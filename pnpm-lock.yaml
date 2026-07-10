@@ -110,6 +110,15 @@ importers:
         specifier: workspace:*
         version: link:../storage
 
+  packages/growth:
+    dependencies:
+      '@massion/identity':
+        specifier: workspace:*
+        version: link:../identity
+      '@massion/storage':
+        specifier: workspace:*
+        version: link:../storage
+
   packages/identity:
     dependencies:
       '@massion/storage':
