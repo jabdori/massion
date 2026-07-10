@@ -296,3 +296,10 @@ DEFINE INDEX evidence_metric_event_id ON evidence_metric_event FIELDS metric_eve
 DEFINE INDEX evidence_metric_event_org ON evidence_metric_event FIELDS organization_id, metric_name;
 `,
 );
+
+export const EVIDENCE_SECRET_REDACTION_MIGRATION = defineMigration(
+  "0032-evidence-secret-redaction",
+  `
+DEFINE FIELD redactions_json ON source_file TYPE option<string>;
+`,
+);

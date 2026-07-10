@@ -6,7 +6,8 @@ import { applyMigrations, type MassionDatabase, type QueryExecutor } from "@mass
 import type { ParsedChunk, ParsedRelation, ParsedSymbol } from "./extractors.js";
 import { normalizeRepositoryPath } from "./path.js";
 import type { ParsedFileEvidence } from "./parser.js";
-import { EVIDENCE_CONTENT_MIGRATION, EVIDENCE_INDEX_MIGRATION } from "./schema.js";
+import type { SecretRedaction } from "./scanner.js";
+import { EVIDENCE_CONTENT_MIGRATION, EVIDENCE_INDEX_MIGRATION, EVIDENCE_SECRET_REDACTION_MIGRATION } from "./schema.js";
 
 interface IndexRecord {
   readonly index_version_id: string;
@@ -29,6 +30,7 @@ interface FileRecord {
   readonly parser_kind: ParsedFileEvidence["parserKind"];
   readonly grammar_version: string;
   readonly parse_error_count: number;
+  readonly redactions_json?: string;
 }
 
 interface SymbolRecord {
@@ -85,6 +87,7 @@ export interface IndexedSourceFile {
   readonly parserKind: ParsedFileEvidence["parserKind"];
   readonly grammarVersion: string;
   readonly parseErrorCount: number;
+  readonly redactions: readonly SecretRedaction[];
 }
 
 export interface IndexedSymbol extends ParsedSymbol {
@@ -124,6 +127,7 @@ export interface StageFileInput {
   readonly contentHash: string;
   readonly evidence: ParsedFileEvidence;
   readonly sourceFileKey?: string;
+  readonly redactions?: readonly SecretRedaction[];
 }
 
 function sha256(value: string): string {
@@ -161,6 +165,7 @@ function sourceFileView(record: FileRecord): IndexedSourceFile {
     parserKind: record.parser_kind,
     grammarVersion: record.grammar_version,
     parseErrorCount: record.parse_error_count,
+    redactions: record.redactions_json ? (JSON.parse(record.redactions_json) as SecretRedaction[]) : [],
   };
 }
 
@@ -220,7 +225,11 @@ export class IndexStore {
   ) {}
 
   public static async create(database: MassionDatabase, organizations: OrganizationService): Promise<IndexStore> {
-    await applyMigrations(database, [EVIDENCE_INDEX_MIGRATION, EVIDENCE_CONTENT_MIGRATION]);
+    await applyMigrations(database, [
+      EVIDENCE_INDEX_MIGRATION,
+      EVIDENCE_CONTENT_MIGRATION,
+      EVIDENCE_SECRET_REDACTION_MIGRATION,
+    ]);
     return new IndexStore(database, organizations);
   }
 
@@ -249,7 +258,7 @@ export class IndexStore {
       const sourceFileId = sha256(`${target.repository_id}\0${input.indexVersionId}\0${input.relativePath}`);
       const sourceFileKey = input.sourceFileKey ?? sha256(`${input.relativePath}\0${input.contentHash}`);
       const [created] = await tx.query<[FileRecord[]]>(
-        "CREATE source_file CONTENT { source_file_id: $source_file_id, source_file_key: $source_file_key, organization_id: $organization_id, repository_id: $repository_id, index_version_id: $index_version_id, relative_path: $relative_path, language: $language, size: $size, content_hash: $content_hash, status: $status, parser_kind: $parser_kind, grammar_version: $grammar_version, parse_error_count: $parse_error_count, created_at: time::now() } RETURN AFTER;",
+        "CREATE source_file CONTENT { source_file_id: $source_file_id, source_file_key: $source_file_key, organization_id: $organization_id, repository_id: $repository_id, index_version_id: $index_version_id, relative_path: $relative_path, language: $language, size: $size, content_hash: $content_hash, status: $status, parser_kind: $parser_kind, grammar_version: $grammar_version, parse_error_count: $parse_error_count, redactions_json: $redactions_json, created_at: time::now() } RETURN AFTER;",
         {
           source_file_id: sourceFileId,
           source_file_key: sourceFileKey,
@@ -264,6 +273,7 @@ export class IndexStore {
           parser_kind: input.evidence.parserKind,
           grammar_version: input.evidence.grammarVersion,
           parse_error_count: input.evidence.parseErrorCount,
+          redactions_json: JSON.stringify(input.redactions ?? []),
         },
       );
       if (!created[0]) throw new Error("SourceFile 생성 결과가 없습니다");
@@ -354,6 +364,7 @@ export class IndexStore {
       size: file.size,
       contentHash: file.contentHash,
       sourceFileKey: file.sourceFileKey,
+      redactions: file.redactions,
       evidence: {
         parserKind: file.parserKind,
         grammarVersion: file.grammarVersion,

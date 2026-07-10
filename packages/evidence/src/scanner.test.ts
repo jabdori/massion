@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { mkdtemp, mkdir, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -47,5 +48,26 @@ describe("Repository scanner", () => {
       ["linked.ts", "symlink"],
     ]);
     expect(result.excluded.every((file) => !("content" in file))).toBe(true);
+  });
+
+  it("source credential을 같은 byte 길이로 redaction하고 원문 대신 hash와 reason만 남긴다", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "massion-scan-secret-"));
+    const secret = "sk-abcdefghijklmnopqrstuvwxyz123456";
+    const original = `export const apiKey = "${secret}";\n`;
+    await writeFile(path.join(root, "secret.ts"), original);
+    const scanner = new RepositoryScanner();
+
+    const scan = await scanner.scan(root, { include: ["**/*.ts"], exclude: [], maxFileBytes: 1_024 });
+    const file = scan.files[0];
+
+    expect(file?.content).not.toContain(secret);
+    expect(Buffer.byteLength(file?.content ?? "")).toBe(Buffer.byteLength(original));
+    expect(file?.redactions).toEqual([
+      expect.objectContaining({
+        reason: "provider_token",
+        contentHash: createHash("sha256").update(secret).digest("hex"),
+      }),
+    ]);
+    expect(JSON.stringify(scan)).not.toContain(secret);
   });
 });
