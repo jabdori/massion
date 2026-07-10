@@ -3,7 +3,11 @@ import { createHash, randomUUID } from "node:crypto";
 import type { OrganizationService, TenantContext } from "@massion/identity";
 import { applyMigrations, type MassionDatabase, type QueryExecutor } from "@massion/storage";
 
-import { SOFTWARE_ENGINEERING_DELIVERY_MIGRATION, SOFTWARE_ENGINEERING_PATH_LEASE_MIGRATION } from "./schema.js";
+import {
+  SOFTWARE_ENGINEERING_DELIVERY_MIGRATION,
+  SOFTWARE_ENGINEERING_PATH_LEASE_MIGRATION,
+  SOFTWARE_ENGINEERING_TDD_EVIDENCE_MIGRATION,
+} from "./schema.js";
 
 export type EngineeringPathLeaseStatus = "active" | "released" | "expired";
 
@@ -141,6 +145,7 @@ export class EngineeringPathLeaseStore {
     await applyMigrations(database, [
       SOFTWARE_ENGINEERING_DELIVERY_MIGRATION,
       SOFTWARE_ENGINEERING_PATH_LEASE_MIGRATION,
+      SOFTWARE_ENGINEERING_TDD_EVIDENCE_MIGRATION,
     ]);
     return new EngineeringPathLeaseStore(database, organizations, options.now ?? (() => new Date()));
   }

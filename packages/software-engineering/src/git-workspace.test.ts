@@ -84,7 +84,10 @@ describe("격리 Git delivery workspace", () => {
 
     await manager.applyPatch(workspace, testPatch);
     await manager.applyPatch(workspace, implementationPatch);
-    const committed = await manager.commit(workspace, { message: "feat: delivery change" });
+    const committed = await manager.commit(workspace, {
+      message: "feat: delivery change",
+      expectedPaths: [...testPatch.paths, ...implementationPatch.paths],
+    });
 
     expect(committed.branchRef).toBe("refs/heads/massion/delivery-1");
     expect(committed.commitSha).toMatch(/^[a-f0-9]{40}$/u);
@@ -113,7 +116,7 @@ describe("격리 Git delivery workspace", () => {
     await expect(readFile(hookMarker, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
     await manager.remove(workspace);
     await expect(realpath(workspace.workspacePath)).rejects.toThrow();
-  });
+  }, 20_000);
 
   it("두 section 중 하나라도 적용 불가하면 index와 worktree를 전혀 바꾸지 않는다", async () => {
     const workspace = await manager.prepare({

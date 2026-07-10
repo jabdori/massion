@@ -235,4 +235,35 @@ describe("Software Engineering delivery 저장소", () => {
     ).rejects.toThrow("실패 error");
     await expect(store.get(otherContext, started.delivery.deliveryId)).rejects.toThrow("Delivery를 찾을 수 없습니다");
   });
+
+  it("command evidence 저장 경계가 호출자와 독립적으로 credential excerpt를 redaction한다", async () => {
+    const started = await store.start(context, input());
+    const secret = "sk-abcdefghijklmnopqrstuvwxyz123456";
+    const evidence = {
+      stage: "red" as const,
+      executable: "node",
+      argumentsHash: "1".repeat(64),
+      cwd: ".",
+      exitCode: 1,
+      stdoutHash: "2".repeat(64),
+      stderrHash: "3".repeat(64),
+      outputExcerpt: `failure ${secret}`,
+      durationMs: 10,
+      timedOut: false,
+      outputLimited: false,
+      credentialRedacted: false,
+    };
+    const recorded = await store.recordCommandEvidence(context, {
+      deliveryId: started.delivery.deliveryId,
+      evidenceKey: "red",
+      evidence,
+    });
+    const [records] = await database.query<[{ output_excerpt: string; credential_redacted: boolean }[]]>(
+      "SELECT output_excerpt, credential_redacted FROM engineering_command_evidence WHERE organization_id = $organization_id AND command_evidence_id = $command_evidence_id;",
+      { organization_id: context.organizationId, command_evidence_id: recorded.commandEvidenceId },
+    );
+    expect(records[0]).toMatchObject({ credential_redacted: true });
+    expect(records[0]?.output_excerpt).not.toContain(secret);
+    expect(await database.exportSql()).not.toContain(secret);
+  });
 });

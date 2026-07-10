@@ -135,6 +135,7 @@ describe("제한된 delivery command runner", () => {
     });
     expect(JSON.stringify(result)).not.toContain(secret);
     expect(result.output).toContain("token=***");
+    expect(result.evidence.credentialRedacted).toBe(true);
     expect(Buffer.byteLength(result.evidence.outputExcerpt)).toBeLessThanOrEqual(1_024);
     expect(result.evidence.stdoutHash).toMatch(/^[a-f0-9]{64}$/u);
   });

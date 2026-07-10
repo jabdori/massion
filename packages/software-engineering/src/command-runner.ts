@@ -33,6 +33,7 @@ export interface EngineeringCommandEvidence {
   readonly durationMs: number;
   readonly timedOut: boolean;
   readonly outputLimited: boolean;
+  readonly credentialRedacted: boolean;
 }
 
 export interface ConfinedCommandResult {
@@ -228,8 +229,10 @@ export class ConfinedCommandRunner {
         const stdoutBytes = Buffer.concat(stdout);
         const stderrBytes = Buffer.concat(stderr);
         const decoder = new TextDecoder("utf-8", { fatal: false });
-        const redactedStdout = redactSecrets(decoder.decode(stdoutBytes)).content;
-        const redactedStderr = redactSecrets(decoder.decode(stderrBytes)).content;
+        const stdoutRedaction = redactSecrets(decoder.decode(stdoutBytes));
+        const stderrRedaction = redactSecrets(decoder.decode(stderrBytes));
+        const redactedStdout = stdoutRedaction.content;
+        const redactedStderr = stderrRedaction.content;
         const output = truncateUtf8(
           [redactedStdout, redactedStderr].filter(Boolean).join(redactedStdout && redactedStderr ? "\n" : ""),
           input.maxOutputBytes,
@@ -248,6 +251,7 @@ export class ConfinedCommandRunner {
           durationMs: Math.max(0, Math.round(performance.now() - startedAt)),
           timedOut,
           outputLimited,
+          credentialRedacted: stdoutRedaction.redactions.length > 0 || stderrRedaction.redactions.length > 0,
         };
         resolvePromise({ evidence, output });
       });

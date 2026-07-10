@@ -236,9 +236,18 @@ export class GitWorkspaceManager {
     return { patchHash: patch.sha256, paths: patch.paths };
   }
 
-  public async commit(workspace: GitDeliveryWorkspace, input: { readonly message: string }): Promise<GitCommitResult> {
+  public async commit(
+    workspace: GitDeliveryWorkspace,
+    input: { readonly message: string; readonly expectedPaths: readonly string[] },
+  ): Promise<GitCommitResult> {
     await this.verifyWorkspace(workspace);
     if (!input.message.trim() || input.message.includes("\0")) throw new Error("Git commit message가 필요합니다");
+    const stagedPaths = (await runGit(workspace.workspacePath, ["diff", "--cached", "--name-only", "-z"])).stdout
+      .split("\0")
+      .filter(Boolean);
+    if (stagedPaths.some((path) => !input.expectedPaths.includes(path))) {
+      throw new Error("Commit staged path가 검증된 patch 경로 밖입니다");
+    }
     const diff = await runGit(workspace.workspacePath, ["diff", "--cached", "--quiet"], { allowFailure: true });
     if (diff.exitCode === 0) throw new Error("Commit할 staged change가 없습니다");
     if (diff.exitCode !== 1) throw new Error("Staged change 상태를 확인하지 못했습니다");
@@ -294,6 +303,19 @@ export class GitWorkspaceManager {
       changeSetHash: createHash("sha256").update(changeSet).digest("hex"),
       fileChanges,
     };
+  }
+
+  public async verifyNoUnstagedChanges(workspace: GitDeliveryWorkspace): Promise<void> {
+    await this.verifyWorkspace(workspace);
+    const unstaged = await runGit(workspace.workspacePath, ["diff", "--quiet"], { allowFailure: true });
+    if (unstaged.exitCode !== 0 && unstaged.exitCode !== 1) {
+      throw new Error("Workspace unstaged diff를 확인하지 못했습니다");
+    }
+    const untracked = (await runGit(workspace.workspacePath, ["ls-files", "--others", "--exclude-standard", "-z"]))
+      .stdout;
+    if (unstaged.exitCode === 1 || untracked) {
+      throw new Error("Delivery command가 staged patch 밖의 workspace 파일을 변경했습니다");
+    }
   }
 
   public async remove(workspace: GitDeliveryWorkspace): Promise<void> {
