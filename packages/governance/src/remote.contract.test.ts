@@ -77,12 +77,32 @@ describe("remote Governance contract", () => {
       resourceRevision: 1,
       workId: "work-remote",
     });
-    const approved = await approvals.vote(context, {
-      commandId: crypto.randomUUID(),
-      approvalId: requested.approval_id,
-      vote: "approve",
-      reason: "remote reviewed",
+    const other = await identity.registerPersonalUser({
+      email: `governance-other-${databaseName}@example.com`,
+      displayName: "Other Governance",
     });
+    const otherContext = await organizations.resolveTenantContext(
+      other.user.user_id,
+      other.organization.organization_id,
+    );
+    await expect(approvals.get(otherContext, requested.approval_id)).rejects.toThrow("Approval을 찾을 수 없습니다");
+    const concurrentVotes = await Promise.allSettled([
+      approvals.vote(context, {
+        commandId: crypto.randomUUID(),
+        approvalId: requested.approval_id,
+        vote: "approve",
+        reason: "remote reviewed",
+      }),
+      approvals.vote(context, {
+        commandId: crypto.randomUUID(),
+        approvalId: requested.approval_id,
+        vote: "approve",
+        reason: "remote concurrent duplicate",
+      }),
+    ]);
+    expect(concurrentVotes.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+    const approved = await approvals.get(context, requested.approval_id);
+    expect(approved.status).toBe("approved");
     const consume = (executionId: string) =>
       permits.consume(context, {
         commandId: crypto.randomUUID(),

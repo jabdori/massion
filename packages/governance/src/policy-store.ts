@@ -77,6 +77,28 @@ function canonicalJson(value: unknown): string {
   return JSON.stringify(value);
 }
 
+function assertPolicyIntegrity(version: PolicyVersion): void {
+  let checksum: string;
+  try {
+    checksum = createHash("sha256")
+      .update(
+        canonicalJson({
+          bundle: {
+            schema: JSON.parse(version.schema_json) as unknown,
+            policies: JSON.parse(version.policies_json) as unknown,
+          },
+          requirements: JSON.parse(version.requirements_json) as unknown,
+        }),
+      )
+      .digest("hex");
+  } catch {
+    throw new Error(`Policy Version checksum 입력을 해석할 수 없습니다: ${version.policy_version_id}`);
+  }
+  if (checksum !== version.checksum) {
+    throw new Error(`Policy Version checksum이 일치하지 않습니다: ${version.policy_version_id}`);
+  }
+}
+
 export class PolicyStore {
   private constructor(
     private readonly database: MassionDatabase,
@@ -235,14 +257,17 @@ export class PolicyStore {
       { organization_id: organizationId, policy_version_id: policyVersionId },
     );
     if (!records[0]) throw new Error(`Policy Version을 찾을 수 없습니다: ${policyVersionId}`);
+    assertPolicyIntegrity(records[0]);
     return records[0];
   }
 
   private async active(executor: QueryExecutor, organizationId: string): Promise<PolicyVersion | undefined> {
     const [records] = await executor.query<[PolicyVersion[]]>(
-      "SELECT * OMIT id FROM governance_policy_version WHERE organization_id = $organization_id AND status = 'active' LIMIT 1;",
+      "SELECT * OMIT id FROM governance_policy_version WHERE organization_id = $organization_id AND status = 'active';",
       { organization_id: organizationId },
     );
+    if (records.length > 1) throw new Error("조직별 active Policy Version은 하나여야 합니다");
+    if (records[0]) assertPolicyIntegrity(records[0]);
     return records[0];
   }
 

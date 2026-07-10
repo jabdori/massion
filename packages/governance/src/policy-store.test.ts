@@ -115,4 +115,44 @@ describe("Policy Version Store", () => {
 
     await expect(store.get(otherContext, draft.policy_version_id)).rejects.toThrow("Policy Version을 찾을 수 없습니다");
   });
+
+  it("저장된 bundle checksum 변조를 fail-closed로 탐지한다", async () => {
+    const first = await store.createDraft(context, {
+      commandId: crypto.randomUUID(),
+      bundle: VALID_BUNDLE,
+      requirements: [],
+    });
+    await database.query(
+      "UPDATE governance_policy_version SET policies_json = $policies WHERE organization_id = $organization_id AND policy_version_id = $policy_version_id;",
+      {
+        organization_id: context.organizationId,
+        policy_version_id: first.policy_version_id,
+        policies: JSON.stringify({ deny: "forbid(principal, action, resource);" }),
+      },
+    );
+
+    await expect(store.get(context, first.policy_version_id)).rejects.toThrow("checksum");
+  });
+
+  it("active Policy 중복을 fail-closed로 탐지한다", async () => {
+    const first = await store.createDraft(context, {
+      commandId: crypto.randomUUID(),
+      bundle: VALID_BUNDLE,
+      requirements: [],
+    });
+    const second = await store.createDraft(context, {
+      commandId: crypto.randomUUID(),
+      bundle: VALID_BUNDLE,
+      requirements: [],
+    });
+    await database.query(
+      "UPDATE governance_policy_version SET status = 'active' WHERE organization_id = $organization_id AND policy_version_id IN $policy_version_ids;",
+      {
+        organization_id: context.organizationId,
+        policy_version_ids: [first.policy_version_id, second.policy_version_id],
+      },
+    );
+
+    await expect(store.getActive(context)).rejects.toThrow("active Policy Version은 하나");
+  });
 });
