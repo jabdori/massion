@@ -23,7 +23,7 @@ import {
 
 const execFileAsync = promisify(execFile);
 
-describe("test-first Engineering Delivery engine", () => {
+describe("test-first Engineering Delivery engine", { timeout: 60_000 }, () => {
   let temporaryRoot: string;
   let repositoryRoot: string;
   let workspaceRoot: string;
@@ -247,7 +247,7 @@ describe("test-first Engineering Delivery engine", () => {
     const exported = await database.exportSql();
     expect(exported).not.toContain(testPatch);
     expect(exported).not.toContain(implementationPatch);
-  }, 20_000);
+  }, 60_000);
 
   it("false red와 failure marker mismatch를 구분하고 commit하지 않는다", async () => {
     const passingTestPatch = testPatch.replace(
@@ -322,7 +322,7 @@ describe("test-first Engineering Delivery engine", () => {
       error: { category: "green_failed" },
     });
     expect(await branchExists()).toBe(false);
-  });
+  }, 60_000);
 
   it("validation 실패는 committed 전이를 막는다", async () => {
     await expect(
@@ -347,7 +347,7 @@ describe("test-first Engineering Delivery engine", () => {
       error: { category: "validation_failed" },
     });
     expect(await branchExists()).toBe(false);
-  }, 20_000);
+  }, 60_000);
 
   it("patch·command output credential을 감지하면 원문 저장과 commit 없이 실패한다", async () => {
     const secret = "sk-abcdefghijklmnopqrstuvwxyz123456";

@@ -44,6 +44,17 @@ export interface GitWorkspaceSnapshot {
   readonly paths: readonly string[];
 }
 
+export interface GitVerificationWorkspace {
+  readonly repositoryRoot: string;
+  readonly workspacePath: string;
+  readonly workspaceRoot: string;
+  readonly targetRevision: string;
+  readonly verificationId: string;
+  readonly originalHead: string;
+}
+
+export class GitProvenanceMismatchError extends Error {}
+
 function within(root: string, target: string): boolean {
   const path = relative(root, target);
   return path === "" || (!path.startsWith(`..${sep}`) && path !== ".." && !isAbsolute(path));
@@ -147,13 +158,13 @@ export class GitWorkspaceManager {
 
   public async verifyRepositoryRoot(repositoryRoot: string, expectedRealPathHash: string): Promise<void> {
     if (!/^[a-f0-9]{64}$/u.test(expectedRealPathHash)) {
-      throw new Error("Repository root real path hash 형식이 잘못되었습니다");
+      throw new GitProvenanceMismatchError("Repository root real path hash 형식이 잘못되었습니다");
     }
     const actual = createHash("sha256")
       .update(await realpath(repositoryRoot))
       .digest("hex");
     if (actual !== expectedRealPathHash) {
-      throw new Error("Repository root real path hash가 등록된 delivery와 다릅니다");
+      throw new GitProvenanceMismatchError("Repository root real path hash가 등록된 delivery와 다릅니다");
     }
   }
 
@@ -223,13 +234,83 @@ export class GitWorkspaceManager {
     }
   }
 
+  public async prepareDetachedVerification(input: {
+    readonly repositoryRoot: string;
+    readonly targetRevision: string;
+    readonly verificationId: string;
+  }): Promise<GitVerificationWorkspace> {
+    if (
+      !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u.test(input.verificationId) ||
+      [".", ".."].includes(input.verificationId)
+    ) {
+      throw new Error("Verification ID는 안전한 directory 식별자여야 합니다");
+    }
+    if (!/^[a-f0-9]{40,64}$/u.test(input.targetRevision)) {
+      throw new Error("Git target revision 형식이 잘못되었습니다");
+    }
+    const repositoryRoot = await realpath(input.repositoryRoot);
+    const topLevel = (await runGit(repositoryRoot, ["rev-parse", "--show-toplevel"])).stdout.trim();
+    if ((await realpath(topLevel)) !== repositoryRoot) throw new Error("등록 경로가 Git repository root가 아닙니다");
+    if (within(repositoryRoot, this.workspaceRoot) || within(this.workspaceRoot, repositoryRoot)) {
+      throw new Error("Workspace root와 repository root는 서로 분리되어야 합니다");
+    }
+    const status = (await runGit(repositoryRoot, ["status", "--porcelain", "--untracked-files=all"])).stdout.trim();
+    if (status) throw new Error("Verification source는 clean Git worktree여야 합니다");
+    const originalHead = (await runGit(repositoryRoot, ["rev-parse", "HEAD"])).stdout.trim();
+    await runGit(repositoryRoot, ["cat-file", "-e", `${input.targetRevision}^{commit}`], {
+      label: "git target commit 확인",
+    });
+    const workspacePath = resolve(this.workspaceRoot, `verification-${input.verificationId}`);
+    if (!within(this.workspaceRoot, workspacePath) || (await exists(workspacePath))) {
+      throw new Error("Verification workspace path가 이미 존재하거나 관리 root 밖입니다");
+    }
+    try {
+      await runGit(
+        repositoryRoot,
+        [
+          "-c",
+          `core.hooksPath=${this.disabledHooksPath}`,
+          "worktree",
+          "add",
+          "--detach",
+          workspacePath,
+          input.targetRevision,
+        ],
+        { label: "git verification worktree add" },
+      );
+      const actualWorkspace = await realpath(workspacePath);
+      if (!within(this.workspaceRoot, actualWorkspace)) {
+        throw new Error("생성된 verification workspace realpath가 관리 root 밖입니다");
+      }
+      const workspaceHead = (await runGit(actualWorkspace, ["rev-parse", "HEAD"])).stdout.trim();
+      const branch = (await runGit(actualWorkspace, ["branch", "--show-current"])).stdout.trim();
+      if (workspaceHead !== input.targetRevision || branch) {
+        throw new Error("Verification workspace가 요청한 detached target commit이 아닙니다");
+      }
+      return Object.freeze({
+        repositoryRoot,
+        workspacePath: actualWorkspace,
+        workspaceRoot: this.workspaceRoot,
+        targetRevision: input.targetRevision,
+        verificationId: input.verificationId,
+        originalHead,
+      });
+    } catch (error) {
+      await runGit(repositoryRoot, ["worktree", "remove", "--force", workspacePath], {
+        allowFailure: true,
+      }).catch(() => undefined);
+      await runGit(repositoryRoot, ["worktree", "prune"], { allowFailure: true }).catch(() => undefined);
+      throw error;
+    }
+  }
+
   public async inspectDeliveryBranch(input: {
     readonly repositoryRoot: string;
     readonly baseRevision: string;
     readonly deliveryId: string;
   }): Promise<GitCommitResult | undefined> {
     if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u.test(input.deliveryId)) {
-      throw new Error("Delivery ID는 안전한 branch 식별자여야 합니다");
+      throw new GitProvenanceMismatchError("Delivery ID는 안전한 branch 식별자여야 합니다");
     }
     const repositoryRoot = await realpath(input.repositoryRoot);
     const branchRef = `refs/heads/massion/${input.deliveryId}`;
@@ -242,9 +323,11 @@ export class GitWorkspaceManager {
     const lineage = (await runGit(repositoryRoot, ["rev-list", "--parents", "-n", "1", commitSha])).stdout
       .trim()
       .split(/\s+/u);
-    if (lineage.length !== 2) throw new Error("Recovery branch는 single-parent delivery commit이어야 합니다");
+    if (lineage.length !== 2)
+      throw new GitProvenanceMismatchError("Recovery branch는 single-parent delivery commit이어야 합니다");
     const parent = lineage[1];
-    if (parent !== input.baseRevision) throw new Error("Recovery branch commit parent가 delivery base와 다릅니다");
+    if (parent !== input.baseRevision)
+      throw new GitProvenanceMismatchError("Recovery branch commit parent가 delivery base와 다릅니다");
     const synthetic: GitDeliveryWorkspace = {
       repositoryRoot,
       workspacePath: repositoryRoot,
@@ -443,6 +526,40 @@ export class GitWorkspaceManager {
       label: "git worktree remove",
     });
     await runGit(workspace.repositoryRoot, ["worktree", "prune"]);
+  }
+
+  public async removeDetachedVerification(workspace: GitVerificationWorkspace): Promise<void> {
+    if (workspace.workspaceRoot !== this.workspaceRoot || !within(this.workspaceRoot, workspace.workspacePath)) {
+      throw new Error("Verification workspace 제거 경로가 관리 root 밖입니다");
+    }
+    await runGit(workspace.repositoryRoot, ["worktree", "remove", "--force", workspace.workspacePath], {
+      allowFailure: !(await exists(workspace.workspacePath)),
+      label: "git verification worktree remove",
+    });
+    await runGit(workspace.repositoryRoot, ["worktree", "prune"]);
+    const head = (await runGit(workspace.repositoryRoot, ["rev-parse", "HEAD"])).stdout.trim();
+    const status = (
+      await runGit(workspace.repositoryRoot, ["status", "--porcelain", "--untracked-files=all"])
+    ).stdout.trim();
+    if (head !== workspace.originalHead || status) {
+      throw new Error("원본 Git worktree가 assurance verification 중 변경되었습니다");
+    }
+  }
+
+  public async verifyDetachedVerificationClean(workspace: GitVerificationWorkspace): Promise<boolean> {
+    if (workspace.workspaceRoot !== this.workspaceRoot || !within(this.workspaceRoot, workspace.workspacePath)) {
+      throw new Error("Verification workspace 검증 경로가 관리 root 밖입니다");
+    }
+    const actualWorkspace = await realpath(workspace.workspacePath);
+    if (!within(this.workspaceRoot, actualWorkspace)) {
+      throw new Error("Verification workspace realpath가 관리 root 밖입니다");
+    }
+    const head = (await runGit(actualWorkspace, ["rev-parse", "HEAD"])).stdout.trim();
+    const branch = (await runGit(actualWorkspace, ["branch", "--show-current"])).stdout.trim();
+    const status = (
+      await runGit(actualWorkspace, ["status", "--porcelain=v1", "--untracked-files=all", "--ignored=matching"])
+    ).stdout.trim();
+    return head === workspace.targetRevision && !branch && !status;
   }
 
   private async verifyWorkspace(workspace: GitDeliveryWorkspace): Promise<void> {

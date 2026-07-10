@@ -267,6 +267,7 @@ describe("Software Engineering delivery 저장소", () => {
       stage: "red" as const,
       executable: "node",
       argumentsHash: "1".repeat(64),
+      environmentHash: "4".repeat(64),
       cwd: ".",
       exitCode: 1,
       stdoutHash: "2".repeat(64),

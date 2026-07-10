@@ -9,8 +9,10 @@ import { WorkAssurancePort, WorkService, type CreateWorkResult } from "@massion/
 import {
   AssuranceBindingStore,
   AssuranceBootstrap,
+  AssuranceCheckStore,
   AssuranceRunVerdictReader,
   type BindingActivationAuthorizer,
+  type TrustedAssuranceCheckExecutor,
 } from "./index.js";
 import * as publicApi from "./index.js";
 import { AssuranceRunStore } from "./run-store.js";
@@ -262,8 +264,47 @@ describe("Assurance run과 Work 완료 게이트", () => {
       "SELECT criterion_id, criterion_key FROM assurance_criterion WHERE organization_id = $organization_id AND assurance_run_id = $assurance_run_id;",
       { organization_id: context.organizationId, assurance_run_id: started.run.assuranceRunId },
     );
+    let trustedExecutionCount = 0;
+    const trustedExecutor: TrustedAssuranceCheckExecutor = {
+      adapterId: "massion.command.v1",
+      async execute() {
+        trustedExecutionCount += 1;
+        return {
+          status: "passed",
+          outputHash: "e".repeat(64),
+          summary: "fresh workspace command passed",
+          toolName: "pnpm",
+          toolVersion: "10.30.3",
+          durationMs: 1,
+          artifactVersionIds: [],
+        };
+      },
+    };
+    const checks = new AssuranceCheckStore(database, organizations, { trustedExecutors: [trustedExecutor] });
+    const peerChecks = new AssuranceCheckStore(database, organizations, { trustedExecutors: [trustedExecutor] });
     for (const criterion of criteria) {
       const acceptance = criterion.criterion_key === "profile:acceptance:coverage";
+      if (!acceptance) {
+        const checkInput = {
+          commandId: crypto.randomUUID(),
+          workId: target.work.work_id,
+          assuranceRunId: started.run.assuranceRunId,
+          criterionId: criterion.criterion_id,
+          bindingKey: "check:implementation",
+        };
+        const [first, deduplicated] = await Promise.all([
+          checks.record(context, checkInput),
+          peerChecks.record(context, { ...checkInput, commandId: crypto.randomUUID() }),
+        ]);
+        expect(deduplicated.check.checkId).toBe(first.check.checkId);
+        const replayedWithNewCommand = await checks.record(context, {
+          ...checkInput,
+          commandId: crypto.randomUUID(),
+        });
+        expect(replayedWithNewCommand.check.checkId).toBe(first.check.checkId);
+        expect(trustedExecutionCount).toBe(1);
+        continue;
+      }
       await database.query(
         "CREATE assurance_check CONTENT { check_id: $check_id, organization_id: $organization_id, work_id: $work_id, assurance_run_id: $assurance_run_id, criterion_id: $criterion_id, kind: $kind, system_adapter_id: $system_adapter_id, command_key: $command_key, input_hash: $input_hash, status: 'passed', output_hash: $output_hash, artifact_version_ids: [], evidence_brief_ids: [], metric_observation_ids: [], human_attestation_ids: [], duration_ms: 0, created_at: time::now(), started_at: time::now(), completed_at: time::now() };",
         {
@@ -281,7 +322,7 @@ describe("Assurance run과 Work 완료 게이트", () => {
       );
     }
     await database.query(
-      "UPDATE assurance_criterion SET status = 'passed', updated_at = time::now() WHERE organization_id = $organization_id AND assurance_run_id = $assurance_run_id;",
+      "UPDATE assurance_criterion SET status = 'passed', updated_at = time::now() WHERE organization_id = $organization_id AND assurance_run_id = $assurance_run_id AND status = 'pending';",
       { organization_id: context.organizationId, assurance_run_id: started.run.assuranceRunId },
     );
     const passed = await runs.transition(context, {

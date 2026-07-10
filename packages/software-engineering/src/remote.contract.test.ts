@@ -37,6 +37,7 @@ function evidence(stage: EngineeringCommandEvidence["stage"], exitCode: number):
     stage,
     executable: "node",
     argumentsHash: "a".repeat(64),
+    environmentHash: "d".repeat(64),
     cwd: ".",
     exitCode,
     stdoutHash: "b".repeat(64),

@@ -172,6 +172,9 @@ importers:
 
   packages/software-engineering:
     dependencies:
+      '@massion/assurance':
+        specifier: workspace:*
+        version: link:../assurance
       '@massion/evidence':
         specifier: workspace:*
         version: link:../evidence

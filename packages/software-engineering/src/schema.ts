@@ -149,3 +149,10 @@ export const SOFTWARE_ENGINEERING_ROOT_BINDING_MIGRATION = defineMigration(
 DEFINE FIELD repository_root_real_path_hash ON engineering_delivery TYPE option<string>;
 `,
 );
+
+export const SOFTWARE_ENGINEERING_COMMAND_ENVIRONMENT_MIGRATION = defineMigration(
+  "0044-software-engineering-command-environment",
+  `
+DEFINE FIELD environment_hash ON engineering_command_evidence TYPE option<string> ASSERT $value = NONE OR string::len($value) = 64;
+`,
+);
