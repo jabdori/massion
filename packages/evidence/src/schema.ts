@@ -104,3 +104,92 @@ DEFINE INDEX evidence_index_event_command ON evidence_index_event FIELDS organiz
 DEFINE INDEX evidence_index_event_repository ON evidence_index_event FIELDS organization_id, repository_id;
 `,
 );
+
+export const EVIDENCE_CONTENT_MIGRATION = defineMigration(
+  "0026-evidence-content",
+  `
+DEFINE FIELD dedupe_key ON index_version TYPE option<string>;
+DEFINE INDEX index_version_dedupe ON index_version FIELDS dedupe_key UNIQUE;
+
+DEFINE TABLE source_file SCHEMAFULL;
+DEFINE FIELD source_file_id ON source_file TYPE string;
+DEFINE FIELD source_file_key ON source_file TYPE string;
+DEFINE FIELD organization_id ON source_file TYPE string;
+DEFINE FIELD repository_id ON source_file TYPE string;
+DEFINE FIELD index_version_id ON source_file TYPE string;
+DEFINE FIELD relative_path ON source_file TYPE string;
+DEFINE FIELD language ON source_file TYPE string;
+DEFINE FIELD size ON source_file TYPE int;
+DEFINE FIELD content_hash ON source_file TYPE string;
+DEFINE FIELD status ON source_file TYPE string ASSERT $value IN ['complete', 'partial'];
+DEFINE FIELD parser_kind ON source_file TYPE string ASSERT $value IN ['tree-sitter', 'lexical'];
+DEFINE FIELD grammar_version ON source_file TYPE string;
+DEFINE FIELD parse_error_count ON source_file TYPE int;
+DEFINE FIELD created_at ON source_file TYPE datetime;
+DEFINE INDEX source_file_id ON source_file FIELDS source_file_id UNIQUE;
+DEFINE INDEX source_file_path ON source_file FIELDS organization_id, index_version_id, relative_path UNIQUE;
+DEFINE INDEX source_file_content ON source_file FIELDS organization_id, repository_id, content_hash;
+
+DEFINE TABLE evidence_symbol SCHEMAFULL;
+DEFINE FIELD symbol_id ON evidence_symbol TYPE string;
+DEFINE FIELD symbol_key ON evidence_symbol TYPE string;
+DEFINE FIELD organization_id ON evidence_symbol TYPE string;
+DEFINE FIELD repository_id ON evidence_symbol TYPE string;
+DEFINE FIELD index_version_id ON evidence_symbol TYPE string;
+DEFINE FIELD source_file_id ON evidence_symbol TYPE string;
+DEFINE FIELD relative_path ON evidence_symbol TYPE string;
+DEFINE FIELD name ON evidence_symbol TYPE string;
+DEFINE FIELD qualified_name ON evidence_symbol TYPE string;
+DEFINE FIELD kind ON evidence_symbol TYPE string;
+DEFINE FIELD start_byte ON evidence_symbol TYPE int;
+DEFINE FIELD end_byte ON evidence_symbol TYPE int;
+DEFINE FIELD start_line ON evidence_symbol TYPE int;
+DEFINE FIELD end_line ON evidence_symbol TYPE int;
+DEFINE FIELD content_hash ON evidence_symbol TYPE string;
+DEFINE FIELD created_at ON evidence_symbol TYPE datetime;
+DEFINE INDEX evidence_symbol_id ON evidence_symbol FIELDS symbol_id UNIQUE;
+DEFINE INDEX evidence_symbol_key ON evidence_symbol FIELDS organization_id, index_version_id, symbol_key UNIQUE;
+DEFINE INDEX evidence_symbol_name ON evidence_symbol FIELDS organization_id, index_version_id, qualified_name;
+
+DEFINE TABLE evidence_chunk SCHEMAFULL;
+DEFINE FIELD chunk_id ON evidence_chunk TYPE string;
+DEFINE FIELD chunk_key ON evidence_chunk TYPE string;
+DEFINE FIELD organization_id ON evidence_chunk TYPE string;
+DEFINE FIELD repository_id ON evidence_chunk TYPE string;
+DEFINE FIELD index_version_id ON evidence_chunk TYPE string;
+DEFINE FIELD source_file_id ON evidence_chunk TYPE string;
+DEFINE FIELD relative_path ON evidence_chunk TYPE string;
+DEFINE FIELD symbol_key ON evidence_chunk TYPE option<string>;
+DEFINE FIELD start_byte ON evidence_chunk TYPE int;
+DEFINE FIELD end_byte ON evidence_chunk TYPE int;
+DEFINE FIELD start_line ON evidence_chunk TYPE int;
+DEFINE FIELD end_line ON evidence_chunk TYPE int;
+DEFINE FIELD content ON evidence_chunk TYPE string;
+DEFINE FIELD content_hash ON evidence_chunk TYPE string;
+DEFINE FIELD language ON evidence_chunk TYPE string;
+DEFINE FIELD created_at ON evidence_chunk TYPE datetime;
+DEFINE INDEX evidence_chunk_id ON evidence_chunk FIELDS chunk_id UNIQUE;
+DEFINE INDEX evidence_chunk_key ON evidence_chunk FIELDS organization_id, index_version_id, chunk_key UNIQUE;
+DEFINE INDEX evidence_chunk_file ON evidence_chunk FIELDS organization_id, index_version_id, source_file_id;
+
+DEFINE TABLE evidence_relation SCHEMAFULL;
+DEFINE FIELD relation_id ON evidence_relation TYPE string;
+DEFINE FIELD relation_key ON evidence_relation TYPE string;
+DEFINE FIELD organization_id ON evidence_relation TYPE string;
+DEFINE FIELD repository_id ON evidence_relation TYPE string;
+DEFINE FIELD index_version_id ON evidence_relation TYPE string;
+DEFINE FIELD source_file_id ON evidence_relation TYPE string;
+DEFINE FIELD relative_path ON evidence_relation TYPE string;
+DEFINE FIELD kind ON evidence_relation TYPE string ASSERT $value IN ['contains', 'imports', 'calls', 'implements', 'documents'];
+DEFINE FIELD source_symbol_key ON evidence_relation TYPE option<string>;
+DEFINE FIELD target_symbol_key ON evidence_relation TYPE option<string>;
+DEFINE FIELD target_text ON evidence_relation TYPE string;
+DEFINE FIELD resolved ON evidence_relation TYPE bool;
+DEFINE FIELD start_line ON evidence_relation TYPE int;
+DEFINE FIELD created_at ON evidence_relation TYPE datetime;
+DEFINE INDEX evidence_relation_id ON evidence_relation FIELDS relation_id UNIQUE;
+DEFINE INDEX evidence_relation_key ON evidence_relation FIELDS organization_id, index_version_id, relation_key UNIQUE;
+DEFINE INDEX evidence_relation_source ON evidence_relation FIELDS organization_id, index_version_id, source_symbol_key;
+DEFINE INDEX evidence_relation_target ON evidence_relation FIELDS organization_id, index_version_id, target_symbol_key;
+`,
+);

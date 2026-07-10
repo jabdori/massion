@@ -11,8 +11,19 @@ describe("Evidence extractor integrity", () => {
       contentHash: "e".repeat(64),
     });
     const methods = result.symbols.filter((symbol) => symbol.name === "run");
+    const first = result.symbols.find((symbol) => symbol.qualifiedName === "First");
 
     expect(methods.map((symbol) => symbol.qualifiedName)).toEqual(["First.run", "Second.run"]);
+    expect(result.relations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: "contains",
+          sourceSymbolKey: first?.symbolKey,
+          targetSymbolKey: methods[0]?.symbolKey,
+          resolved: true,
+        }),
+      ]),
+    );
     expect(new Set(methods.map((symbol) => symbol.symbolKey)).size).toBe(2);
     expect(result.relations.filter((relation) => relation.kind === "calls")).toEqual([
       expect.objectContaining({ sourceSymbolKey: methods[0]?.symbolKey, targetText: "helper", resolved: false }),

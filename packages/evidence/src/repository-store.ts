@@ -8,6 +8,7 @@ import type {
   CompleteIndexInput,
   CreateIndexConfigurationInput,
   EvidenceRepository,
+  FailIndexInput,
   IndexConfiguration,
   IndexVersion,
   RegisterRepositoryInput,
@@ -15,7 +16,7 @@ import type {
   RepositoryRevision,
   StartIndexInput,
 } from "./contracts.js";
-import { EVIDENCE_INDEX_MIGRATION } from "./schema.js";
+import { EVIDENCE_CONTENT_MIGRATION, EVIDENCE_INDEX_MIGRATION } from "./schema.js";
 
 interface RepositoryRecord {
   readonly repository_id: string;
@@ -80,6 +81,7 @@ interface IndexRecord {
   readonly embedding_version?: string;
   readonly embedding_status: IndexVersion["embeddingStatus"];
   readonly configuration_checksum: string;
+  readonly dedupe_key?: string;
   readonly snapshot_checksum?: string;
   readonly file_count: number;
   readonly symbol_count: number;
@@ -125,7 +127,7 @@ export class RepositoryStore {
   ) {}
 
   public static async create(database: MassionDatabase, organizations: OrganizationService): Promise<RepositoryStore> {
-    await applyMigrations(database, [EVIDENCE_INDEX_MIGRATION]);
+    await applyMigrations(database, [EVIDENCE_INDEX_MIGRATION, EVIDENCE_CONTENT_MIGRATION]);
     return new RepositoryStore(database, organizations);
   }
 
@@ -271,6 +273,11 @@ export class RepositoryStore {
     );
   }
 
+  public async getRevision(context: TenantContext, repositoryRevisionId: string): Promise<RepositoryRevision> {
+    await this.organizations.verifyTenantContext(context);
+    return this.revisionView(await this.findRevision(this.database, context.organizationId, repositoryRevisionId));
+  }
+
   public async createConfiguration(
     context: TenantContext,
     input: CreateIndexConfigurationInput,
@@ -353,8 +360,19 @@ export class RepositoryStore {
           throw new Error("parent IndexVersion은 같은 Repository의 current complete여야 합니다");
       }
       const records = await this.listIndexRecords(tx, context.organizationId, input.repositoryId);
+      const dedupeKey =
+        input.mode === "reconcile"
+          ? undefined
+          : hashRequest({
+              organizationId: context.organizationId,
+              repositoryId: input.repositoryId,
+              repositoryRevisionId: input.repositoryRevisionId,
+              configurationId: input.configurationId,
+            });
+      if (dedupeKey && records.some((record) => record.dedupe_key === dedupeKey))
+        throw new Error("같은 revision과 configuration의 IndexVersion이 이미 있습니다");
       const [created] = await tx.query<[IndexRecord[]]>(
-        "CREATE index_version CONTENT { index_version_id: $index_version_id, organization_id: $organization_id, repository_id: $repository_id, repository_revision_id: $repository_revision_id, configuration_id: $configuration_id, version: $version, mode: $mode, parent_index_version_id: $parent_index_version_id, status: 'building', current: false, parser_bundle_version: $parser_bundle_version, schema_version: $schema_version, embedding_version: $embedding_version, embedding_status: $embedding_status, configuration_checksum: $configuration_checksum, file_count: 0, symbol_count: 0, relation_count: 0, chunk_count: 0, created_by_user_id: $created_by_user_id, created_at: time::now(), updated_at: time::now() } RETURN AFTER;",
+        "CREATE index_version CONTENT { index_version_id: $index_version_id, organization_id: $organization_id, repository_id: $repository_id, repository_revision_id: $repository_revision_id, configuration_id: $configuration_id, version: $version, mode: $mode, parent_index_version_id: $parent_index_version_id, status: 'building', current: false, parser_bundle_version: $parser_bundle_version, schema_version: $schema_version, embedding_version: $embedding_version, embedding_status: $embedding_status, configuration_checksum: $configuration_checksum, dedupe_key: $dedupe_key, file_count: 0, symbol_count: 0, relation_count: 0, chunk_count: 0, created_by_user_id: $created_by_user_id, created_at: time::now(), updated_at: time::now() } RETURN AFTER;",
         {
           index_version_id: randomUUID(),
           organization_id: context.organizationId,
@@ -369,6 +387,7 @@ export class RepositoryStore {
           embedding_version: configuration.embedding_version,
           embedding_status: configuration.embedding_status,
           configuration_checksum: configuration.checksum,
+          dedupe_key: dedupeKey,
           created_by_user_id: context.userId,
         },
       );
@@ -386,6 +405,11 @@ export class RepositoryStore {
       });
       return result;
     });
+  }
+
+  public async getConfiguration(context: TenantContext, configurationId: string): Promise<IndexConfiguration> {
+    await this.organizations.verifyTenantContext(context);
+    return this.configurationView(await this.findConfiguration(this.database, context.organizationId, configurationId));
   }
 
   public async completeIndex(
@@ -460,6 +484,54 @@ export class RepositoryStore {
     return this.indexView(
       await this.findIndex(this.database, context.organizationId, repository.currentIndexVersionId),
     );
+  }
+
+  public async getIndex(context: TenantContext, indexVersionId: string): Promise<IndexVersion> {
+    await this.organizations.verifyTenantContext(context);
+    return this.indexView(await this.findIndex(this.database, context.organizationId, indexVersionId));
+  }
+
+  public async failIndex(context: TenantContext, input: FailIndexInput): Promise<{ readonly index: IndexVersion }> {
+    await this.organizations.verifyTenantContext(context);
+    if (!input.error.category.trim() || !/^[a-f0-9]{64}$/u.test(input.error.causeId))
+      throw new Error("Index failure category와 SHA-256 cause ID가 필요합니다");
+    const requestHash = hashRequest(input);
+    return await this.database.transaction(async (tx) => {
+      await this.organizations.verifyTenantContext(context, undefined, tx);
+      const repeated = await this.replay<{ readonly index: IndexVersion }>(
+        tx,
+        context.organizationId,
+        input.commandId,
+        requestHash,
+        "index failure",
+      );
+      if (repeated) return repeated;
+      const target = await this.findIndex(tx, context.organizationId, input.indexVersionId);
+      if (target.status !== "building")
+        throw new Error(`building IndexVersion만 실패 전이할 수 있습니다: ${target.status}`);
+      const [updated] = await tx.query<[IndexRecord[]]>(
+        "UPDATE index_version SET status = $status, current = false, dedupe_key = NONE, error_json = $error_json, updated_at = time::now() WHERE organization_id = $organization_id AND index_version_id = $index_version_id AND status = 'building' RETURN AFTER;",
+        {
+          status: input.status,
+          error_json: canonicalJson(input.error),
+          organization_id: context.organizationId,
+          index_version_id: input.indexVersionId,
+        },
+      );
+      if (!updated[0]) throw new Error("IndexVersion failure 전이에 실패했습니다");
+      const result = { index: this.indexView(updated[0]) };
+      await this.recordEvent(tx, context, {
+        repositoryId: target.repository_id,
+        repositoryRevisionId: target.repository_revision_id,
+        indexVersionId: target.index_version_id,
+        commandId: input.commandId,
+        eventType: `index_${input.status}`,
+        requestHash,
+        payload: { status: input.status, error: input.error },
+        result,
+      });
+      return result;
+    });
   }
 
   public async listIndexes(context: TenantContext, repositoryId: string): Promise<IndexVersion[]> {
