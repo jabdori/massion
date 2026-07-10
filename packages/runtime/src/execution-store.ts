@@ -278,6 +278,15 @@ export class RuntimeExecutionStore {
     return events;
   }
 
+  public async listRecoverable(context: TenantContext): Promise<RuntimeExecution[]> {
+    await this.organizations.verifyTenantContext(context);
+    const [executions] = await this.database.query<[RuntimeExecution[]]>(
+      "SELECT * OMIT id FROM runtime_execution WHERE organization_id = $organization_id AND status IN ['running', 'suspended'] ORDER BY created_at ASC, execution_id ASC;",
+      { organization_id: context.organizationId },
+    );
+    return executions;
+  }
+
   public async getRecovery(
     context: TenantContext,
     executionId: string,
