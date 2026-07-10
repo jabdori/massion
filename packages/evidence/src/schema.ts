@@ -193,3 +193,17 @@ DEFINE INDEX evidence_relation_source ON evidence_relation FIELDS organization_i
 DEFINE INDEX evidence_relation_target ON evidence_relation FIELDS organization_id, index_version_id, target_symbol_key;
 `,
 );
+
+export const EVIDENCE_SEARCH_MIGRATION = defineMigration(
+  "0027-evidence-search",
+  `
+DEFINE ANALYZER evidence_code TOKENIZERS class, camel, blank FILTERS lowercase, ascii;
+`,
+);
+
+export const EVIDENCE_SEARCH_INDEX_MIGRATION = defineMigration(
+  "0028-evidence-search-index",
+  `
+DEFINE INDEX evidence_chunk_content_search ON evidence_chunk FIELDS content FULLTEXT ANALYZER evidence_code BM25;
+`,
+);
