@@ -1,12 +1,19 @@
 import { randomUUID } from "node:crypto";
 
 import { Agent, type DynamicValue } from "@voltagent/core";
-import type { LanguageModel } from "ai";
+import { jsonSchema, Output, type LanguageModel } from "ai";
 
 import type { TenantContext } from "@massion/identity";
 import type { FailureSignal } from "@massion/router";
 
-import type { AgentExecutionEvent, AgentExecutionInput, AgentExecutionResult, AgentRunner } from "./contracts.js";
+import type {
+  AgentExecutionEvent,
+  AgentExecutionInput,
+  AgentExecutionResult,
+  AgentRunner,
+  StructuredAgentRunner,
+  StructuredOutputSpec,
+} from "./contracts.js";
 import { type RuntimeEvent, type RuntimeExecution, RuntimeExecutionStore } from "./execution-store.js";
 import type { AcquireModelInput, RoutedModelFactory, RoutedModelLease } from "./model-factory.js";
 
@@ -102,7 +109,7 @@ export interface AgentExecutionLifecycle {
   recover(context: TenantContext, executionId: string): Promise<AgentExecutionResult>;
 }
 
-export class VoltAgentRunner implements AgentRunner {
+export class VoltAgentRunner implements AgentRunner, StructuredAgentRunner {
   private readonly active = new Map<string, ActiveExecution>();
   private accepting = true;
 
@@ -128,6 +135,35 @@ export class VoltAgentRunner implements AgentRunner {
     const active = this.activate(running.execution.execution_id);
     try {
       return await this.generateWithFallback(context, input, running.execution, active.controller.signal);
+    } finally {
+      this.finish(running.execution.execution_id);
+    }
+  }
+
+  public async executeStructured(
+    context: TenantContext,
+    input: AgentExecutionInput,
+    output: StructuredOutputSpec,
+  ): Promise<AgentExecutionResult> {
+    this.requireAccepting();
+    const created = await this.store.createExecution(context, input);
+    if (created.execution.status !== "queued") return this.resultFromExecution(created.execution);
+    const running = await this.store.transition(context, {
+      commandId: `${created.execution.execution_id}:running`,
+      executionId: created.execution.execution_id,
+      expectedVersion: created.execution.version,
+      target: "running",
+      payload: { agentHandle: input.agentHandle, outputName: output.name },
+    });
+    const active = this.activate(running.execution.execution_id);
+    try {
+      return await this.generateStructuredWithFallback(
+        context,
+        input,
+        output,
+        running.execution,
+        active.controller.signal,
+      );
     } finally {
       this.finish(running.execution.execution_id);
     }
@@ -317,6 +353,79 @@ export class VoltAgentRunner implements AgentRunner {
         if (abortSignal.aborted) {
           const reason = abortSignal.reason as unknown;
           await this.toTerminalIfRunning(context, running.execution_id, "cancelled", { reason });
+          return { executionId: running.execution_id, status: "cancelled" };
+        }
+        if (lease) {
+          const failed = await lease.fail({
+            commandId: `${running.execution_id}:model:${String(attempt)}:fail`,
+            signal: failureSignal(error),
+            emittedTokens: 0,
+            inputTokens: 0,
+            outputTokens: 0,
+          });
+          if (failed.fallbackAllowed) {
+            fallbackFromAttemptId = lease.attemptId;
+            continue;
+          }
+        }
+        const target = isModelUnavailable(error) ? "blocked_model_unavailable" : "failed";
+        const failed = await this.toTerminalIfRunning(context, running.execution_id, target, this.errorPayload(error));
+        return this.resultFromExecution(failed.execution);
+      } finally {
+        this.registry.delete(running.execution_id);
+      }
+    }
+    const failed = await this.toTerminalIfRunning(context, running.execution_id, "failed", {
+      message: "Model fallback 한도 초과",
+    });
+    return this.resultFromExecution(failed.execution);
+  }
+
+  private async generateStructuredWithFallback(
+    context: TenantContext,
+    input: AgentExecutionInput,
+    output: StructuredOutputSpec,
+    running: RuntimeExecution,
+    abortSignal: AbortSignal,
+  ): Promise<AgentExecutionResult> {
+    let fallbackFromAttemptId: string | undefined;
+    for (let attempt = 0; attempt < MAX_FALLBACKS; attempt += 1) {
+      let lease: RoutedModelLease | undefined;
+      try {
+        lease = await this.models.acquire(
+          context,
+          this.acquireInput(input, running.execution_id, attempt, fallbackFromAttemptId),
+        );
+        this.registry.set(running.execution_id, lease);
+        const schema = jsonSchema(
+          output.jsonSchema as Parameters<typeof jsonSchema>[0],
+          output.validate ? { validate: output.validate } : undefined,
+        );
+        const result = await this.agent(context, input.agentHandle).generateText(prompt(input.input), {
+          abortSignal,
+          context: new Map([[EXECUTION_CONTEXT_KEY, running.execution_id]]),
+          output: Output.object({ schema, name: output.name, description: output.description }),
+        });
+        await lease.complete({
+          commandId: `${running.execution_id}:model:${String(attempt)}:complete`,
+          inputTokens: result.usage.inputTokens ?? 0,
+          outputTokens: result.usage.outputTokens ?? 0,
+        });
+        const current = await this.store.getRecovery(context, running.execution_id);
+        await this.store.transition(context, {
+          commandId: `${running.execution_id}:succeeded`,
+          executionId: running.execution_id,
+          expectedVersion: current.execution.version,
+          target: "succeeded",
+          payload: { output: result.output, attemptId: lease.attemptId },
+        });
+        return { executionId: running.execution_id, status: "succeeded", output: result.output };
+      } catch (error) {
+        this.registry.delete(running.execution_id);
+        if (abortSignal.aborted) {
+          await this.toTerminalIfRunning(context, running.execution_id, "cancelled", {
+            reason: abortSignal.reason as unknown,
+          });
           return { executionId: running.execution_id, status: "cancelled" };
         }
         if (lease) {

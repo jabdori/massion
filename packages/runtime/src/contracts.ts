@@ -29,6 +29,16 @@ export interface AgentExecutionResult {
   readonly error?: RuntimeExecutionError;
 }
 
+export interface StructuredOutputSpec {
+  readonly name: string;
+  readonly description: string;
+  readonly jsonSchema: Readonly<Record<string, unknown>>;
+  readonly validate?: (value: unknown) => StructuredOutputValidationResult;
+}
+
+export type StructuredOutputValidationResult =
+  { readonly success: true; readonly value: unknown } | { readonly success: false; readonly error: Error };
+
 export interface AgentExecutionEvent {
   readonly executionId: string;
   readonly sequence: number;
@@ -51,4 +61,12 @@ export interface AgentRunner {
   suspend(context: TenantContext, executionId: string, reason?: string): Promise<void>;
   resume(context: TenantContext, executionId: string, input?: unknown): Promise<AgentExecutionResult>;
   recover(context: TenantContext, executionId: string): Promise<AgentExecutionResult>;
+}
+
+export interface StructuredAgentRunner {
+  executeStructured(
+    context: TenantContext,
+    input: AgentExecutionInput,
+    output: StructuredOutputSpec,
+  ): Promise<AgentExecutionResult>;
 }
