@@ -43,6 +43,8 @@ describe("remote Runtime contract", () => {
       agentHandle: "representative",
       modelRoute: "planning-quality",
       correlationId: "remote",
+      estimatedTokens: 100,
+      estimatedCostMicros: 100,
       input: { remote: true },
     });
     const running = await executions.transition(context, {

@@ -63,6 +63,21 @@ THEN {
 `,
 );
 
+export const RUNTIME_BLOCKED_TRANSITION_MIGRATION = defineMigration(
+  "0015-runtime-blocked-transition",
+  `
+DEFINE EVENT OVERWRITE runtime_execution_transition_guard ON runtime_execution
+WHEN $event = "UPDATE" AND $before.status != $after.status
+THEN {
+  IF !(
+    ($before.status = "queued" AND $after.status IN ["running", "blocked_model_unavailable", "cancelled"]) OR
+    ($before.status = "running" AND $after.status IN ["suspended", "succeeded", "failed", "cancelled", "interrupted", "blocked_model_unavailable"]) OR
+    ($before.status = "suspended" AND $after.status IN ["running", "cancelled"])
+  ) { THROW "허용되지 않는 Runtime 전이"; };
+};
+`,
+);
+
 export const RUNTIME_MEMORY_MIGRATION = defineMigration(
   "0013-runtime-memory",
   `

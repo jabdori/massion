@@ -29,6 +29,8 @@ describe("Runtime Execution Store", () => {
       agentHandle: "delivery-coordination",
       modelRoute: "coding-balanced",
       correlationId: "correlation-1",
+      estimatedTokens: 100,
+      estimatedCostMicros: 100,
       input: { objective: "implement" },
     });
   }
@@ -142,6 +144,8 @@ describe("Runtime Execution Store", () => {
         agentHandle: "representative",
         modelRoute: "planning-quality",
         correlationId: "different",
+        estimatedTokens: 1,
+        estimatedCostMicros: 1,
         input: {},
       }),
     ).rejects.toThrow("같은 commandId");
@@ -169,5 +173,28 @@ describe("Runtime Execution Store", () => {
     await expect(
       store.getRecovery({ ...otherContext, organizationId: context.organizationId }, created.execution.execution_id),
     ).rejects.toThrow("TenantContext");
+  });
+
+  it("상태 변경 없이 stream event를 append하고 version·sequence를 함께 전진시킨다", async () => {
+    const created = await createExecution();
+    const running = await store.transition(context, {
+      commandId: crypto.randomUUID(),
+      executionId: created.execution.execution_id,
+      expectedVersion: 1,
+      target: "running",
+      payload: {},
+    });
+    const appended = await store.appendEvent(context, {
+      commandId: crypto.randomUUID(),
+      executionId: created.execution.execution_id,
+      expectedVersion: running.execution.version,
+      eventType: "model_text_delta",
+      payload: { delta: "hello" },
+    });
+
+    expect(appended.execution.status).toBe("running");
+    expect(appended.execution.version).toBe(3);
+    expect(appended.event.sequence).toBe(3);
+    expect(JSON.parse(appended.event.payload_json)).toEqual({ delta: "hello" });
   });
 });

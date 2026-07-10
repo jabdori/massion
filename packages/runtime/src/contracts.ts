@@ -17,6 +17,8 @@ export interface AgentExecutionInput {
   readonly agentHandle: string;
   readonly modelRoute: string;
   readonly correlationId: string;
+  readonly estimatedTokens: number;
+  readonly estimatedCostMicros: number;
   readonly input: unknown;
 }
 
