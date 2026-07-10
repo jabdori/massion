@@ -18,8 +18,13 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@ai-sdk/provider-utils": "4.0.38",
     "@massion/identity": "workspace:*",
-    "@massion/storage": "workspace:*"
+    "@massion/storage": "workspace:*",
+    "@voltagent/core": "2.9.0",
+    "@voltagent/logger": "2.0.2",
+    "ai": "6.0.222",
+    "zod": "4.4.3"
   },
   "engines": {
     "node": ">=24.0.0"
