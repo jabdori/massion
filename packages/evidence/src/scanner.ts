@@ -16,6 +16,13 @@ export interface ScanOptions {
 
 export type ScannedFileStatus = "indexed";
 
+export interface SecretRedaction {
+  readonly startByte: number;
+  readonly endByte: number;
+  readonly reason: "private_key" | "provider_token" | "credential_assignment";
+  readonly contentHash: string;
+}
+
 export interface ScannedFile {
   readonly relativePath: string;
   readonly absolutePath: string;
@@ -24,6 +31,7 @@ export interface ScannedFile {
   readonly contentHash: string;
   readonly content: string;
   readonly status: ScannedFileStatus;
+  readonly redactions: readonly SecretRedaction[];
 }
 
 export interface ExcludedFile {
@@ -88,6 +96,50 @@ const LANGUAGE_BY_EXTENSION: Readonly<Record<string, string>> = {
 
 function sha256(value: string | Uint8Array): string {
   return createHash("sha256").update(value).digest("hex");
+}
+
+function redactSecrets(content: string): { readonly content: string; readonly redactions: readonly SecretRedaction[] } {
+  const candidates: { start: number; end: number; reason: SecretRedaction["reason"] }[] = [];
+  const addMatches = (pattern: RegExp, reason: SecretRedaction["reason"], valueGroup?: number): void => {
+    for (const match of content.matchAll(pattern)) {
+      const value = valueGroup === undefined ? match[0] : match[valueGroup];
+      if (!value) continue;
+      const offset = valueGroup === undefined ? 0 : match[0].lastIndexOf(value);
+      const start = match.index + offset;
+      const end = start + value.length;
+      if (candidates.some((candidate) => start < candidate.end && end > candidate.start)) continue;
+      candidates.push({ start, end, reason });
+    }
+  };
+  addMatches(/-----BEGIN ([A-Z0-9 ]*PRIVATE KEY)-----[\s\S]*?-----END \1-----/gu, "private_key");
+  addMatches(/\b(?:sk-[A-Za-z0-9_-]{16,}|gh[pousr]_[A-Za-z0-9]{20,}|AKIA[A-Z0-9]{16})\b/gu, "provider_token");
+  addMatches(
+    /\b(?:password|passwd|secret|api[_-]?key|access[_-]?token|auth[_-]?token)\b\s*[:=]\s*(["'])([^"'\r\n]{8,})\1/giu,
+    "credential_assignment",
+    2,
+  );
+  candidates.sort((left, right) => left.start - right.start || left.end - right.end);
+  const redactions: SecretRedaction[] = [];
+  const output: string[] = [];
+  let cursor = 0;
+  for (const candidate of candidates) {
+    output.push(content.slice(cursor, candidate.start));
+    const secret = content.slice(candidate.start, candidate.end);
+    let replacement = "";
+    for (const character of secret) {
+      replacement += character === "\n" || character === "\r" ? character : "*".repeat(Buffer.byteLength(character));
+    }
+    output.push(replacement);
+    redactions.push({
+      startByte: Buffer.byteLength(content.slice(0, candidate.start)),
+      endByte: Buffer.byteLength(content.slice(0, candidate.end)),
+      reason: candidate.reason,
+      contentHash: sha256(secret),
+    });
+    cursor = candidate.end;
+  }
+  output.push(content.slice(cursor));
+  return { content: output.join(""), redactions };
 }
 
 async function hashFile(absolutePath: string): Promise<string> {
@@ -159,25 +211,28 @@ export class RepositoryScanner {
         excluded.push({ relativePath, size: fileStat.size, contentHash, reason: "invalid_utf8" });
         continue;
       }
+      const redacted = redactSecrets(content);
       files.push({
         relativePath,
         absolutePath: confined.absolutePath,
         language,
         size: fileStat.size,
         contentHash,
-        content,
+        content: redacted.content,
         status: "indexed",
+        redactions: redacted.redactions,
       });
     }
     excluded.sort((left, right) => left.relativePath.localeCompare(right.relativePath));
     const manifestChecksum = sha256(
       JSON.stringify({
-        files: files.map(({ relativePath, size, contentHash, language, status }) => ({
+        files: files.map(({ relativePath, size, contentHash, language, status, redactions }) => ({
           relativePath,
           size,
           contentHash,
           language,
           status,
+          redactions,
         })),
         excluded: excluded.map(({ relativePath, size, contentHash, reason }) => ({
           relativePath,

@@ -129,6 +129,7 @@ export class EvidenceIndexer {
             size: file.size,
             contentHash: file.contentHash,
             evidence,
+            redactions: file.redactions,
           });
           stagedFiles += 1;
           fileResults[evidence.status] += 1;
