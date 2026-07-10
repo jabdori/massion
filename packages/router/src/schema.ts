@@ -1,0 +1,197 @@
+import { defineMigration } from "@massion/storage";
+
+export const ROUTER_REGISTRY_MIGRATION = defineMigration(
+  "0009-router-registry",
+  `
+DEFINE TABLE model_provider SCHEMAFULL;
+DEFINE FIELD provider_id ON model_provider TYPE string;
+DEFINE FIELD organization_id ON model_provider TYPE string;
+DEFINE FIELD display_name ON model_provider TYPE string;
+DEFINE FIELD adapter_kind ON model_provider TYPE string;
+DEFINE FIELD enabled ON model_provider TYPE bool;
+DEFINE FIELD created_at ON model_provider TYPE datetime;
+DEFINE FIELD updated_at ON model_provider TYPE datetime;
+DEFINE INDEX model_provider_id ON model_provider FIELDS organization_id, provider_id UNIQUE;
+
+DEFINE TABLE provider_endpoint SCHEMAFULL;
+DEFINE FIELD endpoint_id ON provider_endpoint TYPE string;
+DEFINE FIELD organization_id ON provider_endpoint TYPE string;
+DEFINE FIELD provider_id ON provider_endpoint TYPE string;
+DEFINE FIELD name ON provider_endpoint TYPE string;
+DEFINE FIELD base_url ON provider_endpoint TYPE string;
+DEFINE FIELD local ON provider_endpoint TYPE bool;
+DEFINE FIELD gateway_kind ON provider_endpoint TYPE option<string>;
+DEFINE FIELD enabled ON provider_endpoint TYPE bool;
+DEFINE FIELD created_at ON provider_endpoint TYPE datetime;
+DEFINE FIELD updated_at ON provider_endpoint TYPE datetime;
+DEFINE INDEX provider_endpoint_id ON provider_endpoint FIELDS endpoint_id UNIQUE;
+DEFINE INDEX provider_endpoint_name ON provider_endpoint FIELDS organization_id, provider_id, name UNIQUE;
+
+DEFINE TABLE provider_credential SCHEMAFULL;
+DEFINE FIELD credential_id ON provider_credential TYPE string;
+DEFINE FIELD organization_id ON provider_credential TYPE string;
+DEFINE FIELD provider_id ON provider_credential TYPE string;
+DEFINE FIELD endpoint_id ON provider_credential TYPE string;
+DEFINE FIELD label ON provider_credential TYPE string;
+DEFINE FIELD credential_type ON provider_credential TYPE string;
+DEFINE FIELD status ON provider_credential TYPE string;
+DEFINE FIELD version ON provider_credential TYPE int;
+DEFINE FIELD secret_version ON provider_credential TYPE int;
+DEFINE FIELD priority ON provider_credential TYPE int;
+DEFINE FIELD weight ON provider_credential TYPE int;
+DEFINE FIELD request_count ON provider_credential TYPE int;
+DEFINE FIELD input_tokens ON provider_credential TYPE int;
+DEFINE FIELD output_tokens ON provider_credential TYPE int;
+DEFINE FIELD cost_micros ON provider_credential TYPE int;
+DEFINE FIELD quota_limit ON provider_credential TYPE option<int>;
+DEFINE FIELD quota_remaining ON provider_credential TYPE option<int>;
+DEFINE FIELD quota_reset_at ON provider_credential TYPE option<datetime>;
+DEFINE FIELD cooldown_until ON provider_credential TYPE option<datetime>;
+DEFINE FIELD last_selected_sequence ON provider_credential TYPE int;
+DEFINE FIELD created_at ON provider_credential TYPE datetime;
+DEFINE FIELD updated_at ON provider_credential TYPE datetime;
+DEFINE INDEX provider_credential_id ON provider_credential FIELDS credential_id UNIQUE;
+DEFINE INDEX provider_credential_label ON provider_credential FIELDS organization_id, provider_id, endpoint_id, label UNIQUE;
+
+DEFINE TABLE credential_secret_version SCHEMAFULL;
+DEFINE FIELD secret_version_id ON credential_secret_version TYPE string;
+DEFINE FIELD organization_id ON credential_secret_version TYPE string;
+DEFINE FIELD credential_id ON credential_secret_version TYPE string;
+DEFINE FIELD version ON credential_secret_version TYPE int;
+DEFINE FIELD algorithm ON credential_secret_version TYPE string;
+DEFINE FIELD ciphertext ON credential_secret_version TYPE string;
+DEFINE FIELD iv ON credential_secret_version TYPE string;
+DEFINE FIELD auth_tag ON credential_secret_version TYPE string;
+DEFINE FIELD aad ON credential_secret_version TYPE string;
+DEFINE FIELD created_by ON credential_secret_version TYPE string;
+DEFINE FIELD created_at ON credential_secret_version TYPE datetime;
+DEFINE INDEX credential_secret_version_id ON credential_secret_version FIELDS secret_version_id UNIQUE;
+DEFINE INDEX credential_secret_version_number ON credential_secret_version FIELDS organization_id, credential_id, version UNIQUE;
+
+DEFINE TABLE router_audit_event SCHEMAFULL;
+DEFINE FIELD audit_event_id ON router_audit_event TYPE string;
+DEFINE FIELD organization_id ON router_audit_event TYPE string;
+DEFINE FIELD command_id ON router_audit_event TYPE string;
+DEFINE FIELD event_type ON router_audit_event TYPE string;
+DEFINE FIELD actor_user_id ON router_audit_event TYPE string;
+DEFINE FIELD request_json ON router_audit_event TYPE string;
+DEFINE FIELD result_json ON router_audit_event TYPE string;
+DEFINE FIELD created_at ON router_audit_event TYPE datetime;
+DEFINE INDEX router_audit_event_id ON router_audit_event FIELDS audit_event_id UNIQUE;
+DEFINE INDEX router_audit_command ON router_audit_event FIELDS organization_id, command_id UNIQUE;
+`,
+);
+
+export const MODEL_ROUTE_MIGRATION = defineMigration(
+  "0010-model-route",
+  `
+DEFINE TABLE model_profile SCHEMAFULL;
+DEFINE FIELD model_profile_id ON model_profile TYPE string;
+DEFINE FIELD organization_id ON model_profile TYPE string;
+DEFINE FIELD provider_id ON model_profile TYPE string;
+DEFINE FIELD endpoint_id ON model_profile TYPE string;
+DEFINE FIELD model_id ON model_profile TYPE string;
+DEFINE FIELD route_kind ON model_profile TYPE string;
+DEFINE FIELD context_window ON model_profile TYPE int;
+DEFINE FIELD supports_tools ON model_profile TYPE bool;
+DEFINE FIELD supports_structured_output ON model_profile TYPE bool;
+DEFINE FIELD supports_vision ON model_profile TYPE bool;
+DEFINE FIELD supports_streaming ON model_profile TYPE bool;
+DEFINE FIELD equivalence_group ON model_profile TYPE string;
+DEFINE FIELD eval_score ON model_profile TYPE float;
+DEFINE FIELD verified ON model_profile TYPE bool;
+DEFINE FIELD enabled ON model_profile TYPE bool;
+DEFINE FIELD created_at ON model_profile TYPE datetime;
+DEFINE FIELD updated_at ON model_profile TYPE datetime;
+DEFINE INDEX model_profile_id ON model_profile FIELDS model_profile_id UNIQUE;
+DEFINE INDEX model_profile_model ON model_profile FIELDS organization_id, endpoint_id, model_id UNIQUE;
+
+DEFINE TABLE model_route SCHEMAFULL;
+DEFINE FIELD route_id ON model_route TYPE string;
+DEFINE FIELD organization_id ON model_route TYPE string;
+DEFINE FIELD name ON model_route TYPE string;
+DEFINE FIELD route_kind ON model_route TYPE string;
+DEFINE FIELD credential_policy ON model_route TYPE string;
+DEFINE FIELD data_policy ON model_route TYPE string;
+DEFINE FIELD equivalence_group ON model_route TYPE string;
+DEFINE FIELD min_eval_score ON model_route TYPE float;
+DEFINE FIELD require_tools ON model_route TYPE bool;
+DEFINE FIELD require_structured_output ON model_route TYPE bool;
+DEFINE FIELD require_vision ON model_route TYPE bool;
+DEFINE FIELD require_streaming ON model_route TYPE bool;
+DEFINE FIELD max_context_tokens ON model_route TYPE int;
+DEFINE FIELD request_budget_micros ON model_route TYPE int;
+DEFINE FIELD total_budget_micros ON model_route TYPE int;
+DEFINE FIELD spent_micros ON model_route TYPE int;
+DEFINE FIELD selection_sequence ON model_route TYPE int;
+DEFINE FIELD enabled ON model_route TYPE bool;
+DEFINE FIELD created_at ON model_route TYPE datetime;
+DEFINE FIELD updated_at ON model_route TYPE datetime;
+DEFINE INDEX model_route_id ON model_route FIELDS route_id UNIQUE;
+DEFINE INDEX model_route_name ON model_route FIELDS organization_id, name UNIQUE;
+
+DEFINE TABLE model_route_candidate SCHEMAFULL;
+DEFINE FIELD candidate_id ON model_route_candidate TYPE string;
+DEFINE FIELD organization_id ON model_route_candidate TYPE string;
+DEFINE FIELD route_id ON model_route_candidate TYPE string;
+DEFINE FIELD model_profile_id ON model_route_candidate TYPE string;
+DEFINE FIELD priority ON model_route_candidate TYPE int;
+DEFINE FIELD enabled ON model_route_candidate TYPE bool;
+DEFINE FIELD created_at ON model_route_candidate TYPE datetime;
+DEFINE INDEX model_route_candidate_id ON model_route_candidate FIELDS candidate_id UNIQUE;
+DEFINE INDEX model_route_candidate_profile ON model_route_candidate FIELDS organization_id, route_id, model_profile_id UNIQUE;
+
+DEFINE TABLE route_attempt SCHEMAFULL;
+DEFINE FIELD attempt_id ON route_attempt TYPE string;
+DEFINE FIELD organization_id ON route_attempt TYPE string;
+DEFINE FIELD route_id ON route_attempt TYPE string;
+DEFINE FIELD candidate_id ON route_attempt TYPE string;
+DEFINE FIELD model_profile_id ON route_attempt TYPE string;
+DEFINE FIELD credential_id ON route_attempt TYPE string;
+DEFINE FIELD credential_secret_version ON route_attempt TYPE int;
+DEFINE FIELD command_id ON route_attempt TYPE string;
+DEFINE FIELD status ON route_attempt TYPE string;
+DEFINE FIELD selection_sequence ON route_attempt TYPE int;
+DEFINE FIELD estimated_tokens ON route_attempt TYPE int;
+DEFINE FIELD reserved_cost_micros ON route_attempt TYPE int;
+DEFINE FIELD sticky_key_hash ON route_attempt TYPE option<string>;
+DEFINE FIELD fallback_from_attempt_id ON route_attempt TYPE option<string>;
+DEFINE FIELD explanation_json ON route_attempt TYPE string;
+DEFINE FIELD created_at ON route_attempt TYPE datetime;
+DEFINE FIELD updated_at ON route_attempt TYPE datetime;
+DEFINE INDEX route_attempt_id ON route_attempt FIELDS attempt_id UNIQUE;
+DEFINE INDEX route_attempt_command ON route_attempt FIELDS organization_id, command_id UNIQUE;
+`,
+);
+
+export const ROUTER_HEALTH_MIGRATION = defineMigration(
+  "0011-router-health",
+  `
+DEFINE FIELD OVERWRITE status ON route_attempt TYPE string;
+DEFINE FIELD failure_class ON route_attempt TYPE option<string>;
+DEFINE FIELD status_code ON route_attempt TYPE option<int>;
+DEFINE FIELD emitted_tokens ON route_attempt TYPE int DEFAULT 0;
+DEFINE FIELD actual_input_tokens ON route_attempt TYPE int DEFAULT 0;
+DEFINE FIELD actual_output_tokens ON route_attempt TYPE int DEFAULT 0;
+DEFINE FIELD actual_cost_micros ON route_attempt TYPE int DEFAULT 0;
+DEFINE FIELD fallback_allowed ON route_attempt TYPE bool DEFAULT false;
+DEFINE FIELD retry_at ON route_attempt TYPE option<datetime>;
+
+DEFINE TABLE router_circuit SCHEMAFULL;
+DEFINE FIELD circuit_id ON router_circuit TYPE string;
+DEFINE FIELD organization_id ON router_circuit TYPE string;
+DEFINE FIELD scope_type ON router_circuit TYPE string;
+DEFINE FIELD scope_id ON router_circuit TYPE string;
+DEFINE FIELD state ON router_circuit TYPE string;
+DEFINE FIELD failure_count ON router_circuit TYPE int;
+DEFINE FIELD success_count ON router_circuit TYPE int;
+DEFINE FIELD threshold ON router_circuit TYPE int;
+DEFINE FIELD open_until ON router_circuit TYPE option<datetime>;
+DEFINE FIELD last_failure_class ON router_circuit TYPE option<string>;
+DEFINE FIELD version ON router_circuit TYPE int;
+DEFINE FIELD created_at ON router_circuit TYPE datetime;
+DEFINE FIELD updated_at ON router_circuit TYPE datetime;
+DEFINE INDEX router_circuit_id ON router_circuit FIELDS circuit_id UNIQUE;
+DEFINE INDEX router_circuit_scope ON router_circuit FIELDS organization_id, scope_type, scope_id UNIQUE;
+`,
+);

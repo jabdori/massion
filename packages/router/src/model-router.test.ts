@@ -1,0 +1,374 @@
+import { randomBytes } from "node:crypto";
+
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+
+import { IdentityService, OrganizationService, type TenantContext } from "@massion/identity";
+import { createDatabase, type MassionDatabase } from "@massion/storage";
+
+import {
+  ModelRouter,
+  selectCredential,
+  type CredentialPolicy,
+  type CredentialSelectionView,
+  type ModelProfile,
+} from "./model-router.js";
+import { ProviderService, type ProviderEndpoint } from "./provider.js";
+import { CredentialVault } from "./vault.js";
+
+const CREDENTIALS: CredentialSelectionView[] = [
+  {
+    credential_id: "a",
+    label: "A",
+    priority: 1,
+    weight: 1,
+    request_count: 4,
+    cost_micros: 400,
+    quota_limit: 100,
+    quota_remaining: 20,
+    quota_reset_at: "2030-01-02T00:00:00Z",
+    last_selected_sequence: 9,
+  },
+  {
+    credential_id: "b",
+    label: "B",
+    priority: 1,
+    weight: 2,
+    request_count: 2,
+    cost_micros: 200,
+    quota_limit: 100,
+    quota_remaining: 80,
+    quota_reset_at: "2030-01-01T00:00:00Z",
+    last_selected_sequence: 3,
+  },
+  {
+    credential_id: "c",
+    label: "C",
+    priority: 2,
+    weight: 1,
+    request_count: 0,
+    cost_micros: 0,
+    quota_limit: 100,
+    quota_remaining: 100,
+    quota_reset_at: "2030-01-03T00:00:00Z",
+    last_selected_sequence: 0,
+  },
+];
+
+describe("8개 Credential 선택 policy", () => {
+  it.each<[CredentialPolicy, string]>([
+    ["priority", "b"],
+    ["fill-first", "a"],
+    ["round-robin", "c"],
+    ["weighted", "c"],
+    ["least-used", "c"],
+    ["quota-headroom", "c"],
+    ["reset-aware", "b"],
+  ])("%s가 결정론적인 credential을 선택한다", (policy, expected) => {
+    expect(selectCredential(policy, CREDENTIALS)?.credential_id).toBe(expected);
+  });
+
+  it("sticky는 같은 key에 같은 weighted credential을 선택한다", () => {
+    const first = selectCredential("sticky", CREDENTIALS, "work-1:agent-1");
+    expect(selectCredential("sticky", CREDENTIALS, "work-1:agent-1")?.credential_id).toBe(first?.credential_id);
+    expect(() => selectCredential("sticky", CREDENTIALS)).toThrow("stickyKey");
+  });
+});
+
+describe("Model Route simulation과 reservation", () => {
+  let database: MassionDatabase;
+  let context: TenantContext;
+  let providers: ProviderService;
+  let router: ModelRouter;
+  let endpoint: ProviderEndpoint;
+  let profile: ModelProfile;
+
+  beforeEach(async () => {
+    database = await createDatabase({ url: "mem://", namespace: "massion", database: crypto.randomUUID() });
+    const identity = await IdentityService.create(database);
+    const organizations = await OrganizationService.create(database);
+    const owner = await identity.registerPersonalUser({ email: "owner@example.com", displayName: "Owner" });
+    context = await organizations.resolveTenantContext(owner.user.user_id, owner.organization.organization_id);
+    providers = await ProviderService.create(database, organizations, new CredentialVault(randomBytes(32)));
+    router = await ModelRouter.create(database, organizations, providers);
+    await providers.registerProvider(context, {
+      commandId: crypto.randomUUID(),
+      providerId: "openai",
+      displayName: "OpenAI",
+      adapterKind: "ai-sdk",
+    });
+    endpoint = (
+      await providers.registerEndpoint(context, {
+        commandId: crypto.randomUUID(),
+        providerId: "openai",
+        name: "API",
+        baseUrl: "https://api.openai.com/v1",
+        local: false,
+      })
+    ).endpoint;
+    for (const label of ["account-a", "account-b"]) {
+      await providers.addCredential(context, {
+        commandId: crypto.randomUUID(),
+        providerId: "openai",
+        endpointId: endpoint.endpoint_id,
+        label,
+        credentialType: "api_key",
+        secret: `secret-${label}`,
+        priority: 1,
+        weight: 1,
+      });
+    }
+    profile = (
+      await router.registerModel(context, {
+        commandId: crypto.randomUUID(),
+        providerId: "openai",
+        endpointId: endpoint.endpoint_id,
+        modelId: "gpt-coding",
+        routeKind: "chat",
+        contextWindow: 128_000,
+        supportsTools: true,
+        supportsStructuredOutput: true,
+        supportsVision: false,
+        supportsStreaming: true,
+        equivalenceGroup: "coding-balanced",
+        evalScore: 0.9,
+        verified: true,
+      })
+    ).profile;
+  });
+
+  afterEach(async () => database.close());
+
+  async function route(policy: CredentialPolicy = "round-robin") {
+    const created = await router.createRoute(context, {
+      commandId: crypto.randomUUID(),
+      name: `coding-${policy}-${crypto.randomUUID()}`,
+      routeKind: "chat",
+      credentialPolicy: policy,
+      dataPolicy: "external-allowed",
+      equivalenceGroup: "coding-balanced",
+      minEvalScore: 0.8,
+      requireTools: true,
+      requireStructuredOutput: true,
+      requireVision: false,
+      requireStreaming: true,
+      maxContextTokens: 64_000,
+      requestBudgetMicros: 10_000,
+      totalBudgetMicros: 100_000,
+    });
+    await router.addCandidate(context, {
+      commandId: crypto.randomUUID(),
+      routeId: created.route.route_id,
+      modelProfileId: profile.model_profile_id,
+      priority: 1,
+    });
+    return created.route;
+  }
+
+  it("simulation과 실제 reservation이 같은 선택 이유를 사용하고 simulation에는 secret이 없다", async () => {
+    const created = await route();
+    const request = { routeName: created.name, estimatedTokens: 100, estimatedCostMicros: 1_000 };
+    const simulated = await router.simulate(context, request);
+    const reserved = await router.reserve(context, { ...request, commandId: crypto.randomUUID() });
+
+    expect(simulated.status).toBe("selected");
+    expect(simulated.credential?.credential_id).toBe(reserved.credential?.credential_id);
+    expect(JSON.stringify(simulated)).not.toContain("secret-account");
+    expect(reserved.secret).toBe(`secret-${reserved.credential?.label ?? ""}`);
+    expect(reserved.attempt.status).toBe("reserved");
+  });
+
+  it("동시 round-robin reservation이 서로 다른 account를 선택한다", async () => {
+    const created = await route();
+    const results = await Promise.all([
+      router.reserve(context, {
+        commandId: crypto.randomUUID(),
+        routeName: created.name,
+        estimatedTokens: 10,
+        estimatedCostMicros: 10,
+      }),
+      router.reserve(context, {
+        commandId: crypto.randomUUID(),
+        routeName: created.name,
+        estimatedTokens: 10,
+        estimatedCostMicros: 10,
+      }),
+    ]);
+
+    expect(new Set(results.map((result) => result.credential?.credential_id)).size).toBe(2);
+  });
+
+  it("capability·eval·equivalence와 local-private 위반 Candidate를 거부한다", async () => {
+    const localRoute = await router.createRoute(context, {
+      commandId: crypto.randomUUID(),
+      name: "local-private",
+      routeKind: "chat",
+      credentialPolicy: "priority",
+      dataPolicy: "local-private",
+      equivalenceGroup: "coding-balanced",
+      minEvalScore: 0.95,
+      requireTools: true,
+      requireStructuredOutput: true,
+      requireVision: true,
+      requireStreaming: true,
+      maxContextTokens: 200_000,
+      requestBudgetMicros: 1_000,
+      totalBudgetMicros: 10_000,
+    });
+
+    await expect(
+      router.addCandidate(context, {
+        commandId: crypto.randomUUID(),
+        routeId: localRoute.route.route_id,
+        modelProfileId: profile.model_profile_id,
+        priority: 1,
+      }),
+    ).rejects.toThrow("요구사항을 충족하지 않습니다");
+  });
+
+  it("request·total budget을 simulation과 reservation에서 차단한다", async () => {
+    const created = await route();
+    expect(
+      (
+        await router.simulate(context, {
+          routeName: created.name,
+          estimatedTokens: 10,
+          estimatedCostMicros: 10_001,
+        })
+      ).status,
+    ).toBe("blocked_model_unavailable");
+    await expect(
+      router.reserve(context, {
+        commandId: crypto.randomUUID(),
+        routeName: created.name,
+        estimatedTokens: 10,
+        estimatedCostMicros: 10_001,
+      }),
+    ).rejects.toThrow("요청 예산");
+  });
+
+  it("401 인증 실패는 해당 계정을 비활성화하고 다른 계정으로 안전하게 fallback한다", async () => {
+    const created = await route();
+    const request = { routeName: created.name, estimatedTokens: 100, estimatedCostMicros: 1_000 };
+    const first = await router.reserve(context, { ...request, commandId: crypto.randomUUID() });
+
+    const outcome = await router.reportFailure(context, {
+      commandId: crypto.randomUUID(),
+      attemptId: first.attempt.attempt_id,
+      signal: { kind: "http", statusCode: 401 },
+      emittedTokens: 0,
+      actualInputTokens: 25,
+      actualOutputTokens: 0,
+      actualCostMicros: 100,
+    });
+
+    expect(outcome.attempt.status).toBe("failed");
+    expect(outcome.attempt.failure_class).toBe("authentication");
+    expect(outcome.attempt.fallback_allowed).toBe(true);
+    expect(outcome.next?.credential?.credential_id).not.toBe(first.credential?.credential_id);
+
+    const fallback = await router.reserve(context, {
+      ...request,
+      commandId: crypto.randomUUID(),
+      fallbackFromAttemptId: first.attempt.attempt_id,
+    });
+    expect(fallback.credential?.credential_id).not.toBe(first.credential?.credential_id);
+  });
+
+  it("429 요청 제한은 Retry-After까지 계정을 cooldown하고 다른 계정을 제안한다", async () => {
+    const created = await route();
+    const request = { routeName: created.name, estimatedTokens: 100, estimatedCostMicros: 1_000 };
+    const first = await router.reserve(context, { ...request, commandId: crypto.randomUUID() });
+    const before = Date.now();
+
+    const outcome = await router.reportFailure(context, {
+      commandId: crypto.randomUUID(),
+      attemptId: first.attempt.attempt_id,
+      signal: { kind: "http", statusCode: 429, retryAfter: "120" },
+      emittedTokens: 0,
+      actualInputTokens: 10,
+      actualOutputTokens: 0,
+      actualCostMicros: 50,
+    });
+    const [credentials] = await database.query<[Array<{ status: string; cooldown_until?: unknown }>]>(
+      "SELECT status, cooldown_until FROM provider_credential WHERE credential_id = $credential_id;",
+      { credential_id: first.credential?.credential_id },
+    );
+
+    expect(outcome.attempt.failure_class).toBe("quota");
+    expect(outcome.next?.credential?.credential_id).not.toBe(first.credential?.credential_id);
+    expect(credentials[0]?.status).toBe("cooldown");
+    expect(new Date(String(credentials[0]?.cooldown_until)).getTime()).toBeGreaterThanOrEqual(before + 119_000);
+  });
+
+  it("일부 토큰이 출력된 실패는 interrupted로 기록하고 자동 fallback하지 않는다", async () => {
+    const created = await route();
+    const first = await router.reserve(context, {
+      commandId: crypto.randomUUID(),
+      routeName: created.name,
+      estimatedTokens: 100,
+      estimatedCostMicros: 1_000,
+    });
+    const outcome = await router.reportFailure(context, {
+      commandId: crypto.randomUUID(),
+      attemptId: first.attempt.attempt_id,
+      signal: { kind: "http", statusCode: 503 },
+      emittedTokens: 1,
+      actualInputTokens: 10,
+      actualOutputTokens: 1,
+      actualCostMicros: 100,
+    });
+
+    expect(outcome.attempt.status).toBe("interrupted");
+    expect(outcome.attempt.fallback_allowed).toBe(false);
+    expect(outcome.next).toBeUndefined();
+  });
+
+  it("동일 endpoint의 연속 upstream 실패가 3회면 circuit을 열어 신규 선택을 차단한다", async () => {
+    const created = await route();
+    const request = { routeName: created.name, estimatedTokens: 100, estimatedCostMicros: 100 };
+    for (let index = 0; index < 3; index += 1) {
+      const reserved = await router.reserve(context, { ...request, commandId: crypto.randomUUID() });
+      await router.reportFailure(context, {
+        commandId: crypto.randomUUID(),
+        attemptId: reserved.attempt.attempt_id,
+        signal: { kind: "http", statusCode: 503 },
+        emittedTokens: 0,
+        actualInputTokens: 0,
+        actualOutputTokens: 0,
+        actualCostMicros: 0,
+      });
+    }
+
+    const simulated = await router.simulate(context, request);
+    expect(simulated.status).toBe("blocked_model_unavailable");
+    expect(simulated.explanation.excluded.join(" ")).toContain("circuit open");
+  });
+
+  it("성공 완료는 실제 비용과 token 사용량을 정산한다", async () => {
+    const created = await route();
+    const reserved = await router.reserve(context, {
+      commandId: crypto.randomUUID(),
+      routeName: created.name,
+      estimatedTokens: 100,
+      estimatedCostMicros: 1_000,
+    });
+
+    const outcome = await router.reportSuccess(context, {
+      commandId: crypto.randomUUID(),
+      attemptId: reserved.attempt.attempt_id,
+      actualInputTokens: 40,
+      actualOutputTokens: 20,
+      actualCostMicros: 600,
+    });
+    const [routes] = await database.query<[Array<{ spent_micros: number }>]>(
+      "SELECT spent_micros FROM model_route WHERE route_id = $route_id;",
+      { route_id: created.route_id },
+    );
+
+    expect(outcome.attempt.status).toBe("succeeded");
+    expect(outcome.attempt.actual_input_tokens).toBe(40);
+    expect(outcome.attempt.actual_output_tokens).toBe(20);
+    expect(outcome.attempt.actual_cost_micros).toBe(600);
+    expect(routes[0]?.spent_micros).toBe(600);
+  });
+});
