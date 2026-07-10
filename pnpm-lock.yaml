@@ -151,6 +151,9 @@ importers:
 
   packages/software-engineering:
     dependencies:
+      '@massion/evidence':
+        specifier: workspace:*
+        version: link:../evidence
       '@massion/identity':
         specifier: workspace:*
         version: link:../identity
