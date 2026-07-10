@@ -92,9 +92,13 @@ export class PermitStore {
     return new PermitStore(database, organizations, clock);
   }
 
-  public async consume(context: TenantContext, input: ConsumeApprovalInput): Promise<ExecutionPermit> {
-    await this.organizations.verifyTenantContext(context);
-    return await this.database.transaction(async (tx) => {
+  public async consume(
+    context: TenantContext,
+    input: ConsumeApprovalInput,
+    executor?: QueryExecutor,
+  ): Promise<ExecutionPermit> {
+    await this.organizations.verifyTenantContext(context, undefined, executor ?? this.database);
+    const operation = async (tx: QueryExecutor): Promise<ExecutionPermit> => {
       await this.organizations.verifyTenantContext(context, undefined, tx);
       const [repeated] = await tx.query<[ExecutionPermit[]]>(
         "SELECT * OMIT id FROM governance_execution_permit WHERE organization_id = $organization_id AND command_id = $command_id LIMIT 1;",
@@ -127,7 +131,8 @@ export class PermitStore {
       );
       if (!created[0]) throw new Error("Execution Permit 생성 결과가 없습니다");
       return await this.permit(tx, context.organizationId, permitId);
-    });
+    };
+    return executor ? await operation(executor) : await this.database.transaction(operation);
   }
 
   public async createBypass(context: TenantContext, input: CreateBypassInput): Promise<BypassGrant> {

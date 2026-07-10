@@ -329,6 +329,32 @@ export class OrganizationGraphService {
     await this.organizations.getOrganization(context, context.organizationId);
   }
 
+  private async authorizeChange(
+    context: TenantContext,
+    command: OrganizationCommand,
+    executor?: QueryExecutor,
+  ): Promise<void> {
+    if (!this.governance) return;
+    await this.governance.authorize(
+      context,
+      {
+        commandId: command.commandId,
+        action: "organization.change",
+        resource: {
+          type: "Organization",
+          id: context.organizationId,
+          revision: command.expectedVersion,
+        },
+        environment: command.governanceEnvironment ?? "local",
+        riskClass: "write",
+        external: false,
+        executionId: `organization-change:${command.commandId}`,
+        ...(command.governanceApprovalId ? { approvalId: command.governanceApprovalId } : {}),
+      },
+      executor,
+    );
+  }
+
   public async bootstrap(context: TenantContext): Promise<GraphChangeResult> {
     await this.verify(context, true);
     return await this.database.transaction(async (transaction) => {
@@ -425,22 +451,7 @@ export class OrganizationGraphService {
 
   public async execute(context: TenantContext, command: OrganizationCommand): Promise<GraphChangeResult> {
     await this.verify(context, true);
-    if (this.governance) {
-      await this.governance.authorize(context, {
-        commandId: command.commandId,
-        action: "organization.change",
-        resource: {
-          type: "Organization",
-          id: context.organizationId,
-          revision: command.expectedVersion,
-        },
-        environment: command.governanceEnvironment ?? "local",
-        riskClass: "write",
-        external: false,
-        executionId: `organization-change:${command.commandId}`,
-        ...(command.governanceApprovalId ? { approvalId: command.governanceApprovalId } : {}),
-      });
-    }
+    if (!command.governanceApprovalId) await this.authorizeChange(context, command);
     return await this.database.transaction(async (transaction) => {
       await this.organizations.verifyTenantContext(context, ["owner"], transaction);
       const versions = await listVersions(transaction, context.organizationId);
@@ -458,6 +469,7 @@ export class OrganizationGraphService {
       if (!current || current.version !== command.expectedVersion) {
         throw new Error(`현재 OrganizationVersion은 ${String(current?.version ?? 0)}입니다`);
       }
+      if (command.governanceApprovalId) await this.authorizeChange(context, command, transaction);
       const before = normalizeSnapshot(await listNodes(transaction, context.organizationId));
       const after =
         command.kind === "revert"
