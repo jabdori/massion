@@ -64,6 +64,9 @@ importers:
       '@massion/identity':
         specifier: workspace:*
         version: link:../identity
+      '@massion/organization':
+        specifier: workspace:*
+        version: link:../organization
       '@massion/storage':
         specifier: workspace:*
         version: link:../storage
