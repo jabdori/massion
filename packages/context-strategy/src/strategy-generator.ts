@@ -203,6 +203,31 @@ export class StrategyGenerator {
     return this.view(await this.find(this.database, context.organizationId, strategyGenerationId));
   }
 
+  public async listGenerated(context: TenantContext): Promise<StrategyGeneration[]> {
+    await this.organizations.verifyTenantContext(context);
+    const [records] = await this.database.query<[StrategyGenerationRecord[]]>(
+      "SELECT * OMIT id FROM strategy_generation WHERE organization_id = $organization_id AND status = 'generated' ORDER BY created_at ASC;",
+      { organization_id: context.organizationId },
+    );
+    return records.map((record) => this.view(record));
+  }
+
+  public async markApplied(
+    context: TenantContext,
+    strategyGenerationId: string,
+    commandId: string,
+  ): Promise<StrategyGeneration> {
+    return await this.reconcile(context, strategyGenerationId, commandId, "applied");
+  }
+
+  public async markConflicted(
+    context: TenantContext,
+    strategyGenerationId: string,
+    commandId: string,
+  ): Promise<StrategyGeneration> {
+    return await this.reconcile(context, strategyGenerationId, commandId, "conflicted");
+  }
+
   private async finish(
     context: TenantContext,
     input: GenerateStrategyInput,
@@ -245,6 +270,49 @@ export class StrategyGenerator {
         },
       );
       return this.view(await this.find(tx, context.organizationId, generationId));
+    });
+  }
+
+  private async reconcile(
+    context: TenantContext,
+    strategyGenerationId: string,
+    commandId: string,
+    status: "applied" | "conflicted",
+  ): Promise<StrategyGeneration> {
+    await this.organizations.verifyTenantContext(context);
+    return await this.database.transaction(async (tx) => {
+      await this.organizations.verifyTenantContext(context, undefined, tx);
+      const current = await this.find(tx, context.organizationId, strategyGenerationId);
+      if (current.status === status) return this.view(current);
+      if (current.status !== "generated") {
+        throw new Error(`generated Strategy만 ${status} 상태로 조정할 수 있습니다: ${current.status}`);
+      }
+      const error =
+        status === "conflicted" ? { category: "work_revision_conflict", causeId: randomUUID() } : undefined;
+      const [updated] = await tx.query<[StrategyGenerationRecord[]]>(
+        "UPDATE strategy_generation SET status = $status, error_json = $error_json, updated_at = time::now() WHERE organization_id = $organization_id AND strategy_generation_id = $strategy_generation_id AND status = 'generated' RETURN AFTER;",
+        {
+          status,
+          error_json: error ? canonicalJson(error) : undefined,
+          organization_id: context.organizationId,
+          strategy_generation_id: strategyGenerationId,
+        },
+      );
+      if (!updated[0]) {
+        const concurrent = await this.find(tx, context.organizationId, strategyGenerationId);
+        if (concurrent.status === status) return this.view(concurrent);
+        throw new Error(`Strategy generation ${status} 전이에 실패했습니다`);
+      }
+      await this.insertEvent(
+        tx,
+        context.organizationId,
+        current.work_id,
+        strategyGenerationId,
+        commandId,
+        status === "applied" ? "strategy_projection_applied" : "strategy_projection_conflicted",
+        { status, ...(error ? { error } : {}) },
+      );
+      return this.view(updated[0]);
     });
   }
 

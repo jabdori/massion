@@ -886,6 +886,21 @@ export class WorkService {
     return await listEventsWith(this.database, context.organizationId, workId);
   }
 
+  public async getActivePlan(context: TenantContext, workId: string): Promise<PlanVersion | undefined> {
+    const work = await this.getWork(context, workId);
+    if (!work.active_plan_version_id) return undefined;
+    const [plans] = await this.database.query<[PlanVersion[]]>(
+      "SELECT * OMIT id FROM plan_version WHERE organization_id = $organization_id AND work_id = $work_id AND plan_version_id = $plan_version_id LIMIT 1;",
+      {
+        organization_id: context.organizationId,
+        work_id: workId,
+        plan_version_id: work.active_plan_version_id,
+      },
+    );
+    if (!plans[0]) throw new Error(`활성 PlanVersion을 찾을 수 없습니다: ${work.active_plan_version_id}`);
+    return plans[0];
+  }
+
   public async applyStrategyProjection(
     context: TenantContext,
     input: ApplyStrategyProjectionInput,

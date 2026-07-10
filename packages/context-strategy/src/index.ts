@@ -3,3 +3,5 @@ export * from "./contracts.js";
 export * from "./schema.js";
 export * from "./strategy-schema.js";
 export * from "./strategy-generator.js";
+export * from "./strategy-service.js";
+export * from "./recovery.js";
