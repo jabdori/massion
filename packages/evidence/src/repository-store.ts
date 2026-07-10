@@ -469,7 +469,7 @@ export class RepositoryStore {
         repositoryRevisionId: target.repository_revision_id,
         indexVersionId: target.index_version_id,
         commandId: input.commandId,
-        eventType: "index_completed",
+        eventType: target.mode === "reconcile" ? "index_reconciled" : "index_completed",
         requestHash,
         payload: { version: target.version, counts: input.counts, snapshotChecksum: input.snapshotChecksum },
         result,

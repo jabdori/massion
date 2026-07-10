@@ -8,3 +8,5 @@ export * from "./parser.js";
 export * from "./extractors.js";
 export * from "./index-store.js";
 export * from "./indexer.js";
+export * from "./watcher.js";
+export * from "./recovery.js";
