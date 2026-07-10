@@ -14,8 +14,8 @@
   ],
   "scripts": {
     "build": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\" && tsc -p tsconfig.json",
-    "test": "vitest run src",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "test": "pnpm --filter @massion/runtime exec tsc -p tsconfig.json && pnpm --filter @massion/work exec tsc -p tsconfig.json && vitest run src",
+    "typecheck": "pnpm --filter @massion/runtime exec tsc -p tsconfig.json && pnpm --filter @massion/work exec tsc -p tsconfig.json && tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
     "@massion/identity": "workspace:*",
