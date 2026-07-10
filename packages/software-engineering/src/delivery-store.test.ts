@@ -23,6 +23,7 @@ describe("Software Engineering delivery 저장소", () => {
   const repositoryId = "repository-1";
   const repositoryRevisionId = "repository-revision-1";
   const baseRevision = "0123456789abcdef0123456789abcdef01234567";
+  const repositoryRootRealPathHash = "a".repeat(64);
 
   beforeEach(async () => {
     database = await createDatabase({ url: "mem://", namespace: "massion", database: crypto.randomUUID() });
@@ -43,13 +44,19 @@ describe("Software Engineering delivery 저장소", () => {
         agentHandle: "software-engineering.backend-specialist",
         status: "assigned",
       }),
-      getRepository: async () => ({ organizationId: context.organizationId, repositoryId, status: "active" }),
+      getRepository: async () => ({
+        organizationId: context.organizationId,
+        repositoryId,
+        status: "active",
+        rootRealPathHash: repositoryRootRealPathHash,
+      }),
       getRepositoryRevision: async () => ({
         organizationId: context.organizationId,
         repositoryId,
         repositoryRevisionId,
         providerRevision: baseRevision,
         dirty: false,
+        rootRealPathHash: repositoryRootRealPathHash,
       }),
     };
     store = await EngineeringDeliveryStore.create(database, organizations, prerequisites);
@@ -84,6 +91,7 @@ describe("Software Engineering delivery 저장소", () => {
       repositoryId,
       repositoryRevisionId,
       baseRevision,
+      repositoryRootRealPathHash,
       status: "preparing",
       version: 1,
     });
@@ -91,6 +99,19 @@ describe("Software Engineering delivery 저장소", () => {
     await expect(store.start(context, { ...input(commandId), profileVersion: "changed" })).rejects.toThrow(
       "다른 delivery 명령",
     );
+  });
+
+  it("Repository와 revision의 실제 root path hash가 다르면 생성하지 않는다", async () => {
+    prerequisites.getRepositoryRevision = async () => ({
+      organizationId: context.organizationId,
+      repositoryId,
+      repositoryRevisionId,
+      providerRevision: baseRevision,
+      dirty: false,
+      rootRealPathHash: "b".repeat(64),
+    });
+
+    await expect(store.start(context, input())).rejects.toThrow("root real path hash");
   });
 
   it("Task·Assignment·Repository revision의 tenant와 소유 계보가 다르면 생성하지 않는다", async () => {
@@ -127,6 +148,7 @@ describe("Software Engineering delivery 저장소", () => {
       repositoryRevisionId,
       providerRevision: baseRevision,
       dirty: false,
+      rootRealPathHash: repositoryRootRealPathHash,
     });
     await expect(store.start(context, input())).rejects.toThrow("RepositoryRevision 소유 계보");
   });
@@ -138,6 +160,7 @@ describe("Software Engineering delivery 저장소", () => {
       repositoryRevisionId,
       providerRevision: baseRevision,
       dirty: true,
+      rootRealPathHash: repositoryRootRealPathHash,
     });
     await expect(store.start(context, input())).rejects.toThrow("clean revision");
 
@@ -147,6 +170,7 @@ describe("Software Engineering delivery 저장소", () => {
       repositoryRevisionId,
       providerRevision: baseRevision,
       dirty: false,
+      rootRealPathHash: repositoryRootRealPathHash,
     });
     prerequisites.getAssignment = async () => ({
       organizationId: context.organizationId,
@@ -265,5 +289,38 @@ describe("Software Engineering delivery 저장소", () => {
     expect(records[0]).toMatchObject({ credential_redacted: true });
     expect(records[0]?.output_excerpt).not.toContain(secret);
     expect(await database.exportSql()).not.toContain(secret);
+  });
+
+  it("committed 전이에 존재하지 않거나 다른 stage의 validation evidence를 주입할 수 없다", async () => {
+    let delivery = (await store.start(context, input())).delivery;
+    for (const [target, extra] of [
+      ["test_applied", { testPatchHash: "1".repeat(64) }],
+      ["red_verified", { redEvidenceId: "red" }],
+      ["implementation_applied", { implementationPatchHash: "2".repeat(64) }],
+      ["green_verified", { greenEvidenceId: "green" }],
+    ] as const) {
+      delivery = (
+        await store.transition(context, {
+          commandId: crypto.randomUUID(),
+          deliveryId: delivery.deliveryId,
+          expectedVersion: delivery.version,
+          target,
+          ...extra,
+        })
+      ).delivery;
+    }
+
+    await expect(
+      store.transition(context, {
+        commandId: crypto.randomUUID(),
+        deliveryId: delivery.deliveryId,
+        expectedVersion: delivery.version,
+        target: "committed",
+        branchRef: "refs/heads/massion/forged",
+        commitSha: "b".repeat(40),
+        changeSetHash: "3".repeat(64),
+        validationEvidenceIds: ["forged-validation-evidence"],
+      }),
+    ).rejects.toThrow("validation command evidence");
   });
 });

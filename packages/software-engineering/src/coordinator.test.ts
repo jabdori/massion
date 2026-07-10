@@ -60,13 +60,19 @@ describe("Software Engineering delivery coordination", () => {
         agentHandle,
         status: assignmentStatus,
       }),
-      getRepository: async () => ({ organizationId: context.organizationId, repositoryId, status: "active" }),
+      getRepository: async () => ({
+        organizationId: context.organizationId,
+        repositoryId,
+        status: "active",
+        rootRealPathHash: "a".repeat(64),
+      }),
       getRepositoryRevision: async () => ({
         organizationId: context.organizationId,
         repositoryId,
         repositoryRevisionId,
         providerRevision: baseRevision,
         dirty: false,
+        rootRealPathHash: "a".repeat(64),
       }),
     };
     deliveryStore = await EngineeringDeliveryStore.create(database, organizations, prerequisiteReader);

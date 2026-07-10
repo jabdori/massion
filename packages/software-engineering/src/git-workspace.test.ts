@@ -82,8 +82,26 @@ describe("격리 Git delivery workspace", () => {
       { allowedPaths: ["src"] },
     );
 
-    await manager.applyPatch(workspace, testPatch);
-    await manager.applyPatch(workspace, implementationPatch);
+    const testApplied = await manager.applyPatch(workspace, testPatch);
+    const testSnapshot = await manager.inspectDeliveryWorkspace({
+      repositoryRoot,
+      baseRevision,
+      deliveryId: workspace.deliveryId,
+    });
+    expect(testSnapshot).toMatchObject({
+      changeSetHash: testApplied.changeSetHash,
+      paths: ["src/value.test.js"],
+    });
+    const implementationApplied = await manager.applyPatch(workspace, implementationPatch);
+    const implementationSnapshot = await manager.inspectDeliveryWorkspace({
+      repositoryRoot,
+      baseRevision,
+      deliveryId: workspace.deliveryId,
+    });
+    expect(implementationSnapshot).toMatchObject({
+      changeSetHash: implementationApplied.changeSetHash,
+      paths: ["src/value.js", "src/value.test.js"],
+    });
     const committed = await manager.commit(workspace, {
       message: "feat: delivery change",
       expectedPaths: [...testPatch.paths, ...implementationPatch.paths],
@@ -171,6 +189,20 @@ diff --git a/src/value.test.js b/src/value.test.js
     await expect(manager.prepare({ repositoryRoot, baseRevision, deliveryId: "escape" })).rejects.toThrow(
       "workspace path",
     );
+  });
+
+  it("recovery branch가 base를 첫 부모로 둔 merge commit이면 거부한다", async () => {
+    await git(["switch", "--create", "side"]);
+    await writeFile(join(repositoryRoot, "src/side.js"), "export const side = true;\n");
+    await git(["add", "src/side.js"]);
+    await git(["commit", "-m", "side"]);
+    await git(["switch", "main"]);
+    await git(["merge", "--no-ff", "side", "-m", "merge"]);
+    await git(["branch", "massion/merge-recovery", "HEAD"]);
+
+    await expect(
+      manager.inspectDeliveryBranch({ repositoryRoot, baseRevision, deliveryId: "merge-recovery" }),
+    ).rejects.toThrow("single-parent");
   });
 
   it("기존 symlink target은 mode가 생략된 patch라도 적용 전에 거부한다", async () => {

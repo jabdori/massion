@@ -6,6 +6,7 @@ import { applyMigrations, type MassionDatabase, type QueryExecutor } from "@mass
 import {
   SOFTWARE_ENGINEERING_DELIVERY_MIGRATION,
   SOFTWARE_ENGINEERING_PATH_LEASE_MIGRATION,
+  SOFTWARE_ENGINEERING_ROOT_BINDING_MIGRATION,
   SOFTWARE_ENGINEERING_TDD_EVIDENCE_MIGRATION,
 } from "./schema.js";
 
@@ -146,6 +147,7 @@ export class EngineeringPathLeaseStore {
       SOFTWARE_ENGINEERING_DELIVERY_MIGRATION,
       SOFTWARE_ENGINEERING_PATH_LEASE_MIGRATION,
       SOFTWARE_ENGINEERING_TDD_EVIDENCE_MIGRATION,
+      SOFTWARE_ENGINEERING_ROOT_BINDING_MIGRATION,
     ]);
     return new EngineeringPathLeaseStore(database, organizations, options.now ?? (() => new Date()));
   }

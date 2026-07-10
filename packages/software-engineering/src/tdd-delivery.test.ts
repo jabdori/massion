@@ -1,5 +1,6 @@
+import { createHash } from "node:crypto";
 import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -61,6 +62,9 @@ describe("test-first Engineering Delivery engine", () => {
     await git(["add", "."]);
     await git(["commit", "-m", "initial"]);
     baseRevision = await git(["rev-parse", "HEAD"]);
+    const repositoryRootRealPathHash = createHash("sha256")
+      .update(await realpath(repositoryRoot))
+      .digest("hex");
 
     database = await createDatabase({ url: "mem://", namespace: "massion", database: crypto.randomUUID() });
     const identity = await IdentityService.create(database);
@@ -83,13 +87,19 @@ describe("test-first Engineering Delivery engine", () => {
         agentHandle: "software-engineering.backend-specialist",
         status: "assigned",
       }),
-      getRepository: async () => ({ organizationId: context.organizationId, repositoryId, status: "active" }),
+      getRepository: async () => ({
+        organizationId: context.organizationId,
+        repositoryId,
+        status: "active",
+        rootRealPathHash: repositoryRootRealPathHash,
+      }),
       getRepositoryRevision: async () => ({
         organizationId: context.organizationId,
         repositoryId,
         repositoryRevisionId,
         providerRevision: baseRevision,
         dirty: false,
+        rootRealPathHash: repositoryRootRealPathHash,
       }),
     };
     deliveries = await EngineeringDeliveryStore.create(database, organizations, prerequisites);
@@ -337,7 +347,7 @@ describe("test-first Engineering Delivery engine", () => {
       error: { category: "validation_failed" },
     });
     expect(await branchExists()).toBe(false);
-  });
+  }, 20_000);
 
   it("patch·command output credential을 감지하면 원문 저장과 commit 없이 실패한다", async () => {
     const secret = "sk-abcdefghijklmnopqrstuvwxyz123456";

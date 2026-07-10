@@ -38,6 +38,12 @@ export interface GitCommitResult {
   readonly fileChanges: readonly GitFileChange[];
 }
 
+export interface GitWorkspaceSnapshot {
+  readonly workspace: GitDeliveryWorkspace;
+  readonly changeSetHash: string;
+  readonly paths: readonly string[];
+}
+
 function within(root: string, target: string): boolean {
   const path = relative(root, target);
   return path === "" || (!path.startsWith(`..${sep}`) && path !== ".." && !isAbsolute(path));
@@ -139,6 +145,18 @@ export class GitWorkspaceManager {
     return new GitWorkspaceManager(workspaceRoot, await realpath(disabledHooksPath));
   }
 
+  public async verifyRepositoryRoot(repositoryRoot: string, expectedRealPathHash: string): Promise<void> {
+    if (!/^[a-f0-9]{64}$/u.test(expectedRealPathHash)) {
+      throw new Error("Repository root real path hash 형식이 잘못되었습니다");
+    }
+    const actual = createHash("sha256")
+      .update(await realpath(repositoryRoot))
+      .digest("hex");
+    if (actual !== expectedRealPathHash) {
+      throw new Error("Repository root real path hash가 등록된 delivery와 다릅니다");
+    }
+  }
+
   public async prepare(input: {
     readonly repositoryRoot: string;
     readonly baseRevision: string;
@@ -205,10 +223,109 @@ export class GitWorkspaceManager {
     }
   }
 
+  public async inspectDeliveryBranch(input: {
+    readonly repositoryRoot: string;
+    readonly baseRevision: string;
+    readonly deliveryId: string;
+  }): Promise<GitCommitResult | undefined> {
+    if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u.test(input.deliveryId)) {
+      throw new Error("Delivery ID는 안전한 branch 식별자여야 합니다");
+    }
+    const repositoryRoot = await realpath(input.repositoryRoot);
+    const branchRef = `refs/heads/massion/${input.deliveryId}`;
+    const branch = await runGit(repositoryRoot, ["show-ref", "--verify", "--quiet", branchRef], {
+      allowFailure: true,
+    });
+    if (branch.exitCode === 1) return undefined;
+    if (branch.exitCode !== 0) throw new Error("Recovery branch 존재 여부를 확인하지 못했습니다");
+    const commitSha = (await runGit(repositoryRoot, ["rev-parse", branchRef])).stdout.trim();
+    const lineage = (await runGit(repositoryRoot, ["rev-list", "--parents", "-n", "1", commitSha])).stdout
+      .trim()
+      .split(/\s+/u);
+    if (lineage.length !== 2) throw new Error("Recovery branch는 single-parent delivery commit이어야 합니다");
+    const parent = lineage[1];
+    if (parent !== input.baseRevision) throw new Error("Recovery branch commit parent가 delivery base와 다릅니다");
+    const synthetic: GitDeliveryWorkspace = {
+      repositoryRoot,
+      workspacePath: repositoryRoot,
+      workspaceRoot: this.workspaceRoot,
+      baseRevision: input.baseRevision,
+      deliveryId: input.deliveryId,
+      branchRef,
+    };
+    const fileChanges = await this.fileChanges(synthetic, commitSha);
+    const changeSet = (
+      await runGit(repositoryRoot, ["diff", "--full-index", "--no-ext-diff", "--binary", input.baseRevision, commitSha])
+    ).stdout;
+    return {
+      branchRef,
+      commitSha,
+      changeSetHash: createHash("sha256").update(changeSet).digest("hex"),
+      fileChanges,
+    };
+  }
+
+  public async removeDeliveryWorkspaceIfExists(input: {
+    readonly repositoryRoot: string;
+    readonly baseRevision: string;
+    readonly deliveryId: string;
+  }): Promise<boolean> {
+    const repositoryRoot = await realpath(input.repositoryRoot);
+    const workspacePath = resolve(this.workspaceRoot, input.deliveryId);
+    if (!within(this.workspaceRoot, workspacePath) || !(await exists(workspacePath))) {
+      await runGit(repositoryRoot, ["worktree", "prune"]);
+      return false;
+    }
+    const actual = await realpath(workspacePath);
+    if (!within(this.workspaceRoot, actual)) throw new Error("Recovery workspace가 관리 root 밖입니다");
+    await this.remove({
+      repositoryRoot,
+      workspacePath: actual,
+      workspaceRoot: this.workspaceRoot,
+      baseRevision: input.baseRevision,
+      deliveryId: input.deliveryId,
+      branchRef: `refs/heads/massion/${input.deliveryId}`,
+    });
+    return true;
+  }
+
+  public async inspectDeliveryWorkspace(input: {
+    readonly repositoryRoot: string;
+    readonly baseRevision: string;
+    readonly deliveryId: string;
+  }): Promise<GitWorkspaceSnapshot | undefined> {
+    if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u.test(input.deliveryId) || [".", ".."].includes(input.deliveryId)) {
+      throw new Error("Delivery ID는 안전한 workspace 식별자여야 합니다");
+    }
+    const repositoryRoot = await realpath(input.repositoryRoot);
+    const workspacePath = resolve(this.workspaceRoot, input.deliveryId);
+    if (!within(this.workspaceRoot, workspacePath) || !(await exists(workspacePath))) return undefined;
+    const actual = await realpath(workspacePath);
+    if (!within(this.workspaceRoot, actual)) throw new Error("Recovery workspace가 관리 root 밖입니다");
+    const workspace: GitDeliveryWorkspace = {
+      repositoryRoot,
+      workspacePath: actual,
+      workspaceRoot: this.workspaceRoot,
+      baseRevision: input.baseRevision,
+      deliveryId: input.deliveryId,
+      branchRef: `refs/heads/massion/${input.deliveryId}`,
+    };
+    await this.verifyWorkspace(workspace);
+    const head = (await runGit(actual, ["rev-parse", "HEAD"])).stdout.trim();
+    if (head !== input.baseRevision) throw new Error("Recovery workspace HEAD가 delivery base와 다릅니다");
+    await this.verifyNoUnstagedChanges(workspace);
+    const staged = await this.stagedChangeSet(workspace);
+    return { workspace, ...staged };
+  }
+
   public async applyPatch(
     workspace: GitDeliveryWorkspace,
     patch: ValidatedUnifiedPatch,
-  ): Promise<{ readonly patchHash: string; readonly paths: readonly string[] }> {
+  ): Promise<{
+    readonly patchHash: string;
+    readonly changeSetHash: string;
+    readonly paths: readonly string[];
+  }> {
     await this.verifyWorkspace(workspace);
     if (!patch.validated || createHash("sha256").update(patch.text).digest("hex") !== patch.sha256) {
       throw new Error("검증된 patch provenance가 일치하지 않습니다");
@@ -233,7 +350,7 @@ export class GitWorkspaceManager {
     if (staged.some((path) => !previouslyStaged.has(path) && !patch.paths.includes(path))) {
       throw new Error("Patch parser와 Git staged path가 일치하지 않습니다");
     }
-    return { patchHash: patch.sha256, paths: patch.paths };
+    return { patchHash: patch.sha256, ...(await this.stagedChangeSet(workspace)) };
   }
 
   public async commit(
@@ -345,6 +462,19 @@ export class GitWorkspaceManager {
         throw new Error("Workspace HEAD가 base 또는 delivery branch와 일치하지 않습니다");
       }
     }
+  }
+
+  private async stagedChangeSet(
+    workspace: GitDeliveryWorkspace,
+  ): Promise<{ readonly changeSetHash: string; readonly paths: readonly string[] }> {
+    const [changeSet, paths] = await Promise.all([
+      runGit(workspace.workspacePath, ["diff", "--cached", "--full-index", "--no-ext-diff", "--binary"]),
+      runGit(workspace.workspacePath, ["diff", "--cached", "--name-only", "-z"]),
+    ]);
+    return {
+      changeSetHash: createHash("sha256").update(changeSet.stdout).digest("hex"),
+      paths: paths.stdout.split("\0").filter(Boolean).sort(),
+    };
   }
 
   private async verifyPatchTargets(workspace: GitDeliveryWorkspace, paths: readonly string[]): Promise<void> {

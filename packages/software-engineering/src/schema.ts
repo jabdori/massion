@@ -127,3 +127,25 @@ DEFINE FIELD evidence_hash ON engineering_command_evidence TYPE option<string>;
 DEFINE FIELD change_hash ON engineering_file_change TYPE option<string>;
 `,
 );
+
+export const SOFTWARE_ENGINEERING_METRIC_MIGRATION = defineMigration(
+  "0037-software-engineering-metric",
+  `
+DEFINE TABLE engineering_metric_event SCHEMAFULL;
+DEFINE FIELD metric_event_id ON engineering_metric_event TYPE string;
+DEFINE FIELD organization_id ON engineering_metric_event TYPE string;
+DEFINE FIELD metric_name ON engineering_metric_event TYPE string;
+DEFINE FIELD dimensions_json ON engineering_metric_event TYPE string;
+DEFINE FIELD value ON engineering_metric_event TYPE number;
+DEFINE FIELD occurred_at ON engineering_metric_event TYPE datetime;
+DEFINE INDEX engineering_metric_event_id ON engineering_metric_event FIELDS metric_event_id UNIQUE;
+DEFINE INDEX engineering_metric_event_org ON engineering_metric_event FIELDS organization_id, metric_name;
+  `,
+);
+
+export const SOFTWARE_ENGINEERING_ROOT_BINDING_MIGRATION = defineMigration(
+  "0038-software-engineering-root-binding",
+  `
+DEFINE FIELD repository_root_real_path_hash ON engineering_delivery TYPE option<string>;
+`,
+);
