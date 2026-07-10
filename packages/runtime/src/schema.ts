@@ -62,3 +62,68 @@ THEN {
 };
 `,
 );
+
+export const RUNTIME_MEMORY_MIGRATION = defineMigration(
+  "0013-runtime-memory",
+  `
+DEFINE TABLE runtime_conversation SCHEMAFULL;
+DEFINE FIELD conversation_id ON runtime_conversation TYPE string;
+DEFINE FIELD organization_id ON runtime_conversation TYPE string;
+DEFINE FIELD resource_id ON runtime_conversation TYPE string;
+DEFINE FIELD user_id ON runtime_conversation TYPE string;
+DEFINE FIELD title ON runtime_conversation TYPE string;
+DEFINE FIELD metadata_json ON runtime_conversation TYPE string;
+DEFINE FIELD created_at ON runtime_conversation TYPE datetime;
+DEFINE FIELD updated_at ON runtime_conversation TYPE datetime;
+DEFINE INDEX runtime_conversation_id ON runtime_conversation FIELDS organization_id, conversation_id UNIQUE;
+DEFINE INDEX runtime_conversation_resource ON runtime_conversation FIELDS organization_id, resource_id, updated_at;
+
+DEFINE TABLE runtime_message SCHEMAFULL;
+DEFINE FIELD message_id ON runtime_message TYPE string;
+DEFINE FIELD organization_id ON runtime_message TYPE string;
+DEFINE FIELD user_id ON runtime_message TYPE string;
+DEFINE FIELD conversation_id ON runtime_message TYPE string;
+DEFINE FIELD role ON runtime_message TYPE string;
+DEFINE FIELD message_json ON runtime_message TYPE string;
+DEFINE FIELD created_at ON runtime_message TYPE datetime;
+DEFINE INDEX runtime_message_id ON runtime_message FIELDS organization_id, conversation_id, message_id UNIQUE;
+DEFINE INDEX runtime_message_time ON runtime_message FIELDS organization_id, conversation_id, created_at;
+
+DEFINE TABLE runtime_conversation_step SCHEMAFULL;
+DEFINE FIELD step_id ON runtime_conversation_step TYPE string;
+DEFINE FIELD organization_id ON runtime_conversation_step TYPE string;
+DEFINE FIELD user_id ON runtime_conversation_step TYPE string;
+DEFINE FIELD conversation_id ON runtime_conversation_step TYPE string;
+DEFINE FIELD operation_id ON runtime_conversation_step TYPE string;
+DEFINE FIELD step_index ON runtime_conversation_step TYPE int;
+DEFINE FIELD step_json ON runtime_conversation_step TYPE string;
+DEFINE FIELD created_at ON runtime_conversation_step TYPE datetime;
+DEFINE INDEX runtime_conversation_step_id ON runtime_conversation_step FIELDS organization_id, step_id UNIQUE;
+DEFINE INDEX runtime_conversation_step_order ON runtime_conversation_step FIELDS organization_id, conversation_id, operation_id, step_index;
+
+DEFINE TABLE runtime_working_memory SCHEMAFULL;
+DEFINE FIELD memory_id ON runtime_working_memory TYPE string;
+DEFINE FIELD organization_id ON runtime_working_memory TYPE string;
+DEFINE FIELD scope ON runtime_working_memory TYPE string;
+DEFINE FIELD user_id ON runtime_working_memory TYPE option<string>;
+DEFINE FIELD conversation_id ON runtime_working_memory TYPE option<string>;
+DEFINE FIELD content ON runtime_working_memory TYPE string;
+DEFINE FIELD created_at ON runtime_working_memory TYPE datetime;
+DEFINE FIELD updated_at ON runtime_working_memory TYPE datetime;
+DEFINE INDEX runtime_working_memory_id ON runtime_working_memory FIELDS organization_id, memory_id UNIQUE;
+
+DEFINE TABLE runtime_workflow_state SCHEMAFULL;
+DEFINE FIELD workflow_execution_id ON runtime_workflow_state TYPE string;
+DEFINE FIELD organization_id ON runtime_workflow_state TYPE string;
+DEFINE FIELD workflow_id ON runtime_workflow_state TYPE string;
+DEFINE FIELD workflow_name ON runtime_workflow_state TYPE string;
+DEFINE FIELD status ON runtime_workflow_state TYPE string;
+DEFINE FIELD user_id ON runtime_workflow_state TYPE option<string>;
+DEFINE FIELD metadata_json ON runtime_workflow_state TYPE string;
+DEFINE FIELD state_json ON runtime_workflow_state TYPE string;
+DEFINE FIELD created_at ON runtime_workflow_state TYPE datetime;
+DEFINE FIELD updated_at ON runtime_workflow_state TYPE datetime;
+DEFINE INDEX runtime_workflow_state_id ON runtime_workflow_state FIELDS organization_id, workflow_execution_id UNIQUE;
+DEFINE INDEX runtime_workflow_state_query ON runtime_workflow_state FIELDS organization_id, workflow_id, status, updated_at;
+`,
+);
