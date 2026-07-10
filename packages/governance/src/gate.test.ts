@@ -14,6 +14,7 @@ import { PolicyStore } from "./policy-store.js";
 describe("Governance Gate", () => {
   let database: MassionDatabase;
   let context: TenantContext;
+  let organizations: OrganizationService;
   let approvals: ApprovalStore;
   let emergency: EmergencyControl;
   let gate: GovernanceGate;
@@ -21,7 +22,7 @@ describe("Governance Gate", () => {
   beforeEach(async () => {
     database = await createDatabase({ url: "mem://", namespace: "massion", database: crypto.randomUUID() });
     const identity = await IdentityService.create(database);
-    const organizations = await OrganizationService.create(database);
+    organizations = await OrganizationService.create(database);
     const owner = await identity.registerPersonalUser({ email: "gate@example.com", displayName: "Gate" });
     context = await organizations.resolveTenantContext(owner.user.user_id, owner.organization.organization_id);
     const policies = await PolicyStore.create(database, organizations);
@@ -104,5 +105,45 @@ describe("Governance Gate", () => {
     await emergency.activate(context, { commandId: crypto.randomUUID(), reason: "incident" });
 
     await expect(gate.authorize(context, input())).rejects.toThrow("긴급 중단");
+  });
+
+  it("active Policy 교체는 현재 정책의 사람 승인과 원자 Permit을 요구한다", async () => {
+    const administered = await PolicyStore.create(database, organizations, gate);
+    const defaults = createDefaultPolicy("personal");
+    const active = await administered.getActive(context);
+    if (!active) throw new Error("active 정책이 없습니다");
+    const draft = await administered.createDraft(context, {
+      commandId: crypto.randomUUID(),
+      bundle: defaults.bundle,
+      requirements: defaults.requirements,
+    });
+    const commandId = crypto.randomUUID();
+    let required: GovernanceApprovalRequiredError | undefined;
+    try {
+      await administered.activate(context, {
+        commandId,
+        policyVersionId: draft.policy_version_id,
+        expectedActivePolicyVersionId: active.policy_version_id,
+      });
+    } catch (error) {
+      if (error instanceof GovernanceApprovalRequiredError) required = error;
+      else throw error;
+    }
+    if (!required) throw new Error("정책 교체 승인 요청이 없습니다");
+    await approvals.vote(context, {
+      commandId: crypto.randomUUID(),
+      approvalId: required.approvalId,
+      vote: "approve",
+      reason: "policy reviewed",
+    });
+
+    const activated = await administered.activate(context, {
+      commandId,
+      policyVersionId: draft.policy_version_id,
+      expectedActivePolicyVersionId: active.policy_version_id,
+      governanceApprovalId: required.approvalId,
+    });
+
+    expect(activated.status).toBe("active");
   });
 });

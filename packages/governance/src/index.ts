@@ -1,6 +1,7 @@
 export * from "./approval-store.js";
 export * from "./cedar-authorizer.js";
 export * from "./contracts.js";
+export * from "./declaration.js";
 export * from "./defaults.js";
 export * from "./emergency.js";
 export * from "./gate.js";

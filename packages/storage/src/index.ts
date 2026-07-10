@@ -2,7 +2,9 @@ export { createBackup, restoreBackup, type BackupManifest, type DatabaseBackup }
 export { createDatabase, MassionDatabase, type DatabaseConfig, type QueryExecutor } from "./database.js";
 export {
   DeclarationStore,
+  type DeclarationApplyOptions,
   type DeclarationApplyResult,
+  type DeclarationGovernanceGuard,
   type DeclarationVersion,
   type JsonValue,
 } from "./declaration-store.js";
