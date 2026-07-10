@@ -57,7 +57,9 @@ function isModelUnavailable(error: unknown): boolean {
   return error instanceof Error && error.message.startsWith("blocked_model_unavailable:");
 }
 
-function streamPayload(part: { readonly type: string } & Record<string, unknown>): Record<string, unknown> {
+export function normalizeVoltAgentStreamPart(
+  part: { readonly type: string } & Record<string, unknown>,
+): Record<string, unknown> {
   const safe: Record<string, unknown> = { type: part.type };
   for (const key of ["id", "text", "delta", "toolName", "toolCallId", "finishReason", "usage"] as const) {
     if (part[key] !== undefined) safe[key] = part[key];
@@ -171,7 +173,7 @@ export class VoltAgentRunner implements AgentRunner {
               executionId,
               expectedVersion: state.execution.version,
               eventType: `model_${part.type.replaceAll("-", "_")}`,
-              payload: streamPayload(part),
+              payload: normalizeVoltAgentStreamPart(part),
             });
             yield eventView(state.event);
           }

@@ -10,7 +10,7 @@ import { createDatabase, type MassionDatabase } from "@massion/storage";
 import type { AgentExecutionInput } from "./contracts.js";
 import { RuntimeExecutionStore } from "./execution-store.js";
 import type { RoutedModelFactory, RoutedModelLease } from "./model-factory.js";
-import { RoutedModelRegistry, VoltAgentRunner } from "./voltagent-runner.js";
+import { normalizeVoltAgentStreamPart, RoutedModelRegistry, VoltAgentRunner } from "./voltagent-runner.js";
 
 const USAGE = {
   inputTokens: { total: 2, noCache: 2, cacheRead: 0, cacheWrite: 0 },
@@ -176,6 +176,19 @@ describe("VoltAgent AgentRunner", () => {
     if (!first) throw new Error("stream event가 없습니다");
     const recovery = await store.getRecovery(context, first.executionId);
     expect(recovery.execution.status).toBe("succeeded");
+  });
+
+  it("tool·handoff 귀속 필드는 유지하고 provider secret은 제거한다", () => {
+    const payload = normalizeVoltAgentStreamPart({
+      type: "tool-call",
+      toolName: "delegate_task",
+      toolCallId: "handoff-1",
+      providerMetadata: { authorization: "secret-token" },
+      credential: "secret-token",
+    });
+
+    expect(payload).toEqual({ type: "tool-call", toolName: "delegate_task", toolCallId: "handoff-1" });
+    expect(JSON.stringify(payload)).not.toContain("secret-token");
   });
 
   it("stream 실행을 cancel하면 AbortSignal과 영속 상태가 한 번만 cancelled가 된다", async () => {
