@@ -12,3 +12,6 @@ export * from "./watcher.js";
 export * from "./recovery.js";
 export * from "./search.js";
 export * from "./graph.js";
+export * from "./evidence-store.js";
+export * from "./stale.js";
+export * from "./research.js";

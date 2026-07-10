@@ -207,3 +207,77 @@ export const EVIDENCE_SEARCH_INDEX_MIGRATION = defineMigration(
 DEFINE INDEX evidence_chunk_content_search ON evidence_chunk FIELDS content FULLTEXT ANALYZER evidence_code BM25;
 `,
 );
+
+export const EVIDENCE_BRIEF_MIGRATION = defineMigration(
+  "0029-evidence-brief",
+  `
+DEFINE TABLE evidence_brief SCHEMAFULL;
+DEFINE FIELD evidence_brief_id ON evidence_brief TYPE string;
+DEFINE FIELD organization_id ON evidence_brief TYPE string;
+DEFINE FIELD work_id ON evidence_brief TYPE string;
+DEFINE FIELD repository_id ON evidence_brief TYPE string;
+DEFINE FIELD repository_revision_id ON evidence_brief TYPE string;
+DEFINE FIELD index_version_id ON evidence_brief TYPE string;
+DEFINE FIELD configuration_checksum ON evidence_brief TYPE string;
+DEFINE FIELD query ON evidence_brief TYPE string;
+DEFINE FIELD status ON evidence_brief TYPE string ASSERT $value IN ['ready', 'stale_warning', 'blocked', 'failed'];
+DEFINE FIELD references_json ON evidence_brief TYPE string;
+DEFINE FIELD claims_json ON evidence_brief TYPE string;
+DEFINE FIELD checksum ON evidence_brief TYPE string;
+DEFINE FIELD created_by_user_id ON evidence_brief TYPE string;
+DEFINE FIELD created_at ON evidence_brief TYPE datetime;
+DEFINE INDEX evidence_brief_id ON evidence_brief FIELDS evidence_brief_id UNIQUE;
+DEFINE INDEX evidence_brief_work ON evidence_brief FIELDS organization_id, work_id;
+DEFINE INDEX evidence_brief_index ON evidence_brief FIELDS organization_id, index_version_id;
+
+DEFINE TABLE evidence_brief_event SCHEMAFULL;
+DEFINE FIELD event_id ON evidence_brief_event TYPE string;
+DEFINE FIELD organization_id ON evidence_brief_event TYPE string;
+DEFINE FIELD evidence_brief_id ON evidence_brief_event TYPE string;
+DEFINE FIELD repository_id ON evidence_brief_event TYPE string;
+DEFINE FIELD command_id ON evidence_brief_event TYPE string;
+DEFINE FIELD request_hash ON evidence_brief_event TYPE string;
+DEFINE FIELD event_type ON evidence_brief_event TYPE string;
+DEFINE FIELD payload_json ON evidence_brief_event TYPE string;
+DEFINE FIELD result_json ON evidence_brief_event TYPE string;
+DEFINE FIELD actor_user_id ON evidence_brief_event TYPE string;
+DEFINE FIELD created_at ON evidence_brief_event TYPE datetime;
+DEFINE INDEX evidence_brief_event_id ON evidence_brief_event FIELDS event_id UNIQUE;
+DEFINE INDEX evidence_brief_event_command ON evidence_brief_event FIELDS organization_id, command_id UNIQUE;
+`,
+);
+
+export const EVIDENCE_RESEARCH_MIGRATION = defineMigration(
+  "0030-evidence-research",
+  `
+DEFINE TABLE external_research_source SCHEMAFULL;
+DEFINE FIELD external_source_id ON external_research_source TYPE string;
+DEFINE FIELD organization_id ON external_research_source TYPE string;
+DEFINE FIELD canonical_url ON external_research_source TYPE string;
+DEFINE FIELD provider_kind ON external_research_source TYPE string;
+DEFINE FIELD etag ON external_research_source TYPE option<string>;
+DEFINE FIELD last_modified ON external_research_source TYPE option<string>;
+DEFINE FIELD fetched_at ON external_research_source TYPE datetime;
+DEFINE FIELD media_type ON external_research_source TYPE string;
+DEFINE FIELD content_hash ON external_research_source TYPE string;
+DEFINE FIELD content ON external_research_source TYPE string;
+DEFINE FIELD created_by_user_id ON external_research_source TYPE string;
+DEFINE FIELD created_at ON external_research_source TYPE datetime;
+DEFINE INDEX external_research_source_id ON external_research_source FIELDS external_source_id UNIQUE;
+DEFINE INDEX external_research_source_snapshot ON external_research_source FIELDS organization_id, canonical_url, content_hash UNIQUE;
+
+DEFINE TABLE external_research_event SCHEMAFULL;
+DEFINE FIELD event_id ON external_research_event TYPE string;
+DEFINE FIELD organization_id ON external_research_event TYPE string;
+DEFINE FIELD external_source_id ON external_research_event TYPE string;
+DEFINE FIELD command_id ON external_research_event TYPE string;
+DEFINE FIELD request_hash ON external_research_event TYPE string;
+DEFINE FIELD event_type ON external_research_event TYPE string;
+DEFINE FIELD payload_json ON external_research_event TYPE string;
+DEFINE FIELD result_json ON external_research_event TYPE string;
+DEFINE FIELD actor_user_id ON external_research_event TYPE string;
+DEFINE FIELD created_at ON external_research_event TYPE datetime;
+DEFINE INDEX external_research_event_id ON external_research_event FIELDS event_id UNIQUE;
+DEFINE INDEX external_research_event_command ON external_research_event FIELDS organization_id, command_id UNIQUE;
+`,
+);

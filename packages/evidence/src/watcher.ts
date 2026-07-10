@@ -10,7 +10,13 @@ import { normalizeRepositoryPath } from "./path.js";
 
 export type RepositoryWatchEvent = "add" | "change" | "unlink" | "addDir" | "unlinkDir";
 export type RepositoryIndexReason =
-  "event_batch" | "directory_changed" | "event_flood" | "root_deleted" | "watcher_error" | "startup_recovery";
+  | "event_batch"
+  | "directory_changed"
+  | "event_flood"
+  | "root_deleted"
+  | "watcher_error"
+  | "startup_recovery"
+  | "stale_evidence";
 
 export interface RepositoryChangeSet {
   readonly created: readonly string[];
