@@ -1,5 +1,11 @@
 import { defineMigration } from "@massion/storage";
 
+export const WORK_ASSURANCE_FAIL_CLOSED_GUARD = `
+DEFINE EVENT IF NOT EXISTS work_assurance_completion_guard ON TABLE work
+WHEN $event = 'UPDATE' AND $before.status != 'completed' AND $after.status = 'completed'
+THEN { THROW 'Assurance bootstrap 전에는 Work를 completed로 전이할 수 없습니다'; };
+`;
+
 export const WORK_CORE_MIGRATION = defineMigration(
   "0004-work-core",
   `
@@ -340,5 +346,169 @@ DEFINE FIELD parallelizable ON work_task TYPE option<bool>;
 DEFINE INDEX work_active_plan ON work FIELDS organization_id, active_plan_version_id;
 DEFINE INDEX work_task_plan ON work_task FIELDS organization_id, work_id, plan_version_id;
 DEFINE INDEX work_task_strategy_key ON work_task FIELDS organization_id, work_id, plan_version_id, task_key UNIQUE;
+`,
+);
+
+export const WORK_ASSURANCE_LINK_MIGRATION = defineMigration(
+  "0042-work-assurance-link",
+  `
+DEFINE FIELD assurance_run_id ON work_verification TYPE string ASSERT string::len($value) > 0 AND string::len($value) <= 200;
+DEFINE FIELD target_work_revision ON work_verification TYPE int ASSERT $value >= 1;
+DEFINE FIELD projected_work_revision ON work_verification TYPE int ASSERT $value = $this.target_work_revision + 1;
+DEFINE FIELD snapshot_hash ON work_verification TYPE string ASSERT string::len($value) = 64;
+DEFINE FIELD profile_id ON work_verification TYPE string ASSERT string::len($value) > 0 AND string::len($value) <= 200;
+DEFINE FIELD profile_version ON work_verification TYPE string ASSERT string::len($value) > 0 AND string::len($value) <= 100;
+DEFINE FIELD binding_version_id ON work_verification TYPE string ASSERT string::len($value) > 0 AND string::len($value) <= 200;
+DEFINE FIELD evidence_artifact_version_id ON work_verification TYPE string ASSERT string::len($value) > 0 AND string::len($value) <= 200;
+DEFINE INDEX work_verification_assurance_run ON work_verification FIELDS organization_id, assurance_run_id UNIQUE;
+
+DEFINE FIELD creator_agent_handle ON artifact_version TYPE option<string> ASSERT $value = NONE OR (string::len($value) > 0 AND string::len($value) <= 200);
+DEFINE FIELD creator_execution_id ON artifact_version TYPE option<string> ASSERT $value = NONE OR (string::len($value) > 0 AND string::len($value) <= 200);
+DEFINE EVENT artifact_version_runtime_provenance ON TABLE artifact_version
+WHEN $event = 'CREATE' AND ($after.creator_agent_handle != NONE OR $after.creator_execution_id != NONE)
+THEN {
+  IF $after.creator_agent_handle = NONE OR $after.creator_execution_id = NONE {
+    THROW 'ArtifactVersion Runtime provenance는 handle과 execution이 함께 필요합니다';
+  };
+  LET $executions = (SELECT execution_id FROM runtime_execution WHERE organization_id = $after.organization_id AND work_id = $after.work_id AND execution_id = $after.creator_execution_id AND agent_handle = $after.creator_agent_handle AND status = 'succeeded');
+  IF array::len($executions) != 1 {
+    THROW 'ArtifactVersion creator Runtime Execution이 유효하지 않습니다';
+  };
+};
+DEFINE EVENT artifact_version_immutable ON TABLE artifact_version
+WHEN $event IN ['UPDATE', 'DELETE']
+THEN { THROW 'ArtifactVersion은 immutable입니다'; };
+
+DEFINE EVENT work_verification_assurance_invariant ON TABLE work_verification
+WHEN $event IN ['CREATE', 'UPDATE', 'DELETE']
+THEN {
+  IF $event IN ['UPDATE', 'DELETE'] {
+    THROW 'Assurance WorkVerification은 immutable입니다';
+  };
+  LET $works = (SELECT work_id FROM work WHERE organization_id = $after.organization_id AND work_id = $after.work_id AND status = 'verifying' AND revision = $after.target_work_revision);
+  IF array::len($works) != 1 {
+    THROW 'WorkVerification target Work revision이 유효하지 않습니다';
+  };
+  LET $runs = (SELECT * FROM assurance_run WHERE organization_id = $after.organization_id AND work_id = $after.work_id AND assurance_run_id = $after.assurance_run_id AND target_work_revision = $after.target_work_revision AND snapshot_hash = $after.snapshot_hash AND profile_id = $after.profile_id AND profile_version = $after.profile_version AND binding_version_id = $after.binding_version_id AND projected_work_revision = NONE);
+  IF array::len($runs) != 1 OR
+    ($after.passed = true AND $runs[0].status != 'passed') OR
+    ($after.passed = false AND $runs[0].status != 'failed') {
+    THROW 'WorkVerification terminal Assurance run 연결이 유효하지 않습니다';
+  };
+  LET $bindings = (SELECT binding_version_id FROM assurance_binding_version WHERE organization_id = $after.organization_id AND work_id = $after.work_id AND binding_version_id = $after.binding_version_id AND plan_version_id = $runs[0].plan_version_id AND profile_id = $after.profile_id AND profile_version = $after.profile_version AND status = 'active');
+  IF array::len($bindings) != 1 {
+    THROW 'WorkVerification Assurance binding이 active가 아닙니다';
+  };
+  LET $nodes = (SELECT handle FROM organization_node WHERE organization_id = $after.organization_id AND handle = $runs[0].verifier_handle AND status = 'active');
+  LET $verifier_executions = (SELECT execution_id FROM runtime_execution WHERE organization_id = $after.organization_id AND work_id = $after.work_id AND execution_id = $runs[0].verifier_execution_id AND agent_handle = $runs[0].verifier_handle AND status = 'succeeded');
+  IF array::len($nodes) != 1 OR array::len($verifier_executions) != 1 {
+    THROW 'WorkVerification verifier OrganizationNode와 Runtime Execution이 유효하지 않습니다';
+  };
+  LET $evidence = (SELECT artifact_version_id FROM artifact_version WHERE organization_id = $after.organization_id AND work_id = $after.work_id AND artifact_version_id = $after.evidence_artifact_version_id);
+  IF array::len($evidence) != 1 OR array::len($after.evidence_artifact_version_ids) != 1 OR $after.evidence_artifact_version_ids[0] != $after.evidence_artifact_version_id {
+    THROW 'WorkVerification evidence ArtifactVersion 연결이 유효하지 않습니다';
+  };
+};
+
+DEFINE EVENT OVERWRITE assurance_run_state_invariant ON TABLE assurance_run
+WHEN $event IN ['CREATE', 'UPDATE']
+THEN {
+  IF !(
+    ($after.status IN ['planned', 'running'] AND $after.active_guard_key != NONE AND $after.verdict = NONE AND $after.projected_work_revision = NONE AND $after.completed_at = NONE AND $after.failure_json = NONE) OR
+    ($after.status = 'passed' AND $after.active_guard_key = NONE AND $after.verdict = 'passed' AND $after.completed_at != NONE AND $after.failure_json = NONE AND ($after.projected_work_revision = NONE OR $after.projected_work_revision = $after.target_work_revision + 1)) OR
+    ($after.status = 'failed' AND $after.active_guard_key = NONE AND $after.verdict = 'failed' AND $after.completed_at != NONE AND $after.failure_json != NONE AND ($after.projected_work_revision = NONE OR $after.projected_work_revision = $after.target_work_revision + 1)) OR
+    ($after.status = 'blocked' AND $after.active_guard_key = NONE AND $after.verdict = 'blocked' AND $after.projected_work_revision = NONE AND $after.completed_at != NONE AND $after.failure_json != NONE) OR
+    ($after.status = 'cancelled' AND $after.active_guard_key = NONE AND $after.verdict = NONE AND $after.projected_work_revision = NONE AND $after.completed_at != NONE AND $after.failure_json = NONE)
+  ) {
+    THROW 'Assurance run 상태 metadata 불변식 위반';
+  };
+  IF $event = 'CREATE' AND $after.version != 1 {
+    THROW 'Assurance run은 version 1로 생성해야 합니다';
+  };
+  IF $event = 'CREATE' AND $after.status != 'planned' {
+    THROW 'Assurance run은 planned 상태로만 생성해야 합니다';
+  };
+  IF $event = 'CREATE' {
+    LET $works = (SELECT work_id FROM work WHERE organization_id = $after.organization_id AND work_id = $after.work_id AND status = 'verifying' AND revision = $after.target_work_revision);
+    LET $nodes = (SELECT handle FROM organization_node WHERE organization_id = $after.organization_id AND handle = $after.verifier_handle AND status = 'active');
+    LET $executions = (SELECT execution_id FROM runtime_execution WHERE organization_id = $after.organization_id AND work_id = $after.work_id AND execution_id = $after.verifier_execution_id AND agent_handle = $after.verifier_handle AND status IN ['queued', 'running']);
+    IF array::len($works) != 1 OR array::len($nodes) != 1 OR array::len($executions) != 1 {
+      THROW 'Assurance run의 Work·OrganizationNode·Runtime Execution 연결이 유효하지 않습니다';
+    };
+  };
+  IF $event = 'UPDATE' AND $after.version != $before.version + 1 {
+    THROW 'Assurance run version은 한 번에 1만 증가해야 합니다';
+  };
+  IF $event = 'UPDATE' AND $before.status IN ['blocked', 'cancelled'] {
+    THROW 'Terminal Assurance run은 변경할 수 없습니다';
+  };
+  IF $event = 'UPDATE' AND $before.status IN ['passed', 'failed'] AND !(
+    $before.projected_work_revision = NONE AND
+    $after.projected_work_revision = $before.target_work_revision + 1 AND
+    $after.status = $before.status AND
+    $after.verdict = $before.verdict AND
+    $after.failure_json = $before.failure_json AND
+    $after.completed_at = $before.completed_at
+  ) {
+    THROW 'Terminal Assurance run은 한 번만 Work에 투영할 수 있습니다';
+  };
+  IF $event = 'UPDATE' AND (
+    $after.assurance_run_id != $before.assurance_run_id OR
+    $after.organization_id != $before.organization_id OR
+    $after.work_id != $before.work_id OR
+    $after.target_work_revision != $before.target_work_revision OR
+    $after.plan_version_id != $before.plan_version_id OR
+    $after.binding_version_id != $before.binding_version_id OR
+    $after.profile_id != $before.profile_id OR
+    $after.profile_version != $before.profile_version OR
+    $after.verifier_handle != $before.verifier_handle OR
+    $after.verifier_execution_id != $before.verifier_execution_id OR
+    $after.snapshot_hash != $before.snapshot_hash OR
+    $after.attempt != $before.attempt OR
+    $after.start_command_id != $before.start_command_id OR
+    $after.created_by_user_id != $before.created_by_user_id OR
+    $after.created_at != $before.created_at OR
+    $after.expires_at != $before.expires_at OR
+    $after.started_at != $before.started_at
+  ) {
+    THROW 'Assurance run identity field는 변경할 수 없습니다';
+  };
+  IF $event = 'UPDATE' AND $before.status IN ['planned', 'running'] AND $after.status IN ['planned', 'running'] AND $after.active_guard_key != $before.active_guard_key {
+    THROW 'Active Assurance run guard key는 변경할 수 없습니다';
+  };
+  IF $event = 'UPDATE' AND $before.status != $after.status AND !(
+    ($before.status = 'planned' AND $after.status IN ['running', 'blocked', 'cancelled']) OR
+    ($before.status = 'running' AND $after.status IN ['passed', 'failed', 'blocked', 'cancelled'])
+  ) {
+    THROW '허용되지 않은 Assurance run 상태 전이';
+  };
+};
+
+DEFINE EVENT OVERWRITE work_assurance_completion_guard ON TABLE work
+WHEN $event = 'UPDATE' AND $before.status != 'completed' AND $after.status = 'completed'
+THEN {
+  LET $verifications = (SELECT * FROM work_verification WHERE organization_id = $after.organization_id AND work_id = $after.work_id ORDER BY created_at DESC LIMIT 1);
+  IF array::len($verifications) != 1 OR $verifications[0].passed != true {
+    THROW 'completed 전이에는 최신 passed Assurance Verification이 필요합니다';
+  };
+  LET $runs = (SELECT * FROM assurance_run WHERE organization_id = $after.organization_id AND work_id = $after.work_id AND assurance_run_id = $verifications[0].assurance_run_id AND status = 'passed');
+  IF array::len($runs) != 1 OR
+    $runs[0].target_work_revision != $verifications[0].target_work_revision OR
+    $runs[0].projected_work_revision != $verifications[0].projected_work_revision OR
+    $runs[0].snapshot_hash != $verifications[0].snapshot_hash OR
+    $runs[0].profile_id != $verifications[0].profile_id OR
+    $runs[0].profile_version != $verifications[0].profile_version OR
+    $runs[0].binding_version_id != $verifications[0].binding_version_id {
+    THROW 'completed 전이의 Assurance run 연결이 유효하지 않습니다';
+  };
+  LET $records = (SELECT * FROM work_record WHERE organization_id = $after.organization_id AND work_id = $after.work_id AND finalized = true ORDER BY version DESC LIMIT 1);
+  IF array::len($records) != 1 OR
+    $records[0].recorded_work_revision != $before.revision OR
+    $before.revision != $verifications[0].projected_work_revision + 1 OR
+    $verifications[0].verification_id NOT IN $records[0].verification_ids OR
+    $verifications[0].evidence_artifact_version_id NOT IN $records[0].artifact_version_ids {
+    THROW 'completed 전이에는 Assurance Verification을 포함한 최신 WorkRecord가 필요합니다';
+  };
+};
 `,
 );

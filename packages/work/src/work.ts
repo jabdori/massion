@@ -10,6 +10,7 @@ import { type OrganizationGraphService } from "@massion/organization";
 import { applyMigrations, type MassionDatabase, type QueryExecutor } from "@massion/storage";
 
 import {
+  WORK_ASSURANCE_FAIL_CLOSED_GUARD,
   WORK_COLLABORATION_MIGRATION,
   WORK_CONSTRAINTS_MIGRATION,
   WORK_CORE_MIGRATION,
@@ -489,6 +490,8 @@ export interface ArtifactVersion {
   readonly content_json: string;
   readonly source_artifact_version_id?: string;
   readonly created_by: string;
+  readonly creator_agent_handle?: string;
+  readonly creator_execution_id?: string;
   readonly created_at: unknown;
 }
 
@@ -500,6 +503,14 @@ export interface WorkVerification {
   readonly passed: boolean;
   readonly criteria_json: string;
   readonly evidence_artifact_version_ids: readonly string[];
+  readonly assurance_run_id: string;
+  readonly target_work_revision: number;
+  readonly projected_work_revision: number;
+  readonly snapshot_hash: string;
+  readonly profile_id: string;
+  readonly profile_version: string;
+  readonly binding_version_id: string;
+  readonly evidence_artifact_version_id: string;
   readonly created_at: unknown;
 }
 
@@ -546,13 +557,8 @@ export interface CreateArtifactVersionInput extends WorkCommandInput {
   readonly name: string;
   readonly mediaType: string;
   readonly content: unknown;
-}
-
-export interface RecordVerificationInput extends WorkCommandInput {
-  readonly verifierId: string;
-  readonly passed: boolean;
-  readonly criteria: readonly { readonly criterion: string; readonly passed: boolean; readonly evidence?: string }[];
-  readonly evidenceArtifactVersionIds: readonly string[];
+  readonly creatorAgentHandle?: string;
+  readonly creatorExecutionId?: string;
 }
 
 export interface FinalizeRecordInput extends WorkCommandInput {
@@ -826,6 +832,7 @@ export class WorkService {
       WORK_CONSTRAINTS_MIGRATION,
       WORK_STRATEGY_PROJECTION_MIGRATION,
     ]);
+    await database.query(WORK_ASSURANCE_FAIL_CLOSED_GUARD);
     return new WorkService(database, organizations, graph, governance);
   }
 
@@ -1834,9 +1841,24 @@ export class WorkService {
     context: TenantContext,
     input: CreateArtifactVersionInput,
   ): Promise<WorkCommandResult & { artifact: WorkArtifact; artifactVersion: ArtifactVersion }> {
+    if (Boolean(input.creatorAgentHandle) !== Boolean(input.creatorExecutionId)) {
+      throw new Error("ArtifactVersion creator Agent handle과 Runtime Execution ID는 함께 필요합니다");
+    }
     if (!input.kind.trim() || !input.name.trim() || !input.mediaType.trim())
       throw new Error("Artifact kind, name과 media type이 필요합니다");
     return await this.mutate(context, input, "artifact_version_created", async (transaction, work) => {
+      if (input.creatorAgentHandle && input.creatorExecutionId) {
+        const [executions] = await transaction.query<[{ execution_id: string }[]]>(
+          "SELECT execution_id FROM runtime_execution WHERE organization_id = $organization_id AND work_id = $work_id AND execution_id = $execution_id AND agent_handle = $agent_handle AND status = 'succeeded' LIMIT 1;",
+          {
+            organization_id: context.organizationId,
+            work_id: work.work_id,
+            execution_id: input.creatorExecutionId,
+            agent_handle: input.creatorAgentHandle,
+          },
+        );
+        if (!executions[0]) throw new Error("ArtifactVersion creator Runtime Execution을 찾을 수 없습니다");
+      }
       let artifact: WorkArtifact | undefined;
       if (input.artifactId) {
         const [artifacts] = await transaction.query<[WorkArtifact[]]>(
@@ -1867,7 +1889,9 @@ export class WorkService {
       const version = versions.reduce((maximum, candidate) => Math.max(maximum, candidate.version), 0) + 1;
       const contentJson = canonicalJson(input.content);
       const [created] = await transaction.query<[ArtifactVersion[]]>(
-        "CREATE artifact_version CONTENT { artifact_version_id: $artifact_version_id, artifact_id: $artifact_id, organization_id: $organization_id, work_id: $work_id, version: $version, checksum: $checksum, media_type: $media_type, content_json: $content_json, created_by: $created_by, created_at: time::now() } RETURN AFTER;",
+        input.creatorAgentHandle && input.creatorExecutionId
+          ? "CREATE artifact_version CONTENT { artifact_version_id: $artifact_version_id, artifact_id: $artifact_id, organization_id: $organization_id, work_id: $work_id, version: $version, checksum: $checksum, media_type: $media_type, content_json: $content_json, created_by: $created_by, creator_agent_handle: $creator_agent_handle, creator_execution_id: $creator_execution_id, created_at: time::now() } RETURN AFTER;"
+          : "CREATE artifact_version CONTENT { artifact_version_id: $artifact_version_id, artifact_id: $artifact_id, organization_id: $organization_id, work_id: $work_id, version: $version, checksum: $checksum, media_type: $media_type, content_json: $content_json, created_by: $created_by, created_at: time::now() } RETURN AFTER;",
         {
           artifact_version_id: randomUUID(),
           artifact_id: artifact.artifact_id,
@@ -1878,6 +1902,12 @@ export class WorkService {
           media_type: input.mediaType.trim(),
           content_json: contentJson,
           created_by: context.userId,
+          ...(input.creatorAgentHandle && input.creatorExecutionId
+            ? {
+                creator_agent_handle: input.creatorAgentHandle,
+                creator_execution_id: input.creatorExecutionId,
+              }
+            : {}),
         },
       );
       const artifactVersion = created[0];
@@ -1888,38 +1918,6 @@ export class WorkService {
         { artifact_version_ids: references, organization_id: context.organizationId, work_id: work.work_id },
       );
       return { artifact, artifactVersion };
-    });
-  }
-
-  public async recordVerification(
-    context: TenantContext,
-    input: RecordVerificationInput,
-  ): Promise<WorkCommandResult & { verification: WorkVerification }> {
-    if (input.criteria.length === 0) throw new Error("Verification criteria가 필요합니다");
-    if (input.passed !== input.criteria.every((criterion) => criterion.passed)) {
-      throw new Error("Verification passed 값과 criteria 결과가 일치하지 않습니다");
-    }
-    return await this.mutate(context, input, "verification_recorded", async (transaction, work) => {
-      if (this.graph) await this.graph.verifyActiveNode(context, input.verifierId, transaction);
-      for (const versionId of input.evidenceArtifactVersionIds) {
-        if (!work.artifact_version_ids.includes(versionId))
-          throw new Error(`Work의 ArtifactVersion이 아닙니다: ${versionId}`);
-      }
-      const [records] = await transaction.query<[WorkVerification[]]>(
-        "CREATE work_verification CONTENT { verification_id: $verification_id, organization_id: $organization_id, work_id: $work_id, verifier_id: $verifier_id, passed: $passed, criteria_json: $criteria_json, evidence_artifact_version_ids: $evidence_ids, created_at: time::now() } RETURN AFTER;",
-        {
-          verification_id: randomUUID(),
-          organization_id: context.organizationId,
-          work_id: work.work_id,
-          verifier_id: input.verifierId,
-          passed: input.passed,
-          criteria_json: canonicalJson(input.criteria),
-          evidence_ids: input.evidenceArtifactVersionIds,
-        },
-      );
-      const verification = records[0];
-      if (!verification) throw new Error("Verification 생성 결과가 없습니다");
-      return { verification };
     });
   }
 
@@ -2289,7 +2287,12 @@ export class WorkService {
           "SELECT * OMIT id FROM work_record WHERE organization_id = $organization_id AND work_id = $work_id AND finalized = true ORDER BY version ASC;",
           { organization_id: context.organizationId, work_id: work.work_id },
         );
-        if (!verifications.at(-1)?.passed || records.at(-1)?.recorded_work_revision !== work.revision) {
+        const latestVerification = verifications.at(-1);
+        if (
+          !latestVerification?.passed ||
+          latestVerification.projected_work_revision + 1 !== work.revision ||
+          records.at(-1)?.recorded_work_revision !== work.revision
+        ) {
           throw new Error("completed 전이에는 통과 Verification과 확정 WorkRecord가 필요합니다");
         }
       }

@@ -7,3 +7,6 @@ export * from "./profile.js";
 export * from "./criteria.js";
 export * from "./snapshot.js";
 export * from "./binding-store.js";
+export * from "./independence.js";
+export * from "./work-verdict-reader.js";
+export * from "./database-snapshot.js";

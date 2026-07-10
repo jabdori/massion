@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import { describe, expect, it } from "vitest";
 
 import type { WorkRecoveryBundle } from "@massion/work";
@@ -10,6 +12,10 @@ import {
   createAssuranceSnapshot,
   type CreateAssuranceSnapshotInput,
 } from "./snapshot.js";
+
+function sha256(value: string): string {
+  return createHash("sha256").update(value).digest("hex");
+}
 
 function bundle(): WorkRecoveryBundle {
   return {
@@ -123,9 +129,9 @@ function bundle(): WorkRecoveryBundle {
         organization_id: "organization-1",
         work_id: "work-1",
         version: 1,
-        checksum: "a".repeat(64),
+        checksum: sha256('{"version":1}'),
         media_type: "application/json",
-        content_json: "{}",
+        content_json: '{"version":1}',
         created_by: "software-implementation",
         created_at: "2026-07-10T00:00:00.000Z",
       },
@@ -135,9 +141,9 @@ function bundle(): WorkRecoveryBundle {
         organization_id: "organization-1",
         work_id: "work-1",
         version: 2,
-        checksum: "b".repeat(64),
+        checksum: sha256('{"version":2}'),
         media_type: "application/json",
-        content_json: "{}",
+        content_json: '{"version":2}',
         created_by: "software-implementation",
         created_at: "2026-07-10T00:00:00.000Z",
       },
