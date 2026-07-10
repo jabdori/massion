@@ -1,0 +1,78 @@
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+
+import { IdentityService, OrganizationService, type TenantContext } from "@massion/identity";
+import { createDatabase, type MassionDatabase } from "@massion/storage";
+
+import { CORE_OFFICE_HANDLES, OrganizationGraphService } from "./organization.js";
+
+describe("Organization Graph와 Core Office", () => {
+  let database: MassionDatabase;
+  let context: TenantContext;
+  let graph: OrganizationGraphService;
+
+  beforeEach(async () => {
+    database = await createDatabase({ url: "mem://", namespace: "massion", database: crypto.randomUUID() });
+    const identity = await IdentityService.create(database);
+    const organizations = await OrganizationService.create(database);
+    const owner = await identity.registerPersonalUser({ email: "owner@example.com", displayName: "Owner" });
+    context = await organizations.resolveTenantContext(owner.user.user_id, owner.organization.organization_id);
+    graph = await OrganizationGraphService.create(database, organizations);
+  });
+
+  afterEach(async () => {
+    await database.close();
+  });
+
+  it("Core Office 8개와 bootstrap version을 멱등 생성한다", async () => {
+    const first = await graph.bootstrap(context);
+    const second = await graph.bootstrap(context);
+
+    expect(first.nodes.map((node) => node.handle).sort()).toEqual([...CORE_OFFICE_HANDLES].sort());
+    expect(first.nodes.find((node) => node.handle === "representative")?.outputs).toEqual([
+      "Request",
+      "Work",
+      "FinalResult",
+    ]);
+    expect(first.version.version).toBe(1);
+    expect(second.version.version).toBe(1);
+    expect(await graph.listNodes(context)).toHaveLength(8);
+  });
+
+  it("Core Office는 비활성화하거나 이동할 수 없다", async () => {
+    await graph.bootstrap(context);
+
+    await expect(
+      graph.execute(context, {
+        commandId: crypto.randomUUID(),
+        expectedVersion: 1,
+        kind: "deactivate",
+        handle: "governance",
+      }),
+    ).rejects.toThrow("Core Office");
+  });
+
+  it("stale version을 거부하고 같은 command는 같은 결과를 반환한다", async () => {
+    await graph.bootstrap(context);
+    const command = {
+      commandId: crypto.randomUUID(),
+      expectedVersion: 1,
+      kind: "create" as const,
+      handle: "specialists",
+      name: "Specialists",
+      responsibility: "전문 업무",
+      parentHandle: "delivery-coordination",
+      scope: "persistent" as const,
+    };
+
+    const first = await graph.execute(context, command);
+    const repeated = await graph.execute(context, command);
+    expect(first.version.version).toBe(2);
+    expect(repeated.version.version).toBe(2);
+    await expect(graph.execute(context, { ...command, handle: "different" })).rejects.toThrow(
+      "같은 commandId에 다른 명령",
+    );
+    await expect(graph.execute(context, { ...command, commandId: crypto.randomUUID() })).rejects.toThrow(
+      "현재 OrganizationVersion",
+    );
+  });
+});
