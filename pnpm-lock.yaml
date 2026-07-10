@@ -32,6 +32,18 @@ importers:
 
   packages/foundation: {}
 
+  packages/governance:
+    dependencies:
+      '@cedar-policy/cedar-wasm':
+        specifier: 4.11.2
+        version: 4.11.2
+      '@massion/identity':
+        specifier: workspace:*
+        version: link:../identity
+      '@massion/storage':
+        specifier: workspace:*
+        version: link:../storage
+
   packages/identity:
     dependencies:
       '@massion/storage':
@@ -284,6 +296,9 @@ packages:
   '@babel/runtime@7.29.7':
     resolution: {integrity: sha512-Nq8OhGWiZIZGV6hLHoyAKLLcJihP/xFeBMGJoUrxTX2psI8dCifzLhZISFb+VWS3wFMRDmCGw5R+dOySCqPLhw==}
     engines: {node: '>=6.9.0'}
+
+  '@cedar-policy/cedar-wasm@4.11.2':
+    resolution: {integrity: sha512-WirTj7pAQnP2fRAuJ5OLIl4VmQiUiyGgHku+eNTSXm9LJHMU/v14vHz6nEcxAQjR6oXtm21zRsHEBIbWP9TJ5A==}
 
   '@colors/colors@1.6.0':
     resolution: {integrity: sha512-Ir+AOibqzrIsL6ajt3Rz3LskB7OiMVHqltZmspbW/TJuTVuyOMirVqAkjfY6JISiLHgyNqicAC8AyHHGzNd/dA==}
@@ -2610,6 +2625,8 @@ snapshots:
       nanoevents: 7.0.1
 
   '@babel/runtime@7.29.7': {}
+
+  '@cedar-policy/cedar-wasm@4.11.2': {}
 
   '@colors/colors@1.6.0': {}
 
