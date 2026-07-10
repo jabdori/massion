@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 
+import type { GovernanceGate } from "@massion/governance";
 import { type OrganizationService, type TenantContext } from "@massion/identity";
 import { applyMigrations, type MassionDatabase, type QueryExecutor } from "@massion/storage";
 
@@ -115,6 +116,8 @@ export interface OrganizationVersion {
 interface CommandBase {
   readonly commandId: string;
   readonly expectedVersion: number;
+  readonly governanceApprovalId?: string;
+  readonly governanceEnvironment?: string;
 }
 
 export interface CreateNodeCommand extends CommandBase {
@@ -309,11 +312,16 @@ export class OrganizationGraphService {
   private constructor(
     private readonly database: MassionDatabase,
     private readonly organizations: OrganizationService,
+    private readonly governance?: Pick<GovernanceGate, "authorize">,
   ) {}
 
-  public static async create(database: MassionDatabase, organizations: OrganizationService) {
+  public static async create(
+    database: MassionDatabase,
+    organizations: OrganizationService,
+    governance?: Pick<GovernanceGate, "authorize">,
+  ) {
     await applyMigrations(database, [ORGANIZATION_GRAPH_MIGRATION]);
-    return new OrganizationGraphService(database, organizations);
+    return new OrganizationGraphService(database, organizations, governance);
   }
 
   private async verify(context: TenantContext, requireOwner = false): Promise<void> {
@@ -417,6 +425,22 @@ export class OrganizationGraphService {
 
   public async execute(context: TenantContext, command: OrganizationCommand): Promise<GraphChangeResult> {
     await this.verify(context, true);
+    if (this.governance) {
+      await this.governance.authorize(context, {
+        commandId: command.commandId,
+        action: "organization.change",
+        resource: {
+          type: "Organization",
+          id: context.organizationId,
+          revision: command.expectedVersion,
+        },
+        environment: command.governanceEnvironment ?? "local",
+        riskClass: "write",
+        external: false,
+        executionId: `organization-change:${command.commandId}`,
+        ...(command.governanceApprovalId ? { approvalId: command.governanceApprovalId } : {}),
+      });
+    }
     return await this.database.transaction(async (transaction) => {
       await this.organizations.verifyTenantContext(context, ["owner"], transaction);
       const versions = await listVersions(transaction, context.organizationId);

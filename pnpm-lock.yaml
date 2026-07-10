@@ -52,6 +52,9 @@ importers:
 
   packages/organization:
     dependencies:
+      '@massion/governance':
+        specifier: workspace:*
+        version: link:../governance
       '@massion/identity':
         specifier: workspace:*
         version: link:../identity
@@ -112,6 +115,9 @@ importers:
 
   packages/work:
     dependencies:
+      '@massion/governance':
+        specifier: workspace:*
+        version: link:../governance
       '@massion/identity':
         specifier: workspace:*
         version: link:../identity
