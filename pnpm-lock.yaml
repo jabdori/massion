@@ -32,6 +32,12 @@ importers:
 
   packages/foundation: {}
 
+  packages/identity:
+    dependencies:
+      '@massion/storage':
+        specifier: workspace:*
+        version: link:../storage
+
   packages/storage:
     dependencies:
       '@surrealdb/node':
