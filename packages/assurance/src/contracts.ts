@@ -44,6 +44,9 @@ export interface StartAssuranceRunInput {
   readonly verifierHandle: string;
   readonly verifierExecutionId: string;
   readonly snapshotHash: string;
+  readonly criterionExclusions?: Readonly<
+    Record<string, { readonly rule: string; readonly reason: string; readonly actorId: string }>
+  >;
   readonly leaseTtlMs: number;
 }
 

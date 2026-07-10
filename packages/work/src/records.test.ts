@@ -218,6 +218,13 @@ describe("Work fork·merge와 완료 기록", () => {
     });
 
     await expect(
+      database.query(
+        "UPDATE work SET status = 'completed' WHERE organization_id = $organization_id AND work_id = $work_id;",
+        { organization_id: context.organizationId, work_id: created.work.work_id },
+      ),
+    ).rejects.toThrow("Assurance bootstrap");
+    expect((await service.getWork(context, created.work.work_id)).status).toBe("verifying");
+    await expect(
       service.transition(context, {
         commandId: crypto.randomUUID(),
         workId: created.work.work_id,
@@ -225,76 +232,6 @@ describe("Work fork·merge와 완료 기록", () => {
         target: "completed",
       }),
     ).rejects.toThrow("Verification");
-    await expect(
-      service.recordVerification(context, {
-        commandId: crypto.randomUUID(),
-        workId: created.work.work_id,
-        expectedRevision: verifying.work.revision,
-        verifierId: "assurance",
-        passed: true,
-        criteria: [{ criterion: "테스트", passed: false }],
-        evidenceArtifactVersionIds: [],
-      }),
-    ).rejects.toThrow("일치하지 않습니다");
-    const verification = await service.recordVerification(context, {
-      commandId: crypto.randomUUID(),
-      workId: created.work.work_id,
-      expectedRevision: verifying.work.revision,
-      verifierId: "assurance",
-      passed: true,
-      criteria: [{ criterion: "테스트", passed: true }],
-      evidenceArtifactVersionIds: [],
-    });
-    const record = await service.finalizeRecord(context, {
-      commandId: crypto.randomUUID(),
-      workId: created.work.work_id,
-      expectedRevision: verification.work.revision,
-      summary: "검증 완료",
-    });
-    const laterVerification = await service.recordVerification(context, {
-      commandId: crypto.randomUUID(),
-      workId: created.work.work_id,
-      expectedRevision: record.work.revision,
-      verifierId: "assurance",
-      passed: true,
-      criteria: [{ criterion: "재검증", passed: true }],
-      evidenceArtifactVersionIds: [],
-    });
-    await expect(
-      service.transition(context, {
-        commandId: crypto.randomUUID(),
-        workId: created.work.work_id,
-        expectedRevision: laterVerification.work.revision,
-        target: "completed",
-      }),
-    ).rejects.toThrow("WorkRecord");
-    const refreshedRecord = await service.finalizeRecord(context, {
-      commandId: crypto.randomUUID(),
-      workId: created.work.work_id,
-      expectedRevision: laterVerification.work.revision,
-      summary: "재검증 반영 완료",
-    });
-    const completed = await service.transition(context, {
-      commandId: crypto.randomUUID(),
-      workId: created.work.work_id,
-      expectedRevision: refreshedRecord.work.revision,
-      target: "completed",
-    });
-
-    expect(record.record.finalized).toBe(true);
-    expect(refreshedRecord.record.version).toBe(2);
-    expect(completed.work.status).toBe("completed");
-    const recovery = await service.recoverWork(context, created.work.work_id);
-    expect(recovery.work.status).toBe("completed");
-    expect(recovery.events).toHaveLength(recovery.work.revision);
-    expect(recovery.records.at(-1)?.version).toBe(2);
-    await expect(
-      service.finalizeRecord(context, {
-        commandId: crypto.randomUUID(),
-        workId: created.work.work_id,
-        expectedRevision: completed.work.revision,
-        summary: "변경",
-      }),
-    ).rejects.toThrow("terminal Work");
+    expect("recordVerification" in service).toBe(false);
   });
 });

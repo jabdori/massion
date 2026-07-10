@@ -1,9 +1,18 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { IdentityService, OrganizationService, type TenantContext } from "@massion/identity";
+import { OrganizationGraphService } from "@massion/organization";
+import { RuntimeExecutionStore } from "@massion/runtime";
 import { createDatabase, type MassionDatabase } from "@massion/storage";
+import { WorkService } from "@massion/work";
 
-import { AssuranceRunStore, type StartAssuranceRunInput, type TransitionAssuranceRunInput } from "./index.js";
+import {
+  AssuranceBindingStore,
+  AssuranceRunStore,
+  type BindingActivationAuthorizer,
+  type StartAssuranceRunInput,
+  type TransitionAssuranceRunInput,
+} from "./index.js";
 
 describe("Assurance run 저장소", () => {
   let database: MassionDatabase;
@@ -11,6 +20,12 @@ describe("Assurance run 저장소", () => {
   let context: TenantContext;
   let otherContext: TenantContext;
   let store: AssuranceRunStore;
+  let workId: string;
+  let verifierExecutionId: string;
+  let planVersionId: string;
+  let bindingVersionId: string;
+  let snapshotHash: string;
+  let targetWorkRevision: number;
 
   beforeEach(async () => {
     database = await createDatabase({ url: "mem://", namespace: "massion", database: crypto.randomUUID() });
@@ -20,7 +35,174 @@ describe("Assurance run 저장소", () => {
     const other = await identity.registerPersonalUser({ email: "other-assurance@example.com", displayName: "Other" });
     context = await organizations.resolveTenantContext(owner.user.user_id, owner.organization.organization_id);
     otherContext = await organizations.resolveTenantContext(other.user.user_id, other.organization.organization_id);
+    const graph = await OrganizationGraphService.create(database, organizations);
+    const graphState = await graph.bootstrap(context);
+    const works = await WorkService.create(database, organizations, graph);
+    const created = await works.createWork(context, {
+      commandId: crypto.randomUUID(),
+      text: "Assurance run test",
+      surface: "test",
+      organizationVersionId: graphState.version.version_id,
+    });
+    workId = created.work.work_id;
+    const plan = await works.addPlan(context, {
+      commandId: crypto.randomUUID(),
+      workId,
+      expectedRevision: created.work.revision,
+      content: { objective: "Assurance run test", acceptanceCriteria: [] },
+    });
+    planVersionId = plan.plan.plan_version_id;
+    const planned = await works.transition(context, {
+      commandId: crypto.randomUUID(),
+      workId,
+      expectedRevision: plan.work.revision,
+      target: "planned",
+    });
+    const task = await works.addTask(context, {
+      commandId: crypto.randomUUID(),
+      workId,
+      expectedRevision: planned.work.revision,
+      title: "검증 대상",
+      objective: "Run store를 검증합니다",
+      acceptanceCriteria: ["run을 독립 검증합니다"],
+      dependencyIds: [],
+    });
+    const assigned = await works.assignTask(context, {
+      commandId: crypto.randomUUID(),
+      workId,
+      expectedRevision: task.work.revision,
+      taskId: task.task.task_id,
+      agentHandle: "delivery-coordination",
+    });
+    const ready = await works.transition(context, {
+      commandId: crypto.randomUUID(),
+      workId,
+      expectedRevision: assigned.work.revision,
+      target: "ready",
+    });
+    const workRunning = await works.transition(context, {
+      commandId: crypto.randomUUID(),
+      workId,
+      expectedRevision: ready.work.revision,
+      target: "running",
+    });
+    const taskRunning = await works.transitionTask(context, {
+      commandId: crypto.randomUUID(),
+      workId,
+      expectedRevision: workRunning.work.revision,
+      taskId: task.task.task_id,
+      expectedTaskRevision: task.task.revision,
+      target: "running",
+    });
+    const taskCompleted = await works.transitionTask(context, {
+      commandId: crypto.randomUUID(),
+      workId,
+      expectedRevision: taskRunning.work.revision,
+      taskId: task.task.task_id,
+      expectedTaskRevision: taskRunning.task.revision,
+      target: "completed",
+    });
+    const verifying = await works.transition(context, {
+      commandId: crypto.randomUUID(),
+      workId,
+      expectedRevision: taskCompleted.work.revision,
+      target: "verifying",
+    });
+    targetWorkRevision = verifying.work.revision;
+    const runtime = await RuntimeExecutionStore.create(database, organizations);
+    const queued = await runtime.createExecution(context, {
+      commandId: crypto.randomUUID(),
+      workId,
+      agentHandle: "assurance",
+      modelRoute: "test:assurance",
+      correlationId: crypto.randomUUID(),
+      estimatedTokens: 1,
+      estimatedCostMicros: 0,
+      input: { operation: "assurance" },
+    });
+    const running = await runtime.transition(context, {
+      commandId: crypto.randomUUID(),
+      executionId: queued.execution.execution_id,
+      expectedVersion: queued.execution.version,
+      target: "running",
+      payload: { started: true },
+    });
+    verifierExecutionId = running.execution.execution_id;
+    const authorizer: BindingActivationAuthorizer = {
+      async authorize(_context, input) {
+        const decisionId = `decision:${input.bindingVersionId}`;
+        await database.query(
+          "CREATE governance_policy_decision CONTENT { decision_id: $decision_id, organization_id: $organization_id, command_id: $command_id, request_hash: $request_hash, principal_type: 'Human', principal_id: $principal_id, action: 'work.execute', resource_type: 'AssuranceBindingVersion', resource_id: $resource_id, resource_revision: $resource_revision, environment: 'local', risk_class: 'assurance-binding-activation', external: false, request_summary_json: '{}', outcome: 'allow', reasons_json: '[]', errors_json: '[]', request_json: '{}', created_at: time::now() };",
+          {
+            decision_id: decisionId,
+            organization_id: _context.organizationId,
+            command_id: `${input.commandId}:policy`,
+            request_hash: "c".repeat(64),
+            principal_id: _context.userId,
+            resource_id: input.bindingVersionId,
+            resource_revision: input.revision,
+          },
+        );
+        return { decisionId };
+      },
+    };
+    const bindings = await AssuranceBindingStore.create(database, organizations, authorizer, {
+      allowedAuthorHandles: ["context-strategy"],
+    });
+    const taskCriterionKey = `task:${task.task.task_id}:0`;
+    const draft = await bindings.propose(context, {
+      commandId: crypto.randomUUID(),
+      workId,
+      planVersionId,
+      profileId: "massion.assurance.acceptance.v1",
+      profileVersion: "1.0.0",
+      authorHandle: "context-strategy",
+      requiredCriteria: [
+        { criterionKey: taskCriterionKey, method: "test" },
+        { criterionKey: "profile:acceptance:coverage", method: "evidence" },
+      ],
+      bindings: [
+        {
+          bindingKey: "check:task",
+          criterionKey: taskCriterionKey,
+          kind: "test",
+          executor: { kind: "system_adapter", adapterId: "massion.command.v1" },
+          executable: "pnpm",
+          args: ["test"],
+          cwd: ".",
+          expectedExitCode: 0,
+          timeoutMs: 60_000,
+          maxOutputBytes: 1_000_000,
+          requiredEvidenceKinds: ["command-output"],
+        },
+        {
+          bindingKey: "check:coverage",
+          criterionKey: "profile:acceptance:coverage",
+          kind: "evidence",
+          executor: { kind: "system_adapter", adapterId: "massion.evidence.v1" },
+          evidenceKinds: ["check-result"],
+          maximumAgeMs: 60_000,
+          requiredEvidenceKinds: ["check-result"],
+        },
+      ],
+    });
+    const active = await bindings.activate(context, {
+      commandId: crypto.randomUUID(),
+      bindingVersionId: draft.bindingVersionId,
+      expectedRevision: draft.revision,
+    });
+    bindingVersionId = active.bindingVersionId;
     store = await AssuranceRunStore.create(database, organizations);
+    snapshotHash = (
+      await store.prepareSnapshot(context, {
+        workId,
+        targetWorkRevision,
+        planVersionId,
+        bindingVersionId,
+        profileId: "massion.assurance.acceptance.v1",
+        profileVersion: "1.0.0",
+      })
+    ).snapshot.hash;
   });
 
   afterEach(async () => database.close());
@@ -28,15 +210,15 @@ describe("Assurance run 저장소", () => {
   function input(commandId: string = crypto.randomUUID()): StartAssuranceRunInput {
     return {
       commandId,
-      workId: "work-1",
-      targetWorkRevision: 12,
-      planVersionId: "plan-1",
-      bindingVersionId: "binding-1",
-      profileId: "massion.assurance.acceptance",
+      workId,
+      targetWorkRevision,
+      planVersionId,
+      bindingVersionId,
+      profileId: "massion.assurance.acceptance.v1",
       profileVersion: "1.0.0",
       verifierHandle: "assurance",
-      verifierExecutionId: "execution-assurance-1",
-      snapshotHash: "a".repeat(64),
+      verifierExecutionId,
+      snapshotHash,
       leaseTtlMs: 60_000,
     };
   }
@@ -48,15 +230,15 @@ describe("Assurance run 저장소", () => {
 
     expect(first.run).toMatchObject({
       organizationId: context.organizationId,
-      workId: "work-1",
-      targetWorkRevision: 12,
-      planVersionId: "plan-1",
-      bindingVersionId: "binding-1",
-      profileId: "massion.assurance.acceptance",
+      workId,
+      targetWorkRevision,
+      planVersionId,
+      bindingVersionId,
+      profileId: "massion.assurance.acceptance.v1",
       profileVersion: "1.0.0",
       verifierHandle: "assurance",
-      verifierExecutionId: "execution-assurance-1",
-      snapshotHash: "a".repeat(64),
+      verifierExecutionId,
+      snapshotHash,
       status: "planned",
       version: 1,
       attempt: 1,
@@ -68,6 +250,14 @@ describe("Assurance run 저장소", () => {
     await expect(store.start(context, { ...input(commandId), snapshotHash: "b".repeat(64) })).rejects.toThrow(
       "다른 assurance 명령",
     );
+  });
+
+  it("caller snapshot hash가 현재 DB material snapshot과 다르면 run을 만들지 않는다", async () => {
+    await expect(store.start(context, { ...input(), snapshotHash: "f".repeat(64) })).rejects.toThrow(
+      "material snapshot",
+    );
+    const [runs] = await database.query<[unknown[]]>("SELECT * FROM assurance_run;");
+    expect(runs).toHaveLength(0);
   });
 
   it("planned → running → passed만 허용하고 optimistic version과 terminal 불변성을 강제한다", async () => {

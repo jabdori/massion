@@ -128,6 +128,9 @@ export function createAssuranceSnapshot(input: CreateAssuranceSnapshotInput): As
     if (!version) throw new Error(`Work ArtifactVersion 참조를 찾을 수 없습니다: ${versionId}`);
     sameOwner(version, input);
     assertHash(version.checksum, "ArtifactVersion checksum");
+    if (sha256(version.content_json) !== version.checksum) {
+      throw new Error(`ArtifactVersion content checksum이 일치하지 않습니다: ${versionId}`);
+    }
     const artifact = artifactsById.get(version.artifact_id);
     if (!artifact) throw new Error(`ArtifactVersion의 Artifact를 찾을 수 없습니다: ${version.artifact_id}`);
     sameOwner(artifact, input);

@@ -150,7 +150,7 @@ describe("Request와 Work 상태 머신", () => {
         "UPDATE work SET status = 'completed' WHERE organization_id = $organization_id AND work_id = $work_id;",
         { organization_id: context.organizationId, work_id: created.work.work_id },
       ),
-    ).rejects.toThrow("허용되지 않은 Work 상태 전이");
+    ).rejects.toThrow("Assurance bootstrap");
     await database.query(
       "UPDATE work SET revision = 99 WHERE organization_id = $organization_id AND work_id = $work_id;",
       {

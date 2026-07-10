@@ -13,6 +13,12 @@ import type {
   StartAssuranceRunInput,
   TransitionAssuranceRunInput,
 } from "./contracts.js";
+import { verifyAssuranceStartIndependence } from "./database-independence.js";
+import {
+  buildDatabaseAssuranceSnapshot,
+  type DatabaseAssuranceSnapshotInput,
+  type DatabaseAssuranceSnapshotResult,
+} from "./database-snapshot.js";
 import { ASSURANCE_RUN_MIGRATION } from "./schema.js";
 
 interface RunRecord {
@@ -145,6 +151,12 @@ export class AssuranceRunStore {
         };
       }
 
+      await verifyAssuranceStartIndependence(transaction, context.organizationId, input);
+      const prepared = await buildDatabaseAssuranceSnapshot(transaction, context.organizationId, input);
+      if (prepared.snapshot.hash !== input.snapshotHash) {
+        throw new Error("caller snapshot hash가 현재 Work material snapshot과 일치하지 않습니다");
+      }
+
       const key = guardKey(context.organizationId, input);
       const assuranceRunId = randomUUID();
       const [attempts] = await transaction.query<[{ attempt: number }[]]>(
@@ -180,6 +192,27 @@ export class AssuranceRunStore {
         },
       );
       if (!created[0]) throw new Error("Assurance run 생성 결과가 없습니다");
+      for (const criterion of prepared.criteria) {
+        await transaction.query(
+          "CREATE assurance_criterion CONTENT { criterion_id: $criterion_id, organization_id: $organization_id, work_id: $work_id, assurance_run_id: $assurance_run_id, criterion_key: $criterion_key, source: $source, statement: $statement, method: $method, required_evidence_kinds: $required_evidence_kinds, control_references: $control_references, status: $status, exclusion_rule: $exclusion_rule, exclusion_reason: $exclusion_reason, exclusion_actor_id: $exclusion_actor_id, created_at: time::now(), updated_at: time::now() };",
+          {
+            criterion_id: randomUUID(),
+            organization_id: context.organizationId,
+            work_id: input.workId,
+            assurance_run_id: assuranceRunId,
+            criterion_key: criterion.criterionKey,
+            source: criterion.source,
+            statement: criterion.statement,
+            method: criterion.method,
+            required_evidence_kinds: criterion.requiredEvidenceKinds,
+            control_references: criterion.controlReferences,
+            status: criterion.status,
+            exclusion_rule: criterion.exclusionRule,
+            exclusion_reason: criterion.exclusionReason,
+            exclusion_actor_id: criterion.exclusionActorId,
+          },
+        );
+      }
       await this.recordEvent(transaction, context, {
         assuranceRunId,
         commandId: input.commandId,
@@ -259,6 +292,14 @@ export class AssuranceRunStore {
   public async get(context: TenantContext, assuranceRunId: string): Promise<AssuranceRun> {
     await this.organizations.verifyTenantContext(context);
     return this.view(await this.find(this.database, context.organizationId, assuranceRunId));
+  }
+
+  public async prepareSnapshot(
+    context: TenantContext,
+    input: DatabaseAssuranceSnapshotInput,
+  ): Promise<DatabaseAssuranceSnapshotResult> {
+    await this.organizations.verifyTenantContext(context);
+    return await buildDatabaseAssuranceSnapshot(this.database, context.organizationId, input);
   }
 
   public async listEvents(context: TenantContext, assuranceRunId: string): Promise<AssuranceEvent[]> {
