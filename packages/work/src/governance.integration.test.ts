@@ -20,6 +20,7 @@ describe("Work Governance Gate", () => {
   let context: TenantContext;
   let service: WorkService;
   let approvals: ApprovalStore;
+  let now: Date;
 
   beforeEach(async () => {
     database = await createDatabase({ url: "mem://", namespace: "massion", database: crypto.randomUUID() });
@@ -29,8 +30,9 @@ describe("Work Governance Gate", () => {
     context = await organizations.resolveTenantContext(owner.user.user_id, owner.organization.organization_id);
     const policies = await PolicyStore.create(database, organizations);
     const governance = await GovernanceService.create(database, organizations, policies);
-    approvals = await ApprovalStore.create(database, organizations, governance);
-    const permits = await PermitStore.create(database, organizations);
+    now = new Date("2026-07-10T00:00:00.000Z");
+    approvals = await ApprovalStore.create(database, organizations, governance, { now: () => now });
+    const permits = await PermitStore.create(database, organizations, { now: () => now });
     const emergency = await EmergencyControl.create(database, organizations, permits);
     const gate = new GovernanceGate(governance, approvals, permits, emergency);
     const defaults = createDefaultPolicy("personal");
@@ -141,5 +143,40 @@ describe("Work Governance Gate", () => {
 
     expect(resumed.outcome).toBe("allowed");
     expect(resumed.work.status).toBe("running");
+    expect((await approvals.get(context, waiting.approvalId)).status).toBe("consumed");
+  });
+
+  it.each(["rejected", "expired"] as const)("%s 승인을 waiting_approval Work 취소로 조정한다", async (status) => {
+    const running = await runningWork();
+    const waiting = await service.authorizeRunningAction(context, {
+      commandId: crypto.randomUUID(),
+      workId: running.work_id,
+      expectedRevision: running.revision,
+      action: "tool.call",
+      environment: "local",
+      riskClass: "write",
+      external: false,
+    });
+    if (waiting.outcome !== "waiting_approval") throw new Error("승인 대기 결과가 아닙니다");
+    if (status === "rejected") {
+      await approvals.vote(context, {
+        commandId: crypto.randomUUID(),
+        approvalId: waiting.approvalId,
+        vote: "reject",
+        reason: "위험 작업을 거절합니다",
+      });
+    } else {
+      now = new Date("2026-07-10T02:00:00.000Z");
+    }
+
+    const cancelled = await service.reconcileRunningActionApproval(context, {
+      commandId: crypto.randomUUID(),
+      workId: running.work_id,
+      expectedRevision: waiting.work.revision,
+      approvalId: waiting.approvalId,
+    });
+
+    expect(cancelled.work.status).toBe("cancelled");
+    expect((await approvals.get(context, waiting.approvalId)).status).toBe(status);
   });
 });
