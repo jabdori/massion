@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { IdentityService, OrganizationService, type TenantContext } from "@massion/identity";
-import type { StructuredAgentRunner } from "@massion/runtime";
 import { createDatabase, type MassionDatabase } from "@massion/storage";
 import { WorkService } from "@massion/work";
 
@@ -78,7 +77,10 @@ describe("후속 요청 Continuation 분류와 적용", () => {
     database = await createDatabase({ url: "mem://", namespace: "massion", database: crypto.randomUUID() });
     const identity = await IdentityService.create(database);
     organizations = await OrganizationService.create(database);
-    const owner = await identity.registerPersonalUser({ email: "continuation@example.com", displayName: "Continuation" });
+    const owner = await identity.registerPersonalUser({
+      email: "continuation@example.com",
+      displayName: "Continuation",
+    });
     context = await organizations.resolveTenantContext(owner.user.user_id, owner.organization.organization_id);
     works = await WorkService.create(database, organizations);
     workId = (
@@ -136,13 +138,7 @@ describe("후속 요청 Continuation 분류와 적용", () => {
 
   it("명시적 사람 override는 모델을 호출하지 않고 draft Work의 Context를 연장한다", async () => {
     const executeStructured = vi.fn();
-    const service = await ContinuationService.create(
-      database,
-      organizations,
-      { executeStructured },
-      contexts,
-      works,
-    );
+    const service = await ContinuationService.create(database, organizations, { executeStructured }, contexts, works);
     const request = {
       ...input(),
       override: { decision: "extend_current" as const, reason: "같은 제품의 배포 범위입니다" },
@@ -191,13 +187,7 @@ describe("후속 요청 Continuation 분류와 적용", () => {
       status: "succeeded",
       output: modelDecision("extend_current"),
     });
-    const service = await ContinuationService.create(
-      database,
-      organizations,
-      { executeStructured },
-      contexts,
-      works,
-    );
+    const service = await ContinuationService.create(database, organizations, { executeStructured }, contexts, works);
 
     const result = await service.continue(context, {
       ...input(),
@@ -219,13 +209,7 @@ describe("후속 요청 Continuation 분류와 적용", () => {
         status: "succeeded",
         output: modelDecision(decision),
       });
-      const service = await ContinuationService.create(
-        database,
-        organizations,
-        { executeStructured },
-        contexts,
-        works,
-      );
+      const service = await ContinuationService.create(database, organizations, { executeStructured }, contexts, works);
       const result = await service.continue(context, {
         ...input(),
         independentProjectId: "project-independent",
@@ -280,7 +264,10 @@ describe("후속 요청 Continuation 분류와 적용", () => {
     expect(result.decision).toMatchObject({ decision: "extend_current", replanRequired: true, status: "applied" });
     expect(result.work).toMatchObject({ work_id: workId, status: "planned", revision: 2 });
     expect(result.work?.active_plan_version_id).toBeTruthy();
-    expect(result.contextVersion).toMatchObject({ version: 2, parentContextVersionId: initialContext.contextVersionId });
+    expect(result.contextVersion).toMatchObject({
+      version: 2,
+      parentContextVersionId: initialContext.contextVersionId,
+    });
     expect((await works.listTasks(context, workId)).map((task) => task.task_key)).toEqual(["deploy-verify"]);
   });
 
@@ -289,13 +276,7 @@ describe("후속 요청 Continuation 분류와 적용", () => {
       executionId: "continuation-blocked",
       status: "blocked_model_unavailable",
     });
-    const service = await ContinuationService.create(
-      database,
-      organizations,
-      { executeStructured },
-      contexts,
-      works,
-    );
+    const service = await ContinuationService.create(database, organizations, { executeStructured }, contexts, works);
 
     await expect(service.continue(context, { ...input(), classification: "local-private" })).rejects.toThrow(
       "모델을 사용할 수 없습니다",

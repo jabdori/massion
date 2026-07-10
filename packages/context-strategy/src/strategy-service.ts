@@ -103,11 +103,7 @@ export class StrategyService {
     const applied =
       generated.status === "applied"
         ? generated
-        : await this.generator.markApplied(
-            context,
-            generated.strategyGenerationId,
-            `${input.commandId}:applied`,
-          );
+        : await this.generator.markApplied(context, generated.strategyGenerationId, `${input.commandId}:applied`);
     return { contextVersion, generation: applied, projection };
   }
 }

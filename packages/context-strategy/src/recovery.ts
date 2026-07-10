@@ -13,10 +13,7 @@ function rootCommandId(generationCommandId: string): string {
 
 export class StrategyRecovery {
   private constructor(
-    private readonly generator: Pick<
-      StrategyGenerator,
-      "listGenerated" | "markApplied" | "markConflicted"
-    >,
+    private readonly generator: Pick<StrategyGenerator, "listGenerated" | "markApplied" | "markConflicted">,
     private readonly works: Pick<WorkService, "getWork" | "getActivePlan" | "applyStrategyProjection">,
   ) {}
 
@@ -42,18 +39,10 @@ export class StrategyRecovery {
     const work = await this.works.getWork(context, generation.workId);
     const activePlan = await this.works.getActivePlan(context, generation.workId);
     if (activePlan?.strategy_generation_id === generation.strategyGenerationId) {
-      return await this.generator.markApplied(
-        context,
-        generation.strategyGenerationId,
-        `${root}:applied`,
-      );
+      return await this.generator.markApplied(context, generation.strategyGenerationId, `${root}:applied`);
     }
     if (work.revision !== generation.expectedWorkRevision) {
-      return await this.generator.markConflicted(
-        context,
-        generation.strategyGenerationId,
-        `${root}:conflicted`,
-      );
+      return await this.generator.markConflicted(context, generation.strategyGenerationId, `${root}:conflicted`);
     }
 
     try {
@@ -66,27 +55,15 @@ export class StrategyRecovery {
         strategyChecksum: generation.checksum,
         plan: generation.plan,
       });
-      return await this.generator.markApplied(
-        context,
-        generation.strategyGenerationId,
-        `${root}:applied`,
-      );
+      return await this.generator.markApplied(context, generation.strategyGenerationId, `${root}:applied`);
     } catch (error) {
       const currentPlan = await this.works.getActivePlan(context, generation.workId);
       if (currentPlan?.strategy_generation_id === generation.strategyGenerationId) {
-        return await this.generator.markApplied(
-          context,
-          generation.strategyGenerationId,
-          `${root}:applied`,
-        );
+        return await this.generator.markApplied(context, generation.strategyGenerationId, `${root}:applied`);
       }
       const currentWork = await this.works.getWork(context, generation.workId);
       if (currentWork.revision !== generation.expectedWorkRevision) {
-        return await this.generator.markConflicted(
-          context,
-          generation.strategyGenerationId,
-          `${root}:conflicted`,
-        );
+        return await this.generator.markConflicted(context, generation.strategyGenerationId, `${root}:conflicted`);
       }
       throw error;
     }

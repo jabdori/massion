@@ -145,12 +145,7 @@ export class ContinuationService {
     private readonly contexts: Pick<ContextStore, "create" | "get" | "getLatestForWork">,
     private readonly works: Pick<
       WorkService,
-      | "getWork"
-      | "getWorkRequest"
-      | "getActivePlan"
-      | "createWork"
-      | "createFollowUpWork"
-      | "attachContextVersion"
+      "getWork" | "getWorkRequest" | "getActivePlan" | "createWork" | "createFollowUpWork" | "attachContextVersion"
     >,
     private readonly strategy?: Pick<StrategyService, "plan">,
   ) {}
@@ -162,12 +157,7 @@ export class ContinuationService {
     contexts: Pick<ContextStore, "create" | "get" | "getLatestForWork">,
     works: Pick<
       WorkService,
-      | "getWork"
-      | "getWorkRequest"
-      | "getActivePlan"
-      | "createWork"
-      | "createFollowUpWork"
-      | "attachContextVersion"
+      "getWork" | "getWorkRequest" | "getActivePlan" | "createWork" | "createFollowUpWork" | "attachContextVersion"
     >,
     strategy?: Pick<StrategyService, "plan">,
   ): Promise<ContinuationService> {
@@ -183,7 +173,8 @@ export class ContinuationService {
     const hash = inputHash(input);
     const existing = await this.findByCommand(context.organizationId, input.commandId);
     if (existing) {
-      if (existing.request_hash !== hash) throw new Error("같은 commandId에 다른 continuation 요청을 사용할 수 없습니다");
+      if (existing.request_hash !== hash)
+        throw new Error("같은 commandId에 다른 continuation 요청을 사용할 수 없습니다");
       if (existing.status === "decided") return await this.apply(context, input, existing);
       if (existing.status === "failed") {
         const failed = this.view(existing);
@@ -233,8 +224,8 @@ export class ContinuationService {
     const route =
       input.classification === "local-private" ||
       latestContext?.selectedSources.some((source) => source.classification === "local-private")
-      ? "local-private"
-      : "planning-quality";
+        ? "local-private"
+        : "planning-quality";
     const result = await this.runner.executeStructured(
       context,
       {
@@ -269,7 +260,7 @@ export class ContinuationService {
       {
         name: "massion-continuation-decision",
         description: "후속 요청의 Work 연장 방식을 분류한다",
-        jsonSchema: z.toJSONSchema(continuationDecisionSchema) as Readonly<Record<string, unknown>>,
+        jsonSchema: z.toJSONSchema(continuationDecisionSchema),
         validate: validateModelOutput,
       },
     );
@@ -358,7 +349,20 @@ export class ContinuationService {
             `${input.commandId}:replan:context-placeholder`,
             true,
           );
-          const { commandId: _commandId, workId: _workId, tokenBudget: _tokenBudget, ...contextInput } = prepared;
+          const contextInput = {
+            ...(prepared.projectId ? { projectId: prepared.projectId } : {}),
+            ...(prepared.expectedParentContextVersionId
+              ? { expectedParentContextVersionId: prepared.expectedParentContextVersionId }
+              : {}),
+            objective: prepared.objective,
+            scopeIn: prepared.scopeIn,
+            scopeOut: prepared.scopeOut,
+            constraints: prepared.constraints,
+            assumptions: prepared.assumptions,
+            unknowns: prepared.unknowns,
+            decisions: prepared.decisions,
+            sources: prepared.sources,
+          };
           const replanned = await this.strategy.plan(context, {
             commandId: `${input.commandId}:replan`,
             workId: parentWork.work_id,
@@ -530,7 +534,8 @@ export class ContinuationService {
       const current = await this.findByCommand(context.organizationId, record.command_id, tx);
       if (!current) throw new Error("Continuation decision을 찾을 수 없습니다");
       if (current.status === status) return current;
-      if (current.status !== "decided") throw new Error(`Continuation decision을 적용할 수 없습니다: ${current.status}`);
+      if (current.status !== "decided")
+        throw new Error(`Continuation decision을 적용할 수 없습니다: ${current.status}`);
       const [updated] = await tx.query<[ContinuationDecisionRecord[]]>(
         "UPDATE continuation_decision SET status = $status, applied_work_id = $applied_work_id, applied_context_version_id = $applied_context_version_id, error_json = $error_json, updated_at = time::now() WHERE organization_id = $organization_id AND decision_id = $decision_id AND status = 'decided' RETURN AFTER;",
         {
@@ -543,19 +548,12 @@ export class ContinuationService {
         },
       );
       if (!updated[0]) throw new Error("Continuation decision 상태 전이에 실패했습니다");
-      await this.insertEvent(
-        tx,
-        context,
-        updated[0],
-        `${record.command_id}:${status}`,
-        `continuation_${status}`,
-        {
-          status,
-          ...(result.appliedWorkId ? { appliedWorkId: result.appliedWorkId } : {}),
-          ...(result.appliedContextVersionId ? { appliedContextVersionId: result.appliedContextVersionId } : {}),
-          ...(result.error ? { error: result.error } : {}),
-        },
-      );
+      await this.insertEvent(tx, context, updated[0], `${record.command_id}:${status}`, `continuation_${status}`, {
+        status,
+        ...(result.appliedWorkId ? { appliedWorkId: result.appliedWorkId } : {}),
+        ...(result.appliedContextVersionId ? { appliedContextVersionId: result.appliedContextVersionId } : {}),
+        ...(result.error ? { error: result.error } : {}),
+      });
       return updated[0];
     });
   }
@@ -623,9 +621,7 @@ export class ContinuationService {
       ...(record.actor_reason ? { actorReason: record.actor_reason } : {}),
       status: record.status,
       ...(record.applied_work_id ? { appliedWorkId: record.applied_work_id } : {}),
-      ...(record.applied_context_version_id
-        ? { appliedContextVersionId: record.applied_context_version_id }
-        : {}),
+      ...(record.applied_context_version_id ? { appliedContextVersionId: record.applied_context_version_id } : {}),
       ...(record.error_json
         ? { error: JSON.parse(record.error_json) as { readonly category: string; readonly causeId: string } }
         : {}),

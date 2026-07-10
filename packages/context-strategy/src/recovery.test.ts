@@ -127,6 +127,9 @@ describe("Strategy generation crash recovery", () => {
   it("projection commit 뒤 applied 기록 전 crash를 active plan 근거로 조정한다", async () => {
     const rootCommandId = crypto.randomUUID();
     const generation = await generated(rootCommandId);
+    if (!generation.checksum || !generation.plan) throw new Error("테스트 Strategy generation이 불완전합니다");
+    const strategyChecksum = generation.checksum;
+    const strategyPlan = generation.plan;
     let projectedPlanId: string | undefined;
     await expect(
       (async () => {
@@ -136,8 +139,8 @@ describe("Strategy generation crash recovery", () => {
           expectedRevision: 1,
           contextVersionId: version.contextVersionId,
           strategyGenerationId: generation.strategyGenerationId,
-          strategyChecksum: generation.checksum!,
-          plan: generation.plan!,
+          strategyChecksum,
+          plan: strategyPlan,
         });
         projectedPlanId = projection.plan.plan_version_id;
         throw new Error("injected-after-projection-commit");
@@ -151,8 +154,9 @@ describe("Strategy generation crash recovery", () => {
       expect.objectContaining({ strategyGenerationId: generation.strategyGenerationId, status: "applied" }),
     ]);
     expect((await works.getWork(context, workId)).active_plan_version_id).toBe(projectedPlanId);
-    expect((await works.listEvents(context, workId)).filter((event) => event.event_type === "strategy_projection_applied"))
-      .toHaveLength(1);
+    expect(
+      (await works.listEvents(context, workId)).filter((event) => event.event_type === "strategy_projection_applied"),
+    ).toHaveLength(1);
   });
 
   it("projection 전 crash는 같은 revision에서 한 번 투영하고 revision 변경 시 conflicted로 종료한다", async () => {
@@ -205,8 +209,9 @@ describe("Strategy generation crash recovery", () => {
     });
 
     const results = await recovery.recover(context);
-    expect(results.find((candidate) => candidate.strategyGenerationId === conflictGeneration.strategyGenerationId))
-      .toMatchObject({ status: "conflicted" });
+    expect(
+      results.find((candidate) => candidate.strategyGenerationId === conflictGeneration.strategyGenerationId),
+    ).toMatchObject({ status: "conflicted" });
     expect(await generator.get(context, retryGeneration.strategyGenerationId)).toMatchObject({ status: "applied" });
   });
 });

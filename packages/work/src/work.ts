@@ -2145,10 +2145,7 @@ export class WorkService {
       const validPlans = plans.filter((plan) => plan.valid);
       if (validPlans.length !== 1) {
         findings.push({ code: "plan", message: "현재 Work 상태의 유효한 PlanVersion 수가 1이 아닙니다" });
-      } else if (
-        work.active_plan_version_id &&
-        validPlans[0]?.plan_version_id !== work.active_plan_version_id
-      ) {
+      } else if (work.active_plan_version_id && validPlans[0]?.plan_version_id !== work.active_plan_version_id) {
         findings.push({ code: "plan", message: "활성 PlanVersion 참조와 유효한 PlanVersion이 다릅니다" });
       }
     }
@@ -2250,7 +2247,8 @@ export class WorkService {
           { organization_id: context.organizationId, work_id: work.work_id },
         );
         const activePlan = plans.find(
-          (plan) => plan.valid && (!work.active_plan_version_id || plan.plan_version_id === work.active_plan_version_id),
+          (plan) =>
+            plan.valid && (!work.active_plan_version_id || plan.plan_version_id === work.active_plan_version_id),
         );
         if (!activePlan) throw new Error("planned 전이에는 유효한 PlanVersion이 필요합니다");
       }

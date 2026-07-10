@@ -53,6 +53,11 @@ export const VALID_STRATEGY_PLAN: StrategyPlan = {
   evidenceRequests: [{ key: "evidence-runtime", question: "Runtime 계약이 최신인가", required: true }],
 };
 
+function required<Value>(value: Value | undefined, label: string): Value {
+  if (value === undefined) throw new Error(`테스트 fixture가 없습니다: ${label}`);
+  return value;
+}
+
 describe("StrategyPlan schema", () => {
   it("유효한 계획을 정규화한다", () => {
     expect(validateStrategyPlan(VALID_STRATEGY_PLAN)).toEqual(VALID_STRATEGY_PLAN);
@@ -62,13 +67,13 @@ describe("StrategyPlan schema", () => {
     expect(() =>
       validateStrategyPlan({
         ...VALID_STRATEGY_PLAN,
-        tasks: [{ ...VALID_STRATEGY_PLAN.tasks[0]!, criterionKeys: ["missing"] }],
+        tasks: [{ ...required(VALID_STRATEGY_PLAN.tasks[0], "first task"), criterionKeys: ["missing"] }],
       }),
     ).toThrow("criterion");
     expect(() =>
       validateStrategyPlan({
         ...VALID_STRATEGY_PLAN,
-        tasks: [{ ...VALID_STRATEGY_PLAN.tasks[0]!, dependencyKeys: ["missing"] }],
+        tasks: [{ ...required(VALID_STRATEGY_PLAN.tasks[0], "first task"), dependencyKeys: ["missing"] }],
       }),
     ).toThrow("dependency");
   });
@@ -77,13 +82,19 @@ describe("StrategyPlan schema", () => {
     expect(() =>
       validateStrategyPlan({
         ...VALID_STRATEGY_PLAN,
-        tasks: [{ ...VALID_STRATEGY_PLAN.tasks[0]!, dependencyKeys: ["verify"] }, VALID_STRATEGY_PLAN.tasks[1]!],
+        tasks: [
+          { ...required(VALID_STRATEGY_PLAN.tasks[0], "first task"), dependencyKeys: ["verify"] },
+          required(VALID_STRATEGY_PLAN.tasks[1], "second task"),
+        ],
       }),
     ).toThrow("cycle");
     expect(() =>
       validateStrategyPlan({
         ...VALID_STRATEGY_PLAN,
-        tasks: [VALID_STRATEGY_PLAN.tasks[0]!, { ...VALID_STRATEGY_PLAN.tasks[0]! }],
+        tasks: [
+          required(VALID_STRATEGY_PLAN.tasks[0], "first task"),
+          { ...required(VALID_STRATEGY_PLAN.tasks[0], "first task") },
+        ],
       }),
     ).toThrow("중복");
   });
@@ -94,7 +105,7 @@ describe("StrategyPlan schema", () => {
         ...VALID_STRATEGY_PLAN,
         risks: [
           {
-            ...VALID_STRATEGY_PLAN.risks[0]!,
+            ...required(VALID_STRATEGY_PLAN.risks[0], "first risk"),
             impact: "critical",
             mitigation: "",
             requiresApproval: false,
