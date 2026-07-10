@@ -3,14 +3,23 @@ import { createHash, randomUUID } from "node:crypto";
 import type { OrganizationService, TenantContext } from "@massion/identity";
 import type { MassionDatabase, QueryExecutor } from "@massion/storage";
 
-import type { AssuranceCheck, AssuranceCriterionStatus, HumanAttestation, MetricObservation } from "./contracts.js";
-import type { AssuranceCheckBinding } from "./binding-store.js";
+import type {
+  AssuranceCheck,
+  AssuranceCriterionStatus,
+  AssuranceFinding,
+  HumanAttestation,
+  MetricObservation,
+} from "./contracts.js";
+import { DEFAULT_INSPECTION_MAXIMUM_AGE_MS, type AssuranceCheckBinding } from "./binding-store.js";
 import {
   verifyArtifactEvidence,
   verifyEvidenceBriefFreshness,
   type ArtifactEvidence,
   type EvidenceBriefEvidence,
+  EvidenceValidationError,
 } from "./evidence.js";
+import { assuranceFindingFingerprint } from "./findings.js";
+import { containsAssuranceCredential, normalizeRepositoryUri } from "./sarif.js";
 
 export interface DeterministicCheckResult {
   readonly status: "passed" | "failed" | "blocked";
@@ -54,6 +63,93 @@ export interface TrustedAssuranceCheckExecutor {
     context: TenantContext,
     input: TrustedAssuranceCheckExecutionInput,
   ): Promise<TrustedAssuranceCheckExecutionResult>;
+}
+
+export interface TrustedAssuranceInspectionExecutionInput {
+  readonly workId: string;
+  readonly assuranceRunId: string;
+  readonly criterionId: string;
+  readonly verificationId: string;
+  readonly binding: Extract<AssuranceCheckBinding, { kind: "inspection" }>;
+  readonly artifactVersionIds: readonly string[];
+  readonly evidenceBriefIds: readonly string[];
+  readonly controlReferences: readonly string[];
+}
+
+export interface TrustedAssuranceInspectionFinding {
+  readonly category: AssuranceFinding["category"];
+  readonly severity: AssuranceFinding["severity"];
+  readonly message: string;
+  readonly location?: Readonly<Record<string, unknown>>;
+  readonly evidenceReferenceIds: readonly string[];
+  readonly sourceTool: string;
+  readonly sourceRule: string;
+  readonly controlReferences: readonly string[];
+}
+
+export interface TrustedAssuranceInspectionExecutionResult extends DeterministicCheckResult {
+  readonly executionId?: string;
+  readonly findings: readonly TrustedAssuranceInspectionFinding[];
+}
+
+export interface TrustedAssuranceInspectionExecutor {
+  readonly inspectorProfile: string;
+  execute(
+    context: TenantContext,
+    input: TrustedAssuranceInspectionExecutionInput,
+  ): Promise<TrustedAssuranceInspectionExecutionResult>;
+}
+
+export async function runTrustedAssuranceInspectionExecutor(
+  executors: ReadonlyMap<string, TrustedAssuranceInspectionExecutor>,
+  context: TenantContext,
+  input: TrustedAssuranceInspectionExecutionInput,
+): Promise<TrustedAssuranceInspectionExecutionResult> {
+  const executor = executors.get(input.binding.inspectorProfile);
+  if (!executor) {
+    return { ...result("blocked", "Structured inspection executor를 찾을 수 없습니다"), findings: [] };
+  }
+  let executed: TrustedAssuranceInspectionExecutionResult;
+  try {
+    executed = await executor.execute(context, input);
+  } catch {
+    return { ...result("blocked", "Structured inspection executor 실행에 실패했습니다"), findings: [] };
+  }
+  const submitted = new Set([...input.artifactVersionIds, ...input.evidenceBriefIds]);
+  const exactIds = (actual: readonly string[], expected: readonly string[]): boolean =>
+    actual.length === expected.length &&
+    [...actual].sort().every((value, index) => value === [...expected].sort()[index]);
+  const findingsValid =
+    executed.findings.length <= input.binding.maximumFindings &&
+    executed.findings.every(
+      (finding) =>
+        finding.message.trim().length > 0 &&
+        finding.message.length <= 4_000 &&
+        finding.evidenceReferenceIds.length > 0 &&
+        finding.evidenceReferenceIds.every((reference) => submitted.has(reference)) &&
+        finding.controlReferences.length <= 50 &&
+        finding.controlReferences.every((reference) => Boolean(reference.trim()) && reference.length <= 200) &&
+        finding.sourceTool === input.binding.inspectorProfile &&
+        Boolean(finding.sourceRule.trim()) &&
+        finding.sourceRule.length <= 200,
+    );
+  if (
+    !["passed", "blocked"].includes(executed.status) ||
+    !/^[a-f0-9]{64}$/u.test(executed.outputHash) ||
+    !executed.summary.trim() ||
+    executed.summary.length > 4_000 ||
+    (executed.executionId !== undefined && !executed.executionId.trim()) ||
+    !exactIds(executed.artifactVersionIds, input.artifactVersionIds) ||
+    !exactIds(executed.evidenceBriefIds, input.evidenceBriefIds) ||
+    !exactIds(executed.evidenceReferenceIds, [...input.artifactVersionIds, ...input.evidenceBriefIds]) ||
+    executed.metricObservationIds.length > 0 ||
+    executed.humanAttestationIds.length > 0 ||
+    !findingsValid ||
+    (executed.status === "blocked" && executed.findings.length > 0)
+  ) {
+    return { ...result("blocked", "Structured inspection executor 결과 계약이 올바르지 않습니다"), findings: [] };
+  }
+  return executed;
 }
 
 function canonicalJson(value: unknown): string {
@@ -102,6 +198,10 @@ function result(
     metricObservationIds,
     humanAttestationIds,
   };
+}
+
+function evidenceIntegrityFailure(error: unknown): boolean {
+  return error instanceof EvidenceValidationError && error.reason === "integrity";
 }
 
 export async function runTrustedAssuranceCheckExecutor(
@@ -182,8 +282,9 @@ export function evaluateArtifactEvidenceCheck(input: {
     }
   } catch (error) {
     const summary = error instanceof Error ? error.message : "ArtifactVersion 증거 검증에 실패했습니다";
-    return result(summary.includes("freshness") || summary.includes("미래") ? "blocked" : "failed", summary, {
-      artifactVersionIds: verified,
+    const integrity = evidenceIntegrityFailure(error);
+    return result(integrity ? "failed" : "blocked", integrity ? `Evidence integrity: ${summary}` : summary, {
+      artifactVersionIds: input.requiredArtifactVersionIds,
     });
   }
   return result("passed", `${String(verified.length)}개 ArtifactVersion 증거가 유효합니다`, {
@@ -370,6 +471,7 @@ interface CriterionRecord {
   readonly statement: string;
   readonly method: string;
   readonly status: AssuranceCriterionStatus;
+  readonly control_references: readonly string[];
 }
 
 interface BindingRecord {
@@ -388,6 +490,7 @@ interface CheckRecord {
   readonly system_adapter_id?: string;
   readonly command_key: string;
   readonly input_hash: string;
+  readonly execution_receipt_id?: string;
   readonly status: AssuranceCheck["status"];
   readonly tool_name?: string;
   readonly tool_version?: string;
@@ -478,6 +581,7 @@ function checkView(record: CheckRecord): AssuranceCheck {
     ...(record.system_adapter_id ? { systemAdapterId: record.system_adapter_id } : {}),
     commandKey: record.command_key,
     inputHash: record.input_hash,
+    ...(record.execution_receipt_id ? { executionReceiptId: record.execution_receipt_id } : {}),
     status: record.status,
     ...(record.tool_name ? { toolName: record.tool_name } : {}),
     ...(record.tool_version ? { toolVersion: record.tool_version } : {}),
@@ -509,7 +613,9 @@ const bindingLocksByDatabase = new WeakMap<object, Map<string, Promise<void>>>()
 export class AssuranceCheckStore {
   private readonly clock: () => Date;
   private readonly trustedExecutors: ReadonlyMap<string, TrustedAssuranceCheckExecutor>;
+  private readonly trustedInspectionExecutors: ReadonlyMap<string, TrustedAssuranceInspectionExecutor>;
   private readonly bindingLocks: Map<string, Promise<void>>;
+  private readonly afterEvidenceRevalidation: (() => Promise<void>) | undefined;
 
   public constructor(
     private readonly database: MassionDatabase,
@@ -517,6 +623,9 @@ export class AssuranceCheckStore {
     options: {
       readonly clock?: () => Date;
       readonly trustedExecutors?: readonly TrustedAssuranceCheckExecutor[];
+      readonly trustedInspectionExecutors?: readonly TrustedAssuranceInspectionExecutor[];
+      /** 동시성 검증을 위한 transaction 경계 hook입니다. */
+      readonly afterEvidenceRevalidation?: () => Promise<void>;
     } = {},
   ) {
     this.clock = options.clock ?? (() => new Date());
@@ -525,6 +634,14 @@ export class AssuranceCheckStore {
       throw new Error("Trusted assurance check executor ID가 중복됐습니다");
     }
     this.trustedExecutors = new Map(trustedExecutors.map((executor) => [executor.adapterId, executor]));
+    const inspectionExecutors = options.trustedInspectionExecutors ?? [];
+    if (new Set(inspectionExecutors.map((executor) => executor.inspectorProfile)).size !== inspectionExecutors.length) {
+      throw new Error("Trusted inspection executor profile이 중복됐습니다");
+    }
+    this.trustedInspectionExecutors = new Map(
+      inspectionExecutors.map((executor) => [executor.inspectorProfile, executor]),
+    );
+    this.afterEvidenceRevalidation = options.afterEvidenceRevalidation;
     const sharedLocks = bindingLocksByDatabase.get(database) ?? new Map<string, Promise<void>>();
     bindingLocksByDatabase.set(database, sharedLocks);
     this.bindingLocks = sharedLocks;
@@ -587,6 +704,26 @@ export class AssuranceCheckStore {
             humanAttestationIds: normalized.humanAttestationIds,
           })
         : undefined;
+    const trustedInspectionResult =
+      preflightTarget.binding.kind === "inspection" && !preflightExisting
+        ? await runTrustedAssuranceInspectionExecutor(this.trustedInspectionExecutors, context, {
+            workId: normalized.workId,
+            assuranceRunId: normalized.assuranceRunId,
+            criterionId: normalized.criterionId,
+            verificationId: `${sha256(
+              canonicalJson({
+                organizationId: context.organizationId,
+                assuranceRunId: normalized.assuranceRunId,
+                bindingKey: normalized.bindingKey,
+                inputHash,
+              }),
+            )}-${randomUUID()}`,
+            binding: preflightTarget.binding,
+            artifactVersionIds: normalized.artifactVersionIds,
+            evidenceBriefIds: normalized.evidenceBriefIds,
+            controlReferences: preflightTarget.criterion.control_references,
+          })
+        : undefined;
 
     return await this.database.transaction(async (transaction) => {
       await this.organizations.verifyTenantContext(context, undefined, transaction);
@@ -615,10 +752,39 @@ export class AssuranceCheckStore {
         );
         return { check: checkView(existing), criterionStatus: target.criterion.status };
       }
-      if (trustedResult && canonicalJson(target.binding) !== canonicalJson(preflightTarget.binding)) {
+      if (
+        (trustedResult || trustedInspectionResult) &&
+        canonicalJson(target.binding) !== canonicalJson(preflightTarget.binding)
+      ) {
         throw new Error("Trusted check 실행 중 binding 정본이 변경됐습니다");
       }
-      const executor = await this.executor(transaction, context.organizationId, normalized.workId, target);
+      let revalidatedInspectionResult = trustedInspectionResult;
+      if (trustedInspectionResult?.status === "passed" && target.binding.kind === "inspection") {
+        try {
+          await this.revalidateInspectionEvidence(transaction, context.organizationId, normalized, target.binding);
+        } catch (error) {
+          revalidatedInspectionResult = {
+            ...result(
+              "blocked",
+              error instanceof Error
+                ? `Structured inspection evidence 재검증 실패: ${error.message}`
+                : "Structured inspection evidence 재검증에 실패했습니다",
+            ),
+            ...(trustedInspectionResult.executionId ? { executionId: trustedInspectionResult.executionId } : {}),
+            findings: [],
+          };
+        }
+      }
+      const executor = revalidatedInspectionResult
+        ? target.binding.executor.kind === "runtime_agent"
+          ? {
+              handle: target.binding.executor.handle,
+              ...(revalidatedInspectionResult.executionId
+                ? { executionId: revalidatedInspectionResult.executionId }
+                : {}),
+            }
+          : { adapterId: target.binding.executor.adapterId }
+        : await this.executor(transaction, context.organizationId, normalized.workId, target);
       const evaluated = await this.evaluate(
         transaction,
         context.organizationId,
@@ -626,10 +792,41 @@ export class AssuranceCheckStore {
         target,
         executor,
         trustedResult,
+        revalidatedInspectionResult,
       );
+      if (
+        this.afterEvidenceRevalidation &&
+        (target.binding.kind === "inspection" || target.binding.kind === "evidence")
+      ) {
+        await this.afterEvidenceRevalidation();
+      }
       const checkId = randomUUID();
+      const executionReceiptId = randomUUID();
+      await transaction.query(
+        "CREATE assurance_check_execution_receipt CONTENT { receipt_id: $receipt_id, organization_id: $organization_id, work_id: $work_id, assurance_run_id: $assurance_run_id, criterion_id: $criterion_id, binding_key: $binding_key, input_hash: $input_hash, status: $status, output_hash: $output_hash, artifact_version_ids: $artifact_version_ids, evidence_brief_ids: $evidence_brief_ids, metric_observation_ids: $metric_observation_ids, human_attestation_ids: $human_attestation_ids, executor_kind: $executor_kind, executor_id: $executor_id, created_at: time::now() };",
+        {
+          receipt_id: executionReceiptId,
+          organization_id: context.organizationId,
+          work_id: normalized.workId,
+          assurance_run_id: normalized.assuranceRunId,
+          criterion_id: normalized.criterionId,
+          binding_key: normalized.bindingKey,
+          input_hash: inputHash,
+          status: evaluated.status,
+          output_hash: evaluated.outputHash,
+          artifact_version_ids: evaluated.artifactVersionIds,
+          evidence_brief_ids: evaluated.evidenceBriefIds,
+          metric_observation_ids: evaluated.metricObservationIds,
+          human_attestation_ids: evaluated.humanAttestationIds,
+          executor_kind: target.binding.executor.kind,
+          executor_id:
+            target.binding.executor.kind === "runtime_agent"
+              ? target.binding.executor.handle
+              : target.binding.executor.adapterId,
+        },
+      );
       const [records] = await transaction.query<[CheckRecord[]]>(
-        "CREATE assurance_check CONTENT { check_id: $check_id, organization_id: $organization_id, work_id: $work_id, assurance_run_id: $assurance_run_id, criterion_id: $criterion_id, kind: $kind, executor_handle: $executor_handle, executor_execution_id: $executor_execution_id, system_adapter_id: $system_adapter_id, command_key: $command_key, input_hash: $input_hash, status: $status, tool_name: $tool_name, tool_version: $tool_version, output_hash: $output_hash, output_summary: $output_summary, artifact_version_ids: $artifact_version_ids, evidence_brief_ids: $evidence_brief_ids, metric_observation_ids: $metric_observation_ids, human_attestation_ids: $human_attestation_ids, duration_ms: $duration_ms, created_at: time::now(), started_at: time::now(), completed_at: time::now() } RETURN AFTER;",
+        "CREATE assurance_check CONTENT { check_id: $check_id, organization_id: $organization_id, work_id: $work_id, assurance_run_id: $assurance_run_id, criterion_id: $criterion_id, kind: $kind, executor_handle: $executor_handle, executor_execution_id: $executor_execution_id, system_adapter_id: $system_adapter_id, command_key: $command_key, input_hash: $input_hash, execution_receipt_id: $execution_receipt_id, status: $status, tool_name: $tool_name, tool_version: $tool_version, output_hash: $output_hash, output_summary: $output_summary, artifact_version_ids: $artifact_version_ids, evidence_brief_ids: $evidence_brief_ids, metric_observation_ids: $metric_observation_ids, human_attestation_ids: $human_attestation_ids, duration_ms: $duration_ms, created_at: time::now(), started_at: time::now(), completed_at: time::now() } RETURN AFTER;",
         {
           check_id: checkId,
           organization_id: context.organizationId,
@@ -642,6 +839,7 @@ export class AssuranceCheckStore {
           system_adapter_id: executor.adapterId,
           command_key: normalized.bindingKey,
           input_hash: inputHash,
+          execution_receipt_id: executionReceiptId,
           status: evaluated.status,
           tool_name: evaluated.toolName,
           tool_version: evaluated.toolVersion,
@@ -656,6 +854,22 @@ export class AssuranceCheckStore {
       );
       const created = records[0];
       if (!created) throw new Error("AssuranceCheck 생성 결과가 없습니다");
+      if (revalidatedInspectionResult) {
+        await this.recordInspectionFindings(
+          transaction,
+          context,
+          normalized,
+          target,
+          revalidatedInspectionResult.findings,
+        );
+      }
+      if (
+        target.binding.kind === "evidence" &&
+        evaluated.status === "failed" &&
+        evaluated.summary.startsWith("Evidence integrity:")
+      ) {
+        await this.recordEvidenceIntegrityFinding(transaction, context, normalized, target.binding);
+      }
       const criterionStatus = await this.projectCriterion(transaction, context.organizationId, target, normalized);
       await this.event(transaction, context, normalized, requestHash, checkId, "assurance_check_recorded");
       return { check: checkView(created), criterionStatus };
@@ -713,7 +927,7 @@ export class AssuranceCheckStore {
     const run = runs[0];
     if (!run || !["planned", "running"].includes(run.status)) throw new Error("활성 Assurance run을 찾을 수 없습니다");
     const [criteria] = await executor.query<[CriterionRecord[]]>(
-      "SELECT criterion_id, criterion_key, statement, method, status FROM assurance_criterion WHERE organization_id = $organization_id AND work_id = $work_id AND assurance_run_id = $assurance_run_id AND criterion_id = $criterion_id LIMIT 1;",
+      "SELECT criterion_id, criterion_key, statement, method, status, control_references FROM assurance_criterion WHERE organization_id = $organization_id AND work_id = $work_id AND assurance_run_id = $assurance_run_id AND criterion_id = $criterion_id LIMIT 1;",
       {
         organization_id: organizationId,
         work_id: input.workId,
@@ -747,6 +961,7 @@ export class AssuranceCheckStore {
     target: { readonly run: RunRecord; readonly criterion: CriterionRecord; readonly binding: AssuranceCheckBinding },
     trustedExecutor: { readonly handle?: string; readonly executionId?: string; readonly adapterId?: string },
     trustedResult?: DeterministicCheckResult,
+    trustedInspectionResult?: TrustedAssuranceInspectionExecutionResult,
   ): Promise<DeterministicCheckResult> {
     if (target.binding.kind === "test") {
       return trustedResult ?? result("blocked", "Trusted command executor 결과가 없습니다");
@@ -756,7 +971,7 @@ export class AssuranceCheckStore {
       return await this.metric(executor, organizationId, input, target.binding, trustedExecutor);
     if (target.binding.kind === "human")
       return await this.human(executor, organizationId, input, { ...target, binding: target.binding });
-    throw new Error(`${target.binding.kind} check는 전용 trusted executor가 필요합니다`);
+    return trustedInspectionResult ?? result("blocked", "Trusted inspection executor 결과가 없습니다");
   }
 
   private async evidence(
@@ -767,6 +982,26 @@ export class AssuranceCheckStore {
   ): Promise<DeterministicCheckResult> {
     if (input.metricObservationIds.length || input.humanAttestationIds.length)
       throw new Error("Evidence binding에 다른 evidence kind ID를 사용할 수 없습니다");
+    if (binding.evidenceKinds.includes("check-result")) {
+      const [peerChecks] = await executor.query<[{ status: string; output_hash?: string }[]]>(
+        "SELECT status, output_hash FROM assurance_check WHERE organization_id = $organization_id AND work_id = $work_id AND assurance_run_id = $assurance_run_id;",
+        {
+          organization_id: organizationId,
+          work_id: input.workId,
+          assurance_run_id: input.assuranceRunId,
+        },
+      );
+      if (peerChecks.length === 0) return result("blocked", "검증할 peer Check result가 없습니다");
+      if (peerChecks.some((check) => check.status === "failed")) {
+        return result("failed", "Peer Check result에 실패가 있습니다");
+      }
+      if (peerChecks.some((check) => check.status !== "passed" || !/^[a-f0-9]{64}$/u.test(check.output_hash ?? ""))) {
+        return result("blocked", "Peer Check result가 모두 확정되지 않았습니다");
+      }
+      if (binding.evidenceKinds.every((kind) => kind === "check-result")) {
+        return result("passed", `${String(peerChecks.length)}개 peer Check result가 유효합니다`);
+      }
+    }
     if (input.artifactVersionIds.length === 0 && input.evidenceBriefIds.length === 0) {
       return result("blocked", "Evidence binding에 제출된 evidence ID가 없습니다");
     }
@@ -879,14 +1114,131 @@ export class AssuranceCheckStore {
         });
       }
     } catch (error) {
-      return result("blocked", error instanceof Error ? error.message : "EvidenceBrief 검증에 실패했습니다", {
+      const summary = error instanceof Error ? error.message : "EvidenceBrief 검증에 실패했습니다";
+      const integrity = evidenceIntegrityFailure(error);
+      return result(integrity ? "failed" : "blocked", integrity ? `Evidence integrity: ${summary}` : summary, {
         artifactVersionIds: artifactResult.artifactVersionIds,
+        evidenceBriefIds: input.evidenceBriefIds,
       });
     }
     return result("passed", "DB에서 다시 읽은 evidence가 유효합니다", {
       artifactVersionIds: artifactResult.artifactVersionIds,
       evidenceBriefIds: input.evidenceBriefIds,
     });
+  }
+
+  private async revalidateInspectionEvidence(
+    executor: QueryExecutor,
+    organizationId: string,
+    input: Required<RecordAssuranceCheckInput>,
+    binding: Extract<AssuranceCheckBinding, { kind: "inspection" }>,
+  ): Promise<void> {
+    const maximumAgeMs = binding.maximumAgeMs ?? DEFAULT_INSPECTION_MAXIMUM_AGE_MS;
+    const observedAt = this.clock().toISOString();
+    const allows = (kind: string, id: string): boolean =>
+      binding.evidenceAllowlist.includes(kind) || binding.evidenceAllowlist.includes(id);
+    if (input.artifactVersionIds.some((id) => !allows("artifact-version", id))) {
+      throw new Error("Inspection binding이 ArtifactVersion evidence를 허용하지 않습니다");
+    }
+    if (input.evidenceBriefIds.some((id) => !allows("evidence-brief", id))) {
+      throw new Error("Inspection binding이 EvidenceBrief evidence를 허용하지 않습니다");
+    }
+    const [artifacts] = await executor.query<
+      [
+        {
+          artifact_version_id: string;
+          organization_id: string;
+          work_id: string;
+          checksum: string;
+          content_json: string;
+          created_at: unknown;
+        }[],
+      ]
+    >(
+      "SELECT artifact_version_id, organization_id, work_id, checksum, content_json, created_at FROM artifact_version WHERE organization_id = $organization_id AND work_id = $work_id AND artifact_version_id IN $ids;",
+      { organization_id: organizationId, work_id: input.workId, ids: input.artifactVersionIds },
+    );
+    if (artifacts.length !== input.artifactVersionIds.length) {
+      throw new Error("Inspection ArtifactVersion evidence가 완전하지 않습니다");
+    }
+    for (const artifact of artifacts) {
+      verifyArtifactEvidence({
+        organizationId,
+        workId: input.workId,
+        allowedArtifactVersionIds: input.artifactVersionIds,
+        observedAt,
+        maximumAgeMs,
+        artifact: {
+          artifactVersionId: artifact.artifact_version_id,
+          organizationId: artifact.organization_id,
+          workId: artifact.work_id,
+          checksum: artifact.checksum,
+          contentJson: artifact.content_json,
+          createdAt: iso(artifact.created_at, "Inspection ArtifactVersion createdAt"),
+        },
+      });
+    }
+    const [briefs] = await executor.query<
+      [
+        {
+          evidence_brief_id: string;
+          organization_id: string;
+          work_id: string;
+          repository_id: string;
+          repository_revision_id: string;
+          index_version_id: string;
+          configuration_checksum: string;
+          query: string;
+          status: EvidenceBriefEvidence["status"];
+          references_json: string;
+          claims_json: string;
+          checksum: string;
+          created_at: unknown;
+        }[],
+      ]
+    >(
+      "SELECT evidence_brief_id, organization_id, work_id, repository_id, repository_revision_id, index_version_id, configuration_checksum, query, status, references_json, claims_json, checksum, created_at FROM evidence_brief WHERE organization_id = $organization_id AND work_id = $work_id AND evidence_brief_id IN $ids;",
+      { organization_id: organizationId, work_id: input.workId, ids: input.evidenceBriefIds },
+    );
+    if (briefs.length !== input.evidenceBriefIds.length) {
+      throw new Error("Inspection EvidenceBrief evidence가 완전하지 않습니다");
+    }
+    for (const brief of briefs) {
+      const [indexes] = await executor.query<
+        [{ repository_revision_id: string; index_version_id: string; configuration_checksum: string }[]]
+      >(
+        "SELECT repository_revision_id, index_version_id, configuration_checksum FROM index_version WHERE organization_id = $organization_id AND repository_id = $repository_id AND current = true AND status = 'ready' LIMIT 1;",
+        { organization_id: organizationId, repository_id: brief.repository_id },
+      );
+      const current = indexes[0];
+      if (!current) throw new Error("Inspection EvidenceBrief의 현재 ready IndexVersion이 없습니다");
+      verifyEvidenceBriefFreshness({
+        organizationId,
+        workId: input.workId,
+        observedAt,
+        maximumAgeMs,
+        current: {
+          repositoryRevisionId: current.repository_revision_id,
+          indexVersionId: current.index_version_id,
+          configurationChecksum: current.configuration_checksum,
+        },
+        brief: {
+          evidenceBriefId: brief.evidence_brief_id,
+          organizationId: brief.organization_id,
+          workId: brief.work_id,
+          repositoryId: brief.repository_id,
+          repositoryRevisionId: brief.repository_revision_id,
+          indexVersionId: brief.index_version_id,
+          configurationChecksum: brief.configuration_checksum,
+          query: brief.query,
+          status: brief.status,
+          referencesJson: brief.references_json,
+          claimsJson: brief.claims_json,
+          checksum: brief.checksum,
+          createdAt: iso(brief.created_at, "Inspection EvidenceBrief createdAt"),
+        },
+      });
+    }
   }
 
   private async metric(
@@ -1013,6 +1365,150 @@ export class AssuranceCheckStore {
 
   private kind(kind: AssuranceCheckBinding["kind"]): AssuranceCheck["kind"] {
     return kind === "test" ? "command" : kind;
+  }
+
+  private async recordInspectionFindings(
+    executor: QueryExecutor,
+    context: TenantContext,
+    input: Required<RecordAssuranceCheckInput>,
+    target: { readonly criterion: CriterionRecord; readonly binding: AssuranceCheckBinding },
+    findings: readonly TrustedAssuranceInspectionFinding[],
+  ): Promise<void> {
+    if (target.binding.kind !== "inspection") throw new Error("Inspection binding이 필요합니다");
+    const evidenceAllowlist = new Set([...input.artifactVersionIds, ...input.evidenceBriefIds]);
+    const controlAllowlist = new Set(target.criterion.control_references);
+    const fingerprints = new Set<string>();
+    for (const [index, finding] of findings.entries()) {
+      if (
+        !(["correctness", "security", "reliability", "operability", "supply-chain"] as const).includes(finding.category)
+      ) {
+        throw new Error("Inspection finding category가 올바르지 않습니다");
+      }
+      if (!(["critical", "major", "minor", "info"] as const).includes(finding.severity)) {
+        throw new Error("Inspection finding severity가 올바르지 않습니다");
+      }
+      const message = text(finding.message, "Inspection finding message", 4_000);
+      if (containsAssuranceCredential(message)) throw new Error("Inspection finding message에 credential이 있습니다");
+      if (finding.sourceTool !== target.binding.inspectorProfile) {
+        throw new Error("Inspection finding source tool이 binding profile과 일치하지 않습니다");
+      }
+      const sourceRule = text(finding.sourceRule, "Inspection finding source rule");
+      const evidenceReferenceIds = ids(finding.evidenceReferenceIds, "Inspection finding evidence reference");
+      if (
+        evidenceReferenceIds.length === 0 ||
+        evidenceReferenceIds.some((reference) => !evidenceAllowlist.has(reference))
+      ) {
+        throw new Error("Inspection finding evidence reference가 제출 evidence 밖입니다");
+      }
+      const controlReferences = ids(finding.controlReferences, "Inspection finding control reference");
+      if (controlReferences.some((reference) => !controlAllowlist.has(reference))) {
+        throw new Error("Inspection finding control reference가 criterion 밖입니다");
+      }
+      let location: Readonly<Record<string, unknown>> | undefined;
+      if (finding.location) {
+        const unsupported = Object.keys(finding.location).find((key) => !["uri", "line", "column"].includes(key));
+        if (unsupported) throw new Error(`Inspection finding location field가 올바르지 않습니다: ${unsupported}`);
+        const uri = normalizeRepositoryUri(finding.location.uri);
+        const line = finding.location.line;
+        const column = finding.location.column;
+        if (line !== undefined && (!Number.isSafeInteger(line) || (line as number) < 1)) {
+          throw new Error("Inspection finding line이 올바르지 않습니다");
+        }
+        if (column !== undefined && (!Number.isSafeInteger(column) || (column as number) < 1)) {
+          throw new Error("Inspection finding column이 올바르지 않습니다");
+        }
+        location = {
+          uri,
+          ...(typeof line === "number" ? { line } : {}),
+          ...(typeof column === "number" ? { column } : {}),
+        };
+      }
+      const fingerprint = assuranceFindingFingerprint({
+        category: finding.category,
+        sourceTool: finding.sourceTool,
+        sourceRule,
+        ...(location ? { location } : {}),
+      });
+      if (fingerprints.has(fingerprint)) throw new Error("Inspection finding fingerprint가 중복됐습니다");
+      fingerprints.add(fingerprint);
+      const findingId = randomUUID();
+      await executor.query(
+        "CREATE assurance_finding CONTENT { finding_id: $finding_id, organization_id: $organization_id, work_id: $work_id, assurance_run_id: $assurance_run_id, criterion_id: $criterion_id, fingerprint: $fingerprint, category: $category, severity: $severity, status: 'open', message: $message, location_json: $location_json, evidence_reference_ids: $evidence_reference_ids, source_tool: $source_tool, source_rule: $source_rule, control_references: $control_references, created_at: time::now() };",
+        {
+          finding_id: findingId,
+          organization_id: context.organizationId,
+          work_id: input.workId,
+          assurance_run_id: input.assuranceRunId,
+          criterion_id: input.criterionId,
+          fingerprint,
+          category: finding.category,
+          severity: finding.severity,
+          message,
+          location_json: location ? canonicalJson(location) : undefined,
+          evidence_reference_ids: evidenceReferenceIds,
+          source_tool: finding.sourceTool,
+          source_rule: sourceRule,
+          control_references: controlReferences,
+        },
+      );
+      await this.inspectionFindingEvent(executor, context, input, findingId, index);
+    }
+  }
+
+  private async recordEvidenceIntegrityFinding(
+    executor: QueryExecutor,
+    context: TenantContext,
+    input: Required<RecordAssuranceCheckInput>,
+    binding: Extract<AssuranceCheckBinding, { kind: "evidence" }>,
+  ): Promise<void> {
+    const sourceTool = "massion.assurance.evidence.v1";
+    const sourceRule = `EVIDENCE-INTEGRITY-${sha256(binding.bindingKey).slice(0, 16)}`;
+    const fingerprint = assuranceFindingFingerprint({ category: "security", sourceTool, sourceRule });
+    const findingId = randomUUID();
+    await executor.query(
+      "CREATE assurance_finding CONTENT { finding_id: $finding_id, organization_id: $organization_id, work_id: $work_id, assurance_run_id: $assurance_run_id, criterion_id: $criterion_id, fingerprint: $fingerprint, category: 'security', severity: 'critical', status: 'open', message: 'Evidence checksum 무결성 검증에 실패했습니다', evidence_reference_ids: $evidence_reference_ids, source_tool: $source_tool, source_rule: $source_rule, control_references: [], created_at: time::now() };",
+      {
+        finding_id: findingId,
+        organization_id: context.organizationId,
+        work_id: input.workId,
+        assurance_run_id: input.assuranceRunId,
+        criterion_id: input.criterionId,
+        fingerprint,
+        evidence_reference_ids: [...input.artifactVersionIds, ...input.evidenceBriefIds].sort(),
+        source_tool: sourceTool,
+        source_rule: sourceRule,
+      },
+    );
+    await this.inspectionFindingEvent(executor, context, input, findingId, 0);
+  }
+
+  private async inspectionFindingEvent(
+    executor: QueryExecutor,
+    context: TenantContext,
+    input: Required<RecordAssuranceCheckInput>,
+    findingId: string,
+    index: number,
+  ): Promise<void> {
+    const [events] = await executor.query<[{ sequence: number }[]]>(
+      "SELECT sequence FROM assurance_event WHERE organization_id = $organization_id AND assurance_run_id = $assurance_run_id;",
+      { organization_id: context.organizationId, assurance_run_id: input.assuranceRunId },
+    );
+    const sequence = events.reduce((maximum, event) => Math.max(maximum, event.sequence), 0) + 1;
+    const commandId = `finding:${sha256(`${input.commandId}:${String(index)}:${findingId}`)}`;
+    const findingRequestHash = sha256(canonicalJson({ operation: "record_inspection_finding", findingId }));
+    await executor.query(
+      "CREATE assurance_event CONTENT { event_id: $event_id, organization_id: $organization_id, assurance_run_id: $assurance_run_id, command_id: $command_id, sequence: $sequence, event_type: 'assurance_finding_recorded', request_hash: $request_hash, payload_json: $payload_json, actor_user_id: $actor_user_id, created_at: time::now() };",
+      {
+        event_id: randomUUID(),
+        organization_id: context.organizationId,
+        assurance_run_id: input.assuranceRunId,
+        command_id: commandId,
+        sequence,
+        request_hash: findingRequestHash,
+        payload_json: canonicalJson({ findingId }),
+        actor_user_id: context.userId,
+      },
+    );
   }
 
   private async projectCriterion(

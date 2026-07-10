@@ -26,6 +26,8 @@ export interface AssuranceRun {
   readonly verdict?: AssuranceVerdict;
   readonly projectedWorkRevision?: number;
   readonly failure?: AssuranceFailure;
+  readonly decisionEvidenceHash?: string;
+  readonly decisionGuardRevision?: number;
   readonly createdByUserId: string;
   readonly expiresAt: IsoDateTime;
   readonly startedAt: IsoDateTime;
@@ -104,6 +106,7 @@ export interface AssuranceCheck {
   readonly systemAdapterId?: string;
   readonly commandKey: string;
   readonly inputHash: string;
+  readonly executionReceiptId?: string;
   readonly status: AssuranceCheckStatus;
   readonly toolName?: string;
   readonly toolVersion?: string;

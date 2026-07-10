@@ -6,11 +6,13 @@ import { applyMigrations, type MassionDatabase } from "@massion/storage";
 import { WORK_ASSURANCE_LINK_MIGRATION, WorkService } from "@massion/work";
 
 import { AssuranceRunStore } from "./run-store.js";
+import { AssuranceService, type DecideAssuranceInput, type DecideAssuranceResult } from "./service.js";
 import type { AssuranceEvent, AssuranceRun, AssuranceRunResult, StartAssuranceRunInput } from "./contracts.js";
 import type { DatabaseAssuranceSnapshotInput, DatabaseAssuranceSnapshotResult } from "./database-snapshot.js";
 import { backfillAssuranceBindingChecks } from "./binding-store.js";
 import {
   ASSURANCE_BINDING_MIGRATION,
+  ASSURANCE_DECISION_EVIDENCE_MIGRATION,
   ASSURANCE_EVIDENCE_INTEGRITY_MIGRATION,
   ASSURANCE_RUN_MIGRATION,
 } from "./schema.js";
@@ -23,6 +25,7 @@ export interface AssuranceRunGateway {
     input: DatabaseAssuranceSnapshotInput,
   ): Promise<DatabaseAssuranceSnapshotResult>;
   listEvents(context: TenantContext, assuranceRunId: string): Promise<AssuranceEvent[]>;
+  decide(context: TenantContext, input: DecideAssuranceInput): Promise<DecideAssuranceResult>;
 }
 
 export const AssuranceBootstrap = {
@@ -39,14 +42,17 @@ export const AssuranceBootstrap = {
       ASSURANCE_BINDING_MIGRATION,
       WORK_ASSURANCE_LINK_MIGRATION,
       ASSURANCE_EVIDENCE_INTEGRITY_MIGRATION,
+      ASSURANCE_DECISION_EVIDENCE_MIGRATION,
     ]);
     await backfillAssuranceBindingChecks(database);
     const runs = await AssuranceRunStore.create(database, organizations);
+    const assurance = await AssuranceService.create(database, organizations);
     return Object.freeze({
       start: runs.start.bind(runs),
       get: runs.get.bind(runs),
       prepareSnapshot: runs.prepareSnapshot.bind(runs),
       listEvents: runs.listEvents.bind(runs),
+      decide: assurance.decide.bind(assurance),
     });
   },
 } as const;

@@ -99,6 +99,7 @@ describe("Assurance binding 저장소", () => {
         executor: { kind: "runtime_agent", handle: "security-review" },
         inspectorProfile: "massion.inspection.security.v1",
         evidenceAllowlist: ["artifact-version"],
+        maximumAgeMs: 60_000,
         maximumFindings: 100,
         requiredEvidenceKinds: ["finding"],
       },
@@ -169,6 +170,48 @@ describe("Assurance binding 저장소", () => {
       "다른 binding 명령",
     );
     await expect(store.propose(context, { ...proposal(), bindings: checks().slice(1) })).rejects.toThrow("coverage");
+  });
+
+  it("같은 criterion의 여러 binding 정책을 합치지 않고 각각 projection한다", async () => {
+    const artifactBinding: AssuranceCheckBinding = {
+      bindingKey: "evidence:artifact",
+      criterionKey: "criterion:evidence",
+      kind: "evidence",
+      executor: { kind: "system_adapter", adapterId: "massion.evidence.v1" },
+      evidenceKinds: ["artifact-version"],
+      maximumAgeMs: 60_000,
+      requiredEvidenceKinds: ["artifact-version"],
+    };
+    const checkResultBinding: AssuranceCheckBinding = {
+      ...artifactBinding,
+      bindingKey: "evidence:check-result",
+      evidenceKinds: ["check-result"],
+      requiredEvidenceKinds: ["check-result"],
+    };
+    const proposed = await store.propose(context, {
+      ...proposal(),
+      requiredCriteria: [{ criterionKey: "criterion:evidence", method: "evidence" }],
+      bindings: [artifactBinding, checkResultBinding],
+    });
+
+    const [policies] = await database.query<
+      [{ binding_key: string; evidence_kinds: string[]; required_evidence_kinds: string[] }[]]
+    >(
+      "SELECT binding_key, evidence_kinds, required_evidence_kinds FROM assurance_binding_check WHERE organization_id = $organization_id AND binding_version_id = $binding_version_id ORDER BY binding_key ASC;",
+      { organization_id: context.organizationId, binding_version_id: proposed.bindingVersionId },
+    );
+    expect(policies).toEqual([
+      {
+        binding_key: "evidence:artifact",
+        evidence_kinds: ["artifact-version"],
+        required_evidence_kinds: ["artifact-version"],
+      },
+      {
+        binding_key: "evidence:check-result",
+        evidence_kinds: ["check-result"],
+        required_evidence_kinds: ["check-result"],
+      },
+    ]);
   });
 
   it("method별 bound와 executor 단일성을 검증한다", async () => {

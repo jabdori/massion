@@ -12,6 +12,9 @@ export * from "./database-snapshot.js";
 export * from "./metric.js";
 export * from "./human.js";
 export * from "./findings.js";
+export * from "./sarif.js";
+export * from "./inspection.js";
+export * from "./verdict.js";
 export {
   AssuranceCheckStore,
   type AssuranceCheckRecordResult,
@@ -19,4 +22,8 @@ export {
   type TrustedAssuranceCheckExecutionInput,
   type TrustedAssuranceCheckExecutionResult,
   type TrustedAssuranceCheckExecutor,
+  type TrustedAssuranceInspectionExecutionInput,
+  type TrustedAssuranceInspectionExecutionResult,
+  type TrustedAssuranceInspectionExecutor,
+  type TrustedAssuranceInspectionFinding,
 } from "./checks.js";

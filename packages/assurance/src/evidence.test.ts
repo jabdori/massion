@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 
 import {
+  EvidenceValidationError,
   verifyArtifactEvidence,
   verifyEvidenceBriefFreshness,
   type ArtifactEvidence,
@@ -139,6 +140,23 @@ describe("Assurance evidence", () => {
         brief: evidenceBrief(change as Partial<EvidenceBriefEvidence>),
       }),
     ).toThrow(error);
+  });
+
+  it("현재 configuration checksum 불일치는 integrity tamper가 아니라 stale로 분류한다", () => {
+    expect(() =>
+      verifyEvidenceBriefFreshness({
+        organizationId: "organization-1",
+        workId: "work-1",
+        observedAt: now,
+        maximumAgeMs: 300_000,
+        current: {
+          repositoryRevisionId: "revision-2",
+          indexVersionId: "index-3",
+          configurationChecksum: "c".repeat(64),
+        },
+        brief: evidenceBrief(),
+      }),
+    ).toThrow(expect.objectContaining({ name: EvidenceValidationError.name, reason: "stale" }));
   });
 
   it("EvidenceBrief query·references·claims content checksum 변조를 거부한다", () => {

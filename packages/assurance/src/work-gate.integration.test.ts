@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { IdentityService, OrganizationService, type TenantContext } from "@massion/identity";
 import { OrganizationGraphService } from "@massion/organization";
 import { RuntimeExecutionStore } from "@massion/runtime";
-import { createDatabase, listAppliedMigrations, type MassionDatabase } from "@massion/storage";
+import { createDatabase, listAppliedMigrations, type MassionDatabase, type QueryExecutor } from "@massion/storage";
 import { WorkAssurancePort, WorkService, type CreateWorkResult } from "@massion/work";
 
 import {
@@ -16,6 +16,7 @@ import {
 } from "./index.js";
 import * as publicApi from "./index.js";
 import { AssuranceRunStore } from "./run-store.js";
+import { AssuranceService, DatabaseAssuranceDecisionSource, createAssuranceServiceTestHarness } from "./service.js";
 
 describe("Assurance run과 Work 완료 게이트", () => {
   let database: MassionDatabase;
@@ -146,7 +147,13 @@ describe("Assurance run과 Work 완료 게이트", () => {
     return { ...result, work: verifying.work };
   }
 
-  async function passedRun(target: CreateWorkResult = created): Promise<string> {
+  async function passedRun(
+    target: CreateWorkResult = created,
+    expectedDecision: "passed" | "failed" | "blocked" = "passed",
+    commandOutcome: "passed" | "failed" | "blocked" = "passed",
+    omitAcceptanceCheck = false,
+    decisionService?: AssuranceService,
+  ): Promise<string> {
     const authorizer: BindingActivationAuthorizer = {
       async authorize(_context, input) {
         const decisionId = `decision:${input.bindingVersionId}`;
@@ -270,7 +277,7 @@ describe("Assurance run과 Work 완료 게이트", () => {
       async execute() {
         trustedExecutionCount += 1;
         return {
-          status: "passed",
+          status: commandOutcome,
           outputHash: "e".repeat(64),
           summary: "fresh workspace command passed",
           toolName: "pnpm",
@@ -282,7 +289,12 @@ describe("Assurance run과 Work 완료 게이트", () => {
     };
     const checks = new AssuranceCheckStore(database, organizations, { trustedExecutors: [trustedExecutor] });
     const peerChecks = new AssuranceCheckStore(database, organizations, { trustedExecutors: [trustedExecutor] });
-    for (const criterion of criteria) {
+    const orderedCriteria = [...criteria].sort(
+      (left, right) =>
+        Number(left.criterion_key === "profile:acceptance:coverage") -
+        Number(right.criterion_key === "profile:acceptance:coverage"),
+    );
+    for (const criterion of orderedCriteria) {
       const acceptance = criterion.criterion_key === "profile:acceptance:coverage";
       if (!acceptance) {
         const checkInput = {
@@ -305,40 +317,29 @@ describe("Assurance run과 Work 완료 게이트", () => {
         expect(trustedExecutionCount).toBe(1);
         continue;
       }
-      await database.query(
-        "CREATE assurance_check CONTENT { check_id: $check_id, organization_id: $organization_id, work_id: $work_id, assurance_run_id: $assurance_run_id, criterion_id: $criterion_id, kind: $kind, system_adapter_id: $system_adapter_id, command_key: $command_key, input_hash: $input_hash, status: 'passed', output_hash: $output_hash, artifact_version_ids: [], evidence_brief_ids: [], metric_observation_ids: [], human_attestation_ids: [], duration_ms: 0, created_at: time::now(), started_at: time::now(), completed_at: time::now() };",
-        {
-          check_id: crypto.randomUUID(),
-          organization_id: context.organizationId,
-          work_id: target.work.work_id,
-          assurance_run_id: started.run.assuranceRunId,
-          criterion_id: criterion.criterion_id,
-          kind: acceptance ? "evidence" : "command",
-          system_adapter_id: acceptance ? "massion.evidence.v1" : "massion.command.v1",
-          command_key: acceptance ? "check:acceptance-coverage" : "check:implementation",
-          input_hash: "f".repeat(64),
-          output_hash: "e".repeat(64),
-        },
-      );
+      if (omitAcceptanceCheck) continue;
+      await checks.record(context, {
+        commandId: crypto.randomUUID(),
+        workId: target.work.work_id,
+        assuranceRunId: started.run.assuranceRunId,
+        criterionId: criterion.criterion_id,
+        bindingKey: "check:acceptance-coverage",
+      });
     }
-    await database.query(
-      "UPDATE assurance_criterion SET status = 'passed', updated_at = time::now() WHERE organization_id = $organization_id AND assurance_run_id = $assurance_run_id AND status = 'pending';",
-      { organization_id: context.organizationId, assurance_run_id: started.run.assuranceRunId },
-    );
-    const passed = await runs.transition(context, {
+    const passed = await (decisionService ?? (await AssuranceService.create(database, organizations))).decide(context, {
       commandId: crypto.randomUUID(),
       assuranceRunId: running.run.assuranceRunId,
       expectedVersion: running.run.version,
-      target: "passed",
     });
+    expect(passed.decision.status, JSON.stringify(passed.decision)).toBe(expectedDecision);
     return passed.run.assuranceRunId;
   }
 
-  it("0039→0040→0041→0042→0043 순서로 부트스트랩한다", async () => {
+  it("0039→0040→0041→0042→0043→0045 순서로 부트스트랩한다", async () => {
     const applied = (await listAppliedMigrations(database))
       .map((migration) => migration.migration_id)
       .filter((migrationId) =>
-        ["0039", "0040", "0041", "0042", "0043"].some((prefix) => migrationId.startsWith(prefix)),
+        ["0039", "0040", "0041", "0042", "0043", "0045"].some((prefix) => migrationId.startsWith(prefix)),
       );
     expect(applied).toEqual([
       "0039-assurance-run",
@@ -346,6 +347,7 @@ describe("Assurance run과 Work 완료 게이트", () => {
       "0041-assurance-binding",
       "0042-work-assurance-link",
       "0043-assurance-evidence-integrity",
+      "0045-assurance-decision-evidence",
     ]);
   });
 
@@ -353,7 +355,10 @@ describe("Assurance run과 Work 완료 게이트", () => {
     const publicRuns = await AssuranceBootstrap.create(database, organizations);
 
     expect("AssuranceRunStore" in publicApi).toBe(false);
+    expect("AssuranceService" in publicApi).toBe(false);
+    expect("createAssuranceServiceTestHarness" in publicApi).toBe(false);
     expect("transition" in publicRuns).toBe(false);
+    expect("decide" in publicRuns).toBe(true);
   });
 
   it("실제 terminal passed run만 투영하고 WorkRecord 이후 completed를 허용한다", async () => {
@@ -393,6 +398,136 @@ describe("Assurance run과 Work 완료 게이트", () => {
     expect(record.record.verification_ids).toEqual([projected.verification?.verification_id]);
     expect(completed.work.status).toBe("completed");
     expect(run.projectedWorkRevision).toBe(projected.work.revision);
+  });
+
+  it("DB criterion 확정 실패와 필수 check 누락을 각각 failed·blocked로 판정한다", async () => {
+    const failedRunId = await passedRun(created, "failed", "failed");
+    expect((await runs.get(context, failedRunId)).status).toBe("failed");
+
+    created = await createVerifyingWork();
+    const blockedRunId = await passedRun(created, "blocked", "passed", true);
+    expect((await runs.get(context, blockedRunId)).status).toBe("blocked");
+  });
+
+  it("판정 snapshot 뒤 critical finding이 commit돼도 evidence guard 충돌 재시도로 failed가 된다", async () => {
+    let releaseRead = (): void => undefined;
+    const readReleased = new Promise<void>((resolve) => {
+      releaseRead = resolve;
+    });
+    let notifyRead = (): void => undefined;
+    const readObserved = new Promise<void>((resolve) => {
+      notifyRead = resolve;
+    });
+    class PausedDecisionSource extends DatabaseAssuranceDecisionSource {
+      public assuranceRunId?: string;
+      private paused = false;
+
+      public override async readInTransaction(
+        sourceContext: TenantContext,
+        assuranceRunId: string,
+        transaction: QueryExecutor,
+      ) {
+        const result = await super.readInTransaction(sourceContext, assuranceRunId, transaction);
+        this.assuranceRunId = assuranceRunId;
+        if (!this.paused) {
+          this.paused = true;
+          notifyRead();
+          await readReleased;
+        }
+        return result;
+      }
+    }
+    const source = new PausedDecisionSource(database, organizations, runs);
+    const service = createAssuranceServiceTestHarness(source, runs, { database, source, runs });
+    const decision = passedRun(created, "failed", "passed", false, service);
+    await readObserved;
+    if (!source.assuranceRunId) throw new Error("경쟁 테스트 Assurance run ID가 없습니다");
+    const [criteria] = await database.query<[{ criterion_id: string }[]]>(
+      "SELECT criterion_id FROM assurance_criterion WHERE organization_id = $organization_id AND assurance_run_id = $assurance_run_id LIMIT 1;",
+      { organization_id: context.organizationId, assurance_run_id: source.assuranceRunId },
+    );
+    const criterion = criteria[0];
+    if (!criterion) throw new Error("경쟁 테스트 criterion이 없습니다");
+    await database.query(
+      "CREATE assurance_finding CONTENT { finding_id: $finding_id, organization_id: $organization_id, work_id: $work_id, assurance_run_id: $assurance_run_id, criterion_id: $criterion_id, fingerprint: $fingerprint, category: 'security', severity: 'critical', status: 'open', message: '판정 중 발견된 권한 우회', evidence_reference_ids: [], source_tool: 'race-test', source_rule: 'RACE-001', control_references: [], created_at: time::now() };",
+      {
+        finding_id: crypto.randomUUID(),
+        organization_id: context.organizationId,
+        work_id: created.work.work_id,
+        assurance_run_id: source.assuranceRunId,
+        criterion_id: criterion.criterion_id,
+        fingerprint: "9".repeat(64),
+      },
+    );
+    releaseRead();
+
+    const assuranceRunId = await decision;
+    expect((await runs.get(context, assuranceRunId)).status).toBe("failed");
+  });
+
+  it("terminal 판정 뒤 evidence guard가 바뀌면 Work 투영을 fail-closed 거부한다", async () => {
+    const assuranceRunId = await passedRun();
+    const [criteria] = await database.query<[{ criterion_id: string }[]]>(
+      "SELECT criterion_id FROM assurance_criterion WHERE organization_id = $organization_id AND assurance_run_id = $assurance_run_id LIMIT 1;",
+      { organization_id: context.organizationId, assurance_run_id: assuranceRunId },
+    );
+    const criterion = criteria[0];
+    if (!criterion) throw new Error("drift 테스트 criterion이 없습니다");
+    await database.query(
+      "CREATE assurance_finding CONTENT { finding_id: $finding_id, organization_id: $organization_id, work_id: $work_id, assurance_run_id: $assurance_run_id, criterion_id: $criterion_id, fingerprint: $fingerprint, category: 'security', severity: 'critical', status: 'open', message: 'terminal 이후 evidence drift', evidence_reference_ids: [], source_tool: 'drift-test', source_rule: 'DRIFT-001', control_references: [], created_at: time::now() };",
+      {
+        finding_id: crypto.randomUUID(),
+        organization_id: context.organizationId,
+        work_id: created.work.work_id,
+        assurance_run_id: assuranceRunId,
+        criterion_id: criterion.criterion_id,
+        fingerprint: "8".repeat(64),
+      },
+    );
+
+    await expect(
+      new WorkAssurancePort(database, organizations, new AssuranceRunVerdictReader()).projectVerdict(context, {
+        commandId: crypto.randomUUID(),
+        workId: created.work.work_id,
+        expectedRevision: created.work.revision,
+        assuranceRunId,
+      }),
+    ).rejects.toThrow("evidence가 변경");
+  });
+
+  it("Work 투영 snapshot 도중 Task material이 commit돼도 guard 충돌 재시도로 거부한다", async () => {
+    const assuranceRunId = await passedRun();
+    let releaseClaim = (): void => undefined;
+    const claimReleased = new Promise<void>((resolve) => {
+      releaseClaim = resolve;
+    });
+    let notifyClaim = (): void => undefined;
+    const claimObserved = new Promise<void>((resolve) => {
+      notifyClaim = resolve;
+    });
+    let paused = false;
+    const reader = new AssuranceRunVerdictReader({
+      async afterEvidenceGuardClaim() {
+        if (paused) return;
+        paused = true;
+        notifyClaim();
+        await claimReleased;
+      },
+    });
+    const projection = new WorkAssurancePort(database, organizations, reader).projectVerdict(context, {
+      commandId: crypto.randomUUID(),
+      workId: created.work.work_id,
+      expectedRevision: created.work.revision,
+      assuranceRunId,
+    });
+    await claimObserved;
+    await database.query(
+      "UPDATE work_task SET acceptance_criteria_json = '[\"투영 중 변경\"]' WHERE organization_id = $organization_id AND work_id = $work_id AND task_id = $task_id;",
+      { organization_id: context.organizationId, work_id: created.work.work_id, task_id: taskId },
+    );
+    releaseClaim();
+
+    await expect(projection).rejects.toThrow(/evidence가 변경|snapshot/u);
   });
 
   it("보증 연결이 없는 direct DB completed 우회를 rollback한다", async () => {
@@ -516,7 +651,7 @@ describe("Assurance run과 Work 완료 게이트", () => {
         expectedRevision: created.work.revision,
         assuranceRunId,
       }),
-    ).rejects.toThrow("snapshot");
+    ).rejects.toThrow(/snapshot|evidence가 변경/u);
   });
 
   it("이전 verification-evidence를 검증하되 contributor에서 제외해 새 attempt를 허용한다", async () => {
@@ -552,7 +687,7 @@ describe("Assurance run과 Work 완료 게이트", () => {
         expectedRevision: created.work.revision,
         assuranceRunId,
       }),
-    ).rejects.toThrow("활성 Assurance binding");
+    ).rejects.toThrow(/활성 Assurance binding|evidence가 변경/u);
     const [artifacts] = await database.query<[unknown[]]>(
       "SELECT * FROM work_artifact WHERE organization_id = $organization_id AND work_id = $work_id;",
       { organization_id: context.organizationId, work_id: created.work.work_id },

@@ -189,6 +189,7 @@ function checkBinding(criterion: (typeof requiredCriteria)[number], index: numbe
       kind: "inspection",
       inspectorProfile: "massion.inspection.security.v1",
       evidenceAllowlist: ["artifact-version"],
+      maximumAgeMs: 60_000,
       maximumFindings: 100,
     };
   }
