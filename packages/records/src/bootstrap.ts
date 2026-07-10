@@ -4,6 +4,7 @@ import type { OrganizationService, TenantContext } from "@massion/identity";
 import type { MassionDatabase, QueryExecutor } from "@massion/storage";
 
 import { RecordsMetricStore } from "./metrics.js";
+import { RecordsComplianceAuditor } from "./compliance.js";
 import {
   RecordsRecovery,
   type RecordsRecoveryDependencies,
@@ -180,6 +181,7 @@ export class RecordsBootstrap {
     organizations: OrganizationService,
     options: { readonly continuation: RecordsRecoveryDependencies["continuation"] },
   ): Promise<RecordsBootstrap> {
+    await new RecordsComplianceAuditor(database).assertDatabaseCompliance();
     const service = await RecordsService.create(database, organizations);
     const runs = await RecordsRunStore.create(database, organizations);
     const metrics = await RecordsMetricStore.create(database, organizations);

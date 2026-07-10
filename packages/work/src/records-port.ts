@@ -300,6 +300,27 @@ export class WorkRecordsPort {
         documents.push(createdDocuments[0]);
       }
 
+      if (documents.length > 0) {
+        const renderedPayload = canonicalJson({
+          documentIds: documents.map((document) => document.document_id),
+          markdownChecksums: documents.map((document) => document.markdown_checksum),
+        });
+        await transaction.query(
+          "CREATE records_event CONTENT { event_id: $event_id, organization_id: $organization_id, work_id: $work_id, records_run_id: $records_run_id, command_id: $command_id, sequence: $sequence, event_type: 'records_document_rendered', request_hash: $request_hash, payload_json: $payload_json, actor_user_id: $actor_user_id, created_at: time::now() };",
+          {
+            event_id: randomUUID(),
+            organization_id: context.organizationId,
+            work_id: input.workId,
+            records_run_id: input.recordsRunId,
+            command_id: `${input.recordsRunId}:render`,
+            sequence: run.version + 1,
+            request_hash: sha256(renderedPayload),
+            payload_json: renderedPayload,
+            actor_user_id: context.userId,
+          },
+        );
+      }
+
       const [records] = await transaction.query<[WorkRecord[]]>(
         "SELECT * OMIT id FROM work_record WHERE organization_id = $organization_id AND work_id = $work_id ORDER BY version ASC;",
         { organization_id: context.organizationId, work_id: input.workId },

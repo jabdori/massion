@@ -68,6 +68,7 @@ UPDATE work SET status = 'running', revision = 4 WHERE organization_id = $organi
 UPDATE work SET status = 'verifying', revision = 5 WHERE organization_id = $organization_id AND work_id = $work_id;
 CREATE work_verification CONTENT { verification_id: 'verification-1', organization_id: $organization_id, work_id: $work_id, verifier_id: 'assurance', passed: true, criteria_json: '{}', evidence_artifact_version_ids: [], created_at: time::now() };
 DEFINE TABLE records_run SCHEMALESS;
+DEFINE TABLE records_event SCHEMALESS;
 DEFINE TABLE documentation_impact_assessment SCHEMALESS;
 DEFINE TABLE records_document SCHEMALESS;
 CREATE records_run CONTENT { records_run_id: 'records-run-1', organization_id: $organization_id, work_id: $work_id, target_work_revision: 5, verification_id: 'verification-1', assurance_run_id: 'assurance-run-1', snapshot_hash: $snapshot_hash, renderer_version: 'massion.records.markdown.v1', status: 'rendering', version: 2 };
@@ -135,6 +136,10 @@ CREATE documentation_impact_assessment CONTENT { assessment_id: 'assessment-runb
       checksum: document.markdownChecksum,
       content_json: document.markdown,
     });
+    const [recordsEvents] = await database.query<[{ event_type: string; sequence: number }[]]>(
+      "SELECT event_type, sequence FROM records_event WHERE records_run_id = 'records-run-1' ORDER BY sequence ASC;",
+    );
+    expect(recordsEvents).toContainEqual({ event_type: "records_document_rendered", sequence: 3 });
   });
 
   it("같은 command를 멱등 재생하고 다른 payload는 거부한다", async () => {
