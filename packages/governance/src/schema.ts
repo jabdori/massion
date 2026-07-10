@@ -31,3 +31,25 @@ DEFINE INDEX governance_policy_event_id ON governance_policy_event FIELDS event_
 DEFINE INDEX governance_policy_command ON governance_policy_event FIELDS organization_id, command_id UNIQUE;
 `,
 );
+
+export const GOVERNANCE_DECISION_MIGRATION = defineMigration(
+  "0017-governance-decision",
+  `
+DEFINE TABLE governance_policy_decision SCHEMAFULL;
+DEFINE FIELD decision_id ON governance_policy_decision TYPE string;
+DEFINE FIELD organization_id ON governance_policy_decision TYPE string;
+DEFINE FIELD command_id ON governance_policy_decision TYPE string;
+DEFINE FIELD policy_version_id ON governance_policy_decision TYPE option<string>;
+DEFINE FIELD request_hash ON governance_policy_decision TYPE string;
+DEFINE FIELD request_summary_json ON governance_policy_decision TYPE string;
+DEFINE FIELD outcome ON governance_policy_decision TYPE string ASSERT $value IN ['allow', 'deny', 'require_approval'];
+DEFINE FIELD reasons_json ON governance_policy_decision TYPE string;
+DEFINE FIELD errors_json ON governance_policy_decision TYPE string;
+DEFINE FIELD requirement_json ON governance_policy_decision TYPE option<string>;
+DEFINE FIELD request_json ON governance_policy_decision TYPE string;
+DEFINE FIELD created_at ON governance_policy_decision TYPE datetime;
+DEFINE INDEX governance_policy_decision_id ON governance_policy_decision FIELDS decision_id UNIQUE;
+DEFINE INDEX governance_policy_decision_command ON governance_policy_decision FIELDS organization_id, command_id UNIQUE;
+DEFINE INDEX governance_policy_decision_hash ON governance_policy_decision FIELDS organization_id, request_hash;
+`,
+);

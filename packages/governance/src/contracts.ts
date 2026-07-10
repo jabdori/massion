@@ -41,3 +41,20 @@ export interface ApprovalRequirement {
   readonly separationOfDuty: boolean;
   readonly expiresInSeconds: number;
 }
+
+export interface PolicyDecision {
+  readonly decisionId: string;
+  readonly organizationId: string;
+  readonly policyVersionId?: string;
+  readonly requestHash: string;
+  readonly outcome: "allow" | "deny" | "require_approval";
+  readonly reasons: readonly string[];
+  readonly errors: readonly string[];
+  readonly requirement?: ApprovalRequirement;
+  readonly createdAt: unknown;
+}
+
+export interface EvaluatePolicyInput {
+  readonly commandId: string;
+  readonly request: PolicyRequest;
+}
