@@ -55,14 +55,19 @@ export class EvidenceFreshnessService {
     if (current && current.configurationChecksum !== brief.configurationChecksum)
       reasons.push("configuration_mismatch");
     if (reasons.length === 0) {
-      return await this.measured(context, { evidenceBriefId: brief.evidenceBriefId, status: "fresh", policy, reasons });
+      return await this.measured(context, brief, {
+        evidenceBriefId: brief.evidenceBriefId,
+        status: "fresh",
+        policy,
+        reasons,
+      });
     }
 
     const requiresIndex = reasons.some((reason) =>
       ["current_index_missing", "current_index_incomplete", "configuration_mismatch"].includes(reason),
     );
     if (policy === "block") {
-      return await this.measured(context, {
+      return await this.measured(context, brief, {
         evidenceBriefId: brief.evidenceBriefId,
         status: "blocked",
         policy,
@@ -70,7 +75,7 @@ export class EvidenceFreshnessService {
       });
     }
     if (policy === "warn" && !requiresIndex) {
-      return await this.measured(context, {
+      return await this.measured(context, brief, {
         evidenceBriefId: brief.evidenceBriefId,
         status: "stale_warning",
         policy,
@@ -88,7 +93,7 @@ export class EvidenceFreshnessService {
       changes: EMPTY_CHANGES,
     };
     const accepted = await this.queue.enqueue(context, command);
-    return await this.measured(context, {
+    return await this.measured(context, brief, {
       evidenceBriefId: brief.evidenceBriefId,
       status: "reindex_required",
       policy,
@@ -100,8 +105,21 @@ export class EvidenceFreshnessService {
 
   private async measured(
     context: TenantContext,
+    brief: EvidenceBrief,
     assessment: EvidenceFreshnessAssessment,
   ): Promise<EvidenceFreshnessAssessment> {
+    if (assessment.status !== "fresh") {
+      await this.repositories.recordFreshnessAssessment(context, {
+        commandId: sha256(
+          `freshness-event\0${assessment.evidenceBriefId}\0${assessment.policy}\0${assessment.status}\0${assessment.reasons.join("\0")}`,
+        ),
+        evidenceBriefId: assessment.evidenceBriefId,
+        repositoryId: brief.repositoryId,
+        indexVersionId: brief.indexVersionId,
+        status: assessment.status,
+        reasons: assessment.reasons,
+      });
+    }
     await this.metrics?.recordFreshness(context, assessment.status).catch(() => undefined);
     return assessment;
   }

@@ -541,6 +541,50 @@ export class RepositoryStore {
     );
   }
 
+  public async recordFreshnessAssessment(
+    context: TenantContext,
+    input: {
+      readonly commandId: string;
+      readonly evidenceBriefId: string;
+      readonly repositoryId: string;
+      readonly indexVersionId: string;
+      readonly status: "stale_warning" | "reindex_required" | "blocked";
+      readonly reasons: readonly string[];
+    },
+  ): Promise<void> {
+    await this.organizations.verifyTenantContext(context);
+    const requestHash = hashRequest(input);
+    await this.database.transaction(async (tx) => {
+      await this.organizations.verifyTenantContext(context, undefined, tx);
+      const repeated = await this.replay<{ readonly recorded: true }>(
+        tx,
+        context.organizationId,
+        input.commandId,
+        requestHash,
+        "evidence freshness",
+      );
+      if (repeated) return;
+      await this.findRepository(tx, context.organizationId, input.repositoryId);
+      const index = await this.findIndex(tx, context.organizationId, input.indexVersionId);
+      if (index.repository_id !== input.repositoryId)
+        throw new Error("Evidence freshness IndexVersion과 Repository가 일치하지 않습니다");
+      await this.recordEvent(tx, context, {
+        repositoryId: input.repositoryId,
+        repositoryRevisionId: index.repository_revision_id,
+        indexVersionId: input.indexVersionId,
+        commandId: input.commandId,
+        eventType: "evidence_stale_detected",
+        requestHash,
+        payload: {
+          evidenceBriefId: input.evidenceBriefId,
+          status: input.status,
+          reasons: [...input.reasons].sort(),
+        },
+        result: { recorded: true },
+      });
+    });
+  }
+
   public async audit(context: TenantContext, repositoryId: string): Promise<RepositoryAuditFinding[]> {
     const repository = await this.getRepository(context, repositoryId);
     const indexes = await this.listIndexes(context, repositoryId);

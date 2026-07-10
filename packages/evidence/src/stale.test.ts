@@ -141,5 +141,12 @@ describe("Evidence freshness policy", () => {
     );
     expect(mismatch).toMatchObject({ status: "reindex_required" });
     expect(mismatch.reasons).toContain("configuration_mismatch");
+    const [events] = await database.query<[{ event_type: string; payload_json: string }[]]>(
+      "SELECT event_type, payload_json FROM evidence_index_event WHERE organization_id = $organization_id AND event_type = 'evidence_stale_detected';",
+      { organization_id: context.organizationId },
+    );
+    expect(events).toHaveLength(4);
+    expect(events.every((event) => event.event_type === "evidence_stale_detected")).toBe(true);
+    expect(JSON.stringify(events)).not.toContain(brief.query);
   });
 });
