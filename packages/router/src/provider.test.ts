@@ -1,0 +1,134 @@
+import { randomBytes } from "node:crypto";
+
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+
+import { IdentityService, OrganizationService, type TenantContext } from "@massion/identity";
+import { createDatabase, type MassionDatabase } from "@massion/storage";
+
+import { ProviderService } from "./provider.js";
+import { CredentialVault } from "./vault.js";
+
+describe("Provider와 암호화 Credential lifecycle", () => {
+  let database: MassionDatabase;
+  let context: TenantContext;
+  let service: ProviderService;
+
+  beforeEach(async () => {
+    database = await createDatabase({ url: "mem://", namespace: "massion", database: crypto.randomUUID() });
+    const identity = await IdentityService.create(database);
+    const organizations = await OrganizationService.create(database);
+    const owner = await identity.registerPersonalUser({ email: "owner@example.com", displayName: "Owner" });
+    context = await organizations.resolveTenantContext(owner.user.user_id, owner.organization.organization_id);
+    service = await ProviderService.create(database, organizations, new CredentialVault(randomBytes(32)));
+  });
+
+  afterEach(async () => database.close());
+
+  async function providerEndpoint() {
+    const provider = await service.registerProvider(context, {
+      commandId: crypto.randomUUID(),
+      providerId: "openai",
+      displayName: "OpenAI",
+      adapterKind: "ai-sdk",
+    });
+    const endpoint = await service.registerEndpoint(context, {
+      commandId: crypto.randomUUID(),
+      providerId: provider.provider.provider_id,
+      name: "OpenAI API",
+      baseUrl: "https://api.openai.com/v1",
+      local: false,
+    });
+    return { provider: provider.provider, endpoint: endpoint.endpoint };
+  }
+
+  it("Provider·Endpoint와 여러 Credential을 등록하되 평문을 DB·audit에 남기지 않는다", async () => {
+    const { provider, endpoint } = await providerEndpoint();
+    const first = await service.addCredential(context, {
+      commandId: crypto.randomUUID(),
+      providerId: provider.provider_id,
+      endpointId: endpoint.endpoint_id,
+      label: "account-a",
+      credentialType: "api_key",
+      secret: "sk-account-a",
+      priority: 1,
+      weight: 1,
+    });
+    const second = await service.addCredential(context, {
+      commandId: crypto.randomUUID(),
+      providerId: provider.provider_id,
+      endpointId: endpoint.endpoint_id,
+      label: "account-b",
+      credentialType: "api_key",
+      secret: "sk-account-b",
+      priority: 1,
+      weight: 2,
+    });
+
+    expect(await service.revealSecret(context, first.credential.credential_id)).toBe("sk-account-a");
+    expect(await service.revealSecret(context, second.credential.credential_id)).toBe("sk-account-b");
+    const raw = JSON.stringify(
+      await database.query(
+        "SELECT * FROM provider_credential; SELECT * FROM credential_secret_version; SELECT * FROM router_audit_event;",
+      ),
+    );
+    expect(raw).not.toContain("sk-account-a");
+    expect(raw).not.toContain("sk-account-b");
+    expect(await service.listCredentials(context, provider.provider_id)).toHaveLength(2);
+  });
+
+  it("secret 회전은 새 immutable version을 만들고 revoke 후 복호화를 거부한다", async () => {
+    const { provider, endpoint } = await providerEndpoint();
+    const added = await service.addCredential(context, {
+      commandId: crypto.randomUUID(),
+      providerId: provider.provider_id,
+      endpointId: endpoint.endpoint_id,
+      label: "account",
+      credentialType: "oauth",
+      secret: "token-v1",
+      priority: 1,
+      weight: 1,
+    });
+    const rotated = await service.rotateCredential(context, {
+      commandId: crypto.randomUUID(),
+      credentialId: added.credential.credential_id,
+      expectedVersion: 1,
+      secret: "token-v2",
+    });
+
+    expect(rotated.credential.secret_version).toBe(2);
+    expect(await service.revealSecret(context, added.credential.credential_id)).toBe("token-v2");
+    const revoked = await service.revokeCredential(context, {
+      commandId: crypto.randomUUID(),
+      credentialId: added.credential.credential_id,
+      expectedVersion: 2,
+    });
+    expect(revoked.credential.status).toBe("revoked");
+    await expect(service.revealSecret(context, added.credential.credential_id)).rejects.toThrow("활성");
+  });
+
+  it("비공식 소비자 구독 credential type과 cross-tenant 접근을 거부한다", async () => {
+    const { provider, endpoint } = await providerEndpoint();
+    await expect(
+      service.addCredential(context, {
+        commandId: crypto.randomUUID(),
+        providerId: provider.provider_id,
+        endpointId: endpoint.endpoint_id,
+        label: "chatgpt",
+        credentialType: "consumer_subscription" as "api_key",
+        secret: "cookie",
+        priority: 1,
+        weight: 1,
+      }),
+    ).rejects.toThrow("지원하지 않는 Credential type");
+    const identity = await IdentityService.create(database);
+    const organizations = await OrganizationService.create(database);
+    const other = await identity.registerPersonalUser({ email: "other@example.com", displayName: "Other" });
+    const otherContext = await organizations.resolveTenantContext(
+      other.user.user_id,
+      other.organization.organization_id,
+    );
+    await expect(
+      service.listCredentials({ ...otherContext, organizationId: context.organizationId }, provider.provider_id),
+    ).rejects.toThrow("TenantContext");
+  });
+});
