@@ -50,14 +50,6 @@ export interface StartAssuranceRunInput {
   readonly leaseTtlMs: number;
 }
 
-export interface TransitionAssuranceRunInput {
-  readonly commandId: string;
-  readonly assuranceRunId: string;
-  readonly expectedVersion: number;
-  readonly target: Exclude<AssuranceRunStatus, "planned">;
-  readonly failure?: AssuranceFailure;
-}
-
 export interface AssuranceRunResult {
   readonly run: AssuranceRun;
 }

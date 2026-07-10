@@ -11,7 +11,6 @@ import type {
   AssuranceRunStatus,
   AssuranceVerdict,
   StartAssuranceRunInput,
-  TransitionAssuranceRunInput,
 } from "./contracts.js";
 import { verifyAssuranceStartIndependence } from "./database-independence.js";
 import {
@@ -58,6 +57,14 @@ interface EventRecord {
   readonly payload_json: string;
   readonly actor_user_id: string;
   readonly created_at: unknown;
+}
+
+export interface TransitionAssuranceRunInput {
+  readonly commandId: string;
+  readonly assuranceRunId: string;
+  readonly expectedVersion: number;
+  readonly target: Exclude<AssuranceRunStatus, "planned">;
+  readonly failure?: AssuranceFailure;
 }
 
 const TERMINAL = new Set<AssuranceRunStatus>(["passed", "failed", "blocked", "cancelled"]);
@@ -398,6 +405,11 @@ export class AssuranceRunStore {
       readonly payload: unknown;
     },
   ): Promise<void> {
+    const [events] = await executor.query<[{ sequence: number }[]]>(
+      "SELECT sequence FROM assurance_event WHERE organization_id = $organization_id AND assurance_run_id = $assurance_run_id;",
+      { organization_id: context.organizationId, assurance_run_id: input.assuranceRunId },
+    );
+    const sequence = events.reduce((maximum, event) => Math.max(maximum, event.sequence), 0) + 1;
     await executor.query(
       "CREATE assurance_event CONTENT { event_id: $event_id, organization_id: $organization_id, assurance_run_id: $assurance_run_id, command_id: $command_id, sequence: $sequence, event_type: $event_type, request_hash: $request_hash, payload_json: $payload_json, actor_user_id: $actor_user_id, created_at: time::now() };",
       {
@@ -405,7 +417,7 @@ export class AssuranceRunStore {
         organization_id: context.organizationId,
         assurance_run_id: input.assuranceRunId,
         command_id: input.commandId,
-        sequence: input.sequence,
+        sequence,
         event_type: input.eventType,
         request_hash: input.requestHash,
         payload_json: canonicalJson(input.payload),

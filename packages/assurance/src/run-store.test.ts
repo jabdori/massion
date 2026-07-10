@@ -6,13 +6,8 @@ import { RuntimeExecutionStore } from "@massion/runtime";
 import { createDatabase, type MassionDatabase } from "@massion/storage";
 import { WorkService } from "@massion/work";
 
-import {
-  AssuranceBindingStore,
-  AssuranceRunStore,
-  type BindingActivationAuthorizer,
-  type StartAssuranceRunInput,
-  type TransitionAssuranceRunInput,
-} from "./index.js";
+import { AssuranceBindingStore, type BindingActivationAuthorizer, type StartAssuranceRunInput } from "./index.js";
+import { AssuranceRunStore, type TransitionAssuranceRunInput } from "./run-store.js";
 
 describe("Assurance run 저장소", () => {
   let database: MassionDatabase;
@@ -301,6 +296,37 @@ describe("Assurance run 저장소", () => {
     ).rejects.toThrow("terminal assurance run");
   });
 
+  it("check·finding·attestation Event 뒤에도 실제 다음 sequence로 상태 전이 Event를 기록한다", async () => {
+    const started = await store.start(context, input());
+    const running = await store.transition(context, {
+      commandId: crypto.randomUUID(),
+      assuranceRunId: started.run.assuranceRunId,
+      expectedVersion: started.run.version,
+      target: "running",
+    });
+    await database.query(
+      "CREATE assurance_event CONTENT { event_id: $event_id, organization_id: $organization_id, assurance_run_id: $assurance_run_id, command_id: $command_id, sequence: 3, event_type: 'assurance_attestation_recorded', request_hash: $request_hash, payload_json: '{}', actor_user_id: $actor_user_id, created_at: time::now() };",
+      {
+        event_id: crypto.randomUUID(),
+        organization_id: context.organizationId,
+        assurance_run_id: started.run.assuranceRunId,
+        command_id: crypto.randomUUID(),
+        request_hash: "d".repeat(64),
+        actor_user_id: context.userId,
+      },
+    );
+
+    await store.transition(context, {
+      commandId: crypto.randomUUID(),
+      assuranceRunId: running.run.assuranceRunId,
+      expectedVersion: running.run.version,
+      target: "passed",
+    });
+    expect((await store.listEvents(context, running.run.assuranceRunId)).map((event) => event.sequence)).toEqual([
+      1, 2, 3, 4,
+    ]);
+  });
+
   it("허용되지 않은 전이와 failure metadata가 없는 failed·blocked를 거부한다", async () => {
     const started = await store.start(context, input());
     await expect(
@@ -421,7 +447,7 @@ describe("Assurance run 저장소", () => {
         "CREATE assurance_finding CONTENT { finding_id: 'invalid-finding', organization_id: $organization_id, work_id: 'work-1', assurance_run_id: 'run-1', fingerprint: $fingerprint, category: 'security', severity: 'minor', status: 'accepted', message: 'finding', evidence_reference_ids: [], control_references: [], created_at: time::now() };",
         { organization_id: context.organizationId, fingerprint: "b".repeat(64) },
       ),
-    ).rejects.toThrow("resolution metadata");
+    ).rejects.toThrow("open 상태");
     await expect(
       database.query(
         "CREATE assurance_metric_observation CONTENT { observation_id: 'invalid-observation', organization_id: $organization_id, work_id: 'work-1', producer_kind: 'system_adapter', producer_id: 'adapter-1', source_kind: 'runtime_execution', source_id: 'execution-1', numeric_value: math::infinity, unit: 'percent', checksum: $checksum, command_id: 'metric-1', request_hash: $request_hash, measured_at: time::now(), created_at: time::now() };",
