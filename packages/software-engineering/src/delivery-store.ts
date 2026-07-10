@@ -147,6 +147,15 @@ export class EngineeringDeliveryStore {
     return this.view(await this.find(this.database, context.organizationId, deliveryId));
   }
 
+  public async findByStartCommand(context: TenantContext, commandId: string): Promise<EngineeringDelivery | undefined> {
+    await this.organizations.verifyTenantContext(context);
+    const [records] = await this.database.query<[DeliveryRecord[]]>(
+      "SELECT * OMIT id FROM engineering_delivery WHERE organization_id = $organization_id AND start_command_id = $start_command_id LIMIT 1;",
+      { organization_id: context.organizationId, start_command_id: commandId },
+    );
+    return records[0] ? this.view(records[0]) : undefined;
+  }
+
   public async transition(
     context: TenantContext,
     input: TransitionEngineeringDeliveryInput,
@@ -244,8 +253,8 @@ export class EngineeringDeliveryStore {
     ) {
       throw new Error("Assignment 소유 계보가 Task와 일치하지 않습니다");
     }
-    if (assignment.status !== "active" || assignment.agentHandle !== input.agentHandle) {
-      throw new Error("선택된 active Agent assignment가 아닙니다");
+    if (assignment.status !== "assigned" || assignment.agentHandle !== input.agentHandle) {
+      throw new Error("선택된 활성(assigned) Agent assignment가 아닙니다");
     }
     if (
       repository.organizationId !== context.organizationId ||

@@ -83,3 +83,38 @@ DEFINE INDEX engineering_delivery_event_command ON engineering_delivery_event FI
 DEFINE INDEX engineering_delivery_event_delivery ON engineering_delivery_event FIELDS organization_id, delivery_id;
 `,
 );
+
+export const SOFTWARE_ENGINEERING_PATH_LEASE_MIGRATION = defineMigration(
+  "0035-software-engineering-path-lease",
+  `
+DEFINE TABLE engineering_repository_lease_clock SCHEMAFULL;
+DEFINE FIELD clock_key ON engineering_repository_lease_clock TYPE string;
+DEFINE FIELD organization_id ON engineering_repository_lease_clock TYPE string;
+DEFINE FIELD repository_id ON engineering_repository_lease_clock TYPE string;
+DEFINE FIELD version ON engineering_repository_lease_clock TYPE int;
+DEFINE FIELD updated_at ON engineering_repository_lease_clock TYPE datetime;
+DEFINE INDEX engineering_repository_lease_clock_key ON engineering_repository_lease_clock FIELDS clock_key UNIQUE;
+DEFINE INDEX engineering_repository_lease_clock_repository ON engineering_repository_lease_clock FIELDS organization_id, repository_id UNIQUE;
+
+DEFINE TABLE engineering_path_lease SCHEMAFULL;
+DEFINE FIELD lease_id ON engineering_path_lease TYPE string;
+DEFINE FIELD organization_id ON engineering_path_lease TYPE string;
+DEFINE FIELD repository_id ON engineering_path_lease TYPE string;
+DEFINE FIELD delivery_id ON engineering_path_lease TYPE string;
+DEFINE FIELD path_prefixes ON engineering_path_lease TYPE array<string>;
+DEFINE FIELD status ON engineering_path_lease TYPE string ASSERT $value IN ['active', 'released', 'expired'];
+DEFINE FIELD version ON engineering_path_lease TYPE int;
+DEFINE FIELD expires_at ON engineering_path_lease TYPE datetime;
+DEFINE FIELD acquire_command_id ON engineering_path_lease TYPE string;
+DEFINE FIELD acquire_request_hash ON engineering_path_lease TYPE string;
+DEFINE FIELD release_command_id ON engineering_path_lease TYPE option<string>;
+DEFINE FIELD release_request_hash ON engineering_path_lease TYPE option<string>;
+DEFINE FIELD created_at ON engineering_path_lease TYPE datetime;
+DEFINE FIELD updated_at ON engineering_path_lease TYPE datetime;
+DEFINE INDEX engineering_path_lease_id ON engineering_path_lease FIELDS lease_id UNIQUE;
+DEFINE INDEX engineering_path_lease_acquire_command ON engineering_path_lease FIELDS organization_id, acquire_command_id UNIQUE;
+DEFINE INDEX engineering_path_lease_release_command ON engineering_path_lease FIELDS organization_id, release_command_id UNIQUE;
+DEFINE INDEX engineering_path_lease_delivery ON engineering_path_lease FIELDS organization_id, delivery_id UNIQUE;
+DEFINE INDEX engineering_path_lease_repository ON engineering_path_lease FIELDS organization_id, repository_id, status;
+`,
+);
