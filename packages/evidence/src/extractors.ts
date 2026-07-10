@@ -28,7 +28,7 @@ export interface ParsedSymbol {
 }
 
 export interface ParsedRelation {
-  readonly kind: "imports" | "calls" | "implements" | "documents";
+  readonly kind: "contains" | "imports" | "calls" | "implements" | "documents";
   readonly sourceSymbolKey?: string;
   readonly targetSymbolKey?: string;
   readonly targetText: string;
@@ -205,6 +205,16 @@ export function extractTreeEvidence(
           contentHash: sourceContentHash,
         };
         symbols.push(parsed);
+        if (currentSymbolKey && currentSymbolKey !== parsed.symbolKey) {
+          relations.push({
+            kind: "contains",
+            sourceSymbolKey: currentSymbolKey,
+            targetSymbolKey: parsed.symbolKey,
+            targetText: parsed.qualifiedName,
+            resolved: true,
+            startLine: parsed.startLine,
+          });
+        }
         nextCurrentKey = parsed.symbolKey;
         if (CONTAINER_KINDS.has(kind)) nextScopes = [...scopes, name];
       }

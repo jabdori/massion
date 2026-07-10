@@ -6,3 +6,5 @@ export * from "./scanner.js";
 export * from "./revision.js";
 export * from "./parser.js";
 export * from "./extractors.js";
+export * from "./index-store.js";
+export * from "./indexer.js";

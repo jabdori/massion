@@ -133,6 +133,13 @@ export interface CompleteIndexInput {
   readonly snapshotChecksum: string;
 }
 
+export interface FailIndexInput {
+  readonly commandId: string;
+  readonly indexVersionId: string;
+  readonly status: Extract<IndexVersionStatus, "partial" | "failed">;
+  readonly error: { readonly category: string; readonly causeId: string };
+}
+
 export interface RepositoryAuditFinding {
   readonly code: "current-index" | "index-version" | "repository-pointer";
   readonly message: string;
