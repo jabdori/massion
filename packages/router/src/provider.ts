@@ -365,6 +365,11 @@ export class ProviderService {
     return credentials;
   }
 
+  public async getProvider(context: TenantContext, providerId: string): Promise<ModelProvider> {
+    await this.organizations.verifyTenantContext(context);
+    return await this.requireProvider(this.database, context.organizationId, providerId);
+  }
+
   public async revealSecret(context: TenantContext, credentialId: string): Promise<string> {
     await this.organizations.verifyTenantContext(context);
     const credential = await this.requireCredential(this.database, context.organizationId, credentialId);
