@@ -195,3 +195,11 @@ DEFINE INDEX router_circuit_id ON router_circuit FIELDS circuit_id UNIQUE;
 DEFINE INDEX router_circuit_scope ON router_circuit FIELDS organization_id, scope_type, scope_id UNIQUE;
 `,
 );
+
+export const MODEL_PRICING_MIGRATION = defineMigration(
+  "0014-model-pricing",
+  `
+DEFINE FIELD input_cost_micros_per_million ON model_profile TYPE int DEFAULT 0;
+DEFINE FIELD output_cost_micros_per_million ON model_profile TYPE int DEFAULT 0;
+`,
+);

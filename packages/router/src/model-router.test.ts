@@ -131,6 +131,8 @@ describe("Model Route simulation과 reservation", () => {
         supportsStreaming: true,
         equivalenceGroup: "coding-balanced",
         evalScore: 0.9,
+        inputCostMicrosPerMillion: 1_000_000,
+        outputCostMicrosPerMillion: 1_000_000,
         verified: true,
       })
     ).profile;

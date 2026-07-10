@@ -70,6 +70,8 @@ describe("Massion routed model factory", () => {
       supportsStreaming: true,
       equivalenceGroup: "coding",
       evalScore: 0.9,
+      inputCostMicrosPerMillion: 1_000_000,
+      outputCostMicrosPerMillion: 1_000_000,
       verified: true,
     });
     const route = await router.createRoute(context, {
@@ -116,9 +118,9 @@ describe("Massion routed model factory", () => {
       commandId: crypto.randomUUID(),
       inputTokens: 40,
       outputTokens: 20,
-      costMicros: 600,
     });
     expect(completed.status).toBe("succeeded");
+    expect(completed.actual_cost_micros).toBe(60);
   });
 
   it("first-token 전 401 실패 후 다른 credential lease로 fallback한다", async () => {
@@ -137,7 +139,6 @@ describe("Massion routed model factory", () => {
       emittedTokens: 0,
       inputTokens: 0,
       outputTokens: 0,
-      costMicros: 0,
     });
     const fallback = await factory.acquire(context, {
       commandId: crypto.randomUUID(),

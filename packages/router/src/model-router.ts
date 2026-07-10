@@ -5,7 +5,12 @@ import { applyMigrations, type MassionDatabase, type QueryExecutor } from "@mass
 
 import { classifyFailure, type FailureSignal } from "./failure.js";
 import { ProviderService, type ProviderCredential, type ProviderEndpoint, type RouterAuditEvent } from "./provider.js";
-import { MODEL_ROUTE_MIGRATION, ROUTER_HEALTH_MIGRATION, ROUTER_REGISTRY_MIGRATION } from "./schema.js";
+import {
+  MODEL_PRICING_MIGRATION,
+  MODEL_ROUTE_MIGRATION,
+  ROUTER_HEALTH_MIGRATION,
+  ROUTER_REGISTRY_MIGRATION,
+} from "./schema.js";
 
 export type RouteKind = "chat" | "embedding";
 export type CredentialPolicy =
@@ -25,6 +30,8 @@ export interface ModelProfile {
   readonly supports_streaming: boolean;
   readonly equivalence_group: string;
   readonly eval_score: number;
+  readonly input_cost_micros_per_million: number;
+  readonly output_cost_micros_per_million: number;
   readonly verified: boolean;
   readonly enabled: boolean;
   readonly created_at: unknown;
@@ -118,6 +125,8 @@ export interface RegisterModelInput {
   readonly supportsStreaming: boolean;
   readonly equivalenceGroup: string;
   readonly evalScore: number;
+  readonly inputCostMicrosPerMillion: number;
+  readonly outputCostMicrosPerMillion: number;
   readonly verified: boolean;
 }
 
@@ -333,7 +342,12 @@ export class ModelRouter {
     organizations: OrganizationService,
     providers: ProviderService,
   ): Promise<ModelRouter> {
-    await applyMigrations(database, [ROUTER_REGISTRY_MIGRATION, MODEL_ROUTE_MIGRATION, ROUTER_HEALTH_MIGRATION]);
+    await applyMigrations(database, [
+      ROUTER_REGISTRY_MIGRATION,
+      MODEL_ROUTE_MIGRATION,
+      ROUTER_HEALTH_MIGRATION,
+      MODEL_PRICING_MIGRATION,
+    ]);
     return new ModelRouter(database, organizations, providers);
   }
 
@@ -341,7 +355,13 @@ export class ModelRouter {
     context: TenantContext,
     input: RegisterModelInput,
   ): Promise<{ profile: ModelProfile; audit: RouterAuditEvent }> {
-    if (input.contextWindow < 1 || input.evalScore < 0 || input.evalScore > 1)
+    if (
+      input.contextWindow < 1 ||
+      input.evalScore < 0 ||
+      input.evalScore > 1 ||
+      input.inputCostMicrosPerMillion < 0 ||
+      input.outputCostMicrosPerMillion < 0
+    )
       throw new Error("Model Profile 수치가 유효하지 않습니다");
     return await this.command(
       context,
@@ -353,7 +373,7 @@ export class ModelRouter {
         if (endpoint.provider_id !== input.providerId)
           throw new Error("Model Profile의 Provider와 Endpoint가 다릅니다");
         const [profiles] = await tx.query<[ModelProfile[]]>(
-          "CREATE model_profile CONTENT { model_profile_id: $profile_id, organization_id: $organization_id, provider_id: $provider_id, endpoint_id: $endpoint_id, model_id: $model_id, route_kind: $route_kind, context_window: $context_window, supports_tools: $supports_tools, supports_structured_output: $supports_structured, supports_vision: $supports_vision, supports_streaming: $supports_streaming, equivalence_group: $equivalence_group, eval_score: $eval_score, verified: $verified, enabled: true, created_at: time::now(), updated_at: time::now() } RETURN AFTER;",
+          "CREATE model_profile CONTENT { model_profile_id: $profile_id, organization_id: $organization_id, provider_id: $provider_id, endpoint_id: $endpoint_id, model_id: $model_id, route_kind: $route_kind, context_window: $context_window, supports_tools: $supports_tools, supports_structured_output: $supports_structured, supports_vision: $supports_vision, supports_streaming: $supports_streaming, equivalence_group: $equivalence_group, eval_score: $eval_score, input_cost_micros_per_million: $input_cost, output_cost_micros_per_million: $output_cost, verified: $verified, enabled: true, created_at: time::now(), updated_at: time::now() } RETURN AFTER;",
           {
             profile_id: randomUUID(),
             organization_id: context.organizationId,
@@ -368,6 +388,8 @@ export class ModelRouter {
             supports_streaming: input.supportsStreaming,
             equivalence_group: input.equivalenceGroup,
             eval_score: input.evalScore,
+            input_cost: input.inputCostMicrosPerMillion,
+            output_cost: input.outputCostMicrosPerMillion,
             verified: input.verified,
           },
         );
