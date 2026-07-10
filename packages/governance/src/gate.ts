@@ -1,4 +1,5 @@
 import type { TenantContext } from "@massion/identity";
+import type { QueryExecutor } from "@massion/storage";
 
 import { ApprovalStore } from "./approval-store.js";
 import type { PolicyDecision, PolicyRequest } from "./contracts.js";
@@ -53,7 +54,11 @@ export class GovernanceGate {
     private readonly emergency: EmergencyControl,
   ) {}
 
-  public async authorize(context: TenantContext, input: GovernedActionInput): Promise<GovernanceAuthorization> {
+  public async authorize(
+    context: TenantContext,
+    input: GovernedActionInput,
+    executor?: QueryExecutor,
+  ): Promise<GovernanceAuthorization> {
     if (input.action !== "work.read" && input.action !== "emergency.stop")
       await this.emergency.assertExecutionAllowed(context);
     const request = this.request(context, input);
@@ -65,14 +70,18 @@ export class GovernanceGate {
       if (decision.requestHash !== hashPolicyRequest(request))
         throw new Error("request hash precondition이 일치하지 않습니다");
       if (!decision.policyVersionId) throw new Error("Policy Decision에 version이 없습니다");
-      const permit = await this.permits.consume(context, {
-        commandId: `${input.commandId}:permit`,
-        approvalId: input.approvalId,
-        requestHash: decision.requestHash,
-        policyVersionId: decision.policyVersionId,
-        ...(input.resource.revision === undefined ? {} : { resourceRevision: input.resource.revision }),
-        executionId: input.executionId,
-      });
+      const permit = await this.permits.consume(
+        context,
+        {
+          commandId: `${input.commandId}:permit`,
+          approvalId: input.approvalId,
+          requestHash: decision.requestHash,
+          policyVersionId: decision.policyVersionId,
+          ...(input.resource.revision === undefined ? {} : { resourceRevision: input.resource.revision }),
+          executionId: input.executionId,
+        },
+        executor,
+      );
       return { outcome: "allow", decision, permit };
     }
     const decision = await this.governance.evaluate(context, {

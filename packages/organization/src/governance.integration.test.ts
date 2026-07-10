@@ -78,4 +78,37 @@ describe("Organization Governance Gate", () => {
     expect(changed.version.version).toBe(2);
     expect(changed.nodes).toEqual(expect.arrayContaining([expect.objectContaining({ handle: "engineering" })]));
   });
+
+  it("승인 소비 후 조직 변경이 실패하면 같은 transaction에서 소비도 rollback한다", async () => {
+    const command = {
+      commandId: crypto.randomUUID(),
+      expectedVersion: 1,
+      kind: "create" as const,
+      handle: "orphan",
+      name: "Orphan",
+      responsibility: "invalid",
+      parentHandle: "missing-parent",
+      scope: "persistent" as const,
+    };
+    let required: GovernanceApprovalRequiredError | undefined;
+    try {
+      await graph.execute(context, command);
+    } catch (error) {
+      if (error instanceof GovernanceApprovalRequiredError) required = error;
+      else throw error;
+    }
+    if (!required) throw new Error("조직 변경 승인 요청이 없습니다");
+    await approvals.vote(context, {
+      commandId: crypto.randomUUID(),
+      approvalId: required.approvalId,
+      vote: "approve",
+      reason: "reviewed",
+    });
+
+    await expect(graph.execute(context, { ...command, governanceApprovalId: required.approvalId })).rejects.toThrow(
+      "대상 노드를 찾을 수 없습니다",
+    );
+
+    expect((await approvals.get(context, required.approvalId)).status).toBe("approved");
+  });
 });

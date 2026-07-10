@@ -1879,18 +1879,36 @@ export class WorkService {
     if (work.revision !== input.expectedRevision)
       throw new Error(`현재 Work revision은 ${String(work.revision)}입니다`);
     const governedRevision = input.governedRevision ?? work.revision;
+    const governedAction = {
+      commandId: input.commandId,
+      action: input.action,
+      resource: { type: "Work", id: work.work_id, revision: governedRevision },
+      environment: input.environment,
+      riskClass: input.riskClass,
+      external: input.external,
+      executionId: `work-action:${work.work_id}:${input.commandId}`,
+    } as const;
+    if (input.approvalId) {
+      const approvalId = input.approvalId;
+      return await this.mutate(context, input, "work_state_changed", async (transaction, current) => {
+        if (current.status !== "waiting_approval")
+          throw new Error("waiting_approval Work만 승인 후 재개할 수 있습니다");
+        const authorization = await this.governance?.authorize(context, { ...governedAction, approvalId }, transaction);
+        if (!authorization) throw new Error("Work Governance Gate가 구성되지 않았습니다");
+        await transaction.query(
+          "UPDATE work SET status = 'running', revision = $revision, updated_at = time::now() WHERE organization_id = $organization_id AND work_id = $work_id;",
+          {
+            revision: current.revision + 1,
+            organization_id: context.organizationId,
+            work_id: current.work_id,
+          },
+        );
+        return { outcome: "allowed" as const, authorization };
+      });
+    }
     let authorization: GovernanceAuthorization;
     try {
-      authorization = await this.governance.authorize(context, {
-        commandId: input.commandId,
-        action: input.action,
-        resource: { type: "Work", id: work.work_id, revision: governedRevision },
-        environment: input.environment,
-        riskClass: input.riskClass,
-        external: input.external,
-        executionId: `work-action:${work.work_id}:${input.commandId}`,
-        ...(input.approvalId ? { approvalId: input.approvalId } : {}),
-      });
+      authorization = await this.governance.authorize(context, governedAction);
     } catch (error) {
       if (!(error instanceof GovernanceApprovalRequiredError)) throw error;
       if (work.status !== "running") throw new Error("running Work만 승인 대기로 전이할 수 있습니다", { cause: error });
@@ -1908,18 +1926,8 @@ export class WorkService {
         approvalId: error.approvalId,
       };
     }
-    if (!input.approvalId) {
-      if (work.status !== "running") throw new Error("승인 없는 실행 허가는 running Work에서만 사용할 수 있습니다");
-      return { outcome: "allowed", work, authorization };
-    }
-    if (work.status !== "waiting_approval") throw new Error("waiting_approval Work만 승인 후 재개할 수 있습니다");
-    const resumed = await this.transition(context, {
-      commandId: `${input.commandId}:approval-resumed`,
-      workId: work.work_id,
-      expectedRevision: work.revision,
-      target: "running",
-    });
-    return { outcome: "allowed", work: resumed.work, event: resumed.event, authorization };
+    if (work.status !== "running") throw new Error("승인 없는 실행 허가는 running Work에서만 사용할 수 있습니다");
+    return { outcome: "allowed", work, authorization };
   }
 
   private async mutate<Extra extends object>(
