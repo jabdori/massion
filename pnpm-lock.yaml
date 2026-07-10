@@ -130,9 +130,15 @@ importers:
 
   packages/records:
     dependencies:
+      '@massion/identity':
+        specifier: workspace:*
+        version: link:../identity
       '@massion/storage':
         specifier: workspace:*
         version: link:../storage
+      '@massion/work':
+        specifier: workspace:*
+        version: link:../work
 
   packages/router:
     dependencies:

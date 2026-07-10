@@ -55,6 +55,7 @@ export interface Work {
   readonly policy_version_id?: string;
   readonly prompt_version_id?: string;
   readonly artifact_version_ids: readonly string[];
+  readonly records_schema_version?: string;
   readonly created_at: unknown;
   readonly updated_at: unknown;
 }
@@ -529,6 +530,10 @@ export interface WorkRecord {
   readonly finalized: boolean;
   readonly finalized_by: string;
   readonly finalized_at: unknown;
+  readonly records_run_id?: string;
+  readonly records_snapshot_hash?: string;
+  readonly document_ids?: readonly string[];
+  readonly schema_version?: string;
 }
 
 export interface WorkMergePlan {
@@ -1928,6 +1933,13 @@ export class WorkService {
     const summary = input.summary.trim();
     if (!summary) throw new Error("WorkRecord summary는 비어 있을 수 없습니다");
     return await this.mutate(context, input, "work_record_finalized", async (transaction, work) => {
+      const [recordsRuns] = await transaction.query<[{ records_run_id: string }[]]>(
+        "SELECT records_run_id FROM records_run WHERE organization_id = $organization_id AND work_id = $work_id LIMIT 1;",
+        { organization_id: context.organizationId, work_id: work.work_id },
+      );
+      if (work.records_schema_version === "massion.work.records.v1" || recordsRuns.length !== 0) {
+        throw new Error("Phase 13 WorkRecord는 Records projection으로만 생성할 수 있습니다");
+      }
       const [existing] = await transaction.query<[WorkRecord[]]>(
         "SELECT * OMIT id FROM work_record WHERE organization_id = $organization_id AND work_id = $work_id ORDER BY version ASC;",
         { organization_id: context.organizationId, work_id: work.work_id },
