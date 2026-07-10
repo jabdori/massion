@@ -6,7 +6,7 @@ import type { LanguageModel } from "ai";
 import type { TenantContext } from "@massion/identity";
 import type { FailureSignal } from "@massion/router";
 
-import type { AgentExecutionEvent, AgentExecutionInput, AgentExecutionResult } from "./contracts.js";
+import type { AgentExecutionEvent, AgentExecutionInput, AgentExecutionResult, AgentRunner } from "./contracts.js";
 import { type RuntimeEvent, type RuntimeExecution, RuntimeExecutionStore } from "./execution-store.js";
 import type { AcquireModelInput, RoutedModelFactory, RoutedModelLease } from "./model-factory.js";
 
@@ -94,7 +94,13 @@ interface VoltAgentReader {
   getAgents(): Agent[];
 }
 
-export class VoltAgentRunner {
+export interface AgentExecutionLifecycle {
+  suspend(context: TenantContext, executionId: string, reason?: string): Promise<void>;
+  resume(context: TenantContext, executionId: string, input?: unknown): Promise<AgentExecutionResult>;
+  recover(context: TenantContext, executionId: string): Promise<AgentExecutionResult>;
+}
+
+export class VoltAgentRunner implements AgentRunner {
   private readonly active = new Map<string, ActiveExecution>();
   private accepting = true;
 
@@ -103,6 +109,7 @@ export class VoltAgentRunner {
     private readonly store: RuntimeExecutionStore,
     private readonly models: RoutedModelFactory,
     private readonly registry: RoutedModelRegistry,
+    private readonly lifecycle?: AgentExecutionLifecycle,
   ) {}
 
   public async execute(context: TenantContext, input: AgentExecutionInput): Promise<AgentExecutionResult> {
@@ -248,6 +255,18 @@ export class VoltAgentRunner {
       target: "cancelled",
       payload: { reason },
     });
+  }
+
+  public async suspend(context: TenantContext, executionId: string, reason?: string): Promise<void> {
+    await this.requireLifecycle().suspend(context, executionId, reason);
+  }
+
+  public async resume(context: TenantContext, executionId: string, input?: unknown): Promise<AgentExecutionResult> {
+    return await this.requireLifecycle().resume(context, executionId, input);
+  }
+
+  public async recover(context: TenantContext, executionId: string): Promise<AgentExecutionResult> {
+    return await this.requireLifecycle().recover(context, executionId);
   }
 
   public stopAccepting(): void {
@@ -416,5 +435,10 @@ export class VoltAgentRunner {
 
   private requireAccepting(): void {
     if (!this.accepting) throw new Error("Runtime이 종료 중이어서 새 실행을 받을 수 없습니다");
+  }
+
+  private requireLifecycle(): AgentExecutionLifecycle {
+    if (!this.lifecycle) throw new Error("Runtime workflow lifecycle이 구성되지 않았습니다");
+    return this.lifecycle;
   }
 }

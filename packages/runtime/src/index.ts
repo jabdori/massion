@@ -1,6 +1,7 @@
 export * from "./agent-topology.js";
 export * from "./contracts.js";
 export * from "./execution-store.js";
+export * from "./lifecycle.js";
 export * from "./model-factory.js";
 export * from "./recovery.js";
 export * from "./shutdown.js";
