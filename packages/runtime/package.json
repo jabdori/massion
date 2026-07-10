@@ -14,7 +14,7 @@
   ],
   "scripts": {
     "build": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\" && tsc -p tsconfig.json",
-    "test": "pnpm --filter @massion/identity build && pnpm --filter @massion/organization build && vitest run",
+    "test": "pnpm --filter @massion/identity build && pnpm --filter @massion/organization exec tsc -p tsconfig.json && vitest run",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
