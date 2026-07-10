@@ -136,6 +136,50 @@ describe("격리 Git delivery workspace", () => {
     await expect(realpath(workspace.workspacePath)).rejects.toThrow();
   }, 20_000);
 
+  it("target commit을 별도 detached 검증 workspace에 준비하고 원본을 보존한 채 강제 정리한다", async () => {
+    const deliveryWorkspace = await manager.prepare({
+      repositoryRoot,
+      baseRevision,
+      deliveryId: "verification-source",
+    });
+    const patch = validateUnifiedPatch(
+      `diff --git a/src/value.js b/src/value.js
+--- a/src/value.js
++++ b/src/value.js
+@@ -1 +1 @@
+-export const value = 1;
++export const value = 2;
+`,
+      { allowedPaths: ["src"] },
+    );
+    await manager.applyPatch(deliveryWorkspace, patch);
+    const committed = await manager.commit(deliveryWorkspace, {
+      message: "feat: verification target",
+      expectedPaths: patch.paths,
+    });
+    await manager.remove(deliveryWorkspace);
+
+    const verificationWorkspace = await manager.prepareDetachedVerification({
+      repositoryRoot,
+      targetRevision: committed.commitSha,
+      verificationId: "assurance-check-1",
+    });
+
+    expect(verificationWorkspace.targetRevision).toBe(committed.commitSha);
+    expect(await git(["rev-parse", "HEAD"], verificationWorkspace.workspacePath)).toBe(committed.commitSha);
+    expect(await git(["branch", "--show-current"], verificationWorkspace.workspacePath)).toBe("");
+    expect(await readFile(join(verificationWorkspace.workspacePath, "src/value.js"), "utf8")).toBe(
+      "export const value = 2;\n",
+    );
+    await writeFile(join(verificationWorkspace.workspacePath, "verification-output.txt"), "temporary\n");
+
+    await manager.removeDetachedVerification(verificationWorkspace);
+
+    await expect(realpath(verificationWorkspace.workspacePath)).rejects.toThrow();
+    expect(await git(["rev-parse", "HEAD"])).toBe(baseRevision);
+    expect(await git(["status", "--porcelain", "--untracked-files=all"])).toBe("");
+  }, 20_000);
+
   it("두 section 중 하나라도 적용 불가하면 index와 worktree를 전혀 바꾸지 않는다", async () => {
     const workspace = await manager.prepare({
       repositoryRoot,

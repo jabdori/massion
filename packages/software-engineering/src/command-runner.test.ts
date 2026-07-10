@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { access, mkdtemp, mkdir, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -51,6 +52,9 @@ describe("제한된 delivery command runner", () => {
       outputLimited: false,
     });
     expect(result.evidence.argumentsHash).toMatch(/^[a-f0-9]{64}$/u);
+    expect(result.evidence.environmentHash).toBe(
+      createHash("sha256").update('{"TEST_ALLOWED":"visible"}').digest("hex"),
+    );
     expect(result.output).toContain(`${metacharacter}|visible|`);
     await expect(access(marker)).rejects.toMatchObject({ code: "ENOENT" });
   });
@@ -95,6 +99,30 @@ describe("제한된 delivery command runner", () => {
     await new Promise((resolve) => setTimeout(resolve, 700));
     await expect(access(marker)).rejects.toMatchObject({ code: "ENOENT" });
   });
+
+  it.runIf(process.platform !== "win32")(
+    "direct child가 정상 종료해도 managed process group의 남은 하위 process를 반환 전에 종료한다",
+    async () => {
+      const marker = join(root, "success-grandchild-survived");
+      const result = await runner.run({
+        stage: "validation",
+        executable: "node",
+        args: [
+          "-e",
+          "const {spawn}=require('node:child_process'); const child=spawn(process.execPath,['-e',\"process.on('SIGTERM',()=>{}); setTimeout(()=>require('node:fs').writeFileSync(process.argv[1],'bad'),500); setInterval(()=>{},1000)\",process.argv[1]],{stdio:'ignore'}); child.unref();",
+          marker,
+        ],
+        cwd: ".",
+        timeoutMs: 1_000,
+        maxOutputBytes: 1_024,
+        environment: {},
+      });
+
+      expect(result.evidence).toMatchObject({ exitCode: 0, timedOut: false, outputLimited: false });
+      await new Promise((resolve) => setTimeout(resolve, 700));
+      await expect(access(marker)).rejects.toMatchObject({ code: "ENOENT" });
+    },
+  );
 
   it("stdout·stderr flood를 byte 제한에서 중단하고 non-UTF8을 안전하게 표현한다", async () => {
     const flooded = await runner.run({

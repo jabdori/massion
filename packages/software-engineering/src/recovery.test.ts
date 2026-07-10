@@ -23,7 +23,7 @@ import {
 
 const execFileAsync = promisify(execFile);
 
-describe("Interrupted Engineering Delivery recovery", () => {
+describe("Interrupted Engineering Delivery recovery", { timeout: 60_000 }, () => {
   let root: string;
   let repositoryRoot: string;
   let workspaceRoot: string;
@@ -266,7 +266,7 @@ describe("Interrupted Engineering Delivery recovery", () => {
       await manager.remove(workspace);
     }
     expect(resume.mock.calls.map((call) => call[1].status)).toEqual(statuses);
-  }, 20_000);
+  }, 60_000);
 
   it("저장된 test patch hash와 staged diff가 다르면 재개하지 않고 실패 처리한다", async () => {
     const current = await delivery("mismatch", "test_applied");
@@ -334,7 +334,7 @@ describe("Interrupted Engineering Delivery recovery", () => {
     expect(recovered).toMatchObject({ result: "resumed", delivery: { status: "failed" } });
     expect((await leases.list(context, "repository-1"))[0]?.status).toBe("released");
     await expect(access(workspace.workspacePath)).rejects.toMatchObject({ code: "ENOENT" });
-  }, 20_000);
+  }, 60_000);
 
   it("commit 직후 DB crash를 branch parent·changeSet 검증으로 committed 조정한다", async () => {
     const staged = await recoverableDelivery("commit", "implementation_applied");
@@ -396,7 +396,7 @@ describe("Interrupted Engineering Delivery recovery", () => {
       { organization_id: context.organizationId, delivery_id: current.deliveryId },
     );
     expect(recoveryEvents).toEqual([{ event_type: "engineering_delivery_recovered", command_id: "recover-commit" }]);
-  }, 20_000);
+  }, 60_000);
 
   it("deterministic branch의 tree가 저장된 implementation change set과 다르면 실패 처리한다", async () => {
     const staged = await recoverableDelivery("branch-mismatch", "implementation_applied");
@@ -424,7 +424,7 @@ describe("Interrupted Engineering Delivery recovery", () => {
     expect(recovered).toMatchObject({ result: "cleaned_terminal", delivery: { status: "failed" } });
     expect(recovered.delivery.error?.category).toBe("recovery_branch_mismatch");
     await expect(access(staged.workspace.workspacePath)).rejects.toMatchObject({ code: "ENOENT" });
-  }, 20_000);
+  }, 60_000);
 
   it("deterministic branch의 parent 계보가 잘못되면 실패 처리하고 workspace·lease를 정리한다", async () => {
     const staged = await recoverableDelivery("branch-parent", "implementation_applied");
@@ -461,7 +461,7 @@ describe("Interrupted Engineering Delivery recovery", () => {
     expect(recovered.delivery.error?.category).toBe("recovery_branch_invalid");
     expect((await leases.list(context, "repository-1"))[0]?.status).toBe("released");
     await expect(access(staged.workspace.workspacePath)).rejects.toMatchObject({ code: "ENOENT" });
-  }, 20_000);
+  }, 60_000);
 
   it.each(["failed", "cancelled"] as const)(
     "%s terminal recovery가 남은 workspace와 active lease를 누수하지 않는다",

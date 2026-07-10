@@ -24,6 +24,7 @@ export interface EngineeringCommandEvidence {
   readonly stage: EngineeringCommandStage;
   readonly executable: string;
   readonly argumentsHash: string;
+  readonly environmentHash: string;
   readonly cwd: string;
   readonly exitCode?: number;
   readonly signal?: NodeJS.Signals;
@@ -60,6 +61,12 @@ function sha256(value: string | Uint8Array): string {
   return createHash("sha256").update(value).digest("hex");
 }
 
+function canonicalEnvironment(environment: Readonly<Record<string, string>>): string {
+  return JSON.stringify(
+    Object.fromEntries(Object.entries(environment).sort(([left], [right]) => left.localeCompare(right))),
+  );
+}
+
 function truncateUtf8(value: string, maxBytes: number): string {
   let result = "";
   let size = 0;
@@ -72,17 +79,42 @@ function truncateUtf8(value: string, maxBytes: number): string {
   return result;
 }
 
-function killProcessGroup(child: ReturnType<typeof spawn>, signal: NodeJS.Signals): void {
-  if (!child.pid) return;
+function killProcessGroup(child: ReturnType<typeof spawn>, signal: NodeJS.Signals): boolean {
+  if (!child.pid) return false;
   if (process.platform !== "win32") {
     try {
       process.kill(-child.pid, signal);
-      return;
+      return true;
     } catch {
       // 이미 종료됐거나 process group 생성 전에 실패한 경우 개별 process 종료로 보완합니다.
     }
   }
-  child.kill(signal);
+  return child.kill(signal);
+}
+
+function processGroupExists(child: ReturnType<typeof spawn>): boolean {
+  if (!child.pid || process.platform === "win32") return false;
+  try {
+    process.kill(-child.pid, 0);
+    return true;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === "EPERM";
+  }
+}
+
+async function cleanupManagedProcessGroup(
+  child: ReturnType<typeof spawn>,
+  forceKillTimer: NodeJS.Timeout | undefined,
+): Promise<void> {
+  if (forceKillTimer) clearTimeout(forceKillTimer);
+  if (!processGroupExists(child)) return;
+  killProcessGroup(child, "SIGTERM");
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  if (processGroupExists(child)) killProcessGroup(child, "SIGKILL");
+  for (let attempt = 0; attempt < 20 && processGroupExists(child); attempt += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  if (processGroupExists(child)) throw new Error("Managed command process group을 완전히 종료하지 못했습니다");
 }
 
 export class ConfinedCommandRunner {
@@ -226,34 +258,42 @@ export class ConfinedCommandRunner {
         if (settled) return;
         settled = true;
         clearTimeout(timeout);
-        const stdoutBytes = Buffer.concat(stdout);
-        const stderrBytes = Buffer.concat(stderr);
-        const decoder = new TextDecoder("utf-8", { fatal: false });
-        const stdoutRedaction = redactSecrets(decoder.decode(stdoutBytes));
-        const stderrRedaction = redactSecrets(decoder.decode(stderrBytes));
-        const redactedStdout = stdoutRedaction.content;
-        const redactedStderr = stderrRedaction.content;
-        const output = truncateUtf8(
-          [redactedStdout, redactedStderr].filter(Boolean).join(redactedStdout && redactedStderr ? "\n" : ""),
-          input.maxOutputBytes,
-        );
-        const outputExcerpt = truncateUtf8(output, this.limits.maxExcerptBytes);
-        const evidence: EngineeringCommandEvidence = {
-          stage: input.stage,
-          executable: input.executable,
-          argumentsHash: sha256(JSON.stringify(input.args)),
-          cwd: cwd.relative,
-          ...(typeof code === "number" ? { exitCode: code } : {}),
-          ...(signal ? { signal } : {}),
-          stdoutHash: stdoutHash.digest("hex"),
-          stderrHash: stderrHash.digest("hex"),
-          outputExcerpt,
-          durationMs: Math.max(0, Math.round(performance.now() - startedAt)),
-          timedOut,
-          outputLimited,
-          credentialRedacted: stdoutRedaction.redactions.length > 0 || stderrRedaction.redactions.length > 0,
-        };
-        resolvePromise({ evidence, output });
+        void (async () => {
+          try {
+            await cleanupManagedProcessGroup(child, forceKillTimer);
+            const stdoutBytes = Buffer.concat(stdout);
+            const stderrBytes = Buffer.concat(stderr);
+            const decoder = new TextDecoder("utf-8", { fatal: false });
+            const stdoutRedaction = redactSecrets(decoder.decode(stdoutBytes));
+            const stderrRedaction = redactSecrets(decoder.decode(stderrBytes));
+            const redactedStdout = stdoutRedaction.content;
+            const redactedStderr = stderrRedaction.content;
+            const output = truncateUtf8(
+              [redactedStdout, redactedStderr].filter(Boolean).join(redactedStdout && redactedStderr ? "\n" : ""),
+              input.maxOutputBytes,
+            );
+            const outputExcerpt = truncateUtf8(output, this.limits.maxExcerptBytes);
+            const evidence: EngineeringCommandEvidence = {
+              stage: input.stage,
+              executable: input.executable,
+              argumentsHash: sha256(JSON.stringify(input.args)),
+              environmentHash: sha256(canonicalEnvironment(input.environment)),
+              cwd: cwd.relative,
+              ...(typeof code === "number" ? { exitCode: code } : {}),
+              ...(signal ? { signal } : {}),
+              stdoutHash: stdoutHash.digest("hex"),
+              stderrHash: stderrHash.digest("hex"),
+              outputExcerpt,
+              durationMs: Math.max(0, Math.round(performance.now() - startedAt)),
+              timedOut,
+              outputLimited,
+              credentialRedacted: stdoutRedaction.redactions.length > 0 || stderrRedaction.redactions.length > 0,
+            };
+            resolvePromise({ evidence, output });
+          } catch (error) {
+            reject(error instanceof Error ? error : new Error("Managed command process group 정리에 실패했습니다"));
+          }
+        })();
       });
     });
   }

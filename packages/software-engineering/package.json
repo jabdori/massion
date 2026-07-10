@@ -14,10 +14,12 @@
   ],
   "scripts": {
     "build": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\" && tsc -p tsconfig.json",
-    "test": "pnpm --filter @massion/evidence build && vitest run src",
-    "typecheck": "pnpm --filter @massion/evidence build && tsc -p tsconfig.json --noEmit"
+    "build-deps": "pnpm --filter @massion/assurance build && pnpm --filter @massion/evidence build",
+    "test": "pnpm build-deps && pnpm build && vitest run src",
+    "typecheck": "pnpm build-deps && tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@massion/assurance": "workspace:*",
     "@massion/evidence": "workspace:*",
     "@massion/identity": "workspace:*",
     "@massion/organization": "workspace:*",

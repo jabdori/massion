@@ -17,6 +17,7 @@ import type { EngineeringCommandEvidence } from "./command-runner.js";
 import type { GitFileChange } from "./git-workspace.js";
 import {
   SOFTWARE_ENGINEERING_DELIVERY_MIGRATION,
+  SOFTWARE_ENGINEERING_COMMAND_ENVIRONMENT_MIGRATION,
   SOFTWARE_ENGINEERING_ROOT_BINDING_MIGRATION,
   SOFTWARE_ENGINEERING_TDD_EVIDENCE_MIGRATION,
 } from "./schema.js";
@@ -130,6 +131,7 @@ export class EngineeringDeliveryStore {
       SOFTWARE_ENGINEERING_DELIVERY_MIGRATION,
       SOFTWARE_ENGINEERING_TDD_EVIDENCE_MIGRATION,
       SOFTWARE_ENGINEERING_ROOT_BINDING_MIGRATION,
+      SOFTWARE_ENGINEERING_COMMAND_ENVIRONMENT_MIGRATION,
     ]);
     return new EngineeringDeliveryStore(database, organizations, prerequisites);
   }
@@ -272,6 +274,7 @@ export class EngineeringDeliveryStore {
     }
     for (const [label, hash] of [
       ["Arguments hash", input.evidence.argumentsHash],
+      ["Environment hash", input.evidence.environmentHash],
       ["Stdout hash", input.evidence.stdoutHash],
       ["Stderr hash", input.evidence.stderrHash],
     ] as const) {
@@ -303,7 +306,7 @@ export class EngineeringDeliveryStore {
         return { commandEvidenceId };
       }
       await transaction.query(
-        "CREATE engineering_command_evidence CONTENT { command_evidence_id: $command_evidence_id, organization_id: $organization_id, delivery_id: $delivery_id, stage: $stage, executable: $executable, arguments_hash: $arguments_hash, cwd: $cwd, exit_code: $exit_code, stdout_hash: $stdout_hash, stderr_hash: $stderr_hash, output_excerpt: $output_excerpt, duration_ms: $duration_ms, timed_out: $timed_out, credential_redacted: $credential_redacted, evidence_hash: $evidence_hash, created_at: time::now() };",
+        "CREATE engineering_command_evidence CONTENT { command_evidence_id: $command_evidence_id, organization_id: $organization_id, delivery_id: $delivery_id, stage: $stage, executable: $executable, arguments_hash: $arguments_hash, environment_hash: $environment_hash, cwd: $cwd, exit_code: $exit_code, stdout_hash: $stdout_hash, stderr_hash: $stderr_hash, output_excerpt: $output_excerpt, duration_ms: $duration_ms, timed_out: $timed_out, credential_redacted: $credential_redacted, evidence_hash: $evidence_hash, created_at: time::now() };",
         {
           command_evidence_id: commandEvidenceId,
           organization_id: context.organizationId,
@@ -311,6 +314,7 @@ export class EngineeringDeliveryStore {
           stage: evidence.stage,
           executable: evidence.executable,
           arguments_hash: evidence.argumentsHash,
+          environment_hash: evidence.environmentHash,
           cwd: evidence.cwd,
           exit_code: evidence.exitCode,
           stdout_hash: evidence.stdoutHash,

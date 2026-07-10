@@ -33,9 +33,13 @@ export type AssuranceCheckBinding =
       readonly executable: string;
       readonly args: readonly string[];
       readonly cwd: string;
+      readonly environmentName?: string;
       readonly expectedExitCode: number;
       readonly timeoutMs: number;
       readonly maxOutputBytes: number;
+      readonly timeoutOutcome?: "blocked" | "failed";
+      readonly outputLimitOutcome?: "blocked" | "failed";
+      readonly verifyDeterministicOutput?: boolean;
     })
   | (BindingCommon & {
       readonly kind: "inspection";
@@ -272,6 +276,12 @@ function validateBinding(binding: AssuranceCheckBinding): void {
     text(binding.cwd, "Command cwd", 500);
     if (isAbsolute(binding.cwd) || binding.cwd.split(/[\\/]/u).includes(".."))
       throw new Error("Command cwd는 상대 경로여야 합니다");
+    if (binding.environmentName !== undefined) {
+      text(binding.environmentName, "Command environment profile", 100);
+      if (!/^[a-z][a-z0-9._-]*$/u.test(binding.environmentName)) {
+        throw new Error("Command environment profile 이름이 올바르지 않습니다");
+      }
+    }
     if (!Number.isSafeInteger(binding.expectedExitCode)) throw new Error("Expected exit code는 정수여야 합니다");
     if (!Number.isSafeInteger(binding.timeoutMs) || binding.timeoutMs < 1_000 || binding.timeoutMs > 3_600_000)
       throw new Error("Command timeout은 1초 이상 1시간 이하여야 합니다");
@@ -281,6 +291,15 @@ function validateBinding(binding: AssuranceCheckBinding): void {
       binding.maxOutputBytes > 10_000_000
     )
       throw new Error("Command output limit은 1~10000000 byte여야 합니다");
+    if (binding.timeoutOutcome !== undefined && !["blocked", "failed"].includes(binding.timeoutOutcome)) {
+      throw new Error("Command timeout outcome은 blocked 또는 failed여야 합니다");
+    }
+    if (binding.outputLimitOutcome !== undefined && !["blocked", "failed"].includes(binding.outputLimitOutcome)) {
+      throw new Error("Command output limit outcome은 blocked 또는 failed여야 합니다");
+    }
+    if (binding.verifyDeterministicOutput !== undefined && typeof binding.verifyDeterministicOutput !== "boolean") {
+      throw new Error("Command deterministic output 검증 설정은 boolean이어야 합니다");
+    }
   } else if (binding.kind === "inspection") {
     text(binding.inspectorProfile, "Inspector profile");
     stringList(binding.evidenceAllowlist, "Inspection evidence allowlist", 100);

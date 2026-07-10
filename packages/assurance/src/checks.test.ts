@@ -7,6 +7,8 @@ import {
   evaluateHumanAttestationCheck,
   evaluateMetricObservationCheck,
   finalizeCriterionFromChecks,
+  runTrustedAssuranceCheckExecutor,
+  type TrustedAssuranceCheckExecutor,
 } from "./checks.js";
 
 const organizationId = "organization-1";
@@ -207,5 +209,54 @@ describe("결정론적 Assurance check", () => {
 
   it.each(["passed", "status", "verdict"])("caller의 %s 판정 주입을 거부한다", (key) => {
     expect(() => assertNoCallerVerdict({ commandId: "command-1", [key]: true })).toThrow("caller verdict");
+  });
+
+  it("server-owned trusted executor만 실행하고 누락된 adapter는 blocked로 판정한다", async () => {
+    const executor: TrustedAssuranceCheckExecutor = {
+      adapterId: "massion.software-command.v1",
+      async execute(_context, input) {
+        return {
+          status: "passed",
+          outputHash: "d".repeat(64),
+          summary: "fresh workspace command passed",
+          toolName: "node",
+          toolVersion: "v24.0.0",
+          durationMs: 10,
+          artifactVersionIds: input.artifactVersionIds,
+        };
+      },
+    };
+    const input = {
+      workId,
+      assuranceRunId,
+      criterionId,
+      verificationId: "verification-1",
+      binding: {
+        bindingKey: "test:node",
+        criterionKey: "task:1:0",
+        kind: "test" as const,
+        executor: { kind: "system_adapter" as const, adapterId: executor.adapterId },
+        executable: "node",
+        args: ["--test"],
+        cwd: ".",
+        expectedExitCode: 0,
+        timeoutMs: 5_000,
+        maxOutputBytes: 10_000,
+        requiredEvidenceKinds: ["command-output"],
+      },
+      artifactVersionIds: ["artifact-1"],
+      evidenceBriefIds: [],
+      metricObservationIds: [],
+      humanAttestationIds: [],
+    };
+    const context = { organizationId, userId: "owner-1", membershipId: "membership-1", role: "owner" } as const;
+
+    await expect(
+      runTrustedAssuranceCheckExecutor(new Map([[executor.adapterId, executor]]), context, input),
+    ).resolves.toMatchObject({ status: "passed", toolName: "node", artifactVersionIds: ["artifact-1"] });
+    await expect(runTrustedAssuranceCheckExecutor(new Map(), context, input)).resolves.toMatchObject({
+      status: "blocked",
+      summary: expect.stringContaining("executor"),
+    });
   });
 });

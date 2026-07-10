@@ -21,6 +21,39 @@ export interface DeterministicCheckResult {
   readonly evidenceBriefIds: readonly string[];
   readonly metricObservationIds: readonly string[];
   readonly humanAttestationIds: readonly string[];
+  readonly toolName?: string;
+  readonly toolVersion?: string;
+  readonly durationMs?: number;
+}
+
+export interface TrustedAssuranceCheckExecutionInput {
+  readonly workId: string;
+  readonly assuranceRunId: string;
+  readonly criterionId: string;
+  readonly verificationId: string;
+  readonly binding: Extract<AssuranceCheckBinding, { kind: "test" }>;
+  readonly artifactVersionIds: readonly string[];
+  readonly evidenceBriefIds: readonly string[];
+  readonly metricObservationIds: readonly string[];
+  readonly humanAttestationIds: readonly string[];
+}
+
+export interface TrustedAssuranceCheckExecutionResult {
+  readonly status: "passed" | "failed" | "blocked";
+  readonly outputHash: string;
+  readonly summary: string;
+  readonly toolName: string;
+  readonly toolVersion: string;
+  readonly durationMs: number;
+  readonly artifactVersionIds: readonly string[];
+}
+
+export interface TrustedAssuranceCheckExecutor {
+  readonly adapterId: string;
+  execute(
+    context: TenantContext,
+    input: TrustedAssuranceCheckExecutionInput,
+  ): Promise<TrustedAssuranceCheckExecutionResult>;
 }
 
 function canonicalJson(value: unknown): string {
@@ -68,6 +101,54 @@ function result(
     evidenceBriefIds,
     metricObservationIds,
     humanAttestationIds,
+  };
+}
+
+export async function runTrustedAssuranceCheckExecutor(
+  executors: ReadonlyMap<string, TrustedAssuranceCheckExecutor>,
+  context: TenantContext,
+  input: TrustedAssuranceCheckExecutionInput,
+): Promise<DeterministicCheckResult> {
+  if (input.binding.executor.kind !== "system_adapter") {
+    return result("blocked", "Trusted system executor binding이 아닙니다");
+  }
+  const executor = executors.get(input.binding.executor.adapterId);
+  if (!executor) return result("blocked", "Trusted check executor를 찾을 수 없습니다");
+  let executed: TrustedAssuranceCheckExecutionResult;
+  try {
+    executed = await executor.execute(context, input);
+  } catch {
+    return result("blocked", "Trusted check executor 실행에 실패했습니다");
+  }
+  if (
+    !["passed", "failed", "blocked"].includes(executed.status) ||
+    !/^[a-f0-9]{64}$/u.test(executed.outputHash) ||
+    !executed.summary.trim() ||
+    executed.summary.length > 4_000 ||
+    !executed.toolName.trim() ||
+    executed.toolName.length > 200 ||
+    !executed.toolVersion.trim() ||
+    executed.toolVersion.length > 200 ||
+    !Number.isSafeInteger(executed.durationMs) ||
+    executed.durationMs < 0 ||
+    new Set(executed.artifactVersionIds).size !== executed.artifactVersionIds.length ||
+    executed.artifactVersionIds.some((id) => !input.artifactVersionIds.includes(id))
+  ) {
+    return result("blocked", "Trusted check executor 결과 계약이 올바르지 않습니다");
+  }
+  const artifactVersionIds = [...executed.artifactVersionIds].sort();
+  return {
+    status: executed.status,
+    outputHash: executed.outputHash,
+    summary: executed.summary,
+    evidenceReferenceIds: artifactVersionIds,
+    artifactVersionIds,
+    evidenceBriefIds: [],
+    metricObservationIds: [],
+    humanAttestationIds: [],
+    toolName: executed.toolName,
+    toolVersion: executed.toolVersion,
+    durationMs: executed.durationMs,
   };
 }
 
@@ -423,33 +504,95 @@ function isBinding(value: unknown): value is AssuranceCheckBinding {
   );
 }
 
+const bindingLocksByDatabase = new WeakMap<object, Map<string, Promise<void>>>();
+
 export class AssuranceCheckStore {
   private readonly clock: () => Date;
+  private readonly trustedExecutors: ReadonlyMap<string, TrustedAssuranceCheckExecutor>;
+  private readonly bindingLocks: Map<string, Promise<void>>;
 
   public constructor(
     private readonly database: MassionDatabase,
     private readonly organizations: OrganizationService,
-    options: { readonly clock?: () => Date } = {},
+    options: {
+      readonly clock?: () => Date;
+      readonly trustedExecutors?: readonly TrustedAssuranceCheckExecutor[];
+    } = {},
   ) {
     this.clock = options.clock ?? (() => new Date());
+    const trustedExecutors = options.trustedExecutors ?? [];
+    if (new Set(trustedExecutors.map((executor) => executor.adapterId)).size !== trustedExecutors.length) {
+      throw new Error("Trusted assurance check executor ID가 중복됐습니다");
+    }
+    this.trustedExecutors = new Map(trustedExecutors.map((executor) => [executor.adapterId, executor]));
+    const sharedLocks = bindingLocksByDatabase.get(database) ?? new Map<string, Promise<void>>();
+    bindingLocksByDatabase.set(database, sharedLocks);
+    this.bindingLocks = sharedLocks;
   }
 
   public async record(context: TenantContext, input: RecordAssuranceCheckInput): Promise<AssuranceCheckRecordResult> {
     assertNoCallerVerdict(input as unknown as Readonly<Record<string, unknown>>);
     await this.organizations.verifyTenantContext(context);
     const normalized = this.normalize(input);
+    const lockKey = canonicalJson({
+      organizationId: context.organizationId,
+      assuranceRunId: normalized.assuranceRunId,
+      bindingKey: normalized.bindingKey,
+    });
+    return await this.withBindingLock(lockKey, async () => await this.recordLocked(context, normalized));
+  }
+
+  private async recordLocked(
+    context: TenantContext,
+    normalized: Required<RecordAssuranceCheckInput>,
+  ): Promise<AssuranceCheckRecordResult> {
     const requestHash = sha256(
       canonicalJson({ operation: "record_assurance_check", input: normalized, actorUserId: context.userId }),
     );
     const replayedId = await this.replay(context.organizationId, normalized.commandId, requestHash, this.database);
     if (replayedId) return await this.resultFor(this.database, context.organizationId, replayedId);
 
+    const preflightTarget = await this.target(this.database, context.organizationId, normalized);
+    const inputHash = sha256(canonicalJson({ ...normalized, commandId: undefined }));
+    const [preflightExistingRecords] = await this.database.query<[CheckRecord[]]>(
+      "SELECT * OMIT id FROM assurance_check WHERE organization_id = $organization_id AND assurance_run_id = $assurance_run_id AND command_key = $command_key LIMIT 1;",
+      {
+        organization_id: context.organizationId,
+        assurance_run_id: normalized.assuranceRunId,
+        command_key: normalized.bindingKey,
+      },
+    );
+    const preflightExisting = preflightExistingRecords[0];
+    if (preflightExisting && preflightExisting.input_hash !== inputHash) {
+      throw new Error("같은 check binding에 다른 evidence payload를 사용할 수 없습니다");
+    }
+    const trustedResult =
+      preflightTarget.binding.kind === "test" && !preflightExisting
+        ? await runTrustedAssuranceCheckExecutor(this.trustedExecutors, context, {
+            workId: normalized.workId,
+            assuranceRunId: normalized.assuranceRunId,
+            criterionId: normalized.criterionId,
+            verificationId: `${sha256(
+              canonicalJson({
+                organizationId: context.organizationId,
+                assuranceRunId: normalized.assuranceRunId,
+                bindingKey: normalized.bindingKey,
+                inputHash,
+              }),
+            )}-${randomUUID()}`,
+            binding: preflightTarget.binding,
+            artifactVersionIds: normalized.artifactVersionIds,
+            evidenceBriefIds: normalized.evidenceBriefIds,
+            metricObservationIds: normalized.metricObservationIds,
+            humanAttestationIds: normalized.humanAttestationIds,
+          })
+        : undefined;
+
     return await this.database.transaction(async (transaction) => {
       await this.organizations.verifyTenantContext(context, undefined, transaction);
       const concurrentId = await this.replay(context.organizationId, normalized.commandId, requestHash, transaction);
       if (concurrentId) return await this.resultFor(transaction, context.organizationId, concurrentId);
       const target = await this.target(transaction, context.organizationId, normalized);
-      const inputHash = sha256(canonicalJson({ ...normalized, commandId: undefined }));
       const [existingRecords] = await transaction.query<[CheckRecord[]]>(
         "SELECT * OMIT id FROM assurance_check WHERE organization_id = $organization_id AND assurance_run_id = $assurance_run_id AND command_key = $command_key LIMIT 1;",
         {
@@ -472,11 +615,21 @@ export class AssuranceCheckStore {
         );
         return { check: checkView(existing), criterionStatus: target.criterion.status };
       }
+      if (trustedResult && canonicalJson(target.binding) !== canonicalJson(preflightTarget.binding)) {
+        throw new Error("Trusted check 실행 중 binding 정본이 변경됐습니다");
+      }
       const executor = await this.executor(transaction, context.organizationId, normalized.workId, target);
-      const evaluated = await this.evaluate(transaction, context.organizationId, normalized, target, executor);
+      const evaluated = await this.evaluate(
+        transaction,
+        context.organizationId,
+        normalized,
+        target,
+        executor,
+        trustedResult,
+      );
       const checkId = randomUUID();
       const [records] = await transaction.query<[CheckRecord[]]>(
-        "CREATE assurance_check CONTENT { check_id: $check_id, organization_id: $organization_id, work_id: $work_id, assurance_run_id: $assurance_run_id, criterion_id: $criterion_id, kind: $kind, executor_handle: $executor_handle, executor_execution_id: $executor_execution_id, system_adapter_id: $system_adapter_id, command_key: $command_key, input_hash: $input_hash, status: $status, output_hash: $output_hash, output_summary: $output_summary, artifact_version_ids: $artifact_version_ids, evidence_brief_ids: $evidence_brief_ids, metric_observation_ids: $metric_observation_ids, human_attestation_ids: $human_attestation_ids, duration_ms: 0, created_at: time::now(), started_at: time::now(), completed_at: time::now() } RETURN AFTER;",
+        "CREATE assurance_check CONTENT { check_id: $check_id, organization_id: $organization_id, work_id: $work_id, assurance_run_id: $assurance_run_id, criterion_id: $criterion_id, kind: $kind, executor_handle: $executor_handle, executor_execution_id: $executor_execution_id, system_adapter_id: $system_adapter_id, command_key: $command_key, input_hash: $input_hash, status: $status, tool_name: $tool_name, tool_version: $tool_version, output_hash: $output_hash, output_summary: $output_summary, artifact_version_ids: $artifact_version_ids, evidence_brief_ids: $evidence_brief_ids, metric_observation_ids: $metric_observation_ids, human_attestation_ids: $human_attestation_ids, duration_ms: $duration_ms, created_at: time::now(), started_at: time::now(), completed_at: time::now() } RETURN AFTER;",
         {
           check_id: checkId,
           organization_id: context.organizationId,
@@ -490,12 +643,15 @@ export class AssuranceCheckStore {
           command_key: normalized.bindingKey,
           input_hash: inputHash,
           status: evaluated.status,
+          tool_name: evaluated.toolName,
+          tool_version: evaluated.toolVersion,
           output_hash: evaluated.outputHash,
           output_summary: evaluated.summary,
           artifact_version_ids: evaluated.artifactVersionIds,
           evidence_brief_ids: evaluated.evidenceBriefIds,
           metric_observation_ids: evaluated.metricObservationIds,
           human_attestation_ids: evaluated.humanAttestationIds,
+          duration_ms: evaluated.durationMs ?? 0,
         },
       );
       const created = records[0];
@@ -518,6 +674,26 @@ export class AssuranceCheckStore {
       metricObservationIds: ids(input.metricObservationIds, "MetricObservation ID"),
       humanAttestationIds: ids(input.humanAttestationIds, "HumanAttestation ID"),
     };
+  }
+
+  private async withBindingLock<T>(key: string, operation: () => Promise<T>): Promise<T> {
+    const previous = this.bindingLocks.get(key) ?? Promise.resolve();
+    let release = (): void => undefined;
+    const turn = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const tail = previous.then(
+      () => turn,
+      () => turn,
+    );
+    this.bindingLocks.set(key, tail);
+    await previous.catch(() => undefined);
+    try {
+      return await operation();
+    } finally {
+      release();
+      if (this.bindingLocks.get(key) === tail) this.bindingLocks.delete(key);
+    }
   }
 
   private async target(
@@ -570,7 +746,11 @@ export class AssuranceCheckStore {
     input: Required<RecordAssuranceCheckInput>,
     target: { readonly run: RunRecord; readonly criterion: CriterionRecord; readonly binding: AssuranceCheckBinding },
     trustedExecutor: { readonly handle?: string; readonly executionId?: string; readonly adapterId?: string },
+    trustedResult?: DeterministicCheckResult,
   ): Promise<DeterministicCheckResult> {
+    if (target.binding.kind === "test") {
+      return trustedResult ?? result("blocked", "Trusted command executor 결과가 없습니다");
+    }
     if (target.binding.kind === "evidence") return await this.evidence(executor, organizationId, input, target.binding);
     if (target.binding.kind === "metric")
       return await this.metric(executor, organizationId, input, target.binding, trustedExecutor);

@@ -1,7 +1,7 @@
 import { createRequire } from "node:module";
 import path from "node:path";
 
-import { Language, Parser } from "@vscode/tree-sitter-wasm";
+import type { Language } from "@vscode/tree-sitter-wasm";
 
 import {
   extractLexicalEvidence,
@@ -29,6 +29,8 @@ export interface ParsedFileEvidence {
 }
 
 const require = createRequire(import.meta.url);
+const { Language: TreeSitterLanguage, Parser } =
+  require("@vscode/tree-sitter-wasm") as typeof import("@vscode/tree-sitter-wasm");
 const packageEntry = require.resolve("@vscode/tree-sitter-wasm");
 const wasmDirectory = path.dirname(packageEntry);
 const GRAMMAR_FILE: Readonly<Record<string, string>> = {
@@ -62,7 +64,7 @@ async function loadLanguage(language: string): Promise<Language | undefined> {
   await initialize();
   let loading = languageCache.get(language);
   if (!loading) {
-    loading = Language.load(path.join(wasmDirectory, grammarFile));
+    loading = TreeSitterLanguage.load(path.join(wasmDirectory, grammarFile));
     languageCache.set(language, loading);
   }
   return await loading;
