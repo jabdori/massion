@@ -36,7 +36,6 @@ export interface ModelCompletionUsage {
   readonly commandId: string;
   readonly inputTokens: number;
   readonly outputTokens: number;
-  readonly costMicros: number;
 }
 
 export interface ModelFailureUsage extends ModelCompletionUsage {
@@ -100,6 +99,12 @@ export class MassionModelFactory {
       secret: reservation.secret,
     });
     const attemptId = reservation.attempt.attempt_id;
+    const costFor = (usage: ModelCompletionUsage) =>
+      Math.ceil(
+        (usage.inputTokens * profile.input_cost_micros_per_million +
+          usage.outputTokens * profile.output_cost_micros_per_million) /
+          1_000_000,
+      );
     return {
       attemptId,
       credentialId: credential.credential_id,
@@ -110,7 +115,7 @@ export class MassionModelFactory {
           attemptId,
           actualInputTokens: usage.inputTokens,
           actualOutputTokens: usage.outputTokens,
-          actualCostMicros: usage.costMicros,
+          actualCostMicros: costFor(usage),
         });
         return outcome.attempt;
       },
@@ -122,7 +127,7 @@ export class MassionModelFactory {
           emittedTokens: usage.emittedTokens,
           actualInputTokens: usage.inputTokens,
           actualOutputTokens: usage.outputTokens,
-          actualCostMicros: usage.costMicros,
+          actualCostMicros: costFor(usage),
         });
         return {
           status: outcome.attempt.status,

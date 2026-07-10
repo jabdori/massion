@@ -77,6 +77,8 @@ describe("remote Model Router contract", () => {
       supportsStreaming: true,
       equivalenceGroup: "remote",
       evalScore: 0.9,
+      inputCostMicrosPerMillion: 1_000_000,
+      outputCostMicrosPerMillion: 1_000_000,
       verified: true,
     });
     const route = await router.createRoute(context, {
