@@ -16,6 +16,7 @@ interface WorkRecord {
 }
 
 interface NodeRecord {
+  readonly handle: string;
   readonly status: string;
 }
 
@@ -106,7 +107,7 @@ async function findExecution(
 async function verify(
   executor: QueryExecutor,
   input: {
-    readonly phase: "start" | "verdict";
+    readonly phase: "start" | "verdict" | "completion_audit";
     readonly organizationId: string;
     readonly workId: string;
     readonly targetWorkRevision: number;
@@ -121,13 +122,19 @@ async function verify(
   );
   const work = works[0];
   if (!work) throw new Error(`Assurance 대상 Work를 찾을 수 없습니다: ${input.workId}`);
-  if (work.status !== "verifying" || work.revision !== input.targetWorkRevision) {
+  const validWorkState =
+    input.phase === "completion_audit"
+      ? work.status === "completed" && work.revision >= input.targetWorkRevision + 3
+      : work.status === "verifying" && work.revision === input.targetWorkRevision;
+  if (!validWorkState) {
     throw new Error("Assurance 대상 Work는 target revision의 verifying 상태여야 합니다");
   }
   const [nodes] = await executor.query<[NodeRecord[]]>(
-    "SELECT status FROM organization_node WHERE organization_id = $organization_id AND handle = $handle LIMIT 1;",
+    "SELECT handle, status FROM organization_node WHERE organization_id = $organization_id AND handle = $handle;",
     { organization_id: input.organizationId, handle: input.verifierHandle },
   );
+  const verifierNodeActive =
+    nodes[0]?.handle === input.verifierHandle && (input.phase === "completion_audit" || nodes[0].status === "active");
   const verifier = await findExecution(executor, input.organizationId, input.verifierExecutionId, "Verifier");
   const [tasks] = await executor.query<[TaskRecord[]]>(
     "SELECT task_id, status FROM work_task WHERE organization_id = $organization_id AND work_id = $work_id;",
@@ -237,7 +244,7 @@ async function verify(
     referencedRuntimeRecords.push(creator);
   }
   const checkExecutors: AssuranceIndependenceInput["checkExecutors"][number][] = [];
-  if (input.phase === "verdict" && input.assuranceRunId) {
+  if ((input.phase === "verdict" || input.phase === "completion_audit") && input.assuranceRunId) {
     const [checks] = await executor.query<[CheckRecord[]]>(
       "SELECT executor_handle, executor_execution_id, system_adapter_id FROM assurance_check WHERE organization_id = $organization_id AND work_id = $work_id AND assurance_run_id = $assurance_run_id;",
       {
@@ -268,7 +275,7 @@ async function verify(
     organizationId: input.organizationId,
     workId: input.workId,
     verifierHandle: input.verifierHandle,
-    verifierNodeActive: nodes[0]?.status === "active",
+    verifierNodeActive,
     verifierExecution: execution(verifier),
     tasks: tasks.map((task) => ({ taskId: task.task_id, status: task.status })),
     assignments: assignments.map((assignment) => ({
@@ -316,6 +323,24 @@ export async function verifyAssuranceVerdictIndependence(
 ): Promise<void> {
   await verify(executor, {
     phase: "verdict",
+    organizationId: run.organizationId,
+    workId: run.workId,
+    targetWorkRevision: run.targetWorkRevision,
+    assuranceRunId: run.assuranceRunId,
+    verifierHandle: run.verifierHandle,
+    verifierExecutionId: run.verifierExecutionId,
+  });
+}
+
+export async function verifyAssuranceCompletionIndependence(
+  executor: QueryExecutor,
+  run: Pick<
+    AssuranceRun,
+    "organizationId" | "workId" | "targetWorkRevision" | "assuranceRunId" | "verifierHandle" | "verifierExecutionId"
+  >,
+): Promise<void> {
+  await verify(executor, {
+    phase: "completion_audit",
     organizationId: run.organizationId,
     workId: run.workId,
     targetWorkRevision: run.targetWorkRevision,

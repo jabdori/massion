@@ -1,9 +1,18 @@
+import { createHash } from "node:crypto";
+
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { IdentityService, OrganizationService, type TenantContext } from "@massion/identity";
 import { OrganizationGraphService } from "@massion/organization";
 import { RuntimeExecutionStore } from "@massion/runtime";
-import { createDatabase, listAppliedMigrations, type MassionDatabase, type QueryExecutor } from "@massion/storage";
+import {
+  createBackup,
+  createDatabase,
+  listAppliedMigrations,
+  restoreBackup,
+  type MassionDatabase,
+  type QueryExecutor,
+} from "@massion/storage";
 import { WorkAssurancePort, WorkService, type CreateWorkResult } from "@massion/work";
 
 import {
@@ -28,6 +37,9 @@ describe("Assurance run과 Work 완료 게이트", () => {
   let created: CreateWorkResult;
   let planVersionId: string;
   let taskId: string;
+  let contributorExecutionId: string;
+  let materialArtifactVersionId: string;
+  let checkEvidenceArtifactVersionId: string;
 
   beforeEach(async () => {
     const remoteUrl = process.env.SURREAL_TEST_URL;
@@ -43,7 +55,7 @@ describe("Assurance run과 Work 완료 게이트", () => {
           accept: "application/json",
           "content-type": "text/plain",
         },
-        body: "DEFINE NAMESPACE IF NOT EXISTS massion; USE NS massion; DEFINE DATABASE IF NOT EXISTS assurance_gate;",
+        body: "DEFINE NAMESPACE IF NOT EXISTS massion; USE NS massion; REMOVE DATABASE IF EXISTS assurance_gate; DEFINE DATABASE assurance_gate;",
       });
       if (!provisioned.ok) {
         throw new Error(`SurrealDB 원격 테스트 프로비저닝 실패: ${String(provisioned.status)}`);
@@ -72,6 +84,33 @@ describe("Assurance run과 Work 완료 게이트", () => {
   });
 
   afterEach(async () => database.close());
+
+  async function createRestoreTarget(label: string): Promise<MassionDatabase> {
+    const databaseName = `${label}_${crypto.randomUUID().replaceAll("-", "")}`;
+    const remoteUrl = process.env.SURREAL_TEST_URL;
+    if (remoteUrl) {
+      const sqlUrl = remoteUrl
+        .replace(/^ws:/u, "http:")
+        .replace(/^wss:/u, "https:")
+        .replace(/\/rpc$/u, "/sql");
+      const provisioned = await fetch(sqlUrl, {
+        method: "POST",
+        headers: {
+          authorization: `Basic ${Buffer.from("root:root").toString("base64")}`,
+          accept: "application/json",
+          "content-type": "text/plain",
+        },
+        body: `DEFINE NAMESPACE IF NOT EXISTS massion; USE NS massion; DEFINE DATABASE ${databaseName};`,
+      });
+      if (!provisioned.ok) throw new Error(`복원 DB 프로비저닝 실패: ${String(provisioned.status)}`);
+    }
+    return await createDatabase({
+      url: remoteUrl ?? "mem://",
+      namespace: "massion",
+      database: databaseName,
+      ...(remoteUrl ? { authentication: { username: "root", password: "root" } } : {}),
+    });
+  }
 
   async function createVerifyingWork(): Promise<CreateWorkResult> {
     const result = await work.createWork(context, {
@@ -122,10 +161,48 @@ describe("Assurance run과 Work 완료 게이트", () => {
       expectedRevision: ready.work.revision,
       target: "running",
     });
-    const taskRunning = await work.transitionTask(context, {
+    const queuedContributor = await runtime.createExecution(context, {
+      commandId: crypto.randomUUID(),
+      workId: result.work.work_id,
+      taskId,
+      agentHandle: "delivery-coordination",
+      modelRoute: "test:delivery",
+      correlationId: crypto.randomUUID(),
+      estimatedTokens: 1,
+      estimatedCostMicros: 0,
+      input: { operation: "delivery" },
+    });
+    contributorExecutionId = queuedContributor.execution.execution_id;
+    const runningContributor = await runtime.transition(context, {
+      commandId: crypto.randomUUID(),
+      executionId: contributorExecutionId,
+      expectedVersion: queuedContributor.execution.version,
+      target: "running",
+      payload: { started: true },
+    });
+    await runtime.transition(context, {
+      commandId: crypto.randomUUID(),
+      executionId: contributorExecutionId,
+      expectedVersion: runningContributor.execution.version,
+      target: "succeeded",
+      payload: { output: "delivery complete" },
+    });
+    const material = await work.createArtifactVersion(context, {
       commandId: crypto.randomUUID(),
       workId: result.work.work_id,
       expectedRevision: running.work.revision,
+      kind: "report",
+      name: "delivery-result.json",
+      mediaType: "application/json",
+      content: { result: "검증 대상 산출물" },
+      creatorAgentHandle: "delivery-coordination",
+      creatorExecutionId: contributorExecutionId,
+    });
+    materialArtifactVersionId = material.artifactVersion.artifact_version_id;
+    const taskRunning = await work.transitionTask(context, {
+      commandId: crypto.randomUUID(),
+      workId: result.work.work_id,
+      expectedRevision: material.work.revision,
       taskId,
       expectedTaskRevision: task.task.revision,
       target: "running",
@@ -267,6 +344,23 @@ describe("Assurance run과 Work 완료 게이트", () => {
       target: "succeeded",
       payload: { outputHash: "e".repeat(64) },
     });
+    const checkArtifactId = crypto.randomUUID();
+    checkEvidenceArtifactVersionId = crypto.randomUUID();
+    const checkEvidenceContent = '{"result":"check-only evidence"}';
+    await database.query(
+      "CREATE work_artifact CONTENT { artifact_id: $artifact_id, organization_id: $organization_id, work_id: $work_id, kind: 'command-output', name: $name, created_by: $created_by, created_at: time::now() }; CREATE artifact_version CONTENT { artifact_version_id: $artifact_version_id, artifact_id: $artifact_id, organization_id: $organization_id, work_id: $work_id, version: 1, checksum: $checksum, media_type: 'application/json', content_json: $content_json, created_by: $created_by, creator_agent_handle: 'delivery-coordination', creator_execution_id: $creator_execution_id, created_at: time::now() };",
+      {
+        artifact_id: checkArtifactId,
+        artifact_version_id: checkEvidenceArtifactVersionId,
+        organization_id: context.organizationId,
+        work_id: target.work.work_id,
+        name: `check-output-${started.run.assuranceRunId}.json`,
+        checksum: createHash("sha256").update(checkEvidenceContent).digest("hex"),
+        content_json: checkEvidenceContent,
+        created_by: context.userId,
+        creator_execution_id: contributorExecutionId,
+      },
+    );
     const [criteria] = await database.query<[{ criterion_id: string; criterion_key: string }[]]>(
       "SELECT criterion_id, criterion_key FROM assurance_criterion WHERE organization_id = $organization_id AND assurance_run_id = $assurance_run_id;",
       { organization_id: context.organizationId, assurance_run_id: started.run.assuranceRunId },
@@ -283,7 +377,7 @@ describe("Assurance run과 Work 완료 게이트", () => {
           toolName: "pnpm",
           toolVersion: "10.30.3",
           durationMs: 1,
-          artifactVersionIds: [],
+          artifactVersionIds: [checkEvidenceArtifactVersionId],
         };
       },
     };
@@ -303,6 +397,7 @@ describe("Assurance run과 Work 완료 게이트", () => {
           assuranceRunId: started.run.assuranceRunId,
           criterionId: criterion.criterion_id,
           bindingKey: "check:implementation",
+          artifactVersionIds: [checkEvidenceArtifactVersionId],
         };
         const [first, deduplicated] = await Promise.all([
           checks.record(context, checkInput),
@@ -399,7 +494,298 @@ describe("Assurance run과 Work 완료 게이트", () => {
     expect(record.record.verification_ids).toEqual([projected.verification?.verification_id]);
     expect(completed.work.status).toBe("completed");
     expect(run.projectedWorkRevision).toBe(projected.work.revision);
+    expect(await (await AssuranceBootstrap.create(database, organizations)).auditCompletedWorks(context)).toEqual([]);
   });
+
+  it("completed Work backup을 빈 DB에 복원해 exact Assurance 계보를 감사하고 변조 backup은 거부한다", async () => {
+    const assuranceRunId = await passedRun();
+    const projected = await new WorkAssurancePort(
+      database,
+      organizations,
+      new AssuranceRunVerdictReader(),
+    ).projectVerdict(context, {
+      commandId: crypto.randomUUID(),
+      workId: created.work.work_id,
+      expectedRevision: created.work.revision,
+      assuranceRunId,
+    });
+    const record = await work.finalizeRecord(context, {
+      commandId: crypto.randomUUID(),
+      workId: created.work.work_id,
+      expectedRevision: projected.work.revision,
+      summary: "복원 준수 감사",
+    });
+    await work.transition(context, {
+      commandId: crypto.randomUUID(),
+      workId: created.work.work_id,
+      expectedRevision: record.work.revision,
+      target: "completed",
+    });
+    const backup = await createBackup(database);
+
+    const restored = await createRestoreTarget("assurance_restore_valid");
+    try {
+      await restoreBackup(restored, backup);
+      const restoredOrganizations = await OrganizationService.create(restored);
+      const restoredGateway = await AssuranceBootstrap.create(restored, restoredOrganizations);
+      await expect(restoredGateway.assertRestoredCompliance(context)).resolves.toBeUndefined();
+    } finally {
+      await restored.close();
+    }
+
+    const mutateLine = (
+      table: string,
+      transform: (line: string) => string,
+      match: (line: string) => boolean = () => true,
+    ) => {
+      const lines = backup.sql.split("\n");
+      const index = lines.findIndex((line) => line.includes(`id: ${table}:`) && match(line));
+      if (index < 0) throw new Error(`backup에서 ${table} record를 찾을 수 없습니다`);
+      const original = lines[index] ?? "";
+      const changed = transform(original);
+      if (changed === original) throw new Error(`${table} backup 변조가 적용되지 않았습니다`);
+      lines[index] = changed;
+      const sql = lines.join("\n");
+      return {
+        ...backup,
+        manifest: {
+          ...backup.manifest,
+          sql_sha256: createHash("sha256").update(sql).digest("hex"),
+        },
+        sql,
+      };
+    };
+    const replace = (source: string, before: string, after: string): string => {
+      if (!source.includes(before)) throw new Error(`backup 변조 대상을 찾을 수 없습니다: ${before}`);
+      return source.replace(before, after);
+    };
+    const mutateArtifactContent = (line: string, marker: string, before: string, after: string): string => {
+      const records = line.split(" }, { ");
+      const index = records.findIndex((record) => record.includes(marker));
+      if (index < 0) throw new Error(`Artifact record를 찾을 수 없습니다: ${marker}`);
+      const record = records[index] ?? "";
+      const content = /content_json: '([^']*)'/u.exec(record)?.[1];
+      if (!content) throw new Error("Artifact content_json을 찾을 수 없습니다");
+      const changedContent = replace(content, before, after);
+      records[index] = record
+        .replace(content, changedContent)
+        .replace(
+          /checksum: '[a-f0-9]{64}'/u,
+          `checksum: '${createHash("sha256").update(changedContent).digest("hex")}'`,
+        );
+      return records.join(" }, { ");
+    };
+    const removeRecord = (table: string, marker: string) =>
+      mutateLine(table, (line) => {
+        const prefix = "INSERT [ {";
+        const suffix = " } ];";
+        if (!line.startsWith(prefix) || !line.endsWith(suffix)) {
+          throw new Error(`${table} backup INSERT 형식이 올바르지 않습니다`);
+        }
+        const records = line.slice(prefix.length, -suffix.length).split(" }, { ");
+        const index = records.findIndex((record) => record.includes(marker));
+        if (index < 0) throw new Error(`${table} 삭제 대상을 찾을 수 없습니다: ${marker}`);
+        records.splice(index, 1);
+        return `${prefix}${records.join(" }, { ")}${suffix}`;
+      });
+    const inactiveAssuranceNode = mutateLine(
+      "organization_node",
+      (line) => {
+        const records = line.split(" }, { ");
+        const index = records.findIndex((record) => record.includes("handle: 'assurance'"));
+        if (index < 0) throw new Error("Assurance OrganizationNode를 찾을 수 없습니다");
+        records[index] = replace(records[index] ?? "", "status: 'active'", "status: 'inactive'");
+        return records.join(" }, { ");
+      },
+      (line) => line.includes("handle: 'assurance'"),
+    );
+    const reorganized = await createRestoreTarget("assurance_restore_reorganized");
+    try {
+      await restoreBackup(reorganized, inactiveAssuranceNode);
+      const reorganizedOrganizations = await OrganizationService.create(reorganized);
+      const reorganizedGateway = await AssuranceBootstrap.create(reorganized, reorganizedOrganizations);
+      await expect(reorganizedGateway.auditCompletedWorks(context)).resolves.toEqual([]);
+    } finally {
+      await reorganized.close();
+    }
+    const legacySnapshot = mutateLine("assurance_event", (line) => {
+      const records = line.split(" }, { ");
+      const index = records.findIndex((record) => record.includes("event_type: 'assurance_run_started'"));
+      if (index < 0) throw new Error("Assurance start Event를 찾을 수 없습니다");
+      const record = records[index] ?? "";
+      const changed = record.replace(/"snapshotCanonicalJson":"(?:\\.|[^"\\])*",?/u, "");
+      if (changed === record) throw new Error("Assurance start Event snapshot manifest를 찾을 수 없습니다");
+      records[index] = changed;
+      return records.join(" }, { ");
+    });
+    const legacy = await createRestoreTarget("assurance_restore_legacy_snapshot");
+    try {
+      await restoreBackup(legacy, legacySnapshot);
+      const legacyOrganizations = await OrganizationService.create(legacy);
+      const legacyGateway = await AssuranceBootstrap.create(legacy, legacyOrganizations);
+      await expect(legacyGateway.auditCompletedWorks(context)).resolves.toEqual([]);
+    } finally {
+      await legacy.close();
+    }
+    const corruptions = [
+      {
+        label: "Plan content",
+        backup: mutateLine("plan_version", (line) => replace(line, "완료 게이트 검증", "변조된 완료 게이트 검증")),
+      },
+      {
+        label: "Task acceptance criteria",
+        backup: mutateLine("work_task", (line) =>
+          replace(line, "독립 검증이 통과해야 합니다", "변조된 독립 검증이 통과해야 합니다"),
+        ),
+      },
+      {
+        label: "Assignment",
+        backup: mutateLine("task_assignment", (line) =>
+          replace(line, "agent_handle: 'delivery-coordination'", "agent_handle: 'context-strategy'"),
+        ),
+      },
+      {
+        label: "Assurance binding",
+        backup: mutateLine("assurance_binding_version", (line) =>
+          replace(line, '"executable":"pnpm"', '"executable":"npm"'),
+        ),
+      },
+      {
+        label: "material Artifact",
+        backup: mutateLine(
+          "artifact_version",
+          (line) =>
+            mutateArtifactContent(
+              line,
+              `artifact_version_id: '${materialArtifactVersionId}'`,
+              "검증 대상 산출물",
+              "변조된 산출물",
+            ),
+          (line) => line.includes(`artifact_version_id: '${materialArtifactVersionId}'`),
+        ),
+      },
+      {
+        label: "check ArtifactVersion reference",
+        backup: removeRecord("artifact_version", `artifact_version_id: '${checkEvidenceArtifactVersionId}'`),
+      },
+      {
+        label: "evidence verifier metadata",
+        backup: mutateLine(
+          "artifact_version",
+          (line) =>
+            mutateArtifactContent(
+              line,
+              "application/vnd.massion.assurance-evidence+json",
+              '"verifierHandle":"assurance"',
+              '"verifierHandle":"governance"',
+            ),
+          (line) => line.includes("application/vnd.massion.assurance-evidence+json"),
+        ),
+      },
+      {
+        label: "evidence hash",
+        backup: mutateLine(
+          "artifact_version",
+          (line) =>
+            mutateArtifactContent(
+              line,
+              "application/vnd.massion.assurance-evidence+json",
+              /"evidenceHash":"[a-f0-9]{64}"/u.exec(line)?.[0] ?? "missing-evidence-hash",
+              `"evidenceHash":"${"f".repeat(64)}"`,
+            ),
+          (line) => line.includes("application/vnd.massion.assurance-evidence+json"),
+        ),
+      },
+      {
+        label: "WorkVerification criteria",
+        backup: mutateLine("work_verification", (line) => replace(line, '"status":"passed"', '"status":"failed"')),
+      },
+      {
+        label: "run completedAt",
+        backup: mutateLine("assurance_run", (line) => {
+          const completedAt = /completed_at: d'[^']+'/u.exec(line)?.[0];
+          if (!completedAt) throw new Error("Assurance run completed_at을 찾을 수 없습니다");
+          return replace(line, completedAt, "completed_at: d'2026-01-01T00:00:00Z'");
+        }),
+      },
+      {
+        label: "decision evidence hash",
+        backup: mutateLine("assurance_run", (line) => {
+          const hash = /decision_evidence_hash: '[a-f0-9]{64}'/u.exec(line)?.[0];
+          if (!hash) throw new Error("Assurance run decision_evidence_hash를 찾을 수 없습니다");
+          return replace(line, hash, `decision_evidence_hash: '${"0".repeat(64)}'`);
+        }),
+      },
+      {
+        label: "check executor independence",
+        backup: mutateLine(
+          "assurance_check",
+          (line) =>
+            replace(
+              line,
+              "system_adapter_id: 'massion.command.v1'",
+              `executor_execution_id: '${contributorExecutionId}', executor_handle: 'delivery-coordination'`,
+            ),
+          (line) => line.includes("command_key: 'check:implementation'"),
+        ),
+      },
+    ];
+    for (const corruption of corruptions) {
+      const target = await createRestoreTarget(`assurance_restore_${corruption.label.replaceAll(" ", "_")}`);
+      try {
+        await restoreBackup(target, corruption.backup);
+        const targetOrganizations = await OrganizationService.create(target);
+        await expect(
+          AssuranceBootstrap.create(target, targetOrganizations),
+          `${corruption.label} 변조를 활성화 전에 거부해야 합니다`,
+        ).rejects.toThrow("Assurance 준수 위반");
+      } finally {
+        await target.close();
+      }
+    }
+
+    const verificationLine = backup.sql
+      .split("\n")
+      .find(
+        (line) =>
+          line.startsWith("INSERT [") &&
+          /\bid: work_verification:/u.test(line) &&
+          !/\bid: work_event:/u.test(line) &&
+          line.includes("passed: true"),
+      );
+    if (!verificationLine) throw new Error("backup의 passed WorkVerification을 찾을 수 없습니다");
+    const verificationRecordOffset = verificationLine.lastIndexOf("id: work_verification:");
+    const passedOffset = verificationLine.indexOf("passed: true", verificationRecordOffset);
+    if (passedOffset < 0) throw new Error("backup WorkVerification passed field를 찾을 수 없습니다");
+    const corruptedLine = `${verificationLine.slice(0, passedOffset)}passed: false${verificationLine.slice(passedOffset + "passed: true".length)}`;
+    const corruptedSql = backup.sql.replace(verificationLine, corruptedLine);
+    const corrupted = {
+      ...backup,
+      manifest: {
+        ...backup.manifest,
+        sql_sha256: createHash("sha256").update(corruptedSql).digest("hex"),
+      },
+      sql: corruptedSql,
+    };
+    const invalid = await createRestoreTarget("assurance_restore_invalid");
+    try {
+      await restoreBackup(invalid, corrupted);
+      const invalidOrganizations = await OrganizationService.create(invalid);
+      const [invalidWorks] = await invalid.query<[{ work_id: string; status: string }[]]>(
+        "SELECT work_id, status FROM work WHERE organization_id = $organization_id AND status = 'completed';",
+        { organization_id: context.organizationId },
+      );
+      const [invalidVerifications] = await invalid.query<[{ passed: boolean }[]]>(
+        "SELECT passed FROM work_verification WHERE organization_id = $organization_id;",
+        { organization_id: context.organizationId },
+      );
+      expect(invalidWorks).toHaveLength(1);
+      expect(invalidVerifications).toEqual([{ passed: false }]);
+      await expect(AssuranceBootstrap.create(invalid, invalidOrganizations)).rejects.toThrow("Assurance 준수 위반");
+    } finally {
+      await invalid.close();
+    }
+  }, 20_000);
 
   it.each([
     { verdict: "passed" as const, check: "passed" as const, workStatus: "verifying" },
@@ -750,11 +1136,11 @@ describe("Assurance run과 Work 완료 게이트", () => {
         assuranceRunId,
       }),
     ).rejects.toThrow(/활성 Assurance binding|evidence가 변경/u);
-    const [artifacts] = await database.query<[unknown[]]>(
-      "SELECT * FROM work_artifact WHERE organization_id = $organization_id AND work_id = $work_id;",
+    const [artifacts] = await database.query<[{ kind: string }[]]>(
+      "SELECT kind FROM work_artifact WHERE organization_id = $organization_id AND work_id = $work_id;",
       { organization_id: context.organizationId, work_id: created.work.work_id },
     );
-    expect(artifacts).toHaveLength(0);
+    expect(artifacts.map((artifact) => artifact.kind).sort()).toEqual(["command-output", "report"]);
   });
 
   it("WorkVerification linkage 변경을 즉시 rollback한다", async () => {

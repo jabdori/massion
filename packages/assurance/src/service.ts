@@ -242,6 +242,87 @@ async function referenceCount(
   return records.length;
 }
 
+export async function evaluateAssuranceEvidenceCompleteness(
+  executor: QueryExecutor,
+  input: {
+    readonly organizationId: string;
+    readonly workId: string;
+    readonly bindingsJson?: string;
+    readonly criteria: readonly CriterionRecord[];
+    readonly checks: readonly CheckRecord[];
+    readonly findings: readonly FindingRecord[];
+  },
+): Promise<{
+  readonly bindingValid: boolean;
+  readonly structurallyValid: boolean;
+  readonly requiredEvidenceComplete: boolean;
+}> {
+  const decodedBindings = input.bindingsJson ? bindings(input.bindingsJson) : undefined;
+  const criterionIds = new Set(input.criteria.map((criterion) => criterion.criterion_id));
+  const activeCriteria = input.criteria.filter((criterion) => criterion.status !== "excluded");
+  const criterionKeyById = new Map(
+    input.criteria.map((criterion) => [criterion.criterion_id, criterion.criterion_key]),
+  );
+  const expectedBindings = decodedBindings?.filter((binding) =>
+    activeCriteria.some((criterion) => criterion.criterion_key === binding.criterionKey),
+  );
+  const structurallyValid =
+    input.criteria.length > 0 &&
+    new Set(input.criteria.map((criterion) => criterion.criterion_id)).size === input.criteria.length &&
+    input.criteria.every((criterion) => CRITERION_STATUSES.has(criterion.status as AssuranceCriterionStatus)) &&
+    input.checks.every(
+      (check) =>
+        criterionIds.has(check.criterion_id) &&
+        CHECK_STATUSES.has(check.status as AssuranceCheckStatus) &&
+        [
+          check.artifact_version_ids,
+          check.evidence_brief_ids,
+          check.metric_observation_ids,
+          check.human_attestation_ids,
+        ].every((ids) => new Set(ids).size === ids.length),
+    ) &&
+    input.findings.every(
+      (finding) =>
+        FINDING_SEVERITIES.has(finding.severity as AssuranceFindingSeverity) &&
+        FINDING_STATUSES.has(finding.status as AssuranceFindingStatus),
+    );
+  const allReferenceKinds = [
+    ["artifact_version", "artifact_version_id", input.checks.flatMap((check) => check.artifact_version_ids)],
+    ["evidence_brief", "evidence_brief_id", input.checks.flatMap((check) => check.evidence_brief_ids)],
+    ["assurance_metric_observation", "observation_id", input.checks.flatMap((check) => check.metric_observation_ids)],
+    ["assurance_human_attestation", "attestation_id", input.checks.flatMap((check) => check.human_attestation_ids)],
+  ] as const;
+  let referencesComplete = true;
+  for (const [table, field, ids] of allReferenceKinds) {
+    if ((await referenceCount(executor, table, field, input.organizationId, input.workId, ids)) !== new Set(ids).size) {
+      referencesComplete = false;
+    }
+  }
+  const requiredEvidenceComplete =
+    structurallyValid &&
+    referencesComplete &&
+    expectedBindings !== undefined &&
+    expectedBindings.length > 0 &&
+    activeCriteria.every((criterion) =>
+      expectedBindings.some((binding) => binding.criterionKey === criterion.criterion_key),
+    ) &&
+    expectedBindings.every((binding) =>
+      input.checks.some(
+        (check) =>
+          criterionKeyById.get(check.criterion_id) === binding.criterionKey &&
+          check.command_key === binding.bindingKey &&
+          ["passed", "failed", "blocked", "cancelled"].includes(check.status) &&
+          (check.status === "cancelled" || /^[a-f0-9]{64}$/u.test(check.output_hash ?? "")) &&
+          passedEvidenceMatchesBinding(binding, check, input.checks),
+      ),
+    );
+  return {
+    bindingValid: decodedBindings !== undefined && expectedBindings !== undefined,
+    structurallyValid,
+    requiredEvidenceComplete,
+  };
+}
+
 /** 현재 DB 정본만 읽어 결정론적 판정 입력을 만드는 production source입니다. */
 export class DatabaseAssuranceDecisionSource implements AssuranceDecisionSource {
   public constructor(
@@ -349,67 +430,14 @@ export class DatabaseAssuranceDecisionSource implements AssuranceDecisionSource 
       independenceValid = false;
     }
 
-    const decodedBindings = bindingRecords[0] ? bindings(bindingRecords[0].bindings_json) : undefined;
-    const criterionIds = new Set(criterionRecords.map((criterion) => criterion.criterion_id));
-    const activeCriteria = criterionRecords.filter((criterion) => criterion.status !== "excluded");
-    const criterionKeyById = new Map(
-      criterionRecords.map((criterion) => [criterion.criterion_id, criterion.criterion_key]),
-    );
-    const expectedBindings = decodedBindings?.filter((binding) =>
-      activeCriteria.some((criterion) => criterion.criterion_key === binding.criterionKey),
-    );
-    const structurallyValid =
-      criterionRecords.length > 0 &&
-      new Set(criterionRecords.map((criterion) => criterion.criterion_id)).size === criterionRecords.length &&
-      criterionRecords.every((criterion) => CRITERION_STATUSES.has(criterion.status as AssuranceCriterionStatus)) &&
-      checkRecords.every(
-        (check) =>
-          criterionIds.has(check.criterion_id) &&
-          CHECK_STATUSES.has(check.status as AssuranceCheckStatus) &&
-          [
-            check.artifact_version_ids,
-            check.evidence_brief_ids,
-            check.metric_observation_ids,
-            check.human_attestation_ids,
-          ].every((ids) => new Set(ids).size === ids.length),
-      ) &&
-      findingRecords.every(
-        (finding) =>
-          FINDING_SEVERITIES.has(finding.severity as AssuranceFindingSeverity) &&
-          FINDING_STATUSES.has(finding.status as AssuranceFindingStatus),
-      );
-    const allReferenceKinds = [
-      ["artifact_version", "artifact_version_id", checkRecords.flatMap((check) => check.artifact_version_ids)],
-      ["evidence_brief", "evidence_brief_id", checkRecords.flatMap((check) => check.evidence_brief_ids)],
-      ["assurance_metric_observation", "observation_id", checkRecords.flatMap((check) => check.metric_observation_ids)],
-      ["assurance_human_attestation", "attestation_id", checkRecords.flatMap((check) => check.human_attestation_ids)],
-    ] as const;
-    let referencesComplete = true;
-    for (const [table, field, ids] of allReferenceKinds) {
-      if (
-        (await referenceCount(transaction, table, field, context.organizationId, run.workId, ids)) !== new Set(ids).size
-      ) {
-        referencesComplete = false;
-      }
-    }
-    const requiredEvidenceComplete =
-      structurallyValid &&
-      referencesComplete &&
-      expectedBindings !== undefined &&
-      expectedBindings.length > 0 &&
-      activeCriteria.every((criterion) =>
-        expectedBindings.some((binding) => binding.criterionKey === criterion.criterion_key),
-      ) &&
-      expectedBindings.every((binding) =>
-        checkRecords.some(
-          (check) =>
-            criterionKeyById.get(check.criterion_id) === binding.criterionKey &&
-            check.command_key === binding.bindingKey &&
-            ["passed", "failed", "blocked", "cancelled"].includes(check.status) &&
-            (check.status === "cancelled" || /^[a-f0-9]{64}$/u.test(check.output_hash ?? "")) &&
-            passedEvidenceMatchesBinding(binding, check, checkRecords),
-        ),
-      );
+    const evidence = await evaluateAssuranceEvidenceCompleteness(transaction, {
+      organizationId: context.organizationId,
+      workId: run.workId,
+      ...(bindingRecords[0]?.bindings_json ? { bindingsJson: bindingRecords[0].bindings_json } : {}),
+      criteria: criterionRecords,
+      checks: checkRecords,
+      findings: findingRecords,
+    });
     const verifier = verifierRecords[0];
     const verifierSucceeded =
       verifier?.status === "succeeded" &&
@@ -422,24 +450,23 @@ export class DatabaseAssuranceDecisionSource implements AssuranceDecisionSource 
           return false;
         }
       })();
-    const bindingValid = decodedBindings !== undefined && expectedBindings !== undefined;
     return {
       run,
       decisionInput: {
         cancellationRequested: false,
         snapshotStatus,
         identityValid: run.organizationId === context.organizationId && run.verifierHandle === "assurance",
-        bindingValid,
+        bindingValid: evidence.bindingValid,
         independenceValid,
         verifierSucceeded,
-        requiredEvidenceComplete,
-        criteria: structurallyValid
+        requiredEvidenceComplete: evidence.requiredEvidenceComplete,
+        criteria: evidence.structurallyValid
           ? criterionRecords.map((criterion) => ({
               criterionId: criterion.criterion_id,
               status: criterion.status as AssuranceCriterionStatus,
             }))
           : [],
-        checks: structurallyValid
+        checks: evidence.structurallyValid
           ? checkRecords.map((check) => ({
               criterionId: check.criterion_id,
               bindingKey: check.command_key,
@@ -447,7 +474,7 @@ export class DatabaseAssuranceDecisionSource implements AssuranceDecisionSource 
               ...(check.output_hash ? { outputHash: check.output_hash } : {}),
             }))
           : [],
-        findings: structurallyValid
+        findings: evidence.structurallyValid
           ? findingRecords.map((finding) => ({
               findingId: finding.finding_id,
               severity: finding.severity as AssuranceFindingSeverity,

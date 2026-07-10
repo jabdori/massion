@@ -18,6 +18,12 @@ export * from "./verdict.js";
 export { AssuranceMetricStore, type AssuranceMetricName, type RecordAssuranceMetricInput } from "./metrics.js";
 export { AssuranceRecovery, type AssuranceRecoveryContinuation, type AssuranceRecoveryResult } from "./recovery.js";
 export {
+  AssuranceComplianceAuditor,
+  auditAssuranceCompletionLineage,
+  type AssuranceCompletionAuditFinding,
+  type AssuranceCompletionLineage,
+} from "./compliance.js";
+export {
   AssuranceCheckStore,
   type AssuranceCheckRecordResult,
   type RecordAssuranceCheckInput,
