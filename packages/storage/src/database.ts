@@ -1,7 +1,17 @@
 import { createNodeEngines } from "@surrealdb/node";
-import { createRemoteEngines, Surreal, type SurrealTransaction } from "surrealdb";
+import { createRemoteEngines, isRetryableConflict, Surreal, type SurrealTransaction } from "surrealdb";
 
 const SUPPORTED_PROTOCOLS = new Set(["mem:", "rocksdb:", "http:", "https:", "ws:", "wss:"]);
+const LEGACY_CONFLICT_PREFIX = "Transaction conflict: Write conflict";
+
+function isCompatibleRetryableConflict(error: unknown): boolean {
+  return (
+    isRetryableConflict(error) ||
+    (error instanceof Error &&
+      error.message.startsWith(LEGACY_CONFLICT_PREFIX) &&
+      error.message.endsWith("can be retried"))
+  );
+}
 
 export interface DatabaseConfig {
   readonly url: string;
@@ -33,14 +43,19 @@ export class MassionDatabase implements QueryExecutor, AsyncDisposable {
   }
 
   public async transaction<T>(operation: (transaction: QueryExecutor) => Promise<T>): Promise<T> {
-    const transaction = await this.client.beginTransaction();
-    try {
-      const result = await operation(new TransactionExecutor(transaction));
-      await transaction.commit();
-      return result;
-    } catch (error) {
-      await transaction.cancel();
-      throw error;
+    for (let attempt = 0; ; attempt += 1) {
+      const session = await this.client.forkSession();
+      const transaction = await session.beginTransaction();
+      try {
+        const result = await operation(new TransactionExecutor(transaction));
+        await transaction.commit();
+        return result;
+      } catch (error) {
+        await transaction.cancel().catch(() => undefined);
+        if (!isCompatibleRetryableConflict(error) || attempt >= 3) throw error;
+      } finally {
+        await session.closeSession();
+      }
     }
   }
 

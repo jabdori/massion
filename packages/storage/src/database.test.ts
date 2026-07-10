@@ -29,4 +29,19 @@ describe("SurrealDB 연결", () => {
 
     expect(await db.query<unknown[][]>("SELECT payload FROM rollback_probe;")).toEqual([[]]);
   });
+
+  it("동시 transaction을 서로 독립된 session에서 commit한다", async () => {
+    await using db = await createDatabase({ url: "mem://", namespace: "massion", database: "concurrent_transactions" });
+    await db.query("DEFINE TABLE concurrent_probe SCHEMAFULL; DEFINE FIELD payload ON concurrent_probe TYPE int;");
+
+    await Promise.all([
+      db.transaction(async (tx) => tx.query("CREATE concurrent_probe:one SET payload = 1;")),
+      db.transaction(async (tx) => tx.query("CREATE concurrent_probe:two SET payload = 2;")),
+    ]);
+
+    const [records] = await db.query<[{ payload: number }[]]>(
+      "SELECT payload FROM concurrent_probe ORDER BY payload ASC;",
+    );
+    expect(records).toEqual([{ payload: 1 }, { payload: 2 }]);
+  });
 });
