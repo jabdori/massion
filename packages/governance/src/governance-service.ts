@@ -67,10 +67,10 @@ export class GovernanceService {
 
   public async evaluate(context: TenantContext, input: EvaluatePolicyInput): Promise<PolicyDecision> {
     await this.organizations.verifyTenantContext(context);
-    const requestJson = canonicalJson(input);
+    const requestHash = hashPolicyRequest(input.request);
+    const requestJson = canonicalJson({ commandId: input.commandId, requestHash });
     const repeated = await this.repeated(context.organizationId, input.commandId, requestJson);
     if (repeated) return this.view(repeated);
-    const requestHash = hashPolicyRequest(input.request);
     let outcome: PolicyDecision["outcome"] = "deny";
     let reasons: readonly string[] = [];
     let errors: readonly string[] = [];

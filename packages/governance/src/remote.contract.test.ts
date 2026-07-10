@@ -3,7 +3,12 @@ import { describe, expect, it } from "vitest";
 import { IdentityService, OrganizationService } from "@massion/identity";
 import { createDatabase } from "@massion/storage";
 
+import { ApprovalStore } from "./approval-store.js";
+import { createDefaultPolicy } from "./defaults.js";
+import { GovernanceService } from "./governance-service.js";
+import { PermitStore } from "./permit.js";
 import { PolicyStore } from "./policy-store.js";
+import { ApprovalRecovery } from "./recovery.js";
 
 const remoteUrl = process.env.SURREAL_TEST_URL;
 const remoteTest = remoteUrl ? it : it.skip;
@@ -36,18 +41,11 @@ describe("remote Governance contract", () => {
     const owner = await identity.registerPersonalUser({ email: "governance@example.com", displayName: "Governance" });
     const context = await organizations.resolveTenantContext(owner.user.user_id, owner.organization.organization_id);
     const store = await PolicyStore.create(database, organizations);
+    const defaults = createDefaultPolicy("personal");
     const draft = await store.createDraft(context, {
       commandId: crypto.randomUUID(),
-      bundle: {
-        schema: {
-          Massion: {
-            entityTypes: { Principal: {}, Resource: {} },
-            actions: { Read: { appliesTo: { principalTypes: ["Principal"], resourceTypes: ["Resource"] } } },
-          },
-        },
-        policies: { allow: "permit(principal, action, resource);" },
-      },
-      requirements: [],
+      bundle: defaults.bundle,
+      requirements: defaults.requirements,
     });
 
     const active = await store.activate(context, {
@@ -58,5 +56,54 @@ describe("remote Governance contract", () => {
     expect(await database.version()).toMatch(/^surrealdb-3\./u);
     expect(active.status).toBe("active");
     expect((await store.getActive(context))?.policy_version_id).toBe(active.policy_version_id);
+
+    const governance = await GovernanceService.create(database, organizations, store);
+    const approvals = await ApprovalStore.create(database, organizations, governance);
+    const permits = await PermitStore.create(database, organizations);
+    const evaluate = async () =>
+      await governance.evaluate(context, {
+        commandId: crypto.randomUUID(),
+        request: {
+          principal: { type: "Human", id: context.userId, organizationId: context.organizationId },
+          action: "tool.call",
+          resource: { type: "Work", id: "work-remote", organizationId: context.organizationId, revision: 1 },
+          context: { environment: "local", riskClass: "write", external: false },
+        },
+      });
+    const decision = await evaluate();
+    const requested = await approvals.request(context, {
+      commandId: crypto.randomUUID(),
+      decisionId: decision.decisionId,
+      resourceRevision: 1,
+      workId: "work-remote",
+    });
+    const approved = await approvals.vote(context, {
+      commandId: crypto.randomUUID(),
+      approvalId: requested.approval_id,
+      vote: "approve",
+      reason: "remote reviewed",
+    });
+    const consume = (executionId: string) =>
+      permits.consume(context, {
+        commandId: crypto.randomUUID(),
+        approvalId: approved.approval_id,
+        requestHash: decision.requestHash,
+        policyVersionId: decision.policyVersionId ?? "",
+        resourceRevision: 1,
+        executionId,
+      });
+    const concurrent = await Promise.allSettled([consume("execution-a"), consume("execution-b")]);
+    expect(concurrent.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+
+    const pendingDecision = await evaluate();
+    await approvals.request(context, {
+      commandId: crypto.randomUUID(),
+      decisionId: pendingDecision.decisionId,
+      resourceRevision: 1,
+      workId: "work-pending",
+    });
+    expect(await new ApprovalRecovery(approvals).recover(context)).toEqual([
+      expect.objectContaining({ workId: "work-pending", status: "pending" }),
+    ]);
   });
 });
