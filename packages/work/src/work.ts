@@ -1933,10 +1933,16 @@ export class WorkService {
     const summary = input.summary.trim();
     if (!summary) throw new Error("WorkRecord summary는 비어 있을 수 없습니다");
     return await this.mutate(context, input, "work_record_finalized", async (transaction, work) => {
-      const [recordsRuns] = await transaction.query<[{ records_run_id: string }[]]>(
-        "SELECT records_run_id FROM records_run WHERE organization_id = $organization_id AND work_id = $work_id LIMIT 1;",
-        { organization_id: context.organizationId, work_id: work.work_id },
-      );
+      const [databaseInfo] = await transaction.query<[{ tables: Readonly<Record<string, unknown>> }]>("INFO FOR DB;");
+      const recordsRuns =
+        "records_run" in databaseInfo.tables
+          ? (
+              await transaction.query<[{ records_run_id: string }[]]>(
+                "SELECT records_run_id FROM records_run WHERE organization_id = $organization_id AND work_id = $work_id LIMIT 1;",
+                { organization_id: context.organizationId, work_id: work.work_id },
+              )
+            )[0]
+          : [];
       if (work.records_schema_version === "massion.work.records.v1" || recordsRuns.length !== 0) {
         throw new Error("Phase 13 WorkRecord는 Records projection으로만 생성할 수 있습니다");
       }
