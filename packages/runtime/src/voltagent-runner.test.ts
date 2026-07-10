@@ -24,8 +24,10 @@ describe("VoltAgent AgentRunner", () => {
   let voltAgent: VoltAgent;
   let registry: RoutedModelRegistry;
   let agentId: string;
+  let rejectionListeners: ReturnType<typeof process.rawListeners>;
 
   beforeEach(async () => {
+    rejectionListeners = process.rawListeners("unhandledRejection");
     database = await createDatabase({ url: "mem://", namespace: "massion", database: crypto.randomUUID() });
     const identity = await IdentityService.create(database);
     const organizations = await OrganizationService.create(database);
@@ -52,6 +54,9 @@ describe("VoltAgent AgentRunner", () => {
     AgentRegistry.getInstance().removeAgent(agentId);
     await voltAgent.shutdown();
     await database.close();
+    for (const listener of process.rawListeners("unhandledRejection")) {
+      if (!rejectionListeners.includes(listener)) process.removeListener("unhandledRejection", listener);
+    }
   });
 
   function input(): AgentExecutionInput {
@@ -87,7 +92,7 @@ describe("VoltAgent AgentRunner", () => {
       new MockLanguageModelV3({
         doGenerate: {
           content: [{ type: "text", text: "hello runtime" }],
-          finishReason: "stop",
+          finishReason: { unified: "stop", raw: undefined },
           usage: USAGE,
           warnings: [],
         },
@@ -107,6 +112,121 @@ describe("VoltAgent AgentRunner", () => {
       "execution_succeeded",
     ]);
     expect(registry.size).toBe(0);
+  });
+
+  it("JSON Schema로 검증한 structured object를 Runtime 계보와 함께 반환한다", async () => {
+    const routed = lease(
+      new MockLanguageModelV3({
+        doGenerate: {
+          content: [{ type: "text", text: JSON.stringify({ objective: "완제품 구현" }) }],
+          finishReason: { unified: "stop", raw: undefined },
+          usage: USAGE,
+          warnings: [],
+        },
+      }),
+    );
+    const runner = new VoltAgentRunner(voltAgent, store, { acquire: vi.fn().mockResolvedValue(routed) }, registry);
+
+    const result = await runner.executeStructured(context, input(), {
+      name: "strategy-plan",
+      description: "검증 가능한 실행 계획",
+      jsonSchema: {
+        type: "object",
+        additionalProperties: false,
+        required: ["objective"],
+        properties: { objective: { type: "string" } },
+      },
+    });
+
+    expect(result).toMatchObject({ status: "succeeded", output: { objective: "완제품 구현" } });
+    expect(routed.complete).toHaveBeenCalledWith(expect.objectContaining({ inputTokens: 2, outputTokens: 3 }));
+  });
+
+  it("structured 실행도 첫 응답 전 실패를 동급 모델로 fallback한다", async () => {
+    const failedModel = new MockLanguageModelV3({
+      doGenerate: async () => {
+        const error = new Error("unauthorized") as Error & { statusCode: number };
+        error.statusCode = 401;
+        throw error;
+      },
+    });
+    const first = lease(failedModel, "structured-attempt-1", true);
+    const second = lease(
+      new MockLanguageModelV3({
+        doGenerate: {
+          content: [{ type: "text", text: JSON.stringify({ objective: "fallback plan" }) }],
+          finishReason: { unified: "stop", raw: undefined },
+          usage: USAGE,
+          warnings: [],
+        },
+      }),
+      "structured-attempt-2",
+    );
+    const acquire = vi.fn().mockResolvedValueOnce(first).mockResolvedValueOnce(second);
+    const runner = new VoltAgentRunner(voltAgent, store, { acquire }, registry);
+
+    const result = await runner.executeStructured(context, input(), {
+      name: "strategy-plan",
+      description: "계획",
+      jsonSchema: {
+        type: "object",
+        required: ["objective"],
+        properties: { objective: { type: "string" } },
+      },
+    });
+
+    expect(result).toMatchObject({ status: "succeeded", output: { objective: "fallback plan" } });
+    expect(first.fail).toHaveBeenCalledWith(expect.objectContaining({ signal: { kind: "http", statusCode: 401 } }));
+    expect(acquire.mock.calls[1]?.[1]).toMatchObject({ fallbackFromAttemptId: "structured-attempt-1" });
+  });
+
+  it("structured schema 실패와 모델 부재를 secret 없는 terminal 상태로 기록한다", async () => {
+    const invalid = lease(
+      new MockLanguageModelV3({
+        doGenerate: {
+          content: [{ type: "text", text: JSON.stringify({ apiKey: "secret-value" }) }],
+          finishReason: { unified: "stop", raw: undefined },
+          usage: USAGE,
+          warnings: [],
+        },
+      }),
+    );
+    const invalidRunner = new VoltAgentRunner(
+      voltAgent,
+      store,
+      { acquire: vi.fn().mockResolvedValue(invalid) },
+      registry,
+    );
+    const spec = {
+      name: "strategy-plan",
+      description: "계획",
+      jsonSchema: {
+        type: "object",
+        additionalProperties: false,
+        required: ["objective"],
+        properties: { objective: { type: "string" } },
+      },
+      validate: (value: unknown) =>
+        value && typeof value === "object" && typeof (value as Record<string, unknown>).objective === "string"
+          ? { success: true as const, value }
+          : { success: false as const, error: new Error("objective 필드가 필요합니다") },
+    } as const;
+
+    const failed = await invalidRunner.executeStructured(context, input(), spec);
+    const failedRecovery = await store.getRecovery(context, failed.executionId);
+
+    expect(failed.status).toBe("failed");
+    expect(JSON.stringify(failedRecovery)).not.toContain("secret-value");
+
+    const blockedRunner = new VoltAgentRunner(
+      voltAgent,
+      store,
+      { acquire: vi.fn().mockRejectedValue(new Error("blocked_model_unavailable: route 없음")) },
+      registry,
+    );
+    const blocked = await blockedRunner.executeStructured(context, input(), spec);
+
+    expect(blocked.status).toBe("blocked_model_unavailable");
   });
 
   it("first-token 전 인증 실패는 Router가 허용한 다음 lease로 fallback한다", async () => {
