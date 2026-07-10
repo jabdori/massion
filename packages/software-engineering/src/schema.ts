@@ -118,3 +118,12 @@ DEFINE INDEX engineering_path_lease_delivery ON engineering_path_lease FIELDS or
 DEFINE INDEX engineering_path_lease_repository ON engineering_path_lease FIELDS organization_id, repository_id, status;
 `,
 );
+
+export const SOFTWARE_ENGINEERING_TDD_EVIDENCE_MIGRATION = defineMigration(
+  "0036-software-engineering-tdd-evidence",
+  `
+DEFINE FIELD credential_redacted ON engineering_command_evidence TYPE bool DEFAULT false;
+DEFINE FIELD evidence_hash ON engineering_command_evidence TYPE option<string>;
+DEFINE FIELD change_hash ON engineering_file_change TYPE option<string>;
+`,
+);

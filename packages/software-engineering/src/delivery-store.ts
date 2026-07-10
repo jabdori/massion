@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 
 import type { OrganizationService, TenantContext } from "@massion/identity";
 import { applyMigrations, type MassionDatabase, type QueryExecutor } from "@massion/storage";
+import { redactSecrets } from "@massion/evidence";
 
 import type {
   DeliveryPrerequisiteReader,
@@ -12,7 +13,9 @@ import type {
   StartEngineeringDeliveryInput,
   TransitionEngineeringDeliveryInput,
 } from "./contracts.js";
-import { SOFTWARE_ENGINEERING_DELIVERY_MIGRATION } from "./schema.js";
+import type { EngineeringCommandEvidence } from "./command-runner.js";
+import type { GitFileChange } from "./git-workspace.js";
+import { SOFTWARE_ENGINEERING_DELIVERY_MIGRATION, SOFTWARE_ENGINEERING_TDD_EVIDENCE_MIGRATION } from "./schema.js";
 
 interface DeliveryRecord {
   readonly delivery_id: string;
@@ -49,6 +52,16 @@ interface EventRecord {
   readonly result_json: string;
 }
 
+interface CommandEvidenceRecord {
+  readonly command_evidence_id: string;
+  readonly evidence_hash?: string;
+}
+
+interface FileChangeRecord {
+  readonly file_change_id: string;
+  readonly change_hash?: string;
+}
+
 const TERMINAL_STATUSES = new Set<EngineeringDeliveryStatus>(["committed", "failed", "cancelled"]);
 const NEXT_STATUS: Readonly<Partial<Record<EngineeringDeliveryStatus, EngineeringDeliveryStatus>>> = {
   preparing: "test_applied",
@@ -82,6 +95,10 @@ function assertSha256(value: string, label: string): void {
   if (!/^[a-f0-9]{64}$/u.test(value)) throw new Error(`${label}은 SHA-256 형식이어야 합니다`);
 }
 
+function assertGitObjectHash(value: string, label: string): void {
+  if (!/^[a-f0-9]{40,64}$/u.test(value)) throw new Error(`${label}는 Git object hash 형식이어야 합니다`);
+}
+
 export class EngineeringDeliveryStore {
   private constructor(
     private readonly database: MassionDatabase,
@@ -94,7 +111,10 @@ export class EngineeringDeliveryStore {
     organizations: OrganizationService,
     prerequisites: DeliveryPrerequisiteReader,
   ): Promise<EngineeringDeliveryStore> {
-    await applyMigrations(database, [SOFTWARE_ENGINEERING_DELIVERY_MIGRATION]);
+    await applyMigrations(database, [
+      SOFTWARE_ENGINEERING_DELIVERY_MIGRATION,
+      SOFTWARE_ENGINEERING_TDD_EVIDENCE_MIGRATION,
+    ]);
     return new EngineeringDeliveryStore(database, organizations, prerequisites);
   }
 
@@ -208,6 +228,129 @@ export class EngineeringDeliveryStore {
         payload: { from: current.status, to: input.target, version: updated[0].version },
       });
       return { delivery: this.view(updated[0]) };
+    });
+  }
+
+  public async recordCommandEvidence(
+    context: TenantContext,
+    input: {
+      readonly deliveryId: string;
+      readonly evidenceKey: string;
+      readonly evidence: EngineeringCommandEvidence;
+    },
+  ): Promise<{ readonly commandEvidenceId: string }> {
+    await this.organizations.verifyTenantContext(context);
+    if (!/^[a-z0-9][a-z0-9._-]{0,127}$/u.test(input.evidenceKey)) {
+      throw new Error("Command evidence key 형식이 잘못됐습니다");
+    }
+    for (const [label, hash] of [
+      ["Arguments hash", input.evidence.argumentsHash],
+      ["Stdout hash", input.evidence.stdoutHash],
+      ["Stderr hash", input.evidence.stderrHash],
+    ] as const) {
+      assertSha256(hash, label);
+    }
+    const excerptRedaction = redactSecrets(input.evidence.outputExcerpt);
+    const evidence = {
+      ...input.evidence,
+      outputExcerpt: excerptRedaction.content,
+      credentialRedacted: input.evidence.credentialRedacted || excerptRedaction.redactions.length > 0,
+    };
+    const evidenceHash = hashRequest(evidence);
+    const commandEvidenceId = hashRequest({
+      organizationId: context.organizationId,
+      deliveryId: input.deliveryId,
+      evidenceKey: input.evidenceKey,
+    });
+    return await this.database.transaction(async (transaction) => {
+      await this.organizations.verifyTenantContext(context, undefined, transaction);
+      await this.find(transaction, context.organizationId, input.deliveryId);
+      const [existing] = await transaction.query<[CommandEvidenceRecord[]]>(
+        "SELECT command_evidence_id, evidence_hash FROM engineering_command_evidence WHERE organization_id = $organization_id AND command_evidence_id = $command_evidence_id LIMIT 1;",
+        { organization_id: context.organizationId, command_evidence_id: commandEvidenceId },
+      );
+      if (existing[0]) {
+        if (existing[0].evidence_hash !== evidenceHash) {
+          throw new Error("같은 command evidence key에 다른 evidence를 저장할 수 없습니다");
+        }
+        return { commandEvidenceId };
+      }
+      await transaction.query(
+        "CREATE engineering_command_evidence CONTENT { command_evidence_id: $command_evidence_id, organization_id: $organization_id, delivery_id: $delivery_id, stage: $stage, executable: $executable, arguments_hash: $arguments_hash, cwd: $cwd, exit_code: $exit_code, stdout_hash: $stdout_hash, stderr_hash: $stderr_hash, output_excerpt: $output_excerpt, duration_ms: $duration_ms, timed_out: $timed_out, credential_redacted: $credential_redacted, evidence_hash: $evidence_hash, created_at: time::now() };",
+        {
+          command_evidence_id: commandEvidenceId,
+          organization_id: context.organizationId,
+          delivery_id: input.deliveryId,
+          stage: evidence.stage,
+          executable: evidence.executable,
+          arguments_hash: evidence.argumentsHash,
+          cwd: evidence.cwd,
+          exit_code: evidence.exitCode,
+          stdout_hash: evidence.stdoutHash,
+          stderr_hash: evidence.stderrHash,
+          output_excerpt: evidence.outputExcerpt,
+          duration_ms: evidence.durationMs,
+          timed_out: evidence.timedOut,
+          credential_redacted: evidence.credentialRedacted,
+          evidence_hash: evidenceHash,
+        },
+      );
+      return { commandEvidenceId };
+    });
+  }
+
+  public async recordFileChanges(
+    context: TenantContext,
+    deliveryId: string,
+    changes: readonly GitFileChange[],
+  ): Promise<{ readonly fileChangeIds: readonly string[] }> {
+    await this.organizations.verifyTenantContext(context);
+    if (changes.length === 0) throw new Error("하나 이상의 Engineering file change가 필요합니다");
+    if (new Set(changes.map((change) => change.relativePath)).size !== changes.length) {
+      throw new Error("Engineering file change path가 중복됐습니다");
+    }
+    return await this.database.transaction(async (transaction) => {
+      await this.organizations.verifyTenantContext(context, undefined, transaction);
+      await this.find(transaction, context.organizationId, deliveryId);
+      const fileChangeIds: string[] = [];
+      for (const change of changes) {
+        if (!change.relativePath.trim()) throw new Error("Engineering file change path가 필요합니다");
+        if (change.beforeHash) assertGitObjectHash(change.beforeHash, "File before hash");
+        if (change.afterHash) assertGitObjectHash(change.afterHash, "File after hash");
+        const changeHash = hashRequest(change);
+        const fileChangeId = hashRequest({
+          organizationId: context.organizationId,
+          deliveryId,
+          relativePath: change.relativePath,
+        });
+        const [existing] = await transaction.query<[FileChangeRecord[]]>(
+          "SELECT file_change_id, change_hash FROM engineering_file_change WHERE organization_id = $organization_id AND file_change_id = $file_change_id LIMIT 1;",
+          { organization_id: context.organizationId, file_change_id: fileChangeId },
+        );
+        if (existing[0]) {
+          if (existing[0].change_hash !== changeHash) {
+            throw new Error("같은 file change path에 다른 manifest를 저장할 수 없습니다");
+          }
+          fileChangeIds.push(fileChangeId);
+          continue;
+        }
+        await transaction.query(
+          "CREATE engineering_file_change CONTENT { file_change_id: $file_change_id, organization_id: $organization_id, delivery_id: $delivery_id, relative_path: $relative_path, kind: $kind, before_hash: $before_hash, after_hash: $after_hash, test_file: $test_file, change_hash: $change_hash, created_at: time::now() };",
+          {
+            file_change_id: fileChangeId,
+            organization_id: context.organizationId,
+            delivery_id: deliveryId,
+            relative_path: change.relativePath,
+            kind: change.kind,
+            before_hash: change.beforeHash,
+            after_hash: change.afterHash,
+            test_file: change.testFile,
+            change_hash: changeHash,
+          },
+        );
+        fileChangeIds.push(fileChangeId);
+      }
+      return { fileChangeIds };
     });
   }
 
