@@ -106,3 +106,66 @@ DEFINE INDEX governance_approval_event_command ON governance_approval_event FIEL
 DEFINE INDEX governance_approval_event_sequence ON governance_approval_event FIELDS organization_id, approval_id, sequence UNIQUE;
 `,
 );
+
+export const GOVERNANCE_PERMIT_MIGRATION = defineMigration(
+  "0019-governance-permit",
+  `
+DEFINE TABLE governance_execution_permit SCHEMAFULL;
+DEFINE FIELD permit_id ON governance_execution_permit TYPE string;
+DEFINE FIELD organization_id ON governance_execution_permit TYPE string;
+DEFINE FIELD approval_id ON governance_execution_permit TYPE string;
+DEFINE FIELD command_id ON governance_execution_permit TYPE string;
+DEFINE FIELD request_hash ON governance_execution_permit TYPE string;
+DEFINE FIELD policy_version_id ON governance_execution_permit TYPE string;
+DEFINE FIELD resource_revision ON governance_execution_permit TYPE option<int>;
+DEFINE FIELD execution_id ON governance_execution_permit TYPE string;
+DEFINE FIELD consumed_by_user_id ON governance_execution_permit TYPE string;
+DEFINE FIELD created_at ON governance_execution_permit TYPE datetime;
+DEFINE INDEX governance_execution_permit_id ON governance_execution_permit FIELDS permit_id UNIQUE;
+DEFINE INDEX governance_execution_permit_command ON governance_execution_permit FIELDS organization_id, command_id UNIQUE;
+DEFINE INDEX governance_execution_permit_approval ON governance_execution_permit FIELDS organization_id, approval_id UNIQUE;
+
+DEFINE TABLE governance_bypass SCHEMAFULL;
+DEFINE FIELD bypass_id ON governance_bypass TYPE string;
+DEFINE FIELD organization_id ON governance_bypass TYPE string;
+DEFINE FIELD approval_id ON governance_bypass TYPE string;
+DEFINE FIELD command_id ON governance_bypass TYPE string;
+DEFINE FIELD action ON governance_bypass TYPE string;
+DEFINE FIELD resource_id ON governance_bypass TYPE string;
+DEFINE FIELD environment ON governance_bypass TYPE string;
+DEFINE FIELD reason ON governance_bypass TYPE string;
+DEFINE FIELD expires_at ON governance_bypass TYPE datetime;
+DEFINE FIELD created_by_user_id ON governance_bypass TYPE string;
+DEFINE FIELD created_at ON governance_bypass TYPE datetime;
+DEFINE INDEX governance_bypass_id ON governance_bypass FIELDS bypass_id UNIQUE;
+DEFINE INDEX governance_bypass_command ON governance_bypass FIELDS organization_id, command_id UNIQUE;
+DEFINE INDEX governance_bypass_approval ON governance_bypass FIELDS organization_id, approval_id UNIQUE;
+`,
+);
+
+export const GOVERNANCE_EMERGENCY_MIGRATION = defineMigration(
+  "0020-governance-emergency",
+  `
+DEFINE TABLE governance_emergency_state SCHEMAFULL;
+DEFINE FIELD organization_id ON governance_emergency_state TYPE string;
+DEFINE FIELD active ON governance_emergency_state TYPE bool;
+DEFINE FIELD reason ON governance_emergency_state TYPE string;
+DEFINE FIELD revision ON governance_emergency_state TYPE int;
+DEFINE FIELD changed_by_user_id ON governance_emergency_state TYPE string;
+DEFINE FIELD changed_at ON governance_emergency_state TYPE datetime;
+DEFINE INDEX governance_emergency_organization ON governance_emergency_state FIELDS organization_id UNIQUE;
+
+DEFINE TABLE governance_emergency_event SCHEMAFULL;
+DEFINE FIELD event_id ON governance_emergency_event TYPE string;
+DEFINE FIELD organization_id ON governance_emergency_event TYPE string;
+DEFINE FIELD command_id ON governance_emergency_event TYPE string;
+DEFINE FIELD sequence ON governance_emergency_event TYPE int;
+DEFINE FIELD event_type ON governance_emergency_event TYPE string;
+DEFINE FIELD request_json ON governance_emergency_event TYPE string;
+DEFINE FIELD payload_json ON governance_emergency_event TYPE string;
+DEFINE FIELD created_at ON governance_emergency_event TYPE datetime;
+DEFINE INDEX governance_emergency_event_id ON governance_emergency_event FIELDS event_id UNIQUE;
+DEFINE INDEX governance_emergency_event_command ON governance_emergency_event FIELDS organization_id, command_id UNIQUE;
+DEFINE INDEX governance_emergency_event_sequence ON governance_emergency_event FIELDS organization_id, sequence UNIQUE;
+`,
+);
