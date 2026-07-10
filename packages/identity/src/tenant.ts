@@ -110,6 +110,15 @@ export class OrganizationService {
     await this.authorize(executor, context, roles);
   }
 
+  public async verifyOrganizationMember(
+    userId: string,
+    organizationId: string,
+    executor: QueryExecutor = this.database,
+  ): Promise<void> {
+    const membership = await findMembership(executor, userId, organizationId);
+    if (!membership || membership.status !== "active") throw new Error("활성 Membership이 없습니다");
+  }
+
   public async addMember(
     context: TenantContext,
     userId: string,

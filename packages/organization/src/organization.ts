@@ -369,6 +369,18 @@ export class OrganizationGraphService {
     return await listNodes(this.database, context.organizationId);
   }
 
+  public async verifyActiveNode(
+    context: TenantContext,
+    handle: string,
+    executor: QueryExecutor = this.database,
+  ): Promise<void> {
+    await this.organizations.verifyTenantContext(context, undefined, executor);
+    const nodes = await listNodes(executor, context.organizationId);
+    if (!nodes.some((node) => node.handle === handle && node.status === "active")) {
+      throw new Error(`활성 OrganizationNode를 찾을 수 없습니다: ${handle}`);
+    }
+  }
+
   public async registerReference(
     context: TenantContext,
     nodeHandle: string,

@@ -4,7 +4,13 @@ import { type OrganizationService, type TenantContext } from "@massion/identity"
 import { type OrganizationGraphService } from "@massion/organization";
 import { applyMigrations, type MassionDatabase, type QueryExecutor } from "@massion/storage";
 
-import { WORK_CORE_MIGRATION, WORK_DELIVERY_MIGRATION } from "./schema.js";
+import {
+  WORK_COLLABORATION_MIGRATION,
+  WORK_CONSTRAINTS_MIGRATION,
+  WORK_CORE_MIGRATION,
+  WORK_DELIVERY_MIGRATION,
+  WORK_RECORDS_MIGRATION,
+} from "./schema.js";
 
 export type WorkStatus =
   | "draft"
@@ -197,6 +203,256 @@ export interface SaveCheckpointInput extends WorkCommandInput {
   readonly data: unknown;
 }
 
+export type CollaborationMessageType =
+  | "question"
+  | "answer"
+  | "proposal"
+  | "challenge"
+  | "review_request"
+  | "change_request"
+  | "evidence"
+  | "decision"
+  | "handoff"
+  | "status";
+
+export interface CollaborationRoom {
+  readonly room_id: string;
+  readonly organization_id: string;
+  readonly work_id: string;
+  readonly title: string;
+  readonly coordinator_handle: string;
+  readonly status: "active" | "paused" | "closed" | "cancelled";
+  readonly revision: number;
+  readonly next_sequence: number;
+  readonly max_parallel: number;
+  readonly max_tokens: number;
+  readonly max_cost_micros: number;
+  readonly max_rounds: number;
+  readonly round_count: number;
+  readonly deadline?: unknown;
+  readonly created_at: unknown;
+  readonly updated_at: unknown;
+}
+
+export interface CollaborationParticipant {
+  readonly participant_id: string;
+  readonly organization_id: string;
+  readonly work_id: string;
+  readonly room_id: string;
+  readonly kind: "user" | "agent";
+  readonly subject_id: string;
+  readonly role: "coordinator" | "participant" | "observer";
+  readonly status: "active" | "left";
+  readonly joined_at: unknown;
+}
+
+export interface CollaborationMessage {
+  readonly message_id: string;
+  readonly organization_id: string;
+  readonly work_id: string;
+  readonly room_id: string;
+  readonly sequence: number;
+  readonly message_type: CollaborationMessageType;
+  readonly author_kind: "user" | "agent";
+  readonly author_id: string;
+  readonly content: string;
+  readonly reply_to_message_id?: string;
+  readonly caused_by_message_id?: string;
+  readonly task_id?: string;
+  readonly context_version_id?: string;
+  readonly execution_id?: string;
+  readonly artifact_version_id?: string;
+  readonly token_count: number;
+  readonly cost_micros: number;
+  readonly created_at: unknown;
+}
+
+export interface SharedContextReference {
+  readonly shared_context_reference_id: string;
+  readonly organization_id: string;
+  readonly work_id: string;
+  readonly room_id: string;
+  readonly source_kind: string;
+  readonly source_id: string;
+  readonly version_id: string;
+  readonly checksum: string;
+  readonly created_at: unknown;
+}
+
+export interface ResourceLease {
+  readonly lease_id: string;
+  readonly organization_id: string;
+  readonly work_id: string;
+  readonly resource_key: string;
+  readonly holder_id: string;
+  readonly status: "active" | "released";
+  readonly version: number;
+  readonly expires_at: unknown;
+  readonly created_at: unknown;
+  readonly updated_at: unknown;
+}
+
+export interface OpenRoomInput extends WorkCommandInput {
+  readonly title: string;
+  readonly coordinatorHandle: string;
+  readonly participants: readonly {
+    readonly kind: "user" | "agent";
+    readonly subjectId: string;
+    readonly role: "coordinator" | "participant" | "observer";
+  }[];
+  readonly limits: {
+    readonly maxParallel: number;
+    readonly maxTokens: number;
+    readonly maxCostMicros: number;
+    readonly maxRounds: number;
+    readonly deadline?: string;
+  };
+}
+
+export interface PostMessageInput {
+  readonly commandId: string;
+  readonly workId: string;
+  readonly roomId: string;
+  readonly messageType: CollaborationMessageType;
+  readonly authorKind: "user" | "agent";
+  readonly authorId: string;
+  readonly content: string;
+  readonly replyToMessageId?: string;
+  readonly causedByMessageId?: string;
+  readonly taskId?: string;
+  readonly contextVersionId?: string;
+  readonly executionId?: string;
+  readonly artifactVersionId?: string;
+  readonly tokenCount: number;
+  readonly costMicros: number;
+}
+
+export interface AddSharedContextInput extends WorkCommandInput {
+  readonly roomId: string;
+  readonly sourceKind: string;
+  readonly sourceId: string;
+  readonly versionId: string;
+  readonly checksum: string;
+}
+
+export interface AcquireLeaseInput extends WorkCommandInput {
+  readonly resourceKey: string;
+  readonly holderId: string;
+  readonly ttlMs: number;
+}
+
+export interface ChangeLeaseInput extends WorkCommandInput {
+  readonly resourceKey: string;
+  readonly holderId: string;
+  readonly expectedLeaseVersion: number;
+  readonly ttlMs?: number;
+}
+
+export interface WorkArtifact {
+  readonly artifact_id: string;
+  readonly organization_id: string;
+  readonly work_id: string;
+  readonly kind: string;
+  readonly name: string;
+  readonly created_by: string;
+  readonly created_at: unknown;
+}
+
+export interface ArtifactVersion {
+  readonly artifact_version_id: string;
+  readonly artifact_id: string;
+  readonly organization_id: string;
+  readonly work_id: string;
+  readonly version: number;
+  readonly checksum: string;
+  readonly media_type: string;
+  readonly content_json: string;
+  readonly source_artifact_version_id?: string;
+  readonly created_by: string;
+  readonly created_at: unknown;
+}
+
+export interface WorkVerification {
+  readonly verification_id: string;
+  readonly organization_id: string;
+  readonly work_id: string;
+  readonly verifier_id: string;
+  readonly passed: boolean;
+  readonly criteria_json: string;
+  readonly evidence_artifact_version_ids: readonly string[];
+  readonly created_at: unknown;
+}
+
+export interface WorkRecord {
+  readonly work_record_id: string;
+  readonly organization_id: string;
+  readonly work_id: string;
+  readonly version: number;
+  readonly recorded_work_revision: number;
+  readonly summary: string;
+  readonly event_start_sequence: number;
+  readonly event_end_sequence: number;
+  readonly decision_message_ids: readonly string[];
+  readonly artifact_version_ids: readonly string[];
+  readonly verification_ids: readonly string[];
+  readonly finalized: boolean;
+  readonly finalized_by: string;
+  readonly finalized_at: unknown;
+}
+
+export interface WorkMergePlan {
+  readonly merge_plan_id: string;
+  readonly organization_id: string;
+  readonly parent_work_id: string;
+  readonly child_work_id: string;
+  readonly parent_revision: number;
+  readonly status: "ready" | "conflicted" | "applied";
+  readonly conflict_json: string;
+  readonly artifact_version_ids: readonly string[];
+  readonly decision_message_ids: readonly string[];
+  readonly verification_ids: readonly string[];
+  readonly created_by: string;
+  readonly created_at: unknown;
+  readonly applied_at?: unknown;
+}
+
+export interface ForkWorkInput extends WorkCommandInput {
+  readonly objective: string;
+}
+
+export interface CreateArtifactVersionInput extends WorkCommandInput {
+  readonly artifactId?: string;
+  readonly kind: string;
+  readonly name: string;
+  readonly mediaType: string;
+  readonly content: unknown;
+}
+
+export interface RecordVerificationInput extends WorkCommandInput {
+  readonly verifierId: string;
+  readonly passed: boolean;
+  readonly criteria: readonly { readonly criterion: string; readonly passed: boolean; readonly evidence?: string }[];
+  readonly evidenceArtifactVersionIds: readonly string[];
+}
+
+export interface FinalizeRecordInput extends WorkCommandInput {
+  readonly summary: string;
+}
+
+export interface PlanMergeInput extends WorkCommandInput {
+  readonly childWorkId: string;
+}
+
+export interface ApplyMergeInput extends WorkCommandInput {
+  readonly mergePlanId: string;
+}
+
+export interface WorkComplianceFinding {
+  readonly code:
+    "revision" | "event-sequence" | "plan" | "task-dag" | "assignment" | "task-completion" | "verification" | "record";
+  readonly message: string;
+}
+
 const ALLOWED_TRANSITIONS: Readonly<Record<WorkStatus, readonly WorkStatus[]>> = {
   draft: ["planned", "cancelled"],
   planned: ["ready", "cancelled"],
@@ -211,6 +467,23 @@ const ALLOWED_TRANSITIONS: Readonly<Record<WorkStatus, readonly WorkStatus[]>> =
   cancelled: [],
 };
 
+export function canTransitionWork(current: WorkStatus, target: WorkStatus): boolean {
+  return ALLOWED_TRANSITIONS[current].includes(target);
+}
+
+const COLLABORATION_MESSAGE_TYPES = new Set<CollaborationMessageType>([
+  "question",
+  "answer",
+  "proposal",
+  "challenge",
+  "review_request",
+  "change_request",
+  "evidence",
+  "decision",
+  "handoff",
+  "status",
+]);
+
 function canonicalJson(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
   if (value && typeof value === "object") {
@@ -220,6 +493,15 @@ function canonicalJson(value: unknown): string {
       .join(",")}}`;
   }
   return JSON.stringify(value);
+}
+
+function datetimeMillis(value: unknown): number {
+  if (value instanceof Date) return value.getTime();
+  if (typeof value === "string" || typeof value === "number") return new Date(value).getTime();
+  const serialized = JSON.stringify(value);
+  if (!serialized) return Number.NaN;
+  const parsed = JSON.parse(serialized) as unknown;
+  return typeof parsed === "string" || typeof parsed === "number" ? new Date(parsed).getTime() : Number.NaN;
 }
 
 async function findWork(executor: QueryExecutor, organizationId: string, workId: string): Promise<Work | undefined> {
@@ -297,7 +579,13 @@ export class WorkService {
     organizations: OrganizationService,
     graph?: OrganizationGraphService,
   ): Promise<WorkService> {
-    await applyMigrations(database, [WORK_CORE_MIGRATION, WORK_DELIVERY_MIGRATION]);
+    await applyMigrations(database, [
+      WORK_CORE_MIGRATION,
+      WORK_DELIVERY_MIGRATION,
+      WORK_COLLABORATION_MIGRATION,
+      WORK_RECORDS_MIGRATION,
+      WORK_CONSTRAINTS_MIGRATION,
+    ]);
     return new WorkService(database, organizations, graph);
   }
 
@@ -478,11 +766,8 @@ export class WorkService {
     input: AssignTaskInput,
   ): Promise<WorkCommandResult & { assignment: TaskAssignment }> {
     if (!this.graph) throw new Error("Organization Graph reader가 필요합니다");
-    const nodes = await this.graph.listNodes(context);
-    if (!nodes.some((node) => node.handle === input.agentHandle && node.status === "active")) {
-      throw new Error(`활성 OrganizationNode를 찾을 수 없습니다: ${input.agentHandle}`);
-    }
     return await this.mutate(context, input, "task_assigned", async (transaction, work) => {
+      await this.graph?.verifyActiveNode(context, input.agentHandle, transaction);
       const tasks = await listTasksWith(transaction, context.organizationId, work.work_id);
       if (!tasks.some((task) => task.task_id === input.taskId))
         throw new Error(`Task를 찾을 수 없습니다: ${input.taskId}`);
@@ -668,9 +953,767 @@ export class WorkService {
     });
   }
 
+  public async openRoom(
+    context: TenantContext,
+    input: OpenRoomInput,
+  ): Promise<WorkCommandResult & { room: CollaborationRoom; participants: CollaborationParticipant[] }> {
+    if (!this.graph) throw new Error("Organization Graph reader가 필요합니다");
+    if (!input.title.trim()) throw new Error("Collaboration Room 제목은 비어 있을 수 없습니다");
+    if (
+      input.limits.maxParallel < 1 ||
+      input.limits.maxTokens < 1 ||
+      input.limits.maxCostMicros < 0 ||
+      input.limits.maxRounds < 1
+    ) {
+      throw new Error("Collaboration Room 한계 값이 유효하지 않습니다");
+    }
+    if (
+      !input.participants.some(
+        (participant) =>
+          participant.kind === "agent" &&
+          participant.subjectId === input.coordinatorHandle &&
+          participant.role === "coordinator",
+      )
+    ) {
+      throw new Error("coordinator Agent가 참여자에 포함되어야 합니다");
+    }
+    return await this.mutate(context, input, "collaboration_room_opened", async (transaction, work) => {
+      await this.graph?.verifyActiveNode(context, input.coordinatorHandle, transaction);
+      for (const participant of input.participants) {
+        if (participant.kind === "agent")
+          await this.graph?.verifyActiveNode(context, participant.subjectId, transaction);
+        else
+          await this.organizations.verifyOrganizationMember(participant.subjectId, context.organizationId, transaction);
+      }
+      const roomId = randomUUID();
+      const [rooms] = await transaction.query<[CollaborationRoom[]]>(
+        "CREATE collaboration_room CONTENT { room_id: $room_id, organization_id: $organization_id, work_id: $work_id, title: $title, coordinator_handle: $coordinator_handle, status: 'active', revision: 1, next_sequence: 1, max_parallel: $max_parallel, max_tokens: $max_tokens, max_cost_micros: $max_cost_micros, max_rounds: $max_rounds, round_count: 0, deadline: $deadline, created_at: time::now(), updated_at: time::now() } RETURN AFTER;",
+        {
+          room_id: roomId,
+          organization_id: context.organizationId,
+          work_id: work.work_id,
+          title: input.title.trim(),
+          coordinator_handle: input.coordinatorHandle,
+          max_parallel: input.limits.maxParallel,
+          max_tokens: input.limits.maxTokens,
+          max_cost_micros: input.limits.maxCostMicros,
+          max_rounds: input.limits.maxRounds,
+          deadline: input.limits.deadline ? new Date(input.limits.deadline) : undefined,
+        },
+      );
+      const participants: CollaborationParticipant[] = [];
+      for (const participant of input.participants) {
+        const [records] = await transaction.query<[CollaborationParticipant[]]>(
+          "CREATE collaboration_participant CONTENT { participant_id: $participant_id, organization_id: $organization_id, work_id: $work_id, room_id: $room_id, kind: $kind, subject_id: $subject_id, role: $role, status: 'active', joined_at: time::now() } RETURN AFTER;",
+          {
+            participant_id: randomUUID(),
+            organization_id: context.organizationId,
+            work_id: work.work_id,
+            room_id: roomId,
+            kind: participant.kind,
+            subject_id: participant.subjectId,
+            role: participant.role,
+          },
+        );
+        if (records[0]) participants.push(records[0]);
+      }
+      const room = rooms[0];
+      if (!room || participants.length !== input.participants.length)
+        throw new Error("Collaboration Room 생성 결과가 불완전합니다");
+      return { room, participants };
+    });
+  }
+
+  public async postMessage(
+    context: TenantContext,
+    input: PostMessageInput,
+  ): Promise<WorkCommandResult & { room: CollaborationRoom; message: CollaborationMessage }> {
+    await this.verify(context);
+    const content = input.content.trim();
+    if (!content) throw new Error("Collaboration message 내용은 비어 있을 수 없습니다");
+    if (!COLLABORATION_MESSAGE_TYPES.has(input.messageType)) {
+      throw new Error("지원하지 않는 Collaboration message type입니다");
+    }
+    if (input.authorKind === "user" && input.authorId !== context.userId) {
+      throw new Error("다른 사용자를 작성자로 지정할 수 없습니다");
+    }
+    if (input.tokenCount < 0 || input.costMicros < 0) throw new Error("token과 cost는 음수일 수 없습니다");
+    const requestJson = canonicalJson(input);
+    return await this.database.transaction(async (transaction) => {
+      await this.organizations.verifyTenantContext(context, undefined, transaction);
+      const repeated = await findCommand(transaction, context.organizationId, input.commandId);
+      if (repeated) {
+        return this.replay(repeated, requestJson) as WorkCommandResult & {
+          room: CollaborationRoom;
+          message: CollaborationMessage;
+        };
+      }
+      const work = await findWork(transaction, context.organizationId, input.workId);
+      if (!work) throw new Error(`Work를 찾을 수 없습니다: ${input.workId}`);
+      if (["completed", "cancelled"].includes(work.status)) {
+        throw new Error("terminal Work에는 Collaboration message를 추가할 수 없습니다");
+      }
+      const [rooms] = await transaction.query<[CollaborationRoom[]]>(
+        "SELECT * OMIT id FROM collaboration_room WHERE organization_id = $organization_id AND work_id = $work_id AND room_id = $room_id LIMIT 1;",
+        { organization_id: context.organizationId, work_id: work.work_id, room_id: input.roomId },
+      );
+      const room = rooms[0];
+      if (!room || room.status !== "active") throw new Error("활성 Collaboration Room을 찾을 수 없습니다");
+      const [participants] = await transaction.query<[CollaborationParticipant[]]>(
+        "SELECT * OMIT id FROM collaboration_participant WHERE organization_id = $organization_id AND room_id = $room_id AND kind = $kind AND subject_id = $subject_id AND status = 'active' LIMIT 1;",
+        {
+          organization_id: context.organizationId,
+          room_id: room.room_id,
+          kind: input.authorKind,
+          subject_id: input.authorId,
+        },
+      );
+      if (!participants[0]) throw new Error("활성 Collaboration participant만 메시지를 작성할 수 있습니다");
+      const [messages] = await transaction.query<[CollaborationMessage[]]>(
+        "SELECT * OMIT id FROM collaboration_message WHERE organization_id = $organization_id AND room_id = $room_id ORDER BY sequence ASC;",
+        { organization_id: context.organizationId, room_id: room.room_id },
+      );
+      for (const referenceId of [input.replyToMessageId, input.causedByMessageId].filter(Boolean)) {
+        if (!messages.some((message) => message.message_id === referenceId)) {
+          throw new Error(`같은 Room의 원인 message를 찾을 수 없습니다: ${referenceId ?? ""}`);
+        }
+      }
+      const usedTokens = messages.reduce((sum, message) => sum + message.token_count, 0);
+      const usedCost = messages.reduce((sum, message) => sum + message.cost_micros, 0);
+      if (room.round_count + 1 > room.max_rounds) throw new Error("Collaboration Room round 한도를 초과했습니다");
+      if (usedTokens + input.tokenCount > room.max_tokens)
+        throw new Error("Collaboration Room token 한도를 초과했습니다");
+      if (usedCost + input.costMicros > room.max_cost_micros)
+        throw new Error("Collaboration Room cost 한도를 초과했습니다");
+      if (room.deadline && Date.now() > datetimeMillis(room.deadline))
+        throw new Error("Collaboration Room deadline이 지났습니다");
+      const [created] = await transaction.query<[CollaborationMessage[]]>(
+        "CREATE collaboration_message CONTENT { message_id: $message_id, organization_id: $organization_id, work_id: $work_id, room_id: $room_id, sequence: $sequence, message_type: $message_type, author_kind: $author_kind, author_id: $author_id, content: $content, reply_to_message_id: $reply_to_message_id, caused_by_message_id: $caused_by_message_id, task_id: $task_id, context_version_id: $context_version_id, execution_id: $execution_id, artifact_version_id: $artifact_version_id, token_count: $token_count, cost_micros: $cost_micros, created_at: time::now() } RETURN AFTER;",
+        {
+          message_id: randomUUID(),
+          organization_id: context.organizationId,
+          work_id: work.work_id,
+          room_id: room.room_id,
+          sequence: room.next_sequence,
+          message_type: input.messageType,
+          author_kind: input.authorKind,
+          author_id: input.authorId,
+          content,
+          reply_to_message_id: input.replyToMessageId,
+          caused_by_message_id: input.causedByMessageId,
+          task_id: input.taskId,
+          context_version_id: input.contextVersionId,
+          execution_id: input.executionId,
+          artifact_version_id: input.artifactVersionId,
+          token_count: input.tokenCount,
+          cost_micros: input.costMicros,
+        },
+      );
+      await transaction.query(
+        "UPDATE collaboration_room SET revision = $revision, next_sequence = $next_sequence, round_count = $round_count, updated_at = time::now() WHERE organization_id = $organization_id AND room_id = $room_id; UPDATE work SET revision = $work_revision, updated_at = time::now() WHERE organization_id = $organization_id AND work_id = $work_id;",
+        {
+          revision: room.revision + 1,
+          next_sequence: room.next_sequence + 1,
+          round_count: room.round_count + 1,
+          organization_id: context.organizationId,
+          room_id: room.room_id,
+          work_revision: work.revision + 1,
+          work_id: work.work_id,
+        },
+      );
+      const message = created[0];
+      const updatedWork = await findWork(transaction, context.organizationId, work.work_id);
+      if (!message || !updatedWork) throw new Error("Collaboration message 결과가 불완전합니다");
+      const updatedRoom = {
+        ...room,
+        revision: room.revision + 1,
+        next_sequence: room.next_sequence + 1,
+        round_count: room.round_count + 1,
+      };
+      const provisional = { work: updatedWork, room: updatedRoom, message };
+      const event = await this.appendEvent(
+        transaction,
+        context,
+        updatedWork,
+        input.commandId,
+        "collaboration_message_posted",
+        requestJson,
+        { roomId: room.room_id, messageId: message.message_id },
+        provisional,
+      );
+      const result = { ...provisional, event };
+      await transaction.query("UPDATE work_event SET result_json = $result_json WHERE event_id = $event_id;", {
+        result_json: JSON.stringify(result),
+        event_id: event.event_id,
+      });
+      return result;
+    });
+  }
+
+  public async listMessages(context: TenantContext, workId: string, roomId: string): Promise<CollaborationMessage[]> {
+    await this.getWork(context, workId);
+    const [messages] = await this.database.query<[CollaborationMessage[]]>(
+      "SELECT * OMIT id FROM collaboration_message WHERE organization_id = $organization_id AND work_id = $work_id AND room_id = $room_id ORDER BY sequence ASC;",
+      { organization_id: context.organizationId, work_id: workId, room_id: roomId },
+    );
+    return messages;
+  }
+
+  public async addSharedContext(
+    context: TenantContext,
+    input: AddSharedContextInput,
+  ): Promise<WorkCommandResult & { reference: SharedContextReference }> {
+    if (!/^[a-f0-9]{64}$/.test(input.checksum)) throw new Error("Shared Context checksum은 SHA-256이어야 합니다");
+    return await this.mutate(context, input, "shared_context_attached", async (transaction, work) => {
+      const [rooms] = await transaction.query<[CollaborationRoom[]]>(
+        "SELECT * OMIT id FROM collaboration_room WHERE organization_id = $organization_id AND work_id = $work_id AND room_id = $room_id LIMIT 1;",
+        { organization_id: context.organizationId, work_id: work.work_id, room_id: input.roomId },
+      );
+      if (!rooms[0]) throw new Error(`Collaboration Room을 찾을 수 없습니다: ${input.roomId}`);
+      const [references] = await transaction.query<[SharedContextReference[]]>(
+        "CREATE shared_context_reference CONTENT { shared_context_reference_id: $reference_id, organization_id: $organization_id, work_id: $work_id, room_id: $room_id, source_kind: $source_kind, source_id: $source_id, version_id: $version_id, checksum: $checksum, created_at: time::now() } RETURN AFTER;",
+        {
+          reference_id: randomUUID(),
+          organization_id: context.organizationId,
+          work_id: work.work_id,
+          room_id: input.roomId,
+          source_kind: input.sourceKind,
+          source_id: input.sourceId,
+          version_id: input.versionId,
+          checksum: input.checksum,
+        },
+      );
+      const reference = references[0];
+      if (!reference) throw new Error("Shared Context Reference 생성 결과가 없습니다");
+      return { reference };
+    });
+  }
+
+  public async acquireLease(
+    context: TenantContext,
+    input: AcquireLeaseInput,
+  ): Promise<WorkCommandResult & { lease: ResourceLease }> {
+    if (input.ttlMs < 1) throw new Error("lease TTL은 1ms 이상이어야 합니다");
+    return await this.mutate(context, input, "resource_lease_acquired", async (transaction, work) => {
+      const [leases] = await transaction.query<[ResourceLease[]]>(
+        "SELECT * OMIT id FROM resource_lease WHERE organization_id = $organization_id AND work_id = $work_id AND resource_key = $resource_key LIMIT 1;",
+        { organization_id: context.organizationId, work_id: work.work_id, resource_key: input.resourceKey },
+      );
+      const existing = leases[0];
+      if (existing && existing.status === "active" && datetimeMillis(existing.expires_at) > Date.now()) {
+        throw new Error(`resource lease가 이미 활성 상태입니다: ${input.resourceKey}`);
+      }
+      const expiresAt = new Date(Date.now() + input.ttlMs).toISOString();
+      if (existing) {
+        await transaction.query(
+          "UPDATE resource_lease SET holder_id = $holder_id, status = 'active', version = $version, expires_at = type::datetime($expires_at), updated_at = time::now() WHERE organization_id = $organization_id AND lease_id = $lease_id;",
+          {
+            holder_id: input.holderId,
+            version: existing.version + 1,
+            expires_at: expiresAt,
+            organization_id: context.organizationId,
+            lease_id: existing.lease_id,
+          },
+        );
+        return {
+          lease: {
+            ...existing,
+            holder_id: input.holderId,
+            status: "active",
+            version: existing.version + 1,
+            expires_at: expiresAt,
+          },
+        };
+      }
+      const [created] = await transaction.query<[ResourceLease[]]>(
+        "CREATE resource_lease CONTENT { lease_id: $lease_id, organization_id: $organization_id, work_id: $work_id, resource_key: $resource_key, holder_id: $holder_id, status: 'active', version: 1, expires_at: type::datetime($expires_at), created_at: time::now(), updated_at: time::now() } RETURN AFTER;",
+        {
+          lease_id: randomUUID(),
+          organization_id: context.organizationId,
+          work_id: work.work_id,
+          resource_key: input.resourceKey,
+          holder_id: input.holderId,
+          expires_at: expiresAt,
+        },
+      );
+      const lease = created[0];
+      if (!lease) throw new Error("Resource lease 생성 결과가 없습니다");
+      return { lease };
+    });
+  }
+
+  public async releaseLease(
+    context: TenantContext,
+    input: ChangeLeaseInput,
+  ): Promise<WorkCommandResult & { lease: ResourceLease }> {
+    return await this.mutate(context, input, "resource_lease_released", async (transaction, work) => {
+      const [leases] = await transaction.query<[ResourceLease[]]>(
+        "SELECT * OMIT id FROM resource_lease WHERE organization_id = $organization_id AND work_id = $work_id AND resource_key = $resource_key LIMIT 1;",
+        { organization_id: context.organizationId, work_id: work.work_id, resource_key: input.resourceKey },
+      );
+      const lease = leases[0];
+      if (!lease || lease.status !== "active" || lease.holder_id !== input.holderId)
+        throw new Error("holder의 활성 resource lease가 없습니다");
+      if (lease.version !== input.expectedLeaseVersion)
+        throw new Error(`현재 lease version은 ${String(lease.version)}입니다`);
+      await transaction.query(
+        "UPDATE resource_lease SET status = 'released', version = $version, updated_at = time::now() WHERE organization_id = $organization_id AND lease_id = $lease_id;",
+        { version: lease.version + 1, organization_id: context.organizationId, lease_id: lease.lease_id },
+      );
+      return { lease: { ...lease, status: "released", version: lease.version + 1 } };
+    });
+  }
+
+  public async renewLease(
+    context: TenantContext,
+    input: ChangeLeaseInput & { readonly ttlMs: number },
+  ): Promise<WorkCommandResult & { lease: ResourceLease }> {
+    if (input.ttlMs < 1) throw new Error("lease TTL은 1ms 이상이어야 합니다");
+    return await this.mutate(context, input, "resource_lease_renewed", async (transaction, work) => {
+      const [leases] = await transaction.query<[ResourceLease[]]>(
+        "SELECT * OMIT id FROM resource_lease WHERE organization_id = $organization_id AND work_id = $work_id AND resource_key = $resource_key LIMIT 1;",
+        { organization_id: context.organizationId, work_id: work.work_id, resource_key: input.resourceKey },
+      );
+      const lease = leases[0];
+      if (!lease || lease.status !== "active" || lease.holder_id !== input.holderId) {
+        throw new Error("holder의 활성 resource lease가 없습니다");
+      }
+      if (lease.version !== input.expectedLeaseVersion) {
+        throw new Error(`현재 lease version은 ${String(lease.version)}입니다`);
+      }
+      const expiresAt = new Date(Date.now() + input.ttlMs).toISOString();
+      await transaction.query(
+        "UPDATE resource_lease SET version = $version, expires_at = type::datetime($expires_at), updated_at = time::now() WHERE organization_id = $organization_id AND lease_id = $lease_id;",
+        {
+          version: lease.version + 1,
+          expires_at: expiresAt,
+          organization_id: context.organizationId,
+          lease_id: lease.lease_id,
+        },
+      );
+      return { lease: { ...lease, version: lease.version + 1, expires_at: expiresAt } };
+    });
+  }
+
+  public async forkWork(
+    context: TenantContext,
+    input: ForkWorkInput,
+  ): Promise<WorkCommandResult & { childRequest: WorkRequest; childWork: Work; childEvent: WorkEvent }> {
+    const objective = input.objective.trim();
+    if (!objective) throw new Error("자식 Work objective는 비어 있을 수 없습니다");
+    return await this.mutate(context, input, "work_forked", async (transaction, parent) => {
+      const requestId = randomUUID();
+      const childWorkId = randomUUID();
+      const [requests] = await transaction.query<[WorkRequest[]]>(
+        "CREATE work_request CONTENT { request_id: $request_id, organization_id: $organization_id, requester_user_id: $requester_user_id, text: $text, surface: 'fork', created_at: time::now() } RETURN AFTER;",
+        {
+          request_id: requestId,
+          organization_id: context.organizationId,
+          requester_user_id: context.userId,
+          text: objective,
+        },
+      );
+      const [works] = await transaction.query<[Work[]]>(
+        "CREATE work CONTENT { work_id: $work_id, organization_id: $organization_id, request_id: $request_id, parent_work_id: $parent_work_id, project_id: $project_id, status: 'draft', revision: 1, organization_version_id: $organization_version_id, context_version_id: $context_version_id, policy_version_id: $policy_version_id, prompt_version_id: $prompt_version_id, artifact_version_ids: $artifact_version_ids, created_at: time::now(), updated_at: time::now() } RETURN AFTER;",
+        {
+          work_id: childWorkId,
+          organization_id: context.organizationId,
+          request_id: requestId,
+          parent_work_id: parent.work_id,
+          project_id: parent.project_id,
+          organization_version_id: parent.organization_version_id,
+          context_version_id: parent.context_version_id,
+          policy_version_id: parent.policy_version_id,
+          prompt_version_id: parent.prompt_version_id,
+          artifact_version_ids: parent.artifact_version_ids,
+        },
+      );
+      const childRequest = requests[0];
+      const childWork = works[0];
+      if (!childRequest || !childWork) throw new Error("자식 Work 생성 결과가 불완전합니다");
+      const childCommandId = randomUUID();
+      const childProvisional = { request: childRequest, work: childWork };
+      const childEvent = await this.appendEvent(
+        transaction,
+        context,
+        childWork,
+        childCommandId,
+        "work_created_from_fork",
+        canonicalJson({ parentWorkId: parent.work_id, objective }),
+        { parentWorkId: parent.work_id },
+        childProvisional,
+      );
+      const childResult = { ...childProvisional, event: childEvent };
+      await transaction.query("UPDATE work_event SET result_json = $result_json WHERE event_id = $event_id;", {
+        result_json: JSON.stringify(childResult),
+        event_id: childEvent.event_id,
+      });
+      return { childRequest, childWork, childEvent };
+    });
+  }
+
+  public async createArtifactVersion(
+    context: TenantContext,
+    input: CreateArtifactVersionInput,
+  ): Promise<WorkCommandResult & { artifact: WorkArtifact; artifactVersion: ArtifactVersion }> {
+    if (!input.kind.trim() || !input.name.trim() || !input.mediaType.trim())
+      throw new Error("Artifact kind, name과 media type이 필요합니다");
+    return await this.mutate(context, input, "artifact_version_created", async (transaction, work) => {
+      let artifact: WorkArtifact | undefined;
+      if (input.artifactId) {
+        const [artifacts] = await transaction.query<[WorkArtifact[]]>(
+          "SELECT * OMIT id FROM work_artifact WHERE organization_id = $organization_id AND work_id = $work_id AND artifact_id = $artifact_id LIMIT 1;",
+          { organization_id: context.organizationId, work_id: work.work_id, artifact_id: input.artifactId },
+        );
+        artifact = artifacts[0];
+        if (!artifact) throw new Error(`같은 Work의 Artifact를 찾을 수 없습니다: ${input.artifactId}`);
+      } else {
+        const [artifacts] = await transaction.query<[WorkArtifact[]]>(
+          "CREATE work_artifact CONTENT { artifact_id: $artifact_id, organization_id: $organization_id, work_id: $work_id, kind: $kind, name: $name, created_by: $created_by, created_at: time::now() } RETURN AFTER;",
+          {
+            artifact_id: randomUUID(),
+            organization_id: context.organizationId,
+            work_id: work.work_id,
+            kind: input.kind.trim(),
+            name: input.name.trim(),
+            created_by: context.userId,
+          },
+        );
+        artifact = artifacts[0];
+      }
+      if (!artifact) throw new Error("Artifact 생성 결과가 없습니다");
+      const [versions] = await transaction.query<[ArtifactVersion[]]>(
+        "SELECT * OMIT id FROM artifact_version WHERE organization_id = $organization_id AND artifact_id = $artifact_id;",
+        { organization_id: context.organizationId, artifact_id: artifact.artifact_id },
+      );
+      const version = versions.reduce((maximum, candidate) => Math.max(maximum, candidate.version), 0) + 1;
+      const contentJson = canonicalJson(input.content);
+      const [created] = await transaction.query<[ArtifactVersion[]]>(
+        "CREATE artifact_version CONTENT { artifact_version_id: $artifact_version_id, artifact_id: $artifact_id, organization_id: $organization_id, work_id: $work_id, version: $version, checksum: $checksum, media_type: $media_type, content_json: $content_json, created_by: $created_by, created_at: time::now() } RETURN AFTER;",
+        {
+          artifact_version_id: randomUUID(),
+          artifact_id: artifact.artifact_id,
+          organization_id: context.organizationId,
+          work_id: work.work_id,
+          version,
+          checksum: createHash("sha256").update(contentJson).digest("hex"),
+          media_type: input.mediaType.trim(),
+          content_json: contentJson,
+          created_by: context.userId,
+        },
+      );
+      const artifactVersion = created[0];
+      if (!artifactVersion) throw new Error("ArtifactVersion 생성 결과가 없습니다");
+      const references = [...new Set([...work.artifact_version_ids, artifactVersion.artifact_version_id])];
+      await transaction.query(
+        "UPDATE work SET artifact_version_ids = $artifact_version_ids WHERE organization_id = $organization_id AND work_id = $work_id;",
+        { artifact_version_ids: references, organization_id: context.organizationId, work_id: work.work_id },
+      );
+      return { artifact, artifactVersion };
+    });
+  }
+
+  public async recordVerification(
+    context: TenantContext,
+    input: RecordVerificationInput,
+  ): Promise<WorkCommandResult & { verification: WorkVerification }> {
+    if (input.criteria.length === 0) throw new Error("Verification criteria가 필요합니다");
+    if (input.passed !== input.criteria.every((criterion) => criterion.passed)) {
+      throw new Error("Verification passed 값과 criteria 결과가 일치하지 않습니다");
+    }
+    return await this.mutate(context, input, "verification_recorded", async (transaction, work) => {
+      if (this.graph) await this.graph.verifyActiveNode(context, input.verifierId, transaction);
+      for (const versionId of input.evidenceArtifactVersionIds) {
+        if (!work.artifact_version_ids.includes(versionId))
+          throw new Error(`Work의 ArtifactVersion이 아닙니다: ${versionId}`);
+      }
+      const [records] = await transaction.query<[WorkVerification[]]>(
+        "CREATE work_verification CONTENT { verification_id: $verification_id, organization_id: $organization_id, work_id: $work_id, verifier_id: $verifier_id, passed: $passed, criteria_json: $criteria_json, evidence_artifact_version_ids: $evidence_ids, created_at: time::now() } RETURN AFTER;",
+        {
+          verification_id: randomUUID(),
+          organization_id: context.organizationId,
+          work_id: work.work_id,
+          verifier_id: input.verifierId,
+          passed: input.passed,
+          criteria_json: canonicalJson(input.criteria),
+          evidence_ids: input.evidenceArtifactVersionIds,
+        },
+      );
+      const verification = records[0];
+      if (!verification) throw new Error("Verification 생성 결과가 없습니다");
+      return { verification };
+    });
+  }
+
+  public async finalizeRecord(
+    context: TenantContext,
+    input: FinalizeRecordInput,
+  ): Promise<WorkCommandResult & { record: WorkRecord }> {
+    const summary = input.summary.trim();
+    if (!summary) throw new Error("WorkRecord summary는 비어 있을 수 없습니다");
+    return await this.mutate(context, input, "work_record_finalized", async (transaction, work) => {
+      const [existing] = await transaction.query<[WorkRecord[]]>(
+        "SELECT * OMIT id FROM work_record WHERE organization_id = $organization_id AND work_id = $work_id ORDER BY version ASC;",
+        { organization_id: context.organizationId, work_id: work.work_id },
+      );
+      const version = existing.reduce((maximum, record) => Math.max(maximum, record.version), 0) + 1;
+      const events = await listEventsWith(transaction, context.organizationId, work.work_id);
+      const [decisions] = await transaction.query<[CollaborationMessage[]]>(
+        "SELECT * OMIT id FROM collaboration_message WHERE organization_id = $organization_id AND work_id = $work_id AND message_type = 'decision' ORDER BY sequence ASC;",
+        { organization_id: context.organizationId, work_id: work.work_id },
+      );
+      const [verifications] = await transaction.query<[WorkVerification[]]>(
+        "SELECT * OMIT id FROM work_verification WHERE organization_id = $organization_id AND work_id = $work_id;",
+        { organization_id: context.organizationId, work_id: work.work_id },
+      );
+      const [records] = await transaction.query<[WorkRecord[]]>(
+        "CREATE work_record CONTENT { work_record_id: $record_id, organization_id: $organization_id, work_id: $work_id, version: $version, recorded_work_revision: $recorded_work_revision, summary: $summary, event_start_sequence: $start_sequence, event_end_sequence: $end_sequence, decision_message_ids: $decision_ids, artifact_version_ids: $artifact_ids, verification_ids: $verification_ids, finalized: true, finalized_by: $finalized_by, finalized_at: time::now() } RETURN AFTER;",
+        {
+          record_id: randomUUID(),
+          organization_id: context.organizationId,
+          work_id: work.work_id,
+          version,
+          recorded_work_revision: work.revision + 1,
+          summary,
+          start_sequence: events[0]?.sequence ?? 1,
+          end_sequence: (events.at(-1)?.sequence ?? 0) + 1,
+          decision_ids: decisions.map((message) => message.message_id),
+          artifact_ids: work.artifact_version_ids,
+          verification_ids: verifications.map((verification) => verification.verification_id),
+          finalized_by: context.userId,
+        },
+      );
+      const record = records[0];
+      if (!record) throw new Error("WorkRecord 생성 결과가 없습니다");
+      return { record };
+    });
+  }
+
+  public async planMerge(
+    context: TenantContext,
+    input: PlanMergeInput,
+  ): Promise<WorkCommandResult & { mergePlan: WorkMergePlan }> {
+    return await this.mutate(context, input, "work_merge_planned", async (transaction, parent) => {
+      const child = await findWork(transaction, context.organizationId, input.childWorkId);
+      if (!child || child.parent_work_id !== parent.work_id) throw new Error("직접 자식 Work만 merge할 수 있습니다");
+      const versionIds = [...new Set([...parent.artifact_version_ids, ...child.artifact_version_ids])];
+      const [versions] = await transaction.query<[ArtifactVersion[]]>(
+        "SELECT * OMIT id FROM artifact_version WHERE organization_id = $organization_id AND artifact_version_id IN $version_ids;",
+        { organization_id: context.organizationId, version_ids: versionIds },
+      );
+      const [artifacts] = await transaction.query<[WorkArtifact[]]>(
+        "SELECT * OMIT id FROM work_artifact WHERE organization_id = $organization_id;",
+        { organization_id: context.organizationId },
+      );
+      const artifactById = new Map(artifacts.map((artifact) => [artifact.artifact_id, artifact]));
+      const parentByName = new Map<string, ArtifactVersion>();
+      for (const version of versions.filter((candidate) =>
+        parent.artifact_version_ids.includes(candidate.artifact_version_id),
+      )) {
+        const name = artifactById.get(version.artifact_id)?.name;
+        const current = name ? parentByName.get(name) : undefined;
+        if (name && (!current || version.version > current.version)) parentByName.set(name, version);
+      }
+      const conflicts: { name: string; parentChecksum: string; childChecksum: string }[] = [];
+      for (const version of versions.filter((candidate) =>
+        child.artifact_version_ids.includes(candidate.artifact_version_id),
+      )) {
+        const name = artifactById.get(version.artifact_id)?.name;
+        const parentVersion = name ? parentByName.get(name) : undefined;
+        if (name && parentVersion && parentVersion.checksum !== version.checksum) {
+          conflicts.push({ name, parentChecksum: parentVersion.checksum, childChecksum: version.checksum });
+        }
+      }
+      const [decisions] = await transaction.query<[CollaborationMessage[]]>(
+        "SELECT * OMIT id FROM collaboration_message WHERE organization_id = $organization_id AND work_id = $work_id AND message_type = 'decision';",
+        { organization_id: context.organizationId, work_id: child.work_id },
+      );
+      const [verifications] = await transaction.query<[WorkVerification[]]>(
+        "SELECT * OMIT id FROM work_verification WHERE organization_id = $organization_id AND work_id = $work_id;",
+        { organization_id: context.organizationId, work_id: child.work_id },
+      );
+      const childOnlyArtifacts = child.artifact_version_ids.filter((id) => !parent.artifact_version_ids.includes(id));
+      const [plans] = await transaction.query<[WorkMergePlan[]]>(
+        "CREATE work_merge_plan CONTENT { merge_plan_id: $merge_plan_id, organization_id: $organization_id, parent_work_id: $parent_work_id, child_work_id: $child_work_id, parent_revision: $parent_revision, status: $status, conflict_json: $conflict_json, artifact_version_ids: $artifact_ids, decision_message_ids: $decision_ids, verification_ids: $verification_ids, created_by: $created_by, created_at: time::now() } RETURN AFTER;",
+        {
+          merge_plan_id: randomUUID(),
+          organization_id: context.organizationId,
+          parent_work_id: parent.work_id,
+          child_work_id: child.work_id,
+          parent_revision: parent.revision + 1,
+          status: conflicts.length === 0 ? "ready" : "conflicted",
+          conflict_json: canonicalJson(conflicts),
+          artifact_ids: childOnlyArtifacts,
+          decision_ids: decisions.map((message) => message.message_id),
+          verification_ids: verifications.map((verification) => verification.verification_id),
+          created_by: context.userId,
+        },
+      );
+      const mergePlan = plans[0];
+      if (!mergePlan) throw new Error("Work MergePlan 생성 결과가 없습니다");
+      return { mergePlan };
+    });
+  }
+
+  public async applyMerge(
+    context: TenantContext,
+    input: ApplyMergeInput,
+  ): Promise<WorkCommandResult & { mergePlan: WorkMergePlan; mergedArtifactVersions: ArtifactVersion[] }> {
+    return await this.mutate(context, input, "work_merge_applied", async (transaction, parent) => {
+      const [plans] = await transaction.query<[WorkMergePlan[]]>(
+        "SELECT * OMIT id FROM work_merge_plan WHERE organization_id = $organization_id AND parent_work_id = $work_id AND merge_plan_id = $merge_plan_id LIMIT 1;",
+        { organization_id: context.organizationId, work_id: parent.work_id, merge_plan_id: input.mergePlanId },
+      );
+      const plan = plans[0];
+      if (!plan) throw new Error(`Work MergePlan을 찾을 수 없습니다: ${input.mergePlanId}`);
+      if (plan.status !== "ready") throw new Error("충돌이 없고 ready 상태인 MergePlan만 적용할 수 있습니다");
+      if (plan.parent_revision !== parent.revision)
+        throw new Error("MergePlan 생성 후 부모 Work가 변경되어 다시 계획해야 합니다");
+      const [sourceVersions] = await transaction.query<[ArtifactVersion[]]>(
+        "SELECT * OMIT id FROM artifact_version WHERE organization_id = $organization_id AND artifact_version_id IN $version_ids;",
+        { organization_id: context.organizationId, version_ids: plan.artifact_version_ids },
+      );
+      const mergedArtifactVersions: ArtifactVersion[] = [];
+      for (const sourceVersion of sourceVersions) {
+        const [sourceArtifacts] = await transaction.query<[WorkArtifact[]]>(
+          "SELECT * OMIT id FROM work_artifact WHERE organization_id = $organization_id AND artifact_id = $artifact_id LIMIT 1;",
+          { organization_id: context.organizationId, artifact_id: sourceVersion.artifact_id },
+        );
+        const sourceArtifact = sourceArtifacts[0];
+        if (!sourceArtifact) throw new Error(`병합 원본 Artifact를 찾을 수 없습니다: ${sourceVersion.artifact_id}`);
+        const [parentArtifacts] = await transaction.query<[WorkArtifact[]]>(
+          "SELECT * OMIT id FROM work_artifact WHERE organization_id = $organization_id AND work_id = $work_id AND name = $name LIMIT 1;",
+          { organization_id: context.organizationId, work_id: parent.work_id, name: sourceArtifact.name },
+        );
+        let parentArtifact = parentArtifacts[0];
+        if (!parentArtifact) {
+          const [createdArtifacts] = await transaction.query<[WorkArtifact[]]>(
+            "CREATE work_artifact CONTENT { artifact_id: $artifact_id, organization_id: $organization_id, work_id: $work_id, kind: $kind, name: $name, created_by: $created_by, created_at: time::now() } RETURN AFTER;",
+            {
+              artifact_id: randomUUID(),
+              organization_id: context.organizationId,
+              work_id: parent.work_id,
+              kind: sourceArtifact.kind,
+              name: sourceArtifact.name,
+              created_by: context.userId,
+            },
+          );
+          parentArtifact = createdArtifacts[0];
+        }
+        if (!parentArtifact) throw new Error("부모 Artifact 생성 결과가 없습니다");
+        const [existingVersions] = await transaction.query<[ArtifactVersion[]]>(
+          "SELECT * OMIT id FROM artifact_version WHERE organization_id = $organization_id AND artifact_id = $artifact_id;",
+          { organization_id: context.organizationId, artifact_id: parentArtifact.artifact_id },
+        );
+        const version = existingVersions.reduce((maximum, candidate) => Math.max(maximum, candidate.version), 0) + 1;
+        const [createdVersions] = await transaction.query<[ArtifactVersion[]]>(
+          "CREATE artifact_version CONTENT { artifact_version_id: $artifact_version_id, artifact_id: $artifact_id, organization_id: $organization_id, work_id: $work_id, version: $version, checksum: $checksum, media_type: $media_type, content_json: $content_json, source_artifact_version_id: $source_id, created_by: $created_by, created_at: time::now() } RETURN AFTER;",
+          {
+            artifact_version_id: randomUUID(),
+            artifact_id: parentArtifact.artifact_id,
+            organization_id: context.organizationId,
+            work_id: parent.work_id,
+            version,
+            checksum: sourceVersion.checksum,
+            media_type: sourceVersion.media_type,
+            content_json: sourceVersion.content_json,
+            source_id: sourceVersion.artifact_version_id,
+            created_by: context.userId,
+          },
+        );
+        if (!createdVersions[0]) throw new Error("병합 ArtifactVersion 생성 결과가 없습니다");
+        mergedArtifactVersions.push(createdVersions[0]);
+      }
+      const references = [
+        ...new Set([
+          ...parent.artifact_version_ids,
+          ...mergedArtifactVersions.map((version) => version.artifact_version_id),
+        ]),
+      ];
+      await transaction.query(
+        "UPDATE work SET artifact_version_ids = $artifact_ids WHERE organization_id = $organization_id AND work_id = $work_id; UPDATE work_merge_plan SET status = 'applied', applied_at = time::now() WHERE organization_id = $organization_id AND merge_plan_id = $merge_plan_id;",
+        {
+          artifact_ids: references,
+          organization_id: context.organizationId,
+          work_id: parent.work_id,
+          merge_plan_id: plan.merge_plan_id,
+        },
+      );
+      return { mergePlan: { ...plan, status: "applied" }, mergedArtifactVersions };
+    });
+  }
+
+  public async auditWork(context: TenantContext, workId: string): Promise<WorkComplianceFinding[]> {
+    const work = await this.getWork(context, workId);
+    const events = await listEventsWith(this.database, context.organizationId, workId);
+    const tasks = await listTasksWith(this.database, context.organizationId, workId);
+    const assignments = await listAssignmentsWith(this.database, context.organizationId, workId);
+    const findings: WorkComplianceFinding[] = [];
+    if (work.revision !== events.length) {
+      findings.push({
+        code: "revision",
+        message: `Work revision ${String(work.revision)}과 Event 수 ${String(events.length)}가 다릅니다`,
+      });
+    }
+    if (events.some((event, index) => event.sequence !== index + 1)) {
+      findings.push({ code: "event-sequence", message: "WorkEvent sequence가 연속적이지 않습니다" });
+    }
+    const planRequired = !["draft", "cancelled"].includes(work.status);
+    if (planRequired) {
+      const [plans] = await this.database.query<[PlanVersion[]]>(
+        "SELECT * OMIT id FROM plan_version WHERE organization_id = $organization_id AND work_id = $work_id AND valid = true LIMIT 1;",
+        { organization_id: context.organizationId, work_id: workId },
+      );
+      if (!plans[0]) findings.push({ code: "plan", message: "현재 Work 상태에 유효한 PlanVersion이 없습니다" });
+    }
+    try {
+      assertAcyclic(tasks);
+    } catch (error) {
+      findings.push({
+        code: "task-dag",
+        message: error instanceof Error ? error.message : "Task DAG가 유효하지 않습니다",
+      });
+    }
+    if (["ready", "running", "waiting_approval", "verifying", "completed"].includes(work.status)) {
+      if (tasks.length === 0) findings.push({ code: "task-dag", message: "실행 상태 Work에 Task가 없습니다" });
+      for (const task of tasks.filter((candidate) => candidate.status !== "cancelled")) {
+        const active = assignments.filter(
+          (assignment) => assignment.task_id === task.task_id && assignment.status === "assigned",
+        );
+        if (active.length !== 1) {
+          findings.push({ code: "assignment", message: `Task의 활성 Assignment 수가 1이 아닙니다: ${task.task_id}` });
+        }
+      }
+    }
+    if (
+      ["verifying", "completed"].includes(work.status) &&
+      tasks.some((task) => !["completed", "cancelled"].includes(task.status))
+    ) {
+      findings.push({ code: "task-completion", message: "검증 상태 Work에 완료되지 않은 Task가 있습니다" });
+    }
+    if (work.status === "completed") {
+      const [verifications] = await this.database.query<[WorkVerification[]]>(
+        "SELECT * OMIT id FROM work_verification WHERE organization_id = $organization_id AND work_id = $work_id ORDER BY created_at ASC;",
+        { organization_id: context.organizationId, work_id: workId },
+      );
+      const [records] = await this.database.query<[WorkRecord[]]>(
+        "SELECT * OMIT id FROM work_record WHERE organization_id = $organization_id AND work_id = $work_id AND finalized = true ORDER BY version ASC;",
+        { organization_id: context.organizationId, work_id: workId },
+      );
+      if (!verifications.at(-1)?.passed)
+        findings.push({ code: "verification", message: "완료 Work의 최신 Verification이 통과 상태가 아닙니다" });
+      if (records.at(-1)?.recorded_work_revision !== work.revision - 1) {
+        findings.push({ code: "record", message: "완료 Work의 최신 revision에 대응하는 확정 WorkRecord가 없습니다" });
+      }
+    }
+    return findings.sort((left, right) =>
+      `${left.code}:${left.message}`.localeCompare(`${right.code}:${right.message}`),
+    );
+  }
+
   public async transition(context: TenantContext, input: TransitionInput): Promise<WorkCommandResult> {
     return await this.mutate(context, input, "work_state_changed", async (transaction, work) => {
-      if (!ALLOWED_TRANSITIONS[work.status].includes(input.target)) {
+      if (!canTransitionWork(work.status, input.target)) {
         throw new Error(`허용되지 않은 Work 상태 전이입니다: ${work.status} -> ${input.target}`);
       }
       if (input.target === "planned") {
@@ -697,8 +1740,30 @@ export class WorkService {
         ) {
           throw new Error("ready 전이에는 모든 실행 Task의 Assignment가 필요합니다");
         }
+        if (!this.graph) throw new Error("ready 전이에는 Organization Graph reader가 필요합니다");
+        for (const assignment of assignments.filter((candidate) => candidate.status === "assigned")) {
+          await this.graph.verifyActiveNode(context, assignment.agent_handle, transaction);
+        }
       }
-      if (input.target === "completed") throw new Error("completed 전이에는 Verification과 WorkRecord가 필요합니다");
+      if (input.target === "verifying") {
+        const tasks = await listTasksWith(transaction, context.organizationId, work.work_id);
+        if (tasks.length === 0 || tasks.some((task) => !["completed", "cancelled"].includes(task.status))) {
+          throw new Error("verifying 전이에는 모든 실행 Task의 완료가 필요합니다");
+        }
+      }
+      if (input.target === "completed") {
+        const [verifications] = await transaction.query<[WorkVerification[]]>(
+          "SELECT * OMIT id FROM work_verification WHERE organization_id = $organization_id AND work_id = $work_id ORDER BY created_at ASC;",
+          { organization_id: context.organizationId, work_id: work.work_id },
+        );
+        const [records] = await transaction.query<[WorkRecord[]]>(
+          "SELECT * OMIT id FROM work_record WHERE organization_id = $organization_id AND work_id = $work_id AND finalized = true ORDER BY version ASC;",
+          { organization_id: context.organizationId, work_id: work.work_id },
+        );
+        if (!verifications.at(-1)?.passed || records.at(-1)?.recorded_work_revision !== work.revision) {
+          throw new Error("completed 전이에는 통과 Verification과 확정 WorkRecord가 필요합니다");
+        }
+      }
       await transaction.query(
         "UPDATE work SET status = $status, revision = $revision, updated_at = time::now() WHERE organization_id = $organization_id AND work_id = $work_id;",
         {
@@ -726,6 +1791,12 @@ export class WorkService {
       if (repeated) return this.replay(repeated, requestJson) as WorkCommandResult & Extra;
       const work = await findWork(transaction, context.organizationId, input.workId);
       if (!work) throw new Error(`Work를 찾을 수 없습니다: ${input.workId}`);
+      if (
+        ["completed", "cancelled"].includes(work.status) &&
+        !(work.status === "cancelled" && eventType === "work_record_finalized")
+      ) {
+        throw new Error("terminal Work는 변경할 수 없습니다");
+      }
       if (work.revision !== input.expectedRevision)
         throw new Error(`현재 Work revision은 ${String(work.revision)}입니다`);
       const extra = await operation(transaction, work);

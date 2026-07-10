@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { IdentityService, OrganizationService, type TenantContext } from "@massion/identity";
 import { createDatabase, type MassionDatabase } from "@massion/storage";
 
-import { WorkService } from "./work.js";
+import { canTransitionWork, WorkService, type WorkStatus } from "./work.js";
 
 describe("Request와 Work 상태 머신", () => {
   let database: MassionDatabase;
@@ -32,6 +32,27 @@ describe("Request와 Work 상태 머신", () => {
     expect(result.request.text).toBe("제품을 구현해주세요");
     expect(result.work).toMatchObject({ status: "draft", revision: 1 });
     expect(result.event).toMatchObject({ sequence: 1, event_type: "work_created" });
+  });
+
+  it("명세의 모든 Work 상태 전이 간선을 정확히 허용한다", () => {
+    const expected: Readonly<Record<WorkStatus, readonly WorkStatus[]>> = {
+      draft: ["planned", "cancelled"],
+      planned: ["ready", "cancelled"],
+      ready: ["running", "cancelled"],
+      running: ["waiting_approval", "verifying", "failed", "cancelled"],
+      waiting_approval: ["running", "cancelled"],
+      verifying: ["completed", "failed", "cancelled"],
+      completed: [],
+      failed: ["retrying", "replanning", "cancelled"],
+      retrying: ["running", "cancelled"],
+      replanning: ["planned", "cancelled"],
+      cancelled: [],
+    };
+    const statuses = Object.keys(expected) as WorkStatus[];
+    for (const current of statuses) {
+      for (const target of statuses)
+        expect(canTransitionWork(current, target)).toBe(expected[current].includes(target));
+    }
   });
 
   it("같은 command는 같은 결과를 반환하고 다른 payload 재사용은 거부한다", async () => {
@@ -104,5 +125,41 @@ describe("Request와 Work 상태 머신", () => {
     expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
     expect(results.filter((result) => result.status === "rejected")).toHaveLength(1);
     expect((await service.listEvents(context, created.work.work_id)).map((event) => event.sequence)).toEqual([1, 2]);
+  });
+
+  it("cross-tenant 접근을 거부하고 저장소 우회 위반을 준수 검사로 찾는다", async () => {
+    const created = await service.createWork(context, {
+      commandId: crypto.randomUUID(),
+      text: "검사",
+      surface: "api",
+      organizationVersionId: "org-v1",
+    });
+    const identity = await IdentityService.create(database);
+    const organizations = await OrganizationService.create(database);
+    const other = await identity.registerPersonalUser({ email: "other@example.com", displayName: "Other" });
+    const otherContext = await organizations.resolveTenantContext(
+      other.user.user_id,
+      other.organization.organization_id,
+    );
+
+    await expect(
+      service.getWork({ ...otherContext, organizationId: context.organizationId }, created.work.work_id),
+    ).rejects.toThrow("TenantContext");
+    await expect(
+      database.query(
+        "UPDATE work SET status = 'completed' WHERE organization_id = $organization_id AND work_id = $work_id;",
+        { organization_id: context.organizationId, work_id: created.work.work_id },
+      ),
+    ).rejects.toThrow("허용되지 않은 Work 상태 전이");
+    await database.query(
+      "UPDATE work SET revision = 99 WHERE organization_id = $organization_id AND work_id = $work_id;",
+      {
+        organization_id: context.organizationId,
+        work_id: created.work.work_id,
+      },
+    );
+    const findings = await service.auditWork(context, created.work.work_id);
+
+    expect(findings.map((finding) => finding.code)).toEqual(expect.arrayContaining(["revision"]));
   });
 });
