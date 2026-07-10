@@ -76,7 +76,7 @@ describe("versioned code search", () => {
         commandId: crypto.randomUUID(),
         repositoryId: repository.repositoryId,
         checksum: embedding === "complete" ? "e".repeat(64) : "f".repeat(64),
-        parserBundleVersion: "parser-v1",
+        parserBundleVersion: "vscode-tree-sitter-wasm-0.3.1",
         schemaVersion: "evidence-v1",
         ...(embedding === "complete" ? { embeddingVersion: "embed-v1" } : {}),
         embeddingStatus: embedding,

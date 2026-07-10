@@ -10,6 +10,7 @@ import type { RepositoryStore } from "./repository-store.js";
 import type { RepositoryScanner, ScanOptions } from "./scanner.js";
 
 export interface EvidenceParserPort {
+  readonly bundleVersion: string;
   parse(input: ParseEvidenceInput): Promise<ParsedFileEvidence>;
 }
 
@@ -40,6 +41,18 @@ function sha256(value: string): string {
   return createHash("sha256").update(value).digest("hex");
 }
 
+function canonicalJson(value: unknown): string {
+  if (value === undefined) return "null";
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
+  if (value && typeof value === "object") {
+    return `{${Object.entries(value as Record<string, unknown>)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, child]) => `${JSON.stringify(key)}:${canonicalJson(child)}`)
+      .join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+
 export class EvidenceIndexer {
   public constructor(
     private readonly repositories: RepositoryStore,
@@ -64,6 +77,12 @@ export class EvidenceIndexer {
     ]);
     if (revision.repositoryId !== repository.repositoryId || configuration.repositoryId !== repository.repositoryId)
       throw new Error("Repository, revision과 configuration의 소유 관계가 일치하지 않습니다");
+    if (configuration.parserBundleVersion !== this.parser.bundleVersion)
+      throw new Error("IndexConfiguration parser bundle과 실제 parser bundle이 다릅니다");
+    if (configuration.schemaVersion !== "evidence-v1")
+      throw new Error(`지원하지 않는 evidence schema version입니다: ${configuration.schemaVersion}`);
+    if (canonicalJson(configuration.settings) !== canonicalJson(input.scanOptions))
+      throw new Error("IndexConfiguration settings와 실제 scan options가 다릅니다");
     const scan = await this.scanner.scan(input.root, input.scanOptions);
     if (scan.rootRealPathHash !== repository.rootRealPathHash || scan.rootRealPathHash !== revision.rootRealPathHash)
       throw new Error("Index 대상의 canonical root가 등록된 Repository와 다릅니다");
