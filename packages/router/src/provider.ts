@@ -122,6 +122,14 @@ export interface RevokeCredentialInput extends CommandInput {
   readonly expectedVersion: number;
 }
 
+export interface UpdateCredentialQuotaInput extends CommandInput {
+  readonly credentialId: string;
+  readonly expectedVersion: number;
+  readonly limit: number;
+  readonly remaining: number;
+  readonly resetAt: string;
+}
+
 const CREDENTIAL_TYPES = new Set<CredentialType>(["api_key", "oauth", "service_account", "workload_identity"]);
 const GATEWAY_KINDS = new Set<NonNullable<ProviderEndpoint["gateway_kind"]>>([
   "litellm",
@@ -305,6 +313,47 @@ export class ProviderService {
       );
       return { credential: { ...credential, version: credential.version + 1, status: "revoked" } };
     });
+  }
+
+  public async updateCredentialQuota(
+    context: TenantContext,
+    input: UpdateCredentialQuotaInput,
+  ): Promise<{ credential: ProviderCredential; audit: RouterAuditEvent }> {
+    const resetAt = new Date(input.resetAt);
+    if (
+      !Number.isInteger(input.limit) ||
+      !Number.isInteger(input.remaining) ||
+      input.limit < 1 ||
+      input.remaining < 0 ||
+      input.remaining > input.limit ||
+      !Number.isFinite(resetAt.getTime())
+    ) {
+      throw new Error("Credential quota 값이 유효하지 않습니다");
+    }
+    return await this.command(
+      context,
+      input.commandId,
+      "credential_quota_updated",
+      canonicalJson(input),
+      async (tx) => {
+        const credential = await this.requireCredential(tx, context.organizationId, input.credentialId);
+        if (credential.version !== input.expectedVersion)
+          throw new Error(`현재 Credential version은 ${String(credential.version)}입니다`);
+        if (credential.status === "revoked") throw new Error("폐기된 Credential quota는 갱신할 수 없습니다");
+        const [credentials] = await tx.query<[ProviderCredential[]]>(
+          "UPDATE provider_credential SET version += 1, quota_limit = $quota_limit, quota_remaining = $quota_remaining, quota_reset_at = $quota_reset_at, status = IF status = 'cooldown' AND cooldown_until <= time::now() { 'active' } ELSE { status }, updated_at = time::now() WHERE organization_id = $organization_id AND credential_id = $credential_id RETURN AFTER;",
+          {
+            organization_id: context.organizationId,
+            credential_id: credential.credential_id,
+            quota_limit: input.limit,
+            quota_remaining: input.remaining,
+            quota_reset_at: resetAt,
+          },
+        );
+        if (!credentials[0]) throw new Error("Credential quota 갱신 결과가 없습니다");
+        return { credential: credentials[0] };
+      },
+    );
   }
 
   public async listCredentials(context: TenantContext, providerId?: string): Promise<ProviderCredential[]> {
