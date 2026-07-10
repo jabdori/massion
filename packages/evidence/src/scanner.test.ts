@@ -1,11 +1,15 @@
 import { createHash } from "node:crypto";
+import { execFile } from "node:child_process";
 import { mkdtemp, mkdir, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { promisify } from "node:util";
 
 import { describe, expect, it } from "vitest";
 
 import { RepositoryScanner } from "./scanner.js";
+
+const executeFile = promisify(execFile);
 
 describe("Repository scanner", () => {
   it("ignore와 include를 적용하고 text file의 deterministic manifest를 만든다", async () => {
@@ -69,5 +73,18 @@ describe("Repository scanner", () => {
       }),
     ]);
     expect(JSON.stringify(scan)).not.toContain(secret);
+  });
+
+  it("FIFO 같은 non-regular device를 읽지 않고 unsupported로 제외한다", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "massion-scan-device-"));
+    await executeFile("mkfifo", [path.join(root, "device.ts")]);
+    const scan = await new RepositoryScanner().scan(root, {
+      include: ["**/*.ts"],
+      exclude: [],
+      maxFileBytes: 1_024,
+    });
+
+    expect(scan.files).toEqual([]);
+    expect(scan.excluded).toEqual([{ relativePath: "device.ts", reason: "unsupported" }]);
   });
 });
