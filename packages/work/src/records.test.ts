@@ -284,6 +284,10 @@ describe("Work fork·merge와 완료 기록", () => {
     expect(record.record.finalized).toBe(true);
     expect(refreshedRecord.record.version).toBe(2);
     expect(completed.work.status).toBe("completed");
+    const recovery = await service.recoverWork(context, created.work.work_id);
+    expect(recovery.work.status).toBe("completed");
+    expect(recovery.events).toHaveLength(recovery.work.revision);
+    expect(recovery.records.at(-1)?.version).toBe(2);
     await expect(
       service.finalizeRecord(context, {
         commandId: crypto.randomUUID(),

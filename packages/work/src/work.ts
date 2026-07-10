@@ -453,6 +453,26 @@ export interface WorkComplianceFinding {
   readonly message: string;
 }
 
+export interface WorkRecoveryBundle {
+  readonly request: WorkRequest;
+  readonly work: Work;
+  readonly childWorks: Work[];
+  readonly events: WorkEvent[];
+  readonly plans: PlanVersion[];
+  readonly tasks: WorkTask[];
+  readonly assignments: TaskAssignment[];
+  readonly sessions: WorkSession[];
+  readonly checkpoints: SessionCheckpoint[];
+  readonly rooms: CollaborationRoom[];
+  readonly messages: CollaborationMessage[];
+  readonly sharedContextReferences: SharedContextReference[];
+  readonly leases: ResourceLease[];
+  readonly artifacts: WorkArtifact[];
+  readonly artifactVersions: ArtifactVersion[];
+  readonly verifications: WorkVerification[];
+  readonly records: WorkRecord[];
+}
+
 const ALLOWED_TRANSITIONS: Readonly<Record<WorkStatus, readonly WorkStatus[]>> = {
   draft: ["planned", "cancelled"],
   planned: ["ready", "cancelled"],
@@ -1709,6 +1729,48 @@ export class WorkService {
     return findings.sort((left, right) =>
       `${left.code}:${left.message}`.localeCompare(`${right.code}:${right.message}`),
     );
+  }
+
+  public async recoverWork(context: TenantContext, workId: string): Promise<WorkRecoveryBundle> {
+    const work = await this.getWork(context, workId);
+    const findings = await this.auditWork(context, workId);
+    if (findings.length > 0) throw new Error(`Work 복구 전 준수 위반을 해결해야 합니다: ${canonicalJson(findings)}`);
+    const [requests] = await this.database.query<[WorkRequest[]]>(
+      "SELECT * OMIT id FROM work_request WHERE organization_id = $organization_id AND request_id = $request_id LIMIT 1;",
+      { organization_id: context.organizationId, request_id: work.request_id },
+    );
+    const request = requests[0];
+    if (!request) throw new Error(`Work Request를 찾을 수 없습니다: ${work.request_id}`);
+    const query = async <RecordType>(table: string): Promise<RecordType[]> => {
+      const [records] = await this.database.query<[RecordType[]]>(
+        `SELECT * OMIT id FROM ${table} WHERE organization_id = $organization_id AND work_id = $work_id;`,
+        { organization_id: context.organizationId, work_id: workId },
+      );
+      return records;
+    };
+    const [children] = await this.database.query<[Work[]]>(
+      "SELECT * OMIT id FROM work WHERE organization_id = $organization_id AND parent_work_id = $work_id;",
+      { organization_id: context.organizationId, work_id: workId },
+    );
+    return {
+      request,
+      work,
+      childWorks: children,
+      events: await listEventsWith(this.database, context.organizationId, workId),
+      plans: await query<PlanVersion>("plan_version"),
+      tasks: await listTasksWith(this.database, context.organizationId, workId),
+      assignments: await listAssignmentsWith(this.database, context.organizationId, workId),
+      sessions: await query<WorkSession>("work_session"),
+      checkpoints: await query<SessionCheckpoint>("session_checkpoint"),
+      rooms: await query<CollaborationRoom>("collaboration_room"),
+      messages: await query<CollaborationMessage>("collaboration_message"),
+      sharedContextReferences: await query<SharedContextReference>("shared_context_reference"),
+      leases: await query<ResourceLease>("resource_lease"),
+      artifacts: await query<WorkArtifact>("work_artifact"),
+      artifactVersions: await query<ArtifactVersion>("artifact_version"),
+      verifications: await query<WorkVerification>("work_verification"),
+      records: await query<WorkRecord>("work_record"),
+    };
   }
 
   public async transition(context: TenantContext, input: TransitionInput): Promise<WorkCommandResult> {
