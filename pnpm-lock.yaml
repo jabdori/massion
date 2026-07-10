@@ -56,6 +56,15 @@ importers:
         specifier: workspace:*
         version: link:../storage
 
+  packages/runtime:
+    dependencies:
+      '@massion/identity':
+        specifier: workspace:*
+        version: link:../identity
+      '@massion/storage':
+        specifier: workspace:*
+        version: link:../storage
+
   packages/storage:
     dependencies:
       '@surrealdb/node':
