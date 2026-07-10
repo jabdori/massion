@@ -555,10 +555,12 @@ export class ModelRouter {
       const fallbackAllowed = classified.fallbackEligible && input.emittedTokens === 0;
       const status = input.emittedTokens > 0 ? "interrupted" : "failed";
       const costDelta = input.actualCostMicros - current.reserved_cost_micros;
+      const credential = await this.credential(tx, context.organizationId, current.credential_id);
+      const quotaResetMillis = serializedMillis(credential.quota_reset_at);
       const retryAt = classified.retryAt
         ? new Date(classified.retryAt)
         : classified.failureClass === "quota"
-          ? new Date(Date.now() + 60_000)
+          ? new Date(quotaResetMillis > Date.now() ? quotaResetMillis : Date.now() + 60_000)
           : undefined;
       await tx.query(
         "UPDATE model_route SET spent_micros = math::max([0, spent_micros + $cost_delta]), updated_at = time::now() WHERE organization_id = $organization_id AND route_id = $route_id; UPDATE provider_credential SET status = IF $disable { 'disabled' } ELSE IF $cooldown { 'cooldown' } ELSE { status }, version = IF $disable OR $cooldown { version + 1 } ELSE { version }, cooldown_until = IF $cooldown { $retry_at } ELSE { cooldown_until }, input_tokens += $input_tokens, output_tokens += $output_tokens, cost_micros = math::max([0, cost_micros + $cost_delta]), updated_at = time::now() WHERE organization_id = $organization_id AND credential_id = $credential_id;",
@@ -938,6 +940,19 @@ export class ModelRouter {
     );
     if (!attempts[0]) throw new Error(`Route Attempt를 찾을 수 없습니다: ${attemptId}`);
     return attempts[0];
+  }
+
+  private async credential(
+    executor: QueryExecutor,
+    organizationId: string,
+    credentialId: string,
+  ): Promise<ProviderCredential> {
+    const [credentials] = await executor.query<[ProviderCredential[]]>(
+      "SELECT * OMIT id FROM provider_credential WHERE organization_id = $organization_id AND credential_id = $credential_id LIMIT 1;",
+      { organization_id: organizationId, credential_id: credentialId },
+    );
+    if (!credentials[0]) throw new Error(`Provider Credential을 찾을 수 없습니다: ${credentialId}`);
+    return credentials[0];
   }
 
   private async circuit(

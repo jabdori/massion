@@ -106,6 +106,44 @@ describe("Provider와 암호화 Credential lifecycle", () => {
     await expect(service.revealSecret(context, added.credential.credential_id)).rejects.toThrow("활성");
   });
 
+  it("quota limit·remaining·reset을 version 선행조건으로 갱신한다", async () => {
+    const { provider, endpoint } = await providerEndpoint();
+    const added = await service.addCredential(context, {
+      commandId: crypto.randomUUID(),
+      providerId: provider.provider_id,
+      endpointId: endpoint.endpoint_id,
+      label: "quota-account",
+      credentialType: "api_key",
+      secret: "secret",
+      priority: 1,
+      weight: 1,
+    });
+    const resetAt = new Date(Date.now() + 3_600_000).toISOString();
+    const updated = await service.updateCredentialQuota(context, {
+      commandId: crypto.randomUUID(),
+      credentialId: added.credential.credential_id,
+      expectedVersion: 1,
+      limit: 1_000,
+      remaining: 750,
+      resetAt,
+    });
+
+    expect(updated.credential.version).toBe(2);
+    expect(updated.credential.quota_limit).toBe(1_000);
+    expect(updated.credential.quota_remaining).toBe(750);
+    expect(new Date(String(updated.credential.quota_reset_at)).toISOString()).toBe(resetAt);
+    await expect(
+      service.updateCredentialQuota(context, {
+        commandId: crypto.randomUUID(),
+        credentialId: added.credential.credential_id,
+        expectedVersion: 1,
+        limit: 1_000,
+        remaining: 700,
+        resetAt,
+      }),
+    ).rejects.toThrow("version");
+  });
+
   it("비공식 소비자 구독 credential type과 cross-tenant 접근을 거부한다", async () => {
     const { provider, endpoint } = await providerEndpoint();
     await expect(

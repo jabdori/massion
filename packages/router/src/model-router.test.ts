@@ -300,6 +300,38 @@ describe("Model Route simulation과 reservation", () => {
     expect(new Date(String(credentials[0]?.cooldown_until)).getTime()).toBeGreaterThanOrEqual(before + 119_000);
   });
 
+  it("429에 Retry-After가 없으면 저장된 quota reset까지 cooldown한다", async () => {
+    const created = await route();
+    const first = await router.reserve(context, {
+      commandId: crypto.randomUUID(),
+      routeName: created.name,
+      estimatedTokens: 10,
+      estimatedCostMicros: 10,
+    });
+    const resetAt = new Date(Date.now() + 3_600_000).toISOString();
+    const credential = first.credential;
+    if (!credential) throw new Error("선택된 Credential이 없습니다");
+    await providers.updateCredentialQuota(context, {
+      commandId: crypto.randomUUID(),
+      credentialId: credential.credential_id,
+      expectedVersion: credential.version,
+      limit: 100,
+      remaining: 0,
+      resetAt,
+    });
+    const outcome = await router.reportFailure(context, {
+      commandId: crypto.randomUUID(),
+      attemptId: first.attempt.attempt_id,
+      signal: { kind: "http", statusCode: 429 },
+      emittedTokens: 0,
+      actualInputTokens: 0,
+      actualOutputTokens: 0,
+      actualCostMicros: 0,
+    });
+
+    expect(new Date(String(outcome.attempt.retry_at)).toISOString()).toBe(resetAt);
+  });
+
   it("일부 토큰이 출력된 실패는 interrupted로 기록하고 자동 fallback하지 않는다", async () => {
     const created = await route();
     const first = await router.reserve(context, {
