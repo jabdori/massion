@@ -32,6 +32,8 @@ interface RunRecord {
   readonly projected_work_revision?: number;
   readonly completed_at?: unknown;
   readonly verifier_execution_id: string;
+  readonly decision_evidence_hash?: string;
+  readonly decision_guard_revision?: number;
 }
 
 interface CriterionRecord {
@@ -63,6 +65,10 @@ interface FindingRecord {
 
 interface BindingRecord {
   readonly binding_version_id: string;
+}
+
+interface EvidenceGuardRecord {
+  readonly revision: number;
 }
 
 const VERDICTS = new Set<AssuranceProjectionVerdict>(["passed", "failed", "blocked"]);
@@ -116,6 +122,8 @@ function criteria(records: readonly CriterionRecord[]): AssuranceProjectionCrite
 }
 
 export class AssuranceRunVerdictReader implements AssuranceVerdictReader {
+  public constructor(private readonly hooks: { readonly afterEvidenceGuardClaim?: () => Promise<void> } = {}) {}
+
   public async readTerminalVerdict(
     executor: QueryExecutor,
     input: ReadAssuranceVerdictInput,
@@ -134,6 +142,28 @@ export class AssuranceRunVerdictReader implements AssuranceVerdictReader {
       throw new Error("Assurance run이 terminal verdict 상태가 아닙니다");
     }
     if (run.projected_work_revision !== undefined) throw new Error("Assurance run은 이미 Work에 투영됐습니다");
+    const [guards] = await executor.query<[EvidenceGuardRecord[]]>(
+      "SELECT revision FROM assurance_evidence_guard WHERE organization_id = $organization_id AND work_id = $work_id AND assurance_run_id = $assurance_run_id LIMIT 1;",
+      {
+        organization_id: input.organizationId,
+        work_id: input.workId,
+        assurance_run_id: input.assuranceRunId,
+      },
+    );
+    const expectedGuardRevision = run.decision_guard_revision ?? 0;
+    if (guards[0]?.revision !== expectedGuardRevision) {
+      throw new Error("Terminal Assurance decision 이후 evidence가 변경됐습니다");
+    }
+    const [claimedGuards] = await executor.query<[EvidenceGuardRecord[]]>(
+      "UPDATE assurance_evidence_guard SET revision += 1, updated_at = time::now() WHERE organization_id = $organization_id AND assurance_run_id = $assurance_run_id AND revision = $expected_revision RETURN AFTER;",
+      {
+        organization_id: input.organizationId,
+        assurance_run_id: input.assuranceRunId,
+        expected_revision: expectedGuardRevision,
+      },
+    );
+    if (claimedGuards.length !== 1) throw new Error("Terminal Assurance evidence guard를 획득할 수 없습니다");
+    await this.hooks.afterEvidenceGuardClaim?.();
     await verifyAssuranceVerdictIndependence(executor, runView(run));
     const [criterionRecords] = await executor.query<[CriterionRecord[]]>(
       "SELECT criterion_key, status, exclusion_rule, exclusion_reason, exclusion_actor_id FROM assurance_criterion WHERE organization_id = $organization_id AND work_id = $work_id AND assurance_run_id = $assurance_run_id ORDER BY criterion_key ASC;",

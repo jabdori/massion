@@ -8,6 +8,25 @@ import { WorkService } from "@massion/work";
 
 import { AssuranceBindingStore, type BindingActivationAuthorizer, type StartAssuranceRunInput } from "./index.js";
 import { AssuranceRunStore, type TransitionAssuranceRunInput } from "./run-store.js";
+import { AssuranceService } from "./service.js";
+
+function canonicalJson(value: unknown): string {
+  if (value === undefined) return "null";
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
+  if (value && typeof value === "object") {
+    return `{${Object.entries(value as Record<string, unknown>)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, child]) => `${JSON.stringify(key)}:${canonicalJson(child)}`)
+      .join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+
+function legacyTransitionHash(input: unknown): string {
+  return createHash("sha256")
+    .update(canonicalJson({ operation: "transition", input }))
+    .digest("hex");
+}
 
 describe("Assurance run 저장소", () => {
   let database: MassionDatabase;
@@ -385,6 +404,68 @@ describe("Assurance run 저장소", () => {
     expect(next.run.attempt).toBe(2);
   });
 
+  it("0045 이전 terminal Event request hash를 synthetic evidence hash로 실제 ledger 재생한다", async () => {
+    const assuranceRunId = crypto.randomUUID();
+    const startCommandId = crypto.randomUUID();
+    const decisionCommandId = crypto.randomUUID();
+    await database.query(
+      "CREATE assurance_run CONTENT { assurance_run_id: $assurance_run_id, organization_id: $organization_id, work_id: $work_id, target_work_revision: $target_work_revision, plan_version_id: $plan_version_id, binding_version_id: $binding_version_id, profile_id: 'massion.assurance.acceptance.v1', profile_version: '1.0.0', verifier_handle: 'assurance', verifier_execution_id: $verifier_execution_id, snapshot_hash: $snapshot_hash, status: 'planned', version: 1, attempt: 99, start_command_id: $start_command_id, active_guard_key: $active_guard_key, created_by_user_id: $user_id, expires_at: time::now() + 1h, started_at: time::now(), updated_at: time::now() }; CREATE assurance_event CONTENT { event_id: $start_event_id, organization_id: $organization_id, assurance_run_id: $assurance_run_id, command_id: $start_command_id, sequence: 1, event_type: 'assurance_run_started', request_hash: $start_request_hash, payload_json: '{}', actor_user_id: $user_id, created_at: time::now() };",
+      {
+        assurance_run_id: assuranceRunId,
+        organization_id: context.organizationId,
+        work_id: workId,
+        target_work_revision: targetWorkRevision,
+        plan_version_id: planVersionId,
+        binding_version_id: bindingVersionId,
+        verifier_execution_id: verifierExecutionId,
+        snapshot_hash: snapshotHash,
+        start_command_id: startCommandId,
+        active_guard_key: crypto.randomUUID(),
+        user_id: context.userId,
+        start_event_id: crypto.randomUUID(),
+        start_request_hash: "1".repeat(64),
+      },
+    );
+    await database.query(
+      "UPDATE assurance_run SET status = 'running', version = 2, updated_at = time::now() WHERE organization_id = $organization_id AND assurance_run_id = $assurance_run_id; CREATE assurance_event CONTENT { event_id: $event_id, organization_id: $organization_id, assurance_run_id: $assurance_run_id, command_id: $command_id, sequence: 2, event_type: 'assurance_run_running', request_hash: $request_hash, payload_json: '{}', actor_user_id: $user_id, created_at: time::now() };",
+      {
+        event_id: crypto.randomUUID(),
+        organization_id: context.organizationId,
+        assurance_run_id: assuranceRunId,
+        command_id: crypto.randomUUID(),
+        request_hash: "2".repeat(64),
+        user_id: context.userId,
+      },
+    );
+    await database.query("REMOVE EVENT assurance_run_decision_evidence_integrity ON assurance_run;");
+    await database.query(
+      "UPDATE assurance_run SET status = 'passed', version = 3, active_guard_key = NONE, verdict = 'passed', completed_at = time::now(), updated_at = time::now() WHERE organization_id = $organization_id AND assurance_run_id = $assurance_run_id; CREATE assurance_event CONTENT { event_id: $event_id, organization_id: $organization_id, assurance_run_id: $assurance_run_id, command_id: $command_id, sequence: 3, event_type: 'assurance_run_passed', request_hash: $request_hash, payload_json: '{}', actor_user_id: $user_id, created_at: time::now() };",
+      {
+        event_id: crypto.randomUUID(),
+        organization_id: context.organizationId,
+        assurance_run_id: assuranceRunId,
+        command_id: decisionCommandId,
+        request_hash: legacyTransitionHash({
+          commandId: decisionCommandId,
+          assuranceRunId,
+          expectedVersion: 2,
+          target: "passed",
+        }),
+        user_id: context.userId,
+      },
+    );
+
+    const replayed = await (
+      await AssuranceService.create(database, organizations)
+    ).decide(context, {
+      commandId: decisionCommandId,
+      assuranceRunId,
+      expectedVersion: 2,
+    });
+    expect(replayed.run.status).toBe("passed");
+    expect(replayed.decision.evidenceHash).toMatch(/^[a-f0-9]{64}$/u);
+  });
+
   it("다른 tenant run 접근을 거부하고 command Event 계보를 보존한다", async () => {
     const started = await store.start(context, input("tenant-start"));
     const running = await store.transition(context, {
@@ -464,7 +545,7 @@ describe("Assurance run 저장소", () => {
         "UPDATE assurance_run SET status = 'passed', version = 2 WHERE organization_id = $organization_id AND assurance_run_id = $assurance_run_id;",
         { organization_id: context.organizationId, assurance_run_id: started.run.assuranceRunId },
       ),
-    ).rejects.toThrow("metadata 불변식");
+    ).rejects.toThrow("metadata");
     await expect(
       database.query(
         "UPDATE assurance_run SET status = 'running', version = 3 WHERE organization_id = $organization_id AND assurance_run_id = $assurance_run_id;",
@@ -528,3 +609,4 @@ describe("Assurance run 저장소", () => {
     ).rejects.toThrow("Terminal Assurance run");
   });
 });
+import { createHash } from "node:crypto";

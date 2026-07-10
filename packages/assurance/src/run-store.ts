@@ -18,7 +18,7 @@ import {
   type DatabaseAssuranceSnapshotInput,
   type DatabaseAssuranceSnapshotResult,
 } from "./database-snapshot.js";
-import { ASSURANCE_RUN_MIGRATION } from "./schema.js";
+import { ASSURANCE_DECISION_EVIDENCE_MIGRATION, ASSURANCE_RUN_MIGRATION } from "./schema.js";
 
 interface RunRecord {
   readonly assurance_run_id: string;
@@ -39,6 +39,8 @@ interface RunRecord {
   readonly verdict?: AssuranceVerdict;
   readonly projected_work_revision?: number;
   readonly failure_json?: string;
+  readonly decision_evidence_hash?: string;
+  readonly decision_guard_revision?: number;
   readonly created_by_user_id: string;
   readonly expires_at: unknown;
   readonly started_at: unknown;
@@ -65,6 +67,7 @@ export interface TransitionAssuranceRunInput {
   readonly expectedVersion: number;
   readonly target: Exclude<AssuranceRunStatus, "planned">;
   readonly failure?: AssuranceFailure;
+  readonly decisionEvidenceHash?: string;
 }
 
 const TERMINAL = new Set<AssuranceRunStatus>(["passed", "failed", "blocked", "cancelled"]);
@@ -138,7 +141,7 @@ export class AssuranceRunStore {
     database: MassionDatabase,
     organizations: OrganizationService,
   ): Promise<AssuranceRunStore> {
-    await applyMigrations(database, [ASSURANCE_RUN_MIGRATION]);
+    await applyMigrations(database, [ASSURANCE_RUN_MIGRATION, ASSURANCE_DECISION_EVIDENCE_MIGRATION]);
     return new AssuranceRunStore(database, organizations);
   }
 
@@ -234,71 +237,124 @@ export class AssuranceRunStore {
 
   public async transition(context: TenantContext, input: TransitionAssuranceRunInput): Promise<AssuranceRunResult> {
     await this.organizations.verifyTenantContext(context);
-    this.validateTransition(input);
-    const hash = requestHash("transition", input);
-    return await this.database.transaction(async (transaction) => {
-      await this.organizations.verifyTenantContext(context, undefined, transaction);
-      const replayed = await this.replay(context.organizationId, input.commandId, hash, transaction);
-      if (replayed) {
-        return { run: this.view(await this.find(transaction, context.organizationId, replayed.assurance_run_id)) };
-      }
-      const current = await this.find(transaction, context.organizationId, input.assuranceRunId);
-      if (current.version !== input.expectedVersion) throw new Error("Assurance run version 충돌입니다");
-      if (TERMINAL.has(current.status)) throw new Error("terminal assurance run은 변경할 수 없습니다");
-      if (current.status !== "planned" && current.status !== "running") {
-        throw new Error(`알 수 없는 active assurance 상태입니다: ${current.status}`);
-      }
-      if (!NEXT[current.status].includes(input.target)) {
-        throw new Error(`허용되지 않은 assurance 상태 전이입니다: ${current.status} -> ${input.target}`);
-      }
+    return await this.database.transaction(
+      async (transaction) => await this.transitionInTransaction(context, input, transaction),
+    );
+  }
 
-      const nextVersion = current.version + 1;
-      const verdict = this.verdict(input.target);
-      const [updated] = verdict
+  public async transitionInTransaction(
+    context: TenantContext,
+    input: TransitionAssuranceRunInput,
+    transaction: QueryExecutor,
+  ): Promise<AssuranceRunResult> {
+    await this.organizations.verifyTenantContext(context, undefined, transaction);
+    this.validateTransition(input);
+    const hash = requestHash("transition", {
+      commandId: input.commandId,
+      assuranceRunId: input.assuranceRunId,
+      expectedVersion: input.expectedVersion,
+      target: input.target,
+      ...(input.failure ? { failure: input.failure } : {}),
+    });
+    const decisionEvidenceHash =
+      input.decisionEvidenceHash ??
+      sha256(
+        canonicalJson({
+          assuranceRunId: input.assuranceRunId,
+          expectedVersion: input.expectedVersion,
+          target: input.target,
+          failure: input.failure,
+        }),
+      );
+    const replayed = await this.replay(context.organizationId, input.commandId, hash, transaction);
+    if (replayed) {
+      return { run: this.view(await this.find(transaction, context.organizationId, replayed.assurance_run_id)) };
+    }
+    const current = await this.find(transaction, context.organizationId, input.assuranceRunId);
+    if (current.version !== input.expectedVersion) throw new Error("Assurance run version 충돌입니다");
+    if (TERMINAL.has(current.status)) throw new Error("terminal assurance run은 변경할 수 없습니다");
+    if (current.status !== "planned" && current.status !== "running") {
+      throw new Error(`알 수 없는 active assurance 상태입니다: ${current.status}`);
+    }
+    if (!NEXT[current.status].includes(input.target)) {
+      throw new Error(`허용되지 않은 assurance 상태 전이입니다: ${current.status} -> ${input.target}`);
+    }
+
+    const nextVersion = current.version + 1;
+    const verdict = this.verdict(input.target);
+    let decisionGuardRevision: number | undefined;
+    if (verdict || input.target === "cancelled") {
+      const [guards] = await transaction.query<[{ revision: number }[]]>(
+        "UPDATE assurance_evidence_guard SET revision += 1, updated_at = time::now() WHERE organization_id = $organization_id AND assurance_run_id = $assurance_run_id RETURN AFTER;",
+        { organization_id: context.organizationId, assurance_run_id: input.assuranceRunId },
+      );
+      decisionGuardRevision = guards[0]?.revision;
+      if (
+        typeof decisionGuardRevision !== "number" ||
+        !Number.isSafeInteger(decisionGuardRevision) ||
+        decisionGuardRevision < 1
+      ) {
+        throw new Error("Assurance evidence guard를 획득할 수 없습니다");
+      }
+    }
+    const terminalGuardRevision = decisionGuardRevision ?? 0;
+    const [updated] = verdict
+      ? await transaction.query<[RunRecord[]]>(
+          "UPDATE assurance_run SET status = $status, version = $version, active_guard_key = NONE, verdict = $verdict, failure_json = $failure_json, decision_evidence_hash = $decision_evidence_hash, decision_guard_revision = $decision_guard_revision, completed_at = time::now(), updated_at = time::now() WHERE organization_id = $organization_id AND assurance_run_id = $assurance_run_id RETURN AFTER;",
+          {
+            status: input.target,
+            version: nextVersion,
+            verdict,
+            failure_json: input.failure ? canonicalJson(input.failure) : undefined,
+            decision_evidence_hash: decisionEvidenceHash,
+            decision_guard_revision: terminalGuardRevision,
+            organization_id: context.organizationId,
+            assurance_run_id: input.assuranceRunId,
+          },
+        )
+      : input.target === "cancelled"
         ? await transaction.query<[RunRecord[]]>(
-            "UPDATE assurance_run SET status = $status, version = $version, active_guard_key = NONE, verdict = $verdict, failure_json = $failure_json, completed_at = time::now(), updated_at = time::now() WHERE organization_id = $organization_id AND assurance_run_id = $assurance_run_id RETURN AFTER;",
+            "UPDATE assurance_run SET status = 'cancelled', version = $version, active_guard_key = NONE, decision_evidence_hash = $decision_evidence_hash, decision_guard_revision = $decision_guard_revision, completed_at = time::now(), updated_at = time::now() WHERE organization_id = $organization_id AND assurance_run_id = $assurance_run_id RETURN AFTER;",
             {
-              status: input.target,
               version: nextVersion,
-              verdict,
-              failure_json: input.failure ? canonicalJson(input.failure) : undefined,
+              decision_evidence_hash: decisionEvidenceHash,
+              decision_guard_revision: terminalGuardRevision,
               organization_id: context.organizationId,
               assurance_run_id: input.assuranceRunId,
             },
           )
-        : input.target === "cancelled"
-          ? await transaction.query<[RunRecord[]]>(
-              "UPDATE assurance_run SET status = 'cancelled', version = $version, active_guard_key = NONE, completed_at = time::now(), updated_at = time::now() WHERE organization_id = $organization_id AND assurance_run_id = $assurance_run_id RETURN AFTER;",
-              {
-                version: nextVersion,
-                organization_id: context.organizationId,
-                assurance_run_id: input.assuranceRunId,
-              },
-            )
-          : await transaction.query<[RunRecord[]]>(
-              "UPDATE assurance_run SET status = 'running', version = $version, updated_at = time::now() WHERE organization_id = $organization_id AND assurance_run_id = $assurance_run_id RETURN AFTER;",
-              {
-                version: nextVersion,
-                organization_id: context.organizationId,
-                assurance_run_id: input.assuranceRunId,
-              },
-            );
-      if (!updated[0]) throw new Error("Assurance run 전이 결과가 없습니다");
-      await this.recordEvent(transaction, context, {
-        assuranceRunId: current.assurance_run_id,
-        commandId: input.commandId,
-        sequence: nextVersion,
-        eventType: `assurance_run_${input.target}`,
-        requestHash: hash,
-        payload: { from: current.status, to: input.target, version: nextVersion },
-      });
-      return { run: this.view(updated[0]) };
+        : await transaction.query<[RunRecord[]]>(
+            "UPDATE assurance_run SET status = 'running', version = $version, updated_at = time::now() WHERE organization_id = $organization_id AND assurance_run_id = $assurance_run_id RETURN AFTER;",
+            {
+              version: nextVersion,
+              organization_id: context.organizationId,
+              assurance_run_id: input.assuranceRunId,
+            },
+          );
+    if (!updated[0]) throw new Error("Assurance run 전이 결과가 없습니다");
+    await this.recordEvent(transaction, context, {
+      assuranceRunId: current.assurance_run_id,
+      commandId: input.commandId,
+      sequence: nextVersion,
+      eventType: `assurance_run_${input.target}`,
+      requestHash: hash,
+      payload: { from: current.status, to: input.target, version: nextVersion },
     });
+    return { run: this.view(updated[0]) };
   }
 
   public async get(context: TenantContext, assuranceRunId: string): Promise<AssuranceRun> {
     await this.organizations.verifyTenantContext(context);
     return this.view(await this.find(this.database, context.organizationId, assuranceRunId));
+  }
+
+  public async getInTransaction(
+    context: TenantContext,
+    assuranceRunId: string,
+    transaction: QueryExecutor,
+  ): Promise<AssuranceRun> {
+    await this.organizations.verifyTenantContext(context, undefined, transaction);
+    return this.view(await this.find(transaction, context.organizationId, assuranceRunId));
   }
 
   public async prepareSnapshot(
@@ -360,6 +416,10 @@ export class AssuranceRunStore {
       assertSha256(input.failure.causeHash, "Failure cause hash");
     } else if (input.failure) {
       throw new Error(`${input.target} 전이에는 failure metadata를 사용할 수 없습니다`);
+    }
+    if (input.decisionEvidenceHash !== undefined) {
+      if (input.target === "running") throw new Error("running 전이에는 decision evidence hash를 사용할 수 없습니다");
+      assertSha256(input.decisionEvidenceHash, "Decision evidence hash");
     }
   }
 
@@ -449,6 +509,10 @@ export class AssuranceRunStore {
         ? { projectedWorkRevision: record.projected_work_revision }
         : {}),
       ...(failure ? { failure } : {}),
+      ...(record.decision_evidence_hash ? { decisionEvidenceHash: record.decision_evidence_hash } : {}),
+      ...(record.decision_guard_revision !== undefined
+        ? { decisionGuardRevision: record.decision_guard_revision }
+        : {}),
       createdByUserId: record.created_by_user_id,
       expiresAt: isoDateTime(record.expires_at, "Assurance run expiresAt"),
       startedAt: isoDateTime(record.started_at, "Assurance run startedAt"),

@@ -14,6 +14,7 @@ import type { AssuranceCriterionMethod } from "./contracts.js";
 import { checksumCriterionCoverage } from "./criteria.js";
 import {
   ASSURANCE_BINDING_MIGRATION,
+  ASSURANCE_DECISION_EVIDENCE_MIGRATION,
   ASSURANCE_EVIDENCE_INTEGRITY_MIGRATION,
   ASSURANCE_RUN_MIGRATION,
 } from "./schema.js";
@@ -45,6 +46,7 @@ export type AssuranceCheckBinding =
       readonly kind: "inspection";
       readonly inspectorProfile: string;
       readonly evidenceAllowlist: readonly string[];
+      readonly maximumAgeMs?: number;
       readonly maximumFindings: number;
     })
   | (BindingCommon & {
@@ -211,6 +213,13 @@ interface BindingProjectionSource {
   readonly bindings_json: string;
 }
 
+interface BindingCheckProjectionRecord {
+  readonly binding_key: string;
+  readonly policy_checksum?: string;
+}
+
+export const DEFAULT_INSPECTION_MAXIMUM_AGE_MS = 300_000;
+
 const ALLOWED_EXECUTABLES = new Set(["git", "node", "npm", "npx", "pnpm"]);
 const BINDING_KINDS = new Set<AssuranceCriterionMethod>(["test", "inspection", "evidence", "metric", "human"]);
 const EXECUTOR_KINDS = new Set(["runtime_agent", "system_adapter"]);
@@ -303,6 +312,9 @@ function validateBinding(binding: AssuranceCheckBinding): void {
   } else if (binding.kind === "inspection") {
     text(binding.inspectorProfile, "Inspector profile");
     stringList(binding.evidenceAllowlist, "Inspection evidence allowlist", 100);
+    const maximumAgeMs = binding.maximumAgeMs ?? DEFAULT_INSPECTION_MAXIMUM_AGE_MS;
+    if (!Number.isSafeInteger(maximumAgeMs) || maximumAgeMs < 0)
+      throw new Error("Inspection evidence freshness가 올바르지 않습니다");
     if (
       !Number.isSafeInteger(binding.maximumFindings) ||
       binding.maximumFindings < 1 ||
@@ -391,62 +403,123 @@ export function assuranceBindingIdentityChecksum(binding: AssuranceCheckBinding)
   return sha256([binding.bindingKey, binding.criterionKey, binding.kind, binding.executor.kind, executorId].join("|"));
 }
 
+export function assuranceBindingPolicyChecksum(binding: AssuranceCheckBinding): string {
+  return sha256(
+    canonicalJson({
+      requiredEvidenceKinds: binding.requiredEvidenceKinds,
+      evidenceKinds: binding.kind === "evidence" ? binding.evidenceKinds : [],
+      evidenceAllowlist: binding.kind === "inspection" ? binding.evidenceAllowlist : [],
+      maximumAgeMs:
+        binding.kind === "inspection"
+          ? (binding.maximumAgeMs ?? DEFAULT_INSPECTION_MAXIMUM_AGE_MS)
+          : binding.kind === "evidence"
+            ? binding.maximumAgeMs
+            : undefined,
+    }),
+  );
+}
+
+async function projectBindingCheck(
+  executor: QueryExecutor,
+  source: Pick<BindingProjectionSource, "binding_version_id" | "organization_id" | "work_id">,
+  binding: AssuranceCheckBinding,
+): Promise<void> {
+  const identityChecksum = assuranceBindingIdentityChecksum(binding);
+  const policyChecksum = assuranceBindingPolicyChecksum(binding);
+  await executor.query(
+    "CREATE assurance_binding_check_manifest CONTENT { binding_version_id: $binding_version_id, organization_id: $organization_id, work_id: $work_id, identity_checksum: $identity_checksum, created_at: time::now() };",
+    {
+      binding_version_id: source.binding_version_id,
+      organization_id: source.organization_id,
+      work_id: source.work_id,
+      identity_checksum: identityChecksum,
+    },
+  );
+  await executor.query(
+    "CREATE assurance_binding_check CONTENT { binding_version_id: $binding_version_id, organization_id: $organization_id, work_id: $work_id, binding_key: $binding_key, criterion_key: $criterion_key, kind: $kind, executor_kind: $executor_kind, executor_id: $executor_id, source_kind: $source_kind, metric_operator: $metric_operator, metric_threshold: $metric_threshold, metric_unit: $metric_unit, metric_max_age_ms: $metric_max_age_ms, eligible_roles: $eligible_roles, minimum_attestations: $minimum_attestations, required_evidence_kinds: $required_evidence_kinds, evidence_kinds: $evidence_kinds, evidence_allowlist: $evidence_allowlist, maximum_age_ms: $maximum_age_ms, policy_checksum: $policy_checksum, identity_checksum: $identity_checksum, created_at: time::now() };",
+    {
+      binding_version_id: source.binding_version_id,
+      organization_id: source.organization_id,
+      work_id: source.work_id,
+      binding_key: binding.bindingKey,
+      criterion_key: binding.criterionKey,
+      kind: binding.kind,
+      executor_kind: binding.executor.kind,
+      executor_id: binding.executor.kind === "system_adapter" ? binding.executor.adapterId : binding.executor.handle,
+      source_kind: binding.kind === "metric" ? binding.sourceKind : undefined,
+      metric_operator: binding.kind === "metric" ? binding.operator : undefined,
+      metric_threshold: binding.kind === "metric" ? binding.threshold : undefined,
+      metric_unit: binding.kind === "metric" ? binding.unit : undefined,
+      metric_max_age_ms: binding.kind === "metric" ? binding.maxAgeMs : undefined,
+      eligible_roles: binding.kind === "human" ? binding.eligibleRoles : [],
+      minimum_attestations: binding.kind === "human" ? binding.minimumAttestations : undefined,
+      required_evidence_kinds: binding.requiredEvidenceKinds,
+      evidence_kinds: binding.kind === "evidence" ? binding.evidenceKinds : [],
+      evidence_allowlist: binding.kind === "inspection" ? binding.evidenceAllowlist : [],
+      maximum_age_ms:
+        binding.kind === "inspection"
+          ? (binding.maximumAgeMs ?? DEFAULT_INSPECTION_MAXIMUM_AGE_MS)
+          : binding.kind === "evidence"
+            ? binding.maximumAgeMs
+            : undefined,
+      policy_checksum: policyChecksum,
+      identity_checksum: identityChecksum,
+    },
+  );
+}
+
 async function projectBindingChecks(
   executor: QueryExecutor,
   source: Pick<BindingProjectionSource, "binding_version_id" | "organization_id" | "work_id">,
   bindings: readonly AssuranceCheckBinding[],
 ): Promise<void> {
   for (const binding of bindings) {
-    const identityChecksum = assuranceBindingIdentityChecksum(binding);
-    await executor.query(
-      "CREATE assurance_binding_check_manifest CONTENT { binding_version_id: $binding_version_id, organization_id: $organization_id, work_id: $work_id, identity_checksum: $identity_checksum, created_at: time::now() };",
-      {
-        binding_version_id: source.binding_version_id,
-        organization_id: source.organization_id,
-        work_id: source.work_id,
-        identity_checksum: identityChecksum,
-      },
-    );
-    await executor.query(
-      "CREATE assurance_binding_check CONTENT { binding_version_id: $binding_version_id, organization_id: $organization_id, work_id: $work_id, binding_key: $binding_key, criterion_key: $criterion_key, kind: $kind, executor_kind: $executor_kind, executor_id: $executor_id, source_kind: $source_kind, metric_operator: $metric_operator, metric_threshold: $metric_threshold, metric_unit: $metric_unit, metric_max_age_ms: $metric_max_age_ms, eligible_roles: $eligible_roles, minimum_attestations: $minimum_attestations, identity_checksum: $identity_checksum, created_at: time::now() };",
-      {
-        binding_version_id: source.binding_version_id,
-        organization_id: source.organization_id,
-        work_id: source.work_id,
-        binding_key: binding.bindingKey,
-        criterion_key: binding.criterionKey,
-        kind: binding.kind,
-        executor_kind: binding.executor.kind,
-        executor_id: binding.executor.kind === "system_adapter" ? binding.executor.adapterId : binding.executor.handle,
-        source_kind: binding.kind === "metric" ? binding.sourceKind : undefined,
-        metric_operator: binding.kind === "metric" ? binding.operator : undefined,
-        metric_threshold: binding.kind === "metric" ? binding.threshold : undefined,
-        metric_unit: binding.kind === "metric" ? binding.unit : undefined,
-        metric_max_age_ms: binding.kind === "metric" ? binding.maxAgeMs : undefined,
-        eligible_roles: binding.kind === "human" ? binding.eligibleRoles : [],
-        minimum_attestations: binding.kind === "human" ? binding.minimumAttestations : undefined,
-        identity_checksum: identityChecksum,
-      },
-    );
+    await projectBindingCheck(executor, source, binding);
   }
 }
 
 export async function backfillAssuranceBindingChecks(database: MassionDatabase): Promise<void> {
+  await applyMigrations(database, [ASSURANCE_DECISION_EVIDENCE_MIGRATION]);
   await database.transaction(async (transaction) => {
     const [sources] = await transaction.query<[BindingProjectionSource[]]>(
       "SELECT binding_version_id, organization_id, work_id, bindings_json FROM assurance_binding_version;",
     );
     for (const source of sources) {
-      const [existing] = await transaction.query<[{ binding_key: string }[]]>(
-        "SELECT binding_key FROM assurance_binding_check WHERE organization_id = $organization_id AND binding_version_id = $binding_version_id;",
+      const [existing] = await transaction.query<[BindingCheckProjectionRecord[]]>(
+        "SELECT binding_key, policy_checksum FROM assurance_binding_check WHERE organization_id = $organization_id AND binding_version_id = $binding_version_id;",
         { organization_id: source.organization_id, binding_version_id: source.binding_version_id },
       );
-      if (existing.length > 0) continue;
       const decoded = JSON.parse(source.bindings_json) as unknown;
       if (!Array.isArray(decoded)) throw new Error("Assurance binding projection JSON이 배열이 아닙니다");
       const bindings = decoded as readonly AssuranceCheckBinding[];
       for (const binding of bindings) validateBinding(binding);
-      await projectBindingChecks(transaction, source, bindings);
+      const existingByKey = new Map(existing.map((record) => [record.binding_key, record]));
+      for (const binding of bindings) {
+        const projected = existingByKey.get(binding.bindingKey);
+        if (!projected) {
+          await projectBindingCheck(transaction, source, binding);
+          continue;
+        }
+        if (projected.policy_checksum) continue;
+        await transaction.query(
+          "UPDATE assurance_binding_check SET required_evidence_kinds = $required_evidence_kinds, evidence_kinds = $evidence_kinds, evidence_allowlist = $evidence_allowlist, maximum_age_ms = $maximum_age_ms, policy_checksum = $policy_checksum WHERE organization_id = $organization_id AND binding_version_id = $binding_version_id AND binding_key = $binding_key;",
+          {
+            organization_id: source.organization_id,
+            binding_version_id: source.binding_version_id,
+            binding_key: binding.bindingKey,
+            required_evidence_kinds: binding.requiredEvidenceKinds,
+            evidence_kinds: binding.kind === "evidence" ? binding.evidenceKinds : [],
+            evidence_allowlist: binding.kind === "inspection" ? binding.evidenceAllowlist : [],
+            maximum_age_ms:
+              binding.kind === "inspection"
+                ? (binding.maximumAgeMs ?? DEFAULT_INSPECTION_MAXIMUM_AGE_MS)
+                : binding.kind === "evidence"
+                  ? binding.maximumAgeMs
+                  : undefined,
+            policy_checksum: assuranceBindingPolicyChecksum(binding),
+          },
+        );
+      }
     }
   });
 }
@@ -476,6 +549,7 @@ export class AssuranceBindingStore {
       ASSURANCE_BINDING_MIGRATION,
       WORK_ASSURANCE_LINK_MIGRATION,
       ASSURANCE_EVIDENCE_INTEGRITY_MIGRATION,
+      ASSURANCE_DECISION_EVIDENCE_MIGRATION,
     ]);
     await backfillAssuranceBindingChecks(database);
     return new AssuranceBindingStore(database, organizations, authorizer, options);
