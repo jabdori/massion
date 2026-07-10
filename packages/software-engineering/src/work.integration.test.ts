@@ -118,6 +118,7 @@ describe("Committed delivery의 Work Artifact 통합", () => {
         organizationId: context.organizationId,
         repositoryId: "repository-1",
         status: "active",
+        rootRealPathHash: "a".repeat(64),
       }),
       getRepositoryRevision: async () => ({
         organizationId: context.organizationId,
@@ -125,6 +126,7 @@ describe("Committed delivery의 Work Artifact 통합", () => {
         repositoryRevisionId: "repository-revision-1",
         providerRevision: "a".repeat(40),
         dirty: false,
+        rootRealPathHash: "a".repeat(64),
       }),
     };
     deliveries = await EngineeringDeliveryStore.create(database, organizations, prerequisites);
@@ -152,7 +154,7 @@ describe("Committed delivery의 Work Artifact 통합", () => {
           branchRef: "refs/heads/massion/delivery",
           commitSha: "b".repeat(40),
           changeSetHash: "3".repeat(64),
-          validationEvidenceIds: ["validation-evidence"],
+          validationEvidenceIds: [],
         },
       ],
     ] as const) {

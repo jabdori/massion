@@ -9,3 +9,5 @@ export * from "./git-workspace.js";
 export * from "./command-runner.js";
 export * from "./tdd-delivery.js";
 export * from "./runtime.js";
+export * from "./metrics.js";
+export * from "./recovery.js";

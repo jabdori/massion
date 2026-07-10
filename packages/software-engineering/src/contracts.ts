@@ -24,6 +24,7 @@ export interface EngineeringDelivery {
   readonly repositoryId: string;
   readonly repositoryRevisionId: string;
   readonly baseRevision: string;
+  readonly repositoryRootRealPathHash: string;
   readonly agentHandle: string;
   readonly profileVersion: string;
   readonly status: EngineeringDeliveryStatus;
@@ -105,7 +106,12 @@ export interface DeliveryPrerequisiteReader {
   getRepository(
     context: TenantContext,
     repositoryId: string,
-  ): Promise<{ readonly organizationId: string; readonly repositoryId: string; readonly status: string }>;
+  ): Promise<{
+    readonly organizationId: string;
+    readonly repositoryId: string;
+    readonly status: string;
+    readonly rootRealPathHash: string;
+  }>;
   getRepositoryRevision(
     context: TenantContext,
     repositoryRevisionId: string,
@@ -115,6 +121,7 @@ export interface DeliveryPrerequisiteReader {
     readonly repositoryRevisionId: string;
     readonly providerRevision: string;
     readonly dirty: boolean;
+    readonly rootRealPathHash: string;
   }>;
 }
 

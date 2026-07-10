@@ -45,6 +45,7 @@ describe("Software delivery Governance", () => {
         organizationId: context.organizationId,
         repositoryId: "repository-1",
         status: "active",
+        rootRealPathHash: "a".repeat(64),
       }),
       getRepositoryRevision: async () => ({
         organizationId: context.organizationId,
@@ -52,6 +53,7 @@ describe("Software delivery Governance", () => {
         repositoryRevisionId: "revision-1",
         providerRevision: "a".repeat(40),
         dirty: false,
+        rootRealPathHash: "a".repeat(64),
       }),
     };
     deliveries = await EngineeringDeliveryStore.create(database, organizations, prerequisites);

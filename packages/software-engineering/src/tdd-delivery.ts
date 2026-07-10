@@ -71,6 +71,7 @@ export class TddDeliveryEngine {
     if (delivery.status !== "preparing") {
       throw new Error(`preparing Delivery만 TDD 실행할 수 있습니다: ${delivery.status}`);
     }
+    await this.workspaces.verifyRepositoryRoot(input.repositoryRoot, delivery.repositoryRootRealPathHash);
     let workspace: GitDeliveryWorkspace | undefined;
     let committed: GitCommitResult | undefined;
     try {
@@ -101,7 +102,7 @@ export class TddDeliveryEngine {
         deliveryId: delivery.deliveryId,
       });
       const runner = await this.runners.create(workspace.workspacePath);
-      await this.workspaces.applyPatch(workspace, testPatch);
+      const appliedTest = await this.workspaces.applyPatch(workspace, testPatch);
       delivery = (
         await this.deliveries.transition(context, {
           commandId: `${delivery.startCommandId}:test-applied`,
@@ -109,7 +110,7 @@ export class TddDeliveryEngine {
           expectedVersion: delivery.version,
           target: "test_applied",
           workspaceId: delivery.deliveryId,
-          testPatchHash: testPatch.sha256,
+          testPatchHash: appliedTest.changeSetHash,
         })
       ).delivery;
 
@@ -147,14 +148,14 @@ export class TddDeliveryEngine {
         })
       ).delivery;
 
-      await this.workspaces.applyPatch(workspace, implementationPatch);
+      const appliedImplementation = await this.workspaces.applyPatch(workspace, implementationPatch);
       delivery = (
         await this.deliveries.transition(context, {
           commandId: `${delivery.startCommandId}:implementation-applied`,
           deliveryId: delivery.deliveryId,
           expectedVersion: delivery.version,
           target: "implementation_applied",
-          implementationPatchHash: implementationPatch.sha256,
+          implementationPatchHash: appliedImplementation.changeSetHash,
         })
       ).delivery;
 

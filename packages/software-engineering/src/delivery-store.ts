@@ -15,7 +15,11 @@ import type {
 } from "./contracts.js";
 import type { EngineeringCommandEvidence } from "./command-runner.js";
 import type { GitFileChange } from "./git-workspace.js";
-import { SOFTWARE_ENGINEERING_DELIVERY_MIGRATION, SOFTWARE_ENGINEERING_TDD_EVIDENCE_MIGRATION } from "./schema.js";
+import {
+  SOFTWARE_ENGINEERING_DELIVERY_MIGRATION,
+  SOFTWARE_ENGINEERING_ROOT_BINDING_MIGRATION,
+  SOFTWARE_ENGINEERING_TDD_EVIDENCE_MIGRATION,
+} from "./schema.js";
 
 interface DeliveryRecord {
   readonly delivery_id: string;
@@ -26,6 +30,7 @@ interface DeliveryRecord {
   readonly repository_id: string;
   readonly repository_revision_id: string;
   readonly base_revision: string;
+  readonly repository_root_real_path_hash?: string;
   readonly agent_handle: string;
   readonly profile_version: string;
   readonly status: EngineeringDeliveryStatus;
@@ -54,7 +59,10 @@ interface EventRecord {
 
 interface CommandEvidenceRecord {
   readonly command_evidence_id: string;
+  readonly delivery_id?: string;
+  readonly stage?: EngineeringCommandEvidence["stage"];
   readonly evidence_hash?: string;
+  readonly created_at?: unknown;
 }
 
 interface FileChangeRecord {
@@ -121,6 +129,7 @@ export class EngineeringDeliveryStore {
     await applyMigrations(database, [
       SOFTWARE_ENGINEERING_DELIVERY_MIGRATION,
       SOFTWARE_ENGINEERING_TDD_EVIDENCE_MIGRATION,
+      SOFTWARE_ENGINEERING_ROOT_BINDING_MIGRATION,
     ]);
     return new EngineeringDeliveryStore(database, organizations, prerequisites);
   }
@@ -132,7 +141,7 @@ export class EngineeringDeliveryStore {
     const replayed = await this.replay(context.organizationId, input.commandId, requestHash);
     if (replayed) return { delivery: await this.get(context, replayed.deliveryId) };
 
-    await this.verifyPrerequisites(context, input);
+    const repositoryRootRealPathHash = await this.verifyPrerequisites(context, input);
     return await this.database.transaction(async (tx) => {
       await this.organizations.verifyTenantContext(context, undefined, tx);
       const concurrentReplay = await this.replay(context.organizationId, input.commandId, requestHash, tx);
@@ -141,7 +150,7 @@ export class EngineeringDeliveryStore {
 
       const deliveryId = randomUUID();
       const [created] = await tx.query<[DeliveryRecord[]]>(
-        "CREATE engineering_delivery CONTENT { delivery_id: $delivery_id, organization_id: $organization_id, work_id: $work_id, task_id: $task_id, assignment_id: $assignment_id, repository_id: $repository_id, repository_revision_id: $repository_revision_id, base_revision: $base_revision, agent_handle: $agent_handle, profile_version: $profile_version, status: 'preparing', version: 1, start_command_id: $start_command_id, validation_evidence_ids: [], created_by_user_id: $created_by_user_id, created_at: time::now(), updated_at: time::now() } RETURN AFTER;",
+        "CREATE engineering_delivery CONTENT { delivery_id: $delivery_id, organization_id: $organization_id, work_id: $work_id, task_id: $task_id, assignment_id: $assignment_id, repository_id: $repository_id, repository_revision_id: $repository_revision_id, base_revision: $base_revision, repository_root_real_path_hash: $repository_root_real_path_hash, agent_handle: $agent_handle, profile_version: $profile_version, status: 'preparing', version: 1, start_command_id: $start_command_id, validation_evidence_ids: [], created_by_user_id: $created_by_user_id, created_at: time::now(), updated_at: time::now() } RETURN AFTER;",
         {
           delivery_id: deliveryId,
           organization_id: context.organizationId,
@@ -151,6 +160,7 @@ export class EngineeringDeliveryStore {
           repository_id: input.repositoryId,
           repository_revision_id: input.repositoryRevisionId,
           base_revision: input.baseRevision.trim(),
+          repository_root_real_path_hash: repositoryRootRealPathHash,
           agent_handle: input.agentHandle.trim(),
           profile_version: input.profileVersion.trim(),
           start_command_id: input.commandId,
@@ -204,6 +214,16 @@ export class EngineeringDeliveryStore {
       if (!terminalFailure && NEXT_STATUS[current.status] !== input.target) {
         throw new Error(`허용되지 않는 delivery 상태 전이입니다: ${current.status} -> ${input.target}`);
       }
+      const validationEvidenceIds = input.validationEvidenceIds ?? current.validation_evidence_ids;
+      if (input.target === "committed") {
+        await this.validateCommandEvidenceIds(
+          tx,
+          context.organizationId,
+          input.deliveryId,
+          validationEvidenceIds,
+          "validation",
+        );
+      }
 
       const [updated] = await tx.query<[DeliveryRecord[]]>(
         "UPDATE engineering_delivery SET status = $status, version = $version, workspace_id = $workspace_id, branch_ref = $branch_ref, commit_sha = $commit_sha, test_patch_hash = $test_patch_hash, implementation_patch_hash = $implementation_patch_hash, change_set_hash = $change_set_hash, red_evidence_id = $red_evidence_id, green_evidence_id = $green_evidence_id, validation_evidence_ids = $validation_evidence_ids, artifact_version_id = $artifact_version_id, error_json = $error_json, updated_at = time::now() WHERE organization_id = $organization_id AND delivery_id = $delivery_id AND version = $expected_version RETURN AFTER;",
@@ -221,7 +241,7 @@ export class EngineeringDeliveryStore {
           change_set_hash: input.changeSetHash ?? current.change_set_hash,
           red_evidence_id: input.redEvidenceId ?? current.red_evidence_id,
           green_evidence_id: input.greenEvidenceId ?? current.green_evidence_id,
-          validation_evidence_ids: input.validationEvidenceIds ?? current.validation_evidence_ids,
+          validation_evidence_ids: validationEvidenceIds,
           artifact_version_id: input.artifactVersionId ?? current.artifact_version_id,
           error_json: input.error ? canonicalJson(input.error) : current.error_json,
         },
@@ -377,6 +397,74 @@ export class EngineeringDeliveryStore {
     }));
   }
 
+  public async listCommandEvidenceIds(
+    context: TenantContext,
+    deliveryId: string,
+    stage?: EngineeringCommandEvidence["stage"],
+  ): Promise<string[]> {
+    await this.organizations.verifyTenantContext(context);
+    await this.find(this.database, context.organizationId, deliveryId);
+    const [records] = await this.database.query<[CommandEvidenceRecord[]]>(
+      "SELECT command_evidence_id, stage, created_at FROM engineering_command_evidence WHERE organization_id = $organization_id AND delivery_id = $delivery_id ORDER BY created_at ASC;",
+      { organization_id: context.organizationId, delivery_id: deliveryId },
+    );
+    return records
+      .filter((record) => stage === undefined || record.stage === stage)
+      .map((record) => record.command_evidence_id);
+  }
+
+  public async findRecoveryReplay(
+    context: TenantContext,
+    input: { readonly commandId: string; readonly deliveryId: string; readonly request: unknown },
+  ): Promise<{ readonly deliveryId: string; readonly result: string } | undefined> {
+    await this.organizations.verifyTenantContext(context);
+    const requestHash = hashRequest({ operation: "recovery", request: input.request });
+    const [events] = await this.database.query<[EventRecord[]]>(
+      "SELECT request_hash, result_json FROM engineering_delivery_event WHERE organization_id = $organization_id AND command_id = $command_id LIMIT 1;",
+      { organization_id: context.organizationId, command_id: input.commandId },
+    );
+    const event = events[0];
+    if (!event) return undefined;
+    if (event.request_hash !== requestHash) {
+      throw new Error("같은 command ID에 다른 recovery 명령을 사용할 수 없습니다");
+    }
+    const replay = JSON.parse(event.result_json) as { readonly deliveryId: string; readonly result?: string };
+    if (replay.deliveryId !== input.deliveryId || !replay.result) {
+      throw new Error("Recovery command replay 계보가 잘못됐습니다");
+    }
+    return { deliveryId: replay.deliveryId, result: replay.result };
+  }
+
+  public async recordRecoveryEvent(
+    context: TenantContext,
+    input: {
+      readonly commandId: string;
+      readonly deliveryId: string;
+      readonly request: unknown;
+      readonly result: string;
+    },
+  ): Promise<void> {
+    await this.organizations.verifyTenantContext(context);
+    const requestHash = hashRequest({ operation: "recovery", request: input.request });
+    await this.database.transaction(async (transaction) => {
+      await this.organizations.verifyTenantContext(context, undefined, transaction);
+      const replayed = await this.replay(context.organizationId, input.commandId, requestHash, transaction);
+      if (replayed) {
+        if (replayed.deliveryId !== input.deliveryId) throw new Error("Recovery command replay 계보가 잘못됐습니다");
+        return;
+      }
+      await this.find(transaction, context.organizationId, input.deliveryId);
+      await this.recordEvent(transaction, context, {
+        deliveryId: input.deliveryId,
+        commandId: input.commandId,
+        eventType: "engineering_delivery_recovered",
+        requestHash,
+        payload: { result: input.result },
+        result: { deliveryId: input.deliveryId, result: input.result },
+      });
+    });
+  }
+
   public async attachArtifactVersion(
     context: TenantContext,
     input: {
@@ -444,7 +532,7 @@ export class EngineeringDeliveryStore {
     }
   }
 
-  private async verifyPrerequisites(context: TenantContext, input: StartEngineeringDeliveryInput): Promise<void> {
+  private async verifyPrerequisites(context: TenantContext, input: StartEngineeringDeliveryInput): Promise<string> {
     const [work, task, assignment, repository, revision] = await Promise.all([
       this.prerequisites.getWork(context, input.workId),
       this.prerequisites.getTask(context, input.workId, input.taskId),
@@ -491,6 +579,12 @@ export class EngineeringDeliveryStore {
     if (revision.providerRevision !== input.baseRevision.trim()) {
       throw new Error("Base revision이 RepositoryRevision provider revision과 일치하지 않습니다");
     }
+    assertSha256(repository.rootRealPathHash, "Repository root real path hash");
+    assertSha256(revision.rootRealPathHash, "RepositoryRevision root real path hash");
+    if (repository.rootRealPathHash !== revision.rootRealPathHash) {
+      throw new Error("Repository와 RepositoryRevision root real path hash가 다릅니다");
+    }
+    return repository.rootRealPathHash;
   }
 
   private validateError(target: EngineeringDeliveryStatus, error: EngineeringDeliveryError | undefined): void {
@@ -509,6 +603,28 @@ export class EngineeringDeliveryStore {
     );
     if (!records[0]) throw new Error(`Delivery를 찾을 수 없습니다: ${deliveryId}`);
     return records[0];
+  }
+
+  private async validateCommandEvidenceIds(
+    executor: QueryExecutor,
+    organizationId: string,
+    deliveryId: string,
+    evidenceIds: readonly string[],
+    stage: EngineeringCommandEvidence["stage"],
+  ): Promise<void> {
+    if (new Set(evidenceIds).size !== evidenceIds.length) {
+      throw new Error(`${stage} command evidence ID가 중복됐습니다`);
+    }
+    for (const commandEvidenceId of evidenceIds) {
+      const [records] = await executor.query<[CommandEvidenceRecord[]]>(
+        "SELECT command_evidence_id, delivery_id, stage FROM engineering_command_evidence WHERE organization_id = $organization_id AND command_evidence_id = $command_evidence_id LIMIT 1;",
+        { organization_id: organizationId, command_evidence_id: commandEvidenceId },
+      );
+      const evidence = records[0];
+      if (!evidence || evidence.delivery_id !== deliveryId || evidence.stage !== stage) {
+        throw new Error(`${stage} command evidence가 delivery 소유·stage 계보와 다릅니다`);
+      }
+    }
   }
 
   private async replay(
@@ -537,6 +653,7 @@ export class EngineeringDeliveryStore {
       readonly eventType: string;
       readonly requestHash: string;
       readonly payload: unknown;
+      readonly result?: unknown;
     },
   ): Promise<void> {
     await executor.query(
@@ -549,7 +666,7 @@ export class EngineeringDeliveryStore {
         event_type: input.eventType,
         request_hash: input.requestHash,
         payload_json: canonicalJson(input.payload),
-        result_json: canonicalJson({ deliveryId: input.deliveryId }),
+        result_json: canonicalJson(input.result ?? { deliveryId: input.deliveryId }),
         actor_user_id: context.userId,
       },
     );
@@ -566,6 +683,9 @@ export class EngineeringDeliveryStore {
   }
 
   private view(record: DeliveryRecord): EngineeringDelivery {
+    if (!record.repository_root_real_path_hash) {
+      throw new Error("EngineeringDelivery에 repository root real path hash가 없습니다");
+    }
     return {
       deliveryId: record.delivery_id,
       organizationId: record.organization_id,
@@ -575,6 +695,7 @@ export class EngineeringDeliveryStore {
       repositoryId: record.repository_id,
       repositoryRevisionId: record.repository_revision_id,
       baseRevision: record.base_revision,
+      repositoryRootRealPathHash: record.repository_root_real_path_hash,
       agentHandle: record.agent_handle,
       profileVersion: record.profile_version,
       status: record.status,
