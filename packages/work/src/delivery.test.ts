@@ -167,6 +167,36 @@ describe("Task DAG, Assignment와 Session", () => {
     ).rejects.toThrow("같은 Work");
   });
 
+  it("같은 Work revision의 동시 Assignment는 하나만 commit한다", async () => {
+    const work = await plannedWork("assignment race");
+    const task = await service.addTask(context, {
+      commandId: crypto.randomUUID(),
+      workId: work.work_id,
+      expectedRevision: work.revision,
+      title: "경쟁",
+      objective: "경쟁",
+      acceptanceCriteria: ["한 명"],
+      dependencyIds: [],
+    });
+    const results = await Promise.allSettled(
+      ["delivery-coordination", "assurance"].map((agentHandle) =>
+        service.assignTask(context, {
+          commandId: crypto.randomUUID(),
+          workId: work.work_id,
+          expectedRevision: task.work.revision,
+          taskId: task.task.task_id,
+          agentHandle,
+        }),
+      ),
+    );
+
+    expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+    expect(results.filter((result) => result.status === "rejected")).toHaveLength(1);
+    expect(
+      (await service.listAssignments(context, work.work_id)).filter((assignment) => assignment.status === "assigned"),
+    ).toHaveLength(1);
+  });
+
   it("재배정 계보를 보존하고 Agent Session과 checkpoint를 Work별로 격리한다", async () => {
     const work = await plannedWork();
     const task = await service.addTask(context, {
@@ -215,5 +245,30 @@ describe("Task DAG, Assignment와 Session", () => {
 
     expect(checkpoint.checkpoint.checksum).toMatch(/^[a-f0-9]{64}$/);
     expect(checkpoint.session.revision).toBe(2);
+    const otherWork = await plannedWork("other session");
+    const otherTask = await service.addTask(context, {
+      commandId: crypto.randomUUID(),
+      workId: otherWork.work_id,
+      expectedRevision: otherWork.revision,
+      title: "다른 실행",
+      objective: "다른 실행",
+      acceptanceCriteria: ["완료"],
+      dependencyIds: [],
+    });
+    const otherAssignment = await service.assignTask(context, {
+      commandId: crypto.randomUUID(),
+      workId: otherWork.work_id,
+      expectedRevision: otherTask.work.revision,
+      taskId: otherTask.task.task_id,
+      agentHandle: "assurance",
+    });
+    const otherSession = await service.openSession(context, {
+      commandId: crypto.randomUUID(),
+      workId: otherWork.work_id,
+      expectedRevision: otherAssignment.work.revision,
+      agentHandle: "assurance",
+    });
+    expect(otherSession.session.session_id).not.toBe(session.session.session_id);
+    expect(otherSession.session.work_id).toBe(otherWork.work_id);
   });
 });

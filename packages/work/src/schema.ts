@@ -121,3 +121,206 @@ DEFINE INDEX session_checkpoint_id ON session_checkpoint FIELDS checkpoint_id UN
 DEFINE INDEX session_checkpoint_version ON session_checkpoint FIELDS organization_id, session_id, version UNIQUE;
 `,
 );
+
+export const WORK_COLLABORATION_MIGRATION = defineMigration(
+  "0006-work-collaboration",
+  `
+DEFINE TABLE collaboration_room SCHEMAFULL;
+DEFINE FIELD room_id ON collaboration_room TYPE string;
+DEFINE FIELD organization_id ON collaboration_room TYPE string;
+DEFINE FIELD work_id ON collaboration_room TYPE string;
+DEFINE FIELD title ON collaboration_room TYPE string;
+DEFINE FIELD coordinator_handle ON collaboration_room TYPE string;
+DEFINE FIELD status ON collaboration_room TYPE string;
+DEFINE FIELD revision ON collaboration_room TYPE int;
+DEFINE FIELD next_sequence ON collaboration_room TYPE int;
+DEFINE FIELD max_parallel ON collaboration_room TYPE int;
+DEFINE FIELD max_tokens ON collaboration_room TYPE int;
+DEFINE FIELD max_cost_micros ON collaboration_room TYPE int;
+DEFINE FIELD max_rounds ON collaboration_room TYPE int;
+DEFINE FIELD round_count ON collaboration_room TYPE int;
+DEFINE FIELD deadline ON collaboration_room TYPE option<datetime>;
+DEFINE FIELD created_at ON collaboration_room TYPE datetime;
+DEFINE FIELD updated_at ON collaboration_room TYPE datetime;
+DEFINE INDEX collaboration_room_id ON collaboration_room FIELDS room_id UNIQUE;
+DEFINE INDEX collaboration_room_work ON collaboration_room FIELDS organization_id, work_id;
+
+DEFINE TABLE collaboration_participant SCHEMAFULL;
+DEFINE FIELD participant_id ON collaboration_participant TYPE string;
+DEFINE FIELD organization_id ON collaboration_participant TYPE string;
+DEFINE FIELD work_id ON collaboration_participant TYPE string;
+DEFINE FIELD room_id ON collaboration_participant TYPE string;
+DEFINE FIELD kind ON collaboration_participant TYPE string;
+DEFINE FIELD subject_id ON collaboration_participant TYPE string;
+DEFINE FIELD role ON collaboration_participant TYPE string;
+DEFINE FIELD status ON collaboration_participant TYPE string;
+DEFINE FIELD joined_at ON collaboration_participant TYPE datetime;
+DEFINE INDEX collaboration_participant_id ON collaboration_participant FIELDS participant_id UNIQUE;
+DEFINE INDEX collaboration_participant_subject ON collaboration_participant FIELDS organization_id, room_id, kind, subject_id UNIQUE;
+
+DEFINE TABLE collaboration_message SCHEMAFULL;
+DEFINE FIELD message_id ON collaboration_message TYPE string;
+DEFINE FIELD organization_id ON collaboration_message TYPE string;
+DEFINE FIELD work_id ON collaboration_message TYPE string;
+DEFINE FIELD room_id ON collaboration_message TYPE string;
+DEFINE FIELD sequence ON collaboration_message TYPE int;
+DEFINE FIELD message_type ON collaboration_message TYPE string;
+DEFINE FIELD author_kind ON collaboration_message TYPE string;
+DEFINE FIELD author_id ON collaboration_message TYPE string;
+DEFINE FIELD content ON collaboration_message TYPE string;
+DEFINE FIELD reply_to_message_id ON collaboration_message TYPE option<string>;
+DEFINE FIELD caused_by_message_id ON collaboration_message TYPE option<string>;
+DEFINE FIELD task_id ON collaboration_message TYPE option<string>;
+DEFINE FIELD context_version_id ON collaboration_message TYPE option<string>;
+DEFINE FIELD execution_id ON collaboration_message TYPE option<string>;
+DEFINE FIELD artifact_version_id ON collaboration_message TYPE option<string>;
+DEFINE FIELD token_count ON collaboration_message TYPE int;
+DEFINE FIELD cost_micros ON collaboration_message TYPE int;
+DEFINE FIELD created_at ON collaboration_message TYPE datetime;
+DEFINE INDEX collaboration_message_id ON collaboration_message FIELDS message_id UNIQUE;
+DEFINE INDEX collaboration_message_sequence ON collaboration_message FIELDS organization_id, room_id, sequence UNIQUE;
+
+DEFINE TABLE shared_context_reference SCHEMAFULL;
+DEFINE FIELD shared_context_reference_id ON shared_context_reference TYPE string;
+DEFINE FIELD organization_id ON shared_context_reference TYPE string;
+DEFINE FIELD work_id ON shared_context_reference TYPE string;
+DEFINE FIELD room_id ON shared_context_reference TYPE string;
+DEFINE FIELD source_kind ON shared_context_reference TYPE string;
+DEFINE FIELD source_id ON shared_context_reference TYPE string;
+DEFINE FIELD version_id ON shared_context_reference TYPE string;
+DEFINE FIELD checksum ON shared_context_reference TYPE string;
+DEFINE FIELD created_at ON shared_context_reference TYPE datetime;
+DEFINE INDEX shared_context_reference_id ON shared_context_reference FIELDS shared_context_reference_id UNIQUE;
+DEFINE INDEX shared_context_reference_unique ON shared_context_reference FIELDS organization_id, room_id, source_kind, source_id, version_id UNIQUE;
+
+DEFINE TABLE resource_lease SCHEMAFULL;
+DEFINE FIELD lease_id ON resource_lease TYPE string;
+DEFINE FIELD organization_id ON resource_lease TYPE string;
+DEFINE FIELD work_id ON resource_lease TYPE string;
+DEFINE FIELD resource_key ON resource_lease TYPE string;
+DEFINE FIELD holder_id ON resource_lease TYPE string;
+DEFINE FIELD status ON resource_lease TYPE string;
+DEFINE FIELD version ON resource_lease TYPE int;
+DEFINE FIELD expires_at ON resource_lease TYPE datetime;
+DEFINE FIELD created_at ON resource_lease TYPE datetime;
+DEFINE FIELD updated_at ON resource_lease TYPE datetime;
+DEFINE INDEX resource_lease_id ON resource_lease FIELDS lease_id UNIQUE;
+DEFINE INDEX resource_lease_resource ON resource_lease FIELDS organization_id, work_id, resource_key UNIQUE;
+`,
+);
+
+export const WORK_RECORDS_MIGRATION = defineMigration(
+  "0007-work-records",
+  `
+DEFINE TABLE work_artifact SCHEMAFULL;
+DEFINE FIELD artifact_id ON work_artifact TYPE string;
+DEFINE FIELD organization_id ON work_artifact TYPE string;
+DEFINE FIELD work_id ON work_artifact TYPE string;
+DEFINE FIELD kind ON work_artifact TYPE string;
+DEFINE FIELD name ON work_artifact TYPE string;
+DEFINE FIELD created_by ON work_artifact TYPE string;
+DEFINE FIELD created_at ON work_artifact TYPE datetime;
+DEFINE INDEX work_artifact_id ON work_artifact FIELDS artifact_id UNIQUE;
+DEFINE INDEX work_artifact_name ON work_artifact FIELDS organization_id, work_id, name UNIQUE;
+
+DEFINE TABLE artifact_version SCHEMAFULL;
+DEFINE FIELD artifact_version_id ON artifact_version TYPE string;
+DEFINE FIELD artifact_id ON artifact_version TYPE string;
+DEFINE FIELD organization_id ON artifact_version TYPE string;
+DEFINE FIELD work_id ON artifact_version TYPE string;
+DEFINE FIELD version ON artifact_version TYPE int;
+DEFINE FIELD checksum ON artifact_version TYPE string;
+DEFINE FIELD media_type ON artifact_version TYPE string;
+DEFINE FIELD content_json ON artifact_version TYPE string;
+DEFINE FIELD source_artifact_version_id ON artifact_version TYPE option<string>;
+DEFINE FIELD created_by ON artifact_version TYPE string;
+DEFINE FIELD created_at ON artifact_version TYPE datetime;
+DEFINE INDEX artifact_version_id ON artifact_version FIELDS artifact_version_id UNIQUE;
+DEFINE INDEX artifact_version_number ON artifact_version FIELDS organization_id, artifact_id, version UNIQUE;
+
+DEFINE TABLE work_verification SCHEMAFULL;
+DEFINE FIELD verification_id ON work_verification TYPE string;
+DEFINE FIELD organization_id ON work_verification TYPE string;
+DEFINE FIELD work_id ON work_verification TYPE string;
+DEFINE FIELD verifier_id ON work_verification TYPE string;
+DEFINE FIELD passed ON work_verification TYPE bool;
+DEFINE FIELD criteria_json ON work_verification TYPE string;
+DEFINE FIELD evidence_artifact_version_ids ON work_verification TYPE array<string>;
+DEFINE FIELD created_at ON work_verification TYPE datetime;
+DEFINE INDEX work_verification_id ON work_verification FIELDS verification_id UNIQUE;
+DEFINE INDEX work_verification_work ON work_verification FIELDS organization_id, work_id;
+
+DEFINE TABLE work_record SCHEMAFULL;
+DEFINE FIELD work_record_id ON work_record TYPE string;
+DEFINE FIELD organization_id ON work_record TYPE string;
+DEFINE FIELD work_id ON work_record TYPE string;
+DEFINE FIELD version ON work_record TYPE int;
+DEFINE FIELD recorded_work_revision ON work_record TYPE int;
+DEFINE FIELD summary ON work_record TYPE string;
+DEFINE FIELD event_start_sequence ON work_record TYPE int;
+DEFINE FIELD event_end_sequence ON work_record TYPE int;
+DEFINE FIELD decision_message_ids ON work_record TYPE array<string>;
+DEFINE FIELD artifact_version_ids ON work_record TYPE array<string>;
+DEFINE FIELD verification_ids ON work_record TYPE array<string>;
+DEFINE FIELD finalized ON work_record TYPE bool;
+DEFINE FIELD finalized_by ON work_record TYPE string;
+DEFINE FIELD finalized_at ON work_record TYPE datetime;
+DEFINE INDEX work_record_id ON work_record FIELDS work_record_id UNIQUE;
+DEFINE INDEX work_record_work_version ON work_record FIELDS organization_id, work_id, version UNIQUE;
+
+DEFINE TABLE work_merge_plan SCHEMAFULL;
+DEFINE FIELD merge_plan_id ON work_merge_plan TYPE string;
+DEFINE FIELD organization_id ON work_merge_plan TYPE string;
+DEFINE FIELD parent_work_id ON work_merge_plan TYPE string;
+DEFINE FIELD child_work_id ON work_merge_plan TYPE string;
+DEFINE FIELD parent_revision ON work_merge_plan TYPE int;
+DEFINE FIELD status ON work_merge_plan TYPE string;
+DEFINE FIELD conflict_json ON work_merge_plan TYPE string;
+DEFINE FIELD artifact_version_ids ON work_merge_plan TYPE array<string>;
+DEFINE FIELD decision_message_ids ON work_merge_plan TYPE array<string>;
+DEFINE FIELD verification_ids ON work_merge_plan TYPE array<string>;
+DEFINE FIELD created_by ON work_merge_plan TYPE string;
+DEFINE FIELD created_at ON work_merge_plan TYPE datetime;
+DEFINE FIELD applied_at ON work_merge_plan TYPE option<datetime>;
+DEFINE INDEX work_merge_plan_id ON work_merge_plan FIELDS merge_plan_id UNIQUE;
+DEFINE INDEX work_merge_plan_works ON work_merge_plan FIELDS organization_id, parent_work_id, child_work_id;
+`,
+);
+
+export const WORK_CONSTRAINTS_MIGRATION = defineMigration(
+  "0008-work-constraints",
+  `
+DEFINE FIELD OVERWRITE status ON work TYPE string ASSERT $value IN ['draft', 'planned', 'ready', 'running', 'waiting_approval', 'verifying', 'completed', 'failed', 'retrying', 'replanning', 'cancelled'];
+DEFINE FIELD OVERWRITE revision ON work TYPE int ASSERT $value >= 1;
+DEFINE EVENT work_create_state ON work
+  WHEN $event = 'CREATE' AND $after.status != 'draft'
+  THEN { THROW 'Work는 draft 상태로만 생성할 수 있습니다'; };
+DEFINE EVENT work_transition_state ON work
+  WHEN $event = 'UPDATE' AND $before.status != $after.status AND !(
+    ($before.status = 'draft' AND $after.status IN ['planned', 'cancelled']) OR
+    ($before.status = 'planned' AND $after.status IN ['ready', 'cancelled']) OR
+    ($before.status = 'ready' AND $after.status IN ['running', 'cancelled']) OR
+    ($before.status = 'running' AND $after.status IN ['waiting_approval', 'verifying', 'failed', 'cancelled']) OR
+    ($before.status = 'waiting_approval' AND $after.status IN ['running', 'cancelled']) OR
+    ($before.status = 'verifying' AND $after.status IN ['completed', 'failed', 'cancelled']) OR
+    ($before.status = 'failed' AND $after.status IN ['retrying', 'replanning', 'cancelled']) OR
+    ($before.status = 'retrying' AND $after.status IN ['running', 'cancelled']) OR
+    ($before.status = 'replanning' AND $after.status IN ['planned', 'cancelled'])
+  )
+  THEN { THROW '허용되지 않은 Work 상태 전이입니다'; };
+
+DEFINE FIELD OVERWRITE status ON work_task TYPE string ASSERT $value IN ['blocked', 'ready', 'running', 'completed', 'failed', 'cancelled'];
+DEFINE FIELD OVERWRITE revision ON work_task TYPE int ASSERT $value >= 1;
+DEFINE EVENT task_create_state ON work_task
+  WHEN $event = 'CREATE' AND $after.status NOT IN ['blocked', 'ready']
+  THEN { THROW 'Task는 blocked 또는 ready 상태로만 생성할 수 있습니다'; };
+DEFINE EVENT task_transition_state ON work_task
+  WHEN $event = 'UPDATE' AND $before.status != $after.status AND !(
+    ($before.status = 'blocked' AND $after.status IN ['ready', 'cancelled']) OR
+    ($before.status = 'ready' AND $after.status IN ['running', 'cancelled']) OR
+    ($before.status = 'running' AND $after.status IN ['completed', 'failed', 'cancelled']) OR
+    ($before.status = 'failed' AND $after.status IN ['ready', 'cancelled'])
+  )
+  THEN { THROW '허용되지 않은 Task 상태 전이입니다'; };
+`,
+);
