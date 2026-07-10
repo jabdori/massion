@@ -512,3 +512,53 @@ THEN {
 };
 `,
 );
+
+export const WORK_RECORDS_LINK_MIGRATION = defineMigration(
+  "0048-work-records-link",
+  `
+DEFINE FIELD records_schema_version ON work TYPE option<string> ASSERT $value = NONE OR $value = 'massion.work.records.v1';
+DEFINE FIELD records_run_id ON work_record TYPE option<string>;
+DEFINE FIELD records_snapshot_hash ON work_record TYPE option<string> ASSERT $value = NONE OR string::len($value) = 64;
+DEFINE FIELD document_ids ON work_record TYPE option<array<string>> ASSERT $value = NONE OR array::len($value) <= 3;
+DEFINE FIELD schema_version ON work_record TYPE option<string> ASSERT $value = NONE OR $value = 'massion.work-record.v1';
+DEFINE INDEX work_record_records_run ON work_record FIELDS records_run_id UNIQUE;
+
+DEFINE EVENT work_record_records_projection_invariant ON TABLE work_record
+WHEN $event = 'CREATE'
+THEN {
+  LET $works = (SELECT records_schema_version FROM work WHERE organization_id = $after.organization_id AND work_id = $after.work_id);
+  LET $runs = (SELECT * FROM records_run WHERE organization_id = $after.organization_id AND work_id = $after.work_id AND records_run_id = $after.records_run_id);
+  LET $any_runs = (SELECT records_run_id FROM records_run WHERE organization_id = $after.organization_id AND work_id = $after.work_id LIMIT 1);
+  IF array::len($works) != 1 {
+    THROW 'WorkRecord 대상 Work를 찾을 수 없습니다';
+  };
+  IF ($works[0].records_schema_version = 'massion.work.records.v1' OR array::len($any_runs) != 0) AND (
+    $after.records_run_id = NONE OR
+    $after.records_snapshot_hash = NONE OR
+    $after.document_ids = NONE OR
+    $after.schema_version != 'massion.work-record.v1'
+  ) {
+    THROW 'Phase 13 WorkRecord는 Records projection으로만 생성할 수 있습니다';
+  };
+  IF $after.records_run_id != NONE {
+    IF array::len($runs) != 1 OR
+      $runs[0].status != 'rendering' OR
+      $runs[0].target_work_revision + 1 != $after.recorded_work_revision OR
+      $runs[0].snapshot_hash != $after.records_snapshot_hash OR
+      $runs[0].verification_id NOT IN $after.verification_ids {
+      THROW 'WorkRecord Records run 연결이 유효하지 않습니다';
+    };
+    LET $documents = (SELECT document_id FROM records_document WHERE organization_id = $after.organization_id AND work_id = $after.work_id AND records_run_id = $after.records_run_id AND document_id IN $after.document_ids);
+    IF array::len($documents) != array::len($after.document_ids) {
+      THROW 'WorkRecord Records document 연결이 유효하지 않습니다';
+    };
+  };
+};
+
+DEFINE EVENT work_record_immutable ON TABLE work_record
+WHEN $event IN ['UPDATE', 'DELETE']
+THEN {
+  THROW 'WorkRecord는 immutable입니다';
+};
+`,
+);
