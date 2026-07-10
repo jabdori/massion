@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { type OrganizationService, type TenantContext } from "@massion/identity";
 import { applyMigrations, type MassionDatabase, type QueryExecutor } from "@massion/storage";
 
-import { ORGANIZATION_GRAPH_MIGRATION } from "./schema.js";
+import { ORGANIZATION_CAPABILITY_MIGRATION, ORGANIZATION_GRAPH_MIGRATION } from "./schema.js";
 
 export const CORE_OFFICE_HANDLES = [
   "representative",
@@ -22,6 +22,7 @@ const CORE_OFFICE = [
     name: "Representative",
     responsibility: "사용자 요청 접수, 조정, 최종 응답",
     outputs: ["Request", "Work", "FinalResult"],
+    capabilities: ["request-coordination"],
     parentHandle: undefined,
   },
   {
@@ -29,6 +30,7 @@ const CORE_OFFICE = [
     name: "Context & Strategy",
     responsibility: "프로젝트·업무 맥락 구성, 계획, 위험 분석",
     outputs: ["ContextPackage", "Plan", "AcceptanceCriteria"],
+    capabilities: ["context-strategy"],
     parentHandle: "representative",
   },
   {
@@ -36,6 +38,7 @@ const CORE_OFFICE = [
     name: "Evidence & Research",
     responsibility: "코드·문서·외부 근거 조사, 출처 검증",
     outputs: ["EvidenceBrief"],
+    capabilities: ["evidence-research"],
     parentHandle: "representative",
   },
   {
@@ -43,6 +46,7 @@ const CORE_OFFICE = [
     name: "Governance",
     responsibility: "실행·조직·Extension·자기수정 정책과 승인",
     outputs: ["PolicyDecision", "Approval"],
+    capabilities: ["governance"],
     parentHandle: "representative",
   },
   {
@@ -50,6 +54,7 @@ const CORE_OFFICE = [
     name: "Delivery Coordination",
     responsibility: "Task 배정, 전문 팀 실행 조정, 결과 통합",
     outputs: ["Assignment", "Execution"],
+    capabilities: ["delivery-coordination"],
     parentHandle: "representative",
   },
   {
@@ -57,6 +62,7 @@ const CORE_OFFICE = [
     name: "Assurance",
     responsibility: "독립 리뷰, 테스트·보안·운영 검증",
     outputs: ["Verification"],
+    capabilities: ["assurance"],
     parentHandle: "representative",
   },
   {
@@ -64,6 +70,7 @@ const CORE_OFFICE = [
     name: "Records & Documentation",
     responsibility: "handoff·결정·계보 기록, 문서 영향 반영",
     outputs: ["WorkRecord", "ADR", "Changelog", "Runbook"],
+    capabilities: ["records-documentation"],
     parentHandle: "representative",
   },
   {
@@ -71,6 +78,7 @@ const CORE_OFFICE = [
     name: "Growth",
     responsibility: "Reflection, 개선안 평가·채택·효과 비교·되돌리기",
     outputs: ["Suggestion", "Adoption", "Revert"],
+    capabilities: ["growth"],
     parentHandle: "representative",
   },
 ] as const;
@@ -88,6 +96,7 @@ export interface OrganizationNode {
   readonly name: string;
   readonly responsibility: string;
   readonly outputs: readonly string[];
+  readonly capabilities: readonly string[];
   readonly parent_handle?: string;
   readonly scope: NodeScope;
   readonly work_id?: string;
@@ -176,8 +185,34 @@ export interface RevertCommand extends CommandBase {
   readonly targetVersion: number;
 }
 
+export interface OrganizationProfileNode {
+  readonly handle: string;
+  readonly name: string;
+  readonly responsibility: string;
+  readonly outputs: readonly string[];
+  readonly capabilities: readonly string[];
+  readonly parentHandle: string;
+  readonly scope: NodeScope;
+  readonly workId?: string;
+  readonly role: NodeRole;
+}
+
+export interface InstallProfileCommand extends CommandBase {
+  readonly kind: "install-profile";
+  readonly profileId: string;
+  readonly profileVersion: string;
+  readonly nodes: readonly OrganizationProfileNode[];
+}
+
 export type OrganizationCommand =
-  CreateNodeCommand | TargetCommand | MoveCommand | RoleCommand | SplitCommand | MergeCommand | RevertCommand;
+  | CreateNodeCommand
+  | TargetCommand
+  | MoveCommand
+  | RoleCommand
+  | SplitCommand
+  | MergeCommand
+  | RevertCommand
+  | InstallProfileCommand;
 
 export interface OrganizationReference {
   readonly reference_id: string;
@@ -223,13 +258,16 @@ export interface OrganizationGovernanceGate {
 }
 
 type MutableNode = { -readonly [Key in keyof OrganizationNode]: OrganizationNode[Key] };
+type StoredOrganizationNode = Omit<OrganizationNode, "capabilities"> & {
+  readonly capabilities?: readonly string[];
+};
 
 async function listNodes(executor: QueryExecutor, organizationId: string): Promise<OrganizationNode[]> {
-  const [nodes] = await executor.query<[OrganizationNode[]]>(
-    "SELECT node_id, organization_id, handle, name, responsibility, outputs, parent_handle, scope, work_id, builtin, status, role, created_at FROM organization_node WHERE organization_id = $organization_id ORDER BY handle ASC;",
+  const [nodes] = await executor.query<[StoredOrganizationNode[]]>(
+    "SELECT node_id, organization_id, handle, name, responsibility, outputs, capabilities, parent_handle, scope, work_id, builtin, status, role, created_at FROM organization_node WHERE organization_id = $organization_id ORDER BY handle ASC;",
     { organization_id: organizationId },
   );
-  return nodes;
+  return nodes.map((node) => ({ ...node, capabilities: node.capabilities ?? [] }));
 }
 
 async function listVersions(executor: QueryExecutor, organizationId: string): Promise<OrganizationVersion[]> {
@@ -247,9 +285,9 @@ function latestVersion(versions: OrganizationVersion[]): OrganizationVersion | u
   );
 }
 
-function normalizeSnapshot(nodes: readonly OrganizationNode[]): OrganizationNode[] {
+function normalizeSnapshot(nodes: readonly StoredOrganizationNode[]): OrganizationNode[] {
   return [...nodes]
-    .map((node) => ({ ...node, created_at: String(node.created_at) }))
+    .map((node) => ({ ...node, capabilities: node.capabilities ?? [], created_at: String(node.created_at) }))
     .sort((left, right) => left.handle.localeCompare(right.handle));
 }
 
@@ -307,6 +345,7 @@ function validateOperationalGraph(nodes: readonly OrganizationNode[]): void {
 
 function targetRoots(command: OrganizationCommand): string[] {
   if (command.kind === "create") return [command.parentHandle];
+  if (command.kind === "install-profile") return command.nodes.map((node) => node.handle);
   if (command.kind === "split") return [command.sourceHandle, ...command.childHandles];
   if (command.kind === "merge") return [command.survivorHandle, command.sourceHandle];
   if (command.kind === "revert") return [];
@@ -336,7 +375,7 @@ export class OrganizationGraphService {
     organizations: OrganizationService,
     governance?: OrganizationGovernanceGate,
   ) {
-    await applyMigrations(database, [ORGANIZATION_GRAPH_MIGRATION]);
+    await applyMigrations(database, [ORGANIZATION_GRAPH_MIGRATION, ORGANIZATION_CAPABILITY_MIGRATION]);
     return new OrganizationGraphService(database, organizations, governance);
   }
 
@@ -381,7 +420,7 @@ export class OrganizationGraphService {
         const nodes = await listNodes(transaction, context.organizationId);
         return { nodes, version: existing, impact: { nodeHandles: [], references: [] } };
       }
-      for (const { handle, name, responsibility, outputs, parentHandle } of CORE_OFFICE) {
+      for (const { handle, name, responsibility, outputs, capabilities, parentHandle } of CORE_OFFICE) {
         await this.insertNode(transaction, {
           node_id: randomUUID(),
           organization_id: context.organizationId,
@@ -389,6 +428,7 @@ export class OrganizationGraphService {
           name,
           responsibility,
           outputs,
+          capabilities,
           ...(parentHandle ? { parent_handle: parentHandle } : {}),
           scope: "persistent",
           builtin: true,
@@ -467,6 +507,22 @@ export class OrganizationGraphService {
 
   public async execute(context: TenantContext, command: OrganizationCommand): Promise<GraphChangeResult> {
     await this.verify(context, true);
+    const observedVersions = await listVersions(this.database, context.organizationId);
+    const observedReplay = observedVersions.find((version) => version.command_id === command.commandId);
+    if (observedReplay) {
+      if (observedReplay.request_json !== canonicalJson(command)) {
+        throw new Error("같은 commandId에 다른 명령을 사용할 수 없습니다");
+      }
+      return {
+        nodes: normalizeSnapshot(JSON.parse(observedReplay.after_json) as StoredOrganizationNode[]),
+        version: observedReplay,
+        impact: JSON.parse(observedReplay.impact_json) as ImpactReport,
+      };
+    }
+    const observedCurrent = latestVersion(observedVersions);
+    if (!observedCurrent || observedCurrent.version !== command.expectedVersion) {
+      throw new Error(`현재 OrganizationVersion은 ${String(observedCurrent?.version ?? 0)}입니다`);
+    }
     if (!command.governanceApprovalId) await this.authorizeChange(context, command);
     return await this.database.transaction(async (transaction) => {
       await this.organizations.verifyTenantContext(context, ["owner"], transaction);
@@ -476,7 +532,7 @@ export class OrganizationGraphService {
         if (repeated.request_json !== canonicalJson(command))
           throw new Error("같은 commandId에 다른 명령을 사용할 수 없습니다");
         return {
-          nodes: JSON.parse(repeated.after_json) as OrganizationNode[],
+          nodes: normalizeSnapshot(JSON.parse(repeated.after_json) as StoredOrganizationNode[]),
           version: repeated,
           impact: JSON.parse(repeated.impact_json) as ImpactReport,
         };
@@ -521,7 +577,7 @@ export class OrganizationGraphService {
     const nodes = await listNodes(this.database, context.organizationId);
     const byHandle = new Map(nodes.map((node) => [node.handle, node]));
     const findings: ComplianceFinding[] = [];
-    for (const { handle, name, responsibility, outputs, parentHandle } of CORE_OFFICE) {
+    for (const { handle, name, responsibility, outputs, capabilities, parentHandle } of CORE_OFFICE) {
       const node = byHandle.get(handle);
       if (
         !node ||
@@ -529,6 +585,7 @@ export class OrganizationGraphService {
         node.name !== name ||
         node.responsibility !== responsibility ||
         canonicalJson(node.outputs) !== canonicalJson(outputs) ||
+        canonicalJson(node.capabilities) !== canonicalJson(capabilities) ||
         node.parent_handle !== parentHandle ||
         node.status !== "active"
       ) {
@@ -601,6 +658,7 @@ export class OrganizationGraphService {
         name: command.name.trim(),
         responsibility: command.responsibility.trim(),
         outputs: command.outputs ?? [],
+        capabilities: [],
         parent_handle: command.parentHandle,
         scope: command.scope,
         ...(command.workId ? { work_id: command.workId } : {}),
@@ -609,6 +667,48 @@ export class OrganizationGraphService {
         role: command.role ?? "operator",
         created_at: new Date().toISOString(),
       });
+    } else if (command.kind === "install-profile") {
+      if (!command.profileId.trim() || !command.profileVersion.trim()) {
+        throw new Error("Profile ID와 version이 필요합니다");
+      }
+      if (command.nodes.length === 0) throw new Error("Profile에는 하나 이상의 조직 노드가 필요합니다");
+      const profileHandles = new Set<string>();
+      for (const profileNode of command.nodes) {
+        if (profileHandles.has(profileNode.handle)) {
+          throw new Error(`Profile 안에 중복 handle이 있습니다: ${profileNode.handle}`);
+        }
+        profileHandles.add(profileNode.handle);
+        if (nodes.some((node) => node.handle === profileNode.handle)) {
+          throw new Error(`이미 존재하는 handle입니다: ${profileNode.handle}`);
+        }
+        if (
+          !profileNode.handle.trim() ||
+          !profileNode.name.trim() ||
+          !profileNode.responsibility.trim() ||
+          !profileNode.parentHandle.trim()
+        ) {
+          throw new Error("Profile node의 handle, name, responsibility와 parent가 필요합니다");
+        }
+        if (profileNode.outputs.length === 0 || profileNode.capabilities.length === 0) {
+          throw new Error(`Profile node에는 output과 capability가 필요합니다: ${profileNode.handle}`);
+        }
+        nodes.push({
+          node_id: randomUUID(),
+          organization_id: before[0]?.organization_id ?? "",
+          handle: profileNode.handle,
+          name: profileNode.name.trim(),
+          responsibility: profileNode.responsibility.trim(),
+          outputs: [...profileNode.outputs],
+          capabilities: [...profileNode.capabilities],
+          parent_handle: profileNode.parentHandle,
+          scope: profileNode.scope,
+          ...(profileNode.workId ? { work_id: profileNode.workId } : {}),
+          builtin: false,
+          status: "active",
+          role: profileNode.role,
+          created_at: new Date().toISOString(),
+        });
+      }
     } else if (command.kind === "move") {
       mutable(command.handle).parent_handle = find(command.parentHandle).handle;
     } else if (command.kind === "change-role" || command.kind === "promote") {
@@ -657,7 +757,7 @@ export class OrganizationGraphService {
   private snapshotForRevert(versions: OrganizationVersion[], targetVersion: number): OrganizationNode[] {
     const target = versions.find((version) => version.version === targetVersion);
     if (!target) throw new Error(`되돌릴 OrganizationVersion을 찾을 수 없습니다: ${String(targetVersion)}`);
-    return normalizeSnapshot(JSON.parse(target.after_json) as OrganizationNode[]);
+    return normalizeSnapshot(JSON.parse(target.after_json) as StoredOrganizationNode[]);
   }
 
   private async analyzeImpactWith(
@@ -726,7 +826,7 @@ export class OrganizationGraphService {
 
   private async insertNode(executor: QueryExecutor, node: OrganizationNode): Promise<void> {
     await executor.query(
-      "CREATE organization_node CONTENT { node_id: $node_id, organization_id: $organization_id, handle: $handle, name: $name, responsibility: $responsibility, outputs: $outputs, parent_handle: $parent_handle, scope: $scope, work_id: $work_id, builtin: $builtin, status: $status, role: $role, created_at: type::datetime($created_at) };",
+      "CREATE organization_node CONTENT { node_id: $node_id, organization_id: $organization_id, handle: $handle, name: $name, responsibility: $responsibility, outputs: $outputs, capabilities: $capabilities, parent_handle: $parent_handle, scope: $scope, work_id: $work_id, builtin: $builtin, status: $status, role: $role, created_at: type::datetime($created_at) };",
       {
         node_id: node.node_id,
         organization_id: node.organization_id,
@@ -734,6 +834,7 @@ export class OrganizationGraphService {
         name: node.name,
         responsibility: node.responsibility,
         outputs: node.outputs,
+        capabilities: node.capabilities,
         parent_handle: node.parent_handle,
         scope: node.scope,
         work_id: node.work_id,

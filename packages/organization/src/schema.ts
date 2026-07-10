@@ -50,3 +50,11 @@ DEFINE INDEX organization_reference_unique ON organization_reference FIELDS orga
 DEFINE INDEX organization_reference_node ON organization_reference FIELDS organization_id, node_handle;
 `,
 );
+
+export const ORGANIZATION_CAPABILITY_MIGRATION = defineMigration(
+  "0034-organization-capabilities",
+  `
+DEFINE FIELD capabilities ON organization_node TYPE array<string> DEFAULT [];
+UPDATE organization_node SET capabilities = [] WHERE capabilities = NONE;
+`,
+);

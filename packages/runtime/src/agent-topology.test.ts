@@ -56,6 +56,7 @@ function node(handle: string, parentHandle?: string, status: OrganizationNode["s
     name: handle,
     responsibility: `${handle} responsibility`,
     outputs: [],
+    capabilities: [],
     ...(parentHandle ? { parent_handle: parentHandle } : {}),
     scope: "persistent",
     builtin: false,
