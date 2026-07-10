@@ -34,6 +34,10 @@ function canonicalJson(value: unknown): string {
   return JSON.stringify(value);
 }
 
+export function hashPolicyRequest(request: PolicyRequest): string {
+  return createHash("sha256").update(canonicalJson(request)).digest("hex");
+}
+
 function matches(requirement: ApprovalRequirement, request: PolicyRequest): boolean {
   const environment = typeof request.context.environment === "string" ? request.context.environment : "unknown";
   const riskClass = typeof request.context.riskClass === "string" ? request.context.riskClass : "unknown";
@@ -66,7 +70,7 @@ export class GovernanceService {
     const requestJson = canonicalJson(input);
     const repeated = await this.repeated(context.organizationId, input.commandId, requestJson);
     if (repeated) return this.view(repeated);
-    const requestHash = createHash("sha256").update(canonicalJson(input.request)).digest("hex");
+    const requestHash = hashPolicyRequest(input.request);
     let outcome: PolicyDecision["outcome"] = "deny";
     let reasons: readonly string[] = [];
     let errors: readonly string[] = [];

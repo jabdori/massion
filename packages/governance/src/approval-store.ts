@@ -290,6 +290,15 @@ export class ApprovalStore {
     return events;
   }
 
+  public async listPending(context: TenantContext): Promise<ApprovalRecord[]> {
+    await this.organizations.verifyTenantContext(context);
+    const [records] = await this.database.query<[ApprovalRecord[]]>(
+      "SELECT * OMIT id FROM governance_approval WHERE organization_id = $organization_id AND status = 'pending' ORDER BY created_at ASC, approval_id ASC;",
+      { organization_id: context.organizationId },
+    );
+    return records;
+  }
+
   private async find(executor: QueryExecutor, organizationId: string, approvalId: string): Promise<ApprovalRecord> {
     const [records] = await executor.query<[ApprovalRecord[]]>(
       "SELECT * OMIT id FROM governance_approval WHERE organization_id = $organization_id AND approval_id = $approval_id LIMIT 1;",

@@ -1,5 +1,10 @@
 import { createHash, randomUUID } from "node:crypto";
 
+import {
+  GovernanceApprovalRequiredError,
+  type GovernanceAuthorization,
+  type GovernanceGate,
+} from "@massion/governance";
 import { type OrganizationService, type TenantContext } from "@massion/identity";
 import { type OrganizationGraphService } from "@massion/organization";
 import { applyMigrations, type MassionDatabase, type QueryExecutor } from "@massion/storage";
@@ -104,6 +109,30 @@ export interface WorkCommandInput {
 export interface TransitionInput extends WorkCommandInput {
   readonly target: WorkStatus;
 }
+
+export interface AuthorizeRunningActionInput extends WorkCommandInput {
+  readonly governedRevision?: number;
+  readonly action: string;
+  readonly environment: string;
+  readonly riskClass: string;
+  readonly external: boolean;
+  readonly approvalId?: string;
+}
+
+export type AuthorizeRunningActionResult =
+  | {
+      readonly outcome: "waiting_approval";
+      readonly work: Work;
+      readonly event: WorkEvent;
+      readonly decisionId: string;
+      readonly approvalId: string;
+    }
+  | {
+      readonly outcome: "allowed";
+      readonly work: Work;
+      readonly event?: WorkEvent;
+      readonly authorization: GovernanceAuthorization;
+    };
 
 export interface AddPlanInput extends WorkCommandInput {
   readonly content: Record<string, unknown>;
@@ -592,12 +621,14 @@ export class WorkService {
     private readonly database: MassionDatabase,
     private readonly organizations: OrganizationService,
     private readonly graph?: OrganizationGraphService,
+    private readonly governance?: Pick<GovernanceGate, "authorize">,
   ) {}
 
   public static async create(
     database: MassionDatabase,
     organizations: OrganizationService,
     graph?: OrganizationGraphService,
+    governance?: Pick<GovernanceGate, "authorize">,
   ): Promise<WorkService> {
     await applyMigrations(database, [
       WORK_CORE_MIGRATION,
@@ -606,7 +637,7 @@ export class WorkService {
       WORK_RECORDS_MIGRATION,
       WORK_CONSTRAINTS_MIGRATION,
     ]);
-    return new WorkService(database, organizations, graph);
+    return new WorkService(database, organizations, graph, governance);
   }
 
   private async verify(context: TenantContext): Promise<void> {
@@ -1837,6 +1868,58 @@ export class WorkService {
       );
       return {};
     });
+  }
+
+  public async authorizeRunningAction(
+    context: TenantContext,
+    input: AuthorizeRunningActionInput,
+  ): Promise<AuthorizeRunningActionResult> {
+    if (!this.governance) throw new Error("Work Governance Gate가 구성되지 않았습니다");
+    const work = await this.getWork(context, input.workId);
+    if (work.revision !== input.expectedRevision)
+      throw new Error(`현재 Work revision은 ${String(work.revision)}입니다`);
+    const governedRevision = input.governedRevision ?? work.revision;
+    let authorization: GovernanceAuthorization;
+    try {
+      authorization = await this.governance.authorize(context, {
+        commandId: input.commandId,
+        action: input.action,
+        resource: { type: "Work", id: work.work_id, revision: governedRevision },
+        environment: input.environment,
+        riskClass: input.riskClass,
+        external: input.external,
+        executionId: `work-action:${work.work_id}:${input.commandId}`,
+        ...(input.approvalId ? { approvalId: input.approvalId } : {}),
+      });
+    } catch (error) {
+      if (!(error instanceof GovernanceApprovalRequiredError)) throw error;
+      if (work.status !== "running") throw new Error("running Work만 승인 대기로 전이할 수 있습니다", { cause: error });
+      const waiting = await this.transition(context, {
+        commandId: `${input.commandId}:waiting-approval`,
+        workId: work.work_id,
+        expectedRevision: work.revision,
+        target: "waiting_approval",
+      });
+      return {
+        outcome: "waiting_approval",
+        work: waiting.work,
+        event: waiting.event,
+        decisionId: error.decisionId,
+        approvalId: error.approvalId,
+      };
+    }
+    if (!input.approvalId) {
+      if (work.status !== "running") throw new Error("승인 없는 실행 허가는 running Work에서만 사용할 수 있습니다");
+      return { outcome: "allowed", work, authorization };
+    }
+    if (work.status !== "waiting_approval") throw new Error("waiting_approval Work만 승인 후 재개할 수 있습니다");
+    const resumed = await this.transition(context, {
+      commandId: `${input.commandId}:approval-resumed`,
+      workId: work.work_id,
+      expectedRevision: work.revision,
+      target: "running",
+    });
+    return { outcome: "allowed", work: resumed.work, event: resumed.event, authorization };
   }
 
   private async mutate<Extra extends object>(
