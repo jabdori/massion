@@ -39,4 +39,18 @@ describe("Records bootstrap", () => {
     );
     await expect(bootstrap.metrics.aggregate(context)).resolves.toEqual([]);
   });
+
+  it("손상된 restored completed Work는 service 활성화 전에 거부한다", async () => {
+    await IdentityService.create(database);
+    const organizations = await OrganizationService.create(database);
+    await database.query(
+      "DEFINE TABLE work SCHEMALESS; CREATE work CONTENT { organization_id: 'organization-corrupt', work_id: 'work-corrupt', status: 'completed', revision: 11, records_schema_version: 'massion.work.records.v1' };",
+    );
+
+    await expect(
+      RecordsBootstrap.create(database, organizations, {
+        continuation: { resume: vi.fn(async () => undefined) },
+      }),
+    ).rejects.toThrow("RecordsRun");
+  });
 });

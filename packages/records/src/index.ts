@@ -1,10 +1,11 @@
 export * from "./bootstrap.js";
+export * from "./compliance.js";
 export * from "./contracts.js";
 export * from "./impact.js";
 export * from "./metrics.js";
 export * from "./recovery.js";
 export * from "./renderer.js";
-export * from "./run-store.js";
+export type { CompleteRecordsRunInput, RecordDocumentationImpactsResult, StartRecordsRunInput } from "./run-store.js";
 export { RECORDS_DOCUMENTATION_MIGRATION, RECORDS_RECOVERY_METRIC_MIGRATION } from "./schema.js";
 export * from "./security.js";
 export * from "./service.js";

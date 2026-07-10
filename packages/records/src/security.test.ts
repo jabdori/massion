@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { validateDocumentSecurity } from "./security.js";
+import * as publicApi from "./index.js";
 
 function safe(value: string = "운영 절차를 확인합니다"): Record<string, unknown> {
   return { title: "안전한 문서", sourceReferenceIds: ["source-1"], content: value };
@@ -41,4 +42,10 @@ describe("Records document security boundary", () => {
       }),
     ).not.toThrow();
   });
+});
+
+it("package root에 raw RecordsRunStore를 노출하지 않는다", () => {
+  expect(publicApi).not.toHaveProperty("RecordsRunStore");
+  expect(publicApi).toHaveProperty("RecordsService");
+  expect(publicApi).toHaveProperty("RecordsBootstrap");
 });
