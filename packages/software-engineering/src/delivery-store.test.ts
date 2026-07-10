@@ -41,7 +41,7 @@ describe("Software Engineering delivery 저장소", () => {
         taskId,
         assignmentId,
         agentHandle: "software-engineering.backend-specialist",
-        status: "active",
+        status: "assigned",
       }),
       getRepository: async () => ({ organizationId: context.organizationId, repositoryId, status: "active" }),
       getRepositoryRevision: async () => ({
@@ -109,7 +109,7 @@ describe("Software Engineering delivery 저장소", () => {
       taskId: "different-task",
       assignmentId,
       agentHandle: "software-engineering.backend-specialist",
-      status: "active",
+      status: "assigned",
     });
     await expect(store.start(context, input())).rejects.toThrow("Assignment 소유 계보");
 
@@ -119,7 +119,7 @@ describe("Software Engineering delivery 저장소", () => {
       taskId,
       assignmentId,
       agentHandle: "software-engineering.backend-specialist",
-      status: "active",
+      status: "assigned",
     });
     prerequisites.getRepositoryRevision = async () => ({
       organizationId: context.organizationId,
@@ -154,7 +154,7 @@ describe("Software Engineering delivery 저장소", () => {
       taskId,
       assignmentId,
       agentHandle: "software-engineering.frontend-specialist",
-      status: "active",
+      status: "assigned",
     });
     await expect(store.start(context, input())).rejects.toThrow("Agent assignment");
   });
