@@ -177,6 +177,21 @@ export interface RouteReservation extends RouteSimulation {
   readonly secret: string;
 }
 
+export interface RouteDiagnostic {
+  readonly routeName: string;
+  readonly routeKind: RouteKind;
+  readonly dataPolicy: ModelRoute["data_policy"];
+  readonly status: "available" | "blocked_model_unavailable";
+  readonly reasons: readonly string[];
+  readonly recovery?: string;
+  readonly resumeAt?: string;
+}
+
+export interface RouterDiagnostic {
+  readonly status: "available" | "degraded";
+  readonly routes: readonly RouteDiagnostic[];
+}
+
 export interface ReportFailureInput {
   readonly commandId: string;
   readonly attemptId: string;
@@ -208,6 +223,8 @@ interface RouterCircuit {
   readonly open_until?: unknown;
   readonly version: number;
 }
+
+type CircuitScope = "credential" | "endpoint" | "model";
 
 const POLICIES = new Set<CredentialPolicy>([
   "priority",
@@ -424,6 +441,30 @@ export class ModelRouter {
     return await this.select(this.database, context, request);
   }
 
+  public async diagnose(context: TenantContext, requests: readonly RouteRequest[]): Promise<RouterDiagnostic> {
+    await this.organizations.verifyTenantContext(context);
+    const routes: RouteDiagnostic[] = [];
+    for (const request of requests) {
+      const simulation = await this.select(this.database, context, request);
+      const available = simulation.status === "selected";
+      const recovery = available
+        ? undefined
+        : simulation.route.data_policy === "local-private"
+          ? "활성 local Endpoint, 검증된 local Model Profile, Candidate와 Credential을 구성해주세요."
+          : "요구사항을 만족하는 Model Profile, Candidate와 활성 Credential을 구성해주세요.";
+      routes.push({
+        routeName: simulation.route.name,
+        routeKind: simulation.route.route_kind,
+        dataPolicy: simulation.route.data_policy,
+        status: available ? "available" : "blocked_model_unavailable",
+        reasons: simulation.explanation.excluded,
+        ...(recovery ? { recovery } : {}),
+        ...(simulation.resumeAt ? { resumeAt: simulation.resumeAt } : {}),
+      });
+    }
+    return { status: routes.every((route) => route.status === "available") ? "available" : "degraded", routes };
+  }
+
   public async reserve(context: TenantContext, input: ReserveRouteInput): Promise<RouteReservation> {
     await this.organizations.verifyTenantContext(context);
     const requestJson = canonicalJson(input);
@@ -535,7 +576,27 @@ export class ModelRouter {
       );
       if (["upstream", "timeout", "network"].includes(classified.failureClass)) {
         const profile = await this.profile(tx, context.organizationId, current.model_profile_id);
-        await this.recordCircuitFailure(tx, context.organizationId, profile.endpoint_id, classified.failureClass);
+        await this.recordCircuitFailure(
+          tx,
+          context.organizationId,
+          "credential",
+          current.credential_id,
+          classified.failureClass,
+        );
+        await this.recordCircuitFailure(
+          tx,
+          context.organizationId,
+          "endpoint",
+          profile.endpoint_id,
+          classified.failureClass,
+        );
+        await this.recordCircuitFailure(
+          tx,
+          context.organizationId,
+          "model",
+          profile.model_profile_id,
+          classified.failureClass,
+        );
       }
       const [attempts] = await tx.query<[RouteAttempt[]]>(
         "UPDATE route_attempt SET status = $status, failure_class = $failure_class, status_code = $status_code, emitted_tokens = $emitted_tokens, actual_input_tokens = $input_tokens, actual_output_tokens = $output_tokens, actual_cost_micros = $actual_cost, fallback_allowed = $fallback_allowed, retry_at = $retry_at, updated_at = time::now() WHERE organization_id = $organization_id AND attempt_id = $attempt_id RETURN AFTER;",
@@ -593,6 +654,10 @@ export class ModelRouter {
           cost_delta: costDelta,
         },
       );
+      const profile = await this.profile(tx, context.organizationId, current.model_profile_id);
+      await this.recordCircuitSuccess(tx, context.organizationId, "credential", current.credential_id);
+      await this.recordCircuitSuccess(tx, context.organizationId, "endpoint", profile.endpoint_id);
+      await this.recordCircuitSuccess(tx, context.organizationId, "model", profile.model_profile_id);
       const [attempts] = await tx.query<[RouteAttempt[]]>(
         "UPDATE route_attempt SET status = 'succeeded', emitted_tokens = $output_tokens, actual_input_tokens = $input_tokens, actual_output_tokens = $output_tokens, actual_cost_micros = $actual_cost, fallback_allowed = false, updated_at = time::now() WHERE organization_id = $organization_id AND attempt_id = $attempt_id RETURN AFTER;",
         {
@@ -642,9 +707,15 @@ export class ModelRouter {
         excluded.push(`${profile.model_id}: ${profileFailures.join(", ")}`);
         continue;
       }
-      const circuit = await this.circuit(executor, context.organizationId, endpoint.endpoint_id);
-      if (circuit?.state === "open" && serializedMillis(circuit.open_until) > Date.now()) {
-        const until = new Date(serializedMillis(circuit.open_until)).toISOString();
+      const scopedCircuits = [
+        await this.circuit(executor, context.organizationId, "model", profile.model_profile_id),
+        await this.circuit(executor, context.organizationId, "endpoint", endpoint.endpoint_id),
+      ];
+      const openCircuit = scopedCircuits.find(
+        (item) => item?.state === "open" && serializedMillis(item.open_until) > Date.now(),
+      );
+      if (openCircuit) {
+        const until = new Date(serializedMillis(openCircuit.open_until)).toISOString();
         excluded.push(`${profile.model_id}/${endpoint.name}: circuit open until ${until}`);
         if (!resumeAt || until < resumeAt) resumeAt = until;
         continue;
@@ -654,20 +725,38 @@ export class ModelRouter {
         { organization_id: context.organizationId, provider_id: profile.provider_id, endpoint_id: profile.endpoint_id },
       );
       const now = Date.now();
-      const eligible = credentials.filter((credential) => {
+      const eligible: ProviderCredential[] = [];
+      for (const credential of credentials) {
         if (credential.credential_id === excludedCredentialId) {
           excluded.push(`${profile.model_id}/${credential.label}: 이전 실패 Credential 제외`);
-          return false;
+          continue;
         }
-        if (credential.status === "active" && credential.quota_remaining !== 0) return true;
-        if (credential.status === "cooldown" && serializedMillis(credential.cooldown_until) <= now) return true;
+        const credentialCircuit = await this.circuit(
+          executor,
+          context.organizationId,
+          "credential",
+          credential.credential_id,
+        );
+        if (credentialCircuit?.state === "open" && serializedMillis(credentialCircuit.open_until) > now) {
+          const until = new Date(serializedMillis(credentialCircuit.open_until)).toISOString();
+          excluded.push(`${profile.model_id}/${credential.label}: circuit open until ${until}`);
+          if (!resumeAt || until < resumeAt) resumeAt = until;
+          continue;
+        }
+        if (credential.status === "active" && credential.quota_remaining !== 0) {
+          eligible.push(credential);
+          continue;
+        }
+        if (credential.status === "cooldown" && serializedMillis(credential.cooldown_until) <= now) {
+          eligible.push(credential);
+          continue;
+        }
         if (credential.cooldown_until) {
           const until = new Date(serializedMillis(credential.cooldown_until)).toISOString();
           if (!resumeAt || until < resumeAt) resumeAt = until;
         }
         excluded.push(`${profile.model_id}/${credential.label}: ${credential.status}`);
-        return false;
-      });
+      }
       const selected = selectCredential(route.credential_policy, eligible, request.stickyKey);
       if (selected) {
         const credential = credentials.find((item) => item.credential_id === selected.credential_id);
@@ -854,11 +943,12 @@ export class ModelRouter {
   private async circuit(
     executor: QueryExecutor,
     organizationId: string,
-    endpointId: string,
+    scopeType: CircuitScope,
+    scopeId: string,
   ): Promise<RouterCircuit | undefined> {
     const [circuits] = await executor.query<[RouterCircuit[]]>(
-      "SELECT * OMIT id FROM router_circuit WHERE organization_id = $organization_id AND scope_type = 'endpoint' AND scope_id = $scope_id LIMIT 1;",
-      { organization_id: organizationId, scope_id: endpointId },
+      "SELECT * OMIT id FROM router_circuit WHERE organization_id = $organization_id AND scope_type = $scope_type AND scope_id = $scope_id LIMIT 1;",
+      { organization_id: organizationId, scope_type: scopeType, scope_id: scopeId },
     );
     return circuits[0];
   }
@@ -866,20 +956,22 @@ export class ModelRouter {
   private async recordCircuitFailure(
     executor: QueryExecutor,
     organizationId: string,
-    endpointId: string,
+    scopeType: CircuitScope,
+    scopeId: string,
     failureClass: string,
   ): Promise<void> {
-    const current = await this.circuit(executor, organizationId, endpointId);
+    const current = await this.circuit(executor, organizationId, scopeType, scopeId);
     const failureCount = (current?.failure_count ?? 0) + 1;
     const open = failureCount >= 3;
     const openUntil = open ? new Date(Date.now() + 60_000) : undefined;
     if (!current) {
       await executor.query(
-        "CREATE router_circuit CONTENT { circuit_id: $circuit_id, organization_id: $organization_id, scope_type: 'endpoint', scope_id: $scope_id, state: $state, failure_count: $failure_count, success_count: 0, threshold: 3, open_until: $open_until, last_failure_class: $failure_class, version: 1, created_at: time::now(), updated_at: time::now() };",
+        "CREATE router_circuit CONTENT { circuit_id: $circuit_id, organization_id: $organization_id, scope_type: $scope_type, scope_id: $scope_id, state: $state, failure_count: $failure_count, success_count: 0, threshold: 3, open_until: $open_until, last_failure_class: $failure_class, version: 1, created_at: time::now(), updated_at: time::now() };",
         {
           circuit_id: randomUUID(),
           organization_id: organizationId,
-          scope_id: endpointId,
+          scope_type: scopeType,
+          scope_id: scopeId,
           state: open ? "open" : "closed",
           failure_count: failureCount,
           open_until: openUntil,
@@ -898,6 +990,20 @@ export class ModelRouter {
         open_until: openUntil,
         failure_class: failureClass,
       },
+    );
+  }
+
+  private async recordCircuitSuccess(
+    executor: QueryExecutor,
+    organizationId: string,
+    scopeType: CircuitScope,
+    scopeId: string,
+  ): Promise<void> {
+    const current = await this.circuit(executor, organizationId, scopeType, scopeId);
+    if (!current) return;
+    await executor.query(
+      "UPDATE router_circuit SET state = 'closed', failure_count = 0, success_count += 1, open_until = NONE, last_failure_class = NONE, version += 1, updated_at = time::now() WHERE organization_id = $organization_id AND circuit_id = $circuit_id;",
+      { organization_id: organizationId, circuit_id: current.circuit_id },
     );
   }
 }

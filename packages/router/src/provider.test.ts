@@ -131,4 +131,49 @@ describe("Provider와 암호화 Credential lifecycle", () => {
       service.listCredentials({ ...otherContext, organizationId: context.organizationId }, provider.provider_id),
     ).rejects.toThrow("TenantContext");
   });
+
+  it("external gateway는 지원 gateway kind를 필수로 하고 일반 Provider에는 이를 허용하지 않는다", async () => {
+    await service.registerProvider(context, {
+      commandId: crypto.randomUUID(),
+      providerId: "gateway",
+      displayName: "Gateway",
+      adapterKind: "external-gateway",
+    });
+    await expect(
+      service.registerEndpoint(context, {
+        commandId: crypto.randomUUID(),
+        providerId: "gateway",
+        name: "Missing kind",
+        baseUrl: "https://gateway.example/v1",
+        local: false,
+      }),
+    ).rejects.toThrow("gatewayKind");
+    await expect(
+      service.registerEndpoint(context, {
+        commandId: crypto.randomUUID(),
+        providerId: "gateway",
+        name: "Unknown",
+        baseUrl: "https://gateway.example/v1",
+        local: false,
+        gatewayKind: "unknown" as "litellm",
+      }),
+    ).rejects.toThrow("지원하지 않는 Gateway");
+
+    await service.registerProvider(context, {
+      commandId: crypto.randomUUID(),
+      providerId: "direct",
+      displayName: "Direct",
+      adapterKind: "openai-compatible",
+    });
+    await expect(
+      service.registerEndpoint(context, {
+        commandId: crypto.randomUUID(),
+        providerId: "direct",
+        name: "Wrong gateway metadata",
+        baseUrl: "https://direct.example/v1",
+        local: false,
+        gatewayKind: "portkey",
+      }),
+    ).rejects.toThrow("external-gateway");
+  });
 });

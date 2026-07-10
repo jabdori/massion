@@ -1,3 +1,4 @@
+export * from "./discovery.js";
 export * from "./provider.js";
 export * from "./failure.js";
 export * from "./model-router.js";
