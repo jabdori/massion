@@ -175,12 +175,17 @@ export class RepositoryScanner {
     const ignore = await loadIgnore(rootRealPath);
     const candidates: string[] = [];
     const symlinks: string[] = [];
-    await this.walk(rootRealPath, "", ignore, options, candidates, symlinks);
+    const nonRegular: string[] = [];
+    await this.walk(rootRealPath, "", ignore, options, candidates, symlinks, nonRegular);
     candidates.sort((left, right) => left.localeCompare(right));
     symlinks.sort((left, right) => left.localeCompare(right));
+    nonRegular.sort((left, right) => left.localeCompare(right));
 
     const files: ScannedFile[] = [];
-    const excluded: ExcludedFile[] = symlinks.map((relativePath) => ({ relativePath, reason: "symlink" }));
+    const excluded: ExcludedFile[] = [
+      ...symlinks.map((relativePath): ExcludedFile => ({ relativePath, reason: "symlink" })),
+      ...nonRegular.map((relativePath): ExcludedFile => ({ relativePath, reason: "unsupported" })),
+    ];
     for (const relativePath of candidates) {
       const confined = await resolveConfinedFile(rootRealPath, relativePath);
       const fileStat = await stat(confined.absolutePath);
@@ -258,6 +263,7 @@ export class RepositoryScanner {
     options: ScanOptions,
     candidates: string[],
     symlinks: string[],
+    nonRegular: string[],
   ): Promise<void> {
     const directory = path.join(rootRealPath, ...relativeDirectory.split("/").filter(Boolean));
     const entries = [];
@@ -275,7 +281,7 @@ export class RepositoryScanner {
         ) {
           continue;
         }
-        await this.walk(rootRealPath, relativePath, ignore, options, candidates, symlinks);
+        await this.walk(rootRealPath, relativePath, ignore, options, candidates, symlinks, nonRegular);
         continue;
       }
       if (ignore.ignores(relativePath) || matches(options.exclude, relativePath)) continue;
@@ -284,6 +290,8 @@ export class RepositoryScanner {
         symlinks.push(relativePath);
       } else if (entry.isFile()) {
         candidates.push(relativePath);
+      } else {
+        nonRegular.push(relativePath);
       }
     }
   }
