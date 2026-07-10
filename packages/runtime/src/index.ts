@@ -5,3 +5,4 @@ export * from "./model-factory.js";
 export * from "./schema.js";
 export * from "./surreal-memory.js";
 export * from "./voltagent-topology.js";
+export * from "./voltagent-runner.js";

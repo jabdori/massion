@@ -4,7 +4,7 @@ import { type OrganizationService, type TenantContext } from "@massion/identity"
 import { applyMigrations, type MassionDatabase, type QueryExecutor } from "@massion/storage";
 
 import type { AgentExecutionInput, RuntimeExecutionStatus } from "./contracts.js";
-import { RUNTIME_EXECUTION_MIGRATION } from "./schema.js";
+import { RUNTIME_BLOCKED_TRANSITION_MIGRATION, RUNTIME_EXECUTION_MIGRATION } from "./schema.js";
 
 export interface RuntimeExecution {
   readonly execution_id: string;
@@ -64,9 +64,17 @@ export interface BindWorkflowInput {
   readonly workflowExecutionId: string;
 }
 
+export interface AppendRuntimeEventInput {
+  readonly commandId: string;
+  readonly executionId: string;
+  readonly expectedVersion: number;
+  readonly eventType: string;
+  readonly payload: unknown;
+}
+
 const TRANSITIONS: Readonly<Record<RuntimeExecutionStatus, readonly RuntimeExecutionStatus[]>> = {
   queued: ["running", "blocked_model_unavailable", "cancelled"],
-  running: ["suspended", "succeeded", "failed", "cancelled", "interrupted"],
+  running: ["suspended", "succeeded", "failed", "cancelled", "interrupted", "blocked_model_unavailable"],
   suspended: ["running", "cancelled"],
   succeeded: [],
   failed: [],
@@ -76,6 +84,7 @@ const TRANSITIONS: Readonly<Record<RuntimeExecutionStatus, readonly RuntimeExecu
 };
 
 function canonicalJson(value: unknown): string {
+  if (value === undefined) return "null";
   if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
   if (value && typeof value === "object") {
     return `{${Object.entries(value as Record<string, unknown>)
@@ -96,7 +105,7 @@ export class RuntimeExecutionStore {
     database: MassionDatabase,
     organizations: OrganizationService,
   ): Promise<RuntimeExecutionStore> {
-    await applyMigrations(database, [RUNTIME_EXECUTION_MIGRATION]);
+    await applyMigrations(database, [RUNTIME_EXECUTION_MIGRATION, RUNTIME_BLOCKED_TRANSITION_MIGRATION]);
     return new RuntimeExecutionStore(database, organizations);
   }
 
@@ -224,6 +233,39 @@ export class RuntimeExecutionStore {
       );
       await this.saveResult(tx, event, { execution, event, binding });
       return { execution, event, binding };
+    });
+  }
+
+  public async appendEvent(
+    context: TenantContext,
+    input: AppendRuntimeEventInput,
+  ): Promise<{ execution: RuntimeExecution; event: RuntimeEvent }> {
+    await this.organizations.verifyTenantContext(context);
+    const requestJson = canonicalJson(input);
+    return await this.database.transaction(async (tx) => {
+      await this.organizations.verifyTenantContext(context, undefined, tx);
+      const repeated = await this.repeated(tx, context.organizationId, input.commandId, requestJson);
+      if (repeated) return await this.resultFromEvent(tx, context.organizationId, repeated);
+      const current = await this.execution(tx, context.organizationId, input.executionId);
+      if (current.version !== input.expectedVersion)
+        throw new Error(`현재 Runtime Execution version은 ${String(current.version)}입니다`);
+      const [executions] = await tx.query<[RuntimeExecution[]]>(
+        "UPDATE runtime_execution SET version += 1, event_sequence += 1, updated_at = time::now() WHERE organization_id = $organization_id AND execution_id = $execution_id RETURN AFTER;",
+        { organization_id: context.organizationId, execution_id: current.execution_id },
+      );
+      const execution = executions[0];
+      if (!execution) throw new Error("Runtime Event append 실행 결과가 없습니다");
+      const event = await this.insertEvent(
+        tx,
+        context.organizationId,
+        execution,
+        input.commandId,
+        input.eventType,
+        requestJson,
+        input.payload,
+      );
+      await this.saveResult(tx, event, { execution, event });
+      return { execution, event };
     });
   }
 

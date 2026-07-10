@@ -57,6 +57,10 @@ export interface RoutedModelLease {
   fail(usage: ModelFailureUsage): Promise<ModelFailureOutcome>;
 }
 
+export interface RoutedModelFactory {
+  acquire(context: TenantContext, input: AcquireModelInput): Promise<RoutedModelLease>;
+}
+
 export class OpenAICompatibleModelBuilder implements ProviderModelBuilder {
   public build(selection: ProviderModelSelection): LanguageModel {
     const root = selection.endpoint.base_url.replace(/\/$/u, "");
@@ -70,7 +74,7 @@ export class OpenAICompatibleModelBuilder implements ProviderModelBuilder {
   }
 }
 
-export class MassionModelFactory {
+export class MassionModelFactory implements RoutedModelFactory {
   public constructor(
     private readonly router: ModelRouter,
     private readonly providers: ProviderService,
