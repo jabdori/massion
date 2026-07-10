@@ -21,7 +21,9 @@
     "@massion/evidence": "workspace:*",
     "@massion/identity": "workspace:*",
     "@massion/organization": "workspace:*",
-    "@massion/storage": "workspace:*"
+    "@massion/runtime": "workspace:*",
+    "@massion/storage": "workspace:*",
+    "@massion/work": "workspace:*"
   },
   "engines": {
     "node": ">=24.0.0"

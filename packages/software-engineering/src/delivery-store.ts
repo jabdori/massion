@@ -59,6 +59,13 @@ interface CommandEvidenceRecord {
 
 interface FileChangeRecord {
   readonly file_change_id: string;
+  readonly organization_id: string;
+  readonly delivery_id: string;
+  readonly relative_path: string;
+  readonly kind: GitFileChange["kind"];
+  readonly before_hash?: string;
+  readonly after_hash?: string;
+  readonly test_file: boolean;
   readonly change_hash?: string;
 }
 
@@ -351,6 +358,73 @@ export class EngineeringDeliveryStore {
         fileChangeIds.push(fileChangeId);
       }
       return { fileChangeIds };
+    });
+  }
+
+  public async listFileChanges(context: TenantContext, deliveryId: string): Promise<GitFileChange[]> {
+    await this.organizations.verifyTenantContext(context);
+    await this.find(this.database, context.organizationId, deliveryId);
+    const [records] = await this.database.query<[FileChangeRecord[]]>(
+      "SELECT * OMIT id FROM engineering_file_change WHERE organization_id = $organization_id AND delivery_id = $delivery_id ORDER BY relative_path ASC;",
+      { organization_id: context.organizationId, delivery_id: deliveryId },
+    );
+    return records.map((record) => ({
+      relativePath: record.relative_path,
+      kind: record.kind,
+      ...(record.before_hash ? { beforeHash: record.before_hash } : {}),
+      ...(record.after_hash ? { afterHash: record.after_hash } : {}),
+      testFile: record.test_file,
+    }));
+  }
+
+  public async attachArtifactVersion(
+    context: TenantContext,
+    input: {
+      readonly commandId: string;
+      readonly deliveryId: string;
+      readonly expectedVersion: number;
+      readonly artifactVersionId: string;
+    },
+  ): Promise<EngineeringDeliveryResult> {
+    await this.organizations.verifyTenantContext(context);
+    assertText(input.commandId, "Command ID");
+    assertText(input.artifactVersionId, "ArtifactVersion ID");
+    const requestHash = hashRequest({ operation: "attach-artifact", input });
+    return await this.database.transaction(async (transaction) => {
+      await this.organizations.verifyTenantContext(context, undefined, transaction);
+      const replayed = await this.replay(context.organizationId, input.commandId, requestHash, transaction);
+      if (replayed) {
+        return { delivery: this.view(await this.find(transaction, context.organizationId, replayed.deliveryId)) };
+      }
+      const current = await this.find(transaction, context.organizationId, input.deliveryId);
+      if (current.artifact_version_id) {
+        if (current.artifact_version_id !== input.artifactVersionId) {
+          throw new Error("EngineeringDelivery에는 다른 ArtifactVersion이 이미 연결됐습니다");
+        }
+        return { delivery: this.view(current) };
+      }
+      if (current.status !== "committed")
+        throw new Error("committed Delivery에만 ArtifactVersion을 연결할 수 있습니다");
+      if (current.version !== input.expectedVersion) throw new Error("Engineering delivery version 충돌입니다");
+      const [updated] = await transaction.query<[DeliveryRecord[]]>(
+        "UPDATE engineering_delivery SET artifact_version_id = $artifact_version_id, version = $version, updated_at = time::now() WHERE organization_id = $organization_id AND delivery_id = $delivery_id AND version = $expected_version RETURN AFTER;",
+        {
+          artifact_version_id: input.artifactVersionId,
+          version: current.version + 1,
+          organization_id: context.organizationId,
+          delivery_id: input.deliveryId,
+          expected_version: current.version,
+        },
+      );
+      if (!updated[0]) throw new Error("Engineering delivery version 충돌입니다");
+      await this.recordEvent(transaction, context, {
+        deliveryId: input.deliveryId,
+        commandId: input.commandId,
+        eventType: "engineering_artifact_attached",
+        requestHash,
+        payload: { artifactVersionId: input.artifactVersionId },
+      });
+      return { delivery: this.view(updated[0]) };
     });
   }
 
