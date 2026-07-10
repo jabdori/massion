@@ -33,6 +33,12 @@ export interface ActivatePolicyInput {
   readonly expectedActivePolicyVersionId?: string;
 }
 
+export interface ActivePolicy {
+  readonly version: PolicyVersion;
+  readonly bundle: PolicyBundle;
+  readonly requirements: readonly ApprovalRequirement[];
+}
+
 interface PolicyEvent {
   readonly policy_version_id: string;
   readonly command_id: string;
@@ -157,6 +163,19 @@ export class PolicyStore {
   public async getActive(context: TenantContext): Promise<PolicyVersion | undefined> {
     await this.organizations.verifyTenantContext(context);
     return await this.active(this.database, context.organizationId);
+  }
+
+  public async getActivePolicy(context: TenantContext): Promise<ActivePolicy | undefined> {
+    const version = await this.getActive(context);
+    if (!version) return undefined;
+    return {
+      version,
+      bundle: {
+        schema: JSON.parse(version.schema_json) as Readonly<Record<string, unknown>>,
+        policies: JSON.parse(version.policies_json) as Readonly<Record<string, string>>,
+      },
+      requirements: JSON.parse(version.requirements_json) as ApprovalRequirement[],
+    };
   }
 
   private async find(executor: QueryExecutor, organizationId: string, policyVersionId: string): Promise<PolicyVersion> {
