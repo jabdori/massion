@@ -123,6 +123,12 @@ export interface RevokeCredentialInput extends CommandInput {
 }
 
 const CREDENTIAL_TYPES = new Set<CredentialType>(["api_key", "oauth", "service_account", "workload_identity"]);
+const GATEWAY_KINDS = new Set<NonNullable<ProviderEndpoint["gateway_kind"]>>([
+  "litellm",
+  "portkey",
+  "omniroute",
+  "other",
+]);
 
 function canonicalJson(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
@@ -180,13 +186,18 @@ export class ProviderService {
     if (!input.local && url.protocol !== "https:") throw new Error("외부 Provider endpoint는 HTTPS여야 합니다");
     if (input.local && !["http:", "https:"].includes(url.protocol))
       throw new Error("로컬 endpoint URL이 유효하지 않습니다");
+    if (input.gatewayKind && !GATEWAY_KINDS.has(input.gatewayKind)) throw new Error("지원하지 않는 Gateway입니다");
     return await this.command(
       context,
       input.commandId,
       "provider_endpoint_registered",
       canonicalJson(input),
       async (tx) => {
-        await this.requireProvider(tx, context.organizationId, input.providerId);
+        const provider = await this.requireProvider(tx, context.organizationId, input.providerId);
+        if (provider.adapter_kind === "external-gateway" && !input.gatewayKind)
+          throw new Error("external-gateway Provider에는 gatewayKind가 필요합니다");
+        if (provider.adapter_kind !== "external-gateway" && input.gatewayKind)
+          throw new Error("gatewayKind는 external-gateway Provider에만 사용할 수 있습니다");
         const [endpoints] = await tx.query<[ProviderEndpoint[]]>(
           "CREATE provider_endpoint CONTENT { endpoint_id: $endpoint_id, organization_id: $organization_id, provider_id: $provider_id, name: $name, base_url: $base_url, local: $local, gateway_kind: $gateway_kind, enabled: true, created_at: time::now(), updated_at: time::now() } RETURN AFTER;",
           {

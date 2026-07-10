@@ -344,6 +344,30 @@ describe("Model Route simulation과 reservation", () => {
     expect(simulated.explanation.excluded.join(" ")).toContain("circuit open");
   });
 
+  it("upstream 실패를 credential·endpoint·model 세 범위 circuit에 기록한다", async () => {
+    const created = await route();
+    const reserved = await router.reserve(context, {
+      commandId: crypto.randomUUID(),
+      routeName: created.name,
+      estimatedTokens: 100,
+      estimatedCostMicros: 100,
+    });
+    await router.reportFailure(context, {
+      commandId: crypto.randomUUID(),
+      attemptId: reserved.attempt.attempt_id,
+      signal: { kind: "timeout" },
+      emittedTokens: 0,
+      actualInputTokens: 0,
+      actualOutputTokens: 0,
+      actualCostMicros: 0,
+    });
+    const [circuits] = await database.query<[Array<{ scope_type: string }>]>(
+      "SELECT scope_type FROM router_circuit ORDER BY scope_type ASC;",
+    );
+
+    expect(circuits.map((circuit) => circuit.scope_type)).toEqual(["credential", "endpoint", "model"]);
+  });
+
   it("성공 완료는 실제 비용과 token 사용량을 정산한다", async () => {
     const created = await route();
     const reserved = await router.reserve(context, {
@@ -370,5 +394,84 @@ describe("Model Route simulation과 reservation", () => {
     expect(outcome.attempt.actual_output_tokens).toBe(20);
     expect(outcome.attempt.actual_cost_micros).toBe(600);
     expect(routes[0]?.spent_micros).toBe(600);
+  });
+
+  it("정상 성공은 credential·endpoint·model circuit의 실패 누적을 닫고 초기화한다", async () => {
+    const created = await route("fill-first");
+    const request = { routeName: created.name, estimatedTokens: 10, estimatedCostMicros: 10 };
+    const failed = await router.reserve(context, { ...request, commandId: crypto.randomUUID() });
+    await router.reportFailure(context, {
+      commandId: crypto.randomUUID(),
+      attemptId: failed.attempt.attempt_id,
+      signal: { kind: "network" },
+      emittedTokens: 0,
+      actualInputTokens: 0,
+      actualOutputTokens: 0,
+      actualCostMicros: 0,
+    });
+    const succeeded = await router.reserve(context, { ...request, commandId: crypto.randomUUID() });
+    await router.reportSuccess(context, {
+      commandId: crypto.randomUUID(),
+      attemptId: succeeded.attempt.attempt_id,
+      actualInputTokens: 1,
+      actualOutputTokens: 1,
+      actualCostMicros: 1,
+    });
+    const [circuits] = await database.query<[Array<{ state: string; failure_count: number; success_count: number }>]>(
+      "SELECT state, failure_count, success_count FROM router_circuit;",
+    );
+
+    expect(circuits).toHaveLength(3);
+    expect(circuits.every((circuit) => circuit.state === "closed" && circuit.failure_count === 0)).toBe(true);
+    expect(circuits.every((circuit) => circuit.success_count >= 1)).toBe(true);
+  });
+
+  it("chat·embedding·local-private route의 제한 상태와 복구 조치를 집계한다", async () => {
+    const chat = await route();
+    const embedding = await router.createRoute(context, {
+      commandId: crypto.randomUUID(),
+      name: "embedding-default",
+      routeKind: "embedding",
+      credentialPolicy: "priority",
+      dataPolicy: "external-allowed",
+      equivalenceGroup: "embedding",
+      minEvalScore: 0.8,
+      requireTools: false,
+      requireStructuredOutput: false,
+      requireVision: false,
+      requireStreaming: false,
+      maxContextTokens: 8_000,
+      requestBudgetMicros: 1_000,
+      totalBudgetMicros: 10_000,
+    });
+    const local = await router.createRoute(context, {
+      commandId: crypto.randomUUID(),
+      name: "local-private-default",
+      routeKind: "chat",
+      credentialPolicy: "priority",
+      dataPolicy: "local-private",
+      equivalenceGroup: "local",
+      minEvalScore: 0.8,
+      requireTools: false,
+      requireStructuredOutput: false,
+      requireVision: false,
+      requireStreaming: false,
+      maxContextTokens: 8_000,
+      requestBudgetMicros: 1_000,
+      totalBudgetMicros: 10_000,
+    });
+
+    const diagnostic = await router.diagnose(context, [
+      { routeName: chat.name, estimatedTokens: 1, estimatedCostMicros: 1 },
+      { routeName: embedding.route.name, estimatedTokens: 1, estimatedCostMicros: 1 },
+      { routeName: local.route.name, estimatedTokens: 1, estimatedCostMicros: 1 },
+    ]);
+
+    expect(diagnostic.status).toBe("degraded");
+    expect(
+      diagnostic.routes.find((item) => item.routeKind === "chat" && item.dataPolicy === "external-allowed")?.status,
+    ).toBe("available");
+    expect(diagnostic.routes.find((item) => item.routeKind === "embedding")?.recovery).toContain("Candidate");
+    expect(diagnostic.routes.find((item) => item.dataPolicy === "local-private")?.recovery).toContain("local");
   });
 });
