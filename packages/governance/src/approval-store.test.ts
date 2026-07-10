@@ -88,6 +88,38 @@ describe("Approval Inbox", () => {
     expect((await approvals.listEvents(context, request.approval_id)).map((event) => event.sequence)).toEqual([1, 2]);
   });
 
+  it("동시 terminal vote는 하나만 반영한다", async () => {
+    const governed = await decision();
+    const request = await approvals.request(context, {
+      commandId: crypto.randomUUID(),
+      decisionId: governed.decisionId,
+      resourceRevision: 3,
+    });
+
+    const results = await Promise.allSettled([
+      approvals.vote(context, {
+        commandId: crypto.randomUUID(),
+        approvalId: request.approval_id,
+        vote: "approve",
+        reason: "first",
+      }),
+      approvals.vote(context, {
+        commandId: crypto.randomUUID(),
+        approvalId: request.approval_id,
+        vote: "reject",
+        reason: "second",
+      }),
+    ]);
+
+    expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+    expect(["approved", "rejected"]).toContain((await approvals.get(context, request.approval_id)).status);
+    expect(
+      (await approvals.listEvents(context, request.approval_id)).filter((event) =>
+        ["approval_approved", "approval_rejected"].includes(event.event_type),
+      ),
+    ).toHaveLength(1);
+  });
+
   it("team separation-of-duty는 요청자의 자기 승인을 거부하고 다른 admin을 허용한다", async () => {
     const team = await organizations.createTeam(context.userId, "Governed Team");
     context = await organizations.resolveTenantContext(context.userId, team.organization.organization_id);
