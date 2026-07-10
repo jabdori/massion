@@ -11,7 +11,7 @@ import {
   type RecordsProjectionDocumentInput,
 } from "./records-port.js";
 import { WorkService } from "./work.js";
-import { WORK_RECORDS_LINK_MIGRATION } from "./schema.js";
+import { WORK_RECORDS_COMPLETION_MIGRATION, WORK_RECORDS_LINK_MIGRATION } from "./schema.js";
 
 function sha256(value: string): string {
   return createHash("sha256").update(value).digest("hex");
@@ -31,6 +31,10 @@ describe("Work Records N+2 projection", () => {
     expect(WORK_RECORDS_LINK_MIGRATION.id).toBe("0048-work-records-link");
     expect(WORK_RECORDS_LINK_MIGRATION.checksum).toBe(
       "e7b9a4914870e7c26ec02520f55bc8965c41c59de696952a6a2c3113c4c0fd74",
+    );
+    expect(WORK_RECORDS_COMPLETION_MIGRATION.id).toBe("0049-work-records-completion");
+    expect(WORK_RECORDS_COMPLETION_MIGRATION.checksum).toBe(
+      "76c7c803b7803d362df0801320fc4f31af33477ac3f77bcd087497820b009e1c",
     );
   });
 
@@ -74,6 +78,7 @@ CREATE documentation_impact_assessment CONTENT { assessment_id: 'assessment-runb
 `,
       { organization_id: context.organizationId, work_id: workId, snapshot_hash: "a".repeat(64) },
     );
+    await database.query("REMOVE EVENT IF EXISTS work_assurance_completion_guard ON TABLE work;");
     port = await WorkRecordsPort.create(database, organizations);
     const sourceJson = JSON.stringify({
       kind: "adr",
@@ -183,5 +188,57 @@ CREATE documentation_impact_assessment CONTENT { assessment_id: 'assessment-runb
         { organization_id: context.organizationId, work_id: workId, user_id: context.userId },
       ),
     ).rejects.toThrow("Records projection");
+  });
+
+  it("N+2 계보와 문서 checksum이 정확할 때만 N+3 completed를 만든다", async () => {
+    const finalized = await port.finalize(context, input());
+    const completed = await port.complete(context, {
+      commandId: "records-run-1:complete",
+      workId,
+      expectedRevision: finalized.work.revision,
+      recordsRunId: "records-run-1",
+      recordsSnapshotHash: "a".repeat(64),
+      verificationId: "verification-1",
+    });
+
+    expect(completed.work).toMatchObject({ status: "completed", revision: 7 });
+    expect(completed.event.event_type).toBe("work_state_changed");
+    const repeated = await port.complete(context, {
+      commandId: "records-run-1:complete",
+      workId,
+      expectedRevision: finalized.work.revision,
+      recordsRunId: "records-run-1",
+      recordsSnapshotHash: "a".repeat(64),
+      verificationId: "verification-1",
+    });
+    expect(repeated.event.event_id).toBe(completed.event.event_id);
+  });
+
+  it("문서 Artifact 내용 변조와 direct completed 우회를 DB gate에서 거부한다", async () => {
+    await expect(
+      database.query(
+        "UPDATE work SET status = 'completed', revision = 6 WHERE organization_id = $organization_id AND work_id = $work_id;",
+        { organization_id: context.organizationId, work_id: workId },
+      ),
+    ).rejects.toThrow("Records");
+
+    const finalized = await port.finalize(context, input());
+    await database.query(
+      "UPDATE artifact_version SET content_json = 'tampered' WHERE organization_id = $organization_id AND artifact_version_id = $artifact_version_id;",
+      {
+        organization_id: context.organizationId,
+        artifact_version_id: finalized.artifactVersions[0]?.artifact_version_id,
+      },
+    );
+    await expect(
+      port.complete(context, {
+        commandId: "records-run-1:complete",
+        workId,
+        expectedRevision: finalized.work.revision,
+        recordsRunId: "records-run-1",
+        recordsSnapshotHash: "a".repeat(64),
+        verificationId: "verification-1",
+      }),
+    ).rejects.toThrow("checksum");
   });
 });

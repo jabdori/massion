@@ -177,3 +177,10 @@ THEN {
 };
 `,
 );
+
+export const RECORDS_RECOVERY_METRIC_MIGRATION = defineMigration(
+  "0050-records-recovery-metric",
+  `
+DEFINE FIELD OVERWRITE metric_name ON records_metric_event TYPE string ASSERT $value IN ['records_run_duration_ms', 'records_run_total', 'records_document_total', 'documentation_impact_total', 'records_blocked_total', 'records_recovery_total'];
+`,
+);

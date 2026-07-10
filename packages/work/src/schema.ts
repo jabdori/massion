@@ -562,3 +562,45 @@ THEN {
 };
 `,
 );
+
+export const WORK_RECORDS_COMPLETION_MIGRATION = defineMigration(
+  "0049-work-records-completion",
+  `
+DEFINE EVENT work_records_completion_guard ON TABLE work
+WHEN $event = 'UPDATE' AND $before.status != 'completed' AND $after.status = 'completed'
+THEN {
+  LET $runs = (SELECT * FROM records_run WHERE organization_id = $after.organization_id AND work_id = $after.work_id ORDER BY target_work_revision DESC LIMIT 1);
+  IF array::len($runs) != 0 {
+    IF $before.records_schema_version != 'massion.work.records.v1' OR $after.revision != $before.revision + 1 {
+      THROW 'Records completed 전이의 Work schema 또는 revision이 유효하지 않습니다';
+    };
+    LET $run = $runs[0];
+    IF $run.status NOT IN ['finalized', 'completed'] OR $before.revision != $run.target_work_revision + 1 {
+      THROW 'Records completed 전이의 run 상태 또는 N+2 revision이 유효하지 않습니다';
+    };
+    LET $records = (SELECT * FROM work_record WHERE organization_id = $after.organization_id AND work_id = $after.work_id AND finalized = true ORDER BY version DESC LIMIT 1);
+    IF array::len($records) != 1 OR
+      $records[0].recorded_work_revision != $before.revision OR
+      $records[0].records_run_id != $run.records_run_id OR
+      $records[0].records_snapshot_hash != $run.snapshot_hash OR
+      $records[0].schema_version != 'massion.work-record.v1' OR
+      $run.verification_id NOT IN $records[0].verification_ids {
+      THROW 'Records completed 전이의 WorkRecord 계보가 유효하지 않습니다';
+    };
+    LET $verifications = (SELECT verification_id FROM work_verification WHERE organization_id = $after.organization_id AND work_id = $after.work_id AND verification_id = $run.verification_id AND passed = true);
+    IF array::len($verifications) != 1 {
+      THROW 'Records completed 전이의 passed Verification이 유효하지 않습니다';
+    };
+    LET $required = (SELECT kind FROM documentation_impact_assessment WHERE organization_id = $after.organization_id AND work_id = $after.work_id AND records_run_id = $run.records_run_id AND outcome = 'required' AND kind != 'work-record');
+    LET $documents = (SELECT document_id, kind, artifact_version_id, markdown_checksum FROM records_document WHERE organization_id = $after.organization_id AND work_id = $after.work_id AND records_run_id = $run.records_run_id AND document_id IN $records[0].document_ids);
+    IF array::len($documents) != array::len($records[0].document_ids) OR array::len($documents) != array::len($required) OR !$required.all(|$assessment| $documents.any(|$document| $document.kind = $assessment.kind)) {
+      THROW 'Records completed 전이의 required document 집합이 유효하지 않습니다';
+    };
+    LET $artifacts = (SELECT artifact_version_id, checksum FROM artifact_version WHERE organization_id = $after.organization_id AND work_id = $after.work_id AND artifact_version_id IN $documents.artifact_version_id AND crypto::sha256(content_json) = checksum);
+    IF array::len($artifacts) != array::len($documents) OR !$documents.all(|$document| $artifacts.any(|$artifact| $artifact.artifact_version_id = $document.artifact_version_id AND $artifact.checksum = $document.markdown_checksum)) OR !$documents.all(|$document| $document.artifact_version_id IN $records[0].artifact_version_ids) {
+      THROW 'Records completed 전이의 document Artifact checksum이 유효하지 않습니다';
+    };
+  };
+};
+`,
+);

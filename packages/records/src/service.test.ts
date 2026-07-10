@@ -1,7 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 
 import type { TenantContext } from "@massion/identity";
-import type { FinalizeRecordsProjectionInput, FinalizeRecordsProjectionResult } from "@massion/work";
+import type {
+  CompleteRecordsProjectionResult,
+  FinalizeRecordsProjectionInput,
+  FinalizeRecordsProjectionResult,
+} from "@massion/work";
 
 import type { RecordsRun } from "./contracts.js";
 import type { DocumentationImpactEvaluation } from "./impact.js";
@@ -45,11 +49,18 @@ function dependencies() {
       current = run("rendering");
       return { run: current, assessments: Object.values(evaluation) };
     }),
+    complete: vi.fn(async () => {
+      current = { ...run("completed"), version: 4, completedAt: now };
+      return current;
+    }),
   };
   const workPort = {
-    finalize: vi.fn(
-      async (_context: TenantContext, input: FinalizeRecordsProjectionInput) =>
-        ({ input }) as unknown as FinalizeRecordsProjectionResult,
+    finalize: vi.fn(async (_context: TenantContext, input: FinalizeRecordsProjectionInput) => {
+      current = { ...run("finalized"), version: 3 };
+      return { input } as unknown as FinalizeRecordsProjectionResult;
+    }),
+    complete: vi.fn(
+      async (_context: TenantContext, input: unknown) => ({ input }) as unknown as CompleteRecordsProjectionResult,
     ),
   };
   return { runStore, workPort };
@@ -156,5 +167,25 @@ describe("Records service orchestration", () => {
         documentSources: [],
       }),
     ).rejects.toThrow("rendering");
+  });
+
+  it("N+3 Work completion 뒤 Records run을 terminal completed로 확정한다", async () => {
+    const deps = dependencies();
+    await deps.runStore.recordImpacts(context, "prepare", "records-run-1", {} as DocumentationImpactEvaluation);
+    await deps.workPort.finalize(context, {} as FinalizeRecordsProjectionInput);
+    const service = new RecordsService(deps.runStore, deps.workPort);
+
+    const result = await service.complete(context, { recordsRunId: "records-run-1" });
+
+    expect(result.run.status).toBe("completed");
+    expect(deps.workPort.complete).toHaveBeenCalledWith(
+      context,
+      expect.objectContaining({ commandId: "records-run-1:complete", expectedRevision: 10 }),
+    );
+    expect(deps.runStore.complete).toHaveBeenCalledWith(context, {
+      commandId: "records-run-1:terminal",
+      recordsRunId: "records-run-1",
+      expectedVersion: 3,
+    });
   });
 });
