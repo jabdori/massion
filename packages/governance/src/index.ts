@@ -9,3 +9,4 @@ export * from "./governance-service.js";
 export * from "./permit.js";
 export * from "./policy-store.js";
 export * from "./recovery.js";
+export * from "./schema.js";

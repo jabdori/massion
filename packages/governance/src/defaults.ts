@@ -56,6 +56,7 @@ export function createDefaultPolicy(kind: "personal" | "team"): {
     "Suggestion",
     "Declaration",
     "Approval",
+    "AssuranceBindingVersion",
   ];
   const context = {
     type: "Record",
@@ -95,6 +96,7 @@ export function createDefaultPolicy(kind: "personal" | "team"): {
             Suggestion: resourceShape(),
             Declaration: resourceShape(),
             Approval: resourceShape(),
+            AssuranceBindingVersion: resourceShape(),
           },
           actions,
         },

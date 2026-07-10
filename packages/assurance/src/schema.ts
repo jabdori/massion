@@ -267,3 +267,102 @@ DEFINE INDEX assurance_event_command ON assurance_event FIELDS organization_id, 
 DEFINE INDEX assurance_event_sequence ON assurance_event FIELDS organization_id, assurance_run_id, sequence UNIQUE;
 `,
 );
+
+export const ASSURANCE_BINDING_MIGRATION = defineMigration(
+  "0041-assurance-binding",
+  `
+DEFINE FIELD OVERWRITE binding_version_id ON assurance_binding_version TYPE string ASSERT string::len($value) > 0 AND string::len($value) <= 200;
+DEFINE FIELD OVERWRITE organization_id ON assurance_binding_version TYPE string ASSERT string::len($value) > 0 AND string::len($value) <= 200;
+DEFINE FIELD OVERWRITE work_id ON assurance_binding_version TYPE string ASSERT string::len($value) > 0 AND string::len($value) <= 200;
+DEFINE FIELD OVERWRITE plan_version_id ON assurance_binding_version TYPE string ASSERT string::len($value) > 0 AND string::len($value) <= 200;
+DEFINE FIELD revision ON assurance_binding_version TYPE int ASSERT $value >= 1;
+DEFINE FIELD OVERWRITE profile_id ON assurance_binding_version TYPE string ASSERT string::len($value) > 0 AND string::len($value) <= 200;
+DEFINE FIELD OVERWRITE profile_version ON assurance_binding_version TYPE string ASSERT string::len($value) > 0 AND string::len($value) <= 100;
+DEFINE FIELD OVERWRITE bindings_json ON assurance_binding_version TYPE string ASSERT string::len($value) > 0 AND string::len($value) <= 5000000;
+DEFINE FIELD criteria_checksum ON assurance_binding_version TYPE string ASSERT string::len($value) = 64;
+DEFINE FIELD OVERWRITE checksum ON assurance_binding_version TYPE string ASSERT string::len($value) = 64;
+DEFINE FIELD author_handle ON assurance_binding_version TYPE string ASSERT string::len($value) > 0 AND string::len($value) <= 200;
+DEFINE FIELD OVERWRITE created_by_user_id ON assurance_binding_version TYPE string ASSERT string::len($value) > 0 AND string::len($value) <= 200;
+DEFINE FIELD active_guard_key ON assurance_binding_version TYPE option<string>;
+DEFINE INDEX assurance_binding_active_guard ON assurance_binding_version FIELDS active_guard_key UNIQUE;
+DEFINE EVENT assurance_binding_state_invariant ON TABLE assurance_binding_version
+WHEN $event IN ['CREATE', 'UPDATE']
+THEN {
+  IF $event = 'CREATE' AND $after.status != 'draft' {
+    THROW 'Assurance binding은 draft로 생성해야 합니다';
+  };
+  IF !(
+    ($after.status = 'draft' AND $after.revision = 1 AND $after.active_guard_key = NONE AND $after.governance_decision_id = NONE AND $after.governance_approval_id = NONE AND $after.activated_at = NONE AND $after.superseded_at = NONE) OR
+    ($after.status = 'active' AND $after.active_guard_key != NONE AND $after.governance_decision_id != NONE AND $after.activated_at != NONE AND $after.superseded_at = NONE) OR
+    ($after.status = 'superseded' AND $after.active_guard_key = NONE AND $after.governance_decision_id != NONE AND $after.activated_at != NONE AND $after.superseded_at != NONE)
+  ) {
+    THROW 'Assurance binding 상태 metadata 불변식 위반';
+  };
+  IF $event = 'UPDATE' AND $after.revision != $before.revision + 1 {
+    THROW 'Assurance binding revision은 한 번에 1만 증가해야 합니다';
+  };
+  IF $event = 'UPDATE' AND (
+    $after.binding_version_id != $before.binding_version_id OR
+    $after.organization_id != $before.organization_id OR
+    $after.work_id != $before.work_id OR
+    $after.plan_version_id != $before.plan_version_id OR
+    $after.version != $before.version OR
+    $after.profile_id != $before.profile_id OR
+    $after.profile_version != $before.profile_version OR
+    $after.bindings_json != $before.bindings_json OR
+    $after.criteria_checksum != $before.criteria_checksum OR
+    $after.checksum != $before.checksum OR
+    $after.author_handle != $before.author_handle OR
+    $after.created_by_user_id != $before.created_by_user_id OR
+    $after.created_at != $before.created_at
+  ) {
+    THROW 'Assurance binding immutable field는 변경할 수 없습니다';
+  };
+  IF $event = 'UPDATE' AND $before.status = 'active' AND (
+    $after.governance_decision_id != $before.governance_decision_id OR
+    $after.governance_approval_id != $before.governance_approval_id OR
+    $after.activated_at != $before.activated_at
+  ) {
+    THROW 'Assurance binding activation metadata는 immutable입니다';
+  };
+  IF $event = 'UPDATE' AND $after.status = 'active' {
+    LET $decisions = (SELECT outcome FROM governance_policy_decision WHERE organization_id = $after.organization_id AND decision_id = $after.governance_decision_id AND action = 'work.execute' AND resource_type = 'AssuranceBindingVersion' AND resource_id = $after.binding_version_id AND resource_revision = $before.revision AND risk_class = 'assurance-binding-activation');
+    IF array::len($decisions) != 1 OR $decisions[0].outcome = 'deny' {
+      THROW 'Assurance binding activation Governance decision이 유효하지 않습니다';
+    };
+    IF $decisions[0].outcome = 'allow' AND $after.governance_approval_id != NONE {
+      THROW 'Allow decision에는 Governance approval을 연결할 수 없습니다';
+    };
+    IF $decisions[0].outcome = 'require_approval' {
+      LET $approvals = (SELECT approval_id FROM governance_approval WHERE organization_id = $after.organization_id AND approval_id = $after.governance_approval_id AND decision_id = $after.governance_decision_id AND resource_revision = $before.revision AND status = 'consumed');
+      IF array::len($approvals) != 1 {
+        THROW 'Assurance binding activation Governance approval이 소비되지 않았습니다';
+      };
+    };
+  };
+  IF $event = 'UPDATE' AND !(
+    ($before.status = 'draft' AND $after.status = 'active') OR
+    ($before.status = 'active' AND $after.status = 'superseded')
+  ) {
+    THROW '허용되지 않은 Assurance binding 상태 전이';
+  };
+  IF $event = 'UPDATE' AND $before.status = 'superseded' {
+    THROW 'Superseded Assurance binding은 변경할 수 없습니다';
+  };
+};
+
+DEFINE TABLE assurance_binding_event SCHEMAFULL;
+DEFINE FIELD event_id ON assurance_binding_event TYPE string;
+DEFINE FIELD organization_id ON assurance_binding_event TYPE string;
+DEFINE FIELD binding_version_id ON assurance_binding_event TYPE string;
+DEFINE FIELD command_id ON assurance_binding_event TYPE string;
+DEFINE FIELD sequence ON assurance_binding_event TYPE int ASSERT $value >= 1;
+DEFINE FIELD event_type ON assurance_binding_event TYPE string;
+DEFINE FIELD request_hash ON assurance_binding_event TYPE string ASSERT string::len($value) = 64;
+DEFINE FIELD actor_user_id ON assurance_binding_event TYPE string;
+DEFINE FIELD created_at ON assurance_binding_event TYPE datetime;
+DEFINE INDEX assurance_binding_event_id ON assurance_binding_event FIELDS event_id UNIQUE;
+DEFINE INDEX assurance_binding_event_command ON assurance_binding_event FIELDS organization_id, command_id UNIQUE;
+DEFINE INDEX assurance_binding_event_sequence ON assurance_binding_event FIELDS organization_id, binding_version_id, sequence UNIQUE;
+`,
+);

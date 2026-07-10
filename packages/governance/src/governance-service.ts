@@ -6,7 +6,7 @@ import { applyMigrations, type MassionDatabase } from "@massion/storage";
 import { CedarAuthorizer } from "./cedar-authorizer.js";
 import type { ApprovalRequirement, EvaluatePolicyInput, PolicyDecision, PolicyRequest } from "./contracts.js";
 import { PolicyStore } from "./policy-store.js";
-import { GOVERNANCE_DECISION_MIGRATION } from "./schema.js";
+import { GOVERNANCE_DECISION_CONTEXT_MIGRATION, GOVERNANCE_DECISION_MIGRATION } from "./schema.js";
 
 interface DecisionRecord {
   readonly decision_id: string;
@@ -82,7 +82,7 @@ export class GovernanceService {
     organizations: OrganizationService,
     policies: PolicyStore,
   ): Promise<GovernanceService> {
-    await applyMigrations(database, [GOVERNANCE_DECISION_MIGRATION]);
+    await applyMigrations(database, [GOVERNANCE_DECISION_MIGRATION, GOVERNANCE_DECISION_CONTEXT_MIGRATION]);
     return new GovernanceService(database, organizations, policies);
   }
 
@@ -124,13 +124,23 @@ export class GovernanceService {
       riskClass: input.request.context.riskClass,
     };
     await this.database.query(
-      "CREATE governance_policy_decision CONTENT { decision_id: $decision_id, organization_id: $organization_id, command_id: $command_id, policy_version_id: $policy_version_id, request_hash: $request_hash, request_summary_json: $summary_json, outcome: $outcome, reasons_json: $reasons_json, errors_json: $errors_json, requirement_json: $requirement_json, request_json: $request_json, created_at: time::now() };",
+      "CREATE governance_policy_decision CONTENT { decision_id: $decision_id, organization_id: $organization_id, command_id: $command_id, policy_version_id: $policy_version_id, request_hash: $request_hash, principal_type: $principal_type, principal_id: $principal_id, action: $action, resource_type: $resource_type, resource_id: $resource_id, resource_revision: $resource_revision, environment: $environment, risk_class: $risk_class, external: $external, request_summary_json: $summary_json, outcome: $outcome, reasons_json: $reasons_json, errors_json: $errors_json, requirement_json: $requirement_json, request_json: $request_json, created_at: time::now() };",
       {
         decision_id: decisionId,
         organization_id: context.organizationId,
         command_id: input.commandId,
         policy_version_id: active?.version.policy_version_id,
         request_hash: requestHash,
+        principal_type: input.request.principal.type,
+        principal_id: input.request.principal.id,
+        action: input.request.action,
+        resource_type: input.request.resource.type,
+        resource_id: input.request.resource.id,
+        resource_revision: input.request.resource.revision,
+        environment:
+          typeof input.request.context.environment === "string" ? input.request.context.environment : "unknown",
+        risk_class: typeof input.request.context.riskClass === "string" ? input.request.context.riskClass : "unknown",
+        external: input.request.context.external === true,
         summary_json: canonicalJson(summary),
         outcome,
         reasons_json: canonicalJson(reasons),
