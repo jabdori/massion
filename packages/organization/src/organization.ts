@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
 
-import type { GovernanceGate } from "@massion/governance";
 import { type OrganizationService, type TenantContext } from "@massion/identity";
 import { applyMigrations, type MassionDatabase, type QueryExecutor } from "@massion/storage";
 
@@ -206,6 +205,23 @@ export interface GraphChangeResult {
   readonly impact: ImpactReport;
 }
 
+export interface OrganizationGovernanceGate {
+  authorize(
+    context: TenantContext,
+    input: {
+      readonly commandId: string;
+      readonly action: string;
+      readonly resource: { readonly type: string; readonly id: string; readonly revision?: number };
+      readonly environment: string;
+      readonly riskClass: string;
+      readonly external: boolean;
+      readonly executionId: string;
+      readonly approvalId?: string;
+    },
+    executor?: QueryExecutor,
+  ): Promise<unknown>;
+}
+
 type MutableNode = { -readonly [Key in keyof OrganizationNode]: OrganizationNode[Key] };
 
 async function listNodes(executor: QueryExecutor, organizationId: string): Promise<OrganizationNode[]> {
@@ -312,13 +328,13 @@ export class OrganizationGraphService {
   private constructor(
     private readonly database: MassionDatabase,
     private readonly organizations: OrganizationService,
-    private readonly governance?: Pick<GovernanceGate, "authorize">,
+    private readonly governance?: OrganizationGovernanceGate,
   ) {}
 
   public static async create(
     database: MassionDatabase,
     organizations: OrganizationService,
-    governance?: Pick<GovernanceGate, "authorize">,
+    governance?: OrganizationGovernanceGate,
   ) {
     await applyMigrations(database, [ORGANIZATION_GRAPH_MIGRATION]);
     return new OrganizationGraphService(database, organizations, governance);
