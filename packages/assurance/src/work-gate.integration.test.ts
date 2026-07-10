@@ -335,11 +335,11 @@ describe("Assurance run과 Work 완료 게이트", () => {
     return passed.run.assuranceRunId;
   }
 
-  it("0039→0040→0041→0042→0043→0045 순서로 부트스트랩한다", async () => {
+  it("0039→0040→0041→0042→0043→0045→0046 순서로 부트스트랩한다", async () => {
     const applied = (await listAppliedMigrations(database))
       .map((migration) => migration.migration_id)
       .filter((migrationId) =>
-        ["0039", "0040", "0041", "0042", "0043", "0045"].some((prefix) => migrationId.startsWith(prefix)),
+        ["0039", "0040", "0041", "0042", "0043", "0045", "0046"].some((prefix) => migrationId.startsWith(prefix)),
       );
     expect(applied).toEqual([
       "0039-assurance-run",
@@ -348,6 +348,7 @@ describe("Assurance run과 Work 완료 게이트", () => {
       "0042-work-assurance-link",
       "0043-assurance-evidence-integrity",
       "0045-assurance-decision-evidence",
+      "0046-assurance-recovery-metric",
     ]);
   });
 
@@ -400,6 +401,55 @@ describe("Assurance run과 Work 완료 게이트", () => {
     expect(run.projectedWorkRevision).toBe(projected.work.revision);
   });
 
+  it.each([
+    { verdict: "passed" as const, check: "passed" as const, workStatus: "verifying" },
+    { verdict: "failed" as const, check: "failed" as const, workStatus: "failed" },
+  ])(
+    "실제 $verdict terminal 직후 recovery를 한 번만 원장에 기록하고 Work를 조정한다",
+    async ({ verdict, check, workStatus }) => {
+      const assuranceRunId = await passedRun(created, verdict, check);
+      const gateway = await AssuranceBootstrap.create(database, organizations);
+      const commandId = crypto.randomUUID();
+      const input = { commandId, assuranceRunId };
+
+      const [first, concurrent] = await Promise.all([gateway.recover(context, input), gateway.recover(context, input)]);
+      const replayed = await gateway.recover(context, input);
+      await expect(gateway.recover(context, { commandId, assuranceRunId: "different-run" })).rejects.toThrow(
+        "다른 Assurance recovery 명령",
+      );
+      const currentWork = await work.getWork(context, created.work.work_id);
+      const [events] = await database.query<[{ event_type: string }[]]>(
+        "SELECT event_type FROM assurance_event WHERE organization_id = $organization_id AND assurance_run_id = $assurance_run_id AND event_type = 'assurance_run_recovered';",
+        { organization_id: context.organizationId, assurance_run_id: assuranceRunId },
+      );
+      const [metricEvents] = await database.query<[{ metric_event_id: string }[]]>(
+        "SELECT metric_event_id FROM assurance_metric_event WHERE organization_id = $organization_id AND metric_name = 'assurance_recovery_total';",
+        { organization_id: context.organizationId },
+      );
+      const [runMetricNames] = await database.query<[{ metric_name: string }[]]>(
+        "SELECT metric_name FROM assurance_metric_event WHERE organization_id = $organization_id;",
+        { organization_id: context.organizationId },
+      );
+
+      expect(first.result).toBe("projected");
+      expect(concurrent).toEqual(first);
+      expect(replayed).toEqual(first);
+      expect(first.run.projectedWorkRevision).toBe(created.work.revision + 1);
+      expect(currentWork.status).toBe(workStatus);
+      expect(events).toHaveLength(1);
+      expect(metricEvents).toHaveLength(1);
+      expect(new Set(runMetricNames.map((metric) => metric.metric_name))).toEqual(
+        new Set([
+          "assurance_run_duration_ms",
+          "assurance_verdict_total",
+          "assurance_criterion_total",
+          "assurance_check_total",
+          "assurance_recovery_total",
+        ]),
+      );
+    },
+  );
+
   it("DB criterion 확정 실패와 필수 check 누락을 각각 failed·blocked로 판정한다", async () => {
     const failedRunId = await passedRun(created, "failed", "failed");
     expect((await runs.get(context, failedRunId)).status).toBe("failed");
@@ -407,6 +457,18 @@ describe("Assurance run과 Work 완료 게이트", () => {
     created = await createVerifyingWork();
     const blockedRunId = await passedRun(created, "blocked", "passed", true);
     expect((await runs.get(context, blockedRunId)).status).toBe("blocked");
+    const recovered = await (
+      await AssuranceBootstrap.create(database, organizations)
+    ).recover(context, {
+      commandId: crypto.randomUUID(),
+      assuranceRunId: blockedRunId,
+    });
+    const [blockedMetrics] = await database.query<[{ dimensions_json: string }[]]>(
+      "SELECT dimensions_json FROM assurance_metric_event WHERE organization_id = $organization_id AND metric_name = 'assurance_blocked_total';",
+      { organization_id: context.organizationId },
+    );
+    expect(recovered.result).toBe("terminal_unchanged");
+    expect(blockedMetrics).toEqual([{ dimensions_json: '{"reason":"evidence"}' }]);
   });
 
   it("판정 snapshot 뒤 critical finding이 commit돼도 evidence guard 충돌 재시도로 failed가 된다", async () => {
