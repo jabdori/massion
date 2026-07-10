@@ -104,11 +104,28 @@ export interface CreateWorkResult {
   readonly event: WorkEvent;
 }
 
+export interface CreateFollowUpWorkInput {
+  readonly commandId: string;
+  readonly parentWorkId: string;
+  readonly text: string;
+  readonly surface: string;
+}
+
+export interface CreateFollowUpWorkResult {
+  readonly request: WorkRequest;
+  readonly work: Work;
+  readonly event: WorkEvent;
+}
+
 export interface WorkCommandInput {
   readonly commandId: string;
   readonly workId: string;
   readonly expectedRevision: number;
   readonly causedByEventId?: string;
+}
+
+export interface AttachContextVersionInput extends WorkCommandInput {
+  readonly contextVersionId: string;
 }
 
 export interface TransitionInput extends WorkCommandInput {
@@ -879,6 +896,103 @@ export class WorkService {
     const work = await findWork(this.database, context.organizationId, workId);
     if (!work) throw new Error(`Work를 찾을 수 없습니다: ${workId}`);
     return work;
+  }
+
+  public async getWorkRequest(context: TenantContext, workId: string): Promise<WorkRequest> {
+    const work = await this.getWork(context, workId);
+    const [requests] = await this.database.query<[WorkRequest[]]>(
+      "SELECT * OMIT id FROM work_request WHERE organization_id = $organization_id AND request_id = $request_id LIMIT 1;",
+      { organization_id: context.organizationId, request_id: work.request_id },
+    );
+    if (!requests[0]) throw new Error(`Work Request를 찾을 수 없습니다: ${work.request_id}`);
+    return requests[0];
+  }
+
+  public async attachContextVersion(
+    context: TenantContext,
+    input: AttachContextVersionInput,
+  ): Promise<WorkCommandResult> {
+    if (!input.contextVersionId.trim()) throw new Error("ContextVersion 참조가 필요합니다");
+    return await this.mutate(context, input, "context_version_attached", async (transaction, work) => {
+      if (!["draft", "planned", "replanning"].includes(work.status)) {
+        throw new Error(`ContextVersion을 연결할 수 없는 Work 상태입니다: ${work.status}`);
+      }
+      await transaction.query(
+        "UPDATE work SET context_version_id = $context_version_id WHERE organization_id = $organization_id AND work_id = $work_id;",
+        {
+          context_version_id: input.contextVersionId,
+          organization_id: context.organizationId,
+          work_id: work.work_id,
+        },
+      );
+      return {};
+    });
+  }
+
+  public async createFollowUpWork(
+    context: TenantContext,
+    input: CreateFollowUpWorkInput,
+  ): Promise<CreateFollowUpWorkResult> {
+    await this.verify(context);
+    const text = input.text.trim();
+    if (!text) throw new Error("후속 Request 원문은 비어 있을 수 없습니다");
+    if (!input.surface.trim()) throw new Error("후속 Request surface가 필요합니다");
+    const requestJson = canonicalJson(input);
+    return await this.database.transaction(async (transaction) => {
+      await this.organizations.verifyTenantContext(context, undefined, transaction);
+      const repeated = await findCommand(transaction, context.organizationId, input.commandId);
+      if (repeated) return this.replay(repeated, requestJson) as CreateFollowUpWorkResult;
+      const parent = await findWork(transaction, context.organizationId, input.parentWorkId);
+      if (!parent) throw new Error(`부모 Work를 찾을 수 없습니다: ${input.parentWorkId}`);
+
+      const requestId = randomUUID();
+      const workId = randomUUID();
+      const [requests] = await transaction.query<[WorkRequest[]]>(
+        "CREATE work_request CONTENT { request_id: $request_id, organization_id: $organization_id, requester_user_id: $requester_user_id, text: $text, surface: $surface, created_at: time::now() } RETURN AFTER;",
+        {
+          request_id: requestId,
+          organization_id: context.organizationId,
+          requester_user_id: context.userId,
+          text,
+          surface: input.surface.trim(),
+        },
+      );
+      const [works] = await transaction.query<[Work[]]>(
+        "CREATE work CONTENT { work_id: $work_id, organization_id: $organization_id, request_id: $request_id, parent_work_id: $parent_work_id, project_id: $project_id, status: 'draft', revision: 1, organization_version_id: $organization_version_id, context_version_id: $context_version_id, policy_version_id: $policy_version_id, prompt_version_id: $prompt_version_id, artifact_version_ids: $artifact_version_ids, created_at: time::now(), updated_at: time::now() } RETURN AFTER;",
+        {
+          work_id: workId,
+          organization_id: context.organizationId,
+          request_id: requestId,
+          parent_work_id: parent.work_id,
+          project_id: parent.project_id,
+          organization_version_id: parent.organization_version_id,
+          context_version_id: parent.context_version_id,
+          policy_version_id: parent.policy_version_id,
+          prompt_version_id: parent.prompt_version_id,
+          artifact_version_ids: parent.artifact_version_ids,
+        },
+      );
+      const request = requests[0];
+      const work = works[0];
+      if (!request || !work) throw new Error("후속 Request와 Work 생성 결과가 불완전합니다");
+      const provisional = { request, work };
+      const event = await this.appendEvent(
+        transaction,
+        context,
+        work,
+        input.commandId,
+        "follow_up_work_created",
+        requestJson,
+        { parentWorkId: parent.work_id },
+        provisional,
+      );
+      const result = { request, work, event };
+      await transaction.query("UPDATE work_event SET result_json = $result_json WHERE event_id = $event_id;", {
+        result_json: JSON.stringify(result),
+        event_id: event.event_id,
+      });
+      return result;
+    });
   }
 
   public async listEvents(context: TenantContext, workId: string): Promise<WorkEvent[]> {

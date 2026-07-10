@@ -132,8 +132,11 @@ export class ContextStore {
         (candidate, record) => (!candidate || record.version > candidate.version ? record : candidate),
         undefined,
       );
-      if (latest?.context_version_id !== input.expectedParentContextVersionId) {
+      if (latest && latest.context_version_id !== input.expectedParentContextVersionId) {
         throw new Error("parent ContextVersion precondition이 일치하지 않습니다");
+      }
+      if (!latest && input.expectedParentContextVersionId) {
+        await this.find(tx, context.organizationId, input.expectedParentContextVersionId);
       }
       const packageData: ContextPackageData = {
         objective: input.objective.trim(),
@@ -194,6 +197,20 @@ export class ContextStore {
   public async get(context: TenantContext, contextVersionId: string): Promise<ContextVersion> {
     await this.organizations.verifyTenantContext(context);
     return this.view(await this.find(this.database, context.organizationId, contextVersionId));
+  }
+
+  public async getLatestForWork(context: TenantContext, workId: string): Promise<ContextVersion | undefined> {
+    await this.organizations.verifyTenantContext(context);
+    await this.works.getWork(context, workId);
+    const [records] = await this.database.query<[ContextVersionRecord[]]>(
+      "SELECT * OMIT id FROM context_version WHERE organization_id = $organization_id AND work_id = $work_id;",
+      { organization_id: context.organizationId, work_id: workId },
+    );
+    const latest = records.reduce<ContextVersionRecord | undefined>(
+      (candidate, record) => (!candidate || record.version > candidate.version ? record : candidate),
+      undefined,
+    );
+    return latest ? this.view(latest) : undefined;
   }
 
   public async listEvents(context: TenantContext, workId: string): Promise<ContextEvent[]> {
