@@ -4,3 +4,5 @@ export * from "./schema.js";
 export * from "./team-profile.js";
 export * from "./path-lease.js";
 export * from "./coordinator.js";
+export * from "./patch.js";
+export * from "./git-workspace.js";
