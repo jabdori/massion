@@ -1,0 +1,31 @@
+{
+  "name": "@massion/context-strategy",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\" && tsc -p tsconfig.json",
+    "test": "vitest run src",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@massion/identity": "workspace:*",
+    "@massion/organization": "workspace:*",
+    "@massion/runtime": "workspace:*",
+    "@massion/storage": "workspace:*",
+    "@massion/work": "workspace:*",
+    "zod": "4.4.3"
+  },
+  "engines": {
+    "node": ">=24.0.0"
+  }
+}
