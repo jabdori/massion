@@ -119,6 +119,10 @@ export interface AuthorizeRunningActionInput extends WorkCommandInput {
   readonly approvalId?: string;
 }
 
+export interface ReconcileRunningActionApprovalInput extends WorkCommandInput {
+  readonly approvalId: string;
+}
+
 export type AuthorizeRunningActionResult =
   | {
       readonly outcome: "waiting_approval";
@@ -621,14 +625,14 @@ export class WorkService {
     private readonly database: MassionDatabase,
     private readonly organizations: OrganizationService,
     private readonly graph?: OrganizationGraphService,
-    private readonly governance?: Pick<GovernanceGate, "authorize">,
+    private readonly governance?: Pick<GovernanceGate, "authorize" | "getApprovalStatus">,
   ) {}
 
   public static async create(
     database: MassionDatabase,
     organizations: OrganizationService,
     graph?: OrganizationGraphService,
-    governance?: Pick<GovernanceGate, "authorize">,
+    governance?: Pick<GovernanceGate, "authorize" | "getApprovalStatus">,
   ): Promise<WorkService> {
     await applyMigrations(database, [
       WORK_CORE_MIGRATION,
@@ -1928,6 +1932,18 @@ export class WorkService {
     }
     if (work.status !== "running") throw new Error("승인 없는 실행 허가는 running Work에서만 사용할 수 있습니다");
     return { outcome: "allowed", work, authorization };
+  }
+
+  public async reconcileRunningActionApproval(
+    context: TenantContext,
+    input: ReconcileRunningActionApprovalInput,
+  ): Promise<WorkCommandResult> {
+    if (!this.governance) throw new Error("Work Governance Gate가 구성되지 않았습니다");
+    const status = await this.governance.getApprovalStatus(context, input.approvalId);
+    if (!["rejected", "expired", "cancelled"].includes(status)) {
+      throw new Error(`종료된 거절 승인만 Work 취소로 조정할 수 있습니다: ${status}`);
+    }
+    return await this.transition(context, { ...input, target: "cancelled" });
   }
 
   private async mutate<Extra extends object>(

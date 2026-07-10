@@ -79,7 +79,7 @@ describe("Organization Governance Gate", () => {
     expect(changed.nodes).toEqual(expect.arrayContaining([expect.objectContaining({ handle: "engineering" })]));
   });
 
-  it("승인 소비 후 조직 변경이 실패하면 같은 transaction에서 소비도 rollback한다", async () => {
+  it("조직 변경 적용 전 transaction 검증이 실패하면 승인 소비도 rollback한다", async () => {
     const command = {
       commandId: crypto.randomUUID(),
       expectedVersion: 1,

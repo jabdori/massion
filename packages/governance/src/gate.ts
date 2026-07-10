@@ -1,7 +1,7 @@
 import type { TenantContext } from "@massion/identity";
 import type { QueryExecutor } from "@massion/storage";
 
-import { ApprovalStore } from "./approval-store.js";
+import { ApprovalStore, type ApprovalStatus } from "./approval-store.js";
 import type { PolicyDecision, PolicyRequest } from "./contracts.js";
 import { EmergencyControl } from "./emergency.js";
 import { GovernanceService, hashPolicyRequest } from "./governance-service.js";
@@ -96,6 +96,10 @@ export class GovernanceGate {
       ...(input.resource.revision === undefined ? {} : { resourceRevision: input.resource.revision }),
     });
     throw new GovernanceApprovalRequiredError(decision.decisionId, approval.approval_id);
+  }
+
+  public async getApprovalStatus(context: TenantContext, approvalId: string): Promise<ApprovalStatus> {
+    return (await this.approvals.expire(context, approvalId)).status;
   }
 
   private request(context: TenantContext, input: GovernedActionInput): PolicyRequest {
