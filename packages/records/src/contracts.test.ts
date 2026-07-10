@@ -6,11 +6,7 @@ import {
   validateRecordsDocument,
   validateRecordsRun,
 } from "./contracts.js";
-import type {
-  DocumentationImpactAssessment,
-  RecordsDocument,
-  RecordsRun,
-} from "./contracts.js";
+import type { DocumentationImpactAssessment, RecordsDocument, RecordsRun } from "./contracts.js";
 
 const now = "2026-07-11T00:00:00.000Z";
 
@@ -78,12 +74,8 @@ describe("Records 공개 계약", () => {
 
   it("필수 문서는 실제 source reference를 요구한다", () => {
     expect(() => validateDocumentationImpactAssessment(impact())).not.toThrow();
-    expect(() =>
-      validateDocumentationImpactAssessment({ ...impact(), sourceReferenceIds: [] }),
-    ).toThrow("source");
-    expect(() =>
-      validateDocumentationImpactAssessment({ ...impact(), reason: "x".repeat(2_001) }),
-    ).toThrow("2000자");
+    expect(() => validateDocumentationImpactAssessment({ ...impact(), sourceReferenceIds: [] })).toThrow("source");
+    expect(() => validateDocumentationImpactAssessment({ ...impact(), reason: "x".repeat(2_001) })).toThrow("2000자");
   });
 
   it("저장 문서 checksum과 caller projection 경계를 검증한다", () => {

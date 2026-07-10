@@ -79,7 +79,7 @@ const IMPACT_OUTCOMES = new Set<DocumentationImpactOutcome>(["required", "not-ap
 
 function assertIdentifier(value: unknown, name: string): asserts value is string {
   if (typeof value !== "string" || value.length === 0 || value.length > IDENTIFIER_MAX_LENGTH) {
-    throw new Error(`${name} identifier는 1~${IDENTIFIER_MAX_LENGTH}자여야 합니다`);
+    throw new Error(`${name} identifier는 1~200자여야 합니다`);
   }
 }
 
@@ -97,7 +97,7 @@ function assertIsoDateTime(value: unknown, name: string): asserts value is IsoDa
 
 function assertReferenceIds(values: readonly string[], required: boolean): void {
   if (!Array.isArray(values) || values.length > REFERENCE_MAX_COUNT) {
-    throw new Error(`source reference는 ${REFERENCE_MAX_COUNT}개 이하여야 합니다`);
+    throw new Error("source reference는 100개 이하여야 합니다");
   }
   if (required && values.length === 0) throw new Error("required 문서에는 source reference가 필요합니다");
   if (new Set(values).size !== values.length) throw new Error("source reference는 중복될 수 없습니다");
@@ -116,8 +116,10 @@ export function validateRecordsRun(run: RecordsRun): void {
   if (!Number.isSafeInteger(run.targetWorkRevision) || run.targetWorkRevision < 1) {
     throw new Error("target Work revision은 1 이상인 안전한 정수여야 합니다");
   }
-  if (!Number.isSafeInteger(run.version) || run.version < 1) throw new Error("Records run version은 1 이상이어야 합니다");
-  if (!Number.isSafeInteger(run.attempt) || run.attempt < 1) throw new Error("Records run attempt는 1 이상이어야 합니다");
+  if (!Number.isSafeInteger(run.version) || run.version < 1)
+    throw new Error("Records run version은 1 이상이어야 합니다");
+  if (!Number.isSafeInteger(run.attempt) || run.attempt < 1)
+    throw new Error("Records run attempt는 1 이상이어야 합니다");
   assertSha256(run.snapshotHash, "Snapshot hash");
   assertSha256(run.requestHash, "Request hash");
   if (!RUN_STATUSES.has(run.status)) throw new Error("지원하지 않는 Records run status입니다");
@@ -150,8 +152,12 @@ export function validateDocumentationImpactAssessment(assessment: DocumentationI
   if (assessment.kind === "work-record" && assessment.outcome !== "required") {
     throw new Error("WorkRecord impact outcome은 항상 required여야 합니다");
   }
-  if (typeof assessment.reason !== "string" || assessment.reason.length === 0 || assessment.reason.length > REASON_MAX_LENGTH) {
-    throw new Error(`impact reason은 1~${REASON_MAX_LENGTH}자여야 합니다`);
+  if (
+    typeof assessment.reason !== "string" ||
+    assessment.reason.length === 0 ||
+    assessment.reason.length > REASON_MAX_LENGTH
+  ) {
+    throw new Error("impact reason은 1~2000자여야 합니다");
   }
   assertReferenceIds(assessment.sourceReferenceIds, assessment.outcome === "required");
   assertIsoDateTime(assessment.createdAt, "createdAt");
@@ -166,7 +172,10 @@ export function validateRecordsDocument(document: RecordsDocument): void {
   assertIdentifier(document.rendererVersion, "Renderer version");
   assertIdentifier(document.artifactVersionId, "Artifact version");
   if (!DOCUMENT_KINDS.has(document.kind)) throw new Error("지원하지 않는 records document kind입니다");
-  if (typeof document.sourceJson !== "string" || new TextEncoder().encode(document.sourceJson).byteLength > DOCUMENT_MAX_BYTES) {
+  if (
+    typeof document.sourceJson !== "string" ||
+    new TextEncoder().encode(document.sourceJson).byteLength > DOCUMENT_MAX_BYTES
+  ) {
     throw new Error("Document source는 UTF-8 1 MiB 이하여야 합니다");
   }
   assertSha256(document.sourceChecksum, "Source checksum");

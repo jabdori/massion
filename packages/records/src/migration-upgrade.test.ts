@@ -16,9 +16,7 @@ describe("Records documentation migration", () => {
     expect(RECORDS_DOCUMENTATION_MIGRATION.checksum).toBe(
       "49f183a8494bfdd66ec6fb08c61f67ba3a0e95925a32184e2aba0ecf827ec55c",
     );
-    expect(await applyMigrations(database, [RECORDS_DOCUMENTATION_MIGRATION])).toEqual([
-      "0047-records-documentation",
-    ]);
+    expect(await applyMigrations(database, [RECORDS_DOCUMENTATION_MIGRATION])).toEqual(["0047-records-documentation"]);
     expect(await applyMigrations(database, [RECORDS_DOCUMENTATION_MIGRATION])).toEqual([]);
     expect(await listAppliedMigrations(database)).toEqual([
       {
