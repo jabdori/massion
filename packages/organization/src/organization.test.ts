@@ -8,12 +8,13 @@ import { CORE_OFFICE_HANDLES, OrganizationGraphService } from "./organization.js
 describe("Organization Graph와 Core Office", () => {
   let database: MassionDatabase;
   let context: TenantContext;
+  let organizations: OrganizationService;
   let graph: OrganizationGraphService;
 
   beforeEach(async () => {
     database = await createDatabase({ url: "mem://", namespace: "massion", database: crypto.randomUUID() });
     const identity = await IdentityService.create(database);
-    const organizations = await OrganizationService.create(database);
+    organizations = await OrganizationService.create(database);
     const owner = await identity.registerPersonalUser({ email: "owner@example.com", displayName: "Owner" });
     context = await organizations.resolveTenantContext(owner.user.user_id, owner.organization.organization_id);
     graph = await OrganizationGraphService.create(database, organizations);
@@ -74,5 +75,103 @@ describe("Organization Graph와 Core Office", () => {
     await expect(graph.execute(context, { ...command, commandId: crypto.randomUUID() })).rejects.toThrow(
       "현재 OrganizationVersion",
     );
+  });
+
+  it("profile의 누락 부모와 cycle을 거부하고 조직 노드를 원자적으로 보존한다", async () => {
+    await graph.bootstrap(context);
+    const base = {
+      commandId: crypto.randomUUID(),
+      expectedVersion: 1,
+      kind: "install-profile" as const,
+      profileId: "invalid-profile",
+      profileVersion: "1.0.0",
+    };
+    await expect(
+      graph.execute(context, {
+        ...base,
+        nodes: [
+          {
+            handle: "orphan-specialist",
+            name: "Orphan",
+            responsibility: "누락 부모 검증",
+            outputs: ["Finding"],
+            capabilities: ["testing"],
+            parentHandle: "missing-parent",
+            scope: "persistent",
+            role: "operator",
+          },
+        ],
+      }),
+    ).rejects.toThrow("고아 부모");
+    expect(await graph.listNodes(context)).toHaveLength(8);
+
+    await expect(
+      graph.execute(context, {
+        ...base,
+        commandId: crypto.randomUUID(),
+        nodes: [
+          {
+            handle: "cycle-a",
+            name: "Cycle A",
+            responsibility: "cycle 검증",
+            outputs: ["Finding"],
+            capabilities: ["testing-a"],
+            parentHandle: "cycle-b",
+            scope: "persistent",
+            role: "operator",
+          },
+          {
+            handle: "cycle-b",
+            name: "Cycle B",
+            responsibility: "cycle 검증",
+            outputs: ["Finding"],
+            capabilities: ["testing-b"],
+            parentHandle: "cycle-a",
+            scope: "persistent",
+            role: "operator",
+          },
+        ],
+      }),
+    ).rejects.toThrow("cycle");
+    expect(await graph.listNodes(context)).toHaveLength(8);
+  });
+
+  it("profile 설치는 owner와 Governance를 정확히 한 번 통과한다", async () => {
+    await graph.bootstrap(context);
+    let authorizationCount = 0;
+    const governed = await OrganizationGraphService.create(database, organizations, {
+      authorize: async () => {
+        authorizationCount += 1;
+      },
+    });
+    const command = {
+      commandId: crypto.randomUUID(),
+      expectedVersion: 1,
+      kind: "install-profile" as const,
+      profileId: "governed-profile",
+      profileVersion: "1.0.0",
+      nodes: [
+        {
+          handle: "governed-specialist",
+          name: "Governed Specialist",
+          responsibility: "Governance 검증",
+          outputs: ["Finding"],
+          capabilities: ["governed-testing"],
+          parentHandle: "delivery-coordination",
+          scope: "persistent" as const,
+          role: "operator" as const,
+        },
+      ],
+    };
+    const first = await governed.execute(context, command);
+    const repeated = await governed.execute(context, command);
+    expect(repeated.version.version_id).toBe(first.version.version_id);
+    expect(authorizationCount).toBe(1);
+
+    const memberContext = { ...context, role: "member" as const };
+    await expect(
+      governed.execute(memberContext, { ...command, commandId: crypto.randomUUID(), expectedVersion: 2 }),
+    ).rejects.toThrow("owner");
+    expect(authorizationCount).toBe(1);
   });
 });
