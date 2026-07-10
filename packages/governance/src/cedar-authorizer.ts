@@ -93,3 +93,17 @@ export class CedarAuthorizer {
     }
   }
 }
+
+export function validatePolicyBundle(bundle: PolicyBundle): readonly string[] {
+  try {
+    const result = validate({
+      validationSettings: { mode: "strict" },
+      schema: bundle.schema as Schema,
+      policies: { staticPolicies: { ...bundle.policies } },
+    });
+    if (result.type === "failure") return errorCodes(result.errors);
+    return result.validationErrors.map((entry) => entry.error.code ?? "cedar_validation_error");
+  } catch {
+    return ["cedar_validation_error"];
+  }
+}

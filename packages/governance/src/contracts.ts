@@ -30,3 +30,14 @@ export interface AuthorizationResult {
   readonly reasons: readonly string[];
   readonly errors: readonly string[];
 }
+
+export interface ApprovalRequirement {
+  readonly requirementId: string;
+  readonly actions: readonly string[];
+  readonly environments: readonly string[];
+  readonly riskClasses: readonly string[];
+  readonly approverRoles: readonly string[];
+  readonly quorum: number;
+  readonly separationOfDuty: boolean;
+  readonly expiresInSeconds: number;
+}
