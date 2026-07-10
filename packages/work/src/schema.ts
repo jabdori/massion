@@ -324,3 +324,21 @@ DEFINE EVENT task_transition_state ON work_task
   THEN { THROW '허용되지 않은 Task 상태 전이입니다'; };
 `,
 );
+
+export const WORK_STRATEGY_PROJECTION_MIGRATION = defineMigration(
+  "0023-work-strategy-projection",
+  `
+DEFINE FIELD active_plan_version_id ON work TYPE option<string>;
+DEFINE FIELD context_version_id ON plan_version TYPE option<string>;
+DEFINE FIELD strategy_generation_id ON plan_version TYPE option<string>;
+DEFINE FIELD strategy_checksum ON plan_version TYPE option<string>;
+DEFINE FIELD plan_version_id ON work_task TYPE option<string>;
+DEFINE FIELD task_key ON work_task TYPE option<string>;
+DEFINE FIELD required_capabilities ON work_task TYPE option<array<string>>;
+DEFINE FIELD recommended_agent_handles ON work_task TYPE option<array<string>>;
+DEFINE FIELD parallelizable ON work_task TYPE option<bool>;
+DEFINE INDEX work_active_plan ON work FIELDS organization_id, active_plan_version_id;
+DEFINE INDEX work_task_plan ON work_task FIELDS organization_id, work_id, plan_version_id;
+DEFINE INDEX work_task_strategy_key ON work_task FIELDS organization_id, work_id, plan_version_id, task_key UNIQUE;
+`,
+);

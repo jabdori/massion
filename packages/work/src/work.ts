@@ -15,6 +15,7 @@ import {
   WORK_CORE_MIGRATION,
   WORK_DELIVERY_MIGRATION,
   WORK_RECORDS_MIGRATION,
+  WORK_STRATEGY_PROJECTION_MIGRATION,
 } from "./schema.js";
 
 export type WorkStatus =
@@ -49,6 +50,7 @@ export interface Work {
   readonly revision: number;
   readonly organization_version_id: string;
   readonly context_version_id?: string;
+  readonly active_plan_version_id?: string;
   readonly policy_version_id?: string;
   readonly prompt_version_id?: string;
   readonly artifact_version_ids: readonly string[];
@@ -78,6 +80,9 @@ export interface PlanVersion {
   readonly version: number;
   readonly content_json: string;
   readonly valid: boolean;
+  readonly context_version_id?: string;
+  readonly strategy_generation_id?: string;
+  readonly strategy_checksum?: string;
   readonly created_by: string;
   readonly created_at: unknown;
 }
@@ -151,16 +156,81 @@ export interface AddPlanResult extends WorkCommandResult {
   readonly plan: PlanVersion;
 }
 
+export interface StrategyProjectionCriterion {
+  readonly key: string;
+  readonly statement: string;
+  readonly method: "test" | "inspection" | "evidence" | "metric" | "human";
+  readonly evidenceKinds: readonly string[];
+  readonly planLevel: boolean;
+}
+
+export interface StrategyProjectionRisk {
+  readonly key: string;
+  readonly description: string;
+  readonly likelihood: "low" | "medium" | "high" | "critical";
+  readonly impact: "low" | "medium" | "high" | "critical";
+  readonly mitigation: string;
+  readonly requiresApproval: boolean;
+}
+
+export interface StrategyProjectionTask {
+  readonly key: string;
+  readonly title: string;
+  readonly objective: string;
+  readonly criterionKeys: readonly string[];
+  readonly dependencyKeys: readonly string[];
+  readonly requiredCapabilities: readonly string[];
+  readonly recommendedAgentHandles: readonly string[];
+  readonly parallelizable: boolean;
+}
+
+export interface StrategyProjectionEvidenceRequest {
+  readonly key: string;
+  readonly question: string;
+  readonly required: boolean;
+}
+
+export interface StrategyProjection {
+  readonly objective: string;
+  readonly summary: string;
+  readonly scopeIn: readonly string[];
+  readonly scopeOut: readonly string[];
+  readonly assumptions: readonly string[];
+  readonly unknowns: readonly string[];
+  readonly acceptanceCriteria: readonly StrategyProjectionCriterion[];
+  readonly risks: readonly StrategyProjectionRisk[];
+  readonly tasks: readonly StrategyProjectionTask[];
+  readonly evidenceRequests: readonly StrategyProjectionEvidenceRequest[];
+}
+
+export interface ApplyStrategyProjectionInput extends WorkCommandInput {
+  readonly contextVersionId: string;
+  readonly strategyGenerationId: string;
+  readonly strategyChecksum: string;
+  readonly plan: StrategyProjection;
+}
+
+export interface ApplyStrategyProjectionResult extends WorkCommandResult {
+  readonly plan: PlanVersion;
+  readonly tasks: readonly WorkTask[];
+  readonly previousPlan?: PlanVersion;
+}
+
 export type TaskStatus = "blocked" | "ready" | "running" | "completed" | "failed" | "cancelled";
 
 export interface WorkTask {
   readonly task_id: string;
   readonly organization_id: string;
   readonly work_id: string;
+  readonly plan_version_id?: string;
+  readonly task_key?: string;
   readonly title: string;
   readonly objective: string;
   readonly acceptance_criteria_json: string;
   readonly dependency_ids: readonly string[];
+  readonly required_capabilities?: readonly string[];
+  readonly recommended_agent_handles?: readonly string[];
+  readonly parallelizable?: boolean;
   readonly status: TaskStatus;
   readonly revision: number;
   readonly created_at: unknown;
@@ -593,6 +663,16 @@ async function listTasksWith(executor: QueryExecutor, organizationId: string, wo
   return tasks;
 }
 
+async function listActiveTasksWith(
+  executor: QueryExecutor,
+  organizationId: string,
+  work: Pick<Work, "work_id" | "active_plan_version_id">,
+): Promise<WorkTask[]> {
+  const tasks = await listTasksWith(executor, organizationId, work.work_id);
+  if (!work.active_plan_version_id) return tasks;
+  return tasks.filter((task) => task.plan_version_id === work.active_plan_version_id);
+}
+
 async function listAssignmentsWith(
   executor: QueryExecutor,
   organizationId: string,
@@ -603,6 +683,34 @@ async function listAssignmentsWith(
     { organization_id: organizationId, work_id: workId },
   );
   return assignments;
+}
+
+async function retirePlanExecution(
+  executor: QueryExecutor,
+  organizationId: string,
+  workId: string,
+  planVersionId: string,
+): Promise<void> {
+  const tasks = (await listTasksWith(executor, organizationId, workId)).filter(
+    (task) => task.plan_version_id === planVersionId,
+  );
+  await executor.query(
+    "UPDATE work_task SET status = 'cancelled', revision += 1, updated_at = time::now() WHERE organization_id = $organization_id AND work_id = $work_id AND plan_version_id = $plan_version_id AND status IN ['blocked', 'ready', 'running', 'failed'];",
+    { organization_id: organizationId, work_id: workId, plan_version_id: planVersionId },
+  );
+  const taskIds = new Set(tasks.map((task) => task.task_id));
+  const assignments = await listAssignmentsWith(executor, organizationId, workId);
+  for (const assignment of assignments) {
+    if (assignment.status !== "assigned" || !taskIds.has(assignment.task_id)) continue;
+    await executor.query(
+      "UPDATE task_assignment SET status = 'released', revision = $revision, updated_at = time::now() WHERE organization_id = $organization_id AND assignment_id = $assignment_id;",
+      {
+        revision: assignment.revision + 1,
+        organization_id: organizationId,
+        assignment_id: assignment.assignment_id,
+      },
+    );
+  }
 }
 
 function assertAcyclic(tasks: readonly WorkTask[]): void {
@@ -618,6 +726,65 @@ function assertAcyclic(tasks: readonly WorkTask[]): void {
   };
   const complete = new Set<string>();
   for (const task of tasks) visit(task.task_id, new Set(), complete);
+}
+
+function assertUniqueProjectionKeys(kind: string, values: readonly { readonly key: string }[]): void {
+  const seen = new Set<string>();
+  for (const value of values) {
+    if (!value.key.trim()) throw new Error(`${kind} key는 비어 있을 수 없습니다`);
+    if (seen.has(value.key)) throw new Error(`${kind} key가 중복됐습니다: ${value.key}`);
+    seen.add(value.key);
+  }
+}
+
+function assertStrategyProjection(plan: StrategyProjection): void {
+  if (!plan.objective.trim() || !plan.summary.trim()) throw new Error("StrategyPlan objective와 summary가 필요합니다");
+  if (plan.acceptanceCriteria.length === 0) throw new Error("StrategyPlan acceptance criterion이 필요합니다");
+  if (plan.tasks.length === 0) throw new Error("StrategyPlan Task가 필요합니다");
+  assertUniqueProjectionKeys("Acceptance criterion", plan.acceptanceCriteria);
+  assertUniqueProjectionKeys("Risk", plan.risks);
+  assertUniqueProjectionKeys("Task", plan.tasks);
+  assertUniqueProjectionKeys("Evidence request", plan.evidenceRequests);
+
+  const criteriaByKey = new Map(plan.acceptanceCriteria.map((criterion) => [criterion.key, criterion]));
+  const taskByKey = new Map(plan.tasks.map((task) => [task.key, task]));
+  const assignedCriteria = new Set<string>();
+  for (const task of plan.tasks) {
+    if (!task.title.trim() || !task.objective.trim()) throw new Error(`Strategy Task 내용이 비었습니다: ${task.key}`);
+    for (const criterionKey of task.criterionKeys) {
+      if (!criteriaByKey.has(criterionKey)) throw new Error(`존재하지 않는 criterion입니다: ${criterionKey}`);
+      assignedCriteria.add(criterionKey);
+    }
+    for (const dependencyKey of task.dependencyKeys) {
+      if (!taskByKey.has(dependencyKey)) throw new Error(`존재하지 않는 dependency입니다: ${dependencyKey}`);
+    }
+  }
+  for (const criterion of plan.acceptanceCriteria) {
+    if (!criterion.statement.trim()) throw new Error(`Acceptance criterion 내용이 비었습니다: ${criterion.key}`);
+    if (!criterion.planLevel && !assignedCriteria.has(criterion.key)) {
+      throw new Error(`Task에 귀속되지 않은 criterion입니다: ${criterion.key}`);
+    }
+  }
+  for (const risk of plan.risks) {
+    if (
+      (risk.impact === "critical" || risk.likelihood === "critical") &&
+      (!risk.mitigation.trim() || !risk.requiresApproval)
+    ) {
+      throw new Error(`critical risk에는 mitigation과 사람 승인이 필요합니다: ${risk.key}`);
+    }
+  }
+
+  const visiting = new Set<string>();
+  const visited = new Set<string>();
+  const visit = (taskKey: string): void => {
+    if (visiting.has(taskKey)) throw new Error(`Strategy Task dependency cycle이 있습니다: ${taskKey}`);
+    if (visited.has(taskKey)) return;
+    visiting.add(taskKey);
+    for (const dependencyKey of taskByKey.get(taskKey)?.dependencyKeys ?? []) visit(dependencyKey);
+    visiting.delete(taskKey);
+    visited.add(taskKey);
+  };
+  for (const task of plan.tasks) visit(task.key);
 }
 
 export class WorkService {
@@ -640,6 +807,7 @@ export class WorkService {
       WORK_COLLABORATION_MIGRATION,
       WORK_RECORDS_MIGRATION,
       WORK_CONSTRAINTS_MIGRATION,
+      WORK_STRATEGY_PROJECTION_MIGRATION,
     ]);
     return new WorkService(database, organizations, graph, governance);
   }
@@ -718,6 +886,113 @@ export class WorkService {
     return await listEventsWith(this.database, context.organizationId, workId);
   }
 
+  public async applyStrategyProjection(
+    context: TenantContext,
+    input: ApplyStrategyProjectionInput,
+  ): Promise<ApplyStrategyProjectionResult> {
+    if (!input.contextVersionId.trim()) throw new Error("ContextVersion 참조가 필요합니다");
+    if (!input.strategyGenerationId.trim()) throw new Error("StrategyGeneration 참조가 필요합니다");
+    if (!/^[a-f0-9]{64}$/u.test(input.strategyChecksum)) {
+      throw new Error("Strategy checksum은 SHA-256 형식이어야 합니다");
+    }
+    assertStrategyProjection(input.plan);
+
+    return await this.mutate(context, input, "strategy_projection_applied", async (transaction, work) => {
+      if (!["draft", "planned", "replanning"].includes(work.status)) {
+        throw new Error(`StrategyPlan을 투영할 수 없는 Work 상태입니다: ${work.status}`);
+      }
+      const [plans] = await transaction.query<[PlanVersion[]]>(
+        "SELECT * OMIT id FROM plan_version WHERE organization_id = $organization_id AND work_id = $work_id ORDER BY version ASC;",
+        { organization_id: context.organizationId, work_id: work.work_id },
+      );
+      const previousPlan = work.active_plan_version_id
+        ? plans.find((candidate) => candidate.plan_version_id === work.active_plan_version_id)
+        : undefined;
+      if (work.active_plan_version_id && !previousPlan) {
+        throw new Error(`활성 PlanVersion을 찾을 수 없습니다: ${work.active_plan_version_id}`);
+      }
+      if (previousPlan) {
+        await transaction.query(
+          "UPDATE plan_version SET valid = false WHERE organization_id = $organization_id AND work_id = $work_id AND plan_version_id = $plan_version_id;",
+          {
+            organization_id: context.organizationId,
+            work_id: work.work_id,
+            plan_version_id: previousPlan.plan_version_id,
+          },
+        );
+        await retirePlanExecution(transaction, context.organizationId, work.work_id, previousPlan.plan_version_id);
+      }
+
+      const planVersionId = randomUUID();
+      const version = plans.reduce((maximum, candidate) => Math.max(maximum, candidate.version), 0) + 1;
+      const [createdPlans] = await transaction.query<[PlanVersion[]]>(
+        "CREATE plan_version CONTENT { plan_version_id: $plan_version_id, organization_id: $organization_id, work_id: $work_id, version: $version, content_json: $content_json, valid: true, context_version_id: $context_version_id, strategy_generation_id: $strategy_generation_id, strategy_checksum: $strategy_checksum, created_by: $created_by, created_at: time::now() } RETURN AFTER;",
+        {
+          plan_version_id: planVersionId,
+          organization_id: context.organizationId,
+          work_id: work.work_id,
+          version,
+          content_json: canonicalJson(input.plan),
+          context_version_id: input.contextVersionId,
+          strategy_generation_id: input.strategyGenerationId,
+          strategy_checksum: input.strategyChecksum,
+          created_by: context.userId,
+        },
+      );
+      const plan = createdPlans[0];
+      if (!plan) throw new Error("Strategy PlanVersion 생성 결과가 없습니다");
+
+      const taskIdByKey = new Map(input.plan.tasks.map((task) => [task.key, randomUUID()]));
+      const criterionByKey = new Map(input.plan.acceptanceCriteria.map((criterion) => [criterion.key, criterion]));
+      const tasks: WorkTask[] = [];
+      for (const projected of input.plan.tasks) {
+        const dependencyIds = projected.dependencyKeys.map((key) => {
+          const taskId = taskIdByKey.get(key);
+          if (!taskId) throw new Error(`존재하지 않는 dependency입니다: ${key}`);
+          return taskId;
+        });
+        const criteria = projected.criterionKeys.map((key) => {
+          const criterion = criterionByKey.get(key);
+          if (!criterion) throw new Error(`존재하지 않는 criterion입니다: ${key}`);
+          return criterion;
+        });
+        const [createdTasks] = await transaction.query<[WorkTask[]]>(
+          "CREATE work_task CONTENT { task_id: $task_id, organization_id: $organization_id, work_id: $work_id, plan_version_id: $plan_version_id, task_key: $task_key, title: $title, objective: $objective, acceptance_criteria_json: $acceptance_criteria_json, dependency_ids: $dependency_ids, required_capabilities: $required_capabilities, recommended_agent_handles: $recommended_agent_handles, parallelizable: $parallelizable, status: $status, revision: 1, created_at: time::now(), updated_at: time::now() } RETURN AFTER;",
+          {
+            task_id: taskIdByKey.get(projected.key),
+            organization_id: context.organizationId,
+            work_id: work.work_id,
+            plan_version_id: plan.plan_version_id,
+            task_key: projected.key,
+            title: projected.title.trim(),
+            objective: projected.objective.trim(),
+            acceptance_criteria_json: canonicalJson(criteria),
+            dependency_ids: dependencyIds,
+            required_capabilities: projected.requiredCapabilities,
+            recommended_agent_handles: projected.recommendedAgentHandles,
+            parallelizable: projected.parallelizable,
+            status: dependencyIds.length === 0 ? "ready" : "blocked",
+          },
+        );
+        const task = createdTasks[0];
+        if (!task) throw new Error(`Strategy Task 생성 결과가 없습니다: ${projected.key}`);
+        tasks.push(task);
+      }
+      assertAcyclic(tasks);
+      await transaction.query(
+        "UPDATE work SET status = $status, context_version_id = $context_version_id, active_plan_version_id = $active_plan_version_id, updated_at = time::now() WHERE organization_id = $organization_id AND work_id = $work_id;",
+        {
+          status: work.status === "draft" || work.status === "replanning" ? "planned" : work.status,
+          context_version_id: input.contextVersionId,
+          active_plan_version_id: plan.plan_version_id,
+          organization_id: context.organizationId,
+          work_id: work.work_id,
+        },
+      );
+      return { plan, tasks, ...(previousPlan ? { previousPlan } : {}) };
+    });
+  }
+
   public async addPlan(context: TenantContext, input: AddPlanInput): Promise<AddPlanResult> {
     if (Object.keys(input.content).length === 0) throw new Error("Plan content는 비어 있을 수 없습니다");
     return await this.mutate(context, input, "plan_version_created", async (transaction, work) => {
@@ -726,10 +1001,18 @@ export class WorkService {
         { organization_id: context.organizationId, work_id: work.work_id },
       );
       const version = plans.reduce((maximum, plan) => Math.max(maximum, plan.version), 0) + 1;
+      if (work.active_plan_version_id) {
+        await retirePlanExecution(transaction, context.organizationId, work.work_id, work.active_plan_version_id);
+      }
+      await transaction.query(
+        "UPDATE plan_version SET valid = false WHERE organization_id = $organization_id AND work_id = $work_id AND valid = true;",
+        { organization_id: context.organizationId, work_id: work.work_id },
+      );
+      const planVersionId = randomUUID();
       const [created] = await transaction.query<[PlanVersion[]]>(
         "CREATE plan_version CONTENT { plan_version_id: $plan_version_id, organization_id: $organization_id, work_id: $work_id, version: $version, content_json: $content_json, valid: true, created_by: $created_by, created_at: time::now() } RETURN AFTER;",
         {
-          plan_version_id: randomUUID(),
+          plan_version_id: planVersionId,
           organization_id: context.organizationId,
           work_id: work.work_id,
           version,
@@ -739,6 +1022,14 @@ export class WorkService {
       );
       const plan = created[0];
       if (!plan) throw new Error("PlanVersion 생성 결과가 없습니다");
+      await transaction.query(
+        "UPDATE work SET active_plan_version_id = $active_plan_version_id WHERE organization_id = $organization_id AND work_id = $work_id;",
+        {
+          active_plan_version_id: plan.plan_version_id,
+          organization_id: context.organizationId,
+          work_id: work.work_id,
+        },
+      );
       return { plan };
     });
   }
@@ -748,18 +1039,21 @@ export class WorkService {
       throw new Error("Task title과 objective는 비어 있을 수 없습니다");
     if (input.acceptanceCriteria.length === 0) throw new Error("Task acceptance criteria가 필요합니다");
     return await this.mutate(context, input, "task_created", async (transaction, work) => {
-      const existing = await listTasksWith(transaction, context.organizationId, work.work_id);
+      if (!work.active_plan_version_id) throw new Error("Task 생성에는 활성 PlanVersion이 필요합니다");
+      const existing = await listActiveTasksWith(transaction, context.organizationId, work);
       for (const dependencyId of input.dependencyIds) {
         if (!existing.some((task) => task.task_id === dependencyId)) {
           throw new Error(`같은 Work의 dependency Task를 찾을 수 없습니다: ${dependencyId}`);
         }
       }
       const [records] = await transaction.query<[WorkTask[]]>(
-        "CREATE work_task CONTENT { task_id: $task_id, organization_id: $organization_id, work_id: $work_id, title: $title, objective: $objective, acceptance_criteria_json: $acceptance_criteria_json, dependency_ids: $dependency_ids, status: $status, revision: 1, created_at: time::now(), updated_at: time::now() } RETURN AFTER;",
+        "CREATE work_task CONTENT { task_id: $task_id, organization_id: $organization_id, work_id: $work_id, plan_version_id: $plan_version_id, task_key: $task_key, title: $title, objective: $objective, acceptance_criteria_json: $acceptance_criteria_json, dependency_ids: $dependency_ids, status: $status, revision: 1, created_at: time::now(), updated_at: time::now() } RETURN AFTER;",
         {
           task_id: randomUUID(),
           organization_id: context.organizationId,
           work_id: work.work_id,
+          plan_version_id: work.active_plan_version_id,
+          task_key: randomUUID(),
           title: input.title.trim(),
           objective: input.objective.trim(),
           acceptance_criteria_json: canonicalJson(input.acceptanceCriteria),
@@ -779,7 +1073,7 @@ export class WorkService {
     input: SetTaskDependenciesInput,
   ): Promise<WorkCommandResult & { task: WorkTask }> {
     return await this.mutate(context, input, "task_dependencies_changed", async (transaction, work) => {
-      const tasks = await listTasksWith(transaction, context.organizationId, work.work_id);
+      const tasks = await listActiveTasksWith(transaction, context.organizationId, work);
       const target = tasks.find((task) => task.task_id === input.taskId);
       if (!target) throw new Error(`Task를 찾을 수 없습니다: ${input.taskId}`);
       for (const dependencyId of input.dependencyIds) {
@@ -808,7 +1102,7 @@ export class WorkService {
           task_id: input.taskId,
         },
       );
-      const updated = (await listTasksWith(transaction, context.organizationId, work.work_id)).find(
+      const updated = (await listActiveTasksWith(transaction, context.organizationId, work)).find(
         (task) => task.task_id === input.taskId,
       );
       if (!updated) throw new Error("변경된 Task를 찾을 수 없습니다");
@@ -823,7 +1117,7 @@ export class WorkService {
     if (!this.graph) throw new Error("Organization Graph reader가 필요합니다");
     return await this.mutate(context, input, "task_assigned", async (transaction, work) => {
       await this.graph?.verifyActiveNode(context, input.agentHandle, transaction);
-      const tasks = await listTasksWith(transaction, context.organizationId, work.work_id);
+      const tasks = await listActiveTasksWith(transaction, context.organizationId, work);
       if (!tasks.some((task) => task.task_id === input.taskId))
         throw new Error(`Task를 찾을 수 없습니다: ${input.taskId}`);
       const assignments = await listAssignmentsWith(transaction, context.organizationId, work.work_id);
@@ -871,7 +1165,7 @@ export class WorkService {
       cancelled: [],
     };
     return await this.mutate(context, input, "task_state_changed", async (transaction, work) => {
-      const tasks = await listTasksWith(transaction, context.organizationId, work.work_id);
+      const tasks = await listActiveTasksWith(transaction, context.organizationId, work);
       const target = tasks.find((task) => task.task_id === input.taskId);
       if (!target) throw new Error(`Task를 찾을 수 없습니다: ${input.taskId}`);
       if (target.revision !== input.expectedTaskRevision) {
@@ -1701,7 +1995,7 @@ export class WorkService {
   public async auditWork(context: TenantContext, workId: string): Promise<WorkComplianceFinding[]> {
     const work = await this.getWork(context, workId);
     const events = await listEventsWith(this.database, context.organizationId, workId);
-    const tasks = await listTasksWith(this.database, context.organizationId, workId);
+    const tasks = await listActiveTasksWith(this.database, context.organizationId, work);
     const assignments = await listAssignmentsWith(this.database, context.organizationId, workId);
     const findings: WorkComplianceFinding[] = [];
     if (work.revision !== events.length) {
@@ -1716,10 +2010,18 @@ export class WorkService {
     const planRequired = !["draft", "cancelled"].includes(work.status);
     if (planRequired) {
       const [plans] = await this.database.query<[PlanVersion[]]>(
-        "SELECT * OMIT id FROM plan_version WHERE organization_id = $organization_id AND work_id = $work_id AND valid = true LIMIT 1;",
+        "SELECT * OMIT id FROM plan_version WHERE organization_id = $organization_id AND work_id = $work_id ORDER BY version ASC;",
         { organization_id: context.organizationId, work_id: workId },
       );
-      if (!plans[0]) findings.push({ code: "plan", message: "현재 Work 상태에 유효한 PlanVersion이 없습니다" });
+      const validPlans = plans.filter((plan) => plan.valid);
+      if (validPlans.length !== 1) {
+        findings.push({ code: "plan", message: "현재 Work 상태의 유효한 PlanVersion 수가 1이 아닙니다" });
+      } else if (
+        work.active_plan_version_id &&
+        validPlans[0]?.plan_version_id !== work.active_plan_version_id
+      ) {
+        findings.push({ code: "plan", message: "활성 PlanVersion 참조와 유효한 PlanVersion이 다릅니다" });
+      }
     }
     try {
       assertAcyclic(tasks);
@@ -1815,13 +2117,16 @@ export class WorkService {
       }
       if (input.target === "planned") {
         const [plans] = await transaction.query<[PlanVersion[]]>(
-          "SELECT * OMIT id FROM plan_version WHERE organization_id = $organization_id AND work_id = $work_id AND valid = true LIMIT 1;",
+          "SELECT * OMIT id FROM plan_version WHERE organization_id = $organization_id AND work_id = $work_id ORDER BY version ASC;",
           { organization_id: context.organizationId, work_id: work.work_id },
         );
-        if (!plans[0]) throw new Error("planned 전이에는 유효한 PlanVersion이 필요합니다");
+        const activePlan = plans.find(
+          (plan) => plan.valid && (!work.active_plan_version_id || plan.plan_version_id === work.active_plan_version_id),
+        );
+        if (!activePlan) throw new Error("planned 전이에는 유효한 PlanVersion이 필요합니다");
       }
       if (input.target === "ready") {
-        const tasks = await listTasksWith(transaction, context.organizationId, work.work_id);
+        const tasks = await listActiveTasksWith(transaction, context.organizationId, work);
         assertAcyclic(tasks);
         if (tasks.length === 0) throw new Error("ready 전이에는 Task DAG가 필요합니다");
         const assignments = await listAssignmentsWith(transaction, context.organizationId, work.work_id);
@@ -1843,7 +2148,7 @@ export class WorkService {
         }
       }
       if (input.target === "verifying") {
-        const tasks = await listTasksWith(transaction, context.organizationId, work.work_id);
+        const tasks = await listActiveTasksWith(transaction, context.organizationId, work);
         if (tasks.length === 0 || tasks.some((task) => !["completed", "cancelled"].includes(task.status))) {
           throw new Error("verifying 전이에는 모든 실행 Task의 완료가 필요합니다");
         }
