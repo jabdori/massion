@@ -3,3 +3,7 @@ export * from "./contract-validation.js";
 export * from "./schema.js";
 export * from "./run-store.js";
 export * from "./bootstrap.js";
+export * from "./profile.js";
+export * from "./criteria.js";
+export * from "./snapshot.js";
+export * from "./binding-store.js";

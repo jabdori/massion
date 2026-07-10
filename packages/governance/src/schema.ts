@@ -169,3 +169,18 @@ DEFINE INDEX governance_emergency_event_command ON governance_emergency_event FI
 DEFINE INDEX governance_emergency_event_sequence ON governance_emergency_event FIELDS organization_id, sequence UNIQUE;
 `,
 );
+
+export const GOVERNANCE_DECISION_CONTEXT_MIGRATION = defineMigration(
+  "0040-governance-decision-context",
+  `
+DEFINE FIELD principal_type ON governance_policy_decision TYPE string;
+DEFINE FIELD principal_id ON governance_policy_decision TYPE string;
+DEFINE FIELD action ON governance_policy_decision TYPE string;
+DEFINE FIELD resource_type ON governance_policy_decision TYPE string;
+DEFINE FIELD resource_id ON governance_policy_decision TYPE string;
+DEFINE FIELD resource_revision ON governance_policy_decision TYPE option<int>;
+DEFINE FIELD environment ON governance_policy_decision TYPE string;
+DEFINE FIELD risk_class ON governance_policy_decision TYPE string;
+DEFINE FIELD external ON governance_policy_decision TYPE bool;
+`,
+);
