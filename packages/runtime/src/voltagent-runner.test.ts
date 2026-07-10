@@ -211,4 +211,21 @@ describe("VoltAgent AgentRunner", () => {
     expect(recovery.execution.status).toBe("cancelled");
     expect(recovery.events.filter((event) => event.event_type === "execution_cancelled")).toHaveLength(1);
   });
+
+  it("framework-neutral suspend·resume·recover 계약을 lifecycle adapter에 연결한다", async () => {
+    const lifecycle = {
+      suspend: vi.fn().mockResolvedValue(undefined),
+      resume: vi.fn().mockResolvedValue({ executionId: "execution-1", status: "succeeded" }),
+      recover: vi.fn().mockResolvedValue({ executionId: "execution-1", status: "suspended" }),
+    };
+    const runner = new VoltAgentRunner(voltAgent, store, { acquire: vi.fn() }, registry, lifecycle);
+
+    await runner.suspend(context, "execution-1", "approval");
+    await expect(runner.resume(context, "execution-1", { approved: true })).resolves.toMatchObject({
+      status: "succeeded",
+    });
+    await expect(runner.recover(context, "execution-1")).resolves.toMatchObject({ status: "suspended" });
+
+    expect(lifecycle.suspend).toHaveBeenCalledWith(context, "execution-1", "approval");
+  });
 });
