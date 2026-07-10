@@ -1011,3 +1011,23 @@ THEN {
 };
 `,
 );
+
+export const ASSURANCE_RECOVERY_METRIC_MIGRATION = defineMigration(
+  "0046-assurance-recovery-metric",
+  `
+DEFINE TABLE assurance_metric_event SCHEMAFULL;
+DEFINE FIELD metric_event_id ON assurance_metric_event TYPE string ASSERT string::len($value) = 64;
+DEFINE FIELD organization_id ON assurance_metric_event TYPE string;
+DEFINE FIELD metric_name ON assurance_metric_event TYPE string ASSERT $value IN ['assurance_run_duration_ms', 'assurance_verdict_total', 'assurance_criterion_total', 'assurance_finding_total', 'assurance_check_total', 'assurance_blocked_total', 'assurance_recovery_total'];
+DEFINE FIELD dimensions_json ON assurance_metric_event TYPE string ASSERT string::len($value) > 0 AND string::len($value) <= 1000;
+DEFINE FIELD numeric_value ON assurance_metric_event TYPE number ASSERT $value >= 0;
+DEFINE FIELD occurred_at ON assurance_metric_event TYPE datetime;
+DEFINE INDEX assurance_metric_event_id ON assurance_metric_event FIELDS metric_event_id UNIQUE;
+DEFINE INDEX assurance_metric_event_org ON assurance_metric_event FIELDS organization_id, metric_name;
+DEFINE EVENT assurance_metric_event_immutable ON TABLE assurance_metric_event
+WHEN $event IN ['UPDATE', 'DELETE']
+THEN {
+  THROW 'Assurance metric event는 immutable입니다';
+};
+`,
+);

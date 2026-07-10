@@ -7,6 +7,7 @@ import { WORK_ASSURANCE_LINK_MIGRATION, WorkService } from "@massion/work";
 
 import { AssuranceRunStore } from "./run-store.js";
 import { AssuranceService, type DecideAssuranceInput, type DecideAssuranceResult } from "./service.js";
+import { AssuranceRecovery, type AssuranceRecoveryResult } from "./recovery.js";
 import type { AssuranceEvent, AssuranceRun, AssuranceRunResult, StartAssuranceRunInput } from "./contracts.js";
 import type { DatabaseAssuranceSnapshotInput, DatabaseAssuranceSnapshotResult } from "./database-snapshot.js";
 import { backfillAssuranceBindingChecks } from "./binding-store.js";
@@ -14,6 +15,7 @@ import {
   ASSURANCE_BINDING_MIGRATION,
   ASSURANCE_DECISION_EVIDENCE_MIGRATION,
   ASSURANCE_EVIDENCE_INTEGRITY_MIGRATION,
+  ASSURANCE_RECOVERY_METRIC_MIGRATION,
   ASSURANCE_RUN_MIGRATION,
 } from "./schema.js";
 
@@ -26,6 +28,10 @@ export interface AssuranceRunGateway {
   ): Promise<DatabaseAssuranceSnapshotResult>;
   listEvents(context: TenantContext, assuranceRunId: string): Promise<AssuranceEvent[]>;
   decide(context: TenantContext, input: DecideAssuranceInput): Promise<DecideAssuranceResult>;
+  recover(
+    context: TenantContext,
+    input: { readonly commandId: string; readonly assuranceRunId: string },
+  ): Promise<{ readonly run: AssuranceRun; readonly result: AssuranceRecoveryResult }>;
 }
 
 export const AssuranceBootstrap = {
@@ -43,16 +49,19 @@ export const AssuranceBootstrap = {
       WORK_ASSURANCE_LINK_MIGRATION,
       ASSURANCE_EVIDENCE_INTEGRITY_MIGRATION,
       ASSURANCE_DECISION_EVIDENCE_MIGRATION,
+      ASSURANCE_RECOVERY_METRIC_MIGRATION,
     ]);
     await backfillAssuranceBindingChecks(database);
     const runs = await AssuranceRunStore.create(database, organizations);
     const assurance = await AssuranceService.create(database, organizations);
+    const recovery = await AssuranceRecovery.create(database, organizations);
     return Object.freeze({
       start: runs.start.bind(runs),
       get: runs.get.bind(runs),
       prepareSnapshot: runs.prepareSnapshot.bind(runs),
       listEvents: runs.listEvents.bind(runs),
       decide: assurance.decide.bind(assurance),
+      recover: recovery.recover.bind(recovery),
     });
   },
 } as const;
