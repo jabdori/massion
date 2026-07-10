@@ -53,6 +53,9 @@ importers:
 
   packages/evidence:
     dependencies:
+      '@massion/context-strategy':
+        specifier: workspace:*
+        version: link:../context-strategy
       '@massion/identity':
         specifier: workspace:*
         version: link:../identity

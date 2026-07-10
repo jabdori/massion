@@ -14,6 +14,14 @@ export interface ContextSource {
   readonly estimatedTokens: number;
   readonly mandatory: boolean;
   readonly content?: unknown;
+  readonly evidenceRef?: {
+    readonly evidenceBriefId: string;
+    readonly repositoryId: string;
+    readonly repositoryRevisionId: string;
+    readonly indexVersionId: string;
+    readonly briefChecksum: string;
+    readonly freshnessStatus: "fresh" | "stale_warning";
+  };
 }
 
 export interface ExcludedContextSource {

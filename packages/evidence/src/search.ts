@@ -2,6 +2,7 @@ import type { TenantContext } from "@massion/identity";
 import { applyMigrations, type MassionDatabase } from "@massion/storage";
 
 import type { IndexedChunk, IndexedSymbol, IndexStore } from "./index-store.js";
+import type { EvidenceMetrics } from "./metrics.js";
 import type { RepositoryStore } from "./repository-store.js";
 import {
   EVIDENCE_CONTENT_MIGRATION,
@@ -140,6 +141,7 @@ export class CodeSearchService {
     private readonly repositories: RepositoryStore,
     private readonly indexes: IndexStore,
     private readonly embeddings?: EmbeddingSearchPort,
+    private readonly metrics?: Pick<EvidenceMetrics, "recordSearch">,
   ) {}
 
   public static async create(
@@ -147,6 +149,7 @@ export class CodeSearchService {
     repositories: RepositoryStore,
     indexes: IndexStore,
     embeddings?: EmbeddingSearchPort,
+    metrics?: Pick<EvidenceMetrics, "recordSearch">,
   ): Promise<CodeSearchService> {
     await applyMigrations(database, [
       EVIDENCE_INDEX_MIGRATION,
@@ -154,7 +157,7 @@ export class CodeSearchService {
       EVIDENCE_SEARCH_MIGRATION,
       EVIDENCE_SEARCH_INDEX_MIGRATION,
     ]);
-    return new CodeSearchService(database, repositories, indexes, embeddings);
+    return new CodeSearchService(database, repositories, indexes, embeddings, metrics);
   }
 
   public async search(context: TenantContext, input: CodeSearchInput): Promise<CodeSearchResponse> {
@@ -277,7 +280,7 @@ export class CodeSearchService {
         matchModes: [...candidate.modes].sort(),
         rank: position + 1,
       }));
-    return {
+    const response: CodeSearchResponse = {
       repositoryId: input.repositoryId,
       repositoryRevisionId: current.repositoryRevisionId,
       indexVersionId: current.indexVersionId,
@@ -285,5 +288,7 @@ export class CodeSearchService {
       embeddingStatus,
       results,
     };
+    await this.metrics?.recordSearch(context, searchMode).catch(() => undefined);
+    return response;
   }
 }

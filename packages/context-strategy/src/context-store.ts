@@ -253,6 +253,21 @@ export class ContextStore {
         throw new Error("secret-ref Context source에는 원문 content를 저장할 수 없습니다");
       if (source.content !== undefined && hashContextContent(source.content) !== source.contentHash)
         throw new Error("Context source content hash가 일치하지 않습니다");
+      if (source.kind === "evidence") {
+        if (!source.evidenceRef) throw new Error("evidence Context source에는 EvidenceBrief reference가 필요합니다");
+        if (source.content !== undefined)
+          throw new Error("evidence Context source에는 본문 content를 복제할 수 없습니다");
+        if (
+          source.sourceId !== source.evidenceRef.evidenceBriefId ||
+          source.revision !== source.evidenceRef.indexVersionId ||
+          source.contentHash !== source.evidenceRef.briefChecksum ||
+          source.estimatedTokens !== 0
+        ) {
+          throw new Error("evidence Context source의 ID, revision, checksum 또는 token 계약이 잘못됐습니다");
+        }
+      } else if (source.evidenceRef) {
+        throw new Error("evidence가 아닌 Context source에는 EvidenceBrief reference를 쓸 수 없습니다");
+      }
     }
   }
 

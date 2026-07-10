@@ -281,3 +281,18 @@ DEFINE INDEX external_research_event_id ON external_research_event FIELDS event_
 DEFINE INDEX external_research_event_command ON external_research_event FIELDS organization_id, command_id UNIQUE;
 `,
 );
+
+export const EVIDENCE_METRIC_MIGRATION = defineMigration(
+  "0031-evidence-metric",
+  `
+DEFINE TABLE evidence_metric_event SCHEMAFULL;
+DEFINE FIELD metric_event_id ON evidence_metric_event TYPE string;
+DEFINE FIELD organization_id ON evidence_metric_event TYPE string;
+DEFINE FIELD metric_name ON evidence_metric_event TYPE string;
+DEFINE FIELD dimensions_json ON evidence_metric_event TYPE string;
+DEFINE FIELD value ON evidence_metric_event TYPE number;
+DEFINE FIELD occurred_at ON evidence_metric_event TYPE datetime;
+DEFINE INDEX evidence_metric_event_id ON evidence_metric_event FIELDS metric_event_id UNIQUE;
+DEFINE INDEX evidence_metric_event_org ON evidence_metric_event FIELDS organization_id, metric_name;
+`,
+);

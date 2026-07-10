@@ -4,6 +4,7 @@ import type { TenantContext } from "@massion/identity";
 
 import type { IndexMode, IndexVersion } from "./contracts.js";
 import type { IndexStore } from "./index-store.js";
+import type { EvidenceMetrics } from "./metrics.js";
 import type { ParseEvidenceInput, ParsedFileEvidence } from "./parser.js";
 import type { RepositoryStore } from "./repository-store.js";
 import type { RepositoryScanner, ScanOptions } from "./scanner.js";
@@ -14,6 +15,8 @@ export interface EvidenceParserPort {
 
 export interface EvidenceIndexerHooks {
   readonly afterStagedFile?: (input: { readonly relativePath: string; readonly indexVersionId: string }) => void;
+  readonly metrics?: Pick<EvidenceMetrics, "recordIndex">;
+  readonly now?: () => number;
 }
 
 export interface IndexRepositoryInput {
@@ -47,6 +50,7 @@ export class EvidenceIndexer {
   ) {}
 
   public async index(context: TenantContext, input: IndexRepositoryInput): Promise<IndexRepositoryResult> {
+    const startedAt = (this.hooks.now ?? Date.now)();
     if (!input.commandId.trim()) throw new Error("Index command ID가 필요합니다");
     if (input.mode === "full" && input.parentIndexVersionId)
       throw new Error("full index에는 parent IndexVersion을 지정할 수 없습니다");
@@ -83,11 +87,20 @@ export class EvidenceIndexer {
     let stagedFiles = 0;
     let reusedFiles = 0;
     let parsing = false;
+    const fileResults = { complete: 0, partial: 0 };
+    let parseErrors = 0;
+    let reconciliationDrift = 0;
     try {
       const parent = input.parentIndexVersionId
         ? await this.indexes.getSnapshot(context, input.parentIndexVersionId)
         : undefined;
       const parentFiles = new Map(parent?.files.map((file) => [file.relativePath, file]) ?? []);
+      if (input.mode === "reconcile" && parent) {
+        const scanned = new Map(scan.files.map((file) => [file.relativePath, file]));
+        reconciliationDrift =
+          scan.files.filter((file) => parentFiles.get(file.relativePath)?.contentHash !== file.contentHash).length +
+          parent.files.filter((file) => !scanned.has(file.relativePath)).length;
+      }
       for (const file of scan.files) {
         const previous = parentFiles.get(file.relativePath);
         if (previous?.contentHash === file.contentHash && input.parentIndexVersionId) {
@@ -98,6 +111,8 @@ export class EvidenceIndexer {
             file.relativePath,
           );
           reusedFiles += 1;
+          fileResults[previous.status] += 1;
+          parseErrors += previous.parseErrorCount;
         } else {
           parsing = true;
           const evidence = await this.parser.parse({
@@ -116,6 +131,8 @@ export class EvidenceIndexer {
             evidence,
           });
           stagedFiles += 1;
+          fileResults[evidence.status] += 1;
+          parseErrors += evidence.parseErrorCount;
         }
         this.hooks.afterStagedFile?.({
           relativePath: file.relativePath,
@@ -138,6 +155,18 @@ export class EvidenceIndexer {
         },
         snapshotChecksum: snapshot.checksum,
       });
+      await this.hooks.metrics
+        ?.recordIndex(context, {
+          mode: input.mode,
+          status: "complete",
+          durationMs: Math.max(0, (this.hooks.now ?? Date.now)() - startedAt),
+          files: fileResults,
+          parseErrors,
+          staged: stagedFiles,
+          reused: reusedFiles,
+          reconciliationDrift,
+        })
+        .catch(() => undefined);
       return { index: completed.index, stagedFiles, reusedFiles };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -147,6 +176,18 @@ export class EvidenceIndexer {
           indexVersionId: started.index.indexVersionId,
           status: parsing ? "partial" : "failed",
           error: { category: parsing ? "parser" : "indexer", causeId: sha256(message) },
+        })
+        .catch(() => undefined);
+      await this.hooks.metrics
+        ?.recordIndex(context, {
+          mode: input.mode,
+          status: parsing ? "partial" : "failed",
+          durationMs: Math.max(0, (this.hooks.now ?? Date.now)() - startedAt),
+          files: fileResults,
+          parseErrors,
+          staged: stagedFiles,
+          reused: reusedFiles,
+          reconciliationDrift,
         })
         .catch(() => undefined);
       throw error;
