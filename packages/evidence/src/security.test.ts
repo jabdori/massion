@@ -64,7 +64,7 @@ describe("source secret persistence boundary", () => {
         commandId: crypto.randomUUID(),
         repositoryId: repository.repositoryId,
         checksum: "a".repeat(64),
-        parserBundleVersion: "parser-v1",
+        parserBundleVersion: "vscode-tree-sitter-wasm-0.3.1",
         schemaVersion: "evidence-v1",
         embeddingStatus: "unavailable",
         settings: OPTIONS,

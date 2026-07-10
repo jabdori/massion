@@ -69,6 +69,8 @@ async function loadLanguage(language: string): Promise<Language | undefined> {
 }
 
 export class EvidenceParser {
+  public readonly bundleVersion = "vscode-tree-sitter-wasm-0.3.1";
+
   public async parse(input: ParseEvidenceInput): Promise<ParsedFileEvidence> {
     const language = await loadLanguage(input.language);
     if (!language) {

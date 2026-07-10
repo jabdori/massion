@@ -152,6 +152,7 @@ describe("원자적 Repository index 작성", () => {
     await writeFile(path.join(root, "broken.ts"), "export const broken = true;\n");
     const secondRevision = await prepareRevision(firstRevision.repository.repositoryId);
     const failingParser: EvidenceParserPort = {
+      bundleVersion: "vscode-tree-sitter-wasm-0.3.1",
       parse: async (input) => {
         if (input.relativePath === "broken.ts") throw new Error("parser unavailable");
         return await new EvidenceParser().parse(input);
@@ -338,5 +339,42 @@ describe("원자적 Repository index 작성", () => {
         evidence,
       }),
     ).rejects.toThrow("building IndexVersion");
+
+    const wrongParser = (
+      await repositories.createConfiguration(context, {
+        commandId: crypto.randomUUID(),
+        repositoryId: prepared.repository.repositoryId,
+        checksum: "1".repeat(64),
+        parserBundleVersion: "different-parser",
+        schemaVersion: "evidence-v1",
+        embeddingStatus: "unavailable",
+        settings: SCAN_OPTIONS,
+      })
+    ).configuration;
+    await expect(
+      indexer.index(context, {
+        ...request,
+        commandId: crypto.randomUUID(),
+        configurationId: wrongParser.configurationId,
+      }),
+    ).rejects.toThrow("parser bundle");
+    const wrongSettings = (
+      await repositories.createConfiguration(context, {
+        commandId: crypto.randomUUID(),
+        repositoryId: prepared.repository.repositoryId,
+        checksum: "2".repeat(64),
+        parserBundleVersion: "vscode-tree-sitter-wasm-0.3.1",
+        schemaVersion: "evidence-v1",
+        embeddingStatus: "unavailable",
+        settings: { ...SCAN_OPTIONS, maxFileBytes: 1 },
+      })
+    ).configuration;
+    await expect(
+      indexer.index(context, {
+        ...request,
+        commandId: crypto.randomUUID(),
+        configurationId: wrongSettings.configurationId,
+      }),
+    ).rejects.toThrow("scan options");
   });
 });
