@@ -35,3 +35,40 @@ DEFINE INDEX context_event_id ON context_event FIELDS event_id UNIQUE;
 DEFINE INDEX context_event_command ON context_event FIELDS organization_id, command_id UNIQUE;
 `,
 );
+
+export const STRATEGY_GENERATION_MIGRATION = defineMigration(
+  "0022-strategy-generation",
+  `
+DEFINE TABLE strategy_generation SCHEMAFULL;
+DEFINE FIELD strategy_generation_id ON strategy_generation TYPE string;
+DEFINE FIELD organization_id ON strategy_generation TYPE string;
+DEFINE FIELD work_id ON strategy_generation TYPE string;
+DEFINE FIELD context_version_id ON strategy_generation TYPE string;
+DEFINE FIELD command_id ON strategy_generation TYPE string;
+DEFINE FIELD request_hash ON strategy_generation TYPE string;
+DEFINE FIELD expected_work_revision ON strategy_generation TYPE int;
+DEFINE FIELD status ON strategy_generation TYPE string ASSERT $value IN ['pending', 'generated', 'blocked_model_unavailable', 'failed', 'applied', 'conflicted'];
+DEFINE FIELD runtime_execution_id ON strategy_generation TYPE option<string>;
+DEFINE FIELD plan_json ON strategy_generation TYPE option<string>;
+DEFINE FIELD checksum ON strategy_generation TYPE option<string>;
+DEFINE FIELD error_json ON strategy_generation TYPE option<string>;
+DEFINE FIELD created_by_user_id ON strategy_generation TYPE string;
+DEFINE FIELD created_at ON strategy_generation TYPE datetime;
+DEFINE FIELD updated_at ON strategy_generation TYPE datetime;
+DEFINE INDEX strategy_generation_id ON strategy_generation FIELDS strategy_generation_id UNIQUE;
+DEFINE INDEX strategy_generation_command ON strategy_generation FIELDS organization_id, command_id UNIQUE;
+DEFINE INDEX strategy_generation_context ON strategy_generation FIELDS organization_id, context_version_id;
+
+DEFINE TABLE strategy_event SCHEMAFULL;
+DEFINE FIELD event_id ON strategy_event TYPE string;
+DEFINE FIELD organization_id ON strategy_event TYPE string;
+DEFINE FIELD work_id ON strategy_event TYPE string;
+DEFINE FIELD strategy_generation_id ON strategy_event TYPE string;
+DEFINE FIELD command_id ON strategy_event TYPE string;
+DEFINE FIELD event_type ON strategy_event TYPE string;
+DEFINE FIELD payload_json ON strategy_event TYPE string;
+DEFINE FIELD created_at ON strategy_event TYPE datetime;
+DEFINE INDEX strategy_event_id ON strategy_event FIELDS event_id UNIQUE;
+DEFINE INDEX strategy_event_command ON strategy_event FIELDS organization_id, command_id UNIQUE;
+`,
+);
