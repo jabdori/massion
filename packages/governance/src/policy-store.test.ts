@@ -31,7 +31,7 @@ describe("Policy Version Store", () => {
     const other = await identity.registerPersonalUser({ email: "other-policy@example.com", displayName: "Other" });
     context = await organizations.resolveTenantContext(owner.user.user_id, owner.organization.organization_id);
     otherContext = await organizations.resolveTenantContext(other.user.user_id, other.organization.organization_id);
-    store = await PolicyStore.create(database, organizations);
+    store = await PolicyStore.create(database, organizations, { authorize: async () => undefined });
   });
 
   it("immutable draft에 단조 version과 canonical checksum을 부여한다", async () => {

@@ -48,6 +48,27 @@ function matches(requirement: ApprovalRequirement, request: PolicyRequest): bool
   );
 }
 
+function invariantRequirement(action: string): ApprovalRequirement | undefined {
+  const governed = new Set([
+    "policy.activate",
+    "extension.permission_increase",
+    "growth.adopt",
+    "emergency.stop.disable",
+    "declaration.apply",
+  ]);
+  if (!governed.has(action)) return undefined;
+  return {
+    requirementId: `invariant-${action.replaceAll(".", "-")}`,
+    actions: [action],
+    environments: ["*"],
+    riskClasses: ["*"],
+    approverRoles: ["owner", "admin"],
+    quorum: 1,
+    separationOfDuty: false,
+    expiresInSeconds: 3600,
+  };
+}
+
 export class GovernanceService {
   private constructor(
     private readonly database: MassionDatabase,
@@ -88,7 +109,9 @@ export class GovernanceService {
       reasons = authorization.reasons;
       errors = authorization.errors;
       if (authorization.decision === "allow") {
-        requirement = active.requirements.find((candidate) => matches(candidate, input.request));
+        requirement =
+          active.requirements.find((candidate) => matches(candidate, input.request)) ??
+          invariantRequirement(input.request.action);
         outcome = requirement ? "require_approval" : "allow";
       }
     }

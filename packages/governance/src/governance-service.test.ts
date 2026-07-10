@@ -149,4 +149,33 @@ describe("Governance Policy Decision", () => {
     );
     expect(JSON.stringify(records)).not.toContain("secret-value");
   });
+
+  it("Policy bundle이 요구사항을 제거해도 policy.activate는 non-bypassable 승인을 요구한다", async () => {
+    const defaults = createDefaultPolicy("personal");
+    const draft = await policies.createDraft(context, {
+      commandId: crypto.randomUUID(),
+      bundle: defaults.bundle,
+      requirements: [],
+    });
+    await policies.activate(context, { commandId: crypto.randomUUID(), policyVersionId: draft.policy_version_id });
+
+    const result = await governance.evaluate(context, {
+      commandId: crypto.randomUUID(),
+      request: request("policy.activate", {
+        resource: {
+          type: "Policy",
+          id: "policy-v2",
+          organizationId: context.organizationId,
+          revision: 1,
+          attributes: { dataClassification: "internal" },
+        },
+        context: { environment: "local", riskClass: "destructive", external: false },
+      }),
+    });
+
+    expect(result).toMatchObject({
+      outcome: "require_approval",
+      requirement: { requirementId: "invariant-policy-activate" },
+    });
+  });
 });

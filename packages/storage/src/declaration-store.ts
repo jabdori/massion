@@ -31,6 +31,26 @@ export interface DeclarationApplyResult {
   readonly declaration: DeclarationVersion;
 }
 
+export interface DeclarationApplyOptions {
+  readonly commandId: string;
+  readonly environment: string;
+  readonly approvalId?: string;
+}
+
+export interface DeclarationGovernanceGuard {
+  authorize(
+    input: {
+      readonly commandId: string;
+      readonly projectId: string;
+      readonly currentRevision: number;
+      readonly contentHash: string;
+      readonly environment: string;
+      readonly approvalId?: string;
+    },
+    executor?: QueryExecutor,
+  ): Promise<void>;
+}
+
 function canonicalize(value: JsonValue): string {
   if (value === null || typeof value !== "object") return JSON.stringify(value);
   if (Array.isArray(value)) return `[${value.map(canonicalize).join(",")}]`;
@@ -51,20 +71,56 @@ async function latest(executor: QueryExecutor, projectId: string): Promise<Decla
 }
 
 export class DeclarationStore {
-  private constructor(private readonly database: MassionDatabase) {}
+  private constructor(
+    private readonly database: MassionDatabase,
+    private readonly governance?: DeclarationGovernanceGuard,
+  ) {}
 
-  public static async create(database: MassionDatabase): Promise<DeclarationStore> {
+  public static async create(
+    database: MassionDatabase,
+    governance?: DeclarationGovernanceGuard,
+  ): Promise<DeclarationStore> {
     await applyMigrations(database, [DECLARATION_MIGRATION]);
-    return new DeclarationStore(database);
+    return new DeclarationStore(database, governance);
   }
 
-  public async apply(projectId: string, content: JsonValue): Promise<DeclarationApplyResult> {
+  public async apply(
+    projectId: string,
+    content: JsonValue,
+    options?: DeclarationApplyOptions,
+  ): Promise<DeclarationApplyResult> {
     if (!projectId.trim()) throw new Error("projectId는 비어 있을 수 없습니다");
     const contentHash = hashDeclaration(content);
+    const before = await latest(this.database, projectId);
+    if (before?.content_hash === contentHash) return { created: false, declaration: before };
+    if (before && (!this.governance || !options))
+      throw new Error("기존 선언 변경에는 Governance Guard와 명령이 필요합니다");
+    if (before && this.governance && options && !options.approvalId) {
+      await this.governance.authorize({
+        commandId: options.commandId,
+        projectId,
+        currentRevision: before.revision,
+        contentHash,
+        environment: options.environment,
+      });
+    }
 
     return await this.database.transaction(async (transaction) => {
       const current = await latest(transaction, projectId);
       if (current?.content_hash === contentHash) return { created: false, declaration: current };
+      if (current && this.governance && options?.approvalId) {
+        await this.governance.authorize(
+          {
+            commandId: options.commandId,
+            projectId,
+            currentRevision: current.revision,
+            contentHash,
+            environment: options.environment,
+            approvalId: options.approvalId,
+          },
+          transaction,
+        );
+      }
 
       const revision = (current?.revision ?? 0) + 1;
       const [created] = await transaction.query<[DeclarationVersion[]]>(

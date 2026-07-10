@@ -31,6 +31,25 @@ export interface ActivatePolicyInput {
   readonly commandId: string;
   readonly policyVersionId: string;
   readonly expectedActivePolicyVersionId?: string;
+  readonly governanceApprovalId?: string;
+  readonly governanceEnvironment?: string;
+}
+
+export interface PolicyActivationGate {
+  authorize(
+    context: TenantContext,
+    input: {
+      readonly commandId: string;
+      readonly action: string;
+      readonly resource: { readonly type: string; readonly id: string; readonly revision: number };
+      readonly environment: string;
+      readonly riskClass: string;
+      readonly external: boolean;
+      readonly executionId: string;
+      readonly approvalId?: string;
+    },
+    executor?: QueryExecutor,
+  ): Promise<unknown>;
 }
 
 export interface ActivePolicy {
@@ -62,11 +81,16 @@ export class PolicyStore {
   private constructor(
     private readonly database: MassionDatabase,
     private readonly organizations: OrganizationService,
+    private readonly activationGate?: PolicyActivationGate,
   ) {}
 
-  public static async create(database: MassionDatabase, organizations: OrganizationService): Promise<PolicyStore> {
+  public static async create(
+    database: MassionDatabase,
+    organizations: OrganizationService,
+    activationGate?: PolicyActivationGate,
+  ): Promise<PolicyStore> {
     await applyMigrations(database, [GOVERNANCE_POLICY_MIGRATION]);
-    return new PolicyStore(database, organizations);
+    return new PolicyStore(database, organizations, activationGate);
   }
 
   public async createDraft(context: TenantContext, input: CreatePolicyDraftInput): Promise<PolicyVersion> {
@@ -119,6 +143,9 @@ export class PolicyStore {
 
   public async activate(context: TenantContext, input: ActivatePolicyInput): Promise<PolicyVersion> {
     await this.organizations.verifyTenantContext(context, ["owner", "admin"]);
+    const existingActive = await this.getActive(context);
+    if (existingActive && !this.activationGate) throw new Error("active Policy 교체에는 Governance Gate가 필요합니다");
+    if (existingActive && !input.governanceApprovalId) await this.authorizeActivation(context, input, existingActive);
     const requestJson = canonicalJson(input);
     return await this.database.transaction(async (tx) => {
       await this.organizations.verifyTenantContext(context, ["owner", "admin"], tx);
@@ -130,6 +157,7 @@ export class PolicyStore {
       if (activeId !== input.expectedActivePolicyVersionId)
         throw new Error("active Policy Version precondition이 일치하지 않습니다");
       if (target.status !== "draft") throw new Error("draft Policy Version만 활성화할 수 있습니다");
+      if (active && input.governanceApprovalId) await this.authorizeActivation(context, input, active, tx);
       if (active) {
         await tx.query(
           "UPDATE governance_policy_version SET status = 'superseded', superseded_at = time::now() WHERE organization_id = $organization_id AND policy_version_id = $policy_version_id;",
@@ -153,6 +181,29 @@ export class PolicyStore {
       );
       return result;
     });
+  }
+
+  private async authorizeActivation(
+    context: TenantContext,
+    input: ActivatePolicyInput,
+    active: PolicyVersion,
+    executor?: QueryExecutor,
+  ): Promise<void> {
+    if (!this.activationGate) throw new Error("active Policy 교체에는 Governance Gate가 필요합니다");
+    await this.activationGate.authorize(
+      context,
+      {
+        commandId: input.commandId,
+        action: "policy.activate",
+        resource: { type: "Policy", id: input.policyVersionId, revision: active.version },
+        environment: input.governanceEnvironment ?? "local",
+        riskClass: "destructive",
+        external: false,
+        executionId: `policy-activation:${input.policyVersionId}`,
+        ...(input.governanceApprovalId ? { approvalId: input.governanceApprovalId } : {}),
+      },
+      executor,
+    );
   }
 
   public async get(context: TenantContext, policyVersionId: string): Promise<PolicyVersion> {
