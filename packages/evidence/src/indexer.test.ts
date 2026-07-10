@@ -10,6 +10,7 @@ import { createDatabase, type MassionDatabase } from "@massion/storage";
 
 import {
   EvidenceIndexer,
+  EvidenceMetrics,
   EvidenceParser,
   IndexStore,
   RepositoryScanner,
@@ -99,7 +100,11 @@ describe("원자적 Repository index 작성", () => {
     await writeFile(path.join(root, "README.md"), "# Service\n\nReliable evidence.\n");
     const { repository, revision } = await prepareRevision();
     const configuration = await prepareConfiguration(repository.repositoryId);
-    const indexer = new EvidenceIndexer(repositories, indexes, scanner, new EvidenceParser());
+    const metrics = await EvidenceMetrics.create(database, organizations);
+    const indexer = new EvidenceIndexer(repositories, indexes, scanner, new EvidenceParser(), {
+      metrics,
+      now: () => 100,
+    });
 
     const result = await indexer.index(context, {
       commandId: crypto.randomUUID(),
@@ -122,6 +127,11 @@ describe("원자적 Repository index 작성", () => {
     );
     expect(result.index.snapshotChecksum).toBe(snapshot.checksum);
     expect(await repositories.audit(context, repository.repositoryId)).toEqual([]);
+    expect(await metrics.read(context)).toMatchObject({
+      indexTotal: { full: 1, incremental: 0, reconcile: 0 },
+      fileResultTotal: { complete: 2, partial: 0 },
+      parseErrorTotal: 0,
+    });
   });
 
   it("parser 실패와 실행 crash는 이전 current를 보존하고 각각 partial과 failed version을 남긴다", async () => {

@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import type { TenantContext } from "@massion/identity";
 
 import type { EvidenceBrief } from "./evidence-store.js";
+import type { EvidenceMetrics } from "./metrics.js";
 import type { RepositoryStore } from "./repository-store.js";
 import type { RepositoryIndexCommand, RepositoryIndexCommandQueue } from "./watcher.js";
 
@@ -30,6 +31,7 @@ export class EvidenceFreshnessService {
   public constructor(
     private readonly repositories: RepositoryStore,
     private readonly queue: RepositoryIndexCommandQueue,
+    private readonly metrics?: Pick<EvidenceMetrics, "recordFreshness">,
   ) {}
 
   public async assess(
@@ -53,17 +55,27 @@ export class EvidenceFreshnessService {
     if (current && current.configurationChecksum !== brief.configurationChecksum)
       reasons.push("configuration_mismatch");
     if (reasons.length === 0) {
-      return { evidenceBriefId: brief.evidenceBriefId, status: "fresh", policy, reasons };
+      return await this.measured(context, { evidenceBriefId: brief.evidenceBriefId, status: "fresh", policy, reasons });
     }
 
     const requiresIndex = reasons.some((reason) =>
       ["current_index_missing", "current_index_incomplete", "configuration_mismatch"].includes(reason),
     );
     if (policy === "block") {
-      return { evidenceBriefId: brief.evidenceBriefId, status: "blocked", policy, reasons };
+      return await this.measured(context, {
+        evidenceBriefId: brief.evidenceBriefId,
+        status: "blocked",
+        policy,
+        reasons,
+      });
     }
     if (policy === "warn" && !requiresIndex) {
-      return { evidenceBriefId: brief.evidenceBriefId, status: "stale_warning", policy, reasons };
+      return await this.measured(context, {
+        evidenceBriefId: brief.evidenceBriefId,
+        status: "stale_warning",
+        policy,
+        reasons,
+      });
     }
     const command: RepositoryIndexCommand = {
       commandId: sha256(
@@ -76,13 +88,21 @@ export class EvidenceFreshnessService {
       changes: EMPTY_CHANGES,
     };
     const accepted = await this.queue.enqueue(context, command);
-    return {
+    return await this.measured(context, {
       evidenceBriefId: brief.evidenceBriefId,
       status: "reindex_required",
       policy,
       reasons,
       reindexCommand: command,
       reindexAccepted: accepted,
-    };
+    });
+  }
+
+  private async measured(
+    context: TenantContext,
+    assessment: EvidenceFreshnessAssessment,
+  ): Promise<EvidenceFreshnessAssessment> {
+    await this.metrics?.recordFreshness(context, assessment.status).catch(() => undefined);
+    return assessment;
   }
 }

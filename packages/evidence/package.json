@@ -14,10 +14,11 @@
   ],
   "scripts": {
     "build": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\" && tsc -p tsconfig.json",
-    "test": "pnpm --filter @massion/identity build && vitest run src",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "test": "pnpm --filter @massion/identity build && pnpm --filter @massion/context-strategy build && vitest run src",
+    "typecheck": "pnpm --filter @massion/context-strategy build && tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@massion/context-strategy": "workspace:*",
     "@massion/identity": "workspace:*",
     "@massion/storage": "workspace:*",
     "@vscode/tree-sitter-wasm": "0.3.1",
