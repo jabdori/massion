@@ -366,3 +366,267 @@ DEFINE INDEX assurance_binding_event_command ON assurance_binding_event FIELDS o
 DEFINE INDEX assurance_binding_event_sequence ON assurance_binding_event FIELDS organization_id, binding_version_id, sequence UNIQUE;
 `,
 );
+
+export const ASSURANCE_EVIDENCE_INTEGRITY_MIGRATION = defineMigration(
+  "0043-assurance-evidence-integrity",
+  `
+DEFINE TABLE assurance_binding_check SCHEMAFULL;
+DEFINE FIELD binding_version_id ON assurance_binding_check TYPE string;
+DEFINE FIELD organization_id ON assurance_binding_check TYPE string;
+DEFINE FIELD work_id ON assurance_binding_check TYPE string;
+DEFINE FIELD binding_key ON assurance_binding_check TYPE string;
+DEFINE FIELD criterion_key ON assurance_binding_check TYPE string;
+DEFINE FIELD kind ON assurance_binding_check TYPE string ASSERT $value IN ['test', 'inspection', 'evidence', 'metric', 'human'];
+DEFINE FIELD executor_kind ON assurance_binding_check TYPE string ASSERT $value IN ['runtime_agent', 'system_adapter'];
+DEFINE FIELD executor_id ON assurance_binding_check TYPE string;
+DEFINE FIELD source_kind ON assurance_binding_check TYPE option<string>;
+DEFINE FIELD metric_operator ON assurance_binding_check TYPE option<string>;
+DEFINE FIELD metric_threshold ON assurance_binding_check TYPE option<number>;
+DEFINE FIELD metric_unit ON assurance_binding_check TYPE option<string>;
+DEFINE FIELD metric_max_age_ms ON assurance_binding_check TYPE option<int>;
+DEFINE FIELD eligible_roles ON assurance_binding_check TYPE array<string> DEFAULT [];
+DEFINE FIELD minimum_attestations ON assurance_binding_check TYPE option<int>;
+DEFINE FIELD identity_checksum ON assurance_binding_check TYPE string ASSERT string::len($value) = 64;
+DEFINE FIELD created_at ON assurance_binding_check TYPE datetime;
+DEFINE INDEX assurance_binding_check_key ON assurance_binding_check FIELDS organization_id, binding_version_id, binding_key UNIQUE;
+
+DEFINE TABLE assurance_binding_check_manifest SCHEMAFULL;
+DEFINE FIELD binding_version_id ON assurance_binding_check_manifest TYPE string;
+DEFINE FIELD organization_id ON assurance_binding_check_manifest TYPE string;
+DEFINE FIELD work_id ON assurance_binding_check_manifest TYPE string;
+DEFINE FIELD identity_checksum ON assurance_binding_check_manifest TYPE string ASSERT string::len($value) = 64;
+DEFINE FIELD created_at ON assurance_binding_check_manifest TYPE datetime;
+DEFINE INDEX assurance_binding_check_manifest_identity ON assurance_binding_check_manifest FIELDS organization_id, binding_version_id, identity_checksum UNIQUE;
+DEFINE EVENT assurance_binding_check_manifest_integrity ON TABLE assurance_binding_check_manifest
+WHEN $event IN ['CREATE', 'UPDATE', 'DELETE']
+THEN {
+  IF $event IN ['UPDATE', 'DELETE'] {
+    THROW 'Assurance binding check manifest는 immutable입니다';
+  };
+  LET $versions = (SELECT binding_version_id FROM assurance_binding_version WHERE organization_id = $after.organization_id AND work_id = $after.work_id AND binding_version_id = $after.binding_version_id);
+  IF array::len($versions) != 1 {
+    THROW 'Assurance binding check manifest의 binding이 유효하지 않습니다';
+  };
+};
+DEFINE EVENT assurance_binding_check_integrity ON TABLE assurance_binding_check
+WHEN $event IN ['CREATE', 'UPDATE', 'DELETE']
+THEN {
+  IF $event IN ['UPDATE', 'DELETE'] {
+    THROW 'Assurance binding check projection은 immutable입니다';
+  };
+  LET $expected = crypto::sha256(string::concat($after.binding_key, '|', $after.criterion_key, '|', $after.kind, '|', $after.executor_kind, '|', $after.executor_id));
+  LET $versions = (SELECT binding_version_id FROM assurance_binding_version WHERE organization_id = $after.organization_id AND work_id = $after.work_id AND binding_version_id = $after.binding_version_id);
+  LET $manifests = (SELECT identity_checksum FROM assurance_binding_check_manifest WHERE organization_id = $after.organization_id AND work_id = $after.work_id AND binding_version_id = $after.binding_version_id AND identity_checksum = $after.identity_checksum);
+  IF $after.identity_checksum != $expected OR array::len($versions) != 1 OR array::len($manifests) != 1 {
+    THROW 'Assurance binding check projection identity가 binding manifest와 일치하지 않습니다';
+  };
+};
+
+DEFINE FIELD source_checksum ON assurance_metric_observation TYPE string ASSERT string::len($value) = 64;
+DEFINE EVENT assurance_metric_observation_integrity ON TABLE assurance_metric_observation
+WHEN $event IN ['CREATE', 'UPDATE', 'DELETE']
+THEN {
+  IF $event IN ['UPDATE', 'DELETE'] {
+    THROW 'MetricObservation은 immutable입니다';
+  };
+  LET $works = (SELECT work_id FROM work WHERE organization_id = $after.organization_id AND work_id = $after.work_id);
+  IF array::len($works) != 1 {
+    THROW 'MetricObservation Work가 유효하지 않습니다';
+  };
+  IF $after.source_kind = 'artifact_version' {
+    LET $sources = (SELECT checksum FROM artifact_version WHERE organization_id = $after.organization_id AND work_id = $after.work_id AND artifact_version_id = $after.source_id AND checksum = $after.source_checksum);
+    IF array::len($sources) != 1 {
+      THROW 'MetricObservation ArtifactVersion source와 checksum이 유효하지 않습니다';
+    };
+  } ELSE {
+    LET $sources = (SELECT output_json FROM runtime_execution WHERE organization_id = $after.organization_id AND work_id = $after.work_id AND execution_id = $after.source_id AND status = 'succeeded');
+    IF array::len($sources) != 1 OR crypto::sha256($sources[0].output_json) != $after.source_checksum {
+      THROW 'MetricObservation Runtime source와 checksum이 유효하지 않습니다';
+    };
+  };
+  IF $after.producer_kind = 'runtime_execution' {
+    LET $producers = (SELECT execution_id FROM runtime_execution WHERE organization_id = $after.organization_id AND work_id = $after.work_id AND execution_id = $after.producer_id AND status = 'succeeded');
+    IF array::len($producers) != 1 {
+      THROW 'MetricObservation Runtime producer가 유효하지 않습니다';
+    };
+  };
+};
+
+DEFINE EVENT assurance_human_attestation_integrity ON TABLE assurance_human_attestation
+WHEN $event IN ['CREATE', 'UPDATE', 'DELETE']
+THEN {
+  IF $event IN ['UPDATE', 'DELETE'] {
+    THROW 'HumanAttestation은 immutable입니다';
+  };
+  LET $runs = (SELECT assurance_run_id, binding_version_id, snapshot_hash FROM assurance_run WHERE organization_id = $after.organization_id AND work_id = $after.work_id AND assurance_run_id = $after.assurance_run_id AND status IN ['planned', 'running'] AND snapshot_hash = $after.snapshot_hash);
+  LET $criteria = (SELECT criterion_key, statement FROM assurance_criterion WHERE organization_id = $after.organization_id AND work_id = $after.work_id AND assurance_run_id = $after.assurance_run_id AND criterion_id = $after.criterion_id AND method = 'human' AND status = 'pending');
+  LET $members = (SELECT role FROM membership WHERE organization_id = $after.organization_id AND user_id = $after.attestor_user_id AND status = 'active');
+  IF array::len($runs) != 1 OR array::len($criteria) != 1 OR array::len($members) != 1 OR crypto::sha256($criteria[0].statement) != $after.statement_hash {
+    THROW 'HumanAttestation run·criterion·statement·Membership이 유효하지 않습니다';
+  };
+  LET $matches = (SELECT binding_key FROM assurance_binding_check WHERE organization_id = $after.organization_id AND work_id = $after.work_id AND binding_version_id = $runs[0].binding_version_id AND criterion_key = $criteria[0].criterion_key AND kind = 'human' AND $members[0].role IN eligible_roles);
+  IF array::len($matches) = 0 {
+    THROW 'HumanAttestation attestor가 eligible binding role이 아닙니다';
+  };
+};
+
+DEFINE EVENT assurance_finding_create_integrity ON TABLE assurance_finding
+WHEN $event = 'CREATE' AND $after.status != 'open'
+THEN { THROW 'AssuranceFinding은 open 상태로만 생성할 수 있습니다'; };
+
+DEFINE EVENT assurance_finding_resolution_invariant ON TABLE assurance_finding
+WHEN $event IN ['UPDATE', 'DELETE']
+THEN {
+  IF $event = 'DELETE' {
+    THROW 'AssuranceFinding은 immutable identity이며 삭제할 수 없습니다';
+  };
+  IF $before.status != 'open' OR $after.status NOT IN ['resolved', 'accepted'] {
+    THROW 'AssuranceFinding terminal resolution은 immutable입니다';
+  };
+  LET $actors = (SELECT membership_id FROM membership WHERE organization_id = $after.organization_id AND user_id = $after.resolution_actor_id AND status = 'active');
+  IF array::len($actors) != 1 {
+    THROW 'AssuranceFinding resolution actor의 활성 Membership이 없습니다';
+  };
+  IF $after.status = 'accepted' {
+    IF $after.severity IN ['critical', 'major'] {
+      THROW 'Critical 또는 major AssuranceFinding은 수용할 수 없습니다';
+    };
+    LET $runs = (SELECT profile_id, profile_version FROM assurance_run WHERE organization_id = $after.organization_id AND work_id = $after.work_id AND assurance_run_id = $after.assurance_run_id);
+    IF array::len($runs) != 1 OR $runs[0].profile_version != '1.0.0' OR
+      ($after.severity = 'minor' AND $runs[0].profile_id != 'massion.assurance.software-change.v1') OR
+      ($after.severity = 'info' AND $runs[0].profile_id NOT IN ['massion.assurance.software-change.v1', 'massion.assurance.acceptance.v1'])
+    {
+      THROW 'Assurance profile이 Finding 수용을 허용하지 않습니다';
+    };
+  };
+  IF
+    $after.finding_id != $before.finding_id OR
+    $after.organization_id != $before.organization_id OR
+    $after.work_id != $before.work_id OR
+    $after.assurance_run_id != $before.assurance_run_id OR
+    $after.criterion_id != $before.criterion_id OR
+    $after.fingerprint != $before.fingerprint OR
+    $after.category != $before.category OR
+    $after.severity != $before.severity OR
+    $after.message != $before.message OR
+    $after.location_json != $before.location_json OR
+    $after.evidence_reference_ids != $before.evidence_reference_ids OR
+    $after.source_tool != $before.source_tool OR
+    $after.source_rule != $before.source_rule OR
+    $after.control_references != $before.control_references OR
+    $after.created_at != $before.created_at
+  {
+    THROW 'AssuranceFinding identity와 evidence는 immutable입니다';
+  };
+};
+
+DEFINE EVENT assurance_check_immutable_result ON TABLE assurance_check
+WHEN $event IN ['CREATE', 'UPDATE', 'DELETE']
+THEN {
+  IF $event IN ['UPDATE', 'DELETE'] {
+    THROW 'AssuranceCheck result는 immutable입니다';
+  };
+  IF $after.status NOT IN ['passed', 'failed', 'blocked', 'cancelled'] OR $after.completed_at = NONE {
+    THROW 'AssuranceCheck은 완료 상태로 한 번만 생성해야 합니다';
+  };
+  LET $runs = (SELECT assurance_run_id, binding_version_id, snapshot_hash FROM assurance_run WHERE organization_id = $after.organization_id AND work_id = $after.work_id AND assurance_run_id = $after.assurance_run_id AND status IN ['planned', 'running']);
+  LET $criteria = (SELECT criterion_id, criterion_key, method FROM assurance_criterion WHERE organization_id = $after.organization_id AND work_id = $after.work_id AND assurance_run_id = $after.assurance_run_id AND criterion_id = $after.criterion_id AND status = 'pending');
+  IF array::len($runs) != 1 OR array::len($criteria) != 1 {
+    THROW 'AssuranceCheck의 active run과 pending criterion 연결이 유효하지 않습니다';
+  };
+  LET $matches = (SELECT * FROM assurance_binding_check WHERE organization_id = $after.organization_id AND work_id = $after.work_id AND binding_version_id = $runs[0].binding_version_id AND binding_key = $after.command_key AND criterion_key = $criteria[0].criterion_key AND kind = $criteria[0].method);
+  IF array::len($matches) != 1 OR
+    ($matches[0].kind = 'test' AND $after.kind != 'command') OR
+    ($matches[0].kind != 'test' AND $after.kind != $matches[0].kind)
+  {
+    THROW 'AssuranceCheck command key와 criterion binding이 일치하지 않습니다';
+  };
+  IF $matches[0].executor_kind = 'system_adapter' AND ($after.system_adapter_id != $matches[0].executor_id OR $after.executor_handle != NONE OR $after.executor_execution_id != NONE) {
+    THROW 'AssuranceCheck system adapter executor가 binding과 일치하지 않습니다';
+  };
+  IF $matches[0].executor_kind = 'runtime_agent' {
+    LET $executions = (SELECT execution_id FROM runtime_execution WHERE organization_id = $after.organization_id AND work_id = $after.work_id AND execution_id = $after.executor_execution_id AND agent_handle = $matches[0].executor_id AND status = 'succeeded');
+    IF $after.executor_handle != $matches[0].executor_id OR $after.system_adapter_id != NONE OR array::len($executions) != 1 {
+      THROW 'AssuranceCheck Runtime executor가 binding과 일치하지 않습니다';
+    };
+  };
+  IF $after.status = 'passed' AND $matches[0].kind = 'metric' {
+    LET $observations = (SELECT * FROM assurance_metric_observation WHERE organization_id = $after.organization_id AND work_id = $after.work_id AND observation_id IN $after.metric_observation_ids AND source_kind = $matches[0].source_kind AND unit = $matches[0].metric_unit AND measured_at <= time::now() AND measured_at >= time::now() - duration::from_millis($matches[0].metric_max_age_ms) AND (($matches[0].executor_kind = 'system_adapter' AND producer_kind = 'system_adapter' AND producer_id = $matches[0].executor_id) OR ($matches[0].executor_kind = 'runtime_agent' AND producer_kind = 'runtime_execution' AND producer_id = $after.executor_execution_id)));
+    LET $threshold_pass = $observations.any(|$observation| ($matches[0].metric_operator = '>' AND $observation.numeric_value > $matches[0].metric_threshold) OR ($matches[0].metric_operator = '>=' AND $observation.numeric_value >= $matches[0].metric_threshold) OR ($matches[0].metric_operator = '=' AND $observation.numeric_value = $matches[0].metric_threshold) OR ($matches[0].metric_operator = '<=' AND $observation.numeric_value <= $matches[0].metric_threshold) OR ($matches[0].metric_operator = '<' AND $observation.numeric_value < $matches[0].metric_threshold));
+    IF array::len($observations) = 0 OR array::len($observations) != array::len($after.metric_observation_ids) {
+      THROW 'Passed Metric Check의 observation evidence가 유효하지 않습니다';
+    };
+    IF !$threshold_pass {
+      THROW 'Passed Metric Check의 threshold evidence가 거짓입니다';
+    };
+  };
+  IF $after.status = 'passed' AND $matches[0].kind = 'human' {
+    LET $attestations = (SELECT attestation_id, attestor_user_id, accepted FROM assurance_human_attestation WHERE organization_id = $after.organization_id AND work_id = $after.work_id AND assurance_run_id = $after.assurance_run_id AND criterion_id = $after.criterion_id AND snapshot_hash = $runs[0].snapshot_hash);
+    LET $rejects = $attestations.filter(|$attestation| $attestation.accepted = false);
+    LET $members = (SELECT user_id FROM membership WHERE organization_id = $after.organization_id AND user_id IN $attestations.attestor_user_id AND role IN $matches[0].eligible_roles AND status = 'active');
+    IF array::len($rejects) != 0 OR array::len($attestations) < $matches[0].minimum_attestations OR array::len($members) != array::len($attestations) OR array::len($after.human_attestation_ids) != array::len($attestations) {
+      THROW 'Passed Human Check의 attestation evidence가 유효하지 않습니다';
+    };
+  };
+};
+
+DEFINE EVENT assurance_criterion_result_integrity ON TABLE assurance_criterion
+WHEN $event IN ['UPDATE', 'DELETE']
+THEN {
+  IF $event = 'DELETE' {
+    THROW 'AssuranceCriterion은 immutable identity이며 삭제할 수 없습니다';
+  };
+  IF $before.status != 'pending' OR $after.status NOT IN ['passed', 'failed', 'blocked'] {
+    THROW 'AssuranceCriterion result는 한 번만 투영할 수 있습니다';
+  };
+  IF
+    $after.criterion_id != $before.criterion_id OR
+    $after.organization_id != $before.organization_id OR
+    $after.work_id != $before.work_id OR
+    $after.assurance_run_id != $before.assurance_run_id OR
+    $after.criterion_key != $before.criterion_key OR
+    $after.source != $before.source OR
+    $after.statement != $before.statement OR
+    $after.method != $before.method OR
+    $after.required_evidence_kinds != $before.required_evidence_kinds OR
+    $after.control_references != $before.control_references OR
+    $after.exclusion_rule != $before.exclusion_rule OR
+    $after.exclusion_reason != $before.exclusion_reason OR
+    $after.exclusion_actor_id != $before.exclusion_actor_id OR
+    $after.created_at != $before.created_at
+  {
+    THROW 'AssuranceCriterion identity와 policy는 immutable입니다';
+  };
+  LET $checks = (SELECT status, output_hash FROM assurance_check WHERE organization_id = $after.organization_id AND work_id = $after.work_id AND assurance_run_id = $after.assurance_run_id AND criterion_id = $after.criterion_id);
+  LET $passed_violations = (SELECT check_id FROM assurance_check WHERE organization_id = $after.organization_id AND work_id = $after.work_id AND assurance_run_id = $after.assurance_run_id AND criterion_id = $after.criterion_id AND status != 'passed');
+  LET $failed_checks = (SELECT check_id FROM assurance_check WHERE organization_id = $after.organization_id AND work_id = $after.work_id AND assurance_run_id = $after.assurance_run_id AND criterion_id = $after.criterion_id AND status = 'failed');
+  IF $after.status = 'passed' AND (array::len($checks) = 0 OR array::len($passed_violations) != 0) {
+    THROW 'Passed AssuranceCriterion에는 모두 통과한 Check evidence가 필요합니다';
+  };
+  IF $after.status = 'failed' AND array::len($failed_checks) = 0 {
+    THROW 'Failed AssuranceCriterion에는 failed Check evidence가 필요합니다';
+  };
+};
+
+DEFINE EVENT assurance_event_immutable ON TABLE assurance_event
+WHEN $event IN ['CREATE', 'UPDATE', 'DELETE']
+THEN {
+  IF $event IN ['UPDATE', 'DELETE'] {
+    THROW 'AssuranceEvent audit ledger는 immutable입니다';
+  };
+  IF $after.event_type NOT IN ['assurance_run_started', 'assurance_run_running', 'assurance_run_passed', 'assurance_run_failed', 'assurance_run_blocked', 'assurance_run_cancelled', 'assurance_check_recorded', 'assurance_check_deduplicated', 'assurance_finding_recorded', 'assurance_finding_deduplicated', 'assurance_finding_resolved', 'assurance_finding_accepted', 'assurance_attestation_recorded', 'assurance_run_recovered'] {
+    THROW '허용되지 않은 AssuranceEvent type입니다';
+  };
+  LET $runs = (SELECT status, start_command_id FROM assurance_run WHERE organization_id = $after.organization_id AND assurance_run_id = $after.assurance_run_id);
+  LET $actors = (SELECT membership_id FROM membership WHERE organization_id = $after.organization_id AND user_id = $after.actor_user_id AND status = 'active');
+  LET $previous = (SELECT sequence FROM assurance_event WHERE organization_id = $after.organization_id AND assurance_run_id = $after.assurance_run_id AND event_id != $after.event_id);
+  LET $expected_sequence = IF array::len($previous) = 0 { 1 } ELSE { math::max($previous.sequence) + 1 };
+  IF array::len($runs) != 1 OR array::len($actors) != 1 OR $after.sequence != $expected_sequence {
+    THROW 'AssuranceEvent run·actor·sequence가 유효하지 않습니다';
+  };
+  IF $after.event_type = 'assurance_run_started' AND ($after.command_id != $runs[0].start_command_id OR $after.sequence != 1) {
+    THROW 'Assurance run started Event가 run identity와 일치하지 않습니다';
+  };
+};
+`,
+);

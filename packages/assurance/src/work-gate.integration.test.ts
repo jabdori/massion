@@ -10,9 +10,10 @@ import {
   AssuranceBindingStore,
   AssuranceBootstrap,
   AssuranceRunVerdictReader,
-  type AssuranceRunStore,
   type BindingActivationAuthorizer,
 } from "./index.js";
+import * as publicApi from "./index.js";
+import { AssuranceRunStore } from "./run-store.js";
 
 describe("Assurance run과 Work 완료 게이트", () => {
   let database: MassionDatabase;
@@ -27,6 +28,24 @@ describe("Assurance run과 Work 완료 게이트", () => {
 
   beforeEach(async () => {
     const remoteUrl = process.env.SURREAL_TEST_URL;
+    if (remoteUrl) {
+      const sqlUrl = remoteUrl
+        .replace(/^ws:/u, "http:")
+        .replace(/^wss:/u, "https:")
+        .replace(/\/rpc$/u, "/sql");
+      const provisioned = await fetch(sqlUrl, {
+        method: "POST",
+        headers: {
+          authorization: `Basic ${Buffer.from("root:root").toString("base64")}`,
+          accept: "application/json",
+          "content-type": "text/plain",
+        },
+        body: "DEFINE NAMESPACE IF NOT EXISTS massion; USE NS massion; DEFINE DATABASE IF NOT EXISTS assurance_gate;",
+      });
+      if (!provisioned.ok) {
+        throw new Error(`SurrealDB 원격 테스트 프로비저닝 실패: ${String(provisioned.status)}`);
+      }
+    }
     database = await createDatabase({
       url: remoteUrl ?? "mem://",
       namespace: "massion",
@@ -43,7 +62,8 @@ describe("Assurance run과 Work 완료 게이트", () => {
     const graph = await OrganizationGraphService.create(database, organizations);
     await graph.bootstrap(context);
     runtime = await RuntimeExecutionStore.create(database, organizations);
-    runs = await AssuranceBootstrap.create(database, organizations);
+    await AssuranceBootstrap.create(database, organizations);
+    runs = await AssuranceRunStore.create(database, organizations);
     work = await WorkService.create(database, organizations, graph);
     created = await createVerifyingWork();
   });
@@ -238,6 +258,28 @@ describe("Assurance run과 Work 완료 게이트", () => {
       target: "succeeded",
       payload: { outputHash: "e".repeat(64) },
     });
+    const [criteria] = await database.query<[{ criterion_id: string; criterion_key: string }[]]>(
+      "SELECT criterion_id, criterion_key FROM assurance_criterion WHERE organization_id = $organization_id AND assurance_run_id = $assurance_run_id;",
+      { organization_id: context.organizationId, assurance_run_id: started.run.assuranceRunId },
+    );
+    for (const criterion of criteria) {
+      const acceptance = criterion.criterion_key === "profile:acceptance:coverage";
+      await database.query(
+        "CREATE assurance_check CONTENT { check_id: $check_id, organization_id: $organization_id, work_id: $work_id, assurance_run_id: $assurance_run_id, criterion_id: $criterion_id, kind: $kind, system_adapter_id: $system_adapter_id, command_key: $command_key, input_hash: $input_hash, status: 'passed', output_hash: $output_hash, artifact_version_ids: [], evidence_brief_ids: [], metric_observation_ids: [], human_attestation_ids: [], duration_ms: 0, created_at: time::now(), started_at: time::now(), completed_at: time::now() };",
+        {
+          check_id: crypto.randomUUID(),
+          organization_id: context.organizationId,
+          work_id: target.work.work_id,
+          assurance_run_id: started.run.assuranceRunId,
+          criterion_id: criterion.criterion_id,
+          kind: acceptance ? "evidence" : "command",
+          system_adapter_id: acceptance ? "massion.evidence.v1" : "massion.command.v1",
+          command_key: acceptance ? "check:acceptance-coverage" : "check:implementation",
+          input_hash: "f".repeat(64),
+          output_hash: "e".repeat(64),
+        },
+      );
+    }
     await database.query(
       "UPDATE assurance_criterion SET status = 'passed', updated_at = time::now() WHERE organization_id = $organization_id AND assurance_run_id = $assurance_run_id;",
       { organization_id: context.organizationId, assurance_run_id: started.run.assuranceRunId },
@@ -251,16 +293,26 @@ describe("Assurance run과 Work 완료 게이트", () => {
     return passed.run.assuranceRunId;
   }
 
-  it("0039→0040→0041→0042 순서로 부트스트랩한다", async () => {
+  it("0039→0040→0041→0042→0043 순서로 부트스트랩한다", async () => {
     const applied = (await listAppliedMigrations(database))
       .map((migration) => migration.migration_id)
-      .filter((migrationId) => ["0039", "0040", "0041", "0042"].some((prefix) => migrationId.startsWith(prefix)));
+      .filter((migrationId) =>
+        ["0039", "0040", "0041", "0042", "0043"].some((prefix) => migrationId.startsWith(prefix)),
+      );
     expect(applied).toEqual([
       "0039-assurance-run",
       "0040-governance-decision-context",
       "0041-assurance-binding",
       "0042-work-assurance-link",
+      "0043-assurance-evidence-integrity",
     ]);
+  });
+
+  it("공개 API는 caller가 terminal run verdict를 직접 전이하지 못하게 한다", async () => {
+    const publicRuns = await AssuranceBootstrap.create(database, organizations);
+
+    expect("AssuranceRunStore" in publicApi).toBe(false);
+    expect("transition" in publicRuns).toBe(false);
   });
 
   it("실제 terminal passed run만 투영하고 WorkRecord 이후 completed를 허용한다", async () => {

@@ -1,7 +1,6 @@
 export * from "./contracts.js";
 export * from "./contract-validation.js";
 export * from "./schema.js";
-export * from "./run-store.js";
 export * from "./bootstrap.js";
 export * from "./profile.js";
 export * from "./criteria.js";
@@ -10,3 +9,7 @@ export * from "./binding-store.js";
 export * from "./independence.js";
 export * from "./work-verdict-reader.js";
 export * from "./database-snapshot.js";
+export * from "./metric.js";
+export * from "./human.js";
+export * from "./findings.js";
+export { AssuranceCheckStore, type AssuranceCheckRecordResult, type RecordAssuranceCheckInput } from "./checks.js";
