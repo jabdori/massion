@@ -10,3 +10,5 @@ export * from "./index-store.js";
 export * from "./indexer.js";
 export * from "./watcher.js";
 export * from "./recovery.js";
+export * from "./search.js";
+export * from "./graph.js";
