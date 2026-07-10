@@ -72,3 +72,73 @@ DEFINE INDEX strategy_event_id ON strategy_event FIELDS event_id UNIQUE;
 DEFINE INDEX strategy_event_command ON strategy_event FIELDS organization_id, command_id UNIQUE;
 `,
 );
+
+export const CONTINUATION_STAFFING_MIGRATION = defineMigration(
+  "0024-continuation-staffing",
+  `
+DEFINE TABLE continuation_decision SCHEMAFULL;
+DEFINE FIELD decision_id ON continuation_decision TYPE string;
+DEFINE FIELD organization_id ON continuation_decision TYPE string;
+DEFINE FIELD work_id ON continuation_decision TYPE string;
+DEFINE FIELD command_id ON continuation_decision TYPE string;
+DEFINE FIELD request_hash ON continuation_decision TYPE string;
+DEFINE FIELD request_text ON continuation_decision TYPE string;
+DEFINE FIELD decision ON continuation_decision TYPE string ASSERT $value IN ['extend_current', 'create_follow_up', 'create_independent'];
+DEFINE FIELD confidence ON continuation_decision TYPE float;
+DEFINE FIELD reason_codes_json ON continuation_decision TYPE string;
+DEFINE FIELD context_delta_json ON continuation_decision TYPE string;
+DEFINE FIELD replan_required ON continuation_decision TYPE bool;
+DEFINE FIELD source ON continuation_decision TYPE string ASSERT $value IN ['model', 'human_override'];
+DEFINE FIELD actor_user_id ON continuation_decision TYPE string;
+DEFINE FIELD actor_reason ON continuation_decision TYPE option<string>;
+DEFINE FIELD status ON continuation_decision TYPE string ASSERT $value IN ['decided', 'applied', 'failed'];
+DEFINE FIELD applied_work_id ON continuation_decision TYPE option<string>;
+DEFINE FIELD applied_context_version_id ON continuation_decision TYPE option<string>;
+DEFINE FIELD error_json ON continuation_decision TYPE option<string>;
+DEFINE FIELD created_at ON continuation_decision TYPE datetime;
+DEFINE FIELD updated_at ON continuation_decision TYPE datetime;
+DEFINE INDEX continuation_decision_id ON continuation_decision FIELDS decision_id UNIQUE;
+DEFINE INDEX continuation_decision_command ON continuation_decision FIELDS organization_id, command_id UNIQUE;
+DEFINE INDEX continuation_decision_work ON continuation_decision FIELDS organization_id, work_id;
+
+DEFINE TABLE continuation_event SCHEMAFULL;
+DEFINE FIELD event_id ON continuation_event TYPE string;
+DEFINE FIELD organization_id ON continuation_event TYPE string;
+DEFINE FIELD work_id ON continuation_event TYPE string;
+DEFINE FIELD decision_id ON continuation_event TYPE string;
+DEFINE FIELD command_id ON continuation_event TYPE string;
+DEFINE FIELD event_type ON continuation_event TYPE string;
+DEFINE FIELD payload_json ON continuation_event TYPE string;
+DEFINE FIELD created_at ON continuation_event TYPE datetime;
+DEFINE INDEX continuation_event_id ON continuation_event FIELDS event_id UNIQUE;
+DEFINE INDEX continuation_event_command ON continuation_event FIELDS organization_id, command_id UNIQUE;
+
+DEFINE TABLE staffing_assessment SCHEMAFULL;
+DEFINE FIELD assessment_id ON staffing_assessment TYPE string;
+DEFINE FIELD organization_id ON staffing_assessment TYPE string;
+DEFINE FIELD work_id ON staffing_assessment TYPE string;
+DEFINE FIELD strategy_generation_id ON staffing_assessment TYPE string;
+DEFINE FIELD command_id ON staffing_assessment TYPE string;
+DEFINE FIELD request_hash ON staffing_assessment TYPE string;
+DEFINE FIELD status ON staffing_assessment TYPE string ASSERT $value IN ['verified', 'gaps'];
+DEFINE FIELD recommendations_json ON staffing_assessment TYPE string;
+DEFINE FIELD created_by_user_id ON staffing_assessment TYPE string;
+DEFINE FIELD created_at ON staffing_assessment TYPE datetime;
+DEFINE INDEX staffing_assessment_id ON staffing_assessment FIELDS assessment_id UNIQUE;
+DEFINE INDEX staffing_assessment_command ON staffing_assessment FIELDS organization_id, command_id UNIQUE;
+
+DEFINE TABLE staffing_gap SCHEMAFULL;
+DEFINE FIELD gap_id ON staffing_gap TYPE string;
+DEFINE FIELD assessment_id ON staffing_gap TYPE string;
+DEFINE FIELD organization_id ON staffing_gap TYPE string;
+DEFINE FIELD work_id ON staffing_gap TYPE string;
+DEFINE FIELD strategy_generation_id ON staffing_gap TYPE string;
+DEFINE FIELD task_key ON staffing_gap TYPE string;
+DEFINE FIELD reason ON staffing_gap TYPE string ASSERT $value IN ['missing_recommendation', 'unavailable_recommendation'];
+DEFINE FIELD capability ON staffing_gap TYPE option<string>;
+DEFINE FIELD agent_handle ON staffing_gap TYPE option<string>;
+DEFINE FIELD created_at ON staffing_gap TYPE datetime;
+DEFINE INDEX staffing_gap_id ON staffing_gap FIELDS gap_id UNIQUE;
+DEFINE INDEX staffing_gap_assessment ON staffing_gap FIELDS organization_id, assessment_id;
+`,
+);
