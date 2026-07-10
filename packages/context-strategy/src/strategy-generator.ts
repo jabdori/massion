@@ -287,8 +287,7 @@ export class StrategyGenerator {
       if (current.status !== "generated") {
         throw new Error(`generated Strategy만 ${status} 상태로 조정할 수 있습니다: ${current.status}`);
       }
-      const error =
-        status === "conflicted" ? { category: "work_revision_conflict", causeId: randomUUID() } : undefined;
+      const error = status === "conflicted" ? { category: "work_revision_conflict", causeId: randomUUID() } : undefined;
       const [updated] = await tx.query<[StrategyGenerationRecord[]]>(
         "UPDATE strategy_generation SET status = $status, error_json = $error_json, updated_at = time::now() WHERE organization_id = $organization_id AND strategy_generation_id = $strategy_generation_id AND status = 'generated' RETURN AFTER;",
         {

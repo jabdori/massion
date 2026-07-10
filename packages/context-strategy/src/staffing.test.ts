@@ -98,14 +98,19 @@ describe("Strategy staffing recommendation 검증", () => {
     expect(result.status).toBe("gaps");
     expect(result.gaps).toEqual([
       expect.objectContaining({ taskKey: "unrecommended", reason: "missing_recommendation", capability: "database" }),
-      expect.objectContaining({ taskKey: "missing", reason: "unavailable_recommendation", agentHandle: "research-specialist" }),
-      expect.objectContaining({ taskKey: "inactive", reason: "unavailable_recommendation", agentHandle: "inactive-researcher" }),
+      expect.objectContaining({
+        taskKey: "missing",
+        reason: "unavailable_recommendation",
+        agentHandle: "research-specialist",
+      }),
+      expect.objectContaining({
+        taskKey: "inactive",
+        reason: "unavailable_recommendation",
+        agentHandle: "inactive-researcher",
+      }),
     ]);
     expect(result.recommendations).toEqual([]);
-    expect(verifyActiveNode.mock.calls.map((call) => call[1])).toEqual([
-      "research-specialist",
-      "inactive-researcher",
-    ]);
+    expect(verifyActiveNode.mock.calls.map((call) => call[1])).toEqual(["research-specialist", "inactive-researcher"]);
     expect(verifyActiveNode.mock.calls.flat()).not.toContain("evidence-research");
 
     const [events] = await database.query<[{ event_type: string }[]]>(

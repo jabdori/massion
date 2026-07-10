@@ -47,6 +47,11 @@ const STRATEGY: StrategyProjection = {
   evidenceRequests: [],
 };
 
+function required<Value>(value: Value | undefined, label: string): Value {
+  if (value === undefined) throw new Error(`테스트 fixture가 없습니다: ${label}`);
+  return value;
+}
+
 describe("StrategyPlan의 Work 투영", () => {
   let database: MassionDatabase;
   let context: TenantContext;
@@ -104,9 +109,7 @@ describe("StrategyPlan의 Work 투영", () => {
       ["verify", "blocked"],
     ]);
     expect(result.tasks[1]?.dependency_ids).toEqual([result.tasks[0]?.task_id]);
-    expect(JSON.parse(result.tasks[1]?.acceptance_criteria_json ?? "[]")).toEqual([
-      STRATEGY.acceptanceCriteria[0],
-    ]);
+    expect(JSON.parse(result.tasks[1]?.acceptance_criteria_json ?? "[]")).toEqual([STRATEGY.acceptanceCriteria[0]]);
     expect(result.event.event_type).toBe("strategy_projection_applied");
   });
 
@@ -122,7 +125,7 @@ describe("StrategyPlan의 Work 투영", () => {
         strategyChecksum: "b".repeat(64),
         plan: {
           ...STRATEGY,
-          tasks: [{ ...STRATEGY.tasks[0]!, dependencyKeys: ["missing"] }],
+          tasks: [{ ...required(STRATEGY.tasks[0], "first task"), dependencyKeys: ["missing"] }],
         },
       }),
     ).rejects.toThrow("dependency");
@@ -225,7 +228,9 @@ describe("StrategyPlan의 Work 투영", () => {
       plan: STRATEGY,
     } as const;
 
-    await expect(service.applyStrategyProjection(outsiderContext, projection)).rejects.toThrow("Work를 찾을 수 없습니다");
+    await expect(service.applyStrategyProjection(outsiderContext, projection)).rejects.toThrow(
+      "Work를 찾을 수 없습니다",
+    );
     const applied = await service.applyStrategyProjection(context, projection);
     const cancelled = await service.transition(context, {
       commandId: crypto.randomUUID(),
