@@ -65,6 +65,12 @@ importers:
       chokidar:
         specifier: 5.0.0
         version: 5.0.0
+      ignore:
+        specifier: 7.0.5
+        version: 7.0.5
+      minimatch:
+        specifier: 10.2.5
+        version: 10.2.5
 
   packages/foundation: {}
 

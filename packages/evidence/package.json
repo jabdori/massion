@@ -21,7 +21,9 @@
     "@massion/identity": "workspace:*",
     "@massion/storage": "workspace:*",
     "@vscode/tree-sitter-wasm": "0.3.1",
-    "chokidar": "5.0.0"
+    "chokidar": "5.0.0",
+    "ignore": "7.0.5",
+    "minimatch": "10.2.5"
   },
   "engines": {
     "node": ">=24.0.0"
