@@ -6,3 +6,4 @@ export * from "./path-lease.js";
 export * from "./coordinator.js";
 export * from "./patch.js";
 export * from "./git-workspace.js";
+export * from "./command-runner.js";

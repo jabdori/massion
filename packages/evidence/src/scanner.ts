@@ -98,7 +98,10 @@ function sha256(value: string | Uint8Array): string {
   return createHash("sha256").update(value).digest("hex");
 }
 
-function redactSecrets(content: string): { readonly content: string; readonly redactions: readonly SecretRedaction[] } {
+export function redactSecrets(content: string): {
+  readonly content: string;
+  readonly redactions: readonly SecretRedaction[];
+} {
   const candidates: { start: number; end: number; reason: SecretRedaction["reason"] }[] = [];
   const addMatches = (pattern: RegExp, reason: SecretRedaction["reason"], valueGroup?: number): void => {
     for (const match of content.matchAll(pattern)) {
