@@ -102,6 +102,14 @@ export class OrganizationService {
     return membership;
   }
 
+  public async verifyTenantContext(
+    context: TenantContext,
+    roles?: readonly MembershipRole[],
+    executor: QueryExecutor = this.database,
+  ): Promise<void> {
+    await this.authorize(executor, context, roles);
+  }
+
   public async addMember(
     context: TenantContext,
     userId: string,
