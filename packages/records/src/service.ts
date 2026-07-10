@@ -3,6 +3,8 @@ import { createHash } from "node:crypto";
 import type { OrganizationService, TenantContext } from "@massion/identity";
 import {
   WorkRecordsPort,
+  type CompleteRecordsProjectionInput,
+  type CompleteRecordsProjectionResult,
   type FinalizeRecordsProjectionInput,
   type FinalizeRecordsProjectionResult,
 } from "@massion/work";
@@ -16,7 +18,12 @@ import {
   type DocumentationSourceReference,
 } from "./impact.js";
 import { renderDocument, type RecordsDocumentSource } from "./renderer.js";
-import { RecordsRunStore, type RecordDocumentationImpactsResult, type StartRecordsRunInput } from "./run-store.js";
+import {
+  RecordsRunStore,
+  type CompleteRecordsRunInput,
+  type RecordDocumentationImpactsResult,
+  type StartRecordsRunInput,
+} from "./run-store.js";
 
 export interface ProposeDocumentationImpactsInput {
   readonly commandId: string;
@@ -34,6 +41,15 @@ export interface FinalizeRecordsInput {
   readonly causedByEventId?: string;
 }
 
+export interface CompleteRecordsInput {
+  readonly recordsRunId: string;
+}
+
+export interface RecordsCompletionResult {
+  readonly run: RecordsRun;
+  readonly projection?: CompleteRecordsProjectionResult;
+}
+
 interface RecordsRunGateway {
   start(context: TenantContext, input: StartRecordsRunInput): Promise<RecordsRun>;
   get(context: TenantContext, recordsRunId: string): Promise<RecordsRun>;
@@ -44,10 +60,12 @@ interface RecordsRunGateway {
     evaluation: ReturnType<typeof evaluateDocumentationImpacts>,
     proposals?: readonly DocumentationImpactProposalInput[],
   ): Promise<RecordDocumentationImpactsResult>;
+  complete(context: TenantContext, input: CompleteRecordsRunInput): Promise<RecordsRun>;
 }
 
 interface WorkRecordsProjectionGateway {
   finalize(context: TenantContext, input: FinalizeRecordsProjectionInput): Promise<FinalizeRecordsProjectionResult>;
+  complete(context: TenantContext, input: CompleteRecordsProjectionInput): Promise<CompleteRecordsProjectionResult>;
 }
 
 function documentId(recordsRunId: string, kind: RecordsDocumentSource["kind"]): string {
@@ -121,5 +139,25 @@ export class RecordsService {
       documents,
       ...(input.causedByEventId ? { causedByEventId: input.causedByEventId } : {}),
     });
+  }
+
+  public async complete(context: TenantContext, input: CompleteRecordsInput): Promise<RecordsCompletionResult> {
+    const run = await this.runs.get(context, input.recordsRunId);
+    if (run.status === "completed") return { run };
+    if (run.status !== "finalized") throw new Error("Records complete는 finalized run에서만 실행합니다");
+    const projection = await this.work.complete(context, {
+      commandId: `${run.recordsRunId}:complete`,
+      workId: run.workId,
+      expectedRevision: run.targetWorkRevision + 1,
+      recordsRunId: run.recordsRunId,
+      recordsSnapshotHash: run.snapshotHash,
+      verificationId: run.verificationId,
+    });
+    const completed = await this.runs.complete(context, {
+      commandId: `${run.recordsRunId}:terminal`,
+      recordsRunId: run.recordsRunId,
+      expectedVersion: run.version,
+    });
+    return { run: completed, projection };
   }
 }

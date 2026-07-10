@@ -63,6 +63,12 @@ export interface RecordDocumentationImpactsResult {
   readonly assessments: readonly DocumentationImpactAssessment[];
 }
 
+export interface CompleteRecordsRunInput {
+  readonly commandId: string;
+  readonly recordsRunId: string;
+  readonly expectedVersion: number;
+}
+
 interface WorkRecord {
   readonly work_id: string;
   readonly status: string;
@@ -204,6 +210,61 @@ export class RecordsRunStore {
   public async get(context: TenantContext, recordsRunId: string): Promise<RecordsRun> {
     await this.organizations.verifyTenantContext(context);
     return this.view(await this.find(this.database, context.organizationId, recordsRunId));
+  }
+
+  public async complete(context: TenantContext, input: CompleteRecordsRunInput): Promise<RecordsRun> {
+    await this.organizations.verifyTenantContext(context);
+    assertIdentifier(input.commandId, "Command ID");
+    assertIdentifier(input.recordsRunId, "Records run ID");
+    if (!Number.isSafeInteger(input.expectedVersion) || input.expectedVersion < 1) {
+      throw new Error("Records run expected version이 잘못됐습니다");
+    }
+    const hash = sha256(canonicalJson({ operation: "complete", input }));
+    return await this.database.transaction(async (transaction) => {
+      await this.organizations.verifyTenantContext(context, undefined, transaction);
+      const [events] = await transaction.query<[EventRecord[]]>(
+        "SELECT records_run_id, request_hash FROM records_event WHERE organization_id = $organization_id AND command_id = $command_id AND event_type = 'records_run_completed' LIMIT 1;",
+        { organization_id: context.organizationId, command_id: input.commandId },
+      );
+      if (events[0]) {
+        if (events[0].request_hash !== hash || events[0].records_run_id !== input.recordsRunId) {
+          throw new Error("같은 command ID에 다른 Records completion payload를 사용할 수 없습니다");
+        }
+        return this.view(await this.find(transaction, context.organizationId, input.recordsRunId));
+      }
+      const current = await this.find(transaction, context.organizationId, input.recordsRunId);
+      if (current.status !== "finalized" || current.version !== input.expectedVersion) {
+        throw new Error("Records run terminal 전이의 status 또는 version이 다릅니다");
+      }
+      const [works] = await transaction.query<[{ status: string; revision: number }[]]>(
+        "SELECT status, revision FROM work WHERE organization_id = $organization_id AND work_id = $work_id LIMIT 1;",
+        { organization_id: context.organizationId, work_id: current.work_id },
+      );
+      const work = works[0];
+      if (work?.status !== "completed" || work.revision !== current.target_work_revision + 2) {
+        throw new Error("Records run terminal 전이에는 N+3 completed Work가 필요합니다");
+      }
+      const [updated] = await transaction.query<[RunRecord[]]>(
+        "UPDATE records_run SET status = 'completed', version += 1, active_guard_key = NONE, completed_at = time::now(), updated_at = time::now() WHERE organization_id = $organization_id AND records_run_id = $records_run_id RETURN AFTER;",
+        { organization_id: context.organizationId, records_run_id: input.recordsRunId },
+      );
+      if (!updated[0]) throw new Error("Records run completed 전이 결과가 없습니다");
+      await transaction.query(
+        "CREATE records_event CONTENT { event_id: $event_id, organization_id: $organization_id, work_id: $work_id, records_run_id: $records_run_id, command_id: $command_id, sequence: $sequence, event_type: 'records_run_completed', request_hash: $request_hash, payload_json: $payload_json, actor_user_id: $actor_user_id, created_at: time::now() };",
+        {
+          event_id: randomUUID(),
+          organization_id: context.organizationId,
+          work_id: current.work_id,
+          records_run_id: input.recordsRunId,
+          command_id: input.commandId,
+          sequence: updated[0].version,
+          request_hash: hash,
+          payload_json: canonicalJson({ status: "completed", workRevision: work.revision }),
+          actor_user_id: context.userId,
+        },
+      );
+      return this.view(updated[0]);
+    });
   }
 
   public async recordImpacts(
