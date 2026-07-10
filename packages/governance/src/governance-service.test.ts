@@ -129,4 +129,24 @@ describe("Governance Policy Decision", () => {
     expect(first.errors).toContain("active_policy_missing");
     expect(repeated).toEqual(first);
   });
+
+  it("Policy 원문 context의 secret을 Decision 감사 레코드에 저장하지 않는다", async () => {
+    await activate("personal");
+    await governance.evaluate(context, {
+      commandId: crypto.randomUUID(),
+      request: request("tool.call", {
+        context: {
+          environment: "local",
+          riskClass: "write",
+          external: false,
+          apiKey: "secret-value",
+        },
+      }),
+    });
+
+    const [records] = await database.query<[{ request_json: string; request_summary_json: string }[]]>(
+      "SELECT request_json, request_summary_json FROM governance_policy_decision;",
+    );
+    expect(JSON.stringify(records)).not.toContain("secret-value");
+  });
 });
