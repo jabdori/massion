@@ -160,9 +160,15 @@ importers:
       '@massion/organization':
         specifier: workspace:*
         version: link:../organization
+      '@massion/runtime':
+        specifier: workspace:*
+        version: link:../runtime
       '@massion/storage':
         specifier: workspace:*
         version: link:../storage
+      '@massion/work':
+        specifier: workspace:*
+        version: link:../work
 
   packages/storage:
     dependencies:
