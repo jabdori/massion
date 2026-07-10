@@ -153,6 +153,31 @@ describe("Assurance binding 저장소", () => {
     ]);
   });
 
+  it("completed Work에는 새 Assurance binding을 제안하지 못한다", async () => {
+    await database.query(
+      "CREATE work CONTENT { organization_id: $organization_id, work_id: 'work-1', status: 'completed', revision: 1 };",
+      { organization_id: context.organizationId },
+    );
+
+    await expect(store.propose(context, proposal())).rejects.toThrow("completed Work");
+  });
+
+  it("제안 뒤 completed가 된 Work의 Assurance binding을 활성화하지 못한다", async () => {
+    const draft = await store.propose(context, proposal());
+    await database.query(
+      "CREATE work CONTENT { organization_id: $organization_id, work_id: 'work-1', status: 'completed', revision: 1 };",
+      { organization_id: context.organizationId },
+    );
+
+    await expect(
+      store.activate(context, {
+        commandId: crypto.randomUUID(),
+        bindingVersionId: draft.bindingVersionId,
+        expectedRevision: draft.revision,
+      }),
+    ).rejects.toThrow("completed Work");
+  });
+
   it("typed draft를 멱등 제안하고 payload 충돌과 criterion coverage 누락을 거부한다", async () => {
     const commandId = crypto.randomUUID();
     const first = await store.propose(context, proposal(commandId));

@@ -60,7 +60,10 @@ export interface AssuranceSnapshot {
 
 export type AssuranceFollowUpClassification =
   | { readonly status: "fresh" }
-  | { readonly status: "allowed"; readonly stage: "verification_projection" | "records_finalize" }
+  | {
+      readonly status: "allowed";
+      readonly stage: "verification_projection" | "records_finalize" | "completed";
+    }
   | { readonly status: "stale"; readonly reason: string };
 
 function canonicalJson(value: unknown): string {
@@ -261,6 +264,14 @@ export function classifyAssuranceFollowUpEvents(
   }
   if (types.length === 2 && types[0] === "verification_recorded" && types[1] === "work_record_finalized") {
     return { status: "allowed", stage: "records_finalize" };
+  }
+  if (
+    types.length === 3 &&
+    types[0] === "verification_recorded" &&
+    types[1] === "work_record_finalized" &&
+    types[2] === "work_state_changed"
+  ) {
+    return { status: "allowed", stage: "completed" };
   }
   return { status: "stale", reason: `허용되지 않은 Work 후속 사건입니다: ${types.join(",")}` };
 }

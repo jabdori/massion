@@ -229,7 +229,11 @@ export class AssuranceRunStore {
         sequence: 1,
         eventType: "assurance_run_started",
         requestHash: hash,
-        payload: { status: "planned", attempt },
+        payload: {
+          status: "planned",
+          attempt,
+          snapshotCanonicalJson: prepared.snapshot.canonicalJson,
+        },
       });
       return { run: this.view(created[0]) };
     });
@@ -338,7 +342,12 @@ export class AssuranceRunStore {
       sequence: nextVersion,
       eventType: `assurance_run_${input.target}`,
       requestHash: hash,
-      payload: { from: current.status, to: input.target, version: nextVersion },
+      payload: {
+        from: current.status,
+        to: input.target,
+        version: nextVersion,
+        ...(TERMINAL.has(input.target) ? { decisionEvidenceHash } : {}),
+      },
     });
     return { run: this.view(updated[0]) };
   }

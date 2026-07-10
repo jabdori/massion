@@ -8,6 +8,7 @@ import { WORK_ASSURANCE_LINK_MIGRATION, WorkService } from "@massion/work";
 import { AssuranceRunStore } from "./run-store.js";
 import { AssuranceService, type DecideAssuranceInput, type DecideAssuranceResult } from "./service.js";
 import { AssuranceRecovery, type AssuranceRecoveryResult } from "./recovery.js";
+import { AssuranceComplianceAuditor, type AssuranceCompletionAuditFinding } from "./compliance.js";
 import type { AssuranceEvent, AssuranceRun, AssuranceRunResult, StartAssuranceRunInput } from "./contracts.js";
 import type { DatabaseAssuranceSnapshotInput, DatabaseAssuranceSnapshotResult } from "./database-snapshot.js";
 import { backfillAssuranceBindingChecks } from "./binding-store.js";
@@ -32,6 +33,8 @@ export interface AssuranceRunGateway {
     context: TenantContext,
     input: { readonly commandId: string; readonly assuranceRunId: string },
   ): Promise<{ readonly run: AssuranceRun; readonly result: AssuranceRecoveryResult }>;
+  auditCompletedWorks(context: TenantContext): Promise<AssuranceCompletionAuditFinding[]>;
+  assertRestoredCompliance(context: TenantContext): Promise<void>;
 }
 
 export const AssuranceBootstrap = {
@@ -55,6 +58,8 @@ export const AssuranceBootstrap = {
     const runs = await AssuranceRunStore.create(database, organizations);
     const assurance = await AssuranceService.create(database, organizations);
     const recovery = await AssuranceRecovery.create(database, organizations);
+    const compliance = new AssuranceComplianceAuditor(database, organizations);
+    await compliance.assertDatabaseCompliance();
     return Object.freeze({
       start: runs.start.bind(runs),
       get: runs.get.bind(runs),
@@ -62,6 +67,8 @@ export const AssuranceBootstrap = {
       listEvents: runs.listEvents.bind(runs),
       decide: assurance.decide.bind(assurance),
       recover: recovery.recover.bind(recovery),
+      auditCompletedWorks: compliance.auditCompletedWorks.bind(compliance),
+      assertRestoredCompliance: compliance.assertRestoredCompliance.bind(compliance),
     });
   },
 } as const;

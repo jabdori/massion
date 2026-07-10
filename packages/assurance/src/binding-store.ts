@@ -419,6 +419,17 @@ export function assuranceBindingPolicyChecksum(binding: AssuranceCheckBinding): 
   );
 }
 
+export function assuranceBindingVersionChecksum(input: {
+  readonly workId: string;
+  readonly planVersionId: string;
+  readonly profileId: string;
+  readonly profileVersion: string;
+  readonly criteriaChecksum: string;
+  readonly bindingsJson: string;
+}): string {
+  return sha256(canonicalJson(input));
+}
+
 async function projectBindingCheck(
   executor: QueryExecutor,
   source: Pick<BindingProjectionSource, "binding_version_id" | "organization_id" | "work_id">,
@@ -566,6 +577,7 @@ export class AssuranceBindingStore {
       const concurrent = await this.replay(context.organizationId, input.commandId, hash, transaction);
       if (concurrent)
         return this.view(await this.find(transaction, context.organizationId, concurrent.binding_version_id));
+      await this.assertWorkMutable(transaction, context.organizationId, input.workId);
       const [versions] = await transaction.query<[{ version: number }[]]>(
         "SELECT version FROM assurance_binding_version WHERE organization_id = $organization_id AND work_id = $work_id;",
         { organization_id: context.organizationId, work_id: input.workId },
@@ -574,16 +586,14 @@ export class AssuranceBindingStore {
       const bindingVersionId = randomUUID();
       const criteriaChecksum = checksumCriterionCoverage(input.requiredCriteria);
       const bindingsJson = canonicalJson([...input.bindings].sort((a, b) => a.bindingKey.localeCompare(b.bindingKey)));
-      const checksum = sha256(
-        canonicalJson({
-          workId: input.workId,
-          planVersionId: input.planVersionId,
-          profileId: input.profileId,
-          profileVersion: input.profileVersion,
-          criteriaChecksum,
-          bindingsJson,
-        }),
-      );
+      const checksum = assuranceBindingVersionChecksum({
+        workId: input.workId,
+        planVersionId: input.planVersionId,
+        profileId: input.profileId,
+        profileVersion: input.profileVersion,
+        criteriaChecksum,
+        bindingsJson,
+      });
       const [records] = await transaction.query<[BindingRecord[]]>(
         "CREATE assurance_binding_version CONTENT { binding_version_id: $binding_version_id, organization_id: $organization_id, work_id: $work_id, plan_version_id: $plan_version_id, version: $version, revision: 1, status: 'draft', profile_id: $profile_id, profile_version: $profile_version, bindings_json: $bindings_json, criteria_checksum: $criteria_checksum, checksum: $checksum, author_handle: $author_handle, created_by_user_id: $created_by_user_id, created_at: time::now() } RETURN AFTER;",
         {
@@ -631,6 +641,7 @@ export class AssuranceBindingStore {
     const current = await this.get(context, input.bindingVersionId);
     if (current.revision !== input.expectedRevision) throw new Error("Assurance binding revision 충돌입니다");
     if (current.status !== "draft") throw new Error("Draft Assurance binding만 활성화할 수 있습니다");
+    await this.assertWorkMutable(this.database, context.organizationId, current.workId);
     if (current.version !== (await this.latestVersion(context.organizationId, current.workId))) {
       throw new Error("가장 최신 Assurance binding draft만 활성화할 수 있습니다");
     }
@@ -650,6 +661,7 @@ export class AssuranceBindingStore {
       const draft = await this.find(transaction, context.organizationId, input.bindingVersionId);
       if (draft.revision !== input.expectedRevision || draft.status !== "draft")
         throw new Error("Assurance binding activation precondition이 바뀌었습니다");
+      await this.assertWorkMutable(transaction, context.organizationId, draft.work_id);
       const latestVersion = await this.latestVersion(context.organizationId, draft.work_id, transaction);
       if (draft.version !== latestVersion) {
         throw new Error(
@@ -715,6 +727,16 @@ export class AssuranceBindingStore {
       );
       return this.view(records[0]);
     });
+  }
+
+  private async assertWorkMutable(executor: QueryExecutor, organizationId: string, workId: string): Promise<void> {
+    const [works] = await executor.query<[{ status: string }[]]>(
+      "SELECT status FROM work WHERE organization_id = $organization_id AND work_id = $work_id LIMIT 1;",
+      { organization_id: organizationId, work_id: workId },
+    );
+    if (works[0]?.status === "completed") {
+      throw new Error("completed Work의 Assurance binding은 변경할 수 없습니다");
+    }
   }
 
   public async get(context: TenantContext, bindingVersionId: string): Promise<AssuranceBindingVersion> {

@@ -9,7 +9,11 @@ import type {
   WorkTask,
 } from "@massion/work";
 
-import type { AssuranceBindingVersion, AssuranceCheckBinding } from "./binding-store.js";
+import {
+  assuranceBindingVersionChecksum,
+  type AssuranceBindingVersion,
+  type AssuranceCheckBinding,
+} from "./binding-store.js";
 import { compileAssuranceCriteria, type CompiledAssuranceCriterion, type CriterionExclusionInput } from "./criteria.js";
 import { selectAssuranceProfile } from "./profile.js";
 import { createAssuranceSnapshot, type AssuranceSnapshot } from "./snapshot.js";
@@ -47,6 +51,10 @@ export interface DatabaseAssuranceSnapshotResult {
   readonly criteria: readonly CompiledAssuranceCriterion[];
 }
 
+export interface CompletedDatabaseAssuranceSnapshotInput extends DatabaseAssuranceSnapshotInput {
+  readonly evidenceArtifactVersionId: string;
+}
+
 function binding(
   record: BindingRecord,
 ): Pick<
@@ -82,17 +90,37 @@ function binding(
   };
 }
 
-export async function buildDatabaseAssuranceSnapshot(
+async function buildSnapshot(
   executor: QueryExecutor,
   organizationId: string,
   input: DatabaseAssuranceSnapshotInput,
+  completion?: { readonly evidenceArtifactVersionId: string },
 ): Promise<DatabaseAssuranceSnapshotResult> {
   const [works] = await executor.query<[Work[]]>(
     "SELECT * OMIT id FROM work WHERE organization_id = $organization_id AND work_id = $work_id LIMIT 1;",
     { organization_id: organizationId, work_id: input.workId },
   );
-  const work = works[0];
-  if (!work || work.revision !== input.targetWorkRevision) {
+  const currentWork = works[0];
+  if (!currentWork) {
+    throw new Error("Assurance snapshot target Work revision이 유효하지 않습니다");
+  }
+  const work = completion
+    ? {
+        ...currentWork,
+        status: "verifying" as const,
+        revision: input.targetWorkRevision,
+        artifact_version_ids: currentWork.artifact_version_ids.filter(
+          (artifactVersionId) => artifactVersionId !== completion.evidenceArtifactVersionId,
+        ),
+      }
+    : currentWork;
+  if (
+    completion
+      ? currentWork.status !== "completed" ||
+        currentWork.revision !== input.targetWorkRevision + 3 ||
+        !currentWork.artifact_version_ids.includes(completion.evidenceArtifactVersionId)
+      : currentWork.revision !== input.targetWorkRevision
+  ) {
     throw new Error("Assurance snapshot target Work revision이 유효하지 않습니다");
   }
   const [plans] = await executor.query<[PlanVersion[]]>(
@@ -136,6 +164,17 @@ export async function buildDatabaseAssuranceSnapshot(
   );
   const bindingRecord = bindingRecords[0];
   if (!bindingRecord) throw new Error("Assurance snapshot binding을 찾을 수 없습니다");
+  const expectedBindingChecksum = assuranceBindingVersionChecksum({
+    workId: bindingRecord.work_id,
+    planVersionId: bindingRecord.plan_version_id,
+    profileId: bindingRecord.profile_id,
+    profileVersion: bindingRecord.profile_version,
+    criteriaChecksum: bindingRecord.criteria_checksum,
+    bindingsJson: bindingRecord.bindings_json,
+  });
+  if (bindingRecord.checksum !== expectedBindingChecksum) {
+    throw new Error("Assurance binding version checksum이 일치하지 않습니다");
+  }
   const selectedBinding = binding(bindingRecord);
   const artifactKinds = artifacts.map((artifact) => artifact.kind);
   const profile = selectAssuranceProfile(artifactKinds);
@@ -175,4 +214,22 @@ export async function buildDatabaseAssuranceSnapshot(
     criteria,
   });
   return { snapshot, criteria };
+}
+
+export async function buildDatabaseAssuranceSnapshot(
+  executor: QueryExecutor,
+  organizationId: string,
+  input: DatabaseAssuranceSnapshotInput,
+): Promise<DatabaseAssuranceSnapshotResult> {
+  return await buildSnapshot(executor, organizationId, input);
+}
+
+export async function buildCompletedDatabaseAssuranceSnapshot(
+  executor: QueryExecutor,
+  organizationId: string,
+  input: CompletedDatabaseAssuranceSnapshotInput,
+): Promise<DatabaseAssuranceSnapshotResult> {
+  return await buildSnapshot(executor, organizationId, input, {
+    evidenceArtifactVersionId: input.evidenceArtifactVersionId,
+  });
 }

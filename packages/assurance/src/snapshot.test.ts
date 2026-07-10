@@ -316,6 +316,13 @@ describe("Assurance snapshot", () => {
       ]),
     ).toEqual({ status: "allowed", stage: "records_finalize" });
     expect(
+      classifyAssuranceFollowUpEvents(12, [
+        { sequence: 13, event_type: "verification_recorded" },
+        { sequence: 14, event_type: "work_record_finalized" },
+        { sequence: 15, event_type: "work_state_changed" },
+      ]),
+    ).toEqual({ status: "allowed", stage: "completed" });
+    expect(
       classifyAssuranceFollowUpEvents(12, [{ sequence: 13, event_type: "artifact_version_created" }]),
     ).toMatchObject({ status: "stale" });
     expect(classifyAssuranceFollowUpEvents(12, [{ sequence: 14, event_type: "verification_recorded" }])).toMatchObject({

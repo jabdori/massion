@@ -8,7 +8,7 @@ export interface IndependenceExecution {
 }
 
 export interface AssuranceIndependenceInput {
-  readonly phase: "start" | "verdict";
+  readonly phase: "start" | "verdict" | "completion_audit";
   readonly organizationId: string;
   readonly workId: string;
   readonly verifierHandle: string;
