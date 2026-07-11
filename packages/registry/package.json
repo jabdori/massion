@@ -22,6 +22,7 @@
     "@massion/extension-host": "workspace:*",
     "@massion/identity": "workspace:*",
     "@massion/storage": "workspace:*",
+    "jose": "6.2.3",
     "semver": "7.7.4",
     "sigstore": "5.0.0"
   },
