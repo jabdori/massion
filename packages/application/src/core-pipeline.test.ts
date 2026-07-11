@@ -100,4 +100,47 @@ describe("actual Core Work pipeline adapters", () => {
         .digest("hex"),
     );
   });
+
+  it("어느 단계에서 취소해도 현재 실행을 drain한 뒤 실제 Work를 cancelled로 전이한다", async () => {
+    await using database = await createDatabase({ url: "mem://", namespace: "massion", database: crypto.randomUUID() });
+    const identities = await IdentityService.create(database);
+    const organizations = await OrganizationService.create(database);
+    const owner = await identities.registerPersonalUser({ email: "pipeline-cancel@example.com", displayName: "Cancel" });
+    const context = await organizations.resolveTenantContext(owner.user.user_id, owner.organization.organization_id);
+    const graph = await OrganizationGraphService.create(database, organizations);
+    const core = await graph.bootstrap(context);
+    const works = await WorkService.create(database, organizations, graph);
+    const created = await works.createWork(context, {
+      commandId: "pipeline-cancel-create-0001",
+      text: "취소할 작업",
+      surface: "test",
+      organizationVersionId: core.version.version_id,
+    });
+    const drains: string[] = [];
+    const stages = createCoreWorkPipelineExecutors({
+      graph,
+      works,
+      runtimeExecutions: { findExecutionIdByCommand: async () => undefined },
+      representative: { execute: async () => ({ executionId: "unused", status: "succeeded" }), cancel: async () => undefined },
+      strategy: { plan: async () => ({}) as never },
+      evidence: { execute: async () => ({ outcome: "advanced" }) },
+      delivery: {
+        execute: async () => ({ outcome: "advanced" }),
+        cancel: async (_context, input) => {
+          drains.push(input.commandId);
+        },
+      },
+      assurance: { execute: async () => ({ outcome: "advanced" }) },
+      records: { execute: async () => ({ outcome: "advanced" }) },
+    });
+    await stages.delivery.cancel?.(context, {
+      runId: "pipeline-cancel-run-0001",
+      workId: created.work.work_id,
+      commandId: "pipeline-cancel-run-0001:delivery:cancel",
+      correlationId: "pipeline-cancel-correlation-0001",
+      request: {},
+    });
+    expect(drains).toEqual(["pipeline-cancel-run-0001:delivery:cancel"]);
+    await expect(works.getWork(context, created.work.work_id)).resolves.toMatchObject({ status: "cancelled" });
+  });
 });

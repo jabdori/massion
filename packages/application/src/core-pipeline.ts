@@ -4,7 +4,7 @@ import type { PlanStrategyInput, PlanStrategyResult, StrategyService } from "@ma
 import type { TenantContext } from "@massion/identity";
 import type { OrganizationGraphService } from "@massion/organization";
 import type { AgentRunner, RuntimeExecutionStore } from "@massion/runtime";
-import type { WorkService } from "@massion/work";
+import { canTransitionWork, type WorkService } from "@massion/work";
 
 import type {
   CoreWorkStage,
@@ -20,7 +20,7 @@ type StagePort = {
 
 export interface CoreWorkPipelineDependencies {
   readonly graph: Pick<OrganizationGraphService, "getCurrentSnapshot">;
-  readonly works: Pick<WorkService, "createWork" | "getWork">;
+  readonly works: Pick<WorkService, "createWork" | "getWork" | "transition">;
   readonly representative: Pick<AgentRunner, "execute" | "cancel">;
   readonly runtimeExecutions: Pick<RuntimeExecutionStore, "findExecutionIdByCommand">;
   readonly strategy: Pick<StrategyService, "plan">;
@@ -159,12 +159,27 @@ export function createCoreWorkPipelineExecutors(
       };
     },
   };
+  const cancelWork = (stage: StagePort): CoreWorkStageExecutor => ({
+    execute: async (context, input) => await stage.execute(context, input),
+    async cancel(context, input) {
+      await stage.cancel?.(context, input);
+      if (!input.workId) return;
+      const work = await dependencies.works.getWork(context, input.workId);
+      if (!canTransitionWork(work.status, "cancelled")) return;
+      await dependencies.works.transition(context, {
+        commandId: `${input.runId}:work-cancel`,
+        workId: input.workId,
+        expectedRevision: work.revision,
+        target: "cancelled",
+      });
+    },
+  });
   return {
-    intake,
-    "context-strategy": strategy,
-    evidence: dependencies.evidence,
-    delivery: dependencies.delivery,
-    assurance: dependencies.assurance,
-    records: dependencies.records,
+    intake: cancelWork(intake),
+    "context-strategy": cancelWork(strategy),
+    evidence: cancelWork(dependencies.evidence),
+    delivery: cancelWork(dependencies.delivery),
+    assurance: cancelWork(dependencies.assurance),
+    records: cancelWork(dependencies.records),
   };
 }
