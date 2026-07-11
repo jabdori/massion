@@ -140,7 +140,6 @@ export class ExtensionGovernanceAdapter {
           attributes: {
             ...common.resource.attributes,
             beforePermissionDigest: permissionDiff.beforeDigest,
-            increaseReasons: [...permissionDiff.reasons],
           },
         },
         ...(input.permissionApprovalId === undefined ? {} : { approvalId: input.permissionApprovalId }),

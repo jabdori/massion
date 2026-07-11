@@ -100,6 +100,16 @@ export class ExtensionComplianceAuditor {
         violations.push("artifact-corrupt-or-missing");
       }
     }
+    const [allGrants] = await this.database.query<[Array<{ version_id: string; permission_digest: string }>]>(
+      "SELECT version_id, permission_digest FROM extension_capability_grant WHERE organization_id = $organization_id;",
+      { organization_id: context.organizationId },
+    );
+    for (const grant of allGrants) {
+      const version = versionMap.get(grant.version_id);
+      if (!version || version.permission_digest !== grant.permission_digest) {
+        violations.push("capability-grant-permission-lineage");
+      }
+    }
     const [installations] = await this.database.query<[InstallationAuditRecord[]]>(
       "SELECT * OMIT id FROM extension_installation WHERE organization_id = $organization_id;",
       { organization_id: context.organizationId },

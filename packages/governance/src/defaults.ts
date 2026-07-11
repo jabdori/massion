@@ -44,6 +44,11 @@ function resourceShape() {
         dataClassification: { type: "String", required: false },
         subjectType: { type: "String", required: false },
         subjectId: { type: "String", required: false },
+        artifactDigest: { type: "String", required: false },
+        packageName: { type: "String", required: false },
+        packageVersion: { type: "String", required: false },
+        permissionDigest: { type: "String", required: false },
+        beforePermissionDigest: { type: "String", required: false },
       },
     },
   };
