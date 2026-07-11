@@ -12,6 +12,7 @@ describe("massion-server process", () => {
         MASSION_TOKEN_KEY: Buffer.alloc(32, 11).toString("base64url"),
         MASSION_DATABASE_URL: "mem://",
         MASSION_HTTP_PORT: "32142",
+        MASSION_METRICS_PORT: "32145",
         MASSION_SHUTDOWN_TIMEOUT_MS: "5000",
       },
       stdio: ["ignore", "pipe", "pipe"],

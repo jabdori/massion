@@ -7,6 +7,7 @@ import { WorkService } from "@massion/work";
 
 import type { ServerConfig } from "./config.js";
 import { MassionDaemon } from "./daemon.js";
+import { MetricRegistry, MetricsHttpServer } from "./telemetry.js";
 
 export function createLimitedExecutors(): Readonly<
   Record<(typeof APPLICATION_RUN_STAGES)[number], CoreWorkStageExecutor>
@@ -50,7 +51,15 @@ export async function createMassionDaemon(config: ServerConfig): Promise<Massion
       health: { readiness: async () => (daemon ? await daemon.readiness() : { database: true, migrations: true }) },
       server: config.server,
     });
-    daemon = new MassionDaemon({ application, database, shutdownTimeoutMs: config.shutdownTimeoutMs });
+    const metrics = new MetricRegistry({ massion_daemon_transition_total: ["state"] });
+    const metricsServer = new MetricsHttpServer(metrics, config.metrics);
+    daemon = new MassionDaemon({
+      application,
+      database,
+      shutdownTimeoutMs: config.shutdownTimeoutMs,
+      operationalServices: [metricsServer],
+      onState: (state) => metrics.increment("massion_daemon_transition_total", { state }),
+    });
     return daemon;
   } catch (error) {
     await database.close().catch(() => undefined);
