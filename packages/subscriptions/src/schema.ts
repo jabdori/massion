@@ -1,5 +1,6 @@
 import { defineMigration } from "@massion/storage";
 
+// prettier-ignore -- 이미 배포된 migration SQL의 공백도 checksum에 포함됩니다.
 export const SUBSCRIPTION_MIGRATION = defineMigration(
   "0083-subscription-core",
   `
@@ -109,5 +110,39 @@ DEFINE FIELD created_at ON subscription_audit_event TYPE datetime;
 DEFINE INDEX subscription_audit_event_id ON subscription_audit_event FIELDS organization_id, event_id UNIQUE;
 DEFINE INDEX subscription_audit_command ON subscription_audit_event FIELDS organization_id, command_id UNIQUE;
 DEFINE EVENT subscription_audit_immutable ON TABLE subscription_audit_event WHEN $event IN ['UPDATE', 'DELETE'] THEN { THROW 'Subscription audit event는 immutable입니다'; };
+`,
+);
+
+// prettier-ignore -- 새 migration도 생성 시점의 SQL 바이트를 고정합니다.
+export const SUBSCRIPTION_CONNECTOR_ENROLLMENT_MIGRATION = defineMigration(
+  "0084-subscription-connector-enrollment",
+  `
+DEFINE TABLE subscription_connector_enrollment SCHEMAFULL PERMISSIONS NONE;
+DEFINE FIELD enrollment_id ON subscription_connector_enrollment TYPE string;
+DEFINE FIELD organization_id ON subscription_connector_enrollment TYPE string;
+DEFINE FIELD owner_user_id ON subscription_connector_enrollment TYPE string;
+DEFINE FIELD command_id ON subscription_connector_enrollment TYPE string;
+DEFINE FIELD code_hash ON subscription_connector_enrollment TYPE string ASSERT string::len($value) = 64;
+DEFINE FIELD challenge_nonce ON subscription_connector_enrollment TYPE string;
+DEFINE FIELD location ON subscription_connector_enrollment TYPE string ASSERT $value IN ['server', 'edge'];
+DEFINE FIELD execution_kind ON subscription_connector_enrollment TYPE string ASSERT $value IN ['model', 'agent-runtime'];
+DEFINE FIELD status ON subscription_connector_enrollment TYPE string ASSERT $value IN ['pending', 'used', 'expired'];
+DEFINE FIELD expires_at ON subscription_connector_enrollment TYPE datetime;
+DEFINE FIELD used_at ON subscription_connector_enrollment TYPE option<datetime>;
+DEFINE FIELD created_at ON subscription_connector_enrollment TYPE datetime;
+DEFINE INDEX subscription_connector_enrollment_id ON subscription_connector_enrollment FIELDS enrollment_id UNIQUE;
+DEFINE INDEX subscription_connector_enrollment_code ON subscription_connector_enrollment FIELDS code_hash UNIQUE;
+DEFINE INDEX subscription_connector_enrollment_command ON subscription_connector_enrollment FIELDS organization_id, command_id UNIQUE;
+
+DEFINE TABLE subscription_connector_nonce SCHEMAFULL PERMISSIONS NONE;
+DEFINE FIELD nonce_id ON subscription_connector_nonce TYPE string;
+DEFINE FIELD organization_id ON subscription_connector_nonce TYPE string;
+DEFINE FIELD connector_id ON subscription_connector_nonce TYPE string;
+DEFINE FIELD nonce_hash ON subscription_connector_nonce TYPE string ASSERT string::len($value) = 64;
+DEFINE FIELD observed_at ON subscription_connector_nonce TYPE datetime;
+DEFINE FIELD created_at ON subscription_connector_nonce TYPE datetime;
+DEFINE INDEX subscription_connector_nonce_id ON subscription_connector_nonce FIELDS organization_id, nonce_id UNIQUE;
+DEFINE INDEX subscription_connector_nonce_replay ON subscription_connector_nonce FIELDS organization_id, connector_id, nonce_hash UNIQUE;
+DEFINE EVENT subscription_connector_nonce_immutable ON TABLE subscription_connector_nonce WHEN $event IN ['UPDATE', 'DELETE'] THEN { THROW 'Connector nonce는 immutable입니다'; };
 `,
 );
