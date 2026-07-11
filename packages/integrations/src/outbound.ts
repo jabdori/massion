@@ -110,6 +110,7 @@ export class IntegrationOutboundDispatcher {
     if (!item) return false;
     try {
       const installation = await this.dependencies.store.getInstallation(context, item.installationId);
+      await this.dependencies.store.assertBoundResource(context, item.installationId, item.destination, item.operation);
       const contribution =
         installation.platform === "github"
           ? "eventConsumers:github-sync"

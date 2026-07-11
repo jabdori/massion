@@ -58,6 +58,20 @@ interface BindingRecord {
   request_hash: string;
 }
 
+interface ChannelBindingRecord {
+  channel_binding_id: string;
+  organization_id: string;
+  installation_id: string;
+  external_resource_id: string;
+  resource_kind: "channel" | "repository";
+  maximum_classification: "public";
+  events: string[];
+  state: "active" | "revoked";
+  revision: number;
+  command_id: string;
+  request_hash: string;
+}
+
 interface DeliveryRecord {
   delivery_record_id: string;
   organization_id: string;
@@ -196,6 +210,81 @@ export class IntegrationStore {
       if (!record) throw new Error("Integration user binding 생성 결과가 없습니다");
       return this.bindingView(record);
     });
+  }
+
+  public async bindChannel(
+    context: TenantContext,
+    input: {
+      commandId: string;
+      installationId: string;
+      externalResourceId: string;
+      resourceKind: "channel" | "repository";
+      events: readonly string[];
+    },
+  ) {
+    await this.getInstallation(context, input.installationId);
+    if (
+      input.externalResourceId.length === 0 ||
+      input.externalResourceId.length > 256 ||
+      /(?:^|\/)\.\.?($|\/)|\\/u.test(input.externalResourceId)
+    )
+      throw new Error("Integration channel resource가 유효하지 않습니다");
+    const events = [...new Set(input.events)].sort();
+    if (
+      events.length !== input.events.length ||
+      events.some((event) => event !== "*" && !/^[a-z][a-z0-9._*-]{0,127}$/u.test(event))
+    )
+      throw new Error("Integration channel event가 유효하지 않습니다");
+    const requestHash = sha256(canonical({ ...input, events }));
+    return await this.database.transaction(async (tx) => {
+      await this.organizations.verifyTenantContext(context, undefined, tx);
+      const replay = await first<ChannelBindingRecord>(
+        tx,
+        "SELECT * OMIT id FROM integration_channel_binding WHERE organization_id=$organization_id AND command_id=$command_id LIMIT 1;",
+        { organization_id: context.organizationId, command_id: input.commandId },
+      );
+      if (replay) {
+        if (replay.request_hash !== requestHash)
+          throw new Error("같은 commandId에 다른 channel binding 요청을 사용할 수 없습니다");
+        return this.channelView(replay);
+      }
+      const record = await first<ChannelBindingRecord>(
+        tx,
+        "CREATE integration_channel_binding CONTENT { channel_binding_id:$binding_id, organization_id:$organization_id, installation_id:$installation_id, external_resource_id:$external_resource_id, resource_kind:$resource_kind, maximum_classification:'public', events:$events, state:'active', revision:1, command_id:$command_id, request_hash:$request_hash, created_at:time::now(), updated_at:time::now() } RETURN AFTER;",
+        {
+          binding_id: randomUUID(),
+          organization_id: context.organizationId,
+          installation_id: input.installationId,
+          external_resource_id: input.externalResourceId,
+          resource_kind: input.resourceKind,
+          events,
+          command_id: input.commandId,
+          request_hash: requestHash,
+        },
+      );
+      if (!record) throw new Error("Integration channel binding 생성 결과가 없습니다");
+      return this.channelView(record);
+    });
+  }
+
+  public async assertBoundResource(
+    context: TenantContext,
+    installationId: string,
+    externalResourceId: string,
+    event: string,
+  ): Promise<void> {
+    await this.organizations.verifyTenantContext(context);
+    const record = await first<ChannelBindingRecord>(
+      this.database,
+      "SELECT * OMIT id FROM integration_channel_binding WHERE organization_id=$organization_id AND installation_id=$installation_id AND external_resource_id=$external_resource_id AND state='active' LIMIT 1;",
+      {
+        organization_id: context.organizationId,
+        installation_id: installationId,
+        external_resource_id: externalResourceId,
+      },
+    );
+    if (!record || (!record.events.includes("*") && !record.events.includes(event)))
+      throw new Error("허용된 Integration channel binding을 찾을 수 없습니다");
   }
 
   public async acceptDelivery(
@@ -503,6 +592,18 @@ export class IntegrationStore {
       installationId: record.installation_id,
       externalUserId: record.external_user_id,
       userId: record.user_id,
+      state: record.state,
+      revision: record.revision,
+    };
+  }
+  private channelView(record: ChannelBindingRecord) {
+    return {
+      channelBindingId: record.channel_binding_id,
+      installationId: record.installation_id,
+      externalResourceId: record.external_resource_id,
+      resourceKind: record.resource_kind,
+      maximumClassification: record.maximum_classification,
+      events: [...record.events],
       state: record.state,
       revision: record.revision,
     };
