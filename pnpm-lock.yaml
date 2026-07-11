@@ -42,6 +42,9 @@ importers:
 
   packages/application:
     dependencies:
+      '@massion/assurance':
+        specifier: workspace:*
+        version: link:../assurance
       '@massion/context-strategy':
         specifier: workspace:*
         version: link:../context-strategy
@@ -63,6 +66,9 @@ importers:
       '@massion/organization':
         specifier: workspace:*
         version: link:../organization
+      '@massion/records':
+        specifier: workspace:*
+        version: link:../records
       '@massion/router':
         specifier: workspace:*
         version: link:../router
