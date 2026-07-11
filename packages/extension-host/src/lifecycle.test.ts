@@ -21,6 +21,8 @@ function versionTar(
   options: {
     readonly packageName?: `@massion-ext/${string}`;
     readonly contribution?: string;
+    readonly growthSignal?: string;
+    readonly growthTarget?: string;
     readonly network?: readonly { readonly origin: string; readonly methods: readonly ["GET"] }[];
   } = {},
 ): Buffer {
@@ -33,6 +35,14 @@ function versionTar(
     contributions: {
       ...validManifest.contributions,
       runtimeTools: [{ id: options.contribution ?? "echo", handler: options.contribution ?? "echo" }],
+      growthSignals:
+        options.growthSignal === undefined
+          ? validManifest.contributions.growthSignals
+          : [{ id: options.growthSignal, handler: options.growthSignal }],
+      growthTargets:
+        options.growthTarget === undefined
+          ? validManifest.contributions.growthTargets
+          : [{ id: options.growthTarget, handler: options.growthTarget }],
     },
   };
   const packageJson = { ...validPackage, name: packageName, version };
@@ -224,6 +234,33 @@ describe("ExtensionLifecycleService", () => {
       }),
     ).rejects.toThrow("contribution");
     expect(await store.findInstallation(context, "@massion-ext/other")).toMatchObject({ activationGeneration: 0 });
+  });
+
+  it("선언된 Growth signal과 target contribution을 같은 격리 RPC 경계로 호출한다", async () => {
+    await lifecycle.install(context, {
+      commandId: "install-growth-adapter",
+      archive: versionTar("1.0.0", { growthSignal: "quality", growthTarget: "prompt" }),
+      environment: "local",
+      riskClass: "extension-install",
+      executionId: "surface-growth",
+    });
+
+    await expect(
+      lifecycle.invoke(context, {
+        packageName: "@massion-ext/echo",
+        contribution: "growthSignals:quality",
+        payload: { suggestionId: "suggestion-1" },
+        timeoutMs: 1_000,
+      }),
+    ).resolves.toMatchObject({ contribution: "growthSignals:quality" });
+    await expect(
+      lifecycle.invoke(context, {
+        packageName: "@massion-ext/echo",
+        contribution: "growthTargets:prompt",
+        payload: { operation: "inspect" },
+        timeoutMs: 1_000,
+      }),
+    ).resolves.toMatchObject({ contribution: "growthTargets:prompt" });
   });
 
   it("AgentOS 재시작 후 active pointer에서 worker와 contribution registry를 재구성한다", async () => {
