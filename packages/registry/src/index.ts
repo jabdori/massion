@@ -1,5 +1,6 @@
 export * from "./auth.js";
 export * from "./artifact-store.js";
+export * from "./application-adapter.js";
 export * from "./catalog.js";
 export * from "./contracts.js";
 export * from "./installer.js";

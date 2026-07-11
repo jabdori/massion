@@ -143,6 +143,15 @@ export class RegistryCatalog {
     return version;
   }
 
+  public async info(
+    organizationId: string,
+    versionId: string,
+  ): Promise<{ readonly version: RegistryVersion; readonly recalls: readonly RegistryRecall[] }> {
+    const version = await this.store.get(versionId);
+    if (!visible(version, organizationId)) throw new Error("Registry version을 찾을 수 없습니다");
+    return { version, recalls: await this.store.listRecalls(versionId) };
+  }
+
   public async packument(
     organizationId: string,
     packageName: string,
