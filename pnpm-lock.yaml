@@ -50,6 +50,9 @@ importers:
       '@massion/storage':
         specifier: workspace:*
         version: link:../storage
+      '@massion/work':
+        specifier: workspace:*
+        version: link:../work
 
   packages/assurance:
     dependencies:
