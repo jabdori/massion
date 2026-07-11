@@ -541,3 +541,35 @@ DEFINE INDEX growth_revert_operation_command ON growth_revert_operation FIELDS o
 DEFINE INDEX growth_revert_operation_adoption ON growth_revert_operation FIELDS organization_id, adoption_id UNIQUE;
 `,
 );
+
+export const GROWTH_RECOVERY_METRIC_MIGRATION = defineMigration(
+  "0060-growth-recovery-metric",
+  `
+DEFINE TABLE growth_recovery_operation SCHEMAFULL PERMISSIONS NONE;
+DEFINE FIELD recovery_id ON growth_recovery_operation TYPE string;
+DEFINE FIELD organization_id ON growth_recovery_operation TYPE string;
+DEFINE FIELD aggregate_id ON growth_recovery_operation TYPE string;
+DEFINE FIELD stage ON growth_recovery_operation TYPE string;
+DEFINE FIELD action ON growth_recovery_operation TYPE string ASSERT $value IN ['requeue-trigger', 'resume-reflection', 'resume-evaluation', 'wait-for-approval', 'finish-adoption', 'retry-adoption', 'resume-observation', 'finish-revert', 'retry-revert', 'blocked', 'unchanged'];
+DEFINE FIELD command_id ON growth_recovery_operation TYPE string;
+DEFINE FIELD request_hash ON growth_recovery_operation TYPE string ASSERT string::len($value) = 64;
+DEFINE FIELD created_at ON growth_recovery_operation TYPE datetime;
+DEFINE INDEX growth_recovery_id ON growth_recovery_operation FIELDS organization_id, recovery_id UNIQUE;
+DEFINE INDEX growth_recovery_command ON growth_recovery_operation FIELDS organization_id, command_id UNIQUE;
+DEFINE EVENT growth_recovery_immutable ON TABLE growth_recovery_operation WHEN $event IN ['UPDATE', 'DELETE'] THEN { THROW 'Growth recovery operation은 immutable입니다'; };
+
+DEFINE TABLE growth_metric SCHEMAFULL PERMISSIONS NONE;
+DEFINE FIELD metric_id ON growth_metric TYPE string;
+DEFINE FIELD organization_id ON growth_metric TYPE string;
+DEFINE FIELD idempotency_key ON growth_metric TYPE string;
+DEFINE FIELD metric_name ON growth_metric TYPE string ASSERT $value IN ['growth_trigger_total', 'reflection_run_duration_ms', 'growth_suggestion_total', 'growth_evaluation_total', 'growth_adoption_total', 'growth_effect_total', 'growth_revert_total', 'growth_recovery_total'];
+DEFINE FIELD value ON growth_metric TYPE number ASSERT $value >= 0;
+DEFINE FIELD unit ON growth_metric TYPE string ASSERT $value IN ['count', 'milliseconds'];
+DEFINE FIELD dimensions_json ON growth_metric TYPE string ASSERT string::len($value) <= 1024;
+DEFINE FIELD request_hash ON growth_metric TYPE string ASSERT string::len($value) = 64;
+DEFINE FIELD created_at ON growth_metric TYPE datetime;
+DEFINE INDEX growth_metric_id ON growth_metric FIELDS organization_id, metric_id UNIQUE;
+DEFINE INDEX growth_metric_key ON growth_metric FIELDS organization_id, idempotency_key UNIQUE;
+DEFINE EVENT growth_metric_immutable ON TABLE growth_metric WHEN $event IN ['UPDATE', 'DELETE'] THEN { THROW 'Growth metric은 immutable입니다'; };
+`,
+);
