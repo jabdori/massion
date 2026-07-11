@@ -16,6 +16,8 @@ describe("massion-server process", () => {
         env: {
           PATH: process.env.PATH,
           MASSION_TOKEN_KEY: Buffer.alloc(32, 12).toString("base64url"),
+          MASSION_CREDENTIAL_KEY: Buffer.alloc(32, 13).toString("base64url"),
+          MASSION_SOFTWARE_WORKSPACE_ROOT: `/tmp/massion-main-e2e-${String(process.pid)}-a`,
           MASSION_DATABASE_URL: "mem://",
         },
         encoding: "utf8",
@@ -35,11 +37,14 @@ describe("massion-server process", () => {
   ])(
     "준비 완료 뒤 $signal에서 drain하고 종료 코드 0으로 끝난다",
     async ({ signal, httpPort, metricsPort, registryPort }) => {
+      const softwareWorkspaceRoot = `/tmp/massion-main-e2e-${String(process.pid)}-${signal.toLowerCase()}`;
       const child = spawn(process.execPath, ["dist/main.js"], {
         cwd: new URL("..", import.meta.url),
         env: {
           PATH: process.env.PATH,
           MASSION_TOKEN_KEY: Buffer.alloc(32, 11).toString("base64url"),
+          MASSION_CREDENTIAL_KEY: Buffer.alloc(32, 14).toString("base64url"),
+          MASSION_SOFTWARE_WORKSPACE_ROOT: softwareWorkspaceRoot,
           MASSION_DATABASE_URL: "mem://",
           MASSION_HTTP_PORT: httpPort,
           MASSION_METRICS_PORT: metricsPort,
@@ -76,6 +81,7 @@ describe("massion-server process", () => {
       } finally {
         lines.close();
         if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
+        await rm(softwareWorkspaceRoot, { recursive: true, force: true });
       }
     },
     20_000,

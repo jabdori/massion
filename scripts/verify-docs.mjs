@@ -1,6 +1,10 @@
 import { access, readdir, readFile } from "node:fs/promises";
+import { execFile } from "node:child_process";
 import { dirname, join, relative, resolve } from "node:path";
+import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
+
+const execFileAsync = promisify(execFile);
 
 const TRACE_COLUMNS = [
   "requirement_id",
@@ -56,6 +60,24 @@ async function validatePhaseFiles(root, errors) {
         errors.push(`${entry.name}: completed Phase의 review.md 누락`);
       }
     }
+    const reviewPath = join(phase, "review.md");
+    const planPath = join(phase, "implementation-plan.md");
+    if ((await exists(reviewPath)) && (await exists(planPath))) {
+      const review = await readFile(reviewPath, "utf8");
+      const plan = await readFile(planPath, "utf8");
+      if (/\*\*(?:상태|결과)\*\*:\s*completed/.test(review) && /^- \[ \]/m.test(plan)) {
+        errors.push(`${entry.name}: completed Phase의 미체크 구현 작업`);
+      }
+    }
+  }
+}
+
+async function commitExists(root, commit) {
+  try {
+    await execFileAsync("git", ["-C", root, "cat-file", "-e", `${commit}^{commit}`]);
+    return true;
+  } catch {
+    return false;
   }
 }
 
@@ -80,10 +102,19 @@ async function validateTrace(root, errors) {
     if (!/^REQ-[A-Z][A-Z0-9]*-\d{3}$/.test(id)) errors.push(`잘못된 요구사항 ID: ${id}`);
     if (seen.has(id)) errors.push(`중복 요구사항 ID: ${id}`);
     seen.add(id);
-    for (const column of [3, 4]) {
-      const value = row[column];
-      if (value !== "not-applicable" && value !== "pending" && !(await exists(join(root, value)))) {
-        errors.push(`${id}: 존재하지 않는 추적 경로 ${value}`);
+    const completed = row[9] === "completed";
+    for (const column of completed ? [3, 4, 5, 10] : [3, 4]) {
+      for (const value of row[column].split(",")) {
+        if (value !== "not-applicable" && value !== "pending" && !(await exists(join(root, value)))) {
+          errors.push(`${id}: 존재하지 않는 추적 경로 ${value}`);
+        }
+      }
+    }
+    if (completed) {
+      for (const commit of row[6].split(",")) {
+        if (commit !== "not-applicable" && commit !== "pending" && !(await commitExists(root, commit))) {
+          errors.push(`${id}: 존재하지 않는 추적 커밋 ${commit}`);
+        }
       }
     }
   }

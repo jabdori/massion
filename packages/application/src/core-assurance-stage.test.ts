@@ -17,6 +17,39 @@ const input = {
 };
 
 describe("CoreAssuranceStage", () => {
+  it("요청에 ID가 없어도 현재 Plan과 Artifact에 맞는 활성 binding을 자동 선택한다", async () => {
+    let snapshotInput: unknown;
+    const stage = new CoreAssuranceStage({
+      works: {
+        getWork: async () => ({ revision: 7 }),
+        getActivePlan: async () => ({ plan_version_id: "plan-1" }),
+        recoverWork: async () => ({ artifacts: [] }),
+      },
+      bindings: {
+        getActive: async () => ({
+          bindingVersionId: "binding-auto",
+          profileId: "massion.assurance.acceptance.v1",
+          profileVersion: "1.0.0",
+        }),
+      },
+      runner: { execute: async () => ({ executionId: "verifier", status: "succeeded" }) },
+      assurance: {
+        prepareSnapshot: async (_context: unknown, value: unknown) => {
+          snapshotInput = value;
+          return { snapshot: { hash: "a".repeat(64) } };
+        },
+        start: async () => ({ run: { assuranceRunId: "assurance-auto", status: "passed", projectedWorkRevision: 8 } }),
+      },
+      checks: { execute: async () => ({ outcome: "ready" }) },
+    } as never);
+    await expect(stage.execute(context, { ...input, request: {} })).resolves.toMatchObject({ outcome: "advanced" });
+    expect(snapshotInput).toMatchObject({
+      bindingVersionId: "binding-auto",
+      profileId: "massion.assurance.acceptance.v1",
+      profileVersion: "1.0.0",
+    });
+  });
+
   it("snapshot→independent verifier→run→checks→decide 순서와 service verdict를 사용한다", async () => {
     const calls: string[] = [];
     const assurance = {

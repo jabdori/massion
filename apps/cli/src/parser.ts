@@ -7,6 +7,7 @@ export interface CliInvocation {
   readonly output: CliOutputMode;
   readonly detach: boolean;
   readonly wait: boolean;
+  readonly retryBlocked: boolean;
   readonly after?: number;
   readonly events?: "jsonl";
   readonly profile?: string;
@@ -18,14 +19,25 @@ const COMMANDS: Readonly<Record<string, readonly string[] | undefined>> = {
   init: undefined,
   status: undefined,
   run: undefined,
+  resume: undefined,
   watch: undefined,
   org: ["graph", "apply"],
   work: ["list", "get", "follow-up", "fork", "cancel"],
   chat: ["rooms", "messages", "send", "join", "leave"],
   task: ["assign", "reassign"],
   approval: ["list", "get", "approve", "reject", "cancel"],
+  assurance: ["binding-propose", "binding-activate", "binding-get", "binding-active"],
   runtime: ["get", "cancel", "suspend", "resume"],
-  provider: ["list", "credential-add", "credential-disable", "route-set"],
+  provider: [
+    "list",
+    "provider-add",
+    "endpoint-add",
+    "credential-add",
+    "credential-disable",
+    "model-add",
+    "route-set",
+    "candidate-add",
+  ],
   ext: [
     "validate",
     "link",
@@ -66,6 +78,7 @@ export function parseCliArguments(argv: readonly string[]): CliInvocation {
   let output: CliOutputMode = "human";
   let detach = false;
   let wait = false;
+  let retryBlocked = false;
   let after: number | undefined;
   let events: "jsonl" | undefined;
   let profile: string | undefined;
@@ -78,6 +91,7 @@ export function parseCliArguments(argv: readonly string[]): CliInvocation {
       output = selected;
     } else if (value === "--detach") detach = true;
     else if (value === "--wait") wait = true;
+    else if (value === "--retry-blocked") retryBlocked = true;
     else if (value === "--after") {
       const candidate = optionValue(argv, index, value);
       if (!/^(?:0|[1-9][0-9]*)$/u.test(candidate) || !Number.isSafeInteger(Number(candidate)))
@@ -99,6 +113,8 @@ export function parseCliArguments(argv: readonly string[]): CliInvocation {
   }
   if (detach && wait) throw new Error("--detach와 --wait를 동시에 사용할 수 없습니다");
   if (command === "watch" && events !== "jsonl") throw new Error("watch에는 --events jsonl이 필요합니다");
+  if (retryBlocked && command !== "resume")
+    throw new Error("--retry-blocked는 resume command에서만 사용할 수 있습니다");
   return {
     command,
     ...(subcommand === undefined ? {} : { subcommand }),
@@ -106,6 +122,7 @@ export function parseCliArguments(argv: readonly string[]): CliInvocation {
     output,
     detach,
     wait,
+    retryBlocked,
     ...(after === undefined ? {} : { after }),
     ...(events === undefined ? {} : { events }),
     ...(profile === undefined ? {} : { profile }),

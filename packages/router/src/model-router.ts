@@ -432,6 +432,15 @@ export class ModelRouter {
     });
   }
 
+  public async listModels(context: TenantContext): Promise<readonly ModelProfile[]> {
+    await this.organizations.verifyTenantContext(context);
+    const [profiles] = await this.database.query<[ModelProfile[]]>(
+      "SELECT * OMIT id FROM model_profile WHERE organization_id = $organization_id ORDER BY provider_id ASC, model_id ASC, model_profile_id ASC;",
+      { organization_id: context.organizationId },
+    );
+    return profiles;
+  }
+
   public async listRoutes(context: TenantContext): Promise<readonly ModelRoute[]> {
     await this.organizations.verifyTenantContext(context);
     const [routes] = await this.database.query<[ModelRoute[]]>(
@@ -465,6 +474,17 @@ export class ModelRouter {
       if (!candidates[0]) throw new Error("Route Candidate 생성 결과가 없습니다");
       return { candidate: candidates[0] };
     });
+  }
+
+  public async listCandidates(context: TenantContext, routeId?: string): Promise<readonly RouteCandidate[]> {
+    await this.organizations.verifyTenantContext(context);
+    const [candidates] = await this.database.query<[RouteCandidate[]]>(
+      routeId === undefined
+        ? "SELECT * OMIT id FROM model_route_candidate WHERE organization_id = $organization_id ORDER BY route_id ASC, priority ASC, candidate_id ASC;"
+        : "SELECT * OMIT id FROM model_route_candidate WHERE organization_id = $organization_id AND route_id = $route_id ORDER BY priority ASC, candidate_id ASC;",
+      { organization_id: context.organizationId, route_id: routeId },
+    );
+    return candidates;
   }
 
   public async simulate(context: TenantContext, request: RouteRequest): Promise<RouteSimulation> {

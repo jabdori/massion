@@ -23,11 +23,13 @@ describe("CLI Application adapter", () => {
     };
     await executeCliInvocation(client, parseCliArguments(["work", "list"]));
     await executeCliInvocation(client, parseCliArguments(["approval", "approve", "approval-1", "동의"]));
+    await executeCliInvocation(client, parseCliArguments(["resume", "run-12345678", "--retry-blocked"]));
     expect(calls[0]).toEqual(["work.list", {}]);
     expect(calls[1]).toMatchObject({
       operation: "approval.vote",
       payload: { approvalId: "approval-1", vote: "approve", reason: "동의" },
     });
+    expect(calls[2]).toMatchObject({ operation: "run.resume", payload: { runId: "run-12345678", retryBlocked: true } });
   });
 
   it("credential·route·조직 변경은 argv가 아닌 stdin JSON을 사용한다", async () => {
@@ -48,6 +50,14 @@ describe("CLI Application adapter", () => {
       readJson: async () => ({ providerId: "openai", secret: "reference-only" }),
     });
     expect(command).toMatchObject({ operation: "router.credential.add", payload: { providerId: "openai" } });
+    await executeCliInvocation(client, parseCliArguments(["provider", "model-add"]), {
+      readJson: async () => ({ providerId: "openai", modelId: "gpt" }),
+    });
+    expect(command).toMatchObject({ operation: "router.model.register", payload: { modelId: "gpt" } });
+    await executeCliInvocation(client, parseCliArguments(["assurance", "binding-propose"]), {
+      readJson: async () => ({ workId: "work-1", planVersionId: "plan-1" }),
+    });
+    expect(command).toMatchObject({ operation: "assurance.binding.propose", payload: { workId: "work-1" } });
   });
 
   it("provider list가 credential과 fallback route를 함께 조회한다", async () => {
@@ -65,10 +75,11 @@ describe("CLI Application adapter", () => {
       updateArtifact: async () => ({}),
     };
     await expect(executeCliInvocation(client, parseCliArguments(["provider", "list"]))).resolves.toMatchObject({
+      catalog: { operation: "router.catalog" },
       credentials: { operation: "router.credentials" },
       routes: { operation: "router.routes" },
     });
-    expect(operations).toEqual(["router.credentials", "router.routes"]);
+    expect(operations).toEqual(["router.catalog", "router.credentials", "router.routes"]);
   });
 
   it("공식 Integration 상태와 연결 변경을 같은 Application 경계로 호출한다", async () => {

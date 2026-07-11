@@ -181,6 +181,12 @@ describe("Model Route simulation과 reservation", () => {
 
   it("조직에 설정된 route를 secret 없이 목록으로 조회한다", async () => {
     const created = await route("weighted");
+    await expect(router.listModels(context)).resolves.toEqual([
+      expect.objectContaining({ model_profile_id: profile.model_profile_id, model_id: "gpt-coding" }),
+    ]);
+    await expect(router.listCandidates(context, created.route_id)).resolves.toEqual([
+      expect.objectContaining({ route_id: created.route_id, model_profile_id: profile.model_profile_id }),
+    ]);
     await expect(router.listRoutes(context)).resolves.toEqual([
       expect.objectContaining({ route_id: created.route_id, name: created.name, credential_policy: "weighted" }),
     ]);

@@ -1,4 +1,10 @@
-import type { AssuranceRun, AssuranceRunGateway, DatabaseAssuranceSnapshotInput } from "@massion/assurance";
+import {
+  selectAssuranceProfile,
+  type AssuranceBindingStore,
+  type AssuranceRun,
+  type AssuranceRunGateway,
+  type DatabaseAssuranceSnapshotInput,
+} from "@massion/assurance";
 import type { TenantContext } from "@massion/identity";
 import type { AgentRunner } from "@massion/runtime";
 import type { WorkService } from "@massion/work";
@@ -47,7 +53,8 @@ function configuration(request: unknown): AssuranceConfiguration | undefined {
 export class CoreAssuranceStage implements CoreWorkStageExecutor {
   public constructor(
     private readonly dependencies: {
-      readonly works: Pick<WorkService, "getWork" | "getActivePlan">;
+      readonly works: Pick<WorkService, "getWork" | "getActivePlan"> & Partial<Pick<WorkService, "recoverWork">>;
+      readonly bindings?: Pick<AssuranceBindingStore, "getActive">;
       readonly runner: Pick<AgentRunner, "execute">;
       readonly assurance: Pick<AssuranceRunGateway, "prepareSnapshot" | "start" | "get" | "decide">;
       readonly checks: CoreAssuranceCheckOrchestrator;
@@ -56,13 +63,25 @@ export class CoreAssuranceStage implements CoreWorkStageExecutor {
 
   public async execute(context: TenantContext, input: CoreWorkStageInput): Promise<CoreWorkStageResult> {
     if (!input.workId) throw new Error("Assurance stage에 Work ID가 없습니다");
-    const config = configuration(input.request);
-    if (!config) return { outcome: "blocked", reason: "assurance-configuration-required" };
     const [work, plan] = await Promise.all([
       this.dependencies.works.getWork(context, input.workId),
       this.dependencies.works.getActivePlan(context, input.workId),
     ]);
     if (!plan) return { outcome: "blocked", reason: "strategy-plan-missing" };
+    let config = configuration(input.request);
+    if (!config && this.dependencies.bindings && this.dependencies.works.recoverWork) {
+      const recovery = await this.dependencies.works.recoverWork(context, input.workId);
+      const profile = selectAssuranceProfile(recovery.artifacts.map((artifact) => artifact.kind));
+      const active = await this.dependencies.bindings.getActive(context, input.workId, plan.plan_version_id);
+      if (active && active.profileId === profile.profileId && active.profileVersion === profile.version) {
+        config = {
+          bindingVersionId: active.bindingVersionId,
+          profileId: active.profileId,
+          profileVersion: active.profileVersion,
+        };
+      }
+    }
+    if (!config) return { outcome: "blocked", reason: "assurance-binding-required" };
     const snapshotInput: DatabaseAssuranceSnapshotInput = {
       workId: input.workId,
       targetWorkRevision: work.revision,

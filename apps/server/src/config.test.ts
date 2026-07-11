@@ -12,15 +12,34 @@ import {
 } from "./config.js";
 
 const key = Buffer.alloc(32, 7).toString("base64url");
+const credentialKey = Buffer.alloc(32, 8).toString("base64url");
 
 describe("server configuration", () => {
   it("개인 local mode는 loopback과 owner-only key로 구성한다", () => {
-    expect(parseServerConfig({ MASSION_TOKEN_KEY: key })).toMatchObject({
+    expect(parseServerConfig({ MASSION_TOKEN_KEY: key, MASSION_CREDENTIAL_KEY: credentialKey })).toMatchObject({
       mode: "local",
       database: { url: "rocksdb:///data/massion.db", namespace: "massion", database: "massion" },
       server: { host: "127.0.0.1", port: 3141 },
       registry: { host: "127.0.0.1", port: 3142, publicBaseUrl: "http://127.0.0.1:3142" },
+      credentialKey: Buffer.alloc(32, 8),
+      software: { workspaceRoot: "/var/lib/massion/workspaces", executables: { node: process.execPath } },
     });
+  });
+
+  it("Software Delivery executable allowlist는 절대 경로 JSON만 허용한다", () => {
+    const base = { MASSION_TOKEN_KEY: key, MASSION_CREDENTIAL_KEY: credentialKey };
+    expect(() => parseServerConfig({ ...base, MASSION_SOFTWARE_EXECUTABLES: '{"node":"node"}' })).toThrow("절대 경로");
+    expect(
+      parseServerConfig({
+        ...base,
+        MASSION_SOFTWARE_EXECUTABLES: JSON.stringify({ node: process.execPath }),
+        MASSION_SOFTWARE_ENVIRONMENT_ALLOWLIST: "CI,NODE_ENV",
+      }).software,
+    ).toMatchObject({ executables: { node: process.execPath }, environmentAllowlist: ["CI", "NODE_ENV"] });
+  });
+
+  it("접근 token과 provider credential은 서로 다른 암호화 key를 요구한다", () => {
+    expect(() => parseServerConfig({ MASSION_TOKEN_KEY: key, MASSION_CREDENTIAL_KEY: key })).toThrow("서로 다른 key");
   });
 
   it("team mode는 원격 DB·비loopback bind·trusted TLS proxy를 모두 요구한다", () => {
@@ -31,6 +50,7 @@ describe("server configuration", () => {
       parseServerConfig({
         MASSION_MODE: "team",
         MASSION_TOKEN_KEY: key,
+        MASSION_CREDENTIAL_KEY: credentialKey,
         MASSION_REGISTRY_KEY: key,
         MASSION_REGISTRY_PUBLIC_URL: "https://massion.example.com",
         MASSION_DATABASE_URL: "ws://db:8000/rpc",
@@ -49,6 +69,7 @@ describe("server configuration", () => {
     const environment = {
       MASSION_MODE: "team",
       MASSION_TOKEN_KEY: key,
+      MASSION_CREDENTIAL_KEY: credentialKey,
       MASSION_REGISTRY_KEY: key,
       MASSION_REGISTRY_PUBLIC_URL: "https://massion.example.com",
       MASSION_DATABASE_URL: "ws://db:8000/rpc",
@@ -110,14 +131,25 @@ describe("server configuration", () => {
     const path = join(directory, "token-key");
     try {
       await writeFile(path, key, { mode: 0o600 });
-      await expect(loadServerConfig({ MASSION_TOKEN_KEY_FILE: path })).resolves.toMatchObject({
+      const credentialPath = join(directory, "credential-key");
+      await writeFile(credentialPath, credentialKey, { mode: 0o600 });
+      await expect(
+        loadServerConfig({ MASSION_TOKEN_KEY_FILE: path, MASSION_CREDENTIAL_KEY_FILE: credentialPath }),
+      ).resolves.toMatchObject({
         tokenKey: { key: Buffer.alloc(32, 7) },
+        credentialKey: Buffer.alloc(32, 8),
       });
-      await expect(loadServerConfig({ MASSION_TOKEN_KEY: key, MASSION_TOKEN_KEY_FILE: path })).rejects.toThrow(
-        "동시에",
-      );
+      await expect(
+        loadServerConfig({
+          MASSION_TOKEN_KEY: key,
+          MASSION_TOKEN_KEY_FILE: path,
+          MASSION_CREDENTIAL_KEY: credentialKey,
+        }),
+      ).rejects.toThrow("동시에");
       await chmod(path, 0o644);
-      await expect(loadServerConfig({ MASSION_TOKEN_KEY_FILE: path })).rejects.toThrow("owner-only");
+      await expect(
+        loadServerConfig({ MASSION_TOKEN_KEY_FILE: path, MASSION_CREDENTIAL_KEY_FILE: credentialPath }),
+      ).rejects.toThrow("owner-only");
     } finally {
       await rm(directory, { recursive: true, force: true });
     }

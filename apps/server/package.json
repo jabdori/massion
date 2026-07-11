@@ -11,16 +11,24 @@
   ],
   "scripts": {
     "build": "pnpm build-deps && node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\" && tsc -p tsconfig.json",
-    "build-deps": "pnpm --filter @massion/application build && pnpm --filter @massion/registry build",
+    "build-deps": "pnpm --filter @massion/application build && pnpm --filter @massion/assurance build && pnpm --filter @massion/context-strategy build && pnpm --filter @massion/evidence build && pnpm --filter @massion/extension-host build && pnpm --filter @massion/records build && pnpm --filter @massion/registry build && pnpm --filter @massion/router exec tsc -p tsconfig.json && pnpm --filter @massion/runtime exec tsc -p tsconfig.json && pnpm --filter @massion/software-engineering exec tsc -p tsconfig.json",
     "test": "pnpm build && vitest run src",
     "typecheck": "pnpm build-deps && tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
     "@massion/application": "workspace:*",
+    "@massion/assurance": "workspace:*",
+    "@massion/context-strategy": "workspace:*",
+    "@massion/evidence": "workspace:*",
+    "@massion/extension-host": "workspace:*",
     "@massion/governance": "workspace:*",
     "@massion/identity": "workspace:*",
     "@massion/organization": "workspace:*",
     "@massion/registry": "workspace:*",
+    "@massion/records": "workspace:*",
+    "@massion/router": "workspace:*",
+    "@massion/runtime": "workspace:*",
+    "@massion/software-engineering": "workspace:*",
     "@massion/storage": "workspace:*",
     "@massion/work": "workspace:*"
   },

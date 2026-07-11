@@ -39,6 +39,8 @@ async function main() {
     env: {
       PATH: process.env.PATH,
       MASSION_TOKEN_KEY: globalThis.Buffer.alloc(32, 31).toString("base64url"),
+      MASSION_CREDENTIAL_KEY: globalThis.Buffer.alloc(32, 32).toString("base64url"),
+      MASSION_SOFTWARE_WORKSPACE_ROOT: resolve(directory, "workspaces"),
       MASSION_DATABASE_URL: "mem://",
       MASSION_HTTP_PORT: String(httpPort),
       MASSION_METRICS_PORT: String(metricsPort),
@@ -54,6 +56,10 @@ async function main() {
   try {
     await new Promise((resolvePromise, reject) => {
       const timer = globalThis.setTimeout(() => reject(new Error("daemon ready 대기 시간을 초과했습니다")), 20_000);
+      child.once("exit", (code, signal) => {
+        globalThis.clearTimeout(timer);
+        reject(new Error(`daemon이 준비 전에 종료됐습니다: ${JSON.stringify({ code, signal })}`));
+      });
       lines.on("line", (line) => {
         const event = JSON.parse(line);
         if (event.event === "server.ready") {

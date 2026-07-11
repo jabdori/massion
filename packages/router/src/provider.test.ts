@@ -73,6 +73,12 @@ describe("Provider와 암호화 Credential lifecycle", () => {
     );
     expect(raw).not.toContain("sk-account-a");
     expect(raw).not.toContain("sk-account-b");
+    await expect(service.listProviders(context)).resolves.toEqual([
+      expect.objectContaining({ provider_id: provider.provider_id, display_name: "OpenAI" }),
+    ]);
+    await expect(service.listEndpoints(context, provider.provider_id)).resolves.toEqual([
+      expect.objectContaining({ endpoint_id: endpoint.endpoint_id, base_url: "https://api.openai.com/v1" }),
+    ]);
     expect(await service.listCredentials(context, provider.provider_id)).toHaveLength(2);
   });
 

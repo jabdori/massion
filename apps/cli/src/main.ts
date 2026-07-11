@@ -16,7 +16,7 @@ import { renderCliOutput } from "./render.js";
 import { runHeadless } from "./run.js";
 import { resolveTokenReference } from "./token.js";
 
-const HELP = `mass - Massion AgentOS command line\n\n사용법: mass <version|local|init|status|run|watch|org|work|chat|task|approval|runtime|provider|ext|growth|doctor> [options]\n`;
+const HELP = `mass - Massion AgentOS command line\n\n사용법: mass <version|local|init|status|run|resume|watch|org|work|chat|task|approval|assurance|runtime|provider|ext|growth|doctor> [options]\n`;
 
 async function readStdin(maximum = 1024 * 1024): Promise<Buffer> {
   const chunks: Buffer[] = [];

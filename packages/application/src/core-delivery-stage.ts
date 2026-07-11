@@ -42,7 +42,20 @@ export class CoreDeliveryStage implements CoreWorkStageExecutor {
   public async execute(context: TenantContext, input: CoreWorkStageInput): Promise<CoreWorkStageResult> {
     if (!input.workId) throw new Error("Delivery stage에 Work ID가 없습니다");
     let initial = await this.dependencies.works.getWork(context, input.workId);
+    const preassignedTaskIds = new Set<string>();
     if (initial.status === "planned") {
+      const tasks = await this.dependencies.works.listTasks(context, input.workId);
+      for (const task of tasks.filter((candidate) => candidate.status === "ready")) {
+        const assigned = await this.dependencies.works.assignTask(context, {
+          commandId: `${input.commandId}:task:${task.task_id}:assign`,
+          workId: input.workId,
+          expectedRevision: initial.revision,
+          taskId: task.task_id,
+          agentHandle: task.recommended_agent_handles?.[0] ?? "delivery-coordination",
+        });
+        initial = assigned.work;
+        preassignedTaskIds.add(task.task_id);
+      }
       initial = (
         await this.dependencies.works.transition(context, {
           commandId: `${input.commandId}:work-ready`,
@@ -128,14 +141,16 @@ export class CoreDeliveryStage implements CoreWorkStageExecutor {
       let active = task;
       if (task.status === "ready") {
         const agentHandle = task.recommended_agent_handles?.[0] ?? "delivery-coordination";
-        const assigned = await this.dependencies.works.assignTask(context, {
-          commandId: `${root}:assign`,
-          workId: input.workId,
-          expectedRevision: work.revision,
-          taskId: task.task_id,
-          agentHandle,
-        });
-        work = assigned.work;
+        if (!preassignedTaskIds.has(task.task_id)) {
+          const assigned = await this.dependencies.works.assignTask(context, {
+            commandId: `${root}:assign`,
+            workId: input.workId,
+            expectedRevision: work.revision,
+            taskId: task.task_id,
+            agentHandle,
+          });
+          work = assigned.work;
+        }
         const started = await this.dependencies.works.transitionTask(context, {
           commandId: `${root}:running`,
           workId: input.workId,

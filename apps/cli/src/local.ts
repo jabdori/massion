@@ -10,7 +10,9 @@ export interface LocalPaths {
   readonly dataDirectory: string;
   readonly stateDirectory: string;
   readonly backupDirectory: string;
+  readonly softwareWorkspaceDirectory: string;
   readonly tokenKey: string;
+  readonly credentialKey: string;
   readonly pidFile: string;
   readonly logFile: string;
   readonly databaseUrl: string;
@@ -62,7 +64,9 @@ export function resolveLocalPaths(environment: Readonly<Record<string, string | 
     dataDirectory,
     stateDirectory,
     backupDirectory: join(dataDirectory, "backups"),
+    softwareWorkspaceDirectory: join(dataDirectory, "workspaces"),
     tokenKey: join(configDirectory, "token-key"),
+    credentialKey: join(configDirectory, "credential-key"),
     pidFile: join(stateDirectory, "server.json"),
     logFile: join(stateDirectory, "server.log"),
     databaseUrl: `rocksdb://${join(dataDirectory, "massion.db")}`,
@@ -71,7 +75,13 @@ export function resolveLocalPaths(environment: Readonly<Record<string, string | 
 
 async function ensureDirectories(paths: LocalPaths): Promise<void> {
   await Promise.all(
-    [paths.configDirectory, paths.dataDirectory, paths.stateDirectory, paths.backupDirectory].map(async (path) => {
+    [
+      paths.configDirectory,
+      paths.dataDirectory,
+      paths.stateDirectory,
+      paths.backupDirectory,
+      paths.softwareWorkspaceDirectory,
+    ].map(async (path) => {
       await mkdir(path, { recursive: true, mode: 0o700 });
       const metadata = await stat(path);
       if (!metadata.isDirectory() || (metadata.mode & 0o077) !== 0)
@@ -97,6 +107,28 @@ export async function ensureLocalTokenKey(paths: LocalPaths): Promise<string> {
   } catch (error) {
     if (!(error instanceof Error) || !("code" in error) || error.code !== "EEXIST") throw error;
     return await ensureLocalTokenKey(paths);
+  }
+  return value;
+}
+
+export async function ensureLocalCredentialKey(paths: LocalPaths): Promise<string> {
+  await ensureDirectories(paths);
+  try {
+    const metadata = await stat(paths.credentialKey);
+    if (!metadata.isFile() || (metadata.mode & 0o077) !== 0)
+      throw new Error("local credential key는 owner-only여야 합니다");
+    const value = (await readFile(paths.credentialKey, "utf8")).trim();
+    if (Buffer.from(value, "base64url").length !== 32) throw new Error("local credential key가 유효하지 않습니다");
+    return value;
+  } catch (error) {
+    if (!(error instanceof Error) || !("code" in error) || error.code !== "ENOENT") throw error;
+  }
+  const value = randomBytes(32).toString("base64url");
+  try {
+    await writeFile(paths.credentialKey, `${value}\n`, { mode: 0o600, flag: "wx" });
+  } catch (error) {
+    if (!(error instanceof Error) || !("code" in error) || error.code !== "EEXIST") throw error;
+    return await ensureLocalCredentialKey(paths);
   }
   return value;
 }
@@ -240,7 +272,7 @@ export class LocalDaemonManager {
     readonly pid: number;
     readonly endpoint: string;
   }> {
-    await ensureLocalTokenKey(this.#paths);
+    await Promise.all([ensureLocalTokenKey(this.#paths), ensureLocalCredentialKey(this.#paths)]);
     const existing = await readPidRecord(this.#paths.pidFile);
     if (existing) {
       if ((await this.#owned(existing)) && (await this.#ready(existing.endpoint)))
@@ -265,6 +297,8 @@ export class LocalDaemonManager {
           MASSION_MODE: "local",
           MASSION_DATABASE_URL: this.#paths.databaseUrl,
           MASSION_TOKEN_KEY_FILE: this.#paths.tokenKey,
+          MASSION_CREDENTIAL_KEY_FILE: this.#paths.credentialKey,
+          MASSION_SOFTWARE_WORKSPACE_ROOT: this.#paths.softwareWorkspaceDirectory,
           MASSION_HTTP_PORT: String(localPort),
           MASSION_REGISTRY_PORT: String(localPort + 1),
           MASSION_METRICS_PORT: String(localPort + 2),
@@ -336,7 +370,7 @@ export class LocalDaemonManager {
     const previous = await this.status();
     if (previous.status === "foreign") throw new Error("foreign process 상태에서는 backup할 수 없습니다");
     if (previous.status === "ready" || previous.status === "starting") await this.stop();
-    await ensureLocalTokenKey(this.#paths);
+    await Promise.all([ensureLocalTokenKey(this.#paths), ensureLocalCredentialKey(this.#paths)]);
     try {
       const code = await new Promise<number | null>((resolveCode, reject) => {
         const child = spawn(process.execPath, [this.#serverScript(), "backup", destination], {
@@ -349,6 +383,7 @@ export class LocalDaemonManager {
             MASSION_MODE: "local",
             MASSION_DATABASE_URL: this.#paths.databaseUrl,
             MASSION_TOKEN_KEY_FILE: this.#paths.tokenKey,
+            MASSION_CREDENTIAL_KEY_FILE: this.#paths.credentialKey,
           },
           stdio: ["ignore", "ignore", "inherit"],
         });

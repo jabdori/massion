@@ -10,7 +10,8 @@ RUN find /opt/massion -type f \( -name '*.test.js' -o -name '*.test.js.map' -o -
 
 FROM node:24.18.0-bookworm-slim AS production
 RUN apt-get update \
-  && apt-get install --yes --no-install-recommends ca-certificates dumb-init \
+  && apt-get install --yes --no-install-recommends ca-certificates dumb-init git \
+  && npm install --global pnpm@10.30.3 \
   && rm -rf /var/lib/apt/lists/* \
   && mkdir -p /var/lib/massion /data \
   && chown -R node:node /var/lib/massion /data

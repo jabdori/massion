@@ -139,6 +139,59 @@ describe("ApplicationQueryRegistry", () => {
     });
   });
 
+  it("제공자·endpoint·model·candidate 구성 목록을 secret 없이 공개한다", async () => {
+    const registry = new ApplicationQueryRegistry();
+    registerApplicationQueries(registry, {
+      readModel,
+      providers: {
+        listProviders: async () => [
+          { provider_id: "openai", display_name: "OpenAI", adapter_kind: "openai-compatible", enabled: true },
+        ],
+        listEndpoints: async () => [
+          {
+            endpoint_id: "endpoint-1",
+            provider_id: "openai",
+            name: "API",
+            base_url: "https://api.openai.com/v1",
+            local: false,
+            enabled: true,
+          },
+        ],
+      },
+      router: {
+        listModels: async () => [
+          {
+            model_profile_id: "profile-1",
+            provider_id: "openai",
+            endpoint_id: "endpoint-1",
+            model_id: "gpt",
+            route_kind: "chat",
+            equivalence_group: "general",
+            verified: true,
+            enabled: true,
+          },
+        ],
+        listCandidates: async () => [
+          {
+            candidate_id: "candidate-1",
+            route_id: "route-1",
+            model_profile_id: "profile-1",
+            priority: 1,
+            enabled: true,
+          },
+        ],
+      },
+    } as never);
+    await expect(registry.query(context, ["router:read"], "router.catalog", {})).resolves.toMatchObject({
+      data: {
+        providers: [{ providerId: "openai" }],
+        endpoints: [{ endpointId: "endpoint-1" }],
+        models: [{ modelProfileId: "profile-1" }],
+        candidates: [{ candidateId: "candidate-1" }],
+      },
+    });
+  });
+
   it("웹 운영 화면용 구성원·기억·감사·session을 secret 없이 조회한다", async () => {
     const registry = new ApplicationQueryRegistry();
     registerApplicationQueries(registry, {

@@ -224,6 +224,26 @@ export class ProviderService {
     );
   }
 
+  public async listProviders(context: TenantContext): Promise<ModelProvider[]> {
+    await this.organizations.verifyTenantContext(context);
+    const [providers] = await this.database.query<[ModelProvider[]]>(
+      "SELECT * OMIT id FROM model_provider WHERE organization_id = $organization_id ORDER BY display_name ASC, provider_id ASC;",
+      { organization_id: context.organizationId },
+    );
+    return providers;
+  }
+
+  public async listEndpoints(context: TenantContext, providerId?: string): Promise<ProviderEndpoint[]> {
+    await this.organizations.verifyTenantContext(context);
+    const [endpoints] = await this.database.query<[ProviderEndpoint[]]>(
+      providerId === undefined
+        ? "SELECT * OMIT id FROM provider_endpoint WHERE organization_id = $organization_id ORDER BY provider_id ASC, name ASC, endpoint_id ASC;"
+        : "SELECT * OMIT id FROM provider_endpoint WHERE organization_id = $organization_id AND provider_id = $provider_id ORDER BY name ASC, endpoint_id ASC;",
+      { organization_id: context.organizationId, provider_id: providerId },
+    );
+    return endpoints;
+  }
+
   public async addCredential(
     context: TenantContext,
     input: AddCredentialInput,

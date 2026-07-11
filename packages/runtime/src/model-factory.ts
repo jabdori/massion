@@ -82,14 +82,23 @@ export class MassionModelFactory implements RoutedModelFactory {
   ) {}
 
   public async acquire(context: TenantContext, input: AcquireModelInput): Promise<RoutedModelLease> {
-    const reservation = await this.router.reserve(context, {
-      commandId: input.commandId,
-      routeName: input.routeName,
-      estimatedTokens: input.estimatedTokens,
-      estimatedCostMicros: input.estimatedCostMicros,
-      ...(input.stickyKey ? { stickyKey: input.stickyKey } : {}),
-      ...(input.fallbackFromAttemptId ? { fallbackFromAttemptId: input.fallbackFromAttemptId } : {}),
-    });
+    const reservation = await this.router
+      .reserve(context, {
+        commandId: input.commandId,
+        routeName: input.routeName,
+        estimatedTokens: input.estimatedTokens,
+        estimatedCostMicros: input.estimatedCostMicros,
+        ...(input.stickyKey ? { stickyKey: input.stickyKey } : {}),
+        ...(input.fallbackFromAttemptId ? { fallbackFromAttemptId: input.fallbackFromAttemptId } : {}),
+      })
+      .catch((error: unknown) => {
+        if (error instanceof Error && error.message.includes("Model Route를 찾을 수 없습니다")) {
+          throw new Error(`blocked_model_unavailable: ${input.routeName} Route가 구성되지 않았습니다`, {
+            cause: error,
+          });
+        }
+        throw error;
+      });
     const endpoint = reservation.endpoint;
     const profile = reservation.profile;
     const credential = reservation.credential;

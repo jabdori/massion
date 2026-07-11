@@ -1,4 +1,5 @@
 import type { ExtensionGateway } from "@massion/extension-host";
+import type { AssuranceBindingStore } from "@massion/assurance";
 import type { GrowthGateway } from "@massion/growth";
 import type { MembershipRole, OrganizationService, TenantContext } from "@massion/identity";
 import type { ModelRouter, ProviderService } from "@massion/router";
@@ -28,6 +29,7 @@ export interface ApplicationQueryDependencies {
   readonly readModel: ApplicationReadModel;
   readonly snapshot?: CollaborationGraphSnapshotProjector;
   readonly runtime?: Pick<RuntimeExecutionStore, "listEvents" | "getRecovery">;
+  readonly assuranceBindings?: Pick<AssuranceBindingStore, "get" | "getActive">;
   readonly extension?: Pick<ExtensionGateway, "list">;
   readonly growth?: Pick<
     GrowthGateway,
@@ -40,9 +42,9 @@ export interface ApplicationQueryDependencies {
   readonly memberships?: Pick<OrganizationService, "listMembers">;
   readonly audit?: Pick<ApplicationEventStore, "read">;
   readonly webSessions?: Pick<WebSessionService, "list">;
-  readonly providers?: Pick<ProviderService, "listCredentials">;
-  readonly router?: Pick<ModelRouter, "listRoutes">;
-  readonly status?: () => Promise<unknown>;
+  readonly providers?: Pick<ProviderService, "listProviders" | "listEndpoints" | "listCredentials">;
+  readonly router?: Pick<ModelRouter, "listModels" | "listRoutes" | "listCandidates">;
+  readonly status?: (context: TenantContext) => Promise<unknown>;
 }
 
 const OPERATION = /^[a-z][a-z0-9-]*(?:\.[a-z][a-z0-9-]*)+$/u;
@@ -133,6 +135,25 @@ export class ApplicationQueryRegistry {
       data: await descriptor.handle(context, descriptor.validate(input)),
     };
   }
+}
+
+function assuranceBindingView(binding: Awaited<ReturnType<AssuranceBindingStore["get"]>>): unknown {
+  return {
+    bindingVersionId: binding.bindingVersionId,
+    workId: binding.workId,
+    planVersionId: binding.planVersionId,
+    version: binding.version,
+    revision: binding.revision,
+    status: binding.status,
+    profileId: binding.profileId,
+    profileVersion: binding.profileVersion,
+    bindings: binding.bindings,
+    criteriaChecksum: binding.criteriaChecksum,
+    checksum: binding.checksum,
+    authorHandle: binding.authorHandle,
+    createdAt: binding.createdAt,
+    activatedAt: binding.activatedAt,
+  };
 }
 
 const EVERY_ROLE: readonly MembershipRole[] = ["owner", "admin", "member"];
@@ -520,6 +541,31 @@ export function registerApplicationQueries(
         }),
     });
   }
+  const assuranceBindings = dependencies.assuranceBindings;
+  if (assuranceBindings) {
+    registry.register({
+      operation: "assurance.binding.get",
+      requiredScopes: ["assurance:read"],
+      allowedRoles: EVERY_ROLE,
+      validate: (value) => object(value, ["bindingVersionId"]),
+      handle: async (context, value) =>
+        assuranceBindingView(await assuranceBindings.get(context, text(value.bindingVersionId, "bindingVersionId"))),
+    });
+    registry.register({
+      operation: "assurance.binding.active",
+      requiredScopes: ["assurance:read"],
+      allowedRoles: EVERY_ROLE,
+      validate: (value) => object(value, ["workId", "planVersionId"]),
+      handle: async (context, value) => {
+        const active = await assuranceBindings.getActive(
+          context,
+          text(value.workId, "workId"),
+          text(value.planVersionId, "planVersionId"),
+        );
+        return active ? assuranceBindingView(active) : undefined;
+      },
+    });
+  }
   if (dependencies.providers) {
     registry.register({
       operation: "router.credentials",
@@ -567,13 +613,63 @@ export function registerApplicationQueries(
         })),
     });
   }
+  if (dependencies.providers && dependencies.router) {
+    registry.register({
+      operation: "router.catalog",
+      requiredScopes: ["router:read"],
+      allowedRoles: EVERY_ROLE,
+      validate: (value) => object(value, []),
+      handle: async (context) => {
+        const [providers, endpoints, models, candidates] = await Promise.all([
+          dependencies.providers?.listProviders(context),
+          dependencies.providers?.listEndpoints(context),
+          dependencies.router?.listModels(context),
+          dependencies.router?.listCandidates(context),
+        ]);
+        return {
+          providers: (providers ?? []).map((provider) => ({
+            providerId: provider.provider_id,
+            displayName: provider.display_name,
+            adapterKind: provider.adapter_kind,
+            enabled: provider.enabled,
+          })),
+          endpoints: (endpoints ?? []).map((endpoint) => ({
+            endpointId: endpoint.endpoint_id,
+            providerId: endpoint.provider_id,
+            name: endpoint.name,
+            baseUrl: endpoint.base_url,
+            local: endpoint.local,
+            gatewayKind: endpoint.gateway_kind,
+            enabled: endpoint.enabled,
+          })),
+          models: (models ?? []).map((model) => ({
+            modelProfileId: model.model_profile_id,
+            providerId: model.provider_id,
+            endpointId: model.endpoint_id,
+            modelId: model.model_id,
+            routeKind: model.route_kind,
+            equivalenceGroup: model.equivalence_group,
+            verified: model.verified,
+            enabled: model.enabled,
+          })),
+          candidates: (candidates ?? []).map((candidate) => ({
+            candidateId: candidate.candidate_id,
+            routeId: candidate.route_id,
+            modelProfileId: candidate.model_profile_id,
+            priority: candidate.priority,
+            enabled: candidate.enabled,
+          })),
+        };
+      },
+    });
+  }
   if (dependencies.status) {
     registry.register({
       operation: "system.status",
       requiredScopes: ["system:read"],
       allowedRoles: EVERY_ROLE,
       validate: (value) => object(value, []),
-      handle: async () => await dependencies.status?.(),
+      handle: async (context) => await dependencies.status?.(context),
     });
   }
 }
