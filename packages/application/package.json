@@ -13,6 +13,8 @@
     "dist"
   ],
   "dependencies": {
+    "@massion/context-strategy": "workspace:*",
+    "@massion/evidence": "workspace:*",
     "@massion/extension-host": "workspace:*",
     "@massion/governance": "workspace:*",
     "@massion/growth": "workspace:*",
@@ -25,7 +27,7 @@
   },
   "scripts": {
     "build": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\" && pnpm build-deps && tsc -p tsconfig.json",
-    "build-deps": "pnpm --filter @massion/storage exec tsc -p tsconfig.json && pnpm --filter @massion/identity exec tsc -p tsconfig.json && pnpm --filter @massion/governance exec tsc -p tsconfig.json && pnpm --filter @massion/organization exec tsc -p tsconfig.json && pnpm --filter @massion/work exec tsc -p tsconfig.json && pnpm --filter @massion/runtime exec tsc -p tsconfig.json && pnpm --filter @massion/router exec tsc -p tsconfig.json && pnpm --filter @massion/growth exec tsc -p tsconfig.json && pnpm --filter @massion/extension-host exec tsc -p tsconfig.json",
+    "build-deps": "pnpm --filter @massion/storage exec tsc -p tsconfig.json && pnpm --filter @massion/identity exec tsc -p tsconfig.json && pnpm --filter @massion/governance exec tsc -p tsconfig.json && pnpm --filter @massion/organization exec tsc -p tsconfig.json && pnpm --filter @massion/work exec tsc -p tsconfig.json && pnpm --filter @massion/runtime exec tsc -p tsconfig.json && pnpm --filter @massion/context-strategy exec tsc -p tsconfig.json && pnpm --filter @massion/evidence exec tsc -p tsconfig.json && pnpm --filter @massion/router exec tsc -p tsconfig.json && pnpm --filter @massion/growth exec tsc -p tsconfig.json && pnpm --filter @massion/extension-host exec tsc -p tsconfig.json",
     "test": "pnpm build-deps && vitest run src",
     "typecheck": "pnpm build-deps && tsc -p tsconfig.json --noEmit"
   },

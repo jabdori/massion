@@ -1,0 +1,170 @@
+import { createHash } from "node:crypto";
+
+import type { PlanStrategyInput, PlanStrategyResult, StrategyService } from "@massion/context-strategy";
+import type { TenantContext } from "@massion/identity";
+import type { OrganizationGraphService } from "@massion/organization";
+import type { AgentRunner, RuntimeExecutionStore } from "@massion/runtime";
+import type { WorkService } from "@massion/work";
+
+import type {
+  CoreWorkStage,
+  CoreWorkStageExecutor,
+  CoreWorkStageInput,
+  CoreWorkStageResult,
+} from "./core-work-coordinator.js";
+
+type StagePort = {
+  execute(context: TenantContext, input: CoreWorkStageInput): Promise<CoreWorkStageResult>;
+  cancel?(context: TenantContext, input: Omit<CoreWorkStageInput, "resumeInput">): Promise<void>;
+};
+
+export interface CoreWorkPipelineDependencies {
+  readonly graph: Pick<OrganizationGraphService, "getCurrentSnapshot">;
+  readonly works: Pick<WorkService, "createWork" | "getWork">;
+  readonly representative: Pick<AgentRunner, "execute" | "cancel">;
+  readonly runtimeExecutions: Pick<RuntimeExecutionStore, "findExecutionIdByCommand">;
+  readonly strategy: Pick<StrategyService, "plan">;
+  readonly evidence: StagePort;
+  readonly delivery: StagePort;
+  readonly assurance: StagePort;
+  readonly records: StagePort;
+}
+
+interface CoreRequest {
+  readonly text: string;
+  readonly surface: string;
+  readonly projectId?: string;
+  readonly tokenBudget: number;
+  readonly scopeIn: readonly string[];
+  readonly scopeOut: readonly string[];
+  readonly constraints: readonly string[];
+  readonly assumptions: readonly string[];
+  readonly unknowns: readonly string[];
+  readonly decisions: readonly string[];
+}
+
+function strings(value: unknown): readonly string[] {
+  return Array.isArray(value) && value.every((item) => typeof item === "string") ? value : [];
+}
+
+function request(value: unknown): CoreRequest {
+  if (!value || typeof value !== "object" || Array.isArray(value))
+    throw new Error("Core Work request는 object여야 합니다");
+  const input = value as Record<string, unknown>;
+  const text = typeof input.text === "string" ? input.text.trim() : "";
+  if (!text || text.length > 64 * 1024) throw new Error("Core Work request text가 유효하지 않습니다");
+  const tokenBudget = input.tokenBudget === undefined ? 32_000 : Number(input.tokenBudget);
+  if (!Number.isSafeInteger(tokenBudget) || tokenBudget < 1_000 || tokenBudget > 1_000_000)
+    throw new Error("Core Work token budget이 유효하지 않습니다");
+  return {
+    text,
+    surface: typeof input.surface === "string" ? input.surface : "application",
+    ...(typeof input.projectId === "string" ? { projectId: input.projectId } : {}),
+    tokenBudget,
+    scopeIn: strings(input.scopeIn),
+    scopeOut: strings(input.scopeOut),
+    constraints: strings(input.constraints),
+    assumptions: strings(input.assumptions),
+    unknowns: strings(input.unknowns),
+    decisions: strings(input.decisions),
+  };
+}
+
+export function createCoreWorkPipelineExecutors(
+  dependencies: CoreWorkPipelineDependencies,
+): Readonly<Record<CoreWorkStage, CoreWorkStageExecutor>> {
+  const intake: CoreWorkStageExecutor = {
+    async execute(context, input) {
+      const value = request(input.request);
+      const snapshot = await dependencies.graph.getCurrentSnapshot(context);
+      const created = await dependencies.works.createWork(context, {
+        commandId: `${input.commandId}:work`,
+        text: value.text,
+        surface: value.surface,
+        organizationVersionId: snapshot.version.version_id,
+        ...(value.projectId === undefined ? {} : { projectId: value.projectId }),
+      });
+      const runtime = await dependencies.representative.execute(context, {
+        commandId: `${input.commandId}:representative`,
+        workId: created.work.work_id,
+        agentHandle: "representative",
+        modelRoute: "orchestration-balanced",
+        correlationId: input.correlationId,
+        estimatedTokens: value.tokenBudget,
+        estimatedCostMicros: 0,
+        input: { operation: "coordinate_work", request: value },
+      });
+      if (runtime.status === "blocked_model_unavailable")
+        return { outcome: "blocked", reason: "model-unavailable", workId: created.work.work_id };
+      if (runtime.status !== "succeeded")
+        return { outcome: "blocked", reason: `representative-${runtime.status}`, workId: created.work.work_id };
+      return {
+        outcome: "advanced",
+        workId: created.work.work_id,
+        data: { representativeExecutionId: runtime.executionId },
+      };
+    },
+    async cancel(context, input) {
+      const executionCommand = `${input.commandId.replace(/:cancel$/u, "")}:representative`;
+      const executionId = await dependencies.runtimeExecutions.findExecutionIdByCommand(context, executionCommand);
+      if (executionId) await dependencies.representative.cancel(context, executionId, "Application run cancelled");
+    },
+  };
+  const strategy: CoreWorkStageExecutor = {
+    async execute(context, input) {
+      if (!input.workId) throw new Error("context-strategy stage에 Work ID가 없습니다");
+      const value = request(input.request);
+      const work = await dependencies.works.getWork(context, input.workId);
+      const sourceContent = { text: value.text };
+      const planInput: PlanStrategyInput = {
+        commandId: input.commandId,
+        workId: input.workId,
+        expectedWorkRevision: work.revision,
+        tokenBudget: value.tokenBudget,
+        context: {
+          objective: value.text,
+          scopeIn: value.scopeIn,
+          scopeOut: value.scopeOut,
+          constraints: value.constraints,
+          assumptions: value.assumptions,
+          unknowns: value.unknowns,
+          decisions: value.decisions,
+          sources: [
+            {
+              kind: "request",
+              sourceId: input.runId,
+              revision: "1",
+              contentHash: createHash("sha256").update(JSON.stringify(sourceContent)).digest("hex"),
+              observedAt: new Date().toISOString(),
+              classification: "internal",
+              priority: 100,
+              estimatedTokens: Math.max(1, Math.ceil(value.text.length / 4)),
+              mandatory: true,
+              content: sourceContent,
+            },
+          ],
+        },
+      };
+      const planned: PlanStrategyResult = await dependencies.strategy.plan(context, planInput);
+      if (planned.generation.status === "blocked_model_unavailable")
+        return { outcome: "blocked", reason: "model-unavailable" };
+      if (planned.generation.status !== "applied" || !planned.projection)
+        return { outcome: "blocked", reason: `strategy-${planned.generation.status}` };
+      return {
+        outcome: "advanced",
+        data: {
+          contextVersionId: planned.contextVersion.contextVersionId,
+          strategyGenerationId: planned.generation.strategyGenerationId,
+        },
+      };
+    },
+  };
+  return {
+    intake,
+    "context-strategy": strategy,
+    evidence: dependencies.evidence,
+    delivery: dependencies.delivery,
+    assurance: dependencies.assurance,
+    records: dependencies.records,
+  };
+}

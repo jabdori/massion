@@ -283,15 +283,17 @@ export class ApplicationRunStore {
     runId: string,
     generation: number,
     reason: string,
+    workId?: string,
   ): Promise<ApplicationRunView> {
     return await this.transition(context, runId, generation, async (transaction, record) => {
       await transaction.query(
-        "UPDATE application_run SET status = 'blocked', blocked_reason = $blocked_reason, lease_expires_at = NONE, updated_at = <datetime>$updated_at WHERE organization_id = $organization_id AND run_id = $run_id AND status = 'running' AND lease_generation = $generation;",
+        "UPDATE application_run SET status = 'blocked', blocked_reason = $blocked_reason, work_id = $work_id, lease_expires_at = NONE, updated_at = <datetime>$updated_at WHERE organization_id = $organization_id AND run_id = $run_id AND status = 'running' AND lease_generation = $generation;",
         {
           organization_id: context.organizationId,
           run_id: runId,
           generation,
           blocked_reason: reason,
+          work_id: workId ?? record.work_id,
           updated_at: this.clock.now.toISOString(),
         },
       );

@@ -25,7 +25,7 @@ export interface CoreWorkStageInput {
 export type CoreWorkStageResult =
   | { readonly outcome: "advanced"; readonly workId?: string; readonly data?: unknown }
   | { readonly outcome: "awaiting-approval"; readonly approvalId: string }
-  | { readonly outcome: "blocked"; readonly reason: string };
+  | { readonly outcome: "blocked"; readonly reason: string; readonly workId?: string };
 
 export interface CoreWorkStageExecutor {
   execute(context: TenantContext, input: CoreWorkStageInput): Promise<CoreWorkStageResult>;
@@ -120,7 +120,7 @@ export class CoreWorkCoordinator {
         return await this.store.suspend(context, run.runId, claim.leaseGeneration, result.approvalId);
       }
       if (result.outcome === "blocked") {
-        return await this.store.block(context, run.runId, claim.leaseGeneration, result.reason);
+        return await this.store.block(context, run.runId, claim.leaseGeneration, result.reason, result.workId);
       }
       const following = nextStage(stage);
       if (following === "terminal") {
