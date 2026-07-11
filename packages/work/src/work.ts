@@ -16,8 +16,10 @@ import {
   WORK_CORE_MIGRATION,
   WORK_DELIVERY_MIGRATION,
   WORK_RECORDS_MIGRATION,
+  WORK_PROMPT_VERSION_MIGRATION,
   WORK_STRATEGY_PROJECTION_MIGRATION,
 } from "./schema.js";
+import type { PromptVersionResolver, ResolveWorkPromptInput } from "./prompt-version.js";
 
 export type WorkStatus =
   | "draft"
@@ -54,6 +56,7 @@ export interface Work {
   readonly active_plan_version_id?: string;
   readonly policy_version_id?: string;
   readonly prompt_version_id?: string;
+  readonly prompt_schema_version?: string;
   readonly artifact_version_ids: readonly string[];
   readonly records_schema_version?: string;
   readonly created_at: unknown;
@@ -821,6 +824,7 @@ export class WorkService {
     private readonly organizations: OrganizationService,
     private readonly graph?: OrganizationGraphService,
     private readonly governance?: Pick<GovernanceGate, "authorize" | "getApprovalStatus">,
+    private readonly promptVersions?: PromptVersionResolver,
   ) {}
 
   public static async create(
@@ -828,6 +832,7 @@ export class WorkService {
     organizations: OrganizationService,
     graph?: OrganizationGraphService,
     governance?: Pick<GovernanceGate, "authorize" | "getApprovalStatus">,
+    promptVersions?: PromptVersionResolver,
   ): Promise<WorkService> {
     await applyMigrations(database, [
       WORK_CORE_MIGRATION,
@@ -836,9 +841,10 @@ export class WorkService {
       WORK_RECORDS_MIGRATION,
       WORK_CONSTRAINTS_MIGRATION,
       WORK_STRATEGY_PROJECTION_MIGRATION,
+      WORK_PROMPT_VERSION_MIGRATION,
     ]);
     await database.query(WORK_ASSURANCE_FAIL_CLOSED_GUARD);
-    return new WorkService(database, organizations, graph, governance);
+    return new WorkService(database, organizations, graph, governance, promptVersions);
   }
 
   private async verify(context: TenantContext): Promise<void> {
@@ -850,6 +856,9 @@ export class WorkService {
     const text = input.text.trim();
     if (!text) throw new Error("Request 원문은 비어 있을 수 없습니다");
     if (!input.organizationVersionId.trim()) throw new Error("OrganizationVersion 참조가 필요합니다");
+    if (this.promptVersions && input.promptVersionId !== undefined) {
+      throw new Error("caller는 Growth-aware Work의 PromptVersion ID를 주입할 수 없습니다");
+    }
     const requestJson = canonicalJson(input);
     return await this.database.transaction(async (transaction) => {
       await this.organizations.verifyTenantContext(context, undefined, transaction);
@@ -857,6 +866,19 @@ export class WorkService {
       if (repeated) return this.replay(repeated, requestJson) as CreateWorkResult;
       const requestId = randomUUID();
       const workId = randomUUID();
+      const promptInput: ResolveWorkPromptInput = {
+        workId,
+        requesterUserId: context.userId,
+        organizationVersionId: input.organizationVersionId,
+        ...(input.contextVersionId ? { contextVersionId: input.contextVersionId } : {}),
+        ...(input.policyVersionId ? { policyVersionId: input.policyVersionId } : {}),
+      };
+      const resolvedPrompt = this.promptVersions
+        ? await this.promptVersions.resolve(context, promptInput, transaction)
+        : undefined;
+      if (resolvedPrompt) {
+        await this.promptVersions?.verify(context, resolvedPrompt.promptVersionId, transaction);
+      }
       const [requests] = await transaction.query<[WorkRequest[]]>(
         "CREATE work_request CONTENT { request_id: $request_id, organization_id: $organization_id, requester_user_id: $requester_user_id, text: $text, surface: $surface, created_at: time::now() } RETURN AFTER;",
         {
@@ -868,7 +890,7 @@ export class WorkService {
         },
       );
       const [works] = await transaction.query<[Work[]]>(
-        "CREATE work CONTENT { work_id: $work_id, organization_id: $organization_id, request_id: $request_id, project_id: $project_id, status: 'draft', revision: 1, organization_version_id: $organization_version_id, context_version_id: $context_version_id, policy_version_id: $policy_version_id, prompt_version_id: $prompt_version_id, artifact_version_ids: [], created_at: time::now(), updated_at: time::now() } RETURN AFTER;",
+        "CREATE work CONTENT { work_id: $work_id, organization_id: $organization_id, request_id: $request_id, project_id: $project_id, status: 'draft', revision: 1, organization_version_id: $organization_version_id, context_version_id: $context_version_id, policy_version_id: $policy_version_id, prompt_version_id: $prompt_version_id, prompt_schema_version: $prompt_schema_version, artifact_version_ids: [], created_at: time::now(), updated_at: time::now() } RETURN AFTER;",
         {
           work_id: workId,
           organization_id: context.organizationId,
@@ -877,7 +899,8 @@ export class WorkService {
           organization_version_id: input.organizationVersionId,
           context_version_id: input.contextVersionId,
           policy_version_id: input.policyVersionId,
-          prompt_version_id: input.promptVersionId,
+          prompt_version_id: resolvedPrompt?.promptVersionId ?? input.promptVersionId,
+          prompt_schema_version: resolvedPrompt?.schemaVersion,
         },
       );
       const request = requests[0];
@@ -970,7 +993,7 @@ export class WorkService {
         },
       );
       const [works] = await transaction.query<[Work[]]>(
-        "CREATE work CONTENT { work_id: $work_id, organization_id: $organization_id, request_id: $request_id, parent_work_id: $parent_work_id, project_id: $project_id, status: 'draft', revision: 1, organization_version_id: $organization_version_id, context_version_id: $context_version_id, policy_version_id: $policy_version_id, prompt_version_id: $prompt_version_id, artifact_version_ids: $artifact_version_ids, created_at: time::now(), updated_at: time::now() } RETURN AFTER;",
+        "CREATE work CONTENT { work_id: $work_id, organization_id: $organization_id, request_id: $request_id, parent_work_id: $parent_work_id, project_id: $project_id, status: 'draft', revision: 1, organization_version_id: $organization_version_id, context_version_id: $context_version_id, policy_version_id: $policy_version_id, prompt_version_id: $prompt_version_id, prompt_schema_version: $prompt_schema_version, artifact_version_ids: $artifact_version_ids, created_at: time::now(), updated_at: time::now() } RETURN AFTER;",
         {
           work_id: workId,
           organization_id: context.organizationId,
@@ -981,6 +1004,7 @@ export class WorkService {
           context_version_id: parent.context_version_id,
           policy_version_id: parent.policy_version_id,
           prompt_version_id: parent.prompt_version_id,
+          prompt_schema_version: parent.prompt_schema_version,
           artifact_version_ids: parent.artifact_version_ids,
         },
       );
@@ -1804,7 +1828,7 @@ export class WorkService {
         },
       );
       const [works] = await transaction.query<[Work[]]>(
-        "CREATE work CONTENT { work_id: $work_id, organization_id: $organization_id, request_id: $request_id, parent_work_id: $parent_work_id, project_id: $project_id, status: 'draft', revision: 1, organization_version_id: $organization_version_id, context_version_id: $context_version_id, policy_version_id: $policy_version_id, prompt_version_id: $prompt_version_id, artifact_version_ids: $artifact_version_ids, created_at: time::now(), updated_at: time::now() } RETURN AFTER;",
+        "CREATE work CONTENT { work_id: $work_id, organization_id: $organization_id, request_id: $request_id, parent_work_id: $parent_work_id, project_id: $project_id, status: 'draft', revision: 1, organization_version_id: $organization_version_id, context_version_id: $context_version_id, policy_version_id: $policy_version_id, prompt_version_id: $prompt_version_id, prompt_schema_version: $prompt_schema_version, artifact_version_ids: $artifact_version_ids, created_at: time::now(), updated_at: time::now() } RETURN AFTER;",
         {
           work_id: childWorkId,
           organization_id: context.organizationId,
@@ -1815,6 +1839,7 @@ export class WorkService {
           context_version_id: parent.context_version_id,
           policy_version_id: parent.policy_version_id,
           prompt_version_id: parent.prompt_version_id,
+          prompt_schema_version: parent.prompt_schema_version,
           artifact_version_ids: parent.artifact_version_ids,
         },
       );

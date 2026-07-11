@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { applyMigrations, createDatabase, listAppliedMigrations, type MassionDatabase } from "@massion/storage";
 
-import { GROWTH_CONFIGURATION_MIGRATION } from "./schema.js";
+import { GROWTH_CONFIGURATION_MIGRATION, GROWTH_PROMPT_MEMORY_MIGRATION } from "./schema.js";
 
 describe("Growth configuration migration", () => {
   let database: MassionDatabase | undefined;
@@ -41,5 +41,18 @@ describe("Growth configuration migration", () => {
       "immutable",
     );
     await expect(database.query("DELETE growth_configuration_event;")).rejects.toThrow("immutable");
+  });
+
+  it("0052 Prompt·Memory schema와 checksum을 고정한다", async () => {
+    database = await createDatabase({ url: "mem://", namespace: "massion", database: crypto.randomUUID() });
+
+    expect(GROWTH_PROMPT_MEMORY_MIGRATION.id).toBe("0052-growth-prompt-memory");
+    expect(GROWTH_PROMPT_MEMORY_MIGRATION.checksum).toBe(
+      "84e7ef7b50c8bb14908e65b6635fca209f785cd32d056ad79c3be734037d59a3",
+    );
+    expect(await applyMigrations(database, [GROWTH_PROMPT_MEMORY_MIGRATION])).toEqual(["0052-growth-prompt-memory"]);
+    for (const table of ["prompt_definition_version", "prompt_version", "memory_version"]) {
+      await expect(database.query(`INFO FOR TABLE ${table};`)).resolves.toBeDefined();
+    }
   });
 });

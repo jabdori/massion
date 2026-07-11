@@ -63,6 +63,37 @@ THEN {
 `,
 );
 
+export const RUNTIME_PROMPT_LINEAGE_MIGRATION = defineMigration(
+  "0054-runtime-prompt-lineage",
+  `
+DEFINE FIELD prompt_version_id ON runtime_execution TYPE option<string>;
+DEFINE FIELD prompt_checksum ON runtime_execution TYPE option<string> ASSERT $value = NONE OR string::len($value) = 64;
+DEFINE FIELD memory_version_ids ON runtime_execution TYPE option<array<string>>;
+DEFINE FIELD agent_instruction_checksum ON runtime_execution TYPE option<string> ASSERT $value = NONE OR string::len($value) = 64;
+DEFINE EVENT runtime_prompt_lineage_invariant ON TABLE runtime_execution
+WHEN $event IN ['CREATE', 'UPDATE']
+THEN {
+  LET $present = [
+    $after.prompt_version_id != NONE,
+    $after.prompt_checksum != NONE,
+    $after.memory_version_ids != NONE,
+    $after.agent_instruction_checksum != NONE
+  ];
+  IF $present.any(|$value| $value) AND !$present.all(|$value| $value) {
+    THROW 'Runtime Prompt 계보는 한 번에 완전하게 저장해야 합니다';
+  };
+  IF $event = 'UPDATE' AND $before.prompt_version_id != NONE AND (
+    $after.prompt_version_id != $before.prompt_version_id OR
+    $after.prompt_checksum != $before.prompt_checksum OR
+    $after.memory_version_ids != $before.memory_version_ids OR
+    $after.agent_instruction_checksum != $before.agent_instruction_checksum
+  ) {
+    THROW 'Runtime Prompt 계보는 immutable입니다';
+  };
+};
+`,
+);
+
 export const RUNTIME_BLOCKED_TRANSITION_MIGRATION = defineMigration(
   "0015-runtime-blocked-transition",
   `

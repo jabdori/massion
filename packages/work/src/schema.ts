@@ -604,3 +604,20 @@ THEN {
 };
 `,
 );
+
+export const WORK_PROMPT_VERSION_MIGRATION = defineMigration(
+  "0053-work-prompt-version",
+  `
+DEFINE FIELD prompt_schema_version ON work TYPE option<string> ASSERT $value = NONE OR $value = 'massion.work.prompt.v1';
+DEFINE EVENT work_prompt_version_invariant ON TABLE work
+WHEN $event = 'CREATE' OR ($event = 'UPDATE' AND ($before.prompt_version_id != $after.prompt_version_id OR $before.prompt_schema_version != $after.prompt_schema_version))
+THEN {
+  IF $after.prompt_schema_version = 'massion.work.prompt.v1' AND $after.prompt_version_id = NONE {
+    THROW 'Growth-aware Work에는 PromptVersion ID가 필요합니다';
+  };
+  IF $event = 'UPDATE' {
+    THROW 'Work의 PromptVersion 계보는 변경할 수 없습니다';
+  };
+};
+`,
+);
