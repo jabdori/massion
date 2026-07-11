@@ -9,6 +9,7 @@ import type { IntegrationStore } from "./store.js";
 export interface IntegrationHttpRequest {
   readonly method: string;
   readonly path: string;
+  readonly query?: Readonly<Record<string, string | undefined>>;
   readonly headers: Readonly<Record<string, string | undefined>>;
   readonly body: Buffer;
   readonly receivedAt?: Date;
@@ -69,11 +70,32 @@ export class IntegrationIngress {
       readonly store: IntegrationStore;
       readonly secrets: IngressSecrets;
       readonly connectors: ConnectorInvoker;
+      readonly oauth?: {
+        callback(platform: "slack" | "github", query: Readonly<Record<string, string | undefined>>): Promise<unknown>;
+      };
       readonly schedule?: (context: TenantContext) => void;
     },
   ) {}
 
   public async handle(request: IntegrationHttpRequest): Promise<IntegrationHttpResponse> {
+    const callbackPlatform =
+      request.path === "/integrations/slack/oauth/callback"
+        ? "slack"
+        : request.path === "/integrations/github/setup/callback"
+          ? "github"
+          : undefined;
+    if (callbackPlatform) {
+      if (request.method !== "GET") return { status: 405, headers: { allow: "GET" } };
+      if (!this.dependencies.oauth) return { status: 503, body: { error: "OAuth callback을 사용할 수 없습니다" } };
+      try {
+        return { status: 200, body: await this.dependencies.oauth.callback(callbackPlatform, request.query ?? {}) };
+      } catch (error) {
+        return {
+          status: 400,
+          body: { error: error instanceof Error ? error.message.slice(0, 512) : "OAuth callback을 처리할 수 없습니다" },
+        };
+      }
+    }
     if (request.method !== "POST") return { status: 405, headers: { allow: "POST" } };
     if (request.body.length === 0 || request.body.length > 1024 * 1024)
       return { status: 413, body: { error: "외부 request body 상한을 초과했습니다" } };

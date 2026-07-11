@@ -22,6 +22,7 @@ describe("IntegrationIngress", () => {
     source: input,
   }));
   const scheduled = vi.fn();
+  const oauthCallback = vi.fn(async (platform: "slack" | "github") => ({ connected: true, platform }));
   let ingress: IntegrationIngress;
 
   beforeEach(async () => {
@@ -33,6 +34,7 @@ describe("IntegrationIngress", () => {
     store = await IntegrationStore.create(database, organizations);
     connector.mockClear();
     scheduled.mockClear();
+    oauthCallback.mockClear();
     ingress = new IntegrationIngress({
       store,
       secrets: {
@@ -47,6 +49,7 @@ describe("IntegrationIngress", () => {
         },
       },
       connectors: { invoke: connector },
+      oauth: { callback: oauthCallback },
       schedule: scheduled,
     });
   });
@@ -193,5 +196,17 @@ describe("IntegrationIngress", () => {
     });
     expect(response).toEqual({ status: 401, body: { error: "외부 요청 인증에 실패했습니다" } });
     expect(connector).not.toHaveBeenCalled();
+  });
+
+  it("Slack·GitHub callback GET만 OAuth coordinator로 전달한다", async () => {
+    const response = await ingress.handle({
+      method: "GET",
+      path: "/integrations/github/setup/callback",
+      query: { state: "state", installation_id: "123" },
+      headers: {},
+      body: Buffer.alloc(0),
+    });
+    expect(response).toEqual({ status: 200, body: { connected: true, platform: "github" } });
+    expect(oauthCallback).toHaveBeenCalledWith("github", { state: "state", installation_id: "123" });
   });
 });
