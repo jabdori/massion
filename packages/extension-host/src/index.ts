@@ -1,4 +1,5 @@
 export * from "./artifact-inspector.js";
+export * from "./capability-broker.js";
 export * from "./contracts.js";
 export * from "./governance-adapter.js";
 export * from "./package-service.js";
@@ -6,4 +7,5 @@ export * from "./sandbox.js";
 export * from "./schema.js";
 export * from "./security.js";
 export * from "./store.js";
+export * from "./storage.js";
 export * from "./worker-supervisor.js";
