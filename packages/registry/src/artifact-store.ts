@@ -55,7 +55,8 @@ export class FileArtifactStore implements ArtifactStore {
   public async get(digest: string): Promise<Buffer> {
     assertDigest(digest, "artifact");
     const body = await readFile(this.path(digest));
-    if (createHash("sha256").update(body).digest("hex") !== digest) throw new Error("저장된 artifact integrity가 손상됐습니다");
+    if (createHash("sha256").update(body).digest("hex") !== digest)
+      throw new Error("저장된 artifact integrity가 손상됐습니다");
     return body;
   }
 

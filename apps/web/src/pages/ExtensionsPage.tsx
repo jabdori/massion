@@ -13,7 +13,12 @@ export default function ExtensionsPage() {
   const [busy, setBusy] = useState<string>();
   const [notice, setNotice] = useState<string>();
   const [search, setSearch] = useState("");
-  if (data === undefined || integrationData === undefined || marketplaceData === undefined || inventoryData === undefined)
+  if (
+    data === undefined ||
+    integrationData === undefined ||
+    marketplaceData === undefined ||
+    inventoryData === undefined
+  )
     return <LoadingState label="확장과 외부 연결 상태를 확인하고 있습니다" />;
   const extensions = rows(data);
   const integrations = rows(integrationData);
@@ -45,10 +50,7 @@ export default function ExtensionsPage() {
           executionId: crypto.randomUUID(),
         },
       });
-      await Promise.all([
-        consoleStore.refresh("extension.list", {}),
-        consoleStore.refresh("registry.inventory", {}),
-      ]);
+      await Promise.all([consoleStore.refresh("extension.list", {}), consoleStore.refresh("registry.inventory", {})]);
       setNotice("검증된 Registry artifact를 설치했습니다.");
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "Extension을 설치하지 못했습니다.");
@@ -108,7 +110,9 @@ export default function ExtensionsPage() {
             void searchMarketplace();
           }}
         >
-          <label className="sr-only" htmlFor="marketplace-search">Marketplace 검색</label>
+          <label className="sr-only" htmlFor="marketplace-search">
+            Marketplace 검색
+          </label>
           <input
             id="marketplace-search"
             value={search}
@@ -126,7 +130,11 @@ export default function ExtensionsPage() {
       ) : (
         <section className="extension-table" aria-label="Extension Marketplace">
           <div className="table-head">
-            <span>패키지</span><span>버전</span><span>Provenance</span><span>공개 범위</span><span>설치</span>
+            <span>패키지</span>
+            <span>버전</span>
+            <span>Provenance</span>
+            <span>공개 범위</span>
+            <span>설치</span>
           </div>
           {marketplace.map((item) => (
             <article key={label(item.versionId)}>

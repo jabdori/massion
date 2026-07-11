@@ -18,9 +18,9 @@ describe("Registry immutable store", () => {
     const first = await store.stage("command-0001", version);
     const replay = await store.stage("command-0001", version);
     expect(replay).toEqual(first);
-    await expect(
-      store.stage("command-0002", { ...version, artifactDigest: "c".repeat(64) }),
-    ).rejects.toThrow("다른 artifact");
+    await expect(store.stage("command-0002", { ...version, artifactDigest: "c".repeat(64) })).rejects.toThrow(
+      "다른 artifact",
+    );
   });
 
   it("검사 통과 전 공개와 공개 전 리콜을 거부하고 사건을 append-only로 보존한다", async () => {

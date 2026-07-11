@@ -20,14 +20,26 @@ describe("Application Registry operations", () => {
       search: vi.fn(async () => ({ items: [{ packageName: "@massion-ext/slack" }] })),
       info: vi.fn(async () => ({ packageName: "@massion-ext/slack" })),
       inventory: vi.fn(async () => []),
-      install: vi.fn(async () => ({ installationId: "installation-1", packageName: "@massion-ext/slack", packageVersion: "1.0.0" })),
+      install: vi.fn(async () => ({
+        installationId: "installation-1",
+        packageName: "@massion-ext/slack",
+        packageVersion: "1.0.0",
+      })),
       recall: vi.fn(async () => ({ recallId: "recall-1", versionId: "version-1" })),
     };
     registerApplicationRegistryOperations(commands, queries, operations);
-    await expect(queries.query(context, ["extension:read"], "registry.search", { query: "slack", limit: 20 })).resolves.toMatchObject({ data: { items: expect.any(Array) } });
-    await expect(commands.dispatch(context, ["extension:write"], {
-      schemaVersion: "massion.application.v1", commandId: "registry-install-command-1", correlationId: "registry-install-correlation-1", operation: "registry.install", payload: { versionId: "version-1", environment: "production", riskClass: "medium", executionId: "execution-1" },
-    })).resolves.toMatchObject({ outcome: "succeeded" });
+    await expect(
+      queries.query(context, ["extension:read"], "registry.search", { query: "slack", limit: 20 }),
+    ).resolves.toMatchObject({ data: { items: expect.any(Array) } });
+    await expect(
+      commands.dispatch(context, ["extension:write"], {
+        schemaVersion: "massion.application.v1",
+        commandId: "registry-install-command-1",
+        correlationId: "registry-install-correlation-1",
+        operation: "registry.install",
+        payload: { versionId: "version-1", environment: "production", riskClass: "medium", executionId: "execution-1" },
+      }),
+    ).resolves.toMatchObject({ outcome: "succeeded" });
     expect(operations.install).toHaveBeenCalledOnce();
   });
 });

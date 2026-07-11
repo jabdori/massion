@@ -133,6 +133,7 @@ export class ExtensionPackageService {
       const entries = await readdir(directory, { withFileTypes: true });
       entries.sort((left, right) => (left.name < right.name ? -1 : left.name > right.name ? 1 : 0));
       for (const entry of entries) {
+        if (entry.name === "node_modules" || entry.name === ".git") continue;
         const absolute = join(directory, entry.name);
         const stat = await lstat(absolute);
         if (stat.isSymbolicLink()) throw new Error(`Extension source link를 허용하지 않습니다: ${entry.name}`);

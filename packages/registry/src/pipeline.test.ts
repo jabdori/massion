@@ -67,27 +67,35 @@ describe("Registry inspection pipeline", () => {
     };
     const unknown = new RegistryInspectionPipeline({
       ...common,
-      vulnerabilities: { query: vi.fn(async () => { throw new Error("timeout"); }) },
+      vulnerabilities: {
+        query: vi.fn(async () => {
+          throw new Error("timeout");
+        }),
+      },
     });
     expect(
-      (await unknown.inspect({
-        archive: Buffer.from("archive"),
-        provenanceBundle: {},
-        provenancePolicy: { issuer: "issuer", identity: /^identity$/u },
-        runtime: { agentOS: "1.0.0", node: "24.0.0" },
-      })).assessment.vulnerability,
+      (
+        await unknown.inspect({
+          archive: Buffer.from("archive"),
+          provenanceBundle: {},
+          provenancePolicy: { issuer: "issuer", identity: /^identity$/u },
+          runtime: { agentOS: "1.0.0", node: "24.0.0" },
+        })
+      ).assessment.vulnerability,
     ).toBe("unknown");
     const vulnerable = new RegistryInspectionPipeline({
       ...common,
       vulnerabilities: { query: vi.fn(async () => [{ id: "GHSA-test", severity: "high" as const }]) },
     });
     expect(
-      (await vulnerable.inspect({
-        archive: Buffer.from("archive"),
-        provenanceBundle: {},
-        provenancePolicy: { issuer: "issuer", identity: /^identity$/u },
-        runtime: { agentOS: "1.0.0", node: "24.0.0" },
-      })).assessment.vulnerability,
+      (
+        await vulnerable.inspect({
+          archive: Buffer.from("archive"),
+          provenanceBundle: {},
+          provenancePolicy: { issuer: "issuer", identity: /^identity$/u },
+          runtime: { agentOS: "1.0.0", node: "24.0.0" },
+        })
+      ).assessment.vulnerability,
     ).toBe("fail");
   });
 });
