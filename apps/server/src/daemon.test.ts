@@ -53,4 +53,24 @@ describe("MassionDaemon", () => {
     expect(databaseClose).toHaveBeenCalledOnce();
     vi.useRealTimers();
   });
+
+  it("실행 중 Database 단절은 process 생존과 분리해 readiness만 실패시킨다", async () => {
+    const version = vi.fn().mockResolvedValueOnce("surrealdb-3.2.0").mockRejectedValue(new Error("disconnected"));
+    const readinessFailure = vi.fn();
+    const daemon = new MassionDaemon({
+      application: {
+        server: { beginDrain: () => undefined },
+        start: async () => ({ host: "127.0.0.1", port: 3141, url: "http://127.0.0.1:3141" }),
+        close: async () => undefined,
+      },
+      database: { version, close: async () => undefined },
+      shutdownTimeoutMs: 1_000,
+      onReadinessFailure: readinessFailure,
+    });
+    await daemon.start();
+    await expect(daemon.readiness()).resolves.toEqual({ database: false, migrations: true });
+    expect(daemon.state).toBe("ready");
+    expect(readinessFailure).toHaveBeenCalledWith("database");
+    await daemon.close();
+  });
 });

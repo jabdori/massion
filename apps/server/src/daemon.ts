@@ -17,11 +17,13 @@ export interface MassionDaemonDependencies {
   readonly shutdownTimeoutMs: number;
   readonly operationalServices?: readonly { start(): Promise<unknown>; close(): Promise<void> }[];
   readonly onState?: (state: DaemonState) => void;
+  readonly onReadinessFailure?: (component: "database") => void;
 }
 
 export class MassionDaemon {
   public state: DaemonState = "starting";
   private closing?: Promise<void>;
+  private lastReadinessFailureAt = 0;
 
   public constructor(private readonly dependencies: MassionDaemonDependencies) {}
 
@@ -50,6 +52,11 @@ export class MassionDaemon {
       await this.dependencies.database.version();
       return { database: true, migrations: true };
     } catch {
+      const now = Date.now();
+      if (now - this.lastReadinessFailureAt >= 60_000) {
+        this.lastReadinessFailureAt = now;
+        this.dependencies.onReadinessFailure?.("database");
+      }
       return { database: false, migrations: true };
     }
   }

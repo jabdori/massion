@@ -6,6 +6,7 @@ import { createDatabase } from "@massion/storage";
 import { restoreOperationalBackup, writeOperationalBackup } from "./backup.js";
 import { loadServerConfig } from "./config.js";
 import { createMassionDaemon, provisionRemoteDatabase } from "./product.js";
+import { ShutdownSignalController } from "./signals.js";
 
 function log(event: string, fields: Readonly<Record<string, unknown>> = {}): void {
   process.stdout.write(`${JSON.stringify({ timestamp: new Date().toISOString(), level: "info", event, ...fields })}\n`);
@@ -44,17 +45,15 @@ async function main(): Promise<void> {
   if (command) throw new Error("지원하지 않는 massion-server command입니다");
   const daemon = await createMassionDaemon(config);
   const address = await daemon.start();
-  log("server.ready", { mode: config.mode, host: address.host, port: address.port });
-  let signalCount = 0;
+  const signals = new ShutdownSignalController();
   const removeSignalHandlers = (): void => {
     process.off("SIGTERM", shutdown);
     process.off("SIGINT", shutdown);
   };
   const shutdown = (signal: NodeJS.Signals): void => {
-    signalCount += 1;
-    if (signalCount > 1) {
-      log("server.shutdown.forced", { signal });
-      process.exit(1);
+    if (signals.receive() === "force") {
+      exitAfterLog(1, "server.shutdown.forced", { signal });
+      return;
     }
     log("server.shutdown.started", { signal });
     void daemon
@@ -67,6 +66,7 @@ async function main(): Promise<void> {
   };
   process.once("SIGTERM", shutdown);
   process.once("SIGINT", shutdown);
+  log("server.ready", { mode: config.mode, host: address.host, port: address.port });
 }
 
 main().catch((error: unknown) => {
