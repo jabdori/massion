@@ -99,4 +99,41 @@ DEFINE FIELD payload_json ON integration_delivery TYPE option<string> ASSERT $va
 `,
 );
 
-export const INTEGRATION_MIGRATIONS = [INTEGRATION_MIGRATION, INTEGRATION_PAYLOAD_MIGRATION] as const;
+export const INTEGRATION_INTERACTION_MIGRATION = defineMigration(
+  "0076-integration-oauth-interaction",
+  `
+DEFINE TABLE integration_oauth_attempt SCHEMAFULL PERMISSIONS NONE;
+DEFINE FIELD attempt_id ON integration_oauth_attempt TYPE string;
+DEFINE FIELD organization_id ON integration_oauth_attempt TYPE string;
+DEFINE FIELD platform ON integration_oauth_attempt TYPE string ASSERT $value IN ['slack', 'discord', 'github'];
+DEFINE FIELD state_hash ON integration_oauth_attempt TYPE string ASSERT string::len($value) = 64;
+DEFINE FIELD redirect_uri ON integration_oauth_attempt TYPE string;
+DEFINE FIELD expires_at ON integration_oauth_attempt TYPE datetime;
+DEFINE FIELD consumed_at ON integration_oauth_attempt TYPE option<datetime>;
+DEFINE FIELD created_by_user_id ON integration_oauth_attempt TYPE string;
+DEFINE FIELD created_at ON integration_oauth_attempt TYPE datetime;
+DEFINE INDEX integration_oauth_attempt_id ON integration_oauth_attempt FIELDS organization_id, attempt_id UNIQUE;
+DEFINE INDEX integration_oauth_state ON integration_oauth_attempt FIELDS state_hash UNIQUE;
+
+DEFINE TABLE integration_interaction_handle SCHEMAFULL PERMISSIONS NONE;
+DEFINE FIELD interaction_id ON integration_interaction_handle TYPE string;
+DEFINE FIELD organization_id ON integration_interaction_handle TYPE string;
+DEFINE FIELD installation_id ON integration_interaction_handle TYPE string;
+DEFINE FIELD external_user_id ON integration_interaction_handle TYPE string;
+DEFINE FIELD handle_hash ON integration_interaction_handle TYPE string ASSERT string::len($value) = 64;
+DEFINE FIELD action ON integration_interaction_handle TYPE string;
+DEFINE FIELD resource_id ON integration_interaction_handle TYPE string;
+DEFINE FIELD payload_hash ON integration_interaction_handle TYPE string ASSERT string::len($value) = 64;
+DEFINE FIELD expires_at ON integration_interaction_handle TYPE datetime;
+DEFINE FIELD consumed_at ON integration_interaction_handle TYPE option<datetime>;
+DEFINE FIELD created_at ON integration_interaction_handle TYPE datetime;
+DEFINE INDEX integration_interaction_id ON integration_interaction_handle FIELDS organization_id, interaction_id UNIQUE;
+DEFINE INDEX integration_interaction_hash ON integration_interaction_handle FIELDS handle_hash UNIQUE;
+`,
+);
+
+export const INTEGRATION_MIGRATIONS = [
+  INTEGRATION_MIGRATION,
+  INTEGRATION_PAYLOAD_MIGRATION,
+  INTEGRATION_INTERACTION_MIGRATION,
+] as const;
