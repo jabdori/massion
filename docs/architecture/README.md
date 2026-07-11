@@ -2,7 +2,7 @@
 
 > **문서 상태**: 현재 구현 아키텍처 정본
 > **기준일**: 2026-07-11
-> **제품 구현 기준 커밋**: `8cd2db1`
+> **제품 구현 기준 커밋**: `4c79851`
 > **제품 정본**: [Massion 완제품 설계 명세](../product/2026-07-10-complete-product-design.md)
 > **진행 정본**: [Massion AgentOS 1.0 프로그램 계획](../superpowers/plans/2026-07-10-massion-agentos-1.0-program.md)
 
@@ -21,7 +21,7 @@
 
 굵은 화살표는 사용자 Work의 주 실행 경로, 일반 실선은 동기 명령·직접 호출, 점선은 이벤트·관찰·정책 영향을 뜻합니다. 원통은 영속 저장소, 큰 경계 상자는 프로세스 또는 배포 단위입니다. 색상을 볼 수 없는 환경에서도 상태 라벨과 선 모양으로 구분할 수 있습니다.
 
-기준 커밋에서 Phase 0~20은 구현됨, Phase 21~23은 예정입니다. 개별 요소는 Phase 번호만으로 판정하지 않고 실제 코드와 검증 결과를 함께 확인합니다.
+기준 커밋에서 Phase 0~21은 구현됨, Phase 22~23은 예정입니다. 개별 요소는 Phase 번호만으로 판정하지 않고 실제 코드와 검증 결과를 함께 확인합니다.
 
 ## 2. 전체 시스템 지도
 
@@ -576,7 +576,7 @@ flowchart LR
 
 ## 11. 개인·팀 배포 구조
 
-Massion 1.0은 개인 로컬 설치와 팀 자체 호스팅을 공식 변형으로 둡니다. 개인 모드는 한 명의 owner가 있는 조직일 뿐 데이터 모델을 축약하지 않습니다. 팀 모드는 같은 Application API와 tenant 격리를 네트워크 서비스로 배포합니다. 아래 팀 운영 조립은 Phase 21 예정이며 현재 완료 상태가 아닙니다.
+Massion 1.0은 개인 로컬 설치와 팀 자체 호스팅을 공식 변형으로 둡니다. 개인 모드는 한 명의 owner가 있는 조직일 뿐 데이터 모델을 축약하지 않습니다. 팀 모드는 같은 Application API와 tenant 격리를 TLS 역방향 프록시 뒤의 네트워크 서비스로 배포합니다. Compose 실행과 Kubernetes 1.34 엄격한 schema 검증은 Phase 21 회고에 연결합니다.
 
 ```mermaid
 flowchart LR
@@ -587,8 +587,8 @@ flowchart LR
 
   subgraph Local["개인 로컬 설치 · 사용자 OS"]
     LocalUser["개인 owner"]:::implemented
-    LocalSurface["local CLI · TUI · Web<br/>CLI·TUI 구현됨, Web 예정"]:::implementing
-    LocalCore["Massion AgentOS process<br/>Application · Core Office · Runtime"]:::implementing
+    LocalSurface["local CLI · TUI · Web<br/>구현됨"]:::implemented
+    LocalCore["Massion AgentOS process<br/>Application · Core Office · Runtime<br/>구현됨"]:::implemented
     LocalWorkers["격리 Extension child process"]:::implemented
     LocalDB[("embedded persistent SurrealDB<br/>로컬 단일 정본")]:::implemented
     LocalFiles["사용자 Git·workspace<br/>OS filesystem"]:::external
@@ -600,14 +600,14 @@ flowchart LR
     LocalCore --> LocalFiles
   end
 
-  subgraph Team["팀 자체 호스팅 · Phase 21 예정"]
-    TeamUsers["팀 사용자·관리자"]:::planned
-    Proxy["TLS reverse proxy<br/>remote bind·CORS·rate limit"]:::planned
-    Apps["Application service replica<br/>HTTP · SSE · auth"]:::planned
-    RuntimePool["Runtime·Extension worker pool<br/>sandbox backend"]:::planned
-    SharedDB[("원격 SurrealDB<br/>공유 tenant 정본")]:::planned
-    Backup["암호화 backup·restore<br/>migration·integrity gate"]:::planned
-    K8s["Docker Compose · Kubernetes<br/>배포·health·rollout"]:::planned
+  subgraph Team["팀 자체 호스팅 · Phase 21 구현됨"]
+    TeamUsers["팀 사용자·관리자"]:::implemented
+    Proxy["Caddy TLS reverse proxy<br/>trusted proxy·internal network"]:::implemented
+    Apps["Application service<br/>HTTP · SSE · auth · probe"]:::implemented
+    RuntimePool["Runtime·Extension child process<br/>crash supervisor"]:::implemented
+    SharedDB[("원격 SurrealDB<br/>공유 tenant 정본")]:::implemented
+    Backup["owner-only backup·restore<br/>migration·checksum gate"]:::implemented
+    K8s["Docker Compose · Kubernetes<br/>배포·health·rollout 조립"]:::implemented
 
     TeamUsers --> Proxy
     Proxy --> Apps
@@ -629,8 +629,8 @@ flowchart LR
 
 | 배포 변형 | 현재 상태 | 신뢰·운영 경계 |
 |---|---|---|
-| 개인 로컬 | 도메인·저장소·Runtime·Extension Host·Application API·CLI·TUI 구현됨, Web·설치 조립 예정 | loopback bootstrap, OS 사용자 권한, 로컬 DB 경로당 단일 연결 |
-| 팀 자체 호스팅 | 제품 범위 승인, 운영 조립 예정 | TLS, remote auth, tenant 격리, shared DB, sandbox, backup·restore |
+| 개인 로컬 | Application API·CLI·TUI·Web·서버 조립 구현됨 | loopback bootstrap, OS 사용자 권한, 로컬 DB 경로당 단일 연결 |
+| 팀 자체 호스팅 | Compose 실행 검증·Kubernetes 1.34 schema 검증 완료 | TLS, remote auth, tenant 격리, shared DB, sandbox gate, backup·restore |
 | 관리형 Massion Cloud | 1.0 범위 밖 | 호환 가능한 멀티테넌트 계약만 유지하고 내부 구조는 이 문서에서 설계하지 않음 |
 
 ## 12. 구현 위치와 Phase 상태 색인
@@ -646,7 +646,8 @@ flowchart LR
 | Web Console | 구현됨 | `apps/web` | 18 |
 | Slack·Discord·GitHub 공식 통합 | 구현됨 | `packages/integrations`, `extensions/*` | 19 |
 | Registry·Marketplace | 구현됨 | `packages/registry`, `packages/application`, `apps/cli`, `apps/web` | 20 |
-| 운영·강화·1.0 | 예정 | `docs/superpowers/plans/2026-07-10-massion-agentos-1.0-program.md` | 21~23 |
+| 자체 호스팅·운영 | 구현됨 | `apps/server`, `compose.yaml`, `deploy/kubernetes`, `docs/operations` | 21 |
+| 보안·성능·복구 강화·1.0 릴리스 | 예정 | `docs/superpowers/plans/2026-07-10-massion-agentos-1.0-program.md` | 22~23 |
 
 이 문서의 상태가 프로그램 계획과 달라지면 실제 검증 근거를 확인한 뒤 그림, 표와 기준 커밋을 함께 갱신합니다.
 
