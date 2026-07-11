@@ -341,3 +341,83 @@ THEN {
 };
 `,
 );
+
+export const GROWTH_EVALUATION_MIGRATION = defineMigration(
+  "0057-growth-evaluation",
+  `
+DEFINE TABLE growth_evaluation_strategy_version SCHEMAFULL PERMISSIONS NONE;
+DEFINE FIELD strategy_version_id ON growth_evaluation_strategy_version TYPE string;
+DEFINE FIELD organization_id ON growth_evaluation_strategy_version TYPE string;
+DEFINE FIELD version ON growth_evaluation_strategy_version TYPE int ASSERT $value >= 1;
+DEFINE FIELD parent_version_id ON growth_evaluation_strategy_version TYPE option<string>;
+DEFINE FIELD status ON growth_evaluation_strategy_version TYPE string ASSERT $value IN ['active', 'superseded'];
+DEFINE FIELD strategy_json ON growth_evaluation_strategy_version TYPE string ASSERT string::len($value) <= 65536;
+DEFINE FIELD checksum ON growth_evaluation_strategy_version TYPE string ASSERT string::len($value) = 64;
+DEFINE FIELD governance_decision_id ON growth_evaluation_strategy_version TYPE string;
+DEFINE FIELD command_id ON growth_evaluation_strategy_version TYPE string;
+DEFINE FIELD request_hash ON growth_evaluation_strategy_version TYPE string ASSERT string::len($value) = 64;
+DEFINE FIELD active_guard_key ON growth_evaluation_strategy_version TYPE option<string>;
+DEFINE FIELD created_at ON growth_evaluation_strategy_version TYPE datetime;
+DEFINE FIELD superseded_at ON growth_evaluation_strategy_version TYPE option<datetime>;
+DEFINE INDEX growth_strategy_id ON growth_evaluation_strategy_version FIELDS organization_id, strategy_version_id UNIQUE;
+DEFINE INDEX growth_strategy_version ON growth_evaluation_strategy_version FIELDS organization_id, version UNIQUE;
+DEFINE INDEX growth_strategy_command ON growth_evaluation_strategy_version FIELDS organization_id, command_id UNIQUE;
+DEFINE INDEX growth_strategy_active ON growth_evaluation_strategy_version FIELDS active_guard_key UNIQUE;
+DEFINE EVENT growth_evaluation_strategy_invariant ON TABLE growth_evaluation_strategy_version
+WHEN $event IN ['UPDATE', 'DELETE']
+THEN {
+  IF $event = 'DELETE' { THROW 'Growth EvaluationStrategy는 삭제할 수 없습니다'; };
+  IF !($before.status = 'active' AND $after.status = 'superseded' AND $after.active_guard_key = NONE AND $after.superseded_at != NONE) {
+    THROW 'Growth EvaluationStrategy 상태 전이가 유효하지 않습니다';
+  };
+  IF $after.strategy_version_id != $before.strategy_version_id OR $after.organization_id != $before.organization_id OR
+    $after.version != $before.version OR $after.parent_version_id != $before.parent_version_id OR
+    $after.strategy_json != $before.strategy_json OR $after.checksum != $before.checksum OR
+    $after.governance_decision_id != $before.governance_decision_id OR $after.command_id != $before.command_id OR
+    $after.request_hash != $before.request_hash OR $after.created_at != $before.created_at {
+    THROW 'Growth EvaluationStrategy 내용은 immutable입니다';
+  };
+};
+
+DEFINE TABLE growth_signal_receipt SCHEMAFULL PERMISSIONS NONE;
+DEFINE FIELD receipt_id ON growth_signal_receipt TYPE string;
+DEFINE FIELD organization_id ON growth_signal_receipt TYPE string;
+DEFINE FIELD suggestion_id ON growth_signal_receipt TYPE string;
+DEFINE FIELD signal_id ON growth_signal_receipt TYPE string;
+DEFINE FIELD signal_group ON growth_signal_receipt TYPE string ASSERT $value IN ['required', 'supporting', 'conflict'];
+DEFINE FIELD origin ON growth_signal_receipt TYPE string ASSERT $value IN ['deterministic', 'independent', 'model-self'];
+DEFINE FIELD adapter_id ON growth_signal_receipt TYPE string;
+DEFINE FIELD adapter_version ON growth_signal_receipt TYPE string;
+DEFINE FIELD outcome ON growth_signal_receipt TYPE string ASSERT $value IN ['passed', 'failed', 'unavailable'];
+DEFINE FIELD score ON growth_signal_receipt TYPE number;
+DEFINE FIELD unit ON growth_signal_receipt TYPE string;
+DEFINE FIELD source_id ON growth_signal_receipt TYPE string;
+DEFINE FIELD source_checksum ON growth_signal_receipt TYPE string ASSERT string::len($value) = 64;
+DEFINE FIELD fresh ON growth_signal_receipt TYPE bool;
+DEFINE FIELD evidence_json ON growth_signal_receipt TYPE string ASSERT string::len($value) <= 65536;
+DEFINE FIELD command_id ON growth_signal_receipt TYPE string;
+DEFINE FIELD request_hash ON growth_signal_receipt TYPE string ASSERT string::len($value) = 64;
+DEFINE FIELD created_at ON growth_signal_receipt TYPE datetime;
+DEFINE INDEX growth_signal_receipt_id ON growth_signal_receipt FIELDS organization_id, receipt_id UNIQUE;
+DEFINE INDEX growth_signal_command ON growth_signal_receipt FIELDS organization_id, command_id UNIQUE;
+DEFINE INDEX growth_signal_identity ON growth_signal_receipt FIELDS organization_id, suggestion_id, signal_id, adapter_id, adapter_version UNIQUE;
+DEFINE EVENT growth_signal_receipt_immutable ON TABLE growth_signal_receipt WHEN $event IN ['UPDATE', 'DELETE'] THEN { THROW 'Growth signal receipt는 immutable입니다'; };
+
+DEFINE TABLE growth_evaluation_run SCHEMAFULL PERMISSIONS NONE;
+DEFINE FIELD evaluation_run_id ON growth_evaluation_run TYPE string;
+DEFINE FIELD organization_id ON growth_evaluation_run TYPE string;
+DEFINE FIELD suggestion_id ON growth_evaluation_run TYPE string;
+DEFINE FIELD strategy_version_id ON growth_evaluation_run TYPE string;
+DEFINE FIELD receipt_ids ON growth_evaluation_run TYPE array<string>;
+DEFINE FIELD input_hash ON growth_evaluation_run TYPE string ASSERT string::len($value) = 64;
+DEFINE FIELD outcome ON growth_evaluation_run TYPE string ASSERT $value IN ['eligible', 'ineligible', 'blocked'];
+DEFINE FIELD reason_json ON growth_evaluation_run TYPE string ASSERT string::len($value) <= 65536;
+DEFINE FIELD command_id ON growth_evaluation_run TYPE string;
+DEFINE FIELD request_hash ON growth_evaluation_run TYPE string ASSERT string::len($value) = 64;
+DEFINE FIELD created_at ON growth_evaluation_run TYPE datetime;
+DEFINE INDEX growth_evaluation_run_id ON growth_evaluation_run FIELDS organization_id, evaluation_run_id UNIQUE;
+DEFINE INDEX growth_evaluation_command ON growth_evaluation_run FIELDS organization_id, command_id UNIQUE;
+DEFINE INDEX growth_evaluation_suggestion ON growth_evaluation_run FIELDS organization_id, suggestion_id, strategy_version_id;
+DEFINE EVENT growth_evaluation_run_immutable ON TABLE growth_evaluation_run WHEN $event IN ['UPDATE', 'DELETE'] THEN { THROW 'Growth evaluation run은 immutable입니다'; };
+`,
+);
