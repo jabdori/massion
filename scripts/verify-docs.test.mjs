@@ -28,6 +28,17 @@ test("유효한 문서 구조를 승인한다", async () => {
   assert.deepEqual(await validateDocs(root), []);
 });
 
+test("숫자가 포함된 의미 있는 요구사항 영역 식별자를 승인한다", async () => {
+  const root = await fixture();
+  const trace = join(root, "docs", "generated", "requirements-traceability.tsv");
+  await writeFile(
+    trace,
+    "requirement_id\tsource\tphase\tdesign\tplan\ttests\tcommits\truntime_events\tmetrics\tstatus\tevidence\n" +
+      "REQ-E2E-001\tspec:1\t0\tdocs/product/design.md\tdocs/phases/00-lineage/implementation-plan.md\tnot-applicable\tpending\tevent\tmetric\tapproved\tevidence\n",
+  );
+  assert.deepEqual(await validateDocs(root), []);
+});
+
 test("중복 요구사항 식별자를 거부한다", async () => {
   const root = await fixture();
   const trace = join(root, "docs", "generated", "requirements-traceability.tsv");
