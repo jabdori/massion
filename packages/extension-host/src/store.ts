@@ -1,9 +1,10 @@
 import { createHash, randomUUID } from "node:crypto";
-import { link, mkdir, open, readFile, rename, unlink } from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
+import { link, lstat, mkdir, open, readFile, readdir, rename, rm, unlink } from "node:fs/promises";
+import { dirname, join, relative, resolve, sep } from "node:path";
 
 import type { OrganizationService, TenantContext } from "@massion/identity";
 import { applyMigrations, type MassionDatabase, type QueryExecutor } from "@massion/storage";
+import { extract } from "tar";
 
 import type { ExtensionArtifactReport } from "./contracts.js";
 import { EXTENSION_MIGRATIONS } from "./schema.js";
@@ -28,6 +29,7 @@ interface VersionRecord {
   readonly package_version: string;
   readonly artifact_digest: string;
   readonly content_digest: string;
+  readonly artifact_size: number;
   readonly manifest_json: string;
   readonly manifest_digest: string;
   readonly permission_json: string;
@@ -60,6 +62,12 @@ export interface ExtensionVersionView {
   readonly trustLevel: TrustLevel;
   readonly sourceKind: SourceKind;
   readonly activationGeneration: number;
+}
+
+export interface ExtensionVersionDetails extends ExtensionVersionView {
+  readonly artifactSize: number;
+  readonly manifest: ExtensionArtifactReport["manifest"];
+  readonly permissions: ExtensionArtifactReport["manifest"]["permissions"];
 }
 
 export interface ExtensionInstallationView {
@@ -220,8 +228,8 @@ export class ExtensionStore {
       readonly versionId: string;
       readonly expectedGeneration: number;
       readonly governanceDecisionIds: readonly string[];
-      readonly healthReceipt: Readonly<Record<string, unknown>>;
-      readonly sandboxReceipt?: Readonly<Record<string, unknown>>;
+      readonly healthReceipt: Readonly<object>;
+      readonly sandboxReceipt?: Readonly<object>;
       readonly outcome?: "activated" | "rolled-back";
     },
   ): Promise<ExtensionInstallationView> {
@@ -281,6 +289,25 @@ export class ExtensionStore {
           activated_by_user_id: context.userId,
         },
       );
+      const existingGrant = await first<{ grant_id: string }>(
+        transaction,
+        "SELECT grant_id FROM extension_capability_grant WHERE organization_id = $organization_id AND version_id = $version_id LIMIT 1;",
+        { organization_id: context.organizationId, version_id: version.version_id },
+      );
+      if (!existingGrant) {
+        await transaction.query(
+          "CREATE extension_capability_grant CONTENT { grant_id: $grant_id, organization_id: $organization_id, installation_id: $installation_id, version_id: $version_id, permission_digest: $permission_digest, permission_json: $permission_json, bindings_json: '{}', governance_decision_ids: $governance_decision_ids, created_at: time::now() };",
+          {
+            grant_id: randomUUID(),
+            organization_id: context.organizationId,
+            installation_id: installation.installation_id,
+            version_id: version.version_id,
+            permission_digest: version.permission_digest,
+            permission_json: version.permission_json,
+            governance_decision_ids: [...input.governanceDecisionIds],
+          },
+        );
+      }
       await this.event(transaction, {
         organizationId: context.organizationId,
         installationId: installation.installation_id,
@@ -299,6 +326,43 @@ export class ExtensionStore {
     const version = await this.findVersion(this.database, context.organizationId, versionId);
     const installation = await this.installation(this.database, context.organizationId, version.installation_id);
     return this.versionView(version, installation.activation_generation);
+  }
+
+  public async getVersionDetails(context: TenantContext, versionId: string): Promise<ExtensionVersionDetails> {
+    await this.organizations.verifyTenantContext(context);
+    const version = await this.findVersion(this.database, context.organizationId, versionId);
+    const installation = await this.installation(this.database, context.organizationId, version.installation_id);
+    const view = this.versionView(version, installation.activation_generation);
+    const manifest = JSON.parse(version.manifest_json) as ExtensionArtifactReport["manifest"];
+    const permissions = JSON.parse(version.permission_json) as ExtensionArtifactReport["manifest"]["permissions"];
+    if (sha256(canonicalJson(manifest)) !== version.manifest_digest)
+      throw new Error("Extension manifest digest가 일치하지 않습니다");
+    if (sha256(canonicalJson(permissions)) !== version.permission_digest) {
+      throw new Error("Extension permission digest가 일치하지 않습니다");
+    }
+    return { ...view, artifactSize: version.artifact_size, manifest, permissions };
+  }
+
+  public async findInstallation(
+    context: TenantContext,
+    packageName: string,
+  ): Promise<ExtensionInstallationView | undefined> {
+    await this.organizations.verifyTenantContext(context);
+    const installation = await first<InstallationRecord>(
+      this.database,
+      "SELECT * OMIT id FROM extension_installation WHERE organization_id = $organization_id AND package_name = $package_name LIMIT 1;",
+      { organization_id: context.organizationId, package_name: packageName },
+    );
+    return installation ? this.installationView(installation) : undefined;
+  }
+
+  public async listInstallations(context: TenantContext): Promise<readonly ExtensionInstallationView[]> {
+    await this.organizations.verifyTenantContext(context);
+    const [installations] = await this.database.query<[InstallationRecord[]]>(
+      "SELECT * OMIT id FROM extension_installation WHERE organization_id = $organization_id ORDER BY package_name ASC;",
+      { organization_id: context.organizationId },
+    );
+    return installations.map((installation) => this.installationView(installation));
   }
 
   private async findVersion(
@@ -459,6 +523,47 @@ export class FileArtifactStore {
     return body;
   }
 
+  public async materialize(
+    organizationId: string,
+    digest: string,
+    report: ExtensionArtifactReport,
+  ): Promise<{ readonly versionDirectory: string }> {
+    const namespace = sha256(organizationId);
+    const target = join(this.root, namespace, "packages", digest);
+    if (await this.verifyDirectory(target, report).catch(() => false)) return { versionDirectory: target };
+    const staging = join(this.root, namespace, "materializing", randomUUID());
+    await mkdir(staging, { recursive: true, mode: 0o700 });
+    try {
+      const archive = await this.read(organizationId, digest);
+      await new Promise<void>((resolveExtraction, reject) => {
+        const unpack = extract({
+          cwd: staging,
+          strip: 1,
+          strict: true,
+          preservePaths: false,
+          preserveOwner: false,
+          noChmod: true,
+        });
+        unpack.on("error", reject);
+        unpack.on("close", resolveExtraction);
+        unpack.end(archive);
+      });
+      if (!(await this.verifyDirectory(staging, report)))
+        throw new Error("materialized Extension file digest가 일치하지 않습니다");
+      await mkdir(dirname(target), { recursive: true, mode: 0o700 });
+      try {
+        await rename(staging, target);
+      } catch (error) {
+        if (!(await this.verifyDirectory(target, report).catch(() => false))) throw error;
+        await rm(staging, { recursive: true, force: true });
+      }
+      return { versionDirectory: target };
+    } catch (error) {
+      await rm(staging, { recursive: true, force: true });
+      throw error;
+    }
+  }
+
   public async quarantine(staged: StagedArtifact): Promise<void> {
     const target = join(this.root, staged.organizationNamespace, "quarantine", `${staged.token}.tgz`);
     await mkdir(dirname(target), { recursive: true, mode: 0o700 });
@@ -468,5 +573,25 @@ export class FileArtifactStore {
   private async verify(path: string, digest: string): Promise<void> {
     if (sha256(await readFile(path)) !== digest)
       throw new Error("Extension staged artifact digest가 일치하지 않습니다");
+  }
+
+  private async verifyDirectory(directory: string, report: ExtensionArtifactReport): Promise<boolean> {
+    const actual = new Map<string, string>();
+    const visit = async (current: string): Promise<void> => {
+      for (const entry of await readdir(current, { withFileTypes: true })) {
+        const absolute = join(current, entry.name);
+        const stat = await lstat(absolute);
+        if (stat.isSymbolicLink()) throw new Error("materialized Extension에 link가 있습니다");
+        if (stat.isDirectory()) {
+          await visit(absolute);
+          continue;
+        }
+        if (!stat.isFile()) throw new Error("materialized Extension file type이 유효하지 않습니다");
+        actual.set(relative(directory, absolute).split(sep).join("/"), sha256(await readFile(absolute)));
+      }
+    };
+    await visit(directory);
+    if (actual.size !== report.files.length) return false;
+    return report.files.every((file) => actual.get(file.path) === file.digest);
   }
 }

@@ -2,6 +2,8 @@ export * from "./artifact-inspector.js";
 export * from "./capability-broker.js";
 export * from "./contracts.js";
 export * from "./governance-adapter.js";
+export * from "./gateway.js";
+export * from "./lifecycle.js";
 export * from "./package-service.js";
 export * from "./sandbox.js";
 export * from "./schema.js";
