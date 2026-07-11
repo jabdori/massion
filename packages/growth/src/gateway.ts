@@ -76,6 +76,12 @@ export class GrowthGateway {
   ) {
     return await this.dependencies.effects.observe(context, input);
   }
+  public async listEffectEvaluations(
+    context: TenantContext,
+    input: { readonly adoptionId?: string; readonly limit?: number } = {},
+  ) {
+    return await this.dependencies.effects.listEvaluations(context, input);
+  }
   public async revert(context: TenantContext, input: RevertGrowthAdoptionInput) {
     return await this.dependencies.reverts.revert(context, input);
   }

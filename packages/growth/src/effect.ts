@@ -103,6 +103,15 @@ export interface GrowthEffectEvaluationRecord {
   readonly request_hash: string;
 }
 
+export interface GrowthEffectEvaluationView {
+  readonly effectEvaluationId: string;
+  readonly adoptionId: string;
+  readonly result: GrowthEffectComparison["result"];
+  readonly rawDelta: number;
+  readonly directionalDelta: number;
+  readonly contractChecksum: string;
+}
+
 export class GrowthEffectStore {
   private constructor(
     private readonly database: MassionDatabase,
@@ -209,6 +218,46 @@ export class GrowthEffectStore {
           { organization_id: context.organizationId, adoption_id: input.adoptionId },
         );
       return created[0];
+    });
+  }
+
+  public async listEvaluations(
+    context: TenantContext,
+    input: { readonly adoptionId?: string; readonly limit?: number } = {},
+  ): Promise<readonly GrowthEffectEvaluationView[]> {
+    await this.organizations.verifyTenantContext(context);
+    const limit = input.limit ?? 100;
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 1_000)
+      throw new Error("Growth effect 조회 limit가 유효하지 않습니다");
+    const [records] = await this.database.query<
+      [
+        Array<
+          Pick<GrowthEffectEvaluationRecord, "effect_evaluation_id" | "adoption_id" | "result" | "comparison_json"> & {
+            readonly created_at: string;
+          }
+        >,
+      ]
+    >(
+      "SELECT effect_evaluation_id, adoption_id, result, comparison_json, created_at FROM growth_effect_evaluation WHERE organization_id = $organization_id AND ($adoption_id = NONE OR adoption_id = $adoption_id) ORDER BY created_at DESC LIMIT $limit;",
+      { organization_id: context.organizationId, adoption_id: input.adoptionId, limit },
+    );
+    return records.map((record) => {
+      const comparison = JSON.parse(record.comparison_json) as GrowthEffectComparison;
+      if (
+        comparison.result !== record.result ||
+        !Number.isFinite(comparison.rawDelta) ||
+        !Number.isFinite(comparison.directionalDelta) ||
+        !/^[a-f0-9]{64}$/u.test(comparison.contractChecksum)
+      )
+        throw new Error("Growth effect evaluation 저장 계보가 유효하지 않습니다");
+      return {
+        effectEvaluationId: record.effect_evaluation_id,
+        adoptionId: record.adoption_id,
+        result: record.result,
+        rawDelta: comparison.rawDelta,
+        directionalDelta: comparison.directionalDelta,
+        contractChecksum: comparison.contractChecksum,
+      };
     });
   }
 
