@@ -4,6 +4,7 @@ export * from "./daemon.js";
 export * from "./extension-supervision.js";
 export * from "./operation-queue.js";
 export * from "./product.js";
+export * from "./registry-server.js";
 export * from "./signals.js";
 export * from "./telemetry.js";
 export * from "./upgrade.js";

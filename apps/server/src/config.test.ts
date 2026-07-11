@@ -14,6 +14,7 @@ describe("server configuration", () => {
       mode: "local",
       database: { url: "rocksdb:///data/massion.db", namespace: "massion", database: "massion" },
       server: { host: "127.0.0.1", port: 3141 },
+      registry: { host: "127.0.0.1", port: 3142, publicBaseUrl: "http://127.0.0.1:3142" },
     });
   });
 
@@ -25,6 +26,8 @@ describe("server configuration", () => {
       parseServerConfig({
         MASSION_MODE: "team",
         MASSION_TOKEN_KEY: key,
+        MASSION_REGISTRY_KEY: key,
+        MASSION_REGISTRY_PUBLIC_URL: "https://massion.example.com",
         MASSION_DATABASE_URL: "ws://db:8000/rpc",
         MASSION_HTTP_HOST: "0.0.0.0",
         MASSION_TRUSTED_PROXIES: "172.20.0.10,::ffff:172.20.0.10",
@@ -41,6 +44,8 @@ describe("server configuration", () => {
       parseServerConfig({
         MASSION_MODE: "team",
         MASSION_TOKEN_KEY: key,
+        MASSION_REGISTRY_KEY: key,
+        MASSION_REGISTRY_PUBLIC_URL: "https://massion.example.com",
         MASSION_DATABASE_URL: "rocksdb:///data/team.db",
         MASSION_HTTP_HOST: "0.0.0.0",
         MASSION_TRUSTED_PROXIES: "127.0.0.1",
