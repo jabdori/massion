@@ -11,7 +11,7 @@ describe("Massion server product", () => {
       MASSION_DATABASE_PROVISION_USER: "root",
       MASSION_DATABASE_PROVISION_PASSWORD: "owner-password",
       MASSION_DATABASE_USER: "massion_runtime",
-      MASSION_DATABASE_PASSWORD: "runtime-password\"; REMOVE DATABASE massion; --",
+      MASSION_DATABASE_PASSWORD: 'runtime-password"; REMOVE DATABASE massion; --',
     });
     const calls: { url: string; authorization: string; body: string }[] = [];
     await provisionRemoteDatabase(parsed, async (input, init) => {
@@ -26,8 +26,7 @@ describe("Massion server product", () => {
       {
         url: "http://database:8000/sql",
         authorization: `Basic ${Buffer.from("root:owner-password").toString("base64")}`,
-        body:
-          'DEFINE NAMESPACE IF NOT EXISTS massion; USE NS massion; DEFINE DATABASE IF NOT EXISTS massion; USE DB massion; DEFINE USER OVERWRITE massion_runtime ON DATABASE PASSWORD "runtime-password\\"; REMOVE DATABASE massion; --" ROLES EDITOR;',
+        body: 'DEFINE NAMESPACE IF NOT EXISTS massion; USE NS massion; DEFINE DATABASE IF NOT EXISTS massion; USE DB massion; DEFINE USER OVERWRITE massion_runtime ON DATABASE PASSWORD "runtime-password\\"; REMOVE DATABASE massion; --" ROLES EDITOR;',
       },
     ]);
   });

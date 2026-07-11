@@ -85,9 +85,9 @@ describe("server configuration", () => {
       owner: { username: "root", password: "owner-password" },
       runtime: { username: "massion_runtime", password: "runtime-password" },
     });
-    expect(() =>
-      parseDatabaseProvisionConfig({ ...environment, MASSION_DATABASE_PASSWORD: "owner-password" }),
-    ).toThrow("서로 다른 password");
+    expect(() => parseDatabaseProvisionConfig({ ...environment, MASSION_DATABASE_PASSWORD: "owner-password" })).toThrow(
+      "서로 다른 password",
+    );
   });
 
   it("짧거나 잘못 인코딩된 key와 team embedded DB를 거부한다", () => {
