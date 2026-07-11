@@ -17,19 +17,25 @@ interface AssuranceEvidenceReferences {
 
 function ids(value: unknown, label: string): readonly string[] {
   if (value === undefined) return [];
-  if (!Array.isArray(value) || value.length > 100 || !value.every((item) => typeof item === "string" && item.length > 0)) {
+  if (!Array.isArray(value) || value.length > 100) {
     throw new Error(`${label}가 유효하지 않습니다`);
   }
-  if (new Set(value).size !== value.length) throw new Error(`${label}에 중복이 있습니다`);
-  return [...value].sort();
+  const result: string[] = [];
+  for (const item of value as unknown[]) {
+    if (typeof item !== "string" || item.length === 0) throw new Error(`${label}가 유효하지 않습니다`);
+    result.push(item);
+  }
+  if (new Set(result).size !== result.length) throw new Error(`${label}에 중복이 있습니다`);
+  return result.sort();
 }
 
 function evidence(request: unknown): AssuranceEvidenceReferences {
   const root = request && typeof request === "object" ? (request as Record<string, unknown>) : {};
   const configured = root.assuranceEvidence;
-  const record = configured && typeof configured === "object" && !Array.isArray(configured)
-    ? (configured as Record<string, unknown>)
-    : {};
+  const record =
+    configured && typeof configured === "object" && !Array.isArray(configured)
+      ? (configured as Record<string, unknown>)
+      : {};
   return {
     evidenceBriefIds: ids(record.evidenceBriefIds ?? root.evidenceBriefIds, "Assurance Evidence Brief ID"),
     metricObservationIds: ids(record.metricObservationIds, "Assurance metric observation ID"),

@@ -23,7 +23,7 @@ describe("CoreRecordsStage", () => {
       work: {
         organization_id: context.organizationId,
         work_id: input.workId,
-          status: "verifying",
+        status: "verifying",
         revision: 9,
         organization_version_id: "org-v1",
         active_plan_version_id: "plan-1",
@@ -86,7 +86,7 @@ describe("CoreRecordsStage", () => {
       records: [],
     };
     const records = {
-      start: async (_context: unknown, value: any) => {
+      start: async (_context: unknown, value: { targetWorkRevision: number }) => {
         calls.push("start");
         return { recordsRunId: "records-1", status: "planned", targetWorkRevision: value.targetWorkRevision };
       },

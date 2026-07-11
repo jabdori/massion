@@ -7,9 +7,7 @@ describe("DatabaseCoreAssuranceCheckOrchestrator", () => {
     const recorded: unknown[] = [];
     const orchestrator = new DatabaseCoreAssuranceCheckOrchestrator({
       runs: {
-        listCriteria: async () => [
-          { criterionId: "criterion-1", criterionKey: "criterion-key", status: "pending" },
-        ],
+        listCriteria: async () => [{ criterionId: "criterion-1", criterionKey: "criterion-key", status: "pending" }],
       },
       bindings: {
         get: async () => ({ bindings: [{ criterionKey: "criterion-key", bindingKey: "binding-key" }] }),

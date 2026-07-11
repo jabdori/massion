@@ -6,7 +6,7 @@ export interface JsonlEnvelope {
 
 export async function processJsonLines(
   source: AsyncIterable<Uint8Array>,
-  handle: (input: unknown) => Promise<JsonlEnvelope | unknown>,
+  handle: (input: unknown) => Promise<unknown>,
   write: (line: string) => Promise<void>,
 ): Promise<void> {
   let pending = Buffer.alloc(0);

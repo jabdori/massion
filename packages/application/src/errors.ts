@@ -61,7 +61,14 @@ const CLI_EXIT: Readonly<Record<ApplicationErrorCategory, number>> = {
 };
 
 function safeText(value: string, fallback: string): string {
-  const cleaned = value.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/gu, "").trim();
+  let normalized = "";
+  for (const character of value) {
+    const code = character.codePointAt(0) ?? 0;
+    if (!((code >= 0 && code <= 8) || code === 11 || code === 12 || (code >= 14 && code <= 31) || code === 127)) {
+      normalized += character;
+    }
+  }
+  const cleaned = normalized.trim();
   return cleaned.length > 0 && cleaned.length <= 1024 ? cleaned : fallback;
 }
 

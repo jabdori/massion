@@ -1,6 +1,4 @@
-export function encodeApplicationSseEvent<T extends { readonly sequence: number; readonly type: string }>(
-  event: T,
-): string {
+export function encodeApplicationSseEvent(event: { readonly sequence: number; readonly type: string }): string {
   if (!Number.isSafeInteger(event.sequence) || event.sequence < 1)
     throw new Error("SSE event sequence가 유효하지 않습니다");
   if (!/^[a-z][a-z0-9.-]*$/u.test(event.type)) throw new Error("SSE event type이 유효하지 않습니다");
@@ -15,12 +13,12 @@ export function parseEventCursor(lastEventId: string | undefined, after: string 
   return cursor;
 }
 
-export async function* decodeApplicationSseStream(stream: ReadableStream<Uint8Array>): AsyncGenerator<unknown> {
+export async function* decodeApplicationSseStream(stream: ReadableStream<Uint8Array>): AsyncGenerator {
   const decoder = new TextDecoder("utf-8", { fatal: true });
   const reader = stream.getReader();
   let pending = "";
   try {
-    while (true) {
+    for (;;) {
       const chunk = await reader.read();
       pending += chunk.done ? decoder.decode() : decoder.decode(chunk.value, { stream: true });
       if (Buffer.byteLength(pending) > 4 * 1024 * 1024) throw new Error("SSE client buffer byte 상한을 초과했습니다");
@@ -30,7 +28,7 @@ export async function* decodeApplicationSseStream(stream: ReadableStream<Uint8Ar
         const frame = pending.slice(0, boundary);
         pending = pending.slice(boundary + 2);
         boundary = pending.indexOf("\n\n");
-        if (!frame || frame.startsWith(":")) continue;
+        if (frame.startsWith(":")) continue;
         const fields = new Map<string, string>();
         for (const line of frame.split("\n")) {
           const separator = line.indexOf(":");

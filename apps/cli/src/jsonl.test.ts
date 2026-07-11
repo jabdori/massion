@@ -11,7 +11,11 @@ describe("headless JSON Lines", () => {
     const output: string[] = [];
     await processJsonLines(
       chunks('\n{"correlationId":"a","value":1}\n{"correlation', 'Id":"b","value":2}\n'),
-      async (input) => ({ type: "result", correlationId: (input as any).correlationId, data: input }),
+      async (input) => ({
+        type: "result",
+        correlationId: (input as { correlationId?: unknown }).correlationId,
+        data: input,
+      }),
       async (line) => {
         output.push(line);
       },

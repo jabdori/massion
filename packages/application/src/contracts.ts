@@ -138,7 +138,7 @@ function validateJson(value: unknown, depth = 0): void {
     for (const child of value) validateJson(child, depth + 1);
     return;
   }
-  if (typeof value !== "object" || value === undefined) throw new Error("Application wire 값은 JSON이어야 합니다");
+  if (typeof value !== "object") throw new Error("Application wire 값은 JSON이어야 합니다");
   for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
     if (key === "__proto__" || key === "prototype" || key === "constructor") {
       throw new Error("Application wire 값에 prototype key를 사용할 수 없습니다");
@@ -148,13 +148,13 @@ function validateJson(value: unknown, depth = 0): void {
 }
 
 function validateWire(value: unknown): void {
-  let encoded: string | undefined;
+  if (value === undefined) throw new Error("Application wire 값은 JSON이어야 합니다");
+  let encoded: string;
   try {
     encoded = JSON.stringify(value);
   } catch {
     throw new Error("Application wire 값은 JSON으로 직렬화할 수 있어야 합니다");
   }
-  if (encoded === undefined) throw new Error("Application wire 값은 JSON이어야 합니다");
   if (Buffer.byteLength(encoded, "utf8") > MAX_WIRE_BYTES) {
     throw new Error("Application wire byte 상한을 초과했습니다");
   }

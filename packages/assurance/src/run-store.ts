@@ -361,26 +361,28 @@ export class AssuranceRunStore {
   public async listCriteria(context: TenantContext, assuranceRunId: string): Promise<readonly AssuranceCriterion[]> {
     await this.organizations.verifyTenantContext(context);
     await this.get(context, assuranceRunId);
-    const [records] = await this.database.query<[
-      Array<{
-        criterion_id: string;
-        organization_id: string;
-        work_id: string;
-        assurance_run_id: string;
-        criterion_key: string;
-        source: AssuranceCriterion["source"];
-        statement: string;
-        method: AssuranceCriterion["method"];
-        required_evidence_kinds: readonly string[];
-        control_references: readonly string[];
-        status: AssuranceCriterion["status"];
-        exclusion_rule?: string;
-        exclusion_reason?: string;
-        exclusion_actor_id?: string;
-        created_at: unknown;
-        updated_at: unknown;
-      }>
-    ]>(
+    const [records] = await this.database.query<
+      [
+        Array<{
+          criterion_id: string;
+          organization_id: string;
+          work_id: string;
+          assurance_run_id: string;
+          criterion_key: string;
+          source: AssuranceCriterion["source"];
+          statement: string;
+          method: AssuranceCriterion["method"];
+          required_evidence_kinds: readonly string[];
+          control_references: readonly string[];
+          status: AssuranceCriterion["status"];
+          exclusion_rule?: string;
+          exclusion_reason?: string;
+          exclusion_actor_id?: string;
+          created_at: unknown;
+          updated_at: unknown;
+        }>,
+      ]
+    >(
       "SELECT * OMIT id FROM assurance_criterion WHERE organization_id = $organization_id AND assurance_run_id = $assurance_run_id ORDER BY criterion_key ASC, criterion_id ASC;",
       { organization_id: context.organizationId, assurance_run_id: assuranceRunId },
     );

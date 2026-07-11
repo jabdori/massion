@@ -37,11 +37,11 @@ describe("mass run", () => {
   });
 
   it("approval·model blocked를 성공으로 꾸미지 않고 abort는 run.cancel을 전송한다", async () => {
-    const commands: any[] = [];
+    const commands: Array<{ readonly operation?: unknown }> = [];
     const controller = new AbortController();
     const client: HeadlessApplicationClient = {
       command: async (input) => {
-        commands.push(input);
+        commands.push(input as { readonly operation?: unknown });
         if (commands.length === 1) queueMicrotask(() => controller.abort());
         return { outcome: "accepted", data: { runId: "run-headless-1" } };
       },

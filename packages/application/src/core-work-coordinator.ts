@@ -75,7 +75,7 @@ export class CoreWorkCoordinator {
   public async cancel(context: TenantContext, runId: string): Promise<ApplicationRunView> {
     const run = await this.store.get(context, runId);
     if (run.stage === "terminal") return run;
-    const stage = run.stage as CoreWorkStage;
+    const stage = run.stage;
     await this.executors[stage].cancel?.(context, {
       runId: run.runId,
       ...(run.workId === undefined ? {} : { workId: run.workId }),
@@ -105,7 +105,7 @@ export class CoreWorkCoordinator {
       resumeBlocked = false;
       if (claim.outcome === "in-progress") return await this.store.get(context, run.runId);
       if (claim.outcome === "terminal") return claim.run;
-      const stage = run.stage as CoreWorkStage;
+      const stage = run.stage;
       const result = await this.executors[stage].execute(context, {
         runId: run.runId,
         ...(run.workId === undefined ? {} : { workId: run.workId }),

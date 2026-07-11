@@ -214,7 +214,12 @@ export class ApplicationHttpServer {
 
   public async close(): Promise<void> {
     if (!this.server.listening) return;
-    await new Promise<void>((resolve, reject) => this.server.close((error) => (error ? reject(error) : resolve())));
+    await new Promise<void>((resolve, reject) =>
+      this.server.close((error) => {
+        if (error) reject(error);
+        else resolve();
+      }),
+    );
   }
 
   private async handle(request: IncomingMessage, response: ServerResponse): Promise<void> {
@@ -269,7 +274,10 @@ export class ApplicationHttpServer {
       throw validation("URL token은 허용되지 않습니다");
     if (request.method === "OPTIONS") throw validation("CORS preflight를 지원하지 않습니다");
     if (url.pathname === "/api/v1/bootstrap") {
-      if (request.method !== "POST") return this.method(response, ["POST"]);
+      if (request.method !== "POST") {
+        this.method(response, ["POST"]);
+        return;
+      }
       if (
         !LOOPBACK.has(this.options.host) ||
         !LOOPBACK.has(request.socket.remoteAddress ?? "") ||
@@ -285,8 +293,6 @@ export class ApplicationHttpServer {
       this.acceptJson(request);
       const input = (await json(request)) as Record<string, unknown>;
       if (
-        !input ||
-        typeof input !== "object" ||
         typeof input.commandId !== "string" ||
         typeof input.email !== "string" ||
         typeof input.displayName !== "string" ||
@@ -308,13 +314,19 @@ export class ApplicationHttpServer {
     }
     const access = await this.authenticate(request);
     if (url.pathname === "/api/v1/events/stream") {
-      if (request.method !== "GET") return this.method(response, ["GET"]);
+      if (request.method !== "GET") {
+        this.method(response, ["GET"]);
+        return;
+      }
       if (!hasScope(access.scopes, "event:read")) throw this.scope();
       await this.stream(request, response, access.context, url);
       return;
     }
     if (url.pathname === "/api/v1/events") {
-      if (request.method !== "GET") return this.method(response, ["GET"]);
+      if (request.method !== "GET") {
+        this.method(response, ["GET"]);
+        return;
+      }
       if (!hasScope(access.scopes, "event:read")) throw this.scope();
       this.acceptJson(request);
       const after = parseEventCursor(undefined, url.searchParams.get("after") ?? undefined);
@@ -328,17 +340,22 @@ export class ApplicationHttpServer {
     };
     const fixed = fixedQueries[url.pathname];
     if (fixed) {
-      if (request.method !== "GET") return this.method(response, ["GET"]);
+      if (request.method !== "GET") {
+        this.method(response, ["GET"]);
+        return;
+      }
       this.acceptJson(request);
       sendJson(response, 200, await this.dependencies.queries.query(access.context, access.scopes, fixed, {}));
       return;
     }
     if (url.pathname === "/api/v1/query") {
-      if (request.method !== "POST") return this.method(response, ["POST"]);
+      if (request.method !== "POST") {
+        this.method(response, ["POST"]);
+        return;
+      }
       this.acceptJson(request);
       const input = (await json(request)) as { operation?: unknown; payload?: unknown };
-      if (!input || typeof input !== "object" || typeof input.operation !== "string")
-        throw validation("query operation이 필요합니다");
+      if (typeof input.operation !== "string") throw validation("query operation이 필요합니다");
       sendJson(
         response,
         200,
@@ -347,14 +364,20 @@ export class ApplicationHttpServer {
       return;
     }
     if (url.pathname === "/api/v1/commands") {
-      if (request.method !== "POST") return this.method(response, ["POST"]);
+      if (request.method !== "POST") {
+        this.method(response, ["POST"]);
+        return;
+      }
       this.acceptJson(request);
       const result = await this.dependencies.commands.dispatch(access.context, access.scopes, await json(request));
       sendJson(response, result.outcome === "accepted" || result.outcome === "awaiting-approval" ? 202 : 200, result);
       return;
     }
     if (url.pathname === "/api/v1/tokens") {
-      if (request.method !== "POST") return this.method(response, ["POST"]);
+      if (request.method !== "POST") {
+        this.method(response, ["POST"]);
+        return;
+      }
       this.acceptJson(request);
       if (
         !this.dependencies.tokens ||
@@ -371,7 +394,10 @@ export class ApplicationHttpServer {
     }
     const tokenId = url.pathname.match(/^\/api\/v1\/tokens\/([A-Za-z0-9._:-]{8,128})$/u)?.[1];
     if (tokenId) {
-      if (request.method !== "DELETE") return this.method(response, ["DELETE"]);
+      if (request.method !== "DELETE") {
+        this.method(response, ["DELETE"]);
+        return;
+      }
       if (
         !this.dependencies.tokens ||
         !hasScope(access.scopes, "token:write") ||
@@ -386,7 +412,10 @@ export class ApplicationHttpServer {
       return;
     }
     if (url.pathname === "/api/v1/artifacts/inspect" || url.pathname === "/api/v1/artifacts/install") {
-      if (request.method !== "POST") return this.method(response, ["POST"]);
+      if (request.method !== "POST") {
+        this.method(response, ["POST"]);
+        return;
+      }
       this.acceptJson(request);
       if (header(request, "content-type") !== "application/octet-stream")
         throw validation("Content-Type application/octet-stream이 필요합니다");
@@ -489,13 +518,9 @@ export class ApplicationHttpServer {
       connection: "keep-alive",
       "x-accel-buffering": "no",
     });
-    let closed = false;
-    request.once("close", () => {
-      closed = true;
-    });
     let heartbeatAt = Date.now() + this.options.heartbeatMs;
     try {
-      while (!closed) {
+      while (!request.destroyed && !response.destroyed) {
         const batch = await this.dependencies.events.read(context, { after: cursor, limit: 1000 });
         let batchBytes = 0;
         for (const event of batch.events) {

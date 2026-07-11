@@ -52,7 +52,15 @@ describe("actual Core Work pipeline adapters", () => {
   });
 
   it("context-strategy가 실제 StrategyService contract에 정본 request source를 전달한다", async () => {
-    const captured: any[] = [];
+    const captured: Array<{
+      workId: string;
+      expectedWorkRevision: number;
+      context: {
+        objective: string;
+        constraints: readonly string[];
+        sources: ReadonlyArray<{ kind: string; content: { text: string }; contentHash: string }>;
+      };
+    }> = [];
     const stages = createCoreWorkPipelineExecutors({
       graph: { getCurrentSnapshot: async () => ({ version: { version_id: "org-version" } }) },
       works: {
@@ -68,7 +76,7 @@ describe("actual Core Work pipeline adapters", () => {
       },
       strategy: {
         plan: async (_context: unknown, input: unknown) => {
-          captured.push(input);
+          captured.push(input as (typeof captured)[number]);
           return { contextVersion: {}, generation: { status: "applied" }, projection: {} } as never;
         },
       },
@@ -94,7 +102,10 @@ describe("actual Core Work pipeline adapters", () => {
       expectedWorkRevision: 3,
       context: { objective: "계획", constraints: ["근거"], sources: [{ kind: "request", content: { text: "계획" } }] },
     });
-    expect(captured[0].context.sources[0].contentHash).toBe(
+    const capturedInput = captured[0];
+    const source = capturedInput?.context.sources[0];
+    if (!source) throw new Error("Strategy source가 capture되지 않았습니다");
+    expect(source.contentHash).toBe(
       createHash("sha256")
         .update(JSON.stringify({ text: "계획" }))
         .digest("hex"),
@@ -105,7 +116,10 @@ describe("actual Core Work pipeline adapters", () => {
     await using database = await createDatabase({ url: "mem://", namespace: "massion", database: crypto.randomUUID() });
     const identities = await IdentityService.create(database);
     const organizations = await OrganizationService.create(database);
-    const owner = await identities.registerPersonalUser({ email: "pipeline-cancel@example.com", displayName: "Cancel" });
+    const owner = await identities.registerPersonalUser({
+      email: "pipeline-cancel@example.com",
+      displayName: "Cancel",
+    });
     const context = await organizations.resolveTenantContext(owner.user.user_id, owner.organization.organization_id);
     const graph = await OrganizationGraphService.create(database, organizations);
     const core = await graph.bootstrap(context);
@@ -121,7 +135,10 @@ describe("actual Core Work pipeline adapters", () => {
       graph,
       works,
       runtimeExecutions: { findExecutionIdByCommand: async () => undefined },
-      representative: { execute: async () => ({ executionId: "unused", status: "succeeded" }), cancel: async () => undefined },
+      representative: {
+        execute: async () => ({ executionId: "unused", status: "succeeded" }),
+        cancel: async () => undefined,
+      },
       strategy: { plan: async () => ({}) as never },
       evidence: { execute: async () => ({ outcome: "advanced" }) },
       delivery: {

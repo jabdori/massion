@@ -9,7 +9,7 @@ function bounded(value: string, fallback: string, maximum = 4_000): string {
 }
 
 export class DeterministicRecordsDocumentPlanner implements CoreRecordsDocumentPlanner {
-  public async plan(
+  public plan(
     _context: TenantContext,
     input: Parameters<CoreRecordsDocumentPlanner["plan"]>[1],
   ): Promise<readonly RecordsDocumentSource[]> {
@@ -72,6 +72,6 @@ export class DeterministicRecordsDocumentPlanner implements CoreRecordsDocumentP
         });
       }
     }
-    return documents;
+    return Promise.resolve(documents);
   }
 }

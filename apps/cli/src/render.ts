@@ -1,9 +1,21 @@
 import type { CliOutputMode } from "./parser.js";
 
 function safe(value: unknown): string {
-  return String(value ?? "")
-    .replace(/[\u0000-\u001f\u007f-\u009f]/gu, "")
-    .slice(0, 4096);
+  const text =
+    value === undefined || value === null
+      ? ""
+      : typeof value === "string" ||
+          typeof value === "number" ||
+          typeof value === "boolean" ||
+          typeof value === "bigint"
+        ? String(value)
+        : JSON.stringify(value);
+  let cleaned = "";
+  for (const character of text) {
+    const code = character.codePointAt(0) ?? 0;
+    if (!((code >= 0 && code <= 31) || (code >= 127 && code <= 159))) cleaned += character;
+  }
+  return cleaned.slice(0, 4096);
 }
 
 function human(value: unknown): string {
@@ -28,8 +40,9 @@ function human(value: unknown): string {
 export function renderCliOutput(
   value: unknown,
   mode: CliOutputMode,
-  _options: { readonly tty: boolean; readonly noColor?: boolean },
+  options: { readonly tty: boolean; readonly noColor?: boolean },
 ): string {
+  void options;
   if (mode === "json") return `${JSON.stringify(value)}\n`;
   if (mode === "jsonl")
     return (Array.isArray(value) ? value : [value]).map((item) => JSON.stringify(item)).join("\n") + "\n";

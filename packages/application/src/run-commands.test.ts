@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { TenantContext } from "@massion/identity";
 
+import type { ApplicationCommandDescriptor } from "./command-registry.js";
 import { registerApplicationRunCommands } from "./run-commands.js";
 
 const context: TenantContext = {
@@ -13,7 +14,7 @@ const context: TenantContext = {
 
 describe("Application run commands", () => {
   it("run.start를 accepted로 기록하고 schedule하며 cancel을 coordinator로 보낸다", async () => {
-    const descriptors = new Map<string, any>();
+    const descriptors = new Map<string, ApplicationCommandDescriptor>();
     const scheduled: string[] = [];
     const cancelled: string[] = [];
     const view = (status: "ready" | "cancelled" | "completed") => ({
@@ -27,7 +28,11 @@ describe("Application run commands", () => {
       leaseGeneration: 0,
     });
     registerApplicationRunCommands(
-      { register: (descriptor: any) => descriptors.set(descriptor.operation, descriptor) } as any,
+      {
+        register: (descriptor: ApplicationCommandDescriptor) => {
+          descriptors.set(descriptor.operation, descriptor);
+        },
+      } as never,
       {
         store: { start: async () => view("ready") },
         coordinator: {
@@ -51,6 +56,7 @@ describe("Application run commands", () => {
       payload: {},
     };
     const start = descriptors.get("run.start");
+    if (!start) throw new Error("run.start descriptor가 없습니다");
     const payload = start.validate({ request: { text: "제품화" } });
     await expect(start.handle(context, command, payload)).resolves.toMatchObject({
       outcome: "accepted",
@@ -58,6 +64,7 @@ describe("Application run commands", () => {
     });
     expect(scheduled).toEqual(["run-command-1"]);
     const cancel = descriptors.get("run.cancel");
+    if (!cancel) throw new Error("run.cancel descriptor가 없습니다");
     await cancel.handle(context, { ...command, operation: "run.cancel" }, cancel.validate({ runId: "run-command-1" }));
     expect(cancelled).toEqual(["run-command-1"]);
   });
