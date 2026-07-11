@@ -217,6 +217,69 @@ export class IntegrationStore {
     }));
   }
 
+  public async recordTelemetry(
+    context: TenantContext,
+    input: {
+      sourceId: string;
+      installationId?: string;
+      platform: IntegrationPlatform;
+      eventType: string;
+      outcome: string;
+      payload: unknown;
+      metricName: string;
+      value?: number;
+    },
+  ): Promise<void> {
+    await this.organizations.verifyTenantContext(context);
+    if (
+      !/^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$/u.test(input.sourceId) ||
+      !/^[a-z][a-z0-9._-]{1,127}$/u.test(input.eventType) ||
+      !/^[a-z][a-z0-9._-]{1,127}$/u.test(input.metricName) ||
+      !/^[a-z][a-z0-9._-]{1,63}$/u.test(input.outcome) ||
+      !Number.isFinite(input.value ?? 1) ||
+      (input.value ?? 1) < 0
+    )
+      throw new Error("Integration telemetry input이 유효하지 않습니다");
+    const payloadHash = sha256(canonical(input.payload));
+    await this.database.transaction(async (tx) => {
+      await this.organizations.verifyTenantContext(context, undefined, tx);
+      const existing = await first<{ payload_hash: string }>(
+        tx,
+        "SELECT payload_hash FROM integration_event WHERE organization_id=$organization_id AND source_id=$source_id AND event_type=$event_type LIMIT 1;",
+        { organization_id: context.organizationId, source_id: input.sourceId, event_type: input.eventType },
+      );
+      if (existing) {
+        if (existing.payload_hash !== payloadHash)
+          throw new Error("같은 telemetry source에 다른 payload를 사용할 수 없습니다");
+        return;
+      }
+      await tx.query(
+        `CREATE integration_event CONTENT { event_id:$event_id, organization_id:$organization_id, installation_id:${input.installationId === undefined ? "NONE" : "$installation_id"}, source_id:$source_id, event_type:$event_type, outcome:$outcome, payload_hash:$payload_hash, created_at:time::now() };`,
+        {
+          event_id: randomUUID(),
+          organization_id: context.organizationId,
+          ...(input.installationId === undefined ? {} : { installation_id: input.installationId }),
+          source_id: input.sourceId,
+          event_type: input.eventType,
+          outcome: input.outcome,
+          payload_hash: payloadHash,
+        },
+      );
+      await tx.query(
+        "CREATE integration_metric CONTENT { metric_id:$metric_id, organization_id:$organization_id, source_id:$source_id, metric_name:$metric_name, platform:$platform, outcome:$outcome, value:$value, created_at:time::now() };",
+        {
+          metric_id: randomUUID(),
+          organization_id: context.organizationId,
+          source_id: input.sourceId,
+          metric_name: input.metricName,
+          platform: input.platform,
+          outcome: input.outcome,
+          value: input.value ?? 1,
+        },
+      );
+    });
+  }
+
   public async bindUser(
     context: TenantContext,
     input: { commandId: string; installationId: string; externalUserId: string; userId: string },

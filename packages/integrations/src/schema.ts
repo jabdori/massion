@@ -155,9 +155,41 @@ DEFINE INDEX integration_channel_binding_command ON integration_channel_binding 
 `,
 );
 
+export const INTEGRATION_TELEMETRY_MIGRATION = defineMigration(
+  "0078-integration-telemetry",
+  `
+DEFINE TABLE integration_event SCHEMAFULL PERMISSIONS NONE;
+DEFINE FIELD event_id ON integration_event TYPE string;
+DEFINE FIELD organization_id ON integration_event TYPE string;
+DEFINE FIELD installation_id ON integration_event TYPE option<string>;
+DEFINE FIELD source_id ON integration_event TYPE string;
+DEFINE FIELD event_type ON integration_event TYPE string;
+DEFINE FIELD outcome ON integration_event TYPE string;
+DEFINE FIELD payload_hash ON integration_event TYPE string ASSERT string::len($value) = 64;
+DEFINE FIELD created_at ON integration_event TYPE datetime;
+DEFINE INDEX integration_event_id ON integration_event FIELDS organization_id, event_id UNIQUE;
+DEFINE INDEX integration_event_source ON integration_event FIELDS organization_id, source_id, event_type UNIQUE;
+DEFINE EVENT integration_event_immutable ON TABLE integration_event WHEN $event IN ['UPDATE', 'DELETE'] THEN { THROW 'Integration event는 immutable입니다'; };
+
+DEFINE TABLE integration_metric SCHEMAFULL PERMISSIONS NONE;
+DEFINE FIELD metric_id ON integration_metric TYPE string;
+DEFINE FIELD organization_id ON integration_metric TYPE string;
+DEFINE FIELD source_id ON integration_metric TYPE string;
+DEFINE FIELD metric_name ON integration_metric TYPE string;
+DEFINE FIELD platform ON integration_metric TYPE string ASSERT $value IN ['slack', 'discord', 'github'];
+DEFINE FIELD outcome ON integration_metric TYPE string;
+DEFINE FIELD value ON integration_metric TYPE float ASSERT $value >= 0;
+DEFINE FIELD created_at ON integration_metric TYPE datetime;
+DEFINE INDEX integration_metric_id ON integration_metric FIELDS organization_id, metric_id UNIQUE;
+DEFINE INDEX integration_metric_source ON integration_metric FIELDS organization_id, source_id, metric_name UNIQUE;
+DEFINE EVENT integration_metric_immutable ON TABLE integration_metric WHEN $event IN ['UPDATE', 'DELETE'] THEN { THROW 'Integration metric은 immutable입니다'; };
+`,
+);
+
 export const INTEGRATION_MIGRATIONS = [
   INTEGRATION_MIGRATION,
   INTEGRATION_PAYLOAD_MIGRATION,
   INTEGRATION_INTERACTION_MIGRATION,
   INTEGRATION_BINDING_MIGRATION,
+  INTEGRATION_TELEMETRY_MIGRATION,
 ] as const;

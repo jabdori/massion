@@ -243,4 +243,24 @@ describe("IntegrationStore", () => {
       store.assertBoundResource(context, installation.installationId, "massion/project", "release"),
     ).rejects.toThrow("binding");
   });
+
+  it("저카디널리티 Integration event·metric을 source별 한 번만 기록한다", async () => {
+    const input = {
+      sourceId: "delivery-telemetry-12345678",
+      platform: "slack" as const,
+      eventType: "integration.delivery.accepted",
+      outcome: "accepted",
+      payload: { eventType: "slash-command" },
+      metricName: "integration_delivery_total",
+    };
+    await store.recordTelemetry(context, input);
+    await store.recordTelemetry(context, input);
+    const [events] = await database.query<[unknown[]]>("SELECT * FROM integration_event;");
+    const [metrics] = await database.query<[unknown[]]>("SELECT * FROM integration_metric;");
+    expect(events).toHaveLength(1);
+    expect(metrics).toHaveLength(1);
+    await expect(store.recordTelemetry(context, { ...input, payload: { eventType: "different" } })).rejects.toThrow(
+      "다른 payload",
+    );
+  });
 });

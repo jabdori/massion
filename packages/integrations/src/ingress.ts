@@ -152,6 +152,7 @@ export class IntegrationIngress {
       });
       await this.accept(
         actor.context,
+        "slack",
         actor.installation.installationId,
         field(payload, "event_id"),
         field(event, "type"),
@@ -190,6 +191,7 @@ export class IntegrationIngress {
     );
     await this.accept(
       actor.context,
+      "slack",
       actor.installation.installationId,
       deliveryId,
       payload ? "interaction" : "slash-command",
@@ -247,6 +249,7 @@ export class IntegrationIngress {
     );
     await this.accept(
       actor.context,
+      "discord",
       actor.installation.installationId,
       field(payload, "id"),
       `interaction.${String(payload.type)}`,
@@ -287,6 +290,7 @@ export class IntegrationIngress {
     });
     await this.accept(
       actor.context,
+      "github",
       actor.installation.installationId,
       request.headers["x-github-delivery"] ?? "",
       `${event}.${action}`,
@@ -298,6 +302,7 @@ export class IntegrationIngress {
 
   private async accept(
     context: TenantContext,
+    platform: IntegrationPlatform,
     installationId: string,
     deliveryId: string,
     eventType: string,
@@ -311,6 +316,15 @@ export class IntegrationIngress {
       bodyHash: hash(request.body),
       normalizedPayload,
       receivedAt: request.receivedAt ?? new Date(),
+    });
+    await this.dependencies.store.recordTelemetry(context, {
+      sourceId: deliveryId,
+      installationId,
+      platform,
+      eventType: "integration.delivery.accepted",
+      outcome: "accepted",
+      payload: { eventType },
+      metricName: "integration_delivery_total",
     });
     this.dependencies.schedule?.(context);
   }
