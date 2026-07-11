@@ -12,7 +12,8 @@
     "test": "node --test scripts/*.test.mjs && pnpm -r test",
     "typecheck": "pnpm -r typecheck",
     "verify": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm verify:docs",
-    "verify:docs": "node scripts/verify-docs.mjs"
+    "verify:docs": "node scripts/verify-docs.mjs",
+    "verify:architecture": "node scripts/verify-architecture-diagrams.mjs"
   },
   "engines": {
     "node": ">=24.0.0"
