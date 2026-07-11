@@ -39,4 +39,34 @@ DEFINE EVENT registry_recall_immutable ON TABLE registry_recall WHEN $event IN [
 `,
 );
 
-export const REGISTRY_MIGRATIONS = [REGISTRY_MIGRATION] as const;
+export const REGISTRY_TELEMETRY_MIGRATION = defineMigration(
+  "0080-registry-telemetry",
+  `
+DEFINE TABLE registry_event SCHEMAFULL PERMISSIONS NONE;
+DEFINE FIELD event_id ON registry_event TYPE string;
+DEFINE FIELD organization_id ON registry_event TYPE string;
+DEFINE FIELD source_id ON registry_event TYPE string;
+DEFINE FIELD event_type ON registry_event TYPE string;
+DEFINE FIELD outcome ON registry_event TYPE string;
+DEFINE FIELD package_name ON registry_event TYPE string;
+DEFINE FIELD package_version ON registry_event TYPE string;
+DEFINE FIELD created_at ON registry_event TYPE datetime;
+DEFINE INDEX registry_event_id ON registry_event FIELDS event_id UNIQUE;
+DEFINE INDEX registry_event_source ON registry_event FIELDS organization_id, source_id, event_type UNIQUE;
+DEFINE EVENT registry_event_immutable ON TABLE registry_event WHEN $event IN ['UPDATE', 'DELETE'] THEN { THROW 'Registry event는 immutable입니다'; };
+
+DEFINE TABLE registry_metric SCHEMAFULL PERMISSIONS NONE;
+DEFINE FIELD metric_id ON registry_metric TYPE string;
+DEFINE FIELD organization_id ON registry_metric TYPE string;
+DEFINE FIELD source_id ON registry_metric TYPE string;
+DEFINE FIELD metric_name ON registry_metric TYPE string;
+DEFINE FIELD outcome ON registry_metric TYPE string;
+DEFINE FIELD value ON registry_metric TYPE float ASSERT $value >= 0;
+DEFINE FIELD created_at ON registry_metric TYPE datetime;
+DEFINE INDEX registry_metric_id ON registry_metric FIELDS metric_id UNIQUE;
+DEFINE INDEX registry_metric_source ON registry_metric FIELDS organization_id, source_id, metric_name UNIQUE;
+DEFINE EVENT registry_metric_immutable ON TABLE registry_metric WHEN $event IN ['UPDATE', 'DELETE'] THEN { THROW 'Registry metric은 immutable입니다'; };
+`,
+);
+
+export const REGISTRY_MIGRATIONS = [REGISTRY_MIGRATION, REGISTRY_TELEMETRY_MIGRATION] as const;

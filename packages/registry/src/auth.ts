@@ -41,7 +41,10 @@ export class OidcPublisherAuthenticator {
       });
   }
 
-  public async authenticate(token: string, policy: PublisherTrustPolicy): Promise<{
+  public async authenticate(
+    token: string,
+    policy: PublisherTrustPolicy,
+  ): Promise<{
     readonly subject: string;
     readonly repository: string;
     readonly workflow: string;
@@ -105,7 +108,10 @@ export class UploadGrantService {
     return { token, expiresAt: new Date(expiresAt).toISOString() };
   }
 
-  public consume(token: string, expected: { readonly packageName: string; readonly packageVersion: string; readonly artifactDigest: string }): GrantRecord {
+  public consume(
+    token: string,
+    expected: { readonly packageName: string; readonly packageVersion: string; readonly artifactDigest: string },
+  ): GrantRecord {
     if (!/^[A-Za-z0-9_-]{43}$/u.test(token)) throw new Error("upload grant 형식이 유효하지 않습니다");
     normalizePackageIdentity(expected.packageName, expected.packageVersion);
     assertDigest(expected.artifactDigest, "artifact");

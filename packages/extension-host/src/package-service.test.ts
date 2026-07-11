@@ -29,6 +29,8 @@ afterEach(async () => {
 describe("Extension package service", () => {
   it("local directory를 code 실행 없이 검증하고 source digest를 만든다", async () => {
     const source = await fixture();
+    await mkdir(join(source, "node_modules", ".cache"), { recursive: true });
+    await writeFile(join(source, "node_modules", ".cache", "state.json"), "{}");
     const service = new ExtensionPackageService({ runtime });
 
     const report = await service.validate(source);
@@ -36,6 +38,7 @@ describe("Extension package service", () => {
     expect(report.manifest.name).toBe("@massion-ext/echo");
     expect(report.sourceDigest).toMatch(/^[a-f0-9]{64}$/u);
     expect(report.files).toContain("dist/worker.js");
+    expect(report.files.some((path) => path.startsWith("node_modules/"))).toBe(false);
   });
 
   it("link는 canonical path와 validation digest를 저장하고 source 변경을 탐지한다", async () => {

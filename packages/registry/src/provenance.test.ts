@@ -22,7 +22,8 @@ describe("Sigstore provenance", () => {
     const digest = createHash("sha256").update(artifact).digest("hex");
     const cryptographicVerify = vi.fn(async () => ({
       identity: {
-        subjectAlternativeName: "https://github.com/massion-dev/extensions/.github/workflows/publish.yml@refs/tags/v1.0.0",
+        subjectAlternativeName:
+          "https://github.com/massion-dev/extensions/.github/workflows/publish.yml@refs/tags/v1.0.0",
         extensions: { issuer: "https://token.actions.githubusercontent.com" },
       },
     }));

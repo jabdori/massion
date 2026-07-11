@@ -55,7 +55,11 @@ function canonical(value: unknown): string {
 
 const hash = (value: unknown): string => createHash("sha256").update(canonical(value)).digest("hex");
 
-async function first<T>(executor: QueryExecutor, query: string, bindings: Record<string, unknown>): Promise<T | undefined> {
+async function first<T>(
+  executor: QueryExecutor,
+  query: string,
+  bindings: Record<string, unknown>,
+): Promise<T | undefined> {
   const [records] = await executor.query<[T[]]>(query, bindings);
   return records[0];
 }
@@ -66,14 +70,18 @@ export class SurrealRegistryStore {
     private readonly organizations: OrganizationService,
   ) {}
 
-  public static async create(database: MassionDatabase, organizations: OrganizationService): Promise<SurrealRegistryStore> {
+  public static async create(
+    database: MassionDatabase,
+    organizations: OrganizationService,
+  ): Promise<SurrealRegistryStore> {
     await applyMigrations(database, REGISTRY_MIGRATIONS);
     return new SurrealRegistryStore(database, organizations);
   }
 
   public async stage(context: TenantContext, commandId: string, input: RegistryVersionInput): Promise<RegistryVersion> {
     await this.organizations.verifyTenantContext(context);
-    if (input.ownerOrganizationId !== context.organizationId) throw new Error("다른 tenant의 package를 stage할 수 없습니다");
+    if (input.ownerOrganizationId !== context.organizationId)
+      throw new Error("다른 tenant의 package를 stage할 수 없습니다");
     assertRegistryId(commandId, "commandId");
     normalizePackageIdentity(input.packageName, input.packageVersion);
     assertDigest(input.artifactDigest, "artifact");
@@ -122,7 +130,11 @@ export class SurrealRegistryStore {
     });
   }
 
-  public async recordAssessment(context: TenantContext, versionId: string, assessment: RegistryAssessment): Promise<RegistryVersion> {
+  public async recordAssessment(
+    context: TenantContext,
+    versionId: string,
+    assessment: RegistryAssessment,
+  ): Promise<RegistryVersion> {
     const current = await this.getOwned(context, versionId);
     if (current.state !== "staged") throw new Error("staged version만 검사 결과를 기록할 수 있습니다");
     const record = await first<VersionRecord>(
@@ -153,9 +165,13 @@ export class SurrealRegistryStore {
     const current = await this.getOwned(context, versionId);
     transitionVersion(current.state, "recalled");
     return await this.database.transaction(async (tx) => {
-      const existing = await first<RecallRecord>(tx, "SELECT * OMIT id FROM registry_recall WHERE recall_id=$recall_id LIMIT 1;", {
-        recall_id: recall.recallId,
-      });
+      const existing = await first<RecallRecord>(
+        tx,
+        "SELECT * OMIT id FROM registry_recall WHERE recall_id=$recall_id LIMIT 1;",
+        {
+          recall_id: recall.recallId,
+        },
+      );
       if (existing) throw new Error("recall 사건이 이미 존재합니다");
       await tx.query(
         "CREATE registry_recall CONTENT { recall_id:$recall_id, version_id:$version_id, package_name:$package_name, package_version:$package_version, category:$category, severity:$severity, reason:$reason, created_by_organization_id:$organization_id, created_at:time::now() };",

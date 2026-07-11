@@ -37,15 +37,19 @@ describe("Registry publish auth", () => {
       artifactDigest: "a".repeat(64),
       ttlSeconds: 300,
     });
-    expect(grants.consume(issued.token, {
-      packageName: "@massion-ext/github",
-      packageVersion: "1.0.0",
-      artifactDigest: "a".repeat(64),
-    })).toMatchObject({ publisherId: "publisher-0001" });
-    expect(() => grants.consume(issued.token, {
-      packageName: "@massion-ext/github",
-      packageVersion: "1.0.0",
-      artifactDigest: "a".repeat(64),
-    })).toThrow("소비");
+    expect(
+      grants.consume(issued.token, {
+        packageName: "@massion-ext/github",
+        packageVersion: "1.0.0",
+        artifactDigest: "a".repeat(64),
+      }),
+    ).toMatchObject({ publisherId: "publisher-0001" });
+    expect(() =>
+      grants.consume(issued.token, {
+        packageName: "@massion-ext/github",
+        packageVersion: "1.0.0",
+        artifactDigest: "a".repeat(64),
+      }),
+    ).toThrow("소비");
   });
 });

@@ -48,7 +48,8 @@ const ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{2,191}$/u;
 
 export function normalizePackageIdentity(name: string, version: string): { name: string; version: string } {
   if (!PACKAGE.test(name)) throw new Error("Extension package는 @massion-ext scope여야 합니다");
-  if (!semver.valid(version) || semver.clean(version) !== version) throw new Error("version은 canonical SemVer여야 합니다");
+  if (!semver.valid(version) || semver.clean(version) !== version)
+    throw new Error("version은 canonical SemVer여야 합니다");
   return { name, version };
 }
 

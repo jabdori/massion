@@ -1,4 +1,8 @@
-import { inspectExtensionArchive, type ExtensionArtifactReport, type ExtensionRuntimeVersions } from "@massion/extension-host";
+import {
+  inspectExtensionArchive,
+  type ExtensionArtifactReport,
+  type ExtensionRuntimeVersions,
+} from "@massion/extension-host";
 
 import type { AssessmentOutcome, RegistryAssessment } from "./contracts.js";
 import type { ProvenancePolicy, ProvenanceResult } from "./provenance.js";
@@ -45,7 +49,8 @@ function dependencies(packageJson: Readonly<Record<string, unknown>>): RegistryS
     const value = packageJson[field];
     if (!value || typeof value !== "object" || Array.isArray(value)) continue;
     for (const [name, version] of Object.entries(value as Record<string, unknown>)) {
-      if (typeof version !== "string" || name.length > 214 || version.length > 128) throw new Error("dependency가 유효하지 않습니다");
+      if (typeof version !== "string" || name.length > 214 || version.length > 128)
+        throw new Error("dependency가 유효하지 않습니다");
       result.push({ ecosystem: "npm", name, version });
     }
   }
@@ -108,7 +113,9 @@ export class RegistryInspectionPipeline {
       vulnerability = "unknown";
     }
     const contract = await this.options.contractProbe.probe(artifact).catch(() => ({ outcome: "unknown" as const }));
-    const policy = await this.options.policy.assess(artifact).catch(() => ({ outcome: "unknown" as const, risk: "critical" as const }));
+    const policy = await this.options.policy
+      .assess(artifact)
+      .catch(() => ({ outcome: "unknown" as const, risk: "critical" as const }));
     return {
       artifact,
       ...(provenance ? { provenance } : {}),
@@ -134,7 +141,12 @@ export class OsvClient implements VulnerabilityClient {
     const response = await this.fetcher("https://api.osv.dev/v1/querybatch", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ queries: components.map((component) => ({ package: { ecosystem: "npm", name: component.name }, version: component.version })) }),
+      body: JSON.stringify({
+        queries: components.map((component) => ({
+          package: { ecosystem: "npm", name: component.name },
+          version: component.version,
+        })),
+      }),
       signal: AbortSignal.timeout(5_000),
     });
     if (!response.ok) throw new Error(`OSV query가 실패했습니다: ${String(response.status)}`);

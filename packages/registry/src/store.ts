@@ -40,7 +40,8 @@ export class MemoryRegistryStore {
     const requestHash = hash(input);
     const replay = this.commands.get(commandId);
     if (replay) {
-      if (replay.requestHash !== requestHash) throw new Error("같은 commandId에 다른 Registry 요청을 사용할 수 없습니다");
+      if (replay.requestHash !== requestHash)
+        throw new Error("같은 commandId에 다른 Registry 요청을 사용할 수 없습니다");
       return structuredClone(this.required(replay.versionId));
     }
     const identity = `${input.packageName}@${input.packageVersion}`;
