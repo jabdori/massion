@@ -26,6 +26,7 @@ export * from "./metrics.js";
 export * from "./outbox.js";
 export * from "./product.js";
 export * from "./query-registry.js";
+export * from "./registry-operations.js";
 export * from "./records-document-planner.js";
 export * from "./read-model.js";
 export * from "./run-recovery.js";

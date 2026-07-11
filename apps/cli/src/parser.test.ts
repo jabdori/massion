@@ -16,6 +16,8 @@ describe("mass CLI parser", () => {
     [["runtime", "suspend", "execution-1"], "runtime", "suspend"],
     [["provider", "route-set"], "provider", "route-set"],
     [["ext", "install", "extension.tgz"], "ext", "install"],
+    [["ext", "search", "slack"], "ext", "search"],
+    [["ext", "inventory"], "ext", "inventory"],
     [["growth", "suggestions"], "growth", "suggestions"],
     [["doctor"], "doctor", undefined],
   ])("%j를 해석한다", (argv, command, subcommand) => {

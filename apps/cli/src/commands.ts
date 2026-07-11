@@ -10,6 +10,7 @@ export interface CliApplicationClient {
   inspectArtifact(archive: Uint8Array): Promise<unknown>;
   installArtifact(commandId: string, archive: Uint8Array): Promise<unknown>;
   updateArtifact(commandId: string, archive: Uint8Array): Promise<unknown>;
+  publishArtifact?(commandId: string, archive: Uint8Array): Promise<unknown>;
 }
 
 export interface CliCommandInput {
@@ -83,6 +84,12 @@ export async function executeCliInvocation(
     return { credentials, routes };
   }
   if (invocation.command === "ext" && invocation.subcommand === "list") return await client.query("extension.list", {});
+  if (invocation.command === "ext" && invocation.subcommand === "search")
+    return await client.query("registry.search", { query: args.join(" "), limit: 20 });
+  if (invocation.command === "ext" && invocation.subcommand === "info")
+    return await client.query("registry.info", { versionId: required(args, 0, "versionId") });
+  if (invocation.command === "ext" && invocation.subcommand === "inventory")
+    return await client.query("registry.inventory", {});
   if (invocation.command === "integration" && invocation.subcommand === "list")
     return await client.query("integration.list", {});
   if (invocation.command === "integration" && invocation.subcommand === "deliveries")
@@ -152,9 +159,24 @@ export async function executeCliInvocation(
     );
   if (invocation.command === "ext" && invocation.subcommand === "validate")
     return await client.command(envelope("extension.validate", { source: required(args, 0, "source") }));
+  if (invocation.command === "ext" && invocation.subcommand === "publish") {
+    if (!input.readArtifact || !client.publishArtifact) throw new Error("Registry publish adapter가 필요합니다");
+    return await client.publishArtifact(randomUUID(), await input.readArtifact(required(args, 0, "artifact path")));
+  }
   if (invocation.command === "ext" && ["install", "update"].includes(invocation.subcommand ?? "")) {
+    const target = required(args, 0, "artifact path 또는 Registry versionId");
+    if (!target.endsWith(".tgz")) {
+      return await client.command(
+        envelope("registry.install", {
+          versionId: target,
+          environment: args[1] ?? "production",
+          riskClass: args[2] ?? "medium",
+          executionId: randomUUID(),
+        }),
+      );
+    }
     if (!input.readArtifact) throw new Error("Extension artifact reader가 필요합니다");
-    const archive = await input.readArtifact(required(args, 0, "artifact path"));
+    const archive = await input.readArtifact(target);
     return invocation.subcommand === "install"
       ? await client.installArtifact(randomUUID(), archive)
       : await client.updateArtifact(randomUUID(), archive);
@@ -174,6 +196,7 @@ export async function executeCliInvocation(
     "ext:link": "extension.link",
     "ext:pack": "extension.pack",
     "ext:rollback": "extension.rollback",
+    "ext:recall": "registry.recall",
     "integration:oauth-start": "integration.oauth.start",
     "integration:connect": "integration.connect",
     "integration:user-bind": "integration.user.bind",
