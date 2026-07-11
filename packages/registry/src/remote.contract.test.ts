@@ -4,6 +4,7 @@ import { IdentityService, OrganizationService } from "@massion/identity";
 import { createDatabase } from "@massion/storage";
 import { describe, expect, it } from "vitest";
 
+import { SurrealUploadGrantService } from "./auth.js";
 import { SurrealRegistryStore } from "./surreal-store.js";
 import { RegistryTelemetryStore } from "./telemetry.js";
 
@@ -82,6 +83,25 @@ describe("Registry remote contract", () => {
         metricName: "registry_recall_total",
       });
       expect(await telemetry.list(context)).toHaveLength(1);
+      const grants = await SurrealUploadGrantService.create(database, { secret: Buffer.alloc(32, 22) });
+      const grant = await grants.issue({
+        publisherId: "registry-remote-publisher-1",
+        packageName: input.packageName,
+        packageVersion: input.packageVersion,
+        artifactDigest: input.artifactDigest,
+        ttlSeconds: 300,
+      });
+      const expected = {
+        packageName: input.packageName,
+        packageVersion: input.packageVersion,
+        artifactDigest: input.artifactDigest,
+      };
+      const consumed = await Promise.allSettled([
+        grants.consume(grant.token, expected),
+        grants.consume(grant.token, expected),
+      ]);
+      expect(consumed.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+      expect(consumed.filter((result) => result.status === "rejected")).toHaveLength(1);
     },
     30_000,
   );
