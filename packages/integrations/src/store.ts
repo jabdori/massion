@@ -175,6 +175,48 @@ export class IntegrationStore {
     return this.installationView(record);
   }
 
+  public async list(context: TenantContext) {
+    await this.organizations.verifyTenantContext(context);
+    const [installations] = await this.database.query<[InstallationRecord[]]>(
+      "SELECT * OMIT id FROM integration_installation WHERE organization_id=$organization_id ORDER BY platform, created_at;",
+      { organization_id: context.organizationId },
+    );
+    const [channels] = await this.database.query<[ChannelBindingRecord[]]>(
+      "SELECT * OMIT id FROM integration_channel_binding WHERE organization_id=$organization_id ORDER BY created_at;",
+      { organization_id: context.organizationId },
+    );
+    return installations.map((installation) => ({
+      installationId: installation.installation_id,
+      platform: installation.platform,
+      externalTenantId: installation.external_tenant_id,
+      scopes: [...installation.scopes],
+      state: installation.state,
+      revision: installation.revision,
+      channels: channels
+        .filter((channel) => channel.installation_id === installation.installation_id)
+        .map((channel) => this.channelView(channel)),
+    }));
+  }
+
+  public async listDeliveries(context: TenantContext, limit = 100) {
+    await this.organizations.verifyTenantContext(context);
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 1_000)
+      throw new Error("Integration delivery limit이 유효하지 않습니다");
+    const [records] = await this.database.query<[DeliveryRecord[]]>(
+      "SELECT * OMIT id, payload_json, body_hash, result_hash FROM integration_delivery WHERE organization_id=$organization_id ORDER BY received_at DESC LIMIT $limit;",
+      { organization_id: context.organizationId, limit },
+    );
+    return records.map((record) => ({
+      deliveryRecordId: record.delivery_record_id,
+      installationId: record.installation_id,
+      deliveryId: record.delivery_id,
+      eventType: record.event_type,
+      state: record.state,
+      attempt: record.attempt,
+      receivedAt: (record as DeliveryRecord & { received_at?: string | Date }).received_at,
+    }));
+  }
+
   public async bindUser(
     context: TenantContext,
     input: { commandId: string; installationId: string; externalUserId: string; userId: string },

@@ -21,6 +21,7 @@ export * from "./event-projector.js";
 export * from "./event-store.js";
 export * from "./http-client.js";
 export * from "./http-server.js";
+export * from "./integration-operations.js";
 export * from "./metrics.js";
 export * from "./outbox.js";
 export * from "./product.js";
