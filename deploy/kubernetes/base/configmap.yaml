@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: massion-config
+data:
+  MASSION_MODE: team
+  MASSION_DATABASE_URL: ws://surrealdb:8000/rpc
+  MASSION_DATABASE_NAMESPACE: massion
+  MASSION_DATABASE_NAME: massion
+  MASSION_DATABASE_USER: root
+  MASSION_DATABASE_PASSWORD_FILE: /run/massion-secrets/database-password
+  MASSION_TOKEN_KEY_FILE: /run/massion-secrets/token-key
+  MASSION_HTTP_HOST: 0.0.0.0
+  MASSION_HTTP_PORT: "3141"
+  MASSION_METRICS_HOST: 127.0.0.1
+  MASSION_METRICS_PORT: "9464"
+  MASSION_TRUSTED_PROXIES: 127.0.0.1,::1,::ffff:127.0.0.1
+  MASSION_SHUTDOWN_TIMEOUT_MS: "30000"
+  MASSION_DOMAIN: massion.example.com
+  MASSION_TLS_PORT: "8443"
+  MASSION_UPSTREAM: 127.0.0.1:3141
