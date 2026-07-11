@@ -1,4 +1,8 @@
-export function encodeApplicationSseEvent(event: { readonly sequence: number; readonly type: string }): string {
+export function encodeApplicationSseEvent(event: {
+  readonly sequence: number;
+  readonly type: string;
+  readonly payload?: unknown;
+}): string {
   if (!Number.isSafeInteger(event.sequence) || event.sequence < 1)
     throw new Error("SSE event sequence가 유효하지 않습니다");
   if (!/^[a-z][a-z0-9.-]*$/u.test(event.type)) throw new Error("SSE event type이 유효하지 않습니다");
