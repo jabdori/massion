@@ -102,7 +102,7 @@ export class RegistryApplicationPublisher {
       runtime: this.dependencies.runtime,
     });
     const manifest = inspected.artifact.manifest;
-    this.dependencies.grants.consume(options.uploadGrant, {
+    await this.dependencies.grants.consume(options.uploadGrant, {
       packageName: manifest.name,
       packageVersion: manifest.version,
       artifactDigest: inspected.artifact.artifactDigest,

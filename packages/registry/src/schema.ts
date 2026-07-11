@@ -79,8 +79,26 @@ DEFINE FIELD IF NOT EXISTS supersedes_recall_id ON registry_recall TYPE option<s
 `,
 );
 
+export const REGISTRY_UPLOAD_GRANT_MIGRATION = defineMigration(
+  "0082-registry-upload-grant",
+  `
+DEFINE TABLE registry_upload_grant SCHEMAFULL PERMISSIONS NONE;
+DEFINE FIELD grant_key ON registry_upload_grant TYPE string ASSERT string::len($value) = 64;
+DEFINE FIELD publisher_id ON registry_upload_grant TYPE string;
+DEFINE FIELD package_name ON registry_upload_grant TYPE string;
+DEFINE FIELD package_version ON registry_upload_grant TYPE string;
+DEFINE FIELD artifact_digest ON registry_upload_grant TYPE string ASSERT string::len($value) = 64;
+DEFINE FIELD expires_at ON registry_upload_grant TYPE datetime;
+DEFINE FIELD consumed_at ON registry_upload_grant TYPE option<datetime>;
+DEFINE FIELD created_at ON registry_upload_grant TYPE datetime;
+DEFINE INDEX registry_upload_grant_key ON registry_upload_grant FIELDS grant_key UNIQUE;
+DEFINE EVENT registry_upload_grant_immutable ON TABLE registry_upload_grant WHEN $event = 'DELETE' OR ($event = 'UPDATE' AND $after.consumed_at = NONE) THEN { THROW 'Registry upload grant는 소비 전이나 삭제로 변경할 수 없습니다'; };
+`,
+);
+
 export const REGISTRY_MIGRATIONS = [
   REGISTRY_MIGRATION,
   REGISTRY_TELEMETRY_MIGRATION,
   REGISTRY_RECALL_SUPERSEDE_MIGRATION,
+  REGISTRY_UPLOAD_GRANT_MIGRATION,
 ] as const;
