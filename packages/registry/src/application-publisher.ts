@@ -74,6 +74,19 @@ export class RegistryApplicationPublisher {
       };
       readonly runtime: ExtensionRuntimeVersions;
       readonly provenancePolicy: ProvenancePolicy;
+      readonly telemetry?: {
+        record(
+          context: TenantContext,
+          input: {
+            sourceId: string;
+            eventType: string;
+            outcome: string;
+            packageName: string;
+            packageVersion: string;
+            metricName: string;
+          },
+        ): Promise<void>;
+      };
     },
   ) {}
 
@@ -112,7 +125,18 @@ export class RegistryApplicationPublisher {
       trustChanged: false,
       permissionsIncreased: false,
     });
-    if (decision !== "publish") return assessed;
-    return await this.dependencies.versions.publish(context, assessed.versionId, `${input.commandId}:automatic`);
+    const result =
+      decision === "publish"
+        ? await this.dependencies.versions.publish(context, assessed.versionId, `${input.commandId}:automatic`)
+        : assessed;
+    await this.dependencies.telemetry?.record(context, {
+      sourceId: input.commandId,
+      eventType: result.state === "published" ? "registry.package.published" : "registry.package.staged",
+      outcome: "succeeded",
+      packageName: manifest.name,
+      packageVersion: manifest.version,
+      metricName: result.state === "published" ? "registry_publish_total" : "registry_stage_total",
+    });
+    return result;
   }
 }
