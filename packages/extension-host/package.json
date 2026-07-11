@@ -1,0 +1,32 @@
+{
+  "name": "@massion/extension-host",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\" && pnpm build-deps && tsc -p tsconfig.json",
+    "build-deps": "pnpm --filter @massion/extension-sdk exec tsc -p tsconfig.json",
+    "test": "pnpm build-deps && vitest run src",
+    "typecheck": "pnpm build-deps && tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@massion/extension-sdk": "workspace:*",
+    "semver": "7.8.5",
+    "tar": "7.5.19"
+  },
+  "devDependencies": {
+    "@types/semver": "7.7.1"
+  },
+  "engines": {
+    "node": ">=24.0.0"
+  }
+}

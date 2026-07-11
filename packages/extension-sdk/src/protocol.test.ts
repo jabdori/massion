@@ -44,9 +44,7 @@ describe("Extension RPC v1", () => {
   });
 
   it("frame byte·깊이·prototype key를 거부한다", () => {
-    expect(() => createRpcFrameParser({ maxFrameBytes: 64 }).parse("{" + " ".repeat(100) + "}")).toThrow(
-      "byte",
-    );
+    expect(() => createRpcFrameParser({ maxFrameBytes: 64 }).parse("{" + " ".repeat(100) + "}")).toThrow("byte");
     const polluted =
       '{"protocol":"massion.extension.rpc.v1","requestId":"r","sequence":1,"operation":"health.check","payload":{"__proto__":{"admin":true}}}';
     expect(() => createRpcFrameParser().parse(polluted)).toThrow("prototype");
