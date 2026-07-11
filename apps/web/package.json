@@ -1,0 +1,45 @@
+{
+  "name": "@massion/web",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json --noEmit && vite build && node scripts/check-bundle.mjs",
+    "dev": "vite",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:e2e": "playwright test",
+    "test:e2e:actual": "playwright test --config playwright.actual.config.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@fontsource-variable/archivo": "5.2.8",
+    "@fontsource/ibm-plex-mono": "5.2.7",
+    "@tanstack/react-router": "1.170.17",
+    "react": "19.2.7",
+    "react-dom": "19.2.7"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "4.12.1",
+    "@playwright/test": "1.61.1",
+    "@testing-library/react": "16.3.2",
+    "@testing-library/jest-dom": "6.9.1",
+    "@testing-library/user-event": "14.6.1",
+    "@types/react": "19.2.17",
+    "@types/react-dom": "19.2.3",
+    "@vitejs/plugin-react": "6.0.3",
+    "@massion/application": "workspace:*",
+    "@massion/extension-host": "workspace:*",
+    "@massion/governance": "workspace:*",
+    "@massion/identity": "workspace:*",
+    "@massion/organization": "workspace:*",
+    "@massion/runtime": "workspace:*",
+    "@massion/storage": "workspace:*",
+    "@massion/work": "workspace:*",
+    "jsdom": "29.1.1",
+    "vite": "8.1.4"
+  },
+  "engines": {
+    "node": ">=24.0.0"
+  }
+}

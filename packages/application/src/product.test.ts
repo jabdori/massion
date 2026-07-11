@@ -106,7 +106,10 @@ describe("ApplicationProduct", () => {
       commandId: "web-product-bootstrap-0001",
       email: "web-product@example.com",
       displayName: "Web Product",
-    })) as { access: { token: string } };
+    })) as {
+      access: { token: string };
+      context: { userId: string; organizationId: string; membershipId: string; role: "owner" };
+    };
     const ticketResponse = await fetch(`${endpoint.url}/api/v1/web/login-tickets`, {
       method: "POST",
       headers: {
@@ -197,5 +200,13 @@ describe("ApplicationProduct", () => {
     expect(logout.headers.get("set-cookie")).toContain("Max-Age=0");
     const denied = await fetch(`${endpoint.url}/api/v1/status`, { headers: { cookie, accept: "application/json" } });
     expect(denied.status).toBe(401);
+    await expect(product.metrics.aggregate(initialized.context, "application_request_total")).resolves.toEqual(
+      expect.arrayContaining([
+        { dimensions: { operationClass: "csrf-rotated", result: "succeeded" }, value: 1 },
+        { dimensions: { operationClass: "session-issued", result: "succeeded" }, value: 1 },
+        { dimensions: { operationClass: "session-revoked", result: "succeeded" }, value: 1 },
+        { dimensions: { operationClass: "ticket-issued", result: "succeeded" }, value: 1 },
+      ]),
+    );
   });
 });

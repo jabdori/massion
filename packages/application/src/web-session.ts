@@ -15,6 +15,16 @@ export interface WebSessionClock {
   readonly now: Date;
 }
 
+export interface WebSessionTelemetry {
+  record(
+    context: TenantContext,
+    input: {
+      readonly idempotencyKey: string;
+      readonly action: "ticket-issued" | "session-issued" | "csrf-rotated" | "session-revoked";
+    },
+  ): Promise<void>;
+}
+
 interface LoginTicketRecord {
   readonly ticket_id: string;
   readonly organization_id: string;
@@ -128,6 +138,7 @@ export class WebSessionService {
     private readonly keyId: string,
     private readonly key: Buffer,
     clock?: WebSessionClock,
+    private readonly telemetry?: WebSessionTelemetry,
   ) {
     this.clock = clock ?? {
       get now() {
@@ -140,12 +151,25 @@ export class WebSessionService {
     database: MassionDatabase,
     organizations: OrganizationService,
     tokens: Pick<ApplicationAccessTokenService, "authenticateTokenId">,
-    input: { readonly keyId: string; readonly key: Buffer; readonly clock?: WebSessionClock },
+    input: {
+      readonly keyId: string;
+      readonly key: Buffer;
+      readonly clock?: WebSessionClock;
+      readonly telemetry?: WebSessionTelemetry;
+    },
   ): Promise<WebSessionService> {
     if (!/^[a-z][a-z0-9-]{2,63}$/u.test(input.keyId)) throw new Error("Web session keyId가 유효하지 않습니다");
     if (input.key.length < 32) throw new Error("Web session HMAC key는 32 byte 이상이어야 합니다");
     await applyMigrations(database, [APPLICATION_WEB_SESSION_MIGRATION, APPLICATION_WEB_SESSION_REVISION_MIGRATION]);
-    return new WebSessionService(database, organizations, tokens, input.keyId, Buffer.from(input.key), input.clock);
+    return new WebSessionService(
+      database,
+      organizations,
+      tokens,
+      input.keyId,
+      Buffer.from(input.key),
+      input.clock,
+      input.telemetry,
+    );
   }
 
   public async issueLoginTicket(
@@ -201,6 +225,7 @@ export class WebSessionService {
       await this.event(transaction, created.organization_id, created.user_id, { ticketId }, "ticket-issued");
       return created;
     });
+    await this.observe(access.context, { idempotencyKey: `ticket:${record.ticket_id}`, action: "ticket-issued" });
     return {
       ticketId: record.ticket_id,
       organizationId: record.organization_id,
@@ -284,6 +309,7 @@ export class WebSessionService {
       verified.context.userId !== source.context.userId
     )
       throw new Error("Web session source token 계보가 변경됐습니다");
+    await this.observe(verified.context, { idempotencyKey: `session:${sessionId}`, action: "session-issued" });
     return {
       sessionId,
       sessionToken,
@@ -385,6 +411,10 @@ export class WebSessionService {
         "csrf-rotated",
       );
     });
+    await this.observe(access.context, {
+      idempotencyKey: `csrf:${access.sessionId}:${sha256(csrfToken)}`,
+      action: "csrf-rotated",
+    });
     return csrfToken;
   }
 
@@ -429,6 +459,10 @@ export class WebSessionService {
       );
       return value;
     });
+    await this.observe(context, {
+      idempotencyKey: `revoke:${sessionId}:${String(updated.revision)}`,
+      action: "session-revoked",
+    });
     return {
       sessionId: updated.session_id,
       status: "revoked",
@@ -446,6 +480,7 @@ export class WebSessionService {
     if (!(await this.verifyCsrf(sessionToken, csrfToken)))
       throw new Error("Web session CSRF token이 유효하지 않습니다");
     if (!reason.trim() || reason.length > 256) throw new Error("Web session 폐기 이유가 유효하지 않습니다");
+    const access = await this.authenticate(sessionToken, "massion-api", []);
     const record = await this.session(sessionToken);
     await this.database.transaction(async (transaction) => {
       await transaction.query(
@@ -464,6 +499,10 @@ export class WebSessionService {
         { sessionId: record.session_id, reason },
         "session-revoked",
       );
+    });
+    await this.observe(access.context, {
+      idempotencyKey: `revoke:${record.session_id}`,
+      action: "session-revoked",
     });
   }
 
@@ -490,6 +529,10 @@ export class WebSessionService {
 
   private digest(value: string): string {
     return createHmac("sha256", this.key).update(value).digest("hex");
+  }
+
+  private async observe(context: TenantContext, input: Parameters<WebSessionTelemetry["record"]>[1]): Promise<void> {
+    await this.telemetry?.record(context, input).catch(() => undefined);
   }
 
   private matches(value: string, expected: string): boolean {
