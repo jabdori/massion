@@ -4,5 +4,8 @@ export * from "./command-registry.js";
 export * from "./command-store.js";
 export * from "./contracts.js";
 export * from "./errors.js";
+export * from "./event-projector.js";
+export * from "./event-store.js";
+export * from "./outbox.js";
 export * from "./schema.js";
 export * from "./validation.js";
