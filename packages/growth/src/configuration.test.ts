@@ -23,6 +23,7 @@ describe("GrowthConfigurationStore", () => {
   let memberContext: TenantContext;
   let otherContext: TenantContext;
   let memberId: string;
+  let memberRevision: number;
   let authorizer: AllowConfigurationAuthorizer;
   let store: GrowthConfigurationStore;
 
@@ -39,6 +40,7 @@ describe("GrowthConfigurationStore", () => {
     ownerContext = await organizations.resolveTenantContext(owner.user.user_id, owner.organization.organization_id);
     const membership = await organizations.addMember(ownerContext, member.user.user_id, "member");
     memberId = membership.membership_id;
+    memberRevision = membership.revision;
     memberContext = await organizations.resolveTenantContext(member.user.user_id, owner.organization.organization_id);
     otherContext = await organizations.resolveTenantContext(other.user.user_id, other.organization.organization_id);
     authorizer = new AllowConfigurationAuthorizer();
@@ -105,7 +107,7 @@ describe("GrowthConfigurationStore", () => {
       reflectionEnabled: false,
       adoptionMode: "review",
     });
-    await organizations.suspendMembership(ownerContext, memberId);
+    await organizations.suspendMembership(ownerContext, memberId, memberRevision);
 
     expect((await store.resolve(ownerContext, memberContext.userId)).subject).toEqual({ type: "organization" });
   });

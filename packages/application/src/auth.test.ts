@@ -136,7 +136,7 @@ describe("ApplicationAccessTokenService", () => {
       ttlSeconds: 60,
     });
     if (!memberToken.token) throw new Error("최초 token 원문이 없습니다");
-    await organizations.suspendMembership(context, membership.membership_id);
+    await organizations.suspendMembership(context, membership.membership_id, membership.revision);
     await expect(tokens.authenticate(`Bearer ${memberToken.token}`, "massion-api", ["work:read"])).rejects.toThrow(
       "Membership",
     );

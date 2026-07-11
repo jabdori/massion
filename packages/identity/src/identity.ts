@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import { applyMigrations, type MassionDatabase, type QueryExecutor } from "@massion/storage";
 
-import { IDENTITY_MIGRATION } from "./schema.js";
+import { IDENTITY_MEMBERSHIP_REVISION_MIGRATION, IDENTITY_MIGRATION } from "./schema.js";
 
 export type OrganizationKind = "personal" | "team";
 export type MembershipRole = "owner" | "admin" | "member";
@@ -28,6 +28,7 @@ export interface Membership {
   readonly organization_id: string;
   readonly role: MembershipRole;
   readonly status: MembershipStatus;
+  readonly revision: number;
   readonly created_at: unknown;
 }
 
@@ -61,7 +62,7 @@ async function findPersonalRegistration(
   user: IdentityUser,
 ): Promise<PersonalRegistration | undefined> {
   const [memberships] = await executor.query<[Membership[]]>(
-    "SELECT membership_id, user_id, organization_id, role, status, created_at FROM membership WHERE user_id = $user_id AND role = 'owner' ORDER BY created_at ASC;",
+    "SELECT membership_id, user_id, organization_id, role, status, revision, created_at FROM membership WHERE user_id = $user_id AND role = 'owner' ORDER BY created_at ASC;",
     { user_id: user.user_id },
   );
   for (const membership of memberships) {
@@ -79,7 +80,7 @@ export class IdentityService {
   private constructor(private readonly database: MassionDatabase) {}
 
   public static async create(database: MassionDatabase): Promise<IdentityService> {
-    await applyMigrations(database, [IDENTITY_MIGRATION]);
+    await applyMigrations(database, [IDENTITY_MIGRATION, IDENTITY_MEMBERSHIP_REVISION_MIGRATION]);
     return new IdentityService(database);
   }
 
@@ -108,7 +109,7 @@ export class IdentityService {
         { organization_id: organizationId, name: `${displayName} Personal` },
       );
       const [memberships] = await transaction.query<[Membership[]]>(
-        "CREATE membership CONTENT { membership_id: $membership_id, user_id: $user_id, organization_id: $organization_id, role: 'owner', status: 'active', created_at: time::now() } RETURN AFTER;",
+        "CREATE membership CONTENT { membership_id: $membership_id, user_id: $user_id, organization_id: $organization_id, role: 'owner', status: 'active', revision: 0, created_at: time::now() } RETURN AFTER;",
         { membership_id: membershipId, user_id: userId, organization_id: organizationId },
       );
       const user = users[0];

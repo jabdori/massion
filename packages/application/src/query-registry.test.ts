@@ -138,4 +138,72 @@ describe("ApplicationQueryRegistry", () => {
       data: [{ routeId: "route-1", name: "coding-balanced", credentialPolicy: "weighted" }],
     });
   });
+
+  it("웹 운영 화면용 구성원·기억·감사·session을 secret 없이 조회한다", async () => {
+    const registry = new ApplicationQueryRegistry();
+    registerApplicationQueries(registry, {
+      readModel,
+      memberships: {
+        listMembers: async () => [
+          {
+            membershipId: "query-membership",
+            userId: "query-user",
+            email: "member@example.com",
+            displayName: "Member",
+            role: "member",
+            status: "active",
+            revision: 0,
+            createdAt: "2026-07-11T00:00:00.000Z",
+          },
+        ],
+      },
+      growth: {
+        getActiveMemories: async () => [
+          {
+            memoryVersionId: "memory-1",
+            organizationId: context.organizationId,
+            scope: "organization",
+            subjectId: "organization",
+            version: 1,
+            status: "active",
+            entries: [{ kind: "fact", key: "release", value: "공개하면 안 되는 값", sourceReferenceIds: ["record-1"] }],
+            checksum: "a".repeat(64),
+          },
+        ],
+        resolveConfiguration: async () => ({}),
+        getActiveEvaluationStrategy: async () => ({}),
+        listSuggestions: async () => [],
+        listEffectEvaluations: async () => [],
+      } as never,
+      audit: {
+        read: async () => ({ events: [{ type: "work.created", sequence: 1 }], cursor: 1, snapshotRequired: false }),
+      } as never,
+      webSessions: {
+        list: async () => [
+          {
+            sessionId: "session-1",
+            status: "active",
+            issuedAt: "2026-07-11T00:00:00.000Z",
+            expiresAt: "2026-07-11T08:00:00.000Z",
+            idleExpiresAt: "2026-07-11T00:30:00.000Z",
+            lastSeenAt: "2026-07-11T00:00:00.000Z",
+            revision: 0,
+          },
+        ],
+      },
+    });
+
+    const members = await registry.query(context, ["identity:read"], "identity.memberships", {});
+    expect(members).toMatchObject({ data: [{ userId: "query-user", displayName: "Member" }] });
+    expect(JSON.stringify(members)).not.toContain("member@example.com");
+    const memories = await registry.query(context, ["growth:read"], "growth.memories", {});
+    expect(memories).toMatchObject({ data: [{ memoryVersionId: "memory-1", entryKeys: ["release"] }] });
+    expect(JSON.stringify(memories)).not.toContain("공개하면 안 되는 값");
+    await expect(registry.query(context, ["audit:read"], "application.audit", {})).resolves.toMatchObject({
+      data: { events: [{ type: "work.created" }], cursor: 1 },
+    });
+    await expect(registry.query(context, ["identity:read"], "application.sessions", {})).resolves.toMatchObject({
+      data: [{ sessionId: "session-1", status: "active" }],
+    });
+  });
 });
