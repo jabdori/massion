@@ -70,4 +70,36 @@ describe("CLI Application adapter", () => {
     });
     expect(operations).toEqual(["router.credentials", "router.routes"]);
   });
+
+  it("공식 Integration 상태와 연결 변경을 같은 Application 경계로 호출한다", async () => {
+    const calls: unknown[] = [];
+    const client: CliApplicationClient = {
+      status: async () => ({}),
+      snapshot: async () => ({}),
+      query: async (operation, payload) => {
+        calls.push([operation, payload]);
+        return {};
+      },
+      command: async (input) => {
+        calls.push(input);
+        return {};
+      },
+      inspectArtifact: async () => ({}),
+      installArtifact: async () => ({}),
+      updateArtifact: async () => ({}),
+    };
+    await executeCliInvocation(client, parseCliArguments(["integration", "list"]));
+    await executeCliInvocation(client, parseCliArguments(["integration", "deliveries", "25"]));
+    await executeCliInvocation(client, parseCliArguments(["integration", "channel-bind"]), {
+      readJson: async () => ({
+        installationId: "installation-12345678",
+        externalResourceId: "massion/project",
+        resourceKind: "repository",
+        events: ["issues"],
+      }),
+    });
+    expect(calls[0]).toEqual(["integration.list", {}]);
+    expect(calls[1]).toEqual(["integration.deliveries", { limit: 25 }]);
+    expect(calls[2]).toMatchObject({ operation: "integration.channel.bind" });
+  });
 });

@@ -25,6 +25,7 @@ const COMMANDS: Readonly<Record<string, readonly string[] | undefined>> = {
   runtime: ["get", "cancel", "suspend", "resume"],
   provider: ["list", "credential-add", "credential-disable", "route-set"],
   ext: ["validate", "link", "pack", "install", "update", "rollback", "list"],
+  integration: ["list", "deliveries", "oauth-start", "connect", "user-bind", "channel-bind"],
   growth: ["status", "configure", "suggestions", "adopt", "revert"],
   doctor: undefined,
   help: undefined,

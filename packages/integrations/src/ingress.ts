@@ -28,7 +28,7 @@ interface IngressSecrets {
 }
 
 interface ConnectorInvoker {
-  invoke(platform: IntegrationPlatform, contribution: string, input: unknown): Promise<unknown>;
+  invoke(context: TenantContext, platform: IntegrationPlatform, contribution: string, input: unknown): Promise<unknown>;
 }
 
 function field(source: Record<string, unknown>, name: string): string {
@@ -88,7 +88,11 @@ export class IntegrationIngress {
       if (request.method !== "GET") return { status: 405, headers: { allow: "GET" } };
       if (!this.dependencies.oauth) return { status: 503, body: { error: "OAuth callback을 사용할 수 없습니다" } };
       try {
-        return { status: 200, body: await this.dependencies.oauth.callback(callbackPlatform, request.query ?? {}) };
+        const result = await this.dependencies.oauth.callback(callbackPlatform, request.query ?? {});
+        const target = result && typeof result === "object" ? (result as Record<string, unknown>).returnTo : undefined;
+        if (typeof target !== "string" || !target.startsWith("https://"))
+          throw new Error("OAuth 복귀 주소가 유효하지 않습니다");
+        return { status: 303, headers: { location: target } };
       } catch (error) {
         return {
           status: 400,
@@ -140,7 +144,7 @@ export class IntegrationIngress {
         channelId,
         field(event, "type"),
       );
-      const normalized = await this.dependencies.connectors.invoke("slack", "surfaceConnectors:slack", {
+      const normalized = await this.dependencies.connectors.invoke(actor.context, "slack", "surfaceConnectors:slack", {
         kind: "command",
         userId: externalUserId,
         channelId,
@@ -178,7 +182,12 @@ export class IntegrationIngress {
       channelId,
       payload ? "interaction" : "slash-command",
     );
-    const normalized = await this.dependencies.connectors.invoke("slack", "surfaceConnectors:slack", connectorInput);
+    const normalized = await this.dependencies.connectors.invoke(
+      actor.context,
+      "slack",
+      "surfaceConnectors:slack",
+      connectorInput,
+    );
     await this.accept(
       actor.context,
       actor.installation.installationId,
@@ -222,15 +231,20 @@ export class IntegrationIngress {
       channelId,
       `interaction.${String(payload.type)}`,
     );
-    const normalized = await this.dependencies.connectors.invoke("discord", "surfaceConnectors:discord", {
-      kind: payload.type === 3 ? "component" : "command",
-      name: data.name,
-      subcommand: first?.name,
-      customId: data.custom_id,
-      userId: externalUserId,
-      channelId,
-      options: optionRecord,
-    });
+    const normalized = await this.dependencies.connectors.invoke(
+      actor.context,
+      "discord",
+      "surfaceConnectors:discord",
+      {
+        kind: payload.type === 3 ? "component" : "command",
+        name: data.name,
+        subcommand: first?.name,
+        customId: data.custom_id,
+        userId: externalUserId,
+        channelId,
+        options: optionRecord,
+      },
+    );
     await this.accept(
       actor.context,
       actor.installation.installationId,
@@ -266,7 +280,7 @@ export class IntegrationIngress {
       field(repository, "full_name"),
       event,
     );
-    const normalized = await this.dependencies.connectors.invoke("github", "surfaceConnectors:github", {
+    const normalized = await this.dependencies.connectors.invoke(actor.context, "github", "surfaceConnectors:github", {
       ...payload,
       event,
       action,

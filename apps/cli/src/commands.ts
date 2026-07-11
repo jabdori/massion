@@ -83,6 +83,13 @@ export async function executeCliInvocation(
     return { credentials, routes };
   }
   if (invocation.command === "ext" && invocation.subcommand === "list") return await client.query("extension.list", {});
+  if (invocation.command === "integration" && invocation.subcommand === "list")
+    return await client.query("integration.list", {});
+  if (invocation.command === "integration" && invocation.subcommand === "deliveries")
+    return await client.query(
+      "integration.deliveries",
+      args[0] === undefined ? {} : { limit: integer(args[0], "limit") },
+    );
   if (invocation.command === "growth" && invocation.subcommand === "status")
     return await client.query("growth.configuration.get", {});
   if (invocation.command === "growth" && invocation.subcommand === "suggestions")
@@ -167,6 +174,10 @@ export async function executeCliInvocation(
     "ext:link": "extension.link",
     "ext:pack": "extension.pack",
     "ext:rollback": "extension.rollback",
+    "integration:oauth-start": "integration.oauth.start",
+    "integration:connect": "integration.connect",
+    "integration:user-bind": "integration.user.bind",
+    "integration:channel-bind": "integration.channel.bind",
   };
   const operation = operationMap[`${invocation.command}:${invocation.subcommand ?? ""}`] ?? "";
   if (operation) {

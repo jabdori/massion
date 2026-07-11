@@ -64,6 +64,7 @@ export class IntegrationOAuthCoordinator {
     const state = value(query, "state", /^[A-Za-z0-9_-]{43}$/u);
     const consumed = await this.dependencies.tokens.consumeOAuthState(state);
     if (consumed.platform !== platform) throw new Error("OAuth state platform이 일치하지 않습니다");
+    const returnTo = new URL("/extensions", consumed.redirectUri).toString();
     if (platform === "slack") {
       const code = value(query, "code", /^[A-Za-z0-9._-]{8,512}$/u);
       const response = await this.dependencies.slack.exchange({ code, redirectUri: consumed.redirectUri });
@@ -89,7 +90,7 @@ export class IntegrationOAuthCoordinator {
         credentialRef,
         scopes,
       });
-      return { connected: true, platform, installationId: installation.installationId };
+      return { connected: true, platform, installationId: installation.installationId, returnTo };
     }
     const installationId = value(query, "installation_id", /^[0-9]{1,20}$/u);
     const setupAction = value(query, "setup_action", /^(?:install|update)$/u);
@@ -104,6 +105,6 @@ export class IntegrationOAuthCoordinator {
       credentialRef,
       scopes: ["metadata:read"],
     });
-    return { connected: true, platform, installationId: installation.installationId };
+    return { connected: true, platform, installationId: installation.installationId, returnTo };
   }
 }

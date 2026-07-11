@@ -68,6 +68,16 @@ function strings(value: unknown, label: string): readonly string[] {
   return value as string[];
 }
 
+function oauthPlatform(value: unknown): "slack" | "github" {
+  if (value !== "slack" && value !== "github") throw new Error("OAuth platform이 유효하지 않습니다");
+  return value;
+}
+
+function resourceKind(value: unknown): "channel" | "repository" {
+  if (value !== "channel" && value !== "repository") throw new Error("Integration resource kind가 유효하지 않습니다");
+  return value;
+}
+
 function result(
   command: ApplicationCommandV1,
   input: { resourceType: string; resourceId: string; revision?: number; data?: unknown },
@@ -128,10 +138,8 @@ export function registerApplicationIntegrationOperations(
     recovery: "replay-domain",
     validate(value) {
       const source = object(value, ["platform", "redirectUri", "scopes"], ["platform", "redirectUri"]);
-      if (source.platform !== "slack" && source.platform !== "github")
-        throw new Error("OAuth platform이 유효하지 않습니다");
       return {
-        platform: source.platform as "slack" | "github",
+        platform: oauthPlatform(source.platform),
         redirectUri: text(source.redirectUri, "redirectUri", 2_048),
         scopes: source.scopes === undefined ? [] : strings(source.scopes, "scopes"),
       };
@@ -181,12 +189,10 @@ export function registerApplicationIntegrationOperations(
         ["installationId", "externalResourceId", "resourceKind", "events"],
         ["installationId", "externalResourceId", "resourceKind", "events"],
       );
-      if (source.resourceKind !== "channel" && source.resourceKind !== "repository")
-        throw new Error("Integration resource kind가 유효하지 않습니다");
       return {
         installationId: text(source.installationId, "installationId"),
         externalResourceId: text(source.externalResourceId, "externalResourceId"),
-        resourceKind: source.resourceKind as "channel" | "repository",
+        resourceKind: resourceKind(source.resourceKind),
         events: strings(source.events, "events"),
       };
     },

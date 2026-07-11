@@ -88,7 +88,12 @@ export class IntegrationOutboundDispatcher {
     private readonly dependencies: {
       readonly store: IntegrationStore;
       readonly connectors: {
-        invoke(platform: IntegrationPlatform, contribution: string, input: unknown): Promise<unknown>;
+        invoke(
+          context: TenantContext,
+          platform: IntegrationPlatform,
+          contribution: string,
+          input: unknown,
+        ): Promise<unknown>;
       };
       readonly network: {
         request(input: {
@@ -110,7 +115,15 @@ export class IntegrationOutboundDispatcher {
     if (!item) return false;
     try {
       const installation = await this.dependencies.store.getInstallation(context, item.installationId);
-      await this.dependencies.store.assertBoundResource(context, item.installationId, item.destination, item.operation);
+      const bindingEvent =
+        item.operation === "github.pull-request"
+          ? "pull_request"
+          : item.operation === "github.check-run"
+            ? "checks"
+            : item.operation.startsWith("github.")
+              ? item.operation.slice("github.".length)
+              : item.operation;
+      await this.dependencies.store.assertBoundResource(context, item.installationId, item.destination, bindingEvent);
       const contribution =
         installation.platform === "github"
           ? "eventConsumers:github-sync"
@@ -121,7 +134,12 @@ export class IntegrationOutboundDispatcher {
           : installation.platform === "discord"
             ? { channelId: item.destination, text: publicSummary(item.payload) }
             : item.payload;
-      const rendered = await this.dependencies.connectors.invoke(installation.platform, contribution, connectorInput);
+      const rendered = await this.dependencies.connectors.invoke(
+        context,
+        installation.platform,
+        contribution,
+        connectorInput,
+      );
       const request = requestFromRendered(installation.platform, item.destination, rendered);
       const response = await this.dependencies.network.request({
         context,
