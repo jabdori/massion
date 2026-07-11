@@ -101,6 +101,9 @@ importers:
       '@massion/extension-sdk':
         specifier: workspace:*
         version: link:../extension-sdk
+      '@massion/governance':
+        specifier: workspace:*
+        version: link:../governance
       '@massion/identity':
         specifier: workspace:*
         version: link:../identity
