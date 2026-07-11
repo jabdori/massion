@@ -187,6 +187,42 @@ describe("Governance Policy Decision", () => {
     });
   });
 
+  it("Extension 설치와 권한 증가는 active policy가 review 또는 auto를 선택한다", async () => {
+    const defaults = createDefaultPolicy("personal");
+    const draft = await policies.createDraft(context, {
+      commandId: "extension-auto-policy",
+      bundle: defaults.bundle,
+      requirements: [],
+    });
+    await policies.activate(context, {
+      commandId: "extension-auto-policy-activate",
+      policyVersionId: draft.policy_version_id,
+    });
+    const extensionRequest = (action: "extension.install" | "extension.permission_increase"): PolicyRequest =>
+      request(action, {
+        resource: {
+          type: "ExtensionResource",
+          id: "@massion-ext/echo@1.0.0",
+          organizationId: context.organizationId,
+          revision: 0,
+          attributes: { dataClassification: "internal" },
+        },
+        context: { environment: "local", riskClass: "extension-change", external: false },
+      });
+
+    const install = await governance.evaluate(context, {
+      commandId: "extension-auto-install",
+      request: extensionRequest("extension.install"),
+    });
+    const permission = await governance.evaluate(context, {
+      commandId: "extension-auto-permission",
+      request: extensionRequest("extension.permission_increase"),
+    });
+
+    expect(install.outcome).toBe("allow");
+    expect(permission.outcome).toBe("allow");
+  });
+
   it("Growth adoption의 review만 builtin 승인을 요구하고 auto는 active policy 허용을 따른다", async () => {
     await activate("personal");
     const review = await governance.evaluate(context, {

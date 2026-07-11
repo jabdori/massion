@@ -65,12 +65,7 @@ function automationMode(request: PolicyRequest): GrowthAutomationMode | undefine
 }
 
 function invariantRequirement(action: string, mode?: GrowthAutomationMode): ApprovalRequirement | undefined {
-  const governed = new Set([
-    "policy.activate",
-    "extension.permission_increase",
-    "emergency.stop.disable",
-    "declaration.apply",
-  ]);
+  const governed = new Set(["policy.activate", "emergency.stop.disable", "declaration.apply"]);
   if (action === "growth.adopt" && mode !== "auto") governed.add(action);
   if (action === "growth.revert" && mode !== "auto") governed.add(action);
   if (!governed.has(action)) return undefined;
