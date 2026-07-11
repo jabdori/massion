@@ -106,14 +106,14 @@ export class OperationQueue {
       if (existing[0]) return view(existing[0]);
       const actionId = randomUUID();
       const [created] = await transaction.query<[ActionRow[]]>(
-        "CREATE operation_action CONTENT { action_id: $action_id, dedupe_key: $dedupe_key, kind: $kind, payload_json: $payload_json, state: 'pending', attempts: 0, max_attempts: $max_attempts, available_at: $available_at, lease_owner: NONE, lease_generation: 0, lease_expires_at: NONE, error_category: NONE, created_at: time::now(), updated_at: time::now() } RETURN AFTER;",
+        "CREATE operation_action CONTENT { action_id: $action_id, dedupe_key: $dedupe_key, kind: $kind, payload_json: $payload_json, state: 'pending', attempts: 0, max_attempts: $max_attempts, available_at: time::now() + duration::from_millis($delay_ms), lease_owner: NONE, lease_generation: 0, lease_expires_at: NONE, error_category: NONE, created_at: time::now(), updated_at: time::now() } RETURN AFTER;",
         {
           action_id: actionId,
           dedupe_key: input.dedupeKey,
           kind: input.kind,
           payload_json: payloadJson,
           max_attempts: maxAttempts,
-          available_at: new Date(Date.now() + delayMs),
+          delay_ms: delayMs,
         },
       );
       if (!created[0]) throw new Error("operation action을 생성하지 못했습니다");
@@ -132,11 +132,11 @@ export class OperationQueue {
       if (!candidate) return undefined;
       const generation = candidate.lease_generation + 1;
       const [claimed] = await transaction.query<[ActionRow[]]>(
-        "UPDATE operation_action SET state = 'leased', attempts += 1, lease_owner = $owner, lease_generation = $generation, lease_expires_at = $expires_at, updated_at = time::now() WHERE action_id = $action_id AND lease_generation = $previous_generation AND ((state = 'pending' AND available_at <= time::now()) OR (state = 'leased' AND lease_expires_at <= time::now())) RETURN AFTER;",
+        "UPDATE operation_action SET state = 'leased', attempts += 1, lease_owner = $owner, lease_generation = $generation, lease_expires_at = time::now() + duration::from_millis($lease_ms), updated_at = time::now() WHERE action_id = $action_id AND lease_generation = $previous_generation AND ((state = 'pending' AND available_at <= time::now()) OR (state = 'leased' AND lease_expires_at <= time::now())) RETURN AFTER;",
         {
           owner,
           generation,
-          expires_at: new Date(Date.now() + this.leaseMs),
+          lease_ms: this.leaseMs,
           action_id: candidate.action_id,
           previous_generation: candidate.lease_generation,
         },
@@ -169,10 +169,10 @@ export class OperationQueue {
     if (!current || current.state !== "leased") throw new Error("실패 처리할 operation lease가 없습니다");
     const terminal = current.attempts >= current.maxAttempts;
     const [updated] = await this.database.query<[ActionRow[]]>(
-      "UPDATE operation_action SET state = $state, available_at = $available_at, lease_owner = NONE, lease_expires_at = NONE, error_category = $category, updated_at = time::now() WHERE action_id = $action_id AND state = 'leased' AND lease_generation = $generation AND lease_owner = $owner RETURN AFTER;",
+      "UPDATE operation_action SET state = $state, available_at = time::now() + duration::from_millis($delay_ms), lease_owner = NONE, lease_expires_at = NONE, error_category = $category, updated_at = time::now() WHERE action_id = $action_id AND state = 'leased' AND lease_generation = $generation AND lease_owner = $owner RETURN AFTER;",
       {
         state: terminal ? "failed" : "pending",
-        available_at: new Date(Date.now() + delayMs),
+        delay_ms: delayMs,
         category,
         action_id: actionId,
         generation: leaseGeneration,
