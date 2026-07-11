@@ -18,6 +18,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@ai-sdk/provider": "3.0.14",
     "@ai-sdk/provider-utils": "4.0.38",
     "@massion/identity": "workspace:*",
     "@massion/organization": "workspace:*",
@@ -27,6 +28,8 @@
     "@voltagent/core": "2.9.0",
     "@voltagent/logger": "2.0.2",
     "ai": "6.0.222",
+    "graphql": "16.14.2",
+    "ws": "8.21.0",
     "zod": "4.4.3"
   },
   "engines": {
