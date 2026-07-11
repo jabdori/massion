@@ -1,0 +1,141 @@
+name: Massion 1.0 Release
+
+on:
+  push:
+    tags: ["v1.0.0"]
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    name: Verify, package, publish, and attest
+    runs-on: ubuntu-24.04
+    permissions:
+      artifact-metadata: write
+      attestations: write
+      contents: read
+      id-token: write
+      packages: write
+    steps:
+      - name: 소스 확인
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Node.js 설치
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 24.18.0
+          package-manager-cache: false
+
+      - name: Bun 설치
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.3.14
+
+      - name: pnpm 설치
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.30.3 --activate
+
+      - name: 릴리스 신원 확인
+        run: |
+          test "$GITHUB_REF_NAME" = "v$(node --print "require('./package.json').version")"
+          echo "base=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+        id: identity
+
+      - name: 고정 의존성 설치
+        run: pnpm install --frozen-lockfile
+
+      - name: 전체 품질 검증
+        run: pnpm verify
+
+      - name: 보안 검증
+        run: pnpm verify:security
+
+      - name: 강건성 검증
+        run: pnpm verify:hardening
+
+      - name: 설치·배포 묶음 생성
+        run: pnpm release:build
+
+      - name: 깨끗한 설치·복구 E2E
+        run: pnpm verify:release artifacts/release-1.0.0
+
+      - name: Docker Buildx 설치
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
+
+      - name: GitHub Container Registry 로그인
+        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4.4.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Massion 이미지 빌드·게시
+        id: massion_image
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: .
+          file: Dockerfile
+          push: true
+          tags: ${{ steps.identity.outputs.base }}/massion:1.0.0
+          provenance: mode=max
+          sbom: true
+
+      - name: SurrealDB 이미지 빌드·게시
+        id: surrealdb_image
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: .
+          file: deploy/surreal/Dockerfile
+          push: true
+          tags: ${{ steps.identity.outputs.base }}/surrealdb:3.2.0-massion.1
+          provenance: mode=max
+          sbom: true
+
+      - name: Caddy 이미지 빌드·게시
+        id: caddy_image
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: .
+          file: deploy/caddy/Dockerfile
+          push: true
+          tags: ${{ steps.identity.outputs.base }}/caddy:2.11.4-massion.1
+          provenance: mode=max
+          sbom: true
+
+      - name: Massion 이미지 증명
+        uses: actions/attest@a1948c3f048ba23858d222213b7c278aabede763 # v4.1.1
+        with:
+          subject-name: ${{ steps.identity.outputs.base }}/massion
+          subject-digest: ${{ steps.massion_image.outputs.digest }}
+          push-to-registry: true
+
+      - name: SurrealDB 이미지 증명
+        uses: actions/attest@a1948c3f048ba23858d222213b7c278aabede763 # v4.1.1
+        with:
+          subject-name: ${{ steps.identity.outputs.base }}/surrealdb
+          subject-digest: ${{ steps.surrealdb_image.outputs.digest }}
+          push-to-registry: true
+
+      - name: Caddy 이미지 증명
+        uses: actions/attest@a1948c3f048ba23858d222213b7c278aabede763 # v4.1.1
+        with:
+          subject-name: ${{ steps.identity.outputs.base }}/caddy
+          subject-digest: ${{ steps.caddy_image.outputs.digest }}
+          push-to-registry: true
+
+      - name: 설치·배포 묶음 증명
+        uses: actions/attest@a1948c3f048ba23858d222213b7c278aabede763 # v4.1.1
+        with:
+          subject-path: artifacts/release-1.0.0/*
+
+      - name: 설치·배포 묶음 보관
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: massion-1.0.0
+          path: artifacts/release-1.0.0/*
+          if-no-files-found: error
+          retention-days: 30
