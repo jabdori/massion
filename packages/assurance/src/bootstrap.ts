@@ -23,6 +23,7 @@ import {
 export interface AssuranceRunGateway {
   start(context: TenantContext, input: StartAssuranceRunInput): Promise<AssuranceRunResult>;
   get(context: TenantContext, assuranceRunId: string): Promise<AssuranceRun>;
+  listCriteria(context: TenantContext, assuranceRunId: string): ReturnType<AssuranceRunStore["listCriteria"]>;
   prepareSnapshot(
     context: TenantContext,
     input: DatabaseAssuranceSnapshotInput,
@@ -63,6 +64,7 @@ export const AssuranceBootstrap = {
     return Object.freeze({
       start: runs.start.bind(runs),
       get: runs.get.bind(runs),
+      listCriteria: runs.listCriteria.bind(runs),
       prepareSnapshot: runs.prepareSnapshot.bind(runs),
       listEvents: runs.listEvents.bind(runs),
       decide: assurance.decide.bind(assurance),

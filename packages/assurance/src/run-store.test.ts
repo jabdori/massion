@@ -261,6 +261,10 @@ describe("Assurance run 저장소", () => {
     expect(first.run.startedAt).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/u);
     expect(first.run.updatedAt).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/u);
     expect(repeated.run.assuranceRunId).toBe(first.run.assuranceRunId);
+    await expect(store.listCriteria(context, first.run.assuranceRunId)).resolves.toEqual([
+      expect.objectContaining({ criterionKey: "profile:acceptance:coverage", status: "pending" }),
+      expect.objectContaining({ criterionKey: expect.stringMatching(/^task:/u), status: "pending" }),
+    ]);
     await expect(store.start(context, { ...input(commandId), snapshotHash: "b".repeat(64) })).rejects.toThrow(
       "다른 assurance 명령",
     );

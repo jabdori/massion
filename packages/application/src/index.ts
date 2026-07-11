@@ -1,5 +1,6 @@
 export * from "./auth.js";
 export * from "./artifacts.js";
+export * from "./assurance-check-orchestrator.js";
 export * from "./adapters/read-model.js";
 export * from "./adapters/domain.js";
 export * from "./bootstrap.js";

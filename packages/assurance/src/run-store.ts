@@ -5,6 +5,7 @@ import { applyMigrations, type MassionDatabase, type QueryExecutor } from "@mass
 
 import type {
   AssuranceEvent,
+  AssuranceCriterion,
   AssuranceFailure,
   AssuranceRun,
   AssuranceRunResult,
@@ -355,6 +356,52 @@ export class AssuranceRunStore {
   public async get(context: TenantContext, assuranceRunId: string): Promise<AssuranceRun> {
     await this.organizations.verifyTenantContext(context);
     return this.view(await this.find(this.database, context.organizationId, assuranceRunId));
+  }
+
+  public async listCriteria(context: TenantContext, assuranceRunId: string): Promise<readonly AssuranceCriterion[]> {
+    await this.organizations.verifyTenantContext(context);
+    await this.get(context, assuranceRunId);
+    const [records] = await this.database.query<[
+      Array<{
+        criterion_id: string;
+        organization_id: string;
+        work_id: string;
+        assurance_run_id: string;
+        criterion_key: string;
+        source: AssuranceCriterion["source"];
+        statement: string;
+        method: AssuranceCriterion["method"];
+        required_evidence_kinds: readonly string[];
+        control_references: readonly string[];
+        status: AssuranceCriterion["status"];
+        exclusion_rule?: string;
+        exclusion_reason?: string;
+        exclusion_actor_id?: string;
+        created_at: unknown;
+        updated_at: unknown;
+      }>
+    ]>(
+      "SELECT * OMIT id FROM assurance_criterion WHERE organization_id = $organization_id AND assurance_run_id = $assurance_run_id ORDER BY criterion_key ASC, criterion_id ASC;",
+      { organization_id: context.organizationId, assurance_run_id: assuranceRunId },
+    );
+    return records.map((record) => ({
+      criterionId: record.criterion_id,
+      organizationId: record.organization_id,
+      workId: record.work_id,
+      assuranceRunId: record.assurance_run_id,
+      criterionKey: record.criterion_key,
+      source: record.source,
+      statement: record.statement,
+      method: record.method,
+      requiredEvidenceKinds: record.required_evidence_kinds,
+      controlReferences: record.control_references,
+      status: record.status,
+      ...(record.exclusion_rule ? { exclusionRule: record.exclusion_rule } : {}),
+      ...(record.exclusion_reason ? { exclusionReason: record.exclusion_reason } : {}),
+      ...(record.exclusion_actor_id ? { exclusionActorId: record.exclusion_actor_id } : {}),
+      createdAt: isoDateTime(record.created_at, "Assurance criterion createdAt"),
+      updatedAt: isoDateTime(record.updated_at, "Assurance criterion updatedAt"),
+    }));
   }
 
   public async getInTransaction(
