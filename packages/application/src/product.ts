@@ -123,20 +123,20 @@ export class ApplicationProduct implements AsyncDisposable {
       commands,
       queries,
       dependencies.registry ?? {
-        async search() {
-          return { items: [] };
+        search() {
+          return Promise.resolve({ items: [] });
         },
-        async info() {
-          throw new Error("Registry가 구성되지 않았습니다");
+        info() {
+          return Promise.reject(new Error("Registry가 구성되지 않았습니다"));
         },
-        async inventory() {
-          return [];
+        inventory() {
+          return Promise.resolve([]);
         },
-        async install() {
-          throw new Error("Registry가 구성되지 않았습니다");
+        install() {
+          return Promise.reject(new Error("Registry가 구성되지 않았습니다"));
         },
-        async recall() {
-          throw new Error("Registry가 구성되지 않았습니다");
+        recall() {
+          return Promise.reject(new Error("Registry가 구성되지 않았습니다"));
         },
       },
     );

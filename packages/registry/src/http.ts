@@ -80,7 +80,7 @@ export class RegistryHttpHandler {
           "content-length": String(body.length),
           "cache-control": "private, immutable, max-age=31536000",
           "x-content-type-options": "nosniff",
-          etag: `\"sha256-${version.artifactDigest}\"`,
+          etag: `"sha256-${version.artifactDigest}"`,
         },
       });
     }

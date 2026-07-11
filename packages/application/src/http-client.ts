@@ -162,7 +162,7 @@ export class ApplicationHttpClient {
           "content-type": "application/vnd.massion.registry-publish.v1",
           "x-massion-command-id": commandId,
         },
-        body: framed as unknown as BodyInit,
+        body: framed,
       },
       false,
     );
