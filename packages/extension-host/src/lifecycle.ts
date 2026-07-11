@@ -78,6 +78,19 @@ interface ActiveWorker {
   readonly sessionId: string;
   readonly contributions: readonly string[];
   readonly handle: ExtensionWorkerHandle;
+  readonly previousVersionId?: string;
+}
+
+export interface ExtensionWorkerCrashObserver {
+  record(input: {
+    readonly crashId: string;
+    readonly organizationId: string;
+    readonly installationId: string;
+    readonly versionId: string;
+    readonly previousVersionId?: string;
+    readonly code: number | null;
+    readonly signal: NodeJS.Signals | null;
+  }): Promise<void>;
 }
 
 function contributionIds(contributions: ExtensionContributionDeclaration): readonly string[] {
@@ -112,6 +125,7 @@ export class ExtensionLifecycleService {
       readonly artifacts: FileArtifactStore;
       readonly authorizer: ExtensionLifecycleAuthorizer;
       readonly workers: ExtensionWorkerLauncher | ExtensionWorkerSupervisor;
+      readonly crashObserver?: ExtensionWorkerCrashObserver;
     },
   ) {}
 
@@ -353,8 +367,30 @@ export class ExtensionLifecycleService {
         sessionId: session.sessionId,
         contributions: input.reportContributions,
         handle: worker,
+        ...(input.installation.activeVersionId === undefined
+          ? {}
+          : { previousVersionId: input.installation.activeVersionId }),
       };
       this.registerActiveWorker(context.organizationId, active);
+      void worker.exited
+        ?.then(async (exit) => {
+          if (this.activeWorkers.get(key)?.handle !== worker) return;
+          this.removeActiveWorker(active);
+          await this.dependencies.store.finishWorkerSession(context, session.sessionId, {
+            state: "failed",
+            exitCategory: "unexpected-exit",
+          });
+          await this.dependencies.crashObserver?.record({
+            crashId: `${session.sessionId}:${String(exit.code)}:${exit.signal ?? "none"}`,
+            organizationId: context.organizationId,
+            installationId: activated.installationId,
+            versionId: input.version.versionId,
+            ...(active.previousVersionId === undefined ? {} : { previousVersionId: active.previousVersionId }),
+            code: exit.code,
+            signal: exit.signal,
+          });
+        })
+        .catch(() => undefined);
       if (previous) {
         try {
           await previous.handle.stop();
@@ -409,6 +445,15 @@ export class ExtensionLifecycleService {
     this.activeWorkers.set(key, active);
     for (const contribution of active.contributions) {
       this.contributionOwners.set(`${organizationId}:${contribution}`, active.installationId);
+    }
+  }
+
+  private removeActiveWorker(active: ActiveWorker): void {
+    const key = activeKey(active.organizationId, active.installationId);
+    if (this.activeWorkers.get(key)?.handle !== active.handle) return;
+    this.activeWorkers.delete(key);
+    for (const contribution of active.contributions) {
+      this.contributionOwners.delete(`${active.organizationId}:${contribution}`);
     }
   }
 }
