@@ -13,6 +13,9 @@ const ARTIFACT_LIMIT = 64 * 1024 * 1024;
 const LOOPBACK = new Set(["127.0.0.1", "::1", "::ffff:127.0.0.1", "localhost"]);
 
 export interface ApplicationHttpDependencies {
+  readonly health?: {
+    readiness(): Promise<Readonly<Record<string, boolean>>>;
+  };
   readonly auth: {
     authenticateAccess(
       authorization: string | undefined,
@@ -223,6 +226,7 @@ export class ApplicationHttpServer {
     ApplicationHttpServerOptions;
   private activeRequests = 0;
   private activeStreams = 0;
+  private draining = false;
 
   public constructor(
     private readonly dependencies: ApplicationHttpDependencies,
@@ -271,6 +275,7 @@ export class ApplicationHttpServer {
   }
 
   public async close(): Promise<void> {
+    this.beginDrain();
     if (!this.server.listening) return;
     await new Promise<void>((resolve, reject) =>
       this.server.close((error) => {
@@ -278,6 +283,10 @@ export class ApplicationHttpServer {
         else resolve();
       }),
     );
+  }
+
+  public beginDrain(): void {
+    this.draining = true;
   }
 
   private async handle(request: IncomingMessage, response: ServerResponse): Promise<void> {
@@ -302,6 +311,47 @@ export class ApplicationHttpServer {
 
   private async route(request: IncomingMessage, response: ServerResponse): Promise<void> {
     if (request.rawHeaders.length / 2 > 64) throw validation("HTTP header 개수 상한을 초과했습니다");
+    const url = new URL(request.url ?? "/", "http://massion.invalid");
+    if (url.pathname === "/health/live" || url.pathname === "/health/ready") {
+      if (request.method !== "GET") {
+        this.method(response, ["GET"]);
+        return;
+      }
+      response.setHeader("cache-control", "no-store");
+      if (url.pathname === "/health/live") {
+        sendJson(response, 200, { status: "live" });
+        return;
+      }
+      if (this.draining) {
+        sendJson(response, 503, { status: "not-ready" });
+        return;
+      }
+      try {
+        const readiness = (await this.dependencies.health?.readiness()) ?? {};
+        const entries = Object.entries(readiness)
+          .filter(([name, value]) => /^[a-z][a-z0-9-]{0,31}$/u.test(name) && typeof value === "boolean")
+          .sort(([left], [right]) => left.localeCompare(right))
+          .slice(0, 16);
+        if (entries.some(([, ready]) => !ready)) {
+          sendJson(response, 503, {
+            status: "not-ready",
+            components: Object.fromEntries(entries.map(([name, ready]) => [name, ready ? "ready" : "not-ready"])),
+          });
+          return;
+        }
+        sendJson(response, 200, {
+          status: "ready",
+          components: Object.fromEntries(entries.map(([name]) => [name, "ready"])),
+        });
+      } catch {
+        sendJson(response, 503, { status: "not-ready" });
+      }
+      return;
+    }
+    if (this.draining) {
+      sendJson(response, 503, { status: "draining" });
+      return;
+    }
     const origin = header(request, "origin");
     const secure = !LOOPBACK.has(this.options.host);
     if (origin !== undefined) {
@@ -331,7 +381,6 @@ export class ApplicationHttpServer {
         });
       }
     }
-    const url = new URL(request.url ?? "/", "http://massion.invalid");
     if (url.searchParams.has("access_token") || url.searchParams.has("token"))
       throw validation("URL token은 허용되지 않습니다");
     if (request.method === "OPTIONS") throw validation("CORS preflight를 지원하지 않습니다");
