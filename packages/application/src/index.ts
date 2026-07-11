@@ -22,6 +22,7 @@ export * from "./http-server.js";
 export * from "./outbox.js";
 export * from "./product.js";
 export * from "./query-registry.js";
+export * from "./records-document-planner.js";
 export * from "./read-model.js";
 export * from "./run-recovery.js";
 export * from "./run-commands.js";

@@ -11,6 +11,7 @@ import { CoreDeliveryStage, type CoreSoftwareTaskPort } from "./core-delivery-st
 import { CoreEvidenceStage } from "./core-evidence-stage.js";
 import { createCoreWorkPipelineExecutors } from "./core-pipeline.js";
 import { CoreRecordsStage, type CoreRecordsDocumentPlanner } from "./core-records-stage.js";
+import { DeterministicRecordsDocumentPlanner } from "./records-document-planner.js";
 import type { CoreWorkStage, CoreWorkStageExecutor } from "./core-work-coordinator.js";
 
 export interface CoreProductDependencies {
@@ -23,7 +24,7 @@ export interface CoreProductDependencies {
   readonly assurance: AssuranceRunGateway;
   readonly assuranceChecks: CoreAssuranceCheckOrchestrator;
   readonly records: RecordsService;
-  readonly recordDocuments: CoreRecordsDocumentPlanner;
+  readonly recordDocuments?: CoreRecordsDocumentPlanner;
   readonly software: CoreSoftwareTaskPort;
 }
 
@@ -46,7 +47,7 @@ export function createCoreProductExecutors(
   const records = new CoreRecordsStage({
     works: dependencies.works,
     records: dependencies.records,
-    documents: dependencies.recordDocuments,
+    documents: dependencies.recordDocuments ?? new DeterministicRecordsDocumentPlanner(),
   });
   return createCoreWorkPipelineExecutors({
     graph: dependencies.graph,
