@@ -1,5 +1,6 @@
 export * from "./configuration.js";
 export * from "./contracts.js";
+export * from "./evaluation.js";
 export * from "./governance-adapter.js";
 export * from "./prompt-memory.js";
 export * from "./reflection.js";
