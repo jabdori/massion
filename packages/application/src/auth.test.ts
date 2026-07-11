@@ -83,6 +83,11 @@ describe("ApplicationAccessTokenService", () => {
     if (!issued.token) throw new Error("최초 token 원문이 없습니다");
 
     await expect(tokens.authenticate(`Bearer ${issued.token}`, "massion-api", ["work:read"])).resolves.toEqual(context);
+    await expect(tokens.authenticateAccess(`Bearer ${issued.token}`, "massion-api", [])).resolves.toMatchObject({
+      context,
+      tokenId: issued.tokenId,
+      scopes: ["work:read"],
+    });
     await expect(tokens.authenticate(`Bearer ${issued.token}`, "other-api", ["work:read"])).rejects.toThrow("audience");
     await expect(tokens.authenticate(`Bearer ${issued.token}`, "massion-api", ["work:write"])).rejects.toThrow("scope");
     await expect(tokens.authenticate(issued.token, "massion-api", ["work:read"])).rejects.toThrow("Bearer");
