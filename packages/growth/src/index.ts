@@ -1,4 +1,5 @@
 export * from "./configuration.js";
+export * from "./adoption.js";
 export * from "./contracts.js";
 export * from "./evaluation.js";
 export * from "./governance-adapter.js";
@@ -8,4 +9,5 @@ export * from "./runtime-configuration.js";
 export * from "./schema.js";
 export * from "./snapshot.js";
 export * from "./trigger.js";
+export * from "./targets.js";
 export * from "./work-prompt-adapter.js";

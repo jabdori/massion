@@ -330,6 +330,87 @@ export class PromptMemoryStore {
     return records.map(checkedMemory);
   }
 
+  public async inspectPromptGrowth(context: TenantContext, executor: QueryExecutor): Promise<PromptDefinitionVersion> {
+    await this.organizations.verifyTenantContext(context, undefined, executor);
+    const record = await this.activeDefinition(executor, context.organizationId);
+    if (!record) throw new Error("활성 PromptDefinitionVersion을 찾을 수 없습니다");
+    return checkedDefinition(record);
+  }
+
+  public async inspectMemoryGrowth(context: TenantContext, executor: QueryExecutor): Promise<MemoryVersion> {
+    await this.organizations.verifyTenantContext(context, undefined, executor);
+    const record = await this.activeMemory(executor, context.organizationId, "organization");
+    if (!record) throw new Error("활성 organization MemoryVersion을 찾을 수 없습니다");
+    return checkedMemory(record);
+  }
+
+  public async applyPromptGrowth(
+    context: TenantContext,
+    input: {
+      readonly commandId: string;
+      readonly expectedVersionId: string;
+      readonly sections: readonly PromptAgentSection[];
+    },
+    executor: QueryExecutor,
+  ): Promise<PromptDefinitionVersion> {
+    validateSections(input.sections);
+    await this.organizations.verifyTenantContext(context, undefined, executor);
+    const requestHash = growthChecksum(input);
+    const repeated = await this.definitionByCommand(executor, context.organizationId, input.commandId);
+    if (repeated) {
+      if (repeated.request_hash !== requestHash)
+        throw new Error("같은 commandId에 다른 Prompt Growth payload를 사용할 수 없습니다");
+      return checkedDefinition(repeated);
+    }
+    const current = await this.activeDefinition(executor, context.organizationId);
+    if (!current || current.prompt_definition_version_id !== input.expectedVersionId)
+      throw new Error("PromptDefinition version precondition이 일치하지 않습니다");
+    checkedDefinition(current);
+    await executor.query(
+      "UPDATE prompt_definition_version SET status = 'superseded', active_guard_key = NONE, superseded_at = time::now() WHERE organization_id = $organization_id AND prompt_definition_version_id = $version_id;",
+      { organization_id: context.organizationId, version_id: current.prompt_definition_version_id },
+    );
+    return checkedDefinition(
+      await this.createDefinition(executor, context, input.commandId, requestHash, input.sections, current),
+    );
+  }
+
+  public async applyMemoryGrowth(
+    context: TenantContext,
+    input: { readonly commandId: string; readonly expectedVersionId: string; readonly entries: readonly MemoryEntry[] },
+    executor: QueryExecutor,
+  ): Promise<MemoryVersion> {
+    validateEntries(input.entries);
+    await this.organizations.verifyTenantContext(context, undefined, executor);
+    const requestHash = growthChecksum(input);
+    const repeated = await this.memoryByCommand(executor, context.organizationId, input.commandId);
+    if (repeated) {
+      if (repeated.request_hash !== requestHash)
+        throw new Error("같은 commandId에 다른 Memory Growth payload를 사용할 수 없습니다");
+      return checkedMemory(repeated);
+    }
+    const current = await this.activeMemory(executor, context.organizationId, "organization");
+    if (!current || current.memory_version_id !== input.expectedVersionId)
+      throw new Error("Memory version precondition이 일치하지 않습니다");
+    checkedMemory(current);
+    await executor.query(
+      "UPDATE memory_version SET status = 'superseded', active_guard_key = NONE, superseded_at = time::now() WHERE organization_id = $organization_id AND memory_version_id = $version_id;",
+      { organization_id: context.organizationId, version_id: current.memory_version_id },
+    );
+    return checkedMemory(
+      await this.createMemory(
+        executor,
+        context,
+        input.commandId,
+        requestHash,
+        "organization",
+        "organization",
+        input.entries,
+        current,
+      ),
+    );
+  }
+
   public async activatePromptDefinition(
     context: TenantContext,
     input: {
