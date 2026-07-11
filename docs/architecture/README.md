@@ -2,7 +2,7 @@
 
 > **문서 상태**: 현재 구현 아키텍처 정본
 > **기준일**: 2026-07-11
-> **제품 구현 기준 커밋**: `131b1b3`
+> **제품 구현 기준 커밋**: `43a4236`
 > **제품 정본**: [Massion 완제품 설계 명세](../product/2026-07-10-complete-product-design.md)
 > **진행 정본**: [Massion AgentOS 1.0 프로그램 계획](../superpowers/plans/2026-07-10-massion-agentos-1.0-program.md)
 
@@ -21,7 +21,7 @@
 
 굵은 화살표는 사용자 Work의 주 실행 경로, 일반 실선은 동기 명령·직접 호출, 점선은 이벤트·관찰·정책 영향을 뜻합니다. 원통은 영속 저장소, 큰 경계 상자는 프로세스 또는 배포 단위입니다. 색상을 볼 수 없는 환경에서도 상태 라벨과 선 모양으로 구분할 수 있습니다.
 
-기준 커밋에서 Phase 0~17은 구현됨, Phase 18~23은 예정입니다. 개별 요소는 Phase 번호만으로 판정하지 않고 실제 코드와 검증 결과를 함께 확인합니다.
+기준 커밋에서 Phase 0~18은 구현됨, Phase 19~23은 예정입니다. 개별 요소는 Phase 번호만으로 판정하지 않고 실제 코드와 검증 결과를 함께 확인합니다.
 
 ## 2. 전체 시스템 지도
 
@@ -40,7 +40,7 @@ flowchart TB
   subgraph Surfaces["사용자 화면·외부 연동"]
     CLI["CLI · mass<br/>구현됨 · Phase 16"]:::implemented
     TUI["TUI · OpenTUI<br/>구현됨 · Phase 17"]:::implemented
-    Web["Web Console<br/>예정 · Phase 18"]:::planned
+    Web["Web Console<br/>구현됨 · Phase 18"]:::implemented
     Channels["Slack · Discord · GitHub<br/>예정 · Phase 19"]:::planned
   end
 
@@ -65,11 +65,11 @@ flowchart TB
   Person ==> CLI
   Team ==> CLI
   Person --> TUI
-  Team -.-> Web
+  Team --> Web
   Team -.-> Channels
   CLI ==> API
   TUI --> API
-  Web -.-> API
+  Web --> API
   Channels -.-> API
   API ==> Coordinator
   Coordinator ==> Office
@@ -92,7 +92,8 @@ flowchart TB
 | Core Office·Work·Governance | 구현됨 | `packages/organization`, `packages/work`, `packages/governance` | [Phase 4 회고](../phases/04-organization-graph-core-office/review.md), [Phase 5 회고](../phases/05-work-collaboration-records/review.md), [Phase 8 회고](../phases/08-governance-approval/review.md) |
 | Runtime·Router | 구현됨 | `packages/runtime`, `packages/router` | [Phase 6 회고](../phases/06-provider-credential-router/review.md), [Phase 7 회고](../phases/07-voltagent-runtime-adapter/review.md) |
 | Extension Host | 구현됨 | `packages/extension-host` | [Phase 15 회고](../phases/15-extension-sdk-host/review.md) |
-| Web·외부 Surface·Registry | 예정 | `docs/superpowers/plans/2026-07-10-massion-agentos-1.0-program.md` | 프로그램 Phase 18~20 |
+| Web Console | 구현됨 | `apps/web` | [Phase 18 회고](../phases/18-web-console/review.md) |
+| 외부 Surface·Registry | 예정 | `docs/superpowers/plans/2026-07-10-massion-agentos-1.0-program.md` | 프로그램 Phase 19~20 |
 | SurrealDB 단일 정본 | 구현됨 | `packages/storage` | [Phase 2 회고](../phases/02-surrealdb-source-of-truth/review.md) |
 
 ## 3. 제품 구성요소와 패키지 경계
