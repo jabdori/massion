@@ -12,6 +12,7 @@ export * from "./core-evidence-stage.js";
 export * from "./core-delivery-stage.js";
 export * from "./core-assurance-stage.js";
 export * from "./core-records-stage.js";
+export * from "./core-software-task.js";
 export * from "./errors.js";
 export * from "./event-projector.js";
 export * from "./event-store.js";

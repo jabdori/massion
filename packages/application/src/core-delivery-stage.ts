@@ -12,6 +12,8 @@ export interface CoreSoftwareTaskPort {
       readonly correlationId: string;
       readonly workId: string;
       readonly task: WorkTask;
+      readonly request: unknown;
+      readonly resumeInput?: unknown;
     },
   ): Promise<{
     readonly outcome: "completed" | "awaiting-approval" | "blocked";
@@ -20,7 +22,7 @@ export interface CoreSoftwareTaskPort {
   }>;
   cancelTask?(
     context: TenantContext,
-    input: { readonly commandId: string; readonly workId: string; readonly task: WorkTask },
+    input: { readonly commandId: string; readonly workId: string; readonly task: WorkTask; readonly request: unknown },
   ): Promise<void>;
 }
 
@@ -102,6 +104,8 @@ export class CoreDeliveryStage implements CoreWorkStageExecutor {
           correlationId: input.correlationId,
           workId: input.workId,
           task,
+          request: input.request,
+          ...(input.resumeInput === undefined ? {} : { resumeInput: input.resumeInput }),
         });
         if (result.outcome === "awaiting-approval" && result.approvalId) {
           const current = await this.dependencies.works.getWork(context, input.workId);
@@ -200,7 +204,12 @@ export class CoreDeliveryStage implements CoreWorkStageExecutor {
           ["software-development", "software-engineering"].includes(capability),
         )
       ) {
-        await this.dependencies.software?.cancelTask?.(context, { commandId, workId: input.workId, task });
+        await this.dependencies.software?.cancelTask?.(context, {
+          commandId,
+          workId: input.workId,
+          task,
+          request: input.request,
+        });
         continue;
       }
       const executionId = await this.dependencies.runtimeExecutions.findExecutionIdByCommand(
