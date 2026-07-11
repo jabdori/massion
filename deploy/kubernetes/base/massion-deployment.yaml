@@ -30,7 +30,7 @@ spec:
           command:
             - sh
             - -ec
-            - cp /source/database-password /target/database-password && cp /source/token-key /target/token-key && cp /source/registry-key /target/registry-key && cp /source/tls.crt /target/tls_certificate && cp /source/tls.key /target/tls_private_key && chown 1000:1000 /target/* && chmod 0600 /target/*
+            - cp /source/database-password /app/database-password && cp /source/token-key /app/token-key && cp /source/registry-key /app/registry-key && cp /source/tls.crt /tls/tls_certificate && cp /source/tls.key /tls/tls_private_key && cp /source/database-owner-password /provision/database-owner-password && cp /source/database-password /provision/database-password && chown 1000:1000 /app/* /tls/* /provision/* && chmod 0600 /app/* /tls/* /provision/*
           securityContext:
             runAsNonRoot: false
             runAsUser: 0
@@ -43,8 +43,53 @@ spec:
             - name: raw-secrets
               mountPath: /source
               readOnly: true
-            - name: runtime-secrets
-              mountPath: /target
+            - name: app-secrets
+              mountPath: /app
+            - name: tls-secrets
+              mountPath: /tls
+            - name: provision-secrets
+              mountPath: /provision
+        - name: provision-database
+          image: massion:1.0.0
+          command: ["/usr/bin/dumb-init", "--", "node", "dist/main.js", "provision"]
+          env:
+            - name: MASSION_DATABASE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: massion-config
+                  key: MASSION_DATABASE_URL
+            - name: MASSION_DATABASE_NAMESPACE
+              valueFrom:
+                configMapKeyRef:
+                  name: massion-config
+                  key: MASSION_DATABASE_NAMESPACE
+            - name: MASSION_DATABASE_NAME
+              valueFrom:
+                configMapKeyRef:
+                  name: massion-config
+                  key: MASSION_DATABASE_NAME
+            - name: MASSION_DATABASE_PROVISION_USER
+              value: root
+            - name: MASSION_DATABASE_PROVISION_PASSWORD_FILE
+              value: /run/provision-secrets/database-owner-password
+            - name: MASSION_DATABASE_USER
+              valueFrom:
+                configMapKeyRef:
+                  name: massion-config
+                  key: MASSION_DATABASE_USER
+            - name: MASSION_DATABASE_PASSWORD_FILE
+              value: /run/provision-secrets/database-password
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: provision-secrets
+              mountPath: /run/provision-secrets
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
       containers:
         - name: massion
           image: massion:1.0.0
@@ -97,7 +142,7 @@ spec:
             capabilities:
               drop: ["ALL"]
           volumeMounts:
-            - name: runtime-secrets
+            - name: app-secrets
               mountPath: /run/massion-secrets
               readOnly: true
             - name: tmp
@@ -138,7 +183,7 @@ spec:
             capabilities:
               drop: ["ALL"]
           volumeMounts:
-            - name: runtime-secrets
+            - name: tls-secrets
               mountPath: /run/secrets
               readOnly: true
             - name: caddy-config
@@ -152,10 +197,18 @@ spec:
         - name: raw-secrets
           secret:
             secretName: massion-secrets
-        - name: runtime-secrets
+        - name: app-secrets
           emptyDir:
             medium: Memory
             sizeLimit: 2Mi
+        - name: tls-secrets
+          emptyDir:
+            medium: Memory
+            sizeLimit: 1Mi
+        - name: provision-secrets
+          emptyDir:
+            medium: Memory
+            sizeLimit: 1Mi
         - name: tmp
           emptyDir:
             sizeLimit: 128Mi

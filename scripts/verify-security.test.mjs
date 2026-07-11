@@ -20,9 +20,10 @@ test("container·Registry·Kubernetes 보안 불변량을 강제한다", () => {
   assert.doesNotThrow(() =>
     assertDeploymentSecurity({
       dockerfile: "USER node\nENTRYPOINT [dumb-init]\nHEALTHCHECK x",
-      compose: "read_only: true\nno-new-privileges:true\ncap_drop:\n - ALL\nMASSION_REGISTRY_KEY_FILE: x",
+      compose:
+        "read_only: true\nno-new-privileges:true\ncap_drop:\n - ALL\nMASSION_REGISTRY_KEY_FILE: x\ndatabase-provision:\nMASSION_DATABASE_PROVISION_PASSWORD_FILE: x\nMASSION_DATABASE_USER: massion_runtime",
       kubernetes:
-        "runAsNonRoot: true\nreadOnlyRootFilesystem: true\nallowPrivilegeEscalation: false\ntype: RuntimeDefault\nautomountServiceAccountToken: false",
+        "runAsNonRoot: true\nreadOnlyRootFilesystem: true\nallowPrivilegeEscalation: false\ntype: RuntimeDefault\nautomountServiceAccountToken: false\nname: provision-database\nname: provision-secrets\nname: app-secrets\nname: tls-secrets",
       caddy: "@registry path /npm/*\nMASSION_REGISTRY_UPSTREAM",
     }),
   );

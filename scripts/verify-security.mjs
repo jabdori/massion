@@ -5,13 +5,26 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 const REQUIRED_DEPLOYMENT_MARKERS = {
   dockerfile: ["USER node", "dumb-init", "HEALTHCHECK"],
-  compose: ["read_only: true", "no-new-privileges:true", "cap_drop:", "- ALL", "MASSION_REGISTRY_KEY_FILE"],
+  compose: [
+    "read_only: true",
+    "no-new-privileges:true",
+    "cap_drop:",
+    "- ALL",
+    "MASSION_REGISTRY_KEY_FILE",
+    "database-provision:",
+    "MASSION_DATABASE_PROVISION_PASSWORD_FILE",
+    "MASSION_DATABASE_USER: massion_runtime",
+  ],
   kubernetes: [
     "runAsNonRoot: true",
     "readOnlyRootFilesystem: true",
     "allowPrivilegeEscalation: false",
     "type: RuntimeDefault",
     "automountServiceAccountToken: false",
+    "name: provision-database",
+    "name: provision-secrets",
+    "name: app-secrets",
+    "name: tls-secrets",
   ],
   caddy: ["@registry path /npm/*", "MASSION_REGISTRY_UPSTREAM"],
 };

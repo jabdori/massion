@@ -20,6 +20,29 @@ export interface ServerConfig {
   readonly shutdownTimeoutMs: number;
 }
 
+export interface DatabaseProvisionConfig {
+  readonly url: string;
+  readonly namespace: string;
+  readonly database: string;
+  readonly owner: { readonly username: string; readonly password: string };
+  readonly runtime: { readonly username: string; readonly password: string };
+}
+
+const DATABASE_IDENTIFIER = /^[A-Za-z][A-Za-z0-9_]{0,63}$/u;
+
+function databaseLocation(environment: Readonly<Record<string, string | undefined>>): {
+  readonly url: string;
+  readonly namespace: string;
+  readonly database: string;
+} {
+  const url = environment.MASSION_DATABASE_URL ?? "rocksdb:///data/massion.db";
+  const namespace = environment.MASSION_DATABASE_NAMESPACE ?? "massion";
+  const database = environment.MASSION_DATABASE_NAME ?? "massion";
+  if (![namespace, database].every((name) => DATABASE_IDENTIFIER.test(name)))
+    throw new Error("SurrealDB namespace 또는 database 이름이 유효하지 않습니다");
+  return { url, namespace, database };
+}
+
 function integer(value: string | undefined, fallback: number, minimum: number, maximum: number, label: string): number {
   if (value === undefined) return fallback;
   if (!/^(?:0|[1-9][0-9]*)$/u.test(value)) throw new Error(`${label} 정수가 유효하지 않습니다`);
@@ -50,7 +73,7 @@ function proxies(value: string | undefined): readonly string[] {
 export function parseServerConfig(environment: Readonly<Record<string, string | undefined>>): ServerConfig {
   const mode = environment.MASSION_MODE ?? "local";
   if (mode !== "local" && mode !== "team") throw new Error("MASSION_MODE는 local 또는 team이어야 합니다");
-  const url = environment.MASSION_DATABASE_URL ?? "rocksdb:///data/massion.db";
+  const { url, namespace, database } = databaseLocation(environment);
   const protocol = new URL(url).protocol;
   if (mode === "team" && !new Set(["ws:", "wss:", "http:", "https:"]).has(protocol))
     throw new Error("team mode에는 remote SurrealDB URL이 필요합니다");
@@ -64,10 +87,10 @@ export function parseServerConfig(environment: Readonly<Record<string, string | 
   const password = environment.MASSION_DATABASE_PASSWORD;
   if ((username === undefined) !== (password === undefined))
     throw new Error("SurrealDB username과 password는 함께 구성해야 합니다");
-  const namespace = environment.MASSION_DATABASE_NAMESPACE ?? "massion";
-  const database = environment.MASSION_DATABASE_NAME ?? "massion";
-  if (![namespace, database].every((name) => /^[A-Za-z][A-Za-z0-9_]{0,63}$/u.test(name)))
-    throw new Error("SurrealDB namespace 또는 database 이름이 유효하지 않습니다");
+  if (username && !DATABASE_IDENTIFIER.test(username)) throw new Error("SurrealDB username이 유효하지 않습니다");
+  if (mode === "team" && (!username || !password)) throw new Error("team mode에는 runtime SurrealDB 계정이 필요합니다");
+  if (environment.MASSION_DATABASE_PROVISION_USER || environment.MASSION_DATABASE_PROVISION_PASSWORD)
+    throw new Error("API server에는 provisioning credential을 구성할 수 없습니다");
   const registryPort = integer(environment.MASSION_REGISTRY_PORT, 3142, 1, 65_535, "MASSION_REGISTRY_PORT");
   const registryHost = environment.MASSION_REGISTRY_HOST ?? (mode === "local" ? "127.0.0.1" : "0.0.0.0");
   if (mode === "local" && !new Set(["127.0.0.1", "::1", "localhost"]).has(registryHost))
@@ -90,7 +113,7 @@ export function parseServerConfig(environment: Readonly<Record<string, string | 
       url,
       namespace,
       database,
-      ...(username && password ? { authentication: { username, password } } : {}),
+      ...(username && password ? { authentication: { username, password, scope: "database" as const } } : {}),
     },
     server: {
       host,
@@ -111,6 +134,29 @@ export function parseServerConfig(environment: Readonly<Record<string, string | 
     },
     shutdownTimeoutMs: integer(environment.MASSION_SHUTDOWN_TIMEOUT_MS, 30_000, 1_000, 300_000, "shutdown timeout"),
   };
+}
+
+export function parseDatabaseProvisionConfig(
+  environment: Readonly<Record<string, string | undefined>>,
+): DatabaseProvisionConfig {
+  const location = databaseLocation(environment);
+  if (!new Set(["ws:", "wss:", "http:", "https:"]).has(new URL(location.url).protocol))
+    throw new Error("database provisioning에는 remote SurrealDB URL이 필요합니다");
+  const owner = {
+    username: environment.MASSION_DATABASE_PROVISION_USER ?? "",
+    password: environment.MASSION_DATABASE_PROVISION_PASSWORD ?? "",
+  };
+  const runtime = {
+    username: environment.MASSION_DATABASE_USER ?? "",
+    password: environment.MASSION_DATABASE_PASSWORD ?? "",
+  };
+  if (!owner.username || !owner.password || !runtime.username || !runtime.password)
+    throw new Error("database provisioning에는 owner와 runtime 계정이 모두 필요합니다");
+  if (![owner.username, runtime.username].every((username) => DATABASE_IDENTIFIER.test(username)))
+    throw new Error("SurrealDB username이 유효하지 않습니다");
+  if (owner.username === runtime.username) throw new Error("owner와 runtime은 서로 다른 username이어야 합니다");
+  if (owner.password === runtime.password) throw new Error("owner와 runtime은 서로 다른 password여야 합니다");
+  return { ...location, owner, runtime };
 }
 
 async function secretFile(path: string): Promise<string> {
@@ -138,4 +184,22 @@ export async function loadServerConfig(
     resolved[fileName] = undefined;
   }
   return parseServerConfig(resolved);
+}
+
+export async function loadDatabaseProvisionConfig(
+  environment: Readonly<Record<string, string | undefined>> = process.env,
+): Promise<DatabaseProvisionConfig> {
+  const resolved = { ...environment };
+  const references = [
+    ["MASSION_DATABASE_PROVISION_PASSWORD", "MASSION_DATABASE_PROVISION_PASSWORD_FILE"],
+    ["MASSION_DATABASE_PASSWORD", "MASSION_DATABASE_PASSWORD_FILE"],
+  ] as const;
+  for (const [valueName, fileName] of references) {
+    const value = environment[valueName];
+    const path = environment[fileName];
+    if (value && path) throw new Error(`${valueName}과 ${fileName}은 동시에 사용할 수 없습니다`);
+    if (path) resolved[valueName] = await secretFile(path);
+    resolved[fileName] = undefined;
+  }
+  return parseDatabaseProvisionConfig(resolved);
 }

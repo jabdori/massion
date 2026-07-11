@@ -7,7 +7,7 @@ data:
   MASSION_DATABASE_URL: ws://surrealdb:8000/rpc
   MASSION_DATABASE_NAMESPACE: massion
   MASSION_DATABASE_NAME: massion
-  MASSION_DATABASE_USER: root
+  MASSION_DATABASE_USER: massion_runtime
   MASSION_DATABASE_PASSWORD_FILE: /run/massion-secrets/database-password
   MASSION_TOKEN_KEY_FILE: /run/massion-secrets/token-key
   MASSION_REGISTRY_KEY_FILE: /run/massion-secrets/registry-key

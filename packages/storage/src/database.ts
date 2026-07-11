@@ -20,6 +20,7 @@ export interface DatabaseConfig {
   readonly authentication?: {
     readonly username: string;
     readonly password: string;
+    readonly scope?: "root" | "database";
   };
 }
 
@@ -94,10 +95,20 @@ export async function createDatabase(config: DatabaseConfig): Promise<MassionDat
   });
 
   try {
+    const authentication = config.authentication
+      ? config.authentication.scope === "database"
+        ? {
+            namespace: config.namespace,
+            database: config.database,
+            username: config.authentication.username,
+            password: config.authentication.password,
+          }
+        : { username: config.authentication.username, password: config.authentication.password }
+      : undefined;
     await client.connect(config.url, {
       namespace: config.namespace,
       database: config.database,
-      ...(config.authentication ? { authentication: config.authentication } : {}),
+      ...(authentication ? { authentication } : {}),
       versionCheck: true,
     });
     return new MassionDatabase(client);
