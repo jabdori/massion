@@ -1,8 +1,8 @@
 # Massion AgentOS 1.0 전체 아키텍처
 
 > **문서 상태**: 현재 구현 아키텍처 정본
-> **기준일**: 2026-07-11
-> **제품 구현 기준 커밋**: `4c79851`
+> **기준일**: 2026-07-12
+> **제품 구현 기준**: Phase 23 완료 회고와 현재 release branch
 > **제품 정본**: [Massion 완제품 설계 명세](../product/2026-07-10-complete-product-design.md)
 > **진행 정본**: [Massion AgentOS 1.0 프로그램 계획](../superpowers/plans/2026-07-10-massion-agentos-1.0-program.md)
 
@@ -21,7 +21,7 @@
 
 굵은 화살표는 사용자 Work의 주 실행 경로, 일반 실선은 동기 명령·직접 호출, 점선은 이벤트·관찰·정책 영향을 뜻합니다. 원통은 영속 저장소, 큰 경계 상자는 프로세스 또는 배포 단위입니다. 색상을 볼 수 없는 환경에서도 상태 라벨과 선 모양으로 구분할 수 있습니다.
 
-기준 커밋에서 Phase 0~21은 구현됨, Phase 22~23은 예정입니다. 개별 요소는 Phase 번호만으로 판정하지 않고 실제 코드와 검증 결과를 함께 확인합니다.
+Phase 0~23은 구현·검증됐습니다. 외부 권한이 필요한 공개 tag·OIDC 증명·실제 cluster·SaaS tenant 검증은 Phase 23 회고의 정직한 지원 경계로 분리합니다. 개별 요소는 Phase 번호만으로 판정하지 않고 실제 코드와 검증 결과를 함께 확인합니다.
 
 ## 2. 전체 시스템 지도
 
@@ -654,7 +654,7 @@ flowchart LR
 | Registry·Marketplace | 구현됨 | `packages/registry`, `packages/application`, `apps/cli`, `apps/web` | 20 |
 | 자체 호스팅·운영 | 구현됨 | `apps/server`, `compose.yaml`, `deploy/kubernetes`, `docs/operations` | 21 |
 | 보안·성능·복구 강화 | 구현됨 | `apps/server`, `packages/registry`, `scripts/verify-security.mjs`, `scripts/hardening-load.mjs` | 22 |
-| 완제품 E2E·1.0 릴리스 | 예정 | `docs/superpowers/plans/2026-07-10-massion-agentos-1.0-program.md` | 23 |
+| 완제품 E2E·1.0 릴리스 | 구현됨 | `apps/distribution`, `release`, `scripts/build-release.mjs`, `scripts/verify-release.mjs`, `.github/workflows/release.yml` | 23 |
 
 이 문서의 상태가 프로그램 계획과 달라지면 실제 검증 근거를 확인한 뒤 그림, 표와 기준 커밋을 함께 갱신합니다.
 
