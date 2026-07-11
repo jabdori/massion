@@ -43,6 +43,7 @@ describe("Assurance security regression", () => {
       "auditCompletedWorks",
       "decide",
       "get",
+      "listCriteria",
       "listEvents",
       "prepareSnapshot",
       "recover",

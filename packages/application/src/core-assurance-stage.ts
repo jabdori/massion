@@ -8,7 +8,12 @@ import type { CoreWorkStageExecutor, CoreWorkStageInput, CoreWorkStageResult } f
 export interface CoreAssuranceCheckOrchestrator {
   execute(
     context: TenantContext,
-    input: { readonly commandId: string; readonly run: AssuranceRun; readonly resumeInput?: unknown },
+    input: {
+      readonly commandId: string;
+      readonly run: AssuranceRun;
+      readonly request: unknown;
+      readonly resumeInput?: unknown;
+    },
   ): Promise<{
     readonly outcome: "ready" | "awaiting-approval" | "blocked";
     readonly approvalId?: string;
@@ -92,6 +97,7 @@ export class CoreAssuranceStage implements CoreWorkStageExecutor {
     const checks = await this.dependencies.checks.execute(context, {
       commandId: `${input.commandId}:checks`,
       run: started.run,
+      request: input.request,
       ...(input.resumeInput === undefined ? {} : { resumeInput: input.resumeInput }),
     });
     if (checks.outcome === "awaiting-approval" && checks.approvalId)
