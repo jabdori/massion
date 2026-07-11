@@ -103,7 +103,7 @@ export class OperationQueue {
         "SELECT * OMIT id FROM operation_action WHERE dedupe_key = $dedupe_key LIMIT 1;",
         { dedupe_key: input.dedupeKey },
       );
-      if (existing?.[0]) return view(existing[0]);
+      if (existing[0]) return view(existing[0]);
       const actionId = randomUUID();
       const [created] = await transaction.query<[ActionRow[]]>(
         "CREATE operation_action CONTENT { action_id: $action_id, dedupe_key: $dedupe_key, kind: $kind, payload_json: $payload_json, state: 'pending', attempts: 0, max_attempts: $max_attempts, available_at: $available_at, lease_owner: NONE, lease_generation: 0, lease_expires_at: NONE, error_category: NONE, created_at: time::now(), updated_at: time::now() } RETURN AFTER;",
@@ -116,7 +116,7 @@ export class OperationQueue {
           available_at: new Date(Date.now() + delayMs),
         },
       );
-      if (!created?.[0]) throw new Error("operation action을 생성하지 못했습니다");
+      if (!created[0]) throw new Error("operation action을 생성하지 못했습니다");
       return view(created[0]);
     });
   }
@@ -128,7 +128,7 @@ export class OperationQueue {
       const [selected] = await transaction.query<[ActionRow[]]>(
         "SELECT * OMIT id FROM operation_action WHERE ((state = 'pending' AND available_at <= time::now()) OR (state = 'leased' AND lease_expires_at <= time::now())) AND attempts < max_attempts ORDER BY available_at ASC, created_at ASC LIMIT 1;",
       );
-      const candidate = selected?.[0];
+      const candidate = selected[0];
       if (!candidate) return undefined;
       const generation = candidate.lease_generation + 1;
       const [claimed] = await transaction.query<[ActionRow[]]>(
@@ -141,7 +141,7 @@ export class OperationQueue {
           previous_generation: candidate.lease_generation,
         },
       );
-      return claimed?.[0] ? view(claimed[0]) : undefined;
+      return claimed[0] ? view(claimed[0]) : undefined;
     });
   }
 
@@ -150,7 +150,7 @@ export class OperationQueue {
       "UPDATE operation_action SET state = 'succeeded', lease_owner = NONE, lease_expires_at = NONE, error_category = NONE, updated_at = time::now() WHERE action_id = $action_id AND state = 'leased' AND lease_generation = $generation AND lease_owner = $owner RETURN AFTER;",
       { action_id: actionId, generation: leaseGeneration, owner },
     );
-    if (!updated?.[0]) {
+    if (!updated[0]) {
       const current = await this.get(actionId);
       if (current?.state === "succeeded") return;
       throw new Error("operation lease가 완료 조건과 일치하지 않습니다");
@@ -179,7 +179,7 @@ export class OperationQueue {
         owner,
       },
     );
-    if (!updated?.[0]) throw new Error("operation lease가 실패 조건과 일치하지 않습니다");
+    if (!updated[0]) throw new Error("operation lease가 실패 조건과 일치하지 않습니다");
   }
 
   public async get(actionId: string): Promise<OperationAction | undefined> {
@@ -187,6 +187,6 @@ export class OperationQueue {
       "SELECT * OMIT id FROM operation_action WHERE action_id = $action_id LIMIT 1;",
       { action_id: actionId },
     );
-    return rows?.[0] ? view(rows[0]) : undefined;
+    return rows[0] ? view(rows[0]) : undefined;
   }
 }

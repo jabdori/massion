@@ -104,7 +104,7 @@ export async function loadServerConfig(
     const path = environment[fileName];
     if (value && path) throw new Error(`${valueName}과 ${fileName}은 동시에 사용할 수 없습니다`);
     if (path) resolved[valueName] = await secretFile(path);
-    delete resolved[fileName];
+    resolved[fileName] = undefined;
   }
   return parseServerConfig(resolved);
 }

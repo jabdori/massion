@@ -12,8 +12,9 @@ import { JsonOperationalLogger, MetricRegistry, MetricsHttpServer } from "./tele
 export async function provisionRemoteDatabase(
   config: ServerConfig,
   fetcher: typeof fetch = fetch,
-  wait: (milliseconds: number) => Promise<void> = async (milliseconds) =>
-    await new Promise((resolve) => setTimeout(resolve, milliseconds)),
+  wait: (milliseconds: number) => Promise<void> = async (milliseconds) => {
+    await new Promise((resolve) => setTimeout(resolve, milliseconds));
+  },
 ): Promise<void> {
   if (config.mode !== "team" || !config.database.authentication) return;
   const endpoint = new URL(config.database.url);
@@ -52,7 +53,7 @@ export function createLimitedExecutors(): Readonly<
     APPLICATION_RUN_STAGES.map((stage) => [
       stage,
       {
-        execute: async () => ({ outcome: "blocked" as const, reason: "model-unavailable" }),
+        execute: () => Promise.resolve({ outcome: "blocked" as const, reason: "model-unavailable" }),
       },
     ]),
   ) as unknown as Readonly<Record<(typeof APPLICATION_RUN_STAGES)[number], CoreWorkStageExecutor>>;
@@ -67,7 +68,7 @@ export async function createMassionDaemon(config: ServerConfig): Promise<Massion
     const graph = await OrganizationGraphService.create(database, organizations);
     const policies = await PolicyStore.create(database, organizations);
     const works = await WorkService.create(database, organizations, graph);
-    let daemon: MassionDaemon | undefined;
+    const daemonReference: { current?: MassionDaemon } = {};
     const application = await ApplicationProduct.create({
       database,
       identities,
@@ -85,20 +86,28 @@ export async function createMassionDaemon(config: ServerConfig): Promise<Massion
           modelRuntime: "limited",
         }),
       },
-      health: { readiness: async () => (daemon ? await daemon.readiness() : { database: true, migrations: true }) },
+      health: {
+        readiness: async () =>
+          daemonReference.current ? await daemonReference.current.readiness() : { database: true, migrations: true },
+      },
       server: config.server,
     });
     const metrics = new MetricRegistry({ massion_daemon_transition_total: ["state"] });
     const metricsServer = new MetricsHttpServer(metrics, config.metrics);
     const operations = new JsonOperationalLogger((line) => process.stderr.write(`${line}\n`));
-    daemon = new MassionDaemon({
+    const daemon = new MassionDaemon({
       application,
       database,
       shutdownTimeoutMs: config.shutdownTimeoutMs,
       operationalServices: [metricsServer],
-      onState: (state) => metrics.increment("massion_daemon_transition_total", { state }),
-      onReadinessFailure: (component) => operations.write("server.readiness.failed", { component }),
+      onState: (state) => {
+        metrics.increment("massion_daemon_transition_total", { state });
+      },
+      onReadinessFailure: (component) => {
+        operations.write("server.readiness.failed", { component });
+      },
     });
+    daemonReference.current = daemon;
     return daemon;
   } catch (error) {
     await database.close().catch(() => undefined);

@@ -77,10 +77,9 @@ export class MassionDaemon {
       await Promise.race([
         this.dependencies.application.close(),
         new Promise<never>((_resolve, reject) => {
-          timer = setTimeout(
-            () => reject(new Error("Massion shutdown deadline을 초과했습니다")),
-            this.dependencies.shutdownTimeoutMs,
-          );
+          timer = setTimeout(() => {
+            reject(new Error("Massion shutdown deadline을 초과했습니다"));
+          }, this.dependencies.shutdownTimeoutMs);
         }),
       ]);
     } catch (error) {
@@ -102,7 +101,8 @@ export class MassionDaemon {
     }
     if (failure) {
       this.setState("failed");
-      throw failure;
+      if (failure instanceof Error) throw failure;
+      throw new Error("Massion shutdown에서 알 수 없는 오류가 발생했습니다", { cause: failure });
     }
     this.setState("stopped");
   }

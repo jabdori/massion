@@ -89,7 +89,8 @@ export async function writeOperationalBackup(
     try {
       await link(temporary, path);
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "EEXIST") throw new Error("backup target이 이미 존재합니다");
+      if ((error as NodeJS.ErrnoException).code === "EEXIST")
+        throw new Error("backup target이 이미 존재합니다", { cause: error });
       throw error;
     }
     const directory = await open(dirname(path), "r");
