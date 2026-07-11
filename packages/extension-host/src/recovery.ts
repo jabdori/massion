@@ -46,7 +46,8 @@ export class ExtensionRecoveryService {
       { organization_id: context.organizationId },
     );
     for (const session of sessions) {
-      const expired = session.lease_expires_at !== undefined && new Date(session.lease_expires_at).getTime() < Date.now();
+      const expired =
+        session.lease_expires_at !== undefined && new Date(session.lease_expires_at).getTime() < Date.now();
       const exitCategory = expired ? "lease-expired" : "host-restarted";
       await this.database.transaction(async (transaction) => {
         await transaction.query(
