@@ -58,7 +58,9 @@ async function main(): Promise<void> {
     log("server.shutdown.started", { signal });
     void daemon
       .close()
-      .then(() => exitAfterLog(0, "server.shutdown.completed"))
+      .then(() => {
+        exitAfterLog(0, "server.shutdown.completed");
+      })
       .catch((error: unknown) => {
         exitAfterLog(1, "server.shutdown.failed", { category: error instanceof Error ? error.name : "unknown" });
       })

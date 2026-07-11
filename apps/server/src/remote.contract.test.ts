@@ -34,11 +34,11 @@ describe("operations remote contract", () => {
         database: databaseName,
         authentication: { username: "root", password: "root" },
       };
-      let actionId = "";
       await using database = await createDatabase(config);
       expect(await database.version()).toMatch(/^surrealdb-3\.2\./u);
       const queue = await OperationQueue.create(database, { leaseMs: 1_000 });
-      actionId = (await queue.enqueue({ dedupeKey: "remote:action", kind: "extension-restart", payload: {} })).actionId;
+      const actionId = (await queue.enqueue({ dedupeKey: "remote:action", kind: "extension-restart", payload: {} }))
+        .actionId;
       const claims = await Promise.all([queue.claim("remote-a"), queue.claim("remote-b")]);
       expect(claims.filter(Boolean)).toHaveLength(1);
       const supervisor = await ExtensionCrashSupervisor.create(database, queue, {

@@ -102,7 +102,7 @@ export class ExtensionCrashSupervisor {
         "SELECT * OMIT id FROM extension_supervision_state WHERE organization_id = $organization_id AND installation_id = $installation_id LIMIT 1;",
         { organization_id: input.organizationId, installation_id: input.installationId },
       );
-      const prior = rows?.[0];
+      const prior = rows[0];
       const times = prior
         ? (JSON.parse(prior.failure_times_json) as number[]).filter(
             (time) => Number.isSafeInteger(time) && time >= now - this.options.windowMs && time <= now,
@@ -161,7 +161,7 @@ export class ExtensionCrashSupervisor {
       "UPDATE extension_supervision_state SET failure_times_json = '[]', circuit = 'closed', updated_at = time::now() WHERE organization_id = $organization_id AND installation_id = $installation_id RETURN AFTER;",
       { organization_id: organizationId, installation_id: installationId },
     );
-    if (!updated?.[0]) throw new Error("reset할 Extension circuit를 찾을 수 없습니다");
+    if (!updated[0]) throw new Error("reset할 Extension circuit를 찾을 수 없습니다");
   }
 
   private async decision(crashId: string): Promise<ExtensionCrashDecision | undefined> {
@@ -169,7 +169,7 @@ export class ExtensionCrashSupervisor {
       "SELECT * OMIT id FROM extension_crash_decision WHERE crash_id = $crash_id LIMIT 1;",
       { crash_id: crashId },
     );
-    return rows?.[0] ? (JSON.parse(rows[0].result_json) as ExtensionCrashDecision) : undefined;
+    return rows[0] ? (JSON.parse(rows[0].result_json) as ExtensionCrashDecision) : undefined;
   }
 
   private async enqueue(input: ExtensionCrashInput, decision: ExtensionCrashDecision): Promise<void> {
