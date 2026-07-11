@@ -1,0 +1,95 @@
+import { defineMigration } from "@massion/storage";
+
+export const INTEGRATION_MIGRATION = defineMigration(
+  "0074-official-integrations",
+  `
+DEFINE TABLE integration_installation SCHEMAFULL PERMISSIONS NONE;
+DEFINE FIELD installation_id ON integration_installation TYPE string;
+DEFINE FIELD organization_id ON integration_installation TYPE string;
+DEFINE FIELD platform ON integration_installation TYPE string ASSERT $value IN ['slack', 'discord', 'github'];
+DEFINE FIELD external_tenant_id ON integration_installation TYPE string;
+DEFINE FIELD credential_ref ON integration_installation TYPE string;
+DEFINE FIELD scopes ON integration_installation TYPE array<string>;
+DEFINE FIELD state ON integration_installation TYPE string ASSERT $value IN ['active', 'disabled', 'blocked'];
+DEFINE FIELD revision ON integration_installation TYPE int ASSERT $value > 0;
+DEFINE FIELD command_id ON integration_installation TYPE string;
+DEFINE FIELD request_hash ON integration_installation TYPE string ASSERT string::len($value) = 64;
+DEFINE FIELD created_at ON integration_installation TYPE datetime;
+DEFINE FIELD updated_at ON integration_installation TYPE datetime;
+DEFINE INDEX integration_installation_id ON integration_installation FIELDS organization_id, installation_id UNIQUE;
+DEFINE INDEX integration_installation_external ON integration_installation FIELDS organization_id, platform, external_tenant_id UNIQUE;
+DEFINE INDEX integration_installation_command ON integration_installation FIELDS organization_id, command_id UNIQUE;
+
+DEFINE TABLE integration_user_binding SCHEMAFULL PERMISSIONS NONE;
+DEFINE FIELD binding_id ON integration_user_binding TYPE string;
+DEFINE FIELD organization_id ON integration_user_binding TYPE string;
+DEFINE FIELD installation_id ON integration_user_binding TYPE string;
+DEFINE FIELD external_user_id ON integration_user_binding TYPE string;
+DEFINE FIELD user_id ON integration_user_binding TYPE string;
+DEFINE FIELD state ON integration_user_binding TYPE string ASSERT $value IN ['active', 'revoked'];
+DEFINE FIELD revision ON integration_user_binding TYPE int ASSERT $value > 0;
+DEFINE FIELD command_id ON integration_user_binding TYPE string;
+DEFINE FIELD request_hash ON integration_user_binding TYPE string ASSERT string::len($value) = 64;
+DEFINE FIELD created_at ON integration_user_binding TYPE datetime;
+DEFINE FIELD updated_at ON integration_user_binding TYPE datetime;
+DEFINE INDEX integration_user_binding_id ON integration_user_binding FIELDS organization_id, binding_id UNIQUE;
+DEFINE INDEX integration_user_binding_external ON integration_user_binding FIELDS organization_id, installation_id, external_user_id UNIQUE;
+DEFINE INDEX integration_user_binding_command ON integration_user_binding FIELDS organization_id, command_id UNIQUE;
+
+DEFINE TABLE integration_delivery SCHEMAFULL PERMISSIONS NONE;
+DEFINE FIELD delivery_record_id ON integration_delivery TYPE string;
+DEFINE FIELD organization_id ON integration_delivery TYPE string;
+DEFINE FIELD installation_id ON integration_delivery TYPE string;
+DEFINE FIELD delivery_id ON integration_delivery TYPE string;
+DEFINE FIELD event_type ON integration_delivery TYPE string;
+DEFINE FIELD body_hash ON integration_delivery TYPE string ASSERT string::len($value) = 64;
+DEFINE FIELD state ON integration_delivery TYPE string ASSERT $value IN ['accepted', 'processing', 'succeeded', 'failed', 'blocked'];
+DEFINE FIELD attempt ON integration_delivery TYPE int ASSERT $value >= 0;
+DEFINE FIELD lease_owner ON integration_delivery TYPE option<string>;
+DEFINE FIELD lease_generation ON integration_delivery TYPE int ASSERT $value >= 0;
+DEFINE FIELD lease_expires_at ON integration_delivery TYPE option<datetime>;
+DEFINE FIELD result_hash ON integration_delivery TYPE option<string>;
+DEFINE FIELD received_at ON integration_delivery TYPE datetime;
+DEFINE FIELD updated_at ON integration_delivery TYPE datetime;
+DEFINE INDEX integration_delivery_id ON integration_delivery FIELDS organization_id, delivery_record_id UNIQUE;
+DEFINE INDEX integration_delivery_external ON integration_delivery FIELDS organization_id, installation_id, delivery_id UNIQUE;
+
+DEFINE TABLE integration_outbox SCHEMAFULL PERMISSIONS NONE;
+DEFINE FIELD outbox_id ON integration_outbox TYPE string;
+DEFINE FIELD organization_id ON integration_outbox TYPE string;
+DEFINE FIELD installation_id ON integration_outbox TYPE string;
+DEFINE FIELD destination ON integration_outbox TYPE string;
+DEFINE FIELD operation ON integration_outbox TYPE string;
+DEFINE FIELD idempotency_key ON integration_outbox TYPE string;
+DEFINE FIELD payload_json ON integration_outbox TYPE string ASSERT string::len($value) <= 262144;
+DEFINE FIELD payload_hash ON integration_outbox TYPE string ASSERT string::len($value) = 64;
+DEFINE FIELD state ON integration_outbox TYPE string ASSERT $value IN ['pending', 'processing', 'retrying', 'succeeded', 'blocked'];
+DEFINE FIELD attempt ON integration_outbox TYPE int ASSERT $value >= 0;
+DEFINE FIELD lease_owner ON integration_outbox TYPE option<string>;
+DEFINE FIELD lease_generation ON integration_outbox TYPE int ASSERT $value >= 0;
+DEFINE FIELD lease_expires_at ON integration_outbox TYPE option<datetime>;
+DEFINE FIELD next_attempt_at ON integration_outbox TYPE datetime;
+DEFINE FIELD error_category ON integration_outbox TYPE option<string>;
+DEFINE FIELD command_id ON integration_outbox TYPE string;
+DEFINE FIELD request_hash ON integration_outbox TYPE string ASSERT string::len($value) = 64;
+DEFINE FIELD created_at ON integration_outbox TYPE datetime;
+DEFINE FIELD updated_at ON integration_outbox TYPE datetime;
+DEFINE INDEX integration_outbox_id ON integration_outbox FIELDS organization_id, outbox_id UNIQUE;
+DEFINE INDEX integration_outbox_effect ON integration_outbox FIELDS organization_id, installation_id, idempotency_key UNIQUE;
+DEFINE INDEX integration_outbox_command ON integration_outbox FIELDS organization_id, command_id UNIQUE;
+
+DEFINE TABLE integration_receipt SCHEMAFULL PERMISSIONS NONE;
+DEFINE FIELD receipt_id ON integration_receipt TYPE string;
+DEFINE FIELD organization_id ON integration_receipt TYPE string;
+DEFINE FIELD outbox_id ON integration_receipt TYPE string;
+DEFINE FIELD external_id ON integration_receipt TYPE string;
+DEFINE FIELD external_url ON integration_receipt TYPE option<string>;
+DEFINE FIELD payload_hash ON integration_receipt TYPE string ASSERT string::len($value) = 64;
+DEFINE FIELD created_at ON integration_receipt TYPE datetime;
+DEFINE INDEX integration_receipt_id ON integration_receipt FIELDS organization_id, receipt_id UNIQUE;
+DEFINE INDEX integration_receipt_outbox ON integration_receipt FIELDS organization_id, outbox_id UNIQUE;
+DEFINE EVENT integration_receipt_immutable ON TABLE integration_receipt WHEN $event IN ['UPDATE', 'DELETE'] THEN { THROW 'Integration receipt는 immutable입니다'; };
+`,
+);
+
+export const INTEGRATION_MIGRATIONS = [INTEGRATION_MIGRATION] as const;

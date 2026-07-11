@@ -342,6 +342,15 @@ importers:
         specifier: workspace:*
         version: link:../storage
 
+  packages/integrations:
+    dependencies:
+      '@massion/identity':
+        specifier: workspace:*
+        version: link:../identity
+      '@massion/storage':
+        specifier: workspace:*
+        version: link:../storage
+
   packages/organization:
     dependencies:
       '@massion/governance':
