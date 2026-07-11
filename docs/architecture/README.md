@@ -2,7 +2,7 @@
 
 > **문서 상태**: 현재 구현 아키텍처 정본
 > **기준일**: 2026-07-11
-> **기준 커밋**: `7457921`
+> **제품 구현 기준 커밋**: `7457921`
 > **제품 정본**: [Massion 완제품 설계 명세](../product/2026-07-10-complete-product-design.md)
 > **진행 정본**: [Massion AgentOS 1.0 프로그램 계획](../superpowers/plans/2026-07-10-massion-agentos-1.0-program.md)
 
@@ -294,6 +294,7 @@ flowchart LR
 
 ```mermaid
 stateDiagram-v2
+  classDef implementing fill:#dbeafe,stroke:#1d4ed8,color:#1e3a8a,stroke-width:3px;
   [*] --> Ready: Work run 시작\nstage=intake
   Ready --> Running: runner claim\nlease generation +1
   Running --> Ready: 단계 결과 commit\n다음 stage 저장
@@ -319,6 +320,7 @@ stateDiagram-v2
     [*] --> DeterministicCommand
     DeterministicCommand --> DomainTransaction
   }
+  class Ready,Running,AwaitingApproval,Blocked,Completed,Failed,Cancelled implementing
 ```
 
 | 상황 | 저장되는 상태 | 복구 원칙 |
@@ -600,7 +602,7 @@ flowchart LR
     Proxy["TLS reverse proxy<br/>remote bind·CORS·rate limit"]:::planned
     Apps["Application service replica<br/>HTTP · SSE · auth"]:::planned
     RuntimePool["Runtime·Extension worker pool<br/>sandbox backend"]:::planned
-    SharedDB[("원격 SurrealDB<br/>공유 tenant 정본") ]:::planned
+    SharedDB[("원격 SurrealDB<br/>공유 tenant 정본")]:::planned
     Backup["암호화 backup·restore<br/>migration·integrity gate"]:::planned
     K8s["Docker Compose · Kubernetes<br/>배포·health·rollout"]:::planned
 
@@ -640,3 +642,16 @@ flowchart LR
 | TUI·Web·외부 Surface·Registry·운영·강화·1.0 | 예정 | `docs/superpowers/plans/2026-07-10-massion-agentos-1.0-program.md` | 17~23 |
 
 이 문서의 상태가 프로그램 계획과 달라지면 실제 검증 근거를 확인한 뒤 그림, 표와 기준 커밋을 함께 갱신합니다.
+
+### 검증 기록
+
+2026-07-11에 다음 검증을 실행했습니다.
+
+| 검증 | 결과 |
+|---|---|
+| `pnpm verify:architecture` | Mermaid CLI 11.16.0으로 10개 SVG 렌더링 통과 |
+| `node scripts/verify-docs.mjs` | 문서 구조·로컬 링크·금지된 임시 표기 검사 통과 |
+| `git diff --check` | 공백·충돌 표식 검사 통과 |
+| 브라우저 1440px 및 가로 스크롤 미리보기 | 한글 라벨 잘림·노드 겹침 없음, 상태 색·실선·점선 구분 확인 |
+
+로컬 검증 스크립트는 설치된 Chrome·Chromium을 사용합니다. 자동 탐지 경로에 브라우저가 없으면 `MASSION_MERMAID_BROWSER` 환경 변수에 실행 파일 경로를 지정합니다.

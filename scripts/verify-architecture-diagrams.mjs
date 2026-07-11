@@ -4,6 +4,7 @@ import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 
 const documentPath = "docs/architecture/README.md";
+const mermaidCliVersion = "11.16.0";
 const requiredHeadings = [
   "## 1. 읽는 법과 상태 범례",
   "## 2. 전체 시스템 지도",
@@ -61,13 +62,45 @@ async function validateStructure(markdown) {
 async function render(blocks) {
   const directory = await mkdtemp(join(tmpdir(), "massion-architecture-"));
   try {
+    const browserCandidates = [
+      process.env.MASSION_MERMAID_BROWSER,
+      "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+      "/Applications/Chromium.app/Contents/MacOS/Chromium",
+      "/usr/bin/google-chrome",
+      "/usr/bin/chromium",
+      "/usr/bin/chromium-browser",
+    ].filter(Boolean);
+    let browserExecutable;
+    for (const candidate of browserCandidates) {
+      if (await exists(candidate)) {
+        browserExecutable = candidate;
+        break;
+      }
+    }
+    if (!browserExecutable) {
+      throw new Error(
+        "Mermaid 렌더링용 Chrome·Chromium을 찾을 수 없습니다. MASSION_MERMAID_BROWSER에 실행 파일 경로를 지정해주세요",
+      );
+    }
+    const puppeteerConfig = join(directory, "puppeteer.json");
+    await writeFile(puppeteerConfig, `${JSON.stringify({ executablePath: browserExecutable })}\n`, "utf8");
     for (const [index, block] of blocks.entries()) {
       const input = join(directory, `diagram-${String(index + 1)}.mmd`);
       const output = join(directory, `diagram-${String(index + 1)}.svg`);
       await writeFile(input, `${block}\n`, "utf8");
       const result = spawnSync(
         "pnpm",
-        ["dlx", "@mermaid-js/mermaid-cli@11.15.0", "--input", input, "--output", output, "--quiet"],
+        [
+          "dlx",
+          `@mermaid-js/mermaid-cli@${mermaidCliVersion}`,
+          "--input",
+          input,
+          "--output",
+          output,
+          "--puppeteerConfigFile",
+          puppeteerConfig,
+          "--quiet",
+        ],
         { encoding: "utf8", timeout: 120_000 },
       );
       if (result.status !== 0) {
