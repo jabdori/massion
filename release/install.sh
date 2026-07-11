@@ -9,9 +9,9 @@ bin_dir="$prefix/bin"
 
 verify_checksums() {
   if command -v sha256sum >/dev/null 2>&1; then
-    (cd "$source_dir" && sha256sum -c SHA256SUMS)
+    (cd "$source_dir" && sha256sum -c SHA256SUMS >/dev/null)
   elif command -v shasum >/dev/null 2>&1; then
-    (cd "$source_dir" && shasum -a 256 -c SHA256SUMS)
+    (cd "$source_dir" && shasum -a 256 -c SHA256SUMS >/dev/null)
   else
     echo "SHA-256 검증 도구가 필요합니다" >&2
     exit 1
@@ -53,10 +53,15 @@ exec bun "$release_dir/runtime/node_modules/@massion/tui/dist/main.js" "\$@"
 EOF
 chmod 755 "$temporary/bin/mass" "$temporary/bin/massion-server" "$temporary/bin/massion-tui" "$temporary/uninstall.sh"
 
+previous="$prefix/lib/massion/.previous-1.0.0.$$"
 if [ -e "$release_dir" ]; then
-  rm -rf "$temporary"
+  mv "$release_dir" "$previous"
+fi
+if mv "$temporary" "$release_dir"; then
+  rm -rf "$previous"
 else
-  mv "$temporary" "$release_dir"
+  if [ -e "$previous" ]; then mv "$previous" "$release_dir"; fi
+  exit 1
 fi
 for command_name in mass massion-server massion-tui; do
   link="$bin_dir/$command_name"
