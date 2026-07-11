@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { readFile } from "node:fs/promises";
+import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 import { ApplicationHttpClient, ApplicationRemoteError } from "@massion/application";
@@ -196,4 +197,5 @@ function recordStatus(value: unknown): string | undefined {
   return typeof status === "string" ? status : undefined;
 }
 
-if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) process.exitCode = await runCli();
+if (process.argv[1] && realpathSync(fileURLToPath(import.meta.url)) === realpathSync(process.argv[1]))
+  process.exitCode = await runCli();
