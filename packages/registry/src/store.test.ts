@@ -45,5 +45,12 @@ describe("Registry immutable store", () => {
     expect((await store.get(staged.versionId)).state).toBe("recalled");
     expect(await store.listRecalls(staged.versionId)).toHaveLength(1);
     await expect(store.publish(staged.versionId, "decision-2")).rejects.toThrow("상태 전이");
+    await store.supersedeRecall(staged.versionId, {
+      recallId: "recall-2",
+      supersedesRecallId: "recall-1",
+      reason: "오탐 확인과 독립 재검증 완료",
+    });
+    expect((await store.get(staged.versionId)).state).toBe("published");
+    expect(await store.listRecalls(staged.versionId)).toHaveLength(2);
   });
 });

@@ -37,6 +37,7 @@ describe("Registry Application adapter", () => {
       versions: {
         get: async (_context, versionId) => await store.get(versionId),
         recall: async (_context, versionId, recall) => await store.recall(versionId, recall),
+        supersedeRecall: async (_context, versionId, input) => await store.supersedeRecall(versionId, input),
       },
       catalogVersions: store,
       installer: { install },

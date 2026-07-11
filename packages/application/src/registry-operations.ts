@@ -31,6 +31,7 @@ export interface ApplicationRegistryOperations {
       readonly category: "security" | "malware" | "publisher-compromise" | "policy" | "compatibility";
       readonly severity: "low" | "medium" | "high" | "critical";
       readonly reason: string;
+      readonly supersedesRecallId?: string;
     },
   ): Promise<{ readonly recallId: string; readonly versionId: string }>;
 }
@@ -139,7 +140,7 @@ export function registerApplicationRegistryOperations(
     validate(value) {
       const source = object(
         value,
-        ["versionId", "category", "severity", "reason"],
+        ["versionId", "category", "severity", "reason", "supersedesRecallId"],
         ["versionId", "category", "severity", "reason"],
       );
       if (!["security", "malware", "publisher-compromise", "policy", "compatibility"].includes(String(source.category)))
@@ -151,6 +152,9 @@ export function registerApplicationRegistryOperations(
         category: source.category as "security" | "malware" | "publisher-compromise" | "policy" | "compatibility",
         severity: source.severity as "low" | "medium" | "high" | "critical",
         reason: text(source.reason, "reason", 2048),
+        ...(source.supersedesRecallId === undefined
+          ? {}
+          : { supersedesRecallId: text(source.supersedesRecallId, "supersedesRecallId") }),
       };
     },
     async handle(context, command, value) {

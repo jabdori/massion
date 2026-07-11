@@ -11,6 +11,11 @@ export class RegistryApplicationAdapter {
       readonly versions: {
         get(context: TenantContext, versionId: string): Promise<RegistryVersion>;
         recall(context: TenantContext, versionId: string, recall: RegistryRecall): Promise<RegistryVersion>;
+        supersedeRecall?(
+          context: TenantContext,
+          versionId: string,
+          input: { recallId: string; supersedesRecallId: string; reason: string },
+        ): Promise<RegistryVersion>;
       };
       readonly catalogVersions: RegistryCatalogStore;
       readonly installer: {
@@ -93,14 +98,25 @@ export class RegistryApplicationAdapter {
       readonly category: RegistryRecall["category"];
       readonly severity: RegistryRecall["severity"];
       readonly reason: string;
+      readonly supersedesRecallId?: string;
     },
   ): Promise<{ readonly recallId: string; readonly versionId: string }> {
-    await this.dependencies.versions.recall(context, input.versionId, {
-      recallId: input.commandId,
-      category: input.category,
-      severity: input.severity,
-      reason: input.reason,
-    });
+    if (input.supersedesRecallId !== undefined) {
+      if (!this.dependencies.versions.supersedeRecall)
+        throw new Error("Registry recall supersede adapter가 구성되지 않았습니다");
+      await this.dependencies.versions.supersedeRecall(context, input.versionId, {
+        recallId: input.commandId,
+        supersedesRecallId: input.supersedesRecallId,
+        reason: input.reason,
+      });
+    } else {
+      await this.dependencies.versions.recall(context, input.versionId, {
+        recallId: input.commandId,
+        category: input.category,
+        severity: input.severity,
+        reason: input.reason,
+      });
+    }
     return { recallId: input.commandId, versionId: input.versionId };
   }
 
