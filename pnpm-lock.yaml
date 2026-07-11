@@ -112,6 +112,9 @@ importers:
       '@massion/storage':
         specifier: workspace:*
         version: link:../../packages/storage
+      '@massion/subscriptions':
+        specifier: workspace:*
+        version: link:../../packages/subscriptions
       '@massion/work':
         specifier: workspace:*
         version: link:../../packages/work

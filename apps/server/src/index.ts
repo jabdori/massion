@@ -8,3 +8,5 @@ export * from "./registry-server.js";
 export * from "./signals.js";
 export * from "./telemetry.js";
 export * from "./upgrade.js";
+export * from "./connector-channel.js";
+export * from "./connector-supervision.js";
