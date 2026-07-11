@@ -11,12 +11,12 @@
     }
   },
   "scripts": {
-    "build": "pnpm -r build",
+    "build": "pnpm -r --workspace-concurrency=1 build",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "eslint .",
-    "test": "node --test scripts/*.test.mjs && pnpm -r test",
-    "typecheck": "pnpm -r typecheck",
+    "test": "node --test scripts/*.test.mjs && pnpm -r --workspace-concurrency=1 test",
+    "typecheck": "pnpm -r --workspace-concurrency=1 typecheck",
     "verify": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm verify:docs",
     "verify:docs": "node scripts/verify-docs.mjs",
     "verify:architecture": "node scripts/verify-architecture-diagrams.mjs"
