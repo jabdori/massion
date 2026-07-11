@@ -16,5 +16,6 @@
     "e2e-actual/**/*.ts",
     "vite.config.ts",
     "playwright*.config.ts"
-  ]
+  ],
+  "exclude": ["e2e-actual/server.ts"]
 }
