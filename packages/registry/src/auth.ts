@@ -2,7 +2,10 @@ import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 
 import { createRemoteJWKSet, jwtVerify, type JWTPayload } from "jose";
 
+import { applyMigrations, type MassionDatabase, type QueryExecutor } from "@massion/storage";
+
 import { assertDigest, assertRegistryId, normalizePackageIdentity } from "./contracts.js";
+import { REGISTRY_MIGRATIONS } from "./schema.js";
 
 export interface PublisherTrustPolicy {
   readonly issuer: string;
@@ -80,6 +83,25 @@ interface GrantRecord {
   consumed: boolean;
 }
 
+interface PersistentGrantRecord {
+  readonly grant_key: string;
+  readonly publisher_id: string;
+  readonly package_name: string;
+  readonly package_version: string;
+  readonly artifact_digest: string;
+  readonly expires_at: string | Date;
+  readonly consumed_at?: string | Date;
+}
+
+async function first<T>(
+  executor: QueryExecutor,
+  query: string,
+  bindings: Record<string, unknown>,
+): Promise<T | undefined> {
+  const [records] = await executor.query<[T[]]>(query, bindings);
+  return records[0];
+}
+
 export class UploadGrantService {
   private readonly records = new Map<string, GrantRecord>();
   private readonly now: () => Date;
@@ -133,6 +155,100 @@ export class UploadGrantService {
       throw new Error("upload grant가 package identity와 일치하지 않습니다");
     matched.consumed = true;
     return { ...matched };
+  }
+
+  private key(token: string): string {
+    return createHmac("sha256", this.options.secret).update(token).digest("hex");
+  }
+}
+
+export class SurrealUploadGrantService {
+  private readonly now: () => Date;
+
+  private constructor(
+    private readonly database: MassionDatabase,
+    private readonly options: { readonly secret: Buffer; readonly now?: () => Date },
+  ) {
+    if (options.secret.length < 32) throw new Error("upload grant HMAC secret은 256-bit 이상이어야 합니다");
+    this.now = options.now ?? (() => new Date());
+  }
+
+  public static async create(
+    database: MassionDatabase,
+    options: { readonly secret: Buffer; readonly now?: () => Date },
+  ): Promise<SurrealUploadGrantService> {
+    await applyMigrations(database, REGISTRY_MIGRATIONS);
+    return new SurrealUploadGrantService(database, options);
+  }
+
+  public async issue(input: {
+    readonly publisherId: string;
+    readonly packageName: string;
+    readonly packageVersion: string;
+    readonly artifactDigest: string;
+    readonly ttlSeconds: number;
+  }): Promise<{ readonly token: string; readonly expiresAt: string }> {
+    assertRegistryId(input.publisherId, "publisher");
+    normalizePackageIdentity(input.packageName, input.packageVersion);
+    assertDigest(input.artifactDigest, "artifact");
+    if (!Number.isSafeInteger(input.ttlSeconds) || input.ttlSeconds < 30 || input.ttlSeconds > 300)
+      throw new Error("upload grant TTL이 유효하지 않습니다");
+    const token = randomBytes(32).toString("base64url");
+    const grantKey = this.key(token);
+    const expiresAt = new Date(this.now().getTime() + input.ttlSeconds * 1_000);
+    await this.database.query(
+      "CREATE registry_upload_grant CONTENT { grant_key: $grant_key, publisher_id: $publisher_id, package_name: $package_name, package_version: $package_version, artifact_digest: $artifact_digest, expires_at: $expires_at, consumed_at: NONE, created_at: time::now() };",
+      {
+        grant_key: grantKey,
+        publisher_id: input.publisherId,
+        package_name: input.packageName,
+        package_version: input.packageVersion,
+        artifact_digest: input.artifactDigest,
+        expires_at: expiresAt,
+      },
+    );
+    return { token, expiresAt: expiresAt.toISOString() };
+  }
+
+  public async consume(
+    token: string,
+    expected: { readonly packageName: string; readonly packageVersion: string; readonly artifactDigest: string },
+  ): Promise<GrantRecord> {
+    if (!/^[A-Za-z0-9_-]{43}$/u.test(token)) throw new Error("upload grant 형식이 유효하지 않습니다");
+    normalizePackageIdentity(expected.packageName, expected.packageVersion);
+    assertDigest(expected.artifactDigest, "artifact");
+    const grantKey = this.key(token);
+    return await this.database.transaction(async (transaction) => {
+      const record = await first<PersistentGrantRecord>(
+        transaction,
+        "SELECT * OMIT id FROM registry_upload_grant WHERE grant_key = $grant_key LIMIT 1;",
+        { grant_key: grantKey },
+      );
+      if (!record) throw new Error("upload grant를 찾을 수 없습니다");
+      if (record.consumed_at) throw new Error("upload grant를 이미 소비했습니다");
+      const expiresAt = new Date(record.expires_at).getTime();
+      if (expiresAt < this.now().getTime()) throw new Error("upload grant가 만료됐습니다");
+      if (
+        record.package_name !== expected.packageName ||
+        record.package_version !== expected.packageVersion ||
+        record.artifact_digest !== expected.artifactDigest
+      )
+        throw new Error("upload grant가 package identity와 일치하지 않습니다");
+      const updated = await first<PersistentGrantRecord>(
+        transaction,
+        "UPDATE registry_upload_grant SET consumed_at = time::now() WHERE grant_key = $grant_key AND consumed_at = NONE RETURN AFTER;",
+        { grant_key: grantKey },
+      );
+      if (!updated) throw new Error("upload grant를 이미 소비했습니다");
+      return {
+        publisherId: record.publisher_id,
+        packageName: record.package_name,
+        packageVersion: record.package_version,
+        artifactDigest: record.artifact_digest,
+        expiresAt,
+        consumed: true,
+      };
+    });
   }
 
   private key(token: string): string {
