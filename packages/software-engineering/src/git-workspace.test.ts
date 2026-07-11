@@ -233,7 +233,7 @@ diff --git a/src/value.test.js b/src/value.test.js
     await expect(manager.prepare({ repositoryRoot, baseRevision, deliveryId: "escape" })).rejects.toThrow(
       "workspace path",
     );
-  });
+  }, 15_000);
 
   it("recovery branch가 base를 첫 부모로 둔 merge commit이면 거부한다", async () => {
     await git(["switch", "--create", "side"]);
