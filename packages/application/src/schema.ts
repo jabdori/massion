@@ -242,6 +242,62 @@ DEFINE INDEX application_metric_once ON application_metric FIELDS organization_i
 `,
 );
 
+export const APPLICATION_WEB_SESSION_MIGRATION = defineMigration(
+  "0071-application-web-session",
+  `
+DEFINE TABLE application_web_login_ticket SCHEMAFULL PERMISSIONS NONE;
+DEFINE FIELD ticket_id ON application_web_login_ticket TYPE string;
+DEFINE FIELD organization_id ON application_web_login_ticket TYPE string;
+DEFINE FIELD user_id ON application_web_login_ticket TYPE string;
+DEFINE FIELD source_token_id ON application_web_login_ticket TYPE string;
+DEFINE FIELD audience ON application_web_login_ticket TYPE string;
+DEFINE FIELD scopes ON application_web_login_ticket TYPE array<string>;
+DEFINE FIELD key_id ON application_web_login_ticket TYPE string;
+DEFINE FIELD code_hash ON application_web_login_ticket TYPE string ASSERT string::len($value) = 64;
+DEFINE FIELD command_id ON application_web_login_ticket TYPE string;
+DEFINE FIELD request_hash ON application_web_login_ticket TYPE string ASSERT string::len($value) = 64;
+DEFINE FIELD issued_at ON application_web_login_ticket TYPE datetime;
+DEFINE FIELD expires_at ON application_web_login_ticket TYPE datetime;
+DEFINE FIELD used_at ON application_web_login_ticket TYPE option<datetime>;
+DEFINE INDEX application_web_login_ticket_id ON application_web_login_ticket FIELDS ticket_id UNIQUE;
+DEFINE INDEX application_web_login_ticket_command ON application_web_login_ticket FIELDS organization_id, command_id UNIQUE;
+
+DEFINE TABLE application_web_session SCHEMAFULL PERMISSIONS NONE;
+DEFINE FIELD session_id ON application_web_session TYPE string;
+DEFINE FIELD organization_id ON application_web_session TYPE string;
+DEFINE FIELD user_id ON application_web_session TYPE string;
+DEFINE FIELD source_token_id ON application_web_session TYPE string;
+DEFINE FIELD audience ON application_web_session TYPE string;
+DEFINE FIELD scopes ON application_web_session TYPE array<string>;
+DEFINE FIELD key_id ON application_web_session TYPE string;
+DEFINE FIELD session_hash ON application_web_session TYPE string ASSERT string::len($value) = 64;
+DEFINE FIELD csrf_hash ON application_web_session TYPE string ASSERT string::len($value) = 64;
+DEFINE FIELD issued_at ON application_web_session TYPE datetime;
+DEFINE FIELD expires_at ON application_web_session TYPE datetime;
+DEFINE FIELD idle_ttl_seconds ON application_web_session TYPE int ASSERT $value >= 60;
+DEFINE FIELD idle_expires_at ON application_web_session TYPE datetime;
+DEFINE FIELD last_seen_at ON application_web_session TYPE datetime;
+DEFINE FIELD revoked_at ON application_web_session TYPE option<datetime>;
+DEFINE FIELD revoked_reason ON application_web_session TYPE option<string>;
+DEFINE INDEX application_web_session_id ON application_web_session FIELDS session_id UNIQUE;
+DEFINE INDEX application_web_session_hash ON application_web_session FIELDS session_hash UNIQUE;
+
+DEFINE TABLE application_web_session_event SCHEMAFULL PERMISSIONS NONE;
+DEFINE FIELD event_id ON application_web_session_event TYPE string;
+DEFINE FIELD organization_id ON application_web_session_event TYPE string;
+DEFINE FIELD user_id ON application_web_session_event TYPE string;
+DEFINE FIELD session_id ON application_web_session_event TYPE option<string>;
+DEFINE FIELD ticket_id ON application_web_session_event TYPE option<string>;
+DEFINE FIELD event_type ON application_web_session_event TYPE string ASSERT $value IN ['ticket-issued', 'ticket-consumed', 'session-issued', 'csrf-rotated', 'session-revoked'];
+DEFINE FIELD detail_hash ON application_web_session_event TYPE string ASSERT string::len($value) = 64;
+DEFINE FIELD created_at ON application_web_session_event TYPE datetime;
+DEFINE INDEX application_web_session_event_id ON application_web_session_event FIELDS organization_id, event_id UNIQUE;
+DEFINE EVENT application_web_session_event_immutable ON TABLE application_web_session_event
+WHEN $event IN ['UPDATE', 'DELETE']
+THEN { THROW 'Application web session event는 immutable입니다'; };
+`,
+);
+
 export const APPLICATION_MIGRATIONS = [
   APPLICATION_AUTH_MIGRATION,
   APPLICATION_COMMAND_MIGRATION,
@@ -249,4 +305,5 @@ export const APPLICATION_MIGRATIONS = [
   APPLICATION_EVENT_MIGRATION,
   APPLICATION_RUN_MIGRATION,
   APPLICATION_METRIC_MIGRATION,
+  APPLICATION_WEB_SESSION_MIGRATION,
 ] as const;

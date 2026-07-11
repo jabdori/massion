@@ -6,6 +6,7 @@ import type { AuthenticatedApplicationAccess, IssueApplicationTokenInput } from 
 import type { ApplicationEventV1 } from "./contracts.js";
 import { ApplicationError, applicationErrorToHttpStatus } from "./errors.js";
 import { encodeApplicationSseEvent, parseEventCursor } from "./sse.js";
+import type { AuthenticatedWebSession, ExchangedWebSession } from "./web-session.js";
 
 const JSON_LIMIT = 1024 * 1024;
 const ARTIFACT_LIMIT = 64 * 1024 * 1024;
@@ -49,6 +50,21 @@ export interface ApplicationHttpDependencies {
       readonly displayName: string;
     }): Promise<unknown>;
   };
+  readonly webSessions?: {
+    issueLoginTicket(
+      access: AuthenticatedApplicationAccess,
+      input: { readonly commandId: string; readonly ttlSeconds?: number },
+    ): Promise<unknown>;
+    exchangeLoginTicket(code: string): Promise<ExchangedWebSession>;
+    authenticate(
+      sessionToken: string,
+      audience: string,
+      requiredScopes: readonly string[],
+    ): Promise<AuthenticatedWebSession>;
+    verifyCsrf(sessionToken: string, csrfToken: string): Promise<boolean>;
+    rotateCsrf(sessionToken: string): Promise<string>;
+    revoke(sessionToken: string, csrfToken: string, reason: string): Promise<void>;
+  };
 }
 
 export interface ApplicationHttpServerOptions {
@@ -84,6 +100,28 @@ function header(request: IncomingMessage, name: string): string | undefined {
   const value = request.headers[name];
   if (Array.isArray(value)) throw validation(`${name} header는 하나만 허용됩니다`);
   return value;
+}
+
+function cookie(request: IncomingMessage, name: string): string | undefined {
+  const source = header(request, "cookie");
+  if (!source) return undefined;
+  const values = source
+    .split(";")
+    .map((part) => part.trim())
+    .filter((part) => part.startsWith(`${name}=`))
+    .map((part) => part.slice(name.length + 1));
+  if (values.length > 1) throw validation(`중복 ${name} cookie는 허용되지 않습니다`);
+  return values[0];
+}
+
+function requestOrigin(request: IncomingMessage, secure: boolean): string | undefined {
+  const host = header(request, "host");
+  if (!host || !/^(?:\[[0-9a-f:]+\]|[A-Za-z0-9.-]+)(?::[0-9]{1,5})?$/u.test(host)) return undefined;
+  return `${secure ? "https" : "http"}://${host}`;
+}
+
+interface HttpAccess extends AuthenticatedApplicationAccess {
+  readonly web?: { readonly sessionId: string; readonly sessionToken: string };
 }
 
 async function body(request: IncomingMessage, maximum: number): Promise<Buffer> {
@@ -245,8 +283,10 @@ export class ApplicationHttpServer {
   private async route(request: IncomingMessage, response: ServerResponse): Promise<void> {
     if (request.rawHeaders.length / 2 > 64) throw validation("HTTP header 개수 상한을 초과했습니다");
     const origin = header(request, "origin");
+    const secure = !LOOPBACK.has(this.options.host);
     if (origin !== undefined) {
-      if (!this.options.allowedOrigins?.includes(origin))
+      const sameOrigin = origin === requestOrigin(request, secure);
+      if (!sameOrigin && !this.options.allowedOrigins?.includes(origin))
         throw new ApplicationError({
           category: "authorization",
           severity: "error",
@@ -254,8 +294,10 @@ export class ApplicationHttpServer {
           userMessage: "허용되지 않은 Origin입니다",
           operatorCode: "APP_HTTP_ORIGIN",
         });
-      response.setHeader("access-control-allow-origin", origin);
-      response.setHeader("vary", "Origin");
+      if (!sameOrigin) {
+        response.setHeader("access-control-allow-origin", origin);
+        response.setHeader("vary", "Origin");
+      }
     }
     if (!LOOPBACK.has(this.options.host)) {
       const remote = request.socket.remoteAddress ?? "";
@@ -312,7 +354,84 @@ export class ApplicationHttpServer {
       );
       return;
     }
+    if (url.pathname === "/api/v1/web/sessions") {
+      if (request.method !== "POST") {
+        this.method(response, ["POST"]);
+        return;
+      }
+      this.browserOrigin(request);
+      if (!this.dependencies.webSessions) throw validation("Web session을 사용할 수 없습니다");
+      this.acceptJson(request);
+      const input = (await json(request)) as Record<string, unknown>;
+      if (Object.keys(input).some((key) => key !== "code") || typeof input.code !== "string")
+        throw validation("Web login code가 필요합니다");
+      const exchanged = await this.dependencies.webSessions.exchangeLoginTicket(input.code);
+      response.setHeader("set-cookie", this.sessionCookie(exchanged.sessionToken, exchanged.expiresAt, secure));
+      response.setHeader("cache-control", "no-store");
+      sendJson(response, 201, {
+        schemaVersion: "massion.web.session.v1",
+        sessionId: exchanged.sessionId,
+        context: exchanged.context,
+        scopes: exchanged.scopes,
+        csrfToken: exchanged.csrfToken,
+        issuedAt: exchanged.issuedAt,
+        expiresAt: exchanged.expiresAt,
+        idleExpiresAt: exchanged.idleExpiresAt,
+      });
+      return;
+    }
     const access = await this.authenticate(request);
+    if (url.pathname === "/api/v1/web/login-tickets") {
+      if (request.method !== "POST") {
+        this.method(response, ["POST"]);
+        return;
+      }
+      if (!this.dependencies.webSessions || access.web) throw this.scope();
+      if (!hasScope(access.scopes, "web-session:write") || !["owner", "admin", "member"].includes(access.context.role))
+        throw this.scope();
+      this.acceptJson(request);
+      const input = (await json(request)) as Record<string, unknown>;
+      if (
+        Object.keys(input).some((key) => !["commandId", "ttlSeconds"].includes(key)) ||
+        typeof input.commandId !== "string"
+      )
+        throw validation("Web login ticket input이 유효하지 않습니다");
+      response.setHeader("cache-control", "no-store");
+      sendJson(
+        response,
+        201,
+        await this.dependencies.webSessions.issueLoginTicket(access, {
+          commandId: input.commandId,
+          ...(input.ttlSeconds === undefined ? {} : { ttlSeconds: Number(input.ttlSeconds) }),
+        }),
+      );
+      return;
+    }
+    if (url.pathname === "/api/v1/web/session") {
+      if (!access.web || !this.dependencies.webSessions) throw this.scope();
+      response.setHeader("cache-control", "no-store");
+      if (request.method === "GET") {
+        const csrfToken = await this.dependencies.webSessions.rotateCsrf(access.web.sessionToken);
+        sendJson(response, 200, {
+          schemaVersion: "massion.web.session.v1",
+          sessionId: access.web.sessionId,
+          context: access.context,
+          scopes: access.scopes,
+          csrfToken,
+        });
+        return;
+      }
+      if (request.method === "DELETE") {
+        const csrfToken = await this.browserMutation(request, access);
+        await this.dependencies.webSessions.revoke(access.web.sessionToken, csrfToken, "user-logout");
+        response.setHeader("set-cookie", this.clearSessionCookie(secure));
+        response.writeHead(204);
+        response.end();
+        return;
+      }
+      this.method(response, ["GET", "DELETE"]);
+      return;
+    }
     if (url.pathname === "/api/v1/events/stream") {
       if (request.method !== "GET") {
         this.method(response, ["GET"]);
@@ -368,6 +487,7 @@ export class ApplicationHttpServer {
         this.method(response, ["POST"]);
         return;
       }
+      if (access.web) await this.browserMutation(request, access);
       this.acceptJson(request);
       const result = await this.dependencies.commands.dispatch(access.context, access.scopes, await json(request));
       sendJson(response, result.outcome === "accepted" || result.outcome === "awaiting-approval" ? 202 : 200, result);
@@ -378,6 +498,7 @@ export class ApplicationHttpServer {
         this.method(response, ["POST"]);
         return;
       }
+      if (access.web) await this.browserMutation(request, access);
       this.acceptJson(request);
       if (
         !this.dependencies.tokens ||
@@ -398,6 +519,7 @@ export class ApplicationHttpServer {
         this.method(response, ["DELETE"]);
         return;
       }
+      if (access.web) await this.browserMutation(request, access);
       if (
         !this.dependencies.tokens ||
         !hasScope(access.scopes, "token:write") ||
@@ -416,6 +538,7 @@ export class ApplicationHttpServer {
         this.method(response, ["POST"]);
         return;
       }
+      if (access.web) await this.browserMutation(request, access);
       this.acceptJson(request);
       if (header(request, "content-type") !== "application/octet-stream")
         throw validation("Content-Type application/octet-stream이 필요합니다");
@@ -449,13 +572,21 @@ export class ApplicationHttpServer {
     });
   }
 
-  private async authenticate(request: IncomingMessage): Promise<AuthenticatedApplicationAccess> {
+  private async authenticate(request: IncomingMessage): Promise<HttpAccess> {
     try {
-      return await this.dependencies.auth.authenticateAccess(
-        header(request, "authorization"),
-        this.options.audience,
-        [],
-      );
+      const authorization = header(request, "authorization");
+      if (authorization !== undefined)
+        return await this.dependencies.auth.authenticateAccess(authorization, this.options.audience, []);
+      if (this.dependencies.webSessions) {
+        const secure = !LOOPBACK.has(this.options.host);
+        const cookieName = secure ? "__Host-massion_session" : "massion_session";
+        const sessionToken = cookie(request, cookieName);
+        if (sessionToken) {
+          const access = await this.dependencies.webSessions.authenticate(sessionToken, this.options.audience, []);
+          return { ...access, web: { sessionId: access.sessionId, sessionToken } };
+        }
+      }
+      return await this.dependencies.auth.authenticateAccess(undefined, this.options.audience, []);
     } catch (cause) {
       throw new ApplicationError({
         category: "authentication",
@@ -466,6 +597,52 @@ export class ApplicationHttpServer {
         cause,
       });
     }
+  }
+
+  private async browserMutation(request: IncomingMessage, access: HttpAccess): Promise<string> {
+    if (!access.web || !this.dependencies.webSessions) throw this.scope();
+    this.browserOrigin(request);
+    const csrfToken = header(request, "x-massion-csrf");
+    if (!csrfToken || !(await this.dependencies.webSessions.verifyCsrf(access.web.sessionToken, csrfToken)))
+      throw new ApplicationError({
+        category: "authorization",
+        severity: "error",
+        retryable: false,
+        userMessage: "Web mutation CSRF 검증에 실패했습니다",
+        operatorCode: "APP_HTTP_WEB_CSRF",
+      });
+    return csrfToken;
+  }
+
+  private browserOrigin(request: IncomingMessage): void {
+    const secure = !LOOPBACK.has(this.options.host);
+    if (header(request, "origin") !== requestOrigin(request, secure))
+      throw new ApplicationError({
+        category: "authorization",
+        severity: "error",
+        retryable: false,
+        userMessage: "Web mutation Origin이 일치하지 않습니다",
+        operatorCode: "APP_HTTP_WEB_ORIGIN",
+      });
+    if (header(request, "sec-fetch-site") !== "same-origin")
+      throw new ApplicationError({
+        category: "authorization",
+        severity: "error",
+        retryable: false,
+        userMessage: "Web mutation Fetch Metadata가 유효하지 않습니다",
+        operatorCode: "APP_HTTP_WEB_FETCH_METADATA",
+      });
+  }
+
+  private sessionCookie(sessionToken: string, expiresAt: string, secure: boolean): string {
+    const name = secure ? "__Host-massion_session" : "massion_session";
+    const maximumAge = Math.max(0, Math.floor((new Date(expiresAt).getTime() - Date.now()) / 1_000));
+    return `${name}=${sessionToken}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${String(maximumAge)}${secure ? "; Secure" : ""}`;
+  }
+
+  private clearSessionCookie(secure: boolean): string {
+    const name = secure ? "__Host-massion_session" : "massion_session";
+    return `${name}=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0${secure ? "; Secure" : ""}`;
   }
 
   private acceptJson(request: IncomingMessage): void {

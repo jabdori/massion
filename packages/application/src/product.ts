@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, createHmac, randomUUID } from "node:crypto";
 
 import type { PolicyStore } from "@massion/governance";
 import type { IdentityService, OrganizationService, TenantContext } from "@massion/identity";
@@ -25,6 +25,7 @@ import {
 import { registerApplicationRunCommands } from "./run-commands.js";
 import { ApplicationRunStore } from "./run-store.js";
 import { CollaborationGraphSnapshotProjector } from "./snapshot.js";
+import { WebSessionService } from "./web-session.js";
 
 export interface ApplicationProductDependencies {
   readonly database: MassionDatabase;
@@ -54,6 +55,7 @@ export class ApplicationProduct implements AsyncDisposable {
     public readonly events: ApplicationEventStore,
     public readonly projector: ApplicationEventProjector,
     public readonly metrics: ApplicationMetricStore,
+    public readonly webSessions: WebSessionService,
   ) {}
 
   public static async create(dependencies: ApplicationProductDependencies): Promise<ApplicationProduct> {
@@ -71,6 +73,10 @@ export class ApplicationProduct implements AsyncDisposable {
     const tokens = await ApplicationAccessTokenService.create(dependencies.database, dependencies.organizations, {
       keyId: dependencies.tokenKey.keyId,
       key: dependencies.tokenKey.key,
+    });
+    const webSessions = await WebSessionService.create(dependencies.database, dependencies.organizations, tokens, {
+      keyId: `web-${createHash("sha256").update(dependencies.tokenKey.keyId).digest("hex").slice(0, 16)}`,
+      key: createHmac("sha256", dependencies.tokenKey.key).update("massion-web-session-v1").digest(),
     });
     const events = await ApplicationEventStore.create(dependencies.database, dependencies.organizations);
     const projector = await ApplicationEventProjector.create(dependencies.database, dependencies.organizations);
@@ -147,6 +153,7 @@ export class ApplicationProduct implements AsyncDisposable {
         tokens,
         ...(dependencies.artifacts === undefined ? {} : { artifacts: dependencies.artifacts }),
         bootstrap,
+        webSessions,
       },
       dependencies.server,
     );
@@ -160,6 +167,7 @@ export class ApplicationProduct implements AsyncDisposable {
       events,
       projector,
       metrics,
+      webSessions,
     );
     productReference.current = product;
     return product;
