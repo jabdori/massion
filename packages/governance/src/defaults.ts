@@ -9,7 +9,11 @@ const ACTIONS = [
   "extension.install",
   "extension.permission_increase",
   "policy.activate",
+  "growth.configure",
+  "growth.strategy.activate",
+  "growth.reflect",
   "growth.adopt",
+  "growth.revert",
   "declaration.apply",
   "approval.decide",
   "emergency.stop",
@@ -25,6 +29,7 @@ function entityShape() {
         organizationId: { type: "String", required: true },
         kind: { type: "String", required: false },
         role: { type: "String", required: false },
+        subjectId: { type: "String", required: false },
       },
     },
   };
@@ -37,6 +42,8 @@ function resourceShape() {
       attributes: {
         organizationId: { type: "String", required: true },
         dataClassification: { type: "String", required: false },
+        subjectType: { type: "String", required: false },
+        subjectId: { type: "String", required: false },
       },
     },
   };
@@ -57,6 +64,7 @@ export function createDefaultPolicy(kind: "personal" | "team"): {
     "Declaration",
     "Approval",
     "AssuranceBindingVersion",
+    "GrowthConfiguration",
   ];
   const context = {
     type: "Record",
@@ -64,6 +72,7 @@ export function createDefaultPolicy(kind: "personal" | "team"): {
       environment: { type: "String", required: true },
       riskClass: { type: "String", required: true },
       external: { type: "Boolean", required: true },
+      automationMode: { type: "String", required: false },
     },
   };
   const actions = Object.fromEntries(
@@ -76,7 +85,6 @@ export function createDefaultPolicy(kind: "personal" | "team"): {
     "extension.install",
     "extension.permission_increase",
     "policy.activate",
-    "growth.adopt",
     "declaration.apply",
     "emergency.stop.disable",
   ];
@@ -97,6 +105,7 @@ export function createDefaultPolicy(kind: "personal" | "team"): {
             Declaration: resourceShape(),
             Approval: resourceShape(),
             AssuranceBindingVersion: resourceShape(),
+            GrowthConfiguration: resourceShape(),
           },
           actions,
         },
@@ -110,6 +119,10 @@ export function createDefaultPolicy(kind: "personal" | "team"): {
         "invariant-audit": 'forbid(principal, action == Massion::Action::"audit.disable", resource);',
         "invariant-emergency":
           'forbid(principal, action == Massion::Action::"emergency.stop.disable", resource) when { principal is Massion::Agent };',
+        "growth-organization-configuration":
+          'forbid(principal is Massion::Human, action == Massion::Action::"growth.configure", resource) when { resource has subjectType && resource.subjectType == "organization" && principal has role && principal.role == "member" };',
+        "growth-user-configuration":
+          'forbid(principal is Massion::Human, action == Massion::Action::"growth.configure", resource) when { resource has subjectType && resource.subjectType == "user" && resource has subjectId && principal has subjectId && resource.subjectId != principal.subjectId };',
       },
     },
     requirements: [

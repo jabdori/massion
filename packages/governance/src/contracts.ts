@@ -51,8 +51,11 @@ export interface PolicyDecision {
   readonly reasons: readonly string[];
   readonly errors: readonly string[];
   readonly requirement?: ApprovalRequirement;
+  readonly automationMode?: GrowthAutomationMode;
   readonly createdAt: unknown;
 }
+
+export type GrowthAutomationMode = "review" | "auto";
 
 export interface EvaluatePolicyInput {
   readonly commandId: string;

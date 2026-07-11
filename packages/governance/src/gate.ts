@@ -2,7 +2,7 @@ import type { TenantContext } from "@massion/identity";
 import type { QueryExecutor } from "@massion/storage";
 
 import { ApprovalStore, type ApprovalStatus } from "./approval-store.js";
-import type { PolicyDecision, PolicyRequest } from "./contracts.js";
+import type { GrowthAutomationMode, PolicyDecision, PolicyRequest } from "./contracts.js";
 import { EmergencyControl } from "./emergency.js";
 import { GovernanceService, hashPolicyRequest } from "./governance-service.js";
 import { PermitStore, type ExecutionPermit } from "./permit.js";
@@ -15,12 +15,38 @@ export interface GovernedActionInput {
     readonly id: string;
     readonly revision?: number;
     readonly dataClassification?: string;
+    readonly attributes?: Readonly<Record<string, unknown>>;
   };
   readonly environment: string;
   readonly riskClass: string;
   readonly external: boolean;
   readonly executionId: string;
   readonly approvalId?: string;
+}
+
+export interface GovernedAgentIdentityReader {
+  resolve(
+    context: TenantContext,
+    executionId: string,
+  ): Promise<{
+    readonly organizationId: string;
+    readonly workId: string;
+    readonly agentHandle: string;
+    readonly status:
+      | "queued"
+      | "running"
+      | "suspended"
+      | "succeeded"
+      | "failed"
+      | "cancelled"
+      | "interrupted"
+      | "blocked_model_unavailable";
+  }>;
+}
+
+export interface GovernedGrowthAgentActionInput extends GovernedActionInput {
+  readonly workId: string;
+  readonly automationMode: GrowthAutomationMode;
 }
 
 export interface GovernanceAuthorization {
@@ -52,6 +78,7 @@ export class GovernanceGate {
     private readonly approvals: ApprovalStore,
     private readonly permits: PermitStore,
     private readonly emergency: EmergencyControl,
+    private readonly agentIdentities?: GovernedAgentIdentityReader,
   ) {}
 
   public async authorize(
@@ -62,6 +89,33 @@ export class GovernanceGate {
     if (input.action !== "work.read" && input.action !== "emergency.stop")
       await this.emergency.assertExecutionAllowed(context);
     const request = this.request(context, input);
+    return await this.authorizeRequest(context, input, request, executor);
+  }
+
+  public async authorizeAgent(
+    context: TenantContext,
+    input: GovernedGrowthAgentActionInput,
+    executor?: QueryExecutor,
+  ): Promise<GovernanceAuthorization> {
+    if (input.action !== "growth.adopt") throw new Error("Growth Agent authorization은 growth.adopt만 지원합니다");
+    await this.emergency.assertExecutionAllowed(context);
+    if (!this.agentIdentities) throw new Error("검증된 Agent identity reader가 없습니다");
+    const identity = await this.agentIdentities.resolve(context, input.executionId);
+    if (identity.organizationId !== context.organizationId)
+      throw new Error("Growth Agent Runtime Execution의 organization이 다릅니다");
+    if (identity.workId !== input.workId) throw new Error("Growth Agent Runtime Execution의 Work가 다릅니다");
+    if (identity.agentHandle !== "growth") throw new Error("Runtime Execution은 Growth Agent가 아닙니다");
+    if (identity.status !== "succeeded") throw new Error("Growth Agent Runtime Execution은 succeeded 상태여야 합니다");
+    const request = this.agentRequest(context, input);
+    return await this.authorizeRequest(context, input, request, executor);
+  }
+
+  private async authorizeRequest(
+    context: TenantContext,
+    input: GovernedActionInput,
+    request: PolicyRequest,
+    executor?: QueryExecutor,
+  ): Promise<GovernanceAuthorization> {
     if (input.approvalId) {
       const approval = await this.approvals.get(context, input.approvalId);
       const decision = await this.governance.getDecision(context, approval.decision_id);
@@ -108,7 +162,7 @@ export class GovernanceGate {
         type: "Human",
         id: context.userId,
         organizationId: context.organizationId,
-        attributes: { kind: "human", role: context.role },
+        attributes: { kind: "human", role: context.role, subjectId: context.userId },
       },
       action: input.action,
       resource: {
@@ -116,12 +170,43 @@ export class GovernanceGate {
         id: input.resource.id,
         organizationId: context.organizationId,
         ...(input.resource.revision === undefined ? {} : { revision: input.resource.revision }),
-        attributes: { dataClassification: input.resource.dataClassification ?? "internal" },
+        attributes: {
+          dataClassification: input.resource.dataClassification ?? "internal",
+          ...input.resource.attributes,
+        },
       },
       context: {
         environment: input.environment,
         riskClass: input.riskClass,
         external: input.external,
+      },
+    };
+  }
+
+  private agentRequest(context: TenantContext, input: GovernedGrowthAgentActionInput): PolicyRequest {
+    return {
+      principal: {
+        type: "Agent",
+        id: input.executionId,
+        organizationId: context.organizationId,
+        attributes: { kind: "agent", role: "growth", subjectId: input.executionId },
+      },
+      action: input.action,
+      resource: {
+        type: input.resource.type,
+        id: input.resource.id,
+        organizationId: context.organizationId,
+        ...(input.resource.revision === undefined ? {} : { revision: input.resource.revision }),
+        attributes: {
+          dataClassification: input.resource.dataClassification ?? "internal",
+          ...input.resource.attributes,
+        },
+      },
+      context: {
+        environment: input.environment,
+        riskClass: input.riskClass,
+        external: input.external,
+        automationMode: input.automationMode,
       },
     };
   }

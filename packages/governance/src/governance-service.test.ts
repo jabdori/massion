@@ -7,6 +7,7 @@ import type { PolicyRequest } from "./contracts.js";
 import { createDefaultPolicy } from "./defaults.js";
 import { GovernanceService } from "./governance-service.js";
 import { PolicyStore } from "./policy-store.js";
+import { GOVERNANCE_GROWTH_AUTONOMY_MIGRATION } from "./schema.js";
 
 describe("Governance Policy Decision", () => {
   let database: MassionDatabase;
@@ -23,6 +24,13 @@ describe("Governance Policy Decision", () => {
     context = await organizations.resolveTenantContext(owner.user.user_id, owner.organization.organization_id);
     policies = await PolicyStore.create(database, organizations);
     governance = await GovernanceService.create(database, organizations, policies);
+  });
+
+  it("0055 Growth autonomy migration checksum을 고정한다", () => {
+    expect(GOVERNANCE_GROWTH_AUTONOMY_MIGRATION.id).toBe("0055-governance-growth-autonomy");
+    expect(GOVERNANCE_GROWTH_AUTONOMY_MIGRATION.checksum).toBe(
+      "ad24ffe8e535701bd0397021e6c0242b661a718c4dd63510efd1575619d991d9",
+    );
   });
 
   async function activate(kind: "personal" | "team") {
@@ -177,5 +185,112 @@ describe("Governance Policy Decision", () => {
       outcome: "require_approval",
       requirement: { requirementId: "invariant-policy-activate" },
     });
+  });
+
+  it("Growth adoption의 review만 builtin 승인을 요구하고 auto는 active policy 허용을 따른다", async () => {
+    await activate("personal");
+    const review = await governance.evaluate(context, {
+      commandId: "growth-review",
+      request: request("growth.adopt", {
+        principal: {
+          type: "Agent",
+          id: "growth-execution-1",
+          organizationId: context.organizationId,
+          attributes: { kind: "agent", role: "growth" },
+        },
+        resource: {
+          type: "Suggestion",
+          id: "suggestion-1",
+          organizationId: context.organizationId,
+          revision: 1,
+        },
+        context: { environment: "local", riskClass: "growth-adoption", external: false, automationMode: "review" },
+      }),
+    });
+    const auto = await governance.evaluate(context, {
+      commandId: "growth-auto",
+      request: request("growth.adopt", {
+        principal: {
+          type: "Agent",
+          id: "growth-execution-1",
+          organizationId: context.organizationId,
+          attributes: { kind: "agent", role: "growth" },
+        },
+        resource: {
+          type: "Suggestion",
+          id: "suggestion-1",
+          organizationId: context.organizationId,
+          revision: 1,
+        },
+        context: { environment: "local", riskClass: "growth-adoption", external: false, automationMode: "auto" },
+      }),
+    });
+
+    expect(review).toMatchObject({ outcome: "require_approval", automationMode: "review" });
+    expect(auto).toMatchObject({ outcome: "allow", automationMode: "auto" });
+  });
+
+  it("Growth auto도 active policy의 명시적 approval requirement를 우회하지 않는다", async () => {
+    const defaults = createDefaultPolicy("personal");
+    const draft = await policies.createDraft(context, {
+      commandId: "growth-auto-requirement-policy",
+      bundle: defaults.bundle,
+      requirements: [
+        ...defaults.requirements,
+        {
+          requirementId: "growth-auto-review",
+          actions: ["growth.adopt"],
+          environments: ["*"],
+          riskClasses: ["growth-adoption"],
+          approverRoles: ["owner"],
+          quorum: 1,
+          separationOfDuty: false,
+          expiresInSeconds: 3600,
+        },
+      ],
+    });
+    await policies.activate(context, {
+      commandId: "growth-auto-requirement-activate",
+      policyVersionId: draft.policy_version_id,
+    });
+
+    const result = await governance.evaluate(context, {
+      commandId: "growth-auto-requirement",
+      request: request("growth.adopt", {
+        resource: { type: "Suggestion", id: "suggestion-1", organizationId: context.organizationId },
+        context: { environment: "local", riskClass: "growth-adoption", external: false, automationMode: "auto" },
+      }),
+    });
+
+    expect(result).toMatchObject({ outcome: "require_approval", requirement: { requirementId: "growth-auto-review" } });
+  });
+
+  it("Growth auto도 active Cedar forbid를 우회하지 않는다", async () => {
+    const defaults = createDefaultPolicy("personal");
+    const draft = await policies.createDraft(context, {
+      commandId: "growth-auto-deny-policy",
+      bundle: {
+        ...defaults.bundle,
+        policies: {
+          ...defaults.bundle.policies,
+          "deny-growth-adoption": 'forbid(principal, action == Massion::Action::"growth.adopt", resource);',
+        },
+      },
+      requirements: defaults.requirements,
+    });
+    await policies.activate(context, {
+      commandId: "growth-auto-deny-activate",
+      policyVersionId: draft.policy_version_id,
+    });
+
+    const result = await governance.evaluate(context, {
+      commandId: "growth-auto-denied",
+      request: request("growth.adopt", {
+        resource: { type: "Suggestion", id: "suggestion-1", organizationId: context.organizationId },
+        context: { environment: "local", riskClass: "growth-adoption", external: false, automationMode: "auto" },
+      }),
+    });
+
+    expect(result).toMatchObject({ outcome: "deny", reasons: ["deny-growth-adoption"] });
   });
 });

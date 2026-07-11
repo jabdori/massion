@@ -112,6 +112,9 @@ importers:
 
   packages/growth:
     dependencies:
+      '@massion/governance':
+        specifier: workspace:*
+        version: link:../governance
       '@massion/identity':
         specifier: workspace:*
         version: link:../identity
