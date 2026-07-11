@@ -2,7 +2,7 @@
 
 > **문서 상태**: 현재 구현 아키텍처 정본
 > **기준일**: 2026-07-11
-> **제품 구현 기준 커밋**: `f49ff7d`
+> **제품 구현 기준 커밋**: `8cd2db1`
 > **제품 정본**: [Massion 완제품 설계 명세](../product/2026-07-10-complete-product-design.md)
 > **진행 정본**: [Massion AgentOS 1.0 프로그램 계획](../superpowers/plans/2026-07-10-massion-agentos-1.0-program.md)
 
@@ -21,7 +21,7 @@
 
 굵은 화살표는 사용자 Work의 주 실행 경로, 일반 실선은 동기 명령·직접 호출, 점선은 이벤트·관찰·정책 영향을 뜻합니다. 원통은 영속 저장소, 큰 경계 상자는 프로세스 또는 배포 단위입니다. 색상을 볼 수 없는 환경에서도 상태 라벨과 선 모양으로 구분할 수 있습니다.
 
-기준 커밋에서 Phase 0~19는 구현됨, Phase 20~23은 예정입니다. 개별 요소는 Phase 번호만으로 판정하지 않고 실제 코드와 검증 결과를 함께 확인합니다.
+기준 커밋에서 Phase 0~20은 구현됨, Phase 21~23은 예정입니다. 개별 요소는 Phase 번호만으로 판정하지 않고 실제 코드와 검증 결과를 함께 확인합니다.
 
 ## 2. 전체 시스템 지도
 
@@ -58,7 +58,7 @@ flowchart TB
   end
 
   DB[("SurrealDB<br/>AgentOS 단일 정본<br/>구현됨")]:::implemented
-  Registry["Massion npm 호환 Registry<br/>예정 · Phase 20"]:::planned
+  Registry["Massion npm 호환 Registry<br/>구현됨 · Phase 20"]:::implemented
   Providers["LLM · Embedding Provider<br/>외부"]:::external
   Git["사용자 Git 저장소·원격<br/>외부"]:::external
 
@@ -94,7 +94,7 @@ flowchart TB
 | Extension Host | 구현됨 | `packages/extension-host` | [Phase 15 회고](../phases/15-extension-sdk-host/review.md) |
 | Web Console | 구현됨 | `apps/web` | [Phase 18 회고](../phases/18-web-console/review.md) |
 | Slack·Discord·GitHub Surface | 구현됨 | `packages/integrations`, `extensions/slack`, `extensions/discord`, `extensions/github` | [Phase 19 회고](../phases/19-official-integrations/review.md) |
-| Registry | 예정 | `docs/superpowers/plans/2026-07-10-massion-agentos-1.0-program.md` | 프로그램 Phase 20 |
+| Registry·Marketplace | 구현됨 | `packages/registry`, `apps/cli`, `apps/web` | [Phase 20 회고](../phases/20-registry-marketplace/review.md) |
 | SurrealDB 단일 정본 | 구현됨 | `packages/storage` | [Phase 2 회고](../phases/02-surrealdb-source-of-truth/review.md) |
 
 ## 3. 제품 구성요소와 패키지 경계
@@ -515,7 +515,7 @@ flowchart TB
 
 ## 10. Extension·Registry·격리
 
-Extension은 코어 수정 없이 능력을 추가하지만 Core process, SurrealDB 또는 credential을 직접 받지 않습니다. SDK는 정적 manifest·RPC 계약만 제공하고, Host가 artifact 검사·정책·승인·격리 worker·capability broker·health·rollback을 소유합니다. 공개 Registry의 게시·검색·서명·provenance는 Phase 20 범위입니다.
+Extension은 코어 수정 없이 능력을 추가하지만 Core process, SurrealDB 또는 credential을 직접 받지 않습니다. SDK는 정적 manifest·RPC 계약만 제공하고, Host가 artifact 검사·정책·승인·격리 worker·capability broker·health·rollback을 소유합니다. 공개 Registry는 게시·검사·검색·서명·provenance·리콜을 소유합니다.
 
 ```mermaid
 flowchart LR
@@ -528,7 +528,7 @@ flowchart LR
   SDK["Extension SDK<br/>manifest v1 · RPC types · author helpers"]:::implemented
   Validate["validate · link · pack<br/>경로·script·manifest·content 검사"]:::implemented
   Artifact["npm 호환 .tgz<br/>byte digest · content manifest"]:::implemented
-  Registry["Massion Registry<br/>catalog · trust · signature · provenance<br/>예정 · Phase 20"]:::planned
+  Registry["Massion Registry<br/>catalog · trust · signature · provenance<br/>구현됨 · Phase 20"]:::implemented
   Inspect["Host Artifact Inspector<br/>name·version·digest·compatibility·trust"]:::implemented
   Governance["Governance<br/>install · permission increase<br/>auto 또는 review 정책"]:::implemented
   Store["불변 artifact·version 원장<br/>active pointer"]:::implemented
@@ -572,7 +572,7 @@ flowchart LR
 | community | 위 경계 + OS sandbox | 설치 가능, 활성화 차단 |
 | untrusted-local | 위 경계 + OS sandbox | validate·link·설치 가능, 활성화 차단 |
 
-구현은 `packages/extension-sdk`와 `packages/extension-host`에 있습니다. Registry·Marketplace는 `docs/superpowers/plans/2026-07-10-massion-agentos-1.0-program.md`의 Phase 20에서 완성합니다.
+구현은 `packages/extension-sdk`, `packages/extension-host`, `packages/registry`에 있습니다. Registry 검증 근거는 [Phase 20 회고](../phases/20-registry-marketplace/review.md)에 연결합니다.
 
 ## 11. 개인·팀 배포 구조
 
@@ -619,7 +619,7 @@ flowchart LR
     K8s -. "배포 조립" .-> RuntimePool
   end
 
-  Registry["Massion Registry<br/>예정"]:::planned
+  Registry["Massion Registry<br/>구현됨"]:::implemented
   Providers["공식 AI Provider API<br/>외부"]:::external
   LocalCore --> Providers
   Apps --> Providers
@@ -645,7 +645,8 @@ flowchart LR
 | TUI | 구현됨 | `apps/tui` | 17 |
 | Web Console | 구현됨 | `apps/web` | 18 |
 | Slack·Discord·GitHub 공식 통합 | 구현됨 | `packages/integrations`, `extensions/*` | 19 |
-| Registry·운영·강화·1.0 | 예정 | `docs/superpowers/plans/2026-07-10-massion-agentos-1.0-program.md` | 20~23 |
+| Registry·Marketplace | 구현됨 | `packages/registry`, `packages/application`, `apps/cli`, `apps/web` | 20 |
+| 운영·강화·1.0 | 예정 | `docs/superpowers/plans/2026-07-10-massion-agentos-1.0-program.md` | 21~23 |
 
 이 문서의 상태가 프로그램 계획과 달라지면 실제 검증 근거를 확인한 뒤 그림, 표와 기준 커밋을 함께 갱신합니다.
 
