@@ -3,13 +3,13 @@
 	auto_https disable_redirects
 }
 
-{$MASSION_DOMAIN:localhost}:443 {
+{$MASSION_DOMAIN:localhost}:{$MASSION_TLS_PORT:443} {
 	tls /run/secrets/tls_certificate /run/secrets/tls_private_key
 	encode zstd gzip
 
 	@backend path /api/* /integrations/* /health/*
 	handle @backend {
-		reverse_proxy massion:3141 {
+		reverse_proxy {$MASSION_UPSTREAM:massion:3141} {
 			header_up X-Forwarded-Proto https
 			transport http {
 				dial_timeout 3s

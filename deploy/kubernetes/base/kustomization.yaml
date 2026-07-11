@@ -1,0 +1,19 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: massion
+resources:
+  - namespace.yaml
+  - configmap.yaml
+  - surreal-service.yaml
+  - surreal-statefulset.yaml
+  - massion-deployment.yaml
+  - massion-service.yaml
+  - pdb.yaml
+  - network-policy.yaml
+  - backup-pvc.yaml
+  - backup-cronjob.yaml
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: massion
+    includeSelectors: false
+    includeTemplates: true
