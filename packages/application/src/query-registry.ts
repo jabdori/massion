@@ -27,7 +27,7 @@ export interface ApplicationQueryDependencies {
   readonly snapshot?: CollaborationGraphSnapshotProjector;
   readonly runtime?: Pick<RuntimeExecutionStore, "listEvents" | "getRecovery">;
   readonly extension?: Pick<ExtensionGateway, "list">;
-  readonly growth?: Pick<GrowthGateway, "resolveConfiguration" | "getActiveEvaluationStrategy">;
+  readonly growth?: Pick<GrowthGateway, "resolveConfiguration" | "getActiveEvaluationStrategy" | "listSuggestions">;
   readonly providers?: Pick<ProviderService, "listCredentials">;
   readonly status?: () => Promise<unknown>;
 }
@@ -47,6 +47,13 @@ function text(value: unknown, label: string): string {
   if (typeof value !== "string" || value.length === 0 || value.length > 128)
     throw new Error(`${label}가 유효하지 않습니다`);
   return value;
+}
+
+function boundedInteger(value: unknown, label: string, fallback: number): number {
+  if (value === undefined) return fallback;
+  if (!Number.isSafeInteger(value) || (value as number) < 1 || (value as number) > 1_000)
+    throw new Error(`${label}가 유효하지 않습니다`);
+  return value as number;
 }
 
 export class ApplicationQueryRegistry {
@@ -385,6 +392,30 @@ export function registerApplicationQueries(
           context,
           value.requesterUserId === undefined ? undefined : text(value.requesterUserId, "requesterUserId"),
         ),
+    });
+    registry.register({
+      operation: "growth.suggestions",
+      requiredScopes: ["growth:read"],
+      allowedRoles: EVERY_ROLE,
+      validate: (value) => object(value, ["workId", "status", "limit"]),
+      handle: async (context, value) =>
+        (
+          (await dependencies.growth?.listSuggestions(context, {
+            ...(value.workId === undefined ? {} : { workId: text(value.workId, "workId") }),
+            ...(value.status === undefined ? {} : { status: text(value.status, "status") as never }),
+            limit: boundedInteger(value.limit, "limit", 100),
+          })) ?? []
+        ).map((suggestion) => ({
+          suggestionId: suggestion.suggestion_id,
+          workId: suggestion.work_id,
+          targetKind: suggestion.target_kind,
+          operation: suggestion.operation,
+          summary: suggestion.summary,
+          rationale: suggestion.rationale,
+          expectedEffect: suggestion.expected_effect,
+          riskSummary: suggestion.risk_summary,
+          status: suggestion.status,
+        })),
     });
   }
   if (dependencies.providers) {

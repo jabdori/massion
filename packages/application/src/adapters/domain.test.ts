@@ -152,4 +152,50 @@ describe("Application domain adapters", () => {
       }),
     ).resolves.toMatchObject({ outcome: "succeeded" });
   });
+
+  it("Extension source의 local link와 pack을 공개 Gateway에 위임하고 host path는 반환하지 않는다", async () => {
+    await using database = await createDatabase({
+      url: "mem://",
+      namespace: "massion",
+      database: crypto.randomUUID(),
+    });
+    const identities = await IdentityService.create(database);
+    const organizations = await OrganizationService.create(database);
+    const owner = await identities.registerPersonalUser({ email: "package-domain@example.com", displayName: "Pack" });
+    const context = await organizations.resolveTenantContext(owner.user.user_id, owner.organization.organization_id);
+    const registry = new ApplicationCommandRegistry(await ApplicationCommandStore.create(database, organizations));
+    registerApplicationDomainCommands(registry, {
+      extension: {
+        link: async () => ({
+          sourcePath: "/private/source",
+          sourceDigest: "a".repeat(64),
+          trustLevel: "untrusted-local",
+          validatedAt: "2026-07-11T00:00:00.000Z",
+        }),
+        pack: async () => ({
+          tarballPath: "/private/output/package.tgz",
+          artifactDigest: "b".repeat(64),
+          packageName: "@massion-ext/example",
+          packageVersion: "1.0.0",
+        }),
+      } as never,
+    });
+    const link = await registry.dispatch(context, ["extension:write"], {
+      schemaVersion: "massion.application.v1",
+      commandId: "domain-extension-link-command-0001",
+      correlationId: "domain-extension-link-correlation-0001",
+      operation: "extension.link",
+      payload: { source: "/workspace/ext", environment: "development" },
+    });
+    const pack = await registry.dispatch(context, ["extension:write"], {
+      schemaVersion: "massion.application.v1",
+      commandId: "domain-extension-pack-command-0001",
+      correlationId: "domain-extension-pack-correlation-0001",
+      operation: "extension.pack",
+      payload: { source: "/workspace/ext", destination: "/workspace/dist" },
+    });
+    expect(link).toMatchObject({ outcome: "succeeded", data: { trustLevel: "untrusted-local" } });
+    expect(pack).toMatchObject({ outcome: "succeeded", data: { packageName: "@massion-ext/example" } });
+    expect(JSON.stringify([link, pack])).not.toContain("/private/");
+  });
 });

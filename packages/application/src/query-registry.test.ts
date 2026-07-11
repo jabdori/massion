@@ -69,4 +69,35 @@ describe("ApplicationQueryRegistry", () => {
     });
     await expect(registry.query(context, ["work:read"], "work.list", { injected: true })).rejects.toThrow("알 수 없는");
   });
+
+  it("성장 제안 목록을 secret patch 없이 공개한다", async () => {
+    const registry = new ApplicationQueryRegistry();
+    registerApplicationQueries(registry, {
+      readModel,
+      growth: {
+        resolveConfiguration: async () => ({}),
+        getActiveEvaluationStrategy: async () => ({}),
+        listSuggestions: async () => [
+          {
+            suggestion_id: "suggestion-1",
+            work_id: "query-work",
+            target_kind: "prompt",
+            operation: "replace-instruction",
+            summary: "검증 강화",
+            rationale: "반복 오류 감소",
+            expected_effect: "회귀 감소",
+            risk_summary: "지시문 증가",
+            status: "proposed",
+            patch_json: '{"secret":"공개 금지"}',
+          },
+        ],
+      } as never,
+    });
+    await expect(registry.query(context, ["growth:read"], "growth.suggestions", {})).resolves.toMatchObject({
+      data: [{ suggestionId: "suggestion-1", summary: "검증 강화", status: "proposed" }],
+    });
+    expect(JSON.stringify(await registry.query(context, ["growth:read"], "growth.suggestions", {}))).not.toContain(
+      "공개 금지",
+    );
+  });
 });

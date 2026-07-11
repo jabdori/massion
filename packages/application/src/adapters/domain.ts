@@ -29,7 +29,7 @@ export interface ApplicationDomainDependencies {
   readonly runtime?: Pick<AgentRunner, "execute" | "cancel" | "suspend" | "resume">;
   readonly approvals?: Pick<ApprovalStore, "vote" | "cancel">;
   readonly organization?: Pick<OrganizationGraphService, "execute">;
-  readonly extension?: Pick<ExtensionGateway, "validate" | "install" | "update" | "rollback">;
+  readonly extension?: Pick<ExtensionGateway, "validate" | "link" | "pack" | "install" | "update" | "rollback">;
   readonly growth?: Pick<GrowthGateway, "configure" | "adopt" | "revert">;
   readonly providers?: Pick<ProviderService, "addCredential" | "revokeCredential">;
   readonly router?: Pick<ModelRouter, "createRoute">;
@@ -767,6 +767,33 @@ function registerExtension(
     validate: (value) => payload(value, ["source"], ["source"]),
     async handle(_context, command, value) {
       return result(command, { data: extensionData(await extension.validate(string(value.source, "source"))) });
+    },
+  });
+  register(registry, {
+    operation: "extension.link",
+    requiredScopes: ["extension:write"],
+    allowedRoles: ["owner", "admin"],
+    recovery: "operator-action",
+    validate: (value) => payload(value, ["source", "environment"], ["source", "environment"]),
+    async handle(_context, command, value) {
+      const linked = await extension.link(string(value.source, "source"), {
+        environment: string(value.environment, "environment"),
+      });
+      return result(command, { data: extensionData(linked) });
+    },
+  });
+  register(registry, {
+    operation: "extension.pack",
+    requiredScopes: ["extension:write"],
+    allowedRoles: ["owner", "admin"],
+    recovery: "operator-action",
+    validate: (value) => payload(value, ["source", "destination"], ["source", "destination"]),
+    async handle(_context, command, value) {
+      const packed = await extension.pack(
+        string(value.source, "source"),
+        string(value.destination, "destination"),
+      );
+      return result(command, { data: extensionData(packed) });
     },
   });
   register(registry, {

@@ -68,6 +68,12 @@ export interface GrowthSuggestionRecord {
   readonly status: "proposed" | "evaluated" | "awaiting-review" | "adopted" | "rejected" | "superseded";
 }
 
+export interface ListGrowthSuggestionsInput {
+  readonly workId?: string;
+  readonly status?: GrowthSuggestionRecord["status"];
+  readonly limit?: number;
+}
+
 const MAX_TEXT = 2_000;
 const INJECTION = /ignore previous|system prompt|reveal secrets?|이전\s*지시.*무시|비밀.*공개/iu;
 const OPERATIONS: Readonly<Record<SuggestionTargetKind, Readonly<Record<string, readonly string[]>>>> = {
@@ -275,6 +281,44 @@ export class ReflectionService {
       );
       throw error;
     }
+  }
+
+  public async listSuggestions(
+    context: TenantContext,
+    input: ListGrowthSuggestionsInput = {},
+  ): Promise<readonly GrowthSuggestionRecord[]> {
+    await this.organizations.verifyTenantContext(context);
+    if (input.workId !== undefined && (!input.workId.trim() || input.workId.length > 128)) {
+      throw new Error("Growth Suggestion Work ID가 유효하지 않습니다");
+    }
+    const statuses: readonly GrowthSuggestionRecord["status"][] = [
+      "proposed",
+      "evaluated",
+      "awaiting-review",
+      "adopted",
+      "rejected",
+      "superseded",
+    ];
+    if (input.status !== undefined && !statuses.includes(input.status)) {
+      throw new Error("Growth Suggestion 상태가 유효하지 않습니다");
+    }
+    const limit = input.limit ?? 100;
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 1_000) {
+      throw new Error("Growth Suggestion 조회 개수가 유효하지 않습니다");
+    }
+    const clauses = ["organization_id = $organization_id"];
+    if (input.workId !== undefined) clauses.push("work_id = $work_id");
+    if (input.status !== undefined) clauses.push("status = $status");
+    const [records] = await this.database.query<[GrowthSuggestionRecord[]]>(
+      `SELECT * FROM growth_suggestion WHERE ${clauses.join(" AND ")} ORDER BY created_at DESC, suggestion_id ASC LIMIT $limit;`,
+      {
+        organization_id: context.organizationId,
+        ...(input.workId === undefined ? {} : { work_id: input.workId }),
+        ...(input.status === undefined ? {} : { status: input.status }),
+        limit,
+      },
+    );
+    return records;
   }
 
   private async suggestions(organizationId: string, reflectionRunId: string): Promise<GrowthSuggestionRecord[]> {
