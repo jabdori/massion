@@ -56,4 +56,28 @@ describe("ApplicationHttpClient", () => {
     expect(() => new ApplicationHttpClient({ baseUrl: "file:///tmp/socket", token: "secret" })).toThrow("HTTP");
     expect(() => new ApplicationHttpClient({ baseUrl: "http://example.com", token: "secret" })).toThrow("loopback");
   });
+
+  it("Registry publish를 metadata 길이 prefix와 artifact byte로 전송한다", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response(JSON.stringify({ state: "staged" }), {
+        status: 201,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    const client = new ApplicationHttpClient({
+      baseUrl: "http://127.0.0.1:9000",
+      token: "secret",
+      fetcher,
+    });
+    await client.publishArtifact("registry-publish-command-1", Buffer.from("artifact"), {
+      uploadGrant: "grant-reference",
+    });
+    const init = fetcher.mock.calls[0]?.[1];
+    const body = Buffer.from(init?.body as unknown as Uint8Array);
+    const metadataLength = body.readUInt32BE(0);
+    expect(JSON.parse(body.subarray(4, 4 + metadataLength).toString("utf8"))).toEqual({
+      uploadGrant: "grant-reference",
+    });
+    expect(body.subarray(4 + metadataLength).toString()).toBe("artifact");
+  });
 });

@@ -145,6 +145,32 @@ export class ApplicationHttpClient {
     return await this.artifact("/api/v1/artifacts/install", archive, commandId, "update");
   }
 
+  public async publishArtifact(commandId: string, archive: Uint8Array, metadata: unknown): Promise<unknown> {
+    const encoded = Buffer.from(JSON.stringify(metadata), "utf8");
+    if (encoded.length < 2 || encoded.length > 1024 * 1024)
+      throw new Error("Registry publish metadata byte 상한을 초과했습니다");
+    if (archive.byteLength === 0 || archive.byteLength > 64 * 1024 * 1024)
+      throw new Error("Registry publish artifact byte 상한을 초과했습니다");
+    const header = Buffer.alloc(4);
+    header.writeUInt32BE(encoded.length);
+    const framed = Buffer.concat([header, encoded, Buffer.from(archive)]);
+    const response = await this.request(
+      "/api/v1/registry/publish",
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/vnd.massion.registry-publish.v1",
+          "x-massion-command-id": commandId,
+        },
+        body: framed as unknown as BodyInit,
+      },
+      false,
+    );
+    const value = await this.safeBody(response);
+    if (!response.ok) throw new ApplicationRemoteError(response.status, value);
+    return value;
+  }
+
   private async artifact(
     path: string,
     archive: Uint8Array,

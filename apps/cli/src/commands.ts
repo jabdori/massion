@@ -10,7 +10,7 @@ export interface CliApplicationClient {
   inspectArtifact(archive: Uint8Array): Promise<unknown>;
   installArtifact(commandId: string, archive: Uint8Array): Promise<unknown>;
   updateArtifact(commandId: string, archive: Uint8Array): Promise<unknown>;
-  publishArtifact?(commandId: string, archive: Uint8Array): Promise<unknown>;
+  publishArtifact?(commandId: string, archive: Uint8Array, metadata: unknown): Promise<unknown>;
 }
 
 export interface CliCommandInput {
@@ -161,7 +161,11 @@ export async function executeCliInvocation(
     return await client.command(envelope("extension.validate", { source: required(args, 0, "source") }));
   if (invocation.command === "ext" && invocation.subcommand === "publish") {
     if (!input.readArtifact || !client.publishArtifact) throw new Error("Registry publish adapter가 필요합니다");
-    return await client.publishArtifact(randomUUID(), await input.readArtifact(required(args, 0, "artifact path")));
+    return await client.publishArtifact(
+      randomUUID(),
+      await input.readArtifact(required(args, 0, "artifact path")),
+      await stdin(input, "registry.publish"),
+    );
   }
   if (invocation.command === "ext" && ["install", "update"].includes(invocation.subcommand ?? "")) {
     const target = required(args, 0, "artifact path 또는 Registry versionId");
