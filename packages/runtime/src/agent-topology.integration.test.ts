@@ -7,6 +7,11 @@ import { OrganizationGraphService } from "@massion/organization";
 import { createDatabase, type MassionDatabase } from "@massion/storage";
 
 import { OrganizationAgentTopology } from "./agent-topology.js";
+import {
+  AgentInstructionRegistry,
+  MASSION_RUNTIME_EXECUTION_CONTEXT_KEY,
+  MASSION_TENANT_CONTEXT_KEY,
+} from "./agent-configuration.js";
 import { VoltAgentTopologyRuntime } from "./voltagent-topology.js";
 
 describe("Core Office → VoltAgent topology 통합", () => {
@@ -50,5 +55,42 @@ describe("Core Office → VoltAgent topology 통합", () => {
     expect(agents).toHaveLength(8);
     expect(representative).toBeDefined();
     expect(runtime.childIds(representative?.id ?? "missing")).toHaveLength(7);
+  });
+
+  it("Core Office instruction을 execution별 PromptVersion reader에 연결한다", async () => {
+    const organizations = await OrganizationService.create(database);
+    const graph = await OrganizationGraphService.create(database, organizations);
+    await graph.bootstrap(context);
+    const instructionRegistry = new AgentInstructionRegistry({
+      resolve: async (_tenant, input) => ({
+        promptVersionId: "prompt-version-1",
+        promptChecksum: "a".repeat(64),
+        memoryVersionIds: ["memory-version-1"],
+        instruction: `${input.agentHandle}의 Work 고정 지시문`,
+        instructionChecksum: "b".repeat(64),
+      }),
+    });
+    const topology = new OrganizationAgentTopology(
+      context.organizationId,
+      { listNodes: async () => await graph.listNodes(context) },
+      runtime,
+      async () => 0,
+      instructionRegistry,
+    );
+
+    await topology.sync();
+
+    const assurance = runtime.list(`${context.organizationId}:`).find((agent) => agent.handle === "assurance");
+    expect(typeof assurance?.instructions).toBe("function");
+    const dynamic = assurance?.instructions;
+    if (typeof dynamic !== "function") throw new Error("Assurance dynamic instruction을 찾을 수 없습니다");
+    await expect(
+      dynamic({
+        context: new Map<string | symbol, unknown>([
+          [MASSION_RUNTIME_EXECUTION_CONTEXT_KEY, "execution-1"],
+          [MASSION_TENANT_CONTEXT_KEY, context],
+        ]),
+      } as never),
+    ).resolves.toBe("assurance의 Work 고정 지시문");
   });
 });

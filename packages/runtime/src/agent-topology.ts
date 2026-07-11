@@ -1,4 +1,7 @@
+import type { DynamicValue } from "@voltagent/core";
 import type { OrganizationNode } from "@massion/organization";
+
+import type { AgentInstructionRegistry } from "./agent-configuration.js";
 
 export interface OrganizationNodeSource {
   listNodes(): Promise<OrganizationNode[]>;
@@ -8,7 +11,7 @@ export interface MaterializedAgent {
   readonly id: string;
   readonly name: string;
   readonly handle: string;
-  readonly instructions: string;
+  readonly instructions: string | DynamicValue<string>;
   readonly role: OrganizationNode["role"];
 }
 
@@ -30,6 +33,7 @@ export class OrganizationAgentTopology {
     private readonly source: OrganizationNodeSource,
     private readonly runtime: AgentTopologyRuntime,
     private readonly activeExecutions: ActiveExecutionCounter,
+    private readonly instructions?: Pick<AgentInstructionRegistry, "instructions">,
   ) {
     if (!organizationId.trim()) throw new Error("Agent topology organizationId가 필요합니다");
   }
@@ -97,11 +101,12 @@ export class OrganizationAgentTopology {
   }
 
   private materialized(node: OrganizationNode): MaterializedAgent {
+    const legacyInstruction = `${node.responsibility}\n주요 산출물: ${node.outputs.join(", ")}`;
     return {
       id: this.agentId(node),
       name: `${this.organizationId}:${node.handle}`,
       handle: node.handle,
-      instructions: `${node.responsibility}\n주요 산출물: ${node.outputs.join(", ")}`,
+      instructions: this.instructions?.instructions(node.handle) ?? legacyInstruction,
       role: node.role,
     };
   }

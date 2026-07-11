@@ -8,6 +8,7 @@ import type { RouteAttempt } from "@massion/router";
 import { createDatabase, type MassionDatabase } from "@massion/storage";
 
 import type { AgentExecutionInput } from "./contracts.js";
+import { MASSION_RUNTIME_EXECUTION_CONTEXT_KEY, MASSION_TENANT_CONTEXT_KEY } from "./agent-configuration.js";
 import { RuntimeExecutionStore } from "./execution-store.js";
 import type { RoutedModelFactory, RoutedModelLease } from "./model-factory.js";
 import { normalizeVoltAgentStreamPart, RoutedModelRegistry, VoltAgentRunner } from "./voltagent-runner.js";
@@ -41,7 +42,11 @@ describe("VoltAgent AgentRunner", () => {
         representative: new Agent({
           id: agentId,
           name: `${context.organizationId}:representative`,
-          instructions: "Respond",
+          instructions: ({ context: executionContext }) => {
+            expect(executionContext.get(MASSION_RUNTIME_EXECUTION_CONTEXT_KEY)).toEqual(expect.any(String));
+            expect(executionContext.get(MASSION_TENANT_CONTEXT_KEY)).toEqual(context);
+            return "Respond";
+          },
           model: registry.resolve,
           maxRetries: 0,
         }),

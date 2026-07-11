@@ -4,7 +4,12 @@ import { type OrganizationService, type TenantContext } from "@massion/identity"
 import { applyMigrations, type MassionDatabase, type QueryExecutor } from "@massion/storage";
 
 import type { AgentExecutionInput, RuntimeExecutionStatus } from "./contracts.js";
-import { RUNTIME_BLOCKED_TRANSITION_MIGRATION, RUNTIME_EXECUTION_MIGRATION } from "./schema.js";
+import type { AgentConfigurationReader, ResolvedAgentConfiguration } from "./agent-configuration.js";
+import {
+  RUNTIME_BLOCKED_TRANSITION_MIGRATION,
+  RUNTIME_EXECUTION_MIGRATION,
+  RUNTIME_PROMPT_LINEAGE_MIGRATION,
+} from "./schema.js";
 
 export interface RuntimeExecution {
   readonly execution_id: string;
@@ -20,6 +25,10 @@ export interface RuntimeExecution {
   readonly event_sequence: number;
   readonly output_json?: string;
   readonly error_json?: string;
+  readonly prompt_version_id?: string;
+  readonly prompt_checksum?: string;
+  readonly memory_version_ids?: readonly string[];
+  readonly agent_instruction_checksum?: string;
   readonly started_at?: unknown;
   readonly ended_at?: unknown;
   readonly created_at: unknown;
@@ -99,14 +108,20 @@ export class RuntimeExecutionStore {
   private constructor(
     private readonly database: MassionDatabase,
     private readonly organizations: OrganizationService,
+    private readonly configurations?: AgentConfigurationReader,
   ) {}
 
   public static async create(
     database: MassionDatabase,
     organizations: OrganizationService,
+    configurations?: AgentConfigurationReader,
   ): Promise<RuntimeExecutionStore> {
-    await applyMigrations(database, [RUNTIME_EXECUTION_MIGRATION, RUNTIME_BLOCKED_TRANSITION_MIGRATION]);
-    return new RuntimeExecutionStore(database, organizations);
+    await applyMigrations(database, [
+      RUNTIME_EXECUTION_MIGRATION,
+      RUNTIME_BLOCKED_TRANSITION_MIGRATION,
+      RUNTIME_PROMPT_LINEAGE_MIGRATION,
+    ]);
+    return new RuntimeExecutionStore(database, organizations, configurations);
   }
 
   public async createExecution(
@@ -115,7 +130,7 @@ export class RuntimeExecutionStore {
   ): Promise<{ execution: RuntimeExecution; event: RuntimeEvent }> {
     await this.organizations.verifyTenantContext(context);
     const requestJson = canonicalJson(input);
-    return await this.database.transaction(async (tx) => {
+    const created = await this.database.transaction(async (tx) => {
       await this.organizations.verifyTenantContext(context, undefined, tx);
       const repeated = await this.repeated(tx, context.organizationId, input.commandId, requestJson);
       if (repeated) return await this.resultFromEvent(tx, context.organizationId, repeated);
@@ -146,6 +161,56 @@ export class RuntimeExecutionStore {
       );
       await this.saveResult(tx, event, { execution, event });
       return { execution, event };
+    });
+    if (!this.configurations || created.execution.prompt_version_id) return created;
+    const resolved = await this.configurations.resolve(context, {
+      executionId: created.execution.execution_id,
+      agentHandle: input.agentHandle,
+    });
+    return await this.attachConfiguration(context, created, resolved);
+  }
+
+  private async attachConfiguration(
+    context: TenantContext,
+    created: { execution: RuntimeExecution; event: RuntimeEvent },
+    configuration: ResolvedAgentConfiguration,
+  ): Promise<{ execution: RuntimeExecution; event: RuntimeEvent }> {
+    return await this.database.transaction(async (transaction) => {
+      await this.organizations.verifyTenantContext(context, undefined, transaction);
+      const current = await this.execution(transaction, context.organizationId, created.execution.execution_id);
+      if (current.prompt_version_id) {
+        if (
+          current.prompt_version_id !== configuration.promptVersionId ||
+          current.prompt_checksum !== configuration.promptChecksum ||
+          current.agent_instruction_checksum !== configuration.instructionChecksum
+        ) {
+          throw new Error("Runtime Execution Prompt 계보가 이미 다른 값으로 고정됐습니다");
+        }
+        return { execution: current, event: created.event };
+      }
+      const [executions] = await transaction.query<[RuntimeExecution[]]>(
+        "UPDATE runtime_execution SET prompt_version_id = $prompt_version_id, prompt_checksum = $prompt_checksum, memory_version_ids = $memory_version_ids, agent_instruction_checksum = $agent_instruction_checksum WHERE organization_id = $organization_id AND execution_id = $execution_id RETURN AFTER;",
+        {
+          organization_id: context.organizationId,
+          execution_id: current.execution_id,
+          prompt_version_id: configuration.promptVersionId,
+          prompt_checksum: configuration.promptChecksum,
+          memory_version_ids: configuration.memoryVersionIds,
+          agent_instruction_checksum: configuration.instructionChecksum,
+        },
+      );
+      const execution = executions[0];
+      if (!execution) throw new Error("Runtime Execution Prompt 계보 저장 결과가 없습니다");
+      const result = { execution, event: created.event };
+      await transaction.query(
+        "UPDATE runtime_event SET result_json = $result_json WHERE organization_id = $organization_id AND event_id = $event_id;",
+        {
+          organization_id: context.organizationId,
+          event_id: created.event.event_id,
+          result_json: JSON.stringify(result),
+        },
+      );
+      return result;
     });
   }
 

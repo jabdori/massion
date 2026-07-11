@@ -14,10 +14,10 @@ import type {
   StructuredAgentRunner,
   StructuredOutputSpec,
 } from "./contracts.js";
+import { MASSION_RUNTIME_EXECUTION_CONTEXT_KEY, MASSION_TENANT_CONTEXT_KEY } from "./agent-configuration.js";
 import { type RuntimeEvent, type RuntimeExecution, RuntimeExecutionStore } from "./execution-store.js";
 import type { AcquireModelInput, RoutedModelFactory, RoutedModelLease } from "./model-factory.js";
 
-const EXECUTION_CONTEXT_KEY = "massion.executionId";
 const MAX_FALLBACKS = 16;
 
 interface ActiveExecution {
@@ -78,7 +78,7 @@ export class RoutedModelRegistry {
   private readonly leases = new Map<string, RoutedModelLease>();
 
   public readonly resolve: DynamicValue<LanguageModel> = ({ context }) => {
-    const executionId = context.get(EXECUTION_CONTEXT_KEY);
+    const executionId = context.get(MASSION_RUNTIME_EXECUTION_CONTEXT_KEY);
     if (typeof executionId !== "string") throw new Error("VoltAgent context에 Massion execution ID가 없습니다");
     const lease = this.leases.get(executionId);
     if (!lease) throw new Error(`Runtime model lease를 찾을 수 없습니다: ${executionId}`);
@@ -198,7 +198,10 @@ export class VoltAgentRunner implements AgentRunner, StructuredAgentRunner {
           const agent = this.agent(context, input.agentHandle);
           const result = await agent.streamText(prompt(input.input), {
             abortSignal: active.controller.signal,
-            context: new Map([[EXECUTION_CONTEXT_KEY, executionId]]),
+            context: new Map<string | symbol, unknown>([
+              [MASSION_RUNTIME_EXECUTION_CONTEXT_KEY, executionId],
+              [MASSION_TENANT_CONTEXT_KEY, context],
+            ]),
           });
           for await (const raw of result.fullStream) {
             const part = raw as { readonly type: string } & Record<string, unknown>;
@@ -332,7 +335,10 @@ export class VoltAgentRunner implements AgentRunner, StructuredAgentRunner {
         this.registry.set(running.execution_id, lease);
         const result = await this.agent(context, input.agentHandle).generateText(prompt(input.input), {
           abortSignal,
-          context: new Map([[EXECUTION_CONTEXT_KEY, running.execution_id]]),
+          context: new Map<string | symbol, unknown>([
+            [MASSION_RUNTIME_EXECUTION_CONTEXT_KEY, running.execution_id],
+            [MASSION_TENANT_CONTEXT_KEY, context],
+          ]),
         });
         await lease.complete({
           commandId: `${running.execution_id}:model:${String(attempt)}:complete`,
@@ -403,7 +409,10 @@ export class VoltAgentRunner implements AgentRunner, StructuredAgentRunner {
         );
         const result = await this.agent(context, input.agentHandle).generateText(prompt(input.input), {
           abortSignal,
-          context: new Map([[EXECUTION_CONTEXT_KEY, running.execution_id]]),
+          context: new Map<string | symbol, unknown>([
+            [MASSION_RUNTIME_EXECUTION_CONTEXT_KEY, running.execution_id],
+            [MASSION_TENANT_CONTEXT_KEY, context],
+          ]),
           output: Output.object({ schema, name: output.name, description: output.description }),
         });
         await lease.complete({
