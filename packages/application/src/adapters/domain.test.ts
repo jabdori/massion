@@ -198,4 +198,120 @@ describe("Application domain adapters", () => {
     expect(pack).toMatchObject({ outcome: "succeeded", data: { packageName: "@massion-ext/example" } });
     expect(JSON.stringify([link, pack])).not.toContain("/private/");
   });
+
+  it("Provider·endpoint·model·route candidate를 공개 command로 구성한다", async () => {
+    await using database = await createDatabase({
+      url: "mem://",
+      namespace: "massion",
+      database: crypto.randomUUID(),
+    });
+    const identities = await IdentityService.create(database);
+    const organizations = await OrganizationService.create(database);
+    const owner = await identities.registerPersonalUser({ email: "router-domain@example.com", displayName: "Router" });
+    const context = await organizations.resolveTenantContext(owner.user.user_id, owner.organization.organization_id);
+    const registry = new ApplicationCommandRegistry(await ApplicationCommandStore.create(database, organizations));
+    registerApplicationDomainCommands(registry, {
+      providers: {
+        registerProvider: async () => ({ provider: { provider_id: "openai" } }),
+        registerEndpoint: async () => ({ endpoint: { endpoint_id: "endpoint-1", provider_id: "openai" } }),
+      },
+      router: {
+        registerModel: async () => ({ profile: { model_profile_id: "profile-1", model_id: "gpt" } }),
+        addCandidate: async () => ({ candidate: { candidate_id: "candidate-1", route_id: "route-1" } }),
+      },
+    } as never);
+    const cases = [
+      ["router.provider.register", { providerId: "openai", displayName: "OpenAI", adapterKind: "openai-compatible" }],
+      [
+        "router.endpoint.register",
+        { providerId: "openai", name: "API", baseUrl: "https://api.openai.com/v1", local: false },
+      ],
+      [
+        "router.model.register",
+        {
+          providerId: "openai",
+          endpointId: "endpoint-1",
+          modelId: "gpt",
+          routeKind: "chat",
+          contextWindow: 128000,
+          supportsTools: true,
+          supportsStructuredOutput: true,
+          supportsVision: true,
+          supportsStreaming: true,
+          equivalenceGroup: "general",
+          evalScore: 0.9,
+          inputCostMicrosPerMillion: 1,
+          outputCostMicrosPerMillion: 1,
+          verified: true,
+        },
+      ],
+      ["router.candidate.add", { routeId: "route-1", modelProfileId: "profile-1", priority: 1 }],
+    ] as const;
+    for (const [operation, payload] of cases) {
+      await expect(
+        registry.dispatch(context, ["router:write"], {
+          schemaVersion: "massion.application.v1",
+          commandId: crypto.randomUUID(),
+          correlationId: crypto.randomUUID(),
+          operation,
+          payload,
+        }),
+      ).resolves.toMatchObject({ outcome: "succeeded" });
+    }
+  });
+
+  it("Assurance binding 제안과 정책 승인 재개를 공개 command로 제공한다", async () => {
+    await using database = await createDatabase({ url: "mem://", namespace: "massion", database: crypto.randomUUID() });
+    const identities = await IdentityService.create(database);
+    const organizations = await OrganizationService.create(database);
+    const owner = await identities.registerPersonalUser({
+      email: "binding-domain@example.com",
+      displayName: "Binding",
+    });
+    const context = await organizations.resolveTenantContext(owner.user.user_id, owner.organization.organization_id);
+    const registry = new ApplicationCommandRegistry(await ApplicationCommandStore.create(database, organizations));
+    registerApplicationDomainCommands(registry, {
+      assuranceBindings: {
+        propose: async () => ({ bindingVersionId: "binding-1", revision: 1, status: "draft" }),
+        activate: async (_context: unknown, input: { approvalId?: string }) => {
+          if (!input.approvalId) throw new GovernanceApprovalRequiredError("decision-1", "approval-1");
+          return { bindingVersionId: "binding-1", revision: 2, status: "active" };
+        },
+      },
+    } as never);
+    const base = {
+      schemaVersion: "massion.application.v1" as const,
+      commandId: "binding-propose-command-0001",
+      correlationId: "binding-propose-correlation-0001",
+      operation: "assurance.binding.propose",
+      payload: {
+        workId: "work-1",
+        planVersionId: "plan-1",
+        profileId: "profile",
+        profileVersion: "1",
+        authorHandle: "assurance",
+        requiredCriteria: [],
+        bindings: [],
+      },
+    };
+    await expect(registry.dispatch(context, ["assurance:write"], base)).resolves.toMatchObject({
+      outcome: "succeeded",
+    });
+    const activation = {
+      ...base,
+      commandId: "binding-activate-command-0001",
+      operation: "assurance.binding.activate",
+      payload: { bindingVersionId: "binding-1", expectedRevision: 1 },
+    };
+    await expect(registry.dispatch(context, ["assurance:write"], activation)).resolves.toMatchObject({
+      outcome: "awaiting-approval",
+      data: { approvalId: "approval-1" },
+    });
+    await expect(
+      registry.dispatch(context, ["assurance:write"], {
+        ...activation,
+        payload: { ...activation.payload, approvalId: "approval-1" },
+      }),
+    ).resolves.toMatchObject({ outcome: "succeeded", data: { status: "active" } });
+  });
 });

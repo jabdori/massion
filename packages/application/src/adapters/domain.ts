@@ -1,4 +1,5 @@
 import type { ExtensionGateway } from "@massion/extension-host";
+import type { AssuranceBindingStore } from "@massion/assurance";
 import { GovernanceApprovalRequiredError, GovernanceDeniedError, type ApprovalStore } from "@massion/governance";
 import type { GrowthGateway } from "@massion/growth";
 import type { OrganizationGraphService } from "@massion/organization";
@@ -27,11 +28,15 @@ export interface ApplicationDomainDependencies {
   >;
   readonly runtime?: Pick<AgentRunner, "execute" | "cancel" | "suspend" | "resume">;
   readonly approvals?: Pick<ApprovalStore, "vote" | "cancel">;
+  readonly assuranceBindings?: Pick<AssuranceBindingStore, "propose" | "activate">;
   readonly organization?: Pick<OrganizationGraphService, "execute">;
   readonly extension?: Pick<ExtensionGateway, "validate" | "link" | "pack" | "install" | "update" | "rollback">;
   readonly growth?: Pick<GrowthGateway, "configure" | "adopt" | "revert">;
-  readonly providers?: Pick<ProviderService, "addCredential" | "revokeCredential">;
-  readonly router?: Pick<ModelRouter, "createRoute">;
+  readonly providers?: Pick<
+    ProviderService,
+    "registerProvider" | "registerEndpoint" | "addCredential" | "revokeCredential"
+  >;
+  readonly router?: Pick<ModelRouter, "registerModel" | "createRoute" | "addCandidate">;
 }
 
 type Payload = Readonly<Record<string, unknown>>;
@@ -895,6 +900,51 @@ function registerGrowth(
 function registerRouter(registry: ApplicationCommandRegistry, dependencies: ApplicationDomainDependencies): void {
   if (dependencies.providers) {
     register(registry, {
+      operation: "router.provider.register",
+      requiredScopes: ["router:write"],
+      allowedRoles: ["owner", "admin"],
+      recovery: "replay-domain",
+      validate: (value) =>
+        payload(value, ["providerId", "displayName", "adapterKind"], ["providerId", "displayName", "adapterKind"]),
+      async handle(context, command, value) {
+        const registered = await dependencies.providers?.registerProvider(context, {
+          commandId: command.commandId,
+          ...value,
+        } as never);
+        if (!registered) throw new Error("Provider service가 구성되지 않았습니다");
+        return result(command, {
+          resource: { type: "ModelProvider", id: registered.provider.provider_id },
+          data: { providerId: registered.provider.provider_id },
+        });
+      },
+    });
+    register(registry, {
+      operation: "router.endpoint.register",
+      requiredScopes: ["router:write"],
+      allowedRoles: ["owner", "admin"],
+      recovery: "replay-domain",
+      validate: (value) =>
+        payload(
+          value,
+          ["providerId", "name", "baseUrl", "local", "gatewayKind"],
+          ["providerId", "name", "baseUrl", "local"],
+        ),
+      async handle(context, command, value) {
+        const registered = await dependencies.providers?.registerEndpoint(context, {
+          commandId: command.commandId,
+          ...value,
+        } as never);
+        if (!registered) throw new Error("Provider service가 구성되지 않았습니다");
+        return result(command, {
+          resource: { type: "ProviderEndpoint", id: registered.endpoint.endpoint_id },
+          data: {
+            endpointId: registered.endpoint.endpoint_id,
+            providerId: registered.endpoint.provider_id,
+          },
+        });
+      },
+    });
+    register(registry, {
       operation: "router.credential.add",
       requiredScopes: ["router:write"],
       allowedRoles: ["owner", "admin"],
@@ -948,6 +998,59 @@ function registerRouter(registry: ApplicationCommandRegistry, dependencies: Appl
   }
   if (dependencies.router) {
     register(registry, {
+      operation: "router.model.register",
+      requiredScopes: ["router:write"],
+      allowedRoles: ["owner", "admin"],
+      recovery: "replay-domain",
+      validate: (value) =>
+        payload(
+          value,
+          [
+            "providerId",
+            "endpointId",
+            "modelId",
+            "routeKind",
+            "contextWindow",
+            "supportsTools",
+            "supportsStructuredOutput",
+            "supportsVision",
+            "supportsStreaming",
+            "equivalenceGroup",
+            "evalScore",
+            "inputCostMicrosPerMillion",
+            "outputCostMicrosPerMillion",
+            "verified",
+          ],
+          [
+            "providerId",
+            "endpointId",
+            "modelId",
+            "routeKind",
+            "contextWindow",
+            "supportsTools",
+            "supportsStructuredOutput",
+            "supportsVision",
+            "supportsStreaming",
+            "equivalenceGroup",
+            "evalScore",
+            "inputCostMicrosPerMillion",
+            "outputCostMicrosPerMillion",
+            "verified",
+          ],
+        ),
+      async handle(context, command, value) {
+        const registered = await dependencies.router?.registerModel(context, {
+          commandId: command.commandId,
+          ...value,
+        } as never);
+        if (!registered) throw new Error("Model Router가 구성되지 않았습니다");
+        return result(command, {
+          resource: { type: "ModelProfile", id: registered.profile.model_profile_id },
+          data: { modelProfileId: registered.profile.model_profile_id, modelId: registered.profile.model_id },
+        });
+      },
+    });
+    register(registry, {
       operation: "router.route.configure",
       requiredScopes: ["router:write"],
       allowedRoles: ["owner", "admin"],
@@ -980,7 +1083,94 @@ function registerRouter(registry: ApplicationCommandRegistry, dependencies: Appl
         });
       },
     });
+    register(registry, {
+      operation: "router.candidate.add",
+      requiredScopes: ["router:write"],
+      allowedRoles: ["owner", "admin"],
+      recovery: "replay-domain",
+      validate: (value) =>
+        payload(value, ["routeId", "modelProfileId", "priority"], ["routeId", "modelProfileId", "priority"]),
+      async handle(context, command, value) {
+        const added = await dependencies.router?.addCandidate(context, {
+          commandId: command.commandId,
+          ...value,
+        } as never);
+        if (!added) throw new Error("Model Router가 구성되지 않았습니다");
+        return result(command, {
+          resource: { type: "RouteCandidate", id: added.candidate.candidate_id },
+          data: { candidateId: added.candidate.candidate_id, routeId: added.candidate.route_id },
+        });
+      },
+    });
   }
+}
+
+function registerAssuranceBindings(
+  registry: ApplicationCommandRegistry,
+  bindings: NonNullable<ApplicationDomainDependencies["assuranceBindings"]>,
+): void {
+  register(registry, {
+    operation: "assurance.binding.propose",
+    requiredScopes: ["assurance:write"],
+    allowedRoles: ["owner", "admin"],
+    recovery: "replay-domain",
+    validate: (value) =>
+      payload(
+        value,
+        ["workId", "planVersionId", "profileId", "profileVersion", "authorHandle", "requiredCriteria", "bindings"],
+        ["workId", "planVersionId", "profileId", "profileVersion", "authorHandle", "requiredCriteria", "bindings"],
+      ),
+    async handle(context, command, value) {
+      const proposed = await bindings.propose(context, { commandId: command.commandId, ...value } as never);
+      return result(command, {
+        resource: { type: "AssuranceBindingVersion", id: proposed.bindingVersionId, revision: proposed.revision },
+        data: {
+          bindingVersionId: proposed.bindingVersionId,
+          status: proposed.status,
+          revision: proposed.revision,
+        },
+      });
+    },
+  });
+  register(registry, {
+    operation: "assurance.binding.activate",
+    requiredScopes: ["assurance:write"],
+    allowedRoles: ["owner", "admin"],
+    recovery: "replay-domain",
+    validate: (value) =>
+      payload(value, ["bindingVersionId", "expectedRevision", "approvalId"], ["bindingVersionId", "expectedRevision"]),
+    idempotencyPayload: (value) => Object.fromEntries(Object.entries(value).filter(([key]) => key !== "approvalId")),
+    resumeAwaitingApproval: (value) => value.approvalId !== undefined,
+    async handle(context, command, value) {
+      try {
+        const activated = await bindings.activate(context, {
+          commandId: command.commandId,
+          bindingVersionId: string(value.bindingVersionId, "bindingVersionId"),
+          expectedRevision: integer(value.expectedRevision, "expectedRevision", 1),
+          ...(value.approvalId === undefined ? {} : { approvalId: string(value.approvalId, "approvalId") }),
+        });
+        return result(command, {
+          resource: {
+            type: "AssuranceBindingVersion",
+            id: activated.bindingVersionId,
+            revision: activated.revision,
+          },
+          data: {
+            bindingVersionId: activated.bindingVersionId,
+            status: activated.status,
+            revision: activated.revision,
+          },
+        });
+      } catch (error) {
+        if (error instanceof GovernanceApprovalRequiredError)
+          return result(command, {
+            outcome: "awaiting-approval",
+            data: { decisionId: error.decisionId, approvalId: error.approvalId },
+          });
+        throw error;
+      }
+    },
+  });
 }
 
 export function registerApplicationDomainCommands(
@@ -990,6 +1180,7 @@ export function registerApplicationDomainCommands(
   if (dependencies.works) registerWork(registry, dependencies.works);
   if (dependencies.runtime) registerRuntime(registry, dependencies.runtime);
   if (dependencies.approvals) registerApprovals(registry, dependencies.approvals);
+  if (dependencies.assuranceBindings) registerAssuranceBindings(registry, dependencies.assuranceBindings);
   if (dependencies.organization) registerOrganization(registry, dependencies.organization);
   if (dependencies.extension) registerExtension(registry, dependencies.extension);
   if (dependencies.growth) registerGrowth(registry, dependencies.growth);

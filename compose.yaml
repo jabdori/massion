@@ -96,6 +96,10 @@ services:
       MASSION_DATABASE_USER: massion_runtime
       MASSION_DATABASE_PASSWORD_FILE: /run/secrets/database_password
       MASSION_TOKEN_KEY_FILE: /run/secrets/token_key
+      MASSION_CREDENTIAL_KEY_FILE: /run/secrets/credential_key
+      MASSION_SOFTWARE_WORKSPACE_ROOT: /var/lib/massion/workspaces
+      MASSION_SOFTWARE_EXECUTABLES: '{"node":"/usr/local/bin/node","npm":"/usr/local/bin/npm","npx":"/usr/local/bin/npx","pnpm":"/usr/local/bin/pnpm"}'
+      MASSION_SOFTWARE_ENVIRONMENT_ALLOWLIST: CI,NODE_ENV
       MASSION_REGISTRY_KEY_FILE: /run/secrets/registry_key
       MASSION_REGISTRY_HOST: 0.0.0.0
       MASSION_REGISTRY_PORT: "3142"
@@ -109,6 +113,7 @@ services:
     secrets:
       - database_password
       - token_key
+      - credential_key
       - registry_key
     volumes:
       - massion-data:/var/lib/massion
@@ -189,6 +194,8 @@ secrets:
     file: ${MASSION_DATABASE_PASSWORD_FILE:-./deploy/secrets/database-password}
   token_key:
     file: ${MASSION_TOKEN_KEY_FILE:-./deploy/secrets/token-key}
+  credential_key:
+    file: ${MASSION_CREDENTIAL_KEY_FILE:-./deploy/secrets/credential-key}
   registry_key:
     file: ${MASSION_REGISTRY_KEY_FILE:-./deploy/secrets/registry-key}
   tls_certificate:

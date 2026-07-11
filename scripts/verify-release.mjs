@@ -112,6 +112,7 @@ async function main() {
     jsonOutput(mass, ["local", "stop", "--json"], environment);
 
     const tokenKey = resolve(home, ".config/massion/token-key");
+    const credentialKey = resolve(home, ".config/massion/credential-key");
     const restoredDatabase = resolve(home, ".local/share/massion-restore.db");
     const server = resolve(prefix, "bin/massion-server");
     const restoreEnvironment = {
@@ -119,6 +120,8 @@ async function main() {
       MASSION_MODE: "local",
       MASSION_DATABASE_URL: `rocksdb://${restoredDatabase}`,
       MASSION_TOKEN_KEY_FILE: tokenKey,
+      MASSION_CREDENTIAL_KEY_FILE: credentialKey,
+      MASSION_SOFTWARE_WORKSPACE_ROOT: resolve(home, ".local/share/massion/restore-workspaces"),
     };
     run(server, ["restore", backup], { environment: restoreEnvironment });
     restoreProcess = spawn(server, [], {

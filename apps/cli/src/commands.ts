@@ -57,6 +57,16 @@ export async function executeCliInvocation(
 ): Promise<unknown> {
   const args = invocation.arguments;
   if (invocation.command === "status" || invocation.command === "doctor") return await client.status();
+  if (invocation.command === "resume") {
+    const resumeInput = invocation.retryBlocked ? undefined : input.readJson ? await input.readJson() : undefined;
+    return await client.command(
+      envelope("run.resume", {
+        runId: required(args, 0, "runId"),
+        ...(resumeInput === undefined ? {} : { resumeInput }),
+        retryBlocked: invocation.retryBlocked,
+      }),
+    );
+  }
   if (invocation.command === "org" && invocation.subcommand === "graph") return await client.snapshot();
   if (invocation.command === "work" && invocation.subcommand === "list") return await client.query("work.list", {});
   if (invocation.command === "work" && invocation.subcommand === "get")
@@ -74,14 +84,22 @@ export async function executeCliInvocation(
     return await client.query("governance.approval.list", {});
   if (invocation.command === "approval" && invocation.subcommand === "get")
     return await client.query("governance.approval.get", { approvalId: required(args, 0, "approvalId") });
+  if (invocation.command === "assurance" && invocation.subcommand === "binding-get")
+    return await client.query("assurance.binding.get", { bindingVersionId: required(args, 0, "bindingVersionId") });
+  if (invocation.command === "assurance" && invocation.subcommand === "binding-active")
+    return await client.query("assurance.binding.active", {
+      workId: required(args, 0, "workId"),
+      planVersionId: required(args, 1, "planVersionId"),
+    });
   if (invocation.command === "runtime" && invocation.subcommand === "get")
     return await client.query("runtime.execution.get", { executionId: required(args, 0, "executionId") });
   if (invocation.command === "provider" && invocation.subcommand === "list") {
-    const [credentials, routes] = await Promise.all([
+    const [catalog, credentials, routes] = await Promise.all([
+      client.query("router.catalog", {}),
       client.query("router.credentials", {}),
       client.query("router.routes", {}),
     ]);
-    return { credentials, routes };
+    return { catalog, credentials, routes };
   }
   if (invocation.command === "ext" && invocation.subcommand === "list") return await client.query("extension.list", {});
   if (invocation.command === "ext" && invocation.subcommand === "search")
@@ -189,9 +207,15 @@ export async function executeCliInvocation(
     "org:apply": "organization.command",
     "task:assign": "task.assign",
     "task:reassign": "task.assign",
+    "provider:provider-add": "router.provider.register",
+    "provider:endpoint-add": "router.endpoint.register",
     "provider:credential-add": "router.credential.add",
     "provider:credential-disable": "router.credential.disable",
+    "provider:model-add": "router.model.register",
     "provider:route-set": "router.route.configure",
+    "provider:candidate-add": "router.candidate.add",
+    "assurance:binding-propose": "assurance.binding.propose",
+    "assurance:binding-activate": "assurance.binding.activate",
     "growth:configure": "growth.configure",
     "growth:adopt": "growth.adopt",
     "growth:revert": "growth.revert",

@@ -73,6 +73,18 @@ importers:
       '@massion/application':
         specifier: workspace:*
         version: link:../../packages/application
+      '@massion/assurance':
+        specifier: workspace:*
+        version: link:../../packages/assurance
+      '@massion/context-strategy':
+        specifier: workspace:*
+        version: link:../../packages/context-strategy
+      '@massion/evidence':
+        specifier: workspace:*
+        version: link:../../packages/evidence
+      '@massion/extension-host':
+        specifier: workspace:*
+        version: link:../../packages/extension-host
       '@massion/governance':
         specifier: workspace:*
         version: link:../../packages/governance
@@ -82,9 +94,21 @@ importers:
       '@massion/organization':
         specifier: workspace:*
         version: link:../../packages/organization
+      '@massion/records':
+        specifier: workspace:*
+        version: link:../../packages/records
       '@massion/registry':
         specifier: workspace:*
         version: link:../../packages/registry
+      '@massion/router':
+        specifier: workspace:*
+        version: link:../../packages/router
+      '@massion/runtime':
+        specifier: workspace:*
+        version: link:../../packages/runtime
+      '@massion/software-engineering':
+        specifier: workspace:*
+        version: link:../../packages/software-engineering
       '@massion/storage':
         specifier: workspace:*
         version: link:../../packages/storage

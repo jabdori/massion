@@ -101,6 +101,21 @@ describe("Massion routed model factory", () => {
 
   afterEach(async () => database.close());
 
+  it("구성되지 않은 경로는 실행 실패가 아니라 명시적인 모델 제한 상태로 분류한다", async () => {
+    const factory = new MassionModelFactory(router, providers, {
+      build: () => ({ modelId: "사용되지-않음" }) as LanguageModel,
+    });
+
+    await expect(
+      factory.acquire(context, {
+        commandId: crypto.randomUUID(),
+        routeName: "구성되지-않은-경로",
+        estimatedTokens: 100,
+        estimatedCostMicros: 100,
+      }),
+    ).rejects.toThrow("blocked_model_unavailable: 구성되지-않은-경로 Route가 구성되지 않았습니다");
+  });
+
   it("reservation secret을 lease에 노출하지 않고 model 생성과 실제 usage를 정산한다", async () => {
     const build = vi.fn((selection: ProviderModelSelection) => ({ modelId: selection.modelId }) as LanguageModel);
     const factory = new MassionModelFactory(router, providers, { build });

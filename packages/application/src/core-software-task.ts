@@ -85,7 +85,8 @@ function criteria(task: WorkTask): readonly string[] {
 export class CoreSoftwareTaskAdapter implements CoreSoftwareTaskPort {
   public constructor(
     private readonly dependencies: {
-      readonly works: Pick<WorkService, "getWork" | "listTasks" | "assignTask">;
+      readonly works: Pick<WorkService, "getWork" | "listTasks" | "assignTask"> &
+        Partial<Pick<WorkService, "listAssignments">>;
       readonly deliveries: Pick<EngineeringDeliveryStore, "findByStartCommand" | "get" | "transition">;
       readonly coordinator: Pick<EngineeringDeliveryCoordinator, "start">;
       readonly proposals: Pick<SoftwarePatchProposalService, "propose">;
@@ -107,13 +108,23 @@ export class CoreSoftwareTaskAdapter implements CoreSoftwareTaskPort {
     let delivery = await this.dependencies.deliveries.findByStartCommand(context, startCommand);
     if (!delivery) {
       const current = await this.dependencies.works.getWork(context, input.workId);
-      const assigned = await this.dependencies.works.assignTask(context, {
-        commandId: `${input.commandId}:assignment`,
-        workId: input.workId,
-        expectedRevision: current.revision,
-        taskId: input.task.task_id,
-        agentHandle,
-      });
+      const existingAssignment = this.dependencies.works.listAssignments
+        ? (await this.dependencies.works.listAssignments(context, input.workId)).find(
+            (candidate) =>
+              candidate.task_id === input.task.task_id &&
+              candidate.agent_handle === agentHandle &&
+              candidate.status === "assigned",
+          )
+        : undefined;
+      const assigned = existingAssignment
+        ? { work: current, assignment: existingAssignment }
+        : await this.dependencies.works.assignTask(context, {
+            commandId: `${input.commandId}:assignment`,
+            workId: input.workId,
+            expectedRevision: current.revision,
+            taskId: input.task.task_id,
+            agentHandle,
+          });
       delivery = (
         await this.dependencies.coordinator.start(context, {
           commandId: startCommand,

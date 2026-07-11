@@ -152,7 +152,7 @@ export class GitWorkspaceManager {
     await mkdir(input.workspaceRoot, { recursive: true, mode: 0o700 });
     const workspaceRoot = await realpath(input.workspaceRoot);
     const disabledHooksPath = resolve(workspaceRoot, ".disabled-hooks");
-    await mkdir(disabledHooksPath, { mode: 0o700 });
+    await mkdir(disabledHooksPath, { recursive: true, mode: 0o700 });
     return new GitWorkspaceManager(workspaceRoot, await realpath(disabledHooksPath));
   }
 

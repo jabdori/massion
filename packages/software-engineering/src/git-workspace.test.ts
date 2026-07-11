@@ -48,6 +48,10 @@ describe("격리 Git delivery workspace", () => {
 
   afterEach(async () => rm(temporaryRoot, { recursive: true, force: true }));
 
+  it("daemon 재시작처럼 같은 관리 root를 다시 열 수 있다", async () => {
+    await expect(GitWorkspaceManager.create({ workspaceRoot })).resolves.toBeInstanceOf(GitWorkspaceManager);
+  });
+
   it("patch를 detached worktree에만 원자 적용하고 deterministic branch commit을 만든다", async () => {
     const hookMarker = join(temporaryRoot, "hook-invoked");
     for (const hook of ["post-checkout", "post-commit"]) {

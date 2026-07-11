@@ -4,7 +4,7 @@ import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { LocalDaemonManager, ensureLocalTokenKey, resolveLocalPaths } from "./local.js";
+import { LocalDaemonManager, ensureLocalCredentialKey, ensureLocalTokenKey, resolveLocalPaths } from "./local.js";
 
 describe("local daemon lifecycle", () => {
   it("XDG user directory를 사용하고 token key를 owner-only로 한 번만 만든다", async () => {
@@ -14,9 +14,13 @@ describe("local daemon lifecycle", () => {
       expect(paths.dataDirectory).toBe(join(root, ".local", "share", "massion"));
       const first = await ensureLocalTokenKey(paths);
       const second = await ensureLocalTokenKey(paths);
+      const credential = await ensureLocalCredentialKey(paths);
       expect(second).toBe(first);
+      expect(credential).not.toBe(first);
       expect(Buffer.from(first, "base64url")).toHaveLength(32);
+      expect(Buffer.from(credential, "base64url")).toHaveLength(32);
       expect((await stat(paths.tokenKey)).mode & 0o777).toBe(0o600);
+      expect((await stat(paths.credentialKey)).mode & 0o777).toBe(0o600);
     } finally {
       await rm(root, { recursive: true, force: true });
     }

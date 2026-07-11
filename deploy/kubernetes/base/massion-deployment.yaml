@@ -30,7 +30,7 @@ spec:
           command:
             - sh
             - -ec
-            - cp /source/database-password /app/database-password && cp /source/token-key /app/token-key && cp /source/registry-key /app/registry-key && cp /source/tls.crt /tls/tls_certificate && cp /source/tls.key /tls/tls_private_key && cp /source/database-owner-password /provision/database-owner-password && cp /source/database-password /provision/database-password && chown 1000:1000 /app/* /tls/* /provision/* && chmod 0600 /app/* /tls/* /provision/*
+            - cp /source/database-password /app/database-password && cp /source/token-key /app/token-key && cp /source/credential-key /app/credential-key && cp /source/registry-key /app/registry-key && cp /source/tls.crt /tls/tls_certificate && cp /source/tls.key /tls/tls_private_key && cp /source/database-owner-password /provision/database-owner-password && cp /source/database-password /provision/database-password && chown 1000:1000 /app/* /tls/* /provision/* && chmod 0600 /app/* /tls/* /provision/*
           securityContext:
             runAsNonRoot: false
             runAsUser: 0

@@ -1,6 +1,7 @@
 export * from "./agent-topology.js";
 export * from "./agent-configuration.js";
 export * from "./contracts.js";
+export * from "./embedded-agent-runtime.js";
 export * from "./execution-store.js";
 export * from "./lifecycle.js";
 export * from "./model-factory.js";
