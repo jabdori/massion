@@ -6,6 +6,7 @@ import type { OrganizationGraphService } from "@massion/organization";
 import type { MassionDatabase } from "@massion/storage";
 
 import { registerApplicationDomainCommands, type ApplicationDomainDependencies } from "./adapters/domain.js";
+import { registerApplicationAccessCommands } from "./access-commands.js";
 import { SurrealApplicationReadModel } from "./adapters/read-model.js";
 import { ApplicationAccessTokenService } from "./auth.js";
 import type { ApplicationArtifactGateway } from "./artifacts.js";
@@ -36,7 +37,10 @@ export interface ApplicationProductDependencies {
   readonly tokenKey: { readonly keyId: string; readonly key: Buffer };
   readonly executors: Readonly<Record<CoreWorkStage, CoreWorkStageExecutor>>;
   readonly domain: ApplicationDomainDependencies;
-  readonly queries?: Omit<ApplicationQueryDependencies, "readModel" | "snapshot">;
+  readonly queries?: Omit<
+    ApplicationQueryDependencies,
+    "readModel" | "snapshot" | "memberships" | "audit" | "webSessions"
+  >;
   readonly artifacts?: Pick<ApplicationArtifactGateway, "inspect" | "install" | "update">;
   readonly server?: ApplicationHttpServerOptions;
 }
@@ -68,7 +72,6 @@ export class ApplicationProduct implements AsyncDisposable {
     const readModel = new SurrealApplicationReadModel(dependencies.database, dependencies.organizations);
     const snapshot = new CollaborationGraphSnapshotProjector(readModel);
     const queries = new ApplicationQueryRegistry();
-    registerApplicationQueries(queries, { ...dependencies.queries, readModel, snapshot });
 
     const tokens = await ApplicationAccessTokenService.create(dependencies.database, dependencies.organizations, {
       keyId: dependencies.tokenKey.keyId,
@@ -81,6 +84,15 @@ export class ApplicationProduct implements AsyncDisposable {
     const events = await ApplicationEventStore.create(dependencies.database, dependencies.organizations);
     const projector = await ApplicationEventProjector.create(dependencies.database, dependencies.organizations);
     const metrics = await ApplicationMetricStore.create(dependencies.database, dependencies.organizations);
+    registerApplicationAccessCommands(commands, { organizations: dependencies.organizations, webSessions });
+    registerApplicationQueries(queries, {
+      ...dependencies.queries,
+      readModel,
+      snapshot,
+      memberships: dependencies.organizations,
+      audit: events,
+      webSessions,
+    });
     const bootstrap = new LocalApplicationBootstrap(
       dependencies.identities,
       dependencies.organizations,

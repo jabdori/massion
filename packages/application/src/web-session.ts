@@ -4,7 +4,7 @@ import type { OrganizationService, TenantContext } from "@massion/identity";
 import { applyMigrations, type MassionDatabase, type QueryExecutor } from "@massion/storage";
 
 import type { ApplicationAccessTokenService, AuthenticatedApplicationAccess } from "./auth.js";
-import { APPLICATION_WEB_SESSION_MIGRATION } from "./schema.js";
+import { APPLICATION_WEB_SESSION_MIGRATION, APPLICATION_WEB_SESSION_REVISION_MIGRATION } from "./schema.js";
 
 const TICKET = /^mwt_([0-9a-f-]{36})\.([A-Za-z0-9_-]{43})$/u;
 const SESSION = /^mws_([0-9a-f-]{36})\.([A-Za-z0-9_-]{43})$/u;
@@ -46,6 +46,7 @@ interface WebSessionRecord {
   readonly idle_ttl_seconds: number;
   readonly idle_expires_at: unknown;
   readonly last_seen_at: unknown;
+  readonly revision: number;
   readonly revoked_at?: unknown;
   readonly revoked_reason?: string;
 }
@@ -72,6 +73,18 @@ export interface ExchangedWebSession {
 
 export interface AuthenticatedWebSession extends AuthenticatedApplicationAccess {
   readonly sessionId: string;
+}
+
+export interface WebSessionView {
+  readonly sessionId: string;
+  readonly status: "active" | "idle-expired" | "expired" | "revoked";
+  readonly issuedAt: string;
+  readonly expiresAt: string;
+  readonly idleExpiresAt: string;
+  readonly lastSeenAt: string;
+  readonly revision: number;
+  readonly revokedAt?: string;
+  readonly revokedReason?: string;
 }
 
 function canonicalJson(value: unknown): string {
@@ -131,7 +144,7 @@ export class WebSessionService {
   ): Promise<WebSessionService> {
     if (!/^[a-z][a-z0-9-]{2,63}$/u.test(input.keyId)) throw new Error("Web session keyId가 유효하지 않습니다");
     if (input.key.length < 32) throw new Error("Web session HMAC key는 32 byte 이상이어야 합니다");
-    await applyMigrations(database, [APPLICATION_WEB_SESSION_MIGRATION]);
+    await applyMigrations(database, [APPLICATION_WEB_SESSION_MIGRATION, APPLICATION_WEB_SESSION_REVISION_MIGRATION]);
     return new WebSessionService(database, organizations, tokens, input.keyId, Buffer.from(input.key), input.clock);
   }
 
@@ -238,7 +251,7 @@ export class WebSessionService {
         throw new Error("Web login ticket은 만료됐거나 이미 사용됐습니다");
       const created = await first<WebSessionRecord>(
         transaction,
-        "CREATE application_web_session CONTENT { session_id: $session_id, organization_id: $organization_id, user_id: $user_id, source_token_id: $source_token_id, audience: $audience, scopes: $scopes, key_id: $key_id, session_hash: $session_hash, csrf_hash: $csrf_hash, issued_at: <datetime>$issued_at, expires_at: <datetime>$expires_at, idle_ttl_seconds: $idle_ttl_seconds, idle_expires_at: <datetime>$idle_expires_at, last_seen_at: <datetime>$issued_at, revoked_at: NONE, revoked_reason: NONE } RETURN AFTER;",
+        "CREATE application_web_session CONTENT { session_id: $session_id, organization_id: $organization_id, user_id: $user_id, source_token_id: $source_token_id, audience: $audience, scopes: $scopes, key_id: $key_id, session_hash: $session_hash, csrf_hash: $csrf_hash, issued_at: <datetime>$issued_at, expires_at: <datetime>$expires_at, idle_ttl_seconds: $idle_ttl_seconds, idle_expires_at: <datetime>$idle_expires_at, last_seen_at: <datetime>$issued_at, revision: 0, revoked_at: NONE, revoked_reason: NONE } RETURN AFTER;",
         {
           session_id: sessionId,
           organization_id: consumed.organization_id,
@@ -316,6 +329,42 @@ export class WebSessionService {
     return this.matches(csrfToken, record.csrf_hash);
   }
 
+  public async list(context: TenantContext): Promise<readonly WebSessionView[]> {
+    await this.organizations.verifyTenantContext(context);
+    const [records] = await this.database.query<[WebSessionRecord[]]>(
+      `SELECT * OMIT id, source_token_id, audience, scopes, key_id, session_hash, csrf_hash, idle_ttl_seconds
+       FROM application_web_session
+       WHERE organization_id = $organization_id AND user_id = $user_id
+       ORDER BY issued_at DESC
+       LIMIT 100;`,
+      { organization_id: context.organizationId, user_id: context.userId },
+    );
+    const now = this.clock.now.getTime();
+    return records.map((record) => {
+      const expiresAt = date(record.expires_at, "session expiresAt");
+      const idleExpiresAt = date(record.idle_expires_at, "session idleExpiresAt");
+      const revokedAt = record.revoked_at === undefined ? undefined : date(record.revoked_at, "session revokedAt");
+      const status: WebSessionView["status"] = revokedAt
+        ? "revoked"
+        : expiresAt.getTime() <= now
+          ? "expired"
+          : idleExpiresAt.getTime() <= now
+            ? "idle-expired"
+            : "active";
+      return {
+        sessionId: record.session_id,
+        status,
+        issuedAt: date(record.issued_at, "session issuedAt").toISOString(),
+        expiresAt: expiresAt.toISOString(),
+        idleExpiresAt: idleExpiresAt.toISOString(),
+        lastSeenAt: date(record.last_seen_at, "session lastSeenAt").toISOString(),
+        revision: record.revision,
+        ...(revokedAt === undefined ? {} : { revokedAt: revokedAt.toISOString() }),
+        ...(record.revoked_reason === undefined ? {} : { revokedReason: record.revoked_reason }),
+      };
+    });
+  }
+
   public async rotateCsrf(sessionToken: string): Promise<string> {
     const access = await this.authenticate(sessionToken, "massion-api", []);
     const csrfToken = randomBytes(32).toString("base64url");
@@ -339,6 +388,60 @@ export class WebSessionService {
     return csrfToken;
   }
 
+  public async revokeById(
+    context: TenantContext,
+    sessionId: string,
+    expectedRevision: number,
+    reason: string,
+  ): Promise<WebSessionView> {
+    await this.organizations.verifyTenantContext(context);
+    if (!/^[0-9a-f-]{36}$/u.test(sessionId)) throw new Error("Web session ID가 유효하지 않습니다");
+    if (!Number.isSafeInteger(expectedRevision) || expectedRevision < 0)
+      throw new Error("Web session revision이 유효하지 않습니다");
+    const normalizedReason = reason.trim();
+    if (!normalizedReason || normalizedReason.length > 256)
+      throw new Error("Web session 폐기 이유가 유효하지 않습니다");
+    const now = this.clock.now.toISOString();
+    const updated = await this.database.transaction(async (transaction) => {
+      const value = await first<WebSessionRecord>(
+        transaction,
+        `UPDATE application_web_session
+         SET revoked_at = <datetime>$now, revoked_reason = $reason, revision += 1
+         WHERE organization_id = $organization_id AND user_id = $user_id AND session_id = $session_id
+           AND revision = $expected_revision AND revoked_at = NONE
+         RETURN AFTER;`,
+        {
+          organization_id: context.organizationId,
+          user_id: context.userId,
+          session_id: sessionId,
+          expected_revision: expectedRevision,
+          now,
+          reason: normalizedReason,
+        },
+      );
+      if (!value) throw new Error("Web session revision이 일치하지 않거나 session을 찾을 수 없습니다");
+      await this.event(
+        transaction,
+        context.organizationId,
+        context.userId,
+        { sessionId, reason: normalizedReason },
+        "session-revoked",
+      );
+      return value;
+    });
+    return {
+      sessionId: updated.session_id,
+      status: "revoked",
+      issuedAt: date(updated.issued_at, "session issuedAt").toISOString(),
+      expiresAt: date(updated.expires_at, "session expiresAt").toISOString(),
+      idleExpiresAt: date(updated.idle_expires_at, "session idleExpiresAt").toISOString(),
+      lastSeenAt: date(updated.last_seen_at, "session lastSeenAt").toISOString(),
+      revision: updated.revision,
+      revokedAt: date(updated.revoked_at, "session revokedAt").toISOString(),
+      ...(updated.revoked_reason === undefined ? {} : { revokedReason: updated.revoked_reason }),
+    };
+  }
+
   public async revoke(sessionToken: string, csrfToken: string, reason: string): Promise<void> {
     if (!(await this.verifyCsrf(sessionToken, csrfToken)))
       throw new Error("Web session CSRF token이 유효하지 않습니다");
@@ -346,7 +449,7 @@ export class WebSessionService {
     const record = await this.session(sessionToken);
     await this.database.transaction(async (transaction) => {
       await transaction.query(
-        "UPDATE application_web_session SET revoked_at = <datetime>$now, revoked_reason = $reason WHERE organization_id = $organization_id AND session_id = $session_id AND revoked_at = NONE;",
+        "UPDATE application_web_session SET revoked_at = <datetime>$now, revoked_reason = $reason, revision += 1 WHERE organization_id = $organization_id AND session_id = $session_id AND revoked_at = NONE;",
         {
           organization_id: record.organization_id,
           session_id: record.session_id,

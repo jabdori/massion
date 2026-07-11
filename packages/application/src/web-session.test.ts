@@ -75,6 +75,52 @@ describe("Web login ticket와 session", () => {
     }
   });
 
+  it("현재 사용자의 session 목록을 원문 secret 없이 조회한다", async () => {
+    const value = await fixture();
+    try {
+      const ticket = await value.sessions.issueLoginTicket(value.access, {
+        commandId: "web-login-ticket-list-0001",
+      });
+      if (!ticket.code) throw new Error("login ticket 원문이 없습니다");
+      const exchanged = await value.sessions.exchangeLoginTicket(ticket.code);
+
+      await expect(value.sessions.list(value.context)).resolves.toEqual([
+        expect.objectContaining({
+          sessionId: exchanged.sessionId,
+          status: "active",
+          issuedAt: exchanged.issuedAt,
+          expiresAt: exchanged.expiresAt,
+        }),
+      ]);
+      const serialized = JSON.stringify(await value.sessions.list(value.context));
+      expect(serialized).not.toContain(exchanged.sessionToken);
+      expect(serialized).not.toContain(exchanged.csrfToken);
+    } finally {
+      await value.database.close();
+    }
+  });
+
+  it("session ID와 revision 조건으로 다른 session을 폐기한다", async () => {
+    const value = await fixture();
+    try {
+      const ticket = await value.sessions.issueLoginTicket(value.access, {
+        commandId: "web-login-ticket-revoke-0001",
+      });
+      if (!ticket.code) throw new Error("login ticket 원문이 없습니다");
+      const exchanged = await value.sessions.exchangeLoginTicket(ticket.code);
+
+      await expect(value.sessions.revokeById(value.context, exchanged.sessionId, 1, "access-console")).rejects.toThrow(
+        /revision/u,
+      );
+      await expect(
+        value.sessions.revokeById(value.context, exchanged.sessionId, 0, "access-console"),
+      ).resolves.toMatchObject({ sessionId: exchanged.sessionId, status: "revoked", revision: 1 });
+      await expect(value.sessions.authenticate(exchanged.sessionToken, "massion-api", [])).rejects.toThrow(/폐기/u);
+    } finally {
+      await value.database.close();
+    }
+  });
+
   it("ticket expiry와 session idle·absolute expiry를 fail-closed 처리한다", async () => {
     const value = await fixture();
     try {

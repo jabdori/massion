@@ -1,12 +1,14 @@
 import type { ExtensionGateway } from "@massion/extension-host";
 import type { GrowthGateway } from "@massion/growth";
-import type { MembershipRole, TenantContext } from "@massion/identity";
+import type { MembershipRole, OrganizationService, TenantContext } from "@massion/identity";
 import type { ModelRouter, ProviderService } from "@massion/router";
 import type { RuntimeExecutionStore } from "@massion/runtime";
 
 import { ApplicationError } from "./errors.js";
+import type { ApplicationEventStore } from "./event-store.js";
 import type { ApplicationReadModel } from "./read-model.js";
 import type { CollaborationGraphSnapshotProjector } from "./snapshot.js";
+import type { WebSessionService } from "./web-session.js";
 
 export interface ApplicationQueryResultV1 {
   readonly schemaVersion: "massion.application.v1";
@@ -29,8 +31,15 @@ export interface ApplicationQueryDependencies {
   readonly extension?: Pick<ExtensionGateway, "list">;
   readonly growth?: Pick<
     GrowthGateway,
-    "resolveConfiguration" | "getActiveEvaluationStrategy" | "listSuggestions" | "listEffectEvaluations"
+    | "resolveConfiguration"
+    | "getActiveEvaluationStrategy"
+    | "getActiveMemories"
+    | "listSuggestions"
+    | "listEffectEvaluations"
   >;
+  readonly memberships?: Pick<OrganizationService, "listMembers">;
+  readonly audit?: Pick<ApplicationEventStore, "read">;
+  readonly webSessions?: Pick<WebSessionService, "list">;
   readonly providers?: Pick<ProviderService, "listCredentials">;
   readonly router?: Pick<ModelRouter, "listRoutes">;
   readonly status?: () => Promise<unknown>;
@@ -57,6 +66,12 @@ function boundedInteger(value: unknown, label: string, fallback: number): number
   if (value === undefined) return fallback;
   if (!Number.isSafeInteger(value) || (value as number) < 1 || (value as number) > 1_000)
     throw new Error(`${label}가 유효하지 않습니다`);
+  return value as number;
+}
+
+function cursor(value: unknown): number {
+  if (value === undefined) return 0;
+  if (!Number.isSafeInteger(value) || (value as number) < 0) throw new Error("after가 유효하지 않습니다");
   return value as number;
 }
 
@@ -148,6 +163,47 @@ export function registerApplicationQueries(
         role: context.role,
       }),
   });
+  if (dependencies.memberships) {
+    registry.register({
+      operation: "identity.memberships",
+      requiredScopes: ["identity:read"],
+      allowedRoles: EVERY_ROLE,
+      validate: (value) => object(value, []),
+      handle: async (context) =>
+        ((await dependencies.memberships?.listMembers(context)) ?? []).map((member) => ({
+          membershipId: member.membershipId,
+          userId: member.userId,
+          displayName: member.displayName,
+          ...(context.role === "member" ? {} : { email: member.email }),
+          role: member.role,
+          status: member.status,
+          revision: member.revision,
+          createdAt: member.createdAt,
+        })),
+    });
+  }
+  if (dependencies.webSessions) {
+    registry.register({
+      operation: "application.sessions",
+      requiredScopes: ["identity:read"],
+      allowedRoles: EVERY_ROLE,
+      validate: (value) => object(value, []),
+      handle: async (context) => await dependencies.webSessions?.list(context),
+    });
+  }
+  if (dependencies.audit) {
+    registry.register({
+      operation: "application.audit",
+      requiredScopes: ["audit:read"],
+      allowedRoles: EVERY_ROLE,
+      validate: (value) => object(value, ["after", "limit"]),
+      handle: async (context, value) =>
+        await dependencies.audit?.read(context, {
+          after: cursor(value.after),
+          limit: boundedInteger(value.limit, "limit", 100),
+        }),
+    });
+  }
   registry.register({
     operation: "work.list",
     requiredScopes: ["work:read"],
@@ -388,6 +444,35 @@ export function registerApplicationQueries(
     });
   }
   if (dependencies.growth) {
+    registry.register({
+      operation: "growth.memories",
+      requiredScopes: ["growth:read"],
+      allowedRoles: EVERY_ROLE,
+      validate: (value) => object(value, ["requesterUserId"]),
+      handle: async (context, value) => {
+        const requesterUserId =
+          value.requesterUserId === undefined ? context.userId : text(value.requesterUserId, "requesterUserId");
+        if (requesterUserId !== context.userId && context.role === "member") {
+          throw new ApplicationError({
+            category: "authorization",
+            severity: "error",
+            retryable: false,
+            userMessage: "다른 사용자의 기억을 조회할 권한이 없습니다",
+            operatorCode: "APP_MEMORY_USER_REQUIRED",
+          });
+        }
+        return ((await dependencies.growth?.getActiveMemories(context, requesterUserId)) ?? []).map((memory) => ({
+          memoryVersionId: memory.memoryVersionId,
+          scope: memory.scope,
+          subjectId: memory.subjectId,
+          version: memory.version,
+          status: memory.status,
+          entryKeys: memory.entries.map((entry) => entry.key),
+          sourceReferenceIds: [...new Set(memory.entries.flatMap((entry) => entry.sourceReferenceIds))].sort(),
+          checksum: memory.checksum,
+        }));
+      },
+    });
     registry.register({
       operation: "growth.configuration.get",
       requiredScopes: ["growth:read"],

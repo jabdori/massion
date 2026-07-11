@@ -9,4 +9,4 @@ export {
   type PersonalRegistration,
   type RegisterPersonalUserInput,
 } from "./identity.js";
-export { OrganizationService, type TeamCreation, type TenantContext } from "./tenant.js";
+export { OrganizationService, type OrganizationMemberView, type TeamCreation, type TenantContext } from "./tenant.js";

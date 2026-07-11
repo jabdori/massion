@@ -64,11 +64,51 @@ describe("팀 조직과 TenantContext 격리", () => {
     );
     const added = await organizations.addMember(ownerContext, member.user.user_id, "member");
 
-    await organizations.suspendMembership(ownerContext, added.membership_id);
+    await organizations.suspendMembership(ownerContext, added.membership_id, 0);
 
     await expect(
       organizations.resolveTenantContext(member.user.user_id, team.organization.organization_id),
     ).rejects.toThrow("활성 Membership이 없습니다");
+  });
+
+  it("구성원 role·상태를 revision 조건으로만 변경한다", async () => {
+    const team = await organizations.createTeam(owner.user.user_id, "Massion Team");
+    const context = await organizations.resolveTenantContext(owner.user.user_id, team.organization.organization_id);
+    const added = await organizations.addMember(context, member.user.user_id, "member");
+
+    const promoted = await organizations.updateMembershipRole(context, added.membership_id, "admin", 0);
+    expect(promoted).toMatchObject({ role: "admin", revision: 1 });
+    await expect(organizations.updateMembershipRole(context, added.membership_id, "member", 0)).rejects.toThrow(
+      /revision/u,
+    );
+    await expect(organizations.suspendMembership(context, added.membership_id, 0)).rejects.toThrow(/revision/u);
+    await expect(organizations.suspendMembership(context, added.membership_id, 1)).resolves.toMatchObject({
+      status: "suspended",
+      revision: 2,
+    });
+  });
+
+  it("조직 구성원을 사용자 표시 정보와 함께 tenant 안에서만 조회한다", async () => {
+    const database = await createDatabase({ url: "mem://", namespace: "massion", database: crypto.randomUUID() });
+    try {
+      const identities = await IdentityService.create(database);
+      const organizations = await OrganizationService.create(database);
+      const owner = await identities.registerPersonalUser({ email: "members-owner@example.com", displayName: "Owner" });
+      const member = await identities.registerPersonalUser({ email: "member@example.com", displayName: "Member" });
+      const context = await organizations.resolveTenantContext(owner.user.user_id, owner.organization.organization_id);
+      await organizations.addMember(context, member.user.user_id, "member");
+      await expect(organizations.listMembers(context)).resolves.toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ userId: owner.user.user_id, displayName: "Owner", role: "owner" }),
+          expect.objectContaining({ userId: member.user.user_id, displayName: "Member", role: "member" }),
+        ]),
+      );
+      await expect(organizations.listMembers({ ...context, userId: member.user.user_id })).rejects.toThrow(
+        /TenantContext/u,
+      );
+    } finally {
+      await database.close();
+    }
   });
 
   it("다른 조직 Context로 target 조직을 읽지 못한다", async () => {

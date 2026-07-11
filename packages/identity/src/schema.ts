@@ -31,3 +31,11 @@ DEFINE INDEX membership_by_user ON membership FIELDS user_id;
 DEFINE INDEX membership_by_organization ON membership FIELDS organization_id;
 `,
 );
+
+export const IDENTITY_MEMBERSHIP_REVISION_MIGRATION = defineMigration(
+  "0072-identity-membership-revision",
+  `
+DEFINE FIELD revision ON membership TYPE int DEFAULT 0 ASSERT $value >= 0;
+UPDATE membership SET revision = 0 WHERE revision = NONE;
+`,
+);

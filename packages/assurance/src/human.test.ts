@@ -289,7 +289,7 @@ describe("Assurance HumanAttestation", () => {
     };
     await expect(store.record(memberContext, input())).rejects.toThrow("eligible role");
     await expect(store.record(otherContext, input())).rejects.toThrow();
-    await organizations.suspendMembership(ownerContext, membership.membership_id);
+    await organizations.suspendMembership(ownerContext, membership.membership_id, membership.revision);
     await expect(store.record(memberContext, input())).rejects.toThrow("TenantContext");
   });
 

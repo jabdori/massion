@@ -2,8 +2,14 @@ import { randomUUID } from "node:crypto";
 
 import { applyMigrations, type MassionDatabase, type QueryExecutor } from "@massion/storage";
 
-import { type IdentityUser, type Membership, type MembershipRole, type Organization } from "./identity.js";
-import { IDENTITY_MIGRATION } from "./schema.js";
+import {
+  type IdentityUser,
+  type Membership,
+  type MembershipRole,
+  type MembershipStatus,
+  type Organization,
+} from "./identity.js";
+import { IDENTITY_MEMBERSHIP_REVISION_MIGRATION, IDENTITY_MIGRATION } from "./schema.js";
 
 export interface TenantContext {
   readonly userId: string;
@@ -17,13 +23,24 @@ export interface TeamCreation {
   readonly membership: Membership;
 }
 
+export interface OrganizationMemberView {
+  readonly membershipId: string;
+  readonly userId: string;
+  readonly email: string;
+  readonly displayName: string;
+  readonly role: MembershipRole;
+  readonly status: MembershipStatus;
+  readonly revision: number;
+  readonly createdAt: unknown;
+}
+
 async function findMembership(
   executor: QueryExecutor,
   userId: string,
   organizationId: string,
 ): Promise<Membership | undefined> {
   const [memberships] = await executor.query<[Membership[]]>(
-    `SELECT membership_id, user_id, organization_id, role, status, created_at
+    `SELECT membership_id, user_id, organization_id, role, status, revision, created_at
      FROM membership
      WHERE user_id = $user_id AND organization_id = $organization_id
      LIMIT 1;`,
@@ -46,7 +63,7 @@ export class OrganizationService {
   private constructor(private readonly database: MassionDatabase) {}
 
   public static async create(database: MassionDatabase): Promise<OrganizationService> {
-    await applyMigrations(database, [IDENTITY_MIGRATION]);
+    await applyMigrations(database, [IDENTITY_MIGRATION, IDENTITY_MEMBERSHIP_REVISION_MIGRATION]);
     return new OrganizationService(database);
   }
 
@@ -63,7 +80,7 @@ export class OrganizationService {
         { organization_id: organizationId, name: normalizedName },
       );
       const [memberships] = await transaction.query<[Membership[]]>(
-        "CREATE membership CONTENT { membership_id: $membership_id, user_id: $user_id, organization_id: $organization_id, role: 'owner', status: 'active', created_at: time::now() } RETURN AFTER;",
+        "CREATE membership CONTENT { membership_id: $membership_id, user_id: $user_id, organization_id: $organization_id, role: 'owner', status: 'active', revision: 0, created_at: time::now() } RETURN AFTER;",
         { membership_id: membershipId, user_id: userId, organization_id: organizationId },
       );
       const organization = organizations[0];
@@ -119,13 +136,49 @@ export class OrganizationService {
     if (!membership || membership.status !== "active") throw new Error("활성 Membership이 없습니다");
   }
 
+  public async listMembers(context: TenantContext): Promise<readonly OrganizationMemberView[]> {
+    await this.authorize(this.database, context);
+    const [memberships] = await this.database.query<[Membership[]]>(
+      `SELECT membership_id, user_id, organization_id, role, status, revision, created_at
+       FROM membership
+       WHERE organization_id = $organization_id
+       ORDER BY created_at ASC;`,
+      { organization_id: context.organizationId },
+    );
+    if (memberships.length === 0) return [];
+
+    const [users] = await this.database.query<[IdentityUser[]]>(
+      `SELECT user_id, email, display_name, created_at
+       FROM identity_user
+       WHERE user_id IN $user_ids;`,
+      { user_ids: memberships.map((membership) => membership.user_id) },
+    );
+    const usersById = new Map(users.map((user) => [user.user_id, user]));
+
+    return memberships.map((membership) => {
+      const user = usersById.get(membership.user_id);
+      if (!user) throw new Error(`Membership 사용자를 찾을 수 없습니다: ${membership.user_id}`);
+      return {
+        membershipId: membership.membership_id,
+        userId: membership.user_id,
+        email: user.email,
+        displayName: user.display_name,
+        role: membership.role,
+        status: membership.status,
+        revision: membership.revision,
+        createdAt: membership.created_at,
+      };
+    });
+  }
+
   public async addMember(
     context: TenantContext,
     userId: string,
     role: Exclude<MembershipRole, "owner">,
   ): Promise<Membership> {
     return await this.database.transaction(async (transaction) => {
-      await this.authorize(transaction, context, ["owner", "admin"]);
+      const actor = await this.authorize(transaction, context, ["owner", "admin"]);
+      if (role === "admin" && actor.role !== "owner") throw new Error("admin role은 owner만 부여할 수 있습니다");
       if (!(await userExists(transaction, userId))) throw new Error(`사용자를 찾을 수 없습니다: ${userId}`);
       const [memberships] = await transaction.query<[Membership[]]>(
         `CREATE membership CONTENT {
@@ -134,6 +187,7 @@ export class OrganizationService {
           organization_id: $organization_id,
           role: $role,
           status: 'active',
+          revision: 0,
           created_at: time::now()
         } RETURN AFTER;`,
         {
@@ -149,20 +203,64 @@ export class OrganizationService {
     });
   }
 
-  public async suspendMembership(context: TenantContext, membershipId: string): Promise<void> {
-    await this.database.transaction(async (transaction) => {
-      await this.authorize(transaction, context, ["owner", "admin"]);
+  public async updateMembershipRole(
+    context: TenantContext,
+    membershipId: string,
+    role: Exclude<MembershipRole, "owner">,
+    expectedRevision: number,
+  ): Promise<Membership> {
+    return await this.database.transaction(async (transaction) => {
+      const actor = await this.authorize(transaction, context, ["owner", "admin"]);
+      if (role === "admin" && actor.role !== "owner") throw new Error("admin role은 owner만 부여할 수 있습니다");
       const [targets] = await transaction.query<[Membership[]]>(
-        "SELECT membership_id, user_id, organization_id, role, status, created_at FROM membership WHERE membership_id = $membership_id AND organization_id = $organization_id LIMIT 1;",
+        "SELECT membership_id, user_id, organization_id, role, status, revision, created_at FROM membership WHERE membership_id = $membership_id AND organization_id = $organization_id LIMIT 1;",
+        { membership_id: membershipId, organization_id: context.organizationId },
+      );
+      const target = targets[0];
+      if (!target) throw new Error("대상 Membership을 찾을 수 없습니다");
+      if (target.role === "owner") throw new Error("owner Membership role은 변경할 수 없습니다");
+      if (actor.role === "admin" && target.role === "admin")
+        throw new Error("admin Membership은 owner만 변경할 수 있습니다");
+      const [updated] = await transaction.query<[Membership[]]>(
+        "UPDATE membership SET role = $role, revision += 1 WHERE membership_id = $membership_id AND organization_id = $organization_id AND revision = $expected_revision RETURN AFTER;",
+        {
+          membership_id: membershipId,
+          organization_id: context.organizationId,
+          role,
+          expected_revision: expectedRevision,
+        },
+      );
+      if (!updated[0]) throw new Error("Membership revision이 일치하지 않습니다");
+      return updated[0];
+    });
+  }
+
+  public async suspendMembership(
+    context: TenantContext,
+    membershipId: string,
+    expectedRevision: number,
+  ): Promise<Membership> {
+    return await this.database.transaction(async (transaction) => {
+      const actor = await this.authorize(transaction, context, ["owner", "admin"]);
+      const [targets] = await transaction.query<[Membership[]]>(
+        "SELECT membership_id, user_id, organization_id, role, status, revision, created_at FROM membership WHERE membership_id = $membership_id AND organization_id = $organization_id LIMIT 1;",
         { membership_id: membershipId, organization_id: context.organizationId },
       );
       const target = targets[0];
       if (!target) throw new Error("대상 Membership을 찾을 수 없습니다");
       if (target.role === "owner") throw new Error("owner Membership은 suspend할 수 없습니다");
-      await transaction.query(
-        "UPDATE membership SET status = 'suspended' WHERE membership_id = $membership_id AND organization_id = $organization_id;",
-        { membership_id: membershipId, organization_id: context.organizationId },
+      if (actor.role === "admin" && target.role === "admin")
+        throw new Error("admin Membership은 owner만 suspend할 수 있습니다");
+      const [updated] = await transaction.query<[Membership[]]>(
+        "UPDATE membership SET status = 'suspended', revision += 1 WHERE membership_id = $membership_id AND organization_id = $organization_id AND revision = $expected_revision RETURN AFTER;",
+        {
+          membership_id: membershipId,
+          organization_id: context.organizationId,
+          expected_revision: expectedRevision,
+        },
       );
+      if (!updated[0]) throw new Error("Membership revision이 일치하지 않습니다");
+      return updated[0];
     });
   }
 

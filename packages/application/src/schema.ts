@@ -298,6 +298,14 @@ THEN { THROW 'Application web session event는 immutable입니다'; };
 `,
 );
 
+export const APPLICATION_WEB_SESSION_REVISION_MIGRATION = defineMigration(
+  "0073-application-web-session-revision",
+  `
+DEFINE FIELD revision ON application_web_session TYPE int DEFAULT 0 ASSERT $value >= 0;
+UPDATE application_web_session SET revision = 0 WHERE revision = NONE;
+`,
+);
+
 export const APPLICATION_MIGRATIONS = [
   APPLICATION_AUTH_MIGRATION,
   APPLICATION_COMMAND_MIGRATION,
@@ -306,4 +314,5 @@ export const APPLICATION_MIGRATIONS = [
   APPLICATION_RUN_MIGRATION,
   APPLICATION_METRIC_MIGRATION,
   APPLICATION_WEB_SESSION_MIGRATION,
+  APPLICATION_WEB_SESSION_REVISION_MIGRATION,
 ] as const;
