@@ -170,6 +170,15 @@ export class RuntimeExecutionStore {
     return await this.attachConfiguration(context, created, resolved);
   }
 
+  public async findExecutionIdByCommand(context: TenantContext, commandId: string): Promise<string | undefined> {
+    await this.organizations.verifyTenantContext(context);
+    const [events] = await this.database.query<[{ execution_id: string }[]]>(
+      "SELECT execution_id FROM runtime_event WHERE organization_id = $organization_id AND command_id = $command_id LIMIT 1;",
+      { organization_id: context.organizationId, command_id: commandId },
+    );
+    return events[0]?.execution_id;
+  }
+
   private async attachConfiguration(
     context: TenantContext,
     created: { execution: RuntimeExecution; event: RuntimeEvent },

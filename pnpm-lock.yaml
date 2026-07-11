@@ -42,6 +42,12 @@ importers:
 
   packages/application:
     dependencies:
+      '@massion/context-strategy':
+        specifier: workspace:*
+        version: link:../context-strategy
+      '@massion/evidence':
+        specifier: workspace:*
+        version: link:../evidence
       '@massion/extension-host':
         specifier: workspace:*
         version: link:../extension-host

@@ -459,6 +459,15 @@ export class OrganizationGraphService {
     return await listNodes(this.database, context.organizationId);
   }
 
+  public async getCurrentSnapshot(
+    context: TenantContext,
+  ): Promise<{ readonly nodes: OrganizationNode[]; readonly version: OrganizationVersion }> {
+    await this.verify(context);
+    const version = latestVersion(await listVersions(this.database, context.organizationId));
+    if (!version) throw new Error("OrganizationVersion을 찾을 수 없습니다");
+    return { nodes: normalizeSnapshot(await listNodes(this.database, context.organizationId)), version };
+  }
+
   public async verifyActiveNode(
     context: TenantContext,
     handle: string,
