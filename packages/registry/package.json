@@ -9,7 +9,9 @@
       "default": "./dist/index.js"
     }
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\" && pnpm build-deps && tsc -p tsconfig.json",
     "build-deps": "pnpm --filter @massion/storage exec tsc -p tsconfig.json && pnpm --filter @massion/identity exec tsc -p tsconfig.json && pnpm --filter @massion/extension-host build",
@@ -20,10 +22,13 @@
     "@massion/extension-host": "workspace:*",
     "@massion/identity": "workspace:*",
     "@massion/storage": "workspace:*",
-    "semver": "7.7.4"
+    "semver": "7.7.4",
+    "sigstore": "5.0.0"
   },
   "devDependencies": {
     "@types/semver": "7.7.1"
   },
-  "engines": { "node": ">=24.0.0" }
+  "engines": {
+    "node": ">=24.0.0"
+  }
 }
