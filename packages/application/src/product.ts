@@ -77,13 +77,22 @@ export class ApplicationProduct implements AsyncDisposable {
       keyId: dependencies.tokenKey.keyId,
       key: dependencies.tokenKey.key,
     });
+    const metrics = await ApplicationMetricStore.create(dependencies.database, dependencies.organizations);
     const webSessions = await WebSessionService.create(dependencies.database, dependencies.organizations, tokens, {
       keyId: `web-${createHash("sha256").update(dependencies.tokenKey.keyId).digest("hex").slice(0, 16)}`,
       key: createHmac("sha256", dependencies.tokenKey.key).update("massion-web-session-v1").digest(),
+      telemetry: {
+        async record(context, input) {
+          await metrics.recordOnce(context, input.idempotencyKey, {
+            name: "application_request_total",
+            value: 1,
+            dimensions: { operationClass: input.action, result: "succeeded" },
+          });
+        },
+      },
     });
     const events = await ApplicationEventStore.create(dependencies.database, dependencies.organizations);
     const projector = await ApplicationEventProjector.create(dependencies.database, dependencies.organizations);
-    const metrics = await ApplicationMetricStore.create(dependencies.database, dependencies.organizations);
     registerApplicationAccessCommands(commands, { organizations: dependencies.organizations, webSessions });
     registerApplicationQueries(queries, {
       ...dependencies.queries,
