@@ -75,6 +75,9 @@ importers:
       '@massion/runtime':
         specifier: workspace:*
         version: link:../runtime
+      '@massion/software-engineering':
+        specifier: workspace:*
+        version: link:../software-engineering
       '@massion/storage':
         specifier: workspace:*
         version: link:../storage
