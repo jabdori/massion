@@ -223,6 +223,29 @@ export class ApplicationAccessTokenService {
     if (!record || record.key_id !== this.keyId || !this.matches(match[1], record.token_hash)) {
       throw new Error("Application access token이 유효하지 않습니다");
     }
+    return await this.access(record, audience, requiredScopes);
+  }
+
+  public async authenticateTokenId(
+    tokenId: string,
+    audience: string,
+    requiredScopes: readonly string[],
+  ): Promise<AuthenticatedApplicationAccess> {
+    if (!/^[0-9a-f-]{36}$/u.test(tokenId)) throw new Error("Application access token ID가 유효하지 않습니다");
+    const record = await first<TokenRecord>(
+      this.database,
+      "SELECT * OMIT id FROM application_access_token WHERE token_id = $token_id LIMIT 1;",
+      { token_id: tokenId },
+    );
+    if (!record || record.key_id !== this.keyId) throw new Error("Application access token이 유효하지 않습니다");
+    return await this.access(record, audience, requiredScopes);
+  }
+
+  private async access(
+    record: TokenRecord,
+    audience: string,
+    requiredScopes: readonly string[],
+  ): Promise<AuthenticatedApplicationAccess> {
     if (record.audience !== audience) throw new Error("Application access token audience가 일치하지 않습니다");
     if (record.revoked_at !== undefined) throw new Error("Application access token이 폐기됐습니다");
     if (new Date(dateText(record.expires_at)).getTime() <= this.clock.now.getTime()) {

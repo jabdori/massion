@@ -72,4 +72,130 @@ describe("ApplicationProduct", () => {
     ]);
     await expect(client.events()).resolves.toMatchObject({ events: expect.any(Array) });
   });
+
+  it("Bearer를 일회성 code→HttpOnly cookie로 교환하고 Web mutation에 CSRF를 강제한다", async () => {
+    await using database = await createDatabase({ url: "mem://", namespace: "massion", database: crypto.randomUUID() });
+    const identities = await IdentityService.create(database);
+    const organizations = await OrganizationService.create(database);
+    const graph = await OrganizationGraphService.create(database, organizations);
+    const policies = await PolicyStore.create(database, organizations);
+    const executors = Object.fromEntries(
+      (["intake", "context-strategy", "evidence", "delivery", "assurance", "records"] as const).map((stage) => [
+        stage,
+        {
+          execute: async () =>
+            stage === "intake"
+              ? { outcome: "advanced" as const, workId: "web-session-work-0001" }
+              : { outcome: "advanced" as const },
+        },
+      ]),
+    ) as never;
+    await using product = await ApplicationProduct.create({
+      database,
+      identities,
+      organizations,
+      graph,
+      policies,
+      tokenKey: { keyId: "web-product-key", key: randomBytes(32) },
+      executors,
+      domain: {},
+      queries: { status: async () => ({ status: "ready" }) },
+    });
+    const endpoint = await product.start();
+    const initialized = (await ApplicationHttpClient.bootstrap(endpoint.url, {
+      commandId: "web-product-bootstrap-0001",
+      email: "web-product@example.com",
+      displayName: "Web Product",
+    })) as { access: { token: string } };
+    const ticketResponse = await fetch(`${endpoint.url}/api/v1/web/login-tickets`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${initialized.access.token}`,
+        origin: endpoint.url,
+        accept: "application/json",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ commandId: "web-product-ticket-0001", ttlSeconds: 300 }),
+    });
+    expect(ticketResponse.status).toBe(201);
+    const ticket = (await ticketResponse.json()) as { code?: string };
+    expect(ticket.code).toMatch(/^mwt_/u);
+    const exchange = await fetch(`${endpoint.url}/api/v1/web/sessions`, {
+      method: "POST",
+      headers: {
+        origin: endpoint.url,
+        "sec-fetch-site": "same-origin",
+        accept: "application/json",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ code: ticket.code }),
+    });
+    expect(exchange.status).toBe(201);
+    const setCookie = exchange.headers.get("set-cookie") ?? "";
+    expect(setCookie).toContain("massion_session=mws_");
+    expect(setCookie).toContain("HttpOnly");
+    expect(setCookie).toContain("SameSite=Strict");
+    expect(setCookie).not.toContain("Secure");
+    const cookie = setCookie.split(";", 1)[0] ?? "";
+    const session = (await exchange.json()) as { csrfToken: string; sessionToken?: string };
+    expect(session.sessionToken).toBeUndefined();
+
+    const recovered = await fetch(`${endpoint.url}/api/v1/web/session`, {
+      headers: { cookie, origin: endpoint.url, accept: "application/json" },
+    });
+    expect(recovered.status).toBe(200);
+    const recoveredSession = (await recovered.json()) as { csrfToken: string };
+    expect(recoveredSession.csrfToken).not.toBe(session.csrfToken);
+    const status = await fetch(`${endpoint.url}/api/v1/status`, {
+      headers: { cookie, accept: "application/json" },
+    });
+    expect(status.status).toBe(200);
+
+    const command = {
+      schemaVersion: "massion.application.v1",
+      commandId: "web-product-run-0001",
+      correlationId: "web-product-correlation-0001",
+      operation: "run.start",
+      payload: { request: { text: "Web session command" } },
+    };
+    const missingCsrf = await fetch(`${endpoint.url}/api/v1/commands`, {
+      method: "POST",
+      headers: {
+        cookie,
+        origin: endpoint.url,
+        "sec-fetch-site": "same-origin",
+        accept: "application/json",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify(command),
+    });
+    expect(missingCsrf.status).toBe(403);
+    const accepted = await fetch(`${endpoint.url}/api/v1/commands`, {
+      method: "POST",
+      headers: {
+        cookie,
+        origin: endpoint.url,
+        "sec-fetch-site": "same-origin",
+        "x-massion-csrf": recoveredSession.csrfToken,
+        accept: "application/json",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify(command),
+    });
+    expect(accepted.status).toBe(202);
+
+    const logout = await fetch(`${endpoint.url}/api/v1/web/session`, {
+      method: "DELETE",
+      headers: {
+        cookie,
+        origin: endpoint.url,
+        "sec-fetch-site": "same-origin",
+        "x-massion-csrf": recoveredSession.csrfToken,
+      },
+    });
+    expect(logout.status).toBe(204);
+    expect(logout.headers.get("set-cookie")).toContain("Max-Age=0");
+    const denied = await fetch(`${endpoint.url}/api/v1/status`, { headers: { cookie, accept: "application/json" } });
+    expect(denied.status).toBe(401);
+  });
 });
