@@ -19,7 +19,8 @@
     "typecheck": "pnpm -r --workspace-concurrency=1 typecheck",
     "verify": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm verify:docs",
     "verify:docs": "node scripts/verify-docs.mjs",
-    "verify:architecture": "node scripts/verify-architecture-diagrams.mjs"
+    "verify:architecture": "node scripts/verify-architecture-diagrams.mjs",
+    "verify:security": "node scripts/verify-security.mjs"
   },
   "engines": {
     "node": ">=24.0.0"
