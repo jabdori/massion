@@ -115,6 +115,10 @@ export class ExtensionLifecycleService {
     return await this.activateArchive(context, input, "untrusted-local", "tarball");
   }
 
+  public async installBundled(context: TenantContext, input: ExtensionChangeInput): Promise<ExtensionActivationView> {
+    return await this.activateArchive(context, input, "built-in", "bundled");
+  }
+
   public async update(context: TenantContext, input: ExtensionChangeInput): Promise<ExtensionActivationView> {
     return await this.activateArchive(context, input, "untrusted-local", "tarball");
   }
@@ -231,7 +235,7 @@ export class ExtensionLifecycleService {
     context: TenantContext,
     input: ExtensionChangeInput,
     trustLevel: ExtensionTrustLevel,
-    sourceKind: "tarball",
+    sourceKind: "tarball" | "bundled",
   ): Promise<ExtensionActivationView> {
     const report = await inspectExtensionArchive(input.archive, { runtime: this.dependencies.runtime });
     const currentInstallation = await this.dependencies.store.findInstallation(context, report.manifest.name);

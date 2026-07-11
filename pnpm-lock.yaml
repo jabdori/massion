@@ -160,6 +160,24 @@ importers:
         specifier: 8.1.4
         version: 8.1.4(@types/node@24.13.3)(yaml@2.9.0)
 
+  extensions/discord:
+    devDependencies:
+      '@massion/extension-sdk':
+        specifier: workspace:*
+        version: link:../../packages/extension-sdk
+
+  extensions/github:
+    devDependencies:
+      '@massion/extension-sdk':
+        specifier: workspace:*
+        version: link:../../packages/extension-sdk
+
+  extensions/slack:
+    devDependencies:
+      '@massion/extension-sdk':
+        specifier: workspace:*
+        version: link:../../packages/extension-sdk
+
   packages/application:
     dependencies:
       '@massion/assurance':

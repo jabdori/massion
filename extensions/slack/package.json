@@ -1,0 +1,27 @@
+{
+  "name": "@massion-ext/slack",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "files": [
+    "dist",
+    "massion.extension.json",
+    "README.md",
+    "LICENSE"
+  ],
+  "massion": {
+    "manifest": "massion.extension.json"
+  },
+  "exports": "./dist/worker.js",
+  "scripts": {
+    "build": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\" && tsc -p tsconfig.json",
+    "test": "vitest run src",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "devDependencies": {
+    "@massion/extension-sdk": "workspace:*"
+  },
+  "engines": {
+    "node": ">=24.0.0"
+  }
+}

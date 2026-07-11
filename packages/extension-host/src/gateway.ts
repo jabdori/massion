@@ -4,6 +4,7 @@ import type { ExtensionChangeInput, InvokeExtensionInput, RollbackExtensionInput
 
 interface LifecycleGatewayPort {
   install(context: TenantContext, input: ExtensionChangeInput): Promise<unknown>;
+  installBundled?(context: TenantContext, input: ExtensionChangeInput): Promise<unknown>;
   update(context: TenantContext, input: ExtensionChangeInput): Promise<unknown>;
   rollback(context: TenantContext, input: RollbackExtensionInput): Promise<unknown>;
   list(context: TenantContext): Promise<readonly unknown[]>;
@@ -101,6 +102,19 @@ export class ExtensionGateway {
       archive: input.archive,
       environment: input.environment ?? "local",
       riskClass: input.riskClass ?? "extension-update",
+      executionId: input.executionId ?? `surface:${input.commandId}`,
+      ...(input.installApprovalId === undefined ? {} : { installApprovalId: input.installApprovalId }),
+      ...(input.permissionApprovalId === undefined ? {} : { permissionApprovalId: input.permissionApprovalId }),
+    });
+  }
+
+  public async installBundled(context: TenantContext, input: Parameters<ExtensionGateway["install"]>[1]) {
+    if (!this.lifecycle.installBundled) throw new Error("bundled Extension 설치를 지원하지 않습니다");
+    return await this.lifecycle.installBundled(context, {
+      commandId: input.commandId,
+      archive: input.archive,
+      environment: input.environment ?? "local",
+      riskClass: input.riskClass ?? "extension-install",
       executionId: input.executionId ?? `surface:${input.commandId}`,
       ...(input.installApprovalId === undefined ? {} : { installApprovalId: input.installApprovalId }),
       ...(input.permissionApprovalId === undefined ? {} : { permissionApprovalId: input.permissionApprovalId }),
