@@ -184,3 +184,10 @@ DEFINE FIELD risk_class ON governance_policy_decision TYPE string;
 DEFINE FIELD external ON governance_policy_decision TYPE bool;
 `,
 );
+
+export const GOVERNANCE_GROWTH_AUTONOMY_MIGRATION = defineMigration(
+  "0055-governance-growth-autonomy",
+  `
+DEFINE FIELD automation_mode ON governance_policy_decision TYPE option<string> ASSERT $value = NONE OR $value IN ['review', 'auto'];
+`,
+);

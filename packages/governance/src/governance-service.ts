@@ -4,9 +4,19 @@ import type { OrganizationService, TenantContext } from "@massion/identity";
 import { applyMigrations, type MassionDatabase } from "@massion/storage";
 
 import { CedarAuthorizer } from "./cedar-authorizer.js";
-import type { ApprovalRequirement, EvaluatePolicyInput, PolicyDecision, PolicyRequest } from "./contracts.js";
+import type {
+  ApprovalRequirement,
+  EvaluatePolicyInput,
+  GrowthAutomationMode,
+  PolicyDecision,
+  PolicyRequest,
+} from "./contracts.js";
 import { PolicyStore } from "./policy-store.js";
-import { GOVERNANCE_DECISION_CONTEXT_MIGRATION, GOVERNANCE_DECISION_MIGRATION } from "./schema.js";
+import {
+  GOVERNANCE_DECISION_CONTEXT_MIGRATION,
+  GOVERNANCE_DECISION_MIGRATION,
+  GOVERNANCE_GROWTH_AUTONOMY_MIGRATION,
+} from "./schema.js";
 
 interface DecisionRecord {
   readonly decision_id: string;
@@ -18,6 +28,7 @@ interface DecisionRecord {
   readonly reasons_json: string;
   readonly errors_json: string;
   readonly requirement_json?: string;
+  readonly automation_mode?: GrowthAutomationMode;
   readonly request_json: string;
   readonly created_at: unknown;
 }
@@ -48,14 +59,19 @@ function matches(requirement: ApprovalRequirement, request: PolicyRequest): bool
   );
 }
 
-function invariantRequirement(action: string): ApprovalRequirement | undefined {
+function automationMode(request: PolicyRequest): GrowthAutomationMode | undefined {
+  const mode = request.context.automationMode;
+  return mode === "review" || mode === "auto" ? mode : undefined;
+}
+
+function invariantRequirement(action: string, mode?: GrowthAutomationMode): ApprovalRequirement | undefined {
   const governed = new Set([
     "policy.activate",
     "extension.permission_increase",
-    "growth.adopt",
     "emergency.stop.disable",
     "declaration.apply",
   ]);
+  if (action === "growth.adopt" && mode !== "auto") governed.add(action);
   if (!governed.has(action)) return undefined;
   return {
     requirementId: `invariant-${action.replaceAll(".", "-")}`,
@@ -82,7 +98,11 @@ export class GovernanceService {
     organizations: OrganizationService,
     policies: PolicyStore,
   ): Promise<GovernanceService> {
-    await applyMigrations(database, [GOVERNANCE_DECISION_MIGRATION, GOVERNANCE_DECISION_CONTEXT_MIGRATION]);
+    await applyMigrations(database, [
+      GOVERNANCE_DECISION_MIGRATION,
+      GOVERNANCE_DECISION_CONTEXT_MIGRATION,
+      GOVERNANCE_GROWTH_AUTONOMY_MIGRATION,
+    ]);
     return new GovernanceService(database, organizations, policies);
   }
 
@@ -96,6 +116,7 @@ export class GovernanceService {
     let reasons: readonly string[] = [];
     let errors: readonly string[] = [];
     let requirement: ApprovalRequirement | undefined;
+    const mode = automationMode(input.request);
     const active = await this.policies.getActivePolicy(context);
     if (!active) {
       errors = ["active_policy_missing"];
@@ -111,7 +132,7 @@ export class GovernanceService {
       if (authorization.decision === "allow") {
         requirement =
           active.requirements.find((candidate) => matches(candidate, input.request)) ??
-          invariantRequirement(input.request.action);
+          invariantRequirement(input.request.action, mode);
         outcome = requirement ? "require_approval" : "allow";
       }
     }
@@ -124,7 +145,7 @@ export class GovernanceService {
       riskClass: input.request.context.riskClass,
     };
     await this.database.query(
-      "CREATE governance_policy_decision CONTENT { decision_id: $decision_id, organization_id: $organization_id, command_id: $command_id, policy_version_id: $policy_version_id, request_hash: $request_hash, principal_type: $principal_type, principal_id: $principal_id, action: $action, resource_type: $resource_type, resource_id: $resource_id, resource_revision: $resource_revision, environment: $environment, risk_class: $risk_class, external: $external, request_summary_json: $summary_json, outcome: $outcome, reasons_json: $reasons_json, errors_json: $errors_json, requirement_json: $requirement_json, request_json: $request_json, created_at: time::now() };",
+      "CREATE governance_policy_decision CONTENT { decision_id: $decision_id, organization_id: $organization_id, command_id: $command_id, policy_version_id: $policy_version_id, request_hash: $request_hash, principal_type: $principal_type, principal_id: $principal_id, action: $action, resource_type: $resource_type, resource_id: $resource_id, resource_revision: $resource_revision, environment: $environment, risk_class: $risk_class, external: $external, automation_mode: $automation_mode, request_summary_json: $summary_json, outcome: $outcome, reasons_json: $reasons_json, errors_json: $errors_json, requirement_json: $requirement_json, request_json: $request_json, created_at: time::now() };",
       {
         decision_id: decisionId,
         organization_id: context.organizationId,
@@ -141,6 +162,7 @@ export class GovernanceService {
           typeof input.request.context.environment === "string" ? input.request.context.environment : "unknown",
         risk_class: typeof input.request.context.riskClass === "string" ? input.request.context.riskClass : "unknown",
         external: input.request.context.external === true,
+        automation_mode: mode,
         summary_json: canonicalJson(summary),
         outcome,
         reasons_json: canonicalJson(reasons),
@@ -190,6 +212,7 @@ export class GovernanceService {
       reasons: JSON.parse(record.reasons_json) as string[],
       errors: JSON.parse(record.errors_json) as string[],
       ...(record.requirement_json ? { requirement: JSON.parse(record.requirement_json) as ApprovalRequirement } : {}),
+      ...(record.automation_mode ? { automationMode: record.automation_mode } : {}),
       createdAt: record.created_at,
     };
   }

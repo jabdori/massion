@@ -6,7 +6,7 @@ import { createDatabase, type MassionDatabase } from "@massion/storage";
 import { ApprovalStore } from "./approval-store.js";
 import { createDefaultPolicy } from "./defaults.js";
 import { EmergencyControl } from "./emergency.js";
-import { GovernanceApprovalRequiredError, GovernanceGate } from "./gate.js";
+import { GovernanceApprovalRequiredError, GovernanceGate, type GovernedAgentIdentityReader } from "./gate.js";
 import { GovernanceService } from "./governance-service.js";
 import { PermitStore } from "./permit.js";
 import { PolicyStore } from "./policy-store.js";
@@ -18,6 +18,12 @@ describe("Governance Gate", () => {
   let approvals: ApprovalStore;
   let emergency: EmergencyControl;
   let gate: GovernanceGate;
+  let agentIdentity: {
+    organizationId: string;
+    workId: string;
+    agentHandle: string;
+    status: "succeeded" | "failed";
+  };
 
   beforeEach(async () => {
     database = await createDatabase({ url: "mem://", namespace: "massion", database: crypto.randomUUID() });
@@ -30,7 +36,14 @@ describe("Governance Gate", () => {
     approvals = await ApprovalStore.create(database, organizations, governance);
     const permits = await PermitStore.create(database, organizations);
     emergency = await EmergencyControl.create(database, organizations, permits);
-    gate = new GovernanceGate(governance, approvals, permits, emergency);
+    agentIdentity = {
+      organizationId: context.organizationId,
+      workId: "work-1",
+      agentHandle: "growth",
+      status: "succeeded",
+    };
+    const identityReader: GovernedAgentIdentityReader = { resolve: async () => agentIdentity };
+    gate = new GovernanceGate(governance, approvals, permits, emergency, identityReader);
     const defaults = createDefaultPolicy("personal");
     const draft = await policies.createDraft(context, {
       commandId: crypto.randomUUID(),
@@ -145,5 +158,56 @@ describe("Governance Gate", () => {
     });
 
     expect(activated.status).toBe("active");
+  });
+
+  it("검증된 Growth Agent의 review는 승인 요청하고 auto는 허용한다", async () => {
+    const adoption = {
+      commandId: "growth-agent-adoption",
+      action: "growth.adopt",
+      workId: "work-1",
+      resource: { type: "Suggestion", id: "suggestion-1", revision: 1 },
+      environment: "local",
+      riskClass: "growth-adoption",
+      external: false,
+      executionId: "growth-execution-1",
+    } as const;
+
+    await expect(gate.authorizeAgent(context, { ...adoption, automationMode: "review" })).rejects.toBeInstanceOf(
+      GovernanceApprovalRequiredError,
+    );
+    await expect(
+      gate.authorizeAgent(context, {
+        ...adoption,
+        commandId: "growth-agent-adoption-auto",
+        automationMode: "auto",
+      }),
+    ).resolves.toMatchObject({ outcome: "allow" });
+    const [decisions] = await database.query<[Array<{ principal_type: string; principal_id: string }>]>(
+      "SELECT principal_type, principal_id FROM governance_policy_decision WHERE command_id = 'growth-agent-adoption-auto:policy';",
+    );
+    expect(decisions[0]).toEqual({ principal_type: "Agent", principal_id: "growth-execution-1" });
+  });
+
+  it("다른 Work·handle·상태의 실행은 Growth Agent로 가장할 수 없다", async () => {
+    const adoption = {
+      commandId: "invalid-growth-agent",
+      action: "growth.adopt",
+      workId: "work-1",
+      automationMode: "auto" as const,
+      resource: { type: "Suggestion", id: "suggestion-1", revision: 1 },
+      environment: "local",
+      riskClass: "growth-adoption",
+      external: false,
+      executionId: "delivery-execution-1",
+    };
+
+    agentIdentity = { ...agentIdentity, agentHandle: "delivery-coordination" };
+    await expect(gate.authorizeAgent(context, adoption)).rejects.toThrow("Growth Agent");
+    agentIdentity = { ...agentIdentity, agentHandle: "growth", status: "failed" };
+    await expect(gate.authorizeAgent(context, adoption)).rejects.toThrow("succeeded");
+    agentIdentity = { ...agentIdentity, status: "succeeded", workId: "other-work" };
+    await expect(gate.authorizeAgent(context, adoption)).rejects.toThrow("Work");
+    agentIdentity = { ...agentIdentity, workId: "work-1", organizationId: "other-organization" };
+    await expect(gate.authorizeAgent(context, adoption)).rejects.toThrow("organization");
   });
 });
