@@ -5,6 +5,7 @@ import { OrganizationGrowthProjection } from "@massion/organization";
 
 import { growthChecksum, type MemoryEntry, type PromptAgentSection, type PromptMemoryStore } from "./prompt-memory.js";
 import type { SuggestionTargetKind } from "./reflection.js";
+import { assertGrowthSecurity } from "./security.js";
 
 export interface GrowthTargetState {
   readonly targetKind: SuggestionTargetKind;
@@ -76,6 +77,7 @@ export function applyGrowthPatch(
   snapshot: Readonly<Record<string, unknown>>,
   patch: Readonly<Record<string, unknown>>,
 ): Readonly<Record<string, unknown>> {
+  assertGrowthSecurity(patch, { maxBytes: 256 * 1024, maxDepth: 8, maxOperations: 256 });
   if (kind === "prompt") {
     exactKeys(patch, ["agentHandle", "instruction"]);
     const sections = records(snapshot, "sections");

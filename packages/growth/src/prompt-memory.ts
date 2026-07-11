@@ -5,6 +5,7 @@ import type { OrganizationNode } from "@massion/organization";
 import { applyMigrations, type MassionDatabase, type QueryExecutor } from "@massion/storage";
 
 import { GROWTH_PROMPT_MEMORY_MIGRATION } from "./schema.js";
+import { assertGrowthSecurity } from "./security.js";
 
 export interface PromptAgentSection {
   readonly agentHandle: string;
@@ -229,6 +230,7 @@ function prompt(record: PromptRecord): EffectivePromptVersion {
 }
 
 function validateSections(sections: readonly PromptAgentSection[]): void {
+  assertGrowthSecurity(sections, { maxBytes: 1024 * 1024, maxDepth: 6, maxOperations: 2000 });
   if (sections.length === 0 || sections.length > 200) throw new Error("Prompt section은 1~200개여야 합니다");
   const handles = new Set<string>();
   for (const section of sections) {
@@ -241,6 +243,7 @@ function validateSections(sections: readonly PromptAgentSection[]): void {
 }
 
 function validateEntries(entries: readonly MemoryEntry[]): void {
+  assertGrowthSecurity(entries, { maxBytes: 1024 * 1024, maxDepth: 6, maxOperations: 5000 });
   if (entries.length > 500) throw new Error("Memory entry는 500개 이하여야 합니다");
   for (const entry of entries) {
     if (!entry.key.trim() || !entry.value.trim() || entry.value.length > 10_000)
