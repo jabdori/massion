@@ -67,6 +67,15 @@ describe("IntegrationIngress", () => {
       externalUserId: user,
       userId: context.userId,
     });
+    const resource =
+      platform === "slack" ? "C012ABCDEF" : platform === "discord" ? "423456789012345678" : "massion/project";
+    await store.bindChannel(context, {
+      commandId: `bind-channel-${platform}`,
+      installationId: installation.installationId,
+      externalResourceId: resource,
+      resourceKind: platform === "github" ? "repository" : "channel",
+      events: ["*"],
+    });
     return installation;
   }
 

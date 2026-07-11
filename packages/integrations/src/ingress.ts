@@ -111,10 +111,17 @@ export class IntegrationIngress {
       const externalTenantId = field(payload, "team_id");
       const externalUserId = field(event, "user");
       const actor = await this.dependencies.store.resolveVerifiedActor("slack", externalTenantId, externalUserId);
+      const channelId = field(event, "channel");
+      await this.dependencies.store.assertBoundResource(
+        actor.context,
+        actor.installation.installationId,
+        channelId,
+        field(event, "type"),
+      );
       const normalized = await this.dependencies.connectors.invoke("slack", "surfaceConnectors:slack", {
         kind: "command",
         userId: externalUserId,
-        channelId: field(event, "channel"),
+        channelId,
         text: field(event, "text").replace(/^<@[A-Z0-9]+>\s*/u, ""),
       });
       await this.accept(
@@ -143,6 +150,12 @@ export class IntegrationIngress {
         }
       : { kind: "command", userId: externalUserId, channelId, text: field(values, "text") };
     const actor = await this.dependencies.store.resolveVerifiedActor("slack", externalTenantId, externalUserId);
+    await this.dependencies.store.assertBoundResource(
+      actor.context,
+      actor.installation.installationId,
+      channelId,
+      payload ? "interaction" : "slash-command",
+    );
     const normalized = await this.dependencies.connectors.invoke("slack", "surfaceConnectors:slack", connectorInput);
     await this.accept(
       actor.context,
@@ -180,13 +193,20 @@ export class IntegrationIngress {
       : options;
     const optionRecord = Object.fromEntries(nested.map((option) => [String(option.name), option.value]));
     const actor = await this.dependencies.store.resolveVerifiedActor("discord", externalTenantId, externalUserId);
+    const channelId = field(payload, "channel_id");
+    await this.dependencies.store.assertBoundResource(
+      actor.context,
+      actor.installation.installationId,
+      channelId,
+      `interaction.${String(payload.type)}`,
+    );
     const normalized = await this.dependencies.connectors.invoke("discord", "surfaceConnectors:discord", {
       kind: payload.type === 3 ? "component" : "command",
       name: data.name,
       subcommand: first?.name,
       customId: data.custom_id,
       userId: externalUserId,
-      channelId: field(payload, "channel_id"),
+      channelId,
       options: optionRecord,
     });
     await this.accept(
@@ -217,6 +237,13 @@ export class IntegrationIngress {
     const actor = await this.dependencies.store.resolveVerifiedActor("github", externalTenantId, externalUserId);
     const event = request.headers["x-github-event"] ?? "";
     const action = typeof payload.action === "string" ? payload.action : "unknown";
+    const repository = object(payload.repository, "GitHub repository");
+    await this.dependencies.store.assertBoundResource(
+      actor.context,
+      actor.installation.installationId,
+      field(repository, "full_name"),
+      event,
+    );
     const normalized = await this.dependencies.connectors.invoke("github", "surfaceConnectors:github", {
       ...payload,
       event,

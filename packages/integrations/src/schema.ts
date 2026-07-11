@@ -132,8 +132,32 @@ DEFINE INDEX integration_interaction_hash ON integration_interaction_handle FIEL
 `,
 );
 
+export const INTEGRATION_BINDING_MIGRATION = defineMigration(
+  "0077-integration-channel-binding",
+  `
+DEFINE TABLE integration_channel_binding SCHEMAFULL PERMISSIONS NONE;
+DEFINE FIELD channel_binding_id ON integration_channel_binding TYPE string;
+DEFINE FIELD organization_id ON integration_channel_binding TYPE string;
+DEFINE FIELD installation_id ON integration_channel_binding TYPE string;
+DEFINE FIELD external_resource_id ON integration_channel_binding TYPE string;
+DEFINE FIELD resource_kind ON integration_channel_binding TYPE string ASSERT $value IN ['channel', 'repository'];
+DEFINE FIELD maximum_classification ON integration_channel_binding TYPE string ASSERT $value IN ['public'];
+DEFINE FIELD events ON integration_channel_binding TYPE array<string>;
+DEFINE FIELD state ON integration_channel_binding TYPE string ASSERT $value IN ['active', 'revoked'];
+DEFINE FIELD revision ON integration_channel_binding TYPE int ASSERT $value > 0;
+DEFINE FIELD command_id ON integration_channel_binding TYPE string;
+DEFINE FIELD request_hash ON integration_channel_binding TYPE string ASSERT string::len($value) = 64;
+DEFINE FIELD created_at ON integration_channel_binding TYPE datetime;
+DEFINE FIELD updated_at ON integration_channel_binding TYPE datetime;
+DEFINE INDEX integration_channel_binding_id ON integration_channel_binding FIELDS organization_id, channel_binding_id UNIQUE;
+DEFINE INDEX integration_channel_binding_external ON integration_channel_binding FIELDS organization_id, installation_id, external_resource_id UNIQUE;
+DEFINE INDEX integration_channel_binding_command ON integration_channel_binding FIELDS organization_id, command_id UNIQUE;
+`,
+);
+
 export const INTEGRATION_MIGRATIONS = [
   INTEGRATION_MIGRATION,
   INTEGRATION_PAYLOAD_MIGRATION,
   INTEGRATION_INTERACTION_MIGRATION,
+  INTEGRATION_BINDING_MIGRATION,
 ] as const;

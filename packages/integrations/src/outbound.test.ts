@@ -36,6 +36,13 @@ describe("IntegrationOutboundDispatcher", () => {
         scopes: ["chat:write"],
       })
     ).installationId;
+    await store.bindChannel(context, {
+      commandId: "bind-outbound-channel",
+      installationId,
+      externalResourceId: "C012ABCDEF",
+      resourceKind: "channel",
+      events: ["surface.response"],
+    });
     connector.mockClear();
     network.mockClear();
     network.mockResolvedValue({ status: 200, headers: {}, body: { ok: true, ts: "1234.5678" } });

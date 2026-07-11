@@ -213,4 +213,34 @@ describe("IntegrationStore", () => {
       }),
     ).resolves.toMatchObject({ externalId: "1234.5678", replayed: false });
   });
+
+  it("명시적으로 연결한 channel·repository와 event만 외부 Surface에 허용한다", async () => {
+    const installation = await store.connect(context, {
+      commandId: "connect-channel",
+      platform: "github",
+      externalTenantId: "11223344",
+      credentialRef: "credential:github:channel",
+      scopes: ["metadata:read"],
+    });
+    const binding = await store.bindChannel(context, {
+      commandId: "bind-repository",
+      installationId: installation.installationId,
+      externalResourceId: "massion/project",
+      resourceKind: "repository",
+      events: ["issues", "pull_request"],
+    });
+    expect(binding).toMatchObject({
+      externalResourceId: "massion/project",
+      maximumClassification: "public",
+    });
+    await expect(
+      store.assertBoundResource(context, installation.installationId, "massion/project", "issues"),
+    ).resolves.toBeUndefined();
+    await expect(
+      store.assertBoundResource(context, installation.installationId, "massion/other", "issues"),
+    ).rejects.toThrow("binding");
+    await expect(
+      store.assertBoundResource(context, installation.installationId, "massion/project", "release"),
+    ).rejects.toThrow("binding");
+  });
 });
