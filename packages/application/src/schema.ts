@@ -226,10 +226,27 @@ THEN {
 `,
 );
 
+export const APPLICATION_METRIC_MIGRATION = defineMigration(
+  "0070-application-metric",
+  `
+DEFINE TABLE application_metric SCHEMAFULL PERMISSIONS NONE;
+DEFINE FIELD metric_id ON application_metric TYPE string;
+DEFINE FIELD organization_id ON application_metric TYPE string;
+DEFINE FIELD idempotency_key ON application_metric TYPE string;
+DEFINE FIELD name ON application_metric TYPE string ASSERT $value IN ['application_request_total', 'application_request_duration_ms', 'application_command_total', 'application_event_projection_total', 'application_event_lag_ms', 'application_stream_total', 'application_stream_backpressure_total', 'application_run_total', 'cli_command_total'];
+DEFINE FIELD value ON application_metric TYPE number ASSERT $value >= 0;
+DEFINE FIELD dimensions_json ON application_metric TYPE string;
+DEFINE FIELD created_at ON application_metric TYPE datetime;
+DEFINE INDEX application_metric_id ON application_metric FIELDS organization_id, metric_id UNIQUE;
+DEFINE INDEX application_metric_once ON application_metric FIELDS organization_id, idempotency_key UNIQUE;
+`,
+);
+
 export const APPLICATION_MIGRATIONS = [
   APPLICATION_AUTH_MIGRATION,
   APPLICATION_COMMAND_MIGRATION,
   APPLICATION_OUTBOX_MIGRATION,
   APPLICATION_EVENT_MIGRATION,
   APPLICATION_RUN_MIGRATION,
+  APPLICATION_METRIC_MIGRATION,
 ] as const;

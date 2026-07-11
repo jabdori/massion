@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 import type { PolicyStore } from "@massion/governance";
 import type { IdentityService, OrganizationService, TenantContext } from "@massion/identity";
 import type { OrganizationGraphService } from "@massion/organization";
@@ -14,6 +16,7 @@ import { CoreWorkCoordinator, type CoreWorkStage, type CoreWorkStageExecutor } f
 import { ApplicationEventProjector } from "./event-projector.js";
 import { ApplicationEventStore } from "./event-store.js";
 import { ApplicationHttpServer, type ApplicationHttpServerOptions } from "./http-server.js";
+import { ApplicationMetricStore } from "./metrics.js";
 import {
   ApplicationQueryRegistry,
   registerApplicationQueries,
@@ -50,6 +53,7 @@ export class ApplicationProduct implements AsyncDisposable {
     public readonly tokens: ApplicationAccessTokenService,
     public readonly events: ApplicationEventStore,
     public readonly projector: ApplicationEventProjector,
+    public readonly metrics: ApplicationMetricStore,
   ) {}
 
   public static async create(dependencies: ApplicationProductDependencies): Promise<ApplicationProduct> {
@@ -70,6 +74,7 @@ export class ApplicationProduct implements AsyncDisposable {
     });
     const events = await ApplicationEventStore.create(dependencies.database, dependencies.organizations);
     const projector = await ApplicationEventProjector.create(dependencies.database, dependencies.organizations);
+    const metrics = await ApplicationMetricStore.create(dependencies.database, dependencies.organizations);
     const bootstrap = new LocalApplicationBootstrap(
       dependencies.identities,
       dependencies.organizations,
@@ -90,10 +95,45 @@ export class ApplicationProduct implements AsyncDisposable {
     const server = new ApplicationHttpServer(
       {
         auth: tokens,
-        queries,
+        queries: {
+          async query(context, scopes, operation, payload) {
+            const started = performance.now();
+            const operationClass = operation.split(".", 1)[0] ?? "unknown";
+            const key = randomUUID();
+            try {
+              const output = await queries.query(context, scopes, operation, payload);
+              await metrics.recordOnce(context, `${key}:total`, {
+                name: "application_request_total",
+                value: 1,
+                dimensions: { operationClass, result: "succeeded" },
+              });
+              await metrics.recordOnce(context, `${key}:duration`, {
+                name: "application_request_duration_ms",
+                value: performance.now() - started,
+                dimensions: { operationClass, result: "succeeded" },
+              });
+              return output;
+            } catch (error) {
+              await metrics.recordOnce(context, `${key}:total`, {
+                name: "application_request_total",
+                value: 1,
+                dimensions: { operationClass, result: "failed" },
+              });
+              throw error;
+            }
+          },
+        },
         commands: {
           async dispatch(context, scopes, input) {
             const output = await commands.dispatch(context, scopes, input);
+            await metrics.recordOnce(context, `${output.commandId}:command`, {
+              name: "application_command_total",
+              value: 1,
+              dimensions: {
+                operationClass: output.operation.split(".", 1)[0] ?? "unknown",
+                result: output.outcome,
+              },
+            });
             await projector.projectPending(context, 1_000);
             return output;
           },
@@ -110,7 +150,17 @@ export class ApplicationProduct implements AsyncDisposable {
       },
       dependencies.server,
     );
-    const product = new ApplicationProduct(server, commands, queries, runs, coordinator, tokens, events, projector);
+    const product = new ApplicationProduct(
+      server,
+      commands,
+      queries,
+      runs,
+      coordinator,
+      tokens,
+      events,
+      projector,
+      metrics,
+    );
     productReference.current = product;
     return product;
   }
@@ -139,7 +189,12 @@ export class ApplicationProduct implements AsyncDisposable {
   private schedule(context: TenantContext, runId: string): void {
     const task = Promise.resolve()
       .then(async () => {
-        await this.coordinator.recover(context, runId);
+        const run = await this.coordinator.recover(context, runId);
+        await this.metrics.recordOnce(context, `${runId}:run:${String(run.leaseGeneration)}`, {
+          name: "application_run_total",
+          value: 1,
+          dimensions: { stage: run.stage, result: run.status },
+        });
         await this.projector.projectPending(context, 1_000);
       })
       .catch((error: unknown) => {

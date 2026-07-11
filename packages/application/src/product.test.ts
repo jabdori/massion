@@ -64,6 +64,12 @@ describe("ApplicationProduct", () => {
       status: "completed",
       stage: "terminal",
     });
+    await expect(product.metrics.aggregate(initialized.context, "application_command_total")).resolves.toEqual([
+      { dimensions: { operationClass: "run", result: "accepted" }, value: 1 },
+    ]);
+    await expect(product.metrics.aggregate(initialized.context, "application_run_total")).resolves.toEqual([
+      { dimensions: { stage: "terminal", result: "completed" }, value: 1 },
+    ]);
     await expect(client.events()).resolves.toMatchObject({ events: expect.any(Array) });
   });
 });
