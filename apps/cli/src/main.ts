@@ -9,12 +9,13 @@ import { executeCliInvocation } from "./commands.js";
 import { CliConfigStore } from "./config.js";
 import { processJsonLines, writeWithBackpressure } from "./jsonl.js";
 import { initializeCli } from "./init.js";
+import { LocalDaemonManager } from "./local.js";
 import { parseCliArguments } from "./parser.js";
 import { renderCliOutput } from "./render.js";
 import { runHeadless } from "./run.js";
 import { resolveTokenReference } from "./token.js";
 
-const HELP = `mass - Massion AgentOS command line\n\n사용법: mass <init|status|run|watch|org|work|chat|task|approval|runtime|provider|ext|growth|doctor> [options]\n`;
+const HELP = `mass - Massion AgentOS command line\n\n사용법: mass <version|local|init|status|run|watch|org|work|chat|task|approval|runtime|provider|ext|growth|doctor> [options]\n`;
 
 async function readStdin(maximum = 1024 * 1024): Promise<Buffer> {
   const chunks: Buffer[] = [];
@@ -53,6 +54,28 @@ export async function runCli(argv = process.argv.slice(2)): Promise<number> {
     if (invocation.command === "help") {
       process.stdout.write(HELP);
       return 0;
+    }
+    if (invocation.command === "version") {
+      process.stdout.write("Massion AgentOS 1.0.0\n");
+      return 0;
+    }
+    if (invocation.command === "local") {
+      const manager = new LocalDaemonManager();
+      const value =
+        invocation.subcommand === "start"
+          ? await manager.start()
+          : invocation.subcommand === "status"
+            ? await manager.status()
+            : invocation.subcommand === "backup"
+              ? await manager.backup(invocation.arguments[0])
+              : await manager.stop();
+      process.stdout.write(
+        renderCliOutput(value, invocation.output, {
+          tty: process.stdout.isTTY,
+          noColor: process.env.NO_COLOR !== undefined,
+        }),
+      );
+      return value.status === "foreign" ? 5 : 0;
     }
     if (invocation.command === "init") {
       const endpoint = invocation.arguments[0] ?? "http://127.0.0.1:7331";

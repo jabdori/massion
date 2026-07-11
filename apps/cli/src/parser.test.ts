@@ -3,6 +3,16 @@ import { describe, expect, it } from "vitest";
 import { parseCliArguments } from "./parser.js";
 
 describe("mass CLI parser", () => {
+  it("local daemon lifecycle과 version command를 파싱한다", () => {
+    expect(parseCliArguments(["local", "start"])).toMatchObject({ command: "local", subcommand: "start" });
+    expect(parseCliArguments(["local", "backup", "/tmp/backup.json"])).toMatchObject({
+      command: "local",
+      subcommand: "backup",
+      arguments: ["/tmp/backup.json"],
+    });
+    expect(parseCliArguments(["version"])).toMatchObject({ command: "version" });
+  });
+
   it.each([
     [["init"], "init", undefined],
     [["status", "--json"], "status", undefined],
