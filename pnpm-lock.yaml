@@ -121,6 +121,9 @@ importers:
       '@massion/organization':
         specifier: workspace:*
         version: link:../organization
+      '@massion/records':
+        specifier: workspace:*
+        version: link:../records
       '@massion/runtime':
         specifier: workspace:*
         version: link:../runtime

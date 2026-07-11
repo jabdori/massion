@@ -215,3 +215,129 @@ DEFINE INDEX prompt_version_event_id ON prompt_version_event FIELDS organization
 DEFINE EVENT prompt_version_event_immutable ON TABLE prompt_version_event WHEN $event IN ['UPDATE', 'DELETE'] THEN { THROW 'PromptVersion event는 immutable입니다'; };
 `,
 );
+
+export const GROWTH_REFLECTION_MIGRATION = defineMigration(
+  "0056-growth-reflection",
+  `
+DEFINE TABLE growth_trigger SCHEMAFULL PERMISSIONS NONE;
+DEFINE FIELD trigger_id ON growth_trigger TYPE string;
+DEFINE FIELD organization_id ON growth_trigger TYPE string;
+DEFINE FIELD work_id ON growth_trigger TYPE string;
+DEFINE FIELD records_run_id ON growth_trigger TYPE string;
+DEFINE FIELD work_record_id ON growth_trigger TYPE string;
+DEFINE FIELD verification_id ON growth_trigger TYPE string;
+DEFINE FIELD assurance_run_id ON growth_trigger TYPE string;
+DEFINE FIELD requester_user_id ON growth_trigger TYPE string;
+DEFINE FIELD status ON growth_trigger TYPE string ASSERT $value IN ['pending', 'claimed', 'completed', 'skipped', 'blocked'];
+DEFINE FIELD configuration_version_id ON growth_trigger TYPE option<string>;
+DEFINE FIELD worker_id ON growth_trigger TYPE option<string>;
+DEFINE FIELD lease_expires_at ON growth_trigger TYPE option<datetime>;
+DEFINE FIELD skip_reason ON growth_trigger TYPE option<string>;
+DEFINE FIELD created_at ON growth_trigger TYPE datetime;
+DEFINE FIELD updated_at ON growth_trigger TYPE datetime;
+DEFINE INDEX growth_trigger_id ON growth_trigger FIELDS organization_id, trigger_id UNIQUE;
+DEFINE INDEX growth_trigger_records_run ON growth_trigger FIELDS organization_id, records_run_id UNIQUE;
+DEFINE INDEX growth_trigger_status ON growth_trigger FIELDS organization_id, status, created_at;
+
+DEFINE TABLE reflection_run SCHEMAFULL PERMISSIONS NONE;
+DEFINE FIELD reflection_run_id ON reflection_run TYPE string;
+DEFINE FIELD organization_id ON reflection_run TYPE string;
+DEFINE FIELD work_id ON reflection_run TYPE string;
+DEFINE FIELD records_run_id ON reflection_run TYPE string;
+DEFINE FIELD trigger_id ON reflection_run TYPE string;
+DEFINE FIELD configuration_version_id ON reflection_run TYPE string;
+DEFINE FIELD runtime_execution_id ON reflection_run TYPE option<string>;
+DEFINE FIELD snapshot_hash ON reflection_run TYPE string ASSERT string::len($value) = 64;
+DEFINE FIELD status ON reflection_run TYPE string ASSERT $value IN ['planned', 'generating', 'validated', 'completed', 'blocked', 'cancelled'];
+DEFINE FIELD version ON reflection_run TYPE int ASSERT $value >= 1;
+DEFINE FIELD attempt ON reflection_run TYPE int ASSERT $value >= 1;
+DEFINE FIELD command_id ON reflection_run TYPE string;
+DEFINE FIELD request_hash ON reflection_run TYPE string ASSERT string::len($value) = 64;
+DEFINE FIELD failure_json ON reflection_run TYPE option<string>;
+DEFINE FIELD created_at ON reflection_run TYPE datetime;
+DEFINE FIELD updated_at ON reflection_run TYPE datetime;
+DEFINE INDEX reflection_run_id ON reflection_run FIELDS organization_id, reflection_run_id UNIQUE;
+DEFINE INDEX reflection_run_trigger ON reflection_run FIELDS organization_id, trigger_id, attempt UNIQUE;
+
+DEFINE TABLE growth_suggestion SCHEMAFULL PERMISSIONS NONE;
+DEFINE FIELD suggestion_id ON growth_suggestion TYPE string;
+DEFINE FIELD organization_id ON growth_suggestion TYPE string;
+DEFINE FIELD work_id ON growth_suggestion TYPE string;
+DEFINE FIELD reflection_run_id ON growth_suggestion TYPE string;
+DEFINE FIELD target_kind ON growth_suggestion TYPE string ASSERT $value IN ['prompt', 'memory', 'policy', 'organization'];
+DEFINE FIELD operation ON growth_suggestion TYPE string;
+DEFINE FIELD patch_json ON growth_suggestion TYPE string ASSERT string::len($value) <= 65536;
+DEFINE FIELD summary ON growth_suggestion TYPE string ASSERT string::len($value) <= 2000;
+DEFINE FIELD rationale ON growth_suggestion TYPE string ASSERT string::len($value) <= 2000;
+DEFINE FIELD expected_effect ON growth_suggestion TYPE string ASSERT string::len($value) <= 2000;
+DEFINE FIELD risk_summary ON growth_suggestion TYPE string ASSERT string::len($value) <= 2000;
+DEFINE FIELD source_reference_ids ON growth_suggestion TYPE array<string> ASSERT array::len($value) <= 100;
+DEFINE FIELD status ON growth_suggestion TYPE string ASSERT $value IN ['proposed', 'evaluated', 'awaiting-review', 'adopted', 'rejected', 'superseded'];
+DEFINE FIELD created_at ON growth_suggestion TYPE datetime;
+DEFINE INDEX growth_suggestion_id ON growth_suggestion FIELDS organization_id, suggestion_id UNIQUE;
+DEFINE EVENT growth_suggestion_invariant ON TABLE growth_suggestion
+WHEN $event IN ['UPDATE', 'DELETE']
+THEN {
+  IF $event = 'DELETE' { THROW 'Growth Suggestion은 삭제할 수 없습니다'; };
+  IF $after.suggestion_id != $before.suggestion_id OR $after.organization_id != $before.organization_id OR
+    $after.work_id != $before.work_id OR $after.reflection_run_id != $before.reflection_run_id OR
+    $after.target_kind != $before.target_kind OR $after.operation != $before.operation OR
+    $after.patch_json != $before.patch_json OR $after.summary != $before.summary OR
+    $after.rationale != $before.rationale OR $after.expected_effect != $before.expected_effect OR
+    $after.risk_summary != $before.risk_summary OR $after.source_reference_ids != $before.source_reference_ids OR
+    $after.created_at != $before.created_at {
+    THROW 'Growth Suggestion 내용은 immutable입니다';
+  };
+};
+
+DEFINE TABLE growth_source_reference SCHEMAFULL PERMISSIONS NONE;
+DEFINE FIELD source_reference_id ON growth_source_reference TYPE string;
+DEFINE FIELD organization_id ON growth_source_reference TYPE string;
+DEFINE FIELD work_id ON growth_source_reference TYPE string;
+DEFINE FIELD suggestion_id ON growth_source_reference TYPE string;
+DEFINE FIELD source_kind ON growth_source_reference TYPE string;
+DEFINE FIELD source_id ON growth_source_reference TYPE string;
+DEFINE FIELD source_checksum ON growth_source_reference TYPE string ASSERT string::len($value) = 64;
+DEFINE FIELD captured_revision ON growth_source_reference TYPE string;
+DEFINE FIELD created_at ON growth_source_reference TYPE datetime;
+DEFINE INDEX growth_source_reference_id ON growth_source_reference FIELDS organization_id, source_reference_id UNIQUE;
+DEFINE INDEX growth_source_reference_unique ON growth_source_reference FIELDS organization_id, suggestion_id, source_kind, source_id UNIQUE;
+DEFINE EVENT growth_source_reference_immutable ON TABLE growth_source_reference WHEN $event IN ['UPDATE', 'DELETE'] THEN { THROW 'Growth source reference는 immutable입니다'; };
+
+DEFINE TABLE growth_event SCHEMAFULL PERMISSIONS NONE;
+DEFINE FIELD event_id ON growth_event TYPE string;
+DEFINE FIELD organization_id ON growth_event TYPE string;
+DEFINE FIELD aggregate_type ON growth_event TYPE string;
+DEFINE FIELD aggregate_id ON growth_event TYPE string;
+DEFINE FIELD event_type ON growth_event TYPE string;
+DEFINE FIELD payload_json ON growth_event TYPE string ASSERT string::len($value) <= 65536;
+DEFINE FIELD created_at ON growth_event TYPE datetime;
+DEFINE INDEX growth_event_id ON growth_event FIELDS organization_id, event_id UNIQUE;
+DEFINE EVENT growth_event_immutable ON TABLE growth_event WHEN $event IN ['UPDATE', 'DELETE'] THEN { THROW 'Growth event는 immutable입니다'; };
+
+DEFINE EVENT growth_trigger_on_records_completed ON TABLE records_run
+WHEN $event = 'UPDATE' AND $before.status != 'completed' AND $after.status = 'completed'
+THEN {
+  LET $records = (SELECT work_record_id FROM work_record WHERE organization_id = $after.organization_id AND work_id = $after.work_id AND records_run_id = $after.records_run_id AND finalized = true AND schema_version = 'massion.work-record.v1' LIMIT 1);
+  LET $works = (SELECT request_id FROM work WHERE organization_id = $after.organization_id AND work_id = $after.work_id AND status = 'completed' LIMIT 1);
+  IF array::len($records) = 1 AND array::len($works) = 1 {
+    LET $requests = (SELECT requester_user_id FROM work_request WHERE organization_id = $after.organization_id AND request_id = $works[0].request_id LIMIT 1);
+    IF array::len($requests) = 1 {
+      CREATE growth_trigger CONTENT {
+        trigger_id: crypto::sha256(string::concat($after.organization_id, '|', $after.records_run_id)),
+        organization_id: $after.organization_id,
+        work_id: $after.work_id,
+        records_run_id: $after.records_run_id,
+        work_record_id: $records[0].work_record_id,
+        verification_id: $after.verification_id,
+        assurance_run_id: $after.assurance_run_id,
+        requester_user_id: $requests[0].requester_user_id,
+        status: 'pending',
+        created_at: time::now(),
+        updated_at: time::now()
+      };
+    };
+  };
+};
+`,
+);

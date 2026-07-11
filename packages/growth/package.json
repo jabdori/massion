@@ -14,7 +14,7 @@
   ],
   "scripts": {
     "build": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\" && tsc -p tsconfig.json",
-    "build-deps": "pnpm --filter @massion/storage exec tsc -p tsconfig.json && pnpm --filter @massion/identity exec tsc -p tsconfig.json && pnpm --filter @massion/governance exec tsc -p tsconfig.json && pnpm --filter @massion/organization exec tsc -p tsconfig.json && pnpm --filter @massion/work exec tsc -p tsconfig.json && pnpm --filter @massion/runtime exec tsc -p tsconfig.json",
+    "build-deps": "pnpm --filter @massion/storage exec tsc -p tsconfig.json && pnpm --filter @massion/identity exec tsc -p tsconfig.json && pnpm --filter @massion/governance exec tsc -p tsconfig.json && pnpm --filter @massion/organization exec tsc -p tsconfig.json && pnpm --filter @massion/work exec tsc -p tsconfig.json && pnpm --filter @massion/runtime exec tsc -p tsconfig.json && pnpm --filter @massion/records exec tsc -p tsconfig.json",
     "test": "pnpm build-deps && vitest run src",
     "typecheck": "pnpm build-deps && tsc -p tsconfig.json --noEmit"
   },
@@ -22,6 +22,7 @@
     "@massion/identity": "workspace:*",
     "@massion/governance": "workspace:*",
     "@massion/organization": "workspace:*",
+    "@massion/records": "workspace:*",
     "@massion/runtime": "workspace:*",
     "@massion/storage": "workspace:*",
     "@massion/work": "workspace:*"
