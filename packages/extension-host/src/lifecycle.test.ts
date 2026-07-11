@@ -157,6 +157,23 @@ describe("ExtensionLifecycleService", () => {
     expect(JSON.stringify(activated)).not.toContain(root);
   });
 
+  it("bundled 공식 Extension도 검사·승인·health를 거쳐 built-in으로 설치한다", async () => {
+    const activated = await lifecycle.installBundled(context, {
+      commandId: "install-bundled",
+      archive: versionTar("1.0.0"),
+      environment: "local",
+      riskClass: "extension-install",
+      executionId: "surface-bundled",
+    });
+
+    expect(launcher.inputs[0]?.trustLevel).toBe("built-in");
+    await expect(store.getVersionDetails(context, activated.versionId)).resolves.toMatchObject({
+      trustLevel: "built-in",
+      sourceKind: "bundled",
+    });
+    expect(authorizer.calls).toHaveLength(1);
+  });
+
   it("update health 실패 시 이전 active worker와 pointer를 유지한다", async () => {
     const first = await lifecycle.install(context, {
       commandId: "install-before-failure",

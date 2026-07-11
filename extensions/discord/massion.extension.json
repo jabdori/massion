@@ -1,0 +1,38 @@
+{
+  "schemaVersion": "massion.extension.v1",
+  "name": "@massion-ext/discord",
+  "version": "1.0.0",
+  "displayName": "Discord",
+  "description": "Discord 요청, 진행 알림, 제한된 승인과 결과 Surface",
+  "license": "Apache-2.0",
+  "compatibility": { "agentOS": ">=1.0.0 <2.0.0", "node": ">=24.0.0", "surrealDB": ">=3.2.0 <4.0.0" },
+  "runtime": {
+    "entrypoint": "dist/worker.js",
+    "protocol": "massion.extension.rpc.v1",
+    "healthTimeoutMs": 5000,
+    "stopTimeoutMs": 5000
+  },
+  "permissions": {
+    "tools": [{ "id": "application.surface", "operations": ["query", "command"] }],
+    "network": [{ "origin": "https://discord.com", "methods": ["POST", "PATCH"] }],
+    "files": [],
+    "secrets": [
+      { "slot": "discord-public-key", "purpose": "Discord interaction 서명 검증" },
+      { "slot": "discord-bot-token", "purpose": "Discord REST API 인증" }
+    ],
+    "process": [],
+    "mcp": [],
+    "storage": { "quotaBytes": 1048576, "maxValueBytes": 65536 },
+    "events": ["work.created.v1", "work.updated.v1", "approval.requested.v1"]
+  },
+  "contributions": {
+    "runtimeTools": [],
+    "organizationTemplates": [],
+    "growthSignals": [],
+    "growthTargets": [],
+    "surfaceConnectors": [{ "id": "discord", "handler": "discord" }],
+    "eventConsumers": [{ "id": "discord-notification", "handler": "discord-notification" }],
+    "skills": []
+  },
+  "uninstall": { "retention": "retain" }
+}

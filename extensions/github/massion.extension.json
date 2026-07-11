@@ -1,0 +1,38 @@
+{
+  "schemaVersion": "massion.extension.v1",
+  "name": "@massion-ext/github",
+  "version": "1.0.0",
+  "displayName": "GitHub",
+  "description": "GitHub Issue, Pull Request, Check, Review, Records와 Release 통합",
+  "license": "Apache-2.0",
+  "compatibility": { "agentOS": ">=1.0.0 <2.0.0", "node": ">=24.0.0", "surrealDB": ">=3.2.0 <4.0.0" },
+  "runtime": {
+    "entrypoint": "dist/worker.js",
+    "protocol": "massion.extension.rpc.v1",
+    "healthTimeoutMs": 5000,
+    "stopTimeoutMs": 5000
+  },
+  "permissions": {
+    "tools": [{ "id": "application.surface", "operations": ["query", "command"] }],
+    "network": [{ "origin": "https://api.github.com", "methods": ["GET", "POST", "PUT", "PATCH"] }],
+    "files": [],
+    "secrets": [
+      { "slot": "github-webhook-secret", "purpose": "GitHub webhook HMAC 검증" },
+      { "slot": "github-app-private-key", "purpose": "GitHub App JWT 서명" }
+    ],
+    "process": [],
+    "mcp": [],
+    "storage": { "quotaBytes": 4194304, "maxValueBytes": 262144 },
+    "events": ["delivery.committed.v1", "verification.completed.v1", "records.run.completed.v1", "work.completed.v1"]
+  },
+  "contributions": {
+    "runtimeTools": [],
+    "organizationTemplates": [],
+    "growthSignals": [],
+    "growthTargets": [],
+    "surfaceConnectors": [{ "id": "github", "handler": "github" }],
+    "eventConsumers": [{ "id": "github-sync", "handler": "github-sync" }],
+    "skills": []
+  },
+  "uninstall": { "retention": "retain" }
+}
