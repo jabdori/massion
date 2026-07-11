@@ -24,7 +24,8 @@ describe("Registry HTTP deterministic fuzz", () => {
         const length = next() % 128;
         let suffix = "";
         for (let cursor = 0; cursor < length; cursor += 1) suffix += alphabet[next() % alphabet.length];
-        const method = ["GET", "HEAD", "PUT", "DELETE"][next() % 4]!;
+        const method = ["GET", "HEAD", "PUT", "DELETE"][next() % 4];
+        if (!method) throw new Error("결정론적 method corpus index가 유효하지 않습니다");
         const response = await fetch(`${address.url}/npm/${suffix}`, { method });
         expect([200, 404, 405]).toContain(response.status);
         expect((await response.arrayBuffer()).byteLength).toBeLessThanOrEqual(1024);
