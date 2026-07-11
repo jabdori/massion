@@ -62,13 +62,65 @@ export async function invokeGitHub(contribution: string, input: unknown): Promis
         arguments: { request, external: { kind: "github-comment", id: integer(comment.id, "comment ID") } },
       };
     }
-    if (["pull_request", "pull_request_review", "check_suite", "push"].includes(event))
+    if (event === "pull_request") {
+      const pull = record(source.pull_request, "GitHub pull request");
+      const head = record(pull.head, "GitHub pull request head");
       return {
         kind: "application-event",
-        operation: `github.${event}.${action}`,
+        operation: `github.pull_request.${action}`,
         actorExternalId,
         repository: repo,
-        payload: source,
+        payload: {
+          number: integer(pull.number, "pull request number"),
+          title: text(pull.title, "pull request title", 256),
+          state: text(pull.state, "pull request state", 32),
+          headSha: text(head.sha, "pull request head SHA", 40),
+        },
+      };
+    }
+    if (event === "pull_request_review") {
+      const pull = record(source.pull_request, "GitHub pull request");
+      const review = record(source.review, "GitHub review");
+      return {
+        kind: "application-event",
+        operation: `github.pull_request_review.${action}`,
+        actorExternalId,
+        repository: repo,
+        payload: {
+          pullNumber: integer(pull.number, "pull request number"),
+          reviewId: integer(review.id, "review ID"),
+          state: text(review.state, "review state", 32),
+          body: typeof review.body === "string" ? review.body.slice(0, 32_000) : "",
+        },
+      };
+    }
+    if (event === "check_suite") {
+      const suite = record(source.check_suite, "GitHub check suite");
+      return {
+        kind: "application-event",
+        operation: `github.check_suite.${action}`,
+        actorExternalId,
+        repository: repo,
+        payload: {
+          checkSuiteId: integer(suite.id, "check suite ID"),
+          status: text(suite.status, "check suite status", 32),
+          conclusion: typeof suite.conclusion === "string" ? suite.conclusion : undefined,
+          headSha: text(suite.head_sha, "check suite head SHA", 40),
+        },
+      };
+    }
+    if (event === "push")
+      return {
+        kind: "application-event",
+        operation: "github.push.received",
+        actorExternalId,
+        repository: repo,
+        payload: {
+          ref: text(source.ref, "push ref", 512),
+          before: text(source.before, "push before SHA", 40),
+          after: text(source.after, "push after SHA", 40),
+          forced: source.forced === true,
+        },
       };
     return { kind: "ignored", reason: "unsupported-event" };
   }

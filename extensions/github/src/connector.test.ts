@@ -97,4 +97,21 @@ describe("GitHub 공식 Extension", () => {
       }),
     ).rejects.toThrow("path");
   });
+  it("Review와 Check webhook은 전체 payload 대신 Evidence용 최소 필드만 반환한다", async () => {
+    const result = await invokeGitHub("surfaceConnectors:github", {
+      event: "pull_request_review",
+      action: "submitted",
+      repository,
+      sender,
+      pull_request: { number: 7 },
+      review: { id: 99, state: "approved", body: "좋습니다", secret_extra: "저장 금지" },
+      installation: { token: "저장 금지" },
+    });
+    expect(result).toMatchObject({
+      operation: "github.pull_request_review.submitted",
+      payload: { pullNumber: 7, reviewId: 99, state: "approved", body: "좋습니다" },
+    });
+    expect(JSON.stringify(result)).not.toContain("secret_extra");
+    expect(JSON.stringify(result)).not.toContain("installation");
+  });
 });
