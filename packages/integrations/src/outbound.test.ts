@@ -78,6 +78,7 @@ describe("IntegrationOutboundDispatcher", () => {
     await expect(dispatcher.runOnce(context, "sender-a", new Date("2100-01-01T00:00:00.000Z"))).resolves.toBe(true);
 
     expect(connector).toHaveBeenCalledWith(
+      context,
       "slack",
       "eventConsumers:slack-notification",
       expect.objectContaining({

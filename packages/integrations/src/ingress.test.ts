@@ -17,12 +17,18 @@ describe("IntegrationIngress", () => {
   const discordKeys = generateKeyPairSync("ed25519");
   const discordPublicKey = discordKeys.publicKey.export({ type: "spki", format: "der" }).subarray(-32).toString("hex");
   const now = new Date("2026-07-11T12:00:00.000Z");
-  const connector = vi.fn(async (_platform: string, _contribution: string, input: unknown) => ({
-    kind: "application-command",
-    source: input,
-  }));
+  const connector = vi.fn(
+    async (_context: TenantContext, _platform: string, _contribution: string, input: unknown) => ({
+      kind: "application-command",
+      source: input,
+    }),
+  );
   const scheduled = vi.fn();
-  const oauthCallback = vi.fn(async (platform: "slack" | "github") => ({ connected: true, platform }));
+  const oauthCallback = vi.fn(async (platform: "slack" | "github") => ({
+    connected: true,
+    platform,
+    returnTo: "https://massion.example/extensions",
+  }));
   let ingress: IntegrationIngress;
 
   beforeEach(async () => {
@@ -107,6 +113,7 @@ describe("IntegrationIngress", () => {
 
     expect(response).toMatchObject({ status: 200, body: { response_type: "ephemeral" } });
     expect(connector).toHaveBeenCalledWith(
+      context,
       "slack",
       "surfaceConnectors:slack",
       expect.objectContaining({ kind: "command" }),
@@ -180,6 +187,7 @@ describe("IntegrationIngress", () => {
     });
     expect(response).toEqual({ status: 202, body: { accepted: true } });
     expect(connector).toHaveBeenCalledWith(
+      context,
       "github",
       "surfaceConnectors:github",
       expect.objectContaining({ event: "issues", action: "opened" }),
@@ -206,7 +214,7 @@ describe("IntegrationIngress", () => {
       headers: {},
       body: Buffer.alloc(0),
     });
-    expect(response).toEqual({ status: 200, body: { connected: true, platform: "github" } });
+    expect(response).toEqual({ status: 303, headers: { location: "https://massion.example/extensions" } });
     expect(oauthCallback).toHaveBeenCalledWith("github", { state: "state", installation_id: "123" });
   });
 });
