@@ -97,7 +97,9 @@ export class GovernanceGate {
     input: GovernedGrowthAgentActionInput,
     executor?: QueryExecutor,
   ): Promise<GovernanceAuthorization> {
-    if (input.action !== "growth.adopt") throw new Error("Growth Agent authorization은 growth.adopt만 지원합니다");
+    if (input.action !== "growth.adopt" && input.action !== "growth.revert") {
+      throw new Error("Growth Agent authorization은 growth.adopt와 growth.revert만 지원합니다");
+    }
     await this.emergency.assertExecutionAllowed(context);
     if (!this.agentIdentities) throw new Error("검증된 Agent identity reader가 없습니다");
     const identity = await this.agentIdentities.resolve(context, input.executionId);

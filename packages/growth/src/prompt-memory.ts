@@ -411,6 +411,74 @@ export class PromptMemoryStore {
     );
   }
 
+  public async revertPromptGrowth(
+    context: TenantContext,
+    input: { readonly commandId: string; readonly expectedVersionId: string; readonly targetVersionId: string },
+    executor: QueryExecutor,
+  ): Promise<PromptDefinitionVersion> {
+    await this.organizations.verifyTenantContext(context, undefined, executor);
+    const current = await this.activeDefinition(executor, context.organizationId);
+    if (!current || current.prompt_definition_version_id !== input.expectedVersionId)
+      throw new Error("PromptDefinition revert precondition이 일치하지 않습니다");
+    const target = await this.definitionById(executor, context.organizationId, input.targetVersionId);
+    const requestHash = growthChecksum(input);
+    const repeated = await this.definitionByCommand(executor, context.organizationId, input.commandId);
+    if (repeated) {
+      if (repeated.request_hash !== requestHash)
+        throw new Error("같은 commandId에 다른 Prompt revert payload를 사용할 수 없습니다");
+      return checkedDefinition(repeated);
+    }
+    await executor.query(
+      "UPDATE prompt_definition_version SET status = 'superseded', active_guard_key = NONE, superseded_at = time::now() WHERE organization_id = $organization_id AND prompt_definition_version_id = $version_id;",
+      { organization_id: context.organizationId, version_id: current.prompt_definition_version_id },
+    );
+    return checkedDefinition(
+      await this.createDefinition(
+        executor,
+        context,
+        input.commandId,
+        requestHash,
+        checkedDefinition(target).sections,
+        current,
+      ),
+    );
+  }
+
+  public async revertMemoryGrowth(
+    context: TenantContext,
+    input: { readonly commandId: string; readonly expectedVersionId: string; readonly targetVersionId: string },
+    executor: QueryExecutor,
+  ): Promise<MemoryVersion> {
+    await this.organizations.verifyTenantContext(context, undefined, executor);
+    const current = await this.activeMemory(executor, context.organizationId, "organization");
+    if (!current || current.memory_version_id !== input.expectedVersionId)
+      throw new Error("Memory revert precondition이 일치하지 않습니다");
+    const target = await this.memoryById(executor, context.organizationId, input.targetVersionId);
+    const requestHash = growthChecksum(input);
+    const repeated = await this.memoryByCommand(executor, context.organizationId, input.commandId);
+    if (repeated) {
+      if (repeated.request_hash !== requestHash)
+        throw new Error("같은 commandId에 다른 Memory revert payload를 사용할 수 없습니다");
+      return checkedMemory(repeated);
+    }
+    await executor.query(
+      "UPDATE memory_version SET status = 'superseded', active_guard_key = NONE, superseded_at = time::now() WHERE organization_id = $organization_id AND memory_version_id = $version_id;",
+      { organization_id: context.organizationId, version_id: current.memory_version_id },
+    );
+    return checkedMemory(
+      await this.createMemory(
+        executor,
+        context,
+        input.commandId,
+        requestHash,
+        target.scope,
+        target.subject_id,
+        checkedMemory(target).entries,
+        current,
+      ),
+    );
+  }
+
   public async activatePromptDefinition(
     context: TenantContext,
     input: {
@@ -620,6 +688,28 @@ export class PromptMemoryStore {
       "SELECT * FROM memory_version WHERE active_guard_key = $guard LIMIT 1;",
       { guard: `${organizationId}:memory:${key}` },
     );
+    return records[0];
+  }
+
+  private async definitionById(
+    executor: QueryExecutor,
+    organizationId: string,
+    versionId: string,
+  ): Promise<DefinitionRecord> {
+    const [records] = await executor.query<[DefinitionRecord[]]>(
+      "SELECT * FROM prompt_definition_version WHERE organization_id = $organization_id AND prompt_definition_version_id = $version_id LIMIT 1;",
+      { organization_id: organizationId, version_id: versionId },
+    );
+    if (!records[0]) throw new Error("PromptDefinition target version을 찾을 수 없습니다");
+    return records[0];
+  }
+
+  private async memoryById(executor: QueryExecutor, organizationId: string, versionId: string): Promise<MemoryRecord> {
+    const [records] = await executor.query<[MemoryRecord[]]>(
+      "SELECT * FROM memory_version WHERE organization_id = $organization_id AND memory_version_id = $version_id LIMIT 1;",
+      { organization_id: organizationId, version_id: versionId },
+    );
+    if (!records[0]) throw new Error("Memory target version을 찾을 수 없습니다");
     return records[0];
   }
 

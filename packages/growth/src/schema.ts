@@ -477,3 +477,67 @@ DEFINE INDEX growth_effect_baseline_id ON growth_effect_baseline FIELDS organiza
 DEFINE INDEX growth_effect_baseline_adoption ON growth_effect_baseline FIELDS organization_id, adoption_id UNIQUE;
 `,
 );
+
+export const GROWTH_EFFECT_REVERT_MIGRATION = defineMigration(
+  "0059-growth-effect-revert",
+  `
+DEFINE FIELD contract_json ON growth_effect_baseline TYPE option<string>;
+DEFINE FIELD captured_at ON growth_effect_baseline TYPE option<datetime>;
+DEFINE FIELD exposure_status ON growth_adoption_run TYPE option<string> ASSERT $value = NONE OR $value IN ['active', 'suspended', 'reverted'];
+
+DEFINE TABLE growth_effect_observation SCHEMAFULL PERMISSIONS NONE;
+DEFINE FIELD observation_id ON growth_effect_observation TYPE string;
+DEFINE FIELD organization_id ON growth_effect_observation TYPE string;
+DEFINE FIELD adoption_id ON growth_effect_observation TYPE string;
+DEFINE FIELD score ON growth_effect_observation TYPE number;
+DEFINE FIELD observation_count ON growth_effect_observation TYPE int ASSERT $value >= 0;
+DEFINE FIELD contract_json ON growth_effect_observation TYPE string ASSERT string::len($value) <= 65536;
+DEFINE FIELD contract_checksum ON growth_effect_observation TYPE string ASSERT string::len($value) = 64;
+DEFINE FIELD command_id ON growth_effect_observation TYPE string;
+DEFINE FIELD request_hash ON growth_effect_observation TYPE string ASSERT string::len($value) = 64;
+DEFINE FIELD created_at ON growth_effect_observation TYPE datetime;
+DEFINE INDEX growth_effect_observation_id ON growth_effect_observation FIELDS organization_id, observation_id UNIQUE;
+DEFINE INDEX growth_effect_observation_command ON growth_effect_observation FIELDS organization_id, command_id UNIQUE;
+DEFINE EVENT growth_effect_observation_immutable ON TABLE growth_effect_observation WHEN $event IN ['UPDATE', 'DELETE'] THEN { THROW 'Growth effect observation은 immutable입니다'; };
+
+DEFINE TABLE growth_effect_evaluation SCHEMAFULL PERMISSIONS NONE;
+DEFINE FIELD effect_evaluation_id ON growth_effect_evaluation TYPE string;
+DEFINE FIELD organization_id ON growth_effect_evaluation TYPE string;
+DEFINE FIELD adoption_id ON growth_effect_evaluation TYPE string;
+DEFINE FIELD baseline_id ON growth_effect_evaluation TYPE string;
+DEFINE FIELD observation_id ON growth_effect_evaluation TYPE string;
+DEFINE FIELD result ON growth_effect_evaluation TYPE string ASSERT $value IN ['improved', 'stable', 'degraded', 'inconclusive'];
+DEFINE FIELD comparison_json ON growth_effect_evaluation TYPE string ASSERT string::len($value) <= 65536;
+DEFINE FIELD command_id ON growth_effect_evaluation TYPE string;
+DEFINE FIELD request_hash ON growth_effect_evaluation TYPE string ASSERT string::len($value) = 64;
+DEFINE FIELD created_at ON growth_effect_evaluation TYPE datetime;
+DEFINE INDEX growth_effect_evaluation_id ON growth_effect_evaluation FIELDS organization_id, effect_evaluation_id UNIQUE;
+DEFINE INDEX growth_effect_evaluation_command ON growth_effect_evaluation FIELDS organization_id, command_id UNIQUE;
+DEFINE EVENT growth_effect_evaluation_immutable ON TABLE growth_effect_evaluation WHEN $event IN ['UPDATE', 'DELETE'] THEN { THROW 'Growth effect evaluation은 immutable입니다'; };
+
+DEFINE TABLE growth_revert_operation SCHEMAFULL PERMISSIONS NONE;
+DEFINE FIELD revert_operation_id ON growth_revert_operation TYPE string;
+DEFINE FIELD organization_id ON growth_revert_operation TYPE string;
+DEFINE FIELD adoption_id ON growth_revert_operation TYPE string;
+DEFINE FIELD suggestion_id ON growth_revert_operation TYPE string;
+DEFINE FIELD target_kind ON growth_revert_operation TYPE string ASSERT $value IN ['prompt', 'memory', 'policy', 'organization'];
+DEFINE FIELD mode ON growth_revert_operation TYPE string ASSERT $value IN ['auto', 'review', 'explicit'];
+DEFINE FIELD before_version_id ON growth_revert_operation TYPE string;
+DEFINE FIELD expected_after_version_id ON growth_revert_operation TYPE string;
+DEFINE FIELD expected_after_checksum ON growth_revert_operation TYPE string ASSERT string::len($value) = 64;
+DEFINE FIELD reverted_version_id ON growth_revert_operation TYPE option<string>;
+DEFINE FIELD preview_json ON growth_revert_operation TYPE string ASSERT string::len($value) <= 65536;
+DEFINE FIELD preview_checksum ON growth_revert_operation TYPE string ASSERT string::len($value) = 64;
+DEFINE FIELD governance_decision_id ON growth_revert_operation TYPE option<string>;
+DEFINE FIELD approval_id ON growth_revert_operation TYPE option<string>;
+DEFINE FIELD status ON growth_revert_operation TYPE string ASSERT $value IN ['awaiting-review', 'completed', 'rejected', 'blocked'];
+DEFINE FIELD command_id ON growth_revert_operation TYPE string;
+DEFINE FIELD request_hash ON growth_revert_operation TYPE string ASSERT string::len($value) = 64;
+DEFINE FIELD created_by_user_id ON growth_revert_operation TYPE string;
+DEFINE FIELD created_at ON growth_revert_operation TYPE datetime;
+DEFINE FIELD updated_at ON growth_revert_operation TYPE datetime;
+DEFINE INDEX growth_revert_operation_id ON growth_revert_operation FIELDS organization_id, revert_operation_id UNIQUE;
+DEFINE INDEX growth_revert_operation_command ON growth_revert_operation FIELDS organization_id, command_id UNIQUE;
+DEFINE INDEX growth_revert_operation_adoption ON growth_revert_operation FIELDS organization_id, adoption_id UNIQUE;
+`,
+);
