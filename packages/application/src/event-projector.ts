@@ -353,6 +353,22 @@ export class ApplicationEventProjector {
           payload: {},
         };
       }
+      case "run-event": {
+        const source = await this.source<{
+          run_id: string;
+          lease_generation: number;
+          stage: string;
+          event_type: string;
+        }>(executor, "application_run_event", "event_id", outbox);
+        return {
+          ...common,
+          type: eventType("run", source.event_type),
+          authorKind: "system",
+          authorId: "application",
+          resource: { type: "ApplicationRun", id: source.run_id, revision: source.lease_generation },
+          payload: { stage: source.stage },
+        };
+      }
       default:
         throw new Error(`허용되지 않은 Application outbox source입니다: ${outbox.source_kind}`);
     }
@@ -369,6 +385,7 @@ export class ApplicationEventProjector {
       "growth_event:event_id",
       "application_token_event:event_id",
       "application_command_event:event_id",
+      "application_run_event:event_id",
     ]);
     if (!allowed.has(`${table}:${idField}`)) throw new Error("Application source query allowlist 위반입니다");
     const source = await first<T>(

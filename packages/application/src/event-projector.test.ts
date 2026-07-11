@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { ApplicationEventProjector } from "./event-projector.js";
 import { ApplicationEventStore } from "./event-store.js";
+import { ApplicationRunStore } from "./run-store.js";
 
 describe("ApplicationEventProjector", () => {
   let database: MassionDatabase;
@@ -87,5 +88,22 @@ describe("ApplicationEventProjector", () => {
     const projected = (await events.read(context, { after: 0, limit: 10 })).events;
     expect(projected.map((event) => event.sequence)).toEqual([1, 2, 3, 4]);
     expect(new Set(projected.map((event) => event.eventId))).toHaveProperty("size", 4);
+  });
+
+  it("Core run 상태를 correlation이 보존된 공개 event로 투영한다", async () => {
+    const runs = await ApplicationRunStore.create(database, organizations);
+    const run = await runs.start(context, {
+      commandId: "projector-run-command-0001",
+      correlationId: "projector-run-correlation-0001",
+      request: {},
+    });
+    await projector.projectPending(context, 10);
+    const projected = (await events.read(context, { after: 0, limit: 10 })).events;
+    expect(projected.at(-1)).toMatchObject({
+      type: "run.started",
+      correlationId: "projector-run-correlation-0001",
+      resource: { type: "ApplicationRun", id: run.runId, revision: 0 },
+      payload: { stage: "intake" },
+    });
   });
 });
