@@ -567,6 +567,9 @@ importers:
 
   packages/subscriptions:
     dependencies:
+      '@massion/identity':
+        specifier: workspace:*
+        version: link:../identity
       '@massion/storage':
         specifier: workspace:*
         version: link:../storage
