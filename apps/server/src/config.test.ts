@@ -4,7 +4,12 @@ import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { loadServerConfig, parseServerConfig } from "./config.js";
+import {
+  loadDatabaseProvisionConfig,
+  loadServerConfig,
+  parseDatabaseProvisionConfig,
+  parseServerConfig,
+} from "./config.js";
 
 const key = Buffer.alloc(32, 7).toString("base64url");
 
@@ -29,6 +34,8 @@ describe("server configuration", () => {
         MASSION_REGISTRY_KEY: key,
         MASSION_REGISTRY_PUBLIC_URL: "https://massion.example.com",
         MASSION_DATABASE_URL: "ws://db:8000/rpc",
+        MASSION_DATABASE_USER: "massion_runtime",
+        MASSION_DATABASE_PASSWORD: "runtime-password",
         MASSION_HTTP_HOST: "0.0.0.0",
         MASSION_TRUSTED_PROXIES: "172.20.0.10,::ffff:172.20.0.10",
       }),
@@ -36,6 +43,51 @@ describe("server configuration", () => {
       mode: "team",
       server: { host: "0.0.0.0", trustedProxyAddresses: ["172.20.0.10", "::ffff:172.20.0.10"] },
     });
+  });
+
+  it("team API는 runtime DB 계정만 받고 owner provisioning 계정을 받지 않는다", () => {
+    const environment = {
+      MASSION_MODE: "team",
+      MASSION_TOKEN_KEY: key,
+      MASSION_REGISTRY_KEY: key,
+      MASSION_REGISTRY_PUBLIC_URL: "https://massion.example.com",
+      MASSION_DATABASE_URL: "ws://db:8000/rpc",
+      MASSION_DATABASE_USER: "massion_runtime",
+      MASSION_DATABASE_PASSWORD: "runtime-password",
+      MASSION_HTTP_HOST: "0.0.0.0",
+      MASSION_TRUSTED_PROXIES: "127.0.0.1",
+    };
+    expect(parseServerConfig(environment).database.authentication).toEqual({
+      username: "massion_runtime",
+      password: "runtime-password",
+      scope: "database",
+    });
+    expect(() =>
+      parseServerConfig({
+        ...environment,
+        MASSION_DATABASE_PROVISION_USER: "root",
+        MASSION_DATABASE_PROVISION_PASSWORD: "owner-password",
+      }),
+    ).toThrow("provisioning credential");
+  });
+
+  it("별도 provisioning은 owner와 runtime 계정을 분리하고 같은 비밀을 거부한다", () => {
+    const environment = {
+      MASSION_DATABASE_URL: "ws://db:8000/rpc",
+      MASSION_DATABASE_NAMESPACE: "massion",
+      MASSION_DATABASE_NAME: "massion",
+      MASSION_DATABASE_PROVISION_USER: "root",
+      MASSION_DATABASE_PROVISION_PASSWORD: "owner-password",
+      MASSION_DATABASE_USER: "massion_runtime",
+      MASSION_DATABASE_PASSWORD: "runtime-password",
+    };
+    expect(parseDatabaseProvisionConfig(environment)).toMatchObject({
+      owner: { username: "root", password: "owner-password" },
+      runtime: { username: "massion_runtime", password: "runtime-password" },
+    });
+    expect(() =>
+      parseDatabaseProvisionConfig({ ...environment, MASSION_DATABASE_PASSWORD: "owner-password" }),
+    ).toThrow("서로 다른 password");
   });
 
   it("짧거나 잘못 인코딩된 key와 team embedded DB를 거부한다", () => {
@@ -66,6 +118,30 @@ describe("server configuration", () => {
       );
       await chmod(path, 0o644);
       await expect(loadServerConfig({ MASSION_TOKEN_KEY_FILE: path })).rejects.toThrow("owner-only");
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("provisioning secret file 두 개를 owner-only로 읽는다", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "massion-provision-config-"));
+    const ownerPath = join(directory, "owner-password");
+    const runtimePath = join(directory, "runtime-password");
+    try {
+      await writeFile(ownerPath, "owner-password", { mode: 0o600 });
+      await writeFile(runtimePath, "runtime-password", { mode: 0o600 });
+      await expect(
+        loadDatabaseProvisionConfig({
+          MASSION_DATABASE_URL: "ws://db:8000/rpc",
+          MASSION_DATABASE_PROVISION_USER: "root",
+          MASSION_DATABASE_PROVISION_PASSWORD_FILE: ownerPath,
+          MASSION_DATABASE_USER: "massion_runtime",
+          MASSION_DATABASE_PASSWORD_FILE: runtimePath,
+        }),
+      ).resolves.toMatchObject({
+        owner: { username: "root", password: "owner-password" },
+        runtime: { username: "massion_runtime", password: "runtime-password" },
+      });
     } finally {
       await rm(directory, { recursive: true, force: true });
     }

@@ -25,11 +25,11 @@ services:
     image: massion-surrealdb:3.2.0
     restart: unless-stopped
     environment:
-      SURREAL_PASSWORD_FILE: /run/secrets/database_password
+      SURREAL_PASSWORD_FILE: /run/secrets/database_owner_password
       SURREAL_USER: root
       SURREAL_LOG: info
     secrets:
-      - database_password
+      - database_owner_password
     volumes:
       - surreal-data:/data
     networks:
@@ -41,6 +41,34 @@ services:
       timeout: 3s
       retries: 12
       start_period: 15s
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+  database-provision:
+    image: massion:1.0.0
+    command: ["node", "dist/main.js", "provision"]
+    restart: "no"
+    depends_on:
+      surrealdb:
+        condition: service_healthy
+    environment:
+      MASSION_DATABASE_URL: ws://surrealdb:8000/rpc
+      MASSION_DATABASE_NAMESPACE: massion
+      MASSION_DATABASE_NAME: massion
+      MASSION_DATABASE_PROVISION_USER: root
+      MASSION_DATABASE_PROVISION_PASSWORD_FILE: /run/secrets/database_owner_password
+      MASSION_DATABASE_USER: massion_runtime
+      MASSION_DATABASE_PASSWORD_FILE: /run/secrets/database_password
+    secrets:
+      - database_owner_password
+      - database_password
+    networks:
+      - backend
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
     security_opt:
       - no-new-privileges:true
     cap_drop:
@@ -58,12 +86,14 @@ services:
       surrealdb:
         condition: service_healthy
         restart: true
+      database-provision:
+        condition: service_completed_successfully
     environment:
       MASSION_MODE: team
       MASSION_DATABASE_URL: ws://surrealdb:8000/rpc
       MASSION_DATABASE_NAMESPACE: massion
       MASSION_DATABASE_NAME: massion
-      MASSION_DATABASE_USER: root
+      MASSION_DATABASE_USER: massion_runtime
       MASSION_DATABASE_PASSWORD_FILE: /run/secrets/database_password
       MASSION_TOKEN_KEY_FILE: /run/secrets/token_key
       MASSION_REGISTRY_KEY_FILE: /run/secrets/registry_key
@@ -153,6 +183,8 @@ volumes:
   surreal-data:
 
 secrets:
+  database_owner_password:
+    file: ${MASSION_DATABASE_OWNER_PASSWORD_FILE:-./deploy/secrets/database-owner-password}
   database_password:
     file: ${MASSION_DATABASE_PASSWORD_FILE:-./deploy/secrets/database-password}
   token_key:

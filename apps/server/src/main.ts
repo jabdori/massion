@@ -4,7 +4,7 @@ import { isAbsolute } from "node:path";
 import { createDatabase } from "@massion/storage";
 
 import { restoreOperationalBackup, writeOperationalBackup } from "./backup.js";
-import { loadServerConfig } from "./config.js";
+import { loadDatabaseProvisionConfig, loadServerConfig } from "./config.js";
 import { createMassionDaemon, provisionRemoteDatabase } from "./product.js";
 import { ShutdownSignalController } from "./signals.js";
 
@@ -20,11 +20,16 @@ function exitAfterLog(code: number, event: string, fields: Readonly<Record<strin
 }
 
 async function main(): Promise<void> {
-  const config = await loadServerConfig();
   const [command, path, extra] = process.argv.slice(2);
+  if (command === "provision") {
+    if (path || extra) throw new Error("provision에는 인수가 없어야 합니다");
+    await provisionRemoteDatabase(await loadDatabaseProvisionConfig());
+    exitAfterLog(0, "server.provision.completed");
+    return;
+  }
+  const config = await loadServerConfig();
   if (command === "backup" || command === "restore") {
     if (!path || extra || !isAbsolute(path)) throw new Error(`${command}에는 절대 파일 경로 하나가 필요합니다`);
-    await provisionRemoteDatabase(config);
     const database = await createDatabase(config.database);
     let receipt: Awaited<ReturnType<typeof writeOperationalBackup>>;
     try {

@@ -6,28 +6,27 @@ import { FileArtifactStore, RegistryCatalog, RegistryHttpHandler, SurrealRegistr
 import { createDatabase } from "@massion/storage";
 import { WorkService } from "@massion/work";
 
-import type { ServerConfig } from "./config.js";
+import type { DatabaseProvisionConfig, ServerConfig } from "./config.js";
 import { MassionDaemon } from "./daemon.js";
 import { RegistryReadHttpServer } from "./registry-server.js";
 import { JsonOperationalLogger, MetricRegistry, MetricsHttpServer } from "./telemetry.js";
 
 export async function provisionRemoteDatabase(
-  config: ServerConfig,
+  config: DatabaseProvisionConfig,
   fetcher: typeof fetch = fetch,
   wait: (milliseconds: number) => Promise<void> = async (milliseconds) => {
     await new Promise((resolve) => setTimeout(resolve, milliseconds));
   },
 ): Promise<void> {
-  if (config.mode !== "team" || !config.database.authentication) return;
-  const endpoint = new URL(config.database.url);
+  const endpoint = new URL(config.url);
   endpoint.protocol = endpoint.protocol === "wss:" || endpoint.protocol === "https:" ? "https:" : "http:";
   endpoint.pathname = "/sql";
   endpoint.search = "";
   endpoint.hash = "";
   const authorization = Buffer.from(
-    `${config.database.authentication.username}:${config.database.authentication.password}`,
+    `${config.owner.username}:${config.owner.password}`,
   ).toString("base64");
-  const statement = `DEFINE NAMESPACE IF NOT EXISTS ${config.database.namespace}; USE NS ${config.database.namespace}; DEFINE DATABASE IF NOT EXISTS ${config.database.database};`;
+  const statement = `DEFINE NAMESPACE IF NOT EXISTS ${config.namespace}; USE NS ${config.namespace}; DEFINE DATABASE IF NOT EXISTS ${config.database}; USE DB ${config.database}; DEFINE USER OVERWRITE ${config.runtime.username} ON DATABASE PASSWORD ${JSON.stringify(config.runtime.password)} ROLES EDITOR;`;
   let status = 0;
   for (let attempt = 0; attempt < 10; attempt += 1) {
     try {
@@ -38,7 +37,19 @@ export async function provisionRemoteDatabase(
         signal: AbortSignal.timeout(3_000),
       });
       status = response.status;
-      if (response.ok) return;
+      if (response.ok) {
+        const results: unknown = await response.json().catch(() => undefined);
+        if (
+          Array.isArray(results) &&
+          results.length === 5 &&
+          results.every(
+            (result: unknown) =>
+              result !== null && typeof result === "object" && "status" in result && result.status === "OK",
+          )
+        )
+          return;
+        break;
+      }
       if (response.status !== 503) break;
     } catch {
       status = 0;
@@ -62,7 +73,6 @@ export function createLimitedExecutors(): Readonly<
 }
 
 export async function createMassionDaemon(config: ServerConfig): Promise<MassionDaemon> {
-  await provisionRemoteDatabase(config);
   const database = await createDatabase(config.database);
   try {
     const identities = await IdentityService.create(database);
