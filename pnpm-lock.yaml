@@ -36,7 +36,20 @@ importers:
         specifier: workspace:*
         version: link:../../packages/application
 
-  packages/application: {}
+  packages/application:
+    dependencies:
+      '@massion/governance':
+        specifier: workspace:*
+        version: link:../governance
+      '@massion/identity':
+        specifier: workspace:*
+        version: link:../identity
+      '@massion/organization':
+        specifier: workspace:*
+        version: link:../organization
+      '@massion/storage':
+        specifier: workspace:*
+        version: link:../storage
 
   packages/assurance:
     dependencies:
