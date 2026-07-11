@@ -8,7 +8,7 @@
   },
   "scripts": {
     "build": "pnpm build-deps && node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\" && tsc -p tsconfig.json",
-    "build-deps": "pnpm --filter @massion/application build",
+    "build-deps": "pnpm --filter @massion/application build && pnpm --filter @massion/registry build",
     "test": "pnpm build && vitest run src",
     "typecheck": "pnpm build-deps && tsc -p tsconfig.json --noEmit"
   },
@@ -17,6 +17,7 @@
     "@massion/governance": "workspace:*",
     "@massion/identity": "workspace:*",
     "@massion/organization": "workspace:*",
+    "@massion/registry": "workspace:*",
     "@massion/storage": "workspace:*",
     "@massion/work": "workspace:*"
   },

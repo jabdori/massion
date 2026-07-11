@@ -18,7 +18,7 @@ WORKDIR /opt/massion
 COPY --from=build --chown=node:node /opt/massion/ ./
 USER node
 ENV NODE_ENV=production
-EXPOSE 3141 9464
+EXPOSE 3141 3142 9464
 HEALTHCHECK --interval=10s --timeout=3s --start-period=30s --retries=6 \
   CMD ["node", "-e", "fetch('http://127.0.0.1:3141/health/ready').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
 ENTRYPOINT ["/usr/bin/dumb-init", "--"]

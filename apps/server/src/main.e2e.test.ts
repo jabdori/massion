@@ -30,11 +30,11 @@ describe("massion-server process", () => {
   });
 
   it.each([
-    { signal: "SIGTERM" as const, httpPort: "32142", metricsPort: "32145" },
-    { signal: "SIGINT" as const, httpPort: "32146", metricsPort: "32147" },
+    { signal: "SIGTERM" as const, httpPort: "32142", metricsPort: "32145", registryPort: "32148" },
+    { signal: "SIGINT" as const, httpPort: "32146", metricsPort: "32147", registryPort: "32149" },
   ])(
     "준비 완료 뒤 $signal에서 drain하고 종료 코드 0으로 끝난다",
-    async ({ signal, httpPort, metricsPort }) => {
+    async ({ signal, httpPort, metricsPort, registryPort }) => {
       const child = spawn(process.execPath, ["dist/main.js"], {
         cwd: new URL("..", import.meta.url),
         env: {
@@ -43,6 +43,7 @@ describe("massion-server process", () => {
           MASSION_DATABASE_URL: "mem://",
           MASSION_HTTP_PORT: httpPort,
           MASSION_METRICS_PORT: metricsPort,
+          MASSION_REGISTRY_PORT: registryPort,
           MASSION_SHUTDOWN_TIMEOUT_MS: "5000",
         },
         stdio: ["ignore", "pipe", "pipe"],

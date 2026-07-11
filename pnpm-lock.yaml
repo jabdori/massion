@@ -67,6 +67,9 @@ importers:
       '@massion/organization':
         specifier: workspace:*
         version: link:../../packages/organization
+      '@massion/registry':
+        specifier: workspace:*
+        version: link:../../packages/registry
       '@massion/storage':
         specifier: workspace:*
         version: link:../../packages/storage

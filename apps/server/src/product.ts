@@ -2,11 +2,13 @@ import { APPLICATION_RUN_STAGES, ApplicationProduct, type CoreWorkStageExecutor 
 import { PolicyStore } from "@massion/governance";
 import { IdentityService, OrganizationService } from "@massion/identity";
 import { OrganizationGraphService } from "@massion/organization";
+import { FileArtifactStore, RegistryCatalog, RegistryHttpHandler, SurrealRegistryStore } from "@massion/registry";
 import { createDatabase } from "@massion/storage";
 import { WorkService } from "@massion/work";
 
 import type { ServerConfig } from "./config.js";
 import { MassionDaemon } from "./daemon.js";
+import { RegistryReadHttpServer } from "./registry-server.js";
 import { JsonOperationalLogger, MetricRegistry, MetricsHttpServer } from "./telemetry.js";
 
 export async function provisionRemoteDatabase(
@@ -68,6 +70,14 @@ export async function createMassionDaemon(config: ServerConfig): Promise<Massion
     const graph = await OrganizationGraphService.create(database, organizations);
     const policies = await PolicyStore.create(database, organizations);
     const works = await WorkService.create(database, organizations, graph);
+    const registryStore = await SurrealRegistryStore.create(database, organizations);
+    const registryCatalog = new RegistryCatalog(registryStore.catalogStore(), { tokenSecret: config.registry.tokenKey });
+    const registryHandler = new RegistryHttpHandler({
+      catalog: registryCatalog,
+      artifacts: new FileArtifactStore(config.registry.artifactRoot),
+      publicBaseUrl: config.registry.publicBaseUrl,
+    });
+    const registryServer = new RegistryReadHttpServer(registryHandler, config.registry);
     const daemonReference: { current?: MassionDaemon } = {};
     const application = await ApplicationProduct.create({
       database,
@@ -99,7 +109,7 @@ export async function createMassionDaemon(config: ServerConfig): Promise<Massion
       application,
       database,
       shutdownTimeoutMs: config.shutdownTimeoutMs,
-      operationalServices: [metricsServer],
+      operationalServices: [registryServer, metricsServer],
       onState: (state) => {
         metrics.increment("massion_daemon_transition_total", { state });
       },

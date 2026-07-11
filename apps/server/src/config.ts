@@ -10,6 +10,13 @@ export interface ServerConfig {
   readonly server: ApplicationHttpServerOptions & { readonly host: string; readonly port: number };
   readonly metrics: { readonly host: string; readonly port: number };
   readonly tokenKey: { readonly keyId: string; readonly key: Buffer };
+  readonly registry: {
+    readonly host: string;
+    readonly port: number;
+    readonly publicBaseUrl: string;
+    readonly artifactRoot: string;
+    readonly tokenKey: Buffer;
+  };
   readonly shutdownTimeoutMs: number;
 }
 
@@ -61,6 +68,22 @@ export function parseServerConfig(environment: Readonly<Record<string, string | 
   const database = environment.MASSION_DATABASE_NAME ?? "massion";
   if (![namespace, database].every((name) => /^[A-Za-z][A-Za-z0-9_]{0,63}$/u.test(name)))
     throw new Error("SurrealDB namespace 또는 database 이름이 유효하지 않습니다");
+  const registryPort = integer(environment.MASSION_REGISTRY_PORT, 3142, 1, 65_535, "MASSION_REGISTRY_PORT");
+  const registryHost = environment.MASSION_REGISTRY_HOST ?? (mode === "local" ? "127.0.0.1" : "0.0.0.0");
+  if (mode === "local" && !new Set(["127.0.0.1", "::1", "localhost"]).has(registryHost))
+    throw new Error("local mode Registry host는 loopback이어야 합니다");
+  const registrySecret =
+    environment.MASSION_REGISTRY_KEY ?? (mode === "local" ? environment.MASSION_TOKEN_KEY : undefined);
+  if (!registrySecret) throw new Error("team mode에는 MASSION_REGISTRY_KEY 또는 secret file이 필요합니다");
+  const registryKey = tokenKey(registrySecret).key;
+  const publicBaseUrl = environment.MASSION_REGISTRY_PUBLIC_URL ?? `http://${registryHost}:${String(registryPort)}`;
+  const parsedPublicUrl = new URL(publicBaseUrl);
+  const publicLoopback = new Set(["127.0.0.1", "::1", "localhost"]).has(parsedPublicUrl.hostname);
+  if (
+    parsedPublicUrl.protocol !== "https:" &&
+    !(mode === "local" && publicLoopback && parsedPublicUrl.protocol === "http:")
+  )
+    throw new Error("Registry public URL은 team HTTPS 또는 local loopback HTTP여야 합니다");
   return {
     mode,
     database: {
@@ -79,6 +102,13 @@ export function parseServerConfig(environment: Readonly<Record<string, string | 
       port: integer(environment.MASSION_METRICS_PORT, 9464, 1, 65_535, "MASSION_METRICS_PORT"),
     },
     tokenKey: tokenKey(environment.MASSION_TOKEN_KEY),
+    registry: {
+      host: registryHost,
+      port: registryPort,
+      publicBaseUrl,
+      artifactRoot: environment.MASSION_REGISTRY_ARTIFACT_ROOT ?? "/var/lib/massion/registry",
+      tokenKey: registryKey,
+    },
     shutdownTimeoutMs: integer(environment.MASSION_SHUTDOWN_TIMEOUT_MS, 30_000, 1_000, 300_000, "shutdown timeout"),
   };
 }
@@ -98,6 +128,7 @@ export async function loadServerConfig(
   const references = [
     ["MASSION_TOKEN_KEY", "MASSION_TOKEN_KEY_FILE"],
     ["MASSION_DATABASE_PASSWORD", "MASSION_DATABASE_PASSWORD_FILE"],
+    ["MASSION_REGISTRY_KEY", "MASSION_REGISTRY_KEY_FILE"],
   ] as const;
   for (const [valueName, fileName] of references) {
     const value = environment[valueName];

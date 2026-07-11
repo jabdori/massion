@@ -10,6 +10,11 @@ data:
   MASSION_DATABASE_USER: root
   MASSION_DATABASE_PASSWORD_FILE: /run/massion-secrets/database-password
   MASSION_TOKEN_KEY_FILE: /run/massion-secrets/token-key
+  MASSION_REGISTRY_KEY_FILE: /run/massion-secrets/registry-key
+  MASSION_REGISTRY_HOST: 0.0.0.0
+  MASSION_REGISTRY_PORT: "3142"
+  MASSION_REGISTRY_PUBLIC_URL: https://massion.example.com
+  MASSION_REGISTRY_ARTIFACT_ROOT: /var/lib/massion/registry
   MASSION_HTTP_HOST: 0.0.0.0
   MASSION_HTTP_PORT: "3141"
   MASSION_METRICS_HOST: 127.0.0.1
@@ -19,3 +24,4 @@ data:
   MASSION_DOMAIN: massion.example.com
   MASSION_TLS_PORT: "8443"
   MASSION_UPSTREAM: 127.0.0.1:3141
+  MASSION_REGISTRY_UPSTREAM: 127.0.0.1:3142

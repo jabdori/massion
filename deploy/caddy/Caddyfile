@@ -7,6 +7,16 @@
 	tls /run/secrets/tls_certificate /run/secrets/tls_private_key
 	encode zstd gzip
 
+	@registry path /npm/*
+	handle @registry {
+		reverse_proxy {$MASSION_REGISTRY_UPSTREAM:massion:3142} {
+			transport http {
+				dial_timeout 3s
+				response_header_timeout 10s
+			}
+		}
+	}
+
 	@backend path /api/* /integrations/* /health/*
 	handle @backend {
 		reverse_proxy {$MASSION_UPSTREAM:massion:3141} {
