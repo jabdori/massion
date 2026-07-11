@@ -39,6 +39,8 @@ interface RecallRecord {
   category: RegistryRecall["category"];
   severity: RegistryRecall["severity"];
   reason: string;
+  action?: "recall" | "supersede";
+  supersedes_recall_id?: string;
   created_at: string | Date;
 }
 
@@ -174,7 +176,7 @@ export class SurrealRegistryStore {
       );
       if (existing) throw new Error("recall 사건이 이미 존재합니다");
       await tx.query(
-        "CREATE registry_recall CONTENT { recall_id:$recall_id, version_id:$version_id, package_name:$package_name, package_version:$package_version, category:$category, severity:$severity, reason:$reason, created_by_organization_id:$organization_id, created_at:time::now() };",
+        "CREATE registry_recall CONTENT { recall_id:$recall_id, version_id:$version_id, package_name:$package_name, package_version:$package_version, category:$category, severity:$severity, reason:$reason, action:'recall', supersedes_recall_id:NONE, created_by_organization_id:$organization_id, created_at:time::now() };",
         {
           recall_id: recall.recallId,
           version_id: versionId,
@@ -192,6 +194,52 @@ export class SurrealRegistryStore {
         { version_id: versionId },
       );
       if (!record) throw new Error("Registry recall 상태가 변경됐습니다");
+      return this.view(record);
+    });
+  }
+
+  public async supersedeRecall(
+    context: TenantContext,
+    versionId: string,
+    input: { readonly recallId: string; readonly supersedesRecallId: string; readonly reason: string },
+  ): Promise<RegistryVersion> {
+    assertRegistryId(input.recallId, "recall");
+    assertRegistryId(input.supersedesRecallId, "superseded recall");
+    const current = await this.getOwned(context, versionId);
+    if (current.state !== "recalled") throw new Error("recalled version만 recall을 해제할 수 있습니다");
+    return await this.database.transaction(async (tx) => {
+      const target = await first<RecallRecord>(
+        tx,
+        "SELECT * OMIT id FROM registry_recall WHERE version_id=$version_id AND recall_id=$recall_id AND (action=NONE OR action='recall') LIMIT 1;",
+        { version_id: versionId, recall_id: input.supersedesRecallId },
+      );
+      if (!target) throw new Error("supersede할 recall 사건을 찾을 수 없습니다");
+      const existing = await first<RecallRecord>(
+        tx,
+        "SELECT * OMIT id FROM registry_recall WHERE version_id=$version_id AND supersedes_recall_id=$recall_id LIMIT 1;",
+        { version_id: versionId, recall_id: input.supersedesRecallId },
+      );
+      if (existing) throw new Error("recall 사건이 이미 supersede됐습니다");
+      await tx.query(
+        "CREATE registry_recall CONTENT { recall_id:$recall_id, version_id:$version_id, package_name:$package_name, package_version:$package_version, category:$category, severity:$severity, reason:$reason, action:'supersede', supersedes_recall_id:$supersedes_recall_id, created_by_organization_id:$organization_id, created_at:time::now() };",
+        {
+          recall_id: input.recallId,
+          version_id: versionId,
+          package_name: current.packageName,
+          package_version: current.packageVersion,
+          category: target.category,
+          severity: target.severity,
+          reason: input.reason,
+          supersedes_recall_id: input.supersedesRecallId,
+          organization_id: context.organizationId,
+        },
+      );
+      const record = await first<VersionRecord>(
+        tx,
+        "UPDATE registry_version SET state='published' WHERE version_id=$version_id AND state='recalled' RETURN AFTER;",
+        { version_id: versionId },
+      );
+      if (!record) throw new Error("Registry recall supersede 상태가 변경됐습니다");
       return this.view(record);
     });
   }
@@ -218,6 +266,8 @@ export class SurrealRegistryStore {
       category: record.category,
       severity: record.severity,
       reason: record.reason,
+      action: record.action ?? "recall",
+      ...(record.supersedes_recall_id ? { supersedesRecallId: record.supersedes_recall_id } : {}),
       createdAt: new Date(record.created_at).toISOString(),
     }));
   }
@@ -253,6 +303,8 @@ export class SurrealRegistryStore {
           category: record.category,
           severity: record.severity,
           reason: record.reason,
+          action: record.action ?? "recall",
+          ...(record.supersedes_recall_id ? { supersedesRecallId: record.supersedes_recall_id } : {}),
           createdAt: new Date(record.created_at).toISOString(),
         }));
       },

@@ -92,9 +92,41 @@ export class MemoryRegistryStore {
     const current = this.required(versionId);
     const events = this.recalls.get(versionId) ?? [];
     if (events.some((event) => event.recallId === recall.recallId)) throw new Error("recall 사건이 이미 존재합니다");
-    events.push({ ...structuredClone(recall), createdAt: recall.createdAt ?? new Date().toISOString() });
+    events.push({
+      ...structuredClone(recall),
+      action: "recall",
+      createdAt: recall.createdAt ?? new Date().toISOString(),
+    });
     this.recalls.set(versionId, events);
     const next = { ...current, state: transitionVersion(current.state, "recalled") };
+    this.versions.set(versionId, next);
+    return structuredClone(next);
+  }
+
+  public async supersedeRecall(
+    versionId: string,
+    input: { readonly recallId: string; readonly supersedesRecallId: string; readonly reason: string },
+  ): Promise<RegistryVersion> {
+    assertRegistryId(input.recallId, "recall");
+    assertRegistryId(input.supersedesRecallId, "superseded recall");
+    const current = this.required(versionId);
+    if (current.state !== "recalled") throw new Error("recalled version만 recall을 해제할 수 있습니다");
+    const events = this.recalls.get(versionId) ?? [];
+    const target = events.find((event) => event.recallId === input.supersedesRecallId && event.action !== "supersede");
+    if (!target) throw new Error("supersede할 recall 사건을 찾을 수 없습니다");
+    if (events.some((event) => event.supersedesRecallId === input.supersedesRecallId))
+      throw new Error("recall 사건이 이미 supersede됐습니다");
+    events.push({
+      recallId: input.recallId,
+      category: target.category,
+      severity: target.severity,
+      reason: input.reason,
+      action: "supersede",
+      supersedesRecallId: input.supersedesRecallId,
+      createdAt: new Date().toISOString(),
+    });
+    this.recalls.set(versionId, events);
+    const next = { ...current, state: "published" as const };
     this.versions.set(versionId, next);
     return structuredClone(next);
   }

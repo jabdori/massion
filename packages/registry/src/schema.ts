@@ -31,6 +31,8 @@ DEFINE FIELD package_version ON registry_recall TYPE string;
 DEFINE FIELD category ON registry_recall TYPE string ASSERT $value IN ['security', 'malware', 'publisher-compromise', 'policy', 'compatibility'];
 DEFINE FIELD severity ON registry_recall TYPE string ASSERT $value IN ['low', 'medium', 'high', 'critical'];
 DEFINE FIELD reason ON registry_recall TYPE string ASSERT string::len($value) >= 3 AND string::len($value) <= 2048;
+DEFINE FIELD action ON registry_recall TYPE option<string> ASSERT $value = NONE OR $value IN ['recall', 'supersede'];
+DEFINE FIELD supersedes_recall_id ON registry_recall TYPE option<string>;
 DEFINE FIELD created_by_organization_id ON registry_recall TYPE string;
 DEFINE FIELD created_at ON registry_recall TYPE datetime;
 DEFINE INDEX registry_recall_id ON registry_recall FIELDS recall_id UNIQUE;
@@ -69,4 +71,16 @@ DEFINE EVENT registry_metric_immutable ON TABLE registry_metric WHEN $event IN [
 `,
 );
 
-export const REGISTRY_MIGRATIONS = [REGISTRY_MIGRATION, REGISTRY_TELEMETRY_MIGRATION] as const;
+export const REGISTRY_RECALL_SUPERSEDE_MIGRATION = defineMigration(
+  "0081-registry-recall-supersede",
+  `
+DEFINE FIELD IF NOT EXISTS action ON registry_recall TYPE option<string> ASSERT $value = NONE OR $value IN ['recall', 'supersede'];
+DEFINE FIELD IF NOT EXISTS supersedes_recall_id ON registry_recall TYPE option<string>;
+`,
+);
+
+export const REGISTRY_MIGRATIONS = [
+  REGISTRY_MIGRATION,
+  REGISTRY_TELEMETRY_MIGRATION,
+  REGISTRY_RECALL_SUPERSEDE_MIGRATION,
+] as const;

@@ -20,6 +20,8 @@ export interface RegistryRecall {
   readonly category: "security" | "malware" | "publisher-compromise" | "policy" | "compatibility";
   readonly severity: RecallSeverity;
   readonly reason: string;
+  readonly action?: "recall" | "supersede";
+  readonly supersedesRecallId?: string;
   readonly createdAt?: string;
 }
 

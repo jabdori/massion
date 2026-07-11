@@ -66,6 +66,12 @@ describe("Registry remote contract", () => {
         severity: "critical",
         reason: "remote security drill",
       });
+      await store.supersedeRecall(context, first.versionId, {
+        recallId: "registry-remote-recall-2",
+        supersedesRecallId: "registry-remote-recall-1",
+        reason: "독립 재검증으로 오탐 확인",
+      });
+      expect((await store.get(context, first.versionId)).state).toBe("published");
       const telemetry = await RegistryTelemetryStore.create(database, organizations);
       await telemetry.record(context, {
         sourceId: "registry-remote-source-1",
