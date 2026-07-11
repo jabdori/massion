@@ -92,4 +92,11 @@ DEFINE EVENT integration_receipt_immutable ON TABLE integration_receipt WHEN $ev
 `,
 );
 
-export const INTEGRATION_MIGRATIONS = [INTEGRATION_MIGRATION] as const;
+export const INTEGRATION_PAYLOAD_MIGRATION = defineMigration(
+  "0075-integration-delivery-payload",
+  `
+DEFINE FIELD payload_json ON integration_delivery TYPE option<string> ASSERT $value = NONE OR string::len($value) <= 262144;
+`,
+);
+
+export const INTEGRATION_MIGRATIONS = [INTEGRATION_MIGRATION, INTEGRATION_PAYLOAD_MIGRATION] as const;

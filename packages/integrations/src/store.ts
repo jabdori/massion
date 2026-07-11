@@ -12,6 +12,7 @@ const REFERENCE = /^[a-z][a-z0-9-]{1,31}:[A-Za-z0-9][A-Za-z0-9._:-]{2,191}$/u;
 const SECRET = /\b(?:xox[baprs]-|gh[opusr]_|Bearer\s+)[A-Za-z0-9._~+/-]{12,}/iu;
 
 function canonical(value: unknown): string {
+  if (value === undefined) return "null";
   if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
   if (value && typeof value === "object")
     return `{${Object.entries(value as Record<string, unknown>)
@@ -69,6 +70,7 @@ interface DeliveryRecord {
   lease_owner?: string;
   lease_generation: number;
   lease_expires_at?: string | Date;
+  payload_json?: string;
 }
 
 interface OutboxRecord {
@@ -198,12 +200,22 @@ export class IntegrationStore {
 
   public async acceptDelivery(
     context: TenantContext,
-    input: { installationId: string; deliveryId: string; eventType: string; bodyHash: string; receivedAt: Date },
+    input: {
+      installationId: string;
+      deliveryId: string;
+      eventType: string;
+      bodyHash: string;
+      normalizedPayload?: unknown;
+      receivedAt: Date;
+    },
   ) {
     const installation = await this.getInstallation(context, input.installationId);
     normalizeDeliveryId(installation.platform, input.deliveryId);
     if (!HASH.test(input.bodyHash) || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u.test(input.eventType))
       throw new Error("Integration delivery input이 유효하지 않습니다");
+    const payloadJson = canonical(input.normalizedPayload ?? {});
+    if (Buffer.byteLength(payloadJson) > 262_144 || SECRET.test(payloadJson))
+      throw new Error("Integration delivery payload가 안전하지 않습니다");
     return await this.database.transaction(async (tx) => {
       await this.organizations.verifyTenantContext(context, undefined, tx);
       const replay = await first<DeliveryRecord>(
@@ -222,7 +234,7 @@ export class IntegrationStore {
       }
       const record = await first<DeliveryRecord>(
         tx,
-        "CREATE integration_delivery CONTENT { delivery_record_id:$delivery_record_id, organization_id:$organization_id, installation_id:$installation_id, delivery_id:$delivery_id, event_type:$event_type, body_hash:$body_hash, state:'accepted', attempt:0, lease_owner:NONE, lease_generation:0, lease_expires_at:NONE, result_hash:NONE, received_at:$received_at, updated_at:time::now() } RETURN AFTER;",
+        "CREATE integration_delivery CONTENT { delivery_record_id:$delivery_record_id, organization_id:$organization_id, installation_id:$installation_id, delivery_id:$delivery_id, event_type:$event_type, body_hash:$body_hash, payload_json:$payload_json, state:'accepted', attempt:0, lease_owner:NONE, lease_generation:0, lease_expires_at:NONE, result_hash:NONE, received_at:$received_at, updated_at:time::now() } RETURN AFTER;",
         {
           delivery_record_id: randomUUID(),
           organization_id: context.organizationId,
@@ -230,6 +242,7 @@ export class IntegrationStore {
           delivery_id: input.deliveryId,
           event_type: input.eventType,
           body_hash: input.bodyHash,
+          payload_json: payloadJson,
           received_at: input.receivedAt,
         },
       );
@@ -261,6 +274,31 @@ export class IntegrationStore {
       if (!record) throw new Error("Integration delivery lease 충돌입니다");
       return this.deliveryView(record);
     });
+  }
+
+  public async resolveVerifiedActor(platform: IntegrationPlatform, externalTenantId: string, externalUserId: string) {
+    normalizeExternalId(platform, externalTenantId);
+    normalizeExternalId(platform, externalUserId);
+    const installation = await first<InstallationRecord>(
+      this.database,
+      "SELECT * OMIT id FROM integration_installation WHERE platform=$platform AND external_tenant_id=$external_tenant_id AND state='active' LIMIT 1;",
+      { platform, external_tenant_id: externalTenantId },
+    );
+    if (!installation) throw new Error("활성 Integration installation을 찾을 수 없습니다");
+    const binding = await first<BindingRecord>(
+      this.database,
+      "SELECT * OMIT id FROM integration_user_binding WHERE organization_id=$organization_id AND installation_id=$installation_id AND external_user_id=$external_user_id AND state='active' LIMIT 1;",
+      {
+        organization_id: installation.organization_id,
+        installation_id: installation.installation_id,
+        external_user_id: externalUserId,
+      },
+    );
+    if (!binding) throw new Error("확인된 Integration user binding을 찾을 수 없습니다");
+    return {
+      context: await this.organizations.resolveTenantContext(binding.user_id, installation.organization_id),
+      installation: this.installationView(installation),
+    };
   }
 
   public async completeDelivery(
@@ -413,6 +451,7 @@ export class IntegrationStore {
       state: record.state,
       attempt: record.attempt,
       leaseGeneration: record.lease_generation,
+      payload: JSON.parse(record.payload_json ?? "{}") as unknown,
     };
   }
   private outboxView(record: OutboxRecord) {

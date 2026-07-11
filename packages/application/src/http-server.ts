@@ -65,6 +65,19 @@ export interface ApplicationHttpDependencies {
     rotateCsrf(sessionToken: string): Promise<string>;
     revoke(sessionToken: string, csrfToken: string, reason: string): Promise<void>;
   };
+  readonly integrations?: {
+    handle(input: {
+      readonly method: string;
+      readonly path: string;
+      readonly headers: Readonly<Record<string, string | undefined>>;
+      readonly body: Buffer;
+      readonly receivedAt: Date;
+    }): Promise<{
+      readonly status: number;
+      readonly headers?: Readonly<Record<string, string>>;
+      readonly body?: unknown;
+    }>;
+  };
 }
 
 export interface ApplicationHttpServerOptions {
@@ -315,6 +328,31 @@ export class ApplicationHttpServer {
     if (url.searchParams.has("access_token") || url.searchParams.has("token"))
       throw validation("URL token은 허용되지 않습니다");
     if (request.method === "OPTIONS") throw validation("CORS preflight를 지원하지 않습니다");
+    if (url.pathname.startsWith("/integrations/")) {
+      if (!this.dependencies.integrations) throw validation("Integration HTTP gateway를 사용할 수 없습니다");
+      const integrationResponse = await this.dependencies.integrations.handle({
+        method: request.method ?? "",
+        path: url.pathname,
+        headers: {
+          "content-type": header(request, "content-type"),
+          "x-slack-request-timestamp": header(request, "x-slack-request-timestamp"),
+          "x-slack-signature": header(request, "x-slack-signature"),
+          "x-signature-timestamp": header(request, "x-signature-timestamp"),
+          "x-signature-ed25519": header(request, "x-signature-ed25519"),
+          "x-hub-signature-256": header(request, "x-hub-signature-256"),
+          "x-github-delivery": header(request, "x-github-delivery"),
+          "x-github-event": header(request, "x-github-event"),
+        },
+        body: await body(request, JSON_LIMIT),
+        receivedAt: new Date(),
+      });
+      for (const [name, value] of Object.entries(integrationResponse.headers ?? {})) response.setHeader(name, value);
+      if (integrationResponse.body === undefined) {
+        response.writeHead(integrationResponse.status);
+        response.end();
+      } else sendJson(response, integrationResponse.status, integrationResponse.body);
+      return;
+    }
     if (url.pathname === "/api/v1/bootstrap") {
       if (request.method !== "POST") {
         this.method(response, ["POST"]);
