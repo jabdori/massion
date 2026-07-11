@@ -52,6 +52,12 @@ export interface IssuedApplicationToken {
   readonly token?: string;
 }
 
+export interface AuthenticatedApplicationAccess {
+  readonly context: TenantContext;
+  readonly tokenId: string;
+  readonly scopes: readonly string[];
+}
+
 export interface RevokeApplicationTokenInput {
   readonly commandId: string;
   readonly tokenId: string;
@@ -197,6 +203,14 @@ export class ApplicationAccessTokenService {
     audience: string,
     requiredScopes: readonly string[],
   ): Promise<TenantContext> {
+    return (await this.authenticateAccess(authorization, audience, requiredScopes)).context;
+  }
+
+  public async authenticateAccess(
+    authorization: string | undefined,
+    audience: string,
+    requiredScopes: readonly string[],
+  ): Promise<AuthenticatedApplicationAccess> {
     const match = authorization?.match(/^Bearer ([^ ]+)$/u);
     if (!match?.[1]) throw new Error("Authorization Bearer header가 필요합니다");
     const tokenMatch = match[1].match(TOKEN);
@@ -217,7 +231,11 @@ export class ApplicationAccessTokenService {
     if (!record.scopes.includes("application:*") && requiredScopes.some((scope) => !record.scopes.includes(scope))) {
       throw new Error("Application access token scope가 부족합니다");
     }
-    return await this.organizations.resolveTenantContext(record.user_id, record.organization_id);
+    return {
+      context: await this.organizations.resolveTenantContext(record.user_id, record.organization_id),
+      tokenId: record.token_id,
+      scopes: record.scopes,
+    };
   }
 
   public async revoke(context: TenantContext, input: RevokeApplicationTokenInput): Promise<void> {
