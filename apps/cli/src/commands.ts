@@ -75,8 +75,13 @@ export async function executeCliInvocation(
     return await client.query("governance.approval.get", { approvalId: required(args, 0, "approvalId") });
   if (invocation.command === "runtime" && invocation.subcommand === "get")
     return await client.query("runtime.execution.get", { executionId: required(args, 0, "executionId") });
-  if (invocation.command === "provider" && invocation.subcommand === "list")
-    return await client.query("router.credentials", {});
+  if (invocation.command === "provider" && invocation.subcommand === "list") {
+    const [credentials, routes] = await Promise.all([
+      client.query("router.credentials", {}),
+      client.query("router.routes", {}),
+    ]);
+    return { credentials, routes };
+  }
   if (invocation.command === "ext" && invocation.subcommand === "list") return await client.query("extension.list", {});
   if (invocation.command === "growth" && invocation.subcommand === "status")
     return await client.query("growth.configuration.get", {});

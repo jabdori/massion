@@ -1,7 +1,7 @@
 import type { ExtensionGateway } from "@massion/extension-host";
 import type { GrowthGateway } from "@massion/growth";
 import type { MembershipRole, TenantContext } from "@massion/identity";
-import type { ProviderService } from "@massion/router";
+import type { ModelRouter, ProviderService } from "@massion/router";
 import type { RuntimeExecutionStore } from "@massion/runtime";
 
 import { ApplicationError } from "./errors.js";
@@ -29,6 +29,7 @@ export interface ApplicationQueryDependencies {
   readonly extension?: Pick<ExtensionGateway, "list">;
   readonly growth?: Pick<GrowthGateway, "resolveConfiguration" | "getActiveEvaluationStrategy" | "listSuggestions">;
   readonly providers?: Pick<ProviderService, "listCredentials">;
+  readonly router?: Pick<ModelRouter, "listRoutes">;
   readonly status?: () => Promise<unknown>;
 }
 
@@ -443,6 +444,26 @@ export function registerApplicationQueries(
           outputTokens: credential.output_tokens,
           costMicros: credential.cost_micros,
         })) ?? [],
+    });
+  }
+  if (dependencies.router) {
+    registry.register({
+      operation: "router.routes",
+      requiredScopes: ["router:read"],
+      allowedRoles: EVERY_ROLE,
+      validate: (value) => object(value, []),
+      handle: async (context) =>
+        ((await dependencies.router?.listRoutes(context)) ?? []).map((route) => ({
+          routeId: route.route_id,
+          name: route.name,
+          routeKind: route.route_kind,
+          credentialPolicy: route.credential_policy,
+          dataPolicy: route.data_policy,
+          equivalenceGroup: route.equivalence_group,
+          spentMicros: route.spent_micros,
+          totalBudgetMicros: route.total_budget_micros,
+          enabled: route.enabled,
+        })),
     });
   }
   if (dependencies.status) {

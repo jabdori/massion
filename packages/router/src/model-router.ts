@@ -432,6 +432,15 @@ export class ModelRouter {
     });
   }
 
+  public async listRoutes(context: TenantContext): Promise<readonly ModelRoute[]> {
+    await this.organizations.verifyTenantContext(context);
+    const [routes] = await this.database.query<[ModelRoute[]]>(
+      "SELECT * OMIT id FROM model_route WHERE organization_id = $organization_id ORDER BY name ASC, route_id ASC;",
+      { organization_id: context.organizationId },
+    );
+    return routes;
+  }
+
   public async addCandidate(
     context: TenantContext,
     input: AddCandidateInput,
