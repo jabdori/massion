@@ -6,7 +6,7 @@
 
 ## Task 1. 구독 계정 정본
 
-- [ ] `@massion/subscriptions` package와 append-only migration을 추가합니다.
+- [x] `@massion/subscriptions` package와 append-only migration을 추가합니다.
 - [ ] 개인·조직 scope, 공유 동의·철회, connector와 quota snapshot 원장을 TDD로 구현합니다.
 - [ ] secret·이메일·외부 account ID가 공개 query·event·metric에 나오지 않게 검증합니다.
 
