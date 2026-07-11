@@ -69,6 +69,7 @@ export interface ApplicationHttpDependencies {
     handle(input: {
       readonly method: string;
       readonly path: string;
+      readonly query?: Readonly<Record<string, string | undefined>>;
       readonly headers: Readonly<Record<string, string | undefined>>;
       readonly body: Buffer;
       readonly receivedAt: Date;
@@ -330,9 +331,15 @@ export class ApplicationHttpServer {
     if (request.method === "OPTIONS") throw validation("CORS preflight를 지원하지 않습니다");
     if (url.pathname.startsWith("/integrations/")) {
       if (!this.dependencies.integrations) throw validation("Integration HTTP gateway를 사용할 수 없습니다");
+      const integrationQuery: Record<string, string> = {};
+      for (const [name, value] of url.searchParams) {
+        if (name in integrationQuery) throw validation("Integration query parameter가 중복됐습니다");
+        integrationQuery[name] = value;
+      }
       const integrationResponse = await this.dependencies.integrations.handle({
         method: request.method ?? "",
         path: url.pathname,
+        query: integrationQuery,
         headers: {
           "content-type": header(request, "content-type"),
           "x-slack-request-timestamp": header(request, "x-slack-request-timestamp"),
