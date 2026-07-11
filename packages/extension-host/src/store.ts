@@ -570,6 +570,24 @@ export class FileArtifactStore {
     await rename(staged.path, target);
   }
 
+  public async recoverStaging(organizationId: string): Promise<number> {
+    const namespace = sha256(organizationId);
+    const staging = join(this.root, namespace, "staging");
+    const entries = await readdir(staging, { withFileTypes: true }).catch((error: unknown) => {
+      if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") return [];
+      throw error;
+    });
+    let recovered = 0;
+    for (const entry of entries) {
+      if (!entry.isFile() || !entry.name.endsWith(".tgz")) continue;
+      const target = join(this.root, namespace, "quarantine", entry.name);
+      await mkdir(dirname(target), { recursive: true, mode: 0o700 });
+      await rename(join(staging, entry.name), target);
+      recovered += 1;
+    }
+    return recovered;
+  }
+
   private async verify(path: string, digest: string): Promise<void> {
     if (sha256(await readFile(path)) !== digest)
       throw new Error("Extension staged artifact digest가 일치하지 않습니다");
