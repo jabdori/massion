@@ -65,6 +65,13 @@ describe("ApplicationHttpServer", () => {
         inspect: async (_context, archive) => ({ size: archive.length }),
         install: async (_context, input) => ({ commandId: input.commandId, size: input.archive.length }),
       },
+      registryPublisher: {
+        publish: async (_context, input) => ({
+          commandId: input.commandId,
+          size: input.archive.length,
+          metadata: input.metadata,
+        }),
+      },
       bootstrap: {
         initialize: async (input) => ({ access: { token: "one-time" }, email: input.email }),
       },
@@ -151,6 +158,28 @@ describe("ApplicationHttpServer", () => {
       body: Buffer.from("artifact"),
     });
     expect(await install.json()).toEqual({ commandId: "artifact-command-0001", size: 8 });
+  });
+
+  it("Registry publish metadata와 artifact를 versioned binary frame으로 분리한다", async () => {
+    const metadata = Buffer.from(JSON.stringify({ uploadGrant: "grant-reference", visibility: "public" }));
+    const prefix = Buffer.alloc(4);
+    prefix.writeUInt32BE(metadata.length);
+    const response = await fetch(`${baseUrl}/api/v1/registry/publish`, {
+      method: "POST",
+      headers: {
+        authorization: "Bearer test-token",
+        accept: "application/json",
+        "content-type": "application/vnd.massion.registry-publish.v1",
+        "x-massion-command-id": "registry-publish-command-1",
+      },
+      body: Buffer.concat([prefix, metadata, Buffer.from("artifact")]),
+    });
+    expect(response.status).toBe(201);
+    expect(await response.json()).toEqual({
+      commandId: "registry-publish-command-1",
+      size: 8,
+      metadata: { uploadGrant: "grant-reference", visibility: "public" },
+    });
   });
 
   it("외부 Integration webhook은 Application bearer 인증 전에 전용 gateway로만 전달한다", async () => {

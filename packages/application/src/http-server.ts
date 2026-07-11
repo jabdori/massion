@@ -41,6 +41,12 @@ export interface ApplicationHttpDependencies {
     install(context: TenantContext, input: { readonly commandId: string; readonly archive: Buffer }): Promise<unknown>;
     update?(context: TenantContext, input: { readonly commandId: string; readonly archive: Buffer }): Promise<unknown>;
   };
+  readonly registryPublisher?: {
+    publish(
+      context: TenantContext,
+      input: { readonly commandId: string; readonly archive: Buffer; readonly metadata: unknown },
+    ): Promise<unknown>;
+  };
   readonly bootstrap?: {
     initialize(input: {
       readonly commandId: string;
@@ -606,6 +612,44 @@ export class ApplicationHttpServer {
             : await this.dependencies.artifacts.install(access.context, { commandId, archive });
         sendJson(response, 200, result);
       }
+      return;
+    }
+    if (url.pathname === "/api/v1/registry/publish") {
+      if (request.method !== "POST") {
+        this.method(response, ["POST"]);
+        return;
+      }
+      if (access.web) await this.browserMutation(request, access);
+      this.acceptJson(request);
+      if (header(request, "content-type") !== "application/vnd.massion.registry-publish.v1")
+        throw validation("Registry publish Content-Type이 유효하지 않습니다");
+      if (
+        !this.dependencies.registryPublisher ||
+        !hasScope(access.scopes, "extension:write") ||
+        !["owner", "admin"].includes(access.context.role)
+      )
+        throw this.scope();
+      const framed = await body(request, ARTIFACT_LIMIT + JSON_LIMIT + 4);
+      if (framed.length < 5) throw validation("Registry publish frame이 비어 있습니다");
+      const metadataLength = framed.readUInt32BE(0);
+      if (metadataLength < 2 || metadataLength > JSON_LIMIT || framed.length <= 4 + metadataLength)
+        throw validation("Registry publish metadata 길이가 유효하지 않습니다");
+      let metadata: unknown;
+      try {
+        metadata = JSON.parse(framed.subarray(4, 4 + metadataLength).toString("utf8")) as unknown;
+      } catch {
+        throw validation("Registry publish metadata JSON이 유효하지 않습니다");
+      }
+      const archive = framed.subarray(4 + metadataLength);
+      if (archive.length === 0 || archive.length > ARTIFACT_LIMIT)
+        throw validation("Registry publish artifact 크기가 유효하지 않습니다");
+      const commandId = header(request, "x-massion-command-id");
+      if (!commandId) throw validation("x-massion-command-id header가 필요합니다");
+      sendJson(
+        response,
+        201,
+        await this.dependencies.registryPublisher.publish(access.context, { commandId, archive, metadata }),
+      );
       return;
     }
     throw new ApplicationError({

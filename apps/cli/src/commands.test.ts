@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { executeCliInvocation, type CliApplicationClient } from "./commands.js";
 import { parseCliArguments } from "./parser.js";
@@ -126,5 +126,27 @@ describe("CLI Application adapter", () => {
     expect(calls[0]).toEqual(["registry.search", { query: "slack", limit: 20 }]);
     expect(calls[1]).toMatchObject({ operation: "registry.install", payload: { versionId: "version-12345678" } });
     expect(calls[2]).toEqual(["registry.inventory", {}]);
+  });
+
+  it("Registry publish는 artifact와 stdin trust metadata를 분리해 전달한다", async () => {
+    const publishArtifact = vi.fn(async () => ({}));
+    const client: CliApplicationClient = {
+      status: async () => ({}),
+      snapshot: async () => ({}),
+      query: async () => ({}),
+      command: async () => ({}),
+      inspectArtifact: async () => ({}),
+      installArtifact: async () => ({}),
+      updateArtifact: async () => ({}),
+      publishArtifact,
+    };
+    await executeCliInvocation(client, parseCliArguments(["ext", "publish", "extension.tgz"]), {
+      readArtifact: async () => Buffer.from("artifact"),
+      readJson: async () => ({ uploadGrant: "grant-reference", provenanceBundle: {} }),
+    });
+    expect(publishArtifact).toHaveBeenCalledWith(expect.any(String), Buffer.from("artifact"), {
+      uploadGrant: "grant-reference",
+      provenanceBundle: {},
+    });
   });
 });
