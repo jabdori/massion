@@ -1,0 +1,33 @@
+{
+	admin off
+	auto_https disable_redirects
+}
+
+{$MASSION_DOMAIN:localhost}:443 {
+	tls /run/secrets/tls_certificate /run/secrets/tls_private_key
+	encode zstd gzip
+
+	@backend path /api/* /integrations/* /health/*
+	handle @backend {
+		reverse_proxy massion:3141 {
+			header_up X-Forwarded-Proto https
+			transport http {
+				dial_timeout 3s
+				response_header_timeout 35s
+			}
+		}
+	}
+
+	handle {
+		root * /srv
+		try_files {path} /index.html
+		file_server
+	}
+
+	header {
+		-Server
+		X-Content-Type-Options nosniff
+		Referrer-Policy no-referrer
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+	}
+}

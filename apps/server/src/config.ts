@@ -57,12 +57,16 @@ export function parseServerConfig(environment: Readonly<Record<string, string | 
   const password = environment.MASSION_DATABASE_PASSWORD;
   if ((username === undefined) !== (password === undefined))
     throw new Error("SurrealDB username과 password는 함께 구성해야 합니다");
+  const namespace = environment.MASSION_DATABASE_NAMESPACE ?? "massion";
+  const database = environment.MASSION_DATABASE_NAME ?? "massion";
+  if (![namespace, database].every((name) => /^[A-Za-z][A-Za-z0-9_]{0,63}$/u.test(name)))
+    throw new Error("SurrealDB namespace 또는 database 이름이 유효하지 않습니다");
   return {
     mode,
     database: {
       url,
-      namespace: environment.MASSION_DATABASE_NAMESPACE ?? "massion",
-      database: environment.MASSION_DATABASE_NAME ?? "massion",
+      namespace,
+      database,
       ...(username && password ? { authentication: { username, password } } : {}),
     },
     server: {

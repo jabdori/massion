@@ -1,0 +1,13 @@
+.git
+.worktrees
+.massion
+**/node_modules
+**/dist
+**/test-results*
+**/playwright-report
+**/*.log
+.env
+.env.*
+deploy/secrets
+credentials.json
+coverage

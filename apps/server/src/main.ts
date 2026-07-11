@@ -1,6 +1,11 @@
 #!/usr/bin/env node
+import { isAbsolute } from "node:path";
+
+import { createDatabase } from "@massion/storage";
+
+import { restoreOperationalBackup, writeOperationalBackup } from "./backup.js";
 import { loadServerConfig } from "./config.js";
-import { createMassionDaemon } from "./product.js";
+import { createMassionDaemon, provisionRemoteDatabase } from "./product.js";
 
 function log(event: string, fields: Readonly<Record<string, unknown>> = {}): void {
   process.stdout.write(`${JSON.stringify({ timestamp: new Date().toISOString(), level: "info", event, ...fields })}\n`);
@@ -15,6 +20,28 @@ function exitAfterLog(code: number, event: string, fields: Readonly<Record<strin
 
 async function main(): Promise<void> {
   const config = await loadServerConfig();
+  const [command, path, extra] = process.argv.slice(2);
+  if (command === "backup" || command === "restore") {
+    if (!path || extra || !isAbsolute(path)) throw new Error(`${command}에는 절대 파일 경로 하나가 필요합니다`);
+    await provisionRemoteDatabase(config);
+    const database = await createDatabase(config.database);
+    let receipt: Awaited<ReturnType<typeof writeOperationalBackup>>;
+    try {
+      receipt =
+        command === "backup"
+          ? await writeOperationalBackup(database, path, process.env.MASSION_VERSION ?? "1.0.0")
+          : await restoreOperationalBackup(database, path);
+    } finally {
+      await database.close();
+    }
+    exitAfterLog(0, `server.${command}.completed`, {
+      path: receipt.path,
+      checksum: receipt.checksum,
+      migrations: receipt.migrations.length,
+    });
+    return;
+  }
+  if (command) throw new Error("지원하지 않는 massion-server command입니다");
   const daemon = await createMassionDaemon(config);
   const address = await daemon.start();
   log("server.ready", { mode: config.mode, host: address.host, port: address.port });

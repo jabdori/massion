@@ -1,9 +1,34 @@
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
+import { mkdtemp, rm, stat } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { createInterface } from "node:readline";
 
 import { describe, expect, it } from "vitest";
 
 describe("massion-server process", () => {
+  it("backup 일회성 command가 owner-only artifact를 만들고 종료한다", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "massion-server-backup-command-"));
+    const path = join(directory, "backup.json");
+    try {
+      const child = spawnSync(process.execPath, ["dist/main.js", "backup", path], {
+        cwd: new URL("..", import.meta.url),
+        env: {
+          PATH: process.env.PATH,
+          MASSION_TOKEN_KEY: Buffer.alloc(32, 12).toString("base64url"),
+          MASSION_DATABASE_URL: "mem://",
+        },
+        encoding: "utf8",
+        timeout: 15_000,
+      });
+      expect(child.status, child.stderr).toBe(0);
+      expect(JSON.parse(child.stdout) as { event: string }).toMatchObject({ event: "server.backup.completed" });
+      expect((await stat(path)).mode & 0o777).toBe(0o600);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
   it("준비 완료 뒤 SIGTERM에서 drain하고 종료 코드 0으로 끝난다", async () => {
     const child = spawn(process.execPath, ["dist/main.js"], {
       cwd: new URL("..", import.meta.url),
