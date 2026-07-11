@@ -144,6 +144,25 @@ export function registerApplicationQueries(
     handle: async (context) => (await dependencies.readModel.works(context)).map(publicWork),
   });
   registry.register({
+    operation: "work.get",
+    requiredScopes: ["work:read"],
+    allowedRoles: EVERY_ROLE,
+    validate: (value) => object(value, ["workId"]),
+    handle: async (context, value) => {
+      const workId = text(value.workId, "workId");
+      const work = (await dependencies.readModel.works(context)).find((candidate) => candidate.workId === workId);
+      if (!work)
+        throw new ApplicationError({
+          category: "not-found",
+          severity: "error",
+          retryable: false,
+          userMessage: "Work를 찾을 수 없습니다",
+          operatorCode: "APP_WORK_NOT_FOUND",
+        });
+      return publicWork(work);
+    },
+  });
+  registry.register({
     operation: "work.tasks",
     requiredScopes: ["work:read"],
     allowedRoles: EVERY_ROLE,
@@ -193,6 +212,79 @@ export function registerApplicationQueries(
           lastMessageSequence: room.lastMessageSequence,
         })),
   });
+  if (dependencies.readModel.messages) {
+    registry.register({
+      operation: "work.messages",
+      requiredScopes: ["collaboration:read"],
+      allowedRoles: EVERY_ROLE,
+      validate: (value) => object(value, ["workId", "roomId"]),
+      handle: async (context, value) => {
+        const workId = text(value.workId, "workId");
+        const roomId = text(value.roomId, "roomId");
+        return ((await dependencies.readModel.messages?.(context)) ?? [])
+          .filter((message) => message.workId === workId && message.roomId === roomId)
+          .map((message) => ({
+            messageId: message.messageId,
+            sequence: message.sequence,
+            messageType: message.messageType,
+            authorKind: message.authorKind,
+            authorId: message.authorId,
+            content: message.content,
+            createdAt: message.createdAt,
+          }));
+      },
+    });
+  }
+  if (dependencies.readModel.records) {
+    registry.register({
+      operation: "work.records",
+      requiredScopes: ["work:read"],
+      allowedRoles: EVERY_ROLE,
+      validate: (value) => object(value, ["workId"]),
+      handle: async (context, value) =>
+        ((await dependencies.readModel.records?.(context)) ?? [])
+          .filter((record) => record.workId === text(value.workId, "workId"))
+          .map((record) => ({
+            recordId: record.recordId,
+            version: record.version,
+            summary: record.summary,
+            artifactIds: record.artifactIds,
+            verificationIds: record.verificationIds,
+            finalizedAt: record.finalizedAt,
+          })),
+    });
+  }
+  registry.register({
+    operation: "runtime.execution.get",
+    requiredScopes: ["runtime:read"],
+    allowedRoles: EVERY_ROLE,
+    validate: (value) => object(value, ["executionId"]),
+    handle: async (context, value) => {
+      const executionId = text(value.executionId, "executionId");
+      const execution = (await dependencies.readModel.executions(context)).find(
+        (candidate) => candidate.executionId === executionId,
+      );
+      if (!execution)
+        throw new ApplicationError({
+          category: "not-found",
+          severity: "error",
+          retryable: false,
+          userMessage: "Runtime execution을 찾을 수 없습니다",
+          operatorCode: "APP_EXECUTION_NOT_FOUND",
+        });
+      return {
+        executionId: execution.executionId,
+        workId: execution.workId,
+        ...(execution.taskId === undefined ? {} : { taskId: execution.taskId }),
+        agentHandle: execution.agentHandle,
+        modelRoute: execution.modelRoute,
+        status: execution.status,
+        inputTokens: execution.inputTokens,
+        outputTokens: execution.outputTokens,
+        costMicros: execution.costMicros,
+      };
+    },
+  });
   registry.register({
     operation: "governance.approval.list",
     requiredScopes: ["approval:read"],
@@ -206,6 +298,42 @@ export function registerApplicationQueries(
         requestedBy: approval.requestedBy,
         expiresAt: approval.expiresAt,
       })),
+  });
+  registry.register({
+    operation: "governance.approval.get",
+    requiredScopes: ["approval:read"],
+    allowedRoles: EVERY_ROLE,
+    validate: (value) => object(value, ["approvalId"]),
+    handle: async (context, value) => {
+      const approvalId = text(value.approvalId, "approvalId");
+      const approval = (await dependencies.readModel.approvals(context)).find(
+        (candidate) => candidate.approvalId === approvalId,
+      );
+      if (!approval)
+        throw new ApplicationError({
+          category: "not-found",
+          severity: "error",
+          retryable: false,
+          userMessage: "Approval을 찾을 수 없습니다",
+          operatorCode: "APP_APPROVAL_NOT_FOUND",
+        });
+      return {
+        approvalId: approval.approvalId,
+        action: approval.action,
+        status: approval.status,
+        requestedBy: approval.requestedBy,
+        expiresAt: approval.expiresAt,
+      };
+    },
+  });
+  registry.register({
+    operation: "organization.list",
+    requiredScopes: ["organization:read"],
+    allowedRoles: EVERY_ROLE,
+    validate: (value) => object(value, []),
+    handle: async (context) => [
+      { organizationId: context.organizationId, membershipId: context.membershipId, role: context.role },
+    ],
   });
   if (dependencies.snapshot) {
     registry.register({

@@ -59,6 +59,24 @@ export class ApplicationHttpClient {
       throw new Error("Application HTTP retry 설정이 유효하지 않습니다");
   }
 
+  public static async bootstrap(
+    baseUrl: string,
+    input: { readonly commandId: string; readonly email: string; readonly displayName: string },
+    fetcher: typeof fetch = fetch,
+  ): Promise<unknown> {
+    const endpoint = new URL(baseUrl);
+    if (endpoint.protocol !== "http:" || !isLoopback(endpoint.hostname) || endpoint.username || endpoint.password)
+      throw new Error("Application bootstrap endpoint는 credential 없는 loopback HTTP여야 합니다");
+    const response = await fetcher(new URL("/api/v1/bootstrap", endpoint), {
+      method: "POST",
+      headers: { accept: "application/json", "content-type": "application/json" },
+      body: JSON.stringify(input),
+    });
+    const value = await decode(response);
+    if (!response.ok) throw new ApplicationRemoteError(response.status, value);
+    return value;
+  }
+
   public async status(): Promise<unknown> {
     return await this.jsonRequest("/api/v1/status", { method: "GET" }, true);
   }

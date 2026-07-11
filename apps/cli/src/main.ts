@@ -8,6 +8,7 @@ import { ApplicationHttpClient, ApplicationRemoteError } from "@massion/applicat
 import { executeCliInvocation } from "./commands.js";
 import { CliConfigStore } from "./config.js";
 import { processJsonLines, writeWithBackpressure } from "./jsonl.js";
+import { initializeCli } from "./init.js";
 import { parseCliArguments } from "./parser.js";
 import { renderCliOutput } from "./render.js";
 import { runHeadless } from "./run.js";
@@ -53,7 +54,27 @@ export async function runCli(argv = process.argv.slice(2)): Promise<number> {
       process.stdout.write(HELP);
       return 0;
     }
-    if (invocation.command === "init") throw new Error("mass init은 로컬 AgentOS bootstrap 연결이 필요합니다");
+    if (invocation.command === "init") {
+      const endpoint = invocation.arguments[0] ?? "http://127.0.0.1:7331";
+      const email = invocation.arguments[1];
+      const displayName = invocation.arguments.slice(2).join(" ");
+      if (!email || !displayName) throw new Error("사용법: mass init [endpoint] <email> <display name>");
+      const value = await initializeCli({
+        endpoint,
+        email,
+        displayName,
+        profile: invocation.profile ?? "local",
+        config: new CliConfigStore(),
+        bootstrap: ApplicationHttpClient.bootstrap,
+      });
+      process.stdout.write(
+        renderCliOutput(value, invocation.output, {
+          tty: process.stdout.isTTY,
+          noColor: process.env.NO_COLOR !== undefined,
+        }),
+      );
+      return 0;
+    }
     const config = await new CliConfigStore().load();
     const profileName = invocation.profile ?? config.selectedProfile;
     const profile = config.profiles[profileName];

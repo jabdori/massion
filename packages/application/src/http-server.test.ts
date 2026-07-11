@@ -65,6 +65,9 @@ describe("ApplicationHttpServer", () => {
         inspect: async (_context, archive) => ({ size: archive.length }),
         install: async (_context, input) => ({ commandId: input.commandId, size: input.archive.length }),
       },
+      bootstrap: {
+        initialize: async (input) => ({ access: { token: "one-time" }, email: input.email }),
+      },
     };
     server = new ApplicationHttpServer(dependencies, { pollMs: 5, heartbeatMs: 20 });
     baseUrl = (await server.start()).url;
@@ -108,6 +111,16 @@ describe("ApplicationHttpServer", () => {
       body: JSON.stringify({ value: "x".repeat(1024 * 1024) }),
     });
     expect(oversized.status).toBe(400);
+  });
+
+  it("loopback bootstrap만 인증 전 일회성 token 발급 경계에 접근한다", async () => {
+    const response = await fetch(`${baseUrl}/api/v1/bootstrap`, {
+      method: "POST",
+      headers: { accept: "application/json", "content-type": "application/json" },
+      body: JSON.stringify({ commandId: "bootstrap-command-0001", email: "owner@example.com", displayName: "Owner" }),
+    });
+    expect(response.status).toBe(201);
+    expect(await response.json()).toMatchObject({ access: { token: "one-time" } });
   });
 
   it("binary artifact를 JSON envelope와 분리해 inspect·install한다", async () => {

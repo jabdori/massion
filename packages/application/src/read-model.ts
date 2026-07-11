@@ -68,6 +68,30 @@ export interface ApplicationRoomSource {
   readonly lastMessageSequence: number;
 }
 
+export interface ApplicationMessageSource {
+  readonly organizationId: string;
+  readonly workId: string;
+  readonly roomId: string;
+  readonly messageId: string;
+  readonly sequence: number;
+  readonly messageType: string;
+  readonly authorKind: string;
+  readonly authorId: string;
+  readonly content: string;
+  readonly createdAt: string;
+}
+
+export interface ApplicationRecordSource {
+  readonly organizationId: string;
+  readonly workId: string;
+  readonly recordId: string;
+  readonly version: number;
+  readonly summary: string;
+  readonly artifactIds: readonly string[];
+  readonly verificationIds: readonly string[];
+  readonly finalizedAt: string;
+}
+
 export interface ApplicationApprovalSource {
   readonly organizationId: string;
   readonly approvalId: string;
@@ -94,6 +118,8 @@ export interface ApplicationReadModel {
   assignments(context: TenantContext): Promise<readonly ApplicationAssignmentSource[]>;
   executions(context: TenantContext): Promise<readonly ApplicationExecutionSource[]>;
   rooms(context: TenantContext): Promise<readonly ApplicationRoomSource[]>;
+  messages?(context: TenantContext): Promise<readonly ApplicationMessageSource[]>;
+  records?(context: TenantContext): Promise<readonly ApplicationRecordSource[]>;
   approvals(context: TenantContext): Promise<readonly ApplicationApprovalSource[]>;
   extensions(context: TenantContext): Promise<readonly ApplicationExtensionSource[]>;
 }
