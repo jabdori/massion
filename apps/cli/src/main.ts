@@ -65,7 +65,10 @@ export async function runCli(argv = process.argv.slice(2)): Promise<number> {
         displayName,
         profile: invocation.profile ?? "local",
         config: new CliConfigStore(),
-        bootstrap: ApplicationHttpClient.bootstrap,
+        bootstrap: async (
+          baseUrl: string,
+          bootstrapInput: { readonly commandId: string; readonly email: string; readonly displayName: string },
+        ) => await ApplicationHttpClient.bootstrap(baseUrl, bootstrapInput),
       });
       process.stdout.write(
         renderCliOutput(value, invocation.output, {
@@ -89,7 +92,9 @@ export async function runCli(argv = process.argv.slice(2)): Promise<number> {
           type: "result",
           data: await authenticated.command(input),
         }),
-        async (line) => await writeWithBackpressure(process.stdout, line),
+        async (line) => {
+          await writeWithBackpressure(process.stdout, line);
+        },
       );
       return 0;
     }
@@ -113,11 +118,12 @@ export async function runCli(argv = process.argv.slice(2)): Promise<number> {
             signal: signals.signal,
             ...(invocation.output === "jsonl"
               ? {
-                  onEvent: async (event: unknown) =>
+                  onEvent: async (event: unknown) => {
                     await writeWithBackpressure(
                       process.stdout,
                       `${JSON.stringify({ schemaVersion: "massion.cli.jsonl.v1", type: "event", data: event })}\n`,
-                    ),
+                    );
+                  },
                 }
               : {}),
           },
@@ -162,7 +168,9 @@ export async function runCli(argv = process.argv.slice(2)): Promise<number> {
 }
 
 function recordStatus(value: unknown): string | undefined {
-  return value && typeof value === "object" ? String((value as { status?: unknown }).status ?? "") : undefined;
+  if (!value || typeof value !== "object") return undefined;
+  const status = (value as { status?: unknown }).status;
+  return typeof status === "string" ? status : undefined;
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) process.exitCode = await runCli();

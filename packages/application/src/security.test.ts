@@ -2,7 +2,7 @@ import { connect } from "node:net";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { ApplicationHttpServer, type ApplicationHttpDependencies } from "./http-server.js";
+import { ApplicationHttpServer } from "./http-server.js";
 
 const context = {
   userId: "security-user",

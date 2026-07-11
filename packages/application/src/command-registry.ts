@@ -51,7 +51,7 @@ export class ApplicationCommandRegistry {
       throw new Error("Application command descriptor 권한이 불완전합니다");
     }
     if (this.descriptors.has(descriptor.operation)) throw new Error("Application command operation 중복입니다");
-    this.descriptors.set(descriptor.operation, descriptor as ApplicationCommandDescriptor);
+    this.descriptors.set(descriptor.operation, descriptor);
   }
 
   public async dispatch(

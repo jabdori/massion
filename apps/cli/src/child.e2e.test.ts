@@ -32,8 +32,8 @@ describe("mass child E2E", () => {
         return;
       }
       if (request.url === "/api/v1/commands") {
-        for await (const _chunk of request) {
-          /* body drain */
+        for await (const chunk of request) {
+          void chunk;
         }
         response.writeHead(202, { "content-type": "application/json" });
         response.end(JSON.stringify({ outcome: "accepted", data: { runId: "run-child-0001" } }));

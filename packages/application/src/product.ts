@@ -78,12 +78,13 @@ export class ApplicationProduct implements AsyncDisposable {
       tokens,
     );
 
-    let product: ApplicationProduct;
+    const productReference: { current?: ApplicationProduct } = {};
     registerApplicationRunCommands(commands, {
       store: runs,
       coordinator,
       schedule(context, runId) {
-        product.schedule(context, runId);
+        if (!productReference.current) throw new Error("Application product 조립이 완료되지 않았습니다");
+        productReference.current.schedule(context, runId);
       },
     });
     const server = new ApplicationHttpServer(
@@ -109,7 +110,8 @@ export class ApplicationProduct implements AsyncDisposable {
       },
       dependencies.server,
     );
-    product = new ApplicationProduct(server, commands, queries, runs, coordinator, tokens, events, projector);
+    const product = new ApplicationProduct(server, commands, queries, runs, coordinator, tokens, events, projector);
+    productReference.current = product;
     return product;
   }
 

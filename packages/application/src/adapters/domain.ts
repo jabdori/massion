@@ -1,7 +1,6 @@
 import type { ExtensionGateway } from "@massion/extension-host";
 import { GovernanceApprovalRequiredError, GovernanceDeniedError, type ApprovalStore } from "@massion/governance";
 import type { GrowthGateway } from "@massion/growth";
-import type { TenantContext } from "@massion/identity";
 import type { OrganizationGraphService } from "@massion/organization";
 import type { ModelRouter, ProviderService } from "@massion/router";
 import type { AgentRunner } from "@massion/runtime";
@@ -789,10 +788,7 @@ function registerExtension(
     recovery: "operator-action",
     validate: (value) => payload(value, ["source", "destination"], ["source", "destination"]),
     async handle(_context, command, value) {
-      const packed = await extension.pack(
-        string(value.source, "source"),
-        string(value.destination, "destination"),
-      );
+      const packed = await extension.pack(string(value.source, "source"), string(value.destination, "destination"));
       return result(command, { data: extensionData(packed) });
     },
   });

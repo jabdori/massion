@@ -143,18 +143,19 @@ interface ExtensionVersionRecord {
 function scalar(value: unknown): string | number {
   if (typeof value === "number" || typeof value === "string") return value;
   if (value instanceof Date) return value.toISOString();
-  return value === undefined || value === null ? 0 : String(value);
+  return 0;
 }
 
 function iso(value: unknown): string {
   if (value instanceof Date) return value.toISOString();
-  return new Date(String(value)).toISOString();
+  if (typeof value !== "string" && typeof value !== "number") throw new Error("datetime 값이 유효하지 않습니다");
+  return new Date(value).toISOString();
 }
 
 function contributionIds(manifestJson: string): readonly string[] {
   try {
     const manifest = JSON.parse(manifestJson) as {
-      contributions?: Readonly<Record<string, readonly Array<{ readonly id?: unknown }>[] | unknown>>;
+      contributions?: Readonly<Record<string, unknown>>;
     };
     const result: string[] = [];
     for (const [kind, candidates] of Object.entries(manifest.contributions ?? {})) {

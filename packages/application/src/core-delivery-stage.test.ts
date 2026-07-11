@@ -23,7 +23,7 @@ describe("CoreDeliveryStage", () => {
       works: {
         listTasks: async () => [],
         getWork: async () => ({ revision: 1, status: "running" }),
-        transition: async (_context: unknown, value: any) => {
+        transition: async (_context: unknown, value: { target: string }) => {
           transitions.push(value.target);
           return { work: { revision: 2, status: value.target } };
         },
@@ -46,7 +46,7 @@ describe("CoreDeliveryStage", () => {
       works: {
         listTasks: async () => [],
         getWork: async () => ({ revision, status }),
-        transition: async (_context: unknown, value: any) => {
+        transition: async (_context: unknown, value: { target: string }) => {
           transitions.push(value.target);
           status = value.target;
           revision += 1;
@@ -115,7 +115,7 @@ describe("CoreDeliveryStage", () => {
     const works = {
       listTasks: async () => (taskStatus === "completed" ? [task()] : [task()]),
       getWork: async () => ({ revision, status: workStatus }),
-      transition: async (_context: unknown, value: any) => {
+      transition: async (_context: unknown, value: { target: string }) => {
         calls.push(`work-${value.target}`);
         workStatus = value.target;
         revision += 1;
@@ -126,7 +126,7 @@ describe("CoreDeliveryStage", () => {
         revision += 1;
         return { work: { revision } };
       },
-      transitionTask: async (_context: unknown, value: any) => {
+      transitionTask: async (_context: unknown, value: { target: string }) => {
         calls.push(value.target);
         taskStatus = value.target;
         revision += 1;

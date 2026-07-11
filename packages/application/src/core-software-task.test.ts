@@ -32,7 +32,7 @@ const request = {
 describe("CoreSoftwareTaskAdapter", () => {
   it("배정→TDD→승인 대기 후 같은 Delivery를 승인 ID로 최종화한다", async () => {
     const calls: string[] = [];
-    let existing: any;
+    let existing: { deliveryId: string; status: string } | undefined;
     const adapter = new CoreSoftwareTaskAdapter({
       works: {
         getWork: async () => ({ revision: 1 }),
@@ -55,7 +55,7 @@ describe("CoreSoftwareTaskAdapter", () => {
         },
       },
       proposals: {
-        propose: async (_context: unknown, input: any) => {
+        propose: async (_context: unknown, input: { acceptanceCriteria: readonly string[] }) => {
           calls.push(`propose:${input.acceptanceCriteria[0]}`);
           return {
             testPatch: "test",
@@ -75,7 +75,7 @@ describe("CoreSoftwareTaskAdapter", () => {
         },
       },
       finalizer: {
-        finalize: async (_context: unknown, input: any) => {
+        finalize: async (_context: unknown, input: { governanceApprovalId?: string }) => {
           calls.push(`finalize:${input.governanceApprovalId ?? "none"}`);
           if (!input.governanceApprovalId) throw new GovernanceApprovalRequiredError("decision-1", "approval-1");
           return {};
@@ -114,7 +114,7 @@ describe("CoreSoftwareTaskAdapter", () => {
       works: {},
       deliveries: {
         findByStartCommand: async () => delivery,
-        transition: async (_context: unknown, input: any) => {
+        transition: async (_context: unknown, input: { target: string }) => {
           calls.push(input.target);
           return { delivery: { ...delivery, status: input.target } };
         },

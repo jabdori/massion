@@ -27,18 +27,24 @@ interface SoftwareDeliveryConfiguration {
 }
 
 function strings(value: unknown, label: string): readonly string[] {
-  if (!Array.isArray(value) || !value.every((item) => typeof item === "string" && item.length > 0)) {
+  if (!Array.isArray(value)) {
     throw new Error(`${label} 목록이 유효하지 않습니다`);
   }
-  return value;
+  const result: string[] = [];
+  for (const item of value as unknown[]) {
+    if (typeof item !== "string" || item.length === 0) throw new Error(`${label} 목록이 유효하지 않습니다`);
+    result.push(item);
+  }
+  return result;
 }
 
 function configuration(request: unknown): SoftwareDeliveryConfiguration | undefined {
-  const value = request && typeof request === "object" ? (request as { softwareDelivery?: unknown }).softwareDelivery : undefined;
+  const value =
+    request && typeof request === "object" ? (request as { softwareDelivery?: unknown }).softwareDelivery : undefined;
   if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
   const record = value as Record<string, unknown>;
   const required = ["repositoryRoot", "repositoryId", "repositoryRevisionId", "baseRevision", "profileVersion"];
-  if (!required.every((key) => typeof record[key] === "string" && (record[key] as string).length > 0)) return undefined;
+  if (!required.every((key) => typeof record[key] === "string" && record[key].length > 0)) return undefined;
   const leaseTtlMs = record.leaseTtlMs === undefined ? 300_000 : Number(record.leaseTtlMs);
   if (!Number.isSafeInteger(leaseTtlMs) || leaseTtlMs < 1_000 || leaseTtlMs > 3_600_000) {
     throw new Error("Software Delivery lease 시간이 유효하지 않습니다");
@@ -51,7 +57,8 @@ function configuration(request: unknown): SoftwareDeliveryConfiguration | undefi
     profileVersion: record.profileVersion as string,
     allowedPaths: strings(record.allowedPaths, "Software Delivery allowed path"),
     testPaths: strings(record.testPaths, "Software Delivery test path"),
-    evidenceBriefIds: record.evidenceBriefIds === undefined ? [] : strings(record.evidenceBriefIds, "Evidence Brief ID"),
+    evidenceBriefIds:
+      record.evidenceBriefIds === undefined ? [] : strings(record.evidenceBriefIds, "Evidence Brief ID"),
     environment: typeof record.environment === "string" && record.environment ? record.environment : "local",
     leaseTtlMs,
   };
@@ -128,7 +135,8 @@ export class CoreSoftwareTaskAdapter implements CoreSoftwareTaskPort {
     if (delivery.status === "failed" || delivery.status === "cancelled") {
       return { outcome: "blocked", reason: `software-delivery-${delivery.status}` };
     }
-    if (delivery.status === "preparing") delivery = await this.executeTdd(context, input, config, delivery, agentHandle);
+    if (delivery.status === "preparing")
+      delivery = await this.executeTdd(context, input, config, delivery, agentHandle);
     if (delivery.status !== "committed") return { outcome: "blocked", reason: `software-delivery-${delivery.status}` };
     const [work, tasks] = await Promise.all([
       this.dependencies.works.getWork(context, input.workId),

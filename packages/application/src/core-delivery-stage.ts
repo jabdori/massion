@@ -144,7 +144,6 @@ export class CoreDeliveryStage implements CoreWorkStageExecutor {
           expectedTaskRevision: task.revision,
           target: "running",
         });
-        work = started.work;
         active = started.task;
       }
       const runtimeCommand = `${root}:runtime`;

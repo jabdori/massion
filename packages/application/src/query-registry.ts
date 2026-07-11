@@ -69,7 +69,7 @@ export class ApplicationQueryRegistry {
       throw new Error("Application query descriptor가 유효하지 않습니다");
     }
     if (this.descriptors.has(descriptor.operation)) throw new Error("Application query operation 중복입니다");
-    this.descriptors.set(descriptor.operation, descriptor as ApplicationQueryDescriptor);
+    this.descriptors.set(descriptor.operation, descriptor);
   }
 
   public async query(
@@ -137,12 +137,13 @@ export function registerApplicationQueries(
     requiredScopes: ["identity:read"],
     allowedRoles: EVERY_ROLE,
     validate: (value) => object(value, []),
-    handle: async (context) => ({
-      userId: context.userId,
-      organizationId: context.organizationId,
-      membershipId: context.membershipId,
-      role: context.role,
-    }),
+    handle: (context) =>
+      Promise.resolve({
+        userId: context.userId,
+        organizationId: context.organizationId,
+        membershipId: context.membershipId,
+        role: context.role,
+      }),
   });
   registry.register({
     operation: "work.list",
@@ -339,9 +340,10 @@ export function registerApplicationQueries(
     requiredScopes: ["organization:read"],
     allowedRoles: EVERY_ROLE,
     validate: (value) => object(value, []),
-    handle: async (context) => [
-      { organizationId: context.organizationId, membershipId: context.membershipId, role: context.role },
-    ],
+    handle: (context) =>
+      Promise.resolve([
+        { organizationId: context.organizationId, membershipId: context.membershipId, role: context.role },
+      ]),
   });
   if (dependencies.snapshot) {
     registry.register({

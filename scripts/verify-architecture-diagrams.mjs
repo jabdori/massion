@@ -119,10 +119,10 @@ async function main() {
   const { blocks, errors } = await validateStructure(markdown);
   if (errors.length > 0) throw new Error(errors.join("\n"));
   if (!process.argv.includes("--structure-only")) await render(blocks);
-  console.log(`아키텍처 다이어그램 ${String(blocks.length)}개 검증 통과`);
+  process.stdout.write(`아키텍처 다이어그램 ${String(blocks.length)}개 검증 통과\n`);
 }
 
 main().catch((error) => {
-  console.error(error instanceof Error ? error.message : String(error));
+  process.stderr.write(`${error instanceof Error ? error.message : "알 수 없는 아키텍처 검증 오류"}\n`);
   process.exitCode = 1;
 });

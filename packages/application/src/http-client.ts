@@ -91,7 +91,7 @@ export class ApplicationHttpClient {
     return await this.jsonRequest(`/api/v1/events?after=${String(after)}`, { method: "GET" }, true);
   }
 
-  public async *streamEvents(after = 0, signal?: AbortSignal): AsyncGenerator<unknown> {
+  public async *streamEvents(after = 0, signal?: AbortSignal): AsyncGenerator {
     if (!Number.isSafeInteger(after) || after < 0) throw new Error("Application event cursor가 유효하지 않습니다");
     const response = await this.request(
       `/api/v1/events/stream?after=${String(after)}`,
@@ -186,7 +186,7 @@ export class ApplicationHttpClient {
           headers: {
             authorization: `Bearer ${this.options.token}`,
             accept: "application/json",
-            ...(init.headers ?? {}),
+            ...Object.fromEntries(new Headers(init.headers)),
             ...(init.body === undefined || new Headers(init.headers).has("content-type")
               ? {}
               : { "content-type": "application/json" }),
