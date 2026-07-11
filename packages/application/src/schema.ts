@@ -178,9 +178,58 @@ THEN { THROW 'Application event는 immutable입니다'; };
 `,
 );
 
+export const APPLICATION_RUN_MIGRATION = defineMigration(
+  "0069-application-run",
+  `
+DEFINE TABLE application_run SCHEMAFULL PERMISSIONS NONE;
+DEFINE FIELD run_id ON application_run TYPE string;
+DEFINE FIELD organization_id ON application_run TYPE string;
+DEFINE FIELD actor_user_id ON application_run TYPE string;
+DEFINE FIELD command_id ON application_run TYPE string;
+DEFINE FIELD correlation_id ON application_run TYPE string;
+DEFINE FIELD request_json ON application_run TYPE string;
+DEFINE FIELD request_hash ON application_run TYPE string ASSERT string::len($value) = 64;
+DEFINE FIELD work_id ON application_run TYPE option<string>;
+DEFINE FIELD stage ON application_run TYPE string ASSERT $value IN ['intake', 'context-strategy', 'evidence', 'delivery', 'assurance', 'records', 'terminal'];
+DEFINE FIELD status ON application_run TYPE string ASSERT $value IN ['ready', 'running', 'awaiting-approval', 'blocked', 'completed', 'failed', 'cancelled'];
+DEFINE FIELD approval_id ON application_run TYPE option<string>;
+DEFINE FIELD blocked_reason ON application_run TYPE option<string>;
+DEFINE FIELD result_json ON application_run TYPE option<string>;
+DEFINE FIELD result_hash ON application_run TYPE option<string>;
+DEFINE FIELD lease_generation ON application_run TYPE int ASSERT $value >= 0;
+DEFINE FIELD lease_expires_at ON application_run TYPE option<datetime>;
+DEFINE FIELD created_at ON application_run TYPE datetime;
+DEFINE FIELD updated_at ON application_run TYPE datetime;
+DEFINE INDEX application_run_id ON application_run FIELDS organization_id, run_id UNIQUE;
+DEFINE INDEX application_run_command ON application_run FIELDS organization_id, command_id UNIQUE;
+
+DEFINE TABLE application_run_event SCHEMAFULL PERMISSIONS NONE;
+DEFINE FIELD event_id ON application_run_event TYPE string;
+DEFINE FIELD organization_id ON application_run_event TYPE string;
+DEFINE FIELD run_id ON application_run_event TYPE string;
+DEFINE FIELD correlation_id ON application_run_event TYPE string;
+DEFINE FIELD lease_generation ON application_run_event TYPE int ASSERT $value >= 0;
+DEFINE FIELD stage ON application_run_event TYPE string ASSERT $value IN ['intake', 'context-strategy', 'evidence', 'delivery', 'assurance', 'records', 'terminal'];
+DEFINE FIELD event_type ON application_run_event TYPE string ASSERT $value IN ['started', 'claimed', 'reclaimed', 'advanced', 'suspended', 'blocked', 'completed', 'failed', 'cancelled'];
+DEFINE FIELD detail_hash ON application_run_event TYPE string ASSERT string::len($value) = 64;
+DEFINE FIELD created_at ON application_run_event TYPE datetime;
+DEFINE INDEX application_run_event_id ON application_run_event FIELDS organization_id, event_id UNIQUE;
+DEFINE EVENT application_run_event_immutable ON TABLE application_run_event
+WHEN $event IN ['UPDATE', 'DELETE']
+THEN { THROW 'Application run event는 immutable입니다'; };
+
+DEFINE EVENT application_outbox_from_run ON TABLE application_run_event
+WHEN $event = 'CREATE'
+THEN {
+  CREATE application_outbox CONTENT { outbox_id: string::concat('run-event:', $after.event_id), organization_id: $after.organization_id, source_kind: 'run-event', source_id: $after.event_id, aggregate_id: $after.run_id, correlation_id: $after.correlation_id, causation_id: NONE, occurred_at: $after.created_at, state: 'pending', public_event_id: NONE, created_at: time::now(), updated_at: time::now() };
+};
+`,
+);
+
 export const APPLICATION_MIGRATIONS = [
   APPLICATION_AUTH_MIGRATION,
   APPLICATION_COMMAND_MIGRATION,
   APPLICATION_OUTBOX_MIGRATION,
   APPLICATION_EVENT_MIGRATION,
+  APPLICATION_RUN_MIGRATION,
 ] as const;
