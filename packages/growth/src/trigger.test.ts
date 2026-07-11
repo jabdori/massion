@@ -5,7 +5,8 @@ import { RECORDS_DOCUMENTATION_MIGRATION } from "@massion/records";
 import { applyMigrations, createDatabase, type MassionDatabase } from "@massion/storage";
 import { WORK_CORE_MIGRATION, WORK_RECORDS_LINK_MIGRATION, WORK_RECORDS_MIGRATION } from "@massion/work";
 
-import { GrowthConfigurationStore, type GrowthConfigurationAuthorizer } from "./index.js";
+import { GrowthConfigurationStore } from "./configuration.js";
+import type { GrowthConfigurationAuthorizer } from "./contracts.js";
 import { GrowthTriggerStore } from "./trigger.js";
 
 describe("completed Records Growth trigger", () => {

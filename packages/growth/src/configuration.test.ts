@@ -3,7 +3,8 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { IdentityService, OrganizationService, type TenantContext } from "@massion/identity";
 import { createDatabase, type MassionDatabase } from "@massion/storage";
 
-import { GrowthConfigurationStore, type ConfigureGrowthInput, type GrowthConfigurationAuthorizer } from "./index.js";
+import { GrowthConfigurationStore } from "./configuration.js";
+import type { ConfigureGrowthInput, GrowthConfigurationAuthorizer } from "./contracts.js";
 
 class AllowConfigurationAuthorizer implements GrowthConfigurationAuthorizer {
   public calls: ConfigureGrowthInput[] = [];

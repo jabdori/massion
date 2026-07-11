@@ -8,6 +8,7 @@ import { GROWTH_REFLECTION_MIGRATION } from "./schema.js";
 import { createReflectionSnapshot, type ReflectionSnapshot } from "./snapshot.js";
 import type { ReflectionSourceReference } from "./snapshot.js";
 import type { GrowthTrigger } from "./trigger.js";
+import { validateGrowthSuggestionSecurity } from "./security.js";
 
 export type SuggestionTargetKind = "prompt" | "memory" | "policy" | "organization";
 
@@ -85,6 +86,7 @@ export function validateSuggestionCandidate(
   candidate: SuggestionCandidate,
   snapshot: ReflectionSnapshot,
 ): SuggestionCandidate {
+  validateGrowthSuggestionSecurity(candidate);
   text(candidate.summary, "Suggestion summary");
   text(candidate.rationale, "Suggestion rationale");
   text(candidate.expectedEffect, "Suggestion expected effect");
