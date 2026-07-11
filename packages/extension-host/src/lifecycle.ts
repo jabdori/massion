@@ -71,6 +71,7 @@ interface ActiveWorker {
   readonly installationId: string;
   readonly versionId: string;
   readonly activationGeneration: number;
+  readonly sessionId: string;
   readonly contributions: readonly string[];
   readonly handle: ExtensionWorkerHandle;
 }
@@ -169,6 +170,63 @@ export class ExtensionLifecycleService {
     return await worker.handle.invoke(input.contribution, input.payload, input.timeoutMs);
   }
 
+  public async recoverActive(
+    context: TenantContext,
+  ): Promise<{ readonly recovered: number; readonly blocked: number }> {
+    let recovered = 0;
+    let blocked = 0;
+    const installations = await this.dependencies.store.listInstallations(context);
+    for (const installation of installations) {
+      if (installation.state !== "active" || !installation.activeVersionId) continue;
+      const key = activeKey(context.organizationId, installation.installationId);
+      if (this.activeWorkers.has(key)) continue;
+      let worker: ExtensionWorkerHandle | undefined;
+      try {
+        const version = await this.dependencies.store.getVersionDetails(context, installation.activeVersionId);
+        const archive = await this.dependencies.artifacts.read(context.organizationId, version.artifactDigest);
+        const report = await inspectExtensionArchive(archive, { runtime: this.dependencies.runtime });
+        const contributions = contributionIds(report.manifest.contributions);
+        this.assertContributionOwnership(context.organizationId, installation.installationId, contributions);
+        const materialized = await this.dependencies.artifacts.materialize(
+          context.organizationId,
+          version.artifactDigest,
+          report,
+        );
+        worker = await this.dependencies.workers.start({
+          trustLevel: version.trustLevel,
+          versionDirectory: materialized.versionDirectory,
+          entrypoint: version.manifest.runtime.entrypoint,
+          manifestDigest: version.manifestDigest,
+          sdkVersion: "1.0.0",
+          contributions,
+          healthTimeoutMs: version.manifest.runtime.healthTimeoutMs,
+          stopTimeoutMs: version.manifest.runtime.stopTimeoutMs,
+        });
+        const session = await this.dependencies.store.recordWorkerSession(context, {
+          installationId: installation.installationId,
+          versionId: version.versionId,
+          activationGeneration: installation.activationGeneration,
+          processId: worker.processId,
+          ...(worker.sandboxReceipt === undefined ? {} : { sandboxReceipt: worker.sandboxReceipt }),
+        });
+        this.registerActiveWorker(context.organizationId, {
+          organizationId: context.organizationId,
+          installationId: installation.installationId,
+          versionId: version.versionId,
+          activationGeneration: installation.activationGeneration,
+          sessionId: session.sessionId,
+          contributions,
+          handle: worker,
+        });
+        recovered += 1;
+      } catch {
+        worker?.terminate();
+        blocked += 1;
+      }
+    }
+    return { recovered, blocked };
+  }
+
   private async activateArchive(
     context: TenantContext,
     input: ExtensionChangeInput,
@@ -234,12 +292,11 @@ export class ExtensionLifecycleService {
       readonly outcome: "activated" | "rolled-back";
     },
   ): Promise<ExtensionActivationView> {
-    for (const contribution of input.reportContributions) {
-      const owner = this.contributionOwners.get(`${context.organizationId}:${contribution}`);
-      if (owner && owner !== input.installation.installationId) {
-        throw new Error(`Extension contribution ID가 충돌합니다: ${contribution}`);
-      }
-    }
+    this.assertContributionOwnership(
+      context.organizationId,
+      input.installation.installationId,
+      input.reportContributions,
+    );
     const worker = await this.dependencies.workers.start({
       trustLevel: input.version.trustLevel,
       versionDirectory: input.versionDirectory,
@@ -264,26 +321,39 @@ export class ExtensionLifecycleService {
         ...(worker.sandboxReceipt === undefined ? {} : { sandboxReceipt: worker.sandboxReceipt }),
         outcome: input.outcome,
       });
+      const session = await this.dependencies.store.recordWorkerSession(context, {
+        installationId: activated.installationId,
+        versionId: input.version.versionId,
+        activationGeneration: activated.activationGeneration,
+        processId: worker.processId,
+        ...(worker.sandboxReceipt === undefined ? {} : { sandboxReceipt: worker.sandboxReceipt }),
+      });
       const key = activeKey(context.organizationId, activated.installationId);
       const previous = this.activeWorkers.get(key);
-      if (previous) {
-        for (const contribution of previous.contributions) {
-          this.contributionOwners.delete(`${context.organizationId}:${contribution}`);
-        }
-      }
       const active: ActiveWorker = {
         organizationId: context.organizationId,
         installationId: activated.installationId,
         versionId: input.version.versionId,
         activationGeneration: activated.activationGeneration,
+        sessionId: session.sessionId,
         contributions: input.reportContributions,
         handle: worker,
       };
-      this.activeWorkers.set(key, active);
-      for (const contribution of input.reportContributions) {
-        this.contributionOwners.set(`${context.organizationId}:${contribution}`, activated.installationId);
+      this.registerActiveWorker(context.organizationId, active);
+      if (previous) {
+        try {
+          await previous.handle.stop();
+          await this.dependencies.store.finishWorkerSession(context, previous.sessionId, {
+            state: "stopped",
+            exitCategory: "version-replaced",
+          });
+        } catch {
+          await this.dependencies.store.finishWorkerSession(context, previous.sessionId, {
+            state: "failed",
+            exitCategory: "stop-failed",
+          });
+        }
       }
-      if (previous) await previous.handle.stop().catch(() => undefined);
       return {
         installationId: activated.installationId,
         versionId: input.version.versionId,
@@ -297,6 +367,33 @@ export class ExtensionLifecycleService {
     } catch (error) {
       worker.terminate();
       throw error;
+    }
+  }
+
+  private assertContributionOwnership(
+    organizationId: string,
+    installationId: string,
+    contributions: readonly string[],
+  ): void {
+    for (const contribution of contributions) {
+      const owner = this.contributionOwners.get(`${organizationId}:${contribution}`);
+      if (owner && owner !== installationId) {
+        throw new Error(`Extension contribution ID가 충돌합니다: ${contribution}`);
+      }
+    }
+  }
+
+  private registerActiveWorker(organizationId: string, active: ActiveWorker): void {
+    const key = activeKey(organizationId, active.installationId);
+    const previous = this.activeWorkers.get(key);
+    if (previous) {
+      for (const contribution of previous.contributions) {
+        this.contributionOwners.delete(`${organizationId}:${contribution}`);
+      }
+    }
+    this.activeWorkers.set(key, active);
+    for (const contribution of active.contributions) {
+      this.contributionOwners.set(`${organizationId}:${contribution}`, active.installationId);
     }
   }
 }

@@ -79,6 +79,14 @@ export interface ExtensionInstallationView {
   readonly activationGeneration: number;
 }
 
+export interface RecordedExtensionWorkerSession {
+  readonly sessionId: string;
+  readonly installationId: string;
+  readonly versionId: string;
+  readonly activationGeneration: number;
+  readonly state: "healthy" | "stopped" | "failed";
+}
+
 function sha256(value: string | Buffer): string {
   return createHash("sha256").update(value).digest("hex");
 }
@@ -363,6 +371,72 @@ export class ExtensionStore {
       { organization_id: context.organizationId },
     );
     return installations.map((installation) => this.installationView(installation));
+  }
+
+  public async recordWorkerSession(
+    context: TenantContext,
+    input: {
+      readonly installationId: string;
+      readonly versionId: string;
+      readonly activationGeneration: number;
+      readonly processId: number;
+      readonly sandboxReceipt?: Readonly<object>;
+    },
+  ): Promise<RecordedExtensionWorkerSession> {
+    await this.organizations.verifyTenantContext(context);
+    const sessionId = randomUUID();
+    return await this.database.transaction(async (transaction) => {
+      await this.organizations.verifyTenantContext(context, undefined, transaction);
+      const installation = await this.installation(transaction, context.organizationId, input.installationId);
+      const version = await this.findVersion(transaction, context.organizationId, input.versionId);
+      if (
+        installation.state !== "active" ||
+        installation.active_version_id !== input.versionId ||
+        installation.activation_generation !== input.activationGeneration ||
+        version.installation_id !== input.installationId
+      ) {
+        throw new Error("active Extension pointer와 worker session이 일치하지 않습니다");
+      }
+      await transaction.query(
+        "CREATE extension_worker_session CONTENT { session_id: $session_id, organization_id: $organization_id, installation_id: $installation_id, version_id: $version_id, activation_generation: $activation_generation, state: 'healthy', protocol_version: 'massion.extension.rpc.v1', process_id: $process_id, sandbox_receipt_json: $sandbox_receipt_json, lease_expires_at: NONE, exit_category: NONE, error_hash: NONE, started_at: time::now(), updated_at: time::now() };",
+        {
+          session_id: sessionId,
+          organization_id: context.organizationId,
+          installation_id: input.installationId,
+          version_id: input.versionId,
+          activation_generation: input.activationGeneration,
+          process_id: input.processId,
+          sandbox_receipt_json:
+            input.sandboxReceipt === undefined ? undefined : canonicalJson(input.sandboxReceipt),
+        },
+      );
+      return {
+        sessionId,
+        installationId: input.installationId,
+        versionId: input.versionId,
+        activationGeneration: input.activationGeneration,
+        state: "healthy",
+      };
+    });
+  }
+
+  public async finishWorkerSession(
+    context: TenantContext,
+    sessionId: string,
+    outcome: { readonly state: "stopped" | "failed"; readonly exitCategory: string },
+  ): Promise<void> {
+    await this.organizations.verifyTenantContext(context);
+    const errorHash = outcome.state === "failed" ? sha256(outcome.exitCategory) : undefined;
+    await this.database.query(
+      "UPDATE extension_worker_session SET state = $state, exit_category = $exit_category, error_hash = $error_hash, lease_expires_at = NONE, updated_at = time::now() WHERE organization_id = $organization_id AND session_id = $session_id AND state IN ['starting', 'healthy', 'draining'];",
+      {
+        organization_id: context.organizationId,
+        session_id: sessionId,
+        state: outcome.state,
+        exit_category: outcome.exitCategory,
+        error_hash: errorHash,
+      },
+    );
   }
 
   private async findVersion(

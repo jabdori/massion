@@ -10,10 +10,11 @@ interface SessionRecord {
   readonly session_id: string;
   readonly installation_id: string;
   readonly version_id: string;
+  readonly lease_expires_at?: string;
 }
 
 export interface ExtensionRecoveryAction {
-  readonly kind: "session-expired" | "staging-quarantined";
+  readonly kind: "session-expired" | "session-restarted" | "staging-quarantined";
   readonly referenceId: string;
 }
 
@@ -41,17 +42,20 @@ export class ExtensionRecoveryService {
     await this.organizations.verifyTenantContext(context);
     const actions: ExtensionRecoveryAction[] = [];
     const [sessions] = await this.database.query<[SessionRecord[]]>(
-      "SELECT session_id, installation_id, version_id FROM extension_worker_session WHERE organization_id = $organization_id AND state IN ['starting', 'healthy', 'draining'] AND lease_expires_at < time::now();",
+      "SELECT session_id, installation_id, version_id, lease_expires_at FROM extension_worker_session WHERE organization_id = $organization_id AND state IN ['starting', 'healthy', 'draining'];",
       { organization_id: context.organizationId },
     );
     for (const session of sessions) {
+      const expired = session.lease_expires_at !== undefined && new Date(session.lease_expires_at).getTime() < Date.now();
+      const exitCategory = expired ? "lease-expired" : "host-restarted";
       await this.database.transaction(async (transaction) => {
         await transaction.query(
-          "UPDATE extension_worker_session SET state = 'failed', exit_category = 'lease-expired', error_hash = $error_hash, lease_expires_at = NONE, updated_at = time::now() WHERE organization_id = $organization_id AND session_id = $session_id AND state IN ['starting', 'healthy', 'draining'];",
+          "UPDATE extension_worker_session SET state = 'failed', exit_category = $exit_category, error_hash = $error_hash, lease_expires_at = NONE, updated_at = time::now() WHERE organization_id = $organization_id AND session_id = $session_id AND state IN ['starting', 'healthy', 'draining'];",
           {
             organization_id: context.organizationId,
             session_id: session.session_id,
-            error_hash: sha256("lease-expired"),
+            exit_category: exitCategory,
+            error_hash: sha256(exitCategory),
           },
         );
         const payload = JSON.stringify({ sessionId: session.session_id });
@@ -68,7 +72,7 @@ export class ExtensionRecoveryService {
           },
         );
       });
-      actions.push({ kind: "session-expired", referenceId: session.session_id });
+      actions.push({ kind: expired ? "session-expired" : "session-restarted", referenceId: session.session_id });
     }
     const quarantined = await this.artifacts.recoverStaging(context.organizationId);
     for (let index = 0; index < quarantined; index += 1) {
