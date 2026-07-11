@@ -1,13 +1,11 @@
-import {
-  EXTENSION_RPC_PROTOCOL,
-  EXTENSION_SCHEMA_VERSION,
-  type ExtensionManifestV1,
-} from "./contracts.js";
+import { EXTENSION_RPC_PROTOCOL, EXTENSION_SCHEMA_VERSION, type ExtensionManifestV1 } from "./contracts.js";
 
 const IDENTIFIER = /^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$/u;
 const PACKAGE_NAME = /^@massion-ext\/[a-z0-9]+(?:-[a-z0-9]+)*$/u;
-const SEMVER = /^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/u;
-const SECRET = /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----|\b(?:gh[opusr]|sk|pk)_[A-Za-z0-9_-]{12,}|\bBearer\s+[A-Za-z0-9._~+/-]{12,}/iu;
+const SEMVER =
+  /^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/u;
+const SECRET =
+  /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----|\b(?:gh[opusr]|sk|pk)_[A-Za-z0-9_-]{12,}|\bBearer\s+[A-Za-z0-9._~+/-]{12,}/iu;
 const TOP_FIELDS = new Set([
   "schemaVersion",
   "name",
@@ -85,51 +83,53 @@ function validatePermissions(value: unknown): void {
     "permissions",
   );
   const tools = list(permissions.tools, "permissions.tools").map((candidate, index) => {
-    const tool = exact(candidate, new Set(["id", "operations"]), `permissions.tools[${index}]`);
-    const id = identifier(tool.id, `permissions.tools[${index}].id`);
-    const operations = list(tool.operations, `permissions.tools[${index}].operations`).map((operation) =>
+    const label = `permissions.tools[${String(index)}]`;
+    const tool = exact(candidate, new Set(["id", "operations"]), label);
+    const id = identifier(tool.id, `${label}.id`);
+    const operations = list(tool.operations, `${label}.operations`).map((operation) =>
       identifier(operation, "tool operation"),
     );
-    unique(operations, `permissions.tools[${index}].operations`);
+    unique(operations, `${label}.operations`);
     return id;
   });
   unique(tools, "permissions.tools");
 
   const origins = list(permissions.network, "permissions.network").map((candidate, index) => {
-    const network = exact(candidate, new Set(["origin", "methods"]), `permissions.network[${index}]`);
-    const origin = text(network.origin, `permissions.network[${index}].origin`, 512);
+    const label = `permissions.network[${String(index)}]`;
+    const network = exact(candidate, new Set(["origin", "methods"]), label);
+    const origin = text(network.origin, `${label}.origin`, 512);
     let parsed: URL;
     try {
       parsed = new URL(origin);
     } catch {
-      throw new Error(`permissions.network[${index}].origin이 유효하지 않습니다`);
+      throw new Error(`${label}.origin이 유효하지 않습니다`);
     }
     if (parsed.protocol !== "https:" || parsed.origin !== origin || parsed.hostname.includes("*")) {
-      throw new Error(`permissions.network[${index}].origin은 wildcard 없는 HTTPS origin이어야 합니다`);
+      throw new Error(`${label}.origin은 wildcard 없는 HTTPS origin이어야 합니다`);
     }
-    const methods = list(network.methods, `permissions.network[${index}].methods`).map((method) =>
-      text(method, "network method", 8),
-    );
+    const methods = list(network.methods, `${label}.methods`).map((method) => text(method, "network method", 8));
     if (methods.some((method) => !["GET", "POST", "PUT", "PATCH", "DELETE"].includes(method))) {
       throw new Error("network method가 유효하지 않습니다");
     }
-    unique(methods, `permissions.network[${index}].methods`);
+    unique(methods, `${label}.methods`);
     return origin;
   });
   unique(origins, "permissions.network");
 
   const mounts = list(permissions.files, "permissions.files").map((candidate, index) => {
-    const file = exact(candidate, new Set(["mount", "access"]), `permissions.files[${index}]`);
-    const mount = identifier(file.mount, `permissions.files[${index}].mount`);
+    const label = `permissions.files[${String(index)}]`;
+    const file = exact(candidate, new Set(["mount", "access"]), label);
+    const mount = identifier(file.mount, `${label}.mount`);
     if (file.access !== "read" && file.access !== "write") throw new Error("file access가 유효하지 않습니다");
     return mount;
   });
   unique(mounts, "permissions.files");
 
   const slots = list(permissions.secrets, "permissions.secrets").map((candidate, index) => {
-    const secret = exact(candidate, new Set(["slot", "purpose"]), `permissions.secrets[${index}]`);
-    const slot = identifier(secret.slot, `permissions.secrets[${index}].slot`);
-    text(secret.purpose, `permissions.secrets[${index}].purpose`, 512);
+    const label = `permissions.secrets[${String(index)}]`;
+    const secret = exact(candidate, new Set(["slot", "purpose"]), label);
+    const slot = identifier(secret.slot, `${label}.slot`);
+    text(secret.purpose, `${label}.purpose`, 512);
     return slot;
   });
   unique(slots, "permissions.secrets");
@@ -160,15 +160,12 @@ function validateContributions(value: unknown): void {
   const all: string[] = [];
   for (const field of fields) {
     const ids = list(contributions[field], `contributions.${field}`).map((candidate, index) => {
-      const entry = exact(
-        candidate,
-        field === "skills" ? new Set(["id", "path"]) : new Set(["id", "handler"]),
-        `contributions.${field}[${index}]`,
-      );
-      const id = identifier(entry.id, `contributions.${field}[${index}].id`);
-      const target = text(field === "skills" ? entry.path : entry.handler, `contributions.${field}[${index}] target`, 256);
+      const label = `contributions.${field}[${String(index)}]`;
+      const entry = exact(candidate, field === "skills" ? new Set(["id", "path"]) : new Set(["id", "handler"]), label);
+      const id = identifier(entry.id, `${label}.id`);
+      const target = text(field === "skills" ? entry.path : entry.handler, `${label} target`, 256);
       if (target.startsWith("/") || target.includes("\\") || target.split("/").includes("..")) {
-        throw new Error(`contributions.${field}[${index}] path가 유효하지 않습니다`);
+        throw new Error(`${label} path가 유효하지 않습니다`);
       }
       return id;
     });
@@ -187,13 +184,17 @@ function deepFreeze<T>(value: T): T {
 }
 
 export function validateExtensionManifest(value: unknown): ExtensionManifestV1 {
+  if (value === undefined || typeof value === "function" || typeof value === "symbol") {
+    throw new Error("Extension manifest는 JSON 값이어야 합니다");
+  }
   const encoded = JSON.stringify(value);
-  if (encoded === undefined || Buffer.byteLength(encoded, "utf8") > 64 * 1024) {
+  if (Buffer.byteLength(encoded, "utf8") > 64 * 1024) {
     throw new Error("Extension manifest byte 상한을 초과했습니다");
   }
   validateTree(value);
   const manifest = exact(value, TOP_FIELDS, "manifest");
-  if (manifest.schemaVersion !== EXTENSION_SCHEMA_VERSION) throw new Error("Extension schemaVersion이 유효하지 않습니다");
+  if (manifest.schemaVersion !== EXTENSION_SCHEMA_VERSION)
+    throw new Error("Extension schemaVersion이 유효하지 않습니다");
   const name = text(manifest.name, "Extension name", 128);
   if (!PACKAGE_NAME.test(name)) throw new Error("Extension name은 @massion-ext scope여야 합니다");
   const version = text(manifest.version, "Extension version", 128);

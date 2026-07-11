@@ -21,7 +21,8 @@ export interface ExtensionWorkerIo {
 }
 
 function object(value: unknown, label: string): Record<string, unknown> {
-  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error(`${label} payload가 유효하지 않습니다`);
+  if (!value || typeof value !== "object" || Array.isArray(value))
+    throw new Error(`${label} payload가 유효하지 않습니다`);
   return value as Record<string, unknown>;
 }
 
@@ -84,7 +85,8 @@ export function createExtensionWorker(input: CreateExtensionWorkerInput): {
           }
         }
         const encoded = JSON.stringify(outgoing);
-        if (Buffer.byteLength(encoded, "utf8") > maximum) throw new Error("Extension worker 응답 byte 상한을 초과했습니다");
+        if (Buffer.byteLength(encoded, "utf8") > maximum)
+          throw new Error("Extension worker 응답 byte 상한을 초과했습니다");
         await io.writeLine(encoded);
         if (request.operation === "host.stop") return;
       }

@@ -1,13 +1,10 @@
-import {
-  EXTENSION_RPC_PROTOCOL,
-  type ExtensionHandshake,
-  type ExtensionRpcFrame,
-} from "./contracts.js";
+import { EXTENSION_RPC_PROTOCOL, type ExtensionHandshake, type ExtensionRpcFrame } from "./contracts.js";
 
 function inspect(value: unknown, depth: number, maximum: number): void {
   if (depth > maximum) throw new Error("Extension RPC payload 깊이 상한을 초과했습니다");
   if (!value || typeof value !== "object") {
-    if (typeof value === "number" && !Number.isFinite(value)) throw new Error("Extension RPC number가 유효하지 않습니다");
+    if (typeof value === "number" && !Number.isFinite(value))
+      throw new Error("Extension RPC number가 유효하지 않습니다");
     return;
   }
   for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
@@ -27,7 +24,8 @@ export function createRpcFrameParser(options: { readonly maxFrameBytes?: number;
   const requestIds = new Set<string>();
   return {
     parse(line: string): ExtensionRpcFrame {
-      if (Buffer.byteLength(line, "utf8") > maximumBytes) throw new Error("Extension RPC frame byte 상한을 초과했습니다");
+      if (Buffer.byteLength(line, "utf8") > maximumBytes)
+        throw new Error("Extension RPC frame byte 상한을 초과했습니다");
       let value: unknown;
       try {
         value = JSON.parse(line) as unknown;
@@ -35,7 +33,8 @@ export function createRpcFrameParser(options: { readonly maxFrameBytes?: number;
         throw new Error("Extension RPC stdout은 JSON frame만 허용합니다");
       }
       inspect(value, 0, maximumDepth);
-      if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Extension RPC frame이 유효하지 않습니다");
+      if (!value || typeof value !== "object" || Array.isArray(value))
+        throw new Error("Extension RPC frame이 유효하지 않습니다");
       const frame = value as Record<string, unknown>;
       const allowed = new Set(["protocol", "requestId", "sequence", "operation", "payload"]);
       const unknown = Object.keys(frame).find((key) => !allowed.has(key));

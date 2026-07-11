@@ -96,9 +96,7 @@ describe("Extension manifest v1", () => {
   });
 
   it("manifest byte·깊이·배열 상한을 거부한다", () => {
-    expect(() =>
-      validateExtensionManifest({ ...validManifest, description: "가".repeat(70_000) }),
-    ).toThrow("byte");
+    expect(() => validateExtensionManifest({ ...validManifest, description: "가".repeat(70_000) })).toThrow("byte");
     expect(() =>
       validateExtensionManifest({
         ...validManifest,
