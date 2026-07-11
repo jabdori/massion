@@ -43,6 +43,19 @@ export class RegistryApplicationAdapter {
         >;
       };
       readonly runtime: ExtensionRuntimeVersions;
+      readonly telemetry?: {
+        record(
+          context: TenantContext,
+          input: {
+            sourceId: string;
+            eventType: string;
+            outcome: string;
+            packageName: string;
+            packageVersion: string;
+            metricName: string;
+          },
+        ): Promise<void>;
+      };
     },
   ) {}
 
@@ -79,7 +92,7 @@ export class RegistryApplicationAdapter {
       organizationId: context.organizationId,
       versionId: input.versionId,
     });
-    return (await this.dependencies.installer.install(context, {
+    const installed = (await this.dependencies.installer.install(context, {
       commandId: input.commandId,
       downloadGrant: grant.token,
       environment: input.environment,
@@ -88,6 +101,15 @@ export class RegistryApplicationAdapter {
       ...(input.installApprovalId === undefined ? {} : { installApprovalId: input.installApprovalId }),
       ...(input.permissionApprovalId === undefined ? {} : { permissionApprovalId: input.permissionApprovalId }),
     })) as { installationId: string; packageName: string; packageVersion: string };
+    await this.dependencies.telemetry?.record(context, {
+      sourceId: input.commandId,
+      eventType: "registry.package.installed",
+      outcome: "succeeded",
+      packageName: installed.packageName,
+      packageVersion: installed.packageVersion,
+      metricName: "registry_install_total",
+    });
+    return installed;
   }
 
   public async recall(
@@ -117,6 +139,15 @@ export class RegistryApplicationAdapter {
         reason: input.reason,
       });
     }
+    const version = await this.dependencies.versions.get(context, input.versionId);
+    await this.dependencies.telemetry?.record(context, {
+      sourceId: input.commandId,
+      eventType: input.supersedesRecallId === undefined ? "registry.package.recalled" : "registry.recall.superseded",
+      outcome: "succeeded",
+      packageName: version.packageName,
+      packageVersion: version.packageVersion,
+      metricName: input.supersedesRecallId === undefined ? "registry_recall_total" : "registry_recall_supersede_total",
+    });
     return { recallId: input.commandId, versionId: input.versionId };
   }
 
