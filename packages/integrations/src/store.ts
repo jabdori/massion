@@ -1,0 +1,431 @@
+import { createHash, randomUUID } from "node:crypto";
+
+import type { OrganizationService, TenantContext } from "@massion/identity";
+import { applyMigrations, type MassionDatabase, type QueryExecutor } from "@massion/storage";
+
+import type { IntegrationPlatform } from "./contracts.js";
+import { normalizeDeliveryId, normalizeExternalId } from "./contracts.js";
+import { INTEGRATION_MIGRATIONS } from "./schema.js";
+
+const HASH = /^[a-f0-9]{64}$/u;
+const REFERENCE = /^[a-z][a-z0-9-]{1,31}:[A-Za-z0-9][A-Za-z0-9._:-]{2,191}$/u;
+const SECRET = /\b(?:xox[baprs]-|gh[opusr]_|Bearer\s+)[A-Za-z0-9._~+/-]{12,}/iu;
+
+function canonical(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
+  if (value && typeof value === "object")
+    return `{${Object.entries(value as Record<string, unknown>)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([key, child]) => `${JSON.stringify(key)}:${canonical(child)}`)
+      .join(",")}}`;
+  return JSON.stringify(value);
+}
+
+const sha256 = (value: string): string => createHash("sha256").update(value).digest("hex");
+
+async function first<T>(
+  executor: QueryExecutor,
+  surql: string,
+  bindings: Record<string, unknown>,
+): Promise<T | undefined> {
+  const [records] = await executor.query<[T[]]>(surql, bindings);
+  return records[0];
+}
+
+interface InstallationRecord {
+  installation_id: string;
+  organization_id: string;
+  platform: IntegrationPlatform;
+  external_tenant_id: string;
+  credential_ref: string;
+  scopes: string[];
+  state: "active" | "disabled" | "blocked";
+  revision: number;
+  command_id: string;
+  request_hash: string;
+}
+
+interface BindingRecord {
+  binding_id: string;
+  organization_id: string;
+  installation_id: string;
+  external_user_id: string;
+  user_id: string;
+  state: "active" | "revoked";
+  revision: number;
+  command_id: string;
+  request_hash: string;
+}
+
+interface DeliveryRecord {
+  delivery_record_id: string;
+  organization_id: string;
+  installation_id: string;
+  delivery_id: string;
+  event_type: string;
+  body_hash: string;
+  state: "accepted" | "processing" | "succeeded" | "failed" | "blocked";
+  attempt: number;
+  lease_owner?: string;
+  lease_generation: number;
+  lease_expires_at?: string | Date;
+}
+
+interface OutboxRecord {
+  outbox_id: string;
+  organization_id: string;
+  installation_id: string;
+  destination: string;
+  operation: string;
+  idempotency_key: string;
+  payload_json: string;
+  payload_hash: string;
+  state: "pending" | "processing" | "retrying" | "succeeded" | "blocked";
+  attempt: number;
+  lease_owner?: string;
+  lease_generation: number;
+  command_id: string;
+  request_hash: string;
+}
+
+export class IntegrationStore {
+  private constructor(
+    private readonly database: MassionDatabase,
+    private readonly organizations: OrganizationService,
+  ) {}
+
+  public static async create(database: MassionDatabase, organizations: OrganizationService): Promise<IntegrationStore> {
+    await applyMigrations(database, INTEGRATION_MIGRATIONS);
+    return new IntegrationStore(database, organizations);
+  }
+
+  public async connect(
+    context: TenantContext,
+    input: {
+      commandId: string;
+      platform: IntegrationPlatform;
+      externalTenantId: string;
+      credentialRef: string;
+      scopes: readonly string[];
+    },
+  ) {
+    await this.organizations.verifyTenantContext(context);
+    normalizeExternalId(input.platform, input.externalTenantId);
+    if (!REFERENCE.test(input.credentialRef) || SECRET.test(input.credentialRef))
+      throw new Error("Integration credential reference가 유효하지 않습니다");
+    const scopes = [...new Set(input.scopes)].sort();
+    if (scopes.length !== input.scopes.length || scopes.some((scope) => !/^[a-z][a-z0-9._:-]{1,127}$/u.test(scope)))
+      throw new Error("Integration scope가 유효하지 않습니다");
+    const requestHash = sha256(canonical({ ...input, scopes }));
+    return await this.database.transaction(async (tx) => {
+      await this.organizations.verifyTenantContext(context, undefined, tx);
+      const replay = await first<InstallationRecord>(
+        tx,
+        "SELECT * OMIT id FROM integration_installation WHERE organization_id=$organization_id AND command_id=$command_id LIMIT 1;",
+        { organization_id: context.organizationId, command_id: input.commandId },
+      );
+      if (replay) {
+        if (replay.request_hash !== requestHash)
+          throw new Error("같은 commandId에 다른 Integration 요청을 사용할 수 없습니다");
+        return this.installationView(replay);
+      }
+      const installation = await first<InstallationRecord>(
+        tx,
+        "CREATE integration_installation CONTENT { installation_id:$installation_id, organization_id:$organization_id, platform:$platform, external_tenant_id:$external_tenant_id, credential_ref:$credential_ref, scopes:$scopes, state:'active', revision:1, command_id:$command_id, request_hash:$request_hash, created_at:time::now(), updated_at:time::now() } RETURN AFTER;",
+        {
+          installation_id: randomUUID(),
+          organization_id: context.organizationId,
+          platform: input.platform,
+          external_tenant_id: input.externalTenantId,
+          credential_ref: input.credentialRef,
+          scopes,
+          command_id: input.commandId,
+          request_hash: requestHash,
+        },
+      );
+      if (!installation) throw new Error("Integration installation 생성 결과가 없습니다");
+      return this.installationView(installation);
+    });
+  }
+
+  public async getInstallation(context: TenantContext, installationId: string) {
+    await this.organizations.verifyTenantContext(context);
+    const record = await first<InstallationRecord>(
+      this.database,
+      "SELECT * OMIT id FROM integration_installation WHERE organization_id=$organization_id AND installation_id=$installation_id LIMIT 1;",
+      { organization_id: context.organizationId, installation_id: installationId },
+    );
+    if (!record) throw new Error("Integration installation을 찾을 수 없습니다");
+    return this.installationView(record);
+  }
+
+  public async bindUser(
+    context: TenantContext,
+    input: { commandId: string; installationId: string; externalUserId: string; userId: string },
+  ) {
+    await this.getInstallation(context, input.installationId);
+    normalizeExternalId("slack", input.externalUserId);
+    const requestHash = sha256(canonical(input));
+    return await this.database.transaction(async (tx) => {
+      await this.organizations.verifyTenantContext(context, undefined, tx);
+      const replay = await first<BindingRecord>(
+        tx,
+        "SELECT * OMIT id FROM integration_user_binding WHERE organization_id=$organization_id AND command_id=$command_id LIMIT 1;",
+        { organization_id: context.organizationId, command_id: input.commandId },
+      );
+      if (replay) {
+        if (replay.request_hash !== requestHash)
+          throw new Error("같은 commandId에 다른 user binding 요청을 사용할 수 없습니다");
+        return this.bindingView(replay);
+      }
+      const record = await first<BindingRecord>(
+        tx,
+        "CREATE integration_user_binding CONTENT { binding_id:$binding_id, organization_id:$organization_id, installation_id:$installation_id, external_user_id:$external_user_id, user_id:$user_id, state:'active', revision:1, command_id:$command_id, request_hash:$request_hash, created_at:time::now(), updated_at:time::now() } RETURN AFTER;",
+        {
+          binding_id: randomUUID(),
+          organization_id: context.organizationId,
+          installation_id: input.installationId,
+          external_user_id: input.externalUserId,
+          user_id: input.userId,
+          command_id: input.commandId,
+          request_hash: requestHash,
+        },
+      );
+      if (!record) throw new Error("Integration user binding 생성 결과가 없습니다");
+      return this.bindingView(record);
+    });
+  }
+
+  public async acceptDelivery(
+    context: TenantContext,
+    input: { installationId: string; deliveryId: string; eventType: string; bodyHash: string; receivedAt: Date },
+  ) {
+    const installation = await this.getInstallation(context, input.installationId);
+    normalizeDeliveryId(installation.platform, input.deliveryId);
+    if (!HASH.test(input.bodyHash) || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u.test(input.eventType))
+      throw new Error("Integration delivery input이 유효하지 않습니다");
+    return await this.database.transaction(async (tx) => {
+      await this.organizations.verifyTenantContext(context, undefined, tx);
+      const replay = await first<DeliveryRecord>(
+        tx,
+        "SELECT * OMIT id FROM integration_delivery WHERE organization_id=$organization_id AND installation_id=$installation_id AND delivery_id=$delivery_id LIMIT 1;",
+        {
+          organization_id: context.organizationId,
+          installation_id: input.installationId,
+          delivery_id: input.deliveryId,
+        },
+      );
+      if (replay) {
+        if (replay.body_hash !== input.bodyHash)
+          throw new Error("같은 delivery ID에 다른 body hash를 사용할 수 없습니다");
+        return { ...this.deliveryView(replay), replayed: true };
+      }
+      const record = await first<DeliveryRecord>(
+        tx,
+        "CREATE integration_delivery CONTENT { delivery_record_id:$delivery_record_id, organization_id:$organization_id, installation_id:$installation_id, delivery_id:$delivery_id, event_type:$event_type, body_hash:$body_hash, state:'accepted', attempt:0, lease_owner:NONE, lease_generation:0, lease_expires_at:NONE, result_hash:NONE, received_at:$received_at, updated_at:time::now() } RETURN AFTER;",
+        {
+          delivery_record_id: randomUUID(),
+          organization_id: context.organizationId,
+          installation_id: input.installationId,
+          delivery_id: input.deliveryId,
+          event_type: input.eventType,
+          body_hash: input.bodyHash,
+          received_at: input.receivedAt,
+        },
+      );
+      if (!record) throw new Error("Integration delivery 생성 결과가 없습니다");
+      return { ...this.deliveryView(record), replayed: false };
+    });
+  }
+
+  public async claimDelivery(context: TenantContext, input: { workerId: string; now: Date; leaseMs: number }) {
+    return await this.database.transaction(async (tx) => {
+      await this.organizations.verifyTenantContext(context, undefined, tx);
+      const candidate = await first<DeliveryRecord>(
+        tx,
+        "SELECT * OMIT id FROM integration_delivery WHERE organization_id=$organization_id AND (state='accepted' OR (state='processing' AND lease_expires_at <= $now)) ORDER BY received_at ASC LIMIT 1;",
+        { organization_id: context.organizationId, now: input.now },
+      );
+      if (!candidate) return undefined;
+      const record = await first<DeliveryRecord>(
+        tx,
+        "UPDATE integration_delivery SET state='processing', attempt=attempt+1, lease_owner=$worker_id, lease_generation=lease_generation+1, lease_expires_at=$lease_expires_at, updated_at=time::now() WHERE organization_id=$organization_id AND delivery_record_id=$delivery_record_id AND lease_generation=$expected_generation RETURN AFTER;",
+        {
+          organization_id: context.organizationId,
+          delivery_record_id: candidate.delivery_record_id,
+          expected_generation: candidate.lease_generation,
+          worker_id: input.workerId,
+          lease_expires_at: new Date(input.now.getTime() + input.leaseMs),
+        },
+      );
+      if (!record) throw new Error("Integration delivery lease 충돌입니다");
+      return this.deliveryView(record);
+    });
+  }
+
+  public async completeDelivery(
+    context: TenantContext,
+    input: {
+      deliveryRecordId: string;
+      workerId: string;
+      leaseGeneration: number;
+      outcome: "succeeded" | "failed" | "blocked";
+      resultHash: string;
+    },
+  ) {
+    if (!HASH.test(input.resultHash)) throw new Error("Integration result hash가 유효하지 않습니다");
+    const record = await first<DeliveryRecord>(
+      this.database,
+      "UPDATE integration_delivery SET state=$outcome, result_hash=$result_hash, lease_owner=NONE, lease_expires_at=NONE, updated_at=time::now() WHERE organization_id=$organization_id AND delivery_record_id=$delivery_record_id AND state='processing' AND lease_owner=$worker_id AND lease_generation=$lease_generation RETURN AFTER;",
+      {
+        organization_id: context.organizationId,
+        delivery_record_id: input.deliveryRecordId,
+        worker_id: input.workerId,
+        lease_generation: input.leaseGeneration,
+        outcome: input.outcome,
+        result_hash: input.resultHash,
+      },
+    );
+    if (!record) throw new Error("Integration delivery lease가 일치하지 않습니다");
+  }
+
+  public async enqueue(
+    context: TenantContext,
+    input: {
+      commandId: string;
+      installationId: string;
+      destination: string;
+      operation: string;
+      idempotencyKey: string;
+      payload: unknown;
+    },
+  ) {
+    await this.getInstallation(context, input.installationId);
+    const payloadJson = canonical(input.payload);
+    if (Buffer.byteLength(payloadJson) > 262_144 || SECRET.test(payloadJson))
+      throw new Error("Integration outbox payload가 안전하지 않습니다");
+    const requestHash = sha256(canonical({ ...input, payload: JSON.parse(payloadJson) as unknown }));
+    return await this.database.transaction(async (tx) => {
+      await this.organizations.verifyTenantContext(context, undefined, tx);
+      const replay = await first<OutboxRecord>(
+        tx,
+        "SELECT * OMIT id FROM integration_outbox WHERE organization_id=$organization_id AND command_id=$command_id LIMIT 1;",
+        { organization_id: context.organizationId, command_id: input.commandId },
+      );
+      if (replay) {
+        if (replay.request_hash !== requestHash)
+          throw new Error("같은 commandId에 다른 outbox 요청을 사용할 수 없습니다");
+        return this.outboxView(replay);
+      }
+      const record = await first<OutboxRecord>(
+        tx,
+        "CREATE integration_outbox CONTENT { outbox_id:$outbox_id, organization_id:$organization_id, installation_id:$installation_id, destination:$destination, operation:$operation, idempotency_key:$idempotency_key, payload_json:$payload_json, payload_hash:$payload_hash, state:'pending', attempt:0, lease_owner:NONE, lease_generation:0, lease_expires_at:NONE, next_attempt_at:time::now(), error_category:NONE, command_id:$command_id, request_hash:$request_hash, created_at:time::now(), updated_at:time::now() } RETURN AFTER;",
+        {
+          outbox_id: randomUUID(),
+          organization_id: context.organizationId,
+          installation_id: input.installationId,
+          destination: input.destination,
+          operation: input.operation,
+          idempotency_key: input.idempotencyKey,
+          payload_json: payloadJson,
+          payload_hash: sha256(payloadJson),
+          command_id: input.commandId,
+          request_hash: requestHash,
+        },
+      );
+      if (!record) throw new Error("Integration outbox 생성 결과가 없습니다");
+      return this.outboxView(record);
+    });
+  }
+
+  public async claimOutbox(context: TenantContext, input: { workerId: string; now: Date; leaseMs: number }) {
+    return await this.database.transaction(async (tx) => {
+      await this.organizations.verifyTenantContext(context, undefined, tx);
+      const candidate = await first<OutboxRecord>(
+        tx,
+        "SELECT * OMIT id FROM integration_outbox WHERE organization_id=$organization_id AND ((state IN ['pending','retrying'] AND next_attempt_at <= $now) OR (state='processing' AND lease_expires_at <= $now)) ORDER BY next_attempt_at ASC LIMIT 1;",
+        { organization_id: context.organizationId, now: input.now },
+      );
+      if (!candidate) return undefined;
+      const record = await first<OutboxRecord>(
+        tx,
+        "UPDATE integration_outbox SET state='processing', attempt=attempt+1, lease_owner=$worker_id, lease_generation=lease_generation+1, lease_expires_at=$lease_expires_at, updated_at=time::now() WHERE organization_id=$organization_id AND outbox_id=$outbox_id AND lease_generation=$expected_generation RETURN AFTER;",
+        {
+          organization_id: context.organizationId,
+          outbox_id: candidate.outbox_id,
+          expected_generation: candidate.lease_generation,
+          worker_id: input.workerId,
+          lease_expires_at: new Date(input.now.getTime() + input.leaseMs),
+        },
+      );
+      if (!record) throw new Error("Integration outbox lease 충돌입니다");
+      return this.outboxView(record);
+    });
+  }
+
+  public async retryOutbox(
+    context: TenantContext,
+    input: { outboxId: string; workerId: string; leaseGeneration: number; nextAttemptAt: Date; errorCategory: string },
+  ) {
+    const record = await first<OutboxRecord>(
+      this.database,
+      "UPDATE integration_outbox SET state='retrying', lease_owner=NONE, lease_expires_at=NONE, next_attempt_at=$next_attempt_at, error_category=$error_category, updated_at=time::now() WHERE organization_id=$organization_id AND outbox_id=$outbox_id AND state='processing' AND lease_owner=$worker_id AND lease_generation=$lease_generation RETURN AFTER;",
+      {
+        organization_id: context.organizationId,
+        outbox_id: input.outboxId,
+        worker_id: input.workerId,
+        lease_generation: input.leaseGeneration,
+        next_attempt_at: input.nextAttemptAt,
+        error_category: input.errorCategory,
+      },
+    );
+    if (!record) throw new Error("Integration outbox lease가 일치하지 않습니다");
+  }
+
+  private installationView(record: InstallationRecord) {
+    return {
+      installationId: record.installation_id,
+      organizationId: record.organization_id,
+      platform: record.platform,
+      externalTenantId: record.external_tenant_id,
+      credentialRef: record.credential_ref,
+      scopes: [...record.scopes],
+      state: record.state,
+      revision: record.revision,
+    };
+  }
+  private bindingView(record: BindingRecord) {
+    return {
+      bindingId: record.binding_id,
+      installationId: record.installation_id,
+      externalUserId: record.external_user_id,
+      userId: record.user_id,
+      state: record.state,
+      revision: record.revision,
+    };
+  }
+  private deliveryView(record: DeliveryRecord) {
+    return {
+      deliveryRecordId: record.delivery_record_id,
+      installationId: record.installation_id,
+      deliveryId: record.delivery_id,
+      eventType: record.event_type,
+      state: record.state,
+      attempt: record.attempt,
+      leaseGeneration: record.lease_generation,
+    };
+  }
+  private outboxView(record: OutboxRecord) {
+    return {
+      outboxId: record.outbox_id,
+      installationId: record.installation_id,
+      destination: record.destination,
+      operation: record.operation,
+      idempotencyKey: record.idempotency_key,
+      payload: JSON.parse(record.payload_json) as unknown,
+      state: record.state,
+      attempt: record.attempt,
+      leaseGeneration: record.lease_generation,
+    };
+  }
+}
