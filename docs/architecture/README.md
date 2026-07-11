@@ -576,7 +576,7 @@ flowchart LR
 
 ## 11. 개인·팀 배포 구조
 
-Massion 1.0은 개인 로컬 설치와 팀 자체 호스팅을 공식 변형으로 둡니다. 개인 모드는 한 명의 owner가 있는 조직일 뿐 데이터 모델을 축약하지 않습니다. 팀 모드는 같은 Application API와 tenant 격리를 TLS 역방향 프록시 뒤의 네트워크 서비스로 배포합니다. Compose 실행과 Kubernetes 1.34 엄격한 schema 검증은 Phase 21 회고에 연결합니다.
+Massion 1.0은 개인 로컬 설치와 팀 자체 호스팅을 공식 변형으로 둡니다. 개인 모드는 한 명의 owner가 있는 조직일 뿐 데이터 모델을 축약하지 않습니다. 팀 모드는 같은 Application API와 tenant 격리를 TLS 역방향 프록시 뒤의 네트워크 서비스로 배포합니다. Compose 실행, 공개 읽기 전용 Registry, 데이터베이스 최고 권한 분리와 Kubernetes 1.34 엄격한 schema 검증은 Phase 21·22 회고에 연결합니다.
 
 ```mermaid
 flowchart LR
@@ -600,10 +600,12 @@ flowchart LR
     LocalCore --> LocalFiles
   end
 
-  subgraph Team["팀 자체 호스팅 · Phase 21 구현됨"]
+  subgraph Team["팀 자체 호스팅 · Phase 22 강화 완료"]
     TeamUsers["팀 사용자·관리자"]:::implemented
     Proxy["Caddy TLS reverse proxy<br/>trusted proxy·internal network"]:::implemented
-    Apps["Application service<br/>HTTP · SSE · auth · probe"]:::implemented
+    Apps["Application service<br/>HTTP · SSE · auth · probe<br/>database EDITOR만 보유"]:::implemented
+    RegistryRead["공개 Registry listener<br/>GET · HEAD 전용"]:::implemented
+    Provision["일회 DB provisioning<br/>owner → runtime 회전"]:::implemented
     RuntimePool["Runtime·Extension child process<br/>crash supervisor"]:::implemented
     SharedDB[("원격 SurrealDB<br/>공유 tenant 정본")]:::implemented
     Backup["owner-only backup·restore<br/>migration·checksum gate"]:::implemented
@@ -611,11 +613,15 @@ flowchart LR
 
     TeamUsers --> Proxy
     Proxy --> Apps
+    Proxy --> RegistryRead
+    RegistryRead --> SharedDB
+    Provision --> SharedDB
     Apps --> RuntimePool
     Apps --> SharedDB
     RuntimePool --> SharedDB
     SharedDB --> Backup
     K8s -. "배포 조립" .-> Apps
+    K8s -. "완료형 init" .-> Provision
     K8s -. "배포 조립" .-> RuntimePool
   end
 
@@ -630,7 +636,7 @@ flowchart LR
 | 배포 변형 | 현재 상태 | 신뢰·운영 경계 |
 |---|---|---|
 | 개인 로컬 | Application API·CLI·TUI·Web·서버 조립 구현됨 | loopback bootstrap, OS 사용자 권한, 로컬 DB 경로당 단일 연결 |
-| 팀 자체 호스팅 | Compose 실행 검증·Kubernetes 1.34 schema 검증 완료 | TLS, remote auth, tenant 격리, shared DB, sandbox gate, backup·restore |
+| 팀 자체 호스팅 | Compose 실행·읽기 전용 Registry·owner/runtime 분리 검증, Kubernetes 1.34 schema 검증 완료 | TLS, database 범위 runtime auth, tenant 격리, shared DB, sandbox gate, backup·restore |
 | 관리형 Massion Cloud | 1.0 범위 밖 | 호환 가능한 멀티테넌트 계약만 유지하고 내부 구조는 이 문서에서 설계하지 않음 |
 
 ## 12. 구현 위치와 Phase 상태 색인
@@ -647,19 +653,23 @@ flowchart LR
 | Slack·Discord·GitHub 공식 통합 | 구현됨 | `packages/integrations`, `extensions/*` | 19 |
 | Registry·Marketplace | 구현됨 | `packages/registry`, `packages/application`, `apps/cli`, `apps/web` | 20 |
 | 자체 호스팅·운영 | 구현됨 | `apps/server`, `compose.yaml`, `deploy/kubernetes`, `docs/operations` | 21 |
-| 보안·성능·복구 강화·1.0 릴리스 | 예정 | `docs/superpowers/plans/2026-07-10-massion-agentos-1.0-program.md` | 22~23 |
+| 보안·성능·복구 강화 | 구현됨 | `apps/server`, `packages/registry`, `scripts/verify-security.mjs`, `scripts/hardening-load.mjs` | 22 |
+| 완제품 E2E·1.0 릴리스 | 예정 | `docs/superpowers/plans/2026-07-10-massion-agentos-1.0-program.md` | 23 |
 
 이 문서의 상태가 프로그램 계획과 달라지면 실제 검증 근거를 확인한 뒤 그림, 표와 기준 커밋을 함께 갱신합니다.
 
 ### 검증 기록
 
-2026-07-11에 다음 검증을 실행했습니다.
+2026-07-12에 다음 검증을 실행했습니다.
 
 | 검증 | 결과 |
 |---|---|
 | `pnpm verify:architecture` | Mermaid CLI 11.16.0으로 10개 SVG 렌더링 통과 |
 | `node scripts/verify-docs.mjs` | 문서 구조·로컬 링크·금지된 임시 표기 검사 통과 |
 | `git diff --check` | 공백·충돌 표식 검사 통과 |
+| `pnpm verify:security` | 보안 테스트 13개 파일, moderate·high·critical advisory 0 |
+| `pnpm verify:hardening` | 강화 테스트 26개와 500요청 부하 실패 0, p95 14.43ms, 정상 종료 |
+| Kubernetes 1.34 strict schema | Kustomize 리소스 12개 유효 |
 | 브라우저 1440px 및 가로 스크롤 미리보기 | 한글 라벨 잘림·노드 겹침 없음, 상태 색·실선·점선 구분 확인 |
 
 로컬 검증 스크립트는 설치된 Chrome·Chromium을 사용합니다. 자동 탐지 경로에 브라우저가 없으면 `MASSION_MERMAID_BROWSER` 환경 변수에 실행 파일 경로를 지정합니다.
