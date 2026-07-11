@@ -103,13 +103,16 @@ export class MassionModelFactory implements RoutedModelFactory {
     const profile = reservation.profile;
     const credential = reservation.credential;
     if (!endpoint || !profile || !credential) throw new Error("Model reservation 선택 정보가 없습니다");
+    if (reservation.material.kind !== "encrypted_secret") {
+      throw new Error("Connector session은 구독 Runtime 연결기를 통해 실행해야 합니다");
+    }
     const provider = await this.providers.getProvider(context, profile.provider_id);
     const model = this.builder.build({
       provider,
       endpoint,
       modelId: profile.model_id,
       credentialId: credential.credential_id,
-      secret: reservation.secret,
+      secret: reservation.material.secret,
     });
     const attemptId = reservation.attempt.attempt_id;
     const costFor = (usage: ModelCompletionUsage) =>

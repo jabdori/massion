@@ -2,12 +2,13 @@ import { randomUUID } from "node:crypto";
 
 import { type OrganizationService, type TenantContext } from "@massion/identity";
 import { applyMigrations, type MassionDatabase, type QueryExecutor } from "@massion/storage";
+import { type SubscriptionAccountService, type SubscriptionScope } from "@massion/subscriptions";
 
-import { ROUTER_REGISTRY_MIGRATION } from "./schema.js";
+import { ROUTER_REGISTRY_MIGRATION, ROUTER_SUBSCRIPTION_MATERIAL_MIGRATION } from "./schema.js";
 import { CredentialVault } from "./vault.js";
 
 export type AdapterKind = "ai-sdk" | "openai-compatible" | "ollama" | "external-gateway";
-export type CredentialType = "api_key" | "oauth" | "service_account" | "workload_identity";
+export type CredentialType = "api_key" | "oauth" | "service_account" | "workload_identity" | "subscription_session";
 export type CredentialStatus = "active" | "cooldown" | "disabled" | "revoked";
 
 export interface ModelProvider {
@@ -56,7 +57,15 @@ export interface ProviderCredential {
   readonly last_selected_sequence: number;
   readonly created_at: unknown;
   readonly updated_at: unknown;
+  readonly material_kind?: "encrypted_secret" | "connector_session";
+  readonly subscription_account_id?: string;
+  readonly subscription_connector_id?: string;
+  readonly subscription_scope?: SubscriptionScope;
 }
+
+export type CredentialMaterial =
+  | { readonly kind: "encrypted_secret"; readonly secret: string; readonly secretVersion: number }
+  | { readonly kind: "connector_session"; readonly accountId: string; readonly connectorId: string };
 
 interface CredentialSecretVersion {
   readonly secret_version_id: string;
@@ -111,6 +120,21 @@ export interface AddCredentialInput extends CommandInput {
   readonly weight: number;
 }
 
+export interface AddConnectorCredentialInput extends CommandInput {
+  readonly providerId: string;
+  readonly endpointId: string;
+  readonly label: string;
+  readonly accountId: string;
+  readonly connectorId: string;
+  readonly scope: SubscriptionScope;
+  readonly priority: number;
+  readonly weight: number;
+}
+
+export interface ProviderServiceOptions {
+  readonly accounts?: SubscriptionAccountService;
+}
+
 export interface RotateCredentialInput extends CommandInput {
   readonly credentialId: string;
   readonly expectedVersion: number;
@@ -154,15 +178,17 @@ export class ProviderService {
     private readonly database: MassionDatabase,
     private readonly organizations: OrganizationService,
     private readonly vault: CredentialVault,
+    private readonly options: ProviderServiceOptions,
   ) {}
 
   public static async create(
     database: MassionDatabase,
     organizations: OrganizationService,
     vault: CredentialVault,
+    options: ProviderServiceOptions = {},
   ): Promise<ProviderService> {
-    await applyMigrations(database, [ROUTER_REGISTRY_MIGRATION]);
-    return new ProviderService(database, organizations, vault);
+    await applyMigrations(database, [ROUTER_REGISTRY_MIGRATION, ROUTER_SUBSCRIPTION_MATERIAL_MIGRATION]);
+    return new ProviderService(database, organizations, vault, options);
   }
 
   public async registerProvider(
@@ -277,6 +303,53 @@ export class ProviderService {
       await this.insertSecret(tx, context, credential, 1, input.secret);
       return { credential };
     });
+  }
+
+  public async addConnectorCredential(
+    context: TenantContext,
+    input: AddConnectorCredentialInput,
+  ): Promise<{ credential: ProviderCredential; audit: RouterAuditEvent }> {
+    if (input.priority < 0 || input.weight < 1) throw new Error("Credential priority와 weight가 유효하지 않습니다");
+    const accounts = this.options.accounts;
+    if (!accounts) throw new Error("구독 계정 서비스가 구성되지 않았습니다");
+    return await this.command(
+      context,
+      input.commandId,
+      "connector_credential_added",
+      canonicalJson(input),
+      async (tx) => {
+        await this.requireProvider(tx, context.organizationId, input.providerId);
+        await this.requireEndpoint(tx, context.organizationId, input.providerId, input.endpointId);
+        const account = await accounts.requireUsable(context, input.accountId, input.scope, tx);
+        if (account.provider_id !== input.providerId) throw new Error("구독 계정과 Provider가 일치하지 않습니다");
+        if (account.connector_id !== input.connectorId) throw new Error("구독 계정과 Connector가 일치하지 않습니다");
+        const [credentials] = await tx.query<[ProviderCredential[]]>(
+          `CREATE provider_credential CONTENT {
+            credential_id: $credential_id, organization_id: $organization_id, provider_id: $provider_id,
+            endpoint_id: $endpoint_id, label: $label, credential_type: 'subscription_session', status: 'active',
+            version: 1, secret_version: 0, priority: $priority, weight: $weight, request_count: 0,
+            input_tokens: 0, output_tokens: 0, cost_micros: 0, last_selected_sequence: 0,
+            material_kind: 'connector_session', subscription_account_id: $subscription_account_id,
+            subscription_connector_id: $subscription_connector_id, subscription_scope: $subscription_scope,
+            created_at: time::now(), updated_at: time::now()
+          } RETURN AFTER;`,
+          {
+            credential_id: randomUUID(),
+            organization_id: context.organizationId,
+            provider_id: input.providerId,
+            endpoint_id: input.endpointId,
+            label: input.label.trim(),
+            priority: input.priority,
+            weight: input.weight,
+            subscription_account_id: input.accountId,
+            subscription_connector_id: input.connectorId,
+            subscription_scope: input.scope,
+          },
+        );
+        if (!credentials[0]) throw new Error("Connector Credential 생성 결과가 없습니다");
+        return { credential: credentials[0] };
+      },
+    );
   }
 
   public async rotateCredential(
@@ -408,6 +481,31 @@ export class ProviderService {
     return await this.resolveExecutionSecretVersion(context, credential, credential.secret_version, executor);
   }
 
+  public async resolveExecutionMaterial(
+    context: TenantContext,
+    credential: ProviderCredential,
+    executor: QueryExecutor,
+    secretVersion = credential.secret_version,
+  ): Promise<CredentialMaterial> {
+    await this.organizations.verifyTenantContext(context, undefined, executor);
+    if (credential.organization_id !== context.organizationId || credential.status !== "active") {
+      throw new Error("활성 Credential만 실행에 사용할 수 있습니다");
+    }
+    if (credential.material_kind === "connector_session") {
+      const accountId = credential.subscription_account_id;
+      const connectorId = credential.subscription_connector_id;
+      const scope = credential.subscription_scope;
+      if (!this.options.accounts || !accountId || !connectorId || !scope) {
+        throw new Error("Connector Credential 구성이 불완전합니다");
+      }
+      const account = await this.options.accounts.requireUsable(context, accountId, scope, executor);
+      if (account.connector_id !== connectorId) throw new Error("구독 계정과 Connector binding이 일치하지 않습니다");
+      return { kind: "connector_session", accountId, connectorId };
+    }
+    const secret = await this.resolveExecutionSecretVersion(context, credential, secretVersion, executor);
+    return { kind: "encrypted_secret", secret, secretVersion };
+  }
+
   public async resolveExecutionSecretVersion(
     context: TenantContext,
     credential: ProviderCredential,
@@ -417,6 +515,9 @@ export class ProviderService {
     await this.organizations.verifyTenantContext(context, undefined, executor);
     if (credential.organization_id !== context.organizationId || credential.status !== "active") {
       throw new Error("활성 Credential만 실행에 사용할 수 있습니다");
+    }
+    if (credential.material_kind === "connector_session") {
+      throw new Error("Connector session Credential에는 복호화할 secret이 없습니다");
     }
     const secret = await this.requireSecret(executor, context.organizationId, credential, secretVersion);
     return this.vault.decrypt(

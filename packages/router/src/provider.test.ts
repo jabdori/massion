@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { IdentityService, OrganizationService, type TenantContext } from "@massion/identity";
 import { createDatabase, type MassionDatabase } from "@massion/storage";
+import { SubscriptionAccountService } from "@massion/subscriptions";
 
 import { ProviderService } from "./provider.js";
 import { CredentialVault } from "./vault.js";
@@ -11,12 +12,13 @@ import { CredentialVault } from "./vault.js";
 describe("Provider와 암호화 Credential lifecycle", () => {
   let database: MassionDatabase;
   let context: TenantContext;
+  let organizations: OrganizationService;
   let service: ProviderService;
 
   beforeEach(async () => {
     database = await createDatabase({ url: "mem://", namespace: "massion", database: crypto.randomUUID() });
     const identity = await IdentityService.create(database);
-    const organizations = await OrganizationService.create(database);
+    organizations = await OrganizationService.create(database);
     const owner = await identity.registerPersonalUser({ email: "owner@example.com", displayName: "Owner" });
     context = await organizations.resolveTenantContext(owner.user.user_id, owner.organization.organization_id);
     service = await ProviderService.create(database, organizations, new CredentialVault(randomBytes(32)));
@@ -80,6 +82,58 @@ describe("Provider와 암호화 Credential lifecycle", () => {
       expect.objectContaining({ endpoint_id: endpoint.endpoint_id, base_url: "https://api.openai.com/v1" }),
     ]);
     expect(await service.listCredentials(context, provider.provider_id)).toHaveLength(2);
+  });
+
+  it("구독 계정을 secret 없는 Connector session Credential로 등록한다", async () => {
+    const accounts = await SubscriptionAccountService.create(database, organizations, randomBytes(32));
+    service = await ProviderService.create(database, organizations, new CredentialVault(randomBytes(32)), { accounts });
+    await database.query(
+      `CREATE subscription_connector CONTENT {
+        connector_id: 'codex-edge', organization_id: $organization_id, owner_user_id: $owner_user_id,
+        location: 'edge', execution_kind: 'agent-runtime', protocol: 'massion-connector-v1', version: '1.0.0',
+        public_key: 'fixture', capabilities: ['codex'], status: 'ready', created_at: time::now(), updated_at: time::now()
+      };`,
+      { organization_id: context.organizationId, owner_user_id: context.userId },
+    );
+    const account = await accounts.register(context, {
+      commandId: crypto.randomUUID(),
+      providerId: "openai",
+      alias: "Codex Subscription",
+      connectorId: "codex-edge",
+      profileLocator: "local-codex-profile",
+      billingKind: "consumer-subscription",
+    });
+    const { provider, endpoint } = await providerEndpoint();
+    const added = await service.addConnectorCredential(context, {
+      commandId: crypto.randomUUID(),
+      providerId: provider.provider_id,
+      endpointId: endpoint.endpoint_id,
+      label: "codex-subscription",
+      accountId: account.account_id,
+      connectorId: account.connector_id,
+      scope: "personal",
+      priority: 1,
+      weight: 1,
+    });
+
+    expect(added.credential).toMatchObject({
+      material_kind: "connector_session",
+      subscription_account_id: account.account_id,
+      subscription_connector_id: "codex-edge",
+      secret_version: 0,
+    });
+    await expect(service.resolveExecutionMaterial(context, added.credential, database)).resolves.toEqual({
+      kind: "connector_session",
+      accountId: account.account_id,
+      connectorId: "codex-edge",
+    });
+    expect(
+      JSON.stringify(
+        await database.query("SELECT * FROM credential_secret_version WHERE credential_id = $credential_id;", {
+          credential_id: added.credential.credential_id,
+        }),
+      ),
+    ).toBe("[[]]");
   });
 
   it("secret 회전은 새 immutable version을 만들고 revoke 후 복호화를 거부한다", async () => {

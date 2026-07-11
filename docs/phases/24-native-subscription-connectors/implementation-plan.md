@@ -7,13 +7,13 @@
 ## Task 1. 구독 계정 정본
 
 - [x] `@massion/subscriptions` package와 append-only migration을 추가합니다.
-- [ ] 개인·조직 scope, 공유 동의·철회, connector와 quota snapshot 원장을 TDD로 구현합니다.
-- [ ] secret·이메일·외부 account ID가 공개 query·event·metric에 나오지 않게 검증합니다.
+- [x] 개인·조직 scope, 공유 동의·철회, connector와 quota snapshot 원장을 TDD로 구현합니다.
+- [x] secret·이메일·외부 account ID가 공개 query·event·metric에 나오지 않게 검증합니다.
 
 ## Task 2. 할당량 기반 라우팅
 
-- [ ] ProviderCredential을 암호화 비밀 또는 연결기 세션 union으로 확장합니다.
-- [ ] 복수 quota window와 `adaptive` 선택을 RED→GREEN으로 구현합니다.
+- [x] ProviderCredential을 암호화 비밀 또는 연결기 세션 union으로 확장합니다.
+- [x] 복수 quota window와 `adaptive` 선택을 RED→GREEN으로 구현합니다.
 - [ ] 출력 전·후 실패, cooldown, reset, stale snapshot과 cross-provider fallback을 검증합니다.
 
 ## Task 3. 서버·사용자 기기 연결기
