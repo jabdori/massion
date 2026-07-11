@@ -10,7 +10,7 @@ describe("Massion server product", () => {
       MASSION_TOKEN_KEY: Buffer.alloc(32, 9).toString("base64url"),
       MASSION_DATABASE_URL: "mem://",
     });
-    const config = { ...parsed, server: { ...parsed.server, port: 0 } };
+    const config = { ...parsed, server: { ...parsed.server, port: 0 }, metrics: { ...parsed.metrics, port: 0 } };
     const daemon = await createMassionDaemon(config);
     const address = await daemon.start();
     try {

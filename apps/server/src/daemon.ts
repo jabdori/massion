@@ -15,6 +15,8 @@ export interface MassionDaemonDependencies {
   readonly application: ManagedApplication;
   readonly database: ManagedDatabase;
   readonly shutdownTimeoutMs: number;
+  readonly operationalServices?: readonly { start(): Promise<unknown>; close(): Promise<void> }[];
+  readonly onState?: (state: DaemonState) => void;
 }
 
 export class MassionDaemon {
@@ -28,10 +30,15 @@ export class MassionDaemon {
     await this.dependencies.database.version();
     try {
       const address = await this.dependencies.application.start();
-      this.state = "ready";
+      for (const service of this.dependencies.operationalServices ?? []) await service.start();
+      this.setState("ready");
       return address;
     } catch (error) {
-      this.state = "failed";
+      this.setState("failed");
+      for (const service of [...(this.dependencies.operationalServices ?? [])].reverse()) {
+        await service.close().catch(() => undefined);
+      }
+      await this.dependencies.application.close().catch(() => undefined);
       await this.dependencies.database.close().catch(() => undefined);
       throw error;
     }
@@ -50,7 +57,7 @@ export class MassionDaemon {
   public close(): Promise<void> {
     if (this.closing) return this.closing;
     if (this.state === "stopped") return Promise.resolve();
-    this.state = "draining";
+    this.setState("draining");
     this.dependencies.application.server.beginDrain();
     this.closing = this.closeOnce();
     return this.closing;
@@ -73,6 +80,13 @@ export class MassionDaemon {
       failure = error;
     } finally {
       if (timer) clearTimeout(timer);
+      for (const service of [...(this.dependencies.operationalServices ?? [])].reverse()) {
+        try {
+          await service.close();
+        } catch (error) {
+          failure ??= error;
+        }
+      }
       try {
         await this.dependencies.database.close();
       } catch (error) {
@@ -80,9 +94,14 @@ export class MassionDaemon {
       }
     }
     if (failure) {
-      this.state = "failed";
+      this.setState("failed");
       throw failure;
     }
-    this.state = "stopped";
+    this.setState("stopped");
+  }
+
+  private setState(state: DaemonState): void {
+    this.state = state;
+    this.dependencies.onState?.(state);
   }
 }

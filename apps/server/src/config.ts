@@ -8,6 +8,7 @@ export interface ServerConfig {
   readonly mode: "local" | "team";
   readonly database: DatabaseConfig;
   readonly server: ApplicationHttpServerOptions & { readonly host: string; readonly port: number };
+  readonly metrics: { readonly host: string; readonly port: number };
   readonly tokenKey: { readonly keyId: string; readonly key: Buffer };
   readonly shutdownTimeoutMs: number;
 }
@@ -68,6 +69,10 @@ export function parseServerConfig(environment: Readonly<Record<string, string | 
       host,
       port: integer(environment.MASSION_HTTP_PORT, 3141, 1, 65_535, "MASSION_HTTP_PORT"),
       ...(trustedProxyAddresses.length === 0 ? {} : { trustedProxyAddresses }),
+    },
+    metrics: {
+      host: environment.MASSION_METRICS_HOST ?? (mode === "local" ? "127.0.0.1" : "0.0.0.0"),
+      port: integer(environment.MASSION_METRICS_PORT, 9464, 1, 65_535, "MASSION_METRICS_PORT"),
     },
     tokenKey: tokenKey(environment.MASSION_TOKEN_KEY),
     shutdownTimeoutMs: integer(environment.MASSION_SHUTDOWN_TIMEOUT_MS, 30_000, 1_000, 300_000, "shutdown timeout"),
