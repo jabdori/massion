@@ -68,6 +68,12 @@ describe("ApplicationHttpServer", () => {
       bootstrap: {
         initialize: async (input) => ({ access: { token: "one-time" }, email: input.email }),
       },
+      integrations: {
+        async handle(input) {
+          calls.push(`integration:${input.path}`);
+          return { status: 202, body: { accepted: true, bytes: input.body.length } };
+        },
+      },
     };
     server = new ApplicationHttpServer(dependencies, { pollMs: 5, heartbeatMs: 20 });
     baseUrl = (await server.start()).url;
@@ -145,6 +151,18 @@ describe("ApplicationHttpServer", () => {
       body: Buffer.from("artifact"),
     });
     expect(await install.json()).toEqual({ commandId: "artifact-command-0001", size: 8 });
+  });
+
+  it("외부 Integration webhook은 Application bearer 인증 전에 전용 gateway로만 전달한다", async () => {
+    const response = await fetch(`${baseUrl}/integrations/github/webhooks`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-hub-signature-256": `sha256=${"a".repeat(64)}` },
+      body: JSON.stringify({ installation: { id: 1 } }),
+    });
+
+    expect(response.status).toBe(202);
+    expect(await response.json()).toEqual({ accepted: true, bytes: 25 });
+    expect(calls).toEqual(["integration:/integrations/github/webhooks"]);
   });
 
   it("SSE가 after를 replay하고 Last-Event-ID 재연결을 우선한다", async () => {

@@ -16,7 +16,11 @@ import { ApplicationCommandStore } from "./command-store.js";
 import { CoreWorkCoordinator, type CoreWorkStage, type CoreWorkStageExecutor } from "./core-work-coordinator.js";
 import { ApplicationEventProjector } from "./event-projector.js";
 import { ApplicationEventStore } from "./event-store.js";
-import { ApplicationHttpServer, type ApplicationHttpServerOptions } from "./http-server.js";
+import {
+  ApplicationHttpServer,
+  type ApplicationHttpDependencies,
+  type ApplicationHttpServerOptions,
+} from "./http-server.js";
 import { ApplicationMetricStore } from "./metrics.js";
 import {
   ApplicationQueryRegistry,
@@ -42,6 +46,7 @@ export interface ApplicationProductDependencies {
     "readModel" | "snapshot" | "memberships" | "audit" | "webSessions"
   >;
   readonly artifacts?: Pick<ApplicationArtifactGateway, "inspect" | "install" | "update">;
+  readonly integrations?: NonNullable<ApplicationHttpDependencies["integrations"]>;
   readonly server?: ApplicationHttpServerOptions;
 }
 
@@ -173,6 +178,7 @@ export class ApplicationProduct implements AsyncDisposable {
         },
         tokens,
         ...(dependencies.artifacts === undefined ? {} : { artifacts: dependencies.artifacts }),
+        ...(dependencies.integrations === undefined ? {} : { integrations: dependencies.integrations }),
         bootstrap,
         webSessions,
       },
