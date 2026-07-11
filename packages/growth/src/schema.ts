@@ -421,3 +421,59 @@ DEFINE INDEX growth_evaluation_suggestion ON growth_evaluation_run FIELDS organi
 DEFINE EVENT growth_evaluation_run_immutable ON TABLE growth_evaluation_run WHEN $event IN ['UPDATE', 'DELETE'] THEN { THROW 'Growth evaluation run은 immutable입니다'; };
 `,
 );
+
+export const GROWTH_ADOPTION_MIGRATION = defineMigration(
+  "0058-growth-adoption",
+  `
+DEFINE TABLE growth_adoption_run SCHEMAFULL PERMISSIONS NONE;
+DEFINE FIELD adoption_id ON growth_adoption_run TYPE string;
+DEFINE FIELD organization_id ON growth_adoption_run TYPE string;
+DEFINE FIELD suggestion_id ON growth_adoption_run TYPE string;
+DEFINE FIELD target_kind ON growth_adoption_run TYPE string ASSERT $value IN ['prompt', 'memory', 'policy', 'organization'];
+DEFINE FIELD evaluation_run_id ON growth_adoption_run TYPE string;
+DEFINE FIELD evaluation_input_hash ON growth_adoption_run TYPE string ASSERT string::len($value) = 64;
+DEFINE FIELD configuration_version_id ON growth_adoption_run TYPE string;
+DEFINE FIELD runtime_execution_id ON growth_adoption_run TYPE string;
+DEFINE FIELD before_version_id ON growth_adoption_run TYPE string;
+DEFINE FIELD before_checksum ON growth_adoption_run TYPE string ASSERT string::len($value) = 64;
+DEFINE FIELD after_version_id ON growth_adoption_run TYPE option<string>;
+DEFINE FIELD after_checksum ON growth_adoption_run TYPE option<string>;
+DEFINE FIELD governance_decision_id ON growth_adoption_run TYPE option<string>;
+DEFINE FIELD approval_id ON growth_adoption_run TYPE option<string>;
+DEFINE FIELD status ON growth_adoption_run TYPE string ASSERT $value IN ['awaiting-review', 'observing', 'rejected', 'reverted'];
+DEFINE FIELD command_id ON growth_adoption_run TYPE string;
+DEFINE FIELD request_hash ON growth_adoption_run TYPE string ASSERT string::len($value) = 64;
+DEFINE FIELD created_by_user_id ON growth_adoption_run TYPE string;
+DEFINE FIELD active_target_guard ON growth_adoption_run TYPE option<string>;
+DEFINE FIELD created_at ON growth_adoption_run TYPE datetime;
+DEFINE FIELD updated_at ON growth_adoption_run TYPE datetime;
+DEFINE INDEX growth_adoption_id ON growth_adoption_run FIELDS organization_id, adoption_id UNIQUE;
+DEFINE INDEX growth_adoption_command ON growth_adoption_run FIELDS organization_id, command_id UNIQUE;
+DEFINE INDEX growth_adoption_suggestion ON growth_adoption_run FIELDS organization_id, suggestion_id UNIQUE;
+DEFINE INDEX growth_adoption_active_target ON growth_adoption_run FIELDS active_target_guard UNIQUE;
+
+DEFINE TABLE growth_adoption_event SCHEMAFULL PERMISSIONS NONE;
+DEFINE FIELD event_id ON growth_adoption_event TYPE string;
+DEFINE FIELD organization_id ON growth_adoption_event TYPE string;
+DEFINE FIELD adoption_id ON growth_adoption_event TYPE string;
+DEFINE FIELD event_type ON growth_adoption_event TYPE string;
+DEFINE FIELD payload_json ON growth_adoption_event TYPE string ASSERT string::len($value) <= 65536;
+DEFINE FIELD created_at ON growth_adoption_event TYPE datetime;
+DEFINE INDEX growth_adoption_event_id ON growth_adoption_event FIELDS organization_id, event_id UNIQUE;
+DEFINE EVENT growth_adoption_event_immutable ON TABLE growth_adoption_event WHEN $event IN ['UPDATE', 'DELETE'] THEN { THROW 'Growth Adoption event는 immutable입니다'; };
+
+DEFINE TABLE growth_effect_baseline SCHEMAFULL PERMISSIONS NONE;
+DEFINE FIELD baseline_id ON growth_effect_baseline TYPE string;
+DEFINE FIELD organization_id ON growth_effect_baseline TYPE string;
+DEFINE FIELD adoption_id ON growth_effect_baseline TYPE string;
+DEFINE FIELD suggestion_id ON growth_effect_baseline TYPE string;
+DEFINE FIELD target_kind ON growth_effect_baseline TYPE string ASSERT $value IN ['prompt', 'memory', 'policy', 'organization'];
+DEFINE FIELD target_version_id ON growth_effect_baseline TYPE string;
+DEFINE FIELD status ON growth_effect_baseline TYPE string ASSERT $value IN ['pending', 'captured', 'closed'];
+DEFINE FIELD metrics_json ON growth_effect_baseline TYPE string ASSERT string::len($value) <= 65536;
+DEFINE FIELD checksum ON growth_effect_baseline TYPE string ASSERT string::len($value) = 64;
+DEFINE FIELD created_at ON growth_effect_baseline TYPE datetime;
+DEFINE INDEX growth_effect_baseline_id ON growth_effect_baseline FIELDS organization_id, baseline_id UNIQUE;
+DEFINE INDEX growth_effect_baseline_adoption ON growth_effect_baseline FIELDS organization_id, adoption_id UNIQUE;
+`,
+);

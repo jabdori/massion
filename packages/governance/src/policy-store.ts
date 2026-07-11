@@ -251,6 +251,93 @@ export class PolicyStore {
     };
   }
 
+  /** Growth projection 전용 API입니다. 호출자는 동일 transaction에서 Governance 결정을 검증해야 합니다. */
+  public async inspectGrowthProjection(context: TenantContext, executor: QueryExecutor): Promise<ActivePolicy> {
+    await this.organizations.verifyTenantContext(context, undefined, executor);
+    const version = await this.active(executor, context.organizationId);
+    if (!version) throw new Error("활성 Policy Version을 찾을 수 없습니다");
+    return {
+      version,
+      bundle: {
+        schema: JSON.parse(version.schema_json) as Readonly<Record<string, unknown>>,
+        policies: JSON.parse(version.policies_json) as Readonly<Record<string, string>>,
+      },
+      requirements: JSON.parse(version.requirements_json) as ApprovalRequirement[],
+    };
+  }
+
+  /** 검증된 Growth patch를 활성 Policy의 새 immutable version으로 투영합니다. */
+  public async applyGrowthProjection(
+    context: TenantContext,
+    input: {
+      readonly commandId: string;
+      readonly expectedVersionId: string;
+      readonly patch: { readonly policyId: string; readonly policyText: string };
+    },
+    executor: QueryExecutor,
+  ): Promise<ActivePolicy> {
+    await this.organizations.verifyTenantContext(context, undefined, executor);
+    const current = await this.active(executor, context.organizationId);
+    if (!current || current.policy_version_id !== input.expectedVersionId) {
+      throw new Error("active Policy Version precondition이 일치하지 않습니다");
+    }
+    const existing = await this.repeated(executor, context.organizationId, input.commandId, canonicalJson(input));
+    if (existing) {
+      const replayed = await this.find(executor, context.organizationId, existing.policy_version_id);
+      return {
+        version: replayed,
+        bundle: {
+          schema: JSON.parse(replayed.schema_json) as Record<string, unknown>,
+          policies: JSON.parse(replayed.policies_json) as Record<string, string>,
+        },
+        requirements: JSON.parse(replayed.requirements_json) as ApprovalRequirement[],
+      };
+    }
+    const bundle: PolicyBundle = {
+      schema: JSON.parse(current.schema_json) as Readonly<Record<string, unknown>>,
+      policies: {
+        ...(JSON.parse(current.policies_json) as Record<string, string>),
+        [input.patch.policyId]: input.patch.policyText,
+      },
+    };
+    const errors = validatePolicyBundle(bundle);
+    if (errors.length > 0) throw new Error(`Cedar Policy Bundle 검증 실패: ${errors.join(",")}`);
+    const requirements = JSON.parse(current.requirements_json) as ApprovalRequirement[];
+    const id = randomUUID();
+    const schemaJson = canonicalJson(bundle.schema);
+    const policiesJson = canonicalJson(bundle.policies);
+    const requirementsJson = canonicalJson(requirements);
+    const checksum = createHash("sha256").update(canonicalJson({ bundle, requirements })).digest("hex");
+    await executor.query(
+      "UPDATE governance_policy_version SET status = 'superseded', superseded_at = time::now() WHERE organization_id = $organization_id AND policy_version_id = $policy_version_id;",
+      { organization_id: context.organizationId, policy_version_id: current.policy_version_id },
+    );
+    const [created] = await executor.query<[PolicyVersion[]]>(
+      "CREATE governance_policy_version CONTENT { policy_version_id: $id, organization_id: $organization_id, version: $version, status: 'active', schema_json: $schema_json, policies_json: $policies_json, requirements_json: $requirements_json, checksum: $checksum, created_at: time::now(), activated_at: time::now() } RETURN AFTER;",
+      {
+        id,
+        organization_id: context.organizationId,
+        version: current.version + 1,
+        schema_json: schemaJson,
+        policies_json: policiesJson,
+        requirements_json: requirementsJson,
+        checksum,
+      },
+    );
+    if (!created[0]) throw new Error("Growth Policy Version 생성 결과가 없습니다");
+    const result = await this.find(executor, context.organizationId, id);
+    await this.record(
+      executor,
+      context.organizationId,
+      id,
+      input.commandId,
+      "growth_policy_adopted",
+      canonicalJson(input),
+      result,
+    );
+    return { version: result, bundle, requirements };
+  }
+
   private async find(executor: QueryExecutor, organizationId: string, policyVersionId: string): Promise<PolicyVersion> {
     const [records] = await executor.query<[PolicyVersion[]]>(
       "SELECT * OMIT id FROM governance_policy_version WHERE organization_id = $organization_id AND policy_version_id = $policy_version_id LIMIT 1;",

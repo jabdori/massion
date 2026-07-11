@@ -572,6 +572,69 @@ export class OrganizationGraphService {
     });
   }
 
+  /** Growth projection이 현재 정본을 같은 transaction에서 검사할 때만 사용합니다. */
+  public async inspectGrowthProjection(
+    context: TenantContext,
+    executor: QueryExecutor,
+  ): Promise<{ readonly nodes: OrganizationNode[]; readonly version: OrganizationVersion }> {
+    await this.organizations.verifyTenantContext(context, undefined, executor);
+    const version = latestVersion(await listVersions(executor, context.organizationId));
+    if (!version) throw new Error("OrganizationVersion을 찾을 수 없습니다");
+    return { nodes: normalizeSnapshot(await listNodes(executor, context.organizationId)), version };
+  }
+
+  /** 검증된 책임 변경을 기존 그래프 불변조건·영향 분석·버전 원장으로 투영합니다. */
+  public async applyGrowthProjection(
+    context: TenantContext,
+    input: {
+      readonly commandId: string;
+      readonly expectedVersion: number;
+      readonly patch: { readonly handle: string; readonly responsibility: string };
+    },
+    executor: QueryExecutor,
+  ): Promise<GraphChangeResult> {
+    await this.organizations.verifyTenantContext(context, undefined, executor);
+    const versions = await listVersions(executor, context.organizationId);
+    const repeated = versions.find((version) => version.command_id === input.commandId);
+    if (repeated) {
+      if (repeated.request_json !== canonicalJson(input))
+        throw new Error("같은 commandId에 다른 조직 Growth patch를 사용할 수 없습니다");
+      return {
+        nodes: normalizeSnapshot(JSON.parse(repeated.after_json) as StoredOrganizationNode[]),
+        version: repeated,
+        impact: JSON.parse(repeated.impact_json) as ImpactReport,
+      };
+    }
+    const current = latestVersion(versions);
+    if (!current || current.version !== input.expectedVersion)
+      throw new Error("OrganizationVersion precondition이 일치하지 않습니다");
+    const before = normalizeSnapshot(await listNodes(executor, context.organizationId));
+    const target = before.find((node) => node.handle === input.patch.handle);
+    if (!target) throw new Error(`대상 노드를 찾을 수 없습니다: ${input.patch.handle}`);
+    if (target.builtin) throw new Error("Core Office 노드는 변경할 수 없습니다");
+    const after = before.map((node) =>
+      node.handle === input.patch.handle ? { ...node, responsibility: input.patch.responsibility } : node,
+    );
+    validateGraph(after);
+    validateOperationalGraph(after);
+    const impact = await this.analyzeImpactWith(executor, context.organizationId, [input.patch.handle], after);
+    await this.replaceNodes(executor, context.organizationId, after);
+    const storedAfter = normalizeSnapshot(await listNodes(executor, context.organizationId));
+    const version = await this.createVersion(
+      executor,
+      context,
+      current.version + 1,
+      current.version,
+      input.commandId,
+      "growth-change-node",
+      canonicalJson(input),
+      impact,
+      before,
+      storedAfter,
+    );
+    return { nodes: storedAfter, version, impact };
+  }
+
   public async auditCompliance(context: TenantContext): Promise<ComplianceFinding[]> {
     await this.verify(context);
     const nodes = await listNodes(this.database, context.organizationId);
