@@ -434,6 +434,21 @@ export interface OpenRoomInput extends WorkCommandInput {
   };
 }
 
+export interface JoinRoomInput extends WorkCommandInput {
+  readonly roomId: string;
+  readonly expectedRoomRevision: number;
+  readonly kind: "user" | "agent";
+  readonly subjectId: string;
+  readonly role: "coordinator" | "participant" | "observer";
+}
+
+export interface LeaveRoomInput extends WorkCommandInput {
+  readonly roomId: string;
+  readonly expectedRoomRevision: number;
+  readonly kind: "user" | "agent";
+  readonly subjectId: string;
+}
+
 export interface PostMessageInput {
   readonly commandId: string;
   readonly workId: string;
@@ -1661,6 +1676,127 @@ export class WorkService {
         event_id: event.event_id,
       });
       return result;
+    });
+  }
+
+  public async joinRoom(
+    context: TenantContext,
+    input: JoinRoomInput,
+  ): Promise<WorkCommandResult & { room: CollaborationRoom; participant: CollaborationParticipant }> {
+    if (input.kind === "user" && input.subjectId !== context.userId) {
+      throw new Error("다른 사용자를 Collaboration participant로 참여시킬 수 없습니다");
+    }
+    return await this.mutate(context, input, "collaboration_participant_joined", async (transaction, work) => {
+      const [rooms] = await transaction.query<[CollaborationRoom[]]>(
+        "SELECT * OMIT id FROM collaboration_room WHERE organization_id = $organization_id AND work_id = $work_id AND room_id = $room_id LIMIT 1;",
+        { organization_id: context.organizationId, work_id: work.work_id, room_id: input.roomId },
+      );
+      const room = rooms[0];
+      if (!room || room.status !== "active") throw new Error("활성 Collaboration Room을 찾을 수 없습니다");
+      if (room.revision !== input.expectedRoomRevision) {
+        throw new Error(`현재 Collaboration Room revision은 ${String(room.revision)}입니다`);
+      }
+      if (input.kind === "agent") {
+        if (!this.graph) throw new Error("Agent 참여에는 Organization Graph reader가 필요합니다");
+        await this.graph.verifyActiveNode(context, input.subjectId, transaction);
+      } else {
+        await this.organizations.verifyOrganizationMember(input.subjectId, context.organizationId, transaction);
+      }
+      const [existing] = await transaction.query<[CollaborationParticipant[]]>(
+        "SELECT * OMIT id FROM collaboration_participant WHERE organization_id = $organization_id AND room_id = $room_id AND kind = $kind AND subject_id = $subject_id LIMIT 1;",
+        {
+          organization_id: context.organizationId,
+          room_id: room.room_id,
+          kind: input.kind,
+          subject_id: input.subjectId,
+        },
+      );
+      if (existing[0]?.status === "active") throw new Error("이미 활성 Collaboration participant입니다");
+      let participant: CollaborationParticipant;
+      if (existing[0]) {
+        const [updated] = await transaction.query<[CollaborationParticipant[]]>(
+          "UPDATE collaboration_participant SET status = 'active', role = $role, joined_at = time::now() WHERE organization_id = $organization_id AND participant_id = $participant_id RETURN AFTER;",
+          {
+            organization_id: context.organizationId,
+            participant_id: existing[0].participant_id,
+            role: input.role,
+          },
+        );
+        if (!updated[0]) throw new Error("Collaboration participant 재참여 결과가 없습니다");
+        participant = updated[0];
+      } else {
+        const [created] = await transaction.query<[CollaborationParticipant[]]>(
+          "CREATE collaboration_participant CONTENT { participant_id: $participant_id, organization_id: $organization_id, work_id: $work_id, room_id: $room_id, kind: $kind, subject_id: $subject_id, role: $role, status: 'active', joined_at: time::now() } RETURN AFTER;",
+          {
+            participant_id: randomUUID(),
+            organization_id: context.organizationId,
+            work_id: work.work_id,
+            room_id: room.room_id,
+            kind: input.kind,
+            subject_id: input.subjectId,
+            role: input.role,
+          },
+        );
+        if (!created[0]) throw new Error("Collaboration participant 참여 결과가 없습니다");
+        participant = created[0];
+      }
+      await transaction.query(
+        "UPDATE collaboration_room SET revision = $revision, updated_at = time::now() WHERE organization_id = $organization_id AND room_id = $room_id AND revision = $expected_revision;",
+        {
+          organization_id: context.organizationId,
+          room_id: room.room_id,
+          expected_revision: room.revision,
+          revision: room.revision + 1,
+        },
+      );
+      return { room: { ...room, revision: room.revision + 1 }, participant };
+    });
+  }
+
+  public async leaveRoom(
+    context: TenantContext,
+    input: LeaveRoomInput,
+  ): Promise<WorkCommandResult & { room: CollaborationRoom; participant: CollaborationParticipant }> {
+    if (input.kind === "user" && input.subjectId !== context.userId) {
+      throw new Error("다른 Collaboration participant를 나가게 할 수 없습니다");
+    }
+    return await this.mutate(context, input, "collaboration_participant_left", async (transaction, work) => {
+      const [rooms] = await transaction.query<[CollaborationRoom[]]>(
+        "SELECT * OMIT id FROM collaboration_room WHERE organization_id = $organization_id AND work_id = $work_id AND room_id = $room_id LIMIT 1;",
+        { organization_id: context.organizationId, work_id: work.work_id, room_id: input.roomId },
+      );
+      const room = rooms[0];
+      if (!room || room.status !== "active") throw new Error("활성 Collaboration Room을 찾을 수 없습니다");
+      if (room.revision !== input.expectedRoomRevision) {
+        throw new Error(`현재 Collaboration Room revision은 ${String(room.revision)}입니다`);
+      }
+      const [participants] = await transaction.query<[CollaborationParticipant[]]>(
+        "SELECT * OMIT id FROM collaboration_participant WHERE organization_id = $organization_id AND room_id = $room_id AND kind = $kind AND subject_id = $subject_id AND status = 'active' LIMIT 1;",
+        {
+          organization_id: context.organizationId,
+          room_id: room.room_id,
+          kind: input.kind,
+          subject_id: input.subjectId,
+        },
+      );
+      const current = participants[0];
+      if (!current) throw new Error("활성 Collaboration participant를 찾을 수 없습니다");
+      if (current.role === "coordinator") throw new Error("Collaboration Room coordinator는 바로 나갈 수 없습니다");
+      const [updated] = await transaction.query<[CollaborationParticipant[]]>(
+        "UPDATE collaboration_participant SET status = 'left' WHERE organization_id = $organization_id AND participant_id = $participant_id RETURN AFTER;",
+        { organization_id: context.organizationId, participant_id: current.participant_id },
+      );
+      if (!updated[0]) throw new Error("Collaboration participant 퇴장 결과가 없습니다");
+      await transaction.query(
+        "UPDATE collaboration_room SET revision = $revision, updated_at = time::now() WHERE organization_id = $organization_id AND room_id = $room_id AND revision = $expected_revision;",
+        {
+          organization_id: context.organizationId,
+          room_id: room.room_id,
+          expected_revision: room.revision,
+          revision: room.revision + 1,
+        },
+      );
+      return { room: { ...room, revision: room.revision + 1 }, participant: updated[0] };
     });
   }
 

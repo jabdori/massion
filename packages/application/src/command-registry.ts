@@ -14,6 +14,8 @@ export interface ApplicationCommandDescriptor<Payload = unknown> {
   readonly requiredScopes: readonly string[];
   readonly allowedRoles: readonly MembershipRole[];
   readonly recovery: "replay-domain" | "operator-action";
+  idempotencyPayload?(payload: Payload): unknown;
+  resumeAwaitingApproval?(payload: Payload): boolean;
   validate(payload: unknown): Payload;
   handle(context: TenantContext, command: ApplicationCommandV1, payload: Payload): Promise<ApplicationCommandResultV1>;
 }
@@ -93,7 +95,13 @@ export class ApplicationCommandRegistry {
       });
     }
     const payload = descriptor.validate(command.payload);
-    const claim = await this.store.begin(context, command);
+    const identityCommand: ApplicationCommandV1 = {
+      ...command,
+      payload: descriptor.idempotencyPayload ? descriptor.idempotencyPayload(payload) : command.payload,
+    };
+    const claim = await this.store.begin(context, identityCommand, {
+      resumeAwaitingApproval: descriptor.resumeAwaitingApproval?.(payload) ?? false,
+    });
     if (claim.outcome === "replayed") return claim.result;
     if (claim.outcome === "failed") throw applicationErrorFromStored(claim.error);
     if (claim.outcome === "in-progress") {

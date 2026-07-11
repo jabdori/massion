@@ -181,6 +181,51 @@ describe("Collaboration Room과 resource lease", () => {
     ).rejects.toThrow("deadline");
   });
 
+  it("조직 사용자가 revision을 확인해 협업방에 참여하고 나간다", async () => {
+    const opened = await openRoom();
+    const identities = await IdentityService.create(database);
+    const organizations = await OrganizationService.create(database);
+    const member = await identities.registerPersonalUser({ email: "room-member@example.com", displayName: "Member" });
+    await organizations.addMember(context, member.user.user_id, "member");
+    const memberContext = await organizations.resolveTenantContext(member.user.user_id, context.organizationId);
+    const joined = await service.joinRoom(memberContext, {
+      commandId: "join-room-member-0001",
+      workId: created.work.work_id,
+      expectedRevision: (await service.getWork(memberContext, created.work.work_id)).revision,
+      roomId: opened.room.room_id,
+      expectedRoomRevision: opened.room.revision,
+      kind: "user",
+      subjectId: member.user.user_id,
+      role: "participant",
+    });
+    expect(joined.participant).toMatchObject({ subject_id: member.user.user_id, status: "active" });
+    expect(joined.room.revision).toBe(opened.room.revision + 1);
+
+    const left = await service.leaveRoom(memberContext, {
+      commandId: "leave-room-member-0001",
+      workId: created.work.work_id,
+      expectedRevision: joined.work.revision,
+      roomId: opened.room.room_id,
+      expectedRoomRevision: joined.room.revision,
+      kind: "user",
+      subjectId: member.user.user_id,
+    });
+    expect(left.participant.status).toBe("left");
+    await expect(
+      service.postMessage(memberContext, {
+        commandId: "left-member-message-0001",
+        workId: created.work.work_id,
+        roomId: opened.room.room_id,
+        messageType: "status",
+        authorKind: "user",
+        authorId: member.user.user_id,
+        content: "나간 뒤 메시지",
+        tokenCount: 1,
+        costMicros: 0,
+      }),
+    ).rejects.toThrow("participant");
+  });
+
   it("불변 Shared Context Reference와 versioned lease를 관리한다", async () => {
     const opened = await openRoom();
     let work = await service.getWork(context, created.work.work_id);

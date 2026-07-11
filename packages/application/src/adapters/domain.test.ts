@@ -1,0 +1,155 @@
+import { GovernanceApprovalRequiredError } from "@massion/governance";
+import { IdentityService, OrganizationService } from "@massion/identity";
+import { OrganizationGraphService } from "@massion/organization";
+import { createDatabase } from "@massion/storage";
+import { WorkService } from "@massion/work";
+import { describe, expect, it } from "vitest";
+
+import { ApplicationCommandRegistry } from "../command-registry.js";
+import { ApplicationCommandStore } from "../command-store.js";
+import { registerApplicationDomainCommands } from "./domain.js";
+
+describe("Application domain adapters", () => {
+  it("실제 Work·Organization public service를 command registry에 연결하고 tenant·revision을 보존한다", async () => {
+    await using database = await createDatabase({
+      url: "mem://",
+      namespace: "massion",
+      database: crypto.randomUUID(),
+    });
+    const identities = await IdentityService.create(database);
+    const organizations = await OrganizationService.create(database);
+    const owner = await identities.registerPersonalUser({ email: "domain@example.com", displayName: "Domain" });
+    const context = await organizations.resolveTenantContext(owner.user.user_id, owner.organization.organization_id);
+    const graph = await OrganizationGraphService.create(database, organizations);
+    const core = await graph.bootstrap(context);
+    const works = await WorkService.create(database, organizations, graph);
+    const registry = new ApplicationCommandRegistry(await ApplicationCommandStore.create(database, organizations));
+    registerApplicationDomainCommands(registry, { works, organization: graph });
+
+    const created = await registry.dispatch(context, ["work:write"], {
+      schemaVersion: "massion.application.v1",
+      commandId: "domain-work-create-command-0001",
+      correlationId: "domain-work-create-correlation-0001",
+      operation: "work.create",
+      payload: {
+        text: "Application 경계에서 Work 생성",
+        surface: "cli",
+        organizationVersionId: core.version.version_id,
+      },
+    });
+    expect(created).toMatchObject({ outcome: "succeeded", resource: { type: "Work", revision: 1 } });
+    const workId = (created.data as { workId: string }).workId;
+    await expect(
+      registry.dispatch(context, ["work:write"], {
+        schemaVersion: "massion.application.v1",
+        commandId: "domain-work-cancel-command-0001",
+        correlationId: "domain-work-cancel-correlation-0001",
+        operation: "work.cancel",
+        expectedRevision: 1,
+        payload: { workId },
+      }),
+    ).resolves.toMatchObject({ outcome: "succeeded", data: { status: "cancelled" } });
+
+    await expect(
+      registry.dispatch(context, ["organization:write"], {
+        schemaVersion: "massion.application.v1",
+        commandId: "domain-organization-command-0001",
+        correlationId: "domain-organization-correlation-0001",
+        operation: "organization.command",
+        expectedRevision: 1,
+        payload: {
+          kind: "create",
+          handle: "domain-specialist",
+          name: "Domain Specialist",
+          responsibility: "Application adapter 검증",
+          parentHandle: "representative",
+          scope: "persistent",
+        },
+      }),
+    ).resolves.toMatchObject({ outcome: "succeeded", resource: { type: "Organization", revision: 2 } });
+  });
+
+  it("Extension review는 awaiting-approval로 반환하고 같은 command·artifact로 승인 재개한다", async () => {
+    await using database = await createDatabase({
+      url: "mem://",
+      namespace: "massion",
+      database: crypto.randomUUID(),
+    });
+    const identities = await IdentityService.create(database);
+    const organizations = await OrganizationService.create(database);
+    const owner = await identities.registerPersonalUser({ email: "extension-domain@example.com", displayName: "Ext" });
+    const context = await organizations.resolveTenantContext(owner.user.user_id, owner.organization.organization_id);
+    const registry = new ApplicationCommandRegistry(await ApplicationCommandStore.create(database, organizations));
+    const extension = {
+      async install(_context: unknown, input: { installApprovalId?: string }) {
+        if (!input.installApprovalId)
+          throw new GovernanceApprovalRequiredError("decision-extension", "approval-extension");
+        return {
+          installationId: "installation-domain",
+          versionId: "version-domain",
+          packageName: "@massion-ext/domain",
+          packageVersion: "1.0.0",
+          activationGeneration: 1,
+          state: "active",
+        };
+      },
+    };
+    registerApplicationDomainCommands(registry, { extension: extension as never });
+    const initial = {
+      schemaVersion: "massion.application.v1" as const,
+      commandId: "domain-extension-install-command-0001",
+      correlationId: "domain-extension-install-correlation-0001",
+      operation: "extension.install",
+      payload: { archiveBase64: Buffer.from("archive").toString("base64") },
+    };
+    await expect(registry.dispatch(context, ["extension:write"], initial)).resolves.toMatchObject({
+      outcome: "awaiting-approval",
+      data: { approvalId: "approval-extension" },
+    });
+    await expect(
+      registry.dispatch(context, ["extension:write"], {
+        ...initial,
+        payload: { ...initial.payload, installApprovalId: "approval-extension" },
+      }),
+    ).resolves.toMatchObject({
+      outcome: "succeeded",
+      data: { installationId: "installation-domain", packageName: "@massion-ext/domain" },
+    });
+  });
+
+  it("active 정책이 allow인 Extension은 사람 승인 없이 바로 succeeded를 반환한다", async () => {
+    await using database = await createDatabase({
+      url: "mem://",
+      namespace: "massion",
+      database: crypto.randomUUID(),
+    });
+    const identities = await IdentityService.create(database);
+    const organizations = await OrganizationService.create(database);
+    const owner = await identities.registerPersonalUser({ email: "auto-domain@example.com", displayName: "Auto" });
+    const context = await organizations.resolveTenantContext(owner.user.user_id, owner.organization.organization_id);
+    const registry = new ApplicationCommandRegistry(await ApplicationCommandStore.create(database, organizations));
+    registerApplicationDomainCommands(registry, {
+      extension: {
+        async install() {
+          return {
+            installationId: "installation-auto",
+            versionId: "version-auto",
+            packageName: "@massion-ext/auto",
+            packageVersion: "1.0.0",
+            activationGeneration: 1,
+            state: "active",
+          };
+        },
+      } as never,
+    });
+    await expect(
+      registry.dispatch(context, ["extension:write"], {
+        schemaVersion: "massion.application.v1",
+        commandId: "domain-extension-auto-command-0001",
+        correlationId: "domain-extension-auto-correlation-0001",
+        operation: "extension.install",
+        payload: { archiveBase64: Buffer.from("archive").toString("base64") },
+      }),
+    ).resolves.toMatchObject({ outcome: "succeeded" });
+  });
+});

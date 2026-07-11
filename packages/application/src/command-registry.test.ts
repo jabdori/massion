@@ -183,4 +183,44 @@ describe("ApplicationCommandRegistry", () => {
     });
     expect(called).toBe(false);
   });
+
+  it("승인 ID를 멱등 payload에서 제외하고 awaiting-approval 명령만 같은 command로 재개한다", async () => {
+    registry.register({
+      operation: "extension.reviewed-install",
+      requiredScopes: ["work:write"],
+      allowedRoles: ["owner"],
+      recovery: "replay-domain",
+      validate(payload) {
+        return payload as { readonly artifactDigest: string; readonly approvalId?: string };
+      },
+      idempotencyPayload: (payload) => ({ artifactDigest: payload.artifactDigest }),
+      resumeAwaitingApproval: (payload) => payload.approvalId !== undefined,
+      async handle(_context, command, payload) {
+        return {
+          schemaVersion: "massion.application.v1",
+          commandId: command.commandId,
+          correlationId: command.correlationId,
+          operation: command.operation,
+          outcome: payload.approvalId ? "succeeded" : "awaiting-approval",
+          data: payload.approvalId ? { installed: true } : { approvalId: "approval-required-0001" },
+        };
+      },
+    });
+    const initial = {
+      schemaVersion: "massion.application.v1" as const,
+      commandId: "registry-approval-command-0001",
+      correlationId: "registry-approval-correlation-0001",
+      operation: "extension.reviewed-install",
+      payload: { artifactDigest: "a".repeat(64) },
+    };
+    await expect(registry.dispatch(context, ["work:write"], initial)).resolves.toMatchObject({
+      outcome: "awaiting-approval",
+    });
+    await expect(
+      registry.dispatch(context, ["work:write"], {
+        ...initial,
+        payload: { ...initial.payload, approvalId: "approval-required-0001" },
+      }),
+    ).resolves.toMatchObject({ outcome: "succeeded", data: { installed: true } });
+  });
 });

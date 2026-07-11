@@ -1,4 +1,6 @@
 export * from "./auth.js";
+export * from "./adapters/read-model.js";
+export * from "./adapters/domain.js";
 export * from "./bootstrap.js";
 export * from "./command-registry.js";
 export * from "./command-store.js";
@@ -7,6 +9,7 @@ export * from "./errors.js";
 export * from "./event-projector.js";
 export * from "./event-store.js";
 export * from "./outbox.js";
+export * from "./query-registry.js";
 export * from "./read-model.js";
 export * from "./schema.js";
 export * from "./snapshot.js";
