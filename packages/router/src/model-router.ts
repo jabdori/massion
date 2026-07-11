@@ -2,19 +2,35 @@ import { createHash, randomUUID } from "node:crypto";
 
 import { type OrganizationService, type TenantContext } from "@massion/identity";
 import { applyMigrations, type MassionDatabase, type QueryExecutor } from "@massion/storage";
+import { type SubscriptionAccountService, type SubscriptionQuotaService } from "@massion/subscriptions";
 
 import { classifyFailure, type FailureSignal } from "./failure.js";
-import { ProviderService, type ProviderCredential, type ProviderEndpoint, type RouterAuditEvent } from "./provider.js";
+import {
+  ProviderService,
+  type CredentialMaterial,
+  type ProviderCredential,
+  type ProviderEndpoint,
+  type RouterAuditEvent,
+} from "./provider.js";
 import {
   MODEL_PRICING_MIGRATION,
   MODEL_ROUTE_MIGRATION,
   ROUTER_HEALTH_MIGRATION,
   ROUTER_REGISTRY_MIGRATION,
+  ROUTER_SUBSCRIPTION_MATERIAL_MIGRATION,
 } from "./schema.js";
 
 export type RouteKind = "chat" | "embedding";
 export type CredentialPolicy =
-  "priority" | "fill-first" | "round-robin" | "weighted" | "least-used" | "quota-headroom" | "reset-aware" | "sticky";
+  | "adaptive"
+  | "priority"
+  | "fill-first"
+  | "round-robin"
+  | "weighted"
+  | "least-used"
+  | "quota-headroom"
+  | "reset-aware"
+  | "sticky";
 
 export interface ModelProfile {
   readonly model_profile_id: string;
@@ -110,6 +126,17 @@ export interface CredentialSelectionView {
   readonly quota_remaining?: number;
   readonly quota_reset_at?: unknown;
   readonly last_selected_sequence: number;
+  readonly quota_windows?: readonly {
+    readonly kind: string;
+    readonly remainingRatio?: number;
+    readonly resetsAt?: string;
+    readonly observedAt: string;
+  }[];
+}
+
+export interface ModelRouterSubscriptionServices {
+  readonly accounts: SubscriptionAccountService;
+  readonly quota: SubscriptionQuotaService;
 }
 
 export interface RegisterModelInput {
@@ -183,7 +210,8 @@ export interface RouteSimulation {
 export interface RouteReservation extends RouteSimulation {
   readonly status: "selected";
   readonly attempt: RouteAttempt;
-  readonly secret: string;
+  readonly material: CredentialMaterial;
+  readonly secret?: string;
 }
 
 export interface RouteDiagnostic {
@@ -236,6 +264,7 @@ interface RouterCircuit {
 type CircuitScope = "credential" | "endpoint" | "model";
 
 const POLICIES = new Set<CredentialPolicy>([
+  "adaptive",
   "priority",
   "fill-first",
   "round-robin",
@@ -260,11 +289,42 @@ export function selectCredential(
   policy: CredentialPolicy,
   credentials: readonly CredentialSelectionView[],
   stickyKey?: string,
+  now = new Date(),
 ): CredentialSelectionView | undefined {
   if (credentials.length === 0) return undefined;
   const ordered = [...credentials].sort((left, right) => left.credential_id.localeCompare(right.credential_id));
   const by = (compare: (left: CredentialSelectionView, right: CredentialSelectionView) => number) =>
     [...ordered].sort(compare)[0];
+  if (policy === "adaptive") {
+    const freshWindows = (credential: CredentialSelectionView) =>
+      (credential.quota_windows ?? []).filter((window) => {
+        const observedAt = new Date(window.observedAt).getTime();
+        return Number.isFinite(observedAt) && Math.abs(now.getTime() - observedAt) <= 5 * 60 * 1_000;
+      });
+    const eligible = ordered.filter(
+      (credential) => !freshWindows(credential).some((window) => window.remainingRatio === 0),
+    );
+    if (eligible.length === 0) return undefined;
+    const score = (credential: CredentialSelectionView) => {
+      const windows = freshWindows(credential);
+      if (windows.length === 0) return -1;
+      return Math.max(
+        ...windows.map((window) => {
+          const ratio = window.remainingRatio ?? 0;
+          const resetMillis = window.resetsAt === undefined ? Number.NaN : new Date(window.resetsAt).getTime();
+          if (!Number.isFinite(resetMillis) || resetMillis <= now.getTime()) return 0;
+          return ratio / Math.max(60, (resetMillis - now.getTime()) / 1_000);
+        }),
+      );
+    };
+    return [...eligible].sort(
+      (left, right) =>
+        score(right) - score(left) ||
+        left.request_count / left.weight - right.request_count / right.weight ||
+        left.last_selected_sequence - right.last_selected_sequence ||
+        left.credential_id.localeCompare(right.credential_id),
+    )[0];
+  }
   if (policy === "fill-first")
     return by((left, right) => left.priority - right.priority || left.credential_id.localeCompare(right.credential_id));
   if (policy === "priority")
@@ -335,20 +395,23 @@ export class ModelRouter {
     private readonly database: MassionDatabase,
     private readonly organizations: OrganizationService,
     private readonly providers: ProviderService,
+    private readonly subscriptions?: ModelRouterSubscriptionServices,
   ) {}
 
   public static async create(
     database: MassionDatabase,
     organizations: OrganizationService,
     providers: ProviderService,
+    subscriptions?: ModelRouterSubscriptionServices,
   ): Promise<ModelRouter> {
     await applyMigrations(database, [
       ROUTER_REGISTRY_MIGRATION,
       MODEL_ROUTE_MIGRATION,
       ROUTER_HEALTH_MIGRATION,
       MODEL_PRICING_MIGRATION,
+      ROUTER_SUBSCRIPTION_MATERIAL_MIGRATION,
     ]);
-    return new ModelRouter(database, organizations, providers);
+    return new ModelRouter(database, organizations, providers, subscriptions);
   }
 
   public async registerModel(
@@ -578,13 +641,19 @@ export class ModelRouter {
       );
       const attempt = attempts[0];
       if (!attempt) throw new Error("Route Attempt 생성 결과가 없습니다");
-      const secret = await this.providers.resolveExecutionSecretVersion(
+      const material = await this.providers.resolveExecutionMaterial(
         context,
         simulation.credential,
-        attempt.credential_secret_version,
         tx,
+        attempt.credential_secret_version,
       );
-      return { ...simulation, status: "selected", attempt, secret };
+      return {
+        ...simulation,
+        status: "selected",
+        attempt,
+        material,
+        ...(material.kind === "encrypted_secret" ? { secret: material.secret } : {}),
+      };
     });
   }
 
@@ -778,7 +847,7 @@ export class ModelRouter {
         { organization_id: context.organizationId, provider_id: profile.provider_id, endpoint_id: profile.endpoint_id },
       );
       const now = Date.now();
-      const eligible: ProviderCredential[] = [];
+      const eligible: CredentialSelectionView[] = [];
       for (const credential of credentials) {
         if (credential.credential_id === excludedCredentialId) {
           excluded.push(`${profile.model_id}/${credential.label}: 이전 실패 Credential 제외`);
@@ -796,8 +865,42 @@ export class ModelRouter {
           if (!resumeAt || until < resumeAt) resumeAt = until;
           continue;
         }
+        let selectionCredential: CredentialSelectionView = credential;
+        if (credential.material_kind === "connector_session") {
+          const accountId = credential.subscription_account_id;
+          const connectorId = credential.subscription_connector_id;
+          const scope = credential.subscription_scope;
+          if (!this.subscriptions || !accountId || !connectorId || !scope) {
+            excluded.push(`${profile.model_id}/${credential.label}: 구독 Connector 구성이 불완전함`);
+            continue;
+          }
+          try {
+            const account = await this.subscriptions.accounts.requireUsable(context, accountId, scope, executor);
+            if (account.connector_id !== connectorId) throw new Error("Connector binding 불일치");
+            const current = await this.subscriptions.quota.currentForRouting(context, accountId, executor);
+            selectionCredential = current ? { ...credential, quota_windows: current.windows } : credential;
+            const freshExhausted =
+              current?.windows.some((window) => {
+                const observedAt = new Date(window.observedAt).getTime();
+                return (
+                  Number.isFinite(observedAt) &&
+                  Math.abs(Date.now() - observedAt) <= 5 * 60 * 1_000 &&
+                  (window.remaining === 0 || window.remainingRatio === 0)
+                );
+              }) ?? false;
+            if (freshExhausted) {
+              excluded.push(`${profile.model_id}/${credential.label}: 구독 quota 소진`);
+              continue;
+            }
+          } catch (error) {
+            excluded.push(
+              `${profile.model_id}/${credential.label}: ${error instanceof Error ? error.message : "구독 계정 사용 불가"}`,
+            );
+            continue;
+          }
+        }
         if (credential.status === "active" && credential.quota_remaining !== 0) {
-          eligible.push(credential);
+          eligible.push(selectionCredential);
           continue;
         }
         if (credential.status === "cooldown" && serializedMillis(credential.cooldown_until) <= now) {
@@ -883,11 +986,11 @@ export class ModelRouter {
     );
     const credential = credentials[0];
     if (!credential) throw new Error("Attempt Credential을 찾을 수 없습니다");
-    const secret = await this.providers.resolveExecutionSecretVersion(
+    const material = await this.providers.resolveExecutionMaterial(
       context,
       credential,
-      attempt.credential_secret_version,
       executor,
+      attempt.credential_secret_version,
     );
     return {
       status: "selected",
@@ -897,7 +1000,8 @@ export class ModelRouter {
       endpoint,
       credential,
       attempt,
-      secret,
+      material,
+      ...(material.kind === "encrypted_secret" ? { secret: material.secret } : {}),
       explanation: explanation.explanation,
     };
   }

@@ -203,3 +203,15 @@ DEFINE FIELD input_cost_micros_per_million ON model_profile TYPE int DEFAULT 0;
 DEFINE FIELD output_cost_micros_per_million ON model_profile TYPE int DEFAULT 0;
 `,
 );
+
+// prettier-ignore -- migration SQL의 공백도 checksum에 포함됩니다.
+export const ROUTER_SUBSCRIPTION_MATERIAL_MIGRATION = defineMigration(
+  "0085-router-subscription-material",
+  `
+DEFINE FIELD material_kind ON provider_credential TYPE option<string>;
+DEFINE FIELD subscription_account_id ON provider_credential TYPE option<string>;
+DEFINE FIELD subscription_connector_id ON provider_credential TYPE option<string>;
+DEFINE FIELD subscription_scope ON provider_credential TYPE option<string>;
+DEFINE INDEX provider_credential_subscription_account ON provider_credential FIELDS organization_id, subscription_account_id;
+`,
+);

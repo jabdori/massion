@@ -14,12 +14,13 @@
   ],
   "scripts": {
     "build": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\" && tsc -p tsconfig.json",
-    "test": "pnpm --filter @massion/identity build && vitest run",
+    "test": "pnpm --filter @massion/identity build && pnpm --filter @massion/subscriptions build && vitest run",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
     "@massion/identity": "workspace:*",
-    "@massion/storage": "workspace:*"
+    "@massion/storage": "workspace:*",
+    "@massion/subscriptions": "workspace:*"
   },
   "engines": {
     "node": ">=24.0.0"

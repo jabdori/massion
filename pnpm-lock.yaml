@@ -489,6 +489,9 @@ importers:
       '@massion/storage':
         specifier: workspace:*
         version: link:../storage
+      '@massion/subscriptions':
+        specifier: workspace:*
+        version: link:../subscriptions
 
   packages/runtime:
     dependencies:
