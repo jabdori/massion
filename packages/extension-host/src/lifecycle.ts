@@ -37,6 +37,10 @@ export interface ExtensionChangeInput {
   readonly permissionApprovalId?: string;
 }
 
+export interface RegistryExtensionChangeInput extends ExtensionChangeInput {
+  readonly trustLevel: "verified" | "community";
+}
+
 export interface ExtensionActivationView {
   readonly installationId: string;
   readonly versionId: string;
@@ -117,6 +121,13 @@ export class ExtensionLifecycleService {
 
   public async installBundled(context: TenantContext, input: ExtensionChangeInput): Promise<ExtensionActivationView> {
     return await this.activateArchive(context, input, "built-in", "bundled");
+  }
+
+  public async installRegistry(
+    context: TenantContext,
+    input: RegistryExtensionChangeInput,
+  ): Promise<ExtensionActivationView> {
+    return await this.activateArchive(context, input, input.trustLevel, "registry");
   }
 
   public async update(context: TenantContext, input: ExtensionChangeInput): Promise<ExtensionActivationView> {
@@ -235,7 +246,7 @@ export class ExtensionLifecycleService {
     context: TenantContext,
     input: ExtensionChangeInput,
     trustLevel: ExtensionTrustLevel,
-    sourceKind: "tarball" | "bundled",
+    sourceKind: "tarball" | "bundled" | "registry",
   ): Promise<ExtensionActivationView> {
     const report = await inspectExtensionArchive(input.archive, { runtime: this.dependencies.runtime });
     const currentInstallation = await this.dependencies.store.findInstallation(context, report.manifest.name);
