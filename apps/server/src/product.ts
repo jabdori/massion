@@ -7,7 +7,7 @@ import { WorkService } from "@massion/work";
 
 import type { ServerConfig } from "./config.js";
 import { MassionDaemon } from "./daemon.js";
-import { MetricRegistry, MetricsHttpServer } from "./telemetry.js";
+import { JsonOperationalLogger, MetricRegistry, MetricsHttpServer } from "./telemetry.js";
 
 export async function provisionRemoteDatabase(
   config: ServerConfig,
@@ -90,12 +90,14 @@ export async function createMassionDaemon(config: ServerConfig): Promise<Massion
     });
     const metrics = new MetricRegistry({ massion_daemon_transition_total: ["state"] });
     const metricsServer = new MetricsHttpServer(metrics, config.metrics);
+    const operations = new JsonOperationalLogger((line) => process.stderr.write(`${line}\n`));
     daemon = new MassionDaemon({
       application,
       database,
       shutdownTimeoutMs: config.shutdownTimeoutMs,
       operationalServices: [metricsServer],
       onState: (state) => metrics.increment("massion_daemon_transition_total", { state }),
+      onReadinessFailure: (component) => operations.write("server.readiness.failed", { component }),
     });
     return daemon;
   } catch (error) {
