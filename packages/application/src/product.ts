@@ -21,6 +21,10 @@ import {
   type ApplicationHttpDependencies,
   type ApplicationHttpServerOptions,
 } from "./http-server.js";
+import {
+  registerApplicationIntegrationOperations,
+  type ApplicationIntegrationOperations,
+} from "./integration-operations.js";
 import { ApplicationMetricStore } from "./metrics.js";
 import {
   ApplicationQueryRegistry,
@@ -46,7 +50,10 @@ export interface ApplicationProductDependencies {
     "readModel" | "snapshot" | "memberships" | "audit" | "webSessions"
   >;
   readonly artifacts?: Pick<ApplicationArtifactGateway, "inspect" | "install" | "update">;
-  readonly integrations?: NonNullable<ApplicationHttpDependencies["integrations"]>;
+  readonly integrations?: {
+    readonly http?: NonNullable<ApplicationHttpDependencies["integrations"]>;
+    readonly operations?: ApplicationIntegrationOperations;
+  };
   readonly server?: ApplicationHttpServerOptions;
 }
 
@@ -107,6 +114,8 @@ export class ApplicationProduct implements AsyncDisposable {
       audit: events,
       webSessions,
     });
+    if (dependencies.integrations?.operations)
+      registerApplicationIntegrationOperations(commands, queries, dependencies.integrations.operations);
     const bootstrap = new LocalApplicationBootstrap(
       dependencies.identities,
       dependencies.organizations,
@@ -178,7 +187,7 @@ export class ApplicationProduct implements AsyncDisposable {
         },
         tokens,
         ...(dependencies.artifacts === undefined ? {} : { artifacts: dependencies.artifacts }),
-        ...(dependencies.integrations === undefined ? {} : { integrations: dependencies.integrations }),
+        ...(dependencies.integrations?.http === undefined ? {} : { integrations: dependencies.integrations.http }),
         bootstrap,
         webSessions,
       },

@@ -1,3 +1,4 @@
+export * from "./application-adapter.js";
 export * from "./contracts.js";
 export * from "./dispatcher.js";
 export * from "./github-auth.js";
