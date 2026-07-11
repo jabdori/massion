@@ -180,4 +180,37 @@ describe("IntegrationStore", () => {
       }),
     ).toBeUndefined();
   });
+
+  it("성공한 outbox를 immutable 외부 receipt와 원자적으로 완료한다", async () => {
+    const installation = await store.connect(context, {
+      commandId: "connect-receipt",
+      platform: "slack",
+      externalTenantId: "TRECEIPT01",
+      credentialRef: "credential:slack:receipt",
+      scopes: ["chat:write"],
+    });
+    const queued = await store.enqueue(context, {
+      commandId: "receipt-command",
+      installationId: installation.installationId,
+      destination: "CRECEIPT01",
+      operation: "chat.postMessage",
+      idempotencyKey: "receipt-effect-1",
+      payload: { text: "완료" },
+    });
+    const claimed = await store.claimOutbox(context, {
+      workerId: "sender-receipt",
+      now: new Date("2100-01-01T00:00:00.000Z"),
+      leaseMs: 1_000,
+    });
+    if (!claimed) throw new Error("outbox claim 결과가 없습니다");
+    await expect(
+      store.completeOutbox(context, {
+        outboxId: queued.outboxId,
+        workerId: "sender-receipt",
+        leaseGeneration: claimed.leaseGeneration,
+        externalId: "1234.5678",
+        responseHash: hash("response"),
+      }),
+    ).resolves.toMatchObject({ externalId: "1234.5678", replayed: false });
+  });
 });

@@ -420,6 +420,71 @@ export class IntegrationStore {
     if (!record) throw new Error("Integration outbox lease가 일치하지 않습니다");
   }
 
+  public async completeOutbox(
+    context: TenantContext,
+    input: {
+      outboxId: string;
+      workerId: string;
+      leaseGeneration: number;
+      externalId: string;
+      externalUrl?: string;
+      responseHash: string;
+    },
+  ) {
+    if (!HASH.test(input.responseHash)) throw new Error("Integration response hash가 유효하지 않습니다");
+    return await this.database.transaction(async (tx) => {
+      await this.organizations.verifyTenantContext(context, undefined, tx);
+      const existing = await first<{ receipt_id: string; external_id: string }>(
+        tx,
+        "SELECT * OMIT id FROM integration_receipt WHERE organization_id=$organization_id AND outbox_id=$outbox_id LIMIT 1;",
+        { organization_id: context.organizationId, outbox_id: input.outboxId },
+      );
+      if (existing) return { receiptId: existing.receipt_id, externalId: existing.external_id, replayed: true };
+      const updated = await first<OutboxRecord>(
+        tx,
+        "UPDATE integration_outbox SET state='succeeded', lease_owner=NONE, lease_expires_at=NONE, error_category=NONE, updated_at=time::now() WHERE organization_id=$organization_id AND outbox_id=$outbox_id AND state='processing' AND lease_owner=$worker_id AND lease_generation=$lease_generation RETURN AFTER;",
+        {
+          organization_id: context.organizationId,
+          outbox_id: input.outboxId,
+          worker_id: input.workerId,
+          lease_generation: input.leaseGeneration,
+        },
+      );
+      if (!updated) throw new Error("Integration outbox lease가 일치하지 않습니다");
+      const receiptId = randomUUID();
+      await tx.query(
+        `CREATE integration_receipt CONTENT { receipt_id:$receipt_id, organization_id:$organization_id, outbox_id:$outbox_id, external_id:$external_id, external_url:${input.externalUrl === undefined ? "NONE" : "$external_url"}, payload_hash:$payload_hash, created_at:time::now() };`,
+        {
+          receipt_id: receiptId,
+          organization_id: context.organizationId,
+          outbox_id: input.outboxId,
+          external_id: input.externalId,
+          ...(input.externalUrl === undefined ? {} : { external_url: input.externalUrl }),
+          payload_hash: input.responseHash,
+        },
+      );
+      return { receiptId, externalId: input.externalId, replayed: false };
+    });
+  }
+
+  public async blockOutbox(
+    context: TenantContext,
+    input: { outboxId: string; workerId: string; leaseGeneration: number; errorCategory: string },
+  ): Promise<void> {
+    const record = await first<OutboxRecord>(
+      this.database,
+      "UPDATE integration_outbox SET state='blocked', lease_owner=NONE, lease_expires_at=NONE, error_category=$error_category, updated_at=time::now() WHERE organization_id=$organization_id AND outbox_id=$outbox_id AND state='processing' AND lease_owner=$worker_id AND lease_generation=$lease_generation RETURN AFTER;",
+      {
+        organization_id: context.organizationId,
+        outbox_id: input.outboxId,
+        worker_id: input.workerId,
+        lease_generation: input.leaseGeneration,
+        error_category: input.errorCategory,
+      },
+    );
+    if (!record) throw new Error("Integration outbox lease가 일치하지 않습니다");
+  }
+
   private installationView(record: InstallationRecord) {
     return {
       installationId: record.installation_id,
