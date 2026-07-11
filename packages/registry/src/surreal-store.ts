@@ -222,6 +222,43 @@ export class SurrealRegistryStore {
     }));
   }
 
+  public catalogStore(): {
+    list(): Promise<readonly RegistryVersion[]>;
+    get(versionId: string): Promise<RegistryVersion>;
+    listRecalls(versionId: string): Promise<readonly RegistryRecall[]>;
+  } {
+    return {
+      list: async () => {
+        const [records] = await this.database.query<[VersionRecord[]]>(
+          "SELECT * OMIT id FROM registry_version ORDER BY package_name, package_version;",
+        );
+        return records.map((record) => this.view(record));
+      },
+      get: async (versionId) => {
+        const record = await first<VersionRecord>(
+          this.database,
+          "SELECT * OMIT id FROM registry_version WHERE version_id=$version_id LIMIT 1;",
+          { version_id: versionId },
+        );
+        if (!record) throw new Error("Registry version을 찾을 수 없습니다");
+        return this.view(record);
+      },
+      listRecalls: async (versionId) => {
+        const [records] = await this.database.query<[RecallRecord[]]>(
+          "SELECT * OMIT id FROM registry_recall WHERE version_id=$version_id ORDER BY created_at;",
+          { version_id: versionId },
+        );
+        return records.map((record) => ({
+          recallId: record.recall_id,
+          category: record.category,
+          severity: record.severity,
+          reason: record.reason,
+          createdAt: new Date(record.created_at).toISOString(),
+        }));
+      },
+    };
+  }
+
   private async getOwned(context: TenantContext, versionId: string): Promise<RegistryVersion> {
     await this.organizations.verifyTenantContext(context);
     const record = await first<VersionRecord>(
