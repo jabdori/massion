@@ -7,8 +7,10 @@ import { ApplicationHttpClient, ApplicationRemoteError } from "@massion/applicat
 
 import { executeCliInvocation } from "./commands.js";
 import { CliConfigStore } from "./config.js";
+import { processJsonLines, writeWithBackpressure } from "./jsonl.js";
 import { parseCliArguments } from "./parser.js";
 import { renderCliOutput } from "./render.js";
+import { runHeadless } from "./run.js";
 import { resolveTokenReference } from "./token.js";
 
 const HELP = `mass - Massion AgentOS command line\n\n사용법: mass <init|status|run|watch|org|work|chat|task|approval|runtime|provider|ext|growth|doctor> [options]\n`;
@@ -52,14 +54,71 @@ export async function runCli(argv = process.argv.slice(2)): Promise<number> {
       return 0;
     }
     if (invocation.command === "init") throw new Error("mass init은 로컬 AgentOS bootstrap 연결이 필요합니다");
-    if (["run", "watch"].includes(invocation.command))
-      throw new Error(`${invocation.command}은 headless runner에서 실행해야 합니다`);
     const config = await new CliConfigStore().load();
     const profileName = invocation.profile ?? config.selectedProfile;
     const profile = config.profiles[profileName];
     if (!profile) throw new Error(`CLI profile을 찾을 수 없습니다: ${profileName}`);
     const token = await resolveTokenReference(profile.tokenReference);
     const authenticated = new ApplicationHttpClient({ baseUrl: profile.endpoint, token });
+    if (invocation.command === "run" && invocation.output === "jsonl") {
+      await processJsonLines(
+        process.stdin,
+        async (input) => ({
+          schemaVersion: "massion.cli.jsonl.v1",
+          type: "result",
+          data: await authenticated.command(input),
+        }),
+        async (line) => await writeWithBackpressure(process.stdout, line),
+      );
+      return 0;
+    }
+    const signals = new AbortController();
+    let signalCount = 0;
+    const interrupt = (): void => {
+      signalCount += 1;
+      if (signalCount === 1) signals.abort();
+      else process.exit(130);
+    };
+    process.on("SIGINT", interrupt);
+    try {
+      if (invocation.command === "run") {
+        const text = invocation.arguments.join(" ").trim();
+        if (!text) throw new Error("run request text가 필요합니다");
+        const value = await runHeadless(
+          authenticated,
+          { text, surface: "cli" },
+          {
+            detach: invocation.detach,
+            signal: signals.signal,
+            ...(invocation.output === "jsonl"
+              ? {
+                  onEvent: async (event: unknown) =>
+                    await writeWithBackpressure(
+                      process.stdout,
+                      `${JSON.stringify({ schemaVersion: "massion.cli.jsonl.v1", type: "event", data: event })}\n`,
+                    ),
+                }
+              : {}),
+          },
+        );
+        await writeWithBackpressure(
+          process.stdout,
+          renderCliOutput(value, invocation.output, {
+            tty: process.stdout.isTTY,
+            noColor: process.env.NO_COLOR !== undefined,
+          }),
+        );
+        return recordStatus(value) === "blocked" ? 7 : recordStatus(value) === "cancelled" ? 130 : 0;
+      }
+      if (invocation.command === "watch") {
+        for await (const event of authenticated.streamEvents(invocation.after ?? 0, signals.signal)) {
+          await writeWithBackpressure(process.stdout, `${JSON.stringify(event)}\n`);
+        }
+        return signals.signal.aborted ? 130 : 0;
+      }
+    } finally {
+      process.off("SIGINT", interrupt);
+    }
     const value = await executeCliInvocation(authenticated, invocation, {
       readJson: async () => JSON.parse((await readStdin()).toString("utf8")) as unknown,
       readArtifact: async (path) => {
@@ -79,6 +138,10 @@ export async function runCli(argv = process.argv.slice(2)): Promise<number> {
     process.stderr.write(`${error instanceof Error ? error.message : "알 수 없는 CLI 오류"}\n`);
     return exitCode(error);
   }
+}
+
+function recordStatus(value: unknown): string | undefined {
+  return value && typeof value === "object" ? String((value as { status?: unknown }).status ?? "") : undefined;
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) process.exitCode = await runCli();
