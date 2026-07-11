@@ -14,6 +14,7 @@ export type {
 } from "./prompt-memory.js";
 export type {
   GrowthSuggestionRecord,
+  ListGrowthSuggestionsInput,
   ReflectionRunRecord,
   SuggestionCandidate,
   SuggestionTargetKind,

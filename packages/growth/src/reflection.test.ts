@@ -118,6 +118,9 @@ describe("Reflection suggestion validation", () => {
 
     expect(result.run.status).toBe("completed");
     expect(result.suggestions).toEqual([expect.objectContaining({ target_kind: "prompt", status: "proposed" })]);
+    await expect(service.listSuggestions(context, { workId: "work-1", limit: 10 })).resolves.toEqual([
+      expect.objectContaining({ suggestion_id: result.suggestions[0]?.suggestion_id, summary: "설정 검증 강화" }),
+    ]);
     const [references] = await database.query<[Array<{ source_id: string; source_checksum: string }>]>(
       "SELECT source_id, source_checksum FROM growth_source_reference;",
     );

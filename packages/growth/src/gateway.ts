@@ -7,7 +7,7 @@ import type { ConfigureGrowthInput } from "./contracts.js";
 import type { GrowthEffectSample, GrowthEffectStore } from "./effect.js";
 import type { GrowthEvaluationStore } from "./evaluation.js";
 import type { PromptMemoryStore } from "./prompt-memory.js";
-import type { ReflectionService } from "./reflection.js";
+import type { ListGrowthSuggestionsInput, ReflectionService } from "./reflection.js";
 import type { GrowthRecoveryService } from "./recovery.js";
 import type { GrowthRevertService, RevertGrowthAdoptionInput } from "./revert.js";
 import type { ReflectionSnapshot } from "./snapshot.js";
@@ -51,6 +51,9 @@ export class GrowthGateway {
     input: { readonly commandId: string; readonly trigger: GrowthTrigger; readonly snapshot: ReflectionSnapshot },
   ) {
     return await this.dependencies.reflections.run(context, input);
+  }
+  public async listSuggestions(context: TenantContext, input: ListGrowthSuggestionsInput = {}) {
+    return await this.dependencies.reflections.listSuggestions(context, input);
   }
   public async evaluate(
     context: TenantContext,
