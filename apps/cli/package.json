@@ -7,8 +7,9 @@
     "mass": "./dist/main.js"
   },
   "scripts": {
-    "build": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\" && tsc -p tsconfig.json",
-    "test": "vitest run src",
+    "build": "pnpm build-deps && node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\" && tsc -p tsconfig.json",
+    "build-deps": "pnpm --filter @massion/application build",
+    "test": "pnpm build && vitest run src",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {

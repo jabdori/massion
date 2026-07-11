@@ -16,6 +16,7 @@ export * from "./outbox.js";
 export * from "./query-registry.js";
 export * from "./read-model.js";
 export * from "./run-recovery.js";
+export * from "./run-commands.js";
 export * from "./run-store.js";
 export * from "./schema.js";
 export * from "./sse.js";
