@@ -15,7 +15,7 @@ function visible(version: RegistryVersion, organizationId: string): boolean {
 }
 
 function manifestRecord(version: RegistryVersion): Record<string, unknown> {
-  return version.manifest as Record<string, unknown>;
+  return version.manifest;
 }
 
 function compatible(
@@ -198,7 +198,7 @@ export class RegistryCatalog {
           ? { deprecated: `Massion recalled: ${recalls.at(-1)?.reason ?? "security policy"}` }
           : {}),
         dist: {
-          tarball: `/npm/${encodeURIComponent(packageName)}/-/${packageName.split("/")[1]}-${version.packageVersion}.tgz?v=${version.versionId}`,
+          tarball: `/npm/${encodeURIComponent(packageName)}/-/${packageName.slice("@massion-ext/".length)}-${version.packageVersion}.tgz?v=${version.versionId}`,
           integrity: `sha256-${Buffer.from(version.artifactDigest, "hex").toString("base64")}`,
         },
       };

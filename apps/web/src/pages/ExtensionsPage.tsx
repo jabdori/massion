@@ -118,7 +118,9 @@ export default function ExtensionsPage() {
             value={search}
             maxLength={256}
             placeholder="Slack, GitHub, 도구 이름"
-            onChange={(event) => setSearch(event.target.value)}
+            onChange={(event) => {
+              setSearch(event.target.value);
+            }}
           />
           <button type="submit" className="secondary-button" disabled={busy !== undefined}>
             검색
@@ -146,7 +148,9 @@ export default function ExtensionsPage() {
                 type="button"
                 className="secondary-button"
                 disabled={busy !== undefined}
-                onClick={() => void installVersion(label(item.versionId))}
+                onClick={() => {
+                  void installVersion(label(item.versionId));
+                }}
               >
                 {busy === label(item.versionId) ? "설치 중…" : "설치"}
               </button>

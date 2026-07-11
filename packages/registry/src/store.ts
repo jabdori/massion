@@ -32,6 +32,7 @@ export class MemoryRegistryStore {
   private readonly recalls = new Map<string, RegistryRecall[]>();
 
   public async stage(commandId: string, input: RegistryVersionInput): Promise<RegistryVersion> {
+    await Promise.resolve();
     assertRegistryId(commandId, "commandId");
     normalizePackageIdentity(input.packageName, input.packageVersion);
     assertDigest(input.artifactDigest, "artifact");
@@ -65,6 +66,7 @@ export class MemoryRegistryStore {
   }
 
   public async recordAssessment(versionId: string, assessment: RegistryAssessment): Promise<RegistryVersion> {
+    await Promise.resolve();
     const current = this.required(versionId);
     if (current.state !== "staged") throw new Error("staged version만 검사 결과를 기록할 수 있습니다");
     const next = { ...current, assessment: structuredClone(assessment) };
@@ -73,6 +75,7 @@ export class MemoryRegistryStore {
   }
 
   public async publish(versionId: string, decisionId: string): Promise<RegistryVersion> {
+    await Promise.resolve();
     assertRegistryId(decisionId, "decision");
     const current = this.required(versionId);
     if (!assessmentPassed(current.assessment)) throw new Error("모든 Registry 검사가 통과해야 공개할 수 있습니다");
@@ -87,6 +90,7 @@ export class MemoryRegistryStore {
   }
 
   public async recall(versionId: string, recall: RegistryRecall): Promise<RegistryVersion> {
+    await Promise.resolve();
     assertRegistryId(recall.recallId, "recall");
     if (recall.reason.length < 3 || recall.reason.length > 2048) throw new Error("recall reason이 유효하지 않습니다");
     const current = this.required(versionId);
@@ -107,6 +111,7 @@ export class MemoryRegistryStore {
     versionId: string,
     input: { readonly recallId: string; readonly supersedesRecallId: string; readonly reason: string },
   ): Promise<RegistryVersion> {
+    await Promise.resolve();
     assertRegistryId(input.recallId, "recall");
     assertRegistryId(input.supersedesRecallId, "superseded recall");
     const current = this.required(versionId);
@@ -132,14 +137,17 @@ export class MemoryRegistryStore {
   }
 
   public async get(versionId: string): Promise<RegistryVersion> {
+    await Promise.resolve();
     return structuredClone(this.required(versionId));
   }
 
   public async list(): Promise<readonly RegistryVersion[]> {
+    await Promise.resolve();
     return [...this.versions.values()].map((version) => structuredClone(version));
   }
 
   public async listRecalls(versionId: string): Promise<readonly RegistryRecall[]> {
+    await Promise.resolve();
     return structuredClone(this.recalls.get(versionId) ?? []);
   }
 

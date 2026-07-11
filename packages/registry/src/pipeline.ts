@@ -95,7 +95,7 @@ export class RegistryInspectionPipeline {
     const artifact = await this.inspectArchive(input.archive, { runtime: input.runtime });
     const sbom = dependencies(artifact.packageJson);
     let provenance: ProvenanceResult | undefined;
-    let provenanceOutcome: AssessmentOutcome = "unknown";
+    let provenanceOutcome: AssessmentOutcome;
     try {
       provenance = await this.options.provenance.verify(input.archive, input.provenanceBundle, input.provenancePolicy);
       provenanceOutcome = provenance.outcome;
@@ -103,7 +103,7 @@ export class RegistryInspectionPipeline {
       provenanceOutcome = "fail";
     }
     let findings: readonly VulnerabilityFinding[] = [];
-    let vulnerability: AssessmentOutcome = "unknown";
+    let vulnerability: AssessmentOutcome;
     try {
       findings = await this.options.vulnerabilities.query(sbom.components);
       vulnerability = findings.some((finding) => finding.severity === "high" || finding.severity === "critical")

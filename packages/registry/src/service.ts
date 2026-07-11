@@ -34,6 +34,7 @@ export interface RegistryMutableStore {
 export class MemoryArtifactStore implements ArtifactStore {
   private readonly values = new Map<string, Buffer>();
   public async put(digest: string, body: Buffer): Promise<void> {
+    await Promise.resolve();
     const actual = createHash("sha256").update(body).digest("hex");
     if (actual !== digest) throw new Error("artifact body가 digest와 일치하지 않습니다");
     const existing = this.values.get(digest);
@@ -41,6 +42,7 @@ export class MemoryArtifactStore implements ArtifactStore {
     this.values.set(digest, Buffer.from(body));
   }
   public async get(digest: string): Promise<Buffer> {
+    await Promise.resolve();
     const body = this.values.get(digest);
     if (!body) throw new Error("Registry artifact를 찾을 수 없습니다");
     return Buffer.from(body);
