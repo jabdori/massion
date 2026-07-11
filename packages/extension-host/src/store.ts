@@ -406,8 +406,7 @@ export class ExtensionStore {
           version_id: input.versionId,
           activation_generation: input.activationGeneration,
           process_id: input.processId,
-          sandbox_receipt_json:
-            input.sandboxReceipt === undefined ? undefined : canonicalJson(input.sandboxReceipt),
+          sandbox_receipt_json: input.sandboxReceipt === undefined ? undefined : canonicalJson(input.sandboxReceipt),
         },
       );
       return {
