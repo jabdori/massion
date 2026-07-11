@@ -150,6 +150,10 @@ class WorkerRpcChannel {
     }
   }
 
+  public observeExit(): Promise<{ readonly code: number | null; readonly signal: NodeJS.Signals | null }> {
+    return this.exit;
+  }
+
   private fail(error: Error): void {
     if (this.failure) return;
     this.failure = error;
@@ -176,6 +180,7 @@ export interface StartExtensionWorkerInput {
 export interface ExtensionWorkerHandle {
   readonly processId: number;
   readonly sandboxReceipt?: SandboxReceipt;
+  readonly exited?: Promise<{ readonly code: number | null; readonly signal: NodeJS.Signals | null }>;
   invoke(contribution: string, input: unknown, timeoutMs: number): Promise<unknown>;
   stop(): Promise<void>;
   terminate(): void;
@@ -248,6 +253,7 @@ export class ExtensionWorkerSupervisor {
     const contributions = new Set(input.contributions);
     return {
       processId: child.pid ?? 0,
+      exited: channel.observeExit(),
       ...(sandboxReceipt === undefined ? {} : { sandboxReceipt }),
       async invoke(contribution: string, invocationInput: unknown, timeoutMs: number): Promise<unknown> {
         if (!contributions.has(contribution)) throw new Error("선언하지 않은 Extension contribution입니다");

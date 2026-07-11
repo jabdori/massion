@@ -4,12 +4,13 @@ import { join } from "node:path";
 
 import { IdentityService, OrganizationService, type TenantContext } from "@massion/identity";
 import { createDatabase, type MassionDatabase } from "@massion/storage";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { AuthorizeExtensionChangeInput } from "./governance-adapter.js";
 import {
   ExtensionLifecycleService,
   type ExtensionLifecycleAuthorizer,
+  type ExtensionWorkerCrashObserver,
   type ExtensionWorkerLauncher,
 } from "./lifecycle.js";
 import { makeTar, validManifest, validPackage } from "./test-helpers.js";
@@ -75,6 +76,21 @@ class FakeWorker implements ExtensionWorkerHandle {
   public stopped = false;
   public terminated = false;
   public readonly processId = 100;
+  private readonly resolveExit: (value: {
+    readonly code: number | null;
+    readonly signal: NodeJS.Signals | null;
+  }) => void;
+  public readonly exited: Promise<{ readonly code: number | null; readonly signal: NodeJS.Signals | null }>;
+  public constructor() {
+    let resolveExit: typeof this.resolveExit = () => undefined;
+    this.exited = new Promise((resolve) => {
+      resolveExit = resolve;
+    });
+    this.resolveExit = resolveExit;
+  }
+  public crash(): void {
+    this.resolveExit({ code: 1, signal: null });
+  }
   public async invoke(contribution: string, input: unknown): Promise<unknown> {
     return { contribution, input };
   }
@@ -111,6 +127,7 @@ describe("ExtensionLifecycleService", () => {
   let launcher: FakeWorkerLauncher;
   let lifecycle: ExtensionLifecycleService;
   let root: string;
+  let crashes: Parameters<ExtensionWorkerCrashObserver["record"]>[0][];
 
   beforeEach(async () => {
     database = await createDatabase({ url: "mem://", namespace: "massion", database: crypto.randomUUID() });
@@ -123,12 +140,14 @@ describe("ExtensionLifecycleService", () => {
     artifacts = new FileArtifactStore(root);
     authorizer = new AllowLifecycleAuthorizer();
     launcher = new FakeWorkerLauncher();
+    crashes = [];
     lifecycle = new ExtensionLifecycleService({
       runtime: { agentOS: "1.0.0", node: "24.13.0", surrealDB: "3.2.0" },
       store,
       artifacts,
       authorizer,
       workers: launcher,
+      crashObserver: { record: async (input) => void crashes.push(input) },
     });
   });
 
@@ -172,6 +191,32 @@ describe("ExtensionLifecycleService", () => {
       sourceKind: "bundled",
     });
     expect(authorizer.calls).toHaveLength(1);
+  });
+
+  it("현재 active worker의 예상 밖 종료를 session 실패와 crash observer로 전달한다", async () => {
+    const activated = await lifecycle.install(context, {
+      commandId: "install-crash-observer",
+      archive: versionTar("1.0.0"),
+      environment: "local",
+      riskClass: "extension-install",
+      executionId: "surface-crash",
+    });
+    launcher.workers[0]?.crash();
+    await vi.waitFor(() => expect(crashes).toHaveLength(1));
+    expect(crashes[0]).toMatchObject({
+      organizationId: context.organizationId,
+      installationId: activated.installationId,
+      versionId: activated.versionId,
+      code: 1,
+    });
+    await expect(
+      lifecycle.invoke(context, {
+        packageName: "@massion-ext/echo",
+        contribution: "runtimeTools:echo",
+        payload: {},
+        timeoutMs: 100,
+      }),
+    ).rejects.toThrow("healthy active Extension worker");
   });
 
   it("update health 실패 시 이전 active worker와 pointer를 유지한다", async () => {
