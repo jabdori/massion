@@ -19,6 +19,10 @@ export default tseslint.config(
     ...tseslint.configs.disableTypeChecked,
   },
   {
+    files: ["apps/web/e2e-actual/server.ts"],
+    ...tseslint.configs.disableTypeChecked,
+  },
+  {
     files: ["**/*.js", "**/*.mjs"],
     ...tseslint.configs.disableTypeChecked,
     languageOptions: {
