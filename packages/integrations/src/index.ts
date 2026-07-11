@@ -3,6 +3,7 @@ export * from "./contracts.js";
 export * from "./dispatcher.js";
 export * from "./extension-adapter.js";
 export * from "./github-auth.js";
+export * from "./github-inbound.js";
 export * from "./github-projection.js";
 export * from "./ingress.js";
 export * from "./outbound.js";
