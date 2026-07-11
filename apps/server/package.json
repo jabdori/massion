@@ -6,6 +6,9 @@
   "bin": {
     "massion-server": "./dist/main.js"
   },
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "pnpm build-deps && node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\" && tsc -p tsconfig.json",
     "build-deps": "pnpm --filter @massion/application build && pnpm --filter @massion/registry build",

@@ -1,0 +1,204 @@
+import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
+import { chmod, cp, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { basename, relative, resolve, sep } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
+
+import { createReleaseManifest, verifyReleaseVersions } from "./release-manifest.mjs";
+
+const VERSION = "1.0.0";
+const DIGEST = /^[a-f0-9]{64}$/u;
+
+export function assertCleanReleaseTree(status) {
+  if (status.trim()) throw new Error("release는 clean Git tree에서만 만들 수 있습니다");
+}
+
+export function createChecksumLines(entries) {
+  const seen = new Set();
+  return entries
+    .map((entry) => {
+      if (
+        typeof entry.path !== "string" ||
+        entry.path.startsWith("/") ||
+        entry.path.split("/").includes("..") ||
+        entry.path.includes("\\") ||
+        !DIGEST.test(entry.digest)
+      )
+        throw new Error("checksum path 또는 digest가 유효하지 않습니다");
+      if (seen.has(entry.path)) throw new Error(`checksum path가 중복됐습니다: ${entry.path}`);
+      seen.add(entry.path);
+      return entry;
+    })
+    .sort((left, right) => left.path.localeCompare(right.path))
+    .map((entry) => `${entry.digest}  ${entry.path}`);
+}
+
+function run(command, arguments_, options = {}) {
+  const result = spawnSync(command, arguments_, {
+    cwd: options.cwd,
+    encoding: "utf8",
+    env: { ...process.env, COPYFILE_DISABLE: "1", ...options.environment },
+    maxBuffer: 32 * 1024 * 1024,
+    stdio: options.capture === false ? "inherit" : "pipe",
+  });
+  if (result.status !== 0)
+    throw new Error(`${command} ${arguments_.join(" ")} 실행이 실패했습니다: ${String(result.stderr).slice(0, 2048)}`);
+  return result.stdout;
+}
+
+async function filesUnder(path) {
+  const entries = [];
+  for (const item of await readdir(path, { withFileTypes: true })) {
+    const child = resolve(path, item.name);
+    if (item.isDirectory()) entries.push(...(await filesUnder(child)));
+    else if (item.isFile()) entries.push(child);
+  }
+  return entries;
+}
+
+async function digest(path) {
+  return createHash("sha256")
+    .update(await readFile(path))
+    .digest("hex");
+}
+
+async function sourceDigest(root) {
+  const files = String(run("git", ["ls-files", "-z"], { cwd: root }))
+    .split("\0")
+    .filter(Boolean)
+    .sort();
+  const hash = createHash("sha256");
+  for (const file of files)
+    hash
+      .update(file)
+      .update("\0")
+      .update(await readFile(resolve(root, file)))
+      .update("\0");
+  return hash.digest("hex");
+}
+
+async function workspacePackages(root) {
+  const paths = [resolve(root, "package.json")];
+  for (const directory of ["apps", "packages", "extensions"]) {
+    for (const item of await readdir(resolve(root, directory), { withFileTypes: true })) {
+      if (item.isDirectory()) paths.push(resolve(root, directory, item.name, "package.json"));
+    }
+  }
+  return await Promise.all(
+    paths.map(async (path) => {
+      const value = JSON.parse(await readFile(path, "utf8"));
+      return { name: value.name, version: value.version };
+    }),
+  );
+}
+
+async function writeChecksums(root, excluded = new Set(["SHA256SUMS"])) {
+  const entries = [];
+  for (const path of await filesUnder(root)) {
+    const relativePath = relative(root, path).split(sep).join("/");
+    if (!excluded.has(relativePath)) entries.push({ path: relativePath, digest: await digest(path) });
+  }
+  const lines = createChecksumLines(entries);
+  await writeFile(resolve(root, "SHA256SUMS"), `${lines.join("\n")}\n`, { mode: 0o600 });
+  return lines.length;
+}
+
+async function removeTestArtifacts(root) {
+  for (const path of await filesUnder(root)) {
+    if (/(?:^|\.)test\.(?:js|d\.ts)(?:\.map)?$/u.test(basename(path))) await rm(path);
+  }
+}
+
+async function tar(directory, output) {
+  run("tar", ["-czf", output, "."], { cwd: directory });
+}
+
+async function artifact(path) {
+  const metadata = await stat(path);
+  return { name: basename(path), bytes: metadata.size, digest: await digest(path) };
+}
+
+async function main() {
+  const root = resolve(fileURLToPath(new globalThis.URL("..", import.meta.url)));
+  const output = resolve(root, process.argv[2] ?? "artifacts/release-1.0.0");
+  assertCleanReleaseTree(String(run("git", ["status", "--porcelain", "--untracked-files=normal"], { cwd: root })));
+  verifyReleaseVersions(VERSION, await workspacePackages(root));
+  await rm(output, { recursive: true, force: true });
+  await mkdir(output, { recursive: true, mode: 0o700 });
+  const staging = resolve(output, ".staging");
+  const local = resolve(staging, "local");
+  const deploy = resolve(staging, "deploy");
+  await mkdir(local, { recursive: true, mode: 0o700 });
+  await mkdir(deploy, { recursive: true, mode: 0o700 });
+
+  run("pnpm", ["--filter", "@massion/distribution", "build"], { cwd: root, capture: false });
+  run("pnpm", ["--filter", "@massion/distribution", "deploy", "--prod", "--legacy", resolve(local, "runtime")], {
+    cwd: root,
+    capture: false,
+  });
+  await removeTestArtifacts(resolve(local, "runtime"));
+  await cp(resolve(root, "release/install.sh"), resolve(local, "install.sh"));
+  await cp(resolve(root, "release/uninstall.sh"), resolve(local, "uninstall.sh"));
+  await chmod(resolve(local, "install.sh"), 0o755);
+  await chmod(resolve(local, "uninstall.sh"), 0o755);
+
+  const gitCommit = String(run("git", ["rev-parse", "HEAD"], { cwd: root })).trim();
+  const source = await sourceDigest(root);
+  const bundle = {
+    schema: "massion.release-bundle.v1",
+    version: VERSION,
+    gitCommit,
+    sourceDigest: `sha256:${source}`,
+    platforms: ["darwin-arm64", "darwin-x64", "linux-arm64", "linux-x64"],
+    entrypoints: {
+      mass: "runtime/node_modules/@massion/cli/dist/main.js",
+      server: "runtime/node_modules/@massion/server/dist/main.js",
+      tui: "runtime/node_modules/@massion/tui/dist/main.js",
+    },
+  };
+  await writeFile(resolve(local, "release-bundle.json"), `${JSON.stringify(bundle, undefined, 2)}\n`, { mode: 0o600 });
+  await writeChecksums(local);
+
+  await cp(resolve(root, "compose.yaml"), resolve(deploy, "compose.yaml"));
+  await cp(resolve(root, "deploy"), resolve(deploy, "deploy"), { recursive: true });
+  await cp(resolve(root, "docs/operations"), resolve(deploy, "operations"), { recursive: true });
+  await writeFile(
+    resolve(deploy, "release-bundle.json"),
+    `${JSON.stringify(
+      {
+        ...bundle,
+        images: ["massion:1.0.0", "massion-surrealdb:3.2.0", "massion-caddy:2.11.4"],
+        start: "docker compose --file compose.yaml up -d --no-build --wait --wait-timeout 120",
+      },
+      undefined,
+      2,
+    )}\n`,
+    { mode: 0o600 },
+  );
+  await writeChecksums(deploy);
+
+  const localArchive = resolve(output, `massion-local-${VERSION}.tar.gz`);
+  const deployArchive = resolve(output, `massion-deploy-${VERSION}.tar.gz`);
+  await tar(local, localArchive);
+  await tar(deploy, deployArchive);
+  const toolchains = {
+    node: process.versions.node,
+    bun: String(run("bun", ["--version"], { cwd: root })).trim(),
+    pnpm: String(run("pnpm", ["--version"], { cwd: root })).trim(),
+  };
+  const manifest = createReleaseManifest({
+    version: VERSION,
+    gitCommit,
+    sourceDigest: source,
+    toolchains,
+    artifacts: [await artifact(localArchive), await artifact(deployArchive)],
+  });
+  await writeFile(resolve(output, "release-manifest.json"), `${JSON.stringify(manifest, undefined, 2)}\n`, {
+    mode: 0o600,
+  });
+  await rm(staging, { recursive: true, force: true });
+  process.stdout.write(`${JSON.stringify({ output, ...manifest })}\n`);
+}
+
+const invoked = process.argv[1] ? pathToFileURL(resolve(process.argv[1])).href : "";
+if (import.meta.url === invoked) await main();

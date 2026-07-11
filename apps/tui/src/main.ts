@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 
 import { fileURLToPath } from "node:url";
+import { realpathSync } from "node:fs";
 
 import { ApplicationHttpClient } from "@massion/application";
 import { createCliRenderer, type CliRenderer } from "@opentui/core";
@@ -186,4 +187,5 @@ export async function runTui(
   }
 }
 
-if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) process.exitCode = await runTui();
+if (process.argv[1] && realpathSync(fileURLToPath(import.meta.url)) === realpathSync(process.argv[1]))
+  process.exitCode = await runTui();

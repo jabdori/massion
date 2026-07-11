@@ -53,6 +53,21 @@ importers:
         specifier: workspace:*
         version: link:../../packages/storage
 
+  apps/distribution:
+    dependencies:
+      '@massion/cli':
+        specifier: workspace:*
+        version: link:../cli
+      '@massion/server':
+        specifier: workspace:*
+        version: link:../server
+      '@massion/tui':
+        specifier: workspace:*
+        version: link:../tui
+      tslib:
+        specifier: 2.8.1
+        version: 2.8.1
+
   apps/server:
     dependencies:
       '@massion/application':

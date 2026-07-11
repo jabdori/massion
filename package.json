@@ -22,7 +22,8 @@
     "verify:architecture": "node scripts/verify-architecture-diagrams.mjs",
     "verify:security": "node scripts/verify-security.mjs",
     "verify:hardening": "pnpm --filter @massion/server build && vitest run apps/server/src/registry-fuzz.test.ts apps/server/src/main.e2e.test.ts apps/server/src/operation-queue.test.ts apps/server/src/extension-supervision.test.ts packages/router/src/failure.test.ts packages/storage/src/backup.test.ts && node scripts/hardening-load.mjs",
-    "release:evidence": "node scripts/release-evidence.mjs"
+    "release:evidence": "node scripts/release-evidence.mjs",
+    "release:build": "node scripts/build-release.mjs"
   },
   "engines": {
     "node": ">=24.0.0"
