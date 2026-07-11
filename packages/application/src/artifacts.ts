@@ -19,7 +19,7 @@ export class ApplicationArtifactGateway {
   private readonly inspector: Inspector;
 
   public constructor(
-    private readonly extensions: Pick<ExtensionGateway, "install">,
+    private readonly extensions: Pick<ExtensionGateway, "install" | "update">,
     inspector?: Inspector,
     runtime: ExtensionRuntimeVersions = { agentOS: "1.0.0", node: process.versions.node, surrealDB: "3.2.0" },
   ) {
@@ -47,5 +47,12 @@ export class ApplicationArtifactGateway {
     input: { readonly commandId: string; readonly archive: Buffer },
   ): Promise<unknown> {
     return await this.extensions.install(context, input);
+  }
+
+  public async update(
+    context: TenantContext,
+    input: { readonly commandId: string; readonly archive: Buffer },
+  ): Promise<unknown> {
+    return await this.extensions.update(context, input);
   }
 }

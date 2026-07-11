@@ -123,7 +123,16 @@ export class ApplicationHttpClient {
     return await this.artifact("/api/v1/artifacts/install", archive, commandId);
   }
 
-  private async artifact(path: string, archive: Uint8Array, commandId?: string): Promise<unknown> {
+  public async updateArtifact(commandId: string, archive: Uint8Array): Promise<unknown> {
+    return await this.artifact("/api/v1/artifacts/install", archive, commandId, "update");
+  }
+
+  private async artifact(
+    path: string,
+    archive: Uint8Array,
+    commandId?: string,
+    operation?: "update",
+  ): Promise<unknown> {
     const response = await this.request(
       path,
       {
@@ -131,6 +140,7 @@ export class ApplicationHttpClient {
         headers: {
           "content-type": "application/octet-stream",
           ...(commandId === undefined ? {} : { "x-massion-command-id": commandId }),
+          ...(operation === undefined ? {} : { "x-massion-operation": operation }),
         },
         body: archive as BodyInit,
       },
