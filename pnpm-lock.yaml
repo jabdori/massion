@@ -96,6 +96,8 @@ importers:
         specifier: 10.2.5
         version: 10.2.5
 
+  packages/extension-sdk: {}
+
   packages/foundation: {}
 
   packages/governance:
