@@ -2,7 +2,7 @@
 
 > **문서 상태**: 현재 구현 아키텍처 정본
 > **기준일**: 2026-07-11
-> **제품 구현 기준 커밋**: `c19a237`
+> **제품 구현 기준 커밋**: `131b1b3`
 > **제품 정본**: [Massion 완제품 설계 명세](../product/2026-07-10-complete-product-design.md)
 > **진행 정본**: [Massion AgentOS 1.0 프로그램 계획](../superpowers/plans/2026-07-10-massion-agentos-1.0-program.md)
 
@@ -21,7 +21,7 @@
 
 굵은 화살표는 사용자 Work의 주 실행 경로, 일반 실선은 동기 명령·직접 호출, 점선은 이벤트·관찰·정책 영향을 뜻합니다. 원통은 영속 저장소, 큰 경계 상자는 프로세스 또는 배포 단위입니다. 색상을 볼 수 없는 환경에서도 상태 라벨과 선 모양으로 구분할 수 있습니다.
 
-기준 커밋에서 Phase 0~15는 구현됨, Phase 16은 구현 중, Phase 17~23은 예정입니다. 개별 요소는 Phase 번호만으로 판정하지 않고 실제 코드와 검증 결과를 함께 확인합니다.
+기준 커밋에서 Phase 0~17은 구현됨, Phase 18~23은 예정입니다. 개별 요소는 Phase 번호만으로 판정하지 않고 실제 코드와 검증 결과를 함께 확인합니다.
 
 ## 2. 전체 시스템 지도
 
@@ -38,14 +38,14 @@ flowchart TB
   Team["팀 사용자<br/>공유 조직과 역할"]:::implemented
 
   subgraph Surfaces["사용자 화면·외부 연동"]
-    CLI["CLI · mass<br/>구현 중 · Phase 16"]:::implementing
-    TUI["TUI<br/>예정 · Phase 17"]:::planned
+    CLI["CLI · mass<br/>구현됨 · Phase 16"]:::implemented
+    TUI["TUI · OpenTUI<br/>구현됨 · Phase 17"]:::implemented
     Web["Web Console<br/>예정 · Phase 18"]:::planned
     Channels["Slack · Discord · GitHub<br/>예정 · Phase 19"]:::planned
   end
 
-  API["Application API<br/>인증 · 명령 · 조회 · SSE<br/>구현 중 · Phase 16"]:::implementing
-  Coordinator["핵심 업무 조정기<br/>(CoreWorkCoordinator)<br/>구현 중 · Phase 16"]:::implementing
+  API["Application API<br/>인증 · 명령 · 조회 · SSE<br/>구현됨 · Phase 16"]:::implemented
+  Coordinator["핵심 업무 조정기<br/>(CoreWorkCoordinator)<br/>구현됨 · Phase 16"]:::implemented
 
   subgraph AgentOS["Massion AgentOS Core"]
     Office["Core Office<br/>조직·업무 조정<br/>구현됨"]:::implemented
@@ -64,11 +64,11 @@ flowchart TB
 
   Person ==> CLI
   Team ==> CLI
-  Person -.-> TUI
+  Person --> TUI
   Team -.-> Web
   Team -.-> Channels
   CLI ==> API
-  TUI -.-> API
+  TUI --> API
   Web -.-> API
   Channels -.-> API
   API ==> Coordinator
@@ -87,11 +87,12 @@ flowchart TB
 
 | 요소 | 상태 | 실제 위치 | 근거 |
 |---|---|---|---|
-| CLI·Application API | 구현 중 | `apps/cli`, `packages/application` | [Phase 16 설계](../phases/16-application-api-cli/design.md) |
+| CLI·Application API | 구현됨 | `apps/cli`, `packages/application` | [Phase 16 회고](../phases/16-application-api-cli/review.md) |
+| TUI | 구현됨 | `apps/tui` | [Phase 17 회고](../phases/17-tui/review.md) |
 | Core Office·Work·Governance | 구현됨 | `packages/organization`, `packages/work`, `packages/governance` | [Phase 4 회고](../phases/04-organization-graph-core-office/review.md), [Phase 5 회고](../phases/05-work-collaboration-records/review.md), [Phase 8 회고](../phases/08-governance-approval/review.md) |
 | Runtime·Router | 구현됨 | `packages/runtime`, `packages/router` | [Phase 6 회고](../phases/06-provider-credential-router/review.md), [Phase 7 회고](../phases/07-voltagent-runtime-adapter/review.md) |
 | Extension Host | 구현됨 | `packages/extension-host` | [Phase 15 회고](../phases/15-extension-sdk-host/review.md) |
-| TUI·Web·외부 Surface·Registry | 예정 | `docs/superpowers/plans/2026-07-10-massion-agentos-1.0-program.md` | 프로그램 Phase 17~20 |
+| Web·외부 Surface·Registry | 예정 | `docs/superpowers/plans/2026-07-10-massion-agentos-1.0-program.md` | 프로그램 Phase 18~20 |
 | SurrealDB 단일 정본 | 구현됨 | `packages/storage` | [Phase 2 회고](../phases/02-surrealdb-source-of-truth/review.md) |
 
 ## 3. 제품 구성요소와 패키지 경계
@@ -584,7 +585,7 @@ flowchart LR
 
   subgraph Local["개인 로컬 설치 · 사용자 OS"]
     LocalUser["개인 owner"]:::implemented
-    LocalSurface["local CLI · TUI · Web<br/>CLI 구현 중, 화면 예정"]:::implementing
+    LocalSurface["local CLI · TUI · Web<br/>CLI·TUI 구현됨, Web 예정"]:::implementing
     LocalCore["Massion AgentOS process<br/>Application · Core Office · Runtime"]:::implementing
     LocalWorkers["격리 Extension child process"]:::implemented
     LocalDB[("embedded persistent SurrealDB<br/>로컬 단일 정본")]:::implemented
@@ -626,7 +627,7 @@ flowchart LR
 
 | 배포 변형 | 현재 상태 | 신뢰·운영 경계 |
 |---|---|---|
-| 개인 로컬 | 도메인·저장소·Runtime·Extension Host 구현됨, Application API·CLI 구현 중 | loopback bootstrap, OS 사용자 권한, 로컬 DB 경로당 단일 연결 |
+| 개인 로컬 | 도메인·저장소·Runtime·Extension Host·Application API·CLI·TUI 구현됨, Web·설치 조립 예정 | loopback bootstrap, OS 사용자 권한, 로컬 DB 경로당 단일 연결 |
 | 팀 자체 호스팅 | 제품 범위 승인, 운영 조립 예정 | TLS, remote auth, tenant 격리, shared DB, sandbox, backup·restore |
 | 관리형 Massion Cloud | 1.0 범위 밖 | 호환 가능한 멀티테넌트 계약만 유지하고 내부 구조는 이 문서에서 설계하지 않음 |
 
@@ -638,8 +639,9 @@ flowchart LR
 | Work·Router·Runtime·Governance | 구현됨 | `packages/work`, `packages/router`, `packages/runtime`, `packages/governance` | 5~8 |
 | Context·Evidence·Engineering·Assurance·Records·Growth | 구현됨 | `packages/context-strategy`, `packages/evidence`, `packages/software-engineering`, `packages/assurance`, `packages/records`, `packages/growth` | 9~14 |
 | Extension SDK·Host | 구현됨 | `packages/extension-sdk`, `packages/extension-host` | 15 |
-| Application API·CLI | 구현 중 | `packages/application`, `apps/cli` | 16 |
-| TUI·Web·외부 Surface·Registry·운영·강화·1.0 | 예정 | `docs/superpowers/plans/2026-07-10-massion-agentos-1.0-program.md` | 17~23 |
+| Application API·CLI | 구현됨 | `packages/application`, `apps/cli` | 16 |
+| TUI | 구현됨 | `apps/tui` | 17 |
+| Web·외부 Surface·Registry·운영·강화·1.0 | 예정 | `docs/superpowers/plans/2026-07-10-massion-agentos-1.0-program.md` | 18~23 |
 
 이 문서의 상태가 프로그램 계획과 달라지면 실제 검증 근거를 확인한 뒤 그림, 표와 기준 커밋을 함께 갱신합니다.
 
