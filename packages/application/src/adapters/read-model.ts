@@ -6,9 +6,11 @@ import type {
   ApplicationAssignmentSource,
   ApplicationExecutionSource,
   ApplicationExtensionSource,
+  ApplicationMessageSource,
   ApplicationOrganizationSource,
   ApplicationReadModel,
   ApplicationRoomSource,
+  ApplicationRecordSource,
   ApplicationSourceWatermarks,
   ApplicationTaskSource,
   ApplicationWorkSource,
@@ -88,6 +90,30 @@ interface ParticipantRecord {
   readonly room_id: string;
   readonly subject_id: string;
   readonly status: string;
+}
+
+interface MessageRecord {
+  readonly organization_id: string;
+  readonly work_id: string;
+  readonly room_id: string;
+  readonly message_id: string;
+  readonly sequence: number;
+  readonly message_type: string;
+  readonly author_kind: string;
+  readonly author_id: string;
+  readonly content: string;
+  readonly created_at: unknown;
+}
+
+interface WorkRecordProjection {
+  readonly organization_id: string;
+  readonly work_id: string;
+  readonly work_record_id: string;
+  readonly version: number;
+  readonly summary: string;
+  readonly artifact_version_ids: readonly string[];
+  readonly verification_ids: readonly string[];
+  readonly finalized_at: unknown;
 }
 
 interface ApprovalRecord {
@@ -300,6 +326,44 @@ export class SurrealApplicationReadModel implements ApplicationReadModel {
         .filter((participant) => participant.room_id === room.room_id && participant.status === "active")
         .map((participant) => participant.subject_id),
       lastMessageSequence: Math.max(0, room.next_sequence - 1),
+    }));
+  }
+
+  public async messages(context: TenantContext): Promise<readonly ApplicationMessageSource[]> {
+    await this.organizations.verifyTenantContext(context);
+    const [records] = await this.database.query<[MessageRecord[]]>(
+      "SELECT organization_id, work_id, room_id, message_id, sequence, message_type, author_kind, author_id, content, created_at FROM collaboration_message WHERE organization_id = $organization_id ORDER BY room_id ASC, sequence ASC;",
+      { organization_id: context.organizationId },
+    );
+    return records.map((record) => ({
+      organizationId: record.organization_id,
+      workId: record.work_id,
+      roomId: record.room_id,
+      messageId: record.message_id,
+      sequence: record.sequence,
+      messageType: record.message_type,
+      authorKind: record.author_kind,
+      authorId: record.author_id,
+      content: record.content,
+      createdAt: iso(record.created_at),
+    }));
+  }
+
+  public async records(context: TenantContext): Promise<readonly ApplicationRecordSource[]> {
+    await this.organizations.verifyTenantContext(context);
+    const [records] = await this.database.query<[WorkRecordProjection[]]>(
+      "SELECT organization_id, work_id, work_record_id, version, summary, artifact_version_ids, verification_ids, finalized_at FROM work_record WHERE organization_id = $organization_id AND finalized = true ORDER BY work_id ASC, version ASC;",
+      { organization_id: context.organizationId },
+    );
+    return records.map((record) => ({
+      organizationId: record.organization_id,
+      workId: record.work_id,
+      recordId: record.work_record_id,
+      version: record.version,
+      summary: record.summary,
+      artifactIds: record.artifact_version_ids,
+      verificationIds: record.verification_ids,
+      finalizedAt: iso(record.finalized_at),
     }));
   }
 

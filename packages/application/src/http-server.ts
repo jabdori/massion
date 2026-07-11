@@ -40,6 +40,15 @@ export interface ApplicationHttpDependencies {
     install(context: TenantContext, input: { readonly commandId: string; readonly archive: Buffer }): Promise<unknown>;
     update?(context: TenantContext, input: { readonly commandId: string; readonly archive: Buffer }): Promise<unknown>;
   };
+  readonly bootstrap?: {
+    initialize(input: {
+      readonly commandId: string;
+      readonly remoteAddress: string;
+      readonly trustedLocal: boolean;
+      readonly email: string;
+      readonly displayName: string;
+    }): Promise<unknown>;
+  };
 }
 
 export interface ApplicationHttpServerOptions {
@@ -78,6 +87,9 @@ function header(request: IncomingMessage, name: string): string | undefined {
 }
 
 async function body(request: IncomingMessage, maximum: number): Promise<Buffer> {
+  const declared = header(request, "content-length");
+  if (declared !== undefined && (!/^(?:0|[1-9][0-9]*)$/u.test(declared) || Number(declared) > maximum))
+    throw validation("HTTP Content-Length가 유효하지 않습니다");
   const chunks: Buffer[] = [];
   let size = 0;
   for await (const chunk of request) {
@@ -87,6 +99,21 @@ async function body(request: IncomingMessage, maximum: number): Promise<Buffer> 
     chunks.push(bytes);
   }
   return Buffer.concat(chunks, size);
+}
+
+function validateJsonValue(value: unknown, depth = 0): void {
+  if (depth > 20) throw validation("JSON body 깊이 상한을 초과했습니다");
+  if (typeof value === "string" && value.length > 64 * 1024) throw validation("JSON 문자열 상한을 초과했습니다");
+  if (Array.isArray(value)) {
+    if (value.length > 1000) throw validation("JSON 배열 상한을 초과했습니다");
+    for (const child of value) validateJsonValue(child, depth + 1);
+  } else if (value && typeof value === "object") {
+    for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+      if (["__proto__", "prototype", "constructor"].includes(key))
+        throw validation("JSON prototype key를 허용하지 않습니다");
+      validateJsonValue(child, depth + 1);
+    }
+  }
 }
 
 async function json(request: IncomingMessage): Promise<unknown> {
@@ -101,7 +128,9 @@ async function json(request: IncomingMessage): Promise<unknown> {
     throw validation("JSON body UTF-8이 유효하지 않습니다");
   }
   try {
-    return JSON.parse(text) as unknown;
+    const value = JSON.parse(text) as unknown;
+    validateJsonValue(value);
+    return value;
   } catch {
     throw validation("JSON body가 유효하지 않습니다");
   }
@@ -239,6 +268,44 @@ export class ApplicationHttpServer {
     if (url.searchParams.has("access_token") || url.searchParams.has("token"))
       throw validation("URL token은 허용되지 않습니다");
     if (request.method === "OPTIONS") throw validation("CORS preflight를 지원하지 않습니다");
+    if (url.pathname === "/api/v1/bootstrap") {
+      if (request.method !== "POST") return this.method(response, ["POST"]);
+      if (
+        !LOOPBACK.has(this.options.host) ||
+        !LOOPBACK.has(request.socket.remoteAddress ?? "") ||
+        !this.dependencies.bootstrap
+      )
+        throw new ApplicationError({
+          category: "authorization",
+          severity: "error",
+          retryable: false,
+          userMessage: "로컬 bootstrap을 사용할 수 없습니다",
+          operatorCode: "APP_HTTP_BOOTSTRAP_LOCAL",
+        });
+      this.acceptJson(request);
+      const input = (await json(request)) as Record<string, unknown>;
+      if (
+        !input ||
+        typeof input !== "object" ||
+        typeof input.commandId !== "string" ||
+        typeof input.email !== "string" ||
+        typeof input.displayName !== "string" ||
+        Object.keys(input).some((key) => !["commandId", "email", "displayName"].includes(key))
+      )
+        throw validation("bootstrap input이 유효하지 않습니다");
+      sendJson(
+        response,
+        201,
+        await this.dependencies.bootstrap.initialize({
+          commandId: input.commandId,
+          email: input.email,
+          displayName: input.displayName,
+          remoteAddress: request.socket.remoteAddress ?? "",
+          trustedLocal: true,
+        }),
+      );
+      return;
+    }
     const access = await this.authenticate(request);
     if (url.pathname === "/api/v1/events/stream") {
       if (request.method !== "GET") return this.method(response, ["GET"]);
