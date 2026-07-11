@@ -29,7 +29,7 @@ export class CoreDeliveryStage implements CoreWorkStageExecutor {
     private readonly dependencies: {
       readonly works: Pick<
         WorkService,
-        "listTasks" | "getWork" | "assignTask" | "transitionTask" | "createArtifactVersion"
+        "listTasks" | "getWork" | "transition" | "assignTask" | "transitionTask" | "createArtifactVersion"
       >;
       readonly runner: Pick<AgentRunner, "execute" | "recover" | "cancel">;
       readonly runtimeExecutions: Pick<RuntimeExecutionStore, "findExecutionIdByCommand">;
@@ -39,11 +39,48 @@ export class CoreDeliveryStage implements CoreWorkStageExecutor {
 
   public async execute(context: TenantContext, input: CoreWorkStageInput): Promise<CoreWorkStageResult> {
     if (!input.workId) throw new Error("Delivery stage에 Work ID가 없습니다");
+    let initial = await this.dependencies.works.getWork(context, input.workId);
+    if (initial.status === "planned") {
+      initial = (
+        await this.dependencies.works.transition(context, {
+          commandId: `${input.commandId}:work-ready`,
+          workId: input.workId,
+          expectedRevision: initial.revision,
+          target: "ready",
+        })
+      ).work;
+    }
+    if (initial.status === "waiting_approval" && input.resumeInput === undefined) {
+      return { outcome: "blocked", reason: "approval-resume-required" };
+    }
+    if (initial.status === "ready" || (initial.status === "waiting_approval" && input.resumeInput !== undefined)) {
+      initial = (
+        await this.dependencies.works.transition(context, {
+          commandId: `${input.commandId}:work-running`,
+          workId: input.workId,
+          expectedRevision: initial.revision,
+          target: "running",
+        })
+      ).work;
+    }
+    if (initial.status !== "running") {
+      return { outcome: "blocked", reason: `delivery-work-${initial.status}` };
+    }
     const artifacts: string[] = [];
     for (let iterations = 0; iterations < 1000; iterations += 1) {
       const tasks = await this.dependencies.works.listTasks(context, input.workId);
-      if (tasks.every((task) => task.status === "completed" || task.status === "cancelled"))
+      if (tasks.every((task) => task.status === "completed" || task.status === "cancelled")) {
+        const current = await this.dependencies.works.getWork(context, input.workId);
+        if (current.status === "running") {
+          await this.dependencies.works.transition(context, {
+            commandId: `${input.commandId}:work-verifying`,
+            workId: input.workId,
+            expectedRevision: current.revision,
+            target: "verifying",
+          });
+        }
         return { outcome: "advanced", data: { artifactVersionIds: artifacts } };
+      }
       const running = tasks.find((task) => task.status === "running");
       const ready = tasks.find((task) => task.status === "ready");
       const task = running ?? ready;
@@ -66,8 +103,18 @@ export class CoreDeliveryStage implements CoreWorkStageExecutor {
           workId: input.workId,
           task,
         });
-        if (result.outcome === "awaiting-approval" && result.approvalId)
+        if (result.outcome === "awaiting-approval" && result.approvalId) {
+          const current = await this.dependencies.works.getWork(context, input.workId);
+          if (current.status === "running") {
+            await this.dependencies.works.transition(context, {
+              commandId: `${input.commandId}:work-awaiting-approval`,
+              workId: input.workId,
+              expectedRevision: current.revision,
+              target: "waiting_approval",
+            });
+          }
           return { outcome: "awaiting-approval", approvalId: result.approvalId };
+        }
         if (result.outcome === "blocked")
           return { outcome: "blocked", reason: result.reason ?? "software-delivery-blocked" };
         continue;

@@ -18,14 +18,63 @@ const input = {
 
 describe("CoreDeliveryStage", () => {
   it("Task가 없으면 비소프트웨어 Work도 Assurance 경로로 진행한다", async () => {
+    const transitions: string[] = [];
     const stage = new CoreDeliveryStage({
-      works: { listTasks: async () => [], getWork: async () => ({ revision: 1 }) },
+      works: {
+        listTasks: async () => [],
+        getWork: async () => ({ revision: 1, status: "running" }),
+        transition: async (_context: unknown, value: any) => {
+          transitions.push(value.target);
+          return { work: { revision: 2, status: value.target } };
+        },
+      },
       runner: {},
       runtimeExecutions: {},
     } as never);
     await expect(stage.execute(context, input)).resolves.toMatchObject({
       outcome: "advanced",
       data: { artifactVersionIds: [] },
+    });
+    expect(transitions).toEqual(["verifying"]);
+  });
+
+  it("계획된 Work를 ready와 running으로 전이한 뒤 Task를 실행한다", async () => {
+    const transitions: string[] = [];
+    let status = "planned";
+    let revision = 1;
+    const stage = new CoreDeliveryStage({
+      works: {
+        listTasks: async () => [],
+        getWork: async () => ({ revision, status }),
+        transition: async (_context: unknown, value: any) => {
+          transitions.push(value.target);
+          status = value.target;
+          revision += 1;
+          return { work: { revision, status } };
+        },
+      },
+      runner: {},
+      runtimeExecutions: {},
+    } as never);
+    await expect(stage.execute(context, input)).resolves.toMatchObject({ outcome: "advanced" });
+    expect(transitions).toEqual(["ready", "running", "verifying"]);
+  });
+
+  it("승인 대기 Work는 승인 재개 입력 없이 실행하지 않는다", async () => {
+    const stage = new CoreDeliveryStage({
+      works: {
+        listTasks: async () => [],
+        getWork: async () => ({ revision: 1, status: "waiting_approval" }),
+        transition: async () => {
+          throw new Error("전이하면 안 됩니다");
+        },
+      },
+      runner: {},
+      runtimeExecutions: {},
+    } as never);
+    await expect(stage.execute(context, input)).resolves.toEqual({
+      outcome: "blocked",
+      reason: "approval-resume-required",
     });
   });
 
@@ -38,7 +87,7 @@ describe("CoreDeliveryStage", () => {
       revision: 1,
     };
     const stage = new CoreDeliveryStage({
-      works: { listTasks: async () => [task], getWork: async () => ({ revision: 1 }) },
+      works: { listTasks: async () => [task], getWork: async () => ({ revision: 1, status: "running" }) },
       runner: {},
       runtimeExecutions: {},
     } as never);
@@ -51,6 +100,7 @@ describe("CoreDeliveryStage", () => {
   it("일반 Task는 assign→running→runtime→artifact→completed 순서를 지킨다", async () => {
     const calls: string[] = [];
     let taskStatus = "ready";
+    let workStatus = "running";
     let revision = 1;
     const task = () => ({
       task_id: "task-general",
@@ -64,7 +114,13 @@ describe("CoreDeliveryStage", () => {
     });
     const works = {
       listTasks: async () => (taskStatus === "completed" ? [task()] : [task()]),
-      getWork: async () => ({ revision }),
+      getWork: async () => ({ revision, status: workStatus }),
+      transition: async (_context: unknown, value: any) => {
+        calls.push(`work-${value.target}`);
+        workStatus = value.target;
+        revision += 1;
+        return { work: { revision, status: workStatus } };
+      },
       assignTask: async () => {
         calls.push("assign");
         revision += 1;
@@ -100,6 +156,6 @@ describe("CoreDeliveryStage", () => {
       outcome: "advanced",
       data: { artifactVersionIds: ["artifact-version-1"] },
     });
-    expect(calls).toEqual(["assign", "running", "runtime", "artifact", "completed"]);
+    expect(calls).toEqual(["assign", "running", "runtime", "artifact", "completed", "work-verifying"]);
   });
 });
