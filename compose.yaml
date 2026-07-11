@@ -22,7 +22,7 @@ services:
     build:
       context: .
       dockerfile: deploy/surreal/Dockerfile
-    image: massion-surrealdb:3.2.0
+    image: ${MASSION_SURREALDB_IMAGE:-massion-surrealdb:3.2.0}
     restart: unless-stopped
     environment:
       SURREAL_PASSWORD_FILE: /run/secrets/database_owner_password
@@ -47,7 +47,7 @@ services:
       - ALL
 
   database-provision:
-    image: massion:1.0.0
+    image: ${MASSION_IMAGE:-massion:1.0.0}
     command: ["node", "dist/main.js", "provision"]
     restart: "no"
     depends_on:
@@ -78,7 +78,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: massion:1.0.0
+    image: ${MASSION_IMAGE:-massion:1.0.0}
     restart: unless-stopped
     depends_on:
       volume-init:
@@ -140,7 +140,7 @@ services:
     build:
       context: .
       dockerfile: deploy/caddy/Dockerfile
-    image: massion-caddy:2.11.4
+    image: ${MASSION_CADDY_IMAGE:-massion-caddy:2.11.4}
     restart: unless-stopped
     depends_on:
       massion:
