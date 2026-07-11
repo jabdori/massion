@@ -19,6 +19,7 @@ import { describe, expect, it } from "vitest";
 import { ExtensionComplianceAuditor } from "./compliance.js";
 import { ExtensionGovernanceAdapter } from "./governance-adapter.js";
 import { ExtensionLifecycleService, type ExtensionWorkerLauncher } from "./lifecycle.js";
+import { ExtensionRecoveryService } from "./recovery.js";
 import { makeTar, validManifest, validPackage } from "./test-helpers.js";
 import { ExtensionStore, FileArtifactStore } from "./store.js";
 import type { ExtensionWorkerHandle } from "./worker-supervisor.js";
@@ -252,6 +253,35 @@ describe("remote Extension Host contract", () => {
         executionId: "remote-surface-4",
       });
       expect(rolledBack.activationGeneration).toBe(second.activationGeneration + 1);
+
+      const recovery = await ExtensionRecoveryService.create(database, organizations, artifacts);
+      expect((await recovery.scan(context)).some((action) => action.kind === "session-restarted")).toBe(true);
+      const restarted = new ExtensionLifecycleService({
+        runtime: { agentOS: "1.0.0", node: "24.13.0", surrealDB: "3.2.0" },
+        store,
+        artifacts,
+        authorizer: {
+          authorize: async (_context, input) => ({
+            decisionIds: [`remote-restart:${input.commandId}`],
+            permissionDiff: {
+              increased: false,
+              reasons: [],
+              beforeDigest: "a".repeat(64),
+              afterDigest: "b".repeat(64),
+            },
+          }),
+        },
+        workers,
+      });
+      await expect(restarted.recoverActive(context)).resolves.toEqual({ recovered: 1, blocked: 0 });
+      await expect(
+        restarted.invoke(context, {
+          packageName: "@massion-ext/echo",
+          contribution: "runtimeTools:echo",
+          payload: { restored: true },
+          timeoutMs: 1_000,
+        }),
+      ).resolves.toEqual({ ok: true });
 
       const auditor = await ExtensionComplianceAuditor.create(database, organizations, artifacts);
       await expect(auditor.assertCompliant(context)).resolves.toBeUndefined();
