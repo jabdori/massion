@@ -23,9 +23,8 @@ unexpected worker exit는 active contribution을 제거하고 `extension-restart
 ## 4. 보안 사건
 
 - 의심 Extension version을 Registry recall하고 새 설치·download·activation을 차단한다.
-- Application token, Provider credential, Database owner credential과 TLS key를 각각 회전한다.
+- Application token, Provider credential, Database owner credential, 별도 Database runtime credential과 TLS key를 각각 회전한다. owner credential은 provisioning에만, runtime credential은 장기 실행 Massion에만 다시 주입한다.
 - audit·Registry recall·operation action·deployment event·backup manifest를 보존한다.
 - secret 원문이 log, environment, argv 또는 image layer에 포함됐는지 별도로 조사한다.
 
 장기 load·chaos·credential rotation과 sandbox 탈출 검증은 Phase 22 gate를 따른다.
-

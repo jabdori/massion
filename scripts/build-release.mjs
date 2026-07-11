@@ -139,6 +139,7 @@ async function main() {
   await removeTestArtifacts(resolve(local, "runtime"));
   await cp(resolve(root, "release/install.sh"), resolve(local, "install.sh"));
   await cp(resolve(root, "release/uninstall.sh"), resolve(local, "uninstall.sh"));
+  await cp(resolve(root, "docs/operations/local-install.md"), resolve(local, "README.md"));
   await chmod(resolve(local, "install.sh"), 0o755);
   await chmod(resolve(local, "uninstall.sh"), 0o755);
 
