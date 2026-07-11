@@ -38,6 +38,7 @@ export interface ApplicationHttpDependencies {
   readonly artifacts?: {
     inspect(context: TenantContext, archive: Buffer): Promise<unknown>;
     install(context: TenantContext, input: { readonly commandId: string; readonly archive: Buffer }): Promise<unknown>;
+    update?(context: TenantContext, input: { readonly commandId: string; readonly archive: Buffer }): Promise<unknown>;
   };
 }
 
@@ -330,7 +331,16 @@ export class ApplicationHttpServer {
       else {
         const commandId = header(request, "x-massion-command-id");
         if (!commandId) throw validation("x-massion-command-id header가 필요합니다");
-        sendJson(response, 200, await this.dependencies.artifacts.install(access.context, { commandId, archive }));
+        const operation = header(request, "x-massion-operation") ?? "install";
+        if (!(["install", "update"] as const).includes(operation as never))
+          throw validation("x-massion-operation이 유효하지 않습니다");
+        if (operation === "update" && !this.dependencies.artifacts.update)
+          throw validation("Extension update artifact handler가 없습니다");
+        const result =
+          operation === "update"
+            ? await this.dependencies.artifacts.update?.(access.context, { commandId, archive })
+            : await this.dependencies.artifacts.install(access.context, { commandId, archive });
+        sendJson(response, 200, result);
       }
       return;
     }

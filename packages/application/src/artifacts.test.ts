@@ -20,6 +20,7 @@ describe("ApplicationArtifactGateway", () => {
           installs.push(input);
           return { installationId: "installation-1" };
         },
+        update: async () => ({}),
       },
       async () => ({
         artifactDigest: "a".repeat(64),
