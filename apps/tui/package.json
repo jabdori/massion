@@ -1,0 +1,34 @@
+{
+  "name": "@massion/tui",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "massion-tui": "./dist/main.js"
+  },
+  "scripts": {
+    "build": "pnpm build-deps && node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\" && tsc -p tsconfig.json",
+    "build-deps": "pnpm --filter @massion/application build",
+    "start": "bun src/main.ts",
+    "test": "pnpm build-deps && vitest run src --exclude '**/*.bun.test.ts' && bun test src/open-tui.bun.test.ts",
+    "typecheck": "pnpm build-deps && tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@massion/application": "workspace:*",
+    "@opentui/core": "0.4.3"
+  },
+  "devDependencies": {
+    "@massion/governance": "workspace:*",
+    "@massion/identity": "workspace:*",
+    "@massion/organization": "workspace:*",
+    "@massion/extension-host": "workspace:*",
+    "@massion/runtime": "workspace:*",
+    "@massion/storage": "workspace:*",
+    "@massion/work": "workspace:*",
+    "@types/bun": "1.3.14"
+  },
+  "engines": {
+    "bun": ">=1.3.0",
+    "node": ">=24.0.0"
+  }
+}
