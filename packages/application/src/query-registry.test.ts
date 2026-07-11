@@ -100,4 +100,29 @@ describe("ApplicationQueryRegistry", () => {
       "공개 금지",
     );
   });
+
+  it("모델 route의 운영 상태와 예산만 공개한다", async () => {
+    const registry = new ApplicationQueryRegistry();
+    registerApplicationQueries(registry, {
+      readModel,
+      router: {
+        listRoutes: async () => [
+          {
+            route_id: "route-1",
+            name: "coding-balanced",
+            route_kind: "chat",
+            credential_policy: "weighted",
+            data_policy: "external-allowed",
+            equivalence_group: "coding",
+            spent_micros: 10,
+            total_budget_micros: 100,
+            enabled: true,
+          },
+        ],
+      } as never,
+    });
+    await expect(registry.query(context, ["router:read"], "router.routes", {})).resolves.toMatchObject({
+      data: [{ routeId: "route-1", name: "coding-balanced", credentialPolicy: "weighted" }],
+    });
+  });
 });

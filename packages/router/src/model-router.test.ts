@@ -179,6 +179,14 @@ describe("Model Route simulation과 reservation", () => {
     expect(reserved.attempt.status).toBe("reserved");
   });
 
+  it("조직에 설정된 route를 secret 없이 목록으로 조회한다", async () => {
+    const created = await route("weighted");
+    await expect(router.listRoutes(context)).resolves.toEqual([
+      expect.objectContaining({ route_id: created.route_id, name: created.name, credential_policy: "weighted" }),
+    ]);
+    expect(JSON.stringify(await router.listRoutes(context))).not.toContain("secret-account");
+  });
+
   it("동시 round-robin reservation이 서로 다른 account를 선택한다", async () => {
     const created = await route();
     const results = await Promise.all([

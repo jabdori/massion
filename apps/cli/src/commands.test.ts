@@ -49,4 +49,25 @@ describe("CLI Application adapter", () => {
     });
     expect(command).toMatchObject({ operation: "router.credential.add", payload: { providerId: "openai" } });
   });
+
+  it("provider list가 credential과 fallback route를 함께 조회한다", async () => {
+    const operations: string[] = [];
+    const client = {
+      status: async () => ({}),
+      snapshot: async () => ({}),
+      query: async (operation: string) => {
+        operations.push(operation);
+        return { operation };
+      },
+      command: async () => ({}),
+      inspectArtifact: async () => ({}),
+      installArtifact: async () => ({}),
+      updateArtifact: async () => ({}),
+    };
+    await expect(executeCliInvocation(client, parseCliArguments(["provider", "list"]))).resolves.toMatchObject({
+      credentials: { operation: "router.credentials" },
+      routes: { operation: "router.routes" },
+    });
+    expect(operations).toEqual(["router.credentials", "router.routes"]);
+  });
 });
