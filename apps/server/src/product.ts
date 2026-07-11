@@ -23,9 +23,7 @@ export async function provisionRemoteDatabase(
   endpoint.pathname = "/sql";
   endpoint.search = "";
   endpoint.hash = "";
-  const authorization = Buffer.from(
-    `${config.owner.username}:${config.owner.password}`,
-  ).toString("base64");
+  const authorization = Buffer.from(`${config.owner.username}:${config.owner.password}`).toString("base64");
   const statement = `DEFINE NAMESPACE IF NOT EXISTS ${config.namespace}; USE NS ${config.namespace}; DEFINE DATABASE IF NOT EXISTS ${config.database}; USE DB ${config.database}; DEFINE USER OVERWRITE ${config.runtime.username} ON DATABASE PASSWORD ${JSON.stringify(config.runtime.password)} ROLES EDITOR;`;
   let status = 0;
   for (let attempt = 0; attempt < 10; attempt += 1) {
@@ -81,7 +79,9 @@ export async function createMassionDaemon(config: ServerConfig): Promise<Massion
     const policies = await PolicyStore.create(database, organizations);
     const works = await WorkService.create(database, organizations, graph);
     const registryStore = await SurrealRegistryStore.create(database, organizations);
-    const registryCatalog = new RegistryCatalog(registryStore.catalogStore(), { tokenSecret: config.registry.tokenKey });
+    const registryCatalog = new RegistryCatalog(registryStore.catalogStore(), {
+      tokenSecret: config.registry.tokenKey,
+    });
     const registryHandler = new RegistryHttpHandler({
       catalog: registryCatalog,
       artifacts: new FileArtifactStore(config.registry.artifactRoot),
