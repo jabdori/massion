@@ -91,6 +91,16 @@ describe("ApplicationQueryRegistry", () => {
             patch_json: '{"secret":"공개 금지"}',
           },
         ],
+        listEffectEvaluations: async () => [
+          {
+            effectEvaluationId: "effect-1",
+            adoptionId: "adoption-1",
+            result: "improved",
+            rawDelta: 0.1,
+            directionalDelta: 0.1,
+            contractChecksum: "a".repeat(64),
+          },
+        ],
       } as never,
     });
     await expect(registry.query(context, ["growth:read"], "growth.suggestions", {})).resolves.toMatchObject({
@@ -99,6 +109,9 @@ describe("ApplicationQueryRegistry", () => {
     expect(JSON.stringify(await registry.query(context, ["growth:read"], "growth.suggestions", {}))).not.toContain(
       "공개 금지",
     );
+    await expect(registry.query(context, ["growth:read"], "growth.effects", { limit: 10 })).resolves.toMatchObject({
+      data: [{ effectEvaluationId: "effect-1", result: "improved" }],
+    });
   });
 
   it("모델 route의 운영 상태와 예산만 공개한다", async () => {

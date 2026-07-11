@@ -27,7 +27,10 @@ export interface ApplicationQueryDependencies {
   readonly snapshot?: CollaborationGraphSnapshotProjector;
   readonly runtime?: Pick<RuntimeExecutionStore, "listEvents" | "getRecovery">;
   readonly extension?: Pick<ExtensionGateway, "list">;
-  readonly growth?: Pick<GrowthGateway, "resolveConfiguration" | "getActiveEvaluationStrategy" | "listSuggestions">;
+  readonly growth?: Pick<
+    GrowthGateway,
+    "resolveConfiguration" | "getActiveEvaluationStrategy" | "listSuggestions" | "listEffectEvaluations"
+  >;
   readonly providers?: Pick<ProviderService, "listCredentials">;
   readonly router?: Pick<ModelRouter, "listRoutes">;
   readonly status?: () => Promise<unknown>;
@@ -419,6 +422,17 @@ export function registerApplicationQueries(
           riskSummary: suggestion.risk_summary,
           status: suggestion.status,
         })),
+    });
+    registry.register({
+      operation: "growth.effects",
+      requiredScopes: ["growth:read"],
+      allowedRoles: EVERY_ROLE,
+      validate: (value) => object(value, ["adoptionId", "limit"]),
+      handle: async (context, value) =>
+        await dependencies.growth?.listEffectEvaluations(context, {
+          ...(value.adoptionId === undefined ? {} : { adoptionId: text(value.adoptionId, "adoptionId") }),
+          limit: boundedInteger(value.limit, "limit", 100),
+        }),
     });
   }
   if (dependencies.providers) {

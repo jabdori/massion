@@ -75,6 +75,14 @@ describe("Growth effect comparison", () => {
     });
 
     expect(evaluation.result).toBe("degraded");
+    await expect(store.listEvaluations(context, { adoptionId: "adoption-1", limit: 10 })).resolves.toMatchObject([
+      {
+        effectEvaluationId: evaluation.effect_evaluation_id,
+        adoptionId: "adoption-1",
+        result: "degraded",
+        directionalDelta: expect.any(Number),
+      },
+    ]);
     const [adoptions] = await database.query<[Array<{ exposure_status?: string }>]>(
       "SELECT exposure_status FROM growth_adoption_run WHERE organization_id = $organization_id AND adoption_id = 'adoption-1';",
       { organization_id: context.organizationId },
