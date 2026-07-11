@@ -8,12 +8,54 @@ import { EmptyState, LoadingState, PageHeader, StatusStamp } from "../components
 export default function ExtensionsPage() {
   const data = useQueryData<unknown>(consoleStore, "extension.list");
   const integrationData = useQueryData<unknown>(consoleStore, "integration.list");
+  const marketplaceData = useQueryData<unknown>(consoleStore, "registry.search", { query: "", limit: 20 });
+  const inventoryData = useQueryData<unknown>(consoleStore, "registry.inventory");
   const [busy, setBusy] = useState<string>();
   const [notice, setNotice] = useState<string>();
-  if (data === undefined || integrationData === undefined)
+  const [search, setSearch] = useState("");
+  if (data === undefined || integrationData === undefined || marketplaceData === undefined || inventoryData === undefined)
     return <LoadingState label="확장과 외부 연결 상태를 확인하고 있습니다" />;
   const extensions = rows(data);
   const integrations = rows(integrationData);
+  const marketplace = rows(object(marketplaceData).items);
+  const inventory = rows(inventoryData);
+
+  async function searchMarketplace() {
+    setBusy("marketplace-search");
+    try {
+      await consoleStore.refresh("registry.search", { query: search, limit: 20 });
+    } finally {
+      setBusy(undefined);
+    }
+  }
+
+  async function installVersion(versionId: string) {
+    setBusy(versionId);
+    setNotice(undefined);
+    try {
+      await consoleStore.mutate({
+        schemaVersion: "massion.application.v1",
+        commandId: crypto.randomUUID(),
+        correlationId: crypto.randomUUID(),
+        operation: "registry.install",
+        payload: {
+          versionId,
+          environment: "production",
+          riskClass: "medium",
+          executionId: crypto.randomUUID(),
+        },
+      });
+      await Promise.all([
+        consoleStore.refresh("extension.list", {}),
+        consoleStore.refresh("registry.inventory", {}),
+      ]);
+      setNotice("검증된 Registry artifact를 설치했습니다.");
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Extension을 설치하지 못했습니다.");
+    } finally {
+      setBusy(undefined);
+    }
+  }
 
   async function startOAuth(platform: "slack" | "github") {
     setBusy(platform);
@@ -53,6 +95,62 @@ export default function ExtensionsPage() {
         title="어떤 확장이 운영체제에 연결됐나요?"
         description="설치 버전, 신뢰 수준, 활성 상태와 기여 기능을 확인합니다."
       />
+      <section className="section-heading">
+        <div>
+          <span className="eyebrow">MARKETPLACE</span>
+          <h2>검증된 확장 찾기</h2>
+          <p>현재 AgentOS와 호환되고 리콜되지 않은 버전만 표시합니다.</p>
+        </div>
+        <form
+          className="decision-actions"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void searchMarketplace();
+          }}
+        >
+          <label className="sr-only" htmlFor="marketplace-search">Marketplace 검색</label>
+          <input
+            id="marketplace-search"
+            value={search}
+            maxLength={256}
+            placeholder="Slack, GitHub, 도구 이름"
+            onChange={(event) => setSearch(event.target.value)}
+          />
+          <button type="submit" className="secondary-button" disabled={busy !== undefined}>
+            검색
+          </button>
+        </form>
+      </section>
+      {marketplace.length === 0 ? (
+        <EmptyState title="조건에 맞는 확장이 없습니다" detail="검색어를 바꾸거나 Registry 운영 상태를 확인해주세요." />
+      ) : (
+        <section className="extension-table" aria-label="Extension Marketplace">
+          <div className="table-head">
+            <span>패키지</span><span>버전</span><span>Provenance</span><span>공개 범위</span><span>설치</span>
+          </div>
+          {marketplace.map((item) => (
+            <article key={label(item.versionId)}>
+              <strong>{label(item.packageName)}</strong>
+              <span>{label(item.packageVersion)}</span>
+              <StatusStamp value={label(item.provenance)} />
+              <span>{label(item.visibility)}</span>
+              <button
+                type="button"
+                className="secondary-button"
+                disabled={busy !== undefined}
+                onClick={() => void installVersion(label(item.versionId))}
+              >
+                {busy === label(item.versionId) ? "설치 중…" : "설치"}
+              </button>
+            </article>
+          ))}
+        </section>
+      )}
+      {inventory.length > 0 && (
+        <div className="live-notice" role="status">
+          설치 inventory에서 {String(inventory.length)}개의 보안·업데이트 상태를 확인했습니다.
+        </div>
+      )}
       <section className="section-heading">
         <div>
           <span className="eyebrow">OFFICIAL SURFACES</span>

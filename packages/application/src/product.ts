@@ -32,6 +32,10 @@ import {
   type ApplicationQueryDependencies,
 } from "./query-registry.js";
 import { registerApplicationRunCommands } from "./run-commands.js";
+import {
+  registerApplicationRegistryOperations,
+  type ApplicationRegistryOperations,
+} from "./registry-operations.js";
 import { ApplicationRunStore } from "./run-store.js";
 import { CollaborationGraphSnapshotProjector } from "./snapshot.js";
 import { WebSessionService } from "./web-session.js";
@@ -54,6 +58,7 @@ export interface ApplicationProductDependencies {
     readonly http?: NonNullable<ApplicationHttpDependencies["integrations"]>;
     readonly operations?: ApplicationIntegrationOperations;
   };
+  readonly registry?: ApplicationRegistryOperations;
   readonly server?: ApplicationHttpServerOptions;
 }
 
@@ -116,6 +121,7 @@ export class ApplicationProduct implements AsyncDisposable {
     });
     if (dependencies.integrations?.operations)
       registerApplicationIntegrationOperations(commands, queries, dependencies.integrations.operations);
+    if (dependencies.registry) registerApplicationRegistryOperations(commands, queries, dependencies.registry);
     const bootstrap = new LocalApplicationBootstrap(
       dependencies.identities,
       dependencies.organizations,

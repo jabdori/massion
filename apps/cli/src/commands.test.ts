@@ -102,4 +102,29 @@ describe("CLI Application adapter", () => {
     expect(calls[1]).toEqual(["integration.deliveries", { limit: 25 }]);
     expect(calls[2]).toMatchObject({ operation: "integration.channel.bind" });
   });
+
+  it("Marketplace 검색·설치·inventory를 Registry Application operation으로 전달한다", async () => {
+    const calls: unknown[] = [];
+    const client: CliApplicationClient = {
+      status: async () => ({}),
+      snapshot: async () => ({}),
+      query: async (operation, payload) => {
+        calls.push([operation, payload]);
+        return {};
+      },
+      command: async (input) => {
+        calls.push(input);
+        return {};
+      },
+      inspectArtifact: async () => ({}),
+      installArtifact: async () => ({}),
+      updateArtifact: async () => ({}),
+    };
+    await executeCliInvocation(client, parseCliArguments(["ext", "search", "slack"]));
+    await executeCliInvocation(client, parseCliArguments(["ext", "install", "version-12345678"]));
+    await executeCliInvocation(client, parseCliArguments(["ext", "inventory"]));
+    expect(calls[0]).toEqual(["registry.search", { query: "slack", limit: 20 }]);
+    expect(calls[1]).toMatchObject({ operation: "registry.install", payload: { versionId: "version-12345678" } });
+    expect(calls[2]).toEqual(["registry.inventory", {}]);
+  });
 });
