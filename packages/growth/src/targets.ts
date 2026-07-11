@@ -37,6 +37,8 @@ export interface RevertGrowthTargetInput {
   readonly expectedVersionId: string;
   readonly targetVersionId: string;
   readonly governanceDecisionId: string;
+  readonly suggestionRevision: number;
+  readonly approvalId?: string;
 }
 
 export interface GrowthTargetResult {
@@ -155,9 +157,11 @@ abstract class BaseGrowthTarget implements GrowthTargetPort {
     input: ApplyGrowthTargetInput,
     executor: QueryExecutor,
   ): Promise<GrowthTargetResult>;
-  public revert(): Promise<GrowthTargetResult> {
-    return Promise.reject(new Error("Growth target revert는 effect 단계에서 활성화됩니다"));
-  }
+  public abstract revert(
+    context: TenantContext,
+    input: RevertGrowthTargetInput,
+    executor: QueryExecutor,
+  ): Promise<GrowthTargetResult>;
 }
 
 export class PromptGrowthTarget extends BaseGrowthTarget {
@@ -206,6 +210,33 @@ export class PromptGrowthTarget extends BaseGrowthTarget {
       },
     };
   }
+  public async revert(
+    context: TenantContext,
+    input: RevertGrowthTargetInput,
+    executor: QueryExecutor,
+  ): Promise<GrowthTargetResult> {
+    const before = await this.inspect(context, { suggestionId: input.suggestionId, patch: {} }, executor);
+    if (before.versionId !== input.expectedVersionId) throw new Error("Prompt revert target이 stale합니다");
+    const value = await this.store.revertPromptGrowth(
+      context,
+      {
+        commandId: input.commandId,
+        expectedVersionId: input.expectedVersionId,
+        targetVersionId: input.targetVersionId,
+      },
+      executor,
+    );
+    return {
+      before,
+      after: {
+        targetKind: "prompt",
+        versionId: value.promptDefinitionVersionId,
+        revision: value.version,
+        checksum: value.checksum,
+        snapshot: { sections: value.sections },
+      },
+    };
+  }
 }
 
 export class MemoryGrowthTarget extends BaseGrowthTarget {
@@ -240,6 +271,33 @@ export class MemoryGrowthTarget extends BaseGrowthTarget {
         commandId: input.commandId,
         expectedVersionId: before.versionId,
         entries: next.entries as readonly MemoryEntry[],
+      },
+      executor,
+    );
+    return {
+      before,
+      after: {
+        targetKind: "memory",
+        versionId: value.memoryVersionId,
+        revision: value.version,
+        checksum: value.checksum,
+        snapshot: { entries: value.entries },
+      },
+    };
+  }
+  public async revert(
+    context: TenantContext,
+    input: RevertGrowthTargetInput,
+    executor: QueryExecutor,
+  ): Promise<GrowthTargetResult> {
+    const before = await this.inspect(context, { suggestionId: input.suggestionId, patch: {} }, executor);
+    if (before.versionId !== input.expectedVersionId) throw new Error("Memory revert target이 stale합니다");
+    const value = await this.store.revertMemoryGrowth(
+      context,
+      {
+        commandId: input.commandId,
+        expectedVersionId: input.expectedVersionId,
+        targetVersionId: input.targetVersionId,
       },
       executor,
     );
@@ -307,6 +365,39 @@ export class PolicyGrowthTarget extends BaseGrowthTarget {
       },
     };
   }
+  public async revert(
+    context: TenantContext,
+    input: RevertGrowthTargetInput,
+    executor: QueryExecutor,
+  ): Promise<GrowthTargetResult> {
+    const before = await this.inspect(context, { suggestionId: input.suggestionId, patch: {} }, executor);
+    if (before.versionId !== input.expectedVersionId) throw new Error("Policy revert target이 stale합니다");
+    const value = await this.projection.revert(
+      context,
+      {
+        commandId: input.commandId,
+        expectedVersionId: input.expectedVersionId,
+        targetVersionId: input.targetVersionId,
+        authorization: {
+          decisionId: input.governanceDecisionId,
+          suggestionId: input.suggestionId,
+          targetRevision: input.suggestionRevision,
+          ...(input.approvalId ? { approvalId: input.approvalId } : {}),
+        },
+      },
+      executor,
+    );
+    return {
+      before,
+      after: {
+        targetKind: "policy",
+        versionId: value.version.policy_version_id,
+        revision: value.version.version,
+        checksum: value.version.checksum,
+        snapshot: { schema: value.bundle.schema, policies: value.bundle.policies, requirements: value.requirements },
+      },
+    };
+  }
 }
 
 export class OrganizationGrowthTarget extends BaseGrowthTarget {
@@ -341,6 +432,40 @@ export class OrganizationGrowthTarget extends BaseGrowthTarget {
         commandId: input.commandId,
         patch: input.patch,
         expectedVersion: before.revision,
+        authorization: {
+          decisionId: input.governanceDecisionId,
+          suggestionId: input.suggestionId,
+          targetRevision: input.suggestionRevision,
+          ...(input.approvalId ? { approvalId: input.approvalId } : {}),
+        },
+      },
+      executor,
+    );
+    const snapshot = { nodes: value.nodes };
+    return {
+      before,
+      after: {
+        targetKind: "organization",
+        versionId: value.version.version_id,
+        revision: value.version.version,
+        checksum: growthChecksum({ versionId: value.version.version_id, ...snapshot }),
+        snapshot,
+      },
+    };
+  }
+  public async revert(
+    context: TenantContext,
+    input: RevertGrowthTargetInput,
+    executor: QueryExecutor,
+  ): Promise<GrowthTargetResult> {
+    const before = await this.inspect(context, { suggestionId: input.suggestionId, patch: {} }, executor);
+    if (before.versionId !== input.expectedVersionId) throw new Error("Organization revert target이 stale합니다");
+    const value = await this.projection.revert(
+      context,
+      {
+        commandId: input.commandId,
+        expectedVersionId: input.expectedVersionId,
+        targetVersionId: input.targetVersionId,
         authorization: {
           decisionId: input.governanceDecisionId,
           suggestionId: input.suggestionId,

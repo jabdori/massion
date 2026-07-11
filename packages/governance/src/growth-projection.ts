@@ -89,12 +89,35 @@ export class PolicyGrowthProjection {
       executor,
     );
   }
+
+  public async revert(
+    context: TenantContext,
+    input: {
+      readonly commandId: string;
+      readonly expectedVersionId: string;
+      readonly targetVersionId: string;
+      readonly authorization: GrowthProjectionAuthorization;
+    },
+    executor: QueryExecutor,
+  ): Promise<GrowthPolicyProjectionState> {
+    await verifyGrowthProjectionDecision(context, input.authorization, executor, "growth.revert");
+    return await this.policies.revertGrowthProjection(
+      context,
+      {
+        commandId: input.commandId,
+        expectedVersionId: input.expectedVersionId,
+        targetVersionId: input.targetVersionId,
+      },
+      executor,
+    );
+  }
 }
 
 export async function verifyGrowthProjectionDecision(
   context: TenantContext,
   authorization: GrowthProjectionAuthorization,
   executor: QueryExecutor,
+  expectedAction = "growth.adopt",
 ): Promise<void> {
   const [decisions] = await executor.query<[DecisionRecord[]]>(
     "SELECT decision_id, action, resource_id, resource_revision, outcome, policy_version_id FROM governance_policy_decision WHERE organization_id = $organization_id AND decision_id = $decision_id LIMIT 1;",
@@ -103,17 +126,17 @@ export async function verifyGrowthProjectionDecision(
   const decision = decisions[0];
   if (
     !decision ||
-    decision.action !== "growth.adopt" ||
+    decision.action !== expectedAction ||
     decision.resource_id !== authorization.suggestionId ||
     decision.resource_revision !== authorization.targetRevision
   )
-    throw new Error("저장된 growth.adopt Policy Decision 범위가 일치하지 않습니다");
+    throw new Error(`저장된 ${expectedAction} Policy Decision 범위가 일치하지 않습니다`);
   const [activePolicies] = await executor.query<[Array<{ policy_version_id: string }>]>(
     "SELECT policy_version_id FROM governance_policy_version WHERE organization_id = $organization_id AND status = 'active';",
     { organization_id: context.organizationId },
   );
   if (activePolicies.length !== 1 || decision.policy_version_id !== activePolicies[0]?.policy_version_id) {
-    throw new Error("growth.adopt 결정의 Policy Version이 현재 active Policy와 일치하지 않습니다");
+    throw new Error(`${expectedAction} 결정의 Policy Version이 현재 active Policy와 일치하지 않습니다`);
   }
   if (decision.outcome === "allow") return;
   if (decision.outcome !== "require_approval" || !authorization.approvalId)

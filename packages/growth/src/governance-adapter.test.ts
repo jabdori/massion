@@ -152,5 +152,25 @@ describe("Growth Governance adapter", () => {
         configuration: auto,
       }),
     ).resolves.toMatchObject({ outcome: "allow" });
+    await expect(
+      adapter.authorizeRevert(ownerContext, {
+        commandId: "auto-revert",
+        workId: "work-1",
+        suggestionId: "suggestion-1",
+        suggestionRevision: 1,
+        runtimeExecutionId: queued.execution.execution_id,
+        mode: "auto",
+      }),
+    ).resolves.toMatchObject({ outcome: "allow" });
+    await expect(
+      adapter.authorizeRevert(ownerContext, {
+        commandId: "explicit-revert",
+        workId: "work-1",
+        suggestionId: "suggestion-2",
+        suggestionRevision: 1,
+        runtimeExecutionId: "human-request",
+        mode: "explicit",
+      }),
+    ).rejects.toBeInstanceOf(GovernanceApprovalRequiredError);
   });
 });

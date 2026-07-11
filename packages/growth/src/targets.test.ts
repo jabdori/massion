@@ -61,8 +61,11 @@ describe("Growth target projection", () => {
     const prompt = new PromptGrowthTarget(store);
     const memory = new MemoryGrowthTarget(store);
 
+    let promptV1 = "";
+    let promptV2 = "";
     await database.transaction(async (executor) => {
       const before = await prompt.inspect(context, { suggestionId: "prompt-1", patch: {} }, executor);
+      promptV1 = before.versionId;
       const section = (before.snapshot.sections as Array<{ agentHandle: string }>)[0];
       if (!section) throw new Error("Prompt section이 없습니다");
       const result = await prompt.apply(
@@ -79,7 +82,33 @@ describe("Growth target projection", () => {
         executor,
       );
       expect(result.after.versionId).not.toBe(result.before.versionId);
+      promptV2 = result.after.versionId;
     });
+    await database.transaction(async (executor) => {
+      const reverted = await prompt.revert(
+        context,
+        {
+          commandId: "revert-prompt",
+          suggestionId: "prompt-1",
+          suggestionRevision: 1,
+          expectedVersionId: promptV2,
+          targetVersionId: promptV1,
+          governanceDecisionId: "decision-revert",
+        },
+        executor,
+      );
+      expect(reverted.after.versionId).not.toBe(promptV1);
+      expect(
+        (reverted.after.snapshot.sections as Array<{ instruction: string }>).some((section) =>
+          section.instruction.includes("주요 산출물"),
+        ),
+      ).toBe(true);
+    });
+    const [original] = await database.query<[Array<{ status: string }>]>(
+      "SELECT status FROM prompt_definition_version WHERE organization_id = $organization_id AND prompt_definition_version_id = $version_id;",
+      { organization_id: context.organizationId, version_id: promptV1 },
+    );
+    expect(original[0]?.status).toBe("superseded");
     await database.transaction(async (executor) => {
       const before = await memory.inspect(context, { suggestionId: "memory-1", patch: {} }, executor);
       const result = await memory.apply(

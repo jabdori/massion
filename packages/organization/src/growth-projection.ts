@@ -49,4 +49,26 @@ export class OrganizationGrowthProjection {
       executor,
     );
   }
+
+  public async revert(
+    context: TenantContext,
+    input: {
+      readonly commandId: string;
+      readonly expectedVersionId: string;
+      readonly targetVersionId: string;
+      readonly authorization: GrowthProjectionAuthorization;
+    },
+    executor: QueryExecutor,
+  ): Promise<GraphChangeResult> {
+    await verifyGrowthProjectionDecision(context, input.authorization, executor, "growth.revert");
+    return await this.graph.revertGrowthProjection(
+      context,
+      {
+        commandId: input.commandId,
+        expectedVersionId: input.expectedVersionId,
+        targetVersionId: input.targetVersionId,
+      },
+      executor,
+    );
+  }
 }

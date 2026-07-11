@@ -113,4 +113,51 @@ export class GrowthGovernanceAdapter implements GrowthConfigurationAuthorizer {
       executor,
     );
   }
+
+  public async authorizeRevert(
+    context: TenantContext,
+    input: {
+      readonly commandId: string;
+      readonly workId: string;
+      readonly suggestionId: string;
+      readonly suggestionRevision: number;
+      readonly runtimeExecutionId: string;
+      readonly mode: "review" | "auto" | "explicit";
+      readonly approvalId?: string;
+    },
+    executor?: QueryExecutor,
+  ): Promise<GovernanceAuthorization> {
+    if (input.mode === "explicit") {
+      return await this.gate.authorize(
+        context,
+        {
+          commandId: input.commandId,
+          action: "growth.revert",
+          resource: { type: "Suggestion", id: input.suggestionId, revision: input.suggestionRevision },
+          environment: "local",
+          riskClass: "growth-revert",
+          external: false,
+          executionId: input.runtimeExecutionId,
+          ...(input.approvalId ? { approvalId: input.approvalId } : {}),
+        },
+        executor,
+      );
+    }
+    return await this.gate.authorizeAgent(
+      context,
+      {
+        commandId: input.commandId,
+        action: "growth.revert",
+        workId: input.workId,
+        automationMode: input.mode === "auto" ? "auto" : "review",
+        resource: { type: "Suggestion", id: input.suggestionId, revision: input.suggestionRevision },
+        environment: "local",
+        riskClass: "growth-revert",
+        external: false,
+        executionId: input.runtimeExecutionId,
+        ...(input.approvalId ? { approvalId: input.approvalId } : {}),
+      },
+      executor,
+    );
+  }
 }

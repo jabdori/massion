@@ -338,6 +338,67 @@ export class PolicyStore {
     return { version: result, bundle, requirements };
   }
 
+  public async revertGrowthProjection(
+    context: TenantContext,
+    input: { readonly commandId: string; readonly expectedVersionId: string; readonly targetVersionId: string },
+    executor: QueryExecutor,
+  ): Promise<ActivePolicy> {
+    await this.organizations.verifyTenantContext(context, undefined, executor);
+    const current = await this.active(executor, context.organizationId);
+    if (!current || current.policy_version_id !== input.expectedVersionId)
+      throw new Error("active Policy revert precondition이 일치하지 않습니다");
+    const target = await this.find(executor, context.organizationId, input.targetVersionId);
+    const requestJson = canonicalJson(input);
+    const existing = await this.repeated(executor, context.organizationId, input.commandId, requestJson);
+    if (existing) {
+      const replayed = await this.find(executor, context.organizationId, existing.policy_version_id);
+      return {
+        version: replayed,
+        bundle: {
+          schema: JSON.parse(replayed.schema_json) as Record<string, unknown>,
+          policies: JSON.parse(replayed.policies_json) as Record<string, string>,
+        },
+        requirements: JSON.parse(replayed.requirements_json) as ApprovalRequirement[],
+      };
+    }
+    const bundle: PolicyBundle = {
+      schema: JSON.parse(target.schema_json) as Record<string, unknown>,
+      policies: JSON.parse(target.policies_json) as Record<string, string>,
+    };
+    const requirements = JSON.parse(target.requirements_json) as ApprovalRequirement[];
+    const errors = validatePolicyBundle(bundle);
+    if (errors.length > 0) throw new Error(`Cedar Policy Bundle 검증 실패: ${errors.join(",")}`);
+    const id = randomUUID();
+    await executor.query(
+      "UPDATE governance_policy_version SET status = 'superseded', superseded_at = time::now() WHERE organization_id = $organization_id AND policy_version_id = $policy_version_id;",
+      { organization_id: context.organizationId, policy_version_id: current.policy_version_id },
+    );
+    const [created] = await executor.query<[PolicyVersion[]]>(
+      "CREATE governance_policy_version CONTENT { policy_version_id: $id, organization_id: $organization_id, version: $version, status: 'active', schema_json: $schema_json, policies_json: $policies_json, requirements_json: $requirements_json, checksum: $checksum, created_at: time::now(), activated_at: time::now() } RETURN AFTER;",
+      {
+        id,
+        organization_id: context.organizationId,
+        version: current.version + 1,
+        schema_json: target.schema_json,
+        policies_json: target.policies_json,
+        requirements_json: target.requirements_json,
+        checksum: target.checksum,
+      },
+    );
+    if (!created[0]) throw new Error("Growth Policy revert version 생성 결과가 없습니다");
+    const result = await this.find(executor, context.organizationId, id);
+    await this.record(
+      executor,
+      context.organizationId,
+      id,
+      input.commandId,
+      "growth_policy_reverted",
+      requestJson,
+      result,
+    );
+    return { version: result, bundle, requirements };
+  }
+
   private async find(executor: QueryExecutor, organizationId: string, policyVersionId: string): Promise<PolicyVersion> {
     const [records] = await executor.query<[PolicyVersion[]]>(
       "SELECT * OMIT id FROM governance_policy_version WHERE organization_id = $organization_id AND policy_version_id = $policy_version_id LIMIT 1;",

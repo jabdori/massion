@@ -635,6 +635,50 @@ export class OrganizationGraphService {
     return { nodes: storedAfter, version, impact };
   }
 
+  public async revertGrowthProjection(
+    context: TenantContext,
+    input: { readonly commandId: string; readonly expectedVersionId: string; readonly targetVersionId: string },
+    executor: QueryExecutor,
+  ): Promise<GraphChangeResult> {
+    await this.organizations.verifyTenantContext(context, undefined, executor);
+    const versions = await listVersions(executor, context.organizationId);
+    const repeated = versions.find((version) => version.command_id === input.commandId);
+    if (repeated) {
+      if (repeated.request_json !== canonicalJson(input))
+        throw new Error("같은 commandId에 다른 조직 Growth revert를 사용할 수 없습니다");
+      return {
+        nodes: normalizeSnapshot(JSON.parse(repeated.after_json) as StoredOrganizationNode[]),
+        version: repeated,
+        impact: JSON.parse(repeated.impact_json) as ImpactReport,
+      };
+    }
+    const current = latestVersion(versions);
+    if (!current || current.version_id !== input.expectedVersionId)
+      throw new Error("OrganizationVersion revert precondition이 일치하지 않습니다");
+    const target = versions.find((version) => version.version_id === input.targetVersionId);
+    if (!target) throw new Error("되돌릴 OrganizationVersion을 찾을 수 없습니다");
+    const before = normalizeSnapshot(await listNodes(executor, context.organizationId));
+    const after = normalizeSnapshot(JSON.parse(target.after_json) as StoredOrganizationNode[]);
+    validateGraph(after);
+    validateOperationalGraph(after);
+    const impact = await this.analyzeImpactWith(executor, context.organizationId, changedHandles(before, after), after);
+    await this.replaceNodes(executor, context.organizationId, after);
+    const storedAfter = normalizeSnapshot(await listNodes(executor, context.organizationId));
+    const version = await this.createVersion(
+      executor,
+      context,
+      current.version + 1,
+      current.version,
+      input.commandId,
+      "growth-revert",
+      canonicalJson(input),
+      impact,
+      before,
+      storedAfter,
+    );
+    return { nodes: storedAfter, version, impact };
+  }
+
   public async auditCompliance(context: TenantContext): Promise<ComplianceFinding[]> {
     await this.verify(context);
     const nodes = await listNodes(this.database, context.organizationId);

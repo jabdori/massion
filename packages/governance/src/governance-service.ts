@@ -72,6 +72,7 @@ function invariantRequirement(action: string, mode?: GrowthAutomationMode): Appr
     "declaration.apply",
   ]);
   if (action === "growth.adopt" && mode !== "auto") governed.add(action);
+  if (action === "growth.revert" && mode !== "auto") governed.add(action);
   if (!governed.has(action)) return undefined;
   return {
     requirementId: `invariant-${action.replaceAll(".", "-")}`,
