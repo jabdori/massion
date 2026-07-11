@@ -81,6 +81,11 @@ describe("ApplicationHttpServer", () => {
           return { status: 202, body: { accepted: true, bytes: input.body.length } };
         },
       },
+      health: {
+        async readiness() {
+          return { database: true, migrations: true };
+        },
+      },
     };
     server = new ApplicationHttpServer(dependencies, { pollMs: 5, heartbeatMs: 20 });
     baseUrl = (await server.start()).url;
@@ -107,6 +112,45 @@ describe("ApplicationHttpServer", () => {
     expect(wrongMethod.status).toBe(405);
     expect(wrongMethod.headers.get("allow")).toBe("GET");
     expect(calls).toEqual(["query:system.status", "query:work.list", "command"]);
+  });
+
+  it("인증 없이 생존·준비 상태를 공개하고 drain 중 일반 traffic을 거부한다", async () => {
+    const live = await fetch(`${baseUrl}/health/live`);
+    expect(live.status).toBe(200);
+    expect(await live.json()).toEqual({ status: "live" });
+
+    const ready = await fetch(`${baseUrl}/health/ready`);
+    expect(ready.status).toBe(200);
+    expect(await ready.json()).toEqual({ components: { database: "ready", migrations: "ready" }, status: "ready" });
+
+    server.beginDrain();
+    const draining = await fetch(`${baseUrl}/health/ready`);
+    expect(draining.status).toBe(503);
+    expect(await draining.json()).toEqual({ status: "not-ready" });
+    expect((await fetch(`${baseUrl}/health/live`)).status).toBe(200);
+    expect(
+      (
+        await fetch(`${baseUrl}/api/v1/status`, {
+          headers: { authorization: "Bearer test-token", accept: "application/json" },
+        })
+      ).status,
+    ).toBe(503);
+  });
+
+  it("component readiness 오류 원문을 숨기고 고정 상태만 반환한다", async () => {
+    await server.close();
+    server = new ApplicationHttpServer({
+      auth: { authenticateAccess: async () => ({ context, tokenId: "token", scopes: ["application:*"] }) },
+      queries: { query: async () => ({}) },
+      commands: { dispatch: async () => ({}) },
+      events: { read: async () => ({ events: [], cursor: 0 }) },
+      health: { readiness: async () => Promise.reject(new Error("secret database URL")) },
+    });
+    baseUrl = (await server.start()).url;
+
+    const response = await fetch(`${baseUrl}/health/ready`);
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({ status: "not-ready" });
   });
 
   it("Authorization header만 받고 CORS와 JSON byte 상한을 fail-closed한다", async () => {
