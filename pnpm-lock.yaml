@@ -53,6 +53,27 @@ importers:
         specifier: workspace:*
         version: link:../../packages/storage
 
+  apps/server:
+    dependencies:
+      '@massion/application':
+        specifier: workspace:*
+        version: link:../../packages/application
+      '@massion/governance':
+        specifier: workspace:*
+        version: link:../../packages/governance
+      '@massion/identity':
+        specifier: workspace:*
+        version: link:../../packages/identity
+      '@massion/organization':
+        specifier: workspace:*
+        version: link:../../packages/organization
+      '@massion/storage':
+        specifier: workspace:*
+        version: link:../../packages/storage
+      '@massion/work':
+        specifier: workspace:*
+        version: link:../../packages/work
+
   apps/tui:
     dependencies:
       '@massion/application':
