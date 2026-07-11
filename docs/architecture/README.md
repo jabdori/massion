@@ -2,7 +2,7 @@
 
 > **문서 상태**: 현재 구현 아키텍처 정본
 > **기준일**: 2026-07-11
-> **제품 구현 기준 커밋**: `7457921`
+> **제품 구현 기준 커밋**: `c19a237`
 > **제품 정본**: [Massion 완제품 설계 명세](../product/2026-07-10-complete-product-design.md)
 > **진행 정본**: [Massion AgentOS 1.0 프로그램 계획](../superpowers/plans/2026-07-10-massion-agentos-1.0-program.md)
 
