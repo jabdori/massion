@@ -225,4 +225,39 @@ describe("ExtensionLifecycleService", () => {
     ).rejects.toThrow("contribution");
     expect(await store.findInstallation(context, "@massion-ext/other")).toMatchObject({ activationGeneration: 0 });
   });
+
+  it("AgentOS 재시작 후 active pointer에서 worker와 contribution registry를 재구성한다", async () => {
+    await lifecycle.install(context, {
+      commandId: "install-before-restart",
+      archive: versionTar("1.0.0"),
+      environment: "local",
+      riskClass: "extension-install",
+      executionId: "surface-restart-1",
+    });
+    const restartedLauncher = new FakeWorkerLauncher();
+    const restarted = new ExtensionLifecycleService({
+      runtime: { agentOS: "1.0.0", node: "24.13.0", surrealDB: "3.2.0" },
+      store,
+      artifacts,
+      authorizer,
+      workers: restartedLauncher,
+    });
+
+    expect(await restarted.recoverActive(context)).toEqual({ recovered: 1, blocked: 0 });
+    await expect(
+      restarted.invoke(context, {
+        packageName: "@massion-ext/echo",
+        contribution: "runtimeTools:echo",
+        payload: { after: "restart" },
+        timeoutMs: 1_000,
+      }),
+    ).resolves.toEqual({ contribution: "runtimeTools:echo", input: { after: "restart" } });
+    const [sessions] = await database.query<
+      [Array<{ state: string; activation_generation: number; started_at: string }>]
+    >(
+      "SELECT state, activation_generation, started_at FROM extension_worker_session WHERE organization_id = $organization_id ORDER BY started_at ASC;",
+      { organization_id: context.organizationId },
+    );
+    expect(sessions.at(-1)).toMatchObject({ state: "healthy", activation_generation: 1 });
+  });
 });
