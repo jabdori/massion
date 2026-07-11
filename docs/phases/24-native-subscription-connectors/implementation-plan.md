@@ -18,8 +18,8 @@
 
 ## Task 3. 서버·사용자 기기 연결기
 
-- [ ] 연결기 protocol, 등록, 장치 서명, heartbeat, lease와 replay 방지를 구현합니다.
-- [ ] 서버 연결기의 계정별 profile·process 격리와 사용자 기기 offline·reconnect를 검증합니다.
+- [x] 연결기 protocol, 등록, 장치 서명, heartbeat, lease와 replay 방지를 구현합니다.
+- [x] 서버 연결기의 계정별 profile·process 격리와 사용자 기기 offline·reconnect를 검증합니다.
 - [ ] Governance approval과 runtime suspend·resume을 연결합니다.
 
 ## Task 4. 공식 제공자 연결기
