@@ -215,3 +215,13 @@ DEFINE FIELD subscription_scope ON provider_credential TYPE option<string>;
 DEFINE INDEX provider_credential_subscription_account ON provider_credential FIELDS organization_id, subscription_account_id;
 `,
 );
+
+// prettier-ignore -- migration SQL의 공백도 checksum에 포함됩니다.
+export const ROUTE_ATTEMPT_LINEAGE_MIGRATION = defineMigration(
+  "0086-router-attempt-lineage",
+  `
+DEFINE FIELD routing_policy_version ON model_route TYPE int DEFAULT 1;
+DEFINE FIELD quota_snapshot_id ON route_attempt TYPE option<string> READONLY;
+DEFINE FIELD routing_policy_version ON route_attempt TYPE option<int> READONLY;
+`,
+);
