@@ -1,6 +1,6 @@
 # Phase 26 — GPT-5.6 모델군 호환성 이관 설계
 
-> **상태**: approved
+> **상태**: completed
 > **승인일**: 2026-07-12
 > **상세 설계**: `docs/superpowers/specs/2026-07-12-gpt-5-6-migration-design.md`
 > **선행 상태**: Massion 1.0 runtime과 Model Router 구현 완료; 기존 0~25 제품 프로그램 뒤에 추가된 독립 maintenance 단계
@@ -12,6 +12,7 @@ Massion의 활성 OpenAI API·Codex 구독 실행 경로를 GPT-5.6 Sol·Terra·
 ## 2. 제품 경계
 
 - 직접 OpenAI API에 등록한 공식 GPT-5.6 family만 Responses API로 실행합니다.
+- Responses 요청은 애플리케이션 상태 저장을 기본 거부하는 `store:false`를 명시합니다.
 - OpenAI-compatible·Ollama·외부 gateway와 기존 OpenAI model은 Chat Completions 경로를 유지합니다.
 - 아직 제품에 조립되지 않은 Codex 구독 연결기와 사용자 `config.toml` model 선택은 강제로 덮어쓰지 않습니다.
 - 역할별 Sol·Terra·Luna 자동 배치는 Phase 25 평가 결과가 결정하며 Phase 26에서 추측하지 않습니다.
@@ -27,6 +28,7 @@ Massion의 활성 OpenAI API·Codex 구독 실행 경로를 GPT-5.6 Sol·Terra·
 
 - 상세 설계 12절의 완료 조건을 모두 충족합니다.
 - GPT-5.6 Responses와 기존 Chat Completions 경계가 실제 HTTP contract test로 고정됩니다.
+- 실제 Responses HTTP body가 `store:false`를 포함하는지 고정됩니다.
 - 기존 Codex connector와 타사·기존 model 회귀 테스트가 그대로 통과합니다.
 - Runtime 표적 테스트·typecheck·전체 회귀와 문서 검증 결과를 기록합니다.
 - 실행하지 못한 live OpenAI API·Codex 계정 검증을 완료로 표현하지 않습니다.
