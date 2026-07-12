@@ -54,6 +54,7 @@ const COMMANDS: Readonly<Record<string, readonly string[] | undefined>> = {
   ],
   integration: ["list", "deliveries", "oauth-start", "connect", "user-bind", "channel-bind"],
   growth: ["status", "configure", "suggestions", "adopt", "revert"],
+  subscription: ["providers", "connect", "accounts", "share", "unshare", "quota", "policy", "doctor", "disconnect"],
   doctor: undefined,
   help: undefined,
 };

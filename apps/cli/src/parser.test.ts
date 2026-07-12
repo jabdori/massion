@@ -32,6 +32,15 @@ describe("mass CLI parser", () => {
     [["ext", "search", "slack"], "ext", "search"],
     [["ext", "inventory"], "ext", "inventory"],
     [["growth", "suggestions"], "growth", "suggestions"],
+    [["subscription", "providers"], "subscription", "providers"],
+    [["subscription", "connect", "verified-provider"], "subscription", "connect"],
+    [["subscription", "accounts"], "subscription", "accounts"],
+    [["subscription", "share", "account-1"], "subscription", "share"],
+    [["subscription", "unshare", "account-1"], "subscription", "unshare"],
+    [["subscription", "quota", "account-1"], "subscription", "quota"],
+    [["subscription", "policy", "verified-provider"], "subscription", "policy"],
+    [["subscription", "doctor", "account-1"], "subscription", "doctor"],
+    [["subscription", "disconnect", "account-1"], "subscription", "disconnect"],
     [["doctor"], "doctor", undefined],
   ])("%j를 해석한다", (argv, command, subcommand) => {
     expect(parseCliArguments(argv)).toMatchObject({ command, ...(subcommand === undefined ? {} : { subcommand }) });
@@ -46,5 +55,8 @@ describe("mass CLI parser", () => {
 
   it("token 원문 command-line flag를 제공하지 않는다", () => {
     expect(() => parseCliArguments(["status", "--token", "secret"])).toThrow("지원하지 않는 option");
+    expect(() => parseCliArguments(["subscription", "connect", "verified-provider", "--token", "secret"])).toThrow(
+      "지원하지 않는 option",
+    );
   });
 });
