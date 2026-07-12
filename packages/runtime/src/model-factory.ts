@@ -1,5 +1,5 @@
 import { createOpenAI } from "@ai-sdk/openai";
-import type { LanguageModel } from "ai";
+import { defaultSettingsMiddleware, wrapLanguageModel, type LanguageModel } from "ai";
 
 import type { TenantContext } from "@massion/identity";
 import {
@@ -100,7 +100,13 @@ export class OpenAICompatibleModelBuilder implements ProviderModelBuilder {
       apiKey: selection.secret,
       baseURL,
     });
-    return useResponses ? provider.responses(selection.modelId) : provider.chat(selection.modelId);
+    if (!useResponses) return provider.chat(selection.modelId);
+    return wrapLanguageModel({
+      model: provider.responses(selection.modelId),
+      middleware: defaultSettingsMiddleware({
+        settings: { providerOptions: { openai: { store: false } } },
+      }),
+    });
   }
 }
 

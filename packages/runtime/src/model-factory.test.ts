@@ -286,8 +286,11 @@ describe("Massion routed model factory", () => {
 
   it("공식 OpenAI의 gpt-5.6-sol은 Responses API endpoint로 호출한다", async () => {
     let requestUrl = "";
-    const fetcher = vi.fn(async (input: string | URL | Request) => {
-      requestUrl = input instanceof Request ? input.url : String(input);
+    let requestBody: Record<string, unknown> = {};
+    const fetcher = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const request = input instanceof Request ? input : new Request(input, init);
+      requestUrl = request.url;
+      requestBody = JSON.parse(await request.clone().text()) as Record<string, unknown>;
       return new Response(
         JSON.stringify({
           id: "response-1",
@@ -317,6 +320,7 @@ describe("Massion routed model factory", () => {
     expect(result.text).toBe("ok");
     expect(fetcher).toHaveBeenCalledTimes(1);
     expect(requestUrl).toBe("https://api.openai.com/v1/responses");
+    expect(requestBody.store).toBe(false);
   });
 
   it("실제 OpenAI-compatible builder가 Ollama /v1 endpoint와 Bearer secret으로 호출한다", async () => {
