@@ -50,6 +50,30 @@ async function stdin(input: CliCommandInput, label: string): Promise<Record<stri
   return value as Record<string, unknown>;
 }
 
+function exactInput(
+  value: Readonly<Record<string, unknown>>,
+  allowed: readonly string[],
+  label: string,
+): Readonly<Record<string, unknown>> {
+  const unknown = Object.keys(value).find((key) => !allowed.includes(key));
+  if (unknown) throw new Error(`${label} stdin JSON에 알 수 없는 필드가 있습니다: ${unknown}`);
+  return value;
+}
+
+async function subscriptionAccountRevision(client: CliApplicationClient, accountId: string): Promise<number> {
+  const response = await client.query("subscription.accounts", {});
+  if (!response || typeof response !== "object" || !Array.isArray((response as { data?: unknown }).data)) {
+    throw new Error("구독 계정 조회 응답이 유효하지 않습니다");
+  }
+  const account = (response as { data: unknown[] }).data.find(
+    (item) => item && typeof item === "object" && (item as { accountId?: unknown }).accountId === accountId,
+  ) as { version?: unknown } | undefined;
+  if (!account || !Number.isSafeInteger(account.version) || (account.version as number) < 1) {
+    throw new Error(`구독 계정 또는 version을 찾을 수 없습니다: ${accountId}`);
+  }
+  return account.version as number;
+}
+
 export async function executeCliInvocation(
   client: CliApplicationClient,
   invocation: CliInvocation,
@@ -119,6 +143,48 @@ export async function executeCliInvocation(
     return await client.query("growth.configuration.get", {});
   if (invocation.command === "growth" && invocation.subcommand === "suggestions")
     return await client.query("growth.suggestions", {});
+  if (invocation.command === "subscription" && invocation.subcommand === "providers")
+    return await client.query("subscription.providers", {});
+  if (invocation.command === "subscription" && invocation.subcommand === "accounts")
+    return await client.query("subscription.accounts", {});
+  if (invocation.command === "subscription" && invocation.subcommand === "quota")
+    return await client.query(
+      "subscription.quota",
+      args[0] === undefined ? {} : { accountId: required(args, 0, "accountId") },
+    );
+  if (invocation.command === "subscription" && invocation.subcommand === "doctor")
+    return await client.query(
+      "subscription.doctor",
+      args[0] === undefined ? {} : { accountId: required(args, 0, "accountId") },
+    );
+  if (invocation.command === "subscription" && invocation.subcommand === "policy" && args[1] === undefined)
+    return await client.query("subscription.policy", { providerId: required(args, 0, "providerId") });
+  if (invocation.command === "subscription" && invocation.subcommand === "connect") {
+    const providerId = required(args, 0, "providerId");
+    const label = "기존 Connector profile 등록";
+    const connection = exactInput(
+      await stdin(input, label),
+      ["alias", "connectorId", "profileLocator", "billingKind"],
+      label,
+    );
+    return await client.command(envelope("subscription.account.register", { providerId, ...connection }));
+  }
+  if (
+    invocation.command === "subscription" &&
+    ["share", "unshare", "disconnect"].includes(invocation.subcommand ?? "")
+  ) {
+    const accountId = required(args, 0, "accountId");
+    const revision = await subscriptionAccountRevision(client, accountId);
+    return await client.command(
+      envelope(`subscription.account.${invocation.subcommand ?? ""}`, { accountId }, revision),
+    );
+  }
+  if (invocation.command === "subscription" && invocation.subcommand === "policy") {
+    const providerId = required(args, 0, "providerId");
+    const credentialPolicy = required(args, 1, "credentialPolicy");
+    const revision = args[2] === undefined ? undefined : integer(args[2], "expected revision");
+    return await client.command(envelope("subscription.policy.configure", { providerId, credentialPolicy }, revision));
+  }
   if (invocation.command === "work" && invocation.subcommand === "cancel")
     return await client.command(
       envelope(

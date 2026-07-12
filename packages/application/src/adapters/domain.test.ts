@@ -314,4 +314,181 @@ describe("Application domain adapters", () => {
       }),
     ).resolves.toMatchObject({ outcome: "succeeded", data: { status: "active" } });
   });
+
+  it("구독 Connector·계정·공유·정책 변경을 공개 command로 위임하고 민감한 식별자를 반환하지 않는다", async () => {
+    await using database = await createDatabase({ url: "mem://", namespace: "massion", database: crypto.randomUUID() });
+    const identities = await IdentityService.create(database);
+    const organizations = await OrganizationService.create(database);
+    const owner = await identities.registerPersonalUser({
+      email: "subscription-domain@example.com",
+      displayName: "Subscription",
+    });
+    const context = await organizations.resolveTenantContext(owner.user.user_id, owner.organization.organization_id);
+    const registry = new ApplicationCommandRegistry(await ApplicationCommandStore.create(database, organizations));
+    const calls: Array<{ readonly operation: string; readonly input: unknown }> = [];
+    const account = (scope: "personal" | "organization", status: "active" | "revoked", version: number) => ({
+      account_id: "subscription-account-1",
+      organization_id: "organization-secret",
+      owner_user_id: "owner-secret",
+      provider_id: "verified-provider",
+      alias: "업무 계정",
+      scope,
+      connector_id: "connector-1",
+      profile_fingerprint: "profile-fingerprint-secret",
+      billing_kind: "subscription",
+      status,
+      consent_version: scope === "organization" ? 1 : 0,
+      version,
+      created_at: "2026-07-12T00:00:00.000Z",
+      updated_at: "2026-07-12T00:00:00.000Z",
+    });
+    registerApplicationDomainCommands(registry, {
+      subscriptionConnectors: {
+        enroll: async (input: unknown) => {
+          calls.push({ operation: "connector.enroll", input });
+          return {
+            connector_id: "connector-1",
+            organization_id: "organization-secret",
+            owner_user_id: "owner-secret",
+            location: "edge",
+            execution_kind: "agent-runtime",
+            protocol: "massion-connector-v1",
+            version: "1.0.0",
+            public_key: "connector-public-key-secret",
+            capabilities: ["session.execute"],
+            status: "ready",
+            expires_at: "2026-07-12T00:05:00.000Z",
+            created_at: "2026-07-12T00:00:00.000Z",
+            updated_at: "2026-07-12T00:00:00.000Z",
+          };
+        },
+      },
+      subscriptionAccounts: {
+        register: async (_context: unknown, input: unknown) => {
+          calls.push({ operation: "account.register", input });
+          return account("personal", "active", 1);
+        },
+        share: async (_context: unknown, input: unknown) => {
+          calls.push({ operation: "account.share", input });
+          return account("organization", "active", 2);
+        },
+        unshare: async (_context: unknown, input: unknown) => {
+          calls.push({ operation: "account.unshare", input });
+          return account("personal", "active", 3);
+        },
+        disconnect: async (_context: unknown, input: unknown) => {
+          calls.push({ operation: "account.disconnect", input });
+          return account("personal", "revoked", 4);
+        },
+      },
+      subscriptionPolicy: {
+        configure: async (_context: unknown, input: unknown) => {
+          calls.push({ operation: "policy.configure", input });
+          return {
+            providerId: "verified-provider",
+            credentialPolicy: "quota-headroom",
+            version: 2,
+            source: "configured",
+            updatedAt: "2026-07-12T00:00:00.000Z",
+            token: "policy-token-secret",
+          };
+        },
+        list: async () => [],
+      },
+    } as never);
+
+    const commands = [
+      {
+        operation: "subscription.connector.enroll",
+        payload: {
+          enrollmentId: "enrollment-1",
+          enrollmentCode: "enrollment-code-secret",
+          challengeNonce: "challenge-secret",
+          expiresAt: "2026-07-12T00:05:00.000Z",
+          connectorId: "connector-1",
+          publicKey: "connector-public-key-secret",
+          protocol: "massion-connector-v1",
+          version: "1.0.0",
+          capabilities: ["session.execute"],
+          signature: "connector-signature-secret",
+        },
+      },
+      {
+        operation: "subscription.account.register",
+        payload: {
+          providerId: "verified-provider",
+          alias: "업무 계정",
+          connectorId: "connector-1",
+          profileLocator: "external-account@example.com",
+          billingKind: "subscription",
+        },
+      },
+      {
+        operation: "subscription.account.share",
+        expectedRevision: 1,
+        payload: { accountId: "subscription-account-1" },
+      },
+      {
+        operation: "subscription.account.unshare",
+        expectedRevision: 2,
+        payload: { accountId: "subscription-account-1" },
+      },
+      {
+        operation: "subscription.account.disconnect",
+        expectedRevision: 3,
+        payload: { accountId: "subscription-account-1" },
+      },
+      {
+        operation: "subscription.policy.configure",
+        payload: { providerId: "verified-provider", credentialPolicy: "quota-headroom" },
+      },
+    ] as const;
+    const results = [];
+    for (const command of commands) {
+      results.push(
+        await registry.dispatch(context, ["subscription:write"], {
+          schemaVersion: "massion.application.v1",
+          commandId: crypto.randomUUID(),
+          correlationId: crypto.randomUUID(),
+          ...command,
+        }),
+      );
+    }
+
+    expect(results).toEqual([
+      expect.objectContaining({ data: expect.objectContaining({ connectorId: "connector-1", status: "ready" }) }),
+      expect.objectContaining({ data: expect.objectContaining({ accountId: "subscription-account-1", version: 1 }) }),
+      expect.objectContaining({ data: expect.objectContaining({ scope: "organization", version: 2 }) }),
+      expect.objectContaining({ data: expect.objectContaining({ scope: "personal", version: 3 }) }),
+      expect.objectContaining({ data: expect.objectContaining({ status: "revoked", version: 4 }) }),
+      expect.objectContaining({
+        data: expect.objectContaining({ credentialPolicy: "quota-headroom", version: 2, source: "configured" }),
+      }),
+    ]);
+    expect(calls).toEqual([
+      expect.objectContaining({ operation: "connector.enroll" }),
+      expect.objectContaining({ operation: "account.register" }),
+      expect.objectContaining({ operation: "account.share", input: expect.objectContaining({ expectedVersion: 1 }) }),
+      expect.objectContaining({ operation: "account.unshare", input: expect.objectContaining({ expectedVersion: 2 }) }),
+      expect.objectContaining({
+        operation: "account.disconnect",
+        input: expect.objectContaining({ expectedVersion: 3 }),
+      }),
+      expect.objectContaining({ operation: "policy.configure" }),
+    ]);
+    const serialized = JSON.stringify(results);
+    for (const forbidden of [
+      "organization-secret",
+      "owner-secret",
+      "profile-fingerprint-secret",
+      "external-account@example.com",
+      "enrollment-code-secret",
+      "challenge-secret",
+      "connector-public-key-secret",
+      "connector-signature-secret",
+      "policy-token-secret",
+    ]) {
+      expect(serialized).not.toContain(forbidden);
+    }
+  });
 });

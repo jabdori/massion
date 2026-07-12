@@ -10,6 +10,13 @@ import type { WorkService } from "@massion/work";
 import type { ApplicationCommandDescriptor, ApplicationCommandRegistry } from "../command-registry.js";
 import type { ApplicationCommandResultV1, ApplicationCommandV1 } from "../contracts.js";
 import { ApplicationError } from "../errors.js";
+import type {
+  SubscriptionAccountCommands,
+  SubscriptionConnectorCommands,
+  SubscriptionPolicyStore,
+  SubscriptionPolicyView,
+} from "../subscription-operations.js";
+import { SUBSCRIPTION_CREDENTIAL_POLICIES } from "../subscription-operations.js";
 
 export interface ApplicationDomainDependencies {
   readonly works?: Pick<
@@ -37,6 +44,9 @@ export interface ApplicationDomainDependencies {
     "registerProvider" | "registerEndpoint" | "addCredential" | "revokeCredential"
   >;
   readonly router?: Pick<ModelRouter, "registerModel" | "createRoute" | "addCandidate">;
+  readonly subscriptionAccounts?: SubscriptionAccountCommands;
+  readonly subscriptionConnectors?: SubscriptionConnectorCommands;
+  readonly subscriptionPolicy?: SubscriptionPolicyStore;
 }
 
 type Payload = Readonly<Record<string, unknown>>;
@@ -61,6 +71,19 @@ function string(value: unknown, label: string): string {
 function integer(value: unknown, label: string, minimum = 0): number {
   if (!Number.isSafeInteger(value) || (value as number) < minimum) throw new Error(`${label} 정수가 유효하지 않습니다`);
   return value as number;
+}
+
+function strings(value: unknown, label: string): readonly string[] {
+  if (!Array.isArray(value) || value.length === 0) throw new Error(`${label} 배열이 유효하지 않습니다`);
+  return value.map((item) => string(item, label));
+}
+
+function subscriptionCredentialPolicy(value: unknown): SubscriptionPolicyView["credentialPolicy"] {
+  const candidate = string(value, "credentialPolicy");
+  if (!SUBSCRIPTION_CREDENTIAL_POLICIES.includes(candidate as never)) {
+    throw new Error("지원하지 않는 구독 계정 선택 정책입니다");
+  }
+  return candidate as SubscriptionPolicyView["credentialPolicy"];
 }
 
 function expectedRevision(command: ApplicationCommandV1): number {
@@ -166,6 +189,73 @@ function domainError(error: unknown, correlationId: string): never {
 
 function workData(work: { readonly work_id: string; readonly status: string; readonly revision: number }) {
   return { workId: work.work_id, status: work.status, revision: work.revision };
+}
+
+function timestamp(value: unknown, label: string): string {
+  if (value instanceof Date) return value.toISOString();
+  if (typeof value === "string") return value;
+  if (typeof value === "number" && Number.isFinite(value)) return new Date(value).toISOString();
+  throw new Error(`${label} 시각이 유효하지 않습니다`);
+}
+
+function subscriptionAccountData(account: {
+  readonly account_id: string;
+  readonly provider_id: string;
+  readonly alias: string;
+  readonly scope: string;
+  readonly connector_id: string;
+  readonly billing_kind: string;
+  readonly status: string;
+  readonly consent_version: number;
+  readonly version: number;
+  readonly cooldown_until?: unknown;
+}) {
+  return {
+    accountId: account.account_id,
+    providerId: account.provider_id,
+    alias: account.alias,
+    scope: account.scope,
+    connectorId: account.connector_id,
+    billingKind: account.billing_kind,
+    status: account.status,
+    consentVersion: account.consent_version,
+    version: account.version,
+    ...(account.cooldown_until === undefined
+      ? {}
+      : { cooldownUntil: timestamp(account.cooldown_until, "구독 계정 cooldown") }),
+  };
+}
+
+function subscriptionConnectorData(connector: {
+  readonly connector_id: string;
+  readonly location: string;
+  readonly execution_kind: string;
+  readonly protocol: string;
+  readonly version: string;
+  readonly capabilities: readonly string[];
+  readonly status: string;
+  readonly expires_at?: unknown;
+}) {
+  return {
+    connectorId: connector.connector_id,
+    location: connector.location,
+    executionKind: connector.execution_kind,
+    protocol: connector.protocol,
+    version: connector.version,
+    capabilities: connector.capabilities,
+    status: connector.status,
+    ...(connector.expires_at === undefined ? {} : { expiresAt: timestamp(connector.expires_at, "Connector 만료") }),
+  };
+}
+
+function subscriptionPolicyData(policy: SubscriptionPolicyView) {
+  return {
+    providerId: policy.providerId,
+    credentialPolicy: policy.credentialPolicy,
+    version: policy.version,
+    source: policy.source,
+    ...(policy.updatedAt === undefined ? {} : { updatedAt: policy.updatedAt }),
+  };
 }
 
 function extensionData(value: unknown): Record<string, unknown> {
@@ -1173,6 +1263,146 @@ function registerAssuranceBindings(
   });
 }
 
+function registerSubscriptions(
+  registry: ApplicationCommandRegistry,
+  dependencies: ApplicationDomainDependencies,
+): void {
+  const connectors = dependencies.subscriptionConnectors;
+  if (connectors) {
+    register(registry, {
+      operation: "subscription.connector.enroll",
+      requiredScopes: ["subscription:write"],
+      allowedRoles: ["owner", "admin", "member"],
+      recovery: "operator-action",
+      validate: (value) =>
+        payload(
+          value,
+          [
+            "enrollmentId",
+            "enrollmentCode",
+            "challengeNonce",
+            "expiresAt",
+            "connectorId",
+            "publicKey",
+            "protocol",
+            "version",
+            "capabilities",
+            "signature",
+          ],
+          [
+            "enrollmentId",
+            "enrollmentCode",
+            "challengeNonce",
+            "expiresAt",
+            "connectorId",
+            "publicKey",
+            "protocol",
+            "version",
+            "capabilities",
+            "signature",
+          ],
+        ),
+      async handle(_context, command, value) {
+        const connector = await connectors.enroll({
+          enrollmentId: string(value.enrollmentId, "enrollmentId"),
+          enrollmentCode: string(value.enrollmentCode, "enrollmentCode"),
+          challengeNonce: string(value.challengeNonce, "challengeNonce"),
+          expiresAt: string(value.expiresAt, "expiresAt"),
+          connectorId: string(value.connectorId, "connectorId"),
+          publicKey: string(value.publicKey, "publicKey"),
+          protocol: string(value.protocol, "protocol"),
+          version: string(value.version, "version"),
+          capabilities: strings(value.capabilities, "capabilities"),
+          signature: string(value.signature, "signature"),
+        });
+        return result(command, {
+          resource: { type: "SubscriptionConnector", id: connector.connector_id },
+          data: subscriptionConnectorData(connector),
+        });
+      },
+    });
+  }
+
+  const accounts = dependencies.subscriptionAccounts;
+  if (accounts) {
+    register(registry, {
+      operation: "subscription.account.register",
+      requiredScopes: ["subscription:write"],
+      allowedRoles: ["owner", "admin", "member"],
+      recovery: "replay-domain",
+      validate: (value) =>
+        payload(
+          value,
+          ["providerId", "alias", "connectorId", "profileLocator", "billingKind"],
+          ["providerId", "alias", "connectorId", "profileLocator", "billingKind"],
+        ),
+      async handle(context, command, value) {
+        const account = await accounts.register(context, {
+          commandId: command.commandId,
+          providerId: string(value.providerId, "providerId"),
+          alias: string(value.alias, "alias"),
+          connectorId: string(value.connectorId, "connectorId"),
+          profileLocator: string(value.profileLocator, "profileLocator"),
+          billingKind: string(value.billingKind, "billingKind"),
+        });
+        return result(command, {
+          resource: { type: "SubscriptionAccount", id: account.account_id, revision: account.version },
+          data: subscriptionAccountData(account),
+        });
+      },
+    });
+
+    const definitions = [
+      ["subscription.account.share", "share"],
+      ["subscription.account.unshare", "unshare"],
+      ["subscription.account.disconnect", "disconnect"],
+    ] as const;
+    for (const [operation, method] of definitions) {
+      register(registry, {
+        operation,
+        requiredScopes: ["subscription:write"],
+        allowedRoles: ["owner", "admin", "member"],
+        recovery: "replay-domain",
+        validate: (value) => payload(value, ["accountId"], ["accountId"]),
+        async handle(context, command, value) {
+          const account = await accounts[method](context, {
+            commandId: command.commandId,
+            accountId: string(value.accountId, "accountId"),
+            expectedVersion: expectedRevision(command),
+          });
+          return result(command, {
+            resource: { type: "SubscriptionAccount", id: account.account_id, revision: account.version },
+            data: subscriptionAccountData(account),
+          });
+        },
+      });
+    }
+  }
+
+  const policy = dependencies.subscriptionPolicy;
+  if (policy) {
+    register(registry, {
+      operation: "subscription.policy.configure",
+      requiredScopes: ["subscription:write"],
+      allowedRoles: ["owner", "admin"],
+      recovery: "replay-domain",
+      validate: (value) => payload(value, ["providerId", "credentialPolicy"], ["providerId", "credentialPolicy"]),
+      async handle(context, command, value) {
+        const configured = await policy.configure(context, {
+          commandId: command.commandId,
+          providerId: string(value.providerId, "providerId"),
+          credentialPolicy: subscriptionCredentialPolicy(value.credentialPolicy),
+          ...(command.expectedRevision === undefined ? {} : { expectedVersion: command.expectedRevision }),
+        });
+        return result(command, {
+          resource: { type: "SubscriptionPolicy", id: configured.providerId, revision: configured.version },
+          data: subscriptionPolicyData(configured),
+        });
+      },
+    });
+  }
+}
+
 export function registerApplicationDomainCommands(
   registry: ApplicationCommandRegistry,
   dependencies: ApplicationDomainDependencies,
@@ -1185,4 +1415,5 @@ export function registerApplicationDomainCommands(
   if (dependencies.extension) registerExtension(registry, dependencies.extension);
   if (dependencies.growth) registerGrowth(registry, dependencies.growth);
   registerRouter(registry, dependencies);
+  registerSubscriptions(registry, dependencies);
 }

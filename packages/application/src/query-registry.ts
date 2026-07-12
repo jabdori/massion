@@ -10,6 +10,16 @@ import type { ApplicationEventStore } from "./event-store.js";
 import type { ApplicationReadModel } from "./read-model.js";
 import type { CollaborationGraphSnapshotProjector } from "./snapshot.js";
 import type { WebSessionService } from "./web-session.js";
+import type {
+  SubscriptionAccountQueries,
+  SubscriptionConnectorQueries,
+  SubscriptionPolicyStore,
+  SubscriptionPolicyView,
+  SubscriptionProviderDirectory,
+  SubscriptionProviderView,
+  SubscriptionQuotaQueries,
+} from "./subscription-operations.js";
+import { BuiltinSubscriptionProviderDirectory } from "./subscription-operations.js";
 
 export interface ApplicationQueryResultV1 {
   readonly schemaVersion: "massion.application.v1";
@@ -45,6 +55,11 @@ export interface ApplicationQueryDependencies {
   readonly providers?: Pick<ProviderService, "listProviders" | "listEndpoints" | "listCredentials">;
   readonly router?: Pick<ModelRouter, "listModels" | "listRoutes" | "listCandidates">;
   readonly status?: (context: TenantContext) => Promise<unknown>;
+  readonly subscriptionAccounts?: SubscriptionAccountQueries;
+  readonly subscriptionConnectors?: SubscriptionConnectorQueries;
+  readonly subscriptionProviders?: SubscriptionProviderDirectory;
+  readonly subscriptionQuota?: SubscriptionQuotaQueries;
+  readonly subscriptionPolicy?: SubscriptionPolicyStore;
 }
 
 const OPERATION = /^[a-z][a-z0-9-]*(?:\.[a-z][a-z0-9-]*)+$/u;
@@ -165,6 +180,84 @@ function publicWork(value: Awaited<ReturnType<ApplicationReadModel["works"]>>[nu
     revision: value.revision,
     artifactIds: value.artifactIds,
   };
+}
+
+function timestamp(value: unknown, label: string): string {
+  if (value instanceof Date) return value.toISOString();
+  if (typeof value === "string") return value;
+  if (typeof value === "number" && Number.isFinite(value)) return new Date(value).toISOString();
+  throw new Error(`${label} 시각이 유효하지 않습니다`);
+}
+
+function publicSubscriptionProvider(provider: SubscriptionProviderView) {
+  return {
+    providerId: provider.providerId,
+    displayName: provider.displayName,
+    authKinds: provider.authKinds,
+    executionKind: provider.executionKind,
+    billingKinds: provider.billingKinds,
+    modelDiscovery: provider.modelDiscovery,
+    quotaDiscovery: provider.quotaDiscovery,
+    protocols: provider.protocols,
+    ...(provider.protocol === undefined ? {} : { protocol: provider.protocol }),
+    availability: provider.availability,
+    officialDocumentation: provider.officialDocumentation,
+    credentialPolicies: provider.credentialPolicies,
+    verified: provider.verified,
+  };
+}
+
+function publicSubscriptionPolicy(policy: SubscriptionPolicyView) {
+  return {
+    providerId: policy.providerId,
+    credentialPolicy: policy.credentialPolicy,
+    version: policy.version,
+    source: policy.source,
+    ...(policy.updatedAt === undefined ? {} : { updatedAt: policy.updatedAt }),
+  };
+}
+
+function publicQuota(quota: Awaited<ReturnType<SubscriptionQuotaQueries["current"]>>) {
+  if (!quota) return undefined;
+  return {
+    accountId: quota.accountId,
+    windows: quota.windows.map((window) => ({
+      kind: window.kind,
+      ...(window.limit === undefined ? {} : { limit: window.limit }),
+      ...(window.remaining === undefined ? {} : { remaining: window.remaining }),
+      ...(window.remainingRatio === undefined ? {} : { remainingRatio: window.remainingRatio }),
+      ...(window.resetsAt === undefined ? {} : { resetsAt: window.resetsAt }),
+      observedAt: window.observedAt,
+      confidence: window.confidence,
+    })),
+    ...(quota.minimumRemainingRatio === undefined ? {} : { minimumRemainingRatio: quota.minimumRemainingRatio }),
+    ...(quota.earliestResetAt === undefined ? {} : { earliestResetAt: quota.earliestResetAt }),
+    exhausted: quota.exhausted,
+    observedAt: quota.observedAt,
+  };
+}
+
+async function subscriptionAccountRows(
+  context: TenantContext,
+  dependencies: Pick<
+    ApplicationQueryDependencies,
+    "subscriptionAccounts" | "subscriptionConnectors" | "subscriptionQuota"
+  >,
+  accountId?: string,
+) {
+  const accounts = (await dependencies.subscriptionAccounts?.list(context, "organization")) ?? [];
+  return await Promise.all(
+    accounts
+      .filter((account) => accountId === undefined || account.account_id === accountId)
+      .map(async (account) => {
+        const canReadQuota = account.owner_user_id === context.userId || context.role !== "member";
+        const [connector, quota] = await Promise.all([
+          dependencies.subscriptionConnectors?.get(context, account.connector_id),
+          canReadQuota ? dependencies.subscriptionQuota?.current(context, account.account_id) : undefined,
+        ]);
+        return { account, connector, quota: publicQuota(quota) };
+      }),
+  );
 }
 
 export function registerApplicationQueries(
@@ -661,6 +754,123 @@ export function registerApplicationQueries(
           })),
         };
       },
+    });
+  }
+  const subscriptionProviders = dependencies.subscriptionProviders ?? new BuiltinSubscriptionProviderDirectory();
+  registry.register({
+    operation: "subscription.providers",
+    requiredScopes: ["subscription:read"],
+    allowedRoles: EVERY_ROLE,
+    validate: (value) => object(value, []),
+    handle: async (context) => (await subscriptionProviders.list(context)).map(publicSubscriptionProvider),
+  });
+  if (dependencies.subscriptionAccounts) {
+    registry.register({
+      operation: "subscription.accounts",
+      requiredScopes: ["subscription:read"],
+      allowedRoles: EVERY_ROLE,
+      validate: (value) => object(value, []),
+      handle: async (context) =>
+        (await subscriptionAccountRows(context, dependencies)).map(({ account, connector, quota }) => ({
+          accountId: account.account_id,
+          providerId: account.provider_id,
+          alias: account.alias,
+          scope: account.scope,
+          canManage: account.owner_user_id === context.userId,
+          connectorId: account.connector_id,
+          ...(connector === undefined
+            ? {}
+            : {
+                connectorLocation: connector.location,
+                connectorExecutionKind: connector.execution_kind,
+                connectorStatus: connector.status,
+              }),
+          billingKind: account.billing_kind,
+          status: account.status,
+          version: account.version,
+          ...(account.cooldown_until === undefined
+            ? {}
+            : { cooldownUntil: timestamp(account.cooldown_until, "구독 계정 cooldown") }),
+          ...(quota === undefined
+            ? {}
+            : {
+                windows: quota.windows,
+                minimumRemainingRatio: quota.minimumRemainingRatio,
+                earliestResetAt: quota.earliestResetAt,
+                quotaExhausted: quota.exhausted,
+                quotaObservedAt: quota.observedAt,
+              }),
+        })),
+    });
+  }
+  if (dependencies.subscriptionAccounts && dependencies.subscriptionQuota) {
+    registry.register({
+      operation: "subscription.quota",
+      requiredScopes: ["subscription:read"],
+      allowedRoles: EVERY_ROLE,
+      validate: (value) => object(value, ["accountId"]),
+      handle: async (context, value) =>
+        (
+          await subscriptionAccountRows(
+            context,
+            dependencies,
+            value.accountId === undefined ? undefined : text(value.accountId, "accountId"),
+          )
+        ).flatMap(({ quota }) => (quota === undefined ? [] : [quota])),
+    });
+  }
+  if (dependencies.subscriptionPolicy) {
+    registry.register({
+      operation: "subscription.policy",
+      requiredScopes: ["subscription:read"],
+      allowedRoles: EVERY_ROLE,
+      validate: (value) => object(value, ["providerId"]),
+      handle: async (context, value) =>
+        (
+          await dependencies.subscriptionPolicy?.list(
+            context,
+            value.providerId === undefined ? undefined : text(value.providerId, "providerId"),
+          )
+        )?.map(publicSubscriptionPolicy) ?? [],
+    });
+  }
+  if (dependencies.subscriptionAccounts && dependencies.subscriptionConnectors && dependencies.subscriptionQuota) {
+    registry.register({
+      operation: "subscription.doctor",
+      requiredScopes: ["subscription:read"],
+      allowedRoles: EVERY_ROLE,
+      validate: (value) => object(value, ["accountId"]),
+      handle: async (context, value) =>
+        (
+          await subscriptionAccountRows(
+            context,
+            dependencies,
+            value.accountId === undefined ? undefined : text(value.accountId, "accountId"),
+          )
+        ).map(({ account, connector, quota }) => {
+          const action =
+            account.status === "needs-reauth"
+              ? "reauth"
+              : connector?.status !== "ready"
+                ? "reconnect"
+                : quota?.exhausted || account.status === "cooldown"
+                  ? "wait-for-reset"
+                  : account.status === "active"
+                    ? "none"
+                    : "inspect";
+          return {
+            accountId: account.account_id,
+            providerId: account.provider_id,
+            alias: account.alias,
+            accountStatus: account.status,
+            connectorId: account.connector_id,
+            connectorLocation: connector?.location,
+            connectorStatus: connector?.status ?? "unavailable",
+            quotaStatus: quota === undefined ? "unknown" : quota.exhausted ? "exhausted" : "available",
+            ...(quota?.earliestResetAt === undefined ? {} : { earliestResetAt: quota.earliestResetAt }),
+            action,
+          };
+        }),
     });
   }
   if (dependencies.status) {

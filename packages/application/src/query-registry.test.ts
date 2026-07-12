@@ -259,4 +259,217 @@ describe("ApplicationQueryRegistry", () => {
       data: [{ sessionId: "session-1", status: "active" }],
     });
   });
+
+  it("구독 제공자·계정·Quota·정책·진단을 공개 필드만으로 조회한다", async () => {
+    const registry = new ApplicationQueryRegistry();
+    registerApplicationQueries(registry, {
+      readModel,
+      subscriptionProviders: {
+        list: async () => [
+          {
+            providerId: "verified-provider",
+            displayName: "검증된 제공자",
+            authKinds: ["device-code"],
+            executionKind: "agent-runtime",
+            billingKinds: ["subscription"],
+            modelDiscovery: "protocol",
+            quotaDiscovery: "none",
+            protocol: "acp",
+            protocols: ["acp"],
+            availability: "supported",
+            officialDocumentation: "https://example.com/provider",
+            credentialPolicies: ["adaptive", "quota-headroom"],
+            verified: true,
+            clientSecret: "provider-client-secret",
+          },
+        ],
+      },
+      subscriptionAccounts: {
+        list: async () => [
+          {
+            account_id: "subscription-account-1",
+            organization_id: "organization-secret",
+            owner_user_id: context.userId,
+            provider_id: "verified-provider",
+            alias: "업무 계정",
+            scope: "personal",
+            connector_id: "connector-1",
+            profile_fingerprint: "profile-fingerprint-secret",
+            billing_kind: "subscription",
+            status: "active",
+            consent_version: 0,
+            version: 3,
+            created_at: "2026-07-12T00:00:00.000Z",
+            updated_at: "2026-07-12T00:00:00.000Z",
+          },
+          {
+            account_id: "shared-account-1",
+            organization_id: "organization-secret",
+            owner_user_id: "owner-secret",
+            provider_id: "verified-provider",
+            alias: "공유 계정",
+            scope: "organization",
+            connector_id: "connector-shared",
+            profile_fingerprint: "shared-profile-fingerprint-secret",
+            billing_kind: "subscription",
+            status: "active",
+            consent_version: 1,
+            version: 2,
+            created_at: "2026-07-12T00:00:00.000Z",
+            updated_at: "2026-07-12T00:00:00.000Z",
+          },
+        ],
+      },
+      subscriptionConnectors: {
+        get: async (_context: unknown, connectorId: string) => ({
+          connector_id: connectorId,
+          organization_id: "organization-secret",
+          owner_user_id: "owner-secret",
+          location: connectorId === "connector-1" ? "edge" : "server",
+          execution_kind: "agent-runtime",
+          protocol: "massion-connector-v1",
+          version: "1.0.0",
+          public_key: "connector-public-key-secret",
+          capabilities: ["session.execute"],
+          status: "ready",
+          expires_at: "2026-07-12T00:05:00.000Z",
+          created_at: "2026-07-12T00:00:00.000Z",
+          updated_at: "2026-07-12T00:00:00.000Z",
+        }),
+      },
+      subscriptionQuota: {
+        current: async (_context: unknown, accountId: string) => {
+          if (accountId === "shared-account-1") throw new Error("다른 소유자의 공유 계정 Quota 조회 금지");
+          return {
+            accountId,
+            snapshotId: "quota-snapshot-secret",
+            windows: [
+              {
+                kind: "monthly",
+                limit: 100,
+                remaining: 75,
+                remainingRatio: 0.75,
+                resetsAt: "2026-08-01T00:00:00.000Z",
+                observedAt: "2026-07-12T00:00:00.000Z",
+                source: "private-quota-endpoint",
+                confidence: "reported",
+              },
+            ],
+            minimumRemainingRatio: 0.75,
+            earliestResetAt: "2026-08-01T00:00:00.000Z",
+            exhausted: false,
+            observedAt: "2026-07-12T00:00:00.000Z",
+          };
+        },
+      },
+      subscriptionPolicy: {
+        configure: async () => ({
+          providerId: "verified-provider",
+          credentialPolicy: "quota-headroom",
+          version: 2,
+          source: "configured",
+        }),
+        list: async () => [
+          {
+            providerId: "verified-provider",
+            credentialPolicy: "quota-headroom",
+            version: 2,
+            source: "configured",
+            updatedAt: "2026-07-12T00:00:00.000Z",
+            token: "policy-token-secret",
+          },
+        ],
+      },
+    } as never);
+
+    const providers = await registry.query(context, ["subscription:read"], "subscription.providers", {});
+    const accounts = await registry.query(context, ["subscription:read"], "subscription.accounts", {});
+    const quota = await registry.query(context, ["subscription:read"], "subscription.quota", {});
+    const policy = await registry.query(context, ["subscription:read"], "subscription.policy", {
+      providerId: "verified-provider",
+    });
+    const doctor = await registry.query(context, ["subscription:read"], "subscription.doctor", {
+      accountId: "subscription-account-1",
+    });
+
+    expect(providers).toMatchObject({
+      data: [
+        {
+          providerId: "verified-provider",
+          displayName: "검증된 제공자",
+          modelDiscovery: "protocol",
+          protocol: "acp",
+          protocols: ["acp"],
+          availability: "supported",
+          officialDocumentation: "https://example.com/provider",
+          credentialPolicies: ["adaptive", "quota-headroom"],
+          verified: true,
+        },
+      ],
+    });
+    expect(accounts).toMatchObject({
+      data: [
+        {
+          accountId: "subscription-account-1",
+          alias: "업무 계정",
+          canManage: true,
+          connectorLocation: "edge",
+          minimumRemainingRatio: 0.75,
+          version: 3,
+        },
+        {
+          accountId: "shared-account-1",
+          alias: "공유 계정",
+          canManage: false,
+          connectorLocation: "server",
+          version: 2,
+        },
+      ],
+    });
+    expect((accounts.data as Array<Record<string, unknown>>)[1]).not.toHaveProperty("minimumRemainingRatio");
+    expect(quota).toMatchObject({
+      data: [
+        {
+          accountId: "subscription-account-1",
+          exhausted: false,
+          windows: [{ kind: "monthly", remainingRatio: 0.75 }],
+        },
+      ],
+    });
+    expect(policy).toMatchObject({
+      data: [
+        {
+          providerId: "verified-provider",
+          credentialPolicy: "quota-headroom",
+          version: 2,
+          source: "configured",
+        },
+      ],
+    });
+    expect(doctor).toMatchObject({
+      data: [
+        {
+          accountId: "subscription-account-1",
+          accountStatus: "active",
+          connectorStatus: "ready",
+          quotaStatus: "available",
+          action: "none",
+        },
+      ],
+    });
+    const serialized = JSON.stringify([providers, accounts, quota, policy, doctor]);
+    for (const forbidden of [
+      "organization-secret",
+      "owner-secret",
+      "profile-fingerprint-secret",
+      "shared-profile-fingerprint-secret",
+      "connector-public-key-secret",
+      "provider-client-secret",
+      "policy-token-secret",
+      "quota-snapshot-secret",
+      "private-quota-endpoint",
+    ]) {
+      expect(serialized).not.toContain(forbidden);
+    }
+  });
 });

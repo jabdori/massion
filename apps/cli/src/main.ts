@@ -16,7 +16,7 @@ import { renderCliOutput } from "./render.js";
 import { runHeadless } from "./run.js";
 import { resolveTokenReference } from "./token.js";
 
-const HELP = `mass - Massion AgentOS command line\n\n사용법: mass <version|local|init|status|run|resume|watch|org|work|chat|task|approval|assurance|runtime|provider|ext|growth|doctor> [options]\n`;
+const HELP = `mass - Massion AgentOS command line\n\n사용법: mass <version|local|init|status|run|resume|watch|org|work|chat|task|approval|assurance|runtime|provider|subscription|ext|growth|doctor> [options]\n\n구독 profile 등록: mass subscription connect PROVIDER < profile.json\n  기존 Connector profile metadata만 등록합니다. OAuth/device 로그인을 수행하지 않습니다.\n`;
 
 async function readStdin(maximum = 1024 * 1024): Promise<Buffer> {
   const chunks: Buffer[] = [];

@@ -35,5 +35,6 @@ export * from "./run-store.js";
 export * from "./schema.js";
 export * from "./sse.js";
 export * from "./snapshot.js";
+export * from "./subscription-operations.js";
 export * from "./validation.js";
 export * from "./web-session.js";
