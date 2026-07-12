@@ -16,7 +16,15 @@ import type {
 } from "./contracts.js";
 import { MASSION_RUNTIME_EXECUTION_CONTEXT_KEY, MASSION_TENANT_CONTEXT_KEY } from "./agent-configuration.js";
 import { type RuntimeEvent, type RuntimeExecution, RuntimeExecutionStore } from "./execution-store.js";
-import type { AcquireModelInput, RoutedModelFactory, RoutedModelLease } from "./model-factory.js";
+import {
+  RoutedExecutionSettlementError,
+  type AcquireModelInput,
+  type RoutedAgentRuntimeLease,
+  type RoutedAgentRuntimeResult,
+  type RoutedLanguageModelLease,
+  type RoutedModelFactory,
+  type RoutedModelLease,
+} from "./model-factory.js";
 
 const MAX_FALLBACKS = 16;
 
@@ -26,6 +34,9 @@ interface ActiveExecution {
   readonly resolveDone: () => void;
   cancellation?: Promise<void>;
 }
+
+type AgentRuntimeAttemptOutcome =
+  { readonly kind: "terminal"; readonly result: AgentExecutionResult } | { readonly kind: "fallback" };
 
 function deferred(): { promise: Promise<void>; resolve: () => void } {
   let resolve: () => void = () => undefined;
@@ -75,7 +86,7 @@ export function normalizeVoltAgentStreamPart(
 }
 
 export class RoutedModelRegistry {
-  private readonly leases = new Map<string, RoutedModelLease>();
+  private readonly leases = new Map<string, RoutedLanguageModelLease>();
 
   public readonly resolve: DynamicValue<LanguageModel> = ({ context }) => {
     const executionId = context.get(MASSION_RUNTIME_EXECUTION_CONTEXT_KEY);
@@ -85,7 +96,7 @@ export class RoutedModelRegistry {
     return lease.model;
   };
 
-  public set(executionId: string, lease: RoutedModelLease): void {
+  public set(executionId: string, lease: RoutedLanguageModelLease): void {
     if (this.leases.has(executionId)) throw new Error(`Runtime model lease가 이미 등록됐습니다: ${executionId}`);
     this.leases.set(executionId, lease);
   }
@@ -109,6 +120,18 @@ export interface AgentExecutionLifecycle {
   recover(context: TenantContext, executionId: string): Promise<AgentExecutionResult>;
 }
 
+export interface RoutedExecutionContextResolver {
+  resolve(
+    context: TenantContext,
+    input: {
+      readonly executionId: string;
+      readonly workId: string;
+      readonly taskId?: string;
+      readonly agentHandle: string;
+    },
+  ): Promise<{ readonly workspaceRoot?: string; readonly instruction?: string }>;
+}
+
 export class VoltAgentRunner implements AgentRunner, StructuredAgentRunner {
   private readonly active = new Map<string, ActiveExecution>();
   private accepting = true;
@@ -119,6 +142,7 @@ export class VoltAgentRunner implements AgentRunner, StructuredAgentRunner {
     private readonly models: RoutedModelFactory,
     private readonly registry: RoutedModelRegistry,
     private readonly lifecycle?: AgentExecutionLifecycle,
+    private readonly executionContext?: RoutedExecutionContextResolver,
   ) {}
 
   public async execute(context: TenantContext, input: AgentExecutionInput): Promise<AgentExecutionResult> {
@@ -185,6 +209,7 @@ export class VoltAgentRunner implements AgentRunner, StructuredAgentRunner {
     const executionId = created.execution.execution_id;
     const active = this.activate(executionId);
     let fallbackFromAttemptId: string | undefined;
+    let fallbackFromLeaseId: string | undefined;
     let emittedTokens = 0;
     try {
       for (let attempt = 0; attempt < MAX_FALLBACKS; attempt += 1) {
@@ -192,8 +217,28 @@ export class VoltAgentRunner implements AgentRunner, StructuredAgentRunner {
         try {
           lease = await this.models.acquire(
             context,
-            this.acquireInput(input, executionId, attempt, fallbackFromAttemptId),
+            await this.acquireInput(context, input, executionId, attempt, fallbackFromAttemptId, fallbackFromLeaseId),
           );
+          if (lease.kind === "agent-runtime") {
+            const runtimeResult = await this.executeAgentRuntime(
+              context,
+              input,
+              lease,
+              prompt(input.input),
+              active.controller.signal,
+            );
+            const outcome = await this.settleAgentRuntimeResult(context, executionId, attempt, lease, runtimeResult);
+            if (outcome.kind === "fallback") {
+              fallbackFromAttemptId = lease.attemptId;
+              fallbackFromLeaseId = lease.sessionLeaseId;
+              continue;
+            }
+            const recovery = await this.store.getRecovery(context, executionId);
+            const terminalEvent = recovery.events.at(-1);
+            if (!terminalEvent) throw new Error("Agent runtime terminal Event를 찾을 수 없습니다");
+            yield eventView(terminalEvent);
+            return;
+          }
           this.registry.set(executionId, lease);
           const agent = this.agent(context, input.agentHandle);
           const result = await agent.streamText(prompt(input.input), {
@@ -238,6 +283,13 @@ export class VoltAgentRunner implements AgentRunner, StructuredAgentRunner {
           return;
         } catch (error) {
           this.registry.delete(executionId);
+          if (error instanceof RoutedExecutionSettlementError) {
+            state = await this.toTerminalIfRunning(context, executionId, "interrupted", {
+              category: "settlement",
+            });
+            yield eventView(state.event);
+            return;
+          }
           if (active.controller.signal.aborted) {
             const reason = active.controller.signal.reason as unknown;
             state = await this.toTerminalIfRunning(context, executionId, "cancelled", {
@@ -256,6 +308,7 @@ export class VoltAgentRunner implements AgentRunner, StructuredAgentRunner {
             });
             if (failed.fallbackAllowed && emittedTokens === 0) {
               fallbackFromAttemptId = lease.attemptId;
+              fallbackFromLeaseId = lease.sessionLeaseId;
               continue;
             }
           }
@@ -330,13 +383,37 @@ export class VoltAgentRunner implements AgentRunner, StructuredAgentRunner {
     abortSignal: AbortSignal,
   ): Promise<AgentExecutionResult> {
     let fallbackFromAttemptId: string | undefined;
+    let fallbackFromLeaseId: string | undefined;
     for (let attempt = 0; attempt < MAX_FALLBACKS; attempt += 1) {
       let lease: RoutedModelLease | undefined;
       try {
         lease = await this.models.acquire(
           context,
-          this.acquireInput(input, running.execution_id, attempt, fallbackFromAttemptId),
+          await this.acquireInput(
+            context,
+            input,
+            running.execution_id,
+            attempt,
+            fallbackFromAttemptId,
+            fallbackFromLeaseId,
+          ),
         );
+        if (lease.kind === "agent-runtime") {
+          const runtimeResult = await this.executeAgentRuntime(context, input, lease, prompt(input.input), abortSignal);
+          const outcome = await this.settleAgentRuntimeResult(
+            context,
+            running.execution_id,
+            attempt,
+            lease,
+            runtimeResult,
+          );
+          if (outcome.kind === "fallback") {
+            fallbackFromAttemptId = lease.attemptId;
+            fallbackFromLeaseId = lease.sessionLeaseId;
+            continue;
+          }
+          return outcome.result;
+        }
         this.registry.set(running.execution_id, lease);
         const result = await this.agent(context, input.agentHandle).generateText(prompt(input.input), {
           abortSignal,
@@ -361,6 +438,12 @@ export class VoltAgentRunner implements AgentRunner, StructuredAgentRunner {
         return { executionId: running.execution_id, status: "succeeded", output: result.text };
       } catch (error) {
         this.registry.delete(running.execution_id);
+        if (error instanceof RoutedExecutionSettlementError) {
+          const interrupted = await this.toTerminalIfRunning(context, running.execution_id, "interrupted", {
+            category: "settlement",
+          });
+          return this.resultFromExecution(interrupted.execution);
+        }
         if (abortSignal.aborted) {
           const reason = abortSignal.reason as unknown;
           await this.toTerminalIfRunning(context, running.execution_id, "cancelled", { reason });
@@ -376,6 +459,7 @@ export class VoltAgentRunner implements AgentRunner, StructuredAgentRunner {
           });
           if (failed.fallbackAllowed) {
             fallbackFromAttemptId = lease.attemptId;
+            fallbackFromLeaseId = lease.sessionLeaseId;
             continue;
           }
         }
@@ -400,13 +484,44 @@ export class VoltAgentRunner implements AgentRunner, StructuredAgentRunner {
     abortSignal: AbortSignal,
   ): Promise<AgentExecutionResult> {
     let fallbackFromAttemptId: string | undefined;
+    let fallbackFromLeaseId: string | undefined;
     for (let attempt = 0; attempt < MAX_FALLBACKS; attempt += 1) {
       let lease: RoutedModelLease | undefined;
       try {
         lease = await this.models.acquire(
           context,
-          this.acquireInput(input, running.execution_id, attempt, fallbackFromAttemptId),
+          await this.acquireInput(
+            context,
+            input,
+            running.execution_id,
+            attempt,
+            fallbackFromAttemptId,
+            fallbackFromLeaseId,
+          ),
         );
+        if (lease.kind === "agent-runtime") {
+          const runtimeResult = await this.executeAgentRuntime(
+            context,
+            input,
+            lease,
+            prompt(input.input),
+            abortSignal,
+            output,
+          );
+          const outcome = await this.settleAgentRuntimeResult(
+            context,
+            running.execution_id,
+            attempt,
+            lease,
+            runtimeResult,
+          );
+          if (outcome.kind === "fallback") {
+            fallbackFromAttemptId = lease.attemptId;
+            fallbackFromLeaseId = lease.sessionLeaseId;
+            continue;
+          }
+          return outcome.result;
+        }
         this.registry.set(running.execution_id, lease);
         const schema = jsonSchema(
           output.jsonSchema as Parameters<typeof jsonSchema>[0],
@@ -436,6 +551,12 @@ export class VoltAgentRunner implements AgentRunner, StructuredAgentRunner {
         return { executionId: running.execution_id, status: "succeeded", output: result.output };
       } catch (error) {
         this.registry.delete(running.execution_id);
+        if (error instanceof RoutedExecutionSettlementError) {
+          const interrupted = await this.toTerminalIfRunning(context, running.execution_id, "interrupted", {
+            category: "settlement",
+          });
+          return this.resultFromExecution(interrupted.execution);
+        }
         if (abortSignal.aborted) {
           await this.toTerminalIfRunning(context, running.execution_id, "cancelled", {
             reason: abortSignal.reason as unknown,
@@ -452,6 +573,7 @@ export class VoltAgentRunner implements AgentRunner, StructuredAgentRunner {
           });
           if (failed.fallbackAllowed) {
             fallbackFromAttemptId = lease.attemptId;
+            fallbackFromLeaseId = lease.sessionLeaseId;
             continue;
           }
         }
@@ -468,19 +590,133 @@ export class VoltAgentRunner implements AgentRunner, StructuredAgentRunner {
     return this.resultFromExecution(failed.execution);
   }
 
-  private acquireInput(
+  private async executeAgentRuntime(
+    context: TenantContext,
+    input: AgentExecutionInput,
+    lease: RoutedAgentRuntimeLease,
+    inputPrompt: string,
+    abortSignal: AbortSignal,
+    output?: StructuredOutputSpec,
+  ): Promise<RoutedAgentRuntimeResult> {
+    this.agent(context, input.agentHandle);
+    if (output) {
+      if (!lease.executor.executeStructured) {
+        throw new Error("선택한 Agent runtime은 구조화 출력을 지원하지 않습니다");
+      }
+      return await lease.executor.executeStructured({ prompt: inputPrompt, abortSignal }, output);
+    }
+    return await lease.executor.execute({ prompt: inputPrompt, abortSignal });
+  }
+
+  private async settleAgentRuntimeResult(
+    context: TenantContext,
+    executionId: string,
+    attempt: number,
+    lease: RoutedAgentRuntimeLease,
+    result: RoutedAgentRuntimeResult,
+  ): Promise<AgentRuntimeAttemptOutcome> {
+    if (result.outcome === "completed") {
+      await lease.complete({
+        commandId: `${executionId}:model:${String(attempt)}:complete`,
+        inputTokens: result.usage?.inputTokens ?? 0,
+        outputTokens: result.usage?.outputTokens ?? 0,
+      });
+      const current = await this.store.getRecovery(context, executionId);
+      await this.store.transition(context, {
+        commandId: `${executionId}:succeeded`,
+        executionId,
+        expectedVersion: current.execution.version,
+        target: "succeeded",
+        payload: {
+          output: result.value,
+          attemptId: lease.attemptId,
+          sessionLeaseId: lease.sessionLeaseId,
+          providerSessionId: result.sessionId,
+        },
+      });
+      return { kind: "terminal", result: { executionId, status: "succeeded", output: result.value } };
+    }
+    if (result.outcome === "suspended") {
+      const current = await this.store.getRecovery(context, executionId);
+      await this.store.transition(context, {
+        commandId: `${executionId}:suspended`,
+        executionId,
+        expectedVersion: current.execution.version,
+        target: "suspended",
+        payload: {
+          attemptId: lease.attemptId,
+          sessionLeaseId: lease.sessionLeaseId,
+          providerSessionId: result.sessionId,
+          approvalId: result.approvalId,
+        },
+      });
+      return { kind: "terminal", result: { executionId, status: "suspended" } };
+    }
+    if (result.outcome === "cancelled") {
+      await lease.fail({
+        commandId: `${executionId}:model:${String(attempt)}:cancel`,
+        signal: { kind: "cancelled" },
+        emittedTokens: 0,
+        sideEffectsStarted: true,
+        inputTokens: 0,
+        outputTokens: 0,
+      });
+      const cancelled = await this.toTerminalIfRunning(context, executionId, "cancelled", {
+        attemptId: lease.attemptId,
+        sessionLeaseId: lease.sessionLeaseId,
+        ...(result.sessionId ? { providerSessionId: result.sessionId } : {}),
+      });
+      return { kind: "terminal", result: this.resultFromExecution(cancelled.execution) };
+    }
+    const failed = await lease.fail({
+      commandId: `${executionId}:model:${String(attempt)}:fail`,
+      signal: result.signal,
+      emittedTokens: result.emittedTokens,
+      sideEffectsStarted: result.sideEffectsStarted,
+      inputTokens: 0,
+      outputTokens: result.emittedTokens,
+    });
+    if (failed.fallbackAllowed && result.emittedTokens === 0 && !result.sideEffectsStarted) {
+      return { kind: "fallback" };
+    }
+    const target = result.emittedTokens > 0 || result.sideEffectsStarted ? "interrupted" : "failed";
+    const terminal = await this.toTerminalIfRunning(context, executionId, target, {
+      category: result.category,
+      retryable: result.retryable,
+      attemptId: lease.attemptId,
+      sessionLeaseId: lease.sessionLeaseId,
+      ...(result.sessionId ? { providerSessionId: result.sessionId } : {}),
+    });
+    return { kind: "terminal", result: this.resultFromExecution(terminal.execution) };
+  }
+
+  private async acquireInput(
+    context: TenantContext,
     input: AgentExecutionInput,
     executionId: string,
     attempt: number,
     fallbackFromAttemptId?: string,
-  ): AcquireModelInput {
+    fallbackFromLeaseId?: string,
+  ): Promise<AcquireModelInput> {
+    const resolved = await this.executionContext?.resolve(context, {
+      executionId,
+      workId: input.workId,
+      ...(input.taskId ? { taskId: input.taskId } : {}),
+      agentHandle: input.agentHandle,
+    });
     return {
       commandId: `${executionId}:model:${String(attempt)}:reserve`,
+      executionId,
+      workId: input.workId,
+      agentHandle: input.agentHandle,
+      ...(resolved?.workspaceRoot ? { workspaceRoot: resolved.workspaceRoot } : {}),
+      ...(resolved?.instruction ? { instruction: resolved.instruction } : {}),
       routeName: input.modelRoute,
       estimatedTokens: input.estimatedTokens,
       estimatedCostMicros: input.estimatedCostMicros,
       stickyKey: `${input.workId}:${input.agentHandle}`,
       ...(fallbackFromAttemptId ? { fallbackFromAttemptId } : {}),
+      ...(fallbackFromLeaseId ? { fallbackFromLeaseId } : {}),
     };
   }
 

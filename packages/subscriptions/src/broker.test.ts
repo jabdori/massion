@@ -64,27 +64,33 @@ describe("구독 Connector session broker", () => {
 
   afterEach(async () => database.close());
 
-  function request(routeAttemptId: string, fallbackFromLeaseId?: string) {
+  function request(routeAttemptId: string, fallbackFromLeaseId?: string, quotaSnapshotId?: string) {
     return {
       commandId: randomUUID(),
       accountId: "codex-account",
-      visibility: "personal" as const,
+      connectorId: "edge-codex",
+      scope: "personal" as const,
       workId: "work-1",
       agentHandle: "software-engineering.engineering-lead",
       routeAttemptId,
       ...(fallbackFromLeaseId ? { fallbackFromLeaseId } : {}),
+      ...(quotaSnapshotId ? { quotaSnapshotId } : {}),
     };
   }
 
   it("출력 전 재시도 가능 실패만 다음 Connector session으로 이동한다", async () => {
     const first = await broker.acquire(context, request("route-attempt-1"));
-    await expect(first.fail({ emittedTokens: 0, signal: { kind: "timeout" } })).resolves.toMatchObject({
+    await expect(
+      first.fail({ emittedTokens: 0, sideEffectsStarted: false, signal: { kind: "timeout" } }),
+    ).resolves.toMatchObject({
       status: "failed",
       fallbackAllowed: true,
     });
 
     const second = await broker.acquire(context, request("route-attempt-2", first.leaseId));
-    await expect(second.fail({ emittedTokens: 1, signal: { kind: "timeout" } })).resolves.toMatchObject({
+    await expect(
+      second.fail({ emittedTokens: 1, sideEffectsStarted: false, signal: { kind: "timeout" } }),
+    ).resolves.toMatchObject({
       status: "failed",
       fallbackAllowed: false,
     });
@@ -96,20 +102,42 @@ describe("구독 Connector session broker", () => {
   it("출력 전 인증 실패는 다음 Connector session으로 이동할 수 있다", async () => {
     const first = await broker.acquire(context, request("route-attempt-authentication"));
 
-    await expect(first.fail({ emittedTokens: 0, signal: { kind: "authentication" } })).resolves.toMatchObject({
+    await expect(
+      first.fail({ emittedTokens: 0, sideEffectsStarted: false, signal: { kind: "authentication" } }),
+    ).resolves.toMatchObject({
       status: "failed",
       fallbackAllowed: true,
     });
   });
 
+  it("출력이 없어도 부작용이 시작됐으면 다음 Connector session으로 이동하지 않는다", async () => {
+    const first = await broker.acquire(context, request("route-attempt-side-effect"));
+
+    await expect(
+      first.fail({ emittedTokens: 0, sideEffectsStarted: true, signal: { kind: "timeout" } }),
+    ).resolves.toMatchObject({
+      status: "failed",
+      fallbackAllowed: false,
+    });
+  });
+
   it("같은 route attempt를 재대여하지 않고 활성 lease를 재시작 뒤 복구한다", async () => {
-    const lease = await broker.acquire(context, request("route-attempt-recovery"));
+    const lease = await broker.acquire(context, request("route-attempt-recovery", undefined, "quota-snapshot-1"));
     await expect(broker.acquire(context, request("route-attempt-recovery"))).rejects.toThrow("이미 Session Lease");
 
     const recovered = await broker.recover(context);
     expect(recovered).toEqual([
-      expect.objectContaining({ leaseId: lease.leaseId, routeAttemptId: "route-attempt-recovery", status: "active" }),
+      expect.objectContaining({
+        leaseId: lease.leaseId,
+        routeAttemptId: "route-attempt-recovery",
+        quotaSnapshotId: "quota-snapshot-1",
+        status: "active",
+      }),
     ]);
+
+    const active = await broker.recoverActive(context);
+    await active[0]?.complete();
+    expect(await broker.recover(context)).toEqual([]);
   });
 
   it("활성 lease의 Connector로만 bounded RPC를 전달한다", async () => {

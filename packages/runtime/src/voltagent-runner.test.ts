@@ -10,7 +10,12 @@ import { createDatabase, type MassionDatabase } from "@massion/storage";
 import type { AgentExecutionInput } from "./contracts.js";
 import { MASSION_RUNTIME_EXECUTION_CONTEXT_KEY, MASSION_TENANT_CONTEXT_KEY } from "./agent-configuration.js";
 import { RuntimeExecutionStore } from "./execution-store.js";
-import type { RoutedModelFactory, RoutedModelLease } from "./model-factory.js";
+import type {
+  RoutedAgentRuntimeLease,
+  RoutedAgentRuntimeResult,
+  RoutedModelFactory,
+  RoutedModelLease,
+} from "./model-factory.js";
 import { normalizeVoltAgentStreamPart, RoutedModelRegistry, VoltAgentRunner } from "./voltagent-runner.js";
 
 const USAGE = {
@@ -94,9 +99,27 @@ describe("VoltAgent AgentRunner", () => {
     fallbackAllowed = false,
   ): RoutedModelLease {
     return {
+      kind: "model",
       attemptId,
       credentialId: crypto.randomUUID(),
       model,
+      complete: vi.fn().mockResolvedValue({ status: "succeeded" } as RouteAttempt),
+      fail: vi.fn().mockResolvedValue({ status: "failed", fallbackAllowed }),
+    };
+  }
+
+  function agentLease(
+    result: RoutedAgentRuntimeResult,
+    attemptId = crypto.randomUUID(),
+    sessionLeaseId = crypto.randomUUID(),
+    fallbackAllowed = false,
+  ): RoutedAgentRuntimeLease {
+    return {
+      kind: "agent-runtime",
+      attemptId,
+      credentialId: crypto.randomUUID(),
+      sessionLeaseId,
+      executor: { execute: vi.fn().mockResolvedValue(result) },
       complete: vi.fn().mockResolvedValue({ status: "succeeded" } as RouteAttempt),
       fail: vi.fn().mockResolvedValue({ status: "failed", fallbackAllowed }),
     };
@@ -127,6 +150,120 @@ describe("VoltAgent AgentRunner", () => {
       "execution_succeeded",
     ]);
     expect(registry.size).toBe(0);
+  });
+
+  it("Agent runtime lease는 VoltAgent LanguageModel로 감싸지 않고 명시적 executor로 실행한다", async () => {
+    const routed = agentLease({
+      outcome: "completed",
+      executionId: "provider-execution-1",
+      sessionId: "provider-session-1",
+      value: "native agent result",
+      usage: { inputTokens: 5, outputTokens: 2 },
+    });
+    const acquire = vi.fn().mockResolvedValue(routed);
+    const executionContext = {
+      resolve: vi.fn().mockResolvedValue({
+        workspaceRoot: "/tmp/massion-work-1",
+        instruction: "Representative instruction",
+      }),
+    };
+    const runner = new VoltAgentRunner(voltAgent, store, { acquire }, registry, undefined, executionContext);
+
+    const result = await runner.execute(context, input());
+
+    expect(result).toMatchObject({ status: "succeeded", output: "native agent result" });
+    expect(routed.executor.execute).toHaveBeenCalledWith({
+      prompt: "hello",
+      abortSignal: expect.any(AbortSignal),
+    });
+    expect(routed.complete).toHaveBeenCalledWith(expect.objectContaining({ inputTokens: 5, outputTokens: 2 }));
+    expect(acquire).toHaveBeenCalledWith(
+      context,
+      expect.objectContaining({
+        executionId: result.executionId,
+        workId: "work-1",
+        agentHandle: "representative",
+        workspaceRoot: "/tmp/massion-work-1",
+        instruction: "Representative instruction",
+      }),
+    );
+    expect(registry.size).toBe(0);
+  });
+
+  it("Agent runtime 출력 전 실패는 Router attempt와 Broker lease fallback ID를 함께 넘긴다", async () => {
+    const first = agentLease(
+      {
+        outcome: "failed",
+        executionId: "provider-execution-failed",
+        category: "timeout",
+        retryable: true,
+        signal: { kind: "timeout" },
+        emittedTokens: 0,
+        sideEffectsStarted: false,
+      },
+      "agent-attempt-1",
+      "agent-lease-1",
+      true,
+    );
+    const second = lease(
+      new MockLanguageModelV3({
+        doGenerate: {
+          content: [{ type: "text", text: "fallback model" }],
+          finishReason: "stop",
+          usage: USAGE,
+          warnings: [],
+        },
+      }),
+      "model-attempt-2",
+    );
+    const acquire = vi.fn().mockResolvedValueOnce(first).mockResolvedValueOnce(second);
+    const executionContext = {
+      resolve: vi.fn().mockResolvedValue({
+        workspaceRoot: "/tmp/massion-work-1",
+        instruction: "Representative instruction",
+      }),
+    };
+    const runner = new VoltAgentRunner(voltAgent, store, { acquire }, registry, undefined, executionContext);
+
+    const result = await runner.execute(context, input());
+
+    expect(result).toMatchObject({ status: "succeeded", output: "fallback model" });
+    expect(first.fail).toHaveBeenCalledWith(expect.objectContaining({ signal: { kind: "timeout" }, emittedTokens: 0 }));
+    expect(acquire.mock.calls[1]?.[1]).toMatchObject({
+      fallbackFromAttemptId: "agent-attempt-1",
+      fallbackFromLeaseId: "agent-lease-1",
+    });
+  });
+
+  it("Agent runtime이 출력을 만든 뒤 실패하면 자동 fallback하지 않고 interrupted로 종료한다", async () => {
+    const routed = agentLease(
+      {
+        outcome: "failed",
+        executionId: "provider-execution-output",
+        category: "provider-unavailable",
+        retryable: true,
+        signal: { kind: "network" },
+        emittedTokens: 1,
+        sideEffectsStarted: false,
+      },
+      "agent-attempt-output",
+      "agent-lease-output",
+      true,
+    );
+    const acquire = vi.fn().mockResolvedValue(routed);
+    const executionContext = {
+      resolve: vi.fn().mockResolvedValue({
+        workspaceRoot: "/tmp/massion-work-1",
+        instruction: "Representative instruction",
+      }),
+    };
+    const runner = new VoltAgentRunner(voltAgent, store, { acquire }, registry, undefined, executionContext);
+
+    const result = await runner.execute(context, input());
+
+    expect(result.status).toBe("interrupted");
+    expect(acquire).toHaveBeenCalledOnce();
+    expect(routed.fail).toHaveBeenCalledWith(expect.objectContaining({ emittedTokens: 1, outputTokens: 1 }));
   });
 
   it("JSON Schema로 검증한 structured object를 Runtime 계보와 함께 반환한다", async () => {
