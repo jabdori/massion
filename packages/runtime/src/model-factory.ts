@@ -61,6 +61,32 @@ export interface RoutedModelFactory {
   acquire(context: TenantContext, input: AcquireModelInput): Promise<RoutedModelLease>;
 }
 
+function isOfficialOpenAiApi(endpoint: ProviderEndpoint): boolean {
+  try {
+    const url = new URL(endpoint.base_url);
+    return (
+      url.protocol === "https:" &&
+      url.hostname === "api.openai.com" &&
+      url.port === "" &&
+      url.username === "" &&
+      url.password === "" &&
+      url.search === "" &&
+      url.hash === "" &&
+      url.pathname.replace(/\/$/u, "") === "/v1"
+    );
+  } catch {
+    return false;
+  }
+}
+
+function usesGpt56Responses(selection: ProviderModelSelection): boolean {
+  return (
+    selection.provider.adapter_kind === "ai-sdk" &&
+    isOfficialOpenAiApi(selection.endpoint) &&
+    selection.modelId === "gpt-5.6-sol"
+  );
+}
+
 export class OpenAICompatibleModelBuilder implements ProviderModelBuilder {
   public build(selection: ProviderModelSelection): LanguageModel {
     const root = selection.endpoint.base_url.replace(/\/$/u, "");
@@ -70,7 +96,7 @@ export class OpenAICompatibleModelBuilder implements ProviderModelBuilder {
       apiKey: selection.secret,
       baseURL,
     });
-    return provider.chat(selection.modelId);
+    return usesGpt56Responses(selection) ? provider.responses(selection.modelId) : provider.chat(selection.modelId);
   }
 }
 
