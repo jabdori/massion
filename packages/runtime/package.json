@@ -14,10 +14,11 @@
   ],
   "scripts": {
     "build": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\" && tsc -p tsconfig.json",
-    "test": "pnpm --filter @massion/identity build && pnpm --filter @massion/organization exec tsc -p tsconfig.json && vitest run",
+    "test": "pnpm --filter @massion/identity build && pnpm --filter @massion/organization exec tsc -p tsconfig.json && pnpm --filter @massion/subscriptions build && vitest run",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@agentclientprotocol/sdk": "1.2.1",
     "@ai-sdk/openai": "3.0.83",
     "@ai-sdk/provider": "3.0.14",
     "@ai-sdk/provider-utils": "4.0.38",
@@ -27,6 +28,7 @@
     "@massion/organization": "workspace:*",
     "@massion/router": "workspace:*",
     "@massion/storage": "workspace:*",
+    "@massion/subscriptions": "workspace:*",
     "@openai/codex-sdk": "0.144.1",
     "@voltagent/core": "2.9.0",
     "@voltagent/logger": "2.0.2",
