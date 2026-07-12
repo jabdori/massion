@@ -279,7 +279,7 @@ export class SubscriptionQuotaService {
       await tx.query(
         `CREATE subscription_audit_event CONTENT {
           event_id: $event_id, organization_id: $organization_id, actor_user_id: $actor_user_id,
-          command_id: $command_id, event_type: 'subscription_quota_recorded', resource_id: $resource_id,
+          command_id: $command_id, event_type: 'subscription_quota_observed', resource_id: $resource_id,
           request_hash: $request_hash, result_json: $result_json, created_at: time::now()
         };`,
         {

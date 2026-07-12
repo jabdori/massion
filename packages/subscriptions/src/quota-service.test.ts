@@ -38,8 +38,9 @@ describe("구독 할당량 snapshot과 현재 projection", () => {
   afterEach(async () => database.close());
 
   it("복수 window를 정규화하고 append-only snapshot과 현재 projection을 함께 갱신한다", async () => {
+    const commandId = randomUUID();
     const recorded = await quota.record(context, {
-      commandId: randomUUID(),
+      commandId,
       accountId: "quota-account",
       windows: [
         {
@@ -67,6 +68,13 @@ describe("구독 할당량 snapshot과 현재 projection", () => {
     expect(recorded.current).toMatchObject({ minimumRemainingRatio: 0.25, exhausted: false });
     expect(recorded.current.earliestResetAt).toBe("2030-01-01T05:00:00.000Z");
     await expect(quota.current(context, "quota-account")).resolves.toEqual(recorded.current);
+
+    const [events] = await database.query<[Array<{ event_type: string; resource_id: string }>]>(
+      `SELECT event_type, resource_id FROM subscription_audit_event
+       WHERE organization_id = $organization_id AND command_id = $command_id LIMIT 1;`,
+      { organization_id: context.organizationId, command_id: commandId },
+    );
+    expect(events[0]).toEqual({ event_type: "subscription_quota_observed", resource_id: "quota-account" });
 
     await expect(
       database.query("UPDATE subscription_quota_snapshot SET exhausted = true WHERE account_id = 'quota-account';"),
