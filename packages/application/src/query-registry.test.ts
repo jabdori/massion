@@ -38,6 +38,13 @@ const readModel: ApplicationReadModel = {
       status: "pending",
       requestedBy: "agent",
       expiresAt: "2026-07-11T05:00:00.000Z",
+      displayPreview: {
+        kind: "command",
+        title: "명령 실행",
+        executable: "git",
+        arguments: ["status", "--short"],
+        cwd: "/workspace/project",
+      },
     },
   ],
   extensions: async () => [],
@@ -68,6 +75,38 @@ describe("ApplicationQueryRegistry", () => {
       category: "validation",
     });
     await expect(registry.query(context, ["work:read"], "work.list", { injected: true })).rejects.toThrow("알 수 없는");
+  });
+
+  it("승인 목록과 단건 조회에 비밀 제거 표시 미리보기만 투영한다", async () => {
+    const registry = new ApplicationQueryRegistry();
+    registerApplicationQueries(registry, { readModel });
+
+    await expect(registry.query(context, ["approval:read"], "governance.approval.list", {})).resolves.toMatchObject({
+      data: [
+        {
+          approvalId: "query-approval",
+          displayPreview: {
+            kind: "command",
+            title: "명령 실행",
+            executable: "git",
+            arguments: ["status", "--short"],
+            cwd: "/workspace/project",
+          },
+        },
+      ],
+    });
+    await expect(
+      registry.query(context, ["approval:read"], "governance.approval.get", { approvalId: "query-approval" }),
+    ).resolves.toMatchObject({
+      data: {
+        approvalId: "query-approval",
+        displayPreview: {
+          kind: "command",
+          executable: "git",
+          arguments: ["status", "--short"],
+        },
+      },
+    });
   });
 
   it("성장 제안 목록을 secret patch 없이 공개한다", async () => {
@@ -271,6 +310,7 @@ describe("ApplicationQueryRegistry", () => {
             displayName: "검증된 제공자",
             authKinds: ["device-code"],
             executionKind: "agent-runtime",
+            connectionSurface: "edge-only",
             billingKinds: ["subscription"],
             modelDiscovery: "protocol",
             quotaDiscovery: "none",
@@ -280,6 +320,20 @@ describe("ApplicationQueryRegistry", () => {
             officialDocumentation: "https://example.com/provider",
             credentialPolicies: ["adaptive", "quota-headroom"],
             verified: true,
+            runtimeCapabilities: {
+              accountIsolation: "single-os-keyring-account",
+              output: "final-text-only",
+              cancellation: "protocol",
+              session: "protocol",
+              permissionBridge: "protocol",
+              multipleAccounts: "one-account-per-connector",
+              maturity: "experimental",
+              approvalModes: ["automatic", "deny"],
+              approvalModesBySurface: {
+                server: ["automatic", "review", "deny"],
+                edge: ["automatic", "deny"],
+              },
+            },
             clientSecret: "provider-client-secret",
           },
         ],
@@ -373,6 +427,7 @@ describe("ApplicationQueryRegistry", () => {
           {
             providerId: "verified-provider",
             credentialPolicy: "quota-headroom",
+            approvalMode: "deny",
             version: 2,
             source: "configured",
             updatedAt: "2026-07-12T00:00:00.000Z",
@@ -388,6 +443,9 @@ describe("ApplicationQueryRegistry", () => {
     const policy = await registry.query(context, ["subscription:read"], "subscription.policy", {
       providerId: "verified-provider",
     });
+    expect(policy).toMatchObject({
+      data: [expect.objectContaining({ providerId: "verified-provider", approvalMode: "deny" })],
+    });
     const doctor = await registry.query(context, ["subscription:read"], "subscription.doctor", {
       accountId: "subscription-account-1",
     });
@@ -397,6 +455,7 @@ describe("ApplicationQueryRegistry", () => {
         {
           providerId: "verified-provider",
           displayName: "검증된 제공자",
+          connectionSurface: "edge-only",
           modelDiscovery: "protocol",
           protocol: "acp",
           protocols: ["acp"],
@@ -404,6 +463,14 @@ describe("ApplicationQueryRegistry", () => {
           officialDocumentation: "https://example.com/provider",
           credentialPolicies: ["adaptive", "quota-headroom"],
           verified: true,
+          runtimeCapabilities: {
+            accountIsolation: "single-os-keyring-account",
+            approvalModes: ["automatic", "deny"],
+            approvalModesBySurface: {
+              server: ["automatic", "review", "deny"],
+              edge: ["automatic", "deny"],
+            },
+          },
         },
       ],
     });

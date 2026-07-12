@@ -257,4 +257,66 @@ describe("Approval Inbox", () => {
     expect(cancelled.status).toBe("cancelled");
     expect(repeated).toEqual(cancelled);
   });
+
+  it("provider process가 사라지면 승인됐지만 아직 소비되지 않은 요청도 취소할 수 있다", async () => {
+    const governed = await decision();
+    const request = await approvals.request(context, {
+      commandId: crypto.randomUUID(),
+      decisionId: governed.decisionId,
+      resourceRevision: 3,
+    });
+    await approvals.vote(context, {
+      commandId: crypto.randomUUID(),
+      approvalId: request.approval_id,
+      vote: "approve",
+      reason: "승인",
+    });
+
+    await expect(
+      approvals.cancel(context, {
+        commandId: crypto.randomUUID(),
+        approvalId: request.approval_id,
+        reason: "provider process 복구 불가",
+      }),
+    ).resolves.toMatchObject({ status: "cancelled" });
+  });
+
+  it("안전한 표시 미리보기를 전용 필드에 저장하고 기존 승인 명령의 멱등성에는 포함하지 않는다", async () => {
+    const governed = await decision();
+    const commandId = crypto.randomUUID();
+    const first = await approvals.request(context, {
+      commandId,
+      decisionId: governed.decisionId,
+      resourceRevision: 3,
+      displayPreview: {
+        kind: "command",
+        title: "명령 실행",
+        executable: "git",
+        arguments: ["status", "--token", "approval-secret-never-store"],
+        cwd: "/workspace/project",
+      },
+    });
+    const repeated = await approvals.request(context, {
+      commandId,
+      decisionId: governed.decisionId,
+      resourceRevision: 3,
+      displayPreview: {
+        kind: "provider",
+        title: "재시도에서 바뀐 미리보기",
+      },
+    });
+
+    expect(repeated.approval_id).toBe(first.approval_id);
+    expect(JSON.parse(first.display_preview_json ?? "null")).toEqual({
+      kind: "command",
+      title: "명령 실행",
+      executable: "git",
+      arguments: ["status", "--token", "[민감값 제거]"],
+      cwd: "/workspace/project",
+    });
+    const events = await approvals.listEvents(context, first.approval_id);
+    expect(events).toHaveLength(1);
+    expect(events[0]?.request_json).not.toContain("approval-secret-never-store");
+    expect(events[0]?.request_json).not.toContain("재시도에서 바뀐 미리보기");
+  });
 });

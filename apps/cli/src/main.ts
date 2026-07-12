@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -10,13 +11,29 @@ import { executeCliInvocation } from "./commands.js";
 import { CliConfigStore } from "./config.js";
 import { processJsonLines, writeWithBackpressure } from "./jsonl.js";
 import { initializeCli } from "./init.js";
-import { LocalDaemonManager } from "./local.js";
+import { LocalDaemonManager, resolveLocalPaths } from "./local.js";
 import { parseCliArguments } from "./parser.js";
 import { renderCliOutput } from "./render.js";
 import { runHeadless } from "./run.js";
+import { connectLocalServerSubscription } from "./subscription-login.js";
 import { resolveTokenReference } from "./token.js";
 
-const HELP = `mass - Massion AgentOS command line\n\n사용법: mass <version|local|init|status|run|resume|watch|org|work|chat|task|approval|assurance|runtime|provider|subscription|ext|growth|doctor> [options]\n\n구독 profile 등록: mass subscription connect PROVIDER < profile.json\n  기존 Connector profile metadata만 등록합니다. OAuth/device 로그인을 수행하지 않습니다.\n`;
+const HELP = `mass - Massion AgentOS command line\n\n사용법: mass <version|local|init|status|run|resume|watch|org|work|chat|task|approval|assurance|runtime|provider|subscription|ext|growth|doctor> [options]\n\nEdge Connector 등록 코드: mass subscription enroll edge <model|agent-runtime> [ttlMs]\n로컬 Codex 소비자 구독 로그인: mass subscription connect openai-codex [별칭] [--model GPT-5.6-ID]\nMiniMax 모델 구독 키 연결: mass subscription connect-model minimax-token-plan < model-connection.json\n고급 Connector 연결: mass subscription connect-advanced PROVIDER < connection.json\n구독 정책: mass subscription policy PROVIDER ACCOUNT_POLICY <automatic|review|deny> [EXPECTED_REVISION]\n실행 구독 계보: mass runtime lineage EXECUTION_ID\n구독 공유 승인 재개: mass subscription share ACCOUNT_ID APPROVAL_ID ORIGINAL_COMMAND_ID\n`;
+
+export function assertSecretTransportEndpoint(value: string): void {
+  let endpoint: URL;
+  try {
+    endpoint = new URL(value);
+  } catch {
+    throw new Error("CLI endpoint가 유효하지 않습니다");
+  }
+  if (endpoint.username || endpoint.password) throw new Error("CLI endpoint URL에 자격 증명을 포함할 수 없습니다");
+  if (endpoint.protocol === "https:") return;
+  if (endpoint.protocol === "http:" && new Set(["127.0.0.1", "[::1]", "localhost"]).has(endpoint.hostname)) {
+    return;
+  }
+  throw new Error("구독 secret 전송에는 외부 HTTPS 또는 local loopback HTTP endpoint가 필요합니다");
+}
 
 async function readStdin(maximum = 1024 * 1024): Promise<Buffer> {
   const chunks: Buffer[] = [];
@@ -176,6 +193,22 @@ export async function runCli(argv = process.argv.slice(2)): Promise<number> {
         const archive = await readFile(path);
         if (archive.length > 64 * 1024 * 1024) throw new Error("Extension artifact byte 상한을 초과했습니다");
         return archive;
+      },
+      connectServerSubscription: async (connection) =>
+        await connectLocalServerSubscription(authenticated, connection, {
+          endpoint: profile.endpoint,
+          connectorDirectory: resolveLocalPaths().connectorDirectory,
+          environment: process.env,
+        }),
+      connectServerModelSubscription: async (connection) => {
+        assertSecretTransportEndpoint(profile.endpoint);
+        return await authenticated.command({
+          schemaVersion: "massion.application.v1",
+          commandId: randomUUID(),
+          correlationId: randomUUID(),
+          operation: "subscription.server.connect-model",
+          payload: connection,
+        });
       },
     });
     process.stdout.write(

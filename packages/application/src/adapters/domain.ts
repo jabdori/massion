@@ -5,6 +5,8 @@ import type { GrowthGateway } from "@massion/growth";
 import type { OrganizationGraphService } from "@massion/organization";
 import type { ModelRouter, ProviderService } from "@massion/router";
 import type { AgentRunner } from "@massion/runtime";
+import { listSubscriptionProviderManifests, subscriptionProviderApprovalModes } from "@massion/subscriptions";
+import type { SubscriptionAuthKind, SubscriptionProviderProtocol } from "@massion/subscriptions";
 import type { WorkService } from "@massion/work";
 
 import type { ApplicationCommandDescriptor, ApplicationCommandRegistry } from "../command-registry.js";
@@ -12,11 +14,14 @@ import type { ApplicationCommandResultV1, ApplicationCommandV1 } from "../contra
 import { ApplicationError } from "../errors.js";
 import type {
   SubscriptionAccountCommands,
+  SubscriptionConnectionCommands,
   SubscriptionConnectorCommands,
+  SubscriptionDataDisclosureCommands,
+  SubscriptionServerConnectionCommands,
   SubscriptionPolicyStore,
   SubscriptionPolicyView,
 } from "../subscription-operations.js";
-import { SUBSCRIPTION_CREDENTIAL_POLICIES } from "../subscription-operations.js";
+import { SUBSCRIPTION_APPROVAL_MODES, SUBSCRIPTION_CREDENTIAL_POLICIES } from "../subscription-operations.js";
 
 export interface ApplicationDomainDependencies {
   readonly works?: Pick<
@@ -45,7 +50,10 @@ export interface ApplicationDomainDependencies {
   >;
   readonly router?: Pick<ModelRouter, "registerModel" | "createRoute" | "addCandidate">;
   readonly subscriptionAccounts?: SubscriptionAccountCommands;
+  readonly subscriptionConnections?: SubscriptionConnectionCommands;
+  readonly subscriptionServerConnections?: SubscriptionServerConnectionCommands;
   readonly subscriptionConnectors?: SubscriptionConnectorCommands;
+  readonly subscriptionDataDisclosures?: SubscriptionDataDisclosureCommands;
   readonly subscriptionPolicy?: SubscriptionPolicyStore;
 }
 
@@ -78,12 +86,85 @@ function strings(value: unknown, label: string): readonly string[] {
   return value.map((item) => string(item, label));
 }
 
+function boolean(value: unknown, label: string): boolean {
+  if (typeof value !== "boolean") throw new Error(`${label} boolean이 유효하지 않습니다`);
+  return value;
+}
+
+function subscriptionAuthKind(value: unknown): SubscriptionAuthKind {
+  const candidate = string(value, "authKind");
+  if (!new Set(["oauth", "device-code", "api-key", "subscription-key", "cli-profile", "acp"]).has(candidate)) {
+    throw new Error("지원하지 않는 구독 인증 방식입니다");
+  }
+  return candidate as SubscriptionAuthKind;
+}
+
+function subscriptionModelAuthKind(value: unknown): Extract<SubscriptionAuthKind, "api-key" | "subscription-key"> {
+  const candidate = subscriptionAuthKind(value);
+  if (candidate !== "api-key" && candidate !== "subscription-key") {
+    throw new Error("model 구독 인증 방식이 유효하지 않습니다");
+  }
+  return candidate;
+}
+
+function subscriptionSecret(value: unknown): string {
+  if (
+    typeof value !== "string" ||
+    value.trim().length === 0 ||
+    Buffer.byteLength(value, "utf8") > 16 * 1024 ||
+    /[\0\r\n]/u.test(value)
+  ) {
+    throw new Error("구독 Credential secret이 유효하지 않습니다");
+  }
+  return value;
+}
+
+function subscriptionProtocol(value: unknown): SubscriptionProviderProtocol {
+  const candidate = string(value, "protocol");
+  if (
+    !new Set(["openai", "anthropic", "gemini", "acp", "cli-process", "codex-app-server", "claude-agent-sdk"]).has(
+      candidate,
+    )
+  ) {
+    throw new Error("지원하지 않는 구독 Provider protocol입니다");
+  }
+  return candidate as SubscriptionProviderProtocol;
+}
+
 function subscriptionCredentialPolicy(value: unknown): SubscriptionPolicyView["credentialPolicy"] {
   const candidate = string(value, "credentialPolicy");
   if (!SUBSCRIPTION_CREDENTIAL_POLICIES.includes(candidate as never)) {
     throw new Error("지원하지 않는 구독 계정 선택 정책입니다");
   }
   return candidate as SubscriptionPolicyView["credentialPolicy"];
+}
+
+function subscriptionApprovalMode(value: unknown): SubscriptionPolicyView["approvalMode"] {
+  const candidate = string(value, "approvalMode");
+  if (!SUBSCRIPTION_APPROVAL_MODES.includes(candidate as never)) {
+    throw new Error("지원하지 않는 구독 승인 방식입니다");
+  }
+  return candidate as SubscriptionPolicyView["approvalMode"];
+}
+
+function providerApprovalMode(providerId: string, value: unknown): SubscriptionPolicyView["approvalMode"] {
+  const manifest = listSubscriptionProviderManifests().find((candidate) => candidate.id === providerId);
+  if (manifest?.connectionSurface === "unavailable") {
+    throw new Error("공개 연결 표면이 없는 Provider에는 구독 실행 정책이 허용되지 않습니다");
+  }
+  const declared = manifest ? subscriptionProviderApprovalModes(manifest) : undefined;
+  const selected =
+    value === undefined
+      ? declared?.includes("review")
+        ? "review"
+        : declared?.includes("deny")
+          ? "deny"
+          : (declared?.[0] ?? "review")
+      : subscriptionApprovalMode(value);
+  if (declared && !declared.includes(selected)) {
+    throw new Error(`이 Provider에서 허용되지 않는 구독 승인 방식입니다: ${selected}`);
+  }
+  return selected;
 }
 
 function expectedRevision(command: ApplicationCommandV1): number {
@@ -248,10 +329,42 @@ function subscriptionConnectorData(connector: {
   };
 }
 
+function subscriptionServerConnectorData(connector: {
+  readonly connectorId: string;
+  readonly providerId: string;
+  readonly executionKind: string;
+  readonly runtimeId: string;
+  readonly version: string;
+  readonly capabilities: readonly string[];
+  readonly status: string;
+  readonly trustOrigin: string;
+  readonly processGeneration?: number;
+  readonly lastHealthAt?: string;
+}) {
+  return {
+    connectorId: connector.connectorId,
+    providerId: connector.providerId,
+    executionKind: connector.executionKind,
+    runtimeId: connector.runtimeId,
+    version: connector.version,
+    capabilities: connector.capabilities,
+    status: connector.status,
+    trustOrigin: connector.trustOrigin,
+    ...(connector.processGeneration === undefined ? {} : { processGeneration: connector.processGeneration }),
+    ...(connector.lastHealthAt === undefined ? {} : { lastHealthAt: connector.lastHealthAt }),
+  };
+}
+
+function subscriptionProfileHandle(value: string): string {
+  if (!/^[a-f0-9]{64}\/[a-f0-9]{64}$/u.test(value)) throw new Error("구독 profile handle이 유효하지 않습니다");
+  return value;
+}
+
 function subscriptionPolicyData(policy: SubscriptionPolicyView) {
   return {
     providerId: policy.providerId,
     credentialPolicy: policy.credentialPolicy,
+    approvalMode: policy.approvalMode,
     version: policy.version,
     source: policy.source,
     ...(policy.updatedAt === undefined ? {} : { updatedAt: policy.updatedAt }),
@@ -742,6 +855,7 @@ function registerRuntime(
 function registerApprovals(
   registry: ApplicationCommandRegistry,
   approvals: NonNullable<ApplicationDomainDependencies["approvals"]>,
+  runtime?: ApplicationDomainDependencies["runtime"],
 ): void {
   register(registry, {
     operation: "approval.vote",
@@ -756,6 +870,14 @@ function registerApprovals(
         vote: string(value.vote, "vote") as "approve" | "reject",
         reason: string(value.reason, "reason"),
       });
+      if (
+        runtime &&
+        voted.execution_id &&
+        voted.resume_target === "runtime-subscription" &&
+        (voted.status === "approved" || voted.status === "rejected")
+      ) {
+        await runtime.resume(context, voted.execution_id, { approvalId: voted.approval_id });
+      }
       return result(command, {
         resource: { type: "Approval", id: voted.approval_id, revision: voted.revision },
         data: { approvalId: voted.approval_id, status: voted.status, revision: voted.revision },
@@ -1267,6 +1389,31 @@ function registerSubscriptions(
   registry: ApplicationCommandRegistry,
   dependencies: ApplicationDomainDependencies,
 ): void {
+  const dataDisclosures = dependencies.subscriptionDataDisclosures;
+  if (dataDisclosures) {
+    register(registry, {
+      operation: "subscription.data-disclosure.acknowledge",
+      requiredScopes: ["subscription:write"],
+      allowedRoles: ["owner", "admin", "member"],
+      recovery: "replay-domain",
+      validate: (value) => payload(value, ["providerId", "version"], ["providerId", "version"]),
+      async handle(context, command, value) {
+        const acknowledgement = await dataDisclosures.acknowledge(context, {
+          commandId: command.commandId,
+          providerId: string(value.providerId, "providerId"),
+          version: string(value.version, "version"),
+        });
+        return result(command, {
+          resource: {
+            type: "SubscriptionDataDisclosureAcknowledgement",
+            id: `${acknowledgement.providerId}:${acknowledgement.version}`,
+          },
+          data: acknowledgement,
+        });
+      },
+    });
+  }
+
   const connectors = dependencies.subscriptionConnectors;
   if (connectors) {
     register(registry, {
@@ -1321,10 +1468,176 @@ function registerSubscriptions(
         });
       },
     });
+
+    register(registry, {
+      operation: "subscription.connector.revoke",
+      requiredScopes: ["subscription:write"],
+      allowedRoles: ["owner", "admin", "member"],
+      recovery: "replay-domain",
+      validate: (value) => payload(value, ["connectorId"], ["connectorId"]),
+      async handle(context, command, value) {
+        const connector = await connectors.revoke(context, string(value.connectorId, "connectorId"));
+        return result(command, {
+          resource: { type: "SubscriptionConnector", id: connector.connector_id },
+          data: subscriptionConnectorData(connector),
+        });
+      },
+    });
+  }
+
+  const serverConnections = dependencies.subscriptionServerConnections;
+  if (serverConnections) {
+    register(registry, {
+      operation: "subscription.server.connect-model",
+      requiredScopes: ["subscription:write"],
+      allowedRoles: ["owner", "admin", "member"],
+      recovery: "replay-domain",
+      retryFailedCommand: true,
+      validate: (value) =>
+        payload(
+          value,
+          [
+            "providerId",
+            "alias",
+            "authKind",
+            "billingKind",
+            "secret",
+            "endpointUrl",
+            "protocol",
+            "acceptExperimental",
+            "priority",
+            "weight",
+          ],
+          ["providerId", "alias", "authKind", "billingKind", "secret"],
+        ),
+      async handle(context, command, value) {
+        const connected = await serverConnections.connectModel(context, {
+          commandId: command.commandId,
+          providerId: string(value.providerId, "providerId"),
+          alias: string(value.alias, "alias"),
+          authKind: subscriptionModelAuthKind(value.authKind),
+          billingKind: string(value.billingKind, "billingKind"),
+          secret: subscriptionSecret(value.secret),
+          ...(value.endpointUrl === undefined ? {} : { endpointUrl: string(value.endpointUrl, "endpointUrl") }),
+          ...(value.protocol === undefined ? {} : { protocol: subscriptionProtocol(value.protocol) }),
+          ...(value.acceptExperimental === undefined
+            ? {}
+            : { acceptExperimental: boolean(value.acceptExperimental, "acceptExperimental") }),
+          ...(value.priority === undefined ? {} : { priority: integer(value.priority, "priority") }),
+          ...(value.weight === undefined ? {} : { weight: integer(value.weight, "weight", 1) }),
+        });
+        return result(command, {
+          resource: {
+            type: "SubscriptionAccount",
+            id: connected.account.account_id,
+            revision: connected.account.version,
+          },
+          data: {
+            ...subscriptionAccountData(connected.account),
+            connectorStatus: connected.connector.status,
+          },
+        });
+      },
+    });
+
+    register(registry, {
+      operation: "subscription.server.prepare",
+      requiredScopes: ["subscription:write"],
+      allowedRoles: ["owner", "admin", "member"],
+      recovery: "replay-domain",
+      validate: (value) =>
+        payload(
+          value,
+          ["providerId", "alias", "authKind", "billingKind", "priority", "weight"],
+          ["providerId", "alias", "authKind", "billingKind"],
+        ),
+      async handle(context, command, value) {
+        if (!dataDisclosures) {
+          throw new Error("서버 구독 로그인에 필요한 데이터 처리 고지 서비스가 구성되지 않았습니다");
+        }
+        await dataDisclosures.requireAcknowledgement(context, string(value.providerId, "providerId"));
+        const prepared = await serverConnections.prepare(context, {
+          commandId: command.commandId,
+          providerId: string(value.providerId, "providerId"),
+          alias: string(value.alias, "alias"),
+          authKind: subscriptionAuthKind(value.authKind),
+          billingKind: string(value.billingKind, "billingKind"),
+          ...(value.priority === undefined ? {} : { priority: integer(value.priority, "priority") }),
+          ...(value.weight === undefined ? {} : { weight: integer(value.weight, "weight", 1) }),
+        });
+        return result(command, {
+          resource: {
+            type: "SubscriptionAccount",
+            id: prepared.account.account_id,
+            revision: prepared.account.version,
+          },
+          data: {
+            ...subscriptionAccountData(prepared.account),
+            connectorStatus: prepared.connector.status,
+            loginRequired: prepared.connector.status !== "ready",
+            profileHandle: subscriptionProfileHandle(prepared.profileHandle),
+          },
+        });
+      },
+    });
+
+    for (const [operation, method] of [
+      ["subscription.server.attest", "attest"],
+      ["subscription.server.offline", "offline"],
+    ] as const) {
+      register(registry, {
+        operation,
+        requiredScopes: ["subscription:write"],
+        allowedRoles: ["owner", "admin", "member"],
+        recovery: "replay-domain",
+        validate: (value) =>
+          payload(value, method === "attest" ? ["connectorId", "accountId", "modelId"] : ["connectorId"], [
+            "connectorId",
+          ]),
+        async handle(context, command, value) {
+          const connector = await serverConnections[method](context, {
+            commandId: command.commandId,
+            connectorId: string(value.connectorId, "connectorId"),
+            ...(method !== "attest" || value.accountId === undefined
+              ? {}
+              : { accountId: string(value.accountId, "accountId") }),
+            ...(method !== "attest" || value.modelId === undefined
+              ? {}
+              : { modelId: string(value.modelId, "modelId") }),
+          });
+          const modelRuntime =
+            method === "attest"
+              ? (
+                  connector as {
+                    readonly modelRuntime?: {
+                      readonly modelId: string;
+                      readonly modelProfileId: string;
+                      readonly routeNames: readonly string[];
+                    };
+                  }
+                ).modelRuntime
+              : undefined;
+          return result(command, {
+            resource: { type: "SubscriptionConnector", id: connector.connectorId },
+            data: {
+              ...subscriptionServerConnectorData(connector),
+              ...(modelRuntime
+                ? {
+                    modelId: modelRuntime.modelId,
+                    modelProfileId: modelRuntime.modelProfileId,
+                    routeNames: modelRuntime.routeNames,
+                  }
+                : {}),
+            },
+          });
+        },
+      });
+    }
   }
 
   const accounts = dependencies.subscriptionAccounts;
-  if (accounts) {
+  const connections = dependencies.subscriptionConnections;
+  if (accounts || connections) {
     register(registry, {
       operation: "subscription.account.register",
       requiredScopes: ["subscription:write"],
@@ -1333,30 +1646,91 @@ function registerSubscriptions(
       validate: (value) =>
         payload(
           value,
-          ["providerId", "alias", "connectorId", "profileLocator", "billingKind"],
+          [
+            "providerId",
+            "alias",
+            "connectorId",
+            "profileLocator",
+            "authKind",
+            "billingKind",
+            "endpointUrl",
+            "protocol",
+            "acceptExperimental",
+            "priority",
+            "weight",
+          ],
           ["providerId", "alias", "connectorId", "profileLocator", "billingKind"],
         ),
       async handle(context, command, value) {
-        const account = await accounts.register(context, {
+        const common = {
           commandId: command.commandId,
           providerId: string(value.providerId, "providerId"),
           alias: string(value.alias, "alias"),
           connectorId: string(value.connectorId, "connectorId"),
           profileLocator: string(value.profileLocator, "profileLocator"),
           billingKind: string(value.billingKind, "billingKind"),
-        });
+        };
+        let account;
+        if (connections) {
+          account = (
+            await connections.connect(context, {
+              ...common,
+              authKind: subscriptionAuthKind(value.authKind),
+              ...(value.endpointUrl === undefined ? {} : { endpointUrl: string(value.endpointUrl, "endpointUrl") }),
+              ...(value.protocol === undefined ? {} : { protocol: subscriptionProtocol(value.protocol) }),
+              ...(value.acceptExperimental === undefined
+                ? {}
+                : { acceptExperimental: boolean(value.acceptExperimental, "acceptExperimental") }),
+              ...(value.priority === undefined ? {} : { priority: integer(value.priority, "priority") }),
+              ...(value.weight === undefined ? {} : { weight: integer(value.weight, "weight", 1) }),
+            })
+          ).account;
+        } else {
+          if (!accounts) throw new Error("구독 계정 서비스가 구성되지 않았습니다");
+          account = await accounts.register(context, common);
+        }
         return result(command, {
           resource: { type: "SubscriptionAccount", id: account.account_id, revision: account.version },
           data: subscriptionAccountData(account),
         });
       },
     });
+  }
 
-    const definitions = [
-      ["subscription.account.share", "share"],
-      ["subscription.account.unshare", "unshare"],
-      ["subscription.account.disconnect", "disconnect"],
-    ] as const;
+  if (accounts) {
+    register(registry, {
+      operation: "subscription.account.share",
+      requiredScopes: ["subscription:write"],
+      allowedRoles: ["owner", "admin", "member"],
+      recovery: "replay-domain",
+      validate: (value) => payload(value, ["accountId", "approvalId"], ["accountId"]),
+      idempotencyPayload: (value) => Object.fromEntries(Object.entries(value).filter(([key]) => key !== "approvalId")),
+      resumeAwaitingApproval: (value) => value.approvalId !== undefined,
+      async handle(context, command, value) {
+        try {
+          const account = await accounts.share(context, {
+            commandId: command.commandId,
+            accountId: string(value.accountId, "accountId"),
+            expectedVersion: expectedRevision(command),
+            ...(value.approvalId === undefined ? {} : { approvalId: string(value.approvalId, "approvalId") }),
+          });
+          return result(command, {
+            resource: { type: "SubscriptionAccount", id: account.account_id, revision: account.version },
+            data: subscriptionAccountData(account),
+          });
+        } catch (error) {
+          if (error instanceof GovernanceApprovalRequiredError) {
+            return result(command, {
+              outcome: "awaiting-approval",
+              data: { decisionId: error.decisionId, approvalId: error.approvalId },
+            });
+          }
+          throw error;
+        }
+      },
+    });
+
+    const definitions = [["subscription.account.unshare", "unshare"]] as const;
     for (const [operation, method] of definitions) {
       register(registry, {
         operation,
@@ -1377,6 +1751,37 @@ function registerSubscriptions(
         },
       });
     }
+
+    register(registry, {
+      operation: "subscription.account.disconnect",
+      requiredScopes: ["subscription:write"],
+      allowedRoles: ["owner", "admin", "member"],
+      recovery: "replay-domain",
+      validate: (value) => payload(value, ["accountId"], ["accountId"]),
+      async handle(context, command, value) {
+        const disconnectInput = {
+          commandId: command.commandId,
+          accountId: string(value.accountId, "accountId"),
+          expectedVersion: expectedRevision(command),
+        };
+        const disconnected = connections
+          ? await connections.disconnect(context, disconnectInput)
+          : { account: await accounts.disconnect(context, disconnectInput), revokedCredentialCount: undefined };
+        return result(command, {
+          resource: {
+            type: "SubscriptionAccount",
+            id: disconnected.account.account_id,
+            revision: disconnected.account.version,
+          },
+          data: {
+            ...subscriptionAccountData(disconnected.account),
+            ...(disconnected.revokedCredentialCount === undefined
+              ? {}
+              : { revokedCredentialCount: disconnected.revokedCredentialCount }),
+          },
+        });
+      },
+    });
   }
 
   const policy = dependencies.subscriptionPolicy;
@@ -1386,12 +1791,15 @@ function registerSubscriptions(
       requiredScopes: ["subscription:write"],
       allowedRoles: ["owner", "admin"],
       recovery: "replay-domain",
-      validate: (value) => payload(value, ["providerId", "credentialPolicy"], ["providerId", "credentialPolicy"]),
+      validate: (value) =>
+        payload(value, ["providerId", "credentialPolicy", "approvalMode"], ["providerId", "credentialPolicy"]),
       async handle(context, command, value) {
+        const providerId = string(value.providerId, "providerId");
         const configured = await policy.configure(context, {
           commandId: command.commandId,
-          providerId: string(value.providerId, "providerId"),
+          providerId,
           credentialPolicy: subscriptionCredentialPolicy(value.credentialPolicy),
+          approvalMode: providerApprovalMode(providerId, value.approvalMode),
           ...(command.expectedRevision === undefined ? {} : { expectedVersion: command.expectedRevision }),
         });
         return result(command, {
@@ -1409,7 +1817,7 @@ export function registerApplicationDomainCommands(
 ): void {
   if (dependencies.works) registerWork(registry, dependencies.works);
   if (dependencies.runtime) registerRuntime(registry, dependencies.runtime);
-  if (dependencies.approvals) registerApprovals(registry, dependencies.approvals);
+  if (dependencies.approvals) registerApprovals(registry, dependencies.approvals, dependencies.runtime);
   if (dependencies.assuranceBindings) registerAssuranceBindings(registry, dependencies.assuranceBindings);
   if (dependencies.organization) registerOrganization(registry, dependencies.organization);
   if (dependencies.extension) registerExtension(registry, dependencies.extension);

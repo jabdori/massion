@@ -41,6 +41,50 @@ function optionalText(value: unknown, label: string): string | undefined {
   return value === undefined ? undefined : text(value, label, 1_024);
 }
 
+type ApprovalDisplayPreview = NonNullable<CollaborationGraphSnapshot["pendingApprovals"][number]["displayPreview"]>;
+
+function approvalDisplayPreview(value: unknown): ApprovalDisplayPreview {
+  const preview = record(value, "승인 표시 미리보기");
+  if (preview.kind === "command") {
+    fields(preview, ["kind", "title", "executable", "arguments", "cwd", "reason"], "승인 명령 미리보기");
+    const argumentsValue = strings(preview.arguments, "승인 명령 인수");
+    if (argumentsValue.length > 16 || argumentsValue.some((argument) => argument.length > 256)) {
+      throw new Error("승인 명령 인수 상한이 유효하지 않습니다");
+    }
+    const cwd = optionalText(preview.cwd, "승인 명령 작업 경로");
+    const reason = optionalText(preview.reason, "승인 요청 이유");
+    return {
+      kind: "command",
+      title: text(preview.title, "승인 요청 제목", 160),
+      executable: text(preview.executable, "승인 실행 파일", 256),
+      arguments: argumentsValue,
+      ...(cwd === undefined ? {} : { cwd }),
+      ...(reason === undefined ? {} : { reason }),
+    };
+  }
+  if (preview.kind === "file-change") {
+    fields(preview, ["kind", "title", "path", "summary", "reason"], "승인 파일 변경 미리보기");
+    const reason = optionalText(preview.reason, "승인 요청 이유");
+    return {
+      kind: "file-change",
+      title: text(preview.title, "승인 요청 제목", 160),
+      path: text(preview.path, "승인 파일 경로", 1_024),
+      summary: text(preview.summary, "승인 변경 요약", 500),
+      ...(reason === undefined ? {} : { reason }),
+    };
+  }
+  if (preview.kind === "provider") {
+    fields(preview, ["kind", "title", "reason"], "승인 제공자 미리보기");
+    const reason = optionalText(preview.reason, "승인 요청 이유");
+    return {
+      kind: "provider",
+      title: text(preview.title, "승인 요청 제목", 160),
+      ...(reason === undefined ? {} : { reason }),
+    };
+  }
+  throw new Error("승인 표시 미리보기 종류가 유효하지 않습니다");
+}
+
 const ROOT_FIELDS = [
   "schemaVersion",
   "revision",
@@ -202,13 +246,16 @@ export function decodeSnapshot(input: unknown): CollaborationGraphSnapshot {
 
   const pendingApprovals = array(root.pendingApprovals, "pendingApprovals").map((item) => {
     const approval = record(item, "approval");
-    fields(approval, ["approvalId", "action", "status", "requestedBy", "expiresAt"], "approval");
+    fields(approval, ["approvalId", "action", "status", "requestedBy", "expiresAt", "displayPreview"], "approval");
+    const displayPreview =
+      approval.displayPreview === undefined ? undefined : approvalDisplayPreview(approval.displayPreview);
     return {
       approvalId: text(approval.approvalId, "approvalId", 1_024),
       action: text(approval.action, "approval action"),
       status: text(approval.status, "approval status", 128),
       requestedBy: text(approval.requestedBy, "requestedBy", 1_024),
       expiresAt: text(approval.expiresAt, "expiresAt", 128),
+      ...(displayPreview === undefined ? {} : { displayPreview }),
     };
   });
 

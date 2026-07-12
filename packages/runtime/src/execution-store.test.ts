@@ -1,20 +1,27 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { IdentityService, OrganizationService, type TenantContext } from "@massion/identity";
-import { createDatabase, type MassionDatabase } from "@massion/storage";
+import { applyMigrations, createDatabase, type MassionDatabase } from "@massion/storage";
 
 import { RuntimeExecutionStore } from "./execution-store.js";
+import {
+  RUNTIME_BLOCKED_TRANSITION_MIGRATION,
+  RUNTIME_EXECUTION_MIGRATION,
+  RUNTIME_PROMPT_LINEAGE_MIGRATION,
+} from "./schema.js";
 
 describe("Runtime Execution Store", () => {
   let database: MassionDatabase;
   let context: TenantContext;
+  let identities: IdentityService;
+  let organizations: OrganizationService;
   let store: RuntimeExecutionStore;
 
   beforeEach(async () => {
     database = await createDatabase({ url: "mem://", namespace: "massion", database: crypto.randomUUID() });
-    const identity = await IdentityService.create(database);
-    const organizations = await OrganizationService.create(database);
-    const owner = await identity.registerPersonalUser({ email: "owner@example.com", displayName: "Owner" });
+    identities = await IdentityService.create(database);
+    organizations = await OrganizationService.create(database);
+    const owner = await identities.registerPersonalUser({ email: "owner@example.com", displayName: "Owner" });
     context = await organizations.resolveTenantContext(owner.user.user_id, owner.organization.organization_id);
     store = await RuntimeExecutionStore.create(database, organizations);
   });
@@ -37,6 +44,7 @@ describe("Runtime Execution Store", () => {
 
   it("queued 생성과 running·suspended·running·succeeded 전이를 단조 event로 원자 기록한다", async () => {
     const created = await createExecution();
+    expect(created.execution.actor_user_id).toBe(context.userId);
     const running = await store.transition(context, {
       commandId: crypto.randomUUID(),
       executionId: created.execution.execution_id,
@@ -151,6 +159,18 @@ describe("Runtime Execution Store", () => {
     ).rejects.toThrow("같은 commandId");
   });
 
+  it("같은 실행 상관관계(correlation)의 현재 사용자 Execution만 생성 순서로 찾는다", async () => {
+    const first = await createExecution("correlation-command-1");
+    const second = await createExecution("correlation-command-2");
+
+    await expect(store.listByCorrelation(context, "correlation-1")).resolves.toEqual([
+      expect.objectContaining({ execution_id: first.execution.execution_id, actor_user_id: context.userId }),
+      expect.objectContaining({ execution_id: second.execution.execution_id, actor_user_id: context.userId }),
+    ]);
+    await expect(store.listByCorrelation(context, "missing-correlation")).resolves.toEqual([]);
+    await expect(store.listByCorrelation(context, " \n")).rejects.toThrow("상관관계");
+  });
+
   it("workflow binding과 recovery snapshot을 저장하고 tenant 위조를 거부한다", async () => {
     const created = await createExecution();
     await store.bindWorkflow(context, {
@@ -175,6 +195,140 @@ describe("Runtime Execution Store", () => {
     ).rejects.toThrow("TenantContext");
   });
 
+  it("같은 조직의 다른 사용자에게 실행·event·복구 후보를 노출하지 않는다", async () => {
+    const team = await organizations.createTeam(context.userId, "Runtime Team");
+    const ownerContext = await organizations.resolveTenantContext(context.userId, team.organization.organization_id);
+    const member = await identities.registerPersonalUser({ email: "member@example.com", displayName: "Member" });
+    await organizations.addMember(ownerContext, member.user.user_id, "member");
+    const memberContext = await organizations.resolveTenantContext(
+      member.user.user_id,
+      team.organization.organization_id,
+    );
+    const created = await store.createExecution(ownerContext, {
+      commandId: "owner-command",
+      workId: "team-work",
+      agentHandle: "delivery-coordination",
+      modelRoute: "coding-balanced",
+      correlationId: "team-correlation",
+      estimatedTokens: 100,
+      estimatedCostMicros: 100,
+      input: { objective: "private subscription execution" },
+    });
+    await store.transition(ownerContext, {
+      commandId: "owner-running",
+      executionId: created.execution.execution_id,
+      expectedVersion: 1,
+      target: "running",
+      payload: {},
+    });
+
+    await expect(store.getRecovery(memberContext, created.execution.execution_id)).rejects.toThrow("Runtime Execution");
+    await expect(store.listEvents(memberContext, created.execution.execution_id)).rejects.toThrow("Runtime Execution");
+    await expect(
+      store.transition(memberContext, {
+        commandId: "member-transition",
+        executionId: created.execution.execution_id,
+        expectedVersion: 2,
+        target: "suspended",
+        payload: {},
+      }),
+    ).rejects.toThrow("Runtime Execution");
+    await expect(store.listRecoverable(memberContext)).resolves.toEqual([]);
+    await expect(store.listByCorrelation(memberContext, "team-correlation")).resolves.toEqual([]);
+    await expect(store.findExecutionIdByCommand(memberContext, "owner-command")).resolves.toBeUndefined();
+    await expect(
+      store.createExecution(memberContext, {
+        commandId: "owner-command",
+        workId: "team-work",
+        agentHandle: "delivery-coordination",
+        modelRoute: "coding-balanced",
+        correlationId: "team-correlation",
+        estimatedTokens: 100,
+        estimatedCostMicros: 100,
+        input: { objective: "private subscription execution" },
+      }),
+    ).rejects.toThrow("행위자 계보");
+  });
+
+  it("행위자 계보 변경과 계보 없는 새 실행을 Database event로 거부한다", async () => {
+    const created = await createExecution();
+
+    await expect(
+      database.query(
+        "UPDATE runtime_execution SET actor_user_id = $actor_user_id WHERE execution_id = $execution_id;",
+        { actor_user_id: crypto.randomUUID(), execution_id: created.execution.execution_id },
+      ),
+    ).rejects.toThrow("행위자 계보");
+    await expect(
+      database.query(
+        `CREATE runtime_execution CONTENT {
+          execution_id: $execution_id,
+          organization_id: $organization_id,
+          work_id: 'legacy-forbidden',
+          agent_handle: 'delivery-coordination',
+          model_route: 'coding-balanced',
+          correlation_id: 'legacy-forbidden',
+          input_json: '{}',
+          status: 'running',
+          version: 1,
+          event_sequence: 1,
+          created_at: time::now(),
+          updated_at: time::now()
+        };`,
+        { execution_id: crypto.randomUUID(), organization_id: context.organizationId },
+      ),
+    ).rejects.toThrow("행위자 계보");
+  });
+
+  it("0094 이전 실행은 추측 보정하지 않고 계보 없는 시작 복구 후보로 남긴다", async () => {
+    const legacyDatabase = await createDatabase({
+      url: "mem://",
+      namespace: "massion",
+      database: crypto.randomUUID(),
+    });
+    try {
+      const legacyIdentities = await IdentityService.create(legacyDatabase);
+      const legacyOrganizations = await OrganizationService.create(legacyDatabase);
+      const owner = await legacyIdentities.registerPersonalUser({
+        email: "legacy@example.com",
+        displayName: "Legacy Owner",
+      });
+      await applyMigrations(legacyDatabase, [
+        RUNTIME_EXECUTION_MIGRATION,
+        RUNTIME_BLOCKED_TRANSITION_MIGRATION,
+        RUNTIME_PROMPT_LINEAGE_MIGRATION,
+      ]);
+      await legacyDatabase.query(
+        `CREATE runtime_execution CONTENT {
+          execution_id: 'legacy-running',
+          organization_id: $organization_id,
+          work_id: 'legacy-work',
+          agent_handle: 'delivery-coordination',
+          model_route: 'coding-balanced',
+          correlation_id: 'legacy-correlation',
+          input_json: '{}',
+          status: 'running',
+          version: 1,
+          event_sequence: 1,
+          created_at: time::now(),
+          updated_at: time::now()
+        };`,
+        { organization_id: owner.organization.organization_id },
+      );
+
+      const upgraded = await RuntimeExecutionStore.create(legacyDatabase, legacyOrganizations);
+      await expect(upgraded.listStartupRecoverable()).resolves.toEqual([
+        {
+          execution_id: "legacy-running",
+          organization_id: owner.organization.organization_id,
+          status: "running",
+        },
+      ]);
+    } finally {
+      await legacyDatabase.close();
+    }
+  });
+
   it("상태 변경 없이 stream event를 append하고 version·sequence를 함께 전진시킨다", async () => {
     const created = await createExecution();
     const running = await store.transition(context, {
@@ -196,5 +350,52 @@ describe("Runtime Execution Store", () => {
     expect(appended.execution.version).toBe(3);
     expect(appended.event.sequence).toBe(3);
     expect(JSON.parse(appended.event.payload_json)).toEqual({ delta: "hello" });
+  });
+
+  it("영속 저널 명령을 version 없이 동시 재생해도 사건 하나만 기록한다", async () => {
+    const created = await createExecution();
+    await store.transition(context, {
+      commandId: crypto.randomUUID(),
+      executionId: created.execution.execution_id,
+      expectedVersion: 1,
+      target: "running",
+      payload: {},
+    });
+    const input = {
+      commandId: `${created.execution.execution_id}:subscription:route-session-acquired`,
+      executionId: created.execution.execution_id,
+      eventType: "subscription_route_session_acquired" as const,
+      payload: {
+        executionId: created.execution.execution_id,
+        workId: "work-1",
+        agentHandle: "delivery-coordination",
+        routeAttemptId: "attempt-1",
+        leaseId: "lease-1",
+        accountId: "account-1",
+        connectorId: "connector-1",
+        adapterId: "adapter-1",
+      },
+    };
+
+    const [left, right] = await Promise.all([
+      store.appendSubscriptionReceipt(context, input),
+      store.appendSubscriptionReceipt(context, input),
+    ]);
+    const events = (await store.listEvents(context, created.execution.execution_id)).filter(
+      (event) => event.event_type === "subscription_route_session_acquired",
+    );
+
+    expect(events).toHaveLength(1);
+    expect(left.event.event_id).toBe(right.event.event_id);
+    expect([left.replayed, right.replayed].sort()).toEqual([false, true]);
+    expect(left.execution.version).toBe(3);
+    expect(right.execution.version).toBe(3);
+
+    await expect(
+      store.appendSubscriptionReceipt(context, {
+        ...input,
+        payload: { ...input.payload, routeAttemptId: "attempt-2" },
+      }),
+    ).rejects.toThrow("같은 commandId");
   });
 });

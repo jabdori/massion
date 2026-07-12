@@ -4,7 +4,9 @@ import {
   Codex,
   type CodexOptions,
   type Input,
+  type ApprovalMode,
   type RunResult,
+  type SandboxMode,
   type ThreadOptions,
   type TurnOptions,
 } from "@openai/codex-sdk";
@@ -33,6 +35,17 @@ export interface CodexSdkFactory {
   create(options: CodexOptions): CodexSdkClient;
 }
 
+export interface CodexSubscriptionConnectorOptions {
+  readonly allowedEnvironment: readonly string[];
+  readonly executable?: string;
+  readonly threadPolicy?: {
+    readonly sandboxMode: Exclude<SandboxMode, "danger-full-access">;
+    readonly approvalPolicy: Extract<ApprovalMode, "never" | "on-request">;
+    readonly networkAccessEnabled: boolean;
+    readonly model?: string;
+  };
+}
+
 const OFFICIAL_CODEX_FACTORY: CodexSdkFactory = {
   create: (options) => new Codex(options),
 };
@@ -47,10 +60,24 @@ export class CodexSubscriptionConnector implements SubscriptionAgentAdapter {
 
   public constructor(
     private readonly factory: CodexSdkFactory = OFFICIAL_CODEX_FACTORY,
-    private readonly options: { readonly allowedEnvironment: readonly string[] } = {
+    private readonly options: CodexSubscriptionConnectorOptions = {
       allowedEnvironment: ["PATH", "CODEX_HOME", "LANG", "LC_ALL"],
     },
-  ) {}
+  ) {
+    if (options.executable !== undefined && !isAbsolute(options.executable)) {
+      throw new Error("Codex SDK 실행 파일은 절대 경로여야 합니다");
+    }
+    const policy = options.threadPolicy;
+    if (
+      policy &&
+      (!new Set(["read-only", "workspace-write"]).has(policy.sandboxMode) ||
+        !new Set(["never", "on-request"]).has(policy.approvalPolicy) ||
+        typeof policy.networkAccessEnabled !== "boolean" ||
+        (policy.model !== undefined && !policy.model.trim()))
+    ) {
+      throw new Error("Codex SDK 실행 정책이 유효하지 않습니다");
+    }
+  }
 
   public async execute(_context: TenantContext, input: SubscriptionAgentInput): Promise<SubscriptionAgentResult> {
     return await this.run(input);
@@ -89,8 +116,21 @@ export class CodexSubscriptionConnector implements SubscriptionAgentAdapter {
         return value === undefined ? [] : [[key, value]];
       }),
     );
-    const client = this.factory.create({ env });
-    const threadOptions: ThreadOptions = { workingDirectory: workspaceRoot };
+    const client = this.factory.create({
+      ...(this.options.executable ? { codexPathOverride: this.options.executable } : {}),
+      env,
+    });
+    const threadOptions: ThreadOptions = {
+      workingDirectory: workspaceRoot,
+      ...(this.options.threadPolicy
+        ? {
+            sandboxMode: this.options.threadPolicy.sandboxMode,
+            approvalPolicy: this.options.threadPolicy.approvalPolicy,
+            networkAccessEnabled: this.options.threadPolicy.networkAccessEnabled,
+            ...(this.options.threadPolicy.model ? { model: this.options.threadPolicy.model } : {}),
+          }
+        : {}),
+    };
     const thread = input.sessionId
       ? client.resumeThread(input.sessionId, threadOptions)
       : client.startThread(threadOptions);

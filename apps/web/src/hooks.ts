@@ -3,6 +3,8 @@ import { useEffect, useSyncExternalStore } from "react";
 import type { BrowserSessionStore } from "./session.js";
 import type { WebConsoleState, WebConsoleStore } from "./store.js";
 
+const EMPTY_QUERY_PAYLOAD = Object.freeze({});
+
 export function useSession(store: BrowserSessionStore) {
   return useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
 }
@@ -25,7 +27,7 @@ export function useQueryErrors(store: WebConsoleStore): Readonly<Record<string, 
 export function useQueryData<T>(
   store: WebConsoleStore,
   operation: string,
-  payload: unknown = {},
+  payload: unknown = EMPTY_QUERY_PAYLOAD,
   decoder?: (value: unknown) => T,
 ): T | undefined {
   const data = useSyncExternalStore(

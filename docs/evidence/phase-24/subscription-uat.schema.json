@@ -1,0 +1,251 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://massion.dev/schemas/subscription-uat.v1.json",
+  "title": "Massion Native Subscription UAT Receipt",
+  "description": "최종 릴리스와 실제 UAT 결과의 비밀 제거 계보입니다. 개인정보·인증정보·로컬 경로 검사는 생성기 validator가 재귀적으로 강제합니다.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "gitCommit",
+    "releaseDigest",
+    "tmuxSession",
+    "startedAt",
+    "endedAt",
+    "summary",
+    "scenarios"
+  ],
+  "properties": {
+    "schema": {
+      "const": "massion.subscription-uat.v1"
+    },
+    "gitCommit": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{40}$"
+    },
+    "releaseDigest": {
+      "$ref": "#/$defs/digest"
+    },
+    "tmuxSession": {
+      "$ref": "#/$defs/safeName"
+    },
+    "startedAt": {
+      "$ref": "#/$defs/instant"
+    },
+    "endedAt": {
+      "$ref": "#/$defs/instant"
+    },
+    "summary": {
+      "$ref": "#/$defs/summary"
+    },
+    "scenarios": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 128,
+      "items": {
+        "$ref": "#/$defs/scenario"
+      }
+    }
+  },
+  "$defs": {
+    "safeName": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]{1,127}$"
+    },
+    "digest": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "instant": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$"
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["passed", "failed", "notRun"],
+      "properties": {
+        "passed": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 128
+        },
+        "failed": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 128
+        },
+        "notRun": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 128
+        }
+      }
+    },
+    "command": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["step", "exitCode"],
+      "properties": {
+        "step": {
+          "$ref": "#/$defs/safeName"
+        },
+        "exitCode": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 255
+        }
+      }
+    },
+    "scenario": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "provider", "status", "startedAt", "endedAt", "assertions", "commands", "lineage"],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/safeName"
+        },
+        "provider": {
+          "$ref": "#/$defs/safeName"
+        },
+        "status": {
+          "enum": ["passed", "failed", "not-run"]
+        },
+        "startedAt": {
+          "$ref": "#/$defs/instant"
+        },
+        "endedAt": {
+          "$ref": "#/$defs/instant"
+        },
+        "assertions": {
+          "type": "array",
+          "maxItems": 128,
+          "items": {
+            "$ref": "#/$defs/safeName"
+          }
+        },
+        "commands": {
+          "type": "array",
+          "maxItems": 128,
+          "items": {
+            "$ref": "#/$defs/command"
+          }
+        },
+        "lineage": {
+          "type": "array",
+          "maxItems": 128,
+          "items": {
+            "$ref": "#/$defs/digest"
+          }
+        },
+        "prerequisite": {
+          "enum": [
+            "missing-account",
+            "missing-quota-contract",
+            "provider-approval-required",
+            "interactive-login-required",
+            "external-service-unavailable",
+            "public-provider-connect-unavailable",
+            "public-failure-injection-unavailable",
+            "second-account-required",
+            "second-user-required",
+            "approval-checkpoint-required"
+          ]
+        },
+        "failureClass": {
+          "enum": ["authentication", "quota", "network", "provider", "product", "cancelled"]
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "passed"
+              }
+            },
+            "required": ["status"]
+          },
+          "then": {
+            "properties": {
+              "assertions": {
+                "minItems": 1
+              },
+              "commands": {
+                "minItems": 1,
+                "items": {
+                  "allOf": [
+                    {
+                      "$ref": "#/$defs/command"
+                    },
+                    {
+                      "properties": {
+                        "exitCode": {
+                          "const": 0
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            "not": {
+              "anyOf": [
+                {
+                  "required": ["prerequisite"]
+                },
+                {
+                  "required": ["failureClass"]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "not-run"
+              }
+            },
+            "required": ["status"]
+          },
+          "then": {
+            "required": ["prerequisite"],
+            "properties": {
+              "assertions": {
+                "maxItems": 0
+              },
+              "commands": {
+                "maxItems": 0
+              },
+              "lineage": {
+                "maxItems": 0
+              }
+            },
+            "not": {
+              "required": ["failureClass"]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "failed"
+              }
+            },
+            "required": ["status"]
+          },
+          "then": {
+            "required": ["failureClass"],
+            "not": {
+              "required": ["prerequisite"]
+            }
+          }
+        }
+      ]
+    }
+  }
+}

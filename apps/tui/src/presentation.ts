@@ -10,7 +10,10 @@ const VIEWS: ReadonlyArray<{ readonly view: TuiView; readonly label: string }> =
   { view: "chat", label: "4 대화" },
   { view: "approvals", label: "5 승인" },
   { view: "operations", label: "6 운영" },
+  { view: "subscriptions", label: "7 구독" },
 ];
+
+const SUBSCRIPTION_APPROVAL_MODES = ["automatic", "review", "deny"] as const;
 
 export function safeTerminalText(value: unknown, maximum = 8_192): string {
   if (value === undefined) return "";
@@ -27,6 +30,33 @@ export function safeTerminalText(value: unknown, maximum = 8_192): string {
     })
     .join("")
     .slice(0, maximum);
+}
+
+function approvalPreviewLines(
+  preview: CollaborationGraphSnapshot["pendingApprovals"][number]["displayPreview"],
+): readonly string[] {
+  if (!preview) return ["승인할 실제 실행 내용이 제공되지 않았습니다."];
+  if (preview.kind === "command") {
+    return [
+      `승인 내용           ${safeTerminalText(preview.title, 160)}`,
+      `실행 파일           ${safeTerminalText(preview.executable, 256)}`,
+      `인수                ${preview.arguments.map((value) => safeTerminalText(value, 256)).join(" ") || "없음"}`,
+      ...(preview.cwd === undefined ? [] : [`작업 경로           ${safeTerminalText(preview.cwd, 1_024)}`]),
+      ...(preview.reason === undefined ? [] : [`요청 이유           ${safeTerminalText(preview.reason, 1_000)}`]),
+    ];
+  }
+  if (preview.kind === "file-change") {
+    return [
+      `승인 내용           ${safeTerminalText(preview.title, 160)}`,
+      `변경 경로           ${safeTerminalText(preview.path, 1_024)}`,
+      `변경 요약           ${safeTerminalText(preview.summary, 1_000)}`,
+      ...(preview.reason === undefined ? [] : [`요청 이유           ${safeTerminalText(preview.reason, 1_000)}`]),
+    ];
+  }
+  return [
+    `승인 내용           ${safeTerminalText(preview.title, 160)}`,
+    ...(preview.reason === undefined ? [] : [`요청 이유           ${safeTerminalText(preview.reason, 1_000)}`]),
+  ];
 }
 
 function statusMark(status: string): string {
@@ -192,11 +222,245 @@ function approvals(state: TuiState, snapshot: CollaborationGraphSnapshot): { lis
           `행동                ${approval.action}`,
           `요청자              ${approval.requestedBy}`,
           `만료                ${approval.expiresAt}`,
+          ...approvalPreviewLines(approval.displayPreview),
           "",
           "a: 승인  x: 거절  Delete: 요청 취소",
           "투표 결과와 이유는 감사 기록에 남습니다.",
         ].join("\n")
       : "서버 정책이 승인을 요구할 때 여기에 표시됩니다.",
+  };
+}
+
+type PublicRow = Readonly<Record<string, unknown>>;
+
+function rows(value: unknown): readonly PublicRow[] {
+  return Array.isArray(value)
+    ? (value.filter((item) => item !== null && typeof item === "object" && !Array.isArray(item)) as PublicRow[])
+    : [];
+}
+
+function text(value: unknown, fallback = "확인 불가"): string {
+  return typeof value === "string" || typeof value === "number" ? safeTerminalText(String(value), 256) : fallback;
+}
+
+function strings(value: unknown): readonly string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+}
+
+function numeric(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function subscriptionErrors(state: TuiState): readonly string[] {
+  return Object.entries(state.queryErrors)
+    .filter(([key]) => key.startsWith("subscription"))
+    .map(([key, error]) => `${key}: ${safeTerminalText(error, 180)}`);
+}
+
+function subscriptionQuotaText(account: PublicRow, quotaRows: readonly PublicRow[]): string {
+  const quota =
+    quotaRows.find((item) => item.accountId === account.accountId) ??
+    (Array.isArray(account.windows) || account.minimumRemainingRatio !== undefined ? account : undefined);
+  const ratio = numeric(quota?.minimumRemainingRatio);
+  return ratio === undefined ? "할당량 확인 불가" : `남은 할당량 ${String(Math.round(ratio * 100))}%`;
+}
+
+function subscriptionProviderApprovalModes(
+  provider: PublicRow | undefined,
+  accounts: readonly PublicRow[],
+): readonly string[] {
+  if (provider?.connectionSurface === "unavailable") return [];
+  const runtimeCapabilities =
+    provider?.runtimeCapabilities &&
+    typeof provider.runtimeCapabilities === "object" &&
+    !Array.isArray(provider.runtimeCapabilities)
+      ? (provider.runtimeCapabilities as PublicRow)
+      : undefined;
+  const approvalModesBySurface =
+    runtimeCapabilities?.approvalModesBySurface &&
+    typeof runtimeCapabilities.approvalModesBySurface === "object" &&
+    !Array.isArray(runtimeCapabilities.approvalModesBySurface)
+      ? (runtimeCapabilities.approvalModesBySurface as PublicRow)
+      : undefined;
+  const connectedSurfaces = new Set(
+    accounts
+      .filter((account) => account.providerId === provider?.providerId)
+      .map((account) => account.connectorLocation)
+      .filter((surface): surface is "server" | "edge" => surface === "server" || surface === "edge"),
+  );
+  if (connectedSurfaces.size > 0 && approvalModesBySurface) {
+    const supported = new Set<string>();
+    for (const surface of connectedSurfaces) {
+      for (const mode of strings(approvalModesBySurface[surface])) supported.add(mode);
+    }
+    return SUBSCRIPTION_APPROVAL_MODES.filter((mode) => supported.has(mode));
+  }
+  if (!runtimeCapabilities || !Object.hasOwn(runtimeCapabilities, "approvalModes")) {
+    return SUBSCRIPTION_APPROVAL_MODES;
+  }
+  return strings(runtimeCapabilities.approvalModes).filter((mode) =>
+    SUBSCRIPTION_APPROVAL_MODES.includes(mode as (typeof SUBSCRIPTION_APPROVAL_MODES)[number]),
+  );
+}
+
+function subscriptions(state: TuiState): { list: string; detail: string } {
+  const providers = rows(state.queryResults.subscriptionProviders);
+  const accounts = rows(state.queryResults.subscriptionAccounts);
+  const quota = rows(state.queryResults.subscriptionQuota);
+  const policies = rows(state.queryResults.subscriptionPolicy);
+  const doctors = rows(state.queryResults.subscriptionDoctor);
+  const errors = subscriptionErrors(state);
+  const tabLine = [
+    ["providers", "Provider"],
+    ["accounts", "계정"],
+    ["quota", "할당량"],
+    ["policy", "정책"],
+  ] as const;
+  const navigation = tabLine.map(([tab, label]) => (state.subscriptionTab === tab ? `[${label}]` : label)).join("  ");
+
+  if (state.subscriptionTab === "providers") {
+    const provider = providers[0];
+    const runtimeCapabilities =
+      provider?.runtimeCapabilities &&
+      typeof provider.runtimeCapabilities === "object" &&
+      !Array.isArray(provider.runtimeCapabilities)
+        ? (provider.runtimeCapabilities as PublicRow)
+        : undefined;
+    return {
+      list: providers.length
+        ? providers
+            .map(
+              (item) =>
+                `  ${statusMark(text(item.availability, "unknown"))} ${text(item.displayName)} · ${text(item.availability)}`,
+            )
+            .join("\n")
+        : "등록된 구독 Provider가 없습니다.",
+      detail: [
+        navigation,
+        "",
+        provider ? text(provider.displayName) : "Provider를 선택할 수 없습니다.",
+        `실행 방식           ${text(provider?.executionKind)}`,
+        `인증 방식           ${
+          strings(provider?.authKinds)
+            .map((item) => text(item))
+            .join(", ") || "확인 불가"
+        }`,
+        `모델 검색           ${text(provider?.modelDiscovery)}`,
+        `할당량 검색         ${text(provider?.quotaDiscovery)}`,
+        `연결 위치           ${text(provider?.connectionSurface)}`,
+        ...(runtimeCapabilities
+          ? [
+              `계정 격리           ${text(runtimeCapabilities.accountIsolation)}`,
+              `실행 성숙도         ${text(runtimeCapabilities.maturity)}`,
+              `실행 승인 범위      ${
+                strings(runtimeCapabilities.approvalModes)
+                  .map((item) => text(item))
+                  .join(", ") || "확인 불가"
+              }`,
+            ]
+          : []),
+        `공식 문서           ${text(provider?.officialDocumentation)}`,
+        "",
+        ...errors,
+        "←/→ 또는 h/l: 탭 이동",
+      ].join("\n"),
+    };
+  }
+
+  const selected = accounts.find((item) => item.accountId === state.selection.accountId) ?? accounts[0];
+  const doctor = doctors.find((item) => item.accountId === selected?.accountId);
+  const accountList = accounts.length
+    ? accounts
+        .map(
+          (item) =>
+            `${item === selected ? "›" : " "} ${statusMark(text(item.status, "unknown"))} ${text(item.alias)} · ${text(item.providerId)} · ${text(item.scope)}`,
+        )
+        .join("\n")
+    : "연결된 구독 계정이 없습니다.";
+
+  if (state.subscriptionTab === "accounts") {
+    const canManage = selected?.canManage === true;
+    return {
+      list: accountList,
+      detail: [
+        navigation,
+        "",
+        selected ? text(selected.alias) : "계정을 선택할 수 없습니다.",
+        `Provider            ${text(selected?.providerId)}`,
+        `공유 범위           ${text(selected?.scope)}`,
+        `계정 상태           ${text(selected?.status)}`,
+        `Connector 상태      ${text(doctor?.connectorStatus ?? selected?.connectorStatus)}`,
+        `진단 조치           ${text(doctor?.action, "없음")}`,
+        subscriptionQuotaText(selected ?? {}, quota),
+        `관리 권한           ${canManage ? "있음" : "읽기 전용"}`,
+        "",
+        ...errors,
+        canManage ? "s: 조직 공유  u: 공유 해제  d: 연결 해제" : "소유자만 계정을 변경할 수 있습니다.",
+      ].join("\n"),
+    };
+  }
+
+  if (state.subscriptionTab === "quota") {
+    const quotaRow = quota.find((item) => item.accountId === selected?.accountId);
+    const windows = rows(quotaRow?.windows ?? selected?.windows);
+    return {
+      list: accountList,
+      detail: [
+        navigation,
+        "",
+        selected ? text(selected.alias) : "계정을 선택할 수 없습니다.",
+        subscriptionQuotaText(selected ?? {}, quota),
+        ...(windows.length
+          ? windows.map((window) => {
+              const ratio = numeric(window.remainingRatio);
+              return `• ${text(window.kind)} · ${ratio === undefined ? "잔여 비율 확인 불가" : `${String(Math.round(ratio * 100))}%`} · 초기화 ${text(window.resetsAt)}`;
+            })
+          : ["• Provider가 공개한 할당량 창이 없습니다."]),
+        "",
+        ...errors,
+      ].join("\n"),
+    };
+  }
+
+  const provider = providers[0];
+  const policy = policies.find((item) => item.providerId === provider?.providerId) ?? policies[0];
+  const approvalModes = subscriptionProviderApprovalModes(provider, accounts);
+  const connectionUnavailable = provider?.connectionSurface === "unavailable";
+  const configuredApprovalMode = text(policy?.approvalMode);
+  const displayedApprovalMode = configuredApprovalMode
+    ? approvalModes.includes(configuredApprovalMode)
+      ? configuredApprovalMode
+      : `${configuredApprovalMode} (현재 연결에서 사용 불가)`
+    : (approvalModes[0] ?? "미지원");
+  return {
+    list: providers.length
+      ? providers
+          .map((item) => {
+            const configured = policies.find((policyItem) => policyItem.providerId === item.providerId);
+            return `  ${text(item.displayName)} · ${text(configured?.credentialPolicy, "서버 기본값")}`;
+          })
+          .join("\n")
+      : "정책을 표시할 Provider가 없습니다.",
+    detail: [
+      navigation,
+      "",
+      provider ? text(provider.displayName) : "Provider를 선택할 수 없습니다.",
+      `현재 정책           ${text(policy?.credentialPolicy, "서버 기본값")}`,
+      `도구 승인 방식      ${displayedApprovalMode}`,
+      `정책 version        ${text(policy?.version)}`,
+      `선택 가능 정책      ${
+        strings(provider?.credentialPolicies)
+          .map((item) => text(item))
+          .join(", ") || "확인 불가"
+      }`,
+      `선택 가능 승인      ${approvalModes.join(", ") || "미지원"}`,
+      ...(connectionUnavailable ? ["공개 연결           미지원"] : []),
+      "",
+      ...errors,
+      connectionUnavailable
+        ? "이 Provider는 공개 연결을 지원하지 않아 정책을 변경할 수 없습니다."
+        : "e: 정책 변경 · Web Console 또는 mass subscription policy도 사용 가능",
+    ].join("\n"),
   };
 }
 
@@ -270,11 +534,13 @@ export function present(state: TuiState): {
             ? chat(state, snapshot)
             : state.view === "approvals"
               ? approvals(state, snapshot)
-              : operations(state, snapshot);
+              : state.view === "operations"
+                ? operations(state, snapshot)
+                : subscriptions(state);
   return {
     navigation,
     title: `Massion AgentOS · ${snapshot.organization.organizationId} · ${statusMark(state.connection)} ${state.connection}`,
     ...content,
-    footer: "1–6 화면  j/k 이동  r 새로고침  / 검색  ? 도움말  Ctrl+C 종료",
+    footer: "1–7 화면  j/k 이동  r 새로고침  / 검색  ? 도움말  Ctrl+C 종료",
   };
 }

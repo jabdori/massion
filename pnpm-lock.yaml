@@ -39,6 +39,12 @@ importers:
       '@massion/application':
         specifier: workspace:*
         version: link:../../packages/application
+      '@massion/runtime':
+        specifier: workspace:*
+        version: link:../../packages/runtime
+      '@massion/subscriptions':
+        specifier: workspace:*
+        version: link:../../packages/subscriptions
     devDependencies:
       '@massion/governance':
         specifier: workspace:*
@@ -53,11 +59,29 @@ importers:
         specifier: workspace:*
         version: link:../../packages/storage
 
+  apps/connector:
+    dependencies:
+      '@massion/identity':
+        specifier: workspace:*
+        version: link:../../packages/identity
+      '@massion/runtime':
+        specifier: workspace:*
+        version: link:../../packages/runtime
+      '@massion/subscriptions':
+        specifier: workspace:*
+        version: link:../../packages/subscriptions
+      ws:
+        specifier: 8.21.0
+        version: 8.21.0
+
   apps/distribution:
     dependencies:
       '@massion/cli':
         specifier: workspace:*
         version: link:../cli
+      '@massion/connector':
+        specifier: workspace:*
+        version: link:../connector
       '@massion/server':
         specifier: workspace:*
         version: link:../server
@@ -118,6 +142,9 @@ importers:
       '@massion/work':
         specifier: workspace:*
         version: link:../../packages/work
+      ws:
+        specifier: 8.21.0
+        version: 8.21.0
 
   apps/tui:
     dependencies:
@@ -504,9 +531,15 @@ importers:
       '@agentclientprotocol/sdk':
         specifier: 1.2.1
         version: 1.2.1(zod@4.4.3)
+      '@ai-sdk/anthropic':
+        specifier: 3.0.96
+        version: 3.0.96(zod@4.4.3)
       '@ai-sdk/openai':
         specifier: 3.0.83
         version: 3.0.83(zod@4.4.3)
+      '@ai-sdk/openai-compatible':
+        specifier: 2.0.59
+        version: 2.0.59(zod@4.4.3)
       '@ai-sdk/provider':
         specifier: 3.0.14
         version: 3.0.14

@@ -144,4 +144,42 @@ describe("TUI controller", () => {
     await expect(controller.query("surreal.raw", {})).rejects.toThrow(/허용/u);
     expect(query).toHaveBeenCalledOnce();
   });
+
+  it("구독 관리 조회만 명시적 allowlist로 전달한다", async () => {
+    const query = vi.fn().mockImplementation((operation: string) => Promise.resolve(response(operation, [])));
+    const state = createTuiState();
+    const controller = new TuiController(
+      {
+        status: () => Promise.resolve(response("system.status", {})),
+        me: () =>
+          Promise.resolve(
+            response("identity.me", { userId: "u", organizationId: "o", membershipId: "m", role: "owner" }),
+          ),
+        snapshot: () => Promise.resolve(response("organization.graph.snapshot", testSnapshot)),
+        streamEvents: async function* () {},
+        query,
+        command: () => Promise.resolve({}),
+      },
+      () => undefined,
+      () => state,
+    );
+
+    for (const operation of [
+      "subscription.providers",
+      "subscription.accounts",
+      "subscription.quota",
+      "subscription.policy",
+      "subscription.doctor",
+    ]) {
+      await controller.query(operation, {});
+    }
+
+    expect(query.mock.calls.map(([operation]) => operation)).toEqual([
+      "subscription.providers",
+      "subscription.accounts",
+      "subscription.quota",
+      "subscription.policy",
+      "subscription.doctor",
+    ]);
+  });
 });

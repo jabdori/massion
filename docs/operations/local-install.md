@@ -49,11 +49,25 @@ XDG 환경 변수를 지정하지 않은 기본 위치는 다음과 같습니다
 
 - 설정과 비밀 키: `$HOME/.config/massion`
 - 데이터와 백업: `$HOME/.local/share/massion`
+- 서버 연결기 계정별 프로필: `$HOME/.local/share/massion/connectors`
 - 프로세스 상태와 로그: `$HOME/.local/state/massion`
 
 `XDG_CONFIG_HOME`, `XDG_DATA_HOME`, `XDG_STATE_HOME`을 지정하면 해당 경로를 사용합니다.
+연결기 프로필 디렉터리는 시작할 때 소유자만 접근할 수 있는 권한(0700)인지 검사합니다.
 
-## 5. 제거와 복구
+## 5. 사용자 기기 연결 수신
+
+개인 로컬 모드의 연결 장치 WebSocket 수신은 기본적으로 꺼져 있습니다. 같은 컴퓨터에서만 엣지 연결 장치(edge connector)를 시험해야 할 때 다음처럼 명시적으로 켤 수 있습니다. 로컬 서버는 계속 loopback 주소에만 묶이므로 다른 컴퓨터에서는 접근할 수 없습니다.
+
+```sh
+MASSION_EDGE_CONNECTOR_ENABLED=true \
+MASSION_CONNECTOR_HEARTBEAT_MS=45000 \
+mass local start
+```
+
+연결 장치 심박 유효 시간(heartbeat TTL)의 기본값은 30,000ms이고 허용 범위는 1,000~300,000ms입니다. 팀원의 다른 기기를 연결하려면 이 로컬 설정을 외부에 노출하지 말고 TLS가 적용된 팀 배포를 사용합니다.
+
+## 6. 제거와 복구
 
 설치된 버전의 제거 스크립트를 실행합니다.
 

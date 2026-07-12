@@ -72,6 +72,15 @@ describe("ApplicationHttpServer", () => {
           metadata: input.metadata,
         }),
       },
+      connectorEnrollments: {
+        issue: async (_context, input) => ({
+          enrollmentId: "enrollment-http-1",
+          enrollmentCode: "one-time-enrollment-code",
+          challengeNonce: "one-time-challenge",
+          expiresAt: "2030-01-01T00:10:00.000Z",
+          ...input,
+        }),
+      },
       bootstrap: {
         initialize: async (input) => ({ access: { token: "one-time" }, email: input.email }),
       },
@@ -178,6 +187,51 @@ describe("ApplicationHttpServer", () => {
     });
     expect(response.status).toBe(201);
     expect(await response.json()).toMatchObject({ access: { token: "one-time" } });
+  });
+
+  it("Connector enrollment code는 인증된 전용 non-cache HTTP 응답으로만 발급한다", async () => {
+    const response = await fetch(`${baseUrl}/api/v1/subscriptions/connectors/enrollments`, {
+      method: "POST",
+      headers: {
+        authorization: "Bearer test-token",
+        accept: "application/json",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        commandId: "connector-enrollment-command-0001",
+        location: "edge",
+        executionKind: "agent-runtime",
+        ttlMs: 60_000,
+      }),
+    });
+    expect(response.status).toBe(201);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(await response.json()).toMatchObject({
+      enrollmentId: "enrollment-http-1",
+      enrollmentCode: "one-time-enrollment-code",
+      challengeNonce: "one-time-challenge",
+    });
+    const serverEnrollment = await fetch(`${baseUrl}/api/v1/subscriptions/connectors/enrollments`, {
+      method: "POST",
+      headers: {
+        authorization: "Bearer test-token",
+        accept: "application/json",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        commandId: "server-enrollment-must-use-provisioning",
+        location: "server",
+        executionKind: "agent-runtime",
+      }),
+    });
+    expect(serverEnrollment.status).toBe(400);
+    expect(
+      (
+        await fetch(`${baseUrl}/api/v1/subscriptions/connectors/enrollments`, {
+          headers: { authorization: "Bearer test-token" },
+        })
+      ).status,
+    ).toBe(405);
   });
 
   it("binary artifact를 JSON envelope와 분리해 inspect·install한다", async () => {

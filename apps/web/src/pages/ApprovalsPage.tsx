@@ -1,9 +1,52 @@
 import { useState } from "react";
 
-import { label, rows } from "../data.js";
+import { label, list, object, rows } from "../data.js";
 import { useQueryData } from "../hooks.js";
 import { consoleStore } from "../services.js";
 import { EmptyState, LoadingState, PageHeader, StatusStamp } from "../components/States.js";
+
+function ApprovalPreview({ value, approvalId }: { readonly value: unknown; readonly approvalId: string }) {
+  const preview = object(value);
+  const kind = preview.kind;
+  if (kind !== "command" && kind !== "file-change" && kind !== "provider") return null;
+  const title = label(preview.title, "승인 내용");
+  const reason = typeof preview.reason === "string" ? preview.reason : undefined;
+  return (
+    <section className="approval-preview" aria-label={`${approvalId} 승인 내용`}>
+      <h3>{title}</h3>
+      {kind === "command" ? (
+        <dl>
+          <div>
+            <dt>실행 파일</dt>
+            <dd className="mono">{label(preview.executable)}</dd>
+          </div>
+          <div>
+            <dt>인수</dt>
+            <dd className="mono">{list(preview.arguments).slice(0, 16).join(" ") || "없음"}</dd>
+          </div>
+          {typeof preview.cwd === "string" ? (
+            <div>
+              <dt>작업 경로</dt>
+              <dd className="mono">{preview.cwd}</dd>
+            </div>
+          ) : null}
+        </dl>
+      ) : kind === "file-change" ? (
+        <dl>
+          <div>
+            <dt>경로</dt>
+            <dd className="mono">{label(preview.path)}</dd>
+          </div>
+          <div>
+            <dt>변경 요약</dt>
+            <dd>{label(preview.summary)}</dd>
+          </div>
+        </dl>
+      ) : null}
+      {reason ? <p>{reason}</p> : null}
+    </section>
+  );
+}
 
 export default function ApprovalsPage() {
   const data = useQueryData<unknown>(consoleStore, "governance.approval.list");
@@ -73,6 +116,7 @@ export default function ApprovalsPage() {
                     <dd className="mono">{id}</dd>
                   </div>
                 </dl>
+                <ApprovalPreview value={approval.displayPreview} approvalId={id} />
                 <div className="decision-actions">
                   <button
                     type="button"

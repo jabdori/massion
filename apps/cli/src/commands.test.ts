@@ -4,6 +4,34 @@ import { executeCliInvocation, type CliApplicationClient } from "./commands.js";
 import { parseCliArguments } from "./parser.js";
 
 describe("CLI Application adapter", () => {
+  it("subscription enroll은 재시도하지 않는 전용 API로 일회 등록 코드를 발급한다", async () => {
+    const issueConnectorEnrollment = vi.fn().mockResolvedValue({ enrollmentCode: "one-time-code" });
+    const client: CliApplicationClient = {
+      status: async () => ({}),
+      snapshot: async () => ({}),
+      query: async () => ({}),
+      command: async () => ({}),
+      issueConnectorEnrollment,
+      inspectArtifact: async () => ({}),
+      installArtifact: async () => ({}),
+      updateArtifact: async () => ({}),
+    };
+
+    await executeCliInvocation(client, parseCliArguments(["subscription", "enroll", "edge", "agent-runtime", "60000"]));
+    expect(issueConnectorEnrollment).toHaveBeenCalledWith({
+      commandId: expect.any(String),
+      location: "edge",
+      executionKind: "agent-runtime",
+      ttlMs: 60_000,
+    });
+    await expect(
+      executeCliInvocation(client, parseCliArguments(["subscription", "enroll", "remote", "agent-runtime"])),
+    ).rejects.toThrow("edge");
+    await expect(
+      executeCliInvocation(client, parseCliArguments(["subscription", "enroll", "server", "agent-runtime"])),
+    ).rejects.toThrow("server-managed provisioning");
+  });
+
   it("조회와 mutation을 ApplicationClient 경계만으로 호출한다", async () => {
     const calls: unknown[] = [];
     const client: CliApplicationClient = {
@@ -80,6 +108,26 @@ describe("CLI Application adapter", () => {
       routes: { operation: "router.routes" },
     });
     expect(operations).toEqual(["router.catalog", "router.credentials", "router.routes"]);
+  });
+
+  it("구독 실행 계보를 공개 질의 경계로만 조회한다", async () => {
+    const query = vi.fn().mockResolvedValue({ executionId: "execution-1", attempts: [] });
+    const client: CliApplicationClient = {
+      status: async () => ({}),
+      snapshot: async () => ({}),
+      query,
+      command: async () => ({}),
+      inspectArtifact: async () => ({}),
+      installArtifact: async () => ({}),
+      updateArtifact: async () => ({}),
+    };
+
+    await executeCliInvocation(client, parseCliArguments(["runtime", "lineage", "execution-1"]));
+    expect(query).toHaveBeenCalledWith("runtime.execution.subscription-lineage", { executionId: "execution-1" });
+    await executeCliInvocation(client, parseCliArguments(["runtime", "lineage", "correlation", "correlation-1"]));
+    expect(query).toHaveBeenCalledWith("runtime.execution.subscription-lineage", {
+      correlationId: "correlation-1",
+    });
   });
 
   it("공식 Integration 상태와 연결 변경을 같은 Application 경계로 호출한다", async () => {
@@ -168,6 +216,17 @@ describe("CLI Application adapter", () => {
       snapshot: async () => ({}),
       query: async (operation, payload) => {
         calls.push([operation, payload]);
+        if (operation === "subscription.providers") {
+          return {
+            data: [
+              {
+                providerId: "verified-provider",
+                connectionSurface: "server-and-edge",
+                runtimeCapabilities: { approvalModes: ["automatic", "review", "deny"] },
+              },
+            ],
+          };
+        }
         return operation === "subscription.accounts"
           ? { data: [{ accountId: "account-1", version: 3 }] }
           : { operation };
@@ -189,17 +248,18 @@ describe("CLI Application adapter", () => {
     await executeCliInvocation(client, parseCliArguments(["subscription", "share", "account-1"]));
     await executeCliInvocation(client, parseCliArguments(["subscription", "unshare", "account-1"]));
     await executeCliInvocation(client, parseCliArguments(["subscription", "disconnect", "account-1"]));
-    await executeCliInvocation(client, parseCliArguments(["subscription", "connect", "verified-provider"]), {
+    await executeCliInvocation(client, parseCliArguments(["subscription", "connect-advanced", "verified-provider"]), {
       readJson: async () => ({
         alias: "업무 계정",
         connectorId: "connector-1",
         profileLocator: "외부 계정 참조",
+        authKind: "cli-profile",
         billingKind: "subscription",
       }),
     });
     await executeCliInvocation(
       client,
-      parseCliArguments(["subscription", "policy", "verified-provider", "quota-headroom", "4"]),
+      parseCliArguments(["subscription", "policy", "verified-provider", "quota-headroom", "automatic", "4"]),
     );
 
     expect(calls).toContainEqual(["subscription.providers", {}]);
@@ -238,12 +298,116 @@ describe("CLI Application adapter", () => {
       expect.objectContaining({
         operation: "subscription.policy.configure",
         expectedRevision: 4,
-        payload: { providerId: "verified-provider", credentialPolicy: "quota-headroom" },
+        payload: {
+          providerId: "verified-provider",
+          credentialPolicy: "quota-headroom",
+          approvalMode: "automatic",
+        },
       }),
     );
   });
 
-  it("subscription connect는 기존 Connector profile metadata만 stdin으로 등록한다", async () => {
+  it("구독 정책 command는 Provider가 공개한 승인 방식만 허용하고 unavailable을 거부한다", async () => {
+    const command = vi.fn().mockResolvedValue({ outcome: "succeeded" });
+    const client: CliApplicationClient = {
+      status: async () => ({}),
+      snapshot: async () => ({}),
+      query: async (operation) => {
+        if (operation !== "subscription.providers") return {};
+        return {
+          data: [
+            {
+              providerId: "github-copilot",
+              connectionSurface: "edge-only",
+              runtimeCapabilities: { approvalModes: ["automatic", "deny"] },
+            },
+            {
+              providerId: "google-antigravity-cli",
+              connectionSurface: "unavailable",
+              runtimeCapabilities: {},
+            },
+          ],
+        };
+      },
+      command,
+      inspectArtifact: async () => ({}),
+      installArtifact: async () => ({}),
+      updateArtifact: async () => ({}),
+    };
+
+    await expect(
+      executeCliInvocation(
+        client,
+        parseCliArguments(["subscription", "policy", "github-copilot", "adaptive", "review", "1"]),
+      ),
+    ).rejects.toThrow(/review|승인 방식/u);
+    await expect(
+      executeCliInvocation(
+        client,
+        parseCliArguments(["subscription", "policy", "google-antigravity-cli", "adaptive", "deny", "1"]),
+      ),
+    ).rejects.toThrow(/연결|unavailable/u);
+    await expect(
+      executeCliInvocation(
+        client,
+        parseCliArguments(["subscription", "policy", "github-copilot", "adaptive", "automatic", "1"]),
+      ),
+    ).resolves.toMatchObject({ outcome: "succeeded" });
+    expect(command).toHaveBeenCalledTimes(1);
+  });
+
+  it("Codex 정책 command는 연결된 계정의 실행 표면에 맞춰 review 지원 여부를 판단한다", async () => {
+    let connectorLocation: "server" | "edge" = "server";
+    const command = vi.fn().mockResolvedValue({ outcome: "succeeded" });
+    const client: CliApplicationClient = {
+      status: async () => ({}),
+      snapshot: async () => ({}),
+      query: async (operation) => {
+        if (operation === "subscription.providers") {
+          return {
+            data: [
+              {
+                providerId: "openai-codex",
+                connectionSurface: "server-and-edge",
+                runtimeCapabilities: {
+                  approvalModes: ["automatic", "deny"],
+                  approvalModesBySurface: {
+                    server: ["automatic", "review", "deny"],
+                    edge: ["automatic", "deny"],
+                  },
+                },
+              },
+            ],
+          };
+        }
+        if (operation === "subscription.accounts") {
+          return { data: [{ providerId: "openai-codex", connectorLocation }] };
+        }
+        return {};
+      },
+      command,
+      inspectArtifact: async () => ({}),
+      installArtifact: async () => ({}),
+      updateArtifact: async () => ({}),
+    };
+
+    await expect(
+      executeCliInvocation(
+        client,
+        parseCliArguments(["subscription", "policy", "openai-codex", "adaptive", "review", "1"]),
+      ),
+    ).resolves.toEqual({ outcome: "succeeded" });
+
+    connectorLocation = "edge";
+    await expect(
+      executeCliInvocation(
+        client,
+        parseCliArguments(["subscription", "policy", "openai-codex", "adaptive", "review", "1"]),
+      ),
+    ).rejects.toThrow(/review|승인 방식/u);
+  });
+
+  it("subscription connect-advanced는 인증 정보 원문 없이 Connector 연결 metadata를 stdin으로 받는다", async () => {
     const client: CliApplicationClient = {
       status: async () => ({}),
       snapshot: async () => ({}),
@@ -253,19 +417,123 @@ describe("CLI Application adapter", () => {
       installArtifact: async () => ({}),
       updateArtifact: async () => ({}),
     };
-    const invocation = parseCliArguments(["subscription", "connect", "verified-provider"]);
+    const invocation = parseCliArguments(["subscription", "connect-advanced", "verified-provider"]);
 
-    await expect(executeCliInvocation(client, invocation)).rejects.toThrow("기존 Connector profile 등록");
+    await expect(executeCliInvocation(client, invocation)).rejects.toThrow("구독 Connector 연결");
     await expect(
       executeCliInvocation(client, invocation, {
         readJson: async () => ({
           alias: "업무 계정",
           connectorId: "connector-1",
           profileLocator: "외부 계정 참조",
+          authKind: "cli-profile",
           billingKind: "subscription",
           token: "원문-token-금지",
         }),
       }),
     ).rejects.toThrow("알 수 없는 필드가 있습니다: token");
+  });
+
+  it("subscription connect-model은 secret을 argv가 아닌 stdin에서만 읽어 서버 연결 adapter에 전달한다", async () => {
+    const secret = "minimax-cli-secret-never-returned";
+    const connectServerModelSubscription = vi.fn().mockResolvedValue({
+      accountId: "account-model-12345678",
+      connectorId: "server-model-12345678",
+      status: "active",
+      connectorStatus: "ready",
+    });
+    const client: CliApplicationClient = {
+      status: async () => ({}),
+      snapshot: async () => ({}),
+      query: async () => ({}),
+      command: async () => ({}),
+      inspectArtifact: async () => ({}),
+      installArtifact: async () => ({}),
+      updateArtifact: async () => ({}),
+    };
+
+    const result = await executeCliInvocation(
+      client,
+      parseCliArguments(["subscription", "connect-model", "minimax-token-plan"]),
+      {
+        readJson: async () => ({ secret, alias: "개인 MiniMax" }),
+        connectServerModelSubscription,
+      },
+    );
+
+    expect(connectServerModelSubscription).toHaveBeenCalledWith({
+      providerId: "minimax-token-plan",
+      alias: "개인 MiniMax",
+      authKind: "subscription-key",
+      billingKind: "token-plan",
+      secret,
+    });
+    expect(JSON.stringify(result)).not.toContain(secret);
+    await expect(
+      executeCliInvocation(client, parseCliArguments(["subscription", "connect-model", "minimax-token-plan", secret]), {
+        readJson: async () => ({ secret }),
+        connectServerModelSubscription,
+      }),
+    ).rejects.toThrow(/stdin|명령행|argv/u);
+  });
+
+  it("subscription connect는 로컬 로그인 adapter에 provider와 사람이 읽는 별칭만 전달한다", async () => {
+    const connectServerSubscription = vi.fn(async () => ({ status: "ready" }));
+    const client: CliApplicationClient = {
+      status: async () => ({}),
+      snapshot: async () => ({}),
+      query: async () => ({}),
+      command: async () => ({}),
+      inspectArtifact: async () => ({}),
+      installArtifact: async () => ({}),
+      updateArtifact: async () => ({}),
+    };
+
+    await expect(
+      executeCliInvocation(
+        client,
+        parseCliArguments(["subscription", "connect", "openai-codex", "개인 Codex", "--model", "gpt-5.6-sol"]),
+        {
+          connectServerSubscription,
+        },
+      ),
+    ).resolves.toEqual({ status: "ready" });
+    expect(connectServerSubscription).toHaveBeenCalledWith({
+      providerId: "openai-codex",
+      alias: "개인 Codex",
+      modelId: "gpt-5.6-sol",
+    });
+  });
+
+  it("subscription share 승인 재개는 approval ID와 원래 command ID를 함께 보존한다", async () => {
+    const commands: unknown[] = [];
+    const client: CliApplicationClient = {
+      status: async () => ({}),
+      snapshot: async () => ({}),
+      query: async () => ({ data: [{ accountId: "account-1", version: 3 }] }),
+      command: async (input) => {
+        commands.push(input);
+        return {};
+      },
+      inspectArtifact: async () => ({}),
+      installArtifact: async () => ({}),
+      updateArtifact: async () => ({}),
+    };
+
+    await expect(
+      executeCliInvocation(client, parseCliArguments(["subscription", "share", "account-1", "approval-1"])),
+    ).rejects.toThrow("함께 필요");
+    await executeCliInvocation(
+      client,
+      parseCliArguments(["subscription", "share", "account-1", "approval-1", "original-command-1"]),
+    );
+    expect(commands).toEqual([
+      expect.objectContaining({
+        commandId: "original-command-1",
+        expectedRevision: 3,
+        operation: "subscription.account.share",
+        payload: { accountId: "account-1", approvalId: "approval-1" },
+      }),
+    ]);
   });
 });

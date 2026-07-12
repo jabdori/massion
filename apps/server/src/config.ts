@@ -12,6 +12,12 @@ export interface ServerConfig {
   readonly metrics: { readonly host: string; readonly port: number };
   readonly tokenKey: { readonly keyId: string; readonly key: Buffer };
   readonly credentialKey: Buffer;
+  readonly connectors: {
+    readonly root: string;
+    readonly executables: Readonly<Record<string, string>>;
+    readonly edgeEnabled: boolean;
+    readonly heartbeatMs: number;
+  };
   readonly software: {
     readonly workspaceRoot: string;
     readonly executables: Readonly<Record<string, string>>;
@@ -108,6 +114,37 @@ function softwareExecutables(value: string | undefined): Readonly<Record<string,
   return Object.fromEntries(entries) as Readonly<Record<string, string>>;
 }
 
+function connectorExecutables(value: string | undefined): Readonly<Record<string, string>> {
+  if (!value) return {};
+  if (value.length > 16_384) throw new Error("Connector executable allowlist JSON이 너무 큽니다");
+  let decoded: unknown;
+  try {
+    decoded = JSON.parse(value) as unknown;
+  } catch {
+    throw new Error("Connector executable allowlist JSON이 유효하지 않습니다");
+  }
+  if (!decoded || typeof decoded !== "object" || Array.isArray(decoded)) {
+    throw new Error("Connector executable allowlist는 object여야 합니다");
+  }
+  const entries = Object.entries(decoded as Record<string, unknown>);
+  if (
+    entries.length > 32 ||
+    entries.some(
+      ([name, path]) =>
+        !/^[a-z][a-z0-9._-]*$/u.test(name) || typeof path !== "string" || !isAbsolute(path) || path.length > 4096,
+    )
+  ) {
+    throw new Error("Connector executable allowlist에는 안전한 이름과 절대 경로만 사용할 수 있습니다");
+  }
+  return Object.fromEntries(entries) as Readonly<Record<string, string>>;
+}
+
+function boolean(value: string | undefined, fallback: boolean, label: string): boolean {
+  if (value === undefined) return fallback;
+  if (value !== "true" && value !== "false") throw new Error(`${label}은 true 또는 false여야 합니다`);
+  return value === "true";
+}
+
 function softwareEnvironmentAllowlist(value: string | undefined): readonly string[] {
   const names = (value ?? "CI,NODE_ENV")
     .split(",")
@@ -153,6 +190,8 @@ export function parseServerConfig(environment: Readonly<Record<string, string | 
     throw new Error("접근 token과 provider credential에는 서로 다른 key가 필요합니다");
   const softwareWorkspaceRoot = environment.MASSION_SOFTWARE_WORKSPACE_ROOT ?? "/var/lib/massion/workspaces";
   if (!isAbsolute(softwareWorkspaceRoot)) throw new Error("Software Delivery workspace root는 절대 경로여야 합니다");
+  const connectorRoot = environment.MASSION_CONNECTOR_ROOT ?? "/var/lib/massion/connectors";
+  if (!isAbsolute(connectorRoot)) throw new Error("Connector root는 절대 경로여야 합니다");
   const publicBaseUrl = environment.MASSION_REGISTRY_PUBLIC_URL ?? `http://${registryHost}:${String(registryPort)}`;
   const parsedPublicUrl = new URL(publicBaseUrl);
   const publicLoopback = new Set(["127.0.0.1", "::1", "localhost"]).has(parsedPublicUrl.hostname);
@@ -180,6 +219,18 @@ export function parseServerConfig(environment: Readonly<Record<string, string | 
     },
     tokenKey: parsedTokenKey,
     credentialKey: parsedCredentialKey,
+    connectors: {
+      root: connectorRoot,
+      executables: connectorExecutables(environment.MASSION_CONNECTOR_EXECUTABLES),
+      edgeEnabled: boolean(environment.MASSION_EDGE_CONNECTOR_ENABLED, false, "MASSION_EDGE_CONNECTOR_ENABLED"),
+      heartbeatMs: integer(
+        environment.MASSION_CONNECTOR_HEARTBEAT_MS,
+        30_000,
+        1_000,
+        300_000,
+        "MASSION_CONNECTOR_HEARTBEAT_MS",
+      ),
+    },
     software: {
       workspaceRoot: softwareWorkspaceRoot,
       executables: softwareExecutables(environment.MASSION_SOFTWARE_EXECUTABLES),

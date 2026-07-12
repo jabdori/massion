@@ -1,3 +1,4 @@
+import { decodeApprovalDisplayPreview } from "@massion/governance";
 import type { OrganizationService, TenantContext } from "@massion/identity";
 import type { MassionDatabase } from "@massion/storage";
 
@@ -122,6 +123,7 @@ interface ApprovalRecord {
   readonly status: string;
   readonly requester_user_id: string;
   readonly requirement_json: string;
+  readonly display_preview_json?: string;
   readonly expires_at: unknown;
   readonly created_at: unknown;
 }
@@ -147,9 +149,18 @@ function scalar(value: unknown): string | number {
 }
 
 function iso(value: unknown): string {
-  if (value instanceof Date) return value.toISOString();
-  if (typeof value !== "string" && typeof value !== "number") throw new Error("datetime 값이 유효하지 않습니다");
-  return new Date(value).toISOString();
+  const serialized =
+    value instanceof Date
+      ? value.toISOString()
+      : typeof value === "string" || typeof value === "number"
+        ? value
+        : value && typeof value === "object" && "toISOString" in value
+          ? String((value as { toISOString(): unknown }).toISOString())
+          : undefined;
+  if (serialized === undefined) throw new Error("datetime 값이 유효하지 않습니다");
+  const date = new Date(serialized);
+  if (Number.isNaN(date.getTime())) throw new Error("datetime 값이 유효하지 않습니다");
+  return date.toISOString();
 }
 
 function contributionIds(manifestJson: string): readonly string[] {
@@ -371,11 +382,12 @@ export class SurrealApplicationReadModel implements ApplicationReadModel {
   public async approvals(context: TenantContext): Promise<readonly ApplicationApprovalSource[]> {
     await this.organizations.verifyTenantContext(context);
     const [records] = await this.database.query<[ApprovalRecord[]]>(
-      "SELECT organization_id, approval_id, status, requester_user_id, requirement_json, expires_at, created_at FROM governance_approval WHERE organization_id = $organization_id ORDER BY created_at ASC, approval_id ASC;",
+      "SELECT organization_id, approval_id, status, requester_user_id, requirement_json, display_preview_json, expires_at, created_at FROM governance_approval WHERE organization_id = $organization_id ORDER BY created_at ASC, approval_id ASC;",
       { organization_id: context.organizationId },
     );
     return records.map((record) => {
       const requirement = JSON.parse(record.requirement_json) as { actions?: readonly string[] };
+      const displayPreview = decodeApprovalDisplayPreview(record.display_preview_json);
       return {
         organizationId: record.organization_id,
         approvalId: record.approval_id,
@@ -383,6 +395,7 @@ export class SurrealApplicationReadModel implements ApplicationReadModel {
         status: record.status,
         requestedBy: record.requester_user_id,
         expiresAt: iso(record.expires_at),
+        ...(displayPreview === undefined ? {} : { displayPreview }),
       };
     });
   }

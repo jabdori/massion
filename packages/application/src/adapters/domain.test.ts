@@ -3,13 +3,50 @@ import { IdentityService, OrganizationService } from "@massion/identity";
 import { OrganizationGraphService } from "@massion/organization";
 import { createDatabase } from "@massion/storage";
 import { WorkService } from "@massion/work";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { ApplicationCommandRegistry } from "../command-registry.js";
 import { ApplicationCommandStore } from "../command-store.js";
 import { registerApplicationDomainCommands } from "./domain.js";
 
 describe("Application domain adapters", () => {
+  it("승인 vote가 terminal이면 연결된 구독 Runtime 실행을 approvalId만으로 재개한다", async () => {
+    await using database = await createDatabase({
+      url: "mem://",
+      namespace: "massion",
+      database: crypto.randomUUID(),
+    });
+    const identities = await IdentityService.create(database);
+    const organizations = await OrganizationService.create(database);
+    const owner = await identities.registerPersonalUser({ email: "approval-resume@example.com", displayName: "Owner" });
+    const context = await organizations.resolveTenantContext(owner.user.user_id, owner.organization.organization_id);
+    const resume = vi.fn().mockResolvedValue({ executionId: "execution-review", status: "succeeded" });
+    const registry = new ApplicationCommandRegistry(await ApplicationCommandStore.create(database, organizations));
+    registerApplicationDomainCommands(registry, {
+      runtime: { resume } as never,
+      approvals: {
+        vote: async () => ({
+          approval_id: "approval-review",
+          execution_id: "execution-review",
+          resume_target: "runtime-subscription",
+          status: "approved",
+          revision: 2,
+        }),
+        cancel: vi.fn(),
+      } as never,
+    });
+
+    await registry.dispatch(context, ["approval:write"], {
+      schemaVersion: "massion.application.v1",
+      commandId: "approval-vote-resume-command",
+      correlationId: "approval-vote-resume-correlation",
+      operation: "approval.vote",
+      payload: { approvalId: "approval-review", vote: "approve", reason: "검증 완료" },
+    });
+
+    expect(resume).toHaveBeenCalledWith(context, "execution-review", { approvalId: "approval-review" });
+  });
+
   it("실제 Work·Organization public service를 command registry에 연결하고 tenant·revision을 보존한다", async () => {
     await using database = await createDatabase({
       url: "mem://",
@@ -362,6 +399,23 @@ describe("Application domain adapters", () => {
             updated_at: "2026-07-12T00:00:00.000Z",
           };
         },
+        revoke: async (_context: unknown, connectorId: string) => {
+          calls.push({ operation: "connector.revoke", input: { connectorId } });
+          return {
+            connector_id: connectorId,
+            organization_id: "organization-secret",
+            owner_user_id: "owner-secret",
+            location: "edge",
+            execution_kind: "agent-runtime",
+            protocol: "massion-connector-v1",
+            version: "1.0.0",
+            public_key: "connector-public-key-secret",
+            capabilities: ["session.execute"],
+            status: "revoked",
+            created_at: "2026-07-12T00:00:00.000Z",
+            updated_at: "2026-07-12T00:00:00.000Z",
+          };
+        },
       },
       subscriptionAccounts: {
         register: async (_context: unknown, input: unknown) => {
@@ -381,12 +435,33 @@ describe("Application domain adapters", () => {
           return account("personal", "revoked", 4);
         },
       },
+      subscriptionConnections: {
+        connect: async (_context: unknown, input: unknown) => {
+          calls.push({ operation: "connection.connect", input });
+          return {
+            account: account("personal", "active", 1),
+            binding: {
+              providerId: "verified-provider",
+              endpointId: "endpoint-internal",
+              endpointUrl: "massion-connector:///verified-provider/acp",
+              protocol: "acp",
+              executionKind: "agent-runtime",
+              credentialId: "credential-internal",
+            },
+          };
+        },
+        disconnect: async (_context: unknown, input: unknown) => {
+          calls.push({ operation: "connection.disconnect", input });
+          return { account: account("personal", "revoked", 4), revokedCredentialCount: 1 };
+        },
+      },
       subscriptionPolicy: {
         configure: async (_context: unknown, input: unknown) => {
           calls.push({ operation: "policy.configure", input });
           return {
             providerId: "verified-provider",
             credentialPolicy: "quota-headroom",
+            approvalMode: "automatic",
             version: 2,
             source: "configured",
             updatedAt: "2026-07-12T00:00:00.000Z",
@@ -414,12 +489,17 @@ describe("Application domain adapters", () => {
         },
       },
       {
+        operation: "subscription.connector.revoke",
+        payload: { connectorId: "connector-1" },
+      },
+      {
         operation: "subscription.account.register",
         payload: {
           providerId: "verified-provider",
           alias: "업무 계정",
           connectorId: "connector-1",
           profileLocator: "external-account@example.com",
+          authKind: "acp",
           billingKind: "subscription",
         },
       },
@@ -440,7 +520,11 @@ describe("Application domain adapters", () => {
       },
       {
         operation: "subscription.policy.configure",
-        payload: { providerId: "verified-provider", credentialPolicy: "quota-headroom" },
+        payload: {
+          providerId: "verified-provider",
+          credentialPolicy: "quota-headroom",
+          approvalMode: "automatic",
+        },
       },
     ] as const;
     const results = [];
@@ -457,24 +541,58 @@ describe("Application domain adapters", () => {
 
     expect(results).toEqual([
       expect.objectContaining({ data: expect.objectContaining({ connectorId: "connector-1", status: "ready" }) }),
+      expect.objectContaining({ data: expect.objectContaining({ connectorId: "connector-1", status: "revoked" }) }),
       expect.objectContaining({ data: expect.objectContaining({ accountId: "subscription-account-1", version: 1 }) }),
       expect.objectContaining({ data: expect.objectContaining({ scope: "organization", version: 2 }) }),
       expect.objectContaining({ data: expect.objectContaining({ scope: "personal", version: 3 }) }),
       expect.objectContaining({ data: expect.objectContaining({ status: "revoked", version: 4 }) }),
       expect.objectContaining({
-        data: expect.objectContaining({ credentialPolicy: "quota-headroom", version: 2, source: "configured" }),
+        data: expect.objectContaining({
+          credentialPolicy: "quota-headroom",
+          approvalMode: "automatic",
+          version: 2,
+          source: "configured",
+        }),
       }),
     ]);
+    await expect(
+      registry.dispatch(context, ["subscription:write"], {
+        schemaVersion: "massion.application.v1",
+        commandId: crypto.randomUUID(),
+        correlationId: crypto.randomUUID(),
+        operation: "subscription.policy.configure",
+        payload: { providerId: "openai-codex", credentialPolicy: "adaptive", approvalMode: "review" },
+      }),
+    ).resolves.toMatchObject({ outcome: "succeeded" });
+    for (const [providerId, approvalMode] of [
+      ["github-copilot", "review"],
+      ["google-antigravity-cli", "automatic"],
+    ] as const) {
+      await expect(
+        registry.dispatch(context, ["subscription:write"], {
+          schemaVersion: "massion.application.v1",
+          commandId: crypto.randomUUID(),
+          correlationId: crypto.randomUUID(),
+          operation: "subscription.policy.configure",
+          payload: { providerId, credentialPolicy: "adaptive", approvalMode },
+        }),
+      ).rejects.toThrow();
+    }
     expect(calls).toEqual([
       expect.objectContaining({ operation: "connector.enroll" }),
-      expect.objectContaining({ operation: "account.register" }),
+      expect.objectContaining({ operation: "connector.revoke", input: { connectorId: "connector-1" } }),
+      expect.objectContaining({ operation: "connection.connect", input: expect.objectContaining({ authKind: "acp" }) }),
       expect.objectContaining({ operation: "account.share", input: expect.objectContaining({ expectedVersion: 1 }) }),
       expect.objectContaining({ operation: "account.unshare", input: expect.objectContaining({ expectedVersion: 2 }) }),
       expect.objectContaining({
-        operation: "account.disconnect",
+        operation: "connection.disconnect",
         input: expect.objectContaining({ expectedVersion: 3 }),
       }),
       expect.objectContaining({ operation: "policy.configure" }),
+      expect.objectContaining({
+        operation: "policy.configure",
+        input: expect.objectContaining({ providerId: "openai-codex", approvalMode: "review" }),
+      }),
     ]);
     const serialized = JSON.stringify(results);
     for (const forbidden of [
@@ -487,8 +605,67 @@ describe("Application domain adapters", () => {
       "connector-public-key-secret",
       "connector-signature-secret",
       "policy-token-secret",
+      "endpoint-internal",
+      "credential-internal",
     ]) {
       expect(serialized).not.toContain(forbidden);
     }
+  });
+
+  it("구독 공유는 조직 정책이 요구할 때만 awaiting-approval이 되고 같은 명령으로 재개된다", async () => {
+    await using database = await createDatabase({ url: "mem://", namespace: "massion", database: crypto.randomUUID() });
+    const identities = await IdentityService.create(database);
+    const organizations = await OrganizationService.create(database);
+    const owner = await identities.registerPersonalUser({ email: "share@example.com", displayName: "Share" });
+    const context = await organizations.resolveTenantContext(owner.user.user_id, owner.organization.organization_id);
+    const registry = new ApplicationCommandRegistry(await ApplicationCommandStore.create(database, organizations));
+    const calls: unknown[] = [];
+    registerApplicationDomainCommands(registry, {
+      subscriptionAccounts: {
+        share: async (_context: unknown, input: { approvalId?: string }) => {
+          calls.push(input);
+          if (!input.approvalId) throw new GovernanceApprovalRequiredError("decision-share", "approval-share");
+          return {
+            account_id: "subscription-account-1",
+            organization_id: context.organizationId,
+            owner_user_id: context.userId,
+            provider_id: "openai-codex",
+            alias: "공유 계정",
+            scope: "organization",
+            connector_id: "connector-1",
+            profile_fingerprint: "redacted",
+            billing_kind: "consumer-subscription",
+            status: "active",
+            consent_version: 1,
+            version: 2,
+            created_at: "2026-07-12T00:00:00.000Z",
+            updated_at: "2026-07-12T00:00:00.000Z",
+          };
+        },
+      },
+    } as never);
+    const initial = {
+      schemaVersion: "massion.application.v1" as const,
+      commandId: "subscription-share-command-0001",
+      correlationId: "subscription-share-correlation-0001",
+      operation: "subscription.account.share",
+      expectedRevision: 1,
+      payload: { accountId: "subscription-account-1" },
+    };
+
+    await expect(registry.dispatch(context, ["subscription:write"], initial)).resolves.toMatchObject({
+      outcome: "awaiting-approval",
+      data: { decisionId: "decision-share", approvalId: "approval-share" },
+    });
+    await expect(
+      registry.dispatch(context, ["subscription:write"], {
+        ...initial,
+        payload: { ...initial.payload, approvalId: "approval-share" },
+      }),
+    ).resolves.toMatchObject({ outcome: "succeeded", data: { scope: "organization", version: 2 } });
+    expect(calls).toEqual([
+      expect.not.objectContaining({ approvalId: expect.anything() }),
+      expect.objectContaining({ approvalId: "approval-share" }),
+    ]);
   });
 });

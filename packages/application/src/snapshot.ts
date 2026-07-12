@@ -239,6 +239,7 @@ export class CollaborationGraphSnapshotProjector {
           status: approval.status,
           requestedBy: approval.requestedBy,
           expiresAt: approval.expiresAt,
+          ...(approval.displayPreview === undefined ? {} : { displayPreview: approval.displayPreview }),
         })),
       extensions: sources.extensions.map((extension) => ({
         installationId: extension.installationId,

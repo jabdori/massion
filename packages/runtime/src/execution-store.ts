@@ -6,6 +6,7 @@ import { applyMigrations, type MassionDatabase, type QueryExecutor } from "@mass
 import type { AgentExecutionInput, RuntimeExecutionStatus } from "./contracts.js";
 import type { AgentConfigurationReader, ResolvedAgentConfiguration } from "./agent-configuration.js";
 import {
+  RUNTIME_ACTOR_LINEAGE_MIGRATION,
   RUNTIME_BLOCKED_TRANSITION_MIGRATION,
   RUNTIME_EXECUTION_MIGRATION,
   RUNTIME_PROMPT_LINEAGE_MIGRATION,
@@ -14,6 +15,7 @@ import {
 export interface RuntimeExecution {
   readonly execution_id: string;
   readonly organization_id: string;
+  readonly actor_user_id?: string;
   readonly work_id: string;
   readonly task_id?: string;
   readonly agent_handle: string;
@@ -33,6 +35,13 @@ export interface RuntimeExecution {
   readonly ended_at?: unknown;
   readonly created_at: unknown;
   readonly updated_at: unknown;
+}
+
+export interface RuntimeRecoveryCandidate {
+  readonly execution_id: string;
+  readonly organization_id: string;
+  readonly actor_user_id?: string;
+  readonly status: "running" | "suspended";
 }
 
 export interface RuntimeEvent {
@@ -81,6 +90,36 @@ export interface AppendRuntimeEventInput {
   readonly payload: unknown;
 }
 
+export type RuntimeSubscriptionReceiptEventType =
+  | "subscription_route_session_acquired"
+  | "subscription_invocation_started"
+  | "subscription_checkpoint_observed"
+  | "subscription_terminal_observed"
+  | "subscription_settlement_completed";
+
+export interface AppendRuntimeSubscriptionReceiptInput {
+  readonly commandId: string;
+  readonly executionId: string;
+  readonly eventType: RuntimeSubscriptionReceiptEventType;
+  readonly payload: Readonly<Record<string, unknown>> & {
+    readonly executionId: string;
+    readonly workId: string;
+    readonly agentHandle: string;
+    readonly routeAttemptId: string;
+    readonly leaseId: string;
+    readonly accountId: string;
+    readonly connectorId: string;
+    readonly adapterId: string;
+    readonly quotaSnapshotId?: string;
+  };
+}
+
+export interface AppendRuntimeSubscriptionReceiptResult {
+  readonly execution: RuntimeExecution;
+  readonly event: RuntimeEvent;
+  readonly replayed: boolean;
+}
+
 const TRANSITIONS: Readonly<Record<RuntimeExecutionStatus, readonly RuntimeExecutionStatus[]>> = {
   queued: ["running", "blocked_model_unavailable", "cancelled"],
   running: ["suspended", "succeeded", "failed", "cancelled", "interrupted", "blocked_model_unavailable"],
@@ -120,6 +159,7 @@ export class RuntimeExecutionStore {
       RUNTIME_EXECUTION_MIGRATION,
       RUNTIME_BLOCKED_TRANSITION_MIGRATION,
       RUNTIME_PROMPT_LINEAGE_MIGRATION,
+      RUNTIME_ACTOR_LINEAGE_MIGRATION,
     ]);
     return new RuntimeExecutionStore(database, organizations, configurations);
   }
@@ -132,14 +172,15 @@ export class RuntimeExecutionStore {
     const requestJson = canonicalJson(input);
     const created = await this.database.transaction(async (tx) => {
       await this.organizations.verifyTenantContext(context, undefined, tx);
-      const repeated = await this.repeated(tx, context.organizationId, input.commandId, requestJson);
-      if (repeated) return await this.resultFromEvent(tx, context.organizationId, repeated);
+      const repeated = await this.repeated(tx, context, input.commandId, requestJson);
+      if (repeated) return await this.resultFromEvent(tx, context, repeated);
       const executionId = randomUUID();
       const [executions] = await tx.query<[RuntimeExecution[]]>(
-        "CREATE runtime_execution CONTENT { execution_id: $execution_id, organization_id: $organization_id, work_id: $work_id, task_id: $task_id, agent_handle: $agent_handle, model_route: $model_route, correlation_id: $correlation_id, input_json: $input_json, status: 'queued', version: 1, event_sequence: 1, created_at: time::now(), updated_at: time::now() } RETURN AFTER;",
+        "CREATE runtime_execution CONTENT { execution_id: $execution_id, organization_id: $organization_id, actor_user_id: $actor_user_id, work_id: $work_id, task_id: $task_id, agent_handle: $agent_handle, model_route: $model_route, correlation_id: $correlation_id, input_json: $input_json, status: 'queued', version: 1, event_sequence: 1, created_at: time::now(), updated_at: time::now() } RETURN AFTER;",
         {
           execution_id: executionId,
           organization_id: context.organizationId,
+          actor_user_id: context.userId,
           work_id: input.workId,
           task_id: input.taskId,
           agent_handle: input.agentHandle,
@@ -172,11 +213,13 @@ export class RuntimeExecutionStore {
 
   public async findExecutionIdByCommand(context: TenantContext, commandId: string): Promise<string | undefined> {
     await this.organizations.verifyTenantContext(context);
-    const [events] = await this.database.query<[{ execution_id: string }[]]>(
+    const [events] = await this.database.query<[Pick<RuntimeEvent, "execution_id">[]]>(
       "SELECT execution_id FROM runtime_event WHERE organization_id = $organization_id AND command_id = $command_id LIMIT 1;",
       { organization_id: context.organizationId, command_id: commandId },
     );
-    return events[0]?.execution_id;
+    const event = events[0];
+    if (!event) return undefined;
+    return (await this.findExecution(this.database, context, event.execution_id))?.execution_id;
   }
 
   private async attachConfiguration(
@@ -186,7 +229,7 @@ export class RuntimeExecutionStore {
   ): Promise<{ execution: RuntimeExecution; event: RuntimeEvent }> {
     return await this.database.transaction(async (transaction) => {
       await this.organizations.verifyTenantContext(context, undefined, transaction);
-      const current = await this.execution(transaction, context.organizationId, created.execution.execution_id);
+      const current = await this.execution(transaction, context, created.execution.execution_id);
       if (current.prompt_version_id) {
         if (
           current.prompt_version_id !== configuration.promptVersionId ||
@@ -231,9 +274,9 @@ export class RuntimeExecutionStore {
     const requestJson = canonicalJson(input);
     return await this.database.transaction(async (tx) => {
       await this.organizations.verifyTenantContext(context, undefined, tx);
-      const repeated = await this.repeated(tx, context.organizationId, input.commandId, requestJson);
-      if (repeated) return await this.resultFromEvent(tx, context.organizationId, repeated);
-      const current = await this.execution(tx, context.organizationId, input.executionId);
+      const repeated = await this.repeated(tx, context, input.commandId, requestJson);
+      if (repeated) return await this.resultFromEvent(tx, context, repeated);
+      const current = await this.execution(tx, context, input.executionId);
       if (current.version !== input.expectedVersion)
         throw new Error(`현재 Runtime Execution version은 ${String(current.version)}입니다`);
       if (!TRANSITIONS[current.status].includes(input.target))
@@ -277,7 +320,7 @@ export class RuntimeExecutionStore {
     const requestJson = canonicalJson(input);
     return await this.database.transaction(async (tx) => {
       await this.organizations.verifyTenantContext(context, undefined, tx);
-      const current = await this.execution(tx, context.organizationId, input.executionId);
+      const current = await this.execution(tx, context, input.executionId);
       const [bindings] = await tx.query<[RuntimeWorkflowBinding[]]>(
         "CREATE runtime_workflow_binding CONTENT { binding_id: $binding_id, organization_id: $organization_id, execution_id: $execution_id, workflow_id: $workflow_id, workflow_execution_id: $workflow_execution_id, created_at: time::now(), updated_at: time::now() } RETURN AFTER;",
         {
@@ -318,9 +361,9 @@ export class RuntimeExecutionStore {
     const requestJson = canonicalJson(input);
     return await this.database.transaction(async (tx) => {
       await this.organizations.verifyTenantContext(context, undefined, tx);
-      const repeated = await this.repeated(tx, context.organizationId, input.commandId, requestJson);
-      if (repeated) return await this.resultFromEvent(tx, context.organizationId, repeated);
-      const current = await this.execution(tx, context.organizationId, input.executionId);
+      const repeated = await this.repeated(tx, context, input.commandId, requestJson);
+      if (repeated) return await this.resultFromEvent(tx, context, repeated);
+      const current = await this.execution(tx, context, input.executionId);
       if (current.version !== input.expectedVersion)
         throw new Error(`현재 Runtime Execution version은 ${String(current.version)}입니다`);
       const [executions] = await tx.query<[RuntimeExecution[]]>(
@@ -343,8 +386,51 @@ export class RuntimeExecutionStore {
     });
   }
 
+  public async appendSubscriptionReceipt(
+    context: TenantContext,
+    input: AppendRuntimeSubscriptionReceiptInput,
+  ): Promise<AppendRuntimeSubscriptionReceiptResult> {
+    await this.organizations.verifyTenantContext(context);
+    const requestJson = canonicalJson(input);
+    return await this.database.transaction(async (tx) => {
+      await this.organizations.verifyTenantContext(context, undefined, tx);
+      const repeated = await this.repeated(tx, context, input.commandId, requestJson);
+      if (repeated) {
+        return {
+          execution: await this.execution(tx, context, repeated.execution_id),
+          event: repeated,
+          replayed: true,
+        };
+      }
+      const current = await this.execution(tx, context, input.executionId);
+      const [receiptEvents] = await tx.query<[RuntimeEvent[]]>(
+        "SELECT * OMIT id FROM runtime_event WHERE organization_id = $organization_id AND execution_id = $execution_id AND event_type IN ['subscription_route_session_acquired', 'subscription_invocation_started', 'subscription_checkpoint_observed', 'subscription_terminal_observed', 'subscription_settlement_completed'] ORDER BY sequence ASC;",
+        { organization_id: context.organizationId, execution_id: current.execution_id },
+      );
+      this.requireSubscriptionReceiptTransition(current, receiptEvents, input);
+      const [executions] = await tx.query<[RuntimeExecution[]]>(
+        "UPDATE runtime_execution SET version += 1, event_sequence += 1, updated_at = time::now() WHERE organization_id = $organization_id AND execution_id = $execution_id RETURN AFTER;",
+        { organization_id: context.organizationId, execution_id: current.execution_id },
+      );
+      const execution = executions[0];
+      if (!execution) throw new Error("Runtime Subscription Receipt append 실행 결과가 없습니다");
+      const event = await this.insertEvent(
+        tx,
+        context.organizationId,
+        execution,
+        input.commandId,
+        input.eventType,
+        requestJson,
+        input.payload,
+      );
+      await this.saveResult(tx, event, { execution, event });
+      return { execution, event, replayed: false };
+    });
+  }
+
   public async listEvents(context: TenantContext, executionId: string, afterSequence = 0): Promise<RuntimeEvent[]> {
     await this.organizations.verifyTenantContext(context);
+    await this.execution(this.database, context, executionId);
     const [events] = await this.database.query<[RuntimeEvent[]]>(
       "SELECT * OMIT id FROM runtime_event WHERE organization_id = $organization_id AND execution_id = $execution_id AND sequence > $after_sequence ORDER BY sequence ASC;",
       { organization_id: context.organizationId, execution_id: executionId, after_sequence: afterSequence },
@@ -355,8 +441,35 @@ export class RuntimeExecutionStore {
   public async listRecoverable(context: TenantContext): Promise<RuntimeExecution[]> {
     await this.organizations.verifyTenantContext(context);
     const [executions] = await this.database.query<[RuntimeExecution[]]>(
-      "SELECT * OMIT id FROM runtime_execution WHERE organization_id = $organization_id AND status IN ['running', 'suspended'] ORDER BY created_at ASC, execution_id ASC;",
-      { organization_id: context.organizationId },
+      "SELECT * OMIT id FROM runtime_execution WHERE organization_id = $organization_id AND actor_user_id = $actor_user_id AND status IN ['running', 'suspended'] ORDER BY created_at ASC, execution_id ASC;",
+      { organization_id: context.organizationId, actor_user_id: context.userId },
+    );
+    return executions;
+  }
+
+  public async listByCorrelation(context: TenantContext, correlationId: string): Promise<RuntimeExecution[]> {
+    await this.organizations.verifyTenantContext(context);
+    const normalizedCorrelationId = correlationId.trim();
+    if (!normalizedCorrelationId || normalizedCorrelationId.length > 256 || /[\0\r\n]/u.test(normalizedCorrelationId)) {
+      throw new Error("실행 상관관계 ID가 유효하지 않습니다");
+    }
+    const [executions] = await this.database.query<[RuntimeExecution[]]>(
+      `SELECT * OMIT id FROM runtime_execution
+       WHERE organization_id = $organization_id AND actor_user_id = $actor_user_id
+         AND correlation_id = $correlation_id
+       ORDER BY created_at ASC, execution_id ASC;`,
+      {
+        organization_id: context.organizationId,
+        actor_user_id: context.userId,
+        correlation_id: normalizedCorrelationId,
+      },
+    );
+    return executions;
+  }
+
+  public async listStartupRecoverable(): Promise<RuntimeRecoveryCandidate[]> {
+    const [executions] = await this.database.query<[RuntimeRecoveryCandidate[]]>(
+      "SELECT execution_id, organization_id, actor_user_id, status FROM runtime_execution WHERE status IN ['running', 'suspended'] ORDER BY execution_id ASC;",
     );
     return executions;
   }
@@ -370,7 +483,7 @@ export class RuntimeExecutionStore {
     binding?: RuntimeWorkflowBinding;
   }> {
     await this.organizations.verifyTenantContext(context);
-    const execution = await this.execution(this.database, context.organizationId, executionId);
+    const execution = await this.execution(this.database, context, executionId);
     const events = await this.listEvents(context, executionId);
     const [bindings] = await this.database.query<[RuntimeWorkflowBinding[]]>(
       "SELECT * OMIT id FROM runtime_workflow_binding WHERE organization_id = $organization_id AND execution_id = $execution_id LIMIT 1;",
@@ -381,27 +494,107 @@ export class RuntimeExecutionStore {
 
   private async execution(
     executor: QueryExecutor,
-    organizationId: string,
+    context: TenantContext,
     executionId: string,
   ): Promise<RuntimeExecution> {
+    const execution = await this.findExecution(executor, context, executionId);
+    if (!execution) throw new Error("Runtime Execution을 찾을 수 없습니다");
+    return execution;
+  }
+
+  private async findExecution(
+    executor: QueryExecutor,
+    context: TenantContext,
+    executionId: string,
+  ): Promise<RuntimeExecution | undefined> {
     const [executions] = await executor.query<[RuntimeExecution[]]>(
-      "SELECT * OMIT id FROM runtime_execution WHERE organization_id = $organization_id AND execution_id = $execution_id LIMIT 1;",
-      { organization_id: organizationId, execution_id: executionId },
+      "SELECT * OMIT id FROM runtime_execution WHERE organization_id = $organization_id AND actor_user_id = $actor_user_id AND execution_id = $execution_id LIMIT 1;",
+      { organization_id: context.organizationId, actor_user_id: context.userId, execution_id: executionId },
     );
-    if (!executions[0]) throw new Error(`Runtime Execution을 찾을 수 없습니다: ${executionId}`);
     return executions[0];
+  }
+
+  private requireSubscriptionReceiptTransition(
+    execution: RuntimeExecution,
+    events: readonly RuntimeEvent[],
+    input: AppendRuntimeSubscriptionReceiptInput,
+  ): void {
+    if (execution.status !== "running") {
+      throw new Error("실행 중인 Runtime Execution에만 Subscription Receipt를 기록할 수 있습니다");
+    }
+    if (
+      execution.execution_id !== input.payload.executionId ||
+      execution.work_id !== input.payload.workId ||
+      execution.agent_handle !== input.payload.agentHandle
+    ) {
+      throw new Error("Subscription Receipt Execution·Work·Agent 계보가 일치하지 않습니다");
+    }
+    const parsed = events.map((event) => ({
+      event,
+      payload: JSON.parse(event.payload_json) as Record<string, unknown>,
+    }));
+    const lineageEvents = parsed.filter(
+      ({ payload }) =>
+        payload.routeAttemptId === input.payload.routeAttemptId && payload.leaseId === input.payload.leaseId,
+    );
+    const previous = lineageEvents.at(-1)?.event;
+    if (input.eventType === "subscription_route_session_acquired") {
+      if (
+        lineageEvents.length > 0 ||
+        (events.length > 0 && events.at(-1)?.event_type !== "subscription_settlement_completed")
+      ) {
+        throw new Error(
+          `허용되지 않는 Subscription Receipt 전이: ${events.at(-1)?.event_type ?? "none"} -> ${input.eventType}`,
+        );
+      }
+      return;
+    }
+    const expectedPrevious: Readonly<
+      Record<Exclude<RuntimeSubscriptionReceiptEventType, "subscription_route_session_acquired">, readonly string[]>
+    > = {
+      subscription_invocation_started: ["subscription_route_session_acquired", "subscription_checkpoint_observed"],
+      subscription_checkpoint_observed: ["subscription_invocation_started"],
+      subscription_terminal_observed: ["subscription_invocation_started", "subscription_checkpoint_observed"],
+      subscription_settlement_completed: ["subscription_terminal_observed"],
+    };
+    if (!previous || !expectedPrevious[input.eventType].includes(previous.event_type)) {
+      throw new Error(
+        `허용되지 않는 Subscription Receipt 전이: ${previous?.event_type ?? "none"} -> ${input.eventType}`,
+      );
+    }
+    const acquired = lineageEvents[0];
+    if (acquired?.event.event_type !== "subscription_route_session_acquired") {
+      throw new Error("Subscription Receipt 취득 계보가 없습니다");
+    }
+    for (const key of [
+      "executionId",
+      "workId",
+      "agentHandle",
+      "routeAttemptId",
+      "leaseId",
+      "accountId",
+      "connectorId",
+      "adapterId",
+      "quotaSnapshotId",
+    ] as const) {
+      if (acquired.payload[key] !== input.payload[key]) {
+        throw new Error("Subscription Receipt 계보가 중간에 변경됐습니다");
+      }
+    }
   }
 
   private async repeated(
     executor: QueryExecutor,
-    organizationId: string,
+    context: TenantContext,
     commandId: string,
     requestJson: string,
   ): Promise<RuntimeEvent | undefined> {
     const [events] = await executor.query<[RuntimeEvent[]]>(
       "SELECT * OMIT id FROM runtime_event WHERE organization_id = $organization_id AND command_id = $command_id LIMIT 1;",
-      { organization_id: organizationId, command_id: commandId },
+      { organization_id: context.organizationId, command_id: commandId },
     );
+    if (events[0] && !(await this.findExecution(executor, context, events[0].execution_id)))
+      throw new Error("Runtime command의 행위자 계보가 일치하지 않습니다");
     if (events[0] && events[0].request_json !== requestJson)
       throw new Error("같은 commandId에 다른 Runtime 요청을 사용할 수 없습니다");
     return events[0];
@@ -409,10 +602,10 @@ export class RuntimeExecutionStore {
 
   private async resultFromEvent(
     executor: QueryExecutor,
-    organizationId: string,
+    context: TenantContext,
     event: RuntimeEvent,
   ): Promise<{ execution: RuntimeExecution; event: RuntimeEvent }> {
-    return { execution: await this.execution(executor, organizationId, event.execution_id), event };
+    return { execution: await this.execution(executor, context, event.execution_id), event };
   }
 
   private async insertEvent(

@@ -18,6 +18,7 @@ describe("massion-server process", () => {
           MASSION_TOKEN_KEY: Buffer.alloc(32, 12).toString("base64url"),
           MASSION_CREDENTIAL_KEY: Buffer.alloc(32, 13).toString("base64url"),
           MASSION_SOFTWARE_WORKSPACE_ROOT: `/tmp/massion-main-e2e-${String(process.pid)}-a`,
+          MASSION_CONNECTOR_ROOT: `/tmp/massion-main-e2e-${String(process.pid)}-a/connectors`,
           MASSION_DATABASE_URL: "mem://",
         },
         encoding: "utf8",
@@ -45,6 +46,7 @@ describe("massion-server process", () => {
           MASSION_TOKEN_KEY: Buffer.alloc(32, 11).toString("base64url"),
           MASSION_CREDENTIAL_KEY: Buffer.alloc(32, 14).toString("base64url"),
           MASSION_SOFTWARE_WORKSPACE_ROOT: softwareWorkspaceRoot,
+          MASSION_CONNECTOR_ROOT: join(softwareWorkspaceRoot, "connectors"),
           MASSION_DATABASE_URL: "mem://",
           MASSION_HTTP_PORT: httpPort,
           MASSION_METRICS_PORT: metricsPort,
@@ -60,6 +62,14 @@ describe("massion-server process", () => {
       const lines = createInterface({ input: child.stdout });
       const ready = new Promise<void>((resolve, reject) => {
         const timer = setTimeout(() => reject(new Error("server.ready 대기 시간을 초과했습니다")), 15_000);
+        child.once("exit", (code, exitSignal) => {
+          clearTimeout(timer);
+          reject(
+            new Error(
+              `server.ready 전에 종료됐습니다: code=${String(code)}, signal=${String(exitSignal)}, stderr=${stderr.join("")}`,
+            ),
+          );
+        });
         lines.on("line", (line) => {
           const parsed = JSON.parse(line) as { event?: string };
           if (parsed.event) events.push(parsed.event);

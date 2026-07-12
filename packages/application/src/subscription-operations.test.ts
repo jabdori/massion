@@ -26,14 +26,56 @@ describe("BuiltinSubscriptionProviderDirectory", () => {
       protocol: "codex-app-server",
       officialDocumentation: "https://developers.openai.com/codex/auth",
       credentialPolicies: DOMAIN_POLICIES,
+      runtimeCapabilities: {
+        approvalModes: ["automatic", "deny"],
+        approvalModesBySurface: {
+          server: ["automatic", "review", "deny"],
+          edge: ["automatic", "deny"],
+        },
+      },
     });
+    expect(providers.find((provider) => provider.providerId === "anthropic-claude-code")).toMatchObject({
+      displayName: "Anthropic Claude Agent",
+      availability: "requires-provider-approval",
+    });
+    expect(providers.find((provider) => provider.providerId === "github-copilot")).toMatchObject({
+      availability: "experimental",
+      connectionSurface: "edge-only",
+      runtimeCapabilities: {
+        accountIsolation: "single-os-keyring-account",
+        multipleAccounts: "one-account-per-connector",
+        maturity: "experimental",
+      },
+    });
+    expect(providers.find((provider) => provider.providerId === "google-antigravity-cli")).toMatchObject({
+      connectionSurface: "unavailable",
+    });
+    expect(providers.map((provider) => provider.displayName)).not.toContain("Claude Code");
     expect(providers.find((provider) => provider.providerId === "opencode-go")).toMatchObject({
       executionKind: "model",
+      connectionSurface: "unavailable",
       protocols: ["anthropic", "openai"],
       modelDiscovery: "endpoint",
       officialDocumentation: "https://opencode.ai/docs/go/",
       credentialPolicies: DOMAIN_POLICIES,
       verified: false,
+    });
+    for (const providerId of [
+      "kimi-coding-plan",
+      "stepfun-step-plan",
+      "alibaba-coding-plan",
+      "opencode-go",
+      "kilo-gateway",
+      "xai-api",
+      "nous-portal",
+      "zai-coding-plan",
+    ]) {
+      expect(providers.find((provider) => provider.providerId === providerId)).toMatchObject({
+        connectionSurface: "unavailable",
+      });
+    }
+    expect(providers.find((provider) => provider.providerId === "minimax-token-plan")).toMatchObject({
+      connectionSurface: "server-only",
     });
   });
 

@@ -13,6 +13,21 @@ export function percentile(values, quantile) {
   return sorted[Math.ceil(sorted.length * quantile) - 1];
 }
 
+export function hardeningDaemonEnvironment({ directory, httpPort, metricsPort, registryPort, path }) {
+  return {
+    PATH: path,
+    MASSION_TOKEN_KEY: globalThis.Buffer.alloc(32, 31).toString("base64url"),
+    MASSION_CREDENTIAL_KEY: globalThis.Buffer.alloc(32, 32).toString("base64url"),
+    MASSION_SOFTWARE_WORKSPACE_ROOT: resolve(directory, "workspaces"),
+    MASSION_CONNECTOR_ROOT: resolve(directory, "connectors"),
+    MASSION_DATABASE_URL: "mem://",
+    MASSION_HTTP_PORT: String(httpPort),
+    MASSION_METRICS_PORT: String(metricsPort),
+    MASSION_REGISTRY_PORT: String(registryPort),
+    MASSION_REGISTRY_ARTIFACT_ROOT: directory,
+  };
+}
+
 async function reservePort() {
   const server = createServer();
   await new Promise((resolvePromise, reject) => {
@@ -36,17 +51,13 @@ async function main() {
   const [httpPort, metricsPort, registryPort] = await Promise.all([reservePort(), reservePort(), reservePort()]);
   const child = spawn(process.execPath, ["apps/server/dist/main.js"], {
     cwd: root,
-    env: {
-      PATH: process.env.PATH,
-      MASSION_TOKEN_KEY: globalThis.Buffer.alloc(32, 31).toString("base64url"),
-      MASSION_CREDENTIAL_KEY: globalThis.Buffer.alloc(32, 32).toString("base64url"),
-      MASSION_SOFTWARE_WORKSPACE_ROOT: resolve(directory, "workspaces"),
-      MASSION_DATABASE_URL: "mem://",
-      MASSION_HTTP_PORT: String(httpPort),
-      MASSION_METRICS_PORT: String(metricsPort),
-      MASSION_REGISTRY_PORT: String(registryPort),
-      MASSION_REGISTRY_ARTIFACT_ROOT: directory,
-    },
+    env: hardeningDaemonEnvironment({
+      directory,
+      httpPort,
+      metricsPort,
+      registryPort,
+      path: process.env.PATH,
+    }),
     stdio: ["ignore", "pipe", "pipe"],
   });
   const errors = [];

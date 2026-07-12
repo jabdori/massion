@@ -63,10 +63,23 @@ describe("Connector 일회 등록과 장치 서명", () => {
     );
   });
 
+  it("응답을 잃어도 같은 발급 명령에서 새 일회 code를 만들어내지 않는다", async () => {
+    const commandId = randomUUID();
+    await enrollment.issue(context, { commandId, location: "edge", executionKind: "agent-runtime" });
+    await expect(
+      enrollment.issue(context, { commandId, location: "edge", executionKind: "agent-runtime" }),
+    ).rejects.toThrow("재사용");
+    const [records] = await database.query<[unknown[]]>(
+      "SELECT enrollment_id FROM subscription_connector_enrollment WHERE command_id = $command_id;",
+      { command_id: commandId },
+    );
+    expect(records).toHaveLength(1);
+  });
+
   it("만료된 등록 code를 거부한다", async () => {
     const issued = await enrollment.issue(context, {
       commandId: randomUUID(),
-      location: "server",
+      location: "edge",
       executionKind: "model",
       ttlMs: 1,
     });
@@ -86,6 +99,18 @@ describe("Connector 일회 등록과 장치 서명", () => {
     };
 
     await expect(enrollment.verify(input, new Date("2030-01-01T00:00:00.002Z"))).rejects.toThrow("만료");
+  });
+
+  it("서버 관리형 Connector에는 장치용 일회 등록 code를 발급하지 않는다", async () => {
+    await expect(
+      enrollment.issue(context, {
+        commandId: randomUUID(),
+        location: "server",
+        executionKind: "agent-runtime",
+      }),
+    ).rejects.toThrow("Edge");
+    const [records] = await database.query<[unknown[]]>("SELECT enrollment_id FROM subscription_connector_enrollment;");
+    expect(records).toEqual([]);
   });
 
   it("Ed25519가 아닌 key와 다른 장치의 서명을 거부한다", async () => {

@@ -1,8 +1,8 @@
 # Phase 25 — 모델 평가실과 역할별 자동 배치 구현 계획
 
 > **상태**: planned
-> **상세 계획**: `docs/superpowers/plans/2026-07-12-model-optimization-lab.md`
-> **선행 조건**: Phase 24 completed
+> **상세 계획**: 새 Core 저장소 전환 뒤 Phase 25 시작 commit에서 갱신
+> **선행 조건**: Phase 24 completed 및 Phase 27의 새 비공개 Massion Core root commit 생성
 > **방법**: 각 항목에서 실패 테스트 확인→최소 구현→관련 회귀 검증→커밋 순서를 지킵니다.
 
 ## Task 1. 평가 정본과 역할별 평가 묶음

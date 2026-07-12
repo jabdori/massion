@@ -28,6 +28,11 @@ const QUERY_OPERATIONS = new Set([
   "growth.configuration.get",
   "growth.suggestions",
   "growth.effects",
+  "subscription.providers",
+  "subscription.accounts",
+  "subscription.quota",
+  "subscription.policy",
+  "subscription.doctor",
 ]);
 
 function identity(input: unknown): TuiIdentity {

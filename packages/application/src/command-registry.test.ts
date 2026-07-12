@@ -223,4 +223,46 @@ describe("ApplicationCommandRegistry", () => {
       }),
     ).resolves.toMatchObject({ outcome: "succeeded", data: { installed: true } });
   });
+
+  it("명시적으로 복구 가능한 실패 명령은 같은 command를 새 generation으로 재개한다", async () => {
+    let attempts = 0;
+    registry.register({
+      operation: "subscription.connect-retry",
+      requiredScopes: ["work:write"],
+      allowedRoles: ["owner"],
+      recovery: "replay-domain",
+      retryFailedCommand: true,
+      validate: (payload) => payload,
+      async handle(_context, command) {
+        attempts += 1;
+        if (attempts === 1) throw new Error("일시적인 route 저장 실패");
+        return {
+          schemaVersion: "massion.application.v1",
+          commandId: command.commandId,
+          correlationId: command.correlationId,
+          operation: command.operation,
+          outcome: "succeeded",
+        };
+      },
+    });
+    const input = {
+      schemaVersion: "massion.application.v1" as const,
+      commandId: "registry-failed-retry-command-0001",
+      correlationId: "registry-failed-retry-correlation-0001",
+      operation: "subscription.connect-retry",
+      payload: {},
+    };
+
+    await expect(registry.dispatch(context, ["work:write"], input)).rejects.toMatchObject({ category: "internal" });
+    await expect(registry.dispatch(context, ["work:write"], input)).resolves.toMatchObject({ outcome: "succeeded" });
+    expect(attempts).toBe(2);
+
+    const [commands] = await database.query<[Array<{ state: string; lease_generation: number; error_json?: string }>]>(
+      "SELECT state, lease_generation, error_json FROM application_command WHERE command_id = $command_id;",
+      {
+        command_id: input.commandId,
+      },
+    );
+    expect(commands).toEqual([{ state: "succeeded", lease_generation: 2 }]);
+  });
 });

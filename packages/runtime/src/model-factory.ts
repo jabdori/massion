@@ -1,4 +1,6 @@
+import { createAnthropic } from "@ai-sdk/anthropic";
 import { createOpenAI } from "@ai-sdk/openai";
+import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { defaultSettingsMiddleware, wrapLanguageModel, type LanguageModel } from "ai";
 
 import type { TenantContext } from "@massion/identity";
@@ -18,7 +20,9 @@ import type {
 } from "@massion/subscriptions";
 
 import type { StructuredOutputSpec } from "./contracts.js";
+import type { RuntimeExecutionStore } from "./execution-store.js";
 import type { SubscriptionAgentResult } from "./subscriptions/agent-runtime.js";
+import { SubscriptionExecutionReceiptCoordinator } from "./subscriptions/execution-receipt.js";
 
 const OPENAI_API_BASE_URL = "https://api.openai.com/v1";
 const GPT_56_RESPONSES_MODEL_IDS: ReadonlySet<string> = new Set([
@@ -92,36 +96,67 @@ export type RoutedAgentRuntimeResult =
     })
   | Extract<SubscriptionAgentResult, { readonly outcome: "suspended" }>
   | Extract<SubscriptionAgentResult, { readonly outcome: "cancelled" }>
-  | (Extract<SubscriptionAgentResult, { readonly outcome: "failed" }> & {
+  | (Omit<
+      Extract<SubscriptionAgentResult, { readonly outcome: "failed" }>,
+      "signal" | "emittedTokens" | "sideEffectsStarted"
+    > & {
       readonly signal: FailureSignal;
       readonly emittedTokens: number;
       readonly sideEffectsStarted: boolean;
     });
 
 export interface RoutedAgentRuntimeExecutor {
-  execute(input: { readonly prompt: string; readonly abortSignal?: AbortSignal }): Promise<RoutedAgentRuntimeResult>;
+  execute(input: {
+    readonly executionId: string;
+    readonly prompt: string;
+    readonly abortSignal?: AbortSignal;
+  }): Promise<RoutedAgentRuntimeResult>;
   executeStructured?(
-    input: { readonly prompt: string; readonly abortSignal?: AbortSignal },
+    input: { readonly executionId: string; readonly prompt: string; readonly abortSignal?: AbortSignal },
     output: StructuredOutputSpec,
   ): Promise<RoutedAgentRuntimeResult>;
+  resume?(input: {
+    readonly executionId: string;
+    readonly sessionId: string;
+    readonly approvalId: string;
+    readonly approved: boolean;
+    readonly abortSignal?: AbortSignal;
+  }): Promise<RoutedAgentRuntimeResult>;
   cancel?(): Promise<void>;
 }
 
 export interface RoutedAgentRuntimeLease extends RoutedExecutionLeaseBase {
   readonly kind: "agent-runtime";
   readonly sessionLeaseId: string;
+  readonly sessionExpiresAt: string;
+  readonly subscription: {
+    readonly workId: string;
+    readonly agentHandle: string;
+    readonly accountId: string;
+    readonly connectorId: string;
+    readonly adapterId: string;
+    readonly quotaSnapshotId?: string;
+  };
   readonly executor: RoutedAgentRuntimeExecutor;
+  renewSession(input: { readonly commandId: string; readonly expectedExpiresAt: string }): Promise<string>;
 }
 
 export type RoutedModelLease = RoutedLanguageModelLease | RoutedAgentRuntimeLease;
 
 export interface RoutedModelFactory {
   acquire(context: TenantContext, input: AcquireModelInput): Promise<RoutedModelLease>;
+  createSubscriptionReceipts?(store: RuntimeExecutionStore): SubscriptionExecutionReceiptCoordinator | undefined;
 }
 
 export interface ConnectorSessionBroker {
   acquire(context: TenantContext, input: AcquireSessionInput): Promise<ConnectorSessionLease>;
+  bindRuntime(
+    context: TenantContext,
+    input: { readonly commandId: string; readonly leaseId: string; readonly adapterId: string },
+  ): Promise<{ readonly adapterId?: string }>;
   recoverActive(context: TenantContext): Promise<readonly ConnectorSessionLease[]>;
+  getLease(context: TenantContext, leaseId: string): Promise<ConnectorSessionLease>;
+  findExecutionLeases(context: TenantContext, executionId: string): Promise<readonly ConnectorSessionLease[]>;
 }
 
 export interface ConnectorRuntimeResolutionInput {
@@ -142,7 +177,7 @@ export interface ConnectorRuntimeResolutionInput {
 
 export type ConnectorRuntimeBinding =
   | { readonly kind: "model"; readonly model: LanguageModel }
-  | { readonly kind: "agent-runtime"; readonly executor: RoutedAgentRuntimeExecutor };
+  | { readonly kind: "agent-runtime"; readonly executor: RoutedAgentRuntimeExecutor; readonly adapterId: string };
 
 export interface ConnectorRuntimeResolver {
   resolve(context: TenantContext, input: ConnectorRuntimeResolutionInput): Promise<ConnectorRuntimeBinding>;
@@ -218,15 +253,39 @@ function runtimeText(value: string | undefined, label: string): string {
   return normalized;
 }
 
+function explicitlyNoSideEffects(value: unknown): value is false {
+  return value === false;
+}
+
 export class OpenAICompatibleModelBuilder implements ProviderModelBuilder {
   public build(selection: ProviderModelSelection): LanguageModel {
     const root = selection.endpoint.base_url.replace(/\/$/u, "");
+    if (selection.endpoint.subscription_protocol === "anthropic") {
+      const provider = createAnthropic({
+        authToken: selection.secret,
+        baseURL: root.endsWith("/v1") ? root : `${root}/v1`,
+      });
+      return provider(selection.modelId);
+    }
     const useResponses = usesGpt56Responses(selection);
     const baseURL = useResponses
       ? OPENAI_API_BASE_URL
       : selection.provider.adapter_kind === "ollama"
         ? `${root}/v1`
         : root;
+    if (
+      !useResponses &&
+      (selection.provider.adapter_kind === "openai-compatible" ||
+        selection.provider.adapter_kind === "external-gateway" ||
+        selection.provider.adapter_kind === "subscription-connector")
+    ) {
+      return createOpenAICompatible({
+        name: selection.provider.provider_id,
+        apiKey: selection.secret,
+        baseURL,
+        includeUsage: true,
+      })(selection.modelId);
+    }
     const provider = createOpenAI({
       name: selection.provider.provider_id,
       apiKey: selection.secret,
@@ -249,6 +308,11 @@ export class MassionModelFactory implements RoutedModelFactory {
     private readonly builder: ProviderModelBuilder,
     private readonly connectorRuntime?: ConnectorRuntimeDependencies,
   ) {}
+
+  public createSubscriptionReceipts(store: RuntimeExecutionStore): SubscriptionExecutionReceiptCoordinator | undefined {
+    if (!this.connectorRuntime) return undefined;
+    return new SubscriptionExecutionReceiptCoordinator(store, this.router, this.connectorRuntime.broker);
+  }
 
   public async acquire(context: TenantContext, input: AcquireModelInput): Promise<RoutedModelLease> {
     const reservation = await this.router
@@ -314,12 +378,13 @@ export class MassionModelFactory implements RoutedModelFactory {
     for (const lease of leases) {
       const attempt = await runtime.routeAttempts.read(context, lease.routeAttemptId);
       if (attempt.status === "succeeded") {
-        await lease.complete();
+        await lease.complete({ commandId: `${lease.routeAttemptId}:reconcile:session:complete` });
         reconciled.push({ leaseId: lease.leaseId, routeAttemptId: lease.routeAttemptId, action: "completed" as const });
         continue;
       }
       if (attempt.status === "failed" || attempt.status === "interrupted") {
         await lease.fail({
+          commandId: `${lease.routeAttemptId}:reconcile:session:fail`,
           emittedTokens: attempt.emitted_tokens,
           sideEffectsStarted: true,
           signal: recoveredConnectorFailure(attempt),
@@ -364,9 +429,11 @@ export class MassionModelFactory implements RoutedModelFactory {
     let workId: string;
     let agentHandle: string;
     try {
-      const candidateScope = credential.subscription_scope;
+      if (Boolean(input.fallbackFromAttemptId) !== Boolean(input.fallbackFromLeaseId)) {
+        throw new Error("Connector fallback에는 Route Attempt ID와 Session Lease ID가 모두 필요합니다");
+      }
+      const candidateScope = material.scope;
       if (
-        !candidateScope ||
         credential.subscription_account_id !== material.accountId ||
         credential.subscription_connector_id !== material.connectorId
       ) {
@@ -396,6 +463,7 @@ export class MassionModelFactory implements RoutedModelFactory {
     try {
       session = await runtime.broker.acquire(context, {
         commandId: `${input.commandId}:session:acquire`,
+        executionId,
         accountId: material.accountId,
         connectorId: material.connectorId,
         scope,
@@ -421,12 +489,14 @@ export class MassionModelFactory implements RoutedModelFactory {
       throw error;
     }
     if (
+      session.executionId !== executionId ||
       session.accountId !== material.accountId ||
       session.connectorId !== material.connectorId ||
       session.workId !== workId ||
       session.agentHandle !== agentHandle ||
       session.routeAttemptId !== attemptId ||
-      session.quotaSnapshotId !== reservation.attempt.quota_snapshot_id
+      session.quotaSnapshotId !== reservation.attempt.quota_snapshot_id ||
+      session.status !== "active"
     ) {
       await this.failConnectorAttempt(context, attemptId, session, {
         commandId: `${input.commandId}:session:binding-failed`,
@@ -465,6 +535,28 @@ export class MassionModelFactory implements RoutedModelFactory {
       });
       throw error;
     }
+    if (binding.kind === "agent-runtime") {
+      try {
+        const bound = await runtime.broker.bindRuntime(context, {
+          commandId: `${input.commandId}:session:runtime-bind`,
+          leaseId: session.leaseId,
+          adapterId: binding.adapterId,
+        });
+        if (bound.adapterId !== binding.adapterId) {
+          throw new Error("Session Lease runtime adapter 계보가 Resolver와 일치하지 않습니다");
+        }
+      } catch (error) {
+        await this.failConnectorAttempt(context, attemptId, session, {
+          commandId: `${input.commandId}:session:runtime-bind-failed`,
+          signal: { kind: "input" },
+          emittedTokens: 0,
+          sideEffectsStarted: false,
+          inputTokens: 0,
+          outputTokens: 0,
+        });
+        throw error;
+      }
+    }
     const settlement = {
       attemptId,
       credentialId: credential.credential_id,
@@ -472,7 +564,7 @@ export class MassionModelFactory implements RoutedModelFactory {
       complete: async (usage: ModelCompletionUsage) => {
         try {
           const attempt = await this.completeAttempt(context, attemptId, usage, 0);
-          await session.complete();
+          await session.complete({ commandId: `${usage.commandId}:session` });
           return attempt;
         } catch (error) {
           throw new RoutedExecutionSettlementError("Connector 성공 정산을 완료하지 못했습니다", { cause: error });
@@ -486,9 +578,28 @@ export class MassionModelFactory implements RoutedModelFactory {
         }
       },
     };
+    let sessionExpiresAt = session.expiresAt;
+    const sessionLifecycle = {
+      get sessionExpiresAt() {
+        return sessionExpiresAt;
+      },
+      renewSession: async (renewal: { readonly commandId: string; readonly expectedExpiresAt: string }) => {
+        const renewed = await session.renew(renewal);
+        sessionExpiresAt = renewed.expiresAt;
+        return sessionExpiresAt;
+      },
+    };
+    const subscription = {
+      workId,
+      agentHandle,
+      accountId: material.accountId,
+      connectorId: material.connectorId,
+      adapterId: binding.kind === "agent-runtime" ? binding.adapterId : material.connectorId,
+      ...(reservation.attempt.quota_snapshot_id ? { quotaSnapshotId: reservation.attempt.quota_snapshot_id } : {}),
+    };
     return binding.kind === "model"
       ? { kind: "model", model: binding.model, ...settlement }
-      : { kind: "agent-runtime", executor: binding.executor, ...settlement };
+      : { kind: "agent-runtime", executor: binding.executor, subscription, ...sessionLifecycle, ...settlement };
   }
 
   private async completeAttempt(
@@ -523,6 +634,7 @@ export class MassionModelFactory implements RoutedModelFactory {
         attemptId,
         signal: usage.signal,
         emittedTokens: usage.emittedTokens,
+        sideEffectsStarted: usage.sideEffectsStarted ?? true,
         actualInputTokens: usage.inputTokens,
         actualOutputTokens: usage.outputTokens,
         actualCostMicros,
@@ -531,7 +643,9 @@ export class MassionModelFactory implements RoutedModelFactory {
         status: outcome.attempt.status,
         ...(outcome.attempt.failure_class ? { failureClass: outcome.attempt.failure_class } : {}),
         fallbackAllowed:
-          outcome.attempt.fallback_allowed && usage.emittedTokens === 0 && usage.sideEffectsStarted !== true,
+          outcome.attempt.fallback_allowed &&
+          usage.emittedTokens === 0 &&
+          explicitlyNoSideEffects(usage.sideEffectsStarted),
       };
     } catch (error) {
       throw new RoutedExecutionSettlementError("Router 실패 정산을 완료하지 못했습니다", { cause: error });
@@ -548,6 +662,7 @@ export class MassionModelFactory implements RoutedModelFactory {
     const sideEffectsStarted = usage.sideEffectsStarted ?? defaultSideEffectsStarted;
     const route = await this.failAttempt(context, attemptId, { ...usage, sideEffectsStarted }, 0);
     const connector = await session.fail({
+      commandId: `${usage.commandId}:session`,
       emittedTokens: usage.emittedTokens,
       sideEffectsStarted,
       signal: connectorFailureSignal(usage.signal),

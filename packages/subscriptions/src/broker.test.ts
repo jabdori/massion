@@ -11,9 +11,11 @@ import { SubscriptionConnectorBroker, type ConnectorRequest, type ConnectorTrans
 describe("구독 Connector session broker", () => {
   let database: MassionDatabase;
   let context: TenantContext;
+  let memberContext: TenantContext;
   let broker: SubscriptionConnectorBroker;
   let disconnectedBroker: SubscriptionConnectorBroker;
   let invoked: Array<{ organizationId: string; connectorId: string; request: ConnectorRequest }>;
+  let now: Date;
 
   beforeEach(async () => {
     database = await createDatabase({ url: "mem://", namespace: "massion", database: randomUUID() });
@@ -27,6 +29,12 @@ describe("구독 Connector session broker", () => {
       registered.user.user_id,
       registered.organization.organization_id,
     );
+    const member = await identities.registerPersonalUser({
+      email: "broker-member@example.com",
+      displayName: "Broker Member",
+    });
+    await organizations.addMember(context, member.user.user_id, "member");
+    memberContext = await organizations.resolveTenantContext(member.user.user_id, context.organizationId);
     const accounts = await SubscriptionAccountService.create(database, organizations, randomBytes(32));
     await database.query(
       `CREATE subscription_connector CONTENT {
@@ -51,22 +59,29 @@ describe("구독 Connector session broker", () => {
         yield { kind: "done", sequence: 1, payload: {} };
       },
     };
+    now = new Date("2030-01-01T00:00:00.000Z");
     broker = await SubscriptionConnectorBroker.create(database, organizations, accounts, {
-      now: () => new Date("2030-01-01T00:00:00.000Z"),
+      now: () => now,
       leaseTtlMs: 300_000,
       transport,
     });
     disconnectedBroker = await SubscriptionConnectorBroker.create(database, organizations, accounts, {
-      now: () => new Date("2030-01-01T00:00:00.000Z"),
+      now: () => now,
       leaseTtlMs: 300_000,
     });
   });
 
   afterEach(async () => database.close());
 
-  function request(routeAttemptId: string, fallbackFromLeaseId?: string, quotaSnapshotId?: string) {
+  function request(
+    routeAttemptId: string,
+    fallbackFromLeaseId?: string,
+    quotaSnapshotId?: string,
+    commandId = randomUUID(),
+  ) {
     return {
-      commandId: randomUUID(),
+      commandId,
+      executionId: `execution-${routeAttemptId}`,
       accountId: "codex-account",
       connectorId: "edge-codex",
       scope: "personal" as const,
@@ -81,7 +96,12 @@ describe("구독 Connector session broker", () => {
   it("출력 전 재시도 가능 실패만 다음 Connector session으로 이동한다", async () => {
     const first = await broker.acquire(context, request("route-attempt-1"));
     await expect(
-      first.fail({ emittedTokens: 0, sideEffectsStarted: false, signal: { kind: "timeout" } }),
+      first.fail({
+        commandId: randomUUID(),
+        emittedTokens: 0,
+        sideEffectsStarted: false,
+        signal: { kind: "timeout" },
+      }),
     ).resolves.toMatchObject({
       status: "failed",
       fallbackAllowed: true,
@@ -89,7 +109,12 @@ describe("구독 Connector session broker", () => {
 
     const second = await broker.acquire(context, request("route-attempt-2", first.leaseId));
     await expect(
-      second.fail({ emittedTokens: 1, sideEffectsStarted: false, signal: { kind: "timeout" } }),
+      second.fail({
+        commandId: randomUUID(),
+        emittedTokens: 1,
+        sideEffectsStarted: false,
+        signal: { kind: "timeout" },
+      }),
     ).resolves.toMatchObject({
       status: "failed",
       fallbackAllowed: false,
@@ -103,7 +128,12 @@ describe("구독 Connector session broker", () => {
     const first = await broker.acquire(context, request("route-attempt-authentication"));
 
     await expect(
-      first.fail({ emittedTokens: 0, sideEffectsStarted: false, signal: { kind: "authentication" } }),
+      first.fail({
+        commandId: randomUUID(),
+        emittedTokens: 0,
+        sideEffectsStarted: false,
+        signal: { kind: "authentication" },
+      }),
     ).resolves.toMatchObject({
       status: "failed",
       fallbackAllowed: true,
@@ -114,7 +144,12 @@ describe("구독 Connector session broker", () => {
     const first = await broker.acquire(context, request("route-attempt-side-effect"));
 
     await expect(
-      first.fail({ emittedTokens: 0, sideEffectsStarted: true, signal: { kind: "timeout" } }),
+      first.fail({
+        commandId: randomUUID(),
+        emittedTokens: 0,
+        sideEffectsStarted: true,
+        signal: { kind: "timeout" },
+      }),
     ).resolves.toMatchObject({
       status: "failed",
       fallbackAllowed: false,
@@ -136,8 +171,145 @@ describe("구독 Connector session broker", () => {
     ]);
 
     const active = await broker.recoverActive(context);
-    await active[0]?.complete();
+    await expect(broker.findExecutionLeases(context, lease.executionId)).resolves.toEqual([
+      expect.objectContaining({ leaseId: lease.leaseId, executionId: lease.executionId }),
+    ]);
+    await active[0]?.complete({ commandId: randomUUID() });
     expect(await broker.recover(context)).toEqual([]);
+  });
+
+  it("실행 전에 검증된 runtime adapter를 lease에 한 번 결합하고 다른 adapter 재결합을 거부한다", async () => {
+    const lease = await broker.acquire(context, request("route-attempt-runtime-lineage"));
+    const commandId = randomUUID();
+
+    const bound = await broker.bindRuntime(context, {
+      commandId,
+      leaseId: lease.leaseId,
+      adapterId: "codex",
+    });
+    const replayed = await broker.bindRuntime(context, {
+      commandId,
+      leaseId: lease.leaseId,
+      adapterId: "codex",
+    });
+
+    expect(bound).toMatchObject({ leaseId: lease.leaseId, adapterId: "codex", status: "active" });
+    expect(replayed).toEqual(bound);
+    await expect(
+      broker.bindRuntime(context, {
+        commandId: randomUUID(),
+        leaseId: lease.leaseId,
+        adapterId: "claude",
+      }),
+    ).rejects.toThrow(/adapter|결합/u);
+  });
+
+  it("같은 acquire command와 정규화 요청은 commit 응답 유실 뒤 같은 Session Lease로 재생한다", async () => {
+    const commandId = randomUUID();
+    const input = request("route-attempt-idempotent", undefined, "quota-idempotent", commandId);
+
+    const [first, replayed] = await Promise.all([broker.acquire(context, input), broker.acquire(context, input)]);
+    const [leases, events] = await database.query<
+      [Array<{ lease_id: string }>, Array<{ command_id: string; actor_user_id: string }>]
+    >(
+      "SELECT lease_id FROM subscription_session_lease WHERE organization_id = $organization_id; SELECT command_id, actor_user_id FROM subscription_audit_event WHERE organization_id = $organization_id AND command_id = $command_id;",
+      { organization_id: context.organizationId, command_id: commandId },
+    );
+
+    expect(replayed.leaseId).toBe(first.leaseId);
+    expect(leases).toEqual([{ lease_id: first.leaseId }]);
+    expect(events).toEqual([{ command_id: commandId, actor_user_id: context.userId }]);
+    await expect(broker.acquire(context, { ...input, workId: "different-work" })).rejects.toThrow("다른 요청");
+    await expect(broker.acquire(memberContext, input)).rejects.toThrow("다른 actor");
+  });
+
+  it("complete와 fail은 안정 command로 멱등 재생하고 terminal 상태 불일치를 거부한다", async () => {
+    const completedLease = await broker.acquire(context, request("route-attempt-complete"));
+    const completeCommand = randomUUID();
+
+    const firstComplete = await completedLease.complete({ commandId: completeCommand });
+    const replayedComplete = await (
+      await broker.getLease(memberContext, completedLease.leaseId)
+    ).complete({
+      commandId: completeCommand,
+    });
+    expect(replayedComplete).toEqual(firstComplete);
+    await expect(
+      completedLease.fail({
+        commandId: randomUUID(),
+        emittedTokens: 0,
+        sideEffectsStarted: false,
+        signal: { kind: "timeout" },
+      }),
+    ).rejects.toThrow("terminal 상태");
+
+    const failedLease = await broker.acquire(context, request("route-attempt-fail"));
+    const failCommand = randomUUID();
+    const failure = {
+      commandId: failCommand,
+      emittedTokens: 0,
+      sideEffectsStarted: false,
+      signal: { kind: "timeout" as const },
+    };
+    const firstFail = await failedLease.fail(failure);
+    const replayedFail = await failedLease.fail(failure);
+    expect(replayedFail).toEqual(firstFail);
+    await expect(failedLease.fail({ ...failure, emittedTokens: 1 })).rejects.toThrow("다른 요청");
+    await expect(failedLease.complete({ commandId: randomUUID() })).rejects.toThrow("terminal 상태");
+
+    const racedLease = await broker.acquire(context, request("route-attempt-terminal-race"));
+    const raced = await Promise.allSettled([
+      racedLease.complete({ commandId: randomUUID() }),
+      racedLease.fail({
+        commandId: randomUUID(),
+        emittedTokens: 0,
+        sideEffectsStarted: true,
+        signal: { kind: "timeout" },
+      }),
+    ]);
+    expect(raced.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+    expect(raced.filter((result) => result.status === "rejected")).toHaveLength(1);
+  });
+
+  it("Lease renew은 기존 만료 시각 CAS와 bounded TTL을 적용하고 같은 command를 멱등 재생한다", async () => {
+    const lease = await broker.acquire(context, request("route-attempt-renew"));
+    const expectedExpiresAt = new Date(String(lease.expiresAt)).toISOString();
+    const commandId = randomUUID();
+    now = new Date("2030-01-01T00:04:00.000Z");
+
+    const renewed = await lease.renew({ commandId, expectedExpiresAt });
+    expect(new Date(String(renewed.expiresAt)).toISOString()).toBe("2030-01-01T00:09:00.000Z");
+    now = new Date("2030-01-01T00:04:30.000Z");
+    await expect(lease.renew({ commandId, expectedExpiresAt })).resolves.toEqual(renewed);
+    await expect(
+      lease.renew({ commandId: randomUUID(), expectedExpiresAt: "2030-01-01T00:05:00.000Z" }),
+    ).rejects.toThrow("만료 시각");
+  });
+
+  it("TTL 이후 invoke·renew은 금지하지만 이미 관측한 terminal 정산은 허용한다", async () => {
+    const lease = await broker.acquire(context, request("route-attempt-expired-settlement"));
+    const expectedExpiresAt = new Date(String(lease.expiresAt)).toISOString();
+    now = new Date("2030-01-01T00:06:00.000Z");
+
+    await expect(lease.renew({ commandId: randomUUID(), expectedExpiresAt })).rejects.toThrow("만료되었습니다");
+    await expect(async () => {
+      for await (const event of broker.invoke(context, {
+        protocol: "massion.connector.v1",
+        requestId: "expired-request",
+        leaseId: lease.leaseId,
+        operation: "health",
+        payload: {},
+      })) {
+        void event;
+      }
+    }).rejects.toThrow("만료되었습니다");
+    await expect(lease.complete({ commandId: randomUUID() })).resolves.toMatchObject({ status: "completed" });
+  });
+
+  it("scope와 반환 Lease status는 runtime에서 exact enum으로 검증한다", async () => {
+    await expect(
+      broker.acquire(context, { ...request("route-attempt-invalid-scope"), scope: "invalid" as "personal" }),
+    ).rejects.toThrow("scope");
   });
 
   it("활성 lease의 Connector로만 bounded RPC를 전달한다", async () => {

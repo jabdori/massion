@@ -131,7 +131,7 @@ export class ApplicationCommandStore {
   public async begin(
     context: TenantContext,
     command: ApplicationCommandV1,
-    options: { readonly resumeAwaitingApproval?: boolean } = {},
+    options: { readonly resumeAwaitingApproval?: boolean; readonly retryFailedCommand?: boolean } = {},
   ): Promise<BeginApplicationCommandResult> {
     await this.organizations.verifyTenantContext(context);
     const requestHash = sha256(canonicalJson(command));
@@ -143,10 +143,46 @@ export class ApplicationCommandStore {
         { organization_id: context.organizationId, operation: command.operation, command_id: command.commandId },
       );
       if (existing) {
+        if (existing.actor_user_id !== context.userId) {
+          throw new Error("Application command는 원래 요청 사용자만 replay하거나 재개할 수 있습니다");
+        }
         if (existing.request_hash !== requestHash) {
           throw new Error("같은 commandId에 다른 Application command payload를 사용할 수 없습니다");
         }
-        if (existing.state === "failed") return { outcome: "failed", error: parseError(existing) };
+        if (existing.state === "failed") {
+          if (!options.retryFailedCommand) return { outcome: "failed", error: parseError(existing) };
+          const generation = existing.lease_generation + 1;
+          const expiresAt = new Date(this.clock.now.getTime() + this.leaseMs).toISOString();
+          await transaction.query(
+            "UPDATE application_command SET state = 'running', error_json = NONE, error_hash = NONE, lease_generation = $lease_generation, lease_expires_at = <datetime>$lease_expires_at, updated_at = <datetime>$updated_at WHERE organization_id = $organization_id AND command_record_id = $command_record_id AND state = 'failed' AND lease_generation = $previous_generation;",
+            {
+              organization_id: context.organizationId,
+              command_record_id: existing.command_record_id,
+              previous_generation: existing.lease_generation,
+              lease_generation: generation,
+              lease_expires_at: expiresAt,
+              updated_at: this.clock.now.toISOString(),
+            },
+          );
+          const reclaimed = await this.find(transaction, context.organizationId, existing.command_record_id);
+          if (reclaimed.state !== "running" || reclaimed.lease_generation !== generation) {
+            throw new Error("Application command 실패 재개 동시성 충돌입니다");
+          }
+          await this.event(
+            transaction,
+            context.organizationId,
+            existing.command_record_id,
+            generation,
+            "reclaimed",
+            requestHash,
+          );
+          return {
+            outcome: "claimed",
+            commandRecordId: existing.command_record_id,
+            leaseGeneration: generation,
+            recovered: true,
+          };
+        }
         if (existing.state === "awaiting-approval" && options.resumeAwaitingApproval) {
           const generation = existing.lease_generation + 1;
           const expiresAt = new Date(this.clock.now.getTime() + this.leaseMs).toISOString();

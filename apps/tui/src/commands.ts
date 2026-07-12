@@ -72,6 +72,45 @@ export class TuiCommands {
     return await this.send(`runtime:${executionId}`, "runtime.resume", { executionId, input });
   }
 
+  public async shareSubscriptionAccount(accountId: string, version: number): Promise<unknown> {
+    return await this.subscriptionAccount("share", accountId, version);
+  }
+
+  public async unshareSubscriptionAccount(accountId: string, version: number): Promise<unknown> {
+    return await this.subscriptionAccount("unshare", accountId, version);
+  }
+
+  public async disconnectSubscriptionAccount(accountId: string, version: number): Promise<unknown> {
+    return await this.subscriptionAccount("disconnect", accountId, version);
+  }
+
+  public async configureSubscriptionPolicy(
+    providerId: string,
+    credentialPolicy: string,
+    approvalMode: "automatic" | "review" | "deny",
+    version: number,
+  ): Promise<unknown> {
+    return await this.send(
+      `subscription.policy:${providerId}`,
+      "subscription.policy.configure",
+      { providerId, credentialPolicy, approvalMode },
+      version,
+    );
+  }
+
+  private async subscriptionAccount(
+    operation: "share" | "unshare" | "disconnect",
+    accountId: string,
+    version: number,
+  ): Promise<unknown> {
+    return await this.send(
+      `subscription.account:${accountId}`,
+      `subscription.account.${operation}`,
+      { accountId },
+      version,
+    );
+  }
+
   private async send(key: string, operation: string, payload: unknown, expectedRevision?: number): Promise<unknown> {
     if (this.pending.has(key)) throw new Error("같은 TUI 명령이 이미 진행 중입니다");
     this.pending.add(key);

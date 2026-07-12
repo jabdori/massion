@@ -64,6 +64,18 @@ async function waitReady(endpoint) {
   throw new Error(`release server readiness 시간이 초과됐습니다: ${endpoint}`);
 }
 
+export function restoreEnvironmentForRelease(environment, input) {
+  return {
+    ...environment,
+    MASSION_MODE: "local",
+    MASSION_DATABASE_URL: input.databaseUrl,
+    MASSION_TOKEN_KEY_FILE: input.tokenKeyFile,
+    MASSION_CREDENTIAL_KEY_FILE: input.credentialKeyFile,
+    MASSION_SOFTWARE_WORKSPACE_ROOT: input.workspaceRoot,
+    MASSION_CONNECTOR_ROOT: input.connectorRoot,
+  };
+}
+
 async function main() {
   const root = resolve(fileURLToPath(new globalThis.URL("..", import.meta.url)));
   const release = resolve(root, process.argv[2] ?? "artifacts/release-1.0.0");
@@ -87,11 +99,21 @@ async function main() {
     PATH: `${resolve(prefix, "bin")}:${process.env.PATH ?? ""}`,
   };
   const mass = resolve(prefix, "bin/mass");
+  const connector = resolve(prefix, "bin/massion-connector");
   try {
     run("tar", ["-xzf", resolve(release, "massion-local-1.0.0.tar.gz"), "-C", extracted]);
     run(resolve(extracted, "install.sh"), [], { environment, inherit: true });
     if (String(run(mass, ["version"], { environment })).trim() !== "Massion AgentOS 1.0.0")
       throw new Error("설치된 mass version이 일치하지 않습니다");
+    if (!String(run(connector, ["--help"], { environment })).includes("doctor"))
+      throw new Error("설치된 massion-connector 도움말이 유효하지 않습니다");
+    const connectorDoctor = jsonOutput(connector, ["doctor"], environment);
+    if (
+      connectorDoctor?.schema !== "massion.connector-doctor.v1" ||
+      connectorDoctor.status !== "ready" ||
+      connectorDoctor.runtime !== "bundled"
+    )
+      throw new Error("설치된 massion-connector runtime 진단이 유효하지 않습니다");
     const started = jsonOutput(mass, ["local", "start", "--json"], environment);
     if (started.status !== "started" || started.endpoint !== `http://127.0.0.1:${String(localPort)}`)
       throw new Error("설치된 local server가 시작되지 않았습니다");
@@ -115,14 +137,13 @@ async function main() {
     const credentialKey = resolve(home, ".config/massion/credential-key");
     const restoredDatabase = resolve(home, ".local/share/massion-restore.db");
     const server = resolve(prefix, "bin/massion-server");
-    const restoreEnvironment = {
-      ...environment,
-      MASSION_MODE: "local",
-      MASSION_DATABASE_URL: `rocksdb://${restoredDatabase}`,
-      MASSION_TOKEN_KEY_FILE: tokenKey,
-      MASSION_CREDENTIAL_KEY_FILE: credentialKey,
-      MASSION_SOFTWARE_WORKSPACE_ROOT: resolve(home, ".local/share/massion/restore-workspaces"),
-    };
+    const restoreEnvironment = restoreEnvironmentForRelease(environment, {
+      databaseUrl: `rocksdb://${restoredDatabase}`,
+      tokenKeyFile: tokenKey,
+      credentialKeyFile: credentialKey,
+      workspaceRoot: resolve(home, ".local/share/massion/restore-workspaces"),
+      connectorRoot: resolve(home, ".local/share/massion/restore-connectors"),
+    });
     run(server, ["restore", backup], { environment: restoreEnvironment });
     restoreProcess = spawn(server, [], {
       env: {
@@ -143,15 +164,17 @@ async function main() {
       throw new Error("복구된 release server가 정상 종료되지 않았습니다");
     restoreProcess = undefined;
     run(resolve(prefix, "lib/massion/1.0.0/uninstall.sh"), [], { environment, inherit: true });
-    await access(mass).then(
-      () => {
-        throw new Error("uninstall 뒤 mass symlink가 남았습니다");
-      },
-      () => undefined,
-    );
+    for (const command of ["mass", "massion-connector", "massion-server", "massion-tui"]) {
+      await access(resolve(prefix, "bin", command)).then(
+        () => {
+          throw new Error(`uninstall 뒤 ${command} symlink가 남았습니다`);
+        },
+        () => undefined,
+      );
+    }
     await access(resolve(home, ".local/share/massion"));
     process.stdout.write(
-      `${JSON.stringify({ status: "passed", version: "1.0.0", mode: "limited", backup: "restored", uninstall: "data-preserved" })}\n`,
+      `${JSON.stringify({ status: "passed", version: "1.0.0", mode: "limited", connector: "ready", backup: "restored", uninstall: "data-preserved" })}\n`,
     );
   } finally {
     if (restoreProcess) restoreProcess.kill("SIGTERM");

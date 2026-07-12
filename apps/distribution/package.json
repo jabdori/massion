@@ -4,12 +4,13 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "pnpm --filter @massion/cli build && pnpm --filter @massion/server build && pnpm --filter @massion/tui build",
+    "build": "pnpm --filter @massion/cli build && pnpm --filter @massion/connector build && pnpm --filter @massion/server build && pnpm --filter @massion/tui build",
     "test": "node -e \"process.exit(0)\"",
     "typecheck": "node -e \"process.exit(0)\""
   },
   "dependencies": {
     "@massion/cli": "workspace:*",
+    "@massion/connector": "workspace:*",
     "@massion/server": "workspace:*",
     "@massion/tui": "workspace:*",
     "tslib": "2.8.1"

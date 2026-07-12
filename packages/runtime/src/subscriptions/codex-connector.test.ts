@@ -12,6 +12,62 @@ const context: TenantContext = {
 };
 
 describe("공식 Codex 구독 Connector", () => {
+  it("허용된 실행 파일과 조직 실행 정책을 SDK 기본값 대신 명시적으로 전달한다", async () => {
+    const run = vi.fn().mockResolvedValue({ finalResponse: "완료", items: [] });
+    const startThread = vi.fn().mockReturnValue({ id: "thread-policy", run });
+    const create = vi.fn().mockReturnValue({ startThread, resumeThread: vi.fn() });
+    const connector = new CodexSubscriptionConnector({ create } satisfies CodexSdkFactory, {
+      allowedEnvironment: ["PATH", "CODEX_HOME"],
+      executable: "/opt/massion/connectors/codex",
+      threadPolicy: {
+        sandboxMode: "workspace-write",
+        approvalPolicy: "never",
+        networkAccessEnabled: false,
+        model: "gpt-5.6-codex",
+      },
+    });
+
+    await connector.execute(context, {
+      executionId: "execution-policy",
+      workId: "work-policy",
+      agentHandle: "software-engineering.engineering-lead",
+      prompt: "정책을 확인하세요",
+      workspaceRoot: "/tmp/work-policy",
+      profileRoot: "/tmp/profile-policy",
+      environment: { PATH: "/opt/massion/connectors", HOME: "/private/home" },
+      allowedTools: [],
+      disallowedTools: [],
+    });
+
+    expect(create).toHaveBeenCalledWith({
+      codexPathOverride: "/opt/massion/connectors/codex",
+      env: { PATH: "/opt/massion/connectors", CODEX_HOME: "/tmp/profile-policy" },
+    });
+    expect(startThread).toHaveBeenCalledWith({
+      workingDirectory: "/tmp/work-policy",
+      sandboxMode: "workspace-write",
+      approvalPolicy: "never",
+      networkAccessEnabled: false,
+      model: "gpt-5.6-codex",
+    });
+  });
+
+  it("위험한 전체 접근 sandbox와 상대 실행 파일을 거부한다", () => {
+    const factory = { create: vi.fn() } satisfies CodexSdkFactory;
+    expect(
+      () =>
+        new CodexSubscriptionConnector(factory, {
+          allowedEnvironment: ["PATH"],
+          executable: "bin/codex",
+          threadPolicy: {
+            sandboxMode: "workspace-write",
+            approvalPolicy: "on-request",
+            networkAccessEnabled: false,
+          },
+        }),
+    ).toThrow("절대 경로");
+  });
+
   it("구조화 turn을 격리 workspace와 제한된 환경 변수로 실행한다", async () => {
     const run = vi.fn().mockResolvedValue({
       finalResponse: JSON.stringify({ status: "ok" }),

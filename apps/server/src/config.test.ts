@@ -23,6 +23,12 @@ describe("server configuration", () => {
       registry: { host: "127.0.0.1", port: 3142, publicBaseUrl: "http://127.0.0.1:3142" },
       credentialKey: Buffer.alloc(32, 8),
       software: { workspaceRoot: "/var/lib/massion/workspaces", executables: { node: process.execPath } },
+      connectors: {
+        root: "/var/lib/massion/connectors",
+        executables: {},
+        edgeEnabled: false,
+        heartbeatMs: 30_000,
+      },
     });
   });
 
@@ -36,6 +42,30 @@ describe("server configuration", () => {
         MASSION_SOFTWARE_ENVIRONMENT_ALLOWLIST: "CI,NODE_ENV",
       }).software,
     ).toMatchObject({ executables: { node: process.execPath }, environmentAllowlist: ["CI", "NODE_ENV"] });
+  });
+
+  it("Connector root·실행 파일·Edge 수신·heartbeat 설정을 엄격하게 검증한다", () => {
+    const base = { MASSION_TOKEN_KEY: key, MASSION_CREDENTIAL_KEY: credentialKey };
+    expect(
+      parseServerConfig({
+        ...base,
+        MASSION_CONNECTOR_ROOT: "/srv/massion/connectors",
+        MASSION_CONNECTOR_EXECUTABLES: JSON.stringify({ codex: "/opt/massion/codex", claude: "/opt/massion/claude" }),
+        MASSION_EDGE_CONNECTOR_ENABLED: "true",
+        MASSION_CONNECTOR_HEARTBEAT_MS: "45000",
+      }).connectors,
+    ).toEqual({
+      root: "/srv/massion/connectors",
+      executables: { codex: "/opt/massion/codex", claude: "/opt/massion/claude" },
+      edgeEnabled: true,
+      heartbeatMs: 45_000,
+    });
+    expect(() => parseServerConfig({ ...base, MASSION_CONNECTOR_ROOT: "relative" })).toThrow("Connector root");
+    expect(() =>
+      parseServerConfig({ ...base, MASSION_CONNECTOR_EXECUTABLES: JSON.stringify({ codex: "codex" }) }),
+    ).toThrow("절대 경로");
+    expect(() => parseServerConfig({ ...base, MASSION_EDGE_CONNECTOR_ENABLED: "yes" })).toThrow("true 또는 false");
+    expect(() => parseServerConfig({ ...base, MASSION_CONNECTOR_HEARTBEAT_MS: "999" })).toThrow("범위");
   });
 
   it("접근 token과 provider credential은 서로 다른 암호화 key를 요구한다", () => {

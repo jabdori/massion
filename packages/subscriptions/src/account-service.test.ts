@@ -9,9 +9,20 @@ import { SubscriptionAccountService, type SubscriptionSharingAuthorizer } from "
 
 class TestSharingAuthorizer implements SubscriptionSharingAuthorizer {
   public allowed = false;
+  public readonly calls: Array<{ commandId: string; approvalId?: string }> = [];
 
-  public authorize(): Promise<{ policyVersion: string }> {
-    if (!this.allowed) return Promise.reject(new Error("관리자 정책에서 구독 계정 공유를 허용하지 않았습니다"));
+  public authorize(
+    _context: TenantContext,
+    _account: unknown,
+    input: { readonly commandId: string; readonly approvalId?: string },
+  ): Promise<{ policyVersion: string }> {
+    this.calls.push({
+      commandId: input.commandId,
+      ...(input.approvalId === undefined ? {} : { approvalId: input.approvalId }),
+    });
+    if (!this.allowed && input.approvalId !== "approved-share") {
+      return Promise.reject(new Error("관리자 정책에서 구독 계정 공유를 허용하지 않았습니다"));
+    }
     return Promise.resolve({ policyVersion: "test-policy-v1" });
   }
 }
@@ -63,6 +74,20 @@ describe("구독 계정 소유권과 조직 공유", () => {
         protocol: 'massion-connector-v1',
         version: '1.0.0',
         public_key: 'test-public-key',
+        capabilities: ['codex'],
+        status: 'ready',
+        created_at: time::now(),
+        updated_at: time::now()
+      };
+      CREATE subscription_connector CONTENT {
+        connector_id: 'edge-member-2',
+        organization_id: $organization_id,
+        owner_user_id: $owner_user_id,
+        location: 'edge',
+        execution_kind: 'agent-runtime',
+        protocol: 'massion-connector-v1',
+        version: '1.0.0',
+        public_key: 'test-public-key-2',
         capabilities: ['codex'],
         status: 'ready',
         created_at: time::now(),
@@ -121,6 +146,23 @@ describe("구독 계정 소유권과 조직 공유", () => {
     expect(shared).toMatchObject({ scope: "organization", consent_version: 1, version: 2 });
   });
 
+  it("같은 공유 명령을 승인 ID와 재개해도 idempotency 요청 정본은 바뀌지 않는다", async () => {
+    const account = await register();
+    const commandId = randomUUID();
+    await expect(
+      service.share(member, { commandId, accountId: account.account_id, expectedVersion: 1 }),
+    ).rejects.toThrow("관리자 정책");
+    const shared = await service.share(member, {
+      commandId,
+      accountId: account.account_id,
+      expectedVersion: 1,
+      approvalId: "approved-share",
+    });
+
+    expect(shared).toMatchObject({ scope: "organization", version: 2 });
+    expect(policy.calls).toEqual([{ commandId }, { commandId, approvalId: "approved-share" }]);
+  });
+
   it("소유자가 공유를 철회하면 조직 사용 가능성 검사를 즉시 거부한다", async () => {
     policy.allowed = true;
     const account = await register();
@@ -151,7 +193,7 @@ describe("구독 계정 소유권과 조직 공유", () => {
     });
 
     expect(revoked).toMatchObject({ status: "revoked", version: 2 });
-    await expect(service.requireUsable(member, account.account_id, "personal")).rejects.toThrow("활성 상태");
+    await expect(service.requireUsable(member, account.account_id, "personal")).rejects.toThrow("폐기된 구독 계정");
   });
 
   it("할당량 우회가 금지된 StepFun은 조직에 활성 계정을 하나만 등록한다", async () => {
@@ -169,7 +211,7 @@ describe("구독 계정 소유권과 조직 공유", () => {
         commandId: randomUUID(),
         providerId: "stepfun-step-plan",
         alias: "StepFun 2",
-        connectorId: "edge-member",
+        connectorId: "edge-member-2",
         profileLocator: "stepfun-account-2",
         billingKind: "step-plan",
       }),
@@ -185,11 +227,42 @@ describe("구독 계정 소유권과 조직 공유", () => {
         commandId: randomUUID(),
         providerId: "stepfun-step-plan",
         alias: "StepFun replacement",
-        connectorId: "edge-member",
+        connectorId: "edge-member-2",
         profileLocator: "stepfun-account-2",
         billingKind: "step-plan",
       }),
     ).resolves.toMatchObject({ provider_id: "stepfun-step-plan", status: "active" });
+  });
+
+  it("하나의 Edge Connector에는 연결 해제 전까지 외부 계정을 하나만 등록한다", async () => {
+    const first = await register("Primary Codex");
+
+    await expect(
+      service.register(member, {
+        commandId: randomUUID(),
+        providerId: "anthropic-claude",
+        alias: "Second physical profile",
+        connectorId: "edge-member",
+        profileLocator: "different-profile@example.com",
+        billingKind: "consumer-subscription",
+      }),
+    ).rejects.toThrow("하나의 Edge Connector에는 외부 계정을 하나만");
+
+    await service.disconnect(member, {
+      commandId: randomUUID(),
+      accountId: first.account_id,
+      expectedVersion: first.version,
+    });
+    await expect(
+      service.register(member, {
+        commandId: randomUUID(),
+        providerId: "anthropic-claude",
+        alias: "Replacement profile",
+        connectorId: "edge-member",
+        profileLocator: "different-profile@example.com",
+        billingKind: "consumer-subscription",
+      }),
+    ).resolves.toMatchObject({ provider_id: "anthropic-claude", status: "active" });
   });
 
   it("명령 재시도는 같은 결과를 반환하고 다른 조직 접근과 command 변조를 거부한다", async () => {

@@ -2,6 +2,10 @@ import type { TenantContext } from "@massion/identity";
 
 import type { StructuredOutputSpec } from "../contracts.js";
 
+export type SubscriptionAgentFailureSignal =
+  | { readonly kind: "http"; readonly statusCode: number; readonly retryAfter?: string }
+  | { readonly kind: "timeout" | "network" | "input" | "policy" | "cancelled" | "unknown" };
+
 export interface SubscriptionAgentInput {
   readonly executionId: string;
   readonly workId: string;
@@ -40,6 +44,12 @@ export type SubscriptionAgentResult =
       readonly sessionId?: string;
       readonly category: string;
       readonly retryable: boolean;
+      /** Adapter가 구조적으로 확인한 경우에만 설정합니다. 누락 시 호출자가 fail-closed합니다. */
+      readonly signal?: SubscriptionAgentFailureSignal;
+      /** Provider가 외부로 내보낸 출력 조각 수입니다. 누락 시 0으로 보되 부작용은 알 수 없음으로 처리합니다. */
+      readonly emittedTokens?: number;
+      /** false는 Provider 호출 전 또는 부작용 없음이 증명된 경우에만 사용합니다. */
+      readonly sideEffectsStarted?: boolean;
     };
 
 export interface SubscriptionAgentResumeInput {

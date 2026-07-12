@@ -4,8 +4,17 @@ import { type OrganizationService, type TenantContext } from "@massion/identity"
 import { applyMigrations, type MassionDatabase, type QueryExecutor } from "@massion/storage";
 
 import { listCodingPlanPresets } from "./coding-plan.js";
-import type { SubscriptionAccount, SubscriptionConnector } from "./contracts.js";
-import { SUBSCRIPTION_ACCOUNT_POLICY_MIGRATION, SUBSCRIPTION_MIGRATION } from "./schema.js";
+import type {
+  ConnectorExecutionKind,
+  SubscriptionAccount,
+  SubscriptionConnector,
+  SubscriptionScope,
+} from "./contracts.js";
+import {
+  SUBSCRIPTION_ACCOUNT_POLICY_MIGRATION,
+  SUBSCRIPTION_EDGE_ACCOUNT_GUARD_MIGRATION,
+  SUBSCRIPTION_MIGRATION,
+} from "./schema.js";
 
 interface CommandInput {
   readonly commandId: string;
@@ -17,6 +26,8 @@ export interface RegisterSubscriptionAccountInput extends CommandInput {
   readonly connectorId: string;
   readonly profileLocator: string;
   readonly billingKind: string;
+  readonly requiredExecutionKind?: ConnectorExecutionKind;
+  readonly requiredCapability?: string;
 }
 
 export interface AccountCommandInput extends CommandInput {
@@ -24,10 +35,21 @@ export interface AccountCommandInput extends CommandInput {
   readonly expectedVersion: number;
 }
 
-export type ShareSubscriptionAccountInput = AccountCommandInput;
+export interface ShareSubscriptionAccountInput extends AccountCommandInput {
+  readonly approvalId?: string;
+}
 
 export interface SubscriptionSharingAuthorizer {
-  authorize(context: TenantContext, account: SubscriptionAccount): Promise<{ readonly policyVersion: string }>;
+  authorize(
+    context: TenantContext,
+    account: SubscriptionAccount,
+    input: { readonly commandId: string; readonly approvalId?: string; readonly executor: QueryExecutor },
+  ): Promise<{ readonly policyVersion: string }>;
+}
+
+export interface SubscriptionRoutingAccess {
+  readonly account: SubscriptionAccount;
+  readonly scope: SubscriptionScope;
 }
 
 interface SubscriptionAuditEvent {
@@ -91,16 +113,35 @@ export class SubscriptionAccountService {
     sharingAuthorizer: SubscriptionSharingAuthorizer = DENY_SHARING,
   ): Promise<SubscriptionAccountService> {
     if (fingerprintKey.byteLength < 32) throw new Error("계정 fingerprint key는 32바이트 이상이어야 합니다");
-    await applyMigrations(database, [SUBSCRIPTION_MIGRATION, SUBSCRIPTION_ACCOUNT_POLICY_MIGRATION]);
+    await applyMigrations(database, [
+      SUBSCRIPTION_MIGRATION,
+      SUBSCRIPTION_ACCOUNT_POLICY_MIGRATION,
+      SUBSCRIPTION_EDGE_ACCOUNT_GUARD_MIGRATION,
+    ]);
     return new SubscriptionAccountService(database, organizations, Buffer.from(fingerprintKey), sharingAuthorizer);
   }
 
-  public async register(context: TenantContext, input: RegisterSubscriptionAccountInput): Promise<SubscriptionAccount> {
+  public async register(
+    context: TenantContext,
+    input: RegisterSubscriptionAccountInput,
+    executor: QueryExecutor = this.database,
+  ): Promise<SubscriptionAccount> {
     if (!/^[a-z0-9][a-z0-9-]*$/u.test(input.providerId)) throw new Error("Provider ID 형식이 유효하지 않습니다");
     const alias = requireText(input.alias, "계정 별칭");
     const connectorId = requireText(input.connectorId, "Connector ID");
     const profileLocator = requireText(input.profileLocator, "외부 계정 식별자", 2048);
     const billingKind = requireText(input.billingKind, "결제 유형");
+    const requiredExecutionKind = input.requiredExecutionKind;
+    if (
+      requiredExecutionKind !== undefined &&
+      !new Set<unknown>(["model", "agent-runtime"]).has(requiredExecutionKind)
+    ) {
+      throw new Error("Connector 실행 종류가 유효하지 않습니다");
+    }
+    const requiredCapability =
+      input.requiredCapability === undefined
+        ? undefined
+        : requireText(input.requiredCapability, "필수 Connector capability");
     const profileFingerprint = createHmac("sha256", this.fingerprintKey)
       .update(`${context.organizationId}\0${input.providerId}\0${profileLocator}`)
       .digest("hex");
@@ -111,36 +152,79 @@ export class SubscriptionAccountService {
       connectorId,
       profileFingerprint,
       billingKind,
+      ...(requiredExecutionKind ? { requiredExecutionKind } : {}),
+      ...(requiredCapability ? { requiredCapability } : {}),
     };
 
-    return await this.command(context, input.commandId, "subscription_account_registered", request, async (tx) => {
-      const connector = await this.requireConnector(tx, context.organizationId, connectorId);
-      if (connector.location === "edge" && connector.owner_user_id !== context.userId) {
-        throw new Error("다른 사용자의 Edge Connector에는 계정을 등록할 수 없습니다");
-      }
-      if (connector.status === "revoked" || connector.status === "incompatible") {
-        throw new Error("사용할 수 없는 Connector에는 계정을 등록할 수 없습니다");
-      }
-      const accountId = randomUUID();
-      if (forbidsQuotaCircumvention(input.providerId)) {
-        const [existingAccounts] = await tx.query<[Array<{ account_id: string }>]>(
-          `SELECT account_id FROM subscription_account
-           WHERE organization_id = $organization_id AND provider_id = $provider_id AND status != 'revoked' LIMIT 1;`,
-          { organization_id: context.organizationId, provider_id: input.providerId },
-        );
-        if (existingAccounts[0]) {
-          throw new Error("제공자 약관상 여러 계정으로 할당량 우회를 구성할 수 없습니다");
+    return await this.command(
+      context,
+      input.commandId,
+      "subscription_account_registered",
+      request,
+      async (tx) => {
+        const connector = await this.requireConnector(tx, context.organizationId, connectorId);
+        if (connector.location === "edge" && connector.owner_user_id !== context.userId) {
+          throw new Error("다른 사용자의 Edge Connector에는 계정을 등록할 수 없습니다");
         }
-        await tx.query(
-          `CREATE subscription_provider_account_guard CONTENT {
+        if (connector.status === "revoked" || connector.status === "incompatible") {
+          throw new Error("사용할 수 없는 Connector에는 계정을 등록할 수 없습니다");
+        }
+        if (requiredExecutionKind && connector.execution_kind !== requiredExecutionKind) {
+          throw new Error("구독 Provider와 Connector 실행 종류가 일치하지 않습니다");
+        }
+        if (requiredCapability && !connector.capabilities.includes(requiredCapability)) {
+          throw new Error("Connector가 구독 Provider capability를 선언하지 않았습니다");
+        }
+        const accountId = randomUUID();
+        if (connector.location === "edge") {
+          const [existingAccounts] = await tx.query<[Array<{ account_id: string }>]>(
+            `SELECT account_id FROM subscription_account
+             WHERE organization_id = $organization_id AND connector_id = $connector_id
+               AND status != 'revoked' LIMIT 1;`,
+            { organization_id: context.organizationId, connector_id: connectorId },
+          );
+          if (existingAccounts[0]) {
+            throw new Error("하나의 Edge Connector에는 외부 계정을 하나만 등록할 수 있습니다");
+          }
+          const [existingGuards] = await tx.query<[Array<{ account_id: string }>]>(
+            `SELECT account_id FROM subscription_edge_account_guard
+             WHERE organization_id = $organization_id AND connector_id = $connector_id LIMIT 1;`,
+            { organization_id: context.organizationId, connector_id: connectorId },
+          );
+          if (existingGuards[0]) {
+            throw new Error("하나의 Edge Connector에는 외부 계정을 하나만 등록할 수 있습니다");
+          }
+          await tx.query(
+            `CREATE subscription_edge_account_guard CONTENT {
+               organization_id: $organization_id, connector_id: $connector_id,
+               account_id: $account_id, created_at: time::now()
+             };`,
+            {
+              organization_id: context.organizationId,
+              connector_id: connectorId,
+              account_id: accountId,
+            },
+          );
+        }
+        if (forbidsQuotaCircumvention(input.providerId)) {
+          const [existingAccounts] = await tx.query<[Array<{ account_id: string }>]>(
+            `SELECT account_id FROM subscription_account
+           WHERE organization_id = $organization_id AND provider_id = $provider_id AND status != 'revoked' LIMIT 1;`,
+            { organization_id: context.organizationId, provider_id: input.providerId },
+          );
+          if (existingAccounts[0]) {
+            throw new Error("제공자 약관상 여러 계정으로 할당량 우회를 구성할 수 없습니다");
+          }
+          await tx.query(
+            `CREATE subscription_provider_account_guard CONTENT {
              organization_id: $organization_id, provider_id: $provider_id, account_id: $account_id,
              policy: 'no-quota-circumvention', created_at: time::now()
            };`,
-          { organization_id: context.organizationId, provider_id: input.providerId, account_id: accountId },
-        );
-      }
-      await tx.query(
-        `CREATE subscription_account CONTENT {
+            { organization_id: context.organizationId, provider_id: input.providerId, account_id: accountId },
+          );
+        }
+        await tx.query(
+          `CREATE subscription_account CONTENT {
           account_id: $account_id,
           organization_id: $organization_id,
           owner_user_id: $owner_user_id,
@@ -156,29 +240,40 @@ export class SubscriptionAccountService {
           created_at: time::now(),
           updated_at: time::now()
         };`,
-        {
-          account_id: accountId,
-          organization_id: context.organizationId,
-          owner_user_id: context.userId,
-          provider_id: input.providerId,
-          alias,
-          connector_id: connectorId,
-          profile_fingerprint: profileFingerprint,
-          billing_kind: billingKind,
-          status: connector.status === "ready" ? "active" : "offline",
-        },
-      );
-      return await this.requireAccount(tx, context.organizationId, accountId);
-    });
+          {
+            account_id: accountId,
+            organization_id: context.organizationId,
+            owner_user_id: context.userId,
+            provider_id: input.providerId,
+            alias,
+            connector_id: connectorId,
+            profile_fingerprint: profileFingerprint,
+            billing_kind: billingKind,
+            status: connector.status === "ready" ? "active" : "offline",
+          },
+        );
+        return await this.requireAccount(tx, context.organizationId, accountId);
+      },
+      executor,
+    );
   }
 
   public async share(context: TenantContext, input: ShareSubscriptionAccountInput): Promise<SubscriptionAccount> {
-    return await this.command(context, input.commandId, "subscription_account_shared", input, async (tx) => {
+    const request = {
+      commandId: input.commandId,
+      accountId: input.accountId,
+      expectedVersion: input.expectedVersion,
+    };
+    return await this.command(context, input.commandId, "subscription_account_shared", request, async (tx) => {
       const account = await this.requireOwnedAccount(tx, context, input.accountId);
       this.requireVersion(account, input.expectedVersion);
       if (account.status === "revoked") throw new Error("연결 해제된 계정은 공유할 수 없습니다");
       if (account.scope === "organization") throw new Error("이미 조직에 공유된 계정입니다");
-      const authorization = await this.sharingAuthorizer.authorize(context, account);
+      const authorization = await this.sharingAuthorizer.authorize(context, account, {
+        commandId: input.commandId,
+        ...(input.approvalId === undefined ? {} : { approvalId: input.approvalId }),
+        executor: tx,
+      });
       const policyVersion = requireText(authorization.policyVersion, "공유 정책 version");
       const consentVersion = account.consent_version + 1;
       await this.insertConsent(tx, context, account, consentVersion, "shared", policyVersion, input.commandId);
@@ -219,49 +314,69 @@ export class SubscriptionAccountService {
     });
   }
 
-  public async disconnect(context: TenantContext, input: AccountCommandInput): Promise<SubscriptionAccount> {
-    return await this.command(context, input.commandId, "subscription_account_disconnected", input, async (tx) => {
-      const account = await this.requireOwnedAccount(tx, context, input.accountId);
-      this.requireVersion(account, input.expectedVersion);
-      if (account.status === "revoked") throw new Error("이미 연결 해제된 계정입니다");
-      let consentVersion = account.consent_version;
-      if (account.scope === "organization") {
-        consentVersion += 1;
-        await this.insertConsent(
-          tx,
-          context,
-          account,
-          consentVersion,
-          "unshared",
-          "account-disconnected",
-          input.commandId,
-        );
-      }
-      await tx.query(
-        `UPDATE subscription_account
+  public async disconnect(
+    context: TenantContext,
+    input: AccountCommandInput,
+    executor: QueryExecutor = this.database,
+  ): Promise<SubscriptionAccount> {
+    return await this.command(
+      context,
+      input.commandId,
+      "subscription_account_disconnected",
+      input,
+      async (tx) => {
+        const account = await this.requireOwnedAccount(tx, context, input.accountId);
+        this.requireVersion(account, input.expectedVersion);
+        if (account.status === "revoked") throw new Error("이미 연결 해제된 계정입니다");
+        let consentVersion = account.consent_version;
+        if (account.scope === "organization") {
+          consentVersion += 1;
+          await this.insertConsent(
+            tx,
+            context,
+            account,
+            consentVersion,
+            "unshared",
+            "account-disconnected",
+            input.commandId,
+          );
+        }
+        await tx.query(
+          `UPDATE subscription_account
          SET scope = 'personal', status = 'revoked', consent_version = $consent_version,
              version += 1, updated_at = time::now()
          WHERE organization_id = $organization_id AND account_id = $account_id AND version = $expected_version;`,
-        {
-          organization_id: context.organizationId,
-          account_id: input.accountId,
-          expected_version: input.expectedVersion,
-          consent_version: consentVersion,
-        },
-      );
-      if (forbidsQuotaCircumvention(account.provider_id)) {
-        await tx.query(
-          `DELETE subscription_provider_account_guard
-           WHERE organization_id = $organization_id AND provider_id = $provider_id AND account_id = $account_id;`,
           {
             organization_id: context.organizationId,
-            provider_id: account.provider_id,
+            account_id: input.accountId,
+            expected_version: input.expectedVersion,
+            consent_version: consentVersion,
+          },
+        );
+        if (forbidsQuotaCircumvention(account.provider_id)) {
+          await tx.query(
+            `DELETE subscription_provider_account_guard
+           WHERE organization_id = $organization_id AND provider_id = $provider_id AND account_id = $account_id;`,
+            {
+              organization_id: context.organizationId,
+              provider_id: account.provider_id,
+              account_id: input.accountId,
+            },
+          );
+        }
+        await tx.query(
+          `DELETE subscription_edge_account_guard
+           WHERE organization_id = $organization_id AND connector_id = $connector_id AND account_id = $account_id;`,
+          {
+            organization_id: context.organizationId,
+            connector_id: account.connector_id,
             account_id: input.accountId,
           },
         );
-      }
-      return await this.requireUpdatedAccount(tx, context.organizationId, input.accountId, input.expectedVersion + 1);
-    });
+        return await this.requireUpdatedAccount(tx, context.organizationId, input.accountId, input.expectedVersion + 1);
+      },
+      executor,
+    );
   }
 
   public async list(
@@ -293,6 +408,39 @@ export class SubscriptionAccountService {
     visibility: "personal" | "organization",
     executor: QueryExecutor = this.database,
   ): Promise<SubscriptionAccount> {
+    const account = await this.requireBindable(context, accountId, visibility, executor);
+    if (account.status !== "active") throw new Error("활성 상태의 구독 계정만 사용할 수 있습니다");
+    const connector = await this.requireConnector(executor, context.organizationId, account.connector_id);
+    if (connector.status !== "ready") throw new Error("준비 상태의 Connector가 아닙니다");
+    return account;
+  }
+
+  public async requireRoutingAccess(
+    context: TenantContext,
+    accountId: string,
+    executor: QueryExecutor = this.database,
+  ): Promise<SubscriptionRoutingAccess> {
+    await this.organizations.verifyTenantContext(context, undefined, executor);
+    const account = await this.requireAccount(executor, context.organizationId, accountId);
+    if (account.status !== "active") throw new Error("활성 상태의 구독 계정만 사용할 수 있습니다");
+    const scope =
+      account.owner_user_id === context.userId
+        ? "personal"
+        : account.scope === "organization"
+          ? "organization"
+          : undefined;
+    if (!scope) throw new Error("개인 계정은 계정 소유자만 사용할 수 있습니다");
+    const connector = await this.requireConnector(executor, context.organizationId, account.connector_id);
+    if (connector.status !== "ready") throw new Error("준비 상태의 Connector가 아닙니다");
+    return { account, scope };
+  }
+
+  public async requireBindable(
+    context: TenantContext,
+    accountId: string,
+    visibility: "personal" | "organization",
+    executor: QueryExecutor = this.database,
+  ): Promise<SubscriptionAccount> {
     await this.organizations.verifyTenantContext(context, undefined, executor);
     const account = await this.requireAccount(executor, context.organizationId, accountId);
     if (visibility === "organization" && account.scope !== "organization") {
@@ -301,9 +449,11 @@ export class SubscriptionAccountService {
     if (visibility === "personal" && account.owner_user_id !== context.userId) {
       throw new Error("개인 계정은 계정 소유자만 사용할 수 있습니다");
     }
-    if (account.status !== "active") throw new Error("활성 상태의 구독 계정만 사용할 수 있습니다");
+    if (account.status === "revoked") throw new Error("폐기된 구독 계정에는 Credential을 연결할 수 없습니다");
     const connector = await this.requireConnector(executor, context.organizationId, account.connector_id);
-    if (connector.status !== "ready") throw new Error("준비 상태의 Connector가 아닙니다");
+    if (connector.status === "revoked" || connector.status === "incompatible") {
+      throw new Error("사용할 수 없는 Connector에는 Credential을 연결할 수 없습니다");
+    }
     return account;
   }
 
@@ -313,11 +463,11 @@ export class SubscriptionAccountService {
     eventType: string,
     request: unknown,
     operation: (executor: QueryExecutor) => Promise<SubscriptionAccount>,
+    executor: QueryExecutor = this.database,
   ): Promise<SubscriptionAccount> {
     requireText(commandId, "Command ID");
     const requestHash = sha256(canonicalJson(request));
-    await this.organizations.verifyTenantContext(context);
-    return await this.database.transaction(async (tx) => {
+    const execute = async (tx: QueryExecutor): Promise<SubscriptionAccount> => {
       await this.organizations.verifyTenantContext(context, undefined, tx);
       const [events] = await tx.query<[SubscriptionAuditEvent[]]>(
         `SELECT * OMIT id FROM subscription_audit_event
@@ -361,7 +511,8 @@ export class SubscriptionAccountService {
         },
       );
       return safeResult;
-    });
+    };
+    return executor === this.database ? await this.database.transaction(execute) : await execute(executor);
   }
 
   private async requireOwnedAccount(

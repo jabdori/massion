@@ -84,7 +84,7 @@ describe("Provider와 암호화 Credential lifecycle", () => {
     expect(await service.listCredentials(context, provider.provider_id)).toHaveLength(2);
   });
 
-  it("구독 계정을 secret 없는 Connector session Credential로 등록한다", async () => {
+  it("구독 계정을 secret 없는 Connector session Credential로 등록하고 계정 단위로 폐기한다", async () => {
     const accounts = await SubscriptionAccountService.create(database, organizations, randomBytes(32));
     service = await ProviderService.create(database, organizations, new CredentialVault(randomBytes(32)), { accounts });
     await database.query(
@@ -126,6 +126,7 @@ describe("Provider와 암호화 Credential lifecycle", () => {
       kind: "connector_session",
       accountId: account.account_id,
       connectorId: "codex-edge",
+      scope: "personal",
     });
     expect(
       JSON.stringify(
@@ -134,6 +135,269 @@ describe("Provider와 암호화 Credential lifecycle", () => {
         }),
       ),
     ).toBe("[[]]");
+
+    const revokeCommandId = crypto.randomUUID();
+    const revoked = await service.revokeSubscriptionAccountCredentials(context, {
+      commandId: revokeCommandId,
+      accountId: account.account_id,
+    });
+    expect(revoked.credentials).toEqual([
+      expect.objectContaining({ credential_id: added.credential.credential_id, status: "revoked", version: 2 }),
+    ]);
+    await expect(
+      service.revokeSubscriptionAccountCredentials(context, {
+        commandId: revokeCommandId,
+        accountId: account.account_id,
+      }),
+    ).resolves.toMatchObject({
+      credentials: [
+        expect.objectContaining({ credential_id: added.credential.credential_id, status: "revoked", version: 2 }),
+      ],
+      audit: { audit_event_id: revoked.audit.audit_event_id, command_id: revokeCommandId },
+    });
+    const stored = (await service.listCredentials(context, provider.provider_id)).find(
+      (credential) => credential.credential_id === added.credential.credential_id,
+    );
+    if (!stored) throw new Error("폐기된 구독 Credential을 찾을 수 없습니다");
+    await expect(service.resolveExecutionMaterial(context, stored, database)).rejects.toThrow("활성 Credential");
+  });
+
+  it("model 구독 키를 암호화하면서 계정·Connector·scope 계보를 보존한다", async () => {
+    const accounts = await SubscriptionAccountService.create(database, organizations, randomBytes(32));
+    service = await ProviderService.create(database, organizations, new CredentialVault(randomBytes(32)), { accounts });
+    await database.query(
+      `CREATE subscription_connector CONTENT {
+        connector_id: 'minimax-model', organization_id: $organization_id, owner_user_id: $owner_user_id,
+        location: 'server', execution_kind: 'model', protocol: 'massion-connector-v1', version: '1.0.0',
+        public_key: 'fixture', capabilities: ['minimax-token-plan'], status: 'ready',
+        created_at: time::now(), updated_at: time::now()
+      };`,
+      { organization_id: context.organizationId, owner_user_id: context.userId },
+    );
+    const ensured = await service.ensureSubscriptionProvider(context, {
+      commandId: crypto.randomUUID(),
+      providerId: "minimax-token-plan",
+      endpointUrl: "https://api.minimax.io/v1",
+      protocol: "openai",
+    });
+    const account = await accounts.register(context, {
+      commandId: crypto.randomUUID(),
+      providerId: "minimax-token-plan",
+      alias: "MiniMax Token Plan",
+      connectorId: "minimax-model",
+      profileLocator: "minimax-account",
+      billingKind: "token-plan",
+      requiredExecutionKind: "model",
+      requiredCapability: "minimax-token-plan",
+    });
+    await expect(
+      database.query<[Array<{ readonly location: string }>]>(
+        "SELECT location FROM subscription_connector WHERE organization_id = $organization_id AND connector_id = 'minimax-model';",
+        { organization_id: context.organizationId },
+      ),
+    ).resolves.toEqual([[{ location: "server" }]]);
+    const added = await service.addSubscriptionCredential(context, {
+      commandId: crypto.randomUUID(),
+      providerId: "minimax-token-plan",
+      endpointId: ensured.endpoint.endpoint_id,
+      label: "MiniMax Token Plan key",
+      authKind: "subscription-key",
+      secret: "minimax-subscription-key",
+      accountId: account.account_id,
+      connectorId: account.connector_id,
+      scope: "personal",
+      priority: 1,
+      weight: 1,
+    });
+
+    expect(added.credential).toMatchObject({
+      credential_type: "subscription_key",
+      material_kind: "encrypted_secret",
+      secret_version: 1,
+      subscription_account_id: account.account_id,
+      subscription_connector_id: "minimax-model",
+      subscription_scope: "personal",
+    });
+    await expect(service.resolveExecutionMaterial(context, added.credential, database)).resolves.toEqual({
+      kind: "encrypted_secret",
+      secret: "minimax-subscription-key",
+      secretVersion: 1,
+    });
+    await expect(
+      service.resolveExecutionMaterial(
+        context,
+        { ...added.credential, material_kind: "unknown" as "encrypted_secret" },
+        database,
+      ),
+    ).rejects.toThrow("material kind");
+    const raw = JSON.stringify(
+      await database.query(
+        "SELECT * FROM provider_credential; SELECT * FROM credential_secret_version; SELECT * FROM router_audit_event;",
+      ),
+    );
+    expect(raw).not.toContain("minimax-subscription-key");
+  });
+
+  it("실제 연결 표면이 없는 대화형 코딩 plan은 Provider·계정·암호화 Credential을 만들지 않는다", async () => {
+    const accounts = await SubscriptionAccountService.create(database, organizations, randomBytes(32));
+    service = await ProviderService.create(database, organizations, new CredentialVault(randomBytes(32)), { accounts });
+    await database.query(
+      `CREATE subscription_connector CONTENT {
+        connector_id: 'interactive-kimi', organization_id: $organization_id, owner_user_id: $owner_user_id,
+        location: 'server', execution_kind: 'model', protocol: 'massion-connector-v1', version: '1.0.0',
+        public_key: 'fixture', capabilities: ['kimi-coding-plan'], status: 'ready',
+        created_at: time::now(), updated_at: time::now()
+      };`,
+      { organization_id: context.organizationId, owner_user_id: context.userId },
+    );
+    await expect(
+      service.ensureSubscriptionProvider(context, {
+        commandId: crypto.randomUUID(),
+        providerId: "kimi-coding-plan",
+      }),
+    ).rejects.toThrow(/실제 연결|검증되지/u);
+    expect(
+      JSON.stringify(
+        await database.query(
+          "SELECT * FROM model_provider; SELECT * FROM subscription_account; SELECT * FROM provider_credential; SELECT * FROM credential_secret_version; SELECT * FROM router_audit_event WHERE event_type = 'subscription_secret_credential_added';",
+        ),
+      ),
+    ).not.toContain("interactive-kimi-secret");
+  });
+
+  it("서버 전용 MiniMax Token Plan은 Edge Connector 주입을 거부한다", async () => {
+    const accounts = await SubscriptionAccountService.create(database, organizations, randomBytes(32));
+    service = await ProviderService.create(database, organizations, new CredentialVault(randomBytes(32)), { accounts });
+    await database.query(
+      `CREATE subscription_connector CONTENT {
+        connector_id: 'minimax-edge-rejected', organization_id: $organization_id, owner_user_id: $owner_user_id,
+        location: 'edge', execution_kind: 'model', protocol: 'massion-connector-v1', version: '1.0.0',
+        public_key: 'fixture', capabilities: ['minimax-token-plan'], status: 'ready',
+        created_at: time::now(), updated_at: time::now()
+      };`,
+      { organization_id: context.organizationId, owner_user_id: context.userId },
+    );
+    const ensured = await service.ensureSubscriptionProvider(context, {
+      commandId: crypto.randomUUID(),
+      providerId: "minimax-token-plan",
+      endpointUrl: "https://api.minimax.io/v1",
+      protocol: "openai",
+    });
+    const account = await accounts.register(context, {
+      commandId: crypto.randomUUID(),
+      providerId: "minimax-token-plan",
+      alias: "차단될 MiniMax Edge",
+      connectorId: "minimax-edge-rejected",
+      profileLocator: "edge-minimax-profile",
+      billingKind: "token-plan",
+      requiredExecutionKind: "model",
+      requiredCapability: "minimax-token-plan",
+    });
+
+    await expect(
+      service.addSubscriptionCredential(context, {
+        commandId: crypto.randomUUID(),
+        providerId: "minimax-token-plan",
+        endpointId: ensured.endpoint.endpoint_id,
+        label: "차단될 MiniMax key",
+        authKind: "subscription-key",
+        secret: "edge-minimax-secret",
+        accountId: account.account_id,
+        connectorId: account.connector_id,
+        scope: "personal",
+        priority: 1,
+        weight: 1,
+      }),
+    ).rejects.toThrow("서버 Connector");
+    expect(
+      JSON.stringify(
+        await database.query("SELECT * FROM provider_credential; SELECT * FROM credential_secret_version;"),
+      ),
+    ).not.toContain("edge-minimax-secret");
+  });
+
+  it("encrypted 구독 Credential은 계정·Connector·scope·신선한 quota가 유효할 때만 해독한다", async () => {
+    const accounts = await SubscriptionAccountService.create(database, organizations, randomBytes(32));
+    service = await ProviderService.create(database, organizations, new CredentialVault(randomBytes(32)), { accounts });
+    await database.query(
+      `CREATE subscription_connector CONTENT {
+        connector_id: 'quota-model', organization_id: $organization_id, owner_user_id: $owner_user_id,
+        location: 'server', execution_kind: 'model', protocol: 'massion-connector-v1', version: '1.0.0',
+        public_key: 'fixture', capabilities: ['minimax-token-plan'], status: 'ready',
+        created_at: time::now(), updated_at: time::now()
+      };`,
+      { organization_id: context.organizationId, owner_user_id: context.userId },
+    );
+    const ensured = await service.ensureSubscriptionProvider(context, {
+      commandId: crypto.randomUUID(),
+      providerId: "minimax-token-plan",
+      endpointUrl: "https://api.minimax.io/v1",
+      protocol: "openai",
+    });
+    const account = await accounts.register(context, {
+      commandId: crypto.randomUUID(),
+      providerId: "minimax-token-plan",
+      alias: "Quota MiniMax",
+      connectorId: "quota-model",
+      profileLocator: "quota-kimi",
+      billingKind: "token-plan",
+      requiredExecutionKind: "model",
+      requiredCapability: "minimax-token-plan",
+    });
+    await expect(
+      database.query<[Array<{ readonly location: string }>]>(
+        "SELECT location FROM subscription_connector WHERE organization_id = $organization_id AND connector_id = 'quota-model';",
+        { organization_id: context.organizationId },
+      ),
+    ).resolves.toEqual([[{ location: "server" }]]);
+    const added = await service.addSubscriptionCredential(context, {
+      commandId: crypto.randomUUID(),
+      providerId: "minimax-token-plan",
+      endpointId: ensured.endpoint.endpoint_id,
+      label: "Quota MiniMax key",
+      authKind: "subscription-key",
+      secret: "quota-secret",
+      accountId: account.account_id,
+      connectorId: account.connector_id,
+      scope: "personal",
+      priority: 1,
+      weight: 1,
+    });
+    await database.query(
+      `CREATE subscription_quota_snapshot CONTENT {
+        snapshot_id: 'fresh-exhausted', organization_id: $organization_id, account_id: $account_id,
+        windows_json: $windows_json, checksum: $checksum, exhausted: true,
+        observed_at: time::now(), created_at: time::now()
+      };
+      CREATE subscription_quota_current CONTENT {
+        organization_id: $organization_id, account_id: $account_id, snapshot_id: 'fresh-exhausted',
+        minimum_remaining_ratio: 0f, earliest_reset_at: NONE, exhausted: true,
+        observed_at: time::now(), updated_at: time::now()
+      };`,
+      {
+        organization_id: context.organizationId,
+        account_id: account.account_id,
+        windows_json: JSON.stringify([
+          {
+            kind: "five-hour",
+            remainingRatio: 0,
+            observedAt: new Date().toISOString(),
+            source: "provider-reported",
+            confidence: "reported",
+          },
+        ]),
+        checksum: "a".repeat(64),
+      },
+    );
+
+    await expect(service.resolveExecutionMaterial(context, added.credential, database)).rejects.toThrow("quota");
+    await database.query(
+      `DELETE subscription_quota_current WHERE organization_id = $organization_id AND account_id = $account_id;
+       UPDATE subscription_account SET status = 'offline'
+       WHERE organization_id = $organization_id AND account_id = $account_id;`,
+      { organization_id: context.organizationId, account_id: account.account_id },
+    );
+    await expect(service.resolveExecutionMaterial(context, added.credential, database)).rejects.toThrow("활성 상태");
   });
 
   it("secret 회전은 새 immutable version을 만들고 revoke 후 복호화를 거부한다", async () => {

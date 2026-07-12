@@ -58,4 +58,49 @@ describe("WebConsoleStore", () => {
     release?.();
     await first;
   });
+
+  it("같은 query와 의미상 같은 payload의 동시 조회를 한 번만 전송한다", async () => {
+    let release: ((value: unknown) => void) | undefined;
+    const query = vi.fn(
+      () =>
+        new Promise((resolve) => {
+          release = resolve;
+        }),
+    );
+    const store = new WebConsoleStore({ query } as never);
+
+    const first = store.refresh("subscription.providers", { filter: { verified: true }, limit: 20 });
+    const second = store.refresh("subscription.providers", { limit: 20, filter: { verified: true } });
+
+    expect(query).toHaveBeenCalledTimes(1);
+    release?.({
+      schemaVersion: "massion.application.v1",
+      operation: "subscription.providers",
+      data: [],
+    });
+    await expect(Promise.all([first, second])).resolves.toEqual([[], []]);
+  });
+
+  it("StrictMode에서 겹친 초기 load도 한 번의 query 묶음으로 합친다", async () => {
+    const query = vi.fn((operation: string) =>
+      Promise.resolve({
+        schemaVersion: "massion.application.v1",
+        operation,
+        data: operation === "application.audit" ? { events: [], cursor: 0 } : [],
+      }),
+    );
+    const snapshot = vi.fn(() =>
+      Promise.resolve({
+        schemaVersion: "massion.application.v1",
+        operation: "organization.graph.snapshot",
+        data: {},
+      }),
+    );
+    const store = new WebConsoleStore({ query, snapshot } as never);
+
+    await Promise.all([store.load(), store.load()]);
+
+    expect(query).toHaveBeenCalledTimes(4);
+    expect(snapshot).toHaveBeenCalledTimes(1);
+  });
 });
