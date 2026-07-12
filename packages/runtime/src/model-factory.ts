@@ -12,6 +12,12 @@ import {
 } from "@massion/router";
 
 const OPENAI_API_BASE_URL = "https://api.openai.com/v1";
+const GPT_56_RESPONSES_MODEL_IDS: ReadonlySet<string> = new Set([
+  "gpt-5.6",
+  "gpt-5.6-sol",
+  "gpt-5.6-terra",
+  "gpt-5.6-luna",
+]);
 
 export interface ProviderModelSelection {
   readonly provider: ModelProvider;
@@ -76,7 +82,7 @@ function usesGpt56Responses(selection: ProviderModelSelection): boolean {
   return (
     selection.provider.adapter_kind === "ai-sdk" &&
     isOfficialOpenAiApi(selection.endpoint) &&
-    selection.modelId === "gpt-5.6-sol"
+    GPT_56_RESPONSES_MODEL_IDS.has(selection.modelId)
   );
 }
 
