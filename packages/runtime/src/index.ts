@@ -8,6 +8,8 @@ export * from "./model-factory.js";
 export * from "./recovery.js";
 export * from "./shutdown.js";
 export * from "./subscriptions/agent-runtime.js";
+export * from "./subscriptions/acp-connector.js";
+export * from "./subscriptions/antigravity-connector.js";
 export * from "./subscriptions/claude-connector.js";
 export * from "./subscriptions/codex-connector.js";
 export * from "./schema.js";

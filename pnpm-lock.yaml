@@ -498,6 +498,9 @@ importers:
 
   packages/runtime:
     dependencies:
+      '@agentclientprotocol/sdk':
+        specifier: 1.2.1
+        version: 1.2.1(zod@4.4.3)
       '@ai-sdk/openai':
         specifier: 3.0.83
         version: 3.0.83(zod@4.4.3)
@@ -525,6 +528,9 @@ importers:
       '@massion/storage':
         specifier: workspace:*
         version: link:../storage
+      '@massion/subscriptions':
+        specifier: workspace:*
+        version: link:../subscriptions
       '@openai/codex-sdk':
         specifier: 0.144.1
         version: 0.144.1
@@ -611,6 +617,11 @@ packages:
 
   '@adobe/css-tools@4.5.0':
     resolution: {integrity: sha512-6OzddxPio9UiWTCemp4N8cYLV2ZN1ncRnV1cVGtve7dhPOtRkleRyx32GQCYSwDYgaHU3USMm84tNsvKzRCa1Q==}
+
+  '@agentclientprotocol/sdk@1.2.1':
+    resolution: {integrity: sha512-jwYUdOQR7tc+Zfch53VL4JJyUNK/46q03uUTYb+PjECsmnNl94XFXOfYLJ8RBpMNidXd1rpOAVgb0vqD98xImA==}
+    peerDependencies:
+      zod: ^3.25.0 || ^4.0.0
 
   '@ai-sdk/amazon-bedrock@3.0.105':
     resolution: {integrity: sha512-zMO80RQhm5r9jm8u01CydTAQFo956LO92NeOZYPuzeNdeS1ZXRz9vWA5X2GeSJBGZBSSRc7o1D8tFQK6n1R91w==}
@@ -3753,6 +3764,10 @@ packages:
 snapshots:
 
   '@adobe/css-tools@4.5.0': {}
+
+  '@agentclientprotocol/sdk@1.2.1(zod@4.4.3)':
+    dependencies:
+      zod: 4.4.3
 
   '@ai-sdk/amazon-bedrock@3.0.105(zod@4.4.3)':
     dependencies:
