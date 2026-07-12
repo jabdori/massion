@@ -1,7 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { chmod, cp, lstat, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
-import { basename, relative, resolve, sep } from "node:path";
+import { chmod, cp, lstat, mkdir, readFile, readdir, readlink, rm, stat, writeFile } from "node:fs/promises";
+import { basename, dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { createReleaseManifest, verifyReleaseVersions } from "./release-manifest.mjs";
@@ -55,6 +55,50 @@ export async function verifyRuntimeEntrypoints(root, entrypoints) {
     }
     if (!metadata.isFile()) throw new Error(`release runtime entrypoint가 일반 파일이 아닙니다: ${name} (${path})`);
   }
+}
+
+function isWithin(root, candidate) {
+  return candidate === root || candidate.startsWith(`${root}${sep}`);
+}
+
+export async function assertContainedSymlinks(root) {
+  const runtimeRoot = resolve(root);
+  const visit = async (current) => {
+    for (const entry of await readdir(current, { withFileTypes: true })) {
+      const path = resolve(current, entry.name);
+      const metadata = await lstat(path);
+      if (metadata.isSymbolicLink()) {
+        const target = await readlink(path);
+        if (isAbsolute(target) || !isWithin(runtimeRoot, resolve(current, target))) {
+          throw new Error("release runtime symbolic link가 runtime directory를 벗어납니다");
+        }
+      } else if (metadata.isDirectory()) {
+        await visit(path);
+      }
+    }
+  };
+  await visit(runtimeRoot);
+}
+
+export async function removeEscapingDeploySelfReference(root, packageName) {
+  if (typeof packageName !== "string" || !/^@?[a-z0-9][a-z0-9._-]*(?:\/[a-z0-9][a-z0-9._-]*)?$/u.test(packageName)) {
+    throw new Error("deploy self reference package name이 유효하지 않습니다");
+  }
+  const runtimeRoot = resolve(root);
+  const path = resolve(runtimeRoot, "node_modules", ".pnpm", "node_modules", ...packageName.split("/"));
+  if (!isWithin(runtimeRoot, path)) throw new Error("deploy self reference path가 유효하지 않습니다");
+  let metadata;
+  try {
+    metadata = await lstat(path);
+  } catch (error) {
+    if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") return false;
+    throw error;
+  }
+  if (!metadata.isSymbolicLink()) return false;
+  const target = await readlink(path);
+  if (!isAbsolute(target) && isWithin(runtimeRoot, resolve(dirname(path), target))) return false;
+  await rm(path);
+  return true;
 }
 
 function run(command, arguments_, options = {}) {
@@ -160,6 +204,8 @@ async function main() {
     cwd: root,
     capture: false,
   });
+  await removeEscapingDeploySelfReference(resolve(local, "runtime"), "@massion/distribution");
+  await assertContainedSymlinks(resolve(local, "runtime"));
   await removeTestArtifacts(resolve(local, "runtime"));
   const entrypoints = {
     mass: "runtime/node_modules/@massion/cli/dist/main.js",

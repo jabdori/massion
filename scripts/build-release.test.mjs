@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { lstat, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -44,4 +44,20 @@ test("release manifest를 쓰기 전에 모든 runtime entrypoint를 검증한�
   await writeFile(join(root, connector), "#!/usr/bin/env node\n");
 
   await assert.doesNotReject(async () => await buildRelease.verifyRuntimeEntrypoints(root, { connector }));
+});
+
+test("배포 runtime의 작업공간 밖 심볼릭 링크를 제거하고 나머지 링크 경계를 검증한다", async (context) => {
+  assert.equal(typeof buildRelease.removeEscapingDeploySelfReference, "function");
+  assert.equal(typeof buildRelease.assertContainedSymlinks, "function");
+  const root = await mkdtemp(join(tmpdir(), "massion-release-symlink-"));
+  context.after(async () => await rm(root, { recursive: true, force: true }));
+  const link = join(root, "node_modules/.pnpm/node_modules/@massion/distribution");
+
+  await mkdir(join(root, "node_modules/.pnpm/node_modules/@massion"), { recursive: true });
+  await symlink("../../../../../../../../../apps/distribution", link);
+
+  await assert.rejects(async () => await buildRelease.assertContainedSymlinks(root), /symbolic link/u);
+  await buildRelease.removeEscapingDeploySelfReference(root, "@massion/distribution");
+  await assert.rejects(async () => await lstat(link), { code: "ENOENT" });
+  await assert.doesNotReject(async () => await buildRelease.assertContainedSymlinks(root));
 });
