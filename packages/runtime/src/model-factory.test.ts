@@ -170,9 +170,48 @@ describe("Massion routed model factory", () => {
     expect(fallback.credentialId).not.toBe(first.credentialId);
   });
 
+  it.each(["https://api.openai.com/v1?", "https://api.openai.com/v1#"])(
+    "빈 query/hash가 포함된 OpenAI API URL %s는 chat provider를 사용한다",
+    (baseUrl) => {
+      const builder = new OpenAICompatibleModelBuilder();
+      const provider: ModelProvider = {
+        provider_id: "openai",
+        organization_id: "organization-a",
+        display_name: "OpenAI",
+        adapter_kind: "ai-sdk",
+        enabled: true,
+        created_at: new Date(),
+        updated_at: new Date(),
+      };
+      const endpoint: ProviderEndpoint = {
+        endpoint_id: "endpoint-openai",
+        organization_id: "organization-a",
+        provider_id: "openai",
+        name: "OpenAI API",
+        base_url: baseUrl,
+        local: false,
+        enabled: true,
+        created_at: new Date(),
+        updated_at: new Date(),
+      };
+
+      const model = builder.build({
+        provider,
+        endpoint,
+        modelId: "gpt-5.6-sol",
+        credentialId: "openai-api-key",
+        secret: "openai-secret",
+      });
+
+      expect(model.provider).toBe("openai.chat");
+    },
+  );
+
   it("공식 OpenAI의 gpt-5.6-sol은 Responses API endpoint로 호출한다", async () => {
-    const fetcher = vi.fn(async (_input: string | URL | Request) =>
-      new Response(
+    let requestUrl = "";
+    const fetcher = vi.fn(async (input: string | URL | Request) => {
+      requestUrl = input instanceof Request ? input.url : String(input);
+      return new Response(
         JSON.stringify({
           id: "response-1",
           created_at: 1,
@@ -188,8 +227,8 @@ describe("Massion routed model factory", () => {
           usage: { input_tokens: 1, output_tokens: 1 },
         }),
         { headers: { "content-type": "application/json" } },
-      ),
-    );
+      );
+    });
     vi.stubGlobal("fetch", fetcher);
     const builder = new OpenAICompatibleModelBuilder();
     const provider: ModelProvider = {
@@ -224,7 +263,7 @@ describe("Massion routed model factory", () => {
 
     expect(result.text).toBe("ok");
     expect(fetcher).toHaveBeenCalledTimes(1);
-    expect(fetcher.mock.calls[0]?.[0]).toBe("https://api.openai.com/v1/responses");
+    expect(requestUrl).toBe("https://api.openai.com/v1/responses");
   });
 
   it("실제 OpenAI-compatible builder가 Ollama /v1 endpoint와 Bearer secret으로 호출한다", async () => {
