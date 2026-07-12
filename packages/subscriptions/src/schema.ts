@@ -146,3 +146,33 @@ DEFINE INDEX subscription_connector_nonce_replay ON subscription_connector_nonce
 DEFINE EVENT subscription_connector_nonce_immutable ON TABLE subscription_connector_nonce WHEN $event IN ['UPDATE', 'DELETE'] THEN { THROW 'Connector nonce는 immutable입니다'; };
 `,
 );
+
+// prettier-ignore -- 새 migration도 생성 시점의 SQL 바이트를 고정합니다.
+export const SUBSCRIPTION_POLICY_MIGRATION = defineMigration(
+  "0087-subscription-routing-policy",
+  `
+DEFINE TABLE subscription_routing_policy_version SCHEMAFULL PERMISSIONS NONE;
+DEFINE FIELD policy_version_id ON subscription_routing_policy_version TYPE string;
+DEFINE FIELD organization_id ON subscription_routing_policy_version TYPE string;
+DEFINE FIELD provider_id ON subscription_routing_policy_version TYPE string;
+DEFINE FIELD credential_policy ON subscription_routing_policy_version TYPE string ASSERT $value IN ['adaptive', 'priority', 'fill-first', 'round-robin', 'weighted', 'least-used', 'quota-headroom', 'reset-aware', 'sticky'];
+DEFINE FIELD version ON subscription_routing_policy_version TYPE int ASSERT $value > 0;
+DEFINE FIELD command_id ON subscription_routing_policy_version TYPE string;
+DEFINE FIELD actor_user_id ON subscription_routing_policy_version TYPE string;
+DEFINE FIELD request_hash ON subscription_routing_policy_version TYPE string ASSERT string::len($value) = 64;
+DEFINE FIELD created_at ON subscription_routing_policy_version TYPE datetime;
+DEFINE INDEX subscription_routing_policy_version_id ON subscription_routing_policy_version FIELDS organization_id, policy_version_id UNIQUE;
+DEFINE INDEX subscription_routing_policy_provider_version ON subscription_routing_policy_version FIELDS organization_id, provider_id, version UNIQUE;
+DEFINE INDEX subscription_routing_policy_command ON subscription_routing_policy_version FIELDS organization_id, command_id UNIQUE;
+DEFINE EVENT subscription_routing_policy_immutable ON TABLE subscription_routing_policy_version WHEN $event IN ['UPDATE', 'DELETE'] THEN { THROW 'Subscription routing policy version은 immutable입니다'; };
+
+DEFINE TABLE subscription_routing_policy_active SCHEMAFULL PERMISSIONS NONE;
+DEFINE FIELD organization_id ON subscription_routing_policy_active TYPE string;
+DEFINE FIELD provider_id ON subscription_routing_policy_active TYPE string;
+DEFINE FIELD policy_version_id ON subscription_routing_policy_active TYPE string;
+DEFINE FIELD credential_policy ON subscription_routing_policy_active TYPE string ASSERT $value IN ['adaptive', 'priority', 'fill-first', 'round-robin', 'weighted', 'least-used', 'quota-headroom', 'reset-aware', 'sticky'];
+DEFINE FIELD version ON subscription_routing_policy_active TYPE int ASSERT $value > 0;
+DEFINE FIELD updated_at ON subscription_routing_policy_active TYPE datetime;
+DEFINE INDEX subscription_routing_policy_active_provider ON subscription_routing_policy_active FIELDS organization_id, provider_id UNIQUE;
+`,
+);

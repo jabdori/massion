@@ -2,7 +2,11 @@ import { createHash, randomUUID } from "node:crypto";
 
 import { type OrganizationService, type TenantContext } from "@massion/identity";
 import { applyMigrations, type MassionDatabase, type QueryExecutor } from "@massion/storage";
-import { type SubscriptionAccountService, type SubscriptionQuotaService } from "@massion/subscriptions";
+import {
+  type SubscriptionAccountService,
+  type SubscriptionPolicyStore,
+  type SubscriptionQuotaService,
+} from "@massion/subscriptions";
 
 import { classifyFailure, type FailureSignal } from "./failure.js";
 import {
@@ -16,6 +20,7 @@ import {
   MODEL_PRICING_MIGRATION,
   MODEL_ROUTE_MIGRATION,
   ROUTE_ATTEMPT_LINEAGE_MIGRATION,
+  ROUTE_ATTEMPT_SUBSCRIPTION_POLICY_MIGRATION,
   ROUTER_HEALTH_MIGRATION,
   ROUTER_REGISTRY_MIGRATION,
   ROUTER_SUBSCRIPTION_MATERIAL_MIGRATION,
@@ -114,6 +119,9 @@ export interface RouteAttempt {
   readonly fallback_from_attempt_id?: string;
   readonly quota_snapshot_id?: string;
   readonly routing_policy_version?: number;
+  readonly effective_credential_policy?: CredentialPolicy;
+  readonly subscription_policy_version_id?: string;
+  readonly subscription_policy_version?: number;
   readonly explanation_json: string;
   readonly created_at: unknown;
   readonly updated_at: unknown;
@@ -142,6 +150,7 @@ export interface CredentialSelectionView {
 export interface ModelRouterSubscriptionServices {
   readonly accounts: SubscriptionAccountService;
   readonly quota: SubscriptionQuotaService;
+  readonly policies?: Pick<SubscriptionPolicyStore, "resolve">;
 }
 
 export interface RegisterModelInput {
@@ -210,6 +219,9 @@ export interface RouteSimulation {
     readonly excluded: string[];
   };
   readonly quotaSnapshotId?: string;
+  readonly effectiveCredentialPolicy?: CredentialPolicy;
+  readonly subscriptionPolicyVersionId?: string;
+  readonly subscriptionPolicyVersion?: number;
   readonly resumeAt?: string;
 }
 
@@ -417,6 +429,7 @@ export class ModelRouter {
       MODEL_PRICING_MIGRATION,
       ROUTER_SUBSCRIPTION_MATERIAL_MIGRATION,
       ROUTE_ATTEMPT_LINEAGE_MIGRATION,
+      ROUTE_ATTEMPT_SUBSCRIPTION_POLICY_MIGRATION,
     ]);
     return new ModelRouter(database, organizations, providers, subscriptions);
   }
@@ -640,7 +653,7 @@ export class ModelRouter {
         },
       );
       const [attempts] = await tx.query<[RouteAttempt[]]>(
-        "CREATE route_attempt CONTENT { attempt_id: $attempt_id, organization_id: $organization_id, route_id: $route_id, candidate_id: $candidate_id, model_profile_id: $profile_id, credential_id: $credential_id, credential_secret_version: $secret_version, command_id: $command_id, status: 'reserved', selection_sequence: $sequence, estimated_tokens: $tokens, reserved_cost_micros: $cost, sticky_key_hash: $sticky_hash, fallback_from_attempt_id: $fallback_from, quota_snapshot_id: $quota_snapshot_id, routing_policy_version: $routing_policy_version, explanation_json: $explanation_json, created_at: time::now(), updated_at: time::now() } RETURN AFTER;",
+        "CREATE route_attempt CONTENT { attempt_id: $attempt_id, organization_id: $organization_id, route_id: $route_id, candidate_id: $candidate_id, model_profile_id: $profile_id, credential_id: $credential_id, credential_secret_version: $secret_version, command_id: $command_id, status: 'reserved', selection_sequence: $sequence, estimated_tokens: $tokens, reserved_cost_micros: $cost, sticky_key_hash: $sticky_hash, fallback_from_attempt_id: $fallback_from, quota_snapshot_id: $quota_snapshot_id, routing_policy_version: $routing_policy_version, effective_credential_policy: $effective_credential_policy, subscription_policy_version_id: $subscription_policy_version_id, subscription_policy_version: $subscription_policy_version, explanation_json: $explanation_json, created_at: time::now(), updated_at: time::now() } RETURN AFTER;",
         {
           attempt_id: randomUUID(),
           organization_id: context.organizationId,
@@ -657,6 +670,9 @@ export class ModelRouter {
           fallback_from: input.fallbackFromAttemptId,
           quota_snapshot_id: simulation.quotaSnapshotId,
           routing_policy_version: route.routing_policy_version,
+          effective_credential_policy: simulation.effectiveCredentialPolicy,
+          subscription_policy_version_id: simulation.subscriptionPolicyVersionId,
+          subscription_policy_version: simulation.subscriptionPolicyVersion,
           explanation_json: canonicalJson({ request: requestJson, explanation: simulation.explanation }),
         },
       );
@@ -686,6 +702,15 @@ export class ModelRouter {
         credentialId: attempt.credential_id,
         ...(attempt.quota_snapshot_id ? { quotaSnapshotId: attempt.quota_snapshot_id } : {}),
         routingPolicyVersion: attempt.routing_policy_version,
+        ...(attempt.effective_credential_policy
+          ? { effectiveCredentialPolicy: attempt.effective_credential_policy }
+          : {}),
+        ...(attempt.subscription_policy_version_id
+          ? { subscriptionPolicyVersionId: attempt.subscription_policy_version_id }
+          : {}),
+        ...(attempt.subscription_policy_version === undefined
+          ? {}
+          : { subscriptionPolicyVersion: attempt.subscription_policy_version }),
       });
       const [events] = await tx.query<[RouterAuditEvent[]]>(
         "CREATE router_audit_event CONTENT { audit_event_id: $audit_id, organization_id: $organization_id, command_id: $command_id, event_type: 'route_attempt_recorded', actor_user_id: $actor_user_id, request_json: $request_json, result_json: $result_json, created_at: time::now() } RETURN AFTER;",
@@ -967,7 +992,10 @@ export class ModelRouter {
         }
         excluded.push(`${profile.model_id}/${credential.label}: ${credential.status}`);
       }
-      const selected = selectCredential(route.credential_policy, eligible, request.stickyKey);
+      const subscriptionPolicy = await this.subscriptions?.policies?.resolve(context, profile.provider_id, executor);
+      const configuredSubscriptionPolicy = subscriptionPolicy?.source === "configured" ? subscriptionPolicy : undefined;
+      const effectiveCredentialPolicy = configuredSubscriptionPolicy?.credentialPolicy ?? route.credential_policy;
+      const selected = selectCredential(effectiveCredentialPolicy, eligible, request.stickyKey);
       if (selected) {
         const credential = credentials.find((item) => item.credential_id === selected.credential_id);
         if (!credential) continue;
@@ -979,12 +1007,20 @@ export class ModelRouter {
           endpoint,
           credential: credential.status === "cooldown" ? { ...credential, status: "active" } : credential,
           ...(selected.quota_snapshot_id ? { quotaSnapshotId: selected.quota_snapshot_id } : {}),
+          effectiveCredentialPolicy,
+          ...(configuredSubscriptionPolicy?.policyVersionId
+            ? { subscriptionPolicyVersionId: configuredSubscriptionPolicy.policyVersionId }
+            : {}),
+          ...(configuredSubscriptionPolicy ? { subscriptionPolicyVersion: configuredSubscriptionPolicy.version } : {}),
           explanation: {
             selected: [
               `candidate=${candidate.candidate_id}`,
               `model=${profile.provider_id}/${profile.model_id}`,
               `credential=${credential.credential_id}`,
-              `policy=${route.credential_policy}`,
+              `policy=${effectiveCredentialPolicy}`,
+              ...(configuredSubscriptionPolicy?.policyVersionId
+                ? [`subscription-policy-version=${configuredSubscriptionPolicy.policyVersionId}`]
+                : []),
             ],
             excluded,
           },

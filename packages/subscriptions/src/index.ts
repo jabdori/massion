@@ -6,4 +6,5 @@ export * from "./contracts.js";
 export * from "./enrollment.js";
 export * from "./quota-service.js";
 export * from "./provider-catalog.js";
+export * from "./policy-store.js";
 export * from "./schema.js";
