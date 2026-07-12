@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { IdentityService, OrganizationService, type TenantContext } from "@massion/identity";
 import { createDatabase, type MassionDatabase } from "@massion/storage";
-import { SubscriptionAccountService, SubscriptionQuotaService } from "@massion/subscriptions";
+import { SubscriptionAccountService, SubscriptionPolicyStore, SubscriptionQuotaService } from "@massion/subscriptions";
 
 import {
   ModelRouter,
@@ -169,6 +169,7 @@ describe("Model Route simulation과 reservation", () => {
   let profile: ModelProfile;
   let accounts: SubscriptionAccountService;
   let quota: SubscriptionQuotaService;
+  let policies: SubscriptionPolicyStore;
 
   beforeEach(async () => {
     database = await createDatabase({ url: "mem://", namespace: "massion", database: crypto.randomUUID() });
@@ -178,10 +179,11 @@ describe("Model Route simulation과 reservation", () => {
     context = await organizations.resolveTenantContext(owner.user.user_id, owner.organization.organization_id);
     accounts = await SubscriptionAccountService.create(database, organizations, randomBytes(32));
     quota = await SubscriptionQuotaService.create(database, organizations);
+    policies = await SubscriptionPolicyStore.create(database, organizations);
     providers = await ProviderService.create(database, organizations, new CredentialVault(randomBytes(32)), {
       accounts,
     });
-    router = await ModelRouter.create(database, organizations, providers, { accounts, quota });
+    router = await ModelRouter.create(database, organizations, providers, { accounts, quota, policies });
     await providers.registerProvider(context, {
       commandId: crypto.randomUUID(),
       providerId: "openai",
@@ -283,6 +285,44 @@ describe("Model Route simulation과 reservation", () => {
       expect.objectContaining({ route_id: created.route_id, name: created.name, credential_policy: "weighted" }),
     ]);
     expect(JSON.stringify(await router.listRoutes(context))).not.toContain("secret-account");
+  });
+
+  it("제공자별 구독 정책을 실제 credential 선택에 적용하고 사용한 version을 Attempt에 고정한다", async () => {
+    const created = await route("round-robin");
+    const [credentials] = await database.query<[Array<{ credential_id: string; label: string }>]>(
+      `SELECT credential_id, label FROM provider_credential
+       WHERE organization_id = $organization_id AND provider_id = 'openai' ORDER BY label ASC;`,
+      { organization_id: context.organizationId },
+    );
+    const second = credentials.find((credential) => credential.label === "account-b");
+    if (!second) throw new Error("두 번째 Credential fixture가 없습니다");
+    await database.query(
+      `UPDATE provider_credential SET priority = 0, last_selected_sequence = 100
+       WHERE organization_id = $organization_id AND credential_id = $credential_id;`,
+      { organization_id: context.organizationId, credential_id: second.credential_id },
+    );
+    const configured = await policies.configure(context, {
+      commandId: crypto.randomUUID(),
+      providerId: "openai",
+      credentialPolicy: "priority",
+    });
+
+    const reservation = await router.reserve(context, {
+      commandId: crypto.randomUUID(),
+      routeName: created.name,
+      estimatedTokens: 10,
+      estimatedCostMicros: 10,
+    });
+
+    expect(reservation.credential?.label).toBe("account-b");
+    expect(reservation.attempt).toMatchObject({
+      effective_credential_policy: "priority",
+      subscription_policy_version_id: configured.policyVersionId,
+      subscription_policy_version: 1,
+      routing_policy_version: 2,
+    });
+    expect(reservation.explanation.selected).toContain("policy=priority");
+    expect(reservation.explanation.selected).toContain(`subscription-policy-version=${configured.policyVersionId}`);
   });
 
   it("동시 round-robin reservation이 서로 다른 account를 선택한다", async () => {
@@ -460,6 +500,7 @@ describe("Model Route simulation과 reservation", () => {
       attemptId: reservation.attempt.attempt_id,
       candidateId: reservation.attempt.candidate_id,
       credentialId: reservation.attempt.credential_id,
+      effectiveCredentialPolicy: "adaptive",
       modelProfileId: reservation.attempt.model_profile_id,
       quotaSnapshotId: recorded.snapshotId,
       routeId: reservation.attempt.route_id,

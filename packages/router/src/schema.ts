@@ -225,3 +225,13 @@ DEFINE FIELD quota_snapshot_id ON route_attempt TYPE option<string> READONLY;
 DEFINE FIELD routing_policy_version ON route_attempt TYPE option<int> READONLY;
 `,
 );
+
+// prettier-ignore -- migration SQL의 공백도 checksum에 포함됩니다.
+export const ROUTE_ATTEMPT_SUBSCRIPTION_POLICY_MIGRATION = defineMigration(
+  "0088-router-subscription-policy-lineage",
+  `
+DEFINE FIELD effective_credential_policy ON route_attempt TYPE option<string> READONLY;
+DEFINE FIELD subscription_policy_version_id ON route_attempt TYPE option<string> READONLY;
+DEFINE FIELD subscription_policy_version ON route_attempt TYPE option<int> READONLY;
+`,
+);
