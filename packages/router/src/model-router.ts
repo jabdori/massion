@@ -15,6 +15,7 @@ import {
 import {
   MODEL_PRICING_MIGRATION,
   MODEL_ROUTE_MIGRATION,
+  ROUTE_ATTEMPT_LINEAGE_MIGRATION,
   ROUTER_HEALTH_MIGRATION,
   ROUTER_REGISTRY_MIGRATION,
   ROUTER_SUBSCRIPTION_MATERIAL_MIGRATION,
@@ -72,6 +73,7 @@ export interface ModelRoute {
   readonly total_budget_micros: number;
   readonly spent_micros: number;
   readonly selection_sequence: number;
+  readonly routing_policy_version: number;
   readonly enabled: boolean;
   readonly created_at: unknown;
   readonly updated_at: unknown;
@@ -110,6 +112,8 @@ export interface RouteAttempt {
   readonly reserved_cost_micros: number;
   readonly sticky_key_hash?: string;
   readonly fallback_from_attempt_id?: string;
+  readonly quota_snapshot_id?: string;
+  readonly routing_policy_version?: number;
   readonly explanation_json: string;
   readonly created_at: unknown;
   readonly updated_at: unknown;
@@ -132,6 +136,7 @@ export interface CredentialSelectionView {
     readonly resetsAt?: string;
     readonly observedAt: string;
   }[];
+  readonly quota_snapshot_id?: string;
 }
 
 export interface ModelRouterSubscriptionServices {
@@ -204,6 +209,7 @@ export interface RouteSimulation {
     readonly selected: string[];
     readonly excluded: string[];
   };
+  readonly quotaSnapshotId?: string;
   readonly resumeAt?: string;
 }
 
@@ -410,6 +416,7 @@ export class ModelRouter {
       ROUTER_HEALTH_MIGRATION,
       MODEL_PRICING_MIGRATION,
       ROUTER_SUBSCRIPTION_MATERIAL_MIGRATION,
+      ROUTE_ATTEMPT_LINEAGE_MIGRATION,
     ]);
     return new ModelRouter(database, organizations, providers, subscriptions);
   }
@@ -471,7 +478,7 @@ export class ModelRouter {
       throw new Error("Route budget 또는 context가 유효하지 않습니다");
     return await this.command(context, input.commandId, "model_route_created", canonicalJson(input), async (tx) => {
       const [routes] = await tx.query<[ModelRoute[]]>(
-        "CREATE model_route CONTENT { route_id: $route_id, organization_id: $organization_id, name: $name, route_kind: $route_kind, credential_policy: $credential_policy, data_policy: $data_policy, equivalence_group: $equivalence_group, min_eval_score: $min_eval_score, require_tools: $require_tools, require_structured_output: $require_structured, require_vision: $require_vision, require_streaming: $require_streaming, max_context_tokens: $max_context_tokens, request_budget_micros: $request_budget, total_budget_micros: $total_budget, spent_micros: 0, selection_sequence: 0, enabled: true, created_at: time::now(), updated_at: time::now() } RETURN AFTER;",
+        "CREATE model_route CONTENT { route_id: $route_id, organization_id: $organization_id, name: $name, route_kind: $route_kind, credential_policy: $credential_policy, data_policy: $data_policy, equivalence_group: $equivalence_group, min_eval_score: $min_eval_score, require_tools: $require_tools, require_structured_output: $require_structured, require_vision: $require_vision, require_streaming: $require_streaming, max_context_tokens: $max_context_tokens, request_budget_micros: $request_budget, total_budget_micros: $total_budget, spent_micros: 0, selection_sequence: 0, routing_policy_version: 1, enabled: true, created_at: time::now(), updated_at: time::now() } RETURN AFTER;",
         {
           route_id: randomUUID(),
           organization_id: context.organizationId,
@@ -535,6 +542,10 @@ export class ModelRouter {
         },
       );
       if (!candidates[0]) throw new Error("Route Candidate 생성 결과가 없습니다");
+      await tx.query(
+        "UPDATE model_route SET routing_policy_version += 1, updated_at = time::now() WHERE organization_id = $organization_id AND route_id = $route_id;",
+        { organization_id: context.organizationId, route_id: route.route_id },
+      );
       return { candidate: candidates[0] };
     });
   }
@@ -581,7 +592,15 @@ export class ModelRouter {
 
   public async reserve(context: TenantContext, input: ReserveRouteInput): Promise<RouteReservation> {
     await this.organizations.verifyTenantContext(context);
-    const requestJson = canonicalJson(input);
+    const stickyKeyHash = input.stickyKey ? createHash("sha256").update(input.stickyKey).digest("hex") : undefined;
+    const requestJson = canonicalJson({
+      commandId: input.commandId,
+      routeName: input.routeName,
+      estimatedTokens: input.estimatedTokens,
+      estimatedCostMicros: input.estimatedCostMicros,
+      ...(stickyKeyHash ? { stickyKeyHash } : {}),
+      ...(input.fallbackFromAttemptId ? { fallbackFromAttemptId: input.fallbackFromAttemptId } : {}),
+    });
     return await this.database.transaction(async (tx) => {
       await this.organizations.verifyTenantContext(context, undefined, tx);
       const [repeated] = await tx.query<[RouteAttempt[]]>(
@@ -621,7 +640,7 @@ export class ModelRouter {
         },
       );
       const [attempts] = await tx.query<[RouteAttempt[]]>(
-        "CREATE route_attempt CONTENT { attempt_id: $attempt_id, organization_id: $organization_id, route_id: $route_id, candidate_id: $candidate_id, model_profile_id: $profile_id, credential_id: $credential_id, credential_secret_version: $secret_version, command_id: $command_id, status: 'reserved', selection_sequence: $sequence, estimated_tokens: $tokens, reserved_cost_micros: $cost, sticky_key_hash: $sticky_hash, fallback_from_attempt_id: $fallback_from, explanation_json: $explanation_json, created_at: time::now(), updated_at: time::now() } RETURN AFTER;",
+        "CREATE route_attempt CONTENT { attempt_id: $attempt_id, organization_id: $organization_id, route_id: $route_id, candidate_id: $candidate_id, model_profile_id: $profile_id, credential_id: $credential_id, credential_secret_version: $secret_version, command_id: $command_id, status: 'reserved', selection_sequence: $sequence, estimated_tokens: $tokens, reserved_cost_micros: $cost, sticky_key_hash: $sticky_hash, fallback_from_attempt_id: $fallback_from, quota_snapshot_id: $quota_snapshot_id, routing_policy_version: $routing_policy_version, explanation_json: $explanation_json, created_at: time::now(), updated_at: time::now() } RETURN AFTER;",
         {
           attempt_id: randomUUID(),
           organization_id: context.organizationId,
@@ -634,19 +653,52 @@ export class ModelRouter {
           sequence,
           tokens: input.estimatedTokens,
           cost: input.estimatedCostMicros,
-          sticky_hash: input.stickyKey ? createHash("sha256").update(input.stickyKey).digest("hex") : undefined,
+          sticky_hash: stickyKeyHash,
           fallback_from: input.fallbackFromAttemptId,
+          quota_snapshot_id: simulation.quotaSnapshotId,
+          routing_policy_version: route.routing_policy_version,
           explanation_json: canonicalJson({ request: requestJson, explanation: simulation.explanation }),
         },
       );
       const attempt = attempts[0];
       if (!attempt) throw new Error("Route Attempt 생성 결과가 없습니다");
+      if (attempt.routing_policy_version === undefined) {
+        throw new Error("Route Attempt에 routing policy version이 없습니다");
+      }
       const material = await this.providers.resolveExecutionMaterial(
         context,
         simulation.credential,
         tx,
         attempt.credential_secret_version,
       );
+      const auditRequestJson = canonicalJson({
+        routeName: input.routeName,
+        estimatedTokens: input.estimatedTokens,
+        estimatedCostMicros: input.estimatedCostMicros,
+        ...(stickyKeyHash ? { stickyKeyHash } : {}),
+        ...(input.fallbackFromAttemptId ? { fallbackFromAttemptId: input.fallbackFromAttemptId } : {}),
+      });
+      const auditResultJson = canonicalJson({
+        attemptId: attempt.attempt_id,
+        routeId: attempt.route_id,
+        candidateId: attempt.candidate_id,
+        modelProfileId: attempt.model_profile_id,
+        credentialId: attempt.credential_id,
+        ...(attempt.quota_snapshot_id ? { quotaSnapshotId: attempt.quota_snapshot_id } : {}),
+        routingPolicyVersion: attempt.routing_policy_version,
+      });
+      const [events] = await tx.query<[RouterAuditEvent[]]>(
+        "CREATE router_audit_event CONTENT { audit_event_id: $audit_id, organization_id: $organization_id, command_id: $command_id, event_type: 'route_attempt_recorded', actor_user_id: $actor_user_id, request_json: $request_json, result_json: $result_json, created_at: time::now() } RETURN AFTER;",
+        {
+          audit_id: randomUUID(),
+          organization_id: context.organizationId,
+          command_id: input.commandId,
+          actor_user_id: context.userId,
+          request_json: auditRequestJson,
+          result_json: auditResultJson,
+        },
+      );
+      if (!events[0]) throw new Error("Route Attempt 감사 사건을 생성하지 못했습니다");
       return {
         ...simulation,
         status: "selected",
@@ -878,7 +930,9 @@ export class ModelRouter {
             const account = await this.subscriptions.accounts.requireUsable(context, accountId, scope, executor);
             if (account.connector_id !== connectorId) throw new Error("Connector binding 불일치");
             const current = await this.subscriptions.quota.currentForRouting(context, accountId, executor);
-            selectionCredential = current ? { ...credential, quota_windows: current.windows } : credential;
+            selectionCredential = current
+              ? { ...credential, quota_windows: current.windows, quota_snapshot_id: current.snapshotId }
+              : credential;
             const freshExhausted =
               current?.windows.some((window) => {
                 const observedAt = new Date(window.observedAt).getTime();
@@ -924,6 +978,7 @@ export class ModelRouter {
           profile,
           endpoint,
           credential: credential.status === "cooldown" ? { ...credential, status: "active" } : credential,
+          ...(selected.quota_snapshot_id ? { quotaSnapshotId: selected.quota_snapshot_id } : {}),
           explanation: {
             selected: [
               `candidate=${candidate.candidate_id}`,
@@ -1002,6 +1057,7 @@ export class ModelRouter {
       attempt,
       material,
       ...(material.kind === "encrypted_secret" ? { secret: material.secret } : {}),
+      ...(attempt.quota_snapshot_id ? { quotaSnapshotId: attempt.quota_snapshot_id } : {}),
       explanation: explanation.explanation,
     };
   }

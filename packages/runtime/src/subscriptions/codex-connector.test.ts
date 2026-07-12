@@ -82,4 +82,41 @@ describe("공식 Codex 구독 Connector", () => {
 
     expect(resumeThread).toHaveBeenCalledWith("thread-existing", { workingDirectory: "/tmp/work-1" });
   });
+
+  it("실행 중인 turn을 취소하면 SDK AbortSignal을 중단한다", async () => {
+    let turnSignal: AbortSignal | undefined;
+    const run = vi.fn().mockImplementation(
+      (_input, options?: { readonly signal?: AbortSignal }) =>
+        new Promise((_resolve, reject) => {
+          turnSignal = options?.signal;
+          turnSignal?.addEventListener("abort", () => reject(new Error("cancelled")), { once: true });
+        }),
+    );
+    const connector = new CodexSubscriptionConnector({
+      create: () => ({
+        startThread: () => ({ id: "thread-cancel", run }),
+        resumeThread: vi.fn(),
+      }),
+    });
+    const execution = connector.execute(context, {
+      executionId: "execution-cancel",
+      workId: "work-1",
+      agentHandle: "software-engineering.engineering-lead",
+      prompt: "취소 대기",
+      workspaceRoot: "/tmp/work-cancel",
+      profileRoot: "/tmp/profile-cancel",
+      environment: { PATH: "/usr/bin" },
+      allowedTools: [],
+      disallowedTools: [],
+    });
+
+    await connector.cancel(context, "execution-cancel");
+
+    expect(turnSignal?.aborted).toBe(true);
+    await expect(execution).resolves.toMatchObject({
+      outcome: "cancelled",
+      executionId: "execution-cancel",
+      sessionId: "thread-cancel",
+    });
+  });
 });

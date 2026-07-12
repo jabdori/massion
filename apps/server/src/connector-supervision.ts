@@ -20,11 +20,17 @@ class NodeConnectorChild implements ConnectorChildHandle {
 
   public async stop(timeoutMs: number): Promise<void> {
     if (this.child.exitCode !== null || this.child.signalCode !== null) return;
-    const exited = new Promise<void>((resolveExit) => this.child.once("exit", () => resolveExit()));
+    const exited = new Promise<void>((resolveExit) =>
+      this.child.once("exit", () => {
+        resolveExit();
+      }),
+    );
     this.child.kill("SIGTERM");
     let timer: ReturnType<typeof setTimeout> | undefined;
     const timeout = new Promise<"timeout">((resolveTimeout) => {
-      timer = setTimeout(() => resolveTimeout("timeout"), timeoutMs);
+      timer = setTimeout(() => {
+        resolveTimeout("timeout");
+      }, timeoutMs);
     });
     if ((await Promise.race([exited.then(() => "exited" as const), timeout])) === "timeout") {
       this.child.kill("SIGKILL");
@@ -150,6 +156,6 @@ export class ConnectorProcessSupervisor {
   public async shutdown(): Promise<void> {
     const processes = [...this.active.values()];
     this.active.clear();
-    await Promise.all(processes.map(async (process) => await process.child.stop(this.options.stopTimeoutMs)));
+    await Promise.all(processes.map((process) => process.child.stop(this.options.stopTimeoutMs)));
   }
 }

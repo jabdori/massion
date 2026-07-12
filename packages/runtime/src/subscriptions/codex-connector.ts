@@ -75,8 +75,9 @@ export class CodexSubscriptionConnector implements SubscriptionAgentAdapter {
     return await this.execute(context, { ...input, sessionId: approval.sessionId });
   }
 
-  public async cancel(_context: TenantContext, executionId: string): Promise<void> {
+  public cancel(_context: TenantContext, executionId: string): Promise<void> {
     this.active.get(executionId)?.abort("cancelled");
+    return Promise.resolve();
   }
 
   private async run(input: SubscriptionAgentInput, output?: StructuredOutputSpec): Promise<SubscriptionAgentResult> {

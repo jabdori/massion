@@ -38,6 +38,29 @@ describe("구독 Connector 보안 채널", () => {
     ).toThrow("TLS");
   });
 
+  it.each([
+    [null, "handshake가 유효하지 않습니다"],
+    [
+      {
+        protocol: "massion.connector.v0",
+        organizationId: "organization-1",
+        connectorId: "edge-1",
+        nonce: "channel-nonce-invalid-protocol",
+        observedAt: "2030-01-01T00:00:00.000Z",
+        signature: "invalid",
+      },
+      "protocol이 유효하지 않습니다",
+    ],
+  ])("신뢰하지 않은 handshake 입력 %#을 명시적으로 거부한다", (handshake: unknown, message) => {
+    const { publicKey } = generateKeyPairSync("ed25519");
+    const authenticator = new ConnectorChannelAuthenticator({
+      now: () => new Date("2030-01-01T00:00:00.000Z"),
+    });
+    const publicKeyPem = publicKey.export({ type: "spki", format: "pem" }).toString();
+
+    expect(() => authenticator.verify({ secure: true, publicKey: publicKeyPem, handshake })).toThrow(message);
+  });
+
   it("frame 1 MiB와 요청 전체 16 MiB 상한을 fail closed한다", () => {
     const codec = new ConnectorFrameCodec();
     const frame = codec.encode({
@@ -78,6 +101,7 @@ describe("구독 Connector 보안 채널", () => {
     await detached();
     await expect(async () => {
       for await (const _event of hub.invoke("organization-1", "edge-1", request)) {
+        void _event;
         // 연결 해제 오류를 반복 과정에서 받습니다.
       }
     }).rejects.toThrow("연결되지 않았습니다");

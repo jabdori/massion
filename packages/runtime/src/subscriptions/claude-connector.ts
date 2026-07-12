@@ -62,7 +62,7 @@ export class ClaudeSubscriptionConnector implements SubscriptionAgentAdapter {
   public constructor(
     private readonly query: ClaudeAgentQuery = OFFICIAL_QUERY,
     private readonly permissions: SubscriptionPermissionBridge = {
-      request: async () => ({ outcome: "deny", reason: "Governance permission bridge가 연결되지 않았습니다" }),
+      request: () => Promise.resolve({ outcome: "deny", reason: "Governance permission bridge가 연결되지 않았습니다" }),
     },
   ) {}
 

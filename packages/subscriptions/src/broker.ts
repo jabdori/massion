@@ -80,10 +80,27 @@ interface AuditRow {
   readonly result_json: string;
 }
 
-function requireText(value: string, label: string, maximum = 256): string {
+function requireText(value: unknown, label: string, maximum = 256): string {
+  if (typeof value !== "string") throw new Error(`${label}이 유효하지 않습니다`);
   const normalized = value.trim();
   if (!normalized || normalized.length > maximum) throw new Error(`${label}이 유효하지 않습니다`);
   return normalized;
+}
+
+const CONNECTOR_OPERATIONS = new Set(["generate", "generate-structured", "agent-turn", "cancel", "quota", "health"]);
+
+function parseConnectorRequest(value: unknown): ConnectorRequest {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("Connector 요청이 유효하지 않습니다");
+  }
+  const request = value as Record<string, unknown>;
+  if (request.protocol !== "massion.connector.v1") throw new Error("Connector 요청 protocol이 유효하지 않습니다");
+  requireText(request.requestId, "Connector Request ID");
+  requireText(request.leaseId, "Session Lease ID");
+  if (typeof request.operation !== "string" || !CONNECTOR_OPERATIONS.has(request.operation)) {
+    throw new Error("Connector 요청 operation이 유효하지 않습니다");
+  }
+  return request as unknown as ConnectorRequest;
 }
 
 function sha256(value: string): string {
@@ -91,7 +108,7 @@ function sha256(value: string): string {
 }
 
 function retryableBeforeOutput(kind: ConnectorFailureSignal["kind"]): boolean {
-  return kind === "timeout" || kind === "rate-limit" || kind === "provider-unavailable";
+  return kind === "authentication" || kind === "timeout" || kind === "rate-limit" || kind === "provider-unavailable";
 }
 
 export class SubscriptionConnectorBroker {
@@ -118,7 +135,7 @@ export class SubscriptionConnectorBroker {
     const transport =
       options.transport ??
       ({
-        async *invoke(): AsyncIterable<ConnectorEvent> {
+        invoke(): AsyncIterable<ConnectorEvent> {
           throw new Error("Connector transport가 연결되지 않았습니다");
         },
       } satisfies ConnectorTransportDirectory);
@@ -201,19 +218,8 @@ export class SubscriptionConnectorBroker {
     return rows.map((row) => this.view(row));
   }
 
-  public async *invoke(
-    context: TenantContext,
-    request: ConnectorRequest,
-    signal?: AbortSignal,
-  ): AsyncIterable<ConnectorEvent> {
-    if (request.protocol !== "massion.connector.v1") throw new Error("Connector 요청 protocol이 유효하지 않습니다");
-    requireText(request.requestId, "Connector Request ID");
-    requireText(request.leaseId, "Session Lease ID");
-    if (
-      !new Set(["generate", "generate-structured", "agent-turn", "cancel", "quota", "health"]).has(request.operation)
-    ) {
-      throw new Error("Connector 요청 operation이 유효하지 않습니다");
-    }
+  public async *invoke(context: TenantContext, input: unknown, signal?: AbortSignal): AsyncIterable<ConnectorEvent> {
+    const request = parseConnectorRequest(input);
     let requestBytes: number;
     try {
       requestBytes = Buffer.byteLength(JSON.stringify(request));

@@ -215,6 +215,11 @@ export class VoltAgentRunner implements AgentRunner, StructuredAgentRunner {
               payload: normalizeVoltAgentStreamPart(part),
             });
             yield eventView(state.event);
+            if (part.type === "error") {
+              throw part.error instanceof Error
+                ? part.error
+                : new Error("Model stream에서 오류가 발생했습니다", { cause: part.error });
+            }
           }
           const usage = await result.usage;
           await lease.complete({

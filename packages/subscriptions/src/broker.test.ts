@@ -12,6 +12,7 @@ describe("구독 Connector session broker", () => {
   let database: MassionDatabase;
   let context: TenantContext;
   let broker: SubscriptionConnectorBroker;
+  let disconnectedBroker: SubscriptionConnectorBroker;
   let invoked: Array<{ organizationId: string; connectorId: string; request: ConnectorRequest }>;
 
   beforeEach(async () => {
@@ -55,6 +56,10 @@ describe("구독 Connector session broker", () => {
       leaseTtlMs: 300_000,
       transport,
     });
+    disconnectedBroker = await SubscriptionConnectorBroker.create(database, organizations, accounts, {
+      now: () => new Date("2030-01-01T00:00:00.000Z"),
+      leaseTtlMs: 300_000,
+    });
   });
 
   afterEach(async () => database.close());
@@ -86,6 +91,15 @@ describe("구독 Connector session broker", () => {
     await expect(broker.acquire(context, request("route-attempt-3", second.leaseId))).rejects.toThrow(
       "fallback할 수 없습니다",
     );
+  });
+
+  it("출력 전 인증 실패는 다음 Connector session으로 이동할 수 있다", async () => {
+    const first = await broker.acquire(context, request("route-attempt-authentication"));
+
+    await expect(first.fail({ emittedTokens: 0, signal: { kind: "authentication" } })).resolves.toMatchObject({
+      status: "failed",
+      fallbackAllowed: true,
+    });
   });
 
   it("같은 route attempt를 재대여하지 않고 활성 lease를 재시작 뒤 복구한다", async () => {
@@ -121,8 +135,46 @@ describe("구독 Connector session broker", () => {
         requestId: "request-too-large",
         payload: { data: "x".repeat(16 * 1024 * 1024) },
       })) {
+        void _event;
         // 반복 과정에서 요청 크기 검증 오류를 받습니다.
       }
     }).rejects.toThrow("요청 byte 상한");
+  });
+
+  it.each([
+    [null, "Connector 요청이 유효하지 않습니다"],
+    [
+      {
+        protocol: "massion.connector.v0",
+        requestId: "request-invalid-protocol",
+        leaseId: "unused",
+        operation: "health",
+        payload: {},
+      },
+      "protocol이 유효하지 않습니다",
+    ],
+  ])("신뢰하지 않은 Connector 요청 %#을 명시적으로 거부한다", async (request: unknown, message) => {
+    await expect(async () => {
+      for await (const event of broker.invoke(context, request)) {
+        void event;
+      }
+    }).rejects.toThrow(message);
+  });
+
+  it("transport가 조립되지 않으면 Connector 호출을 fail closed한다", async () => {
+    const lease = await disconnectedBroker.acquire(context, request("route-attempt-disconnected"));
+    const connectorRequest = {
+      protocol: "massion.connector.v1" as const,
+      requestId: "request-disconnected",
+      leaseId: lease.leaseId,
+      operation: "health" as const,
+      payload: {},
+    };
+
+    await expect(async () => {
+      for await (const event of disconnectedBroker.invoke(context, connectorRequest)) {
+        void event;
+      }
+    }).rejects.toThrow("transport가 연결되지 않았습니다");
   });
 });

@@ -131,6 +131,33 @@ describe("Credential 선택 policy", () => {
     expect(selectCredential("adaptive", [exhausted, available], undefined, now)?.credential_id).toBe("available");
     expect(selectCredential("adaptive", [exhausted], undefined, now)).toBeUndefined();
   });
+
+  it("adaptive는 오래된 quota snapshot을 제외 조건으로 쓰지 않고 weighted 순서로 고른다", () => {
+    const now = new Date("2030-01-01T00:10:00.000Z");
+    const staleExhausted: CredentialSelectionView = {
+      ...credentialAt(0),
+      credential_id: "stale-exhausted",
+      request_count: 1,
+      weight: 2,
+      quota_windows: [
+        {
+          kind: "five-hour",
+          remainingRatio: 0,
+          observedAt: "2030-01-01T00:00:00.000Z",
+        },
+      ],
+    };
+    const weightedSecond: CredentialSelectionView = {
+      ...credentialAt(1),
+      credential_id: "weighted-second",
+      request_count: 2,
+      weight: 1,
+    };
+
+    expect(selectCredential("adaptive", [weightedSecond, staleExhausted], undefined, now)?.credential_id).toBe(
+      "stale-exhausted",
+    );
+  });
 });
 
 describe("Model Route simulation과 reservation", () => {
@@ -360,6 +387,95 @@ describe("Model Route simulation과 reservation", () => {
     expect(reservation).not.toHaveProperty("secret");
   });
 
+  it("구독 Route Attempt는 선택에 사용한 quota snapshot과 routing policy version을 직접 기록한다", async () => {
+    await database.query(
+      `UPDATE provider_credential SET status = 'disabled' WHERE organization_id = $organization_id;
+       CREATE subscription_connector CONTENT {
+         connector_id: 'lineage-edge', organization_id: $organization_id, owner_user_id: $owner_user_id,
+         location: 'edge', execution_kind: 'agent-runtime', protocol: 'massion-connector-v1', version: '1.0.0',
+         public_key: 'fixture', capabilities: ['openai'], status: 'ready', created_at: time::now(), updated_at: time::now()
+       };`,
+      { organization_id: context.organizationId, owner_user_id: context.userId },
+    );
+    const account = await accounts.register(context, {
+      commandId: crypto.randomUUID(),
+      providerId: "openai",
+      alias: "Lineage Subscription",
+      connectorId: "lineage-edge",
+      profileLocator: "lineage-profile",
+      billingKind: "consumer-subscription",
+    });
+    await providers.addConnectorCredential(context, {
+      commandId: crypto.randomUUID(),
+      providerId: "openai",
+      endpointId: endpoint.endpoint_id,
+      label: "lineage-subscription",
+      accountId: account.account_id,
+      connectorId: account.connector_id,
+      scope: "personal",
+      priority: 1,
+      weight: 1,
+    });
+    const recorded = await quota.record(context, {
+      commandId: crypto.randomUUID(),
+      accountId: account.account_id,
+      windows: [
+        {
+          kind: "weekly",
+          remainingRatio: 0.7,
+          observedAt: new Date().toISOString(),
+          source: "provider-reported",
+          confidence: "reported",
+        },
+      ],
+    });
+    const created = await route("adaptive");
+
+    const reservation = await router.reserve(context, {
+      commandId: crypto.randomUUID(),
+      routeName: created.name,
+      estimatedTokens: 10,
+      estimatedCostMicros: 10,
+      stickyKey: "work-1:agent-1",
+    });
+    const [stored] = await database.query<[Array<{ quota_snapshot_id?: string; routing_policy_version: number }>]>(
+      `SELECT quota_snapshot_id, routing_policy_version FROM route_attempt
+       WHERE organization_id = $organization_id AND attempt_id = $attempt_id LIMIT 1;`,
+      { organization_id: context.organizationId, attempt_id: reservation.attempt.attempt_id },
+    );
+    const [events] = await database.query<[Array<{ event_type: string; request_json: string; result_json: string }>]>(
+      `SELECT event_type, request_json, result_json FROM router_audit_event
+       WHERE organization_id = $organization_id AND command_id = $command_id LIMIT 1;`,
+      { organization_id: context.organizationId, command_id: reservation.attempt.command_id },
+    );
+
+    expect(reservation.attempt.quota_snapshot_id).toBe(recorded.snapshotId);
+    expect(reservation.attempt.routing_policy_version).toBe(2);
+    expect(stored[0]).toEqual({
+      quota_snapshot_id: recorded.snapshotId,
+      routing_policy_version: 2,
+    });
+    expect(events[0]?.event_type).toBe("route_attempt_recorded");
+    expect(JSON.parse(events[0]?.result_json ?? "null")).toEqual({
+      attemptId: reservation.attempt.attempt_id,
+      candidateId: reservation.attempt.candidate_id,
+      credentialId: reservation.attempt.credential_id,
+      modelProfileId: reservation.attempt.model_profile_id,
+      quotaSnapshotId: recorded.snapshotId,
+      routeId: reservation.attempt.route_id,
+      routingPolicyVersion: 2,
+    });
+    expect(events[0]?.request_json).not.toContain("work-1:agent-1");
+    expect(JSON.stringify(reservation.attempt)).not.toContain("work-1:agent-1");
+    await expect(
+      database.query(
+        `UPDATE route_attempt SET quota_snapshot_id = 'tampered', routing_policy_version = 999
+         WHERE organization_id = $organization_id AND attempt_id = $attempt_id;`,
+        { organization_id: context.organizationId, attempt_id: reservation.attempt.attempt_id },
+      ),
+    ).rejects.toThrow(/read.?only|readonly/iu);
+  });
+
   it("capability·eval·equivalence와 local-private 위반 Candidate를 거부한다", async () => {
     const localRoute = await router.createRoute(context, {
       commandId: crypto.randomUUID(),
@@ -493,6 +609,129 @@ describe("Model Route simulation과 reservation", () => {
     });
 
     expect(new Date(String(outcome.attempt.retry_at)).toISOString()).toBe(resetAt);
+  });
+
+  it("cooldown 종료 시각이 지나면 계정을 다시 활성화하고 제한 시각을 제거한다", async () => {
+    const created = await route("fill-first");
+    const [credentials] = await database.query<[Array<{ credential_id: string; label: string }>]>(
+      "SELECT credential_id, label FROM provider_credential WHERE organization_id = $organization_id ORDER BY label ASC;",
+      { organization_id: context.organizationId },
+    );
+    const recovering = credentials[0];
+    const unavailable = credentials[1];
+    if (!recovering || !unavailable) throw new Error("Credential fixture가 부족합니다");
+    await database.query(
+      `UPDATE provider_credential SET status = 'cooldown', cooldown_until = $expired_at
+       WHERE organization_id = $organization_id AND credential_id = $recovering_id;
+       UPDATE provider_credential SET status = 'disabled'
+       WHERE organization_id = $organization_id AND credential_id = $unavailable_id;`,
+      {
+        organization_id: context.organizationId,
+        recovering_id: recovering.credential_id,
+        unavailable_id: unavailable.credential_id,
+        expired_at: new Date(Date.now() - 1_000),
+      },
+    );
+
+    const reservation = await router.reserve(context, {
+      commandId: crypto.randomUUID(),
+      routeName: created.name,
+      estimatedTokens: 10,
+      estimatedCostMicros: 10,
+    });
+    const [updated] = await database.query<[Array<{ status: string; cooldown_until?: unknown }>]>(
+      "SELECT status, cooldown_until FROM provider_credential WHERE credential_id = $credential_id;",
+      { credential_id: recovering.credential_id },
+    );
+
+    expect(reservation.credential?.credential_id).toBe(recovering.credential_id);
+    expect(updated[0]?.status).toBe("active");
+    expect(updated[0]?.cooldown_until).toBeUndefined();
+  });
+
+  it("같은 제공자의 계정이 모두 불가하면 동급 모델의 다음 제공자로 fallback한다", async () => {
+    const created = await route("fill-first");
+    const [openAiCredentials] = await database.query<[Array<{ credential_id: string; label: string }>]>(
+      "SELECT credential_id, label FROM provider_credential WHERE organization_id = $organization_id AND provider_id = 'openai' ORDER BY label ASC;",
+      { organization_id: context.organizationId },
+    );
+    const unavailable = openAiCredentials[1];
+    if (!unavailable) throw new Error("두 번째 OpenAI Credential fixture가 없습니다");
+    await database.query(
+      "UPDATE provider_credential SET status = 'disabled' WHERE organization_id = $organization_id AND credential_id = $credential_id;",
+      { organization_id: context.organizationId, credential_id: unavailable.credential_id },
+    );
+    await providers.registerProvider(context, {
+      commandId: crypto.randomUUID(),
+      providerId: "anthropic",
+      displayName: "Anthropic",
+      adapterKind: "ai-sdk",
+    });
+    const anthropicEndpoint = (
+      await providers.registerEndpoint(context, {
+        commandId: crypto.randomUUID(),
+        providerId: "anthropic",
+        name: "Anthropic API",
+        baseUrl: "https://api.anthropic.com",
+        local: false,
+      })
+    ).endpoint;
+    await providers.addCredential(context, {
+      commandId: crypto.randomUUID(),
+      providerId: "anthropic",
+      endpointId: anthropicEndpoint.endpoint_id,
+      label: "anthropic-account",
+      credentialType: "api_key",
+      secret: "secret-anthropic-account",
+      priority: 1,
+      weight: 1,
+    });
+    const anthropicProfile = (
+      await router.registerModel(context, {
+        commandId: crypto.randomUUID(),
+        providerId: "anthropic",
+        endpointId: anthropicEndpoint.endpoint_id,
+        modelId: "claude-coding",
+        routeKind: "chat",
+        contextWindow: 128_000,
+        supportsTools: true,
+        supportsStructuredOutput: true,
+        supportsVision: false,
+        supportsStreaming: true,
+        equivalenceGroup: "coding-balanced",
+        evalScore: 0.9,
+        inputCostMicrosPerMillion: 1_000_000,
+        outputCostMicrosPerMillion: 1_000_000,
+        verified: true,
+      })
+    ).profile;
+    await router.addCandidate(context, {
+      commandId: crypto.randomUUID(),
+      routeId: created.route_id,
+      modelProfileId: anthropicProfile.model_profile_id,
+      priority: 2,
+    });
+    const request = { routeName: created.name, estimatedTokens: 10, estimatedCostMicros: 10 };
+    const first = await router.reserve(context, { ...request, commandId: crypto.randomUUID() });
+    const outcome = await router.reportFailure(context, {
+      commandId: crypto.randomUUID(),
+      attemptId: first.attempt.attempt_id,
+      signal: { kind: "http", statusCode: 503 },
+      emittedTokens: 0,
+      actualInputTokens: 0,
+      actualOutputTokens: 0,
+      actualCostMicros: 0,
+    });
+    const fallback = await router.reserve(context, {
+      ...request,
+      commandId: crypto.randomUUID(),
+      fallbackFromAttemptId: first.attempt.attempt_id,
+    });
+
+    expect(first.profile?.provider_id).toBe("openai");
+    expect(outcome.next?.profile?.provider_id).toBe("anthropic");
+    expect(fallback.profile?.provider_id).toBe("anthropic");
+    expect(fallback.attempt.fallback_from_attempt_id).toBe(first.attempt.attempt_id);
   });
 
   it("일부 토큰이 출력된 실패는 interrupted로 기록하고 자동 fallback하지 않는다", async () => {

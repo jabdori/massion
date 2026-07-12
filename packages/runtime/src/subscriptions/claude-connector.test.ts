@@ -64,4 +64,35 @@ describe("공식 Claude Agent SDK 구독 Connector", () => {
       approvalId: "approval-1",
     });
   });
+
+  it("Governance permission bridge가 없으면 도구 사용을 거부한다", async () => {
+    let permissionDecision: unknown;
+    const query: ClaudeAgentQuery = vi.fn().mockImplementation(async function* ({ options }) {
+      permissionDecision = await options.canUseTool?.(
+        "Bash",
+        { command: "git status" },
+        { signal: new AbortController().signal },
+      );
+      yield { type: "result", subtype: "error_during_execution", session_id: "session-denied" };
+    });
+    const connector = new ClaudeSubscriptionConnector(query);
+
+    await expect(
+      connector.execute(context, {
+        executionId: "execution-denied",
+        workId: "work-1",
+        agentHandle: "software-engineering.backend-specialist",
+        prompt: "상태를 확인하세요",
+        workspaceRoot: "/tmp/work-denied",
+        profileRoot: "/tmp/claude-profile-denied",
+        environment: { PATH: "/usr/bin" },
+        allowedTools: [],
+        disallowedTools: [],
+      }),
+    ).resolves.toMatchObject({ outcome: "failed", sessionId: "session-denied" });
+    expect(permissionDecision).toMatchObject({
+      behavior: "deny",
+      message: "Governance permission bridge가 연결되지 않았습니다",
+    });
+  });
 });

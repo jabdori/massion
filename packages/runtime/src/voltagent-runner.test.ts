@@ -26,9 +26,13 @@ describe("VoltAgent AgentRunner", () => {
   let registry: RoutedModelRegistry;
   let agentId: string;
   let rejectionListeners: ReturnType<typeof process.rawListeners>;
+  let terminationListeners: ReturnType<typeof process.rawListeners>;
+  let interruptListeners: ReturnType<typeof process.rawListeners>;
 
   beforeEach(async () => {
     rejectionListeners = process.rawListeners("unhandledRejection");
+    terminationListeners = process.rawListeners("SIGTERM");
+    interruptListeners = process.rawListeners("SIGINT");
     database = await createDatabase({ url: "mem://", namespace: "massion", database: crypto.randomUUID() });
     const identity = await IdentityService.create(database);
     const organizations = await OrganizationService.create(database);
@@ -61,6 +65,12 @@ describe("VoltAgent AgentRunner", () => {
     await database.close();
     for (const listener of process.rawListeners("unhandledRejection")) {
       if (!rejectionListeners.includes(listener)) process.removeListener("unhandledRejection", listener);
+    }
+    for (const listener of process.rawListeners("SIGTERM")) {
+      if (!terminationListeners.includes(listener)) process.removeListener("SIGTERM", listener);
+    }
+    for (const listener of process.rawListeners("SIGINT")) {
+      if (!interruptListeners.includes(listener)) process.removeListener("SIGINT", listener);
     }
   });
 
@@ -301,6 +311,34 @@ describe("VoltAgent AgentRunner", () => {
     if (!first) throw new Error("stream event가 없습니다");
     const recovery = await store.getRecovery(context, first.executionId);
     expect(recovery.execution.status).toBe("succeeded");
+  });
+
+  it("stream 출력 후 실패는 Router가 허용해도 자동 fallback하지 않고 interrupted로 끝낸다", async () => {
+    const routed = lease(
+      new MockLanguageModelV3({
+        doStream: {
+          stream: simulateReadableStream({
+            chunks: [
+              { type: "stream-start", warnings: [] },
+              { type: "text-start", id: "text-1" },
+              { type: "text-delta", id: "text-1", delta: "partial" },
+              { type: "error", error: new Error("upstream disconnected") },
+            ],
+          }),
+        },
+      }),
+      "stream-attempt-1",
+      true,
+    );
+    const acquire = vi.fn().mockResolvedValue(routed);
+    const runner = new VoltAgentRunner(voltAgent, store, { acquire }, registry);
+
+    const events = [];
+    for await (const event of runner.stream(context, input())) events.push(event);
+
+    expect(acquire).toHaveBeenCalledTimes(1);
+    expect(routed.fail).toHaveBeenCalledWith(expect.objectContaining({ emittedTokens: 1, outputTokens: 1 }));
+    expect(events.at(-1)?.type).toBe("execution_interrupted");
   });
 
   it("tool·handoff 귀속 필드는 유지하고 provider secret은 제거한다", () => {

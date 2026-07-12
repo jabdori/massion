@@ -49,6 +49,17 @@ function assertSafeJson(value: unknown, depth = 0): void {
   }
 }
 
+function parseChannelHandshake(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("Connector 채널 handshake가 유효하지 않습니다");
+  }
+  const handshake = value as Record<string, unknown>;
+  if (handshake.protocol !== CONNECTOR_PROTOCOL) {
+    throw new Error("Connector 채널 protocol이 유효하지 않습니다");
+  }
+  return handshake;
+}
+
 export function createChannelHandshakePayload(input: ConnectorChannelHandshakeUnsigned): Buffer {
   return Buffer.from(
     [input.protocol, input.organizationId, input.connectorId, input.nonce, input.observedAt].join("\n"),
@@ -66,18 +77,17 @@ export class ConnectorChannelAuthenticator {
     this.maximumClockSkewMs = options.maximumClockSkewMs ?? 5 * 60 * 1_000;
   }
 
-  public verify(input: {
-    readonly secure: boolean;
-    readonly publicKey: string;
-    readonly handshake: ConnectorChannelHandshake;
-  }): { readonly organizationId: string; readonly connectorId: string } {
+  public verify(input: { readonly secure: boolean; readonly publicKey: string; readonly handshake: unknown }): {
+    readonly organizationId: string;
+    readonly connectorId: string;
+  } {
     if (!input.secure) throw new Error("Edge Connector 채널은 TLS가 필요합니다");
-    const handshake = input.handshake;
-    if (handshake.protocol !== CONNECTOR_PROTOCOL) throw new Error("Connector 채널 protocol이 유효하지 않습니다");
+    const handshake = parseChannelHandshake(input.handshake);
     const organizationId = text(handshake.organizationId, "조직 ID");
     const connectorId = text(handshake.connectorId, "Connector ID");
     const nonce = text(handshake.nonce, "Handshake nonce");
-    const observedAt = new Date(text(handshake.observedAt, "Handshake 시각"));
+    const observedAtText = text(handshake.observedAt, "Handshake 시각");
+    const observedAt = new Date(observedAtText);
     if (!Number.isFinite(observedAt.getTime())) throw new Error("Handshake 시각이 유효하지 않습니다");
     if (Math.abs(this.now().getTime() - observedAt.getTime()) > this.maximumClockSkewMs) {
       throw new Error("Handshake 시각 허용 범위를 벗어났습니다");
@@ -88,7 +98,13 @@ export class ConnectorChannelAuthenticator {
     if (publicKey.asymmetricKeyType !== "ed25519") throw new Error("Connector 장치 key는 Ed25519여야 합니다");
     const verified = verifySignature(
       null,
-      createChannelHandshakePayload(handshake),
+      createChannelHandshakePayload({
+        protocol: CONNECTOR_PROTOCOL,
+        organizationId,
+        connectorId,
+        nonce,
+        observedAt: observedAtText,
+      }),
       publicKey,
       Buffer.from(text(handshake.signature, "Handshake 서명", 2048), "base64url"),
     );
@@ -187,7 +203,7 @@ export class ConnectorChannelHub implements ConnectorTransportDirectory {
   public async shutdown(): Promise<void> {
     const connections = [...this.connections.values()];
     this.connections.clear();
-    await Promise.all(connections.map(async (connection) => await connection.close()));
+    await Promise.all(connections.map((connection) => connection.close()));
   }
 
   private key(organizationId: string, connectorId: string): string {
