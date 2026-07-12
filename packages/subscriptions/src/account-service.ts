@@ -3,8 +3,9 @@ import { createHash, createHmac, randomUUID } from "node:crypto";
 import { type OrganizationService, type TenantContext } from "@massion/identity";
 import { applyMigrations, type MassionDatabase, type QueryExecutor } from "@massion/storage";
 
+import { listCodingPlanPresets } from "./coding-plan.js";
 import type { SubscriptionAccount, SubscriptionConnector } from "./contracts.js";
-import { SUBSCRIPTION_MIGRATION } from "./schema.js";
+import { SUBSCRIPTION_ACCOUNT_POLICY_MIGRATION, SUBSCRIPTION_MIGRATION } from "./schema.js";
 
 interface CommandInput {
   readonly commandId: string;
@@ -69,6 +70,12 @@ function requireText(value: string, label: string, maximum = 128): string {
   return normalized;
 }
 
+function forbidsQuotaCircumvention(providerId: string): boolean {
+  return listCodingPlanPresets().some(
+    (preset) => preset.id === providerId && preset.accountPolicy === "no-quota-circumvention",
+  );
+}
+
 export class SubscriptionAccountService {
   private constructor(
     private readonly database: MassionDatabase,
@@ -84,7 +91,7 @@ export class SubscriptionAccountService {
     sharingAuthorizer: SubscriptionSharingAuthorizer = DENY_SHARING,
   ): Promise<SubscriptionAccountService> {
     if (fingerprintKey.byteLength < 32) throw new Error("계정 fingerprint key는 32바이트 이상이어야 합니다");
-    await applyMigrations(database, [SUBSCRIPTION_MIGRATION]);
+    await applyMigrations(database, [SUBSCRIPTION_MIGRATION, SUBSCRIPTION_ACCOUNT_POLICY_MIGRATION]);
     return new SubscriptionAccountService(database, organizations, Buffer.from(fingerprintKey), sharingAuthorizer);
   }
 
@@ -115,6 +122,23 @@ export class SubscriptionAccountService {
         throw new Error("사용할 수 없는 Connector에는 계정을 등록할 수 없습니다");
       }
       const accountId = randomUUID();
+      if (forbidsQuotaCircumvention(input.providerId)) {
+        const [existingAccounts] = await tx.query<[Array<{ account_id: string }>]>(
+          `SELECT account_id FROM subscription_account
+           WHERE organization_id = $organization_id AND provider_id = $provider_id AND status != 'revoked' LIMIT 1;`,
+          { organization_id: context.organizationId, provider_id: input.providerId },
+        );
+        if (existingAccounts[0]) {
+          throw new Error("제공자 약관상 여러 계정으로 할당량 우회를 구성할 수 없습니다");
+        }
+        await tx.query(
+          `CREATE subscription_provider_account_guard CONTENT {
+             organization_id: $organization_id, provider_id: $provider_id, account_id: $account_id,
+             policy: 'no-quota-circumvention', created_at: time::now()
+           };`,
+          { organization_id: context.organizationId, provider_id: input.providerId, account_id: accountId },
+        );
+      }
       await tx.query(
         `CREATE subscription_account CONTENT {
           account_id: $account_id,
@@ -225,6 +249,17 @@ export class SubscriptionAccountService {
           consent_version: consentVersion,
         },
       );
+      if (forbidsQuotaCircumvention(account.provider_id)) {
+        await tx.query(
+          `DELETE subscription_provider_account_guard
+           WHERE organization_id = $organization_id AND provider_id = $provider_id AND account_id = $account_id;`,
+          {
+            organization_id: context.organizationId,
+            provider_id: account.provider_id,
+            account_id: input.accountId,
+          },
+        );
+      }
       return await this.requireUpdatedAccount(tx, context.organizationId, input.accountId, input.expectedVersion + 1);
     });
   }

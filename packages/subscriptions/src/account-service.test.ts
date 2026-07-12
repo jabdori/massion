@@ -154,6 +154,44 @@ describe("구독 계정 소유권과 조직 공유", () => {
     await expect(service.requireUsable(member, account.account_id, "personal")).rejects.toThrow("활성 상태");
   });
 
+  it("할당량 우회가 금지된 StepFun은 조직에 활성 계정을 하나만 등록한다", async () => {
+    const first = await service.register(member, {
+      commandId: randomUUID(),
+      providerId: "stepfun-step-plan",
+      alias: "StepFun 1",
+      connectorId: "edge-member",
+      profileLocator: "stepfun-account-1",
+      billingKind: "step-plan",
+    });
+
+    await expect(
+      service.register(member, {
+        commandId: randomUUID(),
+        providerId: "stepfun-step-plan",
+        alias: "StepFun 2",
+        connectorId: "edge-member",
+        profileLocator: "stepfun-account-2",
+        billingKind: "step-plan",
+      }),
+    ).rejects.toThrow("할당량 우회");
+
+    await service.disconnect(member, {
+      commandId: randomUUID(),
+      accountId: first.account_id,
+      expectedVersion: first.version,
+    });
+    await expect(
+      service.register(member, {
+        commandId: randomUUID(),
+        providerId: "stepfun-step-plan",
+        alias: "StepFun replacement",
+        connectorId: "edge-member",
+        profileLocator: "stepfun-account-2",
+        billingKind: "step-plan",
+      }),
+    ).resolves.toMatchObject({ provider_id: "stepfun-step-plan", status: "active" });
+  });
+
   it("명령 재시도는 같은 결과를 반환하고 다른 조직 접근과 command 변조를 거부한다", async () => {
     const commandId = randomUUID();
     const input = {
