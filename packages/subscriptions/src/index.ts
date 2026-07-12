@@ -4,6 +4,7 @@ export * from "./connector-registry.js";
 export * from "./coding-plan.js";
 export * from "./contracts.js";
 export * from "./enrollment.js";
+export * from "./metrics.js";
 export * from "./quota-service.js";
 export * from "./provider-catalog.js";
 export * from "./policy-store.js";
