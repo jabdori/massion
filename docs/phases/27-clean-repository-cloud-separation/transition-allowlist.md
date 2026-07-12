@@ -12,8 +12,8 @@
 
 - `.git/`, `.worktrees/`, `.pnpm-store/`, `node_modules/`, `dist/`, cache, coverage, log, 임시 파일
 - secret, 구독 profile, backup 원문, 실제 계정 데이터, 개인 경로와 개발 장치 설정
-- Pi·legacy-lineage·대체 제품 계보를 위한 코드·문서·브랜드 자료와 `docs/history/`
+- legacy source lineage를 위한 코드·문서·브랜드 자료와 `docs/history/`
 - `docs/superpowers/`, `docs/facts/`, 과거 Phase 문서와 새 제품의 현재 정본이 아닌 조사·실험 자료
-- Cloud 사업 코드, Cloud URL·database·billing·fleet·SSO·SCIM·SLA 자료와 `managed-service` 저장소
+- 관리형 서비스 사업 코드, URL·database·billing·fleet·SSO·SCIM·SLA 자료와 별도 서비스 저장소
 
 제외한 기록은 삭제하지 않습니다. source commit, Git bundle, 파일 digest, 제외 사유와 검증 영수증을 private archive에 남겨 문제 추적에 사용합니다.
