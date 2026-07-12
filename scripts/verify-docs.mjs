@@ -99,7 +99,7 @@ async function validateTrace(root, errors) {
       continue;
     }
     const id = row[0];
-    if (!/^REQ-[A-Z][A-Z0-9]*-\d{3}$/.test(id)) errors.push(`잘못된 요구사항 ID: ${id}`);
+    if (!/^REQ-(?:[A-Z][A-Z0-9]*-)+\d{3}$/.test(id)) errors.push(`잘못된 요구사항 ID: ${id}`);
     if (seen.has(id)) errors.push(`중복 요구사항 ID: ${id}`);
     seen.add(id);
     const completed = row[9] === "completed";

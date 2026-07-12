@@ -33,7 +33,7 @@ pnpm verify:security
 pnpm verify:hardening
 ```
 
-제품 설계와 요구사항 계보는 [완제품 설계](docs/product/2026-07-10-complete-product-design.md), [전체 프로그램 계획](docs/superpowers/plans/2026-07-10-massion-agentos-1.0-program.md), [요구사항 추적표](docs/generated/requirements-traceability.tsv)에서 확인할 수 있습니다.
+제품의 현재 구조는 [전체 아키텍처](docs/architecture/README.md), 진행 중인 요구사항과 구현 근거는 [요구사항 추적표](docs/generated/requirements-traceability.tsv), 설치·복구 절차는 [운영 문서](docs/operations/)에서 확인할 수 있습니다. 새 저장소에는 현재 제품 코드와 Phase 24 이후의 유지보수·전환 문서만 남기며, 이전 Phase 문서는 비공개 기록 저장소에서 보존합니다.
 
 ## 지원 경계
 
