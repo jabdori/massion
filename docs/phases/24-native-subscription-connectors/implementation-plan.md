@@ -14,7 +14,7 @@
 
 - [x] ProviderCredential을 암호화 비밀 또는 연결기 세션 union으로 확장합니다.
 - [x] 복수 quota window와 `adaptive` 선택을 RED→GREEN으로 구현합니다.
-- [ ] 출력 전·후 실패, cooldown, reset, stale snapshot과 cross-provider fallback을 검증합니다.
+- [x] 출력 전·후 실패, cooldown, reset, stale snapshot과 cross-provider fallback을 검증합니다.
 
 ## Task 3. 서버·사용자 기기 연결기
 
@@ -25,8 +25,9 @@
 ## Task 4. 공식 제공자 연결기
 
 - [x] Codex SDK·app-server와 Claude Agent SDK 연결기를 구현합니다.
-- [ ] Gemini CLI, Copilot ACP, Qwen, MiniMax, xAI, Nous 구독·OAuth 연결기를 구현합니다.
-- [ ] GLM, Kimi, StepFun, Alibaba, OpenCode Go, Kilo Coding Plan preset과 capability probe를 구현합니다.
+- [x] Gemini Enterprise·Copilot·xAI Grok Build ACP와 Google 개인 Antigravity process 연결기 계약을 구현합니다. Copilot의 잔여 구독 quota와 Antigravity의 모델 목록·quota는 discovery 없음으로 두며, Antigravity의 단일 OS 계정·실험 상태를 capability에 명시합니다.
+- [x] MiniMax Token Plan, xAI API, Nous Portal의 공식 인증·과금 manifest와 GLM·Kimi·StepFun·Alibaba·OpenCode Go·Kilo preset·capability probe를 구현합니다. Z.AI는 승인 전 비활성, Alibaba는 대화형 범위, StepFun은 quota 우회 금지, Kilo는 유료 Gateway로 제한합니다.
+- [x] 2026-04-15 종료된 Qwen OAuth와 공개 계약이 없는 범용 OAuth 모델 연결기(`OAuthModelConnector`)를 제품 범위에서 제거합니다.
 
 ## Task 5. Application과 사용자 화면
 
