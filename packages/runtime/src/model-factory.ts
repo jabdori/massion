@@ -11,6 +11,8 @@ import {
   type RouteAttempt,
 } from "@massion/router";
 
+const OPENAI_API_BASE_URL = "https://api.openai.com/v1";
+
 export interface ProviderModelSelection {
   readonly provider: ModelProvider;
   readonly endpoint: ProviderEndpoint;
@@ -63,17 +65,8 @@ export interface RoutedModelFactory {
 
 function isOfficialOpenAiApi(endpoint: ProviderEndpoint): boolean {
   try {
-    const url = new URL(endpoint.base_url);
-    return (
-      url.protocol === "https:" &&
-      url.hostname === "api.openai.com" &&
-      url.port === "" &&
-      url.username === "" &&
-      url.password === "" &&
-      url.search === "" &&
-      url.hash === "" &&
-      url.pathname.replace(/\/$/u, "") === "/v1"
-    );
+    const href = new URL(endpoint.base_url).href;
+    return href === OPENAI_API_BASE_URL || href === `${OPENAI_API_BASE_URL}/`;
   } catch {
     return false;
   }
@@ -90,13 +83,18 @@ function usesGpt56Responses(selection: ProviderModelSelection): boolean {
 export class OpenAICompatibleModelBuilder implements ProviderModelBuilder {
   public build(selection: ProviderModelSelection): LanguageModel {
     const root = selection.endpoint.base_url.replace(/\/$/u, "");
-    const baseURL = selection.provider.adapter_kind === "ollama" ? `${root}/v1` : root;
+    const useResponses = usesGpt56Responses(selection);
+    const baseURL = useResponses
+      ? OPENAI_API_BASE_URL
+      : selection.provider.adapter_kind === "ollama"
+        ? `${root}/v1`
+        : root;
     const provider = createOpenAI({
       name: selection.provider.provider_id,
       apiKey: selection.secret,
       baseURL,
     });
-    return usesGpt56Responses(selection) ? provider.responses(selection.modelId) : provider.chat(selection.modelId);
+    return useResponses ? provider.responses(selection.modelId) : provider.chat(selection.modelId);
   }
 }
 
