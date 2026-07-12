@@ -17,7 +17,7 @@
     "lint": "eslint .",
     "test": "node --test scripts/*.test.mjs && pnpm -r --workspace-concurrency=1 test",
     "typecheck": "pnpm -r --workspace-concurrency=1 typecheck",
-    "verify": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm verify:docs",
+    "verify": "pnpm format:check && pnpm build && pnpm lint && pnpm typecheck && pnpm test && pnpm verify:docs",
     "verify:docs": "node scripts/verify-docs.mjs",
     "verify:architecture": "node scripts/verify-architecture-diagrams.mjs",
     "verify:security": "node scripts/verify-security.mjs",
