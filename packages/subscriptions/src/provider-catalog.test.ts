@@ -4,6 +4,8 @@ import { listSubscriptionProviderManifests, providerManifest } from "./provider-
 
 describe("공식 구독·OAuth 제공자 catalog", () => {
   it.each([
+    ["openai-codex", "cli-profile", "agent-runtime"],
+    ["anthropic-claude-code", "cli-profile", "agent-runtime"],
     ["google-gemini-cli-enterprise", "acp", "agent-runtime"],
     ["google-antigravity-cli", "cli-profile", "agent-runtime"],
     ["github-copilot", "acp", "agent-runtime"],
@@ -67,6 +69,27 @@ describe("공식 구독·OAuth 제공자 catalog", () => {
       executionKind: "model",
       protocol: "openai",
       endpointAllowlist: ["https://api.x.ai/v1"],
+    });
+  });
+
+  it("Codex와 Claude의 현재 구현 capability를 streaming·approval 지원으로 과장하지 않는다", () => {
+    expect(providerManifest("openai-codex")).toMatchObject({
+      protocol: "codex-app-server",
+      quotaDiscovery: "none",
+      runtimeCapabilities: {
+        output: "final-text-only",
+        permissionBridge: "unsupported",
+        multipleAccounts: "profile-isolated",
+      },
+    });
+    expect(providerManifest("anthropic-claude-code")).toMatchObject({
+      protocol: "claude-agent-sdk",
+      quotaDiscovery: "none",
+      runtimeCapabilities: {
+        output: "final-text-only",
+        permissionBridge: "protocol",
+        multipleAccounts: "profile-isolated",
+      },
     });
   });
 
