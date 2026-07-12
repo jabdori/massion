@@ -90,6 +90,42 @@ describe("Governance Gate", () => {
     expect(result.permit?.approval_id).toBe(required.approvalId);
   });
 
+  it("구독 Runtime 승인만 명시적인 재개 대상으로 기록한다", async () => {
+    let required: GovernanceApprovalRequiredError | undefined;
+    try {
+      await gate.authorize(context, {
+        ...input(),
+        action: "tool.call",
+        resource: { type: "Tool", id: "tool-call-1" },
+        workId: "work-1",
+        executionId: "execution-1",
+        resumeTarget: "runtime-subscription",
+        approvalPreview: {
+          kind: "file-change",
+          title: "파일 변경",
+          path: "/workspace/src/index.ts",
+          summary: "검증 로직 변경",
+        },
+      });
+    } catch (error) {
+      if (error instanceof GovernanceApprovalRequiredError) required = error;
+      else throw error;
+    }
+    if (!required) throw new Error("구독 Runtime 승인 요청이 없습니다");
+
+    await expect(approvals.get(context, required.approvalId)).resolves.toMatchObject({
+      work_id: "work-1",
+      execution_id: "execution-1",
+      resume_target: "runtime-subscription",
+      display_preview_json: JSON.stringify({
+        kind: "file-change",
+        path: "/workspace/src/index.ts",
+        summary: "검증 로직 변경",
+        title: "파일 변경",
+      }),
+    });
+  });
+
   it("승인 후 target revision을 바꾼 재시도는 TOCTOU로 거부한다", async () => {
     let required: GovernanceApprovalRequiredError | undefined;
     try {

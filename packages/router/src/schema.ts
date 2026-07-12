@@ -235,3 +235,52 @@ DEFINE FIELD subscription_policy_version_id ON route_attempt TYPE option<string>
 DEFINE FIELD subscription_policy_version ON route_attempt TYPE option<int> READONLY;
 `,
 );
+
+// prettier-ignore -- migration SQL의 공백도 checksum에 포함됩니다.
+export const ROUTER_SUBSCRIPTION_ENDPOINT_MIGRATION = defineMigration(
+  "0090-router-subscription-endpoint",
+  `
+DEFINE FIELD subscription_protocol ON provider_endpoint TYPE option<string>;
+`,
+);
+
+// prettier-ignore -- migration SQL의 공백도 checksum에 포함됩니다.
+export const ROUTE_ATTEMPT_SIDE_EFFECT_MIGRATION = defineMigration(
+  "0092-router-attempt-side-effect",
+  `
+DEFINE FIELD side_effects_started ON route_attempt TYPE bool DEFAULT false;
+`,
+);
+
+// prettier-ignore -- migration SQL의 공백도 checksum에 포함됩니다.
+export const ROUTER_SUBSCRIPTION_REAUTH_MIGRATION = defineMigration(
+  "0097-router-subscription-reauth",
+  `
+DEFINE FIELD reauth_required ON provider_credential TYPE bool DEFAULT false;
+`,
+);
+
+// prettier-ignore -- migration SQL의 공백도 checksum에 포함됩니다.
+export const MODEL_VERIFICATION_EVIDENCE_MIGRATION = defineMigration(
+  "0098-router-model-verification-evidence",
+  `
+DEFINE TABLE model_verification_evidence SCHEMAFULL;
+DEFINE FIELD evidence_id ON model_verification_evidence TYPE string;
+DEFINE FIELD organization_id ON model_verification_evidence TYPE string;
+DEFINE FIELD model_profile_id ON model_verification_evidence TYPE string;
+DEFINE FIELD model_id ON model_verification_evidence TYPE string;
+DEFINE FIELD subscription_account_id ON model_verification_evidence TYPE option<string>;
+DEFINE FIELD evidence_kind ON model_verification_evidence TYPE string ASSERT $value IN ['runtime-availability', 'provider-capability-contract', 'runtime-capability-contract'];
+DEFINE FIELD source ON model_verification_evidence TYPE string ASSERT string::len($value) > 0 AND string::len($value) <= 2048;
+DEFINE FIELD source_version ON model_verification_evidence TYPE string ASSERT string::len($value) > 0 AND string::len($value) <= 256;
+DEFINE FIELD claim_json ON model_verification_evidence TYPE string ASSERT string::len($value) > 0 AND string::len($value) <= 65536;
+DEFINE FIELD claim_digest ON model_verification_evidence TYPE string ASSERT string::len($value) = 64;
+DEFINE FIELD observed_at ON model_verification_evidence TYPE datetime;
+DEFINE FIELD created_by ON model_verification_evidence TYPE string;
+DEFINE FIELD created_at ON model_verification_evidence TYPE datetime;
+DEFINE INDEX model_verification_evidence_id ON model_verification_evidence FIELDS evidence_id UNIQUE;
+DEFINE INDEX model_verification_evidence_profile ON model_verification_evidence FIELDS organization_id, model_profile_id, evidence_kind;
+DEFINE INDEX model_verification_evidence_account ON model_verification_evidence FIELDS organization_id, model_profile_id, subscription_account_id, evidence_kind;
+DEFINE EVENT model_verification_evidence_immutable ON TABLE model_verification_evidence WHEN $event IN ['UPDATE', 'DELETE'] THEN { THROW 'Model verification evidence는 immutable입니다'; };
+`,
+);

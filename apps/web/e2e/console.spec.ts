@@ -107,6 +107,73 @@ async function mockProduct(page: import("@playwright/test").Page) {
         cursor: 7,
         snapshotRequired: false,
       },
+      "subscription.providers": [
+        {
+          providerId: "openai-codex",
+          displayName: "OpenAI Codex",
+          authKinds: ["oauth"],
+          executionKind: "agent-runtime",
+          billingKinds: ["subscription"],
+          modelDiscovery: "protocol",
+          quotaDiscovery: "command",
+          protocols: ["codex-app-server"],
+          availability: "supported",
+          officialDocumentation: "https://developers.openai.com/codex/auth",
+          credentialPolicies: ["adaptive", "quota-headroom", "round-robin"],
+          verified: true,
+        },
+      ],
+      "subscription.accounts": [
+        {
+          accountId: "account-e2e",
+          providerId: "openai-codex",
+          alias: "개인 Codex",
+          scope: "personal",
+          canManage: true,
+          connectorId: "connector-e2e",
+          connectorLocation: "local",
+          connectorExecutionKind: "agent-runtime",
+          connectorStatus: "ready",
+          billingKind: "subscription",
+          status: "active",
+          version: 4,
+          token: "never-render-e2e-token",
+          ownerUserId: "never-render-e2e-owner",
+          profileFingerprint: "never-render-e2e-fingerprint",
+          publicKey: "never-render-e2e-key",
+        },
+      ],
+      "subscription.quota": [
+        {
+          accountId: "account-e2e",
+          minimumRemainingRatio: 0.65,
+          exhausted: false,
+          observedAt: "2026-07-11T00:20:00.000Z",
+          windows: [
+            {
+              kind: "weekly",
+              remainingRatio: 0.65,
+              resetsAt: "2026-07-18T00:00:00.000Z",
+              observedAt: "2026-07-11T00:20:00.000Z",
+              confidence: "provider-reported",
+            },
+          ],
+        },
+      ],
+      "subscription.policy": [
+        { providerId: "openai-codex", credentialPolicy: "adaptive", version: 2, source: "configured" },
+      ],
+      "subscription.doctor": [
+        {
+          accountId: "account-e2e",
+          providerId: "openai-codex",
+          alias: "개인 Codex",
+          connectorId: "connector-e2e",
+          connectorStatus: "ready",
+          quotaStatus: "available",
+          action: "none",
+        },
+      ],
     };
     await route.fulfill({
       status: 200,
@@ -140,4 +207,26 @@ test("조직 화면은 그래프와 동일한 접근성 명부를 제공한다",
   await expect(page.getByRole("heading", { name: "에이전트 명부" })).toBeVisible();
   await page.keyboard.press("Tab");
   await expect(page.locator(":focus")).toBeVisible();
+});
+
+test("구독 화면은 실제 route와 메뉴에서 계정·할당량·정책을 접근 가능하게 제공한다", async ({ page }) => {
+  await mockProduct(page);
+  await page.goto("/subscriptions");
+
+  await expect(page.getByRole("heading", { name: "모델 구독을 어떻게 사용하고 있나요?" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "구독" })).toHaveAttribute("aria-current", "page");
+  await expect(page.getByRole("heading", { name: "개인 Codex" })).toBeVisible();
+  await expect(page.getByText("65%", { exact: true })).toBeVisible();
+  await expect(page.getByRole("combobox", { name: "OpenAI Codex 계정 선택 정책" })).toHaveValue("adaptive");
+  const content = await page.locator("body").innerText();
+  for (const forbidden of [
+    "never-render-e2e-token",
+    "never-render-e2e-owner",
+    "never-render-e2e-fingerprint",
+    "never-render-e2e-key",
+    "connector-e2e",
+  ])
+    expect(content).not.toContain(forbidden);
+  const accessibility = await new AxeBuilder({ page }).analyze();
+  expect(accessibility.violations).toEqual([]);
 });

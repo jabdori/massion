@@ -1,3 +1,4 @@
+import type { ApprovalDisplayPreview } from "@massion/governance";
 import type { TenantContext } from "@massion/identity";
 
 export type ApplicationSourceWatermarks = Readonly<Record<string, string | number>>;
@@ -99,6 +100,7 @@ export interface ApplicationApprovalSource {
   readonly status: string;
   readonly requestedBy: string;
   readonly expiresAt: string;
+  readonly displayPreview?: ApprovalDisplayPreview;
 }
 
 export interface ApplicationExtensionSource {

@@ -26,6 +26,7 @@ describe("mass CLI parser", () => {
     [["approval", "approve", "approval-1"], "approval", "approve"],
     [["assurance", "binding-propose"], "assurance", "binding-propose"],
     [["runtime", "suspend", "execution-1"], "runtime", "suspend"],
+    [["runtime", "lineage", "execution-1"], "runtime", "lineage"],
     [["provider", "route-set"], "provider", "route-set"],
     [["provider", "model-add"], "provider", "model-add"],
     [["ext", "install", "extension.tgz"], "ext", "install"],
@@ -33,7 +34,10 @@ describe("mass CLI parser", () => {
     [["ext", "inventory"], "ext", "inventory"],
     [["growth", "suggestions"], "growth", "suggestions"],
     [["subscription", "providers"], "subscription", "providers"],
+    [["subscription", "enroll", "edge", "agent-runtime"], "subscription", "enroll"],
     [["subscription", "connect", "verified-provider"], "subscription", "connect"],
+    [["subscription", "connect-model", "minimax-token-plan"], "subscription", "connect-model"],
+    [["subscription", "connect-advanced", "verified-provider"], "subscription", "connect-advanced"],
     [["subscription", "accounts"], "subscription", "accounts"],
     [["subscription", "share", "account-1"], "subscription", "share"],
     [["subscription", "unshare", "account-1"], "subscription", "unshare"],
@@ -58,5 +62,13 @@ describe("mass CLI parser", () => {
     expect(() => parseCliArguments(["subscription", "connect", "verified-provider", "--token", "secret"])).toThrow(
       "지원하지 않는 option",
     );
+  });
+
+  it("Codex 구독 연결의 선택 model을 secret이 아닌 명시적 option으로 파싱한다", () => {
+    expect(parseCliArguments(["subscription", "connect", "openai-codex", "--model", "gpt-5.6-terra"])).toMatchObject({
+      model: "gpt-5.6-terra",
+      arguments: ["openai-codex"],
+    });
+    expect(() => parseCliArguments(["status", "--model", "gpt-5.6-sol"])).toThrow("subscription connect");
   });
 });

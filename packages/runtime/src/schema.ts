@@ -94,6 +94,29 @@ THEN {
 `,
 );
 
+export const RUNTIME_ACTOR_LINEAGE_MIGRATION = defineMigration(
+  "0094-runtime-actor-lineage",
+  `
+DEFINE FIELD actor_user_id ON runtime_execution TYPE option<string>
+  ASSERT $value = NONE OR string::len($value) > 0;
+DEFINE INDEX runtime_execution_recovery_actor ON runtime_execution
+  FIELDS status, organization_id, actor_user_id, created_at, execution_id;
+DEFINE EVENT runtime_execution_actor_lineage_invariant ON TABLE runtime_execution
+WHEN $event IN ['CREATE', 'UPDATE']
+THEN {
+  IF $event = 'CREATE' AND $after.actor_user_id = NONE {
+    THROW 'Runtime Execution 행위자 계보가 필요합니다';
+  };
+  IF $event = 'UPDATE' AND (
+    ($before.actor_user_id = NONE AND $after.actor_user_id != NONE) OR
+    ($before.actor_user_id != NONE AND $after.actor_user_id != $before.actor_user_id)
+  ) {
+    THROW 'Runtime Execution 행위자 계보는 immutable입니다';
+  };
+};
+`,
+);
+
 export const RUNTIME_BLOCKED_TRANSITION_MIGRATION = defineMigration(
   "0015-runtime-blocked-transition",
   `

@@ -3,9 +3,13 @@ import {
   listCodingPlanPresets,
   listSubscriptionProviderManifests,
   SUBSCRIPTION_CREDENTIAL_POLICIES,
+  SUBSCRIPTION_APPROVAL_MODES,
+  type AgentRuntimeCapabilities,
   type CodingPlanPreset,
   type ConfigureSubscriptionPolicyInput as DomainConfigureSubscriptionPolicyInput,
   type ConnectorRegistry,
+  type SubscriptionDataDisclosureService,
+  type ServerConnectorView,
   type SubscriptionAccountService,
   type SubscriptionAuthKind,
   type SubscriptionCredentialPolicy,
@@ -16,7 +20,9 @@ import {
   type SubscriptionQuotaService,
 } from "@massion/subscriptions";
 
-export { SUBSCRIPTION_CREDENTIAL_POLICIES };
+import type { ConnectedSubscription, SubscriptionConnectionService } from "./subscription-connection.js";
+
+export { SUBSCRIPTION_APPROVAL_MODES, SUBSCRIPTION_CREDENTIAL_POLICIES };
 export type ConfigureSubscriptionPolicyInput = DomainConfigureSubscriptionPolicyInput;
 export type SubscriptionPolicyView = DomainSubscriptionPolicyView;
 export type SubscriptionPolicyStore = Pick<DomainSubscriptionPolicyStore, "configure" | "list">;
@@ -27,8 +33,69 @@ export type SubscriptionAccountCommands = Pick<
 >;
 
 export type SubscriptionAccountQueries = Pick<SubscriptionAccountService, "list">;
-export type SubscriptionConnectorCommands = Pick<ConnectorRegistry, "enroll">;
+export type SubscriptionConnectionCommands = Pick<SubscriptionConnectionService, "connect" | "disconnect">;
+export interface SubscriptionServerConnectionCommands {
+  connectModel(
+    context: TenantContext,
+    input: {
+      readonly commandId: string;
+      readonly providerId: string;
+      readonly alias: string;
+      readonly authKind: Extract<SubscriptionAuthKind, "api-key" | "subscription-key">;
+      readonly billingKind: string;
+      readonly secret: string;
+      readonly endpointUrl?: string;
+      readonly protocol?: SubscriptionProviderProtocol;
+      readonly acceptExperimental?: boolean;
+      readonly priority?: number;
+      readonly weight?: number;
+    },
+  ): Promise<ConnectedSubscription & { readonly connector: ServerConnectorView }>;
+  prepare(
+    context: TenantContext,
+    input: {
+      readonly commandId: string;
+      readonly providerId: string;
+      readonly alias: string;
+      readonly authKind: SubscriptionAuthKind;
+      readonly billingKind: string;
+      readonly priority?: number;
+      readonly weight?: number;
+    },
+  ): Promise<
+    ConnectedSubscription & {
+      readonly connector: ServerConnectorView;
+      readonly profileHandle: string;
+    }
+  >;
+  attest(
+    context: TenantContext,
+    input: {
+      readonly commandId: string;
+      readonly connectorId: string;
+      readonly accountId?: string;
+      readonly modelId?: string;
+    },
+  ): Promise<
+    ServerConnectorView & {
+      readonly modelRuntime?: {
+        readonly modelId: string;
+        readonly modelProfileId: string;
+        readonly routeNames: readonly string[];
+      };
+    }
+  >;
+  offline(
+    context: TenantContext,
+    input: { readonly commandId: string; readonly connectorId: string },
+  ): Promise<ServerConnectorView>;
+}
+export type SubscriptionConnectorCommands = Pick<ConnectorRegistry, "enroll" | "revoke">;
 export type SubscriptionConnectorQueries = Pick<ConnectorRegistry, "get">;
+export type SubscriptionDataDisclosureCommands = Pick<
+  SubscriptionDataDisclosureService,
+  "acknowledge" | "requireAcknowledgement"
+>;
 export type SubscriptionQuotaQueries = Pick<SubscriptionQuotaService, "current">;
 
 export interface SubscriptionProviderView {
@@ -36,15 +103,17 @@ export interface SubscriptionProviderView {
   readonly displayName: string;
   readonly authKinds: readonly SubscriptionAuthKind[];
   readonly executionKind: "model" | "agent-runtime";
+  readonly connectionSurface: "server-and-edge" | "server-only" | "edge-only" | "unavailable";
   readonly billingKinds: readonly string[];
   readonly modelDiscovery: "protocol" | "endpoint" | "documented-allowlist" | "command" | "none";
-  readonly quotaDiscovery: "headers" | "command" | "endpoint" | "none";
+  readonly quotaDiscovery: "protocol" | "headers" | "command" | "endpoint" | "none";
   readonly protocols: readonly SubscriptionProviderProtocol[];
   readonly protocol?: SubscriptionProviderProtocol;
   readonly availability: "supported" | "experimental" | "requires-provider-approval";
   readonly officialDocumentation: string;
   readonly credentialPolicies: readonly SubscriptionCredentialPolicy[];
   readonly verified: boolean;
+  readonly runtimeCapabilities?: AgentRuntimeCapabilities;
 }
 
 export interface SubscriptionProviderDirectory {
@@ -61,6 +130,7 @@ function publicManifest(manifest: SubscriptionProviderManifest): SubscriptionPro
     displayName: manifest.displayName,
     authKinds: manifest.authKinds,
     executionKind: manifest.executionKind,
+    connectionSurface: manifest.connectionSurface,
     billingKinds: manifest.billingKinds,
     modelDiscovery: manifest.modelDiscovery,
     quotaDiscovery: manifest.quotaDiscovery,
@@ -70,6 +140,7 @@ function publicManifest(manifest: SubscriptionProviderManifest): SubscriptionPro
     officialDocumentation: manifest.officialDocumentation,
     credentialPolicies: SUBSCRIPTION_CREDENTIAL_POLICIES,
     verified: manifest.verified,
+    ...(manifest.runtimeCapabilities ? { runtimeCapabilities: manifest.runtimeCapabilities } : {}),
   };
 }
 
@@ -80,6 +151,7 @@ function publicPreset(preset: CodingPlanPreset): SubscriptionProviderView {
     displayName: preset.displayName,
     authKinds: preset.authKinds,
     executionKind: "model",
+    connectionSurface: preset.connectionSurface,
     billingKinds: preset.billingKinds,
     modelDiscovery: preset.modelDiscovery,
     quotaDiscovery: preset.quotaDiscovery,
@@ -99,6 +171,7 @@ function mergeProvider(manifest: SubscriptionProviderView, preset: SubscriptionP
     displayName: manifest.displayName,
     authKinds: unique([...manifest.authKinds, ...preset.authKinds]),
     executionKind: manifest.executionKind,
+    connectionSurface: manifest.connectionSurface,
     billingKinds: unique([...manifest.billingKinds, ...preset.billingKinds]),
     modelDiscovery: manifest.modelDiscovery,
     quotaDiscovery: manifest.quotaDiscovery,
@@ -107,6 +180,7 @@ function mergeProvider(manifest: SubscriptionProviderView, preset: SubscriptionP
     officialDocumentation: manifest.officialDocumentation,
     credentialPolicies: manifest.credentialPolicies,
     verified: manifest.verified || preset.verified,
+    ...(manifest.runtimeCapabilities ? { runtimeCapabilities: manifest.runtimeCapabilities } : {}),
   };
   return protocols.length === 1 && protocols[0] !== undefined ? { ...merged, protocol: protocols[0] } : merged;
 }

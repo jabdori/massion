@@ -5,7 +5,13 @@ import { applyMigrations, type MassionDatabase, type QueryExecutor } from "@mass
 
 import type { SubscriptionConnector } from "./contracts.js";
 import { ConnectorEnrollmentService, type EnrollmentVerificationInput } from "./enrollment.js";
-import { SUBSCRIPTION_CONNECTOR_ENROLLMENT_MIGRATION, SUBSCRIPTION_MIGRATION } from "./schema.js";
+import {
+  SUBSCRIPTION_CONNECTOR_ENROLLMENT_MIGRATION,
+  SUBSCRIPTION_EDGE_READY_MIGRATION,
+  SUBSCRIPTION_MIGRATION,
+  SUBSCRIPTION_NONCE_RETENTION_MIGRATION,
+  SUBSCRIPTION_SERVER_CONNECTOR_MIGRATION,
+} from "./schema.js";
 
 export type EnrollConnectorInput = EnrollmentVerificationInput;
 
@@ -15,6 +21,7 @@ export interface ConnectorHeartbeat {
   readonly version: string;
   readonly capabilities: readonly string[];
   readonly observedAt: string;
+  readonly profileHealthObservedAt: string;
   readonly nonce: string;
   readonly signature: string;
 }
@@ -52,6 +59,7 @@ export function createHeartbeatSignaturePayload(input: Omit<ConnectorHeartbeat, 
       version: input.version,
       capabilities: normalizeCapabilities(input.capabilities),
       observedAt: input.observedAt,
+      profileHealthObservedAt: input.profileHealthObservedAt,
       nonce: input.nonce,
     }),
   );
@@ -65,6 +73,7 @@ export class ConnectorRegistry {
     private readonly now: () => Date,
     private readonly heartbeatTtlMs: number,
     private readonly maximumClockSkewMs: number,
+    private readonly nonceRetentionMs: number,
   ) {}
 
   public static async create(
@@ -80,7 +89,13 @@ export class ConnectorRegistry {
     if (!Number.isSafeInteger(maximumClockSkewMs) || maximumClockSkewMs < 0) {
       throw new Error("Heartbeat 허용 시각 오차가 유효하지 않습니다");
     }
-    await applyMigrations(database, [SUBSCRIPTION_MIGRATION, SUBSCRIPTION_CONNECTOR_ENROLLMENT_MIGRATION]);
+    await applyMigrations(database, [
+      SUBSCRIPTION_MIGRATION,
+      SUBSCRIPTION_CONNECTOR_ENROLLMENT_MIGRATION,
+      SUBSCRIPTION_SERVER_CONNECTOR_MIGRATION,
+      SUBSCRIPTION_EDGE_READY_MIGRATION,
+      SUBSCRIPTION_NONCE_RETENTION_MIGRATION,
+    ]);
     return new ConnectorRegistry(
       database,
       organizations,
@@ -88,6 +103,7 @@ export class ConnectorRegistry {
       options.now ?? (() => new Date()),
       heartbeatTtlMs,
       maximumClockSkewMs,
+      Math.max(heartbeatTtlMs, maximumClockSkewMs) * 2,
     );
   }
 
@@ -95,6 +111,7 @@ export class ConnectorRegistry {
     const now = this.now();
     return await this.database.transaction(async (tx) => {
       const verified = await this.enrollment.verify(input, now, tx);
+      if (verified.location !== "edge") throw new Error("장치 등록 경로는 Edge Connector만 허용합니다");
       const connectorId = requireText(input.connectorId, "Connector ID");
       const protocol = requireText(input.protocol, "Connector protocol");
       const version = requireText(input.version, "Connector version");
@@ -104,15 +121,14 @@ export class ConnectorRegistry {
           connector_id: $connector_id,
           organization_id: $organization_id,
           owner_user_id: $owner_user_id,
-          location: $location,
+          location: 'edge',
+          trust_origin: 'edge-device',
           execution_kind: $execution_kind,
           protocol: $protocol,
           version: $version,
           public_key: $public_key,
           capabilities: $capabilities,
-          status: 'ready',
-          last_heartbeat_at: $last_heartbeat_at,
-          expires_at: $expires_at,
+          status: 'enrolling',
           created_at: $created_at,
           updated_at: $created_at
         };`,
@@ -120,14 +136,11 @@ export class ConnectorRegistry {
           connector_id: connectorId,
           organization_id: verified.organizationId,
           owner_user_id: verified.ownerUserId,
-          location: verified.location,
           execution_kind: verified.executionKind,
           protocol,
           version,
           public_key: input.publicKey,
           capabilities,
-          last_heartbeat_at: now,
-          expires_at: new Date(now.getTime() + this.heartbeatTtlMs),
           created_at: now,
         },
       );
@@ -142,16 +155,27 @@ export class ConnectorRegistry {
     if (Math.abs(now.getTime() - observedAt.getTime()) > this.maximumClockSkewMs) {
       throw new Error("Heartbeat 관측 시각이 허용 범위를 벗어났습니다");
     }
+    const profileHealthObservedAt = new Date(input.profileHealthObservedAt);
+    if (
+      !Number.isFinite(profileHealthObservedAt.getTime()) ||
+      profileHealthObservedAt.getTime() > observedAt.getTime() ||
+      Math.abs(now.getTime() - profileHealthObservedAt.getTime()) > this.maximumClockSkewMs
+    ) {
+      throw new Error("Provider profile 건강 증명 시각이 유효하지 않습니다");
+    }
     const nonce = requireText(input.nonce, "Heartbeat nonce");
     if (nonce.length < 16 || nonce.length > 256) throw new Error("Heartbeat nonce 길이가 유효하지 않습니다");
     const capabilities = normalizeCapabilities(input.capabilities);
 
     return await this.database.transaction(async (tx) => {
       const connector = await this.requireConnector(tx, input.organizationId, input.connectorId);
+      if (connector.location !== "edge" || connector.trust_origin !== "edge-device") {
+        throw new Error("장치 heartbeat는 Edge Connector에만 사용할 수 있습니다");
+      }
       if (connector.status === "revoked") throw new Error("폐기된 Connector는 heartbeat를 보낼 수 없습니다");
       if (connector.status === "incompatible") throw new Error("호환되지 않는 Connector입니다");
       if (!/^[A-Za-z0-9_-]{86}$/u.test(input.signature)) throw new Error("Heartbeat 서명 형식이 유효하지 않습니다");
-      const key = createPublicKey(connector.public_key);
+      const key = this.requireEd25519Key(connector.public_key);
       if (
         key.asymmetricKeyType !== "ed25519" ||
         !verifySignature(null, createHeartbeatSignaturePayload(input), key, Buffer.from(input.signature, "base64url"))
@@ -197,8 +221,14 @@ export class ConnectorRegistry {
       );
       await tx.query(
         `UPDATE subscription_account SET status = 'active', version += 1, updated_at = $updated_at
-         WHERE organization_id = $organization_id AND connector_id = $connector_id AND status = 'offline';`,
-        { organization_id: input.organizationId, connector_id: input.connectorId, updated_at: now },
+         WHERE organization_id = $organization_id AND connector_id = $connector_id
+           AND (status = 'offline' OR (status = 'needs-reauth' AND updated_at < $profile_health_observed_at));`,
+        {
+          organization_id: input.organizationId,
+          connector_id: input.connectorId,
+          profile_health_observed_at: profileHealthObservedAt,
+          updated_at: now,
+        },
       );
       return await this.requireConnector(tx, input.organizationId, input.connectorId);
     });
@@ -206,9 +236,13 @@ export class ConnectorRegistry {
 
   public async expire(now = this.now()): Promise<number> {
     return await this.database.transaction(async (tx) => {
+      await tx.query(`DELETE subscription_connector_nonce WHERE created_at < $nonce_cutoff;`, {
+        nonce_cutoff: new Date(now.getTime() - this.nonceRetentionMs),
+      });
       const [expired] = await tx.query<[SubscriptionConnector[]]>(
         `SELECT * OMIT id FROM subscription_connector
-         WHERE status = 'ready' AND expires_at <= $now ORDER BY connector_id ASC;`,
+         WHERE trust_origin = 'edge-device' AND status = 'ready'
+           AND expires_at <= $now ORDER BY connector_id ASC;`,
         { now },
       );
       for (const connector of expired) {
@@ -233,6 +267,9 @@ export class ConnectorRegistry {
     return await this.database.transaction(async (tx) => {
       await this.organizations.verifyTenantContext(context, undefined, tx);
       const connector = await this.requireConnector(tx, context.organizationId, connectorId);
+      if (connector.trust_origin !== "edge-device") {
+        throw new Error("장치 Registry에서는 Edge Connector만 폐기할 수 있습니다");
+      }
       if (connector.owner_user_id !== context.userId && context.role === "member") {
         throw new Error("Connector 소유자 또는 조직 관리자만 폐기할 수 있습니다");
       }
@@ -260,5 +297,16 @@ export class ConnectorRegistry {
     );
     if (!connectors[0]) throw new Error(`Connector를 찾을 수 없습니다: ${connectorId}`);
     return connectors[0];
+  }
+
+  private requireEd25519Key(publicKey: string | undefined) {
+    if (!publicKey) throw new Error("Edge Connector 공개 key가 없습니다");
+    try {
+      const key = createPublicKey(publicKey);
+      if (key.asymmetricKeyType !== "ed25519") throw new Error("not-ed25519");
+      return key;
+    } catch {
+      throw new Error("Edge Connector 공개 key는 Ed25519 SPKI key여야 합니다");
+    }
   }
 }

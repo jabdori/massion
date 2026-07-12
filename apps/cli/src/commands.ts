@@ -11,11 +11,31 @@ export interface CliApplicationClient {
   installArtifact(commandId: string, archive: Uint8Array): Promise<unknown>;
   updateArtifact(commandId: string, archive: Uint8Array): Promise<unknown>;
   publishArtifact?(commandId: string, archive: Uint8Array, metadata: unknown): Promise<unknown>;
+  issueConnectorEnrollment?(input: {
+    readonly commandId: string;
+    readonly location: "edge";
+    readonly executionKind: "model" | "agent-runtime";
+    readonly ttlMs?: number;
+  }): Promise<unknown>;
 }
 
 export interface CliCommandInput {
   readonly readJson?: () => Promise<unknown>;
   readonly readArtifact?: (path: string) => Promise<Uint8Array>;
+  readonly connectServerSubscription?: (input: {
+    readonly providerId: string;
+    readonly alias?: string;
+    readonly modelId?: string;
+  }) => Promise<unknown>;
+  readonly connectServerModelSubscription?: (input: {
+    readonly providerId: "minimax-token-plan";
+    readonly alias: string;
+    readonly authKind: "subscription-key";
+    readonly billingKind: "token-plan";
+    readonly secret: string;
+    readonly priority?: number;
+    readonly weight?: number;
+  }) => Promise<unknown>;
 }
 
 function required(arguments_: readonly string[], index: number, label: string): string {
@@ -30,8 +50,8 @@ function integer(value: string, label: string): number {
   return Number(value);
 }
 
-function envelope(operation: string, payload: unknown, expectedRevision?: number): unknown {
-  const commandId = randomUUID();
+function envelope(operation: string, payload: unknown, expectedRevision?: number, replayCommandId?: string): unknown {
+  const commandId = replayCommandId ?? randomUUID();
   return {
     schemaVersion: "massion.application.v1",
     commandId,
@@ -54,9 +74,39 @@ function exactInput(
   value: Readonly<Record<string, unknown>>,
   allowed: readonly string[],
   label: string,
+  requiredFields: readonly string[] = [],
 ): Readonly<Record<string, unknown>> {
   const unknown = Object.keys(value).find((key) => !allowed.includes(key));
   if (unknown) throw new Error(`${label} stdin JSON에 알 수 없는 필드가 있습니다: ${unknown}`);
+  const missing = requiredFields.find((key) => value[key] === undefined);
+  if (missing) throw new Error(`${label} stdin JSON에 필수 필드가 없습니다: ${missing}`);
+  return value;
+}
+
+function jsonText(value: unknown, label: string, maximum = 256): string {
+  if (typeof value !== "string") throw new Error(`${label}가 유효하지 않습니다`);
+  const normalized = value.trim();
+  if (!normalized || Buffer.byteLength(normalized, "utf8") > maximum || /[\0\r\n]/u.test(normalized)) {
+    throw new Error(`${label}가 유효하지 않습니다`);
+  }
+  return normalized;
+}
+
+function jsonInteger(value: unknown, label: string, minimum: number): number {
+  if (!Number.isSafeInteger(value) || (value as number) < minimum) throw new Error(`${label}가 유효하지 않습니다`);
+  return value as number;
+}
+
+function jsonSecret(value: unknown): string {
+  if (
+    typeof value !== "string" ||
+    value.length === 0 ||
+    value !== value.trim() ||
+    Buffer.byteLength(value, "utf8") > 16 * 1024 ||
+    /[\0\r\n]/u.test(value)
+  ) {
+    throw new Error("구독 Credential secret이 유효하지 않습니다");
+  }
   return value;
 }
 
@@ -72,6 +122,90 @@ async function subscriptionAccountRevision(client: CliApplicationClient, account
     throw new Error(`구독 계정 또는 version을 찾을 수 없습니다: ${accountId}`);
   }
   return account.version as number;
+}
+
+const SUBSCRIPTION_APPROVAL_MODES = ["automatic", "review", "deny"] as const;
+type SubscriptionApprovalMode = (typeof SUBSCRIPTION_APPROVAL_MODES)[number];
+
+async function assertSubscriptionProviderApprovalMode(
+  client: CliApplicationClient,
+  providerId: string,
+  approvalMode: SubscriptionApprovalMode,
+): Promise<void> {
+  const response = await client.query("subscription.providers", {});
+  if (!response || typeof response !== "object" || !Array.isArray((response as { data?: unknown }).data)) {
+    throw new Error("구독 Provider 조회 응답이 유효하지 않습니다");
+  }
+  const provider = (response as { data: unknown[] }).data.find(
+    (item) => item && typeof item === "object" && (item as { providerId?: unknown }).providerId === providerId,
+  ) as
+    | {
+        readonly connectionSurface?: unknown;
+        readonly runtimeCapabilities?: unknown;
+      }
+    | undefined;
+  if (!provider) throw new Error(`구독 Provider를 찾을 수 없습니다: ${providerId}`);
+  if (provider.connectionSurface === "unavailable") {
+    throw new Error("공개 연결 표면이 없는 Provider에는 구독 실행 정책이 허용되지 않습니다");
+  }
+  const runtimeCapabilities =
+    provider.runtimeCapabilities &&
+    typeof provider.runtimeCapabilities === "object" &&
+    !Array.isArray(provider.runtimeCapabilities)
+      ? (provider.runtimeCapabilities as Record<string, unknown>)
+      : undefined;
+  if (!runtimeCapabilities) return;
+  let approvalModes = Array.isArray(runtimeCapabilities.approvalModes)
+    ? runtimeCapabilities.approvalModes.filter(
+        (value): value is SubscriptionApprovalMode =>
+          typeof value === "string" && SUBSCRIPTION_APPROVAL_MODES.includes(value as SubscriptionApprovalMode),
+      )
+    : [];
+  const approvalModesBySurface =
+    runtimeCapabilities.approvalModesBySurface &&
+    typeof runtimeCapabilities.approvalModesBySurface === "object" &&
+    !Array.isArray(runtimeCapabilities.approvalModesBySurface)
+      ? (runtimeCapabilities.approvalModesBySurface as Record<string, unknown>)
+      : undefined;
+  if (approvalModesBySurface) {
+    const accountsResponse = await client.query("subscription.accounts", {});
+    if (
+      !accountsResponse ||
+      typeof accountsResponse !== "object" ||
+      !Array.isArray((accountsResponse as { data?: unknown }).data)
+    ) {
+      throw new Error("구독 계정 조회 응답이 유효하지 않습니다");
+    }
+    const connectedSurfaces = new Set(
+      (accountsResponse as { data: unknown[] }).data
+        .filter(
+          (item): item is { readonly providerId: string; readonly connectorLocation: "server" | "edge" } =>
+            item !== null &&
+            typeof item === "object" &&
+            (item as { providerId?: unknown }).providerId === providerId &&
+            ((item as { connectorLocation?: unknown }).connectorLocation === "server" ||
+              (item as { connectorLocation?: unknown }).connectorLocation === "edge"),
+        )
+        .map((account) => account.connectorLocation),
+    );
+    if (connectedSurfaces.size > 0) {
+      const supported = new Set<SubscriptionApprovalMode>();
+      for (const surface of connectedSurfaces) {
+        const modes = approvalModesBySurface[surface];
+        if (!Array.isArray(modes)) continue;
+        for (const mode of modes) {
+          if (typeof mode === "string" && SUBSCRIPTION_APPROVAL_MODES.includes(mode as SubscriptionApprovalMode)) {
+            supported.add(mode as SubscriptionApprovalMode);
+          }
+        }
+      }
+      approvalModes = SUBSCRIPTION_APPROVAL_MODES.filter((mode) => supported.has(mode));
+    }
+  }
+  if (!Object.hasOwn(runtimeCapabilities, "approvalModes") && !approvalModesBySurface) return;
+  if (!approvalModes.includes(approvalMode)) {
+    throw new Error(`이 Provider에서 허용되지 않는 구독 승인 방식입니다: ${approvalMode}`);
+  }
 }
 
 export async function executeCliInvocation(
@@ -117,6 +251,16 @@ export async function executeCliInvocation(
     });
   if (invocation.command === "runtime" && invocation.subcommand === "get")
     return await client.query("runtime.execution.get", { executionId: required(args, 0, "executionId") });
+  if (invocation.command === "runtime" && invocation.subcommand === "lineage") {
+    if (args[0] === "correlation") {
+      return await client.query("runtime.execution.subscription-lineage", {
+        correlationId: required(args, 1, "correlationId"),
+      });
+    }
+    return await client.query("runtime.execution.subscription-lineage", {
+      executionId: args[0] === "execution" ? required(args, 1, "executionId") : required(args, 0, "executionId"),
+    });
+  }
   if (invocation.command === "provider" && invocation.subcommand === "list") {
     const [catalog, credentials, routes] = await Promise.all([
       client.query("router.catalog", {}),
@@ -145,6 +289,24 @@ export async function executeCliInvocation(
     return await client.query("growth.suggestions", {});
   if (invocation.command === "subscription" && invocation.subcommand === "providers")
     return await client.query("subscription.providers", {});
+  if (invocation.command === "subscription" && invocation.subcommand === "enroll") {
+    if (!client.issueConnectorEnrollment) throw new Error("Connector enrollment API를 사용할 수 없습니다");
+    const location = required(args, 0, "location");
+    const executionKind = required(args, 1, "executionKind");
+    if (location === "server") {
+      throw new Error("server Connector는 검증된 server-managed provisioning 경로를 사용해야 합니다");
+    }
+    if (location !== "edge") throw new Error("location은 edge여야 합니다");
+    if (executionKind !== "model" && executionKind !== "agent-runtime") {
+      throw new Error("executionKind는 model 또는 agent-runtime이어야 합니다");
+    }
+    return await client.issueConnectorEnrollment({
+      commandId: randomUUID(),
+      location,
+      executionKind,
+      ...(args[2] === undefined ? {} : { ttlMs: integer(args[2], "ttlMs") }),
+    });
+  }
   if (invocation.command === "subscription" && invocation.subcommand === "accounts")
     return await client.query("subscription.accounts", {});
   if (invocation.command === "subscription" && invocation.subcommand === "quota")
@@ -160,12 +322,59 @@ export async function executeCliInvocation(
   if (invocation.command === "subscription" && invocation.subcommand === "policy" && args[1] === undefined)
     return await client.query("subscription.policy", { providerId: required(args, 0, "providerId") });
   if (invocation.command === "subscription" && invocation.subcommand === "connect") {
+    if (!input.connectServerSubscription) throw new Error("로컬 구독 로그인 adapter가 필요합니다");
+    const alias = args.slice(1).join(" ").trim();
+    return await input.connectServerSubscription({
+      providerId: required(args, 0, "providerId"),
+      ...(alias ? { alias } : {}),
+      ...(invocation.model === undefined ? {} : { modelId: invocation.model }),
+    });
+  }
+  if (invocation.command === "subscription" && invocation.subcommand === "connect-model") {
     const providerId = required(args, 0, "providerId");
-    const label = "기존 Connector profile 등록";
+    if (args.length !== 1) {
+      throw new Error("model 구독 secret은 명령행(argv)이 아니라 stdin JSON으로만 전달해야 합니다");
+    }
+    if (providerId !== "minimax-token-plan") {
+      throw new Error("현재 자동 model 구독 연결은 MiniMax Token Plan만 지원합니다");
+    }
+    if (!input.connectServerModelSubscription) throw new Error("서버 model 구독 연결 adapter가 필요합니다");
+    const label = "model 구독 연결";
+    const connection = exactInput(await stdin(input, label), ["secret", "alias", "priority", "weight"], label, [
+      "secret",
+    ]);
+    const secret = jsonSecret(connection.secret);
+    return await input.connectServerModelSubscription({
+      providerId,
+      alias: connection.alias === undefined ? "MiniMax Token Plan" : jsonText(connection.alias, "구독 계정 별칭", 128),
+      authKind: "subscription-key",
+      billingKind: "token-plan",
+      secret,
+      ...(connection.priority === undefined
+        ? {}
+        : { priority: jsonInteger(connection.priority, "Credential priority", 0) }),
+      ...(connection.weight === undefined ? {} : { weight: jsonInteger(connection.weight, "Credential weight", 1) }),
+    });
+  }
+  if (invocation.command === "subscription" && invocation.subcommand === "connect-advanced") {
+    const providerId = required(args, 0, "providerId");
+    const label = "구독 Connector 연결";
     const connection = exactInput(
       await stdin(input, label),
-      ["alias", "connectorId", "profileLocator", "billingKind"],
+      [
+        "alias",
+        "connectorId",
+        "profileLocator",
+        "authKind",
+        "billingKind",
+        "endpointUrl",
+        "protocol",
+        "acceptExperimental",
+        "priority",
+        "weight",
+      ],
       label,
+      ["alias", "connectorId", "profileLocator", "authKind", "billingKind"],
     );
     return await client.command(envelope("subscription.account.register", { providerId, ...connection }));
   }
@@ -175,15 +384,32 @@ export async function executeCliInvocation(
   ) {
     const accountId = required(args, 0, "accountId");
     const revision = await subscriptionAccountRevision(client, accountId);
+    const approvalId = invocation.subcommand === "share" ? args[1] : undefined;
+    const replayCommandId = invocation.subcommand === "share" ? args[2] : undefined;
+    if ((approvalId === undefined) !== (replayCommandId === undefined)) {
+      throw new Error("구독 공유 승인 재개에는 approvalId와 원래 commandId가 함께 필요합니다");
+    }
     return await client.command(
-      envelope(`subscription.account.${invocation.subcommand ?? ""}`, { accountId }, revision),
+      envelope(
+        `subscription.account.${invocation.subcommand ?? ""}`,
+        { accountId, ...(approvalId === undefined ? {} : { approvalId }) },
+        revision,
+        replayCommandId,
+      ),
     );
   }
   if (invocation.command === "subscription" && invocation.subcommand === "policy") {
     const providerId = required(args, 0, "providerId");
     const credentialPolicy = required(args, 1, "credentialPolicy");
-    const revision = args[2] === undefined ? undefined : integer(args[2], "expected revision");
-    return await client.command(envelope("subscription.policy.configure", { providerId, credentialPolicy }, revision));
+    const approvalMode = required(args, 2, "approvalMode");
+    if (!SUBSCRIPTION_APPROVAL_MODES.includes(approvalMode as SubscriptionApprovalMode)) {
+      throw new Error("approvalMode은 automatic, review 또는 deny여야 합니다");
+    }
+    await assertSubscriptionProviderApprovalMode(client, providerId, approvalMode as SubscriptionApprovalMode);
+    const revision = args[3] === undefined ? undefined : integer(args[3], "expected revision");
+    return await client.command(
+      envelope("subscription.policy.configure", { providerId, credentialPolicy, approvalMode }, revision),
+    );
   }
   if (invocation.command === "work" && invocation.subcommand === "cancel")
     return await client.command(

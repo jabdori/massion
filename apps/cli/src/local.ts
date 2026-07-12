@@ -11,6 +11,7 @@ export interface LocalPaths {
   readonly stateDirectory: string;
   readonly backupDirectory: string;
   readonly softwareWorkspaceDirectory: string;
+  readonly connectorDirectory: string;
   readonly tokenKey: string;
   readonly credentialKey: string;
   readonly pidFile: string;
@@ -65,6 +66,7 @@ export function resolveLocalPaths(environment: Readonly<Record<string, string | 
     stateDirectory,
     backupDirectory: join(dataDirectory, "backups"),
     softwareWorkspaceDirectory: join(dataDirectory, "workspaces"),
+    connectorDirectory: join(dataDirectory, "connectors"),
     tokenKey: join(configDirectory, "token-key"),
     credentialKey: join(configDirectory, "credential-key"),
     pidFile: join(stateDirectory, "server.json"),
@@ -81,6 +83,7 @@ async function ensureDirectories(paths: LocalPaths): Promise<void> {
       paths.stateDirectory,
       paths.backupDirectory,
       paths.softwareWorkspaceDirectory,
+      paths.connectorDirectory,
     ].map(async (path) => {
       await mkdir(path, { recursive: true, mode: 0o700 });
       const metadata = await stat(path);
@@ -299,6 +302,9 @@ export class LocalDaemonManager {
           MASSION_TOKEN_KEY_FILE: this.#paths.tokenKey,
           MASSION_CREDENTIAL_KEY_FILE: this.#paths.credentialKey,
           MASSION_SOFTWARE_WORKSPACE_ROOT: this.#paths.softwareWorkspaceDirectory,
+          MASSION_CONNECTOR_ROOT: this.#paths.connectorDirectory,
+          MASSION_EDGE_CONNECTOR_ENABLED: this.#environment.MASSION_EDGE_CONNECTOR_ENABLED ?? "false",
+          MASSION_CONNECTOR_HEARTBEAT_MS: this.#environment.MASSION_CONNECTOR_HEARTBEAT_MS ?? "30000",
           MASSION_HTTP_PORT: String(localPort),
           MASSION_REGISTRY_PORT: String(localPort + 1),
           MASSION_METRICS_PORT: String(localPort + 2),

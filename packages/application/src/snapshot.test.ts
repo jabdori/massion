@@ -100,6 +100,12 @@ function source(overrides: Partial<ApplicationReadModel> = {}): ApplicationReadM
         status: "pending",
         requestedBy: "representative",
         expiresAt: "2026-07-11T04:00:00.000Z",
+        displayPreview: {
+          kind: "file-change",
+          title: "파일 변경",
+          path: "/workspace/src/index.ts",
+          summary: "검증 로직 변경",
+        },
       },
     ],
     extensions: async () => [
@@ -135,6 +141,12 @@ describe("CollaborationGraphSnapshotProjector", () => {
       roomIds: ["room-snapshot"],
     });
     expect(snapshot.pendingApprovals).toHaveLength(1);
+    expect(snapshot.pendingApprovals[0]?.displayPreview).toEqual({
+      kind: "file-change",
+      title: "파일 변경",
+      path: "/workspace/src/index.ts",
+      summary: "검증 로직 변경",
+    });
     expect(snapshot.extensions[0]?.contributions).toEqual(["runtimeTools:example"]);
     expect(snapshot.revision).toMatch(/^[a-f0-9]{64}$/u);
   });

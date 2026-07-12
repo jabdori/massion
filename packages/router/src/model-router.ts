@@ -3,7 +3,10 @@ import { createHash, randomUUID } from "node:crypto";
 import { type OrganizationService, type TenantContext } from "@massion/identity";
 import { applyMigrations, type MassionDatabase, type QueryExecutor } from "@massion/storage";
 import {
+  listSubscriptionProviderManifests,
+  subscriptionProviderApprovalModes,
   type SubscriptionAccountService,
+  type ConnectorLocation,
   type SubscriptionPolicyStore,
   type SubscriptionQuotaService,
 } from "@massion/subscriptions";
@@ -17,13 +20,17 @@ import {
   type RouterAuditEvent,
 } from "./provider.js";
 import {
+  MODEL_VERIFICATION_EVIDENCE_MIGRATION,
   MODEL_PRICING_MIGRATION,
   MODEL_ROUTE_MIGRATION,
+  ROUTE_ATTEMPT_SIDE_EFFECT_MIGRATION,
   ROUTE_ATTEMPT_LINEAGE_MIGRATION,
   ROUTE_ATTEMPT_SUBSCRIPTION_POLICY_MIGRATION,
   ROUTER_HEALTH_MIGRATION,
   ROUTER_REGISTRY_MIGRATION,
+  ROUTER_SUBSCRIPTION_ENDPOINT_MIGRATION,
   ROUTER_SUBSCRIPTION_MATERIAL_MIGRATION,
+  ROUTER_SUBSCRIPTION_REAUTH_MIGRATION,
 } from "./schema.js";
 
 export type RouteKind = "chat" | "embedding";
@@ -58,6 +65,40 @@ export interface ModelProfile {
   readonly enabled: boolean;
   readonly created_at: unknown;
   readonly updated_at: unknown;
+}
+
+export type ModelVerificationEvidenceKind =
+  "runtime-availability" | "provider-capability-contract" | "runtime-capability-contract";
+
+export interface ModelVerificationEvidence {
+  readonly evidence_id: string;
+  readonly organization_id: string;
+  readonly model_profile_id: string;
+  readonly model_id: string;
+  readonly subscription_account_id?: string;
+  readonly evidence_kind: ModelVerificationEvidenceKind;
+  readonly source: string;
+  readonly source_version: string;
+  readonly claim_json: string;
+  readonly claim_digest: string;
+  readonly observed_at: unknown;
+  readonly created_by: string;
+  readonly created_at: unknown;
+}
+
+export interface RegisterModelVerificationEvidenceInput {
+  readonly kind: ModelVerificationEvidenceKind;
+  readonly source: string;
+  readonly sourceVersion: string;
+  readonly claim: Readonly<Record<string, unknown>>;
+  readonly observedAt: string;
+  readonly subscriptionAccountId?: string;
+}
+
+export interface RecordModelVerificationEvidenceInput {
+  readonly commandId: string;
+  readonly modelProfileId: string;
+  readonly verificationEvidence: readonly RegisterModelVerificationEvidenceInput[];
 }
 
 export interface ModelRoute {
@@ -107,6 +148,7 @@ export interface RouteAttempt {
   readonly failure_class?: string;
   readonly status_code?: number;
   readonly emitted_tokens: number;
+  readonly side_effects_started: boolean;
   readonly actual_input_tokens: number;
   readonly actual_output_tokens: number;
   readonly actual_cost_micros: number;
@@ -169,6 +211,7 @@ export interface RegisterModelInput {
   readonly inputCostMicrosPerMillion: number;
   readonly outputCostMicrosPerMillion: number;
   readonly verified: boolean;
+  readonly verificationEvidence?: readonly RegisterModelVerificationEvidenceInput[];
 }
 
 export interface CreateRouteInput {
@@ -252,6 +295,7 @@ export interface ReportFailureInput {
   readonly attemptId: string;
   readonly signal: FailureSignal;
   readonly emittedTokens: number;
+  readonly sideEffectsStarted: boolean;
   readonly actualInputTokens: number;
   readonly actualOutputTokens: number;
   readonly actualCostMicros: number;
@@ -303,6 +347,15 @@ function serializedMillis(value: unknown): number {
     : Number.POSITIVE_INFINITY;
 }
 
+function isSubscriptionCredential(credential: ProviderCredential): boolean {
+  return (
+    credential.material_kind === "connector_session" ||
+    credential.subscription_account_id !== undefined ||
+    credential.subscription_connector_id !== undefined ||
+    credential.subscription_scope !== undefined
+  );
+}
+
 export function selectCredential(
   policy: CredentialPolicy,
   credentials: readonly CredentialSelectionView[],
@@ -319,8 +372,14 @@ export function selectCredential(
         const observedAt = new Date(window.observedAt).getTime();
         return Number.isFinite(observedAt) && Math.abs(now.getTime() - observedAt) <= 5 * 60 * 1_000;
       });
+    const activelyExhausted = (window: NonNullable<CredentialSelectionView["quota_windows"]>[number]) => {
+      if (window.remainingRatio !== 0) return false;
+      if (window.resetsAt === undefined) return true;
+      const resetsAt = new Date(window.resetsAt).getTime();
+      return !Number.isFinite(resetsAt) || resetsAt > now.getTime();
+    };
     const eligible = ordered.filter(
-      (credential) => !freshWindows(credential).some((window) => window.remainingRatio === 0),
+      (credential) => !freshWindows(credential).some((window) => activelyExhausted(window)),
     );
     if (eligible.length === 0) return undefined;
     const score = (credential: CredentialSelectionView) => {
@@ -408,6 +467,150 @@ function canonicalJson(value: unknown): string {
   return JSON.stringify(value);
 }
 
+interface NormalizedModelVerificationEvidence {
+  readonly kind: ModelVerificationEvidenceKind;
+  readonly source: string;
+  readonly sourceVersion: string;
+  readonly claimJson: string;
+  readonly claimDigest: string;
+  readonly observedAt: Date;
+  readonly subscriptionAccountId?: string;
+}
+
+const CODEX_VERIFICATION_EVIDENCE_KINDS = new Set<ModelVerificationEvidenceKind>([
+  "runtime-availability",
+  "provider-capability-contract",
+  "runtime-capability-contract",
+]);
+
+function safeEvidenceValue(value: unknown, depth = 0): void {
+  if (depth > 8) throw new Error("Model verification evidence claim 깊이 상한을 초과했습니다");
+  if (value === null || typeof value === "boolean") return;
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) throw new Error("Model verification evidence 숫자가 유효하지 않습니다");
+    return;
+  }
+  if (typeof value === "string") {
+    if (value.length > 4_096 || /[\0\r]/u.test(value)) {
+      throw new Error("Model verification evidence 문자열이 유효하지 않습니다");
+    }
+    return;
+  }
+  if (Array.isArray(value)) {
+    if (value.length > 128) throw new Error("Model verification evidence 배열 상한을 초과했습니다");
+    for (const child of value) safeEvidenceValue(child, depth + 1);
+    return;
+  }
+  if (!value || typeof value !== "object") {
+    throw new Error("Model verification evidence claim 값이 유효하지 않습니다");
+  }
+  const entries = Object.entries(value as Record<string, unknown>);
+  if (entries.length > 128) throw new Error("Model verification evidence 필드 상한을 초과했습니다");
+  for (const [key, child] of entries) {
+    if (!key || key.length > 128 || /[\0\r\n]/u.test(key)) {
+      throw new Error("Model verification evidence 필드 이름이 유효하지 않습니다");
+    }
+    safeEvidenceValue(child, depth + 1);
+  }
+}
+
+function requireEvidenceText(value: string, label: string, maximumLength: number): string {
+  const normalized = value.trim();
+  if (!normalized || normalized.length > maximumLength || /[\0\r\n]/u.test(normalized)) {
+    throw new Error(`${label}이(가) 유효하지 않습니다`);
+  }
+  return normalized;
+}
+
+function normalizedEvidence(input: RegisterModelInput): readonly NormalizedModelVerificationEvidence[] {
+  const raw = input.verificationEvidence ?? [];
+  if (!input.verified && raw.length > 0) {
+    throw new Error("검증되지 않은 Model Profile에는 verification evidence를 연결할 수 없습니다");
+  }
+  if (input.providerId === "openai-codex" && input.verified) {
+    const kinds = new Set(raw.map((evidence) => evidence.kind));
+    if (
+      raw.length !== CODEX_VERIFICATION_EVIDENCE_KINDS.size ||
+      kinds.size !== CODEX_VERIFICATION_EVIDENCE_KINDS.size ||
+      [...CODEX_VERIFICATION_EVIDENCE_KINDS].some((kind) => !kinds.has(kind))
+    ) {
+      throw new Error("Codex 검증 Model Profile에는 독립된 availability·provider·runtime 근거가 필요합니다");
+    }
+  }
+  const normalized = raw.map((evidence) => {
+    if (!CODEX_VERIFICATION_EVIDENCE_KINDS.has(evidence.kind)) {
+      throw new Error("Model verification evidence 종류가 유효하지 않습니다");
+    }
+    const source = requireEvidenceText(evidence.source, "Model verification evidence 출처", 2_048);
+    const sourceVersion = requireEvidenceText(evidence.sourceVersion, "Model verification evidence 출처 버전", 256);
+    const subscriptionAccountId =
+      evidence.subscriptionAccountId === undefined
+        ? undefined
+        : requireEvidenceText(evidence.subscriptionAccountId, "Model verification evidence 구독 계정", 256);
+    const observedAt = new Date(evidence.observedAt);
+    if (!Number.isFinite(observedAt.getTime())) {
+      throw new Error("Model verification evidence 관측 시각이 유효하지 않습니다");
+    }
+    safeEvidenceValue(evidence.claim);
+    const claimJson = canonicalJson(evidence.claim);
+    if (Buffer.byteLength(claimJson, "utf8") > 65_536) {
+      throw new Error("Model verification evidence claim 크기 상한을 초과했습니다");
+    }
+    return {
+      kind: evidence.kind,
+      source,
+      sourceVersion,
+      claimJson,
+      claimDigest: createHash("sha256").update(claimJson).digest("hex"),
+      observedAt,
+      ...(subscriptionAccountId === undefined ? {} : { subscriptionAccountId }),
+    };
+  });
+  if (new Set(normalized.map((evidence) => evidence.source)).size !== normalized.length) {
+    throw new Error("Model verification evidence는 서로 독립된 출처여야 합니다");
+  }
+  if (input.providerId === "openai-codex" && input.verified) {
+    const byKind = new Map(normalized.map((evidence) => [evidence.kind, evidence]));
+    const availability = byKind.get("runtime-availability");
+    const provider = byKind.get("provider-capability-contract");
+    const runtime = byKind.get("runtime-capability-contract");
+    const availabilityClaim = JSON.parse(availability?.claimJson ?? "null") as Record<string, unknown> | null;
+    const providerClaim = JSON.parse(provider?.claimJson ?? "null") as Record<string, unknown> | null;
+    const runtimeClaim = JSON.parse(runtime?.claimJson ?? "null") as Record<string, unknown> | null;
+    if (
+      availability?.source !== "codex-app-server:model/list" ||
+      availabilityClaim?.modelId !== input.modelId ||
+      availabilityClaim.actualAvailable !== true ||
+      !provider?.source.startsWith("https://developers.openai.com/api/docs/") ||
+      typeof providerClaim?.contextWindow !== "number" ||
+      providerClaim.contextWindow < input.contextWindow ||
+      (input.supportsTools && providerClaim.tools !== true) ||
+      (input.supportsStructuredOutput && providerClaim.structuredOutput !== true) ||
+      (input.supportsVision && providerClaim.vision !== true) ||
+      (input.supportsStreaming && providerClaim.streaming !== true) ||
+      runtime?.source !== "massion:bundled-codex-runtime-attestation" ||
+      runtimeClaim?.agentRuntime !== true ||
+      typeof runtimeClaim.runtimeArtifactDigest !== "string" ||
+      !/^[a-f0-9]{64}$/u.test(runtimeClaim.runtimeArtifactDigest) ||
+      runtimeClaim.contextWindow !== input.contextWindow ||
+      runtimeClaim.tools !== input.supportsTools ||
+      runtimeClaim.structuredOutput !== input.supportsStructuredOutput ||
+      runtimeClaim.vision !== input.supportsVision ||
+      runtimeClaim.streaming !== input.supportsStreaming
+    ) {
+      throw new Error("Codex Model verification evidence claim이 profile 계약과 일치하지 않습니다");
+    }
+    if (
+      !availability.subscriptionAccountId ||
+      runtime.subscriptionAccountId !== availability.subscriptionAccountId ||
+      provider.subscriptionAccountId !== undefined
+    ) {
+      throw new Error("Codex Model verification evidence의 구독 계정 계보가 일치하지 않습니다");
+    }
+  }
+  return normalized;
+}
+
 export class ModelRouter {
   private constructor(
     private readonly database: MassionDatabase,
@@ -428,8 +631,12 @@ export class ModelRouter {
       ROUTER_HEALTH_MIGRATION,
       MODEL_PRICING_MIGRATION,
       ROUTER_SUBSCRIPTION_MATERIAL_MIGRATION,
+      ROUTER_SUBSCRIPTION_ENDPOINT_MIGRATION,
       ROUTE_ATTEMPT_LINEAGE_MIGRATION,
       ROUTE_ATTEMPT_SUBSCRIPTION_POLICY_MIGRATION,
+      ROUTE_ATTEMPT_SIDE_EFFECT_MIGRATION,
+      ROUTER_SUBSCRIPTION_REAUTH_MIGRATION,
+      MODEL_VERIFICATION_EVIDENCE_MIGRATION,
     ]);
     return new ModelRouter(database, organizations, providers, subscriptions);
   }
@@ -437,7 +644,11 @@ export class ModelRouter {
   public async registerModel(
     context: TenantContext,
     input: RegisterModelInput,
-  ): Promise<{ profile: ModelProfile; audit: RouterAuditEvent }> {
+  ): Promise<{
+    profile: ModelProfile;
+    evidence: readonly ModelVerificationEvidence[];
+    audit: RouterAuditEvent;
+  }> {
     if (
       input.contextWindow < 1 ||
       input.evalScore < 0 ||
@@ -446,6 +657,7 @@ export class ModelRouter {
       input.outputCostMicrosPerMillion < 0
     )
       throw new Error("Model Profile 수치가 유효하지 않습니다");
+    const evidence = normalizedEvidence(input);
     return await this.command(
       context,
       input.commandId,
@@ -476,8 +688,64 @@ export class ModelRouter {
             verified: input.verified,
           },
         );
-        if (!profiles[0]) throw new Error("Model Profile 생성 결과가 없습니다");
-        return { profile: profiles[0] };
+        const profile = profiles[0];
+        if (!profile) throw new Error("Model Profile 생성 결과가 없습니다");
+        const recorded = await this.createModelEvidence(tx, context, profile, evidence);
+        return { profile, evidence: recorded };
+      },
+    );
+  }
+
+  public async listModelEvidence(
+    context: TenantContext,
+    modelProfileId: string,
+  ): Promise<readonly ModelVerificationEvidence[]> {
+    await this.organizations.verifyTenantContext(context);
+    const profileId = modelProfileId.trim();
+    if (!profileId || profileId.length > 256) throw new Error("Model Profile ID가 유효하지 않습니다");
+    await this.profile(this.database, context.organizationId, profileId);
+    const [evidence] = await this.database.query<[ModelVerificationEvidence[]]>(
+      `SELECT * OMIT id FROM model_verification_evidence
+       WHERE organization_id = $organization_id AND model_profile_id = $model_profile_id
+       ORDER BY evidence_kind ASC, observed_at ASC, evidence_id ASC;`,
+      { organization_id: context.organizationId, model_profile_id: profileId },
+    );
+    return evidence;
+  }
+
+  public async recordModelEvidence(
+    context: TenantContext,
+    input: RecordModelVerificationEvidenceInput,
+  ): Promise<{ evidence: readonly ModelVerificationEvidence[]; audit: RouterAuditEvent }> {
+    return await this.command(
+      context,
+      input.commandId,
+      "model_verification_evidence_recorded",
+      canonicalJson(input),
+      async (tx) => {
+        const profile = await this.profile(tx, context.organizationId, input.modelProfileId);
+        if (!profile.verified || !profile.enabled) {
+          throw new Error("검증된 활성 Model Profile에만 추가 evidence를 기록할 수 있습니다");
+        }
+        const evidence = normalizedEvidence({
+          commandId: input.commandId,
+          providerId: profile.provider_id,
+          endpointId: profile.endpoint_id,
+          modelId: profile.model_id,
+          routeKind: profile.route_kind,
+          contextWindow: profile.context_window,
+          supportsTools: profile.supports_tools,
+          supportsStructuredOutput: profile.supports_structured_output,
+          supportsVision: profile.supports_vision,
+          supportsStreaming: profile.supports_streaming,
+          equivalenceGroup: profile.equivalence_group,
+          evalScore: profile.eval_score,
+          inputCostMicrosPerMillion: profile.input_cost_micros_per_million,
+          outputCostMicrosPerMillion: profile.output_cost_micros_per_million,
+          verified: true,
+          verificationEvidence: input.verificationEvidence,
+        });
+        return { evidence: await this.createModelEvidence(tx, context, profile, evidence) };
       },
     );
   }
@@ -533,6 +801,43 @@ export class ModelRouter {
     return routes;
   }
 
+  public async resolveSubscriptionModelEndpoint(
+    context: TenantContext,
+    accountId: string,
+    providerId: string,
+  ): Promise<string> {
+    await this.organizations.verifyTenantContext(context);
+    if (!this.subscriptions) throw new Error("구독 Model endpoint 조회 서비스가 구성되지 않았습니다");
+    const account = (await this.subscriptions.accounts.requireRoutingAccess(context, accountId, this.database)).account;
+    if (account.provider_id !== providerId) throw new Error("구독 계정 Provider 계보가 일치하지 않습니다");
+    const [credentials] = await this.database.query<[Array<{ readonly endpoint_id: string }>]>(
+      `SELECT endpoint_id FROM provider_credential
+       WHERE organization_id = $organization_id AND provider_id = $provider_id
+         AND subscription_account_id = $account_id AND subscription_connector_id = $connector_id
+         AND material_kind = 'connector_session' AND status = 'active';`,
+      {
+        organization_id: context.organizationId,
+        provider_id: providerId,
+        account_id: account.account_id,
+        connector_id: account.connector_id,
+      },
+    );
+    if (credentials.length !== 1 || !credentials[0]?.endpoint_id) {
+      throw new Error("구독 계정의 Model endpoint 계보가 하나로 확정되지 않았습니다");
+    }
+    return credentials[0].endpoint_id;
+  }
+
+  public async readAttempt(context: TenantContext, attemptId: string): Promise<RouteAttempt> {
+    await this.organizations.verifyTenantContext(context);
+    const normalizedAttemptId = attemptId.trim();
+    if (!normalizedAttemptId || normalizedAttemptId.length > 256)
+      throw new Error("Route Attempt ID가 유효하지 않습니다");
+    const attempt = await this.attempt(this.database, context.organizationId, normalizedAttemptId);
+    await this.requireAttemptActor(this.database, context, attempt);
+    return attempt;
+  }
+
   public async addCandidate(
     context: TenantContext,
     input: AddCandidateInput,
@@ -576,7 +881,13 @@ export class ModelRouter {
 
   public async simulate(context: TenantContext, request: RouteRequest): Promise<RouteSimulation> {
     await this.organizations.verifyTenantContext(context);
-    return await this.select(this.database, context, request);
+    const excludedCredentialIds = request.fallbackFromAttemptId
+      ? await this.fallbackCredentialIds(this.database, context, {
+          ...request,
+          fallbackFromAttemptId: request.fallbackFromAttemptId,
+        })
+      : undefined;
+    return await this.select(this.database, context, request, excludedCredentialIds);
   }
 
   public async diagnose(context: TenantContext, requests: readonly RouteRequest[]): Promise<RouterDiagnostic> {
@@ -620,14 +931,17 @@ export class ModelRouter {
         "SELECT * OMIT id FROM route_attempt WHERE organization_id = $organization_id AND command_id = $command_id LIMIT 1;",
         { organization_id: context.organizationId, command_id: input.commandId },
       );
-      if (repeated[0]) return await this.reservationFromAttempt(tx, context, repeated[0], requestJson);
-      let excludedCredentialId: string | undefined;
-      if (input.fallbackFromAttemptId) {
-        const previous = await this.attempt(tx, context.organizationId, input.fallbackFromAttemptId);
-        if (!previous.fallback_allowed) throw new Error("이전 Attempt는 fallback이 허용되지 않습니다");
-        excludedCredentialId = previous.credential_id;
+      if (repeated[0]) {
+        await this.requireCommandActor(tx, context, input.commandId);
+        return await this.reservationFromAttempt(tx, context, repeated[0], requestJson);
       }
-      const simulation = await this.select(tx, context, input, excludedCredentialId);
+      const excludedCredentialIds = input.fallbackFromAttemptId
+        ? await this.fallbackCredentialIds(tx, context, {
+            ...input,
+            fallbackFromAttemptId: input.fallbackFromAttemptId,
+          })
+        : undefined;
+      const simulation = await this.select(tx, context, input, excludedCredentialIds);
       if (
         simulation.status !== "selected" ||
         !simulation.candidate ||
@@ -643,7 +957,7 @@ export class ModelRouter {
         throw new Error("Route 총 예산을 초과했습니다");
       const sequence = route.selection_sequence + 1;
       await tx.query(
-        "UPDATE model_route SET selection_sequence = $sequence, spent_micros += $cost, updated_at = time::now() WHERE organization_id = $organization_id AND route_id = $route_id; UPDATE provider_credential SET status = 'active', cooldown_until = NONE, request_count += 1, cost_micros += $cost, last_selected_sequence = $sequence, quota_remaining = IF quota_remaining != NONE { math::max([0, quota_remaining - 1]) } ELSE { NONE }, updated_at = time::now() WHERE organization_id = $organization_id AND credential_id = $credential_id;",
+        "UPDATE model_route SET selection_sequence = $sequence, spent_micros += $cost, updated_at = time::now() WHERE organization_id = $organization_id AND route_id = $route_id; UPDATE provider_credential SET status = 'active', reauth_required = false, cooldown_until = NONE, request_count += 1, cost_micros += $cost, last_selected_sequence = $sequence, quota_remaining = IF quota_remaining != NONE { math::max([0, quota_remaining - 1]) } ELSE { NONE }, updated_at = time::now() WHERE organization_id = $organization_id AND credential_id = $credential_id;",
         {
           sequence,
           cost: input.estimatedCostMicros,
@@ -745,91 +1059,149 @@ export class ModelRouter {
       input.actualCostMicros < 0
     )
       throw new Error("Attempt 사용량은 음수일 수 없습니다");
-    return await this.command(context, input.commandId, "route_attempt_failed", canonicalJson(input), async (tx) => {
-      const current = await this.attempt(tx, context.organizationId, input.attemptId);
-      if (current.status !== "reserved") throw new Error("reserved 상태의 Attempt만 실패 처리할 수 있습니다");
-      const classified = classifyFailure(input.signal);
-      const fallbackAllowed = classified.fallbackEligible && input.emittedTokens === 0;
-      const status = input.emittedTokens > 0 ? "interrupted" : "failed";
-      const costDelta = input.actualCostMicros - current.reserved_cost_micros;
-      const credential = await this.credential(tx, context.organizationId, current.credential_id);
-      const quotaResetMillis = serializedMillis(credential.quota_reset_at);
-      const retryAt = classified.retryAt
-        ? new Date(classified.retryAt)
-        : classified.failureClass === "quota"
-          ? new Date(quotaResetMillis > Date.now() ? quotaResetMillis : Date.now() + 60_000)
-          : undefined;
-      await tx.query(
-        "UPDATE model_route SET spent_micros = math::max([0, spent_micros + $cost_delta]), updated_at = time::now() WHERE organization_id = $organization_id AND route_id = $route_id; UPDATE provider_credential SET status = IF $disable { 'disabled' } ELSE IF $cooldown { 'cooldown' } ELSE { status }, version = IF $disable OR $cooldown { version + 1 } ELSE { version }, cooldown_until = IF $cooldown { $retry_at } ELSE { cooldown_until }, input_tokens += $input_tokens, output_tokens += $output_tokens, cost_micros = math::max([0, cost_micros + $cost_delta]), updated_at = time::now() WHERE organization_id = $organization_id AND credential_id = $credential_id;",
-        {
-          organization_id: context.organizationId,
-          route_id: current.route_id,
-          credential_id: current.credential_id,
-          disable: classified.failureClass === "authentication" || classified.failureClass === "billing",
-          cooldown: classified.failureClass === "quota",
-          retry_at: retryAt,
-          input_tokens: input.actualInputTokens,
-          output_tokens: input.actualOutputTokens,
-          cost_delta: costDelta,
-        },
-      );
-      if (["upstream", "timeout", "network"].includes(classified.failureClass)) {
-        const profile = await this.profile(tx, context.organizationId, current.model_profile_id);
-        await this.recordCircuitFailure(
-          tx,
-          context.organizationId,
-          "credential",
-          current.credential_id,
-          classified.failureClass,
+    if (typeof input.sideEffectsStarted !== "boolean") throw new Error("Attempt 부작용 시작 여부가 유효하지 않습니다");
+    return await this.command(
+      context,
+      input.commandId,
+      "route_attempt_failed",
+      canonicalJson(input),
+      async (tx) => {
+        const current = await this.attempt(tx, context.organizationId, input.attemptId);
+        await this.requireAttemptActor(tx, context, current);
+        if (current.status !== "reserved") throw new Error("reserved 상태의 Attempt만 실패 처리할 수 있습니다");
+        const classified = classifyFailure(input.signal);
+        const fallbackAllowed = classified.fallbackEligible && input.emittedTokens === 0 && !input.sideEffectsStarted;
+        const status = input.emittedTokens > 0 || input.sideEffectsStarted ? "interrupted" : "failed";
+        const costDelta = input.actualCostMicros - current.reserved_cost_micros;
+        const credential = await this.credential(tx, context.organizationId, current.credential_id);
+        const subscriptionAuthenticationFailure =
+          classified.failureClass === "authentication" &&
+          isSubscriptionCredential(credential) &&
+          credential.subscription_account_id !== undefined;
+        const quotaResetMillis = serializedMillis(credential.quota_reset_at);
+        const retryAt = classified.retryAt
+          ? new Date(classified.retryAt)
+          : classified.failureClass === "quota"
+            ? new Date(quotaResetMillis > Date.now() ? quotaResetMillis : Date.now() + 60_000)
+            : undefined;
+        await tx.query(
+          "UPDATE model_route SET spent_micros = math::max([0, spent_micros + $cost_delta]), updated_at = time::now() WHERE organization_id = $organization_id AND route_id = $route_id; UPDATE provider_credential SET status = IF $disable { 'disabled' } ELSE IF $cooldown { 'cooldown' } ELSE { status }, reauth_required = IF $reauth_required { true } ELSE { reauth_required }, version = IF $disable OR $cooldown { version + 1 } ELSE { version }, cooldown_until = IF $cooldown { $retry_at } ELSE { cooldown_until }, input_tokens += $input_tokens, output_tokens += $output_tokens, cost_micros = math::max([0, cost_micros + $cost_delta]), updated_at = time::now() WHERE organization_id = $organization_id AND credential_id = $credential_id;",
+          {
+            organization_id: context.organizationId,
+            route_id: current.route_id,
+            credential_id: current.credential_id,
+            disable: classified.failureClass === "authentication" || classified.failureClass === "billing",
+            reauth_required: subscriptionAuthenticationFailure,
+            cooldown: classified.failureClass === "quota",
+            retry_at: retryAt,
+            input_tokens: input.actualInputTokens,
+            output_tokens: input.actualOutputTokens,
+            cost_delta: costDelta,
+          },
         );
-        await this.recordCircuitFailure(
-          tx,
-          context.organizationId,
-          "endpoint",
-          profile.endpoint_id,
-          classified.failureClass,
+        if (subscriptionAuthenticationFailure) {
+          const accountId = credential.subscription_account_id;
+          const connectorId = credential.subscription_connector_id;
+          if (!accountId || !connectorId) throw new Error("구독 인증 실패 계보가 불완전합니다");
+          const [updatedAccounts] = await tx.query<[Array<{ account_id: string }>]>(
+            `UPDATE subscription_account
+           SET status = 'needs-reauth', version += IF status = 'needs-reauth' { 0 } ELSE { 1 }, updated_at = time::now()
+           WHERE organization_id = $organization_id AND account_id = $account_id
+             AND provider_id = $provider_id AND connector_id = $connector_id AND status != 'revoked'
+           RETURN AFTER;`,
+            {
+              organization_id: context.organizationId,
+              account_id: accountId,
+              provider_id: credential.provider_id,
+              connector_id: connectorId,
+            },
+          );
+          if (updatedAccounts.length !== 1) throw new Error("구독 계정 재인증 상태 전이가 충돌했습니다");
+        }
+        if (
+          classified.failureClass === "quota" &&
+          this.subscriptions &&
+          isSubscriptionCredential(credential) &&
+          credential.subscription_account_id
+        ) {
+          await this.subscriptions.quota.recordRateLimitForRouting(
+            context,
+            {
+              commandId: `${input.commandId}:subscription-quota`,
+              accountId: credential.subscription_account_id,
+              observedAt: new Date().toISOString(),
+              ...(retryAt === undefined ? {} : { resetsAt: retryAt.toISOString() }),
+              source: "router-http-429",
+            },
+            tx,
+          );
+        }
+        if (["upstream", "timeout", "network"].includes(classified.failureClass)) {
+          const profile = await this.profile(tx, context.organizationId, current.model_profile_id);
+          await this.recordCircuitFailure(
+            tx,
+            context.organizationId,
+            "credential",
+            current.credential_id,
+            classified.failureClass,
+          );
+          await this.recordCircuitFailure(
+            tx,
+            context.organizationId,
+            "endpoint",
+            profile.endpoint_id,
+            classified.failureClass,
+          );
+          await this.recordCircuitFailure(
+            tx,
+            context.organizationId,
+            "model",
+            profile.model_profile_id,
+            classified.failureClass,
+          );
+        }
+        const [attempts] = await tx.query<[RouteAttempt[]]>(
+          "UPDATE route_attempt SET status = $status, failure_class = $failure_class, status_code = $status_code, emitted_tokens = $emitted_tokens, side_effects_started = $side_effects_started, actual_input_tokens = $input_tokens, actual_output_tokens = $output_tokens, actual_cost_micros = $actual_cost, fallback_allowed = $fallback_allowed, retry_at = $retry_at, updated_at = time::now() WHERE organization_id = $organization_id AND attempt_id = $attempt_id RETURN AFTER;",
+          {
+            organization_id: context.organizationId,
+            attempt_id: current.attempt_id,
+            status,
+            failure_class: classified.failureClass,
+            status_code: input.signal.statusCode,
+            emitted_tokens: input.emittedTokens,
+            side_effects_started: input.sideEffectsStarted,
+            input_tokens: input.actualInputTokens,
+            output_tokens: input.actualOutputTokens,
+            actual_cost: input.actualCostMicros,
+            fallback_allowed: fallbackAllowed,
+            retry_at: retryAt,
+          },
         );
-        await this.recordCircuitFailure(
-          tx,
-          context.organizationId,
-          "model",
-          profile.model_profile_id,
-          classified.failureClass,
-        );
-      }
-      const [attempts] = await tx.query<[RouteAttempt[]]>(
-        "UPDATE route_attempt SET status = $status, failure_class = $failure_class, status_code = $status_code, emitted_tokens = $emitted_tokens, actual_input_tokens = $input_tokens, actual_output_tokens = $output_tokens, actual_cost_micros = $actual_cost, fallback_allowed = $fallback_allowed, retry_at = $retry_at, updated_at = time::now() WHERE organization_id = $organization_id AND attempt_id = $attempt_id RETURN AFTER;",
-        {
-          organization_id: context.organizationId,
-          attempt_id: current.attempt_id,
-          status,
-          failure_class: classified.failureClass,
-          status_code: input.signal.statusCode,
-          emitted_tokens: input.emittedTokens,
-          input_tokens: input.actualInputTokens,
-          output_tokens: input.actualOutputTokens,
-          actual_cost: input.actualCostMicros,
-          fallback_allowed: fallbackAllowed,
-          retry_at: retryAt,
-        },
-      );
-      const attempt = attempts[0];
-      if (!attempt) throw new Error("Route Attempt 실패 처리 결과가 없습니다");
-      if (!fallbackAllowed) return { attempt };
-      const route = await this.routeById(tx, context.organizationId, current.route_id);
-      const next = await this.select(
-        tx,
-        context,
-        {
+        const attempt = attempts[0];
+        if (!attempt) throw new Error("Route Attempt 실패 처리 결과가 없습니다");
+        if (!fallbackAllowed) return { attempt };
+        const route = await this.routeById(tx, context.organizationId, current.route_id);
+        const excludedCredentialIds = await this.fallbackCredentialIds(tx, context, {
           routeName: route.name,
           estimatedTokens: current.estimated_tokens,
           estimatedCostMicros: current.reserved_cost_micros,
           fallbackFromAttemptId: current.attempt_id,
-        },
-        current.credential_id,
-      );
-      return { attempt, next };
-    });
+        });
+        const next = await this.select(
+          tx,
+          context,
+          {
+            routeName: route.name,
+            estimatedTokens: current.estimated_tokens,
+            estimatedCostMicros: current.reserved_cost_micros,
+            fallbackFromAttemptId: current.attempt_id,
+          },
+          excludedCredentialIds,
+        );
+        return { attempt, next };
+      },
+      { roles: ["owner", "admin", "member"] },
+    );
   }
 
   public async reportSuccess(
@@ -838,45 +1210,53 @@ export class ModelRouter {
   ): Promise<{ attempt: RouteAttempt; audit: RouterAuditEvent }> {
     if (input.actualInputTokens < 0 || input.actualOutputTokens < 0 || input.actualCostMicros < 0)
       throw new Error("Attempt 사용량은 음수일 수 없습니다");
-    return await this.command(context, input.commandId, "route_attempt_succeeded", canonicalJson(input), async (tx) => {
-      const current = await this.attempt(tx, context.organizationId, input.attemptId);
-      if (current.status !== "reserved") throw new Error("reserved 상태의 Attempt만 성공 처리할 수 있습니다");
-      const costDelta = input.actualCostMicros - current.reserved_cost_micros;
-      await tx.query(
-        "UPDATE model_route SET spent_micros = math::max([0, spent_micros + $cost_delta]), updated_at = time::now() WHERE organization_id = $organization_id AND route_id = $route_id; UPDATE provider_credential SET input_tokens += $input_tokens, output_tokens += $output_tokens, cost_micros = math::max([0, cost_micros + $cost_delta]), updated_at = time::now() WHERE organization_id = $organization_id AND credential_id = $credential_id;",
-        {
-          organization_id: context.organizationId,
-          route_id: current.route_id,
-          credential_id: current.credential_id,
-          input_tokens: input.actualInputTokens,
-          output_tokens: input.actualOutputTokens,
-          cost_delta: costDelta,
-        },
-      );
-      const profile = await this.profile(tx, context.organizationId, current.model_profile_id);
-      await this.recordCircuitSuccess(tx, context.organizationId, "credential", current.credential_id);
-      await this.recordCircuitSuccess(tx, context.organizationId, "endpoint", profile.endpoint_id);
-      await this.recordCircuitSuccess(tx, context.organizationId, "model", profile.model_profile_id);
-      const [attempts] = await tx.query<[RouteAttempt[]]>(
-        "UPDATE route_attempt SET status = 'succeeded', emitted_tokens = $output_tokens, actual_input_tokens = $input_tokens, actual_output_tokens = $output_tokens, actual_cost_micros = $actual_cost, fallback_allowed = false, updated_at = time::now() WHERE organization_id = $organization_id AND attempt_id = $attempt_id RETURN AFTER;",
-        {
-          organization_id: context.organizationId,
-          attempt_id: current.attempt_id,
-          input_tokens: input.actualInputTokens,
-          output_tokens: input.actualOutputTokens,
-          actual_cost: input.actualCostMicros,
-        },
-      );
-      if (!attempts[0]) throw new Error("Route Attempt 성공 처리 결과가 없습니다");
-      return { attempt: attempts[0] };
-    });
+    return await this.command(
+      context,
+      input.commandId,
+      "route_attempt_succeeded",
+      canonicalJson(input),
+      async (tx) => {
+        const current = await this.attempt(tx, context.organizationId, input.attemptId);
+        await this.requireAttemptActor(tx, context, current);
+        if (current.status !== "reserved") throw new Error("reserved 상태의 Attempt만 성공 처리할 수 있습니다");
+        const costDelta = input.actualCostMicros - current.reserved_cost_micros;
+        await tx.query(
+          "UPDATE model_route SET spent_micros = math::max([0, spent_micros + $cost_delta]), updated_at = time::now() WHERE organization_id = $organization_id AND route_id = $route_id; UPDATE provider_credential SET input_tokens += $input_tokens, output_tokens += $output_tokens, cost_micros = math::max([0, cost_micros + $cost_delta]), updated_at = time::now() WHERE organization_id = $organization_id AND credential_id = $credential_id;",
+          {
+            organization_id: context.organizationId,
+            route_id: current.route_id,
+            credential_id: current.credential_id,
+            input_tokens: input.actualInputTokens,
+            output_tokens: input.actualOutputTokens,
+            cost_delta: costDelta,
+          },
+        );
+        const profile = await this.profile(tx, context.organizationId, current.model_profile_id);
+        await this.recordCircuitSuccess(tx, context.organizationId, "credential", current.credential_id);
+        await this.recordCircuitSuccess(tx, context.organizationId, "endpoint", profile.endpoint_id);
+        await this.recordCircuitSuccess(tx, context.organizationId, "model", profile.model_profile_id);
+        const [attempts] = await tx.query<[RouteAttempt[]]>(
+          "UPDATE route_attempt SET status = 'succeeded', emitted_tokens = $output_tokens, actual_input_tokens = $input_tokens, actual_output_tokens = $output_tokens, actual_cost_micros = $actual_cost, fallback_allowed = false, updated_at = time::now() WHERE organization_id = $organization_id AND attempt_id = $attempt_id RETURN AFTER;",
+          {
+            organization_id: context.organizationId,
+            attempt_id: current.attempt_id,
+            input_tokens: input.actualInputTokens,
+            output_tokens: input.actualOutputTokens,
+            actual_cost: input.actualCostMicros,
+          },
+        );
+        if (!attempts[0]) throw new Error("Route Attempt 성공 처리 결과가 없습니다");
+        return { attempt: attempts[0] };
+      },
+      { roles: ["owner", "admin", "member"] },
+    );
   }
 
   private async select(
     executor: QueryExecutor,
     context: TenantContext,
     request: RouteRequest,
-    excludedCredentialId?: string,
+    excludedCredentialIds?: ReadonlySet<string>,
   ): Promise<RouteSimulation> {
     const route = await this.routeByName(executor, context.organizationId, request.routeName);
     const budgetFailures: string[] = [];
@@ -923,10 +1303,16 @@ export class ModelRouter {
         "SELECT * OMIT id FROM provider_credential WHERE organization_id = $organization_id AND provider_id = $provider_id AND endpoint_id = $endpoint_id;",
         { organization_id: context.organizationId, provider_id: profile.provider_id, endpoint_id: profile.endpoint_id },
       );
+      const subscriptionPolicy = await this.subscriptions?.policies?.resolve(context, profile.provider_id, executor);
+      const configuredSubscriptionPolicy = subscriptionPolicy?.source === "configured" ? subscriptionPolicy : undefined;
+      const effectiveCredentialPolicy = configuredSubscriptionPolicy?.credentialPolicy ?? route.credential_policy;
+      const subscriptionManifest = listSubscriptionProviderManifests().find(
+        (manifest) => manifest.id === profile.provider_id,
+      );
       const now = Date.now();
       const eligible: CredentialSelectionView[] = [];
       for (const credential of credentials) {
-        if (credential.credential_id === excludedCredentialId) {
+        if (excludedCredentialIds?.has(credential.credential_id)) {
           excluded.push(`${profile.model_id}/${credential.label}: 이전 실패 Credential 제외`);
           continue;
         }
@@ -943,7 +1329,8 @@ export class ModelRouter {
           continue;
         }
         let selectionCredential: CredentialSelectionView = credential;
-        if (credential.material_kind === "connector_session") {
+        let recoveredReauthentication = false;
+        if (isSubscriptionCredential(credential)) {
           const accountId = credential.subscription_account_id;
           const connectorId = credential.subscription_connector_id;
           const scope = credential.subscription_scope;
@@ -952,18 +1339,58 @@ export class ModelRouter {
             continue;
           }
           try {
-            const account = await this.subscriptions.accounts.requireUsable(context, accountId, scope, executor);
+            const access = await this.subscriptions.accounts.requireRoutingAccess(context, accountId, executor);
+            const account = access.account;
+            if (account.provider_id !== credential.provider_id) throw new Error("Provider binding 불일치");
             if (account.connector_id !== connectorId) throw new Error("Connector binding 불일치");
+            if (subscriptionManifest && subscriptionPolicy) {
+              const [connectors] = await executor.query<[Array<{ readonly location: ConnectorLocation }>]>(
+                `SELECT location FROM subscription_connector
+                 WHERE organization_id = $organization_id AND connector_id = $connector_id LIMIT 1;`,
+                { organization_id: context.organizationId, connector_id: connectorId },
+              );
+              const connector = connectors[0];
+              if (!connector) throw new Error("Connector 연결 표면을 찾을 수 없습니다");
+              const supportedApprovalModes = subscriptionProviderApprovalModes(
+                subscriptionManifest,
+                connector.location,
+              );
+              if (supportedApprovalModes && !supportedApprovalModes.includes(subscriptionPolicy.approvalMode)) {
+                const surfaceLabel = connector.location === "edge" ? "Edge" : "서버";
+                excluded.push(
+                  `${profile.model_id}/${credential.label}: ${surfaceLabel} 연결 표면은 ${subscriptionPolicy.approvalMode} 승인을 지원하지 않음`,
+                );
+                continue;
+              }
+            }
+            if (
+              profile.provider_id === "openai-codex" &&
+              !(await this.hasCodexAccountModelEvidence(
+                executor,
+                context.organizationId,
+                profile.model_profile_id,
+                accountId,
+              ))
+            ) {
+              throw new Error("이 Codex 계정에서 선택 model의 가용성이 검증되지 않았습니다");
+            }
             const current = await this.subscriptions.quota.currentForRouting(context, accountId, executor);
             selectionCredential = current
               ? { ...credential, quota_windows: current.windows, quota_snapshot_id: current.snapshotId }
               : credential;
+            recoveredReauthentication =
+              credential.status === "disabled" &&
+              (credential as ProviderCredential & { readonly reauth_required?: boolean }).reauth_required === true;
+            const now = Date.now();
             const freshExhausted =
               current?.windows.some((window) => {
                 const observedAt = new Date(window.observedAt).getTime();
+                const resetsAt = window.resetsAt === undefined ? undefined : new Date(window.resetsAt).getTime();
+                const resetIsActive = resetsAt === undefined || !Number.isFinite(resetsAt) || resetsAt > now;
                 return (
                   Number.isFinite(observedAt) &&
-                  Math.abs(Date.now() - observedAt) <= 5 * 60 * 1_000 &&
+                  Math.abs(now - observedAt) <= 5 * 60 * 1_000 &&
+                  resetIsActive &&
                   (window.remaining === 0 || window.remainingRatio === 0)
                 );
               }) ?? false;
@@ -978,7 +1405,7 @@ export class ModelRouter {
             continue;
           }
         }
-        if (credential.status === "active" && credential.quota_remaining !== 0) {
+        if ((credential.status === "active" || recoveredReauthentication) && credential.quota_remaining !== 0) {
           eligible.push(selectionCredential);
           continue;
         }
@@ -992,9 +1419,6 @@ export class ModelRouter {
         }
         excluded.push(`${profile.model_id}/${credential.label}: ${credential.status}`);
       }
-      const subscriptionPolicy = await this.subscriptions?.policies?.resolve(context, profile.provider_id, executor);
-      const configuredSubscriptionPolicy = subscriptionPolicy?.source === "configured" ? subscriptionPolicy : undefined;
-      const effectiveCredentialPolicy = configuredSubscriptionPolicy?.credentialPolicy ?? route.credential_policy;
       const selected = selectCredential(effectiveCredentialPolicy, eligible, request.stickyKey);
       if (selected) {
         const credential = credentials.find((item) => item.credential_id === selected.credential_id);
@@ -1005,7 +1429,12 @@ export class ModelRouter {
           candidate,
           profile,
           endpoint,
-          credential: credential.status === "cooldown" ? { ...credential, status: "active" } : credential,
+          credential:
+            credential.status === "cooldown" ||
+            ((credential as ProviderCredential & { readonly reauth_required?: boolean }).reauth_required === true &&
+              credential.status === "disabled")
+              ? { ...credential, status: "active" }
+              : credential,
           ...(selected.quota_snapshot_id ? { quotaSnapshotId: selected.quota_snapshot_id } : {}),
           effectiveCredentialPolicy,
           ...(configuredSubscriptionPolicy?.policyVersionId
@@ -1049,6 +1478,36 @@ export class ModelRouter {
     if (route.require_streaming && !profile.supports_streaming) failures.push("streaming capability 없음");
     if (route.data_policy === "local-private" && !endpoint.local) failures.push("외부 endpoint 금지");
     return failures;
+  }
+
+  private async fallbackCredentialIds(
+    executor: QueryExecutor,
+    context: TenantContext,
+    request: RouteRequest & { readonly fallbackFromAttemptId: string },
+  ): Promise<ReadonlySet<string>> {
+    const route = await this.routeByName(executor, context.organizationId, request.routeName);
+    const attemptIds = new Set<string>();
+    const credentialIds = new Set<string>();
+    let attemptId: string | undefined = request.fallbackFromAttemptId;
+    let childSequence: number | undefined;
+    for (let depth = 0; attemptId !== undefined; depth += 1) {
+      if (depth >= 256) throw new Error("fallback Attempt 체인 상한을 초과했습니다");
+      if (attemptIds.has(attemptId)) throw new Error("fallback Attempt 체인에 순환이 있습니다");
+      attemptIds.add(attemptId);
+      const attempt = await this.attempt(executor, context.organizationId, attemptId);
+      await this.requireAttemptActor(executor, context, attempt);
+      if (attempt.route_id !== route.route_id) throw new Error("fallback Attempt의 Route가 요청 Route와 다릅니다");
+      if (attempt.status !== "failed" || !attempt.fallback_allowed) {
+        throw new Error("이전 Attempt는 fallback이 허용되지 않습니다");
+      }
+      if (childSequence !== undefined && attempt.selection_sequence >= childSequence) {
+        throw new Error("fallback Attempt 선택 순서가 유효하지 않습니다");
+      }
+      childSequence = attempt.selection_sequence;
+      credentialIds.add(attempt.credential_id);
+      attemptId = attempt.fallback_from_attempt_id;
+    }
+    return credentialIds;
   }
 
   private async reservationFromAttempt(
@@ -1098,21 +1557,128 @@ export class ModelRouter {
     };
   }
 
+  private async requireCommandActor(executor: QueryExecutor, context: TenantContext, commandId: string): Promise<void> {
+    const [events] = await executor.query<[RouterAuditEvent[]]>(
+      `SELECT * OMIT id FROM router_audit_event
+       WHERE organization_id = $organization_id AND command_id = $command_id LIMIT 1;`,
+      { organization_id: context.organizationId, command_id: commandId },
+    );
+    const event = events[0];
+    if (!event) throw new Error("Route Attempt 감사 계보를 찾을 수 없습니다");
+    if (event.actor_user_id !== context.userId) {
+      throw new Error("같은 commandId를 다른 사용자가 재사용할 수 없습니다");
+    }
+  }
+
+  private async requireAttemptActor(
+    executor: QueryExecutor,
+    context: TenantContext,
+    attempt: RouteAttempt,
+  ): Promise<void> {
+    try {
+      await this.requireCommandActor(executor, context, attempt.command_id);
+    } catch {
+      throw new Error("Route Attempt 예약 사용자만 fallback 또는 정산할 수 있습니다");
+    }
+  }
+
+  private async createModelEvidence(
+    executor: QueryExecutor,
+    context: TenantContext,
+    profile: ModelProfile,
+    evidence: readonly NormalizedModelVerificationEvidence[],
+  ): Promise<readonly ModelVerificationEvidence[]> {
+    const recorded: ModelVerificationEvidence[] = [];
+    const verifiedAccounts = new Set<string>();
+    for (const item of evidence) {
+      if (item.subscriptionAccountId && !verifiedAccounts.has(item.subscriptionAccountId)) {
+        const [accounts] = await executor.query<
+          [Array<{ readonly account_id: string; readonly provider_id: string; readonly status: string }>]
+        >(
+          `SELECT account_id, provider_id, status FROM subscription_account
+           WHERE organization_id = $organization_id AND account_id = $account_id
+             AND provider_id = $provider_id AND status = 'active' LIMIT 1;`,
+          {
+            organization_id: context.organizationId,
+            account_id: item.subscriptionAccountId,
+            provider_id: profile.provider_id,
+          },
+        );
+        const [credentials] = await executor.query<
+          [Array<{ readonly credential_id: string; readonly material_kind: string }>]
+        >(
+          `SELECT credential_id, material_kind FROM provider_credential
+           WHERE organization_id = $organization_id AND provider_id = $provider_id
+             AND endpoint_id = $endpoint_id AND subscription_account_id = $account_id
+             AND status = 'active';`,
+          {
+            organization_id: context.organizationId,
+            provider_id: profile.provider_id,
+            endpoint_id: profile.endpoint_id,
+            account_id: item.subscriptionAccountId,
+          },
+        );
+        const expectedMaterialKind = profile.provider_id === "openai-codex" ? "connector_session" : "encrypted_secret";
+        if (
+          accounts.length !== 1 ||
+          credentials.length !== 1 ||
+          credentials[0]?.material_kind !== expectedMaterialKind
+        ) {
+          throw new Error("Model verification evidence의 구독 계정·Credential·Endpoint 계보가 일치하지 않습니다");
+        }
+        verifiedAccounts.add(item.subscriptionAccountId);
+      }
+      const [rows] = await executor.query<[ModelVerificationEvidence[]]>(
+        `CREATE model_verification_evidence CONTENT {
+          evidence_id: $evidence_id, organization_id: $organization_id,
+          model_profile_id: $model_profile_id, model_id: $model_id,
+          subscription_account_id: $subscription_account_id,
+          evidence_kind: $evidence_kind, source: $source, source_version: $source_version,
+          claim_json: $claim_json, claim_digest: $claim_digest, observed_at: $observed_at,
+          created_by: $created_by, created_at: time::now()
+        } RETURN AFTER;`,
+        {
+          evidence_id: randomUUID(),
+          organization_id: context.organizationId,
+          model_profile_id: profile.model_profile_id,
+          model_id: profile.model_id,
+          subscription_account_id: item.subscriptionAccountId,
+          evidence_kind: item.kind,
+          source: item.source,
+          source_version: item.sourceVersion,
+          claim_json: item.claimJson,
+          claim_digest: item.claimDigest,
+          observed_at: item.observedAt,
+          created_by: context.userId,
+        },
+      );
+      const row = rows[0];
+      if (!row) throw new Error("Model verification evidence 생성 결과가 없습니다");
+      recorded.push(row);
+    }
+    return recorded;
+  }
+
   private async command<Payload extends object>(
     context: TenantContext,
     commandId: string,
     eventType: string,
     requestJson: string,
     operation: (executor: QueryExecutor) => Promise<Payload>,
+    options: { readonly roles?: readonly ("owner" | "admin" | "member")[] } = {},
   ): Promise<Payload & { audit: RouterAuditEvent }> {
-    await this.organizations.verifyTenantContext(context, ["owner", "admin"]);
+    const roles = options.roles ?? ["owner", "admin"];
+    await this.organizations.verifyTenantContext(context, roles);
     return await this.database.transaction(async (tx) => {
-      await this.organizations.verifyTenantContext(context, ["owner", "admin"], tx);
+      await this.organizations.verifyTenantContext(context, roles, tx);
       const [existing] = await tx.query<[RouterAuditEvent[]]>(
         "SELECT * OMIT id FROM router_audit_event WHERE organization_id = $organization_id AND command_id = $command_id LIMIT 1;",
         { organization_id: context.organizationId, command_id: commandId },
       );
       if (existing[0]) {
+        if (existing[0].actor_user_id !== context.userId) {
+          throw new Error("같은 commandId를 다른 사용자가 재사용할 수 없습니다");
+        }
         if (existing[0].request_json !== requestJson)
           throw new Error("같은 commandId에 다른 명령을 사용할 수 없습니다");
         return JSON.parse(existing[0].result_json) as Payload & { audit: RouterAuditEvent };
@@ -1165,6 +1731,27 @@ export class ModelRouter {
     );
     if (!profiles[0]) throw new Error(`Model Profile을 찾을 수 없습니다: ${profileId}`);
     return profiles[0];
+  }
+
+  private async hasCodexAccountModelEvidence(
+    executor: QueryExecutor,
+    organizationId: string,
+    modelProfileId: string,
+    accountId: string,
+  ): Promise<boolean> {
+    const [rows] = await executor.query<[Array<{ readonly evidence_kind: string }>]>(
+      `SELECT evidence_kind FROM model_verification_evidence
+       WHERE organization_id = $organization_id AND model_profile_id = $model_profile_id
+         AND subscription_account_id = $subscription_account_id
+         AND evidence_kind IN ['runtime-availability', 'runtime-capability-contract'];`,
+      {
+        organization_id: organizationId,
+        model_profile_id: modelProfileId,
+        subscription_account_id: accountId,
+      },
+    );
+    const kinds = new Set(rows.map((row) => row.evidence_kind));
+    return kinds.has("runtime-availability") && kinds.has("runtime-capability-contract");
   }
 
   private async endpoint(

@@ -1,4 +1,5 @@
 export * from "./approval-store.js";
+export * from "./approval-preview.js";
 export * from "./cedar-authorizer.js";
 export * from "./contracts.js";
 export * from "./declaration.js";

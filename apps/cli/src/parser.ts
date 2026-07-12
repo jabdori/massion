@@ -11,6 +11,7 @@ export interface CliInvocation {
   readonly after?: number;
   readonly events?: "jsonl";
   readonly profile?: string;
+  readonly model?: string;
 }
 
 const COMMANDS: Readonly<Record<string, readonly string[] | undefined>> = {
@@ -27,7 +28,7 @@ const COMMANDS: Readonly<Record<string, readonly string[] | undefined>> = {
   task: ["assign", "reassign"],
   approval: ["list", "get", "approve", "reject", "cancel"],
   assurance: ["binding-propose", "binding-activate", "binding-get", "binding-active"],
-  runtime: ["get", "cancel", "suspend", "resume"],
+  runtime: ["get", "lineage", "cancel", "suspend", "resume"],
   provider: [
     "list",
     "provider-add",
@@ -54,7 +55,20 @@ const COMMANDS: Readonly<Record<string, readonly string[] | undefined>> = {
   ],
   integration: ["list", "deliveries", "oauth-start", "connect", "user-bind", "channel-bind"],
   growth: ["status", "configure", "suggestions", "adopt", "revert"],
-  subscription: ["providers", "connect", "accounts", "share", "unshare", "quota", "policy", "doctor", "disconnect"],
+  subscription: [
+    "providers",
+    "enroll",
+    "connect",
+    "connect-model",
+    "connect-advanced",
+    "accounts",
+    "share",
+    "unshare",
+    "quota",
+    "policy",
+    "doctor",
+    "disconnect",
+  ],
   doctor: undefined,
   help: undefined,
 };
@@ -83,6 +97,7 @@ export function parseCliArguments(argv: readonly string[]): CliInvocation {
   let after: number | undefined;
   let events: "jsonl" | undefined;
   let profile: string | undefined;
+  let model: string | undefined;
   const positional: string[] = [];
   while (index < argv.length) {
     const value = argv[index];
@@ -108,6 +123,10 @@ export function parseCliArguments(argv: readonly string[]): CliInvocation {
       profile = optionValue(argv, index, value);
       if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/u.test(profile)) throw new Error("profile 이름이 유효하지 않습니다");
       index += 1;
+    } else if (value === "--model") {
+      model = optionValue(argv, index, value);
+      if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u.test(model)) throw new Error("model ID가 유효하지 않습니다");
+      index += 1;
     } else if (value?.startsWith("--")) throw new Error(`지원하지 않는 option입니다: ${value}`);
     else if (value !== undefined) positional.push(value);
     index += 1;
@@ -116,6 +135,9 @@ export function parseCliArguments(argv: readonly string[]): CliInvocation {
   if (command === "watch" && events !== "jsonl") throw new Error("watch에는 --events jsonl이 필요합니다");
   if (retryBlocked && command !== "resume")
     throw new Error("--retry-blocked는 resume command에서만 사용할 수 있습니다");
+  if (model !== undefined && (command !== "subscription" || subcommand !== "connect")) {
+    throw new Error("--model은 subscription connect에서만 사용할 수 있습니다");
+  }
   return {
     command,
     ...(subcommand === undefined ? {} : { subcommand }),
@@ -127,5 +149,6 @@ export function parseCliArguments(argv: readonly string[]): CliInvocation {
     ...(after === undefined ? {} : { after }),
     ...(events === undefined ? {} : { events }),
     ...(profile === undefined ? {} : { profile }),
+    ...(model === undefined ? {} : { model }),
   };
 }

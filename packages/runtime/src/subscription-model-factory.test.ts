@@ -179,6 +179,7 @@ describe("구독 실행 Runtime–Broker 브리지", () => {
   }): ConnectorSessionLease {
     return {
       leaseId: `lease-${input.routeAttemptId}`,
+      executionId: "execution-1",
       accountId: input.accountId,
       connectorId: input.connectorId,
       workId: "work-1",
@@ -186,9 +187,10 @@ describe("구독 실행 Runtime–Broker 브리지", () => {
       routeAttemptId: input.routeAttemptId,
       ...(input.quotaSnapshotId ? { quotaSnapshotId: input.quotaSnapshotId } : {}),
       status: "active",
-      expiresAt: new Date(Date.now() + 300_000),
+      expiresAt: new Date(Date.now() + 300_000).toISOString(),
       complete: vi.fn().mockResolvedValue({ status: "completed" }),
       fail: vi.fn().mockResolvedValue({ status: "failed", fallbackAllowed: true, failureKind: "timeout" }),
+      renew: vi.fn(),
     } as ConnectorSessionLease;
   }
 
@@ -201,7 +203,20 @@ describe("구독 실행 Runtime–Broker 브리지", () => {
     });
     const broker: ConnectorSessionBroker = {
       acquire,
+      bindRuntime: vi.fn(async (_context, input) => {
+        const lease = [...sessions.values()].find((candidate) => candidate.leaseId === input.leaseId);
+        if (!lease) throw new Error("Session Lease가 없습니다");
+        const bound = { ...lease, adapterId: input.adapterId };
+        sessions.set(bound.leaseId, bound);
+        return bound;
+      }),
       recoverActive: vi.fn(async () => [...sessions.values()]),
+      getLease: vi.fn(async (_context, leaseId) => {
+        const lease = sessions.get(leaseId);
+        if (!lease) throw new Error("Session Lease가 없습니다");
+        return lease;
+      }),
+      findExecutionLeases: vi.fn(async () => [...sessions.values()]),
     };
     const execute = vi.fn().mockResolvedValue({
       outcome: "completed",
@@ -211,7 +226,7 @@ describe("구독 실행 Runtime–Broker 브리지", () => {
       usage: { inputTokens: 7, outputTokens: 3 },
     });
     const resolver: ConnectorRuntimeResolver = {
-      resolve: vi.fn(async () => ({ kind: "agent-runtime" as const, executor: { execute } })),
+      resolve: vi.fn(async () => ({ kind: "agent-runtime" as const, adapterId: "codex", executor: { execute } })),
     };
     return { acquire, broker, execute, resolver, sessions };
   }
@@ -254,6 +269,7 @@ describe("구독 실행 Runtime–Broker 브리지", () => {
     expect(lease.kind).toBe("agent-runtime");
     expect(request).toEqual({
       commandId: expect.stringContaining(":session:acquire"),
+      executionId: "execution-1",
       accountId: request.accountId,
       connectorId: request.connectorId,
       scope: "personal",
@@ -315,6 +331,7 @@ describe("구독 실행 Runtime–Broker 브리지", () => {
 
     expect(failed.fallbackAllowed).toBe(true);
     expect(firstSession?.fail).toHaveBeenCalledWith({
+      commandId: expect.stringContaining(":session"),
       emittedTokens: 0,
       sideEffectsStarted: false,
       signal: { kind: "timeout" },
@@ -363,10 +380,12 @@ describe("구독 실행 Runtime–Broker 브리지", () => {
   });
 
   it.each([
+    ["executionId", "다른-execution"],
     ["workId", "다른-work"],
     ["agentHandle", "다른-agent"],
     ["routeAttemptId", "다른-attempt"],
     ["quotaSnapshotId", "다른-quota"],
+    ["status", "completed"],
   ] as const)("반환된 Session Lease의 %s 계보가 다르면 실행 전에 양쪽을 실패 처리한다", async (field, value) => {
     let returned: ConnectorSessionLease | undefined;
     const acquire = vi.fn(async (_context: TenantContext, input: Parameters<ConnectorSessionBroker["acquire"]>[1]) => {
@@ -376,6 +395,7 @@ describe("구독 실행 Runtime–Broker 브리지", () => {
     const resolver: ConnectorRuntimeResolver = {
       resolve: vi.fn(async () => ({
         kind: "agent-runtime" as const,
+        adapterId: "codex",
         executor: {
           execute: vi.fn().mockResolvedValue({
             outcome: "completed",
@@ -393,7 +413,16 @@ describe("구독 실행 Runtime–Broker 브리지", () => {
         build: () => ({ modelId: "unused" }) as LanguageModel,
       },
       {
-        broker: { acquire, recoverActive: vi.fn(async () => []) },
+        broker: {
+          acquire,
+          bindRuntime: vi.fn(async (_context, input) => ({ adapterId: input.adapterId })),
+          recoverActive: vi.fn(async () => []),
+          getLease: vi.fn(async () => {
+            if (!returned) throw new Error("Session Lease가 없습니다");
+            return returned;
+          }),
+          findExecutionLeases: vi.fn(async () => (returned ? [returned] : [])),
+        },
         resolver,
       },
     );
@@ -422,7 +451,7 @@ describe("구독 실행 Runtime–Broker 브리지", () => {
       { organization_id: context.organizationId },
     );
 
-    expect(attempts).toEqual([expect.objectContaining({ status: "failed", fallback_allowed: false })]);
+    expect(attempts).toEqual([expect.objectContaining({ status: "interrupted", fallback_allowed: false })]);
   });
 
   it("내부 실행 맥락이 없으면 Connector를 호출하지 않고 Router attempt를 실패로 종결한다", async () => {
@@ -442,7 +471,7 @@ describe("구독 실행 Runtime–Broker 브리지", () => {
       { organization_id: context.organizationId },
     );
 
-    expect(attempts).toEqual([expect.objectContaining({ status: "failed", fallback_allowed: false })]);
+    expect(attempts).toEqual([expect.objectContaining({ status: "interrupted", fallback_allowed: false })]);
     expect(acquire).not.toHaveBeenCalled();
   });
 
@@ -502,6 +531,7 @@ describe("구독 실행 Runtime–Broker 브리지", () => {
       attemptId: lease.attemptId,
       signal: { kind: "network" },
       emittedTokens: 1,
+      sideEffectsStarted: false,
       actualInputTokens: 0,
       actualOutputTokens: 1,
       actualCostMicros: 0,
@@ -522,6 +552,7 @@ describe("구독 실행 Runtime–Broker 브리지", () => {
 
     expect(reconciled).toEqual([{ leaseId: lease.sessionLeaseId, routeAttemptId: lease.attemptId, action: "failed" }]);
     expect(sessions.get(lease.sessionLeaseId)?.fail).toHaveBeenCalledWith({
+      commandId: expect.stringContaining(":reconcile:session:fail"),
       emittedTokens: 1,
       sideEffectsStarted: true,
       signal: { kind: "provider-unavailable" },

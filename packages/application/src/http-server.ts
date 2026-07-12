@@ -1,6 +1,7 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 
 import type { TenantContext } from "@massion/identity";
+import type { IssueEnrollmentInput, IssuedEnrollment } from "@massion/subscriptions";
 
 import type { AuthenticatedApplicationAccess, IssueApplicationTokenInput } from "./auth.js";
 import type { ApplicationEventV1 } from "./contracts.js";
@@ -49,6 +50,9 @@ export interface ApplicationHttpDependencies {
       context: TenantContext,
       input: { readonly commandId: string; readonly archive: Buffer; readonly metadata: unknown },
     ): Promise<unknown>;
+  };
+  readonly connectorEnrollments?: {
+    issue(context: TenantContext, input: IssueEnrollmentInput): Promise<IssuedEnrollment>;
   };
   readonly bootstrap?: {
     initialize(input: {
@@ -289,6 +293,10 @@ export class ApplicationHttpServer {
     this.draining = true;
   }
 
+  public upgradeServer(): Server {
+    return this.server;
+  }
+
   private async handle(request: IncomingMessage, response: ServerResponse): Promise<void> {
     if (this.activeRequests >= this.options.maxConcurrentRequests) {
       sendJson(response, 503, validation("동시 HTTP 요청 상한을 초과했습니다").publicView());
@@ -481,6 +489,43 @@ export class ApplicationHttpServer {
       return;
     }
     const access = await this.authenticate(request);
+    if (url.pathname === "/api/v1/subscriptions/connectors/enrollments") {
+      if (request.method !== "POST") {
+        this.method(response, ["POST"]);
+        return;
+      }
+      if (access.web) await this.browserMutation(request, access);
+      if (
+        !this.dependencies.connectorEnrollments ||
+        !hasScope(access.scopes, "subscription:write") ||
+        !["owner", "admin", "member"].includes(access.context.role)
+      ) {
+        throw this.scope();
+      }
+      this.acceptJson(request);
+      const input = (await json(request)) as Record<string, unknown>;
+      if (
+        Object.keys(input).some((key) => !["commandId", "location", "executionKind", "ttlMs"].includes(key)) ||
+        typeof input.commandId !== "string" ||
+        input.location !== "edge" ||
+        (input.executionKind !== "model" && input.executionKind !== "agent-runtime") ||
+        (input.ttlMs !== undefined && !Number.isSafeInteger(input.ttlMs))
+      ) {
+        throw validation("Connector enrollment 발급 입력이 유효하지 않습니다");
+      }
+      response.setHeader("cache-control", "no-store");
+      sendJson(
+        response,
+        201,
+        await this.dependencies.connectorEnrollments.issue(access.context, {
+          commandId: input.commandId,
+          location: "edge",
+          executionKind: input.executionKind,
+          ...(input.ttlMs === undefined ? {} : { ttlMs: input.ttlMs as number }),
+        }),
+      );
+      return;
+    }
     if (url.pathname === "/api/v1/web/login-tickets") {
       if (request.method !== "POST") {
         this.method(response, ["POST"]);

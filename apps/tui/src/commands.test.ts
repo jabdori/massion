@@ -72,4 +72,38 @@ describe("TUI command", () => {
     await first;
     expect(calls).toBe(1);
   });
+
+  it("구독 계정 공유·공유 해제·연결 해제에 현재 version을 전달한다", async () => {
+    const sent: Array<Record<string, unknown>> = [];
+    const commands = new TuiCommands(
+      { command: (value) => (sent.push(value as Record<string, unknown>), Promise.resolve(value)) },
+      () => "user-1",
+    );
+
+    await commands.shareSubscriptionAccount("account-1", 3);
+    await commands.unshareSubscriptionAccount("account-1", 4);
+    await commands.disconnectSubscriptionAccount("account-1", 5);
+
+    expect(sent.map(({ operation, expectedRevision, payload }) => ({ operation, expectedRevision, payload }))).toEqual([
+      { operation: "subscription.account.share", expectedRevision: 3, payload: { accountId: "account-1" } },
+      { operation: "subscription.account.unshare", expectedRevision: 4, payload: { accountId: "account-1" } },
+      { operation: "subscription.account.disconnect", expectedRevision: 5, payload: { accountId: "account-1" } },
+    ]);
+  });
+
+  it("제공자별 계정 선택 정책과 승인 방식을 하나의 version 명령으로 보낸다", async () => {
+    const sent: Array<Record<string, unknown>> = [];
+    const commands = new TuiCommands(
+      { command: (value) => (sent.push(value as Record<string, unknown>), Promise.resolve(value)) },
+      () => "user-1",
+    );
+
+    await commands.configureSubscriptionPolicy("openai-codex", "round-robin", "deny", 6);
+
+    expect(sent[0]).toMatchObject({
+      operation: "subscription.policy.configure",
+      expectedRevision: 6,
+      payload: { providerId: "openai-codex", credentialPolicy: "round-robin", approvalMode: "deny" },
+    });
+  });
 });

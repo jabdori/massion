@@ -25,6 +25,7 @@ export interface CodingPlanRoute {
 export interface CodingPlanPreset {
   readonly id: string;
   readonly displayName: string;
+  readonly connectionSurface: "server-only" | "unavailable";
   readonly authKinds: readonly CodingPlanAuthKind[];
   readonly routes: readonly CodingPlanRoute[];
   readonly billingKinds: readonly CodingPlanBillingKind[];
@@ -61,12 +62,40 @@ const OPENCODE_ANTHROPIC_MODELS = [
   "qwen3.6-plus",
 ] as const;
 
+const ZAI_CODING_MODELS = ["glm-5.1", "glm-5-turbo", "glm-4.7", "glm-4.5-air"] as const;
+const KIMI_CODING_MODELS = ["kimi-for-coding", "kimi-for-coding-highspeed"] as const;
+const STEPFUN_STEP_MODELS = ["step-3.7-flash", "step-3.5-flash-2603", "step-3.5-flash"] as const;
+const ALIBABA_CODING_MODELS = [
+  "qwen3.7-plus",
+  "qwen3.6-plus",
+  "kimi-k2.5",
+  "glm-5",
+  "MiniMax-M2.5",
+  "qwen3.5-plus",
+  "qwen3-max-2026-01-23",
+  "qwen3-coder-next",
+  "qwen3-coder-plus",
+  "glm-4.7",
+] as const;
+
+export const MINIMAX_OPENAI_MODELS = [
+  "MiniMax-M3",
+  "MiniMax-M2.7",
+  "MiniMax-M2.7-highspeed",
+  "MiniMax-M2.5",
+  "MiniMax-M2.5-highspeed",
+  "MiniMax-M2.1",
+  "MiniMax-M2.1-highspeed",
+  "MiniMax-M2",
+] as const;
+
 const PRESETS = [
   {
     id: "zai-coding-plan",
     displayName: "Z.AI GLM Coding Plan",
+    connectionSurface: "unavailable",
     authKinds: ["api-key"],
-    routes: [{ protocol: "openai", baseUrl: "https://api.z.ai/api/coding/paas/v4" }],
+    routes: [{ protocol: "openai", baseUrl: "https://api.z.ai/api/coding/paas/v4", modelIds: ZAI_CODING_MODELS }],
     billingKinds: ["coding-plan"],
     modelDiscovery: "documented-allowlist",
     quotaDiscovery: "none",
@@ -81,8 +110,9 @@ const PRESETS = [
   {
     id: "kimi-coding-plan",
     displayName: "Kimi Code",
+    connectionSurface: "unavailable",
     authKinds: ["api-key"],
-    routes: [{ protocol: "openai", baseUrl: "https://api.kimi.com/coding/v1" }],
+    routes: [{ protocol: "openai", baseUrl: "https://api.kimi.com/coding/v1", modelIds: KIMI_CODING_MODELS }],
     billingKinds: ["membership-subscription"],
     modelDiscovery: "documented-allowlist",
     quotaDiscovery: "none",
@@ -97,8 +127,9 @@ const PRESETS = [
   {
     id: "stepfun-step-plan",
     displayName: "StepFun Step Plan",
+    connectionSurface: "unavailable",
     authKinds: ["api-key"],
-    routes: [{ protocol: "openai", baseUrl: "https://api.stepfun.ai/step_plan/v1" }],
+    routes: [{ protocol: "openai", baseUrl: "https://api.stepfun.ai/step_plan/v1", modelIds: STEPFUN_STEP_MODELS }],
     billingKinds: ["step-plan"],
     modelDiscovery: "documented-allowlist",
     quotaDiscovery: "none",
@@ -113,8 +144,15 @@ const PRESETS = [
   {
     id: "alibaba-coding-plan",
     displayName: "Alibaba Cloud Coding Plan",
+    connectionSurface: "unavailable",
     authKinds: ["subscription-key"],
-    routes: [{ protocol: "openai", baseUrl: "https://coding-intl.dashscope.aliyuncs.com/v1" }],
+    routes: [
+      {
+        protocol: "openai",
+        baseUrl: "https://coding-intl.dashscope.aliyuncs.com/v1",
+        modelIds: ALIBABA_CODING_MODELS,
+      },
+    ],
     billingKinds: ["coding-plan"],
     modelDiscovery: "documented-allowlist",
     quotaDiscovery: "none",
@@ -129,6 +167,7 @@ const PRESETS = [
   {
     id: "opencode-go",
     displayName: "OpenCode Go",
+    connectionSurface: "unavailable",
     authKinds: ["api-key"],
     routes: [
       {
@@ -157,11 +196,15 @@ const PRESETS = [
   {
     id: "minimax-token-plan",
     displayName: "MiniMax Token Plan",
+    connectionSurface: "server-only",
     authKinds: ["subscription-key"],
-    routes: [{ protocol: "anthropic", baseUrl: "https://api.minimax.io/anthropic" }],
+    routes: [
+      { protocol: "anthropic", baseUrl: "https://api.minimax.io/anthropic" },
+      { protocol: "openai", baseUrl: "https://api.minimax.io/v1", modelIds: MINIMAX_OPENAI_MODELS },
+    ],
     billingKinds: ["token-plan", "api-credits", "team-seat"],
     modelDiscovery: "endpoint",
-    modelDiscoveryEndpoint: "https://api.minimax.io/anthropic/v1/models",
+    modelDiscoveryEndpoint: "https://api.minimax.io/v1/models",
     quotaDiscovery: "endpoint",
     quotaEndpoint: "https://www.minimax.io/v1/token_plan/remains",
     accountPolicy: "standard",
@@ -175,6 +218,7 @@ const PRESETS = [
   {
     id: "kilo-gateway",
     displayName: "Kilo AI Gateway",
+    connectionSurface: "unavailable",
     authKinds: ["api-key"],
     routes: [{ protocol: "openai", baseUrl: "https://api.kilo.ai/api/gateway" }],
     billingKinds: ["api-credits", "pay-as-you-go", "byok", "credit-subscription"],

@@ -3,13 +3,15 @@ import type { CollaborationGraphSnapshot } from "@massion/application";
 import type { TuiEvent } from "./wire.js";
 
 export type TuiConnection = "connecting" | "live" | "reconnecting" | "offline" | "stopped";
-export type TuiView = "overview" | "agents" | "works" | "chat" | "approvals" | "operations";
+export type TuiView = "overview" | "agents" | "works" | "chat" | "approvals" | "operations" | "subscriptions";
+export type TuiSubscriptionTab = "providers" | "accounts" | "quota" | "policy";
 
 export interface TuiSelection {
   readonly workId?: string;
   readonly agentHandle?: string;
   readonly roomId?: string;
   readonly approvalId?: string;
+  readonly accountId?: string;
 }
 
 export interface TuiState {
@@ -21,7 +23,9 @@ export interface TuiState {
   readonly events: readonly TuiEvent[];
   readonly eventLimit: number;
   readonly selection: TuiSelection;
+  readonly subscriptionTab: TuiSubscriptionTab;
   readonly queryResults: Readonly<Record<string, unknown>>;
+  readonly queryErrors: Readonly<Record<string, string>>;
   readonly error?: string;
 }
 
@@ -31,6 +35,8 @@ export type TuiAction =
   | { readonly type: "event.received"; readonly event: TuiEvent }
   | { readonly type: "view.selected"; readonly view: TuiView }
   | { readonly type: "query.loaded"; readonly key: string; readonly value: unknown }
+  | { readonly type: "query.failed"; readonly key: string; readonly error: string }
+  | { readonly type: "subscription.tab.selected"; readonly tab: TuiSubscriptionTab }
   | { readonly type: "selection.changed"; readonly selection: TuiSelection };
 
 export function createTuiState(input: { readonly eventLimit?: number } = {}): TuiState {
@@ -45,7 +51,9 @@ export function createTuiState(input: { readonly eventLimit?: number } = {}): Tu
     events: [],
     eventLimit,
     selection: {},
+    subscriptionTab: "providers",
     queryResults: {},
+    queryErrors: {},
   };
 }
 
@@ -106,7 +114,14 @@ export function reduceTuiState(state: TuiState, action: TuiAction): TuiState {
   }
   if (action.type === "view.selected") return { ...state, view: action.view };
   if (action.type === "query.loaded") {
-    return { ...state, queryResults: { ...state.queryResults, [action.key]: action.value } };
+    return {
+      ...state,
+      queryResults: { ...state.queryResults, [action.key]: action.value },
+      queryErrors: Object.fromEntries(Object.entries(state.queryErrors).filter(([key]) => key !== action.key)),
+    };
   }
+  if (action.type === "query.failed")
+    return { ...state, queryErrors: { ...state.queryErrors, [action.key]: action.error } };
+  if (action.type === "subscription.tab.selected") return { ...state, subscriptionTab: action.tab };
   return { ...state, selection: { ...state.selection, ...action.selection } };
 }

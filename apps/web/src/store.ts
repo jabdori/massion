@@ -31,10 +31,34 @@ function publicError(error: unknown): string {
   return error instanceof Error ? error.message : "알 수 없는 오류가 발생했습니다";
 }
 
+function stableValue(value: unknown, seen = new WeakSet<object>()): unknown {
+  if (value === null || typeof value !== "object") return value;
+  if (seen.has(value)) throw new Error("Query payload에 순환 참조가 있습니다");
+  seen.add(value);
+  if (Array.isArray(value)) {
+    const result = value.map((item) => stableValue(item, seen));
+    seen.delete(value);
+    return result;
+  }
+  const result = Object.fromEntries(
+    Object.entries(value as Record<string, unknown>)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, item]) => [key, stableValue(item, seen)]),
+  );
+  seen.delete(value);
+  return result;
+}
+
+function queryKey(operation: string, payload: unknown): string {
+  return `${operation}:${JSON.stringify(stableValue(payload))}`;
+}
+
 export class WebConsoleStore {
   private state: WebConsoleState = INITIAL;
   private readonly listeners = new Set<() => void>();
   private readonly mutations = new Map<string, Promise<unknown>>();
+  private readonly queries = new Map<string, Promise<unknown>>();
+  private loading: Promise<void> | undefined;
 
   public constructor(private readonly api: StoreApi) {}
 
@@ -45,7 +69,16 @@ export class WebConsoleStore {
     return () => this.listeners.delete(listener);
   };
 
-  public async load(): Promise<void> {
+  public load(): Promise<void> {
+    if (this.loading) return this.loading;
+    const pending = this.performLoad().finally(() => {
+      if (this.loading === pending) this.loading = undefined;
+    });
+    this.loading = pending;
+    return pending;
+  }
+
+  private async performLoad(): Promise<void> {
     this.set({
       status: "loading",
       connection: "connecting",
@@ -83,7 +116,18 @@ export class WebConsoleStore {
     }
   }
 
-  public async refresh(operation: string, payload: unknown = {}): Promise<unknown> {
+  public refresh(operation: string, payload: unknown = {}): Promise<unknown> {
+    const key = queryKey(operation, payload);
+    const active = this.queries.get(key);
+    if (active) return active;
+    const pending = this.performRefresh(operation, payload).finally(() => {
+      if (this.queries.get(key) === pending) this.queries.delete(key);
+    });
+    this.queries.set(key, pending);
+    return pending;
+  }
+
+  private async performRefresh(operation: string, payload: unknown): Promise<unknown> {
     try {
       const envelope = await this.api.query(operation, payload);
       const remainingErrors = Object.fromEntries(

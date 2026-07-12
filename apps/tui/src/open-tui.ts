@@ -10,7 +10,7 @@ import {
 } from "@opentui/core";
 
 import { present, safeTerminalText } from "./presentation.js";
-import type { TuiAction, TuiState, TuiView } from "./state.js";
+import type { TuiAction, TuiState, TuiSubscriptionTab, TuiView } from "./state.js";
 import { layoutForTerminal } from "./view-model.js";
 
 interface OpenTuiActions {
@@ -23,9 +23,21 @@ interface OpenTuiActions {
   readonly cancelWork: (reason: string) => Promise<unknown>;
   readonly assignTask: (agentHandle: string) => Promise<unknown>;
   readonly controlExecution: (operation: "cancel" | "suspend" | "resume", reason: string) => Promise<unknown>;
+  readonly shareSubscriptionAccount: (accountId: string, version: number) => Promise<unknown>;
+  readonly unshareSubscriptionAccount: (accountId: string, version: number) => Promise<unknown>;
+  readonly disconnectSubscriptionAccount: (accountId: string, version: number) => Promise<unknown>;
+  readonly configureSubscriptionPolicy?: (
+    providerId: string,
+    credentialPolicy: string,
+    approvalMode: "automatic" | "review" | "deny",
+    version: number,
+  ) => Promise<unknown>;
   readonly loadView: (view: TuiView) => Promise<void>;
   readonly destroy: () => void;
 }
+
+type ApprovalMode = "automatic" | "review" | "deny";
+const APPROVAL_MODES: readonly ApprovalMode[] = ["automatic", "review", "deny"];
 
 type Modal =
   | { readonly kind: "message"; readonly title: string; readonly placeholder: string }
@@ -40,6 +52,24 @@ type Modal =
       readonly placeholder: string;
       readonly operation: "cancel" | "suspend" | "resume";
     }
+  | {
+      readonly kind: "subscription-account";
+      readonly title: string;
+      readonly placeholder: string;
+      readonly operation: "share" | "unshare" | "disconnect";
+      readonly confirmation: "SHARE" | "UNSHARE" | "DISCONNECT";
+      readonly accountId: string;
+      readonly version: number;
+    }
+  | {
+      readonly kind: "subscription-policy";
+      readonly title: string;
+      readonly placeholder: string;
+      readonly providerId: string;
+      readonly version: number;
+      readonly credentialPolicies: readonly string[];
+      readonly approvalModes: readonly ApprovalMode[];
+    }
   | { readonly kind: "help"; readonly title: string; readonly placeholder: string };
 
 const VIEW_KEYS: Readonly<Record<string, TuiView>> = {
@@ -49,7 +79,10 @@ const VIEW_KEYS: Readonly<Record<string, TuiView>> = {
   "4": "chat",
   "5": "approvals",
   "6": "operations",
+  "7": "subscriptions",
 };
+
+const SUBSCRIPTION_TABS: readonly TuiSubscriptionTab[] = ["providers", "accounts", "quota", "policy"];
 
 export class OpenTuiView {
   private tree: Renderable | undefined;
@@ -214,8 +247,9 @@ export class OpenTuiView {
       box.add(
         new TextRenderable(this.renderer, {
           content:
-            "1–6 화면 이동 · j/k 또는 화살표 항목 이동 · r 새로고침 · / 검색\n" +
+            "1–7 화면 이동 · j/k 또는 화살표 항목 이동 · r 새로고침 · / 검색\n" +
             "c 메시지 · a 승인 · x 거절 · Delete 승인 취소 · d 업무 취소 · t 작업 배정\n" +
+            "구독: ←/→ 또는 h/l 탭 · s 공유 · u 공유 해제 · d 연결 해제\n" +
             "s 실행 일시정지/재개 · z 실행 취소\n" +
             "Esc 입력 닫기 · Ctrl+C 입력 취소/종료 · 선택한 텍스트는 복사할 수 있습니다.",
           ...this.paint("fg", "#C6D0F5"),
@@ -269,6 +303,14 @@ export class OpenTuiView {
       await this.actions.loadView(view);
       return;
     }
+    if (this.actions.state().view === "subscriptions" && ["[", "]", "h", "left", "l", "right"].includes(key.name)) {
+      const delta = ["]", "l", "right"].includes(key.name) ? 1 : -1;
+      const current = SUBSCRIPTION_TABS.indexOf(this.actions.state().subscriptionTab);
+      const tab = SUBSCRIPTION_TABS[(current + delta + SUBSCRIPTION_TABS.length) % SUBSCRIPTION_TABS.length];
+      if (tab) this.actions.dispatch({ type: "subscription.tab.selected", tab });
+      this.render();
+      return;
+    }
     if (key.name === "r")
       await this.runAction(async () => {
         await this.actions.refresh();
@@ -310,6 +352,18 @@ export class OpenTuiView {
         title: "실행 취소 확인",
         placeholder: "실행을 취소하는 이유를 입력해 주세요",
       });
+    } else if (
+      this.actions.state().view === "subscriptions" &&
+      this.actions.state().subscriptionTab === "accounts" &&
+      ["s", "u", "d"].includes(key.name)
+    ) {
+      this.openSubscriptionAccountAction(key.name === "s" ? "share" : key.name === "u" ? "unshare" : "disconnect");
+    } else if (
+      key.name === "e" &&
+      this.actions.state().view === "subscriptions" &&
+      this.actions.state().subscriptionTab === "policy"
+    ) {
+      this.openSubscriptionPolicyAction();
     } else if (["j", "down", "k", "up"].includes(key.name)) {
       this.moveSelection(["j", "down"].includes(key.name) ? 1 : -1);
     }
@@ -330,6 +384,31 @@ export class OpenTuiView {
       this.render();
       return;
     }
+    if (modal.kind === "subscription-account" && content !== modal.confirmation) {
+      this.notice = `확인하려면 ${modal.confirmation}를 정확히 입력해 주세요.`;
+      this.render();
+      return;
+    }
+    let subscriptionPolicyInput:
+      { readonly credentialPolicy: string; readonly approvalMode: "automatic" | "review" | "deny" } | undefined;
+    if (modal.kind === "subscription-policy") {
+      const [credentialPolicy, approvalMode, extra] = content.split(/\s+/u);
+      if (
+        !credentialPolicy ||
+        !approvalMode ||
+        extra !== undefined ||
+        !modal.credentialPolicies.includes(credentialPolicy) ||
+        !modal.approvalModes.includes(approvalMode as ApprovalMode)
+      ) {
+        this.notice = `계정 선택 정책과 ${modal.approvalModes.join(", ")} 중 하나를 공백으로 구분해 입력해 주세요.`;
+        this.render();
+        return;
+      }
+      subscriptionPolicyInput = {
+        credentialPolicy,
+        approvalMode: approvalMode as "automatic" | "review" | "deny",
+      };
+    }
     this.modal = undefined;
     this.input = undefined;
     if (modal.kind === "search") {
@@ -344,6 +423,20 @@ export class OpenTuiView {
       else if (modal.kind === "cancel-work") await this.actions.cancelWork(content);
       else if (modal.kind === "assign-task") await this.actions.assignTask(content);
       else if (modal.kind === "runtime") await this.actions.controlExecution(modal.operation, content);
+      else if (modal.kind === "subscription-account") {
+        if (modal.operation === "share") await this.actions.shareSubscriptionAccount(modal.accountId, modal.version);
+        else if (modal.operation === "unshare")
+          await this.actions.unshareSubscriptionAccount(modal.accountId, modal.version);
+        else await this.actions.disconnectSubscriptionAccount(modal.accountId, modal.version);
+      } else if (modal.kind === "subscription-policy" && subscriptionPolicyInput) {
+        if (!this.actions.configureSubscriptionPolicy) throw new Error("TUI 구독 정책 변경 기능이 구성되지 않았습니다");
+        await this.actions.configureSubscriptionPolicy(
+          modal.providerId,
+          subscriptionPolicyInput.credentialPolicy,
+          subscriptionPolicyInput.approvalMode,
+          modal.version,
+        );
+      }
     });
   }
 
@@ -369,6 +462,162 @@ export class OpenTuiView {
     return state.snapshot?.executions.find((execution) => execution.workId === state.selection.workId);
   }
 
+  private selectedSubscriptionAccount():
+    | {
+        readonly accountId: string;
+        readonly alias: string;
+        readonly scope: string;
+        readonly version: number;
+        readonly canManage: boolean;
+      }
+    | undefined {
+    const state = this.actions.state();
+    const accounts = Array.isArray(state.queryResults.subscriptionAccounts)
+      ? state.queryResults.subscriptionAccounts.filter(
+          (item): item is Record<string, unknown> => item !== null && typeof item === "object" && !Array.isArray(item),
+        )
+      : [];
+    const account = accounts.find((item) => item.accountId === state.selection.accountId) ?? accounts[0];
+    if (
+      typeof account?.accountId !== "string" ||
+      typeof account.alias !== "string" ||
+      typeof account.scope !== "string" ||
+      !Number.isSafeInteger(account.version)
+    )
+      return undefined;
+    return {
+      accountId: account.accountId,
+      alias: account.alias,
+      scope: account.scope,
+      version: account.version as number,
+      canManage: account.canManage === true,
+    };
+  }
+
+  private openSubscriptionAccountAction(operation: "share" | "unshare" | "disconnect"): void {
+    const account = this.selectedSubscriptionAccount();
+    if (!account) {
+      this.notice = "변경할 구독 계정을 선택해 주세요.";
+      this.render();
+      return;
+    }
+    if (!account.canManage) {
+      this.notice = "구독 계정 소유자만 이 작업을 수행할 수 있습니다.";
+      this.render();
+      return;
+    }
+    if (operation === "share" && account.scope === "organization") {
+      this.notice = "이미 조직에 공유된 계정입니다.";
+      this.render();
+      return;
+    }
+    if (operation === "unshare" && account.scope !== "organization") {
+      this.notice = "조직에 공유되지 않은 계정입니다.";
+      this.render();
+      return;
+    }
+    const confirmation = operation === "share" ? "SHARE" : operation === "unshare" ? "UNSHARE" : "DISCONNECT";
+    const label = operation === "share" ? "계정 공유" : operation === "unshare" ? "공유 해제" : "연결 해제";
+    this.open({
+      kind: "subscription-account",
+      operation,
+      confirmation,
+      accountId: account.accountId,
+      version: account.version,
+      title: `${label} 확인 · ${safeTerminalText(account.alias, 80)}`,
+      placeholder: `${confirmation}를 입력해 확정해 주세요`,
+    });
+  }
+
+  private openSubscriptionPolicyAction(): void {
+    const state = this.actions.state();
+    const providers = Array.isArray(state.queryResults.subscriptionProviders)
+      ? state.queryResults.subscriptionProviders.filter(
+          (item): item is Record<string, unknown> => item !== null && typeof item === "object" && !Array.isArray(item),
+        )
+      : [];
+    const policies = Array.isArray(state.queryResults.subscriptionPolicy)
+      ? state.queryResults.subscriptionPolicy.filter(
+          (item): item is Record<string, unknown> => item !== null && typeof item === "object" && !Array.isArray(item),
+        )
+      : [];
+    const accounts = Array.isArray(state.queryResults.subscriptionAccounts)
+      ? state.queryResults.subscriptionAccounts.filter(
+          (item): item is Record<string, unknown> => item !== null && typeof item === "object" && !Array.isArray(item),
+        )
+      : [];
+    const provider = providers[0];
+    const policy = policies.find((candidate) => candidate.providerId === provider?.providerId);
+    const credentialPolicies = Array.isArray(provider?.credentialPolicies)
+      ? provider.credentialPolicies.filter((value): value is string => typeof value === "string")
+      : [];
+    const runtimeCapabilities =
+      provider?.runtimeCapabilities &&
+      typeof provider.runtimeCapabilities === "object" &&
+      !Array.isArray(provider.runtimeCapabilities)
+        ? (provider.runtimeCapabilities as Record<string, unknown>)
+        : undefined;
+    const declaredApprovalModes = Array.isArray(runtimeCapabilities?.approvalModes)
+      ? runtimeCapabilities.approvalModes.filter(
+          (value): value is ApprovalMode => typeof value === "string" && APPROVAL_MODES.includes(value as ApprovalMode),
+        )
+      : undefined;
+    const approvalModesBySurface =
+      runtimeCapabilities?.approvalModesBySurface &&
+      typeof runtimeCapabilities.approvalModesBySurface === "object" &&
+      !Array.isArray(runtimeCapabilities.approvalModesBySurface)
+        ? (runtimeCapabilities.approvalModesBySurface as Record<string, unknown>)
+        : undefined;
+    const connectedSurfaces = new Set(
+      accounts
+        .filter((account) => account.providerId === provider?.providerId)
+        .map((account) => account.connectorLocation)
+        .filter((surface): surface is "server" | "edge" => surface === "server" || surface === "edge"),
+    );
+    const surfaceApprovalModes =
+      connectedSurfaces.size > 0 && approvalModesBySurface
+        ? APPROVAL_MODES.filter((mode) =>
+            [...connectedSurfaces].some((surface) => {
+              const modes = approvalModesBySurface[surface];
+              return Array.isArray(modes) && modes.includes(mode);
+            }),
+          )
+        : undefined;
+    const approvalModes =
+      provider?.connectionSurface === "unavailable"
+        ? []
+        : surfaceApprovalModes !== undefined
+          ? surfaceApprovalModes
+          : declaredApprovalModes === undefined
+            ? APPROVAL_MODES
+            : declaredApprovalModes;
+    if (provider?.connectionSurface === "unavailable") {
+      this.notice = "이 Provider는 공개 연결을 지원하지 않습니다.";
+      this.render();
+      return;
+    }
+    if (
+      typeof provider?.providerId !== "string" ||
+      !Number.isSafeInteger(policy?.version) ||
+      credentialPolicies.length === 0 ||
+      approvalModes.length === 0
+    ) {
+      this.notice = "변경할 Provider 정책과 현재 version을 찾을 수 없습니다.";
+      this.render();
+      return;
+    }
+    const displayName = typeof provider.displayName === "string" ? provider.displayName : provider.providerId;
+    this.open({
+      kind: "subscription-policy",
+      title: `구독 정책 변경 · ${safeTerminalText(displayName, 80)}`,
+      placeholder: `${credentialPolicies.join("|")} <${approvalModes.join("|")}>`,
+      providerId: provider.providerId,
+      version: policy?.version as number,
+      credentialPolicies,
+      approvalModes,
+    });
+  }
+
   private moveSelection(delta: number): void {
     const state = this.actions.state();
     const snapshot = state.snapshot;
@@ -384,7 +633,16 @@ export class OpenTuiView {
                 .map((item) => item.roomId)
             : state.view === "approvals"
               ? snapshot.pendingApprovals.map((item) => item.approvalId)
-              : [];
+              : state.view === "subscriptions" && ["accounts", "quota"].includes(state.subscriptionTab)
+                ? Array.isArray(state.queryResults.subscriptionAccounts)
+                  ? state.queryResults.subscriptionAccounts
+                      .filter(
+                        (item): item is Record<string, unknown> =>
+                          item !== null && typeof item === "object" && !Array.isArray(item),
+                      )
+                      .flatMap((item) => (typeof item.accountId === "string" ? [item.accountId] : []))
+                  : []
+                : [];
     if (!values.length) return;
     const current =
       state.view === "agents"
@@ -393,7 +651,9 @@ export class OpenTuiView {
           ? state.selection.workId
           : state.view === "chat"
             ? state.selection.roomId
-            : state.selection.approvalId;
+            : state.view === "approvals"
+              ? state.selection.approvalId
+              : state.selection.accountId;
     const index = current === undefined ? 0 : Math.max(0, values.indexOf(current));
     const next = values[(index + delta + values.length) % values.length];
     if (!next) return;
@@ -404,7 +664,9 @@ export class OpenTuiView {
           ? { workId: next }
           : state.view === "chat"
             ? { roomId: next }
-            : { approvalId: next };
+            : state.view === "approvals"
+              ? { approvalId: next }
+              : { accountId: next };
     this.actions.dispatch({ type: "selection.changed", selection });
     this.render();
     void this.actions.loadView(state.view);

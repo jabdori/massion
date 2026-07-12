@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { chmod, cp, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { chmod, cp, lstat, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { basename, relative, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -31,6 +31,30 @@ export function createChecksumLines(entries) {
     })
     .sort((left, right) => left.path.localeCompare(right.path))
     .map((entry) => `${entry.digest}  ${entry.path}`);
+}
+
+export async function verifyRuntimeEntrypoints(root, entrypoints) {
+  if (!entrypoints || typeof entrypoints !== "object" || Array.isArray(entrypoints))
+    throw new Error("release runtime entrypoint 설정이 유효하지 않습니다");
+
+  for (const [name, path] of Object.entries(entrypoints)) {
+    if (
+      typeof path !== "string" ||
+      path.length === 0 ||
+      path.startsWith("/") ||
+      path.includes("\\") ||
+      path.split("/").includes("..")
+    )
+      throw new Error(`release runtime entrypoint 경로가 유효하지 않습니다: ${name}`);
+
+    let metadata;
+    try {
+      metadata = await lstat(resolve(root, path));
+    } catch (error) {
+      throw new Error(`release runtime entrypoint가 없습니다: ${name} (${path})`, { cause: error });
+    }
+    if (!metadata.isFile()) throw new Error(`release runtime entrypoint가 일반 파일이 아닙니다: ${name} (${path})`);
+  }
 }
 
 function run(command, arguments_, options = {}) {
@@ -137,6 +161,13 @@ async function main() {
     capture: false,
   });
   await removeTestArtifacts(resolve(local, "runtime"));
+  const entrypoints = {
+    mass: "runtime/node_modules/@massion/cli/dist/main.js",
+    connector: "runtime/node_modules/@massion/connector/dist/main.js",
+    server: "runtime/node_modules/@massion/server/dist/main.js",
+    tui: "runtime/node_modules/@massion/tui/dist/main.js",
+  };
+  await verifyRuntimeEntrypoints(local, entrypoints);
   await cp(resolve(root, "release/install.sh"), resolve(local, "install.sh"));
   await cp(resolve(root, "release/uninstall.sh"), resolve(local, "uninstall.sh"));
   await cp(resolve(root, "docs/operations/local-install.md"), resolve(local, "README.md"));
@@ -151,11 +182,7 @@ async function main() {
     gitCommit,
     sourceDigest: `sha256:${source}`,
     platforms: ["darwin-arm64", "darwin-x64", "linux-arm64", "linux-x64"],
-    entrypoints: {
-      mass: "runtime/node_modules/@massion/cli/dist/main.js",
-      server: "runtime/node_modules/@massion/server/dist/main.js",
-      tui: "runtime/node_modules/@massion/tui/dist/main.js",
-    },
+    entrypoints,
   };
   await writeFile(resolve(local, "release-bundle.json"), `${JSON.stringify(bundle, undefined, 2)}\n`, { mode: 0o600 });
   await writeChecksums(local);

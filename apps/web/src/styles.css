@@ -623,6 +623,23 @@ button:disabled {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.approval-preview {
+  margin-top: 1rem;
+  padding: 1rem;
+  border: 1px solid var(--line);
+  background: var(--ink);
+}
+.approval-preview h3 {
+  margin: 0 0 0.75rem;
+  font-size: 1rem;
+}
+.approval-preview dl {
+  margin: 0;
+}
+.approval-preview p {
+  margin: 0.75rem 0 0;
+  color: var(--muted);
+}
 .decision-actions {
   display: flex;
   gap: 8px;
@@ -1057,6 +1074,283 @@ button:disabled {
   font: 0.7rem var(--mono);
 }
 
+.subscription-enrollment-note {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 32px;
+  align-items: center;
+  margin-bottom: 18px;
+  padding: 22px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--warn);
+  background: var(--panel);
+}
+.subscription-enrollment-note h2,
+.subscription-enrollment-note p {
+  margin: 0;
+}
+.subscription-enrollment-note h2 {
+  font-size: 1.15rem;
+}
+.subscription-enrollment-note p:last-child {
+  max-width: 760px;
+  margin-top: 9px;
+  color: var(--muted);
+  font-size: 0.84rem;
+  line-height: 1.55;
+}
+.subscription-enrollment-note code {
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  color: var(--mint);
+  background: var(--ink);
+  font-size: 0.72rem;
+  overflow-wrap: anywhere;
+}
+.subscription-notice {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  margin-bottom: 26px;
+  padding: 0 14px;
+  border-left: 2px solid var(--mint);
+  background: rgba(141, 232, 178, 0.055);
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+.subscription-section + .subscription-section {
+  margin-top: 48px;
+}
+.subscription-query-error {
+  display: grid;
+  gap: 5px;
+  margin-bottom: 12px;
+  padding: 13px 15px;
+  border: 1px solid rgba(255, 107, 97, 0.5);
+  border-left: 3px solid var(--danger);
+}
+.subscription-query-error span {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+.subscription-empty {
+  padding: 38px 22px;
+  border: 1px dashed var(--line);
+  color: var(--muted);
+}
+.subscription-account-grid,
+.subscription-provider-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+.subscription-account-card,
+.subscription-provider-card {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  background: var(--panel);
+}
+.subscription-account-card > header,
+.subscription-provider-card > header {
+  min-height: 88px;
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: center;
+  padding: 18px 20px;
+  border-bottom: 1px solid var(--line);
+}
+.subscription-account-card header span:first-child,
+.subscription-provider-card header span:first-child {
+  color: var(--signal);
+  font: 0.63rem var(--mono);
+  letter-spacing: 0.08em;
+}
+.subscription-account-card h3,
+.subscription-provider-card h3 {
+  margin: 6px 0 0;
+  font-size: 1.3rem;
+}
+.subscription-facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0;
+  border-bottom: 1px solid var(--line);
+}
+.subscription-facts div {
+  min-height: 66px;
+  display: grid;
+  align-content: center;
+  gap: 5px;
+  padding: 12px 20px;
+  border-right: 1px solid var(--line-soft);
+  border-bottom: 1px solid var(--line-soft);
+}
+.subscription-facts dt,
+.subscription-facts dd {
+  margin: 0;
+}
+.subscription-facts dt {
+  color: var(--muted);
+  font: 0.61rem var(--mono);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.subscription-facts dd {
+  overflow-wrap: anywhere;
+  font-size: 0.82rem;
+}
+.quota-summary {
+  min-height: 82px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 18px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--line);
+}
+.quota-summary span {
+  color: var(--muted);
+  font: 0.64rem var(--mono);
+  letter-spacing: 0.06em;
+}
+.quota-summary strong {
+  color: var(--mint);
+  font: 600 1rem var(--mono);
+}
+.quota-window-list {
+  display: grid;
+}
+.quota-window {
+  padding: 15px 20px;
+  border-bottom: 1px solid var(--line-soft);
+}
+.quota-window header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+  font-size: 0.74rem;
+}
+.quota-window header span,
+.quota-unknown {
+  color: var(--muted);
+}
+.quota-window progress {
+  width: 100%;
+  height: 8px;
+  border: 0;
+  background: var(--ink);
+  accent-color: var(--mint);
+}
+.quota-window progress::-webkit-progress-bar {
+  background: var(--ink);
+}
+.quota-window progress::-webkit-progress-value {
+  background: var(--mint);
+}
+.quota-window dl {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin: 12px 0 0;
+}
+.quota-window dl div {
+  display: grid;
+  gap: 3px;
+}
+.quota-window dt {
+  color: var(--muted);
+  font: 0.58rem var(--mono);
+}
+.quota-window dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-size: 0.7rem;
+}
+.quota-unknown {
+  padding: 10px 0;
+  font-size: 0.72rem;
+}
+.subscription-account-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: auto;
+  padding: 16px 20px;
+}
+.subscription-account-actions button {
+  flex: 1;
+}
+.subscription-readonly {
+  margin: auto 20px 20px;
+  padding-top: 18px;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+.subscription-provider-card {
+  padding-bottom: 20px;
+}
+.subscription-provider-card > header,
+.subscription-provider-card .subscription-facts {
+  margin-bottom: 18px;
+}
+.subscription-provider-card > label,
+.subscription-provider-card > select,
+.subscription-provider-card > button,
+.provider-documentation {
+  margin-right: 20px;
+  margin-left: 20px;
+}
+.provider-documentation {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  margin-bottom: 14px;
+  color: var(--mint);
+  font-size: 0.78rem;
+}
+.subscription-provider-card > label {
+  margin-bottom: 7px;
+  color: var(--muted);
+  font: 0.63rem var(--mono);
+}
+.subscription-provider-card > select {
+  min-height: 46px;
+  margin-bottom: 12px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 0;
+  color: var(--paper);
+  background: var(--ink);
+}
+.subscription-modal-backdrop {
+  position: fixed;
+  z-index: 90;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(11, 13, 10, 0.82);
+}
+.subscription-modal {
+  width: min(520px, 100%);
+  padding: 26px;
+  border: 1px solid var(--warn);
+  background: var(--panel-raised);
+  box-shadow: 12px 12px 0 #080a08;
+}
+.subscription-modal h2 {
+  margin: 0;
+  font-size: 1.7rem;
+}
+.subscription-modal > p:not(.eyebrow) {
+  margin: 18px 0 24px;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
 @media (max-width: 1100px) {
   .app-frame {
     grid-template-columns: 82px minmax(0, 1fr);
@@ -1101,7 +1395,9 @@ button:disabled {
     grid-template-columns: 1fr;
   }
   .decision-list,
-  .memory-grid {
+  .memory-grid,
+  .subscription-account-grid,
+  .subscription-provider-grid {
     grid-template-columns: repeat(2, 1fr);
   }
   .access-list article {
@@ -1202,8 +1498,20 @@ button:disabled {
     min-width: 720px;
   }
   .decision-list,
-  .memory-grid {
+  .memory-grid,
+  .subscription-account-grid,
+  .subscription-provider-grid {
     grid-template-columns: 1fr;
+  }
+  .subscription-enrollment-note {
+    grid-template-columns: 1fr;
+  }
+  .subscription-facts,
+  .quota-window dl {
+    grid-template-columns: 1fr;
+  }
+  .subscription-account-actions {
+    flex-direction: column;
   }
   .filter-field input {
     min-width: 0;

@@ -57,6 +57,7 @@ export interface ApplicationProductDependencies {
   };
   readonly registry?: ApplicationRegistryOperations;
   readonly registryPublisher?: NonNullable<ApplicationHttpDependencies["registryPublisher"]>;
+  readonly connectorEnrollments?: NonNullable<ApplicationHttpDependencies["connectorEnrollments"]>;
   readonly health?: NonNullable<ApplicationHttpDependencies["health"]>;
   readonly server?: ApplicationHttpServerOptions;
 }
@@ -214,6 +215,9 @@ export class ApplicationProduct implements AsyncDisposable {
         ...(dependencies.artifacts === undefined ? {} : { artifacts: dependencies.artifacts }),
         ...(dependencies.integrations?.http === undefined ? {} : { integrations: dependencies.integrations.http }),
         ...(dependencies.registryPublisher === undefined ? {} : { registryPublisher: dependencies.registryPublisher }),
+        ...(dependencies.connectorEnrollments === undefined
+          ? {}
+          : { connectorEnrollments: dependencies.connectorEnrollments }),
         ...(dependencies.health === undefined ? {} : { health: dependencies.health }),
         bootstrap,
         webSessions,

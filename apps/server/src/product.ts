@@ -1,3 +1,7 @@
+import { hkdfSync } from "node:crypto";
+import { chmod, mkdir } from "node:fs/promises";
+import { join } from "node:path";
+
 import {
   ApplicationProduct,
   CoreAssuranceStage,
@@ -7,6 +11,7 @@ import {
   CoreSoftwareTaskAdapter,
   DatabaseCoreAssuranceCheckOrchestrator,
   DeterministicRecordsDocumentPlanner,
+  SubscriptionConnectionService,
   createCoreWorkPipelineExecutors,
   type CoreWorkStage,
   type CoreWorkStageExecutor,
@@ -34,11 +39,13 @@ import { FileArtifactStore, RegistryCatalog, RegistryHttpHandler, SurrealRegistr
 import { RecordsService } from "@massion/records";
 import { CredentialVault, ModelRouter, ProviderService } from "@massion/router";
 import {
+  DirectExecutionLifecycle,
   EmbeddedVoltAgentRuntime,
   MassionModelFactory,
   OpenAICompatibleModelBuilder,
   OrganizationAgentTopology,
   RoutedModelRegistry,
+  RuntimeRecovery,
   RuntimeExecutionStore,
   VoltAgentRunner,
   type AgentExecutionInput,
@@ -59,21 +66,54 @@ import {
   type DeliveryPrerequisiteReader,
   type EngineeringCoordinationPort,
 } from "@massion/software-engineering";
-import { createDatabase } from "@massion/storage";
+import { createDatabase, type MassionDatabase } from "@massion/storage";
+import {
+  ConnectorEnrollmentService,
+  ConnectorRegistry,
+  ServerConnectorProvisioningService,
+  SubscriptionAccountService,
+  SubscriptionConnectorBroker,
+  SubscriptionDataDisclosureService,
+  SubscriptionPolicyStore,
+  SubscriptionQuotaService,
+} from "@massion/subscriptions";
 import { WorkService } from "@massion/work";
 
 import type { DatabaseProvisionConfig, ServerConfig } from "./config.js";
 import { MassionDaemon } from "./daemon.js";
+import { ConnectorChannelAuthenticator, ConnectorChannelHub } from "./connector-channel.js";
+import { ConnectorMaintenanceService } from "./connector-maintenance.js";
+import { ConnectorChannelPersistence } from "./connector-persistence.js";
+import { ConnectorWebSocketService } from "./connector-websocket.js";
+import { BundledCodexSubscriptionObserver } from "./codex-subscription-observer.js";
+import { MiniMaxSubscriptionVerifier } from "./minimax-subscription-verifier.js";
 import { RegistryReadHttpServer } from "./registry-server.js";
+import { RuntimeStartupRecoveryService } from "./runtime-startup-recovery.js";
+import { ServerConnectorLifecycleService } from "./server-connector-lifecycle.js";
+import { ServerConnectorStartupRecoveryService } from "./server-connector-startup-recovery.js";
+import { BUILTIN_CORE_MODEL_ROUTES, BuiltinModelRouteAssembler } from "./server-model-route-assembler.js";
+import { BundledServerConnectorRuntimeAttestor } from "./server-runtime-attestor.js";
+import { ServerSubscriptionConnectionService } from "./server-subscription-connection.js";
+import { MassionSubscriptionExecutionContext } from "./subscription-execution-context.js";
+import { GovernanceSubscriptionPermissionBridge, SubscriptionAgentPolicyResolver } from "./subscription-governance.js";
+import { SubscriptionQuotaSynchronizationService } from "./subscription-quota-sync.js";
+import { MassionSubscriptionRuntimeResolver } from "./subscription-runtime-resolver.js";
+import { GovernanceSubscriptionSharingAuthorizer } from "./subscription-sharing.js";
 import { JsonOperationalLogger, MetricRegistry, MetricsHttpServer } from "./telemetry.js";
 
-const CORE_MODEL_ROUTES = [
-  "orchestration-balanced",
-  "planning-quality",
-  "delivery-quality",
-  "assurance-independent",
-  "software-engineering-quality",
-] as const;
+const CORE_MODEL_ROUTES = BUILTIN_CORE_MODEL_ROUTES.map((route) => route.name);
+
+export function deriveSubscriptionFingerprintKey(credentialKey: Uint8Array): Buffer {
+  return Buffer.from(
+    hkdfSync(
+      "sha256",
+      credentialKey,
+      Buffer.from("massion-subscription-fingerprint-salt-v1", "utf8"),
+      Buffer.from("subscription-account-profile-fingerprint-v1", "utf8"),
+      32,
+    ),
+  );
+}
 
 export async function provisionRemoteDatabase(
   config: DatabaseProvisionConfig,
@@ -135,9 +175,20 @@ export function createLimitedExecutors(): Readonly<Record<CoreWorkStage, CoreWor
   };
 }
 
-export async function createMassionDaemon(config: ServerConfig): Promise<MassionDaemon> {
-  const database = await createDatabase(config.database);
+export interface MassionDaemonAssemblyOptions {
+  /** 테스트와 내장 배포에서 이미 연결된 Database의 소유권을 daemon에 넘깁니다. */
+  readonly database?: MassionDatabase;
+}
+
+export async function createMassionDaemon(
+  config: ServerConfig,
+  options: MassionDaemonAssemblyOptions = {},
+): Promise<MassionDaemon> {
+  const database = options.database ?? (await createDatabase(config.database));
   try {
+    const operations = new JsonOperationalLogger((line) => process.stderr.write(`${line}\n`));
+    await mkdir(config.connectors.root, { recursive: true, mode: 0o700 });
+    await chmod(config.connectors.root, 0o700);
     const identities = await IdentityService.create(database);
     const organizations = await OrganizationService.create(database);
     const graph = await OrganizationGraphService.create(database, organizations);
@@ -147,18 +198,132 @@ export async function createMassionDaemon(config: ServerConfig): Promise<Massion
     const permits = await PermitStore.create(database, organizations);
     const emergency = await EmergencyControl.create(database, organizations, permits);
     const governanceGate = new GovernanceGate(governance, approvals, permits, emergency);
+    const subscriptionPermissionBridge = new GovernanceSubscriptionPermissionBridge(
+      governanceGate,
+      config.mode,
+      approvals,
+    );
     const works = await WorkService.create(database, organizations, graph);
     await ExtensionStore.create(database, organizations);
-    const providers = await ProviderService.create(database, organizations, new CredentialVault(config.credentialKey));
-    const router = await ModelRouter.create(database, organizations, providers);
+    const connectorEnrollment = await ConnectorEnrollmentService.create(database, organizations);
+    const subscriptionConnectors = await ConnectorRegistry.create(database, organizations, connectorEnrollment, {
+      heartbeatTtlMs: config.connectors.heartbeatMs,
+    });
+    const subscriptionPolicies = await SubscriptionPolicyStore.create(database, organizations);
+    const subscriptionDataDisclosures = await SubscriptionDataDisclosureService.create(database, organizations);
+    const subscriptionQuota = await SubscriptionQuotaService.create(database, organizations);
+    const subscriptionAccounts = await SubscriptionAccountService.create(
+      database,
+      organizations,
+      deriveSubscriptionFingerprintKey(config.credentialKey),
+      new GovernanceSubscriptionSharingAuthorizer(governanceGate, config.mode),
+    );
+    const connectorChannels = new ConnectorChannelHub();
+    const subscriptionConnectorCommands = {
+      enroll: subscriptionConnectors.enroll.bind(subscriptionConnectors),
+      revoke: async (context: Parameters<typeof subscriptionConnectors.revoke>[0], connectorId: string) => {
+        const revoked = await subscriptionConnectors.revoke(context, connectorId);
+        await connectorChannels.disconnect({ organizationId: context.organizationId, connectorId });
+        return revoked;
+      },
+    };
+    const connectorBroker = await SubscriptionConnectorBroker.create(database, organizations, subscriptionAccounts, {
+      transport: connectorChannels,
+    });
+    const providers = await ProviderService.create(database, organizations, new CredentialVault(config.credentialKey), {
+      accounts: subscriptionAccounts,
+    });
+    const router = await ModelRouter.create(database, organizations, providers, {
+      accounts: subscriptionAccounts,
+      quota: subscriptionQuota,
+      policies: subscriptionPolicies,
+    });
+    const codexSubscriptionObserver = new BundledCodexSubscriptionObserver({
+      profileRoot: join(config.connectors.root, "profiles"),
+    });
+    const subscriptionQuotaSynchronization = new SubscriptionQuotaSynchronizationService(
+      database,
+      organizations,
+      providers,
+      subscriptionQuota,
+      {
+        intervalMs: 120_000,
+        maximumConcurrency: 4,
+        fetchCodexQuota: async (input) => await codexSubscriptionObserver.readQuota(input),
+        onTransition: (transition) => {
+          if (transition.attempted > 0) operations.write("subscription.quota.synchronized", { ...transition });
+        },
+        onUnavailable: (failure) => {
+          operations.write("subscription.quota.unavailable", { ...failure });
+        },
+      },
+    );
+    const subscriptionConnections = new SubscriptionConnectionService(database, subscriptionAccounts, providers);
+    const serverRuntimeAttestor = new BundledServerConnectorRuntimeAttestor(database, {
+      profileRoot: join(config.connectors.root, "profiles"),
+    });
+    const serverConnectors = await ServerConnectorProvisioningService.create(database, organizations, {
+      runtimeAttestor: serverRuntimeAttestor,
+    });
+    const builtinModelRoutes = new BuiltinModelRouteAssembler(router);
+    const serverSubscriptionConnections = new ServerSubscriptionConnectionService(
+      serverConnectors,
+      subscriptionConnections,
+      subscriptionAccounts,
+      builtinModelRoutes,
+      codexSubscriptionObserver,
+      {
+        profileRoot: join(config.connectors.root, "profiles"),
+        connectors: subscriptionConnectors,
+        logout: async (providerId, input) => {
+          if (providerId !== "openai-codex") {
+            throw new Error("이 서버 구독 Provider의 원격 logout 계약이 구성되지 않았습니다");
+          }
+          const loggedOut = await codexSubscriptionObserver.logout({
+            organizationId: input.organizationId,
+            accountId: input.accountId,
+          });
+          if (!loggedOut) throw new Error("서버 구독 profile을 찾을 수 없습니다");
+        },
+      },
+      new MiniMaxSubscriptionVerifier(),
+    );
     const runtimeExecutions = await RuntimeExecutionStore.create(database, organizations);
+    const directExecutionLifecycle = new DirectExecutionLifecycle(
+      new RuntimeRecovery(runtimeExecutions, { getWorkflowState: () => Promise.resolve(null) }),
+    );
     const modelRegistry = new RoutedModelRegistry();
     const topologyRuntime = new EmbeddedVoltAgentRuntime(modelRegistry.resolve);
+    const subscriptionExecutionContext = new MassionSubscriptionExecutionContext(
+      join(config.connectors.root, "workspaces"),
+      works,
+    );
+    const subscriptionRuntimeResolver = new MassionSubscriptionRuntimeResolver({
+      accounts: subscriptionAccounts,
+      connectors: subscriptionConnectors,
+      broker: connectorBroker,
+      workspaceCapabilities: subscriptionExecutionContext,
+      policies: new SubscriptionAgentPolicyResolver(policies, config.mode, subscriptionPolicies),
+      profileRoot: join(config.connectors.root, "profiles"),
+      executableAllowlist: config.connectors.executables,
+      permissions: {
+        codex: subscriptionPermissionBridge,
+        claude: subscriptionPermissionBridge,
+      },
+    });
+    const modelFactory = new MassionModelFactory(router, providers, new OpenAICompatibleModelBuilder(), {
+      broker: connectorBroker,
+      resolver: subscriptionRuntimeResolver,
+      routeAttempts: { read: async (context, attemptId) => await router.readAttempt(context, attemptId) },
+    });
     const routedRunner = new VoltAgentRunner(
       topologyRuntime,
       runtimeExecutions,
-      new MassionModelFactory(router, providers, new OpenAICompatibleModelBuilder()),
+      modelFactory,
       modelRegistry,
+      directExecutionLifecycle,
+      subscriptionExecutionContext,
+      { subscriptionApprovals: subscriptionPermissionBridge },
     );
     const topologies = new Map<string, OrganizationAgentTopology>();
     const synchronize = async (context: Parameters<typeof graph.listNodes>[0]) => {
@@ -193,6 +358,23 @@ export async function createMassionDaemon(config: ServerConfig): Promise<Massion
       resume: routedRunner.resume.bind(routedRunner),
       recover: routedRunner.recover.bind(routedRunner),
     };
+    const runtimeRecovery = new RuntimeStartupRecoveryService(
+      runtimeExecutions,
+      {
+        resolveTenantContext: async (userId, organizationId) =>
+          await organizations.resolveTenantContext(userId, organizationId),
+      },
+      runner,
+      {
+        onFailure: (failure) => {
+          operations.write("runtime.startup_recovery.failed", {
+            reason: failure.reason,
+            ...(failure.executionId === undefined ? {} : { executionId: failure.executionId }),
+            ...(failure.organizationId === undefined ? {} : { organizationId: failure.organizationId }),
+          });
+        },
+      },
+    );
     const contexts = await ContextStore.create(database, organizations, works);
     const strategyGenerator = await StrategyGenerator.create(database, organizations, runner, contexts, works);
     const strategy = StrategyService.create(contexts, strategyGenerator, works);
@@ -404,12 +586,29 @@ export async function createMassionDaemon(config: ServerConfig): Promise<Massion
       policies,
       tokenKey: config.tokenKey,
       executors,
-      domain: { works, organization: graph, runtime: runner, approvals, assuranceBindings, providers, router },
+      domain: {
+        works,
+        organization: graph,
+        runtime: runner,
+        approvals,
+        assuranceBindings,
+        providers,
+        router,
+        subscriptionAccounts,
+        subscriptionServerConnections: serverSubscriptionConnections,
+        subscriptionConnectors: subscriptionConnectorCommands,
+        subscriptionDataDisclosures,
+        subscriptionPolicy: subscriptionPolicies,
+      },
       queries: {
         runtime: runtimeExecutions,
         assuranceBindings,
         providers,
         router,
+        subscriptionAccounts,
+        subscriptionConnectors,
+        subscriptionQuota,
+        subscriptionPolicy: subscriptionPolicies,
         status: async (context) => {
           const configured = await router.listRoutes(context);
           const configuredNames = new Set(configured.map((route) => route.name));
@@ -432,20 +631,96 @@ export async function createMassionDaemon(config: ServerConfig): Promise<Massion
           };
         },
       },
+      connectorEnrollments: connectorEnrollment,
       health: {
         readiness: async () =>
-          daemonReference.current ? await daemonReference.current.readiness() : { database: true, migrations: true },
+          daemonReference.current
+            ? await daemonReference.current.readiness()
+            : { database: true, migrations: true, connectors: true },
       },
       server: config.server,
     });
     const metrics = new MetricRegistry({ massion_daemon_transition_total: ["state"] });
     const metricsServer = new MetricsHttpServer(metrics, config.metrics);
-    const operations = new JsonOperationalLogger((line) => process.stderr.write(`${line}\n`));
+    const serverConnectorLifecycle = new ServerConnectorLifecycleService(database, {
+      onTransition: (transition) => {
+        operations.write("subscription.server_connector.lifecycle", { ...transition });
+      },
+    });
+    const serverConnectorStartupRecovery = new ServerConnectorStartupRecoveryService(
+      database,
+      organizations,
+      serverConnectors,
+      {
+        onTransition: (transition) => {
+          operations.write("subscription.server_connector.startup_recovery", { ...transition });
+        },
+        onUnavailable: (failure) => {
+          operations.write("subscription.server_connector.startup_unavailable", { ...failure });
+        },
+      },
+    );
+    const connectorMaintenance = new ConnectorMaintenanceService(subscriptionConnectors, {
+      intervalMs: Math.max(1_000, Math.floor(config.connectors.heartbeatMs / 2)),
+      onError: () => {
+        operations.write("connector.expiry.failed");
+      },
+    });
+    const connectorPersistence = new ConnectorChannelPersistence(database, subscriptionConnectors);
+    const connectorWebSocket = config.connectors.edgeEnabled
+      ? new ConnectorWebSocketService({
+          server: application.server.upgradeServer(),
+          hub: connectorChannels,
+          authenticator: new ConnectorChannelAuthenticator({
+            publicKeys: connectorPersistence,
+            nonceClaims: connectorPersistence,
+          }),
+          lifecycle: connectorPersistence,
+          trustedProxyAddresses: config.server.trustedProxyAddresses ?? [],
+          expirySweepIntervalMs: Math.max(1_000, Math.floor(config.connectors.heartbeatMs / 2)),
+        })
+      : undefined;
     const daemon = new MassionDaemon({
       application,
       database,
       shutdownTimeoutMs: config.shutdownTimeoutMs,
-      operationalServices: [registryServer, metricsServer],
+      beforeListenServices: [serverConnectorLifecycle, serverConnectorStartupRecovery, runtimeRecovery],
+      drainServices: [
+        {
+          close: async () => {
+            await routedRunner.shutdown("daemon_shutdown");
+          },
+        },
+      ],
+      afterListenServices: [
+        registryServer,
+        metricsServer,
+        connectorMaintenance,
+        subscriptionQuotaSynchronization,
+        {
+          start: () => Promise.resolve(),
+          close: async () => {
+            await connectorChannels.shutdown();
+          },
+        },
+        ...(connectorWebSocket
+          ? [
+              {
+                start: () => Promise.resolve(),
+                close: async () => {
+                  await connectorWebSocket.shutdown();
+                },
+              },
+            ]
+          : []),
+      ],
+      readinessComponents: {
+        connectors: () => Promise.resolve(connectorMaintenance.ready()),
+        "server-connectors": () =>
+          Promise.resolve(serverConnectorLifecycle.ready() && serverConnectorStartupRecovery.ready()),
+        "subscription-quota": () => Promise.resolve(subscriptionQuotaSynchronization.ready()),
+        "runtime-recovery": () => Promise.resolve(runtimeRecovery.ready()),
+      },
       onState: (state) => {
         metrics.increment("massion_daemon_transition_total", { state });
       },

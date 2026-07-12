@@ -12,6 +12,7 @@ const navigation = [
   ["/memory", "05", "기억"],
   ["/extensions", "06", "확장"],
   ["/access", "07", "접근"],
+  ["/subscriptions", "08", "구독"],
 ] as const;
 
 export function RootShell() {

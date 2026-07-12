@@ -78,6 +78,14 @@ const snapshot = {
       status: "pending",
       requestedBy: "representative",
       expiresAt: "2026-07-12T00:00:00.000Z",
+      displayPreview: {
+        kind: "command",
+        title: "명령 실행",
+        executable: "git",
+        arguments: ["status", "--short"],
+        cwd: "/workspace/project",
+        reason: "변경 상태 확인",
+      },
     },
   ],
   extensions: [],
@@ -90,6 +98,20 @@ describe("TUI wire와 상태", () => {
     expect(() => decodeSnapshot({ ...snapshot, nodes: [{ ...snapshot.nodes[0], costMicros: -1 }] })).toThrow(
       /costMicros/u,
     );
+    expect(() =>
+      decodeSnapshot({
+        ...snapshot,
+        pendingApprovals: [
+          {
+            ...snapshot.pendingApprovals[0],
+            displayPreview: {
+              ...snapshot.pendingApprovals[0].displayPreview,
+              rawInput: { token: "secret" },
+            },
+          },
+        ],
+      }),
+    ).toThrow(/알 수 없는/u);
   });
 
   it("HTTP query 응답의 schema와 operation 계보를 검증한다", () => {
@@ -139,6 +161,31 @@ describe("TUI wire와 상태", () => {
       });
     }
     expect(state.events.map((event) => event.sequence)).toEqual([3, 4, 5]);
+  });
+
+  it("구독 탭과 조회별 오류를 서로 독립적으로 보존하고 성공 시 해당 오류만 지운다", () => {
+    let state = reduceTuiState(createTuiState(), {
+      type: "subscription.tab.selected",
+      tab: "accounts",
+    });
+    state = reduceTuiState(state, {
+      type: "query.failed",
+      key: "subscriptionQuota",
+      error: "할당량 조회 실패",
+    });
+    state = reduceTuiState(state, {
+      type: "query.failed",
+      key: "subscriptionPolicy",
+      error: "정책 조회 실패",
+    });
+    state = reduceTuiState(state, {
+      type: "query.loaded",
+      key: "subscriptionQuota",
+      value: [],
+    });
+
+    expect(state.subscriptionTab).toBe("accounts");
+    expect(state.queryErrors).toEqual({ subscriptionPolicy: "정책 조회 실패" });
   });
 });
 

@@ -20,6 +20,10 @@ import type {
   SubscriptionQuotaQueries,
 } from "./subscription-operations.js";
 import { BuiltinSubscriptionProviderDirectory } from "./subscription-operations.js";
+import {
+  runtimeSubscriptionLineage,
+  runtimeSubscriptionLineagesByCorrelation,
+} from "./runtime-subscription-lineage.js";
 
 export interface ApplicationQueryResultV1 {
   readonly schemaVersion: "massion.application.v1";
@@ -38,7 +42,7 @@ export interface ApplicationQueryDescriptor<Payload = unknown> {
 export interface ApplicationQueryDependencies {
   readonly readModel: ApplicationReadModel;
   readonly snapshot?: CollaborationGraphSnapshotProjector;
-  readonly runtime?: Pick<RuntimeExecutionStore, "listEvents" | "getRecovery">;
+  readonly runtime?: Pick<RuntimeExecutionStore, "listEvents" | "getRecovery" | "listByCorrelation">;
   readonly assuranceBindings?: Pick<AssuranceBindingStore, "get" | "getActive">;
   readonly extension?: Pick<ExtensionGateway, "list">;
   readonly growth?: Pick<
@@ -53,7 +57,7 @@ export interface ApplicationQueryDependencies {
   readonly audit?: Pick<ApplicationEventStore, "read">;
   readonly webSessions?: Pick<WebSessionService, "list">;
   readonly providers?: Pick<ProviderService, "listProviders" | "listEndpoints" | "listCredentials">;
-  readonly router?: Pick<ModelRouter, "listModels" | "listRoutes" | "listCandidates">;
+  readonly router?: Pick<ModelRouter, "listModels" | "listRoutes" | "listCandidates" | "readAttempt">;
   readonly status?: (context: TenantContext) => Promise<unknown>;
   readonly subscriptionAccounts?: SubscriptionAccountQueries;
   readonly subscriptionConnectors?: SubscriptionConnectorQueries;
@@ -190,11 +194,13 @@ function timestamp(value: unknown, label: string): string {
 }
 
 function publicSubscriptionProvider(provider: SubscriptionProviderView) {
+  const runtimeCapabilities = provider.runtimeCapabilities;
   return {
     providerId: provider.providerId,
     displayName: provider.displayName,
     authKinds: provider.authKinds,
     executionKind: provider.executionKind,
+    connectionSurface: provider.connectionSurface,
     billingKinds: provider.billingKinds,
     modelDiscovery: provider.modelDiscovery,
     quotaDiscovery: provider.quotaDiscovery,
@@ -204,6 +210,37 @@ function publicSubscriptionProvider(provider: SubscriptionProviderView) {
     officialDocumentation: provider.officialDocumentation,
     credentialPolicies: provider.credentialPolicies,
     verified: provider.verified,
+    ...(runtimeCapabilities
+      ? {
+          runtimeCapabilities: {
+            ...(runtimeCapabilities.minimumVersion === undefined
+              ? {}
+              : { minimumVersion: runtimeCapabilities.minimumVersion }),
+            accountIsolation: runtimeCapabilities.accountIsolation,
+            output: runtimeCapabilities.output,
+            cancellation: runtimeCapabilities.cancellation,
+            session: runtimeCapabilities.session,
+            permissionBridge: runtimeCapabilities.permissionBridge,
+            multipleAccounts: runtimeCapabilities.multipleAccounts,
+            maturity: runtimeCapabilities.maturity,
+            ...(runtimeCapabilities.approvalModes === undefined
+              ? {}
+              : { approvalModes: runtimeCapabilities.approvalModes }),
+            ...(runtimeCapabilities.approvalModesBySurface === undefined
+              ? {}
+              : {
+                  approvalModesBySurface: {
+                    ...(runtimeCapabilities.approvalModesBySurface.server === undefined
+                      ? {}
+                      : { server: runtimeCapabilities.approvalModesBySurface.server }),
+                    ...(runtimeCapabilities.approvalModesBySurface.edge === undefined
+                      ? {}
+                      : { edge: runtimeCapabilities.approvalModesBySurface.edge }),
+                  },
+                }),
+          },
+        }
+      : {}),
   };
 }
 
@@ -211,6 +248,7 @@ function publicSubscriptionPolicy(policy: SubscriptionPolicyView) {
   return {
     providerId: policy.providerId,
     credentialPolicy: policy.credentialPolicy,
+    approvalMode: policy.approvalMode,
     version: policy.version,
     source: policy.source,
     ...(policy.updatedAt === undefined ? {} : { updatedAt: policy.updatedAt }),
@@ -479,6 +517,7 @@ export function registerApplicationQueries(
         status: approval.status,
         requestedBy: approval.requestedBy,
         expiresAt: approval.expiresAt,
+        ...(approval.displayPreview === undefined ? {} : { displayPreview: approval.displayPreview }),
       })),
   });
   registry.register({
@@ -505,6 +544,7 @@ export function registerApplicationQueries(
         status: approval.status,
         requestedBy: approval.requestedBy,
         expiresAt: approval.expiresAt,
+        ...(approval.displayPreview === undefined ? {} : { displayPreview: approval.displayPreview }),
       };
     },
   });
@@ -545,6 +585,32 @@ export function registerApplicationQueries(
           type: event.event_type,
           createdAt: event.created_at,
         }));
+      },
+    });
+  }
+  if (dependencies.runtime && dependencies.router) {
+    registry.register({
+      operation: "runtime.execution.subscription-lineage",
+      requiredScopes: ["runtime:read"],
+      allowedRoles: EVERY_ROLE,
+      validate: (value) => {
+        const parsed = object(value, ["executionId", "correlationId"]);
+        if ((parsed.executionId === undefined) === (parsed.correlationId === undefined)) {
+          throw new Error("executionId와 correlationId 중 하나만 필요합니다");
+        }
+        return parsed;
+      },
+      handle: async (context, value) => {
+        const runtime = dependencies.runtime as NonNullable<ApplicationQueryDependencies["runtime"]>;
+        const router = dependencies.router as NonNullable<ApplicationQueryDependencies["router"]>;
+        return value.executionId === undefined
+          ? await runtimeSubscriptionLineagesByCorrelation(
+              context,
+              text(value.correlationId, "correlationId"),
+              runtime,
+              router,
+            )
+          : await runtimeSubscriptionLineage(context, text(value.executionId, "executionId"), runtime, router);
       },
     });
   }

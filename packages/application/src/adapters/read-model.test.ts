@@ -1,3 +1,5 @@
+import { ExtensionStore } from "@massion/extension-host";
+import { ApprovalStore, createDefaultPolicy, GovernanceService, PolicyStore } from "@massion/governance";
 import { IdentityService, OrganizationService } from "@massion/identity";
 import { OrganizationGraphService } from "@massion/organization";
 import { RuntimeExecutionStore } from "@massion/runtime";
@@ -22,7 +24,7 @@ describe("SurrealApplicationReadModel", () => {
     const graph = await OrganizationGraphService.create(database, organizations);
     const policies = await PolicyStore.create(database, organizations);
     const governance = await GovernanceService.create(database, organizations, policies);
-    await ApprovalStore.create(database, organizations, governance);
+    const approvals = await ApprovalStore.create(database, organizations, governance);
     await ExtensionStore.create(database, organizations);
     const core = await graph.bootstrap(context);
     const works = await WorkService.create(database, organizations, graph);
@@ -91,6 +93,35 @@ describe("SurrealApplicationReadModel", () => {
       tokenCount: 25,
       costMicros: 125,
     });
+    const defaults = createDefaultPolicy("personal");
+    const policy = await policies.createDraft(context, {
+      commandId: "read-model-policy-0001",
+      bundle: defaults.bundle,
+      requirements: defaults.requirements,
+    });
+    await policies.activate(context, {
+      commandId: "read-model-policy-activate-0001",
+      policyVersionId: policy.policy_version_id,
+    });
+    const decision = await governance.evaluate(context, {
+      commandId: "read-model-decision-0001",
+      request: {
+        principal: { type: "Human", id: context.userId, organizationId: context.organizationId },
+        action: "tool.call",
+        resource: { type: "Tool", id: "tool-read-model", organizationId: context.organizationId },
+        context: { environment: "local", riskClass: "agent-tool", external: false },
+      },
+    });
+    await approvals.request(context, {
+      commandId: "read-model-approval-0001",
+      decisionId: decision.decisionId,
+      displayPreview: {
+        kind: "file-change",
+        title: "파일 변경",
+        path: "/workspace/src/index.ts",
+        summary: "검증 로직 변경",
+      },
+    });
 
     const readModel = new SurrealApplicationReadModel(database, organizations);
     const snapshot = await new CollaborationGraphSnapshotProjector(readModel).project(context);
@@ -108,6 +139,12 @@ describe("SurrealApplicationReadModel", () => {
     expect(snapshot.rooms[0]).toMatchObject({
       participantIds: expect.arrayContaining([context.userId, "representative"]),
     });
+    expect(snapshot.pendingApprovals[0]?.displayPreview).toEqual({
+      kind: "file-change",
+      path: "/workspace/src/index.ts",
+      summary: "검증 로직 변경",
+      title: "파일 변경",
+    });
 
     const other = await identities.registerPersonalUser({
       email: "read-model-other@example.com",
@@ -120,5 +157,3 @@ describe("SurrealApplicationReadModel", () => {
     await expect(readModel.works(otherContext)).resolves.toEqual([]);
   });
 });
-import { ExtensionStore } from "@massion/extension-host";
-import { ApprovalStore, GovernanceService, PolicyStore } from "@massion/governance";

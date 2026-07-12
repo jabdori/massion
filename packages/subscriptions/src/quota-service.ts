@@ -159,6 +159,18 @@ export class SubscriptionQuotaService {
   }
 
   public async record(context: TenantContext, input: RecordQuotaSnapshotInput): Promise<RecordedQuotaSnapshot> {
+    await this.organizations.verifyTenantContext(context);
+    return await this.database.transaction(
+      async (tx) => await this.recordWithExecutor(context, input, tx, "management"),
+    );
+  }
+
+  private async recordWithExecutor(
+    context: TenantContext,
+    input: RecordQuotaSnapshotInput,
+    executor: QueryExecutor,
+    authorization: "management" | "routing",
+  ): Promise<RecordedQuotaSnapshot> {
     requireText(input.commandId, "Command ID");
     const accountId = requireText(input.accountId, "구독 계정 ID");
     const windows = normalizeWindows(input.windows);
@@ -166,8 +178,7 @@ export class SubscriptionQuotaService {
     const checksum = sha256(windowsJson);
     const requestHash = sha256(canonicalJson({ commandId: input.commandId, accountId, windows }));
 
-    await this.organizations.verifyTenantContext(context);
-    return await this.database.transaction(async (tx) => {
+    return await (async (tx: QueryExecutor) => {
       await this.organizations.verifyTenantContext(context, undefined, tx);
       const [events] = await tx.query<[SubscriptionAuditEvent[]]>(
         `SELECT actor_user_id, request_hash, result_json FROM subscription_audit_event
@@ -182,7 +193,9 @@ export class SubscriptionQuotaService {
         return JSON.parse(repeated.result_json) as RecordedQuotaSnapshot;
       }
       const account = await this.requireAccount(tx, context.organizationId, accountId);
-      if (account.owner_user_id !== context.userId && context.role === "member") {
+      const canRecord =
+        authorization === "routing" || account.owner_user_id === context.userId || context.role !== "member";
+      if (!canRecord) {
         throw new Error("계정 소유자 또는 조직 관리자만 Quota를 기록할 수 있습니다");
       }
       const ratios = windows.flatMap((window) => (window.remainingRatio === undefined ? [] : [window.remainingRatio]));
@@ -293,7 +306,7 @@ export class SubscriptionQuotaService {
         },
       );
       return safeResult;
-    });
+    })(executor);
   }
 
   public async recordRateLimit(context: TenantContext, input: RecordRateLimitInput): Promise<RecordedQuotaSnapshot> {
@@ -311,6 +324,32 @@ export class SubscriptionQuotaService {
         },
       ],
     });
+  }
+
+  public async recordRateLimitForRouting(
+    context: TenantContext,
+    input: RecordRateLimitInput,
+    executor: QueryExecutor,
+  ): Promise<RecordedQuotaSnapshot> {
+    return await this.recordWithExecutor(
+      context,
+      {
+        commandId: input.commandId,
+        accountId: input.accountId,
+        windows: [
+          {
+            kind: "rate-limit",
+            remainingRatio: 0,
+            ...(input.resetsAt !== undefined ? { resetsAt: input.resetsAt } : {}),
+            observedAt: input.observedAt,
+            source: input.source,
+            confidence: "derived",
+          },
+        ],
+      },
+      executor,
+      "routing",
+    );
   }
 
   public async current(context: TenantContext, accountId: string): Promise<QuotaCurrentView | undefined> {

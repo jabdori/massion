@@ -106,6 +106,7 @@ export class ConnectorEnrollmentService {
   public async issue(context: TenantContext, input: IssueEnrollmentInput): Promise<IssuedEnrollment> {
     await this.organizations.verifyTenantContext(context);
     requireText(input.commandId, "Command ID");
+    if (input.location !== "edge") throw new Error("일회 장치 등록 code는 Edge Connector에만 발급할 수 있습니다");
     const ttlMs = input.ttlMs ?? DEFAULT_ENROLLMENT_TTL_MS;
     if (!Number.isSafeInteger(ttlMs) || ttlMs < 1 || ttlMs > DEFAULT_ENROLLMENT_TTL_MS) {
       throw new Error("Connector 등록 code TTL은 1ms 이상 10분 이하여야 합니다");
@@ -121,6 +122,14 @@ export class ConnectorEnrollmentService {
     };
     await this.database.transaction(async (tx) => {
       await this.organizations.verifyTenantContext(context, undefined, tx);
+      const [repeated] = await tx.query<[Array<{ enrollment_id: string }>]>(
+        `SELECT enrollment_id FROM subscription_connector_enrollment
+         WHERE organization_id = $organization_id AND command_id = $command_id LIMIT 1;`,
+        { organization_id: context.organizationId, command_id: input.commandId },
+      );
+      if (repeated[0]) {
+        throw new Error("일회용 Connector 등록 code 발급 명령은 재사용할 수 없습니다");
+      }
       await tx.query(
         `CREATE subscription_connector_enrollment CONTENT {
           enrollment_id: $enrollment_id,
@@ -165,6 +174,7 @@ export class ConnectorEnrollmentService {
       );
       const record = records[0];
       if (!record) throw new Error("Connector 등록 code가 유효하지 않습니다");
+      if (record.location !== "edge") throw new Error("일회 장치 등록 code는 Edge Connector에만 사용할 수 있습니다");
       if (record.status === "used") throw new Error("Connector 등록 code를 재사용할 수 없습니다");
       if (record.status !== "pending" || new Date(String(record.expires_at)).getTime() <= now.getTime()) {
         await tx.query(

@@ -14,6 +14,7 @@ export interface ApplicationCommandDescriptor<Payload = unknown> {
   readonly requiredScopes: readonly string[];
   readonly allowedRoles: readonly MembershipRole[];
   readonly recovery: "replay-domain" | "operator-action";
+  readonly retryFailedCommand?: boolean;
   idempotencyPayload?(payload: Payload): unknown;
   resumeAwaitingApproval?(payload: Payload): boolean;
   validate(payload: unknown): Payload;
@@ -46,7 +47,8 @@ export class ApplicationCommandRegistry {
       descriptor.requiredScopes.length === 0 ||
       descriptor.requiredScopes.some((scope) => !SCOPE.test(scope)) ||
       descriptor.allowedRoles.length === 0 ||
-      !["replay-domain", "operator-action"].includes(descriptor.recovery)
+      !["replay-domain", "operator-action"].includes(descriptor.recovery) ||
+      (descriptor.retryFailedCommand === true && descriptor.recovery !== "replay-domain")
     ) {
       throw new Error("Application command descriptor 권한이 불완전합니다");
     }
@@ -101,6 +103,7 @@ export class ApplicationCommandRegistry {
     };
     const claim = await this.store.begin(context, identityCommand, {
       resumeAwaitingApproval: descriptor.resumeAwaitingApproval?.(payload) ?? false,
+      retryFailedCommand: descriptor.retryFailedCommand ?? false,
     });
     if (claim.outcome === "replayed") return claim.result;
     if (claim.outcome === "failed") throw applicationErrorFromStored(claim.error);

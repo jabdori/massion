@@ -191,3 +191,18 @@ export const GOVERNANCE_GROWTH_AUTONOMY_MIGRATION = defineMigration(
 DEFINE FIELD automation_mode ON governance_policy_decision TYPE option<string> ASSERT $value = NONE OR $value IN ['review', 'auto'];
 `,
 );
+
+export const GOVERNANCE_APPROVAL_RESUME_TARGET_MIGRATION = defineMigration(
+  "0099-governance-approval-resume-target",
+  `
+DEFINE FIELD resume_target ON governance_approval TYPE option<string> ASSERT $value = NONE OR $value = 'runtime-subscription';
+`,
+);
+
+// prettier-ignore -- 승인 결정 digest와 원문 입력은 그대로 두고 검토 화면용 비밀 제거 미리보기만 별도 저장합니다.
+export const GOVERNANCE_APPROVAL_DISPLAY_PREVIEW_MIGRATION = defineMigration(
+  "0102-governance-approval-display-preview",
+  `
+DEFINE FIELD display_preview_json ON governance_approval TYPE option<string>;
+`,
+);

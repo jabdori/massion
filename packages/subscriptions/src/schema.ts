@@ -191,3 +191,178 @@ DEFINE INDEX subscription_provider_account_guard_provider ON subscription_provid
 DEFINE INDEX subscription_provider_account_guard_account ON subscription_provider_account_guard FIELDS organization_id, account_id UNIQUE;
 `,
 );
+
+// prettier-ignore -- Runtime과 Session Lease의 crash-safe join 계보를 고정합니다.
+export const SUBSCRIPTION_LEASE_EXECUTION_MIGRATION = defineMigration(
+  "0091-subscription-lease-execution",
+  `
+DEFINE FIELD execution_id ON subscription_session_lease TYPE option<string>;
+UPDATE subscription_session_lease SET status = 'expired', updated_at = time::now()
+WHERE execution_id = NONE AND status = 'active';
+DEFINE INDEX subscription_session_execution ON subscription_session_lease FIELDS organization_id, execution_id;
+`,
+);
+
+// prettier-ignore -- Edge 장치 신뢰와 서버 관리형 Runtime 계보를 분리해 고정합니다.
+export const SUBSCRIPTION_SERVER_CONNECTOR_MIGRATION = defineMigration(
+  "0093-subscription-server-connector",
+  `
+DEFINE FIELD trust_origin ON subscription_connector TYPE option<string>;
+UPDATE subscription_connector SET trust_origin = 'edge-device' WHERE trust_origin = NONE;
+UPDATE subscription_connector SET status = 'offline', expires_at = NONE, updated_at = time::now()
+WHERE location = 'server' AND trust_origin = 'edge-device';
+UPDATE subscription_account SET status = 'offline', version += 1, updated_at = time::now()
+WHERE status = 'active' AND [organization_id, connector_id] IN (
+  SELECT VALUE [organization_id, connector_id] FROM subscription_connector
+  WHERE location = 'server' AND trust_origin = 'edge-device'
+);
+DEFINE FIELD OVERWRITE trust_origin ON subscription_connector TYPE string DEFAULT 'edge-device' ASSERT $value IN ['edge-device', 'server-managed'];
+DEFINE FIELD OVERWRITE public_key ON subscription_connector TYPE option<string>;
+DEFINE FIELD provider_id ON subscription_connector TYPE option<string>;
+DEFINE FIELD runtime_id ON subscription_connector TYPE option<string>;
+DEFINE FIELD runtime_artifact_digest ON subscription_connector TYPE option<string> ASSERT $value = NONE OR string::len($value) = 64;
+DEFINE FIELD process_generation ON subscription_connector TYPE option<int> ASSERT $value = NONE OR $value > 0;
+DEFINE FIELD last_health_at ON subscription_connector TYPE option<datetime>;
+DEFINE INDEX subscription_connector_trust ON subscription_connector FIELDS organization_id, trust_origin, connector_id;
+DEFINE EVENT subscription_connector_trust_invariant ON TABLE subscription_connector
+WHEN $event IN ['CREATE', 'UPDATE']
+THEN {
+  IF $after.trust_origin = 'edge-device' AND $after.public_key = NONE {
+    THROW 'Connector 신뢰 불변식: Edge 장치 공개 key가 필요합니다';
+  };
+  IF $after.trust_origin = 'server-managed' AND (
+    $after.location != 'server' OR
+    $after.protocol != 'massion.connector.v1' OR
+    $after.public_key != NONE OR
+    $after.last_heartbeat_at != NONE OR
+    $after.expires_at != NONE OR
+    $after.provider_id = NONE OR
+    $after.runtime_id = NONE OR
+    $after.runtime_artifact_digest = NONE OR
+    array::len($after.capabilities) != 1 OR
+    $after.capabilities[0] != $after.provider_id OR
+    ($after.status = 'ready' AND ($after.process_generation = NONE OR $after.last_health_at = NONE))
+  ) {
+    THROW 'Connector 신뢰 불변식: 서버 Runtime 계보가 유효하지 않습니다';
+  };
+};
+`,
+);
+
+// prettier-ignore -- 실제 Edge 연결 확인 이전의 조기 ready 상태를 append-only로 차단합니다.
+export const SUBSCRIPTION_EDGE_READY_MIGRATION = defineMigration(
+  "0095-subscription-edge-ready-lineage",
+  `
+UPDATE subscription_account SET status = 'offline', version += 1, updated_at = time::now()
+WHERE status = 'active' AND [organization_id, connector_id] IN (
+  SELECT VALUE [organization_id, connector_id] FROM subscription_connector
+  WHERE trust_origin = 'edge-device' AND status = 'ready' AND (
+    location != 'edge' OR last_heartbeat_at = NONE OR expires_at = NONE OR
+    (last_heartbeat_at != NONE AND expires_at != NONE AND expires_at <= last_heartbeat_at)
+  )
+);
+UPDATE subscription_connector SET status = 'offline', expires_at = NONE, updated_at = time::now()
+WHERE trust_origin = 'edge-device' AND location != 'edge' AND status = 'ready';
+UPDATE subscription_connector SET status = 'enrolling', last_heartbeat_at = NONE, expires_at = NONE, updated_at = time::now()
+WHERE trust_origin = 'edge-device' AND location = 'edge' AND status = 'ready' AND (
+  last_heartbeat_at = NONE OR expires_at = NONE OR
+  (last_heartbeat_at != NONE AND expires_at != NONE AND expires_at <= last_heartbeat_at)
+);
+DEFINE EVENT OVERWRITE subscription_connector_trust_invariant ON TABLE subscription_connector
+WHEN $event IN ['CREATE', 'UPDATE']
+THEN {
+  IF $after.trust_origin = 'edge-device' AND (
+    $after.public_key = NONE OR
+    ($after.status = 'ready' AND (
+      $after.location != 'edge' OR
+      $after.last_heartbeat_at = NONE OR
+      $after.expires_at = NONE OR
+      ($after.last_heartbeat_at != NONE AND $after.expires_at != NONE AND $after.expires_at <= $after.last_heartbeat_at)
+    ))
+  ) {
+    THROW 'Connector 신뢰 불변식: Edge ready에는 실제 heartbeat 계보가 필요합니다';
+  };
+  IF $after.trust_origin = 'server-managed' AND (
+    $after.location != 'server' OR
+    $after.protocol != 'massion.connector.v1' OR
+    $after.public_key != NONE OR
+    $after.last_heartbeat_at != NONE OR
+    $after.expires_at != NONE OR
+    $after.provider_id = NONE OR
+    $after.runtime_id = NONE OR
+    $after.runtime_artifact_digest = NONE OR
+    array::len($after.capabilities) != 1 OR
+    $after.capabilities[0] != $after.provider_id OR
+    ($after.status = 'ready' AND ($after.process_generation = NONE OR $after.last_health_at = NONE))
+  ) {
+    THROW 'Connector 신뢰 불변식: 서버 Runtime 계보가 유효하지 않습니다';
+  };
+};
+`,
+);
+
+// prettier-ignore -- replay 방지 nonce는 허용 시각 창 뒤에 삭제할 수 있어야 하며 UPDATE는 계속 금지합니다.
+export const SUBSCRIPTION_NONCE_RETENTION_MIGRATION = defineMigration(
+  "0096-subscription-nonce-retention",
+  `
+DEFINE EVENT OVERWRITE subscription_connector_nonce_immutable ON TABLE subscription_connector_nonce
+WHEN $event = 'UPDATE'
+THEN { THROW 'Connector nonce는 갱신할 수 없습니다'; };
+`,
+);
+
+// prettier-ignore -- 승인 방식은 기존 제공자별 routing 정책 version과 함께 append-only로 고정합니다.
+export const SUBSCRIPTION_APPROVAL_MODE_MIGRATION = defineMigration(
+  "0098-subscription-approval-mode",
+  `
+DEFINE FIELD approval_mode ON subscription_routing_policy_version TYPE option<string>;
+DEFINE FIELD approval_mode ON subscription_routing_policy_active TYPE option<string>;
+UPDATE subscription_routing_policy_version SET approval_mode = 'review' WHERE approval_mode = NONE;
+UPDATE subscription_routing_policy_active SET approval_mode = 'review' WHERE approval_mode = NONE;
+DEFINE FIELD OVERWRITE approval_mode ON subscription_routing_policy_version TYPE string DEFAULT 'review' ASSERT $value IN ['automatic', 'review', 'deny'];
+DEFINE FIELD OVERWRITE approval_mode ON subscription_routing_policy_active TYPE string DEFAULT 'review' ASSERT $value IN ['automatic', 'review', 'deny'];
+`,
+);
+
+// prettier-ignore -- crash 복구가 Connector ID를 runtime adapter로 오인하지 않도록 실행 계보를 lease에 고정합니다.
+export const SUBSCRIPTION_LEASE_RUNTIME_LINEAGE_MIGRATION = defineMigration(
+  "0100-subscription-lease-runtime-lineage",
+  `
+DEFINE FIELD adapter_id ON subscription_session_lease TYPE option<string>;
+UPDATE subscription_session_lease SET status = 'expired', updated_at = time::now()
+WHERE status = 'active' AND adapter_id = NONE;
+DEFINE INDEX subscription_session_adapter ON subscription_session_lease FIELDS organization_id, adapter_id, lease_id;
+`,
+);
+
+// prettier-ignore -- 하나의 Edge 장치 profile을 여러 논리 계정으로 오인하지 않도록 물리 계정 점유를 고정합니다.
+export const SUBSCRIPTION_EDGE_ACCOUNT_GUARD_MIGRATION = defineMigration(
+  "0101-subscription-edge-account-guard",
+  `
+DEFINE TABLE subscription_edge_account_guard SCHEMAFULL PERMISSIONS NONE;
+DEFINE FIELD organization_id ON subscription_edge_account_guard TYPE string;
+DEFINE FIELD connector_id ON subscription_edge_account_guard TYPE string;
+DEFINE FIELD account_id ON subscription_edge_account_guard TYPE string;
+DEFINE FIELD created_at ON subscription_edge_account_guard TYPE datetime;
+DEFINE INDEX subscription_edge_account_guard_connector ON subscription_edge_account_guard FIELDS organization_id, connector_id UNIQUE;
+DEFINE INDEX subscription_edge_account_guard_account ON subscription_edge_account_guard FIELDS organization_id, account_id UNIQUE;
+`,
+);
+
+// prettier-ignore -- 제공자 데이터 처리 고지 동의는 개인별·버전별로 append-only로 보존합니다.
+export const SUBSCRIPTION_DATA_DISCLOSURE_MIGRATION = defineMigration(
+  "0102-subscription-data-disclosure",
+  `
+DEFINE TABLE subscription_data_disclosure_acknowledgement SCHEMAFULL PERMISSIONS NONE;
+DEFINE FIELD acknowledgement_id ON subscription_data_disclosure_acknowledgement TYPE string;
+DEFINE FIELD organization_id ON subscription_data_disclosure_acknowledgement TYPE string;
+DEFINE FIELD user_id ON subscription_data_disclosure_acknowledgement TYPE string;
+DEFINE FIELD provider_id ON subscription_data_disclosure_acknowledgement TYPE string;
+DEFINE FIELD disclosure_version ON subscription_data_disclosure_acknowledgement TYPE string;
+DEFINE FIELD command_id ON subscription_data_disclosure_acknowledgement TYPE string;
+DEFINE FIELD created_at ON subscription_data_disclosure_acknowledgement TYPE datetime;
+DEFINE INDEX subscription_data_disclosure_acknowledgement_id ON subscription_data_disclosure_acknowledgement FIELDS acknowledgement_id UNIQUE;
+DEFINE INDEX subscription_data_disclosure_acknowledgement_version ON subscription_data_disclosure_acknowledgement FIELDS organization_id, user_id, provider_id, disclosure_version UNIQUE;
+DEFINE EVENT subscription_data_disclosure_acknowledgement_immutable ON TABLE subscription_data_disclosure_acknowledgement WHEN $event IN ['UPDATE', 'DELETE'] THEN { THROW '제공자 데이터 처리 고지 동의는 변경하거나 삭제할 수 없습니다'; };
+`,
+);

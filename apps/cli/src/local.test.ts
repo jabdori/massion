@@ -1,4 +1,4 @@
-import { chmod, mkdtemp, readFile, rm, stat } from "node:fs/promises";
+import { chmod, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -12,6 +12,7 @@ describe("local daemon lifecycle", () => {
     try {
       const paths = resolveLocalPaths({ HOME: root });
       expect(paths.dataDirectory).toBe(join(root, ".local", "share", "massion"));
+      expect(paths.connectorDirectory).toBe(join(root, ".local", "share", "massion", "connectors"));
       const first = await ensureLocalTokenKey(paths);
       const second = await ensureLocalTokenKey(paths);
       const credential = await ensureLocalCredentialKey(paths);
@@ -21,6 +22,40 @@ describe("local daemon lifecycle", () => {
       expect(Buffer.from(credential, "base64url")).toHaveLength(32);
       expect((await stat(paths.tokenKey)).mode & 0o777).toBe(0o600);
       expect((await stat(paths.credentialKey)).mode & 0o777).toBe(0o600);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("개인 서버에 owner-only Connector root를 전달한다", async () => {
+    const root = await mkdtemp(join(tmpdir(), "massion-local-connectors-"));
+    const serverScript = join(root, "server.js");
+    let childEnvironment: NodeJS.ProcessEnv | undefined;
+    try {
+      await writeFile(serverScript, "", { mode: 0o600 });
+      const paths = resolveLocalPaths({ HOME: root });
+      const manager = new LocalDaemonManager({
+        environment: {
+          HOME: root,
+          PATH: process.env.PATH,
+          MASSION_SERVER_BIN: serverScript,
+          MASSION_EDGE_CONNECTOR_ENABLED: "true",
+          MASSION_CONNECTOR_HEARTBEAT_MS: "45000",
+        },
+        fetcher: async () => Response.json({ status: "ready" }),
+        processExists: () => true,
+        processCommand: () => Promise.resolve(`node ${serverScript}`),
+        spawnProcess: (_command, _arguments, options) => {
+          childEnvironment = options.env;
+          return { pid: 42, unref() {} };
+        },
+      });
+
+      await expect(manager.start()).resolves.toMatchObject({ status: "started", pid: 42 });
+      expect(childEnvironment?.MASSION_CONNECTOR_ROOT).toBe(paths.connectorDirectory);
+      expect(childEnvironment?.MASSION_EDGE_CONNECTOR_ENABLED).toBe("true");
+      expect(childEnvironment?.MASSION_CONNECTOR_HEARTBEAT_MS).toBe("45000");
+      expect((await stat(paths.connectorDirectory)).mode & 0o777).toBe(0o700);
     } finally {
       await rm(root, { recursive: true, force: true });
     }

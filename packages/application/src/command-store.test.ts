@@ -19,6 +19,7 @@ const command = {
 
 describe("ApplicationCommandStore", () => {
   let database: MassionDatabase;
+  let organizations: OrganizationService;
   let context: TenantContext;
   let clock: MutableCommandClock;
   let store: ApplicationCommandStore;
@@ -26,7 +27,7 @@ describe("ApplicationCommandStore", () => {
   beforeEach(async () => {
     database = await createDatabase({ url: "mem://", namespace: "massion", database: crypto.randomUUID() });
     const identities = await IdentityService.create(database);
-    const organizations = await OrganizationService.create(database);
+    organizations = await OrganizationService.create(database);
     const owner = await identities.registerPersonalUser({ email: "command@example.com", displayName: "Command" });
     context = await organizations.resolveTenantContext(owner.user.user_id, owner.organization.organization_id);
     clock = new MutableCommandClock(new Date("2026-07-11T01:00:00.000Z"));
@@ -60,6 +61,22 @@ describe("ApplicationCommandStore", () => {
     await expect(store.begin(context, command)).resolves.toEqual({ outcome: "replayed", result });
     await expect(store.begin(context, { ...command, payload: { text: "다른 Work" } })).rejects.toThrow(
       "같은 commandId",
+    );
+  });
+
+  it("같은 조직의 다른 사용자도 개인 command 결과를 replay하거나 재개할 수 없다", async () => {
+    const claimed = await store.begin(context, { ...command, commandId: "command-actor-private-0001" });
+    if (claimed.outcome !== "claimed") throw new Error("command를 claim하지 못했습니다");
+    const identities = await IdentityService.create(database);
+    const member = await identities.registerPersonalUser({
+      email: "command-member@example.com",
+      displayName: "Command Member",
+    });
+    await organizations.addMember(context, member.user.user_id, "member");
+    const memberContext = await organizations.resolveTenantContext(member.user.user_id, context.organizationId);
+
+    await expect(store.begin(memberContext, { ...command, commandId: "command-actor-private-0001" })).rejects.toThrow(
+      "원래 요청 사용자",
     );
   });
 

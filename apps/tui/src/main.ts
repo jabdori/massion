@@ -86,7 +86,43 @@ async function loadView(
     for (const value of values) {
       if (value.status === "fulfilled") dispatch({ type: "query.loaded", key: value.value[0], value: value.value[1] });
     }
+    return;
   }
+  if (view === "subscriptions") {
+    const requests: Array<readonly [string, string]> = [
+      ["subscriptionProviders", "subscription.providers"],
+      ["subscriptionAccounts", "subscription.accounts"],
+      ["subscriptionQuota", "subscription.quota"],
+      ["subscriptionPolicy", "subscription.policy"],
+      ["subscriptionDoctor", "subscription.doctor"],
+    ];
+    await Promise.all(
+      requests.map(async ([key, operation]) => {
+        try {
+          dispatch({ type: "query.loaded", key, value: await controller.query(operation, {}) });
+        } catch {
+          dispatch({ type: "query.failed", key, error: "서버에서 이 구독 정보를 조회하지 못했습니다" });
+        }
+      }),
+    );
+  }
+}
+
+function selectedSubscriptionAccount(state: TuiState): {
+  readonly accountId: string;
+  readonly version: number;
+  readonly canManage: boolean;
+} {
+  const accounts = Array.isArray(state.queryResults.subscriptionAccounts)
+    ? state.queryResults.subscriptionAccounts.filter(
+        (item): item is Record<string, unknown> => item !== null && typeof item === "object" && !Array.isArray(item),
+      )
+    : [];
+  const account = accounts.find((item) => item.accountId === state.selection.accountId) ?? accounts[0];
+  if (typeof account?.accountId !== "string" || !Number.isSafeInteger(account.version))
+    throw new Error("변경할 구독 계정이 선택되지 않았습니다");
+  if (account.canManage !== true) throw new Error("구독 계정 소유자만 변경할 수 있습니다");
+  return { accountId: account.accountId, version: account.version as number, canManage: true };
 }
 
 export async function runTui(
@@ -168,6 +204,26 @@ export async function runTui(
         if (operation === "suspend") return await commands.suspendExecution(execution.executionId, reason);
         return await commands.resumeExecution(execution.executionId, { reason });
       },
+      shareSubscriptionAccount: async (accountId, version) => {
+        const account = selectedSubscriptionAccount(state);
+        if (account.accountId !== accountId || account.version !== version)
+          throw new Error("구독 계정 version이 변경되었습니다");
+        return await commands.shareSubscriptionAccount(accountId, version);
+      },
+      unshareSubscriptionAccount: async (accountId, version) => {
+        const account = selectedSubscriptionAccount(state);
+        if (account.accountId !== accountId || account.version !== version)
+          throw new Error("구독 계정 version이 변경되었습니다");
+        return await commands.unshareSubscriptionAccount(accountId, version);
+      },
+      disconnectSubscriptionAccount: async (accountId, version) => {
+        const account = selectedSubscriptionAccount(state);
+        if (account.accountId !== accountId || account.version !== version)
+          throw new Error("구독 계정 version이 변경되었습니다");
+        return await commands.disconnectSubscriptionAccount(accountId, version);
+      },
+      configureSubscriptionPolicy: async (providerId, credentialPolicy, approvalMode, version) =>
+        await commands.configureSubscriptionPolicy(providerId, credentialPolicy, approvalMode, version),
       loadView: async (selectedView) => {
         await loadView(controller, dispatch, getState, selectedView);
       },

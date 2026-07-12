@@ -17,6 +17,18 @@
 		}
 	}
 
+	@connectors path /connectors
+	handle @connectors {
+		reverse_proxy {$MASSION_UPSTREAM:massion:3141} {
+			header_up X-Forwarded-Proto https
+			stream_close_delay 5m
+			transport http {
+				dial_timeout 3s
+				response_header_timeout 35s
+			}
+		}
+	}
+
 	@backend path /api/* /integrations/* /health/*
 	handle @backend {
 		reverse_proxy {$MASSION_UPSTREAM:massion:3141} {

@@ -4,8 +4,13 @@ import type { MembershipRole, OrganizationService, TenantContext } from "@massio
 import { applyMigrations, type MassionDatabase, type QueryExecutor } from "@massion/storage";
 
 import type { ApprovalRequirement } from "./contracts.js";
+import { normalizeApprovalDisplayPreview, type ApprovalDisplayPreview } from "./approval-preview.js";
 import { GovernanceService } from "./governance-service.js";
-import { GOVERNANCE_APPROVAL_MIGRATION } from "./schema.js";
+import {
+  GOVERNANCE_APPROVAL_DISPLAY_PREVIEW_MIGRATION,
+  GOVERNANCE_APPROVAL_MIGRATION,
+  GOVERNANCE_APPROVAL_RESUME_TARGET_MIGRATION,
+} from "./schema.js";
 
 export type ApprovalStatus = "pending" | "approved" | "rejected" | "expired" | "cancelled" | "consumed";
 
@@ -19,6 +24,8 @@ export interface ApprovalRecord {
   readonly requester_user_id: string;
   readonly work_id?: string;
   readonly execution_id?: string;
+  readonly resume_target?: "runtime-subscription";
+  readonly display_preview_json?: string;
   readonly status: ApprovalStatus;
   readonly requirement_json: string;
   readonly revision: number;
@@ -46,6 +53,8 @@ export interface RequestApprovalInput {
   readonly resourceRevision?: number;
   readonly workId?: string;
   readonly executionId?: string;
+  readonly resumeTarget?: "runtime-subscription";
+  readonly displayPreview?: ApprovalDisplayPreview;
 }
 
 export interface VoteApprovalInput {
@@ -87,6 +96,17 @@ function instant(value: unknown): number {
   return new Date(String(value)).getTime();
 }
 
+function approvalRequestIdentity(input: RequestApprovalInput): unknown {
+  return {
+    commandId: input.commandId,
+    decisionId: input.decisionId,
+    ...(input.resourceRevision === undefined ? {} : { resourceRevision: input.resourceRevision }),
+    ...(input.workId === undefined ? {} : { workId: input.workId }),
+    ...(input.executionId === undefined ? {} : { executionId: input.executionId }),
+    ...(input.resumeTarget === undefined ? {} : { resumeTarget: input.resumeTarget }),
+  };
+}
+
 export class ApprovalStore {
   private constructor(
     private readonly database: MassionDatabase,
@@ -101,7 +121,11 @@ export class ApprovalStore {
     governance: GovernanceService,
     clock: ApprovalClock = { now: () => new Date() },
   ): Promise<ApprovalStore> {
-    await applyMigrations(database, [GOVERNANCE_APPROVAL_MIGRATION]);
+    await applyMigrations(database, [
+      GOVERNANCE_APPROVAL_MIGRATION,
+      GOVERNANCE_APPROVAL_RESUME_TARGET_MIGRATION,
+      GOVERNANCE_APPROVAL_DISPLAY_PREVIEW_MIGRATION,
+    ]);
     return new ApprovalStore(database, organizations, governance, clock);
   }
 
@@ -112,7 +136,12 @@ export class ApprovalStore {
       throw new Error("승인이 필요한 Policy Decision만 Approval을 만들 수 있습니다");
     const requirement = decision.requirement;
     const policyVersionId = decision.policyVersionId;
-    const requestJson = canonicalJson(input);
+    // 표시 미리보기는 재시도 때 다시 생성될 수 있으므로 기존 승인 명령의 identity에 포함하지 않습니다.
+    const requestJson = canonicalJson(approvalRequestIdentity(input));
+    const displayPreviewJson =
+      input.displayPreview === undefined
+        ? undefined
+        : canonicalJson(normalizeApprovalDisplayPreview(input.displayPreview));
     return await this.database.transaction(async (tx) => {
       await this.organizations.verifyTenantContext(context, undefined, tx);
       const repeated = await this.repeated(tx, context.organizationId, input.commandId, requestJson);
@@ -120,7 +149,7 @@ export class ApprovalStore {
       const approvalId = randomUUID();
       const expiresAt = new Date(this.clock.now().getTime() + requirement.expiresInSeconds * 1000);
       const [created] = await tx.query<[ApprovalRecord[]]>(
-        "CREATE governance_approval CONTENT { approval_id: $approval_id, organization_id: $organization_id, decision_id: $decision_id, request_hash: $request_hash, policy_version_id: $policy_version_id, resource_revision: $resource_revision, requester_user_id: $requester_user_id, work_id: $work_id, execution_id: $execution_id, status: 'pending', requirement_json: $requirement_json, revision: 1, event_sequence: 1, expires_at: $expires_at, created_at: time::now(), updated_at: time::now() } RETURN AFTER;",
+        "CREATE governance_approval CONTENT { approval_id: $approval_id, organization_id: $organization_id, decision_id: $decision_id, request_hash: $request_hash, policy_version_id: $policy_version_id, resource_revision: $resource_revision, requester_user_id: $requester_user_id, work_id: $work_id, execution_id: $execution_id, resume_target: $resume_target, display_preview_json: $display_preview_json, status: 'pending', requirement_json: $requirement_json, revision: 1, event_sequence: 1, expires_at: $expires_at, created_at: time::now(), updated_at: time::now() } RETURN AFTER;",
         {
           approval_id: approvalId,
           organization_id: context.organizationId,
@@ -131,6 +160,8 @@ export class ApprovalStore {
           requester_user_id: context.userId,
           work_id: input.workId,
           execution_id: input.executionId,
+          resume_target: input.resumeTarget,
+          display_preview_json: displayPreviewJson,
           requirement_json: canonicalJson(requirement),
           expires_at: expiresAt,
         },
@@ -254,9 +285,11 @@ export class ApprovalStore {
       const current = await this.find(tx, context.organizationId, input.approvalId);
       if (current.requester_user_id !== context.userId)
         await this.organizations.verifyTenantContext(context, ["owner", "admin"], tx);
-      if (current.status !== "pending") throw new Error(`pending Approval만 취소할 수 있습니다: ${current.status}`);
+      if (current.status !== "pending" && current.status !== "approved") {
+        throw new Error(`미소비 Approval만 취소할 수 있습니다: ${current.status}`);
+      }
       const [updated] = await tx.query<[ApprovalRecord[]]>(
-        "UPDATE governance_approval SET status = 'cancelled', revision += 1, event_sequence += 1, updated_at = time::now() WHERE organization_id = $organization_id AND approval_id = $approval_id RETURN AFTER;",
+        "UPDATE governance_approval SET status = 'cancelled', revision += 1, event_sequence += 1, updated_at = time::now() WHERE organization_id = $organization_id AND approval_id = $approval_id AND status IN ['pending', 'approved'] RETURN AFTER;",
         { organization_id: context.organizationId, approval_id: current.approval_id },
       );
       const result = updated[0];

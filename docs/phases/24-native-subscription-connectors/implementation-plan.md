@@ -25,19 +25,33 @@
 ## Task 4. 공식 제공자 연결기
 
 - [x] Codex SDK·app-server와 Claude Agent SDK 연결기를 구현합니다.
-- [x] Gemini Enterprise·Copilot·xAI Grok Build ACP와 Google 개인 Antigravity process 연결기 계약을 구현합니다. Copilot의 잔여 구독 quota와 Antigravity의 모델 목록·quota는 discovery 없음으로 두며, Antigravity의 단일 OS 계정·실험 상태를 capability에 명시합니다.
+- [x] Claude 선택형 사람 승인은 Agent SDK `0.3.207`의 공식 `PreToolUse defer`·`deferred_tool_use`·`--resume` 왕복으로 구현하고, 원 session·도구 호출·입력 digest·승인 ID 불일치와 거부·취소·process 재시작을 실패 폐쇄합니다.
+- [x] Codex의 유료 `planType`, `account/rateLimits/read`, 계정별 `model/list`를 하나의 고정 runtime 경로로 검증하고 요청 모델 또는 결정론적 GPT-5.6 기본 모델을 선택합니다.
+- [x] Codex 모델의 runtime 가용성·OpenAI 공식 능력·bundled runtime artifact를 append-only 라우터 근거로 분리하고, 계정별 모델 근거가 없는 credential을 선택하지 않게 합니다.
+- [x] Codex app-server의 명령·파일 승인 서버 요청을 같은 JSON-RPC 요청에 응답하는 Governance `review` 경로로 구현하고, 서버는 `automatic`·`review`·`deny`, Edge는 `automatic`·`deny`만 공개합니다. `review` 정책에서는 라우터가 Edge credential을 후보에서 제외합니다.
+- [x] Gemini Enterprise·Copilot·xAI Grok Build ACP를 명시적 실험 동의가 필요한 사용자 기기 전용(edge-only) 표면으로 구현합니다. Google Antigravity는 상위 CLI의 one-shot·모델 목록 기능과 별개로 요청별 승인·인증 상태·계정 격리 계약이 부족해 공개 연결을 `unavailable`로 유지합니다. 상세 근거는 `provider-surface-review.md`에 남깁니다.
 - [x] MiniMax Token Plan, xAI API, Nous Portal의 공식 인증·과금 manifest와 GLM·Kimi·StepFun·Alibaba·OpenCode Go·Kilo preset·capability probe를 구현합니다. Z.AI는 승인 전 비활성, Alibaba는 대화형 범위, StepFun은 quota 우회 금지, Kilo는 유료 Gateway로 제한합니다.
 - [x] 2026-04-15 종료된 Qwen OAuth와 공개 계약이 없는 범용 OAuth 모델 연결기(`OAuthModelConnector`)를 제품 범위에서 제거합니다.
 
 ## Task 5. Application과 사용자 화면
 
-- [ ] 구독 provider·account·quota·policy·doctor query와 connect·share·unshare·disconnect command를 추가합니다.
-- [ ] CLI의 `mass subscription ...` UX를 구현합니다.
-- [ ] TUI·Web에서 같은 Application operation과 redacted view를 제공합니다.
+- [x] 구독 provider·account·quota·policy·doctor query와 connect·share·unshare·disconnect·connector 폐기 command를 추가합니다.
+- [x] CLI의 `mass subscription ...` UX와 로그인 전 데이터 처리 고지 동의를 구현합니다.
+- [x] TUI·Web에서 같은 Application operation과 redacted view, 승인 미리보기를 제공합니다.
 
 ## Task 6. 제품 조립과 실제 사용자 검증
 
-- [ ] 설치형 서버·로컬 lifecycle·team deploy에 connector broker를 조립합니다.
-- [ ] 깨끗한 release 설치를 `tmux`에서 실행하고 Claude·Codex·GLM 실제 계정 시나리오를 검증합니다.
+- [x] 배포 하위 작업으로 Caddy의 정확한 `/connectors` WebSocket 경로, Compose·Kustomize의 팀 수신 기본값, 로컬의 소유자 전용 profile root와 명시적 수신 선택을 정적 테스트·구성 해석으로 검증합니다.
+- [x] Codex prepare→유료 인증→모델 발견→Core route→`MassionModelFactory` agent-runtime session lease를 실제 저장소 통합 테스트로 완주합니다.
+- [x] 설치형 서버·로컬 lifecycle에 connector broker, runtime startup recovery, drain shutdown을 조립하고 product test로 검증합니다. team deploy의 실제 사용자 시나리오는 다음 항목에서 검증합니다.
+- [ ] 깨끗한 release 설치를 `tmux`에서 실행하고 공식 허용 범위의 실제 계정 시나리오를 검증합니다. Claude 소비자 로그인과 Z.AI는 제공자 승인 전 `provider-approval-required`로 검증합니다.
 - [ ] 복수 계정 회전·quota·offline·429·fallback·중단·재개·재시작·백업·복원을 검증합니다.
 - [ ] 전체 검증, 요구사항 추적표, 아키텍처, 운영 문서와 Phase 24 회고를 실제 결과로 완료합니다.
+
+## Task 7. Phase 24 기준점 닫기
+
+- [x] 서버 종료에서 HTTP 수신 차단 뒤 실행 중 runtime을 취소·정산하고 connector·Application·Database를 닫는 순서를 TDD로 고정합니다.
+- [x] ACP 초기화 중 취소와 출력 누적 상한을 fail-closed로 구현합니다.
+- [x] Edge Connector 폐기 시 공개 명령이 현재 채널을 즉시 닫고 신규 RPC를 막는 경로를 검증합니다.
+- [x] 개인 Codex 데이터 처리 고지의 명시 동의·버전 기록·로그인 전 차단을 검증합니다.
+- [ ] 실제 사용자 자격 증명·tmux 시나리오, 전체 release gate, Phase 회고를 완료한 하나의 source commit으로 고정합니다.

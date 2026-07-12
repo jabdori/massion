@@ -2,8 +2,8 @@
 
 > **상태**: approved
 > **승인일**: 2026-07-12
-> **상세 설계**: `docs/superpowers/specs/2026-07-12-model-optimization-lab-design.md`
-> **선행 단계**: Phase 24 completed
+> **상세 설계**: 새 Core 저장소 전환 뒤 Phase 25 시작 commit에서 작성
+> **선행 단계**: Phase 24 completed 및 Phase 27의 새 비공개 Massion Core root commit 생성
 
 ## 1. 목적
 

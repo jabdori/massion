@@ -196,6 +196,7 @@ describe("Massion routed model factory", () => {
       commandId: crypto.randomUUID(),
       signal: { kind: "http", statusCode: 401 },
       emittedTokens: 0,
+      sideEffectsStarted: false,
       inputTokens: 0,
       outputTokens: 0,
     });
@@ -377,6 +378,76 @@ describe("Massion routed model factory", () => {
       expect(result.text).toBe("ok");
       expect(requestUrl).toBe("/v1/chat/completions");
       expect(authorization).toBe("Bearer ollama-secret");
+    } finally {
+      await new Promise<void>((resolve, reject) =>
+        server.close((error) => {
+          if (error) reject(error);
+          else resolve();
+        }),
+      );
+    }
+  });
+
+  it("Anthropic 호환 구독 endpoint를 /v1/messages와 Bearer 구독 키로 호출한다", async () => {
+    let requestUrl = "";
+    let authorization = "";
+    let apiKey = "";
+    const server = createServer((request, response) => {
+      requestUrl = request.url ?? "";
+      authorization = request.headers.authorization ?? "";
+      apiKey = String(request.headers["x-api-key"] ?? "");
+      response.setHeader("content-type", "application/json");
+      response.end(
+        JSON.stringify({
+          id: "message-1",
+          type: "message",
+          role: "assistant",
+          model: "MiniMax-M2.7",
+          content: [{ type: "text", text: "ok" }],
+          stop_reason: "end_turn",
+          stop_sequence: null,
+          usage: { input_tokens: 1, output_tokens: 1 },
+        }),
+      );
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("테스트 HTTP 주소를 찾을 수 없습니다");
+    const builder = new OpenAICompatibleModelBuilder();
+    const provider: ModelProvider = {
+      provider_id: "minimax-token-plan",
+      organization_id: "organization-a",
+      display_name: "MiniMax Token Plan",
+      adapter_kind: "subscription-connector",
+      enabled: true,
+      created_at: new Date(),
+      updated_at: new Date(),
+    };
+    const endpoint: ProviderEndpoint = {
+      endpoint_id: "endpoint-minimax",
+      organization_id: "organization-a",
+      provider_id: provider.provider_id,
+      name: "MiniMax Anthropic",
+      base_url: `http://127.0.0.1:${String(address.port)}/anthropic`,
+      local: false,
+      subscription_protocol: "anthropic",
+      enabled: true,
+      created_at: new Date(),
+      updated_at: new Date(),
+    };
+    const model = builder.build({
+      provider,
+      endpoint,
+      modelId: "MiniMax-M2.7",
+      credentialId: "minimax-subscription-key",
+      secret: "subscription-key-value",
+    });
+    try {
+      const result = await generateText({ model, prompt: "hello", maxRetries: 0 });
+      expect(result.text).toBe("ok");
+      expect(requestUrl).toBe("/anthropic/v1/messages");
+      expect(authorization).toBe("Bearer subscription-key-value");
+      expect(apiKey).toBe("");
     } finally {
       await new Promise<void>((resolve, reject) =>
         server.close((error) => {

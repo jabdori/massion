@@ -120,6 +120,19 @@ export class ApplicationHttpClient {
     return await this.jsonRequest("/api/v1/commands", { method: "POST", body: JSON.stringify(input) }, true);
   }
 
+  public async issueConnectorEnrollment(input: {
+    readonly commandId: string;
+    readonly location: "edge";
+    readonly executionKind: "model" | "agent-runtime";
+    readonly ttlMs?: number;
+  }): Promise<unknown> {
+    return await this.jsonRequest(
+      "/api/v1/subscriptions/connectors/enrollments",
+      { method: "POST", body: JSON.stringify(input) },
+      false,
+    );
+  }
+
   public async issueToken(input: unknown): Promise<unknown> {
     return await this.jsonRequest("/api/v1/tokens", { method: "POST", body: JSON.stringify(input) }, true);
   }

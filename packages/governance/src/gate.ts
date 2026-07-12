@@ -1,6 +1,7 @@
 import type { TenantContext } from "@massion/identity";
 import type { QueryExecutor } from "@massion/storage";
 
+import type { ApprovalDisplayPreview } from "./approval-preview.js";
 import { ApprovalStore, type ApprovalStatus } from "./approval-store.js";
 import type { GrowthAutomationMode, PolicyDecision, PolicyRequest } from "./contracts.js";
 import { EmergencyControl } from "./emergency.js";
@@ -21,6 +22,9 @@ export interface GovernedActionInput {
   readonly riskClass: string;
   readonly external: boolean;
   readonly executionId: string;
+  readonly workId?: string;
+  readonly resumeTarget?: "runtime-subscription";
+  readonly approvalPreview?: ApprovalDisplayPreview;
   readonly approvalId?: string;
 }
 
@@ -150,6 +154,10 @@ export class GovernanceGate {
       commandId: `${input.commandId}:approval`,
       decisionId: decision.decisionId,
       ...(input.resource.revision === undefined ? {} : { resourceRevision: input.resource.revision }),
+      ...(input.workId === undefined ? {} : { workId: input.workId }),
+      executionId: input.executionId,
+      ...(input.resumeTarget === undefined ? {} : { resumeTarget: input.resumeTarget }),
+      ...(input.approvalPreview === undefined ? {} : { displayPreview: input.approvalPreview }),
     });
     throw new GovernanceApprovalRequiredError(decision.decisionId, approval.approval_id);
   }
