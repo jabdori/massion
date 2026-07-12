@@ -17,6 +17,45 @@ import { createDatabase, type MassionDatabase } from "@massion/storage";
 
 import { MassionModelFactory, OpenAICompatibleModelBuilder, type ProviderModelSelection } from "./model-factory.js";
 
+function buildOpenAiModelFixture({
+  adapterKind = "ai-sdk",
+  baseUrl,
+  modelId,
+}: {
+  readonly adapterKind?: ModelProvider["adapter_kind"];
+  readonly baseUrl: string;
+  readonly modelId: string;
+}): LanguageModel {
+  const builder = new OpenAICompatibleModelBuilder();
+  const provider: ModelProvider = {
+    provider_id: "openai",
+    organization_id: "organization-a",
+    display_name: "OpenAI",
+    adapter_kind: adapterKind,
+    enabled: true,
+    created_at: new Date(),
+    updated_at: new Date(),
+  };
+  const endpoint: ProviderEndpoint = {
+    endpoint_id: "endpoint-openai",
+    organization_id: "organization-a",
+    provider_id: "openai",
+    name: "OpenAI API",
+    base_url: baseUrl,
+    local: false,
+    enabled: true,
+    created_at: new Date(),
+    updated_at: new Date(),
+  };
+  return builder.build({
+    provider,
+    endpoint,
+    modelId,
+    credentialId: "openai-api-key",
+    secret: "openai-secret",
+  });
+}
+
 describe("Massion routed model factory", () => {
   let database: MassionDatabase;
   let context: TenantContext;
@@ -173,39 +212,68 @@ describe("Massion routed model factory", () => {
   it.each(["https://api.openai.com/v1?", "https://api.openai.com/v1#"])(
     "빈 query/hash가 포함된 OpenAI API URL %s는 chat provider를 사용한다",
     (baseUrl) => {
-      const builder = new OpenAICompatibleModelBuilder();
-      const provider: ModelProvider = {
-        provider_id: "openai",
-        organization_id: "organization-a",
-        display_name: "OpenAI",
-        adapter_kind: "ai-sdk",
-        enabled: true,
-        created_at: new Date(),
-        updated_at: new Date(),
-      };
-      const endpoint: ProviderEndpoint = {
-        endpoint_id: "endpoint-openai",
-        organization_id: "organization-a",
-        provider_id: "openai",
-        name: "OpenAI API",
-        base_url: baseUrl,
-        local: false,
-        enabled: true,
-        created_at: new Date(),
-        updated_at: new Date(),
-      };
-
-      const model = builder.build({
-        provider,
-        endpoint,
+      const model = buildOpenAiModelFixture({
+        baseUrl,
         modelId: "gpt-5.6-sol",
-        credentialId: "openai-api-key",
-        secret: "openai-secret",
       });
 
       expect(model.provider).toBe("openai.chat");
     },
   );
+
+  it.each(["gpt-5.6", "gpt-5.6-terra", "gpt-5.6-luna"])(
+    "공식 OpenAI의 %s는 Responses provider를 사용한다",
+    (modelId) => {
+      const model = buildOpenAiModelFixture({
+        baseUrl: "https://api.openai.com/v1",
+        modelId,
+      });
+
+      expect(model.provider).toBe("openai.responses");
+    },
+  );
+
+  it.each([
+    {
+      name: "공식 OpenAI의 allowlist 외 gpt-5.5는 chat provider를 사용한다",
+      adapterKind: "ai-sdk",
+      baseUrl: "https://api.openai.com/v1",
+      modelId: "gpt-5.5",
+      expectedProvider: "openai.chat",
+    },
+    {
+      name: "사용자 지정 proxy의 gpt-5.6-sol은 chat provider를 사용한다",
+      adapterKind: "ai-sdk",
+      baseUrl: "https://proxy.example/v1",
+      modelId: "gpt-5.6-sol",
+      expectedProvider: "openai.chat",
+    },
+    {
+      name: "openai-compatible adapter의 gpt-5.6-sol은 chat provider를 사용한다",
+      adapterKind: "openai-compatible",
+      baseUrl: "https://gateway.example/v1",
+      modelId: "gpt-5.6-sol",
+      expectedProvider: "openai.chat",
+    },
+    {
+      name: "이중 trailing slash가 포함된 공식 OpenAI URL은 chat provider를 사용한다",
+      adapterKind: "ai-sdk",
+      baseUrl: "https://api.openai.com/v1//",
+      modelId: "gpt-5.6-sol",
+      expectedProvider: "openai.chat",
+    },
+    {
+      name: "단일 trailing slash가 포함된 공식 OpenAI URL은 Responses provider를 사용한다",
+      adapterKind: "ai-sdk",
+      baseUrl: "https://api.openai.com/v1/",
+      modelId: "gpt-5.6-sol",
+      expectedProvider: "openai.responses",
+    },
+  ] as const)("$name", ({ adapterKind, baseUrl, modelId, expectedProvider }) => {
+    const model = buildOpenAiModelFixture({ adapterKind, baseUrl, modelId });
+
+    expect(model.provider).toBe(expectedProvider);
+  });
 
   it("공식 OpenAI의 gpt-5.6-sol은 Responses API endpoint로 호출한다", async () => {
     let requestUrl = "";
@@ -230,33 +298,9 @@ describe("Massion routed model factory", () => {
       );
     });
     vi.stubGlobal("fetch", fetcher);
-    const builder = new OpenAICompatibleModelBuilder();
-    const provider: ModelProvider = {
-      provider_id: "openai",
-      organization_id: "organization-a",
-      display_name: "OpenAI",
-      adapter_kind: "ai-sdk",
-      enabled: true,
-      created_at: new Date(),
-      updated_at: new Date(),
-    };
-    const endpoint: ProviderEndpoint = {
-      endpoint_id: "endpoint-openai",
-      organization_id: "organization-a",
-      provider_id: "openai",
-      name: "OpenAI API",
-      base_url: "https://api.openai.com/v1",
-      local: false,
-      enabled: true,
-      created_at: new Date(),
-      updated_at: new Date(),
-    };
-    const model = builder.build({
-      provider,
-      endpoint,
+    const model = buildOpenAiModelFixture({
+      baseUrl: "https://api.openai.com/v1",
       modelId: "gpt-5.6-sol",
-      credentialId: "openai-api-key",
-      secret: "openai-secret",
     });
 
     const result = await generateText({ model, prompt: "hello", maxRetries: 0 });
