@@ -5,8 +5,8 @@
 ## 포함 후보
 
 - 제품 소스: `apps/`, `packages/`, `extensions/`, `scripts/`, `release/`, `deploy/`
-- 현재 운영·제품 문서: `docs/architecture/`, `docs/operations/`, `docs/phases/24-native-subscription-connectors/`, `docs/phases/25-model-optimization-lab/`, `docs/phases/26-gpt-5-6-migration/`, `docs/phases/27-clean-repository-cloud-separation/`
-- build·검증 정본: 루트 `package.json`, `pnpm-lock.yaml`, `pnpm-workspace.yaml`, `tsconfig.base.json`, `eslint.config.js`, `.prettierignore`, `.prettierrc.json`, `.gitignore`, `compose.yaml`, `Dockerfile`, `README.md`, `CHANGELOG.md`, CI 설정, 새 제품 README와 LICENSE/EULA가 소유자 결정 뒤 추가된 경우의 해당 파일
+- 현재 운영·제품 문서: `docs/architecture/`, `docs/operations/`, `docs/evidence/phase-24/`, `docs/phases/24-native-subscription-connectors/`, `docs/phases/25-model-optimization-lab/`, `docs/phases/26-gpt-5-6-migration/`, `docs/phases/27-clean-repository-cloud-separation/`
+- build·검증 정본: 루트 `package.json`, `pnpm-lock.yaml`, `pnpm-workspace.yaml`, `tsconfig.base.json`, `eslint.config.js`, `.dockerignore`, `.prettierignore`, `.prettierrc.json`, `.gitignore`, `compose.yaml`, `Dockerfile`, `README.md`, `CHANGELOG.md`, `.github/`, 새 제품 README와 LICENSE/EULA가 소유자 결정 뒤 추가된 경우의 해당 파일
 
 ## 제외 후보
 

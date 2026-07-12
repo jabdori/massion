@@ -37,8 +37,8 @@
 모든 과거 commit과 최종 HEAD에 다음 경로만 허용합니다.
 
 - 제품 코드·테스트: `apps/`, `packages/`, `extensions/`, `scripts/`, `release/`, `deploy/`
-- 현재 운영·추적 문서: `docs/architecture/`, `docs/operations/`, `docs/phases/24-native-subscription-connectors/`, `docs/phases/25-model-optimization-lab/`, `docs/phases/26-gpt-5-6-migration/`, `docs/phases/27-clean-repository-cloud-separation/`
-- 루트 정본: `package.json`, `pnpm-lock.yaml`, `pnpm-workspace.yaml`, `tsconfig.base.json`, `eslint.config.js`, `.prettierignore`, `.prettierrc.json`, `.gitignore`, `compose.yaml`, `Dockerfile`, `README.md`, `CHANGELOG.md`, CI 설정
+- 현재 운영·추적 문서: `docs/architecture/`, `docs/operations/`, `docs/evidence/phase-24/`, `docs/phases/24-native-subscription-connectors/`, `docs/phases/25-model-optimization-lab/`, `docs/phases/26-gpt-5-6-migration/`, `docs/phases/27-clean-repository-cloud-separation/`
+- 루트 정본: `package.json`, `pnpm-lock.yaml`, `pnpm-workspace.yaml`, `tsconfig.base.json`, `eslint.config.js`, `.dockerignore`, `.prettierignore`, `.prettierrc.json`, `.gitignore`, `compose.yaml`, `Dockerfile`, `README.md`, `CHANGELOG.md`, `.github/`
 
 다음은 현재 HEAD뿐 아니라 새 Git history 전체에서 제외합니다.
 
