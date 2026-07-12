@@ -176,3 +176,18 @@ DEFINE FIELD updated_at ON subscription_routing_policy_active TYPE datetime;
 DEFINE INDEX subscription_routing_policy_active_provider ON subscription_routing_policy_active FIELDS organization_id, provider_id UNIQUE;
 `,
 );
+
+// prettier-ignore -- 새 migration도 생성 시점의 SQL 바이트를 고정합니다.
+export const SUBSCRIPTION_ACCOUNT_POLICY_MIGRATION = defineMigration(
+  "0089-subscription-account-policy",
+  `
+DEFINE TABLE subscription_provider_account_guard SCHEMAFULL PERMISSIONS NONE;
+DEFINE FIELD organization_id ON subscription_provider_account_guard TYPE string;
+DEFINE FIELD provider_id ON subscription_provider_account_guard TYPE string;
+DEFINE FIELD account_id ON subscription_provider_account_guard TYPE string;
+DEFINE FIELD policy ON subscription_provider_account_guard TYPE string ASSERT $value IN ['no-quota-circumvention'];
+DEFINE FIELD created_at ON subscription_provider_account_guard TYPE datetime;
+DEFINE INDEX subscription_provider_account_guard_provider ON subscription_provider_account_guard FIELDS organization_id, provider_id UNIQUE;
+DEFINE INDEX subscription_provider_account_guard_account ON subscription_provider_account_guard FIELDS organization_id, account_id UNIQUE;
+`,
+);
