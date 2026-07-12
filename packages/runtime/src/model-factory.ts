@@ -10,6 +10,15 @@ import {
   type ProviderService,
   type RouteAttempt,
 } from "@massion/router";
+import type {
+  AcquireSessionInput,
+  ConnectorFailureSignal,
+  ConnectorSessionLease,
+  SubscriptionScope,
+} from "@massion/subscriptions";
+
+import type { StructuredOutputSpec } from "./contracts.js";
+import type { SubscriptionAgentResult } from "./subscriptions/agent-runtime.js";
 
 const OPENAI_API_BASE_URL = "https://api.openai.com/v1";
 const GPT_56_RESPONSES_MODEL_IDS: ReadonlySet<string> = new Set([
@@ -33,11 +42,17 @@ export interface ProviderModelBuilder {
 
 export interface AcquireModelInput {
   readonly commandId: string;
+  readonly executionId?: string;
+  readonly workId?: string;
+  readonly agentHandle?: string;
+  readonly workspaceRoot?: string;
+  readonly instruction?: string;
   readonly routeName: string;
   readonly estimatedTokens: number;
   readonly estimatedCostMicros: number;
   readonly stickyKey?: string;
   readonly fallbackFromAttemptId?: string;
+  readonly fallbackFromLeaseId?: string;
 }
 
 export interface ModelCompletionUsage {
@@ -49,6 +64,7 @@ export interface ModelCompletionUsage {
 export interface ModelFailureUsage extends ModelCompletionUsage {
   readonly signal: FailureSignal;
   readonly emittedTokens: number;
+  readonly sideEffectsStarted?: boolean;
 }
 
 export interface ModelFailureOutcome {
@@ -57,16 +73,96 @@ export interface ModelFailureOutcome {
   readonly fallbackAllowed: boolean;
 }
 
-export interface RoutedModelLease {
+interface RoutedExecutionLeaseBase {
   readonly attemptId: string;
   readonly credentialId: string;
-  readonly model: LanguageModel;
+  readonly sessionLeaseId?: string;
   complete(usage: ModelCompletionUsage): Promise<RouteAttempt>;
   fail(usage: ModelFailureUsage): Promise<ModelFailureOutcome>;
 }
 
+export interface RoutedLanguageModelLease extends RoutedExecutionLeaseBase {
+  readonly kind: "model";
+  readonly model: LanguageModel;
+}
+
+export type RoutedAgentRuntimeResult =
+  | (Omit<Extract<SubscriptionAgentResult, { readonly outcome: "completed" }>, "usage"> & {
+      readonly usage?: { readonly inputTokens: number; readonly outputTokens: number };
+    })
+  | Extract<SubscriptionAgentResult, { readonly outcome: "suspended" }>
+  | Extract<SubscriptionAgentResult, { readonly outcome: "cancelled" }>
+  | (Extract<SubscriptionAgentResult, { readonly outcome: "failed" }> & {
+      readonly signal: FailureSignal;
+      readonly emittedTokens: number;
+      readonly sideEffectsStarted: boolean;
+    });
+
+export interface RoutedAgentRuntimeExecutor {
+  execute(input: { readonly prompt: string; readonly abortSignal?: AbortSignal }): Promise<RoutedAgentRuntimeResult>;
+  executeStructured?(
+    input: { readonly prompt: string; readonly abortSignal?: AbortSignal },
+    output: StructuredOutputSpec,
+  ): Promise<RoutedAgentRuntimeResult>;
+  cancel?(): Promise<void>;
+}
+
+export interface RoutedAgentRuntimeLease extends RoutedExecutionLeaseBase {
+  readonly kind: "agent-runtime";
+  readonly sessionLeaseId: string;
+  readonly executor: RoutedAgentRuntimeExecutor;
+}
+
+export type RoutedModelLease = RoutedLanguageModelLease | RoutedAgentRuntimeLease;
+
 export interface RoutedModelFactory {
   acquire(context: TenantContext, input: AcquireModelInput): Promise<RoutedModelLease>;
+}
+
+export interface ConnectorSessionBroker {
+  acquire(context: TenantContext, input: AcquireSessionInput): Promise<ConnectorSessionLease>;
+  recoverActive(context: TenantContext): Promise<readonly ConnectorSessionLease[]>;
+}
+
+export interface ConnectorRuntimeResolutionInput {
+  readonly executionId: string;
+  readonly workId: string;
+  readonly agentHandle: string;
+  readonly workspaceRoot?: string;
+  readonly instruction?: string;
+  readonly providerId: string;
+  readonly modelId: string;
+  readonly accountId: string;
+  readonly connectorId: string;
+  readonly scope: SubscriptionScope;
+  readonly routeAttemptId: string;
+  readonly quotaSnapshotId?: string;
+  readonly sessionLeaseId: string;
+}
+
+export type ConnectorRuntimeBinding =
+  | { readonly kind: "model"; readonly model: LanguageModel }
+  | { readonly kind: "agent-runtime"; readonly executor: RoutedAgentRuntimeExecutor };
+
+export interface ConnectorRuntimeResolver {
+  resolve(context: TenantContext, input: ConnectorRuntimeResolutionInput): Promise<ConnectorRuntimeBinding>;
+}
+
+export interface ConnectorRouteAttemptReader {
+  read(context: TenantContext, attemptId: string): Promise<RouteAttempt>;
+}
+
+export interface ConnectorRuntimeDependencies {
+  readonly broker: ConnectorSessionBroker;
+  readonly resolver: ConnectorRuntimeResolver;
+  readonly routeAttempts?: ConnectorRouteAttemptReader;
+}
+
+export class RoutedExecutionSettlementError extends Error {
+  public constructor(message: string, options: { readonly cause: unknown }) {
+    super(message, options);
+    this.name = "RoutedExecutionSettlementError";
+  }
 }
 
 function isOfficialOpenAiApi(endpoint: ProviderEndpoint): boolean {
@@ -84,6 +180,42 @@ function usesGpt56Responses(selection: ProviderModelSelection): boolean {
     isOfficialOpenAiApi(selection.endpoint) &&
     GPT_56_RESPONSES_MODEL_IDS.has(selection.modelId)
   );
+}
+
+function connectorFailureSignal(signal: FailureSignal): ConnectorFailureSignal {
+  if (signal.kind === "timeout") return { kind: "timeout" };
+  if (signal.kind === "network") return { kind: "provider-unavailable" };
+  if (signal.kind === "cancelled") return { kind: "cancelled" };
+  if (signal.kind !== "http" || signal.statusCode === undefined) return { kind: "invalid-request" };
+  if (signal.statusCode === 401) return { kind: "authentication" };
+  if (signal.statusCode === 408) return { kind: "timeout" };
+  if (signal.statusCode === 429) return { kind: "rate-limit" };
+  if (signal.statusCode >= 500) return { kind: "provider-unavailable" };
+  return { kind: "invalid-request" };
+}
+
+function recoveredConnectorFailure(attempt: RouteAttempt): ConnectorFailureSignal {
+  switch (attempt.failure_class) {
+    case "authentication":
+      return { kind: "authentication" };
+    case "quota":
+      return { kind: "rate-limit" };
+    case "timeout":
+      return { kind: "timeout" };
+    case "network":
+    case "upstream":
+      return { kind: "provider-unavailable" };
+    case "cancelled":
+      return { kind: "cancelled" };
+    default:
+      return { kind: "invalid-request" };
+  }
+}
+
+function runtimeText(value: string | undefined, label: string): string {
+  const normalized = value?.trim();
+  if (!normalized) throw new Error(`Connector 실행에는 ${label}가 필요합니다`);
+  return normalized;
 }
 
 export class OpenAICompatibleModelBuilder implements ProviderModelBuilder {
@@ -115,6 +247,7 @@ export class MassionModelFactory implements RoutedModelFactory {
     private readonly router: ModelRouter,
     private readonly providers: ProviderService,
     private readonly builder: ProviderModelBuilder,
+    private readonly connectorRuntime?: ConnectorRuntimeDependencies,
   ) {}
 
   public async acquire(context: TenantContext, input: AcquireModelInput): Promise<RoutedModelLease> {
@@ -139,8 +272,8 @@ export class MassionModelFactory implements RoutedModelFactory {
     const profile = reservation.profile;
     const credential = reservation.credential;
     if (!endpoint || !profile || !credential) throw new Error("Model reservation 선택 정보가 없습니다");
-    if (reservation.material.kind !== "encrypted_secret") {
-      throw new Error("Connector session은 구독 Runtime 연결기를 통해 실행해야 합니다");
+    if (reservation.material.kind === "connector_session") {
+      return await this.connectorLease(context, input, reservation);
     }
     const provider = await this.providers.getProvider(context, profile.provider_id);
     const model = this.builder.build({
@@ -158,35 +291,271 @@ export class MassionModelFactory implements RoutedModelFactory {
           1_000_000,
       );
     return {
+      kind: "model",
       attemptId,
       credentialId: credential.credential_id,
       model,
-      complete: async (usage) => {
-        const outcome = await this.router.reportSuccess(context, {
-          commandId: usage.commandId,
-          attemptId,
-          actualInputTokens: usage.inputTokens,
-          actualOutputTokens: usage.outputTokens,
-          actualCostMicros: costFor(usage),
+      complete: async (usage) => await this.completeAttempt(context, attemptId, usage, costFor(usage)),
+      fail: async (usage) => await this.failAttempt(context, attemptId, usage, costFor(usage)),
+    };
+  }
+
+  public async reconcileConnectorLeases(context: TenantContext): Promise<
+    readonly {
+      readonly leaseId: string;
+      readonly routeAttemptId: string;
+      readonly action: "completed" | "failed" | "pending";
+    }[]
+  > {
+    const runtime = this.connectorRuntime;
+    if (!runtime?.routeAttempts) throw new Error("Connector Route Attempt 복구 reader가 구성되지 않았습니다");
+    const leases = await runtime.broker.recoverActive(context);
+    const reconciled = [];
+    for (const lease of leases) {
+      const attempt = await runtime.routeAttempts.read(context, lease.routeAttemptId);
+      if (attempt.status === "succeeded") {
+        await lease.complete();
+        reconciled.push({ leaseId: lease.leaseId, routeAttemptId: lease.routeAttemptId, action: "completed" as const });
+        continue;
+      }
+      if (attempt.status === "failed" || attempt.status === "interrupted") {
+        await lease.fail({
+          emittedTokens: attempt.emitted_tokens,
+          sideEffectsStarted: true,
+          signal: recoveredConnectorFailure(attempt),
         });
-        return outcome.attempt;
+        reconciled.push({ leaseId: lease.leaseId, routeAttemptId: lease.routeAttemptId, action: "failed" as const });
+        continue;
+      }
+      reconciled.push({ leaseId: lease.leaseId, routeAttemptId: lease.routeAttemptId, action: "pending" as const });
+    }
+    return reconciled;
+  }
+
+  private async connectorLease(
+    context: TenantContext,
+    input: AcquireModelInput,
+    reservation: Awaited<ReturnType<ModelRouter["reserve"]>>,
+  ): Promise<RoutedModelLease> {
+    const runtime = this.connectorRuntime;
+    const { material, credential, profile } = reservation;
+    if (material.kind !== "connector_session" || !credential || !profile) {
+      throw new Error("Connector reservation 선택 정보가 없습니다");
+    }
+    if (!runtime) {
+      await this.failAttempt(
+        context,
+        reservation.attempt.attempt_id,
+        {
+          commandId: `${input.commandId}:connector-runtime-unavailable`,
+          signal: { kind: "input" },
+          emittedTokens: 0,
+          sideEffectsStarted: true,
+          inputTokens: 0,
+          outputTokens: 0,
+        },
+        0,
+      );
+      throw new Error("Connector Runtime Broker와 실행 resolver가 구성되지 않았습니다");
+    }
+    const attemptId = reservation.attempt.attempt_id;
+    let scope: SubscriptionScope;
+    let executionId: string;
+    let workId: string;
+    let agentHandle: string;
+    try {
+      const candidateScope = credential.subscription_scope;
+      if (
+        !candidateScope ||
+        credential.subscription_account_id !== material.accountId ||
+        credential.subscription_connector_id !== material.connectorId
+      ) {
+        throw new Error("Connector reservation 계보가 일치하지 않습니다");
+      }
+      scope = candidateScope;
+      executionId = runtimeText(input.executionId, "Execution ID");
+      workId = runtimeText(input.workId, "Work ID");
+      agentHandle = runtimeText(input.agentHandle, "Agent handle");
+    } catch (error) {
+      await this.failAttempt(
+        context,
+        attemptId,
+        {
+          commandId: `${input.commandId}:connector-context-invalid`,
+          signal: { kind: "input" },
+          emittedTokens: 0,
+          sideEffectsStarted: true,
+          inputTokens: 0,
+          outputTokens: 0,
+        },
+        0,
+      );
+      throw error;
+    }
+    let session: ConnectorSessionLease;
+    try {
+      session = await runtime.broker.acquire(context, {
+        commandId: `${input.commandId}:session:acquire`,
+        accountId: material.accountId,
+        connectorId: material.connectorId,
+        scope,
+        workId,
+        agentHandle,
+        routeAttemptId: attemptId,
+        ...(reservation.attempt.quota_snapshot_id ? { quotaSnapshotId: reservation.attempt.quota_snapshot_id } : {}),
+        ...(input.fallbackFromLeaseId ? { fallbackFromLeaseId: input.fallbackFromLeaseId } : {}),
+      });
+    } catch (error) {
+      await this.failAttempt(
+        context,
+        attemptId,
+        {
+          commandId: `${input.commandId}:session:acquire-failed`,
+          signal: { kind: "unknown" },
+          emittedTokens: 0,
+          inputTokens: 0,
+          outputTokens: 0,
+        },
+        0,
+      );
+      throw error;
+    }
+    if (
+      session.accountId !== material.accountId ||
+      session.connectorId !== material.connectorId ||
+      session.workId !== workId ||
+      session.agentHandle !== agentHandle ||
+      session.routeAttemptId !== attemptId ||
+      session.quotaSnapshotId !== reservation.attempt.quota_snapshot_id
+    ) {
+      await this.failConnectorAttempt(context, attemptId, session, {
+        commandId: `${input.commandId}:session:binding-failed`,
+        signal: { kind: "input" },
+        emittedTokens: 0,
+        sideEffectsStarted: false,
+        inputTokens: 0,
+        outputTokens: 0,
+      });
+      throw new Error("Session Lease 계보가 Router reservation과 일치하지 않습니다");
+    }
+    let binding: ConnectorRuntimeBinding;
+    try {
+      binding = await runtime.resolver.resolve(context, {
+        executionId,
+        workId,
+        agentHandle,
+        ...(input.workspaceRoot ? { workspaceRoot: input.workspaceRoot } : {}),
+        ...(input.instruction ? { instruction: input.instruction } : {}),
+        providerId: profile.provider_id,
+        modelId: profile.model_id,
+        accountId: material.accountId,
+        connectorId: material.connectorId,
+        scope,
+        routeAttemptId: attemptId,
+        ...(reservation.attempt.quota_snapshot_id ? { quotaSnapshotId: reservation.attempt.quota_snapshot_id } : {}),
+        sessionLeaseId: session.leaseId,
+      });
+    } catch (error) {
+      await this.failConnectorAttempt(context, attemptId, session, {
+        commandId: `${input.commandId}:session:resolver-failed`,
+        signal: { kind: "input" },
+        emittedTokens: 0,
+        inputTokens: 0,
+        outputTokens: 0,
+      });
+      throw error;
+    }
+    const settlement = {
+      attemptId,
+      credentialId: credential.credential_id,
+      sessionLeaseId: session.leaseId,
+      complete: async (usage: ModelCompletionUsage) => {
+        try {
+          const attempt = await this.completeAttempt(context, attemptId, usage, 0);
+          await session.complete();
+          return attempt;
+        } catch (error) {
+          throw new RoutedExecutionSettlementError("Connector 성공 정산을 완료하지 못했습니다", { cause: error });
+        }
       },
-      fail: async (usage) => {
-        const outcome = await this.router.reportFailure(context, {
-          commandId: usage.commandId,
-          attemptId,
-          signal: usage.signal,
-          emittedTokens: usage.emittedTokens,
-          actualInputTokens: usage.inputTokens,
-          actualOutputTokens: usage.outputTokens,
-          actualCostMicros: costFor(usage),
-        });
-        return {
-          status: outcome.attempt.status,
-          ...(outcome.attempt.failure_class ? { failureClass: outcome.attempt.failure_class } : {}),
-          fallbackAllowed: outcome.attempt.fallback_allowed,
-        };
+      fail: async (usage: ModelFailureUsage) => {
+        try {
+          return await this.failConnectorAttempt(context, attemptId, session, usage);
+        } catch (error) {
+          throw new RoutedExecutionSettlementError("Connector 실패 정산을 완료하지 못했습니다", { cause: error });
+        }
       },
+    };
+    return binding.kind === "model"
+      ? { kind: "model", model: binding.model, ...settlement }
+      : { kind: "agent-runtime", executor: binding.executor, ...settlement };
+  }
+
+  private async completeAttempt(
+    context: TenantContext,
+    attemptId: string,
+    usage: ModelCompletionUsage,
+    actualCostMicros: number,
+  ): Promise<RouteAttempt> {
+    try {
+      const outcome = await this.router.reportSuccess(context, {
+        commandId: usage.commandId,
+        attemptId,
+        actualInputTokens: usage.inputTokens,
+        actualOutputTokens: usage.outputTokens,
+        actualCostMicros,
+      });
+      return outcome.attempt;
+    } catch (error) {
+      throw new RoutedExecutionSettlementError("Router 성공 정산을 완료하지 못했습니다", { cause: error });
+    }
+  }
+
+  private async failAttempt(
+    context: TenantContext,
+    attemptId: string,
+    usage: ModelFailureUsage,
+    actualCostMicros: number,
+  ): Promise<ModelFailureOutcome> {
+    try {
+      const outcome = await this.router.reportFailure(context, {
+        commandId: usage.commandId,
+        attemptId,
+        signal: usage.signal,
+        emittedTokens: usage.emittedTokens,
+        actualInputTokens: usage.inputTokens,
+        actualOutputTokens: usage.outputTokens,
+        actualCostMicros,
+      });
+      return {
+        status: outcome.attempt.status,
+        ...(outcome.attempt.failure_class ? { failureClass: outcome.attempt.failure_class } : {}),
+        fallbackAllowed:
+          outcome.attempt.fallback_allowed && usage.emittedTokens === 0 && usage.sideEffectsStarted !== true,
+      };
+    } catch (error) {
+      throw new RoutedExecutionSettlementError("Router 실패 정산을 완료하지 못했습니다", { cause: error });
+    }
+  }
+
+  private async failConnectorAttempt(
+    context: TenantContext,
+    attemptId: string,
+    session: ConnectorSessionLease,
+    usage: ModelFailureUsage,
+    defaultSideEffectsStarted = true,
+  ): Promise<ModelFailureOutcome> {
+    const sideEffectsStarted = usage.sideEffectsStarted ?? defaultSideEffectsStarted;
+    const route = await this.failAttempt(context, attemptId, { ...usage, sideEffectsStarted }, 0);
+    const connector = await session.fail({
+      emittedTokens: usage.emittedTokens,
+      sideEffectsStarted,
+      signal: connectorFailureSignal(usage.signal),
+    });
+    return {
+      ...route,
+      fallbackAllowed:
+        route.fallbackAllowed && connector.fallbackAllowed && usage.emittedTokens === 0 && !sideEffectsStarted,
     };
   }
 }

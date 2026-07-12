@@ -4,13 +4,14 @@ import { type OrganizationService, type TenantContext } from "@massion/identity"
 import { applyMigrations, type MassionDatabase, type QueryExecutor } from "@massion/storage";
 
 import { type SubscriptionAccountService } from "./account-service.js";
-import type { SubscriptionSessionLease } from "./contracts.js";
+import type { SubscriptionScope, SubscriptionSessionLease } from "./contracts.js";
 import { SUBSCRIPTION_MIGRATION } from "./schema.js";
 
 export interface AcquireSessionInput {
   readonly commandId: string;
   readonly accountId: string;
-  readonly visibility: "personal" | "organization";
+  readonly connectorId: string;
+  readonly scope: SubscriptionScope;
   readonly workId: string;
   readonly agentHandle: string;
   readonly routeAttemptId: string;
@@ -35,6 +36,7 @@ export interface ConnectorSessionLeaseView {
   readonly workId: string;
   readonly agentHandle: string;
   readonly routeAttemptId: string;
+  readonly quotaSnapshotId?: string;
   readonly status: SubscriptionSessionLease["status"];
   readonly expiresAt: unknown;
 }
@@ -43,6 +45,7 @@ export interface ConnectorSessionLease extends ConnectorSessionLeaseView {
   complete(): Promise<ConnectorSessionLeaseView>;
   fail(input: {
     readonly emittedTokens: number;
+    readonly sideEffectsStarted: boolean;
     readonly signal: ConnectorFailureSignal;
   }): Promise<ConnectorLeaseFailure>;
 }
@@ -152,13 +155,15 @@ export class SubscriptionConnectorBroker {
   public async acquire(context: TenantContext, input: AcquireSessionInput): Promise<ConnectorSessionLease> {
     const commandId = requireText(input.commandId, "Command ID");
     const accountId = requireText(input.accountId, "계정 ID");
+    const connectorId = requireText(input.connectorId, "Connector ID");
     const workId = requireText(input.workId, "Work ID");
     const agentHandle = requireText(input.agentHandle, "Agent handle");
     const routeAttemptId = requireText(input.routeAttemptId, "Route Attempt ID");
     await this.organizations.verifyTenantContext(context);
     const row = await this.database.transaction(async (tx) => {
       await this.organizations.verifyTenantContext(context, undefined, tx);
-      const account = await this.accounts.requireUsable(context, accountId, input.visibility, tx);
+      const account = await this.accounts.requireUsable(context, accountId, input.scope, tx);
+      if (account.connector_id !== connectorId) throw new Error("Session Lease Connector binding이 일치하지 않습니다");
       if (input.fallbackFromLeaseId) {
         await this.requireFallbackAllowed(tx, context, input.fallbackFromLeaseId, workId);
       }
@@ -181,7 +186,7 @@ export class SubscriptionConnectorBroker {
           lease_id: leaseId,
           organization_id: context.organizationId,
           account_id: accountId,
-          connector_id: account.connector_id,
+          connector_id: connectorId,
           work_id: workId,
           agent_handle: agentHandle,
           route_attempt_id: routeAttemptId,
@@ -202,6 +207,14 @@ export class SubscriptionConnectorBroker {
   }
 
   public async recover(context: TenantContext): Promise<readonly ConnectorSessionLeaseView[]> {
+    return (await this.recoverRows(context)).map((row) => this.view(row));
+  }
+
+  public async recoverActive(context: TenantContext): Promise<readonly ConnectorSessionLease[]> {
+    return (await this.recoverRows(context)).map((row) => this.bind(context, row));
+  }
+
+  private async recoverRows(context: TenantContext): Promise<readonly SubscriptionSessionLease[]> {
     await this.organizations.verifyTenantContext(context);
     const now = this.now();
     await this.database.query(
@@ -215,7 +228,7 @@ export class SubscriptionConnectorBroker {
        ORDER BY created_at ASC;`,
       { organization_id: context.organizationId, now },
     );
-    return rows.map((row) => this.view(row));
+    return rows;
   }
 
   public async *invoke(context: TenantContext, input: unknown, signal?: AbortSignal): AsyncIterable<ConnectorEvent> {
@@ -264,6 +277,7 @@ export class SubscriptionConnectorBroker {
       workId: row.work_id,
       agentHandle: row.agent_handle,
       routeAttemptId: row.route_attempt_id,
+      ...(row.quota_snapshot_id ? { quotaSnapshotId: row.quota_snapshot_id } : {}),
       status: row.status,
       expiresAt: row.expires_at,
     };
@@ -289,12 +303,18 @@ export class SubscriptionConnectorBroker {
   private async fail(
     context: TenantContext,
     leaseId: string,
-    input: { readonly emittedTokens: number; readonly signal: ConnectorFailureSignal },
+    input: {
+      readonly emittedTokens: number;
+      readonly sideEffectsStarted: boolean;
+      readonly signal: ConnectorFailureSignal;
+    },
   ): Promise<ConnectorLeaseFailure> {
     if (!Number.isSafeInteger(input.emittedTokens) || input.emittedTokens < 0) {
       throw new Error("출력 token 수가 유효하지 않습니다");
     }
-    const fallbackAllowed = input.emittedTokens === 0 && retryableBeforeOutput(input.signal.kind);
+    if (typeof input.sideEffectsStarted !== "boolean") throw new Error("부작용 시작 여부가 유효하지 않습니다");
+    const fallbackAllowed =
+      input.emittedTokens === 0 && !input.sideEffectsStarted && retryableBeforeOutput(input.signal.kind);
     return await this.database.transaction(async (tx) => {
       await this.organizations.verifyTenantContext(context, undefined, tx);
       const lease = await this.requireActiveLease(tx, context.organizationId, leaseId);
