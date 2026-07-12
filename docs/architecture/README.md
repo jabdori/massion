@@ -1,27 +1,26 @@
 # Massion AgentOS 1.0 전체 아키텍처
 
 > **문서 상태**: 현재 구현 아키텍처 정본
-> **기준일**: 2026-07-12
-> **제품 구현 기준**: Phase 23 완성도 감사 교정 검증 완료 (`4050d16`)
-> **제품 정본**: [Massion 완제품 설계 명세](../product/2026-07-10-complete-product-design.md)
-> **진행 정본**: [Massion AgentOS 1.0 프로그램 계획](../superpowers/plans/2026-07-10-massion-agentos-1.0-program.md)
+> **기준일**: 2026-07-13
+> **제품 구현 기준**: 공개 `main` 브랜치의 현재 코드·테스트·운영 문서
+> **진행 근거**: [요구사항 추적표](../generated/requirements-traceability.tsv)와 Phase 24~27 문서
 
-이 문서는 Massion을 처음 접하는 사람과 구현 에이전트가 제품 전체를 빠르게 파악하도록 돕습니다. 승인된 1.0 목표와 현재 코드를 같은 그림에 표시하되 상태를 명확히 구분합니다. 세부 계약은 각 Phase의 설계·구현 계획·회고와 실제 코드가 소유하며, 이 문서는 그 관계를 연결하는 지도입니다.
+이 문서는 Massion을 처음 접하는 사람과 구현 에이전트가 제품 전체를 빠르게 파악하도록 돕습니다. 현재 공개 저장소에 존재하는 코드와 검증 가능한 동작을 같은 그림에 표시하되 상태를 명확히 구분합니다. 세부 계약은 도메인 코드·테스트, 운영 문서와 현재 Phase 문서가 소유하며, 이 문서는 그 관계를 연결하는 지도입니다.
 
-근거는 제품 정본, 완료된 Phase 회고와 실제 코드·테스트, ADR·검증 자료 순으로 판정합니다. 대체된 과거 개념도는 현재 구조의 근거로 사용하지 않습니다.
+근거는 실제 코드·테스트, 운영 문서, 현재 Phase 설계·회고 순으로 판정합니다. 새 저장소 전환 때 제외한 과거 Phase 문서나 대체된 개념도는 현재 구조의 근거로 사용하지 않습니다.
 
 ## 1. 읽는 법과 상태 범례
 
 | 시각 표현 | 상태 | 의미 |
 |---|---|---|
-| 녹색 실선·`구현됨` | 구현됨 | 완료된 Phase의 코드·테스트·회고 근거가 있음 |
+| 녹색 실선·`구현됨` | 구현됨 | 현재 저장소에 코드와 관련 테스트·검증 근거가 있음 |
 | 파란색 굵은 실선·`구현 중` | 구현 중 | 코드가 존재하지만 현재 Phase 완료 검증 전 |
 | 회색 점선·`예정` | 예정 | 승인된 1.0 범위이나 아직 구현되지 않음 |
 | 주황색 이중선·`외부` | 외부 시스템 | Massion이 소유하지 않는 서비스·저장소 |
 
 굵은 화살표는 사용자 Work의 주 실행 경로, 일반 실선은 동기 명령·직접 호출, 점선은 이벤트·관찰·정책 영향을 뜻합니다. 원통은 영속 저장소, 큰 경계 상자는 프로세스 또는 배포 단위입니다. 색상을 볼 수 없는 환경에서도 상태 라벨과 선 모양으로 구분할 수 있습니다.
 
-Phase 0~23은 구현·검증됐습니다. 외부 권한이 필요한 공개 tag·OIDC 증명·실제 cluster·SaaS tenant 검증은 Phase 23 회고의 정직한 지원 경계로 분리합니다. 개별 요소는 Phase 번호만으로 판정하지 않고 실제 코드와 검증 결과를 함께 확인합니다.
+그림의 구현 상태는 과거 Phase 번호만으로 판정하지 않고 현재 코드와 검증 결과를 함께 확인합니다. 새 저장소에는 Phase 24 이후의 유지보수·전환 문서만 남아 있으며, 외부 권한이 필요한 실제 계정·공개 tag·OIDC·cluster 검증은 실행하지 않은 범위를 성공으로 표시하지 않습니다.
 
 ## 2. 전체 시스템 지도
 
@@ -87,15 +86,15 @@ flowchart TB
 
 | 요소 | 상태 | 실제 위치 | 근거 |
 |---|---|---|---|
-| CLI·Application API | 구현됨 | `apps/cli`, `packages/application` | [Phase 16 회고](../phases/16-application-api-cli/review.md) |
-| TUI | 구현됨 | `apps/tui` | [Phase 17 회고](../phases/17-tui/review.md) |
-| Core Office·Work·Governance | 구현됨 | `packages/organization`, `packages/work`, `packages/governance` | [Phase 4 회고](../phases/04-organization-graph-core-office/review.md), [Phase 5 회고](../phases/05-work-collaboration-records/review.md), [Phase 8 회고](../phases/08-governance-approval/review.md) |
-| Runtime·Router | 구현됨 | `packages/runtime`, `packages/router` | [Phase 6 회고](../phases/06-provider-credential-router/review.md), [Phase 7 회고](../phases/07-voltagent-runtime-adapter/review.md) |
-| Extension Host | 구현됨 | `packages/extension-host` | [Phase 15 회고](../phases/15-extension-sdk-host/review.md) |
-| Web Console | 구현됨 | `apps/web` | [Phase 18 회고](../phases/18-web-console/review.md) |
-| Slack·Discord·GitHub Surface | 구현됨 | `packages/integrations`, `extensions/slack`, `extensions/discord`, `extensions/github` | [Phase 19 회고](../phases/19-official-integrations/review.md) |
-| Registry·Marketplace | 구현됨 | `packages/registry`, `apps/cli`, `apps/web` | [Phase 20 회고](../phases/20-registry-marketplace/review.md) |
-| SurrealDB 단일 정본 | 구현됨 | `packages/storage` | [Phase 2 회고](../phases/02-surrealdb-source-of-truth/review.md) |
+| CLI·Application API | 구현됨 | `apps/cli`, `packages/application` | 명령·조회·인증·이벤트 테스트 |
+| TUI | 구현됨 | `apps/tui` | 상태·표현·OpenTUI 렌더러 테스트 |
+| Core Office·Work·Governance | 구현됨 | `packages/organization`, `packages/work`, `packages/governance` | 조직·업무·승인 통합 테스트 |
+| Runtime·Router | 구현됨 | `packages/runtime`, `packages/router` | 모델 생성·실행·라우팅 실패 테스트 |
+| Extension Host | 구현됨 | `packages/extension-host` | 격리·권한·수명주기 테스트 |
+| Web Console | 구현됨 | `apps/web` | 페이지·상태·사용자 흐름 테스트 |
+| Slack·Discord·GitHub Surface | 구현됨 | `packages/integrations`, `extensions/slack`, `extensions/discord`, `extensions/github` | 공식 통합 계약 테스트 |
+| Registry·Marketplace | 구현됨 | `packages/registry`, `apps/cli`, `apps/web` | 게시·정책·검색·설치 테스트 |
+| SurrealDB 단일 정본 | 구현됨 | `packages/storage` | transaction·schema·migration 테스트 |
 
 ## 3. 제품 구성요소와 패키지 경계
 
@@ -572,11 +571,11 @@ flowchart LR
 | community | 위 경계 + OS sandbox | 설치 가능, 활성화 차단 |
 | untrusted-local | 위 경계 + OS sandbox | validate·link·설치 가능, 활성화 차단 |
 
-구현은 `packages/extension-sdk`, `packages/extension-host`, `packages/registry`에 있습니다. Registry 검증 근거는 [Phase 20 회고](../phases/20-registry-marketplace/review.md)에 연결합니다.
+구현은 `packages/extension-sdk`, `packages/extension-host`, `packages/registry`에 있으며 각 패키지의 계약·정책·서비스 테스트가 검증 근거를 소유합니다.
 
 ## 11. 개인·팀 배포 구조
 
-Massion 1.0은 개인 로컬 설치와 팀 자체 호스팅을 공식 변형으로 둡니다. 개인 모드는 한 명의 owner가 있는 조직일 뿐 데이터 모델을 축약하지 않습니다. 팀 모드는 같은 Application API와 tenant 격리를 TLS 역방향 프록시 뒤의 네트워크 서비스로 배포합니다. Compose 실행, 공개 읽기 전용 Registry, 데이터베이스 최고 권한 분리와 Kubernetes 1.34 엄격한 schema 검증은 Phase 21·22 회고에 연결합니다.
+Massion 1.0은 개인 로컬 설치와 팀 자체 호스팅을 공식 변형으로 둡니다. 개인 모드는 한 명의 owner가 있는 조직일 뿐 데이터 모델을 축약하지 않습니다. 팀 모드는 같은 Application API와 tenant 격리를 TLS 역방향 프록시 뒤의 네트워크 서비스로 배포합니다. 배포·백업·복구의 현재 지원 경계는 `compose.yaml`, `deploy/kubernetes`와 `docs/operations`에서 확인합니다.
 
 ```mermaid
 flowchart LR
@@ -643,7 +642,7 @@ flowchart LR
 
 | 영역 | 상태 | 구현·설계 위치 | Phase |
 |---|---|---|---|
-| 제품 헌법·품질·저장소·Identity·Organization | 구현됨 | `docs/phases/00-document-lineage` ~ `docs/phases/04-organization-graph-core-office` | 0~4 |
+| 기반 계약·저장소·Identity·Organization | 구현됨 | `packages/foundation`, `packages/storage`, `packages/identity`, `packages/organization` | 현재 코드 |
 | Work·Router·Runtime·Governance | 구현됨 | `packages/work`, `packages/router`, `packages/runtime`, `packages/governance` | 5~8 |
 | Context·Evidence·Engineering·Assurance·Records·Growth | 구현됨 | `packages/context-strategy`, `packages/evidence`, `packages/software-engineering`, `packages/assurance`, `packages/records`, `packages/growth` | 9~14 |
 | Extension SDK·Host | 구현됨 | `packages/extension-sdk`, `packages/extension-host` | 15 |
@@ -656,20 +655,19 @@ flowchart LR
 | 보안·성능·복구 강화 | 구현됨 | `apps/server`, `packages/registry`, `scripts/verify-security.mjs`, `scripts/hardening-load.mjs` | 22 |
 | 완제품 E2E·1.0 릴리스 | 구현됨 | `apps/distribution`, `release`, `scripts/build-release.mjs`, `scripts/verify-release.mjs`, `.github/workflows/release.yml` | 23 |
 
-이 문서의 상태가 프로그램 계획과 달라지면 실제 검증 근거를 확인한 뒤 그림, 표와 기준 커밋을 함께 갱신합니다.
+이 문서의 상태가 현재 코드와 달라지면 실제 검증 근거를 확인한 뒤 그림과 표를 함께 갱신합니다.
 
 ### 검증 기록
 
-2026-07-12에 다음 검증을 실행했습니다.
+2026-07-13 공개 저장소 전환 후 다음 검증을 다시 실행했습니다.
 
 | 검증 | 결과 |
 |---|---|
-| `pnpm verify:architecture` | Mermaid CLI 11.16.0으로 10개 SVG 렌더링 통과 |
-| `node scripts/verify-docs.mjs` | 문서 구조·로컬 링크·금지된 임시 표기 검사 통과 |
+| `pnpm verify:architecture` | Mermaid CLI 11.16.0으로 다이어그램 10개 SVG 렌더링 통과 |
+| `node --test scripts/verify-docs.test.mjs` | 문서 검증기 테스트 10개 통과 |
+| `node scripts/verify-docs.mjs` | Phase 구조·요구사항 추적표·로컬 링크 검사 통과 |
+| `pnpm build` | 29개 workspace package 빌드 통과 |
+| `pnpm verify:security` | 보안 테스트 파일 14개, 테스트 67개 통과·1개 조건부 생략, moderate·high·critical advisory 0 |
 | `git diff --check` | 공백·충돌 표식 검사 통과 |
-| `pnpm verify:security` | 보안 테스트 13개 파일, moderate·high·critical advisory 0 |
-| `pnpm verify:hardening` | 강화 테스트 26개와 500요청 부하 실패 0, p95 14.43ms, 정상 종료 |
-| Kubernetes 1.34 strict schema | Kustomize 리소스 12개 유효 |
-| 브라우저 1440px 및 가로 스크롤 미리보기 | 한글 라벨 잘림·노드 겹침 없음, 상태 색·실선·점선 구분 확인 |
 
 로컬 검증 스크립트는 설치된 Chrome·Chromium을 사용합니다. 자동 탐지 경로에 브라우저가 없으면 `MASSION_MERMAID_BROWSER` 환경 변수에 실행 파일 경로를 지정합니다.
