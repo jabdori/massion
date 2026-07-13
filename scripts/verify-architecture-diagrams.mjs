@@ -49,7 +49,7 @@ async function validateStructure(markdown) {
     if (!markdown.includes(heading)) errors.push(`필수 제목이 없습니다: ${heading}`);
   }
   const blocks = mermaidBlocks(markdown);
-  if (blocks.length !== 10) errors.push(`Mermaid 다이어그램은 정확히 10개여야 합니다: ${String(blocks.length)}개`);
+  if (blocks.length !== 11) errors.push(`Mermaid 다이어그램은 정확히 11개여야 합니다: ${String(blocks.length)}개`);
   for (const text of forbidden) {
     if (markdown.includes(text)) errors.push(`대체되었거나 임시인 표현이 남아 있습니다: ${text}`);
   }

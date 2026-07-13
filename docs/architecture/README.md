@@ -700,7 +700,7 @@ flowchart LR
 
 | 검증 | 결과 |
 |---|---|
-| `pnpm verify:architecture` | Mermaid CLI 11.16.0으로 다이어그램 10개 SVG 렌더링 통과 |
+| `pnpm verify:architecture` | Mermaid CLI 11.16.0으로 다이어그램 11개 SVG 렌더링 통과 |
 | `node --test scripts/verify-docs.test.mjs` | 문서 검증기 테스트 10개 통과 |
 | `node scripts/verify-docs.mjs` | Phase 구조·요구사항 추적표·로컬 링크 검사 통과 |
 | `pnpm build` | 29개 workspace package 빌드 통과 |
