@@ -70,8 +70,8 @@ export interface ApplicationQueryDependencies {
   readonly subscriptionQuota?: SubscriptionQuotaQueries;
   readonly subscriptionPolicy?: SubscriptionPolicyStore;
   readonly optimization?: {
-    readonly evaluations: Pick<ModelOptimizationStore, "getActivePolicy" | "listReceipts">;
-    readonly batches: Pick<OptimizationBatchService, "getActiveBatch">;
+    readonly evaluations: Pick<ModelOptimizationStore, "getActivePolicy" | "listReceipts" | "listRecommendations">;
+    readonly batches: Pick<OptimizationBatchService, "getActiveBatch" | "listObservations">;
   };
 }
 
@@ -969,6 +969,28 @@ export function registerApplicationQueries(
         if (roleKey !== undefined && !isOptimizationRoleKey(roleKey))
           throw new Error("지원하지 않는 최적화 roleKey입니다");
         return await dependencies.optimization?.evaluations.listReceipts(context, roleKey);
+      },
+    });
+    registry.register({
+      operation: "optimization.recommendations",
+      requiredScopes: ["optimization:read"],
+      allowedRoles: EVERY_ROLE,
+      validate: (value) => object(value, ["roleKey"]),
+      handle: async (context, value) => {
+        const roleKey = value.roleKey === undefined ? undefined : text(value.roleKey, "roleKey");
+        if (roleKey !== undefined && !isOptimizationRoleKey(roleKey))
+          throw new Error("지원하지 않는 최적화 roleKey입니다");
+        return (await dependencies.optimization?.evaluations.listRecommendations(context, roleKey)) ?? [];
+      },
+    });
+    registry.register({
+      operation: "optimization.observations",
+      requiredScopes: ["optimization:read"],
+      allowedRoles: EVERY_ROLE,
+      validate: (value) => object(value, ["batchId"]),
+      handle: async (context, value) => {
+        const batchId = value.batchId === undefined ? undefined : text(value.batchId, "batchId");
+        return (await dependencies.optimization?.batches.listObservations(context, batchId)) ?? [];
       },
     });
     registry.register({

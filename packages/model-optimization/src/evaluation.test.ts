@@ -308,4 +308,29 @@ describe("Massion 모델 평가실", () => {
     });
     expect(recommendation.primaryModelProfileId).toBe(profile.modelProfileId);
   });
+
+  it("정책에 실사용 관찰 예산과 보존 기간을 저장하고 범위를 검증한다", async () => {
+    const policy = await store.configurePolicy(context, {
+      commandId: "policy-retention",
+      policy: "value",
+      autoOptimize: false,
+      productionLearning: true,
+      shadowEnabled: false,
+      observationBudgetMicros: 25_000,
+      observationRetentionDays: 14,
+      governanceDecisionId: "decision-retention",
+    });
+    expect(policy).toMatchObject({ observationBudgetMicros: 25_000, observationRetentionDays: 14 });
+    await expect(
+      store.configurePolicy(context, {
+        commandId: "policy-invalid-budget",
+        policy: "value",
+        autoOptimize: false,
+        productionLearning: true,
+        shadowEnabled: false,
+        observationBudgetMicros: 0,
+        governanceDecisionId: "decision-invalid-budget",
+      }),
+    ).rejects.toThrow("예산");
+  });
 });

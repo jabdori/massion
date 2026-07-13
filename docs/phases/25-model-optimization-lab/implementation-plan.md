@@ -25,7 +25,7 @@
 
 ## Task 4. 선택적 실사용 학습과 안전한 승격
 
-- [ ] 조직별 동의·예산·보존·redaction을 지키는 실사용 관찰을 구현합니다. `production learning` 명시 동의 게이트와 불변 observation은 구현했지만 관찰 예산·보존 기간 검사가 남아 있습니다.
+- [x] 조직별 동의·예산·보존·redaction을 지키는 실사용 관찰을 구현했습니다. `production learning` 명시 동의, 정책별 예산 초과 거부, observation 만료 시각, 불변 observation을 적용합니다.
 - [x] 최초 승인, 그림자 실행, 제한 배치, 정책 기반 최소 표본·개선 폭 게이트와 degraded 관찰 복구를 불변 배치 버전으로 구현했습니다.
 - [x] 활성 포인터를 transaction 안에서 원자적으로 전환하고 재시작 후 DB에서 다시 읽도록 구현했습니다.
 
@@ -33,7 +33,7 @@
 
 - [x] Runtime이 역할별 활성 배치의 주 모델·fallback 선호 순서를 Router reserve에 전달하게 했습니다.
 - [x] 평가 실행·추천·적용·자동화·복구 Application operation과 redacted query를 추가했습니다.
-- [ ] CLI·TUI·Web의 평가 실행·승인 화면을 완전히 동일하게 조립합니다. CLI/Application의 실행·변경 명령과 Web 정책 제어, TUI 조회 화면은 연결했지만 TUI/Web에서 실행·추천 승인 화면을 동일한 흐름으로 마무리해야 합니다.
+- [ ] CLI·TUI·Web의 평가 실행·승인 화면을 완전히 동일하게 조립합니다. CLI/Application과 Web의 실행·변경·승인 흐름, TUI의 추천·관찰 조회를 연결했지만 TUI에서 변경 작업을 직접 실행하는 화면이 남아 있습니다.
 
 ## Task 6. 외부 평가 연동과 제품 조립
 
@@ -50,6 +50,6 @@
 ## 현재 남은 완성 조건
 
 1. Provider 연결을 실제로 호출하는 평가 executor adapter와 역할별 평가 case 입력 경계를 추가합니다. 서버 기본 adapter와 prompt 입력 경계는 연결되었으며 Provider별 품질 판정 고도화가 남아 있습니다.
-2. 실사용 관찰의 조직 consent·예산·보존 정책 검사와 자동 승격 조건을 완성합니다.
-3. CLI·TUI·Web의 실행·추천 승인 화면을 연결하고 실제 release에서 반복합니다.
+2. 자동 승격 조건과 관찰 redaction의 운영 증거를 추가합니다.
+3. TUI에서도 실행·추천 승인·배치 활성화·복구를 직접 실행할 수 있게 하고 실제 release에서 반복합니다.
 4. Claude·Codex·GLM 및 복수 계정이 실제로 연결된 환경에서 tmux receipt를 갱신합니다.

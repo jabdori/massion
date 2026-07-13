@@ -35,6 +35,8 @@ const QUERY_OPERATIONS = new Set([
   "subscription.doctor",
   "optimization.policy",
   "optimization.receipts",
+  "optimization.recommendations",
+  "optimization.observations",
   "optimization.batch.active",
 ]);
 

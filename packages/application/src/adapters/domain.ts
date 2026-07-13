@@ -1934,6 +1934,8 @@ function registerOptimization(registry: ApplicationCommandRegistry, dependencies
           "shadowEnabled",
           "minimumSampleCount",
           "improvementThreshold",
+          "observationBudgetMicros",
+          "observationRetentionDays",
           "governanceDecisionId",
         ],
         ["policy", "autoOptimize", "productionLearning", "shadowEnabled", "governanceDecisionId"],
@@ -1951,6 +1953,12 @@ function registerOptimization(registry: ApplicationCommandRegistry, dependencies
         ...(value.improvementThreshold === undefined
           ? {}
           : { improvementThreshold: Number(value.improvementThreshold) }),
+        ...(value.observationBudgetMicros === undefined
+          ? {}
+          : { observationBudgetMicros: Number(value.observationBudgetMicros) }),
+        ...(value.observationRetentionDays === undefined
+          ? {}
+          : { observationRetentionDays: integer(value.observationRetentionDays, "observationRetentionDays", 1) }),
         governanceDecisionId: string(value.governanceDecisionId, "governanceDecisionId"),
       });
       return result(command, {
