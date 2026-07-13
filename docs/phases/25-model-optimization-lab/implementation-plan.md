@@ -1,48 +1,55 @@
 # Phase 25 — 모델 평가실과 역할별 자동 배치 구현 계획
 
-> **상태**: planned
-> **상세 계획**: 새 Core 저장소 전환 뒤 Phase 25 시작 commit에서 갱신
+> **상태**: in-progress
+> **상세 계획**: `docs/superpowers/plans/2026-07-13-model-optimization-lab.md`
 > **선행 조건**: Phase 24 completed 및 Phase 27의 새 비공개 Massion Core root commit 생성
 > **방법**: 각 항목에서 실패 테스트 확인→최소 구현→관련 회귀 검증→커밋 순서를 지킵니다.
 
 ## Task 1. 평가 정본과 역할별 평가 묶음
 
-- [ ] `@massion/model-optimization` package와 append-only migration을 추가합니다.
-- [ ] 평가 묶음·실행·반복·점수 영수증·정책·추천·배치·관찰·결정 정본을 TDD로 구현합니다.
-- [ ] 코어 역할 8개와 소프트웨어 개발 실행 역할 8개의 빠른·정밀 평가 묶음을 고정합니다.
+- [x] `@massion/model-optimization` package와 append-only migration을 추가했습니다.
+- [x] 평가 묶음·실행·점수 영수증·정책·추천·배치·관찰·결정 정본을 TDD로 구현했습니다.
+- [x] 코어 역할 8개와 소프트웨어 개발 실행 역할 8개의 안정적인 role key와 hard gate 계약을 고정했습니다.
 
 ## Task 2. 후보 자격과 격리 평가 실행
 
-- [ ] 연결된 모델의 실제 기능을 최소 호출로 검사하고 불일치를 fail closed합니다.
-- [ ] 고정된 입력·도구·환경 checksum과 반복 정책을 지키는 평가 실행기를 구현합니다.
-- [ ] 그림자 도구가 파일·메시지·배포·승인·조직 정본 부작용을 차단하는지 검증합니다.
+- [ ] 연결된 모델의 실제 기능을 최소 호출로 검사하고 불일치를 fail closed합니다. 실행기 port는 있으나 Provider별 실제 호출 adapter가 남아 있습니다.
+- [x] 고정된 입력·도구·환경 checksum과 반복 정책을 전달하고 결과를 불변 receipt로 집계하는 평가 실행기를 구현했습니다.
+- [x] 그림자 실행에 파일·메시지·배포·승인·조직 정본 변경 capability를 모두 `false`로 전달하는 테스트를 추가했습니다.
 
 ## Task 3. 채점과 역할별 배치 추천
 
-- [ ] 오류 상태와 품질 실패를 분리하고 하드 게이트·독립 채점·신뢰 구간을 구현합니다.
-- [ ] 다섯 가지 사용자 정책에 따라 성공 작업당 비용·품질·속도·개인정보를 결정론적으로 비교합니다.
-- [ ] 주 모델과 fallback 순서, 근거 영수증, 예상 변화를 포함한 추천을 생성합니다.
+- [x] 오류 상태와 품질 실패를 분리하고 하드 게이트·결정론적 채점을 구현했습니다.
+- [x] 다섯 가지 사용자 정책에 따라 성공 작업당 비용·품질·속도·개인정보를 결정론적으로 비교합니다.
+- [x] 주 모델과 fallback 순서, 근거 영수증, 제외 사유를 포함한 추천을 생성합니다.
 
 ## Task 4. 선택적 실사용 학습과 안전한 승격
 
-- [ ] 조직별 동의·예산·보존·redaction을 지키는 실사용 관찰을 구현합니다.
-- [ ] 최초 승인, 그림자 실행, 제한 배치, 자동 승격과 자동 복구를 불변 배치 버전으로 구현합니다.
-- [ ] 실행 중 배치 고정, 원자적 활성 포인터 전환과 재시작 복구를 검증합니다.
+- [ ] 조직별 동의·예산·보존·redaction을 지키는 실사용 관찰을 구현합니다. 정책 정본과 redacted query는 있지만 관찰 입력에 대한 consent·budget 검사가 남아 있습니다.
+- [x] 최초 승인, 그림자 실행, 제한 배치, 정책 기반 최소 표본·개선 폭 게이트와 degraded 관찰 복구를 불변 배치 버전으로 구현했습니다.
+- [x] 활성 포인터를 transaction 안에서 원자적으로 전환하고 재시작 후 DB에서 다시 읽도록 구현했습니다.
 
 ## Task 5. Runtime·Application·사용자 화면
 
-- [ ] Runtime이 역할별 활성 배치를 해석하고 Phase 24 router fallback으로 전달하게 합니다.
-- [ ] 평가·추천·적용·자동화·복구 Application operation과 redacted query를 추가합니다.
-- [ ] CLI·TUI·Web에서 같은 operation과 예상 비용·근거·동의 화면을 제공합니다.
+- [x] Runtime이 역할별 활성 배치의 주 모델·fallback 선호 순서를 Router reserve에 전달하게 했습니다.
+- [x] 평가 실행·추천·적용·자동화·복구 Application operation과 redacted query를 추가했습니다.
+- [ ] CLI·TUI·Web의 평가 실행·승인 화면을 완전히 동일하게 조립합니다. 현재 CLI/Application과 Web/TUI 조회 화면까지 구현되어 실행·승인 화면이 남아 있습니다.
 
 ## Task 6. 외부 평가 연동과 제품 조립
 
 - [ ] 외부 평가 결과의 버전·라이선스·설정·checksum을 검증하는 선택적 import/export 경계를 제공합니다.
-- [ ] 설치형 서버·로컬 lifecycle·team deploy와 백업·복구에 평가실을 조립합니다.
+- [x] 설치형 서버 bootstrap과 로컬 lifecycle의 Application 구성 및 백업 대상 DB 정본에 평가실을 조립했습니다.
 - [ ] 확장이 새 역할과 버전이 있는 평가 묶음을 안전하게 등록할 수 있게 합니다.
 
 ## Task 7. 실제 사용자 검증과 릴리스 판정
 
-- [ ] Phase 24 release 설치를 `tmux`에서 실행하고 Claude·Codex·GLM 역할별 빠른 평가를 검증합니다.
+- [ ] Phase 24 release 설치를 `tmux`에서 실행하고 실제 연결 가능한 Provider 역할별 빠른 평가를 검증합니다. 현재 Codex 연결은 초기 연결·quota·정책까지 검증되었고 장시간 structured run은 timeout으로 남아 있습니다.
 - [ ] 추천 승인·유지·자동 최적화·shadow·승격·rollback·재시작을 비밀이 제거된 영수증으로 검증합니다.
 - [ ] 전체 검증, 요구사항 추적표, 아키텍처, 운영 문서와 Phase 25 회고를 실제 결과로 완료합니다.
+
+## 현재 남은 완성 조건
+
+1. Provider 연결을 실제로 호출하는 평가 executor adapter와 역할별 평가 case 입력 경계를 추가합니다.
+2. 실사용 관찰의 조직 consent·예산·보존 정책 검사와 자동 승격 조건을 완성합니다.
+3. CLI·TUI·Web의 실행·추천 승인 화면을 연결하고 실제 release에서 반복합니다.
+4. Claude·Codex·GLM 및 복수 계정이 실제로 연결된 환경에서 tmux receipt를 갱신합니다.

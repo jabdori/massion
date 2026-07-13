@@ -78,7 +78,7 @@ describe("Massion 모델 평가실", () => {
   });
 
   it("기본 review 정책에서는 추천 승인 전 batch를 활성화하지 않고 shadow를 차단한다", async () => {
-    const profile = (id: string, quality: number): OptimizationModelProfile => ({
+    const profile = (id: string): OptimizationModelProfile => ({
       modelProfileId: id,
       modelId: id,
       routeId: `route-${id}`,
@@ -123,7 +123,7 @@ describe("Massion 모델 평가실", () => {
     const recommendation = await store.recommend(context, {
       commandId: "recommend-review",
       roleKey: "assurance",
-      candidates: [profile("profile-quality", 0.95)],
+      candidates: [profile("profile-quality")],
       receipts: [
         {
           roleKey: "assurance",
