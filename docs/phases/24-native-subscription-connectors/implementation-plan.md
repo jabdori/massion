@@ -46,7 +46,8 @@
 - [x] 설치형 서버·로컬 lifecycle에 connector broker, runtime startup recovery, drain shutdown을 조립하고 product test로 검증합니다. team deploy의 실제 사용자 시나리오는 다음 항목에서 검증합니다.
 - [x] 깨끗한 release 설치를 `tmux`에서 실행하고 공식 허용 범위의 실제 계정 시나리오를 검증합니다. Claude 소비자 로그인과 Z.AI는 제공자 승인 전 `provider-approval-required`로 검증합니다. 결과는 `docs/evidence/phase-24/subscription-uat-2026-07-13.md`에 기록했습니다.
 - [ ] 복수 계정 회전·quota·offline·429·fallback·중단·재개·재시작·백업·복원을 검증합니다.
-- [ ] 전체 검증, 요구사항 추적표, 아키텍처, 운영 문서와 Phase 24 회고를 실제 결과로 완료합니다. 외부 계정 전제조건이 충족되면 최종 회고를 닫습니다.
+- [x] 전체 검증, 요구사항 추적표, 아키텍처와 운영 문서의 로컬 결과를 현재 source commit에 고정했습니다.
+- [ ] 외부 계정 전제조건이 충족되면 복수 계정 UAT와 함께 Phase 24 최종 회고를 닫습니다.
 
 ## Task 7. Phase 24 기준점 닫기
 
@@ -54,4 +55,4 @@
 - [x] ACP 초기화 중 취소와 출력 누적 상한을 fail-closed로 구현합니다.
 - [x] Edge Connector 폐기 시 공개 명령이 현재 채널을 즉시 닫고 신규 RPC를 막는 경로를 검증합니다.
 - [x] 개인 Codex 데이터 처리 고지의 명시 동의·버전 기록·로그인 전 차단을 검증합니다.
-- [ ] 실제 사용자 자격 증명·tmux 시나리오, 전체 release gate, Phase 회고를 완료한 하나의 source commit으로 고정합니다.
+- [ ] 실제 사용자 자격 증명·tmux 시나리오와 외부 Provider release gate를 완료한 하나의 source commit으로 고정합니다.

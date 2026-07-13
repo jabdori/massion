@@ -45,7 +45,8 @@
 
 - [ ] Phase 24 release 설치를 `tmux`에서 실행하고 실제 연결 가능한 Provider 역할별 빠른 평가를 검증합니다. 현재 Codex 연결은 초기 연결·quota·정책까지 검증되었고 장시간 structured run은 timeout으로 남아 있습니다.
 - [ ] 추천 승인·유지·자동 최적화·shadow·승격·rollback·재시작을 비밀이 제거된 영수증으로 검증합니다.
-- [ ] 전체 검증, 요구사항 추적표, 아키텍처, 운영 문서와 Phase 25 회고를 실제 결과로 완료합니다.
+- [x] 전체 검증, 요구사항 추적표, 아키텍처와 운영 문서의 로컬 결과를 현재 source commit에 고정했습니다.
+- [ ] 실제 Provider UAT와 redacted receipt가 확보되면 Phase 25 최종 회고를 닫습니다.
 
 ## 현재 남은 완성 조건
 
