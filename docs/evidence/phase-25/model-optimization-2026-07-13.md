@@ -1,7 +1,7 @@
 # Phase 25 모델 평가실 검증 증거
 
 > **실행일**: 2026-07-13
-> **검증 커밋**: `5f1b0822bfbdddced82c15b2f7cc44170bb6fa18`
+> **검증 커밋**: `4a833fe19617e84139213a89c3fb1d0afa5c6afa`
 > **범위**: 개인용 Core 저장소의 모델 평가·추천·배치·정책·Runtime 선호 순서
 
 ## 자동 검증 결과
@@ -15,11 +15,12 @@
   - moderate/high/critical 취약점 0개, low 1개
 - `pnpm verify:hardening`: 통과
   - 26개 테스트 통과
-  - hardening load 500 requests, concurrency 32, failures 0, p95 13.58ms
+  - hardening load 500 requests, concurrency 32, failures 0, p95 12.18ms
 - `pnpm release:build`: 통과
   - release schema: `massion.release.v1`
-  - source commit: `5f1b0822bfbdddced82c15b2f7cc44170bb6fa18`
-  - local archive: `sha256:6959a71b803cae07909432f2ce1fe00394712d26b00f036ee5da9d0deb0e1a92`
+  - source commit: `4a833fe19617e84139213a89c3fb1d0afa5c6afa`
+  - source digest: `sha256:984a9cf28771f1fc1dc61a6af2f5ad5b20fcdf2567dcb5255f130d24e7690db1`
+  - local archive: `sha256:23d7cefa13ad6b30a68f7c18e913d8ba426384db8c318881dd158ad2380799f3`
 - `pnpm verify:release`: 통과
   - 개인 설치·실행·백업 복원·삭제 검증
   - 삭제 후 사용자 데이터와 백업 보존 확인
@@ -39,7 +40,7 @@
 
 ## tmux 실제 사용자 시나리오
 
-최종 local archive를 격리된 `massion-uat-phase24` tmux 세션에서 설치하여 실행했습니다. 비밀값과 원시 pane 출력은 저장하지 않았습니다.
+이전 검증 local archive를 격리된 `massion-uat-phase24` tmux 세션에서 설치하여 실행했고, 이번 커밋의 새 local archive도 같은 설치 preflight까지 실행했습니다. 비밀값과 원시 pane 출력은 저장하지 않았습니다.
 
 - `release-lifecycle`: passed
   - 설치, version, Connector doctor, local start, owner 초기화, readiness, provider catalog, event watch, 재시작, backup/restore, uninstall 후 data 보존
@@ -47,6 +48,7 @@
   - Codex 로그인 동의, accounts, doctor, quota, adaptive policy configure/query까지 통과
   - 실제 `run subscription acceptance`는 180초 timeout으로 종료되어 실행 계보와 성공으로 기록하지 않음
   - 브라우저 OAuth 인증 URL에서 사용자 계정 인증이 추가로 필요함
+- 이번 새 archive tmux 재실행은 같은 Codex OAuth 로그인 화면(이메일 입력)에서 사용자 인증이 없어 중단했습니다. 새 영수증을 만들지 않았으며, 기존 구조화 영수증의 결과를 변경하지 않았습니다.
 - 의도적으로 미실행한 시나리오 9개
   - 두 번째 계정, 두 번째 사용자, 공개 failure injection, 승인 checkpoint, quota contract, Claude/Z.AI 공개 Provider 승인 조건
 
