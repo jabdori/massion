@@ -58,9 +58,13 @@ const COMMANDS: Readonly<Record<string, readonly string[] | undefined>> = {
   optimization: [
     "policy",
     "receipts",
+    "recommendations",
+    "observations",
     "batch-active",
     "policy-configure",
     "bundle-create",
+    "bundle-export",
+    "bundle-import",
     "evaluation-start",
     "evaluation-execute",
     "evaluation-complete",

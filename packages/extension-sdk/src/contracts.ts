@@ -32,6 +32,14 @@ export interface ExtensionContributionDeclaration {
   readonly surfaceConnectors: readonly { readonly id: string; readonly handler: string }[];
   readonly eventConsumers: readonly { readonly id: string; readonly handler: string }[];
   readonly skills: readonly { readonly id: string; readonly path: string }[];
+  /** 모델 평가실이 확장에서 제공하는 재현 가능한 평가 번들 선언입니다. */
+  readonly modelEvaluationBundles?: readonly {
+    readonly id: string;
+    readonly roleKey: string;
+    readonly version: number;
+    readonly bundleChecksum: string;
+    readonly handler: string;
+  }[];
 }
 
 export interface ExtensionManifestV1 {

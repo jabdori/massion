@@ -61,7 +61,14 @@ export interface ApplicationDomainDependencies {
   readonly optimization?: {
     readonly evaluations: Pick<
       ModelOptimizationStore,
-      "createBundle" | "startEvaluation" | "executeEvaluation" | "completeEvaluation" | "configurePolicy" | "recommend"
+      | "createBundle"
+      | "exportBundle"
+      | "importBundle"
+      | "startEvaluation"
+      | "executeEvaluation"
+      | "completeEvaluation"
+      | "configurePolicy"
+      | "recommend"
     >;
     readonly batches: Pick<
       OptimizationBatchService,
@@ -1996,6 +2003,48 @@ function registerOptimization(registry: ApplicationCommandRegistry, dependencies
         roleKey: optimizationRole(value.roleKey),
         runtimeVersion: string(value.runtimeVersion, "runtimeVersion"),
         cases,
+      });
+      return result(command, {
+        resource: { type: "OptimizationBundle", id: bundle.bundleId, revision: bundle.version },
+        data: bundle,
+      });
+    },
+  });
+
+  register(registry, {
+    operation: "optimization.bundle.export",
+    requiredScopes: ["optimization:read"],
+    allowedRoles: ["owner", "admin", "member"],
+    recovery: "replay-domain",
+    validate: (value) =>
+      payload(
+        value,
+        ["bundleId", "license", "configurationChecksum"],
+        ["bundleId", "license", "configurationChecksum"],
+      ),
+    async handle(context, command, value) {
+      const exported = await optimization.evaluations.exportBundle(context, {
+        bundleId: string(value.bundleId, "bundleId"),
+        license: string(value.license, "license"),
+        configurationChecksum: string(value.configurationChecksum, "configurationChecksum"),
+      });
+      return result(command, {
+        resource: { type: "OptimizationBundleExport", id: exported.bundle.bundleId },
+        data: exported,
+      });
+    },
+  });
+
+  register(registry, {
+    operation: "optimization.bundle.import",
+    requiredScopes: ["optimization:write"],
+    allowedRoles: ["owner", "admin"],
+    recovery: "replay-domain",
+    validate: (value) => payload(value, ["export"], ["export"]),
+    async handle(context, command, value) {
+      const bundle = await optimization.evaluations.importBundle(context, {
+        commandId: command.commandId,
+        exportValue: value.export,
       });
       return result(command, {
         resource: { type: "OptimizationBundle", id: bundle.bundleId, revision: bundle.version },

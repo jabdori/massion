@@ -37,9 +37,9 @@
 
 ## Task 6. 외부 평가 연동과 제품 조립
 
-- [ ] 외부 평가 결과의 버전·라이선스·설정·checksum을 검증하는 선택적 import/export 경계를 제공합니다.
+- [x] 외부 평가 결과의 schema version·license·설정 checksum·bundle/case 계보를 검증하는 선택적 import/export 경계를 제공합니다. CLI와 Application operation으로 연결합니다.
 - [x] 설치형 서버 bootstrap과 로컬 lifecycle의 Application 구성 및 백업 대상 DB 정본에 평가실을 조립했습니다.
-- [ ] 확장이 새 역할과 버전이 있는 평가 묶음을 안전하게 등록할 수 있게 합니다.
+- [x] 확장이 역할 식별자·버전·SHA-256 체크섬·handler를 가진 평가 묶음을 manifest에 선언하고, Extension host가 이를 격리된 contribution registry에 등록하게 합니다. Core optimizer의 고정 role key 집합과 Extension worker의 외부 역할은 경계를 유지합니다.
 
 ## Task 7. 실제 사용자 검증과 릴리스 판정
 
@@ -49,7 +49,7 @@
 
 ## 현재 남은 완성 조건
 
-1. Provider 연결을 실제로 호출하는 평가 executor adapter와 역할별 평가 case 입력 경계를 추가합니다. 서버 기본 adapter와 prompt 입력 경계는 연결되었으며 Provider별 품질 판정 고도화가 남아 있습니다.
+1. Provider 연결을 실제로 호출하는 평가 executor adapter와 역할별 평가 case 입력 경계를 추가합니다. 서버 adapter는 Router reservation·VoltAgent AI SDK 호출·usage/cost 정산·기대 결과 포함 여부 기반 품질 판정을 수행합니다. 실제 Provider별 품질 분포는 외부 계정 UAT에서 추가 확인해야 합니다.
 2. 자동 승격 조건과 관찰 redaction의 운영 증거를 추가합니다.
-3. TUI 변경 modal과 외부 평가 import/export를 실제 release에서 반복하고 증거로 고정합니다.
+3. TUI 변경 modal·외부 평가 import/export를 실제 release에서 반복해 증거로 고정합니다.
 4. Claude·Codex·GLM 및 복수 계정이 실제로 연결된 환경에서 tmux receipt를 갱신합니다.

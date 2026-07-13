@@ -22,6 +22,13 @@ function versionTar(
   options: {
     readonly packageName?: `@massion-ext/${string}`;
     readonly contribution?: string;
+    readonly modelEvaluationBundle?: {
+      readonly id: string;
+      readonly roleKey: string;
+      readonly version: number;
+      readonly bundleChecksum: string;
+      readonly handler: string;
+    };
     readonly growthSignal?: string;
     readonly growthTarget?: string;
     readonly network?: readonly { readonly origin: string; readonly methods: readonly ["GET"] }[];
@@ -44,6 +51,9 @@ function versionTar(
         options.growthTarget === undefined
           ? validManifest.contributions.growthTargets
           : [{ id: options.growthTarget, handler: options.growthTarget }],
+      ...(options.modelEvaluationBundle === undefined
+        ? {}
+        : { modelEvaluationBundles: [options.modelEvaluationBundle] }),
     },
   };
   const packageJson = { ...validPackage, name: packageName, version };
@@ -323,6 +333,33 @@ describe("ExtensionLifecycleService", () => {
         timeoutMs: 1_000,
       }),
     ).resolves.toMatchObject({ contribution: "growthTargets:prompt" });
+  });
+
+  it("확장이 선언한 모델 평가 번들을 contribution registry에 등록한다", async () => {
+    await lifecycle.install(context, {
+      commandId: "install-model-evaluation-bundle",
+      archive: versionTar("1.0.0", {
+        modelEvaluationBundle: {
+          id: "assurance-v1",
+          roleKey: "assurance",
+          version: 1,
+          bundleChecksum: "c".repeat(64),
+          handler: "evaluation.assurance.v1",
+        },
+      }),
+      environment: "local",
+      riskClass: "extension-install",
+      executionId: "surface-model-evaluation",
+    });
+
+    await expect(
+      lifecycle.invoke(context, {
+        packageName: "@massion-ext/echo",
+        contribution: "modelEvaluationBundles:assurance-v1",
+        payload: { roleKey: "assurance", bundleVersion: 1 },
+        timeoutMs: 1_000,
+      }),
+    ).resolves.toMatchObject({ contribution: "modelEvaluationBundles:assurance-v1" });
   });
 
   it("AgentOS 재시작 후 active pointer에서 worker와 contribution registry를 재구성한다", async () => {

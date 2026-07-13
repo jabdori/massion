@@ -103,6 +103,7 @@ function contributionIds(contributions: ExtensionContributionDeclaration): reado
     ["surfaceConnectors", contributions.surfaceConnectors],
     ["eventConsumers", contributions.eventConsumers],
     ["skills", contributions.skills],
+    ["modelEvaluationBundles", contributions.modelEvaluationBundles ?? []],
   ];
   for (const [kind, entries] of groups) {
     for (const entry of entries) values.push(`${kind}:${entry.id}`);

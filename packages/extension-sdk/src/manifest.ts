@@ -6,6 +6,7 @@ const SEMVER =
   /^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/u;
 const SECRET =
   /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----|\b(?:gh[opusr]|sk|pk)_[A-Za-z0-9_-]{12,}|\bBearer\s+[A-Za-z0-9._~+/-]{12,}/iu;
+const SHA256 = /^[a-f0-9]{64}$/u;
 const TOP_FIELDS = new Set([
   "schemaVersion",
   "name",
@@ -147,7 +148,7 @@ function validatePermissions(value: unknown): void {
 }
 
 function validateContributions(value: unknown): void {
-  const fields = [
+  const standardFields = [
     "runtimeTools",
     "organizationTemplates",
     "growthSignals",
@@ -156,9 +157,10 @@ function validateContributions(value: unknown): void {
     "eventConsumers",
     "skills",
   ] as const;
+  const fields = [...standardFields, "modelEvaluationBundles"] as const;
   const contributions = exact(value, new Set(fields), "contributions");
   const all: string[] = [];
-  for (const field of fields) {
+  for (const field of standardFields) {
     const ids = list(contributions[field], `contributions.${field}`).map((candidate, index) => {
       const label = `contributions.${field}[${String(index)}]`;
       const entry = exact(candidate, field === "skills" ? new Set(["id", "path"]) : new Set(["id", "handler"]), label);
@@ -172,6 +174,27 @@ function validateContributions(value: unknown): void {
     unique(ids, `contributions.${field}`);
     all.push(...ids.map((id) => `${field}:${id}`));
   }
+  unique(all, "contributions");
+
+  const evaluationBundles = list(
+    contributions.modelEvaluationBundles === undefined ? [] : contributions.modelEvaluationBundles,
+    "contributions.modelEvaluationBundles",
+  ).map((candidate, index) => {
+    const label = `contributions.modelEvaluationBundles[${String(index)}]`;
+    const entry = exact(candidate, new Set(["id", "roleKey", "version", "bundleChecksum", "handler"]), label);
+    const id = identifier(entry.id, `${label}.id`);
+    identifier(entry.roleKey, `${label}.roleKey`);
+    integer(entry.version, `${label}.version`, 1, 1_000_000);
+    const checksum = text(entry.bundleChecksum, `${label}.bundleChecksum`, 64);
+    if (!SHA256.test(checksum)) throw new Error(`${label}.bundleChecksum 체크섬이 유효하지 않습니다`);
+    const handler = text(entry.handler, `${label}.handler`, 256);
+    if (handler.startsWith("/") || handler.includes("\\") || handler.split("/").includes("..")) {
+      throw new Error(`${label}.handler path가 유효하지 않습니다`);
+    }
+    return id;
+  });
+  unique(evaluationBundles, "contributions.modelEvaluationBundles");
+  all.push(...evaluationBundles.map((id) => `modelEvaluationBundles:${id}`));
   unique(all, "contributions");
 }
 

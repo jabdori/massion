@@ -5,6 +5,8 @@
 export const MODEL_OPTIMIZATION_OPERATIONS = [
   "optimization.policy.configure",
   "optimization.bundle.create",
+  "optimization.bundle.export",
+  "optimization.bundle.import",
   "optimization.evaluation.start",
   "optimization.evaluation.execute",
   "optimization.evaluation.complete",

@@ -291,6 +291,10 @@ export async function executeCliInvocation(
     return await client.query("optimization.policy", {});
   if (invocation.command === "optimization" && invocation.subcommand === "receipts")
     return await client.query("optimization.receipts", {});
+  if (invocation.command === "optimization" && invocation.subcommand === "recommendations")
+    return await client.query("optimization.recommendations", {});
+  if (invocation.command === "optimization" && invocation.subcommand === "observations")
+    return await client.query("optimization.observations", {});
   if (invocation.command === "optimization" && invocation.subcommand === "batch-active")
     return await client.query("optimization.batch.active", { roleKey: required(args, 0, "roleKey") });
   if (invocation.command === "subscription" && invocation.subcommand === "providers")
@@ -519,6 +523,8 @@ export async function executeCliInvocation(
     "growth:revert": "growth.revert",
     "optimization:policy-configure": "optimization.policy.configure",
     "optimization:bundle-create": "optimization.bundle.create",
+    "optimization:bundle-export": "optimization.bundle.export",
+    "optimization:bundle-import": "optimization.bundle.import",
     "optimization:evaluation-start": "optimization.evaluation.start",
     "optimization:evaluation-execute": "optimization.evaluation.execute",
     "optimization:evaluation-complete": "optimization.evaluation.complete",
