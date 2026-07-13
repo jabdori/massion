@@ -868,12 +868,15 @@ test("격리된 tmux에 daemon·user·connectors·watch 창을 만들고 raw pan
     window: "user",
     step: "working-directory-with-spaces",
     command: process.execPath,
-    arguments: ["-e", 'process.exit(process.cwd() === process.env.EXPECTED_CWD ? 0 : 1)'],
-    environment: { EXPECTED_CWD: canonicalWorkingDirectory },
+    arguments: ["-e", 'require("node:fs").writeFileSync(process.env.CWD_SENTINEL, process.cwd())'],
+    environment: {
+      CWD_SENTINEL: join(workingDirectory, "cwd.txt"),
+    },
     cwd: canonicalWorkingDirectory,
     timeoutMs: 5_000,
   });
   assert.deepEqual(cwdResult, { step: "working-directory-with-spaces", exitCode: 0 });
+  assert.equal(await readFile(join(workingDirectory, "cwd.txt"), "utf8"), canonicalWorkingDirectory);
 
   const hostile = `value'; touch '${sentinel}'; #`;
   const safelyQuoted = await runTmuxUatCommand(session, {

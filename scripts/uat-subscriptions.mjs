@@ -1390,8 +1390,8 @@ function shellCommand(input) {
     });
   const command = [shellQuote(input.command), ...(input.arguments ?? []).map(shellQuote)];
   const invocation = environment.length > 0 ? ["env", ...environment, ...command] : command;
-  const workingDirectory = input.cwd === undefined ? "" : `cd ${shellQuote(input.cwd)} && `;
-  return `exec ${workingDirectory}${invocation.join(" ")}${input.interactive ? "" : " >/dev/null 2>&1"}`;
+  const prefix = input.cwd === undefined ? "exec " : `cd ${shellQuote(input.cwd)} && exec `;
+  return `${prefix}${invocation.join(" ")}${input.interactive ? "" : " >/dev/null 2>&1"}`;
 }
 
 function wait(milliseconds) {
