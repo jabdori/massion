@@ -212,6 +212,7 @@ function sendJson(response: ServerResponse, status: number, value: unknown): voi
 
 export class ApplicationHttpServer {
   private readonly server: Server;
+  private readonly streams = new Set<ServerResponse>();
   private readonly options: Required<
     Pick<
       ApplicationHttpServerOptions,
@@ -291,6 +292,7 @@ export class ApplicationHttpServer {
 
   public beginDrain(): void {
     this.draining = true;
+    for (const response of this.streams) response.destroy();
   }
 
   public upgradeServer(): Server {
@@ -872,6 +874,7 @@ export class ApplicationHttpServer {
     const last = header(request, "last-event-id");
     let cursor = parseEventCursor(last, url.searchParams.get("after") ?? undefined);
     this.activeStreams += 1;
+    this.streams.add(response);
     response.writeHead(200, {
       "content-type": "text/event-stream; charset=utf-8",
       "cache-control": "no-cache, no-transform",
@@ -880,7 +883,7 @@ export class ApplicationHttpServer {
     });
     let heartbeatAt = Date.now() + this.options.heartbeatMs;
     try {
-      while (!request.destroyed && !response.destroyed) {
+      while (!this.draining && !request.destroyed && !response.destroyed) {
         const batch = await this.dependencies.events.read(context, { after: cursor, limit: 1000 });
         let batchBytes = 0;
         for (const event of batch.events) {
@@ -897,6 +900,7 @@ export class ApplicationHttpServer {
         await new Promise<void>((resolve) => setTimeout(resolve, this.options.pollMs));
       }
     } finally {
+      this.streams.delete(response);
       this.activeStreams -= 1;
       if (!response.writableEnded) response.end();
     }
