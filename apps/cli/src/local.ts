@@ -42,7 +42,12 @@ interface LocalDaemonDependencies {
   readonly spawnProcess?: (
     command: string,
     arguments_: readonly string[],
-    options: { readonly env: NodeJS.ProcessEnv; readonly stdout: number; readonly stderr: number },
+    options: {
+      readonly cwd: string;
+      readonly env: NodeJS.ProcessEnv;
+      readonly stdout: number;
+      readonly stderr: number;
+    },
   ) => SpawnedProcess;
 }
 
@@ -71,7 +76,7 @@ export function resolveLocalPaths(environment: Readonly<Record<string, string | 
     credentialKey: join(configDirectory, "credential-key"),
     pidFile: join(stateDirectory, "server.json"),
     logFile: join(stateDirectory, "server.log"),
-    databaseUrl: `rocksdb://${join(dataDirectory, "massion.db")}`,
+    databaseUrl: "rocksdb://./massion.db",
   };
 }
 
@@ -229,6 +234,7 @@ export class LocalDaemonManager {
       ((command, arguments_, options) => {
         const child = spawn(command, [...arguments_], {
           detached: true,
+          cwd: options.cwd,
           env: options.env,
           stdio: ["ignore", options.stdout, options.stderr],
         });
@@ -291,6 +297,7 @@ export class LocalDaemonManager {
     let child: SpawnedProcess;
     try {
       child = this.#spawnProcess(process.execPath, [serverScript], {
+        cwd: this.#paths.dataDirectory,
         env: {
           PATH: this.#environment.PATH,
           HOME: this.#environment.HOME,
@@ -380,6 +387,7 @@ export class LocalDaemonManager {
     try {
       const code = await new Promise<number | null>((resolveCode, reject) => {
         const child = spawn(process.execPath, [this.#serverScript(), "backup", destination], {
+          cwd: this.#paths.dataDirectory,
           env: {
             PATH: this.#environment.PATH,
             HOME: this.#environment.HOME,
