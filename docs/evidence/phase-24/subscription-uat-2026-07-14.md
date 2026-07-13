@@ -5,10 +5,10 @@
 
 ## 최신 local lifecycle 재검증 — 2026-07-14
 
-- Git commit: `087e33850e0f7e2bcaf58921f9532f8539428837`
-- Release manifest source digest: `sha256:402a9da8622524b751bd6af4aadc5cc83e0826550d6b713a764a153d0d26d386`
-- Local release archive: `sha256:ca4b3d5d3515d1c9dcfa99c6d314fd0295bb97313e19b479489ba34627c636e3`
-- UAT receipt: `sha256:93621b15f5f7affe947fcb529fae806b796138e81b1d6ba0dbeeba966a83f2f6`
+- Git commit: `584fdb72b78bf9f2451932af4028c2f0a123bb6a`
+- Release manifest source digest: `sha256:1a705c9545f54abe8ed806e85b424b5be04ca209f7e0809cca3a4171a7231157`
+- Local release archive: `sha256:a9bf059c11cdd50f2fda026170efdb6fa7e6ace00fdbd3f9f66565734ada6611`
+- UAT receipt: `sha256:4bad0bc7039f7060d888690f5c8e88efc1500817258c592420b74566f65a664a`
 - Receipt summary: `passed: 1`, `failed: 0`, `not-run: 9`
 
 이번 실행은 경로에 공백이 포함된 격리 작업공간에서 `tmux`로 수행했습니다. 설치·version·Connector doctor·local 시작·owner 초기화·readiness·provider catalog·event watch·재시작·owner-only backup·복원 서버 시작·복원 readiness·uninstall 후 data 보존을 모두 통과했습니다. 복원 command와 복원 server는 상대 RocksDB URL(`rocksdb://./massion.db`)과 복원 directory 작업 디렉터리를 사용했습니다.
