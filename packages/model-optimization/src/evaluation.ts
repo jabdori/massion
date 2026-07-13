@@ -297,6 +297,7 @@ export class ModelOptimizationStore {
       assertChecksum(item.promptChecksum, "prompt");
       assertChecksum(item.toolsChecksum, "tools");
       assertChecksum(item.environmentChecksum, "environment");
+      if (item.prompt !== undefined) assertText(item.prompt, "평가 prompt", 16_384);
       assertText(item.expectedOutcome, "expected outcome", 4_096);
     }
     const requestHash = digest({ ...input, roleKey: input.roleKey });
@@ -322,7 +323,7 @@ export class ModelOptimizationStore {
         const caseId = randomUUID();
         caseIds.push(caseId);
         await tx.query(
-          "CREATE optimization_case CONTENT { case_id: $case_id, organization_id: $organization_id, role_key: $role_key, version: $version, prompt_checksum: $prompt_checksum, tools_checksum: $tools_checksum, environment_checksum: $environment_checksum, expected_outcome: $expected_outcome, created_at: time::now() };",
+          "CREATE optimization_case CONTENT { case_id: $case_id, organization_id: $organization_id, role_key: $role_key, version: $version, prompt_checksum: $prompt_checksum, tools_checksum: $tools_checksum, environment_checksum: $environment_checksum, prompt: $prompt, expected_outcome: $expected_outcome, created_at: time::now() };",
           {
             case_id: caseId,
             organization_id: context.organizationId,
@@ -331,6 +332,7 @@ export class ModelOptimizationStore {
             prompt_checksum: item.promptChecksum,
             tools_checksum: item.toolsChecksum,
             environment_checksum: item.environmentChecksum,
+            prompt: item.prompt,
             expected_outcome: item.expectedOutcome,
           },
         );
@@ -502,9 +504,10 @@ export class ModelOptimizationStore {
     const cases = await this.listBundleCases(context, bundle.bundle_id);
     if (!cases.length) throw new Error("평가 bundle에 case가 없습니다");
 
+    let profile: OptimizationModelProfile | undefined;
     if (this.options.modelCatalog) {
       const profiles = await this.options.modelCatalog(context);
-      const profile = profiles.find((candidate) => candidate.modelProfileId === input.modelProfileId);
+      profile = profiles.find((candidate) => candidate.modelProfileId === input.modelProfileId);
       if (!profile || !profile.verified) throw new Error("검증된 연결 모델 profile이 아닙니다");
     }
 
@@ -539,6 +542,7 @@ export class ModelOptimizationStore {
     try {
       for (const evaluationCase of cases) {
         const result = await executor.execute({
+          context,
           organizationId: context.organizationId,
           roleKey: input.roleKey,
           modelProfileId: input.modelProfileId,
@@ -546,6 +550,7 @@ export class ModelOptimizationStore {
           mode,
           run,
           case: evaluationCase,
+          ...(profile ? { profile } : {}),
           capabilities,
         });
         this.assertExecutionResult(result);
@@ -757,6 +762,7 @@ export class ModelOptimizationStore {
           readonly prompt_checksum: string;
           readonly tools_checksum: string;
           readonly environment_checksum: string;
+          readonly prompt?: string;
           readonly expected_outcome: string;
         }>,
       ]
@@ -771,6 +777,7 @@ export class ModelOptimizationStore {
       promptChecksum: item.prompt_checksum,
       toolsChecksum: item.tools_checksum,
       environmentChecksum: item.environment_checksum,
+      ...(item.prompt ? { prompt: item.prompt } : {}),
       expectedOutcome: item.expected_outcome,
     }));
   }

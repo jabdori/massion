@@ -25,7 +25,7 @@
 
 ## Task 4. 선택적 실사용 학습과 안전한 승격
 
-- [ ] 조직별 동의·예산·보존·redaction을 지키는 실사용 관찰을 구현합니다. 정책 정본과 redacted query는 있지만 관찰 입력에 대한 consent·budget 검사가 남아 있습니다.
+- [ ] 조직별 동의·예산·보존·redaction을 지키는 실사용 관찰을 구현합니다. `production learning` 명시 동의 게이트와 불변 observation은 구현했지만 관찰 예산·보존 기간 검사가 남아 있습니다.
 - [x] 최초 승인, 그림자 실행, 제한 배치, 정책 기반 최소 표본·개선 폭 게이트와 degraded 관찰 복구를 불변 배치 버전으로 구현했습니다.
 - [x] 활성 포인터를 transaction 안에서 원자적으로 전환하고 재시작 후 DB에서 다시 읽도록 구현했습니다.
 
@@ -49,7 +49,7 @@
 
 ## 현재 남은 완성 조건
 
-1. Provider 연결을 실제로 호출하는 평가 executor adapter와 역할별 평가 case 입력 경계를 추가합니다.
+1. Provider 연결을 실제로 호출하는 평가 executor adapter와 역할별 평가 case 입력 경계를 추가합니다. 서버에는 기존 Router·AI SDK를 통한 기본 adapter가 연결되어 있으며 Provider별 품질 판정 고도화가 남아 있습니다.
 2. 실사용 관찰의 조직 consent·예산·보존 정책 검사와 자동 승격 조건을 완성합니다.
 3. CLI·TUI·Web의 실행·추천 승인 화면을 연결하고 실제 release에서 반복합니다.
 4. Claude·Codex·GLM 및 복수 계정이 실제로 연결된 환경에서 tmux receipt를 갱신합니다.

@@ -1976,6 +1976,7 @@ function registerOptimization(registry: ApplicationCommandRegistry, dependencies
               promptChecksum: string(evaluationCase.promptChecksum, "promptChecksum"),
               toolsChecksum: string(evaluationCase.toolsChecksum, "toolsChecksum"),
               environmentChecksum: string(evaluationCase.environmentChecksum, "environmentChecksum"),
+              ...(evaluationCase.prompt === undefined ? {} : { prompt: string(evaluationCase.prompt, "prompt") }),
               expectedOutcome: string(evaluationCase.expectedOutcome, "expectedOutcome"),
             };
           })

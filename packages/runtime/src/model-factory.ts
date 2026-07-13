@@ -321,7 +321,8 @@ export class MassionModelFactory implements RoutedModelFactory {
   }
 
   public async acquire(context: TenantContext, input: AcquireModelInput): Promise<RoutedModelLease> {
-    const resolvedPreferences = await this.preferenceResolver?.resolve(context, input);
+    const resolvedPreferences =
+      input.preferredModelProfileIds ?? (await this.preferenceResolver?.resolve(context, input));
     const reservation = await this.router
       .reserve(context, {
         commandId: input.commandId,
