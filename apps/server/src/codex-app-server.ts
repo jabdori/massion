@@ -256,6 +256,7 @@ export async function openCodexAppServer(
   try {
     await session.request("initialize", {
       clientInfo: { name: "massion_server", title: "Massion Server", version: "1.0.0" },
+      capabilities: { experimentalApi: true },
     });
     await session.notify("initialized");
   } catch (error) {
