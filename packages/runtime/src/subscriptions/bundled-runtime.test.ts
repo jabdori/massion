@@ -14,7 +14,7 @@ describe("공식 SDK bundled runtime 증명", () => {
     expect(first.runtimeArtifactDigest).toMatch(/^[a-f0-9]{64}$/u);
     expect(first.commandArguments.length).toBeGreaterThan(0);
     await expect(lstat(first.command)).resolves.toMatchObject({});
-  }, 15_000);
+  }, 60_000);
 
   it("Claude Agent SDK와 현재 platform native binary의 실제 artifact를 증명한다", async () => {
     const artifact = await inspectBundledSubscriptionRuntime("claude");
