@@ -31,6 +31,7 @@ describe("local daemon lifecycle", () => {
     const root = await mkdtemp(join(tmpdir(), "massion-local-connectors-"));
     const serverScript = join(root, "server.js");
     let childEnvironment: NodeJS.ProcessEnv | undefined;
+    let childWorkingDirectory: string | undefined;
     try {
       await writeFile(serverScript, "", { mode: 0o600 });
       const paths = resolveLocalPaths({ HOME: root });
@@ -47,12 +48,15 @@ describe("local daemon lifecycle", () => {
         processCommand: () => Promise.resolve(`node ${serverScript}`),
         spawnProcess: (_command, _arguments, options) => {
           childEnvironment = options.env;
+          childWorkingDirectory = options.cwd;
           return { pid: 42, unref() {} };
         },
       });
 
       await expect(manager.start()).resolves.toMatchObject({ status: "started", pid: 42 });
       expect(childEnvironment?.MASSION_CONNECTOR_ROOT).toBe(paths.connectorDirectory);
+      expect(childEnvironment?.MASSION_DATABASE_URL).toBe("rocksdb://./massion.db");
+      expect(childWorkingDirectory).toBe(paths.dataDirectory);
       expect(childEnvironment?.MASSION_EDGE_CONNECTOR_ENABLED).toBe("true");
       expect(childEnvironment?.MASSION_CONNECTOR_HEARTBEAT_MS).toBe("45000");
       expect((await stat(paths.connectorDirectory)).mode & 0o777).toBe(0o700);
