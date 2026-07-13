@@ -19,3 +19,4 @@ export * from "./surreal-memory.js";
 export * from "./voltagent-topology.js";
 export * from "./voltagent-runner.js";
 export * from "./workflow-runtime.js";
+export { generateText } from "ai";

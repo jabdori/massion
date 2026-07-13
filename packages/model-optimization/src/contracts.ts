@@ -19,6 +19,7 @@ export interface EvaluationCase {
   readonly promptChecksum: string;
   readonly toolsChecksum: string;
   readonly environmentChecksum: string;
+  readonly prompt?: string;
   readonly expectedOutcome: string;
 }
 

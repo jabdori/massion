@@ -178,6 +178,7 @@ export const MODEL_OPTIMIZATION_HARDENING_MIGRATION = defineMigration(
   "0104-model-optimization-hardening",
   `
 DEFINE FIELD source ON optimization_observation TYPE string ASSERT $value IN ['evaluation', 'production'];
+DEFINE FIELD prompt ON optimization_case TYPE option<string>;
 DEFINE INDEX optimization_observation_command ON optimization_observation FIELDS organization_id, command_id UNIQUE;
 DEFINE INDEX optimization_batch_command ON optimization_batch FIELDS organization_id, command_id UNIQUE;
 DEFINE INDEX optimization_recovery_command ON optimization_recovery FIELDS organization_id, command_id UNIQUE;

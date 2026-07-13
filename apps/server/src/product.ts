@@ -49,6 +49,7 @@ import {
   RuntimeRecovery,
   RuntimeExecutionStore,
   VoltAgentRunner,
+  generateText,
   type AgentExecutionInput,
   type StructuredOutputSpec,
 } from "@massion/runtime";
@@ -239,6 +240,7 @@ export async function createMassionDaemon(
       quota: subscriptionQuota,
       policies: subscriptionPolicies,
     });
+    const modelFactoryReference: { current?: MassionModelFactory } = {};
     const optimizationEvaluations = await ModelOptimizationStore.create(database, organizations, {
       modelCatalog: async (context) => {
         const [models, routes] = await Promise.all([router.listModels(context), router.listRoutes(context)]);
@@ -256,6 +258,70 @@ export async function createMassionDaemon(
             dataPolicy: route?.data_policy ?? "external-allowed",
           };
         });
+      },
+      executor: {
+        execute: async (input) => {
+          const modelFactory = modelFactoryReference.current;
+          const profile = input.profile;
+          if (!modelFactory || !profile) throw new Error("모델 평가용 Runtime profile이 구성되지 않았습니다");
+          if (!input.case.prompt) throw new Error("실제 평가 실행에는 prompt가 필요합니다");
+          const routes = await router.listRoutes(input.context);
+          const route = routes.find((candidate) => candidate.route_id === profile.routeId);
+          if (!route) throw new Error("모델 평가용 Route를 찾을 수 없습니다");
+          const lease = await modelFactory.acquire(input.context, {
+            commandId: `${input.run.runId}:${input.case.caseId}:reserve`,
+            executionId: input.run.runId,
+            workId: `optimization:${input.run.runId}`,
+            agentHandle: input.roleKey,
+            routeName: route.name,
+            preferredModelProfileIds: [input.modelProfileId],
+            estimatedTokens: 4_096,
+            estimatedCostMicros: 0,
+          });
+          if (lease.kind !== "model") throw new Error("Agent Runtime connector는 모델 평가에서 사용할 수 없습니다");
+          const startedAt = Date.now();
+          try {
+            const result = await generateText({ model: lease.model, prompt: input.case.prompt, maxRetries: 0 });
+            const usage = result.usage as { readonly inputTokens?: number; readonly outputTokens?: number };
+            const inputTokens =
+              typeof usage.inputTokens === "number" && Number.isSafeInteger(usage.inputTokens) ? usage.inputTokens : 0;
+            const outputTokens =
+              typeof usage.outputTokens === "number" && Number.isSafeInteger(usage.outputTokens)
+                ? usage.outputTokens
+                : 0;
+            const completed = result.text.trim().length > 0;
+            const expected = input.case.expectedOutcome.trim().toLocaleLowerCase();
+            const actual = result.text.trim().toLocaleLowerCase();
+            const qualityScore =
+              completed && expected.length > 0 && actual.includes(expected) ? 1 : completed ? 0.5 : 0;
+            const attempt = await lease.complete({
+              commandId: `${input.run.runId}:${input.case.caseId}:complete`,
+              inputTokens,
+              outputTokens,
+            });
+            return {
+              qualityScore,
+              latencyMs: Math.max(0, Date.now() - startedAt),
+              costMicros: attempt.actual_cost_micros,
+              privacyAllowed: true,
+              completed,
+              inputTokens,
+              outputTokens,
+            };
+          } catch (error) {
+            await lease
+              .fail({
+                commandId: `${input.run.runId}:${input.case.caseId}:fail`,
+                signal: { kind: "unknown" },
+                emittedTokens: 0,
+                sideEffectsStarted: false,
+                inputTokens: 0,
+                outputTokens: 0,
+              })
+              .catch(() => undefined);
+            throw error;
+          }
+        },
       },
     });
     const optimizationBatches = await OptimizationBatchService.create(database, organizations);
@@ -353,6 +419,7 @@ export async function createMassionDaemon(
         },
       },
     );
+    modelFactoryReference.current = modelFactory;
     const routedRunner = new VoltAgentRunner(
       topologyRuntime,
       runtimeExecutions,

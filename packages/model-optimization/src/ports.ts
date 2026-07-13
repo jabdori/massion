@@ -1,4 +1,7 @@
+import type { TenantContext } from "@massion/identity";
+
 import type { EvaluationCase, EvaluationRun, StoredEvaluationReceipt } from "./contracts.js";
+import type { OptimizationModelProfile } from "./contracts.js";
 import type { OptimizationRoleKey } from "./scoring.js";
 
 /** 평가 실행 중 정본 변경을 막기 위해 명시적으로 전달하는 capability 집합입니다. */
@@ -11,6 +14,7 @@ export interface EvaluationCapabilities {
 }
 
 export interface ModelEvaluationExecutionInput {
+  readonly context: TenantContext;
   readonly organizationId: string;
   readonly roleKey: OptimizationRoleKey;
   readonly modelProfileId: string;
@@ -18,6 +22,7 @@ export interface ModelEvaluationExecutionInput {
   readonly mode: "standard" | "shadow";
   readonly run: EvaluationRun;
   readonly case: EvaluationCase;
+  readonly profile?: OptimizationModelProfile;
   readonly capabilities: EvaluationCapabilities;
 }
 
