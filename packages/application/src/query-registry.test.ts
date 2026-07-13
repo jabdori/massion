@@ -231,6 +231,60 @@ describe("ApplicationQueryRegistry", () => {
     });
   });
 
+  it("모델 최적화 조회는 adapter가 덧붙인 prompt·credential 필드를 redaction한다", async () => {
+    const registry = new ApplicationQueryRegistry();
+    registerApplicationQueries(registry, {
+      readModel,
+      optimization: {
+        evaluations: {
+          getActivePolicy: async () => ({
+            policyVersionId: "policy-1",
+            organizationId: context.organizationId,
+            version: 1,
+            policy: "quality",
+            autoOptimize: false,
+            productionLearning: false,
+            shadowEnabled: false,
+            minimumSampleCount: 3,
+            improvementThreshold: 0.05,
+            observationBudgetMicros: 100,
+            observationRetentionDays: 7,
+            status: "active",
+            checksum: "a".repeat(64),
+            prompt: "prompt-secret",
+          }),
+          listReceipts: async () => [
+            {
+              receiptId: "receipt-1",
+              runId: "run-1",
+              organizationId: context.organizationId,
+              roleKey: "assurance",
+              modelProfileId: "profile-1",
+              bundleVersion: 1,
+              sampleCount: 1,
+              qualityScore: 0.9,
+              latencyMs: 10,
+              costMicros: 1,
+              privacyAllowed: true,
+              completed: true,
+              inputChecksum: "b".repeat(64),
+              receiptChecksum: "c".repeat(64),
+              credential: "credential-secret",
+            },
+          ],
+          listRecommendations: async () => [],
+        } as never,
+        batches: { getActiveBatch: async () => undefined, listObservations: async () => [] } as never,
+      },
+    });
+
+    const policy = await registry.query(context, ["optimization:read"], "optimization.policy", {});
+    const receipts = await registry.query(context, ["optimization:read"], "optimization.receipts", {});
+    expect(JSON.stringify(policy)).not.toContain("prompt-secret");
+    expect(JSON.stringify(receipts)).not.toContain("credential-secret");
+    expect(policy.data).toEqual([expect.objectContaining({ policyVersionId: "policy-1", checksum: "a".repeat(64) })]);
+  });
+
   it("웹 운영 화면용 구성원·기억·감사·session을 secret 없이 조회한다", async () => {
     const registry = new ApplicationQueryRegistry();
     registerApplicationQueries(registry, {

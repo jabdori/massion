@@ -12,6 +12,7 @@
 - 추천 승인, 제한 batch, shadow, 자동 승격 조건, rollback·recovery
 - production learning 동의, 관찰 예산·보존 기간·만료 시각
 - Application operation과 redacted query
+- Application query 경계에서 policy·receipt·recommendation·observation·active batch를 allowlist projection해 adapter가 덧붙인 prompt·credential 필드를 제거
 - CLI·TUI JSON mutation modal·Web 정책 화면
 - 외부 평가 bundle import/export의 schema·license·configuration checksum 검증
 - Extension manifest의 평가 bundle 선언과 worker contribution registry 등록
@@ -39,4 +40,3 @@ tmux release 시나리오는 설치 preflight까지 진행했습니다. 실제 P
 2. 추천 승인·자동 최적화·shadow·제한 승격·rollback·재시작을 release 환경에서 redacted receipt로 반복합니다.
 3. TUI mutation modal과 외부 bundle import/export를 release 환경에서 반복하고 계보를 기록합니다.
 4. Phase 24 최종 receipt와 함께 전체 source·release·문서 계보를 고정합니다.
-

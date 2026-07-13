@@ -99,6 +99,87 @@ function boundedInteger(value: unknown, label: string, fallback: number): number
   return value as number;
 }
 
+const OPTIMIZATION_POLICY_FIELDS = [
+  "policyVersionId",
+  "organizationId",
+  "version",
+  "policy",
+  "autoOptimize",
+  "productionLearning",
+  "shadowEnabled",
+  "minimumSampleCount",
+  "improvementThreshold",
+  "observationBudgetMicros",
+  "observationRetentionDays",
+  "status",
+  "checksum",
+] as const;
+const OPTIMIZATION_RECEIPT_FIELDS = [
+  "receiptId",
+  "runId",
+  "organizationId",
+  "roleKey",
+  "modelProfileId",
+  "bundleVersion",
+  "sampleCount",
+  "qualityScore",
+  "latencyMs",
+  "costMicros",
+  "privacyAllowed",
+  "completed",
+  "inputChecksum",
+  "receiptChecksum",
+] as const;
+const OPTIMIZATION_RECOMMENDATION_FIELDS = [
+  "recommendationId",
+  "organizationId",
+  "roleKey",
+  "policyVersionId",
+  "primaryModelProfileId",
+  "fallbackModelProfileIds",
+  "excludedJson",
+  "receiptIds",
+  "status",
+  "checksum",
+] as const;
+const OPTIMIZATION_OBSERVATION_FIELDS = [
+  "observationId",
+  "organizationId",
+  "batchId",
+  "sampleCount",
+  "qualityScore",
+  "latencyMs",
+  "costMicros",
+  "status",
+  "source",
+  "policyVersionId",
+  "expiresAt",
+  "checksum",
+] as const;
+const OPTIMIZATION_BATCH_FIELDS = [
+  "batchId",
+  "organizationId",
+  "roleKey",
+  "version",
+  "recommendationId",
+  "policyVersionId",
+  "status",
+  "primaryModelProfileId",
+  "fallbackModelProfileIds",
+  "parentBatchId",
+  "checksum",
+] as const;
+
+function projectOptimizationRecord(value: unknown, fields: readonly string[]): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const record = value as Record<string, unknown>;
+  return Object.fromEntries(fields.filter((field) => field in record).map((field) => [field, record[field]]));
+}
+
+function projectOptimizationList(value: readonly unknown[] | undefined, fields: readonly string[]): readonly unknown[] {
+  return (value ?? []).map((item) => projectOptimizationRecord(item, fields));
+}
+
 function cursor(value: unknown): number {
   if (value === undefined) return 0;
   if (!Number.isSafeInteger(value) || (value as number) < 0) throw new Error("after가 유효하지 않습니다");
@@ -956,7 +1037,7 @@ export function registerApplicationQueries(
       validate: (value) => object(value, []),
       handle: async (context) => {
         const policy = await dependencies.optimization?.evaluations.getActivePolicy(context);
-        return policy === undefined ? [] : [policy];
+        return policy === undefined ? [] : [projectOptimizationRecord(policy, OPTIMIZATION_POLICY_FIELDS)];
       },
     });
     registry.register({
@@ -968,7 +1049,10 @@ export function registerApplicationQueries(
         const roleKey = value.roleKey === undefined ? undefined : text(value.roleKey, "roleKey");
         if (roleKey !== undefined && !isOptimizationRoleKey(roleKey))
           throw new Error("지원하지 않는 최적화 roleKey입니다");
-        return await dependencies.optimization?.evaluations.listReceipts(context, roleKey);
+        return projectOptimizationList(
+          await dependencies.optimization?.evaluations.listReceipts(context, roleKey),
+          OPTIMIZATION_RECEIPT_FIELDS,
+        );
       },
     });
     registry.register({
@@ -980,7 +1064,10 @@ export function registerApplicationQueries(
         const roleKey = value.roleKey === undefined ? undefined : text(value.roleKey, "roleKey");
         if (roleKey !== undefined && !isOptimizationRoleKey(roleKey))
           throw new Error("지원하지 않는 최적화 roleKey입니다");
-        return (await dependencies.optimization?.evaluations.listRecommendations(context, roleKey)) ?? [];
+        return projectOptimizationList(
+          await dependencies.optimization?.evaluations.listRecommendations(context, roleKey),
+          OPTIMIZATION_RECOMMENDATION_FIELDS,
+        );
       },
     });
     registry.register({
@@ -990,7 +1077,10 @@ export function registerApplicationQueries(
       validate: (value) => object(value, ["batchId"]),
       handle: async (context, value) => {
         const batchId = value.batchId === undefined ? undefined : text(value.batchId, "batchId");
-        return (await dependencies.optimization?.batches.listObservations(context, batchId)) ?? [];
+        return projectOptimizationList(
+          await dependencies.optimization?.batches.listObservations(context, batchId),
+          OPTIMIZATION_OBSERVATION_FIELDS,
+        );
       },
     });
     registry.register({
@@ -1002,7 +1092,7 @@ export function registerApplicationQueries(
         const roleKey = text(value.roleKey, "roleKey");
         if (!isOptimizationRoleKey(roleKey)) throw new Error("지원하지 않는 최적화 roleKey입니다");
         const active = await dependencies.optimization?.batches.getActiveBatch(context, roleKey);
-        return active === undefined ? [] : [active];
+        return active === undefined ? [] : [projectOptimizationRecord(active, OPTIMIZATION_BATCH_FIELDS)];
       },
     });
   }
