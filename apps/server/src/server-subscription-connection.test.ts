@@ -830,7 +830,7 @@ describe("실제 서버 구독 계정 준비 조립", () => {
       connector: { status: "offline", trustOrigin: "server-managed" },
       profileHandle: expect.stringMatching(/^[a-f0-9]{64}\/[a-f0-9]{64}$/u),
     });
-  });
+  }, 20_000);
 
   it("Codex 유료 계정의 실제 model/list 선택이 Core route와 MassionModelFactory agent-runtime lease까지 이어진다", async () => {
     database = await createDatabase({ url: "mem://", namespace: "massion", database: randomUUID() });

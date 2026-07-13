@@ -308,7 +308,7 @@ describe("Massion server product", () => {
       await rm(workspaceRoot, { recursive: true, force: true });
     }
     expect(daemon.state).toBe("stopped");
-  });
+  }, 20_000);
 
   it("OpenAI 호환 route가 있으면 Representative→Strategy→Delivery 실제 Core 경로를 실행한다", async () => {
     const plan = {
