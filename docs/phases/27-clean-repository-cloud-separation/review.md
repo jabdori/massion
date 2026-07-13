@@ -32,8 +32,8 @@
 
 최종 release archive를 격리된 tmux 세션에서 실행한 UAT 영수증은 다음 계보를 기록합니다.
 
-- release commit: `2cb4f650f8a9e06ce8b07a8d17848304a07b3025`
-- release artifact digest: `sha256:1091fecb658b5d7de2ff242bab50662421dc07f1d431c4cbc60f3fcd489d3ac5`
+- release commit: `b3359a857bdf733f65febd01aa588e4c14d749be`
+- release artifact digest: `sha256:c30e271041d8b6b40f9c2fdd1c12904bc6fcdd0d77366200975d3a97cb33e88b`
 - 결과: `passed: 1`, `failed: 0`, `not-run: 11`
 - 통과 범위: 설치, version, bundled connector doctor, local start, owner init, status/readiness, provider catalog, SSE watch, restart, backup, restore, uninstall data preservation
 - Codex consumer login: `interactive-login-required`
