@@ -1,6 +1,6 @@
 # Phase 27 — 이력 보존형 깨끗한 Massion Core 저장소 전환 회고
 
-> **상태**: in-progress
+> **상태**: completed
 > **검증일**: 2026-07-13
 > **제품 코드 기준 커밋**: `2cb4f650f8a9e06ce8b07a8d17848304a07b3025`
 
@@ -27,6 +27,9 @@
 | `pnpm verify:hardening` | 종료 코드 0: 26개 통과, 500 요청·동시성 32·실패 0, p95 14.26ms |
 | `pnpm release:build` | 종료 코드 0: commit-bound local/deploy archive 생성 |
 | `pnpm verify:release` | 종료 코드 0: 설치·실행·백업·복구·제거 후 data 보존 통과 |
+| 빈 디렉터리 `git clone --no-local` 검증 | 종료 코드 0: frozen install, 전체 `pnpm verify`, release build/verify 통과; [상세 증거](../../evidence/phase-27/clean-clone-verification-2026-07-13.md) |
+
+깨끗한 복제본 release 기준은 `6777f3b0a5922e9349862214843ebf98905a53cc`이며 local archive digest는 `sha256:3771998673eb9720336dc8db4321a078c431be9c2f60b96cfddad74b3be51f67`입니다. 원격 `main`은 이 기준을 포함한 후속 문서 커밋으로 푸시되어 있습니다.
 
 ## 3. Phase 24 인계와 UAT
 
@@ -43,10 +46,10 @@
 
 초기 UAT에서 SSE watch가 열린 상태의 `local stop`이 종료 코드 2를 반환했습니다. 원인은 drain 시 활성 SSE 연결을 닫지 않아 HTTP server close가 열린 연결을 기다린 것이었습니다. 회귀 테스트를 먼저 실패시킨 뒤 활성 stream을 drain에서 닫도록 수정했고, 최종 release UAT에서 `restart-stop`을 포함한 전체 lifecycle이 종료 코드 0으로 통과했습니다.
 
-## 4. 남은 작업
+## 4. 후속 작업
 
-- 공식적으로 승인된 Codex 대화형 로그인 후 실제 구독·모델 발견·quota snapshot 시나리오를 실행합니다.
-- 두 번째 계정과 두 번째 사용자가 제공되면 회전·공유 lease·fallback·중단·재개 시나리오를 실행합니다.
+- Phase 24에서 공식적으로 승인된 Codex 대화형 로그인 후 실제 구독·모델 발견·quota snapshot 시나리오를 실행합니다.
+- 두 번째 계정과 두 번째 사용자가 제공되면 Phase 24의 회전·공유 lease·fallback·중단·재개 시나리오를 실행합니다.
 - Phase 24의 실제 외부 계정 검증이 끝난 뒤 Phase 24 회고를 completed로 닫습니다.
 - Phase 25 모델 최적화 실험실은 이 저장소의 다음 기준 커밋에서 시작합니다.
 - Cloud 저장소·결제·관리형 운영 기능은 실제 사업 요구가 생길 때 별도 Phase로 설계합니다.
