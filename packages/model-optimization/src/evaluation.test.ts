@@ -309,6 +309,91 @@ describe("Massion 모델 평가실", () => {
     expect(recommendation.primaryModelProfileId).toBe(profile.modelProfileId);
   });
 
+  it("조직이 자동 최적화를 명시하면 충분한 receipt의 추천을 승인 상태로 만든다", async () => {
+    const profile: OptimizationModelProfile = {
+      modelProfileId: "auto-profile",
+      modelId: "auto-model",
+      routeId: "auto-route",
+      providerId: "local-provider",
+      verified: true,
+      supportsStructuredOutput: true,
+      supportsTools: true,
+      supportsStreaming: true,
+      dataPolicy: "external-allowed",
+    };
+    store = await ModelOptimizationStore.create(database, organizations, { modelCatalog: async () => [profile] });
+    await store.configurePolicy(context, {
+      commandId: "policy-auto",
+      policy: "quality",
+      autoOptimize: true,
+      productionLearning: false,
+      shadowEnabled: false,
+      governanceDecisionId: "decision-auto",
+    });
+    const bundle = await store.createBundle(context, {
+      commandId: "bundle-auto",
+      roleKey: "assurance",
+      runtimeVersion: "runtime-auto",
+      cases: [
+        {
+          promptChecksum: checksum("a"),
+          toolsChecksum: checksum("b"),
+          environmentChecksum: checksum("c"),
+          expectedOutcome: "pass",
+        },
+      ],
+    });
+    const run = await store.startEvaluation(context, {
+      commandId: "run-auto",
+      roleKey: "assurance",
+      bundleId: bundle.bundleId,
+      modelProfileId: profile.modelProfileId,
+      runtimeVersion: "runtime-auto",
+      inputChecksum: checksum("d"),
+    });
+    const receipt = await store.completeEvaluation(context, {
+      commandId: "receipt-auto",
+      runId: run.runId,
+      sampleCount: 3,
+      qualityScore: 0.95,
+      latencyMs: 100,
+      costMicros: 10,
+      privacyAllowed: true,
+      completed: true,
+    });
+    const recommendation = await store.recommend(context, {
+      commandId: "recommend-auto",
+      roleKey: "assurance",
+      candidates: [profile],
+      receipts: [
+        {
+          roleKey: "assurance",
+          modelProfileId: profile.modelProfileId,
+          bundleVersion: receipt.bundleVersion,
+          sampleCount: receipt.sampleCount,
+          qualityScore: receipt.qualityScore,
+          latencyMs: receipt.latencyMs,
+          costMicros: receipt.costMicros,
+          privacyAllowed: receipt.privacyAllowed,
+          completed: receipt.completed,
+          inputChecksum: receipt.inputChecksum,
+          receiptChecksum: receipt.receiptChecksum,
+        },
+      ],
+      requirements: {
+        requiresTools: true,
+        requiresStructuredOutput: true,
+        requiresStreaming: true,
+        dataPolicy: "external-allowed",
+      },
+    });
+
+    expect(recommendation).toMatchObject({
+      status: "approved",
+      primaryModelProfileId: profile.modelProfileId,
+    });
+  });
+
   it("정책에 실사용 관찰 예산과 보존 기간을 저장하고 범위를 검증한다", async () => {
     const policy = await store.configurePolicy(context, {
       commandId: "policy-retention",

@@ -68,6 +68,52 @@ describe("모델 최적화 batch lifecycle", () => {
     });
   });
 
+  it("표본·개선폭 게이트를 거치지 않은 candidate batch는 활성화하지 않는다", async () => {
+    await database.query(
+      "CREATE optimization_recommendation CONTENT { recommendation_id: 'recommendation-candidate', organization_id: $organization_id, role_key: 'assurance', policy_version_id: 'policy-candidate', primary_model_profile_id: 'profile-candidate', fallback_model_profile_ids: [], excluded_json: '[]', receipt_ids: [], status: 'approved', checksum: $checksum, command_id: 'recommendation-candidate-command', request_hash: $request_hash, created_by_user_id: $user_id, created_at: time::now() };",
+      {
+        organization_id: context.organizationId,
+        checksum: "a".repeat(64),
+        request_hash: "b".repeat(64),
+        user_id: context.userId,
+      },
+    );
+    const candidate = await batches.createBatch(context, {
+      commandId: "batch-candidate",
+      recommendationId: "recommendation-candidate",
+      status: "candidate",
+    });
+
+    await expect(
+      batches.activateBatch(context, { commandId: "activate-candidate", batchId: candidate.batchId }),
+    ).rejects.toThrow("candidate");
+  });
+
+  it("shadow 동의가 없는 정책에서는 shadow batch를 만들지 않는다", async () => {
+    await database.query(
+      "CREATE optimization_policy_version CONTENT { policy_version_id: 'policy-shadow-off', organization_id: $organization_id, version: 1, policy: 'quality', auto_optimize: false, production_learning: false, shadow_enabled: false, minimum_sample_count: 1, improvement_threshold: 0, status: 'active', checksum: $checksum, governance_decision_id: 'decision-shadow-off', command_id: 'policy-shadow-off-command', request_hash: $request_hash, created_by_user_id: $user_id, created_at: time::now() }; CREATE optimization_recommendation CONTENT { recommendation_id: 'recommendation-shadow-off', organization_id: $organization_id, role_key: 'assurance', policy_version_id: 'policy-shadow-off', primary_model_profile_id: 'profile-shadow-off', fallback_model_profile_ids: [], excluded_json: '[]', receipt_ids: ['receipt-shadow-off'], status: 'approved', checksum: $checksum2, command_id: 'recommendation-shadow-off-command', request_hash: $request_hash2, created_by_user_id: $user_id, created_at: time::now() }; CREATE optimization_receipt CONTENT { receipt_id: 'receipt-shadow-off', run_id: 'run-shadow-off', organization_id: $organization_id, role_key: 'assurance', model_profile_id: 'profile-shadow-off', bundle_version: 1, sample_count: 1, quality_score: 0.9, latency_ms: 10, cost_micros: 1, privacy_allowed: true, completed: true, input_checksum: $checksum3, receipt_checksum: $checksum4, command_id: 'receipt-shadow-off-command', request_hash: $request_hash3, created_at: time::now() };",
+      {
+        organization_id: context.organizationId,
+        checksum: "a".repeat(64),
+        request_hash: "b".repeat(64),
+        checksum2: "c".repeat(64),
+        request_hash2: "d".repeat(64),
+        checksum3: "e".repeat(64),
+        checksum4: "f".repeat(64),
+        request_hash3: "1".repeat(64),
+        user_id: context.userId,
+      },
+    );
+
+    await expect(
+      batches.createBatch(context, {
+        commandId: "batch-shadow-off",
+        recommendationId: "recommendation-shadow-off",
+        status: "shadow",
+      }),
+    ).rejects.toThrow("shadow");
+  });
+
   it("degraded 관측은 실행 중 batch를 자동으로 이전 healthy batch로 복구한다", async () => {
     await database.query(
       "CREATE optimization_recommendation CONTENT { recommendation_id: 'recommendation-old', organization_id: $organization_id, role_key: 'growth', policy_version_id: 'policy-1', primary_model_profile_id: 'profile-old', fallback_model_profile_ids: [], excluded_json: '[]', receipt_ids: [], status: 'approved', checksum: $checksum, command_id: 'recommendation-old-command', request_hash: $request_hash, created_by_user_id: $user_id, created_at: time::now() }; CREATE optimization_recommendation CONTENT { recommendation_id: 'recommendation-new', organization_id: $organization_id, role_key: 'growth', policy_version_id: 'policy-1', primary_model_profile_id: 'profile-new', fallback_model_profile_ids: [], excluded_json: '[]', receipt_ids: [], status: 'approved', checksum: $checksum2, command_id: 'recommendation-new-command', request_hash: $request_hash2, created_by_user_id: $user_id, created_at: time::now() };",

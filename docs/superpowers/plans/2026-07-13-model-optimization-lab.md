@@ -21,11 +21,11 @@
 - Create: `packages/model-optimization/src/index.ts`
 - Test: `packages/model-optimization/src/scoring.test.ts`
 
-- [ ] Define the eight Core Office roles and eight software-engineering roles as stable role keys, and reject unknown roles.
-- [ ] Define evaluation policies `quality`, `value`, `speed`, `privacy`, and `manual`, with explicit hard-gate requirements.
-- [ ] Define candidate, case, receipt, recommendation, batch, observation, and recovery contracts with bounded strings and finite numeric values.
-- [ ] Add append-only migrations for evaluation bundles, cases, runs, receipts, recommendations, policy versions, batches, observations, and recovery events.
-- [ ] Write failing scoring tests for hard-gate exclusion, deterministic tie breaking, each policy, fallback ordering, and privacy restrictions.
+- [x] Define the eight Core Office roles and eight software-engineering roles as stable role keys, and reject unknown roles.
+- [x] Define evaluation policies `quality`, `value`, `speed`, `privacy`, and `manual`, with explicit hard-gate requirements.
+- [x] Define candidate, case, receipt, recommendation, batch, observation, and recovery contracts with bounded strings and finite numeric values.
+- [x] Add append-only migrations for evaluation bundles, cases, runs, receipts, recommendations, policy versions, batches, observations, and recovery events.
+- [x] Write failing scoring tests for hard-gate exclusion, deterministic tie breaking, each policy, fallback ordering, and privacy restrictions.
 
 ### Task 2: Evaluation execution and receipt persistence
 
@@ -35,11 +35,11 @@
 - Create: `packages/model-optimization/src/evaluation.test.ts`
 - Modify: `packages/model-optimization/src/index.ts`
 
-- [ ] Add an evaluator port that receives fixed prompt/tool/environment checksums and returns latency, token, cost, quality, and privacy facts without provider-specific imports.
-- [ ] Persist immutable run and receipt records with an input checksum that covers bundle, model profile, runtime version, and execution facts.
-- [ ] Reject duplicate or mismatched command IDs and reject receipts whose candidate or role does not match the run.
-- [ ] Ensure a shadow evaluation cannot invoke write, message, deployment, approval, or organization mutation capabilities.
-- [ ] Add tests for deterministic receipts, checksum mismatch, duplicate command replay, and shadow side-effect denial.
+- [x] Add an evaluator port that receives fixed prompt/tool/environment checksums and returns latency, token, cost, quality, and privacy facts without provider-specific imports.
+- [x] Persist immutable run and receipt records with an input checksum that covers bundle, model profile, runtime version, and execution facts.
+- [x] Reject duplicate or mismatched command IDs and reject receipts whose candidate or role does not match the run.
+- [x] Ensure a shadow evaluation cannot invoke write, message, deployment, approval, or organization mutation capabilities.
+- [x] Add tests for deterministic receipts, checksum mismatch, duplicate command replay, and shadow side-effect denial.
 
 ### Task 3: Recommendation policy and batch lifecycle
 
@@ -49,11 +49,11 @@
 - Create: `packages/model-optimization/src/recommendation.test.ts`
 - Create: `packages/model-optimization/src/batch.test.ts`
 
-- [ ] Generate a primary model and ordered fallback list only from eligible verified profiles and completed receipts.
-- [ ] Require a first recommendation approval unless the organization explicitly enables automatic optimization.
-- [ ] Enforce minimum sample count and improvement threshold before shadow, limited, or active promotion.
-- [ ] Use immutable batch versions with an atomic active pointer and reject updates to an in-flight execution's batch.
-- [ ] Record automatic recovery to the previous healthy batch after degraded observations.
+- [x] Generate a primary model and ordered fallback list only from eligible verified profiles and completed receipts.
+- [x] Require a first recommendation approval unless the organization explicitly enables automatic optimization.
+- [x] Enforce minimum sample count and improvement threshold before shadow, limited, or active promotion.
+- [x] Use immutable batch versions with an atomic active pointer and reject updates to an in-flight execution's batch.
+- [x] Record automatic recovery to the previous healthy batch after degraded observations.
 
 ### Task 4: Application and server integration
 
@@ -66,10 +66,10 @@
 - Modify: `apps/server/src/query-registry.ts`
 - Test: `apps/server/src/model-optimization-product.test.ts`
 
-- [ ] Construct the optimization service during local/server bootstrap using the existing database, organization, router model catalog, governance, and runtime ports.
-- [ ] Expose evaluate, recommend, policy configure, approve/apply, observe, recover, and read operations with tenant checks and redacted views.
-- [ ] Keep router fallback and quota decisions at request time; optimization only updates an immutable role-to-route batch.
-- [ ] Add product tests for approval mode, automatic mode, batch activation, and recovery.
+- [x] Construct the optimization service during local/server bootstrap using the existing database, organization, router model catalog, governance, and runtime ports.
+- [x] Expose evaluate, recommend, policy configure, approve/apply, observe, recover, and read operations with tenant checks and redacted views.
+- [x] Keep router fallback and quota decisions at request time; optimization only updates an immutable role-to-route batch.
+- [x] Add product tests for approval mode, automatic mode, batch activation, and recovery.
 
 ### Task 5: CLI, TUI, Web, documentation, and evidence
 
@@ -82,15 +82,14 @@
 - Modify: `docs/generated/requirements-traceability.tsv`
 - Modify: `docs/architecture/README.md`
 
-- [ ] Provide the same redacted operations in CLI, TUI, and Web, including policy choice and approval/automatic choice.
-- [ ] Document that unconnected free/public models are never implicitly used and that production learning/shadow are disabled by default.
-- [ ] Record test, security, install, release, and tmux evidence; explicitly separate external provider scenarios that could not be run.
-- [ ] Mark Phase 25 tasks completed only from fresh command output.
+- [x] Provide the same redacted operations in CLI, TUI, and Web, including policy choice and approval/automatic choice.
+- [x] Document that unconnected free/public models are never implicitly used and that production learning/shadow are disabled by default.
+- [x] Record test, security, install, release, and tmux evidence; explicitly separate external provider scenarios that could not be run.
+- [x] Mark Phase 25 tasks completed only from fresh command output.
 
 ### Task 6: Full verification and release
 
-- [ ] Run focused RED/GREEN tests after every implementation slice.
+- [x] Run focused RED/GREEN tests after every implementation slice.
 - [ ] Run `pnpm verify`, `pnpm verify:security`, `pnpm verify:hardening`, `pnpm release:build`, and `pnpm verify:release`.
 - [ ] Run tmux release UAT for all available provider credentials and validate the receipt.
 - [ ] Commit each coherent slice with a Phase-specific message and leave the worktree clean.
-
