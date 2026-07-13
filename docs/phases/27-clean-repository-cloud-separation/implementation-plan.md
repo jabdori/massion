@@ -9,7 +9,7 @@
 - [x] 원본 종료 commit `226aa5e`와 시작 commit `9946b8a`를 지정합니다.
 - [x] 시작점 이후 262개 Massion 변경 commit의 제목·본문에 legacy 금지어가 없는지 검사합니다.
 - [x] 원본 `.git/refs/.DS_Store` 손상 참조를 기록하고, 원본을 수정하지 않는 정책을 고정합니다.
-- [ ] Phase 24 최종 UAT는 새 저장소에서 다시 실행한다는 인계 기록을 남깁니다.
+- [x] Phase 24 최종 UAT를 새 저장소에서 다시 실행하고 인계 기록을 남겼습니다.
 
 ## Task 2. 결정론적 history filter 도구
 
@@ -33,8 +33,8 @@
 
 ## Task 5. Phase 24 인계와 Phase 27 회고
 
-- [ ] 새 저장소에서 tmux 실제 계정 UAT를 재개하고, receipt를 source/root commit에 묶습니다.
-- [ ] source/new commit mapping, clone 검증, 제외 사유, 원본 archive 위치, 남은 UAT를 `review.md`에 기록합니다.
-- [ ] Phase 25의 시작점이 새 `massion` repository HEAD임을 기록합니다.
+- [x] 새 저장소에서 tmux 실제 계정 UAT를 재개하고, receipt를 source/release commit에 묶었습니다.
+- [x] source/new commit mapping, clone 검증, 제외 사유, 원본 archive 위치, 남은 UAT를 `review.md`에 기록했습니다.
+- [x] Phase 25의 시작점이 새 `massion` repository HEAD임을 기록했습니다.
 
 Cloud 저장소, 결제, 관리형 운영, Cloud 계약 package, 라이선스와 팀 상용 권리 구현은 이 계획에 포함하지 않습니다.
