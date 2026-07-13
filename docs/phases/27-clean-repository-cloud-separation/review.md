@@ -33,22 +33,31 @@
 
 ## 3. Phase 24 인계와 UAT
 
-최종 release archive를 격리된 tmux 세션에서 실행한 UAT 영수증은 다음 계보를 기록합니다.
+초기 인계 UAT는 아래의 역사적 기준을 남겼고, 2026-07-14에 현재 Massion Core 기준으로 Codex 인증 재검증을 추가 실행했습니다.
 
 - release commit: `b3359a857bdf733f65febd01aa588e4c14d749be`
 - release artifact digest: `sha256:c30e271041d8b6b40f9c2fdd1c12904bc6fcdd0d77366200975d3a97cb33e88b`
 - 결과: `passed: 1`, `failed: 0`, `not-run: 11`
 - 통과 범위: 설치, version, bundled connector doctor, local start, owner init, status/readiness, provider catalog, SSE watch, restart, backup, restore, uninstall data preservation
-- Codex consumer login: `interactive-login-required`
+- 초기 Codex consumer login: `interactive-login-required`
 - Claude consumer login: `provider-approval-required`
 - Z.AI Coding Plan: `provider-approval-required`
 - 두 번째 계정·공개 failure injection·다중 사용자 승인 시나리오는 필요한 외부 계정 또는 승인 전제조건이 없어 `not-run`으로 남겼습니다.
+
+최신 후속 UAT 영수증은 [`subscription-uat-2026-07-14.md`](../../evidence/phase-24/subscription-uat-2026-07-14.md)에 기록했습니다.
+
+- release commit: `00f77e6f8471895694b2e3600b85f2ee0dad4a5d`
+- local archive digest: `sha256:54b4c151d8bb819b5a305c45a57f41a7b7dd657007982bd9eb2b558540ea23bf`
+- 결과: `passed: 1`, `failed: 1`, `not-run: 9`
+- Codex OAuth 로그인 동의·account·doctor·quota·adaptive policy 조회: 통과
+- 실제 `run subscription acceptance`: 180초 `network` timeout
+- Claude·Z.AI·복수 계정·복수 사용자·failure injection: 외부 승인 또는 계정 전제조건으로 `not-run`
 
 초기 UAT에서 SSE watch가 열린 상태의 `local stop`이 종료 코드 2를 반환했습니다. 원인은 drain 시 활성 SSE 연결을 닫지 않아 HTTP server close가 열린 연결을 기다린 것이었습니다. 회귀 테스트를 먼저 실패시킨 뒤 활성 stream을 drain에서 닫도록 수정했고, 최종 release UAT에서 `restart-stop`을 포함한 전체 lifecycle이 종료 코드 0으로 통과했습니다.
 
 ## 4. 후속 작업
 
-- Phase 24에서 공식적으로 승인된 Codex 대화형 로그인 후 실제 구독·모델 발견·quota snapshot 시나리오를 실행합니다.
+- Codex 인증은 완료되었으므로, 외부 모델 응답이 가능한 상태에서 실제 subscription run과 역할별 평가를 재실행합니다. 현재는 network timeout으로 성공을 확정하지 않습니다.
 - 두 번째 계정과 두 번째 사용자가 제공되면 Phase 24의 회전·공유 lease·fallback·중단·재개 시나리오를 실행합니다.
 - Phase 24의 실제 외부 계정 검증이 끝난 뒤 Phase 24 회고를 completed로 닫습니다.
 - Phase 25 모델 최적화 실험실은 이 저장소의 다음 기준 커밋에서 시작합니다.

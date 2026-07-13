@@ -48,7 +48,7 @@
   - Codex 로그인 동의, accounts, doctor, quota, adaptive policy configure/query까지 통과
   - 실제 `run subscription acceptance`는 180초 timeout으로 종료되어 실행 계보와 성공으로 기록하지 않음
   - 브라우저 OAuth 인증 URL에서 사용자 계정 인증이 추가로 필요함
-- 이번 새 archive tmux 재실행은 같은 Codex OAuth 로그인 화면(이메일 입력)에서 사용자 인증이 없어 중단했습니다. 새 영수증을 만들지 않았으며, 기존 구조화 영수증의 결과를 변경하지 않았습니다.
+- 2026-07-14 새 archive tmux 재실행에서는 Codex OAuth 로그인과 계정 준비가 완료되었습니다. 실제 subscription run은 180초 네트워크 timeout으로 종료되었고, 결과는 새 구조화 영수증에 반영했습니다.
 - 의도적으로 미실행한 시나리오 9개
   - 두 번째 계정, 두 번째 사용자, 공개 failure injection, 승인 checkpoint, quota contract, Claude/Z.AI 공개 Provider 승인 조건
 

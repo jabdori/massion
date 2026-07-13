@@ -1,8 +1,8 @@
 # Phase 24 — 구독 연결기 회고와 종료 조건
 
-> **상태**: 외부 UAT 대기
+> **상태**: 외부 UAT 부분 통과 — Codex 실행 네트워크 재검증 대기
 > **대상**: 개인용 Massion Core의 네이티브 구독 연결기와 로컬 릴리스
-> **검토 기준**: `docs/evidence/phase-24/subscription-uat-2026-07-13.md`
+> **검토 기준**: `docs/evidence/phase-24/subscription-uat-2026-07-14.md`
 
 ## 이번 Phase에서 확인한 것
 
@@ -20,9 +20,9 @@
 
 ## 검증 결과
 
-구조화된 subscription UAT 영수증은 `massion.subscription-uat.v1`이며, 저장된 결과는 `passed: 1`, `failed: 1`, `not-run: 9`입니다. Codex 로그인 동의·계정 목록·doctor·quota·adaptive policy까지 통과했지만 실제 subscription run은 `network` timeout으로 종료되었습니다. Claude·Z.AI와 복수 계정 시나리오는 외부 승인·계정 조건이 없어 실행하지 않았습니다.
+구조화된 subscription UAT 영수증은 `massion.subscription-uat.v1`이며, 이번 검증 결과는 `passed: 1`, `failed: 1`, `not-run: 9`입니다. Codex OAuth 로그인 동의와 계정·doctor·quota·adaptive policy 조회는 통과했지만 실제 subscription run은 180초 네트워크 timeout으로 종료되었습니다. Claude·Z.AI와 복수 계정 시나리오는 외부 승인·계정 조건이 없어 실행하지 않았습니다.
 
-새 release에서도 같은 tmux 설치 preflight를 시작했지만, 브라우저 OAuth가 이메일 입력 화면에서 사용자 인증을 요구해 새 영수증을 만들지 않고 중단했습니다. 이 결과를 성공으로 승격하지 않습니다.
+이번 실행에서는 인증 완료를 확인했지만, 외부 모델 응답이 제한시간 안에 도착하지 않았으므로 실행 성공이나 fallback 성공으로 승격하지 않습니다.
 
 ## 결정과 교훈
 
@@ -39,4 +39,3 @@
 2. 실제 연결된 복수 계정에 대해 rotation·quota·offline·429·fallback·중단·재개·재시작을 검증합니다.
 3. 외부 계정이 승인된 경우에만 Claude·Z.AI 시나리오를 추가하고, 승인되지 않은 경우에는 현재 `provider-approval-required` 근거를 유지합니다.
 4. 최종 source commit, release manifest, UAT receipt가 서로 가리키도록 고정합니다.
-
