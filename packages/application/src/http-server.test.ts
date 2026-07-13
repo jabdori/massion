@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { setTimeout as delay } from "node:timers/promises";
 
 import type { ApplicationEventV1 } from "./contracts.js";
 import { ApplicationHttpServer, type ApplicationHttpDependencies } from "./http-server.js";
@@ -144,6 +145,20 @@ describe("ApplicationHttpServer", () => {
         })
       ).status,
     ).toBe(503);
+  });
+
+  it("drain이 활성 SSE 연결을 닫아 server close가 완료된다", async () => {
+    const response = await fetch(`${baseUrl}/api/v1/events/stream`, {
+      headers: { authorization: "Bearer test-token", accept: "text/event-stream" },
+    });
+    const reader = response.body?.getReader();
+    if (!reader) throw new Error("SSE body가 없습니다");
+    await reader.read();
+
+    const closing = server.close();
+    await expect(Promise.race([closing.then(() => true), delay(250).then(() => false)])).resolves.toBe(true);
+    await reader.cancel().catch(() => undefined);
+    await closing;
   });
 
   it("component readiness 오류 원문을 숨기고 고정 상태만 반환한다", async () => {
