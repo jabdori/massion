@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { Buffer } from "node:buffer";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { access, chmod, mkdir, mkdtemp, readFile, readdir, rm, stat, symlink, writeFile } from "node:fs/promises";
+import { access, chmod, mkdir, mkdtemp, readFile, readdir, realpath, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { test } from "node:test";
@@ -836,6 +836,9 @@ test("격리된 tmux에 daemon·user·connectors·watch 창을 만들고 raw pan
   const sessionName = "massion-uat-phase24-test";
   const root = await mkdtemp(join(tmpdir(), "massion-uat-shell-test-"));
   const sentinel = join(root, "unexpected-side-effect");
+  const workingDirectory = join(root, "working directory with spaces");
+  await mkdir(workingDirectory, { recursive: true });
+  const canonicalWorkingDirectory = await realpath(workingDirectory);
   context.after(async () => await destroyTmuxUatSession({ socketName, sessionName }));
   context.after(async () => await rm(root, { recursive: true, force: true }));
 
@@ -861,6 +864,17 @@ test("격리된 tmux에 daemon·user·connectors·watch 창을 만들고 raw pan
   assert.equal("stderr" in failed, false);
   assert.equal("output" in succeeded, false);
 
+  const cwdResult = await runTmuxUatCommand(session, {
+    window: "user",
+    step: "working-directory-with-spaces",
+    command: process.execPath,
+    arguments: ["-e", 'process.exit(process.cwd() === process.env.EXPECTED_CWD ? 0 : 1)'],
+    environment: { EXPECTED_CWD: canonicalWorkingDirectory },
+    cwd: canonicalWorkingDirectory,
+    timeoutMs: 5_000,
+  });
+  assert.deepEqual(cwdResult, { step: "working-directory-with-spaces", exitCode: 0 });
+
   const hostile = `value'; touch '${sentinel}'; #`;
   const safelyQuoted = await runTmuxUatCommand(session, {
     window: "user",
@@ -879,6 +893,9 @@ test("tmux JSON 관찰기는 raw 출력 파일 없이 검증된 최소 사실과
   const sessionName = "massion-uat-phase24-observed";
   const root = await mkdtemp(join(tmpdir(), "massion-uat-observed-test-"));
   await chmod(root, 0o700);
+  const workingDirectory = join(root, "observed working directory with spaces");
+  await mkdir(workingDirectory, { recursive: true });
+  const canonicalWorkingDirectory = await realpath(workingDirectory);
   context.after(async () => await destroyTmuxUatSession({ socketName, sessionName }));
   context.after(async () => await rm(root, { recursive: true, force: true }));
   const environment = { TMPDIR: root };
@@ -890,7 +907,7 @@ test("tmux JSON 관찰기는 raw 출력 파일 없이 검증된 최소 사실과
     command: process.execPath,
     arguments: [
       "-e",
-      `process.stdout.write(JSON.stringify(${JSON.stringify({
+      `if (process.cwd() !== process.argv[1]) process.exit(9); process.stdout.write(JSON.stringify(${JSON.stringify({
         schemaVersion: "massion.application.v1",
         operation: "subscription.policy",
         data: [
@@ -903,7 +920,9 @@ test("tmux JSON 관찰기는 raw 출력 파일 없이 검증된 최소 사실과
           },
         ],
       })}))`,
+      canonicalWorkingDirectory,
     ],
+    cwd: canonicalWorkingDirectory,
     environment,
     observation: {
       kind: "subscription-policy-query",
@@ -934,7 +953,7 @@ test("tmux JSON 관찰기는 raw 출력 파일 없이 검증된 최소 사실과
   });
   assert.notEqual(invalid.command.exitCode, 0);
   assert.equal(invalid.observation, undefined);
-  assert.deepEqual(await readdir(root), []);
+  assert.deepEqual(await readdir(workingDirectory), []);
 });
 
 test("중단 신호는 실행 중인 tmux command를 종료 코드 130으로 정리한다", async (context) => {

@@ -1377,6 +1377,9 @@ function shellQuote(value) {
 }
 
 function shellCommand(input) {
+  if (input.cwd !== undefined && (typeof input.cwd !== "string" || !isAbsolute(input.cwd))) {
+    throw new Error("UAT command working directory가 절대 경로가 아닙니다");
+  }
   const environment = Object.entries(input.environment ?? {})
     .sort(([left], [right]) => left.localeCompare(right))
     .map(([key, value]) => {
@@ -1387,7 +1390,8 @@ function shellCommand(input) {
     });
   const command = [shellQuote(input.command), ...(input.arguments ?? []).map(shellQuote)];
   const invocation = environment.length > 0 ? ["env", ...environment, ...command] : command;
-  return `exec ${invocation.join(" ")}${input.interactive ? "" : " >/dev/null 2>&1"}`;
+  const workingDirectory = input.cwd === undefined ? "" : `cd ${shellQuote(input.cwd)} && `;
+  return `exec ${workingDirectory}${invocation.join(" ")}${input.interactive ? "" : " >/dev/null 2>&1"}`;
 }
 
 function wait(milliseconds) {
@@ -1476,7 +1480,7 @@ async function runInternalObserver(encoded) {
     const decoded = Buffer.from(observedText(encoded, "내부 관찰 사양", 256 * 1024), "base64url").toString("utf8");
     specification = observedExact(
       JSON.parse(decoded),
-      ["schema", "kind", "expected", "command", "arguments", "observationPath"],
+      ["schema", "kind", "expected", "command", "arguments", "observationPath", "cwd"],
       "내부 관찰 사양",
     );
   } catch {
@@ -1492,13 +1496,16 @@ async function runInternalObserver(encoded) {
     specification.arguments.some(
       (argument) => typeof argument !== "string" || argument.length > 64 * 1024 || /[\0\r\n]/u.test(argument),
     ) ||
-    typeof specification.observationPath !== "string"
+    typeof specification.observationPath !== "string" ||
+    (specification.cwd !== undefined &&
+      (typeof specification.cwd !== "string" || !isAbsolute(specification.cwd) || /[\0\r\n]/u.test(specification.cwd)))
   ) {
     return 65;
   }
   const result = spawnSync(specification.command, specification.arguments, {
     encoding: "utf8",
     env: process.env,
+    cwd: specification.cwd,
     maxBuffer: MAXIMUM_OBSERVED_OUTPUT_BYTES,
     stdio: ["ignore", "pipe", "ignore"],
   });
@@ -1530,6 +1537,7 @@ export async function runTmuxObservedCommand(session, input) {
       command: input.command,
       arguments: input.arguments ?? [],
       observationPath,
+      cwd: input.cwd,
     }),
   ).toString("base64url");
   let commandResult;
@@ -2374,11 +2382,10 @@ export async function runSubscriptionUat(options) {
       observation: { kind: "local-stop", expected: { statuses: ["stopped"] } },
     });
     await stopTmuxBackgroundCommand(session, "watch");
-    const restoreDatabase = join(workspace.restoreDirectory, "massion.db");
     const restoreEnvironment = {
       ...environment,
       MASSION_MODE: "local",
-      MASSION_DATABASE_URL: `rocksdb://${restoreDatabase}`,
+      MASSION_DATABASE_URL: "rocksdb://./massion.db",
       MASSION_TOKEN_KEY_FILE: join(workspace.configHome, "massion", "token-key"),
       MASSION_CREDENTIAL_KEY_FILE: join(workspace.configHome, "massion", "credential-key"),
       MASSION_SOFTWARE_WORKSPACE_ROOT: join(workspace.restoreDirectory, "workspaces"),
@@ -2393,6 +2400,7 @@ export async function runSubscriptionUat(options) {
       command: server,
       arguments: ["restore", backup],
       environment: restoreEnvironment,
+      cwd: workspace.restoreDirectory,
       timeoutMs: options.timeoutMs,
       signal: options.signal,
       observation: { kind: "server-restore", expected: { path: backup } },
@@ -2408,6 +2416,7 @@ export async function runSubscriptionUat(options) {
       command: server,
       arguments: [],
       environment: restoreEnvironment,
+      cwd: workspace.restoreDirectory,
       signal: options.signal,
     });
     commands.push(restoredServer);
