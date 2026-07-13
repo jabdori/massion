@@ -1,6 +1,6 @@
 # Phase 24 — 네이티브 구독 연결기와 실제 사용자 인수 검증 구현 계획
 
-> **상태**: planned
+> **상태**: in-progress
 > **상세 계획**: `docs/superpowers/plans/2026-07-12-native-subscription-connectors.md`
 > **방법**: 각 항목에서 실패 테스트 확인→최소 구현→관련 회귀 검증→커밋 순서를 지킵니다.
 
