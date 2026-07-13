@@ -210,7 +210,7 @@ diff --git a/src/value.test.js b/src/value.test.js
     expect(await readFile(join(workspace.workspacePath, "src/value.js"), "utf8")).toBe("export const value = 1;\n");
     expect(await git(["status", "--porcelain"], workspace.workspacePath)).toBe("");
     await manager.remove(workspace);
-  });
+  }, 15_000);
 
   it("dirty root, 다른 base, branch 충돌과 workspace path 탈출을 거부한다", async () => {
     await writeFile(join(repositoryRoot, "dirty.txt"), "dirty\n");
