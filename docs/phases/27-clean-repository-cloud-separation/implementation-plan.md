@@ -1,6 +1,6 @@
 # Phase 27 — 이력 보존형 깨끗한 Massion Core 저장소 전환 구현 계획
 
-> **상태**: in-progress
+> **상태**: completed
 > **설계**: `docs/phases/27-clean-repository-cloud-separation/design.md`
 > **방법**: 원본 검증 → 일회용 filter-repo → 이력·경로 검사 → 새 private remote → clean clone 검증 → archive 회고
 
@@ -11,25 +11,25 @@
 - [x] 원본 `.git/refs/.DS_Store` 손상 참조를 기록하고, 원본을 수정하지 않는 정책을 고정합니다.
 - [x] Phase 24 최종 UAT를 새 저장소에서 다시 실행하고 인계 기록을 남겼습니다.
 
-## Task 2. 결정론적 history filter 도구
+## Task 2. 결정론적 history filter 절차
 
-- [ ] 허용 경로 밖 파일, 절대·상위 경로, Git metadata, secret·개인 경로, legacy 이름이 있는 filter 입력을 거부하는 실패 테스트를 작성합니다.
-- [ ] source range·allowlist·금지어 목록만 입력으로 받는 export 도구를 구현합니다.
-- [ ] `git filter-repo`를 일회용 복제본에서만 실행하고, `massion/` 접두어를 새 root로 재작성합니다.
-- [ ] 원본 commit → 새 commit 또는 pruned 사유, 파일 SHA-256, 도구 버전의 archive manifest를 생성합니다.
+- [x] 허용 경로 밖 파일, 절대·상위 경로, Git metadata, secret·개인 경로, legacy 이름을 전환 전 검사에서 거부하고 결과를 기록합니다.
+- [x] source range·allowlist·금지어 목록을 고정한 일회용 export 절차를 private archive에 보존합니다. 재사용 export 도구는 제품 Core에 넣지 않습니다.
+- [x] `git filter-repo`를 일회용 복제본에서만 실행하고, `massion/` 접두어를 새 root로 재작성합니다.
+- [x] 원본 commit → 새 commit 또는 pruned 사유, 파일 SHA-256, 도구 버전의 archive manifest를 생성해 owner-only archive에 보존합니다.
 
 ## Task 3. 새 Massion repository 생성
 
-- [ ] 새 격리 디렉터리에 history-filter 결과만 둡니다.
-- [ ] 새 repository의 branch·remote·Git object가 원본 Pi 저장소와 분리됐는지 검사합니다.
-- [ ] 새 HEAD와 전체 history에 허용 경로 밖 파일·금지어·secret·개인 경로가 0건인지 검사합니다.
-- [ ] 새 repository를 private GitHub `massion` 원격으로 생성·push합니다.
+- [x] 새 격리 디렉터리에 history-filter 결과만 둡니다.
+- [x] 새 repository의 branch·remote·Git object가 원본 Pi 저장소와 분리됐는지 검사합니다.
+- [x] 새 HEAD와 전체 history에 허용 경로 밖 파일·금지어·secret·개인 경로가 0건인지 검사합니다.
+- [x] 새 repository를 private GitHub `massion` 원격으로 생성·push합니다.
 
 ## Task 4. clean clone 검증
 
-- [ ] 빈 디렉터리 clone에서 frozen install, format, lint, typecheck, test, build, 문서·보안·hardening 검사를 실행합니다.
-- [ ] release build와 install·server lifecycle·backup restore 검증을 실행합니다.
-- [ ] 실패하면 새 repository를 배포하지 않고 archive manifest와 원본 source commit으로 재현합니다.
+- [x] 빈 디렉터리 clone에서 frozen install, format, lint, typecheck, test, build, 문서·보안·hardening 검사를 실행합니다. 결과는 `docs/evidence/phase-27/clean-clone-verification-2026-07-13.md`에 기록합니다.
+- [x] release build와 install·server lifecycle·backup restore 검증을 실행합니다.
+- [x] 실패 시 배포하지 않는 게이트를 유지하고, archive manifest와 원본 source commit으로 재현할 수 있도록 검증 기준을 고정합니다.
 
 ## Task 5. Phase 24 인계와 Phase 27 회고
 
