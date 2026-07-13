@@ -6,8 +6,8 @@
 
 ## 계보
 
-- Git commit: `2cb4f650f8a9e06ce8b07a8d17848304a07b3025`
-- Release artifact: `sha256:1091fecb658b5d7de2ff242bab50662421dc07f1d431c4cbc60f3fcd489d3ac5`
+- Git commit: `b3359a857bdf733f65febd01aa588e4c14d749be`
+- Release artifact: `sha256:c30e271041d8b6b40f9c2fdd1c12904bc6fcdd0d77366200975d3a97cb33e88b`
 - Receipt schema: `massion.subscription-uat.v1`
 - Receipt summary: `passed: 1`, `failed: 0`, `not-run: 11`
 
