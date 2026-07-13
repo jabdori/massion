@@ -57,6 +57,8 @@ describe("Application model optimization operations", () => {
           autoOptimize: false,
           productionLearning: false,
           shadowEnabled: false,
+          observationBudgetMicros: 25000,
+          observationRetentionDays: 14,
           governanceDecisionId: "decision-optimization",
         }),
       ),

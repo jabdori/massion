@@ -52,6 +52,8 @@ interface ObservationRecord {
   readonly cost_micros: number;
   readonly status: "healthy" | "degraded";
   readonly source?: "evaluation" | "production";
+  readonly policy_version_id?: string;
+  readonly expires_at?: string | Date;
   readonly checksum: string;
   readonly command_id: string;
   readonly request_hash: string;
@@ -64,8 +66,12 @@ interface PointerRecord {
 }
 
 interface OptimizationPolicyRecord {
+  readonly policy_version_id?: string;
+  readonly production_learning?: boolean;
   readonly minimum_sample_count: number;
   readonly improvement_threshold: number;
+  readonly observation_budget_micros?: number;
+  readonly observation_retention_days?: number;
 }
 
 interface OptimizationReceiptRecord {
@@ -127,6 +133,8 @@ function observationView(record: ObservationRecord): OptimizationObservation {
     costMicros: record.cost_micros,
     status: record.status,
     source: record.source ?? "evaluation",
+    ...(record.policy_version_id ? { policyVersionId: record.policy_version_id } : {}),
+    ...(record.expires_at ? { expiresAt: new Date(String(record.expires_at)).toISOString() } : {}),
     checksum: record.checksum,
   };
 }
@@ -402,6 +410,17 @@ export class OptimizationBatchService {
     return batches[0] ? batchView(batches[0]) : undefined;
   }
 
+  public async listObservations(context: TenantContext, batchId?: string): Promise<readonly OptimizationObservation[]> {
+    await this.organizations.verifyTenantContext(context);
+    const [records] = await this.database.query<[ObservationRecord[]]>(
+      batchId
+        ? "SELECT * OMIT id FROM optimization_observation WHERE organization_id = $organization_id AND batch_id = $batch_id ORDER BY created_at DESC;"
+        : "SELECT * OMIT id FROM optimization_observation WHERE organization_id = $organization_id ORDER BY created_at DESC;",
+      { organization_id: context.organizationId, batch_id: batchId },
+    );
+    return records.map(observationView);
+  }
+
   public async recordObservation(
     context: TenantContext,
     input: RecordObservationInput,
@@ -436,18 +455,29 @@ export class OptimizationBatchService {
         throw new Error("같은 commandId에 다른 optimization observation을 사용할 수 없습니다");
       return observationView(repeated[0]);
     }
+    let policyVersionId: string | undefined;
+    let expiresAt: Date | undefined;
     if (source === "production") {
-      const [policies] = await this.database.query<
-        [{ readonly production_learning: boolean; readonly version: number }[]]
-      >(
+      const [policies] = await this.database.query<[OptimizationPolicyRecord[]]>(
         "SELECT * OMIT id FROM optimization_policy_version WHERE organization_id = $organization_id AND status = 'active' ORDER BY version DESC LIMIT 1;",
         { organization_id: context.organizationId },
       );
       if (!policies[0]?.production_learning) throw new Error("production learning 동의가 활성화되지 않았습니다");
+      const policy = policies[0];
+      policyVersionId = policy.policy_version_id;
+      const budget = policy.observation_budget_micros ?? 1_000_000;
+      const [existing] = await this.database.query<[{ readonly cost_micros: number }[]]>(
+        "SELECT cost_micros FROM optimization_observation WHERE organization_id = $organization_id AND policy_version_id = $policy_version_id AND source = 'production';",
+        { organization_id: context.organizationId, policy_version_id: policyVersionId },
+      );
+      const used = existing.reduce((total, observation) => total + observation.cost_micros, 0);
+      if (used + input.costMicros > budget) throw new Error("실사용 observation 예산을 초과했습니다");
+      const retentionDays = policy.observation_retention_days ?? 30;
+      expiresAt = new Date(Date.now() + retentionDays * 86_400_000);
     }
     const checksum = digest(normalizedInput);
     const [created] = await this.database.query<[ObservationRecord[]]>(
-      "CREATE optimization_observation CONTENT { observation_id: $observation_id, organization_id: $organization_id, batch_id: $batch_id, sample_count: $sample_count, quality_score: $quality_score, latency_ms: $latency_ms, cost_micros: $cost_micros, status: $status, source: $source, checksum: $checksum, command_id: $command_id, request_hash: $request_hash, created_at: time::now() } RETURN AFTER;",
+      "CREATE optimization_observation CONTENT { observation_id: $observation_id, organization_id: $organization_id, batch_id: $batch_id, sample_count: $sample_count, quality_score: $quality_score, latency_ms: $latency_ms, cost_micros: $cost_micros, status: $status, source: $source, policy_version_id: $policy_version_id, expires_at: $expires_at, checksum: $checksum, command_id: $command_id, request_hash: $request_hash, created_at: time::now() } RETURN AFTER;",
       {
         observation_id: randomUUID(),
         organization_id: context.organizationId,
@@ -458,6 +488,8 @@ export class OptimizationBatchService {
         cost_micros: input.costMicros,
         status: input.status,
         source,
+        policy_version_id: policyVersionId,
+        expires_at: expiresAt,
         checksum,
         command_id: input.commandId,
         request_hash: requestHash,

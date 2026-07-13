@@ -30,6 +30,7 @@
 - 서버의 `ModelEvaluationExecutor`가 Router 모델 프로필을 선택하고 AI SDK로 prompt를 실행합니다.
 - 평가 실행은 파일·메시지·배포·승인·조직 정본 변경 capability를 모두 `false`로 전달합니다.
 - `production_learning` 동의가 없는 실사용 관찰은 거부합니다.
+- 정책별 실사용 관찰 예산을 누적 검사하여 초과 기록을 거부하고, 보존 기간에 따른 만료 시각을 기록합니다.
 - 관찰·배치·복구 명령은 command idempotency와 request hash를 검사하여 재전송을 안전하게 처리합니다.
 - 활성 배치는 Runtime이 역할별 모델 선호 순서로 읽고 Router reserve 후보 순서에 반영합니다.
 - Web 정책 화면은 owner/admin만 변경할 수 있고, governance decision id를 필수로 받습니다.
@@ -51,4 +52,4 @@
 
 ## 남은 완성 조건
 
-Phase 25는 현재 in-progress입니다. Provider별 품질 판정 고도화, 관찰 예산·보존 정책, TUI/Web 실행·추천 승인 화면, 외부 평가 import/export, 확장 역할 등록, 실제 복수 계정·Provider UAT가 남아 있습니다.
+Phase 25는 현재 in-progress입니다. Provider별 품질 판정 고도화, 자동 승격 운영 증거, TUI 변경 화면, 외부 평가 import/export, 확장 역할 등록, 실제 복수 계정·Provider UAT가 남아 있습니다.

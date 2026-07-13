@@ -8,16 +8,31 @@ import { EmptyState, LoadingState, PageHeader, StatusStamp } from "../components
 export default function OptimizationPage() {
   const policy = useQueryData<unknown>(consoleStore, "optimization.policy");
   const receipts = useQueryData<unknown>(consoleStore, "optimization.receipts");
+  const recommendations = useQueryData<unknown>(consoleStore, "optimization.recommendations");
+  const observations = useQueryData<unknown>(consoleStore, "optimization.observations");
   const me = useQueryData<unknown>(consoleStore, "identity.me");
   const [selectedPolicy, setSelectedPolicy] = useState("quality");
   const [autoOptimize, setAutoOptimize] = useState(false);
   const [productionLearning, setProductionLearning] = useState(false);
   const [shadowEnabled, setShadowEnabled] = useState(false);
+  const [observationBudgetMicros, setObservationBudgetMicros] = useState("1000000");
+  const [observationRetentionDays, setObservationRetentionDays] = useState("30");
   const [governanceDecisionId, setGovernanceDecisionId] = useState("");
+  const [recommendationId, setRecommendationId] = useState("");
+  const [batchId, setBatchId] = useState("");
+  const [observationId, setObservationId] = useState("");
   const [notice, setNotice] = useState<string>();
   const policyRows = rows(policy);
   const receiptRows = rows(receipts);
-  if (policy === undefined || receipts === undefined || me === undefined)
+  const recommendationRows = rows(recommendations);
+  const observationRows = rows(observations);
+  if (
+    policy === undefined ||
+    receipts === undefined ||
+    recommendations === undefined ||
+    observations === undefined ||
+    me === undefined
+  )
     return <LoadingState label="모델 평가실을 연결하고 있습니다" />;
   const activePolicy = policyRows[0];
   const canConfigure =
@@ -39,6 +54,8 @@ export default function OptimizationPage() {
           autoOptimize,
           productionLearning,
           shadowEnabled,
+          observationBudgetMicros: Number(observationBudgetMicros),
+          observationRetentionDays: Number(observationRetentionDays),
           governanceDecisionId: governanceDecisionId.trim(),
         },
       });
@@ -46,6 +63,33 @@ export default function OptimizationPage() {
       setNotice("모델 평가실 정책을 저장했습니다.");
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "모델 평가실 정책을 저장하지 못했습니다.");
+    }
+  }
+
+  async function runOptimizationMutation(
+    operation: string,
+    payload: Record<string, unknown>,
+    successMessage: string,
+  ): Promise<void> {
+    if (!canConfigure) {
+      setNotice("owner/admin 권한이 필요합니다.");
+      return;
+    }
+    try {
+      await consoleStore.mutate({
+        schemaVersion: "massion.application.v1",
+        commandId: crypto.randomUUID(),
+        correlationId: crypto.randomUUID(),
+        operation,
+        payload,
+      });
+      await Promise.all([
+        consoleStore.refresh("optimization.recommendations", {}),
+        consoleStore.refresh("optimization.observations", {}),
+      ]);
+      setNotice(successMessage);
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "모델 평가실 작업을 완료하지 못했습니다.");
     }
   }
   return (
@@ -70,6 +114,11 @@ export default function OptimizationPage() {
           <span>AUTO OPTIMIZE</span>
           <strong>{activePolicy?.autoOptimize === true ? "ON" : "OFF"}</strong>
           <small>조직별 명시 동의</small>
+        </article>
+        <article>
+          <span>RECOMMENDATIONS</span>
+          <strong>{String(recommendationRows.length).padStart(2, "0")}</strong>
+          <small>승인 대기·적용 기록</small>
         </article>
       </section>
       <section className="ledger-panel">
@@ -97,6 +146,119 @@ export default function OptimizationPage() {
             ))}
           </div>
         )}
+      </section>
+      <section className="ledger-panel" aria-labelledby="optimization-recommendations-title">
+        <div className="panel-title">
+          <div>
+            <p className="eyebrow">RECOMMENDATIONS & OBSERVATIONS</p>
+            <h2 id="optimization-recommendations-title">추천·실사용 관찰</h2>
+          </div>
+          <StatusStamp value={`${String(observationRows.length)} observations`} />
+        </div>
+        {recommendationRows.length === 0 ? (
+          <EmptyState title="아직 모델 추천이 없습니다" detail="CLI에서 평가 receipt를 기반으로 추천을 생성해주세요." />
+        ) : (
+          <div className="ledger-list">
+            {recommendationRows.slice(0, 20).map((recommendation) => (
+              <div className="ledger-row" key={label(recommendation.recommendationId)}>
+                <span className="mono">{label(recommendation.recommendationId).slice(0, 12)}</span>
+                <strong>{label(recommendation.roleKey)}</strong>
+                <span>{label(recommendation.primaryModelProfileId, "fallback-only")}</span>
+                <StatusStamp value={label(recommendation.status)} />
+              </div>
+            ))}
+          </div>
+        )}
+        <div className="form-grid">
+          <label>
+            추천 ID
+            <input
+              value={recommendationId}
+              disabled={!canConfigure}
+              onChange={(event) => {
+                setRecommendationId(event.target.value);
+              }}
+            />
+          </label>
+          <label>
+            배치 ID
+            <input
+              value={batchId}
+              disabled={!canConfigure}
+              onChange={(event) => {
+                setBatchId(event.target.value);
+              }}
+            />
+          </label>
+          <label>
+            degraded 관찰 ID
+            <input
+              value={observationId}
+              disabled={!canConfigure}
+              onChange={(event) => {
+                setObservationId(event.target.value);
+              }}
+            />
+          </label>
+        </div>
+        <div className="button-row">
+          <button
+            type="button"
+            className="secondary-button"
+            disabled={!canConfigure || recommendationId.trim().length === 0 || governanceDecisionId.trim().length === 0}
+            onClick={() =>
+              void runOptimizationMutation(
+                "optimization.recommendation.approve",
+                { recommendationId: recommendationId.trim(), governanceDecisionId: governanceDecisionId.trim() },
+                "모델 추천을 승인했습니다.",
+              )
+            }
+          >
+            추천 승인
+          </button>
+          <button
+            type="button"
+            className="secondary-button"
+            disabled={!canConfigure || recommendationId.trim().length === 0}
+            onClick={() =>
+              void runOptimizationMutation(
+                "optimization.batch.create",
+                { recommendationId: recommendationId.trim(), status: "limited" },
+                "제한 배치를 생성했습니다. 배치 ID를 입력해 활성화하세요.",
+              )
+            }
+          >
+            제한 배치 생성
+          </button>
+          <button
+            type="button"
+            className="secondary-button"
+            disabled={!canConfigure || batchId.trim().length === 0}
+            onClick={() =>
+              void runOptimizationMutation(
+                "optimization.batch.activate",
+                { batchId: batchId.trim() },
+                "모델 배치를 활성화했습니다.",
+              )
+            }
+          >
+            배치 활성화
+          </button>
+          <button
+            type="button"
+            className="secondary-button"
+            disabled={!canConfigure || observationId.trim().length === 0}
+            onClick={() =>
+              void runOptimizationMutation(
+                "optimization.recover",
+                { observationId: observationId.trim() },
+                "이전 healthy 배치로 복구했습니다.",
+              )
+            }
+          >
+            degraded 복구
+          </button>
+        </div>
       </section>
       <section className="ledger-panel" aria-labelledby="optimization-policy-title">
         <div className="panel-title">
@@ -133,6 +295,31 @@ export default function OptimizationPage() {
                 setGovernanceDecisionId(event.target.value);
               }}
               placeholder="승인 기록 ID"
+            />
+          </label>
+          <label>
+            실사용 관찰 예산(micros)
+            <input
+              type="number"
+              min="1"
+              value={observationBudgetMicros}
+              disabled={!canConfigure}
+              onChange={(event) => {
+                setObservationBudgetMicros(event.target.value);
+              }}
+            />
+          </label>
+          <label>
+            실사용 관찰 보존 기간(일)
+            <input
+              type="number"
+              min="1"
+              max="3650"
+              value={observationRetentionDays}
+              disabled={!canConfigure}
+              onChange={(event) => {
+                setObservationRetentionDays(event.target.value);
+              }}
             />
           </label>
         </div>

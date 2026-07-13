@@ -92,6 +92,8 @@ interface PolicyRecord {
   readonly shadow_enabled: boolean;
   readonly minimum_sample_count: number;
   readonly improvement_threshold: number;
+  readonly observation_budget_micros?: number;
+  readonly observation_retention_days?: number;
   readonly status: "active" | "superseded";
   readonly checksum: string;
   readonly governance_decision_id: string;
@@ -204,6 +206,8 @@ function policyView(record: PolicyRecord): OptimizationPolicyVersion {
     shadowEnabled: record.shadow_enabled,
     minimumSampleCount: record.minimum_sample_count,
     improvementThreshold: record.improvement_threshold,
+    observationBudgetMicros: record.observation_budget_micros ?? 1_000_000,
+    observationRetentionDays: record.observation_retention_days ?? 30,
     status: record.status,
     checksum: record.checksum,
   };
@@ -584,10 +588,20 @@ export class ModelOptimizationStore {
       throw new Error("모델 평가 정책이 유효하지 않습니다");
     const minimumSampleCount = input.minimumSampleCount ?? 3;
     const improvementThreshold = input.improvementThreshold ?? 0.05;
+    const observationBudgetMicros = input.observationBudgetMicros ?? 1_000_000;
+    const observationRetentionDays = input.observationRetentionDays ?? 30;
     if (!Number.isSafeInteger(minimumSampleCount) || minimumSampleCount < 1)
       throw new Error("모델 평가 최소 표본 수가 유효하지 않습니다");
     if (!Number.isFinite(improvementThreshold) || improvementThreshold < 0 || improvementThreshold > 1)
       throw new Error("모델 평가 개선 기준이 유효하지 않습니다");
+    if (!Number.isFinite(observationBudgetMicros) || observationBudgetMicros <= 0)
+      throw new Error("실사용 observation 예산이 유효하지 않습니다");
+    if (
+      !Number.isSafeInteger(observationRetentionDays) ||
+      observationRetentionDays < 1 ||
+      observationRetentionDays > 3650
+    )
+      throw new Error("실사용 observation 보존 기간이 유효하지 않습니다");
     return await this.database.transaction(async (tx) => {
       const requestHash = digest(input);
       const repeated = await this.command<PolicyRecord>(
@@ -616,10 +630,12 @@ export class ModelOptimizationStore {
         shadowEnabled: input.shadowEnabled,
         minimumSampleCount,
         improvementThreshold,
+        observationBudgetMicros,
+        observationRetentionDays,
         version,
       });
       const [created] = await tx.query<[PolicyRecord[]]>(
-        "CREATE optimization_policy_version CONTENT { policy_version_id: $policy_version_id, organization_id: $organization_id, version: $version, policy: $policy, auto_optimize: $auto_optimize, production_learning: $production_learning, shadow_enabled: $shadow_enabled, minimum_sample_count: $minimum_sample_count, improvement_threshold: $improvement_threshold, status: 'active', checksum: $checksum, governance_decision_id: $governance_decision_id, command_id: $command_id, request_hash: $request_hash, created_by_user_id: $user_id, created_at: time::now() } RETURN AFTER;",
+        "CREATE optimization_policy_version CONTENT { policy_version_id: $policy_version_id, organization_id: $organization_id, version: $version, policy: $policy, auto_optimize: $auto_optimize, production_learning: $production_learning, shadow_enabled: $shadow_enabled, minimum_sample_count: $minimum_sample_count, improvement_threshold: $improvement_threshold, observation_budget_micros: $observation_budget_micros, observation_retention_days: $observation_retention_days, status: 'active', checksum: $checksum, governance_decision_id: $governance_decision_id, command_id: $command_id, request_hash: $request_hash, created_by_user_id: $user_id, created_at: time::now() } RETURN AFTER;",
         {
           policy_version_id: randomUUID(),
           organization_id: context.organizationId,
@@ -630,6 +646,8 @@ export class ModelOptimizationStore {
           shadow_enabled: input.shadowEnabled,
           minimum_sample_count: minimumSampleCount,
           improvement_threshold: improvementThreshold,
+          observation_budget_micros: observationBudgetMicros,
+          observation_retention_days: observationRetentionDays,
           status: "active",
           checksum: policyChecksum,
           governance_decision_id: input.governanceDecisionId,
@@ -744,6 +762,20 @@ export class ModelOptimizationStore {
       { organization_id: context.organizationId, role_key: roleKey },
     );
     return records.map(receiptView);
+  }
+
+  public async listRecommendations(
+    context: TenantContext,
+    roleKey?: OptimizationRoleKey,
+  ): Promise<readonly ModelRecommendationRecord[]> {
+    await this.organizations.verifyTenantContext(context);
+    const [records] = await this.database.query<[RecommendationRecord[]]>(
+      roleKey
+        ? "SELECT * OMIT id FROM optimization_recommendation WHERE organization_id = $organization_id AND role_key = $role_key ORDER BY created_at DESC;"
+        : "SELECT * OMIT id FROM optimization_recommendation WHERE organization_id = $organization_id ORDER BY created_at DESC;",
+      { organization_id: context.organizationId, role_key: roleKey },
+    );
+    return records.map(recommendationView);
   }
 
   public async listBundleCases(context: TenantContext, bundleId: string): Promise<readonly EvaluationCase[]> {

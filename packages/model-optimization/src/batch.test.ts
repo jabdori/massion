@@ -201,4 +201,47 @@ describe("모델 최적화 batch lifecycle", () => {
       }),
     ).rejects.toThrow("production learning");
   });
+
+  it("실사용 observation은 정책별 예산을 넘지 않고 보존 만료 시각을 기록한다", async () => {
+    await database.query(
+      "CREATE optimization_policy_version CONTENT { policy_version_id: 'policy-budget', organization_id: $organization_id, version: 1, policy: 'quality', auto_optimize: false, production_learning: true, shadow_enabled: false, minimum_sample_count: 1, improvement_threshold: 0, observation_budget_micros: 100, observation_retention_days: 7, status: 'active', checksum: $checksum, governance_decision_id: 'decision-budget', command_id: 'policy-budget-command', request_hash: $request_hash, created_by_user_id: $user_id, created_at: time::now() }; CREATE optimization_recommendation CONTENT { recommendation_id: 'recommendation-budget', organization_id: $organization_id, role_key: 'assurance', policy_version_id: 'policy-budget', primary_model_profile_id: 'profile-budget', fallback_model_profile_ids: [], excluded_json: '[]', receipt_ids: [], status: 'approved', checksum: $checksum2, command_id: 'recommendation-budget-command', request_hash: $request_hash2, created_by_user_id: $user_id, created_at: time::now() };",
+      {
+        organization_id: context.organizationId,
+        checksum: "a".repeat(64),
+        request_hash: "b".repeat(64),
+        checksum2: "c".repeat(64),
+        request_hash2: "d".repeat(64),
+        user_id: context.userId,
+      },
+    );
+    const batch = await batches.createBatch(context, {
+      commandId: "batch-budget",
+      recommendationId: "recommendation-budget",
+      status: "candidate",
+    });
+    const first = await batches.recordObservation(context, {
+      commandId: "observation-budget-first",
+      batchId: batch.batchId,
+      sampleCount: 1,
+      qualityScore: 0.9,
+      latencyMs: 100,
+      costMicros: 60,
+      status: "healthy",
+      source: "production",
+    });
+    expect(first).toMatchObject({ source: "production", policyVersionId: "policy-budget" });
+    expect(typeof (first as unknown as { expiresAt?: unknown }).expiresAt).toBe("string");
+    await expect(
+      batches.recordObservation(context, {
+        commandId: "observation-budget-over",
+        batchId: batch.batchId,
+        sampleCount: 1,
+        qualityScore: 0.9,
+        latencyMs: 100,
+        costMicros: 41,
+        status: "healthy",
+        source: "production",
+      }),
+    ).rejects.toThrow("예산");
+  });
 });

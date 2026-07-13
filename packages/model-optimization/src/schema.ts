@@ -40,6 +40,8 @@ DEFINE FIELD production_learning ON optimization_policy_version TYPE bool;
 DEFINE FIELD shadow_enabled ON optimization_policy_version TYPE bool;
 DEFINE FIELD minimum_sample_count ON optimization_policy_version TYPE int ASSERT $value >= 1;
 DEFINE FIELD improvement_threshold ON optimization_policy_version TYPE float ASSERT $value >= 0 AND $value <= 1;
+DEFINE FIELD observation_budget_micros ON optimization_policy_version TYPE option<float> ASSERT $value = NONE OR $value > 0;
+DEFINE FIELD observation_retention_days ON optimization_policy_version TYPE option<int> ASSERT $value = NONE OR ($value >= 1 AND $value <= 3650);
 DEFINE FIELD status ON optimization_policy_version TYPE string ASSERT $value IN ['active', 'superseded'];
 DEFINE FIELD checksum ON optimization_policy_version TYPE string ASSERT string::len($value) = 64;
 DEFINE FIELD governance_decision_id ON optimization_policy_version TYPE string;
@@ -151,6 +153,8 @@ DEFINE FIELD quality_score ON optimization_observation TYPE float ASSERT $value 
 DEFINE FIELD latency_ms ON optimization_observation TYPE float ASSERT $value >= 0;
 DEFINE FIELD cost_micros ON optimization_observation TYPE float ASSERT $value >= 0;
 DEFINE FIELD status ON optimization_observation TYPE string ASSERT $value IN ['healthy', 'degraded'];
+DEFINE FIELD policy_version_id ON optimization_observation TYPE option<string>;
+DEFINE FIELD expires_at ON optimization_observation TYPE option<datetime>;
 DEFINE FIELD checksum ON optimization_observation TYPE string ASSERT string::len($value) = 64;
 DEFINE FIELD command_id ON optimization_observation TYPE string;
 DEFINE FIELD request_hash ON optimization_observation TYPE string ASSERT string::len($value) = 64;
@@ -179,6 +183,10 @@ export const MODEL_OPTIMIZATION_HARDENING_MIGRATION = defineMigration(
   `
 DEFINE FIELD source ON optimization_observation TYPE string ASSERT $value IN ['evaluation', 'production'];
 DEFINE FIELD prompt ON optimization_case TYPE option<string>;
+DEFINE FIELD OVERWRITE observation_budget_micros ON optimization_policy_version TYPE option<float> ASSERT $value = NONE OR $value > 0;
+DEFINE FIELD OVERWRITE observation_retention_days ON optimization_policy_version TYPE option<int> ASSERT $value = NONE OR ($value >= 1 AND $value <= 3650);
+DEFINE FIELD OVERWRITE policy_version_id ON optimization_observation TYPE option<string>;
+DEFINE FIELD OVERWRITE expires_at ON optimization_observation TYPE option<datetime>;
 DEFINE INDEX optimization_observation_command ON optimization_observation FIELDS organization_id, command_id UNIQUE;
 DEFINE INDEX optimization_batch_command ON optimization_batch FIELDS organization_id, command_id UNIQUE;
 DEFINE INDEX optimization_recovery_command ON optimization_recovery FIELDS organization_id, command_id UNIQUE;

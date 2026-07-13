@@ -19,6 +19,8 @@ export const MODEL_OPTIMIZATION_OPERATIONS = [
 export const MODEL_OPTIMIZATION_QUERIES = [
   "optimization.policy",
   "optimization.receipts",
+  "optimization.recommendations",
+  "optimization.observations",
   "optimization.batch.active",
 ] as const;
 

@@ -74,6 +74,8 @@ export interface OptimizationPolicyVersion {
   readonly shadowEnabled: boolean;
   readonly minimumSampleCount: number;
   readonly improvementThreshold: number;
+  readonly observationBudgetMicros: number;
+  readonly observationRetentionDays: number;
   readonly status: "active" | "superseded";
   readonly checksum: string;
 }
@@ -117,6 +119,8 @@ export interface OptimizationObservation {
   readonly costMicros: number;
   readonly status: "healthy" | "degraded";
   readonly source: "evaluation" | "production";
+  readonly policyVersionId?: string;
+  readonly expiresAt?: string;
   readonly checksum: string;
 }
 
@@ -138,6 +142,8 @@ export interface ConfigureOptimizationPolicyInput {
   readonly shadowEnabled: boolean;
   readonly minimumSampleCount?: number;
   readonly improvementThreshold?: number;
+  readonly observationBudgetMicros?: number;
+  readonly observationRetentionDays?: number;
   readonly governanceDecisionId: string;
 }
 
