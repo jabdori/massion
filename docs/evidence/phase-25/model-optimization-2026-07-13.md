@@ -60,3 +60,15 @@
 ## 남은 완성 조건
 
 Phase 25는 현재 in-progress입니다. Provider별 품질 분포와 자동 승격 운영 증거, 실제 TUI/import-export release 반복, 복수 계정·Provider UAT가 남아 있습니다. 확장 평가 묶음의 manifest 검증 및 worker registry 등록은 완료했습니다.
+
+## 2026-07-14 현재 커밋 후속 검증
+
+작업트리 정합성 검토 후 유효한 모델 평가실 변경만 포함한 현재 커밋 `608b905be3a407fe519eafd2a1f15c8d984e39e3`을 기준으로 다시 검증했습니다.
+
+- `pnpm verify`: 통과
+- `pnpm verify:security`: 통과 — 14개 test file, 67개 테스트 통과, moderate/high/critical 0개, low 1개
+- `pnpm verify:hardening`: 통과 — 26개 테스트 통과, 500 requests, concurrency 32, failures 0, p95 13.03ms, shutdown clean
+- `pnpm release:build`: 통과 — source digest `sha256:0bd24fa44cd55b9fc17319aa5f0054881f0ff5f923239356060afb90fe9111ee`, local archive `sha256:8775e3e503c9655ef0fc26da5b24a1c2a5d33d984009aa454e4d5516bf01e27c3`
+- `pnpm verify:release`: 통과 — 공백이 없는 외장 볼륨 임시 경로를 사용하여 설치·실행·백업·복원·삭제·사용자 데이터 보존을 검증했습니다. 이는 제품 설정 변경이 아니라 macOS의 공백 포함 경로에서 RocksDB 네이티브 엔진이 초기화되지 않는 실행 환경 제약을 피하기 위한 검증 경로입니다.
+
+이 후속 검증은 외부 Provider의 실제 품질 분포나 복수 계정 UAT를 대체하지 않습니다. 해당 시나리오는 외부 인증·네트워크·계정 상태가 필요하므로 Phase 25를 계속 `in-progress`로 유지합니다.
