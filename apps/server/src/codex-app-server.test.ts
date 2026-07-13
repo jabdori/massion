@@ -5,6 +5,19 @@ import { describe, expect, it, vi } from "vitest";
 import { openCodexAppServer, withCodexAppServer, type CodexAppServerInboundRequest } from "./codex-app-server.js";
 
 describe("Codex app-server JSON-RPC transport", () => {
+  it("runtime workspace root capability를 initialize에서 선언한다", async () => {
+    const fixturePath = fileURLToPath(new URL("./fixtures/codex-app-server-capability.mjs", import.meta.url));
+
+    await expect(
+      withCodexAppServer(
+        process.execPath,
+        [fixturePath],
+        { CODEX_HOME: "/isolated/profile" },
+        async (session) => await session.request("fixture/capability"),
+      ),
+    ).resolves.toEqual({ status: "experimental-enabled" });
+  });
+
   it("client request와 server 승인 request를 request ID 계보로 multiplex한다", async () => {
     const fixturePath = fileURLToPath(new URL("./fixtures/codex-app-server-multiplex.mjs", import.meta.url));
     const approval = vi.fn(async (request: CodexAppServerInboundRequest) => {
