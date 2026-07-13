@@ -402,8 +402,6 @@ export class OptimizationBatchService {
       input.costMicros < 0
     )
       throw new Error("최적화 observation 수치가 유효하지 않습니다");
-    if (input.status !== "healthy" && input.status !== "degraded")
-      throw new Error("최적화 observation 상태가 유효하지 않습니다");
     const [batches] = await this.database.query<[BatchRecord[]]>(
       "SELECT * OMIT id FROM optimization_batch WHERE organization_id = $organization_id AND batch_id = $batch_id LIMIT 1;",
       { organization_id: context.organizationId, batch_id: input.batchId },

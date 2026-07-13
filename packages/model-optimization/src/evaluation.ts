@@ -6,7 +6,6 @@ import { applyMigrations, type MassionDatabase, type QueryExecutor } from "@mass
 import {
   isOptimizationRoleKey,
   recommendModels,
-  type EvaluationCandidate,
   type EvaluationReceipt,
   type EvaluationRequirements,
   type EvaluationPolicy,
@@ -145,11 +144,6 @@ function assertChecksum(value: unknown, label: string): asserts value is string 
 
 function assertRole(value: string): asserts value is OptimizationRoleKey {
   if (!isOptimizationRoleKey(value)) throw new Error(`지원하지 않는 최적화 역할입니다: ${value}`);
-}
-
-function toIso(value: unknown): string {
-  const date = value instanceof Date ? value : new Date(String(value));
-  return Number.isFinite(date.getTime()) ? date.toISOString() : new Date(0).toISOString();
 }
 
 function bundleView(record: BundleRecord): EvaluationBundle {
@@ -371,7 +365,6 @@ export class ModelOptimizationStore {
     assertText(input.runtimeVersion, "runtime version");
     assertChecksum(input.inputChecksum, "평가 입력");
     const mode = input.mode ?? "standard";
-    if (mode !== "standard" && mode !== "shadow") throw new Error("평가 mode가 유효하지 않습니다");
     return await this.database.transaction(async (tx) => {
       const requestHash = digest(input);
       const repeated = await this.command<RunRecord>(tx, context.organizationId, "optimization_run", input.commandId);
@@ -499,7 +492,6 @@ export class ModelOptimizationStore {
     assertText(input.modelProfileId, "model profile 식별자");
     assertText(input.runtimeVersion, "runtime version");
     const mode = input.mode ?? "standard";
-    if (mode !== "standard" && mode !== "shadow") throw new Error("평가 mode가 유효하지 않습니다");
 
     const [bundles] = await this.database.query<[BundleRecord[]]>(
       "SELECT * OMIT id FROM optimization_bundle WHERE organization_id = $organization_id AND bundle_id = $bundle_id LIMIT 1;",

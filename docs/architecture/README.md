@@ -446,6 +446,42 @@ flowchart LR
 | 모델 fallback | capability·데이터 정책·예산·equivalence·평가 기준을 모두 통과한 후보만 허용 | `packages/router` |
 | 제한 모드 | 모델이 없어도 Identity·Work·조직·승인·기록·진단은 계속 동작 | `packages/router`, `packages/application` |
 
+### 8.1 역할별 모델 평가실과 활성 배치
+
+모델 평가실(Model Optimization Lab)은 사용자가 연결하고 검증한 모델만 역할별 평가 묶음으로 실행합니다. 품질·가성비·속도·개인정보 우선·수동 고정 정책 중 하나를 선택해 주 모델과 순서가 있는 fallback을 추천하며, 최초 추천은 승인 전까지 실행 경로에 반영하지 않습니다. 자동 최적화도 조직 정책의 명시적 동의가 있을 때만 최소 표본·개선 폭 게이트를 통과한 배치를 승격합니다.
+
+```mermaid
+flowchart LR
+  Cases["고정 평가 case<br/>prompt·tools·environment checksum"]:::implemented
+  Executor["Evaluator port<br/>Provider adapter 경계"]:::implemented
+  Receipt["불변 평가 receipt<br/>품질·속도·비용·privacy"]:::implemented
+  Score["결정론적 정책 채점<br/>quality · value · speed · privacy · manual"]:::implemented
+  Recommendation["주 모델·fallback 추천<br/>제외 사유·근거 receipt"]:::implemented
+  Approval{"조직 정책<br/>review 또는 auto"}:::implemented
+  Batch["불변 역할별 batch<br/>candidate → shadow → limited → active"]:::implemented
+  Pointer["원자적 활성 포인터<br/>재시작 후 복구"]:::implemented
+  RouterPreference["Router 선호 profile 순서<br/>계정 quota·circuit·fallback은 Router 소유"]:::implemented
+  SideEffect["shadow capability 차단<br/>파일·메시지·배포·승인·조직 변경 금지"]:::implemented
+
+  Cases --> Executor
+  Executor --> Receipt
+  Receipt --> Score
+  Score --> Recommendation
+  Recommendation --> Approval
+  Approval --> Batch
+  Batch --> Pointer
+  Pointer --> RouterPreference
+  Executor -.-> SideEffect
+```
+
+| 평가실 경계 | 보장 | 실제 위치 |
+|---|---|---|
+| 정본·영수증 | bundle, run, receipt, policy, recommendation, batch, observation, recovery의 tenant 격리와 checksum | `packages/model-optimization` |
+| 후보 카탈로그 | 후보를 명시하지 않으면 서버 Router가 연결된 model profile만 제공하며 무료·공개 모델을 자동 추가하지 않음 | `apps/server/src/product.ts` |
+| 실행 연결 | Provider별 실행은 `ModelEvaluationExecutor` port를 통해 주입하고 도메인은 Provider SDK를 직접 import하지 않음 | `packages/model-optimization/src/ports.ts` |
+| 실사용 경로 | 활성 batch의 primary·fallback profile 순서를 Router에 전달하고 credential·quota·circuit·재시도는 기존 Router가 판정 | `packages/runtime`, `packages/router` |
+| 기본 안전값 | 정책이 없으면 review·shadow 비활성, 추천은 `pending-approval`, shadow capability는 모두 차단 | `packages/model-optimization` |
+
 ## 9. 데이터·명령·이벤트 계보
 
 SurrealDB는 AgentOS 데이터의 유일한 실행 정본입니다. Surface의 변경 명령은 인증·scope와 replay 원장을 통과하고, 각 도메인이 자신의 transaction 안에서 상태와 불변 event를 함께 기록합니다. Transactional outbox는 그 event의 참조를 같은 commit에 남기며, projector가 조직별 전역 순서를 가진 공개 event로 변환합니다.
@@ -654,6 +690,7 @@ flowchart LR
 | 자체 호스팅·운영 | 구현됨 | `apps/server`, `compose.yaml`, `deploy/kubernetes`, `docs/operations` | 21 |
 | 보안·성능·복구 강화 | 구현됨 | `apps/server`, `packages/registry`, `scripts/verify-security.mjs`, `scripts/hardening-load.mjs` | 22 |
 | 완제품 E2E·1.0 릴리스 | 구현됨 | `apps/distribution`, `release`, `scripts/build-release.mjs`, `scripts/verify-release.mjs`, `.github/workflows/release.yml` | 23 |
+| 모델 평가실·역할별 배치 | 구현 중 | `packages/model-optimization`, `packages/router`, `packages/runtime`, `apps/server`, `apps/cli`, `apps/web`, `apps/tui` | 25 |
 
 이 문서의 상태가 현재 코드와 달라지면 실제 검증 근거를 확인한 뒤 그림과 표를 함께 갱신합니다.
 
