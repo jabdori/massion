@@ -77,11 +77,11 @@ Phase 25는 현재 in-progress입니다. Provider별 품질 분포와 자동 승
 
 ## 2026-07-14 최신 release·tmux lifecycle 재검증
 
-- 검증 커밋: `087e33850e0f7e2bcaf58921f9532f8539428837`
-- Release source digest: `sha256:402a9da8622524b751bd6af4aadc5cc83e0826550d6b713a764a153d0d26d386`
-- Local archive digest: `sha256:ca4b3d5d3515d1c9dcfa99c6d314fd0295bb97313e19b479489ba34627c636e3`
+- 검증 커밋: `584fdb72b78bf9f2451932af4028c2f0a123bb6a`
+- Release source digest: `sha256:1a705c9545f54abe8ed806e85b424b5be04ca209f7e0809cca3a4171a7231157`
+- Local archive digest: `sha256:a9bf059c11cdd50f2fda026170efdb6fa7e6ace00fdbd3f9f66565734ada6611`
 - `pnpm verify:release`: 통과
-- tmux UAT receipt digest: `sha256:93621b15f5f7affe947fcb529fae806b796138e81b1d6ba0dbeeba966a83f2f6`
+- tmux UAT receipt digest: `sha256:4bad0bc7039f7060d888690f5c8e88efc1500817258c592420b74566f65a664a`
 - receipt summary: `passed: 1`, `failed: 0`, `not-run: 9`
 
 최신 release는 경로에 공백이 포함된 격리 작업공간에서 local lifecycle 설치·실행·재시작·backup·restore·uninstall data 보존을 통과했습니다. 이 결과는 모델 역할별 Provider 품질 평가를 통과했다는 뜻이 아닙니다. 실제 Provider run, 추천 승인·자동 승격·shadow·rollback의 release 영수증, TUI mutation·외부 bundle import/export 반복은 여전히 외부 Provider 인증·추가 계정·추가 사용자 또는 별도 release 시나리오가 필요합니다.
