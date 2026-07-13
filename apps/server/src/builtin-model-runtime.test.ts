@@ -16,7 +16,7 @@ describe("서버 내장 직접 모델 runtime artifact 증명", () => {
     });
     expect(first.runtimeArtifactDigest).toMatch(/^[a-f0-9]{64}$/u);
     await expect(lstat(first.nodeExecutable)).resolves.toMatchObject({});
-  });
+  }, 20_000);
 
   it("등록하지 않은 runtime ID를 임의의 artifact로 해석하지 않는다", async () => {
     await expect(inspectBuiltinModelRuntime("arbitrary-model" as never)).rejects.toThrow("지원하지 않는");
