@@ -13,7 +13,7 @@
 
 ## Task 2. 후보 자격과 격리 평가 실행
 
-- [ ] 연결된 모델의 실제 기능을 최소 호출로 검사하고 불일치를 fail closed합니다. 실행기 port는 있으나 Provider별 실제 호출 adapter가 남아 있습니다.
+- [x] 연결된 모델의 실제 기능을 최소 호출로 검사하고 불일치를 fail closed합니다. 서버가 Router·AI SDK 기반 Provider 실행 adapter를 `ModelEvaluationExecutor`에 연결하며, 실행 실패는 영수증을 완료하지 않고 fail closed합니다.
 - [x] 고정된 입력·도구·환경 checksum과 반복 정책을 전달하고 결과를 불변 receipt로 집계하는 평가 실행기를 구현했습니다.
 - [x] 그림자 실행에 파일·메시지·배포·승인·조직 정본 변경 capability를 모두 `false`로 전달하는 테스트를 추가했습니다.
 
@@ -33,7 +33,7 @@
 
 - [x] Runtime이 역할별 활성 배치의 주 모델·fallback 선호 순서를 Router reserve에 전달하게 했습니다.
 - [x] 평가 실행·추천·적용·자동화·복구 Application operation과 redacted query를 추가했습니다.
-- [ ] CLI·TUI·Web의 평가 실행·승인 화면을 완전히 동일하게 조립합니다. 현재 CLI/Application과 Web/TUI 조회 화면까지 구현되어 실행·승인 화면이 남아 있습니다.
+- [ ] CLI·TUI·Web의 평가 실행·승인 화면을 완전히 동일하게 조립합니다. CLI/Application의 실행·변경 명령과 Web 정책 제어, TUI 조회 화면은 연결했지만 TUI/Web에서 실행·추천 승인 화면을 동일한 흐름으로 마무리해야 합니다.
 
 ## Task 6. 외부 평가 연동과 제품 조립
 
@@ -49,7 +49,7 @@
 
 ## 현재 남은 완성 조건
 
-1. Provider 연결을 실제로 호출하는 평가 executor adapter와 역할별 평가 case 입력 경계를 추가합니다. 서버에는 기존 Router·AI SDK를 통한 기본 adapter가 연결되어 있으며 Provider별 품질 판정 고도화가 남아 있습니다.
+1. Provider 연결을 실제로 호출하는 평가 executor adapter와 역할별 평가 case 입력 경계를 추가합니다. 서버 기본 adapter와 prompt 입력 경계는 연결되었으며 Provider별 품질 판정 고도화가 남아 있습니다.
 2. 실사용 관찰의 조직 consent·예산·보존 정책 검사와 자동 승격 조건을 완성합니다.
 3. CLI·TUI·Web의 실행·추천 승인 화면을 연결하고 실제 release에서 반복합니다.
 4. Claude·Codex·GLM 및 복수 계정이 실제로 연결된 환경에서 tmux receipt를 갱신합니다.
