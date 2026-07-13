@@ -9,8 +9,8 @@
 - 새 비공개 GitHub 저장소: [jabdori/massion](https://github.com/jabdori/massion)
 - 새 저장소의 기본 브랜치: `main`
 - 최초 synthetic root: `3c9697db15160c3d1fc904464894c0c2cd71a2b4`
-- 전환 후 현재 커밋 수: 235개 (2026-07-13 기준)
-- 새 저장소 tracked file 수: 904개 (2026-07-13 기준)
+- 전환 후 현재 커밋 수: 237개 (2026-07-13 기준)
+- 새 저장소 tracked file 수: 905개 (2026-07-13 기준)
 - 원본 저장소는 수정·삭제하지 않고 owner-only archive bundle로 보존했습니다.
 - 새 저장소의 현재 tree·history·commit message에서 제외 대상 marker와 개인 경로는 0건입니다.
 
