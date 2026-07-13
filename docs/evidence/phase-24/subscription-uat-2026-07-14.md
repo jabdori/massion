@@ -3,7 +3,21 @@
 > **실행 방식**: 검증된 local release archive를 격리된 tmux 세션에서 실행
 > **민감정보**: 원시 pane 출력·계정 식별자·인증정보·개인 경로를 저장하지 않음
 
+## 최신 local lifecycle 재검증 — 2026-07-14
+
+- Git commit: `087e33850e0f7e2bcaf58921f9532f8539428837`
+- Release manifest source digest: `sha256:402a9da8622524b751bd6af4aadc5cc83e0826550d6b713a764a153d0d26d386`
+- Local release archive: `sha256:ca4b3d5d3515d1c9dcfa99c6d314fd0295bb97313e19b479489ba34627c636e3`
+- UAT receipt: `sha256:93621b15f5f7affe947fcb529fae806b796138e81b1d6ba0dbeeba966a83f2f6`
+- Receipt summary: `passed: 1`, `failed: 0`, `not-run: 9`
+
+이번 실행은 경로에 공백이 포함된 격리 작업공간에서 `tmux`로 수행했습니다. 설치·version·Connector doctor·local 시작·owner 초기화·readiness·provider catalog·event watch·재시작·owner-only backup·복원 서버 시작·복원 readiness·uninstall 후 data 보존을 모두 통과했습니다. 복원 command와 복원 server는 상대 RocksDB URL(`rocksdb://./massion.db`)과 복원 directory 작업 디렉터리를 사용했습니다.
+
+Codex·Claude·Z.AI 실제 Provider 실행은 이 실행에서 시작하지 않았습니다. Codex OAuth·실행 응답에 대한 이전 시도는 아래 역사 기록처럼 네트워크 timeout으로 실패했으며, 계정 회전·fallback·승인 재개 시나리오는 외부 전제조건이 남아 있습니다.
+
 ## 계보
+
+아래는 이전 외부 Provider UAT 시도의 보존 기록입니다.
 
 - Git commit: `00f77e6f8471895694b2e3600b85f2ee0dad4a5d`
 - Local release archive: `sha256:54b4c151d8bb819b5a305c45a57f41a7b7dd657007982bd9eb2b558540ea23bf`

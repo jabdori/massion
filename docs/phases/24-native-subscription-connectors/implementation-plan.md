@@ -44,8 +44,8 @@
 - [x] 배포 하위 작업으로 Caddy의 정확한 `/connectors` WebSocket 경로, Compose·Kustomize의 팀 수신 기본값, 로컬의 소유자 전용 profile root와 명시적 수신 선택을 정적 테스트·구성 해석으로 검증합니다.
 - [x] Codex prepare→유료 인증→모델 발견→Core route→`MassionModelFactory` agent-runtime session lease를 실제 저장소 통합 테스트로 완주합니다.
 - [x] 설치형 서버·로컬 lifecycle에 connector broker, runtime startup recovery, drain shutdown을 조립하고 product test로 검증합니다. team deploy의 실제 사용자 시나리오는 다음 항목에서 검증합니다.
-- [x] 깨끗한 release 설치를 `tmux`에서 실행하고 공식 허용 범위의 실제 계정 시나리오를 검증합니다. Claude 소비자 로그인과 Z.AI는 제공자 승인 전 `provider-approval-required`로 검증합니다. 결과는 `docs/evidence/phase-24/subscription-uat-2026-07-13.md`에 기록했습니다.
-- [ ] 복수 계정 회전·quota·offline·429·fallback·중단·재개·재시작·백업·복원을 검증합니다.
+- [x] 깨끗한 release 설치를 `tmux`에서 실행하고 local lifecycle과 공식 허용 범위의 실제 계정 시나리오를 검증합니다. Claude 소비자 로그인과 Z.AI는 제공자 승인 전 `provider-approval-required`로 검증합니다. 최신 local 근거는 `docs/evidence/phase-24/subscription-uat-2026-07-14.md`입니다.
+- [ ] 복수 계정 회전·quota·offline·429·fallback·중단·재개를 검증합니다. 실제 local restart와 owner-only backup·restore는 위 release lifecycle에서 통과했습니다.
 - [x] 전체 검증, 요구사항 추적표, 아키텍처와 운영 문서의 로컬 결과를 현재 source commit에 고정했습니다.
 - [ ] 외부 계정 전제조건이 충족되면 복수 계정 UAT와 함께 Phase 24 최종 회고를 닫습니다.
 

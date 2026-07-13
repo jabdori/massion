@@ -20,7 +20,7 @@
 
 ## 검증 결과
 
-구조화된 subscription UAT 영수증은 `massion.subscription-uat.v1`이며, 이번 검증 결과는 `passed: 1`, `failed: 1`, `not-run: 9`입니다. Codex OAuth 로그인 동의와 계정·doctor·quota·adaptive policy 조회는 통과했지만 실제 subscription run은 180초 네트워크 timeout으로 종료되었습니다. Claude·Z.AI와 복수 계정 시나리오는 외부 승인·계정 조건이 없어 실행하지 않았습니다.
+구조화된 subscription UAT 영수증은 `massion.subscription-uat.v1`입니다. 최신 local lifecycle 재검증은 `passed: 1`, `failed: 0`, `not-run: 9`이며, 경로에 공백이 포함된 tmux 작업공간에서도 설치·시작·재시작·backup·restore·uninstall data 보존을 통과했습니다. 별도의 Codex 외부 Provider 실행 시도는 OAuth·계정·doctor·quota·adaptive policy 조회까지 통과했지만 실제 subscription run이 180초 네트워크 timeout으로 종료되었습니다. Claude·Z.AI와 복수 계정 시나리오는 외부 승인·계정 조건이 없어 실행하지 않았습니다. 최신 상세 근거는 `docs/evidence/phase-24/subscription-uat-2026-07-14.md`입니다.
 
 이번 실행에서는 인증 완료를 확인했지만, 외부 모델 응답이 제한시간 안에 도착하지 않았으므로 실행 성공이나 fallback 성공으로 승격하지 않습니다.
 
