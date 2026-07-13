@@ -68,6 +68,7 @@ interface PointerRecord {
 interface OptimizationPolicyRecord {
   readonly policy_version_id?: string;
   readonly production_learning?: boolean;
+  readonly shadow_enabled?: boolean;
   readonly minimum_sample_count: number;
   readonly improvement_threshold: number;
   readonly observation_budget_micros?: number;
@@ -263,10 +264,12 @@ export class OptimizationBatchService {
       );
       if (input.status !== "candidate") {
         const [policies] = await tx.query<[OptimizationPolicyRecord[]]>(
-          "SELECT minimum_sample_count, improvement_threshold FROM optimization_policy_version WHERE organization_id = $organization_id AND policy_version_id = $policy_version_id AND status = 'active' LIMIT 1;",
+          "SELECT shadow_enabled, minimum_sample_count, improvement_threshold FROM optimization_policy_version WHERE organization_id = $organization_id AND policy_version_id = $policy_version_id AND status = 'active' LIMIT 1;",
           { organization_id: context.organizationId, policy_version_id: recommendation.policy_version_id },
         );
         const policy = policies[0];
+        if (input.status === "shadow" && policy?.shadow_enabled !== true)
+          throw new Error("shadow 동의가 활성화된 정책만 shadow batch를 만들 수 있습니다");
         if (policy) {
           if (!recommendation.primary_model_profile_id)
             throw new Error("주 모델이 없는 추천은 batch로 승격할 수 없습니다");
@@ -356,6 +359,7 @@ export class OptimizationBatchService {
       );
       const batch = records[0];
       if (!batch) throw new Error("모델 batch를 찾을 수 없습니다");
+      if (batch.status === "candidate") throw new Error("candidate batch는 승격 게이트를 거친 뒤 활성화할 수 있습니다");
       if (batch.status === "reverted") throw new Error("되돌려진 batch는 활성화할 수 없습니다");
       await tx.query(
         "UPDATE optimization_batch SET status = 'active', activated_at = time::now() WHERE organization_id = $organization_id AND batch_id = $batch_id;",

@@ -6,6 +6,8 @@
 
 ## 자동 검증 결과
 
+2026-07-14 후속 검증에서는 모델 평가실 package 23개 테스트, Application 평가실 테스트 12개, CLI 16개, TUI 7개, Web 18개, 서버 모델 평가 제품 경계 테스트 1개를 다시 실행했습니다. 후보 batch의 우회 활성화와 shadow 동의 없는 batch 생성을 실패시키는 회귀 테스트를 추가했고, 두 테스트 모두 구현 수정 후 통과했습니다.
+
 - `pnpm verify`: 통과
   - 저장소 검증 테스트 67개 통과
   - 워크스페이스 패키지 테스트 통과
@@ -37,6 +39,7 @@
 - Web 정책 화면은 owner/admin만 변경할 수 있고, governance decision id를 필수로 받습니다.
 - 외부 평가 bundle은 version·license·configuration checksum·case role 계보를 검증한 뒤 Application/CLI import/export operation으로 이동합니다.
 - Extension manifest는 선택적 `modelEvaluationBundles`를 역할 식별자·버전·SHA-256 체크섬·handler와 함께 검증하고, Extension host가 `modelEvaluationBundles:<id>` contribution을 worker 경계에 등록합니다. Core optimizer의 고정 role key 집합과 Extension worker의 외부 역할은 분리됩니다.
+- 후보 batch는 표본·개선폭 승격 게이트 없이 활성화할 수 없고, shadow 동의가 없는 정책에서는 shadow batch를 만들 수 없습니다.
 
 ## tmux 실제 사용자 시나리오
 
