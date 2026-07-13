@@ -42,6 +42,20 @@ describe("모델 최적화 batch lifecycle", () => {
       recommendationId: approved.recommendationId,
       status: "limited",
     });
+    await expect(
+      batches.createBatch(context, {
+        commandId: "batch-1",
+        recommendationId: approved.recommendationId,
+        status: "limited",
+      }),
+    ).resolves.toEqual(candidate);
+    await expect(
+      batches.createBatch(context, {
+        commandId: "batch-1",
+        recommendationId: approved.recommendationId,
+        status: "shadow",
+      }),
+    ).rejects.toThrow("같은 commandId");
     expect(candidate.status).toBe("limited");
     const active = await batches.activateBatch(context, { commandId: "activate-1", batchId: candidate.batchId });
     expect(active.status).toBe("active");
@@ -93,5 +107,30 @@ describe("모델 최적화 batch lifecycle", () => {
       batchId: oldBatch.batchId,
       status: "active",
     });
+  });
+
+  it("정책이 요구한 최소 표본을 채우지 못한 추천은 제한 batch로 승격하지 않는다", async () => {
+    await database.query(
+      "CREATE optimization_policy_version CONTENT { policy_version_id: 'policy-gated', organization_id: $organization_id, version: 1, policy: 'quality', auto_optimize: false, production_learning: false, shadow_enabled: true, minimum_sample_count: 3, improvement_threshold: 0.1, status: 'active', checksum: $checksum, governance_decision_id: 'decision-gated', command_id: 'policy-gated-command', request_hash: $request_hash, created_by_user_id: $user_id, created_at: time::now() }; CREATE optimization_recommendation CONTENT { recommendation_id: 'recommendation-gated', organization_id: $organization_id, role_key: 'growth', policy_version_id: 'policy-gated', primary_model_profile_id: 'profile-gated', fallback_model_profile_ids: [], excluded_json: '[]', receipt_ids: ['receipt-gated'], status: 'approved', checksum: $checksum2, command_id: 'recommendation-gated-command', request_hash: $request_hash2, created_by_user_id: $user_id, created_at: time::now() }; CREATE optimization_receipt CONTENT { receipt_id: 'receipt-gated', run_id: 'run-gated', organization_id: $organization_id, role_key: 'growth', model_profile_id: 'profile-gated', bundle_version: 1, sample_count: 1, quality_score: 0.9, latency_ms: 100, cost_micros: 10, privacy_allowed: true, completed: true, input_checksum: $checksum3, receipt_checksum: $checksum4, command_id: 'receipt-gated-command', request_hash: $request_hash3, created_at: time::now() };",
+      {
+        organization_id: context.organizationId,
+        checksum: "a".repeat(64),
+        request_hash: "b".repeat(64),
+        checksum2: "c".repeat(64),
+        request_hash2: "d".repeat(64),
+        checksum3: "e".repeat(64),
+        checksum4: "f".repeat(64),
+        request_hash3: "1".repeat(64),
+        user_id: context.userId,
+      },
+    );
+
+    await expect(
+      batches.createBatch(context, {
+        commandId: "batch-gated",
+        recommendationId: "recommendation-gated",
+        status: "limited",
+      }),
+    ).rejects.toThrow("최소 표본");
   });
 });

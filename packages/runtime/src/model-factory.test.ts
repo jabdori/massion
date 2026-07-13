@@ -182,6 +182,63 @@ describe("Massion routed model factory", () => {
     expect(completed.actual_cost_micros).toBe(60);
   });
 
+  it("활성 역할별 model batch의 선호 순서를 Router reserve에 전달한다", async () => {
+    const models = await router.listModels(context);
+    const source = models[0];
+    if (!source) throw new Error("model fixture가 없습니다");
+    const preferred = await router.registerModel(context, {
+      commandId: crypto.randomUUID(),
+      providerId: source.provider_id,
+      endpointId: source.endpoint_id,
+      modelId: "preferred-coding-model",
+      routeKind: "chat",
+      contextWindow: 32_000,
+      supportsTools: true,
+      supportsStructuredOutput: true,
+      supportsVision: false,
+      supportsStreaming: true,
+      equivalenceGroup: "coding",
+      evalScore: 0.95,
+      inputCostMicrosPerMillion: 1_000_000,
+      outputCostMicrosPerMillion: 1_000_000,
+      verified: true,
+    });
+    const routes = await router.listRoutes(context);
+    const route = routes.find((candidate) => candidate.name === routeName);
+    if (!route) throw new Error("route fixture가 없습니다");
+    await router.addCandidate(context, {
+      commandId: crypto.randomUUID(),
+      routeId: route.route_id,
+      modelProfileId: preferred.profile.model_profile_id,
+      priority: 99,
+    });
+    const simulation = await router.simulate(context, {
+      routeName,
+      estimatedTokens: 100,
+      estimatedCostMicros: 1_000,
+      preferredModelProfileIds: [preferred.profile.model_profile_id],
+    });
+    expect((await router.listCandidates(context, route.route_id)).map((item) => item.model_profile_id)).toContain(
+      preferred.profile.model_profile_id,
+    );
+    expect(simulation.profile?.model_profile_id).toBe(preferred.profile.model_profile_id);
+    const factory = new MassionModelFactory(
+      router,
+      providers,
+      { build: (selection) => ({ modelId: selection.modelId }) as LanguageModel },
+      undefined,
+      { resolve: async () => [preferred.profile.model_profile_id] },
+    );
+    const lease = await factory.acquire(context, {
+      commandId: crypto.randomUUID(),
+      agentHandle: "assurance",
+      routeName,
+      estimatedTokens: 100,
+      estimatedCostMicros: 1_000,
+    });
+    expect(lease.model.modelId).toBe("preferred-coding-model");
+  });
+
   it("first-token 전 401 실패 후 다른 credential lease로 fallback한다", async () => {
     const factory = new MassionModelFactory(router, providers, {
       build: (selection) => ({ modelId: `${selection.modelId}:${selection.credentialId}` }) as LanguageModel,

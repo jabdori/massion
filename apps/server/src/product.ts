@@ -34,7 +34,7 @@ import {
   PolicyStore,
 } from "@massion/governance";
 import { IdentityService, OrganizationService } from "@massion/identity";
-import { ModelOptimizationStore, OptimizationBatchService } from "@massion/model-optimization";
+import { isOptimizationRoleKey, ModelOptimizationStore, OptimizationBatchService } from "@massion/model-optimization";
 import { OrganizationGraphService } from "@massion/organization";
 import { FileArtifactStore, RegistryCatalog, RegistryHttpHandler, SurrealRegistryStore } from "@massion/registry";
 import { RecordsService } from "@massion/records";
@@ -332,11 +332,27 @@ export async function createMassionDaemon(
         claude: subscriptionPermissionBridge,
       },
     });
-    const modelFactory = new MassionModelFactory(router, providers, new OpenAICompatibleModelBuilder(), {
-      broker: connectorBroker,
-      resolver: subscriptionRuntimeResolver,
-      routeAttempts: { read: async (context, attemptId) => await router.readAttempt(context, attemptId) },
-    });
+    const modelFactory = new MassionModelFactory(
+      router,
+      providers,
+      new OpenAICompatibleModelBuilder(),
+      {
+        broker: connectorBroker,
+        resolver: subscriptionRuntimeResolver,
+        routeAttempts: { read: async (context, attemptId) => await router.readAttempt(context, attemptId) },
+      },
+      {
+        resolve: async (context, input) => {
+          if (!input.agentHandle || !isOptimizationRoleKey(input.agentHandle)) return undefined;
+          const active = await optimizationBatches.getActiveBatch(context, input.agentHandle);
+          if (!active) return undefined;
+          return [
+            ...(active.primaryModelProfileId ? [active.primaryModelProfileId] : []),
+            ...active.fallbackModelProfileIds,
+          ];
+        },
+      },
+    );
     const routedRunner = new VoltAgentRunner(
       topologyRuntime,
       runtimeExecutions,

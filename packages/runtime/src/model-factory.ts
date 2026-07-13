@@ -55,6 +55,7 @@ export interface AcquireModelInput {
   readonly estimatedTokens: number;
   readonly estimatedCostMicros: number;
   readonly stickyKey?: string;
+  readonly preferredModelProfileIds?: readonly string[];
   readonly fallbackFromAttemptId?: string;
   readonly fallbackFromLeaseId?: string;
 }
@@ -146,6 +147,10 @@ export type RoutedModelLease = RoutedLanguageModelLease | RoutedAgentRuntimeLeas
 export interface RoutedModelFactory {
   acquire(context: TenantContext, input: AcquireModelInput): Promise<RoutedModelLease>;
   createSubscriptionReceipts?(store: RuntimeExecutionStore): SubscriptionExecutionReceiptCoordinator | undefined;
+}
+
+export interface RoutedModelPreferenceResolver {
+  resolve(context: TenantContext, input: AcquireModelInput): Promise<readonly string[] | undefined>;
 }
 
 export interface ConnectorSessionBroker {
@@ -307,6 +312,7 @@ export class MassionModelFactory implements RoutedModelFactory {
     private readonly providers: ProviderService,
     private readonly builder: ProviderModelBuilder,
     private readonly connectorRuntime?: ConnectorRuntimeDependencies,
+    private readonly preferenceResolver?: RoutedModelPreferenceResolver,
   ) {}
 
   public createSubscriptionReceipts(store: RuntimeExecutionStore): SubscriptionExecutionReceiptCoordinator | undefined {
@@ -315,12 +321,16 @@ export class MassionModelFactory implements RoutedModelFactory {
   }
 
   public async acquire(context: TenantContext, input: AcquireModelInput): Promise<RoutedModelLease> {
+    const resolvedPreferences = await this.preferenceResolver?.resolve(context, input);
     const reservation = await this.router
       .reserve(context, {
         commandId: input.commandId,
         routeName: input.routeName,
         estimatedTokens: input.estimatedTokens,
         estimatedCostMicros: input.estimatedCostMicros,
+        ...((resolvedPreferences ?? input.preferredModelProfileIds)
+          ? { preferredModelProfileIds: resolvedPreferences ?? input.preferredModelProfileIds }
+          : {}),
         ...(input.stickyKey ? { stickyKey: input.stickyKey } : {}),
         ...(input.fallbackFromAttemptId ? { fallbackFromAttemptId: input.fallbackFromAttemptId } : {}),
       })

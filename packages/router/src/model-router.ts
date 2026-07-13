@@ -242,6 +242,8 @@ export interface RouteRequest {
   readonly routeName: string;
   readonly estimatedTokens: number;
   readonly estimatedCostMicros: number;
+  /** 모델 평가실이 활성 배치에서 선택한 선호 model profile 순서입니다. */
+  readonly preferredModelProfileIds?: readonly string[];
   readonly stickyKey?: string;
   readonly fallbackFromAttemptId?: string;
 }
@@ -922,6 +924,7 @@ export class ModelRouter {
       routeName: input.routeName,
       estimatedTokens: input.estimatedTokens,
       estimatedCostMicros: input.estimatedCostMicros,
+      ...(input.preferredModelProfileIds ? { preferredModelProfileIds: input.preferredModelProfileIds } : {}),
       ...(stickyKeyHash ? { stickyKeyHash } : {}),
       ...(input.fallbackFromAttemptId ? { fallbackFromAttemptId: input.fallbackFromAttemptId } : {}),
     });
@@ -1005,6 +1008,7 @@ export class ModelRouter {
         routeName: input.routeName,
         estimatedTokens: input.estimatedTokens,
         estimatedCostMicros: input.estimatedCostMicros,
+        ...(input.preferredModelProfileIds ? { preferredModelProfileIds: input.preferredModelProfileIds } : {}),
         ...(stickyKeyHash ? { stickyKeyHash } : {}),
         ...(input.fallbackFromAttemptId ? { fallbackFromAttemptId: input.fallbackFromAttemptId } : {}),
       });
@@ -1276,9 +1280,19 @@ export class ModelRouter {
       "SELECT * OMIT id FROM model_route_candidate WHERE organization_id = $organization_id AND route_id = $route_id AND enabled = true ORDER BY priority ASC, candidate_id ASC;",
       { organization_id: context.organizationId, route_id: route.route_id },
     );
+    const preferenceRank = new Map(
+      (request.preferredModelProfileIds ?? []).map((profileId, index) => [profileId, index]),
+    );
+    const orderedCandidates = [...candidates].sort(
+      (left, right) =>
+        (preferenceRank.get(left.model_profile_id) ?? Number.MAX_SAFE_INTEGER) -
+          (preferenceRank.get(right.model_profile_id) ?? Number.MAX_SAFE_INTEGER) ||
+        left.priority - right.priority ||
+        left.candidate_id.localeCompare(right.candidate_id),
+    );
     const excluded: string[] = [];
     let resumeAt: string | undefined;
-    for (const candidate of candidates) {
+    for (const candidate of orderedCandidates) {
       const profile = await this.profile(executor, context.organizationId, candidate.model_profile_id);
       const endpoint = await this.endpoint(executor, context.organizationId, profile.endpoint_id);
       const profileFailures = this.profileFailures(route, profile, endpoint);

@@ -61,7 +61,7 @@ export interface ApplicationDomainDependencies {
   readonly optimization?: {
     readonly evaluations: Pick<
       ModelOptimizationStore,
-      "createBundle" | "startEvaluation" | "completeEvaluation" | "configurePolicy" | "recommend"
+      "createBundle" | "startEvaluation" | "executeEvaluation" | "completeEvaluation" | "configurePolicy" | "recommend"
     >;
     readonly batches: Pick<
       OptimizationBatchService,
@@ -1868,6 +1868,7 @@ function optimizationCandidate(value: unknown): OptimizationModelProfile {
 }
 
 function optimizationCandidates(value: unknown): readonly OptimizationModelProfile[] {
+  if (value === undefined) return [];
   if (!Array.isArray(value) || value.length === 0 || value.length > 128)
     throw new Error("모델 후보 목록이 유효하지 않습니다");
   return value.map(optimizationCandidate);
@@ -2046,6 +2047,31 @@ function registerOptimization(registry: ApplicationCommandRegistry, dependencies
   });
 
   register(registry, {
+    operation: "optimization.evaluation.execute",
+    requiredScopes: ["optimization:write"],
+    allowedRoles: ["owner", "admin", "member"],
+    recovery: "replay-domain",
+    validate: (value) =>
+      payload(
+        value,
+        ["roleKey", "bundleId", "modelProfileId", "runtimeVersion", "mode", "inputChecksum"],
+        ["roleKey", "bundleId", "modelProfileId", "runtimeVersion"],
+      ),
+    async handle(context, command, value) {
+      const receipt = await optimization.evaluations.executeEvaluation(context, {
+        commandId: command.commandId,
+        roleKey: optimizationRole(value.roleKey),
+        bundleId: string(value.bundleId, "bundleId"),
+        modelProfileId: string(value.modelProfileId, "modelProfileId"),
+        runtimeVersion: string(value.runtimeVersion, "runtimeVersion"),
+        ...(value.mode === undefined ? {} : { mode: value.mode as "standard" | "shadow" }),
+        ...(value.inputChecksum === undefined ? {} : { inputChecksum: string(value.inputChecksum, "inputChecksum") }),
+      });
+      return result(command, { resource: { type: "OptimizationReceipt", id: receipt.receiptId }, data: receipt });
+    },
+  });
+
+  register(registry, {
     operation: "optimization.recommend",
     requiredScopes: ["optimization:write"],
     allowedRoles: ["owner", "admin"],
@@ -2054,7 +2080,7 @@ function registerOptimization(registry: ApplicationCommandRegistry, dependencies
       payload(
         value,
         ["roleKey", "candidates", "receipts", "requirements", "manualModelProfileId"],
-        ["roleKey", "candidates", "receipts", "requirements"],
+        ["roleKey", "receipts", "requirements"],
       ),
     async handle(context, command, value) {
       const recommendation = await optimization.evaluations.recommend(context, {

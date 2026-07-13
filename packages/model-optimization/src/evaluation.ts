@@ -25,9 +25,16 @@ import type {
   StartEvaluationInput,
   StoredEvaluationReceipt,
 } from "./contracts.js";
+import type { EvaluationCapabilities, ModelEvaluationExecutionResult, ModelEvaluationExecutor } from "./ports.js";
 import { MODEL_OPTIMIZATION_MIGRATION } from "./schema.js";
 
 export type { OptimizationModelProfile } from "./contracts.js";
+export type {
+  EvaluationCapabilities,
+  ModelEvaluationExecutionInput,
+  ModelEvaluationExecutionResult,
+  ModelEvaluationExecutor,
+} from "./ports.js";
 
 interface BundleRecord {
   readonly bundle_id: string;
@@ -257,6 +264,17 @@ export interface RecommendInput {
 
 export interface ModelOptimizationStoreOptions {
   readonly modelCatalog?: (context: TenantContext) => Promise<readonly OptimizationModelProfile[]>;
+  readonly executor?: ModelEvaluationExecutor;
+}
+
+export interface ExecuteEvaluationInput {
+  readonly commandId: string;
+  readonly roleKey: OptimizationRoleKey;
+  readonly bundleId: string;
+  readonly modelProfileId: string;
+  readonly runtimeVersion: string;
+  readonly mode?: "standard" | "shadow";
+  readonly inputChecksum?: string;
 }
 
 export class ModelOptimizationStore {
@@ -467,6 +485,97 @@ export class ModelOptimizationStore {
     });
   }
 
+  /** 고정된 평가 묶음의 모든 case를 실행하고 하나의 불변 receipt로 집계합니다. */
+  public async executeEvaluation(
+    context: TenantContext,
+    input: ExecuteEvaluationInput,
+  ): Promise<StoredEvaluationReceipt> {
+    const executor = this.options.executor;
+    if (!executor) throw new Error("모델 평가 실행기가 구성되지 않았습니다");
+    await this.organizations.verifyTenantContext(context);
+    assertText(input.commandId, "명령 식별자");
+    assertRole(input.roleKey);
+    assertText(input.bundleId, "bundle 식별자");
+    assertText(input.modelProfileId, "model profile 식별자");
+    assertText(input.runtimeVersion, "runtime version");
+    const mode = input.mode ?? "standard";
+    if (mode !== "standard" && mode !== "shadow") throw new Error("평가 mode가 유효하지 않습니다");
+
+    const [bundles] = await this.database.query<[BundleRecord[]]>(
+      "SELECT * OMIT id FROM optimization_bundle WHERE organization_id = $organization_id AND bundle_id = $bundle_id LIMIT 1;",
+      { organization_id: context.organizationId, bundle_id: input.bundleId },
+    );
+    const bundle = bundles[0];
+    if (!bundle || bundle.role_key !== input.roleKey) throw new Error("평가 bundle을 찾을 수 없거나 역할이 다릅니다");
+    const cases = await this.listBundleCases(context, bundle.bundle_id);
+    if (!cases.length) throw new Error("평가 bundle에 case가 없습니다");
+
+    if (this.options.modelCatalog) {
+      const profiles = await this.options.modelCatalog(context);
+      const profile = profiles.find((candidate) => candidate.modelProfileId === input.modelProfileId);
+      if (!profile || !profile.verified) throw new Error("검증된 연결 모델 profile이 아닙니다");
+    }
+
+    const inputChecksum =
+      input.inputChecksum ??
+      digest({
+        bundleChecksum: bundle.checksum,
+        caseChecksums: cases.map((item) => [item.promptChecksum, item.toolsChecksum, item.environmentChecksum]),
+        roleKey: input.roleKey,
+        modelProfileId: input.modelProfileId,
+        runtimeVersion: input.runtimeVersion,
+        mode,
+      });
+    assertChecksum(inputChecksum, "평가 입력");
+    const run = await this.startEvaluation(context, {
+      commandId: `${input.commandId}:run`,
+      roleKey: input.roleKey,
+      bundleId: input.bundleId,
+      modelProfileId: input.modelProfileId,
+      runtimeVersion: input.runtimeVersion,
+      mode,
+      inputChecksum,
+    });
+    const capabilities: EvaluationCapabilities = {
+      write: false,
+      message: false,
+      deployment: false,
+      approval: false,
+      organizationMutation: false,
+    };
+    const results: ModelEvaluationExecutionResult[] = [];
+    try {
+      for (const evaluationCase of cases) {
+        const result = await executor.execute({
+          organizationId: context.organizationId,
+          roleKey: input.roleKey,
+          modelProfileId: input.modelProfileId,
+          runtimeVersion: input.runtimeVersion,
+          mode,
+          run,
+          case: evaluationCase,
+          capabilities,
+        });
+        this.assertExecutionResult(result);
+        results.push(result);
+      }
+    } catch (error) {
+      await this.markRunFailed(context, run.runId);
+      throw error;
+    }
+    const sampleCount = results.length;
+    return await this.completeEvaluation(context, {
+      commandId: `${input.commandId}:receipt`,
+      runId: run.runId,
+      sampleCount,
+      qualityScore: results.reduce((total, result) => total + result.qualityScore, 0) / sampleCount,
+      latencyMs: results.reduce((total, result) => total + result.latencyMs, 0) / sampleCount,
+      costMicros: results.reduce((total, result) => total + result.costMicros, 0),
+      privacyAllowed: results.every((result) => result.privacyAllowed),
+      completed: results.every((result) => result.completed),
+    });
+  }
+
   public async configurePolicy(
     context: TenantContext,
     input: ConfigureOptimizationPolicyInput,
@@ -560,10 +669,14 @@ export class ModelOptimizationStore {
       status: "active" as const,
       checksum: digest("implicit-default"),
     };
+    const candidates =
+      input.candidates.length > 0 || !this.options.modelCatalog
+        ? input.candidates
+        : await this.options.modelCatalog(context);
     const scored: ModelRecommendation = recommendModels({
       roleKey: input.roleKey,
       policy: policy.policy,
-      candidates: input.candidates,
+      candidates,
       receipts: input.receipts,
       requirements: input.requirements,
       ...(input.manualModelProfileId ? { manualModelProfileId: input.manualModelProfileId } : {}),
@@ -676,6 +789,29 @@ export class ModelOptimizationStore {
       { organization_id: organizationId },
     );
     return records[0];
+  }
+
+  private assertExecutionResult(result: ModelEvaluationExecutionResult): void {
+    if (
+      !Number.isFinite(result.qualityScore) ||
+      result.qualityScore < 0 ||
+      result.qualityScore > 1 ||
+      !Number.isFinite(result.latencyMs) ||
+      result.latencyMs < 0 ||
+      !Number.isFinite(result.costMicros) ||
+      result.costMicros < 0 ||
+      typeof result.privacyAllowed !== "boolean" ||
+      typeof result.completed !== "boolean"
+    ) {
+      throw new Error("모델 평가 실행 결과가 유효하지 않습니다");
+    }
+  }
+
+  private async markRunFailed(context: TenantContext, runId: string): Promise<void> {
+    await this.database.query(
+      "UPDATE optimization_run SET status = 'failed', updated_at = time::now() WHERE organization_id = $organization_id AND run_id = $run_id AND status = 'running';",
+      { organization_id: context.organizationId, run_id: runId },
+    );
   }
 
   private async command<T extends { readonly request_hash: string }>(
