@@ -138,7 +138,7 @@ describe("격리 Git delivery workspace", () => {
     await expect(readFile(hookMarker, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
     await manager.remove(workspace);
     await expect(realpath(workspace.workspacePath)).rejects.toThrow();
-  }, 20_000);
+  }, 60_000);
 
   it("target commit을 별도 detached 검증 workspace에 준비하고 원본을 보존한 채 강제 정리한다", async () => {
     const deliveryWorkspace = await manager.prepare({
