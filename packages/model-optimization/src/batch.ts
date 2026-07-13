@@ -53,6 +53,8 @@ interface ObservationRecord {
   readonly status: "healthy" | "degraded";
   readonly source?: "evaluation" | "production";
   readonly checksum: string;
+  readonly command_id: string;
+  readonly request_hash: string;
 }
 
 interface PointerRecord {
@@ -73,6 +75,18 @@ interface OptimizationReceiptRecord {
   readonly quality_score: number;
   readonly completed: boolean;
   readonly privacy_allowed: boolean;
+}
+
+interface RecoveryRecord {
+  readonly recovery_id: string;
+  readonly organization_id: string;
+  readonly role_key: OptimizationRoleKey;
+  readonly from_batch_id: string;
+  readonly to_batch_id: string;
+  readonly reason: string;
+  readonly observation_id: string;
+  readonly command_id: string;
+  readonly request_hash: string;
 }
 
 const canonicalJson = (value: unknown): string => {
@@ -411,6 +425,17 @@ export class OptimizationBatchService {
     );
     if (!batches[0]) throw new Error("최적화 observation의 batch를 찾을 수 없습니다");
     const source = input.source ?? "evaluation";
+    const normalizedInput = { ...input, source };
+    const requestHash = digest(normalizedInput);
+    const [repeated] = await this.database.query<[ObservationRecord[]]>(
+      "SELECT * OMIT id FROM optimization_observation WHERE organization_id = $organization_id AND command_id = $command_id LIMIT 1;",
+      { organization_id: context.organizationId, command_id: input.commandId },
+    );
+    if (repeated[0]) {
+      if (repeated[0].request_hash !== requestHash)
+        throw new Error("같은 commandId에 다른 optimization observation을 사용할 수 없습니다");
+      return observationView(repeated[0]);
+    }
     if (source === "production") {
       const [policies] = await this.database.query<
         [{ readonly production_learning: boolean; readonly version: number }[]]
@@ -420,7 +445,7 @@ export class OptimizationBatchService {
       );
       if (!policies[0]?.production_learning) throw new Error("production learning 동의가 활성화되지 않았습니다");
     }
-    const checksum = digest(input);
+    const checksum = digest(normalizedInput);
     const [created] = await this.database.query<[ObservationRecord[]]>(
       "CREATE optimization_observation CONTENT { observation_id: $observation_id, organization_id: $organization_id, batch_id: $batch_id, sample_count: $sample_count, quality_score: $quality_score, latency_ms: $latency_ms, cost_micros: $cost_micros, status: $status, source: $source, checksum: $checksum, command_id: $command_id, request_hash: $request_hash, created_at: time::now() } RETURN AFTER;",
       {
@@ -435,7 +460,7 @@ export class OptimizationBatchService {
         source,
         checksum,
         command_id: input.commandId,
-        request_hash: digest(input),
+        request_hash: requestHash,
       },
     );
     if (!created[0]) throw new Error("최적화 observation 생성 결과가 없습니다");
@@ -445,6 +470,24 @@ export class OptimizationBatchService {
   public async recover(context: TenantContext, input: RecoverOptimizationInput): Promise<OptimizationRecoveryEvent> {
     await this.organizations.verifyTenantContext(context);
     return await this.database.transaction(async (tx) => {
+      const requestHash = digest(input);
+      const [repeated] = await tx.query<[RecoveryRecord[]]>(
+        "SELECT * OMIT id FROM optimization_recovery WHERE organization_id = $organization_id AND command_id = $command_id LIMIT 1;",
+        { organization_id: context.organizationId, command_id: input.commandId },
+      );
+      if (repeated[0]) {
+        if (repeated[0].request_hash !== requestHash)
+          throw new Error("같은 commandId에 다른 optimization recovery를 사용할 수 없습니다");
+        return {
+          recoveryId: repeated[0].recovery_id,
+          organizationId: repeated[0].organization_id,
+          roleKey: repeated[0].role_key,
+          fromBatchId: repeated[0].from_batch_id,
+          toBatchId: repeated[0].to_batch_id,
+          reason: repeated[0].reason,
+          observationId: repeated[0].observation_id,
+        };
+      }
       const [observations] = await tx.query<[ObservationRecord[]]>(
         "SELECT * OMIT id FROM optimization_observation WHERE organization_id = $organization_id AND observation_id = $observation_id LIMIT 1;",
         { organization_id: context.organizationId, observation_id: input.observationId },
@@ -487,7 +530,7 @@ export class OptimizationBatchService {
           reason: "degraded-observation",
           observation_id: observation.observation_id,
           command_id: input.commandId,
-          request_hash: digest(input),
+          request_hash: requestHash,
         },
       );
       if (!created[0]) throw new Error("최적화 recovery 생성 결과가 없습니다");

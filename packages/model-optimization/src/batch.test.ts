@@ -58,6 +58,9 @@ describe("모델 최적화 batch lifecycle", () => {
     ).rejects.toThrow("같은 commandId");
     expect(candidate.status).toBe("limited");
     const active = await batches.activateBatch(context, { commandId: "activate-1", batchId: candidate.batchId });
+    await expect(
+      batches.activateBatch(context, { commandId: "activate-1", batchId: candidate.batchId }),
+    ).resolves.toEqual(active);
     expect(active.status).toBe("active");
     expect(await batches.getActiveBatch(context, "assurance")).toMatchObject({
       batchId: candidate.batchId,
@@ -98,10 +101,44 @@ describe("모델 최적화 batch lifecycle", () => {
       costMicros: 100,
       status: "degraded",
     });
+    await expect(
+      batches.recordObservation(context, {
+        commandId: "observation-1",
+        batchId: newBatch.batchId,
+        sampleCount: 10,
+        qualityScore: 0.2,
+        latencyMs: 1000,
+        costMicros: 100,
+        status: "degraded",
+      }),
+    ).resolves.toEqual(observation);
+    await expect(
+      batches.recordObservation(context, {
+        commandId: "observation-1",
+        batchId: newBatch.batchId,
+        sampleCount: 11,
+        qualityScore: 0.2,
+        latencyMs: 1000,
+        costMicros: 100,
+        status: "degraded",
+      }),
+    ).rejects.toThrow("같은 commandId");
     const recovery = await batches.recover(context, {
       commandId: "recovery-1",
       observationId: observation.observationId,
     });
+    await expect(
+      batches.recover(context, {
+        commandId: "recovery-1",
+        observationId: observation.observationId,
+      }),
+    ).resolves.toEqual(recovery);
+    await expect(
+      batches.recover(context, {
+        commandId: "recovery-1",
+        observationId: "other-observation",
+      }),
+    ).rejects.toThrow("같은 commandId");
     expect(recovery.toBatchId).toBe(oldBatch.batchId);
     expect(await batches.getActiveBatch(context, "growth")).toMatchObject({
       batchId: oldBatch.batchId,
