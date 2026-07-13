@@ -106,4 +106,16 @@ describe("TUI command", () => {
       payload: { providerId: "openai-codex", credentialPolicy: "round-robin", approvalMode: "deny" },
     });
   });
+
+  it("모델 평가실 변경은 허용된 operation만 인증된 Application command로 보낸다", async () => {
+    const sent: Array<Record<string, unknown>> = [];
+    const commands = new TuiCommands(
+      { command: (value) => (sent.push(value as Record<string, unknown>), Promise.resolve(value)) },
+      () => "user-1",
+    );
+
+    await commands.optimizationCommand("optimization.batch.activate", { batchId: "batch-1" });
+    await expect(commands.optimizationCommand("system.shutdown", {})).rejects.toThrow("허용되지 않은");
+    expect(sent[0]).toMatchObject({ operation: "optimization.batch.activate", payload: { batchId: "batch-1" } });
+  });
 });

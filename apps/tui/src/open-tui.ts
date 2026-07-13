@@ -32,6 +32,7 @@ interface OpenTuiActions {
     approvalMode: "automatic" | "review" | "deny",
     version: number,
   ) => Promise<unknown>;
+  readonly optimizationCommand?: (operation: string, payload: Record<string, unknown>) => Promise<unknown>;
   readonly loadView: (view: TuiView) => Promise<void>;
   readonly destroy: () => void;
 }
@@ -70,6 +71,7 @@ type Modal =
       readonly credentialPolicies: readonly string[];
       readonly approvalModes: readonly ApprovalMode[];
     }
+  | { readonly kind: "optimization"; readonly title: string; readonly placeholder: string }
   | { readonly kind: "help"; readonly title: string; readonly placeholder: string };
 
 const VIEW_KEYS: Readonly<Record<string, TuiView>> = {
@@ -251,6 +253,7 @@ export class OpenTuiView {
             "c 메시지 · a 승인 · x 거절 · Delete 승인 취소 · d 업무 취소 · t 작업 배정\n" +
             "구독: ←/→ 또는 h/l 탭 · s 공유 · u 공유 해제 · d 연결 해제\n" +
             "s 실행 일시정지/재개 · z 실행 취소\n" +
+            '모델 평가실(운영 화면): operations에서 o · JSON {"operation":"...","payload":{...}}\n' +
             "Esc 입력 닫기 · Ctrl+C 입력 취소/종료 · 선택한 텍스트는 복사할 수 있습니다.",
           ...this.paint("fg", "#C6D0F5"),
         }),
@@ -364,6 +367,12 @@ export class OpenTuiView {
       this.actions.state().subscriptionTab === "policy"
     ) {
       this.openSubscriptionPolicyAction();
+    } else if (key.name === "o" && this.actions.state().view === "operations") {
+      this.open({
+        kind: "optimization",
+        title: "모델 평가실 변경",
+        placeholder: '{"operation":"optimization.batch.activate","payload":{"batchId":"..."}}',
+      });
     } else if (["j", "down", "k", "up"].includes(key.name)) {
       this.moveSelection(["j", "down"].includes(key.name) ? 1 : -1);
     }
@@ -409,6 +418,26 @@ export class OpenTuiView {
         approvalMode: approvalMode as "automatic" | "review" | "deny",
       };
     }
+    let optimizationInput: { readonly operation: string; readonly payload: Record<string, unknown> } | undefined;
+    if (modal.kind === "optimization") {
+      try {
+        const parsed: unknown = JSON.parse(content);
+        if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("object");
+        const value = parsed as Record<string, unknown>;
+        if (
+          typeof value.operation !== "string" ||
+          !value.payload ||
+          typeof value.payload !== "object" ||
+          Array.isArray(value.payload)
+        )
+          throw new Error("operation/payload");
+        optimizationInput = { operation: value.operation, payload: value.payload as Record<string, unknown> };
+      } catch {
+        this.notice = "operation과 object payload가 있는 JSON을 입력해 주세요.";
+        this.render();
+        return;
+      }
+    }
     this.modal = undefined;
     this.input = undefined;
     if (modal.kind === "search") {
@@ -436,6 +465,9 @@ export class OpenTuiView {
           subscriptionPolicyInput.approvalMode,
           modal.version,
         );
+      } else if (modal.kind === "optimization" && optimizationInput) {
+        if (!this.actions.optimizationCommand) throw new Error("TUI 모델 평가실 변경 기능이 구성되지 않았습니다");
+        await this.actions.optimizationCommand(optimizationInput.operation, optimizationInput.payload);
       }
     });
   }

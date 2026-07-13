@@ -6,6 +6,20 @@ interface CommandClient {
   command(value: unknown): Promise<unknown>;
 }
 
+const OPTIMIZATION_MUTATIONS = new Set([
+  "optimization.policy.configure",
+  "optimization.bundle.create",
+  "optimization.evaluation.start",
+  "optimization.evaluation.execute",
+  "optimization.evaluation.complete",
+  "optimization.recommend",
+  "optimization.recommendation.approve",
+  "optimization.batch.create",
+  "optimization.batch.activate",
+  "optimization.observation.record",
+  "optimization.recover",
+]);
+
 export class TuiCommands {
   private readonly pending = new Set<string>();
 
@@ -96,6 +110,11 @@ export class TuiCommands {
       { providerId, credentialPolicy, approvalMode },
       version,
     );
+  }
+
+  public async optimizationCommand(operation: string, payload: Record<string, unknown>): Promise<unknown> {
+    if (!OPTIMIZATION_MUTATIONS.has(operation)) throw new Error("TUI에서 허용되지 않은 최적화 operation입니다");
+    return await this.send(`optimization:${operation}`, operation, payload);
   }
 
   private async subscriptionAccount(
