@@ -11,7 +11,7 @@ import type {
   OptimizationRecoveryEvent,
 } from "./contracts.js";
 import type { OptimizationRoleKey } from "./scoring.js";
-import { MODEL_OPTIMIZATION_MIGRATION } from "./schema.js";
+import { MODEL_OPTIMIZATION_HARDENING_MIGRATION, MODEL_OPTIMIZATION_MIGRATION } from "./schema.js";
 
 interface RecommendationRecord {
   readonly recommendation_id: string;
@@ -51,6 +51,7 @@ interface ObservationRecord {
   readonly latency_ms: number;
   readonly cost_micros: number;
   readonly status: "healthy" | "degraded";
+  readonly source?: "evaluation" | "production";
   readonly checksum: string;
 }
 
@@ -111,6 +112,7 @@ function observationView(record: ObservationRecord): OptimizationObservation {
     latencyMs: record.latency_ms,
     costMicros: record.cost_micros,
     status: record.status,
+    source: record.source ?? "evaluation",
     checksum: record.checksum,
   };
 }
@@ -140,6 +142,7 @@ export interface RecordObservationInput {
   readonly latencyMs: number;
   readonly costMicros: number;
   readonly status: "healthy" | "degraded";
+  readonly source?: "evaluation" | "production";
 }
 
 export interface RecoverOptimizationInput {
@@ -157,7 +160,7 @@ export class OptimizationBatchService {
     database: MassionDatabase,
     organizations: OrganizationService,
   ): Promise<OptimizationBatchService> {
-    await applyMigrations(database, [MODEL_OPTIMIZATION_MIGRATION]);
+    await applyMigrations(database, [MODEL_OPTIMIZATION_MIGRATION, MODEL_OPTIMIZATION_HARDENING_MIGRATION]);
     return new OptimizationBatchService(database, organizations);
   }
 
@@ -407,9 +410,19 @@ export class OptimizationBatchService {
       { organization_id: context.organizationId, batch_id: input.batchId },
     );
     if (!batches[0]) throw new Error("최적화 observation의 batch를 찾을 수 없습니다");
+    const source = input.source ?? "evaluation";
+    if (source === "production") {
+      const [policies] = await this.database.query<
+        [{ readonly production_learning: boolean; readonly version: number }[]]
+      >(
+        "SELECT * OMIT id FROM optimization_policy_version WHERE organization_id = $organization_id AND status = 'active' ORDER BY version DESC LIMIT 1;",
+        { organization_id: context.organizationId },
+      );
+      if (!policies[0]?.production_learning) throw new Error("production learning 동의가 활성화되지 않았습니다");
+    }
     const checksum = digest(input);
     const [created] = await this.database.query<[ObservationRecord[]]>(
-      "CREATE optimization_observation CONTENT { observation_id: $observation_id, organization_id: $organization_id, batch_id: $batch_id, sample_count: $sample_count, quality_score: $quality_score, latency_ms: $latency_ms, cost_micros: $cost_micros, status: $status, checksum: $checksum, command_id: $command_id, request_hash: $request_hash, created_at: time::now() } RETURN AFTER;",
+      "CREATE optimization_observation CONTENT { observation_id: $observation_id, organization_id: $organization_id, batch_id: $batch_id, sample_count: $sample_count, quality_score: $quality_score, latency_ms: $latency_ms, cost_micros: $cost_micros, status: $status, source: $source, checksum: $checksum, command_id: $command_id, request_hash: $request_hash, created_at: time::now() } RETURN AFTER;",
       {
         observation_id: randomUUID(),
         organization_id: context.organizationId,
@@ -419,6 +432,7 @@ export class OptimizationBatchService {
         latency_ms: input.latencyMs,
         cost_micros: input.costMicros,
         status: input.status,
+        source,
         checksum,
         command_id: input.commandId,
         request_hash: digest(input),
