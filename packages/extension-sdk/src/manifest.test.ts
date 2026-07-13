@@ -104,4 +104,66 @@ describe("Extension manifest v1", () => {
       }),
     ).toThrow("배열");
   });
+
+  it("모델 평가 번들을 버전·역할·체크섬과 함께 선언할 수 있다", () => {
+    const manifest = validateExtensionManifest({
+      ...validManifest,
+      contributions: {
+        ...validManifest.contributions,
+        modelEvaluationBundles: [
+          {
+            id: "software-development-v1",
+            roleKey: "software-development",
+            version: 1,
+            bundleChecksum: "a".repeat(64),
+            handler: "evaluation.software-development.v1",
+          },
+        ],
+      },
+    });
+
+    expect(manifest.contributions.modelEvaluationBundles).toHaveLength(1);
+    expect(manifest.contributions.modelEvaluationBundles?.[0]?.roleKey).toBe("software-development");
+  });
+
+  it("모델 평가 번들의 잘못된 체크섬과 중복 식별자를 거부한다", () => {
+    const base = {
+      ...validManifest,
+      contributions: {
+        ...validManifest.contributions,
+        modelEvaluationBundles: [
+          {
+            id: "bundle-v1",
+            roleKey: "research",
+            version: 1,
+            bundleChecksum: "b".repeat(64),
+            handler: "evaluation.research.v1",
+          },
+        ],
+      },
+    };
+
+    expect(() =>
+      validateExtensionManifest({
+        ...base,
+        contributions: {
+          ...base.contributions,
+          modelEvaluationBundles: [{ ...base.contributions.modelEvaluationBundles[0], bundleChecksum: "bad" }],
+        },
+      }),
+    ).toThrow("체크섬");
+
+    expect(() =>
+      validateExtensionManifest({
+        ...base,
+        contributions: {
+          ...base.contributions,
+          modelEvaluationBundles: [
+            ...base.contributions.modelEvaluationBundles,
+            base.contributions.modelEvaluationBundles[0],
+          ],
+        },
+      }),
+    ).toThrow("중복");
+  });
 });

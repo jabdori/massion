@@ -34,6 +34,8 @@
 - 관찰·배치·복구 명령은 command idempotency와 request hash를 검사하여 재전송을 안전하게 처리합니다.
 - 활성 배치는 Runtime이 역할별 모델 선호 순서로 읽고 Router reserve 후보 순서에 반영합니다.
 - Web 정책 화면은 owner/admin만 변경할 수 있고, governance decision id를 필수로 받습니다.
+- 외부 평가 bundle은 version·license·configuration checksum·case role 계보를 검증한 뒤 Application/CLI import/export operation으로 이동합니다.
+- Extension manifest는 선택적 `modelEvaluationBundles`를 역할 식별자·버전·SHA-256 체크섬·handler와 함께 검증하고, Extension host가 `modelEvaluationBundles:<id>` contribution을 worker 경계에 등록합니다. Core optimizer의 고정 role key 집합과 Extension worker의 외부 역할은 분리됩니다.
 
 ## tmux 실제 사용자 시나리오
 
@@ -52,4 +54,4 @@
 
 ## 남은 완성 조건
 
-Phase 25는 현재 in-progress입니다. Provider별 품질 판정 고도화, 자동 승격 운영 증거, TUI 변경 화면, 외부 평가 import/export, 확장 역할 등록, 실제 복수 계정·Provider UAT가 남아 있습니다.
+Phase 25는 현재 in-progress입니다. Provider별 품질 분포와 자동 승격 운영 증거, 실제 TUI/import-export release 반복, 복수 계정·Provider UAT가 남아 있습니다. 확장 평가 묶음의 manifest 검증 및 worker registry 등록은 완료했습니다.

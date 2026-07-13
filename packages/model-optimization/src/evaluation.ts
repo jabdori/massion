@@ -26,6 +26,7 @@ import type {
 } from "./contracts.js";
 import type { EvaluationCapabilities, ModelEvaluationExecutionResult, ModelEvaluationExecutor } from "./ports.js";
 import { MODEL_OPTIMIZATION_HARDENING_MIGRATION, MODEL_OPTIMIZATION_MIGRATION } from "./schema.js";
+import { createEvaluationExport, validateEvaluationExport, type EvaluationExport } from "./transfer.js";
 
 export type { OptimizationModelProfile } from "./contracts.js";
 export type {
@@ -258,6 +259,17 @@ export interface RecommendInput {
   readonly receipts: readonly EvaluationReceipt[];
   readonly requirements: EvaluationRequirements;
   readonly manualModelProfileId?: string;
+}
+
+export interface ExportBundleInput {
+  readonly bundleId: string;
+  readonly license: string;
+  readonly configurationChecksum: string;
+}
+
+export interface ImportBundleInput {
+  readonly commandId: string;
+  readonly exportValue: unknown;
 }
 
 export interface ModelOptimizationStoreOptions {
@@ -812,6 +824,42 @@ export class ModelOptimizationStore {
       ...(item.prompt ? { prompt: item.prompt } : {}),
       expectedOutcome: item.expected_outcome,
     }));
+  }
+
+  public async exportBundle(context: TenantContext, input: ExportBundleInput): Promise<EvaluationExport> {
+    await this.organizations.verifyTenantContext(context);
+    assertText(input.bundleId, "bundle 식별자");
+    const [bundles] = await this.database.query<[BundleRecord[]]>(
+      "SELECT * OMIT id FROM optimization_bundle WHERE organization_id = $organization_id AND bundle_id = $bundle_id LIMIT 1;",
+      { organization_id: context.organizationId, bundle_id: input.bundleId },
+    );
+    const bundle = bundles[0];
+    if (!bundle) throw new Error("평가 bundle을 찾을 수 없습니다");
+    const cases = await this.listBundleCases(context, bundle.bundle_id);
+    return createEvaluationExport({
+      license: input.license,
+      configurationChecksum: input.configurationChecksum,
+      bundle: bundleView(bundle),
+      cases,
+    });
+  }
+
+  public async importBundle(context: TenantContext, input: ImportBundleInput): Promise<EvaluationBundle> {
+    await this.organizations.verifyTenantContext(context);
+    assertText(input.commandId, "명령 식별자");
+    const imported = validateEvaluationExport(input.exportValue);
+    return await this.createBundle(context, {
+      commandId: input.commandId,
+      roleKey: imported.bundle.roleKey,
+      runtimeVersion: imported.bundle.runtimeVersion,
+      cases: imported.cases.map((evaluationCase) => ({
+        promptChecksum: evaluationCase.promptChecksum,
+        toolsChecksum: evaluationCase.toolsChecksum,
+        environmentChecksum: evaluationCase.environmentChecksum,
+        ...(evaluationCase.prompt === undefined ? {} : { prompt: evaluationCase.prompt }),
+        expectedOutcome: evaluationCase.expectedOutcome,
+      })),
+    });
   }
 
   private async activePolicy(executor: QueryExecutor, organizationId: string): Promise<PolicyRecord | undefined> {

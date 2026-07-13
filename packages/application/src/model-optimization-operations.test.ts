@@ -122,4 +122,48 @@ describe("Application model optimization operations", () => {
       ),
     ).resolves.toMatchObject({ outcome: "succeeded", resource: { type: "OptimizationReceipt" } });
   });
+
+  it("평가 bundle export/import operation은 license와 configuration checksum을 검증한다", async () => {
+    const envelope = (commandId: string, operation: string, payload: unknown) => ({
+      schemaVersion: "massion.application.v1",
+      commandId,
+      correlationId: `${commandId}-correlation`,
+      operation,
+      payload,
+    });
+    const created = await registry.dispatch(
+      context,
+      ["optimization:write"],
+      envelope("transfer-bundle", "optimization.bundle.create", {
+        roleKey: "assurance",
+        runtimeVersion: "runtime-1",
+        cases: [
+          {
+            promptChecksum: "a".repeat(64),
+            toolsChecksum: "b".repeat(64),
+            environmentChecksum: "c".repeat(64),
+            expectedOutcome: "pass",
+          },
+        ],
+      }),
+    );
+    const bundleId = (created as { readonly data?: { readonly bundleId?: string } }).data?.bundleId;
+    const exported = await registry.dispatch(
+      context,
+      ["optimization:read"],
+      envelope("transfer-export", "optimization.bundle.export", {
+        bundleId,
+        license: "MIT",
+        configurationChecksum: "d".repeat(64),
+      }),
+    );
+    const exportValue = (exported as { readonly data?: unknown }).data;
+    await expect(
+      registry.dispatch(
+        context,
+        ["optimization:write"],
+        envelope("transfer-import", "optimization.bundle.import", { export: exportValue }),
+      ),
+    ).resolves.toMatchObject({ outcome: "succeeded", resource: { type: "OptimizationBundle" } });
+  });
 });
