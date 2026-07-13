@@ -228,6 +228,7 @@ export async function runTui(
       },
       configureSubscriptionPolicy: async (providerId, credentialPolicy, approvalMode, version) =>
         await commands.configureSubscriptionPolicy(providerId, credentialPolicy, approvalMode, version),
+      optimizationCommand: async (operation, payload) => await commands.optimizationCommand(operation, payload),
       loadView: async (selectedView) => {
         await loadView(controller, dispatch, getState, selectedView);
       },

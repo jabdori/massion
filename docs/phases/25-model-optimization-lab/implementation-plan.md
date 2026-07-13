@@ -33,7 +33,7 @@
 
 - [x] Runtime이 역할별 활성 배치의 주 모델·fallback 선호 순서를 Router reserve에 전달하게 했습니다.
 - [x] 평가 실행·추천·적용·자동화·복구 Application operation과 redacted query를 추가했습니다.
-- [ ] CLI·TUI·Web의 평가 실행·승인 화면을 완전히 동일하게 조립합니다. CLI/Application과 Web의 실행·변경·승인 흐름, TUI의 추천·관찰 조회를 연결했지만 TUI에서 변경 작업을 직접 실행하는 화면이 남아 있습니다.
+- [x] CLI·TUI·Web의 평가 실행·승인 화면을 동일한 redacted Application operation으로 조립했습니다. CLI/Application과 Web의 실행·변경·승인 흐름, TUI의 조회와 허용 목록 기반 JSON 변경 modal을 연결합니다.
 
 ## Task 6. 외부 평가 연동과 제품 조립
 
@@ -51,5 +51,5 @@
 
 1. Provider 연결을 실제로 호출하는 평가 executor adapter와 역할별 평가 case 입력 경계를 추가합니다. 서버 기본 adapter와 prompt 입력 경계는 연결되었으며 Provider별 품질 판정 고도화가 남아 있습니다.
 2. 자동 승격 조건과 관찰 redaction의 운영 증거를 추가합니다.
-3. TUI에서도 실행·추천 승인·배치 활성화·복구를 직접 실행할 수 있게 하고 실제 release에서 반복합니다.
+3. TUI 변경 modal과 외부 평가 import/export를 실제 release에서 반복하고 증거로 고정합니다.
 4. Claude·Codex·GLM 및 복수 계정이 실제로 연결된 환경에서 tmux receipt를 갱신합니다.
