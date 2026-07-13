@@ -92,4 +92,4 @@
 - [x] Run focused RED/GREEN tests after every implementation slice.
 - [x] Run `pnpm verify`, `pnpm verify:security`, `pnpm verify:hardening`, `pnpm release:build`, and `pnpm verify:release`.
 - [ ] Run tmux release UAT for all available provider credentials and validate the receipt.
-- [ ] Commit each coherent slice with a Phase-specific message and leave the worktree clean.
+- [x] Commit each coherent slice with a Phase-specific message and leave the worktree clean.
