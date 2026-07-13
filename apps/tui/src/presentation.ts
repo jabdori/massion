@@ -471,6 +471,12 @@ function operations(state: TuiState, snapshot: CollaborationGraphSnapshot): { li
   const suggestions = Array.isArray(state.queryResults.suggestions) ? state.queryResults.suggestions : [];
   const effects = Array.isArray(state.queryResults.effects) ? state.queryResults.effects : [];
   const records = Array.isArray(state.queryResults.records) ? state.queryResults.records : [];
+  const optimizationPolicy = Array.isArray(state.queryResults.optimizationPolicy)
+    ? state.queryResults.optimizationPolicy
+    : [];
+  const optimizationReceipts = Array.isArray(state.queryResults.optimizationReceipts)
+    ? state.queryResults.optimizationReceipts
+    : [];
   const growthConfiguration =
     state.queryResults.growthConfiguration && typeof state.queryResults.growthConfiguration === "object"
       ? (state.queryResults.growthConfiguration as Record<string, unknown>)
@@ -482,6 +488,8 @@ function operations(state: TuiState, snapshot: CollaborationGraphSnapshot): { li
       `설치 Extension       ${String(extensions.length)}`,
       `Growth 제안          ${String(suggestions.length)}`,
       `Growth 효과 평가     ${String(effects.length)}`,
+      `모델 평가 receipt     ${String(optimizationReceipts.length)}`,
+      `최적화 정책           ${optimizationPolicy.length ? "설정됨" : "기본 review"}`,
       `선택 업무 기록       ${String(records.length)}`,
     ].join("\n"),
     detail: [

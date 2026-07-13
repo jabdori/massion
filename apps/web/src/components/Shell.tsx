@@ -13,6 +13,7 @@ const navigation = [
   ["/extensions", "06", "확장"],
   ["/access", "07", "접근"],
   ["/subscriptions", "08", "구독"],
+  ["/optimization", "09", "모델 평가실"],
 ] as const;
 
 export function RootShell() {

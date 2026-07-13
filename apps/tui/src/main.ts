@@ -78,6 +78,8 @@ async function loadView(
       ["growthConfiguration", "growth.configuration.get", {}],
       ["suggestions", "growth.suggestions", { limit: 100 }],
       ["effects", "growth.effects", { limit: 100 }],
+      ["optimizationPolicy", "optimization.policy", {}],
+      ["optimizationReceipts", "optimization.receipts", {}],
     ];
     if (workId) requests.push(["records", "work.records", { workId }]);
     const values = await Promise.allSettled(

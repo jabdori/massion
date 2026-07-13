@@ -34,6 +34,7 @@ import {
   PolicyStore,
 } from "@massion/governance";
 import { IdentityService, OrganizationService } from "@massion/identity";
+import { ModelOptimizationStore, OptimizationBatchService } from "@massion/model-optimization";
 import { OrganizationGraphService } from "@massion/organization";
 import { FileArtifactStore, RegistryCatalog, RegistryHttpHandler, SurrealRegistryStore } from "@massion/registry";
 import { RecordsService } from "@massion/records";
@@ -238,6 +239,26 @@ export async function createMassionDaemon(
       quota: subscriptionQuota,
       policies: subscriptionPolicies,
     });
+    const optimizationEvaluations = await ModelOptimizationStore.create(database, organizations, {
+      modelCatalog: async (context) => {
+        const [models, routes] = await Promise.all([router.listModels(context), router.listRoutes(context)]);
+        return models.map((model) => {
+          const route = routes.find((candidate) => candidate.equivalence_group === model.equivalence_group);
+          return {
+            modelProfileId: model.model_profile_id,
+            modelId: model.model_id,
+            routeId: route?.route_id ?? model.endpoint_id,
+            providerId: model.provider_id,
+            verified: model.verified && model.enabled,
+            supportsStructuredOutput: model.supports_structured_output,
+            supportsTools: model.supports_tools,
+            supportsStreaming: model.supports_streaming,
+            dataPolicy: route?.data_policy ?? "external-allowed",
+          };
+        });
+      },
+    });
+    const optimizationBatches = await OptimizationBatchService.create(database, organizations);
     const codexSubscriptionObserver = new BundledCodexSubscriptionObserver({
       profileRoot: join(config.connectors.root, "profiles"),
     });
@@ -594,6 +615,7 @@ export async function createMassionDaemon(
         assuranceBindings,
         providers,
         router,
+        optimization: { evaluations: optimizationEvaluations, batches: optimizationBatches },
         subscriptionAccounts,
         subscriptionServerConnections: serverSubscriptionConnections,
         subscriptionConnectors: subscriptionConnectorCommands,
@@ -605,6 +627,7 @@ export async function createMassionDaemon(
         assuranceBindings,
         providers,
         router,
+        optimization: { evaluations: optimizationEvaluations, batches: optimizationBatches },
         subscriptionAccounts,
         subscriptionConnectors,
         subscriptionQuota,

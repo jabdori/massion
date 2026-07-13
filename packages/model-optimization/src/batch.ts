@@ -21,6 +21,9 @@ interface RecommendationRecord {
   readonly primary_model_profile_id?: string;
   readonly fallback_model_profile_ids: readonly string[];
   readonly status: ModelRecommendationRecord["status"];
+  readonly excluded_json: string;
+  readonly receipt_ids: readonly string[];
+  readonly checksum: string;
 }
 
 interface BatchRecord {
@@ -177,10 +180,10 @@ export class OptimizationBatchService {
           ? { primaryModelProfileId: recommendation.primary_model_profile_id }
           : {}),
         fallbackModelProfileIds: recommendation.fallback_model_profile_ids,
-        excludedJson: "[]",
-        receiptIds: [],
+        excludedJson: recommendation.excluded_json,
+        receiptIds: recommendation.receipt_ids,
         status: "approved",
-        checksum: "",
+        checksum: recommendation.checksum,
       };
     });
   }

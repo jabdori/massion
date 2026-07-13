@@ -79,6 +79,11 @@ const routes = [
     path: "/subscriptions",
     component: lazyPage(() => import("./pages/SubscriptionsPage.js")),
   }),
+  createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/optimization",
+    component: lazyPage(() => import("./pages/OptimizationPage.js")),
+  }),
 ] as const;
 
 const routeTree = rootRoute.addChildren(routes);
