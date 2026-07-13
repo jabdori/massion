@@ -465,6 +465,18 @@ importers:
         specifier: workspace:*
         version: link:../storage
 
+  packages/model-optimization:
+    dependencies:
+      '@massion/identity':
+        specifier: workspace:*
+        version: link:../identity
+      '@massion/router':
+        specifier: workspace:*
+        version: link:../router
+      '@massion/storage':
+        specifier: workspace:*
+        version: link:../storage
+
   packages/organization:
     dependencies:
       '@massion/governance':
