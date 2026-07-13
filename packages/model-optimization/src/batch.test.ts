@@ -133,4 +133,35 @@ describe("모델 최적화 batch lifecycle", () => {
       }),
     ).rejects.toThrow("최소 표본");
   });
+
+  it("production learning 동의가 없으면 실사용 observation을 기록하지 않는다", async () => {
+    await database.query(
+      "CREATE optimization_policy_version CONTENT { policy_version_id: 'policy-production-off', organization_id: $organization_id, version: 1, policy: 'quality', auto_optimize: false, production_learning: false, shadow_enabled: true, minimum_sample_count: 1, improvement_threshold: 0, status: 'active', checksum: $checksum, governance_decision_id: 'decision-production-off', command_id: 'policy-production-off-command', request_hash: $request_hash, created_by_user_id: $user_id, created_at: time::now() }; CREATE optimization_recommendation CONTENT { recommendation_id: 'recommendation-production-off', organization_id: $organization_id, role_key: 'assurance', policy_version_id: 'policy-production-off', primary_model_profile_id: 'profile-production-off', fallback_model_profile_ids: [], excluded_json: '[]', receipt_ids: [], status: 'approved', checksum: $checksum2, command_id: 'recommendation-production-off-command', request_hash: $request_hash2, created_by_user_id: $user_id, created_at: time::now() };",
+      {
+        organization_id: context.organizationId,
+        checksum: "a".repeat(64),
+        request_hash: "b".repeat(64),
+        checksum2: "c".repeat(64),
+        request_hash2: "d".repeat(64),
+        user_id: context.userId,
+      },
+    );
+    const batch = await batches.createBatch(context, {
+      commandId: "batch-production-off",
+      recommendationId: "recommendation-production-off",
+      status: "candidate",
+    });
+    await expect(
+      batches.recordObservation(context, {
+        commandId: "observation-production-off",
+        batchId: batch.batchId,
+        sampleCount: 1,
+        qualityScore: 0.9,
+        latencyMs: 100,
+        costMicros: 10,
+        status: "healthy",
+        source: "production",
+      }),
+    ).rejects.toThrow("production learning");
+  });
 });

@@ -2165,7 +2165,7 @@ function registerOptimization(registry: ApplicationCommandRegistry, dependencies
     validate: (value) =>
       payload(
         value,
-        ["batchId", "sampleCount", "qualityScore", "latencyMs", "costMicros", "status"],
+        ["batchId", "sampleCount", "qualityScore", "latencyMs", "costMicros", "status", "source"],
         ["batchId", "sampleCount", "qualityScore", "latencyMs", "costMicros", "status"],
       ),
     async handle(context, command, value) {
@@ -2177,6 +2177,7 @@ function registerOptimization(registry: ApplicationCommandRegistry, dependencies
         latencyMs: Number(value.latencyMs),
         costMicros: Number(value.costMicros),
         status: value.status as "healthy" | "degraded",
+        ...(value.source === undefined ? {} : { source: value.source as "evaluation" | "production" }),
       });
       return result(command, {
         resource: { type: "OptimizationObservation", id: observation.observationId },

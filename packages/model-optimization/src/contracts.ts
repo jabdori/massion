@@ -115,6 +115,7 @@ export interface OptimizationObservation {
   readonly latencyMs: number;
   readonly costMicros: number;
   readonly status: "healthy" | "degraded";
+  readonly source: "evaluation" | "production";
   readonly checksum: string;
 }
 

@@ -25,7 +25,7 @@ import type {
   StoredEvaluationReceipt,
 } from "./contracts.js";
 import type { EvaluationCapabilities, ModelEvaluationExecutionResult, ModelEvaluationExecutor } from "./ports.js";
-import { MODEL_OPTIMIZATION_MIGRATION } from "./schema.js";
+import { MODEL_OPTIMIZATION_HARDENING_MIGRATION, MODEL_OPTIMIZATION_MIGRATION } from "./schema.js";
 
 export type { OptimizationModelProfile } from "./contracts.js";
 export type {
@@ -283,7 +283,7 @@ export class ModelOptimizationStore {
     organizations: OrganizationService,
     options: ModelOptimizationStoreOptions = {},
   ): Promise<ModelOptimizationStore> {
-    await applyMigrations(database, [MODEL_OPTIMIZATION_MIGRATION]);
+    await applyMigrations(database, [MODEL_OPTIMIZATION_MIGRATION, MODEL_OPTIMIZATION_HARDENING_MIGRATION]);
     return new ModelOptimizationStore(database, organizations, options);
   }
 
