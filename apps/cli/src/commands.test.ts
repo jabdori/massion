@@ -110,6 +110,31 @@ describe("CLI Application adapter", () => {
     expect(operations).toEqual(["router.catalog", "router.credentials", "router.routes"]);
   });
 
+  it("모델 평가실 조회와 변경은 전용 optimization Application operation으로 전달한다", async () => {
+    const calls: unknown[] = [];
+    const client: CliApplicationClient = {
+      status: async () => ({}),
+      snapshot: async () => ({}),
+      query: async (operation, payload) => {
+        calls.push([operation, payload]);
+        return { operation };
+      },
+      command: async (input) => {
+        calls.push(input);
+        return { outcome: "succeeded" };
+      },
+      inspectArtifact: async () => ({}),
+      installArtifact: async () => ({}),
+      updateArtifact: async () => ({}),
+    };
+    await executeCliInvocation(client, parseCliArguments(["optimization", "policy"]));
+    await executeCliInvocation(client, parseCliArguments(["optimization", "recommend"]), {
+      readJson: async () => ({ roleKey: "assurance", candidates: [], receipts: [], requirements: {} }),
+    });
+    expect(calls[0]).toEqual(["optimization.policy", {}]);
+    expect(calls[1]).toMatchObject({ operation: "optimization.recommend", payload: { roleKey: "assurance" } });
+  });
+
   it("구독 실행 계보를 공개 질의 경계로만 조회한다", async () => {
     const query = vi.fn().mockResolvedValue({ executionId: "execution-1", attempts: [] });
     const client: CliApplicationClient = {

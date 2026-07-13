@@ -3,6 +3,11 @@ import type { AssuranceBindingStore } from "@massion/assurance";
 import type { GrowthGateway } from "@massion/growth";
 import type { MembershipRole, OrganizationService, TenantContext } from "@massion/identity";
 import type { ModelRouter, ProviderService } from "@massion/router";
+import {
+  isOptimizationRoleKey,
+  type ModelOptimizationStore,
+  type OptimizationBatchService,
+} from "@massion/model-optimization";
 import type { RuntimeExecutionStore } from "@massion/runtime";
 
 import { ApplicationError } from "./errors.js";
@@ -64,6 +69,10 @@ export interface ApplicationQueryDependencies {
   readonly subscriptionProviders?: SubscriptionProviderDirectory;
   readonly subscriptionQuota?: SubscriptionQuotaQueries;
   readonly subscriptionPolicy?: SubscriptionPolicyStore;
+  readonly optimization?: {
+    readonly evaluations: Pick<ModelOptimizationStore, "getActivePolicy" | "listReceipts">;
+    readonly batches: Pick<OptimizationBatchService, "getActiveBatch">;
+  };
 }
 
 const OPERATION = /^[a-z][a-z0-9-]*(?:\.[a-z][a-z0-9-]*)+$/u;
@@ -937,6 +946,42 @@ export function registerApplicationQueries(
             action,
           };
         }),
+    });
+  }
+  if (dependencies.optimization) {
+    registry.register({
+      operation: "optimization.policy",
+      requiredScopes: ["optimization:read"],
+      allowedRoles: EVERY_ROLE,
+      validate: (value) => object(value, []),
+      handle: async (context) => {
+        const policy = await dependencies.optimization?.evaluations.getActivePolicy(context);
+        return policy === undefined ? [] : [policy];
+      },
+    });
+    registry.register({
+      operation: "optimization.receipts",
+      requiredScopes: ["optimization:read"],
+      allowedRoles: EVERY_ROLE,
+      validate: (value) => object(value, ["roleKey"]),
+      handle: async (context, value) => {
+        const roleKey = value.roleKey === undefined ? undefined : text(value.roleKey, "roleKey");
+        if (roleKey !== undefined && !isOptimizationRoleKey(roleKey))
+          throw new Error("지원하지 않는 최적화 roleKey입니다");
+        return await dependencies.optimization?.evaluations.listReceipts(context, roleKey);
+      },
+    });
+    registry.register({
+      operation: "optimization.batch.active",
+      requiredScopes: ["optimization:read"],
+      allowedRoles: EVERY_ROLE,
+      validate: (value) => object(value, ["roleKey"]),
+      handle: async (context, value) => {
+        const roleKey = text(value.roleKey, "roleKey");
+        if (!isOptimizationRoleKey(roleKey)) throw new Error("지원하지 않는 최적화 roleKey입니다");
+        const active = await dependencies.optimization?.batches.getActiveBatch(context, roleKey);
+        return active === undefined ? [] : [active];
+      },
     });
   }
   if (dependencies.status) {

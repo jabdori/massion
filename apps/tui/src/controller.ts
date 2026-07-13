@@ -33,6 +33,9 @@ const QUERY_OPERATIONS = new Set([
   "subscription.quota",
   "subscription.policy",
   "subscription.doctor",
+  "optimization.policy",
+  "optimization.receipts",
+  "optimization.batch.active",
 ]);
 
 function identity(input: unknown): TuiIdentity {

@@ -287,6 +287,12 @@ export async function executeCliInvocation(
     return await client.query("growth.configuration.get", {});
   if (invocation.command === "growth" && invocation.subcommand === "suggestions")
     return await client.query("growth.suggestions", {});
+  if (invocation.command === "optimization" && invocation.subcommand === "policy")
+    return await client.query("optimization.policy", {});
+  if (invocation.command === "optimization" && invocation.subcommand === "receipts")
+    return await client.query("optimization.receipts", {});
+  if (invocation.command === "optimization" && invocation.subcommand === "batch-active")
+    return await client.query("optimization.batch.active", { roleKey: required(args, 0, "roleKey") });
   if (invocation.command === "subscription" && invocation.subcommand === "providers")
     return await client.query("subscription.providers", {});
   if (invocation.command === "subscription" && invocation.subcommand === "enroll") {
@@ -511,6 +517,16 @@ export async function executeCliInvocation(
     "growth:configure": "growth.configure",
     "growth:adopt": "growth.adopt",
     "growth:revert": "growth.revert",
+    "optimization:policy-configure": "optimization.policy.configure",
+    "optimization:bundle-create": "optimization.bundle.create",
+    "optimization:evaluation-start": "optimization.evaluation.start",
+    "optimization:evaluation-complete": "optimization.evaluation.complete",
+    "optimization:recommend": "optimization.recommend",
+    "optimization:recommendation-approve": "optimization.recommendation.approve",
+    "optimization:batch-create": "optimization.batch.create",
+    "optimization:batch-activate": "optimization.batch.activate",
+    "optimization:observe": "optimization.observation.record",
+    "optimization:recover": "optimization.recover",
     "chat:join": "collaboration.participant.join",
     "chat:leave": "collaboration.participant.leave",
     "ext:link": "extension.link",

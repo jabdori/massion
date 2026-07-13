@@ -5,6 +5,15 @@ import type { GrowthGateway } from "@massion/growth";
 import type { OrganizationGraphService } from "@massion/organization";
 import type { ModelRouter, ProviderService } from "@massion/router";
 import type { AgentRunner } from "@massion/runtime";
+import {
+  isOptimizationRoleKey,
+  type EvaluationPolicy,
+  type EvaluationReceipt,
+  type ModelOptimizationStore,
+  type OptimizationBatchService,
+  type OptimizationModelProfile,
+  type OptimizationRoleKey,
+} from "@massion/model-optimization";
 import { listSubscriptionProviderManifests, subscriptionProviderApprovalModes } from "@massion/subscriptions";
 import type { SubscriptionAuthKind, SubscriptionProviderProtocol } from "@massion/subscriptions";
 import type { WorkService } from "@massion/work";
@@ -49,6 +58,16 @@ export interface ApplicationDomainDependencies {
     "registerProvider" | "registerEndpoint" | "addCredential" | "revokeCredential"
   >;
   readonly router?: Pick<ModelRouter, "registerModel" | "createRoute" | "addCandidate">;
+  readonly optimization?: {
+    readonly evaluations: Pick<
+      ModelOptimizationStore,
+      "createBundle" | "startEvaluation" | "completeEvaluation" | "configurePolicy" | "recommend"
+    >;
+    readonly batches: Pick<
+      OptimizationBatchService,
+      "approveRecommendation" | "createBatch" | "activateBatch" | "recordObservation" | "recover"
+    >;
+  };
   readonly subscriptionAccounts?: SubscriptionAccountCommands;
   readonly subscriptionConnections?: SubscriptionConnectionCommands;
   readonly subscriptionServerConnections?: SubscriptionServerConnectionCommands;
@@ -1811,6 +1830,351 @@ function registerSubscriptions(
   }
 }
 
+function optimizationRole(value: unknown): OptimizationRoleKey {
+  const candidate = string(value, "roleKey");
+  if (!isOptimizationRoleKey(candidate)) throw new Error("지원하지 않는 최적화 roleKey입니다");
+  return candidate;
+}
+
+function optimizationPolicy(value: unknown): EvaluationPolicy {
+  const candidate = string(value, "policy");
+  if (!new Set(["quality", "value", "speed", "privacy", "manual"]).has(candidate)) {
+    throw new Error("지원하지 않는 최적화 policy입니다");
+  }
+  return candidate as EvaluationPolicy;
+}
+
+function optimizationCandidate(value: unknown): OptimizationModelProfile {
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("모델 후보가 object여야 합니다");
+  const candidate = value as Record<string, unknown>;
+  return {
+    modelProfileId: string(candidate.modelProfileId, "modelProfileId"),
+    modelId: string(candidate.modelId, "modelId"),
+    routeId: string(candidate.routeId, "routeId"),
+    providerId: string(candidate.providerId, "providerId"),
+    verified: boolean(candidate.verified, "verified"),
+    supportsStructuredOutput: boolean(candidate.supportsStructuredOutput, "supportsStructuredOutput"),
+    supportsTools: boolean(candidate.supportsTools, "supportsTools"),
+    supportsStreaming: boolean(candidate.supportsStreaming, "supportsStreaming"),
+    dataPolicy:
+      candidate.dataPolicy === "local-private"
+        ? "local-private"
+        : candidate.dataPolicy === "external-allowed"
+          ? "external-allowed"
+          : (() => {
+              throw new Error("dataPolicy가 유효하지 않습니다");
+            })(),
+  };
+}
+
+function optimizationCandidates(value: unknown): readonly OptimizationModelProfile[] {
+  if (!Array.isArray(value) || value.length === 0 || value.length > 128)
+    throw new Error("모델 후보 목록이 유효하지 않습니다");
+  return value.map(optimizationCandidate);
+}
+
+function optimizationReceipts(value: unknown): readonly EvaluationReceipt[] {
+  if (!Array.isArray(value) || (value.length > 0 && value.length > 1_024))
+    throw new Error("모델 receipt 목록이 유효하지 않습니다");
+  return value.map((item) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) throw new Error("모델 receipt가 object여야 합니다");
+    const receipt = item as Record<string, unknown>;
+    return {
+      roleKey: optimizationRole(receipt.roleKey),
+      modelProfileId: string(receipt.modelProfileId, "modelProfileId"),
+      bundleVersion: integer(receipt.bundleVersion, "bundleVersion", 1),
+      sampleCount: integer(receipt.sampleCount, "sampleCount", 0),
+      qualityScore: Number(receipt.qualityScore),
+      latencyMs: Number(receipt.latencyMs),
+      costMicros: Number(receipt.costMicros),
+      privacyAllowed: boolean(receipt.privacyAllowed, "privacyAllowed"),
+      completed: boolean(receipt.completed, "completed"),
+      inputChecksum: string(receipt.inputChecksum, "inputChecksum"),
+      receiptChecksum: string(receipt.receiptChecksum, "receiptChecksum"),
+    };
+  });
+}
+
+function optimizationRequirements(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value))
+    throw new Error("모델 평가 requirements가 object여야 합니다");
+  const requirements = value as Record<string, unknown>;
+  return {
+    requiresTools: boolean(requirements.requiresTools, "requiresTools"),
+    requiresStructuredOutput: boolean(requirements.requiresStructuredOutput, "requiresStructuredOutput"),
+    requiresStreaming: boolean(requirements.requiresStreaming, "requiresStreaming"),
+    dataPolicy:
+      requirements.dataPolicy === "local-private"
+        ? "local-private"
+        : requirements.dataPolicy === "external-allowed"
+          ? "external-allowed"
+          : (() => {
+              throw new Error("requirements dataPolicy가 유효하지 않습니다");
+            })(),
+  } as const;
+}
+
+function registerOptimization(registry: ApplicationCommandRegistry, dependencies: ApplicationDomainDependencies): void {
+  const optimization = dependencies.optimization;
+  if (!optimization) return;
+
+  register(registry, {
+    operation: "optimization.policy.configure",
+    requiredScopes: ["optimization:write"],
+    allowedRoles: ["owner", "admin"],
+    recovery: "replay-domain",
+    validate: (value) =>
+      payload(
+        value,
+        [
+          "policy",
+          "autoOptimize",
+          "productionLearning",
+          "shadowEnabled",
+          "minimumSampleCount",
+          "improvementThreshold",
+          "governanceDecisionId",
+        ],
+        ["policy", "autoOptimize", "productionLearning", "shadowEnabled", "governanceDecisionId"],
+      ),
+    async handle(context, command, value) {
+      const configured = await optimization.evaluations.configurePolicy(context, {
+        commandId: command.commandId,
+        policy: optimizationPolicy(value.policy),
+        autoOptimize: boolean(value.autoOptimize, "autoOptimize"),
+        productionLearning: boolean(value.productionLearning, "productionLearning"),
+        shadowEnabled: boolean(value.shadowEnabled, "shadowEnabled"),
+        ...(value.minimumSampleCount === undefined
+          ? {}
+          : { minimumSampleCount: integer(value.minimumSampleCount, "minimumSampleCount", 1) }),
+        ...(value.improvementThreshold === undefined
+          ? {}
+          : { improvementThreshold: Number(value.improvementThreshold) }),
+        governanceDecisionId: string(value.governanceDecisionId, "governanceDecisionId"),
+      });
+      return result(command, {
+        resource: { type: "OptimizationPolicy", id: configured.policyVersionId, revision: configured.version },
+        data: configured,
+      });
+    },
+  });
+
+  register(registry, {
+    operation: "optimization.bundle.create",
+    requiredScopes: ["optimization:write"],
+    allowedRoles: ["owner", "admin"],
+    recovery: "replay-domain",
+    validate: (value) => payload(value, ["roleKey", "runtimeVersion", "cases"], ["roleKey", "runtimeVersion", "cases"]),
+    async handle(context, command, value) {
+      const cases = Array.isArray(value.cases)
+        ? value.cases.map((item) => {
+            if (!item || typeof item !== "object" || Array.isArray(item))
+              throw new Error("평가 case가 object여야 합니다");
+            const evaluationCase = item as Record<string, unknown>;
+            return {
+              promptChecksum: string(evaluationCase.promptChecksum, "promptChecksum"),
+              toolsChecksum: string(evaluationCase.toolsChecksum, "toolsChecksum"),
+              environmentChecksum: string(evaluationCase.environmentChecksum, "environmentChecksum"),
+              expectedOutcome: string(evaluationCase.expectedOutcome, "expectedOutcome"),
+            };
+          })
+        : (() => {
+            throw new Error("평가 cases가 배열이어야 합니다");
+          })();
+      const bundle = await optimization.evaluations.createBundle(context, {
+        commandId: command.commandId,
+        roleKey: optimizationRole(value.roleKey),
+        runtimeVersion: string(value.runtimeVersion, "runtimeVersion"),
+        cases,
+      });
+      return result(command, {
+        resource: { type: "OptimizationBundle", id: bundle.bundleId, revision: bundle.version },
+        data: bundle,
+      });
+    },
+  });
+
+  register(registry, {
+    operation: "optimization.evaluation.start",
+    requiredScopes: ["optimization:write"],
+    allowedRoles: ["owner", "admin", "member"],
+    recovery: "replay-domain",
+    validate: (value) =>
+      payload(
+        value,
+        ["roleKey", "bundleId", "modelProfileId", "runtimeVersion", "inputChecksum", "mode"],
+        ["roleKey", "bundleId", "modelProfileId", "runtimeVersion", "inputChecksum"],
+      ),
+    async handle(context, command, value) {
+      const run = await optimization.evaluations.startEvaluation(context, {
+        commandId: command.commandId,
+        roleKey: optimizationRole(value.roleKey),
+        bundleId: string(value.bundleId, "bundleId"),
+        modelProfileId: string(value.modelProfileId, "modelProfileId"),
+        runtimeVersion: string(value.runtimeVersion, "runtimeVersion"),
+        inputChecksum: string(value.inputChecksum, "inputChecksum"),
+        ...(value.mode === undefined ? {} : { mode: value.mode as "standard" | "shadow" }),
+      });
+      return result(command, { resource: { type: "OptimizationRun", id: run.runId }, data: run });
+    },
+  });
+
+  register(registry, {
+    operation: "optimization.evaluation.complete",
+    requiredScopes: ["optimization:write"],
+    allowedRoles: ["owner", "admin", "member"],
+    recovery: "replay-domain",
+    validate: (value) =>
+      payload(
+        value,
+        ["runId", "sampleCount", "qualityScore", "latencyMs", "costMicros", "privacyAllowed", "completed"],
+        ["runId", "sampleCount", "qualityScore", "latencyMs", "costMicros", "privacyAllowed", "completed"],
+      ),
+    async handle(context, command, value) {
+      const receipt = await optimization.evaluations.completeEvaluation(context, {
+        commandId: command.commandId,
+        runId: string(value.runId, "runId"),
+        sampleCount: integer(value.sampleCount, "sampleCount", 1),
+        qualityScore: Number(value.qualityScore),
+        latencyMs: Number(value.latencyMs),
+        costMicros: Number(value.costMicros),
+        privacyAllowed: boolean(value.privacyAllowed, "privacyAllowed"),
+        completed: boolean(value.completed, "completed"),
+      });
+      return result(command, { resource: { type: "OptimizationReceipt", id: receipt.receiptId }, data: receipt });
+    },
+  });
+
+  register(registry, {
+    operation: "optimization.recommend",
+    requiredScopes: ["optimization:write"],
+    allowedRoles: ["owner", "admin"],
+    recovery: "replay-domain",
+    validate: (value) =>
+      payload(
+        value,
+        ["roleKey", "candidates", "receipts", "requirements", "manualModelProfileId"],
+        ["roleKey", "candidates", "receipts", "requirements"],
+      ),
+    async handle(context, command, value) {
+      const recommendation = await optimization.evaluations.recommend(context, {
+        commandId: command.commandId,
+        roleKey: optimizationRole(value.roleKey),
+        candidates: optimizationCandidates(value.candidates),
+        receipts: optimizationReceipts(value.receipts),
+        requirements: optimizationRequirements(value.requirements),
+        ...(value.manualModelProfileId === undefined
+          ? {}
+          : { manualModelProfileId: string(value.manualModelProfileId, "manualModelProfileId") }),
+      });
+      return result(command, {
+        resource: { type: "OptimizationRecommendation", id: recommendation.recommendationId },
+        data: recommendation,
+      });
+    },
+  });
+
+  register(registry, {
+    operation: "optimization.recommendation.approve",
+    requiredScopes: ["optimization:write"],
+    allowedRoles: ["owner", "admin"],
+    recovery: "replay-domain",
+    validate: (value) =>
+      payload(value, ["recommendationId", "governanceDecisionId"], ["recommendationId", "governanceDecisionId"]),
+    async handle(context, command, value) {
+      const approved = await optimization.batches.approveRecommendation(context, {
+        commandId: command.commandId,
+        recommendationId: string(value.recommendationId, "recommendationId"),
+        governanceDecisionId: string(value.governanceDecisionId, "governanceDecisionId"),
+      });
+      return result(command, {
+        resource: { type: "OptimizationRecommendation", id: approved.recommendationId },
+        data: approved,
+      });
+    },
+  });
+
+  register(registry, {
+    operation: "optimization.batch.create",
+    requiredScopes: ["optimization:write"],
+    allowedRoles: ["owner", "admin"],
+    recovery: "replay-domain",
+    validate: (value) => payload(value, ["recommendationId", "status"], ["recommendationId", "status"]),
+    async handle(context, command, value) {
+      const batch = await optimization.batches.createBatch(context, {
+        commandId: command.commandId,
+        recommendationId: string(value.recommendationId, "recommendationId"),
+        status: value.status as never,
+      });
+      return result(command, {
+        resource: { type: "OptimizationBatch", id: batch.batchId, revision: batch.version },
+        data: batch,
+      });
+    },
+  });
+
+  register(registry, {
+    operation: "optimization.batch.activate",
+    requiredScopes: ["optimization:write"],
+    allowedRoles: ["owner", "admin"],
+    recovery: "replay-domain",
+    validate: (value) => payload(value, ["batchId"], ["batchId"]),
+    async handle(context, command, value) {
+      const batch = await optimization.batches.activateBatch(context, {
+        commandId: command.commandId,
+        batchId: string(value.batchId, "batchId"),
+      });
+      return result(command, {
+        resource: { type: "OptimizationBatch", id: batch.batchId, revision: batch.version },
+        data: batch,
+      });
+    },
+  });
+
+  register(registry, {
+    operation: "optimization.observation.record",
+    requiredScopes: ["optimization:write"],
+    allowedRoles: ["owner", "admin", "member"],
+    recovery: "replay-domain",
+    validate: (value) =>
+      payload(
+        value,
+        ["batchId", "sampleCount", "qualityScore", "latencyMs", "costMicros", "status"],
+        ["batchId", "sampleCount", "qualityScore", "latencyMs", "costMicros", "status"],
+      ),
+    async handle(context, command, value) {
+      const observation = await optimization.batches.recordObservation(context, {
+        commandId: command.commandId,
+        batchId: string(value.batchId, "batchId"),
+        sampleCount: integer(value.sampleCount, "sampleCount", 1),
+        qualityScore: Number(value.qualityScore),
+        latencyMs: Number(value.latencyMs),
+        costMicros: Number(value.costMicros),
+        status: value.status as "healthy" | "degraded",
+      });
+      return result(command, {
+        resource: { type: "OptimizationObservation", id: observation.observationId },
+        data: observation,
+      });
+    },
+  });
+
+  register(registry, {
+    operation: "optimization.recover",
+    requiredScopes: ["optimization:write"],
+    allowedRoles: ["owner", "admin"],
+    recovery: "replay-domain",
+    validate: (value) => payload(value, ["observationId"], ["observationId"]),
+    async handle(context, command, value) {
+      const recovery = await optimization.batches.recover(context, {
+        commandId: command.commandId,
+        observationId: string(value.observationId, "observationId"),
+      });
+      return result(command, { resource: { type: "OptimizationRecovery", id: recovery.recoveryId }, data: recovery });
+    },
+  });
+}
+
 export function registerApplicationDomainCommands(
   registry: ApplicationCommandRegistry,
   dependencies: ApplicationDomainDependencies,
@@ -1824,4 +2188,5 @@ export function registerApplicationDomainCommands(
   if (dependencies.growth) registerGrowth(registry, dependencies.growth);
   registerRouter(registry, dependencies);
   registerSubscriptions(registry, dependencies);
+  registerOptimization(registry, dependencies);
 }

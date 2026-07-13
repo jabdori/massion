@@ -23,6 +23,7 @@
     "@massion/extension-host": "workspace:*",
     "@massion/governance": "workspace:*",
     "@massion/identity": "workspace:*",
+    "@massion/model-optimization": "workspace:*",
     "@massion/organization": "workspace:*",
     "@massion/registry": "workspace:*",
     "@massion/records": "workspace:*",

@@ -115,6 +115,9 @@ importers:
       '@massion/identity':
         specifier: workspace:*
         version: link:../../packages/identity
+      '@massion/model-optimization':
+        specifier: workspace:*
+        version: link:../../packages/model-optimization
       '@massion/organization':
         specifier: workspace:*
         version: link:../../packages/organization
@@ -294,6 +297,9 @@ importers:
       '@massion/identity':
         specifier: workspace:*
         version: link:../identity
+      '@massion/model-optimization':
+        specifier: workspace:*
+        version: link:../model-optimization
       '@massion/organization':
         specifier: workspace:*
         version: link:../organization
