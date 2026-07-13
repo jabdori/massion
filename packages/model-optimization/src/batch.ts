@@ -38,6 +38,8 @@ interface BatchRecord {
   readonly fallback_model_profile_ids: readonly string[];
   readonly parent_batch_id?: string;
   readonly checksum: string;
+  readonly command_id: string;
+  readonly request_hash: string;
 }
 
 interface ObservationRecord {
@@ -56,6 +58,20 @@ interface PointerRecord {
   readonly batch_id: string;
   readonly batch_version: number;
   readonly checksum: string;
+}
+
+interface OptimizationPolicyRecord {
+  readonly minimum_sample_count: number;
+  readonly improvement_threshold: number;
+}
+
+interface OptimizationReceiptRecord {
+  readonly receipt_id: string;
+  readonly model_profile_id: string;
+  readonly sample_count: number;
+  readonly quality_score: number;
+  readonly completed: boolean;
+  readonly privacy_allowed: boolean;
 }
 
 const canonicalJson = (value: unknown): string => {
@@ -194,6 +210,16 @@ export class OptimizationBatchService {
     if (!["candidate", "shadow", "limited", "active"].includes(input.status))
       throw new Error("모델 batch 상태가 유효하지 않습니다");
     return await this.database.transaction(async (tx) => {
+      const requestHash = digest(input);
+      const [repeated] = await tx.query<[BatchRecord[]]>(
+        "SELECT * OMIT id FROM optimization_batch WHERE organization_id = $organization_id AND command_id = $command_id LIMIT 1;",
+        { organization_id: context.organizationId, command_id: input.commandId },
+      );
+      if (repeated[0]) {
+        if (repeated[0].request_hash !== requestHash)
+          throw new Error("같은 commandId에 다른 모델 batch를 사용할 수 없습니다");
+        return batchView(repeated[0]);
+      }
       const [recommendations] = await tx.query<[RecommendationRecord[]]>(
         "SELECT * OMIT id FROM optimization_recommendation WHERE organization_id = $organization_id AND recommendation_id = $recommendation_id LIMIT 1;",
         { organization_id: context.organizationId, recommendation_id: input.recommendationId },
@@ -210,6 +236,59 @@ export class OptimizationBatchService {
         "SELECT batch_id, batch_version, checksum FROM optimization_active_pointer WHERE organization_id = $organization_id AND role_key = $role_key LIMIT 1;",
         { organization_id: context.organizationId, role_key: recommendation.role_key },
       );
+      if (input.status !== "candidate") {
+        const [policies] = await tx.query<[OptimizationPolicyRecord[]]>(
+          "SELECT minimum_sample_count, improvement_threshold FROM optimization_policy_version WHERE organization_id = $organization_id AND policy_version_id = $policy_version_id AND status = 'active' LIMIT 1;",
+          { organization_id: context.organizationId, policy_version_id: recommendation.policy_version_id },
+        );
+        const policy = policies[0];
+        if (policy) {
+          if (!recommendation.primary_model_profile_id)
+            throw new Error("주 모델이 없는 추천은 batch로 승격할 수 없습니다");
+          const [receipts] = await tx.query<[OptimizationReceiptRecord[]]>(
+            "SELECT receipt_id, model_profile_id, sample_count, quality_score, completed, privacy_allowed FROM optimization_receipt WHERE organization_id = $organization_id AND receipt_id IN $receipt_ids;",
+            { organization_id: context.organizationId, receipt_ids: recommendation.receipt_ids },
+          );
+          const primaryReceipt = receipts.find(
+            (receipt) => receipt.model_profile_id === recommendation.primary_model_profile_id,
+          );
+          if (
+            !primaryReceipt ||
+            !primaryReceipt.completed ||
+            !primaryReceipt.privacy_allowed ||
+            primaryReceipt.sample_count < policy.minimum_sample_count
+          )
+            throw new Error("최소 표본과 완료된 privacy 허용 receipt가 필요합니다");
+          if (active[0]) {
+            const [parentBatches] = await tx.query<[BatchRecord[]]>(
+              "SELECT * OMIT id FROM optimization_batch WHERE organization_id = $organization_id AND batch_id = $batch_id LIMIT 1;",
+              { organization_id: context.organizationId, batch_id: active[0].batch_id },
+            );
+            const parentBatch = parentBatches[0];
+            if (parentBatch?.primary_model_profile_id) {
+              const [parentRecommendations] = await tx.query<[RecommendationRecord[]]>(
+                "SELECT * OMIT id FROM optimization_recommendation WHERE organization_id = $organization_id AND recommendation_id = $recommendation_id LIMIT 1;",
+                { organization_id: context.organizationId, recommendation_id: parentBatch.recommendation_id },
+              );
+              const parentRecommendation = parentRecommendations[0];
+              const [parentReceipts] = parentRecommendation
+                ? await tx.query<[OptimizationReceiptRecord[]]>(
+                    "SELECT model_profile_id, sample_count, quality_score, completed, privacy_allowed FROM optimization_receipt WHERE organization_id = $organization_id AND receipt_id IN $receipt_ids;",
+                    { organization_id: context.organizationId, receipt_ids: parentRecommendation.receipt_ids },
+                  )
+                : [[]];
+              const parentReceipt = parentReceipts.find(
+                (receipt) => receipt.model_profile_id === parentBatch.primary_model_profile_id,
+              );
+              if (
+                parentReceipt &&
+                primaryReceipt.quality_score - parentReceipt.quality_score < policy.improvement_threshold
+              )
+                throw new Error("정책이 요구한 개선 폭을 충족하지 못했습니다");
+            }
+          }
+        }
+      }
       const batchId = randomUUID();
       const checksum = digest({
         batchId,
@@ -234,7 +313,7 @@ export class OptimizationBatchService {
           parent_batch_id: active[0]?.batch_id,
           checksum,
           command_id: input.commandId,
-          request_hash: digest(input),
+          request_hash: requestHash,
           user_id: context.userId,
         },
       );

@@ -6,6 +6,7 @@ export const MODEL_OPTIMIZATION_OPERATIONS = [
   "optimization.policy.configure",
   "optimization.bundle.create",
   "optimization.evaluation.start",
+  "optimization.evaluation.execute",
   "optimization.evaluation.complete",
   "optimization.recommend",
   "optimization.recommendation.approve",

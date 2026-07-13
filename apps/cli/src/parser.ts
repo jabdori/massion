@@ -62,6 +62,7 @@ const COMMANDS: Readonly<Record<string, readonly string[] | undefined>> = {
     "policy-configure",
     "bundle-create",
     "evaluation-start",
+    "evaluation-execute",
     "evaluation-complete",
     "recommend",
     "recommendation-approve",

@@ -22,7 +22,17 @@ describe("Application model optimization operations", () => {
       displayName: "Optimization API",
     });
     context = await organizations.resolveTenantContext(owner.user.user_id, owner.organization.organization_id);
-    const evaluations = await ModelOptimizationStore.create(database, organizations);
+    const evaluations = await ModelOptimizationStore.create(database, organizations, {
+      executor: {
+        execute: async () => ({
+          qualityScore: 0.9,
+          latencyMs: 10,
+          costMicros: 1,
+          privacyAllowed: true,
+          completed: true,
+        }),
+      },
+    });
     const batches = await OptimizationBatchService.create(database, organizations);
     registry = new ApplicationCommandRegistry(await ApplicationCommandStore.create(database, organizations));
     registerApplicationDomainCommands(registry, { optimization: { evaluations, batches } });
@@ -69,5 +79,45 @@ describe("Application model optimization operations", () => {
         }),
       ),
     ).resolves.toMatchObject({ outcome: "succeeded", resource: { type: "OptimizationBundle", revision: 1 } });
+  });
+
+  it("평가 실행 operation은 저장된 bundle을 실제 evaluator port로 전달한다", async () => {
+    const envelope = (commandId: string, operation: string, payload: unknown) => ({
+      schemaVersion: "massion.application.v1",
+      commandId,
+      correlationId: `${commandId}-correlation`,
+      operation,
+      payload,
+    });
+    const bundle = await registry.dispatch(
+      context,
+      ["optimization:write"],
+      envelope("execute-bundle", "optimization.bundle.create", {
+        roleKey: "assurance",
+        runtimeVersion: "runtime-1",
+        cases: [
+          {
+            promptChecksum: "a".repeat(64),
+            toolsChecksum: "b".repeat(64),
+            environmentChecksum: "c".repeat(64),
+            expectedOutcome: "pass",
+          },
+        ],
+      }),
+    );
+    const bundleId = (bundle as { readonly data?: { readonly bundleId?: string } }).data?.bundleId;
+    await expect(
+      registry.dispatch(
+        context,
+        ["optimization:write"],
+        envelope("execute-run", "optimization.evaluation.execute", {
+          roleKey: "assurance",
+          bundleId,
+          modelProfileId: "profile-1",
+          runtimeVersion: "runtime-1",
+          mode: "standard",
+        }),
+      ),
+    ).resolves.toMatchObject({ outcome: "succeeded", resource: { type: "OptimizationReceipt" } });
   });
 });

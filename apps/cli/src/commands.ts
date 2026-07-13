@@ -520,6 +520,7 @@ export async function executeCliInvocation(
     "optimization:policy-configure": "optimization.policy.configure",
     "optimization:bundle-create": "optimization.bundle.create",
     "optimization:evaluation-start": "optimization.evaluation.start",
+    "optimization:evaluation-execute": "optimization.evaluation.execute",
     "optimization:evaluation-complete": "optimization.evaluation.complete",
     "optimization:recommend": "optimization.recommend",
     "optimization:recommendation-approve": "optimization.recommendation.approve",
