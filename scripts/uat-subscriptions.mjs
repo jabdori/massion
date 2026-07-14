@@ -93,7 +93,10 @@ export function subscriptionUatPolicy(providerId) {
 }
 
 export function subscriptionUatRunPlan(correlationId) {
-  if (typeof correlationId !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(correlationId)) {
+  if (
+    typeof correlationId !== "string" ||
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(correlationId)
+  ) {
     throw new Error("UAT run correlation ID가 UUID 형식이 아닙니다");
   }
   return {
@@ -2115,8 +2118,9 @@ async function executeProviderScenario(session, plan, environment, timeoutMs, re
     account: accountObservation ? account : undefined,
     correlationId: runPlan.correlationId,
     attemptIds:
-      runtimeLineage?.observation?.facts.executions.flatMap((execution) => execution.attempts.map((attempt) => attempt.attemptId)) ??
-      [],
+      runtimeLineage?.observation?.facts.executions.flatMap((execution) =>
+        execution.attempts.map((attempt) => attempt.attemptId),
+      ) ?? [],
   };
 }
 
