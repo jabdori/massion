@@ -1536,12 +1536,27 @@ async function runInternalObserver(encoded) {
   if (result.status !== 0) {
     return Number.isInteger(result.status) && result.status >= 1 && result.status <= 255 ? result.status : 70;
   }
+  const output = String(result.stdout);
+  if (specification.kind !== "exact-text") {
+    try {
+      JSON.parse(output.trim());
+    } catch {
+      // 원문을 보존하지 않고 JSON 형식 오류만 구분합니다.
+      return 66;
+    }
+  }
   let observation;
   try {
-    observation = parseAndValidateObservedUatOutput(specification.kind, String(result.stdout), specification.expected);
+    observation = parseAndValidateObservedUatOutput(specification.kind, output, specification.expected);
+  } catch {
+    // 유효 JSON이지만 공개 UAT 계약을 만족하지 않는 경우입니다.
+    return 67;
+  }
+  try {
     await writeInternalObservation(specification.observationPath, observation);
   } catch {
-    return 65;
+    // owner-only 관찰 결과를 안전하게 전달하지 못한 경우입니다.
+    return 68;
   }
   return 0;
 }
