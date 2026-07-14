@@ -9,6 +9,8 @@ interface CommandClient {
 const OPTIMIZATION_MUTATIONS = new Set([
   "optimization.policy.configure",
   "optimization.bundle.create",
+  "optimization.bundle.export",
+  "optimization.bundle.import",
   "optimization.evaluation.start",
   "optimization.evaluation.execute",
   "optimization.evaluation.complete",

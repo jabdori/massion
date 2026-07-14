@@ -118,4 +118,25 @@ describe("TUI command", () => {
     await expect(commands.optimizationCommand("system.shutdown", {})).rejects.toThrow("허용되지 않은");
     expect(sent[0]).toMatchObject({ operation: "optimization.batch.activate", payload: { batchId: "batch-1" } });
   });
+
+  it("외부 평가 bundle export·import도 허용된 Application command로 보낸다", async () => {
+    const sent: Array<Record<string, unknown>> = [];
+    const commands = new TuiCommands(
+      { command: (value) => (sent.push(value as Record<string, unknown>), Promise.resolve(value)) },
+      () => "user-1",
+    );
+
+    await commands.optimizationCommand("optimization.bundle.export", { bundleId: "bundle-1" });
+    await commands.optimizationCommand("optimization.bundle.import", {
+      document: { schemaVersion: "massion.optimization.bundle.v1" },
+    });
+
+    expect(sent.map(({ operation, payload }) => ({ operation, payload }))).toEqual([
+      { operation: "optimization.bundle.export", payload: { bundleId: "bundle-1" } },
+      {
+        operation: "optimization.bundle.import",
+        payload: { document: { schemaVersion: "massion.optimization.bundle.v1" } },
+      },
+    ]);
+  });
 });
