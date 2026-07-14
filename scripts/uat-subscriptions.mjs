@@ -520,6 +520,7 @@ function validateAccountQuery(value, expected) {
         "connectorExecutionKind",
         "connectorStatus",
         "billingKind",
+        "profileHandle",
         "status",
         "version",
         "cooldownUntil",
@@ -545,6 +546,12 @@ function validateAccountQuery(value, expected) {
     observedText(account.alias, "구독 account alias", 128);
     if (typeof account.canManage !== "boolean") throw new Error("구독 canManage가 유효하지 않습니다");
     if (account.connectorStatus !== undefined) observedText(account.connectorStatus, "구독 connectorStatus", 32);
+    if (
+      account.profileHandle !== undefined &&
+      (typeof account.profileHandle !== "string" || !/^[a-f0-9]{64}\/[a-f0-9]{64}$/u.test(account.profileHandle))
+    ) {
+      throw new Error("구독 profile handle이 유효하지 않습니다");
+    }
     return { ...facts, alias: account.alias, canManage: account.canManage, connectorStatus: account.connectorStatus };
   });
   const matches = accounts.filter(
