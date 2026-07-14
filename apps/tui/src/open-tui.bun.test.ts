@@ -380,4 +380,44 @@ describe("OpenTUI 실제 renderer", () => {
     expect(setup.renderer.root.findDescendantById("modal-input")).toBeUndefined();
     expect(setup.captureCharFrame()).toContain("공개 연결을 지원하지 않습니다");
   });
+
+  test("운영 화면의 모델 평가실 modal은 JSON mutation을 허용 목록 command로 전달한다", async () => {
+    setup = await createTestRenderer({ width: 100, height: 30 });
+    let state = reduceTuiState(createTuiState(), {
+      type: "snapshot.loaded",
+      snapshot: decodeSnapshot(testSnapshot),
+    });
+    const calls: Array<{ readonly operation: string; readonly payload: Record<string, unknown> }> = [];
+    const view = new OpenTuiView(setup.renderer, {
+      state: () => state,
+      dispatch: (action) => {
+        state = reduceTuiState(state, action);
+      },
+      refresh: () => Promise.resolve(),
+      postMessage: () => Promise.resolve(),
+      vote: () => Promise.resolve(),
+      cancelApproval: () => Promise.resolve(),
+      cancelWork: () => Promise.resolve(),
+      assignTask: () => Promise.resolve(),
+      controlExecution: () => Promise.resolve(),
+      shareSubscriptionAccount: () => Promise.resolve(),
+      unshareSubscriptionAccount: () => Promise.resolve(),
+      disconnectSubscriptionAccount: () => Promise.resolve(),
+      optimizationCommand: (operation, payload) => (calls.push({ operation, payload }), Promise.resolve()),
+      loadView: () => Promise.resolve(),
+      destroy: () => setup?.renderer.destroy(),
+    });
+    view.render();
+
+    emitKey("6");
+    emitKey("o");
+    await setup.renderOnce();
+    expect(setup.captureCharFrame()).toContain("모델 평가실 변경");
+    const input = setup.renderer.root.findDescendantById("modal-input") as InputRenderable;
+    input.value = '{"operation":"optimization.batch.activate","payload":{"batchId":"batch-uat"}}';
+    input.submit();
+    await Bun.sleep(0);
+
+    expect(calls).toEqual([{ operation: "optimization.batch.activate", payload: { batchId: "batch-uat" } }]);
+  });
 });

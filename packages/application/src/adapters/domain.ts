@@ -280,6 +280,19 @@ function domainError(error: unknown, correlationId: string): never {
       cause: error,
     });
   }
+  if (
+    /candidate batch|shadow 동의|최소 표본|개선 폭|승격 게이트|되돌려진 batch|production learning 동의/iu.test(message)
+  ) {
+    throw new ApplicationError({
+      category: "policy",
+      severity: "error",
+      retryable: false,
+      userMessage: "모델 최적화 정책이 요청을 거부했습니다",
+      operatorCode: "APP_OPTIMIZATION_POLICY_GATE",
+      correlationId,
+      cause: error,
+    });
+  }
   if (/유효하지|필요합니다|허용되지|비어 있을 수 없|상한/iu.test(message)) {
     throw new ApplicationError({
       category: "validation",

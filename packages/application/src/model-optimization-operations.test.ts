@@ -166,4 +166,33 @@ describe("Application model optimization operations", () => {
       ),
     ).resolves.toMatchObject({ outcome: "succeeded", resource: { type: "OptimizationBundle" } });
   });
+
+  it("승격 게이트 거부는 내부 오류가 아닌 구조화된 정책 오류로 반환한다", async () => {
+    const gateRegistry = new ApplicationCommandRegistry(
+      await ApplicationCommandStore.create(database, await OrganizationService.create(database)),
+    );
+    registerApplicationDomainCommands(gateRegistry, {
+      optimization: {
+        evaluations: {} as never,
+        batches: {
+          activateBatch: async () => {
+            throw new Error("candidate batch는 승격 게이트를 거친 뒤 활성화할 수 없습니다");
+          },
+        } as never,
+      },
+    });
+
+    await expect(
+      gateRegistry.dispatch(context, ["optimization:write"], {
+        schemaVersion: "massion.application.v1",
+        commandId: "optimization-gate-command",
+        correlationId: "optimization-gate-correlation",
+        operation: "optimization.batch.activate",
+        payload: { batchId: "candidate-batch" },
+      }),
+    ).rejects.toMatchObject({
+      category: "policy",
+      operatorCode: "APP_OPTIMIZATION_POLICY_GATE",
+    });
+  });
 });

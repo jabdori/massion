@@ -254,10 +254,12 @@ export class OptimizationBatchService {
       if (!recommendation) throw new Error("모델 추천을 찾을 수 없습니다");
       if (recommendation.status !== "approved") throw new Error("승인된 모델 추천만 batch로 만들 수 있습니다");
       const [versions] = await tx.query<[{ readonly version: number }[]]>(
-        "SELECT version FROM optimization_batch WHERE organization_id = $organization_id AND role_key = $role_key ORDER BY version DESC LIMIT 1;",
+        "SELECT version FROM optimization_batch WHERE organization_id = $organization_id AND role_key = $role_key;",
         { organization_id: context.organizationId, role_key: recommendation.role_key },
       );
-      const version = (versions[0]?.version ?? 0) + 1;
+      // SurrealDB transaction query의 ORDER BY·LIMIT 결과 순서는 저장 엔진에 따라 보장되지 않을 수 있으므로
+      // 읽어온 모든 version에서 최댓값을 계산해 다음 immutable version을 결정합니다.
+      const version = versions.reduce((maximum, record) => Math.max(maximum, record.version), 0) + 1;
       const [active] = await tx.query<[PointerRecord[]]>(
         "SELECT batch_id, batch_version, checksum FROM optimization_active_pointer WHERE organization_id = $organization_id AND role_key = $role_key LIMIT 1;",
         { organization_id: context.organizationId, role_key: recommendation.role_key },
