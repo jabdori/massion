@@ -32,6 +32,7 @@
 4. UAT 영수증에는 원시 pane 출력, 이메일, token, 개인 경로를 저장하지 않습니다.
 5. 2026-07-14 결정으로 Massion의 개인 Codex 데이터 처리 고지·동의 화면과 append-only 확인 기록을 제거합니다. OpenAI 모델 개선 데이터 제어는 사용자 OpenAI 계정의 선택이며 Massion이 별도 UX로 재확인하거나 저장하지 않습니다. 기존 설치에 남은 Massion 고지 기록 table도 migration으로 제거합니다. Massion 자체의 실사용 학습·shadow 실행·자동 최적화는 기존처럼 별도 동의 전까지 기본 거부입니다.
 6. 비대화형 구독 UAT는 `automatic` 승인 정책으로 실제 실행 완료를 검증합니다. 사람 승인이 필요한 `review` 정책은 자동 UAT와 섞지 않고 별도의 상호작용 시나리오로 검증합니다.
+7. 실제 제품의 Codex 연결은 새 격리 UAT의 반복 로그인과 분리합니다. `subscription.accounts`에서 기존 server 계정을 찾은 뒤 `subscription.doctor`와 `subscription.quota`를 확인하고, 유효한 profile은 다시 로그인하지 않습니다. doctor가 `reauth`이거나 계정 상태가 `needs-reauth`일 때만 해당 profile에서 재인증하며, 새 계정 추가는 `--new-account`로 명시합니다.
 
 ## Phase 24 종료 조건
 

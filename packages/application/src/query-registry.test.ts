@@ -548,6 +548,10 @@ describe("ApplicationQueryRegistry", () => {
       ],
     });
     expect((accounts.data as Array<Record<string, unknown>>)[1]).not.toHaveProperty("minimumRemainingRatio");
+    expect((accounts.data as Array<Record<string, unknown>>)[1]).toMatchObject({
+      profileHandle: expect.stringMatching(/^[a-f0-9]{64}\/[a-f0-9]{64}$/u),
+    });
+    expect((accounts.data as Array<Record<string, unknown>>)[0]).not.toHaveProperty("profileHandle");
     expect(quota).toMatchObject({
       data: [
         {
