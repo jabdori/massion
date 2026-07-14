@@ -157,6 +157,7 @@ export async function runCli(argv = process.argv.slice(2)): Promise<number> {
           {
             detach: invocation.detach,
             signal: signals.signal,
+            ...(invocation.correlationId === undefined ? {} : { correlationId: invocation.correlationId }),
             ...(invocation.output === "jsonl"
               ? {
                   onEvent: async (event: unknown) => {

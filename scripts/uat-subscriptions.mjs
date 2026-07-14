@@ -1,6 +1,6 @@
 import { Buffer } from "node:buffer";
 import { spawnSync } from "node:child_process";
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { createReadStream } from "node:fs";
 import {
   chmod,
@@ -89,6 +89,17 @@ export function subscriptionUatPolicy(providerId) {
     providerId,
     credentialPolicy: "adaptive",
     approvalMode: "automatic",
+  };
+}
+
+export function subscriptionUatRunPlan(correlationId) {
+  if (typeof correlationId !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(correlationId)) {
+    throw new Error("UAT run correlation ID가 UUID 형식이 아닙니다");
+  }
+  return {
+    correlationId,
+    runArguments: ["run", "subscription acceptance", "--correlation", correlationId, "--json"],
+    lineageArguments: ["runtime", "lineage", "correlation", correlationId, "--json"],
   };
 }
 
@@ -1958,6 +1969,7 @@ async function executeProviderScenario(session, plan, environment, timeoutMs, re
   const mass = join(environment.MASSION_PREFIX, "bin", "mass");
   const alias = `UAT ${plan.provider}`;
   const policy = subscriptionUatPolicy(plan.provider);
+  const runPlan = subscriptionUatRunPlan(randomUUID());
   const connect = await runTmuxUatCommand(session, {
     window: "connectors",
     step: `${plan.id}-connect`,
@@ -2055,28 +2067,37 @@ async function executeProviderScenario(session, plan, environment, timeoutMs, re
   const terminal = await observe({
     window: "user",
     step: `${plan.id}-run`,
-    arguments: ["run", "subscription acceptance", "--json"],
+    arguments: runPlan.runArguments,
     observation: { kind: "application-run-terminal", expected: {} },
   });
   if (terminal) assertions.push("application-run-terminal");
-  const runtimeLineage =
-    terminal && account
-      ? await observe({
-          window: "user",
-          step: `${plan.id}-runtime-lineage`,
-          arguments: ["runtime", "lineage", "correlation", terminal.facts.correlationId, "--json"],
-          observation: {
-            kind: "runtime-subscription-lineage",
-            expected: {
-              correlationId: terminal.facts.correlationId,
-              accountId: account.accountId,
-              providerId: plan.provider,
-              requireSettledSuccess: true,
-            },
+  const runtimeLineage = account
+    ? await runTmuxObservedCommand(session, {
+        window: "user",
+        step: `${plan.id}-runtime-lineage`,
+        command: mass,
+        arguments: runPlan.lineageArguments,
+        environment,
+        timeoutMs,
+        signal,
+        observation: {
+          kind: "runtime-subscription-lineage",
+          expected: {
+            correlationId: runPlan.correlationId,
+            accountId: account.accountId,
+            providerId: plan.provider,
+            ...(terminal ? { requireSettledSuccess: true } : {}),
           },
-        })
-      : undefined;
-  if (runtimeLineage) assertions.push("subscription-lineage-verified");
+        },
+      })
+    : undefined;
+  if (runtimeLineage) {
+    commands.push(runtimeLineage.command);
+    if (runtimeLineage.observation) {
+      lineage.push(runtimeLineage.observation.digest);
+      assertions.push(terminal ? "subscription-lineage-verified" : "timeout-lineage-observed");
+    }
+  }
   const failure = commands.find((command) => command.exitCode !== 0);
   return {
     scenario: {
@@ -2092,9 +2113,9 @@ async function executeProviderScenario(session, plan, environment, timeoutMs, re
     },
     supplemental,
     account: accountObservation ? account : undefined,
-    correlationId: terminal?.facts.correlationId,
+    correlationId: runPlan.correlationId,
     attemptIds:
-      runtimeLineage?.facts.executions.flatMap((execution) => execution.attempts.map((attempt) => attempt.attemptId)) ??
+      runtimeLineage?.observation?.facts.executions.flatMap((execution) => execution.attempts.map((attempt) => attempt.attemptId)) ??
       [],
   };
 }
