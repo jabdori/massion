@@ -85,3 +85,18 @@ Phase 25는 현재 in-progress입니다. Provider별 품질 분포와 자동 승
 - receipt summary: `passed: 1`, `failed: 0`, `not-run: 9`
 
 최신 release는 경로에 공백이 포함된 격리 작업공간에서 local lifecycle 설치·실행·재시작·backup·restore·uninstall data 보존을 통과했습니다. 이 결과는 모델 역할별 Provider 품질 평가를 통과했다는 뜻이 아닙니다. 실제 Provider run, 추천 승인·자동 승격·shadow·rollback의 release 영수증, TUI mutation·외부 bundle import/export 반복은 여전히 외부 Provider 인증·추가 계정·추가 사용자 또는 별도 release 시나리오가 필요합니다.
+
+## 2026-07-14 최적화 회귀 수정 후 release tmux 시나리오
+
+코드 검증 기준 커밋은 `e60811ab839ddcb13c09a2074b39a82c273aada1`입니다. 이 커밋은 SurrealDB transaction 조회 순서에 의존하던 batch·bundle version 계산을 전체 version 최댓값 기반으로 고정하고, 후보 batch 활성화 거부를 내부 오류가 아닌 구조화된 최적화 정책 오류로 반환합니다.
+
+새 local archive를 격리된 `massion-opt-uat` tmux 세션에 설치하여 이미 구성된 로컬 OpenAI 호환 평가 Provider를 재사용했습니다. 원시 pane 출력·credential·token·식별자는 보존하지 않았습니다.
+
+- 설치 후 `mass version`: `Massion AgentOS 1.0.0`
+- 승인된 추천으로 batch version `3` 생성 성공(기존 version `1`, `2` 다음 계보 유지)
+- candidate batch 활성화: exit `4`, 사용자 오류 `모델 최적화 정책이 요청을 거부했습니다`
+- limited batch version `3` 활성화 성공
+- production degraded observation 기록 및 `degraded-observation` recovery 성공(이전 active batch로 복구)
+- 평가 bundle version `2`, `3` 생성 성공(기존 version `1` 다음 계보 유지)
+
+이번 시나리오는 외부 Provider의 품질 분포를 증명하지 않습니다. 로컬 호환 Provider에서 평가실의 정책·버전 계보·승격·관찰·복구 경계를 검증한 결과이며, 실제 Claude·Codex·GLM 및 복수 구독 계정의 연결·quota·fallback 검증은 여전히 사용자 계정 인증과 네트워크가 필요합니다.
