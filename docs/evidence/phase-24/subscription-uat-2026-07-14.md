@@ -5,24 +5,25 @@
 
 ## 현재 source commit lifecycle UAT — 2026-07-14
 
-- Git commit: `22ad7835f1ce95ef4e36bbca9a3843e5a15a205c`
-- Local release archive: `sha256:475e782a630ce8aa6d814c10791d748f80452fcb30c0d77e9f0aea078f5829f0`
-- UAT receipt: `sha256:d054d813b7d349e39eb7c8b15d4e4b7435b12ed44fd48641f6e0fee78cf8dce6`
-- Receipt summary: `passed: 1`, `failed: 0`, `not-run: 9`
+- Git commit: `26cac867dec17b36370e80d98d4e9d1813c7db96`
+- Release manifest source digest: `sha256:f00e5d9396ff3beeef9f36eddb231e5b5d07d76ac51618da5d38bd582b7771b1`
+- Local release archive: `sha256:1f4510141e80c6239a80765594eaab7f7d94205663c61a3439c734d63744313c`
+- UAT receipt: `sha256:3cb401a0919904def55c99455e90c88e788c242b8730e1f50c5ab6ac8478acb3`
+- Receipt summary: `passed: 1`, `failed: 1`, `not-run: 9`
 
-최신 source commit의 release를 격리된 `tmux`에서 설치해 version·Connector doctor·local 시작·owner 초기화·readiness·provider catalog·event watch·재시작·owner-only backup·복원·uninstall 후 data 보존을 확인했습니다. Codex 제공자 시나리오는 새 격리 profile에서 사용자 인증 입력이 필요하므로 `interactive-login-required`로 기록했으며, 인증 성공으로 추정하지 않았습니다. 실행 뒤 UAT driver·격리 server·tmux session은 남지 않았습니다.
+최신 source commit의 release를 격리된 `tmux`에서 설치해 version·Connector doctor·local 시작·owner 초기화·readiness·provider catalog·event watch·재시작·owner-only backup·복원·uninstall 후 data 보존을 확인했습니다. 같은 실행에서 Codex의 공식 로그인 세션이 격리 profile에 이미 유효해 연결·account·doctor·quota 조회까지 확인했습니다. 실행 뒤 UAT driver·격리 server·tmux session은 남지 않았습니다.
 
 ## 최신 실제 Codex UAT — 2026-07-14
 
-- Git commit: `64d1e83576f811bf80c8077e5183e27e40b4508b`
-- Release manifest source digest: `sha256:799af64dfda8db445be1ca5001a79d3b0ed79c27cf462e24ced578ffaacf16da`
-- Local release archive: `sha256:d95896feaa642b6410ede7e806d1ee4c48cfc6332a41fd7ee0c349dcf0e3d2d9`
-- UAT receipt: `sha256:48f3e62612222022485009ee04cdd57e0613ee681095dac52008428b9c1bee90`
+- Git commit: `26cac867dec17b36370e80d98d4e9d1813c7db96`
+- Release manifest source digest: `sha256:f00e5d9396ff3beeef9f36eddb231e5b5d07d76ac51618da5d38bd582b7771b1`
+- Local release archive: `sha256:1f4510141e80c6239a80765594eaab7f7d94205663c61a3439c734d63744313c`
+- UAT receipt: `sha256:3cb401a0919904def55c99455e90c88e788c242b8730e1f50c5ab6ac8478acb3`
 - Receipt summary: `passed: 1`, `failed: 1`, `not-run: 9`
 
 이번 실행은 경로에 공백이 포함된 격리 작업공간에서 UAT 드라이버 자체도 `tmux`로 실행했습니다. 설치·version·Connector doctor·local 시작·owner 초기화·readiness·provider catalog·event watch·재시작·owner-only backup·복원 서버 시작·복원 readiness·uninstall 후 data 보존을 모두 통과했습니다. UAT 종료 뒤 격리 tmux·server 프로세스가 남지 않았습니다.
 
-Codex 연결, account·doctor·quota 조회, `adaptive` 자동 승인 정책 설정·조회는 통과했습니다. 실제 `subscription acceptance` 실행은 15분 제한 내 terminal event를 받지 못해 종료 코드 `124`, 분류 `network`으로 실패했습니다. timeout 뒤 같은 상관관계 ID의 공개 runtime 계보 조회는 종료 코드 `65`로 실패했습니다. 이 값은 원시 출력이나 계정 정보를 저장하지 않는 UAT 관찰 계약 실패를 뜻하며, 실제 제공자·제품 원인을 확정하는 근거로 사용하지 않습니다.
+Codex 연결, account·doctor·quota 조회, `adaptive` 자동 승인 정책 설정·조회는 통과했습니다. 실제 `subscription acceptance` 실행은 15분 제한 내 terminal event를 받지 못해 종료 코드 `124`, 분류 `network`으로 실패했습니다. timeout 뒤 같은 상관관계 ID의 공개 runtime 계보 조회는 종료 코드 `67`(유효한 JSON이지만 공개 계약과 불일치)로 실패했습니다. 이 값은 원시 출력이나 계정 정보를 저장하지 않는 UAT 관찰 계약 실패를 뜻하며, 실제 제공자·제품 원인을 확정하는 근거로 사용하지 않습니다.
 
 ## 계보
 
