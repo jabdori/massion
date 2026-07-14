@@ -3,7 +3,6 @@ export * from "./codex-account.js";
 export * from "./broker.js";
 export * from "./connector-registry.js";
 export * from "./coding-plan.js";
-export * from "./data-disclosure.js";
 export * from "./contracts.js";
 export * from "./enrollment.js";
 export * from "./metrics.js";

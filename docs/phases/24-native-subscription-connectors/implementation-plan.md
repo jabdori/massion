@@ -36,7 +36,7 @@
 ## Task 5. Application과 사용자 화면
 
 - [x] 구독 provider·account·quota·policy·doctor query와 connect·share·unshare·disconnect·connector 폐기 command를 추가합니다.
-- [x] CLI의 `mass subscription ...` UX와 로그인 전 데이터 처리 고지 동의를 구현합니다.
+- [x] CLI의 `mass subscription ...` UX는 공식 Codex 로그인만 실행하며 Massion의 별도 데이터 처리 고지·동의 UI를 추가하지 않습니다.
 - [x] TUI·Web에서 같은 Application operation과 redacted view, 승인 미리보기를 제공합니다.
 
 ## Task 6. 제품 조립과 실제 사용자 검증
@@ -54,5 +54,5 @@
 - [x] 서버 종료에서 HTTP 수신 차단 뒤 실행 중 runtime을 취소·정산하고 connector·Application·Database를 닫는 순서를 TDD로 고정합니다.
 - [x] ACP 초기화 중 취소와 출력 누적 상한을 fail-closed로 구현합니다.
 - [x] Edge Connector 폐기 시 공개 명령이 현재 채널을 즉시 닫고 신규 RPC를 막는 경로를 검증합니다.
-- [x] 개인 Codex 데이터 처리 고지의 명시 동의·버전 기록·로그인 전 차단을 검증합니다.
+- [x] 개인 Codex 로그인에서 Massion의 데이터 처리 고지·동의 기록 API가 호출·등록되지 않음을 검증하고, 기존 설치의 불필요한 고지 기록 table도 migration으로 제거합니다. OpenAI 계정 데이터 제어는 제공자 공식 설정에 맡깁니다.
 - [ ] 실제 사용자 자격 증명·tmux 시나리오와 외부 Provider release gate를 완료한 하나의 source commit으로 고정합니다.

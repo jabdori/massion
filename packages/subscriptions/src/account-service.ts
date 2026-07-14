@@ -12,6 +12,7 @@ import type {
 } from "./contracts.js";
 import {
   SUBSCRIPTION_ACCOUNT_POLICY_MIGRATION,
+  SUBSCRIPTION_DATA_DISCLOSURE_RETIREMENT_MIGRATION,
   SUBSCRIPTION_EDGE_ACCOUNT_GUARD_MIGRATION,
   SUBSCRIPTION_MIGRATION,
 } from "./schema.js";
@@ -117,6 +118,7 @@ export class SubscriptionAccountService {
       SUBSCRIPTION_MIGRATION,
       SUBSCRIPTION_ACCOUNT_POLICY_MIGRATION,
       SUBSCRIPTION_EDGE_ACCOUNT_GUARD_MIGRATION,
+      SUBSCRIPTION_DATA_DISCLOSURE_RETIREMENT_MIGRATION,
     ]);
     return new SubscriptionAccountService(database, organizations, Buffer.from(fingerprintKey), sharingAuthorizer);
   }

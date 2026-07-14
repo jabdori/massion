@@ -22,16 +22,6 @@ describe("로컬 서버 소비자 구독 로그인", () => {
       command: vi.fn(async (command: unknown) => {
         const value = command as Record<string, unknown>;
         commands.push(value);
-        if (value.operation === "subscription.data-disclosure.acknowledge") {
-          return {
-            outcome: "succeeded",
-            data: {
-              providerId: "openai-codex",
-              version: "openai-codex-data-controls-2026-07-13",
-              acknowledgedAt: "2026-07-13T00:00:00.000Z",
-            },
-          };
-        }
         if (value.operation === "subscription.server.prepare") {
           return {
             outcome: "succeeded",
@@ -64,12 +54,11 @@ describe("로컬 서버 소비자 구독 로그인", () => {
         return 0;
       },
     );
-    const confirmDataDisclosure = vi.fn(async () => true);
-    return { root, commands, client, inspectRuntime, runInteractive, confirmDataDisclosure };
+    return { root, commands, client, inspectRuntime, runInteractive };
   }
 
-  it("공식 bundled Codex를 격리 profile에서 로그인하고 준비·건강 증명을 순서대로 완료한다", async () => {
-    const { root, commands, client, inspectRuntime, runInteractive, confirmDataDisclosure } = await fixture();
+  it("공식 bundled Codex를 격리 profile에서 별도 데이터 고지 없이 로그인하고 준비·건강 증명을 완료한다", async () => {
+    const { root, commands, client, inspectRuntime, runInteractive } = await fixture();
 
     await expect(
       connectLocalServerSubscription(
@@ -81,7 +70,6 @@ describe("로컬 서버 소비자 구독 로그인", () => {
           environment: { PATH: "/usr/bin", TMPDIR: "/tmp", OPENAI_API_KEY: "노출되면-안됨" },
           inspectRuntime,
           runInteractive,
-          confirmDataDisclosure,
         },
       ),
     ).resolves.toEqual({
@@ -100,17 +88,10 @@ describe("로컬 서버 소비자 구독 로그인", () => {
     );
     expect(runInteractive.mock.calls[0]?.[2]).not.toHaveProperty("OPENAI_API_KEY");
     expect(commands.map((command) => command.operation)).toEqual([
-      "subscription.data-disclosure.acknowledge",
       "subscription.server.prepare",
       "subscription.server.attest",
     ]);
     expect(commands[0]).toMatchObject({
-      payload: {
-        providerId: "openai-codex",
-        version: "openai-codex-data-controls-2026-07-13",
-      },
-    });
-    expect(commands[1]).toMatchObject({
       payload: {
         providerId: "openai-codex",
         alias: "개인 Codex",
@@ -118,7 +99,7 @@ describe("로컬 서버 소비자 구독 로그인", () => {
         billingKind: "consumer-subscription",
       },
     });
-    expect(commands[2]).toMatchObject({
+    expect(commands[1]).toMatchObject({
       payload: {
         connectorId: "server-1234567890abcdef",
         accountId: "account-12345678",
@@ -132,17 +113,9 @@ describe("로컬 서버 소비자 구독 로그인", () => {
   });
 
   it("건강 증명 응답이 끊기면 같은 command와 profile로 재개하며 로그인을 반복하지 않는다", async () => {
-    const { root, commands, client, inspectRuntime, runInteractive, confirmDataDisclosure } = await fixture();
+    const { root, commands, client, inspectRuntime, runInteractive } = await fixture();
     // 순서가 있는 응답을 유지하면서 호출 원문도 별도로 수집합니다.
     const responses = [
-      {
-        outcome: "succeeded",
-        data: {
-          providerId: "openai-codex",
-          version: "openai-codex-data-controls-2026-07-13",
-          acknowledgedAt: "2026-07-13T00:00:00.000Z",
-        },
-      },
       {
         outcome: "succeeded",
         resource: { type: "SubscriptionAccount", id: "account-12345678" },
@@ -172,7 +145,6 @@ describe("로컬 서버 소비자 구독 로그인", () => {
       environment: { PATH: "/usr/bin" },
       inspectRuntime,
       runInteractive,
-      confirmDataDisclosure,
     };
 
     await expect(connectLocalServerSubscription(client, { providerId: "openai-codex" }, options)).rejects.toThrow(
@@ -184,33 +156,11 @@ describe("로컬 서버 소비자 구독 로그인", () => {
 
     expect(runInteractive).toHaveBeenCalledOnce();
     expect(commands.map((command) => command.operation)).toEqual([
-      "subscription.data-disclosure.acknowledge",
       "subscription.server.prepare",
       "subscription.server.attest",
       "subscription.server.attest",
     ]);
-    expect(commands[2]?.commandId).toBe(commands[3]?.commandId);
-  });
-
-  it("명시 동의를 거절하면 Codex 로그인 process와 서버 준비 명령을 시작하지 않는다", async () => {
-    const { root, commands, client, inspectRuntime, runInteractive } = await fixture();
-    const confirmDataDisclosure = vi.fn(async () => false);
-
-    await expect(
-      connectLocalServerSubscription(
-        client,
-        { providerId: "openai-codex" },
-        {
-          endpoint: "http://127.0.0.1:7331",
-          connectorDirectory: root,
-          inspectRuntime,
-          runInteractive,
-          confirmDataDisclosure,
-        },
-      ),
-    ).rejects.toThrow("동의해야");
-    expect(commands).toEqual([]);
-    expect(runInteractive).not.toHaveBeenCalled();
+    expect(commands[1]?.commandId).toBe(commands[2]?.commandId);
   });
 
   it("team 서버·미지원 provider·미승인 Claude 소비자 로그인은 profile과 process 생성 전에 거부한다", async () => {

@@ -25,7 +25,6 @@ import type {
   SubscriptionAccountCommands,
   SubscriptionConnectionCommands,
   SubscriptionConnectorCommands,
-  SubscriptionDataDisclosureCommands,
   SubscriptionServerConnectionCommands,
   SubscriptionPolicyStore,
   SubscriptionPolicyView,
@@ -79,7 +78,6 @@ export interface ApplicationDomainDependencies {
   readonly subscriptionConnections?: SubscriptionConnectionCommands;
   readonly subscriptionServerConnections?: SubscriptionServerConnectionCommands;
   readonly subscriptionConnectors?: SubscriptionConnectorCommands;
-  readonly subscriptionDataDisclosures?: SubscriptionDataDisclosureCommands;
   readonly subscriptionPolicy?: SubscriptionPolicyStore;
 }
 
@@ -1428,31 +1426,6 @@ function registerSubscriptions(
   registry: ApplicationCommandRegistry,
   dependencies: ApplicationDomainDependencies,
 ): void {
-  const dataDisclosures = dependencies.subscriptionDataDisclosures;
-  if (dataDisclosures) {
-    register(registry, {
-      operation: "subscription.data-disclosure.acknowledge",
-      requiredScopes: ["subscription:write"],
-      allowedRoles: ["owner", "admin", "member"],
-      recovery: "replay-domain",
-      validate: (value) => payload(value, ["providerId", "version"], ["providerId", "version"]),
-      async handle(context, command, value) {
-        const acknowledgement = await dataDisclosures.acknowledge(context, {
-          commandId: command.commandId,
-          providerId: string(value.providerId, "providerId"),
-          version: string(value.version, "version"),
-        });
-        return result(command, {
-          resource: {
-            type: "SubscriptionDataDisclosureAcknowledgement",
-            id: `${acknowledgement.providerId}:${acknowledgement.version}`,
-          },
-          data: acknowledgement,
-        });
-      },
-    });
-  }
-
   const connectors = dependencies.subscriptionConnectors;
   if (connectors) {
     register(registry, {
@@ -1591,10 +1564,6 @@ function registerSubscriptions(
           ["providerId", "alias", "authKind", "billingKind"],
         ),
       async handle(context, command, value) {
-        if (!dataDisclosures) {
-          throw new Error("서버 구독 로그인에 필요한 데이터 처리 고지 서비스가 구성되지 않았습니다");
-        }
-        await dataDisclosures.requireAcknowledgement(context, string(value.providerId, "providerId"));
         const prepared = await serverConnections.prepare(context, {
           commandId: command.commandId,
           providerId: string(value.providerId, "providerId"),

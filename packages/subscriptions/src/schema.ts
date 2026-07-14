@@ -349,20 +349,10 @@ DEFINE INDEX subscription_edge_account_guard_account ON subscription_edge_accoun
 `,
 );
 
-// prettier-ignore -- 제공자 데이터 처리 고지 동의는 개인별·버전별로 append-only로 보존합니다.
-export const SUBSCRIPTION_DATA_DISCLOSURE_MIGRATION = defineMigration(
-  "0102-subscription-data-disclosure",
+// prettier-ignore -- 더 이상 필요한 동의 UX와 기록을 기존 설치에서도 완전히 제거합니다.
+export const SUBSCRIPTION_DATA_DISCLOSURE_RETIREMENT_MIGRATION = defineMigration(
+  "0103-subscription-data-disclosure-retirement",
   `
-DEFINE TABLE subscription_data_disclosure_acknowledgement SCHEMAFULL PERMISSIONS NONE;
-DEFINE FIELD acknowledgement_id ON subscription_data_disclosure_acknowledgement TYPE string;
-DEFINE FIELD organization_id ON subscription_data_disclosure_acknowledgement TYPE string;
-DEFINE FIELD user_id ON subscription_data_disclosure_acknowledgement TYPE string;
-DEFINE FIELD provider_id ON subscription_data_disclosure_acknowledgement TYPE string;
-DEFINE FIELD disclosure_version ON subscription_data_disclosure_acknowledgement TYPE string;
-DEFINE FIELD command_id ON subscription_data_disclosure_acknowledgement TYPE string;
-DEFINE FIELD created_at ON subscription_data_disclosure_acknowledgement TYPE datetime;
-DEFINE INDEX subscription_data_disclosure_acknowledgement_id ON subscription_data_disclosure_acknowledgement FIELDS acknowledgement_id UNIQUE;
-DEFINE INDEX subscription_data_disclosure_acknowledgement_version ON subscription_data_disclosure_acknowledgement FIELDS organization_id, user_id, provider_id, disclosure_version UNIQUE;
-DEFINE EVENT subscription_data_disclosure_acknowledgement_immutable ON TABLE subscription_data_disclosure_acknowledgement WHEN $event IN ['UPDATE', 'DELETE'] THEN { THROW '제공자 데이터 처리 고지 동의는 변경하거나 삭제할 수 없습니다'; };
+REMOVE TABLE IF EXISTS subscription_data_disclosure_acknowledgement;
 `,
 );

@@ -61,15 +61,8 @@ describe("Application 서버 구독 연결 명령", () => {
     });
     const attest = vi.fn().mockResolvedValue({ ...connector, status: "ready", processGeneration: 1 });
     const offline = vi.fn().mockResolvedValue(connector);
-    const acknowledge = vi.fn().mockResolvedValue({
-      providerId: "openai-codex",
-      version: "openai-codex-data-controls-2026-07-13",
-      acknowledgedAt: "2026-07-13T00:00:00.000Z",
-    });
-    const requireAcknowledgement = vi.fn().mockResolvedValue(undefined);
     registerApplicationDomainCommands(registry, {
       subscriptionServerConnections: { prepare, attest, offline },
-      subscriptionDataDisclosures: { acknowledge, requireAcknowledgement },
     } as never);
     const dispatch = async (operation: string, payload: unknown) =>
       await registry.dispatch(context, ["subscription:write"], {
@@ -80,10 +73,12 @@ describe("Application 서버 구독 연결 명령", () => {
         payload,
       });
 
-    const disclosed = await dispatch("subscription.data-disclosure.acknowledge", {
-      providerId: "openai-codex",
-      version: "openai-codex-data-controls-2026-07-13",
-    });
+    await expect(
+      dispatch("subscription.data-disclosure.acknowledge", {
+        providerId: "openai-codex",
+        version: "openai-codex-data-controls-2026-07-13",
+      }),
+    ).rejects.toThrow("지원하지 않는 Application operation");
     const prepared = await dispatch("subscription.server.prepare", {
       providerId: "openai-codex",
       alias: "개인 Codex",
@@ -93,13 +88,6 @@ describe("Application 서버 구독 연결 명령", () => {
     const ready = await dispatch("subscription.server.attest", { connectorId: connector.connectorId });
     const stopped = await dispatch("subscription.server.offline", { connectorId: connector.connectorId });
 
-    expect(disclosed).toMatchObject({
-      resource: {
-        type: "SubscriptionDataDisclosureAcknowledgement",
-        id: "openai-codex:openai-codex-data-controls-2026-07-13",
-      },
-      data: { providerId: "openai-codex", version: "openai-codex-data-controls-2026-07-13" },
-    });
     expect(prepared).toMatchObject({
       resource: { type: "SubscriptionAccount", id: account.account_id, revision: 1 },
       data: {
@@ -116,11 +104,6 @@ describe("Application 서버 구독 연결 명령", () => {
     expect(prepare).toHaveBeenCalledWith(
       context,
       expect.objectContaining({ providerId: "openai-codex", authKind: "device-code" }),
-    );
-    expect(requireAcknowledgement).toHaveBeenCalledWith(context, "openai-codex");
-    expect(acknowledge).toHaveBeenCalledWith(
-      context,
-      expect.objectContaining({ providerId: "openai-codex", version: "openai-codex-data-controls-2026-07-13" }),
     );
     const serialized = JSON.stringify([prepared, ready, stopped]);
     for (const secret of [

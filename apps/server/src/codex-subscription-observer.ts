@@ -198,7 +198,9 @@ function creditsWindow(
   ) {
     throw new CodexSubscriptionObservationError("schema");
   }
-  if (!exhausted && (credits.unlimited || credits.hasCredits)) return undefined;
+  // 추가 credit 잔액은 개인 구독의 기본 사용 창과 독립적입니다.
+  // 제공자가 실제 credit 소진을 명시한 경우에만 route 차단 quota로 기록합니다.
+  if (!exhausted) return undefined;
   return {
     kind: `codex:${limitId}:credits`,
     remainingRatio: 0,

@@ -37,6 +37,7 @@ import {
   runSubscriptionUat,
   runTmuxObservedCommand,
   runTmuxUatCommand,
+  subscriptionUatPolicy,
   validateOperationalLogText,
   validateCredentialPolicyAttemptLineage,
   validateFallbackAttemptLineage,
@@ -209,6 +210,14 @@ test("tmux 실행은 최종 local archive를 요구하고 provider 로그인은 
   assert.deepEqual(optedIn.providers, ["claude", "codex"]);
   assert.deepEqual(optedIn.approvedProviders, ["claude"]);
   assert.equal(optedIn.timeoutMs, 300_000);
+});
+
+test("비대화형 구독 UAT는 사용자 승인 대기 없이 자동 승인 정책을 사용한다", () => {
+  assert.deepEqual(subscriptionUatPolicy("openai-codex"), {
+    providerId: "openai-codex",
+    credentialPolicy: "adaptive",
+    approvalMode: "automatic",
+  });
 });
 
 test("CLI 사전조건 실패는 stack trace와 로컬 경로 없이 한 줄로 종료한다", () => {

@@ -8,7 +8,6 @@ import {
   type BundledSubscriptionRuntimeArtifact,
   type BundledSubscriptionRuntimeId,
 } from "@massion/runtime";
-import { subscriptionDataDisclosure, type SubscriptionDataDisclosure } from "@massion/subscriptions";
 
 export interface ServerSubscriptionLoginClient {
   status(): Promise<unknown>;
@@ -31,7 +30,6 @@ export interface ServerSubscriptionLoginOptions {
     arguments_: readonly string[],
     environment: NodeJS.ProcessEnv,
   ) => Promise<number>;
-  readonly confirmDataDisclosure?: (disclosure: SubscriptionDataDisclosure) => Promise<boolean>;
 }
 
 interface ProviderLoginContract {
@@ -53,10 +51,6 @@ interface PendingLogin {
   readonly alias: string;
   readonly requestedModelId?: string;
   readonly phase: "login" | "prepare" | "attest";
-  readonly disclosureVersion: string;
-  readonly disclosureCommandId: string;
-  readonly disclosureCorrelationId: string;
-  readonly disclosureAcknowledged: boolean;
   readonly stagingId: string;
   readonly prepareCommandId: string;
   readonly prepareCorrelationId: string;
@@ -170,10 +164,6 @@ function pendingLogin(value: unknown, providerId: string): PendingLogin {
     source.providerId !== providerId ||
     !new Set(["login", "prepare", "attest"]).has(source.phase ?? "") ||
     typeof source.alias !== "string" ||
-    typeof source.disclosureVersion !== "string" ||
-    typeof source.disclosureCommandId !== "string" ||
-    typeof source.disclosureCorrelationId !== "string" ||
-    typeof source.disclosureAcknowledged !== "boolean" ||
     typeof source.stagingId !== "string" ||
     !/^[0-9a-f-]{36}$/u.test(source.stagingId) ||
     typeof source.prepareCommandId !== "string" ||
@@ -190,9 +180,6 @@ function pendingLogin(value: unknown, providerId: string): PendingLogin {
     profileHandle(source.prepared.profileHandle);
   }
   requestedModelId(source.requestedModelId);
-  if (source.disclosureVersion !== subscriptionDataDisclosure(providerId).version) {
-    throw new Error("재개 중인 구독 로그인 데이터 처리 고지 버전이 현재 버전과 일치하지 않습니다");
-  }
   return source as PendingLogin;
 }
 
@@ -274,21 +261,6 @@ async function defaultInteractiveRunner(
   });
 }
 
-async function defaultDataDisclosureConfirmation(disclosure: SubscriptionDataDisclosure): Promise<boolean> {
-  if (!process.stdin.isTTY || !process.stdout.isTTY) {
-    throw new Error("데이터 처리 고지 동의에는 대화형 터미널이 필요합니다");
-  }
-  const { createInterface } = await import("node:readline/promises");
-  const terminal = createInterface({ input: process.stdin, output: process.stdout });
-  try {
-    process.stdout.write(`\n${disclosure.title}\n${disclosure.summary}\n자세히: ${disclosure.documentationUrl}\n`);
-    const answer = await terminal.question("내용을 확인했고 로그인을 진행하려면 '동의'를 입력하세요: ");
-    return answer.trim() === "동의";
-  } finally {
-    terminal.close();
-  }
-}
-
 function commandEnvelope(commandId: string, correlationId: string, operation: string, payload: unknown): unknown {
   return {
     schemaVersion: "massion.application.v1",
@@ -311,20 +283,6 @@ function parsePrepared(value: unknown): PreparedBinding {
     connectorId: identifier(response.data.connectorId, "서버 Connector ID"),
     profileHandle: profileHandle(response.data.profileHandle),
   };
-}
-
-function assertDisclosureAcknowledged(value: unknown, disclosure: SubscriptionDataDisclosure): void {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw new Error("데이터 처리 고지 동의 응답이 유효하지 않습니다");
-  }
-  const response = value as { outcome?: unknown; data?: { providerId?: unknown; version?: unknown } };
-  if (
-    response.outcome !== "succeeded" ||
-    response.data?.providerId !== disclosure.providerId ||
-    response.data.version !== disclosure.version
-  ) {
-    throw new Error("데이터 처리 고지 동의가 완료되지 않았습니다");
-  }
 }
 
 function assertAttested(value: unknown, connectorId: string): void {
@@ -411,7 +369,6 @@ export async function connectLocalServerSubscription(
   }
   const contract = PROVIDERS[input.providerId];
   if (!contract) throw new Error("서버 관리형 소비자 구독 로그인은 Codex만 지원합니다");
-  const disclosure = subscriptionDataDisclosure(input.providerId);
   assertLocalMode(await client.status());
   assertLoopbackEndpoint(options.endpoint);
   if (!isAbsolute(options.connectorDirectory)) throw new Error("Connector directory는 절대 경로여야 합니다");
@@ -433,10 +390,6 @@ export async function connectLocalServerSubscription(
         alias: selectedAlias,
         ...(selectedModelId === undefined ? {} : { requestedModelId: selectedModelId }),
         phase: "login",
-        disclosureVersion: disclosure.version,
-        disclosureCommandId: randomUUID(),
-        disclosureCorrelationId: randomUUID(),
-        disclosureAcknowledged: false,
         stagingId: randomUUID(),
         prepareCommandId: randomUUID(),
         prepareCorrelationId: randomUUID(),
@@ -452,24 +405,6 @@ export async function connectLocalServerSubscription(
 
     const stagingRoot = resolve(stagingParent, pending.stagingId);
     if (!within(stagingParent, stagingRoot)) throw new Error("구독 staging profile 경로가 유효하지 않습니다");
-    if (!pending.disclosureAcknowledged) {
-      const confirm = options.confirmDataDisclosure ?? defaultDataDisclosureConfirmation;
-      if (!(await confirm(disclosure))) throw new Error("데이터 처리 고지에 동의해야 구독 로그인을 시작할 수 있습니다");
-      const acknowledged = await client.command(
-        commandEnvelope(
-          pending.disclosureCommandId,
-          pending.disclosureCorrelationId,
-          "subscription.data-disclosure.acknowledge",
-          {
-            providerId: disclosure.providerId,
-            version: disclosure.version,
-          },
-        ),
-      );
-      assertDisclosureAcknowledged(acknowledged, disclosure);
-      pending = { ...pending, disclosureAcknowledged: true };
-      await writePending(pendingPath, pending);
-    }
     if (pending.phase === "login") {
       const profileRoot = await ownerOnlyDirectory(stagingRoot);
       const inspect = options.inspectRuntime ?? inspectBundledSubscriptionRuntime;

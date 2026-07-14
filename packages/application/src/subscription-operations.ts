@@ -8,7 +8,6 @@ import {
   type CodingPlanPreset,
   type ConfigureSubscriptionPolicyInput as DomainConfigureSubscriptionPolicyInput,
   type ConnectorRegistry,
-  type SubscriptionDataDisclosureService,
   type ServerConnectorView,
   type SubscriptionAccountService,
   type SubscriptionAuthKind,
@@ -92,10 +91,6 @@ export interface SubscriptionServerConnectionCommands {
 }
 export type SubscriptionConnectorCommands = Pick<ConnectorRegistry, "enroll" | "revoke">;
 export type SubscriptionConnectorQueries = Pick<ConnectorRegistry, "get">;
-export type SubscriptionDataDisclosureCommands = Pick<
-  SubscriptionDataDisclosureService,
-  "acknowledge" | "requireAcknowledgement"
->;
 export type SubscriptionQuotaQueries = Pick<SubscriptionQuotaService, "current">;
 
 export interface SubscriptionProviderView {

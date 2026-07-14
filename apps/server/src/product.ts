@@ -75,7 +75,6 @@ import {
   ServerConnectorProvisioningService,
   SubscriptionAccountService,
   SubscriptionConnectorBroker,
-  SubscriptionDataDisclosureService,
   SubscriptionPolicyStore,
   SubscriptionQuotaService,
 } from "@massion/subscriptions";
@@ -212,7 +211,6 @@ export async function createMassionDaemon(
       heartbeatTtlMs: config.connectors.heartbeatMs,
     });
     const subscriptionPolicies = await SubscriptionPolicyStore.create(database, organizations);
-    const subscriptionDataDisclosures = await SubscriptionDataDisclosureService.create(database, organizations);
     const subscriptionQuota = await SubscriptionQuotaService.create(database, organizations);
     const subscriptionAccounts = await SubscriptionAccountService.create(
       database,
@@ -702,7 +700,6 @@ export async function createMassionDaemon(
         subscriptionAccounts,
         subscriptionServerConnections: serverSubscriptionConnections,
         subscriptionConnectors: subscriptionConnectorCommands,
-        subscriptionDataDisclosures,
         subscriptionPolicy: subscriptionPolicies,
       },
       queries: {
