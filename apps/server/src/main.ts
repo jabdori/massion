@@ -4,7 +4,7 @@ import { isAbsolute } from "node:path";
 import { createDatabase } from "@massion/storage";
 
 import { restoreOperationalBackup, writeOperationalBackup } from "./backup.js";
-import { loadDatabaseProvisionConfig, loadServerConfig } from "./config.js";
+import { loadDatabaseProvisionConfig, loadDatabaseRestoreConfig, loadServerConfig } from "./config.js";
 import { createMassionDaemon, provisionRemoteDatabase } from "./product.js";
 import { ShutdownSignalController } from "./signals.js";
 
@@ -27,24 +27,36 @@ async function main(): Promise<void> {
     exitAfterLog(0, "server.provision.completed");
     return;
   }
-  const config = await loadServerConfig();
-  if (command === "backup" || command === "restore") {
+  if (command === "restore") {
     if (!path || extra || !isAbsolute(path)) throw new Error(`${command}에는 절대 파일 경로 하나가 필요합니다`);
-    const database = await createDatabase(config.database);
-    let receipt: Awaited<ReturnType<typeof writeOperationalBackup>>;
+    const config = await loadDatabaseRestoreConfig();
+    const database = await createDatabase(config);
     try {
-      receipt =
-        command === "backup"
-          ? await writeOperationalBackup(database, path, process.env.MASSION_VERSION ?? "1.0.0")
-          : await restoreOperationalBackup(database, path);
+      const receipt = await restoreOperationalBackup(database, path);
+      exitAfterLog(0, "server.restore.completed", {
+        path: receipt.path,
+        checksum: receipt.checksum,
+        migrations: receipt.migrations.length,
+      });
     } finally {
       await database.close();
     }
-    exitAfterLog(0, `server.${command}.completed`, {
-      path: receipt.path,
-      checksum: receipt.checksum,
-      migrations: receipt.migrations.length,
-    });
+    return;
+  }
+  const config = await loadServerConfig();
+  if (command === "backup") {
+    if (!path || extra || !isAbsolute(path)) throw new Error(`${command}에는 절대 파일 경로 하나가 필요합니다`);
+    const database = await createDatabase(config.database);
+    try {
+      const receipt = await writeOperationalBackup(database, path, process.env.MASSION_VERSION ?? "1.0.0");
+      exitAfterLog(0, "server.backup.completed", {
+        path: receipt.path,
+        checksum: receipt.checksum,
+        migrations: receipt.migrations.length,
+      });
+    } finally {
+      await database.close();
+    }
     return;
   }
   if (command) throw new Error("지원하지 않는 massion-server command입니다");

@@ -23,10 +23,14 @@ Kubernetes는 `massion-backup` CronJob을 사용한다. `concurrencyPolicy: Forb
 운영 Database를 비우거나 덮어쓰지 않는다. 새 database 이름을 준비하고 다음처럼 복구한다.
 
 ```sh
-docker compose exec -T \
+docker compose run --rm --no-deps \
   -e MASSION_DATABASE_NAME=massion_restore_YYYYMMDD \
-  massion node dist/main.js restore /backups/massion-YYYYMMDDTHHMMSSZ.json
+  database-provision node dist/main.js restore /backups/massion-YYYYMMDDTHHMMSSZ.json
 ```
+
+복구는 데이터베이스 import 권한이 필요한 관리 작업이므로 runtime API container(`massion`)가 아니라 owner
+provisioning secret을 가진 일회성 `database-provision` container에서 실행합니다. 기존 운영 database는 변경하지
+않고 새 database 이름을 사용해야 합니다.
 
 Kubernetes에서는 `restore-job.example.yaml`을 복사해 backup 파일과 새 database 이름을 지정하고 `suspend: false`로 바꾼다. 복구 후 migration ID·checksum, 핵심 query, `/health/ready`, Web/API smoke를 확인한 뒤 traffic 대상을 바꾼다.
 
@@ -39,4 +43,3 @@ Kubernetes에서는 `restore-job.example.yaml`을 복사해 backup 파일과 새
 - `OPTION IMPORT` 누락: 임의 추가하지 말고 공식 `surreal export` 또는 Massion bundle을 다시 만든다.
 
 정기 logical export 하나만으로 시점 복구(point-in-time recovery)를 주장하지 않는다. 요구 복구 시점(RPO)이 더 짧으면 volume snapshot·replica·더 잦은 export를 함께 운영한다.
-
