@@ -1037,6 +1037,30 @@ test("중단 신호는 실행 중인 tmux command를 종료 코드 130으로 정
   assert.deepEqual(result, { step: "signal-cleanup", exitCode: 130 });
 });
 
+test("대화형 tmux command도 timeout 뒤 pane을 정리하고 124를 반환한다", async (context) => {
+  const socketName = `massion-uat-timeout-${String(process.pid)}-${Date.now().toString(36)}`;
+  const sessionName = "massion-uat-phase24-timeout";
+  context.after(async () => await destroyTmuxUatSession({ socketName, sessionName }));
+  const session = await createTmuxUatSession({ socketName, sessionName, shell: "/bin/sh" });
+
+  const result = await runTmuxUatCommand(session, {
+    window: "connectors",
+    step: "interactive-timeout-cleanup",
+    command: "/bin/sh",
+    arguments: ["-c", "sleep 10"],
+    interactive: true,
+    timeoutMs: 100,
+  });
+
+  assert.deepEqual(result, { step: "interactive-timeout-cleanup", exitCode: 124 });
+  assert.equal(
+    spawnSync("tmux", ["-L", socketName, "display-message", "-p", "-t", `=${sessionName}:connectors`, "#{pane_dead}"], {
+      encoding: "utf8",
+    }).stdout.trim(),
+    "0",
+  );
+});
+
 test("stale 전용 tmux session은 release preflight 실패 전에도 제거한다", async (context) => {
   const socketName = "massion-uat-phase24";
   const sessionName = "massion-uat-phase24";
