@@ -530,6 +530,27 @@ describe("CLI Application adapter", () => {
     });
   });
 
+  it("subscription connect --new-account는 새 계정 추가 의도를 adapter에 전달한다", async () => {
+    const connectServerSubscription = vi.fn(async () => ({ status: "ready" }));
+    const client: CliApplicationClient = {
+      status: async () => ({}),
+      snapshot: async () => ({}),
+      query: async () => ({}),
+      command: async () => ({}),
+      inspectArtifact: async () => ({}),
+      installArtifact: async () => ({}),
+      updateArtifact: async () => ({}),
+    };
+
+    await executeCliInvocation(
+      client,
+      parseCliArguments(["subscription", "connect", "openai-codex", "--new-account"]),
+      { connectServerSubscription },
+    );
+
+    expect(connectServerSubscription).toHaveBeenCalledWith({ providerId: "openai-codex", newAccount: true });
+  });
+
   it("subscription share 승인 재개는 approval ID와 원래 command ID를 함께 보존한다", async () => {
     const commands: unknown[] = [];
     const client: CliApplicationClient = {

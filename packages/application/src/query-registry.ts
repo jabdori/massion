@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import type { ExtensionGateway } from "@massion/extension-host";
 import type { AssuranceBindingStore } from "@massion/assurance";
 import type { GrowthGateway } from "@massion/growth";
@@ -386,6 +388,11 @@ async function subscriptionAccountRows(
         return { account, connector, quota: publicQuota(quota) };
       }),
   );
+}
+
+function subscriptionProfileHandle(organizationId: string, accountId: string): string {
+  const segment = (value: string): string => createHash("sha256").update(value.trim()).digest("hex");
+  return `${segment(organizationId)}/${segment(accountId)}`;
 }
 
 export function registerApplicationQueries(
@@ -942,6 +949,9 @@ export function registerApplicationQueries(
                 connectorStatus: connector.status,
               }),
           billingKind: account.billing_kind,
+          ...(connector?.location === "server"
+            ? { profileHandle: subscriptionProfileHandle(context.organizationId, account.account_id) }
+            : {}),
           status: account.status,
           version: account.version,
           ...(account.cooldown_until === undefined

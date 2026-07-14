@@ -12,6 +12,7 @@ export interface CliInvocation {
   readonly events?: "jsonl";
   readonly profile?: string;
   readonly model?: string;
+  readonly newAccount: boolean;
   readonly correlationId?: string;
 }
 
@@ -119,6 +120,7 @@ export function parseCliArguments(argv: readonly string[]): CliInvocation {
   let events: "jsonl" | undefined;
   let profile: string | undefined;
   let model: string | undefined;
+  let newAccount = false;
   let correlationId: string | undefined;
   const positional: string[] = [];
   while (index < argv.length) {
@@ -149,7 +151,8 @@ export function parseCliArguments(argv: readonly string[]): CliInvocation {
       model = optionValue(argv, index, value);
       if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u.test(model)) throw new Error("model ID가 유효하지 않습니다");
       index += 1;
-    } else if (value === "--correlation") {
+    } else if (value === "--new-account") newAccount = true;
+    else if (value === "--correlation") {
       correlationId = optionValue(argv, index, value);
       if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(correlationId)) {
         throw new Error("상관관계 ID가 UUID 형식이 아닙니다");
@@ -166,6 +169,9 @@ export function parseCliArguments(argv: readonly string[]): CliInvocation {
   if (model !== undefined && (command !== "subscription" || subcommand !== "connect")) {
     throw new Error("--model은 subscription connect에서만 사용할 수 있습니다");
   }
+  if (newAccount && (command !== "subscription" || subcommand !== "connect")) {
+    throw new Error("--new-account는 subscription connect에서만 사용할 수 있습니다");
+  }
   if (correlationId !== undefined && command !== "run") {
     throw new Error("--correlation은 run command에서만 사용할 수 있습니다");
   }
@@ -181,6 +187,7 @@ export function parseCliArguments(argv: readonly string[]): CliInvocation {
     ...(events === undefined ? {} : { events }),
     ...(profile === undefined ? {} : { profile }),
     ...(model === undefined ? {} : { model }),
+    newAccount,
     ...(correlationId === undefined ? {} : { correlationId }),
   };
 }

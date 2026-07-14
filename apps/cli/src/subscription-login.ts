@@ -11,6 +11,7 @@ import {
 
 export interface ServerSubscriptionLoginClient {
   status(): Promise<unknown>;
+  query(operation: string, payload: unknown): Promise<unknown>;
   command(input: unknown): Promise<unknown>;
 }
 
@@ -18,6 +19,7 @@ export interface ServerSubscriptionLoginInput {
   readonly providerId: string;
   readonly alias?: string;
   readonly modelId?: string;
+  readonly newAccount?: boolean;
 }
 
 export interface ServerSubscriptionLoginOptions {
@@ -57,6 +59,16 @@ interface PendingLogin {
   readonly attestCommandId: string;
   readonly attestCorrelationId: string;
   readonly prepared?: PreparedBinding;
+}
+
+interface ExistingCodexAccount {
+  readonly accountId: string;
+  readonly providerId: "openai-codex";
+  readonly alias: string;
+  readonly connectorId: string;
+  readonly profileHandle: string;
+  readonly accountStatus: string;
+  readonly doctorAction: string;
 }
 
 const PROVIDERS: Readonly<Record<string, ProviderLoginContract>> = {
@@ -304,6 +316,70 @@ function assertLocalMode(value: unknown): void {
   }
 }
 
+function queryRows(value: unknown, label: string): readonly Record<string, unknown>[] {
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error(`${label} 응답이 유효하지 않습니다`);
+  const data = (value as { data?: unknown }).data;
+  if (!Array.isArray(data)) throw new Error(`${label} data가 유효하지 않습니다`);
+  return data.map((item) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) throw new Error(`${label} 항목이 유효하지 않습니다`);
+    return item as Record<string, unknown>;
+  });
+}
+
+function existingCodexAccount(value: Record<string, unknown>): ExistingCodexAccount {
+  if (
+    value.providerId !== "openai-codex" ||
+    typeof value.accountId !== "string" ||
+    typeof value.alias !== "string" ||
+    typeof value.connectorId !== "string" ||
+    value.connectorLocation !== "server" ||
+    typeof value.profileHandle !== "string" ||
+    typeof value.status !== "string"
+  ) {
+    throw new Error("기존 Codex 구독 계정 응답이 유효하지 않습니다");
+  }
+  return {
+    accountId: identifier(value.accountId, "기존 구독 계정 ID"),
+    providerId: "openai-codex",
+    alias: text(value.alias, "기존 구독 계정 별칭", 128),
+    connectorId: identifier(value.connectorId, "기존 Connector ID"),
+    profileHandle: profileHandle(value.profileHandle),
+    accountStatus: value.status,
+    doctorAction: "inspect",
+  };
+}
+
+async function findExistingCodexAccount(
+  client: ServerSubscriptionLoginClient,
+  input: ServerSubscriptionLoginInput,
+): Promise<ExistingCodexAccount | undefined> {
+  const rows = queryRows(await client.query("subscription.accounts", {}), "구독 계정").filter(
+    (row) => row.providerId === "openai-codex" && row.connectorLocation === "server",
+  );
+  if (rows.length === 0) return undefined;
+  const selected = input.alias === undefined ? rows : rows.filter((row) => row.alias === input.alias);
+  if (selected.length === 0) {
+    throw new Error("기존 Codex 계정 별칭을 찾지 못했습니다. 새 계정은 --new-account를 사용해주세요");
+  }
+  if (selected.length > 1) {
+    throw new Error("기존 Codex 계정이 여러 개입니다. 별칭을 지정하거나 --new-account를 사용해주세요");
+  }
+  const account = existingCodexAccount(selected[0] as Record<string, unknown>);
+  const doctorRows = queryRows(
+    await client.query("subscription.doctor", { accountId: account.accountId }),
+    "구독 doctor",
+  );
+  const doctor = doctorRows.find((row) => row.accountId === account.accountId);
+  if (!doctor || typeof doctor.action !== "string" || typeof doctor.accountStatus !== "string") {
+    throw new Error("기존 Codex profile doctor 확인 결과가 없습니다");
+  }
+  const quotaRows = queryRows(await client.query("subscription.quota", { accountId: account.accountId }), "구독 quota");
+  if (quotaRows.some((row) => row.accountId !== account.accountId)) {
+    throw new Error("기존 Codex 구독 quota 계보가 일치하지 않습니다");
+  }
+  return { ...account, accountStatus: doctor.accountStatus, doctorAction: doctor.action };
+}
+
 function assertLoopbackEndpoint(value: string): void {
   let endpoint: URL;
   try {
@@ -383,6 +459,49 @@ export async function connectLocalServerSubscription(
   const release = await acquireLock(join(pendingRoot, `${input.providerId}.lock`));
   try {
     let pending = await readPending(pendingPath, input.providerId);
+    if (!pending && input.newAccount !== true) {
+      const existing = await findExistingCodexAccount(client, input);
+      if (existing) {
+        const [organizationSegment, accountSegment] = existing.profileHandle.split("/");
+        if (!organizationSegment || !accountSegment) throw new Error("기존 Codex profile 계보가 유효하지 않습니다");
+        const existingProfileRoot = resolve(profilesRoot, organizationSegment, accountSegment);
+        if (!within(profilesRoot, existingProfileRoot)) throw new Error("기존 Codex profile 경로가 유효하지 않습니다");
+        const profileWasMissing = !(await directoryExists(existingProfileRoot));
+        if (profileWasMissing) {
+          await ownerOnlyDirectory(existingProfileRoot);
+        }
+        const shouldLogin =
+          profileWasMissing || existing.doctorAction === "reauth" || existing.accountStatus === "needs-reauth";
+        if (shouldLogin) {
+          const inspect = options.inspectRuntime ?? inspectBundledSubscriptionRuntime;
+          const artifact = await inspect(contract.runtimeId);
+          if (artifact.runtimeId !== contract.runtimeId)
+            throw new Error("Bundled 구독 Runtime 계보가 일치하지 않습니다");
+          const run = options.runInteractive ?? defaultInteractiveRunner;
+          const code = await run(
+            artifact.command,
+            contract.arguments(artifact),
+            loginEnvironment(options.environment ?? process.env, existingProfileRoot, contract),
+          );
+          if (code !== 0) throw new Error(`Provider 구독 재인증이 완료되지 않았습니다 (exit ${String(code)})`);
+        }
+        const attested = await client.command(
+          commandEnvelope(randomUUID(), randomUUID(), "subscription.server.attest", {
+            connectorId: existing.connectorId,
+            accountId: existing.accountId,
+            ...(selectedModelId === undefined ? {} : { modelId: selectedModelId }),
+          }),
+        );
+        assertAttested(attested, existing.connectorId);
+        return {
+          status: "ready",
+          providerId: existing.providerId,
+          alias: existing.alias,
+          accountId: existing.accountId,
+          connectorId: existing.connectorId,
+        };
+      }
+    }
     if (!pending) {
       pending = {
         schema: "massion.server-subscription-login.v1",

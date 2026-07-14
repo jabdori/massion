@@ -36,7 +36,7 @@
 ## Task 5. Application과 사용자 화면
 
 - [x] 구독 provider·account·quota·policy·doctor query와 connect·share·unshare·disconnect·connector 폐기 command를 추가합니다.
-- [x] CLI의 `mass subscription ...` UX는 공식 Codex 로그인만 실행하며 Massion의 별도 데이터 처리 고지·동의 UI를 추가하지 않습니다.
+- [x] CLI의 `mass subscription connect`는 기존 server Codex 계정의 profile·doctor·quota를 먼저 확인해 유효한 profile을 재사용합니다. 재인증이 필요한 경우에만 해당 profile에서 공식 Codex 로그인을 실행하며, 새 계정은 `--new-account`를 명시해야 합니다. Massion의 별도 데이터 처리 고지·동의 UI는 추가하지 않습니다.
 - [x] TUI·Web에서 같은 Application operation과 redacted view, 승인 미리보기를 제공합니다.
 
 ## Task 6. 제품 조립과 실제 사용자 검증

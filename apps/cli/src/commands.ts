@@ -26,6 +26,7 @@ export interface CliCommandInput {
     readonly providerId: string;
     readonly alias?: string;
     readonly modelId?: string;
+    readonly newAccount?: boolean;
   }) => Promise<unknown>;
   readonly connectServerModelSubscription?: (input: {
     readonly providerId: "minimax-token-plan";
@@ -338,6 +339,7 @@ export async function executeCliInvocation(
       providerId: required(args, 0, "providerId"),
       ...(alias ? { alias } : {}),
       ...(invocation.model === undefined ? {} : { modelId: invocation.model }),
+      ...(invocation.newAccount ? { newAccount: true } : {}),
     });
   }
   if (invocation.command === "subscription" && invocation.subcommand === "connect-model") {

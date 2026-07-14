@@ -72,6 +72,14 @@ describe("mass CLI parser", () => {
     expect(() => parseCliArguments(["status", "--model", "gpt-5.6-sol"])).toThrow("subscription connect");
   });
 
+  it("새 Codex 구독 계정 추가를 명시적으로 파싱한다", () => {
+    expect(parseCliArguments(["subscription", "connect", "openai-codex", "--new-account"])).toMatchObject({
+      newAccount: true,
+      arguments: ["openai-codex"],
+    });
+    expect(() => parseCliArguments(["status", "--new-account"])).toThrow("subscription connect");
+  });
+
   it("run의 재현 가능한 상관관계 ID를 명시적으로 파싱하고 다른 command에서는 거부한다", () => {
     expect(
       parseCliArguments(["run", "구독 실행", "--correlation", "8b3a91c5-2fe2-4a3e-9a1e-1d32c32e23e6"]),
