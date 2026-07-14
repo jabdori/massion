@@ -100,3 +100,13 @@ Phase 25는 현재 in-progress입니다. Provider별 품질 분포와 자동 승
 - 평가 bundle version `2`, `3` 생성 성공(기존 version `1` 다음 계보 유지)
 
 이번 시나리오는 외부 Provider의 품질 분포를 증명하지 않습니다. 로컬 호환 Provider에서 평가실의 정책·버전 계보·승격·관찰·복구 경계를 검증한 결과이며, 실제 Claude·Codex·GLM 및 복수 구독 계정의 연결·quota·fallback 검증은 여전히 사용자 계정 인증과 네트워크가 필요합니다.
+
+## 2026-07-14 TUI bundle 전송 허용 목록 보완
+
+코드 커밋 `982bf57`에서 TUI의 최적화 변경 허용 목록에 `optimization.bundle.export`와 `optimization.bundle.import`를 추가했습니다. 이전에는 CLI와 Application operation이 지원하는 외부 평가 bundle 전송을 TUI JSON modal에서 거부하는 경로가 있었습니다.
+
+- RED: TUI command test가 두 operation을 `허용되지 않은 최적화 operation`으로 거부하는 것을 확인
+- GREEN: 허용 목록을 보완하고 export·import payload가 인증된 Application command로 전달되는지 검증
+- 결과: TUI test file 7개, 테스트 52개 통과(1개 skip), Bun renderer 13개 통과
+
+실제 최종 release에서 bundle export/import를 수행하는 증적은 다음 release tmux 시나리오에서 추가합니다. 외부 Provider 인증 여부와는 독립적인 제품 표면 검증입니다.

@@ -53,5 +53,5 @@
 
 1. Provider 연결을 실제로 호출하는 평가 executor adapter와 역할별 평가 case 입력 경계는 구현되었습니다. 서버 adapter는 Router reservation·VoltAgent AI SDK 호출·usage/cost 정산·기대 결과 포함 여부 기반 품질 판정을 수행합니다. 실제 Provider별 품질 분포는 외부 계정 UAT에서 추가 확인해야 합니다.
 2. 자동 승격 조건과 관찰 redaction의 운영 증거를 추가합니다.
-3. TUI 변경 modal·외부 평가 import/export를 실제 release에서 반복해 증거로 고정합니다.
+3. TUI 변경 modal은 bundle export/import까지 연결되었습니다(`982bf57`, 관련 테스트 통과). 최종 release에서 외부 평가 import/export를 반복한 redacted 증거를 추가합니다.
 4. Claude·Codex·GLM 및 복수 계정이 실제로 연결된 환경에서 tmux receipt를 갱신합니다.
