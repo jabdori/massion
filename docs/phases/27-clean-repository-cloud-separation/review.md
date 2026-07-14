@@ -62,3 +62,10 @@
 - Phase 24의 실제 외부 계정 검증이 끝난 뒤 Phase 24 회고를 completed로 닫습니다.
 - Phase 25 모델 최적화 실험실은 이 저장소의 다음 기준 커밋에서 시작합니다.
 - Cloud 저장소·결제·관리형 운영 기능은 실제 사업 요구가 생길 때 별도 Phase로 설계합니다.
+
+## 5. 후속 Docker 운영 검증
+
+2026-07-14에 기존 named volume을 사용하는 Docker Compose 팀 배포를 다시 기동하고, owner-only backup·새
+database restore·복구 DB readiness·HTTPS 인증 경계를 실제 container에서 검증했습니다. 반복 기동에서 발견한
+`volume-init` 재귀 권한 오류와 runtime 계정의 import 권한 부족을 수정했으며, 상세 결과는
+[Docker 팀 배포·복구 검증 증거](../../evidence/phase-27/docker-team-uat-2026-07-14.md)에 기록했습니다.
