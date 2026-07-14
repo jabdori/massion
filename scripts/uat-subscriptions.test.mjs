@@ -994,8 +994,27 @@ test("tmux JSON 관찰기는 raw 출력 파일 없이 검증된 최소 사실과
     observation: { kind: "subscription-policy-query", expected: { providerId: "openai-codex" } },
     timeoutMs: 5_000,
   });
-  assert.notEqual(invalid.command.exitCode, 0);
+  assert.equal(invalid.command.exitCode, 66);
   assert.equal(invalid.observation, undefined);
+
+  const contractMismatch = await runTmuxObservedCommand(session, {
+    window: "connectors",
+    step: "observed-contract-mismatch",
+    command: process.execPath,
+    arguments: [
+      "-e",
+      `process.stdout.write(JSON.stringify(${JSON.stringify({
+        schemaVersion: "massion.application.v1",
+        operation: "subscription.policy",
+        data: [],
+      })}))`,
+    ],
+    environment,
+    observation: { kind: "subscription-policy-query", expected: { providerId: "openai-codex" } },
+    timeoutMs: 5_000,
+  });
+  assert.equal(contractMismatch.command.exitCode, 67);
+  assert.equal(contractMismatch.observation, undefined);
   assert.deepEqual(await readdir(workingDirectory), []);
 });
 
