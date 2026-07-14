@@ -3,6 +3,15 @@
 > **실행 방식**: 검증된 local release archive를 격리된 tmux 세션에서 실행
 > **민감정보**: 원시 pane 출력·계정 식별자·인증정보·개인 경로를 저장하지 않음
 
+## 현재 source commit lifecycle UAT — 2026-07-14
+
+- Git commit: `bf92127f78ce62f15f75ca20f5611dc1ea388ddc`
+- Local release archive: `sha256:f55c09d9866164b16d4c32860c7d4b206437a8552055b12302d2655a804bb950`
+- UAT receipt: `sha256:fa6b48dfa20e76d6ff31d1ad7d782770c50670dd0189a8dbc922308dcb573aa2`
+- Receipt summary: `passed: 1`, `failed: 0`, `not-run: 9`
+
+최신 source commit의 release를 격리된 `tmux`에서 설치해 version·Connector doctor·local 시작·owner 초기화·readiness·provider catalog·event watch·재시작·owner-only backup·복원·uninstall 후 data 보존을 확인했습니다. Codex 제공자 시나리오는 새 격리 profile에서 사용자 인증 입력이 필요하므로 `interactive-login-required`로 기록했으며, 인증 성공으로 추정하지 않았습니다. 실행 뒤 UAT driver·격리 server·tmux session은 남지 않았습니다.
+
 ## 최신 실제 Codex UAT — 2026-07-14
 
 - Git commit: `64d1e83576f811bf80c8077e5183e27e40b4508b`
