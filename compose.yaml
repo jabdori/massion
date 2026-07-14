@@ -3,7 +3,7 @@ name: massion
 services:
   volume-init:
     image: busybox:1.37.0
-    command: ["chown", "-R", "1000:1000", "/backups", "/var/lib/massion"]
+    command: ["sh", "-ec", "chown 1000:1000 /backups /var/lib/massion && chmod 0700 /backups /var/lib/massion"]
     restart: "no"
     network_mode: none
     volumes:
@@ -64,6 +64,8 @@ services:
     secrets:
       - database_owner_password
       - database_password
+    volumes:
+      - backup-data:/backups
     networks:
       - backend
     read_only: true

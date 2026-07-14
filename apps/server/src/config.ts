@@ -41,6 +41,8 @@ export interface DatabaseProvisionConfig {
   readonly runtime: { readonly username: string; readonly password: string };
 }
 
+export type DatabaseRestoreConfig = DatabaseConfig;
+
 const DATABASE_IDENTIFIER = /^[A-Za-z][A-Za-z0-9_]{0,63}$/u;
 
 function databaseLocation(environment: Readonly<Record<string, string | undefined>>): {
@@ -270,6 +272,23 @@ export function parseDatabaseProvisionConfig(
   return { ...location, owner, runtime };
 }
 
+export function parseDatabaseRestoreConfig(
+  environment: Readonly<Record<string, string | undefined>>,
+): DatabaseRestoreConfig {
+  const location = databaseLocation(environment);
+  const protocol = new URL(location.url).protocol;
+  if (!new Set(["ws:", "wss:", "http:", "https:"]).has(protocol)) return location;
+
+  const username = environment.MASSION_DATABASE_RESTORE_USER ?? environment.MASSION_DATABASE_PROVISION_USER;
+  const password = environment.MASSION_DATABASE_RESTORE_PASSWORD ?? environment.MASSION_DATABASE_PROVISION_PASSWORD;
+  if (!username || !password) throw new Error("원격 restore에는 owner restore credential이 필요합니다");
+  if (!DATABASE_IDENTIFIER.test(username)) throw new Error("SurrealDB restore username이 유효하지 않습니다");
+  return {
+    ...location,
+    authentication: { username, password, scope: "root" },
+  };
+}
+
 async function secretFile(path: string): Promise<string> {
   const metadata = await stat(path);
   if (!metadata.isFile() || (metadata.mode & 0o077) !== 0)
@@ -314,4 +333,29 @@ export async function loadDatabaseProvisionConfig(
     resolved[fileName] = undefined;
   }
   return parseDatabaseProvisionConfig(resolved);
+}
+
+export async function loadDatabaseRestoreConfig(
+  environment: Readonly<Record<string, string | undefined>> = process.env,
+): Promise<DatabaseRestoreConfig> {
+  const resolved = { ...environment };
+  const restoreValue = environment.MASSION_DATABASE_RESTORE_PASSWORD;
+  const restorePath = environment.MASSION_DATABASE_RESTORE_PASSWORD_FILE;
+  const provisionValue = environment.MASSION_DATABASE_PROVISION_PASSWORD;
+  const provisionPath = environment.MASSION_DATABASE_PROVISION_PASSWORD_FILE;
+  if (restoreValue && restorePath)
+    throw new Error("MASSION_DATABASE_RESTORE_PASSWORD과 secret file은 동시에 사용할 수 없습니다");
+  if (provisionValue && provisionPath)
+    throw new Error("MASSION_DATABASE_PROVISION_PASSWORD과 secret file은 동시에 사용할 수 없습니다");
+  if (restoreValue && (provisionValue || provisionPath))
+    throw new Error("restore password와 provisioning password는 동시에 사용할 수 없습니다");
+  if (restorePath && (provisionValue || provisionPath))
+    throw new Error("restore secret file과 provisioning password는 동시에 사용할 수 없습니다");
+  const passwordPath = restorePath ?? provisionPath;
+  if (passwordPath) resolved.MASSION_DATABASE_RESTORE_PASSWORD = await secretFile(passwordPath);
+  else if (restoreValue) resolved.MASSION_DATABASE_RESTORE_PASSWORD = restoreValue;
+  else if (provisionValue) resolved.MASSION_DATABASE_RESTORE_PASSWORD = provisionValue;
+  resolved.MASSION_DATABASE_PROVISION_PASSWORD = undefined;
+  resolved.MASSION_DATABASE_PROVISION_PASSWORD_FILE = undefined;
+  return parseDatabaseRestoreConfig(resolved);
 }

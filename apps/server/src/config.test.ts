@@ -5,8 +5,10 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import {
+  loadDatabaseRestoreConfig,
   loadDatabaseProvisionConfig,
   loadServerConfig,
+  parseDatabaseRestoreConfig,
   parseDatabaseProvisionConfig,
   parseServerConfig,
 } from "./config.js";
@@ -141,6 +143,32 @@ describe("server configuration", () => {
     );
   });
 
+  it("restore는 원격 DB에서 owner 인증을 사용하고 runtime 계정과 분리한다", () => {
+    expect(
+      parseDatabaseRestoreConfig({
+        MASSION_DATABASE_URL: "ws://db:8000/rpc",
+        MASSION_DATABASE_NAMESPACE: "massion",
+        MASSION_DATABASE_NAME: "massion_restore",
+        MASSION_DATABASE_PROVISION_USER: "root",
+        MASSION_DATABASE_PROVISION_PASSWORD: "owner-password",
+        MASSION_DATABASE_USER: "massion_runtime",
+        MASSION_DATABASE_PASSWORD: "runtime-password",
+      }),
+    ).toMatchObject({
+      url: "ws://db:8000/rpc",
+      namespace: "massion",
+      database: "massion_restore",
+      authentication: { username: "root", password: "owner-password", scope: "root" },
+    });
+    expect(() =>
+      parseDatabaseRestoreConfig({
+        MASSION_DATABASE_URL: "ws://db:8000/rpc",
+        MASSION_DATABASE_NAMESPACE: "massion",
+        MASSION_DATABASE_NAME: "massion_restore",
+      }),
+    ).toThrow("owner restore credential");
+  });
+
   it("짧거나 잘못 인코딩된 key와 team embedded DB를 거부한다", () => {
     expect(() => parseServerConfig({ MASSION_TOKEN_KEY: "short" })).toThrow("32 byte");
     expect(() =>
@@ -203,6 +231,26 @@ describe("server configuration", () => {
       ).resolves.toMatchObject({
         owner: { username: "root", password: "owner-password" },
         runtime: { username: "massion_runtime", password: "runtime-password" },
+      });
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("restore는 provisioning owner secret file을 읽고 runtime secret을 요구하지 않는다", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "massion-restore-config-"));
+    const ownerPath = join(directory, "owner-password");
+    try {
+      await writeFile(ownerPath, "owner-password", { mode: 0o600 });
+      await expect(
+        loadDatabaseRestoreConfig({
+          MASSION_DATABASE_URL: "ws://db:8000/rpc",
+          MASSION_DATABASE_PROVISION_USER: "root",
+          MASSION_DATABASE_PROVISION_PASSWORD_FILE: ownerPath,
+          MASSION_DATABASE_NAME: "massion_restore",
+        }),
+      ).resolves.toMatchObject({
+        authentication: { username: "root", password: "owner-password", scope: "root" },
       });
     } finally {
       await rm(directory, { recursive: true, force: true });

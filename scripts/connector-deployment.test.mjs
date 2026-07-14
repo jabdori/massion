@@ -46,6 +46,23 @@ test("Docker Compose 팀 배포가 영속 연결 장치 root와 안전한 수신
   assert.match(massion, /massion-data:\/var\/lib\/massion/u);
 });
 
+test("Docker volume-init은 기존 0700 하위 directory를 재귀 순회하지 않고 재기동에 멱등이다", async () => {
+  const compose = await source("compose.yaml");
+  const volumeInit = between(compose, "\n  volume-init:\n", "\n  surrealdb:\n");
+
+  assert.match(volumeInit, /chown 1000:1000 \/backups \/var\/lib\/massion/u);
+  assert.match(volumeInit, /chmod 0700 \/backups \/var\/lib\/massion/u);
+  assert.doesNotMatch(volumeInit, /chown -R/u);
+});
+
+test("Docker restore는 runtime API container가 아닌 owner provisioning container에서 실행할 수 있다", async () => {
+  const compose = await source("compose.yaml");
+  const provision = between(compose, "\n  database-provision:\n", "\n  massion:\n");
+
+  assert.match(provision, /backup-data:\/backups/u);
+  assert.match(provision, /MASSION_DATABASE_PROVISION_PASSWORD_FILE/u);
+});
+
 test("Kubernetes 팀 배포가 같은 연결 장치 설정을 ConfigMap으로 전달한다", async () => {
   const configMap = await source("deploy/kubernetes/base/configmap.yaml");
 
