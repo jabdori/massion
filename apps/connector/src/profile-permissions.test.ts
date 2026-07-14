@@ -36,7 +36,8 @@ describe("Provider profile 디렉터리 권한", () => {
     expect(new ProviderProfilePermissionError()).toBeInstanceOf(Error);
     expect((await stat(profileRoot)).mode & 0o777).toBe(0o755);
 
-    await chmod(profileRoot, 0o2700);
+    // macOS는 비특권 사용자의 setgid directory bit를 제거하므로 sticky bit로 특수 권한을 검증한다.
+    await chmod(profileRoot, 0o1700);
     await expect(assertSecureProviderProfileRoot(profileRoot)).rejects.toThrow(/0700|secure-profile/u);
   });
 
