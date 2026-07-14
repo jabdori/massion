@@ -48,7 +48,8 @@
 - `release-lifecycle`: passed
   - 설치, version, Connector doctor, local start, owner 초기화, readiness, provider catalog, event watch, 재시작, backup/restore, uninstall 후 data 보존
 - `codex-live-subscription`: failed (`network`)
-  - Codex 로그인 동의, accounts, doctor, quota, adaptive policy configure/query까지 통과
+  - 공식 Codex CLI OAuth 인증, accounts, doctor, quota, adaptive policy configure/query까지 통과
+  - Massion은 별도의 데이터 처리 고지·동의 UI를 표시하거나 그 선택을 기록하지 않음
   - 실제 `run subscription acceptance`는 180초 timeout으로 종료되어 실행 계보와 성공으로 기록하지 않음
   - 브라우저 OAuth 인증 URL에서 사용자 계정 인증이 추가로 필요함
 - 2026-07-14 외부 Provider UAT 시도에서는 Codex OAuth 로그인과 계정 준비가 완료되었습니다. 실제 subscription run은 180초 네트워크 timeout으로 종료되었고, 결과는 구조화 영수증에 반영했습니다. 최신 local lifecycle 재검증에서는 외부 Provider 실행을 시작하지 않았습니다.
