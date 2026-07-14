@@ -77,6 +77,25 @@ describe("Massion 모델 평가실", () => {
     ).rejects.toThrow("같은 commandId");
   });
 
+  it("같은 role의 세 번째 bundle도 transaction 안에서 가장 큰 version 다음에 생성한다", async () => {
+    for (let index = 1; index <= 3; index += 1) {
+      const bundle = await store.createBundle(context, {
+        commandId: `bundle-versioning-${String(index)}`,
+        roleKey: "assurance",
+        runtimeVersion: "runtime-versioning",
+        cases: [
+          {
+            promptChecksum: checksum(String(index)),
+            toolsChecksum: checksum("b"),
+            environmentChecksum: checksum("c"),
+            expectedOutcome: "pass",
+          },
+        ],
+      });
+      expect(bundle.version).toBe(index);
+    }
+  });
+
   it("기본 review 정책에서는 추천 승인 전 batch를 활성화하지 않고 shadow를 차단한다", async () => {
     const profile = (id: string): OptimizationModelProfile => ({
       modelProfileId: id,

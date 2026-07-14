@@ -68,6 +68,36 @@ describe("모델 최적화 batch lifecycle", () => {
     });
   });
 
+  it("같은 role의 세 번째 batch도 transaction 안에서 가장 큰 version 다음에 생성한다", async () => {
+    const batchIds: string[] = [];
+    for (let index = 1; index <= 3; index += 1) {
+      await database.query(
+        "CREATE optimization_recommendation CONTENT { recommendation_id: $recommendation_id, organization_id: $organization_id, role_key: 'assurance', policy_version_id: 'policy-versioning', primary_model_profile_id: $profile_id, fallback_model_profile_ids: [], excluded_json: '[]', receipt_ids: [], status: 'approved', checksum: $checksum, command_id: $command_id, request_hash: $request_hash, created_by_user_id: $user_id, created_at: time::now() };",
+        {
+          recommendation_id: `recommendation-versioning-${String(index)}`,
+          organization_id: context.organizationId,
+          profile_id: `profile-versioning-${String(index)}`,
+          checksum: `${String(index).repeat(64)}`,
+          command_id: `recommendation-versioning-command-${String(index)}`,
+          request_hash: `${String(index).repeat(64)}`,
+          user_id: context.userId,
+        },
+      );
+      const batch = await batches.createBatch(context, {
+        commandId: `batch-versioning-${String(index)}`,
+        recommendationId: `recommendation-versioning-${String(index)}`,
+        status: "active",
+      });
+      batchIds.push(batch.batchId);
+      await batches.activateBatch(context, {
+        commandId: `activate-versioning-${String(index)}`,
+        batchId: batch.batchId,
+      });
+      expect(batch.version).toBe(index);
+    }
+    expect(new Set(batchIds).size).toBe(3);
+  });
+
   it("표본·개선폭 게이트를 거치지 않은 candidate batch는 활성화하지 않는다", async () => {
     await database.query(
       "CREATE optimization_recommendation CONTENT { recommendation_id: 'recommendation-candidate', organization_id: $organization_id, role_key: 'assurance', policy_version_id: 'policy-candidate', primary_model_profile_id: 'profile-candidate', fallback_model_profile_ids: [], excluded_json: '[]', receipt_ids: [], status: 'approved', checksum: $checksum, command_id: 'recommendation-candidate-command', request_hash: $request_hash, created_by_user_id: $user_id, created_at: time::now() };",

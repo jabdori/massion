@@ -330,10 +330,12 @@ export class ModelOptimizationStore {
         return bundleView(repeated);
       }
       const [versions] = await tx.query<[{ readonly version: number }[]]>(
-        "SELECT version FROM optimization_bundle WHERE organization_id = $organization_id AND role_key = $role_key ORDER BY version DESC LIMIT 1;",
+        "SELECT version FROM optimization_bundle WHERE organization_id = $organization_id AND role_key = $role_key;",
         { organization_id: context.organizationId, role_key: input.roleKey },
       );
-      const version = (versions[0]?.version ?? 0) + 1;
+      // SurrealDB transaction query의 ORDER BY·LIMIT 결과 순서는 저장 엔진에 따라 보장되지 않을 수 있으므로
+      // 읽어온 모든 version에서 최댓값을 계산해 다음 immutable version을 결정합니다.
+      const version = versions.reduce((maximum, record) => Math.max(maximum, record.version), 0) + 1;
       const caseIds: string[] = [];
       for (const item of input.cases) {
         const caseId = randomUUID();
