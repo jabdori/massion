@@ -82,6 +82,16 @@ const OBSERVATION_KINDS = new Set([
   "subscription-quota",
 ]);
 
+// 비대화형 UAT는 사용자의 승인 입력을 기다리지 않고, 실제 실행 완료 여부를 검증합니다.
+// review 정책의 승인 전달은 별도 상호작용 시나리오에서 검증합니다.
+export function subscriptionUatPolicy(providerId) {
+  return {
+    providerId,
+    credentialPolicy: "adaptive",
+    approvalMode: "automatic",
+  };
+}
+
 function fail(message) {
   throw new Error(`Subscription UAT 영수증 ${message}`);
 }
@@ -1947,6 +1957,7 @@ async function executeProviderScenario(session, plan, environment, timeoutMs, re
   const supplemental = [];
   const mass = join(environment.MASSION_PREFIX, "bin", "mass");
   const alias = `UAT ${plan.provider}`;
+  const policy = subscriptionUatPolicy(plan.provider);
   const connect = await runTmuxUatCommand(session, {
     window: "connectors",
     step: `${plan.id}-connect`,
@@ -2021,10 +2032,10 @@ async function executeProviderScenario(session, plan, environment, timeoutMs, re
   }
   const policyCommand = await observe({
     step: `${plan.id}-policy-configure`,
-    arguments: ["subscription", "policy", plan.provider, "adaptive", "review", "--json"],
+    arguments: ["subscription", "policy", plan.provider, policy.credentialPolicy, policy.approvalMode, "--json"],
     observation: {
       kind: "subscription-policy-command",
-      expected: { providerId: plan.provider, credentialPolicy: "adaptive", approvalMode: "review" },
+      expected: policy,
     },
   });
   const policyQuery = policyCommand
@@ -2034,9 +2045,7 @@ async function executeProviderScenario(session, plan, environment, timeoutMs, re
         observation: {
           kind: "subscription-policy-query",
           expected: {
-            providerId: plan.provider,
-            credentialPolicy: "adaptive",
-            approvalMode: "review",
+            ...policy,
             version: policyCommand.facts.version,
           },
         },

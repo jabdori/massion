@@ -119,7 +119,7 @@ describe("Codex 소비자 구독 관측", () => {
     ]);
   });
 
-  it("개인 사용 한도와 credit 소진을 독립 window로 보존하고 알 수 없는 도달 유형은 거부한다", () => {
+  it("추가 credit이 없어도 제공자가 한도 도달을 보고하지 않으면 개인 구독 quota를 소진으로 기록하지 않는다", () => {
     expect(
       decodeCodexRateLimitWindows(
         {
@@ -136,7 +136,6 @@ describe("Codex 소비자 구독 관측", () => {
         new Date("2026-07-12T00:00:00.000Z"),
       ),
     ).toEqual([
-      expect.objectContaining({ kind: "codex:codex:credits", remainingRatio: 0 }),
       expect.objectContaining({
         kind: "codex:codex:individual",
         remainingRatio: 0.25,

@@ -221,21 +221,6 @@ describe("Massion server product", () => {
       });
       await expect(client.query("subscription.accounts", {})).resolves.toMatchObject({ data: [] });
       await expect(client.query("subscription.policy", {})).resolves.toMatchObject({ data: [] });
-      await expect(
-        client.command({
-          schemaVersion: "massion.application.v1",
-          commandId: "server-subscription-disclosure-0001",
-          correlationId: "server-subscription-disclosure-correlation-0001",
-          operation: "subscription.data-disclosure.acknowledge",
-          payload: {
-            providerId: "openai-codex",
-            version: "openai-codex-data-controls-2026-07-13",
-          },
-        }),
-      ).resolves.toMatchObject({
-        outcome: "succeeded",
-        data: { providerId: "openai-codex", version: "openai-codex-data-controls-2026-07-13" },
-      });
       const preparedSubscription = await client.command({
         schemaVersion: "massion.application.v1",
         commandId: "server-subscription-prepare-0001",

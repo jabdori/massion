@@ -4,6 +4,7 @@ import { applyMigrations, createDatabase, listAppliedMigrations, type MassionDat
 
 import {
   SUBSCRIPTION_CONNECTOR_ENROLLMENT_MIGRATION,
+  SUBSCRIPTION_DATA_DISCLOSURE_RETIREMENT_MIGRATION,
   SUBSCRIPTION_EDGE_ACCOUNT_GUARD_MIGRATION,
   SUBSCRIPTION_LEASE_EXECUTION_MIGRATION,
   SUBSCRIPTION_LEASE_RUNTIME_LINEAGE_MIGRATION,
@@ -72,6 +73,22 @@ describe("구독 계정 schema", () => {
     ]) {
       expect(schema).toContain(table);
     }
+  });
+
+  it("제거된 제공자 데이터 처리 동의 기록 table은 기존 설치에서도 삭제한다", async () => {
+    await database.query(`
+      DEFINE TABLE subscription_data_disclosure_acknowledgement SCHEMAFULL PERMISSIONS NONE;
+      DEFINE FIELD acknowledgement_id ON subscription_data_disclosure_acknowledgement TYPE string;
+      CREATE subscription_data_disclosure_acknowledgement CONTENT { acknowledgement_id: 'legacy-disclosure' };
+    `);
+
+    await expect(applyMigrations(database, [SUBSCRIPTION_DATA_DISCLOSURE_RETIREMENT_MIGRATION])).resolves.toEqual([
+      "0103-subscription-data-disclosure-retirement",
+    ]);
+    expect(JSON.stringify(await database.query("INFO FOR DB;"))).not.toContain(
+      "subscription_data_disclosure_acknowledgement",
+    );
+    await expect(applyMigrations(database, [SUBSCRIPTION_DATA_DISCLOSURE_RETIREMENT_MIGRATION])).resolves.toEqual([]);
   });
 
   it("0091 upgrade는 Runtime 계보가 없는 기존 active Lease를 안전하게 만료시킨다", async () => {
