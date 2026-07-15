@@ -219,6 +219,9 @@ if [ "$#" -eq 0 ] && [ -t 0 ] && [ -t 1 ]; then
     node "$release_dir/runtime/node_modules/@massion/cli/dist/main.js" init
   fi
   node "$release_dir/runtime/node_modules/@massion/cli/dist/main.js" local ensure --json >/dev/null
+  if [ ! -e "$config_path" ] || ! node "$release_dir/runtime/node_modules/@massion/cli/dist/main.js" status --json >/dev/null 2>&1; then
+    node "$release_dir/runtime/node_modules/@massion/cli/dist/main.js" init
+  fi
   exec bun "$release_dir/runtime/node_modules/@massion/tui/dist/main.js"
 fi
 exec node "$release_dir/runtime/node_modules/@massion/cli/dist/main.js" "$@"

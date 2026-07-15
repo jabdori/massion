@@ -28,4 +28,35 @@ describe("massion init", () => {
     expect((await readFile(tokenPath, "utf8")).trim()).toBe("mat_bootstrap");
     await rm(root, { recursive: true, force: true });
   });
+
+  it("만료된 기존 token을 같은 profile의 새 token으로 원자적으로 교체한다", async () => {
+    const root = await mkdtemp(join(tmpdir(), "massion-init-reconnect-"));
+    const store = new CliConfigStore(join(root, "config.json"));
+    let issued = 0;
+    const bootstrap = async () => {
+      issued += 1;
+      return { access: { token: `mat_token_${String(issued)}`, tokenId: `token-${String(issued)}` } };
+    };
+    await initializeCli({
+      endpoint: "http://127.0.0.1:7331",
+      email: "owner@example.com",
+      displayName: "Owner",
+      profile: "local",
+      config: store,
+      bootstrap,
+    });
+    await initializeCli({
+      endpoint: "http://127.0.0.1:7331",
+      email: "owner@example.com",
+      displayName: "Owner",
+      profile: "local",
+      config: store,
+      bootstrap,
+    });
+    const config = await store.load();
+    const tokenPath = config.profiles.local?.tokenReference.slice(5);
+    if (!tokenPath) throw new Error("token path가 없습니다");
+    expect((await readFile(tokenPath, "utf8")).trim()).toBe("mat_token_2");
+    await rm(root, { recursive: true, force: true });
+  });
 });

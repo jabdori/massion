@@ -122,6 +122,28 @@ describe("TUI controller", () => {
     expect(state.error ?? "").not.toContain("secret-token");
   });
 
+  it("인증 만료는 무한 재시도하지 않고 재연결 안내를 표시한다", async () => {
+    let state = createTuiState();
+    const controller = new TuiController(
+      {
+        status: () => Promise.reject(Object.assign(new Error("expired"), { status: 401 })),
+        me: () => Promise.reject(new Error("호출되지 않아야 합니다")),
+        snapshot: () => Promise.reject(new Error("호출되지 않아야 합니다")),
+        streamEvents: async function* () {},
+        query: () => Promise.resolve({}),
+        command: () => Promise.resolve({}),
+      },
+      (action) => {
+        state = reduceTuiState(state, action);
+      },
+      () => state,
+      { delay: () => Promise.reject(new Error("인증 실패는 backoff하지 않습니다")) },
+    );
+    await controller.run(new AbortController().signal);
+    expect(state.connection).toBe("offline");
+    expect(state.error).toContain("massion");
+  });
+
   it("query는 allowlist operation만 전달한다", async () => {
     const query = vi.fn().mockImplementation((operation: string) => Promise.resolve(response(operation, [])));
     const state = createTuiState();

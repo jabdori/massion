@@ -84,6 +84,11 @@ function exitCode(error: unknown): number {
 
 export async function runCli(argv = process.argv.slice(2)): Promise<number> {
   try {
+    if (argv[0] === "--help" || argv[0] === "-h") {
+      if (argv.length !== 1) throw new Error(`${argv[0]}에는 추가 인자를 지정할 수 없습니다`);
+      process.stdout.write(HELP);
+      return 0;
+    }
     if (argv[0] === "--web") {
       if (argv.length !== 1) throw new Error("massion --web에는 추가 인자를 지정할 수 없습니다");
       let config;
