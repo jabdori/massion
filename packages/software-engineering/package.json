@@ -15,7 +15,7 @@
   "scripts": {
     "build": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\" && tsc -p tsconfig.json",
     "build-deps": "pnpm --filter @massion/assurance build && pnpm --filter @massion/evidence build",
-    "test": "pnpm build-deps && pnpm build && vitest run src",
+    "test": "pnpm build-deps && pnpm build && vitest run src --maxWorkers=1",
     "typecheck": "pnpm build-deps && tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {

@@ -12,7 +12,7 @@
   "scripts": {
     "build": "pnpm build-deps && node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\" && tsc -p tsconfig.json",
     "build-deps": "pnpm --filter @massion/application build && pnpm --filter @massion/runtime exec tsc -p tsconfig.json",
-    "test": "pnpm build && vitest run src",
+    "test": "pnpm build && vitest run src --maxWorkers=1",
     "typecheck": "pnpm build-deps && tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
