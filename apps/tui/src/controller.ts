@@ -94,6 +94,7 @@ export class TuiController {
   public async run(signal: AbortSignal): Promise<void> {
     let failures = 0;
     let initialized = false;
+    let authenticationFailure = false;
     const stopped = (): boolean => signal.aborted;
     while (!stopped()) {
       try {
@@ -110,8 +111,17 @@ export class TuiController {
         }
         if (stopped()) break;
         throw new Error("Application event stream이 종료됐습니다");
-      } catch {
+      } catch (error) {
         if (stopped()) break;
+        if (isAuthenticationFailure(error)) {
+          authenticationFailure = true;
+          this.dispatch({
+            type: "connection.changed",
+            connection: "offline",
+            error: "로그인이 만료되었거나 취소되었습니다. `massion`을 다시 실행해 재연결해 주세요.",
+          });
+          break;
+        }
         initialized = this.state().snapshot !== undefined;
         failures += 1;
         this.dispatch({
@@ -123,11 +133,17 @@ export class TuiController {
         await this.delay(Math.round(base + base * 0.2 * this.random()));
       }
     }
-    this.dispatch({ type: "connection.changed", connection: "stopped" });
+    if (!authenticationFailure) this.dispatch({ type: "connection.changed", connection: "stopped" });
   }
 
   public async query(operation: string, payload: unknown): Promise<unknown> {
     if (!QUERY_OPERATIONS.has(operation)) throw new Error("TUI에서 허용되지 않은 query operation입니다");
     return decodeQueryResult(await this.client.query(operation, payload), operation);
   }
+}
+
+function isAuthenticationFailure(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const status = (error as { readonly status?: unknown }).status;
+  return status === 401 || status === 403;
 }

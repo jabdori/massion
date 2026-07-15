@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { chmod, mkdir, open } from "node:fs/promises";
+import { chmod, lstat, mkdir, open, rename, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
 import type { CliConfigStore } from "./config.js";
@@ -31,13 +31,23 @@ export async function initializeCli(input: {
   await mkdir(tokenDirectory, { recursive: true, mode: 0o700 });
   await chmod(tokenDirectory, 0o700);
   const tokenPath = join(tokenDirectory, `${input.profile}.token`);
-  const handle = await open(tokenPath, "wx", 0o600);
+  try {
+    const existing = await lstat(tokenPath);
+    if (existing.isSymbolicLink() || !existing.isFile() || (existing.mode & 0o077) !== 0)
+      throw new Error("token file은 symlink가 아닌 0600 regular file이어야 합니다");
+  } catch (error) {
+    if (!(error instanceof Error) || !("code" in error) || error.code !== "ENOENT") throw error;
+  }
+  const temporaryTokenPath = `${tokenPath}.${process.pid.toString()}.tmp`;
+  await rm(temporaryTokenPath, { force: true });
+  const handle = await open(temporaryTokenPath, "wx", 0o600);
   try {
     await handle.writeFile(`${token}\n`, "utf8");
     await handle.sync();
   } finally {
     await handle.close();
   }
+  await rename(temporaryTokenPath, tokenPath);
   await input.config.save({
     schemaVersion: "massion.cli.config.v1",
     selectedProfile: input.profile,
