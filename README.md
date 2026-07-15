@@ -44,6 +44,15 @@ massion
 massion --web
 ```
 
+설치된 Massion의 릴리스를 확인하거나 올릴 때는 두 명령을 구분합니다.
+
+```sh
+massion update          # 최신 릴리스 확인
+massion upgrade         # 최신 릴리스 설치(호환 시)
+```
+
+`upgrade`는 릴리스 매니페스트(manifest)의 플랫폼·Node.js·Bun·주 버전 호환성 검사를 통과한 경우에만 아카이브를 SHA-256으로 검증하고 교체합니다.
+
 `massion init`은 소유자 이메일과 표시 이름을 묻습니다. 설정이 없는 상태에서 `massion`을 실행해도 같은 온보딩을 거쳐 TUI를 엽니다. 자동화에서는 `massion init http://127.0.0.1:7331 owner@example.com "내 이름"` 형식을 사용합니다.
 
 ## TUI와 Web Console

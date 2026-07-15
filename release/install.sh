@@ -98,6 +98,10 @@ if [ ! -f "$source_dir/web/index.html" ] || [ -L "$source_dir/web/index.html" ];
   echo "release Web 진입점이 없거나 일반 파일이 아닙니다: web/index.html" >&2
   exit 1
 fi
+if [ ! -f "$source_dir/update.sh" ] || [ -L "$source_dir/update.sh" ]; then
+  echo "release update 진입점이 없거나 일반 파일이 아닙니다: update.sh" >&2
+  exit 1
+fi
 
 release_exists=0
 if path_exists "$release_dir"; then
@@ -191,7 +195,7 @@ trap 'exit 143' 15
 
 cp -R "$source_dir/runtime" "$staged/runtime"
 cp -R "$source_dir/web" "$staged/web"
-cp "$source_dir/release-bundle.json" "$source_dir/SHA256SUMS" "$source_dir/uninstall.sh" "$staged/"
+cp "$source_dir/release-bundle.json" "$source_dir/SHA256SUMS" "$source_dir/uninstall.sh" "$source_dir/update.sh" "$staged/"
 printf '%s\n' "$owner_marker" >"$staged/.massion-install-owner"
 mkdir -m 700 "$staged/bin"
 
@@ -203,6 +207,9 @@ if [ -L "$launcher" ]; then launcher=$(readlink "$launcher"); fi
 release_dir=$(CDPATH= cd -- "$(dirname -- "$launcher")/.." && pwd)
 export MASSION_SERVER_BIN="$release_dir/runtime/node_modules/@massion/server/dist/main.js"
 export MASSION_WEB_ROOT="$release_dir/web"
+export MASSION_PREFIX="$(CDPATH= cd -- "$release_dir/../../.." && pwd)"
+export MASSION_UPDATE_BIN="$release_dir/update.sh"
+export MASSION_BUN_VERSION="$(bun --version)"
 if [ "$#" -eq 0 ] && [ -t 0 ] && [ -t 1 ]; then
   config_path="${XDG_CONFIG_HOME:-$HOME/.config}/massion/config.json"
   case "$(uname -s)" in
@@ -270,7 +277,8 @@ chmod 700 \
   "$staged/bin/massion" \
   "$staged/bin/massion-connector" \
   "$staged/bin/massion-server" \
-  "$staged/uninstall.sh"
+  "$staged/uninstall.sh" \
+  "$staged/update.sh"
 chmod 600 "$staged/.massion-install-owner" "$staged/release-bundle.json" "$staged/SHA256SUMS"
 
 if [ "$release_exists" -eq 1 ]; then

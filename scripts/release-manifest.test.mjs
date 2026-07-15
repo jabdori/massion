@@ -29,6 +29,11 @@ test("source·toolchain·artifact digest가 정렬된 release manifest를 만든
     ["massion-deploy-1.0.0.tar.gz", "massion-local-1.0.0.tar.gz"],
   );
   assert.equal(manifest.schema, "massion.release.v1");
+  assert.deepEqual(manifest.compatibility, {
+    platforms: ["darwin-arm64", "darwin-x64", "linux-arm64", "linux-x64"],
+    node: { minMajor: 24 },
+    bun: { minVersion: "1.3.0" },
+  });
   assert.throws(
     () =>
       createReleaseManifest({
