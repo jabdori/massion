@@ -31,6 +31,12 @@
 
 깨끗한 복제본 release 기준은 `6777f3b0a5922e9349862214843ebf98905a53cc`이며 local archive digest는 `sha256:3771998673eb9720336dc8db4321a078c431be9c2f60b96cfddad74b3be51f67`입니다. 원격 `main`은 이 기준을 포함한 후속 문서 커밋으로 푸시되어 있습니다.
 
+### 2026-07-15 검증 독립성 보강
+
+깨끗한 checkout에서 `pnpm test`만 직접 실행하면 Registry의 실제 package 검사 두 개가 공식 Extension의 생성물 `dist/worker.js`를 찾지 못해 실패했습니다. `pnpm verify`는 build를 먼저 실행하므로 이 조건을 만족했지만, Registry 테스트 자체에는 숨은 선행조건이 남아 있었습니다.
+
+Registry의 test script는 이제 Slack·Discord·GitHub 공식 Extension을 명시적으로 build한 뒤 실제 npm package 검사를 실행합니다. workspace script 회귀 테스트는 이 선행 단계가 빠지지 않도록 고정합니다. 2026-07-15의 별도 격리 실행에서 `pnpm verify`(exit 0), `pnpm verify:security`(moderate/high/critical 0), `pnpm verify:hardening`(26개 테스트 통과, 500 요청·동시성 32·실패 0, p95 24.02ms)을 관측했습니다. 이 결과에는 현재 source commit의 digest와 명령 로그 digest가 함께 고정되지 않았고 이후 코드도 변경되었으므로, 현재 작업 트리 또는 다음 release의 최종 검증 근거로 사용하지 않습니다. 최종 clean source commit에서 다시 실행해 별도 receipt로 고정합니다. 이 p95는 2026-07-13 기준과 비교하는 release 임계값이 아니라 해당 별도 실행의 관측값입니다.
+
 ## 3. Phase 24 인계와 UAT
 
 초기 인계 UAT는 아래의 역사적 기준을 남겼고, 2026-07-14에 현재 Massion Core 기준으로 Codex 인증 재검증을 추가 실행했습니다.
