@@ -29,4 +29,24 @@ describe("Application SSE", () => {
     for await (const value of decodeApplicationSseStream(stream)) values.push(value);
     expect(values).toEqual([{ sequence: 2, type: "work.changed" }]);
   });
+
+  it("소비자가 terminal event 뒤 순회를 멈추면 underlying stream을 취소한다", async () => {
+    const encoded = new TextEncoder();
+    let cancelled = 0;
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(encoded.encode('id: 1\nevent: run.blocked\ndata: {"sequence":1,"type":"run.blocked"}\n\n'));
+      },
+      cancel() {
+        cancelled += 1;
+      },
+    });
+
+    for await (const value of decodeApplicationSseStream(stream)) {
+      expect(value).toMatchObject({ sequence: 1, type: "run.blocked" });
+      break;
+    }
+
+    expect(cancelled).toBe(1);
+  });
 });

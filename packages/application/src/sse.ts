@@ -53,6 +53,7 @@ export async function* decodeApplicationSseStream(stream: ReadableStream<Uint8Ar
     }
     if (pending.trim()) throw new Error("SSE stream이 불완전한 frame으로 종료됐습니다");
   } finally {
+    await reader.cancel().catch(() => undefined);
     reader.releaseLock();
   }
 }
