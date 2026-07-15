@@ -20,6 +20,8 @@ describe("massion CLI parser", () => {
 
   it.each([
     [["init"], "init", undefined],
+    [["update"], "update", undefined],
+    [["upgrade"], "upgrade", undefined],
     [["status", "--json"], "status", undefined],
     [["run", "제품화", "--wait"], "run", undefined],
     [["resume", "run-12345678", "--retry-blocked"], "resume", undefined],

@@ -36,12 +36,24 @@ export function createReleaseManifest(input) {
       return { name: artifact.name, bytes: artifact.bytes, digest: `sha256:${artifact.digest}` };
     })
     .sort((left, right) => left.name.localeCompare(right.name));
+  const platforms = input.platforms ?? ["darwin-arm64", "darwin-x64", "linux-arm64", "linux-x64"];
+  if (
+    !Array.isArray(platforms) ||
+    platforms.length < 1 ||
+    platforms.some((platform) => typeof platform !== "string" || !/^(?:darwin|linux)-(?:arm64|x64)$/u.test(platform))
+  )
+    throw new Error("release 호환 플랫폼 정보가 유효하지 않습니다");
   return {
     schema: "massion.release.v1",
     version: input.version,
     gitCommit: input.gitCommit,
     sourceDigest: `sha256:${input.sourceDigest}`,
     toolchains: { ...toolchains },
+    compatibility: {
+      platforms: [...new Set(platforms)].sort(),
+      node: { minMajor: 24 },
+      bun: { minVersion: "1.3.0" },
+    },
     artifacts,
   };
 }

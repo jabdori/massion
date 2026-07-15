@@ -51,6 +51,15 @@ massion
 massion init http://127.0.0.1:7331 owner@example.com "내 이름"
 ```
 
+설치된 Massion의 버전 확인과 설치를 분리합니다.
+
+```sh
+massion update          # 최신 릴리스 확인만 수행
+massion upgrade         # 최신 릴리스 확인·검증·설치
+```
+
+호환되지 않는 운영체제·CPU·Node.js·Bun 또는 다른 주 버전은 자동 설치하지 않습니다.
+
 다른 사용자 경로에 설치하려면 설치와 제거 때 같은 `MASSION_PREFIX`를 지정합니다.
 
 ```sh

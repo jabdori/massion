@@ -217,9 +217,11 @@ async function main() {
   await verifyRuntimeEntrypoints(local, entrypoints);
   await cp(resolve(root, "release/install.sh"), resolve(local, "install.sh"));
   await cp(resolve(root, "release/uninstall.sh"), resolve(local, "uninstall.sh"));
+  await cp(resolve(root, "release/update.sh"), resolve(local, "update.sh"));
   await cp(resolve(root, "docs/operations/local-install.md"), resolve(local, "README.md"));
   await chmod(resolve(local, "install.sh"), 0o755);
   await chmod(resolve(local, "uninstall.sh"), 0o755);
+  await chmod(resolve(local, "update.sh"), 0o755);
 
   const gitCommit = String(run("git", ["rev-parse", "HEAD"], { cwd: root })).trim();
   const source = await sourceDigest(root);
@@ -270,6 +272,7 @@ async function main() {
     gitCommit,
     sourceDigest: source,
     toolchains,
+    platforms: bundle.platforms,
     artifacts: [await artifact(localArchive), await artifact(deployArchive)],
   });
   await writeFile(resolve(output, "release-manifest.json"), `${JSON.stringify(manifest, undefined, 2)}\n`, {

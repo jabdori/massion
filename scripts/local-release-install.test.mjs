@@ -57,8 +57,10 @@ async function makeBundle(context) {
   await mkdir(bundle, { recursive: true, mode: 0o700 });
   await cp(join(repositoryRoot, "release/install.sh"), join(bundle, "install.sh"));
   await cp(join(repositoryRoot, "release/uninstall.sh"), join(bundle, "uninstall.sh"));
+  await cp(join(repositoryRoot, "release/update.sh"), join(bundle, "update.sh"));
   await chmod(join(bundle, "install.sh"), 0o700);
   await chmod(join(bundle, "uninstall.sh"), 0o700);
+  await chmod(join(bundle, "update.sh"), 0o700);
 
   const entrypoints = {
     massion: "runtime/node_modules/@massion/cli/dist/main.js",
@@ -108,6 +110,8 @@ test("공백이 있는 개인 경로에 connector를 설치하고 진단한 뒤 
     await readFile(join(release, "bin/massion"), "utf8"),
     /runtime\/node_modules\/@massion\/cli\/dist\/main\.js" init/u,
   );
+  assert.equal((await lstat(join(release, "update.sh"))).isFile(), true);
+  assert.match(await readFile(join(release, "bin/massion"), "utf8"), /MASSION_UPDATE_BIN/u);
   for (const command of commands) {
     const link = join(prefix, "bin", command);
     assert.equal((await lstat(link)).isSymbolicLink(), true);
