@@ -52,3 +52,13 @@ test("CLI 형식 검사는 Application 선언 파일을 먼저 빌드한다", as
 
   assert.match(packageJson.scripts.typecheck, /^pnpm build-deps && /);
 });
+
+test("Registry의 실제 공식 Extension 패키지 검사는 필요한 산출물을 먼저 빌드한다", async () => {
+  const packageJson = JSON.parse(await readFile(new URL("../packages/registry/package.json", import.meta.url), "utf8"));
+
+  assert.equal(
+    packageJson.scripts["build-official-extensions"],
+    "pnpm --filter @massion-ext/slack build && pnpm --filter @massion-ext/discord build && pnpm --filter @massion-ext/github build",
+  );
+  assert.match(packageJson.scripts.test, /^pnpm build-deps && pnpm build-official-extensions && vitest run src$/);
+});
