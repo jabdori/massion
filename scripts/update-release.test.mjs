@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { createServer } from "node:http";
 import { spawn, spawnSync } from "node:child_process";
-import { cp, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { test } from "node:test";
@@ -24,11 +25,16 @@ async function makeInstalledRelease(context, version = "1.0.0") {
   return { release, root };
 }
 
-async function serveManifest(context, manifest) {
+async function serveManifest(context, manifest, archive) {
   const server = createServer((request, response) => {
     if (request.url === "/release-manifest.json") {
       response.writeHead(200, { "content-type": "application/json" });
       response.end(`${JSON.stringify(manifest)}\n`);
+      return;
+    }
+    if (archive && request.url === `/${archive.name}`) {
+      response.writeHead(200, { "content-type": "application/gzip" });
+      response.end(archive.body);
       return;
     }
     response.writeHead(404);
@@ -41,12 +47,13 @@ async function serveManifest(context, manifest) {
   return `http://127.0.0.1:${address.port}`;
 }
 
-async function runUpdate(release, baseUrl, version) {
-  const child = spawn("sh", [join(release, "update.sh"), "--check", "--json"], {
+async function runUpdate(release, baseUrl, version, operation = "--check") {
+  const child = spawn("sh", [join(release, "update.sh"), operation, "--json"], {
     env: {
       ...process.env,
       MASSION_RELEASE_BASE_URL: baseUrl,
       MASSION_VERSION: version,
+      MASSION_PREFIX: join(release, "prefix"),
       MASSION_BUN_VERSION:
         process.env.MASSION_BUN_VERSION ?? spawnSync("bun", ["--version"], { encoding: "utf8" }).stdout.trim(),
     },
@@ -61,7 +68,7 @@ async function runUpdate(release, baseUrl, version) {
   });
 }
 
-function manifest(version, platform = `${process.platform}-${process.arch}`) {
+function manifest(version, platform = `${process.platform}-${process.arch}`, artifactDigest = "c".repeat(64)) {
   return {
     schema: "massion.release.v1",
     version,
@@ -73,7 +80,7 @@ function manifest(version, platform = `${process.platform}-${process.arch}`) {
       node: { minMajor: Number(process.versions.node.split(".")[0]) },
       bun: { minVersion: "1.3.0" },
     },
-    artifacts: [{ name: `massion-local-${version}.tar.gz`, bytes: 1, digest: `sha256:${"c".repeat(64)}` }],
+    artifacts: [{ name: `massion-local-${version}.tar.gz`, bytes: 1, digest: `sha256:${artifactDigest}` }],
   };
 }
 
@@ -101,4 +108,32 @@ test("update는 현재 플랫폼이 release 호환 목록에 없으면 중단한
 
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /호환되지 않는 release/u);
+});
+
+test("upgrade는 아카이브 내부 bundle version이 manifest와 다르면 설치하지 않는다", async (context) => {
+  const { release, root } = await makeInstalledRelease(context);
+  const archiveRoot = join(root, "archive");
+  const archivePath = join(root, "massion-local-1.0.1.tar.gz");
+  await mkdir(archiveRoot, { recursive: true, mode: 0o700 });
+  await writeFile(join(archiveRoot, "install.sh"), "#!/bin/sh\nexit 0\n", { mode: 0o700 });
+  await writeFile(join(archiveRoot, "SHA256SUMS"), "", { mode: 0o600 });
+  await writeFile(
+    join(archiveRoot, "release-bundle.json"),
+    `${JSON.stringify({ schema: "massion.release-bundle.v1", version: "1.0.0" })}\n`,
+    { mode: 0o600 },
+  );
+  const archive = spawnSync("tar", ["-czf", archivePath, "."], { cwd: archiveRoot, encoding: "utf8" });
+  assert.equal(archive.status, 0, archive.stderr);
+  const archiveBody = await readFile(archivePath);
+  const archiveName = "massion-local-1.0.1.tar.gz";
+  const archiveDigest = createHash("sha256").update(archiveBody).digest("hex");
+  const baseUrl = await serveManifest(
+    context,
+    manifest("1.0.1", `${process.platform}-${process.arch}`, archiveDigest),
+    { name: archiveName, body: archiveBody },
+  );
+  const result = await runUpdate(release, baseUrl, "1.0.1", "--apply");
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /bundle version/u);
 });
