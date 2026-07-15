@@ -91,5 +91,5 @@
 
 - [x] Run focused RED/GREEN tests after every implementation slice.
 - [x] Run `pnpm verify`, `pnpm verify:security`, `pnpm verify:hardening`, `pnpm release:build`, and `pnpm verify:release`.
-- [ ] Run tmux release UAT for all available provider credentials and validate the receipt.
+- [x] Run a tmux UAT for the currently available Codex subscription credential and validate the evaluation receipt. Claude/Z.AI and multi-account runs remain external prerequisites; see `docs/evidence/phase-25/model-optimization-2026-07-15.md`.
 - [x] Commit each coherent slice with a Phase-specific message and leave the worktree clean.

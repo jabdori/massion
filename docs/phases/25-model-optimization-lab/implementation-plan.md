@@ -44,8 +44,8 @@
 
 ## Task 7. 실제 사용자 검증과 릴리스 판정
 
-- [ ] Phase 24 release 설치를 `tmux`에서 실행하고 실제 연결 가능한 Provider 역할별 빠른 평가를 검증합니다. 최신 local lifecycle은 경로 공백을 포함한 작업공간에서 통과했지만, Codex 실제 subscription run은 이전 시도에서 180초 network timeout으로 남아 있어 역할별 평가를 완료로 표시하지 않습니다. 근거는 `docs/evidence/phase-24/subscription-uat-2026-07-14.md`입니다.
-- [ ] 추천 승인·유지·자동 최적화·shadow·승격·rollback·재시작을 비밀이 제거된 영수증으로 검증합니다.
+- [x] 현재 연결 가능한 Provider인 Codex의 `representative` 역할 빠른 평가를 현재 서버 build와 `tmux` 사용자 시나리오로 검증했습니다. 실제 Agent runtime 평가 receipt, quota 관측, 추천 생성, 수동 승인, candidate batch 생성까지 통과했습니다. 근거는 `docs/evidence/phase-25/model-optimization-2026-07-15.md`입니다. Claude·Z.AI와 복수 계정 시나리오는 연결·승인 전제조건이 없어 완료로 간주하지 않습니다.
+- [ ] 추천 유지·자동 최적화·shadow·승격·rollback·재시작을 비밀이 제거된 영수증으로 검증합니다. 이번 검증에서는 자동화 기본값을 끈 채 수동 승인과 candidate 단계까지만 실행했습니다.
 - [x] 전체 검증, 요구사항 추적표, 아키텍처와 운영 문서의 로컬 결과를 현재 source commit에 고정했습니다.
 - [ ] 실제 Provider UAT와 redacted receipt가 확보되면 Phase 25 최종 회고를 닫습니다.
 
@@ -54,4 +54,4 @@
 1. Provider 연결을 실제로 호출하는 평가 executor adapter와 역할별 평가 case 입력 경계는 구현되었습니다. 서버 adapter는 Router reservation·VoltAgent AI SDK 호출·usage/cost 정산·기대 결과 포함 여부 기반 품질 판정을 수행합니다. 실제 Provider별 품질 분포는 외부 계정 UAT에서 추가 확인해야 합니다.
 2. 자동 승격 조건과 관찰 redaction의 운영 증거를 추가합니다.
 3. TUI 변경 modal은 bundle export/import까지 연결되었습니다(`982bf57`, 관련 테스트 통과). 최종 release에서 외부 평가 import/export를 반복한 redacted 증거를 추가합니다.
-4. Claude·Codex·GLM 및 복수 계정이 실제로 연결된 환경에서 tmux receipt를 갱신합니다.
+4. Claude·Codex·GLM 및 복수 계정이 실제로 연결된 환경에서 tmux receipt를 갱신합니다. 현재는 Codex 단일 계정 receipt만 확보했습니다.
