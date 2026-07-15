@@ -8,7 +8,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { resolveCliConfigPath } from "./config.js";
 
-describe("mass child E2E", () => {
+describe("massion child E2E", () => {
   let root: string;
   let endpoint: string;
   let close: () => Promise<void>;

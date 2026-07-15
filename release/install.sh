@@ -9,7 +9,7 @@ prefix=${MASSION_PREFIX:-"${HOME:?HOME이 필요합니다}/.local"}
 release_dir="$prefix/lib/massion/$version"
 release_parent="$prefix/lib/massion"
 bin_dir="$prefix/bin"
-command_names="mass massion-connector massion-server massion-tui"
+command_names="massion massion-connector massion-server"
 
 case "$prefix" in
   /*) ;;
@@ -94,6 +94,10 @@ do
     exit 1
   fi
 done
+if [ ! -f "$source_dir/web/index.html" ] || [ -L "$source_dir/web/index.html" ]; then
+  echo "release Web 진입점이 없거나 일반 파일이 아닙니다: web/index.html" >&2
+  exit 1
+fi
 
 release_exists=0
 if path_exists "$release_dir"; then
@@ -186,17 +190,22 @@ trap 'exit 130' 2
 trap 'exit 143' 15
 
 cp -R "$source_dir/runtime" "$staged/runtime"
+cp -R "$source_dir/web" "$staged/web"
 cp "$source_dir/release-bundle.json" "$source_dir/SHA256SUMS" "$source_dir/uninstall.sh" "$staged/"
 printf '%s\n' "$owner_marker" >"$staged/.massion-install-owner"
 mkdir -m 700 "$staged/bin"
 
-cat >"$staged/bin/mass" <<'EOF'
+cat >"$staged/bin/massion" <<'EOF'
 #!/bin/sh
 set -eu
 launcher=$0
 if [ -L "$launcher" ]; then launcher=$(readlink "$launcher"); fi
 release_dir=$(CDPATH= cd -- "$(dirname -- "$launcher")/.." && pwd)
 export MASSION_SERVER_BIN="$release_dir/runtime/node_modules/@massion/server/dist/main.js"
+export MASSION_WEB_ROOT="$release_dir/web"
+if [ "$#" -eq 0 ] && [ -t 0 ] && [ -t 1 ]; then
+  exec bun "$release_dir/runtime/node_modules/@massion/tui/dist/main.js"
+fi
 exec node "$release_dir/runtime/node_modules/@massion/cli/dist/main.js" "$@"
 EOF
 
@@ -244,24 +253,15 @@ set -eu
 launcher=$0
 if [ -L "$launcher" ]; then launcher=$(readlink "$launcher"); fi
 release_dir=$(CDPATH= cd -- "$(dirname -- "$launcher")/.." && pwd)
+export MASSION_WEB_ROOT="$release_dir/web"
 exec node "$release_dir/runtime/node_modules/@massion/server/dist/main.js" "$@"
-EOF
-
-cat >"$staged/bin/massion-tui" <<'EOF'
-#!/bin/sh
-set -eu
-launcher=$0
-if [ -L "$launcher" ]; then launcher=$(readlink "$launcher"); fi
-release_dir=$(CDPATH= cd -- "$(dirname -- "$launcher")/.." && pwd)
-exec bun "$release_dir/runtime/node_modules/@massion/tui/dist/main.js" "$@"
 EOF
 
 chmod -R go-rwx "$staged"
 chmod 700 \
-  "$staged/bin/mass" \
+  "$staged/bin/massion" \
   "$staged/bin/massion-connector" \
   "$staged/bin/massion-server" \
-  "$staged/bin/massion-tui" \
   "$staged/uninstall.sh"
 chmod 600 "$staged/.massion-install-owner" "$staged/release-bundle.json" "$staged/SHA256SUMS"
 
@@ -291,4 +291,4 @@ committed=1
 rm -rf "$transaction"
 transaction=""
 trap - 0 1 2 15
-echo "Massion AgentOS $version 설치 완료: $bin_dir/mass"
+echo "Massion AgentOS $version 설치 완료: $bin_dir/massion"

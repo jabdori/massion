@@ -34,6 +34,14 @@ describe("server configuration", () => {
     });
   });
 
+  it("local Web root는 절대 경로로만 선택적으로 구성한다", () => {
+    const base = { MASSION_TOKEN_KEY: key, MASSION_CREDENTIAL_KEY: credentialKey };
+    expect(parseServerConfig({ ...base, MASSION_WEB_ROOT: "/opt/massion/web" }).server).toMatchObject({
+      webRoot: "/opt/massion/web",
+    });
+    expect(() => parseServerConfig({ ...base, MASSION_WEB_ROOT: "relative/web" })).toThrow("Web root");
+  });
+
   it("Software Delivery executable allowlist는 절대 경로 JSON만 허용한다", () => {
     const base = { MASSION_TOKEN_KEY: key, MASSION_CREDENTIAL_KEY: credentialKey };
     expect(() => parseServerConfig({ ...base, MASSION_SOFTWARE_EXECUTABLES: '{"node":"node"}' })).toThrow("절대 경로");

@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { CliConfigStore, resolveCliConfigPath } from "./config.js";
 
-describe("mass CLI config", () => {
+describe("massion CLI config", () => {
   const roots: string[] = [];
   afterEach(async () => {
     const { rm } = await import("node:fs/promises");

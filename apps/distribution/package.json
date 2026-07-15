@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "pnpm --filter @massion/cli build && pnpm --filter @massion/connector build && pnpm --filter @massion/server build && pnpm --filter @massion/tui build",
+    "build": "pnpm --filter @massion/cli build && pnpm --filter @massion/connector build && pnpm --filter @massion/server build && pnpm --filter @massion/tui build && pnpm --filter @massion/web build",
     "test": "node -e \"process.exit(0)\"",
     "typecheck": "node -e \"process.exit(0)\""
   },

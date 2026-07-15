@@ -6,7 +6,7 @@ function event(sequence: number, type: string, correlationId = "run-correlation-
   return { sequence, type, correlationId, resource: { type: "ApplicationRun", id: "run-headless-1" }, payload: {} };
 }
 
-describe("mass run", () => {
+describe("massion run", () => {
   it("detach는 accepted run만 반환하고 wait는 terminal event까지 재연결한다", async () => {
     let streams = 0;
     const client: HeadlessApplicationClient = {

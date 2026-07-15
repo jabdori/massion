@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 import { CliConfigStore } from "./config.js";
 import { initializeCli } from "./init.js";
 
-describe("mass init", () => {
+describe("massion init", () => {
   it("loopback bootstrap token을 별도 0600 file에 저장하고 config에는 reference만 둔다", async () => {
     const root = await mkdtemp(join(tmpdir(), "massion-init-"));
     const store = new CliConfigStore(join(root, "config.json"));

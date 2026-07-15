@@ -142,7 +142,7 @@ function works(state: TuiState, snapshot: CollaborationGraphSnapshot): { list: s
               `${item.workId === work?.workId ? "›" : " "} ${statusMark(item.status)} 업무 ${item.workId} · ${item.status} · r${String(item.revision)}`,
           )
           .join("\n")
-      : "아직 업무가 없습니다. `mass run`으로 첫 업무를 시작할 수 있습니다.",
+      : "아직 업무가 없습니다. `massion run`으로 첫 업무를 시작할 수 있습니다.",
     detail: work
       ? [
           `업무 ${work.workId}`,
@@ -459,7 +459,7 @@ function subscriptions(state: TuiState): { list: string; detail: string } {
       ...errors,
       connectionUnavailable
         ? "이 Provider는 공개 연결을 지원하지 않아 정책을 변경할 수 없습니다."
-        : "e: 정책 변경 · Web Console 또는 mass subscription policy도 사용 가능",
+        : "e: 정책 변경 · Web Console 또는 massion subscription policy도 사용 가능",
     ].join("\n"),
   };
 }

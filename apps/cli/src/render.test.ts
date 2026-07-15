@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { renderCliOutput } from "./render.js";
 
-describe("mass output", () => {
+describe("massion output", () => {
   it("사람용 의미 우선 표와 설명을 만든다", () => {
     const output = renderCliOutput([{ workId: "work-1", status: "running" }], "human", { tty: false });
     expect(output).toContain("workId");

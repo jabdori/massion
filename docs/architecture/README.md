@@ -37,7 +37,7 @@ flowchart TB
   Team["팀 사용자<br/>공유 조직과 역할"]:::implemented
 
   subgraph Surfaces["사용자 화면·외부 연동"]
-    CLI["CLI · mass<br/>구현됨 · Phase 16"]:::implemented
+    CLI["CLI · massion<br/>구현됨 · Phase 16"]:::implemented
     TUI["TUI · OpenTUI<br/>구현됨 · Phase 17"]:::implemented
     Web["Web Console<br/>구현됨 · Phase 18"]:::implemented
     Channels["Slack · Discord · GitHub<br/>구현됨 · Phase 19"]:::implemented

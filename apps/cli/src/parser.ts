@@ -103,7 +103,7 @@ function optionValue(argv: readonly string[], index: number, option: string): st
 
 export function parseCliArguments(argv: readonly string[]): CliInvocation {
   const command = argv[0] ?? "help";
-  if (!(command in COMMANDS)) throw new Error(`지원하지 않는 mass command입니다: ${command}`);
+  if (!(command in COMMANDS)) throw new Error(`지원하지 않는 massion command입니다: ${command}`);
   const subcommands = COMMANDS[command];
   let index = 1;
   let subcommand: string | undefined;

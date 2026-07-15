@@ -24,7 +24,7 @@ import { fileURLToPath } from "node:url";
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const version = "1.0.0";
 const ownerMarker = "massion-local-1.0.0";
-const commands = ["mass", "massion-connector", "massion-server", "massion-tui"];
+const commands = ["massion", "massion-connector", "massion-server"];
 
 async function filesUnder(path) {
   const files = [];
@@ -61,7 +61,7 @@ async function makeBundle(context) {
   await chmod(join(bundle, "uninstall.sh"), 0o700);
 
   const entrypoints = {
-    mass: "runtime/node_modules/@massion/cli/dist/main.js",
+    massion: "runtime/node_modules/@massion/cli/dist/main.js",
     connector: "runtime/node_modules/@massion/connector/dist/main.js",
     server: "runtime/node_modules/@massion/server/dist/main.js",
     tui: "runtime/node_modules/@massion/tui/dist/main.js",
@@ -78,6 +78,8 @@ async function makeBundle(context) {
     `${JSON.stringify({ schema: "massion.release-bundle.v1", version, entrypoints }, undefined, 2)}\n`,
     { mode: 0o600 },
   );
+  await mkdir(join(bundle, "web"), { recursive: true });
+  await writeFile(join(bundle, "web", "index.html"), "<!doctype html>\n", { mode: 0o600 });
   await writeChecksums(bundle);
   return { bundle, prefix, root };
 }
