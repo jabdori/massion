@@ -1,6 +1,6 @@
 # Phase 28 — pnpm 11 보안 감사 도구 체인 이관 설계
 
-> **상태**: approved
+> **상태**: completed
 > **결정일**: 2026-07-15
 > **선행 상태**: Phase 24의 현재 source 검증과 실제 계정 UAT는 진행 중이며, Phase 27의 깨끗한 Core 저장소 전환은 완료되었습니다.
 > **문제 기준**: 고정된 pnpm 10의 production audit은 npm이 폐기한 감사 endpoint를 호출해 취약점 결과가 아닌 오류 envelope를 반환했습니다.

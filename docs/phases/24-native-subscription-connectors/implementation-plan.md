@@ -49,7 +49,7 @@
 - [x] 새 Codex 계정 prepare의 credential 생성 뒤 실패는 실제 database·Application command registry에서 account/provider/endpoint/credential rollback, offline Connector 보상, 동일 command generation 2 재개, 세 번째 replay 무변화까지 검증합니다. 이는 전역 원자 transaction이 아닌 보상 saga이며, 근거는 `docs/evidence/phase-24/prepare-retry-atomicity-2026-07-15.md`입니다.
 - [ ] 복수 계정 회전·quota·offline·429·fallback·중단·재개를 검증합니다. 실제 local restart와 owner-only backup·restore는 위 release lifecycle에서 통과했습니다.
 - [ ] 현재 source의 기존 profile 재사용 실제 UAT를 사용자 local 환경에서 실행합니다. 기존 Massion 관리 profile을 재사용해 `connectionDisposition: "reused"`, 같은 account·Connector, 직접 quota 관측을 확인하고, 재로그인 UI가 열리지 않은 결과를 source commit·release artifact와 함께 receipt로 고정합니다.
-- [ ] 전체 검증, 요구사항 추적표, 아키텍처와 운영 문서의 로컬 결과를 검증된 source commit에 고정합니다. 2026-07-15의 격리 snapshot 검증은 source digest와 로그 digest가 저장소에 결속되지 않았고 이후 코드가 변경되어 현재 근거로 사용하지 않습니다. 최종 clean source commit에서 `pnpm verify`, security, hardening, architecture, release를 다시 실행하고 명령 로그 digest를 evidence로 남깁니다.
+- [x] 전체 검증, 요구사항 추적표, 아키텍처와 운영 문서의 로컬 결과를 검증된 source commit에 고정합니다. Phase 28의 `pnpm verify`, security, hardening, architecture, release와 clean clone 결과를 `docs/evidence/phase-28/pnpm-11-toolchain-verification-2026-07-15.md`에 결속했습니다. 실제 사용자 계정 UAT와 외부 Provider release gate는 다음 미완료 항목으로 유지합니다.
 - [ ] 외부 계정 전제조건이 충족되면 복수 계정 UAT와 함께 Phase 24 최종 회고를 닫습니다.
 
 ## Task 7. Phase 24 기준점 닫기

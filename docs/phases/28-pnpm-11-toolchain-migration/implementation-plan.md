@@ -1,6 +1,6 @@
 # Phase 28 — pnpm 11 보안 감사 도구 체인 이관 구현 계획
 
-> **상태**: in-progress
+> **상태**: completed
 > **설계**: `docs/phases/28-pnpm-11-toolchain-migration/design.md`
 > **방법**: 실패 원인 재현 → 도구 체인·정책 이관 → 고정 설치 → 품질·보안·release 검증 → evidence·회고
 
@@ -21,8 +21,8 @@
 ## Task 3. 검증 기준점과 회고 고정
 
 - [x] pnpm 11의 `pnpm install --frozen-lockfile`, `pnpm verify`, `pnpm verify:security`를 실제 작업공간에서 실행합니다.
-- [ ] 변경을 하나의 source commit으로 고정하고 source digest를 기록합니다.
-- [ ] 새 source commit에서 hardening, release build, release verify와 Docker build 경로를 재검증합니다.
-- [ ] clean clone 결과·audit 요약·로그 digest를 Phase 28 evidence에 기록하고 요구사항 추적표를 completed로 갱신합니다.
+- [x] 변경을 하나의 source commit(`32bc0993a1ad88c790e4855be733852de8a12f25`)으로 고정하고 source digest를 기록합니다.
+- [x] 새 source commit에서 hardening, release build, release verify와 Docker build 경로를 재검증합니다.
+- [x] clean clone 결과·audit 요약·로그 digest를 Phase 28 evidence에 기록하고 요구사항 추적표를 completed로 갱신합니다.
 
 이 Phase는 Phase 24 외부 계정 UAT를 대체하지 않습니다. 실제 Provider 인증·quota·fallback 검증은 해당 Phase의 미완료 작업으로 남깁니다.
