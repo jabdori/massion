@@ -5,6 +5,8 @@ import { describe, expect, it } from "vitest";
 import { CredentialVault } from "./vault.js";
 
 describe("CredentialVault", () => {
+  const altered = (value: string): string => `${value[0] === "a" ? "b" : "a"}${value.slice(1)}`;
+
   it("AES-256-GCM으로 secret을 roundtrip하고 ciphertext에 평문을 남기지 않는다", () => {
     const vault = new CredentialVault(randomBytes(32));
     const encrypted = vault.encrypt("sk-super-secret", "tenant:credential:1");
@@ -18,10 +20,8 @@ describe("CredentialVault", () => {
     const vault = new CredentialVault(randomBytes(32));
     const encrypted = vault.encrypt("secret", "aad");
 
-    expect(() =>
-      vault.decrypt({ ...encrypted, ciphertext: `${encrypted.ciphertext.slice(0, -2)}aa` }, "aad"),
-    ).toThrow();
-    expect(() => vault.decrypt({ ...encrypted, authTag: `${encrypted.authTag.slice(0, -2)}aa` }, "aad")).toThrow();
+    expect(() => vault.decrypt({ ...encrypted, ciphertext: altered(encrypted.ciphertext) }, "aad")).toThrow();
+    expect(() => vault.decrypt({ ...encrypted, authTag: altered(encrypted.authTag) }, "aad")).toThrow();
     expect(() => vault.decrypt(encrypted, "different-aad")).toThrow();
   });
 
