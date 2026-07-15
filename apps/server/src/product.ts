@@ -49,7 +49,6 @@ import {
   RuntimeRecovery,
   RuntimeExecutionStore,
   VoltAgentRunner,
-  generateText,
   type AgentExecutionInput,
   type StructuredOutputSpec,
 } from "@massion/runtime";
@@ -96,6 +95,7 @@ import { BUILTIN_CORE_MODEL_ROUTES, BuiltinModelRouteAssembler } from "./server-
 import { BundledServerConnectorRuntimeAttestor } from "./server-runtime-attestor.js";
 import { ServerSubscriptionConnectionService } from "./server-subscription-connection.js";
 import { MassionSubscriptionExecutionContext } from "./subscription-execution-context.js";
+import { executeOptimizationCase } from "./model-optimization-executor.js";
 import { GovernanceSubscriptionPermissionBridge, SubscriptionAgentPolicyResolver } from "./subscription-governance.js";
 import { SubscriptionQuotaSynchronizationService } from "./subscription-quota-sync.js";
 import { MassionSubscriptionRuntimeResolver } from "./subscription-runtime-resolver.js";
@@ -239,6 +239,15 @@ export async function createMassionDaemon(
       policies: subscriptionPolicies,
     });
     const modelFactoryReference: { current?: MassionModelFactory } = {};
+    const optimizationEvaluationReference: { current?: ModelOptimizationStore } = {};
+    const subscriptionExecutionContext = new MassionSubscriptionExecutionContext(
+      join(config.connectors.root, "workspaces"),
+      works,
+      {
+        hasOptimizationRun: async (context, runId) =>
+          (await optimizationEvaluationReference.current?.hasEvaluationRun(context, runId)) ?? false,
+      },
+    );
     const optimizationEvaluations = await ModelOptimizationStore.create(database, organizations, {
       modelCatalog: async (context) => {
         const [models, routes] = await Promise.all([router.listModels(context), router.listRoutes(context)]);
@@ -266,62 +275,34 @@ export async function createMassionDaemon(
           const routes = await router.listRoutes(input.context);
           const route = routes.find((candidate) => candidate.route_id === profile.routeId);
           if (!route) throw new Error("모델 평가용 Route를 찾을 수 없습니다");
+          const workId = `optimization:${input.run.runId}`;
+          const workspace = await subscriptionExecutionContext.resolve(input.context, {
+            executionId: input.run.runId,
+            workId,
+            agentHandle: input.roleKey,
+          });
           const lease = await modelFactory.acquire(input.context, {
             commandId: `${input.run.runId}:${input.case.caseId}:reserve`,
             executionId: input.run.runId,
-            workId: `optimization:${input.run.runId}`,
+            workId,
             agentHandle: input.roleKey,
+            workspaceRoot: workspace.workspaceRoot,
             routeName: route.name,
             preferredModelProfileIds: [input.modelProfileId],
             estimatedTokens: 4_096,
             estimatedCostMicros: 0,
           });
-          if (lease.kind !== "model") throw new Error("Agent Runtime connector는 모델 평가에서 사용할 수 없습니다");
-          const startedAt = Date.now();
-          try {
-            const result = await generateText({ model: lease.model, prompt: input.case.prompt, maxRetries: 0 });
-            const usage = result.usage as { readonly inputTokens?: number; readonly outputTokens?: number };
-            const inputTokens =
-              typeof usage.inputTokens === "number" && Number.isSafeInteger(usage.inputTokens) ? usage.inputTokens : 0;
-            const outputTokens =
-              typeof usage.outputTokens === "number" && Number.isSafeInteger(usage.outputTokens)
-                ? usage.outputTokens
-                : 0;
-            const completed = result.text.trim().length > 0;
-            const expected = input.case.expectedOutcome.trim().toLocaleLowerCase();
-            const actual = result.text.trim().toLocaleLowerCase();
-            const qualityScore =
-              completed && expected.length > 0 && actual.includes(expected) ? 1 : completed ? 0.5 : 0;
-            const attempt = await lease.complete({
-              commandId: `${input.run.runId}:${input.case.caseId}:complete`,
-              inputTokens,
-              outputTokens,
-            });
-            return {
-              qualityScore,
-              latencyMs: Math.max(0, Date.now() - startedAt),
-              costMicros: attempt.actual_cost_micros,
-              privacyAllowed: true,
-              completed,
-              inputTokens,
-              outputTokens,
-            };
-          } catch (error) {
-            await lease
-              .fail({
-                commandId: `${input.run.runId}:${input.case.caseId}:fail`,
-                signal: { kind: "unknown" },
-                emittedTokens: 0,
-                sideEffectsStarted: false,
-                inputTokens: 0,
-                outputTokens: 0,
-              })
-              .catch(() => undefined);
-            throw error;
-          }
+          return await executeOptimizationCase({
+            lease,
+            executionId: input.run.runId,
+            caseId: input.case.caseId,
+            prompt: input.case.prompt ?? "",
+            expectedOutcome: input.case.expectedOutcome,
+          });
         },
       },
     });
+    optimizationEvaluationReference.current = optimizationEvaluations;
     const optimizationBatches = await OptimizationBatchService.create(database, organizations);
     const codexSubscriptionObserver = new BundledCodexSubscriptionObserver({
       profileRoot: join(config.connectors.root, "profiles"),
@@ -391,10 +372,6 @@ export async function createMassionDaemon(
     );
     const modelRegistry = new RoutedModelRegistry();
     const topologyRuntime = new EmbeddedVoltAgentRuntime(modelRegistry.resolve);
-    const subscriptionExecutionContext = new MassionSubscriptionExecutionContext(
-      join(config.connectors.root, "workspaces"),
-      works,
-    );
     const subscriptionRuntimeResolver = new MassionSubscriptionRuntimeResolver({
       accounts: subscriptionAccounts,
       connectors: subscriptionConnectors,

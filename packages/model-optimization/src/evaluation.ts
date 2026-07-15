@@ -498,6 +498,17 @@ export class ModelOptimizationStore {
     });
   }
 
+  /** 구독 실행 작업공간에 사용할 평가 run의 조직 소유권을 확인합니다. */
+  public async hasEvaluationRun(context: TenantContext, runId: string): Promise<boolean> {
+    await this.organizations.verifyTenantContext(context);
+    assertText(runId, "평가 run 식별자");
+    const [runs] = await this.database.query<[Array<{ readonly run_id: string }>]>(
+      "SELECT run_id FROM optimization_run WHERE organization_id = $organization_id AND run_id = $run_id LIMIT 1;",
+      { organization_id: context.organizationId, run_id: runId },
+    );
+    return runs.length > 0;
+  }
+
   /** 고정된 평가 묶음의 모든 case를 실행하고 하나의 불변 receipt로 집계합니다. */
   public async executeEvaluation(
     context: TenantContext,
