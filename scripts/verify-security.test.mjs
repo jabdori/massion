@@ -16,6 +16,19 @@ test("moderate·high·critical production advisory를 거부한다", () => {
   );
 });
 
+test("registry 오류 envelope를 취약점 0으로 처리하지 않는다", () => {
+  assert.throws(
+    () =>
+      assertAuditReport({
+        error: {
+          code: "ERR_PNPM_AUDIT_BAD_RESPONSE",
+          message: "The audit endpoint has been retired.",
+        },
+      }),
+    /구조가 유효하지 않습니다/u,
+  );
+});
+
 test("container·Registry·Kubernetes 보안 불변량을 강제한다", () => {
   assert.doesNotThrow(() =>
     assertDeploymentSecurity({

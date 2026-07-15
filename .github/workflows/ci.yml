@@ -32,7 +32,7 @@ jobs:
       - name: pnpm 설치
         run: |
           corepack enable
-          corepack prepare pnpm@10.30.3 --activate
+          corepack prepare pnpm@11.13.0 --activate
 
       - name: 고정 의존성 설치
         run: pnpm install --frozen-lockfile
