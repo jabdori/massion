@@ -207,8 +207,9 @@ async function main() {
   await removeEscapingDeploySelfReference(resolve(local, "runtime"), "@massion/distribution");
   await assertContainedSymlinks(resolve(local, "runtime"));
   await removeTestArtifacts(resolve(local, "runtime"));
+  await cp(resolve(root, "apps/web/dist"), resolve(local, "web"), { recursive: true });
   const entrypoints = {
-    mass: "runtime/node_modules/@massion/cli/dist/main.js",
+    massion: "runtime/node_modules/@massion/cli/dist/main.js",
     connector: "runtime/node_modules/@massion/connector/dist/main.js",
     server: "runtime/node_modules/@massion/server/dist/main.js",
     tui: "runtime/node_modules/@massion/tui/dist/main.js",

@@ -51,7 +51,7 @@ Kustomize base의 `massion-config`에도 위 네 연결 장치 값이 들어 있
 
 ## 4. 로컬 개인 모드
 
-개인 설치 묶음의 `install.sh`를 실행한 뒤 `mass local start`를 사용한다. 이 명령은 loopback 전용 서버, 0600 token key, XDG 사용자 데이터 경로의 embedded SurrealDB를 준비한다. 이어서 `mass init http://127.0.0.1:7331 <email> <display name>`으로 첫 소유자·개인 조직·Core Office·기본 정책·일회 token을 만든다. 자세한 절차는 `local-install.md`를 따른다.
+개인 설치 묶음의 `install.sh`를 실행한 뒤 `massion local start`를 사용한다. 이 명령은 loopback 전용 서버, 0600 token key, XDG 사용자 데이터 경로의 embedded SurrealDB를 준비한다. 이어서 `massion init http://127.0.0.1:7331 <email> <display name>`으로 첫 소유자·개인 조직·Core Office·기본 정책·일회 token을 만든다. 자세한 절차는 `local-install.md`를 따른다.
 
 ## 5. 설치 후 확인
 

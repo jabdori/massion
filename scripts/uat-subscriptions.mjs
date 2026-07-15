@@ -55,7 +55,7 @@ const SEMANTIC_VERSION = /^\d+\.\d+\.\d+$/u;
 const PROVIDER_NAMES = new Set(["codex", "claude", "zai"]);
 const TMUX_WINDOWS = ["daemon", "user", "connectors", "watch"];
 const REQUIRED_ENTRYPOINTS = {
-  mass: "runtime/node_modules/@massion/cli/dist/main.js",
+  massion: "runtime/node_modules/@massion/cli/dist/main.js",
   connector: "runtime/node_modules/@massion/connector/dist/main.js",
   server: "runtime/node_modules/@massion/server/dist/main.js",
   tui: "runtime/node_modules/@massion/tui/dist/main.js",
@@ -2081,14 +2081,14 @@ export async function executeProviderScenario(session, plan, environment, timeou
   const assertions = [];
   const lineage = [releaseDigest];
   const supplemental = [];
-  const mass = join(environment.MASSION_PREFIX, "bin", "mass");
+  const massion = join(environment.MASSION_PREFIX, "bin", "massion");
   const alias = `UAT ${plan.provider}`;
   const policy = subscriptionUatPolicy(plan.provider);
   const runPlan = subscriptionUatRunPlan(randomUUID());
   const connect = await runTmuxUatCommand(session, {
     window: "connectors",
     step: `${plan.id}-connect`,
-    command: mass,
+    command: massion,
     arguments: ["subscription", "connect", plan.provider, alias],
     environment,
     timeoutMs,
@@ -2101,7 +2101,7 @@ export async function executeProviderScenario(session, plan, environment, timeou
     const result = await runTmuxObservedCommand(session, {
       window: input.window ?? "connectors",
       step: input.step,
-      command: mass,
+      command: massion,
       arguments: input.arguments,
       environment,
       timeoutMs,
@@ -2246,7 +2246,7 @@ export async function executeProviderScenario(session, plan, environment, timeou
     ? await runTmuxObservedCommand(session, {
         window: "user",
         step: `${plan.id}-runtime-lineage`,
-        command: mass,
+        command: massion,
         arguments: runPlan.lineageArguments,
         environment,
         timeoutMs,
@@ -2339,7 +2339,7 @@ export async function runSubscriptionUat(options) {
       shell: "/bin/sh",
       environment,
     });
-    const mass = join(workspace.prefix, "bin", "mass");
+    const massion = join(workspace.prefix, "bin", "massion");
     const connector = join(workspace.prefix, "bin", "massion-connector");
     const server = join(workspace.prefix, "bin", "massion-server");
     const endpoint = `http://127.0.0.1:${String(port)}`;
@@ -2381,7 +2381,7 @@ export async function runSubscriptionUat(options) {
     await requiredObserved({
       window: "daemon",
       step: "version-check",
-      command: mass,
+      command: massion,
       arguments: ["version"],
       observation: { kind: "exact-text", expected: { value: `Massion AgentOS ${identity.version}` } },
     });
@@ -2396,7 +2396,7 @@ export async function runSubscriptionUat(options) {
     await requiredObserved({
       window: "daemon",
       step: "local-start",
-      command: mass,
+      command: massion,
       arguments: ["local", "start", "--json"],
       observation: { kind: "local-start", expected: { endpoint, status: "started" } },
     });
@@ -2404,14 +2404,14 @@ export async function runSubscriptionUat(options) {
     await requiredObserved({
       window: "user",
       step: "initialize-owner",
-      command: mass,
+      command: massion,
       arguments: ["init", endpoint, ownerIdentity, "UAT Owner", "--json"],
       observation: { kind: "initialize-owner", expected: { endpoint, profile: "local" } },
     });
     await requiredObserved({
       window: "user",
       step: "status-ready",
-      command: mass,
+      command: massion,
       arguments: ["status", "--json"],
       observation: { kind: "application-status", expected: {} },
     });
@@ -2434,7 +2434,7 @@ export async function runSubscriptionUat(options) {
     await requiredObserved({
       window: "connectors",
       step: "subscription-catalog",
-      command: mass,
+      command: massion,
       arguments: ["subscription", "providers", "--json"],
       observation: {
         kind: "subscription-providers",
@@ -2445,7 +2445,7 @@ export async function runSubscriptionUat(options) {
     const watch = await startTmuxBackgroundCommand(session, {
       window: "watch",
       step: "event-watch",
-      command: mass,
+      command: massion,
       arguments: ["watch", "--events", "jsonl"],
       environment,
       signal: options.signal,
@@ -2478,21 +2478,21 @@ export async function runSubscriptionUat(options) {
     await requiredObserved({
       window: "daemon",
       step: "restart-stop",
-      command: mass,
+      command: massion,
       arguments: ["local", "stop", "--json"],
       observation: { kind: "local-stop", expected: { statuses: ["stopped"] } },
     });
     await requiredObserved({
       window: "daemon",
       step: "restart-start",
-      command: mass,
+      command: massion,
       arguments: ["local", "start", "--json"],
       observation: { kind: "local-start", expected: { endpoint, status: "started" } },
     });
     await requiredObserved({
       window: "user",
       step: "restart-status",
-      command: mass,
+      command: massion,
       arguments: ["status", "--json"],
       observation: { kind: "application-status", expected: {} },
     });
@@ -2504,7 +2504,7 @@ export async function runSubscriptionUat(options) {
       const result = await runTmuxObservedCommand(session, {
         window: "connectors",
         step: `${scenario.id}-restart-doctor`,
-        command: mass,
+        command: massion,
         arguments: ["subscription", "doctor", account.accountId, "--json"],
         environment,
         timeoutMs: options.timeoutMs,
@@ -2529,7 +2529,7 @@ export async function runSubscriptionUat(options) {
         const lineage = await runTmuxObservedCommand(session, {
           window: "user",
           step: `${scenario.id}-restart-lineage`,
-          command: mass,
+          command: massion,
           arguments: ["runtime", "lineage", "correlation", evidence.correlationId, "--json"],
           environment,
           timeoutMs: options.timeoutMs,
@@ -2568,7 +2568,7 @@ export async function runSubscriptionUat(options) {
     await requiredObserved({
       window: "user",
       step: "backup-create",
-      command: mass,
+      command: massion,
       arguments: ["local", "backup", backup, "--json"],
       observation: { kind: "local-backup", expected: { path: backup } },
     });
@@ -2579,7 +2579,7 @@ export async function runSubscriptionUat(options) {
     await requiredObserved({
       window: "daemon",
       step: "local-stop",
-      command: mass,
+      command: massion,
       arguments: ["local", "stop", "--json"],
       observation: { kind: "local-stop", expected: { statuses: ["stopped"] } },
     });
@@ -2648,7 +2648,7 @@ export async function runSubscriptionUat(options) {
       const lineage = await runTmuxObservedCommand(session, {
         window: "user",
         step: `${scenario.id}-restore-lineage`,
-        command: mass,
+        command: massion,
         arguments: ["runtime", "lineage", "correlation", evidence.correlationId, "--json"],
         environment,
         timeoutMs: options.timeoutMs,
@@ -2696,7 +2696,7 @@ export async function runSubscriptionUat(options) {
       command: "/bin/sh",
       arguments: [
         "-c",
-        'for name in mass massion-connector massion-server massion-tui; do test ! -e "$1/$name" && test ! -L "$1/$name" || exit 1; done; test ! -e "$2" && test ! -L "$2" && test -d "$3"',
+        'for name in massion massion-connector massion-server; do test ! -e "$1/$name" && test ! -L "$1/$name" || exit 1; done; test ! -e "$2" && test ! -L "$2" && test -d "$3"',
         "uat-check",
         join(workspace.prefix, "bin"),
         join(workspace.prefix, "lib/massion", identity.version),
@@ -2728,11 +2728,11 @@ export async function runSubscriptionUat(options) {
     }
   } finally {
     if (session && environment) {
-      const mass = join(environment.MASSION_PREFIX, "bin", "mass");
+      const massion = join(environment.MASSION_PREFIX, "bin", "massion");
       await runTmuxUatCommand(session, {
         window: "daemon",
         step: "cleanup-stop",
-        command: mass,
+        command: massion,
         arguments: ["local", "stop"],
         environment,
         timeoutMs: 10_000,

@@ -17,8 +17,9 @@ import { renderCliOutput } from "./render.js";
 import { runHeadless } from "./run.js";
 import { connectLocalServerSubscription } from "./subscription-login.js";
 import { resolveTokenReference } from "./token.js";
+import { openWebConsole } from "./web-login.js";
 
-const HELP = `mass - Massion AgentOS command line\n\n사용법: mass <version|local|init|status|run|resume|watch|org|work|chat|task|approval|assurance|runtime|provider|subscription|ext|growth|optimization|doctor> [options]\n\nEdge Connector 등록 코드: mass subscription enroll edge <model|agent-runtime> [ttlMs]\n로컬 Codex 첫 연결 또는 기존 profile 재사용: mass subscription connect openai-codex [별칭] [--model GPT-5.6-ID]\n추가 Codex 계정 연결: mass subscription connect openai-codex [새 별칭] --new-account [--model GPT-5.6-ID]\nMiniMax 모델 구독 키 연결: mass subscription connect-model minimax-token-plan < model-connection.json\n고급 Connector 연결: mass subscription connect-advanced PROVIDER < connection.json\n구독 정책: mass subscription policy PROVIDER ACCOUNT_POLICY <automatic|review|deny> [EXPECTED_REVISION]\n모델 최적화 조회: mass optimization <policy|receipts|recommendations|observations|batch-active>\n모델 최적화 변경: mass optimization <policy-configure|bundle-create|bundle-export|bundle-import|evaluation-start|evaluation-execute|evaluation-complete|recommend|recommendation-approve|batch-create|batch-activate|observe|recover> < input.json\n실행 구독 계보: mass runtime lineage EXECUTION_ID\n구독 공유 승인 재개: mass subscription share ACCOUNT_ID APPROVAL_ID ORIGINAL_COMMAND_ID\n`;
+const HELP = `Massion AgentOS command line\n\n사용법: massion <version|local|init|status|run|resume|watch|org|work|chat|task|approval|assurance|runtime|provider|subscription|ext|growth|optimization|doctor> [options]\n\n대화형 운영 화면: 인자 없이 massion\nWeb Console: massion --web\n초기화: massion init [endpoint] <email> <display name>\nEdge Connector 등록 코드: massion subscription enroll edge <model|agent-runtime> [ttlMs]\n로컬 Codex 첫 연결 또는 기존 profile 재사용: massion subscription connect openai-codex [별칭] [--model GPT-5.6-ID]\n추가 Codex 계정 연결: massion subscription connect openai-codex [새 별칭] --new-account [--model GPT-5.6-ID]\nMiniMax 모델 구독 키 연결: massion subscription connect-model minimax-token-plan < model-connection.json\n고급 Connector 연결: massion subscription connect-advanced PROVIDER < connection.json\n구독 정책: massion subscription policy PROVIDER ACCOUNT_POLICY <automatic|review|deny> [EXPECTED_REVISION]\n모델 최적화 조회: massion optimization <policy|receipts|recommendations|observations|batch-active>\n모델 최적화 변경: massion optimization <policy-configure|bundle-create|bundle-export|bundle-import|evaluation-start|evaluation-execute|evaluation-complete|recommend|recommendation-approve|batch-create|batch-activate|observe|recover> < input.json\n실행 구독 계보: massion runtime lineage EXECUTION_ID\n구독 공유 승인 재개: massion subscription share ACCOUNT_ID APPROVAL_ID ORIGINAL_COMMAND_ID\n`;
 
 export function assertSecretTransportEndpoint(value: string): void {
   let endpoint: URL;
@@ -68,6 +69,29 @@ function exitCode(error: unknown): number {
 
 export async function runCli(argv = process.argv.slice(2)): Promise<number> {
   try {
+    if (argv[0] === "--web") {
+      if (argv.length !== 1) throw new Error("massion --web에는 추가 인자를 지정할 수 없습니다");
+      let config;
+      try {
+        config = await new CliConfigStore().load();
+      } catch (error) {
+        if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
+          throw new Error(
+            'Massion이 아직 초기화되지 않았습니다. 먼저 `massion init http://127.0.0.1:7331 <email> "<표시명>"`을 실행해 주세요.',
+            { cause: error },
+          );
+        }
+        throw error;
+      }
+      const profile = config.profiles[config.selectedProfile];
+      if (!profile) throw new Error("선택된 CLI profile이 없습니다. 먼저 massion init을 실행해 주세요");
+      const token = await resolveTokenReference(profile.tokenReference);
+      const web = await openWebConsole({ endpoint: profile.endpoint, token });
+      process.stdout.write(
+        `Web Console: ${web.url}\n일회성 로그인 코드(5분): ${web.code}\n만료 시각: ${web.expiresAt}\n`,
+      );
+      return 0;
+    }
     const invocation = parseCliArguments(argv);
     if (invocation.command === "help") {
       process.stdout.write(HELP);
@@ -99,7 +123,7 @@ export async function runCli(argv = process.argv.slice(2)): Promise<number> {
       const endpoint = invocation.arguments[0] ?? "http://127.0.0.1:7331";
       const email = invocation.arguments[1];
       const displayName = invocation.arguments.slice(2).join(" ");
-      if (!email || !displayName) throw new Error("사용법: mass init [endpoint] <email> <display name>");
+      if (!email || !displayName) throw new Error("사용법: massion init [endpoint] <email> <display name>");
       const value = await initializeCli({
         endpoint,
         email,

@@ -98,13 +98,13 @@ async function main() {
     MASSION_LOCAL_PORT: String(localPort),
     PATH: `${resolve(prefix, "bin")}:${process.env.PATH ?? ""}`,
   };
-  const mass = resolve(prefix, "bin/mass");
+  const massion = resolve(prefix, "bin/massion");
   const connector = resolve(prefix, "bin/massion-connector");
   try {
     run("tar", ["-xzf", resolve(release, "massion-local-1.0.0.tar.gz"), "-C", extracted]);
     run(resolve(extracted, "install.sh"), [], { environment, inherit: true });
-    if (String(run(mass, ["version"], { environment })).trim() !== "Massion AgentOS 1.0.0")
-      throw new Error("설치된 mass version이 일치하지 않습니다");
+    if (String(run(massion, ["version"], { environment })).trim() !== "Massion AgentOS 1.0.0")
+      throw new Error("설치된 massion version이 일치하지 않습니다");
     if (!String(run(connector, ["--help"], { environment })).includes("doctor"))
       throw new Error("설치된 massion-connector 도움말이 유효하지 않습니다");
     const connectorDoctor = jsonOutput(connector, ["doctor"], environment);
@@ -114,24 +114,24 @@ async function main() {
       connectorDoctor.runtime !== "bundled"
     )
       throw new Error("설치된 massion-connector runtime 진단이 유효하지 않습니다");
-    const started = jsonOutput(mass, ["local", "start", "--json"], environment);
+    const started = jsonOutput(massion, ["local", "start", "--json"], environment);
     if (started.status !== "started" || started.endpoint !== `http://127.0.0.1:${String(localPort)}`)
       throw new Error("설치된 local server가 시작되지 않았습니다");
     jsonOutput(
-      mass,
+      massion,
       ["init", `http://127.0.0.1:${String(localPort)}`, "owner@example.com", "Release Owner", "--json"],
       environment,
     );
-    const status = jsonOutput(mass, ["status", "--json"], environment);
+    const status = jsonOutput(massion, ["status", "--json"], environment);
     if (status?.data?.status !== "ready" || status?.data?.modelRuntime !== "limited")
       throw new Error("release limited mode 상태가 유효하지 않습니다");
-    const runResult = jsonOutput(mass, ["run", "release E2E", "--detach", "--json"], environment);
+    const runResult = jsonOutput(massion, ["run", "release E2E", "--detach", "--json"], environment);
     if (runResult.type !== "accepted") throw new Error("release Work가 접수되지 않았습니다");
     const backup = resolve(home, "massion-release-backup.json");
-    const backedUp = jsonOutput(mass, ["local", "backup", backup, "--json"], environment);
+    const backedUp = jsonOutput(massion, ["local", "backup", backup, "--json"], environment);
     if (backedUp.status !== "backed-up") throw new Error("release backup이 완료되지 않았습니다");
     if ((await stat(backup)).mode & 0o077) throw new Error("release backup은 owner-only여야 합니다");
-    jsonOutput(mass, ["local", "stop", "--json"], environment);
+    jsonOutput(massion, ["local", "stop", "--json"], environment);
 
     const tokenKey = resolve(home, ".config/massion/token-key");
     const credentialKey = resolve(home, ".config/massion/credential-key");
@@ -164,7 +164,7 @@ async function main() {
       throw new Error("복구된 release server가 정상 종료되지 않았습니다");
     restoreProcess = undefined;
     run(resolve(prefix, "lib/massion/1.0.0/uninstall.sh"), [], { environment, inherit: true });
-    for (const command of ["mass", "massion-connector", "massion-server", "massion-tui"]) {
+    for (const command of ["massion", "massion-connector", "massion-server"]) {
       await access(resolve(prefix, "bin", command)).then(
         () => {
           throw new Error(`uninstall 뒤 ${command} symlink가 남았습니다`);
@@ -179,12 +179,12 @@ async function main() {
   } finally {
     if (restoreProcess) restoreProcess.kill("SIGTERM");
     if (
-      await access(mass).then(
+      await access(massion).then(
         () => true,
         () => false,
       )
     )
-      spawnSync(mass, ["local", "stop", "--json"], { env: environment, stdio: "ignore" });
+      spawnSync(massion, ["local", "stop", "--json"], { env: environment, stdio: "ignore" });
     await rm(temporary, { recursive: true, force: true });
   }
 }

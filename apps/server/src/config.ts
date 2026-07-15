@@ -194,6 +194,8 @@ export function parseServerConfig(environment: Readonly<Record<string, string | 
   if (!isAbsolute(softwareWorkspaceRoot)) throw new Error("Software Delivery workspace root는 절대 경로여야 합니다");
   const connectorRoot = environment.MASSION_CONNECTOR_ROOT ?? "/var/lib/massion/connectors";
   if (!isAbsolute(connectorRoot)) throw new Error("Connector root는 절대 경로여야 합니다");
+  const webRoot = environment.MASSION_WEB_ROOT;
+  if (webRoot !== undefined && !isAbsolute(webRoot)) throw new Error("Web root는 절대 경로여야 합니다");
   const publicBaseUrl = environment.MASSION_REGISTRY_PUBLIC_URL ?? `http://${registryHost}:${String(registryPort)}`;
   const parsedPublicUrl = new URL(publicBaseUrl);
   const publicLoopback = new Set(["127.0.0.1", "::1", "localhost"]).has(parsedPublicUrl.hostname);
@@ -214,6 +216,7 @@ export function parseServerConfig(environment: Readonly<Record<string, string | 
       host,
       port: integer(environment.MASSION_HTTP_PORT, 3141, 1, 65_535, "MASSION_HTTP_PORT"),
       ...(trustedProxyAddresses.length === 0 ? {} : { trustedProxyAddresses }),
+      ...(webRoot === undefined ? {} : { webRoot }),
     },
     metrics: {
       host: environment.MASSION_METRICS_HOST ?? (mode === "local" ? "127.0.0.1" : "0.0.0.0"),

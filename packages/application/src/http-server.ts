@@ -1,4 +1,6 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
+import { realpath, readFile, stat } from "node:fs/promises";
+import { extname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
 import type { TenantContext } from "@massion/identity";
 import type { IssueEnrollmentInput, IssuedEnrollment } from "@massion/subscriptions";
@@ -107,6 +109,7 @@ export interface ApplicationHttpServerOptions {
   readonly pollMs?: number;
   readonly maxConcurrentRequests?: number;
   readonly maxStreams?: number;
+  readonly webRoot?: string;
 }
 
 function hasScope(scopes: readonly string[], required: string): boolean {
@@ -250,6 +253,8 @@ export class ApplicationHttpServer {
       maxConcurrentRequests: options.maxConcurrentRequests ?? 128,
       maxStreams: options.maxStreams ?? 32,
     };
+    if (this.options.webRoot !== undefined && !isAbsolute(this.options.webRoot))
+      throw new Error("Web root는 절대 경로여야 합니다");
     if (!LOOPBACK.has(this.options.host) && (options.trustedProxyAddresses?.length ?? 0) === 0) {
       throw new Error("loopback 밖 bind에는 trusted TLS proxy allowlist가 필요합니다");
     }
@@ -358,6 +363,7 @@ export class ApplicationHttpServer {
       }
       return;
     }
+    if (await this.webAsset(request, response, url)) return;
     if (this.draining) {
       sendJson(response, 503, { status: "draining" });
       return;
@@ -817,6 +823,77 @@ export class ApplicationHttpServer {
         userMessage: "Web mutation Fetch Metadata가 유효하지 않습니다",
         operatorCode: "APP_HTTP_WEB_FETCH_METADATA",
       });
+  }
+
+  private async webAsset(request: IncomingMessage, response: ServerResponse, url: URL): Promise<boolean> {
+    const root = this.options.webRoot;
+    if (!root || (request.method !== "GET" && request.method !== "HEAD")) return false;
+    if (
+      url.pathname === "/connectors" ||
+      url.pathname.startsWith("/api/") ||
+      url.pathname.startsWith("/health/") ||
+      url.pathname.startsWith("/integrations/")
+    )
+      return false;
+    let decoded: string;
+    try {
+      decoded = decodeURIComponent(url.pathname);
+    } catch {
+      sendJson(response, 404, { error: "Web asset를 찾을 수 없습니다" });
+      return true;
+    }
+    if (decoded.includes("\0")) {
+      sendJson(response, 404, { error: "Web asset를 찾을 수 없습니다" });
+      return true;
+    }
+    const resolvedRoot = await realpath(root).catch(() => undefined);
+    if (!resolvedRoot) return false;
+    const candidate = resolve(resolvedRoot, `.${decoded}`);
+    if (candidate !== resolvedRoot && !candidate.startsWith(`${resolvedRoot}${sep}`)) {
+      sendJson(response, 404, { error: "Web asset를 찾을 수 없습니다" });
+      return true;
+    }
+    let target = candidate;
+    let metadata = await stat(target).catch(() => undefined);
+    if (!metadata?.isFile()) {
+      if (extname(decoded) !== "") {
+        sendJson(response, 404, { error: "Web asset를 찾을 수 없습니다" });
+        return true;
+      }
+      target = join(resolvedRoot, "index.html");
+      metadata = await stat(target).catch(() => undefined);
+    }
+    if (!metadata?.isFile()) return false;
+    const realTarget = await realpath(target).catch(() => undefined);
+    if (!realTarget || (realTarget !== resolvedRoot && !realTarget.startsWith(`${resolvedRoot}${sep}`))) {
+      sendJson(response, 404, { error: "Web asset를 찾을 수 없습니다" });
+      return true;
+    }
+    const content = await readFile(realTarget);
+    const extension = extname(realTarget).toLowerCase();
+    const contentType =
+      extension === ".html"
+        ? "text/html; charset=utf-8"
+        : extension === ".js"
+          ? "text/javascript; charset=utf-8"
+          : extension === ".css"
+            ? "text/css; charset=utf-8"
+            : extension === ".json"
+              ? "application/json; charset=utf-8"
+              : extension === ".svg"
+                ? "image/svg+xml"
+                : extension === ".woff2"
+                  ? "font/woff2"
+                  : "application/octet-stream";
+    response.writeHead(200, {
+      "content-type": contentType,
+      "content-length": content.length,
+      "cache-control":
+        relative(resolvedRoot, realTarget) === "index.html" ? "no-cache" : "public, max-age=31536000, immutable",
+    });
+    if (request.method === "GET") response.end(content);
+    else response.end();
+    return true;
   }
 
   private sessionCookie(sessionToken: string, expiresAt: string, secure: boolean): string {

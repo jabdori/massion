@@ -14,7 +14,7 @@ import { describe, expect, it } from "vitest";
 const remoteUrl = process.env.SURREAL_TEST_URL;
 const remoteTest = remoteUrl ? it : it.skip;
 
-describe("mass remote product E2E", () => {
+describe("massion remote product E2E", () => {
   remoteTest(
     "실제 SurrealDB 제품에서 init→status→run→JSON Lines를 child process로 실행한다",
     async () => {

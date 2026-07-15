@@ -1,4 +1,4 @@
-export const MASSION_CLI_NAME = "mass" as const;
+export const MASSION_CLI_NAME = "massion" as const;
 export * from "./commands.js";
 export * from "./config.js";
 export * from "./jsonl.js";

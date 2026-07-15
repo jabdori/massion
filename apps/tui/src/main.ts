@@ -9,7 +9,7 @@ import { createCliRenderer, type CliRenderer } from "@opentui/core";
 import { TuiCommands } from "./commands.js";
 import { TuiController } from "./controller.js";
 import { OpenTuiView } from "./open-tui.js";
-import { loadTuiProfile } from "./profile.js";
+import { loadTuiProfile, resolveTuiConfigPath } from "./profile.js";
 import { createTuiState, reduceTuiState, type TuiAction, type TuiState, type TuiView } from "./state.js";
 
 export interface TuiArguments {
@@ -38,7 +38,13 @@ export function parseTuiArguments(argv: readonly string[]): TuiArguments {
   return { ...(profile === undefined ? {} : { profile }), ...(configPath === undefined ? {} : { configPath }), help };
 }
 
-const HELP = `massion-tui - Massion AgentOS 터미널 사용자 인터페이스\n\n사용법: massion-tui [--profile <name>] [--config <path>]\n사전 준비: mass init으로 안전한 local profile을 생성해 주세요.\n`;
+const HELP = `Massion AgentOS 터미널 사용자 인터페이스\n\n사용법: massion [--profile <name>] [--config <path>]\n사전 준비: massion init으로 안전한 local profile을 생성해 주세요.\n`;
+
+function isMissingConfig(error: unknown, configPath: string): boolean {
+  if (!error || typeof error !== "object") return false;
+  const candidate = error as { readonly code?: unknown; readonly path?: unknown };
+  return candidate.code === "ENOENT" && (candidate.path === undefined || candidate.path === configPath);
+}
 
 async function loadView(
   controller: TuiController,
@@ -143,10 +149,22 @@ export async function runTui(
       (dependencies.write ?? ((value: string) => process.stdout.write(value)))(HELP);
       return 0;
     }
-    const profile = await loadTuiProfile({
-      ...(arguments_.profile === undefined ? {} : { profile: arguments_.profile }),
-      ...(arguments_.configPath === undefined ? {} : { configPath: arguments_.configPath }),
-    });
+    const configPath = arguments_.configPath ?? resolveTuiConfigPath();
+    let profile;
+    try {
+      profile = await loadTuiProfile({
+        ...(arguments_.profile === undefined ? {} : { profile: arguments_.profile }),
+        configPath,
+      });
+    } catch (error) {
+      if (isMissingConfig(error, configPath)) {
+        throw new Error(
+          'Massion이 아직 초기화되지 않았습니다. 먼저 `massion init http://127.0.0.1:7331 <email> "<표시명>"`을 실행해 주세요.',
+          { cause: error },
+        );
+      }
+      throw error;
+    }
     const client = new ApplicationHttpClient({ baseUrl: profile.endpoint, token: profile.token });
     renderer = await (dependencies.createRenderer ?? (async () => await createCliRenderer({ exitOnCtrlC: false })))();
     const abort = new AbortController();

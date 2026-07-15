@@ -311,7 +311,7 @@ export default function SubscriptionsPage() {
             Connector 등록 절차를 완료해 주세요.
           </p>
         </div>
-        <code>mass subscription connect &lt;provider&gt;</code>
+        <code>massion subscription connect &lt;provider&gt;</code>
       </aside>
 
       <div className="subscription-notice" role="status" aria-live="polite">
