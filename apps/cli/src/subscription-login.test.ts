@@ -1014,6 +1014,60 @@ describe("로컬 서버 소비자 구독 로그인", () => {
     expect(commands[1]?.commandId).toBe(commands[2]?.commandId);
   });
 
+  it("성공했지만 직접 quota 증거가 없는 보류 attestation은 새 command로 한 번 재시도한다", async () => {
+    const { root, commands, client, inspectRuntime, runInteractive } = await fixture();
+    const responses = [
+      {
+        outcome: "succeeded",
+        resource: { type: "SubscriptionAccount", id: "account-12345678" },
+        data: {
+          accountId: "account-12345678",
+          connectorId: "server-1234567890abcdef",
+          profileHandle: `${"a".repeat(64)}/${"b".repeat(64)}`,
+          loginRequired: true,
+        },
+      },
+      {
+        outcome: "succeeded",
+        data: { connectorId: "server-1234567890abcdef", status: "ready" },
+      },
+      {
+        outcome: "succeeded",
+        data: {
+          connectorId: "server-1234567890abcdef",
+          status: "ready",
+          quotaObservation: directQuotaObservation(),
+        },
+      },
+    ];
+    client.command.mockImplementation(async (command: unknown) => {
+      commands.push(command as Record<string, unknown>);
+      const response = responses.shift();
+      if (response === undefined) throw new Error("예상하지 않은 추가 command입니다");
+      return response as Awaited<ReturnType<typeof client.command>>;
+    });
+    const options = {
+      endpoint: "http://localhost:7331",
+      connectorDirectory: root,
+      environment: { PATH: "/usr/bin" },
+      inspectRuntime,
+      runInteractive,
+    };
+
+    await expect(
+      connectLocalServerSubscription(client, { providerId: "openai-codex" }, options),
+    ).resolves.toMatchObject({ status: "ready", connectionDisposition: "new" });
+
+    expect(runInteractive).toHaveBeenCalledOnce();
+    expect(commands.map((command) => command.operation)).toEqual([
+      "subscription.server.prepare",
+      "subscription.server.attest",
+      "subscription.server.attest",
+    ]);
+    expect(commands[1]?.commandId).not.toBe(commands[2]?.commandId);
+    expect(commands[1]?.correlationId).not.toBe(commands[2]?.correlationId);
+  });
+
   it("새 계정 준비 응답이 실패하면 --new-account와 같은 command로 재개하며 로그인을 반복하지 않는다", async () => {
     const { root, commands, client, inspectRuntime, runInteractive } = await fixture();
     const responses = [
