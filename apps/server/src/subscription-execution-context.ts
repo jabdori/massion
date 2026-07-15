@@ -17,6 +17,10 @@ interface SubscriptionWorkAccessReader {
   ): Promise<{ readonly work_id: string; readonly organization_id: string }>;
 }
 
+interface SubscriptionOptimizationWorkAccessReader {
+  hasOptimizationRun(context: TenantContext, runId: string): Promise<boolean>;
+}
+
 function segment(value: string): string {
   return createHash("sha256").update(value).digest("hex");
 }
@@ -39,6 +43,7 @@ export class MassionSubscriptionExecutionContext
   public constructor(
     private readonly workspaceRoot: string,
     private readonly works: SubscriptionWorkAccessReader,
+    private readonly optimizationRuns?: SubscriptionOptimizationWorkAccessReader,
   ) {
     if (!isAbsolute(workspaceRoot)) throw new Error("구독 Agent 작업공간 root는 절대 경로여야 합니다");
   }
@@ -111,6 +116,13 @@ export class MassionSubscriptionExecutionContext
   }
 
   private async requireWorkAccess(context: TenantContext, workId: string): Promise<void> {
+    if (workId.startsWith("optimization:")) {
+      const runId = workId.slice("optimization:".length);
+      if (!runId || !this.optimizationRuns || !(await this.optimizationRuns.hasOptimizationRun(context, runId))) {
+        throw new Error("Work 또는 모델 평가 run을 찾을 수 없습니다");
+      }
+      return;
+    }
     const work = await this.works.getWork(context, workId);
     if (work.work_id !== workId || work.organization_id !== context.organizationId) {
       throw new Error("현재 조직 actor가 실행할 수 있는 Work가 아닙니다");

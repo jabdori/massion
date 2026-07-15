@@ -35,6 +35,29 @@ async function root(label: string): Promise<string> {
 }
 
 describe("구독 Agent 작업공간 권한", () => {
+  it("모델 평가 run도 조직 정본으로 확인한 뒤 격리 workspace를 발급한다", async () => {
+    const directory = await root("massion-subscription-optimization-workspace-");
+    const service = new MassionSubscriptionExecutionContext(join(directory, "workspaces"), works, {
+      hasOptimizationRun: async (tenant, runId) =>
+        tenant.organizationId === context.organizationId && runId === "run-1",
+    });
+
+    const resolved = await service.resolve(context, {
+      executionId: "run-1",
+      workId: "optimization:run-1",
+      agentHandle: "representative",
+    });
+
+    expect(resolved.workspaceRoot).toContain("workspaces");
+    await expect(
+      service.resolve(context, {
+        executionId: "run-2",
+        workId: "optimization:run-2",
+        agentHandle: "representative",
+      }),
+    ).rejects.toThrow("Work");
+  });
+
   it("조직과 Work별 owner-only 작업공간을 발급하고 같은 요청만 검증한다", async () => {
     const directory = await root("massion-subscription-workspace-");
     const service = new MassionSubscriptionExecutionContext(join(directory, "workspaces"), works);
