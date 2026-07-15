@@ -41,3 +41,10 @@
 ## 판정
 
 현재 source에서 Codex OAuth 연결, 직접 quota 건강 증명, 기존 profile 재사용은 통과했습니다. 불완전한 성공 응답의 idempotent replay 문제는 `9240500`에서 회복 경로와 회귀 테스트로 수정했습니다. Claude·Z.AI, 복수 계정 rotation·fallback, assurance binding이 필요한 전체 Work 완료는 이번 단일 계정 검증으로 통과 처리하지 않습니다.
+
+## 후속 CLI 실행 수명주기 수정
+
+- Source commit: `d899cba`
+- 원인: terminal event를 받은 뒤 SSE decoder가 reader lock만 해제하고 underlying stream을 취소하지 않아 `mass run` 프로세스가 출력 후에도 남을 수 있었습니다.
+- TDD: 취소 callback을 확인하는 테스트를 먼저 RED로 재현했고, `reader.cancel()`을 추가한 뒤 Application SSE 4/4, Application 전체 165 passed·2 skipped를 통과했습니다.
+- 실제 확인: 수정된 CLI build로 같은 Codex Work 요청을 `tmux`에서 실행해 `run.blocked` 결과를 받은 뒤 CLI·tmux 세션·child process가 남지 않음을 확인했습니다. assurance binding 미설정에 따른 `blocked` 판정 자체는 그대로 보존했습니다.
