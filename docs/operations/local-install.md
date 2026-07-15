@@ -44,9 +44,14 @@ cd massion-local-1.0.0
 ./install.sh
 export PATH="$HOME/.local/bin:$PATH"
 massion version
-massion local start
-massion init http://127.0.0.1:7331 owner@example.com "내 이름"
+massion init
 massion status
+```
+
+`massion init`을 인자 없이 실행하면 소유자 이메일과 표시 이름을 묻는 온보딩을 시작하고, 기본 개인 서버(`http://127.0.0.1:7331`)를 자동으로 준비합니다. 초기화 전에 인자 없이 `massion`을 실행해도 같은 온보딩으로 안내합니다. 스크립트나 CI에서는 기존의 명시적 형식도 사용할 수 있습니다.
+
+```sh
+massion init http://127.0.0.1:7331 owner@example.com "내 이름"
 ```
 
 다른 사용자 경로에 설치하려면 설치와 제거 때 같은 `MASSION_PREFIX`를 지정합니다.
@@ -59,7 +64,7 @@ MASSION_PREFIX="$HOME/apps/massion" ./install.sh
 
 ## 4. 화면과 일상 명령
 
-초기화가 끝난 뒤 인자 없이 `massion`을 실행하면 TUI가 열립니다. 브라우저 기반 화면은 다음 명령으로 실행합니다.
+초기화가 끝난 뒤 인자 없이 `massion`을 실행하면 필요한 개인 서버를 확인한 뒤 TUI가 열립니다. 브라우저 기반 화면도 개인 서버를 자동 확인합니다.
 
 ```sh
 massion
@@ -67,6 +72,8 @@ massion --web
 ```
 
 `massion --web`은 기존 profile을 재사용해 서버에 5분짜리 일회성 로그인 티켓을 요청합니다. profile이 없거나 만료된 경우에만 `massion init` 또는 해당 연결 명령을 다시 실행합니다.
+
+TUI는 실제 대화형 TTY와 최소 `80×24` 터미널 크기가 필요합니다. 아무것도 보이지 않으면 `command -v massion`, `massion version`, `stty size`를 확인하고 `export PATH="$HOME/.local/bin:$PATH"`를 다시 실행합니다.
 
 ```sh
 massion local status

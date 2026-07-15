@@ -204,6 +204,14 @@ release_dir=$(CDPATH= cd -- "$(dirname -- "$launcher")/.." && pwd)
 export MASSION_SERVER_BIN="$release_dir/runtime/node_modules/@massion/server/dist/main.js"
 export MASSION_WEB_ROOT="$release_dir/web"
 if [ "$#" -eq 0 ] && [ -t 0 ] && [ -t 1 ]; then
+  config_path="${XDG_CONFIG_HOME:-$HOME/.config}/massion/config.json"
+  case "$(uname -s)" in
+    Darwin) config_path="$HOME/Library/Application Support/Massion/config.json" ;;
+  esac
+  if [ ! -e "$config_path" ]; then
+    exec node "$release_dir/runtime/node_modules/@massion/cli/dist/main.js" init
+  fi
+  node "$release_dir/runtime/node_modules/@massion/cli/dist/main.js" local ensure --json >/dev/null
   exec bun "$release_dir/runtime/node_modules/@massion/tui/dist/main.js"
 fi
 exec node "$release_dir/runtime/node_modules/@massion/cli/dist/main.js" "$@"
