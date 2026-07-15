@@ -82,6 +82,10 @@ export interface SubscriptionServerConnectionCommands {
         readonly modelProfileId: string;
         readonly routeNames: readonly string[];
       };
+      readonly quotaObservation?: {
+        readonly source: "direct";
+        readonly attestedAt: string;
+      };
     }
   >;
   offline(

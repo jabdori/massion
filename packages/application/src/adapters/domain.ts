@@ -14,7 +14,13 @@ import {
   type OptimizationModelProfile,
   type OptimizationRoleKey,
 } from "@massion/model-optimization";
-import { listSubscriptionProviderManifests, subscriptionProviderApprovalModes } from "@massion/subscriptions";
+import {
+  listSubscriptionProviderManifests,
+  ServerConnectorAuthenticationRequiredError,
+  ServerConnectorPaidSubscriptionRequiredError,
+  ServerConnectorQuotaObservationUnavailableError,
+  subscriptionProviderApprovalModes,
+} from "@massion/subscriptions";
 import type { SubscriptionAuthKind, SubscriptionProviderProtocol } from "@massion/subscriptions";
 import type { WorkService } from "@massion/work";
 
@@ -232,6 +238,39 @@ function register<Parsed>(
 }
 
 function domainError(error: unknown, correlationId: string): never {
+  if (error instanceof ServerConnectorAuthenticationRequiredError) {
+    throw new ApplicationError({
+      category: "authentication",
+      severity: "warning",
+      retryable: false,
+      userMessage: "Codex 구독 profile에 재인증이 필요합니다",
+      operatorCode: "APP_SUBSCRIPTION_REAUTH_REQUIRED",
+      correlationId,
+      cause: error,
+    });
+  }
+  if (error instanceof ServerConnectorPaidSubscriptionRequiredError) {
+    throw new ApplicationError({
+      category: "validation",
+      severity: "warning",
+      retryable: false,
+      userMessage: "Codex 계정의 유료 소비자 구독을 확인할 수 없습니다",
+      operatorCode: "APP_SUBSCRIPTION_PAID_PLAN_REQUIRED",
+      correlationId,
+      cause: error,
+    });
+  }
+  if (error instanceof ServerConnectorQuotaObservationUnavailableError) {
+    throw new ApplicationError({
+      category: "unavailable",
+      severity: "warning",
+      retryable: true,
+      userMessage: "Codex 구독 할당량을 확인할 수 없어 연결을 완료하지 않았습니다",
+      operatorCode: "APP_SUBSCRIPTION_QUOTA_UNAVAILABLE",
+      correlationId,
+      cause: error,
+    });
+  }
   if (error instanceof GovernanceDeniedError) {
     throw new ApplicationError({
       category: "policy",
@@ -377,6 +416,10 @@ function subscriptionServerConnectorData(connector: {
   readonly trustOrigin: string;
   readonly processGeneration?: number;
   readonly lastHealthAt?: string;
+  readonly quotaObservation?: {
+    readonly source: "direct";
+    readonly attestedAt: string;
+  };
 }) {
   return {
     connectorId: connector.connectorId,
@@ -389,6 +432,14 @@ function subscriptionServerConnectorData(connector: {
     trustOrigin: connector.trustOrigin,
     ...(connector.processGeneration === undefined ? {} : { processGeneration: connector.processGeneration }),
     ...(connector.lastHealthAt === undefined ? {} : { lastHealthAt: connector.lastHealthAt }),
+    ...(connector.quotaObservation === undefined
+      ? {}
+      : {
+          quotaObservation: {
+            source: connector.quotaObservation.source,
+            attestedAt: timestamp(connector.quotaObservation.attestedAt, "Codex 직접 quota 관측 시각"),
+          },
+        }),
   };
 }
 
@@ -1557,6 +1608,7 @@ function registerSubscriptions(
       requiredScopes: ["subscription:write"],
       allowedRoles: ["owner", "admin", "member"],
       recovery: "replay-domain",
+      retryFailedCommand: true,
       validate: (value) =>
         payload(
           value,
@@ -1598,6 +1650,7 @@ function registerSubscriptions(
         requiredScopes: ["subscription:write"],
         allowedRoles: ["owner", "admin", "member"],
         recovery: "replay-domain",
+        ...(operation === "subscription.server.attest" ? { retryFailedCommand: true } : {}),
         validate: (value) =>
           payload(value, method === "attest" ? ["connectorId", "accountId", "modelId"] : ["connectorId"], [
             "connectorId",

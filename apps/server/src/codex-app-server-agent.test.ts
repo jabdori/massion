@@ -1,4 +1,8 @@
-import { describe, expect, it, vi } from "vitest";
+import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fileURLToPath } from "node:url";
 
 import type { TenantContext } from "@massion/identity";
@@ -14,17 +18,20 @@ const context: TenantContext = {
   role: "owner",
 };
 
-const input = {
+const inputTemplate = {
   executionId: "execution-review",
   workId: "work-review",
   agentHandle: "software-engineering.backend-specialist",
   prompt: "상태를 확인하고 필요한 파일을 고치세요",
   workspaceRoot: "/tmp/massion-workspace",
-  profileRoot: "/tmp/massion-profile",
+  profileRoot: "",
   environment: { PATH: "/usr/bin", LANG: "ko_KR.UTF-8", SECRET_TOKEN: "never-forward" },
   allowedTools: [],
   disallowedTools: [],
 } as const;
+
+let input: typeof inputTemplate;
+const profiles: string[] = [];
 
 function record(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("object가 필요합니다");
@@ -32,6 +39,35 @@ function record(value: unknown): Record<string, unknown> {
 }
 
 describe("Codex app-server 구독 실행 adapter", () => {
+  beforeEach(async () => {
+    const profileRoot = await mkdtemp(join(tmpdir(), "massion-codex-app-server-profile-"));
+    profiles.push(profileRoot);
+    await chmod(profileRoot, 0o700);
+    await writeFile(join(profileRoot, "auth.json"), "private-login-state", { mode: 0o600 });
+    input = { ...inputTemplate, profileRoot };
+  });
+
+  afterEach(async () => {
+    await Promise.all(profiles.splice(0).map(async (profile) => await rm(profile, { recursive: true, force: true })));
+  });
+
+  it("관리 Codex profile의 auth.json이 없으면 app-server process를 열지 않고 실행을 거부한다", async () => {
+    await rm(join(input.profileRoot, "auth.json"));
+    const open = vi.fn() satisfies CodexAppServerOpen;
+    const connector = new CodexAppServerSubscriptionConnector(
+      { request: vi.fn() } satisfies SubscriptionPermissionBridge,
+      {
+        model: "gpt-5.6-codex",
+        policy: { sandboxMode: "workspace-write", approvalPolicy: "on-request", networkAccessEnabled: false },
+        runtime: async () => ({ command: "/usr/bin/node", commandArguments: ["/runtime/codex.js"] }),
+      },
+      open,
+    );
+
+    await expect(connector.execute(context, input)).rejects.toThrow(/auth\.json|재인증/u);
+    expect(open).not.toHaveBeenCalled();
+  });
+
   it("command 승인을 Governance에 중단하고 같은 server request를 승인한 뒤 turn을 완료한다", async () => {
     const request = vi
       .fn<SubscriptionPermissionBridge["request"]>()
@@ -127,10 +163,11 @@ describe("Codex app-server 구독 실행 adapter", () => {
         throw new Error(`예상하지 않은 method: ${method}`);
       }),
     };
-    const open = vi.fn(async (_command, _arguments, environment, configuredOptions) => {
+    const open = vi.fn(async (_command, arguments_, environment, configuredOptions) => {
+      expect(arguments_).toEqual(["/runtime/codex.js", "--config", 'cli_auth_credentials_store = "file"']);
       expect(environment).toEqual({
-        CODEX_HOME: "/tmp/massion-profile",
-        HOME: "/tmp/massion-profile",
+        CODEX_HOME: input.profileRoot,
+        HOME: input.profileRoot,
         LANG: "ko_KR.UTF-8",
         NO_COLOR: "1",
         PATH: "/usr/bin",

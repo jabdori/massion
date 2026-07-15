@@ -13,6 +13,7 @@ export * from "./subscriptions/antigravity-connector.js";
 export * from "./subscriptions/bundled-runtime.js";
 export * from "./subscriptions/claude-connector.js";
 export * from "./subscriptions/codex-connector.js";
+export * from "./subscriptions/codex-profile.js";
 export * from "./subscriptions/execution-receipt.js";
 export * from "./schema.js";
 export * from "./surreal-memory.js";

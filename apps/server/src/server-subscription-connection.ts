@@ -15,7 +15,12 @@ import type {
   SubscriptionAuthKind,
   SubscriptionConnector,
 } from "@massion/subscriptions";
-import { codingPlanPreset } from "@massion/subscriptions";
+import {
+  codingPlanPreset,
+  ServerConnectorAuthenticationRequiredError,
+  ServerConnectorPaidSubscriptionRequiredError,
+  ServerConnectorQuotaObservationUnavailableError,
+} from "@massion/subscriptions";
 
 import {
   existingSubscriptionProfileRoot,
@@ -23,8 +28,12 @@ import {
   subscriptionProfileHandle,
 } from "./subscription-profile.js";
 import type { AssembledBuiltinModelRoutes, BuiltinModelRouteAssembler } from "./server-model-route-assembler.js";
-import type { BundledCodexSubscriptionObserver } from "./codex-subscription-observer.js";
+import {
+  CodexSubscriptionObservationError,
+  type BundledCodexSubscriptionObserver,
+} from "./codex-subscription-observer.js";
 import type { MiniMaxSubscriptionVerifier } from "./minimax-subscription-verifier.js";
+import type { SubscriptionQuotaSynchronizationService } from "./subscription-quota-sync.js";
 
 export interface PrepareServerSubscriptionInput {
   readonly commandId: string;
@@ -43,6 +52,11 @@ export interface PreparedServerSubscription extends ConnectedSubscription {
 
 export type AttestedServerSubscription = ServerConnectorView & {
   readonly modelRuntime?: AssembledBuiltinModelRoutes;
+  /** 이번 health command가 직접 완료한 Codex quota 관측의 공개 증거입니다. */
+  readonly quotaObservation?: {
+    readonly source: "direct";
+    readonly attestedAt: string;
+  };
 };
 
 export type ConnectServerModelSubscriptionInput = Omit<ConnectModelSubscriptionInput, "connectorId" | "profileLocator">;
@@ -136,7 +150,7 @@ export class ServerSubscriptionConnectionService {
   public constructor(
     private readonly connectors: Pick<
       ServerConnectorProvisioningService,
-      "provision" | "attestHealth" | "markOffline" | "revoke"
+      "provision" | "attestHealth" | "markOffline" | "markReauthenticationRequired" | "revoke"
     >,
     private readonly connections: Pick<SubscriptionConnectionService, "connect" | "connectModel" | "disconnect">,
     private readonly accounts?: Pick<SubscriptionAccountService, "requireBindable" | "requireUsable">,
@@ -144,6 +158,7 @@ export class ServerSubscriptionConnectionService {
     private readonly codexObserver?: Pick<BundledCodexSubscriptionObserver, "readModel">,
     private readonly lifecycle?: ServerSubscriptionLifecycleOptions,
     private readonly miniMaxVerifier?: Pick<MiniMaxSubscriptionVerifier, "verify">,
+    private readonly codexQuotaSynchronization?: Pick<SubscriptionQuotaSynchronizationService, "refreshCodexAccount">,
   ) {}
 
   public async disconnect(
@@ -359,10 +374,15 @@ export class ServerSubscriptionConnectionService {
     });
     if (connector.providerId !== "openai-codex") return connector;
     let compensationVersion = preparedAccount?.version;
+    let quotaReauthenticationTransitioned = false;
     try {
       if (!input.accountId) throw new Error("Codex 구독 계정 ID가 필요합니다");
       if (!this.accounts || !this.modelRoutes || !this.codexObserver) {
         throw new Error("Codex Model route 조립 서비스가 구성되지 않았습니다");
+      }
+      const quotaSynchronization = this.codexQuotaSynchronization;
+      if (!quotaSynchronization) {
+        throw new Error("Codex 직접 quota 동기화 서비스가 구성되지 않았습니다");
       }
       const account = await this.accounts.requireUsable(context, input.accountId, "personal");
       compensationVersion = account.version;
@@ -372,6 +392,18 @@ export class ServerSubscriptionConnectionService {
         account.status !== "active"
       ) {
         throw new Error("Codex 구독 계정과 건강 증명 Connector 계보가 일치하지 않습니다");
+      }
+      const quotaRefresh = await quotaSynchronization.refreshCodexAccount({
+        organizationId: context.organizationId,
+        accountId: account.account_id,
+        requireFresh: true,
+      });
+      if (quotaRefresh.status === "reauthentication-required") {
+        quotaReauthenticationTransitioned = quotaRefresh.transitionApplied;
+        throw new ServerConnectorAuthenticationRequiredError("openai-codex", connector.connectorId);
+      }
+      if (quotaRefresh.status !== "refreshed") {
+        throw new ServerConnectorQuotaObservationUnavailableError();
       }
       const observed = await this.codexObserver.readModel({
         organizationId: context.organizationId,
@@ -383,15 +415,50 @@ export class ServerSubscriptionConnectionService {
         accountId: account.account_id,
         observed,
       });
-      return { ...connector, modelRuntime };
-    } catch {
+      return {
+        ...connector,
+        modelRuntime,
+        quotaObservation: { source: "direct", attestedAt: new Date().toISOString() },
+      };
+    } catch (error) {
+      if (error instanceof ServerConnectorQuotaObservationUnavailableError) throw error;
+      const paidSubscriptionRequired =
+        error instanceof ServerConnectorPaidSubscriptionRequiredError
+          ? error
+          : error instanceof CodexSubscriptionObservationError && error.category === "subscription"
+            ? new ServerConnectorPaidSubscriptionRequiredError("openai-codex", connector.connectorId)
+            : undefined;
+      if (paidSubscriptionRequired && paidSubscriptionRequired.connectorId === input.connectorId) {
+        await this.connectors
+          .markOffline(context, {
+            commandId: `${input.commandId}:model-compensate:v${String(compensationVersion ?? "connector")}`,
+            connectorId: input.connectorId,
+          })
+          .catch(() => undefined);
+        throw paidSubscriptionRequired;
+      }
+      const authenticationRequired =
+        error instanceof ServerConnectorAuthenticationRequiredError
+          ? error
+          : error instanceof CodexSubscriptionObservationError && error.category === "authentication"
+            ? new ServerConnectorAuthenticationRequiredError("openai-codex", connector.connectorId)
+            : undefined;
+      if (authenticationRequired && authenticationRequired.connectorId === input.connectorId) {
+        if (!quotaReauthenticationTransitioned) {
+          await this.connectors.markReauthenticationRequired(context, {
+            commandId: `${input.commandId}:reauth`,
+            connectorId: input.connectorId,
+          });
+        }
+        throw authenticationRequired;
+      }
       await this.connectors
         .markOffline(context, {
           commandId: `${input.commandId}:model-compensate:v${String(compensationVersion ?? "connector")}`,
           connectorId: input.connectorId,
         })
         .catch(() => undefined);
-      throw new Error("Codex GPT-5.6 Model route 조립을 완료하지 못했습니다");
+      throw new Error("Codex GPT-5.6 Model route 조립을 완료하지 못했습니다", { cause: error });
     }
   }
 

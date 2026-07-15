@@ -662,6 +662,7 @@ class BuiltinNativeSubscriptionAgentFactory implements NativeSubscriptionAgentFa
       }
       return new CodexSubscriptionConnector(undefined, {
         allowedEnvironment: ["PATH", "CODEX_HOME", "LANG", "LC_ALL"],
+        managedProfile: true,
         ...(input.executable ? { executable: input.executable } : {}),
         threadPolicy: { ...policy, model: input.modelId },
       });

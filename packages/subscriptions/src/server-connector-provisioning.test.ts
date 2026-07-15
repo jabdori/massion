@@ -6,6 +6,8 @@ import { IdentityService, OrganizationService, type TenantContext } from "@massi
 import { createDatabase, type MassionDatabase } from "@massion/storage";
 
 import {
+  ServerConnectorAuthenticationRequiredError,
+  ServerConnectorPaidSubscriptionRequiredError,
   ServerConnectorProvisioningService,
   type ServerConnectorRuntimeAttestor,
   type ServerConnectorProvisioningOptions,
@@ -355,6 +357,86 @@ describe("서버 관리형 Connector 프로비저닝", () => {
       "SELECT status, version FROM subscription_account WHERE account_id = 'server-reauth-account';",
     );
     expect(accounts).toEqual([{ status: "active", version: 4 }]);
+  });
+
+  it("Codex 인증 만료는 건강 증명을 롤백한 뒤 자동으로 별도 감사 command에서 Connector와 계정을 needs-reauth로 전이한다", async () => {
+    await service.provision(ownerContext, provisionInput());
+    await database.query(
+      `CREATE subscription_account CONTENT {
+        account_id: 'server-expired-account', organization_id: $organization_id, owner_user_id: $owner_user_id,
+        provider_id: 'openai-codex', alias: 'Codex', scope: 'personal', connector_id: 'server-codex-1',
+        profile_fingerprint: $fingerprint, billing_kind: 'consumer-subscription', status: 'active',
+        consent_version: 0, version: 1, created_at: time::now(), updated_at: time::now()
+      };`,
+      {
+        organization_id: ownerContext.organizationId,
+        owner_user_id: ownerContext.userId,
+        fingerprint: "f".repeat(64),
+      },
+    );
+    vi.mocked(runtimeAttestor.attestHealth).mockRejectedValueOnce(
+      new ServerConnectorAuthenticationRequiredError("openai-codex", "server-codex-1"),
+    );
+
+    await expect(
+      service.attestHealth(ownerContext, { commandId: "expired-health-command", connectorId: "server-codex-1" }),
+    ).rejects.toBeInstanceOf(ServerConnectorAuthenticationRequiredError);
+
+    const [connectors, accounts, events] = await database.query<
+      [Array<{ status: string }>, Array<{ status: string; version: number }>, Array<{ event_type: string }>]
+    >(
+      `SELECT status FROM subscription_connector WHERE connector_id = 'server-codex-1';
+       SELECT status, version FROM subscription_account WHERE account_id = 'server-expired-account';
+       SELECT event_type FROM subscription_audit_event
+       WHERE organization_id = $organization_id ORDER BY event_type ASC;`,
+      { organization_id: ownerContext.organizationId },
+    );
+    expect(connectors).toEqual([{ status: "offline" }]);
+    expect(accounts).toEqual([{ status: "needs-reauth", version: 2 }]);
+    expect(events).toEqual([
+      { event_type: "subscription_server_connector_provisioned" },
+      { event_type: "subscription_server_connector_reauthentication_required" },
+    ]);
+  });
+
+  it("Codex 유료 구독 불가 오류는 offline으로 전이하되 needs-reauth나 재인증 감사 event를 만들지 않는다", async () => {
+    await service.provision(ownerContext, provisionInput());
+    await database.query(
+      `CREATE subscription_account CONTENT {
+        account_id: 'server-paid-plan-account', organization_id: $organization_id, owner_user_id: $owner_user_id,
+        provider_id: 'openai-codex', alias: 'Codex', scope: 'personal', connector_id: 'server-codex-1',
+        profile_fingerprint: $fingerprint, billing_kind: 'consumer-subscription', status: 'active',
+        consent_version: 0, version: 1, created_at: time::now(), updated_at: time::now()
+      };`,
+      {
+        organization_id: ownerContext.organizationId,
+        owner_user_id: ownerContext.userId,
+        fingerprint: "1".repeat(64),
+      },
+    );
+    vi.mocked(runtimeAttestor.attestHealth).mockRejectedValueOnce(
+      new ServerConnectorPaidSubscriptionRequiredError("openai-codex", "server-codex-1"),
+    );
+
+    await expect(
+      service.attestHealth(ownerContext, { commandId: "paid-plan-health-command", connectorId: "server-codex-1" }),
+    ).rejects.toBeInstanceOf(ServerConnectorPaidSubscriptionRequiredError);
+
+    const [connectors, accounts, events] = await database.query<
+      [Array<{ status: string }>, Array<{ status: string; version: number }>, Array<{ event_type: string }>]
+    >(
+      `SELECT status FROM subscription_connector WHERE connector_id = 'server-codex-1';
+       SELECT status, version FROM subscription_account WHERE account_id = 'server-paid-plan-account';
+       SELECT event_type FROM subscription_audit_event
+       WHERE organization_id = $organization_id ORDER BY event_type ASC;`,
+      { organization_id: ownerContext.organizationId },
+    );
+    expect(connectors).toEqual([{ status: "offline" }]);
+    expect(accounts).toEqual([{ status: "offline", version: 2 }]);
+    expect(events).toEqual([
+      { event_type: "subscription_server_connector_offline" },
+      { event_type: "subscription_server_connector_provisioned" },
+    ]);
   });
 
   it("일반 구성원도 조직의 안전한 공개 view를 보지만 다른 사람의 Connector를 변경할 수 없다", async () => {

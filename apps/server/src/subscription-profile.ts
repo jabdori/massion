@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
 import { chmod, lstat, mkdir, realpath, rm } from "node:fs/promises";
-import { resolve, sep } from "node:path";
+import { basename, dirname, resolve, sep } from "node:path";
+
+import { ensureManagedCodexProfile } from "@massion/runtime";
 
 function segment(value: string): string {
   const normalized = value.trim();
@@ -18,14 +20,70 @@ function within(root: string, candidate: string): boolean {
   return candidate === root || candidate.startsWith(`${root}${sep}`);
 }
 
+function errorCode(error: unknown): string | undefined {
+  return error instanceof Error && "code" in error && typeof error.code === "string" ? error.code : undefined;
+}
+
+/** macOS의 시스템 경로 별칭만 허용하고, 그 밖의 상위 symlink는 관리 경계 밖으로 봅니다. */
+function expectedCanonicalPath(path: string): string {
+  const resolved = resolve(path);
+  if (process.platform !== "darwin") return resolved;
+  for (const alias of ["/var", "/tmp"]) {
+    if (resolved === alias || resolved.startsWith(`${alias}${sep}`)) {
+      return resolve("/private", resolved.slice(1));
+    }
+  }
+  return resolved;
+}
+
+function canonicalPathMatches(path: string, canonical: string): boolean {
+  return canonical === expectedCanonicalPath(path);
+}
+
+async function nearestExistingDirectory(
+  path: string,
+): Promise<{ readonly path: string; readonly missing: readonly string[] }> {
+  let candidate = resolve(path);
+  const missing: string[] = [];
+  for (;;) {
+    try {
+      const metadata = await lstat(candidate);
+      if (!metadata.isDirectory() || metadata.isSymbolicLink()) {
+        throw new Error("Connector profile directory가 안전하지 않습니다");
+      }
+      return { path: candidate, missing };
+    } catch (error) {
+      if (errorCode(error) !== "ENOENT") throw error;
+      const parent = dirname(candidate);
+      if (parent === candidate) {
+        throw new Error("Connector profile directory의 상위 경로를 찾을 수 없습니다", { cause: error });
+      }
+      missing.unshift(basename(candidate));
+      candidate = parent;
+    }
+  }
+}
+
 async function ownerOnlyDirectory(path: string): Promise<string> {
-  await mkdir(path, { recursive: true, mode: 0o700 });
-  const metadata = await lstat(path);
+  const resolved = resolve(path);
+  const existing = await nearestExistingDirectory(resolved);
+  const canonicalParent = await realpath(existing.path);
+  if (!canonicalPathMatches(existing.path, canonicalParent)) {
+    throw new Error("Connector profile directory의 상위 symlink 경로를 사용할 수 없습니다");
+  }
+  const target = resolve(canonicalParent, ...existing.missing);
+  await mkdir(target, { recursive: true, mode: 0o700 });
+  const metadata = await lstat(target);
   if (!metadata.isDirectory() || metadata.isSymbolicLink()) {
     throw new Error("Connector profile directory가 안전하지 않습니다");
   }
-  await chmod(path, 0o700);
-  return await realpath(path);
+  if (typeof process.getuid === "function" && metadata.uid !== process.getuid()) {
+    throw new Error("Connector profile directory는 현재 사용자 소유여야 합니다");
+  }
+  const canonical = await realpath(target);
+  if (canonical !== target) throw new Error("Connector profile directory의 symlink 경로를 사용할 수 없습니다");
+  await chmod(canonical, 0o700);
+  return canonical;
 }
 
 export async function prepareSubscriptionProfileRoot(
@@ -41,6 +99,7 @@ export async function prepareSubscriptionProfileRoot(
   if (!within(root, organizationRoot) || !within(organizationRoot, profileRoot)) {
     throw new Error("Connector profile 경로가 관리 root 밖입니다");
   }
+  await ensureManagedCodexProfile(profileRoot);
   return profileRoot;
 }
 
@@ -57,7 +116,7 @@ async function existingOwnerOnlyDirectory(path: string, label: string): Promise<
     throw new Error(`${label}는 현재 사용자 소유의 owner-only 디렉터리여야 합니다`);
   }
   const canonical = await realpath(path);
-  if (canonical !== resolve(path)) throw new Error(`${label}에 symlink 경로를 사용할 수 없습니다`);
+  if (!canonicalPathMatches(path, canonical)) throw new Error(`${label}에 symlink 경로를 사용할 수 없습니다`);
   return canonical;
 }
 

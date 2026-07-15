@@ -326,6 +326,13 @@ export async function createMassionDaemon(
     const codexSubscriptionObserver = new BundledCodexSubscriptionObserver({
       profileRoot: join(config.connectors.root, "profiles"),
     });
+    const subscriptionConnections = new SubscriptionConnectionService(database, subscriptionAccounts, providers);
+    const serverRuntimeAttestor = new BundledServerConnectorRuntimeAttestor(database, {
+      profileRoot: join(config.connectors.root, "profiles"),
+    });
+    const serverConnectors = await ServerConnectorProvisioningService.create(database, organizations, {
+      runtimeAttestor: serverRuntimeAttestor,
+    });
     const subscriptionQuotaSynchronization = new SubscriptionQuotaSynchronizationService(
       database,
       organizations,
@@ -341,15 +348,14 @@ export async function createMassionDaemon(
         onUnavailable: (failure) => {
           operations.write("subscription.quota.unavailable", { ...failure });
         },
+        onCodexAuthenticationRequired: async (input) => {
+          await serverConnectors.markReauthenticationRequired(input.context, {
+            commandId: input.commandId,
+            connectorId: input.connectorId,
+          });
+        },
       },
     );
-    const subscriptionConnections = new SubscriptionConnectionService(database, subscriptionAccounts, providers);
-    const serverRuntimeAttestor = new BundledServerConnectorRuntimeAttestor(database, {
-      profileRoot: join(config.connectors.root, "profiles"),
-    });
-    const serverConnectors = await ServerConnectorProvisioningService.create(database, organizations, {
-      runtimeAttestor: serverRuntimeAttestor,
-    });
     const builtinModelRoutes = new BuiltinModelRouteAssembler(router);
     const serverSubscriptionConnections = new ServerSubscriptionConnectionService(
       serverConnectors,
@@ -368,10 +374,16 @@ export async function createMassionDaemon(
             organizationId: input.organizationId,
             accountId: input.accountId,
           });
-          if (!loggedOut) throw new Error("서버 구독 profile을 찾을 수 없습니다");
+          if (!loggedOut) {
+            operations.write("subscription.logout.skipped", {
+              providerId: "openai-codex",
+              reason: "managed-profile-credential-unavailable",
+            });
+          }
         },
       },
       new MiniMaxSubscriptionVerifier(),
+      subscriptionQuotaSynchronization,
     );
     const runtimeExecutions = await RuntimeExecutionStore.create(database, organizations);
     const directExecutionLifecycle = new DirectExecutionLifecycle(

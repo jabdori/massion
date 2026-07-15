@@ -1,6 +1,11 @@
 import { delimiter, dirname } from "node:path";
 
-import { inspectBundledSubscriptionRuntime, type BundledSubscriptionRuntimeArtifact } from "@massion/runtime";
+import {
+  codexFileCredentialStoreArguments,
+  inspectBundledSubscriptionRuntime,
+  managedCodexCredentialState,
+  type BundledSubscriptionRuntimeArtifact,
+} from "@massion/runtime";
 import { isPaidCodexPlanType, type QuotaWindow } from "@massion/subscriptions";
 
 import { withCodexAppServer } from "./codex-app-server.js";
@@ -22,18 +27,20 @@ const CODEX_RATE_LIMIT_REACHED_TYPES = new Set<CodexRateLimitReachedType>([
   "workspace_member_usage_limit_reached",
 ]);
 
-export type CodexSubscriptionObservationFailure = "authentication" | "runtime" | "schema" | "upstream";
+export type CodexSubscriptionObservationFailure = "authentication" | "subscription" | "runtime" | "schema" | "upstream";
 
 export class CodexSubscriptionObservationError extends Error {
   public constructor(public readonly category: CodexSubscriptionObservationFailure) {
     super(
       category === "authentication"
         ? "Codex 유료 소비자 구독 인증을 갱신해야 합니다"
-        : category === "runtime"
-          ? "Codex bundled runtime 계보를 확인할 수 없습니다"
-          : category === "schema"
-            ? "Codex 구독 관측 응답 형식을 확인할 수 없습니다"
-            : "Codex app-server가 구독 관측 요청을 완료하지 못했습니다",
+        : category === "subscription"
+          ? "Codex 유료 소비자 구독을 확인할 수 없습니다"
+          : category === "runtime"
+            ? "Codex bundled runtime 계보를 확인할 수 없습니다"
+            : category === "schema"
+              ? "Codex 구독 관측 응답 형식을 확인할 수 없습니다"
+              : "Codex app-server가 구독 관측 요청을 완료하지 못했습니다",
     );
     this.name = "CodexSubscriptionObservationError";
   }
@@ -277,9 +284,24 @@ export function decodeCodexRateLimitWindows(value: unknown, now = new Date()): r
 
 function verifyPaidAccount(value: unknown): void {
   const response = record(value);
-  const account = record(response?.account);
-  if (response?.requiresOpenaiAuth !== true || account?.type !== "chatgpt" || !isPaidCodexPlanType(account.planType)) {
+  if (!response || typeof response.requiresOpenaiAuth !== "boolean") {
+    throw new CodexSubscriptionObservationError("schema");
+  }
+  if (!response.requiresOpenaiAuth) {
+    throw new CodexSubscriptionObservationError("subscription");
+  }
+  if (response.account === null) {
     throw new CodexSubscriptionObservationError("authentication");
+  }
+  const account = record(response.account);
+  if (!account || typeof account.type !== "string") {
+    throw new CodexSubscriptionObservationError("schema");
+  }
+  if (account.type !== "chatgpt") {
+    throw new CodexSubscriptionObservationError("subscription");
+  }
+  if (typeof account.planType !== "string" || !isPaidCodexPlanType(account.planType)) {
+    throw new CodexSubscriptionObservationError("subscription");
   }
 }
 
@@ -348,7 +370,7 @@ async function defaultObserve(
 ): Promise<CodexSubscriptionObservation> {
   return await withCodexAppServer(
     artifact.command,
-    artifact.commandArguments,
+    codexFileCredentialStoreArguments(artifact.commandArguments),
     environment,
     async (session) => {
       const account = await session.request("account/read", { refreshToken: true });
@@ -365,7 +387,7 @@ async function defaultListModels(
 ): Promise<CodexModelListObservation> {
   return await withCodexAppServer(
     artifact.command,
-    artifact.commandArguments,
+    codexFileCredentialStoreArguments(artifact.commandArguments),
     environment,
     async (session) => {
       const account = await session.request("account/read", { refreshToken: true });
@@ -407,7 +429,7 @@ async function defaultLogout(
 ): Promise<void> {
   await withCodexAppServer(
     artifact.command,
-    artifact.commandArguments,
+    codexFileCredentialStoreArguments(artifact.commandArguments),
     environment,
     async (session) => {
       await session.request("account/logout");
@@ -447,12 +469,13 @@ export class BundledCodexSubscriptionObserver {
     readonly organizationId: string;
     readonly accountId: string;
   }): Promise<readonly QuotaWindow[]> {
-    const artifact = await this.artifact();
     const profileRoot = await prepareSubscriptionProfileRoot(
       this.options.profileRoot,
       input.organizationId,
       input.accountId,
     );
+    await this.requireAuthenticatedProfile(profileRoot);
+    const artifact = await this.artifact();
     let observation: CodexSubscriptionObservation;
     try {
       observation = await this.observe(artifact, codexEnvironment(profileRoot));
@@ -469,12 +492,13 @@ export class BundledCodexSubscriptionObserver {
     readonly accountId: string;
     readonly requestedModelId?: string;
   }): Promise<ObservedCodexGpt56Model> {
-    const artifact = await this.artifact();
     const profileRoot = await prepareSubscriptionProfileRoot(
       this.options.profileRoot,
       input.organizationId,
       input.accountId,
     );
+    await this.requireAuthenticatedProfile(profileRoot);
+    const artifact = await this.artifact();
     let observation: CodexModelListObservation;
     try {
       observation = await this.listModels(artifact, codexEnvironment(profileRoot));
@@ -501,6 +525,12 @@ export class BundledCodexSubscriptionObserver {
       input.accountId,
     );
     if (!profileRoot) return false;
+    try {
+      if ((await managedCodexCredentialState(profileRoot)) !== "present") return false;
+    } catch {
+      // 안전하지 않은 profile에는 원격 logout을 시도하지 않습니다.
+      return false;
+    }
     const artifact = await this.artifact();
     try {
       await this.logoutAccount(artifact, codexEnvironment(profileRoot));
@@ -530,6 +560,17 @@ export class BundledCodexSubscriptionObserver {
       return await inspected;
     } catch (error) {
       if (this.artifactPromise === inspected) this.artifactPromise = undefined;
+      if (error instanceof CodexSubscriptionObservationError) throw error;
+      throw new CodexSubscriptionObservationError("runtime");
+    }
+  }
+
+  private async requireAuthenticatedProfile(profileRoot: string): Promise<void> {
+    try {
+      if ((await managedCodexCredentialState(profileRoot)) === "missing") {
+        throw new CodexSubscriptionObservationError("authentication");
+      }
+    } catch (error) {
       if (error instanceof CodexSubscriptionObservationError) throw error;
       throw new CodexSubscriptionObservationError("runtime");
     }

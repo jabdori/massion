@@ -1,6 +1,7 @@
-import { mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -18,6 +19,16 @@ describe("Codex 소비자 구독 관측", () => {
   afterEach(async () => {
     await Promise.all(cleanups.splice(0).map(async (cleanup) => cleanup()));
   });
+
+  async function seedAuthenticatedProfile(
+    profileRoot: string,
+    organizationId: string,
+    accountId: string,
+  ): Promise<string> {
+    const profile = await prepareSubscriptionProfileRoot(profileRoot, organizationId, accountId);
+    await writeFile(join(profile, "auth.json"), "private-login-state", { mode: 0o600 });
+    return profile;
+  }
 
   it("account/rateLimits/read의 다중 bucket 사용률을 독립된 남은 할당량 window로 변환한다", () => {
     const windows = decodeCodexRateLimitWindows(
@@ -162,6 +173,7 @@ describe("Codex 소비자 구독 관측", () => {
   it("고정된 bundled Codex artifact와 계정별 0700 profile에서 유료 계정과 할당량을 한 세션으로 확인한다", async () => {
     const profileRoot = await mkdtemp(join(tmpdir(), "massion-codex-observer-"));
     cleanups.push(async () => await rm(profileRoot, { recursive: true, force: true }));
+    await seedAuthenticatedProfile(profileRoot, "organization-12345678", "account-12345678");
     const inspectRuntime = vi.fn().mockResolvedValue({
       runtimeId: "codex",
       version: "0.144.1",
@@ -208,9 +220,62 @@ describe("Codex 소비자 구독 관측", () => {
     expect(environment?.CODEX_HOME).not.toContain("account-12345678");
   });
 
-  it.each(["free", "unknown", undefined])("planType=%s 계정은 할당량을 신뢰하지 않는다", async (planType) => {
+  it("기본 Codex app-server 관측·model 목록·logout은 관리 profile의 file credential store를 사용한다", async () => {
+    const root = await mkdtemp(join(tmpdir(), "massion-codex-observer-default-"));
+    cleanups.push(async () => await rm(root, { recursive: true, force: true }));
+    const profileRoot = await realpath(root);
+    const fixturePath = fileURLToPath(new URL("./fixtures/codex-account-app-server.mjs", import.meta.url));
+    const observer = new BundledCodexSubscriptionObserver({
+      profileRoot,
+      inspectRuntime: vi.fn().mockResolvedValue({
+        runtimeId: "codex",
+        version: "0.144.1",
+        runtimeArtifactDigest: "e".repeat(64),
+        command: process.execPath,
+        commandArguments: [fixturePath],
+      }),
+      now: () => new Date("2026-07-12T00:00:00.000Z"),
+    });
+    const input = { organizationId: "organization-default-12345678", accountId: "account-default-12345678" };
+    await seedAuthenticatedProfile(profileRoot, input.organizationId, input.accountId);
+
+    await expect(observer.readQuota(input)).resolves.toEqual([
+      expect.objectContaining({ kind: "codex:codex:primary", remainingRatio: 0.8 }),
+    ]);
+    await expect(observer.readModel(input)).resolves.toMatchObject({ modelId: "gpt-5.6-sol" });
+    await expect(observer.logout(input)).resolves.toBe(true);
+  });
+
+  it("관리 Codex profile의 auth.json이 없으면 quota 관측 process를 시작하지 않고 재인증으로 분류한다", async () => {
+    const profileRoot = await mkdtemp(join(tmpdir(), "massion-codex-observer-missing-auth-"));
+    cleanups.push(async () => await rm(profileRoot, { recursive: true, force: true }));
+    const observe = vi.fn();
+    const observer = new BundledCodexSubscriptionObserver({
+      profileRoot,
+      inspectRuntime: vi.fn().mockResolvedValue({
+        runtimeId: "codex",
+        version: "0.144.1",
+        runtimeArtifactDigest: "f".repeat(64),
+        command: process.execPath,
+        commandArguments: ["/bundled/codex.js"],
+      }),
+      observe,
+    });
+
+    await expect(
+      observer.readQuota({ organizationId: "organization-missing-auth", accountId: "account-missing-auth" }),
+    ).rejects.toMatchObject({ category: "authentication" });
+    expect(observe).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["free", "subscription"],
+    ["unknown", "subscription"],
+    [undefined, "subscription"],
+  ] as const)("planType=%s 계정은 재인증 없이 할당량을 거부한다", async (planType, category) => {
     const profileRoot = await mkdtemp(join(tmpdir(), "massion-codex-observer-plan-"));
     cleanups.push(async () => await rm(profileRoot, { recursive: true, force: true }));
+    await seedAuthenticatedProfile(profileRoot, "organization-12345678", "account-12345678");
     const observer = new BundledCodexSubscriptionObserver({
       profileRoot,
       inspectRuntime: vi.fn().mockResolvedValue({
@@ -231,7 +296,44 @@ describe("Codex 소비자 구독 관측", () => {
 
     await expect(
       observer.readQuota({ organizationId: "organization-12345678", accountId: "account-12345678" }),
-    ).rejects.toMatchObject({ category: "authentication" });
+    ).rejects.toMatchObject({ category });
+  });
+
+  it.each([
+    ["OpenAI 인증이 필요한 로그아웃", { requiresOpenaiAuth: true, account: null }, "authentication"],
+    ["OpenAI 인증이 필요 없는 provider", { requiresOpenaiAuth: false, account: null }, "subscription"],
+    [
+      "AWS 관리 Bedrock provider",
+      { requiresOpenaiAuth: false, account: { type: "amazonBedrock", credentialSource: "awsManaged" } },
+      "subscription",
+    ],
+    ["계정 record 누락", { requiresOpenaiAuth: true, account: "not-a-record" }, "schema"],
+    ["인증 플래그 누락", { account: { type: "chatgpt", planType: "plus" } }, "schema"],
+    [
+      "미확인 plan",
+      { requiresOpenaiAuth: true, account: { type: "chatgpt", planType: "future-plan" } },
+      "subscription",
+    ],
+    ["ChatGPT가 아닌 인증 유형", { requiresOpenaiAuth: true, account: { type: "apiKey" } }, "subscription"],
+  ] as const)("검증된 인증 만료와 응답 형식 오류를 %s에서 구분한다", async (_label, account, category) => {
+    const profileRoot = await mkdtemp(join(tmpdir(), "massion-codex-observer-account-shape-"));
+    cleanups.push(async () => await rm(profileRoot, { recursive: true, force: true }));
+    await seedAuthenticatedProfile(profileRoot, "organization-12345678", "account-12345678");
+    const observer = new BundledCodexSubscriptionObserver({
+      profileRoot,
+      inspectRuntime: vi.fn().mockResolvedValue({
+        runtimeId: "codex",
+        version: "0.144.1",
+        runtimeArtifactDigest: "d".repeat(64),
+        command: process.execPath,
+        commandArguments: ["/bundled/codex.js"],
+      }),
+      observe: vi.fn().mockResolvedValue({ account, rateLimits: {} }),
+    });
+
+    await expect(
+      observer.readQuota({ organizationId: "organization-12345678", accountId: "account-12345678" }),
+    ).rejects.toMatchObject({ category });
   });
 
   it("model/list 실제 결과에서는 isDefault를 먼저 선택하고, 기본값이 없으면 Sol→alias→Terra→Luna 순서를 쓴다", () => {
@@ -261,6 +363,7 @@ describe("Codex 소비자 구독 관측", () => {
   it("계정별 model/list 관측 결과와 bundled artifact digest를 선택 근거로 반환한다", async () => {
     const profileRoot = await mkdtemp(join(tmpdir(), "massion-codex-observer-model-"));
     cleanups.push(async () => await rm(profileRoot, { recursive: true, force: true }));
+    await seedAuthenticatedProfile(profileRoot, "organization-12345678", "account-12345678");
     const listModels = vi.fn().mockResolvedValue({
       account: { account: { type: "chatgpt", planType: "pro" }, requiresOpenaiAuth: true },
       models: [
@@ -344,5 +447,35 @@ describe("Codex 소비자 구독 관측", () => {
       expect.objectContaining({ runtimeId: "codex" }),
       expect.objectContaining({ CODEX_HOME: accountProfile, HOME: accountProfile }),
     );
+  });
+
+  it("auth.json이 외부 파일을 가리키면 원격 logout을 시도하지 않고 외부 로그인 자료를 보존한다", async () => {
+    const temporaryRoot = await mkdtemp(join(tmpdir(), "massion-codex-logout-symlink-"));
+    const outsideRoot = await mkdtemp(join(tmpdir(), "massion-codex-logout-symlink-outside-"));
+    cleanups.push(
+      async () => await rm(temporaryRoot, { recursive: true, force: true }),
+      async () => await rm(outsideRoot, { recursive: true, force: true }),
+    );
+    const profileRoot = await realpath(temporaryRoot);
+    const accountProfile = await prepareSubscriptionProfileRoot(
+      profileRoot,
+      "organization-logout-symlink",
+      "account-logout-symlink",
+    );
+    const outsideAuth = join(outsideRoot, "auth.json");
+    await writeFile(outsideAuth, "outside-private-login-state", { mode: 0o600 });
+    await symlink(outsideAuth, join(accountProfile, "auth.json"));
+    const logout = vi.fn();
+    const observer = new BundledCodexSubscriptionObserver({
+      profileRoot,
+      inspectRuntime: vi.fn(),
+      logout,
+    });
+
+    await expect(
+      observer.logout({ organizationId: "organization-logout-symlink", accountId: "account-logout-symlink" }),
+    ).resolves.toBe(false);
+    expect(logout).not.toHaveBeenCalled();
+    await expect(readFile(outsideAuth, "utf8")).resolves.toBe("outside-private-login-state");
   });
 });

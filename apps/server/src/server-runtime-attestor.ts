@@ -2,7 +2,9 @@ import { spawn } from "node:child_process";
 import { delimiter, dirname } from "node:path";
 
 import {
+  codexFileCredentialStoreArguments,
   inspectBundledSubscriptionRuntime,
+  managedCodexCredentialState,
   type BundledSubscriptionRuntimeArtifact,
   type BundledSubscriptionRuntimeId,
 } from "@massion/runtime";
@@ -12,7 +14,11 @@ import type {
   VerifiedServerConnectorHealth,
   VerifiedServerRuntimeArtifact,
 } from "@massion/subscriptions";
-import { isPaidCodexPlanType } from "@massion/subscriptions";
+import {
+  isPaidCodexPlanType,
+  ServerConnectorAuthenticationRequiredError,
+  ServerConnectorPaidSubscriptionRequiredError,
+} from "@massion/subscriptions";
 
 import {
   inspectBuiltinModelRuntime,
@@ -157,21 +163,32 @@ function verifiedArtifact(
   };
 }
 
-function verifyCodexSubscription(value: unknown): void {
+function verifyCodexSubscription(value: unknown, providerId: string, connectorId: string): void {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new Error("Codex ChatGPT 구독 인증 상태를 확인할 수 없습니다");
   }
   const result = value as { readonly requiresOpenaiAuth?: unknown; readonly account?: unknown };
-  const account = result.account as { readonly type?: unknown; readonly planType?: unknown } | undefined;
-  if (
-    result.requiresOpenaiAuth !== true ||
-    !account ||
-    typeof account !== "object" ||
-    Array.isArray(account) ||
-    account.type !== "chatgpt" ||
-    !isPaidCodexPlanType(account.planType)
-  ) {
+  if (typeof result.requiresOpenaiAuth !== "boolean") {
     throw new Error("Codex ChatGPT 구독 인증 상태를 확인할 수 없습니다");
+  }
+  if (!result.requiresOpenaiAuth) {
+    throw new ServerConnectorPaidSubscriptionRequiredError(providerId, connectorId);
+  }
+  if (result.account === null) {
+    throw new ServerConnectorAuthenticationRequiredError(providerId, connectorId);
+  }
+  const account = result.account as { readonly type?: unknown; readonly planType?: unknown } | undefined;
+  if (!account || typeof account !== "object" || Array.isArray(account)) {
+    throw new Error("Codex ChatGPT 구독 인증 상태를 확인할 수 없습니다");
+  }
+  if (typeof account.type !== "string") {
+    throw new Error("Codex ChatGPT 구독 인증 상태를 확인할 수 없습니다");
+  }
+  if (account.type !== "chatgpt") {
+    throw new ServerConnectorPaidSubscriptionRequiredError(providerId, connectorId);
+  }
+  if (typeof account.planType !== "string" || !isPaidCodexPlanType(account.planType)) {
+    throw new ServerConnectorPaidSubscriptionRequiredError(providerId, connectorId);
   }
 }
 
@@ -295,16 +312,23 @@ export class BundledServerConnectorRuntimeAttestor implements ServerConnectorRun
       );
       try {
         if (selected === "codex") {
+          if ((await managedCodexCredentialState(profileRoot)) !== "present") {
+            throw new ServerConnectorAuthenticationRequiredError(input.providerId, input.connectorId);
+          }
           if (!("command" in artifact)) throw new Error("Codex runtime artifact 계보가 일치하지 않습니다");
-          const result = await this.codexAccount(artifact.command, artifact.commandArguments, {
-            CODEX_HOME: profileRoot,
-            HOME: profileRoot,
-            LANG: "C.UTF-8",
-            LC_ALL: "C.UTF-8",
-            NO_COLOR: "1",
-            PATH: runtimePath(),
-          });
-          verifyCodexSubscription(result);
+          const result = await this.codexAccount(
+            artifact.command,
+            codexFileCredentialStoreArguments(artifact.commandArguments),
+            {
+              CODEX_HOME: profileRoot,
+              HOME: profileRoot,
+              LANG: "C.UTF-8",
+              LC_ALL: "C.UTF-8",
+              NO_COLOR: "1",
+              PATH: runtimePath(),
+            },
+          );
+          verifyCodexSubscription(result, input.providerId, input.connectorId);
         } else {
           if (!("command" in artifact)) throw new Error("Claude runtime artifact 계보가 일치하지 않습니다");
           const result = await this.run(artifact.command, ["auth", "status", "--json"], {
@@ -318,8 +342,14 @@ export class BundledServerConnectorRuntimeAttestor implements ServerConnectorRun
           });
           verifyClaudeSubscription(result.stdout);
         }
-      } catch {
-        throw new Error("Provider 구독 인증 상태를 확인할 수 없습니다");
+      } catch (error) {
+        if (
+          error instanceof ServerConnectorAuthenticationRequiredError ||
+          error instanceof ServerConnectorPaidSubscriptionRequiredError
+        ) {
+          throw error;
+        }
+        throw new Error("Provider 구독 인증 상태를 확인할 수 없습니다", { cause: error });
       }
     }
 

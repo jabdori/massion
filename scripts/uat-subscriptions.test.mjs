@@ -28,6 +28,7 @@ import {
   createTmuxUatSession,
   createUatWorkspace,
   destroyTmuxUatSession,
+  executeProviderScenario,
   parseSubscriptionUatArguments,
   parseAndValidateObservedUatOutput,
   planProviderScenarios,
@@ -100,6 +101,7 @@ test("이메일·token·개인 key·로컬 profile 경로는 어느 중첩 위�
     { token: "secret-value" },
     { detail: "Bearer abcdefghijklmnopqrstuvwxyz" },
     { detail: "-----BEGIN PRIVATE KEY-----" },
+    { detail: "auth.json" },
     { detail: "/Users/person/.codex/auth.json" },
     { detail: "/Volumes/private/massion/server.log" },
     { detail: "/tmp/massion/raw.json" },
@@ -527,6 +529,179 @@ test("공개 JSON 응답은 봉투·상태·provider·account·policy·종료 �
   );
 });
 
+test("Codex 재사용 UAT는 두 번째 연결의 동일 계정·단일 provider 계정·직접 quota 관측을 닫힌 계약으로 검증한다", () => {
+  const observed = (kind, value, expected = {}) =>
+    parseAndValidateObservedUatOutput(kind, typeof value === "string" ? value : JSON.stringify(value), expected);
+  const connection = observed(
+    "subscription-connect",
+    {
+      status: "ready",
+      providerId: "openai-codex",
+      alias: "UAT openai-codex",
+      accountId: "account-uat-0001",
+      connectorId: "connector-uat-0001",
+      connectionDisposition: "reused",
+    },
+    {
+      providerId: "openai-codex",
+      alias: "UAT openai-codex",
+      accountId: "account-uat-0001",
+      connectorId: "connector-uat-0001",
+      connectionDisposition: "reused",
+    },
+  );
+  assert.deepEqual(connection.facts, {
+    status: "ready",
+    providerId: "openai-codex",
+    alias: "UAT openai-codex",
+    accountId: "account-uat-0001",
+    connectorId: "connector-uat-0001",
+    connectionDisposition: "reused",
+  });
+  assert.throws(
+    () =>
+      observed(
+        "subscription-connect",
+        {
+          status: "ready",
+          providerId: "openai-codex",
+          alias: "UAT openai-codex",
+          accountId: "account-uat-0001",
+          connectorId: "connector-uat-0001",
+          connectionDisposition: "new",
+        },
+        {
+          providerId: "openai-codex",
+          alias: "UAT openai-codex",
+          accountId: "account-uat-0001",
+          connectorId: "connector-uat-0001",
+          connectionDisposition: "reused",
+        },
+      ),
+    /재사용|connectionDisposition/u,
+  );
+
+  const account = {
+    accountId: "account-uat-0001",
+    providerId: "openai-codex",
+    alias: "UAT openai-codex",
+    scope: "personal",
+    canManage: true,
+    connectorId: "connector-uat-0001",
+    connectorLocation: "server",
+    connectorExecutionKind: "agent-runtime",
+    connectorStatus: "ready",
+    billingKind: "consumer-subscription",
+    status: "active",
+    version: 1,
+  };
+  assert.equal(
+    observed(
+      "subscription-accounts",
+      { schemaVersion: "massion.application.v1", operation: "subscription.accounts", data: [account] },
+      {
+        providerId: "openai-codex",
+        alias: "UAT openai-codex",
+        accountId: "account-uat-0001",
+        connectorId: "connector-uat-0001",
+        providerAccountCount: 1,
+      },
+    ).facts.providerAccountCount,
+    1,
+  );
+  assert.throws(
+    () =>
+      observed(
+        "subscription-accounts",
+        {
+          schemaVersion: "massion.application.v1",
+          operation: "subscription.accounts",
+          data: [account, { ...account, accountId: "account-uat-0002", alias: "추가 Codex" }],
+        },
+        { providerId: "openai-codex", alias: "UAT openai-codex", providerAccountCount: 1 },
+      ),
+    /provider.*계정|계정 수/u,
+  );
+
+  const directQuota = {
+    schemaVersion: "massion.application.v1",
+    operation: "subscription.quota",
+    data: [
+      {
+        accountId: "account-uat-0001",
+        windows: [
+          {
+            kind: "codex:codex:primary",
+            remainingRatio: 0.75,
+            observedAt: "2026-07-14T12:00:01.000Z",
+            confidence: "reported",
+          },
+        ],
+        exhausted: false,
+        observedAt: "2026-07-14T12:00:01.000Z",
+      },
+    ],
+  };
+  assert.deepEqual(
+    observed("subscription-quota", directQuota, {
+      accountId: "account-uat-0001",
+      requireCodexDirectObservation: true,
+      observedAfter: "2026-07-14T12:00:00.000Z",
+    }).facts,
+    {
+      accountId: "account-uat-0001",
+      available: true,
+      exhausted: false,
+      windows: 1,
+      codexDirectObservation: true,
+      observedAt: "2026-07-14T12:00:01.000Z",
+    },
+  );
+  assert.throws(
+    () =>
+      observed(
+        "subscription-quota",
+        {
+          ...directQuota,
+          data: [{ ...directQuota.data[0], windows: [] }],
+        },
+        {
+          accountId: "account-uat-0001",
+          requireCodexDirectObservation: true,
+          observedAfter: "2026-07-14T12:00:00.000Z",
+        },
+      ),
+    /직접|quota/u,
+  );
+  assert.throws(
+    () =>
+      observed(
+        "subscription-quota",
+        {
+          ...directQuota,
+          data: [
+            {
+              ...directQuota.data[0],
+              windows: [
+                {
+                  ...directQuota.data[0].windows[0],
+                  kind: "weekly",
+                  confidence: "provider-reported",
+                },
+              ],
+            },
+          ],
+        },
+        {
+          accountId: "account-uat-0001",
+          requireCodexDirectObservation: true,
+          observedAfter: "2026-07-14T12:00:00.000Z",
+        },
+      ),
+    /Codex|직접|quota/u,
+  );
+});
+
 test("설치·초기화·상태·catalog·doctor·quota·backup·restore JSON도 상태값까지 닫힌 계약으로 검증한다", () => {
   const observed = (kind, value, expected = {}) =>
     parseAndValidateObservedUatOutput(kind, typeof value === "string" ? value : JSON.stringify(value), expected);
@@ -930,6 +1105,152 @@ test("격리된 tmux에 daemon·user·connectors·watch 창을 만들고 raw pan
   });
   assert.deepEqual(safelyQuoted, { step: "shell-argument-safety", exitCode: 0 });
   await assert.rejects(async () => await access(sentinel));
+});
+
+test("Codex UAT는 최초 대화형 연결 뒤 같은 별칭을 비대화형으로 다시 연결해 profile 재사용·단일 계정·직접 quota를 증명한다", async (context) => {
+  const socketName = `massion-uat-reuse-${String(process.pid)}-${Date.now().toString(36)}`;
+  const sessionName = "massion-uat-phase24-reuse";
+  const fixtureParent = await mkdtemp(join(tmpdir(), "massion-uat-reuse-module-parent-"));
+  await chmod(fixtureParent, 0o700);
+  await writeFile(join(fixtureParent, "package.json"), '{"type":"module"}\n', { mode: 0o600 });
+  const root = await mkdtemp(join(fixtureParent, "massion-uat-reuse-test-"));
+  const prefix = join(root, "prefix");
+  const bin = join(prefix, "bin");
+  const temporaryDirectory = join(root, "tmp");
+  const statePath = join(root, "state.json");
+  await chmod(root, 0o700);
+  await mkdir(bin, { recursive: true, mode: 0o700 });
+  await writeFile(join(prefix, "package.json"), '{"type":"commonjs"}\n', { mode: 0o600 });
+  await mkdir(temporaryDirectory, { recursive: true, mode: 0o700 });
+  await chmod(bin, 0o700);
+  await chmod(temporaryDirectory, 0o700);
+  context.after(async () => await destroyTmuxUatSession({ socketName, sessionName }));
+  context.after(async () => await rm(fixtureParent, { recursive: true, force: true }));
+
+  const mass = join(bin, "mass");
+  await writeFile(
+    mass,
+    [
+      `#!${process.execPath}`,
+      String.raw`const { existsSync, readFileSync, writeFileSync } = require("node:fs");
+const statePath = process.env.UAT_REUSE_STATE;
+const state = existsSync(statePath)
+  ? JSON.parse(readFileSync(statePath, "utf8"))
+  : { connectCalls: [], loginCalls: 0, quotaCalls: 0 };
+const args = process.argv.slice(2);
+const accountId = "account-uat-reuse-0001";
+const connectorId = "connector-uat-reuse-0001";
+const providerId = "openai-codex";
+const alias = "UAT openai-codex";
+const save = () => writeFileSync(statePath, JSON.stringify(state), { mode: 0o600 });
+const json = (value) => process.stdout.write(JSON.stringify(value));
+const account = {
+  accountId,
+  providerId,
+  alias,
+  scope: "personal",
+  canManage: true,
+  connectorId,
+  connectorLocation: "server",
+  connectorExecutionKind: "agent-runtime",
+  connectorStatus: "ready",
+  billingKind: "consumer-subscription",
+  status: "active",
+  version: 1,
+};
+if (args[0] === "subscription" && args[1] === "connect") {
+  state.connectCalls.push(args);
+  if (state.connectCalls.length === 1) {
+    if (args.includes("--json")) process.exit(91);
+    state.loginCalls += 1;
+    save();
+    process.stdout.write("initial interactive login completed\\n");
+    process.exit(0);
+  }
+  if (state.connectCalls.length === 2) {
+    if (!args.includes("--json") || state.loginCalls !== 1) process.exit(92);
+    save();
+    json({ status: "ready", providerId, alias, accountId, connectorId, connectionDisposition: "reused" });
+    process.exit(0);
+  }
+  process.exit(93);
+}
+if (args[0] === "subscription" && args[1] === "accounts") {
+  json({ schemaVersion: "massion.application.v1", operation: "subscription.accounts", data: [account] });
+  process.exit(0);
+}
+if (args[0] === "subscription" && args[1] === "doctor") {
+  json({ schemaVersion: "massion.application.v1", operation: "subscription.doctor", data: [{ accountId, providerId, alias, accountStatus: "active", connectorId, connectorLocation: "server", connectorStatus: "ready", quotaStatus: "available", action: "none" }] });
+  process.exit(0);
+}
+if (args[0] === "subscription" && args[1] === "quota") {
+  if (state.connectCalls.length !== 2) process.exit(95);
+  state.quotaCalls += 1;
+  save();
+  const observedAt = new Date().toISOString();
+  json({ schemaVersion: "massion.application.v1", operation: "subscription.quota", data: [{ accountId, windows: [{ kind: "codex:codex:primary", remainingRatio: 0.75, observedAt, confidence: "reported" }], exhausted: false, observedAt }] });
+  process.exit(0);
+}
+if (args[0] === "subscription" && args[1] === "policy" && args.length > 4) {
+  json({ schemaVersion: "massion.application.v1", commandId: "command-uat-reuse-0001", correlationId: "correlation-uat-reuse-0001", operation: "subscription.policy.configure", outcome: "succeeded", resource: { type: "SubscriptionPolicy", id: providerId, revision: 1 }, data: { providerId, credentialPolicy: "adaptive", approvalMode: "automatic", version: 1, source: "configured" } });
+  process.exit(0);
+}
+if (args[0] === "subscription" && args[1] === "policy") {
+  json({ schemaVersion: "massion.application.v1", operation: "subscription.policy", data: [{ providerId, credentialPolicy: "adaptive", approvalMode: "automatic", version: 1, source: "configured" }] });
+  process.exit(0);
+}
+if (args[0] === "run") {
+  const correlationId = args[args.indexOf("--correlation") + 1];
+  json({ schemaVersion: "massion.cli.run.v1", type: "result", status: "completed", runId: "run-uat-reuse-0001", correlationId, cursor: 1 });
+  process.exit(0);
+}
+if (args[0] === "runtime" && args[1] === "lineage") {
+  const correlationId = args[3];
+  json({ schemaVersion: "massion.application.v1", operation: "runtime.execution.subscription-lineage", data: { correlationId, executions: [{ executionId: "execution-uat-reuse-0001", status: "succeeded", attempts: [{ attemptId: "attempt-uat-reuse-0001", sequence: 1, accountId, credentialRef: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", providerId, modelId: "gpt-5.6-sol", status: "succeeded", emittedTokens: 1, sideEffectsStarted: false, fallbackAllowed: false, lease: { leaseId: "lease-uat-reuse-0001", connectorId, adapterId: "codex", state: "settled" }, terminal: { outcome: "completed", inputTokens: 1, outputTokens: 1, emittedTokens: 1, sideEffectsStarted: false } }] }] } });
+  process.exit(0);
+}
+process.exit(94);
+`,
+    ].join("\n"),
+    { mode: 0o700 },
+  );
+  await chmod(mass, 0o700);
+  const environment = {
+    MASSION_PREFIX: prefix,
+    TMPDIR: temporaryDirectory,
+    UAT_REUSE_STATE: statePath,
+  };
+  const session = await createTmuxUatSession({ socketName, sessionName, shell: "/bin/sh", environment });
+
+  const result = await executeProviderScenario(
+    session,
+    { id: "codex-profile-reuse", provider: "openai-codex" },
+    environment,
+    5_000,
+    digest,
+  );
+
+  assert.equal(
+    result.scenario.status,
+    "passed",
+    JSON.stringify({
+      assertions: result.scenario.assertions,
+      commands: result.scenario.commands,
+      failureClass: result.scenario.failureClass,
+    }),
+  );
+  assert.deepEqual(result.supplemental, []);
+  assert.ok(result.scenario.assertions.includes("account-query-verified"));
+  assert.ok(result.scenario.assertions.includes("profile-reuse-verified"));
+  assert.ok(result.scenario.assertions.includes("provider-account-count-verified"));
+  assert.ok(result.scenario.assertions.includes("codex-direct-quota-verified"));
+  assert.equal((await JSON.parse(await readFile(statePath, "utf8"))).loginCalls, 1);
+  assert.equal((await JSON.parse(await readFile(statePath, "utf8"))).quotaCalls, 1);
+  assert.deepEqual((await JSON.parse(await readFile(statePath, "utf8"))).connectCalls, [
+    ["subscription", "connect", "openai-codex", "UAT openai-codex"],
+    ["subscription", "connect", "openai-codex", "UAT openai-codex", "--json"],
+  ]);
+  assert.ok(result.scenario.commands.some((command) => command.step === "codex-profile-reuse-reconnect"));
 });
 
 test("tmux JSON 관찰기는 raw 출력 파일 없이 검증된 최소 사실과 digest만 돌려준다", async (context) => {
