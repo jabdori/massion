@@ -192,4 +192,4 @@ git commit -m "feat(cli): make massion the unified interactive entrypoint"
 - [x] Local Web assets are served from the same loopback origin as the API.
 - [x] `mass` and `massion-tui` are absent from the public install prefix.
 - [x] Root `install.sh` downloads a pinned release and verifies its manifest and SHA-256 digest before delegating to the bundle installer.
-- [ ] Release install, uninstall, clean clone, security, and hardening tests pass.
+- [x] Release install, uninstall, clean clone, security, and hardening tests pass.
