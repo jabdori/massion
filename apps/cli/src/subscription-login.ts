@@ -63,6 +63,13 @@ interface PreparedBinding {
   readonly profileHandle: string;
 }
 
+class DirectQuotaObservationMissingError extends Error {
+  public constructor() {
+    super("서버 구독 건강 증명의 Codex 직접 quota 관측 증거가 없습니다");
+    this.name = "DirectQuotaObservationMissingError";
+  }
+}
+
 interface PendingLogin {
   readonly schema: "massion.server-subscription-login.v1";
   readonly providerId: string;
@@ -401,7 +408,7 @@ function assertAttested(value: unknown, connectorId: string): void {
   }
   const quotaObservation = response.data.quotaObservation;
   if (!quotaObservation || typeof quotaObservation !== "object" || Array.isArray(quotaObservation)) {
-    throw new Error("서버 구독 건강 증명의 Codex 직접 quota 관측 증거가 없습니다");
+    throw new DirectQuotaObservationMissingError();
   }
   const observation = quotaObservation as Record<string, unknown>;
   if (observation.source !== "direct") {
@@ -847,7 +854,8 @@ export async function connectLocalServerSubscription(
       await writePending(pendingPath, pending);
     }
 
-    const prepared = pending.prepared;
+    const pendingState = pending;
+    const prepared = pendingState.prepared;
     if (!prepared) throw new Error("서버 구독 준비 결과를 찾을 수 없습니다");
     const profileRoot = await placeProfile(profilesRoot, stagingRoot, prepared.profileHandle);
     const loginPreparedProfile = async (): Promise<void> => {
@@ -865,13 +873,15 @@ export async function connectLocalServerSubscription(
         throw new Error("Provider 구독 재인증 뒤 관리 Codex profile의 auth.json을 확인할 수 없습니다");
       }
     };
+    let attestCommandId = pendingState.attestCommandId;
+    let attestCorrelationId = pendingState.attestCorrelationId;
     const attestPreparedProfile = async (): Promise<void> => {
       const observedAfter = Date.now();
       const attested = await client.command(
-        commandEnvelope(pending.attestCommandId, pending.attestCorrelationId, "subscription.server.attest", {
+        commandEnvelope(attestCommandId, attestCorrelationId, "subscription.server.attest", {
           connectorId: prepared.connectorId,
           accountId: prepared.accountId,
-          ...(pending.requestedModelId === undefined ? {} : { modelId: pending.requestedModelId }),
+          ...(pendingState.requestedModelId === undefined ? {} : { modelId: pendingState.requestedModelId }),
         }),
       );
       assertAttested(attested, prepared.connectorId);
@@ -880,15 +890,28 @@ export async function connectLocalServerSubscription(
     try {
       await attestPreparedProfile();
     } catch (error) {
-      if (!reauthenticationRequired(error)) throw error;
-      await loginPreparedProfile();
-      await attestPreparedProfile();
+      if (error instanceof DirectQuotaObservationMissingError) {
+        // 이전 서버가 quota 없이 성공한 응답을 같은 command ID로 replay하면
+        // 새 서버로 교체한 뒤에도 보류 상태가 영구히 같은 응답을 받습니다.
+        // 네트워크 단절·실패는 기존 command를 재사용하지만, 불완전한 성공은
+        // 새 attestation command로 한 번만 재실행합니다.
+        attestCommandId = randomUUID();
+        attestCorrelationId = randomUUID();
+        pending = { ...pendingState, attestCommandId, attestCorrelationId };
+        await writePending(pendingPath, pending);
+        await attestPreparedProfile();
+      } else if (reauthenticationRequired(error)) {
+        await loginPreparedProfile();
+        await attestPreparedProfile();
+      } else {
+        throw error;
+      }
     }
     await rm(pendingPath, { force: true });
     return {
       status: "ready",
-      providerId: pending.providerId,
-      alias: pending.alias,
+      providerId: pendingState.providerId,
+      alias: pendingState.alias,
       accountId: prepared.accountId,
       connectorId: prepared.connectorId,
       connectionDisposition: "new",
