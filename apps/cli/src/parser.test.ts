@@ -5,6 +5,11 @@ import { parseCliArguments } from "./parser.js";
 describe("massion CLI parser", () => {
   it("local daemon lifecycle과 version command를 파싱한다", () => {
     expect(parseCliArguments(["local", "start"])).toMatchObject({ command: "local", subcommand: "start" });
+    expect(parseCliArguments(["local", "ensure", "--json"])).toMatchObject({
+      command: "local",
+      subcommand: "ensure",
+      output: "json",
+    });
     expect(parseCliArguments(["local", "backup", "/tmp/backup.json"])).toMatchObject({
       command: "local",
       subcommand: "backup",

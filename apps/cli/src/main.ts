@@ -12,14 +12,16 @@ import { CliConfigStore } from "./config.js";
 import { processJsonLines, writeWithBackpressure } from "./jsonl.js";
 import { initializeCli } from "./init.js";
 import { LocalDaemonManager, resolveLocalPaths } from "./local.js";
+import { defaultLocalEndpoint, ensureLocalEndpoint } from "./local-entrypoint.js";
 import { parseCliArguments } from "./parser.js";
 import { renderCliOutput } from "./render.js";
 import { runHeadless } from "./run.js";
 import { connectLocalServerSubscription } from "./subscription-login.js";
 import { resolveTokenReference } from "./token.js";
+import { createOnboardingPrompt } from "./onboarding.js";
 import { openWebConsole } from "./web-login.js";
 
-const HELP = `Massion AgentOS command line\n\n사용법: massion <version|local|init|status|run|resume|watch|org|work|chat|task|approval|assurance|runtime|provider|subscription|ext|growth|optimization|doctor> [options]\n\n대화형 운영 화면: 인자 없이 massion\nWeb Console: massion --web\n초기화: massion init [endpoint] <email> <display name>\nEdge Connector 등록 코드: massion subscription enroll edge <model|agent-runtime> [ttlMs]\n로컬 Codex 첫 연결 또는 기존 profile 재사용: massion subscription connect openai-codex [별칭] [--model GPT-5.6-ID]\n추가 Codex 계정 연결: massion subscription connect openai-codex [새 별칭] --new-account [--model GPT-5.6-ID]\nMiniMax 모델 구독 키 연결: massion subscription connect-model minimax-token-plan < model-connection.json\n고급 Connector 연결: massion subscription connect-advanced PROVIDER < connection.json\n구독 정책: massion subscription policy PROVIDER ACCOUNT_POLICY <automatic|review|deny> [EXPECTED_REVISION]\n모델 최적화 조회: massion optimization <policy|receipts|recommendations|observations|batch-active>\n모델 최적화 변경: massion optimization <policy-configure|bundle-create|bundle-export|bundle-import|evaluation-start|evaluation-execute|evaluation-complete|recommend|recommendation-approve|batch-create|batch-activate|observe|recover> < input.json\n실행 구독 계보: massion runtime lineage EXECUTION_ID\n구독 공유 승인 재개: massion subscription share ACCOUNT_ID APPROVAL_ID ORIGINAL_COMMAND_ID\n`;
+const HELP = `Massion AgentOS command line\n\n사용법: massion <version|local|init|status|run|resume|watch|org|work|chat|task|approval|assurance|runtime|provider|subscription|ext|growth|optimization|doctor> [options]\n\n대화형 운영 화면: 인자 없이 massion\nWeb Console: massion --web\n초기화: massion init [endpoint] <email> <display name> (인자를 생략하면 온보딩)\n개인 서버 준비: massion local ensure (대화형 진입점이 내부적으로 사용)\nEdge Connector 등록 코드: massion subscription enroll edge <model|agent-runtime> [ttlMs]\n로컬 Codex 첫 연결 또는 기존 profile 재사용: massion subscription connect openai-codex [별칭] [--model GPT-5.6-ID]\n추가 Codex 계정 연결: massion subscription connect openai-codex [새 별칭] --new-account [--model GPT-5.6-ID]\nMiniMax 모델 구독 키 연결: massion subscription connect-model minimax-token-plan < model-connection.json\n고급 Connector 연결: massion subscription connect-advanced PROVIDER < connection.json\n구독 정책: massion subscription policy PROVIDER ACCOUNT_POLICY <automatic|review|deny> [EXPECTED_REVISION]\n모델 최적화 조회: massion optimization <policy|receipts|recommendations|observations|batch-active>\n모델 최적화 변경: massion optimization <policy-configure|bundle-create|bundle-export|bundle-import|evaluation-start|evaluation-execute|evaluation-complete|recommend|recommendation-approve|batch-create|batch-activate|observe|recover> < input.json\n실행 구독 계보: massion runtime lineage EXECUTION_ID\n구독 공유 승인 재개: massion subscription share ACCOUNT_ID APPROVAL_ID ORIGINAL_COMMAND_ID\n`;
 
 export function assertSecretTransportEndpoint(value: string): void {
   let endpoint: URL;
@@ -85,6 +87,7 @@ export async function runCli(argv = process.argv.slice(2)): Promise<number> {
       }
       const profile = config.profiles[config.selectedProfile];
       if (!profile) throw new Error("선택된 CLI profile이 없습니다. 먼저 massion init을 실행해 주세요");
+      await ensureLocalEndpoint(profile.endpoint, { start: async () => await new LocalDaemonManager().start() });
       const token = await resolveTokenReference(profile.tokenReference);
       const web = await openWebConsole({ endpoint: profile.endpoint, token });
       process.stdout.write(
@@ -103,14 +106,22 @@ export async function runCli(argv = process.argv.slice(2)): Promise<number> {
     }
     if (invocation.command === "local") {
       const manager = new LocalDaemonManager();
-      const value =
-        invocation.subcommand === "start"
-          ? await manager.start()
-          : invocation.subcommand === "status"
-            ? await manager.status()
-            : invocation.subcommand === "backup"
-              ? await manager.backup(invocation.arguments[0])
-              : await manager.stop();
+      let value;
+      if (invocation.subcommand === "start") value = await manager.start();
+      else if (invocation.subcommand === "status") value = await manager.status();
+      else if (invocation.subcommand === "backup") value = await manager.backup(invocation.arguments[0]);
+      else if (invocation.subcommand === "stop") value = await manager.stop();
+      else {
+        let endpoint: string | undefined;
+        try {
+          const config = await new CliConfigStore().load();
+          endpoint = config.profiles[config.selectedProfile]?.endpoint;
+        } catch (error) {
+          if (!(error && typeof error === "object" && "code" in error && error.code === "ENOENT")) throw error;
+        }
+        const prepared = await ensureLocalEndpoint(endpoint, { start: async () => await manager.start() });
+        value = prepared ? await manager.status() : { status: "skipped", reason: "remote-profile" };
+      }
       process.stdout.write(
         renderCliOutput(value, invocation.output, {
           tty: process.stdout.isTTY,
@@ -120,10 +131,22 @@ export async function runCli(argv = process.argv.slice(2)): Promise<number> {
       return value.status === "foreign" ? 5 : 0;
     }
     if (invocation.command === "init") {
-      const endpoint = invocation.arguments[0] ?? "http://127.0.0.1:7331";
-      const email = invocation.arguments[1];
-      const displayName = invocation.arguments.slice(2).join(" ");
+      let endpoint = invocation.arguments[0] ?? defaultLocalEndpoint();
+      let email = invocation.arguments[1];
+      let displayName = invocation.arguments.slice(2).join(" ");
+      if (!email && !displayName && process.stdin.isTTY && process.stdout.isTTY) {
+        const onboarding = createOnboardingPrompt({ environment: process.env });
+        try {
+          const answers = await onboarding.collect();
+          endpoint = invocation.arguments[0] ?? answers.endpoint;
+          email = answers.email;
+          displayName = answers.displayName;
+        } finally {
+          onboarding.readline.close();
+        }
+      }
       if (!email || !displayName) throw new Error("사용법: massion init [endpoint] <email> <display name>");
+      await ensureLocalEndpoint(endpoint, { start: async () => await new LocalDaemonManager().start() });
       const value = await initializeCli({
         endpoint,
         email,

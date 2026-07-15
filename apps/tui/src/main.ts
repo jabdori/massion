@@ -158,10 +158,9 @@ export async function runTui(
       });
     } catch (error) {
       if (isMissingConfig(error, configPath)) {
-        throw new Error(
-          'Massion이 아직 초기화되지 않았습니다. 먼저 `massion init http://127.0.0.1:7331 <email> "<표시명>"`을 실행해 주세요.',
-          { cause: error },
-        );
+        throw new Error("Massion이 아직 초기화되지 않았습니다. 먼저 `massion init`을 실행해 온보딩을 완료해 주세요.", {
+          cause: error,
+        });
       }
       throw error;
     }

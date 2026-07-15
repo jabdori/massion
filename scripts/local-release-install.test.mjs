@@ -103,6 +103,11 @@ test("공백이 있는 개인 경로에 connector를 설치하고 진단한 뒤 
   const release = join(prefix, "lib/massion", version);
   assert.equal(await readFile(join(release, ".massion-install-owner"), "utf8"), `${ownerMarker}\n`);
   assert.equal((await stat(release)).mode & 0o777, 0o700);
+  assert.match(await readFile(join(release, "bin/massion"), "utf8"), /local ensure/u);
+  assert.match(
+    await readFile(join(release, "bin/massion"), "utf8"),
+    /runtime\/node_modules\/@massion\/cli\/dist\/main\.js" init/u,
+  );
   for (const command of commands) {
     const link = join(prefix, "bin", command);
     assert.equal((await lstat(link)).isSymbolicLink(), true);

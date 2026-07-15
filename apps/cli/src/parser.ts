@@ -18,7 +18,7 @@ export interface CliInvocation {
 
 const COMMANDS: Readonly<Record<string, readonly string[] | undefined>> = {
   version: undefined,
-  local: ["start", "status", "backup", "stop"],
+  local: ["start", "status", "backup", "stop", "ensure"],
   init: undefined,
   status: undefined,
   run: undefined,
