@@ -5,7 +5,7 @@
 
 ## 기준점
 
-- Source commit: `9240500879f5a357157b361d00def3ead201989d`
+- Current source commit: `cd0789fd6f20f752ba88b8a033c47bd8b8829320`
 - 변경: 불완전한 성공 attestation 응답을 오래된 command ID로 영구 재생하지 않고, 직접 quota 증거가 없을 때 새 attestation command·correlation ID로 한 번 재시도
 - 회귀 테스트: `apps/cli/src/subscription-login.test.ts`의 보류 attestation 회복 시나리오
 
@@ -37,10 +37,11 @@
 - `pnpm --filter @massion/cli build`: exit 0
 - `pnpm lint`: exit 0
 - `pnpm typecheck`: exit 0
+- `pnpm verify`: exit 0 (format check, workspace build, lint, typecheck, 전체 test, 문서 구조 검증)
 
 ## 판정
 
-현재 source에서 Codex OAuth 연결, 직접 quota 건강 증명, 기존 profile 재사용은 통과했습니다. 불완전한 성공 응답의 idempotent replay 문제는 `9240500`에서 회복 경로와 회귀 테스트로 수정했습니다. Claude·Z.AI, 복수 계정 rotation·fallback, assurance binding이 필요한 전체 Work 완료는 이번 단일 계정 검증으로 통과 처리하지 않습니다.
+현재 source에서 Codex OAuth 연결, 직접 quota 건강 증명, 기존 profile 재사용은 통과했습니다. 불완전한 성공 응답의 idempotent replay 문제는 `9240500`에서 회복 경로와 회귀 테스트로 수정했고, terminal event 뒤 SSE stream 정리는 `d899cba`에서 수정했습니다. Claude·Z.AI, 복수 계정 rotation·fallback, assurance binding이 필요한 전체 Work 완료는 이번 단일 계정 검증으로 통과 처리하지 않습니다.
 
 ## 후속 CLI 실행 수명주기 수정
 
