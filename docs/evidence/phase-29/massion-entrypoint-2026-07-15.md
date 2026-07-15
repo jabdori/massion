@@ -6,7 +6,7 @@
 
 ## 확인된 구현
 
-- 인자 없이 대화형 터미널에서 `massion`을 실행하면 번들 TUI를 실행합니다.
+- 인자 없이 대화형 터미널에서 `massion`을 실행하면 번들 TUI를 실행합니다. 종료 시 화면 트리를 먼저 분리해 OpenTUI 정리 경고를 남기지 않습니다.
 - 초기화 전 TUI 설정이 없으면 원시 파일 시스템 오류 대신 `massion init` 예시를 안내합니다.
 - `massion --web`은 선택된 기존 profile의 token으로 5분짜리 일회성 Web 로그인 티켓을 만들고, 코드를 URL에 넣지 않은 채 브라우저를 엽니다.
 - 로컬 서버는 `MASSION_WEB_ROOT` 아래의 정적 Web 파일만 같은 origin에서 제공하며, API·health·경로 탈출(path traversal)은 정적 파일 처리에서 제외합니다.
@@ -29,14 +29,14 @@ CI=true pnpm --filter @massion/web build                                  # succ
 
 ## 추가로 확인한 로컬 릴리스 검증
 
-clean commit `c1d387e47a79055875eac93f5cd89d78acc980b1`에서 다음을 실행했습니다.
+clean commit `b1ab796160aac1dbd5a149f8c0a98044f0d456a5`에서 다음을 실행했습니다.
 
 ```text
 CI=true pnpm release:build /private/tmp/massion-release-20260715-entrypoint
 CI=true pnpm verify:release /private/tmp/massion-release-20260715-entrypoint
 ```
 
-릴리스 검증은 빈 임시 prefix에서 `massion version`·Connector doctor·local start·owner init·limited status·Work 접수·backup·restore·uninstall 및 데이터 보존을 확인하고 `status: passed`를 반환했습니다. 생성된 개인용 아카이브는 382,068,738 bytes이며 매니페스트에 SHA-256이 기록됐습니다.
+릴리스 검증은 빈 임시 prefix에서 `massion version`·Connector doctor·local start·owner init·limited status·Work 접수·backup·restore·uninstall 및 데이터 보존을 확인하고 `status: passed`를 반환했습니다. 생성된 개인용 아카이브는 382,064,125 bytes이며 매니페스트에 SHA-256이 기록됐습니다.
 
 ## 외부 환경에서 남은 검증
 
