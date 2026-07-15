@@ -15,7 +15,7 @@
 
 ## 자동 검증
 
-다음 검증은 2026-07-15 작업 트리에서 실행했습니다.
+다음 검증은 2026-07-16 `ecd35b1b34e4e8797da6e458c4d69e857bd90656` 릴리스 소스에서 실행했습니다.
 
 ```text
 CI=true pnpm --filter @massion/tui exec vitest run src/main.test.ts       # 3 passed
@@ -25,20 +25,30 @@ node --test scripts/local-release-install.test.mjs scripts/install-script.test.m
 CI=true pnpm --filter @massion/web build                                  # success
 ```
 
-`scripts/install-script.test.mjs`는 실제 네트워크 대신 loopback HTTP 릴리스 서버를 사용해 매니페스트·아카이브·해시 검증과 설치 링크를 확인합니다. 공개 GitHub Release 자산을 통한 최종 설치는 릴리스 tag와 자산을 게시한 뒤 별도로 수행해야 합니다.
+`scripts/install-script.test.mjs`는 실제 네트워크 대신 loopback HTTP 릴리스 서버를 사용해 매니페스트·아카이브·해시 검증과 설치 링크를 확인합니다.
 
 ## 추가로 확인한 로컬 릴리스 검증
 
-clean commit `b1ab796160aac1dbd5a149f8c0a98044f0d456a5`에서 다음을 실행했습니다.
+clean release source commit `ecd35b1b34e4e8797da6e458c4d69e857bd90656`에서 다음을 실행했습니다.
 
 ```text
-CI=true pnpm release:build /private/tmp/massion-release-20260715-entrypoint
-CI=true pnpm verify:release /private/tmp/massion-release-20260715-entrypoint
+CI=true pnpm release:build /private/tmp/massion-release-20260716-final
+CI=true pnpm verify:release /private/tmp/massion-release-20260716-final
 ```
 
-릴리스 검증은 빈 임시 prefix에서 `massion version`·Connector doctor·local start·owner init·limited status·Work 접수·backup·restore·uninstall 및 데이터 보존을 확인하고 `status: passed`를 반환했습니다. 생성된 개인용 아카이브는 382,064,125 bytes이며 매니페스트에 SHA-256이 기록됐습니다.
+릴리스 검증은 빈 임시 prefix에서 `massion version`·Connector doctor·local start·owner init·limited status·Work 접수·backup·restore·uninstall 및 데이터 보존을 확인하고 `status: passed`를 반환했습니다. 개인용 아카이브는 382,069,402 bytes이며 매니페스트에 SHA-256 `sha256:b57b4ebbcf30e196de714caa10bd57581a71b80b2669e55c585cc18d3a5ad509`가 기록됐습니다.
+
+## 공개 릴리스 설치 검증
+
+GitHub Release [`v1.0.0`](https://github.com/jabdori/massion/releases/tag/v1.0.0)에 개인용·배포용 아카이브와 `release-manifest.json`을 게시했습니다. `v1.0.0` 태그와 릴리스 자산의 소스 커밋은 `ecd35b1b34e4e8797da6e458c4d69e857bd90656`으로 고정되어 있습니다.
+
+```text
+curl -fsSL https://raw.githubusercontent.com/jabdori/massion/main/install.sh | MASSION_PREFIX=/private/tmp/massion-curl-release.IEbYPG bash
+Massion AgentOS 1.0.0
+```
+
+공개 Raw URL에서 설치 스크립트를 내려받아 임시 prefix에 설치한 뒤 `massion version`이 `Massion AgentOS 1.0.0`을 반환하는 것을 확인했습니다.
 
 ## 외부 환경에서 남은 검증
 
 - 실제 macOS·Linux 계정에서 `massion`, `massion --web`, 연결기·quota·fallback 시나리오
-- GitHub Release 자산 게시 후 공개 URL의 `curl | bash` 설치
