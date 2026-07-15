@@ -22,11 +22,11 @@ mass run "첫 번째 작업" --detach
 
 ## 개발과 검증
 
-검증 기준 도구는 Node.js 24.8.0, Bun 1.3.14, pnpm 10.30.3입니다. `package.json`은 Node.js 24 이상을 허용합니다.
+검증 기준 도구는 Node.js 24.8.0, Bun 1.3.14, pnpm 11.13.0입니다. `package.json`은 Node.js 24 이상을 허용합니다.
 
 ```sh
 corepack enable
-corepack prepare pnpm@10.30.3 --activate
+corepack prepare pnpm@11.13.0 --activate
 pnpm install --frozen-lockfile
 pnpm verify
 pnpm verify:security
