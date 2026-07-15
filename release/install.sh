@@ -209,7 +209,7 @@ if [ "$#" -eq 0 ] && [ -t 0 ] && [ -t 1 ]; then
     Darwin) config_path="$HOME/Library/Application Support/Massion/config.json" ;;
   esac
   if [ ! -e "$config_path" ]; then
-    exec node "$release_dir/runtime/node_modules/@massion/cli/dist/main.js" init
+    node "$release_dir/runtime/node_modules/@massion/cli/dist/main.js" init
   fi
   node "$release_dir/runtime/node_modules/@massion/cli/dist/main.js" local ensure --json >/dev/null
   exec bun "$release_dir/runtime/node_modules/@massion/tui/dist/main.js"
