@@ -1,6 +1,6 @@
 # Phase 24 — 구독 연결기 회고와 종료 조건
 
-> **상태**: 이전 release 외부 UAT 부분 통과 · 현재 source의 Codex 실행·profile 재사용 재검증 대기
+> **상태**: 현재 source Codex 연결·quota·profile 재사용 통과 · 복수 계정과 전체 assurance 완료 조건 대기
 > **대상**: 개인용 Massion Core의 네이티브 구독 연결기와 로컬 릴리스
 > **검토 기준**: `docs/evidence/phase-24/subscription-uat-2026-07-14.md`
 
@@ -22,7 +22,13 @@
 
 구조화된 subscription UAT 영수증은 `massion.subscription-uat.v1`입니다. 최신 실제 Codex UAT는 `passed: 1`, `failed: 1`, `not-run: 9`이며, 경로에 공백이 포함된 tmux 작업공간에서도 설치·시작·재시작·backup·restore·uninstall data 보존을 통과했습니다. 공식 Codex CLI OAuth 인증·계정·doctor·quota·`adaptive` 자동 정책 조회도 통과했지만, 별도의 Massion 데이터 고지·동의 UI는 실행하지 않았습니다. 실제 subscription run은 15분 안에 terminal event를 받지 못해 `network` timeout으로 종료되었습니다. timeout 뒤 공개 runtime 계보 조회는 원시 출력 없이 UAT 계약 실패로 기록됐으며, 이 문제의 안전한 세부 분류를 후속 UAT에 추가했습니다. Claude·Z.AI와 복수 계정 시나리오는 외부 승인·계정 조건이 없어 실행하지 않았습니다. 최신 상세 근거는 `docs/evidence/phase-24/subscription-uat-2026-07-14.md`입니다.
 
-이번 실행에서는 인증 완료를 확인했지만, 외부 모델 응답이 제한시간 안에 도착하지 않았으므로 실행 성공이나 fallback 성공으로 승격하지 않습니다.
+이전 release 실행에서는 인증 완료를 확인했지만 외부 모델 응답이 제한시간 안에 도착하지 않아 실행 성공이나 fallback 성공으로 승격하지 않았습니다. 현재 source의 최신 단일 계정 검증은 별도 증거 문서 [`codex-live-profile-reuse-2026-07-15.md`](../../evidence/phase-24/codex-live-profile-reuse-2026-07-15.md)에 기록했습니다.
+
+## 2026-07-15 현재 source 재검증
+
+사용자 Codex OAuth 완료 뒤 저장된 보류 attestation을 재개했습니다. 과거 서버가 직접 quota 증거 없이 성공한 응답을 같은 command ID로 replay하던 상태였으므로, CLI가 새 attestation command·correlation ID로 한 번 재시도하도록 수정했습니다. 재시도 후 `ready`가 되었고, 같은 별칭의 두 번째 연결은 OAuth 없이 `connectionDisposition: "reused"`와 직접 quota 관측을 반환했습니다.
+
+같은 연결로 실행한 Application Work에서는 대표·맥락 전략·전달 조정의 Codex Agent runtime이 모두 `runtime.execution-succeeded`를 남겼습니다. 마지막 assurance 단계는 로컬 assurance binding 미설정으로 `run.blocked`가 되었으므로 전체 Work 완료로 기록하지 않았습니다. 복수 계정 rotation·fallback, Claude·Z.AI, assurance binding 전제의 완료 시나리오는 여전히 별도 검증 대상입니다.
 
 ## 결정과 교훈
 
