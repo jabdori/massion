@@ -109,8 +109,11 @@ export class OpenTuiView {
 
   public render(): void {
     if (this.tree) {
-      this.renderer.root.remove(this.tree);
-      this.tree.destroyRecursively();
+      const previous = this.tree;
+      this.tree = undefined;
+      if (this.renderer.root.getChildren().includes(previous)) this.renderer.root.remove(previous);
+      else previous.parent = null;
+      previous.destroyRecursively();
     }
     const layout = layoutForTerminal(this.renderer.width, this.renderer.height);
     if (layout.mode === "unsupported") {
@@ -285,6 +288,17 @@ export class OpenTuiView {
     return lines.length ? lines.join("\n") : `검색 결과가 없습니다: ${safeTerminalText(this.search, 128)}`;
   }
 
+  private dispose(): void {
+    const tree = this.tree;
+    this.tree = undefined;
+    if (tree) {
+      if (this.renderer.root.getChildren().includes(tree)) this.renderer.root.remove(tree);
+      else tree.parent = null;
+      tree.destroyRecursively();
+    }
+    this.actions.destroy();
+  }
+
   private async key(key: KeyEvent): Promise<void> {
     if (key.eventType === "release") return;
     if (this.modal) {
@@ -296,7 +310,7 @@ export class OpenTuiView {
       return;
     }
     if (key.ctrl && key.name === "c") {
-      this.actions.destroy();
+      this.dispose();
       return;
     }
     const view = VIEW_KEYS[key.name];
