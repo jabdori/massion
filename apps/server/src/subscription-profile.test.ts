@@ -1,4 +1,4 @@
-import { lstat, mkdir, realpath, rm, symlink, writeFile } from "node:fs/promises";
+import { lstat, mkdir, readFile, readdir, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -25,6 +25,8 @@ describe("서버 구독 profile lifecycle", () => {
     const profile = await prepareSubscriptionProfileRoot(root, "organization-1", "account-1");
     await writeFile(join(profile, "auth.json"), "private-login-token", { mode: 0o600 });
 
+    await expect(readFile(join(profile, "config.toml"), "utf8")).resolves.toBe('cli_auth_credentials_store = "file"\n');
+    expect((await lstat(join(profile, "config.toml"))).mode & 0o777).toBe(0o600);
     await expect(existingSubscriptionProfileRoot(root, "organization-1", "account-1")).resolves.toBe(profile);
     await expect(forgetSubscriptionProfileRoot(root, "organization-1", "account-1")).resolves.toBe(true);
     await expect(lstat(profile)).rejects.toMatchObject({ code: "ENOENT" });
@@ -46,5 +48,23 @@ describe("서버 구독 profile lifecycle", () => {
 
     await expect(forgetSubscriptionProfileRoot(root, "organization-2", "account-2")).rejects.toThrow(/symlink|안전/u);
     await expect(lstat(outside)).resolves.toMatchObject({});
+  });
+
+  it("관리 root의 상위 directory가 symlink이면 생성 전에 거부하고 대상 바깥에 profile을 만들지 않는다", async () => {
+    const basePath = join(tmpdir(), `massion-profile-ancestor-${crypto.randomUUID()}`);
+    const outsidePath = join(tmpdir(), `massion-profile-ancestor-outside-${crypto.randomUUID()}`);
+    roots.push(basePath, outsidePath);
+    await Promise.all([
+      mkdir(basePath, { recursive: true, mode: 0o700 }),
+      mkdir(outsidePath, { recursive: true, mode: 0o700 }),
+    ]);
+    const [base, outside] = await Promise.all([realpath(basePath), realpath(outsidePath)]);
+    const linkedParent = join(base, "linked-parent");
+    await symlink(outside, linkedParent, "dir");
+
+    await expect(
+      prepareSubscriptionProfileRoot(join(linkedParent, "profiles"), "organization-3", "account-3"),
+    ).rejects.toThrow(/symlink|안전/u);
+    await expect(readdir(outside)).resolves.toEqual([]);
   });
 });

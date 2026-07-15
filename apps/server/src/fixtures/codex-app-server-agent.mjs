@@ -1,7 +1,18 @@
+import { isAbsolute } from "node:path";
 import { createInterface } from "node:readline";
 
-if (process.argv.slice(2).join(" ") !== "app-server --stdio") process.exit(2);
-if (process.env.CODEX_HOME !== "/tmp/massion-profile" || process.env.HOME !== "/tmp/massion-profile") process.exit(3);
+const arguments_ = process.argv.slice(2);
+if (
+  arguments_.length !== 4 ||
+  arguments_[0] !== "--config" ||
+  arguments_[1] !== 'cli_auth_credentials_store = "file"' ||
+  arguments_[2] !== "app-server" ||
+  arguments_[3] !== "--stdio"
+) {
+  process.exit(2);
+}
+if (!process.env.CODEX_HOME || process.env.CODEX_HOME !== process.env.HOME || !isAbsolute(process.env.CODEX_HOME))
+  process.exit(3);
 
 let initialized = false;
 let turnStarted = false;

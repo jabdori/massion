@@ -1,11 +1,18 @@
-import { mkdtemp, realpath, rm, stat } from "node:fs/promises";
+import { mkdtemp, realpath, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { codexFileCredentialStoreArguments } from "@massion/runtime";
+import {
+  ServerConnectorAuthenticationRequiredError,
+  ServerConnectorPaidSubscriptionRequiredError,
+} from "@massion/subscriptions";
+
 import { BundledServerConnectorRuntimeAttestor, readCodexAppServerAccount } from "./server-runtime-attestor.js";
+import { prepareSubscriptionProfileRoot } from "./subscription-profile.js";
 
 describe("서버 bundled runtime 건강 증명", () => {
   const cleanups: string[] = [];
@@ -19,6 +26,7 @@ describe("서버 bundled runtime 건강 증명", () => {
     readonly runtimeId: "codex" | "claude";
     readonly stdout?: string;
     readonly codexAccount?: unknown;
+    readonly authenticated?: boolean;
   }) {
     const root = await mkdtemp(join(tmpdir(), "massion-server-attestor-"));
     cleanups.push(root);
@@ -49,6 +57,14 @@ describe("서버 bundled runtime 건강 증명", () => {
         ]);
       }),
     };
+    if (input.runtimeId === "codex" && input.authenticated !== false) {
+      const profile = await prepareSubscriptionProfileRoot(
+        join(root, "profiles"),
+        "organization-12345678",
+        "account-12345678",
+      );
+      await writeFile(join(profile, "auth.json"), "private-login-state", { mode: 0o600 });
+    }
     return {
       root,
       run,
@@ -120,14 +136,37 @@ describe("서버 bundled runtime 건강 증명", () => {
   it("Codex app-server와 initialize 후 account/read를 refreshToken=true로 교환한다", async () => {
     const fixturePath = new URL("./fixtures/codex-account-app-server.mjs", import.meta.url);
     await expect(
-      readCodexAppServerAccount(process.execPath, [fileURLToPath(fixturePath)], {
+      readCodexAppServerAccount(process.execPath, codexFileCredentialStoreArguments([fileURLToPath(fixturePath)]), {
         CODEX_HOME: "/isolated/profile",
       }),
     ).resolves.toEqual({ requiresOpenaiAuth: true, account: { type: "chatgpt", planType: "plus" } });
   });
 
-  it.each(["free", "unknown", undefined])(
-    "Codex 유료 구독으로 증명할 수 없는 planType=%s 계정은 fail-closed한다",
+  it("관리 Codex profile의 auth.json이 없으면 app-server를 실행하지 않고 재인증 상태로 전이한다", async () => {
+    const { attestor, codexAccount } = await fixture({
+      providerId: "openai-codex",
+      runtimeId: "codex",
+      authenticated: false,
+      codexAccount: { requiresOpenaiAuth: true, account: { type: "chatgpt", planType: "plus" } },
+    });
+
+    await expect(
+      attestor.attestHealth({
+        organizationId: "organization-12345678",
+        actorUserId: "user-12345678",
+        connectorId: "connector-12345678",
+        providerId: "openai-codex",
+        executionKind: "agent-runtime",
+        runtimeId: "codex",
+        runtimeArtifactDigest: "a".repeat(64),
+        version: "0.144.1",
+      }),
+    ).rejects.toBeInstanceOf(ServerConnectorAuthenticationRequiredError);
+    expect(codexAccount).not.toHaveBeenCalled();
+  });
+
+  it.each(["free", "unknown", "future-unverified-plan", undefined])(
+    "Codex 유료 구독으로 증명할 수 없는 planType=%s 계정은 재인증 없이 fail-closed한다",
     async (planType) => {
       const { attestor } = await fixture({
         providerId: "openai-codex",
@@ -149,9 +188,53 @@ describe("서버 bundled runtime 건강 증명", () => {
           runtimeArtifactDigest: "a".repeat(64),
           version: "0.144.1",
         }),
-      ).rejects.toThrow("인증 상태");
+      ).rejects.toMatchObject({
+        code: "paid-subscription-required",
+        providerId: "openai-codex",
+        connectorId: "connector-12345678",
+      });
+      await expect(
+        attestor.attestHealth({
+          organizationId: "organization-12345678",
+          actorUserId: "user-12345678",
+          connectorId: "connector-12345678",
+          providerId: "openai-codex",
+          executionKind: "agent-runtime",
+          runtimeId: "codex",
+          runtimeArtifactDigest: "a".repeat(64),
+          version: "0.144.1",
+        }),
+      ).rejects.toBeInstanceOf(ServerConnectorPaidSubscriptionRequiredError);
     },
   );
+
+  it.each([
+    ["API key", { requiresOpenaiAuth: true, account: { type: "apiKey" } }],
+    ["OpenAI 인증이 필요 없는 provider", { requiresOpenaiAuth: false, account: null }],
+    [
+      "AWS 관리 Bedrock provider",
+      { requiresOpenaiAuth: false, account: { type: "amazonBedrock", credentialSource: "awsManaged" } },
+    ],
+  ] as const)("%s 상태는 자동 재로그인 신호 없이 유료 구독 불가로 fail-closed한다", async (_label, codexAccount) => {
+    const { attestor } = await fixture({
+      providerId: "openai-codex",
+      runtimeId: "codex",
+      codexAccount,
+    });
+
+    await expect(
+      attestor.attestHealth({
+        organizationId: "organization-12345678",
+        actorUserId: "user-12345678",
+        connectorId: "connector-12345678",
+        providerId: "openai-codex",
+        executionKind: "agent-runtime",
+        runtimeId: "codex",
+        runtimeArtifactDigest: "a".repeat(64),
+        version: "0.144.1",
+      }),
+    ).rejects.toBeInstanceOf(ServerConnectorPaidSubscriptionRequiredError);
+  });
 
   it("Codex health probe에는 격리된 profile 경로만 전달한다", async () => {
     const { root, codexAccount, attestor } = await fixture({
@@ -171,7 +254,7 @@ describe("서버 bundled runtime 건강 증명", () => {
     });
     expect(codexAccount).toHaveBeenCalledWith(
       "/runtime/codex",
-      ["/runtime/codex.js"],
+      ["/runtime/codex.js", "--config", 'cli_auth_credentials_store = "file"'],
       expect.objectContaining({ CODEX_HOME: expect.stringMatching(/profiles/) }),
     );
     const profileRoot = String(vi.mocked(codexAccount).mock.calls[0]?.[2].CODEX_HOME);
@@ -318,7 +401,11 @@ describe("서버 bundled runtime 건강 증명", () => {
         runtimeArtifactDigest: "a".repeat(64),
         version: "0.144.1",
       }),
-    ).rejects.toThrow("인증 상태");
+    ).rejects.toMatchObject({
+      code: "needs-reauth",
+      providerId: "openai-codex",
+      connectorId: "connector-12345678",
+    });
 
     const changed = await fixture({
       providerId: "openai-codex",

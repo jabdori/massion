@@ -2,7 +2,9 @@ import { dirname, isAbsolute, relative } from "node:path";
 
 import type { TenantContext } from "@massion/identity";
 import {
+  codexFileCredentialStoreArguments,
   inspectBundledSubscriptionRuntime,
+  managedCodexCredentialState,
   type StructuredOutputSpec,
   type SubscriptionAgentAdapter,
   type SubscriptionAgentInput,
@@ -242,6 +244,9 @@ export class CodexAppServerSubscriptionConnector implements SubscriptionAgentAda
     if (!isAbsolute(input.workspaceRoot) || !isAbsolute(input.profileRoot)) {
       throw new Error("Codex app-server workspace와 profile root는 절대 경로여야 합니다");
     }
+    if ((await managedCodexCredentialState(input.profileRoot)) !== "present") {
+      throw new Error("관리 Codex profile에 재인증이 필요합니다");
+    }
     if (input.allowedTools.length > 0 || input.disallowedTools.length > 0) {
       throw new Error("Codex app-server는 Massion 요청별 도구 목록 정책을 지원하지 않습니다");
     }
@@ -267,21 +272,26 @@ export class CodexAppServerSubscriptionConnector implements SubscriptionAgentAda
         PATH: input.environment.PATH ?? dirname(runtime.command),
         ...(input.environment.LC_ALL ? { LC_ALL: input.environment.LC_ALL } : {}),
       };
-      active.connection = await this.open(runtime.command, runtime.commandArguments, environment, {
-        timeoutMs: this.options.timeoutMs ?? 86_400_000,
-        maximumOutputBytes: 64 * 1024 * 1024,
-        requestHandlers: {
-          "item/commandExecution/requestApproval": async (request) => await this.approval(active, request, "command"),
-          "item/fileChange/requestApproval": async (request) => await this.approval(active, request, "file"),
+      active.connection = await this.open(
+        runtime.command,
+        codexFileCredentialStoreArguments(runtime.commandArguments),
+        environment,
+        {
+          timeoutMs: this.options.timeoutMs ?? 86_400_000,
+          maximumOutputBytes: 64 * 1024 * 1024,
+          requestHandlers: {
+            "item/commandExecution/requestApproval": async (request) => await this.approval(active, request, "command"),
+            "item/fileChange/requestApproval": async (request) => await this.approval(active, request, "file"),
+          },
+          onNotification: (notification) => {
+            this.notification(active, notification.method, notification.params);
+          },
+          onFailure: (error) => {
+            active.completion.reject(error);
+            active.suspension.reject(error);
+          },
         },
-        onNotification: (notification) => {
-          this.notification(active, notification.method, notification.params);
-        },
-        onFailure: (error) => {
-          active.completion.reject(error);
-          active.suspension.reject(error);
-        },
-      });
+      );
       const configuration = threadConfiguration(input, this.options);
       const threadResponse = record(
         input.sessionId

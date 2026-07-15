@@ -1,6 +1,10 @@
+import { randomUUID } from "node:crypto";
+
 import { describe, expect, it, vi } from "vitest";
 
-import type { TenantContext } from "@massion/identity";
+import { IdentityService, OrganizationService, type TenantContext } from "@massion/identity";
+import { createDatabase } from "@massion/storage";
+import { ServerConnectorAuthenticationRequiredError, ServerConnectorProvisioningService } from "@massion/subscriptions";
 
 import { ServerConnectorStartupRecoveryService } from "./server-connector-startup-recovery.js";
 
@@ -12,6 +16,79 @@ const owner: TenantContext = {
 };
 
 describe("서버 Connector 시작 복구", () => {
+  it("Codex 인증 만료는 시작 복구에서도 health 감사는 롤백하고 profile 재인증 상태만 기록한다", async () => {
+    await using database = await createDatabase({ url: "mem://", namespace: "massion", database: randomUUID() });
+    const identities = await IdentityService.create(database);
+    const organizations = await OrganizationService.create(database);
+    const registered = await identities.registerPersonalUser({
+      email: "startup-reauth@example.com",
+      displayName: "Startup Reauth",
+    });
+    const context = await organizations.resolveTenantContext(
+      registered.user.user_id,
+      registered.organization.organization_id,
+    );
+    const runtimeAttestor = {
+      inspectArtifact: vi.fn().mockResolvedValue({
+        runtimeId: "codex",
+        runtimeArtifactDigest: "a".repeat(64),
+        version: "0.144.1",
+      }),
+      attestHealth: vi.fn().mockImplementation(async (input: { providerId: string; connectorId: string }) => {
+        throw new ServerConnectorAuthenticationRequiredError(input.providerId, input.connectorId);
+      }),
+    };
+    const connectors = await ServerConnectorProvisioningService.create(database, organizations, { runtimeAttestor });
+    await connectors.provision(context, {
+      commandId: "startup-reauth-provision",
+      connectorId: "server-startup-reauth-12345678",
+      providerId: "openai-codex",
+      executionKind: "agent-runtime",
+      runtimeId: "codex",
+    });
+    await database.query(
+      `CREATE subscription_account CONTENT {
+        account_id: 'account-startup-reauth-12345678', organization_id: $organization_id, owner_user_id: $owner_user_id,
+        provider_id: 'openai-codex', alias: 'Codex', scope: 'personal', connector_id: 'server-startup-reauth-12345678',
+        profile_fingerprint: $fingerprint, billing_kind: 'consumer-subscription', status: 'active',
+        consent_version: 0, version: 1, created_at: time::now(), updated_at: time::now()
+      };`,
+      {
+        organization_id: context.organizationId,
+        owner_user_id: context.userId,
+        fingerprint: "b".repeat(64),
+      },
+    );
+    const unavailable: unknown[] = [];
+    const transitions: unknown[] = [];
+    const recovery = new ServerConnectorStartupRecoveryService(database, organizations, connectors, {
+      bootId: "boot-reauth-12345678",
+      onUnavailable: (failure) => unavailable.push(failure),
+      onTransition: (transition) => transitions.push(transition),
+    });
+
+    await recovery.start();
+
+    expect(recovery.ready()).toBe(true);
+    expect(unavailable).toEqual([{ category: "health-attestation-failed" }]);
+    expect(transitions).toEqual([{ attempted: 1, restored: 0, unavailable: 1 }]);
+    const [connectorRows, accountRows, auditRows] = await database.query<
+      [Array<{ status: string }>, Array<{ status: string; version: number }>, Array<{ event_type: string }>]
+    >(
+      `SELECT status FROM subscription_connector WHERE connector_id = 'server-startup-reauth-12345678';
+       SELECT status, version FROM subscription_account WHERE account_id = 'account-startup-reauth-12345678';
+       SELECT event_type FROM subscription_audit_event
+       WHERE organization_id = $organization_id ORDER BY event_type ASC;`,
+      { organization_id: context.organizationId },
+    );
+    expect(connectorRows).toEqual([{ status: "offline" }]);
+    expect(accountRows).toEqual([{ status: "needs-reauth", version: 2 }]);
+    expect(auditRows).toEqual([
+      { event_type: "subscription_server_connector_provisioned" },
+      { event_type: "subscription_server_connector_reauthentication_required" },
+    ]);
+  });
+
   it("재시작 뒤 offline 서버 Connector를 소유자 문맥으로 다시 건강 증명한다", async () => {
     const query = vi.fn().mockResolvedValue([
       [

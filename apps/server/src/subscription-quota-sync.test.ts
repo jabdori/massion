@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { ProviderCredential } from "@massion/router";
 import { MiniMaxQuotaFetchError } from "@massion/subscriptions";
 
+import { CodexSubscriptionObservationError } from "./codex-subscription-observer.js";
 import { SubscriptionQuotaSynchronizationService } from "./subscription-quota-sync.js";
 
 const credential: ProviderCredential = {
@@ -189,6 +190,284 @@ describe("구독 할당량 자동 동기화", () => {
     expect(providers.resolveExecutionSecretVersion).not.toHaveBeenCalled();
     expect(transitions).toEqual([{ attempted: 1, refreshed: 1, unavailable: 0 }]);
     await service.close();
+  });
+
+  it("서로 겹친 Codex 연결 health는 각 시작 뒤의 quota를 순차적으로 관측한다", async () => {
+    const codexAccount: CodexQuotaAccount = {
+      account_id: "account-codex-direct-12345678",
+      organization_id: credential.organization_id,
+      owner_user_id: "user-12345678",
+      provider_id: "openai-codex",
+      connector_id: "connector-codex-12345678",
+      billing_kind: "consumer-subscription",
+      status: "active",
+    };
+    const database = databaseFor([], [codexAccount]);
+    const context = {
+      organizationId: codexAccount.organization_id,
+      userId: codexAccount.owner_user_id,
+      membershipId: "membership-12345678",
+      role: "owner" as const,
+    };
+    const releases: Array<() => void> = [];
+    let activeFetches = 0;
+    let maximumActiveFetches = 0;
+    const fetchCodexQuota = vi.fn(async () => {
+      activeFetches += 1;
+      maximumActiveFetches = Math.max(maximumActiveFetches, activeFetches);
+      await new Promise<void>((resolve) => {
+        releases.push(resolve);
+      });
+      activeFetches -= 1;
+      return [
+        {
+          kind: "codex:codex:primary",
+          remainingRatio: 0.75,
+          observedAt: "2026-07-12T00:00:00.000Z",
+          source: "codex-app-server:account/rateLimits/read",
+          confidence: "reported" as const,
+        },
+      ];
+    });
+    const record = vi.fn().mockResolvedValue({});
+    const service = new SubscriptionQuotaSynchronizationService(
+      database as never,
+      { resolveTenantContext: vi.fn().mockResolvedValue(context) } as never,
+      { resolveExecutionSecretVersion: vi.fn() } as never,
+      { record } as never,
+      { intervalMs: 60_000, fetchCodexQuota },
+    );
+
+    const first = service.refreshCodexAccount({
+      organizationId: codexAccount.organization_id,
+      accountId: codexAccount.account_id,
+      requireFresh: true,
+    });
+    await vi.waitFor(() => expect(fetchCodexQuota).toHaveBeenCalledOnce());
+    const second = service.refreshCodexAccount({
+      organizationId: codexAccount.organization_id,
+      accountId: codexAccount.account_id,
+      requireFresh: true,
+    });
+    releases.shift()?.();
+
+    await vi.waitFor(() => expect(fetchCodexQuota).toHaveBeenCalledTimes(2));
+    expect(activeFetches).toBe(1);
+    expect(maximumActiveFetches).toBe(1);
+    releases.shift()?.();
+
+    await expect(Promise.all([first, second])).resolves.toEqual([{ status: "refreshed" }, { status: "refreshed" }]);
+    expect(fetchCodexQuota).toHaveBeenCalledTimes(2);
+    expect(record).toHaveBeenCalledTimes(2);
+    await service.close();
+  });
+
+  it("연결 직후의 Codex 직접 새로고침은 진행 중인 scheduler 관측을 끝낸 뒤 새로 관측한다", async () => {
+    const codexAccount: CodexQuotaAccount = {
+      account_id: "account-codex-shared-12345678",
+      organization_id: credential.organization_id,
+      owner_user_id: "user-12345678",
+      provider_id: "openai-codex",
+      connector_id: "connector-codex-12345678",
+      billing_kind: "consumer-subscription",
+      status: "active",
+    };
+    const context = {
+      organizationId: codexAccount.organization_id,
+      userId: codexAccount.owner_user_id,
+      membershipId: "membership-12345678",
+      role: "owner" as const,
+    };
+    const releases: Array<() => void> = [];
+    let activeFetches = 0;
+    let maximumActiveFetches = 0;
+    const fetchCodexQuota = vi.fn(async () => {
+      activeFetches += 1;
+      maximumActiveFetches = Math.max(maximumActiveFetches, activeFetches);
+      await new Promise<void>((resolve) => {
+        releases.push(resolve);
+      });
+      activeFetches -= 1;
+      return [
+        {
+          kind: "codex:codex:primary",
+          remainingRatio: 0.5,
+          observedAt: "2026-07-12T00:00:00.000Z",
+          source: "codex-app-server:account/rateLimits/read",
+          confidence: "reported" as const,
+        },
+      ];
+    });
+    const record = vi.fn().mockResolvedValue({});
+    const service = new SubscriptionQuotaSynchronizationService(
+      databaseFor([], [codexAccount]) as never,
+      { resolveTenantContext: vi.fn().mockResolvedValue(context) } as never,
+      { resolveExecutionSecretVersion: vi.fn() } as never,
+      { record } as never,
+      { intervalMs: 60_000, fetchCodexQuota },
+    );
+
+    const startup = service.start();
+    await vi.waitFor(() => expect(fetchCodexQuota).toHaveBeenCalledOnce());
+    const direct = service.refreshCodexAccount({
+      organizationId: codexAccount.organization_id,
+      accountId: codexAccount.account_id,
+      requireFresh: true,
+    });
+    releases.shift()?.();
+
+    await expect(startup).resolves.toBeUndefined();
+    await vi.waitFor(() => expect(fetchCodexQuota).toHaveBeenCalledTimes(2));
+    expect(activeFetches).toBe(1);
+    expect(maximumActiveFetches).toBe(1);
+    releases.shift()?.();
+    await expect(direct).resolves.toEqual({ status: "refreshed" });
+    expect(fetchCodexQuota).toHaveBeenCalledTimes(2);
+    expect(record).toHaveBeenCalledTimes(2);
+    await service.close();
+  });
+
+  it("종료 중인 서비스는 대기 중인 Codex 직접 새로고침을 새 provider 관측으로 시작하지 않는다", async () => {
+    const codexAccount: CodexQuotaAccount = {
+      account_id: "account-codex-closing-12345678",
+      organization_id: credential.organization_id,
+      owner_user_id: "user-12345678",
+      provider_id: "openai-codex",
+      connector_id: "connector-codex-12345678",
+      billing_kind: "consumer-subscription",
+      status: "active",
+    };
+    const context = {
+      organizationId: codexAccount.organization_id,
+      userId: codexAccount.owner_user_id,
+      membershipId: "membership-12345678",
+      role: "owner" as const,
+    };
+    let release: (() => void) | undefined;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const fetchCodexQuota = vi.fn(async () => {
+      await gate;
+      return [
+        {
+          kind: "codex:codex:primary",
+          remainingRatio: 0.5,
+          observedAt: "2026-07-12T00:00:00.000Z",
+          source: "codex-app-server:account/rateLimits/read",
+          confidence: "reported" as const,
+        },
+      ];
+    });
+    const service = new SubscriptionQuotaSynchronizationService(
+      databaseFor([], [codexAccount]) as never,
+      { resolveTenantContext: vi.fn().mockResolvedValue(context) } as never,
+      { resolveExecutionSecretVersion: vi.fn() } as never,
+      { record: vi.fn().mockResolvedValue({}) } as never,
+      { intervalMs: 60_000, fetchCodexQuota },
+    );
+
+    const first = service.refreshCodexAccount({
+      organizationId: codexAccount.organization_id,
+      accountId: codexAccount.account_id,
+      requireFresh: true,
+    });
+    await vi.waitFor(() => expect(fetchCodexQuota).toHaveBeenCalledOnce());
+    const queued = service.refreshCodexAccount({
+      organizationId: codexAccount.organization_id,
+      accountId: codexAccount.account_id,
+      requireFresh: true,
+    });
+    const closing = service.close();
+    release?.();
+
+    await expect(first).resolves.toEqual({ status: "refreshed" });
+    await expect(closing).resolves.toBeUndefined();
+    await expect(queued).rejects.toThrow("종료된");
+    expect(fetchCodexQuota).toHaveBeenCalledOnce();
+  });
+
+  it("Codex quota 인증 만료만 재인증 전이하고 유료 구독·schema 오류는 자동 로그인을 유발하지 않는다", async () => {
+    const codexAccount: CodexQuotaAccount = {
+      account_id: "account-codex-auth-12345678",
+      organization_id: credential.organization_id,
+      owner_user_id: "user-12345678",
+      provider_id: "openai-codex",
+      connector_id: "connector-codex-12345678",
+      billing_kind: "consumer-subscription",
+      status: "active",
+    };
+    const context = {
+      organizationId: codexAccount.organization_id,
+      userId: codexAccount.owner_user_id,
+      membershipId: "membership-12345678",
+      role: "owner" as const,
+    };
+    const transitioned = vi.fn().mockResolvedValue(undefined);
+    const unavailable: unknown[] = [];
+    const authenticationService = new SubscriptionQuotaSynchronizationService(
+      databaseFor([], [codexAccount]) as never,
+      { resolveTenantContext: vi.fn().mockResolvedValue(context) } as never,
+      { resolveExecutionSecretVersion: vi.fn() } as never,
+      { record: vi.fn() } as never,
+      {
+        intervalMs: 60_000,
+        fetchCodexQuota: vi.fn().mockRejectedValue(new CodexSubscriptionObservationError("authentication")),
+        onCodexAuthenticationRequired: transitioned,
+        onUnavailable: (failure) => unavailable.push(failure),
+      },
+    );
+
+    await expect(
+      authenticationService.refreshCodexAccount({
+        organizationId: codexAccount.organization_id,
+        accountId: codexAccount.account_id,
+      }),
+    ).resolves.toMatchObject({ status: "reauthentication-required", transitionApplied: true });
+    expect(transitioned).toHaveBeenCalledOnce();
+    expect(unavailable).toEqual([{ category: "authentication" }]);
+
+    const schemaTransitioned = vi.fn();
+    const schemaService = new SubscriptionQuotaSynchronizationService(
+      databaseFor([], [codexAccount]) as never,
+      { resolveTenantContext: vi.fn().mockResolvedValue(context) } as never,
+      { resolveExecutionSecretVersion: vi.fn() } as never,
+      { record: vi.fn() } as never,
+      {
+        intervalMs: 60_000,
+        fetchCodexQuota: vi.fn().mockRejectedValue(new CodexSubscriptionObservationError("schema")),
+        onCodexAuthenticationRequired: schemaTransitioned,
+      },
+    );
+
+    await expect(
+      schemaService.refreshCodexAccount({
+        organizationId: codexAccount.organization_id,
+        accountId: codexAccount.account_id,
+      }),
+    ).resolves.toEqual({ status: "unavailable", category: "schema" });
+    expect(schemaTransitioned).not.toHaveBeenCalled();
+
+    const subscriptionTransitioned = vi.fn();
+    const subscriptionService = new SubscriptionQuotaSynchronizationService(
+      databaseFor([], [codexAccount]) as never,
+      { resolveTenantContext: vi.fn().mockResolvedValue(context) } as never,
+      { resolveExecutionSecretVersion: vi.fn() } as never,
+      { record: vi.fn() } as never,
+      {
+        intervalMs: 60_000,
+        fetchCodexQuota: vi.fn().mockRejectedValue(new CodexSubscriptionObservationError("subscription")),
+        onCodexAuthenticationRequired: subscriptionTransitioned,
+      },
+    );
+
+    await expect(
+      subscriptionService.refreshCodexAccount({
+        organizationId: codexAccount.organization_id,
+        accountId: codexAccount.account_id,
+      }),
+    ).resolves.toEqual({ status: "unavailable", category: "subscription" });
+    expect(subscriptionTransitioned).not.toHaveBeenCalled();
   });
 
   it("개별 인증·소유자 실패를 다른 계정과 격리하고 비밀값 없는 범주·집계만 보고한다", async () => {

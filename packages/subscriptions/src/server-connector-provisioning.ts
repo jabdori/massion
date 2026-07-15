@@ -42,6 +42,49 @@ export interface ServerConnectorCommandInput {
   readonly connectorId: string;
 }
 
+/** 서버 관리형 소비자 구독 profile의 자격 증명이 더 이상 유효하지 않을 때만 사용합니다. */
+export class ServerConnectorAuthenticationRequiredError extends Error {
+  public readonly code = "needs-reauth" as const;
+
+  public constructor(
+    public readonly providerId: string,
+    public readonly connectorId: string,
+  ) {
+    super("서버 관리형 Provider profile에 재인증이 필요합니다");
+    this.name = "ServerConnectorAuthenticationRequiredError";
+  }
+}
+
+/**
+ * profile 로그인 상태는 유효하지만, 소비자 구독으로 사용할 유료 plan을 확인할 수
+ * 없을 때 사용합니다. 이 오류는 재로그인으로 복구하지 않습니다.
+ */
+export class ServerConnectorPaidSubscriptionRequiredError extends Error {
+  public readonly code = "paid-subscription-required" as const;
+
+  public constructor(
+    public readonly providerId: string,
+    public readonly connectorId: string,
+  ) {
+    super("서버 관리형 Provider profile에 유료 소비자 구독이 필요합니다");
+    this.name = "ServerConnectorPaidSubscriptionRequiredError";
+  }
+}
+
+/**
+ * Codex 계정의 인증은 유효하지만, 이번 연결 건강 증명에서 직접 할당량 관측을
+ * 완료하지 못한 경우입니다. 재로그인으로 해결할 수 있는 상태가 아니므로 별도로
+ * 구분합니다.
+ */
+export class ServerConnectorQuotaObservationUnavailableError extends Error {
+  public readonly code = "quota-observation-unavailable" as const;
+
+  public constructor() {
+    super("서버 관리형 Codex 구독 할당량을 직접 관측하지 못했습니다");
+    this.name = "ServerConnectorQuotaObservationUnavailableError";
+  }
+}
+
 export interface ServerConnectorView {
   readonly connectorId: string;
   readonly providerId: string;
@@ -297,102 +340,171 @@ export class ServerConnectorProvisioningService {
       connectorId,
     };
 
-    return await this.command(
-      context,
-      commandId,
-      "subscription_server_connector_health_attested",
-      request,
-      async (tx) => {
-        const connector = await this.requireOwnedServerConnector(tx, context, connectorId);
-        if (connector.status === "revoked") throw new Error("폐기된 서버 Connector는 건강 증명할 수 없습니다");
-        if (connector.status === "incompatible") throw new Error("호환되지 않는 서버 Connector입니다");
-        let attested: VerifiedServerConnectorHealth;
-        try {
-          attested = await this.runtimeAttestor.attestHealth({
-            organizationId: context.organizationId,
-            actorUserId: context.userId,
-            connectorId,
-            providerId: connector.provider_id,
-            executionKind: connector.execution_kind,
-            runtimeId: connector.runtime_id,
-            runtimeArtifactDigest: connector.runtime_artifact_digest,
-            version: connector.version,
-            ...(connector.process_generation === undefined
-              ? {}
-              : { previousProcessGeneration: connector.process_generation }),
-          });
-        } catch {
-          throw new Error("서버 Runtime 건강 증명에 실패했습니다");
-        }
-        const attestedRuntimeId = requireIdentifier(attested.runtimeId, "검증된 Runtime ID");
-        const attestedArtifactDigest = requireDigest(attested.runtimeArtifactDigest);
-        if (connector.runtime_id !== attestedRuntimeId)
-          throw new Error("서버 Connector Runtime ID가 일치하지 않습니다");
-        if (connector.runtime_artifact_digest !== attestedArtifactDigest) {
-          throw new Error("서버 Connector runtime artifact digest가 일치하지 않습니다");
-        }
-        if (!Number.isSafeInteger(attested.processGeneration) || attested.processGeneration < 1) {
-          throw new Error("Process generation은 1 이상의 안전한 정수여야 합니다");
-        }
-        const previousProcessGeneration = connector.process_generation;
-        const processState: unknown = attested.processState;
-        if (processState === "same-process") {
-          if (
-            connector.status !== "ready" ||
-            previousProcessGeneration === undefined ||
-            attested.processGeneration !== previousProcessGeneration
-          ) {
-            throw new Error("동일 Process 건강 증명의 generation이 일치하지 않습니다");
+    try {
+      return await this.command(
+        context,
+        commandId,
+        "subscription_server_connector_health_attested",
+        request,
+        async (tx) => {
+          const connector = await this.requireOwnedServerConnector(tx, context, connectorId);
+          if (connector.status === "revoked") throw new Error("폐기된 서버 Connector는 건강 증명할 수 없습니다");
+          if (connector.status === "incompatible") throw new Error("호환되지 않는 서버 Connector입니다");
+          let attested: VerifiedServerConnectorHealth;
+          try {
+            attested = await this.runtimeAttestor.attestHealth({
+              organizationId: context.organizationId,
+              actorUserId: context.userId,
+              connectorId,
+              providerId: connector.provider_id,
+              executionKind: connector.execution_kind,
+              runtimeId: connector.runtime_id,
+              runtimeArtifactDigest: connector.runtime_artifact_digest,
+              version: connector.version,
+              ...(connector.process_generation === undefined
+                ? {}
+                : { previousProcessGeneration: connector.process_generation }),
+            });
+          } catch (error) {
+            if (
+              (error instanceof ServerConnectorAuthenticationRequiredError ||
+                error instanceof ServerConnectorPaidSubscriptionRequiredError) &&
+              error.providerId === connector.provider_id &&
+              error.connectorId === connectorId
+            ) {
+              throw error;
+            }
+            throw new Error("서버 Runtime 건강 증명에 실패했습니다", { cause: error });
           }
-        } else if (processState === "new-process") {
-          if (attested.processGeneration !== (previousProcessGeneration ?? 0) + 1) {
-            throw new Error("새 Process generation은 이전 값보다 정확히 1 증가해야 합니다");
+          const attestedRuntimeId = requireIdentifier(attested.runtimeId, "검증된 Runtime ID");
+          const attestedArtifactDigest = requireDigest(attested.runtimeArtifactDigest);
+          if (connector.runtime_id !== attestedRuntimeId)
+            throw new Error("서버 Connector Runtime ID가 일치하지 않습니다");
+          if (connector.runtime_artifact_digest !== attestedArtifactDigest) {
+            throw new Error("서버 Connector runtime artifact digest가 일치하지 않습니다");
           }
-        } else {
-          throw new Error("Process 상태 증명이 유효하지 않습니다");
-        }
-        const now = this.now();
-        const generationPredicate =
-          previousProcessGeneration === undefined
-            ? "process_generation = NONE"
-            : "process_generation = $previous_process_generation";
-        const [updated] = await tx.query<[ServerConnectorRecord[]]>(
-          `UPDATE subscription_connector
+          if (!Number.isSafeInteger(attested.processGeneration) || attested.processGeneration < 1) {
+            throw new Error("Process generation은 1 이상의 안전한 정수여야 합니다");
+          }
+          const previousProcessGeneration = connector.process_generation;
+          const processState: unknown = attested.processState;
+          if (processState === "same-process") {
+            if (
+              connector.status !== "ready" ||
+              previousProcessGeneration === undefined ||
+              attested.processGeneration !== previousProcessGeneration
+            ) {
+              throw new Error("동일 Process 건강 증명의 generation이 일치하지 않습니다");
+            }
+          } else if (processState === "new-process") {
+            if (attested.processGeneration !== (previousProcessGeneration ?? 0) + 1) {
+              throw new Error("새 Process generation은 이전 값보다 정확히 1 증가해야 합니다");
+            }
+          } else {
+            throw new Error("Process 상태 증명이 유효하지 않습니다");
+          }
+          const now = this.now();
+          const generationPredicate =
+            previousProcessGeneration === undefined
+              ? "process_generation = NONE"
+              : "process_generation = $previous_process_generation";
+          const [updated] = await tx.query<[ServerConnectorRecord[]]>(
+            `UPDATE subscription_connector
          SET process_generation = $process_generation, last_health_at = $now,
              status = 'ready', updated_at = $now
          WHERE organization_id = $organization_id AND connector_id = $connector_id
            AND trust_origin = 'server-managed' AND status != 'revoked'
            AND ${generationPredicate}
          RETURN AFTER;`,
+            {
+              organization_id: context.organizationId,
+              connector_id: connectorId,
+              process_generation: attested.processGeneration,
+              ...(previousProcessGeneration === undefined
+                ? {}
+                : { previous_process_generation: previousProcessGeneration }),
+              now,
+            },
+          );
+          if (!updated[0]) throw new Error("Process generation 갱신이 충돌했습니다");
+          await tx.query(
+            `UPDATE subscription_account SET status = 'active', version += 1, updated_at = $now
+           WHERE organization_id = $organization_id AND connector_id = $connector_id
+             AND (status = 'offline' OR ($authentication_verified AND status = 'needs-reauth'));`,
+            {
+              organization_id: context.organizationId,
+              connector_id: connectorId,
+              authentication_verified: connector.execution_kind === "agent-runtime",
+              now,
+            },
+          );
+          return this.toView(updated[0]);
+        },
+      );
+    } catch (error) {
+      if (error instanceof ServerConnectorAuthenticationRequiredError && error.connectorId === connectorId) {
+        await this.markReauthenticationRequired(context, {
+          commandId: `${commandId}:reauth`,
+          connectorId,
+        });
+      }
+      if (error instanceof ServerConnectorPaidSubscriptionRequiredError && error.connectorId === connectorId) {
+        await this.markOffline(context, {
+          commandId: `${commandId}:paid-subscription-required`,
+          connectorId,
+        });
+      }
+      throw error;
+    }
+  }
+
+  public async markOffline(context: TenantContext, input: ServerConnectorCommandInput): Promise<ServerConnectorView> {
+    return await this.changeStatus(context, input, "offline", "subscription_server_connector_offline");
+  }
+
+  public async markReauthenticationRequired(
+    context: TenantContext,
+    input: ServerConnectorCommandInput,
+  ): Promise<ServerConnectorView> {
+    const commandId = requireText(input.commandId, "Command ID");
+    const connectorId = requireIdentifier(input.connectorId, "Connector ID");
+    const request = { operation: "mark-reauthentication-required", connectorId };
+    return await this.command(
+      context,
+      commandId,
+      "subscription_server_connector_reauthentication_required",
+      request,
+      async (tx) => {
+        const connector = await this.requireOwnedServerConnector(tx, context, connectorId);
+        if (connector.status === "revoked") throw new Error("폐기된 서버 Connector는 재인증 상태로 전이할 수 없습니다");
+        const now = this.now();
+        const [updated] = await tx.query<[ServerConnectorRecord[]]>(
+          `UPDATE subscription_connector SET status = 'offline', updated_at = $now
+           WHERE organization_id = $organization_id AND connector_id = $connector_id
+             AND trust_origin = 'server-managed' AND status != 'revoked'
+           RETURN AFTER;`,
           {
             organization_id: context.organizationId,
             connector_id: connectorId,
-            process_generation: attested.processGeneration,
-            ...(previousProcessGeneration === undefined
-              ? {}
-              : { previous_process_generation: previousProcessGeneration }),
             now,
           },
         );
-        if (!updated[0]) throw new Error("Process generation 갱신이 충돌했습니다");
+        if (!updated[0]) throw new Error("서버 Connector 재인증 상태 갱신이 충돌했습니다");
         await tx.query(
-          `UPDATE subscription_account SET status = 'active', version += 1, updated_at = $now
-           WHERE organization_id = $organization_id AND connector_id = $connector_id
-             AND (status = 'offline' OR ($authentication_verified AND status = 'needs-reauth'));`,
+          `UPDATE subscription_account
+           SET status = 'needs-reauth',
+               version += IF status = 'needs-reauth' { 0 } ELSE { 1 },
+               updated_at = $now
+           WHERE organization_id = $organization_id AND connector_id = $connector_id AND status != 'revoked';`,
           {
             organization_id: context.organizationId,
             connector_id: connectorId,
-            authentication_verified: connector.execution_kind === "agent-runtime",
             now,
           },
         );
         return this.toView(updated[0]);
       },
     );
-  }
-
-  public async markOffline(context: TenantContext, input: ServerConnectorCommandInput): Promise<ServerConnectorView> {
-    return await this.changeStatus(context, input, "offline", "subscription_server_connector_offline");
   }
 
   public async revoke(context: TenantContext, input: ServerConnectorCommandInput): Promise<ServerConnectorView> {

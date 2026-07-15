@@ -530,6 +530,34 @@ describe("CLI Application adapter", () => {
     });
   });
 
+  it("subscription connect는 기존 profile 재사용 결과를 JSON 출력 계약에 그대로 보존한다", async () => {
+    const connection = {
+      status: "ready",
+      accountId: "account-existing-123",
+      connectorId: "server-codex-123",
+      connectionDisposition: "reused",
+    } as const;
+    const connectServerSubscription = vi.fn(async () => connection);
+    const client: CliApplicationClient = {
+      status: async () => ({}),
+      snapshot: async () => ({}),
+      query: async () => ({}),
+      command: async () => ({}),
+      inspectArtifact: async () => ({}),
+      installArtifact: async () => ({}),
+      updateArtifact: async () => ({}),
+    };
+
+    const result = await executeCliInvocation(
+      client,
+      parseCliArguments(["subscription", "connect", "openai-codex", "개인 Codex"]),
+      { connectServerSubscription },
+    );
+
+    expect(result).toEqual(connection);
+    expect(JSON.parse(JSON.stringify(result))).toEqual(expect.objectContaining({ connectionDisposition: "reused" }));
+  });
+
   it("subscription connect --new-account는 새 계정 추가 의도를 adapter에 전달한다", async () => {
     const connectServerSubscription = vi.fn(async () => ({ status: "ready" }));
     const client: CliApplicationClient = {

@@ -17,12 +17,16 @@ import { MassionModelFactory, OpenAICompatibleModelBuilder } from "@massion/runt
 import { createDatabase, type MassionDatabase } from "@massion/storage";
 import {
   ServerConnectorProvisioningService,
+  ServerConnectorAuthenticationRequiredError,
+  ServerConnectorPaidSubscriptionRequiredError,
+  ServerConnectorQuotaObservationUnavailableError,
   SubscriptionAccountService,
   SubscriptionQuotaService,
 } from "@massion/subscriptions";
 
 import { BuiltinModelRouteAssembler } from "./server-model-route-assembler.js";
 import { BundledServerConnectorRuntimeAttestor } from "./server-runtime-attestor.js";
+import { CodexSubscriptionObservationError } from "./codex-subscription-observer.js";
 import { ServerSubscriptionConnectionService } from "./server-subscription-connection.js";
 import { prepareSubscriptionProfileRoot } from "./subscription-profile.js";
 
@@ -269,6 +273,7 @@ describe("로컬 서버 구독 계정 준비", () => {
       modelProfileId: "profile-gpt-56-sol",
       routeNames: ["orchestration-balanced", "planning-quality"],
     });
+    const refreshCodexAccount = vi.fn().mockResolvedValue({ status: "refreshed" });
     const service = new ServerSubscriptionConnectionService(
       { provision: vi.fn(), attestHealth, revoke: vi.fn(), markOffline: vi.fn() } as never,
       { connect: vi.fn() } as never,
@@ -290,6 +295,9 @@ describe("로컬 서버 구독 계정 준비", () => {
       } as never,
       { assemble: vi.fn(), assembleCodex } as never,
       { readModel } as never,
+      undefined,
+      undefined,
+      { refreshCodexAccount } as never,
     );
 
     await expect(
@@ -301,6 +309,7 @@ describe("로컬 서버 구독 계정 준비", () => {
     ).resolves.toMatchObject({
       status: "ready",
       modelRuntime: { modelId: "gpt-5.6-sol", modelProfileId: "profile-gpt-56-sol" },
+      quotaObservation: { source: "direct", attestedAt: expect.any(String) },
     });
     expect(readModel).toHaveBeenCalledWith({
       organizationId: context.organizationId,
@@ -310,6 +319,351 @@ describe("로컬 서버 구독 계정 준비", () => {
       commandId: "attest-codex-1:routes",
       accountId: "account-codex-1",
       observed,
+    });
+    expect(refreshCodexAccount).toHaveBeenCalledWith({
+      organizationId: context.organizationId,
+      accountId: "account-codex-1",
+      requireFresh: true,
+    });
+    expect(refreshCodexAccount.mock.invocationCallOrder[0]).toBeLessThan(readModel.mock.invocationCallOrder[0] ?? 0);
+    expect(readModel.mock.invocationCallOrder[0]).toBeLessThan(assembleCodex.mock.invocationCallOrder[0] ?? 0);
+  });
+
+  it("Codex 직접 quota 동기화가 구성되지 않으면 ready를 반환하지 않는다", async () => {
+    const markOffline = vi.fn().mockResolvedValue({ connectorId: "server-codex-quota-required", status: "offline" });
+    const service = new ServerSubscriptionConnectionService(
+      {
+        provision: vi.fn(),
+        attestHealth: vi.fn().mockResolvedValue({
+          connectorId: "server-codex-quota-required",
+          providerId: "openai-codex",
+          executionKind: "agent-runtime",
+          runtimeId: "codex",
+          status: "ready",
+        }),
+        revoke: vi.fn(),
+        markOffline,
+      } as never,
+      { connect: vi.fn() } as never,
+      {
+        requireBindable: vi.fn().mockResolvedValue({
+          account_id: "account-codex-quota-required",
+          provider_id: "openai-codex",
+          connector_id: "server-codex-quota-required",
+          status: "offline",
+          version: 1,
+        }),
+        requireUsable: vi.fn().mockResolvedValue({
+          account_id: "account-codex-quota-required",
+          provider_id: "openai-codex",
+          connector_id: "server-codex-quota-required",
+          status: "active",
+          version: 2,
+        }),
+      } as never,
+      { assemble: vi.fn(), assembleCodex: vi.fn().mockResolvedValue({ modelId: "gpt-5.6-sol" }) } as never,
+      { readModel: vi.fn().mockResolvedValue({ modelId: "gpt-5.6-sol" }) } as never,
+    );
+
+    await expect(
+      service.attest(context, {
+        commandId: "attest-codex-quota-required",
+        connectorId: "server-codex-quota-required",
+        accountId: "account-codex-quota-required",
+      }),
+    ).rejects.toThrow("Codex GPT-5.6 Model route");
+    expect(markOffline).toHaveBeenCalledOnce();
+  });
+
+  it("Codex 직접 quota 관측의 인증 만료가 이미 전이됐으면 재인증 감사를 중복 기록하지 않는다", async () => {
+    const markReauthenticationRequired = vi.fn();
+    const markOffline = vi.fn();
+    const service = new ServerSubscriptionConnectionService(
+      {
+        provision: vi.fn(),
+        attestHealth: vi.fn().mockResolvedValue({
+          connectorId: "server-codex-quota-reauth",
+          providerId: "openai-codex",
+          executionKind: "agent-runtime",
+          runtimeId: "codex",
+          status: "ready",
+        }),
+        markReauthenticationRequired,
+        revoke: vi.fn(),
+        markOffline,
+      } as never,
+      { connect: vi.fn() } as never,
+      {
+        requireBindable: vi.fn().mockResolvedValue({
+          account_id: "account-codex-quota-reauth",
+          provider_id: "openai-codex",
+          connector_id: "server-codex-quota-reauth",
+          status: "active",
+          version: 2,
+        }),
+        requireUsable: vi.fn().mockResolvedValue({
+          account_id: "account-codex-quota-reauth",
+          provider_id: "openai-codex",
+          connector_id: "server-codex-quota-reauth",
+          status: "active",
+          version: 2,
+        }),
+      } as never,
+      { assemble: vi.fn(), assembleCodex: vi.fn().mockResolvedValue({ modelId: "gpt-5.6-sol" }) } as never,
+      { readModel: vi.fn().mockResolvedValue({ modelId: "gpt-5.6-sol" }) } as never,
+      undefined,
+      undefined,
+      {
+        refreshCodexAccount: vi.fn().mockResolvedValue({
+          status: "reauthentication-required",
+          transitionApplied: true,
+        }),
+      } as never,
+    );
+
+    await expect(
+      service.attest(context, {
+        commandId: "attest-codex-quota-reauth",
+        connectorId: "server-codex-quota-reauth",
+        accountId: "account-codex-quota-reauth",
+      }),
+    ).rejects.toMatchObject({ code: "needs-reauth", connectorId: "server-codex-quota-reauth" });
+    expect(markReauthenticationRequired).not.toHaveBeenCalled();
+    expect(markOffline).not.toHaveBeenCalled();
+  });
+
+  it("Codex 직접 quota 관측을 기록하지 못하면 ready를 반환하지 않되 재로그인·offline 전이는 하지 않는다", async () => {
+    const markReauthenticationRequired = vi.fn();
+    const markOffline = vi.fn();
+    const refreshCodexAccount = vi.fn().mockResolvedValue({ status: "unavailable", category: "schema" });
+    const readModel = vi.fn();
+    const assembleCodex = vi.fn();
+    const service = new ServerSubscriptionConnectionService(
+      {
+        provision: vi.fn(),
+        attestHealth: vi.fn().mockResolvedValue({
+          connectorId: "server-codex-quota-schema",
+          providerId: "openai-codex",
+          executionKind: "agent-runtime",
+          runtimeId: "codex",
+          status: "ready",
+        }),
+        markReauthenticationRequired,
+        revoke: vi.fn(),
+        markOffline,
+      } as never,
+      { connect: vi.fn() } as never,
+      {
+        requireBindable: vi.fn().mockResolvedValue({
+          account_id: "account-codex-quota-schema",
+          provider_id: "openai-codex",
+          connector_id: "server-codex-quota-schema",
+          status: "active",
+          version: 2,
+        }),
+        requireUsable: vi.fn().mockResolvedValue({
+          account_id: "account-codex-quota-schema",
+          provider_id: "openai-codex",
+          connector_id: "server-codex-quota-schema",
+          status: "active",
+          version: 2,
+        }),
+      } as never,
+      { assemble: vi.fn(), assembleCodex } as never,
+      { readModel } as never,
+      undefined,
+      undefined,
+      { refreshCodexAccount } as never,
+    );
+
+    await expect(
+      service.attest(context, {
+        commandId: "attest-codex-quota-schema",
+        connectorId: "server-codex-quota-schema",
+        accountId: "account-codex-quota-schema",
+      }),
+    ).rejects.toBeInstanceOf(ServerConnectorQuotaObservationUnavailableError);
+    expect(refreshCodexAccount).toHaveBeenCalledOnce();
+    expect(readModel).not.toHaveBeenCalled();
+    expect(assembleCodex).not.toHaveBeenCalled();
+    expect(markReauthenticationRequired).not.toHaveBeenCalled();
+    expect(markOffline).not.toHaveBeenCalled();
+  });
+
+  it("Codex health가 인증 만료를 보고하면 provisioning service가 기록한 재인증 신호를 중복 전이 없이 보존한다", async () => {
+    const authenticationRequired = new ServerConnectorAuthenticationRequiredError(
+      "openai-codex",
+      "server-codex-reauth",
+    );
+    const attestHealth = vi.fn().mockRejectedValue(authenticationRequired);
+    const markReauthenticationRequired = vi.fn().mockResolvedValue({
+      connectorId: "server-codex-reauth",
+      status: "offline",
+    });
+    const markOffline = vi.fn();
+    const service = new ServerSubscriptionConnectionService(
+      {
+        provision: vi.fn(),
+        attestHealth,
+        markReauthenticationRequired,
+        revoke: vi.fn(),
+        markOffline,
+      } as never,
+      { connect: vi.fn() } as never,
+      {
+        requireBindable: vi.fn().mockResolvedValue({
+          account_id: "account-codex-reauth",
+          provider_id: "openai-codex",
+          connector_id: "server-codex-reauth",
+          status: "active",
+          version: 7,
+        }),
+        requireUsable: vi.fn(),
+      } as never,
+    );
+
+    await expect(
+      service.attest(context, {
+        commandId: "attest-codex-reauth",
+        connectorId: "server-codex-reauth",
+        accountId: "account-codex-reauth",
+      }),
+    ).rejects.toBe(authenticationRequired);
+    expect(markReauthenticationRequired).not.toHaveBeenCalled();
+    expect(markOffline).not.toHaveBeenCalled();
+  });
+
+  it("Codex model 관측 중 확인된 인증 만료도 needs-reauth로 전이하고 일반 offline 보상으로 평탄화하지 않는다", async () => {
+    const attestHealth = vi.fn().mockResolvedValue({
+      connectorId: "server-codex-observer-reauth",
+      providerId: "openai-codex",
+      executionKind: "agent-runtime",
+      runtimeId: "codex",
+      status: "ready",
+    });
+    const markReauthenticationRequired = vi.fn().mockResolvedValue({
+      connectorId: "server-codex-observer-reauth",
+      status: "offline",
+    });
+    const markOffline = vi.fn();
+    const service = new ServerSubscriptionConnectionService(
+      {
+        provision: vi.fn(),
+        attestHealth,
+        markReauthenticationRequired,
+        revoke: vi.fn(),
+        markOffline,
+      } as never,
+      { connect: vi.fn() } as never,
+      {
+        requireBindable: vi.fn().mockResolvedValue({
+          account_id: "account-codex-observer-reauth",
+          provider_id: "openai-codex",
+          connector_id: "server-codex-observer-reauth",
+          status: "active",
+          version: 3,
+        }),
+        requireUsable: vi.fn().mockResolvedValue({
+          account_id: "account-codex-observer-reauth",
+          provider_id: "openai-codex",
+          connector_id: "server-codex-observer-reauth",
+          status: "active",
+          version: 3,
+        }),
+      } as never,
+      { assemble: vi.fn(), assembleCodex: vi.fn() } as never,
+      { readModel: vi.fn().mockRejectedValue(new CodexSubscriptionObservationError("authentication")) } as never,
+      undefined,
+      undefined,
+      { refreshCodexAccount: vi.fn().mockResolvedValue({ status: "refreshed" }) } as never,
+    );
+
+    await expect(
+      service.attest(context, {
+        commandId: "attest-codex-observer-reauth",
+        connectorId: "server-codex-observer-reauth",
+        accountId: "account-codex-observer-reauth",
+      }),
+    ).rejects.toMatchObject({
+      code: "needs-reauth",
+      providerId: "openai-codex",
+      connectorId: "server-codex-observer-reauth",
+    });
+    expect(markReauthenticationRequired).toHaveBeenCalledWith(context, {
+      commandId: "attest-codex-observer-reauth:reauth",
+      connectorId: "server-codex-observer-reauth",
+    });
+    expect(markOffline).not.toHaveBeenCalled();
+  });
+
+  it("Codex model 관측이 유료 구독 불가를 보고하면 offline으로 전이하되 재인증을 요구하지 않는다", async () => {
+    const attestHealth = vi.fn().mockResolvedValue({
+      connectorId: "server-codex-paid-plan",
+      providerId: "openai-codex",
+      executionKind: "agent-runtime",
+      runtimeId: "codex",
+      status: "ready",
+    });
+    const markReauthenticationRequired = vi.fn();
+    const markOffline = vi.fn().mockResolvedValue({
+      connectorId: "server-codex-paid-plan",
+      status: "offline",
+    });
+    const service = new ServerSubscriptionConnectionService(
+      {
+        provision: vi.fn(),
+        attestHealth,
+        markReauthenticationRequired,
+        revoke: vi.fn(),
+        markOffline,
+      } as never,
+      { connect: vi.fn() } as never,
+      {
+        requireBindable: vi.fn().mockResolvedValue({
+          account_id: "account-codex-paid-plan",
+          provider_id: "openai-codex",
+          connector_id: "server-codex-paid-plan",
+          status: "active",
+          version: 3,
+        }),
+        requireUsable: vi.fn().mockResolvedValue({
+          account_id: "account-codex-paid-plan",
+          provider_id: "openai-codex",
+          connector_id: "server-codex-paid-plan",
+          status: "active",
+          version: 3,
+        }),
+      } as never,
+      { assemble: vi.fn(), assembleCodex: vi.fn() } as never,
+      { readModel: vi.fn().mockRejectedValue(new CodexSubscriptionObservationError("subscription")) } as never,
+      undefined,
+      undefined,
+      { refreshCodexAccount: vi.fn().mockResolvedValue({ status: "refreshed" }) } as never,
+    );
+
+    await expect(
+      service.attest(context, {
+        commandId: "attest-codex-paid-plan",
+        connectorId: "server-codex-paid-plan",
+        accountId: "account-codex-paid-plan",
+      }),
+    ).rejects.toMatchObject({
+      code: "paid-subscription-required",
+      providerId: "openai-codex",
+      connectorId: "server-codex-paid-plan",
+    });
+    await expect(
+      service.attest(context, {
+        commandId: "attest-codex-paid-plan-second",
+        connectorId: "server-codex-paid-plan",
+        accountId: "account-codex-paid-plan",
+      }),
+    ).rejects.toBeInstanceOf(ServerConnectorPaidSubscriptionRequiredError);
+    expect(markReauthenticationRequired).not.toHaveBeenCalled();
+    expect(markOffline).toHaveBeenCalledTimes(2);
+    expect(markOffline).toHaveBeenNthCalledWith(1, context, {
+      commandId: "attest-codex-paid-plan:model-compensate:v3",
+      connectorId: "server-codex-paid-plan",
     });
   });
 
@@ -795,6 +1149,229 @@ describe("실제 서버 구독 계정 준비 조립", () => {
     expect(applicationCommands).toEqual([{ state: "succeeded", lease_generation: 2 }]);
   });
 
+  it("실제 Codex 준비가 Credential 생성 뒤 실패해도 같은 command 재개는 연결기 하나만 재사용하고 계정 계보를 한 번만 만든다", async () => {
+    database = await createDatabase({ url: "mem://", namespace: "massion", database: randomUUID() });
+    root = await mkdtemp(join(tmpdir(), "massion-server-prepare-saga-"));
+    const identities = await IdentityService.create(database);
+    const organizations = await OrganizationService.create(database);
+    const owner = await identities.registerPersonalUser({
+      email: "prepare-saga@example.com",
+      displayName: "Prepare Saga",
+    });
+    const actualContext = await organizations.resolveTenantContext(
+      owner.user.user_id,
+      owner.organization.organization_id,
+    );
+    const accounts = await SubscriptionAccountService.create(database, organizations, randomBytes(32));
+    const providers = await ProviderService.create(database, organizations, new CredentialVault(randomBytes(32)), {
+      accounts,
+    });
+    const connections = new SubscriptionConnectionService(database, accounts, providers);
+    const inspectArtifact = vi.fn().mockResolvedValue({
+      runtimeId: "codex",
+      runtimeArtifactDigest: "c".repeat(64),
+      version: "0.144.1",
+    });
+    const connectors = await ServerConnectorProvisioningService.create(database, organizations, {
+      runtimeAttestor: {
+        inspectArtifact,
+        attestHealth: vi.fn(),
+      },
+    });
+    const originalAddConnectorCredential = providers.addConnectorCredential.bind(providers);
+    let injectCredentialFailure = true;
+    const addConnectorCredential = vi
+      .spyOn(providers, "addConnectorCredential")
+      .mockImplementation(async (...arguments_) => {
+        const added = await originalAddConnectorCredential(...arguments_);
+        if (injectCredentialFailure) {
+          injectCredentialFailure = false;
+          throw new Error("injected credential persistence failure");
+        }
+        return added;
+      });
+    const service = new ServerSubscriptionConnectionService(connectors, connections, accounts);
+    const commands = new ApplicationCommandRegistry(await ApplicationCommandStore.create(database, organizations));
+    registerApplicationDomainCommands(commands, { subscriptionServerConnections: service } as never);
+    const input = {
+      schemaVersion: "massion.application.v1" as const,
+      commandId: "actual-codex-prepare-saga-command",
+      correlationId: "actual-codex-prepare-saga-correlation",
+      operation: "subscription.server.prepare",
+      payload: {
+        providerId: "openai-codex",
+        alias: "Codex Prepare Saga",
+        authKind: "cli-profile",
+        billingKind: "consumer-subscription",
+      },
+    };
+
+    await expect(commands.dispatch(actualContext, ["subscription:write"], input)).rejects.toMatchObject({
+      category: "internal",
+    });
+    const [
+      failedConnectors,
+      failedAccounts,
+      failedProviders,
+      failedEndpoints,
+      failedCredentials,
+      failedRouterAudits,
+      failedSubscriptionAudits,
+      failedCommands,
+    ] = await database.query<
+      [
+        Array<{ status: string; provider_id: string }>,
+        Array<{ account_id: string }>,
+        Array<{ provider_id: string }>,
+        Array<{ endpoint_id: string }>,
+        Array<{ credential_id: string }>,
+        Array<{ command_id: string }>,
+        Array<{ command_id: string; event_type: string }>,
+        Array<{ state: string; lease_generation: number }>,
+      ]
+    >(
+      `SELECT status, provider_id FROM subscription_connector WHERE organization_id = $organization_id;
+         SELECT account_id FROM subscription_account WHERE organization_id = $organization_id;
+         SELECT provider_id FROM model_provider WHERE organization_id = $organization_id;
+         SELECT endpoint_id FROM provider_endpoint WHERE organization_id = $organization_id;
+         SELECT credential_id FROM provider_credential WHERE organization_id = $organization_id;
+         SELECT command_id FROM router_audit_event WHERE organization_id = $organization_id;
+         SELECT command_id, event_type FROM subscription_audit_event WHERE organization_id = $organization_id ORDER BY command_id ASC;
+         SELECT state, lease_generation FROM application_command
+           WHERE organization_id = $organization_id AND command_id = $command_id;`,
+      { organization_id: actualContext.organizationId, command_id: input.commandId },
+    );
+    expect(failedConnectors).toEqual([{ status: "offline", provider_id: "openai-codex" }]);
+    expect(failedAccounts).toEqual([]);
+    expect(failedProviders).toEqual([]);
+    expect(failedEndpoints).toEqual([]);
+    expect(failedCredentials).toEqual([]);
+    expect(failedRouterAudits).toEqual([]);
+    expect(failedSubscriptionAudits).toEqual([
+      {
+        command_id: `${input.commandId}:compensate-offline`,
+        event_type: "subscription_server_connector_offline",
+      },
+      {
+        command_id: `${input.commandId}:connector`,
+        event_type: "subscription_server_connector_provisioned",
+      },
+    ]);
+    expect(failedCommands).toEqual([{ state: "failed", lease_generation: 1 }]);
+
+    await expect(commands.dispatch(actualContext, ["subscription:write"], input)).resolves.toMatchObject({
+      outcome: "succeeded",
+      data: { status: "offline", connectorStatus: "offline", loginRequired: true },
+    });
+    const [
+      finalConnectors,
+      finalAccounts,
+      finalProviders,
+      finalEndpoints,
+      finalCredentials,
+      finalRouterAudits,
+      finalSubscriptionAudits,
+      finalCommands,
+      commandEvents,
+    ] = await database.query<
+      [
+        Array<{ status: string; provider_id: string }>,
+        Array<{ account_id: string; connector_id: string; status: string }>,
+        Array<{ provider_id: string }>,
+        Array<{ endpoint_id: string; provider_id: string }>,
+        Array<{ credential_id: string; subscription_account_id: string; subscription_connector_id: string }>,
+        Array<{ command_id: string }>,
+        Array<{ command_id: string; event_type: string }>,
+        Array<{ state: string; lease_generation: number }>,
+        Array<{ event_type: string; lease_generation: number }>,
+      ]
+    >(
+      `SELECT status, provider_id FROM subscription_connector WHERE organization_id = $organization_id;
+         SELECT account_id, connector_id, status FROM subscription_account WHERE organization_id = $organization_id;
+         SELECT provider_id FROM model_provider WHERE organization_id = $organization_id;
+         SELECT endpoint_id, provider_id FROM provider_endpoint WHERE organization_id = $organization_id;
+         SELECT credential_id, subscription_account_id, subscription_connector_id
+           FROM provider_credential WHERE organization_id = $organization_id;
+         SELECT command_id FROM router_audit_event WHERE organization_id = $organization_id ORDER BY command_id ASC;
+         SELECT command_id, event_type FROM subscription_audit_event WHERE organization_id = $organization_id ORDER BY command_id ASC;
+         SELECT state, lease_generation FROM application_command
+           WHERE organization_id = $organization_id AND command_id = $command_id;
+         SELECT event_type, lease_generation FROM application_command_event
+           WHERE organization_id = $organization_id ORDER BY lease_generation ASC, event_type ASC;`,
+      { organization_id: actualContext.organizationId, command_id: input.commandId },
+    );
+    expect(finalConnectors).toEqual([{ status: "offline", provider_id: "openai-codex" }]);
+    expect(finalAccounts).toHaveLength(1);
+    expect(finalAccounts[0]).toMatchObject({ status: "offline" });
+    expect(finalProviders).toEqual([{ provider_id: "openai-codex" }]);
+    expect(finalEndpoints).toHaveLength(1);
+    expect(finalEndpoints[0]).toMatchObject({ provider_id: "openai-codex" });
+    expect(finalCredentials).toHaveLength(1);
+    expect(finalCredentials[0]).toMatchObject({
+      subscription_account_id: finalAccounts[0]?.account_id,
+      subscription_connector_id: finalAccounts[0]?.connector_id,
+    });
+    expect(finalRouterAudits).toEqual([
+      { command_id: `${input.commandId}:account:credential` },
+      { command_id: `${input.commandId}:account:provider` },
+    ]);
+    expect(finalSubscriptionAudits).toEqual([
+      {
+        command_id: `${input.commandId}:account:account`,
+        event_type: "subscription_account_registered",
+      },
+      {
+        command_id: `${input.commandId}:compensate-offline`,
+        event_type: "subscription_server_connector_offline",
+      },
+      {
+        command_id: `${input.commandId}:connector`,
+        event_type: "subscription_server_connector_provisioned",
+      },
+    ]);
+    expect(finalCommands).toEqual([{ state: "succeeded", lease_generation: 2 }]);
+    expect(commandEvents).toEqual([
+      { event_type: "claimed", lease_generation: 1 },
+      { event_type: "failed", lease_generation: 1 },
+      { event_type: "completed", lease_generation: 2 },
+      { event_type: "reclaimed", lease_generation: 2 },
+    ]);
+
+    await expect(commands.dispatch(actualContext, ["subscription:write"], input)).resolves.toMatchObject({
+      outcome: "succeeded",
+      data: { status: "offline", connectorStatus: "offline", loginRequired: true },
+    });
+    expect(inspectArtifact).toHaveBeenCalledOnce();
+    expect(addConnectorCredential).toHaveBeenCalledTimes(2);
+    const [
+      replayedAccounts,
+      replayedCredentials,
+      replayedRouterAudits,
+      replayedSubscriptionAudits,
+      replayedCommandEvents,
+    ] = await database.query<
+      [
+        Array<{ account_id: string }>,
+        Array<{ credential_id: string }>,
+        Array<{ command_id: string }>,
+        Array<{ command_id: string }>,
+        Array<{ event_id: string }>,
+      ]
+    >(
+      `SELECT account_id FROM subscription_account WHERE organization_id = $organization_id;
+         SELECT credential_id FROM provider_credential WHERE organization_id = $organization_id;
+         SELECT command_id FROM router_audit_event WHERE organization_id = $organization_id;
+         SELECT command_id FROM subscription_audit_event WHERE organization_id = $organization_id;
+         SELECT event_id FROM application_command_event WHERE organization_id = $organization_id;`,
+      { organization_id: actualContext.organizationId },
+    );
+    expect(replayedAccounts).toHaveLength(1);
+    expect(replayedCredentials).toHaveLength(1);
+    expect(replayedRouterAudits).toHaveLength(2);
+    expect(replayedSubscriptionAudits).toHaveLength(3);
+    expect(replayedCommandEvents).toHaveLength(4);
+  });
+
   it("고정된 bundled Codex artifact와 실제 저장소 서비스를 함께 사용해 offline 계정을 준비한다", async () => {
     database = await createDatabase({ url: "mem://", namespace: "massion", database: randomUUID() });
     root = await mkdtemp(join(tmpdir(), "massion-server-connection-"));
@@ -878,12 +1455,16 @@ describe("실제 서버 구독 계정 준비 조립", () => {
       runtimeArtifactDigest: runtimeArtifact.runtimeArtifactDigest,
     };
     const readModel = vi.fn().mockResolvedValue(observed);
+    const refreshCodexAccount = vi.fn().mockResolvedValue({ status: "refreshed" });
     const service = new ServerSubscriptionConnectionService(
       connectors,
       connections,
       accounts,
       new BuiltinModelRouteAssembler(router),
       { readModel } as never,
+      undefined,
+      undefined,
+      { refreshCodexAccount } as never,
     );
 
     const prepared = await service.prepare(actualContext, {
@@ -895,10 +1476,21 @@ describe("실제 서버 구독 계정 준비 조립", () => {
       priority: 1,
       weight: 1,
     });
+    const accountProfile = await prepareSubscriptionProfileRoot(
+      join(root, "profiles"),
+      actualContext.organizationId,
+      prepared.account.account_id,
+    );
+    await writeFile(join(accountProfile, "auth.json"), "private-login-state", { mode: 0o600 });
     const ready = await service.attest(actualContext, {
       commandId: "actual-codex-model-attest",
       connectorId: prepared.connector.connectorId,
       accountId: prepared.account.account_id,
+    });
+    expect(refreshCodexAccount).toHaveBeenCalledWith({
+      organizationId: actualContext.organizationId,
+      accountId: prepared.account.account_id,
+      requireFresh: true,
     });
 
     const acquireSession = vi.fn().mockImplementation((_context, input) =>
@@ -970,6 +1562,105 @@ describe("실제 서버 구독 계정 준비 조립", () => {
       actualContext,
       expect.objectContaining({ providerId: "openai-codex", modelId: "gpt-5.6-sol" }),
     );
+  });
+
+  it("실제 저장소에서 Codex 직접 quota 관측이 실패하면 새 model route를 만들지 않는다", async () => {
+    database = await createDatabase({ url: "mem://", namespace: "massion", database: randomUUID() });
+    root = await mkdtemp(join(tmpdir(), "massion-server-codex-quota-unavailable-"));
+    const identities = await IdentityService.create(database);
+    const organizations = await OrganizationService.create(database);
+    const owner = await identities.registerPersonalUser({
+      email: "codex-quota-unavailable@example.com",
+      displayName: "Owner",
+    });
+    const actualContext = await organizations.resolveTenantContext(
+      owner.user.user_id,
+      owner.organization.organization_id,
+    );
+    const accounts = await SubscriptionAccountService.create(database, organizations, randomBytes(32));
+    const quota = await SubscriptionQuotaService.create(database, organizations);
+    const providers = await ProviderService.create(database, organizations, new CredentialVault(randomBytes(32)), {
+      accounts,
+    });
+    const router = await ModelRouter.create(database, organizations, providers, { accounts, quota });
+    const connections = new SubscriptionConnectionService(database, accounts, providers);
+    const runtimeArtifact = {
+      runtimeId: "codex" as const,
+      version: "0.144.1",
+      runtimeArtifactDigest: "e".repeat(64),
+      command: process.execPath,
+      commandArguments: ["/bundled/codex.js"],
+    };
+    const connectors = await ServerConnectorProvisioningService.create(database, organizations, {
+      runtimeAttestor: new BundledServerConnectorRuntimeAttestor(database, {
+        profileRoot: join(root, "profiles"),
+        inspectRuntime: vi.fn().mockResolvedValue(runtimeArtifact),
+        codexAccount: vi.fn().mockResolvedValue({
+          account: { type: "chatgpt", planType: "plus" },
+          requiresOpenaiAuth: true,
+        }),
+      }),
+    });
+    const readModel = vi.fn();
+    const refreshCodexAccount = vi.fn().mockResolvedValue({ status: "unavailable", category: "upstream" });
+    const service = new ServerSubscriptionConnectionService(
+      connectors,
+      connections,
+      accounts,
+      new BuiltinModelRouteAssembler(router),
+      { readModel } as never,
+      undefined,
+      undefined,
+      { refreshCodexAccount } as never,
+    );
+    const prepared = await service.prepare(actualContext, {
+      commandId: "actual-codex-quota-unavailable-prepare",
+      providerId: "openai-codex",
+      alias: "Codex Plus",
+      authKind: "cli-profile",
+      billingKind: "consumer-subscription",
+      priority: 1,
+      weight: 1,
+    });
+    const accountProfile = await prepareSubscriptionProfileRoot(
+      join(root, "profiles"),
+      actualContext.organizationId,
+      prepared.account.account_id,
+    );
+    await writeFile(join(accountProfile, "auth.json"), "private-login-state", { mode: 0o600 });
+
+    await expect(
+      service.attest(actualContext, {
+        commandId: "actual-codex-quota-unavailable-attest",
+        connectorId: prepared.connector.connectorId,
+        accountId: prepared.account.account_id,
+      }),
+    ).rejects.toBeInstanceOf(ServerConnectorQuotaObservationUnavailableError);
+
+    expect(refreshCodexAccount).toHaveBeenCalledWith({
+      organizationId: actualContext.organizationId,
+      accountId: prepared.account.account_id,
+      requireFresh: true,
+    });
+    expect(readModel).not.toHaveBeenCalled();
+    await expect(router.listModels(actualContext)).resolves.toEqual([]);
+    await expect(router.listRoutes(actualContext)).resolves.toEqual([]);
+    await expect(router.listCandidates(actualContext)).resolves.toEqual([]);
+    const [connectorsAfter, accountsAfter] = await database.query<
+      [Array<{ status: string }>, Array<{ status: string }>]
+    >(
+      `SELECT status FROM subscription_connector
+       WHERE organization_id = $organization_id AND connector_id = $connector_id;
+       SELECT status FROM subscription_account
+       WHERE organization_id = $organization_id AND account_id = $account_id;`,
+      {
+        organization_id: actualContext.organizationId,
+        connector_id: prepared.connector.connectorId,
+        account_id: prepared.account.account_id,
+      },
+    );
+    expect(connectorsAfter).toEqual([{ status: "ready" }]);
+    expect(accountsAfter).toEqual([{ status: "active" }]);
   });
 
   it("실제 저장소에서 MiniMax secret을 암호화하고 내장 OpenAI 모델 artifact 증명 뒤 ready·active로 전이한다", async () => {

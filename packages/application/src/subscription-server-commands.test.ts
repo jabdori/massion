@@ -4,12 +4,235 @@ import { describe, expect, it, vi } from "vitest";
 
 import { IdentityService, OrganizationService } from "@massion/identity";
 import { createDatabase } from "@massion/storage";
+import {
+  ServerConnectorAuthenticationRequiredError,
+  ServerConnectorPaidSubscriptionRequiredError,
+  ServerConnectorQuotaObservationUnavailableError,
+} from "@massion/subscriptions";
 
 import { registerApplicationDomainCommands } from "./adapters/domain.js";
 import { ApplicationCommandRegistry } from "./command-registry.js";
 import { ApplicationCommandStore } from "./command-store.js";
+import { applicationErrorToHttpStatus, ApplicationError } from "./errors.js";
 
 describe("Application 서버 구독 연결 명령", () => {
+  it("Codex 직접 quota 관측 불가는 재로그인 요구 없이 재시도 가능한 unavailable 계약으로 변환한다", async () => {
+    await using database = await createDatabase({ url: "mem://", namespace: "massion", database: randomUUID() });
+    const identities = await IdentityService.create(database);
+    const organizations = await OrganizationService.create(database);
+    const owner = await identities.registerPersonalUser({ email: "quota-command@example.com", displayName: "Owner" });
+    const context = await organizations.resolveTenantContext(owner.user.user_id, owner.organization.organization_id);
+    const registry = new ApplicationCommandRegistry(await ApplicationCommandStore.create(database, organizations));
+    registerApplicationDomainCommands(registry, {
+      subscriptionServerConnections: {
+        prepare: vi.fn(),
+        attest: vi.fn().mockRejectedValue(new ServerConnectorQuotaObservationUnavailableError()),
+        offline: vi.fn(),
+      },
+    } as never);
+
+    const failure = await registry
+      .dispatch(context, ["subscription:write"], {
+        schemaVersion: "massion.application.v1",
+        commandId: randomUUID(),
+        correlationId: "correlation-quota-12345678",
+        operation: "subscription.server.attest",
+        payload: { connectorId: "server-quota-12345678" },
+      })
+      .catch((error: unknown) => error);
+
+    expect(failure).toBeInstanceOf(ApplicationError);
+    expect(failure).toMatchObject({
+      category: "unavailable",
+      severity: "warning",
+      retryable: true,
+      operatorCode: "APP_SUBSCRIPTION_QUOTA_UNAVAILABLE",
+      correlationId: "correlation-quota-12345678",
+    });
+    expect(applicationErrorToHttpStatus(failure as ApplicationError)).toBe(503);
+  });
+
+  it("Codex profile 재인증 필요 오류만 공개 가능한 authentication 계약으로 변환한다", async () => {
+    await using database = await createDatabase({ url: "mem://", namespace: "massion", database: randomUUID() });
+    const identities = await IdentityService.create(database);
+    const organizations = await OrganizationService.create(database);
+    const owner = await identities.registerPersonalUser({ email: "reauth-command@example.com", displayName: "Owner" });
+    const context = await organizations.resolveTenantContext(owner.user.user_id, owner.organization.organization_id);
+    const registry = new ApplicationCommandRegistry(await ApplicationCommandStore.create(database, organizations));
+    const privateConnectorId = "server-private-connector-12345678";
+    registerApplicationDomainCommands(registry, {
+      subscriptionServerConnections: {
+        prepare: vi.fn(),
+        attest: vi
+          .fn()
+          .mockRejectedValue(new ServerConnectorAuthenticationRequiredError("openai-codex", privateConnectorId)),
+        offline: vi.fn(),
+      },
+    } as never);
+
+    const failure = await registry
+      .dispatch(context, ["subscription:write"], {
+        schemaVersion: "massion.application.v1",
+        commandId: randomUUID(),
+        correlationId: "correlation-reauth-12345678",
+        operation: "subscription.server.attest",
+        payload: { connectorId: privateConnectorId },
+      })
+      .catch((error: unknown) => error);
+
+    expect(failure).toBeInstanceOf(ApplicationError);
+    expect(failure).toMatchObject({
+      category: "authentication",
+      severity: "warning",
+      retryable: false,
+      operatorCode: "APP_SUBSCRIPTION_REAUTH_REQUIRED",
+      correlationId: "correlation-reauth-12345678",
+    });
+    expect(applicationErrorToHttpStatus(failure as ApplicationError)).toBe(401);
+    expect(JSON.stringify((failure as ApplicationError).publicView())).not.toContain(privateConnectorId);
+  });
+
+  it("Codex 유료 구독 불가 오류는 재인증이 아닌 validation 계약으로 변환한다", async () => {
+    await using database = await createDatabase({ url: "mem://", namespace: "massion", database: randomUUID() });
+    const identities = await IdentityService.create(database);
+    const organizations = await OrganizationService.create(database);
+    const owner = await identities.registerPersonalUser({
+      email: "paid-plan-command@example.com",
+      displayName: "Owner",
+    });
+    const context = await organizations.resolveTenantContext(owner.user.user_id, owner.organization.organization_id);
+    const registry = new ApplicationCommandRegistry(await ApplicationCommandStore.create(database, organizations));
+    const privateConnectorId = "server-paid-plan-connector-12345678";
+    registerApplicationDomainCommands(registry, {
+      subscriptionServerConnections: {
+        prepare: vi.fn(),
+        attest: vi
+          .fn()
+          .mockRejectedValue(new ServerConnectorPaidSubscriptionRequiredError("openai-codex", privateConnectorId)),
+        offline: vi.fn(),
+      },
+    } as never);
+
+    const failure = await registry
+      .dispatch(context, ["subscription:write"], {
+        schemaVersion: "massion.application.v1",
+        commandId: randomUUID(),
+        correlationId: "correlation-paid-plan-12345678",
+        operation: "subscription.server.attest",
+        payload: { connectorId: privateConnectorId },
+      })
+      .catch((error: unknown) => error);
+
+    expect(failure).toBeInstanceOf(ApplicationError);
+    expect(failure).toMatchObject({
+      category: "validation",
+      severity: "warning",
+      retryable: false,
+      operatorCode: "APP_SUBSCRIPTION_PAID_PLAN_REQUIRED",
+      correlationId: "correlation-paid-plan-12345678",
+    });
+    expect(applicationErrorToHttpStatus(failure as ApplicationError)).toBe(400);
+    expect(JSON.stringify((failure as ApplicationError).publicView())).not.toContain(privateConnectorId);
+  });
+
+  it("실패한 Codex 건강 증명은 같은 command로 재인증 뒤 재개할 수 있다", async () => {
+    await using database = await createDatabase({ url: "mem://", namespace: "massion", database: randomUUID() });
+    const identities = await IdentityService.create(database);
+    const organizations = await OrganizationService.create(database);
+    const owner = await identities.registerPersonalUser({
+      email: "reauth-retry-command@example.com",
+      displayName: "Owner",
+    });
+    const context = await organizations.resolveTenantContext(owner.user.user_id, owner.organization.organization_id);
+    const registry = new ApplicationCommandRegistry(await ApplicationCommandStore.create(database, organizations));
+    const connectorId = "server-retry-connector-12345678";
+    const attest = vi
+      .fn()
+      .mockRejectedValueOnce(new ServerConnectorAuthenticationRequiredError("openai-codex", connectorId))
+      .mockResolvedValueOnce({
+        connectorId,
+        providerId: "openai-codex",
+        executionKind: "agent-runtime",
+        runtimeId: "codex",
+        version: "0.144.1",
+        capabilities: ["openai-codex"],
+        status: "ready",
+        trustOrigin: "server-managed",
+      });
+    registerApplicationDomainCommands(registry, {
+      subscriptionServerConnections: { prepare: vi.fn(), attest, offline: vi.fn() },
+    } as never);
+    const command = {
+      schemaVersion: "massion.application.v1" as const,
+      commandId: randomUUID(),
+      correlationId: randomUUID(),
+      operation: "subscription.server.attest",
+      payload: { connectorId },
+    };
+
+    await expect(registry.dispatch(context, ["subscription:write"], command)).rejects.toMatchObject({
+      operatorCode: "APP_SUBSCRIPTION_REAUTH_REQUIRED",
+    });
+    await expect(registry.dispatch(context, ["subscription:write"], command)).resolves.toMatchObject({
+      outcome: "succeeded",
+      data: { connectorId, status: "ready" },
+    });
+    expect(attest).toHaveBeenCalledTimes(2);
+  });
+
+  it("실패한 새 Codex 계정 준비는 같은 command로 재개할 수 있다", async () => {
+    await using database = await createDatabase({ url: "mem://", namespace: "massion", database: randomUUID() });
+    const identities = await IdentityService.create(database);
+    const organizations = await OrganizationService.create(database);
+    const owner = await identities.registerPersonalUser({
+      email: "prepare-retry-command@example.com",
+      displayName: "Owner",
+    });
+    const context = await organizations.resolveTenantContext(owner.user.user_id, owner.organization.organization_id);
+    const registry = new ApplicationCommandRegistry(await ApplicationCommandStore.create(database, organizations));
+    const connectorId = "server-prepare-retry-12345678";
+    const prepare = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("일시적인 Codex 준비 실패"))
+      .mockResolvedValueOnce({
+        account: {
+          account_id: "account-prepare-retry-12345678",
+          provider_id: "openai-codex",
+          alias: "새 Codex",
+          scope: "personal",
+          connector_id: connectorId,
+          billing_kind: "consumer-subscription",
+          status: "offline",
+          consent_version: 0,
+          version: 1,
+        },
+        connector: { status: "offline" },
+        profileHandle: `${"a".repeat(64)}/${"b".repeat(64)}`,
+      });
+    registerApplicationDomainCommands(registry, {
+      subscriptionServerConnections: { prepare, attest: vi.fn(), offline: vi.fn() },
+    } as never);
+    const command = {
+      schemaVersion: "massion.application.v1" as const,
+      commandId: randomUUID(),
+      correlationId: randomUUID(),
+      operation: "subscription.server.prepare",
+      payload: {
+        providerId: "openai-codex",
+        alias: "새 Codex",
+        authKind: "cli-profile",
+        billingKind: "consumer-subscription",
+      },
+    };
+
+    await expect(registry.dispatch(context, ["subscription:write"], command)).rejects.toBeInstanceOf(ApplicationError);
+    await expect(registry.dispatch(context, ["subscription:write"], command)).resolves.toMatchObject({
+      outcome: "succeeded",
+      data: { accountId: "account-prepare-retry-12345678", connectorStatus: "offline" },
+    });
+    expect(prepare).toHaveBeenCalledTimes(2);
+  });
+
   it("prepare→로그인 후 attest→offline을 redacted Application 계약으로 연결한다", async () => {
     await using database = await createDatabase({ url: "mem://", namespace: "massion", database: randomUUID() });
     const identities = await IdentityService.create(database);
@@ -59,7 +282,12 @@ describe("Application 서버 구독 연결 명령", () => {
       },
       profileHandle: `${"a".repeat(64)}/${"b".repeat(64)}`,
     });
-    const attest = vi.fn().mockResolvedValue({ ...connector, status: "ready", processGeneration: 1 });
+    const attest = vi.fn().mockResolvedValue({
+      ...connector,
+      status: "ready",
+      processGeneration: 1,
+      quotaObservation: { source: "direct", attestedAt: "2026-07-15T00:00:00.000Z" },
+    });
     const offline = vi.fn().mockResolvedValue(connector);
     registerApplicationDomainCommands(registry, {
       subscriptionServerConnections: { prepare, attest, offline },
@@ -99,7 +327,13 @@ describe("Application 서버 구독 연결 명령", () => {
         profileHandle: `${"a".repeat(64)}/${"b".repeat(64)}`,
       },
     });
-    expect(ready).toMatchObject({ data: { connectorId: connector.connectorId, status: "ready" } });
+    expect(ready).toMatchObject({
+      data: {
+        connectorId: connector.connectorId,
+        status: "ready",
+        quotaObservation: { source: "direct", attestedAt: "2026-07-15T00:00:00.000Z" },
+      },
+    });
     expect(stopped).toMatchObject({ data: { connectorId: connector.connectorId, status: "offline" } });
     expect(prepare).toHaveBeenCalledWith(
       context,

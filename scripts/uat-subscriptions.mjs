@@ -45,6 +45,7 @@ const FORBIDDEN_STRING = [
   /\bBearer\s+[A-Za-z0-9._~+/-]{12,}={0,2}\b/iu,
   /-----BEGIN (?:ENCRYPTED )?PRIVATE KEY-----/u,
   /\b(?:sk-(?:ant-)?|ghp_)[A-Za-z0-9_-]{12,}\b/u,
+  /\bauth\.json\b/iu,
   /(?:^|[\s"'(])\/(?:Volumes|Users|home|private|tmp|var)\/[^\s"'<>]*/u,
   /\bfile:\/\/\/[^\s"'<>]+/iu,
   /[A-Za-z]:\\Users\\[^\s]+/u,
@@ -75,6 +76,7 @@ const OBSERVATION_KINDS = new Set([
   "runtime-subscription-lineage",
   "server-restore",
   "subscription-accounts",
+  "subscription-connect",
   "subscription-doctor",
   "subscription-policy-command",
   "subscription-policy-query",
@@ -554,11 +556,28 @@ function validateAccountQuery(value, expected) {
     }
     return { ...facts, alias: account.alias, canManage: account.canManage, connectorStatus: account.connectorStatus };
   });
-  const matches = accounts.filter(
-    (account) => account.providerId === expected.providerId && account.alias === expected.alias,
-  );
+  const providerId = observedIdentifier(expected.providerId, "기대 providerId");
+  const alias = observedText(expected.alias, "기대 account alias", 128);
+  const expectedAccountId =
+    expected.accountId === undefined ? undefined : observedIdentifier(expected.accountId, "기대 accountId");
+  const expectedConnectorId =
+    expected.connectorId === undefined ? undefined : observedIdentifier(expected.connectorId, "기대 connectorId");
+  const providerAccountCount = accounts.filter((account) => account.providerId === providerId).length;
+  if (expected.providerAccountCount !== undefined) {
+    const requiredCount = observedInteger(expected.providerAccountCount, "기대 provider account 수", 1);
+    if (providerAccountCount !== requiredCount) {
+      throw new Error("provider 구독 계정 수가 기대값과 일치하지 않습니다");
+    }
+  }
+  const matches = accounts.filter((account) => account.providerId === providerId && account.alias === alias);
   if (matches.length !== 1) throw new Error("검증할 구독 account 계보를 정확히 하나 찾지 못했습니다");
   const account = matches[0];
+  if (
+    (expectedAccountId !== undefined && account.accountId !== expectedAccountId) ||
+    (expectedConnectorId !== undefined && account.connectorId !== expectedConnectorId)
+  ) {
+    throw new Error("구독 account 또는 Connector 계보가 기대값과 일치하지 않습니다");
+  }
   if (
     account.status !== "active" ||
     account.scope !== "personal" ||
@@ -580,7 +599,35 @@ function validateAccountQuery(value, expected) {
     scope: account.scope,
     status: account.status,
     version: account.version,
+    ...(expected.providerAccountCount === undefined ? {} : { providerAccountCount }),
   };
+}
+
+function validateSubscriptionConnect(value, expected) {
+  const connection = observedExact(
+    value,
+    ["status", "providerId", "alias", "accountId", "connectorId", "connectionDisposition"],
+    "subscription connect 응답",
+  );
+  if (connection.status !== "ready") throw new Error("subscription connect 상태가 ready가 아닙니다");
+  const facts = {
+    status: connection.status,
+    providerId: observedIdentifier(connection.providerId, "subscription connect providerId"),
+    alias: observedText(connection.alias, "subscription connect alias", 128),
+    accountId: observedIdentifier(connection.accountId, "subscription connect accountId"),
+    connectorId: observedIdentifier(connection.connectorId, "subscription connect connectorId"),
+    connectionDisposition: observedText(connection.connectionDisposition, "subscription connect 재사용 상태", 32),
+  };
+  if (!new Set(["new", "reused", "reauthenticated"]).has(facts.connectionDisposition)) {
+    throw new Error("subscription connect 재사용 상태가 유효하지 않습니다");
+  }
+  const expectedFields = ["providerId", "alias", "accountId", "connectorId", "connectionDisposition"];
+  for (const field of expectedFields) {
+    if (expected[field] !== undefined && expected[field] !== facts[field]) {
+      throw new Error("subscription connect 재사용 계보가 기대값과 일치하지 않습니다");
+    }
+  }
+  return facts;
 }
 
 function validateDoctorQuery(value, expected) {
@@ -630,7 +677,21 @@ function validateDoctorQuery(value, expected) {
 
 function validateQuotaQuery(value, expected) {
   const rows = queryData(value, "subscription.quota");
-  if (rows.length === 0) return { accountId: expected.accountId, available: false };
+  const requireCodexDirectObservation = expected.requireCodexDirectObservation === true;
+  if (
+    expected.requireCodexDirectObservation !== undefined &&
+    typeof expected.requireCodexDirectObservation !== "boolean"
+  ) {
+    throw new Error("Codex 직접 quota 관측 요구값이 유효하지 않습니다");
+  }
+  const observedAfter =
+    expected.observedAfter === undefined
+      ? undefined
+      : new Date(observedInstant(expected.observedAfter, "Codex quota 기준 시각")).getTime();
+  if (rows.length === 0) {
+    if (requireCodexDirectObservation) throw new Error("Codex 직접 quota 관측이 없습니다");
+    return { accountId: expected.accountId, available: false };
+  }
   const quotas = rows.map((item, index) => {
     const quota = observedExact(
       item,
@@ -639,29 +700,56 @@ function validateQuotaQuery(value, expected) {
     );
     const accountId = observedIdentifier(quota.accountId, "quota accountId");
     if (!Array.isArray(quota.windows)) throw new Error("quota windows가 배열이 아닙니다");
-    quota.windows.forEach((item, windowIndex) => {
+    const windows = quota.windows.map((item, windowIndex) => {
       const window = observedExact(
         item,
         ["kind", "limit", "remaining", "remainingRatio", "resetsAt", "observedAt", "confidence"],
         `quota window[${String(windowIndex)}]`,
       );
-      observedText(window.kind, "quota window kind", 64);
-      observedInstant(window.observedAt, "quota window observedAt");
+      const kind = observedText(window.kind, "quota window kind", 64);
+      const windowObservedAt = observedInstant(window.observedAt, "quota window observedAt");
       if (window.resetsAt !== undefined) observedInstant(window.resetsAt, "quota window resetsAt");
-      if (window.confidence !== undefined) observedText(window.confidence, "quota window confidence", 64);
+      const confidence =
+        window.confidence === undefined ? undefined : observedText(window.confidence, "quota window confidence", 64);
       for (const field of ["limit", "remaining", "remainingRatio"]) {
         if (window[field] !== undefined && (typeof window[field] !== "number" || !Number.isFinite(window[field]))) {
           throw new Error(`quota window ${field}가 유효하지 않습니다`);
         }
       }
+      return { kind, observedAt: windowObservedAt, confidence };
     });
     if (typeof quota.exhausted !== "boolean") throw new Error("quota exhausted가 유효하지 않습니다");
-    observedInstant(quota.observedAt, "quota observedAt");
-    return { accountId, available: true, exhausted: quota.exhausted, windows: quota.windows.length };
+    const quotaObservedAt = observedInstant(quota.observedAt, "quota observedAt");
+    return {
+      accountId,
+      available: true,
+      exhausted: quota.exhausted,
+      windows,
+      observedAt: quotaObservedAt,
+    };
   });
   const matches = quotas.filter((quota) => quota.accountId === expected.accountId);
   if (matches.length !== 1) throw new Error("quota account query 계보가 일치하지 않습니다");
-  return matches[0];
+  const quota = matches[0];
+  const facts = {
+    accountId: quota.accountId,
+    available: quota.available,
+    exhausted: quota.exhausted,
+    windows: quota.windows.length,
+  };
+  if (!requireCodexDirectObservation) return facts;
+  const observedAfterMillis = observedAfter ?? 0;
+  const quotaObservedAt = new Date(quota.observedAt).getTime();
+  const directlyObserved = quota.windows.some(
+    (window) =>
+      window.kind.startsWith("codex:") &&
+      window.confidence === "reported" &&
+      new Date(window.observedAt).getTime() >= observedAfterMillis,
+  );
+  if (!directlyObserved || quotaObservedAt < observedAfterMillis) {
+    throw new Error("Codex 직접 quota 관측이 현재 연결 이후에 확인되지 않았습니다");
+  }
+  return { ...facts, codexDirectObservation: true, observedAt: quota.observedAt };
 }
 
 function validatePolicyCommand(value, expected) {
@@ -805,6 +893,8 @@ export function parseAndValidateObservedUatOutput(kind, raw, expectedValue = {})
     facts = validateProviderCatalog(value, expected);
   } else if (kind === "subscription-accounts") {
     facts = validateAccountQuery(value, expected);
+  } else if (kind === "subscription-connect") {
+    facts = validateSubscriptionConnect(value, expected);
   } else if (kind === "subscription-doctor") {
     facts = validateDoctorQuery(value, expected);
   } else if (kind === "subscription-quota") {
@@ -1985,7 +2075,7 @@ export async function verifyOperationalLogFile(path, ownerIdentity) {
   return true;
 }
 
-async function executeProviderScenario(session, plan, environment, timeoutMs, releaseDigest, signal) {
+export async function executeProviderScenario(session, plan, environment, timeoutMs, releaseDigest, signal) {
   const startedAt = new Date().toISOString();
   const commands = [];
   const assertions = [];
@@ -2045,15 +2135,70 @@ async function executeProviderScenario(session, plan, environment, timeoutMs, re
       })
     : undefined;
   if (doctorObservation) assertions.push("provider-health-verified");
-  const quotaObservation = account
+  const initialQuotaObservation =
+    plan.provider !== "openai-codex" && account
+      ? await observe({
+          step: `${plan.id}-quota`,
+          arguments: ["subscription", "quota", account.accountId, "--json"],
+          observation: {
+            kind: "subscription-quota",
+            expected: { accountId: account.accountId },
+          },
+        })
+      : undefined;
+  const reconnectStartedAt = new Date().toISOString();
+  const reconnectObservation =
+    plan.provider === "openai-codex" && account
+      ? await observe({
+          step: `${plan.id}-reconnect`,
+          arguments: ["subscription", "connect", plan.provider, alias, "--json"],
+          observation: {
+            kind: "subscription-connect",
+            expected: {
+              providerId: plan.provider,
+              alias,
+              accountId: account.accountId,
+              connectorId: account.connectorId,
+              connectionDisposition: "reused",
+            },
+          },
+        })
+      : undefined;
+  if (reconnectObservation) assertions.push("profile-reuse-verified");
+  const accountAfterReconnect = reconnectObservation
     ? await observe({
-        step: `${plan.id}-quota`,
-        arguments: ["subscription", "quota", account.accountId, "--json"],
-        observation: { kind: "subscription-quota", expected: { accountId: account.accountId } },
+        step: `${plan.id}-accounts-after-reconnect`,
+        arguments: ["subscription", "accounts", "--json"],
+        observation: {
+          kind: "subscription-accounts",
+          expected: {
+            providerId: plan.provider,
+            alias,
+            accountId: account.accountId,
+            connectorId: account.connectorId,
+            providerAccountCount: 1,
+          },
+        },
       })
     : undefined;
+  const quotaObservation =
+    plan.provider === "openai-codex" && account && reconnectObservation
+      ? await observe({
+          step: `${plan.id}-quota-after-reconnect`,
+          arguments: ["subscription", "quota", account.accountId, "--json"],
+          observation: {
+            kind: "subscription-quota",
+            expected: {
+              accountId: account.accountId,
+              requireCodexDirectObservation: true,
+              observedAfter: reconnectStartedAt,
+            },
+          },
+        })
+      : initialQuotaObservation;
   if (quotaObservation?.facts.available === true) {
     assertions.push("quota-query-verified");
+    if (quotaObservation.facts.codexDirectObservation === true) assertions.push("codex-direct-quota-verified");
   } else if (quotaObservation) {
     const now = new Date().toISOString();
     supplemental.push(
@@ -2067,6 +2212,7 @@ async function executeProviderScenario(session, plan, environment, timeoutMs, re
       ),
     );
   }
+  if (accountAfterReconnect) assertions.push("provider-account-count-verified");
   const policyCommand = await observe({
     step: `${plan.id}-policy-configure`,
     arguments: ["subscription", "policy", plan.provider, policy.credentialPolicy, policy.approvalMode, "--json"],

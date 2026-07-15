@@ -14,6 +14,7 @@ import {
 import type { TenantContext } from "@massion/identity";
 
 import type { StructuredOutputSpec } from "../contracts.js";
+import { managedCodexCredentialState } from "./codex-profile.js";
 import type {
   SubscriptionAgentAdapter,
   SubscriptionAgentInput,
@@ -37,6 +38,8 @@ export interface CodexSdkFactory {
 
 export interface CodexSubscriptionConnectorOptions {
   readonly allowedEnvironment: readonly string[];
+  /** Massion이 생성·수명 관리하는 격리 profile에만 파일 credential store를 강제합니다. */
+  readonly managedProfile?: boolean;
   readonly executable?: string;
   readonly threadPolicy?: {
     readonly sandboxMode: Exclude<SandboxMode, "danger-full-access">;
@@ -110,15 +113,22 @@ export class CodexSubscriptionConnector implements SubscriptionAgentAdapter {
   private async run(input: SubscriptionAgentInput, output?: StructuredOutputSpec): Promise<SubscriptionAgentResult> {
     const workspaceRoot = requirePath(input.workspaceRoot, "Codex workspace root");
     const profileRoot = requirePath(input.profileRoot, "Codex profile root");
-    const env = Object.fromEntries(
+    if (this.options.managedProfile && (await managedCodexCredentialState(profileRoot)) !== "present") {
+      throw new Error("관리 Codex profile에 재인증이 필요합니다");
+    }
+    const selectedEnvironment = Object.fromEntries(
       this.options.allowedEnvironment.flatMap((key) => {
         const value = key === "CODEX_HOME" ? profileRoot : input.environment[key];
         return value === undefined ? [] : [[key, value]];
       }),
     );
+    const env = this.options.managedProfile
+      ? { ...selectedEnvironment, CODEX_HOME: profileRoot, HOME: profileRoot }
+      : selectedEnvironment;
     const client = this.factory.create({
       ...(this.options.executable ? { codexPathOverride: this.options.executable } : {}),
       env,
+      ...(this.options.managedProfile ? { config: { cli_auth_credentials_store: "file" } } : {}),
     });
     const threadOptions: ThreadOptions = {
       workingDirectory: workspaceRoot,
