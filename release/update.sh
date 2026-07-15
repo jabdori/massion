@@ -154,6 +154,21 @@ if [ "$checksum_tool" = "sha256sum" ]; then actual_digest=$(sha256sum "$archive"
 if [ "$actual_digest" != "$archive_digest" ]; then echo "릴리스 아카이브 SHA-256 검증에 실패했습니다" >&2; exit 1; fi
 tar -xzf "$archive" -C "$bundle"
 if [ ! -f "$bundle/install.sh" ] || [ -L "$bundle/install.sh" ] || [ ! -f "$bundle/SHA256SUMS" ]; then echo "릴리스 설치 묶음이 유효하지 않습니다" >&2; exit 1; fi
+node - "$bundle/release-bundle.json" "$requested_version" <<'NODE'
+const { readFileSync } = require("node:fs");
+const [bundlePath, requestedVersion] = process.argv.slice(2);
+let bundle;
+try {
+  bundle = JSON.parse(readFileSync(bundlePath, "utf8"));
+} catch {
+  process.stderr.write("release bundle version을 확인할 수 없습니다\n");
+  process.exit(1);
+}
+if (bundle?.schema !== "massion.release-bundle.v1" || bundle.version !== requestedVersion) {
+  process.stderr.write("release bundle version이 manifest와 다릅니다\n");
+  process.exit(1);
+}
+NODE
 if [ "$json" -eq 1 ]; then
   MASSION_PREFIX="$prefix" sh "$bundle/install.sh" >/dev/null
   printf '{"schema":"massion.update.v1","operation":"upgrade","status":"updated","currentVersion":"%s","targetVersion":"%s"}\n' "$current_version" "$requested_version"
