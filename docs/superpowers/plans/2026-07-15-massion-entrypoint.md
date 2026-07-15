@@ -161,11 +161,11 @@ Document `massion init`, then `massion` for TUI, `massion --web` for Web, and mo
 
 Replace public `mass` and `massion-tui` examples and update install/uninstall instructions to the single `massion` command.
 
-- [ ] **Step 3: Record evidence and known boundaries**
+- [x] **Step 3: Record evidence and known boundaries**
 
 Record the TUI first-run guidance, Web ticket behavior, local static Web health check, and the fact that `mass` compatibility is intentionally not provided before public release.
 
-- [ ] **Step 4: Run the complete verification gates**
+- [x] **Step 4: Run the complete verification gates**
 
 Run:
 
@@ -177,7 +177,7 @@ pnpm release:build /private/tmp/massion-release-20260715-entrypoint
 CI=true pnpm verify:release /private/tmp/massion-release-20260715-entrypoint
 ```
 
-- [ ] **Step 5: Commit the completed feature**
+- [x] **Step 5: Commit the completed feature**
 
 ```sh
 git add apps packages release scripts docs README.md CHANGELOG.md
