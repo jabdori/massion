@@ -15,7 +15,8 @@
   "scripts": {
     "build": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\" && pnpm build-deps && tsc -p tsconfig.json",
     "build-deps": "pnpm --filter @massion/storage exec tsc -p tsconfig.json && pnpm --filter @massion/identity exec tsc -p tsconfig.json && pnpm --filter @massion/extension-host build",
-    "test": "pnpm build-deps && vitest run src",
+    "build-official-extensions": "pnpm --filter @massion-ext/slack build && pnpm --filter @massion-ext/discord build && pnpm --filter @massion-ext/github build",
+    "test": "pnpm build-deps && pnpm build-official-extensions && vitest run src",
     "typecheck": "pnpm build-deps && tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
