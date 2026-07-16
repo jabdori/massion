@@ -13,7 +13,7 @@ import {
 import type { RuntimeExecutionStore } from "@massion/runtime";
 
 import { ApplicationError } from "./errors.js";
-import type { ApplicationEventStore } from "./event-store.js";
+import { ApplicationEventCursorExpiredError, type ApplicationEventStore } from "./event-store.js";
 import type { ApplicationReadModel } from "./read-model.js";
 import type { CollaborationGraphSnapshotProjector } from "./snapshot.js";
 import type { WebSessionService } from "./web-session.js";
@@ -446,11 +446,26 @@ export function registerApplicationQueries(
       requiredScopes: ["audit:read"],
       allowedRoles: EVERY_ROLE,
       validate: (value) => object(value, ["after", "limit"]),
-      handle: async (context, value) =>
-        await dependencies.audit?.read(context, {
-          after: cursor(value.after),
-          limit: boundedInteger(value.limit, "limit", 100),
-        }),
+      handle: async (context, value) => {
+        try {
+          return await dependencies.audit?.read(context, {
+            after: cursor(value.after),
+            limit: boundedInteger(value.limit, "limit", 100),
+          });
+        } catch (cause) {
+          if (cause instanceof ApplicationEventCursorExpiredError) {
+            throw new ApplicationError({
+              category: "conflict",
+              severity: "warning",
+              retryable: true,
+              userMessage: "감사 사건 보존 범위가 지나 snapshot 재동기화가 필요합니다",
+              operatorCode: "APP_EVENT_CURSOR_EXPIRED",
+              cause,
+            });
+          }
+          throw cause;
+        }
+      },
     });
   }
   registry.register({

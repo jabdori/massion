@@ -21,6 +21,13 @@ function parseFrame(frame: string): PublicApplicationEvent | undefined {
   return value as PublicApplicationEvent;
 }
 
+async function isEventCursorExpired(response: Response): Promise<boolean> {
+  if (response.status !== 409) return false;
+  const detail: unknown = await response.json().catch(() => undefined as unknown);
+  if (!detail || typeof detail !== "object" || Array.isArray(detail)) return false;
+  return (detail as Record<string, unknown>).operatorCode === "APP_EVENT_CURSOR_EXPIRED";
+}
+
 export class LiveEventConnection {
   private readonly fetcher: typeof fetch;
   private readonly random: () => number;
@@ -73,6 +80,11 @@ export class LiveEventConnection {
           headers: { accept: "text/event-stream" },
           signal: this.controller.signal,
         });
+        if (await isEventCursorExpired(response)) {
+          await this.store.recoverExpiredCursor();
+          this.retry = 0;
+          continue;
+        }
         if (!response.ok || !response.body) throw new Error(`실시간 연결이 거부됐습니다 (${String(response.status)})`);
         this.retry = 0;
         this.store.setConnection("live");

@@ -140,15 +140,32 @@ describe("ApplicationProduct", () => {
     expect(setCookie).toContain("SameSite=Strict");
     expect(setCookie).not.toContain("Secure");
     const cookie = setCookie.split(";", 1)[0] ?? "";
-    const session = (await exchange.json()) as { csrfToken: string; sessionToken?: string };
+    const session = (await exchange.json()) as {
+      csrfToken: string;
+      issuedAt: string;
+      expiresAt: string;
+      idleExpiresAt: string;
+      sessionToken?: string;
+    };
     expect(session.sessionToken).toBeUndefined();
 
     const recovered = await fetch(`${endpoint.url}/api/v1/web/session`, {
       headers: { cookie, origin: endpoint.url, accept: "application/json" },
     });
     expect(recovered.status).toBe(200);
-    const recoveredSession = (await recovered.json()) as { csrfToken: string };
+    const recoveredSession = (await recovered.json()) as {
+      csrfToken: string;
+      issuedAt: string;
+      expiresAt: string;
+      idleExpiresAt: string;
+    };
     expect(recoveredSession.csrfToken).not.toBe(session.csrfToken);
+    expect(recoveredSession).toMatchObject({
+      issuedAt: session.issuedAt,
+      expiresAt: session.expiresAt,
+      idleExpiresAt: expect.any(String),
+    });
+    expect(Date.parse(recoveredSession.idleExpiresAt)).toBeGreaterThanOrEqual(Date.parse(session.idleExpiresAt));
     const status = await fetch(`${endpoint.url}/api/v1/status`, {
       headers: { cookie, accept: "application/json" },
     });

@@ -83,6 +83,9 @@ export interface ExchangedWebSession {
 
 export interface AuthenticatedWebSession extends AuthenticatedApplicationAccess {
   readonly sessionId: string;
+  readonly issuedAt: string;
+  readonly expiresAt: string;
+  readonly idleExpiresAt: string;
 }
 
 export interface WebSessionView {
@@ -345,7 +348,13 @@ export class WebSessionService {
       "UPDATE application_web_session SET last_seen_at = <datetime>$now, idle_expires_at = <datetime>$idle_expires_at WHERE session_id = $session_id AND revoked_at = NONE;",
       { session_id: record.session_id, now: this.clock.now.toISOString(), idle_expires_at: boundedIdle.toISOString() },
     );
-    return { ...source, sessionId: record.session_id };
+    return {
+      ...source,
+      sessionId: record.session_id,
+      issuedAt: date(record.issued_at, "session issuedAt").toISOString(),
+      expiresAt: date(record.expires_at, "session expiresAt").toISOString(),
+      idleExpiresAt: boundedIdle.toISOString(),
+    };
   }
 
   public async verifyCsrf(sessionToken: string, csrfToken: string): Promise<boolean> {
