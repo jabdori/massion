@@ -27,13 +27,15 @@ export async function collectProviderOnboardingAnswers(
 ): Promise<ProviderOnboardingAnswers> {
   if (options.length === 0) throw new Error("현재 연결할 수 있는 Provider가 없습니다");
   const menu = options
-    .map((option, index) => `  ${index + 1}. ${option.displayName} (${option.providerId})`)
+    .map((option, index) => `  ${String(index + 1)}. ${option.displayName} (${option.providerId})`)
     .join("\n");
   const selected = providerNumber(
     await question(`연결할 Provider를 선택하세요.\n${menu}\n연결할 Provider 번호 [1]: `),
     options.length,
   );
-  return { providerId: options[selected - 1]!.providerId };
+  const option = options[selected - 1];
+  if (!option) throw new Error("Provider 선택 번호가 유효하지 않습니다");
+  return { providerId: option.providerId };
 }
 
 export function createProviderOnboardingPrompt(input: {
