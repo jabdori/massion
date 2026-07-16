@@ -533,7 +533,7 @@ test("Codex 재사용 UAT는 두 번째 연결의 동일 계정·단일 provider
   const observed = (kind, value, expected = {}) =>
     parseAndValidateObservedUatOutput(kind, typeof value === "string" ? value : JSON.stringify(value), expected);
   const connection = observed(
-    "subscription-connect",
+    "provider-auth-login",
     {
       status: "ready",
       providerId: "openai-codex",
@@ -561,7 +561,7 @@ test("Codex 재사용 UAT는 두 번째 연결의 동일 계정·단일 provider
   assert.throws(
     () =>
       observed(
-        "subscription-connect",
+        "provider-auth-login",
         {
           status: "ready",
           providerId: "openai-codex",
@@ -1037,9 +1037,9 @@ test("공개 계보로도 자동 재현할 fixture가 없는 고급 시나리오
 });
 
 test("실패 command 단계와 공개 종료 코드로 원인을 과장 없이 분류한다", () => {
-  assert.equal(classifyUatFailure("codex-live-subscription-connect", 3), "authentication");
-  assert.equal(classifyUatFailure("codex-live-subscription-connect", 7), "provider");
-  assert.equal(classifyUatFailure("codex-live-subscription-connect", 1), "product");
+  assert.equal(classifyUatFailure("codex-live-provider-auth-login", 3), "authentication");
+  assert.equal(classifyUatFailure("codex-live-provider-auth-login", 7), "provider");
+  assert.equal(classifyUatFailure("codex-live-provider-auth-login", 1), "product");
   assert.equal(classifyUatFailure("codex-live-subscription-quota", 7), "quota");
   assert.equal(classifyUatFailure("codex-live-subscription-quota", 65), "product");
   assert.equal(classifyUatFailure("codex-live-subscription-run", 124), "network");
@@ -1158,7 +1158,7 @@ const account = {
   status: "active",
   version: 1,
 };
-if (args[0] === "subscription" && args[1] === "connect") {
+if (args[0] === "auth" && args[1] === "login") {
   state.connectCalls.push(args);
   if (state.connectCalls.length === 1) {
     if (args.includes("--json")) process.exit(91);
@@ -1247,8 +1247,8 @@ process.exit(94);
   assert.equal((await JSON.parse(await readFile(statePath, "utf8"))).loginCalls, 1);
   assert.equal((await JSON.parse(await readFile(statePath, "utf8"))).quotaCalls, 1);
   assert.deepEqual((await JSON.parse(await readFile(statePath, "utf8"))).connectCalls, [
-    ["subscription", "connect", "openai-codex", "UAT openai-codex"],
-    ["subscription", "connect", "openai-codex", "UAT openai-codex", "--json"],
+    ["auth", "login", "openai-codex", "UAT openai-codex"],
+    ["auth", "login", "openai-codex", "UAT openai-codex", "--json"],
   ]);
   assert.ok(result.scenario.commands.some((command) => command.step === "codex-profile-reuse-reconnect"));
 });

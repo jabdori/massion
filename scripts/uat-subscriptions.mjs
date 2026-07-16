@@ -76,7 +76,7 @@ const OBSERVATION_KINDS = new Set([
   "runtime-subscription-lineage",
   "server-restore",
   "subscription-accounts",
-  "subscription-connect",
+  "provider-auth-login",
   "subscription-doctor",
   "subscription-policy-command",
   "subscription-policy-query",
@@ -603,28 +603,28 @@ function validateAccountQuery(value, expected) {
   };
 }
 
-function validateSubscriptionConnect(value, expected) {
+function validateProviderAuthLogin(value, expected) {
   const connection = observedExact(
     value,
     ["status", "providerId", "alias", "accountId", "connectorId", "connectionDisposition"],
-    "subscription connect 응답",
+    "Provider 인증 응답",
   );
-  if (connection.status !== "ready") throw new Error("subscription connect 상태가 ready가 아닙니다");
+  if (connection.status !== "ready") throw new Error("Provider 인증 상태가 ready가 아닙니다");
   const facts = {
     status: connection.status,
-    providerId: observedIdentifier(connection.providerId, "subscription connect providerId"),
-    alias: observedText(connection.alias, "subscription connect alias", 128),
-    accountId: observedIdentifier(connection.accountId, "subscription connect accountId"),
-    connectorId: observedIdentifier(connection.connectorId, "subscription connect connectorId"),
-    connectionDisposition: observedText(connection.connectionDisposition, "subscription connect 재사용 상태", 32),
+    providerId: observedIdentifier(connection.providerId, "Provider 인증 providerId"),
+    alias: observedText(connection.alias, "Provider 인증 alias", 128),
+    accountId: observedIdentifier(connection.accountId, "Provider 인증 accountId"),
+    connectorId: observedIdentifier(connection.connectorId, "Provider 인증 connectorId"),
+    connectionDisposition: observedText(connection.connectionDisposition, "Provider 인증 재사용 상태", 32),
   };
   if (!new Set(["new", "reused", "reauthenticated"]).has(facts.connectionDisposition)) {
-    throw new Error("subscription connect 재사용 상태가 유효하지 않습니다");
+    throw new Error("Provider 인증 재사용 상태가 유효하지 않습니다");
   }
   const expectedFields = ["providerId", "alias", "accountId", "connectorId", "connectionDisposition"];
   for (const field of expectedFields) {
     if (expected[field] !== undefined && expected[field] !== facts[field]) {
-      throw new Error("subscription connect 재사용 계보가 기대값과 일치하지 않습니다");
+      throw new Error("Provider 인증 재사용 계보가 기대값과 일치하지 않습니다");
     }
   }
   return facts;
@@ -893,8 +893,8 @@ export function parseAndValidateObservedUatOutput(kind, raw, expectedValue = {})
     facts = validateProviderCatalog(value, expected);
   } else if (kind === "subscription-accounts") {
     facts = validateAccountQuery(value, expected);
-  } else if (kind === "subscription-connect") {
-    facts = validateSubscriptionConnect(value, expected);
+  } else if (kind === "provider-auth-login") {
+    facts = validateProviderAuthLogin(value, expected);
   } else if (kind === "subscription-doctor") {
     facts = validateDoctorQuery(value, expected);
   } else if (kind === "subscription-quota") {
@@ -2040,7 +2040,7 @@ export function classifyUatFailure(step, code) {
   if (code === 130) return "cancelled";
   if (code === 65 || code === 70) return "product";
   if (step.includes("quota")) return "quota";
-  if (step.includes("connect")) {
+  if (step.includes("connect") || step.includes("provider-auth-login")) {
     if (code === 2 || code === 3 || code === 4) return "authentication";
     if (code === 7) return "provider";
     return "product";
@@ -2089,7 +2089,7 @@ export async function executeProviderScenario(session, plan, environment, timeou
     window: "connectors",
     step: `${plan.id}-connect`,
     command: massion,
-    arguments: ["subscription", "connect", plan.provider, alias],
+    arguments: ["auth", "login", plan.provider, alias],
     environment,
     timeoutMs,
     interactive: true,
@@ -2151,9 +2151,9 @@ export async function executeProviderScenario(session, plan, environment, timeou
     plan.provider === "openai-codex" && account
       ? await observe({
           step: `${plan.id}-reconnect`,
-          arguments: ["subscription", "connect", plan.provider, alias, "--json"],
+          arguments: ["auth", "login", plan.provider, alias, "--json"],
           observation: {
-            kind: "subscription-connect",
+            kind: "provider-auth-login",
             expected: {
               providerId: plan.provider,
               alias,

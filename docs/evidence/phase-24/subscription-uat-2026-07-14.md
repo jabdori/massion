@@ -13,7 +13,7 @@
 
 최신 source commit의 release를 격리된 `tmux`에서 설치해 version·Connector doctor·local 시작·owner 초기화·readiness·provider catalog·event watch·재시작·owner-only backup·복원·uninstall 후 data 보존을 확인했습니다. 같은 실행에서 Codex의 공식 로그인 세션이 격리 profile에 이미 유효해 연결·account·doctor·quota 조회까지 확인했습니다. 실행 뒤 UAT driver·격리 server·tmux session은 남지 않았습니다.
 
-이 UAT의 새 workspace는 매 실행마다 격리되므로, 처음 연결할 때 공식 로그인 흐름이 나타나는 것은 의도된 검증 동작입니다. 실제 제품 경로에서는 이와 달리 기존 server Codex 계정을 먼저 조회하고 profile·doctor·quota를 확인한 뒤 재사용합니다. profile이 없거나 doctor가 `reauth`/계정 상태가 `needs-reauth`일 때만 해당 profile에서 재인증하며, 새 계정 추가는 `mass subscription connect openai-codex --new-account`로 명시합니다. 이 재사용 경로의 자동화 근거는 `apps/cli/src/subscription-login.test.ts`의 account·doctor·quota 시나리오입니다.
+이 UAT의 새 workspace는 매 실행마다 격리되므로, 처음 연결할 때 공식 로그인 흐름이 나타나는 것은 의도된 검증 동작입니다. 실제 제품 경로에서는 이와 달리 기존 server Codex 계정을 먼저 조회하고 profile·doctor·quota를 확인한 뒤 재사용합니다. profile이 없거나 doctor가 `reauth`/계정 상태가 `needs-reauth`일 때만 해당 profile에서 재인증하며, 새 계정 추가는 `massion auth login openai-codex --new-account`로 명시합니다. 이 재사용 경로의 자동화 근거는 `apps/cli/src/subscription-login.test.ts`의 account·doctor·quota 시나리오입니다.
 
 ## 최신 실제 Codex UAT — 2026-07-14
 

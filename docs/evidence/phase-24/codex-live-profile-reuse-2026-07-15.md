@@ -13,7 +13,7 @@
 
 검증은 실행 중인 로컬 Massion 서버(`127.0.0.1:7331`)와 CLI를 별도 `tmux` 세션에서 사용했습니다.
 
-1. 소유자 초기화 뒤 `subscription connect openai-codex`를 실행하고 사용자가 Codex OAuth를 완료했습니다.
+1. 소유자 초기화 뒤 `massion auth login openai-codex`를 실행하고 사용자가 Codex OAuth를 완료했습니다.
 2. 첫 연결은 이전 서버 버전에서 저장된 불완전한 보류 attestation을 읽었습니다. 첫 replay에는 `status: ready`가 있었지만 `quotaObservation`이 없었습니다.
 3. CLI가 새 command·correlation ID를 생성해 attestation을 한 번 재실행했고, 직접 quota 관측 증거를 받은 뒤 `status: ready`, `connectionDisposition: new`를 반환했습니다.
 4. 보류 파일이 삭제된 뒤 같은 별칭으로 다시 연결했습니다. OAuth 흐름을 다시 열지 않고 `status: ready`, `connectionDisposition: reused`와 동일한 계정·Connector 계보를 반환했습니다.

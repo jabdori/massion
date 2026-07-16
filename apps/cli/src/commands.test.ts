@@ -502,34 +502,6 @@ describe("CLI Application adapter", () => {
     ).rejects.toThrow(/stdin|명령행|argv/u);
   });
 
-  it("subscription connect는 로컬 로그인 adapter에 provider와 사람이 읽는 별칭만 전달한다", async () => {
-    const connectServerSubscription = vi.fn(async () => ({ status: "ready" }));
-    const client: CliApplicationClient = {
-      status: async () => ({}),
-      snapshot: async () => ({}),
-      query: async () => ({}),
-      command: async () => ({}),
-      inspectArtifact: async () => ({}),
-      installArtifact: async () => ({}),
-      updateArtifact: async () => ({}),
-    };
-
-    await expect(
-      executeCliInvocation(
-        client,
-        parseCliArguments(["subscription", "connect", "openai-codex", "개인 Codex", "--model", "gpt-5.6-sol"]),
-        {
-          connectServerSubscription,
-        },
-      ),
-    ).resolves.toEqual({ status: "ready" });
-    expect(connectServerSubscription).toHaveBeenCalledWith({
-      providerId: "openai-codex",
-      alias: "개인 Codex",
-      modelId: "gpt-5.6-sol",
-    });
-  });
-
   it("auth login은 같은 로컬 구독 로그인 adapter를 사용한다", async () => {
     const connectServerSubscription = vi.fn(async () => ({ status: "ready" }));
     const client: CliApplicationClient = {
@@ -548,55 +520,6 @@ describe("CLI Application adapter", () => {
       }),
     ).resolves.toEqual({ status: "ready" });
     expect(connectServerSubscription).toHaveBeenCalledWith({ providerId: "openai-codex" });
-  });
-
-  it("subscription connect는 기존 profile 재사용 결과를 JSON 출력 계약에 그대로 보존한다", async () => {
-    const connection = {
-      status: "ready",
-      accountId: "account-existing-123",
-      connectorId: "server-codex-123",
-      connectionDisposition: "reused",
-    } as const;
-    const connectServerSubscription = vi.fn(async () => connection);
-    const client: CliApplicationClient = {
-      status: async () => ({}),
-      snapshot: async () => ({}),
-      query: async () => ({}),
-      command: async () => ({}),
-      inspectArtifact: async () => ({}),
-      installArtifact: async () => ({}),
-      updateArtifact: async () => ({}),
-    };
-
-    const result = await executeCliInvocation(
-      client,
-      parseCliArguments(["subscription", "connect", "openai-codex", "개인 Codex"]),
-      { connectServerSubscription },
-    );
-
-    expect(result).toEqual(connection);
-    expect(JSON.parse(JSON.stringify(result))).toEqual(expect.objectContaining({ connectionDisposition: "reused" }));
-  });
-
-  it("subscription connect --new-account는 새 계정 추가 의도를 adapter에 전달한다", async () => {
-    const connectServerSubscription = vi.fn(async () => ({ status: "ready" }));
-    const client: CliApplicationClient = {
-      status: async () => ({}),
-      snapshot: async () => ({}),
-      query: async () => ({}),
-      command: async () => ({}),
-      inspectArtifact: async () => ({}),
-      installArtifact: async () => ({}),
-      updateArtifact: async () => ({}),
-    };
-
-    await executeCliInvocation(
-      client,
-      parseCliArguments(["subscription", "connect", "openai-codex", "--new-account"]),
-      { connectServerSubscription },
-    );
-
-    expect(connectServerSubscription).toHaveBeenCalledWith({ providerId: "openai-codex", newAccount: true });
   });
 
   it("subscription share 승인 재개는 approval ID와 원래 command ID를 함께 보존한다", async () => {
