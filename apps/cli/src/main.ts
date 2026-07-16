@@ -42,7 +42,7 @@ const HELP = `Massion AgentOS
 
 기능 그룹:
   org, work, chat, task, approval, assurance, runtime
-  provider, subscription, ext, growth, optimization, doctor
+  auth, provider, subscription, ext, growth, optimization, doctor
 
 공통 옵션:
   --json                         한 번에 JSON으로 출력
@@ -55,7 +55,7 @@ const HELP = `Massion AgentOS
   massion
   massion init
   massion run "첫 번째 작업" --wait
-  massion subscription connect openai-codex
+  massion auth login openai-codex
   massion status --json
 
 자동화·고급 명령은 각 명령의 사용법과 README를 참고하세요.
