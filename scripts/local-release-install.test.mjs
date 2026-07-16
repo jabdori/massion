@@ -110,10 +110,7 @@ test("공백이 있는 개인 경로에 connector를 설치하고 진단한 뒤 
     await readFile(join(release, "bin/massion"), "utf8"),
     /runtime\/node_modules\/@massion\/cli\/dist\/main\.js" init/u,
   );
-  assert.match(
-    await readFile(join(release, "bin/massion"), "utf8"),
-    /status --json.*main\.js" init/su,
-  );
+  assert.match(await readFile(join(release, "bin/massion"), "utf8"), /status --json.*main\.js" init/su);
   assert.equal((await lstat(join(release, "update.sh"))).isFile(), true);
   assert.match(await readFile(join(release, "bin/massion"), "utf8"), /MASSION_UPDATE_BIN/u);
   for (const command of commands) {
