@@ -114,6 +114,16 @@ const PROVIDERS: Readonly<Record<string, ProviderLoginContract>> = {
   },
 };
 
+export function listLocalSubscriptionLoginProviders(): readonly {
+  readonly providerId: string;
+  readonly displayName: string;
+}[] {
+  return Object.entries(PROVIDERS).map(([providerId, contract]) => ({
+    providerId,
+    displayName: contract.defaultAlias,
+  }));
+}
+
 function errorCode(error: unknown): string | undefined {
   return error instanceof Error && "code" in error && typeof error.code === "string" ? error.code : undefined;
 }

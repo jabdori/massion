@@ -14,13 +14,14 @@ import { processJsonLines, writeWithBackpressure } from "./jsonl.js";
 import { initializeCli } from "./init.js";
 import { LocalDaemonManager, resolveLocalPaths } from "./local.js";
 import { defaultLocalEndpoint, ensureLocalEndpoint } from "./local-entrypoint.js";
-import { parseCliArguments } from "./parser.js";
+import { parseCliArguments, type CliInvocation } from "./parser.js";
 import { renderCliOutput } from "./render.js";
 import { runHeadless } from "./run.js";
-import { connectLocalServerSubscription } from "./subscription-login.js";
+import { connectLocalServerSubscription, listLocalSubscriptionLoginProviders } from "./subscription-login.js";
 import { resolveTokenReference } from "./token.js";
 import { createOnboardingPrompt } from "./onboarding.js";
 import { openWebConsole } from "./web-login.js";
+import { createProviderOnboardingPrompt } from "./provider-onboarding.js";
 
 const HELP = `Massion AgentOS
 
@@ -44,6 +45,9 @@ const HELP = `Massion AgentOS
   org, work, chat, task, approval, assurance, runtime
   auth, provider, subscription, ext, growth, optimization, doctor
 
+Provider 인증:
+  auth login [provider]           Provider 온보딩 또는 로그인
+
 공통 옵션:
   --json                         한 번에 JSON으로 출력
   --jsonl                        JSON Lines로 출력
@@ -55,11 +59,27 @@ const HELP = `Massion AgentOS
   massion
   massion init
   massion run "첫 번째 작업" --wait
-  massion auth login openai-codex
+  massion auth login
   massion status --json
 
 자동화·고급 명령은 각 명령의 사용법과 README를 참고하세요.
 `;
+
+async function resolveProviderLoginOnboarding(invocation: CliInvocation): Promise<CliInvocation> {
+  if (invocation.command !== "auth" || invocation.subcommand !== "login" || invocation.arguments.length > 0) {
+    return invocation;
+  }
+  if (invocation.output !== "human" || !process.stdin.isTTY || !process.stdout.isTTY) {
+    throw new Error("사용법: massion auth login [providerId] (대화형 Provider 온보딩은 터미널에서 실행하세요)");
+  }
+  const onboarding = createProviderOnboardingPrompt({ options: listLocalSubscriptionLoginProviders() });
+  try {
+    const answers = await onboarding.collect();
+    return { ...invocation, arguments: [answers.providerId] };
+  } finally {
+    onboarding.readline.close();
+  }
+}
 
 async function runReleaseUpdater(arguments_: readonly string[]): Promise<number> {
   const updater = process.env.MASSION_UPDATE_BIN;
@@ -303,7 +323,8 @@ export async function runCli(argv = process.argv.slice(2)): Promise<number> {
     } finally {
       process.off("SIGINT", interrupt);
     }
-    const value = await executeCliInvocation(authenticated, invocation, {
+    const effectiveInvocation = await resolveProviderLoginOnboarding(invocation);
+    const value = await executeCliInvocation(authenticated, effectiveInvocation, {
       readJson: async () => JSON.parse((await readStdin()).toString("utf8")) as unknown,
       readArtifact: async (path) => {
         const archive = await readFile(path);

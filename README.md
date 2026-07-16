@@ -91,15 +91,15 @@ TUI에서는 숫자 키로 화면을 이동합니다.
 
 처음에는 `1` 개요와 `3` 업무만 확인해도 됩니다. `Ctrl+C`로 TUI를 닫아도 로컬 서버와 데이터는 유지됩니다.
 
-### 3. 모델 연결(선택)
+### 3. Provider 온보딩(선택)
 
-실제 AI 모델로 업무를 실행하려면 사용할 공급자(Provider)를 한 번 연결합니다. 예를 들어 OpenAI Codex 구독은 다음처럼 연결합니다.
+실제 AI 모델로 업무를 실행하려면 Provider 온보딩을 한 번 진행합니다.
 
 ```sh
-massion auth login openai-codex
+massion auth login
 ```
 
-이미 연결된 profile이 있으면 다시 로그인하지 않고 재사용합니다. 로그인 또는 추가 계정 연결이 필요한 경우에만 공급자 인증 화면이 나타납니다. 모델을 연결하지 않아도 TUI·조직·업무 기록·백업 기능은 확인할 수 있습니다. API key나 endpoint를 직접 등록하는 고급 작업은 `provider` 명령 그룹을 사용합니다.
+화면에서 Provider를 선택하면 해당 인증 화면으로 이동합니다. 이미 연결된 profile이 있으면 다시 로그인하지 않고 재사용합니다. 특정 Provider를 바로 지정할 때는 `massion auth login openai-codex`처럼 실행할 수 있습니다. 모델을 연결하지 않아도 TUI·조직·업무 기록·백업 기능은 확인할 수 있습니다. API key나 endpoint를 직접 등록하는 고급 작업은 `provider` 명령 그룹을 사용합니다.
 
 ### 4. 첫 업무 실행
 
