@@ -9,12 +9,12 @@
 - [x] `716fd08`에서 격리 브랜치와 워크트리를 생성하고 frozen dependency 설치를 완료합니다.
 - [x] format·전체 build·lint·typecheck·test·문서 검증을 실행해 종료 코드 0 기준선을 확인합니다.
 - [x] CLI·온보딩·Agent harness·TUI·Web·시각 UX 공격 리뷰를 코드와 실제 실행 결과로 분류합니다.
-- [ ] 기준선 명령, source commit과 환경을 Phase 30 evidence에 기록합니다.
+- [x] 기준선 명령, source commit과 환경을 Phase 30 evidence에 기록합니다.
 
 ## Task 2. 공통 query·resource·사건 계약
 
-- [ ] 서로 다른 payload의 query가 같은 결과 슬롯을 공유하는 실패 테스트를 먼저 추가합니다.
-- [ ] operation+정규 payload를 query identity로 사용하고 Web hook과 초기 load를 같은 계약으로 옮깁니다.
+- [x] 서로 다른 payload의 query가 같은 결과 슬롯을 공유하는 실패 테스트를 먼저 추가합니다.
+- [x] operation+정규 payload를 query identity로 사용하고 Web hook과 초기 load를 같은 계약으로 옮깁니다.
 - [ ] TUI의 선택된 업무·협업방 query도 같은 resource identity와 응답 generation을 사용합니다.
 - [ ] loading·ready·empty·error·stale·retry 상태와 event→resource invalidation을 공통 계약으로 정의합니다.
 - [ ] Web과 TUI에서 정상 SSE 사건, gap, 역순, 재연결과 세션 만료를 검증합니다.
