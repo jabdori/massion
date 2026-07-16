@@ -43,6 +43,7 @@ describe("massion CLI parser", () => {
     [["subscription", "providers"], "subscription", "providers"],
     [["subscription", "enroll", "edge", "agent-runtime"], "subscription", "enroll"],
     [["subscription", "connect", "verified-provider"], "subscription", "connect"],
+    [["auth", "login", "openai-codex"], "auth", "login"],
     [["subscription", "connect-model", "minimax-token-plan"], "subscription", "connect-model"],
     [["subscription", "connect-advanced", "verified-provider"], "subscription", "connect-advanced"],
     [["subscription", "accounts"], "subscription", "accounts"],
@@ -77,6 +78,10 @@ describe("massion CLI parser", () => {
       arguments: ["openai-codex"],
     });
     expect(() => parseCliArguments(["status", "--model", "gpt-5.6-sol"])).toThrow("subscription connect");
+    expect(parseCliArguments(["auth", "login", "openai-codex", "--model", "gpt-5.6-terra"])).toMatchObject({
+      model: "gpt-5.6-terra",
+      arguments: ["openai-codex"],
+    });
   });
 
   it("새 Codex 구독 계정 추가를 명시적으로 파싱한다", () => {
