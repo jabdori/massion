@@ -1,9 +1,10 @@
-import { useEffect, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useSyncExternalStore } from "react";
 
 import type { BrowserSessionStore } from "./session.js";
-import type { WebConsoleState, WebConsoleStore } from "./store.js";
+import { createQueryResourceIdentity, type WebConsoleState, type WebConsoleStore } from "./store.js";
 
 const EMPTY_QUERY_PAYLOAD = Object.freeze({});
+const EMPTY_QUERY_ERRORS: Readonly<Record<string, string>> = Object.freeze({});
 
 export function useSession(store: BrowserSessionStore) {
   return useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
@@ -20,7 +21,19 @@ export function useQueryErrors(store: WebConsoleStore): Readonly<Record<string, 
   return useSyncExternalStore(
     store.subscribe,
     () => store.getSnapshot().queryErrors,
-    (): Readonly<Record<string, string>> => ({}),
+    () => EMPTY_QUERY_ERRORS,
+  );
+}
+
+export function useQueryError(
+  store: WebConsoleStore,
+  operation: string,
+  payload: unknown = EMPTY_QUERY_PAYLOAD,
+): string | undefined {
+  return useSyncExternalStore(
+    store.subscribe,
+    () => store.getQueryError(operation, payload),
+    () => undefined,
   );
 }
 
@@ -30,18 +43,16 @@ export function useQueryData<T>(
   payload: unknown = EMPTY_QUERY_PAYLOAD,
   decoder?: (value: unknown) => T,
 ): T | undefined {
-  const data = useSyncExternalStore(
+  const identity = createQueryResourceIdentity(operation, payload);
+  const value = useSyncExternalStore(
     store.subscribe,
-    () => {
-      const value = store.getSnapshot().queries[operation];
-      return value === undefined ? undefined : decoder ? decoder(value) : (value as T);
-    },
+    () => store.getQueryData(operation, payload),
     () => undefined,
   );
   useEffect(() => {
-    if (data === undefined) void store.refresh(operation, payload).catch(() => undefined);
-  }, [data, operation, payload, store]);
-  return data;
+    if (value === undefined) void store.refresh(operation, payload).catch(() => undefined);
+  }, [identity, store, value]);
+  return useMemo(() => (value === undefined ? undefined : decoder ? decoder(value) : (value as T)), [decoder, value]);
 }
 
 export function connectionFromStatus(value: string): WebConsoleState["connection"] {

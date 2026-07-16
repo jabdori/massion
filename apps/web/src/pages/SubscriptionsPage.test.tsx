@@ -18,7 +18,7 @@ vi.mock("../services.js", () => ({
 
 vi.mock("../hooks.js", () => ({
   useQueryData: (_store: unknown, operation: string) => testState.data[operation],
-  useQueryErrors: () => testState.queryErrors,
+  useQueryError: (_store: unknown, operation: string) => testState.queryErrors[operation],
 }));
 
 import SubscriptionsPage from "./SubscriptionsPage.js";

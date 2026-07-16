@@ -6,9 +6,13 @@ import { consoleStore } from "../services.js";
 import { EmptyState, LoadingState, PageHeader, StatusStamp } from "../components/States.js";
 
 export default function ExtensionsPage() {
+  const [marketplaceQuery, setMarketplaceQuery] = useState("");
   const data = useQueryData<unknown>(consoleStore, "extension.list");
   const integrationData = useQueryData<unknown>(consoleStore, "integration.list");
-  const marketplaceData = useQueryData<unknown>(consoleStore, "registry.search", { query: "", limit: 20 });
+  const marketplaceData = useQueryData<unknown>(consoleStore, "registry.search", {
+    query: marketplaceQuery,
+    limit: 20,
+  });
   const inventoryData = useQueryData<unknown>(consoleStore, "registry.inventory");
   const [busy, setBusy] = useState<string>();
   const [notice, setNotice] = useState<string>();
@@ -29,6 +33,7 @@ export default function ExtensionsPage() {
     setBusy("marketplace-search");
     try {
       await consoleStore.refresh("registry.search", { query: search, limit: 20 });
+      setMarketplaceQuery(search);
     } finally {
       setBusy(undefined);
     }

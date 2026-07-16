@@ -18,6 +18,8 @@ export interface WebConsoleState {
 
 type StoreApi = Pick<WebApiClient, "query" | "snapshot" | "command">;
 
+const EMPTY_QUERY_PAYLOAD = Object.freeze({});
+
 const INITIAL: WebConsoleState = {
   status: "idle",
   connection: "offline",
@@ -49,7 +51,7 @@ function stableValue(value: unknown, seen = new WeakSet<object>()): unknown {
   return result;
 }
 
-function queryKey(operation: string, payload: unknown): string {
+export function createQueryResourceIdentity(operation: string, payload: unknown = EMPTY_QUERY_PAYLOAD): string {
   return `${operation}:${JSON.stringify(stableValue(payload))}`;
 }
 
@@ -68,6 +70,14 @@ export class WebConsoleStore {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
   };
+
+  public getQueryData(operation: string, payload: unknown = EMPTY_QUERY_PAYLOAD): unknown {
+    return this.state.queries[createQueryResourceIdentity(operation, payload)];
+  }
+
+  public getQueryError(operation: string, payload: unknown = EMPTY_QUERY_PAYLOAD): string | undefined {
+    return this.state.queryErrors[createQueryResourceIdentity(operation, payload)];
+  }
 
   public load(): Promise<void> {
     if (this.loading) return this.loading;
@@ -101,11 +111,11 @@ export class WebConsoleStore {
         connection: "connecting",
         cursor,
         queries: {
-          "identity.me": me.data,
-          "organization.graph.snapshot": snapshot.data,
-          "work.list": works.data,
-          "governance.approval.list": approvals.data,
-          "application.audit": audit.data,
+          [createQueryResourceIdentity("identity.me")]: me.data,
+          [createQueryResourceIdentity("organization.graph.snapshot")]: snapshot.data,
+          [createQueryResourceIdentity("work.list")]: works.data,
+          [createQueryResourceIdentity("governance.approval.list")]: approvals.data,
+          [createQueryResourceIdentity("application.audit", { limit: 100 })]: audit.data,
         },
         queryErrors: {},
         events: this.eventsFrom(audit),
@@ -117,32 +127,32 @@ export class WebConsoleStore {
   }
 
   public refresh(operation: string, payload: unknown = {}): Promise<unknown> {
-    const key = queryKey(operation, payload);
-    const active = this.queries.get(key);
+    const identity = createQueryResourceIdentity(operation, payload);
+    const active = this.queries.get(identity);
     if (active) return active;
-    const pending = this.performRefresh(operation, payload).finally(() => {
-      if (this.queries.get(key) === pending) this.queries.delete(key);
+    const pending = this.performRefresh(operation, payload, identity).finally(() => {
+      if (this.queries.get(identity) === pending) this.queries.delete(identity);
     });
-    this.queries.set(key, pending);
+    this.queries.set(identity, pending);
     return pending;
   }
 
-  private async performRefresh(operation: string, payload: unknown): Promise<unknown> {
+  private async performRefresh(operation: string, payload: unknown, identity: string): Promise<unknown> {
     try {
       const envelope = await this.api.query(operation, payload);
       const remainingErrors = Object.fromEntries(
-        Object.entries(this.state.queryErrors).filter(([key]) => key !== operation),
+        Object.entries(this.state.queryErrors).filter(([key]) => key !== identity),
       );
       this.set({
         ...this.state,
-        queries: { ...this.state.queries, [operation]: envelope.data },
+        queries: { ...this.state.queries, [identity]: envelope.data },
         queryErrors: remainingErrors,
       });
       return envelope.data;
     } catch (error) {
       this.set({
         ...this.state,
-        queryErrors: { ...this.state.queryErrors, [operation]: publicError(error) },
+        queryErrors: { ...this.state.queryErrors, [identity]: publicError(error) },
       });
       throw error;
     }
@@ -178,7 +188,10 @@ export class WebConsoleStore {
     this.set({
       ...this.state,
       connection: "connecting",
-      queries: { ...this.state.queries, "organization.graph.snapshot": snapshot.data },
+      queries: {
+        ...this.state.queries,
+        [createQueryResourceIdentity("organization.graph.snapshot")]: snapshot.data,
+      },
     });
   }
 
