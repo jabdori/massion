@@ -1,17 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 
 import { label, list, object, rows, type DataRecord } from "../data.js";
-import { useQueryData, useQueryErrors } from "../hooks.js";
+import { useQueryData, useQueryError } from "../hooks.js";
 import { consoleStore } from "../services.js";
 import { LoadingState, PageHeader, StatusStamp } from "../components/States.js";
-
-const OPERATIONS = [
-  "subscription.providers",
-  "subscription.accounts",
-  "subscription.quota",
-  "subscription.policy",
-  "subscription.doctor",
-] as const;
 
 type AccountOperation = "share" | "unshare" | "disconnect";
 type ApprovalMode = "automatic" | "review" | "deny";
@@ -76,16 +68,8 @@ function approvalModeLabel(mode: ApprovalMode): string {
   return "도구 호출 차단";
 }
 
-function QueryIssue({
-  operation,
-  title,
-  errors,
-}: {
-  readonly operation: string;
-  readonly title: string;
-  readonly errors: Readonly<Record<string, string>>;
-}) {
-  if (!errors[operation]) return null;
+function QueryIssue({ title, error }: { readonly title: string; readonly error: string | undefined }) {
+  if (!error) return null;
   return (
     <div className="subscription-query-error" role="alert">
       <strong>{title}</strong>
@@ -211,17 +195,24 @@ export default function SubscriptionsPage() {
   const policyData = useQueryData<unknown>(consoleStore, "subscription.policy");
   const doctorData = useQueryData<unknown>(consoleStore, "subscription.doctor");
   const identityData = useQueryData<unknown>(consoleStore, "identity.me");
-  const queryErrors = useQueryErrors(consoleStore);
+  const providersError = useQueryError(consoleStore, "subscription.providers");
+  const accountsError = useQueryError(consoleStore, "subscription.accounts");
+  const quotaError = useQueryError(consoleStore, "subscription.quota");
+  const policyError = useQueryError(consoleStore, "subscription.policy");
+  const doctorError = useQueryError(consoleStore, "subscription.doctor");
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string>();
   const [confirmation, setConfirmation] = useState<Confirmation>();
   const [policyDrafts, setPolicyDrafts] = useState<Readonly<Record<string, string>>>({});
   const [approvalDrafts, setApprovalDrafts] = useState<Readonly<Record<string, string>>>({});
 
-  const pending = OPERATIONS.some(
-    (operation, index) =>
-      [providersData, accountsData, quotaData, policyData, doctorData][index] === undefined && !queryErrors[operation],
-  );
+  const pending = [
+    { data: providersData, error: providersError },
+    { data: accountsData, error: accountsError },
+    { data: quotaData, error: quotaError },
+    { data: policyData, error: policyError },
+    { data: doctorData, error: doctorError },
+  ].some(({ data, error }) => data === undefined && !error);
   if (pending) return <LoadingState label="구독 계정과 Provider 상태를 확인하고 있습니다" />;
 
   const providers = rows(providersData);
@@ -325,9 +316,9 @@ export default function SubscriptionsPage() {
             <h2 id="subscription-account-title">구독 계정과 Connector 건강</h2>
           </div>
         </div>
-        <QueryIssue operation="subscription.accounts" title="계정 목록 조회 실패" errors={queryErrors} />
-        <QueryIssue operation="subscription.quota" title="할당량 조회 실패" errors={queryErrors} />
-        <QueryIssue operation="subscription.doctor" title="Connector 진단 조회 실패" errors={queryErrors} />
+        <QueryIssue title="계정 목록 조회 실패" error={accountsError} />
+        <QueryIssue title="할당량 조회 실패" error={quotaError} />
+        <QueryIssue title="Connector 진단 조회 실패" error={doctorError} />
         {accounts.length === 0 ? (
           <div className="subscription-empty">
             연결된 구독 계정이 없습니다. 로컬 Connector에서 등록을 시작해 주세요.
@@ -424,8 +415,8 @@ export default function SubscriptionsPage() {
             <p>선택지는 서버의 Provider 카탈로그가 공개한 값만 사용합니다.</p>
           </div>
         </div>
-        <QueryIssue operation="subscription.providers" title="Provider 목록 조회 실패" errors={queryErrors} />
-        <QueryIssue operation="subscription.policy" title="정책 조회 실패" errors={queryErrors} />
+        <QueryIssue title="Provider 목록 조회 실패" error={providersError} />
+        <QueryIssue title="정책 조회 실패" error={policyError} />
         <div className="subscription-provider-grid">
           {providers.map((provider, index) => {
             const providerId = label(provider.providerId, "");

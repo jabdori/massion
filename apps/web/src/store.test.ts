@@ -79,6 +79,67 @@ describe("WebConsoleStore", () => {
       data: [],
     });
     await expect(Promise.all([first, second])).resolves.toEqual([[], []]);
+    expect(store.getSnapshot().queries['subscription.providers:{"filter":{"verified":true},"limit":20}']).toEqual([]);
+  });
+
+  it("같은 query의 서로 다른 payload 결과를 응답 순서와 무관하게 분리한다", async () => {
+    const releases = new Map<string, (value: unknown) => void>();
+    const query = vi.fn(
+      (_operation: string, payload: unknown) =>
+        new Promise((resolve) => {
+          releases.set((payload as { workId: string }).workId, resolve);
+        }),
+    );
+    const store = new WebConsoleStore({ query } as never);
+
+    const workA = store.refresh("work.get", { workId: "work-a" });
+    const workB = store.refresh("work.get", { workId: "work-b" });
+    releases.get("work-b")?.({
+      schemaVersion: "massion.application.v1",
+      operation: "work.get",
+      data: { workId: "work-b" },
+    });
+    await workB;
+
+    expect(store.getSnapshot().queries).toEqual({
+      'work.get:{"workId":"work-b"}': { workId: "work-b" },
+    });
+
+    releases.get("work-a")?.({
+      schemaVersion: "massion.application.v1",
+      operation: "work.get",
+      data: { workId: "work-a" },
+    });
+    await workA;
+
+    expect(store.getSnapshot().queries).toEqual({
+      'work.get:{"workId":"work-b"}': { workId: "work-b" },
+      'work.get:{"workId":"work-a"}': { workId: "work-a" },
+    });
+  });
+
+  it("같은 query의 서로 다른 payload 오류를 각각 보존한다", async () => {
+    const rejections = new Map<string, (error: Error) => void>();
+    const query = vi.fn(
+      (_operation: string, payload: unknown) =>
+        new Promise((_resolve, reject) => {
+          rejections.set((payload as { workId: string }).workId, reject);
+        }),
+    );
+    const store = new WebConsoleStore({ query } as never);
+
+    const workA = store.refresh("work.get", { workId: "work-a" });
+    const workB = store.refresh("work.get", { workId: "work-b" });
+    const rejectedA = expect(workA).rejects.toThrow("work-a 조회 실패");
+    const rejectedB = expect(workB).rejects.toThrow("work-b 조회 실패");
+    rejections.get("work-b")?.(new Error("work-b 조회 실패"));
+    rejections.get("work-a")?.(new Error("work-a 조회 실패"));
+    await Promise.all([rejectedA, rejectedB]);
+
+    expect(store.getSnapshot().queryErrors).toEqual({
+      'work.get:{"workId":"work-b"}': "work-b 조회 실패",
+      'work.get:{"workId":"work-a"}': "work-a 조회 실패",
+    });
   });
 
   it("StrictMode에서 겹친 초기 load도 한 번의 query 묶음으로 합친다", async () => {
@@ -102,5 +163,12 @@ describe("WebConsoleStore", () => {
 
     expect(query).toHaveBeenCalledTimes(4);
     expect(snapshot).toHaveBeenCalledTimes(1);
+    expect(store.getSnapshot().queries).toMatchObject({
+      "identity.me:{}": [],
+      "organization.graph.snapshot:{}": {},
+      "work.list:{}": [],
+      "governance.approval.list:{}": [],
+      'application.audit:{"limit":100}': { events: [], cursor: 0 },
+    });
   });
 });
