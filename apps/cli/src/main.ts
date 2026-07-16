@@ -22,7 +22,44 @@ import { resolveTokenReference } from "./token.js";
 import { createOnboardingPrompt } from "./onboarding.js";
 import { openWebConsole } from "./web-login.js";
 
-const HELP = `Massion AgentOS command line\n\n사용법: massion <version|update|upgrade|local|init|status|run|resume|watch|org|work|chat|task|approval|assurance|runtime|provider|subscription|ext|growth|optimization|doctor> [options]\n\n대화형 운영 화면: 인자 없이 massion\nWeb Console: massion --web\n초기화: massion init [endpoint] <email> <display name> (인자를 생략하면 온보딩)\n업데이트 확인: massion update [version]\n최신 릴리스 설치(호환 시): massion upgrade\n개인 서버 준비: massion local ensure (대화형 진입점이 내부적으로 사용)\nEdge Connector 등록 코드: massion subscription enroll edge <model|agent-runtime> [ttlMs]\n로컬 Codex 첫 연결 또는 기존 profile 재사용: massion subscription connect openai-codex [별칭] [--model GPT-5.6-ID]\n추가 Codex 계정 연결: massion subscription connect openai-codex [새 별칭] --new-account [--model GPT-5.6-ID]\nMiniMax 모델 구독 키 연결: massion subscription connect-model minimax-token-plan < model-connection.json\n고급 Connector 연결: massion subscription connect-advanced PROVIDER < connection.json\n구독 정책: massion subscription policy PROVIDER ACCOUNT_POLICY <automatic|review|deny> [EXPECTED_REVISION]\n모델 최적화 조회: massion optimization <policy|receipts|recommendations|observations|batch-active>\n모델 최적화 변경: massion optimization <policy-configure|bundle-create|bundle-export|bundle-import|evaluation-start|evaluation-execute|evaluation-complete|recommend|recommendation-approve|batch-create|batch-activate|observe|recover> < input.json\n실행 구독 계보: massion runtime lineage EXECUTION_ID\n구독 공유 승인 재개: massion subscription share ACCOUNT_ID APPROVAL_ID ORIGINAL_COMMAND_ID\n`;
+const HELP = `Massion AgentOS
+
+사용법:
+  massion [명령] [옵션]
+  massion                 대화형 TUI 실행 및 첫 실행 온보딩
+  massion --web           Web Console 로그인
+  massion --help          이 도움말 표시
+  massion --version       버전 표시
+
+주요 명령:
+  init [endpoint] [email] [표시명]  개인 서버 초기화 또는 온보딩
+  status                         애플리케이션 상태 확인
+  run <요청>                     새 업무 실행
+  watch --events jsonl           이벤트 스트림 관찰
+  update [version]               업데이트 확인
+  upgrade [version]             호환 가능한 업데이트 설치
+  local <start|status|stop|ensure> 로컬 서버 관리
+
+기능 그룹:
+  org, work, chat, task, approval, assurance, runtime
+  provider, subscription, ext, growth, optimization, doctor
+
+공통 옵션:
+  --json                         한 번에 JSON으로 출력
+  --jsonl                        JSON Lines로 출력
+  --profile <이름>               사용할 연결 프로필 선택
+  --wait                         실행이 끝날 때까지 대기
+  --detach                       실행을 백그라운드로 분리
+
+예시:
+  massion
+  massion init
+  massion run "첫 번째 작업" --wait
+  massion subscription connect openai-codex
+  massion status --json
+
+자동화·고급 명령은 각 명령의 사용법과 README를 참고하세요.
+`;
 
 async function runReleaseUpdater(arguments_: readonly string[]): Promise<number> {
   const updater = process.env.MASSION_UPDATE_BIN;
@@ -87,6 +124,11 @@ export async function runCli(argv = process.argv.slice(2)): Promise<number> {
     if (argv[0] === "--help" || argv[0] === "-h") {
       if (argv.length !== 1) throw new Error(`${argv[0]}에는 추가 인자를 지정할 수 없습니다`);
       process.stdout.write(HELP);
+      return 0;
+    }
+    if (argv[0] === "--version" || argv[0] === "-v") {
+      if (argv.length !== 1) throw new Error(`${argv[0]}에는 추가 인자를 지정할 수 없습니다`);
+      process.stdout.write("Massion AgentOS 1.0.0\n");
       return 0;
     }
     if (argv[0] === "--web") {
