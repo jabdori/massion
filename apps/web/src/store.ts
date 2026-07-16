@@ -18,7 +18,41 @@ export interface WebConsoleState {
 
 type StoreApi = Pick<WebApiClient, "query" | "snapshot" | "command">;
 
+interface WebConsoleStoreOptions {
+  readonly maxQueryResources?: number;
+}
+
+interface QueryResource {
+  readonly identity: string;
+  readonly operation: string;
+  readonly payload: unknown;
+}
+
+export interface ActiveQueryResource {
+  readonly identity: string;
+  readonly operation: string;
+  readonly payload: unknown;
+}
+
+interface RetainedQueryResource {
+  readonly resource: QueryResource;
+  readonly count: number;
+}
+
+interface InFlightQuery {
+  readonly generation: number;
+  readonly origin: "load" | "refresh";
+  readonly promise: Promise<unknown>;
+}
+
+interface QueryRequestState {
+  readonly latest: number;
+  readonly active: number;
+}
+
 const EMPTY_QUERY_PAYLOAD = Object.freeze({});
+const EMPTY_QUERY_ERRORS: Readonly<Record<string, string>> = Object.freeze({});
+const DEFAULT_MAX_QUERY_RESOURCES = 256;
 
 const INITIAL: WebConsoleState = {
   status: "idle",
@@ -33,44 +67,77 @@ function publicError(error: unknown): string {
   return error instanceof Error ? error.message : "알 수 없는 오류가 발생했습니다";
 }
 
-function withoutQueryError(
-  queryErrors: Readonly<Record<string, string>>,
-  identity: string,
-): Readonly<Record<string, string>> {
-  return Object.fromEntries(Object.entries(queryErrors).filter(([key]) => key !== identity));
+function stableValue(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(stableValue);
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([key, item]) => [key, stableValue(item)]),
+    );
+  }
+  return value;
 }
 
-function stableValue(value: unknown, seen = new WeakSet<object>()): unknown {
-  if (value === null || typeof value !== "object") return value;
-  if (seen.has(value)) throw new Error("Query payload에 순환 참조가 있습니다");
-  seen.add(value);
-  if (Array.isArray(value)) {
-    const result = value.map((item) => stableValue(item, seen));
-    seen.delete(value);
-    return result;
+function normalizeQueryPayload(payload: unknown): unknown {
+  if (payload === undefined || typeof payload === "function" || typeof payload === "symbol") {
+    return EMPTY_QUERY_PAYLOAD;
   }
-  const result = Object.fromEntries(
-    Object.entries(value as Record<string, unknown>)
-      .sort(([left], [right]) => left.localeCompare(right))
-      .map(([key, item]) => [key, stableValue(item, seen)]),
-  );
-  seen.delete(value);
-  return result;
+  let encoded: unknown;
+  try {
+    encoded = JSON.stringify(payload);
+  } catch (cause) {
+    throw new Error("Query payload JSON 직렬화에 실패했습니다", { cause });
+  }
+  if (typeof encoded !== "string") return EMPTY_QUERY_PAYLOAD;
+  try {
+    return stableValue(JSON.parse(encoded) as unknown);
+  } catch (cause) {
+    throw new Error("Query payload JSON 정규화에 실패했습니다", { cause });
+  }
+}
+
+function queryResource(operation: string, payload: unknown = EMPTY_QUERY_PAYLOAD): QueryResource {
+  const normalized = normalizeQueryPayload(payload);
+  return {
+    identity: `${operation}:${JSON.stringify(normalized)}`,
+    operation,
+    payload: normalized,
+  };
 }
 
 export function createQueryResourceIdentity(operation: string, payload: unknown = EMPTY_QUERY_PAYLOAD): string {
-  return `${operation}:${JSON.stringify(stableValue(payload))}`;
+  return queryResource(operation, payload).identity;
+}
+
+function hasOwn(value: Readonly<Record<string, unknown>>, key: string): boolean {
+  return Object.prototype.hasOwnProperty.call(value, key);
 }
 
 export class WebConsoleStore {
   private state: WebConsoleState = INITIAL;
   private readonly listeners = new Set<() => void>();
   private readonly mutations = new Map<string, Promise<unknown>>();
-  private readonly queries = new Map<string, Promise<unknown>>();
-  private readonly queryResourceGenerations = new Map<string, number>();
+  private readonly inFlightQueries = new Map<string, InFlightQuery>();
+  private readonly queryRequests = new Map<string, QueryRequestState>();
+  private readonly querySuccessGenerations = new Map<string, number>();
+  private readonly resourceAccess = new Map<string, number>();
+  private readonly retainedResources = new Map<string, RetainedQueryResource>();
+  private readonly maxQueryResources: number;
+  private accessSequence = 0;
+  private requestSequence = 0;
+  private activeQueryErrors: Readonly<Record<string, string>> = EMPTY_QUERY_ERRORS;
   private loading: Promise<void> | undefined;
+  private resynchronizing: Promise<void> | undefined;
 
-  public constructor(private readonly api: StoreApi) {}
+  public constructor(
+    private readonly api: StoreApi,
+    options: WebConsoleStoreOptions = {},
+  ) {
+    this.maxQueryResources = options.maxQueryResources ?? DEFAULT_MAX_QUERY_RESOURCES;
+    if (!Number.isSafeInteger(this.maxQueryResources) || this.maxQueryResources < 1 || this.maxQueryResources > 10_000)
+      throw new Error("Web query resource cache 상한이 유효하지 않습니다");
+  }
 
   public readonly getSnapshot = (): WebConsoleState => this.state;
 
@@ -80,11 +147,42 @@ export class WebConsoleStore {
   };
 
   public getQueryData(operation: string, payload: unknown = EMPTY_QUERY_PAYLOAD): unknown {
-    return this.state.queries[createQueryResourceIdentity(operation, payload)];
+    const identity = createQueryResourceIdentity(operation, payload);
+    if (hasOwn(this.state.queries, identity)) this.touch(identity);
+    return this.state.queries[identity];
   }
 
   public getQueryError(operation: string, payload: unknown = EMPTY_QUERY_PAYLOAD): string | undefined {
-    return this.state.queryErrors[createQueryResourceIdentity(operation, payload)];
+    const identity = createQueryResourceIdentity(operation, payload);
+    if (hasOwn(this.state.queryErrors, identity)) this.touch(identity);
+    return this.state.queryErrors[identity];
+  }
+
+  public readonly getActiveQueryErrors = (): Readonly<Record<string, string>> => this.activeQueryErrors;
+
+  public activeQueryResources(): readonly ActiveQueryResource[] {
+    return [...this.retainedResources.values()].map(({ resource }) => ({ ...resource }));
+  }
+
+  public retainQueryResource(operation: string, payload: unknown = EMPTY_QUERY_PAYLOAD): () => void {
+    const resource = queryResource(operation, payload);
+    const current = this.retainedResources.get(resource.identity);
+    this.retainedResources.set(resource.identity, { resource, count: (current?.count ?? 0) + 1 });
+    this.touch(resource.identity);
+    this.refreshActiveQueryErrors();
+    this.notify();
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      const retained = this.retainedResources.get(resource.identity);
+      if (!retained) return;
+      if (retained.count <= 1) this.retainedResources.delete(resource.identity);
+      else this.retainedResources.set(resource.identity, { ...retained, count: retained.count - 1 });
+      this.refreshActiveQueryErrors();
+      this.pruneCurrentResources();
+      this.notify();
+    };
   }
 
   public load(): Promise<void> {
@@ -97,16 +195,6 @@ export class WebConsoleStore {
   }
 
   private async performLoad(): Promise<void> {
-    const meIdentity = createQueryResourceIdentity("identity.me");
-    const snapshotIdentity = createQueryResourceIdentity("organization.graph.snapshot");
-    const worksIdentity = createQueryResourceIdentity("work.list");
-    const approvalsIdentity = createQueryResourceIdentity("governance.approval.list");
-    const auditIdentity = createQueryResourceIdentity("application.audit", { limit: 100 });
-    const meGeneration = this.beginQueryResourceRequest(meIdentity);
-    const snapshotGeneration = this.beginQueryResourceRequest(snapshotIdentity);
-    const worksGeneration = this.beginQueryResourceRequest(worksIdentity);
-    const approvalsGeneration = this.beginQueryResourceRequest(approvalsIdentity);
-    const auditGeneration = this.beginQueryResourceRequest(auditIdentity);
     this.set({
       status: "loading",
       connection: "connecting",
@@ -115,75 +203,83 @@ export class WebConsoleStore {
       queryErrors: this.state.queryErrors,
       events: this.state.events,
     });
-    try {
-      const [me, snapshot, works, approvals, audit] = await Promise.all([
-        this.api.query("identity.me", {}),
-        this.api.snapshot(),
-        this.api.query("work.list", {}),
-        this.api.query("governance.approval.list", {}),
-        this.api.query("application.audit", { limit: 100 }),
-      ]);
-      const cursor = this.cursorFrom(audit);
-      const queries: Record<string, unknown> = { ...this.state.queries };
-      let queryErrors: Readonly<Record<string, string>> = this.state.queryErrors;
-      const merge = (identity: string, generation: number, data: unknown): boolean => {
-        if (!this.isLatestQueryResourceRequest(identity, generation)) return false;
-        queries[identity] = data;
-        queryErrors = withoutQueryError(queryErrors, identity);
-        return true;
-      };
-      merge(meIdentity, meGeneration, me.data);
-      const snapshotAccepted = merge(snapshotIdentity, snapshotGeneration, snapshot.data);
-      merge(worksIdentity, worksGeneration, works.data);
-      merge(approvalsIdentity, approvalsGeneration, approvals.data);
-      const auditAccepted = merge(auditIdentity, auditGeneration, audit.data);
-      this.set({
-        status: "ready",
-        connection: snapshotAccepted ? "connecting" : this.state.connection,
-        cursor: auditAccepted ? cursor : this.state.cursor,
-        queries,
-        queryErrors,
-        events: auditAccepted ? this.eventsFrom(audit) : this.state.events,
-      });
-    } catch (error) {
-      this.set({ ...this.state, status: "error", connection: "degraded", error: publicError(error) });
-      throw error;
-    }
+    await Promise.allSettled([
+      this.requestQuery("identity.me", {}, true),
+      this.requestSnapshot(true),
+      this.requestQuery("work.list", {}, true),
+      this.requestQuery("governance.approval.list", {}, true),
+      this.requestQuery("application.audit", { limit: 100 }, true),
+    ]);
+    const audit = this.getQueryData("application.audit", { limit: 100 });
+    const auditCursor = this.cursorFromData(audit);
+    const auditEvents = this.eventsFromData(audit);
+    const useAudit = auditCursor > this.state.cursor || (this.state.cursor === 0 && this.state.events.length === 0);
+    this.set({
+      status: "ready",
+      connection: this.state.connection,
+      cursor: useAudit ? auditCursor : this.state.cursor,
+      queries: this.state.queries,
+      queryErrors: this.state.queryErrors,
+      events: useAudit ? this.limitEvents(auditEvents) : this.state.events,
+    });
   }
 
-  public refresh(operation: string, payload: unknown = {}): Promise<unknown> {
-    const identity = createQueryResourceIdentity(operation, payload);
-    const active = this.queries.get(identity);
-    if (active) return active;
-    const generation = this.beginQueryResourceRequest(identity);
-    const pending = this.performRefresh(operation, payload, identity, generation).finally(() => {
-      if (this.queries.get(identity) === pending) this.queries.delete(identity);
+  public refresh(operation: string, payload: unknown = EMPTY_QUERY_PAYLOAD): Promise<unknown> {
+    return this.requestQuery(operation, payload, false);
+  }
+
+  private requestQuery(operation: string, payload: unknown, force: boolean): Promise<unknown> {
+    const resource = queryResource(operation, payload);
+    return this.requestResource(
+      resource,
+      () => this.api.query(resource.operation, resource.payload),
+      force ? "load" : "refresh",
+    );
+  }
+
+  private requestSnapshot(force: boolean): Promise<unknown> {
+    const resource = queryResource("organization.graph.snapshot", EMPTY_QUERY_PAYLOAD);
+    return this.requestResource(resource, () => this.api.snapshot(), force ? "load" : "refresh");
+  }
+
+  private requestResource(
+    resource: QueryResource,
+    loader: () => Promise<ApplicationQueryEnvelope>,
+    origin: "load" | "refresh",
+  ): Promise<unknown> {
+    const active = this.inFlightQueries.get(resource.identity);
+    if (
+      active?.origin === "refresh" &&
+      origin === "refresh" &&
+      this.isLatestQueryResourceRequest(resource.identity, active.generation)
+    ) {
+      return active.promise;
+    }
+    const generation = this.beginQueryResourceRequest(resource.identity);
+    const pending = this.performResourceRequest(resource, generation, loader).finally(() => {
+      const current = this.inFlightQueries.get(resource.identity);
+      if (current?.promise === pending) this.inFlightQueries.delete(resource.identity);
+      this.finishQueryResourceRequest(resource.identity);
+      this.pruneCurrentResources();
     });
-    this.queries.set(identity, pending);
+    this.inFlightQueries.set(resource.identity, { generation, origin, promise: pending });
     return pending;
   }
 
-  private async performRefresh(
-    operation: string,
-    payload: unknown,
-    identity: string,
+  private async performResourceRequest(
+    resource: QueryResource,
     generation: number,
+    loader: () => Promise<ApplicationQueryEnvelope>,
   ): Promise<unknown> {
     try {
-      const envelope = await this.api.query(operation, payload);
-      if (!this.isLatestQueryResourceRequest(identity, generation)) return envelope.data;
-      this.set({
-        ...this.state,
-        queries: { ...this.state.queries, [identity]: envelope.data },
-        queryErrors: withoutQueryError(this.state.queryErrors, identity),
-      });
+      const envelope = await loader();
+      if (this.isLatestQueryResourceRequest(resource.identity, generation)) {
+        this.commitQuerySuccess(resource.identity, envelope.data, generation);
+      }
       return envelope.data;
     } catch (error) {
-      if (this.isLatestQueryResourceRequest(identity, generation)) {
-        this.set({
-          ...this.state,
-          queryErrors: { ...this.state.queryErrors, [identity]: publicError(error) },
-        });
+      if (this.isLatestQueryResourceRequest(resource.identity, generation)) {
+        this.commitQueryFailure(resource.identity, error);
       }
       throw error;
     }
@@ -201,54 +297,186 @@ export class WebConsoleStore {
     if (!Number.isSafeInteger(event.sequence) || event.sequence < 1 || !event.type) return;
     if (event.sequence <= this.state.cursor) return;
     if (this.state.cursor > 0 && event.sequence !== this.state.cursor + 1) {
-      await this.resync();
+      await this.resync(event.sequence);
       return;
     }
-    const events = [...this.state.events, event];
-    while (events.length > 1_000 || JSON.stringify(events).length > 4 * 1024 * 1024) events.shift();
-    this.set({ ...this.state, cursor: event.sequence, events });
+    this.set({
+      ...this.state,
+      cursor: event.sequence,
+      events: this.limitEvents([...this.state.events, event]),
+    });
   }
 
   public setConnection(connection: WebConsoleState["connection"]): void {
     this.set({ ...this.state, connection });
   }
 
-  private async resync(): Promise<void> {
-    const identity = createQueryResourceIdentity("organization.graph.snapshot");
-    const generation = this.beginQueryResourceRequest(identity);
-    this.set({ ...this.state, connection: "degraded" });
-    const snapshot = await this.api.snapshot();
-    if (!this.isLatestQueryResourceRequest(identity, generation)) return;
-    this.set({
-      ...this.state,
-      connection: "connecting",
-      queries: {
-        ...this.state.queries,
-        [identity]: snapshot.data,
-      },
-      queryErrors: withoutQueryError(this.state.queryErrors, identity),
+  private resync(minimumCursor: number): Promise<void> {
+    if (this.resynchronizing) return this.resynchronizing;
+    const previousConnection = this.state.connection;
+    const pending = this.performResync(minimumCursor, previousConnection).finally(() => {
+      if (this.resynchronizing === pending) this.resynchronizing = undefined;
     });
+    this.resynchronizing = pending;
+    return pending;
+  }
+
+  private async performResync(minimumCursor: number, previousConnection: WebConsoleState["connection"]): Promise<void> {
+    const snapshotResource = queryResource("organization.graph.snapshot", EMPTY_QUERY_PAYLOAD);
+    const auditResource = queryResource("application.audit", { limit: 1000 });
+    const snapshotGeneration = this.beginQueryResourceRequest(snapshotResource.identity);
+    const auditGeneration = this.beginQueryResourceRequest(auditResource.identity);
+    this.set({ ...this.state, connection: "degraded" });
+    try {
+      const [snapshotResult, auditResult] = await Promise.allSettled([
+        this.api.snapshot(),
+        this.api.query(auditResource.operation, auditResource.payload),
+      ]);
+      if (snapshotResult.status === "fulfilled") {
+        if (this.isLatestQueryResourceRequest(snapshotResource.identity, snapshotGeneration))
+          this.commitQuerySuccess(snapshotResource.identity, snapshotResult.value.data, snapshotGeneration);
+      } else if (this.isLatestQueryResourceRequest(snapshotResource.identity, snapshotGeneration)) {
+        this.commitQueryFailure(snapshotResource.identity, snapshotResult.reason);
+      }
+      if (auditResult.status === "fulfilled") {
+        if (this.isLatestQueryResourceRequest(auditResource.identity, auditGeneration))
+          this.commitQuerySuccess(auditResource.identity, auditResult.value.data, auditGeneration);
+      } else if (this.isLatestQueryResourceRequest(auditResource.identity, auditGeneration)) {
+        this.commitQueryFailure(auditResource.identity, auditResult.reason);
+      }
+      if (snapshotResult.status === "rejected") throw snapshotResult.reason;
+      if (auditResult.status === "rejected") throw auditResult.reason;
+      const currentSnapshot = this.getQueryData(snapshotResource.operation, snapshotResource.payload);
+      const currentAudit = this.getQueryData(auditResource.operation, auditResource.payload);
+      const cursor = this.cursorFromData(currentAudit);
+      const snapshotRecovered =
+        (this.querySuccessGenerations.get(snapshotResource.identity) ?? 0) >= snapshotGeneration;
+      const auditRecovered = (this.querySuccessGenerations.get(auditResource.identity) ?? 0) >= auditGeneration;
+      if (!snapshotRecovered || !auditRecovered || currentSnapshot === undefined || cursor < minimumCursor) {
+        throw new Error("Application event sequence gap을 복구하지 못했습니다");
+      }
+      this.set({
+        ...this.state,
+        connection: this.state.connection === "degraded" ? previousConnection : this.state.connection,
+        cursor,
+        events: this.limitEvents(this.eventsFromData(currentAudit)),
+      });
+    } finally {
+      this.finishQueryResourceRequest(snapshotResource.identity);
+      this.finishQueryResourceRequest(auditResource.identity);
+      this.pruneCurrentResources();
+    }
   }
 
   private beginQueryResourceRequest(identity: string): number {
-    const generation = (this.queryResourceGenerations.get(identity) ?? 0) + 1;
-    this.queryResourceGenerations.set(identity, generation);
+    const current = this.queryRequests.get(identity);
+    this.requestSequence += 1;
+    const generation = this.requestSequence;
+    this.queryRequests.set(identity, { latest: generation, active: (current?.active ?? 0) + 1 });
+    this.touch(identity);
     return generation;
   }
 
-  private isLatestQueryResourceRequest(identity: string, generation: number): boolean {
-    return this.queryResourceGenerations.get(identity) === generation;
+  private finishQueryResourceRequest(identity: string): void {
+    const current = this.queryRequests.get(identity);
+    if (!current) return;
+    if (current.active <= 1) {
+      this.queryRequests.delete(identity);
+      if (!hasOwn(this.state.queries, identity) && !hasOwn(this.state.queryErrors, identity)) {
+        this.resourceAccess.delete(identity);
+        this.querySuccessGenerations.delete(identity);
+      }
+      return;
+    }
+    this.queryRequests.set(identity, { ...current, active: current.active - 1 });
   }
 
-  private cursorFrom(envelope: ApplicationQueryEnvelope): number {
-    const data = envelope.data;
+  private isLatestQueryResourceRequest(identity: string, generation: number): boolean {
+    return this.queryRequests.get(identity)?.latest === generation;
+  }
+
+  private commitQuerySuccess(identity: string, data: unknown, generation: number): void {
+    this.touch(identity);
+    this.querySuccessGenerations.set(identity, generation);
+    const queryErrors = Object.fromEntries(Object.entries(this.state.queryErrors).filter(([key]) => key !== identity));
+    const bounded = this.boundedResources({ ...this.state.queries, [identity]: data }, queryErrors);
+    this.set({ ...this.state, ...bounded });
+  }
+
+  private commitQueryFailure(identity: string, error: unknown): void {
+    this.touch(identity);
+    const bounded = this.boundedResources(this.state.queries, {
+      ...this.state.queryErrors,
+      [identity]: publicError(error),
+    });
+    this.set({ ...this.state, ...bounded });
+  }
+
+  private boundedResources(
+    sourceQueries: Readonly<Record<string, unknown>>,
+    sourceErrors: Readonly<Record<string, string>>,
+  ): Pick<WebConsoleState, "queries" | "queryErrors"> {
+    let queries = { ...sourceQueries };
+    let queryErrors = { ...sourceErrors };
+    const identities = new Set([...Object.keys(queries), ...Object.keys(queryErrors)]);
+    while (identities.size > this.maxQueryResources) {
+      const candidate = [...identities]
+        .filter((identity) => !this.inFlightQueries.has(identity))
+        .filter((identity) => !this.retainedResources.has(identity))
+        .sort(
+          (left, right) =>
+            (this.resourceAccess.get(left) ?? Number.NEGATIVE_INFINITY) -
+            (this.resourceAccess.get(right) ?? Number.NEGATIVE_INFINITY),
+        )[0];
+      if (!candidate) break;
+      queries = Object.fromEntries(Object.entries(queries).filter(([key]) => key !== candidate));
+      queryErrors = Object.fromEntries(Object.entries(queryErrors).filter(([key]) => key !== candidate));
+      identities.delete(candidate);
+      this.resourceAccess.delete(candidate);
+      this.querySuccessGenerations.delete(candidate);
+    }
+    return { queries, queryErrors };
+  }
+
+  private pruneCurrentResources(): void {
+    const bounded = this.boundedResources(this.state.queries, this.state.queryErrors);
+    if (bounded.queries === this.state.queries && bounded.queryErrors === this.state.queryErrors) return;
+    if (
+      Object.keys(bounded.queries).length === Object.keys(this.state.queries).length &&
+      Object.keys(bounded.queryErrors).length === Object.keys(this.state.queryErrors).length
+    )
+      return;
+    this.set({ ...this.state, ...bounded });
+  }
+
+  private touch(identity: string): void {
+    this.accessSequence += 1;
+    this.resourceAccess.set(identity, this.accessSequence);
+  }
+
+  private refreshActiveQueryErrors(): void {
+    const entries = Object.entries(this.state.queryErrors).filter(([identity]) => this.retainedResources.has(identity));
+    if (entries.length === 0) {
+      this.activeQueryErrors = EMPTY_QUERY_ERRORS;
+      return;
+    }
+    const next = Object.fromEntries(entries);
+    const currentEntries = Object.entries(this.activeQueryErrors);
+    if (
+      currentEntries.length === entries.length &&
+      currentEntries.every(([identity, error]) => next[identity] === error)
+    )
+      return;
+    this.activeQueryErrors = next;
+  }
+
+  private cursorFromData(data: unknown): number {
     if (!data || typeof data !== "object" || Array.isArray(data)) return 0;
     const cursor = (data as Record<string, unknown>).cursor;
     return Number.isSafeInteger(cursor) && (cursor as number) >= 0 ? (cursor as number) : 0;
   }
 
-  private eventsFrom(envelope: ApplicationQueryEnvelope): PublicApplicationEvent[] {
-    const data = envelope.data;
+  private eventsFromData(data: unknown): PublicApplicationEvent[] {
     if (!data || typeof data !== "object" || Array.isArray(data)) return [];
     const events = (data as Record<string, unknown>).events;
     return Array.isArray(events)
@@ -256,8 +484,19 @@ export class WebConsoleStore {
       : [];
   }
 
+  private limitEvents(source: readonly PublicApplicationEvent[]): PublicApplicationEvent[] {
+    const events = [...source];
+    while (events.length > 1_000 || JSON.stringify(events).length > 4 * 1024 * 1024) events.shift();
+    return events;
+  }
+
   private set(value: WebConsoleState): void {
     this.state = value;
+    this.refreshActiveQueryErrors();
+    this.notify();
+  }
+
+  private notify(): void {
     for (const listener of this.listeners) listener();
   }
 }

@@ -1,7 +1,7 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
-import { useQueryData, useQueryError } from "./hooks.js";
+import { useQueryData, useQueryError, useQueryErrors } from "./hooks.js";
 import { WebConsoleStore } from "./store.js";
 
 describe("useQueryData", () => {
@@ -120,5 +120,41 @@ describe("useQueryData", () => {
     });
 
     expect(result.current).toBe("할당량 조회 실패");
+  });
+
+  it("mount된 query descriptor만 유지하고 payload 변경과 unmount에서 해제한다", async () => {
+    const query = vi.fn((_operation: string, payload: unknown) =>
+      Promise.resolve({ schemaVersion: "massion.application.v1", operation: "work.get", data: payload }),
+    );
+    const store = new WebConsoleStore({ query } as never);
+    const { rerender, unmount } = renderHook(
+      ({ workId }: { workId: string }) => useQueryData(store, "work.get", { workId }),
+      { initialProps: { workId: "work-a" } },
+    );
+
+    await waitFor(() =>
+      expect(store.activeQueryResources()).toEqual([expect.objectContaining({ payload: { workId: "work-a" } })]),
+    );
+    rerender({ workId: "work-b" });
+    await waitFor(() =>
+      expect(store.activeQueryResources()).toEqual([expect.objectContaining({ payload: { workId: "work-b" } })]),
+    );
+    unmount();
+    expect(store.activeQueryResources()).toEqual([]);
+  });
+
+  it("현재 화면이 구독한 query 오류만 전역 오류 snapshot에 노출한다", async () => {
+    const query = vi.fn().mockRejectedValue(new Error("현재 조회 실패"));
+    const store = new WebConsoleStore({ query } as never);
+    await store.refresh("registry.search", { query: "과거 검색" }).catch(() => undefined);
+    const errors = renderHook(() => useQueryErrors(store));
+
+    expect(errors.result.current).toEqual({});
+    const active = renderHook(() => useQueryData(store, "work.list"));
+    await waitFor(() => expect(Object.values(errors.result.current)).toEqual(["현재 조회 실패"]));
+
+    active.unmount();
+    await waitFor(() => expect(errors.result.current).toEqual({}));
+    errors.unmount();
   });
 });

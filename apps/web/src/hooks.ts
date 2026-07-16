@@ -18,11 +18,7 @@ export function useConsoleStatus(store: WebConsoleStore) {
 }
 
 export function useQueryErrors(store: WebConsoleStore): Readonly<Record<string, string>> {
-  return useSyncExternalStore(
-    store.subscribe,
-    () => store.getSnapshot().queryErrors,
-    () => EMPTY_QUERY_ERRORS,
-  );
+  return useSyncExternalStore(store.subscribe, store.getActiveQueryErrors, () => EMPTY_QUERY_ERRORS);
 }
 
 export function useQueryError(
@@ -49,6 +45,7 @@ export function useQueryData<T>(
     () => store.getQueryData(operation, payload),
     () => undefined,
   );
+  useEffect(() => store.retainQueryResource(operation, payload), [identity, store]);
   useEffect(() => {
     if (value === undefined) void store.refresh(operation, payload).catch(() => undefined);
   }, [identity, store, value]);
