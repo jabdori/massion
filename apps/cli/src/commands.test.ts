@@ -530,6 +530,26 @@ describe("CLI Application adapter", () => {
     });
   });
 
+  it("auth login은 같은 로컬 구독 로그인 adapter를 사용한다", async () => {
+    const connectServerSubscription = vi.fn(async () => ({ status: "ready" }));
+    const client: CliApplicationClient = {
+      status: async () => ({}),
+      snapshot: async () => ({}),
+      query: async () => ({}),
+      command: async () => ({}),
+      inspectArtifact: async () => ({}),
+      installArtifact: async () => ({}),
+      updateArtifact: async () => ({}),
+    };
+
+    await expect(
+      executeCliInvocation(client, parseCliArguments(["auth", "login", "openai-codex"]), {
+        connectServerSubscription,
+      }),
+    ).resolves.toEqual({ status: "ready" });
+    expect(connectServerSubscription).toHaveBeenCalledWith({ providerId: "openai-codex" });
+  });
+
   it("subscription connect는 기존 profile 재사용 결과를 JSON 출력 계약에 그대로 보존한다", async () => {
     const connection = {
       status: "ready",
