@@ -33,6 +33,13 @@ function publicError(error: unknown): string {
   return error instanceof Error ? error.message : "알 수 없는 오류가 발생했습니다";
 }
 
+function withoutQueryError(
+  queryErrors: Readonly<Record<string, string>>,
+  identity: string,
+): Readonly<Record<string, string>> {
+  return Object.fromEntries(Object.entries(queryErrors).filter(([key]) => key !== identity));
+}
+
 function stableValue(value: unknown, seen = new WeakSet<object>()): unknown {
   if (value === null || typeof value !== "object") return value;
   if (seen.has(value)) throw new Error("Query payload에 순환 참조가 있습니다");
@@ -60,6 +67,7 @@ export class WebConsoleStore {
   private readonly listeners = new Set<() => void>();
   private readonly mutations = new Map<string, Promise<unknown>>();
   private readonly queries = new Map<string, Promise<unknown>>();
+  private readonly queryResourceGenerations = new Map<string, number>();
   private loading: Promise<void> | undefined;
 
   public constructor(private readonly api: StoreApi) {}
@@ -89,6 +97,16 @@ export class WebConsoleStore {
   }
 
   private async performLoad(): Promise<void> {
+    const meIdentity = createQueryResourceIdentity("identity.me");
+    const snapshotIdentity = createQueryResourceIdentity("organization.graph.snapshot");
+    const worksIdentity = createQueryResourceIdentity("work.list");
+    const approvalsIdentity = createQueryResourceIdentity("governance.approval.list");
+    const auditIdentity = createQueryResourceIdentity("application.audit", { limit: 100 });
+    const meGeneration = this.beginQueryResourceRequest(meIdentity);
+    const snapshotGeneration = this.beginQueryResourceRequest(snapshotIdentity);
+    const worksGeneration = this.beginQueryResourceRequest(worksIdentity);
+    const approvalsGeneration = this.beginQueryResourceRequest(approvalsIdentity);
+    const auditGeneration = this.beginQueryResourceRequest(auditIdentity);
     this.set({
       status: "loading",
       connection: "connecting",
@@ -106,19 +124,26 @@ export class WebConsoleStore {
         this.api.query("application.audit", { limit: 100 }),
       ]);
       const cursor = this.cursorFrom(audit);
+      const queries: Record<string, unknown> = { ...this.state.queries };
+      let queryErrors: Readonly<Record<string, string>> = this.state.queryErrors;
+      const merge = (identity: string, generation: number, data: unknown): boolean => {
+        if (!this.isLatestQueryResourceRequest(identity, generation)) return false;
+        queries[identity] = data;
+        queryErrors = withoutQueryError(queryErrors, identity);
+        return true;
+      };
+      merge(meIdentity, meGeneration, me.data);
+      const snapshotAccepted = merge(snapshotIdentity, snapshotGeneration, snapshot.data);
+      merge(worksIdentity, worksGeneration, works.data);
+      merge(approvalsIdentity, approvalsGeneration, approvals.data);
+      const auditAccepted = merge(auditIdentity, auditGeneration, audit.data);
       this.set({
         status: "ready",
-        connection: "connecting",
-        cursor,
-        queries: {
-          [createQueryResourceIdentity("identity.me")]: me.data,
-          [createQueryResourceIdentity("organization.graph.snapshot")]: snapshot.data,
-          [createQueryResourceIdentity("work.list")]: works.data,
-          [createQueryResourceIdentity("governance.approval.list")]: approvals.data,
-          [createQueryResourceIdentity("application.audit", { limit: 100 })]: audit.data,
-        },
-        queryErrors: {},
-        events: this.eventsFrom(audit),
+        connection: snapshotAccepted ? "connecting" : this.state.connection,
+        cursor: auditAccepted ? cursor : this.state.cursor,
+        queries,
+        queryErrors,
+        events: auditAccepted ? this.eventsFrom(audit) : this.state.events,
       });
     } catch (error) {
       this.set({ ...this.state, status: "error", connection: "degraded", error: publicError(error) });
@@ -130,30 +155,36 @@ export class WebConsoleStore {
     const identity = createQueryResourceIdentity(operation, payload);
     const active = this.queries.get(identity);
     if (active) return active;
-    const pending = this.performRefresh(operation, payload, identity).finally(() => {
+    const generation = this.beginQueryResourceRequest(identity);
+    const pending = this.performRefresh(operation, payload, identity, generation).finally(() => {
       if (this.queries.get(identity) === pending) this.queries.delete(identity);
     });
     this.queries.set(identity, pending);
     return pending;
   }
 
-  private async performRefresh(operation: string, payload: unknown, identity: string): Promise<unknown> {
+  private async performRefresh(
+    operation: string,
+    payload: unknown,
+    identity: string,
+    generation: number,
+  ): Promise<unknown> {
     try {
       const envelope = await this.api.query(operation, payload);
-      const remainingErrors = Object.fromEntries(
-        Object.entries(this.state.queryErrors).filter(([key]) => key !== identity),
-      );
+      if (!this.isLatestQueryResourceRequest(identity, generation)) return envelope.data;
       this.set({
         ...this.state,
         queries: { ...this.state.queries, [identity]: envelope.data },
-        queryErrors: remainingErrors,
+        queryErrors: withoutQueryError(this.state.queryErrors, identity),
       });
       return envelope.data;
     } catch (error) {
-      this.set({
-        ...this.state,
-        queryErrors: { ...this.state.queryErrors, [identity]: publicError(error) },
-      });
+      if (this.isLatestQueryResourceRequest(identity, generation)) {
+        this.set({
+          ...this.state,
+          queryErrors: { ...this.state.queryErrors, [identity]: publicError(error) },
+        });
+      }
       throw error;
     }
   }
@@ -183,16 +214,30 @@ export class WebConsoleStore {
   }
 
   private async resync(): Promise<void> {
+    const identity = createQueryResourceIdentity("organization.graph.snapshot");
+    const generation = this.beginQueryResourceRequest(identity);
     this.set({ ...this.state, connection: "degraded" });
     const snapshot = await this.api.snapshot();
+    if (!this.isLatestQueryResourceRequest(identity, generation)) return;
     this.set({
       ...this.state,
       connection: "connecting",
       queries: {
         ...this.state.queries,
-        [createQueryResourceIdentity("organization.graph.snapshot")]: snapshot.data,
+        [identity]: snapshot.data,
       },
+      queryErrors: withoutQueryError(this.state.queryErrors, identity),
     });
+  }
+
+  private beginQueryResourceRequest(identity: string): number {
+    const generation = (this.queryResourceGenerations.get(identity) ?? 0) + 1;
+    this.queryResourceGenerations.set(identity, generation);
+    return generation;
+  }
+
+  private isLatestQueryResourceRequest(identity: string, generation: number): boolean {
+    return this.queryResourceGenerations.get(identity) === generation;
   }
 
   private cursorFrom(envelope: ApplicationQueryEnvelope): number {

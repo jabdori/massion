@@ -1,7 +1,7 @@
-import { renderHook, waitFor } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
-import { useQueryData } from "./hooks.js";
+import { useQueryData, useQueryError } from "./hooks.js";
 import { WebConsoleStore } from "./store.js";
 
 describe("useQueryData", () => {
@@ -83,5 +83,42 @@ describe("useQueryData", () => {
     rerender({ renderCount: 2 });
 
     expect(query).toHaveBeenCalledTimes(1);
+  });
+
+  it("저장된 raw snapshot이 같으면 새 객체 decoder 결과를 다시 만들지 않는다", async () => {
+    const query = vi.fn().mockResolvedValue({
+      schemaVersion: "massion.application.v1",
+      operation: "work.get",
+      data: { workId: "work-a" },
+    });
+    const store = new WebConsoleStore({ query } as never);
+    await store.refresh("work.get", { workId: "work-a" });
+    const decoder = vi.fn((value: unknown) => ({ workId: (value as { workId: string }).workId }));
+
+    const { result, rerender } = renderHook(
+      ({ renderCount }: { renderCount: number }) => {
+        void renderCount;
+        return useQueryData(store, "work.get", { workId: "work-a" }, decoder);
+      },
+      { initialProps: { renderCount: 1 } },
+    );
+    const firstResult = result.current;
+    act(() => store.setConnection("live"));
+    rerender({ renderCount: 2 });
+
+    expect(result.current).toBe(firstResult);
+    expect(decoder).toHaveBeenCalledTimes(1);
+  });
+
+  it("실제 store의 빈 payload query 오류를 선택해서 읽는다", async () => {
+    const query = vi.fn().mockRejectedValue(new Error("할당량 조회 실패"));
+    const store = new WebConsoleStore({ query } as never);
+    const { result } = renderHook(() => useQueryError(store, "subscription.quota"));
+
+    await act(async () => {
+      await store.refresh("subscription.quota", {}).catch(() => undefined);
+    });
+
+    expect(result.current).toBe("할당량 조회 실패");
   });
 });
