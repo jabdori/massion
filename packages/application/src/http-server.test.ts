@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { setTimeout as delay } from "node:timers/promises";
 
 import type { ApplicationEventV1 } from "./contracts.js";
+import { ApplicationEventCursorExpiredError } from "./event-store.js";
 import { ApplicationHttpServer, type ApplicationHttpDependencies } from "./http-server.js";
 
 const context = {
@@ -54,6 +55,7 @@ describe("ApplicationHttpServer", () => {
       },
       events: {
         async read(_context, input) {
+          if (input.after === 99) throw new ApplicationEventCursorExpiredError(100);
           const selected = events.filter((item) => item.sequence > input.after).slice(0, input.limit);
           return { events: selected, cursor: selected.at(-1)?.sequence ?? input.after };
         },
@@ -323,6 +325,20 @@ describe("ApplicationHttpServer", () => {
     expect(text).not.toContain("id: 2");
     abort.abort();
     await reader.cancel().catch(() => undefined);
+  });
+
+  it("SSE header를 열기 전에 만료 cursor를 공개 409 오류로 반환한다", async () => {
+    const response = await fetch(`${baseUrl}/api/v1/events/stream?after=99`, {
+      headers: { authorization: "Bearer test-token", accept: "text/event-stream" },
+    });
+
+    expect(response.status).toBe(409);
+    expect(response.headers.get("content-type")).toContain("application/json");
+    await expect(response.json()).resolves.toMatchObject({
+      category: "conflict",
+      operatorCode: "APP_EVENT_CURSOR_EXPIRED",
+      retryable: true,
+    });
   });
 
   it("loopback 밖 bind는 trusted proxy allowlist 없이는 생성부터 거부한다", () => {

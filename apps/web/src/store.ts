@@ -1,4 +1,4 @@
-import type { ApplicationCommandInput, ApplicationQueryEnvelope, WebApiClient } from "./api.js";
+import { WebApiError, type ApplicationCommandInput, type ApplicationQueryEnvelope, type WebApiClient } from "./api.js";
 
 export interface PublicApplicationEvent {
   readonly sequence: number;
@@ -19,7 +19,7 @@ export interface WebConsoleState {
 type StoreApi = Pick<WebApiClient, "query" | "snapshot" | "command">;
 
 interface WebConsoleStoreOptions {
-  readonly maxQueryResources?: number;
+  readonly queryResourceSoftLimit?: number;
 }
 
 interface QueryResource {
@@ -52,7 +52,9 @@ interface QueryRequestState {
 
 const EMPTY_QUERY_PAYLOAD = Object.freeze({});
 const EMPTY_QUERY_ERRORS: Readonly<Record<string, string>> = Object.freeze({});
-const DEFAULT_MAX_QUERY_RESOURCES = 256;
+const DEFAULT_QUERY_RESOURCE_SOFT_LIMIT = 256;
+const MAX_EVENT_BYTES = 4 * 1024 * 1024;
+const UTF8_ENCODER = new TextEncoder();
 
 const INITIAL: WebConsoleState = {
   status: "idle",
@@ -114,6 +116,12 @@ function hasOwn(value: Readonly<Record<string, unknown>>, key: string): boolean 
   return Object.prototype.hasOwnProperty.call(value, key);
 }
 
+function isEventCursorExpired(error: unknown): boolean {
+  if (!(error instanceof WebApiError) || error.status !== 409) return false;
+  if (!error.detail || typeof error.detail !== "object" || Array.isArray(error.detail)) return false;
+  return (error.detail as Record<string, unknown>).operatorCode === "APP_EVENT_CURSOR_EXPIRED";
+}
+
 export class WebConsoleStore {
   private state: WebConsoleState = INITIAL;
   private readonly listeners = new Set<() => void>();
@@ -123,20 +131,25 @@ export class WebConsoleStore {
   private readonly querySuccessGenerations = new Map<string, number>();
   private readonly resourceAccess = new Map<string, number>();
   private readonly retainedResources = new Map<string, RetainedQueryResource>();
-  private readonly maxQueryResources: number;
+  private readonly queryResourceSoftLimit: number;
   private accessSequence = 0;
   private requestSequence = 0;
   private activeQueryErrors: Readonly<Record<string, string>> = EMPTY_QUERY_ERRORS;
   private loading: Promise<void> | undefined;
   private resynchronizing: Promise<void> | undefined;
+  private resyncMinimumCursor = 0;
 
   public constructor(
     private readonly api: StoreApi,
     options: WebConsoleStoreOptions = {},
   ) {
-    this.maxQueryResources = options.maxQueryResources ?? DEFAULT_MAX_QUERY_RESOURCES;
-    if (!Number.isSafeInteger(this.maxQueryResources) || this.maxQueryResources < 1 || this.maxQueryResources > 10_000)
-      throw new Error("Web query resource cache 상한이 유효하지 않습니다");
+    this.queryResourceSoftLimit = options.queryResourceSoftLimit ?? DEFAULT_QUERY_RESOURCE_SOFT_LIMIT;
+    if (
+      !Number.isSafeInteger(this.queryResourceSoftLimit) ||
+      this.queryResourceSoftLimit < 1 ||
+      this.queryResourceSoftLimit > 10_000
+    )
+      throw new Error("Web query resource cache soft limit이 유효하지 않습니다");
   }
 
   public readonly getSnapshot = (): WebConsoleState => this.state;
@@ -148,13 +161,11 @@ export class WebConsoleStore {
 
   public getQueryData(operation: string, payload: unknown = EMPTY_QUERY_PAYLOAD): unknown {
     const identity = createQueryResourceIdentity(operation, payload);
-    if (hasOwn(this.state.queries, identity)) this.touch(identity);
     return this.state.queries[identity];
   }
 
   public getQueryError(operation: string, payload: unknown = EMPTY_QUERY_PAYLOAD): string | undefined {
     const identity = createQueryResourceIdentity(operation, payload);
-    if (hasOwn(this.state.queryErrors, identity)) this.touch(identity);
     return this.state.queryErrors[identity];
   }
 
@@ -195,6 +206,9 @@ export class WebConsoleStore {
   }
 
   private async performLoad(): Promise<void> {
+    const minimumSuccessGeneration = this.requestSequence;
+    const snapshotIdentity = createQueryResourceIdentity("organization.graph.snapshot");
+    const auditIdentity = createQueryResourceIdentity("application.audit", { limit: 100 });
     this.set({
       status: "loading",
       connection: "connecting",
@@ -203,14 +217,35 @@ export class WebConsoleStore {
       queryErrors: this.state.queryErrors,
       events: this.state.events,
     });
-    await Promise.allSettled([
+    const results = await Promise.allSettled([
       this.requestQuery("identity.me", {}, true),
       this.requestSnapshot(true),
       this.requestQuery("work.list", {}, true),
       this.requestQuery("governance.approval.list", {}, true),
       this.requestQuery("application.audit", { limit: 100 }, true),
     ]);
+    await Promise.all([
+      this.waitForNewerQuery(snapshotIdentity, minimumSuccessGeneration),
+      this.waitForNewerQuery(auditIdentity, minimumSuccessGeneration),
+    ]);
     const audit = this.getQueryData("application.audit", { limit: 100 });
+    const snapshot = this.getQueryData("organization.graph.snapshot");
+    const snapshotFailure: unknown = results[1].status === "rejected" ? (results[1].reason as unknown) : undefined;
+    const auditFailure: unknown = results[4].status === "rejected" ? (results[4].reason as unknown) : undefined;
+    const freshSnapshot =
+      snapshot !== undefined && (this.querySuccessGenerations.get(snapshotIdentity) ?? 0) > minimumSuccessGeneration;
+    const freshAudit =
+      this.hasAuditCursor(audit) && (this.querySuccessGenerations.get(auditIdentity) ?? 0) > minimumSuccessGeneration;
+    const criticalFailure = !freshSnapshot
+      ? (snapshotFailure ?? new Error("초기 snapshot 응답이 유효하지 않습니다"))
+      : !freshAudit
+        ? (auditFailure ?? new Error("초기 audit cursor 응답이 유효하지 않습니다"))
+        : undefined;
+    if (criticalFailure !== undefined) {
+      const error = new Error("Web 초기 운영 상태를 복구하지 못했습니다", { cause: criticalFailure });
+      this.set({ ...this.state, status: "error", connection: "degraded", error: error.message });
+      throw error;
+    }
     const auditCursor = this.cursorFromData(audit);
     const auditEvents = this.eventsFromData(audit);
     const useAudit = auditCursor > this.state.cursor || (this.state.cursor === 0 && this.state.events.length === 0);
@@ -296,7 +331,10 @@ export class WebConsoleStore {
   public async acceptEvent(event: PublicApplicationEvent): Promise<void> {
     if (!Number.isSafeInteger(event.sequence) || event.sequence < 1 || !event.type) return;
     if (event.sequence <= this.state.cursor) return;
-    if (this.state.cursor > 0 && event.sequence !== this.state.cursor + 1) {
+    if (
+      (this.state.cursor === 0 && event.sequence !== 1) ||
+      (this.state.cursor > 0 && event.sequence !== this.state.cursor + 1)
+    ) {
       await this.resync(event.sequence);
       return;
     }
@@ -311,11 +349,21 @@ export class WebConsoleStore {
     this.set({ ...this.state, connection });
   }
 
+  public recoverExpiredCursor(): Promise<void> {
+    if (this.state.cursor >= Number.MAX_SAFE_INTEGER)
+      return Promise.reject(new Error("Application event cursor가 안전한 정수 상한에 도달했습니다"));
+    return this.resync(this.state.cursor + 1);
+  }
+
   private resync(minimumCursor: number): Promise<void> {
+    this.resyncMinimumCursor = Math.max(this.resyncMinimumCursor, minimumCursor);
     if (this.resynchronizing) return this.resynchronizing;
     const previousConnection = this.state.connection;
     const pending = this.performResync(minimumCursor, previousConnection).finally(() => {
-      if (this.resynchronizing === pending) this.resynchronizing = undefined;
+      if (this.resynchronizing === pending) {
+        this.resynchronizing = undefined;
+        this.resyncMinimumCursor = 0;
+      }
     });
     this.resynchronizing = pending;
     return pending;
@@ -323,49 +371,95 @@ export class WebConsoleStore {
 
   private async performResync(minimumCursor: number, previousConnection: WebConsoleState["connection"]): Promise<void> {
     const snapshotResource = queryResource("organization.graph.snapshot", EMPTY_QUERY_PAYLOAD);
-    const auditResource = queryResource("application.audit", { limit: 1000 });
     const snapshotGeneration = this.beginQueryResourceRequest(snapshotResource.identity);
-    const auditGeneration = this.beginQueryResourceRequest(auditResource.identity);
+    const startCursor = this.state.cursor;
     this.set({ ...this.state, connection: "degraded" });
     try {
       const [snapshotResult, auditResult] = await Promise.allSettled([
         this.api.snapshot(),
-        this.api.query(auditResource.operation, auditResource.payload),
+        this.readAuditRange(startCursor, minimumCursor),
       ]);
-      if (snapshotResult.status === "fulfilled") {
-        if (this.isLatestQueryResourceRequest(snapshotResource.identity, snapshotGeneration))
-          this.commitQuerySuccess(snapshotResource.identity, snapshotResult.value.data, snapshotGeneration);
-      } else if (this.isLatestQueryResourceRequest(snapshotResource.identity, snapshotGeneration)) {
-        this.commitQueryFailure(snapshotResource.identity, snapshotResult.reason);
-      }
-      if (auditResult.status === "fulfilled") {
-        if (this.isLatestQueryResourceRequest(auditResource.identity, auditGeneration))
-          this.commitQuerySuccess(auditResource.identity, auditResult.value.data, auditGeneration);
-      } else if (this.isLatestQueryResourceRequest(auditResource.identity, auditGeneration)) {
-        this.commitQueryFailure(auditResource.identity, auditResult.reason);
-      }
-      if (snapshotResult.status === "rejected") throw snapshotResult.reason;
-      if (auditResult.status === "rejected") throw auditResult.reason;
-      const currentSnapshot = this.getQueryData(snapshotResource.operation, snapshotResource.payload);
-      const currentAudit = this.getQueryData(auditResource.operation, auditResource.payload);
-      const cursor = this.cursorFromData(currentAudit);
-      const snapshotRecovered =
-        (this.querySuccessGenerations.get(snapshotResource.identity) ?? 0) >= snapshotGeneration;
-      const auditRecovered = (this.querySuccessGenerations.get(auditResource.identity) ?? 0) >= auditGeneration;
-      if (!snapshotRecovered || !auditRecovered || currentSnapshot === undefined || cursor < minimumCursor) {
+      if (!this.isLatestQueryResourceRequest(snapshotResource.identity, snapshotGeneration)) {
+        await this.waitForNewerQuery(snapshotResource.identity, snapshotGeneration);
+        const newerSnapshotSucceeded =
+          (this.querySuccessGenerations.get(snapshotResource.identity) ?? 0) > snapshotGeneration;
+        const targetCursor = Math.max(minimumCursor, this.resyncMinimumCursor);
+        if (newerSnapshotSucceeded && this.state.cursor >= targetCursor) {
+          const recoveredState = this.withoutError(this.state);
+          this.set({
+            ...recoveredState,
+            connection: recoveredState.connection === "degraded" ? previousConnection : recoveredState.connection,
+          });
+          return;
+        }
         throw new Error("Application event sequence gap을 복구하지 못했습니다");
       }
+      if (snapshotResult.status === "rejected") {
+        this.commitQueryFailure(snapshotResource.identity, snapshotResult.reason);
+        throw snapshotResult.reason;
+      }
+      this.commitQuerySuccess(snapshotResource.identity, snapshotResult.value.data, snapshotGeneration);
+      if (auditResult.status === "rejected") throw auditResult.reason;
+      let recovered = auditResult.value;
+      while (recovered.cursor < this.resyncMinimumCursor) {
+        const additional = await this.readAuditRange(recovered.cursor, this.resyncMinimumCursor);
+        recovered = {
+          cursor: additional.cursor,
+          events: this.mergeEvents(recovered.events, additional.events),
+        };
+      }
+      const targetCursor = Math.max(minimumCursor, this.resyncMinimumCursor);
+      if (recovered.cursor < targetCursor) throw new Error("Application event sequence gap을 복구하지 못했습니다");
+      const recoveredState = this.withoutError(this.state);
       this.set({
-        ...this.state,
-        connection: this.state.connection === "degraded" ? previousConnection : this.state.connection,
-        cursor,
-        events: this.limitEvents(this.eventsFromData(currentAudit)),
+        ...recoveredState,
+        connection: recoveredState.connection === "degraded" ? previousConnection : recoveredState.connection,
+        cursor: recovered.cursor,
+        events: this.mergeEvents(recoveredState.events, recovered.events),
       });
+    } catch (cause) {
+      const error = cause instanceof Error ? cause : new Error("Application event sequence gap을 복구하지 못했습니다");
+      this.set({ ...this.state, connection: "degraded", error: error.message });
+      throw error;
     } finally {
       this.finishQueryResourceRequest(snapshotResource.identity);
-      this.finishQueryResourceRequest(auditResource.identity);
       this.pruneCurrentResources();
     }
+  }
+
+  private async readAuditRange(
+    startCursor: number,
+    initialMinimumCursor: number,
+  ): Promise<{ readonly cursor: number; readonly events: readonly PublicApplicationEvent[] }> {
+    let cursor = startCursor;
+    let events: PublicApplicationEvent[] = [];
+    let restartedFromRetention = false;
+    for (let page = 0; page < 10_000; page += 1) {
+      const targetCursor = Math.max(initialMinimumCursor, this.resyncMinimumCursor);
+      if (cursor >= targetCursor) return { cursor, events };
+      let envelope: ApplicationQueryEnvelope;
+      try {
+        envelope = await this.api.query("application.audit", { after: cursor, limit: 1000 });
+      } catch (cause) {
+        if (cursor > 0 && !restartedFromRetention && isEventCursorExpired(cause)) {
+          cursor = 0;
+          events = [];
+          restartedFromRetention = true;
+          continue;
+        }
+        throw cause;
+      }
+      const nextCursor = this.cursorFromData(envelope.data);
+      if (nextCursor <= cursor) throw new Error("Application audit cursor가 복구 중 전진하지 않았습니다");
+      events = this.mergeEvents(events, this.eventsFromData(envelope.data));
+      cursor = nextCursor;
+    }
+    throw new Error("Application audit gap 복구 page 상한을 초과했습니다");
+  }
+
+  private async waitForNewerQuery(identity: string, generation: number): Promise<void> {
+    const active = this.inFlightQueries.get(identity);
+    if (active && active.generation > generation) await active.promise.catch(() => undefined);
   }
 
   private beginQueryResourceRequest(identity: string): number {
@@ -419,7 +513,7 @@ export class WebConsoleStore {
     let queries = { ...sourceQueries };
     let queryErrors = { ...sourceErrors };
     const identities = new Set([...Object.keys(queries), ...Object.keys(queryErrors)]);
-    while (identities.size > this.maxQueryResources) {
+    while (identities.size > this.queryResourceSoftLimit) {
       const candidate = [...identities]
         .filter((identity) => !this.inFlightQueries.has(identity))
         .filter((identity) => !this.retainedResources.has(identity))
@@ -476,6 +570,12 @@ export class WebConsoleStore {
     return Number.isSafeInteger(cursor) && (cursor as number) >= 0 ? (cursor as number) : 0;
   }
 
+  private hasAuditCursor(data: unknown): boolean {
+    if (!data || typeof data !== "object" || Array.isArray(data)) return false;
+    const cursor = (data as Record<string, unknown>).cursor;
+    return Number.isSafeInteger(cursor) && (cursor as number) >= 0;
+  }
+
   private eventsFromData(data: unknown): PublicApplicationEvent[] {
     if (!data || typeof data !== "object" || Array.isArray(data)) return [];
     const events = (data as Record<string, unknown>).events;
@@ -485,9 +585,36 @@ export class WebConsoleStore {
   }
 
   private limitEvents(source: readonly PublicApplicationEvent[]): PublicApplicationEvent[] {
-    const events = [...source];
-    while (events.length > 1_000 || JSON.stringify(events).length > 4 * 1024 * 1024) events.shift();
-    return events;
+    const candidates = source.slice(-1_000);
+    const events: PublicApplicationEvent[] = [];
+    let bytes = 2;
+    for (let index = candidates.length - 1; index >= 0; index -= 1) {
+      const event = candidates[index];
+      if (!event) continue;
+      const eventBytes = UTF8_ENCODER.encode(JSON.stringify(event)).byteLength + (events.length === 0 ? 0 : 1);
+      if (bytes + eventBytes > MAX_EVENT_BYTES) break;
+      events.push(event);
+      bytes += eventBytes;
+    }
+    return events.reverse();
+  }
+
+  private mergeEvents(
+    current: readonly PublicApplicationEvent[],
+    recovered: readonly PublicApplicationEvent[],
+  ): PublicApplicationEvent[] {
+    const bySequence = new Map<number, PublicApplicationEvent>();
+    for (const event of [...current, ...recovered]) {
+      if (Number.isSafeInteger(event.sequence) && event.sequence > 0 && event.type)
+        bySequence.set(event.sequence, event);
+    }
+    return this.limitEvents([...bySequence.values()].sort((left, right) => left.sequence - right.sequence));
+  }
+
+  private withoutError(state: WebConsoleState): WebConsoleState {
+    const value = { ...state };
+    delete value.error;
+    return value;
   }
 
   private set(value: WebConsoleState): void {

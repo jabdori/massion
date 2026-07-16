@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
+import { WebApiError } from "./api.js";
 import { createQueryResourceIdentity, WebConsoleStore } from "./store.js";
 
 function envelope(operation: string, data: unknown) {
@@ -349,7 +350,7 @@ describe("WebConsoleStore", () => {
     expect(store.getQueryData("organization.graph.snapshot")).toEqual({ source: "new-resync" });
   });
 
-  it("늦은 resync snapshot이 나중에 시작한 load snapshot을 덮지 않는다", async () => {
+  it("늦은 resync snapshot은 나중에 시작한 load snapshot을 덮지 않는다", async () => {
     const oldResync = deferred<unknown>();
     const query = vi.fn((operation: string) =>
       Promise.resolve(
@@ -369,12 +370,12 @@ describe("WebConsoleStore", () => {
     const resyncing = store.acceptEvent({ sequence: 3, type: "work.updated" });
     await store.load();
     oldResync.resolve(envelope("organization.graph.snapshot", { source: "old-resync" }));
-    await resyncing;
+    await expect(resyncing).resolves.toBeUndefined();
 
     expect(store.getQueryData("organization.graph.snapshot")).toEqual({ source: "new-load" });
   });
 
-  it("늦은 resync가 나중에 시작한 snapshot refresh를 덮지 않는다", async () => {
+  it("늦은 resync는 나중 snapshot refresh를 덮지 않지만 gap 복구 실패를 반환한다", async () => {
     const resyncSnapshot = deferred<unknown>();
     const snapshot = vi.fn(() => resyncSnapshot.promise);
     const query = vi.fn((operation: string) =>
@@ -393,9 +394,10 @@ describe("WebConsoleStore", () => {
     const resyncing = store.acceptEvent({ sequence: 3, type: "work.updated" });
     await store.refresh("organization.graph.snapshot");
     resyncSnapshot.resolve(envelope("organization.graph.snapshot", { source: "old-resync" }));
-    await resyncing;
+    await expect(resyncing).rejects.toThrow("sequence gap");
 
     expect(store.getQueryData("organization.graph.snapshot")).toEqual({ source: "new-refresh" });
+    expect(store.getSnapshot()).toMatchObject({ cursor: 1, connection: "degraded" });
   });
 
   it("늦은 snapshot refresh가 나중에 시작한 resync를 덮지 않는다", async () => {
@@ -467,8 +469,10 @@ describe("WebConsoleStore", () => {
     resyncSnapshot.resolve(envelope("organization.graph.snapshot", { source: "resync" }));
     await expect(latest).resolves.toEqual({ source: "new-refresh" });
     oldRefresh.resolve(envelope("organization.graph.snapshot", { source: "old-refresh" }));
-    await Promise.all([stale, recovering]);
+    await stale;
+    await expect(recovering).rejects.toThrow("sequence gap");
     expect(store.getQueryData("organization.graph.snapshot")).toEqual({ source: "new-refresh" });
+    expect(store.getSnapshot()).toMatchObject({ cursor: 1, connection: "degraded" });
   });
 
   it("초기 load 일부가 실패해도 성공한 resource와 identity별 오류를 반영한다", async () => {
@@ -497,14 +501,85 @@ describe("WebConsoleStore", () => {
     expect(store.getSnapshot().cursor).toBe(7);
   });
 
-  it("query resource cache와 과거 오류를 설정된 LRU 상한 안에 유지한다", async () => {
+  it("오래된 load snapshot 실패는 더 최신 snapshot 성공을 무효화하지 않는다", async () => {
+    const loadSnapshot = deferred<unknown>();
+    const query = vi.fn((operation: string) =>
+      Promise.resolve(
+        envelope(
+          operation,
+          operation === "application.audit"
+            ? { events: [], cursor: 7, snapshotRequired: false }
+            : operation === "organization.graph.snapshot"
+              ? { source: "newer-refresh" }
+              : [],
+        ),
+      ),
+    );
+    const snapshot = vi.fn(() => loadSnapshot.promise);
+    const store = new WebConsoleStore({ query, snapshot } as never);
+
+    const loading = store.load();
+    await store.refresh("organization.graph.snapshot");
+    loadSnapshot.reject(new Error("오래된 load snapshot 실패"));
+
+    await expect(loading).resolves.toBeUndefined();
+    expect(store.getQueryData("organization.graph.snapshot")).toEqual({ source: "newer-refresh" });
+    expect(store.getSnapshot()).toMatchObject({ status: "ready", cursor: 7 });
+  });
+
+  it("load snapshot이 stale이면 진행 중인 최신 snapshot 결과까지 기다린다", async () => {
+    const loadSnapshot = deferred<unknown>();
+    const refreshSnapshot = deferred<unknown>();
+    const query = vi.fn((operation: string) => {
+      if (operation === "organization.graph.snapshot") return refreshSnapshot.promise;
+      return Promise.resolve(
+        envelope(
+          operation,
+          operation === "application.audit" ? { events: [], cursor: 7, snapshotRequired: false } : [],
+        ),
+      );
+    });
+    const snapshot = vi.fn(() => loadSnapshot.promise);
+    const store = new WebConsoleStore({ query, snapshot } as never);
+    const loadOutcome = vi.fn();
+
+    const loading = store.load();
+    const refreshing = store.refresh("organization.graph.snapshot");
+    void loading.then(
+      () => loadOutcome("resolved"),
+      () => loadOutcome("rejected"),
+    );
+    loadSnapshot.resolve(envelope("organization.graph.snapshot", { source: "stale-load" }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(loadOutcome).not.toHaveBeenCalled();
+
+    refreshSnapshot.resolve(envelope("organization.graph.snapshot", { source: "newer-refresh" }));
+    await expect(Promise.all([loading, refreshing])).resolves.toEqual([undefined, { source: "newer-refresh" }]);
+    expect(store.getQueryData("organization.graph.snapshot")).toEqual({ source: "newer-refresh" });
+    expect(store.getSnapshot()).toMatchObject({ status: "ready", cursor: 7 });
+  });
+
+  it("초기 snapshot 또는 audit cursor가 없으면 ready가 되거나 첫 고순번 사건을 수락하지 않는다", async () => {
+    const query = vi.fn((operation: string) => Promise.reject(new Error(`${operation} 초기 실패`)));
+    const snapshot = vi.fn().mockRejectedValue(new Error("snapshot 초기 실패"));
+    const store = new WebConsoleStore({ query, snapshot } as never);
+
+    await expect(store.load()).rejects.toThrow(/초기 운영 상태/u);
+    expect(store.getSnapshot()).toMatchObject({ status: "error", connection: "degraded", cursor: 0 });
+    expect(Object.keys(store.getSnapshot().queryErrors)).toHaveLength(5);
+
+    await expect(store.acceptEvent({ sequence: 500, type: "work.updated" })).rejects.toThrow();
+    expect(store.getSnapshot().cursor).toBe(0);
+  });
+
+  it("query resource cache와 과거 오류를 요청·retain 기준 soft limit 안에 유지한다", async () => {
     const query = vi.fn((operation: string, payload: unknown) => {
       const key = (payload as { key: string }).key;
       return key === "old-error"
         ? Promise.reject(new Error("과거 검색 실패"))
         : Promise.resolve(envelope(operation, { key }));
     });
-    const store = new WebConsoleStore({ query } as never, { maxQueryResources: 2 });
+    const store = new WebConsoleStore({ query } as never, { queryResourceSoftLimit: 2 });
 
     await expect(store.refresh("registry.search", { key: "old-error" })).rejects.toThrow("과거 검색 실패");
     await store.refresh("registry.search", { key: "kept" });
@@ -518,7 +593,7 @@ describe("WebConsoleStore", () => {
     expect(Object.keys(store.getSnapshot().queryErrors)).toHaveLength(0);
   });
 
-  it("stale resync 종료 뒤 기존 실시간 연결 상태를 복구한다", async () => {
+  it("stale resync는 최신 snapshot을 보존하되 미복구 gap을 성공으로 처리하지 않는다", async () => {
     const resyncSnapshot = deferred<unknown>();
     const query = vi.fn((operation: string) =>
       Promise.resolve(
@@ -538,10 +613,31 @@ describe("WebConsoleStore", () => {
     const recovering = store.acceptEvent({ sequence: 3, type: "work.updated" });
     await store.refresh("organization.graph.snapshot");
     resyncSnapshot.resolve(envelope("organization.graph.snapshot", { source: "old-resync" }));
-    await recovering;
+    await expect(recovering).rejects.toThrow("sequence gap");
 
     expect(store.getQueryData("organization.graph.snapshot")).toEqual({ source: "new-refresh" });
-    expect(store.getSnapshot().connection).toBe("live");
+    expect(store.getSnapshot()).toMatchObject({ cursor: 1, connection: "degraded" });
+  });
+
+  it("stale resync와 audit이 실패해도 최신 snapshot은 보존하고 gap 실패를 반환한다", async () => {
+    const resyncSnapshot = deferred<unknown>();
+    const query = vi.fn((operation: string) =>
+      operation === "organization.graph.snapshot"
+        ? Promise.resolve(envelope(operation, { source: "newest" }))
+        : Promise.reject(new Error("audit 복구 실패")),
+    );
+    const snapshot = vi.fn(() => resyncSnapshot.promise);
+    const store = new WebConsoleStore({ query, snapshot } as never);
+    store.setConnection("live");
+    await store.acceptEvent({ sequence: 1, type: "work.created" });
+
+    const recovering = store.acceptEvent({ sequence: 3, type: "work.updated" });
+    await store.refresh("organization.graph.snapshot");
+    resyncSnapshot.reject(new Error("stale resync 실패"));
+    await expect(recovering).rejects.toThrow("sequence gap");
+
+    expect(store.getQueryData("organization.graph.snapshot")).toEqual({ source: "newest" });
+    expect(store.getSnapshot()).toMatchObject({ cursor: 1, connection: "degraded" });
   });
 
   it("resync보다 최신인 snapshot 요청이 실패하면 과거 snapshot으로 cursor를 전진시키지 않는다", async () => {
@@ -573,7 +669,7 @@ describe("WebConsoleStore", () => {
     ];
     const query = vi.fn((operation: string, payload: unknown) => {
       if (operation === "application.audit") {
-        expect(payload).toEqual({ limit: 1000 });
+        expect(payload).toEqual({ after: 1, limit: 1000 });
         return Promise.resolve(envelope(operation, { events: recoveredEvents, cursor: 3, snapshotRequired: false }));
       }
       return Promise.resolve(envelope(operation, {}));
@@ -584,11 +680,147 @@ describe("WebConsoleStore", () => {
     await store.acceptEvent({ sequence: 1, type: "work.created" });
 
     await store.acceptEvent({ sequence: 3, type: "collaboration.message-posted" });
-    expect(store.getSnapshot()).toMatchObject({ cursor: 3, connection: "live", events: recoveredEvents });
+    expect(store.getSnapshot()).toMatchObject({
+      cursor: 3,
+      connection: "live",
+      events: [{ sequence: 1, type: "work.created" }, ...recoveredEvents],
+    });
 
     await store.acceptEvent({ sequence: 4, type: "work.completed" });
     expect(store.getSnapshot().cursor).toBe(4);
     expect(snapshot).toHaveBeenCalledTimes(1);
+  });
+
+  it("실패한 gap을 다음 연결에서 복구하면 과거 오류를 제거한다", async () => {
+    let auditFails = true;
+    const query = vi.fn((operation: string) => {
+      if (operation === "application.audit" && auditFails) return Promise.reject(new Error("일시적 audit 실패"));
+      return Promise.resolve(envelope(operation, { events: [], cursor: 3, snapshotRequired: false }));
+    });
+    const snapshot = vi.fn().mockResolvedValue(envelope("organization.graph.snapshot", { revision: "recovered" }));
+    const store = new WebConsoleStore({ query, snapshot } as never);
+    store.setConnection("live");
+    await store.acceptEvent({ sequence: 1, type: "work.created" });
+
+    await expect(store.acceptEvent({ sequence: 3, type: "work.updated" })).rejects.toThrow("일시적 audit 실패");
+    expect(store.getSnapshot()).toMatchObject({ cursor: 1, connection: "degraded", error: "일시적 audit 실패" });
+
+    auditFails = false;
+    store.setConnection("live");
+    await store.acceptEvent({ sequence: 3, type: "work.updated" });
+
+    expect(store.getSnapshot()).toMatchObject({ cursor: 3, connection: "live" });
+    expect(store.getSnapshot().error).toBeUndefined();
+  });
+
+  it("snapshot을 기다리는 동안 더 높은 gap이 들어오면 높아진 cursor까지 audit을 추가 복구한다", async () => {
+    const snapshotResult = deferred<unknown>();
+    const firstAuditStarted = deferred<undefined>();
+    const query = vi.fn((_operation: string, payload: unknown) => {
+      const after = (payload as { after: number }).after;
+      if (after === 1) {
+        firstAuditStarted.resolve(undefined);
+        return Promise.resolve(
+          envelope("application.audit", {
+            events: [
+              { sequence: 2, type: "work.updated" },
+              { sequence: 3, type: "work.completed" },
+            ],
+            cursor: 3,
+            snapshotRequired: false,
+          }),
+        );
+      }
+      expect(payload).toEqual({ after: 3, limit: 1000 });
+      return Promise.resolve(
+        envelope("application.audit", {
+          events: [
+            { sequence: 4, type: "work.updated" },
+            { sequence: 5, type: "work.completed" },
+          ],
+          cursor: 5,
+          snapshotRequired: false,
+        }),
+      );
+    });
+    const snapshot = vi.fn(() => snapshotResult.promise);
+    const store = new WebConsoleStore({ query, snapshot } as never);
+    store.setConnection("live");
+    await store.acceptEvent({ sequence: 1, type: "work.created" });
+
+    const lowerGap = store.acceptEvent({ sequence: 3, type: "work.completed" });
+    await firstAuditStarted.promise;
+    const higherGap = store.acceptEvent({ sequence: 5, type: "work.completed" });
+    snapshotResult.resolve(envelope("organization.graph.snapshot", { revision: "concurrent-gap" }));
+
+    await expect(Promise.all([lowerGap, higherGap])).resolves.toEqual([undefined, undefined]);
+    expect(query).toHaveBeenNthCalledWith(1, "application.audit", { after: 1, limit: 1000 });
+    expect(query).toHaveBeenNthCalledWith(2, "application.audit", { after: 3, limit: 1000 });
+    expect(store.getSnapshot()).toMatchObject({ cursor: 5, connection: "live" });
+  });
+
+  it("성숙 조직의 gap 복구는 cursor 0이 아니라 현재 cursor 뒤부터 audit을 읽는다", async () => {
+    const query = vi.fn((operation: string, payload: unknown) => {
+      if (operation !== "application.audit") return Promise.resolve(envelope(operation, []));
+      if ((payload as { limit?: number }).limit === 100) {
+        return Promise.resolve(envelope(operation, { events: [], cursor: 1498, snapshotRequired: false }));
+      }
+      expect(payload).toEqual({ after: 1498, limit: 1000 });
+      return Promise.resolve(
+        envelope(operation, {
+          events: [
+            { sequence: 1499, type: "work.updated" },
+            { sequence: 1500, type: "work.completed" },
+          ],
+          cursor: 1500,
+          snapshotRequired: false,
+        }),
+      );
+    });
+    const snapshot = vi.fn().mockResolvedValue(envelope("organization.graph.snapshot", { revision: "mature" }));
+    const store = new WebConsoleStore({ query, snapshot } as never);
+    await store.load();
+
+    await store.acceptEvent({ sequence: 1500, type: "work.completed" });
+
+    expect(store.getSnapshot()).toMatchObject({ cursor: 1500, connection: "connecting" });
+    expect(snapshot).toHaveBeenCalledTimes(2);
+  });
+
+  it("현재 cursor가 감사 보존 범위 밖이면 snapshot 뒤 보존 중인 첫 사건부터 복구한다", async () => {
+    const query = vi.fn((_operation: string, payload: unknown) => {
+      const after = (payload as { after: number }).after;
+      if (after === 1) {
+        return Promise.reject(
+          new WebApiError(409, {
+            schemaVersion: "massion.error.v1",
+            operatorCode: "APP_EVENT_CURSOR_EXPIRED",
+          }),
+        );
+      }
+      expect(payload).toEqual({ after: 0, limit: 1000 });
+      return Promise.resolve(
+        envelope("application.audit", {
+          events: [
+            { sequence: 50, type: "work.updated" },
+            { sequence: 51, type: "work.updated" },
+            { sequence: 52, type: "work.completed" },
+          ],
+          cursor: 52,
+          snapshotRequired: false,
+        }),
+      );
+    });
+    const snapshot = vi.fn().mockResolvedValue(envelope("organization.graph.snapshot", { revision: "retained" }));
+    const store = new WebConsoleStore({ query, snapshot } as never);
+    store.setConnection("live");
+    await store.acceptEvent({ sequence: 1, type: "work.created" });
+
+    await store.recoverExpiredCursor();
+
+    expect(query).toHaveBeenNthCalledWith(1, "application.audit", { after: 1, limit: 1000 });
+    expect(query).toHaveBeenNthCalledWith(2, "application.audit", { after: 0, limit: 1000 });
+    expect(store.getSnapshot()).toMatchObject({ cursor: 52, connection: "live" });
   });
 
   it("query identity와 전송 payload를 실제 JSON wire 의미로 정규화한다", async () => {

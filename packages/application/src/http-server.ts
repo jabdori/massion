@@ -8,6 +8,7 @@ import type { IssueEnrollmentInput, IssuedEnrollment } from "@massion/subscripti
 import type { AuthenticatedApplicationAccess, IssueApplicationTokenInput } from "./auth.js";
 import type { ApplicationEventV1 } from "./contracts.js";
 import { ApplicationError, applicationErrorToHttpStatus } from "./errors.js";
+import { ApplicationEventCursorExpiredError } from "./event-store.js";
 import { encodeApplicationSseEvent, parseEventCursor } from "./sse.js";
 import type { AuthenticatedWebSession, ExchangedWebSession } from "./web-session.js";
 
@@ -151,7 +152,13 @@ function requestOrigin(request: IncomingMessage, secure: boolean): string | unde
 }
 
 interface HttpAccess extends AuthenticatedApplicationAccess {
-  readonly web?: { readonly sessionId: string; readonly sessionToken: string };
+  readonly web?: {
+    readonly sessionId: string;
+    readonly sessionToken: string;
+    readonly issuedAt: string;
+    readonly expiresAt: string;
+    readonly idleExpiresAt: string;
+  };
 }
 
 async function body(request: IncomingMessage, maximum: number): Promise<Buffer> {
@@ -571,6 +578,9 @@ export class ApplicationHttpServer {
           context: access.context,
           scopes: access.scopes,
           csrfToken,
+          issuedAt: access.web.issuedAt,
+          expiresAt: access.web.expiresAt,
+          idleExpiresAt: access.web.idleExpiresAt,
         });
         return;
       }
@@ -602,7 +612,7 @@ export class ApplicationHttpServer {
       if (!hasScope(access.scopes, "event:read")) throw this.scope();
       this.acceptJson(request);
       const after = parseEventCursor(undefined, url.searchParams.get("after") ?? undefined);
-      sendJson(response, 200, await this.dependencies.events.read(access.context, { after, limit: 1000 }));
+      sendJson(response, 200, await this.readEvents(access.context, { after, limit: 1000 }));
       return;
     }
     const fixedQueries: Readonly<Record<string, string>> = {
@@ -774,7 +784,16 @@ export class ApplicationHttpServer {
         const sessionToken = cookie(request, cookieName);
         if (sessionToken) {
           const access = await this.dependencies.webSessions.authenticate(sessionToken, this.options.audience, []);
-          return { ...access, web: { sessionId: access.sessionId, sessionToken } };
+          return {
+            ...access,
+            web: {
+              sessionId: access.sessionId,
+              sessionToken,
+              issuedAt: access.issuedAt,
+              expiresAt: access.expiresAt,
+              idleExpiresAt: access.idleExpiresAt,
+            },
+          };
         }
       }
       return await this.dependencies.auth.authenticateAccess(undefined, this.options.audience, []);
@@ -952,16 +971,16 @@ export class ApplicationHttpServer {
     let cursor = parseEventCursor(last, url.searchParams.get("after") ?? undefined);
     this.activeStreams += 1;
     this.streams.add(response);
-    response.writeHead(200, {
-      "content-type": "text/event-stream; charset=utf-8",
-      "cache-control": "no-cache, no-transform",
-      connection: "keep-alive",
-      "x-accel-buffering": "no",
-    });
-    let heartbeatAt = Date.now() + this.options.heartbeatMs;
     try {
-      while (!this.draining && !request.destroyed && !response.destroyed) {
-        const batch = await this.dependencies.events.read(context, { after: cursor, limit: 1000 });
+      let batch = await this.readEvents(context, { after: cursor, limit: 1000 });
+      response.writeHead(200, {
+        "content-type": "text/event-stream; charset=utf-8",
+        "cache-control": "no-cache, no-transform",
+        connection: "keep-alive",
+        "x-accel-buffering": "no",
+      });
+      let heartbeatAt = Date.now() + this.options.heartbeatMs;
+      while (!this.streamClosed(request, response)) {
         let batchBytes = 0;
         for (const event of batch.events) {
           const frame = encodeApplicationSseEvent(event);
@@ -975,11 +994,38 @@ export class ApplicationHttpServer {
           heartbeatAt = Date.now() + this.options.heartbeatMs;
         }
         await new Promise<void>((resolve) => setTimeout(resolve, this.options.pollMs));
+        if (this.streamClosed(request, response)) break;
+        batch = await this.readEvents(context, { after: cursor, limit: 1000 });
       }
     } finally {
       this.streams.delete(response);
       this.activeStreams -= 1;
-      if (!response.writableEnded) response.end();
+      if (response.headersSent && !response.writableEnded) response.end();
     }
+  }
+
+  private async readEvents(
+    context: TenantContext,
+    input: { readonly after: number; readonly limit: number },
+  ): Promise<{ readonly events: readonly ApplicationEventV1[]; readonly cursor: number }> {
+    try {
+      return await this.dependencies.events.read(context, input);
+    } catch (cause) {
+      if (cause instanceof ApplicationEventCursorExpiredError) {
+        throw new ApplicationError({
+          category: "conflict",
+          severity: "warning",
+          retryable: true,
+          userMessage: "사건 보존 범위가 지나 snapshot 재동기화가 필요합니다",
+          operatorCode: "APP_EVENT_CURSOR_EXPIRED",
+          cause,
+        });
+      }
+      throw cause;
+    }
+  }
+
+  private streamClosed(request: IncomingMessage, response: ServerResponse): boolean {
+    return this.draining || request.destroyed || response.destroyed;
   }
 }

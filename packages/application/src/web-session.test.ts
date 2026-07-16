@@ -58,8 +58,15 @@ describe("Web login ticket와 session", () => {
       expect(exchanged.csrfToken).toMatch(/^[A-Za-z0-9_-]{43}$/u);
       expect(exchanged).toMatchObject({ context: value.context, scopes: ["application:*"] });
       await expect(value.sessions.exchangeLoginTicket(ticket.code)).rejects.toThrow(/사용|일회/u);
+      value.now.value = new Date("2026-07-11T10:00:30.000Z");
       const authenticated = await value.sessions.authenticate(exchanged.sessionToken, "massion-api", []);
-      expect(authenticated).toMatchObject({ context: value.context, sessionId: exchanged.sessionId });
+      expect(authenticated).toMatchObject({
+        context: value.context,
+        sessionId: exchanged.sessionId,
+        issuedAt: exchanged.issuedAt,
+        expiresAt: exchanged.expiresAt,
+        idleExpiresAt: "2026-07-11T10:30:30.000Z",
+      });
       expect(await value.sessions.verifyCsrf(exchanged.sessionToken, exchanged.csrfToken)).toBe(true);
       expect(await value.sessions.verifyCsrf(exchanged.sessionToken, "x".repeat(43))).toBe(false);
       const raw = JSON.stringify(

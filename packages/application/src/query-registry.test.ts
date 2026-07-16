@@ -1,6 +1,7 @@
 import type { TenantContext } from "@massion/identity";
 import { describe, expect, it } from "vitest";
 
+import { ApplicationEventCursorExpiredError } from "./event-store.js";
 import type { ApplicationReadModel } from "./read-model.js";
 import { ApplicationQueryRegistry, registerApplicationQueries } from "./query-registry.js";
 
@@ -75,6 +76,26 @@ describe("ApplicationQueryRegistry", () => {
       category: "validation",
     });
     await expect(registry.query(context, ["work:read"], "work.list", { injected: true })).rejects.toThrow("알 수 없는");
+  });
+
+  it("감사 사건 cursor가 보존 범위 밖이면 snapshot 재동기화가 가능한 공개 오류로 변환한다", async () => {
+    const registry = new ApplicationQueryRegistry();
+    registerApplicationQueries(registry, {
+      readModel,
+      audit: {
+        read: async () => {
+          throw new ApplicationEventCursorExpiredError(50);
+        },
+      },
+    });
+
+    await expect(
+      registry.query(context, ["audit:read"], "application.audit", { after: 1, limit: 1000 }),
+    ).rejects.toMatchObject({
+      category: "conflict",
+      operatorCode: "APP_EVENT_CURSOR_EXPIRED",
+      retryable: true,
+    });
   });
 
   it("승인 목록과 단건 조회에 비밀 제거 표시 미리보기만 투영한다", async () => {
