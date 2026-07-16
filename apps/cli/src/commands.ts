@@ -332,10 +332,7 @@ export async function executeCliInvocation(
     );
   if (invocation.command === "subscription" && invocation.subcommand === "policy" && args[1] === undefined)
     return await client.query("subscription.policy", { providerId: required(args, 0, "providerId") });
-  if (
-    (invocation.command === "subscription" && invocation.subcommand === "connect") ||
-    (invocation.command === "auth" && invocation.subcommand === "login")
-  ) {
+  if (invocation.command === "auth" && invocation.subcommand === "login") {
     if (!input.connectServerSubscription) throw new Error("로컬 구독 로그인 adapter가 필요합니다");
     const alias = args.slice(1).join(" ").trim();
     return await input.connectServerSubscription({

@@ -42,7 +42,6 @@ describe("massion CLI parser", () => {
     [["growth", "suggestions"], "growth", "suggestions"],
     [["subscription", "providers"], "subscription", "providers"],
     [["subscription", "enroll", "edge", "agent-runtime"], "subscription", "enroll"],
-    [["subscription", "connect", "verified-provider"], "subscription", "connect"],
     [["auth", "login", "openai-codex"], "auth", "login"],
     [["subscription", "connect-model", "minimax-token-plan"], "subscription", "connect-model"],
     [["subscription", "connect-advanced", "verified-provider"], "subscription", "connect-advanced"],
@@ -67,17 +66,17 @@ describe("massion CLI parser", () => {
 
   it("token 원문 command-line flag를 제공하지 않는다", () => {
     expect(() => parseCliArguments(["status", "--token", "secret"])).toThrow("지원하지 않는 option");
-    expect(() => parseCliArguments(["subscription", "connect", "verified-provider", "--token", "secret"])).toThrow(
+    expect(() => parseCliArguments(["auth", "login", "openai-codex", "--token", "secret"])).toThrow(
       "지원하지 않는 option",
     );
   });
 
   it("Codex 구독 연결의 선택 model을 secret이 아닌 명시적 option으로 파싱한다", () => {
-    expect(parseCliArguments(["subscription", "connect", "openai-codex", "--model", "gpt-5.6-terra"])).toMatchObject({
+    expect(parseCliArguments(["auth", "login", "openai-codex", "--model", "gpt-5.6-terra"])).toMatchObject({
       model: "gpt-5.6-terra",
       arguments: ["openai-codex"],
     });
-    expect(() => parseCliArguments(["status", "--model", "gpt-5.6-sol"])).toThrow("subscription connect");
+    expect(() => parseCliArguments(["status", "--model", "gpt-5.6-sol"])).toThrow("auth login");
     expect(parseCliArguments(["auth", "login", "openai-codex", "--model", "gpt-5.6-terra"])).toMatchObject({
       model: "gpt-5.6-terra",
       arguments: ["openai-codex"],
@@ -85,11 +84,17 @@ describe("massion CLI parser", () => {
   });
 
   it("새 Codex 구독 계정 추가를 명시적으로 파싱한다", () => {
-    expect(parseCliArguments(["subscription", "connect", "openai-codex", "--new-account"])).toMatchObject({
+    expect(parseCliArguments(["auth", "login", "openai-codex", "--new-account"])).toMatchObject({
       newAccount: true,
       arguments: ["openai-codex"],
     });
-    expect(() => parseCliArguments(["status", "--new-account"])).toThrow("subscription connect");
+    expect(() => parseCliArguments(["status", "--new-account"])).toThrow("auth login");
+  });
+
+  it("제거된 subscription connect 호환 명령을 거부한다", () => {
+    expect(() => parseCliArguments(["subscription", "connect", "openai-codex"])).toThrow(
+      "subscription subcommand가 유효하지 않습니다",
+    );
   });
 
   it("run의 재현 가능한 상관관계 ID를 명시적으로 파싱하고 다른 command에서는 거부한다", () => {

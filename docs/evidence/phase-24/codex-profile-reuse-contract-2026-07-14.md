@@ -2,12 +2,12 @@
 
 > **기록 시각**: 2026-07-14
 > **기록 갱신**: 2026-07-15
-> **범위**: 개인용 local Massion의 `subscription connect openai-codex`
+> **범위**: 개인용 local Massion의 `massion auth login openai-codex`
 > **상태**: 변경 범위 자동화 검증 진행 중 · 현재 source commit의 최종 전수 검증과 실제 제공자 UAT 영수증은 대기
 
 ## 사용자 동작 계약
 
-이미 연결된 Massion 관리 Codex profile이 있으면, `subscription connect`는 기존 계정·doctor·quota의 계보를 확인하고 profile 경로와 인증 자료의 안전성을 확인합니다. 이 경로는 계정 소유자로 확인된 사용자(`canManage: true`)만 사용할 수 있습니다. 같은 provider에 소유 계정과 조직 공유 계정이 함께 있어도 소유 계정만 재사용 후보로 계산하므로, 공유 계정이 후보 모호성을 만들지 않습니다. 조직에 공유받은 비소유 사용자는 profile 경로·인증 자료·로그인 process에 접근하기 전에 거부됩니다. profile의 인증 자료가 안전하게 존재하고 재인증 상태가 아니면 공식 Codex 로그인을 다시 열지 않습니다. Codex process를 시작하기 전에는 profile의 최종 경로뿐 아니라 상위 경로의 심볼릭 링크도 거부합니다.
+이미 연결된 Massion 관리 Codex profile이 있으면, `massion auth login`은 기존 계정·doctor·quota의 계보를 확인하고 profile 경로와 인증 자료의 안전성을 확인합니다. 이 경로는 계정 소유자로 확인된 사용자(`canManage: true`)만 사용할 수 있습니다. 같은 provider에 소유 계정과 조직 공유 계정이 함께 있어도 소유 계정만 재사용 후보로 계산하므로, 공유 계정이 후보 모호성을 만들지 않습니다. 조직에 공유받은 비소유 사용자는 profile 경로·인증 자료·로그인 process에 접근하기 전에 거부됩니다. profile의 인증 자료가 안전하게 존재하고 재인증 상태가 아니면 공식 Codex 로그인을 다시 열지 않습니다. Codex process를 시작하기 전에는 profile의 최종 경로뿐 아니라 상위 경로의 심볼릭 링크도 거부합니다.
 
 연결이 완료되려면 건강 증명이 직접 quota 새로고침을 성공시키고, 공개 응답에 직접 관측 증거(`quotaObservation.source: "direct"`)를 포함해야 합니다. 이 새로고침은 계정별 모델 관측과 model profile·Core route candidate 저장보다 먼저 실행합니다. 따라서 새 계정의 직접 관측이 불가능하면 새 model profile·근거·route candidate를 만들지 않아 라우터가 그 미검증 계정을 선택할 수 없습니다. 새로고침이 인증 만료가 아닌 이유로 불가능하면 서버는 `ready`를 반환하지 않고 재시도 가능한 `APP_SUBSCRIPTION_QUOTA_UNAVAILABLE` 오류를 반환합니다. 이 경우 이미 검증되어 있던 연결을 재로그인 또는 Connector offline으로 전이하지 않습니다. CLI는 이 직접 관측 증거를 확인한 뒤 공개 quota projection도 다시 확인합니다. 공개 quota는 동일 계정의 `exhausted` boolean, 비어 있지 않은 `codex:` window, 허용된 신뢰도, 유효한 관측 시각을 가져야 하며, 그중 적어도 하나는 `reported` 신뢰도와 연결 이후 관측 시각을 가져야 합니다. `remainingRatio`는 선택값입니다. 값이 있으면 0~1 범위의 유한 숫자여야 하지만, 값이 없다는 이유만으로 연결을 거부하지 않습니다.
 
@@ -107,7 +107,7 @@ tmux와 실제 자식 process를 쓰는 UAT script는 root test script에서 `--
 
 1. `mass local status --json`으로 local daemon 상태를 확인하고, 중지 상태면 `mass local start --json`을 실행합니다.
 2. `mass subscription accounts --json`에서 `openai-codex` provider의 기존 `active`·`ready` server 계정, 별칭, 현재 사용자의 `canManage: true`를 확인합니다.
-3. 그 별칭으로 `mass subscription connect openai-codex "<기존 별칭>" --json`을 실행합니다.
+3. 그 별칭으로 `massion auth login openai-codex "<기존 별칭>" --json`을 실행합니다.
 4. 출력이 같은 account·Connector와 `connectionDisposition: "reused"`인지 확인합니다.
 5. `mass subscription doctor <accountId> --json`에서 `active`·`ready`·`none`을, `mass subscription quota <accountId> --json`에서 `codex:`·`reported`·현재 연결 이후 `observedAt`을 확인합니다.
 

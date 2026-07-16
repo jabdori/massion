@@ -302,16 +302,16 @@ export default function SubscriptionsPage() {
         description="로컬 구독 계정의 연결 건강, 공개된 할당량과 Provider별 순환 정책을 한곳에서 관리합니다."
       />
 
-      <aside className="subscription-enrollment-note" aria-labelledby="subscription-connect-title">
+      <aside className="subscription-enrollment-note" aria-labelledby="provider-auth-title">
         <div>
           <p className="eyebrow">LOCAL ENROLLMENT ONLY</p>
-          <h2 id="subscription-connect-title">계정 연결은 로컬 Connector에서 시작합니다.</h2>
+          <h2 id="provider-auth-title">Provider 연결은 로컬 Connector에서 시작합니다.</h2>
           <p>
             이 화면은 OAuth 또는 device login이 끝난 것처럼 가장하지 않습니다. 터미널에서 아래 명령을 실행하거나 Edge
             Connector 등록 절차를 완료해 주세요.
           </p>
         </div>
-        <code>massion subscription connect &lt;provider&gt;</code>
+        <code>massion auth login &lt;provider&gt;</code>
       </aside>
 
       <div className="subscription-notice" role="status" aria-live="polite">
