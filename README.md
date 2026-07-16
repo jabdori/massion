@@ -38,10 +38,16 @@ curl -fsSL https://raw.githubusercontent.com/jabdori/massion/main/install.sh \
 개인 설치 후 가장 짧은 시작 흐름은 다음과 같습니다.
 
 ```sh
-massion init
 massion
 # 또는 브라우저를 열어 Web Console을 사용합니다.
 massion --web
+```
+
+설치 상태와 사용법은 다음처럼 확인합니다.
+
+```sh
+massion --help
+massion --version
 ```
 
 설치된 Massion의 릴리스를 확인하거나 올릴 때는 두 명령을 구분합니다.
@@ -53,7 +59,7 @@ massion upgrade         # 최신 릴리스 설치(호환 시)
 
 `upgrade`는 릴리스 매니페스트(manifest)의 플랫폼·Node.js·Bun·주 버전 호환성 검사를 통과한 경우에만 아카이브를 SHA-256으로 검증하고 교체합니다.
 
-`massion init`은 소유자 이메일과 표시 이름을 묻습니다. 설정이 없는 상태에서 `massion`을 실행해도 같은 온보딩을 거쳐 TUI를 엽니다. 자동화에서는 `massion init http://127.0.0.1:7331 owner@example.com "내 이름"` 형식을 사용합니다.
+설정이 없는 상태에서 `massion`을 실행하면 소유자 이메일과 표시 이름을 묻는 온보딩을 거쳐 TUI를 엽니다. 명시적인 초기화가 필요하거나 자동화할 때만 `massion init http://127.0.0.1:7331 owner@example.com "내 이름"` 형식을 사용합니다.
 접근 token이 만료된 경우에도 `massion`이 상태를 확인한 뒤 재연결 온보딩을 다시 엽니다.
 
 ## TUI와 Web Console
