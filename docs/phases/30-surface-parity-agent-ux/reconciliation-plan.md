@@ -154,9 +154,12 @@
 다음 파일은 여러 복구 조각이 공유하므로 절대로 파일 전체를 일괄 스테이징하지 않습니다. 각 조각이 소유한 변경 조각만 검토하고 선택적으로 적용·스테이징합니다.
 
 - `apps/server/src/product.ts`
+- `packages/foundation/src/index.ts`
+- `packages/foundation/package.json`
 - `packages/application/src/adapters/domain.ts`
 - `packages/application/src/query-registry.ts`
 - `packages/application/src/product.ts`
+- `packages/runtime/src/index.ts`
 - `packages/runtime/src/execution-store.ts`
 - `packages/runtime/src/schema.ts`
 - `packages/runtime/src/voltagent-runner.ts`
