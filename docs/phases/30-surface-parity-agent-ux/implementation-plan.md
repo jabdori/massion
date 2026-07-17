@@ -4,6 +4,18 @@
 > **설계**: `docs/phases/30-surface-parity-agent-ux/design.md`
 > **방법**: 기준선 고정 → 공통 계약 → 안전성 P0 → 핵심 기능 동등화 → 운영 동등화 → 시각 재설계 → 하네스·UAT → 회고
 
+## Task 0B. 이력 정합성 복구
+
+> 상세 복구 원장: [Phase 30 History Reconciliation Implementation Plan](./reconciliation-plan.md)
+
+- [x] 기준 HEAD와 안전 스냅샷을 기준으로 변경 상태 감사(audit)를 완료했습니다.
+- [x] 불변 안전 스냅샷(immutable safety snapshot)의 참조, 커밋, 트리를 고정했습니다.
+- [x] 깨끗한 기준선(clean base)에서 동결 설치 후 전체 `pnpm verify`가 종료 코드 `0`으로 통과했음을 확인했습니다.
+- [ ] 안전 스냅샷에서 원자적인 복구 조각(slice)별로 구현을 재구성합니다.
+- [ ] 실제 코드 커밋 SHA와 검증 결과에 맞게 근거·체크리스트·추적성 표를 정정합니다.
+- [ ] 현재 복구 후보에서 전체 `pnpm verify`와 릴리스 검증을 다시 실행합니다.
+- [ ] Playwright, OpenTUI, tmux, 백업·복원, 공급자 사용자 인수 테스트(UAT)를 완료합니다.
+
 ## Task 1. 기준선과 공격 리뷰 고정
 
 - [x] `716fd08`에서 격리 브랜치와 워크트리를 생성하고 frozen dependency 설치를 완료합니다.
