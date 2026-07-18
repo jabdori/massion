@@ -24,7 +24,7 @@
 - 정합성 복구 경로(reconciled worktree): `/Volumes/Crucial P3 PLUS/workspace.backup-20260502/massion/.worktrees/phase-30-reconciled`
 - 정합성 복구 브랜치(reconciled branch): `feat/phase-30-reconciled`
 - 의존성은 `pnpm install --frozen-lockfile` 동결 설치(frozen install)로 고정했습니다.
-- 깨끗한 기준선(clean base)에서 전체 `pnpm verify`를 실행했고 종료 코드(exit code)는 `0`이었습니다.
+- 깨끗한 기준선(clean base)에서 전체 `pnpm verify`를 실행했고 종료 코드(exit code)는 `0`이었습니다. 자세한 범위와 환경은 [깨끗한 기준선 전체 검증 증거](../../evidence/phase-30/clean-base-full-verification-2026-07-18.md)에 기록했습니다.
 
 안전 참조는 변경 출처를 확인하는 읽기 전용 원본입니다. 복구 브랜치가 전체 게이트와 깨끗한 복제본(clean clone) 릴리스 검증을 모두 통과할 때까지 삭제하거나 이동하지 않습니다.
 
