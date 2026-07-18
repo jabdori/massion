@@ -48,6 +48,7 @@ describe("local daemon lifecycle", () => {
           HOME: root,
           PATH: process.env.PATH,
           MASSION_SERVER_BIN: serverScript,
+          MASSION_WEB_ROOT: "/opt/massion/web",
           MASSION_EDGE_CONNECTOR_ENABLED: "true",
           MASSION_CONNECTOR_HEARTBEAT_MS: "45000",
         },
@@ -72,6 +73,7 @@ describe("local daemon lifecycle", () => {
       expect(childEnvironment?.MASSION_DATABASE_PASSWORD_FILE).toBe(
         join(root, ".config", "massion", "database-password"),
       );
+      expect(childEnvironment?.MASSION_WEB_ROOT).toBe("/opt/massion/web");
       expect(childWorkingDirectory).toBe(paths.dataDirectory);
       expect(childEnvironment?.MASSION_EDGE_CONNECTOR_ENABLED).toBe("true");
       expect(childEnvironment?.MASSION_CONNECTOR_HEARTBEAT_MS).toBe("45000");

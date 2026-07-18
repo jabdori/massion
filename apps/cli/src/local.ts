@@ -372,6 +372,9 @@ export class LocalDaemonManager {
       MASSION_DATABASE_URL: databaseEndpoint,
       MASSION_DATABASE_USER: "massion",
       MASSION_DATABASE_PASSWORD_FILE: this.#paths.databasePassword,
+      ...(this.#environment.MASSION_WEB_ROOT === undefined
+        ? {}
+        : { MASSION_WEB_ROOT: this.#environment.MASSION_WEB_ROOT }),
       MASSION_TOKEN_KEY_FILE: this.#paths.tokenKey,
       MASSION_CREDENTIAL_KEY_FILE: this.#paths.credentialKey,
       MASSION_SOFTWARE_WORKSPACE_ROOT: this.#paths.softwareWorkspaceDirectory,
