@@ -45,7 +45,7 @@ spec:
               mountPath: /target
       containers:
         - name: surrealdb
-          image: massion-surrealdb:3.2.0
+          image: massion-surrealdb:3.2.1
           imagePullPolicy: IfNotPresent
           env:
             - name: SURREAL_PASSWORD_FILE

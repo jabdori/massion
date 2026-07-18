@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1.12
-FROM surrealdb/surrealdb:v3.2.0 AS surreal
+FROM surrealdb/surrealdb:v3.2.1@sha256:a0ef3252ec197a31a262423241061390f51ba95509a68f1866f0783ad8f39ea1 AS surreal
 FROM debian:bookworm-slim
 RUN apt-get update \
   && apt-get install --yes --no-install-recommends ca-certificates \

@@ -246,7 +246,7 @@ async function main() {
         ...bundle,
         images: {
           MASSION_IMAGE: "massion:1.0.0",
-          MASSION_SURREALDB_IMAGE: "massion-surrealdb:3.2.0",
+          MASSION_SURREALDB_IMAGE: "massion-surrealdb:3.2.1",
           MASSION_CADDY_IMAGE: "massion-caddy:2.11.4",
         },
         start: "docker compose --file compose.yaml up -d --no-build --wait --wait-timeout 120",
