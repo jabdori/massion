@@ -75,6 +75,48 @@ fi
 
 verify_checksums
 
+native_runtime=$(node - "$source_dir/release-bundle.json" <<'NODE'
+const { readFileSync } = require("node:fs");
+const [path] = process.argv.slice(2);
+let bundle;
+try {
+  bundle = JSON.parse(readFileSync(path, "utf8"));
+} catch {
+  process.stderr.write("release native runtime metadata를 읽을 수 없습니다\n");
+  process.exit(1);
+}
+const operatingSystem = process.platform === "darwin" ? "darwin" : process.platform === "linux" ? "linux" : undefined;
+const architecture = process.arch === "arm64" ? "arm64" : process.arch === "x64" ? "amd64" : undefined;
+const platform = operatingSystem && architecture ? `${operatingSystem}-${architecture}` : undefined;
+const surreal = bundle?.nativeRuntime?.surrealdb;
+const expectedBinary = platform ? `runtime/surrealdb/3.2.1/${platform}/surreal` : undefined;
+if (
+  !platform ||
+  surreal?.version !== "3.2.1" ||
+  surreal.platform !== platform ||
+  surreal.binary !== expectedBinary ||
+  typeof surreal.sha256 !== "string" ||
+  !/^[a-f0-9]{64}$/u.test(surreal.sha256)
+) {
+  process.stderr.write("현재 실행 환경과 호환되는 SurrealDB local runtime metadata가 없습니다\n");
+  process.exit(1);
+}
+process.stdout.write(`${surreal.binary}\n${surreal.platform}\n`);
+NODE
+)
+native_binary_relative=$(printf '%s\n' "$native_runtime" | sed -n '1p')
+native_platform=$(printf '%s\n' "$native_runtime" | sed -n '2p')
+data_home=${XDG_DATA_HOME:-"${HOME:?HOME이 필요합니다}/.local/share"}
+case "$data_home" in
+  /*) ;;
+  *)
+    echo "XDG_DATA_HOME은 절대 경로여야 합니다" >&2
+    exit 1
+    ;;
+esac
+native_cache_directory="$data_home/massion/runtime/surrealdb/3.2.1/$native_platform"
+native_cache_binary="$native_cache_directory/surreal"
+
 if [ -L "$prefix" ] || { [ -e "$prefix" ] && [ ! -d "$prefix" ]; }; then
   echo "설치 prefix가 symlink 없는 directory가 아닙니다: $prefix" >&2
   exit 1
@@ -94,6 +136,10 @@ do
     exit 1
   fi
 done
+if [ ! -f "$source_dir/$native_binary_relative" ] || [ -L "$source_dir/$native_binary_relative" ] || [ ! -x "$source_dir/$native_binary_relative" ]; then
+  echo "release native SurrealDB binary가 없거나 실행할 수 없습니다: $native_binary_relative" >&2
+  exit 1
+fi
 if [ ! -f "$source_dir/web/index.html" ] || [ -L "$source_dir/web/index.html" ]; then
   echo "release Web 진입점이 없거나 일반 파일이 아닙니다: web/index.html" >&2
   exit 1
@@ -193,6 +239,15 @@ trap 'exit 129' 1
 trap 'exit 130' 2
 trap 'exit 143' 15
 
+mkdir -p "$native_cache_directory"
+chmod 700 "$native_cache_directory"
+if [ -L "$native_cache_binary" ]; then
+  echo "local SurrealDB runtime cache binary는 symbolic link일 수 없습니다" >&2
+  exit 1
+fi
+cp "$source_dir/$native_binary_relative" "$native_cache_binary"
+chmod 700 "$native_cache_binary"
+
 cp -R "$source_dir/runtime" "$staged/runtime"
 cp -R "$source_dir/web" "$staged/web"
 cp "$source_dir/release-bundle.json" "$source_dir/SHA256SUMS" "$source_dir/uninstall.sh" "$source_dir/update.sh" "$staged/"
@@ -210,6 +265,24 @@ export MASSION_WEB_ROOT="$release_dir/web"
 export MASSION_PREFIX="$(CDPATH= cd -- "$release_dir/../../.." && pwd)"
 export MASSION_UPDATE_BIN="$release_dir/update.sh"
 export MASSION_BUN_VERSION="$(bun --version)"
+native_runtime=$(node - "$release_dir/release-bundle.json" <<'NODE'
+const { readFileSync } = require("node:fs");
+const [path] = process.argv.slice(2);
+const surreal = JSON.parse(readFileSync(path, "utf8"))?.nativeRuntime?.surrealdb;
+if (
+  surreal?.version !== "3.2.1" ||
+  typeof surreal.platform !== "string" ||
+  typeof surreal.sha256 !== "string" ||
+  !/^[a-f0-9]{64}$/u.test(surreal.sha256)
+) process.exit(1);
+process.stdout.write(`${surreal.platform}\n${surreal.sha256}\n`);
+NODE
+)
+native_platform=$(printf '%s\n' "$native_runtime" | sed -n '1p')
+native_sha256=$(printf '%s\n' "$native_runtime" | sed -n '2p')
+data_home=${XDG_DATA_HOME:-"$HOME/.local/share"}
+export MASSION_SURREAL_BINARY="$data_home/massion/runtime/surrealdb/3.2.1/$native_platform/surreal"
+export MASSION_SURREAL_SHA256="$native_sha256"
 if [ "$#" -eq 0 ] && [ -t 0 ] && [ -t 1 ]; then
   config_path="${XDG_CONFIG_HOME:-$HOME/.config}/massion/config.json"
   case "$(uname -s)" in

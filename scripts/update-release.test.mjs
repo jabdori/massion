@@ -11,6 +11,10 @@ import { fileURLToPath } from "node:url";
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const updateScript = join(repositoryRoot, "release/update.sh");
 
+function runtimePlatform() {
+  return `${process.platform}-${process.arch === "x64" ? "amd64" : process.arch}`;
+}
+
 async function makeInstalledRelease(context, version = "1.0.0") {
   const root = await mkdtemp(join(tmpdir(), "massion update "));
   context.after(async () => await rm(root, { recursive: true, force: true }));
@@ -68,7 +72,7 @@ async function runUpdate(release, baseUrl, version, operation = "--check") {
   });
 }
 
-function manifest(version, platform = `${process.platform}-${process.arch}`, artifactDigest = "c".repeat(64)) {
+function manifest(version, platform = runtimePlatform(), artifactDigest = "c".repeat(64)) {
   return {
     schema: "massion.release.v1",
     version,
@@ -102,7 +106,7 @@ test("update는 호환 가능한 최신 release를 설치하지 않고 JSON으�
 
 test("update는 현재 플랫폼이 release 호환 목록에 없으면 중단한다", async (context) => {
   const { release } = await makeInstalledRelease(context);
-  const incompatiblePlatform = process.platform === "darwin" ? "linux-x64" : "darwin-arm64";
+  const incompatiblePlatform = process.platform === "darwin" ? "linux-amd64" : "darwin-arm64";
   const baseUrl = await serveManifest(context, manifest("1.0.1", incompatiblePlatform));
   const result = await runUpdate(release, baseUrl, "1.0.1");
 
@@ -127,11 +131,10 @@ test("upgrade는 아카이브 내부 bundle version이 manifest와 다르면 설
   const archiveBody = await readFile(archivePath);
   const archiveName = "massion-local-1.0.1.tar.gz";
   const archiveDigest = createHash("sha256").update(archiveBody).digest("hex");
-  const baseUrl = await serveManifest(
-    context,
-    manifest("1.0.1", `${process.platform}-${process.arch}`, archiveDigest),
-    { name: archiveName, body: archiveBody },
-  );
+  const baseUrl = await serveManifest(context, manifest("1.0.1", runtimePlatform(), archiveDigest), {
+    name: archiveName,
+    body: archiveBody,
+  });
   const result = await runUpdate(release, baseUrl, "1.0.1", "--apply");
 
   assert.notEqual(result.status, 0);

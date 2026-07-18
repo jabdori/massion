@@ -30,10 +30,20 @@ test("source·toolchain·artifact digest가 정렬된 release manifest를 만든
   );
   assert.equal(manifest.schema, "massion.release.v1");
   assert.deepEqual(manifest.compatibility, {
-    platforms: ["darwin-arm64", "darwin-x64", "linux-arm64", "linux-x64"],
+    platforms: ["darwin-amd64", "darwin-arm64", "linux-amd64", "linux-arm64"],
     node: { minMajor: 24 },
     bun: { minVersion: "1.3.0" },
   });
+  assert.doesNotThrow(() =>
+    createReleaseManifest({
+      version: "1.0.0",
+      gitCommit: "a".repeat(40),
+      sourceDigest: "b".repeat(64),
+      toolchains: { node: "24.18.0", bun: "1.3.14", pnpm: "10.30.3" },
+      platforms: ["linux-amd64"],
+      artifacts: [{ name: "massion-local-1.0.0.tar.gz", bytes: 1, digest: "c".repeat(64) }],
+    }),
+  );
   assert.throws(
     () =>
       createReleaseManifest({

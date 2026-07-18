@@ -1,13 +1,17 @@
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { chmod, cp, lstat, mkdir, readFile, readdir, readlink, rm, stat, writeFile } from "node:fs/promises";
-import { basename, dirname, isAbsolute, relative, resolve, sep } from "node:path";
+import { chmod, cp, lstat, mkdir, mkdtemp, readFile, readdir, readlink, rm, stat, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { createReleaseManifest, verifyReleaseVersions } from "./release-manifest.mjs";
 
 const VERSION = "1.0.0";
 const DIGEST = /^[a-f0-9]{64}$/u;
+const SURREALDB_VERSION = "3.2.1";
+const SURREALDB_PLATFORM = /^(?:darwin|linux)-(?:arm64|amd64)$/u;
+const SURREALDB_VERSION_OUTPUT = /(?:^|[^0-9])3\.2\.1(?:$|[^0-9])/u;
 
 export function assertCleanReleaseTree(status) {
   if (status.trim()) throw new Error("release는 clean Git tree에서만 만들 수 있습니다");
@@ -31,6 +35,105 @@ export function createChecksumLines(entries) {
     })
     .sort((left, right) => left.path.localeCompare(right.path))
     .map((entry) => `${entry.digest}  ${entry.path}`);
+}
+
+export function nativeSurrealDownloadUrl(platform) {
+  if (!SURREALDB_PLATFORM.test(platform)) throw new Error("SurrealDB runtime platform이 유효하지 않습니다");
+  return `https://download.surrealdb.com/v${SURREALDB_VERSION}/surreal-v${SURREALDB_VERSION}.${platform}.tgz`;
+}
+
+function nativeSurrealPlatform(input) {
+  const operatingSystem = input.platform === "darwin" ? "darwin" : input.platform === "linux" ? "linux" : undefined;
+  const architecture = input.architecture === "arm64" ? "arm64" : input.architecture === "x64" ? "amd64" : undefined;
+  if (!operatingSystem || !architecture)
+    throw new Error("현재 build host는 SurrealDB local runtime을 지원하지 않습니다");
+  return `${operatingSystem}-${architecture}`;
+}
+
+async function verifyNativeSurrealBinary(path) {
+  if (!isAbsolute(path)) throw new Error("MASSION_SURREAL_BINARY는 절대 경로여야 합니다");
+  const metadata = await lstat(path);
+  if (!metadata.isFile() || metadata.isSymbolicLink() || (metadata.mode & 0o111) === 0)
+    throw new Error("SurrealDB local runtime binary는 실행 가능한 regular file이어야 합니다");
+  const output = String(run(path, ["version"]));
+  if (!SURREALDB_VERSION_OUTPUT.test(output))
+    throw new Error("SurrealDB local runtime version 3.2.1을 확인할 수 없습니다");
+}
+
+async function extractedNativeSurrealBinary(root) {
+  const candidates = [];
+  const visit = async (directory) => {
+    for (const entry of await readdir(directory, { withFileTypes: true })) {
+      const path = resolve(directory, entry.name);
+      if (entry.isDirectory()) await visit(path);
+      else if (entry.isFile() && entry.name === "surreal") candidates.push(path);
+    }
+  };
+  await visit(root);
+  if (candidates.length !== 1) throw new Error("공식 SurrealDB archive에서 단일 binary를 찾을 수 없습니다");
+  return candidates[0];
+}
+
+export async function stageNativeSurrealRuntime(
+  root,
+  input = {
+    platform: process.platform,
+    architecture: process.arch,
+    environment: process.env,
+  },
+) {
+  const platform = nativeSurrealPlatform(input);
+  const binary = `runtime/surrealdb/${SURREALDB_VERSION}/${platform}/surreal`;
+  const outputRoot = resolve(root);
+  const destination = resolve(outputRoot, binary);
+  if (!isWithin(outputRoot, destination)) throw new Error("SurrealDB runtime destination이 release 밖을 벗어납니다");
+  const override = input.environment?.MASSION_SURREAL_BINARY;
+  let temporary;
+  let source;
+  try {
+    if (override) {
+      source = override;
+    } else {
+      temporary = await mkdtemp(join(tmpdir(), "massion-surrealdb-"));
+      const archive = join(temporary, "surreal.tgz");
+      run("curl", [
+        "--fail",
+        "--location",
+        "--silent",
+        "--show-error",
+        "--output",
+        archive,
+        nativeSurrealDownloadUrl(platform),
+      ]);
+      run("tar", ["-xzf", archive, "-C", temporary]);
+      source = await extractedNativeSurrealBinary(temporary);
+    }
+    await verifyNativeSurrealBinary(source);
+    await mkdir(dirname(destination), { recursive: true, mode: 0o700 });
+    await cp(source, destination, { force: true });
+    await chmod(destination, 0o700);
+    await verifyNativeSurrealBinary(destination);
+    return {
+      version: SURREALDB_VERSION,
+      platform,
+      binary,
+      sha256: await digest(destination),
+    };
+  } finally {
+    if (temporary) await rm(temporary, { recursive: true, force: true });
+  }
+}
+
+export function createLocalReleaseBundle({ gitCommit, sourceDigest, entrypoints, nativeRuntime }) {
+  return {
+    schema: "massion.release-bundle.v1",
+    version: VERSION,
+    gitCommit,
+    sourceDigest: `sha256:${sourceDigest}`,
+    platforms: [nativeRuntime.platform],
+    entrypoints,
+    nativeRuntime: { surrealdb: nativeRuntime },
+  };
 }
 
 export async function verifyRuntimeEntrypoints(root, entrypoints) {
@@ -215,6 +318,7 @@ async function main() {
     tui: "runtime/node_modules/@massion/tui/dist/main.js",
   };
   await verifyRuntimeEntrypoints(local, entrypoints);
+  const nativeRuntime = await stageNativeSurrealRuntime(local);
   await cp(resolve(root, "release/install.sh"), resolve(local, "install.sh"));
   await cp(resolve(root, "release/uninstall.sh"), resolve(local, "uninstall.sh"));
   await cp(resolve(root, "release/update.sh"), resolve(local, "update.sh"));
@@ -225,14 +329,7 @@ async function main() {
 
   const gitCommit = String(run("git", ["rev-parse", "HEAD"], { cwd: root })).trim();
   const source = await sourceDigest(root);
-  const bundle = {
-    schema: "massion.release-bundle.v1",
-    version: VERSION,
-    gitCommit,
-    sourceDigest: `sha256:${source}`,
-    platforms: ["darwin-arm64", "darwin-x64", "linux-arm64", "linux-x64"],
-    entrypoints,
-  };
+  const bundle = createLocalReleaseBundle({ gitCommit, sourceDigest: source, entrypoints, nativeRuntime });
   await writeFile(resolve(local, "release-bundle.json"), `${JSON.stringify(bundle, undefined, 2)}\n`, { mode: 0o600 });
   await writeChecksums(local);
 
