@@ -8,9 +8,9 @@
 
 > 상세 복구 원장: [Phase 30 History Reconciliation Implementation Plan](./reconciliation-plan.md)
 
-- [x] 기준 HEAD와 안전 스냅샷을 기준으로 변경 상태 감사(audit)를 완료했습니다.
-- [x] 불변 안전 스냅샷(immutable safety snapshot)의 참조, 커밋, 트리를 고정했습니다.
-- [x] 깨끗한 기준선(clean base)에서 동결 설치 후 전체 `pnpm verify`가 종료 코드 `0`으로 통과했음을 확인했습니다.
+- 기록된 후보: 기준 HEAD와 안전 스냅샷을 기준으로 변경 상태를 감사(audit)한 이력이 있습니다. 현재 복구 후보의 재검증 근거는 아직 연결하지 않았습니다.
+- 기록된 후보: 불변 안전 스냅샷(immutable safety snapshot)의 참조, 커밋, 트리를 고정한 이력이 있습니다. 현재 복구 후보의 독립 코드 커밋 근거는 아직 없습니다.
+- 재검증 필요: 깨끗한 기준선(clean base)에서 동결 설치 후 전체 `pnpm verify`가 종료 코드 `0`이었다는 기록은 별도 baseline evidence 커밋과 연결되기 전까지 완료로 표시하지 않습니다.
 - [ ] 안전 스냅샷에서 원자적인 복구 조각(slice)별로 구현을 재구성합니다.
 - [ ] 실제 코드 커밋 SHA와 검증 결과에 맞게 근거·체크리스트·추적성 표를 정정합니다.
 - [ ] 현재 복구 후보에서 전체 `pnpm verify`와 릴리스 검증을 다시 실행합니다.
@@ -18,15 +18,15 @@
 
 ## Task 1. 기준선과 공격 리뷰 고정
 
-- [x] `716fd08`에서 격리 브랜치와 워크트리를 생성하고 frozen dependency 설치를 완료합니다.
-- [x] format·전체 build·lint·typecheck·test·문서 검증을 실행해 종료 코드 0 기준선을 확인합니다.
-- [x] CLI·온보딩·Agent harness·TUI·Web·시각 UX 공격 리뷰를 코드와 실제 실행 결과로 분류합니다.
-- [x] 기준선 명령, source commit과 환경을 Phase 30 evidence에 기록합니다.
+- 기록된 후보: `716fd08`에서 격리 브랜치와 워크트리를 만들고 frozen dependency 설치를 수행한 이력이 있습니다. 현재 복구 후보의 독립 근거로는 아직 승격하지 않았습니다.
+- 기록된 후보: format·전체 build·lint·typecheck·test·문서 검증의 종료 코드 0 기준선 기록이 있습니다. 이 기록은 baseline evidence 커밋과 연결될 때까지 재검증 필요 상태입니다.
+- 기록된 후보: CLI·온보딩·Agent harness·TUI·Web·시각 UX 공격 리뷰를 코드와 실제 실행 결과로 분류한 이력이 있습니다. 현재 복구 후보의 완료 근거는 아닙니다.
+- 기록된 후보: 기준선 명령, source commit과 환경을 Phase 30 evidence에 기록하려는 후보가 있습니다. 실제 evidence SHA와 연결되기 전까지 재검증 필요 상태입니다.
 
 ## Task 2. 공통 query·resource·사건 계약
 
-- [x] 서로 다른 payload의 query가 같은 결과 슬롯을 공유하는 실패 테스트를 먼저 추가합니다.
-- [x] operation+정규 payload를 query identity로 사용하고 Web hook과 초기 load를 같은 계약으로 옮깁니다.
+- 기록된 후보: 서로 다른 payload의 query가 같은 결과 슬롯을 공유하는 실패 테스트를 추가한 이력이 있습니다. 현재 복구 브랜치의 독립 커밋과 최신 검증 근거가 필요합니다.
+- 기록된 후보: operation+정규 payload를 query identity로 사용하고 Web hook과 초기 load를 같은 계약으로 옮긴 후보가 있습니다. 독립 복구와 최신 검증 전에는 완료로 표시하지 않습니다.
 - [ ] TUI의 선택된 업무·협업방 query도 같은 resource identity와 응답 generation을 사용합니다.
 - [ ] loading·ready·empty·error·stale·retry 상태와 event→resource invalidation을 공통 계약으로 정의합니다.
 - [ ] Web과 TUI에서 정상 SSE 사건, gap, 역순, 재연결과 세션 만료를 검증합니다.
