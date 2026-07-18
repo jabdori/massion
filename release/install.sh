@@ -68,7 +68,17 @@ if [ -z "$node_major" ] || [ "$node_major" -lt 24 ]; then
   echo "Node.js 24 이상이 필요합니다" >&2
   exit 1
 fi
-if ! command -v bun >/dev/null 2>&1; then
+bun_version=$(bun --version 2>/dev/null || true)
+bun_supported=$(node - "$bun_version" <<'NODE'
+const value = process.argv[2]?.trim() ?? "";
+const match = /^v?(\d+)\.(\d+)(?:\.\d+)?(?:[-+][0-9A-Za-z.-]+)?$/u.exec(value);
+if (!match) process.exit(0);
+const major = Number(match[1]);
+const minor = Number(match[2]);
+process.stdout.write(major > 1 || (major === 1 && minor >= 3) ? "true" : "false");
+NODE
+)
+if [ "$bun_supported" != "true" ]; then
   echo "Bun 1.3 이상이 필요합니다" >&2
   exit 1
 fi
