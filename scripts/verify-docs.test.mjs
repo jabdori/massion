@@ -28,6 +28,15 @@ test("유효한 문서 구조를 승인한다", async () => {
   assert.deepEqual(await validateDocs(root), []);
 });
 
+test("Phase 30 정합성 원장이 존재하면 별도 검증 실패를 문서 오류로 전달한다", async () => {
+  const root = await fixture();
+  const phase = join(root, "docs", "phases", "30-surface-parity-agent-ux");
+  await mkdir(phase, { recursive: true });
+  await writeFile(join(phase, "reconciliation-manifest.json"), "{ invalid json\n");
+
+  assert.ok((await validateDocs(root)).some((error) => error.includes("Phase 30 정합성 원장")));
+});
+
 test("숫자가 포함된 의미 있는 요구사항 영역 식별자를 승인한다", async () => {
   const root = await fixture();
   const trace = join(root, "docs", "generated", "requirements-traceability.tsv");
