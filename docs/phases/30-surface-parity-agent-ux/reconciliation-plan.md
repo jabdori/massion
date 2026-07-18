@@ -49,17 +49,12 @@
 ### 1) SurrealDB 릴리스 기반
 
 - **상태:** 2 — 후보 구현·재검증 필요
-- **경계:** 아래 8개 파일만 이 조각의 소유 범위로 복원합니다.
-  - `.github/workflows/release.yml`
-  - `compose.yaml`
-  - `deploy/kubernetes/base/surreal-statefulset.yaml`
-  - `deploy/surreal/Dockerfile`
-  - `scripts/build-release.mjs`
-  - `scripts/release-workflow.test.mjs`
-  - `packages/application/src/artifacts.ts`
-  - `packages/extension-host/src/compliance.ts`
-- **최소 검증:** 릴리스 워크플로 테스트(release workflow test), 관련 패키지 테스트, 형식 검사(format), 타입 검사(typecheck), 빌드(build)를 실행하고 컨테이너·Kubernetes 설정의 SurrealDB 버전과 릴리스 산출물 계약을 대조합니다.
-- **문서 조치:** 코드 커밋 뒤 릴리스 증거와 실제 SHA를 체크리스트(checklist)와 추적성 표(traceability matrix)에 기록합니다.
+- **스냅샷 소유:** 정합성 복구 원장(reconciliation manifest)은 안전 스냅샷의 여덟 경로를 Slice 1에 배정합니다. 이 배정은 변경 출처를 보존하는 원장이고, 여덟 hunk를 문자 그대로 한 커밋에 복사하라는 지시가 아닙니다.
+- **Slice 1A 경계:** `.github/workflows/release.yml`, `compose.yaml`, `deploy/kubernetes/base/surreal-statefulset.yaml`, `deploy/surreal/Dockerfile`, `scripts/build-release.mjs`, `scripts/release-workflow.test.mjs`의 원격 Docker·Compose·Kubernetes·release bundle SurrealDB 3.2.1 계약만 먼저 복원합니다. `CHANGELOG.md`의 원격 버전 보정은 안전 스냅샷 복원이 아닌 사후 보정으로 같은 코드 커밋에 포함할 수 있습니다.
+- **Slice 1B 경계:** `packages/application/src/artifacts.ts`와 `packages/extension-host/src/compliance.ts`의 3.2.1 literal은 직접 복원하지 않습니다. 개인용 로컬 RocksDB가 실제로 보고하는 SurrealDB 버전과 확장 호환성 검사의 런타임 전달 경로를 설계·TDD로 닫은 뒤, literal 복원을 대체하거나 보류합니다.
+- **근거:** [SurrealDB 배포·로컬 런타임 경계 조사](../../evidence/phase-30/surrealdb-runtime-boundary-2026-07-18.md)는 로컬 엔진 재현, 원격 OCI digest와 Slice 1A·1B 경계를 기록합니다.
+- **최소 검증:** Slice 1A는 먼저 release workflow 계약 테스트를 RED로 만들고, Dockerfile OCI digest·workflow tag·Compose·Kubernetes·release bundle·원격 CHANGELOG 선언을 모두 GREEN으로 고정합니다. 그 뒤 `docker compose config --quiet`, `kubectl kustomize deploy/kubernetes/base`, 실제 Docker image version, release build·검증을 실행합니다. Slice 1B는 실제 `database.version()` 전달의 RED 테스트와 Application·extension-host 조립 경로가 준비되기 전에는 시작하지 않습니다.
+- **문서 조치:** Slice 1A 코드 커밋 뒤 릴리스 증거와 실제 SHA를 기록합니다. Slice 1B는 안전 스냅샷 literal과 다른 설계를 택할 경우 대체됨(superseded) 근거와 코드 SHA를 별도로 기록합니다.
 
 ### 2) 기반 계약 프리미티브
 
