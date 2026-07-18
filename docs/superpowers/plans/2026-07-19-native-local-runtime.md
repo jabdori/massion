@@ -12,9 +12,9 @@
 - Create: `apps/cli/src/local-surreal-runtime.ts`
 - Create: `apps/cli/src/local-surreal-runtime.test.ts`
 
-- [ ] 먼저 실패 테스트로 platform별 binary 위치, SurrealDB 3.2.1 version, SHA-256 검증 계약을 고정합니다.
-- [ ] `runtime/surrealdb/3.2.1/<platform>/surreal` binary와 `surrealdb/3/database` data 경로를 계산하는 최소 구현을 추가합니다.
-- [ ] focused test를 실행해 GREEN을 확인합니다.
+- [x] 먼저 실패 테스트로 platform별 binary 위치, SurrealDB 3.2.1 version, SHA-256 검증 계약을 고정합니다.
+- [x] `runtime/surrealdb/3.2.1/<platform>/surreal` binary와 `surrealdb/3/database` data 경로를 계산하는 최소 구현을 추가합니다.
+- [x] focused test를 실행해 GREEN을 확인합니다.
 
 ### Task 2: Loopback sidecar lifecycle
 
