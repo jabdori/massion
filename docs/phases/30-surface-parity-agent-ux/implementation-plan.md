@@ -19,9 +19,8 @@
 ## Task 1. 기준선과 공격 리뷰 고정
 
 - 기록된 과거 후보: `716fd08`에서 격리 브랜치와 워크트리를 만들고 frozen dependency 설치를 수행한 이력이 있습니다. 이는 현재 복구 후보의 독립 근거로 승격하지 않았습니다.
-- 기록된 기준선 검증: [깨끗한 기준선 전체 검증 증거](../../evidence/phase-30/clean-base-full-verification-2026-07-18.md)는 format·전체 build·lint·typecheck·test·문서 검증을 포함한 `pnpm verify`의 종료 코드 `0`을 기준 커밋 `65922bd706580a0962b6eda81c6fa3d63b36b6a8`에 연결합니다. 현재 복구 후보의 재검증은 별도 작업입니다.
+- Task 0B에 연결한 기준선 검증 증거는 format·전체 build·lint·typecheck·test·문서 검증을 포함한 `pnpm verify`의 종료 코드 `0`을 기준 커밋 `65922bd706580a0962b6eda81c6fa3d63b36b6a8`에 연결합니다. 현재 복구 후보의 재검증은 별도 작업입니다.
 - 기록된 후보: CLI·온보딩·Agent harness·TUI·Web·시각 UX 공격 리뷰를 코드와 실제 실행 결과로 분류한 이력이 있습니다. 현재 복구 후보의 완료 근거는 아닙니다.
-- 기록된 기준선: [깨끗한 기준선 전체 검증 증거](../../evidence/phase-30/clean-base-full-verification-2026-07-18.md)는 기준선 명령, source commit과 환경을 기록합니다. 이 문서는 기준선 재현성만 다루며, 현재 복구 후보의 완료를 뜻하지 않습니다.
 
 ## Task 2. 공통 query·resource·사건 계약
 
