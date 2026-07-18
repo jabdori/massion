@@ -363,7 +363,7 @@ export class LocalSurrealRuntimeManager {
       return { status: "already-stopped", pid: existing.pid };
     }
 
-    const expectedExecutable = resolve(this.#dependencies.runtime.binaryPath);
+    const expectedExecutable = (await this.#dependencies.attest()).executable;
     if (existing.endpoint !== endpoint(this.#dependencies.port) || !(await this.#owned(existing, expectedExecutable))) {
       throw new Error("기록된 local SurrealDB PID가 다른 process이므로 종료하지 않습니다");
     }
