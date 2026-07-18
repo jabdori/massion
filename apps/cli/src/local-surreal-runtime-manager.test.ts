@@ -392,4 +392,35 @@ describe("local SurrealDB sidecar lifecycle", () => {
     expect(signal).toHaveBeenCalledWith(919, "SIGTERM");
     expect(removeState).toHaveBeenCalledOnce();
   });
+
+  it("macOS 시스템 경로 별칭으로 증명된 sidecar도 종료한다", async () => {
+    const runtimeBinary = "/var/folders/massion/runtime/surrealdb/3.2.1/darwin-arm64/surreal";
+    const canonicalBinary = "/private/var/folders/massion/runtime/surrealdb/3.2.1/darwin-arm64/surreal";
+    let alive = true;
+    const signal = vi.fn<RuntimeManagerDependencies["signal"]>((_pid, receivedSignal) => {
+      expect(receivedSignal).toBe("SIGTERM");
+      alive = false;
+    });
+    const manager = createManager(
+      dependencies({
+        runtime: {
+          binaryPath: runtimeBinary,
+          dataDirectory: "/var/folders/massion/surrealdb/3/database",
+        },
+        attest: async () => ({ executable: canonicalBinary, digest: "a".repeat(64), version: "3.2.1" }),
+        readState: async () => ({
+          pid: 920,
+          endpoint: "http://127.0.0.1:17431",
+          executable: canonicalBinary,
+          startedAt: "2026-07-19T00:00:00.000Z",
+        }),
+        processExists: () => alive,
+        processCommand: async () => `${canonicalBinary} start --bind 127.0.0.1:17431`,
+        signal,
+      }),
+    );
+
+    await expect(manager.stop()).resolves.toEqual({ status: "stopped", pid: 920 });
+    expect(signal).toHaveBeenCalledWith(920, "SIGTERM");
+  });
 });
