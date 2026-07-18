@@ -18,6 +18,10 @@ describe("massion CLI parser", () => {
     expect(parseCliArguments(["version"])).toMatchObject({ command: "version" });
   });
 
+  it("최상위 Web Console option을 별도 실행 흐름으로 파싱한다", () => {
+    expect(parseCliArguments(["--web"])).toMatchObject({ command: "web", output: "human" });
+  });
+
   it.each([
     [["init"], "init", undefined],
     [["update"], "update", undefined],
