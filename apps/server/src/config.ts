@@ -50,7 +50,7 @@ function databaseLocation(environment: Readonly<Record<string, string | undefine
   readonly namespace: string;
   readonly database: string;
 } {
-  const url = environment.MASSION_DATABASE_URL ?? "rocksdb:///data/massion.db";
+  const url = environment.MASSION_DATABASE_URL ?? "http://127.0.0.1:7330";
   const namespace = environment.MASSION_DATABASE_NAMESPACE ?? "massion";
   const database = environment.MASSION_DATABASE_NAME ?? "massion";
   if (![namespace, database].every((name) => DATABASE_IDENTIFIER.test(name)))
@@ -210,7 +210,11 @@ export function parseServerConfig(environment: Readonly<Record<string, string | 
       url,
       namespace,
       database,
-      ...(username && password ? { authentication: { username, password, scope: "database" as const } } : {}),
+      ...(username && password
+        ? {
+            authentication: { username, password, scope: mode === "local" ? ("root" as const) : ("database" as const) },
+          }
+        : {}),
     },
     server: {
       host,

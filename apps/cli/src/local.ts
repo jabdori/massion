@@ -3,7 +3,14 @@ import { randomBytes } from "node:crypto";
 import { closeSync, constants, openSync } from "node:fs";
 import { access, mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { homedir, platform } from "node:os";
-import { isAbsolute, join, resolve } from "node:path";
+import { dirname, isAbsolute, join, resolve } from "node:path";
+
+import {
+  attestLocalSurrealRuntime,
+  LocalSurrealRuntimeManager,
+  resolveLocalSurrealRuntime,
+  type LocalSurrealRuntimeState,
+} from "./local-surreal-runtime.js";
 
 export interface LocalPaths {
   readonly configDirectory: string;
@@ -14,9 +21,11 @@ export interface LocalPaths {
   readonly connectorDirectory: string;
   readonly tokenKey: string;
   readonly credentialKey: string;
+  readonly databasePassword: string;
   readonly pidFile: string;
   readonly logFile: string;
-  readonly databaseUrl: string;
+  readonly surrealPidFile: string;
+  readonly surrealLogFile: string;
 }
 
 interface LocalPidRecord {
@@ -30,6 +39,15 @@ interface LocalPidRecord {
 interface SpawnedProcess {
   readonly pid?: number | undefined;
   unref(): void;
+}
+
+interface LocalSurrealRuntimeController {
+  start(): Promise<{
+    readonly status: "started" | "already-running";
+    readonly pid: number;
+    readonly endpoint: string;
+  }>;
+  stop(): Promise<{ readonly status: "stopped" | "already-stopped"; readonly pid?: number }>;
 }
 
 interface LocalDaemonDependencies {
@@ -49,6 +67,7 @@ interface LocalDaemonDependencies {
       readonly stderr: number;
     },
   ) => SpawnedProcess;
+  readonly surrealRuntime?: LocalSurrealRuntimeController;
 }
 
 function directory(
@@ -74,9 +93,11 @@ export function resolveLocalPaths(environment: Readonly<Record<string, string | 
     connectorDirectory: join(dataDirectory, "connectors"),
     tokenKey: join(configDirectory, "token-key"),
     credentialKey: join(configDirectory, "credential-key"),
+    databasePassword: join(configDirectory, "database-password"),
     pidFile: join(stateDirectory, "server.json"),
     logFile: join(stateDirectory, "server.log"),
-    databaseUrl: "rocksdb://./massion.db",
+    surrealPidFile: join(stateDirectory, "surrealdb.json"),
+    surrealLogFile: join(stateDirectory, "surrealdb.log"),
   };
 }
 
@@ -141,6 +162,28 @@ export async function ensureLocalCredentialKey(paths: LocalPaths): Promise<strin
   return value;
 }
 
+export async function ensureLocalDatabasePassword(paths: LocalPaths): Promise<string> {
+  await ensureDirectories(paths);
+  try {
+    const metadata = await stat(paths.databasePassword);
+    if (!metadata.isFile() || (metadata.mode & 0o077) !== 0)
+      throw new Error("local SurrealDB password는 owner-only여야 합니다");
+    const value = (await readFile(paths.databasePassword, "utf8")).trim();
+    if (Buffer.from(value, "base64url").length !== 32) throw new Error("local SurrealDB password가 유효하지 않습니다");
+    return value;
+  } catch (error) {
+    if (!(error instanceof Error) || !("code" in error) || error.code !== "ENOENT") throw error;
+  }
+  const value = randomBytes(32).toString("base64url");
+  try {
+    await writeFile(paths.databasePassword, `${value}\n`, { mode: 0o600, flag: "wx" });
+  } catch (error) {
+    if (!(error instanceof Error) || !("code" in error) || error.code !== "EEXIST") throw error;
+    return await ensureLocalDatabasePassword(paths);
+  }
+  return value;
+}
+
 function validatePidRecord(value: unknown): LocalPidRecord {
   if (
     !value ||
@@ -179,6 +222,50 @@ async function writePidRecord(path: string, record: LocalPidRecord): Promise<voi
   await rename(temporary, path);
 }
 
+interface LocalSurrealPidRecord extends LocalSurrealRuntimeState {
+  readonly schema: "massion.local-surrealdb.v1";
+}
+
+function validateSurrealPidRecord(value: unknown): LocalSurrealRuntimeState {
+  if (
+    !value ||
+    typeof value !== "object" ||
+    !("schema" in value) ||
+    value.schema !== "massion.local-surrealdb.v1" ||
+    !("pid" in value) ||
+    !Number.isSafeInteger(value.pid) ||
+    Number(value.pid) < 1 ||
+    !("endpoint" in value) ||
+    typeof value.endpoint !== "string" ||
+    !("executable" in value) ||
+    typeof value.executable !== "string" ||
+    !isAbsolute(value.executable) ||
+    !("startedAt" in value) ||
+    typeof value.startedAt !== "string"
+  )
+    throw new Error("local SurrealDB process state가 유효하지 않습니다");
+  return value as LocalSurrealPidRecord;
+}
+
+async function readSurrealPidRecord(path: string): Promise<LocalSurrealRuntimeState | undefined> {
+  try {
+    const metadata = await stat(path);
+    if (!metadata.isFile() || (metadata.mode & 0o077) !== 0)
+      throw new Error("local SurrealDB process state는 owner-only여야 합니다");
+    return validateSurrealPidRecord(JSON.parse(await readFile(path, "utf8")) as unknown);
+  } catch (error) {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") return undefined;
+    throw error;
+  }
+}
+
+async function writeSurrealPidRecord(path: string, state: LocalSurrealRuntimeState): Promise<void> {
+  const temporary = `${path}.${String(process.pid)}.tmp`;
+  const record: LocalSurrealPidRecord = { schema: "massion.local-surrealdb.v1", ...state };
+  await writeFile(temporary, `${JSON.stringify(record)}\n`, { mode: 0o600, flag: "wx" });
+  await rename(temporary, path);
+}
+
 function defaultProcessExists(pid: number): boolean {
   try {
     process.kill(pid, 0);
@@ -207,6 +294,13 @@ function port(environment: Readonly<Record<string, string | undefined>>): number
   return Number(value);
 }
 
+function surrealPort(environment: Readonly<Record<string, string | undefined>>): number {
+  const value = environment.MASSION_SURREAL_PORT ?? "7330";
+  if (!/^[1-9][0-9]{0,4}$/u.test(value) || Number(value) > 65_535)
+    throw new Error("MASSION_SURREAL_PORT가 유효하지 않습니다");
+  return Number(value);
+}
+
 export class LocalDaemonManager {
   readonly #environment: Readonly<Record<string, string | undefined>>;
   readonly #paths: LocalPaths;
@@ -216,6 +310,7 @@ export class LocalDaemonManager {
   readonly #signal: (pid: number, signal: NodeJS.Signals) => void;
   readonly #wait: (milliseconds: number) => Promise<void>;
   readonly #spawnProcess: NonNullable<LocalDaemonDependencies["spawnProcess"]>;
+  #surrealRuntime: LocalSurrealRuntimeController | undefined;
 
   constructor(dependencies: LocalDaemonDependencies = {}) {
     this.#environment = dependencies.environment ?? process.env;
@@ -240,6 +335,7 @@ export class LocalDaemonManager {
         });
         return child;
       });
+    this.#surrealRuntime = dependencies.surrealRuntime;
   }
 
   #serverScript(): string {
@@ -265,6 +361,95 @@ export class LocalDaemonManager {
     }
   }
 
+  #serverEnvironment(databaseEndpoint: string): NodeJS.ProcessEnv {
+    return {
+      PATH: this.#environment.PATH,
+      HOME: this.#environment.HOME,
+      TMPDIR: this.#environment.TMPDIR,
+      NODE_ENV: "production",
+      MASSION_VERSION: "1.0.0",
+      MASSION_MODE: "local",
+      MASSION_DATABASE_URL: databaseEndpoint,
+      MASSION_DATABASE_USER: "massion",
+      MASSION_DATABASE_PASSWORD_FILE: this.#paths.databasePassword,
+      MASSION_TOKEN_KEY_FILE: this.#paths.tokenKey,
+      MASSION_CREDENTIAL_KEY_FILE: this.#paths.credentialKey,
+      MASSION_SOFTWARE_WORKSPACE_ROOT: this.#paths.softwareWorkspaceDirectory,
+      MASSION_CONNECTOR_ROOT: this.#paths.connectorDirectory,
+      MASSION_EDGE_CONNECTOR_ENABLED: this.#environment.MASSION_EDGE_CONNECTOR_ENABLED ?? "false",
+      MASSION_CONNECTOR_HEARTBEAT_MS: this.#environment.MASSION_CONNECTOR_HEARTBEAT_MS ?? "30000",
+      MASSION_HTTP_PORT: String(port(this.#environment)),
+      MASSION_REGISTRY_PORT: String(port(this.#environment) + 1),
+      MASSION_METRICS_PORT: String(port(this.#environment) + 2),
+    };
+  }
+
+  async #localSurrealRuntime(): Promise<LocalSurrealRuntimeController> {
+    if (this.#surrealRuntime) return this.#surrealRuntime;
+    const binary = this.#environment.MASSION_SURREAL_BINARY;
+    const expectedDigest = this.#environment.MASSION_SURREAL_SHA256;
+    if (!binary || !expectedDigest)
+      throw new Error("Massion native SurrealDB runtime이 준비되지 않았습니다. 설치를 다시 실행해 주세요");
+    if (!isAbsolute(binary)) throw new Error("MASSION_SURREAL_BINARY 절대 경로가 필요합니다");
+    const runtime = resolveLocalSurrealRuntime({
+      home: this.#environment.HOME,
+      xdgDataHome: this.#environment.XDG_DATA_HOME,
+    });
+    const executable = resolve(binary);
+    if (executable !== runtime.binaryPath)
+      throw new Error("Massion native SurrealDB runtime 경로가 현재 사용자 data directory와 일치하지 않습니다");
+    const sidecarPort = surrealPort(this.#environment);
+    if (sidecarPort === port(this.#environment))
+      throw new Error("MASSION_SURREAL_PORT와 MASSION_LOCAL_PORT는 달라야 합니다");
+    const password = await ensureLocalDatabasePassword(this.#paths);
+    const manager = new LocalSurrealRuntimeManager({
+      runtime,
+      credential: { user: "massion", password },
+      port: sidecarPort,
+      attest: async () =>
+        await attestLocalSurrealRuntime({
+          executable,
+          expectedDigest,
+          runtimeRoot: dirname(executable),
+        }),
+      prepareDataDirectory: async () => {
+        await mkdir(runtime.dataDirectory, { recursive: true, mode: 0o700 });
+        const metadata = await stat(runtime.dataDirectory);
+        if (!metadata.isDirectory() || (metadata.mode & 0o077) !== 0)
+          throw new Error("local SurrealDB data directory는 owner-only여야 합니다");
+      },
+      readState: async () => await readSurrealPidRecord(this.#paths.surrealPidFile),
+      writeState: async (state) => await writeSurrealPidRecord(this.#paths.surrealPidFile, state),
+      removeState: async () => await rm(this.#paths.surrealPidFile, { force: true }),
+      spawn: (command, arguments_, options) => {
+        const logDescriptor = openSync(this.#paths.surrealLogFile, "a", 0o600);
+        try {
+          return spawn(command, [...arguments_], {
+            detached: true,
+            cwd: options.cwd,
+            env: options.env,
+            stdio: ["ignore", logDescriptor, logDescriptor],
+          });
+        } finally {
+          closeSync(logDescriptor);
+        }
+      },
+      processExists: this.#processExists,
+      processCommand: this.#processCommand,
+      ready: async (endpoint) => {
+        try {
+          return (await this.#fetcher(`${endpoint}/health`, { signal: AbortSignal.timeout(1_000) })).ok;
+        } catch {
+          return false;
+        }
+      },
+      signal: this.#signal,
+      wait: this.#wait,
+    });
+    this.#surrealRuntime = manager;
+    return manager;
+  }
+
   async initializeStateForTest(input: { readonly pid: number; readonly endpoint: string }): Promise<void> {
     await ensureDirectories(this.#paths);
     await writePidRecord(this.#paths.pidFile, {
@@ -281,7 +466,11 @@ export class LocalDaemonManager {
     readonly pid: number;
     readonly endpoint: string;
   }> {
-    await Promise.all([ensureLocalTokenKey(this.#paths), ensureLocalCredentialKey(this.#paths)]);
+    await Promise.all([
+      ensureLocalTokenKey(this.#paths),
+      ensureLocalCredentialKey(this.#paths),
+      ensureLocalDatabasePassword(this.#paths),
+    ]);
     const existing = await readPidRecord(this.#paths.pidFile);
     if (existing) {
       if ((await this.#owned(existing)) && (await this.#ready(existing.endpoint)))
@@ -293,53 +482,45 @@ export class LocalDaemonManager {
     await access(serverScript, constants.R_OK);
     const localPort = port(this.#environment);
     const endpoint = `http://127.0.0.1:${String(localPort)}`;
-    const logDescriptor = openSync(this.#paths.logFile, "a", 0o600);
-    let child: SpawnedProcess;
+    const surrealRuntime = await this.#localSurrealRuntime();
+    const database = await surrealRuntime.start();
+    const startedSidecar = database.status === "started";
+    let child: SpawnedProcess | undefined;
+    let record: LocalPidRecord | undefined;
     try {
-      child = this.#spawnProcess(process.execPath, [serverScript], {
-        cwd: this.#paths.dataDirectory,
-        env: {
-          PATH: this.#environment.PATH,
-          HOME: this.#environment.HOME,
-          TMPDIR: this.#environment.TMPDIR,
-          NODE_ENV: "production",
-          MASSION_VERSION: "1.0.0",
-          MASSION_MODE: "local",
-          MASSION_DATABASE_URL: this.#paths.databaseUrl,
-          MASSION_TOKEN_KEY_FILE: this.#paths.tokenKey,
-          MASSION_CREDENTIAL_KEY_FILE: this.#paths.credentialKey,
-          MASSION_SOFTWARE_WORKSPACE_ROOT: this.#paths.softwareWorkspaceDirectory,
-          MASSION_CONNECTOR_ROOT: this.#paths.connectorDirectory,
-          MASSION_EDGE_CONNECTOR_ENABLED: this.#environment.MASSION_EDGE_CONNECTOR_ENABLED ?? "false",
-          MASSION_CONNECTOR_HEARTBEAT_MS: this.#environment.MASSION_CONNECTOR_HEARTBEAT_MS ?? "30000",
-          MASSION_HTTP_PORT: String(localPort),
-          MASSION_REGISTRY_PORT: String(localPort + 1),
-          MASSION_METRICS_PORT: String(localPort + 2),
-        },
-        stdout: logDescriptor,
-        stderr: logDescriptor,
-      });
-      child.unref();
-    } finally {
-      closeSync(logDescriptor);
+      const logDescriptor = openSync(this.#paths.logFile, "a", 0o600);
+      try {
+        child = this.#spawnProcess(process.execPath, [serverScript], {
+          cwd: this.#paths.dataDirectory,
+          env: this.#serverEnvironment(database.endpoint),
+          stdout: logDescriptor,
+          stderr: logDescriptor,
+        });
+        child.unref();
+      } finally {
+        closeSync(logDescriptor);
+      }
+      if (!child.pid) throw new Error("local Massion server PID를 받지 못했습니다");
+      record = {
+        schema: "massion.local-process.v1",
+        pid: child.pid,
+        endpoint,
+        serverScript,
+        startedAt: new Date().toISOString(),
+      };
+      await writePidRecord(this.#paths.pidFile, record);
+      for (let attempt = 0; attempt < 120; attempt += 1) {
+        if (await this.#ready(endpoint)) return { status: "started", pid: child.pid, endpoint };
+        if (!this.#processExists(child.pid)) break;
+        await this.#wait(250);
+      }
+      throw new Error(`local Massion server가 준비되지 않았습니다. log: ${this.#paths.logFile}`);
+    } catch (error) {
+      if (record && this.#processExists(record.pid) && (await this.#owned(record))) this.#signal(record.pid, "SIGTERM");
+      await rm(this.#paths.pidFile, { force: true });
+      if (startedSidecar) await surrealRuntime.stop().catch(() => undefined);
+      throw error;
     }
-    if (!child.pid) throw new Error("local Massion server PID를 받지 못했습니다");
-    const record: LocalPidRecord = {
-      schema: "massion.local-process.v1",
-      pid: child.pid,
-      endpoint,
-      serverScript,
-      startedAt: new Date().toISOString(),
-    };
-    await writePidRecord(this.#paths.pidFile, record);
-    for (let attempt = 0; attempt < 120; attempt += 1) {
-      if (await this.#ready(endpoint)) return { status: "started", pid: child.pid, endpoint };
-      if (!this.#processExists(child.pid)) break;
-      await this.#wait(250);
-    }
-    if (this.#processExists(child.pid) && (await this.#owned(record))) this.#signal(child.pid, "SIGTERM");
-    await rm(this.#paths.pidFile, { force: true });
-    throw new Error(`local Massion server가 준비되지 않았습니다. log: ${this.#paths.logFile}`);
   }
 
   async status(): Promise<{
@@ -359,16 +540,23 @@ export class LocalDaemonManager {
 
   async stop(): Promise<{ readonly status: "stopped" | "already-stopped"; readonly pid?: number }> {
     const record = await readPidRecord(this.#paths.pidFile);
-    if (!record) return { status: "already-stopped" };
+    if (record && this.#processExists(record.pid) && !(await this.#owned(record)))
+      throw new Error("기록된 PID는 Massion server가 아닙니다");
+    const surrealRuntime = await this.#localSurrealRuntime();
+    if (!record) {
+      await surrealRuntime.stop();
+      return { status: "already-stopped" };
+    }
     if (!this.#processExists(record.pid)) {
       await rm(this.#paths.pidFile, { force: true });
+      await surrealRuntime.stop();
       return { status: "already-stopped", pid: record.pid };
     }
-    if (!(await this.#owned(record))) throw new Error("기록된 PID는 Massion server가 아닙니다");
     this.#signal(record.pid, "SIGTERM");
     for (let attempt = 0; attempt < 120; attempt += 1) {
       if (!this.#processExists(record.pid)) {
         await rm(this.#paths.pidFile, { force: true });
+        await surrealRuntime.stop();
         return { status: "stopped", pid: record.pid };
       }
       await this.#wait(250);
@@ -383,22 +571,19 @@ export class LocalDaemonManager {
     const previous = await this.status();
     if (previous.status === "foreign") throw new Error("foreign process 상태에서는 backup할 수 없습니다");
     if (previous.status === "ready" || previous.status === "starting") await this.stop();
-    await Promise.all([ensureLocalTokenKey(this.#paths), ensureLocalCredentialKey(this.#paths)]);
+    await Promise.all([
+      ensureLocalTokenKey(this.#paths),
+      ensureLocalCredentialKey(this.#paths),
+      ensureLocalDatabasePassword(this.#paths),
+    ]);
+    const surrealRuntime = await this.#localSurrealRuntime();
+    const database = await surrealRuntime.start();
+    const startedSidecar = database.status === "started";
     try {
       const code = await new Promise<number | null>((resolveCode, reject) => {
         const child = spawn(process.execPath, [this.#serverScript(), "backup", destination], {
           cwd: this.#paths.dataDirectory,
-          env: {
-            PATH: this.#environment.PATH,
-            HOME: this.#environment.HOME,
-            TMPDIR: this.#environment.TMPDIR,
-            NODE_ENV: "production",
-            MASSION_VERSION: "1.0.0",
-            MASSION_MODE: "local",
-            MASSION_DATABASE_URL: this.#paths.databaseUrl,
-            MASSION_TOKEN_KEY_FILE: this.#paths.tokenKey,
-            MASSION_CREDENTIAL_KEY_FILE: this.#paths.credentialKey,
-          },
+          env: this.#serverEnvironment(database.endpoint),
           stdio: ["ignore", "ignore", "inherit"],
         });
         child.once("error", reject);
@@ -407,6 +592,7 @@ export class LocalDaemonManager {
       if (code !== 0) throw new Error("local backup이 실패했습니다");
     } finally {
       if (previous.status === "ready" || previous.status === "starting") await this.start();
+      else if (startedSidecar) await surrealRuntime.stop();
     }
     return { status: "backed-up", path: destination };
   }

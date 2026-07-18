@@ -51,6 +51,7 @@ interface RuntimeManager {
     readonly pid: number;
     readonly endpoint: string;
   }>;
+  stop(): Promise<{ readonly status: "stopped" | "already-stopped"; readonly pid?: number }>;
 }
 
 type RuntimeManagerConstructor = new (dependencies: RuntimeManagerDependencies) => RuntimeManager;
@@ -351,5 +352,33 @@ describe("local SurrealDB sidecar lifecycle", () => {
     expect(signal).toHaveBeenCalledWith(918, "SIGTERM");
     expect(removeState).toHaveBeenCalledOnce();
     expect(order).toEqual(["prepare-data-directory", "spawn", "write-state", "signal:SIGTERM", "remove-state"]);
+  });
+
+  it("소유한 sidecar만 종료하고 종료 뒤 state를 정리한다", async () => {
+    const executable = "/Users/massion/.local/share/massion/runtime/surrealdb/3.2.1/darwin-arm64/surreal";
+    let alive = true;
+    const signal = vi.fn<RuntimeManagerDependencies["signal"]>((_pid, receivedSignal) => {
+      expect(receivedSignal).toBe("SIGTERM");
+      alive = false;
+    });
+    const removeState = vi.fn<RuntimeManagerDependencies["removeState"]>(async () => undefined);
+    const manager = createManager(
+      dependencies({
+        readState: async () => ({
+          pid: 919,
+          endpoint: "http://127.0.0.1:17431",
+          executable,
+          startedAt: "2026-07-19T00:00:00.000Z",
+        }),
+        processExists: () => alive,
+        processCommand: async () => `${executable} start --bind 127.0.0.1:17431`,
+        signal,
+        removeState,
+      }),
+    );
+
+    await expect(manager.stop()).resolves.toEqual({ status: "stopped", pid: 919 });
+    expect(signal).toHaveBeenCalledWith(919, "SIGTERM");
+    expect(removeState).toHaveBeenCalledOnce();
   });
 });
