@@ -40,14 +40,14 @@ Docker의 공식 문서는 `--read-only`가 지정 volume 이외의 root filesys
 2. Kubernetes pod security context가 `runAsNonRoot: true`, `runAsUser: 10001`, `runAsGroup: 10001`, `fsGroup: 10001`, `RuntimeDefault` seccomp로 정확히 하나인지 확인합니다.
 3. Kubernetes `surrealdb` container security context가 `allowPrivilegeEscalation: false`, `readOnlyRootFilesystem: true`, `drop: ["ALL"]`인지 확인합니다.
 4. 같은 container가 `/data`, read-only `/run/massion-secrets`, `/tmp` mount와 `/run/massion-secrets/database-owner-password` 환경 변수를 정확히 유지하는지 확인합니다.
-5. init container가 database owner password를 runtime memory volume으로 copy한 뒤 `10001:10001`, mode `0600`으로 만드는 명령을 유지하는지 확인합니다.
+5. `prepare-secret` 초기화 컨테이너(init container)가 소유권 변경에만 필요한 root 실행을 명시하고, 권한 상승 방지(`allowPrivilegeEscalation: false`), 읽기 전용 root filesystem, 전체 capability drop 뒤 `CHOWN`·`FOWNER`만 추가하는지 확인합니다. 또한 원본 secret의 read-only mount와 runtime target mount, database owner password를 복사한 뒤 `10001:10001`, mode `0600`으로 만드는 전체 command block을 유지하는지 확인합니다.
 
 단순 token 존재 검사 대신 service/container block 안에서 동일 property 또는 block이 정확히 하나이고 예상값과 같음을 단언합니다. test를 추가한 뒤에는 source를 바꾸지 않는 메모리 mutation으로 아래 각 변경이 실패하는지 먼저 확인합니다.
 
 - Compose의 `cap_drop` 또는 named `/data` volume 삭제
 - Kubernetes application container의 read-only root filesystem 또는 capability drop 삭제
 - Kubernetes pod의 uid/fsGroup 변경
-- runtime secret mount 또는 init copy·permission 변경
+- runtime secret mount 또는 초기화 컨테이너의 security context·source/target mount·copy·permission 변경
 
 현재 source가 이미 이 profile을 만족하므로 이 단계의 제품 test는 characterization GREEN입니다. mutation 차단 결과를 RED→GREEN 근거로 오해하지 않고, 증거 문서에는 “기존 hardening의 회귀 계약 추가”로 기록합니다.
 
@@ -79,8 +79,9 @@ Compose file source secret은 Docker Compose에서 bind mount로 구현되므로
 ```bash
 runtime_image_tag="$arm64_image_tag"
 compose_project="massion-slice1-$run_id"
-compose_secrets="$scratch_root/compose-secrets"
+test ! -e "$compose_secrets"
 mkdir -m 0700 "$compose_secrets"
+test -d "$compose_secrets"
 node --input-type=module -e '
   import { randomBytes } from "node:crypto";
   import { writeFile } from "node:fs/promises";
@@ -132,12 +133,25 @@ docker_local exec "$compose_container" sh -ec 'test -e /data/massion.db && test 
 compose_runtime down --volumes --remove-orphans
 ```
 
-`compose_project`는 run ID를 포함한 새 이름이어야 합니다. 기존 cleanup trap의 시작 부분에는 아래 함수를 호출해 실패 경로에서도 같은 project만 정리합니다. 기존의 container·image ownership cleanup은 이 호출 뒤에 그대로 유지합니다.
+`compose_project`, `runtime_image_tag`, `compose_secrets`는 base 작업 3의 최상단 변수 구역에서 빈 값 또는 scratch path로 먼저 초기화해야 합니다. 그러면 `set -u` 상태에서 Compose 초기화 이전에 실패해도 trap이 unset 변수를 확장하지 않습니다. base `cleanup()`과 `trap cleanup EXIT`보다 앞에 아래 함수를 정의하고, `cleanup()`의 첫 줄에서 호출합니다. 아래 함수는 base 작업 3의 함수와 동일하게 유지합니다. 기존의 container·image ownership cleanup은 이 호출 뒤에 그대로 유지합니다.
 
 ```bash
 cleanup_compose_runtime() {
-  [ -n "$compose_project" ] || return 0
-  compose_runtime down --volumes --remove-orphans >/dev/null 2>&1 || true
+  [ -n "${compose_project:-}" ] || return 0
+  env -i \
+    PATH="$PATH" \
+    HOME="$HOME" \
+    DOCKER_CONFIG="$docker_config" \
+    TMPDIR="${TMPDIR:-$scratch_root/tmp}" \
+    MASSION_SURREALDB_IMAGE="${runtime_image_tag:-}" \
+    MASSION_DATABASE_OWNER_PASSWORD_FILE="$compose_secrets/database-owner-password" \
+    MASSION_DATABASE_PASSWORD_FILE="$compose_secrets/database-password" \
+    MASSION_TOKEN_KEY_FILE="$compose_secrets/token-key" \
+    MASSION_CREDENTIAL_KEY_FILE="$compose_secrets/credential-key" \
+    MASSION_REGISTRY_KEY_FILE="$compose_secrets/registry-key" \
+    MASSION_TLS_CERTIFICATE_FILE="$compose_secrets/tls.crt" \
+    MASSION_TLS_PRIVATE_KEY_FILE="$compose_secrets/tls.key" \
+    docker --context "$docker_context" compose --env-file /dev/null --project-name "$compose_project" --file "$clean_root/compose.yaml" --project-directory "$clean_root" down --volumes --remove-orphans >/dev/null 2>&1 || true
 }
 ```
 
