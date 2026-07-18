@@ -1,11 +1,15 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 
 import { validateDocs } from "./verify-docs.mjs";
+import { reconciliationManifestPath } from "./verify-phase30-reconciliation.mjs";
+
+const ROOT = resolve(join(dirname(fileURLToPath(import.meta.url)), ".."));
 
 async function fixture() {
   const root = join(tmpdir(), `massion-docs-${randomUUID()}`);
@@ -35,6 +39,20 @@ test("Phase 30 정합성 원장이 존재하면 별도 검증 실패를 문서 �
   await writeFile(join(phase, "reconciliation-manifest.json"), "{ invalid json\n");
 
   assert.ok((await validateDocs(root)).some((error) => error.includes("Phase 30 정합성 원장")));
+});
+
+test("안전 커밋이 없는 새 복제본 문서 구조에서도 Phase 30 정적 원장을 검증한다", async () => {
+  const root = await fixture();
+  const phase = join(root, "docs", "phases", "30-surface-parity-agent-ux");
+  await mkdir(phase, { recursive: true });
+  await writeFile(join(phase, "design.md"), "# Phase 30\n");
+  await writeFile(join(phase, "implementation-plan.md"), "# Plan\n");
+  await writeFile(
+    join(phase, "reconciliation-manifest.json"),
+    await readFile(reconciliationManifestPath(ROOT), "utf8"),
+  );
+
+  assert.deepEqual(await validateDocs(root), []);
 });
 
 test("숫자가 포함된 의미 있는 요구사항 영역 식별자를 승인한다", async () => {

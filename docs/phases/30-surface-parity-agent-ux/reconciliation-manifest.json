@@ -3,6 +3,349 @@
   "baseCommit": "65922bd706580a0962b6eda81c6fa3d63b36b6a8",
   "safetyCommit": "9b049f72a96457c46139811f86d36589f073df64",
   "expectedDiffPathCount": 337,
+  "safetyDiff": {
+    "format": "git-name-status-v1",
+    "sha256": "5c1ba8c1fe67e232caa36e1594a7469841281e726954d5d6d4bfb2fc66ab1351",
+    "entries": [
+      "M\t.github/workflows/ci.yml",
+      "M\t.github/workflows/release.yml",
+      "M\tapps/cli/package.json",
+      "M\tapps/cli/src/child.e2e.test.ts",
+      "M\tapps/cli/src/commands.test.ts",
+      "M\tapps/cli/src/commands.ts",
+      "M\tapps/cli/src/config.test.ts",
+      "M\tapps/cli/src/config.ts",
+      "A\tapps/cli/src/execution.ts",
+      "A\tapps/cli/src/framework-migration.test.ts",
+      "A\tapps/cli/src/help.test.ts",
+      "M\tapps/cli/src/init.test.ts",
+      "M\tapps/cli/src/init.ts",
+      "M\tapps/cli/src/main.test.ts",
+      "M\tapps/cli/src/main.ts",
+      "A\tapps/cli/src/model-provider-authentication.test.ts",
+      "A\tapps/cli/src/model-provider-authentication.ts",
+      "M\tapps/cli/src/onboarding.test.ts",
+      "M\tapps/cli/src/onboarding.ts",
+      "M\tapps/cli/src/parser.test.ts",
+      "M\tapps/cli/src/parser.ts",
+      "A\tapps/cli/src/prompt-error.ts",
+      "A\tapps/cli/src/provider-login-onboarding.test.ts",
+      "M\tapps/cli/src/provider-onboarding.test.ts",
+      "M\tapps/cli/src/provider-onboarding.ts",
+      "M\tapps/cli/src/render.test.ts",
+      "M\tapps/cli/src/render.ts",
+      "M\tapps/cli/src/subscription-login.test.ts",
+      "M\tapps/cli/src/subscription-login.ts",
+      "A\tapps/cli/src/tui-launch.test.ts",
+      "A\tapps/cli/src/web-initialization.test.ts",
+      "A\tapps/cli/src/web-initialization.ts",
+      "M\tapps/server/package.json",
+      "A\tapps/server/src/agent-collaboration.test.ts",
+      "A\tapps/server/src/agent-collaboration.ts",
+      "M\tapps/server/src/daemon.test.ts",
+      "M\tapps/server/src/daemon.ts",
+      "A\tapps/server/src/growth-daemon.test.ts",
+      "A\tapps/server/src/growth-daemon.ts",
+      "A\tapps/server/src/growth-runtime-product.test.ts",
+      "A\tapps/server/src/model-optimization-catalog.test.ts",
+      "A\tapps/server/src/model-optimization-catalog.ts",
+      "M\tapps/server/src/model-optimization-executor.test.ts",
+      "M\tapps/server/src/model-optimization-executor.ts",
+      "M\tapps/server/src/model-optimization-product.test.ts",
+      "M\tapps/server/src/product.test.ts",
+      "M\tapps/server/src/product.ts",
+      "M\tapps/server/src/runtime-startup-recovery.test.ts",
+      "M\tapps/server/src/runtime-startup-recovery.ts",
+      "M\tapps/server/src/server-runtime-attestor.test.ts",
+      "M\tapps/server/src/server-runtime-attestor.ts",
+      "M\tapps/server/src/server-subscription-connection.test.ts",
+      "M\tapps/server/src/server-subscription-connection.ts",
+      "M\tapps/server/src/subscription-governance.test.ts",
+      "M\tapps/server/src/subscription-governance.ts",
+      "M\tapps/server/src/subscription-profile.test.ts",
+      "M\tapps/server/src/subscription-profile.ts",
+      "M\tapps/server/src/subscription-runtime-resolver.test.ts",
+      "M\tapps/server/src/subscription-runtime-resolver.ts",
+      "M\tapps/tui/package.json",
+      "A\tapps/tui/src/action-result.test.ts",
+      "A\tapps/tui/src/approval-resource.test.ts",
+      "A\tapps/tui/src/approval-resource.ts",
+      "M\tapps/tui/src/commands.test.ts",
+      "M\tapps/tui/src/commands.ts",
+      "M\tapps/tui/src/controller.test.ts",
+      "M\tapps/tui/src/controller.ts",
+      "A\tapps/tui/src/core-form-schema.ts",
+      "A\tapps/tui/src/core-forms.test.ts",
+      "A\tapps/tui/src/core-forms.ts",
+      "A\tapps/tui/src/core-resource.test.ts",
+      "A\tapps/tui/src/core-resource.ts",
+      "M\tapps/tui/src/index.ts",
+      "M\tapps/tui/src/main.test.ts",
+      "M\tapps/tui/src/main.ts",
+      "A\tapps/tui/src/multi-field-form.test.ts",
+      "A\tapps/tui/src/multi-field-form.ts",
+      "M\tapps/tui/src/open-tui.bun.test.ts",
+      "M\tapps/tui/src/open-tui.ts",
+      "A\tapps/tui/src/operational-commands.test.ts",
+      "A\tapps/tui/src/operational-form-schema.test.ts",
+      "A\tapps/tui/src/operational-form-schema.ts",
+      "A\tapps/tui/src/operational-forms.test.ts",
+      "A\tapps/tui/src/operational-forms.ts",
+      "A\tapps/tui/src/operational-resource.test.ts",
+      "A\tapps/tui/src/operational-resource.ts",
+      "M\tapps/tui/src/presentation.test.ts",
+      "M\tapps/tui/src/presentation.ts",
+      "M\tapps/tui/src/remote.contract.test.ts",
+      "A\tapps/tui/src/room-resource.test.ts",
+      "A\tapps/tui/src/room-resource.ts",
+      "A\tapps/tui/src/runtime-memory-resource.test.ts",
+      "A\tapps/tui/src/runtime-memory-resource.ts",
+      "A\tapps/tui/src/runtime-memory-workflow.test.ts",
+      "A\tapps/tui/src/runtime-memory-workflow.ts",
+      "A\tapps/tui/src/runtime-resume.test.ts",
+      "A\tapps/tui/src/runtime-resume.ts",
+      "M\tapps/tui/src/state.test.ts",
+      "M\tapps/tui/src/state.ts",
+      "M\tapps/tui/src/wire.ts",
+      "M\tapps/web/.gitignore",
+      "A\tapps/web/e2e-query-resource/index.html",
+      "A\tapps/web/e2e-query-resource/query-resource.spec.ts",
+      "M\tapps/web/e2e/console.spec.ts",
+      "M\tapps/web/index.html",
+      "M\tapps/web/package.json",
+      "M\tapps/web/playwright.actual.config.ts",
+      "A\tapps/web/playwright.query-resource.config.ts",
+      "M\tapps/web/src/api.test.ts",
+      "M\tapps/web/src/api.ts",
+      "A\tapps/web/src/command-action.test.tsx",
+      "A\tapps/web/src/command-action.ts",
+      "A\tapps/web/src/components/Shell.test.tsx",
+      "M\tapps/web/src/components/Shell.tsx",
+      "M\tapps/web/src/hooks.test.tsx",
+      "M\tapps/web/src/hooks.ts",
+      "M\tapps/web/src/live.test.ts",
+      "M\tapps/web/src/live.ts",
+      "A\tapps/web/src/pages/AccessPage.test.tsx",
+      "M\tapps/web/src/pages/AccessPage.tsx",
+      "M\tapps/web/src/pages/ApprovalsPage.test.tsx",
+      "M\tapps/web/src/pages/ApprovalsPage.tsx",
+      "A\tapps/web/src/pages/AuditPage.test.tsx",
+      "M\tapps/web/src/pages/AuditPage.tsx",
+      "A\tapps/web/src/pages/ControlPage.test.tsx",
+      "A\tapps/web/src/pages/ControlPage.tsx",
+      "M\tapps/web/src/pages/LoginPage.tsx",
+      "A\tapps/web/src/pages/MemoryPage.test.tsx",
+      "M\tapps/web/src/pages/MemoryPage.tsx",
+      "A\tapps/web/src/pages/OptimizationPage.css",
+      "A\tapps/web/src/pages/OptimizationPage.test.tsx",
+      "M\tapps/web/src/pages/OptimizationPage.tsx",
+      "M\tapps/web/src/pages/OrganizationPage.test.tsx",
+      "M\tapps/web/src/pages/OrganizationPage.tsx",
+      "A\tapps/web/src/pages/OverviewPage.test.tsx",
+      "M\tapps/web/src/pages/OverviewPage.tsx",
+      "A\tapps/web/src/pages/RoomPage.test.tsx",
+      "M\tapps/web/src/pages/RoomPage.tsx",
+      "A\tapps/web/src/pages/WorkPage.test.tsx",
+      "M\tapps/web/src/pages/WorkPage.tsx",
+      "A\tapps/web/src/pages/control-contract.test.ts",
+      "A\tapps/web/src/pages/control-contract.ts",
+      "A\tapps/web/src/pages/optimization-contract.test.ts",
+      "A\tapps/web/src/pages/optimization-contract.ts",
+      "A\tapps/web/src/router.test.ts",
+      "M\tapps/web/src/router.tsx",
+      "A\tapps/web/src/services.test.ts",
+      "M\tapps/web/src/services.ts",
+      "A\tapps/web/src/session-channel.test.ts",
+      "A\tapps/web/src/session-channel.ts",
+      "A\tapps/web/src/session.test.ts",
+      "M\tapps/web/src/session.ts",
+      "M\tapps/web/src/store.test.ts",
+      "M\tapps/web/src/store.ts",
+      "M\tapps/web/src/styles.css",
+      "M\tapps/web/tsconfig.json",
+      "M\tcompose.yaml",
+      "M\tdeploy/kubernetes/base/surreal-statefulset.yaml",
+      "M\tdeploy/surreal/Dockerfile",
+      "A\tdocs/evidence/phase-30/agent-delegation-runtime-2026-07-17.md",
+      "A\tdocs/evidence/phase-30/agent-runtime-growth-lineage-2026-07-17.md",
+      "A\tdocs/evidence/phase-30/claude-consumer-auth-policy-review-2026-07-17.md",
+      "A\tdocs/evidence/phase-30/cli-framework-migration-2026-07-17.md",
+      "A\tdocs/evidence/phase-30/core-actions-and-resource-states-2026-07-16.md",
+      "A\tdocs/evidence/phase-30/growth-product-assembly-2026-07-17.md",
+      "A\tdocs/evidence/phase-30/model-optimization-server-integrity-2026-07-17.md",
+      "A\tdocs/evidence/phase-30/production-dependency-security-2026-07-17.md",
+      "A\tdocs/evidence/phase-30/tui-core-capability-parity-2026-07-17.md",
+      "A\tdocs/evidence/phase-30/web-core-capability-parity-2026-07-17.md",
+      "M\tdocs/phases/30-surface-parity-agent-ux/design.md",
+      "M\tdocs/phases/30-surface-parity-agent-ux/implementation-plan.md",
+      "M\tdocs/phases/30-surface-parity-agent-ux/review.md",
+      "M\tpackages/application/src/adapters/domain.test.ts",
+      "M\tpackages/application/src/adapters/domain.ts",
+      "M\tpackages/application/src/adapters/read-model.test.ts",
+      "M\tpackages/application/src/adapters/read-model.ts",
+      "M\tpackages/application/src/artifacts.ts",
+      "M\tpackages/application/src/bootstrap.test.ts",
+      "M\tpackages/application/src/bootstrap.ts",
+      "M\tpackages/application/src/event-projector.test.ts",
+      "M\tpackages/application/src/event-projector.ts",
+      "M\tpackages/application/src/event-store.test.ts",
+      "M\tpackages/application/src/event-store.ts",
+      "M\tpackages/application/src/http-client.test.ts",
+      "M\tpackages/application/src/http-client.ts",
+      "M\tpackages/application/src/http-server.test.ts",
+      "M\tpackages/application/src/http-server.ts",
+      "M\tpackages/application/src/http-web.test.ts",
+      "M\tpackages/application/src/index.ts",
+      "M\tpackages/application/src/model-optimization-operations.test.ts",
+      "M\tpackages/application/src/model-optimization-operations.ts",
+      "A\tpackages/application/src/model-optimization-query.test.ts",
+      "M\tpackages/application/src/product.test.ts",
+      "M\tpackages/application/src/product.ts",
+      "M\tpackages/application/src/query-registry.test.ts",
+      "M\tpackages/application/src/query-registry.ts",
+      "M\tpackages/application/src/read-model.ts",
+      "M\tpackages/application/src/remote.contract.test.ts",
+      "A\tpackages/application/src/runtime-memory-operations.test.ts",
+      "A\tpackages/application/src/runtime-memory-operations.ts",
+      "M\tpackages/application/src/snapshot.test.ts",
+      "M\tpackages/application/src/snapshot.ts",
+      "M\tpackages/application/src/web-session.test.ts",
+      "M\tpackages/application/src/web-session.ts",
+      "A\tpackages/application/src/work-merge-plan.ts",
+      "M\tpackages/assurance/src/governance.integration.test.ts",
+      "M\tpackages/extension-host/src/compliance.ts",
+      "M\tpackages/extension-host/src/remote.contract.test.ts",
+      "M\tpackages/foundation/package.json",
+      "A\tpackages/foundation/src/capability-contract.test.ts",
+      "A\tpackages/foundation/src/capability-contract.ts",
+      "M\tpackages/foundation/src/index.ts",
+      "A\tpackages/foundation/src/personal-core-capabilities.ts",
+      "A\tpackages/foundation/src/query-invalidation.test.ts",
+      "A\tpackages/foundation/src/query-invalidation.ts",
+      "A\tpackages/foundation/src/query-resource.test.ts",
+      "A\tpackages/foundation/src/query-resource.ts",
+      "A\tpackages/foundation/src/resource-status.test.ts",
+      "A\tpackages/foundation/src/resource-status.ts",
+      "M\tpackages/governance/src/approval-store.test.ts",
+      "M\tpackages/governance/src/approval-store.ts",
+      "M\tpackages/governance/src/declaration.integration.test.ts",
+      "M\tpackages/governance/src/emergency.test.ts",
+      "M\tpackages/governance/src/gate.test.ts",
+      "M\tpackages/governance/src/permit.test.ts",
+      "M\tpackages/governance/src/remote.contract.test.ts",
+      "M\tpackages/growth/src/adoption.test.ts",
+      "M\tpackages/growth/src/adoption.ts",
+      "M\tpackages/growth/src/bootstrap.ts",
+      "A\tpackages/growth/src/canonical-order.ts",
+      "M\tpackages/growth/src/configuration.ts",
+      "A\tpackages/growth/src/deterministic-order.test.ts",
+      "M\tpackages/growth/src/gateway.ts",
+      "M\tpackages/growth/src/index.ts",
+      "A\tpackages/growth/src/product-assembly.test.ts",
+      "A\tpackages/growth/src/product-assembly.ts",
+      "A\tpackages/growth/src/product-lifecycle.integration.test.ts",
+      "M\tpackages/growth/src/prompt-memory.ts",
+      "M\tpackages/growth/src/recovery.test.ts",
+      "M\tpackages/growth/src/recovery.ts",
+      "A\tpackages/growth/src/reflection-runtime.test.ts",
+      "A\tpackages/growth/src/reflection-runtime.ts",
+      "A\tpackages/growth/src/reflection-snapshot-store.test.ts",
+      "A\tpackages/growth/src/reflection-snapshot-store.ts",
+      "M\tpackages/growth/src/reflection.test.ts",
+      "M\tpackages/growth/src/reflection.ts",
+      "M\tpackages/growth/src/revert.test.ts",
+      "M\tpackages/growth/src/revert.ts",
+      "A\tpackages/growth/src/runtime-foundation.test.ts",
+      "A\tpackages/growth/src/runtime-foundation.ts",
+      "M\tpackages/growth/src/schema.ts",
+      "M\tpackages/growth/src/security.ts",
+      "M\tpackages/growth/src/snapshot.ts",
+      "A\tpackages/growth/src/suggestion-evaluator.test.ts",
+      "A\tpackages/growth/src/suggestion-evaluator.ts",
+      "A\tpackages/growth/src/trigger-processor.test.ts",
+      "A\tpackages/growth/src/trigger-processor.ts",
+      "M\tpackages/growth/src/trigger.test.ts",
+      "M\tpackages/growth/src/trigger.ts",
+      "M\tpackages/identity/src/index.ts",
+      "M\tpackages/identity/src/tenant.test.ts",
+      "M\tpackages/identity/src/tenant.ts",
+      "M\tpackages/integrations/src/dispatcher.test.ts",
+      "M\tpackages/integrations/src/dispatcher.ts",
+      "M\tpackages/integrations/src/schema.ts",
+      "M\tpackages/integrations/src/tokens.test.ts",
+      "M\tpackages/integrations/src/tokens.ts",
+      "M\tpackages/model-optimization/src/batch.test.ts",
+      "M\tpackages/model-optimization/src/batch.ts",
+      "A\tpackages/model-optimization/src/canonical.test.ts",
+      "A\tpackages/model-optimization/src/canonical.ts",
+      "M\tpackages/model-optimization/src/contracts.ts",
+      "M\tpackages/model-optimization/src/evaluation.test.ts",
+      "M\tpackages/model-optimization/src/evaluation.ts",
+      "M\tpackages/model-optimization/src/index.ts",
+      "M\tpackages/model-optimization/src/schema.ts",
+      "M\tpackages/model-optimization/src/scoring.ts",
+      "M\tpackages/model-optimization/src/transfer.ts",
+      "M\tpackages/organization/src/governance.integration.test.ts",
+      "M\tpackages/router/src/discovery.test.ts",
+      "M\tpackages/router/src/discovery.ts",
+      "M\tpackages/router/src/index.ts",
+      "A\tpackages/router/src/model-provider-catalog.test.ts",
+      "A\tpackages/router/src/model-provider-catalog.ts",
+      "M\tpackages/router/src/model-router.test.ts",
+      "M\tpackages/router/src/model-router.ts",
+      "M\tpackages/router/src/provider.test.ts",
+      "M\tpackages/router/src/provider.ts",
+      "M\tpackages/router/src/schema.ts",
+      "A\tpackages/runtime/src/agent-collaboration-runtime.integration.test.ts",
+      "A\tpackages/runtime/src/agent-collaboration-tools.test.ts",
+      "A\tpackages/runtime/src/agent-collaboration-tools.ts",
+      "M\tpackages/runtime/src/agent-configuration.test.ts",
+      "M\tpackages/runtime/src/agent-configuration.ts",
+      "A\tpackages/runtime/src/agent-delegation-runtime.integration.test.ts",
+      "A\tpackages/runtime/src/agent-delegation.test.ts",
+      "A\tpackages/runtime/src/agent-delegation.ts",
+      "A\tpackages/runtime/src/agent-memory-product.test.ts",
+      "A\tpackages/runtime/src/agent-memory-registry.test.ts",
+      "A\tpackages/runtime/src/agent-memory-registry.ts",
+      "M\tpackages/runtime/src/agent-topology.ts",
+      "M\tpackages/runtime/src/embedded-agent-runtime.test.ts",
+      "M\tpackages/runtime/src/embedded-agent-runtime.ts",
+      "M\tpackages/runtime/src/execution-store.test.ts",
+      "M\tpackages/runtime/src/execution-store.ts",
+      "M\tpackages/runtime/src/index.ts",
+      "M\tpackages/runtime/src/model-factory.test.ts",
+      "M\tpackages/runtime/src/model-factory.ts",
+      "M\tpackages/runtime/src/remote.contract.test.ts",
+      "A\tpackages/runtime/src/runtime-memory-redaction.test.ts",
+      "A\tpackages/runtime/src/runtime-memory-redaction.ts",
+      "M\tpackages/runtime/src/schema.ts",
+      "M\tpackages/runtime/src/subscriptions/codex-profile.test.ts",
+      "M\tpackages/runtime/src/subscriptions/codex-profile.ts",
+      "M\tpackages/runtime/src/subscriptions/execution-receipt.test.ts",
+      "M\tpackages/runtime/src/surreal-memory.test.ts",
+      "M\tpackages/runtime/src/surreal-memory.ts",
+      "M\tpackages/runtime/src/voltagent-runner.test.ts",
+      "M\tpackages/runtime/src/voltagent-runner.ts",
+      "M\tpackages/runtime/src/workflow-runtime.test.ts",
+      "M\tpackages/runtime/src/workflow-runtime.ts",
+      "M\tpackages/subscriptions/src/provider-catalog.test.ts",
+      "M\tpackages/subscriptions/src/provider-catalog.ts",
+      "M\tpackages/work/src/collaboration.test.ts",
+      "M\tpackages/work/src/governance.integration.test.ts",
+      "A\tpackages/work/src/merge-plan-read-index.test.ts",
+      "A\tpackages/work/src/message-read-index.test.ts",
+      "M\tpackages/work/src/schema.ts",
+      "M\tpackages/work/src/work.test.ts",
+      "M\tpackages/work/src/work.ts",
+      "M\tpnpm-lock.yaml",
+      "M\trelease/install.sh",
+      "M\tscripts/build-release.mjs",
+      "A\tscripts/capability-contract.test.mjs",
+      "M\tscripts/local-release-install.test.mjs",
+      "A\tscripts/query-resource-runtime-workflow.test.mjs",
+      "M\tscripts/release-workflow.test.mjs"
+    ]
+  },
   "lockfilePolicy": {
     "path": "pnpm-lock.yaml",
     "primarySlice": "2",
@@ -642,209 +985,702 @@
       "path": "apps/cli/src/commands.ts",
       "primarySlice": "3",
       "owners": [
-        { "slice": "3", "anchors": ["CliApplicationHandlerContext"] },
-        { "slice": "4", "anchors": ["optimization"] },
-        { "slice": "7", "anchors": ["handleRuntimeLineage"] },
-        { "slice": "8A", "anchors": ["ApprovalMutationSnapshot"] },
-        { "slice": "10", "anchors": ["modelProviderConnection"] }
+        {
+          "slice": "3",
+          "meaning": "CLI 애플리케이션 명령 핸들러 문맥 타입",
+          "startLine": 320,
+          "endLine": 320,
+          "before": "",
+          "match": "interface CliApplicationHandlerContext {",
+          "after": "  readonly client: CliApplicationClient;"
+        },
+        {
+          "slice": "4",
+          "meaning": "최적화 정책 CLI 조회 명령",
+          "startLine": 661,
+          "endLine": 661,
+          "before": "  \"growth/revert\": stdinCommandHandler(\"growth.revert\"),",
+          "match": "  \"optimization/policy\": async ({ client }) => await client.query(\"optimization.policy\", {}),",
+          "after": "  \"optimization/receipts\": async ({ client }) => await client.query(\"optimization.receipts\", {}),"
+        },
+        {
+          "slice": "7",
+          "meaning": "런타임 계보 CLI 조회 명령",
+          "startLine": 623,
+          "endLine": 623,
+          "before": "    await client.query(\"runtime.execution.get\", { executionId: required(args, 0, \"executionId\") }),",
+          "match": "  \"runtime/lineage\": handleRuntimeLineage,",
+          "after": "  \"runtime/cancel\": runtimeMutationHandler(\"cancel\"),"
+        },
+        {
+          "slice": "8A",
+          "meaning": "승인 변경 전 상태 스냅샷",
+          "startLine": 140,
+          "endLine": 140,
+          "before": "",
+          "match": "interface ApprovalMutationSnapshot {",
+          "after": "  readonly approvalId: string;"
+        },
+        {
+          "slice": "10",
+          "meaning": "연결 요청 Provider ID 검증",
+          "startLine": 389,
+          "endLine": 389,
+          "before": "async function handleAuthLogin({ client, invocation, input, args }: CliApplicationHandlerContext): Promise<unknown> {",
+          "match": "  if (input.modelProviderConnection) {",
+          "after": "    if (args.length !== 1 || args[0] !== input.modelProviderConnection.providerId) {"
+        }
       ]
     },
     {
       "path": "apps/cli/src/parser.ts",
       "primarySlice": "3",
       "owners": [
-        { "slice": "3", "anchors": ["CliParserOutput"] },
-        { "slice": "4", "anchors": ["optimization"] },
-        { "slice": "7", "anchors": ["chat"] },
-        { "slice": "8A", "anchors": ["approval"] },
-        { "slice": "10", "anchors": ["auth"] }
+        {
+          "slice": "3",
+          "meaning": "Commander 기반 CLI 프로그램 생성",
+          "startLine": 418,
+          "endLine": 418,
+          "before": "",
+          "match": "export function createCliProgram(onInvocation: (invocation: CliInvocation) => void, output: CliParserOutput): Command {",
+          "after": "  const program = new Command();"
+        },
+        {
+          "slice": "4",
+          "meaning": "최적화 명령 그룹 정의",
+          "startLine": 266,
+          "endLine": 266,
+          "before": "  {",
+          "match": "    name: \"optimization\",",
+          "after": "    description: \"모델 평가와 자동 최적화 관리\","
+        },
+        {
+          "slice": "7",
+          "meaning": "대화방 명령 그룹 정의",
+          "startLine": 160,
+          "endLine": 160,
+          "before": "  {",
+          "match": "    name: \"chat\",",
+          "after": "    description: \"업무 대화방과 메시지 관리\","
+        },
+        {
+          "slice": "8A",
+          "meaning": "승인 명령 그룹 정의",
+          "startLine": 179,
+          "endLine": 179,
+          "before": "  {",
+          "match": "    name: \"approval\",",
+          "after": "    description: \"승인 요청 조회와 결정\","
+        },
+        {
+          "slice": "10",
+          "meaning": "Provider 인증 명령 그룹 정의",
+          "startLine": 316,
+          "endLine": 316,
+          "before": "  {",
+          "match": "    name: \"auth\",",
+          "after": "    description: \"Provider 계정 인증과 profile 연결\","
+        }
       ]
     },
     {
       "path": "apps/cli/src/execution.ts",
       "primarySlice": "3",
       "owners": [
-        { "slice": "3", "anchors": ["ensureLocalEndpoint"] },
-        { "slice": "10", "anchors": ["resolveProviderLoginOnboarding"] }
+        {
+          "slice": "3",
+          "meaning": "로컬 Application endpoint 자동 준비",
+          "startLine": 418,
+          "endLine": 418,
+          "before": "    async () => {",
+          "match": "      await ensureLocalEndpoint(endpoint, { start: async () => await new LocalDaemonManager().start() });",
+          "after": "      return await initializeCli({"
+        },
+        {
+          "slice": "10",
+          "meaning": "Provider 로그인 온보딩 해석",
+          "startLine": 675,
+          "endLine": 675,
+          "before": "  const { client, profile } = await authenticatedContext(invocation);",
+          "match": "  const effectiveInvocation = await resolveProviderLoginOnboarding(invocation, client);",
+          "after": "  const execute = async (): Promise<unknown> =>"
+        }
       ]
     },
     {
       "path": "apps/server/src/product.ts",
       "primarySlice": "7",
       "owners": [
-        { "slice": "4", "anchors": ["buildOptimizationModelCatalog"] },
-        { "slice": "5", "anchors": ["growth"] },
-        { "slice": "6", "anchors": ["runtimeMemory"] },
-        { "slice": "7", "anchors": ["agentCollaboration"] }
+        {
+          "slice": "4",
+          "meaning": "최적화 모델 카탈로그 조립",
+          "startLine": 334,
+          "endLine": 334,
+          "before": "        ]);",
+          "match": "        return buildOptimizationModelCatalog({",
+          "after": "          providers: configuredProviders,"
+        },
+        {
+          "slice": "5",
+          "meaning": "성장 기능 Product Assembly 생성",
+          "startLine": 582,
+          "endLine": 582,
+          "before": "    };",
+          "match": "    const growth = await GrowthProductAssembly.create({",
+          "after": "      database,"
+        },
+        {
+          "slice": "6",
+          "meaning": "런타임 메모리 의존성 주입",
+          "startLine": 878,
+          "endLine": 878,
+          "before": "      },",
+          "match": "      runtimeMemory: agentMemories,",
+          "after": "      connectorEnrollments: connectorEnrollment,"
+        },
+        {
+          "slice": "7",
+          "meaning": "업무 협업 포트 생성",
+          "startLine": 457,
+          "endLine": 457,
+          "before": "    });",
+          "match": "    const agentCollaboration = new WorkAgentCollaborationPort(works);",
+          "after": "    const topologyRuntime = new EmbeddedVoltAgentRuntime(modelRegistry.resolve, {"
+        }
       ]
     },
     {
       "path": "packages/foundation/src/index.ts",
       "primarySlice": "2",
       "owners": [
-        { "slice": "2", "anchors": ["capability-contract"] },
-        { "slice": "13", "anchors": ["personal-core-capabilities"] }
+        {
+          "slice": "2",
+          "meaning": "capability contract 공개 export",
+          "startLine": 3,
+          "endLine": 3,
+          "before": "export {",
+          "match": "  assertCapabilityReleaseReady,",
+          "after": "  capabilityReleaseProblems,"
+        },
+        {
+          "slice": "13",
+          "meaning": "개인용 핵심 capability 카탈로그 export",
+          "startLine": 21,
+          "endLine": 21,
+          "before": "} from \"./capability-contract.js\";",
+          "match": "export { personalCoreCapabilityCatalog } from \"./personal-core-capabilities.js\";",
+          "after": "export {"
+        }
       ]
     },
     {
       "path": "packages/foundation/package.json",
       "primarySlice": "2",
       "owners": [
-        { "slice": "2", "anchors": ["@noble/hashes"] }
+        {
+          "slice": "2",
+          "meaning": "capability contract 해시 의존성",
+          "startLine": 24,
+          "endLine": 24,
+          "before": "  \"dependencies\": {",
+          "match": "    \"@noble/hashes\": \"2.2.0\"",
+          "after": "  }"
+        }
       ]
     },
     {
       "path": "packages/application/src/adapters/domain.ts",
       "primarySlice": "7",
       "owners": [
-        { "slice": "4", "anchors": ["optimization"] },
-        { "slice": "7", "anchors": ["collaboration"] },
-        { "slice": "8A", "anchors": ["expectedRevision"] },
-        { "slice": "9", "anchors": ["providerSecret"] }
+        {
+          "slice": "4",
+          "meaning": "최적화 정책 변경의 revision 필수 검증",
+          "startLine": 2145,
+          "endLine": 2145,
+          "before": "    async handle(context, command, value) {",
+          "match": "      if (command.expectedRevision === undefined)",
+          "after": "        throw new Error(\"최적화 정책 변경에는 현재 정책 expectedRevision이 필요합니다\");"
+        },
+        {
+          "slice": "7",
+          "meaning": "협업방 종료 도메인 명령 등록",
+          "startLine": 850,
+          "endLine": 850,
+          "before": "  register(registry, {",
+          "match": "    operation: \"collaboration.room.close\",",
+          "after": "    requiredScopes: [\"collaboration:write\"],"
+        },
+        {
+          "slice": "8A",
+          "meaning": "승인 투표의 revision 동시성 검증",
+          "startLine": 1117,
+          "endLine": 1117,
+          "before": "        approvalId: string(value.approvalId, \"approvalId\"),",
+          "match": "        expectedRevision: expectedRevision(command),",
+          "after": "        vote: string(value.vote, \"vote\") as \"approve\" | \"reject\","
+        },
+        {
+          "slice": "9",
+          "meaning": "Provider 비밀값 유효성 검사",
+          "startLine": 1382,
+          "endLine": 1382,
+          "before": "            : { credentialLabel: string(candidate.credentialLabel, \"credentialLabel\") }),",
+          "match": "          ...(candidate.secret === undefined ? {} : { secret: providerSecret(candidate.secret) }),",
+          "after": "          ...(candidate.priority === undefined ? {} : { priority: integer(candidate.priority, \"priority\") }),"
+        }
       ]
     },
     {
       "path": "packages/application/src/adapters/read-model.ts",
       "primarySlice": "7",
       "owners": [
-        { "slice": "7", "anchors": ["collaboration"] },
-        { "slice": "8A", "anchors": ["approval"] }
+        {
+          "slice": "7",
+          "meaning": "협업방 read model 조회 SQL",
+          "startLine": 626,
+          "endLine": 626,
+          "before": "    const [rooms] = await this.database.query<[RoomRecord[]]>(",
+          "match": "      \"SELECT organization_id, work_id, room_id, title, coordinator_handle, status, revision, next_sequence, max_parallel, max_tokens, max_cost_micros, max_rounds, round_count, deadline, created_at FROM collaboration_room WHERE organization_id = $organization_id ORDER BY created_at ASC, room_id ASC;\",",
+          "after": "      { organization_id: context.organizationId },"
+        },
+        {
+          "slice": "8A",
+          "meaning": "승인 목록 read model 메서드",
+          "startLine": 831,
+          "endLine": 831,
+          "before": "",
+          "match": "  public async approvals(",
+          "after": "    context: TenantContext,"
+        }
       ]
     },
     {
       "path": "packages/application/src/query-registry.ts",
       "primarySlice": "7",
       "owners": [
-        { "slice": "4", "anchors": ["optimization"] },
-        { "slice": "5", "anchors": ["growth"] },
-        { "slice": "6", "anchors": ["runtime.execution.events"] },
-        { "slice": "7", "anchors": ["collaboration"] },
-        { "slice": "8A", "anchors": ["governance.approval"] },
-        { "slice": "8B", "anchors": ["audit"] },
-        { "slice": "9", "anchors": ["router.catalog"] }
+        {
+          "slice": "4",
+          "meaning": "최적화 batch 단건 조회 등록",
+          "startLine": 1437,
+          "endLine": 1437,
+          "before": "    registry.register({",
+          "match": "      operation: \"optimization.batch.get\",",
+          "after": "      requiredScopes: [\"optimization:read\"],"
+        },
+        {
+          "slice": "5",
+          "meaning": "성장 제안 revision 공개",
+          "startLine": 1083,
+          "endLine": 1083,
+          "before": "          suggestionId: suggestion.suggestion_id,",
+          "match": "          suggestionRevision: suggestion.revision,",
+          "after": "          workId: suggestion.work_id,"
+        },
+        {
+          "slice": "6",
+          "meaning": "런타임 event 조회 입력 검증",
+          "startLine": 903,
+          "endLine": 903,
+          "before": "      allowedRoles: EVERY_ROLE,",
+          "match": "      validate: (value) => {",
+          "after": "        const parsed = object(value, [\"executionId\", \"afterSequence\", \"limit\", \"order\"]);"
+        },
+        {
+          "slice": "7",
+          "meaning": "협업 메시지 read model 연결",
+          "startLine": 708,
+          "endLine": 708,
+          "before": "  });",
+          "match": "  const readMessages = dependencies.readModel.messages?.bind(dependencies.readModel);",
+          "after": "  if (readMessages) {"
+        },
+        {
+          "slice": "8A",
+          "meaning": "승인 목록 조회와 상태 검증",
+          "startLine": 820,
+          "endLine": 820,
+          "before": "    allowedRoles: EVERY_ROLE,",
+          "match": "    validate: (value): ApplicationApprovalReadOptions => {",
+          "after": "      const parsed = object(value, [\"statuses\", \"limit\", \"afterApprovalId\"]);"
+        },
+        {
+          "slice": "8B",
+          "meaning": "최신 감사 이벤트 조회",
+          "startLine": 575,
+          "endLine": 575,
+          "before": "          if (value.order === \"latest\") {",
+          "match": "            return await dependencies.audit?.readLatest(context, {",
+          "after": "              limit: boundedInteger(value.limit, \"limit\", 100),"
+        },
+        {
+          "slice": "9",
+          "meaning": "Provider 카탈로그 preset 공개",
+          "startLine": 1196,
+          "endLine": 1196,
+          "before": "        return {",
+          "match": "          presets: listModelProviderPresets().map((preset) => ({",
+          "after": "            providerId: preset.id,"
+        }
       ]
     },
     {
       "path": "packages/application/src/read-model.ts",
       "primarySlice": "7",
       "owners": [
-        { "slice": "7", "anchors": ["ApplicationMergePlanSource"] },
-        { "slice": "8A", "anchors": ["approval"] }
+        {
+          "slice": "7",
+          "meaning": "업무 병합 계획 read model 원본",
+          "startLine": 38,
+          "endLine": 38,
+          "before": "",
+          "match": "export interface ApplicationMergePlanSource {",
+          "after": "  readonly organizationId: string;"
+        },
+        {
+          "slice": "8A",
+          "meaning": "승인 read model 포트",
+          "startLine": 198,
+          "endLine": 198,
+          "before": "  records?(context: TenantContext): Promise<readonly ApplicationRecordSource[]>;",
+          "match": "  approvals(",
+          "after": "    context: TenantContext,"
+        }
       ]
     },
     {
       "path": "packages/application/src/product.ts",
       "primarySlice": "6",
       "owners": [
-        { "slice": "5", "anchors": ["bootstrapExtensions"] },
-        { "slice": "6", "anchors": ["runtimeMemory"] }
+        {
+          "slice": "5",
+          "meaning": "성장 bootstrap extension 등록",
+          "startLine": 160,
+          "endLine": 160,
+          "before": "      tokens,",
+          "match": "      dependencies.bootstrapExtensions,",
+          "after": "    );"
+        },
+        {
+          "slice": "6",
+          "meaning": "런타임 메모리 operation 등록",
+          "startLine": 128,
+          "endLine": 128,
+          "before": "    });",
+          "match": "    if (dependencies.runtimeMemory) {",
+          "after": "      registerApplicationRuntimeMemoryOperations(commands, queries, dependencies.runtimeMemory);"
+        }
       ]
     },
     {
       "path": "packages/application/src/event-projector.ts",
       "primarySlice": "7",
       "owners": [
-        { "slice": "7", "anchors": ["work-event"] },
-        { "slice": "8B", "anchors": ["operation"] }
+        {
+          "slice": "7",
+          "meaning": "공용 Application command 이벤트의 원본 operation 조회",
+          "startLine": 347,
+          "endLine": 347,
+          "before": "        );",
+          "match": "        const command = await first<{ operation: string }>(",
+          "after": "          executor,"
+        },
+        {
+          "slice": "8B",
+          "meaning": "감사 이벤트 payload에 command operation 투영",
+          "startLine": 359,
+          "endLine": 359,
+          "before": "          resource: { type: \"ApplicationCommand\", id: source.command_record_id, revision: source.lease_generation },",
+          "match": "          payload: { operation: command.operation },",
+          "after": "        };"
+        }
       ]
     },
     {
       "path": "packages/application/src/snapshot.ts",
       "primarySlice": "7",
       "owners": [
-        { "slice": "7", "anchors": ["CollaborationGraphRoom"] },
-        { "slice": "8A", "anchors": ["approval"] }
+        {
+          "slice": "7",
+          "meaning": "협업 그래프 방 snapshot 타입",
+          "startLine": 46,
+          "endLine": 46,
+          "before": "",
+          "match": "export interface CollaborationGraphRoom {",
+          "after": "  readonly workId: string;"
+        },
+        {
+          "slice": "8A",
+          "meaning": "대기 승인 snapshot 조회",
+          "startLine": 149,
+          "endLine": 149,
+          "before": "        this.source.rooms(context),",
+          "match": "        this.source.approvals(context, { statuses: [\"pending\"], limit: 1_000 }),",
+          "after": "        this.source.extensions(context),"
+        }
       ]
     },
     {
       "path": "packages/application/src/remote.contract.test.ts",
       "primarySlice": "7",
       "owners": [
-        { "slice": "7", "anchors": ["merge"] },
-        { "slice": "8A", "anchors": ["approval"] }
+        {
+          "slice": "7",
+          "meaning": "원격 업무 병합 계획 명령 계약",
+          "startLine": 172,
+          "endLine": 172,
+          "before": "        try {",
+          "match": "          mergePlan = await client.command({",
+          "after": "            schemaVersion: \"massion.application.v1\","
+        },
+        {
+          "slice": "8A",
+          "meaning": "원격 승인 목록 조회 계약",
+          "startLine": 121,
+          "endLine": 121,
+          "before": "        });",
+          "match": "        const firstApprovalPage = (await client.query(\"governance.approval.list\", {",
+          "after": "          statuses: [\"pending\"],"
+        }
       ]
     },
     {
       "path": "packages/runtime/src/execution-store.ts",
       "primarySlice": "6",
       "owners": [
-        { "slice": "6", "anchors": ["memory"] },
-        { "slice": "7", "anchors": ["delegation"] }
+        {
+          "slice": "6",
+          "meaning": "런타임 메모리 단계 정규화",
+          "startLine": 804,
+          "endLine": 804,
+          "before": "    await this.organizations.verifyTenantContext(context);",
+          "match": "    const memorySteps = normalizeRuntimeMemorySteps(input.memorySteps);",
+          "after": "    if (input.target !== \"succeeded\" && memorySteps.length > 0) {"
+        },
+        {
+          "slice": "7",
+          "meaning": "위임 ID 유효성 검증",
+          "startLine": 496,
+          "endLine": 496,
+          "before": "    const parentExecutionId = requiredRuntimeIdentifier(input.parentExecutionId, \"부모 Execution ID\");",
+          "match": "    const delegationId = requiredRuntimeIdentifier(input.delegationId, \"위임 ID\");",
+          "after": "    const childAgentHandle = requiredRuntimeIdentifier(input.childAgentHandle, \"자식 Agent handle\");"
+        }
       ]
     },
     {
       "path": "packages/runtime/src/schema.ts",
       "primarySlice": "6",
       "owners": [
-        { "slice": "6", "anchors": ["RUNTIME_MEMORY"] },
-        { "slice": "7", "anchors": ["RUNTIME_DELEGATION"] }
+        {
+          "slice": "6",
+          "meaning": "런타임 메모리 스키마 migration",
+          "startLine": 242,
+          "endLine": 242,
+          "before": " */",
+          "match": "export const RUNTIME_MEMORY_PRODUCT_MIGRATION = defineMigration(",
+          "after": "  \"0109-runtime-memory-product\","
+        },
+        {
+          "slice": "7",
+          "meaning": "Agent 위임 계보 스키마 migration",
+          "startLine": 120,
+          "endLine": 120,
+          "before": "",
+          "match": "export const RUNTIME_DELEGATION_LINEAGE_MIGRATION = defineMigration(",
+          "after": "  \"0108-runtime-delegation-lineage\","
+        }
       ]
     },
     {
       "path": "packages/runtime/src/voltagent-runner.ts",
       "primarySlice": "6",
       "owners": [
-        { "slice": "6", "anchors": ["memory"] },
-        { "slice": "9", "anchors": ["model"] }
+        {
+          "slice": "6",
+          "meaning": "성공 실행의 메모리 단계 생성",
+          "startLine": 459,
+          "endLine": 459,
+          "before": "            });",
+          "match": "            const memorySteps = createRuntimeMemorySuccessfulSteps({",
+          "after": "              executionId,"
+        },
+        {
+          "slice": "9",
+          "meaning": "Agent runtime 결과를 Router fallback outcome으로 정산",
+          "startLine": 404,
+          "endLine": 411,
+          "before": "              );",
+          "match": "              const outcome = await this.settleAgentRuntimeResult(\n                context,\n                executionId,\n                lease,\n                runtimeResult,\n                true,\n                input,\n              );",
+          "after": "              if (outcome.kind === \"fallback\") {"
+        }
       ]
     },
     {
       "path": "packages/runtime/src/embedded-agent-runtime.ts",
       "primarySlice": "7",
       "owners": [
-        { "slice": "6", "anchors": ["memory"] },
-        { "slice": "7", "anchors": ["delegation"] }
+        {
+          "slice": "6",
+          "meaning": "VoltAgent 메모리 연결",
+          "startLine": 57,
+          "endLine": 57,
+          "before": "        tools: [...(this.options.tools?.(agent) ?? [])],",
+          "match": "        memory: this.options.memory?.(agent) ?? false,",
+          "after": "        maxRetries: 0,"
+        },
+        {
+          "slice": "7",
+          "meaning": "Agent 위임 실행기 연결",
+          "startLine": 109,
+          "endLine": 109,
+          "before": "  public enableDelegation(executor: AgentDelegationExecutor): void {",
+          "match": "    this.delegation = executor;",
+          "after": "    for (const id of this.agents.keys()) this.syncDelegationTool(id);"
+        }
       ]
     },
     {
       "path": "packages/runtime/src/index.ts",
       "primarySlice": "6",
       "owners": [
-        { "slice": "6", "anchors": ["agent-memory"] },
-        { "slice": "7", "anchors": ["agent-delegation"] }
+        {
+          "slice": "6",
+          "meaning": "Agent 메모리 registry export",
+          "startLine": 5,
+          "endLine": 5,
+          "before": "export * from \"./agent-collaboration-tools.js\";",
+          "match": "export * from \"./agent-memory-registry.js\";",
+          "after": "export * from \"./contracts.js\";"
+        },
+        {
+          "slice": "7",
+          "meaning": "Agent 위임 모듈 export",
+          "startLine": 3,
+          "endLine": 3,
+          "before": "export * from \"./agent-configuration.js\";",
+          "match": "export * from \"./agent-delegation.js\";",
+          "after": "export * from \"./agent-collaboration-tools.js\";"
+        }
       ]
     },
     {
       "path": "packages/work/src/work.ts",
       "primarySlice": "7",
       "owners": [
-        { "slice": "7", "anchors": ["collaboration"] },
-        { "slice": "8A", "anchors": ["reason"] }
+        {
+          "slice": "7",
+          "meaning": "협업방 종료 업무 mutation",
+          "startLine": 1891,
+          "endLine": 1891,
+          "before": "    if (!reason || reason.length > 4_096) throw new Error(\"Collaboration Room 종료 사유가 유효하지 않습니다\");",
+          "match": "    return await this.mutate(context, input, \"collaboration_room_closed\", async (transaction, work) => {",
+          "after": "      const [rooms] = await transaction.query<[CollaborationRoom[]]>("
+        },
+        {
+          "slice": "8A",
+          "meaning": "승인 취소 사유 projection",
+          "startLine": 2737,
+          "endLine": 2737,
+          "before": "      );",
+          "match": "      return input.reason === undefined ? {} : { reason: input.reason };",
+          "after": "    });"
+        }
       ]
     },
     {
       "path": "pnpm-lock.yaml",
       "primarySlice": "2",
       "owners": [
-        { "slice": "2", "anchors": ["@noble/hashes"] },
-        { "slice": "3", "anchors": ["@clack/prompts"] },
-        { "slice": "5", "anchors": ["@massion/growth"] },
-        { "slice": "11", "anchors": ["apps/tui"] },
-        { "slice": "12", "anchors": ["apps/web"] }
+        {
+          "slice": "2",
+          "meaning": "Foundation 해시 의존성 lockfile 항목",
+          "startLine": 444,
+          "endLine": 444,
+          "before": "    dependencies:",
+          "match": "      '@noble/hashes':",
+          "after": "        specifier: 2.2.0"
+        },
+        {
+          "slice": "3",
+          "meaning": "CLI Clack prompts 의존성 lockfile 항목",
+          "startLine": 39,
+          "endLine": 39,
+          "before": "    dependencies:",
+          "match": "      '@clack/prompts':",
+          "after": "        specifier: 1.7.0"
+        },
+        {
+          "slice": "5",
+          "meaning": "Growth workspace 의존성 lockfile 항목",
+          "startLine": 127,
+          "endLine": 127,
+          "before": "        version: link:../../packages/governance",
+          "match": "      '@massion/growth':",
+          "after": "        specifier: workspace:*"
+        },
+        {
+          "slice": "11",
+          "meaning": "TUI Foundation workspace 의존성 lockfile 항목",
+          "startLine": 172,
+          "endLine": 172,
+          "before": "        version: link:../../packages/application",
+          "match": "      '@massion/foundation':",
+          "after": "        specifier: workspace:*"
+        },
+        {
+          "slice": "12",
+          "meaning": "Web Foundation workspace 의존성 lockfile 항목",
+          "startLine": 212,
+          "endLine": 212,
+          "before": "        version: 5.2.7",
+          "match": "      '@massion/foundation':",
+          "after": "        specifier: workspace:*"
+        }
       ]
     },
     {
       "path": "docs/phases/30-surface-parity-agent-ux/design.md",
       "primarySlice": "14",
       "owners": [
-        { "slice": "14", "anchors": ["Phase 30"] },
-        { "slice": "15", "anchors": ["UAT"] }
+        {
+          "slice": "14",
+          "meaning": "CLI 상호작용 경계 설계 섹션",
+          "startLine": 62,
+          "endLine": 62,
+          "before": "",
+          "match": "### CLI 상호작용 경계",
+          "after": ""
+        }
       ]
     },
     {
       "path": "docs/phases/30-surface-parity-agent-ux/implementation-plan.md",
       "primarySlice": "14",
       "owners": [
-        { "slice": "14", "anchors": ["Phase 30"] },
-        { "slice": "15", "anchors": ["UAT"] }
+        {
+          "slice": "14",
+          "meaning": "범용 CLI 구현 계획 섹션",
+          "startLine": 22,
+          "endLine": 22,
+          "before": "",
+          "match": "## Task 2A. 범용 CLI 명령·온보딩·출력 경계",
+          "after": ""
+        }
       ]
     },
     {
       "path": "docs/phases/30-surface-parity-agent-ux/review.md",
       "primarySlice": "14",
       "owners": [
-        { "slice": "14", "anchors": ["Phase 30"] },
-        { "slice": "15", "anchors": ["UAT"] }
+        {
+          "slice": "14",
+          "meaning": "CLI 범용 도구 전환 회고 섹션",
+          "startLine": 17,
+          "endLine": 17,
+          "before": "",
+          "match": "## CLI 범용 도구 전환 회고",
+          "after": ""
+        }
       ]
     }
   ]

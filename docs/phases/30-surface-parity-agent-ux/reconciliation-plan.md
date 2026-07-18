@@ -8,7 +8,9 @@
 
 **Tech Stack:** Git 참조(ref)·트리(tree), pnpm 동결 설치(frozen install), TypeScript, Vitest, Playwright, OpenTUI, tmux, Markdown 문서 검증(document verification)
 
-**정본 원장(source of truth):** [정합성 복구 원장(reconciliation manifest)](./reconciliation-manifest.json)은 안전 스냅샷의 완전 경로 배정, 공용 변경 조각(hunk) 소유자와 anchor, 조각별 정확한 검증 명령의 정본입니다. 이 계획은 복구 의도와 순서를 설명하며, 경로 목록·anchor·명령은 원장을 우선합니다.
+**정본 원장(source of truth):** [정합성 복구 원장(reconciliation manifest)](./reconciliation-manifest.json)은 안전 스냅샷의 완전 경로 배정, 공용 변경 조각(hunk)의 정확한 소유자 위치와 조각별 검증 명령의 정본입니다. 이 계획은 복구 의도와 순서를 설명하며, 경로 목록·정확한 위치 증거·명령은 원장을 우선합니다.
+
+**원장 검증 모드:** 기본 검증(`node scripts/verify-phase30-reconciliation.mjs`, `pnpm verify:docs`)은 원장 안에 고정된 337개 `status<TAB>path` 목록과 SHA-256을 사용하므로 안전 커밋이 없는 새 복제본(clean clone)에서도 실행됩니다. 검증기는 목록을 다시 계산한 값과 기준 SHA-256 모두 대조하고, 공용 파일 24개·owner 62개·각 primary 소유 조각 집합도 고정합니다. 원본 저장소에서만 실행하는 엄격 검증(`node scripts/verify-phase30-reconciliation.mjs --require-safety`)은 실제 기준·안전 커밋 diff, 정확한 owner 객체의 행 범위와 `before`·`match`·`after` 문맥, base→safety 추가 hunk 범위를 다시 대조합니다. 각 owner는 문자열 검색이 아니라 이 정확한 위치 객체로 기록합니다.
 
 ---
 
@@ -25,6 +27,12 @@
 - 깨끗한 기준선(clean base)에서 전체 `pnpm verify`를 실행했고 종료 코드(exit code)는 `0`이었습니다.
 
 안전 참조는 변경 출처를 확인하는 읽기 전용 원본입니다. 복구 브랜치가 전체 게이트와 깨끗한 복제본(clean clone) 릴리스 검증을 모두 통과할 때까지 삭제하거나 이동하지 않습니다.
+
+### 1A. 원장 이식성 보정 기록 (2026-07-18)
+
+- **RED:** 안전 커밋이 없는 임시 새 복제본에서 기존 검증기가 Git commit 존재를 필수로 요구했고, 공용 hunk 소유자는 문자열 anchor만 사용했습니다. 또한 구현 계획에 독립 복구 커밋 근거가 없는 완료 체크박스가 있었습니다.
+- **GREEN:** 안전 스냅샷의 337개 `status<TAB>path` 목록과 기준 SHA-256을 원장·검증기에 고정하고, 공용 파일 24개·owner 62개와 primary 소유 조각 집합을 강제했습니다. 각 owner는 실제 안전 커밋의 한 번만 일치하는 행·전후 문맥으로 기록했습니다. 완료 체크박스는 모두 재검증 필요 또는 미구현 작업으로 되돌렸습니다.
+- **검증:** `node --test scripts/verify-phase30-reconciliation.test.mjs scripts/verify-docs.test.mjs`, `node scripts/verify-phase30-reconciliation.mjs`, `node scripts/verify-phase30-reconciliation.mjs --require-safety`, `pnpm verify:docs`를 실행합니다. 이 기록은 원장·문서 정합성만 증명하며, 어떤 기능 조각의 복구 완료나 Phase 30 완료를 뜻하지 않습니다.
 
 ## 2. 복구 상태 정의
 
