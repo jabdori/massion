@@ -16,7 +16,8 @@
 2. local application server를 authenticated WebSocket endpoint로 전환했습니다.
 3. installer가 현재 platform native binary를 배치하고 launcher에 검증 metadata를 전달하게 했습니다.
 4. macOS 시스템 경로 별칭에서도 시작 때 기록한 sidecar를 정상 종료하도록 canonical executable attestation을 사용했습니다.
-5. release artifact를 빈 HOME에 설치해 다음 흐름을 tmux에서 실행했습니다.
+5. 구독 UAT와 개인용 설치 안내에서 공개되지 않은 `massion-server`·직접 RocksDB 복구 경로를 제거했습니다.
+6. 새 release artifact를 빈 HOME에 설치해 다음 흐름을 tmux에서 실행했습니다.
 
 ```text
 install → massion → owner onboarding → TUI live
@@ -25,7 +26,7 @@ Web session → snapshot / me 200 → 같은 organization 확인
 local stop → application·sidecar 포트 종료
 ```
 
-`CI=true pnpm verify:release`도 같은 릴리스 artifact에서 자동 runtime 준비, 초기화, 상태, backup, 중지, 제거를 통과했습니다. 이 기록에는 token, Web login code, 개인 경로를 남기지 않습니다.
+UAT 테스트 30개와 `CI=true pnpm verify:release`도 같은 릴리스 artifact에서 자동 runtime 준비, 초기화, 상태, backup, 중지, 제거를 통과했습니다. tmux lifecycle UAT는 release 1건 성공·실패 0건으로 끝났고, provider 인증이 필요한 9개 시나리오는 미실행으로 기록했습니다. 이 기록에는 token, Web login code, 개인 경로를 남기지 않습니다.
 
 ## 경계
 
