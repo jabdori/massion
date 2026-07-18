@@ -68,7 +68,7 @@ describe("local daemon lifecycle", () => {
       expect(order).toEqual(["surreal-start", "application-start"]);
       expect(surrealRuntime.start).toHaveBeenCalledOnce();
       expect(childEnvironment?.MASSION_CONNECTOR_ROOT).toBe(paths.connectorDirectory);
-      expect(childEnvironment?.MASSION_DATABASE_URL).toBe("http://127.0.0.1:7330");
+      expect(childEnvironment?.MASSION_DATABASE_URL).toBe("ws://127.0.0.1:7330");
       expect(childEnvironment?.MASSION_DATABASE_USER).toBe("massion");
       expect(childEnvironment?.MASSION_DATABASE_PASSWORD_FILE).toBe(
         join(root, ".config", "massion", "database-password"),

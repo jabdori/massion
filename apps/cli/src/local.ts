@@ -301,6 +301,14 @@ function surrealPort(environment: Readonly<Record<string, string | undefined>>):
   return Number(value);
 }
 
+function applicationDatabaseEndpoint(sidecarEndpoint: string): string {
+  const endpoint = new URL(sidecarEndpoint);
+  if (endpoint.protocol !== "http:" || endpoint.hostname !== "127.0.0.1" || endpoint.pathname !== "/")
+    throw new Error("local SurrealDB sidecar endpoint가 유효하지 않습니다");
+  endpoint.protocol = "ws:";
+  return endpoint.toString().replace(/\/$/u, "");
+}
+
 export class LocalDaemonManager {
   readonly #environment: Readonly<Record<string, string | undefined>>;
   readonly #paths: LocalPaths;
@@ -369,7 +377,7 @@ export class LocalDaemonManager {
       NODE_ENV: "production",
       MASSION_VERSION: "1.0.0",
       MASSION_MODE: "local",
-      MASSION_DATABASE_URL: databaseEndpoint,
+      MASSION_DATABASE_URL: applicationDatabaseEndpoint(databaseEndpoint),
       MASSION_DATABASE_USER: "massion",
       MASSION_DATABASE_PASSWORD_FILE: this.#paths.databasePassword,
       ...(this.#environment.MASSION_WEB_ROOT === undefined

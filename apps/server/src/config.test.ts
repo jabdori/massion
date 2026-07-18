@@ -20,7 +20,7 @@ describe("server configuration", () => {
   it("개인 local mode는 loopback과 owner-only key로 구성한다", () => {
     expect(parseServerConfig({ MASSION_TOKEN_KEY: key, MASSION_CREDENTIAL_KEY: credentialKey })).toMatchObject({
       mode: "local",
-      database: { url: "http://127.0.0.1:7330", namespace: "massion", database: "massion" },
+      database: { url: "ws://127.0.0.1:7330", namespace: "massion", database: "massion" },
       server: { host: "127.0.0.1", port: 3141 },
       registry: { host: "127.0.0.1", port: 3142, publicBaseUrl: "http://127.0.0.1:3142" },
       credentialKey: Buffer.alloc(32, 8),
@@ -43,7 +43,7 @@ describe("server configuration", () => {
         MASSION_DATABASE_PASSWORD: "local-sidecar-password",
       }).database,
     ).toMatchObject({
-      url: "http://127.0.0.1:7330",
+      url: "ws://127.0.0.1:7330",
       authentication: { username: "massion", password: "local-sidecar-password", scope: "root" },
     });
   });
