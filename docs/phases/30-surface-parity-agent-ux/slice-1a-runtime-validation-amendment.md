@@ -74,7 +74,31 @@ git commit -m "test(release): cover remote database runtime hardening"
 
 ### Compose source runtime smoke
 
-각 Compose secret path에 임시 random value를 만들고 mode `0600`으로 제한합니다. 실제 값, 사용자 secret, profile 경로를 재사용하거나 출력하지 않습니다. clean clone에서 Docker가 실행 가능한 loaded SurrealDB image tag를 `MASSION_SURREALDB_IMAGE`로 지정하고, `env -i`로 다음 command만 실행합니다.
+Compose file source secret은 Docker Compose에서 bind mount로 구현되므로 host file의 uid·gid·mode remap을 신뢰하면 안 됩니다. 임시 directory 자체를 mode `0700`으로 제한하고, 그 안의 random secret file은 non-root image user가 읽을 수 있도록 mode `0444`로 만듭니다. 실제 값, 사용자 secret, profile 경로를 재사용하거나 출력하지 않습니다. arm64 image build가 성공한 뒤 local Docker가 실행할 loaded tag와 unique Compose project를 명시적으로 초기화합니다.
+
+```bash
+runtime_image_tag="$arm64_image_tag"
+compose_project="massion-slice1-$run_id"
+compose_secrets="$scratch_root/compose-secrets"
+mkdir -m 0700 "$compose_secrets"
+node --input-type=module -e '
+  import { randomBytes } from "node:crypto";
+  import { writeFile } from "node:fs/promises";
+  for (const path of process.argv.slice(1)) {
+    await writeFile(path, randomBytes(24).toString("base64url"), { mode: 0o600 });
+  }
+' \
+  "$compose_secrets/database-owner-password" \
+  "$compose_secrets/database-password" \
+  "$compose_secrets/token-key" \
+  "$compose_secrets/credential-key" \
+  "$compose_secrets/registry-key" \
+  "$compose_secrets/tls.crt" \
+  "$compose_secrets/tls.key"
+chmod 0444 "$compose_secrets"/*
+```
+
+clean clone에서 `runtime_image_tag`를 `MASSION_SURREALDB_IMAGE`로 지정하고, `env -i`로 다음 command만 실행합니다.
 
 ```bash
 compose_runtime() {
@@ -108,7 +132,16 @@ docker_local exec "$compose_container" sh -ec 'test -e /data/massion.db && test 
 compose_runtime down --volumes --remove-orphans
 ```
 
-`compose_project`는 run ID를 포함한 새 이름이어야 합니다. cleanup trap도 같은 project에 `down --volumes --remove-orphans`를 다시 시도합니다. 이 smoke는 source Compose의 writable root filesystem을 의도적으로 유지합니다. full Massion/Caddy stack, 외부 HTTPS port, 실제 provider credential은 시작하지 않습니다.
+`compose_project`는 run ID를 포함한 새 이름이어야 합니다. 기존 cleanup trap의 시작 부분에는 아래 함수를 호출해 실패 경로에서도 같은 project만 정리합니다. 기존의 container·image ownership cleanup은 이 호출 뒤에 그대로 유지합니다.
+
+```bash
+cleanup_compose_runtime() {
+  [ -n "$compose_project" ] || return 0
+  compose_runtime down --volumes --remove-orphans >/dev/null 2>&1 || true
+}
+```
+
+이 smoke는 source Compose의 writable root filesystem을 의도적으로 유지합니다. full Massion/Caddy stack, 외부 HTTPS port, 실제 provider credential은 시작하지 않습니다.
 
 ### Kubernetes container parity smoke
 
