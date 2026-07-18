@@ -153,17 +153,22 @@ export async function runCli(argv = process.argv.slice(2)): Promise<number> {
     }
     if (argv[0] === "--web") {
       if (argv.length !== 1) throw new Error("massion --web에는 추가 인자를 지정할 수 없습니다");
+      const store = new CliConfigStore();
       let config;
       try {
-        config = await new CliConfigStore().load();
+        config = await store.load();
       } catch (error) {
         if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
-          throw new Error(
-            'Massion이 아직 초기화되지 않았습니다. 먼저 `massion init http://127.0.0.1:7331 <email> "<표시명>"`을 실행해 주세요.',
-            { cause: error },
-          );
+          if (!process.stdin.isTTY || !process.stdout.isTTY)
+            throw new Error("Massion이 아직 초기화되지 않았습니다. 먼저 `massion init`을 실행해 주세요.", {
+              cause: error,
+            });
+          const initialized = await runCli(["init"]);
+          if (initialized !== 0) return initialized;
+          config = await store.load();
+        } else {
+          throw error;
         }
-        throw error;
       }
       const profile = config.profiles[config.selectedProfile];
       if (!profile) throw new Error("선택된 CLI profile이 없습니다. 먼저 massion init을 실행해 주세요");
