@@ -516,6 +516,9 @@ case "$docker_config" in
   *) docker_config="$PWD/$docker_config" ;;
 esac
 run_id=""
+compose_project=""
+runtime_image_tag=""
+compose_secrets="$scratch_root/compose-secrets"
 arm64_image_tag=""
 amd64_image_tag=""
 arm64_image_id=""
@@ -541,7 +544,25 @@ remove_owned_image_tag() {
     docker_local image rm "$image_tag" >/dev/null 2>&1 || true
   fi
 }
+cleanup_compose_runtime() {
+  [ -n "${compose_project:-}" ] || return 0
+  env -i \
+    PATH="$PATH" \
+    HOME="$HOME" \
+    DOCKER_CONFIG="$docker_config" \
+    TMPDIR="${TMPDIR:-$scratch_root/tmp}" \
+    MASSION_SURREALDB_IMAGE="${runtime_image_tag:-}" \
+    MASSION_DATABASE_OWNER_PASSWORD_FILE="$compose_secrets/database-owner-password" \
+    MASSION_DATABASE_PASSWORD_FILE="$compose_secrets/database-password" \
+    MASSION_TOKEN_KEY_FILE="$compose_secrets/token-key" \
+    MASSION_CREDENTIAL_KEY_FILE="$compose_secrets/credential-key" \
+    MASSION_REGISTRY_KEY_FILE="$compose_secrets/registry-key" \
+    MASSION_TLS_CERTIFICATE_FILE="$compose_secrets/tls.crt" \
+    MASSION_TLS_PRIVATE_KEY_FILE="$compose_secrets/tls.key" \
+    docker --context "$docker_context" compose --env-file /dev/null --project-name "$compose_project" --file "$clean_root/compose.yaml" --project-directory "$clean_root" down --volumes --remove-orphans >/dev/null 2>&1 || true
+}
 cleanup() {
+  cleanup_compose_runtime
   for container in $smoke_containers; do
     docker_local container rm --force "$container" >/dev/null 2>&1 || true
   done
