@@ -5,7 +5,11 @@ import { join } from "node:path";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { attestLocalSurrealRuntime, resolveLocalSurrealRuntime } from "./local-surreal-runtime.js";
+import {
+  attestLocalSurrealRuntime,
+  provisionLocalSurrealDatabase,
+  resolveLocalSurrealRuntime,
+} from "./local-surreal-runtime.js";
 
 describe("개인용 SurrealDB local runtime", () => {
   const roots: string[] = [];
@@ -24,6 +28,30 @@ describe("개인용 SurrealDB local runtime", () => {
 
     expect(runtime.binaryPath).toBe("/Users/massion/.local/share/massion/runtime/surrealdb/3.2.1/darwin-arm64/surreal");
     expect(runtime.dataDirectory).toBe("/Users/massion/.local/share/massion/surrealdb/3/database");
+  });
+
+  it("인증된 loopback SQL endpoint에서 Massion namespace와 database를 idempotent하게 준비한다", async () => {
+    const password = "local-secret-must-not-appear-in-url";
+    const fetcher = vi.fn<typeof fetch>(async () =>
+      Response.json([{ status: "OK" }, { status: "OK" }, { status: "OK" }]),
+    );
+
+    await expect(
+      provisionLocalSurrealDatabase({
+        endpoint: "http://127.0.0.1:17431",
+        credential: { user: "massion", password },
+        fetcher,
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(fetcher).toHaveBeenCalledExactlyOnceWith(
+      "http://127.0.0.1:17431/sql",
+      expect.objectContaining({
+        method: "POST",
+        body: expect.stringContaining("DEFINE NAMESPACE IF NOT EXISTS massion"),
+      }),
+    );
+    expect(String(fetcher.mock.calls[0]?.[0])).not.toContain(password);
   });
 
   it("절대 regular executable의 SHA-256과 정확한 surreal version 3.2.1을 증명한다", async () => {

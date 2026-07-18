@@ -41,6 +41,7 @@ interface RuntimeManagerDependencies {
   readonly processExists: (pid: number) => boolean;
   readonly processCommand: (pid: number) => Promise<string>;
   readonly ready: (endpoint: string) => Promise<boolean>;
+  readonly provision: (endpoint: string) => Promise<void>;
   readonly signal: (pid: number, signal: NodeJS.Signals) => void;
   readonly wait: (milliseconds: number) => Promise<void>;
 }
@@ -84,6 +85,7 @@ function dependencies(overrides: Partial<RuntimeManagerDependencies> = {}): Runt
     processExists: () => true,
     processCommand: async () => runtime.binaryPath,
     ready: async () => true,
+    provision: async () => undefined,
     signal: () => undefined,
     wait: async () => undefined,
     ...overrides,
@@ -117,6 +119,15 @@ describe("local SurrealDB sidecar lifecycle", () => {
       }),
     );
     expect(spawn.mock.calls[0]?.[1]).not.toContain(credential.password);
+  });
+
+  it("health 응답 뒤 Massion namespace와 database를 준비한 다음 시작을 완료한다", async () => {
+    const provision = vi.fn<RuntimeManagerDependencies["provision"]>(async () => undefined);
+    const manager = createManager(dependencies({ provision }));
+
+    await expect(manager.start()).resolves.toMatchObject({ status: "started" });
+
+    expect(provision).toHaveBeenCalledExactlyOnceWith("http://127.0.0.1:17431");
   });
 
   it("동일한 증명된 sidecar PID가 준비되었으면 새 process를 만들지 않고 재사용한다", async () => {
