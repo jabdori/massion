@@ -10,7 +10,7 @@
 
 - 기록된 후보: 기준 HEAD와 안전 스냅샷을 기준으로 변경 상태를 감사(audit)한 이력이 있습니다. 현재 복구 후보의 재검증 근거는 아직 연결하지 않았습니다.
 - 기록된 후보: 불변 안전 스냅샷(immutable safety snapshot)의 참조, 커밋, 트리를 고정한 이력이 있습니다. 현재 복구 후보의 독립 코드 커밋 근거는 아직 없습니다.
-- 재검증 필요: 깨끗한 기준선(clean base)에서 동결 설치 후 전체 `pnpm verify`가 종료 코드 `0`이었다는 기록은 별도 baseline evidence 커밋과 연결되기 전까지 완료로 표시하지 않습니다.
+- 기록된 기준선 검증: [깨끗한 기준선 전체 검증 증거](../../evidence/phase-30/clean-base-full-verification-2026-07-18.md)는 기준 커밋 `65922bd706580a0962b6eda81c6fa3d63b36b6a8`에서 동결 설치와 전체 `pnpm verify`가 종료 코드 `0`이었음을 기록합니다. 이는 현재 복구 후보의 완료 근거가 아닙니다.
 - [ ] 안전 스냅샷에서 원자적인 복구 조각(slice)별로 구현을 재구성합니다.
 - [ ] 실제 코드 커밋 SHA와 검증 결과에 맞게 근거·체크리스트·추적성 표를 정정합니다.
 - [ ] 현재 복구 후보에서 전체 `pnpm verify`와 릴리스 검증을 다시 실행합니다.
@@ -18,10 +18,10 @@
 
 ## Task 1. 기준선과 공격 리뷰 고정
 
-- 기록된 후보: `716fd08`에서 격리 브랜치와 워크트리를 만들고 frozen dependency 설치를 수행한 이력이 있습니다. 현재 복구 후보의 독립 근거로는 아직 승격하지 않았습니다.
-- 기록된 후보: format·전체 build·lint·typecheck·test·문서 검증의 종료 코드 0 기준선 기록이 있습니다. 이 기록은 baseline evidence 커밋과 연결될 때까지 재검증 필요 상태입니다.
+- 기록된 과거 후보: `716fd08`에서 격리 브랜치와 워크트리를 만들고 frozen dependency 설치를 수행한 이력이 있습니다. 이는 현재 복구 후보의 독립 근거로 승격하지 않았습니다.
+- 기록된 기준선 검증: [깨끗한 기준선 전체 검증 증거](../../evidence/phase-30/clean-base-full-verification-2026-07-18.md)는 format·전체 build·lint·typecheck·test·문서 검증을 포함한 `pnpm verify`의 종료 코드 `0`을 기준 커밋 `65922bd706580a0962b6eda81c6fa3d63b36b6a8`에 연결합니다. 현재 복구 후보의 재검증은 별도 작업입니다.
 - 기록된 후보: CLI·온보딩·Agent harness·TUI·Web·시각 UX 공격 리뷰를 코드와 실제 실행 결과로 분류한 이력이 있습니다. 현재 복구 후보의 완료 근거는 아닙니다.
-- 기록된 후보: 기준선 명령, source commit과 환경을 Phase 30 evidence에 기록하려는 후보가 있습니다. 실제 evidence SHA와 연결되기 전까지 재검증 필요 상태입니다.
+- 기록된 기준선: [깨끗한 기준선 전체 검증 증거](../../evidence/phase-30/clean-base-full-verification-2026-07-18.md)는 기준선 명령, source commit과 환경을 기록합니다. 이 문서는 기준선 재현성만 다루며, 현재 복구 후보의 완료를 뜻하지 않습니다.
 
 ## Task 2. 공통 query·resource·사건 계약
 
