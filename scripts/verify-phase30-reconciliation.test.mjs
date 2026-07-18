@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import test from "node:test";
@@ -77,6 +78,32 @@ test("안전 커밋이 없는 임시 clean-clone 성격 경로에서도 정적 �
   );
 
   assert.deepEqual(await validatePhase30Reconciliation(root), []);
+});
+
+test("심볼릭 링크 절대 경로의 strict 실행은 누락된 안전 커밋을 보고한다", async (context) => {
+  const fixtureRoot = await mkdtemp(join(tmpdir(), "massion-phase30-symlink-entrypoint-"));
+  context.after(async () => await rm(fixtureRoot, { recursive: true, force: true }));
+
+  const cleanCloneRoot = join(fixtureRoot, "clean-clone");
+  const symlinkedCloneRoot = join(fixtureRoot, "symlinked-clean-clone");
+  const sourceScript = join(ROOT, "scripts", "verify-phase30-reconciliation.mjs");
+  const targetScript = join(cleanCloneRoot, "scripts", "verify-phase30-reconciliation.mjs");
+  const manifest = join(cleanCloneRoot, "docs", "phases", "30-surface-parity-agent-ux", "reconciliation-manifest.json");
+  await mkdir(dirname(targetScript), { recursive: true });
+  await mkdir(dirname(manifest), { recursive: true });
+  await writeFile(targetScript, await readFile(sourceScript, "utf8"));
+  await writeFile(manifest, await readFile(reconciliationManifestPath(ROOT), "utf8"));
+  await symlink(cleanCloneRoot, symlinkedCloneRoot, "dir");
+
+  const result = spawnSync(
+    process.execPath,
+    [join(symlinkedCloneRoot, "scripts", "verify-phase30-reconciliation.mjs"), "--require-safety"],
+    { encoding: "utf8" },
+  );
+
+  assert.notEqual(result.status, 0, `stdout:\n${result.stdout}\nstderr:\n${result.stderr}`);
+  assert.equal(result.stdout, "");
+  assert.match(result.stderr, /필수 커밋이 존재하지 않습니다: 9b049f72a96457c46139811f86d36589f073df64/u);
 });
 
 test("문자열만 있는 모호한 hunk anchor를 정적 검증에서 거부한다", async () => {

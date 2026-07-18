@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
-import { readFile } from "node:fs/promises";
+import { readFile, realpath } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
@@ -508,6 +508,21 @@ async function main() {
   );
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+async function isDirectExecution() {
+  if (!process.argv[1]) return false;
+  const invokedPath = resolve(process.argv[1]);
+  const modulePath = fileURLToPath(import.meta.url);
+  try {
+    const [canonicalInvokedPath, canonicalModulePath] = await Promise.all([
+      realpath(invokedPath),
+      realpath(modulePath),
+    ]);
+    return canonicalInvokedPath === canonicalModulePath;
+  } catch {
+    return invokedPath === modulePath;
+  }
+}
+
+if (await isDirectExecution()) {
   await main();
 }
