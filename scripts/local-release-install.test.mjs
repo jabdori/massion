@@ -26,6 +26,17 @@ const version = "1.0.0";
 const ownerMarker = "massion-local-1.0.0";
 const commands = ["massion", "massion-connector", "massion-server"];
 
+function nativeRuntime() {
+  const operatingSystem = process.platform === "darwin" ? "darwin" : "linux";
+  const architecture = process.arch === "arm64" ? "arm64" : "amd64";
+  const platform = `${operatingSystem}-${architecture}`;
+  return {
+    version: "3.2.1",
+    platform,
+    binary: `runtime/surrealdb/3.2.1/${platform}/surreal`,
+  };
+}
+
 async function filesUnder(path) {
   const files = [];
   for (const entry of await readdir(path, { withFileTypes: true })) {
@@ -71,19 +82,31 @@ async function makeBundle(context) {
   for (const path of Object.values(entrypoints)) {
     const absolute = join(bundle, path);
     await mkdir(dirname(absolute), { recursive: true });
-    await writeFile(absolute, "#!/usr/bin/env node\nprocess.stdout.write('fixture runtime\\n');\n", {
+    const content =
+      path === entrypoints.massion
+        ? "#!/usr/bin/env node\nif (process.argv[2] === 'native-runtime') process.stdout.write(JSON.stringify({ binary: process.env.MASSION_SURREAL_BINARY, sha256: process.env.MASSION_SURREAL_SHA256 }));\nelse process.stdout.write('fixture runtime\\n');\n"
+        : "#!/usr/bin/env node\nprocess.stdout.write('fixture runtime\\n');\n";
+    await writeFile(absolute, content, {
       mode: 0o600,
     });
   }
+  const surreal = nativeRuntime();
+  const nativeBinary = join(bundle, surreal.binary);
+  await mkdir(dirname(nativeBinary), { recursive: true });
+  await writeFile(nativeBinary, "#!/bin/sh\nprintf '3.2.1 for fixture\\n'\n", { mode: 0o700 });
+  await chmod(nativeBinary, 0o700);
+  surreal.sha256 = createHash("sha256")
+    .update(await readFile(nativeBinary))
+    .digest("hex");
   await writeFile(
     join(bundle, "release-bundle.json"),
-    `${JSON.stringify({ schema: "massion.release-bundle.v1", version, entrypoints }, undefined, 2)}\n`,
+    `${JSON.stringify({ schema: "massion.release-bundle.v1", version, entrypoints, nativeRuntime: { surrealdb: surreal } }, undefined, 2)}\n`,
     { mode: 0o600 },
   );
   await mkdir(join(bundle, "web"), { recursive: true });
   await writeFile(join(bundle, "web", "index.html"), "<!doctype html>\n", { mode: 0o600 });
   await writeChecksums(bundle);
-  return { bundle, prefix, root };
+  return { bundle, prefix, root, surreal };
 }
 
 function runScript(script, prefix, environment = {}) {
@@ -140,6 +163,26 @@ test("공백이 있는 개인 경로에 connector를 설치하고 진단한 뒤 
   for (const command of commands) {
     await assert.rejects(async () => await lstat(join(prefix, "bin", command)), { code: "ENOENT" });
   }
+});
+
+test("설치기는 native SurrealDB binary를 XDG cache로 복사하고 massion에 검증 metadata를 전달한다", async (context) => {
+  const { bundle, prefix, root, surreal } = await makeBundle(context);
+  const home = join(root, "home");
+  const dataHome = join(root, "xdg-data");
+  await mkdir(home, { recursive: true, mode: 0o700 });
+
+  assertSucceeded(runScript(join(bundle, "install.sh"), prefix, { HOME: home, XDG_DATA_HOME: dataHome }));
+
+  const cached = join(dataHome, "massion", surreal.binary);
+  assert.equal(await readFile(cached, "utf8"), await readFile(join(bundle, surreal.binary), "utf8"));
+  assert.equal((await stat(cached)).mode & 0o777, 0o700);
+  const launched = spawnSync(join(prefix, "bin/massion"), ["native-runtime"], {
+    encoding: "utf8",
+    env: { ...process.env, HOME: home, XDG_DATA_HOME: dataHome },
+    timeout: 10_000,
+  });
+  assertSucceeded(launched);
+  assert.deepEqual(JSON.parse(launched.stdout), { binary: cached, sha256: surreal.sha256 });
 });
 
 test("기존 외부 connector 실행 파일을 덮어쓰지 않고 설치 전 상태를 보존한다", async (context) => {

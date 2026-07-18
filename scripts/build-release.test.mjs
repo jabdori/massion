@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { lstat, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { chmod, lstat, mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -44,6 +44,65 @@ test("release manifest를 쓰기 전에 모든 runtime entrypoint를 검증한�
   await writeFile(join(root, connector), "#!/usr/bin/env node\n");
 
   await assert.doesNotReject(async () => await buildRelease.verifyRuntimeEntrypoints(root, { connector }));
+});
+
+test("현재 build host용 SurrealDB 3.2.1 binary를 override에서 release runtime으로 복사하고 metadata를 만든다", async (context) => {
+  assert.equal(typeof buildRelease.stageNativeSurrealRuntime, "function");
+  const root = await mkdtemp(join(tmpdir(), "massion-release-surreal-runtime-"));
+  context.after(async () => await rm(root, { recursive: true, force: true }));
+  const source = join(root, "surreal-fixture");
+  await writeFile(source, "#!/bin/sh\nprintf '3.2.1 for fixture\\n'\n", { mode: 0o700 });
+  await chmod(source, 0o700);
+
+  const runtime = await buildRelease.stageNativeSurrealRuntime(root, {
+    platform: "darwin",
+    architecture: "arm64",
+    environment: { MASSION_SURREAL_BINARY: source },
+  });
+
+  const binary = join(root, "runtime/surrealdb/3.2.1/darwin-arm64/surreal");
+  assert.deepEqual(runtime, {
+    version: "3.2.1",
+    platform: "darwin-arm64",
+    binary: "runtime/surrealdb/3.2.1/darwin-arm64/surreal",
+    sha256: "816f9f8e1eb1ab7c95c4ddbbd211d8f16afae512f3767569b27de87810584403",
+  });
+  assert.equal(await readFile(binary, "utf8"), await readFile(source, "utf8"));
+  assert.equal((await stat(binary)).mode & 0o777, 0o700);
+});
+
+test("SurrealDB binary override가 없으면 version을 URL에 고정한 공식 archive를 사용한다", () => {
+  assert.equal(typeof buildRelease.nativeSurrealDownloadUrl, "function");
+  assert.equal(
+    buildRelease.nativeSurrealDownloadUrl("linux-amd64"),
+    "https://download.surrealdb.com/v3.2.1/surreal-v3.2.1.linux-amd64.tgz",
+  );
+});
+
+test("개인용 release bundle은 현재 host용 SurrealDB runtime metadata만 기록한다", () => {
+  assert.equal(typeof buildRelease.createLocalReleaseBundle, "function");
+  const nativeRuntime = {
+    version: "3.2.1",
+    platform: "darwin-arm64",
+    binary: "runtime/surrealdb/3.2.1/darwin-arm64/surreal",
+    sha256: "a".repeat(64),
+  };
+  const bundle = buildRelease.createLocalReleaseBundle({
+    gitCommit: "b".repeat(40),
+    sourceDigest: "c".repeat(64),
+    entrypoints: { massion: "runtime/node_modules/@massion/cli/dist/main.js" },
+    nativeRuntime,
+  });
+
+  assert.deepEqual(bundle, {
+    schema: "massion.release-bundle.v1",
+    version: "1.0.0",
+    gitCommit: "b".repeat(40),
+    sourceDigest: `sha256:${"c".repeat(64)}`,
+    platforms: ["darwin-arm64"],
+    entrypoints: { massion: "runtime/node_modules/@massion/cli/dist/main.js" },
+    nativeRuntime: { surrealdb: nativeRuntime },
+  });
 });
 
 test("배포 runtime의 작업공간 밖 심볼릭 링크를 제거하고 나머지 링크 경계를 검증한다", async (context) => {

@@ -101,11 +101,12 @@ if (!artifact || typeof artifact.digest !== "string" || !/^sha256:[a-f0-9]{64}$/
 const toolchains = manifest.toolchains;
 if (!toolchains || typeof toolchains.node !== "string" || typeof toolchains.bun !== "string") throw new Error("릴리스 호환성 정보가 없습니다");
 const compatibility = manifest.compatibility ?? {
-  platforms: ["darwin-arm64", "darwin-x64", "linux-arm64", "linux-x64"],
+  platforms: ["darwin-arm64", "darwin-amd64", "linux-arm64", "linux-amd64"],
   node: { minMajor: 24 },
   bun: { minVersion: "1.3.0" },
 };
-const platform = `${process.platform}-${process.arch}`;
+const architecture = process.arch === "x64" ? "amd64" : process.arch;
+const platform = `${process.platform}-${architecture}`;
 if (!compatibility || !Array.isArray(compatibility.platforms) || !compatibility.platforms.includes(platform)) throw new Error(`현재 실행 환경(${platform})과 호환되지 않는 release입니다`);
 const nodeRequiredMajor = Number(compatibility.node?.minMajor);
 const bunRequired = semver(compatibility.bun?.minVersion);
