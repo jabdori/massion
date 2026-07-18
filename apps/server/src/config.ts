@@ -50,7 +50,7 @@ function databaseLocation(environment: Readonly<Record<string, string | undefine
   readonly namespace: string;
   readonly database: string;
 } {
-  const url = environment.MASSION_DATABASE_URL ?? "http://127.0.0.1:7330";
+  const url = environment.MASSION_DATABASE_URL ?? "ws://127.0.0.1:7330";
   const namespace = environment.MASSION_DATABASE_NAMESPACE ?? "massion";
   const database = environment.MASSION_DATABASE_NAME ?? "massion";
   if (![namespace, database].every((name) => DATABASE_IDENTIFIER.test(name)))
