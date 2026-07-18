@@ -8,6 +8,7 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 import {
+  SAFETY_COMMIT,
   loadReconciliationManifest,
   parseReconciliationArguments,
   reconciliationManifestPath,
@@ -16,8 +17,35 @@ import {
 } from "./verify-phase30-reconciliation.mjs";
 
 const ROOT = resolve(join(dirname(fileURLToPath(import.meta.url)), ".."));
+const safetySnapshotAvailable =
+  spawnSync("git", ["-C", ROOT, "cat-file", "-e", `${SAFETY_COMMIT}^{commit}`], { stdio: "ignore" }).status === 0;
+const strictSafetySkip = safetySnapshotAvailable
+  ? false
+  : "로컬 안전 스냅샷 참조가 없는 clean clone에서는 strict 검증을 실행하지 않습니다";
 
-test("안전 스냅샷의 337개 변경 경로를 원장이 정확히 한 번씩 배정한다", async () => {
+test("일반 clean clone은 로컬 안전 참조 없이 원장 테스트를 통과한다", async (context) => {
+  const fixtureRoot = await mkdtemp(join(tmpdir(), "massion-phase30-public-clean-clone-"));
+  context.after(async () => await rm(fixtureRoot, { recursive: true, force: true }));
+
+  const cloneRoot = join(fixtureRoot, "repository");
+  const clone = spawnSync("git", ["clone", "--quiet", "--no-local", ROOT, cloneRoot], { encoding: "utf8" });
+  assert.equal(clone.status, 0, `stdout:\n${clone.stdout}\nstderr:\n${clone.stderr}`);
+
+  const testPath = join("scripts", "verify-phase30-reconciliation.test.mjs");
+  await writeFile(join(cloneRoot, testPath), await readFile(join(ROOT, testPath), "utf8"));
+  const environment = { ...process.env };
+  delete environment.NODE_TEST_CONTEXT;
+  const result = spawnSync(
+    process.execPath,
+    ["--test", "--test-skip-pattern=^일반 clean clone은 로컬 안전 참조 없이 원장 테스트를 통과한다$", testPath],
+    { cwd: cloneRoot, encoding: "utf8", env: environment },
+  );
+
+  assert.doesNotMatch(result.stderr, /run\(\) is being called recursively/u);
+  assert.equal(result.status, 0, `stdout:\n${result.stdout}\nstderr:\n${result.stderr}`);
+});
+
+test("안전 스냅샷의 337개 변경 경로를 원장이 정확히 한 번씩 배정한다", { skip: strictSafetySkip }, async () => {
   const errors = await validatePhase30Reconciliation(ROOT, { requireSafety: true });
   assert.deepEqual(errors, []);
 
@@ -145,7 +173,7 @@ test("공용 hunk primarySlice는 primary path의 실제 소유 slice와 일치�
   assert.ok(errors.some((error) => error.includes("primary path 소유 slice와 일치하지 않습니다")));
 });
 
-test("안전 커밋 strict 검증은 잘못된 hunk 전후 문맥을 거부한다", async () => {
+test("안전 커밋 strict 검증은 잘못된 hunk 전후 문맥을 거부한다", { skip: strictSafetySkip }, async () => {
   const source = await loadReconciliationManifest(ROOT);
   const manifest = JSON.parse(JSON.stringify(source));
   manifest.sharedHunkAnchors[0].owners[0].before = "잘못된 이전 문맥";
@@ -157,7 +185,7 @@ test("안전 커밋 strict 검증은 잘못된 hunk 전후 문맥을 거부한�
   assert.ok(errors.some((error) => error.includes("이전 문맥")));
 });
 
-test("안전 커밋 strict 검증은 추가 hunk 밖의 정확해 보이는 위치도 거부한다", async () => {
+test("안전 커밋 strict 검증은 추가 hunk 밖의 정확해 보이는 위치도 거부한다", { skip: strictSafetySkip }, async () => {
   const source = await loadReconciliationManifest(ROOT);
   const manifest = JSON.parse(JSON.stringify(source));
   const owner = manifest.sharedHunkAnchors[0].owners[0];
@@ -174,22 +202,26 @@ test("안전 커밋 strict 검증은 추가 hunk 밖의 정확해 보이는 위�
   assert.ok(errors.some((error) => error.includes("변경 범위")));
 });
 
-test("안전 커밋 strict 검증은 반복되는 전후 문맥의 모호한 hunk owner를 거부한다", async () => {
-  const source = await loadReconciliationManifest(ROOT);
-  const manifest = JSON.parse(JSON.stringify(source));
-  const owner = manifest.sharedHunkAnchors[0].owners[0];
-  owner.startLine = 205;
-  owner.endLine = 205;
-  owner.before = "        { cause: error },";
-  owner.match = "      );";
-  owner.after = "    }";
-  const directory = await mkdtemp(join(tmpdir(), "massion-phase30-anchor-ambiguous-"));
-  const manifestPath = join(directory, "reconciliation-manifest.json");
-  await writeFile(manifestPath, `${JSON.stringify(manifest, undefined, 2)}\n`);
+test(
+  "안전 커밋 strict 검증은 반복되는 전후 문맥의 모호한 hunk owner를 거부한다",
+  { skip: strictSafetySkip },
+  async () => {
+    const source = await loadReconciliationManifest(ROOT);
+    const manifest = JSON.parse(JSON.stringify(source));
+    const owner = manifest.sharedHunkAnchors[0].owners[0];
+    owner.startLine = 205;
+    owner.endLine = 205;
+    owner.before = "        { cause: error },";
+    owner.match = "      );";
+    owner.after = "    }";
+    const directory = await mkdtemp(join(tmpdir(), "massion-phase30-anchor-ambiguous-"));
+    const manifestPath = join(directory, "reconciliation-manifest.json");
+    await writeFile(manifestPath, `${JSON.stringify(manifest, undefined, 2)}\n`);
 
-  const errors = await validatePhase30Reconciliation(ROOT, { requireSafety: true, manifestPath });
-  assert.ok(errors.some((error) => error.includes("유일하지 않습니다")));
-});
+    const errors = await validatePhase30Reconciliation(ROOT, { requireSafety: true, manifestPath });
+    assert.ok(errors.some((error) => error.includes("유일하지 않습니다")));
+  },
+);
 
 test("Phase 30 구현 계획은 독립 복구 근거가 없는 완료 체크박스를 사용하지 않는다", async () => {
   const plan = await readFile(
