@@ -20,7 +20,7 @@ import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { basename, dirname, isAbsolute, join, resolve, sep } from "node:path";
 import { setTimeout } from "node:timers";
-import { fileURLToPath, pathToFileURL, URL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const SHA256 = /^sha256:[a-f0-9]{64}$/u;
 const GIT_COMMIT = /^[a-f0-9]{40}$/u;
@@ -74,7 +74,6 @@ const OBSERVATION_KINDS = new Set([
   "local-start",
   "local-stop",
   "runtime-subscription-lineage",
-  "server-restore",
   "subscription-accounts",
   "provider-auth-login",
   "subscription-doctor",
@@ -924,23 +923,6 @@ export function parseAndValidateObservedUatOutput(kind, raw, expectedValue = {})
       runId: observedIdentifier(terminal.runId, "runId"),
       status: terminal.status,
     };
-  } else if (kind === "server-restore") {
-    const restored = observedExact(
-      value,
-      ["timestamp", "level", "event", "path", "checksum", "migrations"],
-      "server restore 응답",
-    );
-    if (
-      restored.level !== "info" ||
-      restored.event !== "server.restore.completed" ||
-      restored.path !== expected.path ||
-      typeof restored.checksum !== "string" ||
-      !/^[a-f0-9]{64}$/u.test(restored.checksum)
-    ) {
-      throw new Error("server restore 완료 계보가 일치하지 않습니다");
-    }
-    observedInstant(restored.timestamp, "server restore timestamp");
-    facts = { event: restored.event, migrations: observedInteger(restored.migrations, "restore migrations", 0) };
   }
   if (facts === undefined) throw new Error("UAT 관찰 결과를 검증하지 못했습니다");
   return { kind, facts, digest: observationDigest(kind, facts) };
@@ -1410,7 +1392,6 @@ export async function createUatWorkspace(parent = tmpdir()) {
     stateHome: join(root, "xdg-state"),
     temporaryDirectory: join(root, "tmp"),
     extractedDirectory: join(root, "release"),
-    restoreDirectory: join(root, "restore"),
   };
   for (const path of Object.values(paths).slice(1)) await ownerOnlyDirectory(path);
   return paths;
@@ -1826,66 +1807,6 @@ export async function atomicWriteSubscriptionUatReceipt(path, value) {
     throw error;
   }
   return receipt;
-}
-
-export async function rebindUatCliEndpoint(configPath, endpointValue) {
-  const target = resolve(configPath);
-  const metadata = await lstat(target);
-  if (
-    !metadata.isFile() ||
-    metadata.isSymbolicLink() ||
-    (metadata.mode & 0o077) !== 0 ||
-    (typeof process.getuid === "function" && metadata.uid !== process.getuid()) ||
-    metadata.size < 1 ||
-    metadata.size > 64 * 1024
-  ) {
-    throw new Error("UAT CLI config는 현재 사용자 소유의 0600 일반 파일이어야 합니다");
-  }
-  const endpoint = new URL(endpointValue);
-  if (
-    endpoint.protocol !== "http:" ||
-    !new Set(["127.0.0.1", "[::1]", "localhost"]).has(endpoint.hostname) ||
-    endpoint.username ||
-    endpoint.password
-  ) {
-    throw new Error("UAT 복구 endpoint는 자격 증명이 없는 local loopback HTTP여야 합니다");
-  }
-  const config = observedExact(
-    JSON.parse(await readFile(target, "utf8")),
-    ["schemaVersion", "selectedProfile", "profiles"],
-    "UAT CLI config",
-  );
-  if (config.schemaVersion !== "massion.cli.config.v1") throw new Error("UAT CLI config schema가 유효하지 않습니다");
-  const selectedProfile = observedIdentifier(config.selectedProfile, "UAT CLI selected profile");
-  const profiles = observedObject(config.profiles, "UAT CLI profiles");
-  const selected = observedExact(profiles[selectedProfile], ["endpoint", "tokenReference"], "UAT CLI profile");
-  observedText(selected.tokenReference, "UAT CLI token reference", 4096);
-  const rebound = {
-    schemaVersion: "massion.cli.config.v1",
-    selectedProfile,
-    profiles: {
-      ...profiles,
-      [selectedProfile]: {
-        endpoint: endpoint.toString().replace(/\/$/u, ""),
-        tokenReference: selected.tokenReference,
-      },
-    },
-  };
-  const temporary = join(dirname(target), `.config-rebind-${String(process.pid)}-${randomBytes(8).toString("hex")}`);
-  const handle = await open(temporary, "wx", 0o600);
-  try {
-    await handle.writeFile(`${JSON.stringify(rebound, undefined, 2)}\n`, "utf8");
-    await handle.sync();
-  } finally {
-    await handle.close();
-  }
-  try {
-    await rename(temporary, target);
-    await chmod(target, 0o600);
-  } catch (error) {
-    await rm(temporary, { force: true });
-    throw error;
-  }
 }
 
 function runCaptured(command, arguments_, options = {}) {
@@ -2341,7 +2262,6 @@ export async function runSubscriptionUat(options) {
     });
     const massion = join(workspace.prefix, "bin", "massion");
     const connector = join(workspace.prefix, "bin", "massion-connector");
-    const server = join(workspace.prefix, "bin", "massion-server");
     const endpoint = `http://127.0.0.1:${String(port)}`;
     const required = async (input) => {
       const result = await runTmuxUatCommand(session, {
@@ -2584,104 +2504,6 @@ export async function runSubscriptionUat(options) {
       observation: { kind: "local-stop", expected: { statuses: ["stopped"] } },
     });
     await stopTmuxBackgroundCommand(session, "watch");
-    const restoreEnvironment = {
-      ...environment,
-      MASSION_MODE: "local",
-      MASSION_DATABASE_URL: "rocksdb://./massion.db",
-      MASSION_TOKEN_KEY_FILE: join(workspace.configHome, "massion", "token-key"),
-      MASSION_CREDENTIAL_KEY_FILE: join(workspace.configHome, "massion", "credential-key"),
-      MASSION_SOFTWARE_WORKSPACE_ROOT: join(workspace.restoreDirectory, "workspaces"),
-      MASSION_CONNECTOR_ROOT: join(workspace.restoreDirectory, "connectors"),
-      MASSION_HTTP_PORT: String(port + 10),
-      MASSION_REGISTRY_PORT: String(port + 11),
-      MASSION_METRICS_PORT: String(port + 12),
-    };
-    const restore = await runTmuxObservedCommand(session, {
-      window: "daemon",
-      step: "backup-restore",
-      command: server,
-      arguments: ["restore", backup],
-      environment: restoreEnvironment,
-      cwd: workspace.restoreDirectory,
-      timeoutMs: options.timeoutMs,
-      signal: options.signal,
-      observation: { kind: "server-restore", expected: { path: backup } },
-    });
-    commands.push(restore.command);
-    if (restore.command.exitCode !== 0 || !restore.observation) {
-      throw Object.assign(new Error("UAT backup restore JSON 검증이 실패했습니다"), restore.command);
-    }
-    lifecycleLineage.push(restore.observation.digest);
-    const restoredServer = await startTmuxBackgroundCommand(session, {
-      window: "daemon",
-      step: "restore-server-start",
-      command: server,
-      arguments: [],
-      environment: restoreEnvironment,
-      cwd: workspace.restoreDirectory,
-      signal: options.signal,
-    });
-    commands.push(restoredServer);
-    if (restoredServer.exitCode !== 0)
-      throw Object.assign(new Error("복구 server가 시작되지 않았습니다"), restoredServer);
-    const restoredEndpoint = `http://127.0.0.1:${String(port + 10)}`;
-    await required({
-      window: "user",
-      step: "restore-readiness",
-      command: process.execPath,
-      arguments: [
-        "-e",
-        "const u=process.argv[1];for(let i=0;i<120;i++){try{const r=await fetch(u+'/health/ready');const b=await r.json();if(r.ok&&b.status==='ready')process.exit(0)}catch{}await new Promise(v=>setTimeout(v,250))}process.exit(1)",
-        restoredEndpoint,
-      ],
-      environment: restoreEnvironment,
-    });
-    assertions.push("backup-restored", "restore-ready");
-    const cliConfigPath =
-      process.platform === "darwin"
-        ? join(workspace.home, "Library", "Application Support", "Massion", "config.json")
-        : join(workspace.configHome, "massion", "config.json");
-    await rebindUatCliEndpoint(cliConfigPath, restoredEndpoint);
-    for (const scenario of providerScenarios.filter((candidate) => candidate.status === "passed")) {
-      const evidence = providerEvidence.get(scenario.id);
-      if (!evidence) continue;
-      const lineage = await runTmuxObservedCommand(session, {
-        window: "user",
-        step: `${scenario.id}-restore-lineage`,
-        command: massion,
-        arguments: ["runtime", "lineage", "correlation", evidence.correlationId, "--json"],
-        environment,
-        timeoutMs: options.timeoutMs,
-        signal: options.signal,
-        observation: {
-          kind: "runtime-subscription-lineage",
-          expected: {
-            correlationId: evidence.correlationId,
-            accountId: evidence.account.accountId,
-            providerId: scenario.provider,
-            requireSettledSuccess: true,
-          },
-        },
-      });
-      scenario.commands.push(lineage.command);
-      const restoredAttemptIds =
-        lineage.observation?.facts.executions.flatMap((execution) =>
-          execution.attempts.map((attempt) => attempt.attemptId),
-        ) ?? [];
-      if (
-        lineage.command.exitCode !== 0 ||
-        !lineage.observation ||
-        JSON.stringify(restoredAttemptIds) !== JSON.stringify(evidence.attemptIds)
-      ) {
-        scenario.status = "failed";
-        scenario.failureClass = classifyUatFailure(lineage.command.step, lineage.command.exitCode || 65);
-      } else {
-        scenario.assertions.push("restore-subscription-lineage-verified");
-        scenario.lineage.push(lineage.observation.digest);
-      }
-      scenario.endedAt = new Date().toISOString();
-    }
-    await stopTmuxBackgroundCommand(session, "daemon");
     await verifyOperationalLogFile(join(workspace.stateHome, "massion", "server.log"), ownerIdentity);
     assertions.push("operational-log-redacted");
     await required({
@@ -2696,7 +2518,7 @@ export async function runSubscriptionUat(options) {
       command: "/bin/sh",
       arguments: [
         "-c",
-        'for name in massion massion-connector massion-server; do test ! -e "$1/$name" && test ! -L "$1/$name" || exit 1; done; test ! -e "$2" && test ! -L "$2" && test -d "$3"',
+        'for name in massion massion-connector; do test ! -e "$1/$name" && test ! -L "$1/$name" || exit 1; done; test ! -e "$2" && test ! -L "$2" && test -d "$3"',
         "uat-check",
         join(workspace.prefix, "bin"),
         join(workspace.prefix, "lib/massion", identity.version),

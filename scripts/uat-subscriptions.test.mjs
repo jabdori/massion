@@ -34,7 +34,6 @@ import {
   planProviderScenarios,
   planUnsupportedLineageScenarios,
   repositoryRootForScript,
-  rebindUatCliEndpoint,
   runSubscriptionUat,
   runTmuxObservedCommand,
   runTmuxUatCommand,
@@ -313,7 +312,7 @@ test("release manifest·archive·bundle·현재 clean commit이 모두 일치해
   );
 });
 
-test("HOME·XDG·prefix·복구 경로를 한 owner-only 임시 작업공간에 격리한다", async (context) => {
+test("HOME·XDG·prefix 경로를 한 owner-only 임시 작업공간에 격리한다", async (context) => {
   const parent = await mkdtemp(join(tmpdir(), "massion-uat-workspace-test-"));
   context.after(async () => await rm(parent, { recursive: true, force: true }));
 
@@ -327,7 +326,6 @@ test("HOME·XDG·prefix·복구 경로를 한 owner-only 임시 작업공간에 
     workspace.stateHome,
     workspace.temporaryDirectory,
     workspace.extractedDirectory,
-    workspace.restoreDirectory,
   ]) {
     const metadata = await stat(path);
     assert.equal(metadata.isDirectory(), true);
@@ -335,30 +333,16 @@ test("HOME·XDG·prefix·복구 경로를 한 owner-only 임시 작업공간에 
   }
 });
 
-test("복구 서버 검증용 CLI endpoint만 owner-only config에서 원자 교체하고 token 참조를 보존한다", async (context) => {
-  const root = await mkdtemp(join(tmpdir(), "massion-uat-cli-rebind-"));
-  const configPath = join(root, "config.json");
-  context.after(async () => await rm(root, { recursive: true, force: true }));
-  await writeFile(
-    configPath,
-    `${JSON.stringify({
-      schemaVersion: "massion.cli.config.v1",
-      selectedProfile: "local",
-      profiles: {
-        local: { endpoint: "http://127.0.0.1:7331", tokenReference: "file:/private/token-reference" },
-      },
-    })}\n`,
-    { mode: 0o600 },
-  );
+test("개인용 release UAT와 설치 안내는 공개되지 않은 server 명령이나 직접 RocksDB 경로를 사용하지 않는다", async () => {
+  const [uat, guide] = await Promise.all([
+    readFile(join(repositoryRoot, "scripts", "uat-subscriptions.mjs"), "utf8"),
+    readFile(join(repositoryRoot, "docs", "operations", "local-install.md"), "utf8"),
+  ]);
 
-  await rebindUatCliEndpoint(configPath, "http://127.0.0.1:7441");
-  const rebound = JSON.parse(await readFile(configPath, "utf8"));
-  assert.equal(rebound.profiles.local.endpoint, "http://127.0.0.1:7441");
-  assert.equal(rebound.profiles.local.tokenReference, "file:/private/token-reference");
-  assert.equal((await stat(configPath)).mode & 0o077, 0);
-
-  await chmod(configPath, 0o644);
-  await assert.rejects(async () => await rebindUatCliEndpoint(configPath, "http://127.0.0.1:7551"), /0600/u);
+  assert.doesNotMatch(uat, /\bmassion-server\b/u);
+  assert.doesNotMatch(uat, /rocksdb:\/\/\.\/massion\.db/u);
+  assert.doesNotMatch(uat, /\bserver-restore\b/u);
+  assert.doesNotMatch(guide, /\bmassion-server\b/u);
 });
 
 test("대화형 로그인 비동의와 승인되지 않은 Claude·Z.AI는 실제 성공 대신 not-run으로 계획한다", () => {
@@ -702,7 +686,7 @@ test("Codex 재사용 UAT는 두 번째 연결의 동일 계정·단일 provider
   );
 });
 
-test("설치·초기화·상태·catalog·doctor·quota·backup·restore JSON도 상태값까지 닫힌 계약으로 검증한다", () => {
+test("설치·초기화·상태·catalog·doctor·quota·backup JSON을 상태값까지 닫힌 계약으로 검증한다", () => {
   const observed = (kind, value, expected = {}) =>
     parseAndValidateObservedUatOutput(kind, typeof value === "string" ? value : JSON.stringify(value), expected);
   assert.equal(
@@ -855,21 +839,6 @@ test("설치·초기화·상태·catalog·doctor·quota·backup·restore JSON도
       { accountId: "account-uat-0001" },
     ).facts,
     { accountId: "account-uat-0001", available: true, exhausted: false, windows: 1 },
-  );
-  assert.deepEqual(
-    observed(
-      "server-restore",
-      {
-        timestamp: "2026-07-12T00:00:00.000Z",
-        level: "info",
-        event: "server.restore.completed",
-        path: "/safe/backup.json",
-        checksum: "a".repeat(64),
-        migrations: 24,
-      },
-      { path: "/safe/backup.json" },
-    ).facts,
-    { event: "server.restore.completed", migrations: 24 },
   );
   assert.throws(
     () =>
