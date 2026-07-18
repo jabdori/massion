@@ -9,7 +9,7 @@ prefix=${MASSION_PREFIX:-"${HOME:?HOME이 필요합니다}/.local"}
 release_dir="$prefix/lib/massion/$version"
 release_parent="$prefix/lib/massion"
 bin_dir="$prefix/bin"
-command_names="massion massion-connector massion-server"
+command_names="massion massion-connector"
 
 case "$prefix" in
   /*) ;;
@@ -338,21 +338,10 @@ esac
 exec node "$entrypoint" "$@"
 EOF
 
-cat >"$staged/bin/massion-server" <<'EOF'
-#!/bin/sh
-set -eu
-launcher=$0
-if [ -L "$launcher" ]; then launcher=$(readlink "$launcher"); fi
-release_dir=$(CDPATH= cd -- "$(dirname -- "$launcher")/.." && pwd)
-export MASSION_WEB_ROOT="$release_dir/web"
-exec node "$release_dir/runtime/node_modules/@massion/server/dist/main.js" "$@"
-EOF
-
 chmod -R go-rwx "$staged"
 chmod 700 \
   "$staged/bin/massion" \
   "$staged/bin/massion-connector" \
-  "$staged/bin/massion-server" \
   "$staged/uninstall.sh" \
   "$staged/update.sh"
 chmod 600 "$staged/.massion-install-owner" "$staged/release-bundle.json" "$staged/SHA256SUMS"

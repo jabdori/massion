@@ -24,7 +24,7 @@ import { fileURLToPath } from "node:url";
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const version = "1.0.0";
 const ownerMarker = "massion-local-1.0.0";
-const commands = ["massion", "massion-connector", "massion-server"];
+const commands = ["massion", "massion-connector"];
 
 function nativeRuntime() {
   const operatingSystem = process.platform === "darwin" ? "darwin" : "linux";
@@ -144,6 +144,8 @@ test("공백이 있는 개인 경로에 connector를 설치하고 진단한 뒤 
     assert.equal(wrapperMode & 0o077, 0, `${command} wrapper는 소유자 전용이어야 합니다`);
     assert.notEqual(wrapperMode & 0o100, 0, `${command} wrapper는 실행 가능해야 합니다`);
   }
+  await assert.rejects(async () => await lstat(join(prefix, "bin", "massion-server")), { code: "ENOENT" });
+  await assert.rejects(async () => await lstat(join(release, "bin", "massion-server")), { code: "ENOENT" });
 
   const connector = join(prefix, "bin/massion-connector");
   const help = spawnSync(connector, ["--help"], { encoding: "utf8", timeout: 10_000 });
