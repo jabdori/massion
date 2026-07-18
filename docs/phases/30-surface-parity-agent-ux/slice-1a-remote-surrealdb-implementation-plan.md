@@ -499,6 +499,8 @@ git commit -m "build(release): pin remote SurrealDB 3.2.1"
 
 **파일:** 코드 수정 없음. 작업 2의 코드 커밋에서만 실행합니다.
 
+> 작업 2 뒤 발견된 실제 Compose·Kubernetes runtime profile과 archive checksum 검증의 보강은 [Slice 1A 런타임 검증 보강 기록](slice-1a-runtime-validation-amendment.md)을 함께 실행합니다. 이 link의 보강은 선택 사항이 아니라 작업 3의 완료 조건입니다.
+
 - [ ] 현재 작업 트리를 Docker build context로 쓰지 않습니다. 코드 커밋을 기준으로 새 임시 복제본(clean clone)을 만들고, 그 안에서 Compose·Kubernetes·두 Linux 플랫폼의 SurrealDB image·동결 설치·전체 품질 검증·릴리스 묶음·복구 검증을 실행합니다. clean clone이므로 개인 파일과 후속 증거 문서가 Docker context·릴리스 산출물에 섞이지 않습니다.
 
 ```bash
