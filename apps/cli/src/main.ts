@@ -14,7 +14,7 @@ import { processJsonLines, writeWithBackpressure } from "./jsonl.js";
 import { initializeCli } from "./init.js";
 import { LocalDaemonManager, resolveLocalPaths } from "./local.js";
 import { defaultLocalEndpoint, ensureLocalEndpoint } from "./local-entrypoint.js";
-import { parseCliArguments, type CliInvocation } from "./parser.js";
+import { CliInformationalOutput, parseCliArguments, type CliInvocation } from "./parser.js";
 import { renderCliOutput } from "./render.js";
 import { runHeadless } from "./run.js";
 import { connectLocalServerSubscription, listLocalSubscriptionLoginProviders } from "./subscription-login.js";
@@ -22,48 +22,6 @@ import { resolveTokenReference } from "./token.js";
 import { createOnboardingPrompt } from "./onboarding.js";
 import { openWebConsole } from "./web-login.js";
 import { createProviderOnboardingPrompt } from "./provider-onboarding.js";
-
-const HELP = `Massion AgentOS
-
-사용법:
-  massion [명령] [옵션]
-  massion                 대화형 TUI 실행 및 첫 실행 온보딩
-  massion --web           Web Console 로그인
-  massion --help          이 도움말 표시
-  massion --version       버전 표시
-
-주요 명령:
-  init [endpoint] [email] [표시명]  개인 서버 초기화 또는 온보딩
-  status                         애플리케이션 상태 확인
-  run <요청>                     새 업무 실행
-  watch --events jsonl           이벤트 스트림 관찰
-  update [version]               업데이트 확인
-  upgrade [version]             호환 가능한 업데이트 설치
-  local <start|status|stop|ensure> 로컬 서버 관리
-
-기능 그룹:
-  org, work, chat, task, approval, assurance, runtime
-  auth, provider, subscription, ext, growth, optimization, doctor
-
-Provider 인증:
-  auth login [provider]           Provider 온보딩 또는 로그인
-
-공통 옵션:
-  --json                         한 번에 JSON으로 출력
-  --jsonl                        JSON Lines로 출력
-  --profile <이름>               사용할 연결 프로필 선택
-  --wait                         실행이 끝날 때까지 대기
-  --detach                       실행을 백그라운드로 분리
-
-예시:
-  massion
-  massion init
-  massion run "첫 번째 작업" --wait
-  massion auth login
-  massion status --json
-
-자동화·고급 명령은 각 명령의 사용법과 README를 참고하세요.
-`;
 
 async function resolveProviderLoginOnboarding(invocation: CliInvocation): Promise<CliInvocation> {
   if (invocation.command !== "auth" || invocation.subcommand !== "login" || invocation.arguments.length > 0) {
@@ -141,18 +99,8 @@ function exitCode(error: unknown): number {
 
 export async function runCli(argv = process.argv.slice(2)): Promise<number> {
   try {
-    if (argv[0] === "--help" || argv[0] === "-h") {
-      if (argv.length !== 1) throw new Error(`${argv[0]}에는 추가 인자를 지정할 수 없습니다`);
-      process.stdout.write(HELP);
-      return 0;
-    }
-    if (argv[0] === "--version" || argv[0] === "-v") {
-      if (argv.length !== 1) throw new Error(`${argv[0]}에는 추가 인자를 지정할 수 없습니다`);
-      process.stdout.write("Massion AgentOS 1.0.0\n");
-      return 0;
-    }
-    if (argv[0] === "--web") {
-      if (argv.length !== 1) throw new Error("massion --web에는 추가 인자를 지정할 수 없습니다");
+    const invocation = parseCliArguments(argv);
+    if (invocation.command === "web") {
       const store = new CliConfigStore();
       let config;
       try {
@@ -178,11 +126,6 @@ export async function runCli(argv = process.argv.slice(2)): Promise<number> {
       process.stdout.write(
         `Web Console: ${web.url}\n일회성 로그인 코드(5분): ${web.code}\n만료 시각: ${web.expiresAt}\n`,
       );
-      return 0;
-    }
-    const invocation = parseCliArguments(argv);
-    if (invocation.command === "help") {
-      process.stdout.write(HELP);
       return 0;
     }
     if (invocation.command === "version") {
@@ -361,6 +304,10 @@ export async function runCli(argv = process.argv.slice(2)): Promise<number> {
     );
     return 0;
   } catch (error) {
+    if (error instanceof CliInformationalOutput) {
+      process.stdout.write(error.output);
+      return 0;
+    }
     process.stderr.write(`${error instanceof Error ? error.message : "알 수 없는 CLI 오류"}\n`);
     return exitCode(error);
   }
