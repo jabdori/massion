@@ -1,9 +1,26 @@
+import { cancel, isCancel, select, text } from "@clack/prompts";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { runCli } from "./main.js";
+import { resolveProviderLoginOnboarding, runCli } from "./main.js";
+import type { CliInvocation } from "./parser.js";
+
+vi.mock("@clack/prompts", () => ({
+  cancel: vi.fn(),
+  isCancel: vi.fn(),
+  select: vi.fn(),
+  text: vi.fn(),
+}));
 
 describe("massion CLI entrypoint", () => {
+  const stdinTty = Object.getOwnPropertyDescriptor(process.stdin, "isTTY");
+  const stdoutTty = Object.getOwnPropertyDescriptor(process.stdout, "isTTY");
+
   afterEach(() => {
+    if (stdinTty) Object.defineProperty(process.stdin, "isTTY", stdinTty);
+    else Reflect.deleteProperty(process.stdin, "isTTY");
+    if (stdoutTty) Object.defineProperty(process.stdout, "isTTY", stdoutTty);
+    else Reflect.deleteProperty(process.stdout, "isTTY");
+    vi.resetAllMocks();
     vi.restoreAllMocks();
   });
 
@@ -34,5 +51,47 @@ describe("massion CLI entrypoint", () => {
 
     expect(write.mock.calls.map(([value]) => String(value)).join("")).toContain("Usage: massion status");
     expect(error).not.toHaveBeenCalled();
+  });
+
+  it("사람용 init 취소는 runtime이나 config를 만들지 않고 130으로 끝난다", async () => {
+    Object.defineProperty(process.stdin, "isTTY", { configurable: true, value: true });
+    Object.defineProperty(process.stdout, "isTTY", { configurable: true, value: true });
+    const cancelled = Symbol("cancelled");
+    vi.mocked(text).mockResolvedValueOnce(cancelled);
+    vi.mocked(isCancel).mockImplementation((value) => value === cancelled);
+    const error = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+
+    await expect(runCli(["init"])).resolves.toBe(130);
+
+    expect(cancel).toHaveBeenCalledWith("온보딩을 취소했습니다.");
+    expect(error).not.toHaveBeenCalled();
+  });
+
+  it("JSON init은 TTY여도 대화형 질문을 열지 않고 사용법 오류로 끝난다", async () => {
+    Object.defineProperty(process.stdin, "isTTY", { configurable: true, value: true });
+    Object.defineProperty(process.stdout, "isTTY", { configurable: true, value: true });
+    const error = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+
+    await expect(runCli(["init", "--json"])).resolves.toBe(2);
+
+    expect(text).not.toHaveBeenCalled();
+    expect(error).toHaveBeenCalledWith(expect.stringContaining("사용법: massion init"));
+  });
+
+  it("비대화형 auth login은 Provider 선택 UI를 열지 않는다", async () => {
+    const invocation: CliInvocation = {
+      command: "auth",
+      subcommand: "login",
+      arguments: [],
+      output: "json",
+      detach: false,
+      wait: false,
+      retryBlocked: false,
+      newAccount: false,
+    };
+
+    await expect(resolveProviderLoginOnboarding(invocation)).rejects.toThrow("사용법: massion auth login");
+
+    expect(select).not.toHaveBeenCalled();
   });
 });

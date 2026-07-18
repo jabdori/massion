@@ -1,6 +1,13 @@
-import { describe, expect, it } from "vitest";
+import { cancel, isCancel, select } from "@clack/prompts";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { collectProviderOnboardingAnswers, type ProviderOnboardingOption } from "./provider-onboarding.js";
+
+vi.mock("@clack/prompts", () => ({
+  cancel: vi.fn(),
+  isCancel: vi.fn(),
+  select: vi.fn(),
+}));
 
 const options: readonly ProviderOnboardingOption[] = [
   { providerId: "openai-codex", displayName: "OpenAI Codex" },
@@ -8,26 +15,40 @@ const options: readonly ProviderOnboardingOption[] = [
 ];
 
 describe("Provider 온보딩", () => {
-  it("번호로 공급자를 선택한다", async () => {
-    const prompts: string[] = [];
-    const result = await collectProviderOnboardingAnswers(options, async (prompt) => {
-      prompts.push(prompt);
-      return "2";
-    });
+  afterEach(() => {
+    vi.resetAllMocks();
+  });
+
+  it("Clack 선택 UI로 Provider를 선택한다", async () => {
+    vi.mocked(isCancel).mockReturnValue(false);
+    vi.mocked(select).mockResolvedValueOnce("anthropic-claude-code");
+
+    const result = await collectProviderOnboardingAnswers(options);
 
     expect(result.providerId).toBe("anthropic-claude-code");
-    expect(prompts[0]).toContain("연결할 Provider 번호");
-  });
-
-  it("입력이 비어 있으면 첫 번째 공급자를 선택한다", async () => {
-    await expect(collectProviderOnboardingAnswers(options, async () => "")).resolves.toEqual({
-      providerId: "openai-codex",
+    expect(select).toHaveBeenCalledWith({
+      message: "연결할 Provider를 선택하세요",
+      options: [
+        { label: "OpenAI Codex", value: "openai-codex" },
+        { label: "Anthropic Claude Agent", value: "anthropic-claude-code" },
+      ],
     });
   });
 
-  it("잘못된 번호는 다시 묻지 않고 오류로 종료한다", async () => {
-    await expect(collectProviderOnboardingAnswers(options, async () => "3")).rejects.toThrow(
-      "Provider 선택 번호가 유효하지 않습니다",
-    );
+  it("선택 취소는 로그인 전에 중단한다", async () => {
+    const cancelled = Symbol("cancelled");
+    vi.mocked(select).mockResolvedValueOnce(cancelled);
+    vi.mocked(isCancel).mockImplementation((value) => value === cancelled);
+
+    await expect(collectProviderOnboardingAnswers(options)).rejects.toMatchObject({ name: "PromptCancelledError" });
+
+    expect(cancel).toHaveBeenCalledWith("Provider 선택을 취소했습니다.");
+  });
+
+  it("선택 UI가 알 수 없는 Provider를 반환하면 거부한다", async () => {
+    vi.mocked(isCancel).mockReturnValue(false);
+    vi.mocked(select).mockResolvedValueOnce("unknown-provider");
+
+    await expect(collectProviderOnboardingAnswers(options)).rejects.toThrow("Provider 선택이 유효하지 않습니다");
   });
 });

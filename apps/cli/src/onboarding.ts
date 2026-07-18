@@ -1,7 +1,7 @@
-import { createInterface, type Interface } from "node:readline/promises";
-import { stdin as defaultInput, stdout as defaultOutput } from "node:process";
+import { cancel, isCancel, text } from "@clack/prompts";
 
 import { defaultLocalEndpoint } from "./local-entrypoint.js";
+import { PromptCancelledError } from "./prompt-cancelled.js";
 
 export interface OnboardingAnswers {
   readonly endpoint: string;
@@ -15,28 +15,22 @@ function required(value: string, label: string): string {
   return normalized;
 }
 
-export async function collectOnboardingAnswers(
-  question: (prompt: string) => Promise<string>,
-  input: { readonly environment?: Readonly<Record<string, string | undefined>> } = {},
-): Promise<OnboardingAnswers> {
-  const email = required(await question("소유자 이메일: "), "소유자 이메일");
-  const displayName = required(await question("표시 이름: "), "표시 이름");
-  return { endpoint: defaultLocalEndpoint(input.environment), email, displayName };
+async function askRequired(label: string): Promise<string> {
+  const value = await text({
+    message: label,
+    validate: (candidate) => (candidate?.trim() ? undefined : `${label}을 입력해 주세요`),
+  });
+  if (isCancel(value)) {
+    cancel("온보딩을 취소했습니다.");
+    throw new PromptCancelledError();
+  }
+  return required(value, label);
 }
 
-export function createOnboardingPrompt(
-  input: {
-    readonly input?: NodeJS.ReadableStream;
-    readonly output?: NodeJS.WritableStream;
-    readonly environment?: Readonly<Record<string, string | undefined>>;
-  } = {},
-): { readonly readline: Interface; readonly collect: () => Promise<OnboardingAnswers> } {
-  const readline = createInterface({ input: input.input ?? defaultInput, output: input.output ?? defaultOutput });
-  return {
-    readline,
-    collect: async () =>
-      await collectOnboardingAnswers((prompt) => readline.question(prompt), {
-        ...(input.environment === undefined ? {} : { environment: input.environment }),
-      }),
-  };
+export async function collectOnboardingAnswers(
+  input: { readonly environment?: Readonly<Record<string, string | undefined>> } = {},
+): Promise<OnboardingAnswers> {
+  const email = await askRequired("소유자 이메일");
+  const displayName = await askRequired("표시 이름");
+  return { endpoint: defaultLocalEndpoint(input.environment), email, displayName };
 }
