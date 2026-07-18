@@ -323,6 +323,18 @@ function commanderError(error: CommanderError, argv: readonly string[]): Error {
   return new Error("massion 사용법이 올바르지 않습니다");
 }
 
+function webInvocation(): CliInvocation {
+  return {
+    command: "web",
+    arguments: [],
+    output: "human",
+    detach: false,
+    wait: false,
+    retryBlocked: false,
+    newAccount: false,
+  };
+}
+
 function addLeaf(
   parent: Command,
   name: string,
@@ -368,8 +380,9 @@ function createProgram(
 }
 
 export function parseCliArguments(argv: readonly string[]): CliInvocation {
-  if (argv[0] === "--web" && argv.length !== 1) {
-    throw new Error("massion --web에는 추가 인자를 지정할 수 없습니다");
+  if (argv[0] === "--web") {
+    if (argv.length !== 1) throw new Error("massion --web에는 추가 인자를 지정할 수 없습니다");
+    return webInvocation();
   }
   let invocation: CliInvocation | undefined;
   let output = "";
@@ -395,15 +408,7 @@ export function parseCliArguments(argv: readonly string[]): CliInvocation {
   }
   if (!invocation) {
     if (program.opts<CommanderOptions>().web === true) {
-      return {
-        command: "web",
-        arguments: [],
-        output: "human",
-        detach: false,
-        wait: false,
-        retryBlocked: false,
-        newAccount: false,
-      };
+      return webInvocation();
     }
     if (argv.length === 0) throw new CliInformationalOutput(program.helpInformation());
     throw new Error("massion command를 해석하지 못했습니다");
