@@ -22,9 +22,10 @@
 - Modify: `apps/cli/src/local-surreal-runtime.ts`
 - Modify: `apps/cli/src/local-surreal-runtime.test.ts`
 
-- [ ] 먼저 실패 테스트로 binary 검증 뒤 `surreal start`가 loopback·인증·새 data 경로로 실행되는 계약을 추가합니다.
-- [ ] sidecar start, authenticated readiness, owned process 확인과 stop을 구현합니다.
-- [ ] focused test를 실행해 GREEN을 확인합니다.
+- [x] 먼저 실패 테스트로 binary 검증 뒤 `surreal start`가 loopback·인증·새 data 경로로 실행되는 계약을 추가합니다.
+- [x] sidecar start, loopback readiness, owned process 확인과 실패 cleanup을 구현합니다.
+- [ ] authenticated application readiness와 stop은 local supervisor 연결에서 구현합니다.
+- [x] focused test를 실행해 GREEN을 확인합니다.
 
 ### Task 3: Local application 연결 전환
 
