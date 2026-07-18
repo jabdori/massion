@@ -56,7 +56,7 @@ function workflowJobByName(workflow, name) {
   const jobsStart = workflow.indexOf("\njobs:\n");
   assert.ok(jobsStart !== -1, "workflow jobs section이 없습니다");
   const jobs = workflow.slice(jobsStart + "\njobs:\n".length);
-  const jobHeadings = [...jobs.matchAll(/^  [^\s][^:\n]*:$/gmu)];
+  const jobHeadings = [...jobs.matchAll(/^ {2}[^\s][^:\n]*:$/gmu)];
   const heading = `  ${name}:`;
   const matches = jobHeadings.filter(([line]) => line === heading);
   assert.equal(matches.length, 1, `${name} workflow job은 정확히 하나여야 합니다`);
@@ -119,9 +119,7 @@ function releaseBundleImagesBlock(builder) {
   const end = builder.indexOf("\n  );", start);
   assert.notEqual(end, -1, "release-bundle.json writeFile 호출의 끝을 찾지 못했습니다");
   const releaseBundleWrite = builder.slice(start, end);
-  const matches = [
-    ...releaseBundleWrite.matchAll(/^        images: \{\n(?<body>(?:^          .*\n?)*)^        \},$/gmu),
-  ];
+  const matches = [...releaseBundleWrite.matchAll(/^ {8}images: \{\n(?<body>(?:^ {10}.*\n?)*)^ {8}\},$/gmu)];
   assert.equal(matches.length, 1, "release bundle images 객체는 정확히 하나여야 합니다");
   return matches[0].groups.body;
 }
@@ -138,7 +136,7 @@ function kubernetesContainerBlock(kubernetes, containerName) {
 
 function kubernetesInitContainerBlock(kubernetes, containerName) {
   const initContainerSections = [
-    ...kubernetes.matchAll(/^      initContainers:\n(?<body>(?:^        .*\n?)*)^      containers:/gmu),
+    ...kubernetes.matchAll(/^ {6}initContainers:\n(?<body>(?:^ {8}.*\n?)*)^ {6}containers:/gmu),
   ];
   assert.equal(initContainerSections.length, 1, "Kubernetes initContainers section은 정확히 하나여야 합니다");
   const [initContainers] = initContainerSections;
@@ -183,13 +181,13 @@ test("원격 SurrealDB 배포 계약은 3.2.1의 registry·배포 이미지 이�
   const qemuStep = workflowStepByName(releaseJob, "QEMU 설치");
   const buildxStep = workflowStepByName(releaseJob, "Docker Buildx 설치");
   assert.ok(qemuStep.offset < buildxStep.offset, "QEMU는 Buildx보다 먼저 설정해야 합니다");
-  const qemuActionLines = workflow.match(/^        uses: docker\/setup-qemu-action@.*$/gmu) ?? [];
+  const qemuActionLines = workflow.match(/^ {8}uses: docker\/setup-qemu-action@.*$/gmu) ?? [];
   assert.deepEqual(
     qemuActionLines,
     [`        uses: ${QEMU_SETUP_ACTION}`],
     "workflow 전체에는 digest로 고정한 QEMU action만 정확히 하나여야 합니다",
   );
-  const binfmtImageLines = workflow.match(/^          image: .*tonistiigi\/binfmt.*$/gmu) ?? [];
+  const binfmtImageLines = workflow.match(/^ {10}image: .*tonistiigi\/binfmt.*$/gmu) ?? [];
   assert.deepEqual(
     binfmtImageLines,
     [`          image: ${QEMU_BINFMT_IMAGE}`],
@@ -353,51 +351,51 @@ test("원격 SurrealDB의 Compose와 Kubernetes runtime 보안 profile을 고정
   const composeSurrealdb = composeServiceBlock(compose, "surrealdb");
   expectSingleBlock(
     composeSurrealdb,
-    /^    secrets:\n      - database_owner_password$/gmu,
+    /^ {4}secrets:\n {6}- database_owner_password$/gmu,
     "    secrets:\n      - database_owner_password",
     "Compose SurrealDB secret mount가 다릅니다",
   );
   expectSingleBlock(
     composeSurrealdb,
-    /^    volumes:\n      - surreal-data:\/data$/gmu,
+    /^ {4}volumes:\n {6}- surreal-data:\/data$/gmu,
     "    volumes:\n      - surreal-data:/data",
     "Compose SurrealDB named data volume이 다릅니다",
   );
   expectSingleBlock(
     composeSurrealdb,
-    /^    security_opt:\n      - no-new-privileges:true$/gmu,
+    /^ {4}security_opt:\n {6}- no-new-privileges:true$/gmu,
     "    security_opt:\n      - no-new-privileges:true",
     "Compose SurrealDB no-new-privileges 설정이 다릅니다",
   );
   expectSingleBlock(
     composeSurrealdb,
-    /^    cap_drop:\n      - ALL$/gmu,
+    /^ {4}cap_drop:\n {6}- ALL$/gmu,
     "    cap_drop:\n      - ALL",
     "Compose SurrealDB capability drop 설정이 다릅니다",
   );
 
   expectSingleBlock(
     kubernetes,
-    /^      securityContext:\n        runAsNonRoot: true\n        runAsUser: 10001\n        runAsGroup: 10001\n        fsGroup: 10001\n        seccompProfile:\n          type: RuntimeDefault$/gmu,
+    /^ {6}securityContext:\n {8}runAsNonRoot: true\n {8}runAsUser: 10001\n {8}runAsGroup: 10001\n {8}fsGroup: 10001\n {8}seccompProfile:\n {10}type: RuntimeDefault$/gmu,
     "      securityContext:\n        runAsNonRoot: true\n        runAsUser: 10001\n        runAsGroup: 10001\n        fsGroup: 10001\n        seccompProfile:\n          type: RuntimeDefault",
     "Kubernetes SurrealDB pod security context가 다릅니다",
   );
   const kubernetesPrepareSecret = kubernetesInitContainerBlock(kubernetes, "prepare-secret");
   expectSingleBlock(
     kubernetesPrepareSecret,
-    /^          securityContext:\n            runAsNonRoot: false\n            runAsUser: 0\n            allowPrivilegeEscalation: false\n            readOnlyRootFilesystem: true\n            capabilities:\n              drop: \["ALL"\]\n              add: \["CHOWN", "FOWNER"\]$/gmu,
+    /^ {10}securityContext:\n {12}runAsNonRoot: false\n {12}runAsUser: 0\n {12}allowPrivilegeEscalation: false\n {12}readOnlyRootFilesystem: true\n {12}capabilities:\n {14}drop: \["ALL"\]\n {14}add: \["CHOWN", "FOWNER"\]$/gmu,
     '          securityContext:\n            runAsNonRoot: false\n            runAsUser: 0\n            allowPrivilegeEscalation: false\n            readOnlyRootFilesystem: true\n            capabilities:\n              drop: ["ALL"]\n              add: ["CHOWN", "FOWNER"]',
     "Kubernetes prepare-secret init container security context가 다릅니다",
   );
   expectSingleBlock(
     kubernetesPrepareSecret,
-    /^          command:\n            - sh\n            - -ec\n            - cp \/source\/database-owner-password \/target\/database-owner-password && chown 10001:10001 \/target\/database-owner-password && chmod 0600 \/target\/database-owner-password$/gmu,
+    /^ {10}command:\n {12}- sh\n {12}- -ec\n {12}- cp \/source\/database-owner-password \/target\/database-owner-password && chown 10001:10001 \/target\/database-owner-password && chmod 0600 \/target\/database-owner-password$/gmu,
     "          command:\n            - sh\n            - -ec\n            - cp /source/database-owner-password /target/database-owner-password && chown 10001:10001 /target/database-owner-password && chmod 0600 /target/database-owner-password",
     "Kubernetes SurrealDB runtime secret 초기화가 다릅니다",
   );
   expectSingleBlock(
     kubernetesPrepareSecret,
-    /^          volumeMounts:\n            - name: raw-secrets\n              mountPath: \/source\n              readOnly: true\n            - name: runtime-secrets\n              mountPath: \/target$/gmu,
+    /^ {10}volumeMounts:\n {12}- name: raw-secrets\n {14}mountPath: \/source\n {14}readOnly: true\n {12}- name: runtime-secrets\n {14}mountPath: \/target$/gmu,
     "          volumeMounts:\n            - name: raw-secrets\n              mountPath: /source\n              readOnly: true\n            - name: runtime-secrets\n              mountPath: /target",
     "Kubernetes prepare-secret init container secret volume mount가 다릅니다",
   );
@@ -405,19 +403,19 @@ test("원격 SurrealDB의 Compose와 Kubernetes runtime 보안 profile을 고정
   const kubernetesSurrealdb = kubernetesContainerBlock(kubernetes, "surrealdb");
   expectSingleBlock(
     kubernetesSurrealdb,
-    /^          env:\n            - name: SURREAL_PASSWORD_FILE\n              value: \/run\/massion-secrets\/database-owner-password$/gmu,
+    /^ {10}env:\n {12}- name: SURREAL_PASSWORD_FILE\n {14}value: \/run\/massion-secrets\/database-owner-password$/gmu,
     "          env:\n            - name: SURREAL_PASSWORD_FILE\n              value: /run/massion-secrets/database-owner-password",
     "Kubernetes SurrealDB password file 경로가 다릅니다",
   );
   expectSingleBlock(
     kubernetesSurrealdb,
-    /^          securityContext:\n            allowPrivilegeEscalation: false\n            readOnlyRootFilesystem: true\n            capabilities:\n              drop: \["ALL"\]$/gmu,
+    /^ {10}securityContext:\n {12}allowPrivilegeEscalation: false\n {12}readOnlyRootFilesystem: true\n {12}capabilities:\n {14}drop: \["ALL"\]$/gmu,
     '          securityContext:\n            allowPrivilegeEscalation: false\n            readOnlyRootFilesystem: true\n            capabilities:\n              drop: ["ALL"]',
     "Kubernetes SurrealDB container security context가 다릅니다",
   );
   expectSingleBlock(
     kubernetesSurrealdb,
-    /^          volumeMounts:\n            - name: data\n              mountPath: \/data\n            - name: runtime-secrets\n              mountPath: \/run\/massion-secrets\n              readOnly: true\n            - name: tmp\n              mountPath: \/tmp$/gmu,
+    /^ {10}volumeMounts:\n {12}- name: data\n {14}mountPath: \/data\n {12}- name: runtime-secrets\n {14}mountPath: \/run\/massion-secrets\n {14}readOnly: true\n {12}- name: tmp\n {14}mountPath: \/tmp$/gmu,
     "          volumeMounts:\n            - name: data\n              mountPath: /data\n            - name: runtime-secrets\n              mountPath: /run/massion-secrets\n              readOnly: true\n            - name: tmp\n              mountPath: /tmp",
     "Kubernetes SurrealDB writable·secret mount가 다릅니다",
   );
