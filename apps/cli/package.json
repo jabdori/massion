@@ -18,7 +18,8 @@
   "dependencies": {
     "@massion/application": "workspace:*",
     "@massion/runtime": "workspace:*",
-    "@massion/subscriptions": "workspace:*"
+    "@massion/subscriptions": "workspace:*",
+    "commander": "15.0.0"
   },
   "devDependencies": {
     "@massion/governance": "workspace:*",
