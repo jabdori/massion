@@ -16,6 +16,7 @@
     "typecheck": "pnpm build-deps && tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@clack/prompts": "1.7.0",
     "@massion/application": "workspace:*",
     "@massion/runtime": "workspace:*",
     "@massion/subscriptions": "workspace:*",

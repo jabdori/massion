@@ -19,24 +19,20 @@ import { renderCliOutput } from "./render.js";
 import { runHeadless } from "./run.js";
 import { connectLocalServerSubscription, listLocalSubscriptionLoginProviders } from "./subscription-login.js";
 import { resolveTokenReference } from "./token.js";
-import { createOnboardingPrompt } from "./onboarding.js";
+import { collectOnboardingAnswers } from "./onboarding.js";
+import { PromptCancelledError } from "./prompt-cancelled.js";
 import { openWebConsole } from "./web-login.js";
-import { createProviderOnboardingPrompt } from "./provider-onboarding.js";
+import { collectProviderOnboardingAnswers } from "./provider-onboarding.js";
 
-async function resolveProviderLoginOnboarding(invocation: CliInvocation): Promise<CliInvocation> {
+export async function resolveProviderLoginOnboarding(invocation: CliInvocation): Promise<CliInvocation> {
   if (invocation.command !== "auth" || invocation.subcommand !== "login" || invocation.arguments.length > 0) {
     return invocation;
   }
   if (invocation.output !== "human" || !process.stdin.isTTY || !process.stdout.isTTY) {
     throw new Error("사용법: massion auth login [providerId] (대화형 Provider 온보딩은 터미널에서 실행하세요)");
   }
-  const onboarding = createProviderOnboardingPrompt({ options: listLocalSubscriptionLoginProviders() });
-  try {
-    const answers = await onboarding.collect();
-    return { ...invocation, arguments: [answers.providerId] };
-  } finally {
-    onboarding.readline.close();
-  }
+  const answers = await collectProviderOnboardingAnswers(listLocalSubscriptionLoginProviders());
+  return { ...invocation, arguments: [answers.providerId] };
 }
 
 async function runReleaseUpdater(arguments_: readonly string[]): Promise<number> {
@@ -170,16 +166,11 @@ export async function runCli(argv = process.argv.slice(2)): Promise<number> {
       let endpoint = invocation.arguments[0] ?? defaultLocalEndpoint();
       let email = invocation.arguments[1];
       let displayName = invocation.arguments.slice(2).join(" ");
-      if (!email && !displayName && process.stdin.isTTY && process.stdout.isTTY) {
-        const onboarding = createOnboardingPrompt({ environment: process.env });
-        try {
-          const answers = await onboarding.collect();
-          endpoint = invocation.arguments[0] ?? answers.endpoint;
-          email = answers.email;
-          displayName = answers.displayName;
-        } finally {
-          onboarding.readline.close();
-        }
+      if (!email && !displayName && invocation.output === "human" && process.stdin.isTTY && process.stdout.isTTY) {
+        const answers = await collectOnboardingAnswers({ environment: process.env });
+        endpoint = invocation.arguments[0] ?? answers.endpoint;
+        email = answers.email;
+        displayName = answers.displayName;
       }
       if (!email || !displayName) throw new Error("사용법: massion init [endpoint] <email> <display name>");
       await ensureLocalEndpoint(endpoint, { start: async () => await new LocalDaemonManager().start() });
@@ -308,6 +299,7 @@ export async function runCli(argv = process.argv.slice(2)): Promise<number> {
       process.stdout.write(error.output);
       return 0;
     }
+    if (error instanceof PromptCancelledError) return 130;
     process.stderr.write(`${error instanceof Error ? error.message : "알 수 없는 CLI 오류"}\n`);
     return exitCode(error);
   }
