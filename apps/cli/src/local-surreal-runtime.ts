@@ -32,6 +32,42 @@ export interface LocalSurrealRuntimeDependencies {
   ) => Promise<{ readonly stdout: string }>;
 }
 
+export interface LocalSurrealRuntimeState {
+  readonly pid: number;
+  readonly endpoint: string;
+  readonly executable: string;
+  readonly startedAt: string;
+}
+
+interface LocalSurrealRuntimeProcess {
+  readonly pid?: number | undefined;
+  unref(): void;
+}
+
+export interface LocalSurrealRuntimeManagerDependencies {
+  readonly runtime: Pick<LocalSurrealRuntime, "binaryPath" | "dataDirectory">;
+  readonly credential: { readonly user: string; readonly password: string };
+  readonly port: number;
+  readonly attest: () => Promise<LocalSurrealRuntimeAttestation>;
+  readonly prepareDataDirectory: () => Promise<void>;
+  readonly readState: () => Promise<LocalSurrealRuntimeState | undefined>;
+  readonly writeState: (state: LocalSurrealRuntimeState) => Promise<void>;
+  readonly removeState: () => Promise<void>;
+  readonly spawn: (
+    command: string,
+    arguments_: readonly string[],
+    options: { readonly cwd: string; readonly env: NodeJS.ProcessEnv },
+  ) => LocalSurrealRuntimeProcess;
+  readonly processExists: (pid: number) => boolean;
+  readonly processCommand: (pid: number) => Promise<string>;
+  readonly ready: (endpoint: string) => Promise<boolean>;
+  readonly signal: (pid: number, signal: NodeJS.Signals) => void;
+  readonly wait: (milliseconds: number) => Promise<void>;
+}
+
+const START_ATTEMPTS = 120;
+const START_INTERVAL_MS = 250;
+
 function runtimePlatform(input: {
   readonly platform: NodeJS.Platform;
   readonly architecture: string;
@@ -162,4 +198,119 @@ export async function attestLocalSurrealRuntime(
   const afterDigest = await digest(executable);
   if (afterDigest !== beforeDigest) throw new Error("local SurrealDB 실행 파일이 version 확인 중 변경됐습니다");
   return { executable, digest: afterDigest, version: version(output.stdout) };
+}
+
+function endpoint(port: number): string {
+  if (!Number.isSafeInteger(port) || port < 1 || port > 65_535)
+    throw new Error("local SurrealDB port가 유효하지 않습니다");
+  return `http://127.0.0.1:${String(port)}`;
+}
+
+function startArguments(dataDirectory: string, port: number): readonly string[] {
+  if (!isAbsolute(dataDirectory)) throw new Error("local SurrealDB data directory는 절대 경로여야 합니다");
+  return [
+    "start",
+    "--bind",
+    `127.0.0.1:${String(port)}`,
+    "--no-banner",
+    `rocksdb://${resolve(dataDirectory)}?sync=every`,
+  ];
+}
+
+function credentialEnvironment(credential: LocalSurrealRuntimeManagerDependencies["credential"]): NodeJS.ProcessEnv {
+  if (!credential.user || !credential.password) throw new Error("local SurrealDB credential이 유효하지 않습니다");
+  return {
+    PATH: process.env.PATH,
+    HOME: process.env.HOME,
+    TMPDIR: process.env.TMPDIR,
+    SURREAL_USER: credential.user,
+    SURREAL_PASS: credential.password,
+    SURREAL_LOG: "warn",
+  };
+}
+
+export class LocalSurrealRuntimeManager {
+  readonly #dependencies: LocalSurrealRuntimeManagerDependencies;
+
+  public constructor(dependencies: LocalSurrealRuntimeManagerDependencies) {
+    this.#dependencies = dependencies;
+  }
+
+  async #owned(state: LocalSurrealRuntimeState, executable: string): Promise<boolean> {
+    if (state.executable !== executable || !this.#dependencies.processExists(state.pid)) return false;
+    const command = await this.#dependencies.processCommand(state.pid).catch(() => "");
+    return command === `${executable} start` || command.startsWith(`${executable} start `);
+  }
+
+  public async start(): Promise<{
+    readonly status: "started" | "already-running";
+    readonly pid: number;
+    readonly endpoint: string;
+  }> {
+    const attested = await this.#dependencies.attest();
+    const sidecarEndpoint = endpoint(this.#dependencies.port);
+    const existing = await this.#dependencies.readState();
+    if (existing) {
+      const ownedExisting = existing.endpoint === sidecarEndpoint && (await this.#owned(existing, attested.executable));
+      if (ownedExisting) {
+        for (let attempt = 0; attempt < START_ATTEMPTS; attempt += 1) {
+          if (await this.#dependencies.ready(existing.endpoint)) {
+            return { status: "already-running", pid: existing.pid, endpoint: existing.endpoint };
+          }
+          if (!this.#dependencies.processExists(existing.pid)) break;
+          await this.#dependencies.wait(START_INTERVAL_MS);
+        }
+        if (this.#dependencies.processExists(existing.pid)) {
+          if (!(await this.#owned(existing, attested.executable))) {
+            throw new Error("기록된 local SurrealDB PID가 다른 process이므로 덮어쓰지 않습니다");
+          }
+          this.#dependencies.signal(existing.pid, "SIGTERM");
+          await this.#dependencies.removeState();
+          throw new Error("기존 local SurrealDB sidecar의 준비 시간이 초과했습니다");
+        }
+      }
+      if (this.#dependencies.processExists(existing.pid)) {
+        throw new Error("기록된 local SurrealDB PID가 다른 process이므로 덮어쓰지 않습니다");
+      }
+      await this.#dependencies.removeState();
+    }
+
+    await this.#dependencies.prepareDataDirectory();
+    const child = this.#dependencies.spawn(
+      attested.executable,
+      startArguments(this.#dependencies.runtime.dataDirectory, this.#dependencies.port),
+      {
+        cwd: this.#dependencies.runtime.dataDirectory,
+        env: credentialEnvironment(this.#dependencies.credential),
+      },
+    );
+    child.unref();
+    if (!child.pid) throw new Error("local SurrealDB sidecar PID를 받지 못했습니다");
+    const state: LocalSurrealRuntimeState = {
+      pid: child.pid,
+      endpoint: sidecarEndpoint,
+      executable: attested.executable,
+      startedAt: new Date().toISOString(),
+    };
+    try {
+      await this.#dependencies.writeState(state);
+    } catch (error) {
+      if (this.#dependencies.processExists(child.pid) && (await this.#owned(state, attested.executable))) {
+        this.#dependencies.signal(child.pid, "SIGTERM");
+      }
+      await this.#dependencies.removeState().catch(() => undefined);
+      throw error;
+    }
+    for (let attempt = 0; attempt < START_ATTEMPTS; attempt += 1) {
+      if (await this.#dependencies.ready(sidecarEndpoint))
+        return { status: "started", pid: child.pid, endpoint: sidecarEndpoint };
+      if (!this.#dependencies.processExists(child.pid)) break;
+      await this.#dependencies.wait(START_INTERVAL_MS);
+    }
+    if (this.#dependencies.processExists(child.pid) && (await this.#owned(state, attested.executable))) {
+      this.#dependencies.signal(child.pid, "SIGTERM");
+    }
+    await this.#dependencies.removeState();
+    throw new Error("local SurrealDB sidecar가 준비되지 않았습니다");
+  }
 }
