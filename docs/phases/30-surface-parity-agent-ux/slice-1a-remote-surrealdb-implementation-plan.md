@@ -802,7 +802,7 @@ test -z "$(git status --porcelain --untracked-files=all)" || {
   exit 1
 }
 without_remote_surreal pnpm release:build
-without_remote_surreal pnpm verify:release artifacts/release-1.0.0
+env -u SURREAL_TEST_URL CI=true pnpm verify:release artifacts/release-1.0.0
 test -z "$(git status --porcelain --untracked-files=all)" || {
   printf '%s\n' "릴리스 묶음 생성·복구 검증 뒤 clean clone의 tracked 상태가 바뀌었습니다" >&2
   exit 1
@@ -856,6 +856,8 @@ test "$archive_kubernetes_image_count" = "1" || {
 ```
 
 모든 명령의 종료 코드는 `0`이어야 하고, `arm64_version`·`amd64_version` 출력에는 각각 숫자 경계가 있는 `3.2.1`이 포함되어야 합니다. Docker 환경 변수가 설정된 경우에는 검증을 시작하지 않고, 현재 context의 endpoint가 local Unix socket이며 그 context가 선택한 active Buildx builder가 `docker` driver와 `linux/amd64`, `linux/arm64`를 모두 제공할 때만 명시한 context·builder를 사용합니다. 증거 문서에는 local Unix-socket·`docker` driver·target platform 검증 사실만 기록하고 context·builder 이름과 socket 경로는 기록하지 않습니다. 두 image tag는 무작위 UUID와 검증 label·image ID로 소유권을 확인하며, cleanup은 현재 tag가 이번 실행의 같은 image ID·label을 가리킬 때만 force 없이 tag를 해제합니다. 따라서 다른 작업의 image나 tag를 삭제하지 않습니다. 각 image의 Config.User·Config.Entrypoint와 두 실제 container smoke는 non-root `surreal` 사용자(uid 10001), 임시 비밀 파일을 읽는 Massion entrypoint, `/data/massion.db` RocksDB 상태와 readiness를 각각 확인하고, 비밀값은 출력·문서화하지 않습니다. Compose는 `env -i`의 최소 환경, 명시한 파일·project directory·빈 env file만 사용하므로 외부 Compose 제어 변수, 모든 Massion override, secret 경로를 상속하지 않습니다. source와 deploy archive 모두에서 Compose image와 Kustomize 출력의 기대 image를 정확히 한 번 확인하며 archive 안의 SurrealDB Dockerfile digest도 확인합니다. `SURREAL_TEST_URL`이 있으면 여러 workspace의 원격 계약 테스트가 인증된 외부 데이터베이스에 실제 쓰기를 할 수 있으므로, clean clone의 설치·테스트·빌드·릴리스 검증에서는 반드시 제거합니다. 인증된 원격 SurrealDB 사용자 인수 테스트(UAT)는 별도 opt-in 시나리오로만 실행하고 이 작업의 성공 근거로 섞지 않습니다. Corepack shim·cache·사용자 home·pnpm store/cache·Node 임시 파일은 clone 밖의 scratch 안에만 만듭니다. 공유 Docker build cache나 다른 프로젝트 image를 전역 prune하지 않습니다. 이 검증은 SurrealDB binary version과 배포 참조를 증명하며 final Debian base·APT 결과를 포함한 image byte 재현성을 주장하지 않습니다.
+
+릴리스 복구 검증은 pnpm 11의 의존성 상태 검사(`verify-deps-before-run`)가 프로덕션 전용(production-only) `node_modules`의 의존성 상태를 복구하는 내부 설치를 실행해야 할 때에도 사람이 TTY 승인으로 개입하지 않도록 해당 호출에서만 `CI=true`를 명시합니다. 이는 의존성 상태 검사를 끄지 않으며, 사용자 환경의 pnpm 전역 설정도 변경하지 않습니다.
 
 ## 작업 4: 코드 SHA와 검증 근거를 문서 커밋으로 닫기
 
