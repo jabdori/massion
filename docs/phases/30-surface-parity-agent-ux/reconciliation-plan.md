@@ -20,8 +20,6 @@
 - 안전 참조(safety ref): `refs/massion-safety/phase-30-pre-reconcile-20260717-65922bd`
 - 안전 커밋(safety commit): `9b049f72a96457c46139811f86d36589f073df64`
 - 안전 트리(safety tree): `22e98dcfe1c689ded1b9b7d6d9caaec328ebddb9`
-- 원본 오염 작업 경로(original dirty worktree): `/Volumes/Crucial P3 PLUS/workspace.backup-20260502/massion/.worktrees/phase-30-parity-ux`
-- 정합성 복구 경로(reconciled worktree): `/Volumes/Crucial P3 PLUS/workspace.backup-20260502/massion/.worktrees/phase-30-reconciled`
 - 정합성 복구 브랜치(reconciled branch): `feat/phase-30-reconciled`
 - 의존성은 `pnpm install --frozen-lockfile` 동결 설치(frozen install)로 고정했습니다.
 - 깨끗한 기준선(clean base)에서 전체 `pnpm verify`를 실행했고 종료 코드(exit code)는 `0`이었습니다. 자세한 범위와 환경은 [깨끗한 기준선 전체 검증 증거](../../evidence/phase-30/clean-base-full-verification-2026-07-18.md)에 기록했습니다.
