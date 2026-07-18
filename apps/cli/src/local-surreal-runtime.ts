@@ -313,4 +313,27 @@ export class LocalSurrealRuntimeManager {
     await this.#dependencies.removeState();
     throw new Error("local SurrealDB sidecar가 준비되지 않았습니다");
   }
+
+  public async stop(): Promise<{ readonly status: "stopped" | "already-stopped"; readonly pid?: number }> {
+    const existing = await this.#dependencies.readState();
+    if (!existing) return { status: "already-stopped" };
+    if (!this.#dependencies.processExists(existing.pid)) {
+      await this.#dependencies.removeState();
+      return { status: "already-stopped", pid: existing.pid };
+    }
+
+    const expectedExecutable = resolve(this.#dependencies.runtime.binaryPath);
+    if (existing.endpoint !== endpoint(this.#dependencies.port) || !(await this.#owned(existing, expectedExecutable))) {
+      throw new Error("기록된 local SurrealDB PID가 다른 process이므로 종료하지 않습니다");
+    }
+    this.#dependencies.signal(existing.pid, "SIGTERM");
+    for (let attempt = 0; attempt < START_ATTEMPTS; attempt += 1) {
+      if (!this.#dependencies.processExists(existing.pid)) {
+        await this.#dependencies.removeState();
+        return { status: "stopped", pid: existing.pid };
+      }
+      await this.#dependencies.wait(START_INTERVAL_MS);
+    }
+    throw new Error("local SurrealDB sidecar 정상 종료 시간을 초과했습니다");
+  }
 }

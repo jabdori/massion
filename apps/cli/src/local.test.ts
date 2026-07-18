@@ -2,7 +2,7 @@ import { chmod, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { LocalDaemonManager, ensureLocalCredentialKey, ensureLocalTokenKey, resolveLocalPaths } from "./local.js";
 
@@ -27,14 +27,22 @@ describe("local daemon lifecycle", () => {
     }
   });
 
-  it("개인 서버에 owner-only Connector root를 전달한다", async () => {
+  it("개인 서버는 native sidecar를 먼저 시작하고 인증된 loopback database를 전달한다", async () => {
     const root = await mkdtemp(join(tmpdir(), "massion-local-connectors-"));
     const serverScript = join(root, "server.js");
     let childEnvironment: NodeJS.ProcessEnv | undefined;
     let childWorkingDirectory: string | undefined;
+    const order: string[] = [];
     try {
       await writeFile(serverScript, "", { mode: 0o600 });
       const paths = resolveLocalPaths({ HOME: root });
+      const surrealRuntime = {
+        start: vi.fn(async () => {
+          order.push("surreal-start");
+          return { status: "started" as const, pid: 41, endpoint: "http://127.0.0.1:7330" };
+        }),
+        stop: vi.fn(async () => ({ status: "stopped" as const, pid: 41 })),
+      };
       const manager = new LocalDaemonManager({
         environment: {
           HOME: root,
@@ -47,19 +55,28 @@ describe("local daemon lifecycle", () => {
         processExists: () => true,
         processCommand: () => Promise.resolve(`node ${serverScript}`),
         spawnProcess: (_command, _arguments, options) => {
+          order.push("application-start");
           childEnvironment = options.env;
           childWorkingDirectory = options.cwd;
           return { pid: 42, unref() {} };
         },
+        surrealRuntime,
       });
 
       await expect(manager.start()).resolves.toMatchObject({ status: "started", pid: 42 });
+      expect(order).toEqual(["surreal-start", "application-start"]);
+      expect(surrealRuntime.start).toHaveBeenCalledOnce();
       expect(childEnvironment?.MASSION_CONNECTOR_ROOT).toBe(paths.connectorDirectory);
-      expect(childEnvironment?.MASSION_DATABASE_URL).toBe("rocksdb://./massion.db");
+      expect(childEnvironment?.MASSION_DATABASE_URL).toBe("http://127.0.0.1:7330");
+      expect(childEnvironment?.MASSION_DATABASE_USER).toBe("massion");
+      expect(childEnvironment?.MASSION_DATABASE_PASSWORD_FILE).toBe(
+        join(root, ".config", "massion", "database-password"),
+      );
       expect(childWorkingDirectory).toBe(paths.dataDirectory);
       expect(childEnvironment?.MASSION_EDGE_CONNECTOR_ENABLED).toBe("true");
       expect(childEnvironment?.MASSION_CONNECTOR_HEARTBEAT_MS).toBe("45000");
       expect((await stat(paths.connectorDirectory)).mode & 0o777).toBe(0o700);
+      expect((await stat(join(root, ".config", "massion", "database-password"))).mode & 0o777).toBe(0o600);
     } finally {
       await rm(root, { recursive: true, force: true });
     }
@@ -69,6 +86,10 @@ describe("local daemon lifecycle", () => {
     const root = await mkdtemp(join(tmpdir(), "massion-local-stop-"));
     const signals: Array<{ pid: number; signal: NodeJS.Signals }> = [];
     let alive = true;
+    const surrealRuntime = {
+      start: vi.fn(async () => ({ status: "already-running" as const, pid: 41, endpoint: "http://127.0.0.1:7330" })),
+      stop: vi.fn(async () => ({ status: "stopped" as const, pid: 41 })),
+    };
     try {
       const paths = resolveLocalPaths({ HOME: root });
       const manager = new LocalDaemonManager({
@@ -80,10 +101,12 @@ describe("local daemon lifecycle", () => {
           alive = false;
         },
         wait: () => Promise.resolve(),
+        surrealRuntime,
       });
       await manager.initializeStateForTest({ pid: 42, endpoint: "http://127.0.0.1:7331" });
       await expect(manager.stop()).resolves.toMatchObject({ status: "stopped", pid: 42 });
       expect(signals).toEqual([{ pid: 42, signal: "SIGTERM" }]);
+      expect(surrealRuntime.stop).toHaveBeenCalledOnce();
       await expect(readFile(paths.pidFile, "utf8")).rejects.toThrow();
     } finally {
       await rm(root, { recursive: true, force: true });
