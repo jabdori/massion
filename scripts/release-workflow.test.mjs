@@ -106,6 +106,11 @@ function expectComposeImage(compose, serviceName, image, message) {
   expectSingleProperty(composeServiceBlock(compose, serviceName), 4, "image", image, message);
 }
 
+function expectSingleBlock(source, expression, expected, message) {
+  const blocks = [...source.matchAll(expression)].map(([block]) => block);
+  assert.deepEqual(blocks, [expected], message);
+}
+
 function releaseBundleImagesBlock(builder) {
   const anchor = 'await writeFile(\n    resolve(deploy, "release-bundle.json"),';
   const anchorCount = builder.split(anchor).length - 1;
@@ -319,5 +324,71 @@ test("원격 SurrealDB 배포 계약은 3.2.1의 registry·배포 이미지 이�
     remoteCliE2e,
     /data: \{ status: "ready", database: expectedDatabaseVersion \}/u,
     "원격 CLI UAT status 기대값이 실제 연결 database version을 사용하지 않습니다",
+  );
+});
+
+test("원격 SurrealDB의 Compose와 Kubernetes runtime 보안 profile을 고정한다", async () => {
+  const [compose, kubernetes] = await Promise.all([
+    readFile(new URL("../compose.yaml", import.meta.url), "utf8"),
+    readFile(new URL("../deploy/kubernetes/base/surreal-statefulset.yaml", import.meta.url), "utf8"),
+  ]);
+
+  const composeSurrealdb = composeServiceBlock(compose, "surrealdb");
+  expectSingleBlock(
+    composeSurrealdb,
+    /^    secrets:\n      - database_owner_password$/gmu,
+    "    secrets:\n      - database_owner_password",
+    "Compose SurrealDB secret mount가 다릅니다",
+  );
+  expectSingleBlock(
+    composeSurrealdb,
+    /^    volumes:\n      - surreal-data:\/data$/gmu,
+    "    volumes:\n      - surreal-data:/data",
+    "Compose SurrealDB named data volume이 다릅니다",
+  );
+  expectSingleBlock(
+    composeSurrealdb,
+    /^    security_opt:\n      - no-new-privileges:true$/gmu,
+    "    security_opt:\n      - no-new-privileges:true",
+    "Compose SurrealDB no-new-privileges 설정이 다릅니다",
+  );
+  expectSingleBlock(
+    composeSurrealdb,
+    /^    cap_drop:\n      - ALL$/gmu,
+    "    cap_drop:\n      - ALL",
+    "Compose SurrealDB capability drop 설정이 다릅니다",
+  );
+
+  expectSingleBlock(
+    kubernetes,
+    /^      securityContext:\n        runAsNonRoot: true\n        runAsUser: 10001\n        runAsGroup: 10001\n        fsGroup: 10001\n        seccompProfile:\n          type: RuntimeDefault$/gmu,
+    "      securityContext:\n        runAsNonRoot: true\n        runAsUser: 10001\n        runAsGroup: 10001\n        fsGroup: 10001\n        seccompProfile:\n          type: RuntimeDefault",
+    "Kubernetes SurrealDB pod security context가 다릅니다",
+  );
+  expectSingleBlock(
+    kubernetes,
+    /^            - cp \/source\/database-owner-password \/target\/database-owner-password && chown 10001:10001 \/target\/database-owner-password && chmod 0600 \/target\/database-owner-password$/gmu,
+    "            - cp /source/database-owner-password /target/database-owner-password && chown 10001:10001 /target/database-owner-password && chmod 0600 /target/database-owner-password",
+    "Kubernetes SurrealDB runtime secret 초기화가 다릅니다",
+  );
+
+  const kubernetesSurrealdb = kubernetesContainerBlock(kubernetes, "surrealdb");
+  expectSingleBlock(
+    kubernetesSurrealdb,
+    /^          env:\n            - name: SURREAL_PASSWORD_FILE\n              value: \/run\/massion-secrets\/database-owner-password$/gmu,
+    "          env:\n            - name: SURREAL_PASSWORD_FILE\n              value: /run/massion-secrets/database-owner-password",
+    "Kubernetes SurrealDB password file 경로가 다릅니다",
+  );
+  expectSingleBlock(
+    kubernetesSurrealdb,
+    /^          securityContext:\n            allowPrivilegeEscalation: false\n            readOnlyRootFilesystem: true\n            capabilities:\n              drop: \["ALL"\]$/gmu,
+    '          securityContext:\n            allowPrivilegeEscalation: false\n            readOnlyRootFilesystem: true\n            capabilities:\n              drop: ["ALL"]',
+    "Kubernetes SurrealDB container security context가 다릅니다",
+  );
+  expectSingleBlock(
+    kubernetesSurrealdb,
+    /^          volumeMounts:\n            - name: data\n              mountPath: \/data\n            - name: runtime-secrets\n              mountPath: \/run\/massion-secrets\n              readOnly: true\n            - name: tmp\n              mountPath: \/tmp$/gmu,
+    "          volumeMounts:\n            - name: data\n              mountPath: /data\n            - name: runtime-secrets\n              mountPath: /run/massion-secrets\n              readOnly: true\n            - name: tmp\n              mountPath: /tmp",
+    "Kubernetes SurrealDB writable·secret mount가 다릅니다",
   );
 });
