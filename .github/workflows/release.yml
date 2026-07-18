@@ -60,7 +60,7 @@ jobs:
       - name: 설치·배포 묶음 생성
         run: pnpm release:build
 
-      - name: 깨끗한 설치·복구 E2E
+      - name: 깨끗한 설치·로컬 실행 E2E
         run: pnpm verify:release artifacts/release-1.0.0
 
       - name: QEMU 설치

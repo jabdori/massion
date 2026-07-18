@@ -44,7 +44,7 @@ if [ ! -f "$marker" ] || [ -L "$marker" ] || [ "$(cat "$marker")" != "$owner_mar
   exit 1
 fi
 
-for command_name in massion massion-connector massion-server; do
+for command_name in massion massion-connector; do
   link="$prefix/bin/$command_name"
   target="$release_dir/bin/$command_name"
   if [ -L "$link" ] && [ "$(readlink "$link")" = "$target" ]; then
