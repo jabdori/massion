@@ -358,8 +358,8 @@
     {
       "id": "1",
       "title": "SurrealDB 릴리스 기반",
-      "purpose": "SurrealDB 3.2.1 릴리스·배포·산출물 계약을 독립 복원한다.",
-      "status": "candidate",
+      "purpose": "원격 배포 SurrealDB 3.2.1 계약(Slice 1A)은 검증했으며, 개인용 로컬 runtime version 전달(Slice 1B)은 별도 TDD 설계 전까지 미완료로 남긴다.",
+      "status": "partial",
       "verification": [
         "node --test scripts/release-workflow.test.mjs",
         "pnpm --filter @massion/application build-deps",
