@@ -8,6 +8,19 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const DIGEST = /^sha256:[a-f0-9]{64}$/u;
 export const PUBLIC_RELEASE_COMMANDS = ["massion", "massion-connector"];
 
+export function releaseVerificationEnvironment({ home, prefix, localPort, environment = process.env }) {
+  if (!Number.isSafeInteger(localPort) || localPort < 2 || localPort > 65_535)
+    throw new Error("release local port가 유효하지 않습니다");
+  return {
+    ...environment,
+    HOME: home,
+    MASSION_PREFIX: prefix,
+    MASSION_LOCAL_PORT: String(localPort),
+    MASSION_SURREAL_PORT: String(localPort - 1),
+    PATH: `${resolve(prefix, "bin")}:${environment.PATH ?? ""}`,
+  };
+}
+
 async function digest(path) {
   return createHash("sha256")
     .update(await readFile(path))
@@ -63,13 +76,7 @@ async function main() {
   await mkdir(home, { recursive: true, mode: 0o700 });
   await mkdir(prefix, { recursive: true, mode: 0o700 });
   await mkdir(extracted, { recursive: true, mode: 0o700 });
-  const environment = {
-    ...process.env,
-    HOME: home,
-    MASSION_PREFIX: prefix,
-    MASSION_LOCAL_PORT: String(localPort),
-    PATH: `${resolve(prefix, "bin")}:${process.env.PATH ?? ""}`,
-  };
+  const environment = releaseVerificationEnvironment({ home, prefix, localPort });
   const massion = resolve(prefix, "bin/massion");
   const connector = resolve(prefix, "bin/massion-connector");
   try {
