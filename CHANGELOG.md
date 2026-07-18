@@ -10,5 +10,5 @@
 - 근거, 코드 인텔리전스, TDD 개발, 품질 보증, 문서 기록, 회고·성장 파이프라인
 - Extension SDK·격리 실행·공식 Slack/Discord/GitHub 확장·npm 호환 공개 Registry
 - CLI·TUI·Web Console과 개인 로컬·Compose·Kubernetes 배포
-- 원격 SurrealDB 3.2.0, 소유자·런타임 자격 증명 분리, 백업·복구·보안·부하 검증
+- 원격 SurrealDB 3.2.1, 소유자·런타임 자격 증명 분리, 백업·복구·보안·부하 검증
 - 자체 포함 설치 묶음, 깨끗한 환경 설치·복구 E2E, SBOM·provenance·GitHub OIDC 증명 자동화

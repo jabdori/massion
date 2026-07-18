@@ -22,7 +22,7 @@ services:
     build:
       context: .
       dockerfile: deploy/surreal/Dockerfile
-    image: ${MASSION_SURREALDB_IMAGE:-massion-surrealdb:3.2.0}
+    image: ${MASSION_SURREALDB_IMAGE:-massion-surrealdb:3.2.1}
     restart: unless-stopped
     environment:
       SURREAL_PASSWORD_FILE: /run/secrets/database_owner_password

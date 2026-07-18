@@ -39,6 +39,7 @@ describe("massion remote product E2E", () => {
         database: databaseName,
         authentication: { username: "root", password: "root" },
       });
+      const expectedDatabaseVersion = await database.version();
       const identities = await IdentityService.create(database);
       const organizations = await OrganizationService.create(database);
       const graph = await OrganizationGraphService.create(database, organizations);
@@ -100,7 +101,9 @@ describe("massion remote product E2E", () => {
         expect(JSON.parse(initialized.stdout)).toMatchObject({ profile: "local" });
         const status = await run(["status", "--json"]);
         expect(status).toMatchObject({ code: 0, stderr: "" });
-        expect(JSON.parse(status.stdout)).toMatchObject({ data: { status: "ready", database: "surrealdb-3.2.0" } });
+        expect(JSON.parse(status.stdout)).toMatchObject({
+          data: { status: "ready", database: expectedDatabaseVersion },
+        });
         const detached = await run(["run", "원격 제품 실행", "--detach", "--json"]);
         expect(detached).toMatchObject({ code: 0, stderr: "" });
         expect(JSON.parse(detached.stdout)).toMatchObject({ type: "accepted", runId: expect.any(String) });

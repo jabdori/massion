@@ -22,14 +22,302 @@ test("release workflow는 tag gate·OIDC attestation·SBOM·max provenance를 �
   assert.match(workflow, /pnpm verify:release\b/u);
 });
 
-test("Compose image는 공개 registry digest로 교체할 수 있고 release bundle이 변수 계약을 기록한다", async () => {
-  const compose = await readFile(new URL("../compose.yaml", import.meta.url), "utf8");
-  const builder = await readFile(new URL("./build-release.mjs", import.meta.url), "utf8");
+const SURREALDB_VERSION = "3.2.1";
+const SURREALDB_DIGEST = "sha256:a0ef3252ec197a31a262423241061390f51ba95509a68f1866f0783ad8f39ea1";
+const WORKFLOW_SURREALDB_TAG = "${{ steps.identity.outputs.base }}/surrealdb:3.2.1-massion.1";
+const QEMU_SETUP_ACTION = "docker/setup-qemu-action@96fe6ef7f33517b61c61be40b68a1882f3264fb8 # v4.2.0";
+const QEMU_BINFMT_IMAGE =
+  "docker.io/tonistiigi/binfmt@sha256:400a4873b838d1b89194d982c45e5fb3cda4593fbfd7e08a02e76b03b21166f0";
+const QEMU_PLATFORMS = "arm64";
+const RELEASE_RUNNER = "ubuntu-24.04";
+const WORKFLOW_SURREALDB_PLATFORMS = "linux/amd64,linux/arm64";
+const DEPLOY_SURREALDB_IMAGE = "massion-surrealdb:3.2.1";
+const COMPOSE_SURREALDB_IMAGE = "${MASSION_SURREALDB_IMAGE:-massion-surrealdb:3.2.1}";
+const COMPOSE_MASSION_IMAGE = "${MASSION_IMAGE:-massion:1.0.0}";
+const COMPOSE_CADDY_IMAGE = "${MASSION_CADDY_IMAGE:-massion-caddy:2.11.4}";
+const UPSTREAM_SURREALDB_IMAGE = `surrealdb/surrealdb:v${SURREALDB_VERSION}@${SURREALDB_DIGEST}`;
 
-  assert.match(compose, /MASSION_IMAGE/u);
-  assert.match(compose, /MASSION_SURREALDB_IMAGE/u);
-  assert.match(compose, /MASSION_CADDY_IMAGE/u);
-  assert.match(builder, /MASSION_IMAGE/u);
-  assert.match(builder, /MASSION_SURREALDB_IMAGE/u);
-  assert.match(builder, /MASSION_CADDY_IMAGE/u);
+function escapeRegularExpression(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function workflowStepByName(workflow, name) {
+  const heading = new RegExp(`^      - name: ${escapeRegularExpression(name)}$`, "mu");
+  const matches = [...workflow.matchAll(new RegExp(heading.source, "gmu"))];
+  assert.ok(matches.length > 0, `${name} workflow step이 없습니다`);
+  assert.equal(matches.length, 1, `${name} workflow step은 정확히 하나여야 합니다`);
+  const [match] = matches;
+  const start = match.index;
+  const end = workflow.indexOf("\n      - name: ", start + 1);
+  return { content: workflow.slice(start, end === -1 ? undefined : end), offset: start };
+}
+
+function workflowJobByName(workflow, name) {
+  const jobsStart = workflow.indexOf("\njobs:\n");
+  assert.ok(jobsStart !== -1, "workflow jobs section이 없습니다");
+  const jobs = workflow.slice(jobsStart + "\njobs:\n".length);
+  const jobHeadings = [...jobs.matchAll(/^  [^\s][^:\n]*:$/gmu)];
+  const heading = `  ${name}:`;
+  const matches = jobHeadings.filter(([line]) => line === heading);
+  assert.equal(matches.length, 1, `${name} workflow job은 정확히 하나여야 합니다`);
+  const [match] = matches;
+  const start = match.index;
+  const next = jobHeadings.find((candidate) => candidate.index > start);
+  return jobs.slice(start, next?.index);
+}
+
+function expectSingleProperty(block, indentation, key, value, message) {
+  const prefix = `${" ".repeat(indentation)}${key}: `;
+  const lines = [...block.matchAll(new RegExp(`^${escapeRegularExpression(prefix)}.*$`, "gmu"))].map(([line]) => line);
+  assert.deepEqual(lines, [`${prefix}${value}`], message);
+}
+
+function expectSingleDockerInstruction(stage, instruction, value, message) {
+  const prefix = `${instruction} `;
+  const lines = [...stage.matchAll(new RegExp(`^${escapeRegularExpression(prefix)}.*$`, "gmu"))].map(([line]) => line);
+  assert.deepEqual(lines, [`${prefix}${value}`], message);
+}
+
+function finalDockerStage(dockerfile) {
+  const stages = [...dockerfile.matchAll(/^FROM .+$/gmu)];
+  assert.ok(stages.length > 0, "Dockerfile에 FROM stage가 없습니다");
+  const finalStage = stages[stages.length - 1];
+  return dockerfile.slice(finalStage.index);
+}
+
+function expectSurrealBinaryCopy(finalStage) {
+  const lines = [...finalStage.matchAll(/^COPY .+ \/usr\/local\/bin\/surreal$/gmu)].map(([line]) => line);
+  assert.deepEqual(
+    lines,
+    ["COPY --from=surreal /surreal /usr/local/bin/surreal"],
+    "Dockerfile final stage는 고정한 surreal stage의 binary만 복사해야 합니다",
+  );
+}
+
+function composeServiceBlock(compose, serviceName) {
+  const service = compose.match(
+    new RegExp(`^  ${escapeRegularExpression(serviceName)}:\\n(?<body>(?:^    .*\\n?)*)`, "mu"),
+  );
+  assert.ok(service?.groups?.body, `${serviceName} Compose service가 없습니다`);
+  return service.groups.body;
+}
+
+function expectComposeImage(compose, serviceName, image, message) {
+  expectSingleProperty(composeServiceBlock(compose, serviceName), 4, "image", image, message);
+}
+
+function releaseBundleImagesBlock(builder) {
+  const anchor = 'await writeFile(\n    resolve(deploy, "release-bundle.json"),';
+  const anchorCount = builder.split(anchor).length - 1;
+  assert.equal(anchorCount, 1, "release-bundle.json writeFile 호출은 정확히 하나여야 합니다");
+  const start = builder.indexOf(anchor);
+  const end = builder.indexOf("\n  );", start);
+  assert.notEqual(end, -1, "release-bundle.json writeFile 호출의 끝을 찾지 못했습니다");
+  const releaseBundleWrite = builder.slice(start, end);
+  const matches = [
+    ...releaseBundleWrite.matchAll(/^        images: \{\n(?<body>(?:^          .*\n?)*)^        \},$/gmu),
+  ];
+  assert.equal(matches.length, 1, "release bundle images 객체는 정확히 하나여야 합니다");
+  return matches[0].groups.body;
+}
+
+function kubernetesContainerBlock(kubernetes, containerName) {
+  const heading = new RegExp(`^        - name: ${escapeRegularExpression(containerName)}$`, "gmu");
+  const matches = [...kubernetes.matchAll(heading)];
+  assert.equal(matches.length, 1, `${containerName} Kubernetes container는 정확히 하나여야 합니다`);
+  const [match] = matches;
+  const start = match.index;
+  const end = kubernetes.indexOf("\n        - name: ", start + 1);
+  return kubernetes.slice(start, end === -1 ? undefined : end);
+}
+
+function currentChangelogSection(changelog) {
+  const headings = [...changelog.matchAll(/^## [^\n]+$/gmu)];
+  assert.ok(headings.length > 0, "CHANGELOG 현재 릴리스 항목이 없습니다");
+  const start = headings[0].index;
+  const end = headings[1]?.index ?? changelog.length;
+  return changelog.slice(start, end);
+}
+
+test("원격 SurrealDB 배포 계약은 3.2.1의 registry·배포 이미지 이름과 OCI digest를 고정한다", async () => {
+  const [workflow, compose, builder, dockerfile, kubernetes, changelog, remoteCliE2e] = await Promise.all([
+    readFile(new URL("../.github/workflows/release.yml", import.meta.url), "utf8"),
+    readFile(new URL("../compose.yaml", import.meta.url), "utf8"),
+    readFile(new URL("./build-release.mjs", import.meta.url), "utf8"),
+    readFile(new URL("../deploy/surreal/Dockerfile", import.meta.url), "utf8"),
+    readFile(new URL("../deploy/kubernetes/base/surreal-statefulset.yaml", import.meta.url), "utf8"),
+    readFile(new URL("../CHANGELOG.md", import.meta.url), "utf8"),
+    readFile(new URL("../apps/cli/src/remote.e2e.test.ts", import.meta.url), "utf8"),
+  ]);
+
+  const releaseJob = workflowJobByName(workflow, "release");
+  expectSingleProperty(
+    releaseJob,
+    4,
+    "runs-on",
+    RELEASE_RUNNER,
+    "release workflow runner가 x64 ubuntu-24.04가 아닙니다",
+  );
+  const qemuStep = workflowStepByName(releaseJob, "QEMU 설치");
+  const buildxStep = workflowStepByName(releaseJob, "Docker Buildx 설치");
+  assert.ok(qemuStep.offset < buildxStep.offset, "QEMU는 Buildx보다 먼저 설정해야 합니다");
+  const qemuActionLines = workflow.match(/^        uses: docker\/setup-qemu-action@.*$/gmu) ?? [];
+  assert.deepEqual(
+    qemuActionLines,
+    [`        uses: ${QEMU_SETUP_ACTION}`],
+    "workflow 전체에는 digest로 고정한 QEMU action만 정확히 하나여야 합니다",
+  );
+  const binfmtImageLines = workflow.match(/^          image: .*tonistiigi\/binfmt.*$/gmu) ?? [];
+  assert.deepEqual(
+    binfmtImageLines,
+    [`          image: ${QEMU_BINFMT_IMAGE}`],
+    "workflow 전체에는 digest로 고정한 binfmt image만 정확히 하나여야 합니다",
+  );
+  expectSingleProperty(qemuStep.content, 8, "uses", QEMU_SETUP_ACTION, "workflow QEMU action이 다릅니다");
+  expectSingleProperty(
+    qemuStep.content,
+    10,
+    "image",
+    QEMU_BINFMT_IMAGE,
+    "workflow QEMU binfmt image가 digest로 고정되지 않았습니다",
+  );
+  expectSingleProperty(
+    qemuStep.content,
+    10,
+    "platforms",
+    QEMU_PLATFORMS,
+    "workflow QEMU 대상 platform이 arm64로 제한되지 않았습니다",
+  );
+
+  const surrealWorkflowStep = workflowStepByName(releaseJob, "SurrealDB 이미지 빌드·게시");
+  expectSingleProperty(
+    surrealWorkflowStep.content,
+    8,
+    "id",
+    "surrealdb_image",
+    "workflow SurrealDB step id가 다릅니다",
+  );
+  expectSingleProperty(
+    surrealWorkflowStep.content,
+    10,
+    "file",
+    "deploy/surreal/Dockerfile",
+    "workflow Dockerfile 경로가 다릅니다",
+  );
+  expectSingleProperty(
+    surrealWorkflowStep.content,
+    10,
+    "push",
+    "true",
+    "workflow SurrealDB registry 게시가 비활성화됐습니다",
+  );
+  expectSingleProperty(
+    surrealWorkflowStep.content,
+    10,
+    "tags",
+    WORKFLOW_SURREALDB_TAG,
+    "workflow SurrealDB 게시 tag가 다릅니다",
+  );
+  expectSingleProperty(
+    surrealWorkflowStep.content,
+    10,
+    "platforms",
+    WORKFLOW_SURREALDB_PLATFORMS,
+    "workflow SurrealDB 다중 아키텍처가 다릅니다",
+  );
+  assert.doesNotMatch(
+    workflow,
+    /surrealdb:3\.2\.0-massion\.1/u,
+    "workflow에 이전 SurrealDB registry tag가 남아 있습니다",
+  );
+
+  expectComposeImage(compose, "surrealdb", COMPOSE_SURREALDB_IMAGE, "Compose SurrealDB 기본 이미지가 다릅니다");
+  expectComposeImage(compose, "massion", COMPOSE_MASSION_IMAGE, "Compose Massion 기본 이미지가 다릅니다");
+  expectComposeImage(
+    compose,
+    "database-provision",
+    COMPOSE_MASSION_IMAGE,
+    "Compose database provision 기본 이미지가 다릅니다",
+  );
+  expectComposeImage(compose, "caddy", COMPOSE_CADDY_IMAGE, "Compose Caddy 기본 이미지가 다릅니다");
+  expectSingleProperty(
+    kubernetesContainerBlock(kubernetes, "surrealdb"),
+    10,
+    "image",
+    DEPLOY_SURREALDB_IMAGE,
+    "Kubernetes SurrealDB 이미지가 다릅니다",
+  );
+  const releaseBundleImages = releaseBundleImagesBlock(builder);
+  expectSingleProperty(
+    releaseBundleImages,
+    10,
+    "MASSION_IMAGE",
+    '"massion:1.0.0",',
+    "release bundle Massion 이미지가 다릅니다",
+  );
+  expectSingleProperty(
+    releaseBundleImages,
+    10,
+    "MASSION_SURREALDB_IMAGE",
+    `"${DEPLOY_SURREALDB_IMAGE}",`,
+    "release bundle SurrealDB 이미지가 다릅니다",
+  );
+  expectSingleProperty(
+    releaseBundleImages,
+    10,
+    "MASSION_CADDY_IMAGE",
+    '"massion-caddy:2.11.4",',
+    "release bundle Caddy 이미지가 다릅니다",
+  );
+  const surrealStageLines = [...dockerfile.matchAll(/^FROM .* AS surreal$/gmu)].map(([line]) => line);
+  assert.deepEqual(
+    surrealStageLines,
+    [`FROM ${UPSTREAM_SURREALDB_IMAGE} AS surreal`],
+    "Dockerfile upstream SurrealDB OCI digest stage가 다릅니다",
+  );
+  const finalStage = finalDockerStage(dockerfile);
+  expectSurrealBinaryCopy(finalStage);
+  expectSingleDockerInstruction(
+    finalStage,
+    "USER",
+    "surreal",
+    "Dockerfile final 실행 사용자가 surreal로 고정되지 않았습니다",
+  );
+  expectSingleDockerInstruction(
+    finalStage,
+    "ENTRYPOINT",
+    '["/usr/local/bin/massion-surreal-entrypoint"]',
+    "Dockerfile final entrypoint가 Massion SurrealDB entrypoint가 아닙니다",
+  );
+  const currentChangelog = currentChangelogSection(changelog);
+  assert.match(
+    currentChangelog,
+    /^- 원격 SurrealDB 3\.2\.1,/mu,
+    "CHANGELOG 현재 릴리스의 원격 SurrealDB 버전이 다릅니다",
+  );
+  assert.doesNotMatch(
+    currentChangelog,
+    /원격 SurrealDB 3\.2\.0/u,
+    "CHANGELOG 현재 릴리스에 이전 원격 SurrealDB 버전이 남아 있습니다",
+  );
+  assert.doesNotMatch(
+    remoteCliE2e,
+    /surrealdb-3\.2\.0/u,
+    "원격 CLI UAT에 이전 SurrealDB version literal이 남아 있습니다",
+  );
+  assert.match(
+    remoteCliE2e,
+    /const expectedDatabaseVersion = await database\.version\(\);/u,
+    "원격 CLI UAT가 실제 연결 database version을 고정하지 않습니다",
+  );
+  assert.match(
+    remoteCliE2e,
+    /queries: \{ status: async \(\) => \(\{ status: "ready", database: await database\.version\(\) \}\) \}/u,
+    "원격 CLI UAT status query가 status 시점의 실제 database version을 읽지 않습니다",
+  );
+  assert.match(
+    remoteCliE2e,
+    /data: \{ status: "ready", database: expectedDatabaseVersion \}/u,
+    "원격 CLI UAT status 기대값이 실제 연결 database version을 사용하지 않습니다",
+  );
 });
