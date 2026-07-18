@@ -149,6 +149,22 @@ describe("ApplicationProduct", () => {
     };
     expect(session.sessionToken).toBeUndefined();
 
+    const replayed = await fetch(`${endpoint.url}/api/v1/web/sessions`, {
+      method: "POST",
+      headers: {
+        origin: endpoint.url,
+        "sec-fetch-site": "same-origin",
+        accept: "application/json",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ code: ticket.code }),
+    });
+    expect(replayed.status).toBe(401);
+    await expect(replayed.json()).resolves.toMatchObject({
+      category: "authentication",
+      userMessage: "Web login code가 유효하지 않거나 만료됐습니다",
+    });
+
     const recovered = await fetch(`${endpoint.url}/api/v1/web/session`, {
       headers: { cookie, origin: endpoint.url, accept: "application/json" },
     });

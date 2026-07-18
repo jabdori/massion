@@ -10,7 +10,7 @@ import type { ApplicationEventV1 } from "./contracts.js";
 import { ApplicationError, applicationErrorToHttpStatus } from "./errors.js";
 import { ApplicationEventCursorExpiredError } from "./event-store.js";
 import { encodeApplicationSseEvent, parseEventCursor } from "./sse.js";
-import type { AuthenticatedWebSession, ExchangedWebSession } from "./web-session.js";
+import { WebLoginTicketError, type AuthenticatedWebSession, type ExchangedWebSession } from "./web-session.js";
 
 const JSON_LIMIT = 1024 * 1024;
 const ARTIFACT_LIMIT = 64 * 1024 * 1024;
@@ -488,7 +488,20 @@ export class ApplicationHttpServer {
       const input = (await json(request)) as Record<string, unknown>;
       if (Object.keys(input).some((key) => key !== "code") || typeof input.code !== "string")
         throw validation("Web login code가 필요합니다");
-      const exchanged = await this.dependencies.webSessions.exchangeLoginTicket(input.code);
+      let exchanged: ExchangedWebSession;
+      try {
+        exchanged = await this.dependencies.webSessions.exchangeLoginTicket(input.code);
+      } catch (cause) {
+        if (!(cause instanceof WebLoginTicketError)) throw cause;
+        throw new ApplicationError({
+          category: "authentication",
+          severity: "error",
+          retryable: false,
+          userMessage: "Web login code가 유효하지 않거나 만료됐습니다",
+          operatorCode: "APP_HTTP_WEB_LOGIN",
+          cause,
+        });
+      }
       response.setHeader("set-cookie", this.sessionCookie(exchanged.sessionToken, exchanged.expiresAt, secure));
       response.setHeader("cache-control", "no-store");
       sendJson(response, 201, {

@@ -11,6 +11,13 @@ const SESSION = /^mws_([0-9a-f-]{36})\.([A-Za-z0-9_-]{43})$/u;
 const CSRF = /^[A-Za-z0-9_-]{43}$/u;
 const COMMAND = /^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$/u;
 
+export class WebLoginTicketError extends Error {
+  public constructor(message: string) {
+    super(message);
+    this.name = "WebLoginTicketError";
+  }
+}
+
 export interface WebSessionClock {
   readonly now: Date;
 }
@@ -245,7 +252,7 @@ export class WebSessionService {
     input: { readonly absoluteTtlSeconds?: number; readonly idleTtlSeconds?: number } = {},
   ): Promise<ExchangedWebSession> {
     const match = code.match(TICKET);
-    if (!match?.[1]) throw new Error("Web login ticket 형식이 유효하지 않습니다");
+    if (!match?.[1]) throw new WebLoginTicketError("Web login ticket 형식이 유효하지 않습니다");
     const absoluteTtlSeconds = input.absoluteTtlSeconds ?? 28_800;
     const idleTtlSeconds = input.idleTtlSeconds ?? 1_800;
     if (
@@ -277,7 +284,7 @@ export class WebSessionService {
         { ticket_id: candidate.ticket_id, now },
       );
       if (!consumed || !this.matches(code, consumed.code_hash))
-        throw new Error("Web login ticket은 만료됐거나 이미 사용됐습니다");
+        throw new WebLoginTicketError("Web login ticket은 만료됐거나 이미 사용됐습니다");
       const created = await first<WebSessionRecord>(
         transaction,
         "CREATE application_web_session CONTENT { session_id: $session_id, organization_id: $organization_id, user_id: $user_id, source_token_id: $source_token_id, audience: $audience, scopes: $scopes, key_id: $key_id, session_hash: $session_hash, csrf_hash: $csrf_hash, issued_at: <datetime>$issued_at, expires_at: <datetime>$expires_at, idle_ttl_seconds: $idle_ttl_seconds, idle_expires_at: <datetime>$idle_expires_at, last_seen_at: <datetime>$issued_at, revision: 0, revoked_at: NONE, revoked_reason: NONE } RETURN AFTER;",
@@ -515,10 +522,10 @@ export class WebSessionService {
 
   private assertTicket(record: LoginTicketRecord | undefined, raw: string): asserts record is LoginTicketRecord {
     if (!record || record.key_id !== this.keyId || !this.matches(raw, record.code_hash))
-      throw new Error("Web login ticket이 유효하지 않습니다");
-    if (record.used_at !== undefined) throw new Error("Web login ticket은 이미 사용됐습니다");
+      throw new WebLoginTicketError("Web login ticket이 유효하지 않습니다");
+    if (record.used_at !== undefined) throw new WebLoginTicketError("Web login ticket은 이미 사용됐습니다");
     if (date(record.expires_at, "ticket expiresAt").getTime() <= this.clock.now.getTime())
-      throw new Error("Web login ticket이 만료됐습니다");
+      throw new WebLoginTicketError("Web login ticket이 만료됐습니다");
   }
 
   private async session(raw: string): Promise<WebSessionRecord> {
