@@ -8,6 +8,7 @@ import { dirname, isAbsolute, join, resolve } from "node:path";
 import {
   attestLocalSurrealRuntime,
   LocalSurrealRuntimeManager,
+  provisionLocalSurrealDatabase,
   resolveLocalSurrealRuntime,
   type LocalSurrealRuntimeState,
 } from "./local-surreal-runtime.js";
@@ -454,6 +455,12 @@ export class LocalDaemonManager {
           return false;
         }
       },
+      provision: async (endpoint) =>
+        await provisionLocalSurrealDatabase({
+          endpoint,
+          credential: { user: "massion", password },
+          fetcher: this.#fetcher,
+        }),
       signal: this.#signal,
       wait: this.#wait,
     });

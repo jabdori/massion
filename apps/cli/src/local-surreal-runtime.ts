@@ -61,6 +61,7 @@ export interface LocalSurrealRuntimeManagerDependencies {
   readonly processExists: (pid: number) => boolean;
   readonly processCommand: (pid: number) => Promise<string>;
   readonly ready: (endpoint: string) => Promise<boolean>;
+  readonly provision: (endpoint: string) => Promise<void>;
   readonly signal: (pid: number, signal: NodeJS.Signals) => void;
   readonly wait: (milliseconds: number) => Promise<void>;
 }
@@ -229,6 +230,43 @@ function credentialEnvironment(credential: LocalSurrealRuntimeManagerDependencie
   };
 }
 
+export async function provisionLocalSurrealDatabase(input: {
+  readonly endpoint: string;
+  readonly credential: LocalSurrealRuntimeManagerDependencies["credential"];
+  readonly fetcher?: typeof fetch;
+}): Promise<void> {
+  const endpoint = new URL(input.endpoint);
+  if (endpoint.protocol !== "http:" || endpoint.hostname !== "127.0.0.1" || endpoint.pathname !== "/")
+    throw new Error("local SurrealDB sidecar endpoint가 유효하지 않습니다");
+  if (!input.credential.user || !input.credential.password)
+    throw new Error("local SurrealDB credential이 유효하지 않습니다");
+  endpoint.pathname = "/sql";
+  endpoint.search = "";
+  endpoint.hash = "";
+  const authorization = Buffer.from(`${input.credential.user}:${input.credential.password}`).toString("base64");
+  const response = await (input.fetcher ?? fetch)(endpoint.toString(), {
+    method: "POST",
+    headers: {
+      authorization: `Basic ${authorization}`,
+      accept: "application/json",
+      "content-type": "text/plain",
+    },
+    body: "DEFINE NAMESPACE IF NOT EXISTS massion; USE NS massion; DEFINE DATABASE IF NOT EXISTS massion;",
+    signal: AbortSignal.timeout(3_000),
+  }).catch(() => undefined);
+  const results: unknown = await response?.json().catch(() => undefined);
+  if (
+    !response?.ok ||
+    !Array.isArray(results) ||
+    results.length !== 3 ||
+    !results.every(
+      (result: unknown) =>
+        result !== null && typeof result === "object" && "status" in result && result.status === "OK",
+    )
+  )
+    throw new Error("local SurrealDB namespace/database 준비에 실패했습니다");
+}
+
 export class LocalSurrealRuntimeManager {
   readonly #dependencies: LocalSurrealRuntimeManagerDependencies;
 
@@ -255,6 +293,7 @@ export class LocalSurrealRuntimeManager {
       if (ownedExisting) {
         for (let attempt = 0; attempt < START_ATTEMPTS; attempt += 1) {
           if (await this.#dependencies.ready(existing.endpoint)) {
+            await this.#dependencies.provision(existing.endpoint);
             return { status: "already-running", pid: existing.pid, endpoint: existing.endpoint };
           }
           if (!this.#dependencies.processExists(existing.pid)) break;
@@ -302,8 +341,10 @@ export class LocalSurrealRuntimeManager {
       throw error;
     }
     for (let attempt = 0; attempt < START_ATTEMPTS; attempt += 1) {
-      if (await this.#dependencies.ready(sidecarEndpoint))
+      if (await this.#dependencies.ready(sidecarEndpoint)) {
+        await this.#dependencies.provision(sidecarEndpoint);
         return { status: "started", pid: child.pid, endpoint: sidecarEndpoint };
+      }
       if (!this.#dependencies.processExists(child.pid)) break;
       await this.#dependencies.wait(START_INTERVAL_MS);
     }
