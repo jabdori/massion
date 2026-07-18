@@ -133,6 +133,7 @@ async function first<T>(
 
 export class WebSessionService {
   private readonly clock: WebSessionClock;
+  private readonly sessionTouches = new Map<string, Promise<void>>();
 
   private constructor(
     private readonly database: MassionDatabase,
@@ -344,10 +345,7 @@ export class WebSessionService {
     const boundedIdle = new Date(
       Math.min(idleExpiresAt.getTime(), date(record.expires_at, "session expiresAt").getTime()),
     );
-    await this.database.query(
-      "UPDATE application_web_session SET last_seen_at = <datetime>$now, idle_expires_at = <datetime>$idle_expires_at WHERE session_id = $session_id AND revoked_at = NONE;",
-      { session_id: record.session_id, now: this.clock.now.toISOString(), idle_expires_at: boundedIdle.toISOString() },
-    );
+    await this.touchSession(record.session_id, this.clock.now.toISOString(), boundedIdle.toISOString());
     return {
       ...source,
       sessionId: record.session_id,
@@ -534,6 +532,26 @@ export class WebSessionService {
     if (!record || record.key_id !== this.keyId || !this.matches(raw, record.session_hash))
       throw new Error("Web session이 유효하지 않습니다");
     return record;
+  }
+
+  private async touchSession(sessionId: string, now: string, idleExpiresAt: string): Promise<void> {
+    const active = this.sessionTouches.get(sessionId);
+    if (active) {
+      await active;
+      return;
+    }
+    const pending = this.database
+      .query(
+        "UPDATE application_web_session SET last_seen_at = <datetime>$now, idle_expires_at = <datetime>$idle_expires_at WHERE session_id = $session_id AND revoked_at = NONE;",
+        { session_id: sessionId, now, idle_expires_at: idleExpiresAt },
+      )
+      .then(() => undefined);
+    this.sessionTouches.set(sessionId, pending);
+    try {
+      await pending;
+    } finally {
+      if (this.sessionTouches.get(sessionId) === pending) this.sessionTouches.delete(sessionId);
+    }
   }
 
   private digest(value: string): string {

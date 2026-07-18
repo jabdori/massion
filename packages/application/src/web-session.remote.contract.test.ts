@@ -11,7 +11,7 @@ const remoteUrl = process.env.SURREAL_TEST_URL;
 const remoteTest = remoteUrl ? it : it.skip;
 
 describe("Web session remote contract", () => {
-  remoteTest("실제 SurrealDB 3.2.x에서 revision migration과 session 폐기를 검증한다", async () => {
+  remoteTest("실제 SurrealDB 3.2.x에서 동시 session 인증과 revision session 폐기를 검증한다", async () => {
     const databaseName = `web_session_${randomUUID().replaceAll("-", "")}`;
     const sqlUrl = (remoteUrl ?? "")
       .replace(/^ws:/u, "http:")
@@ -61,6 +61,11 @@ describe("Web session remote contract", () => {
     const ticket = await sessions.issueLoginTicket(access, { commandId: "web-remote-ticket-0001" });
     if (!ticket.code) throw new Error("login ticket 원문이 없습니다");
     const exchanged = await sessions.exchangeLoginTicket(ticket.code);
+    await expect(
+      Promise.all(
+        Array.from({ length: 5 }, async () => await sessions.authenticate(exchanged.sessionToken, "massion-api", [])),
+      ),
+    ).resolves.toHaveLength(5);
     await expect(sessions.list(context)).resolves.toMatchObject([
       { sessionId: exchanged.sessionId, status: "active", revision: 0 },
     ]);
