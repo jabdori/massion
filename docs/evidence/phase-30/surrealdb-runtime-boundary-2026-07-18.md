@@ -56,7 +56,7 @@ node --input-type=module -e '
 
 ### Slice 1A — 원격 배포 SurrealDB 3.2.1
 
-다음 커밋에서는 실제 배포 이미지 계약만 TDD로 복원합니다.
+실제 배포 이미지 계약만 TDD로 복원했습니다.
 
 - release workflow의 `${{ steps.identity.outputs.base }}/surrealdb:3.2.1-massion.1` 게시 tag
 - Compose, Kubernetes, release bundle의 `massion-surrealdb:3.2.1`
@@ -65,6 +65,18 @@ node --input-type=module -e '
 - 위 값을 모두 검사하는 release workflow 계약 테스트
 
 이 단계는 개인용 로컬 RocksDB 엔진이나 확장 호환성 값을 바꾸지 않습니다.
+
+#### 구현·검증 기록
+
+안전 스냅샷이 제공한 원격 six-path 후보와 Slice 1A의 실제 복원 범위는 `.github/workflows/release.yml`, `compose.yaml`, `deploy/kubernetes/base/surreal-statefulset.yaml`, `deploy/surreal/Dockerfile`, `scripts/build-release.mjs`, `scripts/release-workflow.test.mjs`입니다. `CHANGELOG.md`의 원격 버전 표기는 안전 스냅샷 밖 사후 보정으로 같은 Slice 1A 코드 계보에 포함했습니다.
+
+안전 스냅샷 밖에서 추가한 QEMU action·고정 binfmt digest·arm64-only emulator hardening은 원격 image 다중 architecture 검증을 위해 별도 계약으로 추가했습니다. 또한 opt-in 원격 CLI UAT의 오래된 3.2.0 literal은 실제 연결 database version을 기대하는 호환성 보정으로만 수정했습니다. 두 변경은 안전 스냅샷의 six-path 복원과 다른 출처이며, 인증된 원격 UAT를 실제 실행했다는 뜻이 아닙니다.
+
+코드 커밋 `462cb7b06390a0875d951fd9d9f535e90de086fc`부터 `0dff1f3a3ead8e005fe45058196b845e70344934`까지의 Slice 1A 계보는 깨끗한 복제본에서 2026-07-18T15:18:52Z부터 2026-07-18T15:45:39Z까지 재검증했습니다. source·archive Compose와 Kubernetes image, OCI digest, arm64·amd64 runtime smoke, 전체 품질·보안·hardening·release recovery가 종료 코드 0이었습니다. 상세 결과는 [Slice 1A 원격 SurrealDB 3.2.1 검증 증거](./slice-1a-remote-surrealdb-2026-07-18.md)에 기록합니다.
+
+이 범위는 workflow가 실제로 내려받는 runtime Buildx, Docker-container BuildKit image, Dockerfile frontend image를 source supply chain으로 고정하지 않습니다. 이 값들은 Release Recovery에서 별도 고정·회귀 test가 필요한 항목으로 남습니다.
+
+공개 `v1.0.0` tag는 새 Slice 1A 커밋으로 재실행하지 않았습니다. 2026-07-18T15:47:16Z에 재확인한 기존 release workflow는 `전체 품질 검증` 실패 뒤 build·publish·attestation 단계가 skipped된 상태였으며, 이를 새 registry release 성공으로 취급하지 않습니다.
 
 ### Slice 1B — 실제 데이터베이스 버전 전달
 
@@ -83,4 +95,5 @@ node --input-type=module -e '
 - 개인용 로컬 RocksDB를 SurrealDB 3.2.1 엔진으로 이전할 수 있다는 결론
 - 현재 공식 Extension이 로컬 3.0.2 엔진에서 기능적으로 지원된다는 결론
 - Extension lifecycle·package service·compliance auditor의 production 조립 경로가 이미 완성됐다는 결론
-- Slice 1A 또는 Slice 1B의 구현 완료
+- Slice 1B의 구현 완료
+- 인증된 원격 SurrealDB UAT, 실제 Kubernetes apply, registry publish·attestation의 완료

@@ -8,14 +8,16 @@
 
 > 상세 복구 원장: [Phase 30 History Reconciliation Implementation Plan](./reconciliation-plan.md)
 
-- 기록된 후보: 기준 HEAD와 안전 스냅샷을 기준으로 변경 상태를 감사(audit)한 이력이 있습니다. 현재 복구 후보의 재검증 근거는 아직 연결하지 않았습니다.
-- 기록된 후보: 불변 안전 스냅샷(immutable safety snapshot)의 참조, 커밋, 트리를 고정한 이력이 있습니다. 현재 복구 후보의 독립 코드 커밋 근거는 아직 없습니다.
+- 기록된 후보: 기준 HEAD와 안전 스냅샷을 기준으로 변경 상태를 감사(audit)한 이력이 있습니다. 현재 복구 후보 전반의 재검증 근거는 아직 연결하지 않았으며, Slice 1A의 예외 근거는 아래 기록으로 한정합니다.
+- 기록된 후보: 불변 안전 스냅샷(immutable safety snapshot)의 참조, 커밋, 트리를 고정한 이력이 있습니다. 현재 복구 후보 전반의 독립 코드 커밋 근거는 아직 없으며, Slice 1A의 예외 근거는 아래 기록으로 한정합니다.
 - 기록된 기준선 검증: [깨끗한 기준선 전체 검증 증거](../../evidence/phase-30/clean-base-full-verification-2026-07-18.md)는 기준 커밋 `65922bd706580a0962b6eda81c6fa3d63b36b6a8`에서 동결 설치와 전체 `pnpm verify`가 종료 코드 `0`이었음을 기록합니다. 이는 현재 복구 후보의 완료 근거가 아닙니다.
 - [ ] Slice 1은 원격 배포 SurrealDB 3.2.1 계약(Slice 1A)을 먼저 복원하고, 개인용 로컬 데이터베이스의 실제 runtime version 전달(Slice 1B)은 별도 TDD 설계로 닫습니다. 근거는 [SurrealDB 배포·로컬 런타임 경계 조사](../../evidence/phase-30/surrealdb-runtime-boundary-2026-07-18.md)에 기록합니다.
 - [ ] 안전 스냅샷에서 원자적인 복구 조각(slice)별로 구현을 재구성합니다.
 - [ ] 실제 코드 커밋 SHA와 검증 결과에 맞게 근거·체크리스트·추적성 표를 정정합니다.
 - [ ] 현재 복구 후보에서 전체 `pnpm verify`와 릴리스 검증을 다시 실행합니다.
 - [ ] Playwright, OpenTUI, tmux, 백업·복원, 공급자 사용자 인수 테스트(UAT)를 완료합니다.
+
+2026-07-18 기록: Slice 1A 원격 배포 SurrealDB 3.2.1 계약은 코드 커밋 `462cb7b06390a0875d951fd9d9f535e90de086fc`부터 `0dff1f3a3ead8e005fe45058196b845e70344934`까지와 깨끗한 복제본 종료 코드 0으로 근거를 닫았습니다. 상세 실행 결과는 [Slice 1A 원격 SurrealDB 3.2.1 검증 증거](../../evidence/phase-30/slice-1a-remote-surrealdb-2026-07-18.md)에 기록합니다. 개인용 로컬 runtime version 전달(Slice 1B)은 미완료이며, 안전 스냅샷 밖 opt-in CLI UAT의 3.2.0 literal 보정은 실제 연결 database version 호환성만 맞춘 변경으로서 인증된 UAT 완료를 뜻하지 않습니다.
 
 ## Task 1. 기준선과 공격 리뷰 고정
 
