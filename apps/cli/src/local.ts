@@ -395,8 +395,8 @@ export class LocalDaemonManager {
       throw new Error("Massion native SurrealDB runtime이 준비되지 않았습니다. 설치를 다시 실행해 주세요");
     if (!isAbsolute(binary)) throw new Error("MASSION_SURREAL_BINARY 절대 경로가 필요합니다");
     const runtime = resolveLocalSurrealRuntime({
-      home: this.#environment.HOME,
-      xdgDataHome: this.#environment.XDG_DATA_HOME,
+      ...(this.#environment.HOME === undefined ? {} : { home: this.#environment.HOME }),
+      ...(this.#environment.XDG_DATA_HOME === undefined ? {} : { xdgDataHome: this.#environment.XDG_DATA_HOME }),
     });
     const executable = resolve(binary);
     if (executable !== runtime.binaryPath)
