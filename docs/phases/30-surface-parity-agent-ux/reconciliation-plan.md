@@ -8,6 +8,8 @@
 
 **Tech Stack:** Git 참조(ref)·트리(tree), pnpm 동결 설치(frozen install), TypeScript, Vitest, Playwright, OpenTUI, tmux, Markdown 문서 검증(document verification)
 
+**정본 원장(source of truth):** [정합성 복구 원장(reconciliation manifest)](./reconciliation-manifest.json)은 안전 스냅샷의 완전 경로 배정, 공용 변경 조각(hunk) 소유자와 anchor, 조각별 정확한 검증 명령의 정본입니다. 이 계획은 복구 의도와 순서를 설명하며, 경로 목록·anchor·명령은 원장을 우선합니다.
+
 ---
 
 ## 1. 기준점과 불변 안전 스냅샷
@@ -26,7 +28,7 @@
 
 ## 2. 복구 상태 정의
 
-- [x] **1 — 커밋 완료·최신 검증(committed + freshly verified):** 독립 코드 커밋이 있고 현재 후보에서 요구 검증을 다시 통과했으며, 문서가 실제 커밋 SHA를 가리킵니다. 체크박스는 이 상태에만 사용합니다.
+- **1 — 커밋 완료·최신 검증(committed + freshly verified):** 독립 코드 커밋이 있고 현재 후보에서 요구 검증을 다시 통과했으며, 문서가 실제 커밋 SHA를 가리킵니다. 체크박스는 이 상태에만 사용합니다.
 - **2 — 후보 구현·재검증 필요(candidate implemented / reverify):** 안전 스냅샷에 구현 후보가 있으나 정합성 복구 브랜치의 독립 커밋과 최신 검증 근거가 아직 없습니다.
 - **3 — 부분 구현(partial):** 일부 계층 또는 호출 경로만 구현되어 계약 전체를 만족하지 않습니다.
 - **4 — 미구현(not implemented):** 요구 계약을 충족하는 구현 근거가 없습니다.
@@ -35,6 +37,8 @@
 상태는 추측으로 올리지 않습니다. 코드 커밋, 현재 후보에서 실행한 검증 결과, 실제 SHA를 기록한 문서 커밋이 모두 있어야 상태 1로 전환합니다.
 
 ## 3. 순서화된 복구 원장
+
+실행 순서 식별자는 1, 2, 3, 4, 5, 6, 7, 8A, 8B, 9, 10, 11, 12, 13, 14, 15의 16개입니다. 8A와 8B는 기존의 과대한 8번 조각을 승인 CAS와 Application HTTP·Web session 계약으로 분리한 것입니다.
 
 ### 1) SurrealDB 릴리스 기반
 
@@ -93,12 +97,19 @@
 - **최소 검증:** 협업·위임 단위 및 통합 테스트, 상태 전이 테스트, 관련 타입 검사와 빌드를 실행합니다.
 - **문서 조치:** 위임 흐름, 실패·취소 경계, 테스트 결과와 코드 커밋 SHA를 연결합니다.
 
-### 8) 작업·거버넌스·애플리케이션·서버 잔여 계약
+### 8A) 승인 revision CAS와 Integration 전달
 
 - **상태:** 3 — 부분 구현
-- **경계:** 작업(work), 거버넌스(governance), 애플리케이션(application), 서버(server) 사이에 남은 계약을 기능별로 더 작은 조각으로 나눕니다. `packages/work/src/work.ts`, `packages/application/src/adapters/domain.ts`, `packages/application/src/query-registry.ts`, `packages/application/src/product.ts`, `apps/server/src/product.ts`는 파일 전체가 아니라 검증 가능한 소유 변경 조각만 복원합니다.
-- **최소 검증:** 각 하위 계약의 단위·통합·서버 계약 테스트와 소비자 타입 검사·빌드를 통과한 뒤 다음 하위 계약으로 진행합니다.
-- **문서 조치:** 부분 구현을 완료로 표현한 기존 근거는 대체됨(superseded)으로 표시하고, 하위 계약별 코드 SHA와 검증 결과로 교체합니다.
+- **경계:** 승인(approval)의 revision 기반 비교·교환(compare-and-swap), 취소 사유(reason), Integration command envelope 전달을 복원합니다. `packages/governance`, `packages/integrations`, `packages/assurance`, `packages/organization`과 `packages/work`의 승인 변경 조각만 적용합니다. `packages/application/src/adapters/domain.ts`, `packages/application/src/adapters/read-model.ts`, `packages/application/src/query-registry.ts`, `packages/application/src/read-model.ts`, `packages/application/src/snapshot.ts`, `packages/application/src/remote.contract.test.ts`, `packages/work/src/work.ts`은 파일 전체가 아니라 원장이 지정한 변경 조각만 적용합니다.
+- **최소 검증:** governance·integrations·assurance·organization·work·extension-host·application의 단위·통합 계약 테스트, 타입 검사(typecheck), 빌드를 통과한 뒤 다음 조각으로 진행합니다.
+- **문서 조치:** approval CAS와 external Integration 전달의 코드 SHA, 동시 수정 충돌 테스트, 검증 결과를 분리해 기록합니다.
+
+### 8B) Application HTTP·Web session·event 보강
+
+- **상태:** 2 — 후보 구현·재검증 필요
+- **경계:** Application HTTP API, Web session, command event 공개 payload의 독립 계약을 복원합니다. `packages/application/src/event-store.ts`, `http-client.ts`, `http-server.ts`, `http-web.test.ts`, `product.test.ts`, `web-session.ts`와 각 테스트가 이 조각의 고유 경로입니다. `packages/application/src/event-projector.ts`, `query-registry.ts`는 원장의 소유 변경 조각만 적용합니다.
+- **최소 검증:** Application HTTP·Web session·event 단위 테스트, Application 전체 테스트, 타입 검사와 빌드, Server 타입 검사와 빌드를 실행합니다.
+- **문서 조치:** HTTP envelope, session binding, event 공개 범위의 코드 SHA와 검증 결과를 별도 근거로 기록합니다.
 
 ### 9) Router/Hermes 공급자 백엔드
 
@@ -174,7 +185,21 @@
 - `apps/web/src/api.ts`
 - `pnpm-lock.yaml`
 
-## 5. 복구 조각별 실행 절차
+## 5. `pnpm-lock.yaml` 처리 원칙
+
+`pnpm-lock.yaml`의 primary 소유자는 2번 조각 하나이며, 3·5·11·12번은 [정합성 복구 원장](./reconciliation-manifest.json)이 지정한 공용 변경 조각만 소유합니다. 안전 커밋의 최종 `pnpm-lock.yaml`을 통째로 복원하면 안 됩니다. 이 파일은 미래 조각의 manifest까지 한꺼번에 포함합니다.
+
+manifest를 변경하는 각 조각에서는 반드시 다음 순서로 해당 시점 manifest가 요구하는 폐쇄 의존성(closed dependency set)만 재생성합니다. 안전 커밋의 최종 lockfile 전체를 복사하지 않습니다.
+
+```bash
+pnpm install --lockfile-only
+git diff -- pnpm-lock.yaml
+pnpm install --frozen-lockfile
+```
+
+아직 적용하지 않은 importer가 lockfile에 나타나면 그 조각은 범위 오염입니다. 정확한 owner·anchor·명령은 원장을 기준으로 검증합니다.
+
+## 6. 복구 조각별 실행 절차
 
 1. 안전 커밋 `9b049f72a96457c46139811f86d36589f073df64`에서 현재 조각이 소유한 파일 또는 변경 조각만 복원합니다.
 2. 저장소의 포맷터(formatter)를 적용하고 포맷 차이를 검토합니다.
@@ -185,7 +210,7 @@
 7. 체크리스트와 추적성 표에 실제 코드 SHA와 검증 결과를 기록하는 후속 문서 커밋을 만듭니다.
 8. 독립 명세 리뷰(specification review)를 먼저 받고, 그다음 독립 품질 리뷰(quality review)를 받습니다. Important 또는 Critical 등급 문제가 하나라도 있으면 다음 조각으로 진행하지 않고 멈춥니다.
 
-## 6. 최종 회계와 안전 참조 보존
+## 7. 최종 회계와 안전 참조 보존
 
 최종 후보는 안전 커밋 `9b049f72a96457c46139811f86d36589f073df64`과 안전 트리 `22e98dcfe1c689ded1b9b7d6d9caaec328ebddb9`를 기준으로 경로별 회계(accounting)를 수행합니다. 안전 스냅샷과 최종 후보 사이의 모든 차이는 의도적이며, 테스트되었고, 문서화되었음을 코드 커밋과 후속 문서 커밋으로 증명해야 합니다.
 

@@ -4,6 +4,8 @@ import { dirname, join, relative, resolve } from "node:path";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 
+import { reconciliationManifestPath, validatePhase30Reconciliation } from "./verify-phase30-reconciliation.mjs";
+
 const execFileAsync = promisify(execFile);
 
 const TRACE_COLUMNS = [
@@ -153,11 +155,19 @@ async function validateMarkdown(root, errors) {
   }
 }
 
+async function validatePhase30ReconciliationManifest(root, errors) {
+  if (!(await exists(reconciliationManifestPath(root)))) return;
+  for (const error of await validatePhase30Reconciliation(root)) {
+    errors.push(`Phase 30 정합성 원장: ${error}`);
+  }
+}
+
 export async function validateDocs(root) {
   const errors = [];
   await validatePhaseFiles(root, errors);
   await validateTrace(root, errors);
   await validateMarkdown(root, errors);
+  await validatePhase30ReconciliationManifest(root, errors);
   return errors.sort();
 }
 

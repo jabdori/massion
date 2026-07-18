@@ -1,0 +1,851 @@
+{
+  "schema": "massion.phase30.reconciliation.v1",
+  "baseCommit": "65922bd706580a0962b6eda81c6fa3d63b36b6a8",
+  "safetyCommit": "9b049f72a96457c46139811f86d36589f073df64",
+  "expectedDiffPathCount": 337,
+  "lockfilePolicy": {
+    "path": "pnpm-lock.yaml",
+    "primarySlice": "2",
+    "owners": ["2", "3", "5", "11", "12"],
+    "regenerateCommand": "pnpm install --lockfile-only",
+    "safetyCommitWholeFileCopy": "forbidden",
+    "rule": "각 manifest 변경 뒤 해당 시점 manifest의 폐쇄 의존성만 재생성하고 안전 커밋의 최종 lockfile 전체를 복사하지 않는다."
+  },
+  "slices": [
+    {
+      "id": "1",
+      "title": "SurrealDB 릴리스 기반",
+      "purpose": "SurrealDB 3.2.1 릴리스·배포·산출물 계약을 독립 복원한다.",
+      "status": "candidate",
+      "verification": [
+        "node --test scripts/release-workflow.test.mjs",
+        "pnpm --filter @massion/application build-deps",
+        "pnpm --filter @massion/application exec vitest run src/artifacts.test.ts",
+        "pnpm --filter @massion/application typecheck",
+        "pnpm --filter @massion/application build",
+        "pnpm --filter @massion/extension-host build-deps",
+        "pnpm --filter @massion/extension-host exec vitest run src/compliance.test.ts",
+        "pnpm --filter @massion/extension-host typecheck",
+        "pnpm --filter @massion/extension-host build"
+      ],
+      "primaryPaths": [
+        ".github/workflows/release.yml",
+        "compose.yaml",
+        "deploy/kubernetes/base/surreal-statefulset.yaml",
+        "deploy/surreal/Dockerfile",
+        "scripts/build-release.mjs",
+        "scripts/release-workflow.test.mjs",
+        "packages/application/src/artifacts.ts",
+        "packages/extension-host/src/compliance.ts"
+      ]
+    },
+    {
+      "id": "2",
+      "title": "기반 계약 프리미티브",
+      "purpose": "기능 능력 계약, 쿼리 리소스, 쿼리 무효화, 리소스 상태의 기반 계약을 복원한다.",
+      "status": "candidate",
+      "verification": [
+        "pnpm --filter @massion/foundation exec vitest run src/capability-contract.test.ts src/query-invalidation.test.ts src/query-resource.test.ts src/resource-status.test.ts",
+        "pnpm --filter @massion/foundation typecheck",
+        "pnpm --filter @massion/foundation build",
+        "pnpm install --lockfile-only",
+        "pnpm install --frozen-lockfile"
+      ],
+      "primaryPaths": [
+        "pnpm-lock.yaml",
+        "packages/foundation/package.json",
+        "packages/foundation/src/capability-contract.test.ts",
+        "packages/foundation/src/capability-contract.ts",
+        "packages/foundation/src/index.ts",
+        "packages/foundation/src/query-invalidation.test.ts",
+        "packages/foundation/src/query-invalidation.ts",
+        "packages/foundation/src/query-resource.test.ts",
+        "packages/foundation/src/query-resource.ts",
+        "packages/foundation/src/resource-status.test.ts",
+        "packages/foundation/src/resource-status.ts"
+      ]
+    },
+    {
+      "id": "3",
+      "title": "CLI 프레임워크",
+      "purpose": "Commander·Clack 기반 명령 파싱, 온보딩, 로컬 실행과 릴리스 설치 경로를 복원한다. 범용 Provider 인증은 제외한다.",
+      "status": "candidate",
+      "verification": [
+        "pnpm --filter @massion/cli build",
+        "pnpm --filter @massion/cli exec vitest run src/parser.test.ts src/commands.test.ts src/framework-migration.test.ts src/help.test.ts src/init.test.ts src/main.test.ts src/onboarding.test.ts src/render.test.ts src/tui-launch.test.ts src/web-initialization.test.ts --maxWorkers=1",
+        "pnpm --filter @massion/cli test",
+        "pnpm --filter @massion/cli typecheck",
+        "pnpm install --lockfile-only",
+        "pnpm install --frozen-lockfile"
+      ],
+      "primaryPaths": [
+        "apps/cli/package.json",
+        "apps/cli/src/child.e2e.test.ts",
+        "apps/cli/src/commands.test.ts",
+        "apps/cli/src/commands.ts",
+        "apps/cli/src/config.test.ts",
+        "apps/cli/src/config.ts",
+        "apps/cli/src/execution.ts",
+        "apps/cli/src/framework-migration.test.ts",
+        "apps/cli/src/help.test.ts",
+        "apps/cli/src/init.test.ts",
+        "apps/cli/src/init.ts",
+        "apps/cli/src/main.test.ts",
+        "apps/cli/src/main.ts",
+        "apps/cli/src/onboarding.test.ts",
+        "apps/cli/src/onboarding.ts",
+        "apps/cli/src/parser.test.ts",
+        "apps/cli/src/parser.ts",
+        "apps/cli/src/prompt-error.ts",
+        "apps/cli/src/render.test.ts",
+        "apps/cli/src/render.ts",
+        "apps/cli/src/tui-launch.test.ts",
+        "apps/cli/src/web-initialization.test.ts",
+        "apps/cli/src/web-initialization.ts",
+        "release/install.sh",
+        "scripts/local-release-install.test.mjs"
+      ]
+    },
+    {
+      "id": "4",
+      "title": "모델 최적화",
+      "purpose": "모델 최적화 도메인, 애플리케이션 서비스, 서버 카탈로그와 실행 계약을 복원한다.",
+      "status": "candidate",
+      "verification": [
+        "pnpm --filter @massion/model-optimization test",
+        "pnpm --filter @massion/model-optimization typecheck",
+        "pnpm --filter @massion/model-optimization build",
+        "pnpm --filter @massion/application build-deps",
+        "pnpm --filter @massion/application exec vitest run src/model-optimization-operations.test.ts src/model-optimization-query.test.ts",
+        "pnpm --filter @massion/application typecheck",
+        "pnpm --filter @massion/application build",
+        "pnpm --filter @massion/server typecheck",
+        "pnpm --filter @massion/server build"
+      ],
+      "primaryPaths": [
+        "apps/server/src/model-optimization-catalog.test.ts",
+        "apps/server/src/model-optimization-catalog.ts",
+        "apps/server/src/model-optimization-executor.test.ts",
+        "apps/server/src/model-optimization-executor.ts",
+        "apps/server/src/model-optimization-product.test.ts",
+        "packages/application/src/model-optimization-operations.test.ts",
+        "packages/application/src/model-optimization-operations.ts",
+        "packages/application/src/model-optimization-query.test.ts",
+        "packages/model-optimization/src/batch.test.ts",
+        "packages/model-optimization/src/batch.ts",
+        "packages/model-optimization/src/canonical.test.ts",
+        "packages/model-optimization/src/canonical.ts",
+        "packages/model-optimization/src/contracts.ts",
+        "packages/model-optimization/src/evaluation.test.ts",
+        "packages/model-optimization/src/evaluation.ts",
+        "packages/model-optimization/src/index.ts",
+        "packages/model-optimization/src/schema.ts",
+        "packages/model-optimization/src/scoring.ts",
+        "packages/model-optimization/src/transfer.ts"
+      ]
+    },
+    {
+      "id": "5",
+      "title": "Growth",
+      "purpose": "성장 기능 도메인, 애플리케이션 bootstrap, 서버 실행 경로를 복원한다.",
+      "status": "candidate",
+      "verification": [
+        "pnpm --filter @massion/growth test",
+        "pnpm --filter @massion/growth typecheck",
+        "pnpm --filter @massion/growth build",
+        "pnpm --filter @massion/application build-deps",
+        "pnpm --filter @massion/application exec vitest run src/bootstrap.test.ts src/query-registry.test.ts",
+        "pnpm --filter @massion/application typecheck",
+        "pnpm --filter @massion/application build",
+        "pnpm --filter @massion/server typecheck",
+        "pnpm --filter @massion/server build",
+        "pnpm install --lockfile-only",
+        "pnpm install --frozen-lockfile"
+      ],
+      "primaryPaths": [
+        "apps/server/package.json",
+        "apps/server/src/growth-daemon.test.ts",
+        "apps/server/src/growth-daemon.ts",
+        "apps/server/src/growth-runtime-product.test.ts",
+        "packages/application/src/bootstrap.test.ts",
+        "packages/application/src/bootstrap.ts",
+        "packages/growth/src/adoption.test.ts",
+        "packages/growth/src/adoption.ts",
+        "packages/growth/src/bootstrap.ts",
+        "packages/growth/src/canonical-order.ts",
+        "packages/growth/src/configuration.ts",
+        "packages/growth/src/deterministic-order.test.ts",
+        "packages/growth/src/gateway.ts",
+        "packages/growth/src/index.ts",
+        "packages/growth/src/product-assembly.test.ts",
+        "packages/growth/src/product-assembly.ts",
+        "packages/growth/src/product-lifecycle.integration.test.ts",
+        "packages/growth/src/prompt-memory.ts",
+        "packages/growth/src/recovery.test.ts",
+        "packages/growth/src/recovery.ts",
+        "packages/growth/src/reflection-runtime.test.ts",
+        "packages/growth/src/reflection-runtime.ts",
+        "packages/growth/src/reflection-snapshot-store.test.ts",
+        "packages/growth/src/reflection-snapshot-store.ts",
+        "packages/growth/src/reflection.test.ts",
+        "packages/growth/src/reflection.ts",
+        "packages/growth/src/revert.test.ts",
+        "packages/growth/src/revert.ts",
+        "packages/growth/src/runtime-foundation.test.ts",
+        "packages/growth/src/runtime-foundation.ts",
+        "packages/growth/src/schema.ts",
+        "packages/growth/src/security.ts",
+        "packages/growth/src/snapshot.ts",
+        "packages/growth/src/suggestion-evaluator.test.ts",
+        "packages/growth/src/suggestion-evaluator.ts",
+        "packages/growth/src/trigger-processor.test.ts",
+        "packages/growth/src/trigger-processor.ts",
+        "packages/growth/src/trigger.test.ts",
+        "packages/growth/src/trigger.ts"
+      ]
+    },
+    {
+      "id": "6",
+      "title": "런타임 메모리와 아웃박스",
+      "purpose": "런타임 메모리, outbox, 실행 복구와 Identity tenant 경계를 복원한다.",
+      "status": "candidate",
+      "verification": [
+        "pnpm --filter @massion/identity test",
+        "pnpm --filter @massion/identity typecheck",
+        "pnpm --filter @massion/identity build",
+        "pnpm --filter @massion/runtime test",
+        "pnpm --filter @massion/runtime typecheck",
+        "pnpm --filter @massion/runtime build",
+        "pnpm --filter @massion/application build-deps",
+        "pnpm --filter @massion/application exec vitest run src/runtime-memory-operations.test.ts src/product.test.ts",
+        "pnpm --filter @massion/application typecheck",
+        "pnpm --filter @massion/application build",
+        "SURREAL_TEST_URL=\"$SURREAL_TEST_URL\" pnpm --filter @massion/runtime exec vitest run src/remote.contract.test.ts"
+      ],
+      "primaryPaths": [
+        "apps/server/src/daemon.test.ts",
+        "apps/server/src/daemon.ts",
+        "apps/server/src/runtime-startup-recovery.test.ts",
+        "apps/server/src/runtime-startup-recovery.ts",
+        "apps/server/src/subscription-runtime-resolver.test.ts",
+        "apps/server/src/subscription-runtime-resolver.ts",
+        "packages/application/src/index.ts",
+        "packages/application/src/product.ts",
+        "packages/application/src/runtime-memory-operations.test.ts",
+        "packages/application/src/runtime-memory-operations.ts",
+        "packages/identity/src/index.ts",
+        "packages/identity/src/tenant.test.ts",
+        "packages/identity/src/tenant.ts",
+        "packages/runtime/src/agent-configuration.test.ts",
+        "packages/runtime/src/agent-configuration.ts",
+        "packages/runtime/src/agent-memory-product.test.ts",
+        "packages/runtime/src/agent-memory-registry.test.ts",
+        "packages/runtime/src/agent-memory-registry.ts",
+        "packages/runtime/src/agent-topology.ts",
+        "packages/runtime/src/execution-store.test.ts",
+        "packages/runtime/src/execution-store.ts",
+        "packages/runtime/src/index.ts",
+        "packages/runtime/src/remote.contract.test.ts",
+        "packages/runtime/src/runtime-memory-redaction.test.ts",
+        "packages/runtime/src/runtime-memory-redaction.ts",
+        "packages/runtime/src/schema.ts",
+        "packages/runtime/src/subscriptions/execution-receipt.test.ts",
+        "packages/runtime/src/surreal-memory.test.ts",
+        "packages/runtime/src/surreal-memory.ts",
+        "packages/runtime/src/voltagent-runner.test.ts",
+        "packages/runtime/src/voltagent-runner.ts",
+        "packages/runtime/src/workflow-runtime.test.ts",
+        "packages/runtime/src/workflow-runtime.ts"
+      ]
+    },
+    {
+      "id": "7",
+      "title": "협업과 위임",
+      "purpose": "협업방, 에이전트 위임, 작업 병합과 실행 계보 계약을 복원한다.",
+      "status": "candidate",
+      "verification": [
+        "pnpm --filter @massion/work test",
+        "pnpm --filter @massion/work typecheck",
+        "pnpm --filter @massion/work build",
+        "pnpm --filter @massion/runtime test",
+        "pnpm --filter @massion/runtime typecheck",
+        "pnpm --filter @massion/runtime build",
+        "pnpm --filter @massion/application test",
+        "pnpm --filter @massion/application typecheck",
+        "pnpm --filter @massion/application build",
+        "SURREAL_TEST_URL=\"$SURREAL_TEST_URL\" pnpm --filter @massion/application exec vitest run src/remote.contract.test.ts"
+      ],
+      "primaryPaths": [
+        "apps/server/src/agent-collaboration.test.ts",
+        "apps/server/src/agent-collaboration.ts",
+        "apps/server/src/product.test.ts",
+        "apps/server/src/product.ts",
+        "packages/application/src/adapters/domain.test.ts",
+        "packages/application/src/adapters/domain.ts",
+        "packages/application/src/adapters/read-model.test.ts",
+        "packages/application/src/adapters/read-model.ts",
+        "packages/application/src/event-projector.test.ts",
+        "packages/application/src/event-projector.ts",
+        "packages/application/src/query-registry.test.ts",
+        "packages/application/src/query-registry.ts",
+        "packages/application/src/read-model.ts",
+        "packages/application/src/remote.contract.test.ts",
+        "packages/application/src/snapshot.test.ts",
+        "packages/application/src/snapshot.ts",
+        "packages/application/src/work-merge-plan.ts",
+        "packages/runtime/src/agent-collaboration-runtime.integration.test.ts",
+        "packages/runtime/src/agent-collaboration-tools.test.ts",
+        "packages/runtime/src/agent-collaboration-tools.ts",
+        "packages/runtime/src/agent-delegation-runtime.integration.test.ts",
+        "packages/runtime/src/agent-delegation.test.ts",
+        "packages/runtime/src/agent-delegation.ts",
+        "packages/runtime/src/embedded-agent-runtime.test.ts",
+        "packages/runtime/src/embedded-agent-runtime.ts",
+        "packages/work/src/collaboration.test.ts",
+        "packages/work/src/merge-plan-read-index.test.ts",
+        "packages/work/src/message-read-index.test.ts",
+        "packages/work/src/schema.ts",
+        "packages/work/src/work.ts"
+      ]
+    },
+    {
+      "id": "8A",
+      "title": "승인 revision CAS와 Integration 전달",
+      "purpose": "승인 revision 기반 compare-and-swap, 취소 사유, Integration command envelope 전달을 복원한다.",
+      "status": "partial",
+      "verification": [
+        "pnpm --filter @massion/governance test",
+        "pnpm --filter @massion/governance typecheck",
+        "pnpm --filter @massion/governance build",
+        "pnpm --filter @massion/integrations test",
+        "pnpm --filter @massion/integrations typecheck",
+        "pnpm --filter @massion/integrations build",
+        "pnpm --filter @massion/assurance test",
+        "pnpm --filter @massion/assurance typecheck",
+        "pnpm --filter @massion/assurance build",
+        "pnpm --filter @massion/organization test",
+        "pnpm --filter @massion/organization typecheck",
+        "pnpm --filter @massion/organization build",
+        "pnpm --filter @massion/work test",
+        "pnpm --filter @massion/work typecheck",
+        "pnpm --filter @massion/work build",
+        "pnpm --filter @massion/extension-host test",
+        "pnpm --filter @massion/extension-host typecheck",
+        "pnpm --filter @massion/extension-host build",
+        "pnpm --filter @massion/application test",
+        "pnpm --filter @massion/application typecheck",
+        "pnpm --filter @massion/application build"
+      ],
+      "primaryPaths": [
+        "apps/server/src/subscription-governance.test.ts",
+        "apps/server/src/subscription-governance.ts",
+        "packages/assurance/src/governance.integration.test.ts",
+        "packages/extension-host/src/remote.contract.test.ts",
+        "packages/governance/src/approval-store.test.ts",
+        "packages/governance/src/approval-store.ts",
+        "packages/governance/src/declaration.integration.test.ts",
+        "packages/governance/src/emergency.test.ts",
+        "packages/governance/src/gate.test.ts",
+        "packages/governance/src/permit.test.ts",
+        "packages/governance/src/remote.contract.test.ts",
+        "packages/integrations/src/dispatcher.test.ts",
+        "packages/integrations/src/dispatcher.ts",
+        "packages/integrations/src/schema.ts",
+        "packages/integrations/src/tokens.test.ts",
+        "packages/integrations/src/tokens.ts",
+        "packages/organization/src/governance.integration.test.ts",
+        "packages/work/src/governance.integration.test.ts",
+        "packages/work/src/work.test.ts"
+      ]
+    },
+    {
+      "id": "8B",
+      "title": "Application HTTP·Web session·event 보강",
+      "purpose": "Application HTTP API, Web session, event stream의 독립 계약을 복원한다.",
+      "status": "candidate",
+      "verification": [
+        "pnpm --filter @massion/application exec vitest run src/event-store.test.ts src/http-client.test.ts src/http-server.test.ts src/http-web.test.ts src/product.test.ts src/web-session.test.ts",
+        "pnpm --filter @massion/application test",
+        "pnpm --filter @massion/application typecheck",
+        "pnpm --filter @massion/application build",
+        "pnpm --filter @massion/server typecheck",
+        "pnpm --filter @massion/server build"
+      ],
+      "primaryPaths": [
+        "packages/application/src/event-store.test.ts",
+        "packages/application/src/event-store.ts",
+        "packages/application/src/http-client.test.ts",
+        "packages/application/src/http-client.ts",
+        "packages/application/src/http-server.test.ts",
+        "packages/application/src/http-server.ts",
+        "packages/application/src/http-web.test.ts",
+        "packages/application/src/product.test.ts",
+        "packages/application/src/web-session.test.ts",
+        "packages/application/src/web-session.ts"
+      ]
+    },
+    {
+      "id": "9",
+      "title": "Router/Hermes Provider 백엔드",
+      "purpose": "Provider 카탈로그, Router fallback 백엔드, Codex profile과 구독 카탈로그를 복원한다.",
+      "status": "candidate",
+      "verification": [
+        "pnpm --filter @massion/router test",
+        "pnpm --filter @massion/router typecheck",
+        "pnpm --filter @massion/router build",
+        "pnpm --filter @massion/subscriptions test",
+        "pnpm --filter @massion/subscriptions typecheck",
+        "pnpm --filter @massion/subscriptions build",
+        "pnpm --filter @massion/runtime exec vitest run src/model-factory.test.ts src/subscriptions/codex-profile.test.ts",
+        "pnpm --filter @massion/runtime test",
+        "pnpm --filter @massion/runtime typecheck",
+        "pnpm --filter @massion/runtime build",
+        "pnpm --filter @massion/application test",
+        "pnpm --filter @massion/application typecheck",
+        "pnpm --filter @massion/application build"
+      ],
+      "primaryPaths": [
+        "apps/server/src/server-runtime-attestor.test.ts",
+        "apps/server/src/server-runtime-attestor.ts",
+        "apps/server/src/server-subscription-connection.test.ts",
+        "apps/server/src/server-subscription-connection.ts",
+        "apps/server/src/subscription-profile.test.ts",
+        "apps/server/src/subscription-profile.ts",
+        "packages/router/src/discovery.test.ts",
+        "packages/router/src/discovery.ts",
+        "packages/router/src/index.ts",
+        "packages/router/src/model-provider-catalog.test.ts",
+        "packages/router/src/model-provider-catalog.ts",
+        "packages/router/src/model-router.test.ts",
+        "packages/router/src/model-router.ts",
+        "packages/router/src/provider.test.ts",
+        "packages/router/src/provider.ts",
+        "packages/router/src/schema.ts",
+        "packages/runtime/src/model-factory.test.ts",
+        "packages/runtime/src/model-factory.ts",
+        "packages/runtime/src/subscriptions/codex-profile.test.ts",
+        "packages/runtime/src/subscriptions/codex-profile.ts",
+        "packages/subscriptions/src/provider-catalog.test.ts",
+        "packages/subscriptions/src/provider-catalog.ts"
+      ]
+    },
+    {
+      "id": "10",
+      "title": "범용 Provider CLI 연결",
+      "purpose": "Provider 선택·인증·로그아웃과 실제 CLI 실행 경로 연결을 닫는다.",
+      "status": "partial",
+      "verification": [
+        "pnpm --filter @massion/cli exec vitest run src/model-provider-authentication.test.ts src/provider-login-onboarding.test.ts src/provider-onboarding.test.ts src/subscription-login.test.ts --maxWorkers=1",
+        "pnpm --filter @massion/cli test",
+        "pnpm --filter @massion/cli typecheck",
+        "pnpm --filter @massion/cli build"
+      ],
+      "primaryPaths": [
+        "apps/cli/src/model-provider-authentication.test.ts",
+        "apps/cli/src/model-provider-authentication.ts",
+        "apps/cli/src/provider-login-onboarding.test.ts",
+        "apps/cli/src/provider-onboarding.test.ts",
+        "apps/cli/src/provider-onboarding.ts",
+        "apps/cli/src/subscription-login.test.ts",
+        "apps/cli/src/subscription-login.ts"
+      ]
+    },
+    {
+      "id": "11",
+      "title": "TUI 표면",
+      "purpose": "OpenTUI 화면, 양방향 운영 명령, 리소스 상태와 복구 워크플로를 복원한다.",
+      "status": "partial",
+      "verification": [
+        "pnpm --filter @massion/tui test",
+        "pnpm --filter @massion/tui typecheck",
+        "pnpm --filter @massion/tui build",
+        "pnpm install --lockfile-only",
+        "pnpm install --frozen-lockfile"
+      ],
+      "primaryPaths": [
+        "apps/tui/package.json",
+        "apps/tui/src/action-result.test.ts",
+        "apps/tui/src/approval-resource.test.ts",
+        "apps/tui/src/approval-resource.ts",
+        "apps/tui/src/commands.test.ts",
+        "apps/tui/src/commands.ts",
+        "apps/tui/src/controller.test.ts",
+        "apps/tui/src/controller.ts",
+        "apps/tui/src/core-form-schema.ts",
+        "apps/tui/src/core-forms.test.ts",
+        "apps/tui/src/core-forms.ts",
+        "apps/tui/src/core-resource.test.ts",
+        "apps/tui/src/core-resource.ts",
+        "apps/tui/src/index.ts",
+        "apps/tui/src/main.test.ts",
+        "apps/tui/src/main.ts",
+        "apps/tui/src/multi-field-form.test.ts",
+        "apps/tui/src/multi-field-form.ts",
+        "apps/tui/src/open-tui.bun.test.ts",
+        "apps/tui/src/open-tui.ts",
+        "apps/tui/src/operational-commands.test.ts",
+        "apps/tui/src/operational-form-schema.test.ts",
+        "apps/tui/src/operational-form-schema.ts",
+        "apps/tui/src/operational-forms.test.ts",
+        "apps/tui/src/operational-forms.ts",
+        "apps/tui/src/operational-resource.test.ts",
+        "apps/tui/src/operational-resource.ts",
+        "apps/tui/src/presentation.test.ts",
+        "apps/tui/src/presentation.ts",
+        "apps/tui/src/remote.contract.test.ts",
+        "apps/tui/src/room-resource.test.ts",
+        "apps/tui/src/room-resource.ts",
+        "apps/tui/src/runtime-memory-resource.test.ts",
+        "apps/tui/src/runtime-memory-resource.ts",
+        "apps/tui/src/runtime-memory-workflow.test.ts",
+        "apps/tui/src/runtime-memory-workflow.ts",
+        "apps/tui/src/runtime-resume.test.ts",
+        "apps/tui/src/runtime-resume.ts",
+        "apps/tui/src/state.test.ts",
+        "apps/tui/src/state.ts",
+        "apps/tui/src/wire.ts"
+      ]
+    },
+    {
+      "id": "12",
+      "title": "Web 표면",
+      "purpose": "Web 콘솔의 query resource, 세션, 화면, e2e와 CI 경로를 복원한다.",
+      "status": "candidate",
+      "verification": [
+        "pnpm --filter @massion/web test",
+        "pnpm --filter @massion/web typecheck",
+        "pnpm --filter @massion/web build",
+        "pnpm --filter @massion/web test:e2e",
+        "pnpm --filter @massion/web test:e2e:actual",
+        "pnpm install --lockfile-only",
+        "pnpm install --frozen-lockfile"
+      ],
+      "primaryPaths": [
+        ".github/workflows/ci.yml",
+        "scripts/query-resource-runtime-workflow.test.mjs",
+        "apps/web/.gitignore",
+        "apps/web/e2e-query-resource/index.html",
+        "apps/web/e2e-query-resource/query-resource.spec.ts",
+        "apps/web/e2e/console.spec.ts",
+        "apps/web/index.html",
+        "apps/web/package.json",
+        "apps/web/playwright.actual.config.ts",
+        "apps/web/playwright.query-resource.config.ts",
+        "apps/web/src/api.test.ts",
+        "apps/web/src/api.ts",
+        "apps/web/src/command-action.test.tsx",
+        "apps/web/src/command-action.ts",
+        "apps/web/src/components/Shell.test.tsx",
+        "apps/web/src/components/Shell.tsx",
+        "apps/web/src/hooks.test.tsx",
+        "apps/web/src/hooks.ts",
+        "apps/web/src/live.test.ts",
+        "apps/web/src/live.ts",
+        "apps/web/src/pages/AccessPage.test.tsx",
+        "apps/web/src/pages/AccessPage.tsx",
+        "apps/web/src/pages/ApprovalsPage.test.tsx",
+        "apps/web/src/pages/ApprovalsPage.tsx",
+        "apps/web/src/pages/AuditPage.test.tsx",
+        "apps/web/src/pages/AuditPage.tsx",
+        "apps/web/src/pages/ControlPage.test.tsx",
+        "apps/web/src/pages/ControlPage.tsx",
+        "apps/web/src/pages/LoginPage.tsx",
+        "apps/web/src/pages/MemoryPage.test.tsx",
+        "apps/web/src/pages/MemoryPage.tsx",
+        "apps/web/src/pages/OptimizationPage.css",
+        "apps/web/src/pages/OptimizationPage.test.tsx",
+        "apps/web/src/pages/OptimizationPage.tsx",
+        "apps/web/src/pages/OrganizationPage.test.tsx",
+        "apps/web/src/pages/OrganizationPage.tsx",
+        "apps/web/src/pages/OverviewPage.test.tsx",
+        "apps/web/src/pages/OverviewPage.tsx",
+        "apps/web/src/pages/RoomPage.test.tsx",
+        "apps/web/src/pages/RoomPage.tsx",
+        "apps/web/src/pages/WorkPage.test.tsx",
+        "apps/web/src/pages/WorkPage.tsx",
+        "apps/web/src/pages/control-contract.test.ts",
+        "apps/web/src/pages/control-contract.ts",
+        "apps/web/src/pages/optimization-contract.test.ts",
+        "apps/web/src/pages/optimization-contract.ts",
+        "apps/web/src/router.test.ts",
+        "apps/web/src/router.tsx",
+        "apps/web/src/services.test.ts",
+        "apps/web/src/services.ts",
+        "apps/web/src/session-channel.test.ts",
+        "apps/web/src/session-channel.ts",
+        "apps/web/src/session.test.ts",
+        "apps/web/src/session.ts",
+        "apps/web/src/store.test.ts",
+        "apps/web/src/store.ts",
+        "apps/web/src/styles.css",
+        "apps/web/tsconfig.json"
+      ]
+    },
+    {
+      "id": "13",
+      "title": "기능 능력 게이트",
+      "purpose": "개인용 핵심 기능 카탈로그와 capability contract RED/GREEN 게이트를 복원한다.",
+      "status": "partial",
+      "verification": [
+        "pnpm --filter @massion/foundation test",
+        "pnpm --filter @massion/foundation typecheck",
+        "pnpm --filter @massion/foundation build",
+        "node --test scripts/capability-contract.test.mjs"
+      ],
+      "primaryPaths": [
+        "scripts/capability-contract.test.mjs",
+        "packages/foundation/src/personal-core-capabilities.ts"
+      ]
+    },
+    {
+      "id": "14",
+      "title": "근거·체크리스트·추적성 정정",
+      "purpose": "후보 증거와 Phase 문서를 실제 구현·검증·커밋 상태에 맞게 정정한다.",
+      "status": "partial",
+      "verification": [
+        "pnpm verify:docs",
+        "node scripts/verify-phase30-reconciliation.mjs",
+        "git diff --check"
+      ],
+      "primaryPaths": [
+        "docs/evidence/phase-30/agent-delegation-runtime-2026-07-17.md",
+        "docs/evidence/phase-30/agent-runtime-growth-lineage-2026-07-17.md",
+        "docs/evidence/phase-30/claude-consumer-auth-policy-review-2026-07-17.md",
+        "docs/evidence/phase-30/cli-framework-migration-2026-07-17.md",
+        "docs/evidence/phase-30/core-actions-and-resource-states-2026-07-16.md",
+        "docs/evidence/phase-30/growth-product-assembly-2026-07-17.md",
+        "docs/evidence/phase-30/model-optimization-server-integrity-2026-07-17.md",
+        "docs/evidence/phase-30/production-dependency-security-2026-07-17.md",
+        "docs/evidence/phase-30/tui-core-capability-parity-2026-07-17.md",
+        "docs/evidence/phase-30/web-core-capability-parity-2026-07-17.md",
+        "docs/phases/30-surface-parity-agent-ux/design.md",
+        "docs/phases/30-surface-parity-agent-ux/implementation-plan.md",
+        "docs/phases/30-surface-parity-agent-ux/review.md"
+      ]
+    },
+    {
+      "id": "15",
+      "title": "전체 게이트와 사용자 인수 검증",
+      "purpose": "모든 복구 조각 뒤 clean clone, 전체 게이트, tmux와 Provider 사용자 인수 검증을 수행한다.",
+      "status": "not-implemented",
+      "verification": [
+        "pnpm install --frozen-lockfile",
+        "pnpm verify",
+        "pnpm verify:security",
+        "pnpm verify:release"
+      ],
+      "primaryPaths": []
+    }
+  ],
+  "sharedHunkAnchors": [
+    {
+      "path": "apps/cli/src/commands.ts",
+      "primarySlice": "3",
+      "owners": [
+        { "slice": "3", "anchors": ["CliApplicationHandlerContext"] },
+        { "slice": "4", "anchors": ["optimization"] },
+        { "slice": "7", "anchors": ["handleRuntimeLineage"] },
+        { "slice": "8A", "anchors": ["ApprovalMutationSnapshot"] },
+        { "slice": "10", "anchors": ["modelProviderConnection"] }
+      ]
+    },
+    {
+      "path": "apps/cli/src/parser.ts",
+      "primarySlice": "3",
+      "owners": [
+        { "slice": "3", "anchors": ["CliParserOutput"] },
+        { "slice": "4", "anchors": ["optimization"] },
+        { "slice": "7", "anchors": ["chat"] },
+        { "slice": "8A", "anchors": ["approval"] },
+        { "slice": "10", "anchors": ["auth"] }
+      ]
+    },
+    {
+      "path": "apps/cli/src/execution.ts",
+      "primarySlice": "3",
+      "owners": [
+        { "slice": "3", "anchors": ["ensureLocalEndpoint"] },
+        { "slice": "10", "anchors": ["resolveProviderLoginOnboarding"] }
+      ]
+    },
+    {
+      "path": "apps/server/src/product.ts",
+      "primarySlice": "7",
+      "owners": [
+        { "slice": "4", "anchors": ["buildOptimizationModelCatalog"] },
+        { "slice": "5", "anchors": ["growth"] },
+        { "slice": "6", "anchors": ["runtimeMemory"] },
+        { "slice": "7", "anchors": ["agentCollaboration"] }
+      ]
+    },
+    {
+      "path": "packages/foundation/src/index.ts",
+      "primarySlice": "2",
+      "owners": [
+        { "slice": "2", "anchors": ["capability-contract"] },
+        { "slice": "13", "anchors": ["personal-core-capabilities"] }
+      ]
+    },
+    {
+      "path": "packages/foundation/package.json",
+      "primarySlice": "2",
+      "owners": [
+        { "slice": "2", "anchors": ["@noble/hashes"] }
+      ]
+    },
+    {
+      "path": "packages/application/src/adapters/domain.ts",
+      "primarySlice": "7",
+      "owners": [
+        { "slice": "4", "anchors": ["optimization"] },
+        { "slice": "7", "anchors": ["collaboration"] },
+        { "slice": "8A", "anchors": ["expectedRevision"] },
+        { "slice": "9", "anchors": ["providerSecret"] }
+      ]
+    },
+    {
+      "path": "packages/application/src/adapters/read-model.ts",
+      "primarySlice": "7",
+      "owners": [
+        { "slice": "7", "anchors": ["collaboration"] },
+        { "slice": "8A", "anchors": ["approval"] }
+      ]
+    },
+    {
+      "path": "packages/application/src/query-registry.ts",
+      "primarySlice": "7",
+      "owners": [
+        { "slice": "4", "anchors": ["optimization"] },
+        { "slice": "5", "anchors": ["growth"] },
+        { "slice": "6", "anchors": ["runtime.execution.events"] },
+        { "slice": "7", "anchors": ["collaboration"] },
+        { "slice": "8A", "anchors": ["governance.approval"] },
+        { "slice": "8B", "anchors": ["audit"] },
+        { "slice": "9", "anchors": ["router.catalog"] }
+      ]
+    },
+    {
+      "path": "packages/application/src/read-model.ts",
+      "primarySlice": "7",
+      "owners": [
+        { "slice": "7", "anchors": ["ApplicationMergePlanSource"] },
+        { "slice": "8A", "anchors": ["approval"] }
+      ]
+    },
+    {
+      "path": "packages/application/src/product.ts",
+      "primarySlice": "6",
+      "owners": [
+        { "slice": "5", "anchors": ["bootstrapExtensions"] },
+        { "slice": "6", "anchors": ["runtimeMemory"] }
+      ]
+    },
+    {
+      "path": "packages/application/src/event-projector.ts",
+      "primarySlice": "7",
+      "owners": [
+        { "slice": "7", "anchors": ["work-event"] },
+        { "slice": "8B", "anchors": ["operation"] }
+      ]
+    },
+    {
+      "path": "packages/application/src/snapshot.ts",
+      "primarySlice": "7",
+      "owners": [
+        { "slice": "7", "anchors": ["CollaborationGraphRoom"] },
+        { "slice": "8A", "anchors": ["approval"] }
+      ]
+    },
+    {
+      "path": "packages/application/src/remote.contract.test.ts",
+      "primarySlice": "7",
+      "owners": [
+        { "slice": "7", "anchors": ["merge"] },
+        { "slice": "8A", "anchors": ["approval"] }
+      ]
+    },
+    {
+      "path": "packages/runtime/src/execution-store.ts",
+      "primarySlice": "6",
+      "owners": [
+        { "slice": "6", "anchors": ["memory"] },
+        { "slice": "7", "anchors": ["delegation"] }
+      ]
+    },
+    {
+      "path": "packages/runtime/src/schema.ts",
+      "primarySlice": "6",
+      "owners": [
+        { "slice": "6", "anchors": ["RUNTIME_MEMORY"] },
+        { "slice": "7", "anchors": ["RUNTIME_DELEGATION"] }
+      ]
+    },
+    {
+      "path": "packages/runtime/src/voltagent-runner.ts",
+      "primarySlice": "6",
+      "owners": [
+        { "slice": "6", "anchors": ["memory"] },
+        { "slice": "9", "anchors": ["model"] }
+      ]
+    },
+    {
+      "path": "packages/runtime/src/embedded-agent-runtime.ts",
+      "primarySlice": "7",
+      "owners": [
+        { "slice": "6", "anchors": ["memory"] },
+        { "slice": "7", "anchors": ["delegation"] }
+      ]
+    },
+    {
+      "path": "packages/runtime/src/index.ts",
+      "primarySlice": "6",
+      "owners": [
+        { "slice": "6", "anchors": ["agent-memory"] },
+        { "slice": "7", "anchors": ["agent-delegation"] }
+      ]
+    },
+    {
+      "path": "packages/work/src/work.ts",
+      "primarySlice": "7",
+      "owners": [
+        { "slice": "7", "anchors": ["collaboration"] },
+        { "slice": "8A", "anchors": ["reason"] }
+      ]
+    },
+    {
+      "path": "pnpm-lock.yaml",
+      "primarySlice": "2",
+      "owners": [
+        { "slice": "2", "anchors": ["@noble/hashes"] },
+        { "slice": "3", "anchors": ["@clack/prompts"] },
+        { "slice": "5", "anchors": ["@massion/growth"] },
+        { "slice": "11", "anchors": ["apps/tui"] },
+        { "slice": "12", "anchors": ["apps/web"] }
+      ]
+    },
+    {
+      "path": "docs/phases/30-surface-parity-agent-ux/design.md",
+      "primarySlice": "14",
+      "owners": [
+        { "slice": "14", "anchors": ["Phase 30"] },
+        { "slice": "15", "anchors": ["UAT"] }
+      ]
+    },
+    {
+      "path": "docs/phases/30-surface-parity-agent-ux/implementation-plan.md",
+      "primarySlice": "14",
+      "owners": [
+        { "slice": "14", "anchors": ["Phase 30"] },
+        { "slice": "15", "anchors": ["UAT"] }
+      ]
+    },
+    {
+      "path": "docs/phases/30-surface-parity-agent-ux/review.md",
+      "primarySlice": "14",
+      "owners": [
+        { "slice": "14", "anchors": ["Phase 30"] },
+        { "slice": "15", "anchors": ["UAT"] }
+      ]
+    }
+  ]
+}
