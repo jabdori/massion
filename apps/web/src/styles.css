@@ -170,6 +170,104 @@ code {
 .side-rail nav a span {
   font: 0.65rem var(--mono);
 }
+.nav-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  margin-left: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--accent-contrast, #fff);
+  background: var(--accent, #5B5FEF);
+  border-radius: 999px;
+}
+
+
+
+/* 승인 위험도 배너 */
+.risk-banner {
+  padding: 12px 16px;
+  border-radius: 8px;
+  margin-bottom: 16px;
+}
+
+.risk-banner strong {
+  display: block;
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.risk-banner p {
+  font-size: 14px;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.risk-banner.risk-low {
+  background: rgba(34, 197, 94, 0.08);
+  border-left: 3px solid #22C55E;
+}
+.risk-banner.risk-low strong { color: #16A34A; }
+
+.risk-banner.risk-medium {
+  background: rgba(245, 166, 35, 0.08);
+  border-left: 3px solid #F5A623;
+}
+.risk-banner.risk-medium strong { color: #D97706; }
+
+.risk-banner.risk-high {
+  background: rgba(239, 68, 68, 0.08);
+  border-left: 3px solid #EF4444;
+}
+.risk-banner.risk-high strong { color: #DC2626; }
+
+/* 친화적 승인 카드 */
+.approval-card-detailed {
+  background: var(--surface, #fff);
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: 10px;
+  padding: 24px;
+  margin-bottom: 16px;
+}
+
+.approval-card-detailed .approval-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  font-size: 14px;
+  color: var(--accent, #F5A623);
+  font-weight: 600;
+}
+
+.approval-card-detailed .approval-card-title {
+  font-size: 18px;
+  font-weight: 600;
+  margin: 0 0 16px 0;
+}
+
+.approval-card-detailed .approval-card-meta {
+  display: flex;
+  gap: 16px;
+  font-size: 13px;
+  color: #6b7280;
+  margin-top: 12px;
+}
+
+.approval-reason {
+  margin-top: 12px;
+  padding: 12px;
+  background: rgba(99, 102, 241, 0.04);
+  border-radius: 8px;
+}
+
+.approval-reason p { margin: 4px 0 0 0; font-size: 14px; line-height: 1.5; }
+
 .side-rail nav a:hover {
   color: var(--paper);
   background: var(--surface-raised);
@@ -1555,6 +1653,60 @@ button:disabled {
   color: var(--muted);
   font-size: 0.82rem;
 }
+
+
+/* 계획 미리보기 카드 */
+.plan-preview-card {
+  margin-top: 16px;
+  padding: 20px 24px;
+  background: var(--surface, #fff);
+  border: 1px solid var(--accent, #5B5FEF);
+  border-left: 3px solid var(--accent, #5B5FEF);
+  border-radius: 10px;
+}
+
+.plan-preview-header {
+  margin-bottom: 12px;
+}
+
+.plan-preview-header strong {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--accent, #5B5FEF);
+}
+
+.plan-preview-body {
+  margin-bottom: 16px;
+}
+
+.plan-preview-request {
+  font-size: 15px;
+  line-height: 1.6;
+  color: #1f2937;
+  margin: 0 0 12px 0;
+  padding: 12px;
+  background: rgba(91, 95, 239, 0.04);
+  border-radius: 8px;
+}
+
+.plan-preview-steps {
+  margin: 0;
+  padding-left: 20px;
+  font-size: 14px;
+  line-height: 1.8;
+  color: #4b5563;
+}
+
+.plan-preview-steps li {
+  list-style: decimal;
+}
+
+.plan-preview-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+}
+
 .quick-examples {
   display: flex;
   flex-wrap: wrap;
