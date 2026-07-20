@@ -11,6 +11,8 @@ import type {
   AgentExecutionInput,
   AgentExecutionResult,
   AgentRunner,
+  ExecutionDelta,
+  ExecutionDeltaObserver,
   StructuredAgentRunner,
   StructuredOutputSpec,
 } from "./contracts.js";
@@ -41,6 +43,7 @@ export interface SessionRenewalClock {
 
 export interface VoltAgentRunnerOptions {
   readonly sessionRenewalClock?: SessionRenewalClock;
+  readonly deltaObserver?: ExecutionDeltaObserver;
   readonly subscriptionReceipts?: Pick<
     SubscriptionExecutionReceiptCoordinator,
     | "read"
@@ -154,7 +157,8 @@ function jsonOutputPrompt(input: unknown, output: StructuredOutputSpec): string 
 }
 
 function validateJsonOutput(value: unknown, output: StructuredOutputSpec): unknown {
-  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("구조화 출력은 JSON object여야 합니다");
+  if (!value || typeof value !== "object" || Array.isArray(value))
+    throw new Error("구조화 출력은 JSON object여야 합니다");
   if (!output.validate) return value;
   const validated = output.validate(value);
   if (!validated.success) throw new Error("구조화 출력 검증에 실패했습니다", { cause: validated.error });
@@ -163,7 +167,10 @@ function validateJsonOutput(value: unknown, output: StructuredOutputSpec): unkno
 
 function nonNativeStructuredGenerationOptions(lease: RoutedLanguageModelLease) {
   const provider =
-    lease.model && typeof lease.model === "object" && "provider" in lease.model && typeof lease.model.provider === "string"
+    lease.model &&
+    typeof lease.model === "object" &&
+    "provider" in lease.model &&
+    typeof lease.model.provider === "string"
       ? lease.model.provider
       : undefined;
   if (provider !== "zai-coding-plan.chat") return {};
@@ -248,6 +255,7 @@ export interface RoutedExecutionContextResolver {
 
 export class VoltAgentRunner implements AgentRunner, StructuredAgentRunner {
   private readonly active = new Map<string, ActiveExecution>();
+  private readonly deltaSequences = new Map<string, number>();
   private readonly suspendedSubscriptions = new Map<string, SuspendedSubscriptionExecution>();
   private readonly subscriptionReceipts: VoltAgentRunnerOptions["subscriptionReceipts"];
   private accepting = true;
@@ -416,6 +424,13 @@ export class VoltAgentRunner implements AgentRunner, StructuredAgentRunner {
             for await (const raw of result.fullStream) {
               const part = raw as { readonly type: string } & Record<string, unknown>;
               const text = typeof part.text === "string" ? part.text : part.delta;
+              this.emitStreamDelta(
+                context,
+                executionId,
+                input.agentHandle,
+                part,
+                typeof text === "string" ? text : undefined,
+              );
               if (part.type === "text-delta" && typeof text === "string" && text.length > 0) emittedTokens += 1;
               state = await this.store.appendEvent(context, {
                 commandId: `${executionId}:stream:${String(state.execution.event_sequence + 1)}`,
@@ -816,11 +831,14 @@ export class VoltAgentRunner implements AgentRunner, StructuredAgentRunner {
           inputTokens = result.usage.inputTokens ?? 0;
           outputTokens = result.usage.outputTokens ?? 0;
         } else {
-          const result = await this.agent(context, input.agentHandle).generateText(jsonOutputPrompt(input.input, output), {
-            ...generationOptions,
-            ...nonNativeStructuredGenerationOptions(lease),
-            output: Output.json({ name: output.name, description: output.description }),
-          });
+          const result = await this.agent(context, input.agentHandle).generateText(
+            jsonOutputPrompt(input.input, output),
+            {
+              ...generationOptions,
+              ...nonNativeStructuredGenerationOptions(lease),
+              output: Output.json({ name: output.name, description: output.description }),
+            },
+          );
           structuredOutput = validateJsonOutput(result.output, output);
           inputTokens = result.usage.inputTokens ?? 0;
           outputTokens = result.usage.outputTokens ?? 0;
@@ -1275,11 +1293,68 @@ export class VoltAgentRunner implements AgentRunner, StructuredAgentRunner {
   }
 
   private finish(executionId: string): void {
+    this.deltaSequences.delete(executionId);
     const active = this.active.get(executionId);
     if (!active) return;
     this.active.delete(executionId);
     active.detachAbortSignal();
     active.resolveDone();
+  }
+
+  // 휘발성 실행 델타: 저장소에 기록하지 않고 관찰자에게만 전달합니다. 관찰자 오류는 실행에 전파하지 않습니다.
+  private emitDelta(
+    context: TenantContext,
+    executionId: string,
+    agentHandle: string,
+    partial: Omit<ExecutionDelta, "executionId" | "agentHandle" | "sequence" | "occurredAt">,
+  ): void {
+    const observer = this.options.deltaObserver;
+    if (!observer) return;
+    const sequence = (this.deltaSequences.get(executionId) ?? 0) + 1;
+    this.deltaSequences.set(executionId, sequence);
+    try {
+      observer.observe(context, {
+        executionId,
+        agentHandle,
+        sequence,
+        occurredAt: new Date().toISOString(),
+        ...partial,
+      });
+    } catch {
+      // 관찰자 예외는 무시합니다.
+    }
+  }
+
+  private emitStreamDelta(
+    context: TenantContext,
+    executionId: string,
+    agentHandle: string,
+    part: { readonly type: string } & Record<string, unknown>,
+    text: string | undefined,
+  ): void {
+    if (!this.options.deltaObserver) return;
+    const toolName = typeof part.toolName === "string" ? part.toolName : undefined;
+    const toolCallId = typeof part.toolCallId === "string" ? part.toolCallId : undefined;
+    if (part.type === "text-delta" && text !== undefined && text.length > 0)
+      this.emitDelta(context, executionId, agentHandle, { kind: "output-text", text });
+    else if (part.type === "reasoning-delta" && text !== undefined && text.length > 0)
+      this.emitDelta(context, executionId, agentHandle, { kind: "reasoning", text });
+    else if (part.type === "tool-call")
+      this.emitDelta(context, executionId, agentHandle, {
+        kind: "tool-call",
+        ...(toolName === undefined ? {} : { toolName }),
+        ...(toolCallId === undefined ? {} : { toolCallId }),
+      });
+    else if (part.type === "tool-result")
+      this.emitDelta(context, executionId, agentHandle, {
+        kind: "tool-result",
+        ...(toolName === undefined ? {} : { toolName }),
+        ...(toolCallId === undefined ? {} : { toolCallId }),
+        summary: JSON.stringify(part.output ?? part.result ?? null).slice(0, 500),
+      });
+    else if (part.type === "error") this.emitDelta(context, executionId, agentHandle, { kind: "error" });
+    else if (part.type === "finish")
+      this.emitDelta(context, executionId, agentHandle, { kind: "lifecycle", summary: "finish" });
   }
 
   private async cancelBeforeProvider(

@@ -48,6 +48,27 @@ export interface AgentExecutionEvent {
   readonly createdAt: unknown;
 }
 
+// 실행 델타는 Surface 체감용 휘발성 신호입니다. 도메인 정본이 아니므로 저장소에 기록하지 않고,
+// 재연결 복구는 work.timeline 재조회가 담당합니다.
+export type ExecutionDeltaKind = "output-text" | "reasoning" | "tool-call" | "tool-result" | "lifecycle" | "error";
+
+export interface ExecutionDelta {
+  readonly executionId: string;
+  readonly agentHandle: string;
+  readonly sequence: number;
+  readonly kind: ExecutionDeltaKind;
+  readonly text?: string;
+  readonly toolName?: string;
+  readonly toolCallId?: string;
+  readonly summary?: string;
+  readonly occurredAt: string;
+}
+
+export interface ExecutionDeltaObserver {
+  // 동기 fire-and-forget: 예외·배압을 실행 경로에 전파하지 않습니다.
+  observe(context: TenantContext, delta: ExecutionDelta): void;
+}
+
 export interface RuntimeExecutionError {
   readonly category: string;
   readonly retryable: boolean;

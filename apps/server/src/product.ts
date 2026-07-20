@@ -5,6 +5,7 @@ import { join } from "node:path";
 import {
   ApplicationProduct,
   CoreAssuranceStage,
+  ExecutionStreamRegistry,
   CoreDeliveryStage,
   CoreEvidenceStage,
   CoreRecordsStage,
@@ -415,6 +416,7 @@ export async function createMassionDaemon(
       },
     );
     modelFactoryReference.current = modelFactory;
+    const executionStream = new ExecutionStreamRegistry();
     const routedRunner = new VoltAgentRunner(
       topologyRuntime,
       runtimeExecutions,
@@ -422,7 +424,7 @@ export async function createMassionDaemon(
       modelRegistry,
       directExecutionLifecycle,
       subscriptionExecutionContext,
-      { subscriptionApprovals: subscriptionPermissionBridge },
+      { subscriptionApprovals: subscriptionPermissionBridge, deltaObserver: executionStream },
     );
     const topologies = new Map<string, OrganizationAgentTopology>();
     const synchronize = async (context: Parameters<typeof graph.listNodes>[0]) => {
@@ -698,6 +700,7 @@ export async function createMassionDaemon(
     const registryServer = new RegistryReadHttpServer(registryHandler, config.registry);
     const daemonReference: { current?: MassionDaemon } = {};
     const application = await ApplicationProduct.create({
+      executionStream,
       database,
       identities,
       organizations,

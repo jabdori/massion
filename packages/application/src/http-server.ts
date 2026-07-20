@@ -45,6 +45,13 @@ export interface ApplicationHttpDependencies {
       input: { readonly after: number; readonly limit: number },
     ): Promise<{ readonly events: readonly ApplicationEventV1[]; readonly cursor: number }>;
   };
+  readonly executionStream?: {
+    subscribe(
+      context: TenantContext,
+      subscription: { readonly executionId?: string },
+      handler: (delta: unknown) => void,
+    ): () => void;
+  };
   readonly tokens?: {
     issue(context: TenantContext, input: IssueApplicationTokenInput): Promise<unknown>;
     revoke(context: TenantContext, input: { readonly commandId: string; readonly tokenId: string }): Promise<void>;
@@ -506,9 +513,14 @@ export class ApplicationHttpServer {
         throw validation("access token 갱신 입력이 유효하지 않습니다");
       let access: unknown;
       try {
-        access = await this.dependencies.auth.refreshLocalAccess(header(request, "authorization"), this.options.audience, [], {
-          commandId: input.commandId,
-        });
+        access = await this.dependencies.auth.refreshLocalAccess(
+          header(request, "authorization"),
+          this.options.audience,
+          [],
+          {
+            commandId: input.commandId,
+          },
+        );
       } catch (cause) {
         throw new ApplicationError({
           category: "authentication",
@@ -652,6 +664,15 @@ export class ApplicationHttpServer {
         return;
       }
       this.method(response, ["GET", "DELETE"]);
+      return;
+    }
+    if (url.pathname === "/api/v1/executions/stream") {
+      if (request.method !== "GET") {
+        this.method(response, ["GET"]);
+        return;
+      }
+      if (!hasScope(access.scopes, "event:read")) throw this.scope();
+      await this.executionDeltaStream(request, response, access.context, url);
       return;
     }
     if (url.pathname === "/api/v1/events/stream") {
@@ -1007,6 +1028,56 @@ export class ApplicationHttpServer {
       userMessage: "Application scope 또는 역할이 부족합니다",
       operatorCode: "APP_HTTP_SCOPE",
     });
+  }
+
+  // 휘발성 실행 델타 SSE: replay 없음, 재연결 복구는 work.timeline 재조회가 담당합니다.
+  private async executionDeltaStream(
+    request: IncomingMessage,
+    response: ServerResponse,
+    context: TenantContext,
+    url: URL,
+  ): Promise<void> {
+    const registry = this.dependencies.executionStream;
+    if (!registry) throw validation("실행 스트림이 이 배포에서 활성화되지 않았습니다");
+    if (this.activeStreams >= this.options.maxStreams)
+      throw new ApplicationError({
+        category: "rate-limit",
+        severity: "warning",
+        retryable: true,
+        userMessage: "동시 event stream 상한을 초과했습니다",
+        operatorCode: "APP_HTTP_STREAM_LIMIT",
+      });
+    const accept = header(request, "accept");
+    if (accept !== undefined && !accept.includes("text/event-stream"))
+      throw validation("Accept text/event-stream이 필요합니다");
+    const executionId = url.searchParams.get("executionId") ?? undefined;
+    this.activeStreams += 1;
+    this.streams.add(response);
+    const unsubscribe = registry.subscribe(context, executionId === undefined ? {} : { executionId }, (delta) => {
+      if (this.streamClosed(request, response)) return;
+      response.write(`event: execution-delta\ndata: ${JSON.stringify(delta)}\n\n`);
+    });
+    try {
+      response.writeHead(200, {
+        "content-type": "text/event-stream; charset=utf-8",
+        "cache-control": "no-cache, no-transform",
+        connection: "keep-alive",
+        "x-accel-buffering": "no",
+      });
+      let heartbeatAt = Date.now() + this.options.heartbeatMs;
+      while (!this.streamClosed(request, response)) {
+        if (Date.now() >= heartbeatAt) {
+          response.write(`: heartbeat ${String(Date.now())}\n\n`);
+          heartbeatAt = Date.now() + this.options.heartbeatMs;
+        }
+        await new Promise<void>((resolve) => setTimeout(resolve, this.options.pollMs));
+      }
+    } finally {
+      unsubscribe();
+      this.streams.delete(response);
+      this.activeStreams -= 1;
+      if (response.headersSent && !response.writableEnded) response.end();
+    }
   }
 
   private async stream(

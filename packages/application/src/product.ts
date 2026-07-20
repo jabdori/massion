@@ -6,6 +6,7 @@ import type { OrganizationGraphService } from "@massion/organization";
 import type { MassionDatabase } from "@massion/storage";
 
 import { registerApplicationDomainCommands, type ApplicationDomainDependencies } from "./adapters/domain.js";
+import type { ExecutionStreamRegistry } from "./execution-stream.js";
 import { registerApplicationAccessCommands } from "./access-commands.js";
 import { SurrealApplicationReadModel } from "./adapters/read-model.js";
 import { ApplicationAccessTokenService } from "./auth.js";
@@ -50,6 +51,7 @@ export interface ApplicationProductDependencies {
     ApplicationQueryDependencies,
     "readModel" | "runs" | "snapshot" | "memberships" | "audit" | "webSessions"
   >;
+  readonly executionStream?: ExecutionStreamRegistry;
   readonly artifacts?: Pick<ApplicationArtifactGateway, "inspect" | "install" | "update">;
   readonly integrations?: {
     readonly http?: NonNullable<ApplicationHttpDependencies["integrations"]>;
@@ -213,6 +215,7 @@ export class ApplicationProduct implements AsyncDisposable {
           },
         },
         tokens,
+        ...(dependencies.executionStream === undefined ? {} : { executionStream: dependencies.executionStream }),
         ...(dependencies.artifacts === undefined ? {} : { artifacts: dependencies.artifacts }),
         ...(dependencies.integrations?.http === undefined ? {} : { integrations: dependencies.integrations.http }),
         ...(dependencies.registryPublisher === undefined ? {} : { registryPublisher: dependencies.registryPublisher }),

@@ -741,7 +741,8 @@ describe("VoltAgent AgentRunner", () => {
       ...lease(
         new MockLanguageModelV3({
           doGenerate: async (options) => {
-            const responseFormat = options.responseFormat as { readonly type?: string; readonly schema?: unknown } | undefined;
+            const responseFormat = options.responseFormat as
+              { readonly type?: string; readonly schema?: unknown } | undefined;
             if (responseFormat?.type !== "json" || responseFormat.schema !== undefined)
               throw new Error("JSON object response format이 필요합니다");
             if (!JSON.stringify(options.prompt).includes("Massion JSON output schema"))
@@ -1107,6 +1108,59 @@ describe("VoltAgent AgentRunner", () => {
     const first = events[0];
     if (!first) throw new Error("stream event가 없습니다");
     const recovery = await store.getRecovery(context, first.executionId);
+    expect(recovery.execution.status).toBe("succeeded");
+  });
+
+  it("delta observer에 휘발성 실행 델타를 전달하고 observer 오류는 실행에 전파하지 않는다", async () => {
+    const routed = lease(
+      new MockLanguageModelV3({
+        doStream: {
+          stream: simulateReadableStream({
+            chunks: [
+              { type: "stream-start", warnings: [] },
+              { type: "text-start", id: "text-1" },
+              { type: "text-delta", id: "text-1", delta: "환불" },
+              { type: "text-delta", id: "text-1", delta: " API" },
+              { type: "text-end", id: "text-1" },
+              { type: "finish", finishReason: "stop", usage: USAGE },
+            ],
+          }),
+        },
+      }),
+    );
+    const observed: { kind: string; text?: string; sequence: number; executionId: string; agentHandle: string }[] = [];
+    const runner = new VoltAgentRunner(
+      voltAgent,
+      store,
+      { acquire: vi.fn().mockResolvedValue(routed) },
+      registry,
+      undefined,
+      undefined,
+      {
+        deltaObserver: {
+          observe: (_observerContext, delta) => {
+            observed.push({
+              kind: delta.kind,
+              ...(delta.text === undefined ? {} : { text: delta.text }),
+              sequence: delta.sequence,
+              executionId: delta.executionId,
+              agentHandle: delta.agentHandle,
+            });
+            throw new Error("observer 오류는 무시되어야 합니다");
+          },
+        },
+      },
+    );
+
+    const events = [];
+    for await (const event of runner.stream(context, input())) events.push(event);
+
+    const texts = observed.filter((delta) => delta.kind === "output-text");
+    expect(texts.map((delta) => delta.text)).toEqual(["환불", " API"]);
+    expect(observed.map((delta) => delta.sequence)).toEqual(observed.map((_, index) => index + 1));
+    expect(new Set(observed.map((delta) => delta.executionId)).size).toBe(1);
+    expect(observed[0]?.agentHandle).toBe("representative");
+    const recovery = await store.getRecovery(context, observed[0]?.executionId ?? "");
     expect(recovery.execution.status).toBe("succeeded");
   });
 
