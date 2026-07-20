@@ -110,8 +110,12 @@ async function loadView(
   if (view === "works") {
     const workId = state().selection.workId;
     if (workId) {
-      const records = await controller.query("work.records", { workId });
-      dispatch({ type: "query.loaded", key: "records", value: records });
+      const [records, timeline] = await Promise.allSettled([
+        controller.query("work.records", { workId }),
+        controller.query("work.timeline", { workId }),
+      ]);
+      if (records.status === "fulfilled") dispatch({ type: "query.loaded", key: "records", value: records.value });
+      if (timeline.status === "fulfilled") dispatch({ type: "query.loaded", key: "timeline", value: timeline.value });
     }
     return;
   }

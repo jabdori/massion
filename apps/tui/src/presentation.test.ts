@@ -255,3 +255,48 @@ describe("Workspace 스코프 표시", () => {
     expect(globalOutput.list).toContain("분석");
   });
 });
+
+describe("작업 상세 transcript", () => {
+  it("timeline 셀을 대화 형태로 렌더링한다", () => {
+    let state = reduceTuiState(createTuiState(), { type: "snapshot.loaded", snapshot: decodeSnapshot(testSnapshot) });
+    state = reduceTuiState(state, {
+      type: "query.loaded",
+      key: "timeline",
+      value: [
+        {
+          cellId: "event:event-1",
+          kind: "stage",
+          title: "업무가 접수되었습니다",
+          createdAt: "2026-07-21T09:00:00.000Z",
+          sequence: 1,
+        },
+        {
+          cellId: "message:message-1",
+          kind: "user-message",
+          title: "내 메시지",
+          detail: "환불 API를 추가해주세요",
+          authorId: "user-1",
+          roomId: "room-1",
+          createdAt: "2026-07-21T09:01:00.000Z",
+          sequence: 1,
+        },
+        {
+          cellId: "message:message-2",
+          kind: "agent-message",
+          title: "에이전트 응답",
+          detail: "계획을 수립했습니다",
+          authorId: "representative",
+          roomId: "room-1",
+          createdAt: "2026-07-21T09:02:00.000Z",
+          sequence: 2,
+        },
+      ],
+    });
+
+    const output = present(state);
+    expect(output.detail).toContain("진행 기록");
+    expect(output.detail).toContain("업무가 접수되었습니다");
+    expect(output.detail).toContain("환불 API를 추가해주세요");
+    expect(output.detail).toContain("계획을 수립했습니다");
+  });
+});

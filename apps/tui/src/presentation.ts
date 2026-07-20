@@ -4,8 +4,10 @@ import {
   USER_STAGES,
   userStageProgress,
   workStatusToken,
+  workTimelineCellToken,
   type CollaborationGraphNode,
   type CollaborationGraphSnapshot,
+  type WorkTimelineCellKind,
 } from "@massion/application";
 
 import type { TuiState, TuiView } from "./state.js";
@@ -106,6 +108,42 @@ function renderUserStageBar(internalStage: string): string {
 function workDisplayTitle(snapshot: CollaborationGraphSnapshot, workId: string): string {
   const task = snapshot.tasks.find((item) => item.workId === workId);
   return safeTerminalText(task?.title ?? workId, 80);
+}
+
+// work.timeline 셀을 대화(transcript) 줄로 렌더링합니다. TUI·Web이 같은 셀 계약을 공유합니다.
+const TRANSCRIPT_KINDS: readonly WorkTimelineCellKind[] = [
+  "user-message",
+  "agent-message",
+  "stage",
+  "task",
+  "artifact",
+  "verification",
+  "record",
+  "plan",
+  "activity",
+];
+
+function transcriptLines(state: TuiState, maximum = 14): readonly string[] {
+  const value = state.queryResults.timeline;
+  if (!Array.isArray(value)) return [];
+  const cells = value.filter(
+    (item): item is Record<string, unknown> => item !== null && typeof item === "object" && !Array.isArray(item),
+  );
+  if (cells.length === 0) return [];
+  return cells.slice(-maximum).map((cell) => {
+    const kind = TRANSCRIPT_KINDS.includes(cell.kind as WorkTimelineCellKind)
+      ? (cell.kind as WorkTimelineCellKind)
+      : "activity";
+    const token = workTimelineCellToken(kind);
+    const detail = typeof cell.detail === "string" ? cell.detail : undefined;
+    const title = typeof cell.title === "string" ? cell.title : "";
+    if (kind === "user-message") return `› 나  ${safeTerminalText(detail ?? title, 160)}`;
+    if (kind === "agent-message") {
+      const author = typeof cell.authorId === "string" ? cell.authorId : "에이전트";
+      return `● ${safeTerminalText(author, 40)}  ${safeTerminalText(detail ?? title, 160)}`;
+    }
+    return `${token.symbol} ${safeTerminalText(detail ?? title, 160)}`;
+  });
 }
 
 function recentNews(state: TuiState): readonly string[] {
@@ -230,8 +268,9 @@ function works(state: TuiState, snapshot: CollaborationGraphSnapshot): { list: s
         `산출물              ${work.artifactIds.length ? work.artifactIds.join(", ") : "아직 없어요"}`,
         ...recoveryLines,
         "",
-        "최근 소식",
-        ...recentNews(state),
+        ...(transcriptLines(state).length
+          ? ["진행 기록", ...transcriptLines(state)]
+          : ["최근 소식", ...recentNews(state)]),
         "",
         "d: 자세히 보기  ·  n: 새 작업  ·  m: 메시지",
       ].join("\n"),
