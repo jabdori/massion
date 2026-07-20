@@ -86,6 +86,45 @@ describe("ApplicationQueryRegistry", () => {
     });
   });
 
+  it("work.timeline은 event·메시지를 병합한 셀 목록을 반환한다", async () => {
+    const registry = new ApplicationQueryRegistry();
+    registerApplicationQueries(registry, {
+      readModel,
+      workTimeline: {
+        events: async () => [
+          {
+            event_id: "event-1",
+            sequence: 1,
+            event_type: "work_created",
+            actor_user_id: "query-user",
+            payload_json: "{}",
+            created_at: "2026-07-21T09:00:00.000Z",
+          },
+        ],
+        rooms: async () => [{ room_id: "room-1" }],
+        messages: async () => [
+          {
+            message_id: "message-1",
+            room_id: "room-1",
+            sequence: 1,
+            author_kind: "user" as const,
+            author_id: "query-user",
+            content: "진행 상황 알려주세요",
+            created_at: "2026-07-21T09:01:00.000Z",
+          },
+        ],
+      },
+    });
+    await expect(
+      registry.query(context, ["work:read"], "work.timeline", { workId: "query-work" }),
+    ).resolves.toMatchObject({
+      data: [
+        { cellId: "event:event-1", kind: "stage" },
+        { cellId: "message:message-1", kind: "user-message", detail: "진행 상황 알려주세요" },
+      ],
+    });
+  });
+
   it("workspace.list와 workspace.get을 workspace:read scope로 제공한다", async () => {
     const registry = new ApplicationQueryRegistry();
     const workspaceView = {

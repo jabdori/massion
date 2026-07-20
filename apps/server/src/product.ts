@@ -723,6 +723,12 @@ export async function createMassionDaemon(
       queries: {
         runtime: runtimeExecutions,
         workspaces,
+        workTimeline: {
+          events: async (timelineContext, workId) => await works.listEvents(timelineContext, workId),
+          rooms: async (timelineContext, workId) => await works.listRooms(timelineContext, workId),
+          messages: async (timelineContext, workId, roomId) =>
+            await works.listMessages(timelineContext, workId, roomId),
+        },
         assuranceBindings,
         providers,
         router,

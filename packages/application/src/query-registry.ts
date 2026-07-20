@@ -13,6 +13,8 @@ import {
 import type { RuntimeExecutionStore } from "@massion/runtime";
 import type { WorkspaceService, WorkspaceView } from "@massion/workspace";
 
+import { projectWorkTimeline, type WorkTimelineSources } from "./timeline.js";
+
 import { ApplicationError } from "./errors.js";
 import { ApplicationEventCursorExpiredError, type ApplicationEventStore } from "./event-store.js";
 import type { ApplicationReadModel } from "./read-model.js";
@@ -65,6 +67,7 @@ export interface ApplicationQueryDependencies {
   >;
   readonly memberships?: Pick<OrganizationService, "listMembers">;
   readonly workspaces?: Pick<WorkspaceService, "list" | "get">;
+  readonly workTimeline?: WorkTimelineSources;
   readonly audit?: Pick<ApplicationEventStore, "read">;
   readonly webSessions?: Pick<WebSessionService, "list">;
   readonly providers?: Pick<ProviderService, "listProviders" | "listEndpoints" | "listCredentials">;
@@ -522,6 +525,28 @@ export function registerApplicationQueries(
       validate: (value) => object(value, ["workspaceId"]),
       handle: async (context, value) =>
         publicWorkspace(await workspaces.get(context, text(value.workspaceId, "workspaceId"))),
+    });
+  }
+  if (dependencies.workTimeline) {
+    const timelineSources = dependencies.workTimeline;
+    registry.register({
+      operation: "work.timeline",
+      requiredScopes: ["work:read"],
+      allowedRoles: EVERY_ROLE,
+      validate: (value) => object(value, ["workId", "limit"]),
+      handle: async (context, value) => {
+        const limit =
+          value.limit === undefined
+            ? undefined
+            : Number.isSafeInteger(value.limit) && Number(value.limit) >= 1
+              ? Number(value.limit)
+              : (() => {
+                  throw new Error("timeline limit이 유효하지 않습니다");
+                })();
+        return await projectWorkTimeline(timelineSources, context, text(value.workId, "workId"), {
+          ...(limit === undefined ? {} : { limit }),
+        });
+      },
     });
   }
   registry.register({

@@ -38,6 +38,7 @@ export * from "./runtime-subscription-lineage.js";
 export * from "./schema.js";
 export * from "./sse.js";
 export * from "./snapshot.js";
+export * from "./timeline.js";
 export * from "./subscription-operations.js";
 export * from "./subscription-connection.js";
 export * from "./validation.js";
