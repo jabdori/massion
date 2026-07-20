@@ -78,6 +78,28 @@ type Modal =
 
 const SUBSCRIPTION_TABS: readonly TuiSubscriptionTab[] = ["providers", "accounts", "quota", "policy"];
 
+// Guided Workspace: 왼쪽은 목록, 오른쪽은 선택 항목 상세를 사람 언어로 표시합니다.
+// 내부 용어 대신 "무엇이 보이는지"를 먼저 씁니다.
+const LIST_PANEL_TITLES: Readonly<Record<TuiView, string>> = {
+  works: "작업 목록",
+  approvals: "확인 대기 목록",
+  chat: "협업방",
+  agents: "협업 에이전트",
+  overview: "요약",
+  operations: "운영 지표",
+  subscriptions: "구독 목록",
+};
+
+const DETAIL_PANEL_TITLES: Readonly<Record<TuiView, string>> = {
+  works: "선택한 작업",
+  approvals: "확인 상세",
+  chat: "대화",
+  agents: "에이전트 정보",
+  overview: "조직 상태",
+  operations: "운영 상세",
+  subscriptions: "구독 상세",
+};
+
 export class OpenTuiView {
   private tree: Renderable | undefined;
   private input: InputRenderable | undefined;
@@ -149,8 +171,15 @@ export class OpenTuiView {
     const list = this.filtered(output.list);
     const detail = this.filtered(output.detail);
     const inspectorOn = this.actions.state().inspector;
-    body.add(this.panel("작업 목록", list, layout.mode === "wide" ? "40%" : "38%"));
-    body.add(this.panel(inspectorOn ? "자세히 보기" : "진행 상황", detail, layout.mode === "wide" ? "60%" : "62%"));
+    const view = this.actions.state().view;
+    body.add(this.panel(LIST_PANEL_TITLES[view], list, layout.mode === "wide" ? "40%" : "38%"));
+    body.add(
+      this.panel(
+        inspectorOn ? "자세히 보기" : DETAIL_PANEL_TITLES[view],
+        detail,
+        layout.mode === "wide" ? "60%" : "62%",
+      ),
+    );
     root.add(body);
     if (this.modal) root.add(this.modalPanel());
     root.add(this.footer(this.notice || output.footer));
@@ -244,7 +273,7 @@ export class OpenTuiView {
     if (modal?.kind === "help") {
       box.add(
         new TextRenderable(this.renderer, {
-         content:
+          content:
             "기본 화면: 작업 목록 + 진행 상황이 바로 보입니다.\n" +
             "Tab/Shift+Tab: 뷰 전환(작업·확인·대화·개요·협업·운영·구독)\n" +
             "j/k 또는 화살표: 이동 · Enter: 자세히 열기 · d: 자세히 토글 · Esc: 뒤로\n" +
@@ -329,8 +358,7 @@ export class OpenTuiView {
     else if (key.name === "/") open({ kind: "search", title: "현재 화면 검색", placeholder: "검색어를 입력해 주세요" });
     else if (key.name === "n")
       open({ kind: "start-work", title: "새 작업 시작", placeholder: "작업 내용을 입력해 주세요" });
-    else if (key.name === "m")
-      open({ kind: "message", title: "메시지 보내기", placeholder: "메시지를 입력해 주세요" });
+    else if (key.name === "m") open({ kind: "message", title: "메시지 보내기", placeholder: "메시지를 입력해 주세요" });
     else if (key.name === "a" && this.actions.state().view === "approvals")
       open({ kind: "vote", vote: "approve", title: "승인 이유", placeholder: "승인 근거를 입력해 주세요" });
     else if (key.name === "x" && this.actions.state().view === "approvals")
@@ -739,7 +767,13 @@ export class OpenTuiView {
 
   private cycleView(delta: number): void {
     const views: readonly import("./state.js").TuiView[] = [
-      "works", "approvals", "chat", "overview", "agents", "operations", "subscriptions",
+      "works",
+      "approvals",
+      "chat",
+      "overview",
+      "agents",
+      "operations",
+      "subscriptions",
     ];
     const current = this.actions.state().view;
     const index = views.indexOf(current);
