@@ -670,6 +670,15 @@ importers:
         specifier: workspace:*
         version: link:../storage
 
+  packages/workspace:
+    dependencies:
+      '@massion/identity':
+        specifier: workspace:*
+        version: link:../identity
+      '@massion/storage':
+        specifier: workspace:*
+        version: link:../storage
+
 packages:
 
   '@adobe/css-tools@4.5.0':
