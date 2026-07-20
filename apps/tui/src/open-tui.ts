@@ -17,6 +17,7 @@ interface OpenTuiActions {
   readonly state: () => TuiState;
   readonly dispatch: (action: TuiAction) => void;
   readonly refresh: () => Promise<void>;
+  readonly startWork: (text: string) => Promise<unknown>;
   readonly postMessage: (content: string) => Promise<unknown>;
   readonly vote: (vote: "approve" | "reject", reason: string) => Promise<unknown>;
   readonly cancelApproval: (reason: string) => Promise<unknown>;
@@ -41,6 +42,7 @@ type ApprovalMode = "automatic" | "review" | "deny";
 const APPROVAL_MODES: readonly ApprovalMode[] = ["automatic", "review", "deny"];
 
 type Modal =
+  | { readonly kind: "start-work"; readonly title: string; readonly placeholder: string }
   | { readonly kind: "message"; readonly title: string; readonly placeholder: string }
   | { readonly kind: "search"; readonly title: string; readonly placeholder: string }
   | { readonly kind: "vote"; readonly title: string; readonly placeholder: string; readonly vote: "approve" | "reject" }
@@ -253,7 +255,7 @@ export class OpenTuiView {
         new TextRenderable(this.renderer, {
           content:
             "1–7 화면 이동 · j/k 또는 화살표 항목 이동 · r 새로고침 · / 검색\n" +
-            "c 메시지 · a 승인 · x 거절 · Delete 승인 취소 · d 업무 취소 · t 작업 배정\n" +
+            "n 새 업무 · c 메시지 · a 승인 · x 거절 · Delete 승인 취소 · d 업무 취소 · t 작업 배정\n" +
             "구독: ←/→ 또는 h/l 탭 · s 공유 · u 공유 해제 · d 연결 해제\n" +
             "s 실행 일시정지/재개 · z 실행 취소\n" +
             '모델 평가실(운영 화면): operations에서 o · JSON {"operation":"...","payload":{...}}\n' +
@@ -335,6 +337,8 @@ export class OpenTuiView {
     else if (key.name === "?") this.open({ kind: "help", title: "키보드 도움말", placeholder: "" });
     else if (key.name === "/")
       this.open({ kind: "search", title: "현재 화면 검색", placeholder: "검색어를 입력해 주세요" });
+    else if (key.name === "n")
+      this.open({ kind: "start-work", title: "새 업무 시작", placeholder: "업무 내용을 입력해 주세요" });
     else if (key.name === "c" && this.actions.state().view === "chat")
       this.open({ kind: "message", title: "협업방에 메시지 보내기", placeholder: "메시지를 입력해 주세요" });
     else if (key.name === "a" && this.actions.state().view === "approvals")
@@ -403,7 +407,7 @@ export class OpenTuiView {
     if (!modal) return;
     const content = value.trim();
     if (!content && modal.kind !== "search") {
-      this.notice = "내용 또는 이유를 입력해야 합니다.";
+      this.notice = modal.kind === "start-work" ? "업무 내용을 입력해 주세요." : "내용 또는 이유를 입력해야 합니다.";
       this.render();
       return;
     }
@@ -459,42 +463,51 @@ export class OpenTuiView {
       this.render();
       return;
     }
-    await this.runAction(async () => {
-      if (modal.kind === "message") await this.actions.postMessage(content);
-      else if (modal.kind === "vote") await this.actions.vote(modal.vote, content);
-      else if (modal.kind === "cancel-approval") await this.actions.cancelApproval(content);
-      else if (modal.kind === "cancel-work") await this.actions.cancelWork(content);
-      else if (modal.kind === "assign-task") await this.actions.assignTask(content);
-      else if (modal.kind === "runtime") await this.actions.controlExecution(modal.operation, content);
-      else if (modal.kind === "subscription-account") {
-        if (modal.operation === "share") await this.actions.shareSubscriptionAccount(modal.accountId, modal.version);
-        else if (modal.operation === "unshare")
-          await this.actions.unshareSubscriptionAccount(modal.accountId, modal.version);
-        else await this.actions.disconnectSubscriptionAccount(modal.accountId, modal.version);
-      } else if (modal.kind === "subscription-policy" && subscriptionPolicyInput) {
-        if (!this.actions.configureSubscriptionPolicy) throw new Error("TUI 구독 정책 변경 기능이 구성되지 않았습니다");
-        await this.actions.configureSubscriptionPolicy(
-          modal.providerId,
-          subscriptionPolicyInput.credentialPolicy,
-          subscriptionPolicyInput.approvalMode,
-          modal.version,
-        );
-      } else if (modal.kind === "optimization" && optimizationInput) {
-        if (!this.actions.optimizationCommand) throw new Error("TUI 모델 평가실 변경 기능이 구성되지 않았습니다");
-        await this.actions.optimizationCommand(optimizationInput.operation, optimizationInput.payload);
-      }
-    });
+    await this.runAction(
+      async () => {
+        if (modal.kind === "start-work") {
+          await this.actions.startWork(content);
+          this.actions.dispatch({ type: "view.selected", view: "works" });
+        } else if (modal.kind === "message") await this.actions.postMessage(content);
+        else if (modal.kind === "vote") await this.actions.vote(modal.vote, content);
+        else if (modal.kind === "cancel-approval") await this.actions.cancelApproval(content);
+        else if (modal.kind === "cancel-work") await this.actions.cancelWork(content);
+        else if (modal.kind === "assign-task") await this.actions.assignTask(content);
+        else if (modal.kind === "runtime") await this.actions.controlExecution(modal.operation, content);
+        else if (modal.kind === "subscription-account") {
+          if (modal.operation === "share") await this.actions.shareSubscriptionAccount(modal.accountId, modal.version);
+          else if (modal.operation === "unshare")
+            await this.actions.unshareSubscriptionAccount(modal.accountId, modal.version);
+          else await this.actions.disconnectSubscriptionAccount(modal.accountId, modal.version);
+        } else if (modal.kind === "subscription-policy" && subscriptionPolicyInput) {
+          if (!this.actions.configureSubscriptionPolicy)
+            throw new Error("TUI 구독 정책 변경 기능이 구성되지 않았습니다");
+          await this.actions.configureSubscriptionPolicy(
+            modal.providerId,
+            subscriptionPolicyInput.credentialPolicy,
+            subscriptionPolicyInput.approvalMode,
+            modal.version,
+          );
+        } else if (modal.kind === "optimization" && optimizationInput) {
+          if (!this.actions.optimizationCommand) throw new Error("TUI 모델 평가실 변경 기능이 구성되지 않았습니다");
+          await this.actions.optimizationCommand(optimizationInput.operation, optimizationInput.payload);
+        }
+      },
+      modal.kind === "start-work"
+        ? "새 업무 요청을 시작했습니다. 업무 목록에서 진행 상황을 확인할 수 있습니다."
+        : undefined,
+    );
   }
 
-  private async runAction(action: () => Promise<void>): Promise<void> {
+  private async runAction(action: () => Promise<void>, successNotice = "서버 정본에 반영되었습니다."): Promise<void> {
     if (this.busy) return;
     this.busy = true;
     this.notice = "요청을 서버에서 처리하고 있습니다…";
     this.render();
     try {
       await action();
-      this.notice = "서버 정본에 반영되었습니다.";
       await this.actions.loadView(this.actions.state().view);
+      this.notice = successNotice;
     } catch {
       this.notice = "요청을 완료하지 못했습니다. 서버 정책과 연결 상태를 확인해 주세요.";
     } finally {

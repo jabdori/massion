@@ -83,6 +83,53 @@ describe("TUI controller", () => {
     expect(state.needsResync).toBe(false);
   });
 
+  it("업무·협업 event 뒤에는 snapshot과 현재 협업방 메시지를 다시 읽고 runtime event마다 반복하지 않는다", async () => {
+    let state: TuiState = { ...createTuiState(), view: "chat" };
+    let snapshots = 0;
+    const query = vi
+      .fn()
+      .mockResolvedValue(response("work.messages", [{ messageId: "message-2", content: "인계 완료" }]));
+    const abort = new AbortController();
+    const controller = new TuiController(
+      {
+        status: () => Promise.resolve(response("system.status", {})),
+        me: () =>
+          Promise.resolve(
+            response("identity.me", {
+              userId: "user-1",
+              organizationId: "organization-1",
+              membershipId: "member-1",
+              role: "owner",
+            }),
+          ),
+        snapshot: () => {
+          snapshots += 1;
+          return Promise.resolve(response("organization.graph.snapshot", testSnapshot));
+        },
+        streamEvents: async function* () {
+          yield { sequence: 1, type: "collaboration.message-posted", payload: { roomId: "room-1" } };
+          yield { sequence: 2, type: "work.created", payload: { workId: "work-2" } };
+          yield { sequence: 3, type: "runtime.execution-started", payload: { executionId: "execution-2" } };
+          abort.abort();
+        },
+        query,
+        command: () => Promise.resolve({}),
+      },
+      (action) => {
+        state = reduceTuiState(state, action);
+      },
+      () => state,
+      { delay: () => Promise.resolve(), random: () => 0 },
+    );
+
+    await controller.run(abort.signal);
+
+    expect(snapshots).toBe(3);
+    expect(query).toHaveBeenCalledWith("work.messages", { workId: "work-1", roomId: "room-1" });
+    expect(query).toHaveBeenCalledTimes(2);
+    expect(state.queryResults.messages).toEqual([{ messageId: "message-2", content: "인계 완료" }]);
+  });
+
   it("연결 실패 후 상한 backoff로 재연결하고 token을 오류 상태에 복사하지 않는다", async () => {
     let state = createTuiState();
     let streams = 0;
