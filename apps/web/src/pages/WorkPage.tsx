@@ -1,7 +1,15 @@
 import { Link, useParams } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 
-import { USER_STAGES, userStageForInternal, userStageIndex, userStageProgress, workStatusToken } from "@massion/application";
+import {
+  USER_STAGES,
+  userStageForInternal,
+  userStageIndex,
+  userStageProgress,
+  workStatusToken,
+  workTimelineCellToken,
+  type WorkTimelineCellKind,
+} from "@massion/application";
 
 import { label, list, object, rows } from "../data.js";
 import { useQueryData } from "../hooks.js";
@@ -34,6 +42,7 @@ export default function WorkPage() {
   const assignmentsData = useQueryData<unknown>(consoleStore, "work.assignments", payload);
   const roomsData = useQueryData<unknown>(consoleStore, "work.rooms", payload);
   const recordsData = useQueryData<unknown>(consoleStore, "work.records", payload);
+  const timelineData = useQueryData<unknown>(consoleStore, "work.timeline", payload);
   const meData = useQueryData<unknown>(consoleStore, "identity.me");
   const [notice, setNotice] = useState<string>();
   const [messageText, setMessageText] = useState("");
@@ -43,10 +52,7 @@ export default function WorkPage() {
   // React Hook 규칙: 모든 hook을 조건부 return 앞에 호출해야 합니다.
   // rows/object/label은 undefined 입력에 대해 안전하게 빈 값을 반환합니다.
   const firstRoomId = label(rows(roomsData)[0]?.roomId, "");
-  const messagesPayload = useMemo(
-    () => ({ workId, roomId: firstRoomId }),
-    [workId, firstRoomId],
-  );
+  const messagesPayload = useMemo(() => ({ workId, roomId: firstRoomId }), [workId, firstRoomId]);
   const messagesData = useQueryData<unknown>(consoleStore, "work.messages", messagesPayload, undefined, {
     enabled: Boolean(firstRoomId),
   });
@@ -127,7 +133,14 @@ export default function WorkPage() {
       </div>
 
       {/* 사용자용 4단계 진행 바 */}
-      <div className="stage-progress" role="progressbar" aria-valuenow={userStageIndex(internalStage) + 1} aria-valuemin={1} aria-valuemax={USER_STAGES.length} aria-label="작업 진행 단계">
+      <div
+        className="stage-progress"
+        role="progressbar"
+        aria-valuenow={userStageIndex(internalStage) + 1}
+        aria-valuemin={1}
+        aria-valuemax={USER_STAGES.length}
+        aria-label="작업 진행 단계"
+      >
         {USER_STAGES.map((stage, index) => {
           const progress = userStageProgress(internalStage, stage.id);
           return (
@@ -138,6 +151,33 @@ export default function WorkPage() {
           );
         })}
       </div>
+
+      {/* 진행 기록: work.timeline 공통 투영 (TUI와 같은 셀 계약) */}
+      <section className="home-section" style={{ marginTop: "32px" }}>
+        <h2 className="home-section-title">진행 기록</h2>
+        {rows(timelineData).length === 0 ? (
+          <p className="quiet-line">아직 진행 기록이 없습니다.</p>
+        ) : (
+          <div className="message-preview-list" aria-label="업무 진행 기록">
+            {rows(timelineData)
+              .slice(-20)
+              .map((cell) => {
+                const token = workTimelineCellToken(label(cell.kind, "activity") as WorkTimelineCellKind);
+                return (
+                  <article key={label(cell.cellId)} className={`message message-${label(cell.kind)}`}>
+                    <header>
+                      <strong>
+                        {token.symbol} {token.friendlyLabel}
+                      </strong>
+                      <time>{label(cell.createdAt)}</time>
+                    </header>
+                    <p>{label(cell.detail, label(cell.title))}</p>
+                  </article>
+                );
+              })}
+          </div>
+        )}
+      </section>
 
       {/* 최근 소식: 작업 목록을 친화적 카드로 */}
       <section className="home-section" style={{ marginTop: "32px" }}>
@@ -188,17 +228,26 @@ export default function WorkPage() {
       {firstRoomId ? (
         <section className="home-section">
           <h2 className="home-section-title">Massion에게 메시지 보내기</h2>
-          <form className="composer-inline" onSubmit={(event) => { void sendMessage(event); }}>
+          <form
+            className="composer-inline"
+            onSubmit={(event) => {
+              void sendMessage(event);
+            }}
+          >
             <textarea
               value={messageText}
-              onChange={(event) => { setMessageText(event.target.value); }}
+              onChange={(event) => {
+                setMessageText(event.target.value);
+              }}
               maxLength={16_000}
               rows={2}
               placeholder="작업에 대해 질문이나 추가 지시를 입력하세요…"
               aria-label="Massion에게 보낼 메시지"
             />
             <div className="composer-inline-actions">
-              <span role="status" aria-live="polite">{messageNotice}</span>
+              <span role="status" aria-live="polite">
+                {messageNotice}
+              </span>
               <button className="primary-button" type="submit" disabled={!messageText.trim()}>
                 메시지 보내기
               </button>
@@ -234,7 +283,9 @@ export default function WorkPage() {
         <button
           className="details-toggle"
           aria-expanded={showDetails}
-          onClick={() => { setShowDetails(!showDetails); }}
+          onClick={() => {
+            setShowDetails(!showDetails);
+          }}
         >
           자세히 보기
         </button>
