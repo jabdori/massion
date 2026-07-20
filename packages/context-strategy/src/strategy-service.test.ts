@@ -132,6 +132,35 @@ describe("Context부터 Work projection까지의 StrategyService", () => {
     expect(executeStructured).toHaveBeenCalledTimes(1);
   });
 
+  it("실행 레코드 생성 중 취소되면 StrategyGenerator가 structured Provider를 시작하지 않는다", async () => {
+    const controller = new AbortController();
+    let providerCalls = 0;
+    const executeStructured = vi.fn(
+      async (_context: TenantContext, runtimeInput: Parameters<StructuredAgentRunner["executeStructured"]>[1]) => {
+        // Runtime execution record가 만들어진 직후 coordinator가 취소한 상황을 재현합니다.
+        controller.abort("application-run-cancelled");
+        if (!runtimeInput.signal?.aborted) providerCalls += 1;
+        if (runtimeInput.signal?.aborted) {
+          return { executionId: "strategy-cancelled-before-provider", status: "cancelled" as const };
+        }
+        return { executionId: "strategy-provider-started", status: "succeeded" as const, output: PLAN };
+      },
+    );
+    const strategy = await service({ executeStructured });
+
+    await strategy.plan(context, {
+      ...input(),
+      signal: controller.signal,
+    });
+
+    expect(executeStructured).toHaveBeenCalledWith(
+      context,
+      expect.objectContaining({ signal: controller.signal }),
+      expect.any(Object),
+    );
+    expect(providerCalls).toBe(0);
+  });
+
   it("모델 부재와 잘못된 structured output은 Work를 변경하거나 계획을 꾸며내지 않는다", async () => {
     const blocked = await service({
       executeStructured: vi.fn().mockResolvedValue({

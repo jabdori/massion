@@ -68,4 +68,51 @@ describe("Application run commands", () => {
     await cancel.handle(context, { ...command, operation: "run.cancel" }, cancel.validate({ runId: "run-command-1" }));
     expect(cancelled).toEqual(["run-command-1"]);
   });
+
+  it("차단된 run 재시도는 외부 command ID를 재시도 시도 ID로 전달한다", async () => {
+    const descriptors = new Map<string, ApplicationCommandDescriptor>();
+    const retryCalls: Array<{ runId: string; retryAttemptId: string }> = [];
+    const completed = {
+      runId: "run-command-retry-1",
+      organizationId: context.organizationId,
+      commandId: "run-start-command-0002",
+      correlationId: "run-start-correlation-0002",
+      request: {},
+      stage: "terminal" as const,
+      status: "completed" as const,
+      leaseGeneration: 2,
+    };
+    registerApplicationRunCommands(
+      {
+        register: (descriptor: ApplicationCommandDescriptor) => {
+          descriptors.set(descriptor.operation, descriptor);
+        },
+      } as never,
+      {
+        store: { start: async () => completed },
+        coordinator: {
+          cancel: async () => completed,
+          resume: async () => completed,
+          retryBlocked: async (_context, runId, retryAttemptId) => {
+            retryCalls.push({ runId, retryAttemptId });
+            return completed;
+          },
+        },
+        schedule: async () => undefined,
+      },
+    );
+    const resume = descriptors.get("run.resume");
+    if (!resume) throw new Error("run.resume descriptor가 없습니다");
+    const command = {
+      schemaVersion: "massion.application.v1" as const,
+      commandId: "run-resume-retry-command-0001",
+      correlationId: "run-resume-retry-correlation-0001",
+      operation: "run.resume",
+      payload: {},
+    };
+    const payload = resume.validate({ runId: "run-command-retry-1", retryBlocked: true });
+
+    await expect(resume.handle(context, command, payload)).resolves.toMatchObject({ outcome: "succeeded" });
+    expect(retryCalls).toEqual([{ runId: "run-command-retry-1", retryAttemptId: "run-resume-retry-command-0001" }]);
+  });
 });

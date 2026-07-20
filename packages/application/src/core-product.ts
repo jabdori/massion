@@ -1,4 +1,4 @@
-import type { AssuranceRunGateway } from "@massion/assurance";
+import type { AssuranceBindingStore, AssuranceRunGateway } from "@massion/assurance";
 import type { StrategyService } from "@massion/context-strategy";
 import type { EvidenceBriefStore } from "@massion/evidence";
 import type { OrganizationGraphService } from "@massion/organization";
@@ -22,6 +22,7 @@ export interface CoreProductDependencies {
   readonly strategy: StrategyService;
   readonly briefs: EvidenceBriefStore;
   readonly assurance: AssuranceRunGateway;
+  readonly assuranceBindings: AssuranceBindingStore;
   readonly assuranceChecks: CoreAssuranceCheckOrchestrator;
   readonly records: RecordsService;
   readonly recordDocuments?: CoreRecordsDocumentPlanner;
@@ -40,7 +41,9 @@ export function createCoreProductExecutors(
   });
   const assurance = new CoreAssuranceStage({
     works: dependencies.works,
+    bindings: dependencies.assuranceBindings,
     runner: dependencies.runner,
+    runtimeExecutions: dependencies.runtimeExecutions,
     assurance: dependencies.assurance,
     checks: dependencies.assuranceChecks,
   });

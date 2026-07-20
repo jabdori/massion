@@ -358,6 +358,16 @@ export class AssuranceRunStore {
     return this.view(await this.find(this.database, context.organizationId, assuranceRunId));
   }
 
+  public async findByStartCommand(context: TenantContext, startCommandId: string): Promise<AssuranceRun | undefined> {
+    await this.organizations.verifyTenantContext(context);
+    assertText(startCommandId, "Assurance run 시작 command ID");
+    const [records] = await this.database.query<[RunRecord[]]>(
+      "SELECT * OMIT id FROM assurance_run WHERE organization_id = $organization_id AND start_command_id = $start_command_id LIMIT 1;",
+      { organization_id: context.organizationId, start_command_id: startCommandId },
+    );
+    return records[0] ? this.view(records[0]) : undefined;
+  }
+
   public async listCriteria(context: TenantContext, assuranceRunId: string): Promise<readonly AssuranceCriterion[]> {
     await this.organizations.verifyTenantContext(context);
     await this.get(context, assuranceRunId);

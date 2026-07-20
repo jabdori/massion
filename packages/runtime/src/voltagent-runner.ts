@@ -86,6 +86,7 @@ interface ActiveExecution {
   readonly controller: AbortController;
   readonly done: Promise<void>;
   readonly resolveDone: () => void;
+  readonly detachAbortSignal: () => void;
   cancellation?: Promise<void>;
 }
 
@@ -236,12 +237,15 @@ export class VoltAgentRunner implements AgentRunner, StructuredAgentRunner {
   }
 
   public async execute(context: TenantContext, input: AgentExecutionInput): Promise<AgentExecutionResult> {
+    const { signal, ...executionInput } = input;
     const releaseIntake = this.beginIntake();
     let active: ActiveExecution | undefined;
     let running: { readonly execution: RuntimeExecution } | undefined;
     try {
-      const created = await this.store.createExecution(context, input);
+      const created = await this.store.createExecution(context, executionInput);
       if (created.execution.status !== "queued") return this.resultFromExecution(created.execution);
+      if (signal?.aborted)
+        return await this.cancelBeforeProvider(context, created.execution.execution_id, signal.reason as unknown);
       running = await this.store.transition(context, {
         commandId: `${created.execution.execution_id}:running`,
         executionId: created.execution.execution_id,
@@ -249,11 +253,17 @@ export class VoltAgentRunner implements AgentRunner, StructuredAgentRunner {
         target: "running",
         payload: { agentHandle: input.agentHandle },
       });
-      active = this.activate(context, running.execution.execution_id);
+      active = this.activate(context, running.execution.execution_id, signal);
     } finally {
       releaseIntake();
     }
     try {
+      if (this.isAborted(active))
+        return await this.cancelBeforeProvider(
+          context,
+          running.execution.execution_id,
+          active.controller.signal.reason as unknown,
+        );
       return await this.generateWithFallback(context, input, running.execution, active.controller.signal);
     } finally {
       this.finish(running.execution.execution_id);
@@ -265,12 +275,15 @@ export class VoltAgentRunner implements AgentRunner, StructuredAgentRunner {
     input: AgentExecutionInput,
     output: StructuredOutputSpec,
   ): Promise<AgentExecutionResult> {
+    const { signal, ...executionInput } = input;
     const releaseIntake = this.beginIntake();
     let active: ActiveExecution | undefined;
     let running: { readonly execution: RuntimeExecution } | undefined;
     try {
-      const created = await this.store.createExecution(context, input);
+      const created = await this.store.createExecution(context, executionInput);
       if (created.execution.status !== "queued") return this.resultFromExecution(created.execution);
+      if (signal?.aborted)
+        return await this.cancelBeforeProvider(context, created.execution.execution_id, signal.reason as unknown);
       running = await this.store.transition(context, {
         commandId: `${created.execution.execution_id}:running`,
         executionId: created.execution.execution_id,
@@ -278,11 +291,17 @@ export class VoltAgentRunner implements AgentRunner, StructuredAgentRunner {
         target: "running",
         payload: { agentHandle: input.agentHandle, outputName: output.name },
       });
-      active = this.activate(context, running.execution.execution_id);
+      active = this.activate(context, running.execution.execution_id, signal);
     } finally {
       releaseIntake();
     }
     try {
+      if (this.isAborted(active))
+        return await this.cancelBeforeProvider(
+          context,
+          running.execution.execution_id,
+          active.controller.signal.reason as unknown,
+        );
       return await this.generateStructuredWithFallback(
         context,
         input,
@@ -308,14 +327,22 @@ export class VoltAgentRunner implements AgentRunner, StructuredAgentRunner {
         target: "running",
         payload: { agentHandle: input.agentHandle },
       });
-      yield eventView(state.event);
       const executionId = created.execution.execution_id;
       const active = this.activate(context, executionId);
-      releaseIntake();
-      let fallbackFromAttemptId: string | undefined;
-      let fallbackFromLeaseId: string | undefined;
-      let emittedTokens = 0;
       try {
+        yield eventView(state.event);
+        if (this.isAborted(active)) {
+          state = await this.toTerminalIfRunning(context, executionId, "cancelled", {
+            reason: active.controller.signal.reason as unknown,
+          });
+          this.finish(executionId);
+          yield eventView(state.event);
+          return;
+        }
+        releaseIntake();
+        let fallbackFromAttemptId: string | undefined;
+        let fallbackFromLeaseId: string | undefined;
+        let emittedTokens = 0;
         for (let attempt = 0; attempt < MAX_FALLBACKS; attempt += 1) {
           let lease: RoutedModelLease | undefined;
           try {
@@ -399,7 +426,7 @@ export class VoltAgentRunner implements AgentRunner, StructuredAgentRunner {
               yield eventView(state.event);
               return;
             }
-            if (active.controller.signal.aborted) {
+            if (this.isAborted(active)) {
               const reason = active.controller.signal.reason as unknown;
               state = await this.toTerminalIfRunning(context, executionId, "cancelled", {
                 reason,
@@ -449,14 +476,21 @@ export class VoltAgentRunner implements AgentRunner, StructuredAgentRunner {
   }
 
   public async cancel(context: TenantContext, executionId: string, reason = "cancelled"): Promise<void> {
-    const recovery = await this.store.getRecovery(context, executionId);
     const active = this.active.get(executionId);
+    if (active) {
+      if (active.context.organizationId !== context.organizationId) {
+        throw new Error("Runtime Execution 조직이 일치하지 않습니다");
+      }
+      active.cancellation ??= this.cancelActive(active, reason);
+      await active.cancellation;
+      return;
+    }
+    const recovery = await this.store.getRecovery(context, executionId);
     if (
       ["succeeded", "failed", "cancelled", "interrupted", "blocked_model_unavailable"].includes(
         recovery.execution.status,
       )
     ) {
-      if (active) await active.done;
       return;
     }
     const suspendedSubscription = this.suspendedSubscriptions.get(executionId);
@@ -494,11 +528,6 @@ export class VoltAgentRunner implements AgentRunner, StructuredAgentRunner {
         this.suspendedSubscriptions.delete(executionId);
         throw error;
       }
-      return;
-    }
-    if (active) {
-      active.cancellation ??= this.cancelActive(active, reason);
-      await active.cancellation;
       return;
     }
     await this.store.transition(context, {
@@ -587,6 +616,15 @@ export class VoltAgentRunner implements AgentRunner, StructuredAgentRunner {
             fallbackFromLeaseId,
           ),
         );
+        if (abortSignal.aborted) {
+          return await this.cancelAcquiredLease(
+            context,
+            running.execution_id,
+            attempt,
+            lease,
+            abortSignal.reason as unknown,
+          );
+        }
         if (lease.kind === "agent-runtime") {
           await this.recordSubscriptionInvocationStarted(context, running.execution_id, lease);
           const runtimeResult = await this.executeAgentRuntime(
@@ -695,6 +733,15 @@ export class VoltAgentRunner implements AgentRunner, StructuredAgentRunner {
             fallbackFromLeaseId,
           ),
         );
+        if (abortSignal.aborted) {
+          return await this.cancelAcquiredLease(
+            context,
+            running.execution_id,
+            attempt,
+            lease,
+            abortSignal.reason as unknown,
+          );
+        }
         if (lease.kind === "agent-runtime") {
           await this.recordSubscriptionInvocationStarted(context, running.execution_id, lease);
           const runtimeResult = await this.executeAgentRuntime(
@@ -1152,14 +1199,25 @@ export class VoltAgentRunner implements AgentRunner, StructuredAgentRunner {
     await active.done;
   }
 
-  private activate(context: TenantContext, executionId: string): ActiveExecution {
+  private isAborted(active: ActiveExecution): boolean {
+    return active.controller.signal.aborted;
+  }
+
+  private activate(context: TenantContext, executionId: string, signal?: AbortSignal): ActiveExecution {
     if (this.active.has(executionId)) throw new Error(`Runtime Execution이 이미 활성 상태입니다: ${executionId}`);
     const completion = deferred();
+    const controller = new AbortController();
+    const abort = () => {
+      if (!controller.signal.aborted) controller.abort(signal?.reason);
+    };
+    if (signal?.aborted) abort();
+    else signal?.addEventListener("abort", abort, { once: true });
     const active = {
       context,
-      controller: new AbortController(),
+      controller,
       done: completion.promise,
       resolveDone: completion.resolve,
+      detachAbortSignal: () => signal?.removeEventListener("abort", abort),
     };
     this.active.set(executionId, active);
     return active;
@@ -1169,7 +1227,49 @@ export class VoltAgentRunner implements AgentRunner, StructuredAgentRunner {
     const active = this.active.get(executionId);
     if (!active) return;
     this.active.delete(executionId);
+    active.detachAbortSignal();
     active.resolveDone();
+  }
+
+  private async cancelBeforeProvider(
+    context: TenantContext,
+    executionId: string,
+    reason: unknown,
+  ): Promise<AgentExecutionResult> {
+    const current = await this.store.getRecovery(context, executionId);
+    if (!["queued", "running"].includes(current.execution.status)) return this.resultFromExecution(current.execution);
+    try {
+      const cancelled = await this.store.transition(context, {
+        commandId: `${executionId}:cancelled`,
+        executionId,
+        expectedVersion: current.execution.version,
+        target: "cancelled",
+        payload: { reason },
+      });
+      return this.resultFromExecution(cancelled.execution);
+    } catch (error) {
+      const recovered = await this.store.getRecovery(context, executionId);
+      if (recovered.execution.status === "cancelled") return this.resultFromExecution(recovered.execution);
+      throw error;
+    }
+  }
+
+  private async cancelAcquiredLease(
+    context: TenantContext,
+    executionId: string,
+    attempt: number,
+    lease: RoutedModelLease,
+    reason: unknown,
+  ): Promise<AgentExecutionResult> {
+    await lease.fail({
+      commandId: `${executionId}:model:${String(attempt)}:cancel`,
+      signal: { kind: "cancelled" },
+      emittedTokens: 0,
+      sideEffectsStarted: false,
+      inputTokens: 0,
+      outputTokens: 0,
+    });
+    return await this.cancelBeforeProvider(context, executionId, reason);
   }
 
   private async toTerminalIfRunning(

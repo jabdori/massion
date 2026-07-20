@@ -20,6 +20,7 @@ export interface AgentExecutionInput {
   readonly estimatedTokens: number;
   readonly estimatedCostMicros: number;
   readonly input: unknown;
+  readonly signal?: AbortSignal;
 }
 
 export interface AgentExecutionResult {

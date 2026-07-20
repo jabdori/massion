@@ -270,6 +270,17 @@ describe("Assurance run 저장소", () => {
     );
   });
 
+  it("시작 명령으로 같은 조직의 Assurance run을 찾고 다른 조직에는 노출하지 않는다", async () => {
+    const commandId = crypto.randomUUID();
+    const started = await store.start(context, input(commandId));
+
+    await expect(store.findByStartCommand(context, commandId)).resolves.toMatchObject({
+      assuranceRunId: started.run.assuranceRunId,
+      startCommandId: commandId,
+    });
+    await expect(store.findByStartCommand(otherContext, commandId)).resolves.toBeUndefined();
+  });
+
   it("caller snapshot hash가 현재 DB material snapshot과 다르면 run을 만들지 않는다", async () => {
     await expect(store.start(context, { ...input(), snapshotHash: "f".repeat(64) })).rejects.toThrow(
       "material snapshot",

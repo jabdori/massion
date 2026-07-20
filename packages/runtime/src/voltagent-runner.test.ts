@@ -735,6 +735,143 @@ describe("VoltAgent AgentRunner", () => {
     expect(routed.complete).toHaveBeenCalledWith(expect.objectContaining({ inputTokens: 2, outputTokens: 3 }));
   });
 
+  it("실행 레코드 생성 중 취소 신호가 오면 Provider를 만들지 않고 cancelled로 끝낸다", async () => {
+    const controller = new AbortController();
+    const acquire = vi.fn();
+    const createExecution = store.createExecution.bind(store);
+    vi.spyOn(store, "createExecution").mockImplementation(async (tenant, execution) => {
+      const created = await createExecution(tenant, execution);
+      controller.abort("application-run-cancelled");
+      return created;
+    });
+    const runner = new VoltAgentRunner(voltAgent, store, { acquire }, registry);
+
+    const result = await runner.execute(context, { ...input(), signal: controller.signal });
+
+    expect(result.status).toBe("cancelled");
+    expect(acquire).not.toHaveBeenCalled();
+    await expect(store.getRecovery(context, result.executionId)).resolves.toMatchObject({
+      execution: { status: "cancelled" },
+    });
+  });
+
+  it("구조화 실행도 레코드 생성 중 취소 신호가 오면 Provider를 만들지 않고 cancelled로 끝낸다", async () => {
+    const controller = new AbortController();
+    const acquire = vi.fn();
+    const createExecution = store.createExecution.bind(store);
+    vi.spyOn(store, "createExecution").mockImplementation(async (tenant, execution) => {
+      const created = await createExecution(tenant, execution);
+      controller.abort("application-run-cancelled");
+      return created;
+    });
+    const runner = new VoltAgentRunner(voltAgent, store, { acquire }, registry);
+
+    const result = await runner.executeStructured(
+      context,
+      { ...input(), signal: controller.signal },
+      {
+        name: "strategy-plan",
+        description: "검증 가능한 실행 계획",
+        jsonSchema: {
+          type: "object",
+          additionalProperties: false,
+          required: ["objective"],
+          properties: { objective: { type: "string" } },
+        },
+      },
+    );
+
+    expect(result.status).toBe("cancelled");
+    expect(acquire).not.toHaveBeenCalled();
+    await expect(store.getRecovery(context, result.executionId)).resolves.toMatchObject({
+      execution: { status: "cancelled" },
+    });
+  });
+
+  it("모델 lease 획득 중 취소되면 반환 뒤 Provider 실행 없이 cancelled로 끝낸다", async () => {
+    const controller = new AbortController();
+    const routed = agentLease({
+      outcome: "completed",
+      executionId: "provider-execution",
+      sessionId: "provider-session",
+      value: "사용되지 않음",
+    });
+    let releaseLease!: (lease: RoutedModelLease) => void;
+    const acquire = vi.fn(
+      () =>
+        new Promise<RoutedModelLease>((resolve) => {
+          releaseLease = resolve;
+        }),
+    );
+    const runner = new VoltAgentRunner(voltAgent, store, { acquire }, registry);
+
+    const pending = runner.execute(context, { ...input(), signal: controller.signal });
+    await vi.waitFor(() => expect(acquire).toHaveBeenCalledOnce());
+    controller.abort("application-run-cancelled");
+    releaseLease(routed);
+
+    const result = await pending;
+
+    expect(result.status).toBe("cancelled");
+    expect(routed.executor.execute).not.toHaveBeenCalled();
+    expect(routed.fail).toHaveBeenCalledWith(
+      expect.objectContaining({ signal: { kind: "cancelled" }, sideEffectsStarted: false }),
+    );
+    await expect(store.getRecovery(context, result.executionId)).resolves.toMatchObject({
+      execution: { status: "cancelled" },
+    });
+  });
+
+  it("구조화 실행도 모델 lease 획득 중 취소되면 반환 뒤 Provider 실행 없이 cancelled로 끝낸다", async () => {
+    const controller = new AbortController();
+    const routed = agentLease({
+      outcome: "completed",
+      executionId: "provider-execution",
+      sessionId: "provider-session",
+      value: { objective: "사용되지 않음" },
+    });
+    routed.executor.executeStructured = vi.fn(async ({ executionId }) => ({
+      outcome: "completed",
+      executionId,
+      sessionId: "provider-session",
+      value: { objective: "사용되지 않음" },
+    }));
+    let releaseLease!: (lease: RoutedModelLease) => void;
+    const acquire = vi.fn(
+      () =>
+        new Promise<RoutedModelLease>((resolve) => {
+          releaseLease = resolve;
+        }),
+    );
+    const runner = new VoltAgentRunner(voltAgent, store, { acquire }, registry);
+
+    const pending = runner.executeStructured(
+      context,
+      { ...input(), signal: controller.signal },
+      {
+        name: "strategy-plan",
+        description: "검증 가능한 실행 계획",
+        jsonSchema: {
+          type: "object",
+          additionalProperties: false,
+          required: ["objective"],
+          properties: { objective: { type: "string" } },
+        },
+      },
+    );
+    await vi.waitFor(() => expect(acquire).toHaveBeenCalledOnce());
+    controller.abort("application-run-cancelled");
+    releaseLease(routed);
+
+    const result = await pending;
+
+    expect(result.status).toBe("cancelled");
+    expect(routed.executor.executeStructured).not.toHaveBeenCalled();
+    expect(routed.fail).toHaveBeenCalledWith(
+      expect.objectContaining({ signal: { kind: "cancelled" }, sideEffectsStarted: false }),
+    );
+  });
+
   it("structured 실행도 첫 응답 전 실패를 동급 모델로 fallback한다", async () => {
     const failedModel = new MockLanguageModelV3({
       doGenerate: async () => {
@@ -964,6 +1101,26 @@ describe("VoltAgent AgentRunner", () => {
     const recovery = await store.getRecovery(context, queued.value.executionId);
     expect(recovery.execution.status).toBe("cancelled");
     expect(recovery.events.filter((event) => event.event_type === "execution_cancelled")).toHaveLength(1);
+  });
+
+  it("running event 직후 취소하면 provider 실행을 시작하지 않고 cancelled로 끝낸다", async () => {
+    const acquire = vi.fn();
+    const runner = new VoltAgentRunner(voltAgent, store, { acquire }, registry);
+    const iterator = runner.stream(context, input())[Symbol.asyncIterator]();
+    const queued = await iterator.next();
+    if (queued.done) throw new Error("queued event가 없습니다");
+    const running = await iterator.next();
+    if (running.done) throw new Error("running event가 없습니다");
+
+    const cancelling = runner.cancel(context, queued.value.executionId, "running 경계 취소");
+    const terminal = await iterator.next();
+    await cancelling;
+
+    expect(acquire).not.toHaveBeenCalled();
+    expect(terminal).toMatchObject({ done: false, value: { type: "execution_cancelled" } });
+    await expect(store.getRecovery(context, queued.value.executionId)).resolves.toMatchObject({
+      execution: { status: "cancelled" },
+    });
   });
 
   it("framework-neutral suspend·resume·recover 계약을 lifecycle adapter에 연결한다", async () => {

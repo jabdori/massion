@@ -35,6 +35,7 @@ export interface GenerateStrategyInput {
   readonly workId: string;
   readonly expectedWorkRevision: number;
   readonly contextVersionId: string;
+  readonly signal?: AbortSignal;
 }
 
 interface StrategyGenerationRecord {
@@ -68,7 +69,9 @@ function canonicalJson(value: unknown): string {
 }
 
 function requestHash(input: GenerateStrategyInput): string {
-  return createHash("sha256").update(canonicalJson(input)).digest("hex");
+  const { signal, ...request } = input;
+  void signal;
+  return createHash("sha256").update(canonicalJson(request)).digest("hex");
 }
 
 function validateOutput(value: unknown): StructuredOutputValidationResult {
@@ -156,6 +159,7 @@ export class StrategyGenerator {
         correlationId: input.commandId,
         estimatedTokens: contextVersion.tokenTotal + 4_000,
         estimatedCostMicros: 0,
+        ...(input.signal === undefined ? {} : { signal: input.signal }),
         input: {
           operation: "create_strategy_plan",
           contextVersionId: contextVersion.contextVersionId,

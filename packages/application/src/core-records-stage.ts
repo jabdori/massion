@@ -29,6 +29,22 @@ function sha256(value: string): string {
   return createHash("sha256").update(value).digest("hex");
 }
 
+function isoDateTime(value: unknown, label: string): string {
+  if (typeof value === "string" || value instanceof Date) {
+    const date = new Date(value);
+    if (!Number.isNaN(date.getTime())) return date.toISOString();
+  }
+  if (value && typeof value === "object" && "toISOString" in value) {
+    const convert = (value as { readonly toISOString?: unknown }).toISOString;
+    if (typeof convert === "function") {
+      const serialized = String(convert.call(value));
+      const date = new Date(serialized);
+      if (!Number.isNaN(date.getTime())) return date.toISOString();
+    }
+  }
+  throw new Error(`${label} datetime을 UTC ISO 형식으로 직렬화할 수 없습니다`);
+}
+
 function proposals(request: unknown): readonly DocumentationImpactProposalInput[] {
   const value =
     request && typeof request === "object"
@@ -37,19 +53,37 @@ function proposals(request: unknown): readonly DocumentationImpactProposalInput[
   return Array.isArray(value) ? (value as DocumentationImpactProposalInput[]) : [];
 }
 
+interface ActiveRecordsRun {
+  readonly recordsRunId: string;
+  cancellation?: Promise<void>;
+}
+
+const APPLICATION_RUN_CANCELLED = "Application run cancelled";
+
 export class CoreRecordsStage implements CoreWorkStageExecutor {
+  private readonly activeRecordsRuns = new Map<string, ActiveRecordsRun>();
+
   public constructor(
     private readonly dependencies: {
       readonly works: Pick<WorkService, "recoverWork">;
-      readonly records: Pick<RecordsService, "start" | "proposeImpacts" | "finalize" | "complete">;
+      readonly records: Pick<RecordsService, "start" | "cancel" | "proposeImpacts" | "finalize" | "complete">;
       readonly documents: CoreRecordsDocumentPlanner;
     },
   ) {}
 
+  public async cancel(context: TenantContext, input: Omit<CoreWorkStageInput, "resumeInput">): Promise<void> {
+    const stageCommandId = input.commandId.replace(/:cancel$/u, "");
+    const active = this.activeRecordsRuns.get(stageCommandId);
+    if (!active) return;
+    await this.cancelRecordsRun(context, stageCommandId, active.recordsRunId);
+  }
+
   public async execute(context: TenantContext, input: CoreWorkStageInput): Promise<CoreWorkStageResult> {
+    this.throwIfCancelled(input);
     if (!input.workId) throw new Error("Records stage에 Work ID가 없습니다");
     const workId = input.workId;
     const recovery = await this.dependencies.works.recoverWork(context, workId);
+    this.throwIfCancelled(input);
     const verification = [...recovery.verifications]
       .filter((item) => item.passed)
       .sort((left, right) => left.projected_work_revision - right.projected_work_revision)
@@ -129,6 +163,7 @@ export class CoreRecordsStage implements CoreWorkStageExecutor {
       },
       governanceReferences: [],
     });
+    this.throwIfCancelled(input);
     const run = await this.dependencies.records.start(context, {
       commandId: `${input.commandId}:start`,
       workId,
@@ -138,61 +173,115 @@ export class CoreRecordsStage implements CoreWorkStageExecutor {
       snapshotHash: snapshot.hash,
       rendererVersion: RECORDS_MARKDOWN_RENDERER_VERSION,
     });
-    if (run.status === "completed") return { outcome: "advanced", data: { recordsRunId: run.recordsRunId } };
-    const sourceReferences: DocumentationSourceReference[] = [
-      {
-        referenceId: verification.verification_id,
-        organizationId: context.organizationId,
+    if (run.status === "completed") {
+      this.throwIfCancelled(input);
+      return { outcome: "advanced", data: { recordsRunId: run.recordsRunId } };
+    }
+    const active: ActiveRecordsRun = { recordsRunId: run.recordsRunId };
+    this.activeRecordsRuns.set(input.commandId, active);
+    try {
+      await this.cancelAndThrowIfCancelled(context, input, run.recordsRunId);
+      const sourceReferences: DocumentationSourceReference[] = [
+        {
+          referenceId: verification.verification_id,
+          organizationId: context.organizationId,
+          workId,
+          sourceType: "verification",
+        },
+        ...recovery.events.map((event) => ({
+          referenceId: event.event_id,
+          organizationId: context.organizationId,
+          workId,
+          sourceType: "event" as const,
+        })),
+        ...recovery.messages.map((message) => ({
+          referenceId: message.message_id,
+          organizationId: context.organizationId,
+          workId,
+          sourceType: "message" as const,
+        })),
+        ...recovery.artifactVersions.map((artifact) => ({
+          referenceId: artifact.artifact_version_id,
+          organizationId: context.organizationId,
+          workId,
+          sourceType: "artifact" as const,
+        })),
+      ];
+      await this.cancelAndThrowIfCancelled(context, input, run.recordsRunId);
+      const impacts = await this.dependencies.records.proposeImpacts(context, {
+        commandId: `${input.commandId}:impacts`,
+        recordsRunId: run.recordsRunId,
+        evaluatedAt: isoDateTime(recovery.events.at(-1)?.created_at ?? recovery.work.updated_at, "Records 평가 시각"),
+        proposals: proposals(input.request),
+        sources: sourceReferences,
+      });
+      await this.cancelAndThrowIfCancelled(context, input, run.recordsRunId);
+      const requiredKinds = impacts.assessments
+        .filter((assessment) => assessment.outcome === "required" && assessment.kind !== "work-record")
+        .map((assessment) => assessment.kind as "adr" | "changelog" | "runbook");
+      await this.cancelAndThrowIfCancelled(context, input, run.recordsRunId);
+      const documents = await this.dependencies.documents.plan(context, {
+        commandId: `${input.commandId}:documents`,
         workId,
-        sourceType: "verification",
-      },
-      ...recovery.events.map((event) => ({
-        referenceId: event.event_id,
-        organizationId: context.organizationId,
-        workId,
-        sourceType: "event" as const,
-      })),
-      ...recovery.messages.map((message) => ({
-        referenceId: message.message_id,
-        organizationId: context.organizationId,
-        workId,
-        sourceType: "message" as const,
-      })),
-      ...recovery.artifactVersions.map((artifact) => ({
-        referenceId: artifact.artifact_version_id,
-        organizationId: context.organizationId,
-        workId,
-        sourceType: "artifact" as const,
-      })),
-    ];
-    const impacts = await this.dependencies.records.proposeImpacts(context, {
-      commandId: `${input.commandId}:impacts`,
-      recordsRunId: run.recordsRunId,
-      evaluatedAt: String(recovery.events.at(-1)?.created_at ?? recovery.work.updated_at),
-      proposals: proposals(input.request),
-      sources: sourceReferences,
-    });
-    const requiredKinds = impacts.assessments
-      .filter((assessment) => assessment.outcome === "required" && assessment.kind !== "work-record")
-      .map((assessment) => assessment.kind as "adr" | "changelog" | "runbook");
-    const documents = await this.dependencies.documents.plan(context, {
-      commandId: `${input.commandId}:documents`,
-      workId,
-      requiredKinds,
-      sourceReferences,
-      recovery,
-    });
-    if (requiredKinds.some((kind) => !documents.some((document) => document.kind === kind)))
-      return { outcome: "blocked", reason: "records-document-required" };
-    await this.dependencies.records.finalize(context, {
-      commandId: `${input.commandId}:finalize`,
-      recordsRunId: run.recordsRunId,
-      expectedWorkRevision: run.targetWorkRevision,
-      documentSources: documents,
-    });
-    const completed = await this.dependencies.records.complete(context, { recordsRunId: run.recordsRunId });
-    return completed.run.status === "completed"
-      ? { outcome: "advanced", data: { recordsRunId: completed.run.recordsRunId, snapshotHash: snapshot.hash } }
-      : { outcome: "blocked", reason: `records-${completed.run.status}` };
+        requiredKinds,
+        sourceReferences,
+        recovery,
+      });
+      await this.cancelAndThrowIfCancelled(context, input, run.recordsRunId);
+      if (requiredKinds.some((kind) => !documents.some((document) => document.kind === kind)))
+        return { outcome: "blocked", reason: "records-document-required" };
+      await this.cancelAndThrowIfCancelled(context, input, run.recordsRunId);
+      await this.dependencies.records.finalize(context, {
+        commandId: `${input.commandId}:finalize`,
+        recordsRunId: run.recordsRunId,
+        expectedWorkRevision: run.targetWorkRevision,
+        documentSources: documents,
+      });
+      await this.cancelAndThrowIfCancelled(context, input, run.recordsRunId);
+      const completed = await this.dependencies.records.complete(context, { recordsRunId: run.recordsRunId });
+      await this.cancelAndThrowIfCancelled(context, input, run.recordsRunId);
+      return completed.run.status === "completed"
+        ? { outcome: "advanced", data: { recordsRunId: completed.run.recordsRunId, snapshotHash: snapshot.hash } }
+        : { outcome: "blocked", reason: `records-${completed.run.status}` };
+    } finally {
+      if (this.activeRecordsRuns.get(input.commandId) === active) this.activeRecordsRuns.delete(input.commandId);
+    }
+  }
+
+  private throwIfCancelled(input: CoreWorkStageInput): void {
+    if (input.signal?.aborted) throw new Error(APPLICATION_RUN_CANCELLED);
+  }
+
+  private async cancelAndThrowIfCancelled(
+    context: TenantContext,
+    input: CoreWorkStageInput,
+    recordsRunId: string,
+  ): Promise<void> {
+    const active = this.activeRecordsRuns.get(input.commandId);
+    if (!input.signal?.aborted && active?.cancellation === undefined) return;
+    await this.cancelRecordsRun(context, input.commandId, recordsRunId);
+    throw new Error(APPLICATION_RUN_CANCELLED);
+  }
+
+  private async cancelRecordsRun(context: TenantContext, stageCommandId: string, recordsRunId: string): Promise<void> {
+    const active = this.activeRecordsRuns.get(stageCommandId);
+    if (active?.recordsRunId === recordsRunId) {
+      if (!active.cancellation) {
+        const cancellation = this.dependencies.records
+          .cancel(context, { commandId: `${stageCommandId}:cancel`, recordsRunId })
+          .then(() => undefined);
+        active.cancellation = cancellation;
+        try {
+          await cancellation;
+        } catch (error) {
+          if (active.cancellation === cancellation) delete active.cancellation;
+          throw error;
+        }
+      } else {
+        await active.cancellation;
+      }
+      return;
+    }
+    await this.dependencies.records.cancel(context, { commandId: `${stageCommandId}:cancel`, recordsRunId });
   }
 }

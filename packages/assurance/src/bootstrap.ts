@@ -3,12 +3,19 @@ import type { OrganizationService, TenantContext } from "@massion/identity";
 import { ORGANIZATION_CAPABILITY_MIGRATION, ORGANIZATION_GRAPH_MIGRATION } from "@massion/organization";
 import { RUNTIME_BLOCKED_TRANSITION_MIGRATION, RUNTIME_EXECUTION_MIGRATION } from "@massion/runtime";
 import { applyMigrations, type MassionDatabase } from "@massion/storage";
-import { WORK_ASSURANCE_LINK_MIGRATION, WorkService } from "@massion/work";
+import {
+  WORK_ASSURANCE_LINK_MIGRATION,
+  WorkAssurancePort,
+  WorkService,
+  type ProjectAssuranceVerdictInput,
+  type WorkAssuranceProjectionResult,
+} from "@massion/work";
 
-import { AssuranceRunStore } from "./run-store.js";
+import { AssuranceRunStore, type TransitionAssuranceRunInput } from "./run-store.js";
 import { AssuranceService, type DecideAssuranceInput, type DecideAssuranceResult } from "./service.js";
 import { AssuranceRecovery, type AssuranceRecoveryResult } from "./recovery.js";
 import { AssuranceComplianceAuditor, type AssuranceCompletionAuditFinding } from "./compliance.js";
+import { AssuranceRunVerdictReader } from "./work-verdict-reader.js";
 import type { AssuranceEvent, AssuranceRun, AssuranceRunResult, StartAssuranceRunInput } from "./contracts.js";
 import type { DatabaseAssuranceSnapshotInput, DatabaseAssuranceSnapshotResult } from "./database-snapshot.js";
 import { backfillAssuranceBindingChecks } from "./binding-store.js";
@@ -22,7 +29,9 @@ import {
 
 export interface AssuranceRunGateway {
   start(context: TenantContext, input: StartAssuranceRunInput): Promise<AssuranceRunResult>;
+  transition(context: TenantContext, input: TransitionAssuranceRunInput): Promise<AssuranceRunResult>;
   get(context: TenantContext, assuranceRunId: string): Promise<AssuranceRun>;
+  findByStartCommand(context: TenantContext, startCommandId: string): Promise<AssuranceRun | undefined>;
   listCriteria(context: TenantContext, assuranceRunId: string): ReturnType<AssuranceRunStore["listCriteria"]>;
   prepareSnapshot(
     context: TenantContext,
@@ -30,6 +39,7 @@ export interface AssuranceRunGateway {
   ): Promise<DatabaseAssuranceSnapshotResult>;
   listEvents(context: TenantContext, assuranceRunId: string): Promise<AssuranceEvent[]>;
   decide(context: TenantContext, input: DecideAssuranceInput): Promise<DecideAssuranceResult>;
+  projectVerdict(context: TenantContext, input: ProjectAssuranceVerdictInput): Promise<WorkAssuranceProjectionResult>;
   recover(
     context: TenantContext,
     input: { readonly commandId: string; readonly assuranceRunId: string },
@@ -58,16 +68,20 @@ export const AssuranceBootstrap = {
     await backfillAssuranceBindingChecks(database);
     const runs = await AssuranceRunStore.create(database, organizations);
     const assurance = await AssuranceService.create(database, organizations);
+    const projection = new WorkAssurancePort(database, organizations, new AssuranceRunVerdictReader());
     const recovery = await AssuranceRecovery.create(database, organizations);
     const compliance = new AssuranceComplianceAuditor(database, organizations);
     await compliance.assertDatabaseCompliance();
     return Object.freeze({
       start: runs.start.bind(runs),
+      transition: runs.transition.bind(runs),
       get: runs.get.bind(runs),
+      findByStartCommand: runs.findByStartCommand.bind(runs),
       listCriteria: runs.listCriteria.bind(runs),
       prepareSnapshot: runs.prepareSnapshot.bind(runs),
       listEvents: runs.listEvents.bind(runs),
       decide: assurance.decide.bind(assurance),
+      projectVerdict: projection.projectVerdict.bind(projection),
       recover: recovery.recover.bind(recovery),
       auditCompletedWorks: compliance.auditCompletedWorks.bind(compliance),
       assertRestoredCompliance: compliance.assertRestoredCompliance.bind(compliance),

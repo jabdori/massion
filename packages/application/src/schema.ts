@@ -306,6 +306,14 @@ UPDATE application_web_session SET revision = 0 WHERE revision = NONE;
 `,
 );
 
+export const APPLICATION_RUN_RETRY_MIGRATION = defineMigration(
+  "0105-application-run-retry",
+  `
+DEFINE FIELD retry_attempt_id ON application_run TYPE option<string>;
+DEFINE FIELD retry_replay_id ON application_run TYPE option<string>;
+`,
+);
+
 export const APPLICATION_MIGRATIONS = [
   APPLICATION_AUTH_MIGRATION,
   APPLICATION_COMMAND_MIGRATION,
@@ -315,4 +323,5 @@ export const APPLICATION_MIGRATIONS = [
   APPLICATION_METRIC_MIGRATION,
   APPLICATION_WEB_SESSION_MIGRATION,
   APPLICATION_WEB_SESSION_REVISION_MIGRATION,
+  APPLICATION_RUN_RETRY_MIGRATION,
 ] as const;

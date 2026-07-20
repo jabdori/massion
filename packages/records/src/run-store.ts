@@ -69,6 +69,11 @@ export interface CompleteRecordsRunInput {
   readonly expectedVersion: number;
 }
 
+export interface CancelRecordsRunInput {
+  readonly commandId: string;
+  readonly recordsRunId: string;
+}
+
 interface WorkRecord {
   readonly work_id: string;
   readonly status: string;
@@ -210,6 +215,69 @@ export class RecordsRunStore {
   public async get(context: TenantContext, recordsRunId: string): Promise<RecordsRun> {
     await this.organizations.verifyTenantContext(context);
     return this.view(await this.find(this.database, context.organizationId, recordsRunId));
+  }
+
+  public async cancel(context: TenantContext, input: CancelRecordsRunInput): Promise<RecordsRun> {
+    await this.organizations.verifyTenantContext(context);
+    assertIdentifier(input.commandId, "Command ID");
+    assertIdentifier(input.recordsRunId, "Records run ID");
+    const hash = sha256(canonicalJson({ operation: "cancel", input }));
+    return await this.database.transaction(async (transaction) => {
+      await this.organizations.verifyTenantContext(context, undefined, transaction);
+      const [events] = await transaction.query<[EventRecord[]]>(
+        "SELECT records_run_id, request_hash FROM records_event WHERE organization_id = $organization_id AND command_id = $command_id AND event_type = 'records_run_cancelled' LIMIT 1;",
+        {
+          organization_id: context.organizationId,
+          command_id: input.commandId,
+        },
+      );
+      if (events[0]) {
+        if (events[0].request_hash !== hash || events[0].records_run_id !== input.recordsRunId) {
+          throw new Error("같은 command ID에 다른 Records cancellation payload를 사용할 수 없습니다");
+        }
+        return this.view(await this.find(transaction, context.organizationId, input.recordsRunId));
+      }
+      const current = await this.find(transaction, context.organizationId, input.recordsRunId);
+      let result = current;
+      if (!["completed", "blocked", "cancelled"].includes(current.status)) {
+        const [updated] = await transaction.query<[RunRecord[]]>(
+          "UPDATE records_run SET status = 'cancelled', version += 1, active_guard_key = NONE, completed_at = time::now(), updated_at = time::now() WHERE organization_id = $organization_id AND records_run_id = $records_run_id AND version = $version AND status IN ['planned', 'rendering', 'finalized'] RETURN AFTER;",
+          {
+            organization_id: context.organizationId,
+            records_run_id: input.recordsRunId,
+            version: current.version,
+          },
+        );
+        if (!updated[0]) {
+          const concurrent = await this.find(transaction, context.organizationId, input.recordsRunId);
+          if (!["completed", "blocked", "cancelled"].includes(concurrent.status)) {
+            throw new Error("Records run cancellation 상태가 동시에 변경되었습니다");
+          }
+          result = concurrent;
+        } else {
+          result = updated[0];
+        }
+      }
+      const [sequences] = await transaction.query<[{ sequence: number }[]]>(
+        "SELECT sequence FROM records_event WHERE organization_id = $organization_id AND records_run_id = $records_run_id;",
+        { organization_id: context.organizationId, records_run_id: input.recordsRunId },
+      );
+      await transaction.query(
+        "CREATE records_event CONTENT { event_id: $event_id, organization_id: $organization_id, work_id: $work_id, records_run_id: $records_run_id, command_id: $command_id, sequence: $sequence, event_type: 'records_run_cancelled', request_hash: $request_hash, payload_json: $payload_json, actor_user_id: $actor_user_id, created_at: time::now() };",
+        {
+          event_id: randomUUID(),
+          organization_id: context.organizationId,
+          work_id: current.work_id,
+          records_run_id: input.recordsRunId,
+          command_id: input.commandId,
+          sequence: sequences.reduce((maximum, event) => Math.max(maximum, event.sequence), 0) + 1,
+          request_hash: hash,
+          payload_json: canonicalJson({ from: current.status, to: result.status, version: result.version }),
+          actor_user_id: context.userId,
+        },
+      );
+      return this.view(result);
+    });
   }
 
   public async complete(context: TenantContext, input: CompleteRecordsRunInput): Promise<RecordsRun> {
