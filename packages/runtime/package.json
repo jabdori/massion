@@ -35,7 +35,6 @@
     "@voltagent/core": "2.9.0",
     "@voltagent/logger": "2.0.2",
     "ai": "6.0.222",
-    "ai-sdk-provider-claude-code": "4.0.1",
     "graphql": "16.14.2",
     "ws": "8.21.0",
     "zod": "4.4.3"
