@@ -89,9 +89,9 @@ interface PendingLogin {
   readonly prepared?: PreparedBinding;
 }
 
-interface ExistingCodexAccount {
+interface ExistingSubscriptionAccount {
   readonly accountId: string;
-  readonly providerId: "openai-codex";
+  readonly providerId: string;
   readonly alias: string;
   readonly connectorId: string;
   readonly profileHandle: string;
@@ -112,6 +112,12 @@ const PROVIDERS: Readonly<Record<string, ProviderLoginContract>> = {
     arguments: (artifact) => [...codexFileCredentialStoreArguments(artifact.commandArguments), "login"],
     environment: (profileRoot) => ({ CODEX_HOME: profileRoot }),
   },
+  "anthropic-claude-code": {
+    runtimeId: "claude",
+    defaultAlias: "Anthropic Claude Code",
+    arguments: () => ["auth", "login", "--claudeai"],
+    environment: (profileRoot) => ({ CLAUDE_CONFIG_DIR: profileRoot }),
+  },
 };
 
 export function listLocalSubscriptionLoginProviders(): readonly {
@@ -122,6 +128,12 @@ export function listLocalSubscriptionLoginProviders(): readonly {
     providerId,
     displayName: contract.defaultAlias,
   }));
+}
+
+function subscriptionProviderLabel(providerId: string): string {
+  if (providerId === "openai-codex") return "Codex";
+  if (providerId === "anthropic-claude-code") return "Claude Code";
+  return "구독 Provider";
 }
 
 function errorCode(error: unknown): string | undefined {
@@ -405,7 +417,7 @@ function parsePrepared(value: unknown): PreparedBinding {
   };
 }
 
-function assertAttested(value: unknown, connectorId: string): void {
+function assertAttested(value: unknown, connectorId: string, runtimeId: BundledSubscriptionRuntimeId): void {
   if (!value || typeof value !== "object" || Array.isArray(value))
     throw new Error("서버 구독 건강 증명 응답이 유효하지 않습니다");
   const response = value as { outcome?: unknown; data?: Record<string, unknown> };
@@ -416,6 +428,7 @@ function assertAttested(value: unknown, connectorId: string): void {
   ) {
     throw new Error("서버 구독 Runtime이 준비 상태가 되지 않았습니다");
   }
+  if (runtimeId !== "codex") return;
   const quotaObservation = response.data.quotaObservation;
   if (!quotaObservation || typeof quotaObservation !== "object" || Array.isArray(quotaObservation)) {
     throw new DirectQuotaObservationMissingError();
@@ -425,6 +438,17 @@ function assertAttested(value: unknown, connectorId: string): void {
     throw new Error("서버 구독 건강 증명의 Codex quota 관측 출처가 유효하지 않습니다");
   }
   observedAt(observation.attestedAt, "Codex 직접 quota 건강 증명 시각");
+}
+
+async function prepareLoginProfile(contract: ProviderLoginContract, profileRoot: string): Promise<void> {
+  if (contract.runtimeId === "codex") await ensureManagedCodexProfile(profileRoot);
+}
+
+async function assertInteractiveLoginPersisted(contract: ProviderLoginContract, profileRoot: string): Promise<void> {
+  if (contract.runtimeId !== "codex") return;
+  if ((await managedCodexCredentialState(profileRoot)) !== "present") {
+    throw new Error("Provider 구독 로그인 뒤 관리 Codex profile의 auth.json을 확인할 수 없습니다");
+  }
 }
 
 function reauthenticationRequired(error: unknown): boolean {
@@ -530,9 +554,13 @@ async function assertFreshCodexQuota(
   }
 }
 
-function existingCodexAccount(value: Record<string, unknown>): ExistingCodexAccount {
+function existingSubscriptionAccount(
+  value: Record<string, unknown>,
+  providerId: string,
+  providerLabel: string,
+): ExistingSubscriptionAccount {
   if (
-    value.providerId !== "openai-codex" ||
+    value.providerId !== providerId ||
     typeof value.accountId !== "string" ||
     typeof value.alias !== "string" ||
     typeof value.connectorId !== "string" ||
@@ -540,26 +568,26 @@ function existingCodexAccount(value: Record<string, unknown>): ExistingCodexAcco
     typeof value.profileHandle !== "string" ||
     typeof value.status !== "string"
   ) {
-    throw new Error("기존 Codex 구독 계정 응답이 유효하지 않습니다");
+    throw new Error(`기존 ${providerLabel} 구독 계정 응답이 유효하지 않습니다`);
   }
   // `canManage`는 서버가 현재 사용자가 실제 소유자인지 계산한 공개 권한 신호입니다.
   // 공유받은 구성원은 profile을 읽거나 재인증해서는 안 됩니다.
   if (value.canManage !== true) {
-    throw new Error("기존 Codex profile은 계정 소유자만 재인증하거나 재사용할 수 있습니다");
+    throw new Error(`기존 ${providerLabel} profile은 계정 소유자만 재인증하거나 재사용할 수 있습니다`);
   }
   if (value.scope !== "personal" && value.scope !== "organization") {
-    throw new Error("기존 Codex 구독 계정 scope가 유효하지 않습니다");
+    throw new Error(`기존 ${providerLabel} 구독 계정 scope가 유효하지 않습니다`);
   }
   if (value.billingKind !== "consumer-subscription" || value.connectorExecutionKind !== "agent-runtime") {
-    throw new Error("기존 Codex 구독 계정의 실행 계보가 유효하지 않습니다");
+    throw new Error(`기존 ${providerLabel} 구독 계정의 실행 계보가 유효하지 않습니다`);
   }
   return {
     accountId: identifier(value.accountId, "기존 구독 계정 ID"),
-    providerId: "openai-codex",
+    providerId,
     alias: text(value.alias, "기존 구독 계정 별칭", 128),
     connectorId: identifier(value.connectorId, "기존 Connector ID"),
     profileHandle: profileHandle(value.profileHandle),
-    accountStatus: enumValue(value.status, "기존 Codex 계정 상태", REUSABLE_ACCOUNT_STATUSES),
+    accountStatus: enumValue(value.status, `기존 ${providerLabel} 계정 상태`, REUSABLE_ACCOUNT_STATUSES),
     doctorAction: "inspect",
   };
 }
@@ -569,7 +597,11 @@ function enumValue(value: unknown, label: string, values: ReadonlySet<string>): 
   return value;
 }
 
-function existingCodexDoctor(value: Record<string, unknown>, account: ExistingCodexAccount): ExistingCodexAccount {
+function existingSubscriptionDoctor(
+  value: Record<string, unknown>,
+  account: ExistingSubscriptionAccount,
+  providerLabel: string,
+): ExistingSubscriptionAccount {
   if (
     value.accountId !== account.accountId ||
     value.providerId !== account.providerId ||
@@ -577,27 +609,27 @@ function existingCodexDoctor(value: Record<string, unknown>, account: ExistingCo
     value.connectorId !== account.connectorId ||
     value.connectorLocation !== "server"
   ) {
-    throw new Error("기존 Codex profile doctor 계보가 일치하지 않습니다");
+    throw new Error(`기존 ${providerLabel} profile doctor 계보가 일치하지 않습니다`);
   }
   const accountStatus = enumValue(
     value.accountStatus,
-    "기존 Codex profile doctor 계정 상태",
+    `기존 ${providerLabel} profile doctor 계정 상태`,
     REUSABLE_ACCOUNT_STATUSES,
   );
   const connectorStatus = enumValue(
     value.connectorStatus,
-    "기존 Codex profile doctor Connector 상태",
+    `기존 ${providerLabel} profile doctor Connector 상태`,
     REUSABLE_CONNECTOR_STATUSES,
   );
-  const quotaStatus = enumValue(value.quotaStatus, "기존 Codex profile doctor quota 상태", DOCTOR_QUOTA_STATUSES);
-  const doctorAction = enumValue(value.action, "기존 Codex profile doctor 작업", DOCTOR_ACTIONS);
+  const quotaStatus = enumValue(value.quotaStatus, `기존 ${providerLabel} profile doctor quota 상태`, DOCTOR_QUOTA_STATUSES);
+  const doctorAction = enumValue(value.action, `기존 ${providerLabel} profile doctor 작업`, DOCTOR_ACTIONS);
   void connectorStatus;
   void quotaStatus;
   if (accountStatus !== account.accountStatus) {
-    throw new Error("기존 Codex profile doctor 계정 상태가 구독 계정과 일치하지 않습니다");
+    throw new Error(`기존 ${providerLabel} profile doctor 계정 상태가 구독 계정과 일치하지 않습니다`);
   }
   if ((accountStatus === "needs-reauth") !== (doctorAction === "reauth")) {
-    throw new Error("기존 Codex profile doctor 재인증 상태가 일치하지 않습니다");
+    throw new Error(`기존 ${providerLabel} profile doctor 재인증 상태가 일치하지 않습니다`);
   }
   return { ...account, accountStatus, doctorAction };
 }
@@ -615,44 +647,51 @@ function assertPreflightCodexQuota(rows: readonly Record<string, unknown>[], acc
   });
 }
 
-function manageableCodexCandidates(rows: readonly Record<string, unknown>[]): readonly Record<string, unknown>[] {
+function manageableSubscriptionCandidates(
+  rows: readonly Record<string, unknown>[],
+  providerLabel: string,
+): readonly Record<string, unknown>[] {
   return rows.flatMap((row) => {
     if (row.canManage === true) return [row];
     if (row.canManage === false) return [];
-    throw new Error("기존 Codex 구독 계정의 관리 권한 응답이 유효하지 않습니다");
+    throw new Error(`기존 ${providerLabel} 구독 계정의 관리 권한 응답이 유효하지 않습니다`);
   });
 }
 
-async function findExistingCodexAccount(
+async function findExistingSubscriptionAccount(
   client: ServerSubscriptionLoginClient,
   input: ServerSubscriptionLoginInput,
-): Promise<ExistingCodexAccount | undefined> {
+  contract: ProviderLoginContract,
+): Promise<ExistingSubscriptionAccount | undefined> {
+  const providerLabel = subscriptionProviderLabel(input.providerId);
   const rows = queryRows(await client.query("subscription.accounts", {}), "구독 계정").filter(
-    (row) => row.providerId === "openai-codex" && row.connectorLocation === "server",
+    (row) => row.providerId === input.providerId && row.connectorLocation === "server",
   );
   if (rows.length === 0) return undefined;
   const matching = input.alias === undefined ? rows : rows.filter((row) => row.alias === input.alias);
   if (matching.length === 0) {
-    throw new Error("기존 Codex 계정 별칭을 찾지 못했습니다. 새 계정은 --new-account를 사용해주세요");
+    throw new Error(`기존 ${providerLabel} 계정 별칭을 찾지 못했습니다. 새 계정은 --new-account를 사용해주세요`);
   }
-  const selected = manageableCodexCandidates(matching);
+  const selected = manageableSubscriptionCandidates(matching, providerLabel);
   if (selected.length === 0) {
-    throw new Error("기존 Codex profile은 계정 소유자만 재인증하거나 재사용할 수 있습니다");
+    throw new Error(`기존 ${providerLabel} profile은 계정 소유자만 재인증하거나 재사용할 수 있습니다`);
   }
   if (selected.length > 1) {
-    throw new Error("기존 Codex 계정이 여러 개입니다. 별칭을 지정하거나 --new-account를 사용해주세요");
+    throw new Error(`기존 ${providerLabel} 계정이 여러 개입니다. 별칭을 지정하거나 --new-account를 사용해주세요`);
   }
-  const account = existingCodexAccount(selected[0] as Record<string, unknown>);
+  const account = existingSubscriptionAccount(selected[0] as Record<string, unknown>, input.providerId, providerLabel);
   const doctorRows = queryRows(
     await client.query("subscription.doctor", { accountId: account.accountId }),
     "구독 doctor",
   );
   if (doctorRows.length !== 1) {
-    throw new Error("기존 Codex profile doctor 확인 결과가 없습니다");
+    throw new Error(`기존 ${providerLabel} profile doctor 확인 결과가 없습니다`);
   }
-  const doctorAccount = existingCodexDoctor(doctorRows[0] as Record<string, unknown>, account);
-  const quotaRows = queryRows(await client.query("subscription.quota", { accountId: account.accountId }), "구독 quota");
-  assertPreflightCodexQuota(quotaRows, account.accountId);
+  const doctorAccount = existingSubscriptionDoctor(doctorRows[0] as Record<string, unknown>, account, providerLabel);
+  if (contract.runtimeId === "codex") {
+    const quotaRows = queryRows(await client.query("subscription.quota", { accountId: account.accountId }), "구독 quota");
+    assertPreflightCodexQuota(quotaRows, account.accountId);
+  }
   return doctorAccount;
 }
 
@@ -710,16 +749,14 @@ export async function connectLocalServerSubscription(
   input: ServerSubscriptionLoginInput,
   options: ServerSubscriptionLoginOptions,
 ): Promise<LocalServerSubscriptionConnection> {
-  if (input.providerId === "anthropic-claude-code") {
-    throw new Error("Anthropic 사전 승인 전에는 Claude 소비자 구독 로그인을 제공할 수 없습니다");
-  }
   const contract = PROVIDERS[input.providerId];
-  if (!contract) throw new Error("서버 관리형 소비자 구독 로그인은 Codex만 지원합니다");
+  if (!contract) throw new Error("서버 관리형 소비자 구독 로그인은 Codex와 Claude Code만 지원합니다");
   assertLocalMode(await client.status());
   assertLoopbackEndpoint(options.endpoint);
   if (!isAbsolute(options.connectorDirectory)) throw new Error("Connector directory는 절대 경로여야 합니다");
 
   const selectedAlias = alias(input.alias, contract.defaultAlias);
+  const selectedProviderLabel = subscriptionProviderLabel(input.providerId);
   const selectedModelId = requestedModelId(input.modelId);
   const connectorRoot = await ownerOnlyDirectory(resolve(options.connectorDirectory));
   const profilesRoot = await ownerOnlyDirectory(join(connectorRoot, "profiles"));
@@ -730,26 +767,29 @@ export async function connectLocalServerSubscription(
   try {
     let pending = await readPending(pendingPath, input.providerId);
     if (pending?.intent === "new-account" && input.newAccount !== true) {
-      throw new Error("중단된 새 Codex 계정 추가를 재개하려면 --new-account를 다시 명시해주세요");
+      throw new Error(`중단된 새 ${selectedProviderLabel} 계정 추가를 재개하려면 --new-account를 다시 명시해주세요`);
     }
     if (pending?.intent === "initial" && input.newAccount === true) {
       throw new Error(
-        "기존 Codex 연결 재개 상태가 남아 있습니다. 새 계정을 추가하기 전에 해당 연결을 완료하거나 재개 상태를 정리해주세요",
+        `기존 ${selectedProviderLabel} 연결 재개 상태가 남아 있습니다. 새 계정을 추가하기 전에 해당 연결을 완료하거나 재개 상태를 정리해주세요`,
       );
     }
     if (!pending && input.newAccount !== true) {
-      const existing = await findExistingCodexAccount(client, input);
+      const existing = await findExistingSubscriptionAccount(client, input, contract);
       if (existing) {
         const [organizationSegment, accountSegment] = existing.profileHandle.split("/");
-        if (!organizationSegment || !accountSegment) throw new Error("기존 Codex profile 계보가 유효하지 않습니다");
+        if (!organizationSegment || !accountSegment)
+          throw new Error(`기존 ${selectedProviderLabel} profile 계보가 유효하지 않습니다`);
         const existingProfileRoot = resolve(profilesRoot, organizationSegment, accountSegment);
-        if (!within(profilesRoot, existingProfileRoot)) throw new Error("기존 Codex profile 경로가 유효하지 않습니다");
+        if (!within(profilesRoot, existingProfileRoot))
+          throw new Error(`기존 ${selectedProviderLabel} profile 경로가 유효하지 않습니다`);
         const profileWasMissing = !(await directoryExists(existingProfileRoot));
         if (profileWasMissing) {
           await ownerOnlyDirectory(existingProfileRoot);
         }
-        await ensureManagedCodexProfile(existingProfileRoot);
-        const credentialState = await managedCodexCredentialState(existingProfileRoot);
+        await prepareLoginProfile(contract, existingProfileRoot);
+        const credentialState =
+          contract.runtimeId === "codex" ? await managedCodexCredentialState(existingProfileRoot) : "unknown";
         const shouldLogin =
           profileWasMissing ||
           credentialState === "missing" ||
@@ -768,9 +808,7 @@ export async function connectLocalServerSubscription(
             loginEnvironment(options.environment ?? process.env, existingProfileRoot, contract),
           );
           if (code !== 0) throw new Error(`Provider 구독 재인증이 완료되지 않았습니다 (exit ${String(code)})`);
-          if ((await managedCodexCredentialState(existingProfileRoot)) !== "present") {
-            throw new Error("Provider 구독 재인증 뒤 관리 Codex profile의 auth.json을 확인할 수 없습니다");
-          }
+          await assertInteractiveLoginPersisted(contract, existingProfileRoot);
         };
         const attestExistingProfile = async (): Promise<void> => {
           const observedAfter = Date.now();
@@ -781,8 +819,8 @@ export async function connectLocalServerSubscription(
               ...(selectedModelId === undefined ? {} : { modelId: selectedModelId }),
             }),
           );
-          assertAttested(attested, existing.connectorId);
-          await assertFreshCodexQuota(client, existing.accountId, observedAfter);
+          assertAttested(attested, existing.connectorId, contract.runtimeId);
+          if (contract.runtimeId === "codex") await assertFreshCodexQuota(client, existing.accountId, observedAfter);
         };
         if (shouldLogin) {
           await loginExistingProfile();
@@ -830,7 +868,7 @@ export async function connectLocalServerSubscription(
     if (!within(stagingParent, stagingRoot)) throw new Error("구독 staging profile 경로가 유효하지 않습니다");
     if (pending.phase === "login") {
       const profileRoot = await ownerOnlyDirectory(stagingRoot);
-      await ensureManagedCodexProfile(profileRoot);
+      await prepareLoginProfile(contract, profileRoot);
       const inspect = options.inspectRuntime ?? inspectBundledSubscriptionRuntime;
       const artifact = await inspect(contract.runtimeId);
       if (artifact.runtimeId !== contract.runtimeId) throw new Error("Bundled 구독 Runtime 계보가 일치하지 않습니다");
@@ -841,9 +879,7 @@ export async function connectLocalServerSubscription(
         loginEnvironment(options.environment ?? process.env, profileRoot, contract),
       );
       if (code !== 0) throw new Error(`Provider 구독 로그인이 완료되지 않았습니다 (exit ${String(code)})`);
-      if ((await managedCodexCredentialState(profileRoot)) !== "present") {
-        throw new Error("Provider 구독 로그인 뒤 관리 Codex profile의 auth.json을 확인할 수 없습니다");
-      }
+      await assertInteractiveLoginPersisted(contract, profileRoot);
       pending = { ...pending, phase: "prepare" };
       await writePending(pendingPath, pending);
     }
@@ -879,9 +915,7 @@ export async function connectLocalServerSubscription(
         loginEnvironment(options.environment ?? process.env, profileRoot, contract),
       );
       if (code !== 0) throw new Error(`Provider 구독 재인증이 완료되지 않았습니다 (exit ${String(code)})`);
-      if ((await managedCodexCredentialState(profileRoot)) !== "present") {
-        throw new Error("Provider 구독 재인증 뒤 관리 Codex profile의 auth.json을 확인할 수 없습니다");
-      }
+      await assertInteractiveLoginPersisted(contract, profileRoot);
     };
     let attestCommandId = pendingState.attestCommandId;
     let attestCorrelationId = pendingState.attestCorrelationId;
@@ -894,13 +928,13 @@ export async function connectLocalServerSubscription(
           ...(pendingState.requestedModelId === undefined ? {} : { modelId: pendingState.requestedModelId }),
         }),
       );
-      assertAttested(attested, prepared.connectorId);
-      await assertFreshCodexQuota(client, prepared.accountId, observedAfter);
+      assertAttested(attested, prepared.connectorId, contract.runtimeId);
+      if (contract.runtimeId === "codex") await assertFreshCodexQuota(client, prepared.accountId, observedAfter);
     };
     try {
       await attestPreparedProfile();
     } catch (error) {
-      if (error instanceof DirectQuotaObservationMissingError) {
+      if (contract.runtimeId === "codex" && error instanceof DirectQuotaObservationMissingError) {
         // 이전 서버가 quota 없이 성공한 응답을 같은 command ID로 replay하면
         // 새 서버로 교체한 뒤에도 보류 상태가 영구히 같은 응답을 받습니다.
         // 네트워크 단절·실패는 기존 command를 재사용하지만, 불완전한 성공은

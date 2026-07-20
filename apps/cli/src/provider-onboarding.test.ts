@@ -11,7 +11,7 @@ vi.mock("@clack/prompts", () => ({
 
 const options: readonly ProviderOnboardingOption[] = [
   { providerId: "openai-codex", displayName: "OpenAI Codex" },
-  { providerId: "anthropic-claude-code", displayName: "Anthropic Claude Agent" },
+  { providerId: "anthropic-claude-code", displayName: "Anthropic Claude Code" },
 ];
 
 describe("Provider 온보딩", () => {
@@ -30,7 +30,7 @@ describe("Provider 온보딩", () => {
       message: "연결할 Provider를 선택하세요",
       options: [
         { label: "OpenAI Codex", value: "openai-codex" },
-        { label: "Anthropic Claude Agent", value: "anthropic-claude-code" },
+        { label: "Anthropic Claude Code", value: "anthropic-claude-code" },
       ],
     });
   });

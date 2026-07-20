@@ -113,20 +113,21 @@ describe("공식 구독·OAuth 제공자 catalog", () => {
     expect(subscriptionProviderApprovalModes(manifest)).toEqual(["automatic", "review", "deny"]);
   });
 
-  it("공식 지원 도구 승인이 필요한 Z.AI를 기본 지원으로 과장하지 않는다", () => {
+  it("Z.AI Coding Plan을 서버의 OpenAI 호환 model 연결로 제공한다", () => {
     expect(providerManifest("zai-coding-plan")).toMatchObject({
       quotaDiscovery: "none",
-      availability: "requires-provider-approval",
+      connectionSurface: "server-only",
+      availability: "supported",
     });
   });
 
-  it("Anthropic 사전 승인 없는 제3자 제품의 claude.ai 소비자 로그인을 기본 지원하지 않는다", () => {
+  it("Claude Code 소비자 구독은 공식 CLI profile 연결로 지원한다", () => {
     expect(providerManifest("anthropic-claude-code")).toMatchObject({
-      displayName: "Anthropic Claude Agent",
-      availability: "requires-provider-approval",
+      displayName: "Anthropic Claude Code",
+      availability: "supported",
       officialDocumentation: "https://platform.claude.com/docs/en/agent-sdk/overview",
     });
-    expect(listSubscriptionProviderManifests().map((manifest) => manifest.displayName)).not.toContain("Claude Code");
+    expect(listSubscriptionProviderManifests().map((manifest) => manifest.displayName)).toContain("Anthropic Claude Code");
   });
 
   it("Google 개인 구독과 기업 CLI를 분리하고 기계 판독할 수 없는 잔여 quota를 주장하지 않는다", () => {
@@ -196,9 +197,10 @@ describe("공식 구독·OAuth 제공자 catalog", () => {
     }
     expect(providerManifest("google-antigravity-cli")).toMatchObject({ connectionSurface: "unavailable" });
     expect(providerManifest("minimax-token-plan")).toMatchObject({ connectionSurface: "server-only" });
-    for (const providerId of ["xai-api", "nous-portal", "zai-coding-plan"]) {
+    for (const providerId of ["xai-api", "nous-portal"]) {
       expect(providerManifest(providerId)).toMatchObject({ connectionSurface: "unavailable" });
     }
+    expect(providerManifest("zai-coding-plan")).toMatchObject({ connectionSurface: "server-only" });
   });
 
   it("외부 ACP Edge는 저장된 profile 인증과 automatic·deny만 공개하고 review를 주장하지 않는다", () => {

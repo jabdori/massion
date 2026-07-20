@@ -35,8 +35,8 @@ describe("BuiltinSubscriptionProviderDirectory", () => {
       },
     });
     expect(providers.find((provider) => provider.providerId === "anthropic-claude-code")).toMatchObject({
-      displayName: "Anthropic Claude Agent",
-      availability: "requires-provider-approval",
+      displayName: "Anthropic Claude Code",
+      availability: "supported",
     });
     expect(providers.find((provider) => provider.providerId === "github-copilot")).toMatchObject({
       availability: "experimental",
@@ -50,7 +50,7 @@ describe("BuiltinSubscriptionProviderDirectory", () => {
     expect(providers.find((provider) => provider.providerId === "google-antigravity-cli")).toMatchObject({
       connectionSurface: "unavailable",
     });
-    expect(providers.map((provider) => provider.displayName)).not.toContain("Claude Code");
+    expect(providers.map((provider) => provider.displayName)).toContain("Anthropic Claude Code");
     expect(providers.find((provider) => provider.providerId === "opencode-go")).toMatchObject({
       executionKind: "model",
       connectionSurface: "unavailable",
@@ -68,13 +68,15 @@ describe("BuiltinSubscriptionProviderDirectory", () => {
       "kilo-gateway",
       "xai-api",
       "nous-portal",
-      "zai-coding-plan",
     ]) {
       expect(providers.find((provider) => provider.providerId === providerId)).toMatchObject({
         connectionSurface: "unavailable",
       });
     }
     expect(providers.find((provider) => provider.providerId === "minimax-token-plan")).toMatchObject({
+      connectionSurface: "server-only",
+    });
+    expect(providers.find((provider) => provider.providerId === "zai-coding-plan")).toMatchObject({
       connectionSurface: "server-only",
     });
   });
