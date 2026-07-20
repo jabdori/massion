@@ -13,7 +13,7 @@
 | UX-1 `work.timeline` 공통 투영 | 완료 | `209d7b1` + Web 진행 기록 표시. 팔레트 metadata는 UX-3 팔레트와 함께 |
 | UX-2 실행 스트림 | 서버측 완료 | `c23738f` — delta observer·fan-out registry·`/api/v1/executions/stream`. Surface 소비는 UX-3·4에서 |
 | Web workspace parity | 완료 | `2aa1c4c` — /workspaces 관리(등록·신뢰·보관)·작업 필터 |
-| UX-3 TUI transcript 재설계 | 미착수 | solid 채택 판정 완료, 렌더 계층 교체 대기 |
+| UX-3 TUI transcript 재설계 | 부분 완료 | `9b9d4b9` works 상세 timeline transcript, `cd05ac1` Ctrl+P 팔레트(공통 계약 `SURFACE_PALETTE_ITEMS` 소스). 잔여: solid 렌더 계층 교체 — 현행 배포가 `tsc dist` + `bun dist/main.js` 실행이라 solid `.tsx`는 `Bun.build` + `@opentui/solid/bun-plugin` 빌드 파이프라인 전환 결정이 선행되어야 함. 스트리밍 active cell·상시 composer·승인 diff 오버레이는 이 전환과 함께 진행 |
 | UX-4 Web 관제 분할 화면·폴링 제거 | 부분 | timeline 표시만 연결, SSE 소비·분할 화면 대기 |
 | UX-5 신뢰 장치 · WS-3 GUI · WS-4 Web 역할 | 미착수 | trusted 전 도구 실행 차단 게이트 포함 |
 > **대상**: `apps/tui`, `apps/web`, `packages/application` (표현 계약 확장)
