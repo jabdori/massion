@@ -44,8 +44,18 @@ const observedMiniMax = {
   source: "https://api.minimax.io/v1/models" as const,
 };
 
+const observedZai = {
+  modelId: "glm-5.2",
+  observedAt: "2026-07-20T00:00:00.000Z",
+  source: "https://api.z.ai/api/coding/paas/v4/chat/completions" as const,
+};
+
 function miniMaxVerifier() {
   return { verify: vi.fn().mockResolvedValue(observedMiniMax) };
+}
+
+function zaiVerifier() {
+  return { verify: vi.fn().mockResolvedValue(observedZai) };
 }
 
 describe("로컬 서버 구독 계정 준비", () => {
@@ -188,16 +198,47 @@ describe("로컬 서버 구독 계정 준비", () => {
         billingKind: "api-usage",
       }),
     ).rejects.toThrow("소비자 구독");
+    expect(provision).not.toHaveBeenCalled();
+  });
+
+  it("Claude Code 소비자 구독은 공식 Claude runtime으로 offline 준비한다", async () => {
+    const provision = vi
+      .fn()
+      .mockImplementation((_context, input) =>
+        Promise.resolve({ connectorId: input.connectorId, providerId: input.providerId, status: "offline" }),
+      );
+    const connect = vi.fn().mockImplementation((_context, input) =>
+      Promise.resolve({
+        account: { account_id: "account-claude-12345678", connector_id: input.connectorId, status: "offline", version: 1 },
+        binding: { providerId: input.providerId, executionKind: "agent-runtime" },
+      }),
+    );
+    const service = new ServerSubscriptionConnectionService(
+      { provision, attestHealth: vi.fn(), revoke: vi.fn(), markOffline: vi.fn() } as never,
+      { connect } as never,
+    );
+
     await expect(
       service.prepare(context, {
-        commandId: "command-claude-policy",
+        commandId: "command-claude-12345678",
         providerId: "anthropic-claude-code",
-        alias: "Claude",
+        alias: "개인 Claude",
         authKind: "cli-profile",
         billingKind: "consumer-subscription",
       }),
-    ).rejects.toThrow(/승인|Anthropic/u);
-    expect(provision).not.toHaveBeenCalled();
+    ).resolves.toMatchObject({
+      account: { account_id: "account-claude-12345678", status: "offline" },
+      connector: { providerId: "anthropic-claude-code", status: "offline" },
+    });
+
+    expect(provision).toHaveBeenCalledWith(
+      context,
+      expect.objectContaining({
+        providerId: "anthropic-claude-code",
+        executionKind: "agent-runtime",
+        runtimeId: "claude",
+      }),
+    );
   });
 
   it("계정 연결이 실패하면 생성한 Connector를 감사 가능한 offline 상태로 되돌려 재시도 가능하게 둔다", async () => {
@@ -801,6 +842,121 @@ describe("로컬 서버 구독 계정 준비", () => {
       connector: { status: "ready", runtimeId: "openai-model" },
       binding: { protocol: "openai", endpointUrl: "https://api.minimax.io/v1" },
       modelRuntime: { modelId: "MiniMax-M2.7", modelProfileId: "profile-minimax-m27" },
+    });
+    expect(JSON.stringify(result)).not.toContain(secret);
+  });
+
+  it("Z.AI Coding Plan 키를 공식 OpenAI 호환 runtime에 연결하고 GLM-5.2 Core route를 만든다", async () => {
+    const secret = "zai-server-secret-never-returned";
+    const provision = vi.fn().mockImplementation((_context, input) =>
+      Promise.resolve({
+        connectorId: input.connectorId,
+        providerId: input.providerId,
+        executionKind: "model",
+        runtimeId: input.runtimeId,
+        status: "offline",
+      }),
+    );
+    const connectModel = vi.fn().mockImplementation((_context, input) =>
+      Promise.resolve({
+        account: {
+          account_id: "account-zai-12345678",
+          provider_id: input.providerId,
+          connector_id: input.connectorId,
+          status: "offline",
+          version: 1,
+        },
+        binding: {
+          providerId: input.providerId,
+          endpointId: "endpoint-zai-coding-plan",
+          endpointUrl: input.endpointUrl,
+          protocol: input.protocol,
+          executionKind: "model",
+        },
+      }),
+    );
+    const attestHealth = vi.fn().mockImplementation((_context, input) =>
+      Promise.resolve({
+        connectorId: input.connectorId,
+        providerId: "zai-coding-plan",
+        executionKind: "model",
+        runtimeId: "openai-model",
+        status: "ready",
+      }),
+    );
+    const assemble = vi.fn().mockResolvedValue({
+      modelId: "glm-5.2",
+      modelProfileId: "profile-zai-glm-52",
+      routeNames: ["orchestration-balanced"],
+    });
+    const verify = vi.fn().mockResolvedValue(observedZai);
+    const service = new ServerSubscriptionConnectionService(
+      {
+        provision,
+        attestHealth,
+        revoke: vi.fn().mockResolvedValue({ status: "revoked" }),
+        markOffline: vi.fn(),
+      } as never,
+      { connect: vi.fn(), connectModel } as never,
+      {
+        requireBindable: vi.fn().mockImplementation(() =>
+          Promise.resolve({
+            account_id: "account-zai-12345678",
+            provider_id: "zai-coding-plan",
+            connector_id: vi.mocked(provision).mock.calls[0]?.[1].connectorId,
+            status: "offline",
+            version: 1,
+          }),
+        ),
+        requireUsable: vi.fn().mockImplementation(() =>
+          Promise.resolve({
+            account_id: "account-zai-12345678",
+            provider_id: "zai-coding-plan",
+            connector_id: vi.mocked(provision).mock.calls[0]?.[1].connectorId,
+            status: "active",
+            version: 2,
+          }),
+        ),
+      } as never,
+      { assemble } as never,
+      undefined,
+      undefined,
+      miniMaxVerifier(),
+      undefined,
+      { verify },
+    );
+
+    const result = await service.connectModel(context, {
+      commandId: "zai-model-command-12345678",
+      providerId: "zai-coding-plan",
+      alias: "개인 Z.AI",
+      authKind: "api-key",
+      billingKind: "coding-plan",
+      secret,
+    });
+
+    expect(verify).toHaveBeenCalledWith({
+      endpointUrl: "https://api.z.ai/api/coding/paas/v4",
+      secret,
+      requiredModelId: "glm-5.2",
+    });
+    expect(connectModel).toHaveBeenCalledWith(
+      context,
+      expect.objectContaining({
+        endpointUrl: "https://api.z.ai/api/coding/paas/v4",
+        protocol: "openai",
+        secret,
+      }),
+    );
+    expect(assemble).toHaveBeenCalledWith(
+      context,
+      expect.objectContaining({ providerId: "zai-coding-plan", observed: observedZai }),
+    );
+    expect(result).toMatchObject({
+      account: { status: "active" },
+      connector: { status: "ready", runtimeId: "openai-model" },
+      binding: { endpointUrl: "https://api.z.ai/api/coding/paas/v4", protocol: "openai" },
+      modelRuntime: { modelId: "glm-5.2", modelProfileId: "profile-zai-glm-52" },
     });
     expect(JSON.stringify(result)).not.toContain(secret);
   });

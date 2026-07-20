@@ -1245,13 +1245,12 @@ export function parseSubscriptionUatArguments(argv) {
   }
   if (argv[0] !== "--tmux") {
     throw new Error(
-      "사용법: node scripts/uat-subscriptions.mjs --tmux --release <massion-local-VERSION.tar.gz> [--providers codex,claude,zai] [--interactive-provider-login] [--approved-providers claude,zai] [--timeout-ms N]",
+      "사용법: node scripts/uat-subscriptions.mjs --tmux --release <massion-local-VERSION.tar.gz> [--providers codex,claude,zai] [--interactive-provider-login] [--timeout-ms N]",
     );
   }
 
   let release;
   let providers = ["codex", "claude", "zai"];
-  let approvedProviders = [];
   let interactiveProviderLogin = false;
   let timeoutMs = DEFAULT_TIMEOUT_MS;
   for (let index = 1; index < argv.length; index += 1) {
@@ -1271,19 +1270,7 @@ export function parseSubscriptionUatArguments(argv) {
       }
       index += 1;
     } else if (argument === "--interactive-provider-login") {
-      interactiveProviderLogin = true;
-    } else if (argument === "--approved-providers") {
-      const value = requiredOption(argv, index, argument);
-      approvedProviders = value.split(",");
-      if (
-        approvedProviders.length < 1 ||
-        new Set(approvedProviders).size !== approvedProviders.length ||
-        approvedProviders.some((provider) => provider !== "claude" && provider !== "zai")
-      ) {
-        throw new Error("--approved-providers는 중복 없는 claude,zai 목록이어야 합니다");
-      }
-      index += 1;
-    } else if (argument === "--timeout-ms") {
+      interactiveProviderLogin = true;    } else if (argument === "--timeout-ms") {
       const value = requiredOption(argv, index, argument);
       if (!/^[1-9][0-9]*$/u.test(value)) throw new Error("--timeout-ms가 유효하지 않습니다");
       timeoutMs = Number(value);
@@ -1299,7 +1286,7 @@ export function parseSubscriptionUatArguments(argv) {
   if (!RELEASE_ARCHIVE.test(basename(release))) {
     throw new Error("--release는 massion-local-VERSION.tar.gz 최종 archive여야 합니다");
   }
-  return { mode: "tmux", release, providers, approvedProviders, interactiveProviderLogin, timeoutMs };
+  return { mode: "tmux", release, providers, interactiveProviderLogin, timeoutMs };
 }
 
 export function validateReleaseBinding(input) {
@@ -1729,8 +1716,7 @@ async function stopTmuxBackgroundCommand(session, window) {
   respawnShell(session, window);
 }
 
-export function planProviderScenarios(providers, interactiveProviderLogin, approvedProviders = []) {
-  const approved = new Set(approvedProviders);
+export function planProviderScenarios(providers, interactiveProviderLogin) {
   return providers.map((provider) => {
     if (!PROVIDER_NAMES.has(provider)) throw new Error(`지원하지 않는 UAT provider입니다: ${provider}`);
     if (provider === "codex") {
@@ -1744,13 +1730,13 @@ export function planProviderScenarios(providers, interactiveProviderLogin, appro
       return {
         id: "claude-live-subscription",
         provider: "anthropic-claude-code",
-        prerequisite: approved.has("claude") ? "public-provider-connect-unavailable" : "provider-approval-required",
+        ...(interactiveProviderLogin ? {} : { prerequisite: "interactive-login-required" }),
       };
     }
     return {
       id: "zai-live-subscription",
       provider: "zai-coding-plan",
-      prerequisite: approved.has("zai") ? "public-provider-connect-unavailable" : "provider-approval-required",
+      // Z.AI Coding Plan은 API key 기반이므로 대화형 로그인 없이 항상 실행 가능합니다.
     };
   });
 }
@@ -2231,7 +2217,6 @@ export async function runSubscriptionUat(options) {
   const providerPlans = planProviderScenarios(
     options.providers,
     options.interactiveProviderLogin,
-    options.approvedProviders ?? [],
   );
   const providerScenarios = [
     ...providerPlans.filter((plan) => plan.prerequisite).map((plan) => scenarioNotRun(plan, startedAt)),
@@ -2348,8 +2333,8 @@ export async function runSubscriptionUat(options) {
     assertions.push("daemon-ready", "owner-initialized", "application-status-verified");
     const providerCatalogExpectations = {
       codex: { providerId: "openai-codex", availability: "supported" },
-      claude: { providerId: "anthropic-claude-code", availability: "requires-provider-approval" },
-      zai: { providerId: "zai-coding-plan", availability: "requires-provider-approval" },
+      claude: { providerId: "anthropic-claude-code", availability: "supported" },
+      zai: { providerId: "zai-coding-plan", availability: "supported" },
     };
     await requiredObserved({
       window: "connectors",

@@ -34,6 +34,7 @@ import {
 } from "./codex-subscription-observer.js";
 import type { MiniMaxSubscriptionVerifier } from "./minimax-subscription-verifier.js";
 import type { SubscriptionQuotaSynchronizationService } from "./subscription-quota-sync.js";
+import type { ZaiCodingPlanSubscriptionVerifier } from "./zai-coding-plan-subscription-verifier.js";
 
 export interface PrepareServerSubscriptionInput {
   readonly commandId: string;
@@ -105,11 +106,23 @@ function connectorId(context: TenantContext, input: PrepareServerSubscriptionInp
   return `server-${digest.slice(0, 40)}`;
 }
 
-function modelRuntime(input: ConnectServerModelSubscriptionInput): {
-  readonly runtimeId: "openai-model";
-  readonly endpointUrl: string;
-  readonly protocol: "openai";
-} {
+type ServerModelRuntime =
+  | {
+      readonly runtimeId: "openai-model";
+      readonly endpointUrl: string;
+      readonly protocol: "openai";
+      readonly requiredModelId: "MiniMax-M2.7";
+      readonly verifier: "minimax";
+    }
+  | {
+      readonly runtimeId: "openai-model";
+      readonly endpointUrl: string;
+      readonly protocol: "openai";
+      readonly requiredModelId: "glm-5.2";
+      readonly verifier: "zai-coding-plan";
+    };
+
+function modelRuntime(input: ConnectServerModelSubscriptionInput): ServerModelRuntime {
   const preset = codingPlanPreset(input.providerId);
   if (preset.availability === "requires-provider-approval") {
     throw new Error("이 구독 Provider는 공식 제공자 승인이 확인된 뒤에만 연결할 수 있습니다");
@@ -117,26 +130,57 @@ function modelRuntime(input: ConnectServerModelSubscriptionInput): {
   if (preset.usageScope === "interactive-coding") {
     throw new Error("대화형 코딩 전용 model plan은 서버 내장 direct model runtime에서 지원하지 않습니다");
   }
-  if (input.providerId !== "minimax-token-plan") {
-    throw new Error("현재 서버 내장 direct model runtime은 MiniMax Token Plan만 지원합니다");
+  if (input.providerId === "minimax-token-plan") {
+    if (input.authKind !== "subscription-key" || !preset.authKinds.includes(input.authKind)) {
+      throw new Error("MiniMax Token Plan 구독 키 인증 방식이 유효하지 않습니다");
+    }
+    if (input.billingKind !== "token-plan" || !preset.billingKinds.includes(input.billingKind)) {
+      throw new Error("현재 서버 내장 MiniMax 연결은 Token Plan 결제 유형만 지원합니다");
+    }
+    const route = preset.routes.find(
+      (candidate) => candidate.protocol === "openai" && candidate.baseUrl === "https://api.minimax.io/v1",
+    );
+    if (
+      !route ||
+      (input.protocol !== undefined && input.protocol !== "openai") ||
+      (input.endpointUrl !== undefined && input.endpointUrl !== route.baseUrl)
+    ) {
+      throw new Error("MiniMax 서버 연결은 공식 OpenAI 호환 openai-model 경로만 지원합니다");
+    }
+    return {
+      runtimeId: "openai-model",
+      endpointUrl: route.baseUrl,
+      protocol: "openai",
+      requiredModelId: "MiniMax-M2.7",
+      verifier: "minimax",
+    };
   }
-  if (input.authKind !== "subscription-key" || !preset.authKinds.includes(input.authKind)) {
-    throw new Error("MiniMax Token Plan 구독 키 인증 방식이 유효하지 않습니다");
+  if (input.providerId === "zai-coding-plan") {
+    if (input.authKind !== "api-key" || !preset.authKinds.includes(input.authKind)) {
+      throw new Error("Z.AI Coding Plan API key 인증 방식이 유효하지 않습니다");
+    }
+    if (input.billingKind !== "coding-plan" || !preset.billingKinds.includes(input.billingKind)) {
+      throw new Error("Z.AI Coding Plan 연결은 Coding Plan 결제 유형만 지원합니다");
+    }
+    const route = preset.routes.find(
+      (candidate) => candidate.protocol === "openai" && candidate.baseUrl === "https://api.z.ai/api/coding/paas/v4",
+    );
+    if (
+      !route ||
+      (input.protocol !== undefined && input.protocol !== "openai") ||
+      (input.endpointUrl !== undefined && input.endpointUrl !== route.baseUrl)
+    ) {
+      throw new Error("Z.AI 서버 연결은 공식 OpenAI 호환 Coding Plan 경로만 지원합니다");
+    }
+    return {
+      runtimeId: "openai-model",
+      endpointUrl: route.baseUrl,
+      protocol: "openai",
+      requiredModelId: "glm-5.2",
+      verifier: "zai-coding-plan",
+    };
   }
-  if (input.billingKind !== "token-plan" || !preset.billingKinds.includes(input.billingKind)) {
-    throw new Error("현재 서버 내장 MiniMax 연결은 Token Plan 결제 유형만 지원합니다");
-  }
-  const route = preset.routes.find(
-    (candidate) => candidate.protocol === "openai" && candidate.baseUrl === "https://api.minimax.io/v1",
-  );
-  if (
-    !route ||
-    (input.protocol !== undefined && input.protocol !== "openai") ||
-    (input.endpointUrl !== undefined && input.endpointUrl !== route.baseUrl)
-  ) {
-    throw new Error("MiniMax 서버 연결은 공식 OpenAI 호환 openai-model 경로만 지원합니다");
-  }
-  return { runtimeId: "openai-model", endpointUrl: route.baseUrl, protocol: "openai" };
+  throw new Error("현재 서버 내장 direct model runtime은 MiniMax Token Plan 또는 Z.AI Coding Plan만 지원합니다");
 }
 
 function modelSecret(value: string): string {
@@ -159,6 +203,7 @@ export class ServerSubscriptionConnectionService {
     private readonly lifecycle?: ServerSubscriptionLifecycleOptions,
     private readonly miniMaxVerifier?: Pick<MiniMaxSubscriptionVerifier, "verify">,
     private readonly codexQuotaSynchronization?: Pick<SubscriptionQuotaSynchronizationService, "refreshCodexAccount">,
+    private readonly zaiCodingPlanVerifier?: Pick<ZaiCodingPlanSubscriptionVerifier, "verify">,
   ) {}
 
   public async disconnect(
@@ -204,12 +249,10 @@ export class ServerSubscriptionConnectionService {
     const runtime = modelRuntime(input);
     if (!this.accounts) throw new Error("서버 model 구독 계정 조회 서비스가 구성되지 않았습니다");
     if (!this.modelRoutes) throw new Error("서버 내장 Core model route 조립기가 구성되지 않았습니다");
-    if (!this.miniMaxVerifier) throw new Error("MiniMax 구독 Credential 실인증 서비스가 구성되지 않았습니다");
-    const observed = await this.miniMaxVerifier.verify({
-      endpointUrl: runtime.endpointUrl,
-      secret,
-      requiredModelId: "MiniMax-M2.7",
-    });
+    const observed =
+      runtime.verifier === "minimax"
+        ? await this.verifyMiniMax(runtime.endpointUrl, secret, runtime.requiredModelId)
+        : await this.verifyZaiCodingPlan(runtime.endpointUrl, secret, runtime.requiredModelId);
     const selectedConnectorId = connectorId(context, input);
     const connector = await this.connectors.provision(context, {
       commandId: `${input.commandId}:connector`,
@@ -298,13 +341,28 @@ export class ServerSubscriptionConnectionService {
     }
   }
 
+  private async verifyMiniMax(
+    endpointUrl: string,
+    secret: string,
+    requiredModelId: "MiniMax-M2.7",
+  ): Promise<import("./minimax-subscription-verifier.js").ObservedMiniMaxSubscriptionModel> {
+    if (!this.miniMaxVerifier) throw new Error("MiniMax 구독 Credential 실인증 서비스가 구성되지 않았습니다");
+    return await this.miniMaxVerifier.verify({ endpointUrl, secret, requiredModelId });
+  }
+
+  private async verifyZaiCodingPlan(
+    endpointUrl: string,
+    secret: string,
+    requiredModelId: "glm-5.2",
+  ): Promise<import("./zai-coding-plan-subscription-verifier.js").ObservedZaiCodingPlanModel> {
+    if (!this.zaiCodingPlanVerifier) throw new Error("Z.AI Coding Plan Credential 실인증 서비스가 구성되지 않았습니다");
+    return await this.zaiCodingPlanVerifier.verify({ endpointUrl, secret, requiredModelId });
+  }
+
   public async prepare(
     context: TenantContext,
     input: PrepareServerSubscriptionInput,
   ): Promise<PreparedServerSubscription> {
-    if (input.providerId === "anthropic-claude-code") {
-      throw new Error("Anthropic 사전 승인 전에는 Claude 소비자 구독 로그인을 제공할 수 없습니다");
-    }
     const runtime = SERVER_RUNTIMES[input.providerId];
     if (!runtime) throw new Error("서버 관리형 소비자 구독은 Codex와 Claude만 지원합니다");
     if (input.billingKind !== "consumer-subscription") {

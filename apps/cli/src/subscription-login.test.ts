@@ -106,6 +106,40 @@ describe("로컬 서버 소비자 구독 로그인", () => {
     };
   }
 
+  function existingClaudeAccount(overrides: Record<string, unknown> = {}) {
+    return {
+      accountId: "account-existing-claude-123",
+      providerId: "anthropic-claude-code",
+      alias: "기존 Claude",
+      connectorId: "server-existing-claude-123",
+      connectorLocation: "server",
+      connectorExecutionKind: "agent-runtime",
+      connectorStatus: "ready",
+      billingKind: "consumer-subscription",
+      scope: "personal",
+      canManage: true,
+      status: "active",
+      version: 4,
+      profileHandle: `${"c".repeat(64)}/${"d".repeat(64)}`,
+      ...overrides,
+    };
+  }
+
+  function existingClaudeDoctor(overrides: Record<string, unknown> = {}) {
+    return {
+      accountId: "account-existing-claude-123",
+      providerId: "anthropic-claude-code",
+      alias: "기존 Claude",
+      accountStatus: "active",
+      connectorId: "server-existing-claude-123",
+      connectorLocation: "server",
+      connectorStatus: "ready",
+      quotaStatus: "unknown",
+      action: "none",
+      ...overrides,
+    };
+  }
+
   function reportedCodexQuota(accountId: string) {
     const observedAt = new Date(Date.now() + 60_000).toISOString();
     return {
@@ -131,6 +165,13 @@ describe("로컬 서버 소비자 구독 로그인", () => {
     const profile = join(root, "profiles", "a".repeat(64), "b".repeat(64));
     await mkdir(profile, { recursive: true, mode: 0o700 });
     await writeFile(join(profile, "auth.json"), "existing-private-login-state", { mode: 0o600 });
+    return profile;
+  }
+
+  async function seedExistingClaudeProfile(root: string): Promise<string> {
+    const profile = join(root, "profiles", "c".repeat(64), "d".repeat(64));
+    await mkdir(profile, { recursive: true, mode: 0o700 });
+    await writeFile(join(profile, "claude-session.json"), "existing-private-login-state", { mode: 0o600 });
     return profile;
   }
 
@@ -192,6 +233,68 @@ describe("로컬 서버 소비자 구독 로그인", () => {
     expect((await readdir(join(root, ".pending-subscriptions"))).filter((name) => name.endsWith(".json"))).toEqual([]);
   });
 
+  it("Claude Code 소비자 구독은 격리 profile에서 공식 claude.ai 로그인을 거쳐 첫 연결한다", async () => {
+    const { root, commands, client } = await fixture();
+    const inspectRuntime = vi.fn(async () => ({
+      runtimeId: "claude" as const,
+      version: "0.3.207",
+      runtimeArtifactDigest: "d".repeat(64),
+      command: "/runtime/claude",
+      commandArguments: [],
+    }));
+    const runInteractive = vi.fn(
+      async (_command: string, _arguments: readonly string[], environment: NodeJS.ProcessEnv) => {
+        if (!environment.CLAUDE_CONFIG_DIR) throw new Error("CLAUDE_CONFIG_DIR 누락");
+        await writeFile(join(environment.CLAUDE_CONFIG_DIR, "claude-login-created"), "fixture", { mode: 0o600 });
+        return 0;
+      },
+    );
+
+    await expect(
+      connectLocalServerSubscription(
+        client,
+        { providerId: "anthropic-claude-code", alias: "개인 Claude" },
+        {
+          endpoint: "http://127.0.0.1:7331",
+          connectorDirectory: root,
+          environment: { PATH: "/usr/bin", ANTHROPIC_API_KEY: "노출되면-안됨" },
+          inspectRuntime,
+          runInteractive,
+        },
+      ),
+    ).resolves.toEqual({
+      status: "ready",
+      providerId: "anthropic-claude-code",
+      alias: "개인 Claude",
+      accountId: "account-12345678",
+      connectorId: "server-1234567890abcdef",
+      connectionDisposition: "new",
+    });
+
+    expect(inspectRuntime).toHaveBeenCalledWith("claude");
+    expect(runInteractive).toHaveBeenCalledWith(
+      "/runtime/claude",
+      ["auth", "login", "--claudeai"],
+      expect.objectContaining({ CLAUDE_CONFIG_DIR: expect.any(String), HOME: expect.any(String) }),
+    );
+    expect(runInteractive.mock.calls[0]?.[2]).not.toHaveProperty("ANTHROPIC_API_KEY");
+    expect(commands.map((command) => command.operation)).toEqual([
+      "subscription.server.prepare",
+      "subscription.server.attest",
+    ]);
+    expect(commands[0]).toMatchObject({
+      payload: {
+        providerId: "anthropic-claude-code",
+        alias: "개인 Claude",
+        authKind: "cli-profile",
+        billingKind: "consumer-subscription",
+      },
+    });
+    await expect(
+      readFile(join(root, "profiles", "a".repeat(64), "b".repeat(64), "claude-login-created"), "utf8"),
+    ).resolves.toBe("fixture");
+  });
+
   it("유효한 기존 Codex profile은 account·doctor·quota 확인 뒤 로그인하지 않고 재사용한다", async () => {
     const { root, commands, client, inspectRuntime, runInteractive } = await fixture();
     await seedExistingCodexProfile(root);
@@ -235,6 +338,47 @@ describe("로컬 서버 소비자 구독 로그인", () => {
     await expect(readFile(join(root, "profiles", "a".repeat(64), "b".repeat(64), "config.toml"), "utf8")).resolves.toBe(
       'cli_auth_credentials_store = "file"\n',
     );
+  });
+
+  it("유효한 기존 Claude Code profile은 account·doctor 확인 뒤 다시 로그인하지 않고 재사용한다", async () => {
+    const { root, commands, client } = await fixture();
+    await seedExistingClaudeProfile(root);
+    const inspectRuntime = vi.fn(async () => ({
+      runtimeId: "claude" as const,
+      version: "0.3.207",
+      runtimeArtifactDigest: "d".repeat(64),
+      command: "/runtime/claude",
+      commandArguments: [],
+    }));
+    const runInteractive = vi.fn(async () => 0);
+    client.query.mockImplementation(async (operation: string) => {
+      if (operation === "subscription.accounts") return { data: [existingClaudeAccount()] };
+      if (operation === "subscription.doctor") return { data: [existingClaudeDoctor()] };
+      if (operation === "subscription.quota") throw new Error("Claude Code 재사용은 quota 조회를 요청하지 않아야 합니다");
+      return { data: [] };
+    });
+
+    await expect(
+      connectLocalServerSubscription(
+        client,
+        { providerId: "anthropic-claude-code" },
+        { endpoint: "http://127.0.0.1:7331", connectorDirectory: root, inspectRuntime, runInteractive },
+      ),
+    ).resolves.toMatchObject({
+      status: "ready",
+      providerId: "anthropic-claude-code",
+      accountId: "account-existing-claude-123",
+      connectorId: "server-existing-claude-123",
+      connectionDisposition: "reused",
+    });
+
+    expect(runInteractive).not.toHaveBeenCalled();
+    expect(inspectRuntime).not.toHaveBeenCalled();
+    expect(commands.map((command) => command.operation)).toEqual(["subscription.server.attest"]);
+    expect(client.query.mock.calls.map(([operation]) => operation)).toEqual([
+      "subscription.accounts",
+      "subscription.doctor",
+    ]);
   });
 
   it("ready 응답에 직접 quota 관측 증거가 없으면 기존 Codex profile을 재사용하지 않는다", async () => {
@@ -1122,7 +1266,7 @@ describe("로컬 서버 소비자 구독 로그인", () => {
     expect(commands[0]?.commandId).toBe(commands[1]?.commandId);
   });
 
-  it("team 서버·미지원 provider·미승인 Claude 소비자 로그인은 profile과 process 생성 전에 거부한다", async () => {
+  it("team 서버와 미지원 provider는 profile과 process 생성 전에 거부한다", async () => {
     const { root, client, inspectRuntime, runInteractive } = await fixture();
     client.status.mockResolvedValue({ data: { mode: "team" } });
 
@@ -1150,18 +1294,6 @@ describe("로컬 서버 소비자 구독 로그인", () => {
         },
       ),
     ).rejects.toThrow("Codex");
-    await expect(
-      connectLocalServerSubscription(
-        { ...client, status: async () => ({ data: { mode: "local" } }) },
-        { providerId: "anthropic-claude-code" },
-        {
-          endpoint: "http://127.0.0.1:7331",
-          connectorDirectory: root,
-          inspectRuntime,
-          runInteractive,
-        },
-      ),
-    ).rejects.toThrow(/승인|Anthropic/u);
     expect(inspectRuntime).not.toHaveBeenCalled();
     expect(runInteractive).not.toHaveBeenCalled();
   });
