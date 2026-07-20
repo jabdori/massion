@@ -192,9 +192,19 @@ function works(state: TuiState, snapshot: CollaborationGraphSnapshot): { list: s
 
   if (!work) return { list, detail: "선택할 작업이 없습니다." };
 
-  // 기본(친화적): 4단계 진행 바 + 최근 소식
+  // 기본(친화적): 4단계 진행 바 + 최근 소식 + 차단 시 복구 안내
   if (!state.inspector) {
     const stage = currentInternalStage(snapshot, work.workId);
+    const isBlocked = work.status === "blocked" || classifyStatus(work.status) === "blocked";
+    const recoveryLines = isBlocked ? [
+      "",
+      "잠시 멈췄어요",
+      "현재 작업을 진행할 수 없습니다.",
+      "다음 중 하나를 시도해보세요:",
+      "  • AI 연결 상태 확인 (구독 화면)",
+      "  • 나중에 다시 시도",
+      "  • 현재까지의 결과 확인",
+    ] : [];
     return {
       list,
       detail: [
@@ -203,6 +213,7 @@ function works(state: TuiState, snapshot: CollaborationGraphSnapshot): { list: s
         "",
         `상태                ${statusLabel(work.status)}`,
         `산출물              ${work.artifactIds.length ? work.artifactIds.join(", ") : "아직 없어요"}`,
+        ...recoveryLines,
         "",
         "최근 소식",
         ...recentNews(state),
