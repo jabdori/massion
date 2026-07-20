@@ -83,6 +83,46 @@ export const AGENT_ROLES: readonly AgentRoleToken[] = [
   { handle: "assurance", abbreviation: "ASR", label: "Assurance", friendlyLabel: "결과 검토 담당" },
 ] as const;
 
+// ── 승인 위험도 (사용자 친화적 영향 표현) ────────────────────────
+
+export interface ApprovalRiskToken {
+  readonly id: string;
+  readonly friendlyLabel: string;
+  readonly description: string;
+  readonly semantic: "low" | "medium" | "high";
+}
+
+export const APPROVAL_RISK_TOKENS: Readonly<Record<string, ApprovalRiskToken>> = {
+  low: {
+    id: "low",
+    friendlyLabel: "영향이 작습니다",
+    description: "문서나 설정 내용만 변경됩니다.",
+    semantic: "low",
+  },
+  medium: {
+    id: "medium",
+    friendlyLabel: "주의가 필요합니다",
+    description: "실행 중인 작업이나 서비스에 영향을 줄 수 있습니다. 문제가 생기면 되돌릴 수 있습니다.",
+    semantic: "medium",
+  },
+  high: {
+    id: "high",
+    friendlyLabel: "되돌리기 어렵습니다",
+    description: "데이터가 변경되거나 삭제될 수 있습니다. 실행 전에 상태를 확인해주세요.",
+    semantic: "high",
+  },
+} as const;
+
+export function approvalRiskToken(risk: string): ApprovalRiskToken {
+  return APPROVAL_RISK_TOKENS[risk] ?? APPROVAL_RISK_TOKENS["medium"]!;
+}
+
+export function approvalRiskFromPreview(preview: { kind?: string }): ApprovalRiskToken {
+  if (preview.kind === "command") return APPROVAL_RISK_TOKENS["medium"]!;
+  if (preview.kind === "file-change") return APPROVAL_RISK_TOKENS["low"]!;
+  return APPROVAL_RISK_TOKENS["medium"]!;
+}
+
 export function agentRoleToken(handle: string): AgentRoleToken {
   return AGENT_ROLES.find((role) => role.handle === handle) ?? {
     handle, abbreviation: handle.slice(0, 3).toUpperCase(), label: handle, friendlyLabel: handle,

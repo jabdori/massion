@@ -48,13 +48,21 @@ beforeEach(() => {
 afterEach(() => cleanup());
 
 describe("OverviewPage", () => {
-  it("자연어 업무를 시작하고 실행 상태를 표시한 뒤 생성된 업무로 이동한다", async () => {
+  it("요청 입력 후 계획 미리보기를 보여주고, 확인하면 업무를 시작한다", async () => {
     const user = userEvent.setup();
     const { container, rerender } = render(<OverviewPage />);
-    const request = "massion-secret-never-render를 포함한 협업 업무";
+    const request = "경쟁사 동향을 조사해서 보고서로 만들어줘";
 
+    // 1단계: 요청 입력
     await user.type(screen.getByRole("textbox", { name: "새 업무 요청" }), request);
     await user.click(screen.getByRole("button", { name: "업무 시작" }));
+
+    // 계획 미리보기 카드가 표시되고, run.start는 아직 호출되지 않음
+    await waitFor(() => expect(screen.getByText("제가 이렇게 진행할게요")).toBeInTheDocument());
+    expect(testState.mutate).not.toHaveBeenCalled();
+
+    // 2단계: 시작하기 클릭 → run.start 호출
+    await user.click(screen.getByRole("button", { name: "시작하기" }));
 
     await waitFor(() =>
       expect(testState.mutate).toHaveBeenCalledWith(
@@ -81,6 +89,20 @@ describe("OverviewPage", () => {
     );
   });
 
+  it("계획 미리보기에서 수정을 누르면 입력으로 돌아간다", async () => {
+    const user = userEvent.setup();
+    render(<OverviewPage />);
+
+    await user.type(screen.getByRole("textbox", { name: "새 업무 요청" }), "테스트 요청");
+    await user.click(screen.getByRole("button", { name: "업무 시작" }));
+
+    expect(screen.getByText("제가 이렇게 진행할게요")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "수정" }));
+
+    expect(screen.queryByText("제가 이렇게 진행할게요")).not.toBeInTheDocument();
+    expect(testState.mutate).not.toHaveBeenCalled();
+  });
+
   it("업무 시작 실패에서는 내부 오류 원문을 표시하지 않는다", async () => {
     const user = userEvent.setup();
     const internalError = "provider-token-never-render를 포함한 내부 오류";
@@ -89,6 +111,7 @@ describe("OverviewPage", () => {
 
     await user.type(screen.getByRole("textbox", { name: "새 업무 요청" }), "제품 출시 준비");
     await user.click(screen.getByRole("button", { name: "업무 시작" }));
+    await user.click(screen.getByRole("button", { name: "시작하기" }));
 
     await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("업무를 시작하지 못했습니다."));
     expect(screen.getByRole("status")).not.toHaveTextContent(internalError);

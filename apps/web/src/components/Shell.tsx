@@ -1,12 +1,14 @@
 import { Link, Outlet, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 
-import { connectionFromStatus, useConsoleStatus, useQueryErrors, useSession } from "../hooks.js";
+import { connectionFromStatus, useConsoleStatus, useQueryData, useQueryErrors, useSession } from "../hooks.js";
 import { api, consoleStore, liveConnection, sessionStore } from "../services.js";
+import { label, rows } from "../data.js";
 
 // 기본 내비게이션: 홈 / 확인할 것 / 결과
 const primaryNavigation = [
   ["/", "홈"],
+  ["/works", "작업"],
   ["/approvals", "확인할 것"],
   ["/audit", "결과"],
 ] as const;
@@ -23,6 +25,8 @@ export function RootShell() {
   const session = useSession(sessionStore);
   const status = useConsoleStatus(consoleStore);
   const queryErrors = useQueryErrors(consoleStore);
+  const approvalData = useQueryData<unknown>(consoleStore, "governance.approval.list");
+  const pendingApprovals = approvalData !== undefined ? rows(approvalData).length : 0;
   const navigate = useNavigate();
   // 더보기 서브메뉴 펼침/절첨 상태
   const [moreOpen, setMoreOpen] = useState(false);
@@ -77,9 +81,12 @@ export function RootShell() {
           <span>MASSION</span>
         </Link>
         <nav>
-          {primaryNavigation.map(([to, label]) => (
+          {primaryNavigation.map(([to, navLabel]) => (
             <Link key={to} to={to} activeProps={{ "aria-current": "page" }}>
-              {label}
+              {navLabel}
+              {to === "/approvals" && pendingApprovals > 0 ? (
+                <span className="nav-badge">{pendingApprovals}</span>
+              ) : null}
             </Link>
           ))}
           <button

@@ -1,19 +1,31 @@
 import { useState } from "react";
 
+import { approvalRiskFromPreview } from "@massion/application";
+
 import { label, list, object, rows } from "../data.js";
 import { useQueryData } from "../hooks.js";
 import { consoleStore } from "../services.js";
-import { EmptyState, LoadingState, PageHeader, StatusStamp } from "../components/States.js";
+import { EmptyState, LoadingState } from "../components/States.js";
 
-function ApprovalPreview({ value, approvalId }: { readonly value: unknown; readonly approvalId: string }) {
+function ApprovalDetail({ value, approvalId }: { readonly value: unknown; readonly approvalId: string }) {
   const preview = object(value);
   const kind = preview.kind;
   if (kind !== "command" && kind !== "file-change" && kind !== "provider") return null;
+
   const title = label(preview.title, "승인 내용");
   const reason = typeof preview.reason === "string" ? preview.reason : undefined;
+  const risk = approvalRiskFromPreview({ kind });
+
   return (
     <section className="approval-preview" aria-label={`${approvalId} 승인 내용`}>
+      {/* 친화적 위험도 표현 */}
+      <div className={`risk-banner risk-${risk.semantic}`} role="note">
+        <strong>{risk.friendlyLabel}</strong>
+        <p>{risk.description}</p>
+      </div>
+
       <h3>{title}</h3>
+
       {kind === "command" ? (
         <dl>
           <div>
@@ -34,7 +46,7 @@ function ApprovalPreview({ value, approvalId }: { readonly value: unknown; reado
       ) : kind === "file-change" ? (
         <dl>
           <div>
-            <dt>경로</dt>
+            <dt>변경 경로</dt>
             <dd className="mono">{label(preview.path)}</dd>
           </div>
           <div>
@@ -43,7 +55,13 @@ function ApprovalPreview({ value, approvalId }: { readonly value: unknown; reado
           </div>
         </dl>
       ) : null}
-      {reason ? <p>{reason}</p> : null}
+
+      {reason ? (
+        <div className="approval-reason">
+          <p className="eyebrow">요청 이유</p>
+          <p>{reason}</p>
+        </div>
+      ) : null}
     </section>
   );
 }
@@ -52,7 +70,9 @@ export default function ApprovalsPage() {
   const data = useQueryData<unknown>(consoleStore, "governance.approval.list");
   const [busy, setBusy] = useState<string>();
   const [notice, setNotice] = useState<string>();
-  if (data === undefined) return <LoadingState label="승인 원장을 읽고 있습니다" />;
+
+  if (data === undefined) return <LoadingState label="확인할 항목을 불러오고 있습니다" />;
+
   const approvals = rows(data);
 
   async function vote(approvalId: string, decision: "approve" | "reject") {
@@ -78,45 +98,41 @@ export default function ApprovalsPage() {
 
   return (
     <>
-      <PageHeader
-        index="03 / DECISIONS"
-        title="어떤 결정이 기다리고 있나요?"
-        description="조직 정책에 따라 사람 검토가 필요한 작업만 이곳에 도착합니다."
-      />
+      {/* 친화적 헤더 */}
+      <section className="greeting-section">
+        <h1>확인이 필요해요</h1>
+        <p>Massion이 진행하려는 작업 중 사용자 확인이 필요한 항목입니다.</p>
+      </section>
+
       <div className="live-notice" role="status" aria-live="polite">
-        {notice ?? `${String(approvals.length)}개의 결정이 대기 중입니다.`}
+        {notice ?? (approvals.length > 0 ? `${approvals.length}개의 항목이 대기 중입니다.` : "모두 확인되었습니다.")}
       </div>
+
       {approvals.length === 0 ? (
         <EmptyState
-          title="결정 대기열이 비었습니다"
-          detail="자동 반영 정책이 허용한 작업은 승인함을 거치지 않습니다."
+          title="확인할 항목이 없습니다"
+          detail="자동 반영이 허용된 작업은 확인을 거치지 않고 진행됩니다."
         />
       ) : (
-        <section className="decision-list" aria-label="승인 요청">
-          {approvals.map((approval, index) => {
+        <section className="decision-list" aria-label="확인 요청">
+          {approvals.map((approval) => {
             const id = label(approval.approvalId);
             return (
-              <article key={id}>
-                <header>
-                  <span>{String(index + 1).padStart(2, "0")}</span>
-                  <StatusStamp value={label(approval.status)} />
+              <article key={id} className="approval-card-detailed">
+                <header className="approval-card-header">
+                  <span className="status-symbol">?</span>
+                  <span>확인이 필요해요</span>
                 </header>
-                <h2>{label(approval.action)}</h2>
-                <dl>
-                  <div>
-                    <dt>요청자</dt>
-                    <dd>{label(approval.requestedBy)}</dd>
-                  </div>
-                  <div>
-                    <dt>만료</dt>
-                    <dd>{label(approval.expiresAt)}</dd>
-                  </div>
-                  <div>
-                    <dt>식별자</dt>
-                    <dd className="mono">{id}</dd>
-                  </div>
-                </dl>
-                <ApprovalPreview value={approval.displayPreview} approvalId={id} />
+
+                <h2 className="approval-card-title">{label(approval.action)}</h2>
+
+                <ApprovalDetail value={approval.displayPreview} approvalId={id} />
+
+                <div className="approval-card-meta">
+                  <span>요청자: {label(approval.requestedBy)}</span>
+                  {label(approval.expiresAt) ? <span>만료: {label(approval.expiresAt)}</span> : null}
+                </div>
+
                 <div className="decision-actions">
                   <button
                     type="button"
@@ -124,7 +140,7 @@ export default function ApprovalsPage() {
                     disabled={busy === id}
                     onClick={() => void vote(id, "reject")}
                   >
-                    거절
+                    지금은 하지 않기
                   </button>
                   <button
                     type="button"

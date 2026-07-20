@@ -13,7 +13,25 @@ function runIdFrom(value: unknown): string | undefined {
   return typeof runId === "string" && runId.length > 0 ? runId : undefined;
 }
 
-const QUICK_EXAMPLES = ["문서 작성해주세요", "자료 조사해주세요", "개발 작업을 진행해주세요", "일정을 정리해주세요"];
+const QUICK_EXAMPLES = ["문서 작성", "자료 조사", "개발 작업", "일정 정리"];
+
+// 요청 텍스트에서 사용자 친화적 진행 예상 단계 생성
+function estimateSteps(text: string): string[] {
+  const lower = text.toLowerCase();
+  const steps: string[] = [];
+  if (/조사|분석|리서치|검색|찾아/.test(lower) || /research|analyz|search|investigat/i.test(text)) {
+    steps.push("관련 자료 확인");
+  }
+  if (/작성|만들어|생성|정리|요약|보고서|문서/.test(lower) || /writ|creat|draft|generat|document|report/i.test(text)) {
+    steps.push("내용 작성");
+  }
+  if (/코드|개발|구현|수정|버그|api/.test(lower) || /code|develop|implement|fix|bug|api/i.test(text)) {
+    steps.push("작업 진행");
+  }
+  if (steps.length === 0) steps.push("요청 이해", "작업 진행", "결과 확인");
+  steps.push("결과 확인");
+  return steps;
+}
 
 export default function OverviewPage() {
   const navigate = useNavigate();
@@ -21,6 +39,7 @@ export default function OverviewPage() {
   const approvals = useQueryData<unknown>(consoleStore, "governance.approval.list");
   const snapshot = useQueryData<unknown>(consoleStore, "organization.graph.snapshot");
   const [request, setRequest] = useState("");
+  const [pendingRequest, setPendingRequest] = useState<string>();
   const [runId, setRunId] = useState<string>();
   const [notice, setNotice] = useState<string>();
   const [starting, setStarting] = useState(false);
@@ -33,7 +52,6 @@ export default function OverviewPage() {
   const run = object(runData);
   const runWorkId = label(run.workId, "");
 
-  // 진행 중이거나 확인이 필요한 작업
   const activeWorks = workRows.filter((item) =>
     ["running", "blocked", "awaiting-approval"].includes(label(item.status)),
   );
@@ -44,9 +62,17 @@ export default function OverviewPage() {
     void navigate({ to: "/works/$workId", params: { workId: runWorkId } });
   }, [navigate, runWorkId]);
 
-  async function startWork(event: { preventDefault(): void }) {
+  // 1단계: 요청 입력 → 계획 미리보기 표시
+  function showPlanPreview(event: { preventDefault(): void }) {
     event.preventDefault();
     const text = request.trim();
+    if (!text) return;
+    setPendingRequest(text);
+  }
+
+  // 2단계: 계획 확인 → 실제 실행
+  async function confirmAndStart() {
+    const text = pendingRequest?.trim();
     if (!text || starting) return;
     setStarting(true);
     setNotice(undefined);
@@ -61,6 +87,7 @@ export default function OverviewPage() {
       const acceptedRunId = runIdFrom(result);
       if (!acceptedRunId) throw new Error("새 업무 실행 식별자를 받지 못했습니다.");
       setRequest("");
+      setPendingRequest(undefined);
       setRunId(acceptedRunId);
       setNotice("업무를 준비하고 있습니다.");
     } catch {
@@ -87,11 +114,7 @@ export default function OverviewPage() {
 
       {/* 빠른 시작: 입력창 + 예시 버튼 */}
       <section className="quick-start">
-        <form
-          onSubmit={(event) => {
-            void startWork(event);
-          }}
-        >
+        <form onSubmit={showPlanPreview}>
           <label htmlFor="work-request">새 업무 요청</label>
           <textarea
             id="work-request"
@@ -107,8 +130,8 @@ export default function OverviewPage() {
             <span role="status" aria-live="polite">
               {notice}
             </span>
-            <button className="primary-button" type="submit" disabled={starting || !request.trim()}>
-              {starting ? "업무 준비 중" : "업무 시작"}
+            <button className="primary-button" type="submit" disabled={!request.trim()}>
+              업무 시작
             </button>
           </div>
         </form>
@@ -120,10 +143,45 @@ export default function OverviewPage() {
               className="example-chip"
               onClick={() => setRequest(example)}
             >
-              {example.replace("해주세요", "")}
+              {example}
             </button>
           ))}
         </div>
+
+        {/* 계획 미리보기 카드 */}
+        {pendingRequest ? (
+          <div className="plan-preview-card" role="dialog" aria-label="요청 확인">
+            <div className="plan-preview-header">
+              <strong>제가 이렇게 진행할게요</strong>
+            </div>
+            <div className="plan-preview-body">
+              <p className="plan-preview-request">{pendingRequest}</p>
+              <ol className="plan-preview-steps">
+                {estimateSteps(pendingRequest).map((step, index) => (
+                  <li key={index}>{step}</li>
+                ))}
+              </ol>
+            </div>
+            <div className="plan-preview-actions">
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => setPendingRequest(undefined)}
+              >
+                수정
+              </button>
+              <button
+                type="button"
+                className="primary-button"
+                disabled={starting}
+                onClick={() => void confirmAndStart()}
+              >
+                {starting ? "시작 중…" : "시작하기"}
+              </button>
+            </div>
+          </div>
+        ) : null}
+
         {/* 실행 진행 상태 (친화적 라벨) */}
         {runId ? (
           <div className="run-progress-friendly" role="status" aria-live="polite">
@@ -193,7 +251,7 @@ export default function OverviewPage() {
                     <span className="work-card-symbol">{token.symbol}</span>
                     <span className="work-card-label">{token.friendlyLabel}</span>
                   </div>
-                  <p className="work-card-title">업무 #{label(work.revision, "0")}</p>
+                  <p className="work-card-title">{label(work.title, `업무 ${label(work.revision, "0")}`)}</p>
                 </Link>
               );
             })}
@@ -216,7 +274,7 @@ export default function OverviewPage() {
                 className="recent-result"
               >
                 <span className="recent-result-symbol">✓</span>
-                <span className="recent-result-title">업무 #{label(work.revision, "0")}</span>
+                <span className="recent-result-title">{label(work.title, `업무 ${label(work.revision, "0")}`)}</span>
                 <StatusStamp value={label(work.status)} />
               </Link>
             ))}
