@@ -74,6 +74,8 @@ export interface ApplicationEventProjectorHooks {
 }
 
 export class ApplicationEventProjector {
+  private readonly organizationProjectionTails = new Map<string, Promise<void>>();
+
   private constructor(
     private readonly database: MassionDatabase,
     private readonly organizations: OrganizationService,
@@ -93,21 +95,44 @@ export class ApplicationEventProjector {
     await this.organizations.verifyTenantContext(context);
     if (!Number.isSafeInteger(limit) || limit < 1 || limit > 1_000)
       throw new Error("Application projection limit이 유효하지 않습니다");
-    let projected = 0;
-    let transientFailures = 0;
-    while (projected < limit) {
-      try {
-        if (!(await this.projectOne(context))) break;
-        projected += 1;
-        transientFailures = 0;
-      } catch (error) {
-        if (error instanceof ProjectionHookError) throw error.original;
-        transientFailures += 1;
-        if (transientFailures >= 8) throw error;
-        await Promise.resolve();
+    return await this.projectForOrganization(context.organizationId, async () => {
+      let projected = 0;
+      let transientFailures = 0;
+      while (projected < limit) {
+        try {
+          if (!(await this.projectOne(context))) break;
+          projected += 1;
+          transientFailures = 0;
+        } catch (error) {
+          if (error instanceof ProjectionHookError) throw error.original;
+          transientFailures += 1;
+          if (transientFailures >= 8) throw error;
+          await Promise.resolve();
+        }
       }
+      return projected;
+    });
+  }
+
+  private async projectForOrganization<T>(organizationId: string, operation: () => Promise<T>): Promise<T> {
+    const previous = this.organizationProjectionTails.get(organizationId) ?? Promise.resolve();
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const tail = previous.then(
+      () => gate,
+      () => gate,
+    );
+    this.organizationProjectionTails.set(organizationId, tail);
+    await previous.catch(() => undefined);
+    try {
+      return await operation();
+    } finally {
+      release();
+      if (this.organizationProjectionTails.get(organizationId) === tail)
+        this.organizationProjectionTails.delete(organizationId);
     }
-    return projected;
   }
 
   private async projectOne(context: TenantContext): Promise<boolean> {

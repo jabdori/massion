@@ -1,6 +1,6 @@
 import { IdentityService, OrganizationService, type TenantContext } from "@massion/identity";
 import { OrganizationGraphService } from "@massion/organization";
-import { createDatabase, type MassionDatabase } from "@massion/storage";
+import { createDatabase, type MassionDatabase, type QueryExecutor } from "@massion/storage";
 import { WorkService } from "@massion/work";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
@@ -88,6 +88,59 @@ describe("ApplicationEventProjector", () => {
     const projected = (await events.read(context, { after: 0, limit: 10 })).events;
     expect(projected.map((event) => event.sequence)).toEqual([1, 2, 3, 4]);
     expect(new Set(projected.map((event) => event.eventId))).toHaveProperty("size", 4);
+  });
+
+  it("같은 조직의 투영은 첫 transaction이 끝나기 전 두 번째 transaction에 진입하지 않는다", async () => {
+    let transactionCalls = 0;
+    let firstTransactionEntered!: () => void;
+    let releaseFirstTransaction!: () => void;
+    const firstTransaction = new Promise<void>((resolve) => {
+      releaseFirstTransaction = resolve;
+    });
+    const entered = new Promise<void>((resolve) => {
+      firstTransactionEntered = resolve;
+    });
+    const executor: QueryExecutor = {
+      async query<R = unknown[]>(): Promise<R> {
+        return [[]] as R;
+      },
+    };
+    const database = {
+      async transaction<T>(operation: (transaction: QueryExecutor) => Promise<T>): Promise<T> {
+        transactionCalls += 1;
+        if (transactionCalls === 1) {
+          firstTransactionEntered();
+          await firstTransaction;
+        }
+        return await operation(executor);
+      },
+    } as unknown as MassionDatabase;
+    const organizations = {
+      async verifyTenantContext(): Promise<void> {},
+    } as unknown as OrganizationService;
+    const isolated = Reflect.construct(ApplicationEventProjector, [
+      database,
+      organizations,
+    ]) as ApplicationEventProjector;
+    const isolatedContext: TenantContext = {
+      userId: "projector-serialization-user",
+      organizationId: "projector-serialization-organization",
+      membershipId: "projector-serialization-membership",
+      role: "owner",
+    };
+
+    const first = isolated.projectPending(isolatedContext, 1);
+    await entered;
+    const second = isolated.projectPending(isolatedContext, 1);
+    try {
+      await new Promise<void>((resolve) => {
+        setImmediate(resolve);
+      });
+      expect(transactionCalls).toBe(1);
+    } finally {
+      releaseFirstTransaction();
+      await Promise.all([first, second]);
+    }
   });
 
   it("Core run 상태를 correlation이 보존된 공개 event로 투영한다", async () => {
