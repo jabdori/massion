@@ -246,6 +246,7 @@ export class OpenTuiView {
         new TextRenderable(this.renderer, {
          content:
             "기본 화면: 작업 목록 + 진행 상황이 바로 보입니다.\n" +
+            "Tab/Shift+Tab: 뷰 전환(작업·확인·대화·개요·협업·운영·구독)\n" +
             "j/k 또는 화살표: 이동 · Enter: 자세히 열기 · d: 자세히 토글 · Esc: 뒤로\n" +
             "n: 새 작업 · m: 메시지 보내기 · /: 검색 · r: 새로고침\n" +
             "확인 필요: a 승인 · x 거절 · Delete 승인 취소 · 자세히에서 c 작업 취소 · t 작업 배정\n" +
@@ -394,6 +395,8 @@ export class OpenTuiView {
       // Esc: 자세히 보기 닫고 목록으로
       this.actions.dispatch({ type: "inspector.toggled" });
       this.render();
+    } else if (key.name === "tab") {
+      this.cycleView(key.shift ? -1 : 1);
     } else if (["j", "down", "k", "up"].includes(key.name)) {
       this.moveSelection(["j", "down"].includes(key.name) ? 1 : -1);
     }
@@ -732,5 +735,19 @@ export class OpenTuiView {
     this.actions.dispatch({ type: "selection.changed", selection });
     this.render();
     void this.actions.loadView(state.view);
+  }
+
+  private cycleView(delta: number): void {
+    const views: readonly import("./state.js").TuiView[] = [
+      "works", "approvals", "chat", "overview", "agents", "operations", "subscriptions",
+    ];
+    const current = this.actions.state().view;
+    const index = views.indexOf(current);
+    const next = views[(index + delta + views.length) % views.length];
+    if (next) {
+      this.actions.dispatch({ type: "view.selected", view: next });
+      this.render();
+      void this.actions.loadView(next);
+    }
   }
 }

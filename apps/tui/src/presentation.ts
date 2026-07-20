@@ -628,6 +628,6 @@ export function present(state: TuiState): {
     navigation,
     title: `Massion · ${statusLabel(state.connection)} · ${snapshot.organization.organizationId}`,
     ...content,
-    footer: "n 새 작업  ·  m 메시지  ·  d 자세히  ·  / 검색  ·  j/k 이동  ·  r 새로고침  ·  ? 도움말  ·  Ctrl+C 종료",
+    footer: "Tab 뷰 전환  ·  n 새 작업  ·  m 메시지  ·  d 자세히  ·  / 검색  ·  j/k 이동  ·  r 새로고침  ·  ? 도움말  ·  Ctrl+C 종료",
   };
 }
