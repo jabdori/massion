@@ -37,6 +37,8 @@ body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
+  font-size: 16px;
+  line-height: 1.6;
   background-color: var(--canvas);
 }
 button,
@@ -444,6 +446,39 @@ button:disabled {
 }
 .state-error {
   border-color: rgba(239, 68, 68, 0.35);
+}
+.state-panel-icon {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  margin-bottom: 14px;
+  border-radius: 50%;
+  font-size: 1.3rem;
+  line-height: 1;
+}
+.state-empty .state-panel-icon {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.state-error .state-panel-icon {
+  background: rgba(239, 68, 68, 0.1);
+  color: var(--status-failed);
+}
+.state-panel-hint {
+  margin: 14px 0 0;
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+.state-panel-guidance {
+  margin: 14px 0 0;
+  padding: 14px 18px;
+  max-width: 520px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-raised);
+  color: var(--paper);
+  font-size: 0.9rem;
+  text-align: left;
 }
 .pulse-mark {
   width: 12px;
@@ -1665,19 +1700,19 @@ button:disabled {
 .composer-inline textarea {
   width: 100%;
   padding: 12px;
-  font-size: 15px;
+  font-size: 1rem;
   line-height: 1.5;
-  border: 1px solid var(--border, #e5e7eb);
-  border-radius: 8px;
-  background: var(--surface, #fff);
-  color: var(--text, #1f2937);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--paper);
   resize: vertical;
 }
 
 .composer-inline textarea:focus {
   outline: none;
-  border-color: var(--accent, #5B5FEF);
-  box-shadow: 0 0 0 3px rgba(91, 95, 239, 0.12);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
 .composer-inline-actions {
@@ -1688,8 +1723,8 @@ button:disabled {
 }
 
 .composer-inline-actions span {
-  font-size: 13px;
-  color: #6b7280;
+  font-size: 0.82rem;
+  color: var(--muted);
 }
 
 /* 메시지 미리보기 목록 */
@@ -1700,38 +1735,38 @@ button:disabled {
 .message-preview-list .message {
   padding: 10px 14px;
   margin-bottom: 8px;
-  border-radius: 8px;
-  background: rgba(99, 102, 241, 0.03);
+  border-radius: var(--radius-sm);
+  background: var(--accent-soft);
 }
 
 .message-preview-list .message header {
   display: flex;
   gap: 8px;
   align-items: baseline;
-  font-size: 12px;
-  color: #6b7280;
+  font-size: 0.78rem;
+  color: var(--muted);
   margin-bottom: 4px;
 }
 
 .message-preview-list .message p {
   margin: 0;
-  font-size: 14px;
+  font-size: 0.9rem;
   line-height: 1.5;
 }
 
 .message-user {
-  background: rgba(91, 95, 239, 0.06) !important;
-  border-left: 2px solid var(--accent, #5B5FEF);
+  background: var(--accent-soft) !important;
+  border-left: 2px solid var(--accent);
 }
 
 /* 계획 미리보기 카드 */
 .plan-preview-card {
   margin-top: 16px;
   padding: 20px 24px;
-  background: var(--surface, #fff);
-  border: 1px solid var(--accent, #5B5FEF);
-  border-left: 3px solid var(--accent, #5B5FEF);
-  border-radius: 10px;
+  background: var(--surface);
+  border: 1px solid var(--accent);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius);
 }
 
 .plan-preview-header {
@@ -1739,9 +1774,9 @@ button:disabled {
 }
 
 .plan-preview-header strong {
-  font-size: 16px;
+  font-size: 1rem;
   font-weight: 600;
-  color: var(--accent, #5B5FEF);
+  color: var(--accent);
 }
 
 .plan-preview-body {
@@ -1749,21 +1784,21 @@ button:disabled {
 }
 
 .plan-preview-request {
-  font-size: 15px;
+  font-size: 1rem;
   line-height: 1.6;
-  color: #1f2937;
+  color: var(--paper);
   margin: 0 0 12px 0;
   padding: 12px;
-  background: rgba(91, 95, 239, 0.04);
-  border-radius: 8px;
+  background: var(--accent-soft);
+  border-radius: var(--radius-sm);
 }
 
 .plan-preview-steps {
   margin: 0;
   padding-left: 20px;
-  font-size: 14px;
+  font-size: 0.9rem;
   line-height: 1.8;
-  color: #4b5563;
+  color: var(--muted);
 }
 
 .plan-preview-steps li {
@@ -2017,29 +2052,37 @@ button:disabled {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  padding: 4px 12px;
+  border-radius: var(--radius-sm);
   font-size: 0.85rem;
   font-weight: 500;
 }
 .friendly-status .status-symbol {
-  font-size: 1rem;
+  font-size: 0.9rem;
 }
 .friendly-status.is-running {
+  background: rgba(79, 138, 247, 0.1);
   color: var(--status-running);
 }
 .friendly-status.is-approval {
+  background: rgba(245, 166, 35, 0.1);
   color: var(--status-approval);
 }
 .friendly-status.is-blocked {
+  background: rgba(249, 115, 22, 0.1);
   color: var(--status-blocked);
 }
 .friendly-status.is-failed {
+  background: rgba(239, 68, 68, 0.1);
   color: var(--status-failed);
 }
 .friendly-status.is-completed {
+  background: rgba(34, 197, 94, 0.1);
   color: var(--status-completed);
 }
 .friendly-status.is-ready,
 .friendly-status.is-cancelled {
+  background: rgba(156, 163, 175, 0.12);
   color: var(--status-ready);
 }
 
@@ -2396,26 +2439,6 @@ button:disabled {
   color: var(--line);
   font-size: 0.7rem;
 }
-/* ── Guided Workspace: 친화적 상태 배지 ── */
-.friendly-status {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 12px;
-  border-radius: var(--radius-sm);
-  font-size: 0.85rem;
-  font-weight: 500;
-}
-.friendly-status .status-symbol {
-  font-size: 0.9rem;
-}
-.friendly-status[data-tone="ready"] { background: rgba(156, 163, 175, 0.12); color: var(--status-ready); }
-.friendly-status[data-tone="running"] { background: rgba(79, 138, 247, 0.1); color: var(--status-running); }
-.friendly-status[data-tone="approval"] { background: rgba(245, 166, 35, 0.1); color: var(--status-approval); }
-.friendly-status[data-tone="blocked"] { background: rgba(249, 115, 22, 0.1); color: var(--status-blocked); }
-.friendly-status[data-tone="failed"] { background: rgba(239, 68, 68, 0.1); color: var(--status-failed); }
-.friendly-status[data-tone="completed"] { background: rgba(34, 197, 94, 0.1); color: var(--status-completed); }
-.friendly-status[data-tone="cancelled"] { background: rgba(156, 163, 175, 0.1); color: var(--status-cancelled); }
 /* ── Guided Workspace: 홈 입력창 ── */
 .home-input-area {
   max-width: 640px;

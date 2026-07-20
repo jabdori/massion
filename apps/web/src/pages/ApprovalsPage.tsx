@@ -112,6 +112,7 @@ export default function ApprovalsPage() {
         <EmptyState
           title="확인할 항목이 없습니다"
           detail="자동 반영이 허용된 작업은 확인을 거치지 않고 진행됩니다."
+          hint="되돌리기 어려운 변경(예: 데이터 삭제)만 따로 확인을 요청합니다."
         />
       ) : (
         <section className="decision-list" aria-label="확인 요청">

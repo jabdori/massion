@@ -13,7 +13,7 @@ export default function OrganizationPage() {
   return (
     <>
       <PageHeader
-        index="02 / ORGANIZATION"
+        index="02 / 조직"
         title="에이전트들이 어떻게 협업하나요?"
         description="역할, 책임, Capability와 현재 배정을 그래프와 동일한 접근성 목록으로 제공합니다."
       />
@@ -21,7 +21,7 @@ export default function OrganizationPage() {
         <section className="graph-panel" aria-labelledby="graph-title">
           <div className="panel-title">
             <div>
-              <p className="eyebrow">LIVE COLLABORATION MAP</p>
+              <p className="eyebrow">조직 구성도</p>
               <h2 id="graph-title">협업 맵</h2>
             </div>
             <span>REV {label(snapshot.revision).slice(0, 8)}</span>
@@ -64,7 +64,7 @@ export default function OrganizationPage() {
         <section className="agent-directory" aria-labelledby="agent-list-title">
           <div className="panel-title">
             <div>
-              <p className="eyebrow">ACCESSIBLE DIRECTORY</p>
+              <p className="eyebrow">접근 가능한 명부</p>
               <h2 id="agent-list-title">에이전트 명부</h2>
             </div>
             <span>{nodes.length}</span>

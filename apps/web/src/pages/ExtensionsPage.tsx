@@ -98,13 +98,13 @@ export default function ExtensionsPage() {
   return (
     <>
       <PageHeader
-        index="06 / EXTENSIONS"
+        index="06 / 확장"
         title="어떤 확장이 운영체제에 연결됐나요?"
         description="설치 버전, 신뢰 수준, 활성 상태와 기여 기능을 확인합니다."
       />
       <section className="section-heading">
         <div>
-          <span className="eyebrow">MARKETPLACE</span>
+          <span className="eyebrow">마켓플레이스</span>
           <h2>검증된 확장 찾기</h2>
           <p>현재 AgentOS와 호환되고 리콜되지 않은 버전만 표시합니다.</p>
         </div>
@@ -170,7 +170,7 @@ export default function ExtensionsPage() {
       )}
       <section className="section-heading">
         <div>
-          <span className="eyebrow">OFFICIAL SURFACES</span>
+          <span className="eyebrow">공식 채널</span>
           <h2>Slack·Discord·GitHub 연결</h2>
           <p>확인된 외부 사용자와 허용한 채널·저장소만 같은 Work와 승인 원장에 연결됩니다.</p>
         </div>
@@ -223,7 +223,7 @@ export default function ExtensionsPage() {
       )}
       <section className="section-heading">
         <div>
-          <span className="eyebrow">EXTENSION RUNTIME</span>
+          <span className="eyebrow">실행 환경</span>
           <h2>설치된 실행 확장</h2>
         </div>
       </section>
