@@ -242,7 +242,13 @@ describe("Workspace 스코프 표시", () => {
     let state = reduceTuiState(createTuiState(), { type: "snapshot.loaded", snapshot: decodeSnapshot(testSnapshot) });
     state = reduceTuiState(state, {
       type: "workspace.attached",
-      workspace: { workspaceId: "workspace-9", name: "shop-api", path: "/home/owner/shop-api", trust: "trusted" },
+      workspace: {
+        workspaceId: "workspace-9",
+        name: "shop-api",
+        path: "/home/owner/shop-api",
+        trust: "trusted",
+        revision: 1,
+      },
     });
 
     const scoped = present(state);

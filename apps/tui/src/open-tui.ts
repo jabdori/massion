@@ -20,6 +20,7 @@ interface OpenTuiActions {
   readonly dispatch: (action: TuiAction) => void;
   readonly refresh: () => Promise<void>;
   readonly startWork: (text: string) => Promise<unknown>;
+  readonly trustWorkspace?: () => Promise<unknown>;
   readonly postMessage: (content: string) => Promise<unknown>;
   readonly vote: (vote: "approve" | "reject", reason: string) => Promise<unknown>;
   readonly cancelApproval: (reason: string) => Promise<unknown>;
@@ -514,7 +515,21 @@ export class OpenTuiView {
       this.open({ kind: "search", title: "현재 화면 검색", placeholder: "검색어를 입력해 주세요" });
     else if (item.id === "work.cancel")
       this.open({ kind: "cancel-work", title: "업무 취소", placeholder: "취소 이유를 입력해 주세요" });
-    else if (item.id === "workspace.scope.toggle") {
+    else if (item.id === "workspace.trust") {
+      const workspace = this.actions.state().workspace;
+      if (!workspace) {
+        this.notice = "연결된 워크스페이스가 없습니다.";
+        this.render();
+      } else if (workspace.trust === "trusted") {
+        this.notice = "이미 신뢰된 워크스페이스입니다.";
+        this.render();
+      } else if (this.actions.trustWorkspace) {
+        void this.runAction(async () => {
+          await this.actions.trustWorkspace?.();
+          this.notice = "워크스페이스를 신뢰했습니다. 차단됐던 작업은 재시도로 재개할 수 있습니다.";
+        });
+      }
+    } else if (item.id === "workspace.scope.toggle") {
       if (this.actions.state().workspace) {
         this.actions.dispatch({ type: "workspace.scope.toggled" });
         this.notice = this.actions.state().workspaceScope

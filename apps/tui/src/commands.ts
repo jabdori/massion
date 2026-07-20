@@ -40,6 +40,10 @@ export class TuiCommands {
     return await this.send("workspace.register", "workspace.register", { path });
   }
 
+  public async trustWorkspace(workspaceId: string, revision: number): Promise<unknown> {
+    return await this.send("workspace.trust", "workspace.trust", { workspaceId, decision: "trusted" }, revision);
+  }
+
   public async postMessage(input: {
     readonly workId: string;
     readonly roomId: string;

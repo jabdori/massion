@@ -662,7 +662,7 @@ export async function createMassionDaemon(
       recovery: engineeringRecovery,
     });
     const evidenceStage = new CoreEvidenceStage({ works, briefs });
-    const deliveryStage = new CoreDeliveryStage({ works, runner, runtimeExecutions, software });
+    const deliveryStage = new CoreDeliveryStage({ works, runner, runtimeExecutions, software, workspaces });
     const assuranceStage = new CoreAssuranceStage({
       works,
       bindings: assuranceBindings,

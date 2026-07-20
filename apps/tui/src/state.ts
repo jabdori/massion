@@ -11,6 +11,7 @@ export interface TuiWorkspace {
   readonly name: string;
   readonly path: string;
   readonly trust: string;
+  readonly revision: number;
 }
 
 export interface TuiSelection {

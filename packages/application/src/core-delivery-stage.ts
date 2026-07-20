@@ -2,6 +2,7 @@ import type { TenantContext } from "@massion/identity";
 import type { AgentRunner, RuntimeExecutionStore } from "@massion/runtime";
 import { isSoftwareEngineeringTask } from "@massion/software-engineering";
 import type { WorkService, WorkTask } from "@massion/work";
+import type { WorkspaceService } from "@massion/workspace";
 
 import type { CoreWorkStageExecutor, CoreWorkStageInput, CoreWorkStageResult } from "./core-work-coordinator.js";
 
@@ -47,6 +48,7 @@ export class CoreDeliveryStage implements CoreWorkStageExecutor {
       readonly runner: Pick<AgentRunner, "execute" | "recover" | "cancel">;
       readonly runtimeExecutions: Pick<RuntimeExecutionStore, "findExecutionIdByCommand">;
       readonly software?: CoreSoftwareTaskPort;
+      readonly workspaces?: Pick<WorkspaceService, "get">;
     },
   ) {}
 
@@ -55,6 +57,13 @@ export class CoreDeliveryStage implements CoreWorkStageExecutor {
     if (!input.workId) throw new Error("Delivery stage에 Work ID가 없습니다");
     let initial = await this.dependencies.works.getWork(context, input.workId);
     this.throwIfCancelled(input);
+    // 신뢰 게이트: workspace에 바인딩된 Work는 trusted 승인 전 도구 실행(delivery)을 차단합니다.
+    // blocked는 재시도 가능 상태이므로 신뢰 결정 후 명시적 retry로 재개합니다.
+    if (initial.workspace_id !== undefined && this.dependencies.workspaces) {
+      const workspace = await this.dependencies.workspaces.get(context, initial.workspace_id);
+      this.throwIfCancelled(input);
+      if (workspace.trust !== "trusted") return { outcome: "blocked", reason: "workspace-untrusted" };
+    }
     const preassignedTaskIds = new Set<string>();
     if (initial.status === "planned") {
       const tasks = await this.dependencies.works.listTasks(context, input.workId);

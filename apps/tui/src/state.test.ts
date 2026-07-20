@@ -237,13 +237,20 @@ describe("Workspace 스코프 상태", () => {
     expect(state.workspaceScope).toBe(true);
     state = reduceTuiState(state, {
       type: "workspace.attached",
-      workspace: { workspaceId: "workspace-1", name: "shop-api", path: "/home/owner/shop-api", trust: "pending" },
+      workspace: {
+        workspaceId: "workspace-1",
+        name: "shop-api",
+        path: "/home/owner/shop-api",
+        trust: "pending",
+        revision: 0,
+      },
     });
     expect(state.workspace).toEqual({
       workspaceId: "workspace-1",
       name: "shop-api",
       path: "/home/owner/shop-api",
       trust: "pending",
+      revision: 0,
     });
     state = reduceTuiState(state, { type: "workspace.scope.toggled" });
     expect(state.workspaceScope).toBe(false);

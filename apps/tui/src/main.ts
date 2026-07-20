@@ -10,7 +10,14 @@ import { TuiCommands } from "./commands.js";
 import { TuiController } from "./controller.js";
 import { OpenTuiView } from "./open-tui.js";
 import { loadTuiProfile, resolveTuiConfigPath } from "./profile.js";
-import { createTuiState, reduceTuiState, type TuiAction, type TuiState, type TuiView } from "./state.js";
+import {
+  createTuiState,
+  reduceTuiState,
+  type TuiAction,
+  type TuiState,
+  type TuiView,
+  type TuiWorkspace,
+} from "./state.js";
 
 export interface TuiArguments {
   readonly profile?: string;
@@ -51,6 +58,27 @@ export function parseTuiArguments(argv: readonly string[]): TuiArguments {
 
 const HELP = `Massion AgentOS 터미널 사용자 인터페이스\n\n사용법: massion [--profile <name>] [--config <path>] [--workspace <path>]\n기본값: 현재 디렉토리를 워크스페이스로 연결합니다.\n사전 준비: massion init으로 안전한 local profile을 생성해 주세요.\n`;
 
+// workspace command 응답 data를 화면 상태로 변환합니다.
+function decodeWorkspaceData(data: unknown): TuiWorkspace | undefined {
+  if (!data || typeof data !== "object") return undefined;
+  const workspace = data as Record<string, unknown>;
+  if (
+    typeof workspace.workspaceId !== "string" ||
+    typeof workspace.name !== "string" ||
+    typeof workspace.path !== "string" ||
+    typeof workspace.trust !== "string" ||
+    !Number.isSafeInteger(workspace.revision)
+  )
+    return undefined;
+  return {
+    workspaceId: workspace.workspaceId,
+    name: workspace.name,
+    path: workspace.path,
+    trust: workspace.trust,
+    revision: workspace.revision as number,
+  };
+}
+
 // 실행 디렉토리를 Workspace로 등록(멱등)하고 화면 상태에 연결합니다.
 // 서버가 workspace 명령을 지원하지 않거나 실패하면 전역 모드로 계속합니다.
 async function attachWorkspace(
@@ -60,25 +88,8 @@ async function attachWorkspace(
 ): Promise<void> {
   try {
     const registered = (await commands.registerWorkspace(path)) as { readonly data?: unknown };
-    const data = registered.data;
-    if (!data || typeof data !== "object") return;
-    const workspace = data as Record<string, unknown>;
-    if (
-      typeof workspace.workspaceId !== "string" ||
-      typeof workspace.name !== "string" ||
-      typeof workspace.path !== "string" ||
-      typeof workspace.trust !== "string"
-    )
-      return;
-    dispatch({
-      type: "workspace.attached",
-      workspace: {
-        workspaceId: workspace.workspaceId,
-        name: workspace.name,
-        path: workspace.path,
-        trust: workspace.trust,
-      },
-    });
+    const decoded = decodeWorkspaceData(registered.data);
+    if (decoded) dispatch({ type: "workspace.attached", workspace: decoded });
   } catch {
     // 전역 모드 유지: workspace 없이도 TUI는 동작해야 합니다.
   }
@@ -231,6 +242,16 @@ export async function runTui(
       refresh,
       startWork: async (text) =>
         await commands.startRun(text, state.workspaceScope ? state.workspace?.workspaceId : undefined),
+      trustWorkspace: async () => {
+        const workspace = state.workspace;
+        if (!workspace) throw new Error("연결된 워크스페이스가 없습니다");
+        const result = (await commands.trustWorkspace(workspace.workspaceId, workspace.revision)) as {
+          readonly data?: unknown;
+        };
+        const decoded = decodeWorkspaceData(result.data);
+        if (decoded) dispatch({ type: "workspace.attached", workspace: decoded });
+        return result;
+      },
       postMessage: async (content) => {
         const { workId, roomId } = state.selection;
         if (!workId || !roomId) throw new Error("메시지를 보낼 협업방이 선택되지 않았습니다");

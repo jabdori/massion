@@ -38,6 +38,41 @@ describe("CoreDeliveryStage", () => {
     expect(transitions).toEqual(["verifying"]);
   });
 
+  it("신뢰되지 않은 workspace에 바인딩된 Work는 delivery를 차단한다", async () => {
+    const stage = new CoreDeliveryStage({
+      works: {
+        listTasks: async () => [],
+        getWork: async () => ({ revision: 1, status: "running", workspace_id: "workspace-1" }),
+        transition: async () => {
+          throw new Error("차단된 delivery는 상태를 전이하면 안 됩니다");
+        },
+      },
+      runner: {},
+      runtimeExecutions: {},
+      workspaces: { get: async () => ({ workspaceId: "workspace-1", trust: "pending" }) },
+    } as never);
+    await expect(stage.execute(context, input)).resolves.toMatchObject({
+      outcome: "blocked",
+      reason: "workspace-untrusted",
+    });
+  });
+
+  it("trusted workspace에 바인딩된 Work는 정상 진행한다", async () => {
+    const stage = new CoreDeliveryStage({
+      works: {
+        listTasks: async () => [],
+        getWork: async () => ({ revision: 1, status: "running", workspace_id: "workspace-1" }),
+        transition: async (_context: unknown, value: { target: string }) => ({
+          work: { revision: 2, status: value.target },
+        }),
+      },
+      runner: {},
+      runtimeExecutions: {},
+      workspaces: { get: async () => ({ workspaceId: "workspace-1", trust: "trusted" }) },
+    } as never);
+    await expect(stage.execute(context, input)).resolves.toMatchObject({ outcome: "advanced" });
+  });
+
   it("계획된 Work를 ready와 running으로 전이한 뒤 Task를 실행한다", async () => {
     const transitions: string[] = [];
     let status = "planned";

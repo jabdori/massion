@@ -116,6 +116,14 @@ export const SURFACE_PALETTE_ITEMS: readonly SurfacePaletteItem[] = [
   },
   // 설정
   {
+    id: "workspace.trust",
+    title: "현재 워크스페이스 신뢰",
+    category: "설정",
+    keywords: ["trust", "신뢰", "workspace", "허용"],
+    risky: true,
+    surfaces: ["tui", "web"],
+  },
+  {
     id: "workspace.scope.toggle",
     title: "워크스페이스 스코프 전환",
     category: "설정",
