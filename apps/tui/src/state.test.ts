@@ -230,3 +230,22 @@ describe("TUI wire와 상태", () => {
 });
 
 export { snapshot as testSnapshot };
+
+describe("Workspace 스코프 상태", () => {
+  it("workspace.attached와 scope 토글을 반영한다", () => {
+    let state = createTuiState();
+    expect(state.workspaceScope).toBe(true);
+    state = reduceTuiState(state, {
+      type: "workspace.attached",
+      workspace: { workspaceId: "workspace-1", name: "shop-api", path: "/home/owner/shop-api", trust: "pending" },
+    });
+    expect(state.workspace).toEqual({
+      workspaceId: "workspace-1",
+      name: "shop-api",
+      path: "/home/owner/shop-api",
+      trust: "pending",
+    });
+    state = reduceTuiState(state, { type: "workspace.scope.toggled" });
+    expect(state.workspaceScope).toBe(false);
+  });
+});

@@ -236,3 +236,22 @@ describe("TUI presentation", () => {
     expect(output.detail).toContain("선택 가능 승인      automatic, review, deny");
   });
 });
+
+describe("Workspace 스코프 표시", () => {
+  it("scope가 켜지면 workspace 밖 작업을 숨기고 제목·전체 보기 상태를 표시한다", () => {
+    let state = reduceTuiState(createTuiState(), { type: "snapshot.loaded", snapshot: decodeSnapshot(testSnapshot) });
+    state = reduceTuiState(state, {
+      type: "workspace.attached",
+      workspace: { workspaceId: "workspace-9", name: "shop-api", path: "/home/owner/shop-api", trust: "trusted" },
+    });
+
+    const scoped = present(state);
+    expect(scoped.title).toContain("shop-api");
+    expect(scoped.list).toContain("이 워크스페이스");
+
+    const globalState = reduceTuiState(state, { type: "workspace.scope.toggled" });
+    const globalOutput = present(globalState);
+    expect(globalOutput.title).toContain("전체 보기");
+    expect(globalOutput.list).toContain("분석");
+  });
+});

@@ -165,7 +165,7 @@ export function decodeSnapshot(input: unknown): CollaborationGraphSnapshot {
 
   const works = array(root.works, "works").map((item) => {
     const work = record(item, "work");
-    fields(work, ["workId", "status", "revision", "artifactIds", "taskIds", "roomIds"], "work");
+    fields(work, ["workId", "status", "revision", "artifactIds", "taskIds", "roomIds", "workspaceId"], "work");
     return {
       workId: text(work.workId, "workId", 1_024),
       status: text(work.status, "work status", 128),
@@ -173,6 +173,7 @@ export function decodeSnapshot(input: unknown): CollaborationGraphSnapshot {
       artifactIds: strings(work.artifactIds, "artifactIds"),
       taskIds: strings(work.taskIds, "taskIds"),
       roomIds: strings(work.roomIds, "roomIds"),
+      ...(work.workspaceId === undefined ? {} : { workspaceId: text(work.workspaceId, "work workspaceId", 1_024) }),
     };
   });
 

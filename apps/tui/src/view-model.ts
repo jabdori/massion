@@ -58,10 +58,7 @@ const AGENT_HANDLE_TO_INTERNAL_STAGE: Readonly<Record<string, string>> = {
 const TERMINAL_WORK_STATUSES = new Set(["completed", "cancelled", "failed"]);
 const ACTIVE_EXECUTION_STATUSES = new Set(["running", "queued", "suspended"]);
 
-export function currentInternalStage(
-  snapshot: CollaborationGraphSnapshot,
-  workId: string | undefined,
-): string {
+export function currentInternalStage(snapshot: CollaborationGraphSnapshot, workId: string | undefined): string {
   if (!workId) return "intake";
   const work = snapshot.works.find((item) => item.workId === workId);
   if (work && TERMINAL_WORK_STATUSES.has(work.status)) return "records";

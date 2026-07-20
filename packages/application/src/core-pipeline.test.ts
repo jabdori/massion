@@ -50,6 +50,43 @@ describe("actual Core Work pipeline adapters", () => {
     expect(await works.getWork(context, (result as { workId: string }).workId)).toMatchObject({ status: "draft" });
   });
 
+  it("intake는 request의 workspaceId를 생성된 Work에 바인딩한다", async () => {
+    await using database = await createDatabase({ url: "mem://", namespace: "massion", database: crypto.randomUUID() });
+    const identities = await IdentityService.create(database);
+    const organizations = await OrganizationService.create(database);
+    const owner = await identities.registerPersonalUser({
+      email: "workspace-intake@example.com",
+      displayName: "Owner",
+    });
+    const context = await organizations.resolveTenantContext(owner.user.user_id, owner.organization.organization_id);
+    const graph = await OrganizationGraphService.create(database, organizations);
+    await graph.bootstrap(context);
+    const works = await WorkService.create(database, organizations, graph);
+    const stages = createCoreWorkPipelineExecutors({
+      graph,
+      works,
+      runtimeExecutions: { findExecutionIdByCommand: async () => undefined },
+      representative: {
+        execute: async () => ({ executionId: "execution-representative", status: "blocked_model_unavailable" }),
+        cancel: async () => undefined,
+      },
+      strategy: { plan: async () => ({ planVersionId: "unused" }) as never },
+      evidence: { execute: async () => ({ outcome: "advanced" }) },
+      delivery: { execute: async () => ({ outcome: "advanced" }) },
+      assurance: { execute: async () => ({ outcome: "advanced" }) },
+      records: { execute: async () => ({ outcome: "advanced" }) },
+    });
+    const result = await stages.intake.execute(context, {
+      runId: "pipeline-workspace-run-0001",
+      commandId: "pipeline-workspace-run-0001:intake",
+      correlationId: "pipeline-workspace-correlation-0001",
+      request: { text: "워크스페이스 바인딩 검증", surface: "tui", workspaceId: "workspace-shop-api" },
+    });
+    const workId = (result as { workId: string }).workId;
+    const work = await works.getWork(context, workId);
+    expect(work.workspace_id).toBe("workspace-shop-api");
+  });
+
   it("재시도 intake는 기존 Work를 만들지 않고 같은 Work로 Representative를 다시 실행한다", async () => {
     const createWorkCalls: string[] = [];
     const representativeCalls: Array<{ workId: string; commandId: string }> = [];

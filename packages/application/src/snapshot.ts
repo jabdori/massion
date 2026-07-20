@@ -41,6 +41,7 @@ export interface CollaborationGraphWork {
   readonly artifactIds: readonly string[];
   readonly taskIds: readonly string[];
   readonly roomIds: readonly string[];
+  readonly workspaceId?: string;
 }
 
 export interface CollaborationGraphSnapshot {
@@ -184,6 +185,7 @@ export class CollaborationGraphSnapshotProjector {
       status: work.status,
       revision: work.revision,
       artifactIds: [...work.artifactIds],
+      ...(work.workspaceId === undefined ? {} : { workspaceId: work.workspaceId }),
       taskIds: sources.tasks.filter((task) => task.workId === work.workId).map((task) => task.taskId),
       roomIds: sources.rooms.filter((room) => room.workId === work.workId).map((room) => room.roomId),
     }));

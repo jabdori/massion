@@ -54,6 +54,7 @@ interface CoreRequest {
   readonly text: string;
   readonly surface: string;
   readonly projectId?: string;
+  readonly workspaceId?: string;
   readonly tokenBudget: number;
   readonly scopeIn: readonly string[];
   readonly scopeOut: readonly string[];
@@ -80,6 +81,7 @@ function request(value: unknown): CoreRequest {
     text,
     surface: typeof input.surface === "string" ? input.surface : "application",
     ...(typeof input.projectId === "string" ? { projectId: input.projectId } : {}),
+    ...(typeof input.workspaceId === "string" ? { workspaceId: input.workspaceId } : {}),
     tokenBudget,
     scopeIn: strings(input.scopeIn),
     scopeOut: strings(input.scopeOut),
@@ -162,6 +164,7 @@ export function createCoreWorkPipelineExecutors(
           surface: value.surface,
           organizationVersionId: snapshot.version.version_id,
           ...(value.projectId === undefined ? {} : { projectId: value.projectId }),
+          ...(value.workspaceId === undefined ? {} : { workspaceId: value.workspaceId }),
         });
         workId = created.work.work_id;
         if (input.signal?.aborted) await cancelAndThrowIfCancelled(context, input, workId);

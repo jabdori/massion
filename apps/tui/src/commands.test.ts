@@ -156,3 +156,31 @@ describe("TUI command", () => {
     ]);
   });
 });
+
+describe("TUI workspace command", () => {
+  it("workspaceId가 있으면 run.start request에 포함한다", async () => {
+    const sent: unknown[] = [];
+    const commands = new TuiCommands(
+      { command: (value) => (sent.push(value), Promise.resolve(value)) },
+      () => "user-1",
+    );
+    await commands.startRun("환불 API 추가", "workspace-1");
+    expect(sent[0]).toMatchObject({
+      operation: "run.start",
+      payload: { request: { text: "환불 API 추가", surface: "tui", workspaceId: "workspace-1" } },
+    });
+  });
+
+  it("registerWorkspace는 workspace.register command를 전송한다", async () => {
+    const sent: unknown[] = [];
+    const commands = new TuiCommands(
+      { command: (value) => (sent.push(value), Promise.resolve(value)) },
+      () => "user-1",
+    );
+    await commands.registerWorkspace("/home/owner/projects/shop-api");
+    expect(sent[0]).toMatchObject({
+      operation: "workspace.register",
+      payload: { path: "/home/owner/projects/shop-api" },
+    });
+  });
+});

@@ -30,8 +30,14 @@ export class TuiCommands {
     private readonly userId: () => string,
   ) {}
 
-  public async startRun(text: string): Promise<unknown> {
-    return await this.send("run.start", "run.start", { request: { text, surface: "tui" } });
+  public async startRun(text: string, workspaceId?: string): Promise<unknown> {
+    return await this.send("run.start", "run.start", {
+      request: { text, surface: "tui", ...(workspaceId === undefined ? {} : { workspaceId }) },
+    });
+  }
+
+  public async registerWorkspace(path: string): Promise<unknown> {
+    return await this.send("workspace.register", "workspace.register", { path });
   }
 
   public async postMessage(input: {

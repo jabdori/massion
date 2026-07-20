@@ -6,6 +6,13 @@ export type TuiConnection = "connecting" | "live" | "reconnecting" | "offline" |
 export type TuiView = "overview" | "agents" | "works" | "chat" | "approvals" | "operations" | "subscriptions";
 export type TuiSubscriptionTab = "providers" | "accounts" | "quota" | "policy";
 
+export interface TuiWorkspace {
+  readonly workspaceId: string;
+  readonly name: string;
+  readonly path: string;
+  readonly trust: string;
+}
+
 export interface TuiSelection {
   readonly workId?: string;
   readonly agentHandle?: string;
@@ -27,6 +34,8 @@ export interface TuiState {
   readonly subscriptionTab: TuiSubscriptionTab;
   readonly queryResults: Readonly<Record<string, unknown>>;
   readonly queryErrors: Readonly<Record<string, string>>;
+  readonly workspace?: TuiWorkspace;
+  readonly workspaceScope: boolean;
   readonly error?: string;
 }
 
@@ -34,31 +43,34 @@ export type TuiAction =
   | { readonly type: "connection.changed"; readonly connection: TuiConnection; readonly error?: string }
   | { readonly type: "snapshot.loaded"; readonly snapshot: CollaborationGraphSnapshot }
   | { readonly type: "event.received"; readonly event: TuiEvent }
- | { readonly type: "view.selected"; readonly view: TuiView }
+  | { readonly type: "view.selected"; readonly view: TuiView }
   | { readonly type: "inspector.toggled" }
- | { readonly type: "query.loaded"; readonly key: string; readonly value: unknown }
+  | { readonly type: "query.loaded"; readonly key: string; readonly value: unknown }
   | { readonly type: "messages.loaded"; readonly workId: string; readonly roomId: string; readonly value: unknown }
   | { readonly type: "query.failed"; readonly key: string; readonly error: string }
   | { readonly type: "subscription.tab.selected"; readonly tab: TuiSubscriptionTab }
+  | { readonly type: "workspace.attached"; readonly workspace: TuiWorkspace }
+  | { readonly type: "workspace.scope.toggled" }
   | { readonly type: "selection.changed"; readonly selection: TuiSelection };
 
 export function createTuiState(input: { readonly eventLimit?: number } = {}): TuiState {
   const eventLimit = input.eventLimit ?? 500;
   if (!Number.isSafeInteger(eventLimit) || eventLimit < 1 || eventLimit > 10_000)
     throw new Error("TUI event 보관 상한이 유효하지 않습니다");
- return {
-   connection: "connecting",
+  return {
+    connection: "connecting",
     view: "works",
-   cursor: 0,
-   needsResync: false,
-   events: [],
-   eventLimit,
-   selection: {},
+    cursor: 0,
+    needsResync: false,
+    events: [],
+    eventLimit,
+    selection: {},
     inspector: false,
-   subscriptionTab: "providers",
-   queryResults: {},
-   queryErrors: {},
- };
+    subscriptionTab: "providers",
+    queryResults: {},
+    queryErrors: {},
+    workspaceScope: true,
+  };
 }
 
 function clearError(state: TuiState): TuiState {
@@ -116,9 +128,9 @@ export function reduceTuiState(state: TuiState, action: TuiAction): TuiState {
       events: [...state.events, action.event].slice(-state.eventLimit),
     };
   }
- if (action.type === "view.selected") return { ...state, view: action.view };
+  if (action.type === "view.selected") return { ...state, view: action.view };
   if (action.type === "inspector.toggled") return { ...state, inspector: !state.inspector };
- if (action.type === "query.loaded") {
+  if (action.type === "query.loaded") {
     return {
       ...state,
       queryResults: { ...state.queryResults, [action.key]: action.value },
@@ -136,6 +148,8 @@ export function reduceTuiState(state: TuiState, action: TuiAction): TuiState {
   if (action.type === "query.failed")
     return { ...state, queryErrors: { ...state.queryErrors, [action.key]: action.error } };
   if (action.type === "subscription.tab.selected") return { ...state, subscriptionTab: action.tab };
+  if (action.type === "workspace.attached") return { ...state, workspace: action.workspace };
+  if (action.type === "workspace.scope.toggled") return { ...state, workspaceScope: !state.workspaceScope };
   const selection = { ...state.selection, ...action.selection };
   if (
     action.selection.workId !== undefined &&

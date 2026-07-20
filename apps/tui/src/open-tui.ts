@@ -359,7 +359,13 @@ export class OpenTuiView {
     else if (key.name === "n")
       open({ kind: "start-work", title: "새 작업 시작", placeholder: "작업 내용을 입력해 주세요" });
     else if (key.name === "m") open({ kind: "message", title: "메시지 보내기", placeholder: "메시지를 입력해 주세요" });
-    else if (key.name === "a" && this.actions.state().view === "approvals")
+    else if (key.name === "g" && this.actions.state().workspace) {
+      this.actions.dispatch({ type: "workspace.scope.toggled" });
+      this.notice = this.actions.state().workspaceScope
+        ? "현재 워크스페이스 작업만 표시합니다."
+        : "조직의 전체 작업을 표시합니다.";
+      this.render();
+    } else if (key.name === "a" && this.actions.state().view === "approvals")
       open({ kind: "vote", vote: "approve", title: "승인 이유", placeholder: "승인 근거를 입력해 주세요" });
     else if (key.name === "x" && this.actions.state().view === "approvals")
       open({ kind: "vote", vote: "reject", title: "거절 이유", placeholder: "거절 근거를 입력해 주세요" });

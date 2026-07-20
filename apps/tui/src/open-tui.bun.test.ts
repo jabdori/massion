@@ -121,24 +121,24 @@ describe("OpenTUI 실제 renderer", () => {
       },
     });
     view.render();
-   setup.renderer.keyInput.emit(
-     "keypress",
-     new KeyEvent({
-      name: "m",
-      sequence: "m",
-      raw: "m",
-      number: false,
-      source: "raw",
-      ctrl: false,
-      shift: false,
-      meta: false,
-      option: false,
-      eventType: "press",
-      repeated: false,
-    }),
-  );
-  await setup.renderOnce();
-  expect(setup.captureCharFrame()).toContain("메시지 보내기");
+    setup.renderer.keyInput.emit(
+      "keypress",
+      new KeyEvent({
+        name: "m",
+        sequence: "m",
+        raw: "m",
+        number: false,
+        source: "raw",
+        ctrl: false,
+        shift: false,
+        meta: false,
+        option: false,
+        eventType: "press",
+        repeated: false,
+      }),
+    );
+    await setup.renderOnce();
+    expect(setup.captureCharFrame()).toContain("메시지 보내기");
     setup.renderer.keyInput.emit(
       "keypress",
       new KeyEvent({

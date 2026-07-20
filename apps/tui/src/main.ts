@@ -15,12 +15,14 @@ import { createTuiState, reduceTuiState, type TuiAction, type TuiState, type Tui
 export interface TuiArguments {
   readonly profile?: string;
   readonly configPath?: string;
+  readonly workspacePath?: string;
   readonly help: boolean;
 }
 
 export function parseTuiArguments(argv: readonly string[]): TuiArguments {
   let profile: string | undefined;
   let configPath: string | undefined;
+  let workspacePath: string | undefined;
   let help = false;
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
@@ -33,12 +35,54 @@ export function parseTuiArguments(argv: readonly string[]): TuiArguments {
       configPath = argv[index + 1];
       index += 1;
       if (!configPath) throw new Error("--config 값이 필요합니다");
+    } else if (argument === "--workspace") {
+      workspacePath = argv[index + 1];
+      index += 1;
+      if (!workspacePath) throw new Error("--workspace 값이 필요합니다");
     } else throw new Error(`알 수 없는 TUI 인자입니다: ${String(argument)}`);
   }
-  return { ...(profile === undefined ? {} : { profile }), ...(configPath === undefined ? {} : { configPath }), help };
+  return {
+    ...(profile === undefined ? {} : { profile }),
+    ...(configPath === undefined ? {} : { configPath }),
+    ...(workspacePath === undefined ? {} : { workspacePath }),
+    help,
+  };
 }
 
-const HELP = `Massion AgentOS 터미널 사용자 인터페이스\n\n사용법: massion [--profile <name>] [--config <path>]\n사전 준비: massion init으로 안전한 local profile을 생성해 주세요.\n`;
+const HELP = `Massion AgentOS 터미널 사용자 인터페이스\n\n사용법: massion [--profile <name>] [--config <path>] [--workspace <path>]\n기본값: 현재 디렉토리를 워크스페이스로 연결합니다.\n사전 준비: massion init으로 안전한 local profile을 생성해 주세요.\n`;
+
+// 실행 디렉토리를 Workspace로 등록(멱등)하고 화면 상태에 연결합니다.
+// 서버가 workspace 명령을 지원하지 않거나 실패하면 전역 모드로 계속합니다.
+async function attachWorkspace(
+  commands: TuiCommands,
+  dispatch: (action: TuiAction) => void,
+  path: string,
+): Promise<void> {
+  try {
+    const registered = (await commands.registerWorkspace(path)) as { readonly data?: unknown };
+    const data = registered.data;
+    if (!data || typeof data !== "object") return;
+    const workspace = data as Record<string, unknown>;
+    if (
+      typeof workspace.workspaceId !== "string" ||
+      typeof workspace.name !== "string" ||
+      typeof workspace.path !== "string" ||
+      typeof workspace.trust !== "string"
+    )
+      return;
+    dispatch({
+      type: "workspace.attached",
+      workspace: {
+        workspaceId: workspace.workspaceId,
+        name: workspace.name,
+        path: workspace.path,
+        trust: workspace.trust,
+      },
+    });
+  } catch {
+    // 전역 모드 유지: workspace 없이도 TUI는 동작해야 합니다.
+  }
+}
 
 function isMissingConfig(error: unknown, configPath: string): boolean {
   if (!error || typeof error !== "object") return false;
@@ -173,6 +217,7 @@ export async function runTui(
     const getState = (): TuiState => state;
     const controller = new TuiController(client, dispatch, getState);
     const commands = new TuiCommands(client, () => controller.identity.userId);
+    await attachWorkspace(commands, dispatch, arguments_.workspacePath ?? process.cwd());
     const refresh = async (): Promise<void> => {
       await controller.refresh();
     };
@@ -180,7 +225,8 @@ export async function runTui(
       state: getState,
       dispatch,
       refresh,
-      startWork: async (text) => await commands.startRun(text),
+      startWork: async (text) =>
+        await commands.startRun(text, state.workspaceScope ? state.workspace?.workspaceId : undefined),
       postMessage: async (content) => {
         const { workId, roomId } = state.selection;
         if (!workId || !roomId) throw new Error("메시지를 보낼 협업방이 선택되지 않았습니다");

@@ -178,18 +178,30 @@ function agents(state: TuiState, snapshot: CollaborationGraphSnapshot): { list: 
   };
 }
 
+// Workspace 스코프가 켜져 있으면 현재 디렉토리 workspace에 속한 작업만 표시합니다.
+export function visibleWorks(
+  state: TuiState,
+  snapshot: CollaborationGraphSnapshot,
+): readonly CollaborationGraphSnapshot["works"][number][] {
+  if (!state.workspaceScope || !state.workspace) return snapshot.works;
+  return snapshot.works.filter((item) => item.workspaceId === state.workspace?.workspaceId);
+}
+
 function works(state: TuiState, snapshot: CollaborationGraphSnapshot): { list: string; detail: string } {
-  const work = snapshot.works.find((item) => item.workId === state.selection.workId) ?? snapshot.works[0];
+  const scopedWorks = visibleWorks(state, snapshot);
+  const work = scopedWorks.find((item) => item.workId === state.selection.workId) ?? scopedWorks[0];
   const tasks = work ? snapshot.tasks.filter((item) => item.workId === work.workId) : [];
   const executions = work ? snapshot.executions.filter((item) => item.workId === work.workId) : [];
-  const list = snapshot.works.length
-    ? snapshot.works
+  const list = scopedWorks.length
+    ? scopedWorks
         .map(
           (item) =>
             `${item.workId === work?.workId ? "›" : " "} ${statusMark(item.status)} ${workDisplayTitle(snapshot, item.workId)} · ${statusLabel(item.status)}`,
         )
         .join("\n")
-    : "아직 작업이 없어요.\n무엇을 도와드릴까요?  n 키를 눌러 첫 작업을 시작해 주세요.";
+    : state.workspaceScope && state.workspace && snapshot.works.length > 0
+      ? `이 워크스페이스(${safeTerminalText(state.workspace.name, 80)})에는 아직 작업이 없어요.\nn 키로 새 작업을 시작하거나 g 키로 전체 작업을 볼 수 있어요.`
+      : "아직 작업이 없어요.\n무엇을 도와드릴까요?  n 키를 눌러 첫 작업을 시작해 주세요.";
 
   if (!work) return { list, detail: "무엇을 도와드릴까요?\nn 키를 눌러 첫 작업을 시작해 주세요." };
 
@@ -641,7 +653,11 @@ export function present(state: TuiState): {
                 : subscriptions(state);
   return {
     navigation,
-    title: `Massion · ${statusLabel(state.connection)} · ${snapshot.organization.organizationId}`,
+    title: `Massion · ${statusLabel(state.connection)} · ${snapshot.organization.organizationId}${
+      state.workspace
+        ? ` · ${safeTerminalText(state.workspace.name, 80)}${state.workspaceScope ? "" : " (전체 보기)"}`
+        : ""
+    }`,
     ...content,
     footer: footerForView(state.view),
   };

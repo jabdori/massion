@@ -13,6 +13,10 @@ describe("TUI executable", () => {
       help: false,
     });
     expect(() => parseTuiArguments(["--token", "secret"])).toThrow(/알 수 없는/u);
+    expect(parseTuiArguments(["--workspace", "/home/owner/projects/shop-api"])).toEqual({
+      workspacePath: "/home/owner/projects/shop-api",
+      help: false,
+    });
   });
 
   it("help는 profile이나 renderer 없이 출력한다", async () => {
