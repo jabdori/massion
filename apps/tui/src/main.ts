@@ -13,6 +13,7 @@ import { loadTuiProfile, resolveTuiConfigPath } from "./profile.js";
 import {
   createTuiState,
   reduceTuiState,
+  shouldRingAttentionBell,
   type TuiAction,
   type TuiState,
   type TuiView,
@@ -225,8 +226,11 @@ export async function runTui(
       abort.abort();
     });
     let state = createTuiState();
+    const bellEnabled = process.env.NO_BELL === undefined && process.stdout.isTTY;
     const dispatch = (action: TuiAction): void => {
+      const previous = state;
       state = reduceTuiState(state, action);
+      if (bellEnabled && shouldRingAttentionBell(previous, state)) process.stdout.write("\u0007");
       view.render();
     };
     const getState = (): TuiState => state;

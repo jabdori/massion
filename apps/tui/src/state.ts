@@ -167,3 +167,10 @@ export function reduceTuiState(state: TuiState, action: TuiAction): TuiState {
   const queryErrors = Object.fromEntries(Object.entries(state.queryErrors).filter(([key]) => key !== "messages"));
   return { ...state, selection, queryResults, queryErrors };
 }
+
+// attention 알림: 새 승인 대기가 생겼을 때만 한 번 울립니다 (옵트아웃: NO_BELL).
+export function shouldRingAttentionBell(previous: TuiState, next: TuiState): boolean {
+  const before = previous.snapshot?.pendingApprovals.length ?? 0;
+  const after = next.snapshot?.pendingApprovals.length ?? 0;
+  return after > before;
+}

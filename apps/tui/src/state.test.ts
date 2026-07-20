@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { createTuiState, reduceTuiState } from "./state.js";
+import { createTuiState, reduceTuiState, shouldRingAttentionBell } from "./state.js";
 import { decodeQueryResult, decodeSnapshot } from "./wire.js";
 
 const snapshot = {
@@ -254,5 +254,29 @@ describe("Workspace 스코프 상태", () => {
     });
     state = reduceTuiState(state, { type: "workspace.scope.toggled" });
     expect(state.workspaceScope).toBe(false);
+  });
+});
+
+describe("attention 알림 판정", () => {
+  it("승인 대기 수가 늘어날 때만 벨을 울린다", () => {
+    const base = reduceTuiState(createTuiState(), { type: "snapshot.loaded", snapshot: decodeSnapshot(snapshot) });
+    const snapshotWithApproval = decodeSnapshot({
+      ...snapshot,
+      pendingApprovals: [
+        ...snapshot.pendingApprovals,
+        {
+          approvalId: "approval-bell",
+          action: "tool.call",
+          status: "pending",
+          requestedBy: "agent",
+          expiresAt: "2026-07-21T10:00:00.000Z",
+        },
+      ],
+    });
+    const withApproval = reduceTuiState(base, { type: "snapshot.loaded", snapshot: snapshotWithApproval });
+
+    expect(shouldRingAttentionBell(base, withApproval)).toBe(true);
+    expect(shouldRingAttentionBell(withApproval, withApproval)).toBe(false);
+    expect(shouldRingAttentionBell(withApproval, base)).toBe(false);
   });
 });
