@@ -1,5 +1,6 @@
 import {
   agentRoleToken,
+  approvalRiskFromPreview,
   USER_STAGES,
   userStageProgress,
   workStatusToken,
@@ -157,10 +158,10 @@ function agents(state: TuiState, snapshot: CollaborationGraphSnapshot): { list: 
       ? snapshot.nodes.map((item) => nodeLine(item, item.handle === node?.handle)).join("\n")
       : "등록된 에이전트가 없습니다.",
     detail: node
-     ? [
-         `${node.name} (${node.handle})`,
+      ? [
+          `${node.name} (${node.handle})`,
           `역할                ${agentRoleToken(node.role).friendlyLabel}`,
-         `책임                ${node.responsibility}`,
+          `책임                ${node.responsibility}`,
           `범위                ${node.scope}`,
           `상태                ${statusMark(node.executionStatus ?? node.status)} ${node.executionStatus ?? node.status}`,
           `현재 업무           ${node.currentWorkId ?? "없음"}`,
@@ -188,27 +189,29 @@ function works(state: TuiState, snapshot: CollaborationGraphSnapshot): { list: s
             `${item.workId === work?.workId ? "›" : " "} ${statusMark(item.status)} ${workDisplayTitle(snapshot, item.workId)} · ${statusLabel(item.status)}`,
         )
         .join("\n")
-    : "아직 작업이 없습니다. n 키를 눌러 첫 작업을 시작해 주세요.";
+    : "아직 작업이 없어요.\n무엇을 도와드릴까요?  n 키를 눌러 첫 작업을 시작해 주세요.";
 
-  if (!work) return { list, detail: "선택할 작업이 없습니다." };
+  if (!work) return { list, detail: "무엇을 도와드릴까요?\nn 키를 눌러 첫 작업을 시작해 주세요." };
 
   // 기본(친화적): 4단계 진행 바 + 최근 소식 + 차단 시 복구 안내
   if (!state.inspector) {
     const stage = currentInternalStage(snapshot, work.workId);
     const isBlocked = work.status === "blocked" || classifyStatus(work.status) === "blocked";
-    const recoveryLines = isBlocked ? [
-      "",
-      "잠시 멈췄어요",
-      "현재 작업을 진행할 수 없습니다.",
-      "다음 중 하나를 시도해보세요:",
-      "  • AI 연결 상태 확인 (구독 화면)",
-      "  • 나중에 다시 시도",
-      "  • 현재까지의 결과 확인",
-    ] : [];
+    const recoveryLines = isBlocked
+      ? [
+          "",
+          "잠시 멈췄어요",
+          "현재 작업을 진행할 수 없습니다.",
+          "다음 중 하나를 시도해보세요:",
+          "  • AI 연결 상태 확인 (구독 화면)",
+          "  • 나중에 다시 시도",
+          "  • 현재까지의 결과 확인",
+        ]
+      : [];
     return {
       list,
       detail: [
-        "작업 진행",
+        workDisplayTitle(snapshot, work.workId),
         renderUserStageBar(stage),
         "",
         `상태                ${statusLabel(work.status)}`,
@@ -305,6 +308,7 @@ function approvals(state: TuiState, snapshot: CollaborationGraphSnapshot): { lis
           `요청자              ${approval.requestedBy}`,
           `만료                ${approval.expiresAt}`,
           ...approvalPreviewLines(approval.displayPreview),
+          `영향                ${approvalRiskFromPreview(approval.displayPreview ?? {}).friendlyLabel}`,
           "",
           "a: 승인  x: 거절  Delete: 요청 취소",
           "투표 결과와 이유는 감사 기록에 남습니다.",
@@ -618,7 +622,7 @@ export function present(state: TuiState): {
       title: "Massion",
       list: "Application API에 연결하고 있습니다…",
       detail: state.error ?? "상태·Identity·협업 snapshot을 확인합니다.",
-      footer: "? 도움말  ·  Ctrl+C 종료",
+      footer: footerForView(state.view),
     };
   }
   const content =
@@ -639,6 +643,29 @@ export function present(state: TuiState): {
     navigation,
     title: `Massion · ${statusLabel(state.connection)} · ${snapshot.organization.organizationId}`,
     ...content,
-    footer: "Tab 뷰 전환  ·  n 새 작업  ·  m 메시지  ·  d 자세히  ·  / 검색  ·  j/k 이동  ·  r 새로고침  ·  ? 도움말  ·  Ctrl+C 종료",
+    footer: footerForView(state.view),
   };
+}
+// Guided Workspace: 화면마다 의미가 있는 단축키만 하단에 표시합니다.
+// 공통 핵심(↑↓ 이동 · n 새 작업 · ? 도움말 · Ctrl+C 종료)은 모든 화면에서 유지되어
+// 색상 없이도 키보드로 빠르게 작업 목록을 다룰 수 있습니다.
+const MOVE_HINT = "↑↓ 이동";
+
+function footerForView(view: TuiView): string {
+  switch (view) {
+    case "works":
+      return `${MOVE_HINT}  Enter 열기  d 자세히  n 새 작업  m 메시지  ? 도움말  Ctrl+C 종료`;
+    case "approvals":
+      return `${MOVE_HINT}  a 승인  x 거절  n 새 작업  ? 도움말  Ctrl+C 종료`;
+    case "chat":
+      return `${MOVE_HINT}  m 메시지  n 새 작업  ? 도움말  Ctrl+C 종료`;
+    case "agents":
+      return `${MOVE_HINT}  Enter 열기  n 새 작업  ? 도움말  Ctrl+C 종료`;
+    case "subscriptions":
+      return `←/→ 탭  ${MOVE_HINT}  n 새 작업  ? 도움말  Ctrl+C 종료`;
+    case "operations":
+      return `${MOVE_HINT}  n 새 작업  o 모델 평가실  ? 도움말  Ctrl+C 종료`;
+    default:
+      return `${MOVE_HINT}  n 새 작업  m 메시지  ? 도움말  Ctrl+C 종료`;
+  }
 }
