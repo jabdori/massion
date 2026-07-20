@@ -1,4 +1,6 @@
 import { Link, Outlet, useNavigate } from "@tanstack/react-router";
+
+import { CommandPalette } from "./CommandPalette.js";
 import { useEffect, useState } from "react";
 
 import { connectionFromStatus, useConsoleStatus, useQueryData, useQueryErrors, useSession } from "../hooks.js";
@@ -125,6 +127,7 @@ export function RootShell() {
             <span>{Object.values(queryErrors)[0]}</span>
           </div>
         ) : null}
+        <CommandPalette />
         <Outlet />
       </main>
       <div className="sr-only" role="status" aria-live="polite">

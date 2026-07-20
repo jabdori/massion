@@ -6,10 +6,10 @@ export default defineConfig({
   plugins: [react()],
   resolve: {
     alias: {
-      // 웹은 design-tokens만 필요합니다.
+      // 웹은 브라우저 안전 진입점만 사용합니다.
       // @massion/application의 barrel export가 서버 전용 패키지(surrealdb, tar 등)를
-      // 끌어들이는 것을 방지하기 위해 design-tokens 소스를 직접 가리킵니다.
-      "@massion/application": resolve(__dirname, "../../packages/application/src/design-tokens.ts"),
+      // 끌어들이는 것을 방지하기 위해 browser.ts 소스를 직접 가리킵니다.
+      "@massion/application": resolve(__dirname, "../../packages/application/src/browser.ts"),
     },
   },
   server: {
