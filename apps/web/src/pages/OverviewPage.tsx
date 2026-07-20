@@ -116,8 +116,12 @@ export default function OverviewPage() {
       <section className="quick-start">
         <form onSubmit={showPlanPreview}>
           <label htmlFor="work-request">새 업무 요청</label>
+          <span id="work-request-help" className="form-help">
+            한 문장으로 요청을 적어주세요. Massion이 내용을 정리하고 필요한 작업을 나눠 진행합니다.
+          </span>
           <textarea
             id="work-request"
+            aria-describedby="work-request-help"
             value={request}
             onChange={(event) => {
               setRequest(event.target.value);
