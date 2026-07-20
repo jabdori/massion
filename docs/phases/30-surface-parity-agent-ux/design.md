@@ -2,14 +2,14 @@
 
 > **상태**: in-progress
 > **결정일**: 2026-07-16
-> **기준 source commit**: `716fd08`
-> **구현 브랜치**: `feat/phase-30-parity-ux`
+> **기준 source commit**: `746c0d5`
+> **구현 브랜치**: `feat/phase-30-reconciled`
 
 ## 1. 문제와 판정
 
-현재 TUI와 Web Console은 같은 Application API를 사용하지만 동일한 제품 기능을 제공하지 않습니다. TUI에는 작업 배정, runtime 일시정지·재개·취소, 승인 취소가 있고 Web에는 접근 관리, 감사, 기억, 확장 설치와 OAuth가 있습니다. 양쪽 모두 새 업무와 협업방을 만드는 사용자 흐름이 없으며, 정상 순서의 실시간 사건이 현재 화면의 query를 갱신하지 않습니다.
+TUI와 Web Console은 공통 Application API를 쓰지만 전체 개인용 기능은 아직 동등하지 않습니다. 첫 세로 흐름의 두 화면 업무 생성은 구현·자동화 테스트로 고정됐고, 실제 local UAT는 Web에서 만든 Work의 Core Office 메시지가 TUI에 표시되고 TUI 응답이 Web에 반영되는 것을 확인했습니다. Provider가 없는 실제 local UAT에서는 Representative 실행이 `blocked_model_unavailable`으로 끝나는 것이 확인됐습니다.
 
-Web query cache는 operation만 결과 키로 사용해 서로 다른 payload의 결과를 같은 슬롯에 저장합니다. `/works/A`에서 `/works/B`로 이동할 때 A의 데이터가 B 화면에 남아 잘못된 업무를 취소할 수 있으므로 시각 개선보다 먼저 수정해야 하는 안전 결함입니다.
+현재 우선순위는 이 연결된 흐름을 기준으로 남은 capability 동등성과 Provider 성공 경로를 검증하는 것입니다. 이미 고친 resource identity와 늦은 협업 메시지 회귀는 계속 테스트로 유지합니다.
 
 Phase 30은 개인용 Core 범위의 모든 사용자 기능을 TUI와 Web 양쪽에 제공하고, 같은 command·query·권한·revision·결과·사건 계보를 검증합니다. 화면 배치는 환경에 맞게 달라도 기능과 의미는 같아야 합니다.
 

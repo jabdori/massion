@@ -16,5 +16,7 @@
 - 커밋 `f21cd21` 기준 개인용 artifact를 만들고, `node scripts/verify-release.mjs artifacts/release-1.0.0`의 종료 코드 0으로 SHA-256 확인, 설치, local runtime, 초기화, backup, 제거 후 data 보존을 확인했습니다.
 - 새 HOME의 tmux에서 `massion` onboarding → native sidecar → TUI `live`를 확인했습니다. 이어 `massion --web`으로 발급한 같은 Web session에서 복구, 초기 다섯 조회, 조직 일치, 로그아웃을 확인했고 모든 조회는 HTTP 200이었습니다.
 - 실제 Provider 계정 연결은 사용자 인증이 필요한 별도 UAT입니다. 이 기록은 local runtime 전환 범위만 완료로 판정합니다.
+- `faacebd`, `1bf60eb`, `746c0d5`에서 동시 `run.start` 투영, TUI Work·Room 선택, 늦은 협업 메시지 응답을 각각 회귀 테스트로 고정했습니다.
+- source commit `746c0d5` release artifact는 빈 환경 설치·초기화·backup·제거 후 data 보존 검증을 통과했습니다. 이어 실제 Web→TUI→Web 협업 메시지 흐름을 확인했습니다. 상세는 [업무 협업 UAT](../../evidence/phase-30/work-collaboration-local-uat-2026-07-20.md)에 기록합니다.
 
 다음 조각도 failing test → 최소 구현 → focused verification → 실제 사용자 흐름 → 작은 commit 순서로 기록합니다. Cloud, 모델 평가실, 추가 provider·레지스트리 범위는 이 사용자 흐름을 대체하지 않습니다.
