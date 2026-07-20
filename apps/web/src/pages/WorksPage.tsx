@@ -29,6 +29,7 @@ export default function WorksPage() {
         <EmptyState
           title="아직 작업이 없습니다"
           detail="홈에서 새 요청을 만들면 여기에 표시됩니다."
+          hint="예: '이번 주 회의 자료 정리해줘'처럼 한 문장으로 요청해보세요."
         />
       ) : (
         <>

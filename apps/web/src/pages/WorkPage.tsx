@@ -242,15 +242,15 @@ export default function WorkPage() {
         <div className="work-detail">
           <section className="work-status-band">
             <StatusStamp value={workStatus} />
-            <span>REV {label(work.revision)}</span>
-            <span>ARTIFACT {list(work.artifactIds).length}</span>
+            <span>버전 {label(work.revision)}</span>
+            <span>결과물 수 {list(work.artifactIds).length}</span>
             <code>{label(workId).slice(0, 12)}</code>
           </section>
           <div className="work-layout" style={{ marginTop: "16px" }}>
             <section className="ledger-panel">
               <div className="panel-title">
                 <div>
-                  <p className="eyebrow">TASK REGISTER</p>
+                  <p className="eyebrow">작업 현황</p>
                   <h2>작업과 배정</h2>
                 </div>
                 <span>{tasks.length}</span>
@@ -279,7 +279,7 @@ export default function WorkPage() {
               <section className="ledger-panel">
                 <div className="panel-title">
                   <div>
-                    <p className="eyebrow">COLLABORATION</p>
+                    <p className="eyebrow">협업 공간</p>
                     <h2>협업방</h2>
                   </div>
                 </div>

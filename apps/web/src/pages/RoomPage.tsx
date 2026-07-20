@@ -51,7 +51,7 @@ export default function RoomPage() {
   return (
     <>
       <PageHeader
-        index="COLLABORATION / ROOM"
+        index="협업방"
         title={label(room?.name, "협업방")}
         description="사용자와 여러 에이전트가 같은 사건 순서 위에서 동시에 대화합니다."
       />
