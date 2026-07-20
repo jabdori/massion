@@ -3,7 +3,7 @@
 > **상태**: in-progress
 > **시작일**: 2026-07-16
 > **최근 업데이트**: 2026-07-21
-> **기준 source commit**: `8424b45`
+> **기준 source commit**: `09bafc1`
 
 ## 디자인 방향 전환
 
@@ -30,6 +30,7 @@
 - ApprovalsPage 친화적 위험도/영향 표현 (risk-banner)
 - WorkPage 인라인 메시지 입력 (협업방 이동 없이 에이전트와 소통)
 - 모바일 반응형 디자인 (768px, 480px 브레이크포인트)
+- 접근성: ARIA progressbar, aria-label, aria-describedby, focus-visible, prefers-reduced-motion
 
 **TUI:**
 - Guided Workspace 2패널 레이아웃, 친화적 상태 라벨
@@ -43,26 +44,33 @@
 
 ### 실제 실행 검증
 
-- Z.AI GLM Coding Plan: 간단한 요청(Run completed) + 복잡한 요청(Python 코드 작성, evidence 통과→delivery→assurance 진행 확인)
+- Z.AI GLM Coding Plan 1차 (2026-07-20): 간단한 요청(completed) + 복잡한 요청(Python 코드 작성, delivery 시간 초과로 blocked)
+- Z.AI GLM Coding Plan 2차 (2026-07-21): 코드 작성 요청이 delivery 통과 → assurance(verifying) 도달, 산출물 2개 생성. 이전 제한 해결 확인.
 - 개인 local token 만료 복구: 60초 만료 뒤 재초기화 없이 복구 확인
 - Software Engineering 조직: Git fixture에서 백엔드 담당자 RED→GREEN 변경 + commit + 독립 Assurance 통과
+- Core Office 협업방: 9명 참가자(8개 에이전트 조직 + 사용자), handoff 정상 동작
 
 ## 근거
 
-- `8424b45`: 전체 패키지 린트 에러 해결 (software-assurance-recipe, core-evidence-stage, design-tokens.test)
+- `09bafc1`: Web 접근성 개선 (focus-visible 복원, aria-describedby)
+- `b56fa22`: ARIA 속성 추가 (progressbar, aria-label, aria-describedby)
+- `a0f5c77`: Phase 30 회고 최신화 (518 테스트 통과 기록)
+- `8424b45`: 전체 패키지 린트 에러 해결
 - `ee49474`: 모바일 반응형 디자인 (768px, 480px 브레이크포인트)
 - `e9c5131`: TUI 차단 상태 친화적 복구 안내 (Recovery Card)
 - `499ff60`: Guided Workspace 변경사항 린트 에러 수정
 - `1d4d4cc`: WorkPage 인라인 메시지 입력 추가
 - `064562e`: README Guided Workspace 용어 업데이트
 - `c6c7f5f`: TUI Tab 뷰 전환 추가
-- `0557486`: Guided Workspace works list, plan preview, approval risk expression 추가
-- `beaeabd`: TUI·Web Guided Workspace 재설계 (디자인 토큰, 4단계 진행 바, 친화적 라벨)
-- `f3b41a4`: Guided Workspace 디자인 토큰 및 UX Projection 계층 추가
-- 실제 화면 검증: [업무 협업 UAT](../../evidence/phase-30/work-collaboration-local-uat-2026-07-20.md)
-- Z.AI Coding Plan 검증: [Z.AI Coding Plan 검증](../../evidence/phase-30/zai-core-office-uat-2026-07-20.md)
+- `0557486`: Guided Workspace works list, plan preview, approval risk
+- `beaeabd`: TUI·Web Guided Workspace 재설계
+- `f3b41a4`: Guided Workspace 디자인 토큰 및 UX Projection 계층
+- [업무 협업 UAT](../../evidence/phase-30/work-collaboration-local-uat-2026-07-20.md)
+- [Z.AI Coding Plan 1차 UAT](../../evidence/phase-30/zai-core-office-uat-2026-07-20.md)
+- [GLM 도그푸딩 1차 UAT](../../evidence/phase-30/glm-dogfooding-uat-2026-07-20.md)
+- [GLM 도그푸딩 2차 UAT](../../evidence/phase-30/glm-dogfooding-uat-2026-07-21.md)
 
-## 품질 게이트 결과 (commit `8424b45` 기준)
+## 품질 게이트 결과 (commit `09bafc1` 기준)
 
 - **ESLint**: 0 에러 (application, web, tui, cli 전체)
 - **TypeScript**: 4개 패키지(application, web, tui, cli) typecheck 통과
@@ -76,5 +84,5 @@
 
 - 복수 Provider 계정 quota·fallback 검증 (단일 GLM 계정만 검증됨) — 사용자 계정 필요
 - Claude 소비자 구독 실계정 UAT — 브라우저 OAuth 로그인 필요
-- 접근성 parity UAT 최종 확인
+- 접근성 parity UAT 최종 확인 (접근성 코드 구현은 완료, 화면 리더 실측 필요)
 - 위 항목이 끝나기 전에는 Phase 30을 completed로 변경하지 않습니다.
