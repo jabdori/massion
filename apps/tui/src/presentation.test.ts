@@ -29,6 +29,16 @@ describe("TUI presentation", () => {
     expect(present(state).list).toContain("자동 반영 정책");
   });
 
+  it("업무가 비어 있으면 외부 명령 대신 TUI 안의 새 업무 동작을 안내한다", () => {
+    const empty = decodeSnapshot({ ...testSnapshot, works: [], tasks: [], assignments: [], executions: [], rooms: [] });
+    let state = reduceTuiState(createTuiState(), { type: "snapshot.loaded", snapshot: empty });
+    state = reduceTuiState(state, { type: "view.selected", view: "works" });
+
+    const output = present(state);
+    expect(output.list).toContain("n 키");
+    expect(output.list).not.toContain("massion run");
+  });
+
   it("승인 상세에 실행 파일·비밀 제거 인수·작업 경로와 제공자 이유를 표시한다", () => {
     let state = reduceTuiState(createTuiState(), { type: "snapshot.loaded", snapshot: decodeSnapshot(testSnapshot) });
     state = reduceTuiState(state, { type: "view.selected", view: "approvals" });

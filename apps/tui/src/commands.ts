@@ -30,6 +30,10 @@ export class TuiCommands {
     private readonly userId: () => string,
   ) {}
 
+  public async startRun(text: string): Promise<unknown> {
+    return await this.send("run.start", "run.start", { request: { text, surface: "tui" } });
+  }
+
   public async postMessage(input: {
     readonly workId: string;
     readonly roomId: string;

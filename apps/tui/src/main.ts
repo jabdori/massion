@@ -185,6 +185,7 @@ export async function runTui(
       state: getState,
       dispatch,
       refresh,
+      startWork: async (text) => await commands.startRun(text),
       postMessage: async (content) => {
         const { workId, roomId } = state.selection;
         if (!workId || !roomId) throw new Error("메시지를 보낼 협업방이 선택되지 않았습니다");

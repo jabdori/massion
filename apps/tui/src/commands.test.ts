@@ -3,6 +3,22 @@ import { describe, expect, it } from "vitest";
 import { TuiCommands } from "./commands.js";
 
 describe("TUI command", () => {
+  it("새 업무 요청을 TUI surface가 담긴 Application command로 전송한다", async () => {
+    const sent: unknown[] = [];
+    const commands = new TuiCommands(
+      { command: (value) => (sent.push(value), Promise.resolve(value)) },
+      () => "user-1",
+    );
+
+    await commands.startRun("릴리스 준비 상태를 점검해 주세요");
+
+    expect(sent[0]).toMatchObject({
+      schemaVersion: "massion.application.v1",
+      operation: "run.start",
+      payload: { request: { text: "릴리스 준비 상태를 점검해 주세요", surface: "tui" } },
+    });
+  });
+
   it("메시지를 인증된 Application command로만 전송한다", async () => {
     const sent: unknown[] = [];
     const commands = new TuiCommands(

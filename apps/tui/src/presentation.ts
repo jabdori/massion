@@ -142,7 +142,7 @@ function works(state: TuiState, snapshot: CollaborationGraphSnapshot): { list: s
               `${item.workId === work?.workId ? "›" : " "} ${statusMark(item.status)} 업무 ${item.workId} · ${item.status} · r${String(item.revision)}`,
           )
           .join("\n")
-      : "아직 업무가 없습니다. `massion run`으로 첫 업무를 시작할 수 있습니다.",
+      : "아직 업무가 없습니다. n 키를 눌러 첫 업무를 시작해 주세요.",
     detail: work
       ? [
           `업무 ${work.workId}`,
@@ -165,7 +165,7 @@ function works(state: TuiState, snapshot: CollaborationGraphSnapshot): { list: s
               )
             : ["없음"]),
           "",
-          "d: 업무 취소  s: 실행 일시정지/재개",
+          "n: 새 업무  d: 업무 취소  s: 실행 일시정지/재개",
         ].join("\n")
       : "선택할 업무가 없습니다.",
   };
@@ -557,6 +557,6 @@ export function present(state: TuiState): {
     navigation,
     title: `Massion AgentOS · ${snapshot.organization.organizationId} · ${statusMark(state.connection)} ${state.connection}`,
     ...content,
-    footer: "1–7 화면  j/k 이동  r 새로고침  / 검색  ? 도움말  Ctrl+C 종료",
+    footer: "1–7 화면  n 새 업무  j/k 이동  r 새로고침  / 검색  ? 도움말  Ctrl+C 종료",
   };
 }

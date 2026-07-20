@@ -40,6 +40,10 @@ const QUERY_OPERATIONS = new Set([
   "optimization.batch.active",
 ]);
 
+function refreshesSnapshot(type: string): boolean {
+  return type.startsWith("work.") || type.startsWith("collaboration.");
+}
+
 function identity(input: unknown): TuiIdentity {
   if (!input || typeof input !== "object" || Array.isArray(input))
     throw new Error("TUI Identity 응답이 유효하지 않습니다");
@@ -104,9 +108,13 @@ export class TuiController {
         }
         for await (const input of this.client.streamEvents(this.state().cursor, signal)) {
           if (stopped()) break;
-          this.dispatch({ type: "event.received", event: decodeEvent(input) });
+          const event = decodeEvent(input);
+          this.dispatch({ type: "event.received", event });
           if (this.state().needsResync) await this.refresh();
-          else this.dispatch({ type: "connection.changed", connection: "live" });
+          else if (refreshesSnapshot(event.type)) {
+            await this.refresh();
+            await this.refreshCurrentChatMessages();
+          } else this.dispatch({ type: "connection.changed", connection: "live" });
           failures = 0;
         }
         if (stopped()) break;
@@ -139,6 +147,14 @@ export class TuiController {
   public async query(operation: string, payload: unknown): Promise<unknown> {
     if (!QUERY_OPERATIONS.has(operation)) throw new Error("TUI에서 허용되지 않은 query operation입니다");
     return decodeQueryResult(await this.client.query(operation, payload), operation);
+  }
+
+  private async refreshCurrentChatMessages(): Promise<void> {
+    const state = this.state();
+    const { workId, roomId } = state.selection;
+    if (state.view !== "chat" || !workId || !roomId) return;
+    const messages = await this.query("work.messages", { workId, roomId });
+    this.dispatch({ type: "query.loaded", key: "messages", value: messages });
   }
 }
 

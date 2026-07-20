@@ -45,6 +45,7 @@ describe("OpenTUI 실제 renderer", () => {
       state: () => state,
       dispatch: () => undefined,
       refresh: () => Promise.resolve(),
+      startWork: () => Promise.resolve(),
       postMessage: () => Promise.resolve(),
       vote: () => Promise.resolve(),
       cancelApproval: () => Promise.resolve(),
@@ -72,6 +73,7 @@ describe("OpenTUI 실제 renderer", () => {
       state: () => state,
       dispatch: () => undefined,
       refresh: () => Promise.resolve(),
+      startWork: () => Promise.resolve(),
       postMessage: () => Promise.resolve(),
       vote: () => Promise.resolve(),
       cancelApproval: () => Promise.resolve(),
@@ -103,6 +105,7 @@ describe("OpenTUI 실제 renderer", () => {
         state = reduceTuiState(state, action);
       },
       refresh: () => Promise.resolve(),
+      startWork: () => Promise.resolve(),
       postMessage: () => Promise.resolve(),
       vote: () => Promise.resolve(),
       cancelApproval: () => Promise.resolve(),
@@ -157,6 +160,58 @@ describe("OpenTUI 실제 renderer", () => {
     expect(setup.captureCharFrame()).not.toContain("협업방에 메시지 보내기");
   });
 
+  test("새 업무 단축키는 빈 입력을 보내지 않고 성공하면 업무 화면을 선택한다", async () => {
+    setup = await createTestRenderer({ width: 120, height: 40 });
+    let state = reduceTuiState(createTuiState(), {
+      type: "snapshot.loaded",
+      snapshot: decodeSnapshot(testSnapshot),
+    });
+    const started: string[] = [];
+    const loaded: string[] = [];
+    const view = new OpenTuiView(setup.renderer, {
+      state: () => state,
+      dispatch: (action) => {
+        state = reduceTuiState(state, action);
+      },
+      refresh: () => Promise.resolve(),
+      startWork: (text) => (started.push(text), Promise.resolve()),
+      postMessage: () => Promise.resolve(),
+      vote: () => Promise.resolve(),
+      cancelApproval: () => Promise.resolve(),
+      cancelWork: () => Promise.resolve(),
+      assignTask: () => Promise.resolve(),
+      controlExecution: () => Promise.resolve(),
+      shareSubscriptionAccount: () => Promise.resolve(),
+      unshareSubscriptionAccount: () => Promise.resolve(),
+      disconnectSubscriptionAccount: () => Promise.resolve(),
+      loadView: (selected) => (loaded.push(selected), Promise.resolve()),
+      destroy: () => setup?.renderer.destroy(),
+    });
+    view.render();
+
+    emitKey("n");
+    await setup.renderOnce();
+    expect(setup.captureCharFrame()).toContain("새 업무 시작");
+
+    let input = setup.renderer.root.findDescendantById("modal-input") as InputRenderable;
+    input.value = "   ";
+    input.submit();
+    await Bun.sleep(0);
+    expect(started).toEqual([]);
+    expect(setup.captureCharFrame()).toContain("업무 내용을 입력해 주세요");
+
+    input = setup.renderer.root.findDescendantById("modal-input") as InputRenderable;
+    input.value = "릴리스 준비 상태를 점검해 주세요";
+    input.submit();
+    await Bun.sleep(0);
+    await setup.renderOnce();
+
+    expect(started).toEqual(["릴리스 준비 상태를 점검해 주세요"]);
+    expect(loaded).toEqual(["works"]);
+    expect(state.view).toBe("works");
+    expect(setup.captureCharFrame()).toContain("새 업무 요청을 시작했습니다");
+  });
+
   test("구독 계정을 80×24에서 선택하고 공유·공유 해제·연결 해제를 각각 확인한 뒤 실행한다", async () => {
     setup = await createTestRenderer({ width: 80, height: 24 });
     let state = reduceTuiState(createTuiState(), {
@@ -191,6 +246,7 @@ describe("OpenTUI 실제 renderer", () => {
         state = reduceTuiState(state, action);
       },
       refresh: () => Promise.resolve(),
+      startWork: () => Promise.resolve(),
       postMessage: () => Promise.resolve(),
       vote: () => Promise.resolve(),
       cancelApproval: () => Promise.resolve(),
@@ -295,6 +351,7 @@ describe("OpenTUI 실제 renderer", () => {
         state = reduceTuiState(state, action);
       },
       refresh: () => Promise.resolve(),
+      startWork: () => Promise.resolve(),
       postMessage: () => Promise.resolve(),
       vote: () => Promise.resolve(),
       cancelApproval: () => Promise.resolve(),
@@ -360,6 +417,7 @@ describe("OpenTUI 실제 renderer", () => {
         state = reduceTuiState(state, action);
       },
       refresh: () => Promise.resolve(),
+      startWork: () => Promise.resolve(),
       postMessage: () => Promise.resolve(),
       vote: () => Promise.resolve(),
       cancelApproval: () => Promise.resolve(),
@@ -394,6 +452,7 @@ describe("OpenTUI 실제 renderer", () => {
         state = reduceTuiState(state, action);
       },
       refresh: () => Promise.resolve(),
+      startWork: () => Promise.resolve(),
       postMessage: () => Promise.resolve(),
       vote: () => Promise.resolve(),
       cancelApproval: () => Promise.resolve(),
