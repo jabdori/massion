@@ -268,9 +268,15 @@ describe("Massion server product", () => {
             };
           }
         | undefined;
-      for (let attempt = 0; attempt < 100; attempt += 1) {
+      for (let attempt = 0; attempt < 300; attempt += 1) {
         snapshot = (await client.snapshot()) as typeof snapshot;
-        if ((snapshot?.data?.executions?.length ?? 0) > 0) break;
+        if (
+          snapshot?.data?.executions?.some(
+            (execution) =>
+              execution.agentHandle === "representative" && execution.status === "blocked_model_unavailable",
+          )
+        )
+          break;
         await new Promise((resolve) => setTimeout(resolve, 10));
       }
       expect(snapshot?.data?.works).toEqual([expect.objectContaining({ status: "draft" })]);
