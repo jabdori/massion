@@ -55,12 +55,7 @@ async function loadView(
   const snapshot = state().snapshot;
   if (!snapshot) return;
   if (view === "chat") {
-    const workId = state().selection.workId;
-    const roomId = state().selection.roomId;
-    if (workId && roomId) {
-      const messages = await controller.query("work.messages", { workId, roomId });
-      dispatch({ type: "query.loaded", key: "messages", value: messages });
-    }
+    await controller.refreshCurrentChatMessages();
     return;
   }
   if (view === "approvals") {

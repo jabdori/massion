@@ -165,10 +165,16 @@ describe("TUI wire와 상태", () => {
       ],
     });
     let state = reduceTuiState(createTuiState(), { type: "snapshot.loaded", snapshot: multipleWorks });
+    state = reduceTuiState(state, {
+      type: "query.loaded",
+      key: "messages",
+      value: [{ messageId: "message-1", content: "첫 번째 업무의 메시지" }],
+    });
 
     state = reduceTuiState(state, { type: "selection.changed", selection: { workId: "work-2" } });
 
     expect(state.selection).toMatchObject({ workId: "work-2", roomId: "room-2" });
+    expect(state.queryResults.messages).toBeUndefined();
   });
 
   it("event cursor를 단조 증가시키고 순서 gap은 snapshot 재동기화를 요구한다", () => {

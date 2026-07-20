@@ -149,12 +149,14 @@ export class TuiController {
     return decodeQueryResult(await this.client.query(operation, payload), operation);
   }
 
-  private async refreshCurrentChatMessages(): Promise<void> {
+  public async refreshCurrentChatMessages(): Promise<void> {
     const state = this.state();
     const { workId, roomId } = state.selection;
     if (state.view !== "chat" || !workId || !roomId) return;
     const messages = await this.query("work.messages", { workId, roomId });
-    this.dispatch({ type: "query.loaded", key: "messages", value: messages });
+    const current = this.state().selection;
+    if (current.workId !== workId || current.roomId !== roomId) return;
+    this.dispatch({ type: "messages.loaded", workId, roomId, value: messages });
   }
 }
 
