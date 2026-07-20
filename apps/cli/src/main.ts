@@ -11,8 +11,9 @@ import { ApplicationHttpClient, ApplicationRemoteError } from "@massion/applicat
 import { executeCliInvocation } from "./commands.js";
 import { CliConfigStore } from "./config.js";
 import { processJsonLines, writeWithBackpressure } from "./jsonl.js";
-import { initializeCli } from "./init.js";
+import { initializeCli, replaceCliFileToken } from "./init.js";
 import { LocalDaemonManager, resolveLocalPaths } from "./local.js";
+import { ensurePersonalLoopbackAccess } from "./local-access.js";
 import { defaultLocalEndpoint, ensureLocalEndpoint } from "./local-entrypoint.js";
 import { CliInformationalOutput, parseCliArguments, type CliInvocation } from "./parser.js";
 import { renderCliOutput } from "./render.js";
@@ -31,7 +32,10 @@ export async function resolveProviderLoginOnboarding(invocation: CliInvocation):
   if (invocation.output !== "human" || !process.stdin.isTTY || !process.stdout.isTTY) {
     throw new Error("사용법: massion auth login [providerId] (대화형 Provider 온보딩은 터미널에서 실행하세요)");
   }
-  const answers = await collectProviderOnboardingAnswers(listLocalSubscriptionLoginProviders());
+  const answers = await collectProviderOnboardingAnswers([
+    ...listLocalSubscriptionLoginProviders(),
+    { providerId: "zai-coding-plan", displayName: "Z.AI GLM Coding Plan" },
+  ]);
   return { ...invocation, arguments: [answers.providerId] };
 }
 
@@ -93,6 +97,25 @@ function exitCode(error: unknown): number {
   return 2;
 }
 
+async function resolveProfileAccess(profile: { readonly endpoint: string; readonly tokenReference: string }): Promise<string> {
+  const token = await resolveTokenReference(profile.tokenReference);
+  return await ensurePersonalLoopbackAccess({
+    endpoint: profile.endpoint,
+    tokenReference: profile.tokenReference,
+    token,
+    verify: async (candidate) => {
+      await new ApplicationHttpClient({ baseUrl: profile.endpoint, token: candidate }).status();
+    },
+    refresh: async (candidate) =>
+      (
+        await ApplicationHttpClient.refreshLocalAccess(profile.endpoint, candidate, {
+          commandId: randomUUID(),
+        })
+      ).token,
+    replace: replaceCliFileToken,
+  });
+}
+
 export async function runCli(argv = process.argv.slice(2)): Promise<number> {
   try {
     const invocation = parseCliArguments(argv);
@@ -117,7 +140,7 @@ export async function runCli(argv = process.argv.slice(2)): Promise<number> {
       const profile = config.profiles[config.selectedProfile];
       if (!profile) throw new Error("선택된 CLI profile이 없습니다. 먼저 massion init을 실행해 주세요");
       await ensureLocalEndpoint(profile.endpoint, { start: async () => await new LocalDaemonManager().start() });
-      const token = await resolveTokenReference(profile.tokenReference);
+      const token = await resolveProfileAccess(profile);
       const web = await openWebConsole({ endpoint: profile.endpoint, token });
       process.stdout.write(
         `Web Console: ${web.url}\n일회성 로그인 코드(5분): ${web.code}\n만료 시각: ${web.expiresAt}\n`,
@@ -197,7 +220,7 @@ export async function runCli(argv = process.argv.slice(2)): Promise<number> {
     const profileName = invocation.profile ?? config.selectedProfile;
     const profile = config.profiles[profileName];
     if (!profile) throw new Error(`CLI profile을 찾을 수 없습니다: ${profileName}`);
-    const token = await resolveTokenReference(profile.tokenReference);
+    const token = await resolveProfileAccess(profile);
     const authenticated = new ApplicationHttpClient({ baseUrl: profile.endpoint, token });
     if (invocation.command === "run" && invocation.output === "jsonl") {
       await processJsonLines(
@@ -264,6 +287,7 @@ export async function runCli(argv = process.argv.slice(2)): Promise<number> {
     }
     const effectiveInvocation = await resolveProviderLoginOnboarding(invocation);
     const value = await executeCliInvocation(authenticated, effectiveInvocation, {
+      environment: process.env,
       readJson: async () => JSON.parse((await readStdin()).toString("utf8")) as unknown,
       readArtifact: async (path) => {
         const archive = await readFile(path);

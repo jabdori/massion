@@ -14,6 +14,7 @@ export * from "./core-product.js";
 export * from "./core-evidence-stage.js";
 export * from "./core-delivery-stage.js";
 export * from "./core-assurance-stage.js";
+export * from "./software-assurance-recipe.js";
 export * from "./core-records-stage.js";
 export * from "./core-software-task.js";
 export * from "./errors.js";

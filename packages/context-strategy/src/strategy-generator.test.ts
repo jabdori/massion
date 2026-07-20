@@ -24,9 +24,9 @@ const VALID_STRATEGY_PLAN: StrategyPlan = {
   acceptanceCriteria: [
     {
       key: "criterion-tests",
-      statement: "테스트가 통과한다",
-      method: "test",
-      evidenceKinds: ["test-report"],
+      statement: "산출물이 생성된다",
+      method: "evidence",
+      evidenceKinds: ["artifact-version"],
       planLevel: false,
     },
   ],
@@ -35,7 +35,7 @@ const VALID_STRATEGY_PLAN: StrategyPlan = {
     {
       key: "verify",
       title: "검증",
-      objective: "테스트를 실행한다",
+      objective: "산출물을 생성한다",
       criterionKeys: ["criterion-tests"],
       dependencyKeys: [],
       requiredCapabilities: ["testing"],
@@ -155,6 +155,150 @@ describe("Strategy Generator", () => {
     expect(executeStructured).toHaveBeenCalledWith(
       context,
       expect.objectContaining({ modelRoute: "local-private" }),
+      expect.any(Object),
+    );
+  });
+
+  it("자동 Core Office 계획은 자동 검증 가능한 산출물 증거만 허용한다", async () => {
+    const version = await contextVersion();
+    const nonAutomaticPlan: StrategyPlan = {
+      ...VALID_STRATEGY_PLAN,
+      acceptanceCriteria: [
+        {
+          key: "criterion-tests",
+          statement: "기록을 검사한다",
+          method: "inspection",
+          evidenceKinds: ["text-record"],
+          planLevel: false,
+        },
+      ],
+    };
+    const executeStructured = vi.fn().mockResolvedValue({
+      executionId: "execution-non-automatic",
+      status: "succeeded",
+      output: nonAutomaticPlan,
+    });
+    const generator = await StrategyGenerator.create(
+      database,
+      organizations,
+      { executeStructured },
+      contextStore,
+      work,
+    );
+
+    const generated = await generator.generate(context, {
+      commandId: crypto.randomUUID(),
+      workId,
+      expectedWorkRevision: 1,
+      contextVersionId: version.contextVersionId,
+    });
+
+    expect(generated.status).toBe("failed");
+    const output = executeStructured.mock.calls[0]?.[2];
+    expect(output?.validate?.(nonAutomaticPlan)).toMatchObject({ success: false });
+  });
+
+  it("자동 Core Office 계획은 실제 Core Office 담당자만 Task에 추천한다", async () => {
+    const version = await contextVersion();
+    const unknownAgentPlan: StrategyPlan = {
+      ...VALID_STRATEGY_PLAN,
+      tasks: [
+        {
+          key: "verify",
+          title: "검증",
+          objective: "산출물을 생성한다",
+          criterionKeys: ["criterion-tests"],
+          dependencyKeys: [],
+          requiredCapabilities: ["testing"],
+          recommendedAgentHandles: ["zai-agent"],
+          parallelizable: false,
+        },
+      ],
+    };
+    const executeStructured = vi.fn().mockResolvedValue({
+      executionId: "execution-unknown-agent",
+      status: "succeeded",
+      output: unknownAgentPlan,
+    });
+    const generator = await StrategyGenerator.create(
+      database,
+      organizations,
+      { executeStructured },
+      contextStore,
+      work,
+    );
+
+    const generated = await generator.generate(context, {
+      commandId: crypto.randomUUID(),
+      workId,
+      expectedWorkRevision: 1,
+      contextVersionId: version.contextVersionId,
+    });
+
+    expect(generated.status).toBe("failed");
+    const output = executeStructured.mock.calls[0]?.[2];
+    expect(output?.validate?.(unknownAgentPlan)).toMatchObject({ success: false });
+  });
+
+  it("활성 Software Engineering 전문 담당자를 자동 계획에 추천할 수 있다", async () => {
+    const version = await contextVersion();
+    const softwarePlan: StrategyPlan = {
+      ...VALID_STRATEGY_PLAN,
+      tasks: [
+        {
+          key: "implement-backend-change",
+          title: "Backend 변경 구현",
+          objective: "테스트 우선으로 작은 Backend 변경을 구현한다",
+          criterionKeys: ["criterion-tests"],
+          dependencyKeys: [],
+          requiredCapabilities: ["backend-engineering"],
+          recommendedAgentHandles: ["software-engineering.backend-specialist"],
+          parallelizable: false,
+        },
+      ],
+    };
+    const executeStructured = vi.fn().mockResolvedValue({
+      executionId: "execution-software-specialist",
+      status: "succeeded",
+      output: softwarePlan,
+    });
+    const generator = await StrategyGenerator.create(
+      database,
+      organizations,
+      { executeStructured },
+      contextStore,
+      work,
+      {
+        listNodes: async () => [
+          {
+            handle: "software-engineering.backend-specialist",
+            status: "active",
+            capabilities: ["backend-engineering"],
+          },
+        ],
+      } as never,
+    );
+
+    await expect(
+      generator.generate(context, {
+        commandId: crypto.randomUUID(),
+        workId,
+        expectedWorkRevision: 1,
+        contextVersionId: version.contextVersionId,
+      }),
+    ).resolves.toMatchObject({ status: "generated", plan: softwarePlan });
+    expect(executeStructured).toHaveBeenCalledWith(
+      context,
+      expect.objectContaining({
+        input: expect.objectContaining({
+          availableAgents: [
+            expect.objectContaining({
+              handle: "software-engineering.backend-specialist",
+              capabilities: ["backend-engineering"],
+            }),
+          ],
+        }),
+      }),
       expect.any(Object),
     );
   });

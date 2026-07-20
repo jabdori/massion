@@ -219,6 +219,7 @@ export class SoftwareDeliveryFinalizer {
         green: delivery.greenEvidenceId,
         validations: delivery.validationEvidenceIds,
       },
+      ...(delivery.assuranceRecipe ? { assuranceRecipe: delivery.assuranceRecipe } : {}),
       files: changes.map((change) => ({
         relativePath: change.relativePath,
         kind: change.kind,

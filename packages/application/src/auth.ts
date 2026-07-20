@@ -211,6 +211,29 @@ export class ApplicationAccessTokenService {
     audience: string,
     requiredScopes: readonly string[],
   ): Promise<AuthenticatedApplicationAccess> {
+    return await this.access(await this.verifiedRecord(authorization), audience, requiredScopes);
+  }
+
+  /**
+   * 개인 loopback HTTP 경계에서만 호출하는 만료 token 교체용 경로입니다.
+   * 원래 token의 원문 hash·audience·권한·폐기 상태는 그대로 검증합니다.
+   */
+  public async refreshLocalAccess(
+    authorization: string | undefined,
+    audience: string,
+    requiredScopes: readonly string[],
+    input: { readonly commandId: string },
+  ): Promise<IssuedApplicationToken> {
+    const access = await this.access(await this.verifiedRecord(authorization), audience, requiredScopes, true);
+    return await this.issue(access.context, {
+      commandId: input.commandId,
+      audience,
+      scopes: access.scopes,
+      ttlSeconds: 3_600,
+    });
+  }
+
+  private async verifiedRecord(authorization: string | undefined): Promise<TokenRecord> {
     const match = authorization?.match(/^Bearer ([^ ]+)$/u);
     if (!match?.[1]) throw new Error("Authorization Bearer header가 필요합니다");
     const tokenMatch = match[1].match(TOKEN);
@@ -223,7 +246,7 @@ export class ApplicationAccessTokenService {
     if (!record || record.key_id !== this.keyId || !this.matches(match[1], record.token_hash)) {
       throw new Error("Application access token이 유효하지 않습니다");
     }
-    return await this.access(record, audience, requiredScopes);
+    return record;
   }
 
   public async authenticateTokenId(
@@ -245,10 +268,11 @@ export class ApplicationAccessTokenService {
     record: TokenRecord,
     audience: string,
     requiredScopes: readonly string[],
+    allowExpired = false,
   ): Promise<AuthenticatedApplicationAccess> {
     if (record.audience !== audience) throw new Error("Application access token audience가 일치하지 않습니다");
     if (record.revoked_at !== undefined) throw new Error("Application access token이 폐기됐습니다");
-    if (new Date(dateText(record.expires_at)).getTime() <= this.clock.now.getTime()) {
+    if (!allowExpired && new Date(dateText(record.expires_at)).getTime() <= this.clock.now.getTime()) {
       throw new Error("Application access token이 만료됐습니다");
     }
     if (!record.scopes.includes("application:*") && requiredScopes.some((scope) => !record.scopes.includes(scope))) {

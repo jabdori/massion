@@ -502,6 +502,34 @@ describe("CLI Application adapter", () => {
     ).rejects.toThrow(/stdin|명령행|argv/u);
   });
 
+  it("subscription connect-model은 Z.AI Coding Plan 키를 OpenAI 호환 model 연결로 전달한다", async () => {
+    const secret = "zai-cli-secret-never-returned";
+    const connectServerModelSubscription = vi.fn().mockResolvedValue({ status: "active" });
+    const client: CliApplicationClient = {
+      status: async () => ({}),
+      snapshot: async () => ({}),
+      query: async () => ({}),
+      command: async () => ({}),
+      inspectArtifact: async () => ({}),
+      installArtifact: async () => ({}),
+      updateArtifact: async () => ({}),
+    };
+
+    await executeCliInvocation(client, parseCliArguments(["subscription", "connect-model", "zai-coding-plan"]), {
+      readJson: async () => ({ secret, alias: "개인 Z.AI" }),
+      connectServerModelSubscription,
+    });
+
+    expect(connectServerModelSubscription).toHaveBeenCalledWith({
+      providerId: "zai-coding-plan",
+      alias: "개인 Z.AI",
+      authKind: "api-key",
+      billingKind: "coding-plan",
+      secret,
+    });
+    expect(JSON.stringify(await Promise.resolve({ status: "active" }))).not.toContain(secret);
+  });
+
   it("auth login은 같은 로컬 구독 로그인 adapter를 사용한다", async () => {
     const connectServerSubscription = vi.fn(async () => ({ status: "ready" }));
     const client: CliApplicationClient = {
@@ -520,6 +548,74 @@ describe("CLI Application adapter", () => {
       }),
     ).resolves.toEqual({ status: "ready" });
     expect(connectServerSubscription).toHaveBeenCalledWith({ providerId: "openai-codex" });
+  });
+
+  it("auth login zai-coding-plan은 현재 셸의 Z_AI_API_KEY를 직접 model 연결에만 전달한다", async () => {
+    const secret = "zai-environment-secret-never-returned";
+    const connectServerModelSubscription = vi.fn().mockResolvedValue({ status: "active" });
+    const client: CliApplicationClient = {
+      status: async () => ({}),
+      snapshot: async () => ({}),
+      query: async () => ({}),
+      command: async () => ({}),
+      inspectArtifact: async () => ({}),
+      installArtifact: async () => ({}),
+      updateArtifact: async () => ({}),
+    };
+
+    const result = await executeCliInvocation(client, parseCliArguments(["auth", "login", "zai-coding-plan"]), {
+      environment: { Z_AI_API_KEY: secret },
+      connectServerModelSubscription,
+    });
+
+    expect(connectServerModelSubscription).toHaveBeenCalledWith({
+      providerId: "zai-coding-plan",
+      alias: "Z.AI GLM Coding Plan",
+      authKind: "api-key",
+      billingKind: "coding-plan",
+      secret,
+    });
+    expect(JSON.stringify(result)).not.toContain(secret);
+  });
+
+  it("auth login zai-coding-plan은 현재 GLM-5.2만 명시적으로 허용한다", async () => {
+    const connectServerModelSubscription = vi.fn().mockResolvedValue({ status: "active" });
+    const client: CliApplicationClient = {
+      status: async () => ({}),
+      snapshot: async () => ({}),
+      query: async () => ({}),
+      command: async () => ({}),
+      inspectArtifact: async () => ({}),
+      installArtifact: async () => ({}),
+      updateArtifact: async () => ({}),
+    };
+    const input = { environment: { Z_AI_API_KEY: "zai-environment-secret-never-returned" }, connectServerModelSubscription };
+
+    await expect(
+      executeCliInvocation(client, parseCliArguments(["auth", "login", "zai-coding-plan", "--model", "glm-5.2"]), input),
+    ).resolves.toMatchObject({ status: "active" });
+    await expect(
+      executeCliInvocation(client, parseCliArguments(["auth", "login", "zai-coding-plan", "--model", "glm-5.1"]), input),
+    ).rejects.toThrow("glm-5.2");
+  });
+
+  it("auth login zai-coding-plan은 셸 키가 없으면 대화형 입력이나 argv 전송 없이 중단한다", async () => {
+    const client: CliApplicationClient = {
+      status: async () => ({}),
+      snapshot: async () => ({}),
+      query: async () => ({}),
+      command: async () => ({}),
+      inspectArtifact: async () => ({}),
+      installArtifact: async () => ({}),
+      updateArtifact: async () => ({}),
+    };
+
+    await expect(
+      executeCliInvocation(client, parseCliArguments(["auth", "login", "zai-coding-plan"]), {
+        environment: {},
+        connectServerModelSubscription: vi.fn(),
+      }),
+    ).rejects.toThrow("Z_AI_API_KEY");
   });
 
   it("subscription share 승인 재개는 approval ID와 원래 command ID를 함께 보존한다", async () => {

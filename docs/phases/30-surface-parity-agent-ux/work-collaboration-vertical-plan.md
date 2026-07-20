@@ -29,9 +29,18 @@
   - Web에서 만든 Work와 두 메시지는 TUI에서 그 Work를 선택한 뒤 `r` 없이 대화 화면을 처음 열었을 때 표시됐습니다. TUI에서 보낸 다음 메시지도 Web에 실시간 반영됐습니다.
   - 모델 경로가 없는 환경은 예상대로 `blocked_model_unavailable`으로 끝났습니다.
 
-- [ ] **Provider 연결 실제 검증**
-  - Provider 인증이 필요한 Representative 성공과 Context & Strategy handoff는 사용자 계정 인증 뒤 별도 UAT로 확인합니다.
-  - 전체 capability 동등성은 이 세로 흐름과 별도로 남아 있습니다.
+- [x] **Z.AI Provider 연결과 실제 Core 실행 검증**
+  - `zai-coding-plan` 연결, `glm-5.2` route 조립, JSON object 전환과 Core 완료 경로를 계약 테스트와 실제 계정 실행으로 확인했습니다. 근거는 [Z.AI Coding Plan 검증](../../evidence/phase-30/zai-core-office-uat-2026-07-20.md)에 있습니다.
+
+- [x] **개인 local profile 만료 복구**
+  - 만료된 0600 file token은 loopback application server에서만 같은 권한의 새 token으로 교체하고, CLI가 재초기화 없이 계속 실행됩니다. 근거는 [local access token UAT](../../evidence/phase-30/local-access-refresh-uat-2026-07-20.md)에 있습니다.
+
+- [x] **Software Engineering 실제 전달 경로**
+  - 설치된 전문 조직의 담당자를 계획에 추천하고, 실제 Git fixture에서 RED→GREEN 변경·commit·독립 Assurance를 완료하는 서버 제품 테스트를 고정했습니다.
+  - 원본 Repository는 변경하지 않는 것을 함께 확인했습니다.
+
+- [ ] **복수 Provider 계정 정책 검증**
+  - 계정별 quota, 복수 계정 순환과 Provider 간 fallback을 실제 계정으로 확인합니다.
 
 ## 작업 단위
 

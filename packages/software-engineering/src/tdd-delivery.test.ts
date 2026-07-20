@@ -223,6 +223,32 @@ describe("test-first Engineering Delivery engine", { timeout: 60_000 }, () => {
       implementationPatchHash: expect.stringMatching(/^[a-f0-9]{64}$/u),
     });
     expect(result.delivery.validationEvidenceIds).toHaveLength(2);
+    expect(result.delivery.assuranceRecipe).toEqual({
+      schemaVersion: "massion.software-assurance-recipe.v1",
+      focusedCommand: {
+        executable: "node",
+        args: ["src/value.test.mjs"],
+        cwd: ".",
+        timeoutMs: 1_000,
+        maxOutputBytes: 8_192,
+      },
+      validationCommands: [
+        {
+          executable: "node",
+          args: ["-e", "if (1 + 1 !== 2) process.exit(1)"],
+          cwd: ".",
+          timeoutMs: 1_000,
+          maxOutputBytes: 2_048,
+        },
+        {
+          executable: "node",
+          args: ["-e", "process.stdout.write('validation-2')"],
+          cwd: ".",
+          timeoutMs: 1_000,
+          maxOutputBytes: 2_048,
+        },
+      ],
+    });
     expect(result.commit.fileChanges).toEqual([
       expect.objectContaining({ relativePath: "src/value.mjs", kind: "modified", testFile: false }),
       expect.objectContaining({ relativePath: "src/value.test.mjs", kind: "modified", testFile: true }),

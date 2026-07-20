@@ -15,6 +15,25 @@ export interface EngineeringDeliveryError {
   readonly causeId: string;
 }
 
+/** 독립 검증에서 재실행할 수 있는, 비밀값 없는 명령 명세입니다. */
+export interface EngineeringAssuranceCommand {
+  readonly executable: string;
+  readonly args: readonly string[];
+  readonly cwd: string;
+  readonly timeoutMs: number;
+  readonly maxOutputBytes: number;
+}
+
+/**
+ * TDD delivery가 실제로 성공시킨 명령만 보존합니다.
+ * 환경 변수와 패치 원문은 넣지 않아, 비밀정보나 코드 본문을 재검증 경로에 저장하지 않습니다.
+ */
+export interface EngineeringAssuranceRecipe {
+  readonly schemaVersion: "massion.software-assurance-recipe.v1";
+  readonly focusedCommand: EngineeringAssuranceCommand;
+  readonly validationCommands: readonly EngineeringAssuranceCommand[];
+}
+
 export interface EngineeringDelivery {
   readonly deliveryId: string;
   readonly organizationId: string;
@@ -39,6 +58,7 @@ export interface EngineeringDelivery {
   readonly redEvidenceId?: string;
   readonly greenEvidenceId?: string;
   readonly validationEvidenceIds: readonly string[];
+  readonly assuranceRecipe?: EngineeringAssuranceRecipe;
   readonly artifactVersionId?: string;
   readonly error?: EngineeringDeliveryError;
   readonly createdByUserId: string;
@@ -72,6 +92,7 @@ export interface TransitionEngineeringDeliveryInput {
   readonly redEvidenceId?: string;
   readonly greenEvidenceId?: string;
   readonly validationEvidenceIds?: readonly string[];
+  readonly assuranceRecipe?: EngineeringAssuranceRecipe;
   readonly artifactVersionId?: string;
   readonly error?: EngineeringDeliveryError;
 }

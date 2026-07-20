@@ -38,6 +38,29 @@ interface AssuranceConfiguration {
   readonly criterionExclusions?: DatabaseAssuranceSnapshotInput["criterionExclusions"];
 }
 
+export interface AutomaticAssuranceBindingRecipe {
+  readonly requiredCriteria: readonly {
+    readonly criterionKey: string;
+    readonly method: AssuranceCheckBinding["kind"];
+  }[];
+  readonly bindings: readonly AssuranceCheckBinding[];
+}
+
+/**
+ * 소프트웨어 Delivery가 남긴 안전한 재검증 명령을 Assurance binding으로 변환합니다.
+ * 이 경계는 Application이 명령 원문이나 저장 형식을 직접 알지 않게 합니다.
+ */
+export interface SoftwareAssuranceRecipeResolver {
+  resolve(
+    context: TenantContext,
+    input: {
+      readonly workId: string;
+      readonly planContentJson: string;
+      readonly recovery: Pick<WorkRecoveryBundle, "artifacts" | "artifactVersions" | "tasks">;
+    },
+  ): Promise<AutomaticAssuranceBindingRecipe | undefined>;
+}
+
 type AssuranceConfigurationResolution =
   | { readonly outcome: "ready"; readonly configuration: AssuranceConfiguration }
   | { readonly outcome: "awaiting-approval"; readonly approvalId: string }
@@ -89,15 +112,7 @@ function automaticBindings(
   planContentJson: string,
   recovery: Pick<WorkRecoveryBundle, "tasks">,
   profile: ReturnType<typeof selectAssuranceProfile>,
-):
-  | {
-      readonly requiredCriteria: readonly {
-        readonly criterionKey: string;
-        readonly method: AssuranceCheckBinding["kind"];
-      }[];
-      readonly bindings: readonly AssuranceCheckBinding[];
-    }
-  | undefined {
+): AutomaticAssuranceBindingRecipe | undefined {
   if (profile.profileId !== "massion.assurance.acceptance.v1") return undefined;
   let plan: ReturnType<typeof validateStrategyPlan>;
   try {
@@ -171,6 +186,7 @@ export class CoreAssuranceStage implements CoreWorkStageExecutor {
         "prepareSnapshot" | "start" | "transition" | "get" | "findByStartCommand" | "decide" | "projectVerdict"
       >;
       readonly checks: CoreAssuranceCheckOrchestrator;
+      readonly softwareAssuranceRecipes?: SoftwareAssuranceRecipeResolver;
     },
   ) {}
 
@@ -425,7 +441,7 @@ export class CoreAssuranceStage implements CoreWorkStageExecutor {
     input: CoreWorkStageInput,
     workId: string,
     plan: { readonly plan_version_id: string; readonly content_json: string },
-    recovery: Pick<WorkRecoveryBundle, "artifacts" | "tasks">,
+    recovery: Pick<WorkRecoveryBundle, "artifacts" | "artifactVersions" | "tasks">,
   ): Promise<AssuranceConfigurationResolution> {
     const profile = selectAssuranceProfile(recovery.artifacts.map((artifact) => artifact.kind));
     const active = await this.dependencies.bindings.getActive(context, workId, plan.plan_version_id);
@@ -433,7 +449,14 @@ export class CoreAssuranceStage implements CoreWorkStageExecutor {
     if (active && active.profileId === profile.profileId && active.profileVersion === profile.version) {
       return { outcome: "ready", configuration: configurationFromBinding(active) };
     }
-    const recipe = automaticBindings(plan.content_json, recovery, profile);
+    const recipe =
+      profile.profileId === "massion.assurance.software-change.v1"
+        ? await this.dependencies.softwareAssuranceRecipes?.resolve(context, {
+            workId,
+            planContentJson: plan.content_json,
+            recovery,
+          })
+        : automaticBindings(plan.content_json, recovery, profile);
     if (!recipe) return { outcome: "blocked", reason: "assurance-recipe-unavailable" };
     this.throwIfCancelled(input);
     const draft = await this.dependencies.bindings.propose(context, {

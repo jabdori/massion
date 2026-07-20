@@ -290,7 +290,7 @@ export interface SoftwareAssuranceExecutionInput extends Omit<
 
 export type SoftwareAssuranceExecutionResult = TrustedAssuranceCheckExecutionResult;
 
-interface CodeChangeManifest {
+export interface SoftwareCodeChangeManifest {
   readonly schemaVersion: "massion.code-change-manifest.v1";
   readonly deliveryId: string;
   readonly repositoryId: string;
@@ -341,8 +341,8 @@ function sha256(value: string): string {
   return createHash("sha256").update(value).digest("hex");
 }
 
-function parseManifest(value: string): CodeChangeManifest {
-  const decoded = JSON.parse(value) as Partial<CodeChangeManifest>;
+export function parseSoftwareCodeChangeManifest(value: string): SoftwareCodeChangeManifest {
+  const decoded = JSON.parse(value) as Partial<SoftwareCodeChangeManifest>;
   if (
     decoded.schemaVersion !== "massion.code-change-manifest.v1" ||
     typeof decoded.deliveryId !== "string" ||
@@ -360,10 +360,10 @@ function parseManifest(value: string): CodeChangeManifest {
   ) {
     throw new Error("Code-change manifest 형식이 올바르지 않습니다");
   }
-  return decoded as CodeChangeManifest;
+  return decoded as SoftwareCodeChangeManifest;
 }
 
-function normalizedChanges(changes: readonly GitFileChange[]): CodeChangeManifest["files"] {
+export function normalizedSoftwareFileChanges(changes: readonly GitFileChange[]): SoftwareCodeChangeManifest["files"] {
   return changes.map((change) => ({
     relativePath: change.relativePath,
     kind: change.kind,
@@ -371,6 +371,64 @@ function normalizedChanges(changes: readonly GitFileChange[]): CodeChangeManifes
     ...(change.afterHash ? { afterHash: change.afterHash } : {}),
     testFile: change.testFile,
   }));
+}
+
+export function verifySoftwareAssuranceSource(
+  context: TenantContext,
+  input: { readonly workId: string; readonly artifactVersionId: string },
+  source: SoftwareAssuranceSource,
+): SoftwareCodeChangeManifest {
+  const { delivery, artifact, repository, revision } = source;
+  if (
+    delivery.organizationId !== context.organizationId ||
+    artifact.organizationId !== context.organizationId ||
+    repository.organizationId !== context.organizationId ||
+    revision.organizationId !== context.organizationId ||
+    delivery.workId !== input.workId ||
+    artifact.workId !== input.workId ||
+    artifact.artifactVersionId !== input.artifactVersionId
+  ) {
+    throw new Error("Software assurance source의 tenant·Work 소유권이 일치하지 않습니다");
+  }
+  if (
+    delivery.status !== "committed" ||
+    delivery.artifactVersionId !== artifact.artifactVersionId ||
+    delivery.repositoryId !== repository.repositoryId ||
+    delivery.repositoryRevisionId !== revision.repositoryRevisionId ||
+    revision.repositoryId !== repository.repositoryId ||
+    repository.status !== "active" ||
+    revision.dirty
+  ) {
+    throw new Error("Software assurance delivery·repository 정본 상태가 유효하지 않습니다");
+  }
+  if (
+    artifact.mediaType !== "application/vnd.massion.code-change-manifest+json" ||
+    artifact.checksum !== sha256(artifact.contentJson)
+  ) {
+    throw new Error("Code-change ArtifactVersion checksum 또는 media type이 유효하지 않습니다");
+  }
+  if (
+    delivery.repositoryRootRealPathHash !== repository.rootRealPathHash ||
+    revision.rootRealPathHash !== repository.rootRealPathHash ||
+    revision.providerRevision !== delivery.baseRevision
+  ) {
+    throw new Error("Repository realpath·revision provenance가 delivery와 일치하지 않습니다");
+  }
+  const manifest = parseSoftwareCodeChangeManifest(artifact.contentJson);
+  if (
+    manifest.deliveryId !== delivery.deliveryId ||
+    manifest.repositoryId !== delivery.repositoryId ||
+    manifest.repositoryRevisionId !== delivery.repositoryRevisionId ||
+    manifest.baseRevision !== delivery.baseRevision ||
+    manifest.branchRef !== delivery.branchRef ||
+    manifest.commitSha !== delivery.commitSha ||
+    manifest.changeSetHash !== delivery.changeSetHash ||
+    manifest.evidence.green !== delivery.greenEvidenceId ||
+    canonicalJson(manifest.evidence.validations) !== canonicalJson(delivery.validationEvidenceIds)
+  ) {
+    throw new Error("Code-change manifest가 committed delivery와 일치하지 않습니다");
+  }
+  return manifest;
 }
 
 function reproducibleEvidence(evidence: EngineeringCommandEvidence): Omit<EngineeringCommandEvidence, "durationMs"> {
@@ -473,12 +531,16 @@ export class SoftwareAssuranceAdapter implements TrustedAssuranceCheckExecutor {
     } catch {
       return classifiedResult("blocked", input, "source_unavailable");
     }
-    let manifest: CodeChangeManifest;
+    let manifest: SoftwareCodeChangeManifest;
     const environment = this.options.environmentProfiles[input.binding.environmentName ?? "default"];
     if (!environment) return classifiedResult("blocked", input, "environment_unavailable");
     const environmentHash = sha256(canonicalJson(environment));
     try {
-      manifest = this.verifySource(context, input, source);
+      manifest = verifySoftwareAssuranceSource(
+        context,
+        { workId: input.workId, artifactVersionId: input.artifactVersionIds[0] ?? "" },
+        source,
+      );
       const argumentRedaction = redactSecrets(JSON.stringify(input.binding.args));
       const recipe = source.commandEvidence.find(
         (evidence) =>
@@ -531,7 +593,7 @@ export class SoftwareAssuranceAdapter implements TrustedAssuranceCheckExecutor {
       branch.branchRef !== manifest.branchRef ||
       branch.commitSha !== manifest.commitSha ||
       branch.changeSetHash !== manifest.changeSetHash ||
-      canonicalJson(normalizedChanges(branch.fileChanges)) !== canonicalJson(manifest.files)
+      canonicalJson(normalizedSoftwareFileChanges(branch.fileChanges)) !== canonicalJson(manifest.files)
     ) {
       return classifiedResult("failed", input, "provenance_invalid");
     }
@@ -668,61 +730,4 @@ export class SoftwareAssuranceAdapter implements TrustedAssuranceCheckExecutor {
     });
   }
 
-  private verifySource(
-    context: TenantContext,
-    input: SoftwareAssuranceExecutionInput,
-    source: SoftwareAssuranceSource,
-  ): CodeChangeManifest {
-    const { delivery, artifact, repository, revision } = source;
-    if (
-      delivery.organizationId !== context.organizationId ||
-      artifact.organizationId !== context.organizationId ||
-      repository.organizationId !== context.organizationId ||
-      revision.organizationId !== context.organizationId ||
-      delivery.workId !== input.workId ||
-      artifact.workId !== input.workId ||
-      artifact.artifactVersionId !== input.artifactVersionIds[0]
-    ) {
-      throw new Error("Software assurance source의 tenant·Work 소유권이 일치하지 않습니다");
-    }
-    if (
-      delivery.status !== "committed" ||
-      delivery.artifactVersionId !== artifact.artifactVersionId ||
-      delivery.repositoryId !== repository.repositoryId ||
-      delivery.repositoryRevisionId !== revision.repositoryRevisionId ||
-      revision.repositoryId !== repository.repositoryId ||
-      repository.status !== "active" ||
-      revision.dirty
-    ) {
-      throw new Error("Software assurance delivery·repository 정본 상태가 유효하지 않습니다");
-    }
-    if (
-      artifact.mediaType !== "application/vnd.massion.code-change-manifest+json" ||
-      artifact.checksum !== sha256(artifact.contentJson)
-    ) {
-      throw new Error("Code-change ArtifactVersion checksum 또는 media type이 유효하지 않습니다");
-    }
-    if (
-      delivery.repositoryRootRealPathHash !== repository.rootRealPathHash ||
-      revision.rootRealPathHash !== repository.rootRealPathHash ||
-      revision.providerRevision !== delivery.baseRevision
-    ) {
-      throw new Error("Repository realpath·revision provenance가 delivery와 일치하지 않습니다");
-    }
-    const manifest = parseManifest(artifact.contentJson);
-    if (
-      manifest.deliveryId !== delivery.deliveryId ||
-      manifest.repositoryId !== delivery.repositoryId ||
-      manifest.repositoryRevisionId !== delivery.repositoryRevisionId ||
-      manifest.baseRevision !== delivery.baseRevision ||
-      manifest.branchRef !== delivery.branchRef ||
-      manifest.commitSha !== delivery.commitSha ||
-      manifest.changeSetHash !== delivery.changeSetHash ||
-      manifest.evidence.green !== delivery.greenEvidenceId ||
-      canonicalJson(manifest.evidence.validations) !== canonicalJson(delivery.validationEvidenceIds)
-    ) {
-      throw new Error("Code-change manifest가 committed delivery와 일치하지 않습니다");
-    }
-    return manifest;
-  }
 }

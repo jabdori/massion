@@ -4,6 +4,35 @@ import { dirname, join } from "node:path";
 
 import type { CliConfigStore } from "./config.js";
 
+export async function replaceCliFileToken(reference: string, token: string): Promise<void> {
+  if (!reference.startsWith("file:")) throw new Error("개인 token 교체에는 file reference가 필요합니다");
+  const tokenPath = reference.slice(5);
+  if (!tokenPath || !token.trim()) throw new Error("개인 token file 교체 입력이 유효하지 않습니다");
+  try {
+    const existing = await lstat(tokenPath);
+    if (existing.isSymbolicLink() || !existing.isFile() || (existing.mode & 0o077) !== 0)
+      throw new Error("token file은 symlink가 아닌 0600 regular file이어야 합니다");
+  } catch (error) {
+    if (!(error instanceof Error) || !("code" in error) || error.code !== "ENOENT") throw error;
+  }
+  const temporaryTokenPath = `${tokenPath}.${process.pid.toString()}.tmp`;
+  await rm(temporaryTokenPath, { force: true });
+  const handle = await open(temporaryTokenPath, "wx", 0o600);
+  try {
+    await handle.writeFile(`${token}\n`, "utf8");
+    await handle.sync();
+  } finally {
+    await handle.close();
+  }
+  try {
+    await rename(temporaryTokenPath, tokenPath);
+    await chmod(tokenPath, 0o600);
+  } catch (error) {
+    await rm(temporaryTokenPath, { force: true });
+    throw error;
+  }
+}
+
 export async function initializeCli(input: {
   readonly endpoint: string;
   readonly email: string;
@@ -31,23 +60,7 @@ export async function initializeCli(input: {
   await mkdir(tokenDirectory, { recursive: true, mode: 0o700 });
   await chmod(tokenDirectory, 0o700);
   const tokenPath = join(tokenDirectory, `${input.profile}.token`);
-  try {
-    const existing = await lstat(tokenPath);
-    if (existing.isSymbolicLink() || !existing.isFile() || (existing.mode & 0o077) !== 0)
-      throw new Error("token file은 symlink가 아닌 0600 regular file이어야 합니다");
-  } catch (error) {
-    if (!(error instanceof Error) || !("code" in error) || error.code !== "ENOENT") throw error;
-  }
-  const temporaryTokenPath = `${tokenPath}.${process.pid.toString()}.tmp`;
-  await rm(temporaryTokenPath, { force: true });
-  const handle = await open(temporaryTokenPath, "wx", 0o600);
-  try {
-    await handle.writeFile(`${token}\n`, "utf8");
-    await handle.sync();
-  } finally {
-    await handle.close();
-  }
-  await rename(temporaryTokenPath, tokenPath);
+  await replaceCliFileToken(`file:${tokenPath}`, token);
   await input.config.save({
     schemaVersion: "massion.cli.config.v1",
     selectedProfile: input.profile,

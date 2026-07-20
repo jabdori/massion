@@ -261,6 +261,85 @@ describe("CoreAssuranceStage", () => {
     expect(proposed).toBe(false);
   });
 
+  it("소프트웨어 변경은 독립 재실행 recipe가 있을 때 해당 binding을 자동 연결한다", async () => {
+    let proposed: unknown;
+    const stage = new CoreAssuranceStage({
+      works: {
+        getWork: async () => ({ revision: 7 }),
+        getActivePlan: async () => ({ plan_version_id: "plan-1", content_json: "{}" }),
+        recoverWork: async () => ({
+          artifacts: [{ kind: "code-change" }],
+          artifactVersions: [{ artifact_version_id: "code-change-version" }],
+          tasks: [],
+        }),
+      },
+      bindings: {
+        getActive: async () => undefined,
+        propose: async (_context: unknown, value: unknown) => {
+          proposed = value;
+          return {
+            bindingVersionId: "software-binding-1",
+            revision: 1,
+            profileId: "massion.assurance.software-change.v1",
+            profileVersion: "1.0.0",
+          };
+        },
+        activate: async () => ({
+          bindingVersionId: "software-binding-1",
+          revision: 2,
+          profileId: "massion.assurance.software-change.v1",
+          profileVersion: "1.0.0",
+        }),
+      },
+      softwareAssuranceRecipes: {
+        resolve: async (_context: unknown, value: unknown) => {
+          expect(value).toMatchObject({
+            workId: "assurance-work",
+            recovery: { artifactVersions: [{ artifact_version_id: "code-change-version" }] },
+          });
+          return {
+            requiredCriteria: [{ criterionKey: "profile:software:correctness", method: "test" }],
+            bindings: [
+              {
+                bindingKey: "software-correctness",
+                criterionKey: "profile:software:correctness",
+                kind: "test",
+                executor: { kind: "system_adapter", adapterId: "massion.software-command.v1" },
+                requiredEvidenceKinds: ["command-output", "code-change"],
+                executable: "pnpm",
+                args: ["test"],
+                cwd: ".",
+                expectedExitCode: 0,
+                timeoutMs: 60_000,
+                maxOutputBytes: 1_000_000,
+              },
+            ],
+          };
+        },
+      },
+      runner: verifierRunner(),
+      runtimeExecutions: noStoredVerifier,
+      assurance: {
+        prepareSnapshot: async () => ({ snapshot: { hash: "a".repeat(64) } }),
+        start: async () => ({ run: { assuranceRunId: "assurance-1", status: "planned", version: 1 } }),
+        transition: async () => ({ run: { assuranceRunId: "assurance-1", status: "running", version: 2 } }),
+        get: async () => ({ assuranceRunId: "assurance-1", status: "running", version: 2 }),
+        decide: async () => ({ run: { assuranceRunId: "assurance-1", status: "passed", version: 3 } }),
+        projectVerdict: async () => ({ work: { revision: 8 } }),
+      },
+      checks: { execute: async () => ({ outcome: "ready" }) },
+    } as never);
+
+    await expect(stage.execute(context, { ...input, request: {} })).resolves.toMatchObject({
+      outcome: "advanced",
+      data: { assuranceRunId: "assurance-1", verdict: "passed" },
+    });
+    expect(proposed).toMatchObject({
+      profileId: "massion.assurance.software-change.v1",
+      bindings: [expect.objectContaining({ bindingKey: "software-correctness" })],
+    });
+  });
+
   it("요청에 ID가 없어도 현재 Plan과 Artifact에 맞는 활성 binding을 자동 선택한다", async () => {
     let snapshotInput: unknown;
     const stage = new CoreAssuranceStage({

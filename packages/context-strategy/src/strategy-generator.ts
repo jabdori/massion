@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 
 import type { OrganizationService, TenantContext } from "@massion/identity";
+import { CORE_OFFICE_HANDLES } from "@massion/organization";
 import type { StructuredAgentRunner, StructuredOutputValidationResult } from "@massion/runtime";
 import { applyMigrations, type MassionDatabase, type QueryExecutor } from "@massion/storage";
 import type { WorkService } from "@massion/work";
@@ -8,7 +9,12 @@ import type { WorkService } from "@massion/work";
 import type { ContextStore } from "./context-store.js";
 import { hashContextContent } from "./context-store.js";
 import { STRATEGY_GENERATION_MIGRATION } from "./schema.js";
-import { strategyPlanJsonSchema, validateStrategyPlan, type StrategyPlan } from "./strategy-schema.js";
+import {
+  automaticStrategyPlanJsonSchema,
+  validateAutomaticStrategyPlan,
+  validateStrategyPlan,
+  type StrategyPlan,
+} from "./strategy-schema.js";
 
 export type StrategyGenerationStatus =
   "pending" | "generated" | "blocked_model_unavailable" | "failed" | "applied" | "conflicted";
@@ -74,9 +80,35 @@ function requestHash(input: GenerateStrategyInput): string {
   return createHash("sha256").update(canonicalJson(request)).digest("hex");
 }
 
-function validateOutput(value: unknown): StructuredOutputValidationResult {
+export interface StrategyPlanningAgent {
+  readonly handle: string;
+  readonly status: string;
+  readonly capabilities: readonly string[];
+}
+
+export interface StrategyAgentDirectory {
+  listNodes(context: TenantContext): Promise<readonly StrategyPlanningAgent[]>;
+}
+
+function validatedPlan(
+  value: unknown,
+  availableAgentHandles: ReadonlySet<string>,
+): StrategyPlan {
+  const plan = validateAutomaticStrategyPlan(value);
+  for (const task of plan.tasks) {
+    if (task.recommendedAgentHandles.some((handle) => !availableAgentHandles.has(handle))) {
+      throw new Error("StrategyPlan이 활성 Organization Agent가 아닌 담당자를 추천했습니다");
+    }
+  }
+  return plan;
+}
+
+function validateOutput(
+  value: unknown,
+  availableAgentHandles: ReadonlySet<string>,
+): StructuredOutputValidationResult {
   try {
-    return { success: true, value: validateStrategyPlan(value) };
+    return { success: true, value: validatedPlan(value, availableAgentHandles) };
   } catch {
     return { success: false, error: new Error("StrategyPlan structured output 검증에 실패했습니다") };
   }
@@ -89,6 +121,7 @@ export class StrategyGenerator {
     private readonly runner: StructuredAgentRunner,
     private readonly contexts: Pick<ContextStore, "get">,
     private readonly works: Pick<WorkService, "getWork">,
+    private readonly agents?: StrategyAgentDirectory,
   ) {}
 
   public static async create(
@@ -97,9 +130,10 @@ export class StrategyGenerator {
     runner: StructuredAgentRunner,
     contexts: Pick<ContextStore, "get">,
     works: Pick<WorkService, "getWork">,
+    agents?: StrategyAgentDirectory,
   ): Promise<StrategyGenerator> {
     await applyMigrations(database, [STRATEGY_GENERATION_MIGRATION]);
-    return new StrategyGenerator(database, organizations, runner, contexts, works);
+    return new StrategyGenerator(database, organizations, runner, contexts, works, agents);
   }
 
   public async generate(context: TenantContext, input: GenerateStrategyInput): Promise<StrategyGeneration> {
@@ -149,6 +183,8 @@ export class StrategyGenerator {
     const route = contextVersion.selectedSources.some((source) => source.classification === "local-private")
       ? "local-private"
       : "planning-quality";
+    const availableAgents = await this.availableAgents(context);
+    const availableAgentHandles = new Set(availableAgents.map((agent) => agent.handle));
     const result = await this.runner.executeStructured(
       context,
       {
@@ -171,18 +207,22 @@ export class StrategyGenerator {
           unknowns: contextVersion.unknowns,
           decisions: contextVersion.decisions,
           sources: contextVersion.selectedSources,
+          availableAgents: availableAgents.map((agent) => ({
+            handle: agent.handle,
+            capabilities: agent.capabilities,
+          })),
         },
       },
       {
         name: "massion-strategy-plan",
         description: "검증 가능한 Work StrategyPlan",
-        jsonSchema: strategyPlanJsonSchema,
-        validate: validateOutput,
+        jsonSchema: automaticStrategyPlanJsonSchema,
+        validate: (value) => validateOutput(value, availableAgentHandles),
       },
     );
     if (result.status === "succeeded") {
       try {
-        const plan = validateStrategyPlan(result.output);
+        const plan = validatedPlan(result.output, availableAgentHandles);
         return await this.finish(context, input, generationId, "generated", {
           runtimeExecutionId: result.executionId,
           plan,
@@ -275,6 +315,22 @@ export class StrategyGenerator {
       );
       return this.view(await this.find(tx, context.organizationId, generationId));
     });
+  }
+
+  private async availableAgents(context: TenantContext): Promise<readonly StrategyPlanningAgent[]> {
+    const candidates = this.agents
+      ? await this.agents.listNodes(context)
+      : CORE_OFFICE_HANDLES.map((handle) => ({ handle, status: "active", capabilities: [] }));
+    const unique = new Map<string, StrategyPlanningAgent>();
+    for (const candidate of candidates) {
+      if (candidate.status !== "active" || !candidate.handle.trim()) continue;
+      unique.set(candidate.handle, {
+        handle: candidate.handle,
+        status: candidate.status,
+        capabilities: [...candidate.capabilities],
+      });
+    }
+    return [...unique.values()].sort((left, right) => left.handle.localeCompare(right.handle));
   }
 
   private async reconcile(

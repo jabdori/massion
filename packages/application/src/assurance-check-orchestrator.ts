@@ -48,6 +48,31 @@ function requiresPriorCheckResult(binding: AssuranceCheckBinding | undefined): b
   return binding?.kind === "evidence" && binding.evidenceKinds.includes("check-result");
 }
 
+function requiresExactCodeChange(binding: AssuranceCheckBinding): boolean {
+  return (
+    (binding.kind === "test" &&
+      binding.executor.kind === "system_adapter" &&
+      binding.executor.adapterId === "massion.software-command.v1") ||
+    (binding.kind === "inspection" && binding.inspectorProfile === "massion.software-security-scan.v1")
+  );
+}
+
+function artifactVersionIds(
+  binding: AssuranceCheckBinding,
+  recovery: Awaited<ReturnType<WorkService["recoverWork"]>>,
+): readonly string[] {
+  if (!requiresExactCodeChange(binding)) return recovery.work.artifact_version_ids;
+  const codeChangeArtifacts = recovery.artifacts.filter((artifact) => artifact.kind === "code-change");
+  if (codeChangeArtifacts.length !== 1 || !codeChangeArtifacts[0]) return [];
+  const workArtifactVersions = new Set(recovery.work.artifact_version_ids);
+  const versions = recovery.artifactVersions.filter(
+    (version) =>
+      version.artifact_id === codeChangeArtifacts[0]?.artifact_id &&
+      workArtifactVersions.has(version.artifact_version_id),
+  );
+  return versions.length === 1 && versions[0] ? [versions[0].artifact_version_id] : [];
+}
+
 export class DatabaseCoreAssuranceCheckOrchestrator implements CoreAssuranceCheckOrchestrator {
   public constructor(
     private readonly dependencies: {
@@ -87,7 +112,7 @@ export class DatabaseCoreAssuranceCheckOrchestrator implements CoreAssuranceChec
         assuranceRunId: input.run.assuranceRunId,
         criterionId: item.criterion.criterionId,
         bindingKey: checkBinding.bindingKey,
-        artifactVersionIds: recovery.work.artifact_version_ids,
+        artifactVersionIds: artifactVersionIds(checkBinding, recovery),
         evidenceBriefIds: references.evidenceBriefIds,
         metricObservationIds: references.metricObservationIds,
         humanAttestationIds: references.humanAttestationIds,

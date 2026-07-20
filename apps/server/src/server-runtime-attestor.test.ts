@@ -384,6 +384,80 @@ describe("서버 bundled runtime 건강 증명", () => {
     expect(inspectModelRuntime).toHaveBeenCalledTimes(1);
   });
 
+  it("Z.AI Coding Plan도 같은 OpenAI 호환 runtime과 암호화 API key 계보로 건강 증명한다", async () => {
+    const inspectModelRuntime = vi.fn().mockResolvedValue({
+      runtimeId: "openai-model",
+      version: "1.0.0+openai-compatible.2.0.59",
+      runtimeArtifactDigest: "d".repeat(64),
+      nodeExecutable: process.execPath,
+    });
+    const database = {
+      query: vi.fn().mockImplementation((statement: string) => {
+        if (statement.includes("FROM subscription_connector")) return Promise.resolve([[{ status: "offline" }]]);
+        if (statement.includes("FROM provider_credential")) {
+          return Promise.resolve([
+            [
+              {
+                credential_id: "credential-zai-12345678",
+                subscription_account_id: "account-zai-12345678",
+                subscription_connector_id: "connector-zai-12345678",
+                provider_id: "zai-coding-plan",
+                material_kind: "encrypted_secret",
+                status: "active",
+                secret_version: 1,
+              },
+            ],
+          ]);
+        }
+        if (statement.includes("FROM credential_secret_version")) {
+          return Promise.resolve([[{ credential_id: "credential-zai-12345678", version: 1, algorithm: "aes-256-gcm" }]]);
+        }
+        return Promise.resolve([
+          [
+            {
+              account_id: "account-zai-12345678",
+              owner_user_id: "user-12345678",
+              provider_id: "zai-coding-plan",
+              connector_id: "connector-zai-12345678",
+              billing_kind: "coding-plan",
+              status: "offline",
+            },
+          ],
+        ]);
+      }),
+    };
+    const attestor = new BundledServerConnectorRuntimeAttestor(database as never, {
+      profileRoot: "/unused-for-model",
+      inspectRuntime: vi.fn(),
+      inspectModelRuntime,
+      run: vi.fn(),
+      codexAccount: vi.fn(),
+    });
+
+    await expect(
+      attestor.inspectArtifact({
+        organizationId: "organization-12345678",
+        actorUserId: "user-12345678",
+        providerId: "zai-coding-plan",
+        executionKind: "model",
+        runtimeId: "openai-model",
+      }),
+    ).resolves.toMatchObject({ runtimeId: "openai-model", runtimeArtifactDigest: "d".repeat(64) });
+    await expect(
+      attestor.attestHealth({
+        organizationId: "organization-12345678",
+        actorUserId: "user-12345678",
+        connectorId: "connector-zai-12345678",
+        providerId: "zai-coding-plan",
+        executionKind: "model",
+        runtimeId: "openai-model",
+        runtimeArtifactDigest: "d".repeat(64),
+        version: "1.0.0+openai-compatible.2.0.59",
+      }),
+    ).resolves.toMatchObject({ runtimeId: "openai-model", processGeneration: 1, processState: "new-process" });
+    expect(inspectModelRuntime).toHaveBeenCalledTimes(1);
+  });
+
   it("로그아웃·artifact 변경·계정 계보 부재를 fail-closed한다", async () => {
     const loggedOut = await fixture({
       providerId: "openai-codex",

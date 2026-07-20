@@ -39,6 +39,23 @@ const observedMiniMax = {
   source: "https://api.minimax.io/v1/models" as const,
 };
 
+const observedZai = {
+  modelId: "glm-5.2",
+  observedAt: "2026-07-20T00:00:00.000Z",
+  source: "https://api.z.ai/api/coding/paas/v4/chat/completions" as const,
+};
+
+function zaiProfile() {
+  return {
+    ...profile(),
+    model_profile_id: "profile-zai-glm-52",
+    provider_id: "zai-coding-plan",
+    endpoint_id: "endpoint-zai-coding-plan",
+    model_id: "glm-5.2",
+    context_window: 1_000_000,
+  };
+}
+
 function miniMaxEvidence() {
   return [
     {
@@ -138,6 +155,70 @@ describe("서버 내장 모델 Core route 조립", () => {
     expect(result).toEqual({
       modelId: "MiniMax-M2.7",
       modelProfileId: "profile-minimax-m27",
+      routeNames: BUILTIN_CORE_MODEL_ROUTES.map((route) => route.name),
+    });
+  });
+
+  it("Z.AI Coding Plan의 실제 chat completion 관측으로 GLM-5.2 Core route를 만든다", async () => {
+    const router = {
+      listModels: vi.fn().mockResolvedValue([]),
+      registerModel: vi.fn().mockResolvedValue({ profile: zaiProfile() }),
+      listRoutes: vi.fn().mockResolvedValue([]),
+      createRoute: vi.fn().mockImplementation((_context, input) =>
+        Promise.resolve({
+          route: {
+            route_id: `route-${input.name}`,
+            name: input.name,
+            route_kind: input.routeKind,
+            credential_policy: input.credentialPolicy,
+            data_policy: input.dataPolicy,
+            equivalence_group: input.equivalenceGroup,
+            min_eval_score: input.minEvalScore,
+            require_tools: input.requireTools,
+            require_structured_output: input.requireStructuredOutput,
+            require_vision: input.requireVision,
+            require_streaming: input.requireStreaming,
+            max_context_tokens: input.maxContextTokens,
+            request_budget_micros: input.requestBudgetMicros,
+            total_budget_micros: input.totalBudgetMicros,
+            enabled: true,
+          },
+        }),
+      ),
+      listCandidates: vi.fn().mockResolvedValue([]),
+      addCandidate: vi.fn().mockResolvedValue({ candidate: { candidate_id: "candidate-zai" } }),
+    };
+
+    const result = await new BuiltinModelRouteAssembler(router as never).assemble(context, {
+      commandId: "connect-zai-12345678",
+      providerId: "zai-coding-plan",
+      endpointId: "endpoint-zai-coding-plan",
+      accountId: "account-zai-12345678",
+      observed: observedZai,
+    });
+
+    expect(router.registerModel).toHaveBeenCalledWith(
+      context,
+      expect.objectContaining({
+        providerId: "zai-coding-plan",
+        endpointId: "endpoint-zai-coding-plan",
+        modelId: "glm-5.2",
+        contextWindow: 1_000_000,
+        supportsTools: true,
+        supportsStructuredOutput: false,
+        verified: true,
+        verificationEvidence: expect.arrayContaining([
+          expect.objectContaining({
+            kind: "runtime-availability",
+            source: "https://api.z.ai/api/coding/paas/v4/chat/completions",
+            subscriptionAccountId: "account-zai-12345678",
+          }),
+        ]),
+      }),
+    );
+    expect(result).toEqual({
+      modelId: "glm-5.2",
+      modelProfileId: "profile-zai-glm-52",
       routeNames: BUILTIN_CORE_MODEL_ROUTES.map((route) => route.name),
     });
   });

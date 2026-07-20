@@ -40,6 +40,23 @@ describe("ApplicationHttpServer", () => {
           if (authorization !== "Bearer test-token") throw new Error("invalid token");
           return { context, tokenId: "token-http", scopes: ["application:*"] };
         },
+        async refreshLocalAccess(authorization, audience, requiredScopes, input) {
+          if (authorization !== "Bearer expired-token") throw new Error("invalid refresh token");
+          expect(audience).toBe("massion-api");
+          expect(requiredScopes).toEqual([]);
+          expect(input.commandId).toBe("refresh-http-token-0001");
+          return {
+            tokenId: "refreshed-http-token",
+            organizationId: context.organizationId,
+            userId: context.userId,
+            audience,
+            scopes: ["application:*"],
+            issuedAt: "2026-07-11T00:00:00.000Z",
+            expiresAt: "2026-07-11T01:00:00.000Z",
+            replayed: false,
+            token: "mat_refreshed-token",
+          };
+        },
       },
       queries: {
         async query(_context, _scopes, operation, payload) {
@@ -204,6 +221,35 @@ describe("ApplicationHttpServer", () => {
     });
     expect(response.status).toBe(201);
     expect(await response.json()).toMatchObject({ access: { token: "one-time" } });
+  });
+
+  it("loopback access refresh는 만료된 Bearer 원문으로만 새 token을 발급한다", async () => {
+    const response = await fetch(`${baseUrl}/api/v1/access/refresh`, {
+      method: "POST",
+      headers: {
+        authorization: "Bearer expired-token",
+        accept: "application/json",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ commandId: "refresh-http-token-0001" }),
+    });
+    expect(response.status).toBe(201);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(await response.json()).toMatchObject({ access: { token: "mat_refreshed-token", replayed: false } });
+  });
+
+  it("loopback access refresh의 잘못된 token은 내부 오류 대신 인증 오류로 반환한다", async () => {
+    const response = await fetch(`${baseUrl}/api/v1/access/refresh`, {
+      method: "POST",
+      headers: {
+        authorization: "Bearer invalid-token",
+        accept: "application/json",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ commandId: "refresh-http-token-0002" }),
+    });
+    expect(response.status).toBe(401);
+    expect(await response.json()).toMatchObject({ category: "authentication", operatorCode: "APP_HTTP_AUTH" });
   });
 
   it("Connector enrollment code는 인증된 전용 non-cache HTTP 응답으로만 발급한다", async () => {

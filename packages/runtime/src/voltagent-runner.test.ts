@@ -103,6 +103,7 @@ describe("VoltAgent AgentRunner", () => {
       attemptId,
       credentialId: crypto.randomUUID(),
       model,
+      supportsStructuredOutput: true,
       complete: vi.fn().mockResolvedValue({ status: "succeeded" } as RouteAttempt),
       fail: vi.fn().mockResolvedValue({ status: "failed", fallbackAllowed }),
     };
@@ -733,6 +734,87 @@ describe("VoltAgent AgentRunner", () => {
 
     expect(result).toMatchObject({ status: "succeeded", output: { objective: "완제품 구현" } });
     expect(routed.complete).toHaveBeenCalledWith(expect.objectContaining({ inputTokens: 2, outputTokens: 3 }));
+  });
+
+  it("JSON Schema 응답 형식을 지원하지 않는 모델은 JSON object와 프롬프트 schema를 사용해 structured 결과로 처리한다", async () => {
+    const routed = {
+      ...lease(
+        new MockLanguageModelV3({
+          doGenerate: async (options) => {
+            const responseFormat = options.responseFormat as { readonly type?: string; readonly schema?: unknown } | undefined;
+            if (responseFormat?.type !== "json" || responseFormat.schema !== undefined)
+              throw new Error("JSON object response format이 필요합니다");
+            if (!JSON.stringify(options.prompt).includes("Massion JSON output schema"))
+              throw new Error("프롬프트에 JSON Schema가 필요합니다");
+            return {
+              content: [{ type: "text" as const, text: JSON.stringify({ objective: "일반 JSON 계획" }) }],
+              finishReason: { unified: "stop" as const, raw: undefined },
+              usage: USAGE,
+              warnings: [],
+            };
+          },
+        }),
+      ),
+      supportsStructuredOutput: false,
+    } as RoutedModelLease & { readonly supportsStructuredOutput: false };
+    const runner = new VoltAgentRunner(voltAgent, store, { acquire: vi.fn().mockResolvedValue(routed) }, registry);
+
+    const result = await runner.executeStructured(context, input(), {
+      name: "strategy-plan",
+      description: "검증 가능한 실행 계획",
+      jsonSchema: {
+        type: "object",
+        additionalProperties: false,
+        required: ["objective"],
+        properties: { objective: { type: "string" } },
+      },
+      validate: (value: unknown) =>
+        value && typeof value === "object" && typeof (value as Record<string, unknown>).objective === "string"
+          ? { success: true as const, value }
+          : { success: false as const, error: new Error("objective 필드가 필요합니다") },
+    });
+
+    expect(result).toMatchObject({ status: "succeeded", output: { objective: "일반 JSON 계획" } });
+  });
+
+  it("Z.AI Coding Plan의 JSON 계획은 reasoning을 끈다", async () => {
+    const routed = {
+      ...lease(
+        new MockLanguageModelV3({
+          provider: "zai-coding-plan.chat",
+          doGenerate: async (options) => {
+            expect(options.providerOptions).toEqual({
+              "zai-coding-plan": { thinking: { type: "disabled" } },
+            });
+            return {
+              content: [{ type: "text" as const, text: JSON.stringify({ objective: "Z.AI JSON 계획" }) }],
+              finishReason: { unified: "stop" as const, raw: undefined },
+              usage: USAGE,
+              warnings: [],
+            };
+          },
+        }),
+      ),
+      supportsStructuredOutput: false,
+    } as RoutedModelLease & { readonly supportsStructuredOutput: false };
+    const runner = new VoltAgentRunner(voltAgent, store, { acquire: vi.fn().mockResolvedValue(routed) }, registry);
+
+    const result = await runner.executeStructured(context, input(), {
+      name: "strategy-plan",
+      description: "검증 가능한 실행 계획",
+      jsonSchema: {
+        type: "object",
+        additionalProperties: false,
+        required: ["objective"],
+        properties: { objective: { type: "string" } },
+      },
+      validate: (value: unknown) =>
+        value && typeof value === "object" && typeof (value as Record<string, unknown>).objective === "string"
+          ? { success: true as const, value }
+          : { success: false as const, error: new Error("objective 필드가 필요합니다") },
+    });
+
+    expect(result).toMatchObject({ status: "succeeded", output: { objective: "Z.AI JSON 계획" } });
   });
 
   it("실행 레코드 생성 중 취소 신호가 오면 Provider를 만들지 않고 cancelled로 끝낸다", async () => {

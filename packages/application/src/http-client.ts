@@ -77,6 +77,33 @@ export class ApplicationHttpClient {
     return value;
   }
 
+  public static async refreshLocalAccess(
+    baseUrl: string,
+    token: string,
+    input: { readonly commandId: string },
+    fetcher: typeof fetch = fetch,
+  ): Promise<{ readonly token: string; readonly tokenId?: string; readonly replayed?: boolean }> {
+    const endpoint = new URL(baseUrl);
+    if (endpoint.protocol !== "http:" || !isLoopback(endpoint.hostname) || endpoint.username || endpoint.password)
+      throw new Error("Application access token 갱신 endpoint는 credential 없는 loopback HTTP여야 합니다");
+    if (!token.trim()) throw new Error("Application token이 필요합니다");
+    const response = await fetcher(new URL("/api/v1/access/refresh", endpoint), {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${token}`,
+        accept: "application/json",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify(input),
+    });
+    const value = await decode(response);
+    if (!response.ok) throw new ApplicationRemoteError(response.status, value);
+    const access = value && typeof value === "object" ? (value as { access?: unknown }).access : undefined;
+    if (!access || typeof access !== "object" || typeof (access as { token?: unknown }).token !== "string")
+      throw new Error("Application access token 갱신 응답이 유효하지 않습니다");
+    return access as { readonly token: string; readonly tokenId?: string; readonly replayed?: boolean };
+  }
+
   public async status(): Promise<unknown> {
     return await this.jsonRequest("/api/v1/status", { method: "GET" }, true);
   }

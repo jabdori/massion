@@ -55,6 +55,26 @@ describe("공식 Coding Plan preset", () => {
     expect(() => codingPlanRouteForModel("minimax-token-plan", "MiniMax-미검증")).toThrow("검증된 route");
   });
 
+  it("Z.AI Coding Plan은 현재 공식 모델 허용 목록으로 OpenAI 호환 경로를 선언한다", () => {
+    expect(codingPlanPreset("zai-coding-plan")).toMatchObject({
+      connectionSurface: "server-only",
+      usageScope: "agent-api",
+      availability: "supported",
+      authKinds: ["api-key"],
+      billingKinds: ["coding-plan"],
+    });
+    expect(codingPlanPreset("zai-coding-plan").routes[0]?.modelIds).toEqual([
+      "glm-5.2",
+      "glm-5-turbo",
+      "glm-4.7",
+    ]);
+    expect(codingPlanRouteForModel("zai-coding-plan", "glm-5.2")).toMatchObject({
+      protocol: "openai",
+      baseUrl: "https://api.z.ai/api/coding/paas/v4",
+    });
+    expect(() => codingPlanRouteForModel("zai-coding-plan", "glm-5.1")).toThrow("검증된 route");
+  });
+
   it("모든 preset은 인증을 요구하고 무료·익명 모델을 활성 후보에서 제외한다", () => {
     for (const preset of listCodingPlanPresets()) {
       expect(preset.authKinds.length).toBeGreaterThan(0);
@@ -92,7 +112,7 @@ describe("공식 Coding Plan preset", () => {
       expect(codingPlanRouteForModel("stepfun-step-plan", modelId)).toMatchObject({ protocol: "openai" });
     }
     expect(codingPlanRouteForModel("alibaba-coding-plan", "qwen3.7-plus")).toMatchObject({ protocol: "openai" });
-    expect(codingPlanRouteForModel("zai-coding-plan", "glm-5.1")).toMatchObject({ protocol: "openai" });
+    expect(codingPlanRouteForModel("zai-coding-plan", "glm-5.2")).toMatchObject({ protocol: "openai" });
     for (const providerId of ["kimi-coding-plan", "stepfun-step-plan", "alibaba-coding-plan", "zai-coding-plan"]) {
       expect(() => codingPlanRouteForModel(providerId, "문서에-없는-모델")).toThrow("검증된 route");
     }

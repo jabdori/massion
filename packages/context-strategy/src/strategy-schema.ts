@@ -6,6 +6,12 @@ const key = z
   .min(1)
   .max(100)
   .regex(/^[a-z0-9][a-z0-9-]*$/u);
+const agentHandle = z
+  .string()
+  .trim()
+  .min(1)
+  .max(100)
+  .regex(/^[a-z0-9][a-z0-9.-]*$/u);
 const shortText = z.string().trim().min(1).max(1_000);
 
 export const acceptanceCriterionSchema = z
@@ -17,6 +23,11 @@ export const acceptanceCriterionSchema = z
     planLevel: z.boolean(),
   })
   .strict();
+
+const automaticAcceptanceCriterionSchema = acceptanceCriterionSchema.extend({
+  method: z.literal("evidence"),
+  evidenceKinds: z.tuple([z.literal("artifact-version")]),
+});
 
 export const strategyRiskSchema = z
   .object({
@@ -37,7 +48,7 @@ export const strategyTaskSchema = z
     criterionKeys: z.array(key).max(100),
     dependencyKeys: z.array(key).max(50),
     requiredCapabilities: z.array(shortText).max(50),
-    recommendedAgentHandles: z.array(key).max(20),
+    recommendedAgentHandles: z.array(agentHandle).max(20),
     parallelizable: z.boolean(),
   })
   .strict();
@@ -64,6 +75,10 @@ export const strategyPlanSchema = z
     evidenceRequests: z.array(evidenceRequestSchema).max(100),
   })
   .strict();
+
+const automaticStrategyPlanSchema = strategyPlanSchema.extend({
+  acceptanceCriteria: z.array(automaticAcceptanceCriterionSchema).min(1).max(100),
+});
 
 export type AcceptanceCriterion = z.infer<typeof acceptanceCriterionSchema>;
 export type StrategyRisk = z.infer<typeof strategyRiskSchema>;
@@ -130,4 +145,11 @@ export function validateStrategyPlan(input: unknown): StrategyPlan {
   return plan;
 }
 
+export function validateAutomaticStrategyPlan(input: unknown): StrategyPlan {
+  return validateStrategyPlan(automaticStrategyPlanSchema.parse(input));
+}
+
 export const strategyPlanJsonSchema = z.toJSONSchema(strategyPlanSchema) as Readonly<Record<string, unknown>>;
+export const automaticStrategyPlanJsonSchema = z.toJSONSchema(automaticStrategyPlanSchema) as Readonly<
+  Record<string, unknown>
+>;

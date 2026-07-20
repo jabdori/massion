@@ -60,6 +60,54 @@ describe("CoreDeliveryStage", () => {
     expect(transitions).toEqual(["ready", "running", "verifying"]);
   });
 
+  it("계획된 Work는 의존 관계로 막힌 Task까지 배정한 뒤 ready로 전이한다", async () => {
+    const assignedTaskIds: string[] = [];
+    let status = "planned";
+    let revision = 1;
+    let listCalls = 0;
+    const stage = new CoreDeliveryStage({
+      works: {
+        listTasks: async () => {
+          listCalls += 1;
+          if (listCalls > 1) return [];
+          return [
+            {
+              task_id: "task-first",
+              status: "ready",
+              recommended_agent_handles: ["delivery-coordination"],
+              revision: 1,
+            },
+            {
+              task_id: "task-dependent",
+              status: "blocked",
+              recommended_agent_handles: ["records-documentation"],
+              revision: 1,
+            },
+          ];
+        },
+        getWork: async () => ({ revision, status }),
+        assignTask: async (_context: unknown, value: { taskId: string }) => {
+          assignedTaskIds.push(value.taskId);
+          revision += 1;
+          return { work: { revision } };
+        },
+        transition: async (_context: unknown, value: { target: string }) => {
+          if (value.target === "ready" && assignedTaskIds.length !== 2) {
+            throw new Error("ready 전이에는 모든 실행 Task의 Assignment가 필요합니다");
+          }
+          status = value.target;
+          revision += 1;
+          return { work: { revision, status } };
+        },
+      },
+      runner: {},
+      runtimeExecutions: {},
+    } as never);
+
+    await expect(stage.execute(context, input)).resolves.toMatchObject({ outcome: "advanced" });
+    expect(assignedTaskIds).toEqual(["task-first", "task-dependent"]);
+  });
+
   it("승인 대기 Work는 승인 재개 입력 없이 실행하지 않는다", async () => {
     const stage = new CoreDeliveryStage({
       works: {
@@ -78,12 +126,12 @@ describe("CoreDeliveryStage", () => {
     });
   });
 
-  it("software capability는 전용 delivery가 없으면 fail-open하지 않는다", async () => {
+  it("설치된 Software Engineering 전문 담당자 Task는 전용 delivery가 없으면 fail-open하지 않는다", async () => {
     const task = {
       task_id: "task-software",
       status: "ready",
-      required_capabilities: ["software-development"],
-      recommended_agent_handles: ["software-development"],
+      required_capabilities: ["backend-engineering"],
+      recommended_agent_handles: ["software-engineering.backend-specialist"],
       revision: 1,
     };
     const stage = new CoreDeliveryStage({
@@ -305,13 +353,13 @@ describe("CoreDeliveryStage", () => {
     expect(receivedSignal).toBe(controller.signal);
   });
 
-  it("ready 상태 software Task도 취소하면 전용 delivery를 정리한다", async () => {
+  it("ready 상태 Software Engineering 전문 Task도 취소하면 전용 delivery를 정리한다", async () => {
     const cancelled: string[] = [];
     const task = {
       task_id: "task-software-cancel",
       status: "ready",
-      required_capabilities: ["software-development"],
-      recommended_agent_handles: ["software-development"],
+      required_capabilities: ["backend-engineering"],
+      recommended_agent_handles: ["software-engineering.backend-specialist"],
       revision: 1,
     };
     const stage = new CoreDeliveryStage({
