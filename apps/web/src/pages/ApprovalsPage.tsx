@@ -138,6 +138,7 @@ export default function ApprovalsPage() {
                     type="button"
                     className="secondary-button danger"
                     disabled={busy === id}
+                    aria-label={`${label(approval.action)} 거부`}
                     onClick={() => void vote(id, "reject")}
                   >
                     지금은 하지 않기
@@ -146,6 +147,7 @@ export default function ApprovalsPage() {
                     type="button"
                     className="primary-button"
                     disabled={busy === id}
+                    aria-label={`${label(approval.action)} 승인`}
                     onClick={() => void vote(id, "approve")}
                   >
                     {busy === id ? "반영 중…" : "승인"}
