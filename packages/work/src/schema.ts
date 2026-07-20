@@ -621,3 +621,11 @@ THEN {
 };
 `,
 );
+
+export const WORK_WORKSPACE_MIGRATION = defineMigration(
+  "0107-work-workspace",
+  `
+DEFINE FIELD workspace_id ON work TYPE option<string>;
+DEFINE INDEX work_by_workspace ON work FIELDS organization_id, workspace_id;
+`,
+);

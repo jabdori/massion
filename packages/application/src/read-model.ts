@@ -25,6 +25,7 @@ export interface ApplicationWorkSource {
   readonly status: string;
   readonly revision: number;
   readonly artifactIds: readonly string[];
+  readonly workspaceId?: string;
 }
 
 export interface ApplicationTaskSource {

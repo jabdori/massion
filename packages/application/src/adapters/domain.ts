@@ -527,6 +527,7 @@ function registerWork(
           "surface",
           "organizationVersionId",
           "projectId",
+          "workspaceId",
           "contextVersionId",
           "policyVersionId",
           "promptVersionId",
@@ -541,6 +542,7 @@ function registerWork(
           surface: string(value.surface, "surface"),
           organizationVersionId: string(value.organizationVersionId, "organizationVersionId"),
           ...(value.projectId === undefined ? {} : { projectId: string(value.projectId, "projectId") }),
+          ...(value.workspaceId === undefined ? {} : { workspaceId: string(value.workspaceId, "workspaceId") }),
           ...(value.contextVersionId === undefined
             ? {}
             : { contextVersionId: string(value.contextVersionId, "contextVersionId") }),

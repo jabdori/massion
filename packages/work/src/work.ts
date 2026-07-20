@@ -18,6 +18,7 @@ import {
   WORK_RECORDS_MIGRATION,
   WORK_PROMPT_VERSION_MIGRATION,
   WORK_STRATEGY_PROJECTION_MIGRATION,
+  WORK_WORKSPACE_MIGRATION,
 } from "./schema.js";
 import type { PromptVersionResolver, ResolveWorkPromptInput } from "./prompt-version.js";
 
@@ -49,6 +50,7 @@ export interface Work {
   readonly request_id: string;
   readonly parent_work_id?: string;
   readonly project_id?: string;
+  readonly workspace_id?: string;
   readonly status: WorkStatus;
   readonly revision: number;
   readonly organization_version_id: string;
@@ -98,6 +100,7 @@ export interface CreateWorkInput {
   readonly surface: string;
   readonly organizationVersionId: string;
   readonly projectId?: string;
+  readonly workspaceId?: string;
   readonly contextVersionId?: string;
   readonly policyVersionId?: string;
   readonly promptVersionId?: string;
@@ -857,6 +860,7 @@ export class WorkService {
       WORK_CONSTRAINTS_MIGRATION,
       WORK_STRATEGY_PROJECTION_MIGRATION,
       WORK_PROMPT_VERSION_MIGRATION,
+      WORK_WORKSPACE_MIGRATION,
     ]);
     await database.query(WORK_ASSURANCE_FAIL_CLOSED_GUARD);
     return new WorkService(database, organizations, graph, governance, promptVersions);
@@ -905,12 +909,13 @@ export class WorkService {
         },
       );
       const [works] = await transaction.query<[Work[]]>(
-        "CREATE work CONTENT { work_id: $work_id, organization_id: $organization_id, request_id: $request_id, project_id: $project_id, status: 'draft', revision: 1, organization_version_id: $organization_version_id, context_version_id: $context_version_id, policy_version_id: $policy_version_id, prompt_version_id: $prompt_version_id, prompt_schema_version: $prompt_schema_version, artifact_version_ids: [], created_at: time::now(), updated_at: time::now() } RETURN AFTER;",
+        "CREATE work CONTENT { work_id: $work_id, organization_id: $organization_id, request_id: $request_id, project_id: $project_id, workspace_id: $workspace_id, status: 'draft', revision: 1, organization_version_id: $organization_version_id, context_version_id: $context_version_id, policy_version_id: $policy_version_id, prompt_version_id: $prompt_version_id, prompt_schema_version: $prompt_schema_version, artifact_version_ids: [], created_at: time::now(), updated_at: time::now() } RETURN AFTER;",
         {
           work_id: workId,
           organization_id: context.organizationId,
           request_id: requestId,
           project_id: input.projectId,
+          workspace_id: input.workspaceId,
           organization_version_id: input.organizationVersionId,
           context_version_id: input.contextVersionId,
           policy_version_id: input.policyVersionId,
@@ -1008,13 +1013,14 @@ export class WorkService {
         },
       );
       const [works] = await transaction.query<[Work[]]>(
-        "CREATE work CONTENT { work_id: $work_id, organization_id: $organization_id, request_id: $request_id, parent_work_id: $parent_work_id, project_id: $project_id, status: 'draft', revision: 1, organization_version_id: $organization_version_id, context_version_id: $context_version_id, policy_version_id: $policy_version_id, prompt_version_id: $prompt_version_id, prompt_schema_version: $prompt_schema_version, artifact_version_ids: $artifact_version_ids, created_at: time::now(), updated_at: time::now() } RETURN AFTER;",
+        "CREATE work CONTENT { work_id: $work_id, organization_id: $organization_id, request_id: $request_id, parent_work_id: $parent_work_id, project_id: $project_id, workspace_id: $workspace_id, status: 'draft', revision: 1, organization_version_id: $organization_version_id, context_version_id: $context_version_id, policy_version_id: $policy_version_id, prompt_version_id: $prompt_version_id, prompt_schema_version: $prompt_schema_version, artifact_version_ids: $artifact_version_ids, created_at: time::now(), updated_at: time::now() } RETURN AFTER;",
         {
           work_id: workId,
           organization_id: context.organizationId,
           request_id: requestId,
           parent_work_id: parent.work_id,
           project_id: parent.project_id,
+          workspace_id: parent.workspace_id,
           organization_version_id: parent.organization_version_id,
           context_version_id: parent.context_version_id,
           policy_version_id: parent.policy_version_id,
@@ -1973,13 +1979,14 @@ export class WorkService {
         },
       );
       const [works] = await transaction.query<[Work[]]>(
-        "CREATE work CONTENT { work_id: $work_id, organization_id: $organization_id, request_id: $request_id, parent_work_id: $parent_work_id, project_id: $project_id, status: 'draft', revision: 1, organization_version_id: $organization_version_id, context_version_id: $context_version_id, policy_version_id: $policy_version_id, prompt_version_id: $prompt_version_id, prompt_schema_version: $prompt_schema_version, artifact_version_ids: $artifact_version_ids, created_at: time::now(), updated_at: time::now() } RETURN AFTER;",
+        "CREATE work CONTENT { work_id: $work_id, organization_id: $organization_id, request_id: $request_id, parent_work_id: $parent_work_id, project_id: $project_id, workspace_id: $workspace_id, status: 'draft', revision: 1, organization_version_id: $organization_version_id, context_version_id: $context_version_id, policy_version_id: $policy_version_id, prompt_version_id: $prompt_version_id, prompt_schema_version: $prompt_schema_version, artifact_version_ids: $artifact_version_ids, created_at: time::now(), updated_at: time::now() } RETURN AFTER;",
         {
           work_id: childWorkId,
           organization_id: context.organizationId,
           request_id: requestId,
           parent_work_id: parent.work_id,
           project_id: parent.project_id,
+          workspace_id: parent.workspace_id,
           organization_version_id: parent.organization_version_id,
           context_version_id: parent.context_version_id,
           policy_version_id: parent.policy_version_id,

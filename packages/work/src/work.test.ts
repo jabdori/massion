@@ -163,3 +163,55 @@ describe("Request와 Work 상태 머신", () => {
     expect(findings.map((finding) => finding.code)).toEqual(expect.arrayContaining(["revision"]));
   });
 });
+
+describe("Work workspace 바인딩", () => {
+  let database: MassionDatabase;
+  let context: TenantContext;
+  let service: WorkService;
+
+  beforeEach(async () => {
+    database = await createDatabase({ url: "mem://", namespace: "massion", database: crypto.randomUUID() });
+    const identity = await IdentityService.create(database);
+    const organizations = await OrganizationService.create(database);
+    const owner = await identity.registerPersonalUser({ email: "owner@example.com", displayName: "Owner" });
+    context = await organizations.resolveTenantContext(owner.user.user_id, owner.organization.organization_id);
+    service = await WorkService.create(database, organizations);
+  });
+
+  afterEach(async () => database.close());
+
+  it("workspaceId를 지정하면 Work에 저장되고 follow-up Work가 상속한다", async () => {
+    const created = await service.createWork(context, {
+      commandId: crypto.randomUUID(),
+      text: "환불 API를 추가한다",
+      surface: "cli",
+      organizationVersionId: "organization-version-1",
+      workspaceId: "workspace-shop-api",
+    });
+    expect(created.work.workspace_id).toBe("workspace-shop-api");
+
+    await service.transition(context, {
+      commandId: crypto.randomUUID(),
+      workId: created.work.work_id,
+      expectedRevision: created.work.revision,
+      target: "cancelled",
+    });
+    const followUp = await service.createFollowUpWork(context, {
+      commandId: crypto.randomUUID(),
+      parentWorkId: created.work.work_id,
+      text: "후속 지시를 반영한다",
+      surface: "cli",
+    });
+    expect(followUp.work.workspace_id).toBe("workspace-shop-api");
+  });
+
+  it("workspaceId 없이 만든 Work는 workspace 바인딩이 없다", async () => {
+    const created = await service.createWork(context, {
+      commandId: crypto.randomUUID(),
+      text: "일반 요청",
+      surface: "web",
+      organizationVersionId: "organization-version-1",
+    });
+    expect(created.work.workspace_id).toBeUndefined();
+  });
+});

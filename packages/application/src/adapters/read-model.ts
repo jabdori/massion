@@ -37,6 +37,7 @@ interface WorkRecord {
   readonly status: string;
   readonly revision: number;
   readonly artifact_version_ids: readonly string[];
+  readonly workspace_id?: string;
   readonly updated_at: unknown;
 }
 
@@ -246,7 +247,7 @@ export class SurrealApplicationReadModel implements ApplicationReadModel {
   public async works(context: TenantContext): Promise<readonly ApplicationWorkSource[]> {
     await this.organizations.verifyTenantContext(context);
     const [records] = await this.database.query<[WorkRecord[]]>(
-      "SELECT organization_id, work_id, status, revision, artifact_version_ids, updated_at FROM work WHERE organization_id = $organization_id ORDER BY updated_at DESC, work_id ASC;",
+      "SELECT organization_id, work_id, status, revision, artifact_version_ids, workspace_id, updated_at FROM work WHERE organization_id = $organization_id ORDER BY updated_at DESC, work_id ASC;",
       { organization_id: context.organizationId },
     );
     return records.map((record) => ({
@@ -255,6 +256,7 @@ export class SurrealApplicationReadModel implements ApplicationReadModel {
       status: record.status,
       revision: record.revision,
       artifactIds: record.artifact_version_ids,
+      ...(record.workspace_id === undefined ? {} : { workspaceId: record.workspace_id }),
     }));
   }
 

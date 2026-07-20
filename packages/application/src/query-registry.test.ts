@@ -17,6 +17,14 @@ const readModel: ApplicationReadModel = {
   organization: async () => ({ organizationId: context.organizationId, version: 1, nodes: [] }),
   works: async () => [
     { organizationId: context.organizationId, workId: "query-work", status: "running", revision: 2, artifactIds: [] },
+    {
+      organizationId: context.organizationId,
+      workId: "workspace-work",
+      status: "running",
+      revision: 1,
+      artifactIds: [],
+      workspaceId: "workspace-shop-api",
+    },
   ],
   tasks: async () => [
     {
@@ -57,7 +65,16 @@ describe("ApplicationQueryRegistry", () => {
     registerApplicationQueries(registry, { readModel });
     await expect(registry.query(context, ["work:read"], "work.list", {})).resolves.toMatchObject({
       operation: "work.list",
-      data: [{ workId: "query-work", status: "running", revision: 2, artifactIds: [] }],
+      data: [
+        { workId: "query-work", status: "running", revision: 2, artifactIds: [] },
+        {
+          workId: "workspace-work",
+          status: "running",
+          revision: 1,
+          artifactIds: [],
+          workspaceId: "workspace-shop-api",
+        },
+      ],
     });
     await expect(registry.query(context, ["work:read"], "work.tasks", { workId: "query-work" })).resolves.toMatchObject(
       {
@@ -67,6 +84,18 @@ describe("ApplicationQueryRegistry", () => {
     await expect(registry.query(context, ["work:read"], "governance.approval.list", {})).rejects.toMatchObject({
       category: "authorization",
     });
+  });
+
+  it("work.list는 workspaceId filter를 지원하고 응답에 workspaceId를 포함한다", async () => {
+    const registry = new ApplicationQueryRegistry();
+    registerApplicationQueries(registry, { readModel });
+    await expect(
+      registry.query(context, ["work:read"], "work.list", { workspaceId: "workspace-shop-api" }),
+    ).resolves.toMatchObject({
+      data: [{ workId: "workspace-work", workspaceId: "workspace-shop-api" }],
+    });
+    const unfiltered = await registry.query(context, ["work:read"], "work.list", {});
+    expect((unfiltered as { data: unknown[] }).data).toHaveLength(2);
   });
 
   it("unknown operation·payload field와 role을 거부한다", async () => {

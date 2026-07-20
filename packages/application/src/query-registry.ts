@@ -289,6 +289,7 @@ function publicWork(value: Awaited<ReturnType<ApplicationReadModel["works"]>>[nu
     status: value.status,
     revision: value.revision,
     artifactIds: value.artifactIds,
+    ...(value.workspaceId === undefined ? {} : { workspaceId: value.workspaceId }),
   };
 }
 
@@ -496,8 +497,13 @@ export function registerApplicationQueries(
     operation: "work.list",
     requiredScopes: ["work:read"],
     allowedRoles: EVERY_ROLE,
-    validate: (value) => object(value, []),
-    handle: async (context) => (await dependencies.readModel.works(context)).map(publicWork),
+    validate: (value) => object(value, ["workspaceId"]),
+    handle: async (context, value) => {
+      const works = (await dependencies.readModel.works(context)).map(publicWork);
+      if (value.workspaceId === undefined) return works;
+      const workspaceId = text(value.workspaceId, "workspaceId");
+      return works.filter((work) => work.workspaceId === workspaceId);
+    },
   });
   registry.register({
     operation: "work.get",
