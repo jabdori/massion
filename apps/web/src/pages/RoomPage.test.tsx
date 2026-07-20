@@ -98,6 +98,7 @@ describe("RoomPage", () => {
           payload: expect.objectContaining({
             workId: "work-active",
             roomId: "room-active",
+            messageType: "question",
             authorId: "user-active",
             content: "사용자 후속 질문",
           }),

@@ -35,7 +35,7 @@ export default function RoomPage() {
         payload: {
           workId,
           roomId,
-          messageType: "text",
+          messageType: "question",
           authorKind: "user",
           authorId: label(me.userId),
           content: content.trim(),
