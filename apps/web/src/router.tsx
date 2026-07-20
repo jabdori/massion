@@ -51,6 +51,11 @@ const routes = [
   }),
   createRoute({
     getParentRoute: () => rootRoute,
+    path: "/workspaces",
+    component: lazyPage(() => import("./pages/WorkspacesPage.js")),
+  }),
+  createRoute({
+    getParentRoute: () => rootRoute,
     path: "/rooms/$roomId",
     component: lazyPage(() => import("./pages/RoomPage.js")),
   }),

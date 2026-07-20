@@ -15,6 +15,7 @@ const primaryNavigation = [
 
 // 더보기 서브메뉴: 설정 및 시스템 항목
 const moreNavigation = [
+  ["/workspaces", "워크스페이스"],
   ["/organization", "역할과 권한"],
   ["/subscriptions", "연결된 AI"],
   ["/extensions", "앱 및 연동"],
@@ -93,7 +94,9 @@ export function RootShell() {
             type="button"
             className="nav-more-toggle"
             aria-expanded={moreOpen}
-            onClick={() => { setMoreOpen((value) => !value); }}
+            onClick={() => {
+              setMoreOpen((value) => !value);
+            }}
           >
             더보기
           </button>
