@@ -1,7 +1,21 @@
 # Phase 30 — 에이전틱 도구 UX 벤치마크와 TUI·Web 근본 재설계 계획
 
-> **상태**: proposed
+> **상태**: in-progress (2026-07-21 UX-0·UX-1·UX-2·WS-1·WS-2 및 Web workspace parity 구현 완료)
 > **작성일**: 2026-07-21
+
+## 진행 현황 (2026-07-21)
+
+| 슬라이스 | 상태 | 근거 커밋 |
+|---|---|---|
+| UX-0 판정 2건 | 완료 | [판정 문서](ux0-spike-judgments.md) — `@opentui/solid` 채택, ExecutionDeltaPort 확정 |
+| WS-1 Workspace 도메인 + Work 바인딩 | 완료 | `fe4f94e`, `c998c96` (migration 0106·0107) |
+| WS-2 Application API + CLI/TUI cwd attach | 완료 | `3ece5f8`, `083aa55` (`--workspace`, g 키 스코프 전환) |
+| UX-1 `work.timeline` 공통 투영 | 완료 | `209d7b1` + Web 진행 기록 표시. 팔레트 metadata는 UX-3 팔레트와 함께 |
+| UX-2 실행 스트림 | 서버측 완료 | `c23738f` — delta observer·fan-out registry·`/api/v1/executions/stream`. Surface 소비는 UX-3·4에서 |
+| Web workspace parity | 완료 | `2aa1c4c` — /workspaces 관리(등록·신뢰·보관)·작업 필터 |
+| UX-3 TUI transcript 재설계 | 미착수 | solid 채택 판정 완료, 렌더 계층 교체 대기 |
+| UX-4 Web 관제 분할 화면·폴링 제거 | 부분 | timeline 표시만 연결, SSE 소비·분할 화면 대기 |
+| UX-5 신뢰 장치 · WS-3 GUI · WS-4 Web 역할 | 미착수 | trusted 전 도구 실행 차단 게이트 포함 |
 > **대상**: `apps/tui`, `apps/web`, `packages/application` (표현 계약 확장)
 > **관계**: [Phase 30 design](design.md)의 REQ-SURFACE-004(공통 view-model·접근성)를 대체·확장하는 재설계 제안
 
