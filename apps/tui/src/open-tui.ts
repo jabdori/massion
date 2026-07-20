@@ -303,6 +303,10 @@ export class OpenTuiView {
 
   private async key(key: KeyEvent): Promise<void> {
     if (key.eventType === "release") return;
+    const open = (modal: Modal): void => {
+      key.preventDefault();
+      this.open(modal);
+    };
     if (this.modal) {
       if (key.name === "escape" || (key.ctrl && key.name === "c")) {
         this.modal = undefined;
@@ -334,32 +338,31 @@ export class OpenTuiView {
       await this.runAction(async () => {
         await this.actions.refresh();
       });
-    else if (key.name === "?") this.open({ kind: "help", title: "키보드 도움말", placeholder: "" });
-    else if (key.name === "/")
-      this.open({ kind: "search", title: "현재 화면 검색", placeholder: "검색어를 입력해 주세요" });
+    else if (key.name === "?") open({ kind: "help", title: "키보드 도움말", placeholder: "" });
+    else if (key.name === "/") open({ kind: "search", title: "현재 화면 검색", placeholder: "검색어를 입력해 주세요" });
     else if (key.name === "n")
-      this.open({ kind: "start-work", title: "새 업무 시작", placeholder: "업무 내용을 입력해 주세요" });
+      open({ kind: "start-work", title: "새 업무 시작", placeholder: "업무 내용을 입력해 주세요" });
     else if (key.name === "c" && this.actions.state().view === "chat")
-      this.open({ kind: "message", title: "협업방에 메시지 보내기", placeholder: "메시지를 입력해 주세요" });
+      open({ kind: "message", title: "협업방에 메시지 보내기", placeholder: "메시지를 입력해 주세요" });
     else if (key.name === "a" && this.actions.state().view === "approvals")
-      this.open({ kind: "vote", vote: "approve", title: "승인 이유", placeholder: "승인 근거를 입력해 주세요" });
+      open({ kind: "vote", vote: "approve", title: "승인 이유", placeholder: "승인 근거를 입력해 주세요" });
     else if (key.name === "x" && this.actions.state().view === "approvals")
-      this.open({ kind: "vote", vote: "reject", title: "거절 이유", placeholder: "거절 근거를 입력해 주세요" });
+      open({ kind: "vote", vote: "reject", title: "거절 이유", placeholder: "거절 근거를 입력해 주세요" });
     else if (key.name === "delete" && this.actions.state().view === "approvals")
-      this.open({
+      open({
         kind: "cancel-approval",
         title: "승인 요청 취소",
         placeholder: "승인 요청을 취소하는 이유를 입력해 주세요",
       });
     else if (key.name === "d" && this.actions.state().view === "works")
-      this.open({ kind: "cancel-work", title: "업무 취소 확인", placeholder: "취소 이유를 입력해 주세요" });
+      open({ kind: "cancel-work", title: "업무 취소 확인", placeholder: "취소 이유를 입력해 주세요" });
     else if (key.name === "t" && this.actions.state().view === "works")
-      this.open({ kind: "assign-task", title: "작업 배정·재배정", placeholder: "에이전트 handle을 입력해 주세요" });
+      open({ kind: "assign-task", title: "작업 배정·재배정", placeholder: "에이전트 handle을 입력해 주세요" });
     else if (key.name === "s" && this.actions.state().view === "works") {
       const execution = this.selectedExecution();
       if (execution) {
         const operation = execution.status === "suspended" ? "resume" : "suspend";
-        this.open({
+        open({
           kind: "runtime",
           operation,
           title: operation === "resume" ? "실행 재개 확인" : "실행 일시정지 확인",
@@ -367,7 +370,7 @@ export class OpenTuiView {
         });
       }
     } else if (key.name === "z" && this.actions.state().view === "works" && this.selectedExecution()) {
-      this.open({
+      open({
         kind: "runtime",
         operation: "cancel",
         title: "실행 취소 확인",
@@ -378,15 +381,17 @@ export class OpenTuiView {
       this.actions.state().subscriptionTab === "accounts" &&
       ["s", "u", "d"].includes(key.name)
     ) {
+      key.preventDefault();
       this.openSubscriptionAccountAction(key.name === "s" ? "share" : key.name === "u" ? "unshare" : "disconnect");
     } else if (
       key.name === "e" &&
       this.actions.state().view === "subscriptions" &&
       this.actions.state().subscriptionTab === "policy"
     ) {
+      key.preventDefault();
       this.openSubscriptionPolicyAction();
     } else if (key.name === "o" && this.actions.state().view === "operations") {
-      this.open({
+      open({
         kind: "optimization",
         title: "모델 평가실 변경",
         placeholder: '{"operation":"optimization.batch.activate","payload":{"batchId":"..."}}',

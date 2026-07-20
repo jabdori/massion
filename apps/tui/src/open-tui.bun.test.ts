@@ -194,6 +194,7 @@ describe("OpenTUI 실제 renderer", () => {
     expect(setup.captureCharFrame()).toContain("새 업무 시작");
 
     let input = setup.renderer.root.findDescendantById("modal-input") as InputRenderable;
+    expect(input.value).toBe("");
     input.value = "   ";
     input.submit();
     await Bun.sleep(0);
