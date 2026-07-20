@@ -3,7 +3,7 @@
 > **상태**: in-progress
 > **시작일**: 2026-07-16
 > **최근 업데이트**: 2026-07-21
-> **기준 source commit**: `09bafc1`
+> **기준 source commit**: `938709f`
 
 ## 디자인 방향 전환
 
@@ -31,6 +31,10 @@
 - WorkPage 인라인 메시지 입력 (협업방 이동 없이 에이전트와 소통)
 - 모바일 반응형 디자인 (768px, 480px 브레이크포인트)
 - 접근성: ARIA progressbar, aria-label, aria-describedby, focus-visible, prefers-reduced-motion
+- 기술 용어 번역: REV→버전, ARTIFACT→결과물 수, EXTENSIONS→확장, ORGANIZATION→조직
+- 빈 화면 예시 안내, 오류 상태 복구 가이드
+- 하드코딩 색상을 CSS 디자인 토큰으로 통일
+- 기본 본문 16px, line-height 1.6
 
 **TUI:**
 - Guided Workspace 2패널 레이아웃, 친화적 상태 라벨
@@ -38,6 +42,11 @@
 - 4단계 진행 바, 친화적 에이전트 역할명
 - 차단 상태 친화적 복구 안내 (Recovery Card)
 - D 자세히 보기 토글
+- 화면별 컨텍스트 도움말 바 (작업/확인/대화/구독 각각 다른 단축키 안내)
+- 빈 작업 상태에서 "무엇을 도와드릴까요?" 입력 유도
+- 작업 상세 첫 줄을 정적 라벨 대신 작업 제목으로 표시
+- 승인 화면에 친화적 영향 표현 추가
+- 패널 제목을 뷰별 사용자 언어로 표시
 
 **문서:**
 - README를 Guided Workspace 용어로 전면 업데이트
@@ -52,25 +61,21 @@
 
 ## 근거
 
+- `938709f`: Web Console Guided Workspace UX 개선 (용어 번역, 디자인 토큰 통일, 빈 화면 예시, 오류 가이드)
+- `7dee246`: TUI Guided Workspace UX 개선 (화면별 도움말, 빈 상태 입력 유도, 승인 영향 표현, 패널 제목)
+- `eda3505`: 2차 GLM 도그푸딩 UAT 증거 추가, 회고 09bafc1 기준 업데이트
 - `09bafc1`: Web 접근성 개선 (focus-visible 복원, aria-describedby)
 - `b56fa22`: ARIA 속성 추가 (progressbar, aria-label, aria-describedby)
-- `a0f5c77`: Phase 30 회고 최신화 (518 테스트 통과 기록)
 - `8424b45`: 전체 패키지 린트 에러 해결
 - `ee49474`: 모바일 반응형 디자인 (768px, 480px 브레이크포인트)
 - `e9c5131`: TUI 차단 상태 친화적 복구 안내 (Recovery Card)
-- `499ff60`: Guided Workspace 변경사항 린트 에러 수정
-- `1d4d4cc`: WorkPage 인라인 메시지 입력 추가
-- `064562e`: README Guided Workspace 용어 업데이트
-- `c6c7f5f`: TUI Tab 뷰 전환 추가
-- `0557486`: Guided Workspace works list, plan preview, approval risk
 - `beaeabd`: TUI·Web Guided Workspace 재설계
 - `f3b41a4`: Guided Workspace 디자인 토큰 및 UX Projection 계층
-- [업무 협업 UAT](../../evidence/phase-30/work-collaboration-local-uat-2026-07-20.md)
-- [Z.AI Coding Plan 1차 UAT](../../evidence/phase-30/zai-core-office-uat-2026-07-20.md)
 - [GLM 도그푸딩 1차 UAT](../../evidence/phase-30/glm-dogfooding-uat-2026-07-20.md)
 - [GLM 도그푸딩 2차 UAT](../../evidence/phase-30/glm-dogfooding-uat-2026-07-21.md)
+- [업무 협업 UAT](../../evidence/phase-30/work-collaboration-local-uat-2026-07-20.md)
 
-## 품질 게이트 결과 (commit `09bafc1` 기준)
+## 품질 게이트 결과 (commit `938709f` 기준)
 
 - **ESLint**: 0 에러 (application, web, tui, cli 전체)
 - **TypeScript**: 4개 패키지(application, web, tui, cli) typecheck 통과
