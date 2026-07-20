@@ -130,6 +130,44 @@ describe("TUI controller", () => {
     expect(state.queryResults.messages).toEqual([{ messageId: "message-2", content: "인계 완료" }]);
   });
 
+  it("이전 협업방의 늦은 응답은 새로 선택한 협업방에 반영하지 않는다", async () => {
+    let state: TuiState = { ...createTuiState(), view: "chat" };
+    const abort = new AbortController();
+    const controller = new TuiController(
+      {
+        status: () => Promise.resolve(response("system.status", {})),
+        me: () =>
+          Promise.resolve(
+            response("identity.me", {
+              userId: "user-1",
+              organizationId: "organization-1",
+              membershipId: "member-1",
+              role: "owner",
+            }),
+          ),
+        snapshot: () => Promise.resolve(response("organization.graph.snapshot", testSnapshot)),
+        streamEvents: async function* () {
+          yield { sequence: 1, type: "collaboration.message-posted", payload: { roomId: "room-1" } };
+          abort.abort();
+        },
+        query: () => {
+          state = { ...state, selection: { workId: "work-2", roomId: "room-2" } };
+          return Promise.resolve(response("work.messages", [{ messageId: "message-1", content: "이전 방 메시지" }]));
+        },
+        command: () => Promise.resolve({}),
+      },
+      (action) => {
+        state = reduceTuiState(state, action);
+      },
+      () => state,
+      { delay: () => Promise.resolve(), random: () => 0 },
+    );
+
+    await controller.run(abort.signal);
+
+    expect(state.queryResults.messages).toBeUndefined();
+  });
+
   it("연결 실패 후 상한 backoff로 재연결하고 token을 오류 상태에 복사하지 않는다", async () => {
     let state = createTuiState();
     let streams = 0;

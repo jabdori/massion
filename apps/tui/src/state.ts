@@ -35,6 +35,7 @@ export type TuiAction =
   | { readonly type: "event.received"; readonly event: TuiEvent }
   | { readonly type: "view.selected"; readonly view: TuiView }
   | { readonly type: "query.loaded"; readonly key: string; readonly value: unknown }
+  | { readonly type: "messages.loaded"; readonly workId: string; readonly roomId: string; readonly value: unknown }
   | { readonly type: "query.failed"; readonly key: string; readonly error: string }
   | { readonly type: "subscription.tab.selected"; readonly tab: TuiSubscriptionTab }
   | { readonly type: "selection.changed"; readonly selection: TuiSelection };
@@ -120,6 +121,14 @@ export function reduceTuiState(state: TuiState, action: TuiAction): TuiState {
       queryErrors: Object.fromEntries(Object.entries(state.queryErrors).filter(([key]) => key !== action.key)),
     };
   }
+  if (action.type === "messages.loaded") {
+    if (state.selection.workId !== action.workId || state.selection.roomId !== action.roomId) return state;
+    return {
+      ...state,
+      queryResults: { ...state.queryResults, messages: action.value },
+      queryErrors: Object.fromEntries(Object.entries(state.queryErrors).filter(([key]) => key !== "messages")),
+    };
+  }
   if (action.type === "query.failed")
     return { ...state, queryErrors: { ...state.queryErrors, [action.key]: action.error } };
   if (action.type === "subscription.tab.selected") return { ...state, subscriptionTab: action.tab };
@@ -133,5 +142,9 @@ export function reduceTuiState(state: TuiState, action: TuiAction): TuiState {
     if (roomId === undefined) delete selection.roomId;
     else selection.roomId = roomId;
   }
-  return { ...state, selection };
+  if (selection.workId === state.selection.workId && selection.roomId === state.selection.roomId)
+    return { ...state, selection };
+  const queryResults = Object.fromEntries(Object.entries(state.queryResults).filter(([key]) => key !== "messages"));
+  const queryErrors = Object.fromEntries(Object.entries(state.queryErrors).filter(([key]) => key !== "messages"));
+  return { ...state, selection, queryResults, queryErrors };
 }
