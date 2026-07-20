@@ -86,6 +86,39 @@ describe("ApplicationQueryRegistry", () => {
     });
   });
 
+  it("workspace.list와 workspace.get을 workspace:read scope로 제공한다", async () => {
+    const registry = new ApplicationQueryRegistry();
+    const workspaceView = {
+      workspaceId: "workspace-shop-api",
+      organizationId: context.organizationId,
+      name: "shop-api",
+      path: "/home/owner/projects/shop-api",
+      kind: "local-directory",
+      trust: "trusted",
+      status: "active",
+      revision: 1,
+      createdAt: "2026-07-21T00:00:00.000Z",
+      lastUsedAt: "2026-07-21T00:00:00.000Z",
+    } as const;
+    registerApplicationQueries(registry, {
+      readModel,
+      workspaces: {
+        list: async () => [workspaceView],
+        get: async () => workspaceView,
+      } as never,
+    });
+    await expect(registry.query(context, ["workspace:read"], "workspace.list", {})).resolves.toMatchObject({
+      data: [{ workspaceId: "workspace-shop-api", path: "/home/owner/projects/shop-api", trust: "trusted" }],
+    });
+    const got = await registry.query(context, ["workspace:read"], "workspace.get", {
+      workspaceId: "workspace-shop-api",
+    });
+    expect((got as { data: { organizationId?: string } }).data.organizationId).toBeUndefined();
+    await expect(registry.query(context, ["work:read"], "workspace.list", {})).rejects.toMatchObject({
+      category: "authorization",
+    });
+  });
+
   it("work.list는 workspaceId filter를 지원하고 응답에 workspaceId를 포함한다", async () => {
     const registry = new ApplicationQueryRegistry();
     registerApplicationQueries(registry, { readModel });

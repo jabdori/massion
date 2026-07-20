@@ -151,6 +151,9 @@ importers:
       '@massion/work':
         specifier: workspace:*
         version: link:../../packages/work
+      '@massion/workspace':
+        specifier: workspace:*
+        version: link:../../packages/workspace
       ws:
         specifier: 8.21.0
         version: 8.21.0
@@ -330,6 +333,9 @@ importers:
       '@massion/work':
         specifier: workspace:*
         version: link:../work
+      '@massion/workspace':
+        specifier: workspace:*
+        version: link:../workspace
 
   packages/assurance:
     dependencies:

@@ -3,6 +3,7 @@ import { IdentityService, OrganizationService } from "@massion/identity";
 import { OrganizationGraphService } from "@massion/organization";
 import { createDatabase } from "@massion/storage";
 import { WorkService } from "@massion/work";
+import { WorkspaceService } from "@massion/workspace";
 import { describe, expect, it, vi } from "vitest";
 
 import { ApplicationCommandRegistry } from "../command-registry.js";
@@ -104,6 +105,67 @@ describe("Application domain adapters", () => {
         },
       }),
     ).resolves.toMatchObject({ outcome: "succeeded", resource: { type: "Organization", revision: 2 } });
+  });
+
+  it("workspace 명령을 command registry에 연결하고 등록·신뢰·archive를 처리한다", async () => {
+    await using database = await createDatabase({
+      url: "mem://",
+      namespace: "massion",
+      database: crypto.randomUUID(),
+    });
+    const identities = await IdentityService.create(database);
+    const organizations = await OrganizationService.create(database);
+    const owner = await identities.registerPersonalUser({ email: "workspace@example.com", displayName: "Owner" });
+    const context = await organizations.resolveTenantContext(owner.user.user_id, owner.organization.organization_id);
+    const workspaces = await WorkspaceService.create(database, organizations);
+    const registry = new ApplicationCommandRegistry(await ApplicationCommandStore.create(database, organizations));
+    registerApplicationDomainCommands(registry, { workspaces });
+
+    const registered = await registry.dispatch(context, ["workspace:write"], {
+      schemaVersion: "massion.application.v1",
+      commandId: "workspace-register-command-0001",
+      correlationId: "workspace-register-correlation-0001",
+      operation: "workspace.register",
+      payload: { path: "/home/owner/projects/shop-api" },
+    });
+    expect(registered).toMatchObject({
+      outcome: "succeeded",
+      resource: { type: "Workspace", revision: 0 },
+      data: { path: "/home/owner/projects/shop-api", trust: "pending", status: "active" },
+    });
+    const workspaceId = (registered.data as { workspaceId: string }).workspaceId;
+
+    await expect(
+      registry.dispatch(context, ["workspace:write"], {
+        schemaVersion: "massion.application.v1",
+        commandId: "workspace-trust-command-0001",
+        correlationId: "workspace-trust-correlation-0001",
+        operation: "workspace.trust",
+        expectedRevision: 0,
+        payload: { workspaceId, decision: "trusted" },
+      }),
+    ).resolves.toMatchObject({ outcome: "succeeded", data: { trust: "trusted" }, resource: { revision: 1 } });
+
+    await expect(
+      registry.dispatch(context, ["workspace:write"], {
+        schemaVersion: "massion.application.v1",
+        commandId: "workspace-archive-command-0001",
+        correlationId: "workspace-archive-correlation-0001",
+        operation: "workspace.archive",
+        expectedRevision: 1,
+        payload: { workspaceId },
+      }),
+    ).resolves.toMatchObject({ outcome: "succeeded", data: { status: "archived" } });
+
+    await expect(
+      registry.dispatch(context, ["work:write"], {
+        schemaVersion: "massion.application.v1",
+        commandId: "workspace-scope-command-0001",
+        correlationId: "workspace-scope-correlation-0001",
+        operation: "workspace.register",
+        payload: { path: "/home/owner/projects/other" },
+      }),
+    ).rejects.toMatchObject({ category: "authorization" });
   });
 
   it("Extension review는 awaiting-approval로 반환하고 같은 command·artifact로 승인 재개한다", async () => {

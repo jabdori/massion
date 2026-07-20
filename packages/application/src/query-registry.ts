@@ -11,6 +11,7 @@ import {
   type OptimizationBatchService,
 } from "@massion/model-optimization";
 import type { RuntimeExecutionStore } from "@massion/runtime";
+import type { WorkspaceService, WorkspaceView } from "@massion/workspace";
 
 import { ApplicationError } from "./errors.js";
 import { ApplicationEventCursorExpiredError, type ApplicationEventStore } from "./event-store.js";
@@ -63,6 +64,7 @@ export interface ApplicationQueryDependencies {
     | "listEffectEvaluations"
   >;
   readonly memberships?: Pick<OrganizationService, "listMembers">;
+  readonly workspaces?: Pick<WorkspaceService, "list" | "get">;
   readonly audit?: Pick<ApplicationEventStore, "read">;
   readonly webSessions?: Pick<WebSessionService, "list">;
   readonly providers?: Pick<ProviderService, "listProviders" | "listEndpoints" | "listCredentials">;
@@ -491,6 +493,35 @@ export function registerApplicationQueries(
       allowedRoles: EVERY_ROLE,
       validate: (value) => object(value, ["runId"]),
       handle: async (context, value) => publicRun(await runs.get(context, text(value.runId, "runId"))),
+    });
+  }
+  if (dependencies.workspaces) {
+    const workspaces = dependencies.workspaces;
+    const publicWorkspace = (workspace: WorkspaceView) => ({
+      workspaceId: workspace.workspaceId,
+      name: workspace.name,
+      path: workspace.path,
+      kind: workspace.kind,
+      trust: workspace.trust,
+      status: workspace.status,
+      revision: workspace.revision,
+      createdAt: workspace.createdAt,
+      lastUsedAt: workspace.lastUsedAt,
+    });
+    registry.register({
+      operation: "workspace.list",
+      requiredScopes: ["workspace:read"],
+      allowedRoles: EVERY_ROLE,
+      validate: (value) => object(value, []),
+      handle: async (context) => (await workspaces.list(context)).map(publicWorkspace),
+    });
+    registry.register({
+      operation: "workspace.get",
+      requiredScopes: ["workspace:read"],
+      allowedRoles: EVERY_ROLE,
+      validate: (value) => object(value, ["workspaceId"]),
+      handle: async (context, value) =>
+        publicWorkspace(await workspaces.get(context, text(value.workspaceId, "workspaceId"))),
     });
   }
   registry.register({

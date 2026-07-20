@@ -82,6 +82,7 @@ import {
   SubscriptionQuotaService,
 } from "@massion/subscriptions";
 import { WorkService } from "@massion/work";
+import { WorkspaceService } from "@massion/workspace";
 
 import type { DatabaseProvisionConfig, ServerConfig } from "./config.js";
 import { MassionDaemon } from "./daemon.js";
@@ -210,6 +211,7 @@ export async function createMassionDaemon(
       approvals,
     );
     const works = await WorkService.create(database, organizations, graph);
+    const workspaces = await WorkspaceService.create(database, organizations);
     await ExtensionStore.create(database, organizations);
     const connectorEnrollment = await ConnectorEnrollmentService.create(database, organizations);
     const subscriptionConnectors = await ConnectorRegistry.create(database, organizations, connectorEnrollment, {
@@ -705,6 +707,7 @@ export async function createMassionDaemon(
       executors,
       domain: {
         works,
+        workspaces,
         organization: graph,
         runtime: runner,
         approvals,
@@ -719,6 +722,7 @@ export async function createMassionDaemon(
       },
       queries: {
         runtime: runtimeExecutions,
+        workspaces,
         assuranceBindings,
         providers,
         router,

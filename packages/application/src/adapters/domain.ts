@@ -23,6 +23,7 @@ import {
 } from "@massion/subscriptions";
 import type { SubscriptionAuthKind, SubscriptionProviderProtocol } from "@massion/subscriptions";
 import type { WorkService } from "@massion/work";
+import type { WorkspaceService, WorkspaceView } from "@massion/workspace";
 
 import type { ApplicationCommandDescriptor, ApplicationCommandRegistry } from "../command-registry.js";
 import type { ApplicationCommandResultV1, ApplicationCommandV1 } from "../contracts.js";
@@ -52,6 +53,7 @@ export interface ApplicationDomainDependencies {
     | "postMessage"
     | "assignTask"
   >;
+  readonly workspaces?: Pick<WorkspaceService, "register" | "decideTrust" | "archive">;
   readonly runtime?: Pick<AgentRunner, "execute" | "cancel" | "suspend" | "resume">;
   readonly approvals?: Pick<ApprovalStore, "vote" | "cancel">;
   readonly assuranceBindings?: Pick<AssuranceBindingStore, "propose" | "activate">;
@@ -508,6 +510,94 @@ function growthData(value: unknown): Record<string, unknown> {
     );
   }
   return selected;
+}
+
+function workspaceData(workspace: WorkspaceView): Record<string, unknown> {
+  return {
+    workspaceId: workspace.workspaceId,
+    name: workspace.name,
+    path: workspace.path,
+    kind: workspace.kind,
+    trust: workspace.trust,
+    status: workspace.status,
+    revision: workspace.revision,
+  };
+}
+
+function workspaceTrustDecision(value: unknown): "trusted" | "blocked" {
+  const decision = string(value, "decision");
+  if (decision !== "trusted" && decision !== "blocked") throw new Error("지원하지 않는 workspace 신뢰 결정입니다");
+  return decision;
+}
+
+function registerWorkspace(
+  registry: ApplicationCommandRegistry,
+  workspaces: NonNullable<ApplicationDomainDependencies["workspaces"]>,
+): void {
+  register(registry, {
+    operation: "workspace.register",
+    requiredScopes: ["workspace:write"],
+    allowedRoles: ["owner", "admin", "member"],
+    recovery: "replay-domain",
+    validate: (value) => payload(value, ["path", "name"], ["path"]),
+    async handle(context, command, value) {
+      try {
+        const workspace = await workspaces.register(context, {
+          path: string(value.path, "path"),
+          ...(value.name === undefined ? {} : { name: string(value.name, "name") }),
+        });
+        return result(command, {
+          resource: { type: "Workspace", id: workspace.workspaceId, revision: workspace.revision },
+          data: workspaceData(workspace),
+        });
+      } catch (error) {
+        return domainError(error, command.correlationId);
+      }
+    },
+  });
+  register(registry, {
+    operation: "workspace.trust",
+    requiredScopes: ["workspace:write"],
+    allowedRoles: ["owner", "admin"],
+    recovery: "replay-domain",
+    validate: (value) => payload(value, ["workspaceId", "decision"], ["workspaceId", "decision"]),
+    async handle(context, command, value) {
+      try {
+        const workspace = await workspaces.decideTrust(context, {
+          workspaceId: string(value.workspaceId, "workspaceId"),
+          decision: workspaceTrustDecision(value.decision),
+          expectedRevision: expectedRevision(command),
+        });
+        return result(command, {
+          resource: { type: "Workspace", id: workspace.workspaceId, revision: workspace.revision },
+          data: workspaceData(workspace),
+        });
+      } catch (error) {
+        return domainError(error, command.correlationId);
+      }
+    },
+  });
+  register(registry, {
+    operation: "workspace.archive",
+    requiredScopes: ["workspace:write"],
+    allowedRoles: ["owner", "admin"],
+    recovery: "replay-domain",
+    validate: (value) => payload(value, ["workspaceId"], ["workspaceId"]),
+    async handle(context, command, value) {
+      try {
+        const workspace = await workspaces.archive(context, {
+          workspaceId: string(value.workspaceId, "workspaceId"),
+          expectedRevision: expectedRevision(command),
+        });
+        return result(command, {
+          resource: { type: "Workspace", id: workspace.workspaceId, revision: workspace.revision },
+          data: workspaceData(workspace),
+        });
+      } catch (error) {
+        return domainError(error, command.correlationId);
+      }
+    },
+  });
 }
 
 function registerWork(
@@ -2302,6 +2392,7 @@ export function registerApplicationDomainCommands(
   dependencies: ApplicationDomainDependencies,
 ): void {
   if (dependencies.works) registerWork(registry, dependencies.works);
+  if (dependencies.workspaces) registerWorkspace(registry, dependencies.workspaces);
   if (dependencies.runtime) registerRuntime(registry, dependencies.runtime);
   if (dependencies.approvals) registerApprovals(registry, dependencies.approvals, dependencies.runtime);
   if (dependencies.assuranceBindings) registerAssuranceBindings(registry, dependencies.assuranceBindings);

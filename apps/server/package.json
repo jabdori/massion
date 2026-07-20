@@ -32,6 +32,7 @@
     "@massion/software-engineering": "workspace:*",
     "@massion/storage": "workspace:*",
     "@massion/subscriptions": "workspace:*",
+    "@massion/workspace": "workspace:*",
     "@massion/work": "workspace:*",
     "ws": "8.21.0"
   },
