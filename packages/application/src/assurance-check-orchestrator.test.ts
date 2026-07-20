@@ -83,4 +83,70 @@ describe("DatabaseCoreAssuranceCheckOrchestrator", () => {
     ]);
     expect(JSON.stringify(recorded)).not.toContain("verdict");
   });
+
+  it("소프트웨어 재검증에는 해당 code-change ArtifactVersion 하나만 전달한다", async () => {
+    const recorded: unknown[] = [];
+    const orchestrator = new DatabaseCoreAssuranceCheckOrchestrator({
+      runs: {
+        listCriteria: async () => [
+          { criterionId: "software", criterionKey: "profile:software:correctness", status: "pending" },
+          { criterionId: "other", criterionKey: "deliverable-created", status: "pending" },
+        ],
+      },
+      bindings: {
+        get: async () => ({
+          bindings: [
+            {
+              criterionKey: "profile:software:correctness",
+              bindingKey: "software-correctness",
+              kind: "test",
+              executor: { kind: "system_adapter", adapterId: "massion.software-command.v1" },
+            },
+            {
+              criterionKey: "deliverable-created",
+              bindingKey: "deliverable",
+              kind: "evidence",
+              evidenceKinds: ["artifact-version"],
+            },
+          ],
+        }),
+      },
+      works: {
+        recoverWork: async () => ({
+          work: { artifact_version_ids: ["task-output-version", "code-change-version"] },
+          artifacts: [
+            { artifact_id: "task-output", kind: "task-output" },
+            { artifact_id: "code-change", kind: "code-change" },
+          ],
+          artifactVersions: [
+            { artifact_id: "task-output", artifact_version_id: "task-output-version" },
+            { artifact_id: "code-change", artifact_version_id: "code-change-version" },
+          ],
+        }),
+      },
+      checks: {
+        record: async (_context: unknown, input: unknown) => {
+          recorded.push(input);
+          return {};
+        },
+      },
+    } as never);
+
+    await expect(
+      orchestrator.execute({} as never, {
+        commandId: "assurance-checks-command",
+        run: { assuranceRunId: "assurance-run", bindingVersionId: "binding-version", workId: "work-1" } as never,
+        request: {},
+      }),
+    ).resolves.toEqual({ outcome: "ready" });
+    expect(recorded).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ bindingKey: "software-correctness", artifactVersionIds: ["code-change-version"] }),
+        expect.objectContaining({
+          bindingKey: "deliverable",
+          artifactVersionIds: ["task-output-version", "code-change-version"],
+        }),
+      ]),
+    );
+  });
 });

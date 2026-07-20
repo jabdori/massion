@@ -143,6 +143,37 @@ function prompt(input: unknown): string {
   return typeof input === "string" ? input : JSON.stringify(input);
 }
 
+function jsonOutputPrompt(input: unknown, output: StructuredOutputSpec): string {
+  return [
+    prompt(input),
+    "",
+    `Massion JSON output schema (${output.name}):`,
+    JSON.stringify(output.jsonSchema),
+    "응답은 위 schema를 만족하는 JSON object 하나만 반환하세요. Markdown code fence나 설명을 포함하지 마세요.",
+  ].join("\n");
+}
+
+function validateJsonOutput(value: unknown, output: StructuredOutputSpec): unknown {
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("구조화 출력은 JSON object여야 합니다");
+  if (!output.validate) return value;
+  const validated = output.validate(value);
+  if (!validated.success) throw new Error("구조화 출력 검증에 실패했습니다", { cause: validated.error });
+  return validated.value;
+}
+
+function nonNativeStructuredGenerationOptions(lease: RoutedLanguageModelLease) {
+  const provider =
+    lease.model && typeof lease.model === "object" && "provider" in lease.model && typeof lease.model.provider === "string"
+      ? lease.model.provider
+      : undefined;
+  if (provider !== "zai-coding-plan.chat") return {};
+  return {
+    providerOptions: {
+      "zai-coding-plan": { thinking: { type: "disabled" as const } },
+    },
+  };
+}
+
 function failureSignal(error: unknown): FailureSignal {
   if (error && typeof error === "object") {
     const record = error as Record<string, unknown>;
@@ -762,22 +793,42 @@ export class VoltAgentRunner implements AgentRunner, StructuredAgentRunner {
           return outcome.result;
         }
         this.registry.set(running.execution_id, lease);
-        const schema = jsonSchema(
-          output.jsonSchema as Parameters<typeof jsonSchema>[0],
-          output.validate ? { validate: output.validate } : undefined,
-        );
-        const result = await this.agent(context, input.agentHandle).generateText(prompt(input.input), {
+        const generationOptions = {
           abortSignal,
           context: new Map<string | symbol, unknown>([
             [MASSION_RUNTIME_EXECUTION_CONTEXT_KEY, running.execution_id],
             [MASSION_TENANT_CONTEXT_KEY, context],
           ]),
-          output: Output.object({ schema, name: output.name, description: output.description }),
-        });
+        };
+        let structuredOutput: unknown;
+        let inputTokens = 0;
+        let outputTokens = 0;
+        if (lease.supportsStructuredOutput) {
+          const schema = jsonSchema(
+            output.jsonSchema as Parameters<typeof jsonSchema>[0],
+            output.validate ? { validate: output.validate } : undefined,
+          );
+          const result = await this.agent(context, input.agentHandle).generateText(prompt(input.input), {
+            ...generationOptions,
+            output: Output.object({ schema, name: output.name, description: output.description }),
+          });
+          structuredOutput = result.output;
+          inputTokens = result.usage.inputTokens ?? 0;
+          outputTokens = result.usage.outputTokens ?? 0;
+        } else {
+          const result = await this.agent(context, input.agentHandle).generateText(jsonOutputPrompt(input.input, output), {
+            ...generationOptions,
+            ...nonNativeStructuredGenerationOptions(lease),
+            output: Output.json({ name: output.name, description: output.description }),
+          });
+          structuredOutput = validateJsonOutput(result.output, output);
+          inputTokens = result.usage.inputTokens ?? 0;
+          outputTokens = result.usage.outputTokens ?? 0;
+        }
         await lease.complete({
           commandId: `${running.execution_id}:model:${String(attempt)}:complete`,
-          inputTokens: result.usage.inputTokens ?? 0,
-          outputTokens: result.usage.outputTokens ?? 0,
+          inputTokens,
+          outputTokens,
         });
         const current = await this.store.getRecovery(context, running.execution_id);
         await this.store.transition(context, {
@@ -785,9 +836,9 @@ export class VoltAgentRunner implements AgentRunner, StructuredAgentRunner {
           executionId: running.execution_id,
           expectedVersion: current.execution.version,
           target: "succeeded",
-          payload: { output: result.output, attemptId: lease.attemptId },
+          payload: { output: structuredOutput, attemptId: lease.attemptId },
         });
-        return { executionId: running.execution_id, status: "succeeded", output: result.output };
+        return { executionId: running.execution_id, status: "succeeded", output: structuredOutput };
       } catch (error) {
         this.registry.delete(running.execution_id);
         if (error instanceof RoutedExecutionSettlementError) {

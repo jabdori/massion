@@ -1,5 +1,6 @@
 import type { TenantContext } from "@massion/identity";
 import type { AgentRunner, RuntimeExecutionStore } from "@massion/runtime";
+import { isSoftwareEngineeringTask } from "@massion/software-engineering";
 import type { WorkService, WorkTask } from "@massion/work";
 
 import type { CoreWorkStageExecutor, CoreWorkStageInput, CoreWorkStageResult } from "./core-work-coordinator.js";
@@ -7,11 +8,10 @@ import type { CoreWorkStageExecutor, CoreWorkStageInput, CoreWorkStageResult } f
 const APPLICATION_RUN_CANCELLED = "Application run cancelled";
 
 function isSoftwareTask(task: WorkTask): boolean {
-  return (
-    task.required_capabilities?.some((capability) =>
-      ["software-development", "software-engineering"].includes(capability),
-    ) ?? false
-  );
+  return isSoftwareEngineeringTask({
+    requiredCapabilities: task.required_capabilities ?? [],
+    recommendedAgentHandles: task.recommended_agent_handles ?? [],
+  });
 }
 
 export interface CoreSoftwareTaskPort {
@@ -59,7 +59,7 @@ export class CoreDeliveryStage implements CoreWorkStageExecutor {
     if (initial.status === "planned") {
       const tasks = await this.dependencies.works.listTasks(context, input.workId);
       this.throwIfCancelled(input);
-      for (const task of tasks.filter((candidate) => candidate.status === "ready")) {
+      for (const task of tasks.filter((candidate) => candidate.status !== "cancelled")) {
         this.throwIfCancelled(input);
         const assigned = await this.dependencies.works.assignTask(context, {
           commandId: `${input.commandId}:task:${task.task_id}:assign`,

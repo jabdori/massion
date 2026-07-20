@@ -62,7 +62,7 @@ const OPENCODE_ANTHROPIC_MODELS = [
   "qwen3.6-plus",
 ] as const;
 
-const ZAI_CODING_MODELS = ["glm-5.1", "glm-5-turbo", "glm-4.7", "glm-4.5-air"] as const;
+const ZAI_CODING_MODELS = ["glm-5.2", "glm-5-turbo", "glm-4.7"] as const;
 const KIMI_CODING_MODELS = ["kimi-for-coding", "kimi-for-coding-highspeed"] as const;
 const STEPFUN_STEP_MODELS = ["step-3.7-flash", "step-3.5-flash-2603", "step-3.5-flash"] as const;
 const ALIBABA_CODING_MODELS = [
@@ -93,15 +93,15 @@ const PRESETS = [
   {
     id: "zai-coding-plan",
     displayName: "Z.AI GLM Coding Plan",
-    connectionSurface: "unavailable",
+    connectionSurface: "server-only",
     authKinds: ["api-key"],
     routes: [{ protocol: "openai", baseUrl: "https://api.z.ai/api/coding/paas/v4", modelIds: ZAI_CODING_MODELS }],
     billingKinds: ["coding-plan"],
     modelDiscovery: "documented-allowlist",
     quotaDiscovery: "none",
     accountPolicy: "standard",
-    usageScope: "interactive-coding",
-    availability: "requires-provider-approval",
+    usageScope: "agent-api",
+    availability: "supported",
     requiresAuthentication: true,
     blockedModelIdSuffixes: [],
     officialDocumentation: "https://docs.z.ai/devpack/quick-start",

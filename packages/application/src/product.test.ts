@@ -78,6 +78,63 @@ describe("ApplicationProduct", () => {
     await expect(client.events()).resolves.toMatchObject({ events: expect.any(Array) });
   });
 
+  it("백그라운드 stage 예외도 run.blocked 이벤트로 종료한다", async () => {
+    await using database = await createDatabase({ url: "mem://", namespace: "massion", database: crypto.randomUUID() });
+    const identities = await IdentityService.create(database);
+    const organizations = await OrganizationService.create(database);
+    const graph = await OrganizationGraphService.create(database, organizations);
+    const policies = await PolicyStore.create(database, organizations);
+    const stages = ["intake", "context-strategy", "evidence", "delivery", "assurance", "records"] as const;
+    const executors = Object.fromEntries(
+      stages.map((stage) => [
+        stage,
+        {
+          async execute() {
+            if (stage === "intake") return { outcome: "advanced" as const, workId: "product-failed-work-0001" };
+            if (stage === "delivery") throw new Error("ready 전이에는 모든 실행 Task의 Assignment가 필요합니다");
+            return { outcome: "advanced" as const };
+          },
+        },
+      ]),
+    ) as never;
+    await using product = await ApplicationProduct.create({
+      database,
+      identities,
+      organizations,
+      graph,
+      policies,
+      tokenKey: { keyId: "product-stage-failure-key", key: randomBytes(32) },
+      executors,
+      domain: {},
+      queries: { status: async () => ({ status: "ready" }) },
+    });
+    const endpoint = await product.start();
+    const initialized = (await ApplicationHttpClient.bootstrap(endpoint.url, {
+      commandId: "product-stage-failure-bootstrap-0001",
+      email: "product-stage-failure@example.com",
+      displayName: "Product failure",
+    })) as { access: { token: string } };
+    const client = new ApplicationHttpClient({ baseUrl: endpoint.url, token: initialized.access.token });
+    const correlationId = "product-stage-failure-correlation-0001";
+    const started = (await client.command({
+      schemaVersion: "massion.application.v1",
+      commandId: "product-stage-failure-run-0001",
+      correlationId,
+      operation: "run.start",
+      payload: { request: { text: "실패 종료 검증" } },
+    })) as { readonly outcome: string; readonly data?: { readonly runId?: string } };
+    const runId = started.data?.runId;
+    if (!runId) throw new Error("run.start가 runId를 반환하지 않았습니다");
+
+    await expect(product.drain()).resolves.toBeUndefined();
+    await expect(client.query("run.get", { runId })).resolves.toMatchObject({
+      data: { runId, workId: "product-failed-work-0001", status: "blocked", stage: "delivery", blockedReason: "delivery-stage-failed" },
+    });
+    await expect(client.events()).resolves.toMatchObject({
+      events: expect.arrayContaining([expect.objectContaining({ type: "run.blocked", correlationId })]),
+    });
+  });
+
   it("Bearer를 일회성 code→HttpOnly cookie로 교환하고 Web mutation에 CSRF를 강제한다", async () => {
     await using database = await createDatabase({ url: "mem://", namespace: "massion", database: crypto.randomUUID() });
     const identities = await IdentityService.create(database);

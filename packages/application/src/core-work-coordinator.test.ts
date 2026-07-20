@@ -112,6 +112,36 @@ describe("CoreWorkCoordinator", () => {
     });
   });
 
+  it("stage 실행 예외는 run을 대기 상태로 남기지 않고 차단 상태로 끝낸다", async () => {
+    await using database = await createDatabase({ url: "mem://", namespace: "massion", database: crypto.randomUUID() });
+    const identities = await IdentityService.create(database);
+    const organizations = await OrganizationService.create(database);
+    const owner = await identities.registerPersonalUser({ email: "coordinator-stage-failure@example.com", displayName: "Fail" });
+    const context = await organizations.resolveTenantContext(owner.user.user_id, owner.organization.organization_id);
+    const store = await ApplicationRunStore.create(database, organizations);
+    const coordinator = new CoreWorkCoordinator(store, {
+      ...executors([]),
+      delivery: {
+        async execute() {
+          throw new Error("ready 전이에는 모든 실행 Task의 Assignment가 필요합니다");
+        },
+      },
+    });
+
+    const blocked = await coordinator.start(context, {
+      commandId: "core-run-stage-failure-command-0001",
+      correlationId: "core-run-stage-failure-correlation-0001",
+      request: {},
+    });
+
+    expect(blocked).toMatchObject({ status: "blocked", stage: "delivery", blockedReason: "delivery-stage-failed" });
+    await expect(store.getByCommand(context, "core-run-stage-failure-command-0001")).resolves.toMatchObject({
+      status: "blocked",
+      stage: "delivery",
+      blockedReason: "delivery-stage-failed",
+    });
+  });
+
   it("차단된 재시도와 실행 중 취소는 같은 재시도 시도 command prefix를 사용한다", async () => {
     await using database = await createDatabase({ url: "mem://", namespace: "massion", database: crypto.randomUUID() });
     const identities = await IdentityService.create(database);

@@ -348,6 +348,29 @@ export class GitWorkspaceManager {
     };
   }
 
+  /** 고정된 두 commit 사이의 변경만 읽고, 현재 worktree 내용은 읽지 않습니다. */
+  public async readCommitDiff(input: {
+    readonly repositoryRoot: string;
+    readonly baseRevision: string;
+    readonly targetRevision: string;
+  }): Promise<string> {
+    if (!/^[a-f0-9]{40,64}$/u.test(input.baseRevision) || !/^[a-f0-9]{40,64}$/u.test(input.targetRevision)) {
+      throw new GitProvenanceMismatchError("Git revision 형식이 잘못되었습니다");
+    }
+    const repositoryRoot = await realpath(input.repositoryRoot);
+    const topLevel = (await runGit(repositoryRoot, ["rev-parse", "--show-toplevel"])).stdout.trim();
+    if ((await realpath(topLevel)) !== repositoryRoot) {
+      throw new GitProvenanceMismatchError("등록 경로가 Git repository root가 아닙니다");
+    }
+    await Promise.all([
+      runGit(repositoryRoot, ["cat-file", "-e", `${input.baseRevision}^{commit}`]),
+      runGit(repositoryRoot, ["cat-file", "-e", `${input.targetRevision}^{commit}`]),
+    ]);
+    return (
+      await runGit(repositoryRoot, ["diff", "--no-ext-diff", "--unified=0", input.baseRevision, input.targetRevision])
+    ).stdout;
+  }
+
   public async removeDeliveryWorkspaceIfExists(input: {
     readonly repositoryRoot: string;
     readonly baseRevision: string;

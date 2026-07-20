@@ -1,6 +1,6 @@
 # Massion AgentOS
 
-> **개발 상태:** Phase 30 진행 중입니다. 실제 UAT는 Web 업무 생성과 TUI·Web의 Core Office 메시지 왕복을 통과했습니다. TUI 업무 생성은 자동화된 화면 테스트로 고정돼 있습니다. 실제 Provider 성공, 복수 계정 quota·fallback, 전체 화면 capability 동등성은 아직 진행 중입니다.
+> **개발 상태:** Phase 30 진행 중입니다. 실제 UAT는 Web 업무 생성과 TUI·Web의 Core Office 메시지 왕복, Z.AI GLM Coding Plan 단일 계정의 Core Office 완료 흐름을 통과했습니다. TUI 업무 생성은 자동화된 화면 테스트로 고정돼 있습니다. 복수 계정 quota·fallback과 전체 화면 capability 동등성은 아직 진행 중입니다.
 
 Massion AgentOS는 개인이나 팀이 여러 AI 에이전트(agent)를 조직처럼 구성하고, 일을 맡기고, 서로 협업하게 하며, 결과와 근거를 추적할 수 있게 하는 설치형 에이전트 운영체제(Agent Operating System)를 목표로 합니다.
 

@@ -172,6 +172,12 @@ export class CoreWorkCoordinator {
             ...(nextResumeInput === undefined ? {} : { resumeInput: nextResumeInput }),
             signal: controller.signal,
           });
+        } catch {
+          const cancellation = controller.signal.aborted ? this.cancellationRequests.get(run.runId) : undefined;
+          if (cancellation) return await cancellation;
+          const current = await this.store.get(context, run.runId);
+          if (current.status === "cancelled") return current;
+          return await this.store.block(context, run.runId, claim.leaseGeneration, `${stage}-stage-failed`, run.workId);
         } finally {
           this.releaseStageAbortController(run.runId, controller);
         }

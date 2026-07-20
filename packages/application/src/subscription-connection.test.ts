@@ -490,25 +490,35 @@ describe("구독 연결 오케스트레이션", () => {
     });
   });
 
-  it("승인이 필요한 제공자와 허용되지 않은 인증·결제 유형을 연결하지 않는다", async () => {
+  it("Z.AI Coding Plan과 허용되지 않은 인증·결제 유형을 구분한다", async () => {
     await connector({
       id: "zai-model",
       owner: ownerContext,
       executionKind: "model",
       capabilities: ["zai-coding-plan"],
+      location: "server",
     });
     await expect(
       connections.connectModel(ownerContext, {
         commandId: crypto.randomUUID(),
         providerId: "zai-coding-plan",
-        alias: "승인 전 Z.AI",
+        alias: "개인 Z.AI",
         connectorId: "zai-model",
         profileLocator: "zai-profile",
         authKind: "api-key",
         billingKind: "coding-plan",
         secret: "zai-secret",
+        endpointUrl: "https://api.z.ai/api/coding/paas/v4",
+        protocol: "openai",
       }),
-    ).rejects.toThrow(/실제 연결|검증되지/u);
+    ).resolves.toMatchObject({
+      account: { provider_id: "zai-coding-plan", status: "active" },
+      binding: {
+        endpointUrl: "https://api.z.ai/api/coding/paas/v4",
+        protocol: "openai",
+        executionKind: "model",
+      },
+    });
 
     await connector({
       id: "minimax-invalid-policy",

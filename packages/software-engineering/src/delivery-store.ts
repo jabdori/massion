@@ -8,6 +8,7 @@ import type {
   DeliveryPrerequisiteReader,
   EngineeringDelivery,
   EngineeringDeliveryError,
+  EngineeringAssuranceRecipe,
   EngineeringDeliveryResult,
   EngineeringDeliveryStatus,
   StartEngineeringDeliveryInput,
@@ -46,6 +47,7 @@ interface DeliveryRecord {
   readonly red_evidence_id?: string;
   readonly green_evidence_id?: string;
   readonly validation_evidence_ids: readonly string[];
+  readonly assurance_recipe_json?: string;
   readonly artifact_version_id?: string;
   readonly error_json?: string;
   readonly created_by_user_id: string;
@@ -113,6 +115,44 @@ function assertSha256(value: string, label: string): void {
 
 function assertGitObjectHash(value: string, label: string): void {
   if (!/^[a-f0-9]{40,64}$/u.test(value)) throw new Error(`${label}는 Git object hash 형식이어야 합니다`);
+}
+
+function validateAssuranceCommand(command: EngineeringAssuranceRecipe["focusedCommand"]): void {
+  assertText(command.executable, "Assurance command executable");
+  if (command.args.length > 50) throw new Error("Assurance command argument는 50개 이하여야 합니다");
+  for (const argument of command.args) {
+    if (!argument.trim() || argument.length > 500 || argument.includes("\0")) {
+      throw new Error("Assurance command argument 형식이 잘못됐습니다");
+    }
+  }
+  assertText(command.cwd, "Assurance command cwd");
+  if (command.cwd.startsWith("/") || command.cwd.split(/[\\/]/u).includes("..")) {
+    throw new Error("Assurance command cwd는 상대 경로여야 합니다");
+  }
+  if (!Number.isSafeInteger(command.timeoutMs) || command.timeoutMs < 1_000 || command.timeoutMs > 3_600_000) {
+    throw new Error("Assurance command timeout은 1초 이상 1시간 이하여야 합니다");
+  }
+  if (!Number.isSafeInteger(command.maxOutputBytes) || command.maxOutputBytes < 1 || command.maxOutputBytes > 10_000_000) {
+    throw new Error("Assurance command output limit은 1~10000000 byte여야 합니다");
+  }
+}
+
+function validateAssuranceRecipe(recipe: EngineeringAssuranceRecipe): void {
+  if (recipe.schemaVersion !== "massion.software-assurance-recipe.v1") {
+    throw new Error("Software assurance recipe 버전이 올바르지 않습니다");
+  }
+  validateAssuranceCommand(recipe.focusedCommand);
+  if (recipe.validationCommands.length > 20) throw new Error("Assurance validation command는 20개 이하여야 합니다");
+  for (const command of recipe.validationCommands) validateAssuranceCommand(command);
+  if (redactSecrets(JSON.stringify(recipe)).redactions.length > 0) {
+    throw new Error("Assurance recipe에 credential을 저장할 수 없습니다");
+  }
+}
+
+function decodeAssuranceRecipe(value: string): EngineeringAssuranceRecipe {
+  const parsed = JSON.parse(value) as EngineeringAssuranceRecipe;
+  validateAssuranceRecipe(parsed);
+  return parsed;
 }
 
 export class EngineeringDeliveryStore {
@@ -217,6 +257,10 @@ export class EngineeringDeliveryStore {
         throw new Error(`허용되지 않는 delivery 상태 전이입니다: ${current.status} -> ${input.target}`);
       }
       const validationEvidenceIds = input.validationEvidenceIds ?? current.validation_evidence_ids;
+      if (input.assuranceRecipe) validateAssuranceRecipe(input.assuranceRecipe);
+      const assuranceRecipeJson = input.assuranceRecipe
+        ? canonicalJson(input.assuranceRecipe)
+        : current.assurance_recipe_json;
       if (input.target === "committed") {
         await this.validateCommandEvidenceIds(
           tx,
@@ -228,7 +272,7 @@ export class EngineeringDeliveryStore {
       }
 
       const [updated] = await tx.query<[DeliveryRecord[]]>(
-        "UPDATE engineering_delivery SET status = $status, version = $version, workspace_id = $workspace_id, branch_ref = $branch_ref, commit_sha = $commit_sha, test_patch_hash = $test_patch_hash, implementation_patch_hash = $implementation_patch_hash, change_set_hash = $change_set_hash, red_evidence_id = $red_evidence_id, green_evidence_id = $green_evidence_id, validation_evidence_ids = $validation_evidence_ids, artifact_version_id = $artifact_version_id, error_json = $error_json, updated_at = time::now() WHERE organization_id = $organization_id AND delivery_id = $delivery_id AND version = $expected_version RETURN AFTER;",
+        "UPDATE engineering_delivery SET status = $status, version = $version, workspace_id = $workspace_id, branch_ref = $branch_ref, commit_sha = $commit_sha, test_patch_hash = $test_patch_hash, implementation_patch_hash = $implementation_patch_hash, change_set_hash = $change_set_hash, red_evidence_id = $red_evidence_id, green_evidence_id = $green_evidence_id, validation_evidence_ids = $validation_evidence_ids, assurance_recipe_json = $assurance_recipe_json, artifact_version_id = $artifact_version_id, error_json = $error_json, updated_at = time::now() WHERE organization_id = $organization_id AND delivery_id = $delivery_id AND version = $expected_version RETURN AFTER;",
         {
           organization_id: context.organizationId,
           delivery_id: input.deliveryId,
@@ -244,6 +288,7 @@ export class EngineeringDeliveryStore {
           red_evidence_id: input.redEvidenceId ?? current.red_evidence_id,
           green_evidence_id: input.greenEvidenceId ?? current.green_evidence_id,
           validation_evidence_ids: validationEvidenceIds,
+          assurance_recipe_json: assuranceRecipeJson,
           artifact_version_id: input.artifactVersionId ?? current.artifact_version_id,
           error_json: input.error ? canonicalJson(input.error) : current.error_json,
         },
@@ -714,6 +759,7 @@ export class EngineeringDeliveryStore {
       ...(record.red_evidence_id ? { redEvidenceId: record.red_evidence_id } : {}),
       ...(record.green_evidence_id ? { greenEvidenceId: record.green_evidence_id } : {}),
       validationEvidenceIds: record.validation_evidence_ids,
+      ...(record.assurance_recipe_json ? { assuranceRecipe: decodeAssuranceRecipe(record.assurance_recipe_json) } : {}),
       ...(record.artifact_version_id ? { artifactVersionId: record.artifact_version_id } : {}),
       ...(record.error_json ? { error: JSON.parse(record.error_json) as EngineeringDeliveryError } : {}),
       createdByUserId: record.created_by_user_id,

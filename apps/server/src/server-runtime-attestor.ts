@@ -91,6 +91,17 @@ function runtimePath(): string {
 
 type SupportedRuntimeId = BundledSubscriptionRuntimeId | BuiltinModelRuntimeId;
 
+function isOpenAiCompatibleModelProvider(providerId: string): providerId is "minimax-token-plan" | "zai-coding-plan" {
+  return providerId === "minimax-token-plan" || providerId === "zai-coding-plan";
+}
+
+function hasSupportedModelPlanBilling(providerId: string, billingKind: string): boolean {
+  return (
+    (providerId === "minimax-token-plan" && billingKind === "token-plan") ||
+    (providerId === "zai-coding-plan" && billingKind === "coding-plan")
+  );
+}
+
 function runtimeId(value: string): SupportedRuntimeId {
   if (value !== "codex" && value !== "claude" && value !== "openai-model") {
     throw new Error("지원하지 않는 서버 runtime입니다");
@@ -259,7 +270,7 @@ export class BundledServerConnectorRuntimeAttestor implements ServerConnectorRun
     void input.actorUserId;
     const selected = runtimeId(input.runtimeId);
     if (selected === "openai-model") {
-      if (input.executionKind !== "model" || input.providerId !== "minimax-token-plan") {
+      if (input.executionKind !== "model" || !isOpenAiCompatibleModelProvider(input.providerId)) {
         throw new Error("서버 내장 모델 runtime과 Provider 계약이 일치하지 않습니다");
       }
       return verifiedArtifact(await this.modelArtifact(selected));
@@ -288,7 +299,7 @@ export class BundledServerConnectorRuntimeAttestor implements ServerConnectorRun
     if (
       (isBundledAgentRuntime(selected)
         ? input.executionKind !== "agent-runtime" || input.providerId !== expectedProvider(selected)
-        : input.executionKind !== "model" || input.providerId !== "minimax-token-plan") ||
+        : input.executionKind !== "model" || !isOpenAiCompatibleModelProvider(input.providerId)) ||
       artifact.runtimeId !== selected ||
       artifact.runtimeArtifactDigest !== input.runtimeArtifactDigest ||
       artifact.version !== input.version
@@ -297,8 +308,8 @@ export class BundledServerConnectorRuntimeAttestor implements ServerConnectorRun
     }
     const account = await this.account(input.organizationId, input.connectorId, input.providerId);
     if (selected === "openai-model") {
-      if (account.billing_kind !== "token-plan") {
-        throw new Error("서버 내장 MiniMax runtime은 Token Plan 계정만 건강 증명할 수 있습니다");
+      if (!hasSupportedModelPlanBilling(input.providerId, account.billing_kind)) {
+        throw new Error("서버 내장 OpenAI 호환 runtime의 구독 결제 유형이 일치하지 않습니다");
       }
       await this.modelCredential(input.organizationId, input.connectorId, input.providerId, account.account_id);
     } else {

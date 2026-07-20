@@ -76,6 +76,35 @@ describe("ApplicationHttpClient", () => {
     expect(() => new ApplicationHttpClient({ baseUrl: "http://example.com", token: "secret" })).toThrow("loopback");
   });
 
+  it("만료된 개인 loopback token을 한 번만 갱신 요청한다", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          access: { token: "mat_refreshed-token", tokenId: "refreshed-token", replayed: false },
+        }),
+        { status: 201, headers: { "content-type": "application/json" } },
+      ),
+    );
+
+    await expect(
+      ApplicationHttpClient.refreshLocalAccess(
+        "http://127.0.0.1:9000",
+        "mat_expired-token",
+        { commandId: "refresh-client-token-0001" },
+        fetcher,
+      ),
+    ).resolves.toEqual({ token: "mat_refreshed-token", tokenId: "refreshed-token", replayed: false });
+    expect(fetcher).toHaveBeenCalledOnce();
+    expect(fetcher).toHaveBeenCalledWith(
+      new URL("http://127.0.0.1:9000/api/v1/access/refresh"),
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({ authorization: "Bearer mat_expired-token" }),
+        body: JSON.stringify({ commandId: "refresh-client-token-0001" }),
+      }),
+    );
+  });
+
   it("Registry publish를 metadata 길이 prefix와 artifact byte로 전송한다", async () => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
       new Response(JSON.stringify({ state: "staged" }), {

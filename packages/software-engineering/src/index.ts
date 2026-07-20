@@ -12,3 +12,4 @@ export * from "./runtime.js";
 export * from "./metrics.js";
 export * from "./recovery.js";
 export * from "./assurance-adapter.js";
+export * from "./security-inspection.js";

@@ -26,6 +26,7 @@ DEFINE FIELD change_set_hash ON engineering_delivery TYPE option<string>;
 DEFINE FIELD red_evidence_id ON engineering_delivery TYPE option<string>;
 DEFINE FIELD green_evidence_id ON engineering_delivery TYPE option<string>;
 DEFINE FIELD validation_evidence_ids ON engineering_delivery TYPE array<string>;
+DEFINE FIELD assurance_recipe_json ON engineering_delivery TYPE option<string>;
 DEFINE FIELD artifact_version_id ON engineering_delivery TYPE option<string>;
 DEFINE FIELD error_json ON engineering_delivery TYPE option<string>;
 DEFINE FIELD created_by_user_id ON engineering_delivery TYPE string;

@@ -22,6 +22,7 @@ export interface CliApplicationClient {
 export interface CliCommandInput {
   readonly readJson?: () => Promise<unknown>;
   readonly readArtifact?: (path: string) => Promise<Uint8Array>;
+  readonly environment?: Readonly<Record<string, string | undefined>>;
   readonly connectServerSubscription?: (input: {
     readonly providerId: string;
     readonly alias?: string;
@@ -29,10 +30,10 @@ export interface CliCommandInput {
     readonly newAccount?: boolean;
   }) => Promise<unknown>;
   readonly connectServerModelSubscription?: (input: {
-    readonly providerId: "minimax-token-plan";
+    readonly providerId: "minimax-token-plan" | "zai-coding-plan";
     readonly alias: string;
-    readonly authKind: "subscription-key";
-    readonly billingKind: "token-plan";
+    readonly authKind: "subscription-key" | "api-key";
+    readonly billingKind: "token-plan" | "coding-plan";
     readonly secret: string;
     readonly priority?: number;
     readonly weight?: number;
@@ -109,6 +110,14 @@ function jsonSecret(value: unknown): string {
     throw new Error("구독 Credential secret이 유효하지 않습니다");
   }
   return value;
+}
+
+function zaiCodingPlanEnvironmentSecret(environment: Readonly<Record<string, string | undefined>> | undefined): string {
+  const secret = environment?.Z_AI_API_KEY;
+  if (typeof secret !== "string" || !secret || secret !== secret.trim() || /[\0\r\n]/u.test(secret)) {
+    throw new Error("Z.AI Coding Plan 연결에는 현재 셸의 Z_AI_API_KEY 환경 변수가 필요합니다");
+  }
+  return jsonSecret(secret);
 }
 
 async function subscriptionAccountRevision(client: CliApplicationClient, accountId: string): Promise<number> {
@@ -333,10 +342,25 @@ export async function executeCliInvocation(
   if (invocation.command === "subscription" && invocation.subcommand === "policy" && args[1] === undefined)
     return await client.query("subscription.policy", { providerId: required(args, 0, "providerId") });
   if (invocation.command === "auth" && invocation.subcommand === "login") {
+    const providerId = required(args, 0, "providerId");
+    if (providerId === "zai-coding-plan") {
+      if (!input.connectServerModelSubscription) throw new Error("서버 model 구독 연결 adapter가 필요합니다");
+      if (invocation.model !== undefined && invocation.model !== "glm-5.2") {
+        throw new Error("Z.AI Coding Plan auth login은 현재 glm-5.2 model만 지원합니다");
+      }
+      const alias = args.slice(1).join(" ").trim();
+      return await input.connectServerModelSubscription({
+        providerId: "zai-coding-plan",
+        alias: alias || "Z.AI GLM Coding Plan",
+        authKind: "api-key",
+        billingKind: "coding-plan",
+        secret: zaiCodingPlanEnvironmentSecret(input.environment),
+      });
+    }
     if (!input.connectServerSubscription) throw new Error("로컬 구독 로그인 adapter가 필요합니다");
     const alias = args.slice(1).join(" ").trim();
     return await input.connectServerSubscription({
-      providerId: required(args, 0, "providerId"),
+      providerId,
       ...(alias ? { alias } : {}),
       ...(invocation.model === undefined ? {} : { modelId: invocation.model }),
       ...(invocation.newAccount ? { newAccount: true } : {}),
@@ -347,9 +371,23 @@ export async function executeCliInvocation(
     if (args.length !== 1) {
       throw new Error("model 구독 secret은 명령행(argv)이 아니라 stdin JSON으로만 전달해야 합니다");
     }
-    if (providerId !== "minimax-token-plan") {
-      throw new Error("현재 자동 model 구독 연결은 MiniMax Token Plan만 지원합니다");
-    }
+    const preset =
+      providerId === "minimax-token-plan"
+        ? {
+            providerId: "minimax-token-plan" as const,
+            defaultAlias: "MiniMax Token Plan",
+            authKind: "subscription-key" as const,
+            billingKind: "token-plan" as const,
+          }
+        : providerId === "zai-coding-plan"
+          ? {
+              providerId: "zai-coding-plan" as const,
+              defaultAlias: "Z.AI GLM Coding Plan",
+              authKind: "api-key" as const,
+              billingKind: "coding-plan" as const,
+            }
+          : undefined;
+    if (!preset) throw new Error("현재 자동 model 구독 연결은 MiniMax Token Plan 또는 Z.AI Coding Plan만 지원합니다");
     if (!input.connectServerModelSubscription) throw new Error("서버 model 구독 연결 adapter가 필요합니다");
     const label = "model 구독 연결";
     const connection = exactInput(await stdin(input, label), ["secret", "alias", "priority", "weight"], label, [
@@ -357,10 +395,10 @@ export async function executeCliInvocation(
     ]);
     const secret = jsonSecret(connection.secret);
     return await input.connectServerModelSubscription({
-      providerId,
-      alias: connection.alias === undefined ? "MiniMax Token Plan" : jsonText(connection.alias, "구독 계정 별칭", 128),
-      authKind: "subscription-key",
-      billingKind: "token-plan",
+      providerId: preset.providerId,
+      alias: connection.alias === undefined ? preset.defaultAlias : jsonText(connection.alias, "구독 계정 별칭", 128),
+      authKind: preset.authKind,
+      billingKind: preset.billingKind,
       secret,
       ...(connection.priority === undefined
         ? {}

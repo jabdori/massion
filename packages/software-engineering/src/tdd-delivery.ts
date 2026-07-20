@@ -4,6 +4,7 @@ import { redactSecrets } from "@massion/evidence";
 import type { TenantContext } from "@massion/identity";
 
 import type { EngineeringDelivery } from "./contracts.js";
+import type { EngineeringAssuranceRecipe } from "./contracts.js";
 import type { ConfinedCommandInput, ConfinedCommandResult } from "./command-runner.js";
 import { EngineeringDeliveryStore } from "./delivery-store.js";
 import { GitWorkspaceManager, type GitCommitResult, type GitDeliveryWorkspace } from "./git-workspace.js";
@@ -199,6 +200,8 @@ export class TddDeliveryEngine {
         );
       }
 
+      const assuranceRecipe = this.assuranceRecipe(input);
+
       committed = await this.workspaces.commit(workspace, {
         message: input.commitMessage,
         expectedPaths: [...new Set([...testPatch.paths, ...implementationPatch.paths])],
@@ -214,6 +217,7 @@ export class TddDeliveryEngine {
           commitSha: committed.commitSha,
           changeSetHash: committed.changeSetHash,
           validationEvidenceIds,
+          assuranceRecipe,
         })
       ).delivery;
       await this.workspaces.remove(workspace);
@@ -247,6 +251,31 @@ export class TddDeliveryEngine {
       throw new DeliveryExecutionError("invalid_red_marker", "RED failure marker 형식이 잘못됐습니다");
     }
     this.assertNoCredential(marker, "RED failure marker");
+  }
+
+  private assuranceRecipe(input: TddDeliveryInput): EngineeringAssuranceRecipe {
+    const command = (value: CommandSpecification): EngineeringAssuranceRecipe["focusedCommand"] => {
+      if (Object.keys(value.environment).length > 0) {
+        throw new DeliveryExecutionError(
+          "assurance_recipe_environment",
+          "독립 재검증 명령에는 환경 변수를 사용할 수 없습니다",
+        );
+      }
+      const result = {
+        executable: value.executable,
+        args: [...value.args],
+        cwd: value.cwd,
+        timeoutMs: value.timeoutMs,
+        maxOutputBytes: value.maxOutputBytes,
+      };
+      this.assertNoCredential(JSON.stringify(result), "Assurance command");
+      return result;
+    };
+    return {
+      schemaVersion: "massion.software-assurance-recipe.v1",
+      focusedCommand: command(input.focusedCommand),
+      validationCommands: input.validationCommands.map(command),
+    };
   }
 
   private assertNoCredential(value: string, label: string): void {

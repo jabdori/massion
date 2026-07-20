@@ -26,6 +26,12 @@ export interface ApplicationHttpDependencies {
       audience: string,
       requiredScopes: readonly string[],
     ): Promise<AuthenticatedApplicationAccess>;
+    refreshLocalAccess?(
+      authorization: string | undefined,
+      audience: string,
+      requiredScopes: readonly string[],
+      input: { readonly commandId: string },
+    ): Promise<unknown>;
   };
   readonly queries: {
     query(context: TenantContext, scopes: readonly string[], operation: string, payload: unknown): Promise<unknown>;
@@ -475,6 +481,46 @@ export class ApplicationHttpServer {
           trustedLocal: true,
         }),
       );
+      return;
+    }
+    if (url.pathname === "/api/v1/access/refresh") {
+      if (request.method !== "POST") {
+        this.method(response, ["POST"]);
+        return;
+      }
+      if (
+        !LOOPBACK.has(this.options.host) ||
+        !LOOPBACK.has(request.socket.remoteAddress ?? "") ||
+        !this.dependencies.auth.refreshLocalAccess
+      )
+        throw new ApplicationError({
+          category: "authorization",
+          severity: "error",
+          retryable: false,
+          userMessage: "로컬 access token 갱신을 사용할 수 없습니다",
+          operatorCode: "APP_HTTP_ACCESS_REFRESH_LOCAL",
+        });
+      this.acceptJson(request);
+      const input = (await json(request)) as Record<string, unknown>;
+      if (Object.keys(input).some((key) => key !== "commandId") || typeof input.commandId !== "string")
+        throw validation("access token 갱신 입력이 유효하지 않습니다");
+      let access: unknown;
+      try {
+        access = await this.dependencies.auth.refreshLocalAccess(header(request, "authorization"), this.options.audience, [], {
+          commandId: input.commandId,
+        });
+      } catch (cause) {
+        throw new ApplicationError({
+          category: "authentication",
+          severity: "error",
+          retryable: false,
+          userMessage: "Application access token 인증에 실패했습니다",
+          operatorCode: "APP_HTTP_AUTH",
+          cause,
+        });
+      }
+      response.setHeader("cache-control", "no-store");
+      sendJson(response, 201, { access });
       return;
     }
     if (url.pathname === "/api/v1/web/sessions") {

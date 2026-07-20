@@ -9,6 +9,7 @@ import {
   CoreEvidenceStage,
   CoreRecordsStage,
   CoreSoftwareTaskAdapter,
+  CodeChangeAssuranceRecipeResolver,
   DatabaseCoreAssuranceCheckOrchestrator,
   DeterministicRecordsDocumentPlanner,
   SubscriptionConnectionService,
@@ -54,6 +55,7 @@ import {
 } from "@massion/runtime";
 import {
   ConfinedCommandRunner,
+  DatabaseSoftwareAssuranceSourceReader,
   EngineeringDeliveryCoordinator,
   EngineeringDeliveryRecovery,
   EngineeringDeliveryStore,
@@ -61,6 +63,8 @@ import {
   EngineeringPathLeaseStore,
   GitWorkspaceManager,
   SoftwareDeliveryFinalizer,
+  SoftwareAssuranceAdapter,
+  SoftwareSecurityInspectionExecutor,
   SoftwarePatchProposalService,
   TddDeliveryEngine,
   WorkServiceDeliveryPort,
@@ -87,6 +91,7 @@ import { ConnectorChannelPersistence } from "./connector-persistence.js";
 import { ConnectorWebSocketService } from "./connector-websocket.js";
 import { BundledCodexSubscriptionObserver } from "./codex-subscription-observer.js";
 import { MiniMaxSubscriptionVerifier } from "./minimax-subscription-verifier.js";
+import { ZaiCodingPlanSubscriptionVerifier } from "./zai-coding-plan-subscription-verifier.js";
 import { RegistryReadHttpServer } from "./registry-server.js";
 import { RuntimeStartupRecoveryService } from "./runtime-startup-recovery.js";
 import { ServerConnectorLifecycleService } from "./server-connector-lifecycle.js";
@@ -365,6 +370,7 @@ export async function createMassionDaemon(
       },
       new MiniMaxSubscriptionVerifier(),
       subscriptionQuotaSynchronization,
+      new ZaiCodingPlanSubscriptionVerifier(),
     );
     const runtimeExecutions = await RuntimeExecutionStore.create(database, organizations);
     const directExecutionLifecycle = new DirectExecutionLifecycle(
@@ -470,7 +476,7 @@ export async function createMassionDaemon(
       },
     );
     const contexts = await ContextStore.create(database, organizations, works);
-    const strategyGenerator = await StrategyGenerator.create(database, organizations, runner, contexts, works);
+    const strategyGenerator = await StrategyGenerator.create(database, organizations, runner, contexts, works, graph);
     const strategy = StrategyService.create(contexts, strategyGenerator, works);
     const repositories = await RepositoryStore.create(database, organizations);
     const indexes = await IndexStore.create(database, organizations);
@@ -482,13 +488,6 @@ export async function createMassionDaemon(
       new GovernanceBindingActivationAuthorizer(governanceGate),
       { allowedAuthorHandles: ["assurance", "representative"] },
     );
-    const assuranceChecks = new AssuranceCheckStore(database, organizations);
-    const assuranceOrchestrator = new DatabaseCoreAssuranceCheckOrchestrator({
-      runs: assurance,
-      bindings: assuranceBindings,
-      checks: assuranceChecks,
-      works,
-    });
     const records = await RecordsService.create(database, organizations);
     const deliveryPrerequisites: DeliveryPrerequisiteReader = {
       async getWork(context, workId) {
@@ -613,6 +612,28 @@ export async function createMassionDaemon(
           maxExcerptBytes: 64_000,
         }),
     });
+    const softwareAssuranceReader = new DatabaseSoftwareAssuranceSourceReader(database, organizations);
+    const softwareAssuranceAdapter = await SoftwareAssuranceAdapter.create(softwareAssuranceReader, {
+      workspaceRoot: join(config.software.workspaceRoot, "assurance-command"),
+      executables: config.software.executables,
+      environmentProfiles: { default: {} },
+      maxTimeoutMs: 3_600_000,
+      maxOutputBytes: 10_000_000,
+      maxExcerptBytes: 64_000,
+    });
+    const softwareSecurityInspection = await SoftwareSecurityInspectionExecutor.create(softwareAssuranceReader, {
+      workspaceRoot: join(config.software.workspaceRoot, "assurance-security"),
+    });
+    const assuranceChecks = new AssuranceCheckStore(database, organizations, {
+      trustedExecutors: [softwareAssuranceAdapter],
+      trustedInspectionExecutors: [softwareSecurityInspection],
+    });
+    const assuranceOrchestrator = new DatabaseCoreAssuranceCheckOrchestrator({
+      runs: assurance,
+      bindings: assuranceBindings,
+      checks: assuranceChecks,
+      works,
+    });
     const engineeringMetrics = await EngineeringMetricStore.create(database, organizations);
     const engineeringFinalizer = new SoftwareDeliveryFinalizer(
       engineeringDeliveries,
@@ -645,6 +666,7 @@ export async function createMassionDaemon(
       runtimeExecutions,
       assurance,
       checks: assuranceOrchestrator,
+      softwareAssuranceRecipes: new CodeChangeAssuranceRecipeResolver(),
     });
     const recordsStage = new CoreRecordsStage({
       works,

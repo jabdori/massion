@@ -177,3 +177,13 @@ export function selectEngineeringAgent(
     reason: eligible.length === 0 ? "no_exact_candidate" : "ambiguous_exact_candidates",
   };
 }
+
+/** Software Engineering profile이 책임지는 Task인지 profile 계약으로 판별합니다. */
+export function isSoftwareEngineeringTask(input: {
+  readonly requiredCapabilities: readonly string[];
+  readonly recommendedAgentHandles: readonly string[];
+}): boolean {
+  const profileHandles = new Set<string>(SOFTWARE_ENGINEERING_TEAM_PROFILE.nodes.map((node) => node.handle));
+  if (input.recommendedAgentHandles.some((handle) => profileHandles.has(handle))) return true;
+  return SOFTWARE_ENGINEERING_TEAM_PROFILE.nodes.some((node) => sameCapabilities(node.capabilities, input.requiredCapabilities));
+}

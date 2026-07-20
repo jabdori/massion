@@ -1,11 +1,23 @@
 import { ApplicationHttpClient } from "@massion/application";
+import {
+  EvidenceIndexer,
+  EvidenceParser,
+  IndexStore,
+  RepositoryRevisionCollector,
+  RepositoryScanner,
+  RepositoryStore,
+} from "@massion/evidence";
 import { IdentityService, OrganizationService } from "@massion/identity";
 import { RuntimeExecutionStore } from "@massion/runtime";
+import { SOFTWARE_ENGINEERING_TEAM_PROFILE } from "@massion/software-engineering";
 import { createDatabase } from "@massion/storage";
-import { mkdtemp, rm, stat } from "node:fs/promises";
+import { execFile } from "node:child_process";
+import { createHash } from "node:crypto";
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { createServer, request } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { promisify } from "node:util";
 import { describe, expect, it, vi } from "vitest";
 
 import { parseDatabaseProvisionConfig, parseServerConfig } from "./config.js";
@@ -637,6 +649,507 @@ describe("Massion server product", () => {
         upstreamRequests.filter((request) => request.url.endsWith("/chat/completions")).length,
       ).toBeGreaterThanOrEqual(3);
       expect(upstreamRequests.some((request) => request.url.endsWith("/models"))).toBe(true);
+      expect(upstreamRequests.every((request) => request.authorization === `Bearer ${secret}`)).toBe(true);
+    } finally {
+      await daemon.close();
+      await rm(workspaceRoot, { recursive: true, force: true });
+      vi.unstubAllGlobals();
+    }
+  }, 20_000);
+
+  it("설치된 Software Engineering 조직이 실제 Git 변경과 독립 Assurance까지 완성한다", async () => {
+    const plan = {
+      objective: "값 모듈 변경",
+      summary: "백엔드 전문 담당자가 테스트 우선으로 값을 변경한다",
+      scopeIn: ["src/value.mjs", "src/value.test.mjs"],
+      scopeOut: [],
+      assumptions: [],
+      unknowns: [],
+      acceptanceCriteria: [
+        {
+          key: "value-is-two",
+          statement: "value 모듈은 2를 내보낸다",
+          method: "evidence",
+          evidenceKinds: ["artifact-version"],
+          planLevel: false,
+        },
+      ],
+      risks: [],
+      tasks: [
+        {
+          key: "implement-value-change",
+          title: "value 모듈 변경",
+          objective: "src/value.mjs의 value를 1에서 2로 바꾸고 src/value.test.mjs로 검증한다",
+          criterionKeys: ["value-is-two"],
+          dependencyKeys: [],
+          requiredCapabilities: ["backend-engineering"],
+          recommendedAgentHandles: ["software-engineering.backend-specialist"],
+          parallelizable: false,
+        },
+      ],
+      evidenceRequests: [],
+    };
+    const proposal = {
+      testPatch: [
+        "diff --git a/src/value.test.mjs b/src/value.test.mjs",
+        "--- a/src/value.test.mjs",
+        "+++ b/src/value.test.mjs",
+        "@@ -1,3 +1,3 @@",
+        ' import assert from "node:assert/strict";',
+        ' import { value } from "./value.mjs";',
+        '-assert.equal(value, 1, "MASSION_EXPECTED_VALUE");',
+        '+assert.equal(value, 2, "MASSION_EXPECTED_VALUE");',
+        "",
+      ].join("\n"),
+      implementationPatch: [
+        "diff --git a/src/value.mjs b/src/value.mjs",
+        "--- a/src/value.mjs",
+        "+++ b/src/value.mjs",
+        "@@ -1 +1 @@",
+        "-export const value = 1;",
+        "+export const value = 2;",
+        "",
+      ].join("\n"),
+      focusedCommand: {
+        executable: "node",
+        args: ["src/value.test.mjs"],
+        cwd: ".",
+        timeoutMs: 10_000,
+        maxOutputBytes: 8_192,
+        environment: {},
+      },
+      redFailureMarker: "MASSION_EXPECTED_VALUE",
+      validationCommands: [],
+      commitMessage: "feat: update value",
+    };
+    const modelServer = createServer((request, response) => {
+      const chunks: Buffer[] = [];
+      request.on("data", (chunk: Buffer) => chunks.push(chunk));
+      request.on("end", () => {
+        const body = JSON.parse(Buffer.concat(chunks).toString("utf8")) as {
+          readonly messages?: unknown;
+          readonly response_format?: unknown;
+        };
+        const structuredPrompt = `${JSON.stringify(body.messages) ?? ""}\n${JSON.stringify(body.response_format) ?? ""}`;
+        const content = structuredPrompt.includes("software_patch_proposal") || structuredPrompt.includes("testPatch")
+          ? JSON.stringify(proposal)
+          : structuredPrompt.includes("massion-strategy-plan") || body.response_format
+            ? JSON.stringify(plan)
+            : "완료";
+        response.setHeader("content-type", "application/json");
+        response.end(
+          JSON.stringify({
+            id: crypto.randomUUID(),
+            object: "chat.completion",
+            created: 1,
+            model: "massion-test-model",
+            choices: [{ index: 0, message: { role: "assistant", content }, finish_reason: "stop" }],
+            usage: { prompt_tokens: 10, completion_tokens: 10, total_tokens: 20 },
+          }),
+        );
+      });
+    });
+    await new Promise<void>((resolve) => modelServer.listen(0, "127.0.0.1", resolve));
+    const modelAddress = modelServer.address();
+    if (!modelAddress || typeof modelAddress === "string") throw new Error("테스트 모델 주소를 찾을 수 없습니다");
+
+    const workspaceRoot = await mkdtemp(join(tmpdir(), "massion-software-product-"));
+    const repositoryRoot = join(workspaceRoot, "fixture-repository");
+    const runFile = promisify(execFile);
+    await mkdir(join(repositoryRoot, "src"), { recursive: true });
+    await writeFile(join(repositoryRoot, "src", "value.mjs"), "export const value = 1;\n", "utf8");
+    await writeFile(
+      join(repositoryRoot, "src", "value.test.mjs"),
+      'import assert from "node:assert/strict";\nimport { value } from "./value.mjs";\nassert.equal(value, 1, "MASSION_EXPECTED_VALUE");\n',
+      "utf8",
+    );
+    await runFile("git", ["init", "--initial-branch=main"], { cwd: repositoryRoot });
+    await runFile("git", ["config", "user.name", "Massion Product Test"], { cwd: repositoryRoot });
+    await runFile("git", ["config", "user.email", "massion-product@example.invalid"], { cwd: repositoryRoot });
+    await runFile("git", ["add", "src/value.mjs", "src/value.test.mjs"], { cwd: repositoryRoot });
+    await runFile("git", ["commit", "-m", "test: add software fixture"], { cwd: repositoryRoot });
+
+    const parsed = parseServerConfig({
+      MASSION_TOKEN_KEY: Buffer.alloc(32, 61).toString("base64url"),
+      MASSION_CREDENTIAL_KEY: Buffer.alloc(32, 62).toString("base64url"),
+      MASSION_DATABASE_URL: "mem://",
+      MASSION_SOFTWARE_WORKSPACE_ROOT: join(workspaceRoot, "massion-workspaces"),
+      MASSION_CONNECTOR_ROOT: join(workspaceRoot, "connectors"),
+    });
+    const database = await createDatabase(parsed.database);
+    const daemon = await createMassionDaemon(
+      {
+        ...parsed,
+        server: { ...parsed.server, port: 0 },
+        metrics: { ...parsed.metrics, port: 0 },
+        registry: { ...parsed.registry, port: 0 },
+      },
+      { database },
+    );
+    const address = await daemon.start();
+    try {
+      const initialized = (await ApplicationHttpClient.bootstrap(address.url, {
+        commandId: "software-product-bootstrap-command-0001",
+        email: "software-product@example.com",
+        displayName: "Software Product",
+      })) as {
+        readonly access: { readonly token: string };
+        readonly context: { readonly userId: string; readonly organizationId: string; readonly membershipId: string; readonly role: "owner" };
+      };
+      const client = new ApplicationHttpClient({ baseUrl: address.url, token: initialized.access.token });
+      const command = async (operation: string, payload: unknown, expectedRevision?: number) =>
+        (await client.command({
+          schemaVersion: "massion.application.v1",
+          commandId: crypto.randomUUID(),
+          correlationId: crypto.randomUUID(),
+          operation,
+          ...(expectedRevision === undefined ? {} : { expectedRevision }),
+          payload,
+        })) as { readonly data: Record<string, unknown> };
+
+      await command(
+        "organization.command",
+        {
+          kind: "install-profile",
+          profileId: SOFTWARE_ENGINEERING_TEAM_PROFILE.profileId,
+          profileVersion: SOFTWARE_ENGINEERING_TEAM_PROFILE.profileVersion,
+          nodes: SOFTWARE_ENGINEERING_TEAM_PROFILE.nodes,
+        },
+        1,
+      );
+      await command("router.provider.register", {
+        providerId: "local-openai",
+        displayName: "Local OpenAI",
+        adapterKind: "openai-compatible",
+      });
+      const endpoint = await command("router.endpoint.register", {
+        providerId: "local-openai",
+        name: "Test API",
+        baseUrl: `http://127.0.0.1:${String(modelAddress.port)}/v1`,
+        local: true,
+      });
+      await command("router.credential.add", {
+        providerId: "local-openai",
+        endpointId: endpoint.data.endpointId,
+        label: "test-account",
+        credentialType: "api_key",
+        secret: "test-secret",
+        priority: 1,
+        weight: 1,
+      });
+      const model = await command("router.model.register", {
+        providerId: "local-openai",
+        endpointId: endpoint.data.endpointId,
+        modelId: "massion-test-model",
+        routeKind: "chat",
+        contextWindow: 200_000,
+        supportsTools: true,
+        supportsStructuredOutput: true,
+        supportsVision: false,
+        supportsStreaming: true,
+        equivalenceGroup: "software-product-test",
+        evalScore: 1,
+        inputCostMicrosPerMillion: 0,
+        outputCostMicrosPerMillion: 0,
+        verified: true,
+      });
+      for (const name of [
+        "orchestration-balanced",
+        "planning-quality",
+        "delivery-quality",
+        "assurance-independent",
+        "software-engineering-quality",
+      ]) {
+        const route = await command("router.route.configure", {
+          name,
+          routeKind: "chat",
+          credentialPolicy: "round-robin",
+          dataPolicy: "external-allowed",
+          equivalenceGroup: "software-product-test",
+          minEvalScore: 0,
+          requireTools: false,
+          requireStructuredOutput: name === "planning-quality",
+          requireVision: false,
+          requireStreaming: false,
+          maxContextTokens: 200_000,
+          requestBudgetMicros: 1_000_000,
+          totalBudgetMicros: 10_000_000,
+        });
+        await command("router.candidate.add", {
+          routeId: route.data.routeId,
+          modelProfileId: model.data.modelProfileId,
+          priority: 1,
+        });
+      }
+
+      const organizations = await OrganizationService.create(database);
+      const repositories = await RepositoryStore.create(database, organizations);
+      const indexes = await IndexStore.create(database, organizations);
+      const scanner = new RepositoryScanner();
+      const collector = new RepositoryRevisionCollector(scanner);
+      const scanOptions = { include: ["**/*"], exclude: [], maxFileBytes: 128 * 1_024 } as const;
+      const captured = await collector.capture(repositoryRoot, scanOptions);
+      const registered = await repositories.register(initialized.context, {
+        commandId: "software-product-repository-register-0001",
+        name: "software-product-fixture",
+        providerKind: captured.providerKind,
+        rootRef: repositoryRoot,
+        rootRealPathHash: captured.rootRealPathHash,
+        defaultBranch: "main",
+      });
+      const revision = await repositories.captureRevision(initialized.context, {
+        commandId: "software-product-repository-revision-0001",
+        repositoryId: registered.repository.repositoryId,
+        providerRevision: captured.providerRevision,
+        dirty: captured.dirty,
+        ...(captured.dirtyFingerprint ? { dirtyFingerprint: captured.dirtyFingerprint } : {}),
+        manifestChecksum: captured.manifestChecksum,
+        rootRealPathHash: captured.rootRealPathHash,
+        collectorVersion: captured.collectorVersion,
+      });
+      const parser = new EvidenceParser();
+      const indexConfiguration = await repositories.createConfiguration(initialized.context, {
+        commandId: "software-product-index-configuration-0001",
+        repositoryId: registered.repository.repositoryId,
+        checksum: createHash("sha256").update(JSON.stringify(scanOptions)).digest("hex"),
+        parserBundleVersion: parser.bundleVersion,
+        schemaVersion: "evidence-v1",
+        embeddingStatus: "unavailable",
+        settings: scanOptions,
+      });
+      await new EvidenceIndexer(repositories, indexes, scanner, parser).index(initialized.context, {
+        commandId: "software-product-index-0001",
+        repositoryId: registered.repository.repositoryId,
+        repositoryRevisionId: revision.revision.repositoryRevisionId,
+        configurationId: indexConfiguration.configuration.configurationId,
+        mode: "full",
+        root: repositoryRoot,
+        scanOptions,
+      });
+
+      await command("run.start", {
+        request: {
+          text: "value 모듈을 테스트 우선으로 2로 변경해주세요",
+          softwareDelivery: {
+            repositoryRoot,
+            repositoryId: registered.repository.repositoryId,
+            repositoryRevisionId: revision.revision.repositoryRevisionId,
+            baseRevision: captured.providerRevision,
+            profileVersion: SOFTWARE_ENGINEERING_TEAM_PROFILE.profileVersion,
+            allowedPaths: ["src"],
+            testPaths: ["src/value.test.mjs"],
+          },
+        },
+      });
+      let snapshot: {
+        data?: {
+          readonly works?: readonly { readonly status: string; readonly artifactIds: readonly string[] }[];
+          readonly executions?: readonly { readonly agentHandle: string; readonly status: string }[];
+        };
+      } = {};
+      for (let attempt = 0; attempt < 600; attempt += 1) {
+        snapshot = (await client.snapshot()) as typeof snapshot;
+        const completed = snapshot.data?.works?.some(
+          (work) => work.status === "completed" && work.artifactIds.length > 0,
+        );
+        const specialistCompleted = snapshot.data?.executions?.some(
+          (execution) =>
+            execution.agentHandle === "software-engineering.backend-specialist" && execution.status === "succeeded",
+        );
+        const assuranceCompleted = snapshot.data?.executions?.some(
+          (execution) => execution.agentHandle === "assurance" && execution.status === "succeeded",
+        );
+        if (completed && specialistCompleted && assuranceCompleted) break;
+        await new Promise((resolve) => setTimeout(resolve, 25));
+      }
+      expect(snapshot.data?.works).toEqual([
+        expect.objectContaining({ status: "completed", artifactIds: expect.arrayContaining([expect.any(String)]) }),
+      ]);
+      expect(snapshot.data?.executions).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ agentHandle: "representative", status: "succeeded" }),
+          expect.objectContaining({ agentHandle: "context-strategy", status: "succeeded" }),
+          expect.objectContaining({ agentHandle: "software-engineering.backend-specialist", status: "succeeded" }),
+          expect.objectContaining({ agentHandle: "assurance", status: "succeeded" }),
+        ]),
+      );
+      expect(await readFile(join(repositoryRoot, "src", "value.mjs"), "utf8")).toBe("export const value = 1;\n");
+      await expect(runFile("git", ["status", "--porcelain=v1"], { cwd: repositoryRoot })).resolves.toMatchObject({
+        stdout: "",
+      });
+    } finally {
+      await daemon.close();
+      await rm(workspaceRoot, { recursive: true, force: true });
+      await new Promise<void>((resolve, reject) => modelServer.close((error) => (error ? reject(error) : resolve())));
+    }
+  }, 45_000);
+
+  it("clean install에서 Z.AI Coding Plan connect-model 하나로 Core route·ready 상태·실제 run을 완성한다", async () => {
+    const plan = {
+      objective: "Z.AI 자동 Core 경로 검증",
+      summary: "구독 연결 직후 Core 실행 경로를 검증한다",
+      scopeIn: ["자동 모델 조립"],
+      scopeOut: [],
+      assumptions: [],
+      unknowns: [],
+      acceptanceCriteria: [
+        {
+          key: "zai-core-path",
+          statement: "자동 조립된 모델로 전달 작업이 실행된다",
+          method: "evidence",
+          evidenceKinds: ["artifact-version"],
+          planLevel: false,
+        },
+      ],
+      risks: [],
+      tasks: [
+        {
+          key: "deliver-zai-core",
+          title: "Z.AI Core 전달",
+          objective: "자동 조립된 route로 Delivery Agent를 실행한다",
+          criterionKeys: ["zai-core-path"],
+          dependencyKeys: [],
+          requiredCapabilities: [],
+          recommendedAgentHandles: ["delivery-coordination"],
+          parallelizable: false,
+        },
+      ],
+      evidenceRequests: [],
+    };
+    const realFetch = globalThis.fetch;
+    const upstreamRequests: Array<{
+      readonly url: string;
+      readonly authorization: string;
+      readonly responseFormatType?: string;
+      readonly includesOutputSchema: boolean;
+    }> = [];
+    vi.stubGlobal("fetch", async (input: string | URL | Request, init?: RequestInit) => {
+      const url = input instanceof Request ? input.url : String(input);
+      if (!url.startsWith("https://api.z.ai/api/coding/paas/v4/")) return await realFetch(input, init);
+      const headers = new Headers(input instanceof Request ? input.headers : init?.headers);
+      const bodyText =
+        input instanceof Request ? await input.clone().text() : typeof init?.body === "string" ? init.body : "{}";
+      const body = JSON.parse(bodyText) as {
+        readonly model?: unknown;
+        readonly response_format?: { readonly type?: unknown };
+        readonly messages?: unknown;
+      };
+      upstreamRequests.push({
+        url,
+        authorization: headers.get("authorization") ?? "",
+        ...(typeof body.response_format?.type === "string" ? { responseFormatType: body.response_format.type } : {}),
+        includesOutputSchema: JSON.stringify(body.messages).includes("Massion JSON output schema"),
+      });
+      if (body.model !== "glm-5.2") return new Response("invalid model", { status: 400 });
+      if (body.response_format?.type === "json_schema")
+        return new Response("JSON Schema response format is unsupported", { status: 400 });
+      const content =
+        body.response_format?.type === "json_object"
+          ? JSON.stringify(
+              JSON.stringify(body.messages).includes("Massion JSON output schema") ? plan : { objective: "불완전한 계획" },
+            )
+          : "완료";
+      return Response.json({
+        id: crypto.randomUUID(),
+        object: "chat.completion",
+        created: 1,
+        model: "glm-5.2",
+        choices: [
+          {
+            index: 0,
+            message: { role: "assistant", content },
+            finish_reason: "stop",
+          },
+        ],
+        usage: { prompt_tokens: 10, completion_tokens: 10, total_tokens: 20 },
+      });
+    });
+    const workspaceRoot = await mkdtemp(join(tmpdir(), "massion-zai-core-"));
+    const parsed = parseServerConfig({
+      MASSION_TOKEN_KEY: Buffer.alloc(32, 51).toString("base64url"),
+      MASSION_CREDENTIAL_KEY: Buffer.alloc(32, 52).toString("base64url"),
+      MASSION_DATABASE_URL: "mem://",
+      MASSION_SOFTWARE_WORKSPACE_ROOT: workspaceRoot,
+      MASSION_CONNECTOR_ROOT: join(workspaceRoot, "connectors"),
+    });
+    const daemon = await createMassionDaemon({
+      ...parsed,
+      server: { ...parsed.server, port: 0 },
+      metrics: { ...parsed.metrics, port: 0 },
+      registry: { ...parsed.registry, port: 0 },
+    });
+    const secret = "zai-product-secret-never-returned";
+    const address = await daemon.start();
+    try {
+      const initialized = (await ApplicationHttpClient.bootstrap(address.url, {
+        commandId: "zai-core-bootstrap-command-0001",
+        email: "zai-core@example.com",
+        displayName: "Z.AI Core",
+      })) as { access: { token: string } };
+      const client = new ApplicationHttpClient({ baseUrl: address.url, token: initialized.access.token });
+      const connected = await client.command({
+        schemaVersion: "massion.application.v1",
+        commandId: "zai-core-connect-command-0001",
+        correlationId: "zai-core-connect-correlation-0001",
+        operation: "subscription.server.connect-model",
+        payload: {
+          providerId: "zai-coding-plan",
+          alias: "Z.AI GLM Coding Plan",
+          authKind: "api-key",
+          billingKind: "coding-plan",
+          secret,
+        },
+      });
+      expect(connected).toMatchObject({
+        outcome: "succeeded",
+        data: {
+          providerId: "zai-coding-plan",
+          status: "active",
+          connectorStatus: "ready",
+        },
+      });
+      expect(JSON.stringify(connected)).not.toContain(secret);
+      await expect(client.status()).resolves.toMatchObject({
+        data: { status: "ready", mode: "local", modelRuntime: "ready" },
+      });
+      await client.command({
+        schemaVersion: "massion.application.v1",
+        commandId: "zai-core-run-command-0001",
+        correlationId: "zai-core-run-correlation-0001",
+        operation: "run.start",
+        payload: { request: { text: "자동 Z.AI Core 경로를 검증해주세요" } },
+      });
+      let snapshot: {
+        data?: {
+          works?: readonly { status: string }[];
+          executions?: readonly { agentHandle: string; status: string }[];
+        };
+      } = {};
+      for (let attempt = 0; attempt < 300; attempt += 1) {
+        snapshot = (await client.snapshot()) as typeof snapshot;
+        if (
+          (snapshot.data?.executions?.length ?? 0) >= 4 &&
+          snapshot.data?.works?.some((work) => work.status === "completed")
+        ) {
+          break;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+      expect(snapshot.data?.works).toEqual([expect.objectContaining({ status: "completed" })]);
+      expect(snapshot.data?.executions).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ agentHandle: "representative", status: "succeeded" }),
+          expect.objectContaining({ agentHandle: "context-strategy", status: "succeeded" }),
+          expect.objectContaining({ agentHandle: "delivery-coordination", status: "succeeded" }),
+          expect.objectContaining({ agentHandle: "assurance", status: "succeeded" }),
+        ]),
+      );
+      expect(
+        upstreamRequests.filter((request) => request.url.endsWith("/chat/completions")).length,
+      ).toBeGreaterThanOrEqual(4);
+      expect(upstreamRequests.some((request) => request.responseFormatType === "json_schema")).toBe(false);
+      expect(upstreamRequests.some((request) => request.responseFormatType === "json_object")).toBe(true);
+      expect(upstreamRequests.some((request) => request.includesOutputSchema)).toBe(true);
       expect(upstreamRequests.every((request) => request.authorization === `Bearer ${secret}`)).toBe(true);
     } finally {
       await daemon.close();

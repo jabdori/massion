@@ -89,6 +89,7 @@ interface RoutedExecutionLeaseBase {
 export interface RoutedLanguageModelLease extends RoutedExecutionLeaseBase {
   readonly kind: "model";
   readonly model: LanguageModel;
+  readonly supportsStructuredOutput: boolean;
 }
 
 export type RoutedAgentRuntimeResult =
@@ -370,6 +371,7 @@ export class MassionModelFactory implements RoutedModelFactory {
       attemptId,
       credentialId: credential.credential_id,
       model,
+      supportsStructuredOutput: profile.supports_structured_output,
       complete: async (usage) => await this.completeAttempt(context, attemptId, usage, costFor(usage)),
       fail: async (usage) => await this.failAttempt(context, attemptId, usage, costFor(usage)),
     };
@@ -609,7 +611,12 @@ export class MassionModelFactory implements RoutedModelFactory {
       ...(reservation.attempt.quota_snapshot_id ? { quotaSnapshotId: reservation.attempt.quota_snapshot_id } : {}),
     };
     return binding.kind === "model"
-      ? { kind: "model", model: binding.model, ...settlement }
+      ? {
+          kind: "model",
+          model: binding.model,
+          supportsStructuredOutput: profile.supports_structured_output,
+          ...settlement,
+        }
       : { kind: "agent-runtime", executor: binding.executor, subscription, ...sessionLifecycle, ...settlement };
   }
 

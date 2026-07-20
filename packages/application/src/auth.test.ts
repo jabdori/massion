@@ -105,6 +105,42 @@ describe("ApplicationAccessTokenService", () => {
     await expect(tokens.authenticate(`Bearer ${issued.token}`, "massion-api", ["work:read"])).rejects.toThrow("폐기");
   });
 
+  it("만료된 개인 loopback 접근 token 원문은 같은 권한의 새 token으로만 교체한다", async () => {
+    const issued = await tokens.issue(context, {
+      commandId: "issue-local-refresh-token-0001",
+      audience: "massion-api",
+      scopes: ["application:*"],
+      ttlSeconds: 60,
+    });
+    if (!issued.token) throw new Error("최초 token 원문이 없습니다");
+
+    clock.now = new Date("2026-07-11T00:01:01.000Z");
+    await expect(tokens.authenticateAccess(`Bearer ${issued.token}`, "massion-api", [])).rejects.toThrow("만료");
+
+    const refreshed = await tokens.refreshLocalAccess(`Bearer ${issued.token}`, "massion-api", [], {
+      commandId: "refresh-local-access-token-0001",
+    });
+    expect(refreshed).toMatchObject({
+      audience: "massion-api",
+      scopes: ["application:*"],
+      replayed: false,
+    });
+    expect(refreshed.tokenId).not.toBe(issued.tokenId);
+    expect(refreshed.token).toMatch(/^mat_[A-Za-z0-9_-]+\.[A-Za-z0-9_-]{43}$/u);
+    if (!refreshed.token) throw new Error("갱신 token 원문이 없습니다");
+    await expect(tokens.authenticateAccess(`Bearer ${refreshed.token}`, "massion-api", [])).resolves.toMatchObject({
+      context,
+      scopes: ["application:*"],
+    });
+
+    await tokens.revoke(context, { commandId: "revoke-local-refresh-token-0001", tokenId: issued.tokenId });
+    await expect(
+      tokens.refreshLocalAccess(`Bearer ${issued.token}`, "massion-api", [], {
+        commandId: "refresh-revoked-local-access-token-0001",
+      }),
+    ).rejects.toThrow("폐기");
+  });
+
   it("다른 조직 token과 suspended Membership을 tenant context로 사용할 수 없다", async () => {
     const identities = await IdentityService.create(database);
     const other = await identities.registerPersonalUser({ email: "other-surface@example.com", displayName: "Other" });
