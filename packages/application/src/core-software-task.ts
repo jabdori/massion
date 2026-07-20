@@ -13,6 +13,8 @@ import type { WorkService, WorkTask } from "@massion/work";
 
 import type { CoreSoftwareTaskPort } from "./core-delivery-stage.js";
 
+const APPLICATION_RUN_CANCELLED = "Application run cancelled";
+
 interface SoftwareDeliveryConfiguration {
   readonly repositoryRoot: string;
   readonly repositoryId: string;
@@ -83,6 +85,9 @@ function criteria(task: WorkTask): readonly string[] {
 }
 
 export class CoreSoftwareTaskAdapter implements CoreSoftwareTaskPort {
+  private readonly activeCommands = new Set<string>();
+  private readonly cancellationRequested = new Set<string>();
+
   public constructor(
     private readonly dependencies: {
       readonly works: Pick<WorkService, "getWork" | "listTasks" | "assignTask"> &
@@ -100,86 +105,128 @@ export class CoreSoftwareTaskAdapter implements CoreSoftwareTaskPort {
     context: TenantContext,
     input: Parameters<CoreSoftwareTaskPort["executeTask"]>[1],
   ): ReturnType<CoreSoftwareTaskPort["executeTask"]> {
-    const config = configuration(input.request);
-    if (!config) return { outcome: "blocked", reason: "software-delivery-configuration-required" };
-    const agentHandle = input.task.recommended_agent_handles?.[0];
-    if (!agentHandle) return { outcome: "blocked", reason: "software-delivery-agent-required" };
-    const startCommand = `${input.commandId}:engineering`;
-    let delivery = await this.dependencies.deliveries.findByStartCommand(context, startCommand);
-    if (!delivery) {
-      const current = await this.dependencies.works.getWork(context, input.workId);
-      const existingAssignment = this.dependencies.works.listAssignments
-        ? (await this.dependencies.works.listAssignments(context, input.workId)).find(
-            (candidate) =>
-              candidate.task_id === input.task.task_id &&
-              candidate.agent_handle === agentHandle &&
-              candidate.status === "assigned",
-          )
-        : undefined;
-      const assigned = existingAssignment
-        ? { work: current, assignment: existingAssignment }
-        : await this.dependencies.works.assignTask(context, {
-            commandId: `${input.commandId}:assignment`,
-            workId: input.workId,
-            expectedRevision: current.revision,
-            taskId: input.task.task_id,
-            agentHandle,
-          });
-      delivery = (
-        await this.dependencies.coordinator.start(context, {
-          commandId: startCommand,
-          workId: input.workId,
-          expectedWorkRevision: assigned.work.revision,
-          taskId: input.task.task_id,
-          expectedTaskRevision: input.task.revision,
-          assignmentId: assigned.assignment.assignment_id,
-          repositoryId: config.repositoryId,
-          repositoryRevisionId: config.repositoryRevisionId,
-          baseRevision: config.baseRevision,
-          agentHandle,
-          profileVersion: config.profileVersion,
-          allowedPaths: config.allowedPaths,
-          leaseTtlMs: config.leaseTtlMs,
-        })
-      ).delivery;
-    }
-    if (delivery.status === "failed" || delivery.status === "cancelled") {
-      return { outcome: "blocked", reason: `software-delivery-${delivery.status}` };
-    }
-    if (delivery.status === "preparing")
-      delivery = await this.executeTdd(context, input, config, delivery, agentHandle);
-    if (delivery.status !== "committed") return { outcome: "blocked", reason: `software-delivery-${delivery.status}` };
-    const [work, tasks] = await Promise.all([
-      this.dependencies.works.getWork(context, input.workId),
-      this.dependencies.works.listTasks(context, input.workId),
-    ]);
-    const task = tasks.find((candidate) => candidate.task_id === input.task.task_id);
-    if (!task) return { outcome: "blocked", reason: "software-delivery-task-missing" };
-    const resumedApprovalId = approvalId(input.resumeInput);
+    this.activeCommands.add(input.commandId);
     try {
-      await this.dependencies.finalizer.finalize(context, {
-        commandId: `${input.commandId}:finalize`,
-        deliveryId: delivery.deliveryId,
-        expectedWorkRevision: work.revision,
-        expectedTaskRevision: task.revision,
-        environment: config.environment,
-        ...(resumedApprovalId ? { governanceApprovalId: resumedApprovalId } : {}),
-      });
-      return { outcome: "completed" };
-    } catch (error) {
-      if (error instanceof GovernanceApprovalRequiredError) {
-        return { outcome: "awaiting-approval", approvalId: error.approvalId };
+      const config = configuration(input.request);
+      if (!config) return { outcome: "blocked", reason: "software-delivery-configuration-required" };
+      const agentHandle = input.task.recommended_agent_handles?.[0];
+      if (!agentHandle) return { outcome: "blocked", reason: "software-delivery-agent-required" };
+      await this.throwIfCancelled(context, input, config);
+      const startCommand = `${input.commandId}:engineering`;
+      let delivery = await this.dependencies.deliveries.findByStartCommand(context, startCommand);
+      await this.throwIfCancelled(context, input, config);
+      if (!delivery) {
+        const current = await this.dependencies.works.getWork(context, input.workId);
+        await this.throwIfCancelled(context, input, config);
+        const existingAssignment = this.dependencies.works.listAssignments
+          ? (await this.dependencies.works.listAssignments(context, input.workId)).find(
+              (candidate) =>
+                candidate.task_id === input.task.task_id &&
+                candidate.agent_handle === agentHandle &&
+                candidate.status === "assigned",
+            )
+          : undefined;
+        await this.throwIfCancelled(context, input, config);
+        const assigned = existingAssignment
+          ? { work: current, assignment: existingAssignment }
+          : await this.dependencies.works.assignTask(context, {
+              commandId: `${input.commandId}:assignment`,
+              workId: input.workId,
+              expectedRevision: current.revision,
+              taskId: input.task.task_id,
+              agentHandle,
+            });
+        await this.throwIfCancelled(context, input, config);
+        delivery = (
+          await this.dependencies.coordinator.start(context, {
+            commandId: startCommand,
+            workId: input.workId,
+            expectedWorkRevision: assigned.work.revision,
+            taskId: input.task.task_id,
+            expectedTaskRevision: input.task.revision,
+            assignmentId: assigned.assignment.assignment_id,
+            repositoryId: config.repositoryId,
+            repositoryRevisionId: config.repositoryRevisionId,
+            baseRevision: config.baseRevision,
+            agentHandle,
+            profileVersion: config.profileVersion,
+            allowedPaths: config.allowedPaths,
+            leaseTtlMs: config.leaseTtlMs,
+          })
+        ).delivery;
+        await this.throwIfCancelled(context, input, config);
       }
-      throw error;
+      if (delivery.status === "failed" || delivery.status === "cancelled") {
+        return { outcome: "blocked", reason: `software-delivery-${delivery.status}` };
+      }
+      if (delivery.status === "preparing") {
+        await this.throwIfCancelled(context, input, config);
+        delivery = await this.executeTdd(context, input, config, delivery, agentHandle);
+        await this.throwIfCancelled(context, input, config);
+      }
+      if (delivery.status !== "committed")
+        return { outcome: "blocked", reason: `software-delivery-${delivery.status}` };
+      const [work, tasks] = await Promise.all([
+        this.dependencies.works.getWork(context, input.workId),
+        this.dependencies.works.listTasks(context, input.workId),
+      ]);
+      await this.throwIfCancelled(context, input, config);
+      const task = tasks.find((candidate) => candidate.task_id === input.task.task_id);
+      if (!task) return { outcome: "blocked", reason: "software-delivery-task-missing" };
+      const resumedApprovalId = approvalId(input.resumeInput);
+      try {
+        await this.throwIfCancelled(context, input, config);
+        await this.dependencies.finalizer.finalize(context, {
+          commandId: `${input.commandId}:finalize`,
+          deliveryId: delivery.deliveryId,
+          expectedWorkRevision: work.revision,
+          expectedTaskRevision: task.revision,
+          environment: config.environment,
+          ...(resumedApprovalId ? { governanceApprovalId: resumedApprovalId } : {}),
+        });
+        await this.throwIfCancelled(context, input, config);
+        return { outcome: "completed" };
+      } catch (error) {
+        if (error instanceof GovernanceApprovalRequiredError) {
+          return { outcome: "awaiting-approval", approvalId: error.approvalId };
+        }
+        throw error;
+      }
+    } finally {
+      this.activeCommands.delete(input.commandId);
+      this.cancellationRequested.delete(input.commandId);
     }
   }
 
   public async cancelTask(
     context: TenantContext,
-    input: Parameters<NonNullable<CoreSoftwareTaskPort["cancelTask"]>>[1],
+    input: Parameters<CoreSoftwareTaskPort["cancelTask"]>[1],
   ): Promise<void> {
-    const config = configuration(input.request);
-    if (!config) return;
+    this.cancellationRequested.add(input.commandId);
+    try {
+      const config = configuration(input.request);
+      if (!config) return;
+      await this.cancelExistingDelivery(context, input, config);
+    } finally {
+      if (!this.activeCommands.has(input.commandId)) this.cancellationRequested.delete(input.commandId);
+    }
+  }
+
+  private async throwIfCancelled(
+    context: TenantContext,
+    input: Parameters<CoreSoftwareTaskPort["executeTask"]>[1],
+    config: SoftwareDeliveryConfiguration,
+  ): Promise<void> {
+    if (!input.signal?.aborted && !this.cancellationRequested.has(input.commandId)) return;
+    await this.cancelExistingDelivery(context, input, config);
+    throw new Error(APPLICATION_RUN_CANCELLED);
+  }
+
+  private async cancelExistingDelivery(
+    context: TenantContext,
+    input: Parameters<CoreSoftwareTaskPort["cancelTask"]>[1],
+    config: SoftwareDeliveryConfiguration,
+  ): Promise<void> {
     const delivery = await this.dependencies.deliveries.findByStartCommand(context, `${input.commandId}:engineering`);
     if (!delivery) return;
     if (!["committed", "failed", "cancelled"].includes(delivery.status)) {
@@ -220,6 +267,7 @@ export class CoreSoftwareTaskAdapter implements CoreSoftwareTaskPort {
       evidenceBriefIds: config.evidenceBriefIds,
       allowedPaths: config.allowedPaths,
     });
+    await this.throwIfCancelled(context, input, config);
     return (
       await this.dependencies.engine.execute(context, {
         deliveryId: delivery.deliveryId,

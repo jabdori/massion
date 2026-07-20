@@ -308,7 +308,7 @@ describe("Massion server product", () => {
           key: "core-path",
           statement: "전달 작업이 완료된다",
           method: "evidence",
-          evidenceKinds: ["check-result"],
+          evidenceKinds: ["artifact-version"],
           planLevel: false,
         },
       ],
@@ -459,18 +459,19 @@ describe("Massion server product", () => {
       for (let attempt = 0; attempt < 300; attempt += 1) {
         snapshot = (await client.snapshot()) as typeof snapshot;
         if (
-          (snapshot.data?.executions?.length ?? 0) >= 3 &&
-          snapshot.data?.works?.some((work) => work.status === "verifying")
+          (snapshot.data?.executions?.length ?? 0) >= 4 &&
+          snapshot.data?.works?.some((work) => work.status === "completed")
         )
           break;
         await new Promise((resolve) => setTimeout(resolve, 10));
       }
-      expect(snapshot.data?.works).toEqual([expect.objectContaining({ status: "verifying" })]);
+      expect(snapshot.data?.works).toEqual([expect.objectContaining({ status: "completed" })]);
       expect(snapshot.data?.executions).toEqual(
         expect.arrayContaining([
           expect.objectContaining({ agentHandle: "representative", status: "succeeded" }),
           expect.objectContaining({ agentHandle: "context-strategy", status: "succeeded" }),
           expect.objectContaining({ agentHandle: "delivery-coordination", status: "succeeded" }),
+          expect.objectContaining({ agentHandle: "assurance", status: "succeeded" }),
         ]),
       );
     } finally {
@@ -493,7 +494,7 @@ describe("Massion server product", () => {
           key: "minimax-core-path",
           statement: "자동 조립된 모델로 전달 작업이 실행된다",
           method: "evidence",
-          evidenceKinds: ["check-result"],
+          evidenceKinds: ["artifact-version"],
           planLevel: false,
         },
       ],
@@ -610,19 +611,20 @@ describe("Massion server product", () => {
       for (let attempt = 0; attempt < 300; attempt += 1) {
         snapshot = (await client.snapshot()) as typeof snapshot;
         if (
-          (snapshot.data?.executions?.length ?? 0) >= 3 &&
-          snapshot.data?.works?.some((work) => work.status === "verifying")
+          (snapshot.data?.executions?.length ?? 0) >= 4 &&
+          snapshot.data?.works?.some((work) => work.status === "completed")
         ) {
           break;
         }
         await new Promise((resolve) => setTimeout(resolve, 10));
       }
-      expect(snapshot.data?.works).toEqual([expect.objectContaining({ status: "verifying" })]);
+      expect(snapshot.data?.works).toEqual([expect.objectContaining({ status: "completed" })]);
       expect(snapshot.data?.executions).toEqual(
         expect.arrayContaining([
           expect.objectContaining({ agentHandle: "representative", status: "succeeded" }),
           expect.objectContaining({ agentHandle: "context-strategy", status: "succeeded" }),
           expect.objectContaining({ agentHandle: "delivery-coordination", status: "succeeded" }),
+          expect.objectContaining({ agentHandle: "assurance", status: "succeeded" }),
         ]),
       );
       expect(

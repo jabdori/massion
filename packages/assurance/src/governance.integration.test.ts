@@ -23,16 +23,18 @@ describe("Assurance binding Governance 통합", () => {
   let database: MassionDatabase;
   let context: TenantContext;
   let approvals: ApprovalStore;
+  let identities: IdentityService;
   let organizations: OrganizationService;
+  let policies: PolicyStore;
   let gate: GovernanceGate;
 
   beforeEach(async () => {
     database = await createDatabase({ url: "mem://", namespace: "massion", database: crypto.randomUUID() });
-    const identity = await IdentityService.create(database);
+    identities = await IdentityService.create(database);
     organizations = await OrganizationService.create(database);
-    const owner = await identity.registerPersonalUser({ email: "binding-gate@example.com", displayName: "Gate" });
+    const owner = await identities.registerPersonalUser({ email: "binding-gate@example.com", displayName: "Gate" });
     context = await organizations.resolveTenantContext(owner.user.user_id, owner.organization.organization_id);
-    const policies = await PolicyStore.create(database, organizations);
+    policies = await PolicyStore.create(database, organizations);
     const governance = await GovernanceService.create(database, organizations, policies);
     approvals = await ApprovalStore.create(database, organizations, governance);
     const permits = await PermitStore.create(database, organizations);
@@ -72,7 +74,7 @@ describe("Assurance binding Governance 통합", () => {
     };
   }
 
-  it("위험한 binding 활성화는 실제 사람 승인과 permit 소비 후 허용한다", async () => {
+  it("개인용 기본 정책은 내부 binding 활성화를 자동으로 허용한다", async () => {
     const store = await AssuranceBindingStore.create(
       database,
       organizations,
@@ -80,50 +82,55 @@ describe("Assurance binding Governance 통합", () => {
       { allowedAuthorHandles: ["context-strategy"] },
     );
     const draft = await store.propose(context, proposal());
-    const commandId = crypto.randomUUID();
-    let required: GovernanceApprovalRequiredError | undefined;
-    try {
-      await store.activate(context, {
-        commandId,
-        bindingVersionId: draft.bindingVersionId,
-        expectedRevision: draft.revision,
-      });
-    } catch (error) {
-      if (error instanceof GovernanceApprovalRequiredError) required = error;
-      else throw error;
-    }
-    if (!required) throw new Error("Assurance binding activation 승인 요청이 없습니다");
-    const pending = await approvals.get(context, required.approvalId);
-    const [decisions] = await database.query<[{ request_summary_json: string }[]]>(
-      "SELECT request_summary_json FROM governance_policy_decision WHERE organization_id = $organization_id AND decision_id = $decision_id;",
-      { organization_id: context.organizationId, decision_id: required.decisionId },
+    const active = await store.activate(context, {
+      commandId: crypto.randomUUID(),
+      bindingVersionId: draft.bindingVersionId,
+      expectedRevision: draft.revision,
+    });
+    const [decisions] = await database.query<[{ request_summary_json: string; outcome: string }[]]>(
+      "SELECT request_summary_json, outcome FROM governance_policy_decision WHERE organization_id = $organization_id AND decision_id = $decision_id;",
+      { organization_id: context.organizationId, decision_id: active.governanceDecisionId },
     );
     const decision = decisions[0];
     if (!decision) throw new Error("Binding Governance decision을 찾을 수 없습니다");
-    expect(pending.resource_revision).toBe(draft.revision);
+    expect(active).toMatchObject({ status: "active" });
+    expect(active).not.toHaveProperty("governanceApprovalId");
+    expect(decision.outcome).toBe("allow");
     expect(JSON.parse(decision.request_summary_json)).toMatchObject({
       resource: { type: "AssuranceBindingVersion", id: draft.bindingVersionId },
     });
-    await approvals.vote(context, {
+  });
+
+  it("조직 검토 정책은 binding 활성화를 사람 승인으로 유지한다", async () => {
+    const teamOwner = await identities.registerPersonalUser({ email: "binding-team@example.com", displayName: "Team" });
+    const teamContext = await organizations.resolveTenantContext(
+      teamOwner.user.user_id,
+      teamOwner.organization.organization_id,
+    );
+    const defaults = createDefaultPolicy("team");
+    const draftPolicy = await policies.createDraft(teamContext, {
       commandId: crypto.randomUUID(),
-      approvalId: required.approvalId,
-      vote: "approve",
-      reason: "검증 recipe를 검토했습니다",
+      bundle: defaults.bundle,
+      requirements: defaults.requirements,
     });
-
-    const active = await store.activate(context, {
-      commandId,
-      bindingVersionId: draft.bindingVersionId,
-      expectedRevision: draft.revision,
-      approvalId: required.approvalId,
+    await policies.activate(teamContext, {
+      commandId: crypto.randomUUID(),
+      policyVersionId: draftPolicy.policy_version_id,
     });
-
-    expect(active).toMatchObject({
-      status: "active",
-      governanceDecisionId: required.decisionId,
-      governanceApprovalId: required.approvalId,
-    });
-    expect((await approvals.get(context, required.approvalId)).status).toBe("consumed");
+    const store = await AssuranceBindingStore.create(
+      database,
+      organizations,
+      new GovernanceBindingActivationAuthorizer(gate),
+      { allowedAuthorHandles: ["context-strategy"] },
+    );
+    const draft = await store.propose(teamContext, proposal());
+    await expect(
+      store.activate(teamContext, {
+        commandId: crypto.randomUUID(),
+        bindingVersionId: draft.bindingVersionId,
+        expectedRevision: draft.revision,
+      }),
+    ).rejects.toBeInstanceOf(GovernanceApprovalRequiredError);
   });
 
   it("local-private 외부 binding 활성화는 실제 Governance deny를 유지한다", async () => {

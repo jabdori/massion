@@ -92,7 +92,7 @@ export function createDefaultPolicy(kind: "personal" | "team"): {
     ACTIONS.map((action) => [action, { appliesTo: { principalTypes, resourceTypes, context } }]),
   );
   const dangerousActions = [
-    "work.execute",
+    ...(kind === "team" ? ["work.execute"] : []),
     "tool.call",
     "organization.change",
     "subscription.account.share",

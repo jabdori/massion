@@ -45,6 +45,10 @@ function dependencies() {
   const runStore = {
     start: vi.fn(async () => current),
     get: vi.fn(async () => current),
+    cancel: vi.fn(async () => {
+      current = { ...run("cancelled"), completedAt: now };
+      return current;
+    }),
     recordImpacts: vi.fn(async (_context, _commandId, _recordsRunId, evaluation: DocumentationImpactEvaluation) => {
       current = run("rendering");
       return { run: current, assessments: Object.values(evaluation) };
@@ -82,6 +86,21 @@ describe("Records service orchestration", () => {
 
     expect(await service.start(context, input)).toEqual(run());
     expect(deps.runStore.start).toHaveBeenCalledWith(context, input);
+  });
+
+  it("active Records run cancellation을 RecordsRunStore에 위임한다", async () => {
+    const deps = dependencies();
+    const service = new RecordsService(deps.runStore, deps.workPort);
+    const cancellation = { commandId: "records:cancel", recordsRunId: "records-run-1" };
+
+    const result = await (
+      service as unknown as {
+        cancel(context: TenantContext, input: typeof cancellation): Promise<RecordsRun>;
+      }
+    ).cancel(context, cancellation);
+
+    expect(result).toMatchObject({ recordsRunId: "records-run-1", status: "cancelled" });
+    expect(deps.runStore.cancel).toHaveBeenCalledWith(context, cancellation);
   });
 
   it("네 impact를 deterministic 평가해 저장하고 rendering으로 전이한다", async () => {

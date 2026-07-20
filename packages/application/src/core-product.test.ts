@@ -12,6 +12,7 @@ describe("Core product composition", () => {
       strategy: {},
       briefs: {},
       assurance: {},
+      assuranceBindings: {},
       assuranceChecks: {},
       records: {},
       recordDocuments: {},

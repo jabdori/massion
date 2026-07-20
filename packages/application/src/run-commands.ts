@@ -100,7 +100,7 @@ export function registerApplicationRunCommands(
     },
     async handle(context, command, payload) {
       const run = payload.retryBlocked
-        ? await dependencies.coordinator.retryBlocked(context, payload.runId)
+        ? await dependencies.coordinator.retryBlocked(context, payload.runId, command.commandId)
         : await dependencies.coordinator.resume(context, payload.runId, payload.resumeInput);
       return result(command, {
         outcome: run.status === "completed" ? "succeeded" : "accepted",

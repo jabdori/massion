@@ -73,34 +73,64 @@ function request(value: unknown): CoreRequest {
 export function createCoreWorkPipelineExecutors(
   dependencies: CoreWorkPipelineDependencies,
 ): Readonly<Record<CoreWorkStage, CoreWorkStageExecutor>> {
+  const cancelCreatedWork = async (context: TenantContext, runId: string, workId: string): Promise<void> => {
+    const work = await dependencies.works.getWork(context, workId);
+    if (!canTransitionWork(work.status, "cancelled")) return;
+    await dependencies.works.transition(context, {
+      commandId: `${runId}:work-cancel`,
+      workId,
+      expectedRevision: work.revision,
+      target: "cancelled",
+    });
+  };
+  const throwIfCancelled = (input: CoreWorkStageInput): void => {
+    if (input.signal?.aborted) throw new Error("Application run cancelled");
+  };
+  const cancelAndThrowIfCancelled = async (
+    context: TenantContext,
+    input: CoreWorkStageInput,
+    workId: string,
+  ): Promise<void> => {
+    if (!input.signal?.aborted) return;
+    await cancelCreatedWork(context, input.runId, workId);
+    throw new Error("Application run cancelled");
+  };
   const intake: CoreWorkStageExecutor = {
     async execute(context, input) {
       const value = request(input.request);
-      const snapshot = await dependencies.graph.getCurrentSnapshot(context);
-      const created = await dependencies.works.createWork(context, {
-        commandId: `${input.commandId}:work`,
-        text: value.text,
-        surface: value.surface,
-        organizationVersionId: snapshot.version.version_id,
-        ...(value.projectId === undefined ? {} : { projectId: value.projectId }),
-      });
+      let workId = input.workId;
+      if (workId === undefined) {
+        const snapshot = await dependencies.graph.getCurrentSnapshot(context);
+        throwIfCancelled(input);
+        const created = await dependencies.works.createWork(context, {
+          commandId: `${input.commandId}:work`,
+          text: value.text,
+          surface: value.surface,
+          organizationVersionId: snapshot.version.version_id,
+          ...(value.projectId === undefined ? {} : { projectId: value.projectId }),
+        });
+        workId = created.work.work_id;
+        if (input.signal?.aborted) await cancelAndThrowIfCancelled(context, input, workId);
+      }
+      if (input.signal?.aborted) await cancelAndThrowIfCancelled(context, input, workId);
       const runtime = await dependencies.representative.execute(context, {
         commandId: `${input.commandId}:representative`,
-        workId: created.work.work_id,
+        workId,
         agentHandle: "representative",
         modelRoute: "orchestration-balanced",
         correlationId: input.correlationId,
         estimatedTokens: value.tokenBudget,
         estimatedCostMicros: 0,
         input: { operation: "coordinate_work", request: value },
+        ...(input.signal === undefined ? {} : { signal: input.signal }),
       });
       if (runtime.status === "blocked_model_unavailable")
-        return { outcome: "blocked", reason: "model-unavailable", workId: created.work.work_id };
+        return { outcome: "blocked", reason: "model-unavailable", workId };
       if (runtime.status !== "succeeded")
-        return { outcome: "blocked", reason: `representative-${runtime.status}`, workId: created.work.work_id };
+        return { outcome: "blocked", reason: `representative-${runtime.status}`, workId };
       return {
         outcome: "advanced",
-        workId: created.work.work_id,
+        workId,
         data: { representativeExecutionId: runtime.executionId },
       };
     },
@@ -115,12 +145,14 @@ export function createCoreWorkPipelineExecutors(
       if (!input.workId) throw new Error("context-strategy stage에 Work ID가 없습니다");
       const value = request(input.request);
       const work = await dependencies.works.getWork(context, input.workId);
+      throwIfCancelled(input);
       const sourceContent = { text: value.text };
       const planInput: PlanStrategyInput = {
         commandId: input.commandId,
         workId: input.workId,
         expectedWorkRevision: work.revision,
         tokenBudget: value.tokenBudget,
+        ...(input.signal === undefined ? {} : { signal: input.signal }),
         context: {
           objective: value.text,
           scopeIn: value.scopeIn,
@@ -158,20 +190,26 @@ export function createCoreWorkPipelineExecutors(
         },
       };
     },
+    async cancel(context, input) {
+      const strategyCommandId = input.commandId.replace(/:cancel$/u, "");
+      const executionId = await dependencies.runtimeExecutions.findExecutionIdByCommand(
+        context,
+        `${strategyCommandId}:generate:runtime`,
+      );
+      if (executionId) await dependencies.representative.cancel(context, executionId, "Application run cancelled");
+    },
   };
   const cancelWork = (stage: StagePort): CoreWorkStageExecutor => ({
     execute: async (context, input) => await stage.execute(context, input),
     async cancel(context, input) {
-      await stage.cancel?.(context, input);
-      if (!input.workId) return;
-      const work = await dependencies.works.getWork(context, input.workId);
-      if (!canTransitionWork(work.status, "cancelled")) return;
-      await dependencies.works.transition(context, {
-        commandId: `${input.runId}:work-cancel`,
-        workId: input.workId,
-        expectedRevision: work.revision,
-        target: "cancelled",
-      });
+      let cleanupError: Error | undefined;
+      try {
+        await stage.cancel?.(context, input);
+      } catch (error) {
+        cleanupError = error instanceof Error ? error : new Error(String(error), { cause: error });
+      }
+      if (input.workId) await cancelCreatedWork(context, input.runId, input.workId);
+      if (cleanupError) throw cleanupError;
     },
   });
   return {

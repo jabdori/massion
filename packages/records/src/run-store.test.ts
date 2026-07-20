@@ -95,6 +95,66 @@ CREATE work_verification CONTENT { organization_id: $organization_id, work_id: '
     await expect(store.start(context, input())).rejects.toThrow();
   });
 
+  it("active Records run 취소는 guard를 해제하고 같은 cancellation command를 멱등 재생한다", async () => {
+    const started = await store.start(context, input());
+    const cancellation = {
+      commandId: crypto.randomUUID(),
+      recordsRunId: started.recordsRunId,
+    };
+    const cancellable = store as unknown as {
+      cancel(
+        context: TenantContext,
+        input: { readonly commandId: string; readonly recordsRunId: string },
+      ): Promise<{
+        readonly recordsRunId: string;
+        readonly status: string;
+        readonly version: number;
+        readonly completedAt?: string;
+      }>;
+    };
+
+    const cancelled = await cancellable.cancel(context, cancellation);
+    const replayed = await cancellable.cancel(context, cancellation);
+
+    expect(cancelled).toMatchObject({
+      recordsRunId: started.recordsRunId,
+      status: "cancelled",
+      version: 2,
+      completedAt: expect.any(String),
+    });
+    expect(replayed).toEqual(cancelled);
+    await expect(cancellable.cancel(context, { ...cancellation, recordsRunId: "other-records-run" })).rejects.toThrow(
+      "다른 Records cancellation payload",
+    );
+    const [guards] = await database.query<[Array<{ released: boolean }>]>(
+      "SELECT active_guard_key = NONE AS released FROM records_run WHERE organization_id = $organization_id AND records_run_id = $records_run_id;",
+      { organization_id: context.organizationId, records_run_id: started.recordsRunId },
+    );
+    expect(guards).toEqual([{ released: true }]);
+    await expect(store.start(context, input())).resolves.toMatchObject({ attempt: 2, status: "planned" });
+  });
+
+  it("terminal Records run에도 cancellation command를 기록해 다른 run 재사용을 거부한다", async () => {
+    const first = await store.start(context, input());
+    const cancellable = store as unknown as {
+      cancel(
+        tenantContext: TenantContext,
+        value: { readonly commandId: string; readonly recordsRunId: string },
+      ): Promise<{ readonly recordsRunId: string; readonly status: string }>;
+    };
+    await cancellable.cancel(context, { commandId: crypto.randomUUID(), recordsRunId: first.recordsRunId });
+
+    const terminalCommandId = crypto.randomUUID();
+    await expect(
+      cancellable.cancel(context, { commandId: terminalCommandId, recordsRunId: first.recordsRunId }),
+    ).resolves.toMatchObject({ recordsRunId: first.recordsRunId, status: "cancelled" });
+
+    const second = await store.start(context, input());
+    await expect(
+      cancellable.cancel(context, { commandId: terminalCommandId, recordsRunId: second.recordsRunId }),
+    ).rejects.toThrow("다른 Records cancellation payload");
+  });
+
   it("verifying N+1·최신 passed Verification·Assurance projection을 강제한다", async () => {
     await database.query("UPDATE work SET status = 'running' WHERE work_id = 'work-1';");
     await expect(store.start(context, input())).rejects.toThrow("verifying");

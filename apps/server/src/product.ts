@@ -443,7 +443,10 @@ export async function createMassionDaemon(
         await synchronize(context);
         return await routedRunner.executeStructured(context, input, output);
       },
-      stream: routedRunner.stream.bind(routedRunner),
+      async *stream(context: Parameters<typeof routedRunner.execute>[0], input: AgentExecutionInput) {
+        await synchronize(context);
+        yield* routedRunner.stream(context, input);
+      },
       cancel: routedRunner.cancel.bind(routedRunner),
       suspend: routedRunner.suspend.bind(routedRunner),
       resume: routedRunner.resume.bind(routedRunner),
@@ -639,6 +642,7 @@ export async function createMassionDaemon(
       works,
       bindings: assuranceBindings,
       runner,
+      runtimeExecutions,
       assurance,
       checks: assuranceOrchestrator,
     });

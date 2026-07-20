@@ -19,6 +19,7 @@ import {
 } from "./impact.js";
 import { renderDocument, type RecordsDocumentSource } from "./renderer.js";
 import {
+  type CancelRecordsRunInput,
   RecordsRunStore,
   type CompleteRecordsRunInput,
   type RecordDocumentationImpactsResult,
@@ -53,6 +54,7 @@ export interface RecordsCompletionResult {
 interface RecordsRunGateway {
   start(context: TenantContext, input: StartRecordsRunInput): Promise<RecordsRun>;
   get(context: TenantContext, recordsRunId: string): Promise<RecordsRun>;
+  cancel(context: TenantContext, input: CancelRecordsRunInput): Promise<RecordsRun>;
   recordImpacts(
     context: TenantContext,
     commandId: string,
@@ -86,6 +88,10 @@ export class RecordsService {
 
   public async start(context: TenantContext, input: StartRecordsRunInput): Promise<RecordsRun> {
     return await this.runs.start(context, input);
+  }
+
+  public async cancel(context: TenantContext, input: CancelRecordsRunInput): Promise<RecordsRun> {
+    return await this.runs.cancel(context, input);
   }
 
   public async proposeImpacts(

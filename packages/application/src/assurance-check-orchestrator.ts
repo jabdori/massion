@@ -1,4 +1,5 @@
 import type {
+  AssuranceCheckBinding,
   AssuranceBindingStore,
   AssuranceCheckStore,
   AssuranceRunGateway,
@@ -43,6 +44,10 @@ function evidence(request: unknown): AssuranceEvidenceReferences {
   };
 }
 
+function requiresPriorCheckResult(binding: AssuranceCheckBinding | undefined): boolean {
+  return binding?.kind === "evidence" && binding.evidenceKinds.includes("check-result");
+}
+
 export class DatabaseCoreAssuranceCheckOrchestrator implements CoreAssuranceCheckOrchestrator {
   public constructor(
     private readonly dependencies: {
@@ -64,15 +69,23 @@ export class DatabaseCoreAssuranceCheckOrchestrator implements CoreAssuranceChec
     ]);
     const references = evidence(input.request);
     const bindingByCriterion = new Map(binding.bindings.map((item) => [item.criterionKey, item]));
-    for (const criterion of criteria) {
-      if (criterion.status === "excluded") continue;
-      const checkBinding = bindingByCriterion.get(criterion.criterionKey);
+    const scheduled = criteria
+      .filter((criterion) => criterion.status !== "excluded")
+      .map((criterion) => ({ criterion, binding: bindingByCriterion.get(criterion.criterionKey) }));
+    if (scheduled.some((item) => !item.binding)) return { outcome: "blocked", reason: "assurance-binding-incomplete" };
+    scheduled.sort((left, right) => {
+      const dependencyOrder =
+        Number(requiresPriorCheckResult(left.binding)) - Number(requiresPriorCheckResult(right.binding));
+      return dependencyOrder || left.criterion.criterionKey.localeCompare(right.criterion.criterionKey);
+    });
+    for (const item of scheduled) {
+      const checkBinding = item.binding;
       if (!checkBinding) return { outcome: "blocked", reason: "assurance-binding-incomplete" };
       const record: RecordAssuranceCheckInput = {
         commandId: `${input.commandId}:${checkBinding.bindingKey}`,
         workId: input.run.workId,
         assuranceRunId: input.run.assuranceRunId,
-        criterionId: criterion.criterionId,
+        criterionId: item.criterion.criterionId,
         bindingKey: checkBinding.bindingKey,
         artifactVersionIds: recovery.work.artifact_version_ids,
         evidenceBriefIds: references.evidenceBriefIds,

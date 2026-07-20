@@ -3,6 +3,52 @@ import { describe, expect, it } from "vitest";
 import { DatabaseCoreAssuranceCheckOrchestrator } from "./assurance-check-orchestrator.js";
 
 describe("DatabaseCoreAssuranceCheckOrchestrator", () => {
+  it("다른 검사 결과를 요구하는 coverage 검사는 일반 검사가 끝난 뒤에 기록한다", async () => {
+    const recorded: string[] = [];
+    const orchestrator = new DatabaseCoreAssuranceCheckOrchestrator({
+      runs: {
+        listCriteria: async () => [
+          { criterionId: "coverage", criterionKey: "profile:acceptance:coverage", status: "pending" },
+          { criterionId: "deliverable", criterionKey: "deliverable-created", status: "pending" },
+        ],
+      },
+      bindings: {
+        get: async () => ({
+          bindings: [
+            {
+              criterionKey: "profile:acceptance:coverage",
+              bindingKey: "coverage",
+              kind: "evidence",
+              evidenceKinds: ["check-result"],
+            },
+            {
+              criterionKey: "deliverable-created",
+              bindingKey: "deliverable",
+              kind: "evidence",
+              evidenceKinds: ["artifact-version"],
+            },
+          ],
+        }),
+      },
+      works: { recoverWork: async () => ({ work: { artifact_version_ids: ["artifact-version-1"] } }) },
+      checks: {
+        record: async (_context: unknown, value: { readonly bindingKey: string }) => {
+          recorded.push(value.bindingKey);
+          return {};
+        },
+      },
+    } as never);
+
+    await expect(
+      orchestrator.execute({} as never, {
+        commandId: "assurance-checks-command",
+        run: { assuranceRunId: "assurance-run", bindingVersionId: "binding-version", workId: "work-1" } as never,
+        request: {},
+      }),
+    ).resolves.toEqual({ outcome: "ready" });
+    expect(recorded).toEqual(["deliverable", "coverage"]);
+  });
+
   it("caller verdict 없이 criterion·binding·실제 Work evidence를 검사 원장에 연결한다", async () => {
     const recorded: unknown[] = [];
     const orchestrator = new DatabaseCoreAssuranceCheckOrchestrator({

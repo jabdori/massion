@@ -10,6 +10,7 @@ export interface PlanStrategyInput {
   readonly workId: string;
   readonly expectedWorkRevision: number;
   readonly tokenBudget: number;
+  readonly signal?: AbortSignal;
   readonly context: Omit<CreateContextInput, "commandId" | "workId" | "tokenBudget">;
 }
 
@@ -52,6 +53,7 @@ export class StrategyService {
       workId: input.workId,
       expectedWorkRevision: input.expectedWorkRevision,
       contextVersionId: contextVersion.contextVersionId,
+      ...(input.signal === undefined ? {} : { signal: input.signal }),
     });
     if (!["generated", "applied"].includes(generated.status) || !generated.plan || !generated.checksum) {
       return { contextVersion, generation: generated };
