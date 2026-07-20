@@ -14,8 +14,10 @@
 | UX-2 실행 스트림 | 서버측 완료 | `c23738f` — delta observer·fan-out registry·`/api/v1/executions/stream`. Surface 소비는 UX-3·4에서 |
 | Web workspace parity | 완료 | `2aa1c4c` — /workspaces 관리(등록·신뢰·보관)·작업 필터 |
 | UX-3 TUI transcript 재설계 | 부분 완료 | `9b9d4b9` works 상세 timeline transcript, `cd05ac1` Ctrl+P 팔레트(공통 계약 `SURFACE_PALETTE_ITEMS` 소스). 잔여: solid 렌더 계층 교체 — 현행 배포가 `tsc dist` + `bun dist/main.js` 실행이라 solid `.tsx`는 `Bun.build` + `@opentui/solid/bun-plugin` 빌드 파이프라인 전환 결정이 선행되어야 함. 스트리밍 active cell·상시 composer·승인 diff 오버레이는 이 전환과 함께 진행 |
-| UX-4 Web 관제 분할 화면·폴링 제거 | 부분 | timeline 표시만 연결, SSE 소비·분할 화면 대기 |
-| UX-5 신뢰 장치 · WS-3 GUI · WS-4 Web 역할 | 미착수 | trusted 전 도구 실행 차단 게이트 포함 |
+| UX-4 Web 관제 분할 화면·폴링 제거 | 부분 | timeline 표시 + `Cmd/Ctrl+K` 팔레트·parity 테스트(`ffdbcbb`, browser.ts 진입점 포함). SSE 소비·분할 화면 대기 |
+| UX-5 신뢰 장치 | 부분 완료 | `65d4f7a` 신뢰 게이트(delivery blocked=workspace-untrusted, TUI workspace.trust 팔레트 명령), `fdf2608` 승인 대기 터미널 벨(NO_BELL 옵트아웃). 잔여: 자율성 다이얼(Governance 세션 모드), Web 알림, Git provenance 노출 |
+| WS-4 Web 역할 결정 | 완료 | [ws4-web-role-decision.md](ws4-web-role-decision.md) — Web=GUI 동일 화면, browser.ts 계약 경계, 로컬 능력 어댑터, WS-3 spike 판정 기준 |
+| WS-3 GUI shell | 미착수 | WS-4 결정의 spike 기준(Tauri: 서버 기동·폴더 선택·알림)으로 착수 |
 > **대상**: `apps/tui`, `apps/web`, `packages/application` (표현 계약 확장)
 > **관계**: [Phase 30 design](design.md)의 REQ-SURFACE-004(공통 view-model·접근성)를 대체·확장하는 재설계 제안
 
