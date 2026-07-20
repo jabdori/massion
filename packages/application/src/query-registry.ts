@@ -15,6 +15,7 @@ import type { RuntimeExecutionStore } from "@massion/runtime";
 import { ApplicationError } from "./errors.js";
 import { ApplicationEventCursorExpiredError, type ApplicationEventStore } from "./event-store.js";
 import type { ApplicationReadModel } from "./read-model.js";
+import type { ApplicationRunStore, ApplicationRunView } from "./run-store.js";
 import type { CollaborationGraphSnapshotProjector } from "./snapshot.js";
 import type { WebSessionService } from "./web-session.js";
 import type {
@@ -48,6 +49,7 @@ export interface ApplicationQueryDescriptor<Payload = unknown> {
 
 export interface ApplicationQueryDependencies {
   readonly readModel: ApplicationReadModel;
+  readonly runs?: Pick<ApplicationRunStore, "get">;
   readonly snapshot?: CollaborationGraphSnapshotProjector;
   readonly runtime?: Pick<RuntimeExecutionStore, "listEvents" | "getRecovery" | "listByCorrelation">;
   readonly assuranceBindings?: Pick<AssuranceBindingStore, "get" | "getActive">;
@@ -74,6 +76,18 @@ export interface ApplicationQueryDependencies {
   readonly optimization?: {
     readonly evaluations: Pick<ModelOptimizationStore, "getActivePolicy" | "listReceipts" | "listRecommendations">;
     readonly batches: Pick<OptimizationBatchService, "getActiveBatch" | "listObservations">;
+  };
+}
+
+function publicRun(run: ApplicationRunView): Record<string, unknown> {
+  return {
+    runId: run.runId,
+    ...(run.workId === undefined ? {} : { workId: run.workId }),
+    stage: run.stage,
+    status: run.status,
+    ...(run.approvalId === undefined ? {} : { approvalId: run.approvalId }),
+    ...(run.blockedReason === undefined ? {} : { blockedReason: run.blockedReason }),
+    leaseGeneration: run.leaseGeneration,
   };
 }
 
@@ -466,6 +480,16 @@ export function registerApplicationQueries(
           throw cause;
         }
       },
+    });
+  }
+  if (dependencies.runs) {
+    const runs = dependencies.runs;
+    registry.register({
+      operation: "run.get",
+      requiredScopes: ["work:read"],
+      allowedRoles: EVERY_ROLE,
+      validate: (value) => object(value, ["runId"]),
+      handle: async (context, value) => publicRun(await runs.get(context, text(value.runId, "runId"))),
     });
   }
   registry.register({

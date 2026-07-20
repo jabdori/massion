@@ -48,7 +48,7 @@ export interface ApplicationProductDependencies {
   readonly domain: ApplicationDomainDependencies;
   readonly queries?: Omit<
     ApplicationQueryDependencies,
-    "readModel" | "snapshot" | "memberships" | "audit" | "webSessions"
+    "readModel" | "runs" | "snapshot" | "memberships" | "audit" | "webSessions"
   >;
   readonly artifacts?: Pick<ApplicationArtifactGateway, "inspect" | "install" | "update">;
   readonly integrations?: {
@@ -114,6 +114,7 @@ export class ApplicationProduct implements AsyncDisposable {
     registerApplicationQueries(queries, {
       ...dependencies.queries,
       readModel,
+      runs,
       snapshot,
       memberships: dependencies.organizations,
       audit: events,
