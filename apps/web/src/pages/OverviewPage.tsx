@@ -28,7 +28,7 @@ function estimateSteps(text: string): string[] {
   if (/코드|개발|구현|수정|버그|api/.test(lower) || /code|develop|implement|fix|bug|api/i.test(text)) {
     steps.push("작업 진행");
   }
-  if (steps.length === 0) steps.push("요청 이해", "작업 진행", "결과 확인");
+  if (steps.length === 0) steps.push("요청 이해", "자료와 계획 준비", "작업 진행");
   steps.push("결과 확인");
   return steps;
 }
