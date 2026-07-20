@@ -231,7 +231,7 @@ export default function WorkPage() {
         <button
           className="details-toggle"
           aria-expanded={showDetails}
-          onClick={() => setShowDetails(!showDetails)}
+          onClick={() => { setShowDetails(!showDetails); }}
         >
           자세히 보기
         </button>

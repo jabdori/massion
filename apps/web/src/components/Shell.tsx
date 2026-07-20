@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 
 import { connectionFromStatus, useConsoleStatus, useQueryData, useQueryErrors, useSession } from "../hooks.js";
 import { api, consoleStore, liveConnection, sessionStore } from "../services.js";
-import { label, rows } from "../data.js";
+import { rows } from "../data.js";
 
 // 기본 내비게이션: 홈 / 확인할 것 / 결과
 const primaryNavigation = [
@@ -93,7 +93,7 @@ export function RootShell() {
             type="button"
             className="nav-more-toggle"
             aria-expanded={moreOpen}
-            onClick={() => setMoreOpen((value) => !value)}
+            onClick={() => { setMoreOpen((value) => !value); }}
           >
             더보기
           </button>

@@ -27,7 +27,7 @@ export const WORK_STATUS_TOKENS: Readonly<Record<string, WorkStatusToken>> = {
 } as const;
 
 export function workStatusToken(status: string): WorkStatusToken {
-  return WORK_STATUS_TOKENS[status] ?? { id: status, symbol: "?", label: status, friendlyLabel: status, semantic: "ready" as const };
+  return WORK_STATUS_TOKENS[status] ?? { id: status, symbol: "?", label: status, friendlyLabel: status, semantic: "ready" };
 }
 
 // ── 사용자용 4단계 진행 (UX Projection) ───────────────────────────
@@ -49,7 +49,8 @@ export const USER_STAGES: readonly UserStageToken[] = [
 ] as const;
 
 export function userStageForInternal(internalStage: string): UserStageToken {
-  return USER_STAGES.find((stage) => stage.internalStages.includes(internalStage)) ?? USER_STAGES[0]!;
+  const found = USER_STAGES.find((stage) => stage.internalStages.includes(internalStage));
+  return found ?? USER_STAGES.find((s) => s.id === "understand") ?? { id: "understand", friendlyLabel: "요청 이해", technicalLabel: "Intake · Context", internalStages: ["intake", "context-strategy"] };
 }
 
 export function userStageIndex(internalStage: string): number {
@@ -114,13 +115,20 @@ export const APPROVAL_RISK_TOKENS: Readonly<Record<string, ApprovalRiskToken>> =
 } as const;
 
 export function approvalRiskToken(risk: string): ApprovalRiskToken {
-  return APPROVAL_RISK_TOKENS[risk] ?? APPROVAL_RISK_TOKENS["medium"]!;
+  return APPROVAL_RISK_TOKENS[risk] ?? APPROVAL_RISK_TOKENS["medium"] ?? {
+    id: "medium", friendlyLabel: "주의가 필요합니다", description: "실행 중인 작업에 영향을 줄 수 있습니다.", semantic: "medium",
+  };
 }
 
 export function approvalRiskFromPreview(preview: { kind?: string }): ApprovalRiskToken {
-  if (preview.kind === "command") return APPROVAL_RISK_TOKENS["medium"]!;
-  if (preview.kind === "file-change") return APPROVAL_RISK_TOKENS["low"]!;
-  return APPROVAL_RISK_TOKENS["medium"]!;
+  const medium: ApprovalRiskToken = APPROVAL_RISK_TOKENS["medium"] ?? {
+    id: "medium", friendlyLabel: "주의가 필요합니다", description: "실행 중인 작업에 영향을 줄 수 있습니다.", semantic: "medium",
+  };
+  if (preview.kind === "command") return medium;
+  if (preview.kind === "file-change") return APPROVAL_RISK_TOKENS["low"] ?? {
+    id: "low", friendlyLabel: "영향이 작습니다", description: "문서나 설정 내용만 변경됩니다.", semantic: "low",
+  };
+  return medium;
 }
 
 export function agentRoleToken(handle: string): AgentRoleToken {
