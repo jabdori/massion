@@ -1,8 +1,8 @@
 import { createHash } from "node:crypto";
 
-import type { PlanStrategyInput, PlanStrategyResult, StrategyService } from "@massion/context-strategy";
+import type { ContextSource, PlanStrategyInput, PlanStrategyResult, StrategyService } from "@massion/context-strategy";
 import type { TenantContext } from "@massion/identity";
-import type { OrganizationGraphService } from "@massion/organization";
+import { CORE_OFFICE_HANDLES, type OrganizationGraphService } from "@massion/organization";
 import type { AgentRunner, RuntimeExecutionStore } from "@massion/runtime";
 import { canTransitionWork, type WorkService } from "@massion/work";
 
@@ -20,7 +20,10 @@ type StagePort = {
 
 export interface CoreWorkPipelineDependencies {
   readonly graph: Pick<OrganizationGraphService, "getCurrentSnapshot">;
-  readonly works: Pick<WorkService, "createWork" | "getWork" | "transition">;
+  readonly works: Pick<
+    WorkService,
+    "createWork" | "getWork" | "transition" | "openRoom" | "postMessage" | "listRooms" | "listMessages"
+  >;
   readonly representative: Pick<AgentRunner, "execute" | "cancel">;
   readonly runtimeExecutions: Pick<RuntimeExecutionStore, "findExecutionIdByCommand">;
   readonly strategy: Pick<StrategyService, "plan">;
@@ -28,6 +31,19 @@ export interface CoreWorkPipelineDependencies {
   readonly delivery: StagePort;
   readonly assurance: StagePort;
   readonly records: StagePort;
+}
+
+const CORE_OFFICE_ROOM_TITLE = "Core Office";
+
+function handoffContent(output: unknown): string {
+  if (typeof output === "string" && output.trim()) return output.trim().slice(0, 16_000);
+  try {
+    const encoded = JSON.stringify(output);
+    if (encoded && encoded !== "{}" && encoded !== "null") return encoded.slice(0, 16_000);
+  } catch {
+    // 구조화할 수 없는 실행 출력은 handoff 본문으로 저장하지 않습니다.
+  }
+  return "사용자 요청을 Context & Strategy에 전달합니다.";
 }
 
 interface CoreRequest {
@@ -95,6 +111,40 @@ export function createCoreWorkPipelineExecutors(
     await cancelCreatedWork(context, input.runId, workId);
     throw new Error("Application run cancelled");
   };
+  const coreOfficeRoom = async (
+    context: TenantContext,
+    input: CoreWorkStageInput,
+    workId: string,
+    tokenBudget: number,
+  ) => {
+    const existing = (await dependencies.works.listRooms(context, workId)).find(
+      (room) => room.title === CORE_OFFICE_ROOM_TITLE && room.coordinator_handle === "representative",
+    );
+    if (existing) return existing;
+    const work = await dependencies.works.getWork(context, workId);
+    const opened = await dependencies.works.openRoom(context, {
+      commandId: `${input.runId}:core-office-room`,
+      workId,
+      expectedRevision: work.revision,
+      title: CORE_OFFICE_ROOM_TITLE,
+      coordinatorHandle: "representative",
+      participants: [
+        { kind: "user", subjectId: context.userId, role: "participant" },
+        ...CORE_OFFICE_HANDLES.map((handle) => ({
+          kind: "agent" as const,
+          subjectId: handle,
+          role: handle === "representative" ? ("coordinator" as const) : ("participant" as const),
+        })),
+      ],
+      limits: {
+        maxParallel: CORE_OFFICE_HANDLES.length,
+        maxTokens: tokenBudget,
+        maxCostMicros: 1_000_000,
+        maxRounds: 100,
+      },
+    });
+    return opened.room;
+  };
   const intake: CoreWorkStageExecutor = {
     async execute(context, input) {
       const value = request(input.request);
@@ -113,6 +163,20 @@ export function createCoreWorkPipelineExecutors(
         if (input.signal?.aborted) await cancelAndThrowIfCancelled(context, input, workId);
       }
       if (input.signal?.aborted) await cancelAndThrowIfCancelled(context, input, workId);
+      const room = await coreOfficeRoom(context, input, workId, value.tokenBudget);
+      await cancelAndThrowIfCancelled(context, input, workId);
+      const requestMessage = await dependencies.works.postMessage(context, {
+        commandId: `${input.runId}:core-office-request`,
+        workId,
+        roomId: room.room_id,
+        messageType: "question",
+        authorKind: "user",
+        authorId: context.userId,
+        content: value.text,
+        tokenCount: 0,
+        costMicros: 0,
+      });
+      await cancelAndThrowIfCancelled(context, input, workId);
       const runtime = await dependencies.representative.execute(context, {
         commandId: `${input.commandId}:representative`,
         workId,
@@ -128,10 +192,26 @@ export function createCoreWorkPipelineExecutors(
         return { outcome: "blocked", reason: "model-unavailable", workId };
       if (runtime.status !== "succeeded")
         return { outcome: "blocked", reason: `representative-${runtime.status}`, workId };
+      if (input.signal?.aborted) return { outcome: "blocked", reason: "representative-cancelled", workId };
+      await dependencies.works.postMessage(context, {
+        commandId: `${input.commandId}:representative-handoff`,
+        workId,
+        roomId: room.room_id,
+        messageType: "handoff",
+        authorKind: "agent",
+        authorId: "representative",
+        content: handoffContent(runtime.output),
+        replyToMessageId: requestMessage.message.message_id,
+        causedByMessageId: requestMessage.message.message_id,
+        executionId: runtime.executionId,
+        tokenCount: 0,
+        costMicros: 0,
+      });
+      await cancelAndThrowIfCancelled(context, input, workId);
       return {
         outcome: "advanced",
         workId,
-        data: { representativeExecutionId: runtime.executionId },
+        data: { representativeExecutionId: runtime.executionId, roomId: room.room_id },
       };
     },
     async cancel(context, input) {
@@ -147,6 +227,51 @@ export function createCoreWorkPipelineExecutors(
       const work = await dependencies.works.getWork(context, input.workId);
       throwIfCancelled(input);
       const sourceContent = { text: value.text };
+      const room = (await dependencies.works.listRooms(context, input.workId)).find(
+        (candidate) => candidate.title === CORE_OFFICE_ROOM_TITLE && candidate.coordinator_handle === "representative",
+      );
+      throwIfCancelled(input);
+      const messages = room ? await dependencies.works.listMessages(context, input.workId, room.room_id) : [];
+      throwIfCancelled(input);
+      const sources: ContextSource[] = [
+        {
+          kind: "request",
+          sourceId: input.runId,
+          revision: "1",
+          contentHash: createHash("sha256").update(JSON.stringify(sourceContent)).digest("hex"),
+          observedAt: new Date().toISOString(),
+          classification: "internal",
+          priority: 100,
+          estimatedTokens: Math.max(1, Math.ceil(value.text.length / 4)),
+          mandatory: true,
+          content: sourceContent,
+        },
+      ];
+      if (room && messages.length > 0) {
+        const collaborationContent = {
+          roomId: room.room_id,
+          messages: messages.map((message) => ({
+            sequence: message.sequence,
+            messageType: message.message_type,
+            authorKind: message.author_kind,
+            authorId: message.author_id,
+            content: message.content,
+          })),
+        };
+        const serialized = JSON.stringify(collaborationContent);
+        sources.push({
+          kind: "collaboration",
+          sourceId: room.room_id,
+          revision: String(messages.at(-1)?.sequence ?? 0),
+          contentHash: createHash("sha256").update(serialized).digest("hex"),
+          observedAt: new Date().toISOString(),
+          classification: "internal",
+          priority: 90,
+          estimatedTokens: Math.max(1, Math.ceil(serialized.length / 4)),
+          mandatory: false,
+          content: collaborationContent,
+        });
+      }
       const planInput: PlanStrategyInput = {
         commandId: input.commandId,
         workId: input.workId,
@@ -161,20 +286,7 @@ export function createCoreWorkPipelineExecutors(
           assumptions: value.assumptions,
           unknowns: value.unknowns,
           decisions: value.decisions,
-          sources: [
-            {
-              kind: "request",
-              sourceId: input.runId,
-              revision: "1",
-              contentHash: createHash("sha256").update(JSON.stringify(sourceContent)).digest("hex"),
-              observedAt: new Date().toISOString(),
-              classification: "internal",
-              priority: 100,
-              estimatedTokens: Math.max(1, Math.ceil(value.text.length / 4)),
-              mandatory: true,
-              content: sourceContent,
-            },
-          ],
+          sources,
         },
       };
       const planned: PlanStrategyResult = await dependencies.strategy.plan(context, planInput);

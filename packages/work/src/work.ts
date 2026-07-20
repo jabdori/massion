@@ -1809,6 +1809,15 @@ export class WorkService {
     return messages;
   }
 
+  public async listRooms(context: TenantContext, workId: string): Promise<CollaborationRoom[]> {
+    await this.getWork(context, workId);
+    const [rooms] = await this.database.query<[CollaborationRoom[]]>(
+      "SELECT * OMIT id FROM collaboration_room WHERE organization_id = $organization_id AND work_id = $work_id ORDER BY created_at ASC;",
+      { organization_id: context.organizationId, work_id: workId },
+    );
+    return rooms;
+  }
+
   public async addSharedContext(
     context: TenantContext,
     input: AddSharedContextInput,

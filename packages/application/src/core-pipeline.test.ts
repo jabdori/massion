@@ -63,6 +63,10 @@ describe("actual Core Work pipeline adapters", () => {
         },
         getWork: async () => ({ revision: 1, status: "draft" }),
         transition: async () => ({}) as never,
+        listRooms: async () => [
+          { room_id: "existing-core-office-room", title: "Core Office", coordinator_handle: "representative" },
+        ],
+        postMessage: async () => ({ message: { message_id: "existing-core-office-message" } }) as never,
       },
       runtimeExecutions: { findExecutionIdByCommand: async () => undefined },
       representative: {
@@ -166,6 +170,13 @@ describe("actual Core Work pipeline adapters", () => {
           ({ work: { work_id: "pipeline-intake-signal-work", revision: 1, status: "draft" } }) as never,
         getWork: async () => ({ work_id: "pipeline-intake-signal-work", revision: 1, status: "draft" }) as never,
         transition: async () => ({}) as never,
+        listRooms: async () =>
+          [{ room_id: "signal-core-office-room", title: "Core Office", coordinator_handle: "representative" }] as never,
+        openRoom: async () => {
+          throw new Error("기존 Core Office 방을 열면 안 됩니다");
+        },
+        postMessage: async () => ({ message: { message_id: "signal-core-office-message" } }) as never,
+        listMessages: async () => [],
       },
       runtimeExecutions: { findExecutionIdByCommand: async () => undefined },
       representative: {
@@ -222,6 +233,7 @@ describe("actual Core Work pipeline adapters", () => {
           return await work;
         },
         transition: async () => ({}) as never,
+        listRooms: async () => [],
       },
       runtimeExecutions: { findExecutionIdByCommand: async () => undefined },
       representative: {
@@ -271,6 +283,14 @@ describe("actual Core Work pipeline adapters", () => {
         },
         getWork: async () => ({ revision: 3, status: "draft" }) as never,
         transition: async () => ({}) as never,
+        listRooms: async () => [],
+        openRoom: async () => {
+          throw new Error("context-strategy에서 방을 열면 안 됩니다");
+        },
+        postMessage: async () => {
+          throw new Error("context-strategy에서 메시지를 쓰면 안 됩니다");
+        },
+        listMessages: async () => [],
       },
       runtimeExecutions: { findExecutionIdByCommand: async () => undefined },
       representative: {
@@ -371,6 +391,7 @@ describe("actual Core Work pipeline adapters", () => {
           throw new Error("not used");
         },
         getWork: async () => ({ revision: 3 }),
+        listRooms: async () => [],
       },
       runtimeExecutions: { findExecutionIdByCommand: async () => undefined },
       representative: {
@@ -413,6 +434,120 @@ describe("actual Core Work pipeline adapters", () => {
         .update(JSON.stringify({ text: "계획" }))
         .digest("hex"),
     );
+  });
+
+  it("새 Work의 Core Office 방에 요청과 Representative handoff를 기록하고 전략 입력으로 다시 사용한다", async () => {
+    await using database = await createDatabase({ url: "mem://", namespace: "massion", database: crypto.randomUUID() });
+    const identities = await IdentityService.create(database);
+    const organizations = await OrganizationService.create(database);
+    const owner = await identities.registerPersonalUser({
+      email: "collaboration-pipeline@example.com",
+      displayName: "Collaboration",
+    });
+    const context = await organizations.resolveTenantContext(owner.user.user_id, owner.organization.organization_id);
+    const graph = await OrganizationGraphService.create(database, organizations);
+    await graph.bootstrap(context);
+    const works = await WorkService.create(database, organizations, graph);
+    const captured: unknown[] = [];
+    const stages = createCoreWorkPipelineExecutors({
+      graph,
+      works,
+      runtimeExecutions: { findExecutionIdByCommand: async () => undefined },
+      representative: {
+        execute: async () => ({
+          executionId: "collaboration-representative-execution",
+          status: "succeeded",
+          output: "요청을 분석했고 전략 수립으로 전달합니다.",
+        }),
+        cancel: async () => undefined,
+      },
+      strategy: {
+        plan: async (_context, input) => {
+          captured.push(input);
+          return {
+            contextVersion: { contextVersionId: "collaboration-context" },
+            generation: { status: "applied", strategyGenerationId: "collaboration-strategy" },
+            projection: {},
+          } as never;
+        },
+      },
+      evidence: { execute: async () => ({ outcome: "advanced" }) },
+      delivery: { execute: async () => ({ outcome: "advanced" }) },
+      assurance: { execute: async () => ({ outcome: "advanced" }) },
+      records: { execute: async () => ({ outcome: "advanced" }) },
+    });
+    const request = { text: "협업 기록을 남기는 업무를 시작해주세요", surface: "test" };
+    const intake = await stages.intake.execute(context, {
+      runId: "collaboration-pipeline-run",
+      commandId: "collaboration-pipeline-run:intake",
+      correlationId: "collaboration-pipeline-correlation",
+      request,
+    });
+    if (intake.outcome !== "advanced" || !intake.workId) throw new Error("intake가 Work ID를 반환하지 않았습니다");
+    const workId = intake.workId;
+
+    const rooms = await works.listRooms(context, workId);
+    expect(rooms).toHaveLength(1);
+    expect(rooms[0]).toMatchObject({ title: "Core Office", coordinator_handle: "representative", status: "active" });
+    const room = rooms[0];
+    if (!room) throw new Error("Core Office 협업방이 생성되지 않았습니다");
+    const messages = await works.listMessages(context, workId, room.room_id);
+    expect(messages).toMatchObject([
+      {
+        sequence: 1,
+        message_type: "question",
+        author_kind: "user",
+        author_id: context.userId,
+        content: request.text,
+      },
+      {
+        sequence: 2,
+        message_type: "handoff",
+        author_kind: "agent",
+        author_id: "representative",
+        content: "요청을 분석했고 전략 수립으로 전달합니다.",
+      },
+    ]);
+
+    await expect(
+      stages["context-strategy"].execute(context, {
+        runId: "collaboration-pipeline-run",
+        workId,
+        commandId: "collaboration-pipeline-run:context-strategy",
+        correlationId: "collaboration-pipeline-correlation",
+        request,
+      }),
+    ).resolves.toMatchObject({ outcome: "advanced" });
+    const planned = captured[0] as {
+      readonly context: {
+        readonly sources: readonly {
+          readonly kind: string;
+          readonly content?: { readonly roomId?: string; readonly messages?: readonly Record<string, unknown>[] };
+        }[];
+      };
+    };
+    const collaboration = planned.context.sources.find((source) => source.kind === "collaboration");
+    expect(collaboration?.content?.roomId).toBe(room.room_id);
+    expect(collaboration?.content?.messages).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ authorId: context.userId, content: request.text }),
+        expect.objectContaining({ authorId: "representative", messageType: "handoff" }),
+      ]),
+    );
+
+    await stages.intake.execute(context, {
+      runId: "collaboration-pipeline-run",
+      workId,
+      commandId: "collaboration-pipeline-run:intake:retry:retry-0001",
+      correlationId: "collaboration-pipeline-correlation",
+      request,
+    });
+    expect(await works.listRooms(context, workId)).toHaveLength(1);
+    expect(
+      (await works.listMessages(context, workId, room.room_id)).filter(
+        (message) => message.message_type === "question" && message.author_id === context.userId,
+      ),
+    ).toHaveLength(1);
   });
 
   it("어느 단계에서 취소해도 현재 실행을 drain한 뒤 실제 Work를 cancelled로 전이한다", async () => {
