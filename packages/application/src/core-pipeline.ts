@@ -1,6 +1,10 @@
-import { createHash } from "node:crypto";
-
-import type { ContextSource, PlanStrategyInput, PlanStrategyResult, StrategyService } from "@massion/context-strategy";
+import {
+  hashContextContent,
+  type ContextSource,
+  type PlanStrategyInput,
+  type PlanStrategyResult,
+  type StrategyService,
+} from "@massion/context-strategy";
 import type { TenantContext } from "@massion/identity";
 import { CORE_OFFICE_HANDLES, type OrganizationGraphService } from "@massion/organization";
 import type { AgentRunner, RuntimeExecutionStore } from "@massion/runtime";
@@ -238,7 +242,7 @@ export function createCoreWorkPipelineExecutors(
           kind: "request",
           sourceId: input.runId,
           revision: "1",
-          contentHash: createHash("sha256").update(JSON.stringify(sourceContent)).digest("hex"),
+          contentHash: hashContextContent(sourceContent),
           observedAt: new Date().toISOString(),
           classification: "internal",
           priority: 100,
@@ -263,7 +267,7 @@ export function createCoreWorkPipelineExecutors(
           kind: "collaboration",
           sourceId: room.room_id,
           revision: String(messages.at(-1)?.sequence ?? 0),
-          contentHash: createHash("sha256").update(serialized).digest("hex"),
+          contentHash: hashContextContent(collaborationContent),
           observedAt: new Date().toISOString(),
           classification: "internal",
           priority: 90,

@@ -1,5 +1,4 @@
-import { createHash } from "node:crypto";
-
+import { hashContextContent } from "@massion/context-strategy";
 import { IdentityService, OrganizationService } from "@massion/identity";
 import { OrganizationGraphService } from "@massion/organization";
 import { createDatabase } from "@massion/storage";
@@ -429,11 +428,7 @@ describe("actual Core Work pipeline adapters", () => {
     const capturedInput = captured[0];
     const source = capturedInput?.context.sources[0];
     if (!source) throw new Error("Strategy source가 capture되지 않았습니다");
-    expect(source.contentHash).toBe(
-      createHash("sha256")
-        .update(JSON.stringify({ text: "계획" }))
-        .digest("hex"),
-    );
+    expect(source.contentHash).toBe(hashContextContent({ text: "계획" }));
   });
 
   it("새 Work의 Core Office 방에 요청과 Representative handoff를 기록하고 전략 입력으로 다시 사용한다", async () => {
@@ -522,11 +517,13 @@ describe("actual Core Work pipeline adapters", () => {
       readonly context: {
         readonly sources: readonly {
           readonly kind: string;
+          readonly contentHash: string;
           readonly content?: { readonly roomId?: string; readonly messages?: readonly Record<string, unknown>[] };
         }[];
       };
     };
     const collaboration = planned.context.sources.find((source) => source.kind === "collaboration");
+    if (!collaboration?.content) throw new Error("Core Office 협업 source가 생성되지 않았습니다");
     expect(collaboration?.content?.roomId).toBe(room.room_id);
     expect(collaboration?.content?.messages).toEqual(
       expect.arrayContaining([
@@ -534,6 +531,7 @@ describe("actual Core Work pipeline adapters", () => {
         expect.objectContaining({ authorId: "representative", messageType: "handoff" }),
       ]),
     );
+    expect(collaboration.contentHash).toBe(hashContextContent(collaboration.content));
 
     await stages.intake.execute(context, {
       runId: "collaboration-pipeline-run",
