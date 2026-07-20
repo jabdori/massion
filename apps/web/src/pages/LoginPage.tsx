@@ -1,13 +1,24 @@
 import { useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { api, consoleStore, liveConnection, sessionStore } from "../services.js";
 
 export default function LoginPage() {
-  const [code, setCode] = useState("");
+  // URL 쿼리 파라미터에서 로그인 코드를 자동 감지합니다
+  const initialCode = typeof window !== "undefined"
+    ? new URLSearchParams(window.location.search).get("code") ?? ""
+    : "";
+  const [code, setCode] = useState(initialCode);
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
   const navigate = useNavigate();
+  const hasInitialCode = initialCode.length > 0;
+
+  // CLI에서 발급한 코드가 URL에 있으면 자동으로 로그인을 시도합니다
+  useEffect(() => {
+    if (!hasInitialCode) return;
+    void submit({ preventDefault() {} });
+  }, []);
 
   async function submit(event: { preventDefault(): void }) {
     event.preventDefault();
