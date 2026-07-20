@@ -2584,3 +2584,181 @@ button:disabled {
   margin: 2px 0 0;
   word-break: break-all;
 }
+
+
+/* ── 모바일 반응형 (768px 이하) ────────────────────────────── */
+@media (max-width: 768px) {
+  .app-frame {
+    flex-direction: column;
+  }
+
+  .side-rail {
+    flex-direction: row;
+    width: 100%;
+    height: auto;
+    min-height: 56px;
+    padding: 8px 12px;
+    gap: 4px;
+    overflow-x: auto;
+    border-right: none;
+    border-bottom: 1px solid var(--border, #e5e7eb);
+  }
+
+  .side-rail .brand-block {
+    flex-shrink: 0;
+  }
+
+  .side-rail .brand-block span:last-child {
+    display: none;
+  }
+
+  .side-rail nav {
+    flex-direction: row;
+    gap: 4px;
+    flex-wrap: nowrap;
+  }
+
+  .side-rail nav a {
+    padding: 8px 12px;
+    font-size: 13px;
+    white-space: nowrap;
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+  }
+
+  .nav-more-toggle {
+    min-height: 44px;
+    padding: 8px 12px;
+  }
+
+  .nav-more-section {
+    position: absolute;
+    bottom: 56px;
+    left: 0;
+    right: 0;
+    background: var(--surface, #fff);
+    border-bottom: 1px solid var(--border, #e5e7eb);
+    box-shadow: 0 -4px 12px rgba(0,0,0,0.08);
+    z-index: 100;
+  }
+
+  .rail-foot {
+    display: none;
+  }
+
+  .main-stage {
+    padding: 16px 12px;
+    flex: 1;
+    overflow-y: auto;
+  }
+
+  .card-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .greeting-section h1 {
+    font-size: 22px;
+  }
+
+  .greeting-section p {
+    font-size: 15px;
+  }
+
+  .quick-start textarea {
+    font-size: 16px;
+  }
+
+  .primary-button,
+  .secondary-button {
+    min-height: 44px;
+    font-size: 15px;
+  }
+
+  .quick-examples {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .example-chip {
+    padding: 10px 16px;
+    font-size: 14px;
+    min-height: 40px;
+  }
+
+  .plan-preview-card {
+    padding: 16px;
+  }
+
+  .plan-preview-actions {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .plan-preview-actions button {
+    width: 100%;
+  }
+
+  .approval-card-detailed {
+    padding: 16px;
+  }
+
+  .decision-actions {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .decision-actions button {
+    width: 100%;
+  }
+
+  .composer-inline textarea {
+    font-size: 16px;
+  }
+
+  .home-section-title {
+    font-size: 18px;
+  }
+
+  .work-card,
+  .approval-card,
+  .recent-result {
+    padding: 14px;
+  }
+}
+
+/* ── 소형 모바일 (480px 이하) ──────────────────────────────── */
+@media (max-width: 480px) {
+  .main-stage {
+    padding: 12px 8px;
+  }
+
+  .greeting-section h1 {
+    font-size: 20px;
+  }
+
+  .quick-examples {
+    flex-direction: column;
+  }
+
+  .example-chip {
+    width: 100%;
+    text-align: center;
+  }
+
+  .plan-preview-steps {
+    font-size: 13px;
+  }
+
+  .risk-banner {
+    padding: 10px 12px;
+  }
+
+  .risk-banner strong {
+    font-size: 13px;
+  }
+
+  .risk-banner p {
+    font-size: 13px;
+  }
+}
