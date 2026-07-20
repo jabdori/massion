@@ -141,7 +141,7 @@ export default function OverviewPage() {
               key={example}
               type="button"
               className="example-chip"
-              onClick={() => setRequest(example)}
+              onClick={() => { setRequest(example); }}
             >
               {example}
             </button>
@@ -166,7 +166,7 @@ export default function OverviewPage() {
               <button
                 type="button"
                 className="secondary-button"
-                onClick={() => setPendingRequest(undefined)}
+                onClick={() => { setPendingRequest(undefined); }}
               >
                 수정
               </button>

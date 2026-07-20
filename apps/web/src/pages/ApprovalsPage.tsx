@@ -105,7 +105,7 @@ export default function ApprovalsPage() {
       </section>
 
       <div className="live-notice" role="status" aria-live="polite">
-        {notice ?? (approvals.length > 0 ? `${approvals.length}개의 항목이 대기 중입니다.` : "모두 확인되었습니다.")}
+        {notice ?? (approvals.length > 0 ? `${String(approvals.length)}개의 항목이 대기 중입니다.` : "모두 확인되었습니다.")}
       </div>
 
       {approvals.length === 0 ? (
