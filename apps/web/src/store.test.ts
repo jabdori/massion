@@ -823,6 +823,105 @@ describe("WebConsoleStore", () => {
     expect(store.getSnapshot()).toMatchObject({ cursor: 52, connection: "live" });
   });
 
+  it("실행 사건은 유지 중인 실행 조회와 개요 조회만 다시 읽는다", async () => {
+    const query = vi.fn((operation: string, payload: unknown) => Promise.resolve(envelope(operation, payload)));
+    const snapshot = vi.fn(() => Promise.resolve(envelope("organization.graph.snapshot", { revision: 2 })));
+    const store = new WebConsoleStore({ query, snapshot } as never);
+    const releaseRunA = store.retainQueryResource("run.get", { runId: "run-active-a" });
+    const releaseRunB = store.retainQueryResource("run.get", { runId: "run-active-b" });
+    const releaseWorks = store.retainQueryResource("work.list");
+    const releaseSnapshot = store.retainQueryResource("organization.graph.snapshot");
+    const releaseUnrelated = store.retainQueryResource("work.get", { workId: "work-unrelated" });
+
+    await store.acceptEvent({
+      sequence: 1,
+      type: "run.stage-advanced",
+      resource: { type: "ApplicationRun", id: "run-event" },
+    });
+
+    expect(query).toHaveBeenCalledWith("run.get", { runId: "run-active-a" });
+    expect(query).toHaveBeenCalledWith("run.get", { runId: "run-active-b" });
+    expect(query).toHaveBeenCalledWith("work.list", {});
+    expect(query).not.toHaveBeenCalledWith("work.get", { workId: "work-unrelated" });
+    expect(snapshot).toHaveBeenCalledTimes(1);
+
+    releaseUnrelated();
+    releaseSnapshot();
+    releaseWorks();
+    releaseRunB();
+    releaseRunA();
+  });
+
+  it("업무와 협업 사건은 같은 업무와 협업방의 유지 중인 조회만 다시 읽는다", async () => {
+    const query = vi.fn((operation: string, payload: unknown) => Promise.resolve(envelope(operation, payload)));
+    const snapshot = vi.fn(() => Promise.resolve(envelope("organization.graph.snapshot", { revision: 2 })));
+    const store = new WebConsoleStore({ query, snapshot } as never);
+    const releases = [
+      store.retainQueryResource("work.list"),
+      store.retainQueryResource("organization.graph.snapshot"),
+      store.retainQueryResource("work.get", { workId: "work-active" }),
+      store.retainQueryResource("work.tasks", { workId: "work-active" }),
+      store.retainQueryResource("work.assignments", { workId: "work-active" }),
+      store.retainQueryResource("work.rooms", { workId: "work-active" }),
+      store.retainQueryResource("work.records", { workId: "work-active" }),
+      store.retainQueryResource("work.messages", { workId: "work-active", roomId: "room-active" }),
+      store.retainQueryResource("work.messages", { workId: "work-active", roomId: "room-other" }),
+      store.retainQueryResource("work.get", { workId: "work-other" }),
+    ];
+
+    await store.acceptEvent({
+      sequence: 1,
+      type: "work.updated",
+      resource: { type: "Work", id: "work-active" },
+    });
+
+    for (const operation of ["work.get", "work.tasks", "work.assignments", "work.rooms", "work.records"]) {
+      expect(query).toHaveBeenCalledWith(operation, { workId: "work-active" });
+    }
+    expect(query).toHaveBeenCalledWith("work.list", {});
+    expect(query).not.toHaveBeenCalledWith("work.get", { workId: "work-other" });
+    expect(query).not.toHaveBeenCalledWith("work.messages", { workId: "work-active", roomId: "room-active" });
+    expect(snapshot).toHaveBeenCalledTimes(1);
+
+    query.mockClear();
+    snapshot.mockClear();
+    await store.acceptEvent({
+      sequence: 2,
+      type: "collaboration.message-posted",
+      resource: { type: "Work", id: "work-active" },
+      payload: { roomId: "room-active" },
+    });
+
+    expect(query).toHaveBeenCalledWith("work.messages", { workId: "work-active", roomId: "room-active" });
+    expect(query).not.toHaveBeenCalledWith("work.messages", { workId: "work-active", roomId: "room-other" });
+    expect(query).toHaveBeenCalledWith("work.get", { workId: "work-active" });
+    expect(query).toHaveBeenCalledWith("work.rooms", { workId: "work-active" });
+    expect(query).not.toHaveBeenCalledWith("work.tasks", { workId: "work-active" });
+    expect(query).not.toHaveBeenCalledWith("work.assignments", { workId: "work-active" });
+    expect(query).not.toHaveBeenCalledWith("work.records", { workId: "work-active" });
+    expect(query).not.toHaveBeenCalledWith("work.list", {});
+    expect(snapshot).toHaveBeenCalledTimes(1);
+
+    for (const release of releases.reverse()) release();
+  });
+
+  it("유지 중인 조회가 있어도 무관한 runtime 사건은 다시 읽지 않는다", async () => {
+    const query = vi.fn((operation: string, payload: unknown) => Promise.resolve(envelope(operation, payload)));
+    const snapshot = vi.fn(() => Promise.resolve(envelope("organization.graph.snapshot", { revision: 2 })));
+    const store = new WebConsoleStore({ query, snapshot } as never);
+    const release = store.retainQueryResource("work.get", { workId: "work-active" });
+
+    await store.acceptEvent({
+      sequence: 1,
+      type: "runtime.token-emitted",
+      resource: { type: "Execution", id: "execution-active" },
+    });
+
+    expect(query).not.toHaveBeenCalled();
+    expect(snapshot).not.toHaveBeenCalled();
+    release();
+  });
+
   it("query identity와 전송 payload를 실제 JSON wire 의미로 정규화한다", async () => {
     const query = vi.fn((operation: string, payload: unknown) => Promise.resolve(envelope(operation, payload)));
     const store = new WebConsoleStore({ query } as never);

@@ -157,4 +157,25 @@ describe("useQueryData", () => {
     await waitFor(() => expect(errors.result.current).toEqual({}));
     errors.unmount();
   });
+
+  it("비활성 query는 유지하거나 읽지 않다가 활성화되면 조회한다", async () => {
+    const query = vi.fn((_operation: string, payload: unknown) =>
+      Promise.resolve({ schemaVersion: "massion.application.v1", operation: "run.get", data: payload }),
+    );
+    const store = new WebConsoleStore({ query } as never);
+    const { result, rerender } = renderHook(
+      ({ enabled }: { enabled: boolean }) =>
+        useQueryData<{ runId: string }>(store, "run.get", { runId: "run-pending" }, undefined, { enabled }),
+      { initialProps: { enabled: false } },
+    );
+
+    expect(result.current).toBeUndefined();
+    expect(query).not.toHaveBeenCalled();
+    expect(store.activeQueryResources()).toEqual([]);
+
+    rerender({ enabled: true });
+
+    await waitFor(() => expect(query).toHaveBeenCalledWith("run.get", { runId: "run-pending" }));
+    await waitFor(() => expect(result.current).toEqual({ runId: "run-pending" }));
+  });
 });

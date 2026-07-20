@@ -5,6 +5,11 @@ import { createQueryResourceIdentity, type WebConsoleState, type WebConsoleStore
 
 const EMPTY_QUERY_PAYLOAD = Object.freeze({});
 const EMPTY_QUERY_ERRORS: Readonly<Record<string, string>> = Object.freeze({});
+const NOOP_SUBSCRIBE: (listener: () => void) => () => void = () => () => undefined;
+
+interface QueryDataOptions {
+  readonly enabled?: boolean;
+}
 
 export function useSession(store: BrowserSessionStore) {
   return useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
@@ -38,17 +43,22 @@ export function useQueryData<T>(
   operation: string,
   payload: unknown = EMPTY_QUERY_PAYLOAD,
   decoder?: (value: unknown) => T,
+  options: QueryDataOptions = {},
 ): T | undefined {
+  const enabled = options.enabled ?? true;
   const identity = createQueryResourceIdentity(operation, payload);
   const value = useSyncExternalStore(
-    store.subscribe,
-    () => store.getQueryData(operation, payload),
+    enabled ? store.subscribe : NOOP_SUBSCRIBE,
+    () => (enabled ? store.getQueryData(operation, payload) : undefined),
     () => undefined,
   );
-  useEffect(() => store.retainQueryResource(operation, payload), [identity, store]);
   useEffect(() => {
-    if (value === undefined) void store.refresh(operation, payload).catch(() => undefined);
-  }, [identity, store, value]);
+    if (!enabled) return;
+    return store.retainQueryResource(operation, payload);
+  }, [enabled, identity, store]);
+  useEffect(() => {
+    if (enabled && value === undefined) void store.refresh(operation, payload).catch(() => undefined);
+  }, [enabled, identity, store, value]);
   return useMemo(() => (value === undefined ? undefined : decoder ? decoder(value) : (value as T)), [decoder, value]);
 }
 

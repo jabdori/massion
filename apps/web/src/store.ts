@@ -55,6 +55,12 @@ const EMPTY_QUERY_ERRORS: Readonly<Record<string, string>> = Object.freeze({});
 const DEFAULT_QUERY_RESOURCE_SOFT_LIMIT = 256;
 const MAX_EVENT_BYTES = 4 * 1024 * 1024;
 const UTF8_ENCODER = new TextEncoder();
+const WORK_QUERY_OPERATIONS = new Set(["work.get", "work.tasks", "work.assignments", "work.rooms", "work.records"]);
+
+interface EventResource {
+  readonly type: string;
+  readonly id: string;
+}
 
 const INITIAL: WebConsoleState = {
   status: "idle",
@@ -114,6 +120,27 @@ export function createQueryResourceIdentity(operation: string, payload: unknown 
 
 function hasOwn(value: Readonly<Record<string, unknown>>, key: string): boolean {
   return Object.prototype.hasOwnProperty.call(value, key);
+}
+
+function objectField(value: unknown): Readonly<Record<string, unknown>> | undefined {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Readonly<Record<string, unknown>>)
+    : undefined;
+}
+
+function stringField(value: unknown, key: string): string | undefined {
+  const record = objectField(value);
+  const candidate = record?.[key];
+  return typeof candidate === "string" && candidate.length > 0 ? candidate : undefined;
+}
+
+function eventResource(event: PublicApplicationEvent): EventResource | undefined {
+  const resource = objectField(event.resource);
+  const type = resource?.type;
+  const id = resource?.id;
+  return typeof type === "string" && type.length > 0 && typeof id === "string" && id.length > 0
+    ? { type, id }
+    : undefined;
 }
 
 function isEventCursorExpired(error: unknown): boolean {
@@ -343,6 +370,7 @@ export class WebConsoleStore {
       cursor: event.sequence,
       events: this.limitEvents([...this.state.events, event]),
     });
+    await this.refreshResourcesAffectedBy(event);
   }
 
   public setConnection(connection: WebConsoleState["connection"]): void {
@@ -460,6 +488,65 @@ export class WebConsoleStore {
   private async waitForNewerQuery(identity: string, generation: number): Promise<void> {
     const active = this.inFlightQueries.get(identity);
     if (active && active.generation > generation) await active.promise.catch(() => undefined);
+  }
+
+  private async refreshResourcesAffectedBy(event: PublicApplicationEvent): Promise<void> {
+    const resource = eventResource(event);
+    const isCollaborationMessage = event.type === "collaboration.message-posted";
+    const roomId = isCollaborationMessage ? stringField(event.payload, "roomId") : undefined;
+    const affected = new Map<string, QueryResource>();
+    const add = (candidate: QueryResource): void => {
+      affected.set(candidate.identity, candidate);
+    };
+    const isRunEvent = event.type.startsWith("run.");
+    const isWorkEvent = resource?.type === "Work";
+    for (const { resource: candidate } of this.retainedResources.values()) {
+      if (isRunEvent) {
+        if (
+          candidate.operation === "run.get" ||
+          candidate.operation === "work.list" ||
+          candidate.operation === "organization.graph.snapshot"
+        )
+          add(candidate);
+      }
+      if (!isWorkEvent) continue;
+      if (isCollaborationMessage) {
+        if (candidate.operation === "organization.graph.snapshot") {
+          add(candidate);
+          continue;
+        }
+        if (
+          (candidate.operation === "work.get" || candidate.operation === "work.rooms") &&
+          stringField(candidate.payload, "workId") === resource.id
+        ) {
+          add(candidate);
+          continue;
+        }
+        if (
+          roomId !== undefined &&
+          candidate.operation === "work.messages" &&
+          stringField(candidate.payload, "workId") === resource.id &&
+          stringField(candidate.payload, "roomId") === roomId
+        )
+          add(candidate);
+        continue;
+      }
+      if (candidate.operation === "work.list" || candidate.operation === "organization.graph.snapshot") {
+        add(candidate);
+        continue;
+      }
+      if (WORK_QUERY_OPERATIONS.has(candidate.operation) && stringField(candidate.payload, "workId") === resource.id) {
+        add(candidate);
+        continue;
+      }
+    }
+    await Promise.allSettled(
+      [...affected.values()].map((candidate) =>
+        candidate.operation === "organization.graph.snapshot"
+          ? this.requestSnapshot(false)
+          : this.requestResource(candidate, () => this.api.query(candidate.operation, candidate.payload), "refresh"),
+      ),
+    );
   }
 
   private beginQueryResourceRequest(identity: string): number {
