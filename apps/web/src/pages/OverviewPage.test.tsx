@@ -65,8 +65,8 @@ describe("OverviewPage", () => {
       ),
     );
     expect(screen.getByRole("textbox", { name: "새 업무 요청" })).toHaveValue("");
-    expect(screen.getByText("RUNNING")).toBeInTheDocument();
-    expect(screen.getByText("INTAKE")).toBeInTheDocument();
+    expect(screen.getByText("진행 중이에요")).toBeInTheDocument();
+    expect(screen.getByText(/요청 이해/)).toBeInTheDocument();
     expect(container.textContent).not.toContain(request);
     expect(testState.runPayload).toEqual({ runId: "run-web-0001" });
 

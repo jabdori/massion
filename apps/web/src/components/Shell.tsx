@@ -1,19 +1,22 @@
 import { Link, Outlet, useNavigate } from "@tanstack/react-router";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
 import { connectionFromStatus, useConsoleStatus, useQueryErrors, useSession } from "../hooks.js";
 import { api, consoleStore, liveConnection, sessionStore } from "../services.js";
 
-const navigation = [
-  ["/", "01", "개요"],
-  ["/organization", "02", "조직"],
-  ["/approvals", "03", "승인"],
-  ["/audit", "04", "감사"],
-  ["/memory", "05", "기억"],
-  ["/extensions", "06", "확장"],
-  ["/access", "07", "접근"],
-  ["/subscriptions", "08", "구독"],
-  ["/optimization", "09", "모델 평가실"],
+// 기본 내비게이션: 홈 / 확인할 것 / 결과
+const primaryNavigation = [
+  ["/", "홈"],
+  ["/approvals", "확인할 것"],
+  ["/audit", "결과"],
+] as const;
+
+// 더보기 서브메뉴: 설정 및 시스템 항목
+const moreNavigation = [
+  ["/organization", "역할과 권한"],
+  ["/subscriptions", "연결된 AI"],
+  ["/extensions", "앱 및 연동"],
+  ["/access", "시스템 상태"],
 ] as const;
 
 export function RootShell() {
@@ -21,6 +24,8 @@ export function RootShell() {
   const status = useConsoleStatus(consoleStore);
   const queryErrors = useQueryErrors(consoleStore);
   const navigate = useNavigate();
+  // 더보기 서브메뉴 펼침/절첨 상태
+  const [moreOpen, setMoreOpen] = useState(false);
 
   useEffect(() => {
     void api.recoverSession().then(
@@ -54,8 +59,8 @@ export function RootShell() {
   if (session.status === "checking")
     return (
       <main className="boot-screen" aria-live="polite">
-        <p className="eyebrow">MASSION / CONTROL OFFICE</p>
-        <h1>조직의 현재 상태를 확인하고 있습니다.</h1>
+        <p className="eyebrow">MASSION</p>
+        <h1>잠시만 기다려주세요. 준비하고 있습니다.</h1>
         <div className="boot-line" aria-hidden="true" />
       </main>
     );
@@ -70,15 +75,30 @@ export function RootShell() {
         <Link to="/" className="brand-block" aria-label="Massion 운영 개요">
           <span className="brand-mark">M</span>
           <span>MASSION</span>
-          <small>CONTROL OFFICE</small>
         </Link>
         <nav>
-          {navigation.map(([to, number, label]) => (
+          {primaryNavigation.map(([to, label]) => (
             <Link key={to} to={to} activeProps={{ "aria-current": "page" }}>
-              <span>{number}</span>
               {label}
             </Link>
           ))}
+          <button
+            type="button"
+            className="nav-more-toggle"
+            aria-expanded={moreOpen}
+            onClick={() => setMoreOpen((value) => !value)}
+          >
+            더보기
+          </button>
+          {moreOpen ? (
+            <div className="nav-more-section">
+              {moreNavigation.map(([to, label]) => (
+                <Link key={to} to={to} activeProps={{ "aria-current": "page" }}>
+                  {label}
+                </Link>
+              ))}
+            </div>
+          ) : null}
         </nav>
         <div className="rail-foot">
           <span className={`connection-dot connection-${connection}`} aria-hidden="true" />

@@ -23,6 +23,7 @@ export interface TuiState {
   readonly events: readonly TuiEvent[];
   readonly eventLimit: number;
   readonly selection: TuiSelection;
+  readonly inspector: boolean;
   readonly subscriptionTab: TuiSubscriptionTab;
   readonly queryResults: Readonly<Record<string, unknown>>;
   readonly queryErrors: Readonly<Record<string, string>>;
@@ -33,8 +34,9 @@ export type TuiAction =
   | { readonly type: "connection.changed"; readonly connection: TuiConnection; readonly error?: string }
   | { readonly type: "snapshot.loaded"; readonly snapshot: CollaborationGraphSnapshot }
   | { readonly type: "event.received"; readonly event: TuiEvent }
-  | { readonly type: "view.selected"; readonly view: TuiView }
-  | { readonly type: "query.loaded"; readonly key: string; readonly value: unknown }
+ | { readonly type: "view.selected"; readonly view: TuiView }
+  | { readonly type: "inspector.toggled" }
+ | { readonly type: "query.loaded"; readonly key: string; readonly value: unknown }
   | { readonly type: "messages.loaded"; readonly workId: string; readonly roomId: string; readonly value: unknown }
   | { readonly type: "query.failed"; readonly key: string; readonly error: string }
   | { readonly type: "subscription.tab.selected"; readonly tab: TuiSubscriptionTab }
@@ -44,18 +46,19 @@ export function createTuiState(input: { readonly eventLimit?: number } = {}): Tu
   const eventLimit = input.eventLimit ?? 500;
   if (!Number.isSafeInteger(eventLimit) || eventLimit < 1 || eventLimit > 10_000)
     throw new Error("TUI event 보관 상한이 유효하지 않습니다");
-  return {
-    connection: "connecting",
-    view: "overview",
-    cursor: 0,
-    needsResync: false,
-    events: [],
-    eventLimit,
-    selection: {},
-    subscriptionTab: "providers",
-    queryResults: {},
-    queryErrors: {},
-  };
+ return {
+   connection: "connecting",
+    view: "works",
+   cursor: 0,
+   needsResync: false,
+   events: [],
+   eventLimit,
+   selection: {},
+    inspector: false,
+   subscriptionTab: "providers",
+   queryResults: {},
+   queryErrors: {},
+ };
 }
 
 function clearError(state: TuiState): TuiState {
@@ -113,8 +116,9 @@ export function reduceTuiState(state: TuiState, action: TuiAction): TuiState {
       events: [...state.events, action.event].slice(-state.eventLimit),
     };
   }
-  if (action.type === "view.selected") return { ...state, view: action.view };
-  if (action.type === "query.loaded") {
+ if (action.type === "view.selected") return { ...state, view: action.view };
+  if (action.type === "inspector.toggled") return { ...state, inspector: !state.inspector };
+ if (action.type === "query.loaded") {
     return {
       ...state,
       queryResults: { ...state.queryResults, [action.key]: action.value },

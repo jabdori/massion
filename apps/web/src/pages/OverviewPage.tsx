@@ -1,15 +1,19 @@
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 
+import { userStageForInternal, workStatusToken } from "@massion/application";
+
 import { label, object, rows } from "../data.js";
 import { useQueryData } from "../hooks.js";
 import { consoleStore } from "../services.js";
-import { EmptyState, LoadingState, PageHeader, StatusStamp } from "../components/States.js";
+import { LoadingState, StatusStamp } from "../components/States.js";
 
 function runIdFrom(value: unknown): string | undefined {
   const runId = object(object(value).data).runId;
   return typeof runId === "string" && runId.length > 0 ? runId : undefined;
 }
+
+const QUICK_EXAMPLES = ["문서 작성해주세요", "자료 조사해주세요", "개발 작업을 진행해주세요", "일정을 정리해주세요"];
 
 export default function OverviewPage() {
   const navigate = useNavigate();
@@ -26,12 +30,14 @@ export default function OverviewPage() {
   });
   const workRows = rows(works);
   const approvalRows = rows(approvals);
-  const graph = object(snapshot);
-  const nodes = rows(graph.nodes);
-  const executions = rows(graph.executions);
-  const running = executions.filter((item) => ["queued", "running", "suspended"].includes(label(item.status, "")));
   const run = object(runData);
   const runWorkId = label(run.workId, "");
+
+  // 진행 중이거나 확인이 필요한 작업
+  const activeWorks = workRows.filter((item) =>
+    ["running", "blocked", "awaiting-approval"].includes(label(item.status)),
+  );
+  const completedWorks = workRows.filter((item) => label(item.status) === "completed");
 
   useEffect(() => {
     if (!runWorkId) return;
@@ -56,7 +62,7 @@ export default function OverviewPage() {
       if (!acceptedRunId) throw new Error("새 업무 실행 식별자를 받지 못했습니다.");
       setRequest("");
       setRunId(acceptedRunId);
-      setNotice("Core Office가 업무를 준비하고 있습니다.");
+      setNotice("업무를 준비하고 있습니다.");
     } catch {
       setNotice("업무를 시작하지 못했습니다.");
     } finally {
@@ -65,19 +71,22 @@ export default function OverviewPage() {
   }
 
   if (works === undefined || approvals === undefined || snapshot === undefined) return <LoadingState />;
+
+  const runStatus = label(run.status, "preparing");
+  const runStage = label(run.stage, "intake");
+  const runStatusToken = workStatusToken(runStatus);
+  const runStageToken = userStageForInternal(runStage);
+
   return (
     <>
-      <PageHeader
-        index="01 / OPERATIONS"
-        title="조직은 지금 무엇을 하고 있나요?"
-        description="업무, 에이전트 실행, 승인 요청과 최근 사건을 한 화면에서 확인합니다."
-      />
-      <section className="work-launcher" aria-labelledby="work-launcher-title">
-        <div>
-          <p className="eyebrow">NEW WORK</p>
-          <h2 id="work-launcher-title">지금 무엇을 함께 할까요?</h2>
-          <p>한 문장으로 적으면 Core Office가 업무와 협업 흐름을 시작합니다.</p>
-        </div>
+      {/* 환영 인사 */}
+      <section className="greeting-section">
+        <h1>안녕하세요. 무엇을 도와드릴까요?</h1>
+        <p>한 문장으로 말씀해주시면 정리해서 진행합니다.</p>
+      </section>
+
+      {/* 빠른 시작: 입력창 + 예시 버튼 */}
+      <section className="quick-start">
         <form
           onSubmit={(event) => {
             void startWork(event);
@@ -103,113 +112,117 @@ export default function OverviewPage() {
             </button>
           </div>
         </form>
+        <div className="quick-examples">
+          {QUICK_EXAMPLES.map((example) => (
+            <button
+              key={example}
+              type="button"
+              className="example-chip"
+              onClick={() => setRequest(example)}
+            >
+              {example.replace("해주세요", "")}
+            </button>
+          ))}
+        </div>
+        {/* 실행 진행 상태 (친화적 라벨) */}
         {runId ? (
-          <div className="run-progress" role="status" aria-live="polite">
-            <span className="eyebrow">RUN IN PROGRESS</span>
-            <StatusStamp value={label(run.status, "preparing").toUpperCase()} />
-            <strong>{label(run.stage, "preparing").toUpperCase()}</strong>
+          <div className="run-progress-friendly" role="status" aria-live="polite">
+            <span className={`friendly-status is-${runStatusToken.semantic}`}>
+              <span className="status-symbol">{runStatusToken.symbol}</span>
+              {runStatusToken.friendlyLabel}
+            </span>
+            <span>{runStageToken.friendlyLabel} 단계</span>
             {runWorkId ? <code>{runWorkId}</code> : <span>업무를 만들고 있습니다.</span>}
           </div>
         ) : null}
       </section>
-      <section className="metric-rack" aria-label="운영 요약">
-        <article>
-          <span>ACTIVE WORK</span>
-          <strong>
-            {workRows
-              .filter((item) => label(item.status) !== "completed")
-              .length.toString()
-              .padStart(2, "0")}
-          </strong>
-          <small>전체 {workRows.length}건</small>
-        </article>
-        <article>
-          <span>AGENTS ONLINE</span>
-          <strong>{running.length.toString().padStart(2, "0")}</strong>
-          <small>등록 {nodes.length}명</small>
-        </article>
-        <article className={approvalRows.length > 0 ? "metric-alert" : ""}>
-          <span>NEEDS DECISION</span>
-          <strong>{approvalRows.length.toString().padStart(2, "0")}</strong>
-          <small>{approvalRows.length > 0 ? "검토가 필요합니다" : "대기 없음"}</small>
-        </article>
-        <article>
-          <span>EVENT CURSOR</span>
-          <strong>{consoleStore.getSnapshot().cursor.toString().padStart(6, "0")}</strong>
-          <small>실시간 원장</small>
-        </article>
-      </section>
-      <div className="dashboard-grid">
-        <section className="ledger-panel work-register">
-          <div className="panel-title">
-            <div>
-              <p className="eyebrow">WORK REGISTER</p>
-              <h2>진행 중인 업무</h2>
-            </div>
-            <span>{workRows.length}</span>
+
+      {/* 확인이 필요해요 */}
+      <section className="home-section">
+        <h2 className="home-section-title">
+          확인이 필요해요
+          {approvalRows.length > 0 ? (
+            <span className="home-section-count">{approvalRows.length}</span>
+          ) : null}
+          {approvalRows.length > 0 ? (
+            <Link to="/approvals" className="home-section-link">
+              모두 보기
+            </Link>
+          ) : null}
+        </h2>
+        {approvalRows.length === 0 ? (
+          <p className="quiet-line">현재 확인이 필요한 항목이 없습니다.</p>
+        ) : (
+          <div className="card-grid">
+            {approvalRows.slice(0, 6).map((item) => (
+              <article className="approval-card" key={label(item.approvalId)}>
+                <div className="approval-card-header">
+                  <span className="status-symbol">?</span>
+                  확인이 필요해요
+                </div>
+                <p className="approval-card-title">{label(item.action)}</p>
+                <p className="approval-card-meta">{label(item.requestedBy)}</p>
+              </article>
+            ))}
           </div>
-          {workRows.length === 0 ? (
-            <EmptyState title="아직 시작된 업무가 없습니다" detail="위 입력창에 첫 업무를 적어 시작해주세요." />
-          ) : (
-            <div className="ledger-list">
-              {workRows.slice(0, 8).map((work) => (
+        )}
+      </section>
+
+      {/* 진행 중인 작업 */}
+      <section className="home-section">
+        <h2 className="home-section-title">
+          진행 중인 작업
+          {activeWorks.length > 0 ? (
+            <span className="home-section-count">{activeWorks.length}</span>
+          ) : null}
+        </h2>
+        {activeWorks.length === 0 ? (
+          <p className="quiet-line">진행 중인 작업이 없습니다.</p>
+        ) : (
+          <div className="card-grid">
+            {activeWorks.slice(0, 6).map((work) => {
+              const token = workStatusToken(label(work.status));
+              return (
                 <Link
                   key={label(work.workId)}
                   to="/works/$workId"
                   params={{ workId: label(work.workId) }}
-                  className="ledger-row"
+                  className="work-card"
                 >
-                  <span className="mono">{label(work.workId).slice(0, 12)}</span>
-                  <strong>업무 #{label(work.revision, "0")}</strong>
-                  <StatusStamp value={label(work.status)} />
-                  <span aria-hidden="true">↗</span>
+                  <div className="work-card-header">
+                    <span className="work-card-symbol">{token.symbol}</span>
+                    <span className="work-card-label">{token.friendlyLabel}</span>
+                  </div>
+                  <p className="work-card-title">업무 #{label(work.revision, "0")}</p>
                 </Link>
-              ))}
-            </div>
-          )}
-        </section>
-        <section className="ledger-panel agent-register">
-          <div className="panel-title">
-            <div>
-              <p className="eyebrow">ACTIVE OFFICE</p>
-              <h2>에이전트 배치</h2>
-            </div>
-            <Link to="/organization">전체 보기</Link>
+              );
+            })}
           </div>
-          <div className="agent-stack">
-            {nodes.slice(0, 6).map((node, index) => (
-              <article key={label(node.handle)}>
-                <span className="agent-index">{String(index + 1).padStart(2, "0")}</span>
-                <div>
-                  <strong>{label(node.name)}</strong>
-                  <small>{label(node.responsibility)}</small>
-                </div>
-                <StatusStamp value={label(node.executionStatus, label(node.status))} />
-              </article>
+        )}
+      </section>
+
+      {/* 최근 결과 */}
+      <section className="home-section">
+        <h2 className="home-section-title">최근 결과</h2>
+        {completedWorks.length === 0 ? (
+          <p className="quiet-line">완료된 작업이 아직 없습니다.</p>
+        ) : (
+          <div className="card-list">
+            {completedWorks.slice(0, 5).map((work) => (
+              <Link
+                key={label(work.workId)}
+                to="/works/$workId"
+                params={{ workId: label(work.workId) }}
+                className="recent-result"
+              >
+                <span className="recent-result-symbol">✓</span>
+                <span className="recent-result-title">업무 #{label(work.revision, "0")}</span>
+                <StatusStamp value={label(work.status)} />
+              </Link>
             ))}
           </div>
-        </section>
-        <section className="ledger-panel approval-strip">
-          <div className="panel-title">
-            <div>
-              <p className="eyebrow">DECISION QUEUE</p>
-              <h2>선택이 필요한 항목</h2>
-            </div>
-            <Link to="/approvals">승인함 열기</Link>
-          </div>
-          {approvalRows.length === 0 ? (
-            <p className="quiet-line">현재 대기 중인 승인 요청이 없습니다.</p>
-          ) : (
-            approvalRows.slice(0, 3).map((item) => (
-              <div className="approval-line" key={label(item.approvalId)}>
-                <StatusStamp value="PENDING" />
-                <strong>{label(item.action)}</strong>
-                <span>{label(item.requestedBy)}</span>
-              </div>
-            ))
-          )}
-        </section>
-      </div>
+        )}
+      </section>
     </>
   );
 }

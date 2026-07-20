@@ -10,14 +10,24 @@ describe("TUI presentation", () => {
     expect(safeTerminalText("정상\u001b[31m위험\u0007")).toBe("정상�[31m위험�");
   });
 
-  it("일곱 view가 같은 snapshot에서 사람 의미를 먼저 표시한다", () => {
+  it("일곱 view가 같은 snapshot에서 친화적 화면 이름으로 안내한다", () => {
+    const friendlyLabels: Readonly<Record<string, string>> = {
+      overview: "개요",
+      agents: "협업",
+      works: "작업",
+      chat: "대화",
+      approvals: "확인",
+      operations: "운영",
+      subscriptions: "구독",
+    };
     let state = reduceTuiState(createTuiState(), { type: "snapshot.loaded", snapshot: decodeSnapshot(testSnapshot) });
     for (const view of ["overview", "agents", "works", "chat", "approvals", "operations", "subscriptions"] as const) {
       state = reduceTuiState(state, { type: "view.selected", view });
       const output = present(state);
-      expect(output.navigation).toContain(
-        `[${String(["overview", "agents", "works", "chat", "approvals", "operations", "subscriptions"].indexOf(view) + 1)}`,
-      );
+      // 숫자 키 없이 친화적 화면 이름을 표시한다
+      expect(output.navigation).toContain(friendlyLabels[view]);
+      expect(output.navigation).not.toContain("[1");
+      expect(output.footer).toContain("n 새 작업");
       expect(output.list.length + output.detail.length).toBeGreaterThan(20);
     }
   });
@@ -37,6 +47,28 @@ describe("TUI presentation", () => {
     const output = present(state);
     expect(output.list).toContain("n 키");
     expect(output.list).not.toContain("massion run");
+  });
+
+  it("작업 홈은 4단계 진행 바와 친화적 상태를 표시하고 자세히 보기로 기술 정보를 보여준다", () => {
+    let state = reduceTuiState(createTuiState(), { type: "snapshot.loaded", snapshot: decodeSnapshot(testSnapshot) });
+    state = reduceTuiState(state, { type: "view.selected", view: "works" });
+
+    const friendly = present(state);
+    // 친화적 진행 바: 사용자용 4단계 라벨이 모두 표시된다
+    expect(friendly.detail).toContain("요청 이해");
+    expect(friendly.detail).toContain("자료와 계획 준비");
+    expect(friendly.detail).toContain("작업 진행");
+    expect(friendly.detail).toContain("결과 확인");
+    // running → "진행 중이에요" 친화적 상태 라벨
+    expect(friendly.detail).toContain("진행 중이에요");
+    expect(friendly.detail).toContain("최근 소식");
+
+    // 자세히 보기(D)를 켜면 기술 상세로 전환된다
+    state = reduceTuiState(state, { type: "inspector.toggled" });
+    const technical = present(state);
+    expect(technical.detail).toContain("작업(Task)");
+    expect(technical.detail).toContain("실행(Execution)");
+    expect(technical.navigation).toContain("자세히 보기");
   });
 
   it("승인 상세에 실행 파일·비밀 제거 인수·작업 경로와 제공자 이유를 표시한다", () => {

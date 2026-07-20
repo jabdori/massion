@@ -44,3 +44,35 @@ export function layoutForTerminal(width: number, height: number): TuiLayout {
   if (width < 80 || height < 24) return { mode: "unsupported", width, height, requiredWidth: 80, requiredHeight: 24 };
   return { mode: width >= 120 ? "wide" : "compact", width, height };
 }
+
+// Guided Workspace: 현재 작업이 어느 내부 단계(intake·delivery …)에 있는지 유도합니다.
+// snapshot에는 명시적인 stage 필드가 없으므로, 현재 실행 중인 에이전트의 역할(role)에서 유도합니다.
+const AGENT_HANDLE_TO_INTERNAL_STAGE: Readonly<Record<string, string>> = {
+  representative: "intake",
+  "context-strategy": "context-strategy",
+  evidence: "evidence",
+  delivery: "delivery",
+  assurance: "assurance",
+};
+
+const TERMINAL_WORK_STATUSES = new Set(["completed", "cancelled", "failed"]);
+const ACTIVE_EXECUTION_STATUSES = new Set(["running", "queued", "suspended"]);
+
+export function currentInternalStage(
+  snapshot: CollaborationGraphSnapshot,
+  workId: string | undefined,
+): string {
+  if (!workId) return "intake";
+  const work = snapshot.works.find((item) => item.workId === workId);
+  if (work && TERMINAL_WORK_STATUSES.has(work.status)) return "records";
+  const execution = snapshot.executions.find(
+    (item) => item.workId === workId && ACTIVE_EXECUTION_STATUSES.has(item.status),
+  );
+  if (execution) {
+    const node = snapshot.nodes.find((item) => item.handle === execution.agentHandle);
+    const stage = node ? AGENT_HANDLE_TO_INTERNAL_STAGE[node.role] : undefined;
+    if (stage) return stage;
+  }
+  if (work?.status === "draft") return "intake";
+  return "delivery";
+}
