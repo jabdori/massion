@@ -40,6 +40,17 @@ export default function WorkPage() {
   const [messageNotice, setMessageNotice] = useState<string>();
   const [showDetails, setShowDetails] = useState(false);
 
+  // React Hook 규칙: 모든 hook을 조건부 return 앞에 호출해야 합니다.
+  // rows/object/label은 undefined 입력에 대해 안전하게 빈 값을 반환합니다.
+  const firstRoomId = label(rows(roomsData)[0]?.roomId, "");
+  const messagesPayload = useMemo(
+    () => ({ workId, roomId: firstRoomId }),
+    [workId, firstRoomId],
+  );
+  const messagesData = useQueryData<unknown>(consoleStore, "work.messages", messagesPayload, undefined, {
+    enabled: Boolean(firstRoomId),
+  });
+
   if ([workData, tasksData, assignmentsData, roomsData, meData].some((value) => value === undefined))
     return <LoadingState label="업무 정보를 불러오고 있습니다" />;
 
@@ -49,14 +60,6 @@ export default function WorkPage() {
   const rooms = rows(roomsData);
   const records = rows(recordsData);
   const me = object(meData);
-  const firstRoomId = label(rooms[0]?.roomId, "");
-  const messagesPayload = useMemo(
-    () => ({ workId, roomId: firstRoomId }),
-    [workId, firstRoomId],
-  );
-  const messagesData = useQueryData<unknown>(consoleStore, "work.messages", messagesPayload, undefined, {
-    enabled: Boolean(firstRoomId),
-  });
   const messages = rows(messagesData);
 
   const workStatus = label(work.status);
