@@ -83,8 +83,10 @@ async function defaultOpenBrowser(url: string): Promise<void> {
 export async function openWebConsole(
   input: OpenWebConsoleInput,
 ): Promise<{ readonly url: string; readonly code: string; readonly expiresAt: string }> {
-  const url = `${endpoint(input.endpoint)}/`;
+  const baseUrl = endpoint(input.endpoint);
   const ticket = await issueWebLoginTicket(input);
+  // 티켓 코드를 URL에 포함하여 브라우저가 자동으로 로그인할 수 있게 합니다
+  const url = `${baseUrl}/login?code=${encodeURIComponent(ticket.code)}`;
   await (input.openBrowser ?? defaultOpenBrowser)(url).catch(() => undefined);
   return { url, code: ticket.code, expiresAt: ticket.expiresAt };
 }
