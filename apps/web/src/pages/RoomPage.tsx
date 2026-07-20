@@ -1,5 +1,5 @@
 import { useParams } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useMemo, useState } from "react";
 
 import { label, list, object, rows } from "../data.js";
 import { useQueryData } from "../hooks.js";
@@ -10,23 +10,17 @@ export default function RoomPage() {
   const { roomId } = useParams({ from: "/rooms/$roomId" });
   const snapshotData = useQueryData<unknown>(consoleStore, "organization.graph.snapshot");
   const meData = useQueryData<unknown>(consoleStore, "identity.me");
-  const [messages, setMessages] = useState<unknown>();
   const [content, setContent] = useState("");
   const [notice, setNotice] = useState<string>();
   const room = rows(object(snapshotData).rooms).find((candidate) => candidate.roomId === roomId);
   const workId = label(room?.workId, "");
-  useEffect(() => {
-    if (workId)
-      void consoleStore
-        .refresh("work.messages", { workId, roomId })
-        .then(setMessages)
-        .catch((error: unknown) => {
-          setNotice(error instanceof Error ? error.message : "메시지를 읽지 못했습니다.");
-        });
-  }, [roomId, workId]);
-  if (snapshotData === undefined || meData === undefined || (workId && messages === undefined))
+  const messagePayload = useMemo(() => ({ workId, roomId }), [roomId, workId]);
+  const messagesData = useQueryData<unknown>(consoleStore, "work.messages", messagePayload, undefined, {
+    enabled: Boolean(workId),
+  });
+  if (snapshotData === undefined || meData === undefined || (workId && messagesData === undefined))
     return <LoadingState label="협업 대화를 불러오고 있습니다" />;
-  const messageRows = rows(messages);
+  const messageRows = rows(messagesData);
   const me = object(meData);
 
   async function submit(event: { preventDefault(): void }) {
@@ -48,7 +42,6 @@ export default function RoomPage() {
         },
       });
       setContent("");
-      setMessages(await consoleStore.refresh("work.messages", { workId, roomId }));
       setNotice("메시지를 보냈습니다.");
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "메시지를 보내지 못했습니다.");
