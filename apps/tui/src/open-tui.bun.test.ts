@@ -61,8 +61,8 @@ describe("OpenTUI 실제 renderer", () => {
     view.render();
     await setup.renderOnce();
     const frame = setup.captureCharFrame();
-    expect(frame).toContain("Massion AgentOS");
-    expect(frame).toContain("진행 중 업무");
+    expect(frame).toContain("Massion");
+    expect(frame).toContain("요청 이해");
     expect(frame).toContain("Ctrl+C 종료");
   });
 
@@ -121,24 +121,24 @@ describe("OpenTUI 실제 renderer", () => {
       },
     });
     view.render();
-    setup.renderer.keyInput.emit(
-      "keypress",
-      new KeyEvent({
-        name: "c",
-        sequence: "c",
-        raw: "c",
-        number: false,
-        source: "raw",
-        ctrl: false,
-        shift: false,
-        meta: false,
-        option: false,
-        eventType: "press",
-        repeated: false,
-      }),
-    );
-    await setup.renderOnce();
-    expect(setup.captureCharFrame()).toContain("협업방에 메시지 보내기");
+   setup.renderer.keyInput.emit(
+     "keypress",
+     new KeyEvent({
+      name: "m",
+      sequence: "m",
+      raw: "m",
+      number: false,
+      source: "raw",
+      ctrl: false,
+      shift: false,
+      meta: false,
+      option: false,
+      eventType: "press",
+      repeated: false,
+    }),
+  );
+  await setup.renderOnce();
+  expect(setup.captureCharFrame()).toContain("메시지 보내기");
     setup.renderer.keyInput.emit(
       "keypress",
       new KeyEvent({
@@ -157,7 +157,7 @@ describe("OpenTUI 실제 renderer", () => {
     );
     await setup.renderOnce();
     expect(destroyed).toBe(false);
-    expect(setup.captureCharFrame()).not.toContain("협업방에 메시지 보내기");
+    expect(setup.captureCharFrame()).not.toContain("메시지 보내기");
   });
 
   test("새 업무 단축키는 빈 입력을 보내지 않고 성공하면 업무 화면을 선택한다", async () => {
@@ -191,7 +191,7 @@ describe("OpenTUI 실제 renderer", () => {
 
     emitKey("n");
     await setup.renderOnce();
-    expect(setup.captureCharFrame()).toContain("새 업무 시작");
+    expect(setup.captureCharFrame()).toContain("새 작업 시작");
 
     let input = setup.renderer.root.findDescendantById("modal-input") as InputRenderable;
     expect(input.value).toBe("");
@@ -199,7 +199,7 @@ describe("OpenTUI 실제 renderer", () => {
     input.submit();
     await Bun.sleep(0);
     expect(started).toEqual([]);
-    expect(setup.captureCharFrame()).toContain("업무 내용을 입력해 주세요");
+    expect(setup.captureCharFrame()).toContain("작업 내용을 입력해 주세요");
 
     input = setup.renderer.root.findDescendantById("modal-input") as InputRenderable;
     input.value = "릴리스 준비 상태를 점검해 주세요";
@@ -210,7 +210,7 @@ describe("OpenTUI 실제 renderer", () => {
     expect(started).toEqual(["릴리스 준비 상태를 점검해 주세요"]);
     expect(loaded).toEqual(["works"]);
     expect(state.view).toBe("works");
-    expect(setup.captureCharFrame()).toContain("새 업무 요청을 시작했습니다");
+    expect(setup.captureCharFrame()).toContain("새 작업 요청을 시작했습니다");
   });
 
   test("구독 계정을 80×24에서 선택하고 공유·공유 해제·연결 해제를 각각 확인한 뒤 실행한다", async () => {
@@ -469,7 +469,8 @@ describe("OpenTUI 실제 renderer", () => {
     });
     view.render();
 
-    emitKey("6");
+    state = reduceTuiState(state, { type: "view.selected", view: "operations" });
+    view.render();
     emitKey("o");
     await setup.renderOnce();
     expect(setup.captureCharFrame()).toContain("모델 평가실 변경");

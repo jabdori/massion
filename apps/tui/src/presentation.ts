@@ -1,17 +1,25 @@
-import type { CollaborationGraphNode, CollaborationGraphSnapshot } from "@massion/application";
+import {
+  agentRoleToken,
+  USER_STAGES,
+  userStageProgress,
+  workStatusToken,
+  type CollaborationGraphNode,
+  type CollaborationGraphSnapshot,
+} from "@massion/application";
 
 import type { TuiState, TuiView } from "./state.js";
-import { buildDashboard } from "./view-model.js";
+import { buildDashboard, currentInternalStage } from "./view-model.js";
 
-const VIEWS: ReadonlyArray<{ readonly view: TuiView; readonly label: string }> = [
-  { view: "overview", label: "1 개요" },
-  { view: "agents", label: "2 협업 맵" },
-  { view: "works", label: "3 업무" },
-  { view: "chat", label: "4 대화" },
-  { view: "approvals", label: "5 승인" },
-  { view: "operations", label: "6 운영" },
-  { view: "subscriptions", label: "7 구독" },
-];
+// Guided Workspace: 숫자 키 대신 친화적인 화면 이름만 표시합니다.
+const VIEW_LABELS: Readonly<Record<TuiView, string>> = {
+  overview: "개요",
+  agents: "협업",
+  works: "작업",
+  chat: "대화",
+  approvals: "확인",
+  operations: "운영",
+  subscriptions: "구독",
+};
 
 const SUBSCRIPTION_APPROVAL_MODES = ["automatic", "review", "deny"] as const;
 
@@ -59,11 +67,50 @@ function approvalPreviewLines(
   ];
 }
 
+// Guided Workspace: 서버 상태 문자열을 공통 디자인 토큰의 의미 체계로 분류합니다.
+const RUNNING_STATUSES = new Set(["active", "running", "live"]);
+const COMPLETED_STATUSES = new Set(["completed", "passed"]);
+const APPROVAL_STATUSES = new Set(["pending", "queued", "waiting_approval"]);
+const BLOCKED_STATUSES = new Set(["suspended", "blocked"]);
+const FAILED_STATUSES = new Set(["failed"]);
+const CANCELLED_STATUSES = new Set(["cancelled", "offline"]);
+
+function classifyStatus(status: string): string {
+  if (RUNNING_STATUSES.has(status)) return "running";
+  if (COMPLETED_STATUSES.has(status)) return "completed";
+  if (APPROVAL_STATUSES.has(status)) return "awaiting-approval";
+  if (BLOCKED_STATUSES.has(status)) return "blocked";
+  if (FAILED_STATUSES.has(status)) return "failed";
+  if (CANCELLED_STATUSES.has(status)) return "cancelled";
+  return "ready";
+}
+
 function statusMark(status: string): string {
-  if (["active", "running", "completed", "passed", "live"].includes(status)) return "●";
-  if (["pending", "queued", "waiting_approval", "suspended"].includes(status)) return "◐";
-  if (["failed", "blocked", "cancelled", "offline"].includes(status)) return "×";
-  return "○";
+  return workStatusToken(classifyStatus(status)).symbol;
+}
+
+function statusLabel(status: string): string {
+  return workStatusToken(classifyStatus(status)).friendlyLabel;
+}
+
+// 사용자용 4단계 진행 바: "✓ 요청 이해 ── ▶ 작업 진행 ── ○ 결과 확인"
+function renderUserStageBar(internalStage: string): string {
+  return USER_STAGES.map((stage) => {
+    const progress = userStageProgress(internalStage, stage.id);
+    const mark = progress === "completed" ? "✓" : progress === "current" ? "▶" : "○";
+    return `${mark} ${stage.friendlyLabel}`;
+  }).join(" ── ");
+}
+
+function workDisplayTitle(snapshot: CollaborationGraphSnapshot, workId: string): string {
+  const task = snapshot.tasks.find((item) => item.workId === workId);
+  return safeTerminalText(task?.title ?? workId, 80);
+}
+
+function recentNews(state: TuiState): readonly string[] {
+  const events = state.events.slice(-6);
+  if (!events.length) return ["아직 소식이 없어요."];
+  return events.map((event) => `${String(event.sequence).padStart(6)}  ${safeTerminalText(event.type, 80)}`);
 }
 
 function nodeLine(node: CollaborationGraphNode, selected: boolean): string {
@@ -96,7 +143,7 @@ function overview(state: TuiState, snapshot: CollaborationGraphSnapshot): { list
       `조직 버전           ${String(snapshot.organization.version)}`,
       `Snapshot revision   ${snapshot.revision.slice(0, 12)}…`,
       `Event cursor        ${String(state.cursor)}`,
-      `연결                ${statusMark(state.connection)} ${state.connection}`,
+      `연결                ${statusMark(state.connection)} ${statusLabel(state.connection)}`,
       "",
       state.error ?? "실시간 연결이 정상입니다.",
     ].join("\n"),
@@ -110,10 +157,10 @@ function agents(state: TuiState, snapshot: CollaborationGraphSnapshot): { list: 
       ? snapshot.nodes.map((item) => nodeLine(item, item.handle === node?.handle)).join("\n")
       : "등록된 에이전트가 없습니다.",
     detail: node
-      ? [
-          `${node.name} (${node.handle})`,
-          `역할                ${node.role}`,
-          `책임                ${node.responsibility}`,
+     ? [
+         `${node.name} (${node.handle})`,
+          `역할                ${agentRoleToken(node.role).friendlyLabel}`,
+         `책임                ${node.responsibility}`,
           `범위                ${node.scope}`,
           `상태                ${statusMark(node.executionStatus ?? node.status)} ${node.executionStatus ?? node.status}`,
           `현재 업무           ${node.currentWorkId ?? "없음"}`,
@@ -134,40 +181,64 @@ function works(state: TuiState, snapshot: CollaborationGraphSnapshot): { list: s
   const work = snapshot.works.find((item) => item.workId === state.selection.workId) ?? snapshot.works[0];
   const tasks = work ? snapshot.tasks.filter((item) => item.workId === work.workId) : [];
   const executions = work ? snapshot.executions.filter((item) => item.workId === work.workId) : [];
+  const list = snapshot.works.length
+    ? snapshot.works
+        .map(
+          (item) =>
+            `${item.workId === work?.workId ? "›" : " "} ${statusMark(item.status)} ${workDisplayTitle(snapshot, item.workId)} · ${statusLabel(item.status)}`,
+        )
+        .join("\n")
+    : "아직 작업이 없습니다. n 키를 눌러 첫 작업을 시작해 주세요.";
+
+  if (!work) return { list, detail: "선택할 작업이 없습니다." };
+
+  // 기본(친화적): 4단계 진행 바 + 최근 소식
+  if (!state.inspector) {
+    const stage = currentInternalStage(snapshot, work.workId);
+    return {
+      list,
+      detail: [
+        "작업 진행",
+        renderUserStageBar(stage),
+        "",
+        `상태                ${statusLabel(work.status)}`,
+        `산출물              ${work.artifactIds.length ? work.artifactIds.join(", ") : "아직 없어요"}`,
+        "",
+        "최근 소식",
+        ...recentNews(state),
+        "",
+        "d: 자세히 보기  ·  n: 새 작업  ·  m: 메시지",
+      ].join("\n"),
+    };
+  }
+
+  // 자세히 보기(D): 기술 상세 — 작업·실행·배정
   return {
-    list: snapshot.works.length
-      ? snapshot.works
-          .map(
-            (item) =>
-              `${item.workId === work?.workId ? "›" : " "} ${statusMark(item.status)} 업무 ${item.workId} · ${item.status} · r${String(item.revision)}`,
+    list,
+    detail: [
+      `작업 ${work.workId} · ${statusLabel(work.status)}`,
+      `상태 / revision     ${work.status} / ${String(work.revision)}`,
+      `산출물              ${work.artifactIds.length ? work.artifactIds.join(", ") : "없음"}`,
+      "",
+      "작업(Task)",
+      ...(tasks.length
+        ? tasks.map((task) => {
+            const assignment = snapshot.assignments.find((item) => item.taskId === task.taskId);
+            const role = assignment ? agentRoleToken(assignment.agentHandle).friendlyLabel : "미배정";
+            return `${statusMark(task.status)} ${task.title} (${task.taskId}) → ${role}`;
+          })
+        : ["없음"]),
+      "",
+      "실행(Execution)",
+      ...(executions.length
+        ? executions.map(
+            (execution) =>
+              `${statusMark(execution.status)} ${execution.agentHandle} · ${execution.status} · ${execution.modelRoute}`,
           )
-          .join("\n")
-      : "아직 업무가 없습니다. n 키를 눌러 첫 업무를 시작해 주세요.",
-    detail: work
-      ? [
-          `업무 ${work.workId}`,
-          `상태 / revision     ${work.status} / ${String(work.revision)}`,
-          `산출물              ${work.artifactIds.length ? work.artifactIds.join(", ") : "없음"}`,
-          "",
-          "작업(Task)",
-          ...(tasks.length
-            ? tasks.map((task) => {
-                const assignment = snapshot.assignments.find((item) => item.taskId === task.taskId);
-                return `${statusMark(task.status)} ${task.title} (${task.taskId}) → ${assignment?.agentHandle ?? "미배정"}`;
-              })
-            : ["없음"]),
-          "",
-          "실행(Execution)",
-          ...(executions.length
-            ? executions.map(
-                (execution) =>
-                  `${statusMark(execution.status)} ${execution.agentHandle} · ${execution.status} · ${execution.modelRoute}`,
-              )
-            : ["없음"]),
-          "",
-          "n: 새 업무  d: 업무 취소  s: 실행 일시정지/재개",
-        ].join("\n")
-      : "선택할 업무가 없습니다.",
+        : ["없음"]),
+      "",
+      "d: 간단히 보기  ·  c: 업무 취소  ·  s: 실행 일시정지/재개  ·  t: 작업 배정",
+    ].join("\n"),
   };
 }
 
@@ -198,7 +269,7 @@ function chat(state: TuiState, snapshot: CollaborationGraphSnapshot): { list: st
               })
             : ["표시할 메시지가 없습니다."]),
           "",
-          "c: 새 메시지 작성",
+          "m: 새 메시지 작성",
         ].join("\n")
       : "선택할 협업방이 없습니다.",
   };
@@ -528,15 +599,15 @@ export function present(state: TuiState): {
   readonly detail: string;
   readonly footer: string;
 } {
-  const navigation = VIEWS.map((item) => (item.view === state.view ? `[${item.label}]` : item.label)).join("   ");
+  const navigation = `${VIEW_LABELS[state.view]}${state.inspector ? " · 자세히 보기" : ""}`;
   const snapshot = state.snapshot;
   if (!snapshot) {
     return {
       navigation,
-      title: "Massion AgentOS",
+      title: "Massion",
       list: "Application API에 연결하고 있습니다…",
       detail: state.error ?? "상태·Identity·협업 snapshot을 확인합니다.",
-      footer: "Ctrl+C 종료  ? 도움말",
+      footer: "? 도움말  ·  Ctrl+C 종료",
     };
   }
   const content =
@@ -555,8 +626,8 @@ export function present(state: TuiState): {
                 : subscriptions(state);
   return {
     navigation,
-    title: `Massion AgentOS · ${snapshot.organization.organizationId} · ${statusMark(state.connection)} ${state.connection}`,
+    title: `Massion · ${statusLabel(state.connection)} · ${snapshot.organization.organizationId}`,
     ...content,
-    footer: "1–7 화면  n 새 업무  j/k 이동  r 새로고침  / 검색  ? 도움말  Ctrl+C 종료",
+    footer: "n 새 작업  ·  m 메시지  ·  d 자세히  ·  / 검색  ·  j/k 이동  ·  r 새로고침  ·  ? 도움말  ·  Ctrl+C 종료",
   };
 }

@@ -76,16 +76,6 @@ type Modal =
   | { readonly kind: "optimization"; readonly title: string; readonly placeholder: string }
   | { readonly kind: "help"; readonly title: string; readonly placeholder: string };
 
-const VIEW_KEYS: Readonly<Record<string, TuiView>> = {
-  "1": "overview",
-  "2": "agents",
-  "3": "works",
-  "4": "chat",
-  "5": "approvals",
-  "6": "operations",
-  "7": "subscriptions",
-};
-
 const SUBSCRIPTION_TABS: readonly TuiSubscriptionTab[] = ["providers", "accounts", "quota", "policy"];
 
 export class OpenTuiView {
@@ -158,8 +148,9 @@ export class OpenTuiView {
     });
     const list = this.filtered(output.list);
     const detail = this.filtered(output.detail);
-    body.add(this.panel("목록 / 맵", list, layout.mode === "wide" ? "46%" : "40%"));
-    body.add(this.panel("상세", detail, layout.mode === "wide" ? "54%" : "60%"));
+    const inspectorOn = this.actions.state().inspector;
+    body.add(this.panel("작업 목록", list, layout.mode === "wide" ? "40%" : "38%"));
+    body.add(this.panel(inspectorOn ? "자세히 보기" : "진행 상황", detail, layout.mode === "wide" ? "60%" : "62%"));
     root.add(body);
     if (this.modal) root.add(this.modalPanel());
     root.add(this.footer(this.notice || output.footer));
@@ -253,13 +244,15 @@ export class OpenTuiView {
     if (modal?.kind === "help") {
       box.add(
         new TextRenderable(this.renderer, {
-          content:
-            "1–7 화면 이동 · j/k 또는 화살표 항목 이동 · r 새로고침 · / 검색\n" +
-            "n 새 업무 · c 메시지 · a 승인 · x 거절 · Delete 승인 취소 · d 업무 취소 · t 작업 배정\n" +
+         content:
+            "기본 화면: 작업 목록 + 진행 상황이 바로 보입니다.\n" +
+            "j/k 또는 화살표: 이동 · Enter: 자세히 열기 · d: 자세히 토글 · Esc: 뒤로\n" +
+            "n: 새 작업 · m: 메시지 보내기 · /: 검색 · r: 새로고침\n" +
+            "확인 필요: a 승인 · x 거절 · Delete 승인 취소 · 자세히에서 c 작업 취소 · t 작업 배정\n" +
+            "실행 제어(자세히): s 일시정지/재개 · z 실행 취소\n" +
             "구독: ←/→ 또는 h/l 탭 · s 공유 · u 공유 해제 · d 연결 해제\n" +
-            "s 실행 일시정지/재개 · z 실행 취소\n" +
-            '모델 평가실(운영 화면): operations에서 o · JSON {"operation":"...","payload":{...}}\n' +
-            "Esc 입력 닫기 · Ctrl+C 입력 취소/종료 · 선택한 텍스트는 복사할 수 있습니다.",
+            '모델 평가실(운영): o · JSON {"operation":"...","payload":{...}}\n' +
+            "Esc: 입력 닫기 · Ctrl+C: 종료 · 선택한 텍스트는 복사할 수 있습니다.",
           ...this.paint("fg", "#C6D0F5"),
         }),
       );
@@ -319,13 +312,6 @@ export class OpenTuiView {
       this.dispose();
       return;
     }
-    const view = VIEW_KEYS[key.name];
-    if (view) {
-      this.actions.dispatch({ type: "view.selected", view });
-      this.render();
-      await this.actions.loadView(view);
-      return;
-    }
     if (this.actions.state().view === "subscriptions" && ["[", "]", "h", "left", "l", "right"].includes(key.name)) {
       const delta = ["]", "l", "right"].includes(key.name) ? 1 : -1;
       const current = SUBSCRIPTION_TABS.indexOf(this.actions.state().subscriptionTab);
@@ -341,9 +327,9 @@ export class OpenTuiView {
     else if (key.name === "?") open({ kind: "help", title: "키보드 도움말", placeholder: "" });
     else if (key.name === "/") open({ kind: "search", title: "현재 화면 검색", placeholder: "검색어를 입력해 주세요" });
     else if (key.name === "n")
-      open({ kind: "start-work", title: "새 업무 시작", placeholder: "업무 내용을 입력해 주세요" });
-    else if (key.name === "c" && this.actions.state().view === "chat")
-      open({ kind: "message", title: "협업방에 메시지 보내기", placeholder: "메시지를 입력해 주세요" });
+      open({ kind: "start-work", title: "새 작업 시작", placeholder: "작업 내용을 입력해 주세요" });
+    else if (key.name === "m")
+      open({ kind: "message", title: "메시지 보내기", placeholder: "메시지를 입력해 주세요" });
     else if (key.name === "a" && this.actions.state().view === "approvals")
       open({ kind: "vote", vote: "approve", title: "승인 이유", placeholder: "승인 근거를 입력해 주세요" });
     else if (key.name === "x" && this.actions.state().view === "approvals")
@@ -354,8 +340,8 @@ export class OpenTuiView {
         title: "승인 요청 취소",
         placeholder: "승인 요청을 취소하는 이유를 입력해 주세요",
       });
-    else if (key.name === "d" && this.actions.state().view === "works")
-      open({ kind: "cancel-work", title: "업무 취소 확인", placeholder: "취소 이유를 입력해 주세요" });
+    else if (key.name === "c" && this.actions.state().view === "works")
+      open({ kind: "cancel-work", title: "작업 취소 확인", placeholder: "취소 이유를 입력해 주세요" });
     else if (key.name === "t" && this.actions.state().view === "works")
       open({ kind: "assign-task", title: "작업 배정·재배정", placeholder: "에이전트 handle을 입력해 주세요" });
     else if (key.name === "s" && this.actions.state().view === "works") {
@@ -396,6 +382,18 @@ export class OpenTuiView {
         title: "모델 평가실 변경",
         placeholder: '{"operation":"optimization.batch.activate","payload":{"batchId":"..."}}',
       });
+    } else if (key.name === "d") {
+      // D: 기술 상세(Inspector) 토글
+      this.actions.dispatch({ type: "inspector.toggled" });
+      this.render();
+    } else if (key.name === "return" && !this.actions.state().inspector) {
+      // Enter: 선택한 작업의 자세히 보기 열기
+      this.actions.dispatch({ type: "inspector.toggled" });
+      this.render();
+    } else if (key.name === "escape" && this.actions.state().inspector) {
+      // Esc: 자세히 보기 닫고 목록으로
+      this.actions.dispatch({ type: "inspector.toggled" });
+      this.render();
     } else if (["j", "down", "k", "up"].includes(key.name)) {
       this.moveSelection(["j", "down"].includes(key.name) ? 1 : -1);
     }
@@ -499,7 +497,7 @@ export class OpenTuiView {
         }
       },
       modal.kind === "start-work"
-        ? "새 업무 요청을 시작했습니다. 업무 목록에서 진행 상황을 확인할 수 있습니다."
+        ? "새 작업 요청을 시작했습니다. 작업 목록에서 진행 상황을 확인할 수 있습니다."
         : undefined,
     );
   }
