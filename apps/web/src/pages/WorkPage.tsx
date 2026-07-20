@@ -1,7 +1,7 @@
 import { Link, useParams } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 
-import { USER_STAGES, userStageForInternal, userStageProgress, workStatusToken } from "@massion/application";
+import { USER_STAGES, userStageForInternal, userStageIndex, userStageProgress, workStatusToken } from "@massion/application";
 
 import { label, list, object, rows } from "../data.js";
 import { useQueryData } from "../hooks.js";
@@ -124,7 +124,7 @@ export default function WorkPage() {
       </div>
 
       {/* 사용자용 4단계 진행 바 */}
-      <div className="stage-progress">
+      <div className="stage-progress" role="progressbar" aria-valuenow={userStageIndex(internalStage) + 1} aria-valuemin={1} aria-valuemax={USER_STAGES.length} aria-label="작업 진행 단계">
         {USER_STAGES.map((stage, index) => {
           const progress = userStageProgress(internalStage, stage.id);
           return (
