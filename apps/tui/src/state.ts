@@ -123,5 +123,15 @@ export function reduceTuiState(state: TuiState, action: TuiAction): TuiState {
   if (action.type === "query.failed")
     return { ...state, queryErrors: { ...state.queryErrors, [action.key]: action.error } };
   if (action.type === "subscription.tab.selected") return { ...state, subscriptionTab: action.tab };
-  return { ...state, selection: { ...state.selection, ...action.selection } };
+  const selection = { ...state.selection, ...action.selection };
+  if (
+    action.selection.workId !== undefined &&
+    action.selection.workId !== state.selection.workId &&
+    action.selection.roomId === undefined
+  ) {
+    const roomId = state.snapshot?.rooms.find((room) => room.workId === action.selection.workId)?.roomId;
+    if (roomId === undefined) delete selection.roomId;
+    else selection.roomId = roomId;
+  }
+  return { ...state, selection };
 }

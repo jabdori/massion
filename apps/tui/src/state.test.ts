@@ -137,6 +137,40 @@ describe("TUI wire와 상태", () => {
     expect(refreshed.selection.workId).toBe("work-1");
   });
 
+  it("업무 선택을 바꾸면 해당 업무의 협업방도 함께 선택한다", () => {
+    const multipleWorks = decodeSnapshot({
+      ...snapshot,
+      works: [
+        ...snapshot.works,
+        {
+          workId: "work-2",
+          status: "draft",
+          revision: 1,
+          artifactIds: [],
+          taskIds: [],
+          roomIds: ["room-2"],
+        },
+      ],
+      rooms: [
+        ...snapshot.rooms,
+        {
+          workId: "work-2",
+          roomId: "room-2",
+          name: "두 번째 개발 협업",
+          kind: "work",
+          status: "open",
+          participantIds: ["representative", "user-1"],
+          lastMessageSequence: 1,
+        },
+      ],
+    });
+    let state = reduceTuiState(createTuiState(), { type: "snapshot.loaded", snapshot: multipleWorks });
+
+    state = reduceTuiState(state, { type: "selection.changed", selection: { workId: "work-2" } });
+
+    expect(state.selection).toMatchObject({ workId: "work-2", roomId: "room-2" });
+  });
+
   it("event cursor를 단조 증가시키고 순서 gap은 snapshot 재동기화를 요구한다", () => {
     const first = reduceTuiState(createTuiState(), {
       type: "event.received",
