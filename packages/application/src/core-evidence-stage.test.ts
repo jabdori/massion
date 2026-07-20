@@ -17,11 +17,11 @@ const input = {
 };
 
 describe("CoreEvidenceStage", () => {
-  it("required evidence가 없으면 차단하고 같은 Work의 fresh brief가 있으면 통과한다", async () => {
+  it("evidence가 없어도 빈 evidence로 진행하고 같은 Work의 fresh brief가 있으면 검증 후 통과한다", async () => {
     const plan = {
       content_json: JSON.stringify({ evidenceRequests: [{ key: "source", question: "근거?", required: true }] }),
     };
-    const blocked = new CoreEvidenceStage({
+    const withoutEvidence = new CoreEvidenceStage({
       works: { getActivePlan: async () => plan },
       briefs: {
         getBrief: async () => {
@@ -29,9 +29,9 @@ describe("CoreEvidenceStage", () => {
         },
       },
     } as never);
-    await expect(blocked.execute(context, input)).resolves.toMatchObject({
-      outcome: "blocked",
-      reason: "evidence-required",
+    await expect(withoutEvidence.execute(context, input)).resolves.toMatchObject({
+      outcome: "advanced",
+      data: { evidenceBriefIds: [] },
     });
     const complete = new CoreEvidenceStage({
       works: { getActivePlan: async () => plan },
