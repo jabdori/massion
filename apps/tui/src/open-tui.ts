@@ -9,6 +9,8 @@ import {
   type Renderable,
 } from "@opentui/core";
 
+import { filterPaletteItems, SURFACE_PALETTE_ITEMS, type SurfacePaletteItem } from "@massion/application";
+
 import { present, safeTerminalText } from "./presentation.js";
 import type { TuiAction, TuiState, TuiSubscriptionTab, TuiView } from "./state.js";
 import { layoutForTerminal } from "./view-model.js";
@@ -74,7 +76,14 @@ type Modal =
       readonly approvalModes: readonly ApprovalMode[];
     }
   | { readonly kind: "optimization"; readonly title: string; readonly placeholder: string }
+  | { readonly kind: "palette"; readonly title: string; readonly placeholder: string }
   | { readonly kind: "help"; readonly title: string; readonly placeholder: string };
+
+// 팔레트 항목은 공통 계약(SURFACE_PALETTE_ITEMS)이 정본입니다 (Phase 30 원칙 13).
+const TUI_PALETTE_ITEMS: readonly SurfacePaletteItem[] = SURFACE_PALETTE_ITEMS.filter((item) =>
+  item.surfaces.includes("tui"),
+);
+const PALETTE_VISIBLE_LIMIT = 8;
 
 const SUBSCRIPTION_TABS: readonly TuiSubscriptionTab[] = ["providers", "accounts", "quota", "policy"];
 
@@ -107,6 +116,8 @@ export class OpenTuiView {
   private search = "";
   private busy = false;
   private notice = "";
+  private paletteQuery = "";
+  private paletteIndex = 0;
   private readonly noColor = process.env.NO_COLOR !== undefined;
 
   public constructor(
@@ -258,10 +269,14 @@ export class OpenTuiView {
     return box;
   }
 
+  private paletteMatches(): readonly SurfacePaletteItem[] {
+    return filterPaletteItems(TUI_PALETTE_ITEMS, this.paletteQuery);
+  }
+
   private modalPanel(): BoxRenderable {
     const modal = this.modal;
     const box = new BoxRenderable(this.renderer, {
-      height: modal?.kind === "help" ? 8 : 5,
+      height: modal?.kind === "help" ? 8 : modal?.kind === "palette" ? PALETTE_VISIBLE_LIMIT + 6 : 5,
       width: "100%",
       border: true,
       borderStyle: "double",
@@ -277,7 +292,7 @@ export class OpenTuiView {
             "기본 화면: 작업 목록 + 진행 상황이 바로 보입니다.\n" +
             "Tab/Shift+Tab: 뷰 전환(작업·확인·대화·개요·협업·운영·구독)\n" +
             "j/k 또는 화살표: 이동 · Enter: 자세히 열기 · d: 자세히 토글 · Esc: 뒤로\n" +
-            "n: 새 작업 · m: 메시지 보내기 · /: 검색 · r: 새로고침\n" +
+            "n: 새 작업 · m: 메시지 보내기 · /: 검색 · r: 새로고침 · Ctrl+P: 명령 팔레트\n" +
             "확인 필요: a 승인 · x 거절 · Delete 승인 취소 · 자세히에서 c 작업 취소 · t 작업 배정\n" +
             "실행 제어(자세히): s 일시정지/재개 · z 실행 취소\n" +
             "구독: ←/→ 또는 h/l 탭 · s 공유 · u 공유 해제 · d 연결 해제\n" +
@@ -291,7 +306,7 @@ export class OpenTuiView {
     const input = new InputRenderable(this.renderer, {
       id: "modal-input",
       width: "100%",
-      value: "",
+      value: modal?.kind === "palette" ? this.paletteQuery : "",
       placeholder: modal?.placeholder ?? "입력 후 Enter",
       maxLength: 65_536,
       ...this.paint("backgroundColor", "#232634"),
@@ -303,6 +318,28 @@ export class OpenTuiView {
     });
     box.add(input);
     this.input = input;
+    if (modal?.kind === "palette") {
+      input.on(InputRenderableEvents.INPUT, () => {
+        if (this.paletteQuery === input.value) return;
+        this.paletteQuery = input.value;
+        this.paletteIndex = 0;
+        this.render();
+      });
+      const matches = this.paletteMatches().slice(0, PALETTE_VISIBLE_LIMIT);
+      const lines = matches.length
+        ? matches.map((item, index) => {
+            const marker = index === this.paletteIndex ? "›" : " ";
+            const hint = item.keyHint ? `  (${item.keyHint})` : "";
+            return `${marker} ${item.title}  ·  ${item.category}${item.risky ? " ⚠" : ""}${hint}`;
+          })
+        : ["일치하는 명령이 없습니다."];
+      box.add(
+        new TextRenderable(this.renderer, {
+          content: [...lines, "", "↑↓ 이동 · Enter 실행 · Esc 닫기"].join("\n"),
+          ...this.paint("fg", "#C6D0F5"),
+        }),
+      );
+    }
     return box;
   }
 
@@ -331,9 +368,20 @@ export class OpenTuiView {
       this.open(modal);
     };
     if (this.modal) {
+      if (this.modal.kind === "palette" && (key.name === "up" || key.name === "down")) {
+        key.preventDefault();
+        const total = Math.min(this.paletteMatches().length, PALETTE_VISIBLE_LIMIT);
+        if (total > 0) {
+          this.paletteIndex = (this.paletteIndex + (key.name === "down" ? 1 : total - 1)) % total;
+          this.render();
+        }
+        return;
+      }
       if (key.name === "escape" || (key.ctrl && key.name === "c")) {
         this.modal = undefined;
         this.input = undefined;
+        this.paletteQuery = "";
+        this.paletteIndex = 0;
         this.render();
       }
       return;
@@ -350,7 +398,11 @@ export class OpenTuiView {
       this.render();
       return;
     }
-    if (key.name === "r")
+    if (key.ctrl && key.name === "p") {
+      this.paletteQuery = "";
+      this.paletteIndex = 0;
+      open({ kind: "palette", title: "명령 팔레트", placeholder: "명령 검색…" });
+    } else if (key.name === "r")
       await this.runAction(async () => {
         await this.actions.refresh();
       });
@@ -442,9 +494,62 @@ export class OpenTuiView {
     this.render();
   }
 
+  // 팔레트 항목 실행: 항목 ID는 공통 계약이 소유하고 여기서 화면 동작으로 변환합니다.
+  private runPaletteItem(item: SurfacePaletteItem): void {
+    if (item.id.startsWith("view.")) {
+      const view = item.id.slice("view.".length) as TuiView;
+      this.actions.dispatch({ type: "view.selected", view });
+      void this.actions.loadView(view);
+      return;
+    }
+    if (item.id === "work.start")
+      this.open({ kind: "start-work", title: "새 작업 시작", placeholder: "작업 내용을 입력해 주세요" });
+    else if (item.id === "message.post")
+      this.open({ kind: "message", title: "메시지 보내기", placeholder: "메시지를 입력해 주세요" });
+    else if (item.id === "refresh")
+      void this.runAction(async () => {
+        await this.actions.refresh();
+      });
+    else if (item.id === "search")
+      this.open({ kind: "search", title: "현재 화면 검색", placeholder: "검색어를 입력해 주세요" });
+    else if (item.id === "work.cancel")
+      this.open({ kind: "cancel-work", title: "업무 취소", placeholder: "취소 이유를 입력해 주세요" });
+    else if (item.id === "workspace.scope.toggle") {
+      if (this.actions.state().workspace) {
+        this.actions.dispatch({ type: "workspace.scope.toggled" });
+        this.notice = this.actions.state().workspaceScope
+          ? "현재 워크스페이스 작업만 표시합니다."
+          : "조직의 전체 작업을 표시합니다.";
+      } else this.notice = "연결된 워크스페이스가 없습니다.";
+      this.render();
+    } else if (item.id === "inspector.toggle") {
+      this.actions.dispatch({ type: "inspector.toggled" });
+      this.render();
+    } else if (item.id === "help") this.open({ kind: "help", title: "키보드 도움말", placeholder: "" });
+    else {
+      this.notice = `아직 팔레트에서 실행할 수 없는 명령입니다: ${item.id}`;
+      this.render();
+    }
+  }
+
   private async submit(value: string): Promise<void> {
     const modal = this.modal;
     if (!modal) return;
+    if (modal.kind === "palette") {
+      const matches = this.paletteMatches().slice(0, PALETTE_VISIBLE_LIMIT);
+      const selected = matches[this.paletteIndex] ?? matches[0];
+      this.modal = undefined;
+      this.input = undefined;
+      this.paletteQuery = "";
+      this.paletteIndex = 0;
+      if (!selected) {
+        this.notice = "일치하는 명령이 없습니다.";
+        this.render();
+        return;
+      }
+      this.runPaletteItem(selected);
+      return;
+    }
     const content = value.trim();
     if (!content && modal.kind !== "search") {
       this.notice = modal.kind === "start-work" ? "업무 내용을 입력해 주세요." : "내용 또는 이유를 입력해야 합니다.";

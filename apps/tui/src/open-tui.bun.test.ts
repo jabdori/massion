@@ -482,3 +482,67 @@ describe("OpenTUI 실제 renderer", () => {
     expect(calls).toEqual([{ operation: "optimization.batch.activate", payload: { batchId: "batch-uat" } }]);
   });
 });
+
+describe("명령 팔레트", () => {
+  test("Ctrl+P로 팔레트를 열고 질의로 거른 항목을 Enter로 실행한다", async () => {
+    setup = await createTestRenderer({ width: 120, height: 40 });
+    let state = reduceTuiState(createTuiState(), {
+      type: "snapshot.loaded",
+      snapshot: decodeSnapshot(testSnapshot),
+    });
+    const loaded: string[] = [];
+    const view = new OpenTuiView(setup.renderer, {
+      state: () => state,
+      dispatch: (action) => {
+        state = reduceTuiState(state, action);
+      },
+      refresh: () => Promise.resolve(),
+      startWork: () => Promise.resolve(),
+      postMessage: () => Promise.resolve(),
+      vote: () => Promise.resolve(),
+      cancelApproval: () => Promise.resolve(),
+      cancelWork: () => Promise.resolve(),
+      assignTask: () => Promise.resolve(),
+      controlExecution: () => Promise.resolve(),
+      shareSubscriptionAccount: () => Promise.resolve(),
+      unshareSubscriptionAccount: () => Promise.resolve(),
+      disconnectSubscriptionAccount: () => Promise.resolve(),
+      loadView: (selected) => {
+        loaded.push(selected);
+        return Promise.resolve();
+      },
+      destroy: () => undefined,
+    });
+    view.render();
+
+    setup.renderer.keyInput.emit(
+      "keypress",
+      new KeyEvent({
+        name: "p",
+        sequence: "\u0010",
+        raw: "\u0010",
+        number: false,
+        source: "raw",
+        ctrl: true,
+        shift: false,
+        meta: false,
+        option: false,
+        eventType: "press",
+        repeated: false,
+      }),
+    );
+    await setup.renderOnce();
+    const opened = setup.captureCharFrame();
+    expect(opened).toContain("명령 팔레트");
+    expect(opened).toContain("작업 화면 열기");
+
+    for (const character of "overview") emitKey(character);
+    await setup.renderOnce();
+    expect(setup.captureCharFrame()).toContain("개요 화면 열기");
+
+    emitKey("return");
+    await setup.renderOnce();
+    expect(state.view).toBe("overview");
+    expect(loaded).toEqual(["overview"]);
+  });
+});
