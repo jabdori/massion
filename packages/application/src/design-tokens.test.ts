@@ -1,13 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  AGENT_ROLES,
   DESIGN_TOKENS,
   USER_STAGES,
-  WORK_STATUS_TOKENS,
   agentRoleToken,
   userStageForInternal,
-  userStageIndex,
   userStageProgress,
   workStatusToken,
 } from "./design-tokens.js";

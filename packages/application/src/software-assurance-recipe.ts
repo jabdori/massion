@@ -72,7 +72,7 @@ function assuranceCommand(value: unknown): AssuranceCommand | undefined {
   }
   const result = {
     executable: candidate.executable,
-    args: [...candidate.args],
+    args: candidate.args.map((a) => String(a)),
     cwd: candidate.cwd,
     timeoutMs: candidate.timeoutMs,
     maxOutputBytes: candidate.maxOutputBytes,
@@ -113,7 +113,7 @@ function codeChangeSource(
   } catch {
     return undefined;
   }
-  if (manifest.schemaVersion !== "massion.code-change-manifest.v1") return undefined;
+  if ((manifest.schemaVersion as string) !== "massion.code-change-manifest.v1") return undefined;
   const recipe = assuranceRecipe(manifest.assuranceRecipe);
   return recipe ? { artifactVersionId: version.artifact_version_id, recipe } : undefined;
 }
@@ -159,6 +159,7 @@ function commandBinding(
  * manifest에 없는 값과 patch 본문·환경 변수는 사용하지 않습니다.
  */
 export class CodeChangeAssuranceRecipeResolver implements SoftwareAssuranceRecipeResolver {
+  // eslint-disable-next-line @typescript-eslint/require-await -- 인터페이스 계약으로 Promise 반환 필요, 본문은 동기적
   public async resolve(
     _context: Parameters<SoftwareAssuranceRecipeResolver["resolve"]>[0],
     input: Parameters<SoftwareAssuranceRecipeResolver["resolve"]>[1],

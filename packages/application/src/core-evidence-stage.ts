@@ -16,10 +16,6 @@ export class CoreEvidenceStage implements CoreWorkStageExecutor {
     if (!input.workId) throw new Error("Evidence stage에 Work ID가 없습니다");
     const plan = await this.dependencies.works.getActivePlan(context, input.workId);
     if (!plan) return { outcome: "blocked", reason: "strategy-plan-missing" };
-    const content = JSON.parse(plan.content_json) as {
-      evidenceRequests?: readonly { readonly key?: unknown; readonly required?: unknown }[];
-    };
-    const required = (content.evidenceRequests ?? []).filter((request) => request.required === true).length;
     const request =
       input.request && typeof input.request === "object" ? (input.request as { evidenceBriefIds?: unknown }) : {};
     const ids =

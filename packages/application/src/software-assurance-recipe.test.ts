@@ -150,10 +150,11 @@ describe("Software assurance recipe resolver", () => {
         timeoutMs: 60_000,
         maxOutputBytes: 1_000_000,
       },
-      validationCommands: [],
-    });
-    changed.artifactVersions[0]!.checksum = "0".repeat(64);
-    await expect(
+    validationCommands: [],
+  });
+    const version0 = changed.artifactVersions[0];
+    if (version0) version0.checksum = "0".repeat(64);
+  await expect(
       resolver.resolve(context, { workId: "work-1", planContentJson: plan, recovery: changed as never }),
     ).resolves.toBeUndefined();
   });

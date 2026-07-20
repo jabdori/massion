@@ -431,8 +431,8 @@ export class LocalDaemonManager {
           throw new Error("local SurrealDB data directory는 owner-only여야 합니다");
       },
       readState: async () => await readSurrealPidRecord(this.#paths.surrealPidFile),
-      writeState: async (state) => await writeSurrealPidRecord(this.#paths.surrealPidFile, state),
-      removeState: async () => await rm(this.#paths.surrealPidFile, { force: true }),
+      writeState: async (state) => { await writeSurrealPidRecord(this.#paths.surrealPidFile, state); },
+      removeState: async () => { await rm(this.#paths.surrealPidFile, { force: true }); },
       spawn: (command, arguments_, options) => {
         const logDescriptor = openSync(this.#paths.surrealLogFile, "a", 0o600);
         try {
@@ -456,11 +456,11 @@ export class LocalDaemonManager {
         }
       },
       provision: async (endpoint) =>
-        await provisionLocalSurrealDatabase({
+        { await provisionLocalSurrealDatabase({
           endpoint,
           credential: { user: "massion", password },
           fetcher: this.#fetcher,
-        }),
+        }); },
       signal: this.#signal,
       wait: this.#wait,
     });
