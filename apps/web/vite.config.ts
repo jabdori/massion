@@ -1,8 +1,17 @@
 import react from "@vitejs/plugin-react";
+import { resolve } from "node:path";
 import { defineConfig } from "vitest/config";
 
 export default defineConfig({
   plugins: [react()],
+  resolve: {
+    alias: {
+      // 웹은 design-tokens만 필요합니다.
+      // @massion/application의 barrel export가 서버 전용 패키지(surrealdb, tar 등)를
+      // 끌어들이는 것을 방지하기 위해 design-tokens 소스를 직접 가리킵니다.
+      "@massion/application": resolve(__dirname, "../../packages/application/src/design-tokens.ts"),
+    },
+  },
   server: {
     host: "127.0.0.1",
     port: 4173,
