@@ -50,16 +50,21 @@ describe("ApplicationProduct", () => {
     };
     const client = new ApplicationHttpClient({ baseUrl: endpoint.url, token: initialized.access.token });
     await expect(client.status()).resolves.toMatchObject({ data: { status: "ready" } });
-    await expect(
-      client.command({
-        schemaVersion: "massion.application.v1",
-        commandId: "product-run-command-0001",
-        correlationId: "product-run-correlation-0001",
-        operation: "run.start",
-        payload: { request: { text: "제품 경계 검증" } },
-      }),
-    ).resolves.toMatchObject({ outcome: "accepted", data: { status: "ready" } });
+    const started = (await client.command({
+      schemaVersion: "massion.application.v1",
+      commandId: "product-run-command-0001",
+      correlationId: "product-run-correlation-0001",
+      operation: "run.start",
+      payload: { request: { text: "제품 경계 검증" } },
+    })) as { readonly outcome: string; readonly data?: { readonly runId?: string; readonly status?: string } };
+    expect(started).toMatchObject({ outcome: "accepted", data: { status: "ready", runId: expect.any(String) } });
+    const runId = started.data?.runId;
+    if (!runId) throw new Error("run.start가 runId를 반환하지 않았습니다");
     await product.drain();
+    await expect(client.query("run.get", { runId })).resolves.toMatchObject({
+      operation: "run.get",
+      data: { runId, workId: "product-work-0001", status: "completed", stage: "terminal" },
+    });
     await expect(product.runs.getByCommand(initialized.context, "product-run-command-0001")).resolves.toMatchObject({
       status: "completed",
       stage: "terminal",

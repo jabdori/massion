@@ -78,6 +78,40 @@ describe("ApplicationQueryRegistry", () => {
     await expect(registry.query(context, ["work:read"], "work.list", { injected: true })).rejects.toThrow("알 수 없는");
   });
 
+  it("진행 중인 Application run은 요청 원문 없이 현재 Work 연결만 공개한다", async () => {
+    const registry = new ApplicationQueryRegistry();
+    registerApplicationQueries(registry, {
+      readModel,
+      runs: {
+        get: async () => ({
+          runId: "query-run-0001",
+          organizationId: context.organizationId,
+          commandId: "query-run-command-0001",
+          correlationId: "query-run-correlation-0001",
+          request: { text: "공개하면 안 되는 요청 원문" },
+          workId: "query-work",
+          stage: "delivery",
+          status: "running",
+          leaseGeneration: 3,
+        }),
+      },
+    } as never);
+
+    const result = await registry.query(context, ["work:read"], "run.get", { runId: "query-run-0001" });
+
+    expect(result).toMatchObject({
+      operation: "run.get",
+      data: {
+        runId: "query-run-0001",
+        workId: "query-work",
+        stage: "delivery",
+        status: "running",
+        leaseGeneration: 3,
+      },
+    });
+    expect(JSON.stringify(result)).not.toContain("공개하면 안 되는 요청 원문");
+  });
+
   it("감사 사건 cursor가 보존 범위 밖이면 snapshot 재동기화가 가능한 공개 오류로 변환한다", async () => {
     const registry = new ApplicationQueryRegistry();
     registerApplicationQueries(registry, {
