@@ -1655,6 +1655,75 @@ button:disabled {
 }
 
 
+
+
+/* 인라인 메시지 컴포저 */
+.composer-inline {
+  margin-top: 8px;
+}
+
+.composer-inline textarea {
+  width: 100%;
+  padding: 12px;
+  font-size: 15px;
+  line-height: 1.5;
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: 8px;
+  background: var(--surface, #fff);
+  color: var(--text, #1f2937);
+  resize: vertical;
+}
+
+.composer-inline textarea:focus {
+  outline: none;
+  border-color: var(--accent, #5B5FEF);
+  box-shadow: 0 0 0 3px rgba(91, 95, 239, 0.12);
+}
+
+.composer-inline-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 8px;
+}
+
+.composer-inline-actions span {
+  font-size: 13px;
+  color: #6b7280;
+}
+
+/* 메시지 미리보기 목록 */
+.message-preview-list {
+  margin-top: 16px;
+}
+
+.message-preview-list .message {
+  padding: 10px 14px;
+  margin-bottom: 8px;
+  border-radius: 8px;
+  background: rgba(99, 102, 241, 0.03);
+}
+
+.message-preview-list .message header {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  font-size: 12px;
+  color: #6b7280;
+  margin-bottom: 4px;
+}
+
+.message-preview-list .message p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.message-user {
+  background: rgba(91, 95, 239, 0.06) !important;
+  border-left: 2px solid var(--accent, #5B5FEF);
+}
+
 /* 계획 미리보기 카드 */
 .plan-preview-card {
   margin-top: 16px;

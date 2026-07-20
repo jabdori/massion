@@ -34,10 +34,13 @@ export default function WorkPage() {
   const assignmentsData = useQueryData<unknown>(consoleStore, "work.assignments", payload);
   const roomsData = useQueryData<unknown>(consoleStore, "work.rooms", payload);
   const recordsData = useQueryData<unknown>(consoleStore, "work.records", payload);
+  const meData = useQueryData<unknown>(consoleStore, "identity.me");
   const [notice, setNotice] = useState<string>();
+  const [messageText, setMessageText] = useState("");
+  const [messageNotice, setMessageNotice] = useState<string>();
   const [showDetails, setShowDetails] = useState(false);
 
-  if ([workData, tasksData, assignmentsData, roomsData].some((value) => value === undefined))
+  if ([workData, tasksData, assignmentsData, roomsData, meData].some((value) => value === undefined))
     return <LoadingState label="업무 정보를 불러오고 있습니다" />;
 
   const work = object(workData);
@@ -45,6 +48,16 @@ export default function WorkPage() {
   const assignments = rows(assignmentsData);
   const rooms = rows(roomsData);
   const records = rows(recordsData);
+  const me = object(meData);
+  const firstRoomId = label(rooms[0]?.roomId, "");
+  const messagesPayload = useMemo(
+    () => ({ workId, roomId: firstRoomId }),
+    [workId, firstRoomId],
+  );
+  const messagesData = useQueryData<unknown>(consoleStore, "work.messages", messagesPayload, undefined, {
+    enabled: Boolean(firstRoomId),
+  });
+  const messages = rows(messagesData);
 
   const workStatus = label(work.status);
   const statusToken = workStatusToken(workStatus);
@@ -65,6 +78,33 @@ export default function WorkPage() {
       setNotice("업무 취소 요청을 반영했습니다.");
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "취소하지 못했습니다.");
+    }
+  }
+
+  async function sendMessage(event: { preventDefault(): void }) {
+    event.preventDefault();
+    const text = messageText.trim();
+    if (!text || !firstRoomId) return;
+    try {
+      await consoleStore.mutate({
+        schemaVersion: "massion.application.v1",
+        commandId: crypto.randomUUID(),
+        correlationId: crypto.randomUUID(),
+        operation: "collaboration.message.post",
+        payload: {
+          workId,
+          roomId: firstRoomId,
+          messageType: "question",
+          authorKind: "user",
+          authorId: label(me.userId),
+          content: text,
+        },
+      });
+      setMessageText("");
+      setMessageNotice("메시지를 보냈습니다.");
+      await consoleStore.refresh("work.messages", messagesPayload);
+    } catch (error) {
+      setMessageNotice(error instanceof Error ? error.message : "메시지를 보내지 못했습니다.");
     }
   }
 
@@ -140,6 +180,42 @@ export default function WorkPage() {
           </div>
         )}
       </section>
+
+      {/* Massion에게 메시지 보내기 */}
+      {firstRoomId ? (
+        <section className="home-section">
+          <h2 className="home-section-title">Massion에게 메시지 보내기</h2>
+          <form className="composer-inline" onSubmit={(event) => { void sendMessage(event); }}>
+            <textarea
+              value={messageText}
+              onChange={(event) => { setMessageText(event.target.value); }}
+              maxLength={16_000}
+              rows={2}
+              placeholder="작업에 대해 질문이나 추가 지시를 입력하세요…"
+              aria-label="Massion에게 보낼 메시지"
+            />
+            <div className="composer-inline-actions">
+              <span role="status" aria-live="polite">{messageNotice}</span>
+              <button className="primary-button" type="submit" disabled={!messageText.trim()}>
+                메시지 보내기
+              </button>
+            </div>
+          </form>
+          {messages.length > 0 ? (
+            <div className="message-preview-list">
+              {messages.slice(-5).map((message) => (
+                <article key={label(message.messageId)} className={`message message-${label(message.authorKind)}`}>
+                  <header>
+                    <strong>{label(message.authorId)}</strong>
+                    <time>{label(message.createdAt)}</time>
+                  </header>
+                  <p>{label(message.content)}</p>
+                </article>
+              ))}
+            </div>
+          ) : null}
+        </section>
+      ) : null}
 
       {/* 업무 취소 */}
       {!["cancelled", "completed"].includes(workStatus) ? (
