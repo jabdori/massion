@@ -491,10 +491,26 @@ export class LocalDaemonManager {
     ]);
     const existing = await readPidRecord(this.#paths.pidFile);
     if (existing) {
-      if ((await this.#owned(existing)) && (await this.#ready(existing.endpoint)))
-        return { status: "already-running", pid: existing.pid, endpoint: existing.endpoint };
-      if (this.#processExists(existing.pid)) throw new Error("기록된 PID가 다른 process이므로 덮어쓰지 않습니다");
-      await rm(this.#paths.pidFile, { force: true });
+      if (await this.#owned(existing)) {
+        // 우리 서버다. 이미 준비됐으면 재사용하고, 아직 부팅 중이면 잠시 기다린다.
+        for (let attempt = 0; attempt < 40; attempt += 1) {
+          if (await this.#ready(existing.endpoint))
+            return { status: "already-running", pid: existing.pid, endpoint: existing.endpoint };
+          if (!this.#processExists(existing.pid)) break;
+          await this.#wait(250);
+        }
+        // 살아있지만 끝내 준비되지 못했다(예: SurrealDB 사이드카 유실). 정리하고 새로 띄워 self-heal한다.
+        if (this.#processExists(existing.pid)) {
+          this.#signal(existing.pid, "SIGTERM");
+          for (let attempt = 0; attempt < 120 && this.#processExists(existing.pid); attempt += 1)
+            await this.#wait(250);
+        }
+        await rm(this.#paths.pidFile, { force: true });
+      } else if (this.#processExists(existing.pid)) {
+        throw new Error("기록된 PID가 Massion server가 아니므로 덮어쓰지 않습니다");
+      } else {
+        await rm(this.#paths.pidFile, { force: true });
+      }
     }
     const serverScript = this.#serverScript();
     await access(serverScript, constants.R_OK);
