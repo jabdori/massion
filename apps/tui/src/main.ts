@@ -241,12 +241,6 @@ export async function runTui(
     const getState = (): TuiState => state;
     const controller = new TuiController(client, dispatch, getState);
     const commands = new TuiCommands(client, () => controller.identity.userId);
-    await attachWorkspace(commands, dispatch, arguments_.workspacePath ?? process.cwd());
-    try {
-      dispatch({ type: "query.loaded", key: "autonomy", value: await controller.query("governance.autonomy", {}) });
-    } catch {
-      // 자율성 조회 실패는 표시 생략으로 처리합니다.
-    }
     const refresh = async (): Promise<void> => {
       await controller.refresh();
     };
@@ -344,6 +338,14 @@ export async function runTui(
     });
     view.render();
     await view.ready;
+    // 워크스페이스 attach·자율성 조회는 view가 mount·ready된 뒤에 dispatch합니다.
+    // (view 생성 전 dispatch는 렌더러/반응계가 아직 없어 첫 화면이 갇힙니다.)
+    await attachWorkspace(commands, dispatch, arguments_.workspacePath ?? process.cwd());
+    try {
+      dispatch({ type: "query.loaded", key: "autonomy", value: await controller.query("governance.autonomy", {}) });
+    } catch {
+      // 자율성 조회 실패는 표시 생략으로 처리합니다.
+    }
     // 휘발성 실행 델타 구독: 끊기면 1초 후 재연결하고, 복구 정본은 work.timeline 재조회가 담당합니다.
     const aborted = (): boolean => abort.signal.aborted;
     const streamDeltas = async (): Promise<void> => {

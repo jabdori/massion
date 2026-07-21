@@ -305,7 +305,8 @@ if [ "$#" -eq 0 ] && [ -t 0 ] && [ -t 1 ]; then
   if [ ! -e "$config_path" ] || ! node "$release_dir/runtime/node_modules/@massion/cli/dist/main.js" status --json >/dev/null 2>&1; then
     node "$release_dir/runtime/node_modules/@massion/cli/dist/main.js" init
   fi
-  exec bun "$release_dir/runtime/node_modules/@massion/tui/dist/main.js"
+  # @opentui/solid reactivity 셋업을 번들보다 먼저 로드해야 TUI가 첫 화면에 갇히지 않습니다.
+  exec bun --preload "$release_dir/runtime/node_modules/@massion/tui/dist/preload.mjs" "$release_dir/runtime/node_modules/@massion/tui/dist/main.js"
 fi
 exec node "$release_dir/runtime/node_modules/@massion/cli/dist/main.js" "$@"
 EOF
