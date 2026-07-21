@@ -4,7 +4,7 @@ import { createSignal } from "solid-js";
 import { filterPaletteItems, SURFACE_PALETTE_ITEMS, type SurfacePaletteItem } from "@massion/application";
 
 import { mountSolidView, type SolidModalModel, type SolidViewModel } from "./solid-view.jsx";
-import { present, safeTerminalText } from "./presentation.js";
+import { approvalPreviewLines, present, safeTerminalText } from "./presentation.js";
 import type { TuiAction, TuiState, TuiSubscriptionTab, TuiView } from "./state.js";
 import { layoutForTerminal } from "./view-model.js";
 
@@ -223,6 +223,20 @@ export class OpenTuiView {
         height: PALETTE_VISIBLE_LIMIT + 6,
         paletteText: [...lines, "", "↑↓ 이동 · Enter 실행 · Esc 닫기"].join("\n"),
       };
+    }
+    if (modal.kind === "vote" || modal.kind === "cancel-approval") {
+      const state = this.actions.state();
+      const approval = state.snapshot?.pendingApprovals.find((item) => item.approvalId === state.selection.approvalId);
+      if (approval) {
+        const lines = approvalPreviewLines(approval.displayPreview).map((line) => safeTerminalText(line, 200));
+        return {
+          key: `${modal.kind}:${approval.approvalId}`,
+          title: modal.title,
+          placeholder: modal.placeholder,
+          height: Math.min(5 + lines.length, 14),
+          contextText: lines.join("\n"),
+        };
+      }
     }
     return { key: `${modal.kind}:${modal.title}`, title: modal.title, placeholder: modal.placeholder, height: 5 };
   }

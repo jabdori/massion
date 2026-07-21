@@ -557,3 +557,50 @@ describe("명령 팔레트", () => {
     expect(loaded).toEqual(["overview"]);
   });
 });
+
+describe("승인 미리보기 오버레이", () => {
+  test("투표 modal에 선택한 승인의 실행 내용을 함께 표시한다", async () => {
+    setup = await createTestRenderer({ width: 120, height: 40 });
+    let state = reduceTuiState(createTuiState(), {
+      type: "snapshot.loaded",
+      snapshot: decodeSnapshot(testSnapshot),
+    });
+    state = reduceTuiState(state, { type: "view.selected", view: "approvals" });
+    const votes: { vote: string; reason: string }[] = [];
+    const view = new OpenTuiView(setup.renderer, {
+      state: () => state,
+      dispatch: (action) => {
+        state = reduceTuiState(state, action);
+      },
+      refresh: () => Promise.resolve(),
+      startWork: () => Promise.resolve(),
+      postMessage: () => Promise.resolve(),
+      vote: (vote, reason) => (votes.push({ vote, reason }), Promise.resolve()),
+      cancelApproval: () => Promise.resolve(),
+      cancelWork: () => Promise.resolve(),
+      assignTask: () => Promise.resolve(),
+      controlExecution: () => Promise.resolve(),
+      shareSubscriptionAccount: () => Promise.resolve(),
+      unshareSubscriptionAccount: () => Promise.resolve(),
+      disconnectSubscriptionAccount: () => Promise.resolve(),
+      loadView: () => Promise.resolve(),
+      destroy: () => undefined,
+    });
+    view.render();
+    await view.ready;
+
+    emitKey("a");
+    await setup.renderOnce();
+    const frame = setup.captureCharFrame();
+    expect(frame).toContain("승인 이유");
+    expect(frame).toContain("승인 내용");
+    expect(frame).toContain("명령 실행");
+    expect(frame).toContain("git");
+
+    const input = setup.renderer.root.findDescendantById("modal-input") as InputRenderable;
+    input.value = "안전한 조회 명령";
+    input.submit();
+    await Bun.sleep(0);
+    expect(votes).toEqual([{ vote: "approve", reason: "안전한 조회 명령" }]);
+  });
+});

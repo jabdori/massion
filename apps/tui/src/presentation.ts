@@ -43,7 +43,7 @@ export function safeTerminalText(value: unknown, maximum = 8_192): string {
     .slice(0, maximum);
 }
 
-function approvalPreviewLines(
+export function approvalPreviewLines(
   preview: CollaborationGraphSnapshot["pendingApprovals"][number]["displayPreview"],
 ): readonly string[] {
   if (!preview) return ["승인할 실제 실행 내용이 제공되지 않았습니다."];

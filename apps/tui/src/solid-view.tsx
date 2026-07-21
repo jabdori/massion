@@ -22,6 +22,7 @@ export interface SolidModalModel {
   readonly height: number;
   readonly helpText?: string;
   readonly paletteText?: string;
+  readonly contextText?: string;
 }
 
 export interface SolidComposerModel {
@@ -73,6 +74,9 @@ export function mountSolidView(
           when={modal()?.helpText === undefined}
           fallback={<text {...paint("fg", "#C6D0F5")}>{modal()?.helpText ?? ""}</text>}
         >
+          <Show when={modal()?.contextText !== undefined}>
+            <text {...paint("fg", "#A5ADCE")}>{modal()?.contextText ?? ""}</text>
+          </Show>
           <input
             id="modal-input"
             ref={(input: InputRenderable) => {
