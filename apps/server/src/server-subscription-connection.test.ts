@@ -889,7 +889,7 @@ describe("로컬 서버 구독 계정 준비", () => {
       modelProfileId: "profile-zai-glm-52",
       routeNames: ["orchestration-balanced"],
     });
-    const verify = vi.fn().mockResolvedValue(observedZai);
+    const zai = zaiVerifier();
     const service = new ServerSubscriptionConnectionService(
       {
         provision,
@@ -923,7 +923,7 @@ describe("로컬 서버 구독 계정 준비", () => {
       undefined,
       miniMaxVerifier(),
       undefined,
-      { verify },
+      zai,
     );
 
     const result = await service.connectModel(context, {
@@ -935,7 +935,7 @@ describe("로컬 서버 구독 계정 준비", () => {
       secret,
     });
 
-    expect(verify).toHaveBeenCalledWith({
+    expect(zai.verify).toHaveBeenCalledWith({
       endpointUrl: "https://api.z.ai/api/coding/paas/v4",
       secret,
       requiredModelId: "glm-5.2",

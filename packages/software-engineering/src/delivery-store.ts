@@ -117,22 +117,37 @@ function assertGitObjectHash(value: string, label: string): void {
   if (!/^[a-f0-9]{40,64}$/u.test(value)) throw new Error(`${label}는 Git object hash 형식이어야 합니다`);
 }
 
-function validateAssuranceCommand(command: EngineeringAssuranceRecipe["focusedCommand"]): void {
+// Assurance recipe는 신뢰 경계 밖(영속 문자열·호출자 입력)에서 들어오므로 unknown에서 구조를 좁혀 검증합니다.
+function validateAssuranceCommand(value: unknown): asserts value is EngineeringAssuranceRecipe["focusedCommand"] {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("Assurance command 형식이 잘못됐습니다");
+  }
+  const command = value as Record<string, unknown>;
+  if (typeof command.executable !== "string") throw new Error("Assurance command executable 형식이 잘못됐습니다");
   assertText(command.executable, "Assurance command executable");
-  if (command.args.length > 50) throw new Error("Assurance command argument는 50개 이하여야 합니다");
+  if (!Array.isArray(command.args) || command.args.length > 50) {
+    throw new Error("Assurance command argument는 50개 이하여야 합니다");
+  }
   for (const argument of command.args) {
-    if (!argument.trim() || argument.length > 500 || argument.includes("\0")) {
+    if (typeof argument !== "string" || !argument.trim() || argument.length > 500 || argument.includes("\0")) {
       throw new Error("Assurance command argument 형식이 잘못됐습니다");
     }
   }
+  if (typeof command.cwd !== "string") throw new Error("Assurance command cwd 형식이 잘못됐습니다");
   assertText(command.cwd, "Assurance command cwd");
   if (command.cwd.startsWith("/") || command.cwd.split(/[\\/]/u).includes("..")) {
     throw new Error("Assurance command cwd는 상대 경로여야 합니다");
   }
-  if (!Number.isSafeInteger(command.timeoutMs) || command.timeoutMs < 1_000 || command.timeoutMs > 3_600_000) {
+  if (
+    typeof command.timeoutMs !== "number" ||
+    !Number.isSafeInteger(command.timeoutMs) ||
+    command.timeoutMs < 1_000 ||
+    command.timeoutMs > 3_600_000
+  ) {
     throw new Error("Assurance command timeout은 1초 이상 1시간 이하여야 합니다");
   }
   if (
+    typeof command.maxOutputBytes !== "number" ||
     !Number.isSafeInteger(command.maxOutputBytes) ||
     command.maxOutputBytes < 1 ||
     command.maxOutputBytes > 10_000_000
@@ -141,12 +156,18 @@ function validateAssuranceCommand(command: EngineeringAssuranceRecipe["focusedCo
   }
 }
 
-function validateAssuranceRecipe(recipe: EngineeringAssuranceRecipe): void {
+function validateAssuranceRecipe(value: unknown): asserts value is EngineeringAssuranceRecipe {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("Software assurance recipe 형식이 잘못됐습니다");
+  }
+  const recipe = value as Record<string, unknown>;
   if (recipe.schemaVersion !== "massion.software-assurance-recipe.v1") {
     throw new Error("Software assurance recipe 버전이 올바르지 않습니다");
   }
   validateAssuranceCommand(recipe.focusedCommand);
-  if (recipe.validationCommands.length > 20) throw new Error("Assurance validation command는 20개 이하여야 합니다");
+  if (!Array.isArray(recipe.validationCommands) || recipe.validationCommands.length > 20) {
+    throw new Error("Assurance validation command는 20개 이하여야 합니다");
+  }
   for (const command of recipe.validationCommands) validateAssuranceCommand(command);
   if (redactSecrets(JSON.stringify(recipe)).redactions.length > 0) {
     throw new Error("Assurance recipe에 credential을 저장할 수 없습니다");
@@ -154,7 +175,7 @@ function validateAssuranceRecipe(recipe: EngineeringAssuranceRecipe): void {
 }
 
 function decodeAssuranceRecipe(value: string): EngineeringAssuranceRecipe {
-  const parsed = JSON.parse(value) as EngineeringAssuranceRecipe;
+  const parsed: unknown = JSON.parse(value);
   validateAssuranceRecipe(parsed);
   return parsed;
 }

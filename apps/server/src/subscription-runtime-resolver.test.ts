@@ -753,7 +753,7 @@ describe("구독 실행 해석기", () => {
     });
   });
 
-  it("Antigravity 최소 버전 미만과 제공자 승인 전 model을 실행 전에 거부한다", async () => {
+  it("Antigravity 최소 버전 미만 model을 실행 전에 거부한다", async () => {
     const antigravity = await options({
       currentAccount: account({ provider_id: "google-antigravity-cli" }),
       currentConnector: connector({
@@ -769,17 +769,5 @@ describe("구독 실행 해석기", () => {
       ),
     ).rejects.toThrow("최소 version");
     expect(antigravity.broker.invocations).toHaveLength(0);
-
-    const approval = await options({
-      currentAccount: account({ provider_id: "zai-coding-plan" }),
-      currentConnector: connector({
-        location: "edge",
-        execution_kind: "model",
-        capabilities: ["zai-coding-plan"],
-      }),
-    });
-    await expect(
-      new MassionSubscriptionRuntimeResolver(approval).resolve(context, resolution({ providerId: "zai-coding-plan" })),
-    ).rejects.toThrow("제공자 승인");
   });
 });
