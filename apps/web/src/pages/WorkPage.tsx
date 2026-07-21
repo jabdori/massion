@@ -15,6 +15,7 @@ import { label, list, object, rows } from "../data.js";
 import { useQueryData } from "../hooks.js";
 import { consoleStore } from "../services.js";
 import { EmptyState, LoadingState, StatusStamp } from "../components/States.js";
+import { useExecutionStream } from "../execution-stream.js";
 
 // work 객체에는 stage 필드가 없으므로 status에서 내부 단계를 유추합니다.
 function internalStageFromWorkStatus(status: string): string {
@@ -44,6 +45,8 @@ export default function WorkPage() {
   const recordsData = useQueryData<unknown>(consoleStore, "work.records", payload);
   const timelineData = useQueryData<unknown>(consoleStore, "work.timeline", payload);
   const meData = useQueryData<unknown>(consoleStore, "identity.me");
+  const snapshotData = useQueryData<unknown>(consoleStore, "organization.graph.snapshot");
+  const executionStream = useExecutionStream();
   const [notice, setNotice] = useState<string>();
   const [messageText, setMessageText] = useState("");
   const [messageNotice, setMessageNotice] = useState<string>();
@@ -67,6 +70,15 @@ export default function WorkPage() {
   const records = rows(recordsData);
   const me = object(meData);
   const messages = rows(messagesData);
+
+  const snapshotExecutions = rows(object(snapshotData).executions);
+  const liveStream =
+    executionStream &&
+    snapshotExecutions.some(
+      (item) => label(item.executionId) === executionStream.executionId && label(item.workId) === workId,
+    )
+      ? executionStream
+      : undefined;
 
   const workStatus = label(work.status);
   const statusToken = workStatusToken(workStatus);
@@ -152,77 +164,94 @@ export default function WorkPage() {
         })}
       </div>
 
-      {/* 진행 기록: work.timeline 공통 투영 (TUI와 같은 셀 계약) */}
-      <section className="home-section" style={{ marginTop: "32px" }}>
-        <h2 className="home-section-title">진행 기록</h2>
-        {rows(timelineData).length === 0 ? (
-          <p className="quiet-line">아직 진행 기록이 없습니다.</p>
-        ) : (
-          <div className="message-preview-list" aria-label="업무 진행 기록">
-            {rows(timelineData)
-              .slice(-20)
-              .map((cell) => {
-                const token = workTimelineCellToken(label(cell.kind, "activity") as WorkTimelineCellKind);
-                return (
-                  <article key={label(cell.cellId)} className={`message message-${label(cell.kind)}`}>
-                    <header>
-                      <strong>
-                        {token.symbol} {token.friendlyLabel}
-                      </strong>
-                      <time>{label(cell.createdAt)}</time>
-                    </header>
-                    <p>{label(cell.detail, label(cell.title))}</p>
-                  </article>
-                );
-              })}
-          </div>
-        )}
-      </section>
+      <div className="work-split">
+        <div className="work-split-main">
+          {/* 진행 기록: work.timeline 공통 투영 (TUI와 같은 셀 계약) */}
+          <section className="home-section" style={{ marginTop: "32px" }}>
+            <h2 className="home-section-title">진행 기록</h2>
+            {rows(timelineData).length === 0 ? (
+              <p className="quiet-line">아직 진행 기록이 없습니다.</p>
+            ) : (
+              <div className="message-preview-list" aria-label="업무 진행 기록">
+                {rows(timelineData)
+                  .slice(-20)
+                  .map((cell) => {
+                    const token = workTimelineCellToken(label(cell.kind, "activity") as WorkTimelineCellKind);
+                    return (
+                      <article key={label(cell.cellId)} className={`message message-${label(cell.kind)}`}>
+                        <header>
+                          <strong>
+                            {token.symbol} {token.friendlyLabel}
+                          </strong>
+                          <time>{label(cell.createdAt)}</time>
+                        </header>
+                        <p>{label(cell.detail, label(cell.title))}</p>
+                      </article>
+                    );
+                  })}
+              </div>
+            )}
+          </section>
 
-      {/* 최근 소식: 작업 목록을 친화적 카드로 */}
-      <section className="home-section" style={{ marginTop: "32px" }}>
-        <h2 className="home-section-title">최근 소식</h2>
-        {tasks.length === 0 ? (
-          <p className="quiet-line">아직 진행된 작업이 없습니다. 계획이 완료되면 작업이 생성됩니다.</p>
-        ) : (
-          <div className="card-list">
-            {tasks.slice(0, 6).map((task) => {
-              const assignment = assignments.find((item) => item.taskId === task.taskId);
-              return (
-                <article className="work-card" key={label(task.taskId)}>
-                  <div className="work-card-header">
-                    <StatusStamp value={label(task.status)} />
-                  </div>
-                  <p className="work-card-title">{label(task.title)}</p>
-                  {assignment ? (
-                    <span className="work-card-label">@{label(assignment.agentHandle)}</span>
-                  ) : (
-                    <span className="work-card-label">담당자 대기 중</span>
-                  )}
-                </article>
-              );
-            })}
-          </div>
-        )}
-      </section>
-
-      {/* 결과물 */}
-      <section className="home-section">
-        <h2 className="home-section-title">결과물</h2>
-        {records.length === 0 ? (
-          <p className="quiet-line">아직 확정된 결과물이 없습니다.</p>
-        ) : (
-          <div className="card-list">
-            {records.map((record) => (
-              <article className="recent-result" key={label(record.recordId)}>
-                <span className="recent-result-symbol">✓</span>
-                <span className="recent-result-title">{label(record.summary)}</span>
-                <span className="recent-result-meta">V{label(record.version)}</span>
+          {/* 응답 중 셀: 휘발성 실행 델타 (확정 내용은 진행 기록이 대체) */}
+          {liveStream ? (
+            <section className="home-section" aria-live="polite">
+              <article className="message message-agent-message">
+                <header>
+                  <strong>● {liveStream.agentHandle} 응답 중… ▌</strong>
+                </header>
+                <p style={{ whiteSpace: "pre-wrap" }}>{liveStream.text.slice(-1_500)}</p>
               </article>
-            ))}
-          </div>
-        )}
-      </section>
+            </section>
+          ) : null}
+        </div>
+        <aside className="work-split-side">
+          {/* 최근 소식: 작업 목록을 친화적 카드로 */}
+          <section className="home-section" style={{ marginTop: "32px" }}>
+            <h2 className="home-section-title">최근 소식</h2>
+            {tasks.length === 0 ? (
+              <p className="quiet-line">아직 진행된 작업이 없습니다. 계획이 완료되면 작업이 생성됩니다.</p>
+            ) : (
+              <div className="card-list">
+                {tasks.slice(0, 6).map((task) => {
+                  const assignment = assignments.find((item) => item.taskId === task.taskId);
+                  return (
+                    <article className="work-card" key={label(task.taskId)}>
+                      <div className="work-card-header">
+                        <StatusStamp value={label(task.status)} />
+                      </div>
+                      <p className="work-card-title">{label(task.title)}</p>
+                      {assignment ? (
+                        <span className="work-card-label">@{label(assignment.agentHandle)}</span>
+                      ) : (
+                        <span className="work-card-label">담당자 대기 중</span>
+                      )}
+                    </article>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+
+          {/* 결과물 */}
+          <section className="home-section">
+            <h2 className="home-section-title">결과물</h2>
+            {records.length === 0 ? (
+              <p className="quiet-line">아직 확정된 결과물이 없습니다.</p>
+            ) : (
+              <div className="card-list">
+                {records.map((record) => (
+                  <article className="recent-result" key={label(record.recordId)}>
+                    <span className="recent-result-symbol">✓</span>
+                    <span className="recent-result-title">{label(record.summary)}</span>
+                    <span className="recent-result-meta">V{label(record.version)}</span>
+                  </article>
+                ))}
+              </div>
+            )}
+          </section>
+        </aside>
+      </div>
 
       {/* Massion에게 메시지 보내기 */}
       {firstRoomId ? (

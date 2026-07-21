@@ -3,24 +3,24 @@
   color: var(--paper);
   background: var(--canvas);
   font-synthesis: none;
-  --canvas: #F8F9FB;
-  --surface: #FFFFFF;
-  --surface-raised: #F0F2F5;
-  --line: #E4E7EC;
-  --line-soft: #EFF1F4;
-  --ink: #1A1D23;
-  --paper: #1A1D23;
-  --muted: #6B7280;
-  --accent: #5B5FEF;
+  --canvas: #f8f9fb;
+  --surface: #ffffff;
+  --surface-raised: #f0f2f5;
+  --line: #e4e7ec;
+  --line-soft: #eff1f4;
+  --ink: #1a1d23;
+  --paper: #1a1d23;
+  --muted: #6b7280;
+  --accent: #5b5fef;
   --accent-soft: rgba(91, 95, 239, 0.08);
-  --accent-hover: #4A4ED9;
-  --status-ready: #9CA3AF;
-  --status-running: #4F8AF7;
-  --status-approval: #F5A623;
-  --status-blocked: #F97316;
-  --status-failed: #EF4444;
-  --status-completed: #22C55E;
-  --status-cancelled: #9CA3AF;
+  --accent-hover: #4a4ed9;
+  --status-ready: #9ca3af;
+  --status-running: #4f8af7;
+  --status-approval: #f5a623;
+  --status-blocked: #f97316;
+  --status-failed: #ef4444;
+  --status-completed: #22c55e;
+  --status-cancelled: #9ca3af;
   --radius: 10px;
   --radius-sm: 6px;
   --mono: "JetBrains Mono", "IBM Plex Mono", monospace;
@@ -63,7 +63,7 @@ button {
 }
 ::selection {
   background: var(--accent);
-  color: #FFFFFF;
+  color: #ffffff;
 }
 .sr-only {
   position: absolute;
@@ -83,7 +83,7 @@ button {
   top: -80px;
   padding: 12px 18px;
   background: var(--accent);
-  color: #FFFFFF;
+  color: #ffffff;
   text-decoration: none;
   font-weight: 700;
 }
@@ -121,7 +121,7 @@ code {
   display: grid;
   grid-template-columns: 38px 1fr;
   grid-template-rows: 1fr 1fr;
-  min-height:  72px;
+  min-height: 72px;
   padding: 24px 20px;
   border-bottom: 1px solid var(--line);
   text-decoration: none;
@@ -184,11 +184,9 @@ code {
   font-weight: 600;
   line-height: 1;
   color: var(--accent-contrast, #fff);
-  background: var(--accent, #5B5FEF);
+  background: var(--accent, #5b5fef);
   border-radius: 999px;
 }
-
-
 
 /* 승인 위험도 배너 */
 .risk-banner {
@@ -212,21 +210,27 @@ code {
 
 .risk-banner.risk-low {
   background: rgba(34, 197, 94, 0.08);
-  border-left: 3px solid #22C55E;
+  border-left: 3px solid #22c55e;
 }
-.risk-banner.risk-low strong { color: #16A34A; }
+.risk-banner.risk-low strong {
+  color: #16a34a;
+}
 
 .risk-banner.risk-medium {
   background: rgba(245, 166, 35, 0.08);
-  border-left: 3px solid #F5A623;
+  border-left: 3px solid #f5a623;
 }
-.risk-banner.risk-medium strong { color: #D97706; }
+.risk-banner.risk-medium strong {
+  color: #d97706;
+}
 
 .risk-banner.risk-high {
   background: rgba(239, 68, 68, 0.08);
-  border-left: 3px solid #EF4444;
+  border-left: 3px solid #ef4444;
 }
-.risk-banner.risk-high strong { color: #DC2626; }
+.risk-banner.risk-high strong {
+  color: #dc2626;
+}
 
 /* 친화적 승인 카드 */
 .approval-card-detailed {
@@ -243,7 +247,7 @@ code {
   gap: 8px;
   margin-bottom: 12px;
   font-size: 14px;
-  color: var(--accent, #F5A623);
+  color: var(--accent, #f5a623);
   font-weight: 600;
 }
 
@@ -268,7 +272,11 @@ code {
   border-radius: 8px;
 }
 
-.approval-reason p { margin: 4px 0 0 0; font-size: 14px; line-height: 1.5; }
+.approval-reason p {
+  margin: 4px 0 0 0;
+  font-size: 14px;
+  line-height: 1.5;
+}
 
 .side-rail nav a:hover {
   color: var(--paper);
@@ -404,7 +412,7 @@ code {
   padding: 0 18px;
   border: 1px solid var(--accent);
   background: var(--accent);
-  color: #FFFFFF;
+  color: #ffffff;
   font-weight: 720;
   cursor: pointer;
   border-radius: var(--radius-sm);
@@ -1689,9 +1697,6 @@ button:disabled {
   font-size: 0.82rem;
 }
 
-
-
-
 /* 인라인 메시지 컴포저 */
 .composer-inline {
   margin-top: 8px;
@@ -1825,7 +1830,10 @@ button:disabled {
   color: var(--muted);
   font-size: 0.82rem;
   cursor: pointer;
-  transition: border-color 0.15s, color 0.15s, background 0.15s;
+  transition:
+    border-color 0.15s,
+    color 0.15s,
+    background 0.15s;
 }
 .example-chip:hover {
   border-color: var(--accent);
@@ -1983,12 +1991,12 @@ button:disabled {
 .stage-step.completed .stage-step-dot {
   border-color: var(--status-completed);
   background: var(--status-completed);
-  color: #FFFFFF;
+  color: #ffffff;
 }
 .stage-step.current .stage-step-dot {
   border-color: var(--accent);
   background: var(--accent);
-  color: #FFFFFF;
+  color: #ffffff;
 }
 .stage-step-label {
   margin-top: 6px;
@@ -2617,7 +2625,6 @@ button:disabled {
   word-break: break-all;
 }
 
-
 /* ── 모바일 반응형 (768px 이하) ────────────────────────────── */
 @media (max-width: 768px) {
   .app-frame {
@@ -2671,7 +2678,7 @@ button:disabled {
     right: 0;
     background: var(--surface, #fff);
     border-bottom: 1px solid var(--border, #e5e7eb);
-    box-shadow: 0 -4px 12px rgba(0,0,0,0.08);
+    box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.08);
     z-index: 100;
   }
 
@@ -2858,4 +2865,23 @@ button:disabled {
 .palette-item-meta {
   font-size: 12px;
   opacity: 0.7;
+}
+
+/* Work 상세 2단 분할: 좌측 진행 기록(대화) · 우측 작업/산출물 */
+.work-split {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  gap: 24px;
+  align-items: start;
+}
+
+.work-split-main,
+.work-split-side {
+  min-width: 0;
+}
+
+@media (max-width: 900px) {
+  .work-split {
+    grid-template-columns: 1fr;
+  }
 }
