@@ -68,6 +68,7 @@ export interface ApplicationQueryDependencies {
   readonly memberships?: Pick<OrganizationService, "listMembers">;
   readonly workspaces?: Pick<WorkspaceService, "list" | "get">;
   readonly workTimeline?: WorkTimelineSources;
+  readonly autonomy?: { get(context: TenantContext): Promise<{ readonly mode: string; readonly revision: number }> };
   readonly provenance?: {
     listByWork(
       context: TenantContext,
@@ -563,6 +564,16 @@ export function registerApplicationQueries(
           ...(limit === undefined ? {} : { limit }),
         });
       },
+    });
+  }
+  if (dependencies.autonomy) {
+    const autonomy = dependencies.autonomy;
+    registry.register({
+      operation: "governance.autonomy",
+      requiredScopes: ["governance:read"],
+      allowedRoles: EVERY_ROLE,
+      validate: (value) => object(value, []),
+      handle: async (context) => await autonomy.get(context),
     });
   }
   if (dependencies.provenance) {

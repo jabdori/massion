@@ -1,4 +1,4 @@
-import { GovernanceApprovalRequiredError } from "@massion/governance";
+import { AutonomyStore, GovernanceApprovalRequiredError } from "@massion/governance";
 import { IdentityService, OrganizationService } from "@massion/identity";
 import { OrganizationGraphService } from "@massion/organization";
 import { createDatabase } from "@massion/storage";
@@ -105,6 +105,33 @@ describe("Application domain adapters", () => {
         },
       }),
     ).resolves.toMatchObject({ outcome: "succeeded", resource: { type: "Organization", revision: 2 } });
+  });
+
+  it("governance.autonomy.set은 owner가 모드를 전환하고 revision을 보존한다", async () => {
+    await using database = await createDatabase({
+      url: "mem://",
+      namespace: "massion",
+      database: crypto.randomUUID(),
+    });
+    const identities = await IdentityService.create(database);
+    const organizations = await OrganizationService.create(database);
+    const owner = await identities.registerPersonalUser({ email: "autonomy@example.com", displayName: "Owner" });
+    const context = await organizations.resolveTenantContext(owner.user.user_id, owner.organization.organization_id);
+    const autonomy = await AutonomyStore.create(database, organizations);
+    const registry = new ApplicationCommandRegistry(await ApplicationCommandStore.create(database, organizations));
+    registerApplicationDomainCommands(registry, { autonomy });
+
+    await expect(
+      registry.dispatch(context, ["governance:write"], {
+        schemaVersion: "massion.application.v1",
+        commandId: "autonomy-set-command-0001",
+        correlationId: "autonomy-set-correlation-0001",
+        operation: "governance.autonomy.set",
+        expectedRevision: 0,
+        payload: { mode: "review" },
+      }),
+    ).resolves.toMatchObject({ outcome: "succeeded", data: { mode: "review", revision: 1 } });
+    await expect(autonomy.get(context)).resolves.toEqual({ mode: "review", revision: 1 });
   });
 
   it("workspace 명령을 command registry에 연결하고 등록·신뢰·archive를 처리한다", async () => {

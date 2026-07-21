@@ -25,6 +25,7 @@ export const WEB_PALETTE_ACTIONS: Readonly<Record<string, (navigate: PaletteNavi
     window.location.reload();
   },
   "work.cancel": (navigate) => void navigate({ to: "/works" }),
+  "autonomy.toggle": (navigate) => void navigate({ to: "/access" }),
   "workspace.trust": (navigate) => void navigate({ to: "/workspaces" }),
   "workspace.scope.toggle": (navigate) => void navigate({ to: "/works" }),
 };
@@ -67,13 +68,21 @@ export function CommandPalette() {
   }
 
   return (
-    <div className="palette-backdrop" role="presentation" onClick={() => { setOpen(false); }}>
+    <div
+      className="palette-backdrop"
+      role="presentation"
+      onClick={() => {
+        setOpen(false);
+      }}
+    >
       <div
         className="palette-panel"
         role="dialog"
         aria-modal="true"
         aria-label="명령 팔레트"
-        onClick={(event) => { event.stopPropagation(); }}
+        onClick={(event) => {
+          event.stopPropagation();
+        }}
       >
         <input
           ref={inputReference}
@@ -108,7 +117,9 @@ export function CommandPalette() {
                 <button
                   type="button"
                   className={itemIndex === index ? "palette-item is-selected" : "palette-item"}
-                  onClick={() => { run(item); }}
+                  onClick={() => {
+                    run(item);
+                  }}
                 >
                   <span>{item.title}</span>
                   <span className="palette-item-meta">

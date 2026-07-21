@@ -44,6 +44,10 @@ export class TuiCommands {
     return await this.send("workspace.trust", "workspace.trust", { workspaceId, decision: "trusted" }, revision);
   }
 
+  public async setAutonomyMode(mode: "automatic" | "review", revision: number): Promise<unknown> {
+    return await this.send("governance.autonomy.set", "governance.autonomy.set", { mode }, revision);
+  }
+
   public async postMessage(input: {
     readonly workId: string;
     readonly roomId: string;

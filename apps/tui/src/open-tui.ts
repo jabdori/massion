@@ -14,6 +14,7 @@ interface OpenTuiActions {
   readonly refresh: () => Promise<void>;
   readonly startWork: (text: string) => Promise<unknown>;
   readonly trustWorkspace?: () => Promise<unknown>;
+  readonly toggleAutonomy?: () => Promise<string>;
   readonly postMessage: (content: string) => Promise<unknown>;
   readonly vote: (vote: "approve" | "reject", reason: string) => Promise<unknown>;
   readonly cancelApproval: (reason: string) => Promise<unknown>;
@@ -455,7 +456,17 @@ export class OpenTuiView {
       this.open({ kind: "search", title: "현재 화면 검색", placeholder: "검색어를 입력해 주세요" });
     else if (item.id === "work.cancel")
       this.open({ kind: "cancel-work", title: "업무 취소", placeholder: "취소 이유를 입력해 주세요" });
-    else if (item.id === "workspace.trust") {
+    else if (item.id === "autonomy.toggle") {
+      if (this.actions.toggleAutonomy) {
+        void this.runAction(async () => {
+          const mode = await this.actions.toggleAutonomy?.();
+          this.notice =
+            mode === "review"
+              ? "검토 모드: 읽기 외 실행은 승인 후 진행합니다."
+              : "자동 모드: 정책이 요구하는 승인만 대기합니다.";
+        });
+      }
+    } else if (item.id === "workspace.trust") {
       const workspace = this.actions.state().workspace;
       if (!workspace) {
         this.notice = "연결된 워크스페이스가 없습니다.";

@@ -24,6 +24,7 @@ import {
 import type { SubscriptionAuthKind, SubscriptionProviderProtocol } from "@massion/subscriptions";
 import type { WorkService } from "@massion/work";
 import type { WorkspaceService, WorkspaceView } from "@massion/workspace";
+import type { AutonomyStore } from "@massion/governance";
 
 import type { ApplicationCommandDescriptor, ApplicationCommandRegistry } from "../command-registry.js";
 import type { ApplicationCommandResultV1, ApplicationCommandV1 } from "../contracts.js";
@@ -54,6 +55,7 @@ export interface ApplicationDomainDependencies {
     | "assignTask"
   >;
   readonly workspaces?: Pick<WorkspaceService, "register" | "decideTrust" | "archive">;
+  readonly autonomy?: Pick<AutonomyStore, "set">;
   readonly runtime?: Pick<AgentRunner, "execute" | "cancel" | "suspend" | "resume">;
   readonly approvals?: Pick<ApprovalStore, "vote" | "cancel">;
   readonly assuranceBindings?: Pick<AssuranceBindingStore, "propose" | "activate">;
@@ -528,6 +530,32 @@ function workspaceTrustDecision(value: unknown): "trusted" | "blocked" {
   const decision = string(value, "decision");
   if (decision !== "trusted" && decision !== "blocked") throw new Error("지원하지 않는 workspace 신뢰 결정입니다");
   return decision;
+}
+
+function registerAutonomy(
+  registry: ApplicationCommandRegistry,
+  autonomy: NonNullable<ApplicationDomainDependencies["autonomy"]>,
+): void {
+  register(registry, {
+    operation: "governance.autonomy.set",
+    requiredScopes: ["governance:write"],
+    allowedRoles: ["owner", "admin"],
+    recovery: "replay-domain",
+    validate: (value) => payload(value, ["mode"], ["mode"]),
+    async handle(context, command, value) {
+      try {
+        const mode = string(value.mode, "mode");
+        if (mode !== "automatic" && mode !== "review") throw new Error("지원하지 않는 자율성 모드입니다");
+        const state = await autonomy.set(context, { mode, expectedRevision: expectedRevision(command) });
+        return result(command, {
+          resource: { type: "GovernanceAutonomy", id: context.organizationId, revision: state.revision },
+          data: { mode: state.mode, revision: state.revision },
+        });
+      } catch (error) {
+        return domainError(error, command.correlationId);
+      }
+    },
+  });
 }
 
 function registerWorkspace(
@@ -2393,6 +2421,7 @@ export function registerApplicationDomainCommands(
 ): void {
   if (dependencies.works) registerWork(registry, dependencies.works);
   if (dependencies.workspaces) registerWorkspace(registry, dependencies.workspaces);
+  if (dependencies.autonomy) registerAutonomy(registry, dependencies.autonomy);
   if (dependencies.runtime) registerRuntime(registry, dependencies.runtime);
   if (dependencies.approvals) registerApprovals(registry, dependencies.approvals, dependencies.runtime);
   if (dependencies.assuranceBindings) registerAssuranceBindings(registry, dependencies.assuranceBindings);

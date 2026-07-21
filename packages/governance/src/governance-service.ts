@@ -12,6 +12,7 @@ import type {
   PolicyRequest,
 } from "./contracts.js";
 import { PolicyStore } from "./policy-store.js";
+import { AutonomyStore } from "./autonomy.js";
 import {
   GOVERNANCE_DECISION_CONTEXT_MIGRATION,
   GOVERNANCE_DECISION_MIGRATION,
@@ -64,6 +65,23 @@ function automationMode(request: PolicyRequest): GrowthAutomationMode | undefine
   return mode === "review" || mode === "auto" ? mode : undefined;
 }
 
+function isReadAction(action: string): boolean {
+  return action === "work.read" || action.endsWith(".read");
+}
+
+function autonomyReviewRequirement(action: string): ApprovalRequirement {
+  return {
+    requirementId: "autonomy-review",
+    actions: [action],
+    environments: ["*"],
+    riskClasses: ["*"],
+    approverRoles: ["owner", "admin"],
+    quorum: 1,
+    separationOfDuty: false,
+    expiresInSeconds: 3600,
+  };
+}
+
 function invariantRequirement(action: string, mode?: GrowthAutomationMode): ApprovalRequirement | undefined {
   const governed = new Set(["policy.activate", "emergency.stop.disable", "declaration.apply"]);
   if (action === "growth.adopt" && mode !== "auto") governed.add(action);
@@ -86,6 +104,7 @@ export class GovernanceService {
     private readonly database: MassionDatabase,
     private readonly organizations: OrganizationService,
     private readonly policies: PolicyStore,
+    public readonly autonomy: AutonomyStore,
     private readonly authorizer = new CedarAuthorizer(),
   ) {}
 
@@ -99,7 +118,8 @@ export class GovernanceService {
       GOVERNANCE_DECISION_CONTEXT_MIGRATION,
       GOVERNANCE_GROWTH_AUTONOMY_MIGRATION,
     ]);
-    return new GovernanceService(database, organizations, policies);
+    const autonomy = await AutonomyStore.create(database, organizations);
+    return new GovernanceService(database, organizations, policies, autonomy);
   }
 
   public async evaluate(context: TenantContext, input: EvaluatePolicyInput): Promise<PolicyDecision> {
@@ -130,6 +150,16 @@ export class GovernanceService {
           active.requirements.find((candidate) => matches(candidate, input.request)) ??
           invariantRequirement(input.request.action, mode);
         outcome = requirement ? "require_approval" : "allow";
+        // 자율성 다이얼(조이기 전용): review 모드는 읽기 외 allow를 승인 요구로 승격합니다.
+        // deny와 정책·불변식이 요구한 승인은 이 설정으로 바뀌지 않습니다.
+        if (outcome === "allow" && !isReadAction(input.request.action)) {
+          const autonomyState = await this.autonomy.get(context);
+          if (autonomyState.mode === "review") {
+            requirement = autonomyReviewRequirement(input.request.action);
+            outcome = "require_approval";
+            reasons = [...reasons, "autonomy-review"];
+          }
+        }
       }
     }
     const decisionId = randomUUID();

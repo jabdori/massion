@@ -181,6 +181,16 @@ function provenanceLines(state: TuiState): readonly string[] {
   ];
 }
 
+// 자율성 다이얼 상태를 헤더에 표시합니다 (automatic=자동, review=검토).
+function autonomyLabel(state: TuiState): string {
+  const autonomy = state.queryResults.autonomy;
+  if (!autonomy || typeof autonomy !== "object" || Array.isArray(autonomy)) return "";
+  const mode = (autonomy as Record<string, unknown>).mode;
+  if (mode === "review") return " · 모드: 검토";
+  if (mode === "automatic") return " · 모드: 자동";
+  return "";
+}
+
 function recentNews(state: TuiState): readonly string[] {
   const events = state.events.slice(-6);
   if (!events.length) return ["아직 소식이 없어요."];
@@ -734,7 +744,7 @@ export function present(state: TuiState): {
       state.workspace
         ? ` · ${safeTerminalText(state.workspace.name, 80)}${state.workspaceScope ? "" : " (전체 보기)"}`
         : ""
-    }`,
+    }${autonomyLabel(state)}`,
     ...content,
     footer: footerForView(state.view),
   };

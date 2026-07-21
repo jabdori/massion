@@ -116,6 +116,14 @@ export const SURFACE_PALETTE_ITEMS: readonly SurfacePaletteItem[] = [
   },
   // 설정
   {
+    id: "autonomy.toggle",
+    title: "자율성 모드 전환 (자동 ↔ 검토)",
+    category: "설정",
+    keywords: ["autonomy", "자율성", "승인", "review", "automatic", "모드"],
+    risky: true,
+    surfaces: ["tui", "web"],
+  },
+  {
     id: "workspace.trust",
     title: "현재 워크스페이스 신뢰",
     category: "설정",

@@ -6,6 +6,7 @@ import { createDatabase, type MassionDatabase } from "@massion/storage";
 import type { PolicyRequest } from "./contracts.js";
 import { createDefaultPolicy } from "./defaults.js";
 import { GovernanceService } from "./governance-service.js";
+import { AutonomyStore } from "./autonomy.js";
 import { PolicyStore } from "./policy-store.js";
 import { GOVERNANCE_GROWTH_AUTONOMY_MIGRATION } from "./schema.js";
 
@@ -80,6 +81,32 @@ describe("Governance Policy Decision", () => {
       outcome: "require_approval",
       requirement: { separationOfDuty: false, quorum: 1 },
     });
+  });
+
+  it("자율성 review 모드는 allow를 승인 요구로 승격하되 읽기와 기존 판정은 바꾸지 않는다", async () => {
+    await activate("personal");
+    const autonomy = await AutonomyStore.create(database, organizations);
+
+    const before = await governance.evaluate(context, {
+      commandId: crypto.randomUUID(),
+      request: request("work.execute"),
+    });
+    expect(before.outcome).toBe("allow");
+
+    await autonomy.set(context, { mode: "review", expectedRevision: 0 });
+
+    const upgraded = await governance.evaluate(context, {
+      commandId: crypto.randomUUID(),
+      request: request("work.execute"),
+    });
+    expect(upgraded).toMatchObject({
+      outcome: "require_approval",
+      requirement: { requirementId: "autonomy-review" },
+    });
+    expect(upgraded.reasons).toContain("autonomy-review");
+
+    const read = await governance.evaluate(context, { commandId: crypto.randomUUID(), request: request("work.read") });
+    expect(read.outcome).toBe("allow");
   });
 
   it("team production 위험 작업은 분리된 지정 역할 승인을 요구한다", async () => {

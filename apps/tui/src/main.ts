@@ -242,6 +242,11 @@ export async function runTui(
     const controller = new TuiController(client, dispatch, getState);
     const commands = new TuiCommands(client, () => controller.identity.userId);
     await attachWorkspace(commands, dispatch, arguments_.workspacePath ?? process.cwd());
+    try {
+      dispatch({ type: "query.loaded", key: "autonomy", value: await controller.query("governance.autonomy", {}) });
+    } catch {
+      // 자율성 조회 실패는 표시 생략으로 처리합니다.
+    }
     const refresh = async (): Promise<void> => {
       await controller.refresh();
     };
@@ -251,6 +256,14 @@ export async function runTui(
       refresh,
       startWork: async (text) =>
         await commands.startRun(text, state.workspaceScope ? state.workspace?.workspaceId : undefined),
+      toggleAutonomy: async () => {
+        const current = state.queryResults.autonomy as { mode?: unknown; revision?: unknown } | undefined;
+        const mode = current?.mode === "review" ? "automatic" : "review";
+        const revision = Number.isSafeInteger(current?.revision) ? (current?.revision as number) : 0;
+        const result = (await commands.setAutonomyMode(mode, revision)) as { readonly data?: unknown };
+        dispatch({ type: "query.loaded", key: "autonomy", value: result.data });
+        return mode;
+      },
       trustWorkspace: async () => {
         const workspace = state.workspace;
         if (!workspace) throw new Error("연결된 워크스페이스가 없습니다");

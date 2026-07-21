@@ -9,6 +9,7 @@ export default function AccessPage() {
   const membersData = useQueryData<unknown>(consoleStore, "identity.memberships");
   const sessionsData = useQueryData<unknown>(consoleStore, "application.sessions");
   const meData = useQueryData<unknown>(consoleStore, "identity.me");
+  const autonomyData = useQueryData<unknown>(consoleStore, "governance.autonomy");
   const [notice, setNotice] = useState<string>();
   if (membersData === undefined || sessionsData === undefined || meData === undefined)
     return <LoadingState label="사용자와 세션 권한을 확인하고 있습니다" />;
@@ -55,6 +56,50 @@ export default function AccessPage() {
           </button>
         }
       />
+      {/* 자율성 다이얼: 조이기 전용 — review는 읽기 외 실행을 승인 뒤에 진행합니다. */}
+      <section className="home-section">
+        <h2 className="home-section-title">자율성 모드</h2>
+        {(() => {
+          const autonomy = object(autonomyData);
+          const mode = label(autonomy.mode, "automatic");
+          const revision = Number(autonomy.revision ?? 0);
+          return (
+            <div className="composer-inline">
+              <span>
+                현재: <strong>{mode === "review" ? "검토 (실행 전 승인)" : "자동 (정책 요구 승인만)"}</strong>
+              </span>
+              {elevated ? (
+                <button
+                  className="secondary-button"
+                  type="button"
+                  onClick={() => {
+                    void (async () => {
+                      try {
+                        await consoleStore.mutate({
+                          schemaVersion: "massion.application.v1",
+                          commandId: crypto.randomUUID(),
+                          correlationId: crypto.randomUUID(),
+                          operation: "governance.autonomy.set",
+                          expectedRevision: revision,
+                          payload: { mode: mode === "review" ? "automatic" : "review" },
+                        });
+                        await consoleStore.refresh("governance.autonomy", {});
+                        setNotice("자율성 모드를 전환했습니다.");
+                      } catch (error) {
+                        setNotice(error instanceof Error ? error.message : "자율성 모드를 전환하지 못했습니다.");
+                      }
+                    })();
+                  }}
+                >
+                  {mode === "review" ? "자동으로 전환" : "검토로 전환"}
+                </button>
+              ) : (
+                <span className="quiet-line">owner·admin만 전환할 수 있습니다.</span>
+              )}
+            </div>
+          );
+        })()}
+      </section>
       <div className="live-notice" role="status" aria-live="polite">
         {notice ?? "권한 변경은 다음 요청부터 즉시 적용됩니다."}
       </div>

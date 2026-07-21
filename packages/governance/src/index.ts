@@ -1,3 +1,4 @@
+export * from "./autonomy.js";
 export * from "./approval-store.js";
 export * from "./approval-preview.js";
 export * from "./cedar-authorizer.js";
