@@ -24,16 +24,35 @@ fn massion_candidates() -> Vec<PathBuf> {
     candidates
 }
 
-// massion --web --print-url: 로컬 서버를 보장하고 인증된 콘솔 URL(코드 포함)을 stdout에 출력합니다.
-// TUI처럼 로그인 마찰 없이 바로 인증된 상태로 콘솔을 띄우기 위한 것입니다.
-fn authenticated_console_url() -> Option<String> {
+// 데스크톱 세션: 로컬 서버를 보장하고 티켓을 서버측에서 교환한 세션 쿠키를 확보합니다.
+// WKWebView는 fetch 응답의 Set-Cookie를 신뢰성 있게 저장하지 못하므로(브라우저는 정상),
+// 코드→쿠키 교환을 브라우저가 아니라 CLI에서 수행하고 shell이 그 쿠키를 document.cookie로
+// 주입한 뒤 콘솔 root를 로드합니다. TUI처럼 로그인 마찰 없이 인증 상태로 진입하기 위함입니다.
+struct DesktopSession {
+    origin: String,
+    cookie: String,
+    max_age_seconds: u64,
+}
+
+fn desktop_session() -> Option<DesktopSession> {
     for candidate in massion_candidates() {
-        let output = Command::new(&candidate).args(["--web", "--print-url"]).output();
+        let output = Command::new(&candidate).args(["--web", "--print-session"]).output();
         if let Ok(output) = output {
             if output.status.success() {
-                let url = String::from_utf8_lossy(&output.stdout).trim().to_string();
-                if url.starts_with("http://") || url.starts_with("https://") {
-                    return Some(url);
+                let text = String::from_utf8_lossy(&output.stdout);
+                if let Ok(value) = serde_json::from_str::<serde_json::Value>(text.trim()) {
+                    let origin = value.get("origin").and_then(serde_json::Value::as_str);
+                    let cookie = value.get("cookie").and_then(serde_json::Value::as_str);
+                    let max_age = value.get("maxAgeSeconds").and_then(serde_json::Value::as_u64).unwrap_or(900);
+                    if let (Some(origin), Some(cookie)) = (origin, cookie) {
+                        if origin.starts_with("http://") || origin.starts_with("https://") {
+                            return Some(DesktopSession {
+                                origin: origin.to_string(),
+                                cookie: cookie.to_string(),
+                                max_age_seconds: max_age,
+                            });
+                        }
+                    }
                 }
             }
         }
@@ -61,13 +80,31 @@ const SHELL_ADAPTER_INIT: &str = r#"
 })();
 "#;
 
+// 세션 쿠키를 document.cookie로 주입하는 초기화 스크립트를 만듭니다.
+// 페이지의 다른 스크립트보다 먼저(document-start) 실행되므로, 앱이 recoverSession을
+// 호출할 시점엔 이미 인증 쿠키가 존재해 로그인 화면 없이 콘솔로 진입합니다.
+fn cookie_init_script(session: &DesktopSession) -> String {
+    let document_cookie = format!("{}; path=/; max-age={}; samesite=lax", session.cookie, session.max_age_seconds);
+    // 토큰 값에 특수문자가 있어도 안전하도록 JSON 문자열 리터럴로 escape합니다.
+    let literal = serde_json::to_string(&document_cookie).unwrap_or_else(|_| "\"\"".to_string());
+    format!("try {{ document.cookie = {literal}; }} catch (_) {{}}")
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let port = local_port();
-    // 인증된 URL을 우선 사용하고, CLI가 없거나 미초기화면 콘솔 루트로 폴백합니다.
-    // (폴백 시 콘솔이 로그인/초기화 안내를 표시합니다.)
-    let target = authenticated_console_url().unwrap_or_else(|| format!("http://127.0.0.1:{port}/"));
+    let session = desktop_session();
+    // 세션을 확보하면 쿠키를 주입하고 콘솔 root를 로드합니다.
+    // 확보하지 못하면(예: 서버 미기동) 콘솔 root로 폴백해 로그인/초기화 안내를 표시합니다.
+    let target = session
+        .as_ref()
+        .map(|s| format!("{}/", s.origin.trim_end_matches('/')))
+        .unwrap_or_else(|| format!("http://127.0.0.1:{port}/"));
     let console_url: tauri::Url = target.parse().expect("콘솔 URL");
+    let init_script = match &session {
+        Some(s) => format!("{}\n{SHELL_ADAPTER_INIT}", cookie_init_script(s)),
+        None => SHELL_ADAPTER_INIT.to_string(),
+    };
 
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
@@ -76,7 +113,7 @@ pub fn run() {
             tauri::WebviewWindowBuilder::new(app, "main", tauri::WebviewUrl::External(console_url.clone()))
                 .title("Massion")
                 .inner_size(1280.0, 800.0)
-                .initialization_script(SHELL_ADAPTER_INIT)
+                .initialization_script(&init_script)
                 .build()?;
             Ok(())
         })

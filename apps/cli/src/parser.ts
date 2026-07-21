@@ -323,10 +323,10 @@ function commanderError(error: CommanderError, argv: readonly string[]): Error {
   return new Error("massion 사용법이 올바르지 않습니다");
 }
 
-function webInvocation(printUrl = false): CliInvocation {
+function webInvocation(extra?: "--print-url" | "--print-session"): CliInvocation {
   return {
     command: "web",
-    arguments: printUrl ? ["--print-url"] : [],
+    arguments: extra ? [extra] : [],
     output: "human",
     detach: false,
     wait: false,
@@ -381,10 +381,12 @@ function createProgram(
 
 export function parseCliArguments(argv: readonly string[]): CliInvocation {
   if (argv[0] === "--web") {
-    if (argv.length === 1) return webInvocation(false);
+    if (argv.length === 1) return webInvocation();
     // --print-url: 브라우저를 열지 않고 인증된 콘솔 URL만 출력합니다 (데스크톱 shell·자동화용).
-    if (argv.length === 2 && argv[1] === "--print-url") return webInvocation(true);
-    throw new Error("massion --web에는 --print-url 외 추가 인자를 지정할 수 없습니다");
+    if (argv.length === 2 && argv[1] === "--print-url") return webInvocation("--print-url");
+    // --print-session: 티켓을 교환한 세션 쿠키를 JSON으로 출력합니다 (데스크톱 shell 쿠키 주입용).
+    if (argv.length === 2 && argv[1] === "--print-session") return webInvocation("--print-session");
+    throw new Error("massion --web에는 --print-url·--print-session 외 추가 인자를 지정할 수 없습니다");
   }
   let invocation: CliInvocation | undefined;
   let output = "";

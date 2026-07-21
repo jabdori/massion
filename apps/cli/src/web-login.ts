@@ -90,3 +90,38 @@ export async function openWebConsole(
   await (input.openBrowser ?? defaultOpenBrowser)(url).catch(() => undefined);
   return { url, code: ticket.code, expiresAt: ticket.expiresAt };
 }
+
+export interface DesktopSession {
+  readonly origin: string;
+  // 브라우저 쿠키 저장소에 그대로 주입할 name=value 쌍입니다.
+  readonly cookie: string;
+  readonly maxAgeSeconds: number;
+}
+
+// 데스크톱 shell 전용: 티켓을 서버측에서 즉시 교환해 세션 쿠키를 확보합니다.
+// WKWebView는 fetch 응답의 Set-Cookie를 신뢰성 있게 저장하지 못하므로, shell이 이 쿠키를
+// document.cookie로 주입한 뒤 콘솔 root를 로드하면 로그인 마찰 없이 인증 상태로 진입합니다.
+export async function issueDesktopSession(input: WebLoginInput): Promise<DesktopSession> {
+  const baseUrl = endpoint(input.endpoint);
+  const ticket = await issueWebLoginTicket(input);
+  const response = await (input.fetcher ?? fetch)(`${baseUrl}/api/v1/web/sessions`, {
+    method: "POST",
+    headers: {
+      accept: "application/json",
+      "content-type": "application/json",
+      // 서버의 Fetch Metadata/Origin CSRF 방어를 브라우저와 동일하게 충족시킵니다.
+      origin: baseUrl,
+      "sec-fetch-site": "same-origin",
+      "sec-fetch-mode": "cors",
+    },
+    body: JSON.stringify({ code: ticket.code }),
+  });
+  await response.json().catch(() => undefined);
+  if (!response.ok) throw new Error(`Web session 교환에 실패했습니다 (${String(response.status)})`);
+  const setCookie = response.headers.get("set-cookie");
+  if (!setCookie) throw new Error("Web session 쿠키를 받지 못했습니다");
+  const nameValue = /^(?:__Host-)?massion_session=[^;]+/u.exec(setCookie);
+  if (!nameValue) throw new Error("Web session 쿠키 형식이 예상과 다릅니다");
+  const maxAge = /max-age=(\d+)/iu.exec(setCookie);
+  return { origin: baseUrl, cookie: nameValue[0], maxAgeSeconds: maxAge ? Number(maxAge[1]) : 900 };
+}

@@ -24,7 +24,11 @@ describe("massion CLI parser", () => {
       command: "web",
       arguments: ["--print-url"],
     });
-    expect(() => parseCliArguments(["--web", "foo"])).toThrow(/--print-url 외/u);
+    expect(parseCliArguments(["--web", "--print-session"])).toMatchObject({
+      command: "web",
+      arguments: ["--print-session"],
+    });
+    expect(() => parseCliArguments(["--web", "foo"])).toThrow(/추가 인자/u);
   });
 
   it.each([

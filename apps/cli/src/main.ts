@@ -22,7 +22,7 @@ import { connectLocalServerSubscription, listLocalSubscriptionLoginProviders } f
 import { resolveTokenReference } from "./token.js";
 import { collectOnboardingAnswers } from "./onboarding.js";
 import { PromptCancelledError } from "./prompt-cancelled.js";
-import { openWebConsole } from "./web-login.js";
+import { issueDesktopSession, openWebConsole } from "./web-login.js";
 import { collectProviderOnboardingAnswers } from "./provider-onboarding.js";
 
 export async function resolveProviderLoginOnboarding(invocation: CliInvocation): Promise<CliInvocation> {
@@ -144,6 +144,13 @@ export async function runCli(argv = process.argv.slice(2)): Promise<number> {
       if (!profile) throw new Error("선택된 CLI profile이 없습니다. 먼저 massion init을 실행해 주세요");
       await ensureLocalEndpoint(profile.endpoint, { start: async () => await new LocalDaemonManager().start() });
       const token = await resolveProfileAccess(profile);
+      // --print-session: 티켓을 서버측에서 교환해 세션 쿠키를 JSON으로 출력합니다.
+      // 데스크톱 shell이 이 쿠키를 webview에 주입하고 콘솔 root를 로드해 로그인 마찰 없이 인증합니다.
+      if (invocation.arguments.includes("--print-session")) {
+        const session = await issueDesktopSession({ endpoint: profile.endpoint, token });
+        process.stdout.write(`${JSON.stringify(session)}\n`);
+        return 0;
+      }
       // --print-url: 브라우저를 열지 않고 인증된 URL만 출력합니다. 데스크톱 shell이 이 URL을 webview에 로드합니다.
       const printUrl = invocation.arguments.includes("--print-url");
       const web = await openWebConsole({
