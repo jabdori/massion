@@ -333,6 +333,76 @@ export class WebSessionService {
     };
   }
 
+  /**
+   * 로컬 loopback 경계에서 access 토큰으로 세션을 직접 발급합니다.
+   * 티켓(code) 간접층 없이 access 토큰 → 세션 쿠키 한 단계로 frictionless 로컬 진입을 만듭니다.
+   * 로컬 CLI(`massion --web`)와 데스크톱 shell 양쪽이 이 경로를 공유합니다.
+   * 원격/조직 서버는 HTTP 엔드포인트가 루프백 게이트로 차단하므로 이 메서드에 닿지 않습니다.
+   * exchangeLoginTicket의 세션 생성 로직과 동일하게 동작하지만, 티켓 소비 없이
+   * 검증된 access 토큰의 계보를 그대로 세션 출처로 사용합니다.
+   */
+ public async issueLocalSession(
+   access: AuthenticatedApplicationAccess,
+    input: { readonly commandId?: string; readonly absoluteTtlSeconds?: number; readonly idleTtlSeconds?: number } = {},
+ ): Promise<ExchangedWebSession> {
+    const commandId = input.commandId ?? randomUUID();
+    if (!COMMAND.test(commandId)) throw new Error("Local session commandId가 유효하지 않습니다");
+    const absoluteTtlSeconds = input.absoluteTtlSeconds ?? 28_800;
+    const idleTtlSeconds = input.idleTtlSeconds ?? 1_800;
+    if (
+      !Number.isSafeInteger(absoluteTtlSeconds) ||
+      absoluteTtlSeconds < 300 ||
+      absoluteTtlSeconds > 86_400 ||
+      !Number.isSafeInteger(idleTtlSeconds) ||
+      idleTtlSeconds < 60 ||
+      idleTtlSeconds > absoluteTtlSeconds
+    )
+      throw new Error("Web session TTL이 유효하지 않습니다");
+    // access 토큰을 원문 hash·audience·권한·폐기 상태까지 재검증합니다.
+    const verified = await this.tokens.authenticateTokenId(access.tokenId, "massion-api", []);
+    const now = this.clock.now.toISOString();
+    const expiresAt = new Date(this.clock.now.getTime() + absoluteTtlSeconds * 1_000).toISOString();
+    const idleExpiresAt = new Date(this.clock.now.getTime() + idleTtlSeconds * 1_000).toISOString();
+    const sessionId = randomUUID();
+    const sessionToken = `mws_${sessionId}.${randomBytes(32).toString("base64url")}`;
+    const csrfToken = randomBytes(32).toString("base64url");
+    await this.database.transaction(async (transaction) => {
+      await this.organizations.verifyTenantContext(verified.context, undefined, transaction);
+      const created = await first<WebSessionRecord>(
+        transaction,
+        "CREATE application_web_session CONTENT { session_id: $session_id, organization_id: $organization_id, user_id: $user_id, source_token_id: $source_token_id, audience: $audience, scopes: $scopes, key_id: $key_id, session_hash: $session_hash, csrf_hash: $csrf_hash, issued_at: <datetime>$issued_at, expires_at: <datetime>$expires_at, idle_ttl_seconds: $idle_ttl_seconds, idle_expires_at: <datetime>$idle_expires_at, last_seen_at: <datetime>$issued_at, revision: 0, revoked_at: NONE, revoked_reason: NONE } RETURN AFTER;",
+        {
+          session_id: sessionId,
+          organization_id: verified.context.organizationId,
+          user_id: verified.context.userId,
+          source_token_id: access.tokenId,
+          audience: "massion-api",
+          scopes: [...verified.scopes],
+          key_id: this.keyId,
+          session_hash: this.digest(sessionToken),
+          csrf_hash: this.digest(csrfToken),
+          issued_at: now,
+          expires_at: expiresAt,
+          idle_ttl_seconds: idleTtlSeconds,
+          idle_expires_at: idleExpiresAt,
+        },
+      );
+      if (!created) throw new Error("Web session 생성 결과가 없습니다");
+      await this.event(transaction, verified.context.organizationId, verified.context.userId, { sessionId }, "session-issued");
+    });
+    await this.observe(verified.context, { idempotencyKey: `session:${sessionId}`, action: "session-issued" });
+    return {
+      sessionId,
+      sessionToken,
+      csrfToken,
+      context: verified.context,
+      scopes: verified.scopes,
+      issuedAt: now,
+      expiresAt,
+      idleExpiresAt,
+    };
+  }
+
   public async authenticate(
     sessionToken: string,
     audience: string,

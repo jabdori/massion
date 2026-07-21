@@ -158,13 +158,12 @@ export async function runCli(argv = process.argv.slice(2)): Promise<number> {
         token,
         ...(printUrl ? { openBrowser: () => Promise.resolve() } : {}),
       });
-      if (printUrl) {
-        process.stdout.write(`${web.url}\n`);
-      } else {
-        process.stdout.write(
-          `Web Console: ${web.url}\n일회성 로그인 코드(5분): ${web.code}\n만료 시각: ${web.expiresAt}\n`,
-        );
-      }
+     if (printUrl) {
+       process.stdout.write(`${web.url}\n`);
+     } else {
+        // Frictionless: access 토큰으로 세션을 예약했으므로 브라우저가 콘솔을 열면 자동 인증됩니다.
+        process.stdout.write(`Web Console: ${web.url}\n`);
+     }
       return 0;
     }
     if (invocation.command === "version") {

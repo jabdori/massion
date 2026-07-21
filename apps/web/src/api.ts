@@ -159,6 +159,10 @@ export class WebApiClient {
     return value;
   }
 
+  // Frictionless 로컬 진입: 로컬 서버가 이미 발급한 세션을 복구합니다.
+  // massion --web 이 백그라운드에서 access 토큰으로 /api/v1/web/local-session 을 호출해
+  // 세션 쿠키를 설정한 뒤 브라우저를 열므로, 웹은 쿠키로 recoverSession 만 수행합니다.
+  // (원격/조직 서버는 local-session 엔드포인트가 차단되므로 여기로 오지 않습니다.)
   public recoverSession(): Promise<WebSessionEnvelope> {
     if (this.sessionRecovery) return this.sessionRecovery;
     const pending = this.request("/api/v1/web/session", { method: "GET" })

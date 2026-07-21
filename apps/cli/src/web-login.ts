@@ -84,11 +84,13 @@ export async function openWebConsole(
   input: OpenWebConsoleInput,
 ): Promise<{ readonly url: string; readonly code: string; readonly expiresAt: string }> {
   const baseUrl = endpoint(input.endpoint);
-  const ticket = await issueWebLoginTicket(input);
-  // 티켓 코드를 URL에 포함하여 브라우저가 자동으로 로그인할 수 있게 합니다
-  const url = `${baseUrl}/login?code=${encodeURIComponent(ticket.code)}`;
+  // Frictionless 로컬 진입: access 토큰으로 세션을 직접 발급해 서버에 보관시킵니다.
+  // 브라우저가 콘솔 root를 GET하면 서버가 이 세션 쿠키를 자동으로 내려줍니다.
+  // 일회성 코드를 URL이나 터미널에 노출하지 않습니다.
+  await issueLocalSession(input);
+  const url = `${baseUrl}/`;
   await (input.openBrowser ?? defaultOpenBrowser)(url).catch(() => undefined);
-  return { url, code: ticket.code, expiresAt: ticket.expiresAt };
+  return { url, code: "", expiresAt: new Date(Date.now() + 28_800_000).toISOString() };
 }
 
 export interface DesktopSession {
@@ -96,6 +98,28 @@ export interface DesktopSession {
   // 브라우저 쿠키 저장소에 그대로 주입할 name=value 쌍입니다.
   readonly cookie: string;
   readonly maxAgeSeconds: number;
+}
+
+// Frictionless 로컬 진입: access 토큰으로 /api/v1/web/local-session 을 호출해 세션을 발급받습니다.
+// 서버는 발급한 세션을 잠깐 보관(pendingLocalSession)하고, 브라우저가 콘솔 root를
+// GET하면 자동으로 세션 쿠키를 내려줍니다. 일회성 코드를 URL/터미널에 노출하지 않습니다.
+export async function issueLocalSession(input: WebLoginInput): Promise<void> {
+  const baseUrl = endpoint(input.endpoint);
+  const response = await (input.fetcher ?? fetch)(`${baseUrl}/api/v1/web/local-session`, {
+    method: "POST",
+    headers: {
+      accept: "application/json",
+      "content-type": "application/json",
+      authorization: `Bearer ${input.token}`,
+      // 서버의 Fetch Metadata/Origin CSRF 방어를 브라우저와 동일하게 충족시킵니다.
+      origin: baseUrl,
+      "sec-fetch-site": "same-origin",
+      "sec-fetch-mode": "cors",
+    },
+    body: JSON.stringify({ commandId: randomUUID() }),
+  });
+  await response.json().catch(() => undefined);
+  if (!response.ok) throw new Error(`Local session 발급에 실패했습니다 (${String(response.status)})`);
 }
 
 // 데스크톱 shell 전용: 티켓을 서버측에서 즉시 교환해 세션 쿠키를 확보합니다.

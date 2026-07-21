@@ -85,6 +85,10 @@ export interface ApplicationHttpDependencies {
       input: { readonly commandId: string; readonly ttlSeconds?: number },
     ): Promise<unknown>;
     exchangeLoginTicket(code: string): Promise<ExchangedWebSession>;
+    issueLocalSession(
+      access: AuthenticatedApplicationAccess,
+      input: { readonly commandId: string; readonly absoluteTtlSeconds?: number; readonly idleTtlSeconds?: number },
+    ): Promise<ExchangedWebSession>;
     authenticate(
       sessionToken: string,
       audience: string,
@@ -252,9 +256,14 @@ export class ApplicationHttpServer {
     >
   > &
     ApplicationHttpServerOptions;
-  private activeRequests = 0;
-  private activeStreams = 0;
-  private draining = false;
+ private activeRequests = 0;
+ private activeStreams = 0;
+ private draining = false;
+  // Frictionless 로컬 진입: CLI가 local-session으로 발급한 세션을 잠깐 보관합니다.
+  // 루프백에서 익명 첫 요청이 오면 이 세션 쿠키를 자동으로 내려주고 비웁니다.
+  // 시스템 브라우저는 CLI가 얻은 세션 쿠키를 직접 주입할 수 없기 때문에,
+  // 로컬 서버가 잠깐 기억하는 bootstrap 역할만 합니다(짧은 TTL, 1회 소비).
+  private pendingLocalSession: { readonly token: string; readonly expiresAt: string } | undefined;
 
   public constructor(
     private readonly dependencies: ApplicationHttpDependencies,
@@ -381,10 +390,25 @@ export class ApplicationHttpServer {
       } catch {
         sendJson(response, 503, { status: "not-ready" });
       }
-      return;
-    }
-    if (await this.webAsset(request, response, url)) return;
-    if (this.draining) {
+     return;
+   }
+   // Frictionless 로컬 진입: CLI가 local-session으로 예약한 세션이 있으면
+   // 루프백 첫 GET 요청에 자동으로 쿠키를 내려주고 비웁니다. 시스템 브라우저는
+   // CLI가 얻은 세션 쿠키를 직접 주입할 수 없으므로 로컬 서버가 bootstrap합니다.
+   if (this.pendingLocalSession !== undefined && request.method === "GET") {
+     const secure = !LOOPBACK.has(this.options.host);
+     const cookieName = secure ? "__Host-massion_session" : "massion_session";
+     const existing = header(request, "cookie");
+     const hasSession = existing !== undefined && existing.includes(`${cookieName}=`);
+     const loopback = LOOPBACK.has(request.socket.remoteAddress ?? "");
+     if (!hasSession && loopback) {
+       const pending = this.pendingLocalSession;
+       this.pendingLocalSession = undefined;
+       response.setHeader("set-cookie", this.sessionCookie(pending.token, pending.expiresAt, secure));
+     }
+   }
+   if (await this.webAsset(request, response, url)) return;
+   if (this.draining) {
       sendJson(response, 503, { status: "draining" });
       return;
     }
@@ -571,11 +595,51 @@ export class ApplicationHttpServer {
         issuedAt: exchanged.issuedAt,
         expiresAt: exchanged.expiresAt,
         idleExpiresAt: exchanged.idleExpiresAt,
+     });
+     return;
+   }
+    // Frictionless 로컬 진입: access 토큰 → 세션 쿠키를 티켓(code) 없이 1단계로 발급합니다.
+    // 로컬 loopback(host·remoteAddress 모두 루프백)에서만 허용합니다. 원격/조직 서버는 차단.
+    if (url.pathname === "/api/v1/web/local-session") {
+      if (request.method !== "POST") {
+        this.method(response, ["POST"]);
+        return;
+      }
+      if (!LOOPBACK.has(this.options.host) || !LOOPBACK.has(request.socket.remoteAddress ?? ""))
+        throw new ApplicationError({
+          category: "authorization",
+          severity: "error",
+          retryable: false,
+          userMessage: "로컬 세션 발급은 loopback 경계에서만 사용할 수 있습니다",
+          operatorCode: "APP_HTTP_WEB_LOCAL_ORIGIN",
+        });
+      if (!this.dependencies.webSessions) throw validation("Web session을 사용할 수 없습니다");
+      // 로컬 프로파일 access 토큰(Authorization Bearer)으로 access를 검증합니다.
+      const localAccess = await this.authenticate(request);
+      if (!localAccess.web) await this.browserOrigin(request);
+      this.acceptJson(request);
+      const input = (await json(request)) as Record<string, unknown>;
+      if (Object.keys(input).some((key) => key !== "commandId") || typeof input.commandId !== "string")
+        throw validation("Local session commandId가 필요합니다");
+     const issued = await this.dependencies.webSessions.issueLocalSession(localAccess, { commandId: input.commandId });
+      // 시스템 브라우저가 CLI 세션을 받을 수 있도록 잠깐 보관합니다. 브라우저 첫 요청에서 소비.
+      this.pendingLocalSession = { token: issued.sessionToken, expiresAt: issued.expiresAt };
+      response.setHeader("set-cookie", this.sessionCookie(issued.sessionToken, issued.expiresAt, secure));
+      response.setHeader("cache-control", "no-store");
+      sendJson(response, 201, {
+        schemaVersion: "massion.web.session.v1",
+        sessionId: issued.sessionId,
+        context: issued.context,
+        scopes: issued.scopes,
+        csrfToken: issued.csrfToken,
+        issuedAt: issued.issuedAt,
+        expiresAt: issued.expiresAt,
+        idleExpiresAt: issued.idleExpiresAt,
       });
       return;
     }
-    const access = await this.authenticate(request);
-    if (url.pathname === "/api/v1/subscriptions/connectors/enrollments") {
+   const access = await this.authenticate(request);
+   if (url.pathname === "/api/v1/subscriptions/connectors/enrollments") {
       if (request.method !== "POST") {
         this.method(response, ["POST"]);
         return;
