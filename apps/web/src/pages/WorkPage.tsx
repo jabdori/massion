@@ -7,8 +7,6 @@ import {
   userStageIndex,
   userStageProgress,
   workStatusToken,
-  workTimelineCellToken,
-  type WorkTimelineCellKind,
 } from "@massion/application";
 
 import { label, list, object, rows } from "../data.js";
@@ -16,6 +14,9 @@ import { useQueryData } from "../hooks.js";
 import { consoleStore } from "../services.js";
 import { EmptyState, LoadingState, StatusStamp } from "../components/States.js";
 import { useExecutionStream } from "../execution-stream.js";
+import { WorkTranscript } from "../nimbalyst/WorkTranscript.js";
+import { WorkComposer } from "../nimbalyst/WorkComposer.js";
+import { toTranscriptItems, withStreamingTail } from "../nimbalyst/adapters/timeline-adapter.js";
 
 // work 객체에는 stage 필드가 없으므로 status에서 내부 단계를 유추합니다.
 function internalStageFromWorkStatus(status: string): string {
@@ -85,6 +86,7 @@ export default function WorkPage() {
   const statusToken = workStatusToken(workStatus);
   const internalStage = internalStageFromWorkStatus(workStatus);
   const currentStage = userStageForInternal(internalStage);
+  const transcriptItems = withStreamingTail(toTranscriptItems(timelineData), liveStream);
 
   async function cancel() {
     try {
@@ -103,10 +105,9 @@ export default function WorkPage() {
     }
   }
 
-  async function sendMessage(event: { preventDefault(): void }) {
-    event.preventDefault();
-    const text = messageText.trim();
-    if (!text || !firstRoomId) return;
+  async function sendMessage(text: string) {
+    const trimmed = text.trim();
+    if (!trimmed || !firstRoomId) return;
     try {
       await consoleStore.mutate({
         schemaVersion: "massion.application.v1",
@@ -119,7 +120,7 @@ export default function WorkPage() {
           messageType: "question",
           authorKind: "user",
           authorId: label(me.userId),
-          content: text,
+          content: trimmed,
         },
       });
       setMessageText("");
@@ -166,45 +167,12 @@ export default function WorkPage() {
       </div>
 
       <div className="work-split">
-        <div className="work-split-main">
-          {/* 진행 기록: work.timeline 공통 투영 (TUI와 같은 셀 계약) */}
+       <div className="work-split-main">
+          {/* 진행 기록: nimbalyst transcript — work.timeline 공통 투영 + 실행 델타 active cell */}
           <section className="home-section" style={{ marginTop: "32px" }}>
             <h2 className="home-section-title">진행 기록</h2>
-            {rows(timelineData).length === 0 ? (
-              <p className="quiet-line">아직 진행 기록이 없습니다.</p>
-            ) : (
-              <div className="message-preview-list" aria-label="업무 진행 기록">
-                {rows(timelineData)
-                  .slice(-20)
-                  .map((cell) => {
-                    const token = workTimelineCellToken(label(cell.kind, "activity") as WorkTimelineCellKind);
-                    return (
-                      <article key={label(cell.cellId)} className={`message message-${label(cell.kind)}`}>
-                        <header>
-                          <strong>
-                            {token.symbol} {token.friendlyLabel}
-                          </strong>
-                          <time>{label(cell.createdAt)}</time>
-                        </header>
-                        <p>{label(cell.detail, label(cell.title))}</p>
-                      </article>
-                    );
-                  })}
-              </div>
-            )}
+            <WorkTranscript items={transcriptItems} />
           </section>
-
-          {/* 응답 중 셀: 휘발성 실행 델타 (확정 내용은 진행 기록이 대체) */}
-          {liveStream ? (
-            <section className="home-section" aria-live="polite">
-              <article className="message message-agent-message">
-                <header>
-                  <strong>● {liveStream.agentHandle} 응답 중… ▌</strong>
-                </header>
-                <p style={{ whiteSpace: "pre-wrap" }}>{liveStream.text.slice(-1_500)}</p>
-              </article>
-            </section>
-          ) : null}
         </div>
         <aside className="work-split-side">
           {/* 최근 소식: 작업 목록을 친화적 카드로 */}
@@ -257,32 +225,18 @@ export default function WorkPage() {
       {/* Massion에게 메시지 보내기 */}
       {firstRoomId ? (
         <section className="home-section">
-          <h2 className="home-section-title">Massion에게 메시지 보내기</h2>
-          <form
-            className="composer-inline"
-            onSubmit={(event) => {
-              void sendMessage(event);
+        <h2 className="home-section-title">Massion에게 메시지 보내기</h2>
+          <div role="status" aria-live="polite" className="quiet-line">
+            {messageNotice}
+          </div>
+          <WorkComposer
+            value={messageText}
+            onChange={setMessageText}
+            onSend={(text) => {
+              void sendMessage(text);
             }}
-          >
-            <textarea
-              value={messageText}
-              onChange={(event) => {
-                setMessageText(event.target.value);
-              }}
-              maxLength={16_000}
-              rows={2}
-              placeholder="작업에 대해 질문이나 추가 지시를 입력하세요…"
-              aria-label="Massion에게 보낼 메시지"
-            />
-            <div className="composer-inline-actions">
-              <span role="status" aria-live="polite">
-                {messageNotice}
-              </span>
-              <button className="primary-button" type="submit" disabled={!messageText.trim()}>
-                메시지 보내기
-              </button>
-            </div>
-          </form>
+            disabled={!firstRoomId}
+          />
           {messages.length > 0 ? (
             <div className="message-preview-list">
               {messages.slice(-5).map((message) => (
