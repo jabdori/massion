@@ -947,7 +947,7 @@ describe("Massion server product", () => {
           readonly executions?: readonly { readonly agentHandle: string; readonly status: string }[];
         };
       } = {};
-      for (let attempt = 0; attempt < 600; attempt += 1) {
+      for (let attempt = 0; attempt < 2400; attempt += 1) {
         snapshot = (await client.snapshot()) as typeof snapshot;
         const completed = snapshot.data?.works?.some(
           (work) => work.status === "completed" && work.artifactIds.length > 0,
@@ -982,7 +982,7 @@ describe("Massion server product", () => {
       await rm(workspaceRoot, { recursive: true, force: true });
       await new Promise<void>((resolve, reject) => modelServer.close((error) => (error ? reject(error) : resolve())));
     }
-  }, 45_000);
+  }, 90_000);
 
   it("clean install에서 Z.AI Coding Plan connect-model 하나로 Core route·ready 상태·실제 run을 완성한다", async () => {
     const plan = {

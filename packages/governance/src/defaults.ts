@@ -20,6 +20,7 @@ const ACTIONS = [
   "emergency.stop",
   "emergency.stop.disable",
   "audit.disable",
+  "software-delivery.finalize",
 ] as const;
 
 function entityShape() {
@@ -78,6 +79,7 @@ export function createDefaultPolicy(kind: "personal" | "team"): {
     "AssuranceBindingVersion",
     "GrowthConfiguration",
     "SubscriptionAccount",
+    "EngineeringDelivery",
   ];
   const context = {
     type: "Record",
@@ -121,6 +123,7 @@ export function createDefaultPolicy(kind: "personal" | "team"): {
             AssuranceBindingVersion: resourceShape(),
             GrowthConfiguration: resourceShape(),
             SubscriptionAccount: resourceShape(),
+            EngineeringDelivery: resourceShape(),
           },
           actions,
         },
