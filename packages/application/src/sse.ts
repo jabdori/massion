@@ -57,3 +57,38 @@ export async function* decodeApplicationSseStream(stream: ReadableStream<Uint8Ar
     reader.releaseLock();
   }
 }
+
+// 실행 델타 SSE: id 없이 event/data만 갖는 휘발성 프레임입니다. heartbeat(:)는 무시합니다.
+export async function* decodeExecutionDeltaSseStream(stream: ReadableStream<Uint8Array>): AsyncGenerator {
+  const decoder = new TextDecoder("utf-8", { fatal: true });
+  const reader = stream.getReader();
+  let pending = "";
+  try {
+    for (;;) {
+      const chunk = await reader.read();
+      pending += chunk.done ? decoder.decode() : decoder.decode(chunk.value, { stream: true });
+      if (Buffer.byteLength(pending) > 4 * 1024 * 1024) throw new Error("SSE client buffer byte 상한을 초과했습니다");
+      pending = pending.replaceAll("\r\n", "\n");
+      let boundary = pending.indexOf("\n\n");
+      while (boundary >= 0) {
+        const frame = pending.slice(0, boundary);
+        pending = pending.slice(boundary + 2);
+        boundary = pending.indexOf("\n\n");
+        if (frame.startsWith(":")) continue;
+        const frameFields = new Map<string, string>();
+        for (const line of frame.split("\n")) {
+          const separator = line.indexOf(":");
+          if (separator < 0) continue;
+          frameFields.set(line.slice(0, separator), line.slice(separator + 1).replace(/^ /u, ""));
+        }
+        if (frameFields.get("event") !== "execution-delta") continue;
+        const data = frameFields.get("data");
+        if (data === undefined) continue;
+        yield JSON.parse(data) as unknown;
+      }
+      if (chunk.done) return;
+    }
+  } finally {
+    reader.releaseLock();
+  }
+}

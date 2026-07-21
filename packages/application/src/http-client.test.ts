@@ -129,3 +129,36 @@ describe("ApplicationHttpClient", () => {
     expect(body.subarray(4 + metadataLength).toString()).toBe("artifact");
   });
 });
+
+describe("실행 델타 SSE client", () => {
+  it("execution-delta frame만 디코드하고 heartbeat는 무시한다", async () => {
+    const encoder = new TextEncoder();
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(encoder.encode(": heartbeat 1\n\n"));
+        controller.enqueue(
+          encoder.encode(
+            'event: execution-delta\ndata: {"executionId":"execution-1","agentHandle":"representative","sequence":1,"kind":"output-text","text":"환불","occurredAt":"2026-07-21T09:00:00.000Z"}\n\n',
+          ),
+        );
+        controller.enqueue(
+          encoder.encode(
+            'event: execution-delta\ndata: {"executionId":"execution-1","agentHandle":"representative","sequence":2,"kind":"lifecycle","summary":"finish","occurredAt":"2026-07-21T09:00:01.000Z"}\n\n',
+          ),
+        );
+        controller.close();
+      },
+    });
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(body, { status: 200, headers: { "content-type": "text/event-stream" } }));
+    const client = new ApplicationHttpClient({ baseUrl: "http://127.0.0.1:9000", token: "secret", fetcher });
+
+    const deltas: unknown[] = [];
+    for await (const delta of client.streamExecutionDeltas()) deltas.push(delta);
+
+    expect(deltas).toHaveLength(2);
+    expect(deltas[0]).toMatchObject({ kind: "output-text", text: "환불" });
+    expect(String(fetcher.mock.calls[0]?.[0])).toContain("/api/v1/executions/stream");
+  });
+});

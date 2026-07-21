@@ -9,6 +9,7 @@ import { createCliRenderer, type CliRenderer } from "@opentui/core";
 import { TuiCommands } from "./commands.js";
 import { TuiController } from "./controller.js";
 import { loadTuiProfile, resolveTuiConfigPath } from "./profile.js";
+import { decodeExecutionDelta } from "./wire.js";
 import {
   createTuiState,
   reduceTuiState,
@@ -327,6 +328,23 @@ export async function runTui(
     });
     view.render();
     await view.ready;
+    // 휘발성 실행 델타 구독: 끊기면 1초 후 재연결하고, 복구 정본은 work.timeline 재조회가 담당합니다.
+    const aborted = (): boolean => abort.signal.aborted;
+    const streamDeltas = async (): Promise<void> => {
+      while (!aborted()) {
+        try {
+          for await (const raw of client.streamExecutionDeltas(undefined, abort.signal)) {
+            const delta = decodeExecutionDelta(raw);
+            if (delta) dispatch({ type: "stream.delta", delta });
+          }
+        } catch {
+          // 연결 실패·중단은 재시도로 처리합니다.
+        }
+        if (aborted()) return;
+        await new Promise<void>((resolve) => setTimeout(resolve, 1_000));
+      }
+    };
+    void streamDeltas();
     await controller.run(abort.signal);
     return 0;
   } catch (error) {

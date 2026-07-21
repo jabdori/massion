@@ -14,6 +14,24 @@ export interface TuiWorkspace {
   readonly revision: number;
 }
 
+export type TuiExecutionDeltaKind = "output-text" | "reasoning" | "tool-call" | "tool-result" | "lifecycle" | "error";
+
+export interface TuiExecutionDelta {
+  readonly executionId: string;
+  readonly agentHandle: string;
+  readonly sequence: number;
+  readonly kind: TuiExecutionDeltaKind;
+  readonly text?: string;
+  readonly toolName?: string;
+  readonly summary?: string;
+}
+
+export interface TuiStreamState {
+  readonly executionId: string;
+  readonly agentHandle: string;
+  readonly text: string;
+}
+
 export interface TuiSelection {
   readonly workId?: string;
   readonly agentHandle?: string;
@@ -37,6 +55,7 @@ export interface TuiState {
   readonly queryErrors: Readonly<Record<string, string>>;
   readonly workspace?: TuiWorkspace;
   readonly workspaceScope: boolean;
+  readonly stream?: TuiStreamState;
   readonly error?: string;
 }
 
@@ -52,6 +71,7 @@ export type TuiAction =
   | { readonly type: "subscription.tab.selected"; readonly tab: TuiSubscriptionTab }
   | { readonly type: "workspace.attached"; readonly workspace: TuiWorkspace }
   | { readonly type: "workspace.scope.toggled" }
+  | { readonly type: "stream.delta"; readonly delta: TuiExecutionDelta }
   | { readonly type: "selection.changed"; readonly selection: TuiSelection };
 
 export function createTuiState(input: { readonly eventLimit?: number } = {}): TuiState {
@@ -151,6 +171,7 @@ export function reduceTuiState(state: TuiState, action: TuiAction): TuiState {
   if (action.type === "subscription.tab.selected") return { ...state, subscriptionTab: action.tab };
   if (action.type === "workspace.attached") return { ...state, workspace: action.workspace };
   if (action.type === "workspace.scope.toggled") return { ...state, workspaceScope: !state.workspaceScope };
+  if (action.type === "stream.delta") return applyStreamDelta(state, action.delta);
   const selection = { ...state.selection, ...action.selection };
   if (
     action.selection.workId !== undefined &&
@@ -166,6 +187,36 @@ export function reduceTuiState(state: TuiState, action: TuiAction): TuiState {
   const queryResults = Object.fromEntries(Object.entries(state.queryResults).filter(([key]) => key !== "messages"));
   const queryErrors = Object.fromEntries(Object.entries(state.queryErrors).filter(([key]) => key !== "messages"));
   return { ...state, selection, queryResults, queryErrors };
+}
+
+// 휘발성 실행 델타를 표시용 버퍼로 누적합니다. 정본이 아니므로 finish 시 버리고 timeline이 대체합니다.
+const STREAM_TEXT_LIMIT = 4_000;
+
+function applyStreamDelta(state: TuiState, delta: TuiExecutionDelta): TuiState {
+  if (delta.kind === "lifecycle" && delta.summary === "finish") {
+    if (state.stream?.executionId !== delta.executionId) return state;
+    const next: { -readonly [Key in keyof TuiState]: TuiState[Key] } = { ...state };
+    delete next.stream;
+    return next;
+  }
+  const base = state.stream?.executionId === delta.executionId ? state.stream.text : "";
+  const addition =
+    delta.kind === "output-text" || delta.kind === "reasoning"
+      ? (delta.text ?? "")
+      : delta.kind === "tool-call"
+        ? `\n▸ 도구 실행: ${delta.toolName ?? "도구"}\n`
+        : delta.kind === "error"
+          ? "\n⚠ 실행 오류가 발생했습니다\n"
+          : "";
+  if (!addition) return state;
+  return {
+    ...state,
+    stream: {
+      executionId: delta.executionId,
+      agentHandle: delta.agentHandle,
+      text: (base + addition).slice(-STREAM_TEXT_LIMIT),
+    },
+  };
 }
 
 // attention 알림: 새 승인 대기가 생겼을 때만 한 번 울립니다 (옵트아웃: NO_BELL).

@@ -1,4 +1,5 @@
 import type { CollaborationGraphSnapshot } from "@massion/application";
+import type { TuiExecutionDelta } from "./state.js";
 
 export interface TuiEvent {
   readonly sequence: number;
@@ -305,4 +306,29 @@ export function decodeQueryResult(input: unknown, expectedOperation: string): un
   if (value.schemaVersion !== "massion.application.v1" || value.operation !== expectedOperation || !("data" in value))
     throw new Error("Application query 응답 계보가 유효하지 않습니다");
   return value.data;
+}
+
+// 실행 델타(SSE)는 휘발성 표시 데이터이므로 손상된 값은 조용히 버립니다.
+const EXECUTION_DELTA_KINDS = new Set(["output-text", "reasoning", "tool-call", "tool-result", "lifecycle", "error"]);
+
+export function decodeExecutionDelta(value: unknown): TuiExecutionDelta | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const delta = value as Record<string, unknown>;
+  if (
+    typeof delta.executionId !== "string" ||
+    typeof delta.agentHandle !== "string" ||
+    !Number.isSafeInteger(delta.sequence) ||
+    typeof delta.kind !== "string" ||
+    !EXECUTION_DELTA_KINDS.has(delta.kind)
+  )
+    return undefined;
+  return {
+    executionId: delta.executionId,
+    agentHandle: delta.agentHandle,
+    sequence: delta.sequence as number,
+    kind: delta.kind as TuiExecutionDelta["kind"],
+    ...(typeof delta.text === "string" ? { text: delta.text } : {}),
+    ...(typeof delta.toolName === "string" ? { toolName: delta.toolName } : {}),
+    ...(typeof delta.summary === "string" ? { summary: delta.summary } : {}),
+  };
 }

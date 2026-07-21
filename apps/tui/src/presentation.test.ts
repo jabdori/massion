@@ -306,3 +306,41 @@ describe("작업 상세 transcript", () => {
     expect(output.detail).toContain("계획을 수립했습니다");
   });
 });
+
+describe("스트리밍 active cell", () => {
+  it("선택한 작업의 실행 델타를 응답 중 셀로 표시한다", () => {
+    let state = reduceTuiState(createTuiState(), { type: "snapshot.loaded", snapshot: decodeSnapshot(testSnapshot) });
+    state = reduceTuiState(state, {
+      type: "stream.delta",
+      delta: {
+        executionId: "execution-1",
+        agentHandle: "representative",
+        sequence: 1,
+        kind: "output-text",
+        text: "환불 API 계약을 정의하고 있습니다",
+      },
+    });
+
+    const output = present(state);
+    expect(output.detail).toContain("응답 중");
+    expect(output.detail).toContain("환불 API 계약을 정의하고 있습니다");
+  });
+
+  it("다른 작업의 실행 델타는 표시하지 않는다", () => {
+    let state = reduceTuiState(createTuiState(), { type: "snapshot.loaded", snapshot: decodeSnapshot(testSnapshot) });
+    state = reduceTuiState(state, {
+      type: "stream.delta",
+      delta: {
+        executionId: "execution-unknown",
+        agentHandle: "backend",
+        sequence: 1,
+        kind: "output-text",
+        text: "다른 작업",
+      },
+    });
+
+    const output = present(state);
+    expect(output.detail).not.toContain("응답 중");
+    expect(output.detail).not.toContain("다른 작업");
+  });
+});

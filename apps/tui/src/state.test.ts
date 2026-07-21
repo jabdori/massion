@@ -280,3 +280,86 @@ describe("attention 알림 판정", () => {
     expect(shouldRingAttentionBell(withApproval, base)).toBe(false);
   });
 });
+
+describe("실행 델타 스트림 상태", () => {
+  it("output-text 델타를 누적하고 tool-call은 표시 줄로 남긴다", () => {
+    let state = createTuiState();
+    state = reduceTuiState(state, {
+      type: "stream.delta",
+      delta: {
+        executionId: "execution-1",
+        agentHandle: "representative",
+        sequence: 1,
+        kind: "output-text",
+        text: "환불",
+      },
+    });
+    state = reduceTuiState(state, {
+      type: "stream.delta",
+      delta: {
+        executionId: "execution-1",
+        agentHandle: "representative",
+        sequence: 2,
+        kind: "output-text",
+        text: " API",
+      },
+    });
+    state = reduceTuiState(state, {
+      type: "stream.delta",
+      delta: {
+        executionId: "execution-1",
+        agentHandle: "representative",
+        sequence: 3,
+        kind: "tool-call",
+        toolName: "repo-search",
+      },
+    });
+    expect(state.stream).toMatchObject({ executionId: "execution-1", agentHandle: "representative" });
+    expect(state.stream?.text).toContain("환불 API");
+    expect(state.stream?.text).toContain("▸ 도구 실행: repo-search");
+  });
+
+  it("다른 실행의 델타는 버퍼를 교체하고 lifecycle finish는 스트림을 정리한다", () => {
+    let state = createTuiState();
+    state = reduceTuiState(state, {
+      type: "stream.delta",
+      delta: {
+        executionId: "execution-1",
+        agentHandle: "representative",
+        sequence: 1,
+        kind: "output-text",
+        text: "이전",
+      },
+    });
+    state = reduceTuiState(state, {
+      type: "stream.delta",
+      delta: { executionId: "execution-2", agentHandle: "backend", sequence: 1, kind: "output-text", text: "새 실행" },
+    });
+    expect(state.stream?.executionId).toBe("execution-2");
+    expect(state.stream?.text).toBe("새 실행");
+
+    state = reduceTuiState(state, {
+      type: "stream.delta",
+      delta: { executionId: "execution-2", agentHandle: "backend", sequence: 2, kind: "lifecycle", summary: "finish" },
+    });
+    expect(state.stream).toBeUndefined();
+  });
+});
+
+describe("실행 델타 decode", () => {
+  it("유효한 델타만 통과시키고 손상된 값은 undefined", async () => {
+    const { decodeExecutionDelta } = await import("./wire.js");
+    expect(
+      decodeExecutionDelta({
+        executionId: "execution-1",
+        agentHandle: "representative",
+        sequence: 1,
+        kind: "output-text",
+        text: "환불",
+        occurredAt: "2026-07-21T09:00:00.000Z",
+      }),
+    ).toMatchObject({ executionId: "execution-1", kind: "output-text", text: "환불" });
+    expect(decodeExecutionDelta({ executionId: 1 })).toBeUndefined();
+    expect(decodeExecutionDelta("문자열")).toBeUndefined();
+  });
+});

@@ -1,4 +1,4 @@
-import { decodeApplicationSseStream } from "./sse.js";
+import { decodeApplicationSseStream, decodeExecutionDeltaSseStream } from "./sse.js";
 
 export class ApplicationRemoteError extends Error {
   public constructor(
@@ -133,6 +133,24 @@ export class ApplicationHttpClient {
     if (!response.headers.get("content-type")?.startsWith("text/event-stream") || !response.body)
       throw new Error("Application SSE 응답이 유효하지 않습니다");
     yield* decodeApplicationSseStream(response.body);
+  }
+
+  // 휘발성 실행 델타 stream: replay 없음, 재연결 복구는 work.timeline 재조회가 담당합니다.
+  public async *streamExecutionDeltas(executionId?: string, signal?: AbortSignal): AsyncGenerator {
+    const query = executionId === undefined ? "" : `?executionId=${encodeURIComponent(executionId)}`;
+    const response = await this.request(
+      `/api/v1/executions/stream${query}`,
+      {
+        method: "GET",
+        headers: { accept: "text/event-stream" },
+        ...(signal === undefined ? {} : { signal }),
+      },
+      false,
+    );
+    if (!response.ok) throw new ApplicationRemoteError(response.status, await this.safeBody(response));
+    if (!response.headers.get("content-type")?.startsWith("text/event-stream") || !response.body)
+      throw new Error("Application SSE 응답이 유효하지 않습니다");
+    yield* decodeExecutionDeltaSseStream(response.body);
   }
 
   public async query(operation: string, payload: unknown): Promise<unknown> {

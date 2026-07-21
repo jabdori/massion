@@ -146,6 +146,20 @@ function transcriptLines(state: TuiState, maximum = 14): readonly string[] {
   });
 }
 
+// 실행 델타(휘발성)를 응답 중 셀로 렌더링합니다. 확정 내용은 timeline이 대체합니다.
+function activeStreamLines(state: TuiState, snapshot: CollaborationGraphSnapshot, workId: string): readonly string[] {
+  const stream = state.stream;
+  if (!stream) return [];
+  const execution = snapshot.executions.find((item) => item.executionId === stream.executionId);
+  if (!execution || execution.workId !== workId) return [];
+  const tail = stream.text
+    .split("\n")
+    .filter((line) => line.length > 0)
+    .slice(-6)
+    .map((line) => safeTerminalText(line, 160));
+  return ["", `● ${safeTerminalText(stream.agentHandle, 40)} 응답 중… ▌`, ...tail];
+}
+
 function recentNews(state: TuiState): readonly string[] {
   const events = state.events.slice(-6);
   if (!events.length) return ["아직 소식이 없어요."];
@@ -271,6 +285,7 @@ function works(state: TuiState, snapshot: CollaborationGraphSnapshot): { list: s
         ...(transcriptLines(state).length
           ? ["진행 기록", ...transcriptLines(state)]
           : ["최근 소식", ...recentNews(state)]),
+        ...activeStreamLines(state, snapshot, work.workId),
         "",
         "d: 자세히 보기  ·  n: 새 작업  ·  m: 메시지",
       ].join("\n"),
