@@ -275,3 +275,19 @@ Work 목록·승인 목록·운영 화면은 slash 명령(`/works`, `/approvals`
 | 승인 diff에 필요한 산출물 내용 조회 API 부재 가능성 | UX-1에서 artifact 내용 조회 계약을 함께 판정 |
 
 이 계획이 승인되면 Phase 30의 남은 화면 작업은 이 재설계 슬라이스로 대체·흡수하고, 요구사항 추적표에 REQ-SURFACE-UX 항목을 추가합니다.
+
+## 8. nimbalyst 렌더러 이식 — 시각 품질 v1 (2026-07-21)
+
+사용자 재지적("시각적으로 개선된 게 없다")에 대한 응답으로 nimbalyst 렌더러를 clone-and-own 으로 vendor 하고 WorkPage 에 적용했다.
+
+| 범위 | 상태 | 근거 커밋 |
+|---|---|---|
+| nimbalyst 패키지 vendor (runtime·extension-sdk·collab-protocol·collab-adapters) | 완료 | `2ef2d5a` — MIT 출처 표기(`src/vendor/README.md`), tests 제외 반입 |
+| 빌드 격리 (tailwind 3.4 + postcss + tsconfig.vendor.json + @nimbalyst alias) | 완료 | `2ef2d5a` — 메인 strict typecheck 보호, vendor 만 Bundler 해상도로 별도 검사 |
+| crystal-dark 테마 + AIInput(composer) 적용 | 완료 | `4910482` — NimbalystTheme.css + crystal-dark 토큰, 앱 쉘 전체 다크 전환 |
+| TranscriptItem 어댑터 (work.timeline + 실행 델타 → transcript) | 완료 | `4910482` — 단일 매핑 경계, Massion 도메인 정본 재사용 |
+| WorkTranscript 렌더 검증 | 완료 | `f673b1c` — role/kind 셀·마크다운·streaming cell 테스트 |
+
+v1 의도적 한계(다음 슬라이스): lexical 리치 편집·monaco·mermaid·칸반은 vendor 에 보존하고 lazy-load 전환 후 활성화(현재는 react-markdown 읽기 + nimbalyst AIInput). nimbalyst AgentTranscript(lexical 기반)는 barrel 이 무거운 체인(file-tree·lexical)을 끌어와 v1 미사용 — WorkComposer 는 AIInput 진입점을 직접 import 해 차단. collab(Yjs)/AI provider 백엔드는 로컬 단일 사용자 기준 드롭.
+
+> **상태**: in-progress (2026-07-21 UX-0~WS-4 + nimbalyst 시각 품질 v1 적용 완료)
