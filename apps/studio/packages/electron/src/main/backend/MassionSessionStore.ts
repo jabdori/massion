@@ -73,8 +73,9 @@ export class MassionSessionStore implements SessionStore {
 
     async ensureReady(): Promise<void> {}
 
-    async list(workspaceId: string, _options?: SessionListOptions): Promise<SessionMeta[]> {
-        const works = await this.query<MassionWork[]>('work.list', workspaceId ? { workspaceId } : {});
+    async list(_workspaceId: string, _options?: SessionListOptions): Promise<SessionMeta[]> {
+        // ponytail: Nimbalyst passes fs path as workspaceId; Massion uses UUID — skip filter for S2
+        const works = await this.query<MassionWork[]>('work.list', {});
 
         const withTimelines = await Promise.all(
             works.map(async (work) => {
