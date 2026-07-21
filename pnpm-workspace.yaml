@@ -1,5 +1,8 @@
 packages:
   - apps/*
+  # studio(Nimbalyst 기반)·cli-tui(OpenCode 기반)는 자체 npm workspace로 독립 관리 — pnpm에서 제외
+  - "!apps/studio"
+  - "!apps/cli-tui"
   - extensions/*
   - packages/*
 
