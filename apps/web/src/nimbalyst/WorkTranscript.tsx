@@ -1,10 +1,19 @@
-// Work 진행 기록 transcript — nimbalyst 시각 언어(crystal-dark 토큰 + 셀 구조)로 렌더.
-// v1은 react-markdown으로 내용을 읽습니다(lexical 리치 편집은 다음 슬라이스).
-// nimbalyst AgentTranscript(lexical 기반)는 vendor에 보존되어 있으며 lazy-load로 전환 예정.
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
+// Work 진행 기록 transcript — nimbalyst MarkdownRenderer 로 마크다운을 렌더한다.
+// MarkdownRenderer(react-syntax-highlighter Prism 포함)는 무거우므로 lazy-load 로 분리한다.
+// 초기 WorkPage 청크는 가볍고, 마크다운 렌더는 별도 청크로 지연 로드된다.
+import { Suspense, lazy } from "react";
+import type { ComponentType } from "react";
 
 import type { TranscriptItem, TranscriptRole } from "./adapters/contract.js";
+
+// nimbalyst 진짜 마크다운 렌더(Prism 코드 하이라이트·테이블·링크 autolink) — 별도 청크.
+interface MarkdownRendererProps {
+  readonly content: string;
+  readonly isUser: boolean;
+}
+const MarkdownRenderer = lazy(async (): Promise<{ default: ComponentType<MarkdownRendererProps> }> => ({
+  default: (await import("@nimbalyst/runtime/ui/AgentTranscript/components/MarkdownRenderer")).MarkdownRenderer,
+}));
 
 const ROLE_LABEL: Readonly<Record<TranscriptRole, string>> = {
   user: "나",
@@ -44,12 +53,24 @@ export function WorkTranscript({ items }: WorkTranscriptProps) {
                 <time className="nim-transcript-cell-time">{item.createdAt}</time>
               </header>
               <div className={`nim-transcript-cell-body${item.streaming ? " is-streaming" : ""}`}>
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>{item.content || " "}</ReactMarkdown>
+                <Suspense fallback={<span className="nim-transcript-empty">렌더 준비 중…</span>}>
+                  <LazyMarkdown content={item.content || " "} isUser={item.role === "user"} />
+                </Suspense>
               </div>
             </article>
           );
         })
       )}
     </div>
+  );
+}
+
+// MarkdownProvider(jotai 빈 store)로 감싼 lazy 렌더.
+import { MarkdownProvider } from "./MarkdownProvider.js";
+function LazyMarkdown({ content, isUser }: { readonly content: string; readonly isUser: boolean }) {
+  return (
+    <MarkdownProvider>
+      <MarkdownRenderer content={content} isUser={isUser} />
+    </MarkdownProvider>
   );
 }
