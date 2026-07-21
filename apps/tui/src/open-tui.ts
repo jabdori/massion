@@ -38,7 +38,6 @@ type ApprovalMode = "automatic" | "review" | "deny";
 const APPROVAL_MODES: readonly ApprovalMode[] = ["automatic", "review", "deny"];
 
 type Modal =
-  | { readonly kind: "start-work"; readonly title: string; readonly placeholder: string }
   | { readonly kind: "message"; readonly title: string; readonly placeholder: string }
   | { readonly kind: "search"; readonly title: string; readonly placeholder: string }
   | { readonly kind: "vote"; readonly title: string; readonly placeholder: string; readonly vote: "approve" | "reject" }
@@ -122,6 +121,8 @@ export class OpenTuiView {
   private paletteQuery = "";
   private paletteIndex = 0;
   private modalInput: InputRenderable | undefined;
+  private composerFocused = false;
+  private composerInput: InputRenderable | undefined;
   private readonly noColor = process.env.NO_COLOR !== undefined;
   private readonly setModel: (model: SolidViewModel) => void;
   public readonly ready: Promise<void>;
@@ -147,6 +148,12 @@ export class OpenTuiView {
       },
       onInputMount: (input) => {
         this.modalInput = input;
+      },
+      onComposerSubmit: (value) => {
+        void this.submitComposer(value);
+      },
+      onComposerMount: (input) => {
+        this.composerInput = input;
       },
     });
   }
@@ -174,6 +181,14 @@ export class OpenTuiView {
         footer: safeTerminalText(this.notice || output.footer, 512),
       },
       ...(this.modal === undefined ? {} : { modal: this.modalModel(this.modal) }),
+      ...(view === "works"
+        ? {
+            composer: {
+              focused: this.composerFocused,
+              placeholder: "무엇을 도와드릴까요? 작업 내용을 입력하고 Enter를 눌러 주세요",
+            },
+          }
+        : {}),
     });
     this.renderer.requestRender();
   }
@@ -260,6 +275,14 @@ export class OpenTuiView {
       this.dispose();
       return;
     }
+    if (this.composerFocused) {
+      if (key.name === "escape") {
+        this.composerFocused = false;
+        this.render();
+      }
+      // composer가 focus를 갖는 동안 전역 단축키는 비활성화합니다.
+      return;
+    }
     if (this.actions.state().view === "subscriptions" && ["[", "]", "h", "left", "l", "right"].includes(key.name)) {
       const delta = ["]", "l", "right"].includes(key.name) ? 1 : -1;
       const current = SUBSCRIPTION_TABS.indexOf(this.actions.state().subscriptionTab);
@@ -278,9 +301,11 @@ export class OpenTuiView {
       });
     else if (key.name === "?") open({ kind: "help", title: "키보드 도움말", placeholder: "" });
     else if (key.name === "/") open({ kind: "search", title: "현재 화면 검색", placeholder: "검색어를 입력해 주세요" });
-    else if (key.name === "n")
-      open({ kind: "start-work", title: "새 작업 시작", placeholder: "작업 내용을 입력해 주세요" });
-    else if (key.name === "m") open({ kind: "message", title: "메시지 보내기", placeholder: "메시지를 입력해 주세요" });
+    else if (key.name === "n") {
+      key.preventDefault();
+      this.focusComposer();
+    } else if (key.name === "m")
+      open({ kind: "message", title: "메시지 보내기", placeholder: "메시지를 입력해 주세요" });
     else if (key.name === "g" && this.actions.state().workspace) {
       this.actions.dispatch({ type: "workspace.scope.toggled" });
       this.notice = this.actions.state().workspaceScope
@@ -358,6 +383,33 @@ export class OpenTuiView {
     }
   }
 
+  // 상시 composer: works 화면 하단 고정 입력에 focus를 옮깁니다.
+  private focusComposer(): void {
+    if (this.actions.state().view !== "works") {
+      this.actions.dispatch({ type: "view.selected", view: "works" });
+      void this.actions.loadView("works");
+    }
+    this.modal = undefined;
+    this.composerFocused = true;
+    this.notice = "";
+    this.render();
+  }
+
+  private async submitComposer(value: string): Promise<void> {
+    const content = (value || (this.composerInput?.value ?? "")).trim();
+    if (!content) {
+      this.notice = "업무 내용을 입력해 주세요.";
+      this.render();
+      return;
+    }
+    await this.runAction(async () => {
+      await this.actions.startWork(content);
+      this.actions.dispatch({ type: "view.selected", view: "works" });
+      if (this.composerInput) this.composerInput.value = "";
+      this.composerFocused = false;
+    }, "새 작업 요청을 시작했습니다. 작업 목록에서 진행 상황을 확인할 수 있습니다.");
+  }
+
   private open(modal: Modal): void {
     this.modal = modal;
     this.notice = "";
@@ -378,8 +430,7 @@ export class OpenTuiView {
       void this.actions.loadView(view);
       return;
     }
-    if (item.id === "work.start")
-      this.open({ kind: "start-work", title: "새 작업 시작", placeholder: "작업 내용을 입력해 주세요" });
+    if (item.id === "work.start") this.focusComposer();
     else if (item.id === "message.post")
       this.open({ kind: "message", title: "메시지 보내기", placeholder: "메시지를 입력해 주세요" });
     else if (item.id === "refresh")
@@ -441,7 +492,7 @@ export class OpenTuiView {
     }
     const content = value.trim();
     if (!content && modal.kind !== "search") {
-      this.notice = modal.kind === "start-work" ? "업무 내용을 입력해 주세요." : "내용 또는 이유를 입력해야 합니다.";
+      this.notice = "내용 또는 이유를 입력해야 합니다.";
       this.resetModalInput();
       this.render();
       return;
@@ -500,40 +551,31 @@ export class OpenTuiView {
       this.render();
       return;
     }
-    await this.runAction(
-      async () => {
-        if (modal.kind === "start-work") {
-          await this.actions.startWork(content);
-          this.actions.dispatch({ type: "view.selected", view: "works" });
-        } else if (modal.kind === "message") await this.actions.postMessage(content);
-        else if (modal.kind === "vote") await this.actions.vote(modal.vote, content);
-        else if (modal.kind === "cancel-approval") await this.actions.cancelApproval(content);
-        else if (modal.kind === "cancel-work") await this.actions.cancelWork(content);
-        else if (modal.kind === "assign-task") await this.actions.assignTask(content);
-        else if (modal.kind === "runtime") await this.actions.controlExecution(modal.operation, content);
-        else if (modal.kind === "subscription-account") {
-          if (modal.operation === "share") await this.actions.shareSubscriptionAccount(modal.accountId, modal.version);
-          else if (modal.operation === "unshare")
-            await this.actions.unshareSubscriptionAccount(modal.accountId, modal.version);
-          else await this.actions.disconnectSubscriptionAccount(modal.accountId, modal.version);
-        } else if (modal.kind === "subscription-policy" && subscriptionPolicyInput) {
-          if (!this.actions.configureSubscriptionPolicy)
-            throw new Error("TUI 구독 정책 변경 기능이 구성되지 않았습니다");
-          await this.actions.configureSubscriptionPolicy(
-            modal.providerId,
-            subscriptionPolicyInput.credentialPolicy,
-            subscriptionPolicyInput.approvalMode,
-            modal.version,
-          );
-        } else if (modal.kind === "optimization" && optimizationInput) {
-          if (!this.actions.optimizationCommand) throw new Error("TUI 모델 평가실 변경 기능이 구성되지 않았습니다");
-          await this.actions.optimizationCommand(optimizationInput.operation, optimizationInput.payload);
-        }
-      },
-      modal.kind === "start-work"
-        ? "새 작업 요청을 시작했습니다. 작업 목록에서 진행 상황을 확인할 수 있습니다."
-        : undefined,
-    );
+    await this.runAction(async () => {
+      if (modal.kind === "message") await this.actions.postMessage(content);
+      else if (modal.kind === "vote") await this.actions.vote(modal.vote, content);
+      else if (modal.kind === "cancel-approval") await this.actions.cancelApproval(content);
+      else if (modal.kind === "cancel-work") await this.actions.cancelWork(content);
+      else if (modal.kind === "assign-task") await this.actions.assignTask(content);
+      else if (modal.kind === "runtime") await this.actions.controlExecution(modal.operation, content);
+      else if (modal.kind === "subscription-account") {
+        if (modal.operation === "share") await this.actions.shareSubscriptionAccount(modal.accountId, modal.version);
+        else if (modal.operation === "unshare")
+          await this.actions.unshareSubscriptionAccount(modal.accountId, modal.version);
+        else await this.actions.disconnectSubscriptionAccount(modal.accountId, modal.version);
+      } else if (modal.kind === "subscription-policy" && subscriptionPolicyInput) {
+        if (!this.actions.configureSubscriptionPolicy) throw new Error("TUI 구독 정책 변경 기능이 구성되지 않았습니다");
+        await this.actions.configureSubscriptionPolicy(
+          modal.providerId,
+          subscriptionPolicyInput.credentialPolicy,
+          subscriptionPolicyInput.approvalMode,
+          modal.version,
+        );
+      } else if (modal.kind === "optimization" && optimizationInput) {
+        if (!this.actions.optimizationCommand) throw new Error("TUI 모델 평가실 변경 기능이 구성되지 않았습니다");
+        await this.actions.optimizationCommand(optimizationInput.operation, optimizationInput.payload);
+      }
+    }, undefined);
   }
 
   private async runAction(action: () => Promise<void>, successNotice = "서버 정본에 반영되었습니다."): Promise<void> {

@@ -195,24 +195,24 @@ describe("OpenTUI 실제 renderer", () => {
 
     emitKey("n");
     await setup.renderOnce();
-    expect(setup.captureCharFrame()).toContain("새 작업 시작");
+    expect(setup.captureCharFrame()).toContain("무엇을 도와드릴까요?");
 
-    let input = setup.renderer.root.findDescendantById("modal-input") as InputRenderable;
-    expect(input.value).toBe("");
-    input.value = "   ";
-    input.submit();
+    const composer = setup.renderer.root.findDescendantById("composer-input") as InputRenderable;
+    expect(composer.value).toBe("");
+    composer.value = "   ";
+    composer.submit();
     await Bun.sleep(0);
     expect(started).toEqual([]);
-    expect(setup.captureCharFrame()).toContain("작업 내용을 입력해 주세요");
+    expect(setup.captureCharFrame()).toContain("업무 내용을 입력해 주세요");
 
-    input = setup.renderer.root.findDescendantById("modal-input") as InputRenderable;
-    input.value = "릴리스 준비 상태를 점검해 주세요";
-    input.submit();
+    composer.value = "릴리스 준비 상태를 점검해 주세요";
+    composer.submit();
     await Bun.sleep(0);
     await setup.renderOnce();
 
     expect(started).toEqual(["릴리스 준비 상태를 점검해 주세요"]);
     expect(loaded).toEqual(["works"]);
+    expect(composer.value).toBe("");
     expect(state.view).toBe("works");
     expect(setup.captureCharFrame()).toContain("새 작업 요청을 시작했습니다");
   });

@@ -24,17 +24,25 @@ export interface SolidModalModel {
   readonly paletteText?: string;
 }
 
+export interface SolidComposerModel {
+  readonly focused: boolean;
+  readonly placeholder: string;
+}
+
 export interface SolidViewModel {
   readonly noColor: boolean;
   readonly unsupported?: { readonly width: number; readonly height: number };
   readonly panel?: SolidPanelModel;
   readonly modal?: SolidModalModel;
+  readonly composer?: SolidComposerModel;
 }
 
 export interface SolidViewHandlers {
   onInput(value: string): void;
   onSubmit(value: string): void;
   onInputMount(input: InputRenderable): void;
+  onComposerSubmit(value: string): void;
+  onComposerMount(input: InputRenderable): void;
 }
 
 export function mountSolidView(
@@ -149,6 +157,26 @@ export function mountSolidView(
                 width={panel().mode === "wide" ? "60%" : "62%"}
               />
             </box>
+            <Show when={model().composer !== undefined}>
+              <box height={3} width="100%" paddingX={1} alignItems="center">
+                <input
+                  id="composer-input"
+                  ref={(input: InputRenderable) => {
+                    handlers.onComposerMount(input);
+                  }}
+                  width="100%"
+                  focused={model().composer?.focused === true && model().modal === undefined}
+                  placeholder={model().composer?.placeholder ?? ""}
+                  maxLength={65_536}
+                  {...paint("backgroundColor", "#1B1F27")}
+                  {...paint("textColor", "#C6D0F5")}
+                  {...paint("cursorColor", "#8BD5CA")}
+                  onSubmit={(value) => {
+                    handlers.onComposerSubmit(typeof value === "string" ? value : "");
+                  }}
+                />
+              </box>
+            </Show>
             <Show when={model().modal !== undefined}>
               <ModalBox />
             </Show>
