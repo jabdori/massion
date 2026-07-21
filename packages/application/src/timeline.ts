@@ -73,6 +73,10 @@ function isoTimestamp(value: unknown): string {
   if (value instanceof Date) return value.toISOString();
   if (typeof value === "string") return value;
   if (typeof value === "number" && Number.isFinite(value)) return new Date(value).toISOString();
+  // SurrealDB DateTime (not instanceof Date; has .toISOString())
+  if (value !== null && typeof value === "object" && typeof (value as Record<string, unknown>)["toISOString"] === "function") {
+    return (value as { toISOString(): string }).toISOString();
+  }
   throw new Error("timeline 항목의 시각이 유효하지 않습니다");
 }
 

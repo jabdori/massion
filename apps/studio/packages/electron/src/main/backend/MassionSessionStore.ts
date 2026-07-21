@@ -48,7 +48,9 @@ export class MassionSessionStore implements SessionStore {
             body: JSON.stringify({ operation, payload }),
         });
         if (!response.ok) throw new Error(`Massion query ${operation} failed (${response.status})`);
-        return response.json() as Promise<T>;
+        // Response shape: {schemaVersion, operation, data: <result>}
+        const envelope = await response.json() as { data: T };
+        return envelope.data;
     }
 
     private async command(operation: string, payload: Record<string, unknown> = {}): Promise<void> {
