@@ -323,10 +323,10 @@ function commanderError(error: CommanderError, argv: readonly string[]): Error {
   return new Error("massion 사용법이 올바르지 않습니다");
 }
 
-function webInvocation(): CliInvocation {
+function webInvocation(printUrl = false): CliInvocation {
   return {
     command: "web",
-    arguments: [],
+    arguments: printUrl ? ["--print-url"] : [],
     output: "human",
     detach: false,
     wait: false,
@@ -381,8 +381,10 @@ function createProgram(
 
 export function parseCliArguments(argv: readonly string[]): CliInvocation {
   if (argv[0] === "--web") {
-    if (argv.length !== 1) throw new Error("massion --web에는 추가 인자를 지정할 수 없습니다");
-    return webInvocation();
+    if (argv.length === 1) return webInvocation(false);
+    // --print-url: 브라우저를 열지 않고 인증된 콘솔 URL만 출력합니다 (데스크톱 shell·자동화용).
+    if (argv.length === 2 && argv[1] === "--print-url") return webInvocation(true);
+    throw new Error("massion --web에는 --print-url 외 추가 인자를 지정할 수 없습니다");
   }
   let invocation: CliInvocation | undefined;
   let output = "";

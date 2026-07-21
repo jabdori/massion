@@ -20,6 +20,11 @@ describe("massion CLI parser", () => {
 
   it("최상위 Web Console option을 별도 실행 흐름으로 파싱한다", () => {
     expect(parseCliArguments(["--web"])).toMatchObject({ command: "web", output: "human" });
+    expect(parseCliArguments(["--web", "--print-url"])).toMatchObject({
+      command: "web",
+      arguments: ["--print-url"],
+    });
+    expect(() => parseCliArguments(["--web", "foo"])).toThrow(/--print-url 외/u);
   });
 
   it.each([

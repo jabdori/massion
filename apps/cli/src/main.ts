@@ -97,7 +97,10 @@ function exitCode(error: unknown): number {
   return 2;
 }
 
-async function resolveProfileAccess(profile: { readonly endpoint: string; readonly tokenReference: string }): Promise<string> {
+async function resolveProfileAccess(profile: {
+  readonly endpoint: string;
+  readonly tokenReference: string;
+}): Promise<string> {
   const token = await resolveTokenReference(profile.tokenReference);
   return await ensurePersonalLoopbackAccess({
     endpoint: profile.endpoint,
@@ -141,10 +144,20 @@ export async function runCli(argv = process.argv.slice(2)): Promise<number> {
       if (!profile) throw new Error("선택된 CLI profile이 없습니다. 먼저 massion init을 실행해 주세요");
       await ensureLocalEndpoint(profile.endpoint, { start: async () => await new LocalDaemonManager().start() });
       const token = await resolveProfileAccess(profile);
-      const web = await openWebConsole({ endpoint: profile.endpoint, token });
-      process.stdout.write(
-        `Web Console: ${web.url}\n일회성 로그인 코드(5분): ${web.code}\n만료 시각: ${web.expiresAt}\n`,
-      );
+      // --print-url: 브라우저를 열지 않고 인증된 URL만 출력합니다. 데스크톱 shell이 이 URL을 webview에 로드합니다.
+      const printUrl = invocation.arguments.includes("--print-url");
+      const web = await openWebConsole({
+        endpoint: profile.endpoint,
+        token,
+        ...(printUrl ? { openBrowser: () => Promise.resolve() } : {}),
+      });
+      if (printUrl) {
+        process.stdout.write(`${web.url}\n`);
+      } else {
+        process.stdout.write(
+          `Web Console: ${web.url}\n일회성 로그인 코드(5분): ${web.code}\n만료 시각: ${web.expiresAt}\n`,
+        );
+      }
       return 0;
     }
     if (invocation.command === "version") {
