@@ -8,7 +8,6 @@ import { createCliRenderer, type CliRenderer } from "@opentui/core";
 
 import { TuiCommands } from "./commands.js";
 import { TuiController } from "./controller.js";
-import { OpenTuiView } from "./open-tui.js";
 import { loadTuiProfile, resolveTuiConfigPath } from "./profile.js";
 import {
   createTuiState,
@@ -220,6 +219,8 @@ export async function runTui(
       throw error;
     }
     const client = new ApplicationHttpClient({ baseUrl: profile.endpoint, token: profile.token });
+    // solid-view(.tsx)는 vitest(node)에서 변환할 수 없으므로 실행 시점에만 불러옵니다.
+    const { OpenTuiView } = await import("./open-tui.js");
     renderer = await (dependencies.createRenderer ?? (async () => await createCliRenderer({ exitOnCtrlC: false })))();
     const abort = new AbortController();
     renderer.on("destroy", () => {
@@ -325,6 +326,7 @@ export async function runTui(
       },
     });
     view.render();
+    await view.ready;
     await controller.run(abort.signal);
     return 0;
   } catch (error) {

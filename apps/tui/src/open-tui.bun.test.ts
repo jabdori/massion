@@ -59,6 +59,7 @@ describe("OpenTUI 실제 renderer", () => {
       destroy: () => setup?.renderer.destroy(),
     });
     view.render();
+    await view.ready;
     await setup.renderOnce();
     const frame = setup.captureCharFrame();
     expect(frame).toContain("Massion");
@@ -87,6 +88,7 @@ describe("OpenTUI 실제 renderer", () => {
       destroy: () => setup?.renderer.destroy(),
     });
     view.render();
+    await view.ready;
     await setup.renderOnce();
     expect(setup.captureCharFrame()).toContain("최소 80×24");
   });
@@ -121,6 +123,7 @@ describe("OpenTUI 실제 renderer", () => {
       },
     });
     view.render();
+    await view.ready;
     setup.renderer.keyInput.emit(
       "keypress",
       new KeyEvent({
@@ -188,6 +191,7 @@ describe("OpenTUI 실제 renderer", () => {
       destroy: () => setup?.renderer.destroy(),
     });
     view.render();
+    await view.ready;
 
     emitKey("n");
     await setup.renderOnce();
@@ -261,6 +265,7 @@ describe("OpenTUI 실제 renderer", () => {
       destroy: () => setup?.renderer.destroy(),
     });
     view.render();
+    await view.ready;
     await setup.renderOnce();
     const initial = setup.captureCharFrame();
     expect(initial).toContain("업무용 Codex");
@@ -293,6 +298,7 @@ describe("OpenTUI 실제 renderer", () => {
       value: [account("organization")],
     });
     view.render();
+    await view.ready;
     emitKey("u");
     const unshareInput = setup.renderer.root.findDescendantById("modal-input") as InputRenderable;
     unshareInput.value = "UNSHARE";
@@ -367,6 +373,7 @@ describe("OpenTUI 실제 renderer", () => {
       destroy: () => setup?.renderer.destroy(),
     });
     view.render();
+    await view.ready;
 
     emitKey("e");
     await setup.renderOnce();
@@ -433,6 +440,7 @@ describe("OpenTUI 실제 renderer", () => {
       destroy: () => setup?.renderer.destroy(),
     });
     view.render();
+    await view.ready;
 
     emitKey("e");
     await setup.renderOnce();
@@ -468,9 +476,11 @@ describe("OpenTUI 실제 renderer", () => {
       destroy: () => setup?.renderer.destroy(),
     });
     view.render();
+    await view.ready;
 
     state = reduceTuiState(state, { type: "view.selected", view: "operations" });
     view.render();
+    await view.ready;
     emitKey("o");
     await setup.renderOnce();
     expect(setup.captureCharFrame()).toContain("모델 평가실 변경");
@@ -514,6 +524,7 @@ describe("명령 팔레트", () => {
       destroy: () => undefined,
     });
     view.render();
+    await view.ready;
 
     setup.renderer.keyInput.emit(
       "keypress",

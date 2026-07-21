@@ -1,16 +1,9 @@
-import {
-  BoxRenderable,
-  InputRenderable,
-  InputRenderableEvents,
-  TextAttributes,
-  TextRenderable,
-  type CliRenderer,
-  type KeyEvent,
-  type Renderable,
-} from "@opentui/core";
+import { type CliRenderer, type InputRenderable, type KeyEvent } from "@opentui/core";
+import { createSignal } from "solid-js";
 
 import { filterPaletteItems, SURFACE_PALETTE_ITEMS, type SurfacePaletteItem } from "@massion/application";
 
+import { mountSolidView, type SolidModalModel, type SolidViewModel } from "./solid-view.jsx";
 import { present, safeTerminalText } from "./presentation.js";
 import type { TuiAction, TuiState, TuiSubscriptionTab, TuiView } from "./state.js";
 import { layoutForTerminal } from "./view-model.js";
@@ -86,6 +79,17 @@ const TUI_PALETTE_ITEMS: readonly SurfacePaletteItem[] = SURFACE_PALETTE_ITEMS.f
 );
 const PALETTE_VISIBLE_LIMIT = 8;
 
+const HELP_TEXT =
+  "기본 화면: 작업 목록 + 진행 상황이 바로 보입니다.\n" +
+  "Tab/Shift+Tab: 뷰 전환(작업·확인·대화·개요·협업·운영·구독)\n" +
+  "j/k 또는 화살표: 이동 · Enter: 자세히 열기 · d: 자세히 토글 · Esc: 뒤로\n" +
+  "n: 새 작업 · m: 메시지 보내기 · /: 검색 · r: 새로고침 · Ctrl+P: 명령 팔레트\n" +
+  "확인 필요: a 승인 · x 거절 · Delete 승인 취소 · 자세히에서 c 작업 취소 · t 작업 배정\n" +
+  "실행 제어(자세히): s 일시정지/재개 · z 실행 취소\n" +
+  "구독: ←/→ 또는 h/l 탭 · s 공유 · u 공유 해제 · d 연결 해제\n" +
+  '모델 평가실(운영): o · JSON {"operation":"...","payload":{...}}\n' +
+  "Esc: 입력 닫기 · Ctrl+C: 종료 · 선택한 텍스트는 복사할 수 있습니다.";
+
 const SUBSCRIPTION_TABS: readonly TuiSubscriptionTab[] = ["providers", "accounts", "quota", "policy"];
 
 // Guided Workspace: 왼쪽은 목록, 오른쪽은 선택 항목 상세를 사람 언어로 표시합니다.
@@ -111,15 +115,16 @@ const DETAIL_PANEL_TITLES: Readonly<Record<TuiView, string>> = {
 };
 
 export class OpenTuiView {
-  private tree: Renderable | undefined;
-  private input: InputRenderable | undefined;
   private modal: Modal | undefined;
   private search = "";
   private busy = false;
   private notice = "";
   private paletteQuery = "";
   private paletteIndex = 0;
+  private modalInput: InputRenderable | undefined;
   private readonly noColor = process.env.NO_COLOR !== undefined;
+  private readonly setModel: (model: SolidViewModel) => void;
+  public readonly ready: Promise<void>;
 
   public constructor(
     private readonly renderer: CliRenderer,
@@ -131,201 +136,63 @@ export class OpenTuiView {
     this.renderer.on("resize", () => {
       this.render();
     });
+    const [model, setModel] = createSignal<SolidViewModel>({ noColor: this.noColor });
+    this.setModel = setModel;
+    this.ready = mountSolidView(renderer, model, {
+      onInput: (value) => {
+        this.onModalInput(value);
+      },
+      onSubmit: (value) => {
+        void this.submit(value);
+      },
+      onInputMount: (input) => {
+        this.modalInput = input;
+      },
+    });
   }
 
   public render(): void {
-    if (this.tree) {
-      const previous = this.tree;
-      this.tree = undefined;
-      if (this.renderer.root.getChildren().includes(previous)) this.renderer.root.remove(previous);
-      else previous.parent = null;
-      previous.destroyRecursively();
-    }
     const layout = layoutForTerminal(this.renderer.width, this.renderer.height);
     if (layout.mode === "unsupported") {
-      const root = new BoxRenderable(this.renderer, {
-        id: "massion-tui-small",
-        width: "100%",
-        height: "100%",
-        alignItems: "center",
-        justifyContent: "center",
-      });
-      root.add(
-        new TextRenderable(this.renderer, {
-          content: `Massion TUI는 최소 80×24가 필요합니다.\n현재 크기: ${String(layout.width)}×${String(layout.height)}`,
-          ...this.paint("fg", "#F3B35B"),
-          attributes: TextAttributes.BOLD,
-        }),
-      );
-      this.tree = root;
-      this.renderer.root.add(root);
+      this.setModel({ noColor: this.noColor, unsupported: { width: layout.width, height: layout.height } });
+      this.renderer.requestRender();
       return;
     }
-
     const output = present(this.actions.state());
-    const root = new BoxRenderable(this.renderer, {
-      id: "massion-tui-root",
-      width: "100%",
-      height: "100%",
-      flexDirection: "column",
-      ...this.paint("backgroundColor", "#0B0D10"),
-    });
-    root.add(this.header(output.title));
-    root.add(this.navigation(output.navigation));
-    const body = new BoxRenderable(this.renderer, {
-      id: "body",
-      flexDirection: "row",
-      flexGrow: 1,
-      width: "100%",
-      gap: 1,
-      paddingX: 1,
-    });
-    const list = this.filtered(output.list);
-    const detail = this.filtered(output.detail);
     const inspectorOn = this.actions.state().inspector;
     const view = this.actions.state().view;
-    body.add(this.panel(LIST_PANEL_TITLES[view], list, layout.mode === "wide" ? "40%" : "38%"));
-    body.add(
-      this.panel(
-        inspectorOn ? "자세히 보기" : DETAIL_PANEL_TITLES[view],
-        detail,
-        layout.mode === "wide" ? "60%" : "62%",
-      ),
-    );
-    root.add(body);
-    if (this.modal) root.add(this.modalPanel());
-    root.add(this.footer(this.notice || output.footer));
-    this.tree = root;
-    this.renderer.root.add(root);
-    this.input?.focus();
+    this.setModel({
+      noColor: this.noColor,
+      panel: {
+        mode: layout.mode,
+        title: safeTerminalText(output.title, 512),
+        navigation: output.navigation,
+        listTitle: LIST_PANEL_TITLES[view],
+        listContent: safeTerminalText(this.filtered(output.list)),
+        detailTitle: inspectorOn ? "자세히 보기" : DETAIL_PANEL_TITLES[view],
+        detailContent: safeTerminalText(this.filtered(output.detail)),
+        footer: safeTerminalText(this.notice || output.footer, 512),
+      },
+      ...(this.modal === undefined ? {} : { modal: this.modalModel(this.modal) }),
+    });
     this.renderer.requestRender();
-  }
-
-  private paint<Key extends string>(key: Key, value: string): Partial<Record<Key, string>> {
-    return this.noColor ? {} : ({ [key]: value } as Record<Key, string>);
-  }
-
-  private header(content: string): BoxRenderable {
-    const box = new BoxRenderable(this.renderer, {
-      id: "header",
-      height: 3,
-      width: "100%",
-      paddingX: 2,
-      alignItems: "center",
-      ...this.paint("backgroundColor", "#151A21"),
-    });
-    box.add(
-      new TextRenderable(this.renderer, {
-        content: safeTerminalText(content, 512),
-        ...this.paint("fg", "#8BD5CA"),
-        attributes: TextAttributes.BOLD,
-      }),
-    );
-    return box;
-  }
-
-  private navigation(content: string): BoxRenderable {
-    const box = new BoxRenderable(this.renderer, { height: 3, width: "100%", paddingX: 2, alignItems: "center" });
-    box.add(new TextRenderable(this.renderer, { content, ...this.paint("fg", "#C6D0F5") }));
-    return box;
-  }
-
-  private panel(title: string, content: string, width: `${number}%`): BoxRenderable {
-    const panel = new BoxRenderable(this.renderer, {
-      width,
-      height: "100%",
-      border: true,
-      borderStyle: "rounded",
-      ...this.paint("borderColor", "#414559"),
-      title,
-      titleAlignment: "left",
-      padding: 1,
-      overflow: "hidden",
-    });
-    panel.add(
-      new TextRenderable(this.renderer, {
-        content: safeTerminalText(content),
-        ...this.paint("fg", "#C6D0F5"),
-        selectable: true,
-        width: "100%",
-      }),
-    );
-    return panel;
-  }
-
-  private footer(content: string): BoxRenderable {
-    const box = new BoxRenderable(this.renderer, {
-      height: 2,
-      width: "100%",
-      paddingX: 2,
-      alignItems: "center",
-      ...this.paint("backgroundColor", "#151A21"),
-    });
-    box.add(
-      new TextRenderable(this.renderer, {
-        content: safeTerminalText(content, 512),
-        ...this.paint("fg", "#A5ADCE"),
-      }),
-    );
-    return box;
   }
 
   private paletteMatches(): readonly SurfacePaletteItem[] {
     return filterPaletteItems(TUI_PALETTE_ITEMS, this.paletteQuery);
   }
 
-  private modalPanel(): BoxRenderable {
-    const modal = this.modal;
-    const box = new BoxRenderable(this.renderer, {
-      height: modal?.kind === "help" ? 8 : modal?.kind === "palette" ? PALETTE_VISIBLE_LIMIT + 6 : 5,
-      width: "100%",
-      border: true,
-      borderStyle: "double",
-      ...this.paint("borderColor", "#F3B35B"),
-      title: modal?.title ?? "입력",
-      paddingX: 1,
-      flexDirection: "column",
-    });
-    if (modal?.kind === "help") {
-      box.add(
-        new TextRenderable(this.renderer, {
-          content:
-            "기본 화면: 작업 목록 + 진행 상황이 바로 보입니다.\n" +
-            "Tab/Shift+Tab: 뷰 전환(작업·확인·대화·개요·협업·운영·구독)\n" +
-            "j/k 또는 화살표: 이동 · Enter: 자세히 열기 · d: 자세히 토글 · Esc: 뒤로\n" +
-            "n: 새 작업 · m: 메시지 보내기 · /: 검색 · r: 새로고침 · Ctrl+P: 명령 팔레트\n" +
-            "확인 필요: a 승인 · x 거절 · Delete 승인 취소 · 자세히에서 c 작업 취소 · t 작업 배정\n" +
-            "실행 제어(자세히): s 일시정지/재개 · z 실행 취소\n" +
-            "구독: ←/→ 또는 h/l 탭 · s 공유 · u 공유 해제 · d 연결 해제\n" +
-            '모델 평가실(운영): o · JSON {"operation":"...","payload":{...}}\n' +
-            "Esc: 입력 닫기 · Ctrl+C: 종료 · 선택한 텍스트는 복사할 수 있습니다.",
-          ...this.paint("fg", "#C6D0F5"),
-        }),
-      );
-      return box;
+  private modalModel(modal: Modal): SolidModalModel {
+    if (modal.kind === "help") {
+      return {
+        key: "help",
+        title: modal.title,
+        placeholder: modal.placeholder,
+        height: 8,
+        helpText: HELP_TEXT,
+      };
     }
-    const input = new InputRenderable(this.renderer, {
-      id: "modal-input",
-      width: "100%",
-      value: modal?.kind === "palette" ? this.paletteQuery : "",
-      placeholder: modal?.placeholder ?? "입력 후 Enter",
-      maxLength: 65_536,
-      ...this.paint("backgroundColor", "#232634"),
-      ...this.paint("textColor", "#C6D0F5"),
-      ...this.paint("cursorColor", "#8BD5CA"),
-    });
-    input.on(InputRenderableEvents.ENTER, () => {
-      void this.submit(input.value);
-    });
-    box.add(input);
-    this.input = input;
-    if (modal?.kind === "palette") {
-      input.on(InputRenderableEvents.INPUT, () => {
-        if (this.paletteQuery === input.value) return;
-        this.paletteQuery = input.value;
-        this.paletteIndex = 0;
-        this.render();
-      });
+    if (modal.kind === "palette") {
       const matches = this.paletteMatches().slice(0, PALETTE_VISIBLE_LIMIT);
       const lines = matches.length
         ? matches.map((item, index) => {
@@ -334,14 +201,24 @@ export class OpenTuiView {
             return `${marker} ${item.title}  ·  ${item.category}${item.risky ? " ⚠" : ""}${hint}`;
           })
         : ["일치하는 명령이 없습니다."];
-      box.add(
-        new TextRenderable(this.renderer, {
-          content: [...lines, "", "↑↓ 이동 · Enter 실행 · Esc 닫기"].join("\n"),
-          ...this.paint("fg", "#C6D0F5"),
-        }),
-      );
+      return {
+        key: "palette",
+        title: modal.title,
+        placeholder: modal.placeholder,
+        height: PALETTE_VISIBLE_LIMIT + 6,
+        paletteText: [...lines, "", "↑↓ 이동 · Enter 실행 · Esc 닫기"].join("\n"),
+      };
     }
-    return box;
+    return { key: `${modal.kind}:${modal.title}`, title: modal.title, placeholder: modal.placeholder, height: 5 };
+  }
+
+  // 팔레트 입력이 바뀔 때만 목록을 다시 계산합니다.
+  private onModalInput(value: string): void {
+    if (this.modal?.kind !== "palette") return;
+    if (this.paletteQuery === value) return;
+    this.paletteQuery = value;
+    this.paletteIndex = 0;
+    this.render();
   }
 
   private filtered(content: string): string {
@@ -352,13 +229,6 @@ export class OpenTuiView {
   }
 
   private dispose(): void {
-    const tree = this.tree;
-    this.tree = undefined;
-    if (tree) {
-      if (this.renderer.root.getChildren().includes(tree)) this.renderer.root.remove(tree);
-      else tree.parent = null;
-      tree.destroyRecursively();
-    }
     this.actions.destroy();
   }
 
@@ -380,7 +250,6 @@ export class OpenTuiView {
       }
       if (key.name === "escape" || (key.ctrl && key.name === "c")) {
         this.modal = undefined;
-        this.input = undefined;
         this.paletteQuery = "";
         this.paletteIndex = 0;
         this.render();
@@ -493,6 +362,12 @@ export class OpenTuiView {
     this.modal = modal;
     this.notice = "";
     this.render();
+    this.resetModalInput();
+  }
+
+  // reconciler가 input renderable을 재사용하므로 값을 직접 비웁니다.
+  private resetModalInput(): void {
+    if (this.modalInput) this.modalInput.value = "";
   }
 
   // 팔레트 항목 실행: 항목 ID는 공통 계약이 소유하고 여기서 화면 동작으로 변환합니다.
@@ -554,7 +429,6 @@ export class OpenTuiView {
       const matches = this.paletteMatches().slice(0, PALETTE_VISIBLE_LIMIT);
       const selected = matches[this.paletteIndex] ?? matches[0];
       this.modal = undefined;
-      this.input = undefined;
       this.paletteQuery = "";
       this.paletteIndex = 0;
       if (!selected) {
@@ -568,11 +442,13 @@ export class OpenTuiView {
     const content = value.trim();
     if (!content && modal.kind !== "search") {
       this.notice = modal.kind === "start-work" ? "업무 내용을 입력해 주세요." : "내용 또는 이유를 입력해야 합니다.";
+      this.resetModalInput();
       this.render();
       return;
     }
     if (modal.kind === "subscription-account" && content !== modal.confirmation) {
       this.notice = `확인하려면 ${modal.confirmation}를 정확히 입력해 주세요.`;
+      this.resetModalInput();
       this.render();
       return;
     }
@@ -588,6 +464,7 @@ export class OpenTuiView {
         !modal.approvalModes.includes(approvalMode as ApprovalMode)
       ) {
         this.notice = `계정 선택 정책과 ${modal.approvalModes.join(", ")} 중 하나를 공백으로 구분해 입력해 주세요.`;
+        this.resetModalInput();
         this.render();
         return;
       }
@@ -612,12 +489,12 @@ export class OpenTuiView {
         optimizationInput = { operation: value.operation, payload: value.payload as Record<string, unknown> };
       } catch {
         this.notice = "operation과 object payload가 있는 JSON을 입력해 주세요.";
+        this.resetModalInput();
         this.render();
         return;
       }
     }
     this.modal = undefined;
-    this.input = undefined;
     if (modal.kind === "search") {
       this.search = content;
       this.render();

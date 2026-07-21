@@ -10,7 +10,7 @@
     "dist"
   ],
   "scripts": {
-    "build": "pnpm build-deps && node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\" && tsc -p tsconfig.json",
+    "build": "pnpm build-deps && bun scripts/build.ts",
     "build-deps": "pnpm --filter @massion/application build",
     "start": "bun src/main.ts",
     "test": "pnpm build-deps && vitest run src --exclude '**/*.bun.test.ts' && bun test src/open-tui.bun.test.ts",
@@ -18,13 +18,15 @@
   },
   "dependencies": {
     "@massion/application": "workspace:*",
-    "@opentui/core": "0.4.3"
+    "@opentui/core": "0.4.3",
+    "@opentui/solid": "0.4.3",
+    "solid-js": "1.9.12"
   },
   "devDependencies": {
+    "@massion/extension-host": "workspace:*",
     "@massion/governance": "workspace:*",
     "@massion/identity": "workspace:*",
     "@massion/organization": "workspace:*",
-    "@massion/extension-host": "workspace:*",
     "@massion/runtime": "workspace:*",
     "@massion/storage": "workspace:*",
     "@massion/work": "workspace:*",
