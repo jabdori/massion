@@ -13,7 +13,7 @@
 | UX-1 `work.timeline` 공통 투영 | 완료 | `209d7b1` + Web 진행 기록 표시. 팔레트 metadata는 UX-3 팔레트와 함께 |
 | UX-2 실행 스트림 | 서버측 완료 | `c23738f` — delta observer·fan-out registry·`/api/v1/executions/stream`. Surface 소비는 UX-3·4에서 |
 | Web workspace parity | 완료 | `2aa1c4c` — /workspaces 관리(등록·신뢰·보관)·작업 필터 |
-| UX-3 TUI transcript 재설계 | 대부분 완료 | `9b9d4b9` transcript, `cd05ac1` Ctrl+P 팔레트, `b3dc0c4` **solid 렌더러 전환 완료** — 렌더 트리를 `@opentui/solid` 컴포넌트로 교체(로직·키 처리·테스트 의미 보존, 렌더러 parity 테스트 18건 무변경 통과), dist는 `Bun.build`+solid plugin 번들, tsc는 typecheck 전용. 주의: 이 reconciler(0.4.3)는 `Show keyed`에서도 renderable을 재사용하므로 input 초기화는 ref로 직접 수행. 잔여: 스트리밍 active cell(UX-2 SSE 소비)·상시 composer·승인 diff 오버레이 |
+| UX-3 TUI transcript 재설계 | 대부분 완료 | `9b9d4b9` transcript, `cd05ac1` Ctrl+P 팔레트, `b3dc0c4` **solid 렌더러 전환 완료** — 렌더 트리를 `@opentui/solid` 컴포넌트로 교체(로직·키 처리·테스트 의미 보존, 렌더러 parity 테스트 18건 무변경 통과), dist는 `Bun.build`+solid plugin 번들, tsc는 typecheck 전용. 주의: 이 reconciler(0.4.3)는 `Show keyed`에서도 renderable을 재사용하므로 input 초기화는 ref로 직접 수행. 스트리밍 active cell 완료(`work-detail 응답 중 셀 + 델타 SSE client·재연결`). 잔여: 상시 composer·승인 diff 오버레이 |
 | UX-4 Web 관제 분할 화면·폴링 제거 | 부분 | timeline 표시 + `Cmd/Ctrl+K` 팔레트·parity 테스트(`ffdbcbb`, browser.ts 진입점 포함). SSE 소비·분할 화면 대기 |
 | UX-5 신뢰 장치 | 부분 완료 | `65d4f7a` 신뢰 게이트(delivery blocked=workspace-untrusted, TUI workspace.trust 팔레트 명령), `fdf2608` 승인 대기 터미널 벨(NO_BELL 옵트아웃). 잔여: 자율성 다이얼(Governance 세션 모드), Web 알림, Git provenance 노출 |
 | WS-4 Web 역할 결정 | 완료 | [ws4-web-role-decision.md](ws4-web-role-decision.md) — Web=GUI 동일 화면, browser.ts 계약 경계, 로컬 능력 어댑터, WS-3 spike 판정 기준 |
