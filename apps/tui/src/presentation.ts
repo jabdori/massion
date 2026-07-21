@@ -160,6 +160,27 @@ function activeStreamLines(state: TuiState, snapshot: CollaborationGraphSnapshot
   return ["", `● ${safeTerminalText(stream.agentHandle, 40)} 응답 중… ▌`, ...tail];
 }
 
+// Git provenance: software-engineering delivery의 브랜치·commit 계보를 표시합니다.
+function provenanceLines(state: TuiState): readonly string[] {
+  const value = state.queryResults.provenance;
+  if (!Array.isArray(value) || value.length === 0) return [];
+  const rows = value.filter(
+    (item): item is Record<string, unknown> => item !== null && typeof item === "object" && !Array.isArray(item),
+  );
+  if (rows.length === 0) return [];
+  return [
+    "",
+    "코드 변경(Git)",
+    ...rows.slice(-6).map((row) => {
+      const sha = typeof row.commitSha === "string" ? row.commitSha.slice(0, 10) : "커밋 전";
+      const branch = typeof row.branchRef === "string" ? row.branchRef : "";
+      const status = typeof row.status === "string" ? row.status : "";
+      const agent = typeof row.agentHandle === "string" ? `@${row.agentHandle}` : "";
+      return safeTerminalText(`${sha}  ${branch}  ${status}  ${agent}`, 200);
+    }),
+  ];
+}
+
 function recentNews(state: TuiState): readonly string[] {
   const events = state.events.slice(-6);
   if (!events.length) return ["아직 소식이 없어요."];
@@ -308,6 +329,8 @@ function works(state: TuiState, snapshot: CollaborationGraphSnapshot): { list: s
             return `${statusMark(task.status)} ${task.title} (${task.taskId}) → ${role}`;
           })
         : ["없음"]),
+      "",
+      ...provenanceLines(state),
       "",
       "실행(Execution)",
       ...(executions.length

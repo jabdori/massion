@@ -726,6 +726,18 @@ export async function createMassionDaemon(
       queries: {
         runtime: runtimeExecutions,
         workspaces,
+        provenance: {
+          listByWork: async (provenanceContext, workId) =>
+            (await engineeringDeliveries.listByWork(provenanceContext, workId)).map((delivery) => ({
+              deliveryId: delivery.deliveryId,
+              taskId: delivery.taskId,
+              agentHandle: delivery.agentHandle,
+              status: delivery.status,
+              ...(delivery.branchRef === undefined ? {} : { branchRef: delivery.branchRef }),
+              ...(delivery.commitSha === undefined ? {} : { commitSha: delivery.commitSha }),
+              createdAt: delivery.createdAt,
+            })),
+        },
         workTimeline: {
           events: async (timelineContext, workId) => await works.listEvents(timelineContext, workId),
           rooms: async (timelineContext, workId) => await works.listRooms(timelineContext, workId),

@@ -78,6 +78,17 @@ describe("Software Engineering delivery 저장소", () => {
     };
   }
 
+  it("listByWork는 같은 Work의 delivery만 시간순으로 반환하고 tenant를 격리한다", async () => {
+    const started = await store.start(context, input(crypto.randomUUID()));
+
+    const listed = await store.listByWork(context, workId);
+    expect(listed).toHaveLength(1);
+    expect(listed[0]?.deliveryId).toBe(started.delivery.deliveryId);
+
+    expect(await store.listByWork(context, "work-없음")).toHaveLength(0);
+    expect(await store.listByWork(otherContext, workId)).toHaveLength(0);
+  });
+
   it("delivery를 preparing 상태로 만들고 같은 명령은 멱등 재생하며 payload 변경은 거부한다", async () => {
     const commandId = crypto.randomUUID();
     const first = await store.start(context, input(commandId));

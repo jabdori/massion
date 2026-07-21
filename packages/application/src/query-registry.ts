@@ -68,6 +68,22 @@ export interface ApplicationQueryDependencies {
   readonly memberships?: Pick<OrganizationService, "listMembers">;
   readonly workspaces?: Pick<WorkspaceService, "list" | "get">;
   readonly workTimeline?: WorkTimelineSources;
+  readonly provenance?: {
+    listByWork(
+      context: TenantContext,
+      workId: string,
+    ): Promise<
+      readonly {
+        readonly deliveryId: string;
+        readonly taskId: string;
+        readonly agentHandle: string;
+        readonly status: string;
+        readonly branchRef?: string;
+        readonly commitSha?: string;
+        readonly createdAt: unknown;
+      }[]
+    >;
+  };
   readonly audit?: Pick<ApplicationEventStore, "read">;
   readonly webSessions?: Pick<WebSessionService, "list">;
   readonly providers?: Pick<ProviderService, "listProviders" | "listEndpoints" | "listCredentials">;
@@ -547,6 +563,25 @@ export function registerApplicationQueries(
           ...(limit === undefined ? {} : { limit }),
         });
       },
+    });
+  }
+  if (dependencies.provenance) {
+    const provenance = dependencies.provenance;
+    registry.register({
+      operation: "work.provenance",
+      requiredScopes: ["work:read"],
+      allowedRoles: EVERY_ROLE,
+      validate: (value) => object(value, ["workId"]),
+      handle: async (context, value) =>
+        (await provenance.listByWork(context, text(value.workId, "workId"))).map((delivery) => ({
+          deliveryId: delivery.deliveryId,
+          taskId: delivery.taskId,
+          agentHandle: delivery.agentHandle,
+          status: delivery.status,
+          ...(delivery.branchRef === undefined ? {} : { branchRef: delivery.branchRef }),
+          ...(delivery.commitSha === undefined ? {} : { commitSha: delivery.commitSha }),
+          createdAt: delivery.createdAt,
+        })),
     });
   }
   registry.register({

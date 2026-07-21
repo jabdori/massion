@@ -44,6 +44,7 @@ export default function WorkPage() {
   const roomsData = useQueryData<unknown>(consoleStore, "work.rooms", payload);
   const recordsData = useQueryData<unknown>(consoleStore, "work.records", payload);
   const timelineData = useQueryData<unknown>(consoleStore, "work.timeline", payload);
+  const provenanceData = useQueryData<unknown>(consoleStore, "work.provenance", payload);
   const meData = useQueryData<unknown>(consoleStore, "identity.me");
   const snapshotData = useQueryData<unknown>(consoleStore, "organization.graph.snapshot");
   const executionStream = useExecutionStream();
@@ -323,6 +324,29 @@ export default function WorkPage() {
       {/* 기술 정보 (토글로 펼침) */}
       {showDetails ? (
         <div className="work-detail">
+          {rows(provenanceData).length > 0 ? (
+            <section className="ledger-panel" style={{ marginBottom: "16px" }}>
+              <div className="panel-title">
+                <div>
+                  <p className="eyebrow">코드 변경</p>
+                  <h2>Git 계보</h2>
+                </div>
+              </div>
+              <div className="task-list">
+                {rows(provenanceData).map((delivery) => (
+                  <article key={label(delivery.deliveryId)}>
+                    <div>
+                      <strong>
+                        <code>{label(delivery.commitSha, "커밋 전").slice(0, 10)}</code> {label(delivery.branchRef)}
+                      </strong>
+                      <code>@{label(delivery.agentHandle)}</code>
+                    </div>
+                    <StatusStamp value={label(delivery.status)} />
+                  </article>
+                ))}
+              </div>
+            </section>
+          ) : null}
           <section className="work-status-band">
             <StatusStamp value={workStatus} />
             <span>버전 {label(work.revision)}</span>

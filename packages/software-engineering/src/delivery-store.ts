@@ -132,7 +132,11 @@ function validateAssuranceCommand(command: EngineeringAssuranceRecipe["focusedCo
   if (!Number.isSafeInteger(command.timeoutMs) || command.timeoutMs < 1_000 || command.timeoutMs > 3_600_000) {
     throw new Error("Assurance command timeout은 1초 이상 1시간 이하여야 합니다");
   }
-  if (!Number.isSafeInteger(command.maxOutputBytes) || command.maxOutputBytes < 1 || command.maxOutputBytes > 10_000_000) {
+  if (
+    !Number.isSafeInteger(command.maxOutputBytes) ||
+    command.maxOutputBytes < 1 ||
+    command.maxOutputBytes > 10_000_000
+  ) {
     throw new Error("Assurance command output limit은 1~10000000 byte여야 합니다");
   }
 }
@@ -224,6 +228,15 @@ export class EngineeringDeliveryStore {
   public async get(context: TenantContext, deliveryId: string): Promise<EngineeringDelivery> {
     await this.organizations.verifyTenantContext(context);
     return this.view(await this.find(this.database, context.organizationId, deliveryId));
+  }
+
+  public async listByWork(context: TenantContext, workId: string): Promise<EngineeringDelivery[]> {
+    await this.organizations.verifyTenantContext(context);
+    const [records] = await this.database.query<[DeliveryRecord[]]>(
+      "SELECT * OMIT id FROM engineering_delivery WHERE organization_id = $organization_id AND work_id = $work_id ORDER BY created_at ASC;",
+      { organization_id: context.organizationId, work_id: workId },
+    );
+    return records.map((record) => this.view(record));
   }
 
   public async findByStartCommand(context: TenantContext, commandId: string): Promise<EngineeringDelivery | undefined> {

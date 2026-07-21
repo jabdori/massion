@@ -86,6 +86,31 @@ describe("ApplicationQueryRegistry", () => {
     });
   });
 
+  it("work.provenance는 코드 변경 계보(브랜치·commit)를 반환한다", async () => {
+    const registry = new ApplicationQueryRegistry();
+    registerApplicationQueries(registry, {
+      readModel,
+      provenance: {
+        listByWork: async () => [
+          {
+            deliveryId: "delivery-1",
+            taskId: "task-1",
+            agentHandle: "backend-specialist",
+            status: "committed",
+            branchRef: "massion/work-1",
+            commitSha: "abc1234def",
+            createdAt: "2026-07-21T09:00:00.000Z",
+          },
+        ],
+      },
+    });
+    await expect(
+      registry.query(context, ["work:read"], "work.provenance", { workId: "query-work" }),
+    ).resolves.toMatchObject({
+      data: [{ deliveryId: "delivery-1", commitSha: "abc1234def", branchRef: "massion/work-1", status: "committed" }],
+    });
+  });
+
   it("work.timeline은 event·메시지를 병합한 셀 목록을 반환한다", async () => {
     const registry = new ApplicationQueryRegistry();
     registerApplicationQueries(registry, {
