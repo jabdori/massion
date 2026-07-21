@@ -1,9 +1,11 @@
 import { afterEach, describe, expect, test } from "bun:test";
+import { createSignal } from "solid-js";
 
 import { createTestRenderer } from "@opentui/core/testing";
 import { InputRenderable, KeyEvent } from "@opentui/core";
 
 import { OpenTuiView } from "./open-tui.js";
+import { mountSolidView, type SolidViewModel } from "./solid-view.jsx";
 import { createTuiState, reduceTuiState } from "./state.js";
 import { testSnapshot } from "./state.test.js";
 import { decodeSnapshot } from "./wire.js";
@@ -32,6 +34,41 @@ function emitKey(name: string): void {
 afterEach(() => {
   setup?.renderer.destroy();
   setup = undefined;
+});
+
+describe("초기 렌더", () => {
+  test("panel·unsupported가 아직 없는 초기 모델에서도 orphan text 없이 로딩 화면을 그린다", async () => {
+    // 데몬 연결 전 첫 프레임은 { noColor }뿐이다. 루트가 빈 텍스트 노드를 만들면
+    // OpenTUI가 "Orphan text" 오류를 내며 화면이 깨진다. 루트는 항상 box여야 한다.
+    setup = await createTestRenderer({ width: 120, height: 40 });
+    const [model, setModel] = createSignal<SolidViewModel>({ noColor: true });
+    await mountSolidView(setup.renderer, model, {
+      onInput: () => undefined,
+      onSubmit: () => undefined,
+      onInputMount: () => undefined,
+      onComposerSubmit: () => undefined,
+      onComposerMount: () => undefined,
+    });
+    await setup.renderOnce();
+    expect(setup.captureCharFrame()).toContain("운영실을 준비하는 중");
+
+    // 이후 panel이 채워지면 정상 화면으로 전환된다.
+    setModel({
+      noColor: true,
+      panel: {
+        mode: "wide",
+        title: "Massion",
+        navigation: "탐색",
+        listTitle: "목록",
+        listContent: "항목",
+        detailTitle: "상세",
+        detailContent: "내용",
+        footer: "Ctrl+C 종료",
+      },
+    });
+    await setup.renderOnce();
+    expect(setup.captureCharFrame()).toContain("Massion");
+  });
 });
 
 describe("OpenTUI 실제 renderer", () => {

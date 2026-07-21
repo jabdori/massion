@@ -128,7 +128,16 @@ export function mountSolidView(
       <Show
         when={model().unsupported === undefined && model().panel}
         fallback={
-          <Show when={model().unsupported}>
+          <Show
+            when={model().unsupported}
+            // panel·unsupported가 아직 없는 초기 프레임에도 루트가 항상 box를 렌더하도록 합니다.
+            // (루트에 빈 텍스트 노드가 생기면 OpenTUI가 orphan text로 거부합니다.)
+            fallback={
+              <box width="100%" height="100%" alignItems="center" justifyContent="center">
+                <text {...paint("fg", "#A5ADCE")}>Massion 운영실을 준비하는 중…</text>
+              </box>
+            }
+          >
             {(size) => (
               <box width="100%" height="100%" alignItems="center" justifyContent="center">
                 <text attributes={TextAttributes.BOLD} {...paint("fg", "#F3B35B")}>

@@ -24,6 +24,32 @@ fn massion_candidates() -> Vec<PathBuf> {
     candidates
 }
 
+// GUI로 실행된 앱은 최소 PATH(/usr/bin:/bin:…)만 가지므로 massion 래퍼가 의존하는
+// node·bun(mise/homebrew 등에 설치)을 찾지 못해 실패합니다. CLI를 spawn할 때
+// 사용자 툴체인·표준 위치를 PATH에 보강해 이를 해결합니다.
+fn augmented_path() -> String {
+    let mut dirs: Vec<String> = Vec::new();
+    if let Ok(home) = std::env::var("HOME") {
+        dirs.push(format!("{home}/.local/bin"));
+        dirs.push(format!("{home}/.local/share/mise/shims"));
+    }
+    dirs.push("/opt/homebrew/bin".to_string());
+    dirs.push("/usr/local/bin".to_string());
+    if let Ok(existing) = std::env::var("PATH") {
+        for part in existing.split(':') {
+            if !part.is_empty() {
+                dirs.push(part.to_string());
+            }
+        }
+    }
+    for standard in ["/usr/bin", "/bin", "/usr/sbin", "/sbin"] {
+        dirs.push(standard.to_string());
+    }
+    // 순서를 유지하며 중복을 제거합니다.
+    let mut seen = std::collections::HashSet::new();
+    dirs.into_iter().filter(|dir| seen.insert(dir.clone())).collect::<Vec<_>>().join(":")
+}
+
 // 데스크톱 세션: 로컬 서버를 보장하고 티켓을 서버측에서 교환한 세션 쿠키를 확보합니다.
 // WKWebView는 fetch 응답의 Set-Cookie를 신뢰성 있게 저장하지 못하므로(브라우저는 정상),
 // 코드→쿠키 교환을 브라우저가 아니라 CLI에서 수행하고 shell이 그 쿠키를 document.cookie로
@@ -35,8 +61,12 @@ struct DesktopSession {
 }
 
 fn desktop_session() -> Option<DesktopSession> {
+    let path = augmented_path();
     for candidate in massion_candidates() {
-        let output = Command::new(&candidate).args(["--web", "--print-session"]).output();
+        let output = Command::new(&candidate)
+            .args(["--web", "--print-session"])
+            .env("PATH", &path)
+            .output();
         if let Ok(output) = output {
             if output.status.success() {
                 let text = String::from_utf8_lossy(&output.stdout);
