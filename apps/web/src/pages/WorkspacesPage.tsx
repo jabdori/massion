@@ -4,6 +4,7 @@ import { label, rows } from "../data.js";
 import { useQueryData } from "../hooks.js";
 import { consoleStore } from "../services.js";
 import { EmptyState, LoadingState, PageHeader } from "../components/States.js";
+import { localShell } from "../local-shell.js";
 
 // TUI cwd attach와 같은 workspace.register/trust/archive 계약을 사용합니다.
 const TRUST_LABELS: Readonly<Record<string, string>> = {
@@ -68,6 +69,21 @@ export default function WorkspacesPage() {
             placeholder="/home/me/projects/my-app"
             aria-label="워크스페이스 경로"
           />
+          {localShell()?.pickDirectory ? (
+            <button
+              className="secondary-button"
+              type="button"
+              onClick={() => {
+                void localShell()
+                  ?.pickDirectory?.()
+                  .then((selected) => {
+                    if (selected) setPath(selected);
+                  });
+              }}
+            >
+              폴더 선택
+            </button>
+          ) : null}
           <button className="primary-button" type="submit" disabled={!path.trim()}>
             등록
           </button>

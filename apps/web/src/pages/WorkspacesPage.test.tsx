@@ -61,6 +61,22 @@ describe("WorkspacesPage", () => {
     expect(testState.refresh).toHaveBeenCalledWith("workspace.list", {});
   });
 
+  it("desktop shell 어댑터가 있으면 폴더 선택으로 경로를 채운다", async () => {
+    (globalThis as { massionShell?: unknown }).massionShell = {
+      pickDirectory: () => Promise.resolve("/home/owner/projects/from-dialog"),
+    };
+    try {
+      const user = userEvent.setup();
+      render(<WorkspacesPage />);
+      await user.click(screen.getByRole("button", { name: "폴더 선택" }));
+      expect(await screen.findByRole("textbox", { name: "워크스페이스 경로" })).toHaveValue(
+        "/home/owner/projects/from-dialog",
+      );
+    } finally {
+      delete (globalThis as { massionShell?: unknown }).massionShell;
+    }
+  });
+
   it("경로를 입력해 workspace.register command를 보낸다", async () => {
     const user = userEvent.setup();
     render(<WorkspacesPage />);

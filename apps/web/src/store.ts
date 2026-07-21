@@ -55,7 +55,15 @@ const EMPTY_QUERY_ERRORS: Readonly<Record<string, string>> = Object.freeze({});
 const DEFAULT_QUERY_RESOURCE_SOFT_LIMIT = 256;
 const MAX_EVENT_BYTES = 4 * 1024 * 1024;
 const UTF8_ENCODER = new TextEncoder();
-const WORK_QUERY_OPERATIONS = new Set(["work.get", "work.tasks", "work.assignments", "work.rooms", "work.records"]);
+const WORK_QUERY_OPERATIONS = new Set([
+  "work.get",
+  "work.tasks",
+  "work.assignments",
+  "work.rooms",
+  "work.records",
+  "work.timeline",
+  "work.provenance",
+]);
 
 interface EventResource {
   readonly type: string;

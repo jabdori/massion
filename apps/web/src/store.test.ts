@@ -65,6 +65,29 @@ describe("WebConsoleStore", () => {
     expect(snapshot).toHaveBeenCalledTimes(2);
   });
 
+  it("Work 사건은 보유 중인 work.timeline·work.provenance 조회를 다시 읽는다", async () => {
+    const query = vi
+      .fn()
+      .mockResolvedValue({ schemaVersion: "massion.application.v1", operation: "work.timeline", data: [] });
+    const store = new WebConsoleStore({ query } as never);
+    const releaseTimeline = store.retainQueryResource("work.timeline", { workId: "work-1" });
+    const releaseProvenance = store.retainQueryResource("work.provenance", { workId: "work-1" });
+    await store.refresh("work.timeline", { workId: "work-1" });
+    await store.refresh("work.provenance", { workId: "work-1" });
+    query.mockClear();
+
+    await store.acceptEvent({
+      sequence: 1,
+      type: "work.updated",
+      resource: { type: "Work", id: "work-1" },
+    } as never);
+
+    const operations = query.mock.calls.map(([operation]) => operation).sort();
+    expect(operations).toEqual(["work.provenance", "work.timeline"]);
+    releaseTimeline();
+    releaseProvenance();
+  });
+
   it("같은 command ID의 동시 변경을 한 번만 전송한다", async () => {
     let release: (() => void) | undefined;
     const command = vi.fn(() => new Promise<void>((resolve) => (release = resolve)));
