@@ -17,5 +17,5 @@
     "vite.config.ts",
     "playwright*.config.ts"
   ],
-  "exclude": ["e2e-actual/server.ts"]
+  "exclude": ["e2e-actual/server.ts", "src/vendor/**"]
 }
