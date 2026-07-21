@@ -1,0 +1,11 @@
+{
+  "name": "@massion/desktop",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Massion desktop shell (Tauri). 화면은 apps/web 단일 소스이며 이 패키지는 native wrapper만 소유합니다.",
+  "scripts": {
+    "build": "echo 'desktop shell은 Rust toolchain으로 별도 빌드합니다: cd apps/desktop/src-tauri && cargo build'",
+    "test": "echo 'desktop shell 검증은 cargo build와 수동 UAT로 수행합니다'",
+    "typecheck": "echo 'desktop shell에는 TypeScript 소스가 없습니다'"
+  }
+}
