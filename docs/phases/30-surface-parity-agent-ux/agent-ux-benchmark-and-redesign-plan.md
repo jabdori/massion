@@ -14,10 +14,10 @@
 | UX-2 실행 스트림 | 서버측 완료 | `c23738f` — delta observer·fan-out registry·`/api/v1/executions/stream`. Surface 소비는 UX-3·4에서 |
 | Web workspace parity | 완료 | `2aa1c4c` — /workspaces 관리(등록·신뢰·보관)·작업 필터 |
 | UX-3 TUI transcript 재설계 | 대부분 완료 | `9b9d4b9` transcript, `cd05ac1` Ctrl+P 팔레트, `b3dc0c4` **solid 렌더러 전환 완료** — 렌더 트리를 `@opentui/solid` 컴포넌트로 교체(로직·키 처리·테스트 의미 보존, 렌더러 parity 테스트 18건 무변경 통과), dist는 `Bun.build`+solid plugin 번들, tsc는 typecheck 전용. 주의: 이 reconciler(0.4.3)는 `Show keyed`에서도 renderable을 재사용하므로 input 초기화는 ref로 직접 수행. 스트리밍 active cell·상시 composer(`2f8e53a`)·승인 실행 미리보기 오버레이(`d9ce3ac`)까지 완료 — **UX-3 전체 완료** |
-| UX-4 Web 관제 분할 화면·SSE | 대부분 완료 | 팔레트(`ffdbcbb`) + Work 상세 2단 분할·실행 델타 응답 중 셀(`5fddf4c`, useExecutionStream이 TUI와 같은 누적 규칙). 잔여: 사건 기반 무효화로 mutate-후-refresh 폴링 완전 제거 |
-| UX-5 신뢰 장치 | 대부분 완료 | 신뢰 게이트(`65d4f7a`)·터미널 벨(`fdf2608`)·**Git provenance 노출**(`ad23e65` — work.provenance query, TUI inspector·Web 자세히 보기의 코드 변경 계보). **자율성 다이얼은 보류**: 세션 승인 모드 전환은 Governance의 조직 정책과 충돌하는 세션 스코프 override 개념이 필요하므로 도메인 설계(정책 상한·감사 계보) 선행 후 별도 슬라이스로 진행 |
+| UX-4 Web 관제 분할 화면·SSE | 완료 | 팔레트(`ffdbcbb`) + Work 상세 2단 분할·실행 델타 응답 중 셀(`5fddf4c`) + **사건 기반 무효화로 폴링 제거**(`92cf0ec` — Work 사건이 보유 중인 timeline·provenance를 다시 읽음) |
+| UX-5 신뢰 장치 | 완료 | 신뢰 게이트(`65d4f7a`)·터미널 벨(`fdf2608`)·Git provenance(`ad23e65`) + **자율성 다이얼**(`821e6ae` — `@massion/governance` AutonomyStore migration 0108, review 모드가 읽기 외 allow를 승인 요구로 조이기 전용 승격, TUI 헤더·팔레트·Web AccessPage) |
 | WS-4 Web 역할 결정 | 완료 | [ws4-web-role-decision.md](ws4-web-role-decision.md) — Web=GUI 동일 화면, browser.ts 계약 경계, 로컬 능력 어댑터, WS-3 spike 판정 기준 |
-| WS-3 GUI shell | spike 통과 | 2026-07-21 Tauri 2.6 spike: `create-tauri-app`(vanilla) 스캐폴드가 이 개발 환경(macOS·Rust 1.92)에서 `cargo build` 43.8초에 성공, 24MB debug 바이너리 생성 — **Tauri 채택 가능 판정**. 본 구현: `apps/web` dist를 frontendDist로 지정 + dialog/notification plugin + `LocalShellCapabilities` 어댑터([WS-4 결정](ws4-web-role-decision.md) §2.2) + 로컬 서버 수명 관리 |
+| WS-3 GUI shell | 완료 | `apps/desktop` Tauri shell(`dc87d4d`): 로컬 서버 콘솔을 native window로 로드, 미기동 시 `massion local start` 기동, `window.massionShell`로 폴더 선택·알림 주입. Rust 컴파일 47.8초·32MB 바이너리 성공. 번들 서명·배포는 릴리스 파이프라인 결정 시 연결 |
 > **대상**: `apps/tui`, `apps/web`, `packages/application` (표현 계약 확장)
 > **관계**: [Phase 30 design](design.md)의 REQ-SURFACE-004(공통 view-model·접근성)를 대체·확장하는 재설계 제안
 
