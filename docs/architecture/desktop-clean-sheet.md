@@ -56,16 +56,18 @@ bridge 런타임은 2026-07-22 현재 Active LTS인 공식 Node.js 24.18.0 macOS
 
 하나의 업무를 선택한 상세 화면은 Work를 중심으로 한 네 영역입니다.
 
-1. 전역 레일: 대표·홈, 업무, 조직, 결정, 성장, 역량으로 이동합니다.
+1. 전역 레일: 대표·홈, 업무, 조직, 결정, 성장, 역량, 설정으로 이동합니다.
 2. Work 목록: 생성, 검색, 상태 필터, 선택을 담당합니다.
 3. Work 활동: 요청부터 계획, 실행, 승인, 산출물, 검증까지 실제 사건 순서를 표시하고 후속 지시를 받습니다.
 4. 검사기(inspector): 선택한 Work의 작업, 담당 에이전트, 검증 상태를 교차 확인합니다.
 
-Work 상세의 네 영역을 AgentOS 전체 정보 구조로 확대 해석하지 않습니다. `결정`은 실행 승인과 조직·자기수정 결정을 통합하고, `성장`은 Reflection·Suggestion·Effect·Revert를 별도 제품 표면으로 제공합니다. `역량`은 설치 패키지보다 조직에 추가된 Skill·Tool·MCP·Extension Capability를 우선 표시합니다. 실행 자동화 수준은 별도 전역 제품 축이 아니라 결정과 성장 안의 정책 설정입니다.
+Work 상세의 네 영역을 AgentOS 전체 정보 구조로 확대 해석하지 않습니다. `결정`은 실행 승인과 조직·자기수정 결정을 통합하고, `성장`은 Reflection·Suggestion·Effect·Revert를 별도 제품 표면으로 제공합니다. `역량`은 설치 패키지보다 조직에 추가된 Skill·Tool·MCP·Extension Capability를 우선 표시하며 Registry 검색·검토·승인·설치를 제공합니다. `설정`은 Provider·계정 인증·모델 경로·실행 정책과 로컬 운영 환경을 별도 표면에서 구성합니다. 실행 자동화 수준은 별도 전역 제품 축이 아니라 설정이 투영하는 실행·성장 정책입니다.
 
-1440px 이상에서는 `160px 272px minmax(0, 1fr) 372px`, 1280~1439px에서는 `144px 248px minmax(520px, 1fr) 320px`, 1180~1279px에서는 `72px 232px minmax(520px, 1fr) 300px` 열을 사용합니다. 최소 창 크기는 1180×720px이며 각 영역은 독립적으로 스크롤합니다. 모바일용 축소 레이아웃은 첫 릴리스 범위가 아닙니다.
+전역 Sidebar는 확장 224px, 아이콘 모드 64px를 기본값으로 사용합니다. 표면 내부 패널은 모든 화면에 같은 열 비율을 강제하지 않고 Resizable의 표면별 기본값과 최소 폭을 사용합니다. Work의 초기값은 목록 248px, 본문 가변, Inspector 320px이며 사용자가 조절한 비율을 로컬 UI 환경설정으로 보존합니다. 최소 창 크기는 1180×720px이고 이 폭에서는 Sidebar가 아이콘 모드가 되며 Inspector를 접을 수 있습니다. 각 영역은 독립적으로 스크롤합니다. 모바일용 축소 레이아웃은 첫 릴리스 범위가 아닙니다.
 
-shadcn/ui는 완성 화면이나 디자인 시스템으로 채택하지 않고 접근성 상호작용이 복잡한 요소의 소스 공급 방식으로만 선택 사용합니다. shadcn/ui가 제공한 코드는 `apps/desktop`이 직접 소유·검토·수정하며 `--all`로 일괄 추가하지 않습니다. 첫 범위는 Button, Badge, Avatar, Tabs, Tooltip, Dropdown, Dialog, AlertDialog, Textarea, Skeleton, Command입니다. Sidebar, Card, Resizable, Sheet, ScrollArea는 사용하지 않고 CSS Grid와 native scroll로 구현합니다. 이를 통해 승인된 단일 암갈색 배경, 한 가지 amber 강조색, 제한된 border·radius 계층을 앱이 직접 소유합니다.
+shadcn/ui는 공통 셸과 접근성 상호작용의 소스 공급 방식으로 적극 사용합니다. 제공된 코드는 `apps/desktop`이 직접 소유·검토·수정하며 `--all`이나 `--overwrite`로 일괄 추가하지 않습니다. 공통 셸에는 Sidebar, Resizable, ScrollArea, Separator, Command와 필요할 때만 Sheet를 사용합니다. 데이터 표면에는 Item/Table, Tabs, Badge, Progress, Accordion, Empty, Skeleton과 Alert를 사용하고, 설정에는 Field, Input, Select와 Switch를 사용합니다. 승인·권한·삭제에는 Dialog와 AlertDialog를 사용합니다. Card는 실제로 독립된 요약 경계에만 제한합니다. 제품은 단일 암갈색 배경, 한 가지 amber 강조색, 제한된 border·radius 계층과 정보 구조를 계속 직접 소유합니다.
+
+세부 컴포넌트 매핑, Provider 인증, Extension 설치와 구현 순서는 [데스크톱 제품 표면 구현 설계](../superpowers/specs/2026-07-22-massion-desktop-product-surfaces-design.md)를 따릅니다.
 
 ## 보안과 데이터 흐름 규칙
 
