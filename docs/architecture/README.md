@@ -5,9 +5,11 @@
 > **제품 구현 기준**: 공개 `main` 브랜치의 현재 코드·테스트·운영 문서
 > **진행 근거**: [요구사항 추적표](../generated/requirements-traceability.tsv)와 Phase 24~28 문서
 
-이 문서는 Massion을 처음 접하는 사람과 구현 에이전트가 제품 전체를 빠르게 파악하도록 돕습니다. 현재 공개 저장소에 존재하는 코드와 검증 가능한 동작을 같은 그림에 표시하되 상태를 명확히 구분합니다. 세부 계약은 도메인 코드·테스트, 운영 문서와 현재 Phase 문서가 소유하며, 이 문서는 그 관계를 연결하는 지도입니다.
+> **제품 정체성 정본:** [Massion 제품 헌법과 현재 방향](../product/constitution.md). 이 문서는 현재 구현 구조를 설명하며 제품의 목적과 철학을 다시 정의하지 않습니다.
 
-근거는 실제 코드·테스트, 운영 문서, 현재 Phase 설계·회고 순으로 판정합니다. 새 저장소 전환 때 제외한 과거 Phase 문서나 대체된 개념도는 현재 구조의 근거로 사용하지 않습니다.
+이 문서는 Massion을 처음 접하는 사람과 구현 에이전트가 현재 구현 전체를 빠르게 파악하도록 돕습니다. 현재 공개 저장소에 존재하는 코드와 검증 가능한 동작을 같은 그림에 표시하되 상태를 명확히 구분합니다. 세부 계약은 도메인 코드·테스트, 운영 문서와 현재 Phase 문서가 소유하며, 이 문서는 그 관계를 연결하는 지도입니다.
+
+현재 동작은 실제 코드·테스트, 운영 문서, 현재 Phase 설계·회고 순으로 판정합니다. 새 저장소 전환 때 제외한 과거 Phase 문서나 대체된 개념도는 현재 구현 완료의 근거로 사용하지 않습니다. 과거 계보에서 확인된 제품 의도는 [제품 헌법](../product/constitution.md)이 보존합니다.
 
 ## 1. 읽는 법과 상태 범례
 
@@ -53,7 +55,7 @@ flowchart TB
     Intelligence["맥락 · 근거 · 실행 · 검증<br/>기록 · 성장 · 구현됨"]:::implemented
     Runtime["에이전트 실행 계층<br/>VoltAgent Adapter · 구현됨"]:::implemented
     Router["모델·계정 라우터<br/>회전 · fallback · 구현됨"]:::implemented
-    ExtHost["Extension Host<br/>격리 worker · 구현됨"]:::implemented
+    ExtHost["Extension Host<br/>패키지 구현 · 서버 조립 미완료"]:::implementing
   end
 
   DB[("SurrealDB<br/>AgentOS 단일 정본<br/>구현됨")]:::implemented
@@ -77,10 +79,10 @@ flowchart TB
   Office --> Intelligence
   Intelligence --> Runtime
   Runtime --> Router
-  ExtHost --> Runtime
+  ExtHost -. "제품 실행 경로 연결 필요" .-> Runtime
   AgentOS --> DB
   Router --> Providers
-  ExtHost -. "설치·업데이트" .-> Registry
+  ExtHost -. "목표: 설치·업데이트" .-> Registry
   Intelligence --> Git
 ```
 
@@ -90,7 +92,7 @@ flowchart TB
 | TUI | 구현됨 | `apps/tui` | 상태·표현·OpenTUI 렌더러 테스트 |
 | Core Office·Work·Governance | 구현됨 | `packages/organization`, `packages/work`, `packages/governance` | 조직·업무·승인 통합 테스트 |
 | Runtime·Router | 구현됨 | `packages/runtime`, `packages/router` | 모델 생성·실행·라우팅 실패 테스트 |
-| Extension Host | 구현됨 | `packages/extension-host` | 격리·권한·수명주기 테스트 |
+| Extension Host | 패키지 구현됨·서버 조립 미완료 | `packages/extension-host`, `apps/server` | 격리·권한·수명주기 테스트는 있으나 서버는 Store schema만 생성 |
 | Web Console | 구현됨 | `apps/web` | 페이지·상태·사용자 흐름 테스트 |
 | Slack·Discord·GitHub Surface | 구현됨 | `packages/integrations`, `extensions/slack`, `extensions/discord`, `extensions/github` | 공식 통합 계약 테스트 |
 | Registry·Marketplace | 구현됨 | `packages/registry`, `apps/cli`, `apps/web` | 게시·정책·검색·설치 테스트 |
@@ -126,7 +128,7 @@ flowchart LR
   end
 
   ExtSDK["Extension 계약<br/>@massion/extension-sdk"]:::implemented
-  ExtHost["Extension 격리·broker<br/>@massion/extension-host"]:::implemented
+  ExtHost["Extension 격리·broker<br/>패키지 구현 · 서버 조립 미완료"]:::implementing
   Application["제품 API 조합<br/>@massion/application<br/>구현됨"]:::implemented
   Surfaces["CLI · TUI · Web · Integration"]:::implemented
   VoltAgent["VoltAgent 실행 엔진<br/>외부"]:::external
@@ -152,8 +154,8 @@ flowchart LR
   Work --> Growth
   Runtime --> Growth
   ExtSDK --> ExtHost
-  ExtHost --> Runtime
-  ExtHost -. "capability broker만 허용" .-> Work
+  ExtHost -. "제품 실행 경로 연결 필요" .-> Runtime
+  ExtHost -. "목표: capability broker만 허용" .-> Work
   Runtime --> VoltAgent
   Router --> Provider
   Identity --> Application
@@ -163,7 +165,7 @@ flowchart LR
   Runtime --> Application
   Router --> Application
   Intelligence --> Application
-  ExtHost --> Application
+  ExtHost -. "조립 미완료" .-> Application
   Application --> Surfaces
 ```
 
@@ -176,7 +178,7 @@ flowchart LR
 
 ## 4. Core Office와 전문 조직
 
-Core Office는 설치와 함께 모든 tenant 조직에 생성되는 제거 불가능한 여덟 개 내장 노드입니다. 조직 노드는 영속하지만 LLM 프로세스가 항상 실행되는 것은 아니며, Work가 필요로 할 때 Agent로 materialize됩니다. Software Engineering은 기본 배포판에 포함되지만 비내장(non-builtin) 전문 조직이고, Extension 조직은 설치·권한 부여 후에만 추가됩니다.
+Core Office는 현재 구현에서 모든 tenant 조직에 생성되는 제거 불가능한 여덟 개 내장 노드입니다. 이는 운영 책임의 기본 투영이지 사용자에게 보이는 전체 조직을 여덟 노드로 제한한다는 뜻은 아닙니다. 조직 노드는 영속하지만 LLM 프로세스가 항상 실행되는 것은 아니며, Work가 필요로 할 때 Agent로 materialize됩니다. Software Engineering Profile은 코드에 포함된 비내장(non-builtin) 전문 조직이지만 현재 생산 Bootstrap에서 자동 설치하지 않습니다. Extension 조직·Agent contribution은 계약에 존재하지만 서버 실행 경로와의 조립이 미완료입니다.
 
 ```mermaid
 flowchart TB
@@ -204,19 +206,19 @@ flowchart TB
     Rep --> Growth
   end
 
-  subgraph Engineering["Software Engineering · 기본 전문 조직 · non-builtin"]
-    EngTeam["software-engineering<br/>팀 coordinator"]:::implemented
-    Lead["Engineering Lead<br/>분해·충돌·통합"]:::implemented
-    Specialists["Frontend · Backend · Database<br/>Infrastructure specialists"]:::implemented
-    Quality["Test Engineer · Security Reviewer<br/>Release Engineer"]:::implemented
+  subgraph Engineering["Software Engineering · 설치 가능한 전문 조직 · non-builtin"]
+    EngTeam["software-engineering<br/>팀 coordinator"]:::implementing
+    Lead["Engineering Lead<br/>분해·충돌·통합"]:::implementing
+    Specialists["Frontend · Backend · Database<br/>Infrastructure specialists"]:::implementing
+    Quality["Test Engineer · Security Reviewer<br/>Release Engineer"]:::implementing
     EngTeam --> Lead
     Lead --> Specialists
     Lead --> Quality
   end
 
-  subgraph Extensions["설치형 전문 조직·Agent"]
-    ExtOrg["Extension 선언 조직<br/>권한·호환성 검증 후 활성"]:::implemented
-    ExtAgent["격리 worker의 Agent·Tool<br/>capability broker 사용"]:::implemented
+  subgraph Extensions["설치형 전문 조직·Agent · 제품 조립 미완료"]
+    ExtOrg["Extension 선언 조직<br/>소비 경로 연결 필요"]:::planned
+    ExtAgent["격리 worker의 Agent·Tool<br/>서버 조립 필요"]:::planned
     ExtOrg --> ExtAgent
   end
 
@@ -230,8 +232,8 @@ flowchart TB
 | 조직 유형 | 변경 가능성 | 실행 방식 | 실제 위치 |
 |---|---|---|---|
 | Core Office 8개 | 제품 migration 외 변경 불가 | Work에 필요할 때 Agent materialize | `packages/organization`, `packages/runtime` |
-| Software Engineering 9개 역할 | 조직 명령으로 비활성화 가능, 기본 배포 bootstrap은 활성 요구 | 격리 Git workspace와 TDD delivery | `packages/software-engineering` |
-| Extension 조직·Agent | manifest·정책·승인·호환성 범위에서 설치·업데이트·rollback | Core 밖 격리 worker | `packages/extension-sdk`, `packages/extension-host` |
+| Software Engineering 9개 역할 | Profile 계약 구현, 생산 Bootstrap 자동 설치 없음 | 설치 후 격리 Git workspace와 TDD delivery | `packages/software-engineering` |
+| Extension 조직·Agent | manifest 계약 구현, 조직·Runtime 소비 경로 미완료 | 목표는 Core 밖 격리 worker | `packages/extension-sdk`, `packages/extension-host`, `apps/server` |
 
 ## 5. Work 처리 전체 흐름
 
@@ -249,7 +251,7 @@ flowchart LR
   Context["맥락·전략<br/>ContextVersion · Plan · Criteria"]:::implemented
   Evidence["근거 조사<br/>EvidenceBrief · source revision"]:::implemented
   Delivery{"실행 종류<br/>Delivery Coordination"}:::implemented
-  Software["개발 작업<br/>Software Engineering<br/>TDD · Git provenance"]:::implemented
+  Software["개발 작업<br/>Software Engineering Profile<br/>생산 bootstrap 미연결"]:::implementing
   Domain["비개발 작업<br/>전문 Agent·Tool 또는<br/>Representative 조정 실행"]:::implemented
   Approval{"정책상 승인이<br/>필요한가?"}:::implemented
   Auto["자동 실행<br/>auto 정책"]:::implemented
@@ -681,7 +683,7 @@ flowchart LR
 | 기반 계약·저장소·Identity·Organization | 구현됨 | `packages/foundation`, `packages/storage`, `packages/identity`, `packages/organization` | 현재 코드 |
 | Work·Router·Runtime·Governance | 구현됨 | `packages/work`, `packages/router`, `packages/runtime`, `packages/governance` | 5~8 |
 | Context·Evidence·Engineering·Assurance·Records·Growth | 구현됨 | `packages/context-strategy`, `packages/evidence`, `packages/software-engineering`, `packages/assurance`, `packages/records`, `packages/growth` | 9~14 |
-| Extension SDK·Host | 구현됨 | `packages/extension-sdk`, `packages/extension-host` | 15 |
+| Extension SDK·Host | 패키지 구현됨·서버 조립 미완료 | `packages/extension-sdk`, `packages/extension-host`, `apps/server` | 15 이후 제품 조립 필요 |
 | Application API·CLI | 구현됨 | `packages/application`, `apps/cli` | 16 |
 | TUI | 구현됨 | `apps/tui` | 17 |
 | Web Console | 구현됨 | `apps/web` | 18 |

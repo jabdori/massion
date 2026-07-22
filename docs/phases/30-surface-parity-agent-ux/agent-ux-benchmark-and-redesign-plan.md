@@ -2,6 +2,7 @@
 
 > **상태**: in-progress (2026-07-21 UX-0·UX-1·UX-2·WS-1·WS-2 및 Web workspace parity 구현 완료)
 > **작성일**: 2026-07-21
+> **제품 정합성 메모**: 이 문서의 conversation-first·Work 관제 범위는 [제품 헌법](../../product/constitution.md)의 `대표·홈`과 `업무` 표면에 해당합니다. 조직·결정·성장·역량을 포함한 AgentOS 전체 정보 구조를 대체하지 않습니다.
 
 ## 진행 현황 (2026-07-21)
 
@@ -16,7 +17,7 @@
 | UX-3 TUI transcript 재설계 | 대부분 완료 | `9b9d4b9` transcript, `cd05ac1` Ctrl+P 팔레트, `b3dc0c4` **solid 렌더러 전환 완료** — 렌더 트리를 `@opentui/solid` 컴포넌트로 교체(로직·키 처리·테스트 의미 보존, 렌더러 parity 테스트 18건 무변경 통과), dist는 `Bun.build`+solid plugin 번들, tsc는 typecheck 전용. 주의: 이 reconciler(0.4.3)는 `Show keyed`에서도 renderable을 재사용하므로 input 초기화는 ref로 직접 수행. 스트리밍 active cell·상시 composer(`2f8e53a`)·승인 실행 미리보기 오버레이(`d9ce3ac`)까지 완료 — **UX-3 전체 완료** |
 | UX-4 Web 관제 분할 화면·SSE | 완료 | 팔레트(`ffdbcbb`) + Work 상세 2단 분할·실행 델타 응답 중 셀(`5fddf4c`) + **사건 기반 무효화로 폴링 제거**(`92cf0ec` — Work 사건이 보유 중인 timeline·provenance를 다시 읽음) |
 | UX-5 신뢰 장치 | 완료 | 신뢰 게이트(`65d4f7a`)·터미널 벨(`fdf2608`)·Git provenance(`ad23e65`) + **자율성 다이얼**(`821e6ae` — `@massion/governance` AutonomyStore migration 0108, review 모드가 읽기 외 allow를 승인 요구로 조이기 전용 승격, TUI 헤더·팔레트·Web AccessPage) |
-| WS-4 Web 역할 결정 | 완료 | [ws4-web-role-decision.md](ws4-web-role-decision.md) — Web=GUI 동일 화면, browser.ts 계약 경계, 로컬 능력 어댑터, WS-3 spike 판정 기준 |
+| WS-4 Web 역할 결정 | 대체됨 | [독립 데스크톱 ADR](../../architecture/desktop-clean-sheet.md)이 Web=GUI 동일 화면 결정을 대체함 |
 | WS-3 GUI shell | 완료 | `apps/desktop` Tauri shell(`dc87d4d`): 로컬 서버 콘솔을 native window로 로드, 미기동 시 `massion local start` 기동, `window.massionShell`로 폴더 선택·알림 주입. Rust 컴파일 47.8초·32MB 바이너리 성공. 번들 서명·배포는 릴리스 파이프라인 결정 시 연결 |
 > **대상**: `apps/tui`, `apps/web`, `packages/application` (표현 계약 확장)
 > **관계**: [Phase 30 design](design.md)의 REQ-SURFACE-004(공통 view-model·접근성)를 대체·확장하는 재설계 제안
@@ -110,7 +111,7 @@ Work의 계보(Request → Context → Evidence → Delivery → Approval → Ru
 
 ### 4.1 제품 원칙 (기존 8원칙에 추가)
 
-9. **대화가 기본 화면입니다.** 사용자는 Work를 "관리"하기 전에 "대화"합니다. 목록·지표는 보조 화면입니다.
+9. **대화는 대표·홈과 Work의 기본 상호작용입니다.** 사용자는 Work를 "관리"하기 전에 조직과 대화합니다. 목록·지표는 보조 화면이며, 조직·결정·성장·역량 표면을 대체하지 않습니다.
 10. **에이전트 활동은 실시간으로 공개합니다.** 도구 호출·계획 진행·모델 시도는 발생 즉시 transcript에 나타납니다.
 11. **개입은 흐름 안에서 만납니다.** 승인·질문·차단은 별도 화면 이동 없이 현재 대화 위 오버레이(TUI)·인라인 카드(Web)로 제시하고, 변경 내용(diff)을 함께 보여줍니다.
 12. **자율성은 다이얼입니다.** Governance의 auto/review 정책을 사용자가 세션 중 전환할 수 있는 모드로 노출합니다 (조직 정책이 허용하는 범위 내).
@@ -217,7 +218,7 @@ Work 목록·승인 목록·운영 화면은 slash 명령(`/works`, `/approvals`
 | Claude Code | CLI 세션은 `~/.claude/projects/<slug>/` 디렉토리 단위 저장·재개. Desktop(2026-04 재설계)은 멀티 세션 sidebar + 세션별 프로젝트 폴더 + Git worktree 격리 병렬 실행 |
 | OpenCode | 서버 중심, `opencode`를 디렉토리에서 실행하면 그 디렉토리 컨텍스트로 TUI가 붙음 |
 
-공통 패턴: **TUI = 디렉토리 스코프, GUI/데스크톱 = 전역 관제 센터, Web/Cloud UI ≈ GUI와 동일.** Massion은 이미 OpenCode형 서버 중심 구조이므로, 빠진 것은 서버가 아니라 **Workspace 도메인 개념과 Surface별 스코프 규칙**입니다.
+공통 패턴에서 **TUI = 디렉토리 스코프, GUI/데스크톱 = 전역 관제 센터**는 유지합니다. Web과 Desktop의 화면 코드를 공유한다는 판단은 이후 [독립 데스크톱 ADR](../../architecture/desktop-clean-sheet.md)로 대체됐습니다. 두 Surface는 같은 Application API와 도메인 의미를 사용하지만 화면과 수명 주기는 각각 소유합니다.
 
 ### 6.2 목표 모델
 
@@ -233,8 +234,8 @@ Work 목록·승인 목록·운영 화면은 slash 명령(`/works`, `/approvals`
 | Surface | 스코프 | 역할 |
 |---|---|---|
 | CLI/TUI (`massion`) | 실행 디렉토리의 Workspace로 자동 attach (`--dir` 지정 가능, 미등록이면 신뢰 확인 후 등록) | 그 워크스페이스의 Work·세션만 기본 표시, 팔레트에서 전역 전환 가능 |
-| GUI (신규, native shell) | 전역 | 워크스페이스 sidebar + 병렬 Work 관제 센터. `apps/web` 코드를 native shell(Tauri 우선 검토)로 감싸고 폴더 선택·알림·tray 등 로컬 능력만 추가 |
-| Web Console | 전역 (GUI와 동일 UI) | 같은 `apps/web` 코드. 로컬 서버 접속용 브라우저 화면이자 향후 원격/팀 접속 화면. GUI와 Web은 별도 제품이 아니라 같은 화면의 두 배포 형태 |
+| Desktop | 전역 | `apps/desktop`이 조직·Work·성장 운영 화면과 Tauri 수명 주기를 독립 소유하고 Application API 계약만 재사용 |
+| Web Console | 전역 | 팀·원격 브라우저 Surface로 유지하며 Desktop과 도메인 의미는 같지만 화면 코드는 공유하지 않음 |
 
 ### 6.3 실행 슬라이스 (기존 UX 슬라이스와 병행 가능)
 
@@ -248,14 +249,13 @@ Work 목록·승인 목록·운영 화면은 slash 명령(`/works`, `/approvals`
 - [ ] TUI 헤더에 현재 워크스페이스 표시, 기본 목록을 워크스페이스 스코프로 전환
 - [ ] 팔레트에 "워크스페이스 전환 / 전체 보기" 항목
 
-**Slice WS-3: GUI shell (UX-4 완료 후)**
-- [ ] Tauri(우선)·Electron 비교 spike: `apps/web` 재사용 + 폴더 선택 dialog + 알림
-- [ ] 워크스페이스 sidebar(모든 워크스페이스·Work·세션)와 병렬 관제 레이아웃
-- [ ] 로컬 서버 자동 기동·연결 (기존 `massion --web` 부트스트랩 재사용)
+**Slice WS-3: 독립 Desktop — 후속 ADR로 대체**
+- [ ] 구현과 완료 기준은 [독립 데스크톱 ADR](../../architecture/desktop-clean-sheet.md)을 따름
+- [ ] `apps/web` 화면·레이아웃을 재사용하지 않고 Application API 계약만 재사용
 
-**Slice WS-4: Web 역할 정의 (연구 → 결정 문서)**
-- [ ] 로컬 콘솔 vs 원격 팀 접속 vs 향후 Cloud의 경계·인증 차이 정리
-- [ ] GUI와 Web의 코드 공유 경계(로컬 능력 어댑터 계층) 계약화
+**Slice WS-4: Web 역할 정의 — 역사 결정 보존, 활성 결정은 대체됨**
+- [x] 기존 결정은 [WS-4 문서](ws4-web-role-decision.md)에 보존
+- [x] 독립 Desktop 전환으로 화면 코드 공유 결정 폐기
 
 ### 6.4 워크스페이스 관련 위험
 
@@ -263,7 +263,7 @@ Work 목록·승인 목록·운영 화면은 slash 명령(`/works`, `/approvals`
 |---|---|
 | 경로가 도메인 정본에 들어가며 이식성·보안 문제 | 경로는 로컬 서버 기준으로만 유효함을 계약에 명시, 원격 배포에서는 workspace 종류를 분리(local-directory vs remote) |
 | 신뢰되지 않은 디렉토리에서 도구 실행 | trusted 승인 전 실행 차단 (Claude Code trusted folder 패턴) |
-| GUI 신규 앱의 유지 비용 | 화면 코드는 `apps/web` 단일 소스, shell은 얇은 wrapper로 한정 |
+| 독립 Desktop의 유지 비용 | Application API·상태 의미·디자인 token만 공유하고 Surface별 화면 책임을 명확히 유지 |
 
 ## 7. 위험과 결정 필요 사항
 

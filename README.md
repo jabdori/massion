@@ -2,6 +2,8 @@
 
 > **개발 상태:** Phase 30 진행 중입니다. Guided Workspace 재설계로 Web과 TUI 모두 친화적 사용자 경험을 제공합니다. Z.AI GLM Coding Plan 단일 계정으로 에이전트 조직의 완료 흐름을 검증했습니다. 복수 계정 quota·fallback과 접근성 parity는 진행 중입니다.
 
+> **제품 정본:** [제품 헌법과 현재 방향](docs/product/constitution.md)은 Massion의 계보, 철학, 불변량, 제품 경계와 다음 목표를 고정합니다. 구현이나 화면이 이 문서와 다르면 차이를 제품 갭으로 기록하며, 구현에 맞추기 위해 정체성을 축소하지 않습니다.
+
 Massion AgentOS는 개인이나 팀이 여러 AI 에이전트(agent)를 조직처럼 구성하고, 일을 맡기고, 서로 협업하게 하며, 결과와 근거를 추적할 수 있게 하는 설치형 에이전트 운영체제(Agent Operating System)를 목표로 합니다.
 
 제품 범위에는 조직과 역할을 관리하는 핵심 코어, 작업·대화·할당 파이프라인, 선택형 승인 정책, 다중 모델 공급자 라우팅과 장애 대체(fallback), 근거·품질 보증·기록·성장 파이프라인, 확장 프로그램(Extension) SDK·Registry, CLI·TUI·Web Console, 로컬 및 자체 호스팅 배포가 포함됩니다.
@@ -208,7 +210,7 @@ pnpm verify:security
 pnpm verify:hardening
 ```
 
-제품의 현재 구조는 [전체 아키텍처](docs/architecture/README.md), 진행 중인 요구사항과 구현 근거는 [요구사항 추적표](docs/generated/requirements-traceability.tsv), 설치·복구 절차는 [운영 문서](docs/operations/)에서 확인할 수 있습니다. 새 저장소에는 현재 제품 코드와 Phase 24 이후의 유지보수·전환 문서만 남기며, 이전 Phase 문서는 비공개 기록 저장소에서 보존합니다.
+제품의 목적과 변경 불가 경계는 [제품 헌법](docs/product/constitution.md), 현재 구조는 [전체 아키텍처](docs/architecture/README.md), 진행 중인 요구사항과 구현 근거는 [요구사항 추적표](docs/generated/requirements-traceability.tsv), 설치·복구 절차는 [운영 문서](docs/operations/)에서 확인할 수 있습니다. 새 저장소에는 현재 제품 코드와 Phase 24 이후의 유지보수·전환 문서만 남기며, 이전 Phase 문서는 비공개 기록 저장소에서 보존합니다.
 
 ## 지원 경계
 

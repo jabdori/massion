@@ -1,8 +1,11 @@
 # Phase 30 — WS-4: Web의 역할과 GUI 경계 결정
 
-> **상태**: decided
+> **상태**: superseded — 독립 데스크톱 결정으로 대체됨
 > **판정일**: 2026-07-21
 > **관계**: [에이전틱 도구 UX 벤치마크와 재설계 계획](agent-ux-benchmark-and-redesign-plan.md)의 WS-4 슬라이스
+> **대체 문서**: [조직·Work·성장을 운영하는 독립 AgentOS 데스크톱 ADR](../../architecture/desktop-clean-sheet.md)
+
+이 문서는 2026-07-21 당시 판단의 이력을 보존합니다. `apps/web` 화면을 GUI에 재사용하는 결정은 더 이상 활성 결정이 아니며 새 구현과 검토 근거로 사용하지 않습니다.
 
 ## 1. 결정 요약
 
