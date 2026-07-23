@@ -39,6 +39,7 @@ export function useDesktopController(service: DesktopService) {
   const [newWorkError, setNewWorkError] = useState("");
   const [startingWork, setStartingWork] = useState(false);
   const [executionNotice, setExecutionNotice] = useState<ExecutionNotice | undefined>();
+  const [eventRevision, setEventRevision] = useState(0);
   const [retryVersion, setRetryVersion] = useState(0);
 
   const deferredQuery = useDeferredValue(query);
@@ -172,6 +173,7 @@ export function useDesktopController(service: DesktopService) {
         if (timer) clearTimeout(timer);
         timer = setTimeout(() => {
           timer = undefined;
+          setEventRevision((current) => current + 1);
           const candidateWorkIds = [...durableWorkCandidatesRef.current];
           durableWorkCandidatesRef.current.clear();
           void (async () => {
@@ -375,6 +377,7 @@ export function useDesktopController(service: DesktopService) {
     decideApproval,
     detailLoading,
     executionNotice,
+    eventRevision,
     filter,
     newWork: {
       error: newWorkError,
@@ -404,6 +407,7 @@ export function useDesktopController(service: DesktopService) {
     submitDirective,
     visibleWorks,
     work,
+    works,
   };
 }
 

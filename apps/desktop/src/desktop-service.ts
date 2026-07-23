@@ -1567,6 +1567,7 @@ function projectApproval(approval: ApprovalViewV1): ApprovalView {
     id: approval.approvalId,
     title: approval.displayPreview?.title ?? approval.action,
     description: approvalDescription(approval),
+    ...(approval.workId === undefined ? {} : { workId: approval.workId }),
     revision: approval.revision,
     status: approval.status,
   };

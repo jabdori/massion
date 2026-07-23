@@ -1,11 +1,11 @@
 import {
   ArrowRightIcon as ArrowRight,
   AtIcon as At,
+  BellIcon as Bell,
   BriefcaseIcon as Briefcase,
   CaretDownIcon as CaretDown,
   CaretRightIcon as CaretRight,
   CheckCircleIcon as CheckCircle,
-  CheckSquareIcon as CheckSquare,
   ClockIcon as Clock,
   DatabaseIcon as Database,
   FileCsvIcon as FileCsv,
@@ -26,7 +26,7 @@ import {
   WarningCircleIcon as WarningCircle,
   XIcon as X,
 } from "@phosphor-icons/react";
-import { Component, type CSSProperties, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { Component, type CSSProperties, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Background, Handle, Position, ReactFlow, type Edge as RFEdge, type Node as RFNode, type ReactFlowInstance } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 
@@ -82,7 +82,6 @@ const navItems = [
   { label: "홈", icon: House, surface: "home" },
   { label: "업무", icon: Briefcase, surface: "work" },
   { label: "조직", icon: TreeStructure, surface: "organization" },
-  { label: "확인 필요", icon: CheckSquare, surface: "decisions" },
   { label: "개선", icon: Star, surface: "growth" },
   { label: "확장", icon: PuzzlePiece, surface: "capabilities" },
   { label: "설정", icon: Gear, surface: "settings" },
@@ -133,12 +132,29 @@ export function App({ service }: AppProps) {
   const controller = useDesktopController(service);
   const [surface, setSurface] = useState<DesktopSurface>("work");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [notifications, setNotifications] = useState<ApprovalView[]>();
+  const [notificationError, setNotificationError] = useState("");
+  const [pendingNotificationIds, setPendingNotificationIds] = useState<ReadonlySet<string>>(new Set());
   const [awaitingRegistryInstall, setAwaitingRegistryInstall] = useState<AwaitingRegistryInstall>();
   const [rooms, setRooms] = useState<RoomView[]>([]);
   const [selectedRoomId, setSelectedRoomId] = useState<string>();
   // 방이 늘어나도 탭 바가 감당해야 할 개수는 사용자가 연 것뿐입니다. 대표 방은 항상 열려 있습니다.
   const [openRoomIds, setOpenRoomIds] = useState<readonly string[]>([]);
   const selectedWorkId = controller.work?.id;
+  const refreshNotifications = useCallback(async () => {
+    try {
+      const pending = await service.loadPendingApprovals();
+      setNotifications(pending.filter((approval) => approval.status === "pending"));
+      setNotificationError("");
+    } catch (cause) {
+      setNotificationError(surfaceErrorMessage(cause, "알림을 불러오지 못했습니다."));
+    }
+  }, [service]);
+  useEffect(() => {
+    if (controller.phase !== "ready") return;
+    void refreshNotifications();
+  }, [controller.eventRevision, controller.phase, refreshNotifications]);
   useEffect(() => {
     if (selectedWorkId === undefined) {
       setRooms([]);
@@ -193,6 +209,36 @@ export function App({ service }: AppProps) {
     setAwaitingRegistryInstall(undefined);
     await service.installRegistry({ ...pending.request, installApprovalId: pending.approvalId }, pending.identity);
   };
+  const decideNotification = async (approval: ApprovalView, vote: "approve" | "reject") => {
+    if (pendingNotificationIds.has(approval.id)) return;
+    setPendingNotificationIds((current) => new Set(current).add(approval.id));
+    setNotificationError("");
+    try {
+      await service.decideApproval(
+        approval,
+        vote,
+        vote === "approve" ? "데스크톱 알림에서 승인" : "데스크톱 알림에서 거절",
+      );
+      setNotifications((current) => current?.filter((item) => item.id !== approval.id));
+      await handleApprovalDecision(approval.id, vote);
+      if (approval.workId !== undefined && approval.workId === selectedWorkId) {
+        controller.setSelectedId(approval.workId);
+      }
+    } catch (cause) {
+      setNotificationError(surfaceErrorMessage(cause, "승인 결정을 저장하지 못했습니다."));
+      await refreshNotifications();
+    } finally {
+      setPendingNotificationIds((current) => {
+        const next = new Set(current);
+        next.delete(approval.id);
+        return next;
+      });
+    }
+  };
+  const decideWorkApproval = async (approval: ApprovalView, decision: "approved" | "rejected") => {
+    await controller.decideApproval(approval, decision);
+    await refreshNotifications();
+  };
 
   if (controller.phase === "loading") return <DesktopLoading />;
   if (controller.phase === "error") return <DesktopError error={controller.rootError} onRetry={controller.retry} />;
@@ -206,8 +252,12 @@ export function App({ service }: AppProps) {
       >
         <GlobalRail
           activeSurface={surface}
-          attentionCount={controller.work?.approvals.filter((value) => value.status === "pending").length ?? 0}
           collapsed={sidebarCollapsed}
+          notificationCount={notifications?.length ?? 0}
+          onOpenNotifications={() => {
+            setNotificationsOpen(true);
+            void refreshNotifications();
+          }}
           onSelect={setSurface}
           onToggle={() => setSidebarCollapsed((current) => !current)}
         />
@@ -233,7 +283,7 @@ export function App({ service }: AppProps) {
               onAnnouncement={controller.setAnnouncement}
               onComposerChange={controller.setComposer}
               onControlRun={controller.controlRun}
-              onDecideApproval={controller.decideApproval}
+              onDecideApproval={(approval, decision) => void decideWorkApproval(approval, decision)}
               onSubmitDirective={controller.submitDirective}
               pendingApprovals={controller.pendingApprovals}
               pendingDirective={controller.pendingDirective}
@@ -249,13 +299,13 @@ export function App({ service }: AppProps) {
         ) : (
           <ProductSurface
             awaitingRegistryInstall={awaitingRegistryInstall}
-            onApprovalDecision={handleApprovalDecision}
             onAwaitingRegistryInstallChange={setAwaitingRegistryInstall}
             onCreate={() => {
               controller.newWork.setOpen(true);
             }}
-            onOpenDecisions={() => {
-              setSurface("decisions");
+            onOpenNotifications={() => {
+              setNotificationsOpen(true);
+              void refreshNotifications();
             }}
             onOpenWork={(workId) => {
               controller.setSelectedId(workId);
@@ -266,6 +316,16 @@ export function App({ service }: AppProps) {
           />
         )}
       </div>
+      <NotificationCenter
+        approvals={notifications}
+        error={notificationError}
+        onDecide={decideNotification}
+        onOpenChange={setNotificationsOpen}
+        onRetry={() => void refreshNotifications()}
+        open={notificationsOpen}
+        pending={pendingNotificationIds}
+        works={controller.works}
+      />
       <NewWorkDialog {...controller.newWork} />
     </TooltipProvider>
   );
@@ -273,14 +333,16 @@ export function App({ service }: AppProps) {
 
 function GlobalRail({
   activeSurface,
-  attentionCount,
   collapsed,
+  notificationCount,
+  onOpenNotifications,
   onSelect,
   onToggle,
 }: {
   activeSurface: DesktopSurface;
-  attentionCount: number;
   collapsed: boolean;
+  notificationCount: number;
+  onOpenNotifications: () => void;
   onSelect: (surface: DesktopSurface) => void;
   onToggle: () => void;
 }) {
@@ -295,10 +357,28 @@ function GlobalRail({
       </SidebarHeader>
       <SidebarContent>
         <SidebarGroup>
+          <SidebarGroupLabel>받은 항목</SidebarGroupLabel>
+          <SidebarMenu>
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                aria-label={notificationCount === 0 ? "알림" : `알림, 미해결 ${String(notificationCount)}개`}
+                onClick={onOpenNotifications}
+              >
+                <Bell aria-hidden="true" size={21} weight="regular" />
+                <span className="flex-1 text-left">알림</span>
+                {notificationCount ? (
+                  <span className="rail-label flex min-w-5 items-center justify-center rounded-full bg-gate px-1.5 font-mono text-[11px] font-semibold text-gate-ink">
+                    {notificationCount}
+                  </span>
+                ) : null}
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          </SidebarMenu>
+        </SidebarGroup>
+        <SidebarGroup>
           <SidebarGroupLabel>운영</SidebarGroupLabel>
           <SidebarMenu>
           {navItems.filter((item) => item.surface !== "settings").map(({ icon: Icon, label, surface }) => {
-            const count = label === "확인 필요" ? attentionCount : 0;
             const current = activeSurface === surface;
             return (
               <SidebarMenuItem key={label}>
@@ -310,11 +390,6 @@ function GlobalRail({
                   >
                   <Icon aria-hidden="true" size={21} weight="regular" />
                   <span className="flex-1 text-left">{label}</span>
-                  {count ? (
-                    <span className="rail-label flex min-w-5 items-center justify-center rounded-full bg-gate px-1.5 font-mono text-[11px] font-semibold text-gate-ink">
-                      {count}
-                    </span>
-                  ) : null}
                   </SidebarMenuButton>
               </SidebarMenuItem>
             );
@@ -329,19 +404,17 @@ function GlobalRail({
 
 function ProductSurface({
   awaitingRegistryInstall,
-  onApprovalDecision,
   onAwaitingRegistryInstallChange,
   onCreate,
-  onOpenDecisions,
+  onOpenNotifications,
   onOpenWork,
   service,
   surface,
 }: {
   awaitingRegistryInstall: AwaitingRegistryInstall | undefined;
-  onApprovalDecision: (approvalId: string, vote: "approve" | "reject") => Promise<void>;
   onAwaitingRegistryInstallChange: (value: AwaitingRegistryInstall | undefined) => void;
   onCreate: () => void;
-  onOpenDecisions: () => void;
+  onOpenNotifications: () => void;
   onOpenWork: (workId: string) => void;
   service: DesktopService;
   surface: Exclude<DesktopSurface, "work">;
@@ -350,13 +423,12 @@ function ProductSurface({
     return (
       <HomeSurface
         onCreate={onCreate}
-        onOpenDecisions={onOpenDecisions}
+        onOpenNotifications={onOpenNotifications}
         onOpenWork={onOpenWork}
         service={service}
       />
     );
   if (surface === "organization") return <OrganizationSurface service={service} />;
-  if (surface === "decisions") return <DecisionSurface onApprovalDecision={onApprovalDecision} service={service} />;
   if (surface === "growth") return <GrowthSurface onOpenWork={onOpenWork} service={service} />;
   if (surface === "capabilities") return <ExtensionSurface awaitingInstall={awaitingRegistryInstall} onAwaitingInstallChange={onAwaitingRegistryInstallChange} service={service} />;
   return <SettingsSurface service={service} />;
@@ -388,12 +460,12 @@ function WorkEmptySurface({ onCreate }: { onCreate: () => void }) {
 
 function HomeSurface({
   onCreate,
-  onOpenDecisions,
+  onOpenNotifications,
   onOpenWork,
   service,
 }: {
   onCreate: () => void;
-  onOpenDecisions: () => void;
+  onOpenNotifications: () => void;
   onOpenWork: (workId: string) => void;
   service: DesktopService;
 }) {
@@ -454,7 +526,7 @@ function HomeSurface({
             ) : (
               <ul className="grid gap-1.5">
                 {/*
-                  * 승인은 이동시키지 않고 그 자리에서 처리합니다. 방·확인 필요와 같은 문법이라
+                  * 승인은 이동시키지 않고 그 자리에서 처리합니다. 방·알림과 같은 문법이라
                   * 사용자가 같은 모양을 두 가지로 배우지 않아도 됩니다.
                   */}
                 {approvals.map((approval) => (
@@ -468,7 +540,7 @@ function HomeSurface({
                       <span className="block truncate text-xs text-secondary">{approval.description}</span>
                     </span>
                     <span className="shrink-0 text-[11px] text-gate">승인 필요</span>
-                    <OpenButton label={`${approval.title} 자세히 보기`} onOpen={onOpenDecisions} />
+                    <OpenButton label={`${approval.title} 자세히 보기`} onOpen={onOpenNotifications} />
                   </li>
                 ))}
                 {blocked.map((work) => (
@@ -542,134 +614,109 @@ function HomeSurface({
   );
 }
 
-function DecisionSurface({ onApprovalDecision, service }: { onApprovalDecision: (approvalId: string, vote: "approve" | "reject") => Promise<void>; service: DesktopService }) {
-  const [approvals, setApprovals] = useState<ApprovalView[] | undefined>();
-  const [autonomy, setAutonomy] = useState<AutonomyView>();
-  const [error, setError] = useState("");
-  const [pending, setPending] = useState<ReadonlySet<string>>(new Set());
-  const [saving, setSaving] = useState(false);
-  useEffect(() => {
-    let disposed = false;
-    void Promise.all([service.loadPendingApprovals(), service.loadAutonomy()]).then(([items, mode]) => {
-      if (!disposed) { setApprovals(items); setAutonomy(mode); }
-    }).catch((cause: unknown) => !disposed && setError(surfaceErrorMessage(cause, "확인 필요 항목을 불러오지 못했습니다.")));
-    return () => {
-      disposed = true;
-    };
-  }, [service]);
-  const decide = async (approval: ApprovalView, vote: "approve" | "reject") => {
-    setPending((current) => new Set(current).add(approval.id));
-    setError("");
-    try {
-      await service.decideApproval(approval, vote, vote === "approve" ? "데스크톱 확인 필요 화면에서 승인" : "데스크톱 확인 필요 화면에서 거절");
-      setApprovals((current) => current?.filter((item) => item.id !== approval.id));
-      await onApprovalDecision(approval.id, vote);
-    } catch (cause) {
-      setError(surfaceErrorMessage(cause, "승인 결정을 저장하지 못했습니다."));
-    } finally {
-      setPending((current) => {
-        const next = new Set(current);
-        next.delete(approval.id);
-        return next;
-      });
-    }
-  };
-  const setMode = async (mode: AutonomyView["mode"]) => {
-    if (!autonomy || autonomy.mode === mode || saving) return;
-    setSaving(true); setError("");
-    try { setAutonomy(await service.setAutonomy(mode, autonomy.revision)); }
-    catch (cause) { setError(surfaceErrorMessage(cause, "자율성 경계를 변경하지 못했습니다.")); }
-    finally { setSaving(false); }
-  };
-  const waiting = approvals?.length ?? 0;
+function NotificationCenter({
+  approvals,
+  error,
+  onDecide,
+  onOpenChange,
+  onRetry,
+  open,
+  pending,
+  works,
+}: {
+  approvals: ApprovalView[] | undefined;
+  error: string;
+  onDecide: (approval: ApprovalView, vote: "approve" | "reject") => Promise<void>;
+  onOpenChange: (open: boolean) => void;
+  onRetry: () => void;
+  open: boolean;
+  pending: ReadonlySet<string>;
+  works: WorkView[];
+}) {
+  const workTitles = new Map(works.map((work) => [work.id, work.title]));
   return (
-    <SurfaceFrame title="확인 필요">
-      {error ? <SurfaceError message={error} /> : null}
-      {approvals === undefined || autonomy === undefined ? <SurfaceLoading /> : null}
-
-      {approvals ? (
-        <section aria-label="기다리는 항목" className="mb-8 max-w-4xl">
-          <h2 className="mb-2.5 text-[10px] font-semibold tracking-[0.08em] text-muted">
-            지금 멈춰 있는 것 {waiting ? <span className="text-gate">{waiting}</span> : null}
-          </h2>
-          {waiting === 0 ? (
-            <p className="text-sm text-muted">기다리는 항목이 없습니다. 조직이 계속 일하고 있습니다.</p>
-          ) : (
-            <ul className="grid gap-2">
-              {approvals.map((approval) => (
-                <li
-                  className="rounded-[7px] border border-gate-border bg-gate-wash px-3.5 py-3"
-                  key={approval.id}
-                >
-                  <div className="flex items-start gap-3">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                        <span aria-hidden="true" className="text-gate">◇</span>
-                        <h3 className="text-[13px] font-medium">{approval.title}</h3>
-                        <span className="text-[11px] text-gate">승인 필요</span>
-                      </div>
-                      <p className="mt-1 text-[13px] leading-5 text-secondary">{approval.description}</p>
-                      {/* 무엇이·왜·되돌릴 수 있는지를 버튼보다 먼저 보입니다. 방의 게이트 블록과 같은 문법입니다. */}
-                      {/* 식별자는 감사에 필요하므로 지우지 않고, 사람이 읽는 문장 뒤로 내립니다. */}
-                      <p className="mt-1.5 text-[11px] text-muted">
-                        승인 전까지 관련 실행이 멈춥니다
-                        {approval.revision === undefined ? "" : ` · 개정 ${String(approval.revision)}`}
-                        <span className="ml-2 font-mono text-fg-3" title={`승인 요청 ${approval.id}`}>
-                          {approval.id}
-                        </span>
-                      </p>
-                    </div>
-                    <DecisionActions
-                      approveName={approval.title}
-                      busy={pending.has(approval.id)}
-                      disabled={pending.has(approval.id)}
-                      onApprove={() => void decide(approval, "approve")}
-                      onReject={() => void decide(approval, "reject")}
-                    />
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-      ) : null}
-
-      {autonomy ? (
-        <section aria-label="자율성 경계" className="max-w-4xl">
-          <h2 className="mb-2.5 text-[10px] font-semibold tracking-[0.08em] text-muted">실행 자율성</h2>
-          <div className="rounded-[7px] border border-border bg-surface-1 px-3.5 py-3">
-            <p className="text-[13px] text-secondary">
-              {autonomy.mode === "automatic"
-                ? "미리 승인된 범위에서는 사람을 기다리지 않고 실행합니다. 위험한 실행과 조직 변경은 여전히 멈춰서 확인을 받습니다."
-                : "실행 전에 사람의 확인을 받습니다. 조직이 더 자주 멈추는 대신 개입 지점이 많아집니다."}
-            </p>
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-              <button
-                className={`rounded-[5px] border px-3 py-1 text-[12px] disabled:opacity-50 ${
-                  autonomy.mode === "automatic" ? "border-control bg-surface-2 text-primary" : "border-border text-secondary"
-                }`}
-                disabled={saving || autonomy.mode === "automatic"}
-                onClick={() => void setMode("automatic")}
-                type="button"
-              >
-                자동 실행
-              </button>
-              <button
-                className={`rounded-[5px] border px-3 py-1 text-[12px] disabled:opacity-50 ${
-                  autonomy.mode === "review" ? "border-control bg-surface-2 text-primary" : "border-border text-secondary"
-                }`}
-                disabled={saving || autonomy.mode === "review"}
-                onClick={() => void setMode("review")}
-                type="button"
-              >
-                검토 후 실행
-              </button>
-              <span className="font-mono text-[11px] text-muted">개정 {autonomy.revision}</span>
+    <Dialog onOpenChange={onOpenChange} open={open}>
+      <DialogContent
+        aria-label="알림"
+        className="h-full max-w-[430px] rounded-none border-y-0 border-r-0 p-0 shadow-[-18px_0_48px_rgba(21,24,28,0.18)]"
+        viewportClassName="place-items-stretch justify-items-end p-0"
+      >
+        <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)]">
+          <header className="flex items-start gap-3 border-b border-border px-5 py-4">
+            <div className="min-w-0 flex-1">
+              <div className="flex items-baseline gap-2">
+                <DialogTitle className="text-[17px] font-semibold tracking-[-0.02em]">알림</DialogTitle>
+                {approvals?.length ? <span className="font-mono text-[11px] text-gate">{approvals.length}</span> : null}
+              </div>
+              <DialogDescription className="mt-1 text-[12px] leading-5 text-muted">
+                조치가 끝날 때까지 미해결 항목이 여기에 남습니다.
+              </DialogDescription>
             </div>
+            <DialogClose
+              aria-label="알림 닫기"
+              className="flex size-8 shrink-0 items-center justify-center rounded-[5px] text-muted outline-none hover:bg-surface-2 hover:text-primary focus-visible:ring-2 focus-visible:ring-accent/70"
+            >
+              <X aria-hidden="true" size={17} />
+            </DialogClose>
+          </header>
+          <div className="min-h-0 overflow-y-auto px-4 py-4">
+            {error ? (
+              <div>
+                <SurfaceError message={error} />
+                <Button onClick={onRetry} size="sm" type="button" variant="outline">다시 불러오기</Button>
+              </div>
+            ) : null}
+            {approvals === undefined && !error ? <SurfaceLoading /> : null}
+            {approvals?.length === 0 ? (
+              <div className="py-12 text-center">
+                <Bell aria-hidden="true" className="mx-auto text-muted" size={28} />
+                <p className="mt-3 text-[13px] font-medium">미해결 알림이 없습니다.</p>
+                <p className="mt-1 text-[12px] text-muted">조직이 사람의 결정을 기다리지 않고 있습니다.</p>
+              </div>
+            ) : null}
+            {approvals?.length ? (
+              <ul className="divide-y divide-gate-border border-y border-gate-border">
+                {approvals.map((approval) => {
+                  const workTitle = approval.workId === undefined ? undefined : workTitles.get(approval.workId);
+                  return (
+                    <li className="bg-gate-wash px-3 py-3.5" key={approval.id}>
+                      <div className="flex items-center gap-2">
+                        <span aria-hidden="true" className="text-gate">◇</span>
+                        <h3 className="min-w-0 flex-1 truncate text-[13px] font-medium">{approval.title}</h3>
+                        <span className="shrink-0 text-[11px] text-gate">승인 필요</span>
+                      </div>
+                      <p className="mt-1.5 text-[12px] leading-5 text-secondary">{approval.description}</p>
+                      <div className="mt-2 border-t border-gate-border pt-2 text-[11px] text-muted">
+                        <p>
+                          {workTitle ?? (approval.workId === undefined ? "조직 전역" : "연결된 업무")}
+                          {approval.workId === undefined ? null : (
+                            <span className="ml-2 font-mono text-fg-3" title={`업무 ${approval.workId}`}>{approval.workId}</span>
+                          )}
+                        </p>
+                        <p className="mt-1">
+                          해결 전까지 관련 실행이 멈춥니다
+                          {approval.revision === undefined ? "" : ` · 개정 ${String(approval.revision)}`}
+                          <span className="ml-2 font-mono text-fg-3" title={`승인 요청 ${approval.id}`}>{approval.id}</span>
+                        </p>
+                      </div>
+                      <div className="mt-3 flex justify-end">
+                        <DecisionActions
+                          approveName={approval.title}
+                          busy={pending.has(approval.id)}
+                          disabled={pending.has(approval.id)}
+                          onApprove={() => void onDecide(approval, "approve")}
+                          onReject={() => void onDecide(approval, "reject")}
+                        />
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            ) : null}
           </div>
-        </section>
-      ) : null}
-    </SurfaceFrame>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -1450,7 +1497,7 @@ function ExtensionSurface({
             <section className="rounded-[7px] border border-gate-border bg-gate-wash p-3">
               <p className="text-[12px] font-medium text-gate">설치가 승인을 기다립니다</p>
               <p className="mt-1 text-[11px] leading-4 text-secondary">
-                확인 필요 화면에서 승인하면 설치가 이어집니다.
+                알림에서 승인하면 설치가 이어집니다.
               </p>
               <p className="mt-1.5 font-mono text-[11px] text-fg-3" title={`승인 요청 ${awaitingInstall.approvalId}`}>
                 {awaitingInstall.approvalId}
@@ -1991,9 +2038,11 @@ function growthEffectStatus(result: GrowthView["effects"][number]["result"]): st
 
 function SettingsSurface({ service }: { service: DesktopService }) {
   const [settings, setSettings] = useState<SettingsView>();
+  const [autonomy, setAutonomy] = useState<AutonomyView>();
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [saving, setSaving] = useState(false);
+  const [autonomySaving, setAutonomySaving] = useState(false);
   const [zaiFormOpen, setZaiFormOpen] = useState(false);
   const [zaiAlias, setZaiAlias] = useState("Z.ai GLM-5.2");
   const [zaiSecret, setZaiSecret] = useState("");
@@ -2003,9 +2052,30 @@ function SettingsSurface({ service }: { service: DesktopService }) {
   const [areaId, setAreaId] = useState<(typeof SETTINGS_AREAS)[number]["id"]>("routes");
   useEffect(() => {
     let disposed = false;
-    void service.loadSettings().then((value) => !disposed && setSettings(value)).catch((cause: unknown) => !disposed && setError(surfaceErrorMessage(cause, "설정을 불러오지 못했습니다.")));
+    void Promise.all([service.loadSettings(), service.loadAutonomy()])
+      .then(([value, mode]) => {
+        if (!disposed) {
+          setSettings(value);
+          setAutonomy(mode);
+        }
+      })
+      .catch((cause: unknown) => !disposed && setError(surfaceErrorMessage(cause, "설정을 불러오지 못했습니다.")));
     return () => { disposed = true; };
   }, [service]);
+  const setAutonomyMode = async (mode: AutonomyView["mode"]) => {
+    if (!autonomy || autonomy.mode === mode || autonomySaving) return;
+    setAutonomySaving(true);
+    setError("");
+    setNotice("");
+    try {
+      setAutonomy(await service.setAutonomy(mode, autonomy.revision));
+      setNotice("실행 자율성 경계를 저장했습니다.");
+    } catch (cause) {
+      setError(surfaceErrorMessage(cause, "자율성 경계를 변경하지 못했습니다."));
+    } finally {
+      setAutonomySaving(false);
+    }
+  };
   const submit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (saving) return;
@@ -2214,6 +2284,45 @@ function SettingsSurface({ service }: { service: DesktopService }) {
                 </GrowthSection>
               ) : null}
 
+              {area?.id === "autonomy" && autonomy ? (
+                <section aria-label="자율성 경계">
+                  <GrowthSection title="실행 자율성">
+                    <p className="text-[13px] leading-5 text-secondary">
+                      {autonomy.mode === "automatic"
+                        ? "미리 승인된 범위에서는 사람을 기다리지 않고 실행합니다. 위험한 실행과 조직 변경은 여전히 알림에서 확인을 받습니다."
+                        : "실행 전에 사람의 확인을 받습니다. 조직이 더 자주 멈추는 대신 개입 지점이 많아집니다."}
+                    </p>
+                    <div className="mt-3 flex flex-wrap items-center gap-2">
+                      <button
+                        className={`rounded-[5px] border px-3 py-1 text-[12px] disabled:opacity-50 ${
+                          autonomy.mode === "automatic"
+                            ? "border-control bg-surface-2 text-primary"
+                            : "border-border text-secondary"
+                        }`}
+                        disabled={autonomySaving || autonomy.mode === "automatic"}
+                        onClick={() => void setAutonomyMode("automatic")}
+                        type="button"
+                      >
+                        자동 실행
+                      </button>
+                      <button
+                        className={`rounded-[5px] border px-3 py-1 text-[12px] disabled:opacity-50 ${
+                          autonomy.mode === "review"
+                            ? "border-control bg-surface-2 text-primary"
+                            : "border-border text-secondary"
+                        }`}
+                        disabled={autonomySaving || autonomy.mode === "review"}
+                        onClick={() => void setAutonomyMode("review")}
+                        type="button"
+                      >
+                        검토 후 실행
+                      </button>
+                      <span className="font-mono text-[11px] text-muted">개정 {autonomy.revision}</span>
+                    </div>
+                  </GrowthSection>
+                </section>
+              ) : null}
+
               {area?.id === "local" ? (
                 <GrowthSection title="로컬 운영 환경">
                   {/* 없는 것을 있는 것처럼 그리지 않습니다. 무엇이 없는지 화면이 말합니다. */}
@@ -2270,6 +2379,12 @@ const SETTINGS_AREAS = [
     title: "구독 계정",
     hint: "남은 할당량",
     background: "구독으로 쓰는 계정의 남은 양입니다. 소진되면 그 계정을 쓰는 경로가 멈추므로 미리 보여야 합니다.",
+  },
+  {
+    id: "autonomy",
+    title: "실행 자율성",
+    hint: "언제 사람을 기다리나",
+    background: "미리 승인된 범위에서 자동으로 실행할지, 매 실행 전에 사람의 검토를 받을지 정합니다. 위험 경계는 어느 모드에서도 유지됩니다.",
   },
   {
     id: "local",

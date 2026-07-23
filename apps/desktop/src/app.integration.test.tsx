@@ -229,11 +229,15 @@ describe("AgentOS native data flow", () => {
     const initialRequest = installRegistry.mock.calls[0]?.[0];
     const identity = installRegistry.mock.calls[0]?.[1];
 
-    await user.click(screen.getByRole("button", { name: "확인 필요" }));
-    await user.click(await screen.findByRole("button", { name: /승인$/ }));
-    expect(decideApproval).toHaveBeenCalledWith(approval, "approve", "데스크톱 확인 필요 화면에서 승인");
+    await user.click(screen.getByRole("button", { name: /알림/ }));
+    const panel = await screen.findByRole("dialog", { name: "알림" });
+    await user.click(within(panel).getByRole("button", { name: /승인$/ }));
+    expect(decideApproval).toHaveBeenCalledWith(approval, "approve", "데스크톱 알림에서 승인");
     await waitFor(() => expect(installRegistry).toHaveBeenCalledTimes(2));
     expect(installRegistry).toHaveBeenNthCalledWith(2, { ...initialRequest, installApprovalId: "approval-install-1" }, identity);
+    expect(await within(panel).findByText("미해결 알림이 없습니다.")).toBeInTheDocument();
+    await user.click(within(panel).getByRole("button", { name: "알림 닫기" }));
+    expect(screen.getByRole("button", { name: "알림" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "승인 반영 후 설치 재개" })).not.toBeInTheDocument();
   });
 
@@ -251,19 +255,41 @@ describe("AgentOS native data flow", () => {
     expect(screen.getByTestId("desktop-shell").style.getPropertyValue("--sidebar-width")).toBe("150px");
   });
 
-  it("조직과 결정 화면이 실제 서비스 조회를 사용한다", async () => {
+  it("알림 배지는 선택한 업무와 무관하게 전역 미해결 승인을 유지한다", async () => {
     const user = userEvent.setup();
-    const loadOrganization = vi.fn(createFixtureDesktopService().loadOrganization);
+    const approval = {
+      id: "approval-crm-access",
+      title: "CRM 고객 데이터 읽기",
+      description: "고객 식별정보가 포함된 데이터에 읽기 전용으로 접근합니다.",
+      revision: 1,
+      status: "pending",
+      workId: "churn-q3",
+    };
+    render(<App service={service({ loadPendingApprovals: async () => [approval] })} />);
+
+    expect(await screen.findByRole("button", { name: "알림, 미해결 1개" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /파트너 계약서 검토/ }));
+    expect(screen.getByRole("button", { name: "알림, 미해결 1개" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "알림, 미해결 1개" }));
+    const panel = await screen.findByRole("dialog", { name: "알림" });
+    expect(within(panel).getByText("CRM 고객 데이터 읽기")).toBeInTheDocument();
+    expect(within(panel).getByText("3분기 고객 이탈 원인 분석")).toBeInTheDocument();
+
+    await user.click(within(panel).getByRole("button", { name: "알림 닫기" }));
+    await user.click(screen.getByRole("button", { name: "알림, 미해결 1개" }));
+    expect(await screen.findByText("CRM 고객 데이터 읽기")).toBeInTheDocument();
+  });
+
+  it("실행 자율성은 설정에서 실제 서비스 조회를 사용한다", async () => {
+    const user = userEvent.setup();
     const loadPendingApprovals = vi.fn(createFixtureDesktopService().loadPendingApprovals);
     const loadAutonomy = vi.fn(createFixtureDesktopService().loadAutonomy);
-    render(<App service={service({ loadOrganization, loadPendingApprovals, loadAutonomy })} />);
+    render(<App service={service({ loadPendingApprovals, loadAutonomy })} />);
 
-    await user.click(screen.getByRole("button", { name: "조직" }));
-    await screen.findByRole("main", { name: "조직" });
-    expect(loadOrganization).toHaveBeenCalledOnce();
-
-    await user.click(screen.getByRole("button", { name: "확인 필요" }));
-    await screen.findByRole("main", { name: "확인 필요" });
+    await user.click(screen.getByRole("button", { name: "설정" }));
+    await user.click(await screen.findByRole("button", { name: /실행 자율성/ }));
+    expect(screen.getByRole("region", { name: "자율성 경계" })).toBeInTheDocument();
     await waitFor(() => {
       expect(loadPendingApprovals).toHaveBeenCalledOnce();
       expect(loadAutonomy).toHaveBeenCalledOnce();

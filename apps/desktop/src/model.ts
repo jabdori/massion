@@ -169,6 +169,7 @@ export interface ApprovalView {
   id: string;
   title: string;
   description: string;
+  workId?: string;
   revision: number | undefined;
   status: string;
 }
@@ -287,6 +288,7 @@ const works: WorkView[] = [
         id: "approval-crm-access",
         title: "CRM 고객 데이터 읽기",
         description: "고객 식별정보가 포함된 데이터에 읽기 전용으로 접근합니다.",
+        workId: "churn-q3",
         revision: 1,
         status: "pending",
       },
