@@ -26,8 +26,8 @@ describe("개인용 SurrealDB local runtime", () => {
       architecture: "arm64",
     });
 
-    expect(runtime.binaryPath).toBe("/Users/massion/.local/share/massion/runtime/surrealdb/3.2.1/darwin-arm64/surreal");
-    expect(runtime.dataDirectory).toBe("/Users/massion/.local/share/massion/surrealdb/3/database");
+    expect(runtime.binaryPath).toBe("/Users/massion/.local/share/massion-v1/runtime/surrealdb/3.2.1/darwin-arm64/surreal");
+    expect(runtime.dataDirectory).toBe("/Users/massion/.local/share/massion-v1/surrealdb/3/database");
   });
 
   it("인증된 loopback SQL endpoint에서 Massion namespace와 database를 idempotent하게 준비한다", async () => {

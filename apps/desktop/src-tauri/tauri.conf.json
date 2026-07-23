@@ -4,13 +4,26 @@
   "version": "1.0.0",
   "identifier": "dev.massion.desktop",
   "build": {
-    "frontendDist": "../fallback"
+    "beforeDevCommand": "node src-tauri/prepare-runtime.mjs && pnpm dev",
+    "devUrl": "http://localhost:5173",
+    "frontendDist": "../dist"
   },
   "app": {
-    "withGlobalTauri": true,
-    "windows": [],
+    "withGlobalTauri": false,
+    "windows": [
+      {
+        "label": "main",
+        "title": "Massion",
+        "width": 1440,
+        "height": 900,
+        "minWidth": 1180,
+        "minHeight": 720,
+        "resizable": true
+      }
+    ],
     "security": {
-      "csp": null
+      "capabilities": ["default"],
+      "csp": "default-src 'self'; connect-src ipc: http://ipc.localhost; img-src 'self' asset: data: blob:; font-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'"
     }
   },
   "bundle": {

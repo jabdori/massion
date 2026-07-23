@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "target": "aarch64-apple-darwin",
+  "runtimes": {
+    "node": {
+      "version": "24.18.0",
+      "externalBin": "binaries/node",
+      "input": "binaries/node-aarch64-apple-darwin",
+      "archiveUrl": "https://nodejs.org/download/release/v24.18.0/node-v24.18.0-darwin-arm64.tar.xz",
+      "archiveSha256": "4477b9f78efb77744cf5eb57a0e9594dba66466b38b4e93fa9f35cb907a095a6",
+      "binarySha256": "ee6fb0e015284d83a91e8ec5213f43a157f8a392b58555301682892ba928c04a",
+      "checksumSource": "publisher-signed-shasums"
+    },
+    "surrealdb": {
+      "version": "3.2.1",
+      "externalBin": "binaries/surrealdb",
+      "input": "binaries/surrealdb-aarch64-apple-darwin",
+      "archiveUrl": "https://download.surrealdb.com/v3.2.1/surreal-v3.2.1.darwin-arm64.tgz",
+      "archiveSha256": "53928df8bb498df0a8beff3c2e3c4079d64ab239ed5177ce0e5b41f3d4480443",
+      "binarySha256": "78d1a4593759bce976836f8691457ce20fe8a28ec266fb275d780a4708db1899",
+      "checksumSource": "official-https-payload-recomputed"
+    }
+  }
+}

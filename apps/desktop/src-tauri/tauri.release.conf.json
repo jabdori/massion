@@ -1,0 +1,12 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "build": {
+    "beforeBuildCommand": "pnpm build && node src-tauri/stage-runtime.mjs"
+  },
+  "bundle": {
+    "externalBin": ["binaries/node", "binaries/surrealdb"],
+    "resources": {
+      ".runtime-stage/": ""
+    }
+  }
+}

@@ -1,14 +1,15 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "로컬 서버 콘솔(main window)에 폴더 선택·알림 능력을 부여합니다.",
+  "description": "번들된 AgentOS 렌더러에 Tauri 핵심 기능만 부여합니다.",
   "windows": ["main"],
-  "remote": {
-    "urls": ["http://127.0.0.1:*", "http://localhost:*"]
-  },
   "permissions": [
-    "core:default",
-    "dialog:allow-open",
-    "notification:default"
+    "core:event:allow-listen",
+    "core:event:allow-unlisten",
+    "allow-bootstrap",
+    "allow-query",
+    "allow-command",
+    "allow-stream-start",
+    "allow-stream-stop"
   ]
 }

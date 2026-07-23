@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "output": ".runtime-stage",
+  "deployment": "pnpm-deploy-prod-isolated",
+  "build": ["@massion/server", "@massion/desktop-bridge"],
+  "bridge": {
+    "package": "@massion/desktop-bridge",
+    "destination": "desktop-bridge",
+    "entry": "dist/entry.js"
+  },
+  "server": {
+    "package": "@massion/server",
+    "destination": "server",
+    "entry": "dist/main.js"
+  }
+}

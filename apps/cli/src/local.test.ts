@@ -11,8 +11,8 @@ describe("local daemon lifecycle", () => {
     const root = await mkdtemp(join(tmpdir(), "massion-local-paths-"));
     try {
       const paths = resolveLocalPaths({ HOME: root });
-      expect(paths.dataDirectory).toBe(join(root, ".local", "share", "massion"));
-      expect(paths.connectorDirectory).toBe(join(root, ".local", "share", "massion", "connectors"));
+      expect(paths.dataDirectory).toBe(join(root, ".local", "share", "massion-v1"));
+      expect(paths.connectorDirectory).toBe(join(root, ".local", "share", "massion-v1", "connectors"));
       const first = await ensureLocalTokenKey(paths);
       const second = await ensureLocalTokenKey(paths);
       const credential = await ensureLocalCredentialKey(paths);
@@ -54,7 +54,7 @@ describe("local daemon lifecycle", () => {
         },
         fetcher: async () => Response.json({ status: "ready" }),
         processExists: () => true,
-        processCommand: () => Promise.resolve(`node ${serverScript}`),
+        processCommand: () => Promise.resolve(`${process.execPath} ${serverScript}`),
         spawnProcess: (_command, _arguments, options) => {
           order.push("application-start");
           childEnvironment = options.env;
@@ -71,14 +71,14 @@ describe("local daemon lifecycle", () => {
       expect(childEnvironment?.MASSION_DATABASE_URL).toBe("ws://127.0.0.1:7330");
       expect(childEnvironment?.MASSION_DATABASE_USER).toBe("massion");
       expect(childEnvironment?.MASSION_DATABASE_PASSWORD_FILE).toBe(
-        join(root, ".config", "massion", "database-password"),
+        join(root, ".config", "massion-v1", "database-password"),
       );
       expect(childEnvironment?.MASSION_WEB_ROOT).toBe("/opt/massion/web");
       expect(childWorkingDirectory).toBe(paths.dataDirectory);
       expect(childEnvironment?.MASSION_EDGE_CONNECTOR_ENABLED).toBe("true");
       expect(childEnvironment?.MASSION_CONNECTOR_HEARTBEAT_MS).toBe("45000");
       expect((await stat(paths.connectorDirectory)).mode & 0o777).toBe(0o700);
-      expect((await stat(join(root, ".config", "massion", "database-password"))).mode & 0o777).toBe(0o600);
+      expect((await stat(join(root, ".config", "massion-v1", "database-password"))).mode & 0o777).toBe(0o600);
     } finally {
       await rm(root, { recursive: true, force: true });
     }
@@ -97,7 +97,7 @@ describe("local daemon lifecycle", () => {
       const manager = new LocalDaemonManager({
         environment: { HOME: root, MASSION_SERVER_BIN: "/opt/massion/server/dist/main.js" },
         processExists: () => alive,
-        processCommand: () => Promise.resolve("node /opt/massion/server/dist/main.js"),
+        processCommand: () => Promise.resolve(`${process.execPath} /opt/massion/server/dist/main.js`),
         signal: (pid, signal) => {
           signals.push({ pid, signal });
           alive = false;
@@ -122,7 +122,7 @@ describe("local daemon lifecycle", () => {
       const manager = new LocalDaemonManager({
         environment: { HOME: root, MASSION_SERVER_BIN: "/opt/massion/server/dist/main.js" },
         processExists: () => true,
-        processCommand: () => Promise.resolve("node /tmp/unrelated.js"),
+        processCommand: () => Promise.resolve(`/usr/bin/env ${process.execPath} /opt/massion/server/dist/main.js`),
         signal: () => {
           signalled = true;
         },
@@ -153,7 +153,7 @@ describe("local daemon lifecycle", () => {
         // 새 서버(pid 99)가 뜨기 전에는 not-ready, 뜬 뒤에는 ready를 돌려준다.
         fetcher: async () => Response.json({ status: spawned ? "ready" : "starting" }),
         processExists: (pid) => (pid === 99 ? true : oldAlive),
-        processCommand: () => Promise.resolve(`node ${serverScript}`),
+        processCommand: () => Promise.resolve(`${process.execPath} ${serverScript}`),
         signal: (pid, signal) => {
           signals.push({ pid, signal });
           if (pid === 42) oldAlive = false;
