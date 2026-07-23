@@ -736,30 +736,35 @@ function ApprovalInboxCard({
   const workId = approval.workId;
   return (
     <section className="rounded-[7px] border border-gate-border bg-gate-wash px-3.5 py-3" title={auditTitle}>
-      <div className="flex items-center gap-2">
-        <span aria-hidden="true" className="text-gate">◇</span>
-        <h3 className="min-w-0 flex-1 truncate text-[13px] font-medium">{approval.title}</h3>
-        <span className="shrink-0 text-[11px] text-gate">승인 필요</span>
-      </div>
+      <h3 className="text-[13px] font-medium">
+        {workId === undefined ? (
+          <span className="flex min-h-6 items-center gap-2">
+            <span aria-hidden="true" className="text-gate">◇</span>
+            <span className="min-w-0 flex-1 truncate">{approval.title}</span>
+            <span className="shrink-0 text-[11px] font-normal text-gate">승인 필요</span>
+          </span>
+        ) : (
+          <button
+            aria-label={`업무로 이동: ${workTitle ?? "연결된 업무"}`}
+            className="flex min-h-6 w-full items-center gap-2 rounded-[3px] text-left outline-none hover:text-primary focus-visible:ring-2 focus-visible:ring-gate/70"
+            onClick={() => onOpenWork(workId)}
+            type="button"
+          >
+            <span aria-hidden="true" className="text-gate">◇</span>
+            <span className="min-w-0 flex-1 truncate">{approval.title}</span>
+            <span className="shrink-0 text-[11px] font-normal text-gate">승인 필요</span>
+            <CaretRight aria-hidden="true" className="shrink-0 text-muted" size={12} />
+          </button>
+        )}
+      </h3>
       <p className="mt-1.5 text-[12px] leading-5 text-secondary">{approval.description}</p>
-      {/* 출처 줄. 어디서 온 요청인지 꺾쇠로 바로 이동합니다 — 결정 전에 맥락을 볼 수 있게. */}
-      {workId === undefined ? (
-        <p className="mt-2 border-t border-gate-border pt-2 text-[11px] text-muted">조직 전역</p>
-      ) : (
-        <button
-          aria-label={`업무로 이동: ${workTitle ?? "연결된 업무"}`}
-          className="mt-2 flex w-full items-center gap-1.5 border-t border-gate-border pt-2 text-left text-[11px] text-muted outline-none hover:text-primary focus-visible:ring-2 focus-visible:ring-gate/70"
-          onClick={() => onOpenWork(workId)}
-          type="button"
-        >
-          <span className="min-w-0 flex-1 truncate">{workTitle ?? "연결된 업무"}</span>
-          <CaretRight aria-hidden="true" className="shrink-0" size={12} />
-        </button>
-      )}
-      <p className="mt-1 text-[11px] text-muted">
-        해결 전까지 관련 실행이 멈춥니다
-        {approval.revision === undefined ? "" : ` · 개정 ${String(approval.revision)}`}
-      </p>
+      <div className="mt-2 border-t border-gate-border pt-2 text-[11px] text-muted">
+        <p>{workTitle ?? (workId === undefined ? "조직 전역" : "연결된 업무")}</p>
+        <p className="mt-1">
+          해결 전까지 관련 실행이 멈춥니다
+          {approval.revision === undefined ? "" : ` · 개정 ${String(approval.revision)}`}
+        </p>
+      </div>
       <div className="mt-3 flex justify-end">
         <DecisionActions
           approveName={approval.title}
@@ -787,22 +792,20 @@ function BlockedInboxCard({
       style={{ borderColor: "var(--halt)", background: "color-mix(in srgb, var(--halt) 8%, transparent)" }}
       title={`업무 ${item.workId}`}
     >
-      <div className="flex items-center gap-2">
-        <span aria-hidden="true" className="text-halt">⊘</span>
-        {/* 제목 줄 전체가 이동 표면입니다. 별도 "열기" 버튼은 반복하지 않고 꺾쇠만 둡니다. */}
-        <h3 className="min-w-0 flex-1 text-[13px] font-medium">
-          <button
-            aria-label={`업무로 이동: ${item.title}`}
-            className="flex w-full items-center gap-1.5 rounded-[3px] text-left outline-none hover:text-primary focus-visible:ring-2 focus-visible:ring-halt/70"
-            onClick={() => onOpenWork(item.workId)}
-            type="button"
-          >
-            <span className="min-w-0 flex-1 truncate">{item.title}</span>
-            <CaretRight aria-hidden="true" className="shrink-0" size={12} />
-          </button>
-        </h3>
-        <span className="shrink-0 text-[11px] text-halt">막힘</span>
-      </div>
+      {/* 제목·상태·꺾쇠를 한 줄에 두고, 꺾쇠는 두 카드 모두 맨 오른쪽에 맞춥니다. */}
+      <h3 className="text-[13px] font-medium">
+        <button
+          aria-label={`업무로 이동: ${item.title}`}
+          className="flex min-h-6 w-full items-center gap-2 rounded-[3px] text-left outline-none hover:text-primary focus-visible:ring-2 focus-visible:ring-halt/70"
+          onClick={() => onOpenWork(item.workId)}
+          type="button"
+        >
+          <span aria-hidden="true" className="text-halt">⊘</span>
+          <span className="min-w-0 flex-1 truncate">{item.title}</span>
+          <span className="shrink-0 text-[11px] font-normal text-halt">막힘</span>
+          <CaretRight aria-hidden="true" className="shrink-0 text-muted" size={12} />
+        </button>
+      </h3>
       {/* 차단 원인을 구별해 보입니다. 모델 부재와 폴더 신뢰는 할 일이 완전히 다릅니다. */}
       <p className="mt-1.5 text-[12px] leading-5 text-halt">{item.reason}</p>
     </section>

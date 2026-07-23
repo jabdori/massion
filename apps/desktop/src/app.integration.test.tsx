@@ -282,7 +282,7 @@ describe("AgentOS native data flow", () => {
     expect(await screen.findByText("CRM 고객 데이터 읽기")).toBeInTheDocument();
   });
 
-  it("수신함 항목은 중복 열기 라벨 없이 꺾쇠로 업무에 이동한다", async () => {
+  it("수신함 항목은 상단 행 맨 오른쪽 꺾쇠로 업무에 이동한다", async () => {
     const user = userEvent.setup();
     render(<App service={service()} />);
 
@@ -291,8 +291,12 @@ describe("AgentOS native data flow", () => {
     const approvalSource = within(panel).getByRole("button", { name: "업무로 이동: 3분기 고객 이탈 원인 분석" });
     const blockedSource = within(panel).getByRole("button", { name: "업무로 이동: 파트너 계약서 검토" });
 
-    expect(approvalSource.querySelector("svg")).toBeInTheDocument();
-    expect(blockedSource.querySelector("svg")).toBeInTheDocument();
+    expect(approvalSource).toHaveTextContent("CRM 고객 데이터 읽기승인 필요");
+    expect(blockedSource).toHaveTextContent("파트너 계약서 검토막힘");
+    expect(approvalSource.lastElementChild?.tagName).toBe("svg");
+    expect(blockedSource.lastElementChild?.tagName).toBe("svg");
+    expect(approvalSource.parentElement?.tagName).toBe("H3");
+    expect(blockedSource.parentElement?.tagName).toBe("H3");
     expect(within(panel).queryByText("업무 열기")).not.toBeInTheDocument();
 
     await user.click(blockedSource);
