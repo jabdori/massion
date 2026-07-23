@@ -11,6 +11,7 @@ import {
   CoreRecordsStage,
   CoreSoftwareTaskAdapter,
   CodeChangeAssuranceRecipeResolver,
+  ApplicationArtifactGateway,
   DatabaseCoreAssuranceCheckOrchestrator,
   DeterministicRecordsDocumentPlanner,
   SubscriptionConnectionService,
@@ -26,19 +27,54 @@ import {
 } from "@massion/assurance";
 import { ContextStore, StrategyGenerator, StrategyService } from "@massion/context-strategy";
 import { EvidenceBriefStore, IndexStore, RepositoryStore } from "@massion/evidence";
-import { ExtensionStore } from "@massion/extension-host";
+import {
+  ExtensionGateway,
+  ExtensionGovernanceAdapter,
+  ExtensionLifecycleService,
+  ExtensionPackageService,
+  ExtensionStore,
+  ExtensionWorkerSupervisor,
+  FileArtifactStore as ExtensionFileArtifactStore,
+} from "@massion/extension-host";
+import {
+  GrowthAdoptionService,
+  GrowthBootstrap,
+  GrowthComplianceAuditor,
+  GrowthConfigurationStore,
+  GrowthEffectStore,
+  GrowthEvaluationStore,
+  GrowthGateway,
+  GrowthGovernanceAdapter,
+  GrowthRecoveryService,
+  GrowthRevertService,
+  GrowthTargetRegistry,
+  MemoryGrowthTarget,
+  OrganizationGrowthTarget,
+  PolicyGrowthTarget,
+  PromptGrowthTarget,
+  PromptMemoryStore,
+  ReflectionService,
+} from "@massion/growth";
 import {
   ApprovalStore,
   EmergencyControl,
   GovernanceGate,
   GovernanceService,
   PermitStore,
+  PolicyGrowthProjection,
   PolicyStore,
 } from "@massion/governance";
 import { IdentityService, OrganizationService } from "@massion/identity";
 import { isOptimizationRoleKey, ModelOptimizationStore, OptimizationBatchService } from "@massion/model-optimization";
-import { OrganizationGraphService } from "@massion/organization";
-import { FileArtifactStore, RegistryCatalog, RegistryHttpHandler, SurrealRegistryStore } from "@massion/registry";
+import { OrganizationGraphService, OrganizationGrowthProjection } from "@massion/organization";
+import {
+  FileArtifactStore,
+  RegistryApplicationAdapter,
+  RegistryCatalog,
+  RegistryHttpHandler,
+  RegistryInstaller,
+  SurrealRegistryStore,
+} from "@massion/registry";
 import { RecordsService } from "@massion/records";
 import { CredentialVault, ModelRouter, ProviderService } from "@massion/router";
 import {
@@ -87,6 +123,7 @@ import { WorkspaceService } from "@massion/workspace";
 
 import type { DatabaseProvisionConfig, ServerConfig } from "./config.js";
 import { MassionDaemon } from "./daemon.js";
+import { ApplicationRunStartupRecoveryService } from "./application-run-startup-recovery.js";
 import { ConnectorChannelAuthenticator, ConnectorChannelHub } from "./connector-channel.js";
 import { ConnectorMaintenanceService } from "./connector-maintenance.js";
 import { ConnectorChannelPersistence } from "./connector-persistence.js";
@@ -108,6 +145,7 @@ import { SubscriptionQuotaSynchronizationService } from "./subscription-quota-sy
 import { MassionSubscriptionRuntimeResolver } from "./subscription-runtime-resolver.js";
 import { GovernanceSubscriptionSharingAuthorizer } from "./subscription-sharing.js";
 import { JsonOperationalLogger, MetricRegistry, MetricsHttpServer } from "./telemetry.js";
+import { seedBundledOfficialExtensions } from "./bundled-official-extensions.js";
 
 const CORE_MODEL_ROUTES = BUILTIN_CORE_MODEL_ROUTES.map((route) => route.name);
 
@@ -213,7 +251,7 @@ export async function createMassionDaemon(
     );
     const works = await WorkService.create(database, organizations, graph);
     const workspaces = await WorkspaceService.create(database, organizations);
-    await ExtensionStore.create(database, organizations);
+    const extensionStore = await ExtensionStore.create(database, organizations);
     const connectorEnrollment = await ConnectorEnrollmentService.create(database, organizations);
     const subscriptionConnectors = await ConnectorRegistry.create(database, organizations, connectorEnrollment, {
       heartbeatTtlMs: config.connectors.heartbeatMs,
@@ -493,6 +531,48 @@ export async function createMassionDaemon(
       { allowedAuthorHandles: ["assurance", "representative"] },
     );
     const records = await RecordsService.create(database, organizations);
+    const growthAuthorizer = new GrowthGovernanceAdapter(governanceGate);
+    const growthConfigurations = await GrowthConfigurationStore.create(database, organizations, growthAuthorizer);
+    const growthPrompts = await PromptMemoryStore.create(database, organizations);
+    const growthEvaluations = await GrowthEvaluationStore.create(database, organizations);
+    const growthRecovery = await GrowthRecoveryService.create(database, organizations);
+    const growthTargets = new GrowthTargetRegistry({
+      prompt: new PromptGrowthTarget(growthPrompts),
+      memory: new MemoryGrowthTarget(growthPrompts),
+      policy: new PolicyGrowthTarget(new PolicyGrowthProjection(policies)),
+      organization: new OrganizationGrowthTarget(new OrganizationGrowthProjection(graph)),
+    });
+    const growthReflections = await ReflectionService.create(
+      database,
+      organizations,
+      {
+        async generate() {
+          throw new Error("Growth reflection 생성기는 현재 서버 runtime에 연결되지 않았습니다");
+        },
+      },
+      {
+        async verify() {
+          throw new Error("Growth reflection 근거 검증기가 현재 서버 runtime에 연결되지 않았습니다");
+        },
+      },
+    );
+    const growth = new GrowthGateway({
+      bootstrap: new GrowthBootstrap(
+        graph,
+        growthPrompts,
+        growthEvaluations,
+        new GrowthComplianceAuditor(database, organizations),
+        growthRecovery,
+      ),
+      configurations: growthConfigurations,
+      prompts: growthPrompts,
+      reflections: growthReflections,
+      evaluations: growthEvaluations,
+      adoptions: await GrowthAdoptionService.create(database, organizations, growthAuthorizer, growthTargets),
+      effects: await GrowthEffectStore.create(database, organizations),
+      reverts: await GrowthRevertService.create(database, organizations, growthAuthorizer, growthTargets),
+      recovery: growthRecovery,
+    });
     const deliveryPrerequisites: DeliveryPrerequisiteReader = {
       async getWork(context, workId) {
         const work = await works.getWork(context, workId);
@@ -692,12 +772,51 @@ export async function createMassionDaemon(
     const registryCatalog = new RegistryCatalog(registryStore.catalogStore(), {
       tokenSecret: config.registry.tokenKey,
     });
+    // ponytail: registry read handler 와 installer 가 동일 artifact 저장소를 공유합니다.
+    const artifactStore = new FileArtifactStore(config.registry.artifactRoot);
     const registryHandler = new RegistryHttpHandler({
       catalog: registryCatalog,
-      artifacts: new FileArtifactStore(config.registry.artifactRoot),
+      artifacts: artifactStore,
       publicBaseUrl: config.registry.publicBaseUrl,
     });
     const registryServer = new RegistryReadHttpServer(registryHandler, config.registry);
+    const extensionRuntime = { agentOS: "1.0.0", node: process.versions.node, surrealDB: "3.2.0" };
+    if (config.registry.bundledExtensionsRoot) {
+      await seedBundledOfficialExtensions({
+        root: config.registry.bundledExtensionsRoot,
+        identities,
+        organizations,
+        versions: registryStore,
+        artifacts: artifactStore,
+        runtime: extensionRuntime,
+      });
+    }
+    // ponytail: Extension lifecycle artifact 저장소는 registry artifactRoot 를 재사용(하위 경로가 겹치지 않음).
+    const extensionLifecycle = new ExtensionLifecycleService({
+      runtime: extensionRuntime,
+      store: extensionStore,
+      artifacts: new ExtensionFileArtifactStore(config.registry.artifactRoot),
+      authorizer: new ExtensionGovernanceAdapter(governanceGate),
+      workers: new ExtensionWorkerSupervisor(),
+    });
+    const extensionGateway = new ExtensionGateway(
+      extensionLifecycle,
+      new ExtensionPackageService({ runtime: extensionRuntime }),
+    );
+    const registryInstaller = new RegistryInstaller({
+      catalog: registryCatalog,
+      artifacts: artifactStore,
+      lifecycle: extensionLifecycle,
+      runtime: extensionRuntime,
+    });
+    const registryAdapter = new RegistryApplicationAdapter({
+      catalog: registryCatalog,
+      versions: registryStore,
+      catalogVersions: registryStore.catalogStore(),
+      installer: registryInstaller,
+      inventory: { list: (context) => extensionStore.listInstallations(context) },
+      runtime: extensionRuntime,
+    });
     const daemonReference: { current?: MassionDaemon } = {};
     const application = await ApplicationProduct.create({
       executionStream,
@@ -716,6 +835,8 @@ export async function createMassionDaemon(
         runtime: runner,
         approvals,
         assuranceBindings,
+        extension: extensionGateway,
+        growth,
         providers,
         router,
         optimization: { evaluations: optimizationEvaluations, batches: optimizationBatches },
@@ -747,6 +868,8 @@ export async function createMassionDaemon(
             await works.listMessages(timelineContext, workId, roomId),
         },
         assuranceBindings,
+        extension: extensionGateway,
+        growth,
         providers,
         router,
         optimization: { evaluations: optimizationEvaluations, batches: optimizationBatches },
@@ -776,6 +899,8 @@ export async function createMassionDaemon(
           };
         },
       },
+      artifacts: new ApplicationArtifactGateway(extensionGateway),
+      registry: registryAdapter,
       connectorEnrollments: connectorEnrollment,
       health: {
         readiness: async () =>
@@ -785,6 +910,23 @@ export async function createMassionDaemon(
       },
       server: config.server,
     });
+    const applicationRunRecovery = new ApplicationRunStartupRecoveryService(
+      application.runs,
+      {
+        resolveTenantContext: async (userId, organizationId) =>
+          await organizations.resolveTenantContext(userId, organizationId),
+      },
+      application.coordinator,
+      {
+        onFailure: (failure) => {
+          operations.write("application.run.startup_recovery.failed", {
+            reason: failure.reason,
+            ...(failure.runId === undefined ? {} : { runId: failure.runId }),
+            ...(failure.organizationId === undefined ? {} : { organizationId: failure.organizationId }),
+          });
+        },
+      },
+    );
     const metrics = new MetricRegistry({ massion_daemon_transition_total: ["state"] });
     const metricsServer = new MetricsHttpServer(metrics, config.metrics);
     const serverConnectorLifecycle = new ServerConnectorLifecycleService(database, {
@@ -829,8 +971,18 @@ export async function createMassionDaemon(
       application,
       database,
       shutdownTimeoutMs: config.shutdownTimeoutMs,
-      beforeListenServices: [serverConnectorLifecycle, serverConnectorStartupRecovery, runtimeRecovery],
+      beforeListenServices: [
+        serverConnectorLifecycle,
+        serverConnectorStartupRecovery,
+        runtimeRecovery,
+        applicationRunRecovery,
+      ],
       drainServices: [
+        {
+          close: async () => {
+            await extensionLifecycle.close();
+          },
+        },
         {
           close: async () => {
             await routedRunner.shutdown("daemon_shutdown");
@@ -865,6 +1017,7 @@ export async function createMassionDaemon(
           Promise.resolve(serverConnectorLifecycle.ready() && serverConnectorStartupRecovery.ready()),
         "subscription-quota": () => Promise.resolve(subscriptionQuotaSynchronization.ready()),
         "runtime-recovery": () => Promise.resolve(runtimeRecovery.ready()),
+        "application-run-recovery": () => Promise.resolve(applicationRunRecovery.ready()),
       },
       onState: (state) => {
         metrics.increment("massion_daemon_transition_total", { state });

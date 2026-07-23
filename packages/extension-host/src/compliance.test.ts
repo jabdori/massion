@@ -40,7 +40,7 @@ describe("ExtensionComplianceAuditor", () => {
     const version = await store.registerVersion(context, {
       commandId: "compliance-version",
       artifact: report,
-      trustLevel: "built-in",
+      trustLevel: "verified",
       sourceKind: "bundled",
     });
     await store.activateVersion(context, {

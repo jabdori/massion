@@ -148,7 +148,6 @@ export class SubscriptionQuotaSynchronizationService {
     this.healthy = false;
     if (this.timer) clearInterval(this.timer);
     this.timer = undefined;
-    await Promise.all([this.active, ...this.codexRefreshes.values()]);
   }
 
   /**

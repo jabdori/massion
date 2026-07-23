@@ -304,7 +304,7 @@ DEFINE INDEX growth_source_reference_id ON growth_source_reference FIELDS organi
 DEFINE INDEX growth_source_reference_unique ON growth_source_reference FIELDS organization_id, suggestion_id, source_kind, source_id UNIQUE;
 DEFINE EVENT growth_source_reference_immutable ON TABLE growth_source_reference WHEN $event IN ['UPDATE', 'DELETE'] THEN { THROW 'Growth source reference는 immutable입니다'; };
 
-DEFINE TABLE growth_event SCHEMAFULL PERMISSIONS NONE;
+DEFINE TABLE OVERWRITE growth_event SCHEMAFULL PERMISSIONS NONE;
 DEFINE FIELD event_id ON growth_event TYPE string;
 DEFINE FIELD organization_id ON growth_event TYPE string;
 DEFINE FIELD aggregate_type ON growth_event TYPE string;
@@ -340,6 +340,11 @@ THEN {
   };
 };
 `,
+  {
+    // Application outbox가 이 테이블을 먼저 만들 수 있었던 이전 설치와,
+    // 이미 적용된 정본 migration checksum을 모두 안전하게 수용합니다.
+    compatibleChecksums: ["233d3c60f9145d4bbf035fdcdc0488f41c6cebb575f31f992fccce39698a6d7d"],
+  },
 );
 
 export const GROWTH_EVALUATION_MIGRATION = defineMigration(

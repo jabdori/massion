@@ -1,4 +1,4 @@
-import { ApplicationHttpClient } from "@massion/application";
+import { ApplicationHttpClient, ApplicationRunStore, type ApplicationRunClock } from "@massion/application";
 import {
   EvidenceIndexer,
   EvidenceParser,
@@ -8,7 +8,9 @@ import {
   RepositoryStore,
 } from "@massion/evidence";
 import { IdentityService, OrganizationService } from "@massion/identity";
+import { OrganizationGraphService } from "@massion/organization";
 import { RuntimeExecutionStore } from "@massion/runtime";
+import { ExtensionPackageService } from "@massion/extension-host";
 import { SOFTWARE_ENGINEERING_TEAM_PROFILE } from "@massion/software-engineering";
 import { createDatabase } from "@massion/storage";
 import { execFile } from "node:child_process";
@@ -16,7 +18,7 @@ import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { createServer, request } from "node:http";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { promisify } from "node:util";
 import { describe, expect, it, vi } from "vitest";
 
@@ -110,6 +112,34 @@ describe("Massion server product", () => {
     ).rejects.toThrow("준비에 실패");
   });
 
+  it("기존 Application outbox가 만든 growth_event 테이블이 있어도 Growth 조립 후 수신을 시작한다", async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), "massion-growth-event-upgrade-"));
+    const parsed = parseServerConfig({
+      MASSION_TOKEN_KEY: Buffer.alloc(32, 41).toString("base64url"),
+      MASSION_CREDENTIAL_KEY: Buffer.alloc(32, 42).toString("base64url"),
+      MASSION_DATABASE_URL: "mem://",
+      MASSION_SOFTWARE_WORKSPACE_ROOT: join(workspaceRoot, "software"),
+      MASSION_CONNECTOR_ROOT: join(workspaceRoot, "connectors"),
+    });
+    const database = await createDatabase(parsed.database);
+    await database.query("DEFINE TABLE growth_event SCHEMALESS;");
+    const daemon = await createMassionDaemon(
+      {
+        ...parsed,
+        server: { ...parsed.server, port: 0 },
+        metrics: { ...parsed.metrics, port: 0 },
+        registry: { ...parsed.registry, port: 0 },
+      },
+      { database },
+    );
+    try {
+      await expect(daemon.start()).resolves.toMatchObject({ host: "127.0.0.1" });
+    } finally {
+      await daemon.close();
+      await rm(workspaceRoot, { recursive: true, force: true });
+    }
+  }, 20_000);
+
   it("서버 수신 전에 중단된 직접 Agent 실행을 복구하고 정상 종료 때 Runtime을 먼저 비운다", async () => {
     const workspaceRoot = await mkdtemp(join(tmpdir(), "massion-runtime-recovery-"));
     const databaseUrl = `rocksdb://${join(workspaceRoot, "massion.db")}`;
@@ -174,6 +204,333 @@ describe("Massion server product", () => {
     }
   }, 20_000);
 
+  it("서버 수신 전에 원래 사용자 문맥으로 복구 가능한 ApplicationRun을 표준 Core 경로에 재진입시킨다", async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), "massion-application-run-recovery-"));
+    const databaseUrl = `rocksdb://${join(workspaceRoot, "massion.db")}`;
+    const parsed = parseServerConfig({
+      MASSION_TOKEN_KEY: Buffer.alloc(32, 53).toString("base64url"),
+      MASSION_CREDENTIAL_KEY: Buffer.alloc(32, 54).toString("base64url"),
+      MASSION_DATABASE_URL: databaseUrl,
+      MASSION_SOFTWARE_WORKSPACE_ROOT: join(workspaceRoot, "software"),
+      MASSION_CONNECTOR_ROOT: join(workspaceRoot, "connectors"),
+    });
+    const seedDatabase = await createDatabase(parsed.database);
+    const identities = await IdentityService.create(seedDatabase);
+    const organizations = await OrganizationService.create(seedDatabase);
+    const owner = await identities.registerPersonalUser({
+      email: "application-run-recovery-owner@example.com",
+      displayName: "Application Run Recovery Owner",
+    });
+    const member = await identities.registerPersonalUser({
+      email: "application-run-recovery-member@example.com",
+      displayName: "Application Run Recovery Member",
+    });
+    const ownerPersonalContext = await organizations.resolveTenantContext(
+      owner.user.user_id,
+      owner.organization.organization_id,
+    );
+    const team = await organizations.createTeam(owner.user.user_id, "Application Run Recovery Team");
+    const ownerContext = await organizations.resolveTenantContext(
+      owner.user.user_id,
+      team.organization.organization_id,
+    );
+    await organizations.addMember(ownerContext, member.user.user_id, "member");
+    const memberContext = await organizations.resolveTenantContext(
+      member.user.user_id,
+      team.organization.organization_id,
+    );
+    const graph = await OrganizationGraphService.create(seedDatabase, organizations);
+    await graph.bootstrap(ownerContext);
+    await graph.bootstrap(ownerPersonalContext);
+    const daemon = await createMassionDaemon(
+      {
+        ...parsed,
+        server: { ...parsed.server, port: 0 },
+        metrics: { ...parsed.metrics, port: 0 },
+        registry: { ...parsed.registry, port: 0 },
+      },
+      { database: seedDatabase },
+    );
+    let now = new Date(Date.now() - 60_000);
+    const clock: ApplicationRunClock = {
+      get now() {
+        return now;
+      },
+    };
+    const runs = await ApplicationRunStore.create(seedDatabase, organizations, { leaseMs: 1_000, clock });
+    const ready = await runs.start(ownerContext, {
+      commandId: "application-run-startup-ready-command-0001",
+      correlationId: "application-run-startup-ready-correlation-0001",
+      request: { text: "재시작 전에 준비된 실행" },
+    });
+    const expired = await runs.start(memberContext, {
+      commandId: "application-run-startup-expired-command-0001",
+      correlationId: "application-run-startup-expired-correlation-0001",
+      request: { text: "재시작 전에 lease가 만료된 실행" },
+    });
+    const expiredClaim = await runs.claim(memberContext, expired.runId);
+    if (expiredClaim.outcome !== "claimed") throw new Error("만료 대상 ApplicationRun lease를 얻지 못했습니다");
+    now = new Date(Date.now() + 60_000);
+    const active = await runs.start(ownerPersonalContext, {
+      commandId: "application-run-startup-active-command-0001",
+      correlationId: "application-run-startup-active-correlation-0001",
+      request: { text: "다른 조직에서 아직 lease가 유효한 실행" },
+    });
+    const activeClaim = await runs.claim(ownerPersonalContext, active.runId);
+    if (activeClaim.outcome !== "claimed") throw new Error("활성 ApplicationRun lease를 얻지 못했습니다");
+
+    const address = await daemon.start();
+    try {
+      const readyResponse = await fetch(`${address.url}/health/ready`);
+      expect(readyResponse.status).toBe(200);
+      await expect(readyResponse.json()).resolves.toMatchObject({
+        components: { "application-run-recovery": "ready" },
+      });
+      const [records] = await seedDatabase.query<
+        [{ run_id: string; organization_id: string; status: string; lease_generation: number; work_id?: string }[]]
+      >(
+        "SELECT run_id, organization_id, status, lease_generation, work_id FROM application_run WHERE run_id IN $run_ids;",
+        { run_ids: [ready.runId, expired.runId, active.runId] },
+      );
+      const byId = new Map(records.map((record) => [record.run_id, record]));
+      expect(byId.get(ready.runId)).toMatchObject({
+        organization_id: ownerContext.organizationId,
+        status: "blocked",
+        lease_generation: 1,
+      });
+      expect(byId.get(expired.runId)).toMatchObject({
+        organization_id: memberContext.organizationId,
+        status: "blocked",
+        lease_generation: expiredClaim.leaseGeneration + 1,
+      });
+      expect(byId.get(active.runId)).toMatchObject({
+        organization_id: ownerPersonalContext.organizationId,
+        status: "running",
+        lease_generation: activeClaim.leaseGeneration,
+      });
+      const [requests] = await seedDatabase.query<[{ requester_user_id: string; text: string }[]]>(
+        "SELECT requester_user_id, text FROM work_request WHERE text IN $texts ORDER BY text ASC;",
+        { texts: ["재시작 전에 준비된 실행", "재시작 전에 lease가 만료된 실행"] },
+      );
+      expect(requests).toEqual([
+        {
+          requester_user_id: memberContext.userId,
+          text: "재시작 전에 lease가 만료된 실행",
+        },
+        {
+          requester_user_id: ownerContext.userId,
+          text: "재시작 전에 준비된 실행",
+        },
+      ]);
+    } finally {
+      await daemon.close();
+      await rm(workspaceRoot, { recursive: true, force: true });
+    }
+ }, 20_000);
+
+  it("로컬 daemon과 owner 접근 토큰으로 extension.list를 조회하고 registry.info 누락 버전이 fallback 메시지로 실패하지 않는다", async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), "massion-extension-registry-wiring-"));
+    const parsed = parseServerConfig({
+      MASSION_TOKEN_KEY: Buffer.alloc(32, 7).toString("base64url"),
+      MASSION_CREDENTIAL_KEY: Buffer.alloc(32, 8).toString("base64url"),
+      MASSION_DATABASE_URL: "mem://",
+      MASSION_SOFTWARE_WORKSPACE_ROOT: workspaceRoot,
+      MASSION_CONNECTOR_ROOT: join(workspaceRoot, "connectors"),
+    });
+    const config = {
+      ...parsed,
+      server: { ...parsed.server, port: 0 },
+      metrics: { ...parsed.metrics, port: 0 },
+      registry: { ...parsed.registry, port: 0 },
+    };
+    const daemon = await createMassionDaemon(config);
+    const address = await daemon.start();
+    try {
+      const initialized = (await ApplicationHttpClient.bootstrap(address.url, {
+        commandId: "extension-registry-wiring-bootstrap-0001",
+      })) as { access: { token: string } };
+      const client = new ApplicationHttpClient({ baseUrl: address.url, token: initialized.access.token });
+      // extension.list: governance 승인 기반 lifecycle/gateway가 연결되어 빈 설치 목록을 반환한다.
+      await expect(client.query("extension.list", {})).resolves.toMatchObject({ data: [] });
+      // registry.info: 누락 버전은 not-found로 실패해야 하며 ApplicationProduct fallback 텍스트가 아니어야 한다.
+      let registryInfoError: unknown = "did-not-throw";
+      try {
+        await client.query("registry.info", { versionId: "missing-registry-version" });
+      } catch (error) {
+        registryInfoError = error;
+      }
+      expect(registryInfoError).toBeInstanceOf(Error);
+      expect(String((registryInfoError as Error).message)).not.toContain("Registry가 구성되지 않았습니다");
+    } finally {
+      await daemon.close();
+      await rm(workspaceRoot, { recursive: true, force: true });
+    }
+  }, 20_000);
+
+  it("번들 Slack Registry 설치는 승인 뒤 같은 commandId로 재개해 active installation을 반환한다", async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), "massion-registry-resume-"));
+    const bundledRoot = join(workspaceRoot, "bundled-extensions");
+    const runtime = { agentOS: "1.0.0", node: process.versions.node, surrealDB: "3.2.0" };
+    const packed = await new ExtensionPackageService({ runtime }).pack(
+      resolve(process.cwd(), "../../extensions/slack"),
+      bundledRoot,
+    );
+    const archive = packed.tarballPath.split("/").pop();
+    if (!archive) throw new Error("번들 Slack archive 이름이 없습니다");
+    await writeFile(
+      join(bundledRoot, "official-extensions.json"),
+      JSON.stringify([
+        {
+          packageName: packed.artifact.manifest.name,
+          packageVersion: packed.artifact.manifest.version,
+          archive,
+          artifactDigest: packed.artifact.artifactDigest,
+        },
+      ]),
+    );
+    const parsed = parseServerConfig({
+      MASSION_TOKEN_KEY: Buffer.alloc(32, 75).toString("base64url"),
+      MASSION_CREDENTIAL_KEY: Buffer.alloc(32, 76).toString("base64url"),
+      MASSION_DATABASE_URL: "mem://",
+      MASSION_SOFTWARE_WORKSPACE_ROOT: join(workspaceRoot, "software"),
+      MASSION_CONNECTOR_ROOT: join(workspaceRoot, "connectors"),
+      MASSION_REGISTRY_ARTIFACT_ROOT: join(workspaceRoot, "registry"),
+      MASSION_REGISTRY_BUNDLED_EXTENSIONS: bundledRoot,
+    });
+    const database = await createDatabase(parsed.database);
+    const daemon = await createMassionDaemon(
+      {
+        ...parsed,
+        server: { ...parsed.server, port: 0 },
+        metrics: { ...parsed.metrics, port: 0 },
+        registry: { ...parsed.registry, port: 0 },
+      },
+      { database },
+    );
+    const address = await daemon.start();
+    try {
+      const initialized = (await ApplicationHttpClient.bootstrap(address.url, {
+        commandId: "registry-resume-bootstrap-0001",
+      })) as { access: { token: string } };
+      const client = new ApplicationHttpClient({ baseUrl: address.url, token: initialized.access.token });
+      const search = (await client.query("registry.search", { query: "slack", limit: 20 })) as {
+        data: { items: Array<{ versionId: string }> };
+      };
+      const command = {
+        schemaVersion: "massion.application.v1" as const,
+        commandId: "registry-resume-install-0001",
+        correlationId: "registry-resume-correlation-0001",
+        operation: "registry.install",
+        payload: {
+          versionId: search.data.items[0]?.versionId,
+          environment: "production",
+          riskClass: "medium",
+          executionId: "registry-resume-execution-0001",
+        },
+      };
+      if (!command.payload.versionId) throw new Error("번들 Slack Registry version이 없습니다");
+      const awaiting = (await client.command(command)) as { data: { approvalId: string } };
+      const pending = (await client.query("governance.approval.list", { status: "pending" })) as {
+        data: Array<{ approvalId: string; revision: number }>;
+      };
+      const approval = pending.data.find((item) => item.approvalId === awaiting.data.approvalId);
+      if (!approval) throw new Error("Registry 설치 Approval이 없습니다");
+      await client.command({
+        schemaVersion: "massion.application.v1",
+        commandId: "registry-resume-decide-0001",
+        correlationId: "registry-resume-decide-correlation-0001",
+        operation: "approval.decide",
+        payload: {
+          approvalId: approval.approvalId,
+          expectedApprovalRevision: approval.revision,
+          vote: "approve",
+          reason: "번들 Slack 설치 승인",
+        },
+      });
+      await expect(
+        client.command({ ...command, payload: { ...command.payload, installApprovalId: approval.approvalId } }),
+      ).resolves.toMatchObject({ outcome: "succeeded", data: { packageName: "@massion-ext/slack" } });
+      await expect(client.query("extension.list", {})).resolves.toMatchObject({
+        data: [{ packageName: "@massion-ext/slack", state: "active", activeVersionId: expect.any(String) }],
+      });
+      const [sessions] = await database.query<[{ state: string; process_id: number }[]]>(
+        "SELECT state, process_id FROM extension_worker_session;",
+      );
+      expect(sessions).toHaveLength(1);
+      expect(sessions[0]).toMatchObject({ state: "healthy" });
+      expect(sessions[0]?.process_id).toBeGreaterThan(0);
+    } finally {
+      await daemon.close();
+      await rm(workspaceRoot, { recursive: true, force: true });
+    }
+  }, 30_000);
+
+  it("초기 설치의 결정 화면은 빈 승인 목록과 자율성 상태를 함께 조회한다", async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), "massion-decisions-query-wiring-"));
+    const parsed = parseServerConfig({
+      MASSION_TOKEN_KEY: Buffer.alloc(32, 73).toString("base64url"),
+      MASSION_CREDENTIAL_KEY: Buffer.alloc(32, 74).toString("base64url"),
+      MASSION_DATABASE_URL: "mem://",
+      MASSION_SOFTWARE_WORKSPACE_ROOT: workspaceRoot,
+      MASSION_CONNECTOR_ROOT: join(workspaceRoot, "connectors"),
+    });
+    const daemon = await createMassionDaemon({
+      ...parsed,
+      server: { ...parsed.server, port: 0 },
+      metrics: { ...parsed.metrics, port: 0 },
+      registry: { ...parsed.registry, port: 0 },
+    });
+    const address = await daemon.start();
+    try {
+      const initialized = (await ApplicationHttpClient.bootstrap(address.url, {
+        commandId: "decisions-query-wiring-bootstrap-0001",
+      })) as { access: { token: string } };
+      const client = new ApplicationHttpClient({ baseUrl: address.url, token: initialized.access.token });
+
+      await expect(client.query("governance.approval.list", { status: "pending" })).resolves.toMatchObject({ data: [] });
+      await expect(client.query("governance.autonomy", {})).resolves.toMatchObject({
+        data: { mode: "automatic", revision: 0 },
+      });
+    } finally {
+      await daemon.close();
+      await rm(workspaceRoot, { recursive: true, force: true });
+    }
+  }, 20_000);
+
+  it("초기 설치에서도 성장 조회는 실제 저장소의 빈 상태를 반환한다", async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), "massion-growth-query-wiring-"));
+    const parsed = parseServerConfig({
+      MASSION_TOKEN_KEY: Buffer.alloc(32, 71).toString("base64url"),
+      MASSION_CREDENTIAL_KEY: Buffer.alloc(32, 72).toString("base64url"),
+      MASSION_DATABASE_URL: "mem://",
+      MASSION_SOFTWARE_WORKSPACE_ROOT: workspaceRoot,
+      MASSION_CONNECTOR_ROOT: join(workspaceRoot, "connectors"),
+    });
+    const daemon = await createMassionDaemon({
+      ...parsed,
+      server: { ...parsed.server, port: 0 },
+      metrics: { ...parsed.metrics, port: 0 },
+      registry: { ...parsed.registry, port: 0 },
+    });
+    const address = await daemon.start();
+    try {
+      const initialized = (await ApplicationHttpClient.bootstrap(address.url, {
+        commandId: "growth-query-wiring-bootstrap-0001",
+      })) as { access: { token: string } };
+      const client = new ApplicationHttpClient({ baseUrl: address.url, token: initialized.access.token });
+
+      await expect(client.query("growth.configuration.get", {})).resolves.toMatchObject({
+        data: { reflectionEnabled: true, adoptionMode: "review" },
+      });
+      await expect(client.query("growth.memories", {})).resolves.toMatchObject({ data: [] });
+      await expect(client.query("growth.suggestions", { limit: 50 })).resolves.toMatchObject({ data: [] });
+      await expect(client.query("growth.effects", { limit: 50 })).resolves.toMatchObject({ data: [] });
+    } finally {
+      await daemon.close();
+      await rm(workspaceRoot, { recursive: true, force: true });
+    }
+  }, 20_000);
+
   it("실제 control plane을 조립하고 모델 없는 Work만 제한 모드로 차단한다", async () => {
     const workspaceRoot = await mkdtemp(join(tmpdir(), "massion-product-software-"));
     const parsed = parseServerConfig({
@@ -211,8 +568,6 @@ describe("Massion server product", () => {
       await expect(connectorUpgradeStatus(address.url)).resolves.toBe(101);
       const initialized = (await ApplicationHttpClient.bootstrap(address.url, {
         commandId: "server-bootstrap-command-0001",
-        email: "owner@example.com",
-        displayName: "Owner",
       })) as { access: { token: string } };
       const client = new ApplicationHttpClient({ baseUrl: address.url, token: initialized.access.token });
       await expect(
@@ -390,8 +745,6 @@ describe("Massion server product", () => {
     try {
       const initialized = (await ApplicationHttpClient.bootstrap(address.url, {
         commandId: "live-core-bootstrap-command-0001",
-        email: "live-core@example.com",
-        displayName: "Live Core",
       })) as { access: { token: string } };
       const client = new ApplicationHttpClient({ baseUrl: address.url, token: initialized.access.token });
       const command = async (operation: string, payload: unknown) =>
@@ -584,8 +937,6 @@ describe("Massion server product", () => {
     try {
       const initialized = (await ApplicationHttpClient.bootstrap(address.url, {
         commandId: "minimax-core-bootstrap-command-0001",
-        email: "minimax-core@example.com",
-        displayName: "MiniMax Core",
       })) as { access: { token: string } };
       const client = new ApplicationHttpClient({ baseUrl: address.url, token: initialized.access.token });
       const connected = await client.command({
@@ -731,11 +1082,12 @@ describe("Massion server product", () => {
           readonly response_format?: unknown;
         };
         const structuredPrompt = `${JSON.stringify(body.messages) ?? ""}\n${JSON.stringify(body.response_format) ?? ""}`;
-        const content = structuredPrompt.includes("software_patch_proposal") || structuredPrompt.includes("testPatch")
-          ? JSON.stringify(proposal)
-          : structuredPrompt.includes("massion-strategy-plan") || body.response_format
-            ? JSON.stringify(plan)
-            : "완료";
+        const content =
+          structuredPrompt.includes("software_patch_proposal") || structuredPrompt.includes("testPatch")
+            ? JSON.stringify(proposal)
+            : structuredPrompt.includes("massion-strategy-plan") || body.response_format
+              ? JSON.stringify(plan)
+              : "완료";
         response.setHeader("content-type", "application/json");
         response.end(
           JSON.stringify({
@@ -790,11 +1142,14 @@ describe("Massion server product", () => {
     try {
       const initialized = (await ApplicationHttpClient.bootstrap(address.url, {
         commandId: "software-product-bootstrap-command-0001",
-        email: "software-product@example.com",
-        displayName: "Software Product",
       })) as {
         readonly access: { readonly token: string };
-        readonly context: { readonly userId: string; readonly organizationId: string; readonly membershipId: string; readonly role: "owner" };
+        readonly context: {
+          readonly userId: string;
+          readonly organizationId: string;
+          readonly membershipId: string;
+          readonly role: "owner";
+        };
       };
       const client = new ApplicationHttpClient({ baseUrl: address.url, token: initialized.access.token });
       const command = async (operation: string, payload: unknown, expectedRevision?: number) =>
@@ -1046,7 +1401,9 @@ describe("Massion server product", () => {
       const content =
         body.response_format?.type === "json_object"
           ? JSON.stringify(
-              JSON.stringify(body.messages).includes("Massion JSON output schema") ? plan : { objective: "불완전한 계획" },
+              JSON.stringify(body.messages).includes("Massion JSON output schema")
+                ? plan
+                : { objective: "불완전한 계획" },
             )
           : "완료";
       return Response.json({
@@ -1083,8 +1440,6 @@ describe("Massion server product", () => {
     try {
       const initialized = (await ApplicationHttpClient.bootstrap(address.url, {
         commandId: "zai-core-bootstrap-command-0001",
-        email: "zai-core@example.com",
-        displayName: "Z.AI Core",
       })) as { access: { token: string } };
       const client = new ApplicationHttpClient({ baseUrl: address.url, token: initialized.access.token });
       const connected = await client.command({

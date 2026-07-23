@@ -52,13 +52,6 @@ function archive(version: string): Buffer {
 
 class RemoteWorker implements ExtensionWorkerHandle {
   public readonly processId = 4242;
-  public readonly sandboxReceipt = {
-    backendId: "remote-contract-sandbox",
-    backendVersion: "1.0.0",
-    policyDigest: "d".repeat(64),
-    processId: 4242,
-    appliedAt: new Date().toISOString(),
-  };
   public async invoke(): Promise<unknown> {
     return { ok: true };
   }

@@ -9,16 +9,9 @@ import {
   validateHandshake,
   type ExtensionHandshake,
   type ExtensionRpcFrame,
-  type ExtensionTrustLevel,
 } from "@massion/extension-sdk";
 
-import {
-  assertSandboxEligibility,
-  extensionSandboxPolicyDigest,
-  nodePermissionArguments,
-  type SandboxBackend,
-  type SandboxReceipt,
-} from "./sandbox.js";
+import { resolveWorkerEntrypoint } from "./worker-entrypoint.js";
 
 interface PendingRequest {
   readonly expectedOperation: string;
@@ -167,7 +160,6 @@ class WorkerRpcChannel {
 }
 
 export interface StartExtensionWorkerInput {
-  readonly trustLevel: ExtensionTrustLevel;
   readonly versionDirectory: string;
   readonly entrypoint: string;
   readonly manifestDigest: string;
@@ -179,7 +171,6 @@ export interface StartExtensionWorkerInput {
 
 export interface ExtensionWorkerHandle {
   readonly processId: number;
-  readonly sandboxReceipt?: SandboxReceipt;
   readonly exited?: Promise<{ readonly code: number | null; readonly signal: NodeJS.Signals | null }>;
   invoke(contribution: string, input: unknown, timeoutMs: number): Promise<unknown>;
   stop(): Promise<void>;
@@ -196,37 +187,15 @@ function safeEnvironment(): Readonly<Record<string, string>> {
 }
 
 export class ExtensionWorkerSupervisor {
-  public constructor(private readonly sandboxBackend?: SandboxBackend) {}
-
   public async start(input: StartExtensionWorkerInput): Promise<ExtensionWorkerHandle> {
     const versionDirectory = realpathSync(input.versionDirectory);
-    const args = nodePermissionArguments(versionDirectory, input.entrypoint);
-    const policyDigest = extensionSandboxPolicyDigest({ ...input, versionDirectory });
-    let child: ChildProcessWithoutNullStreams;
-    let sandboxReceipt: SandboxReceipt | undefined;
-    if (this.sandboxBackend) {
-      const sandboxed = await this.sandboxBackend.spawn({
-        command: process.execPath,
-        args,
-        cwd: versionDirectory,
-        environment: safeEnvironment(),
-        policyDigest,
-      });
-      child = sandboxed.child;
-      sandboxReceipt = assertSandboxEligibility(input.trustLevel, policyDigest, sandboxed.receipt);
-      if (child.pid !== sandboxReceipt?.processId) {
-        child.kill("SIGKILL");
-        throw new Error("Extension sandbox receipt process가 실제 worker와 일치하지 않습니다");
-      }
-    } else {
-      assertSandboxEligibility(input.trustLevel, policyDigest);
-      child = spawn(process.execPath, [...args], {
-        cwd: versionDirectory,
-        shell: false,
-        env: safeEnvironment(),
-        stdio: ["pipe", "pipe", "pipe"],
-      });
-    }
+    const entrypoint = resolveWorkerEntrypoint(versionDirectory, input.entrypoint);
+    const child: ChildProcessWithoutNullStreams = spawn(process.execPath, [entrypoint], {
+      cwd: versionDirectory,
+      shell: false,
+      env: safeEnvironment(),
+      stdio: ["pipe", "pipe", "pipe"],
+    });
     const channel = new WorkerRpcChannel(child);
     try {
       const nonce = randomUUID();
@@ -254,7 +223,6 @@ export class ExtensionWorkerSupervisor {
     return {
       processId: child.pid ?? 0,
       exited: channel.observeExit(),
-      ...(sandboxReceipt === undefined ? {} : { sandboxReceipt }),
       async invoke(contribution: string, invocationInput: unknown, timeoutMs: number): Promise<unknown> {
         if (!contributions.has(contribution)) throw new Error("선언하지 않은 Extension contribution입니다");
         return (

@@ -186,6 +186,26 @@ describe("ExtensionLifecycleService", () => {
     expect(JSON.stringify(activated)).not.toContain(root);
   });
 
+  it("종료 시 활성 worker를 중지하고 session을 종료 상태로 기록한다", async () => {
+    const activated = await lifecycle.install(context, {
+      commandId: "install-close-v1",
+      archive: versionTar("1.0.0"),
+      environment: "local",
+      riskClass: "extension-install",
+      executionId: "surface-close-1",
+    });
+
+    await lifecycle.close();
+
+    expect(launcher.workers[0]?.stopped).toBe(true);
+    await expect(lifecycle.invoke(context, {
+      packageName: activated.packageName,
+      contribution: "runtimeTools:echo",
+      payload: {},
+      timeoutMs: 100,
+    })).rejects.toThrow("healthy active Extension worker");
+  });
+
   it("bundled 공식 Extension도 검사·승인·health를 거쳐 built-in으로 설치한다", async () => {
     const activated = await lifecycle.installBundled(context, {
       commandId: "install-bundled",
@@ -195,7 +215,6 @@ describe("ExtensionLifecycleService", () => {
       executionId: "surface-bundled",
     });
 
-    expect(launcher.inputs[0]?.trustLevel).toBe("built-in");
     await expect(store.getVersionDetails(context, activated.versionId)).resolves.toMatchObject({
       trustLevel: "built-in",
       sourceKind: "bundled",

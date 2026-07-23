@@ -28,6 +28,19 @@ describe("SurrealDB migration", () => {
     ).rejects.toThrow("적용된 migration checksum 불일치: 0001-probe");
   });
 
+  it("명시적으로 승인한 이전 checksum은 호환 migration으로 인정한다", async () => {
+    await using db = await createDatabase({ url: "mem://", namespace: "massion", database: "compatible-checksum" });
+    const previous = defineMigration("0001-probe", "DEFINE TABLE compatibility_probe SCHEMAFULL;");
+    await applyMigrations(db, [previous]);
+
+    const compatible = defineMigration(
+      "0001-probe",
+      "DEFINE TABLE OVERWRITE compatibility_probe SCHEMAFULL;",
+      { compatibleChecksums: [previous.checksum] },
+    );
+    await expect(applyMigrations(db, [compatible])).resolves.toEqual([]);
+  });
+
   it("migration 실패 시 schema와 적용 기록을 rollback한다", async () => {
     await using db = await createDatabase({ url: "mem://", namespace: "massion", database: "rollback" });
     const broken = defineMigration(

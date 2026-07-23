@@ -47,6 +47,14 @@ describe("Registry Application adapter", () => {
     expect((await adapter.search(context, { query: "slack", limit: 20 })) as { items: unknown[] }).toMatchObject({
       items: [expect.objectContaining({ packageName: "@massion-ext/slack" })],
     });
+    await expect(adapter.inventory(context)).resolves.toEqual([
+      expect.objectContaining({
+        versionId: staged.versionId,
+        packageName: "@massion-ext/slack",
+        packageVersion: "1.0.0",
+        visibility: "public",
+      }),
+    ]);
     await adapter.install(context, {
       commandId: "adapter-install-1",
       versionId: staged.versionId,

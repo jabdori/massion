@@ -52,8 +52,6 @@ describe("Massion server model optimization product boundary", () => {
     try {
       const initialized = (await ApplicationHttpClient.bootstrap(address.url, {
         commandId: "model-optimization-bootstrap-0001",
-        email: "model-optimization-product@example.com",
-        displayName: "Model Optimization Product",
       })) as { access: { token: string } };
       const client = new ApplicationHttpClient({ baseUrl: address.url, token: initialized.access.token });
       const command = async (operation: string, payload: unknown) =>

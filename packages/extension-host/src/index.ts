@@ -8,7 +8,7 @@ export * from "./gateway.js";
 export * from "./lifecycle.js";
 export * from "./metrics.js";
 export * from "./package-service.js";
-export * from "./sandbox.js";
+export * from "./worker-entrypoint.js";
 export * from "./recovery.js";
 export * from "./schema.js";
 export * from "./security.js";

@@ -1,5 +1,16 @@
 export { GrowthBootstrap, decideGrowthBootstrap } from "./bootstrap.js";
 export { GrowthGateway, type GrowthGatewayDependencies } from "./gateway.js";
+export { GrowthAdoptionService } from "./adoption.js";
+export { GrowthConfigurationStore } from "./configuration.js";
+export { GrowthComplianceAuditor } from "./compliance.js";
+export { GrowthEffectStore } from "./effect.js";
+export { GrowthEvaluationStore } from "./evaluation.js";
+export { GrowthGovernanceAdapter } from "./governance-adapter.js";
+export { PromptMemoryStore } from "./prompt-memory.js";
+export { ReflectionService } from "./reflection.js";
+export { GrowthRecoveryService } from "./recovery.js";
+export { GrowthRevertService } from "./revert.js";
+export { GrowthTargetRegistry, MemoryGrowthTarget, OrganizationGrowthTarget, PolicyGrowthTarget, PromptGrowthTarget } from "./targets.js";
 
 export type { AdoptGrowthSuggestionInput, GrowthAdoptionResult, GrowthAdoptionStatus } from "./adoption.js";
 export type { ConfigureGrowthInput, GrowthConfigurationSubject, GrowthConfigurationVersion } from "./contracts.js";

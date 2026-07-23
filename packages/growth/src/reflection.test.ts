@@ -127,7 +127,7 @@ describe("Reflection suggestion validation", () => {
     expect(references).toEqual([{ source_id: "work-record-1", source_checksum: "b".repeat(64) }]);
     expect(GROWTH_REFLECTION_MIGRATION.id).toBe("0056-growth-reflection");
     expect(GROWTH_REFLECTION_MIGRATION.checksum).toBe(
-      "233d3c60f9145d4bbf035fdcdc0488f41c6cebb575f31f992fccce39698a6d7d",
+      "4043afa33ffa9c4950ec69ed44fb40740f5e879baed6353dd833c3c7fb1a4004",
     );
   });
 });

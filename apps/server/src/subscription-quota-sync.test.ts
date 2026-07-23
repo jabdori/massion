@@ -77,6 +77,30 @@ function databaseFor(records: readonly ProviderCredential[], codexAccounts: read
 }
 
 describe("구독 할당량 자동 동기화", () => {
+  it("진행 중인 주기 동기화가 멈춰도 종료는 Database close 단계로 진행한다", async () => {
+    vi.useFakeTimers();
+    const database = {
+      query: vi
+        .fn<() => Promise<[readonly ProviderCredential[]]>>()
+        .mockResolvedValueOnce([[]])
+        .mockResolvedValueOnce([[]])
+        .mockImplementation(async () => await new Promise<never>(() => undefined)),
+    };
+    const service = new SubscriptionQuotaSynchronizationService(
+      database as never,
+      { resolveTenantContext: vi.fn() } as never,
+      { resolveExecutionSecretVersion: vi.fn() } as never,
+      { record: vi.fn() } as never,
+      { intervalMs: 1_000 },
+    );
+
+    await service.start();
+    await vi.advanceTimersByTimeAsync(1_000);
+
+    await expect(service.close()).resolves.toBeUndefined();
+    vi.useRealTimers();
+  });
+
   it("ready 모델 구독의 암호화 secret을 실행 시점에만 복호화해 공식 endpoint 관측값을 기록한다", async () => {
     const database = databaseFor([credential]);
     const context = {

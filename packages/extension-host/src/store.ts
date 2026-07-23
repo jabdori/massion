@@ -237,7 +237,6 @@ export class ExtensionStore {
       readonly expectedGeneration: number;
       readonly governanceDecisionIds: readonly string[];
       readonly healthReceipt: Readonly<object>;
-      readonly sandboxReceipt?: Readonly<object>;
       readonly outcome?: "activated" | "rolled-back";
     },
   ): Promise<ExtensionInstallationView> {
@@ -279,7 +278,7 @@ export class ExtensionStore {
         throw new Error("Extension activation generation 동시성 충돌입니다");
       }
       await transaction.query(
-        "CREATE extension_activation CONTENT { activation_id: $activation_id, organization_id: $organization_id, installation_id: $installation_id, before_version_id: $before_version_id, after_version_id: $after_version_id, before_generation: $before_generation, after_generation: $after_generation, command_id: $command_id, request_hash: $request_hash, governance_decision_ids: $governance_decision_ids, health_receipt_json: $health_receipt_json, sandbox_receipt_json: $sandbox_receipt_json, outcome: $outcome, activated_by_user_id: $activated_by_user_id, created_at: time::now() };",
+        "CREATE extension_activation CONTENT { activation_id: $activation_id, organization_id: $organization_id, installation_id: $installation_id, before_version_id: $before_version_id, after_version_id: $after_version_id, before_generation: $before_generation, after_generation: $after_generation, command_id: $command_id, request_hash: $request_hash, governance_decision_ids: $governance_decision_ids, health_receipt_json: $health_receipt_json, outcome: $outcome, activated_by_user_id: $activated_by_user_id, created_at: time::now() };",
         {
           activation_id: activationId,
           organization_id: context.organizationId,
@@ -292,7 +291,6 @@ export class ExtensionStore {
           request_hash: requestHash,
           governance_decision_ids: [...input.governanceDecisionIds],
           health_receipt_json: canonicalJson(input.healthReceipt),
-          sandbox_receipt_json: input.sandboxReceipt ? canonicalJson(input.sandboxReceipt) : undefined,
           outcome: input.outcome ?? "activated",
           activated_by_user_id: context.userId,
         },
@@ -380,7 +378,6 @@ export class ExtensionStore {
       readonly versionId: string;
       readonly activationGeneration: number;
       readonly processId: number;
-      readonly sandboxReceipt?: Readonly<object>;
     },
   ): Promise<RecordedExtensionWorkerSession> {
     await this.organizations.verifyTenantContext(context);
@@ -398,7 +395,7 @@ export class ExtensionStore {
         throw new Error("active Extension pointer와 worker session이 일치하지 않습니다");
       }
       await transaction.query(
-        "CREATE extension_worker_session CONTENT { session_id: $session_id, organization_id: $organization_id, installation_id: $installation_id, version_id: $version_id, activation_generation: $activation_generation, state: 'healthy', protocol_version: 'massion.extension.rpc.v1', process_id: $process_id, sandbox_receipt_json: $sandbox_receipt_json, lease_expires_at: NONE, exit_category: NONE, error_hash: NONE, started_at: time::now(), updated_at: time::now() };",
+        "CREATE extension_worker_session CONTENT { session_id: $session_id, organization_id: $organization_id, installation_id: $installation_id, version_id: $version_id, activation_generation: $activation_generation, state: 'healthy', protocol_version: 'massion.extension.rpc.v1', process_id: $process_id, lease_expires_at: NONE, exit_category: NONE, error_hash: NONE, started_at: time::now(), updated_at: time::now() };",
         {
           session_id: sessionId,
           organization_id: context.organizationId,
@@ -406,7 +403,6 @@ export class ExtensionStore {
           version_id: input.versionId,
           activation_generation: input.activationGeneration,
           process_id: input.processId,
-          sandbox_receipt_json: input.sandboxReceipt === undefined ? undefined : canonicalJson(input.sandboxReceipt),
         },
       );
       return {

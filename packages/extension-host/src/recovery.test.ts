@@ -47,7 +47,7 @@ describe("ExtensionRecoveryService", () => {
 
   it("만료된 worker lease를 failed로 전이하고 미완료 staging을 quarantine한다", async () => {
     await database.query(
-      "CREATE extension_worker_session CONTENT { session_id: 'session-expired', organization_id: $organization_id, installation_id: $installation_id, version_id: $version_id, activation_generation: 1, state: 'starting', protocol_version: 'massion.extension.rpc.v1', process_id: NONE, sandbox_receipt_json: NONE, lease_expires_at: time::now() - 1h, exit_category: NONE, error_hash: NONE, started_at: time::now() - 2h, updated_at: time::now() - 2h };",
+      "CREATE extension_worker_session CONTENT { session_id: 'session-expired', organization_id: $organization_id, installation_id: $installation_id, version_id: $version_id, activation_generation: 1, state: 'starting', protocol_version: 'massion.extension.rpc.v1', process_id: NONE, lease_expires_at: time::now() - 1h, exit_category: NONE, error_hash: NONE, started_at: time::now() - 2h, updated_at: time::now() - 2h };",
       {
         organization_id: context.organizationId,
         installation_id: version.installationId,
@@ -67,7 +67,7 @@ describe("ExtensionRecoveryService", () => {
 
   it("재시작 때 lease가 없는 기존 healthy session도 stale 상태로 종료한다", async () => {
     await database.query(
-      "CREATE extension_worker_session CONTENT { session_id: 'session-before-restart', organization_id: $organization_id, installation_id: $installation_id, version_id: $version_id, activation_generation: 1, state: 'healthy', protocol_version: 'massion.extension.rpc.v1', process_id: 101, sandbox_receipt_json: NONE, lease_expires_at: NONE, exit_category: NONE, error_hash: NONE, started_at: time::now() - 1h, updated_at: time::now() - 1h };",
+      "CREATE extension_worker_session CONTENT { session_id: 'session-before-restart', organization_id: $organization_id, installation_id: $installation_id, version_id: $version_id, activation_generation: 1, state: 'healthy', protocol_version: 'massion.extension.rpc.v1', process_id: 101, lease_expires_at: NONE, exit_category: NONE, error_hash: NONE, started_at: time::now() - 1h, updated_at: time::now() - 1h };",
       {
         organization_id: context.organizationId,
         installation_id: version.installationId,

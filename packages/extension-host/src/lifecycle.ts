@@ -71,6 +71,7 @@ export interface InvokeExtensionInput {
 }
 
 interface ActiveWorker {
+  readonly context: TenantContext;
   readonly organizationId: string;
   readonly installationId: string;
   readonly versionId: string;
@@ -223,7 +224,6 @@ export class ExtensionLifecycleService {
           report,
         );
         worker = await this.dependencies.workers.start({
-          trustLevel: version.trustLevel,
           versionDirectory: materialized.versionDirectory,
           entrypoint: version.manifest.runtime.entrypoint,
           manifestDigest: version.manifestDigest,
@@ -237,9 +237,9 @@ export class ExtensionLifecycleService {
           versionId: version.versionId,
           activationGeneration: installation.activationGeneration,
           processId: worker.processId,
-          ...(worker.sandboxReceipt === undefined ? {} : { sandboxReceipt: worker.sandboxReceipt }),
         });
         this.registerActiveWorker(context.organizationId, {
+          context,
           organizationId: context.organizationId,
           installationId: installation.installationId,
           versionId: version.versionId,
@@ -255,6 +255,31 @@ export class ExtensionLifecycleService {
       }
     }
     return { recovered, blocked };
+  }
+
+  public async close(): Promise<void> {
+    const workers = [...this.activeWorkers.values()];
+    this.activeWorkers.clear();
+    this.contributionOwners.clear();
+    await Promise.all(
+      workers.map(async (worker) => {
+        try {
+          await worker.handle.stop();
+          await this.dependencies.store.finishWorkerSession(worker.context, worker.sessionId, {
+            state: "stopped",
+            exitCategory: "daemon-shutdown",
+          });
+        } catch {
+          worker.handle.terminate();
+          await this.dependencies.store
+            .finishWorkerSession(worker.context, worker.sessionId, {
+              state: "failed",
+              exitCategory: "stop-failed",
+            })
+            .catch(() => undefined);
+        }
+      }),
+    );
   }
 
   private async activateArchive(
@@ -328,7 +353,6 @@ export class ExtensionLifecycleService {
       input.reportContributions,
     );
     const worker = await this.dependencies.workers.start({
-      trustLevel: input.version.trustLevel,
       versionDirectory: input.versionDirectory,
       entrypoint: input.version.manifest.runtime.entrypoint,
       manifestDigest: input.version.manifestDigest,
@@ -348,7 +372,6 @@ export class ExtensionLifecycleService {
           checkedAt: new Date().toISOString(),
           manifestDigest: input.version.manifestDigest,
         },
-        ...(worker.sandboxReceipt === undefined ? {} : { sandboxReceipt: worker.sandboxReceipt }),
         outcome: input.outcome,
       });
       const session = await this.dependencies.store.recordWorkerSession(context, {
@@ -356,11 +379,11 @@ export class ExtensionLifecycleService {
         versionId: input.version.versionId,
         activationGeneration: activated.activationGeneration,
         processId: worker.processId,
-        ...(worker.sandboxReceipt === undefined ? {} : { sandboxReceipt: worker.sandboxReceipt }),
       });
       const key = activeKey(context.organizationId, activated.installationId);
       const previous = this.activeWorkers.get(key);
       const active: ActiveWorker = {
+        context,
         organizationId: context.organizationId,
         installationId: activated.installationId,
         versionId: input.version.versionId,

@@ -12,7 +12,6 @@ const METRICS = new Set([
   "extension_protocol_violation_total",
   "extension_activation_total",
   "extension_rollback_total",
-  "extension_sandbox_unavailable_total",
   "extension_recovery_total",
   "extension_operation_duration_ms",
 ]);
@@ -25,7 +24,6 @@ export type ExtensionMetricName =
   | "extension_protocol_violation_total"
   | "extension_activation_total"
   | "extension_rollback_total"
-  | "extension_sandbox_unavailable_total"
   | "extension_recovery_total"
   | "extension_operation_duration_ms";
 export type ExtensionMetricOutcome = "success" | "failure" | "blocked" | "recovered" | "quarantined" | "timeout";

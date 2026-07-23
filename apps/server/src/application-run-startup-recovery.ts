@@ -1,0 +1,137 @@
+import type { TenantContext } from "@massion/identity";
+
+export interface ApplicationRunStartupRecoveryCandidate {
+  readonly runId: string;
+  readonly organizationId: string;
+  readonly actorUserId?: string;
+}
+
+export interface ApplicationRunStartupRecoverySource {
+  listStartupRecoverable(): Promise<readonly ApplicationRunStartupRecoveryCandidate[]>;
+}
+
+export interface ApplicationRunRecoveryContextResolver {
+  resolveTenantContext(userId: string, organizationId: string): Promise<TenantContext>;
+}
+
+export interface ApplicationRunRecoveryTarget {
+  recover(context: TenantContext, runId: string): Promise<unknown>;
+}
+
+export type ApplicationRunStartupRecoveryFailureReason =
+  "candidate_list_failed" | "legacy_actor_lineage_missing" | "membership_unavailable" | "recovery_failed";
+
+export interface ApplicationRunStartupRecoveryFailure {
+  readonly reason: ApplicationRunStartupRecoveryFailureReason;
+  readonly runId?: string;
+  readonly organizationId?: string;
+  readonly cause?: unknown;
+}
+
+export interface ApplicationRunStartupRecoveryOptions {
+  readonly onFailure?: (failure: ApplicationRunStartupRecoveryFailure) => void | Promise<void>;
+}
+
+export class ApplicationRunStartupRecoveryService {
+  private started = false;
+  private closed = false;
+  private healthy = false;
+  private active: Promise<void> | undefined;
+
+  public constructor(
+    private readonly source: ApplicationRunStartupRecoverySource,
+    private readonly contexts: ApplicationRunRecoveryContextResolver,
+    private readonly target: ApplicationRunRecoveryTarget,
+    private readonly options: ApplicationRunStartupRecoveryOptions = {},
+  ) {}
+
+  public async start(): Promise<void> {
+    if (this.closed) throw new Error("종료된 ApplicationRun 시작 복구 서비스는 다시 시작할 수 없습니다");
+    if (this.started) throw new Error("ApplicationRun 시작 복구 서비스가 이미 실행됐습니다");
+    this.started = true;
+    this.healthy = false;
+    const active = this.recoverAll();
+    this.active = active;
+    try {
+      await active;
+    } finally {
+      if (this.active === active) this.active = undefined;
+    }
+  }
+
+  public ready(): boolean {
+    return this.started && !this.closed && !this.active && this.healthy;
+  }
+
+  public async close(): Promise<void> {
+    if (this.closed) {
+      await this.active;
+      return;
+    }
+    this.closed = true;
+    this.healthy = false;
+    await this.active;
+  }
+
+  private async recoverAll(): Promise<void> {
+    let candidates: readonly ApplicationRunStartupRecoveryCandidate[];
+    try {
+      candidates = await this.source.listStartupRecoverable();
+    } catch (error) {
+      await this.report({ reason: "candidate_list_failed", cause: error });
+      return;
+    }
+
+    let healthy = true;
+    for (const candidate of candidates) {
+      if (this.closed) {
+        healthy = false;
+        break;
+      }
+      if (!candidate.actorUserId) {
+        healthy = false;
+        await this.report({
+          reason: "legacy_actor_lineage_missing",
+          runId: candidate.runId,
+          organizationId: candidate.organizationId,
+        });
+        continue;
+      }
+
+      let context: TenantContext;
+      try {
+        context = await this.contexts.resolveTenantContext(candidate.actorUserId, candidate.organizationId);
+      } catch (error) {
+        healthy = false;
+        await this.report({
+          reason: "membership_unavailable",
+          runId: candidate.runId,
+          organizationId: candidate.organizationId,
+          cause: error,
+        });
+        continue;
+      }
+
+      try {
+        await this.target.recover(context, candidate.runId);
+      } catch (error) {
+        healthy = false;
+        await this.report({
+          reason: "recovery_failed",
+          runId: candidate.runId,
+          organizationId: candidate.organizationId,
+          cause: error,
+        });
+      }
+    }
+    if (!this.closed) this.healthy = healthy;
+  }
+
+  private async report(failure: ApplicationRunStartupRecoveryFailure): Promise<void> {
+    try {
+      await this.options.onFailure?.(failure);
+    } catch {
+      // 실패 보고 오류가 다음 실행 복구를 막아서는 안 됩니다.
+    }
+  }
+}

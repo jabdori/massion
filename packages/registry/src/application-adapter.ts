@@ -152,29 +152,7 @@ export class RegistryApplicationAdapter {
   }
 
   public async inventory(context: TenantContext): Promise<readonly unknown[]> {
-    const [installed, versions] = await Promise.all([
-      this.dependencies.inventory.list(context),
-      this.dependencies.catalogVersions.list(),
-    ]);
-    const findings: unknown[] = [];
-    for (const installation of installed) {
-      const recalled = versions.find(
-        (version) =>
-          version.state === "recalled" &&
-          version.packageName === installation.packageName &&
-          (installation.packageVersion === undefined || version.packageVersion === installation.packageVersion),
-      );
-      if (!recalled) continue;
-      const recalls = await this.dependencies.catalogVersions.listRecalls(recalled.versionId);
-      findings.push({
-        installationId: installation.installationId,
-        packageName: installation.packageName,
-        packageVersion: recalled.packageVersion,
-        state: installation.state ?? "unknown",
-        severity: recalls.at(-1)?.severity ?? "high",
-        reason: recalls.at(-1)?.reason ?? "Registry recall",
-      });
-    }
-    return findings;
+    const result = await this.search(context, { query: "", limit: 100 });
+    return (result as { readonly items: readonly unknown[] }).items;
   }
 }

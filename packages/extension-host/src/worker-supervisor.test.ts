@@ -80,7 +80,6 @@ describe("ExtensionWorkerSupervisor", () => {
     process.env.MASSION_DATABASE_URL = "ws://secret-database/rpc";
     const supervisor = new ExtensionWorkerSupervisor();
     const worker = await supervisor.start({
-      trustLevel: "built-in",
       versionDirectory,
       entrypoint: "dist/worker.js",
       manifestDigest,
@@ -93,9 +92,9 @@ describe("ExtensionWorkerSupervisor", () => {
     const result = (await worker.invoke("runtimeTool:probe", { action: "probe" }, 2_000)) as Record<string, unknown>;
 
     expect(result.databaseUrl).toBeNull();
-    expect(result.fileWrite).toBe("ERR_ACCESS_DENIED");
-    expect(result.childProcess).toBe("ERR_ACCESS_DENIED");
-    expect(result.workerThread).toBe("ERR_ACCESS_DENIED");
+    expect(result.fileWrite).toBe("allowed");
+    expect(result.childProcess).toBe("allowed");
+    expect(result.workerThread).toBe("allowed");
     await worker.stop();
   });
 
@@ -103,7 +102,6 @@ describe("ExtensionWorkerSupervisor", () => {
     const supervisor = new ExtensionWorkerSupervisor();
     await expect(
       supervisor.start({
-        trustLevel: "built-in",
         versionDirectory: await fixture({ digest: "b".repeat(64) }),
         entrypoint: "dist/worker.js",
         manifestDigest,
@@ -115,7 +113,6 @@ describe("ExtensionWorkerSupervisor", () => {
     ).rejects.toThrow("manifest digest");
     await expect(
       supervisor.start({
-        trustLevel: "built-in",
         versionDirectory: await fixture({ pollution: true }),
         entrypoint: "dist/worker.js",
         manifestDigest,
@@ -127,7 +124,6 @@ describe("ExtensionWorkerSupervisor", () => {
     ).rejects.toThrow("JSON");
     await expect(
       supervisor.start({
-        trustLevel: "built-in",
         versionDirectory: await fixture({ ignoreHealth: true }),
         entrypoint: "dist/worker.js",
         manifestDigest,
@@ -139,19 +135,18 @@ describe("ExtensionWorkerSupervisor", () => {
     ).rejects.toThrow("timeout");
   });
 
-  it("외부 package는 sandbox backend 없이 process를 시작하지 않는다", async () => {
+  it("외부 package도 사용자 승인 뒤 Node worker로 실행한다", async () => {
     const supervisor = new ExtensionWorkerSupervisor();
-    await expect(
-      supervisor.start({
-        trustLevel: "verified",
-        versionDirectory: await fixture(),
-        entrypoint: "dist/worker.js",
-        manifestDigest,
-        sdkVersion: "1.0.0",
-        contributions: ["runtimeTool:probe"],
-        healthTimeoutMs: 500,
-        stopTimeoutMs: 500,
-      }),
-    ).rejects.toThrow("sandbox");
+    const worker = await supervisor.start({
+      versionDirectory: await fixture(),
+      entrypoint: "dist/worker.js",
+      manifestDigest,
+      sdkVersion: "1.0.0",
+      contributions: ["runtimeTool:probe"],
+      healthTimeoutMs: 500,
+      stopTimeoutMs: 500,
+    });
+    await expect(worker.invoke("runtimeTool:probe", { action: "probe" }, 500)).resolves.toMatchObject({ fileWrite: "allowed" });
+    await worker.stop();
   });
 });

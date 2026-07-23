@@ -28,6 +28,8 @@ export interface ServerConfig {
     readonly port: number;
     readonly publicBaseUrl: string;
     readonly artifactRoot: string;
+    /** 패키지된 데스크톱이 제공하는 공식 Extension artifact 목록입니다. */
+    readonly bundledExtensionsRoot?: string;
     readonly tokenKey: Buffer;
   };
   readonly shutdownTimeoutMs: number;
@@ -197,6 +199,9 @@ export function parseServerConfig(environment: Readonly<Record<string, string | 
   const webRoot = environment.MASSION_WEB_ROOT;
   if (webRoot !== undefined && !isAbsolute(webRoot)) throw new Error("Web root는 절대 경로여야 합니다");
   const publicBaseUrl = environment.MASSION_REGISTRY_PUBLIC_URL ?? `http://${registryHost}:${String(registryPort)}`;
+  const bundledExtensionsRoot = environment.MASSION_REGISTRY_BUNDLED_EXTENSIONS;
+  if (bundledExtensionsRoot !== undefined && !isAbsolute(bundledExtensionsRoot))
+    throw new Error("Bundled Extension root는 절대 경로여야 합니다");
   const parsedPublicUrl = new URL(publicBaseUrl);
   const publicLoopback = new Set(["127.0.0.1", "::1", "localhost"]).has(parsedPublicUrl.hostname);
   if (
@@ -250,6 +255,7 @@ export function parseServerConfig(environment: Readonly<Record<string, string | 
       port: registryPort,
       publicBaseUrl,
       artifactRoot: environment.MASSION_REGISTRY_ARTIFACT_ROOT ?? "/var/lib/massion/registry",
+      ...(bundledExtensionsRoot === undefined ? {} : { bundledExtensionsRoot }),
       tokenKey: registryKey,
     },
     shutdownTimeoutMs: integer(environment.MASSION_SHUTDOWN_TIMEOUT_MS, 30_000, 1_000, 300_000, "shutdown timeout"),

@@ -32,7 +32,6 @@ interface ActivationAuditRecord {
   readonly after_generation: number;
   readonly governance_decision_ids: readonly string[];
   readonly health_receipt_json: string;
-  readonly sandbox_receipt_json?: string;
 }
 
 function canonicalJson(value: unknown): string {
@@ -144,9 +143,6 @@ export class ExtensionComplianceAuditor {
         if (health.status !== "healthy") violations.push("health-receipt-invalid");
       } catch {
         violations.push("health-receipt-invalid");
-      }
-      if (version.trust_level !== "built-in" && !activation.sandbox_receipt_json) {
-        violations.push("sandbox-receipt-missing");
       }
       const [grants] = await this.database.query<[Array<{ permission_digest: string }>]>(
         "SELECT permission_digest FROM extension_capability_grant WHERE organization_id = $organization_id AND version_id = $version_id LIMIT 1;",

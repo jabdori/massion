@@ -14,6 +14,7 @@ export interface Migration {
   readonly id: string;
   readonly checksum: string;
   readonly surql: string;
+  readonly compatibleChecksums?: readonly string[];
 }
 
 export interface AppliedMigration {
@@ -21,12 +22,21 @@ export interface AppliedMigration {
   readonly checksum: string;
 }
 
-export function defineMigration(id: string, surql: string): Migration {
+export function defineMigration(
+  id: string,
+  surql: string,
+  options: { readonly compatibleChecksums?: readonly string[] } = {},
+): Migration {
   if (!/^\d{4}-[a-z0-9-]+$/.test(id)) throw new Error(`잘못된 migration ID: ${id}`);
+  const compatibleChecksums = options.compatibleChecksums ?? [];
+  if (compatibleChecksums.some((checksum) => !/^[a-f0-9]{64}$/u.test(checksum))) {
+    throw new Error(`잘못된 호환 migration checksum: ${id}`);
+  }
   return {
     id,
     surql,
     checksum: createHash("sha256").update(surql).digest("hex"),
+    ...(compatibleChecksums.length === 0 ? {} : { compatibleChecksums }),
   };
 }
 
@@ -56,7 +66,9 @@ export async function applyMigrations(database: MassionDatabase, migrations: rea
   for (const migration of ordered) {
     const existing = applied.get(migration.id);
     if (existing) {
-      if (existing !== migration.checksum) throw new Error(`적용된 migration checksum 불일치: ${migration.id}`);
+      if (existing !== migration.checksum && !migration.compatibleChecksums?.includes(existing)) {
+        throw new Error(`적용된 migration checksum 불일치: ${migration.id}`);
+      }
       continue;
     }
 
