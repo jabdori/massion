@@ -35,6 +35,10 @@ import type {
 
 const MAX_FALLBACKS = 16;
 const MINIMUM_SESSION_RENEW_DELAY_MS = 1_000;
+// 모델 제공자가 응답을 끝내지 않아도 Work가 영구 실행 상태에 남지 않도록 합니다.
+// 로컬 Connector의 기본 요청 기한(120초)과 맞춰, 모델 호출도 같은 상한을 사용합니다.
+const MODEL_TOTAL_TIMEOUT_MS = 120_000;
+const MODEL_STREAM_CHUNK_TIMEOUT_MS = 30_000;
 
 export interface SessionRenewalClock {
   now(): number;
@@ -194,6 +198,11 @@ function failureSignal(error: unknown): FailureSignal {
 
 function isModelUnavailable(error: unknown): boolean {
   return error instanceof Error && error.message.startsWith("blocked_model_unavailable:");
+}
+
+/** 모든 모델 호출은 상위 취소를 보존하면서도 외부 응답 대기를 유한하게 제한합니다. */
+function modelAbortSignal(parent: AbortSignal): AbortSignal {
+  return AbortSignal.any([parent, AbortSignal.timeout(MODEL_TOTAL_TIMEOUT_MS)]);
 }
 
 export function normalizeVoltAgentStreamPart(
@@ -415,7 +424,11 @@ export class VoltAgentRunner implements AgentRunner, StructuredAgentRunner {
             this.registry.set(executionId, lease);
             const agent = this.agent(context, input.agentHandle);
             const result = await agent.streamText(prompt(input.input), {
-              abortSignal: active.controller.signal,
+              abortSignal: modelAbortSignal(active.controller.signal),
+              timeout: {
+                totalMs: MODEL_TOTAL_TIMEOUT_MS,
+                chunkMs: MODEL_STREAM_CHUNK_TIMEOUT_MS,
+              },
               context: new Map<string | symbol, unknown>([
                 [MASSION_RUNTIME_EXECUTION_CONTEXT_KEY, executionId],
                 [MASSION_TENANT_CONTEXT_KEY, context],
@@ -691,7 +704,7 @@ export class VoltAgentRunner implements AgentRunner, StructuredAgentRunner {
         }
         this.registry.set(running.execution_id, lease);
         const result = await this.agent(context, input.agentHandle).generateText(prompt(input.input), {
-          abortSignal,
+          abortSignal: modelAbortSignal(abortSignal),
           context: new Map<string | symbol, unknown>([
             [MASSION_RUNTIME_EXECUTION_CONTEXT_KEY, running.execution_id],
             [MASSION_TENANT_CONTEXT_KEY, context],
@@ -809,7 +822,7 @@ export class VoltAgentRunner implements AgentRunner, StructuredAgentRunner {
         }
         this.registry.set(running.execution_id, lease);
         const generationOptions = {
-          abortSignal,
+          abortSignal: modelAbortSignal(abortSignal),
           context: new Map<string | symbol, unknown>([
             [MASSION_RUNTIME_EXECUTION_CONTEXT_KEY, running.execution_id],
             [MASSION_TENANT_CONTEXT_KEY, context],
