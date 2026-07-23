@@ -65,6 +65,7 @@ import {
   type ActivityView,
   type AgentView,
   type ApprovalView,
+  type InboxItem,
   type ArtifactView,
   type StepState,
   type TaskView,
@@ -239,6 +240,8 @@ export function App({ service }: AppProps) {
     await controller.decideApproval(approval, decision);
     await refreshNotifications();
   };
+  // 수신함 한 원천. 배지·수신함·홈이 모두 이 배열을 봅니다. 홈이 승인을 따로 조회하지 않습니다.
+  const inboxItems = useMemo(() => buildInboxItems(notifications, controller.works), [notifications, controller.works]);
 
   if (controller.phase === "loading") return <DesktopLoading />;
   if (controller.phase === "error") return <DesktopError error={controller.rootError} onRetry={controller.retry} />;
@@ -253,7 +256,7 @@ export function App({ service }: AppProps) {
         <GlobalRail
           activeSurface={surface}
           collapsed={sidebarCollapsed}
-          notificationCount={notifications?.length ?? 0}
+          notificationCount={inboxItems === undefined ? 0 : inboxItems.length}
           onOpenNotifications={() => {
             setNotificationsOpen(true);
             void refreshNotifications();
@@ -299,6 +302,7 @@ export function App({ service }: AppProps) {
         ) : (
           <ProductSurface
             awaitingRegistryInstall={awaitingRegistryInstall}
+            inboxItems={inboxItems}
             onAwaitingRegistryInstallChange={setAwaitingRegistryInstall}
             onCreate={() => {
               controller.newWork.setOpen(true);
@@ -317,10 +321,15 @@ export function App({ service }: AppProps) {
         )}
       </div>
       <InboxPanel
-        approvals={notifications}
         error={notificationError}
+        items={inboxItems}
         onDecide={decideNotification}
         onOpenChange={setNotificationsOpen}
+        onOpenWork={(workId) => {
+          setNotificationsOpen(false);
+          controller.setSelectedId(workId);
+          setSurface("work");
+        }}
         onRetry={() => void refreshNotifications()}
         open={notificationsOpen}
         pending={pendingNotificationIds}
@@ -404,6 +413,7 @@ function GlobalRail({
 
 function ProductSurface({
   awaitingRegistryInstall,
+  inboxItems,
   onAwaitingRegistryInstallChange,
   onCreate,
   onOpenNotifications,
@@ -412,6 +422,7 @@ function ProductSurface({
   surface,
 }: {
   awaitingRegistryInstall: AwaitingRegistryInstall | undefined;
+  inboxItems: InboxItem[] | undefined;
   onAwaitingRegistryInstallChange: (value: AwaitingRegistryInstall | undefined) => void;
   onCreate: () => void;
   onOpenNotifications: () => void;
@@ -422,6 +433,7 @@ function ProductSurface({
   if (surface === "home")
     return (
       <HomeSurface
+        inboxItems={inboxItems}
         onCreate={onCreate}
         onOpenNotifications={onOpenNotifications}
         onOpenWork={onOpenWork}
@@ -459,42 +471,35 @@ function WorkEmptySurface({ onCreate }: { onCreate: () => void }) {
 }
 
 function HomeSurface({
+  inboxItems,
   onCreate,
   onOpenNotifications,
   onOpenWork,
   service,
 }: {
+  inboxItems: InboxItem[] | undefined;
   onCreate: () => void;
   onOpenNotifications: () => void;
   onOpenWork: (workId: string) => void;
   service: DesktopService;
 }) {
   const [works, setWorks] = useState<WorkView[]>();
-  const [approvals, setApprovals] = useState<ApprovalView[]>();
   const [error, setError] = useState("");
 
   useEffect(() => {
     let disposed = false;
-    void Promise.all([
-      service.loadIndex({ filter: "active", search: "" }),
-      service.loadPendingApprovals(),
-    ])
-      .then(([items, pending]) => {
-        if (disposed) return;
-        setWorks(items);
-        setApprovals(pending);
-      })
-      .catch((cause: unknown) => {
-        if (!disposed) setError(surfaceErrorMessage(cause, "현황을 불러오지 못했습니다."));
-      });
+    void service
+      .loadIndex({ filter: "active", search: "" })
+      .then((items) => !disposed && setWorks(items))
+      .catch((cause: unknown) => !disposed && setError(surfaceErrorMessage(cause, "현황을 불러오지 못했습니다.")));
     return () => {
       disposed = true;
     };
   }, [service]);
 
-  const blocked = (works ?? []).filter((work) => work.run?.status === "blocked");
+  // 차단은 수신함과 같은 원천(inboxItems)에서 옵니다. 홈이 따로 세지 않아 숫자가 갈리지 않습니다.
   const running = (works ?? []).filter((work) => work.status === "active" && work.run?.status !== "blocked");
-  const waitingCount = (approvals?.length ?? 0) + blocked.length;
+  const waiting = inboxItems ?? [];
 
   return (
     <SurfaceFrame title="홈">
@@ -513,56 +518,53 @@ function HomeSurface({
         </button>
       </section>
 
-      {works === undefined || approvals === undefined ? <SurfaceLoading /> : null}
+      {works === undefined || inboxItems === undefined ? <SurfaceLoading /> : null}
 
-      {works && approvals ? (
+      {works && inboxItems ? (
         <div className="grid max-w-4xl gap-7">
           <section aria-label="나를 기다리는 것">
             <h2 className="mb-2.5 text-[10px] font-semibold tracking-[0.08em] text-muted">
-              나를 기다리는 것 {waitingCount ? <span className="text-gate">{waitingCount}</span> : null}
+              나를 기다리는 것 {waiting.length ? <span className="text-gate">{waiting.length}</span> : null}
             </h2>
-            {waitingCount === 0 ? (
-              <p className="text-sm text-muted">지금 결정을 기다리는 항목이 없습니다.</p>
+            {waiting.length === 0 ? (
+              <p className="text-sm text-muted">지금 사람을 기다리는 항목이 없습니다.</p>
             ) : (
+              // 홈은 요약입니다. 승인 처리는 수신함에서, 차단 해결은 업무에서 — 같은 원천을 눌러서 엽니다.
               <ul className="grid gap-1.5">
-                {/*
-                  * 승인은 이동시키지 않고 그 자리에서 처리합니다. 방·수신함과 같은 문법이라
-                  * 사용자가 같은 모양을 두 가지로 배우지 않아도 됩니다.
-                  */}
-                {approvals.map((approval) => (
-                  <li
-                    className="flex items-center gap-2.5 rounded-[7px] border border-gate-border bg-gate-wash px-3.5 py-2.5"
-                    key={approval.id}
-                  >
-                    <span aria-hidden="true" className="text-gate">◇</span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-[13px] font-medium">{approval.title}</span>
-                      <span className="block truncate text-xs text-secondary">{approval.description}</span>
-                    </span>
-                    <span className="shrink-0 text-[11px] text-gate">승인 필요</span>
-                    <OpenButton label={`${approval.title} 자세히 보기`} onOpen={onOpenNotifications} />
-                  </li>
-                ))}
-                {blocked.map((work) => (
-                  <li key={work.id}>
-                    <button
-                      className="flex w-full items-center gap-2.5 rounded-[7px] border border-border bg-surface-1 px-3.5 py-2.5 text-left outline-none hover:border-control"
-                      onClick={() => {
-                        onOpenWork(work.id);
-                      }}
-                      type="button"
+                {waiting.map((item) =>
+                  item.kind === "approval" ? (
+                    <li
+                      className="flex items-center gap-2.5 rounded-[7px] border border-gate-border bg-gate-wash px-3.5 py-2.5"
+                      key={item.id}
                     >
-                      <span aria-hidden="true" className="text-danger">⊘</span>
+                      <span aria-hidden="true" className="text-gate">◇</span>
                       <span className="min-w-0 flex-1">
-                        <span className="block truncate text-[13px] font-medium">{work.title}</span>
-                        {/* 차단 원인을 구별해 보입니다. 모델 부재와 폴더 신뢰는 할 일이 완전히 다릅니다. */}
-                        <span className="block truncate font-mono text-[11px] text-danger">
-                          {work.run?.blockedReason ?? "차단됨"}
-                        </span>
+                        <span className="block truncate text-[13px] font-medium">{item.approval.title}</span>
+                        <span className="block truncate text-xs text-secondary">{item.approval.description}</span>
                       </span>
-                    </button>
-                  </li>
-                ))}
+                      <span className="shrink-0 text-[11px] text-gate">승인 필요</span>
+                      <OpenButton label={`${item.approval.title} 수신함에서 보기`} onOpen={onOpenNotifications} />
+                    </li>
+                  ) : (
+                    <li key={item.id}>
+                      <button
+                        className="flex w-full items-center gap-2.5 rounded-[7px] border border-halt/40 bg-surface-1 px-3.5 py-2.5 text-left outline-none hover:border-halt"
+                        onClick={() => {
+                          onOpenWork(item.workId);
+                        }}
+                        type="button"
+                      >
+                        <span aria-hidden="true" className="text-halt">⊘</span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-[13px] font-medium">{item.title}</span>
+                          {/* 차단 원인을 구별해 보입니다. 모델 부재와 폴더 신뢰는 할 일이 완전히 다릅니다. */}
+                          <span className="block truncate font-mono text-[11px] text-halt">{item.reason}</span>
+                        </span>
+                        <span className="shrink-0 text-[11px] text-halt">막힘</span>
+                      </button>
+                    </li>
+                  ),
+                )}
               </ul>
             )}
           </section>
@@ -614,20 +616,42 @@ function HomeSurface({
   );
 }
 
+/**
+ * 수신함 한 원천. 승인 대기와 차단을 한 목록으로 투영합니다.
+ * 막힘(halt)이 승인 대기보다 급하므로 먼저 둡니다. 배지·수신함·홈이 전부 이 결과를 봅니다.
+ * approvals가 아직 undefined(로딩 중)면 목록도 undefined로 두어 로딩 상태를 구분합니다.
+ */
+function buildInboxItems(approvals: ApprovalView[] | undefined, works: readonly WorkView[]): InboxItem[] | undefined {
+  if (approvals === undefined) return undefined;
+  const blocked: InboxItem[] = works
+    .filter((work) => work.run?.status === "blocked")
+    .map((work) => ({
+      kind: "blocked",
+      id: `blocked:${work.id}`,
+      workId: work.id,
+      title: work.title,
+      reason: work.run?.blockedReason ?? "차단됨",
+    }));
+  const approval: InboxItem[] = approvals.map((item) => ({ kind: "approval", id: item.id, approval: item }));
+  return [...blocked, ...approval];
+}
+
 function InboxPanel({
-  approvals,
   error,
+  items,
   onDecide,
   onOpenChange,
+  onOpenWork,
   onRetry,
   open,
   pending,
   works,
 }: {
-  approvals: ApprovalView[] | undefined;
   error: string;
+  items: InboxItem[] | undefined;
   onDecide: (approval: ApprovalView, vote: "approve" | "reject") => Promise<void>;
   onOpenChange: (open: boolean) => void;
+  onOpenWork: (workId: string) => void;
   onRetry: () => void;
   open: boolean;
   pending: ReadonlySet<string>;
@@ -636,20 +660,17 @@ function InboxPanel({
   const workTitles = new Map(works.map((work) => [work.id, work.title]));
   return (
     <Dialog onOpenChange={onOpenChange} open={open}>
-      <DialogContent
-        aria-label="수신함"
-        className="h-full max-w-[430px] rounded-none border-y-0 border-r-0 p-0 shadow-[-18px_0_48px_rgba(21,24,28,0.18)]"
-        viewportClassName="place-items-stretch justify-items-end p-0"
-      >
+      {/* 오른쪽에 딱 붙는 시트. 그림자 대신 왼쪽 1px 선으로 가릅니다(DESIGN.md: 그림자 없음). */}
+      <DialogContent aria-label="수신함" className="w-[420px] border-l border-border" sheet>
         <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)]">
           <header className="flex items-start gap-3 border-b border-border px-5 py-4">
             <div className="min-w-0 flex-1">
               <div className="flex items-baseline gap-2">
                 <DialogTitle className="text-[17px] font-semibold tracking-[-0.02em]">수신함</DialogTitle>
-                {approvals?.length ? <span className="font-mono text-[11px] text-gate">{approvals.length}</span> : null}
+                {items?.length ? <span className="font-mono text-[11px] text-gate">{items.length}</span> : null}
               </div>
               <DialogDescription className="mt-1 text-[12px] leading-5 text-muted">
-                조치가 끝날 때까지 미해결 항목이 여기에 남습니다.
+                사람이 결정하거나 풀어줄 때까지 여기에 남습니다.
               </DialogDescription>
             </div>
             <DialogClose
@@ -659,64 +680,132 @@ function InboxPanel({
               <X aria-hidden="true" size={17} />
             </DialogClose>
           </header>
-          <div className="min-h-0 overflow-y-auto px-4 py-4">
+          <div className="min-h-0 space-y-2 overflow-y-auto px-4 py-4">
             {error ? (
               <div>
                 <SurfaceError message={error} />
                 <Button onClick={onRetry} size="sm" type="button" variant="outline">다시 불러오기</Button>
               </div>
             ) : null}
-            {approvals === undefined && !error ? <SurfaceLoading /> : null}
-            {approvals?.length === 0 ? (
+            {items === undefined && !error ? <SurfaceLoading /> : null}
+            {items?.length === 0 ? (
               <div className="py-12 text-center">
                 <Bell aria-hidden="true" className="mx-auto text-muted" size={28} />
-                <p className="mt-3 text-[13px] font-medium">수신함에 미해결 항목이 없습니다.</p>
-                <p className="mt-1 text-[12px] text-muted">조직이 사람의 결정을 기다리지 않고 있습니다.</p>
+                <p className="mt-3 text-[13px] font-medium">수신함이 비어 있습니다.</p>
+                <p className="mt-1 text-[12px] text-muted">지금 사람을 기다리거나 막힌 것이 없습니다.</p>
               </div>
             ) : null}
-            {approvals?.length ? (
-              <ul className="divide-y divide-gate-border border-y border-gate-border">
-                {approvals.map((approval) => {
-                  const workTitle = approval.workId === undefined ? undefined : workTitles.get(approval.workId);
-                  return (
-                    <li className="bg-gate-wash px-3 py-3.5" key={approval.id}>
-                      <div className="flex items-center gap-2">
-                        <span aria-hidden="true" className="text-gate">◇</span>
-                        <h3 className="min-w-0 flex-1 truncate text-[13px] font-medium">{approval.title}</h3>
-                        <span className="shrink-0 text-[11px] text-gate">승인 필요</span>
-                      </div>
-                      <p className="mt-1.5 text-[12px] leading-5 text-secondary">{approval.description}</p>
-                      <div className="mt-2 border-t border-gate-border pt-2 text-[11px] text-muted">
-                        <p>
-                          {workTitle ?? (approval.workId === undefined ? "조직 전역" : "연결된 업무")}
-                          {approval.workId === undefined ? null : (
-                            <span className="ml-2 font-mono text-fg-3" title={`업무 ${approval.workId}`}>{approval.workId}</span>
-                          )}
-                        </p>
-                        <p className="mt-1">
-                          해결 전까지 관련 실행이 멈춥니다
-                          {approval.revision === undefined ? "" : ` · 개정 ${String(approval.revision)}`}
-                          <span className="ml-2 font-mono text-fg-3" title={`승인 요청 ${approval.id}`}>{approval.id}</span>
-                        </p>
-                      </div>
-                      <div className="mt-3 flex justify-end">
-                        <DecisionActions
-                          approveName={approval.title}
-                          busy={pending.has(approval.id)}
-                          disabled={pending.has(approval.id)}
-                          onApprove={() => void onDecide(approval, "approve")}
-                          onReject={() => void onDecide(approval, "reject")}
-                        />
-                      </div>
-                    </li>
-                  );
-                })}
-              </ul>
-            ) : null}
+            {items?.map((item) =>
+              item.kind === "approval" ? (
+                <ApprovalInboxCard
+                  key={item.id}
+                  approval={item.approval}
+                  busy={pending.has(item.id)}
+                  onDecide={onDecide}
+                  onOpenWork={onOpenWork}
+                  workTitle={item.approval.workId === undefined ? undefined : workTitles.get(item.approval.workId)}
+                />
+              ) : (
+                <BlockedInboxCard key={item.id} item={item} onOpenWork={onOpenWork} />
+              ),
+            )}
           </div>
         </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/** 승인 대기 카드. gate(노랑)는 "지금 사람 결정이 필요함" 예약색입니다. */
+function ApprovalInboxCard({
+  approval,
+  busy,
+  onDecide,
+  onOpenWork,
+  workTitle,
+}: {
+  approval: ApprovalView;
+  busy: boolean;
+  onDecide: (approval: ApprovalView, vote: "approve" | "reject") => Promise<void>;
+  onOpenWork: (workId: string) => void;
+  workTitle: string | undefined;
+}) {
+  // 감사 식별자(업무·승인 요청 id)는 본문에 슬러그로 찍지 않고 title 툴팁으로 내립니다.
+  // 수신함은 읽는 곳이 아니라 처리하는 곳이라 "무엇을·어디서"만 사람의 말로 보입니다.
+  const auditTitle = `승인 요청 ${approval.id}${approval.workId === undefined ? "" : ` · 업무 ${approval.workId}`}`;
+  const workId = approval.workId;
+  return (
+    <section className="rounded-[7px] border border-gate-border bg-gate-wash px-3.5 py-3" title={auditTitle}>
+      <div className="flex items-center gap-2">
+        <span aria-hidden="true" className="text-gate">◇</span>
+        <h3 className="min-w-0 flex-1 truncate text-[13px] font-medium">{approval.title}</h3>
+        <span className="shrink-0 text-[11px] text-gate">승인 필요</span>
+      </div>
+      <p className="mt-1.5 text-[12px] leading-5 text-secondary">{approval.description}</p>
+      {/* 출처 줄. 어디서 온 요청인지 꺾쇠로 바로 이동합니다 — 결정 전에 맥락을 볼 수 있게. */}
+      {workId === undefined ? (
+        <p className="mt-2 border-t border-gate-border pt-2 text-[11px] text-muted">조직 전역</p>
+      ) : (
+        <button
+          aria-label={`업무로 이동: ${workTitle ?? "연결된 업무"}`}
+          className="mt-2 flex w-full items-center gap-1.5 border-t border-gate-border pt-2 text-left text-[11px] text-muted outline-none hover:text-primary focus-visible:ring-2 focus-visible:ring-gate/70"
+          onClick={() => onOpenWork(workId)}
+          type="button"
+        >
+          <span className="min-w-0 flex-1 truncate">{workTitle ?? "연결된 업무"}</span>
+          <CaretRight aria-hidden="true" className="shrink-0" size={12} />
+        </button>
+      )}
+      <p className="mt-1 text-[11px] text-muted">
+        해결 전까지 관련 실행이 멈춥니다
+        {approval.revision === undefined ? "" : ` · 개정 ${String(approval.revision)}`}
+      </p>
+      <div className="mt-3 flex justify-end">
+        <DecisionActions
+          approveName={approval.title}
+          busy={busy}
+          disabled={busy}
+          onApprove={() => void onDecide(approval, "approve")}
+          onReject={() => void onDecide(approval, "reject")}
+        />
+      </div>
+    </section>
+  );
+}
+
+/** 차단 카드. halt(빨강)는 "실행이 막힘" 예약색입니다. 승인·거절이 아니라 원인을 풀러 업무로 갑니다. */
+function BlockedInboxCard({
+  item,
+  onOpenWork,
+}: {
+  item: Extract<InboxItem, { kind: "blocked" }>;
+  onOpenWork: (workId: string) => void;
+}) {
+  return (
+    <section
+      className="rounded-[7px] border px-3.5 py-3"
+      style={{ borderColor: "var(--halt)", background: "color-mix(in srgb, var(--halt) 8%, transparent)" }}
+      title={`업무 ${item.workId}`}
+    >
+      <div className="flex items-center gap-2">
+        <span aria-hidden="true" className="text-halt">⊘</span>
+        {/* 제목 줄 전체가 이동 표면입니다. 별도 "열기" 버튼은 반복하지 않고 꺾쇠만 둡니다. */}
+        <h3 className="min-w-0 flex-1 text-[13px] font-medium">
+          <button
+            aria-label={`업무로 이동: ${item.title}`}
+            className="flex w-full items-center gap-1.5 rounded-[3px] text-left outline-none hover:text-primary focus-visible:ring-2 focus-visible:ring-halt/70"
+            onClick={() => onOpenWork(item.workId)}
+            type="button"
+          >
+            <span className="min-w-0 flex-1 truncate">{item.title}</span>
+            <CaretRight aria-hidden="true" className="shrink-0" size={12} />
+          </button>
+        </h3>
+        <span className="shrink-0 text-[11px] text-halt">막힘</span>
+      </div>
+      {/* 차단 원인을 구별해 보입니다. 모델 부재와 폴더 신뢰는 할 일이 완전히 다릅니다. */}
+      <p className="mt-1.5 text-[12px] leading-5 text-halt">{item.reason}</p>
+    </section>
   );
 }
 

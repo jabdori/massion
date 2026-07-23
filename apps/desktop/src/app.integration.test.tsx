@@ -235,9 +235,10 @@ describe("AgentOS native data flow", () => {
     expect(decideApproval).toHaveBeenCalledWith(approval, "approve", "데스크톱 수신함에서 승인");
     await waitFor(() => expect(installRegistry).toHaveBeenCalledTimes(2));
     expect(installRegistry).toHaveBeenNthCalledWith(2, { ...initialRequest, installApprovalId: "approval-install-1" }, identity);
-    expect(await within(panel).findByText("수신함에 미해결 항목이 없습니다.")).toBeInTheDocument();
+    // 승인한 항목은 수신함에서 사라집니다. (fixture의 차단 업무는 별개로 남습니다.)
+    await waitFor(() => expect(within(panel).queryByText("Calendar 설치")).toBeNull());
     await user.click(within(panel).getByRole("button", { name: "수신함 닫기" }));
-    expect(screen.getByRole("button", { name: "수신함" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /수신함/ })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "승인 반영 후 설치 재개" })).not.toBeInTheDocument();
   });
 
@@ -267,18 +268,36 @@ describe("AgentOS native data flow", () => {
     };
     render(<App service={service({ loadPendingApprovals: async () => [approval] })} />);
 
-    expect(await screen.findByRole("button", { name: "수신함, 미해결 1개" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "수신함, 미해결 2개" })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /파트너 계약서 검토/ }));
-    expect(screen.getByRole("button", { name: "수신함, 미해결 1개" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "수신함, 미해결 2개" })).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "수신함, 미해결 1개" }));
+    await user.click(screen.getByRole("button", { name: "수신함, 미해결 2개" }));
     const panel = await screen.findByRole("dialog", { name: "수신함" });
     expect(within(panel).getByText("CRM 고객 데이터 읽기")).toBeInTheDocument();
     expect(within(panel).getByText("3분기 고객 이탈 원인 분석")).toBeInTheDocument();
 
     await user.click(within(panel).getByRole("button", { name: "수신함 닫기" }));
-    await user.click(screen.getByRole("button", { name: "수신함, 미해결 1개" }));
+    await user.click(screen.getByRole("button", { name: "수신함, 미해결 2개" }));
     expect(await screen.findByText("CRM 고객 데이터 읽기")).toBeInTheDocument();
+  });
+
+  it("수신함 항목은 중복 열기 라벨 없이 꺾쇠로 업무에 이동한다", async () => {
+    const user = userEvent.setup();
+    render(<App service={service()} />);
+
+    await user.click(await screen.findByRole("button", { name: /수신함, 미해결/ }));
+    const panel = await screen.findByRole("dialog", { name: "수신함" });
+    const approvalSource = within(panel).getByRole("button", { name: "업무로 이동: 3분기 고객 이탈 원인 분석" });
+    const blockedSource = within(panel).getByRole("button", { name: "업무로 이동: 파트너 계약서 검토" });
+
+    expect(approvalSource.querySelector("svg")).toBeInTheDocument();
+    expect(blockedSource.querySelector("svg")).toBeInTheDocument();
+    expect(within(panel).queryByText("업무 열기")).not.toBeInTheDocument();
+
+    await user.click(blockedSource);
+    expect(screen.queryByRole("dialog", { name: "수신함" })).not.toBeInTheDocument();
+    expect(screen.getByRole("main", { name: "파트너 계약서 검토" })).toBeInTheDocument();
   });
 
   it("실행 자율성은 설정에서 실제 서비스 조회를 사용한다", async () => {

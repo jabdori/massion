@@ -174,6 +174,16 @@ export interface ApprovalView {
   status: string;
 }
 
+/**
+ * 수신함 항목. "사람이 필요한 것"을 한 덩어리로 뭉치지 않고, 해결 방식이 다른 것을 타입으로 가릅니다.
+ *  - approval: 실행이 승인을 기다리며 멈춤. gate(노랑). 그 자리에서 승인·거절.
+ *  - blocked:  실행이 막힘(모델 부재·폴더 신뢰 등). halt(빨강). 원인을 풀러 업무로 이동.
+ * 배지·수신함·홈이 모두 이 한 타입의 목록을 봅니다. 숫자가 갈리지 않게.
+ */
+export type InboxItem =
+  | { readonly kind: "approval"; readonly id: string; readonly approval: ApprovalView }
+  | { readonly kind: "blocked"; readonly id: string; readonly workId: string; readonly title: string; readonly reason: string };
+
 export interface VerificationView {
   id: string;
   title: string;
@@ -440,6 +450,8 @@ const works: WorkView[] = [
     updatedAt: "어제",
     summary: "갱신 계약의 책임 범위와 해지 조건을 기존 정책에 대조합니다.",
     progress: 22,
+    // 차단된 업무. 승인 대기와 달리 사람이 원인을 풀어야 진행됩니다(수신함 halt 항목).
+    run: { runId: "run-partner", status: "blocked", stage: "evidence", leaseGeneration: 1, blockedReason: "신뢰하지 않은 폴더 접근이 필요합니다" },
     approvals: [],
     tasks: [
       { id: "terms", title: "계약 조항 검증", state: "active", time: "어제" },
