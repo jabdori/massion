@@ -96,6 +96,19 @@ type AwaitingRegistryInstall = {
   approvalId: string;
 };
 
+type ApprovalDestination =
+  | { readonly surface: "work"; readonly workId: string }
+  | { readonly surface: "capabilities" };
+
+function approvalDestination(
+  approval: ApprovalView,
+  registryApprovalId: string | undefined,
+): ApprovalDestination | undefined {
+  if (approval.workId !== undefined) return { surface: "work", workId: approval.workId };
+  if (approval.id === registryApprovalId || approval.action?.startsWith("extension.")) return { surface: "capabilities" };
+  return undefined;
+}
+
 const stateLabel: Record<StepState, string> = {
   done: "완료",
   active: "진행 중",
@@ -222,7 +235,11 @@ export function App({ service }: AppProps) {
     setAwaitingRegistryInstall(undefined);
     await service.installRegistry({ ...pending.request, installApprovalId: pending.approvalId }, pending.identity);
   };
-  const decideNotification = async (approval: ApprovalView, vote: "approve" | "reject") => {
+  const decideNotification = async (
+    approval: ApprovalView,
+    vote: "approve" | "reject",
+    source: "수신함" | "확장" = "수신함",
+  ) => {
     if (pendingNotificationIds.has(approval.id)) return;
     setPendingNotificationIds((current) => new Set(current).add(approval.id));
     setNotificationError("");
@@ -230,7 +247,7 @@ export function App({ service }: AppProps) {
       await service.decideApproval(
         approval,
         vote,
-        vote === "approve" ? "데스크톱 수신함에서 승인" : "데스크톱 수신함에서 거절",
+        `데스크톱 ${source}에서 ${vote === "approve" ? "승인" : "거절"}`,
       );
       setNotifications((current) => current?.filter((item) => item.id !== approval.id));
       await handleApprovalDecision(approval.id, vote);
@@ -258,10 +275,24 @@ export function App({ service }: AppProps) {
     [growth?.suggestions, notifications, controller.works],
   );
   const inboxError = [notificationError, growthError].filter(Boolean).join(" ");
+  const registryApproval = awaitingRegistryInstall === undefined
+    ? undefined
+    : notifications?.find((approval) => approval.id === awaitingRegistryInstall.approvalId);
   const openInbox = () => {
     setNotificationsOpen(true);
     void refreshNotifications();
     void refreshGrowth();
+  };
+  const openApproval = (approval: ApprovalView) => {
+    const destination = approvalDestination(approval, awaitingRegistryInstall?.approvalId);
+    if (destination === undefined) return;
+    setNotificationsOpen(false);
+    if (destination.surface === "work") {
+      controller.setSelectedId(destination.workId);
+      setSurface("work");
+      return;
+    }
+    setSurface(destination.surface);
   };
 
   if (controller.phase === "loading") return <DesktopLoading />;
@@ -319,11 +350,15 @@ export function App({ service }: AppProps) {
           </> : <WorkEmptySurface onCreate={() => controller.newWork.setOpen(true)} />
         ) : (
           <ProductSurface
+            approvalBusy={registryApproval === undefined ? false : pendingNotificationIds.has(registryApproval.id)}
             awaitingRegistryInstall={awaitingRegistryInstall}
             growth={growth}
             growthError={growthError}
             inboxItems={inboxItems}
-            onAwaitingRegistryInstallChange={setAwaitingRegistryInstall}
+            onAwaitingRegistryInstallChange={(value) => {
+              setAwaitingRegistryInstall(value);
+              if (value !== undefined) void refreshNotifications();
+            }}
             onCreate={() => {
               controller.newWork.setOpen(true);
             }}
@@ -333,6 +368,8 @@ export function App({ service }: AppProps) {
               controller.setSelectedId(workId);
               setSurface("work");
             }}
+            onDecideApproval={(approval, vote) => decideNotification(approval, vote, "확장")}
+            registryApproval={registryApproval}
             service={service}
             surface={surface as Exclude<DesktopSurface, "work">}
             requestedGrowthSuggestionId={requestedGrowthSuggestionId}
@@ -340,10 +377,12 @@ export function App({ service }: AppProps) {
         )}
       </div>
       <InboxPanel
+        canOpenApproval={(approval) => approvalDestination(approval, awaitingRegistryInstall?.approvalId) !== undefined}
         error={inboxError}
         items={inboxItems}
         onDecide={decideNotification}
         onOpenChange={setNotificationsOpen}
+        onOpenApproval={openApproval}
         onOpenGrowth={(suggestionId) => {
           setNotificationsOpen(false);
           setRequestedGrowthSuggestionId(suggestionId);
@@ -439,29 +478,35 @@ function GlobalRail({
 }
 
 function ProductSurface({
+  approvalBusy,
   awaitingRegistryInstall,
   growth,
   growthError,
   inboxItems,
   onAwaitingRegistryInstallChange,
   onCreate,
+  onDecideApproval,
   onOpenNotifications,
   onOpenWork,
   onRetryGrowth,
   requestedGrowthSuggestionId,
+  registryApproval,
   service,
   surface,
 }: {
+  approvalBusy: boolean;
   awaitingRegistryInstall: AwaitingRegistryInstall | undefined;
   growth: GrowthView | undefined;
   growthError: string;
   inboxItems: InboxItem[] | undefined;
   onAwaitingRegistryInstallChange: (value: AwaitingRegistryInstall | undefined) => void;
   onCreate: () => void;
+  onDecideApproval: (approval: ApprovalView, vote: "approve" | "reject") => Promise<void>;
   onOpenNotifications: () => void;
   onOpenWork: (workId: string) => void;
   onRetryGrowth: () => void;
   requestedGrowthSuggestionId: string | undefined;
+  registryApproval: ApprovalView | undefined;
   service: DesktopService;
   surface: Exclude<DesktopSurface, "work">;
 }) {
@@ -486,7 +531,17 @@ function ProductSurface({
         requestedSuggestionId={requestedGrowthSuggestionId}
       />
     );
-  if (surface === "capabilities") return <ExtensionSurface awaitingInstall={awaitingRegistryInstall} onAwaitingInstallChange={onAwaitingRegistryInstallChange} service={service} />;
+  if (surface === "capabilities")
+    return (
+      <ExtensionSurface
+        approval={registryApproval}
+        approvalBusy={approvalBusy}
+        awaitingInstall={awaitingRegistryInstall}
+        onAwaitingInstallChange={onAwaitingRegistryInstallChange}
+        onDecideApproval={onDecideApproval}
+        service={service}
+      />
+    );
   return <SettingsSurface service={service} />;
 }
 
@@ -708,10 +763,12 @@ function buildInboxItems(
 }
 
 function InboxPanel({
+  canOpenApproval,
   error,
   items,
   onDecide,
   onOpenChange,
+  onOpenApproval,
   onOpenGrowth,
   onOpenWork,
   onRetry,
@@ -719,10 +776,12 @@ function InboxPanel({
   pending,
   works,
 }: {
+  canOpenApproval: (approval: ApprovalView) => boolean;
   error: string;
   items: InboxItem[] | undefined;
   onDecide: (approval: ApprovalView, vote: "approve" | "reject") => Promise<void>;
   onOpenChange: (open: boolean) => void;
+  onOpenApproval: (approval: ApprovalView) => void;
   onOpenGrowth: (suggestionId: string) => void;
   onOpenWork: (workId: string) => void;
   onRetry: () => void;
@@ -775,7 +834,8 @@ function InboxPanel({
                   approval={item.approval}
                   busy={pending.has(item.id)}
                   onDecide={onDecide}
-                  onOpenWork={onOpenWork}
+                  onOpen={() => onOpenApproval(item.approval)}
+                  routable={canOpenApproval(item.approval)}
                   workTitle={item.approval.workId === undefined ? undefined : workTitles.get(item.approval.workId)}
                 />
               ) : item.kind === "growth" ? (
@@ -801,13 +861,15 @@ function ApprovalInboxCard({
   approval,
   busy,
   onDecide,
-  onOpenWork,
+  onOpen,
+  routable,
   workTitle,
 }: {
   approval: ApprovalView;
   busy: boolean;
   onDecide: (approval: ApprovalView, vote: "approve" | "reject") => Promise<void>;
-  onOpenWork: (workId: string) => void;
+  onOpen: () => void;
+  routable: boolean;
   workTitle: string | undefined;
 }) {
   // 감사 식별자(업무·승인 요청 id)는 본문에 슬러그로 찍지 않고 title 툴팁으로 내립니다.
@@ -817,7 +879,7 @@ function ApprovalInboxCard({
   return (
     <section className="rounded-[7px] border border-gate-border bg-gate-wash px-3.5 py-3" title={auditTitle}>
       <h3 className="text-[13px] font-medium">
-        {workId === undefined ? (
+        {!routable ? (
           <span className="flex min-h-6 items-center gap-2">
             <span aria-hidden="true" className="text-gate">◇</span>
             <span className="min-w-0 flex-1 truncate">{approval.title}</span>
@@ -825,9 +887,9 @@ function ApprovalInboxCard({
           </span>
         ) : (
           <button
-            aria-label={`업무로 이동: ${workTitle ?? "연결된 업무"}`}
+            aria-label={`승인 검토 열기: ${approval.title}`}
             className="flex min-h-6 w-full items-center gap-2 rounded-[3px] text-left outline-none hover:text-primary focus-visible:ring-2 focus-visible:ring-gate/70"
-            onClick={() => onOpenWork(workId)}
+            onClick={onOpen}
             type="button"
           >
             <span aria-hidden="true" className="text-gate">◇</span>
@@ -845,15 +907,17 @@ function ApprovalInboxCard({
           {approval.revision === undefined ? "" : ` · 개정 ${String(approval.revision)}`}
         </p>
       </div>
-      <div className="mt-3 flex justify-end">
-        <DecisionActions
-          approveName={approval.title}
-          busy={busy}
-          disabled={busy}
-          onApprove={() => void onDecide(approval, "approve")}
-          onReject={() => void onDecide(approval, "reject")}
-        />
-      </div>
+      {!routable ? (
+        <div className="mt-3 flex justify-end">
+          <DecisionActions
+            approveName={approval.title}
+            busy={busy}
+            disabled={busy}
+            onApprove={() => void onDecide(approval, "approve")}
+            onReject={() => void onDecide(approval, "reject")}
+          />
+        </div>
+      ) : null}
     </section>
   );
 }
@@ -1448,12 +1512,18 @@ const provenanceLabel: Record<string, string> = {
 };
 
 function ExtensionSurface({
+  approval,
+  approvalBusy,
   awaitingInstall,
   onAwaitingInstallChange,
+  onDecideApproval,
   service,
 }: {
+  approval: ApprovalView | undefined;
+  approvalBusy: boolean;
   awaitingInstall: AwaitingRegistryInstall | undefined;
   onAwaitingInstallChange: (value: AwaitingRegistryInstall | undefined) => void;
+  onDecideApproval: (approval: ApprovalView, vote: "approve" | "reject") => Promise<void>;
   service: DesktopService;
 }) {
   const [entries, setEntries] = useState<readonly ExtensionEntryView[]>();
@@ -1697,14 +1767,27 @@ function ExtensionSurface({
         </header>
         <div className="min-h-0 space-y-4 overflow-y-auto px-3 py-3">
           {awaitingInstall ? (
-            <section className="rounded-[7px] border border-gate-border bg-gate-wash p-3">
+            <section aria-label="설치 승인" className="rounded-[7px] border border-gate-border bg-gate-wash p-3">
               <p className="text-[12px] font-medium text-gate">설치가 승인을 기다립니다</p>
               <p className="mt-1 text-[11px] leading-4 text-secondary">
-                수신함에서 승인하면 설치가 이어집니다.
+                요청한 권한과 출처를 확인한 뒤 여기서 결정합니다.
               </p>
               <p className="mt-1.5 font-mono text-[11px] text-fg-3" title={`승인 요청 ${awaitingInstall.approvalId}`}>
                 {awaitingInstall.approvalId}
               </p>
+              {approval === undefined ? (
+                <p className="mt-2 text-[11px] text-muted">승인 정보를 불러오는 중입니다.</p>
+              ) : (
+                <div className="mt-3 flex justify-end">
+                  <DecisionActions
+                    approveName={approval.title}
+                    busy={approvalBusy}
+                    disabled={approvalBusy}
+                    onApprove={() => void onDecideApproval(approval, "approve")}
+                    onReject={() => void onDecideApproval(approval, "reject")}
+                  />
+                </div>
+              )}
             </section>
           ) : null}
           {selected ? (

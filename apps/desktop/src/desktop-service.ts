@@ -1565,6 +1565,7 @@ function projectVerification(verification: VerificationViewV1): VerificationView
 function projectApproval(approval: ApprovalViewV1): ApprovalView {
   return {
     id: approval.approvalId,
+    action: approval.action,
     title: approval.displayPreview?.title ?? approval.action,
     description: approvalDescription(approval),
     ...(approval.workId === undefined ? {} : { workId: approval.workId }),

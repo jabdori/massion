@@ -231,13 +231,14 @@ describe("AgentOS native data flow", () => {
 
     await user.click(screen.getByRole("button", { name: /수신함/ }));
     const panel = await screen.findByRole("dialog", { name: "수신함" });
-    await user.click(within(panel).getByRole("button", { name: /승인$/ }));
-    expect(decideApproval).toHaveBeenCalledWith(approval, "approve", "데스크톱 수신함에서 승인");
+    expect(within(panel).queryByRole("button", { name: /승인$/ })).not.toBeInTheDocument();
+    await user.click(within(panel).getByRole("button", { name: "승인 검토 열기: Calendar 설치" }));
+    expect(screen.queryByRole("dialog", { name: "수신함" })).not.toBeInTheDocument();
+    const extension = await screen.findByRole("main", { name: "확장" });
+    await user.click(within(extension).getByRole("button", { name: "Calendar 설치 승인" }));
+    expect(decideApproval).toHaveBeenCalledWith(approval, "approve", "데스크톱 확장에서 승인");
     await waitFor(() => expect(installRegistry).toHaveBeenCalledTimes(2));
     expect(installRegistry).toHaveBeenNthCalledWith(2, { ...initialRequest, installApprovalId: "approval-install-1" }, identity);
-    // 승인한 항목은 수신함에서 사라집니다. (fixture의 차단 업무는 별개로 남습니다.)
-    await waitFor(() => expect(within(panel).queryByText("Calendar 설치")).toBeNull());
-    await user.click(within(panel).getByRole("button", { name: "수신함 닫기" }));
     expect(screen.getByRole("button", { name: /수신함/ })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "승인 반영 후 설치 재개" })).not.toBeInTheDocument();
   });
@@ -288,7 +289,7 @@ describe("AgentOS native data flow", () => {
 
     await user.click(await screen.findByRole("button", { name: /수신함, 미해결/ }));
     const panel = await screen.findByRole("dialog", { name: "수신함" });
-    const approvalSource = within(panel).getByRole("button", { name: "업무로 이동: 3분기 고객 이탈 원인 분석" });
+    const approvalSource = within(panel).getByRole("button", { name: "승인 검토 열기: CRM 고객 데이터 읽기" });
     const blockedSource = within(panel).getByRole("button", { name: "업무로 이동: 파트너 계약서 검토" });
 
     expect(approvalSource).toHaveTextContent("CRM 고객 데이터 읽기승인 필요");
@@ -297,6 +298,8 @@ describe("AgentOS native data flow", () => {
     expect(blockedSource.lastElementChild?.tagName).toBe("svg");
     expect(approvalSource.parentElement?.tagName).toBe("H3");
     expect(blockedSource.parentElement?.tagName).toBe("H3");
+    expect(within(panel).queryByRole("button", { name: "CRM 고객 데이터 읽기 승인" })).not.toBeInTheDocument();
+    expect(within(panel).queryByRole("button", { name: "CRM 고객 데이터 읽기 거절" })).not.toBeInTheDocument();
     expect(within(panel).queryByText("업무 열기")).not.toBeInTheDocument();
 
     await user.click(blockedSource);
