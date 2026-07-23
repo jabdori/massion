@@ -80,6 +80,14 @@ Massion은 모델을 고를 수 있는 채팅 앱도, 에이전트 여러 개를
 - [확장 Capability](docs/phases/30-surface-parity-agent-ux/extension-capability-handoff.md) — 설치된 확장이 조직에 무엇을 더했는지 계약에 노출
 - [설정 조회 계약](docs/phases/30-surface-parity-agent-ux/settings-contract-handoff.md) — `router.*`·`subscription.*` 일곱 조회에 타입 주기
 
+핸드오프를 현재 데스크톱과 실제 검증 순서로 통합한 실행 문서:
+
+- [제품 통합·정합성 설계](docs/superpowers/specs/2026-07-24-phase-30-product-integration-design.md) — 현재 기준선, 세로 흐름 순서와 전체 완료 판정
+- [홈·워크스페이스·파일 문맥](docs/superpowers/specs/2026-07-24-desktop-home-context-design.md) — 내부 ID 없는 새 사명 입력과 네이티브 문맥 선택
+- [Runtime·Application·표면 계약 수렴](docs/superpowers/specs/2026-07-24-runtime-contract-convergence-design.md) — 네 핸드오프와 실제 코드 연결점
+- [실제 데스크톱 UAT](docs/superpowers/specs/2026-07-24-desktop-live-uat-design.md) — Computer Use 기반 핵심 12개·확장 4개 시나리오
+- [통합 구현 계획](docs/superpowers/plans/2026-07-24-phase-30-product-integration.md) — 파일·명령·커밋 단위 실행 순서
+
 **표면 결정 (2026-07-24, 사용자 논의로 확정)**
 
 - **홈 = 여러 도메인을 가로지르는 대시보드.** 다른 다섯 표면은 각자 한 도메인을 깊게 봅니다(업무=Work, 개선=Growth, 조직=Organization, 확장=Extension, 설정=Router·Subscription·실행 정책). 승인은 별도 표면이 아니라 어느 화면에서나 여는 지속형 `수신함`에 남습니다. 가로로 집약하는 곳이 없고, 그게 홈의 고유 가치입니다. 대표와의 대화방 안은 **도메인이 거부합니다** — `collaboration_room.work_id`가 필수라 Work 없는 방은 존재할 수 없고, 그런 방을 만들면 그냥 업무 하나가 됩니다. 이름은 `대표·홈` → `홈`으로 줄였습니다.
