@@ -148,7 +148,7 @@ export function App({ service }: AppProps) {
       setNotifications(pending.filter((approval) => approval.status === "pending"));
       setNotificationError("");
     } catch (cause) {
-      setNotificationError(surfaceErrorMessage(cause, "알림을 불러오지 못했습니다."));
+      setNotificationError(surfaceErrorMessage(cause, "수신함을 불러오지 못했습니다."));
     }
   }, [service]);
   useEffect(() => {
@@ -217,7 +217,7 @@ export function App({ service }: AppProps) {
       await service.decideApproval(
         approval,
         vote,
-        vote === "approve" ? "데스크톱 알림에서 승인" : "데스크톱 알림에서 거절",
+        vote === "approve" ? "데스크톱 수신함에서 승인" : "데스크톱 수신함에서 거절",
       );
       setNotifications((current) => current?.filter((item) => item.id !== approval.id));
       await handleApprovalDecision(approval.id, vote);
@@ -316,7 +316,7 @@ export function App({ service }: AppProps) {
           />
         )}
       </div>
-      <NotificationCenter
+      <InboxPanel
         approvals={notifications}
         error={notificationError}
         onDecide={decideNotification}
@@ -361,11 +361,11 @@ function GlobalRail({
           <SidebarMenu>
             <SidebarMenuItem>
               <SidebarMenuButton
-                aria-label={notificationCount === 0 ? "알림" : `알림, 미해결 ${String(notificationCount)}개`}
+                aria-label={notificationCount === 0 ? "수신함" : `수신함, 미해결 ${String(notificationCount)}개`}
                 onClick={onOpenNotifications}
               >
                 <Bell aria-hidden="true" size={21} weight="regular" />
-                <span className="flex-1 text-left">알림</span>
+                <span className="flex-1 text-left">수신함</span>
                 {notificationCount ? (
                   <span className="rail-label flex min-w-5 items-center justify-center rounded-full bg-gate px-1.5 font-mono text-[11px] font-semibold text-gate-ink">
                     {notificationCount}
@@ -526,7 +526,7 @@ function HomeSurface({
             ) : (
               <ul className="grid gap-1.5">
                 {/*
-                  * 승인은 이동시키지 않고 그 자리에서 처리합니다. 방·알림과 같은 문법이라
+                  * 승인은 이동시키지 않고 그 자리에서 처리합니다. 방·수신함과 같은 문법이라
                   * 사용자가 같은 모양을 두 가지로 배우지 않아도 됩니다.
                   */}
                 {approvals.map((approval) => (
@@ -614,7 +614,7 @@ function HomeSurface({
   );
 }
 
-function NotificationCenter({
+function InboxPanel({
   approvals,
   error,
   onDecide,
@@ -637,7 +637,7 @@ function NotificationCenter({
   return (
     <Dialog onOpenChange={onOpenChange} open={open}>
       <DialogContent
-        aria-label="알림"
+        aria-label="수신함"
         className="h-full max-w-[430px] rounded-none border-y-0 border-r-0 p-0 shadow-[-18px_0_48px_rgba(21,24,28,0.18)]"
         viewportClassName="place-items-stretch justify-items-end p-0"
       >
@@ -645,7 +645,7 @@ function NotificationCenter({
           <header className="flex items-start gap-3 border-b border-border px-5 py-4">
             <div className="min-w-0 flex-1">
               <div className="flex items-baseline gap-2">
-                <DialogTitle className="text-[17px] font-semibold tracking-[-0.02em]">알림</DialogTitle>
+                <DialogTitle className="text-[17px] font-semibold tracking-[-0.02em]">수신함</DialogTitle>
                 {approvals?.length ? <span className="font-mono text-[11px] text-gate">{approvals.length}</span> : null}
               </div>
               <DialogDescription className="mt-1 text-[12px] leading-5 text-muted">
@@ -653,7 +653,7 @@ function NotificationCenter({
               </DialogDescription>
             </div>
             <DialogClose
-              aria-label="알림 닫기"
+              aria-label="수신함 닫기"
               className="flex size-8 shrink-0 items-center justify-center rounded-[5px] text-muted outline-none hover:bg-surface-2 hover:text-primary focus-visible:ring-2 focus-visible:ring-accent/70"
             >
               <X aria-hidden="true" size={17} />
@@ -670,7 +670,7 @@ function NotificationCenter({
             {approvals?.length === 0 ? (
               <div className="py-12 text-center">
                 <Bell aria-hidden="true" className="mx-auto text-muted" size={28} />
-                <p className="mt-3 text-[13px] font-medium">미해결 알림이 없습니다.</p>
+                <p className="mt-3 text-[13px] font-medium">수신함에 미해결 항목이 없습니다.</p>
                 <p className="mt-1 text-[12px] text-muted">조직이 사람의 결정을 기다리지 않고 있습니다.</p>
               </div>
             ) : null}
@@ -1497,7 +1497,7 @@ function ExtensionSurface({
             <section className="rounded-[7px] border border-gate-border bg-gate-wash p-3">
               <p className="text-[12px] font-medium text-gate">설치가 승인을 기다립니다</p>
               <p className="mt-1 text-[11px] leading-4 text-secondary">
-                알림에서 승인하면 설치가 이어집니다.
+                수신함에서 승인하면 설치가 이어집니다.
               </p>
               <p className="mt-1.5 font-mono text-[11px] text-fg-3" title={`승인 요청 ${awaitingInstall.approvalId}`}>
                 {awaitingInstall.approvalId}
@@ -2289,7 +2289,7 @@ function SettingsSurface({ service }: { service: DesktopService }) {
                   <GrowthSection title="실행 자율성">
                     <p className="text-[13px] leading-5 text-secondary">
                       {autonomy.mode === "automatic"
-                        ? "미리 승인된 범위에서는 사람을 기다리지 않고 실행합니다. 위험한 실행과 조직 변경은 여전히 알림에서 확인을 받습니다."
+                        ? "미리 승인된 범위에서는 사람을 기다리지 않고 실행합니다. 위험한 실행과 조직 변경은 여전히 수신함에서 확인을 받습니다."
                         : "실행 전에 사람의 확인을 받습니다. 조직이 더 자주 멈추는 대신 개입 지점이 많아집니다."}
                     </p>
                     <div className="mt-3 flex flex-wrap items-center gap-2">

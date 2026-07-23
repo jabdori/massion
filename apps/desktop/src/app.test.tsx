@@ -65,7 +65,7 @@ describe("AgentOS 데스크톱", () => {
     expect(screen.queryByRole("button", { name: "CRM 고객 데이터 읽기 승인" })).not.toBeInTheDocument();
   });
 
-  it("전역 메뉴가 여섯 제품 화면으로 전환되고 알림 패널은 현재 화면 위에 열린다", async () => {
+  it("전역 메뉴가 여섯 제품 화면으로 전환되고 수신함 패널은 현재 화면 위에 열린다", async () => {
     const user = userEvent.setup();
     renderApp();
 
@@ -78,9 +78,9 @@ describe("AgentOS 데스크톱", () => {
     await user.click(screen.getByRole("button", { name: "조직" }));
     expect(await screen.findByRole("main", { name: "조직" })).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: /알림/ }));
-    expect(await screen.findByRole("dialog", { name: "알림" })).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "알림 닫기" }));
+    await user.click(screen.getByRole("button", { name: /수신함/ }));
+    expect(await screen.findByRole("dialog", { name: "수신함" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "수신함 닫기" }));
     expect(screen.getByRole("main", { name: "조직" })).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "개선" }));
