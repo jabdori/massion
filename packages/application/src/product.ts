@@ -11,6 +11,7 @@ import { registerApplicationAccessCommands } from "./access-commands.js";
 import { SurrealApplicationReadModel } from "./adapters/read-model.js";
 import { ApplicationAccessTokenService } from "./auth.js";
 import type { ApplicationArtifactGateway } from "./artifacts.js";
+import { registerApplicationApprovalCommands } from "./approval-commands.js";
 import { LocalApplicationBootstrap } from "./bootstrap.js";
 import { ApplicationCommandRegistry } from "./command-registry.js";
 import { ApplicationCommandStore } from "./command-store.js";
@@ -37,6 +38,8 @@ import { registerApplicationRegistryOperations, type ApplicationRegistryOperatio
 import { ApplicationRunStore } from "./run-store.js";
 import { CollaborationGraphSnapshotProjector } from "./snapshot.js";
 import { WebSessionService } from "./web-session.js";
+import { registerWorkDirectiveCommands } from "./work-directive-commands.js";
+import { WorkDirectiveStore } from "./work-directive-store.js";
 
 export interface ApplicationProductDependencies {
   readonly database: MassionDatabase;
@@ -73,6 +76,7 @@ export class ApplicationProduct implements AsyncDisposable {
     public readonly commands: ApplicationCommandRegistry,
     public readonly queries: ApplicationQueryRegistry,
     public readonly runs: ApplicationRunStore,
+    public readonly directives: WorkDirectiveStore,
     public readonly coordinator: CoreWorkCoordinator,
     public readonly tokens: ApplicationAccessTokenService,
     public readonly events: ApplicationEventStore,
@@ -83,10 +87,19 @@ export class ApplicationProduct implements AsyncDisposable {
 
   public static async create(dependencies: ApplicationProductDependencies): Promise<ApplicationProduct> {
     const runs = await ApplicationRunStore.create(dependencies.database, dependencies.organizations);
-    const coordinator = new CoreWorkCoordinator(runs, dependencies.executors);
+    const directives = await WorkDirectiveStore.create(dependencies.database, dependencies.organizations);
+    const coordinator = new CoreWorkCoordinator(runs, dependencies.executors, {}, directives);
     const commandStore = await ApplicationCommandStore.create(dependencies.database, dependencies.organizations);
     const commands = new ApplicationCommandRegistry(commandStore);
     registerApplicationDomainCommands(commands, dependencies.domain);
+    if (dependencies.domain.approvals) {
+      registerApplicationApprovalCommands(commands, {
+        approvals: dependencies.domain.approvals,
+        runs,
+        coordinator,
+        ...(dependencies.domain.runtime === undefined ? {} : { runtime: dependencies.domain.runtime }),
+      });
+    }
 
     const readModel = new SurrealApplicationReadModel(dependencies.database, dependencies.organizations);
     const snapshot = new CollaborationGraphSnapshotProjector(readModel);
@@ -162,6 +175,14 @@ export class ApplicationProduct implements AsyncDisposable {
         productReference.current.schedule(context, runId);
       },
     });
+    registerWorkDirectiveCommands(commands, {
+      directives,
+      runs,
+      schedule(context, runId) {
+        if (!productReference.current) throw new Error("Application product 조립이 완료되지 않았습니다");
+        productReference.current.schedule(context, runId);
+      },
+    });
     const server = new ApplicationHttpServer(
       {
         auth: tokens,
@@ -196,7 +217,7 @@ export class ApplicationProduct implements AsyncDisposable {
         commands: {
           async dispatch(context, scopes, input) {
             const output = await commands.dispatch(context, scopes, input);
-            await metrics.recordOnce(context, `${output.commandId}:command`, {
+            await metrics.recordOnce(context, `${output.commandId}:command:${output.outcome}`, {
               name: "application_command_total",
               value: 1,
               dimensions: {
@@ -233,6 +254,7 @@ export class ApplicationProduct implements AsyncDisposable {
       commands,
       queries,
       runs,
+      directives,
       coordinator,
       tokens,
       events,

@@ -460,7 +460,13 @@ describe("actual Core Work pipeline adapters", () => {
     expect(captured[0]).toMatchObject({
       workId: "pipeline-work-0002",
       expectedWorkRevision: 3,
-      context: { objective: "계획", constraints: ["근거"], sources: [{ kind: "request", content: { text: "계획" } }] },
+      context: {
+        objective: "계획",
+        constraints: ["근거"],
+        sources: expect.arrayContaining([
+          expect.objectContaining({ kind: "request", content: { text: "계획" } }),
+        ]),
+      },
     });
     const capturedInput = captured[0];
     const source = capturedInput?.context.sources[0];
@@ -583,6 +589,47 @@ describe("actual Core Work pipeline adapters", () => {
         (message) => message.message_type === "question" && message.author_id === context.userId,
       ),
     ).toHaveLength(1);
+  });
+
+  it("미지원 Delivery 지시는 downstream 실행 전에 명시적으로 차단한다", async () => {
+    let deliveryCalls = 0;
+    const stages = createCoreWorkPipelineExecutors({
+      graph: {},
+      works: {},
+      runtimeExecutions: {},
+      representative: {},
+      strategy: {},
+      evidence: { execute: async () => ({ outcome: "advanced" }) },
+      delivery: {
+        execute: async () => {
+          deliveryCalls += 1;
+          return { outcome: "advanced" };
+        },
+      },
+      assurance: { execute: async () => ({ outcome: "advanced" }) },
+      records: { execute: async () => ({ outcome: "advanced" }) },
+    } as never);
+
+    await expect(
+      stages.delivery.execute(
+        { userId: "user", organizationId: "org", membershipId: "member", role: "owner" },
+        {
+          runId: "pipeline-delivery-directive-run-0001",
+          workId: "pipeline-delivery-directive-work-0001",
+          commandId: "pipeline-delivery-directive-run-0001:delivery",
+          correlationId: "pipeline-delivery-directive-correlation-0001",
+          request: { text: "기존 실행" },
+          directives: [
+            {
+              directiveId: "pipeline-delivery-directive-0001",
+              content: "기존 구현을 다른 언어로 다시 작성해주세요",
+              mode: "now",
+            },
+          ],
+        },
+      ),
+    ).resolves.toEqual({ outcome: "blocked", reason: "delivery-directive-unsupported" });
+    expect(deliveryCalls).toBe(0);
   });
 
   it("어느 단계에서 취소해도 현재 실행을 drain한 뒤 실제 Work를 cancelled로 전이한다", async () => {

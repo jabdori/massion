@@ -39,6 +39,99 @@ export interface CoreWorkPipelineDependencies {
 
 const CORE_OFFICE_ROOM_TITLE = "Core Office";
 
+type CurrentOrganizationSnapshot = Awaited<
+  ReturnType<CoreWorkPipelineDependencies["graph"]["getCurrentSnapshot"]>
+>;
+
+function organizationDeclarationContent(snapshot: CurrentOrganizationSnapshot) {
+  const nodes = Array.isArray(snapshot.nodes) ? snapshot.nodes : [];
+  return {
+    product: {
+      name: "Massion",
+      identity: "현재 Work를 처리하는 조직형 AgentOS",
+      interpretationRule:
+        "사용자가 별도 외부 조직이나 서비스를 명시하지 않는 한, 'Massion'은 현재 설치의 AgentOS와 그 조직을 뜻합니다.",
+    },
+    organization: {
+      version: snapshot.version.version,
+      versionId: snapshot.version.version_id,
+      nodes: nodes.map((node) => ({
+        handle: node.handle,
+        name: node.name,
+        responsibility: node.responsibility,
+        parentHandle: node.parent_handle,
+        role: node.role,
+        status: node.status,
+        capabilities: node.capabilities,
+        outputs: node.outputs,
+      })),
+    },
+  };
+}
+
+function organizationDeclarationSource(
+  snapshot: CurrentOrganizationSnapshot,
+  observedAt: string,
+): ContextSource {
+  const content = organizationDeclarationContent(snapshot);
+  const serialized = JSON.stringify(content);
+  return {
+    kind: "declaration",
+    sourceId: `organization:${snapshot.version.version_id}`,
+    revision: String(snapshot.version.version),
+    contentHash: hashContextContent(content),
+    observedAt,
+    classification: "internal",
+    priority: 120,
+    estimatedTokens: Math.max(1, Math.ceil(serialized.length / 4)),
+    mandatory: true,
+    content,
+  };
+}
+
+function directiveIds(input: CoreWorkStageInput): readonly string[] {
+  return input.directives?.map((directive) => directive.directiveId) ?? [];
+}
+
+function strategyDirectiveSources(input: CoreWorkStageInput, observedAt: string): readonly ContextSource[] {
+  return (input.directives ?? []).map((directive) => {
+    const content = {
+      directiveId: directive.directiveId,
+      content: directive.content,
+      mode: directive.mode,
+    };
+    return {
+      kind: "manual",
+      sourceId: directive.directiveId,
+      revision: "1",
+      contentHash: hashContextContent(content),
+      observedAt,
+      classification: "internal",
+      priority: 110,
+      estimatedTokens: Math.max(1, Math.ceil(JSON.stringify(content).length / 4)),
+      mandatory: true,
+      content,
+    };
+  });
+}
+
+function blockUnsupportedDirectives(
+  stage: Exclude<CoreWorkStage, "context-strategy">,
+  executor: CoreWorkStageExecutor,
+): CoreWorkStageExecutor {
+  return {
+    async execute(context, input) {
+      if (input.directives && input.directives.length > 0) {
+        return { outcome: "blocked", reason: `${stage}-directive-unsupported` };
+      }
+      return await executor.execute(context, input);
+    },
+    async cancel(context, input) {
+      await executor.cancel?.(context, input);
+    },
+  };
+}
+
 function handoffContent(output: unknown): string {
   if (typeof output === "string" && output.trim()) return output.trim().slice(0, 16_000);
   try {
@@ -154,15 +247,15 @@ export function createCoreWorkPipelineExecutors(
   const intake: CoreWorkStageExecutor = {
     async execute(context, input) {
       const value = request(input.request);
+      const organizationSnapshot = await dependencies.graph.getCurrentSnapshot(context);
+      throwIfCancelled(input);
       let workId = input.workId;
       if (workId === undefined) {
-        const snapshot = await dependencies.graph.getCurrentSnapshot(context);
-        throwIfCancelled(input);
         const created = await dependencies.works.createWork(context, {
           commandId: `${input.commandId}:work`,
           text: value.text,
           surface: value.surface,
-          organizationVersionId: snapshot.version.version_id,
+          organizationVersionId: organizationSnapshot.version.version_id,
           ...(value.projectId === undefined ? {} : { projectId: value.projectId }),
           ...(value.workspaceId === undefined ? {} : { workspaceId: value.workspaceId }),
         });
@@ -192,7 +285,11 @@ export function createCoreWorkPipelineExecutors(
         correlationId: input.correlationId,
         estimatedTokens: value.tokenBudget,
         estimatedCostMicros: 0,
-        input: { operation: "coordinate_work", request: value },
+        input: {
+          operation: "coordinate_work",
+          request: value,
+          organization: organizationDeclarationContent(organizationSnapshot),
+        },
         ...(input.signal === undefined ? {} : { signal: input.signal }),
       });
       if (runtime.status === "blocked_model_unavailable")
@@ -233,6 +330,8 @@ export function createCoreWorkPipelineExecutors(
       const value = request(input.request);
       const work = await dependencies.works.getWork(context, input.workId);
       throwIfCancelled(input);
+      const organizationSnapshot = await dependencies.graph.getCurrentSnapshot(context);
+      throwIfCancelled(input);
       const sourceContent = { text: value.text };
       const room = (await dependencies.works.listRooms(context, input.workId)).find(
         (candidate) => candidate.title === CORE_OFFICE_ROOM_TITLE && candidate.coordinator_handle === "representative",
@@ -240,19 +339,22 @@ export function createCoreWorkPipelineExecutors(
       throwIfCancelled(input);
       const messages = room ? await dependencies.works.listMessages(context, input.workId, room.room_id) : [];
       throwIfCancelled(input);
+      const observedAt = new Date().toISOString();
       const sources: ContextSource[] = [
         {
           kind: "request",
           sourceId: input.runId,
           revision: "1",
           contentHash: hashContextContent(sourceContent),
-          observedAt: new Date().toISOString(),
+          observedAt,
           classification: "internal",
           priority: 100,
           estimatedTokens: Math.max(1, Math.ceil(value.text.length / 4)),
           mandatory: true,
           content: sourceContent,
         },
+        organizationDeclarationSource(organizationSnapshot, observedAt),
+        ...strategyDirectiveSources(input, observedAt),
       ];
       if (room && messages.length > 0) {
         const collaborationContent = {
@@ -307,6 +409,7 @@ export function createCoreWorkPipelineExecutors(
           contextVersionId: planned.contextVersion.contextVersionId,
           strategyGenerationId: planned.generation.strategyGenerationId,
         },
+        ...(directiveIds(input).length === 0 ? {} : { appliedDirectiveIds: directiveIds(input) }),
       };
     },
     async cancel(context, input) {
@@ -332,11 +435,11 @@ export function createCoreWorkPipelineExecutors(
     },
   });
   return {
-    intake: cancelWork(intake),
+    intake: blockUnsupportedDirectives("intake", cancelWork(intake)),
     "context-strategy": cancelWork(strategy),
-    evidence: cancelWork(dependencies.evidence),
-    delivery: cancelWork(dependencies.delivery),
-    assurance: cancelWork(dependencies.assurance),
-    records: cancelWork(dependencies.records),
+    evidence: blockUnsupportedDirectives("evidence", cancelWork(dependencies.evidence)),
+    delivery: blockUnsupportedDirectives("delivery", cancelWork(dependencies.delivery)),
+    assurance: blockUnsupportedDirectives("assurance", cancelWork(dependencies.assurance)),
+    records: blockUnsupportedDirectives("records", cancelWork(dependencies.records)),
   };
 }

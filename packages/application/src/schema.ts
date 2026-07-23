@@ -314,6 +314,47 @@ DEFINE FIELD retry_replay_id ON application_run TYPE option<string>;
 `,
 );
 
+export const APPLICATION_WORK_DIRECTIVE_MIGRATION = defineMigration(
+  "0108-application-work-directive",
+  `
+DEFINE FIELD directive_sequence ON application_run TYPE int DEFAULT 0 ASSERT $value >= 0;
+UPDATE application_run SET directive_sequence = 0 WHERE directive_sequence = NONE;
+
+DEFINE TABLE application_work_directive SCHEMAFULL PERMISSIONS NONE;
+DEFINE FIELD directive_id ON application_work_directive TYPE string;
+DEFINE FIELD organization_id ON application_work_directive TYPE string;
+DEFINE FIELD actor_user_id ON application_work_directive TYPE string;
+DEFINE FIELD command_id ON application_work_directive TYPE string;
+DEFINE FIELD correlation_id ON application_work_directive TYPE string;
+DEFINE FIELD work_id ON application_work_directive TYPE string;
+DEFINE FIELD run_id ON application_work_directive TYPE string;
+DEFINE FIELD sequence ON application_work_directive TYPE int ASSERT $value > 0;
+DEFINE FIELD content ON application_work_directive TYPE string ASSERT string::len($value) > 0 AND string::len($value) <= 65536;
+DEFINE FIELD content_hash ON application_work_directive TYPE string ASSERT string::len($value) = 64;
+DEFINE FIELD request_hash ON application_work_directive TYPE string ASSERT string::len($value) = 64;
+DEFINE FIELD mode ON application_work_directive TYPE string ASSERT $value IN ['now', 'next-stage'];
+DEFINE FIELD submitted_stage ON application_work_directive TYPE string ASSERT $value IN ['intake', 'context-strategy', 'evidence', 'delivery', 'assurance', 'records'];
+DEFINE FIELD status ON application_work_directive TYPE string ASSERT $value IN ['queued', 'applying', 'applied', 'failed', 'unapplied'];
+DEFINE FIELD lease_generation ON application_work_directive TYPE int ASSERT $value >= 0;
+DEFINE FIELD lease_expires_at ON application_work_directive TYPE option<datetime>;
+DEFINE FIELD failure_reason ON application_work_directive TYPE option<string>;
+DEFINE FIELD created_at ON application_work_directive TYPE datetime;
+DEFINE FIELD updated_at ON application_work_directive TYPE datetime;
+DEFINE INDEX application_work_directive_id ON application_work_directive FIELDS organization_id, directive_id UNIQUE;
+DEFINE INDEX application_work_directive_command ON application_work_directive FIELDS organization_id, command_id UNIQUE;
+DEFINE INDEX application_work_directive_sequence ON application_work_directive FIELDS organization_id, run_id, sequence UNIQUE;
+DEFINE INDEX application_work_directive_queue ON application_work_directive FIELDS organization_id, run_id, status, sequence;
+DEFINE INDEX application_run_work_history ON application_run FIELDS organization_id, work_id, created_at, run_id;
+`,
+);
+
+export const APPLICATION_RUN_APPROVAL_RESUME_MIGRATION = defineMigration(
+  "0109-application-run-approval-resume",
+  `
+DEFINE FIELD resume_approval_id ON application_run TYPE option<string>;
+`,
+);
+
 export const APPLICATION_MIGRATIONS = [
   APPLICATION_AUTH_MIGRATION,
   APPLICATION_COMMAND_MIGRATION,
@@ -324,4 +365,6 @@ export const APPLICATION_MIGRATIONS = [
   APPLICATION_WEB_SESSION_MIGRATION,
   APPLICATION_WEB_SESSION_REVISION_MIGRATION,
   APPLICATION_RUN_RETRY_MIGRATION,
+  APPLICATION_WORK_DIRECTIVE_MIGRATION,
+  APPLICATION_RUN_APPROVAL_RESUME_MIGRATION,
 ] as const;

@@ -7,7 +7,7 @@ import type { ApplicationRunStore } from "./run-store.js";
 
 interface RunCommandDependencies {
   readonly store: Pick<ApplicationRunStore, "start">;
-  readonly coordinator: Pick<CoreWorkCoordinator, "cancel" | "resume" | "retryBlocked">;
+  readonly coordinator: Pick<CoreWorkCoordinator, "cancel" | "retryBlocked">;
   readonly schedule: (context: TenantContext, runId: string) => void | Promise<void>;
 }
 
@@ -91,17 +91,17 @@ export function registerApplicationRunCommands(
     allowedRoles: ["owner", "admin", "member"],
     recovery: "replay-domain",
     validate(value) {
-      const payload = object(value, ["runId", "resumeInput", "retryBlocked"]);
+      const payload = object(value, ["runId", "retryBlocked"]);
+      if (payload.retryBlocked !== true) {
+        throw new Error("run.resume은 차단된 실행 재시도 전용이며 retryBlocked는 true여야 합니다");
+      }
       return {
         runId: text(payload.runId, "runId"),
-        resumeInput: payload.resumeInput,
-        retryBlocked: payload.retryBlocked === true,
+        retryBlocked: true as const,
       };
     },
     async handle(context, command, payload) {
-      const run = payload.retryBlocked
-        ? await dependencies.coordinator.retryBlocked(context, payload.runId, command.commandId)
-        : await dependencies.coordinator.resume(context, payload.runId, payload.resumeInput);
+      const run = await dependencies.coordinator.retryBlocked(context, payload.runId, command.commandId);
       return result(command, {
         outcome: run.status === "completed" ? "succeeded" : "accepted",
         resource: { type: "ApplicationRun", id: run.runId, revision: run.leaseGeneration },

@@ -60,6 +60,7 @@ export interface RequestApprovalInput {
 export interface VoteApprovalInput {
   readonly commandId: string;
   readonly approvalId: string;
+  readonly expectedRevision?: number;
   readonly vote: "approve" | "reject";
   readonly reason: string;
 }
@@ -185,6 +186,11 @@ export class ApprovalStore {
 
   public async vote(context: TenantContext, input: VoteApprovalInput): Promise<ApprovalRecord> {
     await this.organizations.verifyTenantContext(context);
+    if (
+      input.expectedRevision !== undefined &&
+      (!Number.isSafeInteger(input.expectedRevision) || input.expectedRevision < 0)
+    )
+      throw new Error("승인 요청의 expectedRevision이 올바르지 않습니다");
     await this.expire(context, input.approvalId);
     const requestJson = canonicalJson(input);
     return await this.database.transaction(async (tx) => {
@@ -194,6 +200,11 @@ export class ApprovalStore {
       const repeated = await this.repeated(tx, context.organizationId, input.commandId, requestJson);
       if (repeated) return await this.find(tx, context.organizationId, repeated.approval_id);
       if (current.status === "expired") throw new Error("Approval이 만료됐습니다");
+      const expectedRevision = input.expectedRevision ?? current.revision;
+      if (input.expectedRevision !== undefined && current.revision !== input.expectedRevision)
+        throw new Error(
+          `승인 요청의 revision 충돌입니다: 기대 ${String(input.expectedRevision)}, 현재 ${String(current.revision)}`,
+        );
       if (current.status !== "pending") throw new Error(`pending Approval만 결정할 수 있습니다: ${current.status}`);
       if (instant(current.expires_at) <= this.clock.now().getTime()) throw new Error("Approval이 만료됐습니다");
       if (requirement.separationOfDuty && current.requester_user_id === context.userId)
@@ -207,6 +218,24 @@ export class ApprovalStore {
           throw new Error("같은 승인자는 다른 표를 다시 제출할 수 없습니다");
         return current;
       }
+      const [approvals] = await tx.query<[{ count: number }[]]>(
+        "SELECT count() AS count FROM governance_approval_vote WHERE organization_id = $organization_id AND approval_id = $approval_id AND vote = 'approve' GROUP ALL;",
+        { organization_id: context.organizationId, approval_id: current.approval_id },
+      );
+      const approveCount = (approvals[0]?.count ?? 0) + (input.vote === "approve" ? 1 : 0);
+      const status: ApprovalStatus =
+        input.vote === "reject" ? "rejected" : approveCount >= requirement.quorum ? "approved" : "pending";
+      const [updated] = await tx.query<[ApprovalRecord[]]>(
+        "UPDATE governance_approval SET status = $status, revision += 1, event_sequence += 1, updated_at = time::now() WHERE organization_id = $organization_id AND approval_id = $approval_id AND status = 'pending' AND revision = $expected_revision RETURN AFTER;",
+        {
+          organization_id: context.organizationId,
+          approval_id: current.approval_id,
+          expected_revision: expectedRevision,
+          status,
+        },
+      );
+      const result = updated[0];
+      if (!result) throw new Error("승인 요청의 revision 충돌입니다");
       await tx.query(
         "CREATE governance_approval_vote CONTENT { vote_id: $vote_id, organization_id: $organization_id, approval_id: $approval_id, approver_user_id: $approver_user_id, approver_membership_id: $approver_membership_id, approver_role: $approver_role, vote: $vote, reason: $reason, created_at: time::now() };",
         {
@@ -220,19 +249,6 @@ export class ApprovalStore {
           reason: input.reason,
         },
       );
-      const [approvals] = await tx.query<[{ count: number }[]]>(
-        "SELECT count() AS count FROM governance_approval_vote WHERE organization_id = $organization_id AND approval_id = $approval_id AND vote = 'approve' GROUP ALL;",
-        { organization_id: context.organizationId, approval_id: current.approval_id },
-      );
-      const approveCount = approvals[0]?.count ?? 0;
-      const status: ApprovalStatus =
-        input.vote === "reject" ? "rejected" : approveCount >= requirement.quorum ? "approved" : "pending";
-      const [updated] = await tx.query<[ApprovalRecord[]]>(
-        "UPDATE governance_approval SET status = $status, revision += 1, event_sequence += 1, updated_at = time::now() WHERE organization_id = $organization_id AND approval_id = $approval_id RETURN AFTER;",
-        { organization_id: context.organizationId, approval_id: current.approval_id, status },
-      );
-      const result = updated[0];
-      if (!result) throw new Error("Approval vote 반영 결과가 없습니다");
       await this.insertEvent(
         tx,
         context.organizationId,
@@ -249,31 +265,42 @@ export class ApprovalStore {
 
   public async expire(context: TenantContext, approvalId: string): Promise<ApprovalRecord> {
     await this.organizations.verifyTenantContext(context);
-    return await this.database.transaction(async (tx) => {
-      const current = await this.find(tx, context.organizationId, approvalId);
-      if (current.status !== "pending" || instant(current.expires_at) > this.clock.now().getTime()) return current;
-      const commandId = `${approvalId}:expire`;
-      const requestJson = canonicalJson({ approvalId });
-      const repeated = await this.repeated(tx, context.organizationId, commandId, requestJson);
-      if (repeated) return await this.find(tx, context.organizationId, approvalId);
-      const [updated] = await tx.query<[ApprovalRecord[]]>(
-        "UPDATE governance_approval SET status = 'expired', revision += 1, event_sequence += 1, updated_at = time::now() WHERE organization_id = $organization_id AND approval_id = $approval_id RETURN AFTER;",
-        { organization_id: context.organizationId, approval_id: approvalId },
-      );
-      const result = updated[0];
-      if (!result) throw new Error("Approval expiry 결과가 없습니다");
-      await this.insertEvent(
-        tx,
-        context.organizationId,
-        approvalId,
-        commandId,
-        result.event_sequence,
-        "approval_expired",
-        requestJson,
-        { expiredAt: this.clock.now().toISOString() },
-      );
-      return await this.find(tx, context.organizationId, approvalId);
-    });
+    // ponytail: 네 번의 CAS 경합 뒤 최신 상태를 반환하고, 지속 경합이 관측되면 공통 재시도 정책으로 올립니다.
+    for (let attempt = 0; ; attempt += 1) {
+      const expired = await this.database.transaction(async (tx) => {
+        const current = await this.find(tx, context.organizationId, approvalId);
+        if (current.status !== "pending" || instant(current.expires_at) > this.clock.now().getTime()) return current;
+        const commandId = `${approvalId}:expire`;
+        const requestJson = canonicalJson({ approvalId });
+        const repeated = await this.repeated(tx, context.organizationId, commandId, requestJson);
+        if (repeated) return await this.find(tx, context.organizationId, approvalId);
+        const [updated] = await tx.query<[ApprovalRecord[]]>(
+          "UPDATE governance_approval SET status = 'expired', revision += 1, event_sequence += 1, updated_at = time::now() WHERE organization_id = $organization_id AND approval_id = $approval_id AND status = 'pending' AND revision = $current_revision RETURN AFTER;",
+          {
+            organization_id: context.organizationId,
+            approval_id: approvalId,
+            current_revision: current.revision,
+          },
+        );
+        const result = updated[0];
+        if (!result) return undefined;
+        await this.insertEvent(
+          tx,
+          context.organizationId,
+          approvalId,
+          commandId,
+          result.event_sequence,
+          "approval_expired",
+          requestJson,
+          { expiredAt: this.clock.now().toISOString() },
+        );
+        return await this.find(tx, context.organizationId, approvalId);
+      });
+      if (expired) return expired;
+      const latest = await this.find(this.database, context.organizationId, approvalId);
+      if (latest.status !== "pending" || instant(latest.expires_at) > this.clock.now().getTime()) return latest;
+      if (attempt >= 3) throw new Error("Approval 만료 처리 동시성 충돌입니다");
+    }
   }
 
   public async cancel(context: TenantContext, input: CancelApprovalInput): Promise<ApprovalRecord> {

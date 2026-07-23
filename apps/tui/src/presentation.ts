@@ -243,7 +243,8 @@ function agents(state: TuiState, snapshot: CollaborationGraphSnapshot): { list: 
     detail: node
       ? [
           `${node.name} (${node.handle})`,
-          `역할                ${agentRoleToken(node.role).friendlyLabel}`,
+          // agentRoleToken은 handle로 찾습니다. node.role은 NodeRole("operator")이라 늘 fallback이었습니다.
+          `역할                ${agentRoleToken(node.handle).friendlyLabel}`,
           `책임                ${node.responsibility}`,
           `범위                ${node.scope}`,
           `상태                ${statusMark(node.executionStatus ?? node.status)} ${node.executionStatus ?? node.status}`,

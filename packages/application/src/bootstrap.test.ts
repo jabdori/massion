@@ -28,13 +28,11 @@ describe("LocalApplicationBootstrap", () => {
     await database.close();
   });
 
-  it("loopback trusted bootstrap이 개인 조직·Core Office·기본 정책·첫 token을 생성한다", async () => {
+  it("loopback trusted bootstrap이 프로필 입력 없이 로컬 설치 조직·Core Office·기본 정책·첫 token을 생성한다", async () => {
     const result = await bootstrap.initialize({
       commandId: "local-bootstrap-command-0001",
       remoteAddress: "127.0.0.1",
       trustedLocal: true,
-      email: "owner@example.com",
-      displayName: "Owner",
     });
     expect(result.registration.organization.kind).toBe("personal");
     expect(result.coreOffice.nodes).toHaveLength(8);
@@ -45,8 +43,6 @@ describe("LocalApplicationBootstrap", () => {
       commandId: "local-bootstrap-command-0001",
       remoteAddress: "127.0.0.1",
       trustedLocal: true,
-      email: "owner@example.com",
-      displayName: "Owner",
     });
     expect(replayed.registration.organization.organization_id).toBe(result.registration.organization.organization_id);
     expect(replayed.coreOffice.version.version).toBe(1);
@@ -60,8 +56,6 @@ describe("LocalApplicationBootstrap", () => {
         commandId: "remote-bootstrap-command-0001",
         remoteAddress: "203.0.113.8",
         trustedLocal: true,
-        email: "remote@example.com",
-        displayName: "Remote",
       }),
     ).rejects.toThrow("loopback");
     await expect(
@@ -69,8 +63,6 @@ describe("LocalApplicationBootstrap", () => {
         commandId: "untrusted-bootstrap-command-0001",
         remoteAddress: "::1",
         trustedLocal: false,
-        email: "untrusted@example.com",
-        displayName: "Untrusted",
       }),
     ).rejects.toThrow("trusted local");
   });

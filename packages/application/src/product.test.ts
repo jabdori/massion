@@ -4,12 +4,73 @@ import { PolicyStore } from "@massion/governance";
 import { IdentityService, OrganizationService } from "@massion/identity";
 import { OrganizationGraphService } from "@massion/organization";
 import { createDatabase } from "@massion/storage";
-import { describe, expect, it } from "vitest";
+import { WorkService } from "@massion/work";
+import { describe, expect, it, vi } from "vitest";
 
 import { ApplicationHttpClient } from "./http-client.js";
 import { ApplicationProduct } from "./product.js";
 
 describe("ApplicationProduct", () => {
+  it("공개 approval.decide를 실제 제품 명령 레지스트리에 조립한다", async () => {
+    await using database = await createDatabase({ url: "mem://", namespace: "massion", database: crypto.randomUUID() });
+    const identities = await IdentityService.create(database);
+    const organizations = await OrganizationService.create(database);
+    const graph = await OrganizationGraphService.create(database, organizations);
+    const policies = await PolicyStore.create(database, organizations);
+    const owner = await identities.registerPersonalUser({
+      email: "approval-decide-product@example.com",
+      displayName: "Owner",
+    });
+    const context = await organizations.resolveTenantContext(owner.user.user_id, owner.organization.organization_id);
+    const vote = vi.fn().mockResolvedValue({
+      approval_id: "approval-product-0001",
+      status: "pending",
+      revision: 2,
+    });
+    const executors = Object.fromEntries(
+      (["intake", "context-strategy", "evidence", "delivery", "assurance", "records"] as const).map((stage) => [
+        stage,
+        { execute: async () => ({ outcome: "advanced" as const }) },
+      ]),
+    ) as never;
+    await using product = await ApplicationProduct.create({
+      database,
+      identities,
+      organizations,
+      graph,
+      policies,
+      tokenKey: { keyId: "approval-decide-product-key", key: randomBytes(32) },
+      executors,
+      domain: { approvals: { vote, cancel: vi.fn() } as never },
+      queries: { status: async () => ({ status: "ready" }) },
+    });
+
+    await expect(
+      product.commands.dispatch(context, ["approval:write"], {
+        schemaVersion: "massion.application.v1",
+        commandId: "approval-decide-product-command-0001",
+        correlationId: "approval-decide-product-correlation-0001",
+        operation: "approval.decide",
+        payload: {
+          approvalId: "approval-product-0001",
+          expectedApprovalRevision: 1,
+          vote: "approve",
+          reason: "검토 완료",
+        },
+      }),
+    ).resolves.toMatchObject({
+      outcome: "succeeded",
+      resource: { type: "Approval", id: "approval-product-0001", revision: 2 },
+    });
+    expect(vote).toHaveBeenCalledWith(context, {
+      commandId: "approval-decide-product-command-0001",
+      approvalId: "approval-product-0001",
+      expectedRevision: 1,
+      vote: "approve",
+      reason: "검토 완료",
+    });
+  });
+
   it("인증·명령·Core run·event를 하나의 실제 HTTP 제품 경계로 조립한다", async () => {
     await using database = await createDatabase({ url: "mem://", namespace: "massion", database: crypto.randomUUID() });
     const identities = await IdentityService.create(database);
@@ -42,8 +103,6 @@ describe("ApplicationProduct", () => {
     const endpoint = await product.start();
     const initialized = (await ApplicationHttpClient.bootstrap(endpoint.url, {
       commandId: "product-bootstrap-command-0001",
-      email: "product@example.com",
-      displayName: "Product",
     })) as {
       access: { token: string };
       context: { userId: string; organizationId: string; membershipId: string; role: "owner" };
@@ -111,8 +170,6 @@ describe("ApplicationProduct", () => {
     const endpoint = await product.start();
     const initialized = (await ApplicationHttpClient.bootstrap(endpoint.url, {
       commandId: "product-stage-failure-bootstrap-0001",
-      email: "product-stage-failure@example.com",
-      displayName: "Product failure",
     })) as { access: { token: string } };
     const client = new ApplicationHttpClient({ baseUrl: endpoint.url, token: initialized.access.token });
     const correlationId = "product-stage-failure-correlation-0001";
@@ -128,7 +185,13 @@ describe("ApplicationProduct", () => {
 
     await expect(product.drain()).resolves.toBeUndefined();
     await expect(client.query("run.get", { runId })).resolves.toMatchObject({
-      data: { runId, workId: "product-failed-work-0001", status: "blocked", stage: "delivery", blockedReason: "delivery-stage-failed" },
+      data: {
+        runId,
+        workId: "product-failed-work-0001",
+        status: "blocked",
+        stage: "delivery",
+        blockedReason: "delivery-stage-failed",
+      },
     });
     await expect(client.events()).resolves.toMatchObject({
       events: expect.arrayContaining([expect.objectContaining({ type: "run.blocked", correlationId })]),
@@ -166,8 +229,6 @@ describe("ApplicationProduct", () => {
     const endpoint = await product.start();
     const initialized = (await ApplicationHttpClient.bootstrap(endpoint.url, {
       commandId: "web-product-bootstrap-0001",
-      email: "web-product@example.com",
-      displayName: "Web Product",
     })) as {
       access: { token: string };
       context: { userId: string; organizationId: string; membershipId: string; role: "owner" };
@@ -304,4 +365,123 @@ describe("ApplicationProduct", () => {
       ]),
     );
   });
+
+  it("실제 HTTP work.directive.submit을 영속화하고 다음 stage executor에 전달한다", async () => {
+    await using database = await createDatabase({ url: "mem://", namespace: "massion", database: crypto.randomUUID() });
+    const identities = await IdentityService.create(database);
+    const organizations = await OrganizationService.create(database);
+    const graph = await OrganizationGraphService.create(database, organizations);
+    const policies = await PolicyStore.create(database, organizations);
+    const works = await WorkService.create(database, organizations);
+    let workId = "";
+    let entered!: () => void;
+    let release!: () => void;
+    const stageEntered = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const stageRelease = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const received: unknown[] = [];
+    const stages = ["intake", "context-strategy", "evidence", "delivery", "assurance", "records"] as const;
+    const executors = Object.fromEntries(
+      stages.map((stage) => [
+        stage,
+        {
+          async execute(
+            _context: unknown,
+            input: { readonly directives?: readonly { readonly directiveId: string }[] },
+          ) {
+            if (stage === "intake") return { outcome: "advanced" as const, workId };
+            if (stage === "context-strategy") {
+              entered();
+              await stageRelease;
+              return { outcome: "advanced" as const };
+            }
+            if (stage === "evidence") {
+              received.push(input.directives);
+              return {
+                outcome: "advanced" as const,
+                appliedDirectiveIds: input.directives?.map((directive) => directive.directiveId) ?? [],
+              };
+            }
+            return { outcome: "advanced" as const };
+          },
+        },
+      ]),
+    ) as never;
+    await using product = await ApplicationProduct.create({
+      database,
+      identities,
+      organizations,
+      graph,
+      policies,
+      tokenKey: { keyId: "product-directive-key", key: randomBytes(32) },
+      executors,
+      domain: { works },
+      queries: { status: async () => ({ status: "ready" }) },
+    });
+    const endpoint = await product.start();
+    const initialized = (await ApplicationHttpClient.bootstrap(endpoint.url, {
+      commandId: "product-directive-bootstrap-0001",
+    })) as {
+      access: { token: string };
+      context: { userId: string; organizationId: string; membershipId: string; role: "owner" };
+    };
+    const work = await works.createWork(initialized.context, {
+      commandId: "product-directive-work-command-0001",
+      text: "실제 HTTP 지시 전달",
+      surface: "desktop",
+      organizationVersionId: "product-directive-org-version-0001",
+    });
+    workId = work.work.work_id;
+    const client = new ApplicationHttpClient({ baseUrl: endpoint.url, token: initialized.access.token });
+    const started = (await client.command({
+      schemaVersion: "massion.application.v1",
+      commandId: "product-directive-run-command-0001",
+      correlationId: "product-directive-run-correlation-0001",
+      operation: "run.start",
+      payload: { request: { text: "기존 요청" } },
+    })) as { readonly data?: { readonly runId?: string } };
+    const runId = started.data?.runId;
+    if (!runId) throw new Error("run.start가 runId를 반환하지 않았습니다");
+    await stageEntered;
+
+    try {
+      await expect(
+        client.command({
+          schemaVersion: "massion.application.v1",
+          commandId: "product-directive-submit-command-0001",
+          correlationId: "product-directive-submit-correlation-0001",
+          operation: "work.directive.submit",
+          expectedRevision: work.work.revision,
+          payload: {
+            workId,
+            runId,
+            content: "최종 보고서에서 개인정보를 제외해주세요",
+            mode: "now",
+          },
+        }),
+      ).resolves.toMatchObject({
+        outcome: "accepted",
+        resource: { type: "WorkDirective", id: expect.any(String), revision: 0 },
+        data: { workId, runId, status: "queued" },
+      });
+    } finally {
+      release();
+    }
+    await product.drain();
+
+    expect(received).toEqual([
+      [
+        expect.objectContaining({
+          content: "최종 보고서에서 개인정보를 제외해주세요",
+          mode: "now",
+        }),
+      ],
+    ]);
+    await expect(product.directives.listByRun(initialized.context, runId)).resolves.toEqual([
+      expect.objectContaining({ status: "applied", workId, runId }),
+    ]);
+  }, 20_000);
 });

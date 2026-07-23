@@ -12,7 +12,7 @@ import {
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { ApplicationRunStore, type ApplicationRunClock } from "./run-store.js";
-import { APPLICATION_RUN_MIGRATION } from "./schema.js";
+import { APPLICATION_MIGRATIONS, APPLICATION_RUN_MIGRATION } from "./schema.js";
 
 class MutableRunClock implements ApplicationRunClock {
   public constructor(public now: Date) {}
@@ -87,6 +87,7 @@ describe("ApplicationRunStore", () => {
   it("0069 migration checksum을 고정한다", () => {
     expect(APPLICATION_RUN_MIGRATION.id).toBe("0069-application-run");
     expect(APPLICATION_RUN_MIGRATION.checksum).toMatch(/^[a-f0-9]{64}$/u);
+    expect(APPLICATION_MIGRATIONS.map((migration) => migration.id)).toContain("0109-application-run-approval-resume");
   });
 
   it("기존 0069 checksum 데이터베이스에 재시도 schema migration을 적용한다", async () => {
@@ -103,7 +104,11 @@ describe("ApplicationRunStore", () => {
       ApplicationRunStore,
     );
     expect((await listAppliedMigrations(legacyDatabase)).map((migration) => migration.migration_id)).toEqual(
-      expect.arrayContaining(["0069-application-run", "0105-application-run-retry"]),
+      expect.arrayContaining([
+        "0069-application-run",
+        "0105-application-run-retry",
+        "0109-application-run-approval-resume",
+      ]),
     );
   });
 
@@ -299,5 +304,257 @@ describe("ApplicationRunStore", () => {
       other.organization.organization_id,
     );
     await expect(store.get(otherContext, run.runId)).rejects.toThrow("찾을 수 없습니다");
+  });
+
+  it("승인 ID로 같은 tenant의 run을 찾고 재개된 뒤에도 연결을 복구한다", async () => {
+    const approvalId = "approval-run-lookup-0001";
+    const run = await store.start(context, {
+      commandId: "application-run-approval-lookup-0001",
+      correlationId: "application-run-approval-lookup-correlation-0001",
+      request: {},
+    });
+    const claim = await store.claim(context, run.runId);
+    if (claim.outcome !== "claimed") throw new Error("승인 대기 run lease를 얻지 못했습니다");
+    await store.suspend(context, run.runId, claim.leaseGeneration, approvalId);
+
+    await expect(store.findByApproval(context, approvalId)).resolves.toMatchObject({
+      kind: "active",
+      approvalId,
+      run: { runId: run.runId },
+    });
+    await expect(store.getByApproval(context, approvalId)).resolves.toMatchObject({
+      runId: run.runId,
+      status: "awaiting-approval",
+      approvalId,
+    });
+
+    await expect(
+      store.claim(context, run.runId, {
+        resumeAwaitingApproval: true,
+        approvalId: "approval-run-different-0001",
+      }),
+    ).rejects.toThrow("Approval");
+    await expect(store.claim(context, run.runId, { resumeAwaitingApproval: true })).rejects.toThrow("Approval");
+    await expect(store.claim(context, run.runId, { approvalId })).rejects.toThrow("승인 재개");
+
+    const resumed = await store.claim(context, run.runId, { resumeAwaitingApproval: true, approvalId });
+    if (resumed.outcome !== "claimed") throw new Error("승인 대기 run을 재개하지 못했습니다");
+    await expect(store.get(context, run.runId)).resolves.toMatchObject({ resumeInput: { approvalId } });
+    await expect(store.findByApproval(context, approvalId)).resolves.toMatchObject({
+      kind: "resuming",
+      approvalId,
+      run: { runId: run.runId },
+    });
+    await expect(store.getByApproval(context, approvalId)).resolves.toMatchObject({
+      runId: run.runId,
+      status: "running",
+    });
+
+    await store.advance(context, run.runId, resumed.leaseGeneration, { stage: "context-strategy" });
+    await expect(store.findByApproval(context, approvalId)).resolves.toMatchObject({
+      kind: "historical",
+      approvalId,
+      run: { runId: run.runId },
+    });
+    await expect(store.findByApproval(context, "approval-unrelated-0001")).resolves.toBeUndefined();
+
+    const identities = await IdentityService.create(database);
+    const organizations = await OrganizationService.create(database);
+    const other = await identities.registerPersonalUser({
+      email: "run-approval-other@example.com",
+      displayName: "Other",
+    });
+    const otherContext = await organizations.resolveTenantContext(
+      other.user.user_id,
+      other.organization.organization_id,
+    );
+    await expect(store.getByApproval(otherContext, approvalId)).rejects.toThrow("찾을 수 없습니다");
+    await expect(store.claim(otherContext, run.runId, { resumeAwaitingApproval: true, approvalId })).rejects.toThrow(
+      "찾을 수 없습니다",
+    );
+  });
+
+  it("승인 재개 ID는 block·일반 복구에서 보존하고 stage 전이·완료·새 승인·취소에서 제거한다", async () => {
+    async function resumed(suffix: string) {
+      const approvalId = `approval-resume-transition-${suffix}`;
+      const started = await store.start(context, {
+        commandId: `application-run-resume-transition-${suffix}`,
+        correlationId: `application-run-resume-correlation-${suffix}`,
+        request: {},
+      });
+      const initial = await store.claim(context, started.runId);
+      if (initial.outcome !== "claimed") throw new Error("승인 대기 준비 lease를 얻지 못했습니다");
+      await store.suspend(context, started.runId, initial.leaseGeneration, approvalId);
+      const claim = await store.claim(context, started.runId, { resumeAwaitingApproval: true, approvalId });
+      if (claim.outcome !== "claimed") throw new Error("승인 재개 lease를 얻지 못했습니다");
+      return { approvalId, runId: started.runId, generation: claim.leaseGeneration };
+    }
+
+    const advanced = await resumed("advance-0001");
+    await store.advance(context, advanced.runId, advanced.generation, { stage: "context-strategy" });
+    await expect(store.get(context, advanced.runId)).resolves.not.toHaveProperty("resumeInput");
+
+    const completed = await resumed("complete-0001");
+    await store.complete(context, completed.runId, completed.generation);
+    await expect(store.get(context, completed.runId)).resolves.not.toHaveProperty("resumeInput");
+
+    const suspended = await resumed("suspend-0001");
+    await store.suspend(context, suspended.runId, suspended.generation, "approval-resume-next-0001");
+    await expect(store.get(context, suspended.runId)).resolves.toMatchObject({
+      status: "awaiting-approval",
+      approvalId: "approval-resume-next-0001",
+    });
+    await expect(store.get(context, suspended.runId)).resolves.not.toHaveProperty("resumeInput");
+
+    const cancelled = await resumed("cancel-0001");
+    await store.cancel(context, cancelled.runId);
+    await expect(store.get(context, cancelled.runId)).resolves.not.toHaveProperty("resumeInput");
+
+    const blocked = await resumed("block-0001");
+    await store.block(context, blocked.runId, blocked.generation, "executor-crashed");
+    await expect(store.get(context, blocked.runId)).resolves.toMatchObject({
+      status: "blocked",
+      resumeInput: { approvalId: blocked.approvalId },
+    });
+    const recovered = await store.claim(context, blocked.runId, { resumeBlocked: true });
+    if (recovered.outcome !== "claimed") throw new Error("차단된 run을 복구하지 못했습니다");
+    await expect(store.get(context, blocked.runId)).resolves.toMatchObject({
+      status: "running",
+      resumeInput: { approvalId: blocked.approvalId },
+    });
+  });
+
+  it("시작 복구 후보는 tenant별 actor 계보와 안정 순서를 보존하고 복구 가능한 상태만 반환한다", async () => {
+    const ready = await store.start(context, {
+      commandId: "application-run-startup-ready-0001",
+      correlationId: "application-run-startup-ready-correlation-0001",
+      request: {},
+    });
+    clock.now = new Date("2026-07-11T06:00:01.000Z");
+    const expired = await store.start(context, {
+      commandId: "application-run-startup-expired-0001",
+      correlationId: "application-run-startup-expired-correlation-0001",
+      request: {},
+    });
+    await store.claim(context, expired.runId);
+
+    clock.now = new Date("2026-07-11T06:00:02.000Z");
+    const identities = await IdentityService.create(database);
+    const organizations = await OrganizationService.create(database);
+    const other = await identities.registerPersonalUser({
+      email: "run-startup-other@example.com",
+      displayName: "Other",
+    });
+    const otherContext = await organizations.resolveTenantContext(
+      other.user.user_id,
+      other.organization.organization_id,
+    );
+    const otherReady = await store.start(otherContext, {
+      commandId: "application-run-startup-other-ready-0001",
+      correlationId: "application-run-startup-other-ready-correlation-0001",
+      request: {},
+    });
+
+    clock.now = new Date("2026-07-11T06:00:03.000Z");
+    const tied = await Promise.all(
+      ["a", "b"].map(
+        async (suffix) =>
+          await store.start(context, {
+            commandId: `application-run-startup-tied-${suffix}-0001`,
+            correlationId: `application-run-startup-tied-${suffix}-correlation-0001`,
+            request: {},
+          }),
+      ),
+    );
+
+    clock.now = new Date("2026-07-11T06:01:00.000Z");
+    const active = await store.start(context, {
+      commandId: "application-run-startup-active-0001",
+      correlationId: "application-run-startup-active-correlation-0001",
+      request: {},
+    });
+    await store.claim(context, active.runId);
+
+    const awaiting = await store.start(context, {
+      commandId: "application-run-startup-awaiting-0001",
+      correlationId: "application-run-startup-awaiting-correlation-0001",
+      request: {},
+    });
+    const awaitingClaim = await store.claim(context, awaiting.runId);
+    if (awaitingClaim.outcome !== "claimed") throw new Error("승인 대기 후보 제외용 lease를 얻지 못했습니다");
+    await store.suspend(context, awaiting.runId, awaitingClaim.leaseGeneration, "approval-startup-awaiting-0001");
+
+    const blocked = await store.start(context, {
+      commandId: "application-run-startup-blocked-0001",
+      correlationId: "application-run-startup-blocked-correlation-0001",
+      request: {},
+    });
+    const blockedClaim = await store.claim(context, blocked.runId);
+    if (blockedClaim.outcome !== "claimed") throw new Error("차단 후보 제외용 lease를 얻지 못했습니다");
+    await store.block(context, blocked.runId, blockedClaim.leaseGeneration, "blocked");
+
+    const completed = await store.start(context, {
+      commandId: "application-run-startup-completed-0001",
+      correlationId: "application-run-startup-completed-correlation-0001",
+      request: {},
+    });
+    const completedClaim = await store.claim(context, completed.runId);
+    if (completedClaim.outcome !== "claimed") throw new Error("완료 후보 제외용 lease를 얻지 못했습니다");
+    await store.complete(context, completed.runId, completedClaim.leaseGeneration);
+
+    const cancelled = await store.start(context, {
+      commandId: "application-run-startup-cancelled-0001",
+      correlationId: "application-run-startup-cancelled-correlation-0001",
+      request: {},
+    });
+    await store.cancel(context, cancelled.runId);
+
+    const expected = [
+      { runId: ready.runId, organizationId: context.organizationId, actorUserId: context.userId },
+      { runId: expired.runId, organizationId: context.organizationId, actorUserId: context.userId },
+      { runId: otherReady.runId, organizationId: otherContext.organizationId, actorUserId: otherContext.userId },
+      ...tied
+        .toSorted((left, right) => left.runId.localeCompare(right.runId))
+        .map((candidate) => ({
+          runId: candidate.runId,
+          organizationId: context.organizationId,
+          actorUserId: context.userId,
+        })),
+    ];
+    await expect(store.listStartupRecoverable()).resolves.toEqual(expected);
+    await expect(store.listStartupRecoverable(2)).resolves.toEqual(expected.slice(0, 2));
+    for (const limit of [0, 1.5, 1_001]) {
+      await expect(store.listStartupRecoverable(limit)).rejects.toThrow("조회 개수");
+    }
+  });
+
+  it("차단된 run도 cancel하고 Work별 run을 조회한다", async () => {
+    const run = await store.start(context, {
+      commandId: "application-run-blocked-cancel-0001",
+      correlationId: "application-run-blocked-cancel-correlation-0001",
+      request: {},
+    });
+    const claim = await store.claim(context, run.runId);
+    if (claim.outcome !== "claimed") throw new Error("run lease를 얻지 못했습니다");
+    await store.advance(context, run.runId, claim.leaseGeneration, {
+      stage: "context-strategy",
+      workId: "work-blocked-cancel-0001",
+    });
+    const nextClaim = await store.claim(context, run.runId);
+    if (nextClaim.outcome !== "claimed") throw new Error("다음 run lease를 얻지 못했습니다");
+    await store.block(context, run.runId, nextClaim.leaseGeneration, "model-unavailable");
+
+    await expect(store.cancel(context, run.runId)).resolves.toMatchObject({
+      status: "cancelled",
+      stage: "terminal",
+    });
+    await expect(store.listByWork(context, "work-blocked-cancel-0001")).resolves.toEqual([
+      expect.objectContaining({
+        runId: run.runId,
+        status: "cancelled",
+        createdAt: "2026-07-11T06:00:00.000Z",
+        updatedAt: "2026-07-11T06:00:00.000Z",
+      }),
+    ]);
   });
 });

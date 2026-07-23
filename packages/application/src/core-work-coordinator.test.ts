@@ -1,6 +1,7 @@
 import type { TenantContext } from "@massion/identity";
 import { IdentityService, OrganizationService } from "@massion/identity";
 import { createDatabase } from "@massion/storage";
+import { WorkService } from "@massion/work";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -11,6 +12,7 @@ import {
 } from "./core-work-coordinator.js";
 import { createCoreWorkPipelineExecutors } from "./core-pipeline.js";
 import { ApplicationRunStore } from "./run-store.js";
+import { WorkDirectiveStore } from "./work-directive-store.js";
 
 function executors(calls: string[]): Readonly<Record<CoreWorkStage, CoreWorkStageExecutor>> {
   return Object.fromEntries(
@@ -110,6 +112,141 @@ describe("CoreWorkCoordinator", () => {
       status: "completed",
       stage: "terminal",
     });
+  });
+
+  it("승인 재개 입력을 정확한 approvalId allowlist로 검증하고 불일치하면 executor 전에 거부한다", async () => {
+    await using database = await createDatabase({ url: "mem://", namespace: "massion", database: crypto.randomUUID() });
+    const identities = await IdentityService.create(database);
+    const organizations = await OrganizationService.create(database);
+    const owner = await identities.registerPersonalUser({
+      email: "coordinator-approval-validation@example.com",
+      displayName: "Approval validation",
+    });
+    const context = await organizations.resolveTenantContext(owner.user.user_id, owner.organization.organization_id);
+    const store = await ApplicationRunStore.create(database, organizations);
+    const run = await store.start(context, {
+      commandId: "core-run-approval-validation-command-0001",
+      correlationId: "core-run-approval-validation-correlation-0001",
+      request: {},
+    });
+    const claim = await store.claim(context, run.runId);
+    if (claim.outcome !== "claimed") throw new Error("승인 대기 준비 lease를 얻지 못했습니다");
+    const approvalId = "approval-validation-0001";
+    await store.suspend(context, run.runId, claim.leaseGeneration, approvalId);
+    let executorCalls = 0;
+    const coordinator = new CoreWorkCoordinator(store, {
+      ...executors([]),
+      intake: {
+        async execute() {
+          executorCalls += 1;
+          return { outcome: "advanced", workId: "work-approval-validation" };
+        },
+      },
+    });
+
+    await expect(
+      coordinator.resume(context, run.runId, { approvalId: "approval-validation-different-0001" }),
+    ).rejects.toThrow("일치");
+    await expect(coordinator.resume(context, run.runId, { approvalId, extra: true })).rejects.toThrow(
+      "승인 재개 입력",
+    );
+    await expect(coordinator.resume(context, run.runId, { approvalId: " " })).rejects.toThrow("승인 재개 입력");
+    await expect(coordinator.resume(context, run.runId, approvalId)).rejects.toThrow("승인 재개 입력");
+    expect(executorCalls).toBe(0);
+    await expect(store.get(context, run.runId)).resolves.toMatchObject({
+      status: "awaiting-approval",
+      approvalId,
+    });
+  });
+
+  it("승인 claim 뒤 중단되어도 영속된 입력으로 복구하고 stage 전이 뒤에는 다시 전달하지 않는다", async () => {
+    await using database = await createDatabase({ url: "mem://", namespace: "massion", database: crypto.randomUUID() });
+    const identities = await IdentityService.create(database);
+    const organizations = await OrganizationService.create(database);
+    const owner = await identities.registerPersonalUser({
+      email: "coordinator-approval-recovery@example.com",
+      displayName: "Approval recovery",
+    });
+    const context = await organizations.resolveTenantContext(owner.user.user_id, owner.organization.organization_id);
+    const clock = { now: new Date("2026-07-22T02:00:00.000Z") };
+    const store = await ApplicationRunStore.create(database, organizations, { clock, leaseMs: 1_000 });
+    const run = await store.start(context, {
+      commandId: "core-run-approval-recovery-command-0001",
+      correlationId: "core-run-approval-recovery-correlation-0001",
+      request: {},
+    });
+    const initialClaim = await store.claim(context, run.runId);
+    if (initialClaim.outcome !== "claimed") throw new Error("승인 대기 준비 lease를 얻지 못했습니다");
+    const approvalId = "approval-recovery-0001";
+    await store.suspend(context, run.runId, initialClaim.leaseGeneration, approvalId);
+
+    let firstStageEntered!: () => void;
+    let releaseFirstStage!: () => void;
+    const firstStageEntry = new Promise<void>((resolve) => {
+      firstStageEntered = resolve;
+    });
+    const firstStageRelease = new Promise<void>((resolve) => {
+      releaseFirstStage = resolve;
+    });
+    const firstCoordinator = new CoreWorkCoordinator(store, {
+      ...executors([]),
+      intake: {
+        async execute() {
+          firstStageEntered();
+          await firstStageRelease;
+          return { outcome: "advanced", workId: "work-approval-recovery" };
+        },
+      },
+    });
+    const firstResume = firstCoordinator.resume(context, run.runId, { approvalId });
+    await firstStageEntry;
+    await expect(store.get(context, run.runId)).resolves.toMatchObject({
+      status: "running",
+      resumeInput: { approvalId },
+    });
+
+    clock.now = new Date("2026-07-22T02:00:01.001Z");
+    const recoveredIntakeInputs: unknown[] = [];
+    const recoveryCoordinator = new CoreWorkCoordinator(store, {
+      ...executors([]),
+      intake: {
+        async execute(_context, input) {
+          recoveredIntakeInputs.push(input.resumeInput);
+          return { outcome: "advanced", workId: "work-approval-recovery" };
+        },
+      },
+      "context-strategy": {
+        async execute() {
+          return { outcome: "in-progress" };
+        },
+      },
+    });
+    await expect(recoveryCoordinator.recover(context, run.runId)).resolves.toMatchObject({
+      status: "running",
+      stage: "context-strategy",
+    });
+    expect(recoveredIntakeInputs).toEqual([{ approvalId }]);
+    await expect(store.get(context, run.runId)).resolves.not.toHaveProperty("resumeInput");
+
+    clock.now = new Date("2026-07-22T02:00:02.002Z");
+    const postAdvanceInputs: unknown[] = [];
+    const postAdvanceCoordinator = new CoreWorkCoordinator(store, {
+      ...executors([]),
+      "context-strategy": {
+        async execute(_context, input) {
+          postAdvanceInputs.push(input.resumeInput);
+          return { outcome: "advanced" };
+        },
+      },
+    });
+    await expect(postAdvanceCoordinator.recover(context, run.runId)).resolves.toMatchObject({
+      status: "completed",
+      stage: "terminal",
+    });
+    expect(postAdvanceInputs).toEqual([undefined]);
+
+    releaseFirstStage();
+    await expect(firstResume).rejects.toThrow("lease generation");
   });
 
   it("stage 실행 예외는 run을 대기 상태로 남기지 않고 차단 상태로 끝낸다", async () => {
@@ -841,5 +978,400 @@ describe("CoreWorkCoordinator", () => {
       },
     ]);
     await expect(store.get(context, delivery.runId)).resolves.toMatchObject({ status: "cancelled", stage: "terminal" });
+  });
+
+  it("실행 중 제출된 지시를 현재 stage를 중단하지 않고 다음 안전 경계에 별도 입력으로 전달한다", async () => {
+    await using database = await createDatabase({ url: "mem://", namespace: "massion", database: crypto.randomUUID() });
+    const identities = await IdentityService.create(database);
+    const organizations = await OrganizationService.create(database);
+    const owner = await identities.registerPersonalUser({
+      email: "coordinator-directive@example.com",
+      displayName: "Directive",
+    });
+    const context = await organizations.resolveTenantContext(owner.user.user_id, owner.organization.organization_id);
+    const works = await WorkService.create(database, organizations);
+    const work = await works.createWork(context, {
+      commandId: "coordinator-directive-work-command-0001",
+      text: "실행 중 지시 반영",
+      surface: "desktop",
+      organizationVersionId: "coordinator-directive-org-version-0001",
+    });
+    const store = await ApplicationRunStore.create(database, organizations);
+    const directives = await WorkDirectiveStore.create(database, organizations);
+    let entered!: () => void;
+    let release!: () => void;
+    const stageEntered = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const stageRelease = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const received: Array<{
+      stage: CoreWorkStage;
+      resumeInput?: unknown;
+      directives?: readonly { directiveId: string; content: string; mode: string }[];
+    }> = [];
+    const stages = executors([]);
+    const coordinator = new CoreWorkCoordinator(
+      store,
+      {
+        ...stages,
+        intake: {
+          execute: async () => ({ outcome: "advanced", workId: work.work.work_id }),
+        },
+        "context-strategy": {
+          async execute(_context, input) {
+            received.push({
+              stage: "context-strategy",
+              ...(input.directives === undefined ? {} : { directives: input.directives }),
+            });
+            entered();
+            await stageRelease;
+            return { outcome: "advanced" };
+          },
+        },
+        evidence: {
+          async execute(_context, input) {
+            received.push({
+              stage: "evidence",
+              resumeInput: input.resumeInput,
+              ...(input.directives === undefined ? {} : { directives: input.directives }),
+            });
+            return {
+              outcome: "advanced",
+              ...(input.directives === undefined
+                ? {}
+                : { appliedDirectiveIds: input.directives.map((directive) => directive.directiveId) }),
+            };
+          },
+        },
+      },
+      {},
+      directives,
+    );
+    const starting = coordinator.start(context, {
+      commandId: "coordinator-directive-run-command-0001",
+      correlationId: "coordinator-directive-run-correlation-0001",
+      request: { text: "기존 요청" },
+    });
+    await stageEntered;
+    const active = await store.getByCommand(context, "coordinator-directive-run-command-0001");
+    const now = await directives.submit(context, {
+      commandId: "coordinator-directive-now-command-0001",
+      correlationId: "coordinator-directive-now-correlation-0001",
+      expectedRevision: work.work.revision,
+      workId: work.work.work_id,
+      runId: active.runId,
+      content: "가장 이른 안전 경계에서 반영",
+      mode: "now",
+    });
+    const next = await directives.submit(context, {
+      commandId: "coordinator-directive-next-command-0001",
+      correlationId: "coordinator-directive-next-correlation-0001",
+      expectedRevision: work.work.revision,
+      workId: work.work.work_id,
+      runId: active.runId,
+      content: "다음 stage 시작 전에 반영",
+      mode: "next-stage",
+    });
+    release();
+
+    await expect(starting).resolves.toMatchObject({ status: "completed", stage: "terminal" });
+    expect(received).toEqual([
+      { stage: "context-strategy", directives: undefined },
+      {
+        stage: "evidence",
+        resumeInput: undefined,
+        directives: [
+          { directiveId: now.directiveId, content: now.content, mode: "now" },
+          { directiveId: next.directiveId, content: next.content, mode: "next-stage" },
+        ],
+      },
+    ]);
+    await expect(directives.listByRun(context, active.runId)).resolves.toEqual([
+      expect.objectContaining({ directiveId: now.directiveId, status: "applied" }),
+      expect.objectContaining({ directiveId: next.directiveId, status: "applied" }),
+    ]);
+  });
+
+  const invalidDirectiveAcknowledgements: readonly (readonly [
+    string,
+    (directiveIds: readonly string[]) => readonly string[] | undefined,
+  ])[] = [
+    ["확인 값 없음", (_directiveIds: readonly string[]): readonly string[] | undefined => undefined],
+    ["일부 누락", (directiveIds: readonly string[]): readonly string[] | undefined => [directiveIds[0]!]],
+    [
+      "알 수 없는 ID 추가",
+      (directiveIds: readonly string[]): readonly string[] | undefined => [...directiveIds, "unknown-directive"],
+    ],
+    [
+      "ID 중복",
+      (directiveIds: readonly string[]): readonly string[] | undefined => [...directiveIds, directiveIds[1]!],
+    ],
+  ];
+
+  it.each(invalidDirectiveAcknowledgements)(
+    "claim한 지시의 반영 확인이 정확하지 않으면 모두 failed로 끝내고 stage를 차단한다: %s",
+    async (_case, acknowledge) => {
+      await using database = await createDatabase({
+        url: "mem://",
+        namespace: "massion",
+        database: crypto.randomUUID(),
+      });
+      const identities = await IdentityService.create(database);
+      const organizations = await OrganizationService.create(database);
+      const owner = await identities.registerPersonalUser({
+        email: "coordinator-directive-unacknowledged@example.com",
+        displayName: "Directive unacknowledged",
+      });
+      const context = await organizations.resolveTenantContext(owner.user.user_id, owner.organization.organization_id);
+      const works = await WorkService.create(database, organizations);
+      const work = await works.createWork(context, {
+        commandId: "coordinator-directive-unacknowledged-work-command-0001",
+        text: "지시 반영 확인 검증",
+        surface: "desktop",
+        organizationVersionId: "coordinator-directive-unacknowledged-org-version-0001",
+      });
+      const store = await ApplicationRunStore.create(database, organizations);
+      const run = await store.start(context, {
+        commandId: "coordinator-directive-unacknowledged-run-command-0001",
+        correlationId: "coordinator-directive-unacknowledged-run-correlation-0001",
+        request: {},
+      });
+      const runClaim = await store.claim(context, run.runId);
+      if (runClaim.outcome !== "claimed") throw new Error("evidence 준비용 lease를 얻지 못했습니다");
+      await store.advance(context, run.runId, runClaim.leaseGeneration, {
+        stage: "evidence",
+        workId: work.work.work_id,
+      });
+      const directives = await WorkDirectiveStore.create(database, organizations);
+      const submitted = [];
+      for (const sequence of [1, 2]) {
+        submitted.push(
+          await directives.submit(context, {
+            commandId: `coordinator-directive-unacknowledged-command-000${String(sequence)}`,
+            correlationId: `coordinator-directive-unacknowledged-correlation-000${String(sequence)}`,
+            expectedRevision: work.work.revision,
+            workId: work.work.work_id,
+            runId: run.runId,
+            content: `${String(sequence)}번째 지시`,
+            mode: "now",
+          }),
+        );
+      }
+      const directiveIds = submitted.map((directive) => directive.directiveId);
+      const appliedDirectiveIds = acknowledge(directiveIds);
+      let evidenceCalls = 0;
+      const stages = executors([]);
+      const coordinator = new CoreWorkCoordinator(
+        store,
+        {
+          ...stages,
+          evidence: {
+            async execute() {
+              evidenceCalls += 1;
+              return {
+                outcome: "advanced",
+                ...(appliedDirectiveIds === undefined ? {} : { appliedDirectiveIds }),
+              };
+            },
+          },
+        },
+        {},
+        directives,
+      );
+
+      await expect(coordinator.recover(context, run.runId)).resolves.toMatchObject({
+        status: "blocked",
+        stage: "evidence",
+        blockedReason: "evidence-directive-unacknowledged",
+      });
+      expect(evidenceCalls).toBe(1);
+      await expect(directives.listByRun(context, run.runId)).resolves.toEqual(
+        submitted.map((directive) =>
+          expect.objectContaining({
+            directiveId: directive.directiveId,
+            status: "failed",
+            failureReason: "evidence-directive-unacknowledged",
+          }),
+        ),
+      );
+    },
+  );
+
+  it("명시적 blocked 재시도에서만 failed 지시를 FIFO로 다시 전달하고 반영한다", async () => {
+    await using database = await createDatabase({ url: "mem://", namespace: "massion", database: crypto.randomUUID() });
+    const identities = await IdentityService.create(database);
+    const organizations = await OrganizationService.create(database);
+    const owner = await identities.registerPersonalUser({
+      email: "coordinator-directive-retry@example.com",
+      displayName: "Directive retry",
+    });
+    const context = await organizations.resolveTenantContext(owner.user.user_id, owner.organization.organization_id);
+    const works = await WorkService.create(database, organizations);
+    const work = await works.createWork(context, {
+      commandId: "coordinator-directive-retry-work-command-0001",
+      text: "실패 지시 재시도",
+      surface: "desktop",
+      organizationVersionId: "coordinator-directive-retry-org-version-0001",
+    });
+    const store = await ApplicationRunStore.create(database, organizations);
+    const run = await store.start(context, {
+      commandId: "coordinator-directive-retry-run-command-0001",
+      correlationId: "coordinator-directive-retry-run-correlation-0001",
+      request: {},
+    });
+    const runClaim = await store.claim(context, run.runId);
+    if (runClaim.outcome !== "claimed") throw new Error("evidence 준비용 lease를 얻지 못했습니다");
+    await store.advance(context, run.runId, runClaim.leaseGeneration, {
+      stage: "evidence",
+      workId: work.work.work_id,
+    });
+    const directives = await WorkDirectiveStore.create(database, organizations);
+    const submitted = [];
+    for (const sequence of [1, 2]) {
+      submitted.push(
+        await directives.submit(context, {
+          commandId: `coordinator-directive-retry-command-000${String(sequence)}`,
+          correlationId: `coordinator-directive-retry-correlation-000${String(sequence)}`,
+          expectedRevision: work.work.revision,
+          workId: work.work.work_id,
+          runId: run.runId,
+          content: `${String(sequence)}번째 재시도 지시`,
+          mode: "now",
+        }),
+      );
+    }
+    const directiveIds = submitted.map((directive) => directive.directiveId);
+    const receivedDirectiveIds: Array<readonly string[] | undefined> = [];
+    const stages = executors([]);
+    const coordinator = new CoreWorkCoordinator(
+      store,
+      {
+        ...stages,
+        evidence: {
+          async execute(_context, input) {
+            const received = input.directives?.map((directive) => directive.directiveId);
+            receivedDirectiveIds.push(received);
+            if (receivedDirectiveIds.length === 1) return { outcome: "advanced" };
+            return { outcome: "advanced", appliedDirectiveIds: received ?? [] };
+          },
+        },
+      },
+      {},
+      directives,
+    );
+
+    await expect(coordinator.recover(context, run.runId)).resolves.toMatchObject({
+      status: "blocked",
+      stage: "evidence",
+      blockedReason: "evidence-directive-unacknowledged",
+    });
+    await expect(directives.listByRun(context, run.runId)).resolves.toEqual(
+      submitted.map((directive) =>
+        expect.objectContaining({ directiveId: directive.directiveId, status: "failed" }),
+      ),
+    );
+
+    await expect(coordinator.recover(context, run.runId)).resolves.toMatchObject({
+      status: "blocked",
+      stage: "evidence",
+    });
+    expect(receivedDirectiveIds).toEqual([directiveIds]);
+
+    await expect(
+      coordinator.retryBlocked(context, run.runId, "coordinator-directive-retry-attempt-0001"),
+    ).resolves.toMatchObject({ status: "completed", stage: "terminal" });
+    expect(receivedDirectiveIds).toEqual([directiveIds, directiveIds]);
+    await expect(directives.listByRun(context, run.runId)).resolves.toEqual(
+      submitted.map((directive) =>
+        expect.objectContaining({ directiveId: directive.directiveId, status: "applied" }),
+      ),
+    );
+  });
+
+  it("lease가 만료된 applying 지시를 자동 회수하지 않고 새 worker의 executor 진입을 차단한다", async () => {
+    await using database = await createDatabase({ url: "mem://", namespace: "massion", database: crypto.randomUUID() });
+    const identities = await IdentityService.create(database);
+    const organizations = await OrganizationService.create(database);
+    const owner = await identities.registerPersonalUser({
+      email: "coordinator-directive-applying@example.com",
+      displayName: "Directive applying",
+    });
+    const context = await organizations.resolveTenantContext(owner.user.user_id, owner.organization.organization_id);
+    const works = await WorkService.create(database, organizations);
+    const work = await works.createWork(context, {
+      commandId: "coordinator-directive-applying-work-command-0001",
+      text: "처리 중 지시 중복 실행 방지",
+      surface: "desktop",
+      organizationVersionId: "coordinator-directive-applying-org-version-0001",
+    });
+    const clock = { now: new Date("2026-07-22T01:00:00.000Z") };
+    const store = await ApplicationRunStore.create(database, organizations, { clock, leaseMs: 1_000 });
+    const directives = await WorkDirectiveStore.create(database, organizations, { clock, leaseMs: 1_000 });
+    const run = await store.start(context, {
+      commandId: "coordinator-directive-applying-run-command-0001",
+      correlationId: "coordinator-directive-applying-run-correlation-0001",
+      request: {},
+    });
+    const intakeClaim = await store.claim(context, run.runId);
+    if (intakeClaim.outcome !== "claimed") throw new Error("evidence 준비용 lease를 얻지 못했습니다");
+    await store.advance(context, run.runId, intakeClaim.leaseGeneration, {
+      stage: "evidence",
+      workId: work.work.work_id,
+    });
+    const directive = await directives.submit(context, {
+      commandId: "coordinator-directive-applying-command-0001",
+      correlationId: "coordinator-directive-applying-correlation-0001",
+      expectedRevision: work.work.revision,
+      workId: work.work.work_id,
+      runId: run.runId,
+      content: "외부 효과는 한 번만 실행해주세요",
+      mode: "now",
+    });
+    const originalWorkerClaim = await store.claim(context, run.runId);
+    if (originalWorkerClaim.outcome !== "claimed") throw new Error("기존 worker의 run lease를 얻지 못했습니다");
+    const [applying] = await directives.claimEligible(
+      context,
+      run.runId,
+      "evidence",
+      originalWorkerClaim.leaseGeneration,
+    );
+    expect(applying).toMatchObject({ directiveId: directive.directiveId, status: "applying", leaseGeneration: 1 });
+
+    clock.now = new Date("2026-07-22T01:00:01.001Z");
+    let evidenceCalls = 0;
+    const stages = executors([]);
+    const coordinator = new CoreWorkCoordinator(
+      store,
+      {
+        ...stages,
+        evidence: {
+          async execute(_context, input) {
+            evidenceCalls += 1;
+            return {
+              outcome: "advanced",
+              appliedDirectiveIds: input.directives?.map((candidate) => candidate.directiveId) ?? [],
+            };
+          },
+        },
+      },
+      {},
+      directives,
+    );
+
+    await expect(coordinator.recover(context, run.runId)).resolves.toMatchObject({
+      status: "blocked",
+      stage: "evidence",
+      blockedReason: "evidence-directive-busy",
+    });
+    expect(evidenceCalls).toBe(0);
+    await expect(directives.listByRun(context, run.runId)).resolves.toEqual([
+      expect.objectContaining({
+        directiveId: directive.directiveId,
+        status: "applying",
+        leaseGeneration: 1,
+      }),
+    ]);
   });
 });

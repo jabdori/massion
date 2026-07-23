@@ -61,7 +61,7 @@ export class ApplicationHttpClient {
 
   public static async bootstrap(
     baseUrl: string,
-    input: { readonly commandId: string; readonly email: string; readonly displayName: string },
+    input: { readonly commandId: string },
     fetcher: typeof fetch = fetch,
   ): Promise<unknown> {
     const endpoint = new URL(baseUrl);

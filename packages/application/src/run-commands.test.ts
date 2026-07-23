@@ -40,7 +40,6 @@ describe("Application run commands", () => {
             cancelled.push(runId);
             return view("cancelled");
           },
-          resume: async () => view("completed"),
           retryBlocked: async () => view("completed"),
         },
         schedule: async (_context, runId) => {
@@ -92,7 +91,6 @@ describe("Application run commands", () => {
         store: { start: async () => completed },
         coordinator: {
           cancel: async () => completed,
-          resume: async () => completed,
           retryBlocked: async (_context, runId, retryAttemptId) => {
             retryCalls.push({ runId, retryAttemptId });
             return completed;
@@ -114,5 +112,31 @@ describe("Application run commands", () => {
 
     await expect(resume.handle(context, command, payload)).resolves.toMatchObject({ outcome: "succeeded" });
     expect(retryCalls).toEqual([{ runId: "run-command-retry-1", retryAttemptId: "run-resume-retry-command-0001" }]);
+  });
+
+  it("work:write run.resume으로 승인 대기 실행을 직접 재개할 수 없다", () => {
+    const descriptors = new Map<string, ApplicationCommandDescriptor>();
+    registerApplicationRunCommands(
+      {
+        register: (descriptor: ApplicationCommandDescriptor) => descriptors.set(descriptor.operation, descriptor),
+      } as never,
+      {
+        store: { start: async () => ({}) as never },
+        coordinator: { cancel: async () => ({}) as never, retryBlocked: async () => ({}) as never },
+        schedule: async () => undefined,
+      },
+    );
+    const resume = descriptors.get("run.resume");
+    if (!resume) throw new Error("run.resume descriptor가 없습니다");
+
+    expect(resume.requiredScopes).toEqual(["work:write"]);
+    expect(() =>
+      resume.validate({
+        runId: "run-awaiting-approval-0001",
+        resumeInput: { approvalId: "approval-direct-resume-0001" },
+      }),
+    ).toThrow("알 수 없는 필드");
+    expect(() => resume.validate({ runId: "run-awaiting-approval-0001" })).toThrow("재시도 전용");
+    expect(() => resume.validate({ runId: "run-awaiting-approval-0001", retryBlocked: false })).toThrow("retryBlocked");
   });
 });

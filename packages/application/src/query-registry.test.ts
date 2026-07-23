@@ -195,6 +195,285 @@ describe("ApplicationQueryRegistry", () => {
     expect((unfiltered as { data: unknown[] }).data).toHaveLength(2);
   });
 
+  it("work.index를 검색·상태·cursor로 페이지하고 Work detail을 공개한다", async () => {
+    const registry = new ApplicationQueryRegistry();
+    registerApplicationQueries(registry, {
+      readModel: {
+        ...readModel,
+        works: async () => [
+          {
+            organizationId: context.organizationId,
+            workId: "work-retention",
+            title: "고객 이탈 원인 분석",
+            status: "running",
+            revision: 3,
+            artifactIds: ["artifact-version-1"],
+            workspaceId: "workspace-shop-api",
+            createdAt: "2026-07-21T09:00:00.000Z",
+            updatedAt: "2026-07-21T10:00:00.000Z",
+          },
+          {
+            organizationId: context.organizationId,
+            workId: "work-contract",
+            title: "파트너 계약서 검토",
+            status: "running",
+            revision: 2,
+            artifactIds: [],
+            createdAt: "2026-07-21T08:00:00.000Z",
+            updatedAt: "2026-07-21T09:00:00.000Z",
+          },
+          {
+            organizationId: context.organizationId,
+            workId: "work-complete",
+            title: "주간 운영 보고서",
+            status: "completed",
+            revision: 5,
+            artifactIds: [],
+            createdAt: "2026-07-20T08:00:00.000Z",
+            updatedAt: "2026-07-20T09:00:00.000Z",
+          },
+        ],
+      },
+    } as never);
+
+    const first = await registry.query(context, ["work:read"], "work.index", {
+      status: "running",
+      limit: 1,
+    });
+    expect(first).toMatchObject({
+      data: {
+        items: [{ workId: "work-retention", title: "고객 이탈 원인 분석", status: "running" }],
+        nextCursor: "1",
+      },
+    });
+    await expect(
+      registry.query(context, ["work:read"], "work.index", {
+        status: "running",
+        cursor: "1",
+        limit: 1,
+      }),
+    ).resolves.toMatchObject({ data: { items: [{ workId: "work-contract" }] } });
+    await expect(registry.query(context, ["work:read"], "work.index", { search: "이탈" })).resolves.toMatchObject({
+      data: { items: [{ workId: "work-retention" }] },
+    });
+    await expect(
+      registry.query(context, ["work:read"], "work.detail", { workId: "work-retention" }),
+    ).resolves.toMatchObject({
+      data: {
+        workId: "work-retention",
+        title: "고객 이탈 원인 분석",
+        artifactIds: ["artifact-version-1"],
+        artifactVersionIds: ["artifact-version-1"],
+        createdAt: "2026-07-21T09:00:00.000Z",
+      },
+    });
+  });
+
+  it("Work inspector 조회는 연결 필드만 공개하고 artifact content는 노출하지 않는다", async () => {
+    const registry = new ApplicationQueryRegistry();
+    registerApplicationQueries(registry, {
+      readModel: {
+        ...readModel,
+        executions: async () => [
+          {
+            organizationId: context.organizationId,
+            executionId: "execution-work-1",
+            workId: "query-work",
+            taskId: "query-task",
+            agentHandle: "representative",
+            modelRoute: "balanced",
+            status: "running",
+            inputTokens: 10,
+            outputTokens: 20,
+            costMicros: 30,
+            createdAt: "2026-07-21T09:02:00.000Z",
+          },
+        ],
+        artifacts: async () => [
+          {
+            organizationId: context.organizationId,
+            artifactId: "artifact-1",
+            artifactVersionId: "artifact-version-1",
+            workId: "query-work",
+            name: "이탈 분석 보고서",
+            kind: "report",
+            version: 1,
+            mediaType: "application/pdf",
+            checksum: "a".repeat(64),
+            createdBy: "analysis",
+            createdAt: "2026-07-21T09:03:00.000Z",
+            contentJson: '{"secret":"노출 금지"}',
+          },
+        ],
+        verifications: async () => [
+          {
+            organizationId: context.organizationId,
+            verificationId: "verification-1",
+            workId: "query-work",
+            verifierId: "assurance",
+            passed: true,
+            criteria: ["통계 유의성"],
+            evidenceArtifactVersionIds: ["artifact-version-1"],
+            createdAt: "2026-07-21T09:04:00.000Z",
+          },
+        ],
+        directives: async () => [
+          {
+            organizationId: context.organizationId,
+            directiveId: "directive-1",
+            workId: "query-work",
+            runId: "run-work-1",
+            sequence: 1,
+            content: "표본 구간을 추가해 주세요",
+            mode: "next-stage",
+            submittedStage: "delivery",
+            status: "queued",
+            createdAt: "2026-07-21T09:05:00.000Z",
+            updatedAt: "2026-07-21T09:05:00.000Z",
+          },
+        ],
+        approvals: async () => [
+          {
+            organizationId: context.organizationId,
+            approvalId: "approval-work-1",
+            workId: "query-work",
+            executionId: "execution-work-1",
+            action: "tool.call",
+            status: "pending",
+            requestedBy: "representative",
+            revision: 2,
+            expiresAt: "2026-07-21T10:00:00.000Z",
+          },
+          {
+            organizationId: context.organizationId,
+            approvalId: "approval-other",
+            workId: "other-work",
+            action: "tool.call",
+            status: "pending",
+            requestedBy: "representative",
+            revision: 1,
+            expiresAt: "2026-07-21T10:00:00.000Z",
+          },
+        ],
+      },
+      runs: {
+        get: async () => {
+          throw new Error("사용하지 않음");
+        },
+        listByWork: async () => [
+          {
+            runId: "run-work-1",
+            organizationId: context.organizationId,
+            commandId: "command-run-work-1",
+            correlationId: "correlation-run-work-1",
+            request: { text: "원문 노출 금지" },
+            workId: "query-work",
+            stage: "delivery",
+            status: "running",
+            leaseGeneration: 2,
+            createdAt: "2026-07-21T09:00:00.000Z",
+            updatedAt: "2026-07-21T09:01:00.000Z",
+          },
+        ],
+      },
+    } as never);
+
+    const results = await Promise.all([
+      registry.query(context, ["work:read"], "run.list", { workId: "query-work" }),
+      registry.query(context, ["work:read"], "work.executions", { workId: "query-work" }),
+      registry.query(context, ["work:read"], "work.artifacts", { workId: "query-work" }),
+      registry.query(context, ["work:read"], "work.artifact.get", {
+        workId: "query-work",
+        artifactVersionId: "artifact-version-1",
+      }),
+      registry.query(context, ["work:read"], "work.verifications", { workId: "query-work" }),
+      registry.query(context, ["work:read"], "work.directive.list", { workId: "query-work" }),
+      registry.query(context, ["approval:read"], "governance.approval.list", {
+        workId: "query-work",
+        status: "pending",
+      }),
+    ]);
+    expect(results[0]).toMatchObject({ data: [{ runId: "run-work-1", workId: "query-work" }] });
+    expect(results[1]).toMatchObject({ data: [{ executionId: "execution-work-1" }] });
+    expect(results[2]).toMatchObject({ data: [{ artifactVersionId: "artifact-version-1", name: "이탈 분석 보고서" }] });
+    expect(results[3]).toMatchObject({ data: { artifactId: "artifact-1" } });
+    expect(results[4]).toMatchObject({ data: [{ verificationId: "verification-1", passed: true }] });
+    expect(results[5]).toMatchObject({ data: [{ directiveId: "directive-1", status: "queued" }] });
+    expect(results[6]).toMatchObject({
+      data: [
+        {
+          approvalId: "approval-work-1",
+          workId: "query-work",
+          executionId: "execution-work-1",
+          revision: 2,
+        },
+      ],
+    });
+    expect(JSON.stringify(results)).not.toContain("원문 노출 금지");
+    expect(JSON.stringify(results)).not.toContain("contentJson");
+    expect(JSON.stringify(results)).not.toContain("노출 금지");
+  });
+
+  it("work.activity.list는 최신 활동부터 cursor로 이전 활동을 페이지한다", async () => {
+    const registry = new ApplicationQueryRegistry();
+    registerApplicationQueries(registry, {
+      readModel,
+      workTimeline: {
+        events: async () => [
+          {
+            event_id: "event-1",
+            sequence: 1,
+            event_type: "work_created",
+            actor_user_id: "query-user",
+            payload_json: "{}",
+            created_at: "2026-07-21T09:00:00.000Z",
+          },
+          {
+            event_id: "event-2",
+            sequence: 2,
+            event_type: "task_created",
+            actor_user_id: "query-user",
+            payload_json: '{"title":"원인 분석"}',
+            created_at: "2026-07-21T09:01:00.000Z",
+          },
+        ],
+        rooms: async () => [{ room_id: "room-1" }],
+        messages: async () => [
+          {
+            message_id: "message-1",
+            room_id: "room-1",
+            sequence: 1,
+            author_kind: "agent" as const,
+            author_id: "analysis",
+            content: "분석을 시작했습니다",
+            created_at: "2026-07-21T09:02:00.000Z",
+          },
+        ],
+      },
+    });
+
+    const latest = await registry.query(context, ["work:read"], "work.activity.list", {
+      workId: "query-work",
+      limit: 2,
+    });
+    expect(latest).toMatchObject({
+      data: {
+        items: [
+          { activityId: "message:message-1", kind: "message" },
+          { activityId: "event:event-2", kind: "task" },
+        ],
+        nextCursor: "2",
+      },
+    });
+    await expect(
+      registry.query(context, ["work:read"], "work.activity.list", {
+        workId: "query-work",
+        cursor: "2",
+        limit: 2,
+      }),
+    ).resolves.toMatchObject({ data: { items: [{ activityId: "event:event-1" }] } });
+  });
+
   it("unknown operation·payload field와 role을 거부한다", async () => {
     const registry = new ApplicationQueryRegistry();
     registerApplicationQueries(registry, { readModel });
@@ -777,5 +1056,247 @@ describe("ApplicationQueryRegistry", () => {
     ]) {
       expect(serialized).not.toContain(forbidden);
     }
+  });
+});
+
+describe("협업방 조회", () => {
+  const roomReadModel: ApplicationReadModel = {
+    ...readModel,
+    rooms: async () => [
+      {
+        organizationId: context.organizationId,
+        workId: "query-work",
+        roomId: "room-1",
+        name: "3분기 이탈 분석",
+        kind: "work",
+        status: "active",
+        participantIds: ["representative", "evidence-research", "assurance"],
+        lastMessageSequence: 3,
+      },
+    ],
+    messages: async () => [
+      {
+        organizationId: context.organizationId,
+        workId: "query-work",
+        roomId: "room-1",
+        messageId: "message-question",
+        sequence: 1,
+        messageType: "question",
+        authorKind: "agent",
+        authorId: "delivery-coordination",
+        content: "라벨링 기준이 뭔가요?",
+        createdAt: "2026-07-21T09:01:00.000Z",
+      },
+      {
+        organizationId: context.organizationId,
+        workId: "query-work",
+        roomId: "room-1",
+        messageId: "message-answer",
+        sequence: 2,
+        messageType: "answer",
+        authorKind: "agent",
+        authorId: "evidence-research",
+        content: "5축입니다.",
+        createdAt: "2026-07-21T09:02:00.000Z",
+        replyToMessageId: "message-question",
+      },
+      {
+        organizationId: context.organizationId,
+        workId: "query-work",
+        roomId: "room-1",
+        messageId: "message-challenge",
+        sequence: 3,
+        messageType: "challenge",
+        authorKind: "agent",
+        authorId: "assurance",
+        content: "분기 간 비교가 성립하지 않습니다.",
+        createdAt: "2026-07-21T09:03:00.000Z",
+        replyToMessageId: "message-answer",
+        causedByMessageId: "message-question",
+      },
+      {
+        organizationId: context.organizationId,
+        workId: "other-work",
+        roomId: "room-9",
+        messageId: "message-other",
+        sequence: 1,
+        messageType: "status",
+        authorKind: "agent",
+        authorId: "representative",
+        content: "다른 Work의 메시지",
+        createdAt: "2026-07-21T09:04:00.000Z",
+      },
+    ],
+  };
+
+  it("방 예산 소비량을 메시지 합으로 계산한다", async () => {
+    // 소비량은 방 레코드에 없고 메시지의 token_count·cost_micros 합입니다.
+    const registry = new ApplicationQueryRegistry();
+    registerApplicationQueries(registry, {
+      readModel: {
+        ...roomReadModel,
+        rooms: async () => [
+          {
+            organizationId: context.organizationId,
+            workId: "query-work",
+            roomId: "room-1",
+            name: "3분기 이탈 분석",
+            kind: "work",
+            status: "active",
+            participantIds: ["representative"],
+            lastMessageSequence: 2,
+            coordinatorHandle: "representative",
+            roundCount: 4,
+            maxRounds: 12,
+            maxTokens: 200_000,
+            maxCostMicros: 2_000_000,
+          },
+        ],
+        messages: async () => [
+          {
+            organizationId: context.organizationId,
+            workId: "query-work",
+            roomId: "room-1",
+            messageId: "m1",
+            sequence: 1,
+            messageType: "evidence",
+            authorKind: "agent",
+            authorId: "representative",
+            content: "하나",
+            createdAt: "2026-07-21T09:01:00.000Z",
+            tokenCount: 30_000,
+            costMicros: 200_000,
+          },
+          {
+            organizationId: context.organizationId,
+            workId: "query-work",
+            roomId: "room-1",
+            messageId: "m2",
+            sequence: 2,
+            messageType: "evidence",
+            authorKind: "agent",
+            authorId: "representative",
+            content: "둘",
+            createdAt: "2026-07-21T09:02:00.000Z",
+            tokenCount: 18_200,
+            costMicros: 110_000,
+          },
+          {
+            organizationId: context.organizationId,
+            workId: "query-work",
+            roomId: "room-other",
+            messageId: "m3",
+            sequence: 1,
+            messageType: "evidence",
+            authorKind: "agent",
+            authorId: "representative",
+            content: "다른 방",
+            createdAt: "2026-07-21T09:03:00.000Z",
+            tokenCount: 99_999,
+            costMicros: 999_999,
+          },
+        ],
+      },
+    });
+
+    await expect(
+      registry.query(context, ["collaboration:read"], "work.rooms", { workId: "query-work" }),
+    ).resolves.toMatchObject({
+      data: [
+        {
+          roundCount: 4,
+          maxRounds: 12,
+          // 다른 방의 메시지는 합에 들어가지 않습니다.
+          usedTokens: 48_200,
+          maxTokens: 200_000,
+          usedCostMicros: 310_000,
+          coordinatorHandle: "representative",
+        },
+      ],
+    });
+  });
+
+  it("공유 컨텍스트는 checksum과 함께 Work 범위로 준다", async () => {
+    const registry = new ApplicationQueryRegistry();
+    registerApplicationQueries(registry, {
+      readModel: {
+        ...roomReadModel,
+        sharedContexts: async () => [
+          {
+            organizationId: context.organizationId,
+            workId: "query-work",
+            roomId: "room-1",
+            sharedContextReferenceId: "ref-1",
+            sourceKind: "evidence-brief",
+            sourceId: "brief-1",
+            versionId: "v3",
+            checksum: "a3f1c8",
+          },
+          {
+            organizationId: context.organizationId,
+            workId: "other-work",
+            roomId: "room-9",
+            sharedContextReferenceId: "ref-2",
+            sourceKind: "evidence-brief",
+            sourceId: "brief-2",
+            versionId: "v1",
+            checksum: "ffffff",
+          },
+        ],
+      },
+    });
+
+    const result = await registry.query(context, ["collaboration:read"], "work.shared-contexts", {
+      workId: "query-work",
+    });
+    expect(result.data).toEqual([
+      { sharedContextReferenceId: "ref-1", roomId: "room-1", sourceKind: "evidence-brief", sourceId: "brief-1", versionId: "v3", checksum: "a3f1c8" },
+    ]);
+  });
+
+  it("방 목록이 참가자와 마지막 sequence를 함께 준다", async () => {
+    const registry = new ApplicationQueryRegistry();
+    registerApplicationQueries(registry, { readModel: roomReadModel });
+
+    await expect(
+      registry.query(context, ["collaboration:read"], "work.rooms", { workId: "query-work" }),
+    ).resolves.toMatchObject({
+      data: [{ roomId: "room-1", participantIds: ["representative", "evidence-research", "assurance"], lastMessageSequence: 3 }],
+    });
+  });
+
+  it("메시지는 타입과 인과 계보를 잃지 않는다", async () => {
+    // 반론이 무엇을 반박하는지 없이 오면 화면이 인용을 그릴 수 없습니다.
+    const registry = new ApplicationQueryRegistry();
+    registerApplicationQueries(registry, { readModel: roomReadModel });
+
+    const result = await registry.query(context, ["collaboration:read"], "work.messages", {
+      workId: "query-work",
+      roomId: "room-1",
+    });
+
+    expect(result.data).toMatchObject([
+      { messageId: "message-question", messageType: "question", authorId: "delivery-coordination" },
+      { messageId: "message-answer", messageType: "answer", replyToMessageId: "message-question" },
+      {
+        messageId: "message-challenge",
+        messageType: "challenge",
+        replyToMessageId: "message-answer",
+        causedByMessageId: "message-question",
+      },
+    ]);
+  });
+
+  it("다른 Work·다른 방의 메시지는 섞이지 않는다", async () => {
+    const registry = new ApplicationQueryRegistry();
+    registerApplicationQueries(registry, { readModel: roomReadModel });
+
+    const result = await registry.query(context, ["collaboration:read"], "work.messages", {
+      workId: "query-work",
+      roomId: "room-1",
+    });
+
+    expect(result.data).toHaveLength(3);
+    expect(JSON.stringify(result.data)).not.toContain("다른 Work의 메시지");
   });
 });

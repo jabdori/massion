@@ -17,7 +17,14 @@ import { projectWorkTimeline, type WorkTimelineSources } from "./timeline.js";
 
 import { ApplicationError } from "./errors.js";
 import { ApplicationEventCursorExpiredError, type ApplicationEventStore } from "./event-store.js";
-import type { ApplicationReadModel } from "./read-model.js";
+import type {
+  ApplicationApprovalSource,
+  ApplicationArtifactSource,
+  ApplicationDirectiveSource,
+  ApplicationExecutionSource,
+  ApplicationReadModel,
+  ApplicationVerificationSource,
+} from "./read-model.js";
 import type { ApplicationRunStore, ApplicationRunView } from "./run-store.js";
 import type { CollaborationGraphSnapshotProjector } from "./snapshot.js";
 import type { WebSessionService } from "./web-session.js";
@@ -52,7 +59,9 @@ export interface ApplicationQueryDescriptor<Payload = unknown> {
 
 export interface ApplicationQueryDependencies {
   readonly readModel: ApplicationReadModel;
-  readonly runs?: Pick<ApplicationRunStore, "get">;
+  readonly runs?: Pick<ApplicationRunStore, "get"> & {
+    listByWork?(context: TenantContext, workId: string): Promise<readonly ApplicationRunView[]>;
+  };
   readonly snapshot?: CollaborationGraphSnapshotProjector;
   readonly runtime?: Pick<RuntimeExecutionStore, "listEvents" | "getRecovery" | "listByCorrelation">;
   readonly assuranceBindings?: Pick<AssuranceBindingStore, "get" | "getActive">;
@@ -110,6 +119,8 @@ function publicRun(run: ApplicationRunView): Record<string, unknown> {
     ...(run.approvalId === undefined ? {} : { approvalId: run.approvalId }),
     ...(run.blockedReason === undefined ? {} : { blockedReason: run.blockedReason }),
     leaseGeneration: run.leaseGeneration,
+    ...(run.createdAt === undefined ? {} : { createdAt: run.createdAt }),
+    ...(run.updatedAt === undefined ? {} : { updatedAt: run.updatedAt }),
   };
 }
 
@@ -224,6 +235,34 @@ function cursor(value: unknown): number {
   return value as number;
 }
 
+function pageCursor(value: unknown): number {
+  if (value === undefined) return 0;
+  if (typeof value !== "string" || !/^(0|[1-9]\d*)$/u.test(value)) throw new Error("cursor가 유효하지 않습니다");
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed)) throw new Error("cursor가 유효하지 않습니다");
+  return parsed;
+}
+
+function pageLimit(value: unknown, fallback: number): number {
+  const limit = boundedInteger(value, "limit", fallback);
+  if (limit > 100) throw new Error("limit가 유효하지 않습니다");
+  return limit;
+}
+
+function page<T>(items: readonly T[], offset: number, limit: number) {
+  const selected = items.slice(offset, offset + limit);
+  return {
+    items: selected,
+    ...(offset + selected.length < items.length ? { nextCursor: String(offset + selected.length) } : {}),
+  };
+}
+
+function searchText(value: unknown): string | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== "string" || value.length > 256) throw new Error("search가 유효하지 않습니다");
+  return value.trim().toLocaleLowerCase();
+}
+
 export class ApplicationQueryRegistry {
   private readonly descriptors = new Map<string, ApplicationQueryDescriptor>();
 
@@ -308,10 +347,104 @@ const EVERY_ROLE: readonly MembershipRole[] = ["owner", "admin", "member"];
 function publicWork(value: Awaited<ReturnType<ApplicationReadModel["works"]>>[number]) {
   return {
     workId: value.workId,
+    title: value.title ?? value.workId,
     status: value.status,
     revision: value.revision,
     artifactIds: value.artifactIds,
+    artifactVersionIds: value.artifactIds,
     ...(value.workspaceId === undefined ? {} : { workspaceId: value.workspaceId }),
+    ...(value.createdAt === undefined ? {} : { createdAt: value.createdAt }),
+    ...(value.updatedAt === undefined ? {} : { updatedAt: value.updatedAt }),
+  };
+}
+
+function publicExecution(execution: ApplicationExecutionSource) {
+  return {
+    executionId: execution.executionId,
+    workId: execution.workId,
+    ...(execution.taskId === undefined ? {} : { taskId: execution.taskId }),
+    agentHandle: execution.agentHandle,
+    modelRoute: execution.modelRoute,
+    status: execution.status,
+    inputTokens: execution.inputTokens,
+    outputTokens: execution.outputTokens,
+    costMicros: execution.costMicros,
+    ...(execution.createdAt === undefined ? {} : { createdAt: execution.createdAt }),
+    ...(execution.updatedAt === undefined ? {} : { updatedAt: execution.updatedAt }),
+  };
+}
+
+function publicApproval(approval: ApplicationApprovalSource) {
+  return {
+    approvalId: approval.approvalId,
+    action: approval.action,
+    status: approval.status,
+    requestedBy: approval.requestedBy,
+    expiresAt: approval.expiresAt,
+    ...(approval.workId === undefined ? {} : { workId: approval.workId }),
+    ...(approval.executionId === undefined ? {} : { executionId: approval.executionId }),
+    ...(approval.revision === undefined ? {} : { revision: approval.revision }),
+    ...(approval.resourceRevision === undefined ? {} : { resourceRevision: approval.resourceRevision }),
+    ...(approval.resumeTarget === undefined ? {} : { resumeTarget: approval.resumeTarget }),
+    ...(approval.createdAt === undefined ? {} : { createdAt: approval.createdAt }),
+    ...(approval.updatedAt === undefined ? {} : { updatedAt: approval.updatedAt }),
+    ...(approval.displayPreview === undefined ? {} : { displayPreview: approval.displayPreview }),
+  };
+}
+
+function publicArtifact(artifact: ApplicationArtifactSource) {
+  return {
+    artifactId: artifact.artifactId,
+    artifactVersionId: artifact.artifactVersionId,
+    workId: artifact.workId,
+    name: artifact.name,
+    kind: artifact.kind,
+    version: artifact.version,
+    mediaType: artifact.mediaType,
+    checksum: artifact.checksum,
+    createdBy: artifact.createdBy,
+    createdAt: artifact.createdAt,
+    ...(artifact.sourceArtifactVersionId === undefined
+      ? {}
+      : { sourceArtifactVersionId: artifact.sourceArtifactVersionId }),
+    ...(artifact.creatorAgentHandle === undefined ? {} : { creatorAgentHandle: artifact.creatorAgentHandle }),
+    ...(artifact.creatorExecutionId === undefined ? {} : { creatorExecutionId: artifact.creatorExecutionId }),
+  };
+}
+
+function publicVerification(verification: ApplicationVerificationSource) {
+  return {
+    verificationId: verification.verificationId,
+    workId: verification.workId,
+    verifierId: verification.verifierId,
+    passed: verification.passed,
+    criteria: verification.criteria,
+    evidenceArtifactVersionIds: verification.evidenceArtifactVersionIds,
+    ...(verification.assuranceRunId === undefined ? {} : { assuranceRunId: verification.assuranceRunId }),
+    ...(verification.targetWorkRevision === undefined ? {} : { targetWorkRevision: verification.targetWorkRevision }),
+    ...(verification.projectedWorkRevision === undefined
+      ? {}
+      : { projectedWorkRevision: verification.projectedWorkRevision }),
+    ...(verification.profileId === undefined ? {} : { profileId: verification.profileId }),
+    ...(verification.profileVersion === undefined ? {} : { profileVersion: verification.profileVersion }),
+    ...(verification.bindingVersionId === undefined ? {} : { bindingVersionId: verification.bindingVersionId }),
+    createdAt: verification.createdAt,
+  };
+}
+
+function publicDirective(directive: ApplicationDirectiveSource) {
+  return {
+    directiveId: directive.directiveId,
+    workId: directive.workId,
+    runId: directive.runId,
+    sequence: directive.sequence,
+    content: directive.content,
+    mode: directive.mode,
+    submittedStage: directive.submittedStage,
+    status: directive.status,
+    createdAt: directive.createdAt,
+    updatedAt: directive.updatedAt,
+    ...(directive.failureReason === undefined ? {} : { failureReason: directive.failureReason }),
   };
 }
 
@@ -514,6 +647,16 @@ export function registerApplicationQueries(
       validate: (value) => object(value, ["runId"]),
       handle: async (context, value) => publicRun(await runs.get(context, text(value.runId, "runId"))),
     });
+    if (runs.listByWork) {
+      registry.register({
+        operation: "run.list",
+        requiredScopes: ["work:read"],
+        allowedRoles: EVERY_ROLE,
+        validate: (value) => object(value, ["workId"]),
+        handle: async (context, value) =>
+          (await runs.listByWork?.(context, text(value.workId, "workId")))?.map(publicRun) ?? [],
+      });
+    }
   }
   if (dependencies.workspaces) {
     const workspaces = dependencies.workspaces;
@@ -565,6 +708,38 @@ export function registerApplicationQueries(
         });
       },
     });
+    registry.register({
+      operation: "work.activity.list",
+      requiredScopes: ["work:read"],
+      allowedRoles: EVERY_ROLE,
+      validate: (value) => object(value, ["workId", "cursor", "limit"]),
+      handle: async (context, value) => {
+        const workId = text(value.workId, "workId");
+        const cells = await projectWorkTimeline(timelineSources, context, workId, { limit: 2_000 });
+        const activities = [...cells].reverse().map((cell) => ({
+          activityId: cell.cellId,
+          workId,
+          kind:
+            cell.kind === "user-message" || cell.kind === "agent-message"
+              ? "message"
+              : cell.kind === "task"
+                ? "task"
+                : cell.kind === "artifact"
+                  ? "artifact"
+                  : cell.kind === "verification"
+                    ? "verification"
+                    : cell.kind === "record"
+                      ? "record"
+                      : "work",
+          title: cell.title,
+          createdAt: cell.createdAt,
+          ...(cell.detail === undefined ? {} : { detail: cell.detail }),
+          ...(cell.authorId === undefined ? {} : { authorId: cell.authorId }),
+          resourceId: cell.cellId,
+        }));
+        return page(activities, pageCursor(value.cursor), pageLimit(value.limit, 100));
+      },
+    });
   }
   if (dependencies.autonomy) {
     const autonomy = dependencies.autonomy;
@@ -608,7 +783,52 @@ export function registerApplicationQueries(
     },
   });
   registry.register({
+    operation: "work.index",
+    requiredScopes: ["work:read"],
+    allowedRoles: EVERY_ROLE,
+    validate: (value) => object(value, ["workspaceId", "status", "search", "cursor", "limit"]),
+    handle: async (context, value) => {
+      const workspaceId = value.workspaceId === undefined ? undefined : text(value.workspaceId, "workspaceId");
+      const status = value.status === undefined ? undefined : text(value.status, "status");
+      const search = searchText(value.search);
+      const works = (await dependencies.readModel.works(context))
+        .filter((work) => workspaceId === undefined || work.workspaceId === workspaceId)
+        .filter((work) => status === undefined || work.status === status)
+        .filter((work) => {
+          if (!search) return true;
+          return `${work.title ?? ""}\n${work.workId}`.toLocaleLowerCase().includes(search);
+        })
+        .sort((left, right) => {
+          const leftTime = left.updatedAt ?? "";
+          const rightTime = right.updatedAt ?? "";
+          if (leftTime !== rightTime) return leftTime > rightTime ? -1 : 1;
+          return left.workId.localeCompare(right.workId);
+        })
+        .map(publicWork);
+      return page(works, pageCursor(value.cursor), pageLimit(value.limit, 50));
+    },
+  });
+  registry.register({
     operation: "work.get",
+    requiredScopes: ["work:read"],
+    allowedRoles: EVERY_ROLE,
+    validate: (value) => object(value, ["workId"]),
+    handle: async (context, value) => {
+      const workId = text(value.workId, "workId");
+      const work = (await dependencies.readModel.works(context)).find((candidate) => candidate.workId === workId);
+      if (!work)
+        throw new ApplicationError({
+          category: "not-found",
+          severity: "error",
+          retryable: false,
+          userMessage: "Work를 찾을 수 없습니다",
+          operatorCode: "APP_WORK_NOT_FOUND",
+        });
+      return publicWork(work);
+    },
+  });
+  registry.register({
+    operation: "work.detail",
     requiredScopes: ["work:read"],
     allowedRoles: EVERY_ROLE,
     validate: (value) => object(value, ["workId"]),
@@ -640,6 +860,16 @@ export function registerApplicationQueries(
           title: task.title,
           status: task.status,
           revision: task.revision,
+          ...(task.objective === undefined ? {} : { objective: task.objective }),
+          ...(task.acceptanceCriteria === undefined ? {} : { acceptanceCriteria: task.acceptanceCriteria }),
+          ...(task.dependencyIds === undefined ? {} : { dependencyIds: task.dependencyIds }),
+          ...(task.requiredCapabilities === undefined ? {} : { requiredCapabilities: task.requiredCapabilities }),
+          ...(task.recommendedAgentHandles === undefined
+            ? {}
+            : { recommendedAgentHandles: task.recommendedAgentHandles }),
+          ...(task.parallelizable === undefined ? {} : { parallelizable: task.parallelizable }),
+          ...(task.createdAt === undefined ? {} : { createdAt: task.createdAt }),
+          ...(task.updatedAt === undefined ? {} : { updatedAt: task.updatedAt }),
         })),
   });
   registry.register({
@@ -656,26 +886,129 @@ export function registerApplicationQueries(
           agentHandle: assignment.agentHandle,
           status: assignment.status,
           revision: assignment.revision,
+          ...(assignment.assignmentId === undefined ? {} : { assignmentId: assignment.assignmentId }),
+          ...(assignment.createdAt === undefined ? {} : { createdAt: assignment.createdAt }),
+          ...(assignment.updatedAt === undefined ? {} : { updatedAt: assignment.updatedAt }),
         })),
+  });
+  registry.register({
+    operation: "work.executions",
+    requiredScopes: ["work:read"],
+    allowedRoles: EVERY_ROLE,
+    validate: (value) => object(value, ["workId"]),
+    handle: async (context, value) =>
+      (await dependencies.readModel.executions(context))
+        .filter((execution) => execution.workId === text(value.workId, "workId"))
+        .map(publicExecution),
+  });
+  registry.register({
+    operation: "work.artifacts",
+    requiredScopes: ["work:read"],
+    allowedRoles: EVERY_ROLE,
+    validate: (value) => object(value, ["workId"]),
+    handle: async (context, value) =>
+      ((await dependencies.readModel.artifacts?.(context)) ?? [])
+        .filter((artifact) => artifact.workId === text(value.workId, "workId"))
+        .map(publicArtifact),
+  });
+  registry.register({
+    operation: "work.artifact.get",
+    requiredScopes: ["work:read"],
+    allowedRoles: EVERY_ROLE,
+    validate: (value) => object(value, ["workId", "artifactVersionId"]),
+    handle: async (context, value) => {
+      const workId = text(value.workId, "workId");
+      const artifactVersionId = text(value.artifactVersionId, "artifactVersionId");
+      const artifact = ((await dependencies.readModel.artifacts?.(context)) ?? []).find(
+        (candidate) => candidate.workId === workId && candidate.artifactVersionId === artifactVersionId,
+      );
+      if (!artifact)
+        throw new ApplicationError({
+          category: "not-found",
+          severity: "error",
+          retryable: false,
+          userMessage: "Artifact를 찾을 수 없습니다",
+          operatorCode: "APP_ARTIFACT_NOT_FOUND",
+        });
+      return publicArtifact(artifact);
+    },
+  });
+  registry.register({
+    operation: "work.verifications",
+    requiredScopes: ["work:read"],
+    allowedRoles: EVERY_ROLE,
+    validate: (value) => object(value, ["workId"]),
+    handle: async (context, value) =>
+      ((await dependencies.readModel.verifications?.(context)) ?? [])
+        .filter((verification) => verification.workId === text(value.workId, "workId"))
+        .map(publicVerification),
+  });
+  registry.register({
+    operation: "work.directive.list",
+    requiredScopes: ["work:read"],
+    allowedRoles: EVERY_ROLE,
+    validate: (value) => object(value, ["workId", "runId"]),
+    handle: async (context, value) => {
+      const workId = text(value.workId, "workId");
+      const runId = value.runId === undefined ? undefined : text(value.runId, "runId");
+      return ((await dependencies.readModel.directives?.(context)) ?? [])
+        .filter((directive) => directive.workId === workId && (runId === undefined || directive.runId === runId))
+        .map(publicDirective);
+    },
   });
   registry.register({
     operation: "work.rooms",
     requiredScopes: ["collaboration:read"],
     allowedRoles: EVERY_ROLE,
     validate: (value) => object(value, ["workId"]),
-    handle: async (context, value) =>
-      (await dependencies.readModel.rooms(context))
-        .filter((room) => room.workId === text(value.workId, "workId"))
-        .map((room) => ({
-          workId: room.workId,
-          roomId: room.roomId,
-          name: room.name,
-          kind: room.kind,
-          status: room.status,
-          participantIds: room.participantIds,
-          lastMessageSequence: room.lastMessageSequence,
-        })),
+    handle: async (context, value) => {
+      const workId = text(value.workId, "workId");
+      const messages = (await dependencies.readModel.messages?.(context)) ?? [];
+      return (await dependencies.readModel.rooms(context))
+        .filter((room) => room.workId === workId)
+        .map((room) => {
+          // 소비량은 방에 저장돼 있지 않고 메시지의 합입니다.
+          const roomMessages = messages.filter((message) => message.roomId === room.roomId);
+          const usedTokens = roomMessages.reduce((sum, message) => sum + (message.tokenCount ?? 0), 0);
+          const usedCostMicros = roomMessages.reduce((sum, message) => sum + (message.costMicros ?? 0), 0);
+          return {
+            workId: room.workId,
+            roomId: room.roomId,
+            name: room.name,
+            kind: room.kind,
+            status: room.status,
+            participantIds: room.participantIds,
+            lastMessageSequence: room.lastMessageSequence,
+            ...(room.coordinatorHandle === undefined ? {} : { coordinatorHandle: room.coordinatorHandle }),
+            ...(room.roundCount === undefined ? {} : { roundCount: room.roundCount }),
+            ...(room.maxRounds === undefined ? {} : { maxRounds: room.maxRounds }),
+            ...(room.maxTokens === undefined ? {} : { usedTokens, maxTokens: room.maxTokens }),
+            ...(room.maxCostMicros === undefined ? {} : { usedCostMicros, maxCostMicros: room.maxCostMicros }),
+          };
+        });
+    },
   });
+  if (dependencies.readModel.sharedContexts) {
+    registry.register({
+      operation: "work.shared-contexts",
+      requiredScopes: ["collaboration:read"],
+      allowedRoles: EVERY_ROLE,
+      validate: (value) => object(value, ["workId"]),
+      handle: async (context, value) => {
+        const workId = text(value.workId, "workId");
+        return ((await dependencies.readModel.sharedContexts?.(context)) ?? [])
+          .filter((reference) => reference.workId === workId)
+          .map((reference) => ({
+            sharedContextReferenceId: reference.sharedContextReferenceId,
+            roomId: reference.roomId,
+            sourceKind: reference.sourceKind,
+            sourceId: reference.sourceId,
+            versionId: reference.versionId,
+            checksum: reference.checksum,
+          }));
+      },
+    });
+  }
   if (dependencies.readModel.messages) {
     registry.register({
       operation: "work.messages",
@@ -695,6 +1028,9 @@ export function registerApplicationQueries(
             authorId: message.authorId,
             content: message.content,
             createdAt: message.createdAt,
+            // 인과 계보. 반론이 무엇을 반박하는지, 답변이 어느 질문에 붙는지가 여기서 옵니다.
+            ...(message.replyToMessageId === undefined ? {} : { replyToMessageId: message.replyToMessageId }),
+            ...(message.causedByMessageId === undefined ? {} : { causedByMessageId: message.causedByMessageId }),
           }));
       },
     });
@@ -736,33 +1072,22 @@ export function registerApplicationQueries(
           userMessage: "Runtime execution을 찾을 수 없습니다",
           operatorCode: "APP_EXECUTION_NOT_FOUND",
         });
-      return {
-        executionId: execution.executionId,
-        workId: execution.workId,
-        ...(execution.taskId === undefined ? {} : { taskId: execution.taskId }),
-        agentHandle: execution.agentHandle,
-        modelRoute: execution.modelRoute,
-        status: execution.status,
-        inputTokens: execution.inputTokens,
-        outputTokens: execution.outputTokens,
-        costMicros: execution.costMicros,
-      };
+      return publicExecution(execution);
     },
   });
   registry.register({
     operation: "governance.approval.list",
     requiredScopes: ["approval:read"],
     allowedRoles: EVERY_ROLE,
-    validate: (value) => object(value, []),
-    handle: async (context) =>
-      (await dependencies.readModel.approvals(context)).map((approval) => ({
-        approvalId: approval.approvalId,
-        action: approval.action,
-        status: approval.status,
-        requestedBy: approval.requestedBy,
-        expiresAt: approval.expiresAt,
-        ...(approval.displayPreview === undefined ? {} : { displayPreview: approval.displayPreview }),
-      })),
+    validate: (value) => object(value, ["workId", "status"]),
+    handle: async (context, value) => {
+      const workId = value.workId === undefined ? undefined : text(value.workId, "workId");
+      const status = value.status === undefined ? undefined : text(value.status, "status");
+      return (await dependencies.readModel.approvals(context))
+        .filter((approval) => workId === undefined || approval.workId === workId)
+        .filter((approval) => status === undefined || approval.status === status)
+        .map(publicApproval);
+    },
   });
   registry.register({
     operation: "governance.approval.get",
@@ -782,14 +1107,7 @@ export function registerApplicationQueries(
           userMessage: "Approval을 찾을 수 없습니다",
           operatorCode: "APP_APPROVAL_NOT_FOUND",
         });
-      return {
-        approvalId: approval.approvalId,
-        action: approval.action,
-        status: approval.status,
-        requestedBy: approval.requestedBy,
-        expiresAt: approval.expiresAt,
-        ...(approval.displayPreview === undefined ? {} : { displayPreview: approval.displayPreview }),
-      };
+      return publicApproval(approval);
     },
   });
   registry.register({

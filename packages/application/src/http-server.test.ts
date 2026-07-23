@@ -102,7 +102,7 @@ describe("ApplicationHttpServer", () => {
         }),
       },
       bootstrap: {
-        initialize: async (input) => ({ access: { token: "one-time" }, email: input.email }),
+        initialize: async () => ({ access: { token: "one-time" } }),
       },
       integrations: {
         async handle(input) {
@@ -217,7 +217,7 @@ describe("ApplicationHttpServer", () => {
     const response = await fetch(`${baseUrl}/api/v1/bootstrap`, {
       method: "POST",
       headers: { accept: "application/json", "content-type": "application/json" },
-      body: JSON.stringify({ commandId: "bootstrap-command-0001", email: "owner@example.com", displayName: "Owner" }),
+      body: JSON.stringify({ commandId: "bootstrap-command-0001" }),
     });
     expect(response.status).toBe(201);
     expect(await response.json()).toMatchObject({ access: { token: "one-time" } });

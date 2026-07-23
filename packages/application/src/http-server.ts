@@ -75,8 +75,6 @@ export interface ApplicationHttpDependencies {
       readonly commandId: string;
       readonly remoteAddress: string;
       readonly trustedLocal: boolean;
-      readonly email: string;
-      readonly displayName: string;
     }): Promise<unknown>;
   };
   readonly webSessions?: {
@@ -494,20 +492,13 @@ export class ApplicationHttpServer {
         });
       this.acceptJson(request);
       const input = (await json(request)) as Record<string, unknown>;
-      if (
-        typeof input.commandId !== "string" ||
-        typeof input.email !== "string" ||
-        typeof input.displayName !== "string" ||
-        Object.keys(input).some((key) => !["commandId", "email", "displayName"].includes(key))
-      )
+      if (typeof input.commandId !== "string" || Object.keys(input).some((key) => key !== "commandId"))
         throw validation("bootstrap input이 유효하지 않습니다");
       sendJson(
         response,
         201,
         await this.dependencies.bootstrap.initialize({
           commandId: input.commandId,
-          email: input.email,
-          displayName: input.displayName,
           remoteAddress: request.socket.remoteAddress ?? "",
           trustedLocal: true,
         }),

@@ -1,4 +1,5 @@
 import type { TenantContext } from "@massion/identity";
+import { GovernanceApprovalRequiredError } from "@massion/governance";
 
 import type { ApplicationCommandRegistry } from "./command-registry.js";
 import type { ApplicationCommandV1, ApplicationCommandResultV1 } from "./contracts.js";
@@ -107,7 +108,7 @@ export function registerApplicationRegistryOperations(
     operation: "registry.install",
     requiredScopes: ["extension:write"],
     allowedRoles: ["owner", "admin"],
-    recovery: "operator-action",
+    recovery: "replay-domain",
     validate(value) {
       const source = object(
         value,
@@ -127,9 +128,29 @@ export function registerApplicationRegistryOperations(
           : { permissionApprovalId: text(source.permissionApprovalId, "permissionApprovalId") }),
       };
     },
+    idempotencyPayload: (value) =>
+      Object.fromEntries(
+        Object.entries(value).filter(([key]) => !["installApprovalId", "permissionApprovalId"].includes(key)),
+      ),
+    resumeAwaitingApproval: (value) =>
+      value.installApprovalId !== undefined || value.permissionApprovalId !== undefined,
     async handle(context, command, value) {
-      const installed = await operations.install(context, { commandId: command.commandId, ...value });
-      return result(command, "ExtensionInstallation", installed.installationId, installed);
+      try {
+        const installed = await operations.install(context, { commandId: command.commandId, ...value });
+        return result(command, "ExtensionInstallation", installed.installationId, installed);
+      } catch (error) {
+        if (error instanceof GovernanceApprovalRequiredError) {
+          return {
+            schemaVersion: "massion.application.v1",
+            commandId: command.commandId,
+            correlationId: command.correlationId,
+            operation: command.operation,
+            outcome: "awaiting-approval",
+            data: { decisionId: error.decisionId, approvalId: error.approvalId },
+          };
+        }
+        throw error;
+      }
     },
   });
   commands.register({

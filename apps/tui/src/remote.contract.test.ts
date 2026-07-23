@@ -77,8 +77,6 @@ describe("TUI remote product contract", () => {
       const endpoint = await product.start();
       const initialized = (await ApplicationHttpClient.bootstrap(endpoint.url, {
         commandId: `tui-bootstrap-${randomUUID()}`,
-        email: `tui-${randomUUID()}@example.com`,
-        displayName: "TUI Remote",
       })) as {
         access: { token: string };
         context: { userId: string; organizationId: string; membershipId: string; role: "owner" };

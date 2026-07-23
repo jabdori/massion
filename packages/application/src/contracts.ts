@@ -1,3 +1,5 @@
+import type { ApprovalDisplayPreview } from "@massion/governance";
+
 export const APPLICATION_SCHEMA_VERSION = "massion.application.v1" as const;
 export const APPLICATION_EVENT_SCHEMA_VERSION = "massion.application.event.v1" as const;
 export const APPLICATION_ERROR_SCHEMA_VERSION = "massion.error.v1" as const;
@@ -28,6 +30,350 @@ export interface ApplicationCommandResultV1 {
   readonly outcome: ApplicationCommandOutcome;
   readonly resource?: ApplicationResourceV1;
   readonly data?: unknown;
+}
+
+export interface CursorPageV1<T> {
+  readonly items: readonly T[];
+  readonly nextCursor?: string;
+}
+
+export interface StartRunRequestV1 {
+  readonly text: string;
+  readonly surface?: string;
+  readonly projectId?: string;
+  readonly workspaceId?: string;
+  readonly tokenBudget?: number;
+  readonly scopeIn?: readonly string[];
+  readonly scopeOut?: readonly string[];
+  readonly constraints?: readonly string[];
+  readonly assumptions?: readonly string[];
+  readonly unknowns?: readonly string[];
+  readonly decisions?: readonly string[];
+}
+
+export interface WorkSummaryV1 {
+  readonly workId: string;
+  readonly title: string;
+  readonly status: string;
+  readonly revision: number;
+  readonly workspaceId?: string;
+  readonly updatedAt?: string;
+}
+
+export interface WorkDetailV1 extends WorkSummaryV1 {
+  readonly artifactVersionIds: readonly string[];
+  /** 이전 공개 계약 호환용입니다. 새 클라이언트는 artifactVersionIds를 사용합니다. */
+  readonly artifactIds: readonly string[];
+  readonly createdAt?: string;
+}
+
+export type WorkActivityKindV1 =
+  | "work"
+  | "message"
+  | "run"
+  | "task"
+  | "assignment"
+  | "execution"
+  | "approval"
+  | "artifact"
+  | "verification"
+  | "record";
+
+export interface WorkActivityViewV1 {
+  readonly activityId: string;
+  readonly workId: string;
+  readonly kind: WorkActivityKindV1;
+  readonly title: string;
+  readonly createdAt: string;
+  readonly detail?: string;
+  readonly status?: string;
+  readonly authorId?: string;
+  readonly resourceId?: string;
+}
+
+export interface TaskViewV1 {
+  readonly workId: string;
+  readonly taskId: string;
+  readonly title: string;
+  readonly status: string;
+  readonly revision: number;
+  readonly objective?: string;
+  readonly acceptanceCriteria?: readonly string[];
+  readonly dependencyIds?: readonly string[];
+  readonly requiredCapabilities?: readonly string[];
+  readonly recommendedAgentHandles?: readonly string[];
+  readonly parallelizable?: boolean;
+  readonly createdAt?: string;
+  readonly updatedAt?: string;
+}
+
+export interface AssignmentViewV1 {
+  readonly workId: string;
+  readonly taskId: string;
+  readonly agentHandle: string;
+  readonly status: string;
+  readonly revision: number;
+  readonly assignmentId?: string;
+  readonly createdAt?: string;
+  readonly updatedAt?: string;
+}
+
+export interface RunViewV1 {
+  readonly runId: string;
+  readonly workId?: string;
+  readonly stage: string;
+  readonly status: string;
+  readonly approvalId?: string;
+  readonly blockedReason?: string;
+  readonly leaseGeneration: number;
+  readonly createdAt?: string;
+  readonly updatedAt?: string;
+}
+
+export interface ExecutionViewV1 {
+  readonly executionId: string;
+  readonly workId: string;
+  readonly taskId?: string;
+  readonly agentHandle: string;
+  readonly modelRoute: string;
+  readonly status: string;
+  readonly inputTokens: number;
+  readonly outputTokens: number;
+  readonly costMicros: number;
+  readonly createdAt?: string;
+  readonly updatedAt?: string;
+}
+
+export interface ApprovalViewV1 {
+  readonly approvalId: string;
+  readonly action: string;
+  readonly status: string;
+  readonly requestedBy: string;
+  readonly expiresAt: string;
+  readonly workId?: string;
+  readonly executionId?: string;
+  readonly revision?: number;
+  readonly resourceRevision?: number;
+  readonly resumeTarget?: string;
+  readonly createdAt?: string;
+  readonly updatedAt?: string;
+  readonly displayPreview?: ApprovalDisplayPreview;
+}
+
+export interface RoomViewV1 {
+  readonly workId: string;
+  readonly roomId: string;
+  readonly name: string;
+  readonly kind: string;
+  readonly status: string;
+  readonly participantIds: readonly string[];
+  readonly lastMessageSequence: number;
+  readonly coordinatorHandle?: string;
+  /** 방의 실행 예산과 소비량. 남은 여유를 알아야 계속할지 멈출지 판단할 수 있습니다. */
+  readonly roundCount?: number;
+  readonly maxRounds?: number;
+  readonly usedTokens?: number;
+  readonly maxTokens?: number;
+  readonly usedCostMicros?: number;
+  readonly maxCostMicros?: number;
+}
+
+/** 방이 참조하는 불변 스냅샷. 같은 것을 보고 있음을 checksum이 보증합니다. */
+export interface SharedContextViewV1 {
+  readonly sharedContextReferenceId: string;
+  readonly roomId: string;
+  readonly sourceKind: string;
+  readonly sourceId: string;
+  readonly versionId: string;
+  readonly checksum: string;
+}
+
+/** `CollaborationMessageType` 10종. 화면 문법이 이 값에서 갈라집니다. */
+export type RoomMessageTypeV1 =
+  | "question"
+  | "answer"
+  | "proposal"
+  | "challenge"
+  | "review_request"
+  | "change_request"
+  | "evidence"
+  | "decision"
+  | "handoff"
+  | "status";
+
+export interface RoomMessageViewV1 {
+  readonly messageId: string;
+  readonly sequence: number;
+  readonly messageType: RoomMessageTypeV1 | string;
+  readonly authorKind: string;
+  /** 에이전트면 조직 handle, 사람이면 사용자 식별자. 화자 정체성의 정본입니다. */
+  readonly authorId: string;
+  readonly content: string;
+  readonly createdAt: string;
+  readonly replyToMessageId?: string;
+  readonly causedByMessageId?: string;
+}
+
+export interface OrganizationNodeViewV1 {
+  readonly node_id: string;
+  readonly handle: string;
+  readonly name: string;
+  readonly responsibility: string;
+  readonly parent_handle?: string;
+  readonly status: "active" | "inactive" | "retired";
+  readonly role: "orchestrator" | "coordinator" | "operator";
+  readonly capabilities: readonly string[];
+}
+
+export interface OrganizationGraphSnapshotV1 {
+  readonly nodes: readonly OrganizationNodeViewV1[];
+  readonly version: { readonly version: number };
+}
+
+export interface GovernanceAutonomyViewV1 {
+  readonly mode: "automatic" | "review";
+  readonly revision: number;
+}
+
+export interface ExtensionInstallationViewV1 {
+  readonly installationId: string;
+  readonly packageName: string;
+  readonly state: string;
+  readonly activeVersionId?: string;
+  readonly activationGeneration: number;
+}
+
+export interface ArtifactViewV1 {
+  readonly artifactId: string;
+  readonly artifactVersionId: string;
+  readonly workId: string;
+  readonly name: string;
+  readonly kind: string;
+  readonly version: number;
+  readonly mediaType: string;
+  readonly checksum: string;
+  readonly createdBy: string;
+  readonly createdAt: string;
+  readonly sourceArtifactVersionId?: string;
+  readonly creatorAgentHandle?: string;
+  readonly creatorExecutionId?: string;
+}
+
+export interface VerificationViewV1 {
+  readonly verificationId: string;
+  readonly workId: string;
+  readonly verifierId: string;
+  readonly passed: boolean;
+  readonly criteria: unknown;
+  readonly evidenceArtifactVersionIds: readonly string[];
+  readonly assuranceRunId?: string;
+  readonly targetWorkRevision?: number;
+  readonly projectedWorkRevision?: number;
+  readonly profileId?: string;
+  readonly profileVersion?: string;
+  readonly bindingVersionId?: string;
+  readonly createdAt: string;
+}
+
+export interface DirectiveViewV1 {
+  readonly directiveId: string;
+  readonly workId: string;
+  readonly runId: string;
+  readonly sequence: number;
+  readonly content: string;
+  readonly mode: "now" | "next-stage";
+  readonly submittedStage: string;
+  readonly status: string;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+  readonly failureReason?: string;
+}
+
+export interface ApplicationQueryMapV1 {
+  readonly "work.index": {
+    readonly payload: {
+      readonly workspaceId?: string;
+      readonly status?: string;
+      readonly search?: string;
+      readonly cursor?: string;
+      readonly limit?: number;
+    };
+    readonly data: CursorPageV1<WorkSummaryV1>;
+  };
+  readonly "work.detail": { readonly payload: { readonly workId: string }; readonly data: WorkDetailV1 };
+  readonly "run.list": { readonly payload: { readonly workId: string }; readonly data: readonly RunViewV1[] };
+  readonly "work.activity.list": {
+    readonly payload: { readonly workId: string; readonly cursor?: string; readonly limit?: number };
+    readonly data: CursorPageV1<WorkActivityViewV1>;
+  };
+  readonly "work.tasks": { readonly payload: { readonly workId: string }; readonly data: readonly TaskViewV1[] };
+  readonly "work.assignments": {
+    readonly payload: { readonly workId: string };
+    readonly data: readonly AssignmentViewV1[];
+  };
+  readonly "work.executions": {
+    readonly payload: { readonly workId: string };
+    readonly data: readonly ExecutionViewV1[];
+  };
+  readonly "work.artifacts": {
+    readonly payload: { readonly workId: string };
+    readonly data: readonly ArtifactViewV1[];
+  };
+  readonly "work.artifact.get": {
+    readonly payload: { readonly workId: string; readonly artifactVersionId: string };
+    readonly data: ArtifactViewV1;
+  };
+  readonly "work.verifications": {
+    readonly payload: { readonly workId: string };
+    readonly data: readonly VerificationViewV1[];
+  };
+  readonly "work.directive.list": {
+    readonly payload: { readonly workId: string; readonly runId?: string };
+    readonly data: readonly DirectiveViewV1[];
+  };
+  readonly "governance.approval.list": {
+    readonly payload: { readonly workId?: string; readonly status?: string };
+    readonly data: readonly ApprovalViewV1[];
+  };
+  readonly "governance.approval.get": {
+    readonly payload: { readonly approvalId: string };
+    readonly data: ApprovalViewV1;
+  };
+  readonly "work.rooms": { readonly payload: { readonly workId: string }; readonly data: readonly RoomViewV1[] };
+  readonly "work.messages": {
+    readonly payload: { readonly workId: string; readonly roomId: string };
+    readonly data: readonly RoomMessageViewV1[];
+  };
+  readonly "work.shared-contexts": {
+    readonly payload: { readonly workId: string };
+    readonly data: readonly SharedContextViewV1[];
+  };
+  readonly "organization.graph.snapshot": { readonly payload: Record<string, never>; readonly data: OrganizationGraphSnapshotV1 };
+  readonly "governance.autonomy": { readonly payload: Record<string, never>; readonly data: GovernanceAutonomyViewV1 };
+  readonly "extension.list": { readonly payload: Record<string, never>; readonly data: readonly ExtensionInstallationViewV1[] };
+}
+
+export interface ApplicationCommandMapV1 {
+  readonly "run.start": { readonly payload: { readonly request: StartRunRequestV1 } };
+  readonly "run.cancel": { readonly payload: { readonly runId: string } };
+  readonly "run.resume": { readonly payload: { readonly runId: string; readonly retryBlocked: true } };
+  readonly "work.directive.submit": {
+    readonly payload: {
+      readonly workId: string;
+      readonly runId: string;
+      readonly content: string;
+      readonly mode: "now" | "next-stage";
+    };
+  };
+  readonly "approval.decide": {
+    readonly payload: {
+      readonly approvalId: string;
+      readonly expectedApprovalRevision: number;
+      readonly vote: "approve" | "reject";
+      readonly reason: string;
+    };
+  };
+  readonly "governance.autonomy.set": { readonly payload: { readonly mode: "automatic" | "review" } };
 }
 
 export interface ApplicationEventV1 {
@@ -155,7 +501,7 @@ function validateWire(value: unknown): void {
   } catch {
     throw new Error("Application wire 값은 JSON으로 직렬화할 수 있어야 합니다");
   }
-  if (Buffer.byteLength(encoded, "utf8") > MAX_WIRE_BYTES) {
+  if (new TextEncoder().encode(encoded).byteLength > MAX_WIRE_BYTES) {
     throw new Error("Application wire byte 상한을 초과했습니다");
   }
   validateJson(value);
