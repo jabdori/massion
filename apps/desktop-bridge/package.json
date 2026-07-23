@@ -1,0 +1,32 @@
+{
+  "name": "@massion/desktop-bridge",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "massion-desktop-bridge": "./dist/entry.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/main.d.ts",
+      "default": "./dist/main.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "pnpm build-deps && pnpm build-self",
+    "build-deps": "pnpm --filter @massion/application build && pnpm --filter @massion/local-control build",
+    "build-self": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\" && tsc -p tsconfig.json",
+    "test": "pnpm build-deps && pnpm build-self && vitest run src --maxWorkers=1",
+    "typecheck": "pnpm build-deps && tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@massion/application": "workspace:*",
+    "@massion/local-control": "workspace:*"
+  },
+  "engines": {
+    "node": ">=24.0.0"
+  }
+}

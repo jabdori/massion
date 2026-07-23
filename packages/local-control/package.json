@@ -1,0 +1,34 @@
+{
+  "name": "@massion/local-control",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./daemon": {
+      "types": "./dist/daemon.d.ts",
+      "default": "./dist/daemon.js"
+    },
+    "./profiles": {
+      "types": "./dist/profiles.d.ts",
+      "default": "./dist/profiles.js"
+    },
+    "./access": {
+      "types": "./dist/access.d.ts",
+      "default": "./dist/access.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\" && tsc -p tsconfig.json",
+    "test": "vitest run src --maxWorkers=1",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@massion/application": "workspace:*"
+  },
+  "engines": {
+    "node": ">=24.0.0"
+  }
+}
