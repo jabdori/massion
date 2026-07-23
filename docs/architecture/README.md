@@ -55,7 +55,7 @@ flowchart TB
     Intelligence["맥락 · 근거 · 실행 · 검증<br/>기록 · 성장 · 구현됨"]:::implemented
     Runtime["에이전트 실행 계층<br/>VoltAgent Adapter · 구현됨"]:::implemented
     Router["모델·계정 라우터<br/>회전 · fallback · 구현됨"]:::implemented
-    ExtHost["Extension Host<br/>패키지 구현 · 서버 조립 미완료"]:::implementing
+    ExtHost["Extension Host<br/>서버 조립·Application API 연결됨"]:::implemented
   end
 
   DB[("SurrealDB<br/>AgentOS 단일 정본<br/>구현됨")]:::implemented
@@ -79,10 +79,10 @@ flowchart TB
   Office --> Intelligence
   Intelligence --> Runtime
   Runtime --> Router
-  ExtHost -. "제품 실행 경로 연결 필요" .-> Runtime
+  API --> ExtHost
   AgentOS --> DB
   Router --> Providers
-  ExtHost -. "목표: 설치·업데이트" .-> Registry
+  ExtHost --> Registry
   Intelligence --> Git
 ```
 
@@ -92,7 +92,7 @@ flowchart TB
 | TUI | 구현됨 | `apps/tui` | 상태·표현·OpenTUI 렌더러 테스트 |
 | Core Office·Work·Governance | 구현됨 | `packages/organization`, `packages/work`, `packages/governance` | 조직·업무·승인 통합 테스트 |
 | Runtime·Router | 구현됨 | `packages/runtime`, `packages/router` | 모델 생성·실행·라우팅 실패 테스트 |
-| Extension Host | 패키지 구현됨·서버 조립 미완료 | `packages/extension-host`, `apps/server` | 격리·권한·수명주기 테스트는 있으나 서버는 Store schema만 생성 |
+| Extension Host | 구현됨 | `packages/extension-host`, `apps/server` | 수명주기·Gateway·Registry 설치기와 Application API 조립, 서버 통합 테스트 |
 | Web Console | 구현됨 | `apps/web` | 페이지·상태·사용자 흐름 테스트 |
 | Slack·Discord·GitHub Surface | 구현됨 | `packages/integrations`, `extensions/slack`, `extensions/discord`, `extensions/github` | 공식 통합 계약 테스트 |
 | Registry·Marketplace | 구현됨 | `packages/registry`, `apps/cli`, `apps/web` | 게시·정책·검색·설치 테스트 |
@@ -128,7 +128,7 @@ flowchart LR
   end
 
   ExtSDK["Extension 계약<br/>@massion/extension-sdk"]:::implemented
-  ExtHost["Extension 격리·broker<br/>패키지 구현 · 서버 조립 미완료"]:::implementing
+  ExtHost["Extension lifecycle·Gateway<br/>서버 조립·Application API 연결됨"]:::implemented
   Application["제품 API 조합<br/>@massion/application<br/>구현됨"]:::implemented
   Surfaces["CLI · TUI · Web · Integration"]:::implemented
   VoltAgent["VoltAgent 실행 엔진<br/>외부"]:::external
@@ -154,7 +154,7 @@ flowchart LR
   Work --> Growth
   Runtime --> Growth
   ExtSDK --> ExtHost
-  ExtHost -. "제품 실행 경로 연결 필요" .-> Runtime
+  Application --> ExtHost
   ExtHost -. "목표: capability broker만 허용" .-> Work
   Runtime --> VoltAgent
   Router --> Provider
@@ -165,7 +165,7 @@ flowchart LR
   Runtime --> Application
   Router --> Application
   Intelligence --> Application
-  ExtHost -. "조립 미완료" .-> Application
+  ExtHost -->|lifecycle·gateway·artifact 경로| Application
   Application --> Surfaces
 ```
 
@@ -174,11 +174,11 @@ flowchart LR
 | 데이터 | SurrealDB SDK 타입은 저장소 facade 위 도메인 계약에 노출하지 않음 | `packages/storage` |
 | 실행 | VoltAgent 타입은 Runtime adapter 내부에 격리 | `packages/runtime` |
 | 제품 API | 도메인 공개 서비스만 조합하고 raw store를 반환하지 않음 | `packages/application` |
-| Extension | worker는 capability broker만 사용하고 Database·credential에 직접 접근하지 않음 | `packages/extension-sdk`, `packages/extension-host` |
+| Extension | 설치·업데이트·목록·Registry 설치는 Application API가 Host Gateway로 조합한다. worker는 일반 Node child process이며, OS sandbox·VM·Apple signing을 기본 강제하지 않는다. 대신 승인된 manifest 권한, 출처·artifact 계보, 제한된 RPC와 감사 기록이 경계가 된다. | `packages/application`, `packages/extension-sdk`, `packages/extension-host`, `packages/registry`, `apps/server` |
 
 ## 4. Core Office와 전문 조직
 
-Core Office는 현재 구현에서 모든 tenant 조직에 생성되는 제거 불가능한 여덟 개 내장 노드입니다. 이는 운영 책임의 기본 투영이지 사용자에게 보이는 전체 조직을 여덟 노드로 제한한다는 뜻은 아닙니다. 조직 노드는 영속하지만 LLM 프로세스가 항상 실행되는 것은 아니며, Work가 필요로 할 때 Agent로 materialize됩니다. Software Engineering Profile은 코드에 포함된 비내장(non-builtin) 전문 조직이지만 현재 생산 Bootstrap에서 자동 설치하지 않습니다. Extension 조직·Agent contribution은 계약에 존재하지만 서버 실행 경로와의 조립이 미완료입니다.
+Core Office는 현재 구현에서 모든 tenant 조직에 생성되는 제거 불가능한 여덟 개 내장 노드입니다. 이는 운영 책임의 기본 투영이지 사용자에게 보이는 전체 조직을 여덟 노드로 제한한다는 뜻은 아닙니다. 조직 노드는 영속하지만 LLM 프로세스가 항상 실행되는 것은 아니며, Work가 필요로 할 때 Agent로 materialize됩니다. Software Engineering Profile은 코드에 포함된 비내장(non-builtin) 전문 조직이지만 현재 생산 Bootstrap에서 자동 설치하지 않습니다. Extension의 설치 수명주기와 worker 실행은 서버와 Application API에 조립되어 있지만, Extension 조직 템플릿·Skill·runtime tool을 Organization Graph 또는 Agent 실행에 소비시키는 경로는 아직 없습니다.
 
 ```mermaid
 flowchart TB
@@ -216,9 +216,9 @@ flowchart TB
     Lead --> Quality
   end
 
-  subgraph Extensions["설치형 전문 조직·Agent · 제품 조립 미완료"]
-    ExtOrg["Extension 선언 조직<br/>소비 경로 연결 필요"]:::planned
-    ExtAgent["격리 worker의 Agent·Tool<br/>서버 조립 필요"]:::planned
+  subgraph Extensions["설치형 전문 조직·Agent · AgentOS 소비 경로 미구현"]
+    ExtOrg["Extension 조직 Template·Skill<br/>Organization Graph 소비 경로 필요"]:::planned
+    ExtAgent["Extension runtime tool·Agent<br/>Agent 실행 소비 경로 필요"]:::planned
     ExtOrg --> ExtAgent
   end
 
@@ -233,7 +233,7 @@ flowchart TB
 |---|---|---|---|
 | Core Office 8개 | 제품 migration 외 변경 불가 | Work에 필요할 때 Agent materialize | `packages/organization`, `packages/runtime` |
 | Software Engineering 9개 역할 | Profile 계약 구현, 생산 Bootstrap 자동 설치 없음 | 설치 후 격리 Git workspace와 TDD delivery | `packages/software-engineering` |
-| Extension 조직·Agent | manifest 계약 구현, 조직·Runtime 소비 경로 미완료 | 목표는 Core 밖 격리 worker | `packages/extension-sdk`, `packages/extension-host`, `apps/server` |
+| Extension 조직·Agent | 설치 수명주기·worker는 구현·조립됨, 조직 Template·Skill·runtime tool의 조직·Runtime 소비 경로는 미구현 | 승인된 Extension은 일반 Node worker로 실행하되, AgentOS에 기여시키는 연결은 아직 없음 | `packages/extension-sdk`, `packages/extension-host`, `packages/runtime`, `apps/server` |
 
 ## 5. Work 처리 전체 흐름
 
@@ -337,7 +337,11 @@ stateDiagram-v2
 
 ## 7. 에이전트 협업과 대화
 
-Organization Graph의 활성 노드는 tenant별 Agent map으로 투영됩니다. Agent는 상대를 발견해 직접 메시지나 다자 협업방에서 대화할 수 있고 독립 Task는 병렬 실행할 수 있지만, 메시지·위임·공유 맥락·실행·사용자 개입은 모두 하나의 Work와 인과 계보에 귀속됩니다.
+Organization Graph의 활성 노드는 tenant별 Agent map으로 투영됩니다. 제품 의도는 Agent가 상대를 발견해 직접 메시지나 다자 협업방에서 대화하고, 그 메시지·위임·공유 맥락·실행·사용자 개입이 모두 하나의 Work와 인과 계보에 귀속되는 것입니다.
+
+**현재 구현은 이 의도에 도달하지 않았습니다.** 협업방 도메인과 VoltAgent 위임은 각각 구현됐지만 둘이 연결돼 있지 않습니다. 생산 경로에서 협업 메시지를 기록하는 곳은 `packages/application/src/core-pipeline.ts` 두 지점(사용자 요청, Representative handoff)과 Surface가 호출하는 공개 command뿐이며, `packages/runtime/src`는 `postMessage`를 한 번도 호출하지 않습니다. 그래서 실제 방에는 Work당 메시지 두 건만 남고 에이전트 사이의 위임·질문·답변은 VoltAgent 메모리에서 끝납니다.
+
+이 절의 상태 표시는 **도메인이 표현할 수 있는 것**과 **실행 경로가 실제로 만드는 것**을 구분합니다. `packages/work`에 계약이 있다는 사실이 그 대화가 발생한다는 뜻은 아닙니다.
 
 ```mermaid
 flowchart TB
@@ -351,28 +355,28 @@ flowchart TB
   Observer["사용자 Surface<br/>관찰 · 메시지 · 승인 · 취소"]:::implemented
 
   subgraph WorkBoundary["하나의 Work에 귀속된 협업 경계"]
-    Room["Collaboration Room<br/>동시 실행·시간·token·cost·round 제한"]:::implemented
-    User["사용자 participant"]:::implemented
-    AgentA["Agent A<br/>Task·Assignment·Session"]:::implemented
-    AgentB["Agent B<br/>Task·Assignment·Session"]:::implemented
-    AgentC["Agent C<br/>Task·Assignment·Session"]:::implemented
-    System["System participant<br/>상태·정책 event"]:::implemented
-    Messages["순서화된 메시지<br/>reply · caused-by · handoff"]:::implemented
-    Shared["Shared Context Reference<br/>불변 읽기 snapshot"]:::implemented
-    Lease["Resource Lease<br/>공유 쓰기·expected revision"]:::implemented
+    Room["Collaboration Room<br/>Work당 1개 자동 생성<br/>사용자 + Core Office 8"]:::implemented
+    User["사용자 participant<br/>요청 메시지 기록됨"]:::implemented
+    AgentA["Representative<br/>handoff 1건 기록됨"]:::implemented
+    AgentB["Agent B<br/>Task·Assignment·Session<br/>방에 발언하지 않음"]:::planned
+    AgentC["Agent C<br/>Task·Assignment·Session<br/>방에 발언하지 않음"]:::planned
+    System["System participant<br/>상태·정책 event"]:::planned
+    Messages["순서화된 메시지<br/>reply · caused-by · handoff<br/>현재 Work당 2건"]:::implementing
+    Shared["Shared Context Reference<br/>도메인만 · 생산 기록 없음"]:::planned
+    Lease["Resource Lease<br/>도메인만 · 생산 기록 없음"]:::planned
     Events["Work · Runtime · Collaboration events<br/>correlation · causation"]:::implemented
 
     User --> Room
     AgentA --> Room
-    AgentB --> Room
-    AgentC --> Room
-    System --> Room
+    AgentB -. "미연결" .-> Room
+    AgentC -. "미연결" .-> Room
+    System -. "미연결" .-> Room
     Room --> Messages
-    AgentA <-->|"직접 질문·답변"| AgentB
+    AgentA <-. "직접 질문·답변 · 기록 경로 없음" .-> AgentB
     AgentA -. "병렬 Task" .-> AgentC
-    AgentB -. "delegate_task · handoff" .-> AgentC
-    Messages --> Shared
-    Messages --> Lease
+    AgentB -. "VoltAgent delegate_task · 방에 남지 않음" .-> AgentC
+    Messages -. "미연결" .-> Shared
+    Messages -. "미연결" .-> Lease
     Messages --> Events
   end
 
@@ -385,13 +389,18 @@ flowchart TB
   Observer -. "정책 범위 내 개입" .-> Room
 ```
 
-| 협업 요소 | 보장 | 실제 위치 |
-|---|---|---|
-| Agent map·위임 | 조직 버전에 맞는 활성 topology, 제거된 관계·Agent 반영 | `packages/runtime`, `packages/organization` |
-| 직접·다자 대화 | 작성자, room sequence, reply·causation, 참조 계보 | `packages/work` |
-| 병렬 실행 | 독립 Task, Assignment, Agent별 Session과 실행 제한 | `packages/work`, `packages/runtime` |
-| 공유 상태 | 불변 SharedContextReference와 versioned resource lease | `packages/work` |
-| 사용자 관찰·개입 | 공개 event, 승인·취소·메시지가 같은 Work에 기록 | `packages/application`, `packages/governance` |
+| 협업 요소 | 상태 | 도메인 계약 | 생산 실행 경로 |
+|---|---|---|---|
+| Agent map·위임 | 구현됨 | `packages/organization` | `packages/runtime/src/voltagent-topology.ts`가 조직 그래프를 supervisor·subAgent로 배선하고 VoltAgent가 위임을 실행 |
+| 협업방 생성 | 구현됨 | `packages/work` | `core-pipeline.ts`가 Work마다 `Core Office` 방 하나를 보장. 사용자 + Core Office 8명 참가 |
+| 사용자 요청·Representative handoff 기록 | 구현됨 | `packages/work` | `core-pipeline.ts` 두 지점. `replyTo`·`causedBy`로 인과 연결 |
+| 사용자 관찰·개입 | 구현됨 | `packages/work` | 공개 command `collaboration.room.open` · `room.join` · `message.post`를 Surface가 호출 |
+| **에이전트 간 직접 대화 기록** | **미구현** | `packages/work`에 10종 메시지 타입·인과·순서 계약 존재 | **없음.** `packages/runtime/src`에 `postMessage` 호출 0건. VoltAgent 위임은 메모리에서 끝남 |
+| **다자 협업 라운드** | **미구현** | 방에 `max_parallel` · `max_rounds` · `round_count` 존재 | **없음.** 라운드를 진행시키는 실행 경로가 없음 |
+| **공유 상태** | **미구현** | `SharedContextReference` · `ResourceLease` 계약과 테스트 존재 | **없음.** 생산 호출 0건 |
+| 병렬 실행 | 부분 | `packages/work`의 Task·Assignment | Task 병렬은 동작. 협업방 안의 병렬 발언은 위 항목에 종속 |
+
+`REQ-AGENT-HARNESS-001`(추적표 `in-progress`)이 이 미구현 항목을 요구합니다: *"실제 Agent runtime은 권한과 인과관계를 보존하는 협업 메시지·handoff·memory 계약을 사용하고 실행 계보를 양쪽 화면에 제공합니다."*
 
 ## 8. 모델 계정·Provider 라우팅
 
@@ -552,7 +561,9 @@ flowchart TB
 
 ## 10. Extension·Registry·격리
 
-Extension은 코어 수정 없이 능력을 추가하지만 Core process, SurrealDB 또는 credential을 직접 받지 않습니다. SDK는 정적 manifest·RPC 계약만 제공하고, Host가 artifact 검사·정책·승인·격리 worker·capability broker·health·rollback을 소유합니다. 공개 Registry는 게시·검사·검색·서명·provenance·리콜을 소유합니다.
+Extension은 코어 수정 없이 능력을 추가하지만 Core process, SurrealDB 또는 credential을 직접 받지 않습니다. SDK는 정적 manifest·RPC 계약만 제공하고, Host는 artifact 검사·정책·승인·worker 수명주기·health·rollback을 소유합니다. 서버 composition root는 `ExtensionLifecycleService`, `ExtensionGateway`, `RegistryInstaller`를 만들고 Application API의 Extension 명령·조회, artifact install/update, Registry install 경로에 주입합니다. 공개 Registry는 게시·검사·검색·서명·provenance·리콜을 소유합니다.
+
+기본 실행 경계는 OS sandbox, VM 또는 Apple signing을 강제하는 모델이 아닙니다. 승인된 Extension은 별도 일반 Node child process로 실행되고, bounded JSON Lines RPC, manifest 권한, 설치·권한 증가 승인, artifact·출처 계보, worker session·activation 감사와 health·rollback으로 통제됩니다. `ExtensionCapabilityBroker`는 패키지에 구현돼 있지만 현재 서버 composition root가 생성하거나 worker RPC에 연결하지 않으므로, 이 문서는 이를 생산 실행 경로로 표시하지 않습니다.
 
 ```mermaid
 flowchart LR
@@ -570,9 +581,9 @@ flowchart LR
   Governance["Governance<br/>install · permission increase<br/>auto 또는 review 정책"]:::implemented
   Store["불변 artifact·version 원장<br/>active pointer"]:::implemented
   Supervisor["Worker Supervisor<br/>session · restart · health"]:::implemented
-  Sandbox["별도 process<br/>Node permission + OS sandbox"]:::implemented
+  WorkerProcess["별도 일반 Node child process<br/>승인·권한·감사 경계<br/>OS sandbox·VM·Apple signing 강제 아님"]:::implemented
   Worker["Extension worker<br/>bounded JSON Lines RPC"]:::implemented
-  Broker["Capability Broker<br/>매 호출 tenant·permission·quota 검증"]:::implemented
+  Broker["Capability Broker<br/>구현됨 · production 연결 미구현"]:::planned
   Core["Runtime · Organization · Growth<br/>Records · Surface public ports"]:::implemented
   Database[("SurrealDB")]:::implemented
   Credential["Credential Vault"]:::implemented
@@ -588,10 +599,10 @@ flowchart LR
   Inspect --> Governance
   Governance --> Store
   Store --> Supervisor
-  Supervisor --> Sandbox
-  Sandbox --> Worker
-  Worker --> Broker
-  Broker --> Core
+  Supervisor --> WorkerProcess
+  WorkerProcess --> Worker
+  Worker -. "향후 승인된 capability 호출" .-> Broker
+  Broker -. "향후 public port" .-> Core
   Core --> Database
   Broker --> Credential
   Store --> Update
@@ -602,14 +613,16 @@ flowchart LR
   Worker -. "secret 원문 접근 금지" .-> Credential
 ```
 
-| 신뢰 수준 | 활성화 경계 | sandbox가 없을 때 |
+| 신뢰 수준 | 활성화 경계 | 실행 책임 |
 |---|---|---|
-| built-in | child process + Node permission + broker | 같은 Massion release 검증 책임으로 실행 가능 |
-| verified | 위 경계 + OS sandbox | 설치 가능, 활성화 차단 |
-| community | 위 경계 + OS sandbox | 설치 가능, 활성화 차단 |
-| untrusted-local | 위 경계 + OS sandbox | validate·link·설치 가능, 활성화 차단 |
+| built-in | artifact·manifest·권한 계보 + Governance 승인 | 같은 Massion release 안의 출처를 표시하고 조직 승인을 기록 |
+| verified | 위와 동일 | 검증된 외부 출처를 표시하고, 사용자가 승인한 권한으로 실행 |
+| community | 위와 동일 | 커뮤니티 출처를 표시하고, 사용자가 승인한 권한으로 실행 |
+| untrusted-local | 위와 동일 | 로컬 출처를 명시하고, 사용자가 책임지고 승인한 권한으로 실행 |
 
-구현은 `packages/extension-sdk`, `packages/extension-host`, `packages/registry`에 있으며 각 패키지의 계약·정책·서비스 테스트가 검증 근거를 소유합니다.
+설치·수명주기·Gateway·Registry 설치기와 Application API 조립은 구현됐습니다. 그러나 Extension이 선언한 조직 Template·Skill·runtime tool이 Organization Graph에 반영되거나 Agent 실행이 이를 선택·호출하여 Work·Approval·Audit에 남기는 소비 경로는 미구현입니다. 이는 제품 헌법이 정한 "조직의 역량" 목표를 축소하는 말이 아니라, 그 세로 흐름이 아직 남았다는 현재 구현 진단입니다.
+
+구현 근거는 `apps/server/src/product.ts`, `packages/application/src/artifacts.ts`, `packages/application/src/registry-operations.ts`, `packages/extension-host/src/worker-supervisor.ts`, `packages/extension-host/src/worker-entrypoint.test.ts` 및 각 패키지의 계약·정책·서비스 테스트입니다.
 
 ## 11. 개인·팀 배포 구조
 
@@ -626,7 +639,7 @@ flowchart LR
     LocalUser["개인 owner"]:::implemented
     LocalSurface["local CLI · TUI · Web<br/>구현됨"]:::implemented
     LocalCore["Massion AgentOS process<br/>Application · Core Office · Runtime<br/>구현됨"]:::implemented
-    LocalWorkers["격리 Extension child process"]:::implemented
+    LocalWorkers["일반 Node Extension child process<br/>승인·권한·감사 경계"]:::implemented
     LocalDB[("embedded persistent SurrealDB<br/>로컬 단일 정본")]:::implemented
     LocalFiles["사용자 Git·workspace<br/>OS filesystem"]:::external
 
@@ -643,7 +656,7 @@ flowchart LR
     Apps["Application service<br/>HTTP · SSE · auth · probe<br/>database EDITOR만 보유"]:::implemented
     RegistryRead["공개 Registry listener<br/>GET · HEAD 전용"]:::implemented
     Provision["일회 DB provisioning<br/>owner → runtime 회전"]:::implemented
-    RuntimePool["Runtime·Extension child process<br/>crash supervisor"]:::implemented
+    RuntimePool["Runtime·일반 Node Extension child process<br/>crash supervisor"]:::implemented
     SharedDB[("원격 SurrealDB<br/>공유 tenant 정본")]:::implemented
     Backup["owner-only backup·restore<br/>migration·checksum gate"]:::implemented
     K8s["Docker Compose · Kubernetes<br/>배포·health·rollout 조립"]:::implemented
@@ -673,7 +686,7 @@ flowchart LR
 | 배포 변형 | 현재 상태 | 신뢰·운영 경계 |
 |---|---|---|
 | 개인 로컬 | Application API·CLI·TUI·Web·서버 조립 구현됨 | loopback bootstrap, OS 사용자 권한, 로컬 DB 경로당 단일 연결 |
-| 팀 자체 호스팅 | Compose 실행·읽기 전용 Registry·owner/runtime 분리 검증, Kubernetes 1.34 schema 검증 완료 | TLS, database 범위 runtime auth, tenant 격리, shared DB, sandbox gate, backup·restore |
+| 팀 자체 호스팅 | Compose 실행·읽기 전용 Registry·owner/runtime 분리 검증, Kubernetes 1.34 schema 검증 완료 | TLS, database 범위 runtime auth, tenant 격리, shared DB, Extension 설치 승인·출처·권한·감사, backup·restore |
 | 관리형 Massion Cloud | 1.0 범위 밖 | 호환 가능한 멀티테넌트 계약만 유지하고 내부 구조는 이 문서에서 설계하지 않음 |
 
 ## 12. 구현 위치와 Phase 상태 색인
@@ -683,7 +696,7 @@ flowchart LR
 | 기반 계약·저장소·Identity·Organization | 구현됨 | `packages/foundation`, `packages/storage`, `packages/identity`, `packages/organization` | 현재 코드 |
 | Work·Router·Runtime·Governance | 구현됨 | `packages/work`, `packages/router`, `packages/runtime`, `packages/governance` | 5~8 |
 | Context·Evidence·Engineering·Assurance·Records·Growth | 구현됨 | `packages/context-strategy`, `packages/evidence`, `packages/software-engineering`, `packages/assurance`, `packages/records`, `packages/growth` | 9~14 |
-| Extension SDK·Host | 패키지 구현됨·서버 조립 미완료 | `packages/extension-sdk`, `packages/extension-host`, `apps/server` | 15 이후 제품 조립 필요 |
+| Extension SDK·Host | 구현됨 | `packages/extension-sdk`, `packages/extension-host`, `apps/server` | Application API에 Extension Host와 Registry 설치기 조립 |
 | Application API·CLI | 구현됨 | `packages/application`, `apps/cli` | 16 |
 | TUI | 구현됨 | `apps/tui` | 17 |
 | Web Console | 구현됨 | `apps/web` | 18 |
