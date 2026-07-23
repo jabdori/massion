@@ -136,6 +136,9 @@ export function App({ service }: AppProps) {
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [notifications, setNotifications] = useState<ApprovalView[]>();
   const [notificationError, setNotificationError] = useState("");
+  const [growth, setGrowth] = useState<GrowthView>();
+  const [growthError, setGrowthError] = useState("");
+  const [requestedGrowthSuggestionId, setRequestedGrowthSuggestionId] = useState<string>();
   const [pendingNotificationIds, setPendingNotificationIds] = useState<ReadonlySet<string>>(new Set());
   const [awaitingRegistryInstall, setAwaitingRegistryInstall] = useState<AwaitingRegistryInstall>();
   const [rooms, setRooms] = useState<RoomView[]>([]);
@@ -152,10 +155,19 @@ export function App({ service }: AppProps) {
       setNotificationError(surfaceErrorMessage(cause, "수신함을 불러오지 못했습니다."));
     }
   }, [service]);
+  const refreshGrowth = useCallback(async () => {
+    try {
+      setGrowth(await service.loadGrowth());
+      setGrowthError("");
+    } catch (cause) {
+      setGrowthError(surfaceErrorMessage(cause, "개선 검토를 불러오지 못했습니다."));
+    }
+  }, [service]);
   useEffect(() => {
     if (controller.phase !== "ready") return;
     void refreshNotifications();
-  }, [controller.eventRevision, controller.phase, refreshNotifications]);
+    void refreshGrowth();
+  }, [controller.eventRevision, controller.phase, refreshGrowth, refreshNotifications]);
   useEffect(() => {
     if (selectedWorkId === undefined) {
       setRooms([]);
@@ -240,8 +252,17 @@ export function App({ service }: AppProps) {
     await controller.decideApproval(approval, decision);
     await refreshNotifications();
   };
-  // 수신함 한 원천. 배지·수신함·홈이 모두 이 배열을 봅니다. 홈이 승인을 따로 조회하지 않습니다.
-  const inboxItems = useMemo(() => buildInboxItems(notifications, controller.works), [notifications, controller.works]);
+  // 수신함 한 원천. 배지·수신함·홈이 모두 이 배열을 봅니다. 각 표면이 따로 세지 않습니다.
+  const inboxItems = useMemo(
+    () => buildInboxItems(notifications, controller.works, growth?.suggestions ?? []),
+    [growth?.suggestions, notifications, controller.works],
+  );
+  const inboxError = [notificationError, growthError].filter(Boolean).join(" ");
+  const openInbox = () => {
+    setNotificationsOpen(true);
+    void refreshNotifications();
+    void refreshGrowth();
+  };
 
   if (controller.phase === "loading") return <DesktopLoading />;
   if (controller.phase === "error") return <DesktopError error={controller.rootError} onRetry={controller.retry} />;
@@ -257,10 +278,7 @@ export function App({ service }: AppProps) {
           activeSurface={surface}
           collapsed={sidebarCollapsed}
           notificationCount={inboxItems === undefined ? 0 : inboxItems.length}
-          onOpenNotifications={() => {
-            setNotificationsOpen(true);
-            void refreshNotifications();
-          }}
+          onOpenNotifications={openInbox}
           onSelect={setSurface}
           onToggle={() => setSidebarCollapsed((current) => !current)}
         />
@@ -302,35 +320,44 @@ export function App({ service }: AppProps) {
         ) : (
           <ProductSurface
             awaitingRegistryInstall={awaitingRegistryInstall}
+            growth={growth}
+            growthError={growthError}
             inboxItems={inboxItems}
             onAwaitingRegistryInstallChange={setAwaitingRegistryInstall}
             onCreate={() => {
               controller.newWork.setOpen(true);
             }}
-            onOpenNotifications={() => {
-              setNotificationsOpen(true);
-              void refreshNotifications();
-            }}
+            onOpenNotifications={openInbox}
+            onRetryGrowth={() => void refreshGrowth()}
             onOpenWork={(workId) => {
               controller.setSelectedId(workId);
               setSurface("work");
             }}
             service={service}
             surface={surface as Exclude<DesktopSurface, "work">}
+            requestedGrowthSuggestionId={requestedGrowthSuggestionId}
           />
         )}
       </div>
       <InboxPanel
-        error={notificationError}
+        error={inboxError}
         items={inboxItems}
         onDecide={decideNotification}
         onOpenChange={setNotificationsOpen}
+        onOpenGrowth={(suggestionId) => {
+          setNotificationsOpen(false);
+          setRequestedGrowthSuggestionId(suggestionId);
+          setSurface("growth");
+        }}
         onOpenWork={(workId) => {
           setNotificationsOpen(false);
           controller.setSelectedId(workId);
           setSurface("work");
         }}
-        onRetry={() => void refreshNotifications()}
+        onRetry={() => {
+          void refreshNotifications();
+          void refreshGrowth();
+        }}
         open={notificationsOpen}
         pending={pendingNotificationIds}
         works={controller.works}
@@ -413,20 +440,28 @@ function GlobalRail({
 
 function ProductSurface({
   awaitingRegistryInstall,
+  growth,
+  growthError,
   inboxItems,
   onAwaitingRegistryInstallChange,
   onCreate,
   onOpenNotifications,
   onOpenWork,
+  onRetryGrowth,
+  requestedGrowthSuggestionId,
   service,
   surface,
 }: {
   awaitingRegistryInstall: AwaitingRegistryInstall | undefined;
+  growth: GrowthView | undefined;
+  growthError: string;
   inboxItems: InboxItem[] | undefined;
   onAwaitingRegistryInstallChange: (value: AwaitingRegistryInstall | undefined) => void;
   onCreate: () => void;
   onOpenNotifications: () => void;
   onOpenWork: (workId: string) => void;
+  onRetryGrowth: () => void;
+  requestedGrowthSuggestionId: string | undefined;
   service: DesktopService;
   surface: Exclude<DesktopSurface, "work">;
 }) {
@@ -441,7 +476,16 @@ function ProductSurface({
       />
     );
   if (surface === "organization") return <OrganizationSurface service={service} />;
-  if (surface === "growth") return <GrowthSurface onOpenWork={onOpenWork} service={service} />;
+  if (surface === "growth")
+    return (
+      <GrowthSurface
+        error={growthError}
+        growth={growth}
+        onOpenWork={onOpenWork}
+        onRetry={onRetryGrowth}
+        requestedSuggestionId={requestedGrowthSuggestionId}
+      />
+    );
   if (surface === "capabilities") return <ExtensionSurface awaitingInstall={awaitingRegistryInstall} onAwaitingInstallChange={onAwaitingRegistryInstallChange} service={service} />;
   return <SettingsSurface service={service} />;
 }
@@ -545,6 +589,19 @@ function HomeSurface({
                       <span className="shrink-0 text-[11px] text-gate">승인 필요</span>
                       <OpenButton label={`${item.approval.title} 수신함에서 보기`} onOpen={onOpenNotifications} />
                     </li>
+                  ) : item.kind === "growth" ? (
+                    <li
+                      className="flex items-center gap-2.5 rounded-[7px] border border-gate-border bg-gate-wash px-3.5 py-2.5"
+                      key={item.id}
+                    >
+                      <Star aria-hidden="true" className="shrink-0 text-gate" size={15} />
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-[13px] font-medium">{item.title}</span>
+                        <span className="block truncate text-xs text-secondary">{item.reason}</span>
+                      </span>
+                      <span className="shrink-0 text-[11px] text-gate">개선 검토</span>
+                      <OpenButton label={`${item.title} 수신함에서 보기`} onOpen={onOpenNotifications} />
+                    </li>
                   ) : (
                     <li key={item.id}>
                       <button
@@ -617,11 +674,15 @@ function HomeSurface({
 }
 
 /**
- * 수신함 한 원천. 승인 대기와 차단을 한 목록으로 투영합니다.
+ * 수신함 한 원천. 승인 대기·차단·검토 대기 개선을 한 목록으로 투영합니다.
  * 막힘(halt)이 승인 대기보다 급하므로 먼저 둡니다. 배지·수신함·홈이 전부 이 결과를 봅니다.
  * approvals가 아직 undefined(로딩 중)면 목록도 undefined로 두어 로딩 상태를 구분합니다.
  */
-function buildInboxItems(approvals: ApprovalView[] | undefined, works: readonly WorkView[]): InboxItem[] | undefined {
+function buildInboxItems(
+  approvals: ApprovalView[] | undefined,
+  works: readonly WorkView[],
+  suggestions: GrowthView["suggestions"],
+): InboxItem[] | undefined {
   if (approvals === undefined) return undefined;
   const blocked: InboxItem[] = works
     .filter((work) => work.run?.status === "blocked")
@@ -633,7 +694,17 @@ function buildInboxItems(approvals: ApprovalView[] | undefined, works: readonly 
       reason: work.run?.blockedReason ?? "차단됨",
     }));
   const approval: InboxItem[] = approvals.map((item) => ({ kind: "approval", id: item.id, approval: item }));
-  return [...blocked, ...approval];
+  const growth: InboxItem[] = suggestions
+    .filter((suggestion) => suggestion.status === "awaiting-review")
+    .map((suggestion) => ({
+      kind: "growth",
+      id: `growth:${suggestion.suggestionId}`,
+      suggestionId: suggestion.suggestionId,
+      workId: suggestion.workId,
+      title: suggestion.summary,
+      reason: suggestion.rationale,
+    }));
+  return [...blocked, ...approval, ...growth];
 }
 
 function InboxPanel({
@@ -641,6 +712,7 @@ function InboxPanel({
   items,
   onDecide,
   onOpenChange,
+  onOpenGrowth,
   onOpenWork,
   onRetry,
   open,
@@ -651,6 +723,7 @@ function InboxPanel({
   items: InboxItem[] | undefined;
   onDecide: (approval: ApprovalView, vote: "approve" | "reject") => Promise<void>;
   onOpenChange: (open: boolean) => void;
+  onOpenGrowth: (suggestionId: string) => void;
   onOpenWork: (workId: string) => void;
   onRetry: () => void;
   open: boolean;
@@ -704,6 +777,13 @@ function InboxPanel({
                   onDecide={onDecide}
                   onOpenWork={onOpenWork}
                   workTitle={item.approval.workId === undefined ? undefined : workTitles.get(item.approval.workId)}
+                />
+              ) : item.kind === "growth" ? (
+                <GrowthInboxCard
+                  key={item.id}
+                  item={item}
+                  onOpenGrowth={onOpenGrowth}
+                  workTitle={workTitles.get(item.workId)}
                 />
               ) : (
                 <BlockedInboxCard key={item.id} item={item} onOpenWork={onOpenWork} />
@@ -808,6 +888,37 @@ function BlockedInboxCard({
       </h3>
       {/* 차단 원인을 구별해 보입니다. 모델 부재와 폴더 신뢰는 할 일이 완전히 다릅니다. */}
       <p className="mt-1.5 text-[12px] leading-5 text-halt">{item.reason}</p>
+    </section>
+  );
+}
+
+/** 개선 검토 카드. 수신함에서는 결론을 내리지 않고 근거가 있는 개선 상세로 이동합니다. */
+function GrowthInboxCard({
+  item,
+  onOpenGrowth,
+  workTitle,
+}: {
+  item: Extract<InboxItem, { kind: "growth" }>;
+  onOpenGrowth: (suggestionId: string) => void;
+  workTitle: string | undefined;
+}) {
+  return (
+    <section className="rounded-[7px] border border-gate-border bg-gate-wash px-3.5 py-3" title={`개선 제안 ${item.suggestionId}`}>
+      <h3 className="text-[13px] font-medium">
+        <button
+          aria-label={`개선 검토 열기: ${item.title}`}
+          className="flex min-h-6 w-full items-center gap-2 rounded-[3px] text-left outline-none hover:text-primary focus-visible:ring-2 focus-visible:ring-gate/70"
+          onClick={() => onOpenGrowth(item.suggestionId)}
+          type="button"
+        >
+          <Star aria-hidden="true" className="shrink-0 text-gate" size={14} />
+          <span className="min-w-0 flex-1 truncate">{item.title}</span>
+          <span className="shrink-0 text-[11px] font-normal text-gate">검토 대기</span>
+          <CaretRight aria-hidden="true" className="shrink-0 text-muted" size={12} />
+        </button>
+      </h3>
+      <p className="mt-1.5 text-[12px] leading-5 text-secondary">{item.reason}</p>
+      <p className="mt-2 border-t border-gate-border pt-2 text-[11px] text-muted">{workTitle ?? "연결된 업무"}</p>
     </section>
   );
 }
@@ -1645,30 +1756,30 @@ function extensionStateLabel(state: string | undefined): string {
  *  - 컨텍스트: 기억·효과·정책은 지금 판단할 대상이 아니라 배경입니다.
  */
 function GrowthSurface({
+  error,
+  growth,
   onOpenWork,
-  service,
+  onRetry,
+  requestedSuggestionId,
 }: {
+  error: string;
+  growth: GrowthView | undefined;
   onOpenWork: (workId: string) => void;
-  service: DesktopService;
+  onRetry: () => void;
+  requestedSuggestionId: string | undefined;
 }) {
-  const [growth, setGrowth] = useState<GrowthView>();
-  const [error, setError] = useState("");
   const [selectedId, setSelectedId] = useState<string>();
   const [filter, setFilter] = useState<"waiting" | "all">("waiting");
   useEffect(() => {
-    let disposed = false;
-    void service
-      .loadGrowth()
-      .then((value) => {
-        if (disposed) return;
-        setGrowth(value);
-        setSelectedId(value.suggestions[0]?.suggestionId);
-      })
-      .catch((cause: unknown) => !disposed && setError(surfaceErrorMessage(cause, "개선 기록을 불러오지 못했습니다.")));
-    return () => {
-      disposed = true;
-    };
-  }, [service]);
+    if (growth === undefined) return;
+    const requested = growth.suggestions.find((suggestion) => suggestion.suggestionId === requestedSuggestionId);
+    if (requested !== undefined) setFilter("waiting");
+    setSelectedId((current) =>
+      requested?.suggestionId
+      ?? growth.suggestions.find((suggestion) => suggestion.suggestionId === current)?.suggestionId
+      ?? growth.suggestions[0]?.suggestionId,
+    );
+  }, [growth, requestedSuggestionId]);
 
   const suggestions = growth?.suggestions ?? [];
   const visible = filter === "waiting" ? suggestions.filter((item) => item.status === "awaiting-review") : suggestions;
@@ -1681,6 +1792,7 @@ function GrowthSurface({
     return (
       <main aria-label="개선" className="col-span-3 min-h-0 overflow-y-auto bg-canvas px-8 py-7">
         <SurfaceError message={error} />
+        <Button onClick={onRetry} size="sm" type="button" variant="outline">다시 불러오기</Button>
       </main>
     );
   }

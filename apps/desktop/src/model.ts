@@ -178,11 +178,13 @@ export interface ApprovalView {
  * 수신함 항목. "사람이 필요한 것"을 한 덩어리로 뭉치지 않고, 해결 방식이 다른 것을 타입으로 가릅니다.
  *  - approval: 실행이 승인을 기다리며 멈춤. gate(노랑). 그 자리에서 승인·거절.
  *  - blocked:  실행이 막힘(모델 부재·폴더 신뢰 등). halt(빨강). 원인을 풀러 업무로 이동.
+ *  - growth:   개선 제안이 검토를 기다림. 근거를 읽을 수 있는 개선 상세로 이동.
  * 배지·수신함·홈이 모두 이 한 타입의 목록을 봅니다. 숫자가 갈리지 않게.
  */
 export type InboxItem =
   | { readonly kind: "approval"; readonly id: string; readonly approval: ApprovalView }
-  | { readonly kind: "blocked"; readonly id: string; readonly workId: string; readonly title: string; readonly reason: string };
+  | { readonly kind: "blocked"; readonly id: string; readonly workId: string; readonly title: string; readonly reason: string }
+  | { readonly kind: "growth"; readonly id: string; readonly suggestionId: string; readonly workId: string; readonly title: string; readonly reason: string };
 
 export interface VerificationView {
   id: string;

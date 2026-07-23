@@ -256,7 +256,7 @@ describe("AgentOS native data flow", () => {
     expect(screen.getByTestId("desktop-shell").style.getPropertyValue("--sidebar-width")).toBe("150px");
   });
 
-  it("수신함 배지는 선택한 업무와 무관하게 전역 미해결 승인을 유지한다", async () => {
+  it("수신함 배지는 선택한 업무와 무관하게 전역 미해결 항목을 유지한다", async () => {
     const user = userEvent.setup();
     const approval = {
       id: "approval-crm-access",
@@ -268,17 +268,17 @@ describe("AgentOS native data flow", () => {
     };
     render(<App service={service({ loadPendingApprovals: async () => [approval] })} />);
 
-    expect(await screen.findByRole("button", { name: "수신함, 미해결 2개" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "수신함, 미해결 4개" })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /파트너 계약서 검토/ }));
-    expect(screen.getByRole("button", { name: "수신함, 미해결 2개" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "수신함, 미해결 4개" })).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "수신함, 미해결 2개" }));
+    await user.click(screen.getByRole("button", { name: "수신함, 미해결 4개" }));
     const panel = await screen.findByRole("dialog", { name: "수신함" });
     expect(within(panel).getByText("CRM 고객 데이터 읽기")).toBeInTheDocument();
-    expect(within(panel).getByText("3분기 고객 이탈 원인 분석")).toBeInTheDocument();
+    expect(within(panel).getAllByText("3분기 고객 이탈 원인 분석").length).toBeGreaterThan(0);
 
     await user.click(within(panel).getByRole("button", { name: "수신함 닫기" }));
-    await user.click(screen.getByRole("button", { name: "수신함, 미해결 2개" }));
+    await user.click(screen.getByRole("button", { name: "수신함, 미해결 4개" }));
     expect(await screen.findByText("CRM 고객 데이터 읽기")).toBeInTheDocument();
   });
 
@@ -302,6 +302,23 @@ describe("AgentOS native data flow", () => {
     await user.click(blockedSource);
     expect(screen.queryByRole("dialog", { name: "수신함" })).not.toBeInTheDocument();
     expect(screen.getByRole("main", { name: "파트너 계약서 검토" })).toBeInTheDocument();
+  });
+
+  it("수신함은 검토 대기 개선을 집계하고 해당 개선 상세로 이동한다", async () => {
+    const user = userEvent.setup();
+    render(<App service={service()} />);
+
+    await user.click(await screen.findByRole("button", { name: "수신함, 미해결 4개" }));
+    const panel = await screen.findByRole("dialog", { name: "수신함" });
+    const improvement = within(panel).getByRole("button", {
+      name: "개선 검토 열기: 임시로 만든 계량분석 팀을 조직에 남깁니다.",
+    });
+    expect(improvement).toHaveTextContent("검토 대기");
+
+    await user.click(improvement);
+    expect(screen.queryByRole("dialog", { name: "수신함" })).not.toBeInTheDocument();
+    const growth = await screen.findByRole("main", { name: "개선" });
+    expect(within(growth).getByRole("heading", { name: "임시로 만든 계량분석 팀을 조직에 남깁니다." })).toBeInTheDocument();
   });
 
   it("실행 자율성은 설정에서 실제 서비스 조회를 사용한다", async () => {
