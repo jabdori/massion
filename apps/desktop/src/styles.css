@@ -1,0 +1,259 @@
+@import "tailwindcss";
+@import "pretendard/dist/web/variable/pretendardvariable.css";
+@import "@fontsource/geist-mono/400.css";
+@import "@fontsource/geist-mono/500.css";
+
+:root {
+  color-scheme: dark;
+
+  /* DESIGN.md의 네 단계 깊이. 그림자를 쓰지 않으므로 깊이는 이 네 값과 1px 선이 전부입니다. */
+  /*
+   * 깊이를 층위와 1px 선으로만 만들기로 했으므로 그 둘이 실제로 보여야 합니다.
+   * 이전 값은 면 분리 1.048, 선 1.279로 사실상 보이지 않았습니다.
+   */
+  --bg-0: #0e0e10;
+  --bg-1: #191a1d;
+  --bg-2: #1f2024;
+  --bg-3: #2a2b30;
+  --line: #2e2f34;
+  --line-strong: #3a3b42;
+
+  --fg: #ededef;
+  --fg-2: #a0a0a8;
+  /*
+   * 11px 메타 텍스트(시각·checksum·경로·adapter 버전)에 씁니다.
+   * 메타가 얹히는 세 면 bg-0·bg-1·bg-2 모두에서 WCAG AA 4.5:1을 넘겨야 합니다.
+   * 이전 #6e6e76은 bg-0에서 3.82였고, #82828a는 bg-2에서 4.27로 부족했습니다.
+   */
+  --fg-3: #8a8a92;
+
+  /*
+   * 에이전트 색. 아바타·화자 이름·좌측 레일·진행률 막대 네 곳에만 씁니다.
+   * 버튼·테두리·배경에 쓰면 "지금 누가 말하고 있나"를 읽는 능력이 죽습니다.
+   *
+   * 슬롯은 역할이 아니라 정체성(handle)에 붙습니다. 역할에 붙이면 같은 역할이
+   * 병렬로 셋 돌 때 색이 전부 같아져서 구분이 불가능해집니다.
+   * 배정은 @massion/application의 agentIdentityToken이 소유합니다.
+   *
+   * 노랑·초록 계열은 넣지 않습니다. 노랑은 "사람이 필요함" 예약어이고,
+   * 초록은 성공 표시로 오독됩니다.
+   */
+  --agent-0: #e4e4e8;
+  --agent-1: #7c9eff;
+  --agent-2: #4fc3a1;
+  --agent-3: #c99bff;
+  --agent-4: #6fd3e8;
+  --agent-5: #f58fb0;
+  --agent-6: #e88ad8;
+  --agent-7: #8fa8c4;
+  /* 아직 조직에 없는 노드. 채우지 않고 점선으로만 표기합니다. */
+  --agent-provisional: #9ba8c4;
+  --user: #3a3a40;
+
+  /* 예약어. gate는 사람이 필요한 곳에만, halt는 차단·실패에만 씁니다. 초록은 없습니다. */
+  --gate: #f5c451;
+  --gate-ink: #241d07;
+  --gate-wash: #231d0e;
+  --gate-border: #4a3c15;
+  --halt: #ff6b6b;
+
+  /* scope:"work"와 미승인 표기. 점선은 이 두 뜻으로만 씁니다. */
+  --provisional-border: 1px dashed var(--agent-provisional);
+
+  /* 기존 유틸리티·shadcn 토큰 호환 별칭 */
+  --canvas: var(--bg-0);
+  --chrome: var(--bg-1);
+  --surface: var(--bg-2);
+  --raised: var(--bg-3);
+  --surface-1: var(--bg-1);
+  --surface-2: var(--bg-2);
+  --border: var(--line);
+  --control: var(--line-strong);
+  --primary: var(--fg);
+  --secondary: var(--fg-2);
+  --muted: var(--fg-3);
+  /*
+   * accent는 중성 강조입니다. gate로 이어붙이면 bg-accent를 쓰는 모든 장식이 노랑이 되고
+   * "노랑 = 사람이 필요함" 예약어가 무의미해집니다. gate는 반드시 명시적으로만 씁니다.
+   */
+  --accent: var(--fg);
+  --accent-ink: var(--bg-0);
+  --danger: var(--halt);
+
+  /* 초점 표시는 gate를 쓰지 않습니다. 노랑은 "사람이 필요함" 전용어입니다. */
+  --focus-ring: var(--agent-strategy);
+  --selection-background: color-mix(in srgb, var(--agent-strategy) 32%, transparent);
+  --selection-foreground: var(--fg);
+  --overlay: rgb(0 0 0 / 0.6);
+}
+
+@theme inline {
+  --color-bg-0: var(--bg-0);
+  --color-bg-1: var(--bg-1);
+  --color-bg-2: var(--bg-2);
+  --color-bg-3: var(--bg-3);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-fg: var(--fg);
+  --color-fg-2: var(--fg-2);
+  --color-fg-3: var(--fg-3);
+
+  --color-agent-0: var(--agent-0);
+  --color-agent-1: var(--agent-1);
+  --color-agent-2: var(--agent-2);
+  --color-agent-3: var(--agent-3);
+  --color-agent-4: var(--agent-4);
+  --color-agent-5: var(--agent-5);
+  --color-agent-6: var(--agent-6);
+  --color-agent-7: var(--agent-7);
+  --color-agent-provisional: var(--agent-provisional);
+  --color-user: var(--user);
+
+  --color-gate: var(--gate);
+  --color-gate-ink: var(--gate-ink);
+  --color-gate-wash: var(--gate-wash);
+  --color-gate-border: var(--gate-border);
+  --color-halt: var(--halt);
+
+  --color-canvas: var(--canvas);
+  --color-chrome: var(--chrome);
+  --color-surface-1: var(--surface-1);
+  --color-surface-2: var(--surface-2);
+  --color-surface: var(--surface);
+  --color-raised: var(--raised);
+
+  --color-background: var(--canvas);
+  --color-foreground: var(--fg);
+  --color-card: var(--bg-1);
+  --color-card-foreground: var(--fg);
+  --color-popover: var(--bg-2);
+  --color-popover-foreground: var(--fg);
+  --color-border: var(--line);
+  --color-input: var(--line-strong);
+  --color-ring: var(--focus-ring);
+  --color-control: var(--line-strong);
+  --color-primary: var(--fg);
+  --color-primary-foreground: var(--bg-0);
+  --color-secondary: var(--fg-2);
+  --color-secondary-foreground: var(--fg);
+  --color-muted: var(--fg-3);
+  --color-muted-foreground: var(--fg-3);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-ink);
+  --color-accent-ink: var(--accent-ink);
+  --color-danger: var(--halt);
+  --color-destructive: var(--halt);
+  --color-destructive-foreground: var(--bg-0);
+  --color-sidebar: var(--chrome);
+  --color-sidebar-foreground: var(--fg);
+  --color-sidebar-primary: var(--fg);
+  --color-sidebar-primary-foreground: var(--bg-0);
+  --color-sidebar-accent: var(--bg-3);
+  --color-sidebar-accent-foreground: var(--fg);
+  --color-sidebar-border: var(--line);
+  --color-sidebar-ring: var(--focus-ring);
+
+  --font-sans: "Pretendard Variable", Pretendard, ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, monospace;
+
+  /* 화면 제목 16px을 넘지 않습니다. 위계는 크기가 아니라 무게와 색으로 만듭니다. */
+  --text-label: 10px;
+  --text-label--line-height: 14px;
+  --text-label--letter-spacing: 0.08em;
+  --text-label--font-weight: 600;
+  --text-figure: 11px;
+  --text-figure--line-height: 16px;
+  --text-speaker: 12px;
+  --text-speaker--line-height: 18px;
+  --text-speaker--font-weight: 500;
+  --text-body: 13px;
+  --text-body--line-height: 20px;
+  --text-title: 16px;
+  --text-title--line-height: 24px;
+  --text-title--letter-spacing: -0.02em;
+  --text-title--font-weight: 600;
+
+  --spacing: 0.25rem;
+  --radius-sm: 3px;
+  --radius-md: 5px;
+  --radius-lg: 7px;
+}
+
+* {
+  box-sizing: border-box;
+  scrollbar-color: var(--line-strong) transparent;
+  scrollbar-width: thin;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  min-width: 1180px;
+  min-height: 720px;
+  margin: 0;
+  overflow: hidden;
+}
+
+body {
+  overflow: hidden;
+  background: var(--bg-0);
+  color: var(--fg);
+  font-family: "Pretendard Variable", Pretendard, ui-sans-serif, system-ui, sans-serif;
+  font-size: 13px;
+  line-height: 20px;
+  text-rendering: optimizeLegibility;
+  /*
+   * macOS 다크 배경에서 antialiased는 밝은 글자의 획을 얇게 만듭니다.
+   * 대비는 같아도 흐려 보이므로 어두운 테마에서는 쓰지 않습니다.
+   */
+}
+
+/* 라운드·토큰·비용·개정·경과가 흔들리면 스캔이 불가능해집니다. */
+body,
+input,
+button,
+table {
+  font-variant-numeric: tabular-nums;
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+}
+
+button:not(:disabled),
+summary {
+  cursor: pointer;
+}
+
+summary::-webkit-details-marker {
+  display: none;
+}
+
+:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
+}
+
+::selection {
+  background: var(--selection-background);
+  color: var(--selection-foreground);
+}
+
+.app-shell {
+  height: 100%;
+  max-height: 100dvh;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
