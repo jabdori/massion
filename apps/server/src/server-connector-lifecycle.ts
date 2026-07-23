@@ -66,7 +66,7 @@ export class ServerConnectorLifecycleService {
     const counts = await this.database.transaction(async (transaction) => {
       const [connectors] = await transaction.query<[Array<{ connector_id: string }>]>(
         `UPDATE subscription_connector SET status = 'offline', updated_at = $now
-         WHERE trust_origin = 'server-managed' AND status = 'ready'
+         WHERE trust_origin = 'server-managed' AND execution_kind = 'agent-runtime' AND status = 'ready'
          RETURN BEFORE;`,
         { now },
       );
@@ -74,7 +74,7 @@ export class ServerConnectorLifecycleService {
         `UPDATE subscription_account SET status = 'offline', version += 1, updated_at = $now
          WHERE status = 'active' AND [organization_id, connector_id] IN (
            SELECT VALUE [organization_id, connector_id] FROM subscription_connector
-           WHERE trust_origin = 'server-managed'
+           WHERE trust_origin = 'server-managed' AND execution_kind = 'agent-runtime'
          )
          RETURN BEFORE;`,
         { now },

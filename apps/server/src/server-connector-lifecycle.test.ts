@@ -23,8 +23,8 @@ describe("서버 관리형 Connector 수명주기", () => {
     provisioning = await ServerConnectorProvisioningService.create(database, organizations, {
       now: () => now,
       runtimeAttestor: {
-        inspectArtifact: async () => ({
-          runtimeId: "codex",
+        inspectArtifact: async (input) => ({
+          runtimeId: input.runtimeId,
           runtimeArtifactDigest: "a".repeat(64),
           version: "1.0.0",
         }),
@@ -42,6 +42,13 @@ describe("서버 관리형 Connector 수명주기", () => {
       providerId: "openai-codex",
       executionKind: "agent-runtime",
       runtimeId: "codex",
+    });
+    await provisioning.provision(context, {
+      commandId: "provision-zai",
+      connectorId: "server-zai",
+      providerId: "zai-coding-plan",
+      executionKind: "model",
+      runtimeId: "openai-model",
     });
     await database.query(
       `CREATE subscription_account CONTENT {
@@ -62,17 +69,25 @@ describe("서버 관리형 Connector 수명주기", () => {
         provider_id: 'openai-codex', alias: 'Edge Codex', scope: 'personal', connector_id: 'edge-codex',
         profile_fingerprint: $edge_fingerprint, billing_kind: 'consumer-subscription', status: 'active',
         consent_version: 0, version: 1, created_at: $now, updated_at: $now
+      };
+      CREATE subscription_account CONTENT {
+        account_id: 'zai-account', organization_id: $organization_id, owner_user_id: $owner_user_id,
+        provider_id: 'zai-coding-plan', alias: 'Z.ai', scope: 'personal', connector_id: 'server-zai',
+        profile_fingerprint: $zai_fingerprint, billing_kind: 'coding-plan', status: 'active',
+        consent_version: 0, version: 1, created_at: $now, updated_at: $now
       };`,
       {
         organization_id: context.organizationId,
         owner_user_id: context.userId,
         server_fingerprint: "b".repeat(64),
         edge_fingerprint: "c".repeat(64),
+        zai_fingerprint: "d".repeat(64),
         now,
         expires_at: new Date(now.getTime() + 60_000),
       },
     );
     await provisioning.attestHealth(context, { commandId: "attest-server-1", connectorId: "server-codex" });
+    await provisioning.attestHealth(context, { commandId: "attest-zai-1", connectorId: "server-zai" });
   });
 
   afterEach(async () => await database.close());
@@ -90,6 +105,7 @@ describe("서버 관리형 Connector 수명주기", () => {
     expect(connectors).toEqual([
       { connector_id: "edge-codex", status: "ready" },
       { connector_id: "server-codex", status: "offline" },
+      { connector_id: "server-zai", status: "ready" },
     ]);
     const [accounts] = await database.query<[Array<{ account_id: string; status: string; version: number }>]>(
       "SELECT account_id, status, version FROM subscription_account ORDER BY account_id ASC;",
@@ -97,6 +113,7 @@ describe("서버 관리형 Connector 수명주기", () => {
     expect(accounts).toEqual([
       { account_id: "edge-account", status: "active", version: 1 },
       { account_id: "server-account", status: "offline", version: 3 },
+      { account_id: "zai-account", status: "active", version: 1 },
     ]);
     expect(transitions).toHaveBeenCalledWith({ phase: "startup", connectorCount: 1, accountCount: 1 });
   });

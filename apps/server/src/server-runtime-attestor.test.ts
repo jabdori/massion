@@ -113,6 +113,7 @@ describe("서버 bundled runtime 건강 증명", () => {
     await expect(attestor.attestHealth(input)).resolves.toEqual({
       runtimeId: "codex",
       runtimeArtifactDigest: "a".repeat(64),
+      version: "0.144.1",
       processGeneration: 1,
       processState: "new-process",
     });
@@ -120,6 +121,7 @@ describe("서버 bundled runtime 건강 증명", () => {
     await expect(attestor.attestHealth({ ...input, previousProcessGeneration: 1 })).resolves.toEqual({
       runtimeId: "codex",
       runtimeArtifactDigest: "a".repeat(64),
+      version: "0.144.1",
       processGeneration: 1,
       processState: "same-process",
     });
@@ -127,6 +129,7 @@ describe("서버 bundled runtime 건강 증명", () => {
     await expect(attestor.attestHealth({ ...input, previousProcessGeneration: 1 })).resolves.toEqual({
       runtimeId: "codex",
       runtimeArtifactDigest: "a".repeat(64),
+      version: "0.144.1",
       processGeneration: 2,
       processState: "new-process",
     });
@@ -377,6 +380,7 @@ describe("서버 bundled runtime 건강 증명", () => {
     ).resolves.toEqual({
       runtimeId: "openai-model",
       runtimeArtifactDigest: "c".repeat(64),
+      version: "1.0.0+openai-compatible.2.0.59",
       processGeneration: 1,
       processState: "new-process",
     });

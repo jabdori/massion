@@ -115,6 +115,8 @@ export interface VerifiedServerRuntimeArtifact {
 export interface VerifiedServerConnectorHealth {
   readonly runtimeId: string;
   readonly runtimeArtifactDigest: string;
+  /** 현재 검증한 runtime 버전입니다. 이전 attestor mock과의 호환을 위해 선택값으로 둡니다. */
+  readonly version?: string;
   readonly processGeneration: number;
   readonly processState: "same-process" | "new-process";
 }
@@ -378,10 +380,14 @@ export class ServerConnectorProvisioningService {
           }
           const attestedRuntimeId = requireIdentifier(attested.runtimeId, "검증된 Runtime ID");
           const attestedArtifactDigest = requireDigest(attested.runtimeArtifactDigest);
+          const attestedVersion = requireVersion(attested.version ?? connector.version);
           if (connector.runtime_id !== attestedRuntimeId)
             throw new Error("서버 Connector Runtime ID가 일치하지 않습니다");
-          if (connector.runtime_artifact_digest !== attestedArtifactDigest) {
+          if (connector.execution_kind === "agent-runtime" && connector.runtime_artifact_digest !== attestedArtifactDigest) {
             throw new Error("서버 Connector runtime artifact digest가 일치하지 않습니다");
+          }
+          if (connector.execution_kind === "agent-runtime" && connector.version !== attestedVersion) {
+            throw new Error("서버 Connector runtime version이 일치하지 않습니다");
           }
           if (!Number.isSafeInteger(attested.processGeneration) || attested.processGeneration < 1) {
             throw new Error("Process generation은 1 이상의 안전한 정수여야 합니다");
@@ -410,7 +416,8 @@ export class ServerConnectorProvisioningService {
               : "process_generation = $previous_process_generation";
           const [updated] = await tx.query<[ServerConnectorRecord[]]>(
             `UPDATE subscription_connector
-         SET process_generation = $process_generation, last_health_at = $now,
+         SET version = $version, runtime_artifact_digest = $runtime_artifact_digest,
+             process_generation = $process_generation, last_health_at = $now,
              status = 'ready', updated_at = $now
          WHERE organization_id = $organization_id AND connector_id = $connector_id
            AND trust_origin = 'server-managed' AND status != 'revoked'
@@ -419,6 +426,8 @@ export class ServerConnectorProvisioningService {
             {
               organization_id: context.organizationId,
               connector_id: connectorId,
+              version: attestedVersion,
+              runtime_artifact_digest: attestedArtifactDigest,
               process_generation: attested.processGeneration,
               ...(previousProcessGeneration === undefined
                 ? {}

@@ -138,6 +138,47 @@ describe("서버 관리형 Connector 프로비저닝", () => {
     });
   });
 
+  it("저장된 API key 모델은 앱 runtime 갱신 뒤 현재 artifact로 다시 건강 증명한다", async () => {
+    const modelInput = {
+      commandId: randomUUID(),
+      connectorId: "server-zai-1",
+      providerId: "zai-coding-plan",
+      executionKind: "model" as const,
+      runtimeId: "openai-model",
+    };
+    verifiedArtifact = {
+      runtimeId: "openai-model",
+      runtimeArtifactDigest: "b".repeat(64),
+      version: "1.0.0+openai-compatible.2.0.59",
+    };
+    verifiedHealth = {
+      runtimeId: "openai-model",
+      runtimeArtifactDigest: "b".repeat(64),
+      version: "1.0.0+openai-compatible.2.0.59",
+      processGeneration: 1,
+      processState: "new-process",
+    };
+    await service.provision(ownerContext, modelInput);
+    await service.attestHealth(ownerContext, { commandId: randomUUID(), connectorId: modelInput.connectorId });
+    await service.markOffline(ownerContext, { commandId: randomUUID(), connectorId: modelInput.connectorId });
+
+    verifiedHealth = {
+      ...verifiedHealth,
+      runtimeArtifactDigest: "c".repeat(64),
+      version: "1.0.0+openai-compatible.2.0.60",
+      processGeneration: 2,
+    };
+
+    await expect(
+      service.attestHealth(ownerContext, { commandId: randomUUID(), connectorId: modelInput.connectorId }),
+    ).resolves.toMatchObject({
+      status: "ready",
+      runtimeArtifactDigest: "c".repeat(64),
+      version: "1.0.0+openai-compatible.2.0.60",
+      processGeneration: 2,
+    });
+  });
+
   it("Provider catalog의 실행 종류와 capability를 정확히 강제하고 경로 형태 runtime ID를 저장하지 않는다", async () => {
     await expect(
       service.provision(ownerContext, {

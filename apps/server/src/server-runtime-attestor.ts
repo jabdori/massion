@@ -296,13 +296,14 @@ export class BundledServerConnectorRuntimeAttestor implements ServerConnectorRun
     const artifact = isBundledAgentRuntime(selected)
       ? await this.inspectRuntime(selected)
       : await this.modelArtifact(selected);
+    const isModelRuntime = !isBundledAgentRuntime(selected);
     if (
       (isBundledAgentRuntime(selected)
         ? input.executionKind !== "agent-runtime" || input.providerId !== expectedProvider(selected)
         : input.executionKind !== "model" || !isOpenAiCompatibleModelProvider(input.providerId)) ||
       artifact.runtimeId !== selected ||
-      artifact.runtimeArtifactDigest !== input.runtimeArtifactDigest ||
-      artifact.version !== input.version
+      (!isModelRuntime &&
+        (artifact.runtimeArtifactDigest !== input.runtimeArtifactDigest || artifact.version !== input.version))
     ) {
       throw new Error("서버 Runtime artifact 건강 계보가 일치하지 않습니다");
     }
@@ -374,6 +375,7 @@ export class BundledServerConnectorRuntimeAttestor implements ServerConnectorRun
       return {
         runtimeId: selected,
         runtimeArtifactDigest: artifact.runtimeArtifactDigest,
+        version: artifact.version,
         processGeneration: activeGeneration,
         processState: "same-process",
       };
@@ -388,6 +390,7 @@ export class BundledServerConnectorRuntimeAttestor implements ServerConnectorRun
     return {
       runtimeId: selected,
       runtimeArtifactDigest: artifact.runtimeArtifactDigest,
+      version: artifact.version,
       processGeneration,
       processState: "new-process",
     };
