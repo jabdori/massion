@@ -118,7 +118,7 @@ Massion은 모델을 고를 수 있는 채팅 앱도, 에이전트 여러 개를
 - 복수 Provider 계정의 quota 소진·fallback 실증. 단일 GLM 계정만 검증됐습니다.
 - Claude 소비자 구독 실계정 UAT.
 - 접근성 실측. 코드 구현은 있으나 스크린리더 실사용 확인은 하지 않았습니다.
-- 데스크톱 자체의 사용자 UAT. 현재 데스크톱 구현체는 커밋되지 않은 작업 트리 상태입니다.
+- 데스크톱 자체의 사용자 UAT. 데스크톱 구현체는 커밋됐고 fixture 기반 테스트는 통과하지만, Tauri → bridge → daemon → 실제 Provider를 거치는 사용자 조작 검증은 아직 없습니다.
 
 ## Product Principles
 

@@ -76,7 +76,7 @@ interface GrowthEffectSample { score · observationCount · contract }
 
 ## 3. 계약이 버리는 것
 
-조회는 넷뿐이고 command는 **0개**입니다.
+조회는 넷뿐입니다. 명령 레지스트리에는 `growth.configure`·`growth.adopt`·`growth.revert`가 이미 등록돼 있지만 `ApplicationCommandMapV1`에 타입이 없고 데스크톱 서비스가 호출하지 않습니다. `evaluate`·명시적 `reject`·효과 관측은 공개 명령 자체가 없습니다.
 
 ```
 growth.configuration.get · growth.effects · growth.memories · growth.suggestions
@@ -112,10 +112,10 @@ growth.configuration.get · growth.effects · growth.memories · growth.suggesti
 
 | command | 도메인 | 주의 |
 |---|---|---|
-| `growth.suggestion.evaluate` | `evaluation.ts` `evaluate()` | 승인 전 필수 단계 |
-| `growth.suggestion.approve` | `adoption.ts` `adopt()` | `evaluationRunId` · `expectedEvaluationInputHash` · `expectedTargetChecksum`을 화면이 갖고 있어야 호출 가능 |
+| `growth.suggestion.evaluate` | `evaluation.ts` `evaluate()` | 새 공개 명령. 승인 전 필수 단계 |
+| `growth.suggestion.approve` | 기존 `growth.adopt` → `adoption.ts` `adopt()` | 제품 용어에 맞춰 별칭을 추가하거나 기존 명령을 타입화합니다. `evaluationRunId` · `expectedEvaluationInputHash` · `expectedTargetChecksum`이 필요합니다. |
 | `growth.suggestion.reject` | | 거부도 기록으로 남아야 함 |
-| `growth.adoption.revert` | `revert.ts` | |
+| `growth.adoption.revert` | 기존 `growth.revert` → `revert.ts` | 기존 명령을 타입화하고 데스크톱에 연결합니다. |
 | `growth.effect.observe` | `effect.ts` `observe()` · `captureBaseline()` | 승인 시 자동인지 별도인지 도메인 테스트로 확인 |
 
 **Governance 게이트를 반드시 통과시키십시오.** `packages/growth/src/governance-adapter.ts`와 `GrowthAdoptionAuthorizer`가 있습니다. 헌법 4.6이 *"자기수정의 버전, 평가와 되돌리기"*를 사람의 통제 대상으로 규정합니다.
@@ -155,7 +155,7 @@ growth.configuration.get · growth.effects · growth.memories · growth.suggesti
 
 `apps/desktop/src/app.tsx` `GrowthSurface`는 위 데이터가 없어 다음만 보여줍니다: `summary` · `operation` · `targetKind` · `rationale` · `expectedEffect` · `riskSummary` · `workId` · `status`.
 
-승인·거부 버튼은 **비활성**이고 *"승인·거부 명령이 아직 연결되지 않았습니다"*가 붙어 있습니다. `app.integration.test.tsx`가 `toBeDisabled()`로 이를 고정하므로, 명령을 연결하는 사람이 그 테스트를 고쳐야만 통과합니다.
+승인·거부 버튼은 **비활성**이고 *"승인·거절 명령이 아직 연결되지 않았습니다"*가 붙어 있습니다. `app.integration.test.tsx`가 `toBeDisabled()`로 이를 고정하므로, 기존 `growth.adopt`와 새 거절 경로를 연결하는 사람이 그 테스트를 고쳐야만 통과합니다.
 
 화면은 fixture로 완성본 형태를 이미 그려 두었습니다: `어디서 나왔나`(source reference를 종류별로 푼 목록) · `왜` · `평가`(신호를 `필수`/`보강`/`반대` × `결정론`/`독립 검증`/`자기평가`로 표시) · `무엇이 바뀌나`(전후 diff) · `승인하면` · `적용 후 측정`. `growthBlockers()`가 평가 미실행·필수 신호 실패·대상 drift를 승인 불가 사유로 미리 계산합니다.
 

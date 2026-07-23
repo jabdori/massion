@@ -159,7 +159,7 @@ apps/server/src/product.ts:465  deltaObserver: executionStream  ← 주입 지�
 | 임시/영속 분리, 점선 | `scope`는 읽지만 계약이 버림, `work_id` 없음 | `OrganizationNodeViewV1`에 `scope`·`work_id` 추가 |
 | 부서·팀·팀장·구성원 구분 | `NodeRole`은 `orchestrator`·`coordinator`·`operator`뿐이며 조직 단위와 Agent를 구분하지 않음 | 조직 단위 종류와 Agent 소속을 도메인에서 분리해 조회 계약에 노출 |
 
-**지도(B)의 승격 조건:** 지금 지도는 읽기 전용(방향 잡기·이동)입니다. ① `move`/`split`/`merge` command가 계약에 열리고 ② 위 `parent_handle`이 오면, 이 지도가 그대로 **드래그 편성 캔버스**가 됩니다(`@xyflow/react` 이미 설치됨, `OrgMap`의 `nodesDraggable`만 열면 됨). 그 전까지 편성은 화면에 없습니다.
+**지도(B)의 승격 조건:** 지금 지도는 읽기 전용(방향 잡기·이동)입니다. 도메인과 범용 `organization.command`에는 `move`/`split`/`merge`가 이미 있지만 `ApplicationCommandMapV1` 타입과 데스크톱 전용 메서드가 없습니다. ① 이 명령을 타입화해 화면에 연결하고 ② 위 `parent_handle`이 실 조회로 오면, 지도가 **드래그 편성 캔버스**로 승격할 수 있습니다(`@xyflow/react` 이미 설치됨). 드래그는 곧바로 적용하지 않고 영향·승인·버전 충돌을 확인하는 제안을 먼저 만듭니다.
 
 ## 8. 완료 판정
 

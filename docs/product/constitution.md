@@ -323,7 +323,7 @@ Massion을 다음 중 하나로 축소하지 않습니다.
 
 2026-07-24 기준. 표면 여섯(홈, 업무, 조직, 개선, 확장, 설정)과 전역 수신함이 구현돼 있습니다. 도메인 표면은 같은 3열 골격을 쓰고 수신함은 현재 표면 위에 열립니다.
 
-- 남은 격차는 화면이 아니라 **계약**입니다. 표면을 완성본 기준으로 만들면서 도메인에는 있고 계약이 버리는 것이 반복해서 드러났습니다. 여섯 건 모두 인계 문서로 남겼습니다(9.3·9.4·9.5, [설정 조회 계약](../phases/30-surface-parity-agent-ux/settings-contract-handoff.md)).
+- 남은 격차는 화면 추가보다 **계약과 실제 실행 연결**에 집중돼 있습니다. 표면을 완성본 기준으로 만들면서 도메인에는 있고 Application 계약이나 생산 호출 경로가 버리는 것이 반복해서 드러났습니다. 현재 네 인계 문서가 개선, 협업·조직, 확장, 설정 범위를 소유합니다(9.3·9.4·9.5, [설정 조회 계약](../phases/30-surface-parity-agent-ux/settings-contract-handoff.md)).
 - 조직 화면은 **구조(A) + 지도(B) 하이브리드**로 완성본 기준으로 그립니다(2026-07-24). 본문은 자식이 있는 노드를 접을 수 있는 중첩 구조, 우측은 전체 위치를 보여주는 지도이며 A가 읽기의 중심임을 유지하도록 55:45로 나눕니다. `NodeRole`은 총괄·조율·실행만 뜻하므로 `coordinator`를 부서나 팀으로 번역하지 않습니다. 에이전트는 `agentIdentityToken`으로 업무 화면과 같은 이름을 쓰고, scope:"work" 임시 팀은 분리·점선으로 구분합니다.
 - 다만 **읽기 전용**입니다. 편성·분리·병합·Staffing 명령이 계약에 없고, `parent_handle`은 조회 쿼리가 가져오지 않으며 `scope`·`work_id`는 `OrganizationNodeViewV1`에 없습니다. 따라서 **실 데이터로는 계층·임시/영속 구분을 그릴 수 없습니다.** 지금 화면은 fixture로 완성본을 고정해 둔 상태입니다([협업 런타임 핸드오프](../phases/30-surface-parity-agent-ux/agent-collaboration-runtime-handoff.md) §7).
 - 확장 화면은 Capability를 먼저 보이지만 **설치된 확장의 Capability는 계약이 주지 않아 비어 있습니다.** 9.5를 보십시오.
@@ -339,7 +339,7 @@ Massion을 다음 중 하나로 축소하지 않습니다.
 ### 9.3 개선(자가개선)
 
 - **도메인은 4.8을 정확히 구현하고 있습니다.** 평가 게이트(`proposed → evaluated → awaiting-review → adopted`), 신호 그룹 `required`/`supporting`/`conflict`, 신호 출처 `deterministic`/`independent`/`model-self`, 전후 버전(`beforeVersionId`/`afterVersionId`), 측정 기반 효과 판정(표본 수·임계값·단위)이 모두 존재합니다.
-- **Application 계약은 판정 결과만 내보내고 근거를 버립니다.** 조회는 넷뿐이고 command는 0개입니다. `growth.suggestions` 투영이 `patch_json`(전후 diff), `source_reference_ids`(원인 Event·Evidence), `reflection_run_id`, `revision`을 버립니다. 평가 실행과 신호 영수증은 조회 자체가 없고, 효과는 측정값 없이 판정 한 단어만 전달됩니다.
+- **Application 조회 계약은 판정 결과만 내보내고 근거를 버립니다.** 조회는 넷뿐이며 `growth.suggestions` 투영이 `patch_json`(전후 diff), `source_reference_ids`(원인 Event·Evidence), `reflection_run_id`, `revision`을 버립니다. 평가 실행과 신호 영수증은 조회 자체가 없고, 효과는 측정값 없이 판정 한 단어만 전달됩니다. 명령 레지스트리에는 `growth.configure`·`growth.adopt`·`growth.revert`가 이미 있지만 타입이 지정된 `ApplicationCommandMapV1`과 데스크톱 서비스에 연결되지 않았습니다. `evaluate`·명시적 `reject`·효과 관측 명령도 공개 제품 경로에 없습니다.
 - 그래서 화면은 "무엇을 바꾸자"만 보여줄 수 있고 "왜 믿어야 하는가"를 보여줄 수 없습니다. **근거 없는 승인 버튼**이며, 4.8이 막으려던 것을 화면에서 무력화합니다.
 - 데스크톱 `개선` 표면은 이 제약 아래 읽기 전용입니다. 승인·거절 버튼은 비활성이며 이유가 화면에 표시됩니다.
 - 인계 문서: [개선 평가·채택·효과 핸드오프](../phases/30-surface-parity-agent-ux/growth-adoption-handoff.md)
@@ -357,7 +357,7 @@ Massion을 다음 중 하나로 축소하지 않습니다.
 ### 9.5 Extension
 
 - Extension SDK·Host 패키지에는 manifest, 권한, artifact, worker와 lifecycle 계약이 있습니다.
-- 현재 서버 조립은 Extension Store schema만 생성하고 lifecycle, worker supervisor, capability broker와 gateway를 생산 실행 경로에 연결하지 않습니다.
+- 서버는 Extension lifecycle, worker supervisor와 gateway를 생산 Application 경로에 조립하고 Registry 설치도 같은 lifecycle을 사용합니다. 다만 설치된 확장의 Tool·Skill·조직 Template 선언을 Core Agent Runtime이 실제 Capability로 소비하는 연결은 없습니다.
 - 현재 공식 예시는 외부 연동 중심이며 Skill·Tool·조직 Template이 실제 Agent Runtime에 기여하는 완성 경로가 없습니다.
 - **Application 계약이 Capability 선언을 버립니다.** SDK에는 `ExtensionContributionDeclaration` 8종과 `ExtensionPermissionDeclaration` 8종이 있는데 `ExtensionInstallationViewV1`은 다섯 필드뿐이고 그중 어느 것도 Capability가 아닙니다. `registry.*` 조회 넷은 계약에 반환 타입 자체가 없어 `Promise<unknown>`입니다. 그래서 6절이 요구하는 *"조직에 추가된 Capability를 먼저"*를 **설치된 확장에 대해 만족할 수 없습니다.**
 - 인계 문서: [확장 Capability 핸드오프](../phases/30-surface-parity-agent-ux/extension-capability-handoff.md)

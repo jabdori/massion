@@ -55,7 +55,7 @@ export interface ExtensionInstallationViewV1 {
 - [ ] `registry.*` 넷이 `ApplicationQueryMapV1`에 타입과 함께 등록된다
 - [ ] 설치 → 승인 → 활성화 뒤 목록의 상태가 `starting → healthy`로 따라간다
 
-## 5. 범위 밖
+## 5. 후속 범위
 
-- Extension lifecycle·worker supervisor·capability broker의 생산 경로 연결 (헌법 9.5)
+- Extension lifecycle·worker supervisor·gateway와 Registry 설치는 서버 생산 경로에 이미 조립돼 있습니다. 남은 것은 설치 manifest의 Tool·Skill·조직 Template 선언을 Core Agent Runtime의 실제 Capability로 소비하고 Work·승인·감사에 연결하는 흐름입니다.
 - 설치된 확장의 권한 변경·비활성화 command
