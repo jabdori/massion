@@ -7,6 +7,7 @@ import type { CodeSearchResult } from "./search.js";
 import type { IndexStore } from "./index-store.js";
 import type { RepositoryStore } from "./repository-store.js";
 import {
+  EVIDENCE_BRIEF_KNOWLEDGE_MIGRATION,
   EVIDENCE_BRIEF_MIGRATION,
   EVIDENCE_CONTENT_MIGRATION,
   EVIDENCE_INDEX_MIGRATION,
@@ -76,7 +77,8 @@ export interface EvidenceBrief {
   readonly indexVersionId: string;
   readonly configurationChecksum: string;
   readonly query: string;
-  readonly status: "ready" | "stale_warning" | "blocked" | "failed";
+  readonly status: "ready" | "stale_warning" | "blocked" | "failed" | "no_match";
+  readonly scopeChecksum?: string;
   readonly references: readonly EvidenceReference[];
   readonly claims: readonly EvidenceClaim[];
   readonly checksum: string;
@@ -93,6 +95,15 @@ export interface CreateEvidenceBriefInput {
   readonly references: readonly EvidenceReferenceInput[];
 }
 
+export interface CreateNoMatchEvidenceBriefInput {
+  readonly commandId: string;
+  readonly workId: string;
+  readonly repositoryId: string;
+  readonly indexVersionId: string;
+  readonly query: string;
+  readonly scopeChecksum: string;
+}
+
 interface BriefRecord {
   readonly evidence_brief_id: string;
   readonly organization_id: string;
@@ -103,6 +114,8 @@ interface BriefRecord {
   readonly configuration_checksum: string;
   readonly query: string;
   readonly status: EvidenceBrief["status"];
+  readonly scope_checksum?: string;
+  readonly automatic_key?: string;
   readonly references_json: string;
   readonly claims_json: string;
   readonly checksum: string;
@@ -150,8 +163,10 @@ function briefChecksum(input: {
   readonly status: EvidenceBrief["status"];
   readonly references: readonly EvidenceReference[];
   readonly claims: readonly EvidenceClaim[];
+  readonly scopeChecksum?: string;
 }): string {
-  return sha256(canonicalJson(input));
+  const { scopeChecksum, ...core } = input;
+  return sha256(canonicalJson(scopeChecksum === undefined ? core : { ...core, scopeChecksum }));
 }
 
 export class EvidenceBriefStore {
@@ -175,6 +190,7 @@ export class EvidenceBriefStore {
       EVIDENCE_CONTENT_MIGRATION,
       EVIDENCE_BRIEF_MIGRATION,
       EVIDENCE_RESEARCH_MIGRATION,
+      EVIDENCE_BRIEF_KNOWLEDGE_MIGRATION,
     ]);
     return new EvidenceBriefStore(database, organizations, repositories, indexes, synthesis);
   }
@@ -344,6 +360,97 @@ export class EvidenceBriefStore {
     return this.view(records[0], true);
   }
 
+  public async createNoMatch(
+    context: TenantContext,
+    input: CreateNoMatchEvidenceBriefInput,
+  ): Promise<{ readonly brief: EvidenceBrief }> {
+    await this.organizations.verifyTenantContext(context);
+    if (!input.commandId.trim() || !input.workId.trim())
+      throw new Error("EvidenceBrief command와 Work ID가 필요합니다");
+    const query = input.query.trim();
+    if (!query || query.length > 4_000) throw new Error("EvidenceBrief query는 1자 이상 4,000자 이하여야 합니다");
+    if (!/^[a-f0-9]{64}$/u.test(input.scopeChecksum))
+      throw new Error("EvidenceBrief scope checksum은 SHA-256 형식이어야 합니다");
+    await this.repositories.getRepository(context, input.repositoryId);
+    const requestHash = sha256(canonicalJson(input));
+    const replayed = await this.replay(context.organizationId, input.commandId, requestHash);
+    if (replayed) return { brief: await this.getBrief(context, replayed.evidenceBriefId) };
+    const index = await this.repositories.getIndex(context, input.indexVersionId);
+    if (index.repositoryId !== input.repositoryId || !["complete", "superseded"].includes(index.status))
+      throw new Error("EvidenceBrief IndexVersion은 같은 Repository의 완전한 snapshot이어야 합니다");
+    await this.indexes.getSnapshot(context, input.indexVersionId);
+    const automaticKey = `${context.organizationId}:${input.workId}`;
+    const checksum = briefChecksum({
+      workId: input.workId,
+      repositoryId: input.repositoryId,
+      repositoryRevisionId: index.repositoryRevisionId,
+      indexVersionId: input.indexVersionId,
+      configurationChecksum: index.configurationChecksum,
+      query,
+      status: "no_match",
+      references: [],
+      claims: [],
+      scopeChecksum: input.scopeChecksum,
+    });
+    return await this.database.transaction(async (tx) => {
+      await this.organizations.verifyTenantContext(context, undefined, tx);
+      const repeated = await this.replay(context.organizationId, input.commandId, requestHash, tx);
+      if (repeated) return { brief: await this.getBrief(context, repeated.evidenceBriefId) };
+      const [existing] = await tx.query<[BriefRecord[]]>(
+        "SELECT * OMIT id FROM evidence_brief WHERE organization_id = $organization_id AND automatic_key = $automatic_key LIMIT 1;",
+        { organization_id: context.organizationId, automatic_key: automaticKey },
+      );
+      if (existing[0]) {
+        if (existing[0].scope_checksum !== input.scopeChecksum)
+          throw new Error("같은 Work의 automatic no-match EvidenceBrief scope가 다릅니다");
+        return { brief: this.view(existing[0], true) };
+      }
+      const evidenceBriefId = randomUUID();
+      const [created] = await tx.query<[BriefRecord[]]>(
+        "CREATE evidence_brief CONTENT { evidence_brief_id: $evidence_brief_id, organization_id: $organization_id, work_id: $work_id, repository_id: $repository_id, repository_revision_id: $repository_revision_id, index_version_id: $index_version_id, configuration_checksum: $configuration_checksum, query: $query, status: 'no_match', scope_checksum: $scope_checksum, automatic_key: $automatic_key, references_json: '[]', claims_json: '[]', checksum: $checksum, created_by_user_id: $created_by_user_id, created_at: time::now() } RETURN AFTER;",
+        {
+          evidence_brief_id: evidenceBriefId,
+          organization_id: context.organizationId,
+          work_id: input.workId,
+          repository_id: input.repositoryId,
+          repository_revision_id: index.repositoryRevisionId,
+          index_version_id: input.indexVersionId,
+          configuration_checksum: index.configurationChecksum,
+          query,
+          scope_checksum: input.scopeChecksum,
+          automatic_key: automaticKey,
+          checksum,
+          created_by_user_id: context.userId,
+        },
+      );
+      if (!created[0]) throw new Error("EvidenceBrief 생성 결과가 없습니다");
+      await tx.query(
+        "CREATE evidence_brief_event CONTENT { event_id: $event_id, organization_id: $organization_id, evidence_brief_id: $evidence_brief_id, repository_id: $repository_id, command_id: $command_id, request_hash: $request_hash, event_type: 'evidence_brief_created', payload_json: $payload_json, result_json: $result_json, actor_user_id: $actor_user_id, created_at: time::now() };",
+        {
+          event_id: randomUUID(),
+          organization_id: context.organizationId,
+          evidence_brief_id: evidenceBriefId,
+          repository_id: input.repositoryId,
+          command_id: input.commandId,
+          request_hash: requestHash,
+          payload_json: canonicalJson({ indexVersionId: input.indexVersionId, referenceCount: 0, claimCount: 0 }),
+          result_json: JSON.stringify({ evidenceBriefId }),
+          actor_user_id: context.userId,
+        },
+      );
+      return { brief: this.view(created[0], true) };
+    });
+  }
+
+  public async listByWork(context: TenantContext, workId: string): Promise<readonly EvidenceBrief[]> {
+    await this.organizations.verifyTenantContext(context);
+    const [records] = await this.database.query<[BriefRecord[]]>(
+      "SELECT * OMIT id FROM evidence_brief WHERE organization_id = $organization_id AND work_id = $work_id ORDER BY created_at ASC;",
+      { organization_id: context.organizationId, work_id: workId },
+    );
+    return records.map((record) => this.view(record, true));
+  }
+
   private async replay(
     organizationId: string,
     commandId: string,
@@ -365,17 +472,32 @@ export class EvidenceBriefStore {
     const claims = JSON.parse(record.claims_json) as EvidenceClaim[];
     if (
       verify &&
-      briefChecksum({
-        workId: record.work_id,
-        repositoryId: record.repository_id,
-        repositoryRevisionId: record.repository_revision_id,
-        indexVersionId: record.index_version_id,
-        configurationChecksum: record.configuration_checksum,
-        query: record.query,
-        status: record.status,
-        references,
-        claims,
-      }) !== record.checksum
+      briefChecksum(
+        record.scope_checksum === undefined
+          ? {
+              workId: record.work_id,
+              repositoryId: record.repository_id,
+              repositoryRevisionId: record.repository_revision_id,
+              indexVersionId: record.index_version_id,
+              configurationChecksum: record.configuration_checksum,
+              query: record.query,
+              status: record.status,
+              references,
+              claims,
+            }
+          : {
+              workId: record.work_id,
+              repositoryId: record.repository_id,
+              repositoryRevisionId: record.repository_revision_id,
+              indexVersionId: record.index_version_id,
+              configurationChecksum: record.configuration_checksum,
+              query: record.query,
+              status: record.status,
+              references,
+              claims,
+              scopeChecksum: record.scope_checksum,
+            },
+      ) !== record.checksum
     ) {
       throw new Error(`EvidenceBrief checksum이 일치하지 않습니다: ${record.evidence_brief_id}`);
     }
@@ -389,6 +511,7 @@ export class EvidenceBriefStore {
       configurationChecksum: record.configuration_checksum,
       query: record.query,
       status: record.status,
+      ...(record.scope_checksum === undefined ? {} : { scopeChecksum: record.scope_checksum }),
       references,
       claims,
       checksum: record.checksum,

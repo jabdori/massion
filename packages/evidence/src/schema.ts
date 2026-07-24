@@ -312,3 +312,13 @@ DEFINE FIELD workspace_guard_key ON evidence_repository TYPE option<string>;
 DEFINE INDEX evidence_repository_workspace_guard ON evidence_repository FIELDS workspace_guard_key UNIQUE;
 `,
 );
+
+export const EVIDENCE_BRIEF_KNOWLEDGE_MIGRATION = defineMigration(
+  "0034-evidence-brief-knowledge",
+  `
+DEFINE FIELD OVERWRITE status ON evidence_brief TYPE string ASSERT $value IN ['ready', 'stale_warning', 'blocked', 'failed', 'no_match'];
+DEFINE FIELD scope_checksum ON evidence_brief TYPE option<string>;
+DEFINE FIELD automatic_key ON evidence_brief TYPE option<string>;
+DEFINE INDEX evidence_brief_automatic_key ON evidence_brief FIELDS automatic_key UNIQUE;
+`,
+);

@@ -241,6 +241,57 @@ describe("immutable EvidenceBrief", () => {
     await expect(store.getBrief(context, created.brief.evidenceBriefId)).rejects.toThrow("checksum");
   });
 
+  it("자동 no-match 영수증은 Work와 scope별로 하나만 만들고 tenant와 checksum을 경계로 지킨다", async () => {
+    const store = await EvidenceBriefStore.create(database, repositories, indexes);
+    const scopeChecksum = "f".repeat(64);
+    const input = {
+      commandId: crypto.randomUUID(),
+      workId: "work-no-match",
+      repositoryId: fixture.repository.repositoryId,
+      indexVersionId: fixture.index.indexVersionId,
+      query: "찾지 못한 근거",
+      scopeChecksum,
+    };
+    const manual = await store.createBrief(context, {
+      commandId: crypto.randomUUID(),
+      workId: input.workId,
+      repositoryId: input.repositoryId,
+      indexVersionId: input.indexVersionId,
+      query: "수동 근거",
+      references: [{ kind: "code", result: fixture.result }],
+    });
+    const first = await store.createNoMatch(context, input);
+    const replayed = await store.createNoMatch(context, input);
+    const sameScope = await store.createNoMatch(context, { ...input, commandId: crypto.randomUUID() });
+    const identity = await IdentityService.create(database);
+    const other = await identity.registerPersonalUser({ email: "brief-other@example.com", displayName: "Other" });
+    const otherContext = await OrganizationService.create(database).then((organizations) =>
+      organizations.resolveTenantContext(other.user.user_id, other.organization.organization_id),
+    );
+
+    expect(first.brief).toMatchObject({ status: "no_match", references: [], claims: [], scopeChecksum });
+    expect(replayed.brief.evidenceBriefId).toBe(first.brief.evidenceBriefId);
+    expect(sameScope.brief.evidenceBriefId).toBe(first.brief.evidenceBriefId);
+    const briefs = await store.listByWork(context, input.workId);
+    expect(briefs).toHaveLength(2);
+    expect(briefs.map((brief) => brief.evidenceBriefId)).toEqual(
+      expect.arrayContaining([manual.brief.evidenceBriefId, first.brief.evidenceBriefId]),
+    );
+    expect(await store.listByWork(otherContext, input.workId)).toEqual([]);
+    await expect(
+      store.createNoMatch(context, { ...input, commandId: crypto.randomUUID(), scopeChecksum: "e".repeat(64) }),
+    ).rejects.toThrow("scope");
+    await database.query(
+      "UPDATE evidence_brief SET scope_checksum = $scope_checksum WHERE organization_id = $organization_id AND evidence_brief_id = $evidence_brief_id;",
+      {
+        scope_checksum: "0".repeat(64),
+        organization_id: context.organizationId,
+        evidence_brief_id: first.brief.evidenceBriefId,
+      },
+    );
+    await expect(store.getBrief(context, first.brief.evidenceBriefId)).rejects.toThrow("checksum");
+  });
+
   it("저장된 external snapshot만 reference로 허용하고 content checksum을 다시 검증한다", async () => {
     const content = "verified external snapshot";
     const contentHash = createHash("sha256").update(content).digest("hex");
