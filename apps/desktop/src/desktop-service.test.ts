@@ -122,7 +122,7 @@ function transport(overrides: Record<string, unknown> = {}): NativeTransport & {
     "growth.effects": [{ effectEvaluationId: "effect-0001", adoptionId: "adoption-0001", result: "improved" }],
   };
   Object.assign(data, overrides);
-  const query = vi.fn(async (operation: string, _payload: unknown) => result(operation, data[operation]));
+  const query = vi.fn(async (operation: string) => result(operation, data[operation]));
   const command = vi.fn(async (input: unknown) => {
     const value = input as { commandId: string; correlationId: string; operation: string };
     return {

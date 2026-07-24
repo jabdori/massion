@@ -449,13 +449,13 @@ describe("AgentOS native data flow", () => {
   });
 
   it("등록된 stream 정리 실패를 unhandled rejection으로 남기지 않는다", async () => {
-    const subscribed = deferred<void>();
+    const subscribed = deferred<undefined>();
     const stop = vi.fn(async () => {
       throw new Error("이미 종료된 stream입니다");
     });
     const fake = service({
       subscribeDurable: async () => {
-        subscribed.resolve();
+        subscribed.resolve(undefined);
         return stop;
       },
     });

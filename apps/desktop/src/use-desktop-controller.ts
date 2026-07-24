@@ -137,7 +137,7 @@ export function useDesktopController(service: DesktopService) {
       if (!service.initialSnapshot) setPhase("loading");
       setRootError("");
       try {
-        const state = await service.bootstrap();
+        await service.bootstrap();
         if (disposed) return;
         setPhase("ready");
         await reloadIndex({ surfaceError: !service.initialSnapshot });
@@ -163,6 +163,7 @@ export function useDesktopController(service: DesktopService) {
   useEffect(() => {
     if (phase !== "ready") return;
     let disposed = false;
+    const isDisposed = () => disposed;
     let timer: ReturnType<typeof setTimeout> | undefined;
     let stop: (() => Promise<void>) | undefined;
     void service
@@ -187,7 +188,7 @@ export function useDesktopController(service: DesktopService) {
                   continue;
                 try {
                   const candidate = await service.loadWork(candidateId);
-                  if (disposed || pendingCreationRef.current?.runId !== creation.runId) return;
+                  if (isDisposed() || pendingCreationRef.current?.runId !== creation.runId) return;
                   if (candidate.run?.runId !== creation.runId) continue;
                   detailRequestRef.current += 1;
                   pendingCreationRef.current = undefined;
@@ -200,7 +201,7 @@ export function useDesktopController(service: DesktopService) {
                   setAnnouncement("새 Work가 생성되어 선택했습니다.");
                   return;
                 } catch (error) {
-                  if (!disposed) setAnnouncement(errorMessage(error, "새 Work의 실행 계보를 확인하지 못했습니다."));
+                  if (!isDisposed()) setAnnouncement(errorMessage(error, "새 Work의 실행 계보를 확인하지 못했습니다."));
                 }
               }
             }
@@ -396,7 +397,9 @@ export function useDesktopController(service: DesktopService) {
     pendingRunAction,
     phase,
     query,
-    retry: () => setRetryVersion((current) => current + 1),
+    retry: () => {
+      setRetryVersion((current) => current + 1);
+    },
     rootError,
     selectedId,
     setAnnouncement,

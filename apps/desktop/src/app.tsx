@@ -18,7 +18,6 @@ import {
   PaperclipIcon as Paperclip,
   PlusIcon as Plus,
   PuzzlePieceIcon as PuzzlePiece,
-  RobotIcon as Robot,
   ShieldCheckIcon as ShieldCheck,
   StarIcon as Star,
   TreeStructureIcon as TreeStructure,
@@ -39,7 +38,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupLabel, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem } from "@/components/ui/sidebar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import type {
   AutonomyView,
   CommandIdentity,
@@ -226,7 +225,7 @@ export function App({ service }: AppProps) {
       if (event.key === "[" && !(event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement || event.target instanceof HTMLSelectElement)) setSidebarCollapsed((current) => !current);
     };
     window.addEventListener("keydown", toggleSidebar);
-    return () => window.removeEventListener("keydown", toggleSidebar);
+    return () => { window.removeEventListener("keydown", toggleSidebar); };
   }, []);
   const handleApprovalDecision = async (approvalId: string, vote: "approve" | "reject") => {
     const pending = awaitingRegistryInstall;
@@ -311,13 +310,13 @@ export function App({ service }: AppProps) {
           notificationCount={inboxItems === undefined ? 0 : inboxItems.length}
           onOpenNotifications={openInbox}
           onSelect={setSurface}
-          onToggle={() => setSidebarCollapsed((current) => !current)}
+          onToggle={() => { setSidebarCollapsed((current) => !current); }}
         />
         {surface === "work" ? (
           controller.work ? <>
             <WorkList
               filter={controller.filter}
-              onCreate={() => controller.newWork.setOpen(true)}
+              onCreate={() => { controller.newWork.setOpen(true); }}
               onFilterChange={controller.setFilter}
               onQueryChange={controller.setQuery}
               onSelect={controller.setSelectedId}
@@ -334,9 +333,9 @@ export function App({ service }: AppProps) {
               composer={controller.composer}
               onAnnouncement={controller.setAnnouncement}
               onComposerChange={controller.setComposer}
-              onControlRun={controller.controlRun}
-              onDecideApproval={(approval, decision) => void decideWorkApproval(approval, decision)}
-              onSubmitDirective={controller.submitDirective}
+              onControlRun={(action) => { void controller.controlRun(action); }}
+              onDecideApproval={(approval, decision) => { void decideWorkApproval(approval, decision); }}
+              onSubmitDirective={(mode) => { void controller.submitDirective(mode); }}
               pendingApprovals={controller.pendingApprovals}
               pendingDirective={controller.pendingDirective}
               pendingRunAction={controller.pendingRunAction}
@@ -347,7 +346,7 @@ export function App({ service }: AppProps) {
               work={controller.work}
             />
             <WorkInspector room={room} work={controller.work} />
-          </> : <WorkEmptySurface onCreate={() => controller.newWork.setOpen(true)} />
+          </> : <WorkEmptySurface onCreate={() => { controller.newWork.setOpen(true); }} />
         ) : (
           <ProductSurface
             approvalBusy={registryApproval === undefined ? false : pendingNotificationIds.has(registryApproval.id)}
@@ -363,7 +362,7 @@ export function App({ service }: AppProps) {
               controller.newWork.setOpen(true);
             }}
             onOpenNotifications={openInbox}
-            onRetryGrowth={() => void refreshGrowth()}
+            onRetryGrowth={() => { void refreshGrowth(); }}
             onOpenWork={(workId) => {
               controller.setSelectedId(workId);
               setSurface("work");
@@ -371,7 +370,7 @@ export function App({ service }: AppProps) {
             onDecideApproval={(approval, vote) => decideNotification(approval, vote, "확장")}
             registryApproval={registryApproval}
             service={service}
-            surface={surface as Exclude<DesktopSurface, "work">}
+            surface={surface}
             requestedGrowthSuggestionId={requestedGrowthSuggestionId}
           />
         )}
@@ -472,7 +471,7 @@ function GlobalRail({
           </SidebarMenu>
         </SidebarGroup>
       </SidebarContent>
-      <SidebarFooter><SidebarMenu><SidebarMenuItem><SidebarMenuButton active={activeSurface === "settings"} aria-label="설정" onClick={() => onSelect("settings")}><Gear aria-hidden="true" size={20} /><span>설정</span></SidebarMenuButton></SidebarMenuItem></SidebarMenu><p className="mt-2 text-[11px] text-muted group-data-[collapsed=true]/sidebar:hidden">로컬 연결됨</p></SidebarFooter>
+      <SidebarFooter><SidebarMenu><SidebarMenuItem><SidebarMenuButton active={activeSurface === "settings"} aria-label="설정" onClick={() => { onSelect("settings"); }}><Gear aria-hidden="true" size={20} /><span>설정</span></SidebarMenuButton></SidebarMenuItem></SidebarMenu><p className="mt-2 text-[11px] text-muted group-data-[collapsed=true]/sidebar:hidden">로컬 연결됨</p></SidebarFooter>
     </Sidebar>
   );
 }
@@ -589,8 +588,8 @@ function HomeSurface({
     let disposed = false;
     void service
       .loadIndex({ filter: "active", search: "" })
-      .then((items) => !disposed && setWorks(items))
-      .catch((cause: unknown) => !disposed && setError(surfaceErrorMessage(cause, "현황을 불러오지 못했습니다.")));
+      .then((items) => { if (!disposed) setWorks(items); })
+      .catch((cause: unknown) => { if (!disposed) setError(surfaceErrorMessage(cause, "현황을 불러오지 못했습니다.")); });
     return () => {
       disposed = true;
     };
@@ -834,7 +833,7 @@ function InboxPanel({
                   approval={item.approval}
                   busy={pending.has(item.id)}
                   onDecide={onDecide}
-                  onOpen={() => onOpenApproval(item.approval)}
+                  onOpen={() => { onOpenApproval(item.approval); }}
                   routable={canOpenApproval(item.approval)}
                   workTitle={item.approval.workId === undefined ? undefined : workTitles.get(item.approval.workId)}
                 />
@@ -913,8 +912,8 @@ function ApprovalInboxCard({
             approveName={approval.title}
             busy={busy}
             disabled={busy}
-            onApprove={() => void onDecide(approval, "approve")}
-            onReject={() => void onDecide(approval, "reject")}
+            onApprove={() => { void onDecide(approval, "approve"); }}
+            onReject={() => { void onDecide(approval, "reject"); }}
           />
         </div>
       ) : null}
@@ -941,7 +940,7 @@ function BlockedInboxCard({
         <button
           aria-label={`업무로 이동: ${item.title}`}
           className="flex min-h-6 w-full items-center gap-2 rounded-[3px] text-left outline-none hover:text-primary focus-visible:ring-2 focus-visible:ring-halt/70"
-          onClick={() => onOpenWork(item.workId)}
+          onClick={() => { onOpenWork(item.workId); }}
           type="button"
         >
           <span aria-hidden="true" className="text-halt">⊘</span>
@@ -972,7 +971,7 @@ function GrowthInboxCard({
         <button
           aria-label={`개선 검토 열기: ${item.title}`}
           className="flex min-h-6 w-full items-center gap-2 rounded-[3px] text-left outline-none hover:text-primary focus-visible:ring-2 focus-visible:ring-gate/70"
-          onClick={() => onOpenGrowth(item.suggestionId)}
+          onClick={() => { onOpenGrowth(item.suggestionId); }}
           type="button"
         >
           <Star aria-hidden="true" className="shrink-0 text-gate" size={14} />
@@ -995,7 +994,7 @@ function OrganizationSurface({ service }: { service: DesktopService }) {
   const structureRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     let disposed = false;
-    void service.loadOrganization().then((value) => !disposed && setOrganization(value)).catch((cause: unknown) => !disposed && setError(surfaceErrorMessage(cause, "조직 정보를 불러오지 못했습니다.")));
+    void service.loadOrganization().then((value) => { if (!disposed) setOrganization(value); }).catch((cause: unknown) => { if (!disposed) setError(surfaceErrorMessage(cause, "조직 정보를 불러오지 못했습니다.")); });
     return () => { disposed = true; };
   }, [service]);
 
@@ -1359,7 +1358,9 @@ function OrgMap({
         cursor += 1;
       } else {
         const xs = kids.map((kid) => place(kid, depth + 1));
-        x = (xs[0]! + xs[xs.length - 1]!) / 2;
+        const first = xs[0] ?? 0;
+        const last = xs[xs.length - 1] ?? first;
+        x = (first + last) / 2;
       }
       pos.set(node.handle, { x, y: depth * ORG_MAP_ROW_H });
       return x;
@@ -1544,7 +1545,7 @@ function ExtensionSurface({
         setEntries(value);
         setSelectedId((current) => current ?? value[0]?.id);
       })
-      .catch((cause: unknown) => !disposed && setError(surfaceErrorMessage(cause, "확장 목록을 불러오지 못했습니다.")));
+      .catch((cause: unknown) => { if (!disposed) setError(surfaceErrorMessage(cause, "확장 목록을 불러오지 못했습니다.")); });
     return () => {
       disposed = true;
     };
@@ -1662,7 +1663,7 @@ function ExtensionSurface({
                       : "hover:bg-surface-1"
                   }`}
                   key={item.id}
-                  onClick={() => void select(item)}
+                  onClick={() => { void select(item); }}
                   type="button"
                 >
                   <span className="block truncate text-[13px] font-medium">{extensionDisplayName(item.packageName)}</span>
@@ -1694,7 +1695,7 @@ function ExtensionSurface({
                 <button
                   className="shrink-0 rounded-[5px] bg-gate px-3 py-1 text-[12px] font-medium text-gate-ink hover:brightness-110 disabled:opacity-50"
                   disabled={busy !== ""}
-                  onClick={() => void install(selected.id)}
+                  onClick={() => { void install(selected.id); }}
                   type="button"
                 >
                   {busy === `install:${selected.id}` ? "요청 중" : "설치"}
@@ -1783,8 +1784,8 @@ function ExtensionSurface({
                     approveName={approval.title}
                     busy={approvalBusy}
                     disabled={approvalBusy}
-                    onApprove={() => void onDecideApproval(approval, "approve")}
-                    onReject={() => void onDecideApproval(approval, "reject")}
+                    onApprove={() => { void onDecideApproval(approval, "approve"); }}
+                    onReject={() => { void onDecideApproval(approval, "reject"); }}
                   />
                 </div>
               )}
@@ -2346,7 +2347,7 @@ function SettingsSurface({ service }: { service: DesktopService }) {
           setAutonomy(mode);
         }
       })
-      .catch((cause: unknown) => !disposed && setError(surfaceErrorMessage(cause, "설정을 불러오지 못했습니다.")));
+      .catch((cause: unknown) => { if (!disposed) setError(surfaceErrorMessage(cause, "설정을 불러오지 못했습니다.")); });
     return () => { disposed = true; };
   }, [service]);
   const setAutonomyMode = async (mode: AutonomyView["mode"]) => {
@@ -2363,7 +2364,7 @@ function SettingsSurface({ service }: { service: DesktopService }) {
       setAutonomySaving(false);
     }
   };
-  const submit = async (event: React.FormEvent<HTMLFormElement>) => {
+  const submit = async (event: React.SyntheticEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (saving) return;
     const submittedSecret = secret;
@@ -2381,7 +2382,7 @@ function SettingsSurface({ service }: { service: DesktopService }) {
     } catch (cause) { setError(surfaceErrorMessage(cause, "Provider 연결을 추가하지 못했습니다.")); }
     finally { setSaving(false); }
   };
-  const submitZai = async (event: React.FormEvent<HTMLFormElement>) => {
+  const submitZai = async (event: React.SyntheticEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (saving) return;
     const submittedSecret = zaiSecret;
@@ -2394,7 +2395,7 @@ function SettingsSurface({ service }: { service: DesktopService }) {
     } catch (cause) { setError(surfaceErrorMessage(cause, "Z.ai GLM-5.2 연결을 추가하지 못했습니다.")); }
     finally { setSaving(false); }
   };
-  const setField = (field: keyof typeof provider, value: string | boolean) => setProvider((current) => ({ ...current, [field]: value }));
+  const setField = (field: keyof typeof provider, value: string | boolean) => { setProvider((current) => ({ ...current, [field]: value })); };
 
   const routes = settings ? projectModelRoutes(settings.routes, settings.catalog) : [];
   const connections = settings ? projectProviderConnections(settings.catalog) : [];
@@ -2418,9 +2419,9 @@ function SettingsSurface({ service }: { service: DesktopService }) {
           <div className="divide-y divide-border border-b border-border">
             {SETTINGS_AREAS.map((item) => (
               <button
-                aria-pressed={item.id === area?.id}
+                aria-pressed={item.id === area.id}
                 className={`relative w-full px-3 py-2.5 text-left outline-none transition-colors duration-150 ${
-                  item.id === area?.id
+                  item.id === area.id
                     ? "bg-surface-2 before:absolute before:inset-y-0 before:left-0 before:w-0.5 before:bg-primary"
                     : "hover:bg-surface-1"
                 }`}
@@ -2441,14 +2442,14 @@ function SettingsSurface({ service }: { service: DesktopService }) {
 
       <div className="grid min-h-0 grid-rows-[46px_minmax(0,1fr)] border-r border-border">
         <header className="flex items-center border-b border-border px-5">
-          <h2 className="truncate text-[15px] font-semibold tracking-[-0.015em]">{area?.title}</h2>
+          <h2 className="truncate text-[15px] font-semibold tracking-[-0.015em]">{area.title}</h2>
         </header>
         <div className="min-h-0 overflow-y-auto px-5 py-4">
           {error ? <SurfaceError message={error} /> : null}
           {!settings && !error ? <SurfaceLoading /> : null}
           {settings ? (
             <div className="mx-auto max-w-[76ch]">
-              {area?.id === "routes" ? (
+              {area.id === "routes" ? (
                 <>
                   <GrowthSection title="요청이 어디로 가나">
                     {routes.length === 0 ? (
@@ -2470,7 +2471,7 @@ function SettingsSurface({ service }: { service: DesktopService }) {
                                 ? "꺼져 있습니다"
                                 : route.candidateCount === 0
                                   ? "쓸 수 있는 모델이 없어 실행되지 않습니다"
-                                  : `모델 ${route.candidateCount}개`}
+                                  : `모델 ${String(route.candidateCount)}개`}
                               {route.totalBudgetMicros > 0
                                 ? ` · 예산 ${costText(route.spentMicros)} / ${costText(route.totalBudgetMicros)}`
                                 : ""}
@@ -2484,7 +2485,7 @@ function SettingsSurface({ service }: { service: DesktopService }) {
                 </>
               ) : null}
 
-              {area?.id === "providers" ? (
+              {area.id === "providers" ? (
                 <>
                   <GrowthSection title="연결된 Provider">
                     {connections.length === 0 ? (
@@ -2510,14 +2511,14 @@ function SettingsSurface({ service }: { service: DesktopService }) {
                   <div className="mt-4 flex flex-wrap gap-2">
                     <button
                       className="rounded-[5px] border border-control px-3 py-1 text-[12px] text-secondary hover:border-fg-3 hover:text-primary"
-                      onClick={() => setZaiFormOpen((open) => !open)}
+                      onClick={() => { setZaiFormOpen((open) => !open); }}
                       type="button"
                     >
                       Z.ai GLM-5.2 연결
                     </button>
                     <button
                       className="rounded-[5px] border border-control px-3 py-1 text-[12px] text-secondary hover:border-fg-3 hover:text-primary"
-                      onClick={() => setProviderFormOpen((open) => !open)}
+                      onClick={() => { setProviderFormOpen((open) => !open); }}
                       type="button"
                     >
                       다른 Provider 연결
@@ -2546,7 +2547,7 @@ function SettingsSurface({ service }: { service: DesktopService }) {
                 </>
               ) : null}
 
-              {area?.id === "accounts" ? (
+              {area.id === "accounts" ? (
                 <GrowthSection title="구독 계정">
                   {accounts.length === 0 ? (
                     <p className="text-[12px] text-muted">연결된 구독 계정이 없습니다.</p>
@@ -2571,7 +2572,7 @@ function SettingsSurface({ service }: { service: DesktopService }) {
                 </GrowthSection>
               ) : null}
 
-              {area?.id === "autonomy" && autonomy ? (
+              {area.id === "autonomy" && autonomy ? (
                 <section aria-label="자율성 경계">
                   <GrowthSection title="실행 자율성">
                     <p className="text-[13px] leading-5 text-secondary">
@@ -2587,7 +2588,7 @@ function SettingsSurface({ service }: { service: DesktopService }) {
                             : "border-border text-secondary"
                         }`}
                         disabled={autonomySaving || autonomy.mode === "automatic"}
-                        onClick={() => void setAutonomyMode("automatic")}
+                        onClick={() => { void setAutonomyMode("automatic"); }}
                         type="button"
                       >
                         자동 실행
@@ -2599,7 +2600,7 @@ function SettingsSurface({ service }: { service: DesktopService }) {
                             : "border-border text-secondary"
                         }`}
                         disabled={autonomySaving || autonomy.mode === "review"}
-                        onClick={() => void setAutonomyMode("review")}
+                        onClick={() => { void setAutonomyMode("review"); }}
                         type="button"
                       >
                         검토 후 실행
@@ -2610,7 +2611,7 @@ function SettingsSurface({ service }: { service: DesktopService }) {
                 </section>
               ) : null}
 
-              {area?.id === "local" ? (
+              {area.id === "local" ? (
                 <GrowthSection title="로컬 운영 환경">
                   {/* 없는 것을 있는 것처럼 그리지 않습니다. 무엇이 없는지 화면이 말합니다. */}
                   <p className="text-[12px] leading-5 text-muted">
@@ -2632,9 +2633,9 @@ function SettingsSurface({ service }: { service: DesktopService }) {
         <div className="min-h-0 space-y-4 overflow-y-auto px-3 py-3">
           <section>
             <h3 className="text-[10px] font-semibold tracking-[0.08em] text-muted">이 구역이 정하는 것</h3>
-            <p className="mt-1.5 text-[11px] leading-4 text-secondary">{area?.background}</p>
+            <p className="mt-1.5 text-[11px] leading-4 text-secondary">{area.background}</p>
           </section>
-          {area?.id === "providers" ? (
+          {area.id === "providers" ? (
             <section>
               <h3 className="text-[10px] font-semibold tracking-[0.08em] text-muted">자격 증명</h3>
               <p className="mt-1.5 text-[11px] leading-4 text-secondary">
@@ -2713,8 +2714,8 @@ function resetText(iso: string): string {
   return Number.isNaN(at.getTime()) ? "" : `${String(at.getMonth() + 1)}월 ${String(at.getDate())}일 초기화`;
 }
 
-function ZaiCodingPlanConnectionForm({ alias, saving, secret, setAlias, setSecret, submit }: { alias: string; saving: boolean; secret: string; setAlias: (value: string) => void; setSecret: (value: string) => void; submit: (event: React.FormEvent<HTMLFormElement>) => Promise<void> }) { return <form aria-label="Z.ai GLM-5.2 연결" className="mt-5 grid max-w-3xl grid-cols-2 gap-4 border-b border-border pb-5" onSubmit={(event) => void submit(event)}><SettingsField label="연결 이름"><Input aria-label="연결 이름" onChange={(event) => setAlias(event.target.value)} required value={alias} /></SettingsField><SettingsField label="Z.ai API Key"><Input aria-label="Z.ai API Key" onChange={(event) => setSecret(event.target.value)} required type="password" value={secret} /></SettingsField><p className="col-span-2 text-xs leading-5 text-muted">API Key는 로컬 자격 증명 저장소에만 기록되며, 이 화면에는 다시 표시되지 않습니다.</p><div className="col-span-2 flex justify-end"><Button disabled={saving} type="submit">{saving ? "연결 중…" : "연결하고 기본 Route 구성"}</Button></div></form>; }
-function ProviderConnectionForm({ provider, saving, secret, setField, setSecret, submit }: { provider: { providerId: string; displayName: string; adapterKind: string; endpointName: string; baseUrl: string; local: boolean; credentialLabel: string; credentialType: string }; saving: boolean; secret: string; setField: (field: keyof typeof provider, value: string | boolean) => void; setSecret: (value: string) => void; submit: (event: React.FormEvent<HTMLFormElement>) => Promise<void> }) { return <form aria-label="Provider 연결 추가" className="mt-5 grid max-w-3xl grid-cols-2 gap-4 border-b border-border pb-5" onSubmit={(event) => void submit(event)}><SettingsField label="Provider ID"><Input aria-label="Provider ID" onChange={(event) => setField("providerId", event.target.value)} required value={provider.providerId} /></SettingsField><SettingsField label="표시 이름"><Input aria-label="표시 이름" onChange={(event) => setField("displayName", event.target.value)} required value={provider.displayName} /></SettingsField><SettingsField label="Adapter kind"><Input aria-label="Adapter kind" onChange={(event) => setField("adapterKind", event.target.value)} required value={provider.adapterKind} /></SettingsField><SettingsField label="Endpoint 이름"><Input aria-label="Endpoint 이름" onChange={(event) => setField("endpointName", event.target.value)} required value={provider.endpointName} /></SettingsField><SettingsField label="Base URL"><Input aria-label="Base URL" onChange={(event) => setField("baseUrl", event.target.value)} required type="url" value={provider.baseUrl} /></SettingsField><SettingsField label="Credential label"><Input aria-label="Credential label" onChange={(event) => setField("credentialLabel", event.target.value)} required value={provider.credentialLabel} /></SettingsField><SettingsField label="Credential type"><Input aria-label="Credential type" onChange={(event) => setField("credentialType", event.target.value)} required value={provider.credentialType} /></SettingsField><SettingsField label="Credential secret"><Input aria-label="Credential secret" onChange={(event) => setSecret(event.target.value)} required type="password" value={secret} /></SettingsField><label className="col-span-2 flex items-center gap-2 text-sm text-secondary"><input checked={provider.local} onChange={(event) => setField("local", event.target.checked)} type="checkbox" />로컬 endpoint</label><div className="col-span-2 flex justify-end"><Button disabled={saving} type="submit">{saving ? "연결 중…" : "Provider 연결 추가"}</Button></div></form>; }
+function ZaiCodingPlanConnectionForm({ alias, saving, secret, setAlias, setSecret, submit }: { alias: string; saving: boolean; secret: string; setAlias: (value: string) => void; setSecret: (value: string) => void; submit: (event: React.SyntheticEvent<HTMLFormElement>) => Promise<void> }) { return <form aria-label="Z.ai GLM-5.2 연결" className="mt-5 grid max-w-3xl grid-cols-2 gap-4 border-b border-border pb-5" onSubmit={(event) => { void submit(event); }}><SettingsField label="연결 이름"><Input aria-label="연결 이름" onChange={(event) => { setAlias(event.target.value); }} required value={alias} /></SettingsField><SettingsField label="Z.ai API Key"><Input aria-label="Z.ai API Key" onChange={(event) => { setSecret(event.target.value); }} required type="password" value={secret} /></SettingsField><p className="col-span-2 text-xs leading-5 text-muted">API Key는 로컬 자격 증명 저장소에만 기록되며, 이 화면에는 다시 표시되지 않습니다.</p><div className="col-span-2 flex justify-end"><Button disabled={saving} type="submit">{saving ? "연결 중…" : "연결하고 기본 Route 구성"}</Button></div></form>; }
+function ProviderConnectionForm({ provider, saving, secret, setField, setSecret, submit }: { provider: { providerId: string; displayName: string; adapterKind: string; endpointName: string; baseUrl: string; local: boolean; credentialLabel: string; credentialType: string }; saving: boolean; secret: string; setField: (field: keyof typeof provider, value: string | boolean) => void; setSecret: (value: string) => void; submit: (event: React.SyntheticEvent<HTMLFormElement>) => Promise<void> }) { return <form aria-label="Provider 연결 추가" className="mt-5 grid max-w-3xl grid-cols-2 gap-4 border-b border-border pb-5" onSubmit={(event) => { void submit(event); }}><SettingsField label="Provider ID"><Input aria-label="Provider ID" onChange={(event) => { setField("providerId", event.target.value); }} required value={provider.providerId} /></SettingsField><SettingsField label="표시 이름"><Input aria-label="표시 이름" onChange={(event) => { setField("displayName", event.target.value); }} required value={provider.displayName} /></SettingsField><SettingsField label="Adapter kind"><Input aria-label="Adapter kind" onChange={(event) => { setField("adapterKind", event.target.value); }} required value={provider.adapterKind} /></SettingsField><SettingsField label="Endpoint 이름"><Input aria-label="Endpoint 이름" onChange={(event) => { setField("endpointName", event.target.value); }} required value={provider.endpointName} /></SettingsField><SettingsField label="Base URL"><Input aria-label="Base URL" onChange={(event) => { setField("baseUrl", event.target.value); }} required type="url" value={provider.baseUrl} /></SettingsField><SettingsField label="Credential label"><Input aria-label="Credential label" onChange={(event) => { setField("credentialLabel", event.target.value); }} required value={provider.credentialLabel} /></SettingsField><SettingsField label="Credential type"><Input aria-label="Credential type" onChange={(event) => { setField("credentialType", event.target.value); }} required value={provider.credentialType} /></SettingsField><SettingsField label="Credential secret"><Input aria-label="Credential secret" onChange={(event) => { setSecret(event.target.value); }} required type="password" value={secret} /></SettingsField><label className="col-span-2 flex items-center gap-2 text-sm text-secondary"><input checked={provider.local} onChange={(event) => { setField("local", event.target.checked); }} type="checkbox" />로컬 endpoint</label><div className="col-span-2 flex justify-end"><Button disabled={saving} type="submit">{saving ? "연결 중…" : "Provider 연결 추가"}</Button></div></form>; }
 function SettingsField({ children, label }: { children: React.ReactNode; label: string }) { return <label className="grid gap-1.5 text-sm text-secondary"><span>{label}</span>{children}</label>; }
 
 function RouterConfiguration({ service, settings, onRefresh }: { service: DesktopService; settings: SettingsView; onRefresh: (settings: SettingsView) => void }) {
@@ -2726,7 +2727,7 @@ function RouterConfiguration({ service, settings, onRefresh }: { service: Deskto
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
   const [advancedOpen, setAdvancedOpen] = useState(false);
-  const refresh = async () => onRefresh(await service.loadSettings());
+  const refresh = async () => { onRefresh(await service.loadSettings()); };
   const input = "rounded-[6px] border-border bg-canvas";
   const save = async (kind: string, action: () => Promise<void>, fallback: string) => {
     setBusy(kind);
@@ -2735,10 +2736,10 @@ function RouterConfiguration({ service, settings, onRefresh }: { service: Deskto
     catch (cause) { setError(surfaceErrorMessage(cause, fallback)); }
     finally { setBusy(""); }
   };
-  const submitModel = async (event: React.FormEvent<HTMLFormElement>) => { event.preventDefault(); await save("model", () => service.registerModel({ providerId: model.providerId, endpointId: model.endpointId, modelId: model.modelId, routeKind: model.routeKind, contextWindow: Number(model.contextWindow), supportsTools: true, supportsStructuredOutput: true, supportsVision: false, supportsStreaming: true, equivalenceGroup: model.equivalenceGroup, evalScore: Number(model.evalScore), inputCostMicrosPerMillion: Number(model.inputCost), outputCostMicrosPerMillion: Number(model.outputCost), verified: model.verified }), "모델 프로필을 등록하지 못했습니다."); };
-  const submitRoute = async (event: React.FormEvent<HTMLFormElement>) => { event.preventDefault(); await save("route", () => service.configureRoute({ name: route.name, routeKind: route.routeKind }), "라우트를 저장하지 못했습니다."); };
-  const submitCandidate = async (event: React.FormEvent<HTMLFormElement>) => { event.preventDefault(); await save("candidate", () => service.addRouteCandidate({ routeId: candidate.routeId, modelProfileId: candidate.modelProfileId, priority: Number(candidate.priority) }), "라우트 후보를 연결하지 못했습니다."); };
-  return <section className="mt-6 border-t border-border pt-5"><div className="flex items-center justify-between"><div><p className="text-[11px] font-medium tracking-[0.04em] text-muted">모델 라우팅</p><p className="mt-1 text-sm text-secondary">{models.length}개 모델 프로필 · {routes.length}개 라우트</p></div><Button onClick={() => setAdvancedOpen((open) => !open)} size="sm" type="button" variant="outline">고급 라우팅 설정</Button></div>{advancedOpen ? <div className="mt-5 grid gap-5 border-t border-border pt-5">{error ? <SurfaceError message={error} /> : null}<form aria-label="모델 프로필 등록" className="grid grid-cols-2 gap-4" onSubmit={(event) => void submitModel(event)}><SettingsField label="모델 Provider ID"><Input aria-label="모델 Provider ID" className={input} onChange={(event) => setModel({ ...model, providerId: event.target.value })} required value={model.providerId} /></SettingsField><SettingsField label="모델 Endpoint ID"><Input aria-label="모델 Endpoint ID" className={input} onChange={(event) => setModel({ ...model, endpointId: event.target.value })} required value={model.endpointId} /></SettingsField><SettingsField label="모델 ID"><Input aria-label="모델 ID" className={input} onChange={(event) => setModel({ ...model, modelId: event.target.value })} required value={model.modelId} /></SettingsField><SettingsField label="Context window"><Input aria-label="Context window" className={input} min="1" onChange={(event) => setModel({ ...model, contextWindow: event.target.value })} required type="number" value={model.contextWindow} /></SettingsField><SettingsField label="동등성 그룹"><Input aria-label="동등성 그룹" className={input} onChange={(event) => setModel({ ...model, equivalenceGroup: event.target.value })} required value={model.equivalenceGroup} /></SettingsField><SettingsField label="평가 점수"><Input aria-label="평가 점수" className={input} min="0" onChange={(event) => setModel({ ...model, evalScore: event.target.value })} required step="any" type="number" value={model.evalScore} /></SettingsField><SettingsField label="입력 비용 (micros/백만)"><Input aria-label="입력 비용 (micros/백만)" className={input} min="0" onChange={(event) => setModel({ ...model, inputCost: event.target.value })} required type="number" value={model.inputCost} /></SettingsField><SettingsField label="출력 비용 (micros/백만)"><Input aria-label="출력 비용 (micros/백만)" className={input} min="0" onChange={(event) => setModel({ ...model, outputCost: event.target.value })} required type="number" value={model.outputCost} /></SettingsField><label className="text-sm text-secondary"><input checked={model.verified} onChange={(event) => setModel({ ...model, verified: event.target.checked })} type="checkbox" /> 검증됨</label><Button disabled={busy !== ""} type="submit">모델 등록</Button></form><form aria-label="라우트 구성" className="flex items-end gap-3" onSubmit={(event) => void submitRoute(event)}><SettingsField label="라우트 이름"><Input aria-label="라우트 이름" className={input} onChange={(event) => setRoute({ ...route, name: event.target.value })} required value={route.name} /></SettingsField><Button disabled={busy !== ""} type="submit">라우트 저장</Button></form><form aria-label="라우트 후보 연결" className="grid grid-cols-[1fr_1fr_auto] items-end gap-3" onSubmit={(event) => void submitCandidate(event)}><SettingsField label="라우트"><select aria-label="라우트" className={`h-8 ${input}`} onChange={(event) => setCandidate({ ...candidate, routeId: event.target.value })} required value={candidate.routeId}>{routes.map((item) => <option key={item.routeId} value={item.routeId}>{item.name}</option>)}</select></SettingsField><SettingsField label="모델 프로필"><select aria-label="모델 프로필" className={`h-8 ${input}`} onChange={(event) => setCandidate({ ...candidate, modelProfileId: event.target.value })} required value={candidate.modelProfileId}>{models.map((item) => <option key={item.modelProfileId} value={item.modelProfileId}>{item.providerId}/{item.modelId}</option>)}</select></SettingsField><Button disabled={busy !== "" || !candidate.routeId || !candidate.modelProfileId} type="submit">후보 연결</Button></form></div> : null}</section>;
+  const submitModel = async (event: React.SyntheticEvent<HTMLFormElement>) => { event.preventDefault(); await save("model", () => service.registerModel({ providerId: model.providerId, endpointId: model.endpointId, modelId: model.modelId, routeKind: model.routeKind, contextWindow: Number(model.contextWindow), supportsTools: true, supportsStructuredOutput: true, supportsVision: false, supportsStreaming: true, equivalenceGroup: model.equivalenceGroup, evalScore: Number(model.evalScore), inputCostMicrosPerMillion: Number(model.inputCost), outputCostMicrosPerMillion: Number(model.outputCost), verified: model.verified }), "모델 프로필을 등록하지 못했습니다."); };
+  const submitRoute = async (event: React.SyntheticEvent<HTMLFormElement>) => { event.preventDefault(); await save("route", () => service.configureRoute({ name: route.name, routeKind: route.routeKind }), "라우트를 저장하지 못했습니다."); };
+  const submitCandidate = async (event: React.SyntheticEvent<HTMLFormElement>) => { event.preventDefault(); await save("candidate", () => service.addRouteCandidate({ routeId: candidate.routeId, modelProfileId: candidate.modelProfileId, priority: Number(candidate.priority) }), "라우트 후보를 연결하지 못했습니다."); };
+  return <section className="mt-6 border-t border-border pt-5"><div className="flex items-center justify-between"><div><p className="text-[11px] font-medium tracking-[0.04em] text-muted">모델 라우팅</p><p className="mt-1 text-sm text-secondary">{models.length}개 모델 프로필 · {routes.length}개 라우트</p></div><Button onClick={() => { setAdvancedOpen((open) => !open); }} size="sm" type="button" variant="outline">고급 라우팅 설정</Button></div>{advancedOpen ? <div className="mt-5 grid gap-5 border-t border-border pt-5">{error ? <SurfaceError message={error} /> : null}<form aria-label="모델 프로필 등록" className="grid grid-cols-2 gap-4" onSubmit={(event) => { void submitModel(event); }}><SettingsField label="모델 Provider ID"><Input aria-label="모델 Provider ID" className={input} onChange={(event) => { setModel({ ...model, providerId: event.target.value }); }} required value={model.providerId} /></SettingsField><SettingsField label="모델 Endpoint ID"><Input aria-label="모델 Endpoint ID" className={input} onChange={(event) => { setModel({ ...model, endpointId: event.target.value }); }} required value={model.endpointId} /></SettingsField><SettingsField label="모델 ID"><Input aria-label="모델 ID" className={input} onChange={(event) => { setModel({ ...model, modelId: event.target.value }); }} required value={model.modelId} /></SettingsField><SettingsField label="Context window"><Input aria-label="Context window" className={input} min="1" onChange={(event) => { setModel({ ...model, contextWindow: event.target.value }); }} required type="number" value={model.contextWindow} /></SettingsField><SettingsField label="동등성 그룹"><Input aria-label="동등성 그룹" className={input} onChange={(event) => { setModel({ ...model, equivalenceGroup: event.target.value }); }} required value={model.equivalenceGroup} /></SettingsField><SettingsField label="평가 점수"><Input aria-label="평가 점수" className={input} min="0" onChange={(event) => { setModel({ ...model, evalScore: event.target.value }); }} required step="any" type="number" value={model.evalScore} /></SettingsField><SettingsField label="입력 비용 (micros/백만)"><Input aria-label="입력 비용 (micros/백만)" className={input} min="0" onChange={(event) => { setModel({ ...model, inputCost: event.target.value }); }} required type="number" value={model.inputCost} /></SettingsField><SettingsField label="출력 비용 (micros/백만)"><Input aria-label="출력 비용 (micros/백만)" className={input} min="0" onChange={(event) => { setModel({ ...model, outputCost: event.target.value }); }} required type="number" value={model.outputCost} /></SettingsField><label className="text-sm text-secondary"><input checked={model.verified} onChange={(event) => { setModel({ ...model, verified: event.target.checked }); }} type="checkbox" /> 검증됨</label><Button disabled={busy !== ""} type="submit">모델 등록</Button></form><form aria-label="라우트 구성" className="flex items-end gap-3" onSubmit={(event) => { void submitRoute(event); }}><SettingsField label="라우트 이름"><Input aria-label="라우트 이름" className={input} onChange={(event) => { setRoute({ ...route, name: event.target.value }); }} required value={route.name} /></SettingsField><Button disabled={busy !== ""} type="submit">라우트 저장</Button></form><form aria-label="라우트 후보 연결" className="grid grid-cols-[1fr_1fr_auto] items-end gap-3" onSubmit={(event) => { void submitCandidate(event); }}><SettingsField label="라우트"><select aria-label="라우트" className={`h-8 ${input}`} onChange={(event) => { setCandidate({ ...candidate, routeId: event.target.value }); }} required value={candidate.routeId}>{routes.map((item) => <option key={item.routeId} value={item.routeId}>{item.name}</option>)}</select></SettingsField><SettingsField label="모델 프로필"><select aria-label="모델 프로필" className={`h-8 ${input}`} onChange={(event) => { setCandidate({ ...candidate, modelProfileId: event.target.value }); }} required value={candidate.modelProfileId}>{models.map((item) => <option key={item.modelProfileId} value={item.modelProfileId}>{item.providerId}/{item.modelId}</option>)}</select></SettingsField><Button disabled={busy !== "" || !candidate.routeId || !candidate.modelProfileId} type="submit">후보 연결</Button></form></div> : null}</section>;
 }
 
 function routeItems(value: unknown): readonly { routeId: string; name: string }[] {
@@ -2764,7 +2765,6 @@ function modelProfiles(value: unknown): readonly { modelProfileId: string; provi
   });
 }
 
-interface RegistryItem { readonly versionId: string; readonly packageName: string; readonly packageVersion?: string; readonly description?: string; readonly visibility?: string; readonly ownerOrganizationId?: string; readonly provenance?: string; readonly status?: string; }
 interface RegistryVersionDetail { readonly packageVersion?: string; readonly description?: string; readonly visibility?: string; readonly ownerOrganizationId?: string; readonly assessment?: { readonly provenance?: string }; readonly manifest?: Record<string, unknown>; }
 interface RegistryDetail { readonly version?: RegistryVersionDetail; }
 function registryDetail(value: unknown): RegistryDetail {
@@ -2792,7 +2792,6 @@ function endpointIdFor(catalog: unknown, providerId: string, name: string, baseU
 }
 
 function SurfaceLoading() { return <div role="status" className="text-sm text-secondary">불러오는 중…</div>; }
-function SurfaceEmpty({ message }: { message: string }) { return <p className="text-sm text-muted">{message}</p>; }
 function SurfaceError({ message }: { message: string }) { return <p role="alert" className="mb-4 text-sm text-danger">{message}</p>; }
 function surfaceErrorMessage(error: unknown, fallback: string): string { return error instanceof Error && error.message ? error.message : fallback; }
 
@@ -3015,7 +3014,7 @@ function WorkActivity({
           {canResume ? (
             <Button
               disabled={pendingRunAction !== undefined}
-              onClick={() => onControlRun("resume")}
+              onClick={() => { onControlRun("resume"); }}
               size="sm"
               variant="ghost"
             >
@@ -3025,7 +3024,7 @@ function WorkActivity({
           {canCancel ? (
             <Button
               disabled={pendingRunAction !== undefined}
-              onClick={() => onControlRun("cancel")}
+              onClick={() => { onControlRun("cancel"); }}
               size="sm"
               variant="ghost"
             >
@@ -3407,7 +3406,7 @@ function ArtifactsActivity({ artifacts, title }: { artifacts: ArtifactView[]; ti
               />
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-xs text-primary">{artifact.name}</span>
-                <span className="font-mono text-[10px] text-muted">{artifact.size ?? artifact.format}</span>
+                <span className="font-mono text-[10px] text-muted">{artifact.size}</span>
               </span>
               <span className="shrink-0 text-[10px] text-muted">열기·다운로드 미지원</span>
             </div>
@@ -3634,7 +3633,7 @@ function WorkInspector({ room, work }: { room: RoomView | undefined; work: WorkV
                       <span className="min-w-0 flex-1">
                         <span className="block truncate text-xs text-primary">{artifact.name}</span>
                         <span className="font-mono text-[10px] text-muted">
-                          {artifact.format} · {artifact.size ?? "크기 미제공"} · {artifact.createdAt}
+                          {artifact.format} · {artifact.size} · {artifact.createdAt}
                         </span>
                       </span>
                       <span className="shrink-0 text-[10px] text-muted">메타데이터만</span>
@@ -3847,7 +3846,7 @@ function NewWorkDialog({
               className="mt-2 min-h-28 border border-control bg-surface-1 px-3 py-2"
               disabled={starting}
               id="new-work-text"
-              onChange={(event) => setText(event.target.value)}
+              onChange={(event) => { setText(event.target.value); }}
               placeholder="예: 파트너 계약의 주요 위험을 검토해줘"
               required
               value={text}
@@ -3859,7 +3858,7 @@ function NewWorkDialog({
               className="mt-2 h-10 w-full rounded-md border border-control bg-surface-1 px-3 text-sm text-primary outline-none placeholder:text-muted focus:border-accent/70 focus:ring-2 focus:ring-accent/25"
               disabled={starting}
               id="new-work-workspace"
-              onChange={(event) => setWorkspaceId(event.target.value)}
+              onChange={(event) => { setWorkspaceId(event.target.value); }}
               placeholder="workspace-0001"
               value={workspaceId}
             />
@@ -3912,21 +3911,6 @@ function DesktopError({ error, onRetry }: { error: string; onRetry: () => void }
         <p className="mt-2 text-sm leading-6 text-muted">{error || "daemon 상태를 확인한 뒤 다시 연결해 주세요."}</p>
         <Button className="mt-5" onClick={onRetry}>
           다시 시도
-        </Button>
-      </div>
-    </main>
-  );
-}
-
-function DesktopEmpty({ onCreate }: { onCreate: () => void }) {
-  return (
-    <main className="flex min-h-[100dvh] min-w-[1180px] items-center justify-center bg-canvas text-primary">
-      <div className="text-center">
-        <Briefcase aria-hidden="true" className="mx-auto mb-4 text-muted" size={32} />
-        <h1 className="text-lg font-semibold">아직 Work가 없습니다.</h1>
-        <p className="mt-2 text-sm text-muted">첫 업무를 만들면 에이전트 실행 과정이 여기에 표시됩니다.</p>
-        <Button className="mt-5" onClick={onCreate} variant="primary">
-          <Plus aria-hidden="true" size={16} />첫 Work 만들기
         </Button>
       </div>
     </main>
