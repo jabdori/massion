@@ -724,14 +724,15 @@ export function createFixtureDesktopService(): DesktopService {
   return {
     initialSnapshot,
     bootstrap: () => fixturePromise(() => "ready"),
-    loadIndex: ({ filter, search }) => {
+    loadIndex: (input) => fixturePromise(() => {
+      const { filter, search } = input;
       const normalizedSearch = search.trim().toLocaleLowerCase("ko");
-      return fixturePromise(() => initialSnapshot.works.filter(
+      return initialSnapshot.works.filter(
         (work) =>
           workStatusFilter(work.status) === filter &&
           (normalizedSearch.length === 0 || work.title.toLocaleLowerCase("ko").includes(normalizedSearch)),
-      ));
-    },
+      );
+    }),
     loadWork: (workId) => {
       const work = initialSnapshot.works.find((candidate) => candidate.id === workId);
       return fixturePromise(() => {

@@ -160,6 +160,12 @@ describe("Application desktop service", () => {
     await expect(promise).rejects.toThrow("Fixture Work를 찾을 수 없습니다");
   });
 
+  it("fixture index 입력 평가 오류도 rejected Promise로 전달한다", async () => {
+    const input = { get filter(): "active" { throw new Error("fixture input error"); }, search: "" };
+    const promise = createFixtureDesktopService().loadIndex(input);
+    await expect(promise).rejects.toThrow("fixture input error");
+  });
+
   it("bootstrap이 연결되지 않은 상태를 오류로 처리하고 Native stream 이름을 UI 계약으로 변환한다", async () => {
     const native = transport();
     native.bootstrap = async () => ({ connection: { status: "initialization-required" } });
