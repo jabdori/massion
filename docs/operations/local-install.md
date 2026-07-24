@@ -11,7 +11,7 @@
 - 같은 후보 SHA의 전체 검증과 실제 Tauri UAT 통과
 - 앱과 Node.js·SurrealDB sidecar의 서명, 공증, Gatekeeper 통과
 - 깨끗한 Mac 최초 실행, 후보 교체 업데이트, 제거·재설치 통과
-- 개인 데이터 백업→복구와 daemon·sidecar 강제 종료 복구 통과
+- 앱 교체·재설치 뒤 데이터 지속성과 daemon·sidecar 강제 종료 복구 통과
 - 키보드·VoiceOver 실측 통과
 
 ## 2. 개발 실행
@@ -36,7 +36,7 @@ pnpm --filter @massion/desktop tauri:dev
 - 호환할 수 없는 데이터는 자동 삭제하지 않고 실행을 중단합니다.
 - 자동 업데이트는 수동 교체가 실제 사용자 흐름을 충족하지 못할 때 별도 사양으로 추가합니다.
 
-앱 제거는 `/Applications/Massion.app`을 삭제합니다. 전체 데이터 삭제는 검증된 백업을 만든 뒤 사용자가 별도로 명시해야 하며, 첫 1.0에서 앱 제거와 함께 자동 수행하지 않습니다.
+앱 제거는 `/Applications/Massion.app`을 삭제합니다. 첫 1.0은 앱 제거와 함께 사용자 데이터를 자동 삭제하지 않습니다. 전체 데이터 삭제는 사용자가 로컬 데이터 위치를 확인하고 별도로 수행합니다.
 
 ## 4. 로컬 데이터 위치
 
@@ -48,9 +48,9 @@ pnpm --filter @massion/desktop tauri:dev
 
 `XDG_CONFIG_HOME`, `XDG_DATA_HOME`, `XDG_STATE_HOME`을 지정하면 각 기준 경로 아래의 `massion-v1`을 사용합니다. 이 값은 `packages/local-control/src/daemon.ts`의 `resolveLocalPaths()`가 소유합니다.
 
-## 5. 백업·복구 상태
+## 5. 후속 백업·복구 경계
 
-개인 백업은 내부 `LocalDaemonManager.backup()`과 CLI 경로가 존재하지만, 개인용 데스크톱 복구 진입점과 실제 앱 왕복 UAT는 아직 없습니다. 따라서 현재 백업만으로 복구 가능하다고 안내하지 않습니다. 구현·검증 기준은 [백업·복구 Runbook](backup-restore.md)을 따릅니다.
+내부 `LocalDaemonManager.backup()`과 운영 복구 원시는 보존하지만 개인용 데스크톱 UI와 왕복 UAT는 1.0 필수 범위가 아닙니다. 첫 파괴적 schema migration, 버전 간 자동 업그레이드 또는 복구할 가치가 큰 실사용 데이터가 생기기 전에 [백업·복구 Runbook](backup-restore.md)을 다시 승격합니다.
 
 ## 6. 레거시 경로
 

@@ -175,7 +175,7 @@ Massion.app
 
 ### UAT-16 설정과 로컬 운영 상태
 
-- Provider·route·계정·quota·자율성·daemon·DB 버전·데이터 위치·백업 시각을 확인합니다.
+- Provider·route·계정·quota·자율성·daemon·DB 버전·데이터 위치를 확인합니다.
 
 통과: 실제 값이 표시되고 secret은 없으며 읽기 실패를 숫자 0으로 위장하지 않습니다.
 
@@ -205,7 +205,7 @@ pnpm --filter @massion/desktop tauri:build
 
 `pnpm verify:release`는 현재 레거시 CLI·TUI·Web 묶음을 검사하므로 개인용 데스크톱 완료 근거로 사용하지 않습니다. 그 뒤 같은 SHA에서 서명·공증한 `.app`으로 UAT-01~16 중 구현 범위에 해당하는 시나리오를 다시 실행합니다. 최소 출시 판정은 핵심 12개와 구현 완료된 확장 시나리오 전부 통과입니다.
 
-추가로 깨끗한 macOS arm64 환경에서 설치·후보 교체 업데이트·제거·재설치, 백업→복구, daemon·SurrealDB sidecar 강제 종료 복구를 수행합니다. 키보드만으로 핵심 흐름을 완주하고 VoiceOver와 Accessibility Inspector로 각 화면의 이름·역할·상태·초점 순서를 실측합니다.
+추가로 깨끗한 macOS arm64 환경에서 설치·후보 교체 업데이트·제거·재설치 뒤 데이터 지속성과 daemon·SurrealDB sidecar 강제 종료 복구를 확인합니다. 키보드만으로 핵심 흐름을 완주하고 VoiceOver와 Accessibility Inspector로 각 화면의 이름·역할·상태·초점 순서를 실측합니다.
 
 ## 9. 중단 조건
 

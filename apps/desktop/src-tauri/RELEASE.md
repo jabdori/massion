@@ -19,13 +19,12 @@ pnpm tauri:build
 모든 항목은 같은 후보 commit SHA와 같은 artifact로 통과해야 합니다.
 
 - `pnpm verify`와 데스크톱 build·typecheck·test
-- 핵심 UAT-01~~12와 구현 완료된 UAT-13~~16
+- 핵심 UAT-01–12와 구현 완료된 UAT-13–16
 - Developer ID Application 서명과 Apple 공증·스테이플
 - 앱 내부 Node.js·SurrealDB sidecar 서명 검증
 - 깨끗한 macOS arm64 사용자에서 최초 설치·Gatekeeper 실행
 - 이전 서명 후보에서 새 후보로 수동 교체 업데이트와 데이터 보존
 - 앱 제거·재설치와 데이터 보존 정책 확인
-- 개인 데이터 백업→빈 데이터 복구→핵심 query·checksum·migration 대조
 - daemon과 SurrealDB sidecar 강제 종료 뒤 재연결·중복 방지·데이터 무결성
 - 키보드만으로 핵심 흐름 완주, VoiceOver와 Accessibility Inspector 실측
 - 개인 사용자가 등록한 BYOK 키가 로컬 소유자 경계 밖으로 노출·공유·중계되지 않는지 확인
@@ -47,7 +46,7 @@ Ad-hoc 서명은 개발 확인에만 쓸 수 있고 공개 후보로 인정하�
 1. 후보 SHA를 고정합니다.
 2. 전체 검증과 실제 Tauri UAT를 통과합니다.
 3. 서명·공증한 artifact로 깨끗한 Mac 설치·업데이트·제거를 통과합니다.
-4. 같은 artifact로 백업·복구, 비정상 종료, 접근성을 통과합니다.
+4. 같은 artifact로 데이터 지속성, 비정상 종료, 접근성을 통과합니다.
 5. artifact digest와 모든 증거의 후보 SHA가 일치하는지 확인합니다.
 6. 마지막 단계에서만 `v1.0.0` 태그와 GitHub Release를 만듭니다.
 

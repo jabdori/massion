@@ -403,8 +403,7 @@ Expected: exit 0.
 - Create: `scripts/verify-desktop-release.test.mjs`
 - Create: `.github/workflows/desktop-release.yml`
 - Modify: `apps/desktop/src-tauri/tauri.release.conf.json`
-- Modify: `packages/local-control/src/daemon.ts`
-- Modify: `apps/desktop/src/desktop-service.ts`
+- Modify only if abnormal recovery fails: `packages/local-control/src/daemon.ts`, `apps/desktop-bridge/src/application-adapter.ts`, `apps/desktop/src/desktop-service.ts`
 - Modify: `PRODUCT.md`
 - Modify: `docs/product/constitution.md`
 - Modify: `docs/generated/requirements-traceability.tsv`
@@ -442,31 +441,27 @@ xcrun stapler validate Massion.app
 
 개발 도구와 Massion 데이터가 없는 macOS arm64 사용자에서 최초 실행과 Gatekeeper 통과를 확인합니다. 이전 서명 후보를 설치한 상태에서 새 후보로 앱을 교체하는 수동 업데이트를 수행하고 Work·설정·데이터가 유지되는지 확인합니다. 앱을 제거한 뒤 데이터 보존 정책을 확인하고 재설치해 같은 데이터에 재연결합니다. 자동 업데이트 기능은 첫 1.0 필수 사양으로 만들지 않으며, 수동 교체가 실패할 때만 Tauri updater를 별도 범위로 추가합니다.
 
-- [ ] **Step 6: 개인 데이터 백업→복구 왕복을 검증합니다.**
-
-현재 `LocalDaemonManager.backup()`은 존재하지만 개인용 복구 진입점은 없습니다. 같은 운영 백업 형식과 기존 `restoreOperationalBackup()`을 재사용해 daemon이 멈춘 상태에서 빈 새 데이터베이스로만 복구하는 명령을 추가합니다. 별도 복구 엔진을 만들지 않습니다. 고유 Work·조직 변경·승인·Records를 만든 뒤 백업하고, 격리된 빈 데이터 위치로 복구하여 핵심 query와 checksum·migration 계보를 대조합니다. 기존 데이터 덮어쓰기는 거부합니다.
-
-- [ ] **Step 7: 비정상 종료와 데이터 무결성을 검증합니다.**
+- [ ] **Step 6: 비정상 종료와 데이터 무결성을 검증합니다.**
 
 실행 중 daemon과 SurrealDB sidecar를 각각 강제 종료하고 앱 재연결을 확인합니다. 재시작 뒤 Work·event·message가 중복되지 않고, 마지막 확정 transaction 이전 상태로 일관되게 복원되며, 데이터베이스 readiness와 핵심 query가 통과해야 합니다. 실패한 공통 경로에만 회귀 테스트 한 건을 추가합니다.
 
-- [ ] **Step 8: 키보드·VoiceOver 접근성을 실측합니다.**
+- [ ] **Step 7: 키보드·VoiceOver 접근성을 실측합니다.**
 
 마우스 없이 UAT-01~12를 수행하고 모든 조작 요소의 초점 표시·논리적 순서·대화상자 복귀를 확인합니다. VoiceOver와 Accessibility Inspector로 홈·업무·수신함·조직 구조/지도·개선·확장·설정의 이름(name), 역할(role), 상태(state), 행동(action)을 확인합니다. 클릭 가능한데 VoiceOver로 실행할 수 없는 요소나 핵심 흐름을 막는 경고는 릴리스 차단입니다.
 
-- [ ] **Step 9: 개인 BYOK 경계를 증명합니다.**
+- [ ] **Step 8: 개인 BYOK 경계를 증명합니다.**
 
 구현·테스트 작성·실패 분석·패치와 실제 개인용 Work는 소유자 본인의 Z.AI Coding Plan `glm-5.2` 키로 실행합니다. 키는 로컬 소유자 전용 저장소에만 두고 renderer·로그·스크린샷·evidence·원격 Massion 서비스에 전달하지 않습니다. 계정·할당량을 다른 사용자에게 공유·대여·판매·중계하는 경로가 없는지 확인합니다.
 
-- [ ] **Step 10: 재발 방지 릴리스 자동화를 연결합니다.**
+- [ ] **Step 9: 재발 방지 릴리스 자동화를 연결합니다.**
 
 `desktop-release.yml`은 수동 승인된 후보 SHA에서만 실행하고, 서명·공증 secret이 없으면 게시하지 않습니다. `verify-desktop-release.mjs`는 앱 버전·후보 SHA·서명·공증·sidecar·UAT evidence의 일치를 한 번만 검사합니다. GitHub Release는 모든 게이트가 같은 SHA로 통과한 뒤 마지막 단계에서만 생성합니다.
 
-- [ ] **Step 11: 문서 주장을 실제 SHA와 결과로 갱신합니다.**
+- [ ] **Step 10: 문서 주장을 실제 SHA와 결과로 갱신합니다.**
 
 건너뛴 시나리오는 통과로 기록하지 않고 이유와 차단 조건을 씁니다.
 
-- [ ] **Step 12: 증거 커밋을 만듭니다.**
+- [ ] **Step 11: 증거 커밋을 만듭니다.**
 
 ```sh
 git add docs/evidence/phase-30/desktop-live-uat-2026-07-24.md docs/evidence/phase-30/personal-desktop-release-YYYY-MM-DD.md PRODUCT.md docs/product/constitution.md docs/generated/requirements-traceability.tsv
@@ -482,4 +477,4 @@ git commit -m "test(desktop): 실제 AgentOS 사용자 시나리오 검증" \
 - 과도한 unit test를 피하고 신뢰 경계와 실제 실패만 테스트합니다.
 - 실제 앱 검증은 jsdom/브라우저가 아니라 빌드된 Tauri 앱과 Computer Use를 사용합니다.
 - 완료 판정은 테스트 개수가 아니라 12개 핵심 시나리오와 구현된 확장 시나리오의 전부 통과입니다.
-- 릴리스 판정은 서명·공증, 깨끗한 설치·업데이트·제거, 백업→복구, 비정상 종료, 키보드·VoiceOver, 개인 BYOK 격리까지 모두 같은 후보 SHA로 통과해야 합니다.
+- 릴리스 판정은 서명·공증, 깨끗한 설치·업데이트·제거와 데이터 지속성, 비정상 종료, 키보드·VoiceOver, 개인 BYOK 격리까지 모두 같은 후보 SHA로 통과해야 합니다.

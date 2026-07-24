@@ -171,7 +171,7 @@ Card는 화면 전체를 카드 격자로 만드는 데 사용하지 않습니�
 | Provider 및 계정 | API Provider, endpoint, credential, 구독 계정, 연결 상태 | 필수 |
 | 모델 및 경로 | model profile, route, candidate, fallback, 진단 | 필수 |
 | 권한 및 자동화 | Work 실행 자율성, Extension/Growth 승인 정책 | 기존 자율성 + 읽기 가능한 정책 |
-| 저장 및 백업 | 로컬 데이터 위치, 백업·복구 | 현재 지원 계약만 노출 |
+| 저장 | 로컬 데이터 위치 | 위치·지속성만 노출. 백업·복구 UI는 첫 파괴적 migration 전에 재검토 |
 | 알림 | 승인·차단·완료 알림 | Desktop 알림 계약 이후 |
 | 고급 | 버전, 진단, bridge/daemon 상태 | 필수 읽기, 제한된 복구 행동 |
 
