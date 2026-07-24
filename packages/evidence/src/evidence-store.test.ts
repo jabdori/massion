@@ -252,6 +252,14 @@ describe("immutable EvidenceBrief", () => {
       query: "찾지 못한 근거",
       scopeChecksum,
     };
+    await expect(
+      store.createNoMatch(context, {
+        ...input,
+        commandId: crypto.randomUUID(),
+        workId: "work-invalid-scope",
+        scopeChecksum: "invalid",
+      }),
+    ).rejects.toThrow("SHA-256");
     const manual = await store.createBrief(context, {
       commandId: crypto.randomUUID(),
       workId: input.workId,
@@ -290,6 +298,31 @@ describe("immutable EvidenceBrief", () => {
       },
     );
     await expect(store.getBrief(context, first.brief.evidenceBriefId)).rejects.toThrow("checksum");
+  });
+
+  it("IndexVersion snapshot row가 변조되면 automatic no-match Brief를 만들지 않는다", async () => {
+    const store = await EvidenceBriefStore.create(database, repositories, indexes);
+    await database.query(
+      "UPDATE evidence_chunk SET content = $content WHERE organization_id = $organization_id AND index_version_id = $index_version_id AND chunk_id = $chunk_id;",
+      {
+        content: "tampered snapshot content",
+        organization_id: context.organizationId,
+        index_version_id: fixture.index.indexVersionId,
+        chunk_id: fixture.result.referenceId,
+      },
+    );
+
+    await expect(
+      store.createNoMatch(context, {
+        commandId: crypto.randomUUID(),
+        workId: "work-tampered-snapshot",
+        repositoryId: fixture.repository.repositoryId,
+        indexVersionId: fixture.index.indexVersionId,
+        query: "변조된 snapshot",
+        scopeChecksum: "f".repeat(64),
+      }),
+    ).rejects.toThrow("snapshot checksum");
+    expect(await store.findAutomaticByWork(context, "work-tampered-snapshot")).toBeUndefined();
   });
 
   it("저장된 external snapshot만 reference로 허용하고 content checksum을 다시 검증한다", async () => {

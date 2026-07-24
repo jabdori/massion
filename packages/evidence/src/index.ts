@@ -13,6 +13,8 @@ export * from "./recovery.js";
 export * from "./search.js";
 export * from "./graph.js";
 export * from "./evidence-store.js";
+export * from "./workspace-knowledge.js";
+export * from "./prompt-materializer.js";
 export * from "./stale.js";
 export * from "./research.js";
 export * from "./context.js";

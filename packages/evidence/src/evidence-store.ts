@@ -3,8 +3,9 @@ import { createHash, randomUUID } from "node:crypto";
 import { OrganizationService, type TenantContext } from "@massion/identity";
 import { applyMigrations, type MassionDatabase, type QueryExecutor } from "@massion/storage";
 
+import type { IndexVersion } from "./contracts.js";
+import type { IndexSnapshot, IndexStore } from "./index-store.js";
 import type { CodeSearchResult } from "./search.js";
-import type { IndexStore } from "./index-store.js";
 import type { RepositoryStore } from "./repository-store.js";
 import {
   EVIDENCE_BRIEF_KNOWLEDGE_MIGRATION,
@@ -104,6 +105,16 @@ export interface CreateNoMatchEvidenceBriefInput {
   readonly scopeChecksum: string;
 }
 
+export interface CreateAutomaticEvidenceBriefInput {
+  readonly commandId: string;
+  readonly workId: string;
+  readonly repositoryId: string;
+  readonly indexVersionId: string;
+  readonly query: string;
+  readonly scopeChecksum: string;
+  readonly references: readonly CodeEvidenceReferenceInput[];
+}
+
 interface BriefRecord {
   readonly evidence_brief_id: string;
   readonly organization_id: string;
@@ -135,6 +146,22 @@ interface ExternalSourceRecord {
   readonly media_type: string;
   readonly content_hash: string;
   readonly content: string;
+}
+
+interface PersistAutomaticBriefInput {
+  readonly commandId: string;
+  readonly requestHash: string;
+  readonly workId: string;
+  readonly repositoryId: string;
+  readonly repositoryRevisionId: string;
+  readonly indexVersionId: string;
+  readonly configurationChecksum: string;
+  readonly query: string;
+  readonly status: Extract<EvidenceBrief["status"], "ready" | "no_match">;
+  readonly scopeChecksum: string;
+  readonly references: readonly CodeEvidenceReference[];
+  readonly claims: readonly EvidenceClaim[];
+  readonly checksum: string;
 }
 
 function canonicalJson(value: unknown): string {
@@ -213,7 +240,7 @@ export class EvidenceBriefStore {
     const index = await this.repositories.getIndex(context, input.indexVersionId);
     if (index.repositoryId !== input.repositoryId || !["complete", "superseded"].includes(index.status))
       throw new Error("EvidenceBrief IndexVersion은 같은 Repository의 완전한 snapshot이어야 합니다");
-    const snapshot = await this.indexes.getSnapshot(context, input.indexVersionId);
+    const snapshot = await this.verifiedSnapshot(context, index);
     const references = await Promise.all(
       input.references.map(async (reference): Promise<EvidenceReference> => {
         if (reference.kind === "external") {
@@ -236,62 +263,12 @@ export class EvidenceBriefStore {
             contentHash: source.content_hash,
           };
         }
-        const result = reference.result;
-        if (
-          result.repositoryId !== input.repositoryId ||
-          result.repositoryRevisionId !== index.repositoryRevisionId ||
-          result.indexVersionId !== input.indexVersionId
-        ) {
-          throw new Error("Reference의 RepositoryRevision 또는 IndexVersion이 EvidenceBrief와 다릅니다");
-        }
-        const item =
-          result.kind === "symbol"
-            ? snapshot.symbols.find((symbol) => symbol.symbolId === result.referenceId)
-            : snapshot.chunks.find((chunk) => chunk.chunkId === result.referenceId);
-        if (!item) throw new Error(`Evidence reference를 IndexVersion에서 찾을 수 없습니다: ${result.referenceId}`);
-        if (
-          item.relativePath !== result.relativePath ||
-          item.startLine !== result.startLine ||
-          item.endLine !== result.endLine ||
-          item.startByte !== result.startByte ||
-          item.endByte !== result.endByte ||
-          item.contentHash !== result.contentHash
-        ) {
-          throw new Error(`Evidence reference checksum 또는 range가 다릅니다: ${result.referenceId}`);
-        }
-        const file = snapshot.files.find((candidate) => candidate.sourceFileId === item.sourceFileId);
-        if (!file) throw new Error(`Evidence reference의 SourceFile을 찾을 수 없습니다: ${result.referenceId}`);
-        return {
-          referenceId: result.referenceId,
-          kind: "code" as const,
-          repositoryId: input.repositoryId,
-          repositoryRevisionId: index.repositoryRevisionId,
-          indexVersionId: input.indexVersionId,
-          relativePath: result.relativePath,
-          sourceKind: result.kind,
-          startLine: result.startLine,
-          endLine: result.endLine,
-          startByte: result.startByte,
-          endByte: result.endByte,
-          contentHash: result.contentHash,
-          parserConfidence: file.status,
-        };
+        return this.validateCodeReference(input.repositoryId, index, snapshot, reference.result);
       }),
     );
     if (new Set(references.map((reference) => reference.referenceId)).size !== references.length)
       throw new Error("EvidenceBrief reference ID는 중복될 수 없습니다");
-    const synthesized = this.synthesis ? await this.synthesis.synthesize({ query, references }) : { claims: [] };
-    const referenceIds = new Set(references.map((reference) => reference.referenceId));
-    const claims: EvidenceClaim[] = synthesized.claims.map((claim) => {
-      const text = claim.text.trim();
-      if (!text || claim.referenceIds.length === 0) throw new Error("Evidence claim에는 text와 citation이 필요합니다");
-      if (claim.referenceIds.some((referenceId) => !referenceIds.has(referenceId)))
-        throw new Error("Evidence claim은 제공된 reference ID만 인용할 수 있습니다");
-      const cited = [...new Set(claim.referenceIds)].sort();
-      return { claimId: sha256(`${text}\0${cited.join("\0")}`), text, referenceIds: cited };
-    });
-    if (new Set(claims.map((claim) => claim.claimId)).size !== claims.length)
-      throw new Error("Evidence claim은 중복될 수 없습니다");
+    const claims = await this.synthesizeClaims(query, references);
     const core = {
       workId: input.workId,
       repositoryId: input.repositoryId,
@@ -349,6 +326,69 @@ export class EvidenceBriefStore {
     });
   }
 
+  public async createAutomaticBrief(
+    context: TenantContext,
+    input: CreateAutomaticEvidenceBriefInput,
+  ): Promise<{ readonly brief: EvidenceBrief }> {
+    await this.organizations.verifyTenantContext(context);
+    if (!input.commandId.trim() || !input.workId.trim())
+      throw new Error("EvidenceBrief command와 Work ID가 필요합니다");
+    const query = input.query.trim();
+    if (!query || query.length > 4_000) throw new Error("EvidenceBrief query는 1자 이상 4,000자 이하여야 합니다");
+    if (!/^[a-f0-9]{64}$/u.test(input.scopeChecksum))
+      throw new Error("EvidenceBrief scope checksum은 SHA-256 형식이어야 합니다");
+    if (input.references.length < 1 || input.references.length > 12)
+      throw new Error("Automatic EvidenceBrief reference는 1개 이상 12개 이하여야 합니다");
+    await this.repositories.getRepository(context, input.repositoryId);
+    const requestHash = sha256(canonicalJson(input));
+    const replayed = await this.replay(context.organizationId, input.commandId, requestHash);
+    if (replayed) return { brief: await this.getBrief(context, replayed.evidenceBriefId) };
+    const existing = await this.findAutomaticByWork(context, input.workId);
+    if (existing) {
+      if (existing.scopeChecksum !== input.scopeChecksum)
+        throw new Error("같은 Work의 automatic EvidenceBrief scope가 다릅니다");
+      return { brief: existing };
+    }
+
+    const index = await this.repositories.getIndex(context, input.indexVersionId);
+    if (index.repositoryId !== input.repositoryId || !["complete", "superseded"].includes(index.status))
+      throw new Error("EvidenceBrief IndexVersion은 같은 Repository의 완전한 snapshot이어야 합니다");
+    const snapshot = await this.verifiedSnapshot(context, index);
+    const references = input.references.map((reference) =>
+      this.validateCodeReference(input.repositoryId, index, snapshot, reference.result),
+    );
+    if (new Set(references.map((reference) => reference.referenceId)).size !== references.length)
+      throw new Error("EvidenceBrief reference ID는 중복될 수 없습니다");
+    const claims = await this.synthesizeClaims(query, references);
+    const checksum = briefChecksum({
+      workId: input.workId,
+      repositoryId: input.repositoryId,
+      repositoryRevisionId: index.repositoryRevisionId,
+      indexVersionId: input.indexVersionId,
+      configurationChecksum: index.configurationChecksum,
+      query,
+      status: "ready",
+      references,
+      claims,
+      scopeChecksum: input.scopeChecksum,
+    });
+    return await this.persistAutomaticBrief(context, {
+      commandId: input.commandId,
+      requestHash,
+      workId: input.workId,
+      repositoryId: input.repositoryId,
+      repositoryRevisionId: index.repositoryRevisionId,
+      indexVersionId: input.indexVersionId,
+      configurationChecksum: index.configurationChecksum,
+      query,
+      status: "ready",
+      scopeChecksum: input.scopeChecksum,
+      references,
+      claims,
+      checksum,
+    });
+  }
+
   public async getBrief(context: TenantContext, evidenceBriefId: string): Promise<EvidenceBrief> {
     await this.organizations.verifyTenantContext(context);
     const [records] = await this.database.query<[BriefRecord[]]>(
@@ -358,6 +398,17 @@ export class EvidenceBriefStore {
     if (!records[0]) throw new Error(`EvidenceBrief를 찾을 수 없습니다: ${evidenceBriefId}`);
     await this.repositories.getRepository(context, records[0].repository_id);
     return this.view(records[0], true);
+  }
+
+  public async findAutomaticByWork(context: TenantContext, workId: string): Promise<EvidenceBrief | undefined> {
+    await this.organizations.verifyTenantContext(context);
+    if (!workId.trim()) throw new Error("Work ID가 필요합니다");
+    const automaticKey = `${context.organizationId}:${workId}`;
+    const [records] = await this.database.query<[BriefRecord[]]>(
+      "SELECT * OMIT id FROM evidence_brief WHERE organization_id = $organization_id AND automatic_key = $automatic_key LIMIT 1;",
+      { organization_id: context.organizationId, automatic_key: automaticKey },
+    );
+    return records[0] ? this.view(records[0], true) : undefined;
   }
 
   public async createNoMatch(
@@ -375,11 +426,16 @@ export class EvidenceBriefStore {
     const requestHash = sha256(canonicalJson(input));
     const replayed = await this.replay(context.organizationId, input.commandId, requestHash);
     if (replayed) return { brief: await this.getBrief(context, replayed.evidenceBriefId) };
+    const existing = await this.findAutomaticByWork(context, input.workId);
+    if (existing) {
+      if (existing.scopeChecksum !== input.scopeChecksum)
+        throw new Error("같은 Work의 automatic EvidenceBrief scope가 다릅니다");
+      return { brief: existing };
+    }
     const index = await this.repositories.getIndex(context, input.indexVersionId);
     if (index.repositoryId !== input.repositoryId || !["complete", "superseded"].includes(index.status))
       throw new Error("EvidenceBrief IndexVersion은 같은 Repository의 완전한 snapshot이어야 합니다");
-    await this.indexes.getSnapshot(context, input.indexVersionId);
-    const automaticKey = `${context.organizationId}:${input.workId}`;
+    await this.verifiedSnapshot(context, index);
     const checksum = briefChecksum({
       workId: input.workId,
       repositoryId: input.repositoryId,
@@ -392,9 +448,110 @@ export class EvidenceBriefStore {
       claims: [],
       scopeChecksum: input.scopeChecksum,
     });
+    return await this.persistAutomaticBrief(context, {
+      commandId: input.commandId,
+      requestHash,
+      workId: input.workId,
+      repositoryId: input.repositoryId,
+      repositoryRevisionId: index.repositoryRevisionId,
+      indexVersionId: input.indexVersionId,
+      configurationChecksum: index.configurationChecksum,
+      query,
+      status: "no_match",
+      scopeChecksum: input.scopeChecksum,
+      references: [],
+      claims: [],
+      checksum,
+    });
+  }
+
+  public async listByWork(context: TenantContext, workId: string): Promise<readonly EvidenceBrief[]> {
+    await this.organizations.verifyTenantContext(context);
+    const [records] = await this.database.query<[BriefRecord[]]>(
+      "SELECT * OMIT id FROM evidence_brief WHERE organization_id = $organization_id AND work_id = $work_id ORDER BY created_at ASC;",
+      { organization_id: context.organizationId, work_id: workId },
+    );
+    return records.map((record) => this.view(record, true));
+  }
+
+  private async verifiedSnapshot(context: TenantContext, index: IndexVersion): Promise<IndexSnapshot> {
+    const snapshot = await this.indexes.getSnapshot(context, index.indexVersionId);
+    if (!index.snapshotChecksum || index.snapshotChecksum !== snapshot.checksum)
+      throw new Error("EvidenceBrief IndexVersion snapshot checksum이 다릅니다");
+    return snapshot;
+  }
+
+  private validateCodeReference(
+    repositoryId: string,
+    index: IndexVersion,
+    snapshot: IndexSnapshot,
+    result: CodeSearchResult,
+  ): CodeEvidenceReference {
+    if (
+      result.repositoryId !== repositoryId ||
+      result.repositoryRevisionId !== index.repositoryRevisionId ||
+      result.indexVersionId !== index.indexVersionId
+    ) {
+      throw new Error("Reference의 RepositoryRevision 또는 IndexVersion이 EvidenceBrief와 다릅니다");
+    }
+    const item =
+      result.kind === "symbol"
+        ? snapshot.symbols.find((symbol) => symbol.symbolId === result.referenceId)
+        : snapshot.chunks.find((chunk) => chunk.chunkId === result.referenceId);
+    if (!item) throw new Error(`Evidence reference를 IndexVersion에서 찾을 수 없습니다: ${result.referenceId}`);
+    if (
+      item.relativePath !== result.relativePath ||
+      item.startLine !== result.startLine ||
+      item.endLine !== result.endLine ||
+      item.startByte !== result.startByte ||
+      item.endByte !== result.endByte ||
+      item.contentHash !== result.contentHash
+    ) {
+      throw new Error(`Evidence reference checksum 또는 range가 다릅니다: ${result.referenceId}`);
+    }
+    const file = snapshot.files.find((candidate) => candidate.sourceFileId === item.sourceFileId);
+    if (!file) throw new Error(`Evidence reference의 SourceFile을 찾을 수 없습니다: ${result.referenceId}`);
+    return {
+      referenceId: result.referenceId,
+      kind: "code",
+      repositoryId,
+      repositoryRevisionId: index.repositoryRevisionId,
+      indexVersionId: index.indexVersionId,
+      relativePath: result.relativePath,
+      sourceKind: result.kind,
+      startLine: result.startLine,
+      endLine: result.endLine,
+      startByte: result.startByte,
+      endByte: result.endByte,
+      contentHash: result.contentHash,
+      parserConfidence: file.status,
+    };
+  }
+
+  private async synthesizeClaims(query: string, references: readonly EvidenceReference[]): Promise<EvidenceClaim[]> {
+    const synthesized = this.synthesis ? await this.synthesis.synthesize({ query, references }) : { claims: [] };
+    const referenceIds = new Set(references.map((reference) => reference.referenceId));
+    const claims: EvidenceClaim[] = synthesized.claims.map((claim) => {
+      const text = claim.text.trim();
+      if (!text || claim.referenceIds.length === 0) throw new Error("Evidence claim에는 text와 citation이 필요합니다");
+      if (claim.referenceIds.some((referenceId) => !referenceIds.has(referenceId)))
+        throw new Error("Evidence claim은 제공된 reference ID만 인용할 수 있습니다");
+      const cited = [...new Set(claim.referenceIds)].sort();
+      return { claimId: sha256(`${text}\0${cited.join("\0")}`), text, referenceIds: cited };
+    });
+    if (new Set(claims.map((claim) => claim.claimId)).size !== claims.length)
+      throw new Error("Evidence claim은 중복될 수 없습니다");
+    return claims;
+  }
+
+  private async persistAutomaticBrief(
+    context: TenantContext,
+    input: PersistAutomaticBriefInput,
+  ): Promise<{ readonly brief: EvidenceBrief }> {
+    const automaticKey = `${context.organizationId}:${input.workId}`;
     return await this.database.transaction(async (tx) => {
       await this.organizations.verifyTenantContext(context, undefined, tx);
-      const repeated = await this.replay(context.organizationId, input.commandId, requestHash, tx);
+      const repeated = await this.replay(context.organizationId, input.commandId, input.requestHash, tx);
       if (repeated) return { brief: await this.getBrief(context, repeated.evidenceBriefId) };
       const [existing] = await tx.query<[BriefRecord[]]>(
         "SELECT * OMIT id FROM evidence_brief WHERE organization_id = $organization_id AND automatic_key = $automatic_key LIMIT 1;",
@@ -402,24 +559,27 @@ export class EvidenceBriefStore {
       );
       if (existing[0]) {
         if (existing[0].scope_checksum !== input.scopeChecksum)
-          throw new Error("같은 Work의 automatic no-match EvidenceBrief scope가 다릅니다");
+          throw new Error("같은 Work의 automatic EvidenceBrief scope가 다릅니다");
         return { brief: this.view(existing[0], true) };
       }
       const evidenceBriefId = randomUUID();
       const [created] = await tx.query<[BriefRecord[]]>(
-        "CREATE evidence_brief CONTENT { evidence_brief_id: $evidence_brief_id, organization_id: $organization_id, work_id: $work_id, repository_id: $repository_id, repository_revision_id: $repository_revision_id, index_version_id: $index_version_id, configuration_checksum: $configuration_checksum, query: $query, status: 'no_match', scope_checksum: $scope_checksum, automatic_key: $automatic_key, references_json: '[]', claims_json: '[]', checksum: $checksum, created_by_user_id: $created_by_user_id, created_at: time::now() } RETURN AFTER;",
+        "CREATE evidence_brief CONTENT { evidence_brief_id: $evidence_brief_id, organization_id: $organization_id, work_id: $work_id, repository_id: $repository_id, repository_revision_id: $repository_revision_id, index_version_id: $index_version_id, configuration_checksum: $configuration_checksum, query: $query, status: $status, scope_checksum: $scope_checksum, automatic_key: $automatic_key, references_json: $references_json, claims_json: $claims_json, checksum: $checksum, created_by_user_id: $created_by_user_id, created_at: time::now() } RETURN AFTER;",
         {
           evidence_brief_id: evidenceBriefId,
           organization_id: context.organizationId,
           work_id: input.workId,
           repository_id: input.repositoryId,
-          repository_revision_id: index.repositoryRevisionId,
+          repository_revision_id: input.repositoryRevisionId,
           index_version_id: input.indexVersionId,
-          configuration_checksum: index.configurationChecksum,
-          query,
+          configuration_checksum: input.configurationChecksum,
+          query: input.query,
+          status: input.status,
           scope_checksum: input.scopeChecksum,
           automatic_key: automaticKey,
-          checksum,
+          references_json: canonicalJson(input.references),
+          claims_json: canonicalJson(input.claims),
+          checksum: input.checksum,
           created_by_user_id: context.userId,
         },
       );
@@ -432,23 +592,18 @@ export class EvidenceBriefStore {
           evidence_brief_id: evidenceBriefId,
           repository_id: input.repositoryId,
           command_id: input.commandId,
-          request_hash: requestHash,
-          payload_json: canonicalJson({ indexVersionId: input.indexVersionId, referenceCount: 0, claimCount: 0 }),
+          request_hash: input.requestHash,
+          payload_json: canonicalJson({
+            indexVersionId: input.indexVersionId,
+            referenceCount: input.references.length,
+            claimCount: input.claims.length,
+          }),
           result_json: JSON.stringify({ evidenceBriefId }),
           actor_user_id: context.userId,
         },
       );
       return { brief: this.view(created[0], true) };
     });
-  }
-
-  public async listByWork(context: TenantContext, workId: string): Promise<readonly EvidenceBrief[]> {
-    await this.organizations.verifyTenantContext(context);
-    const [records] = await this.database.query<[BriefRecord[]]>(
-      "SELECT * OMIT id FROM evidence_brief WHERE organization_id = $organization_id AND work_id = $work_id ORDER BY created_at ASC;",
-      { organization_id: context.organizationId, work_id: workId },
-    );
-    return records.map((record) => this.view(record, true));
   }
 
   private async replay(
