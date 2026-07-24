@@ -155,6 +155,11 @@ describe("Application desktop service", () => {
     ]));
   });
 
+  it("없는 fixture Work 조회는 동기 throw 없이 rejected Promise를 반환한다", async () => {
+    const promise = createFixtureDesktopService().loadWork("없는-id");
+    await expect(promise).rejects.toThrow("Fixture Work를 찾을 수 없습니다");
+  });
+
   it("bootstrap이 연결되지 않은 상태를 오류로 처리하고 Native stream 이름을 UI 계약으로 변환한다", async () => {
     const native = transport();
     native.bootstrap = async () => ({ connection: { status: "initialization-required" } });

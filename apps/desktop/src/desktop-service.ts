@@ -715,16 +715,18 @@ function fixtureRegistryDetail(versionId: string): unknown {
   };
 }
 
+const fixturePromise = <T>(run: () => T): Promise<T> => new Promise((resolve) => { resolve(run()); });
+
 export function createFixtureDesktopService(): DesktopService {
   const initialSnapshot = fixtureDataAdapter();
-  const stop: DesktopStreamStop = () => Promise.resolve();
+  const stop: DesktopStreamStop = () => { return fixturePromise(() => undefined); };
 
   return {
     initialSnapshot,
-    bootstrap: () => Promise.resolve("ready"),
+    bootstrap: () => fixturePromise(() => "ready"),
     loadIndex: ({ filter, search }) => {
       const normalizedSearch = search.trim().toLocaleLowerCase("ko");
-      return Promise.resolve(initialSnapshot.works.filter(
+      return fixturePromise(() => initialSnapshot.works.filter(
         (work) =>
           workStatusFilter(work.status) === filter &&
           (normalizedSearch.length === 0 || work.title.toLocaleLowerCase("ko").includes(normalizedSearch)),
@@ -732,14 +734,17 @@ export function createFixtureDesktopService(): DesktopService {
     },
     loadWork: (workId) => {
       const work = initialSnapshot.works.find((candidate) => candidate.id === workId);
-      return work ? Promise.resolve(work) : Promise.reject(new Error("Fixture Work를 찾을 수 없습니다"));
+      return fixturePromise(() => {
+        if (!work) throw new Error("Fixture Work를 찾을 수 없습니다");
+        return work;
+      });
     },
     loadPendingApprovals: () =>
-      Promise.resolve(initialSnapshot.works.flatMap((work) => work.approvals.filter((approval) => approval.status === "pending"))),
+      fixturePromise(() => initialSnapshot.works.flatMap((work) => work.approvals.filter((approval) => approval.status === "pending"))),
     // fixture 방은 model.ts의 활동을 그대로 씁니다. 실 daemon에서는 loadRoom이 대체합니다.
     loadRooms: (workId: string) => {
       const work = fixtureDataAdapter().works.find((candidate) => candidate.id === workId);
-      if (!work) return Promise.resolve([]);
+      if (!work) return fixturePromise(() => []);
       const speak = (handle: string) => speakerFor({ authorKind: "agent", authorId: handle }, fixtureOrganizationNodes);
       const quill = speak("evidence-research");
       const vega = speak("delivery-coordination");
@@ -751,7 +756,7 @@ export function createFixtureDesktopService(): DesktopService {
 
       // 아직 아무도 말하지 않은 Work. 빈 방도 정상 상태입니다.
       if (work.activities.length === 0) {
-        return Promise.resolve([
+        return fixturePromise(() => [
           {
             roomId: `${workId}-core-office`,
             name: "Core Office",
@@ -765,7 +770,7 @@ export function createFixtureDesktopService(): DesktopService {
         ]);
       }
 
-      return Promise.resolve(withRoomReferences([
+      return fixturePromise(() => withRoomReferences([
         {
           roomId: `${workId}-core-office`,
           name: "Core Office",
@@ -812,27 +817,27 @@ export function createFixtureDesktopService(): DesktopService {
       ]));
     },
 
-    loadOrganization: () => Promise.resolve({ version: 1, nodes: fixtureOrganizationNodes }),
-    loadAutonomy: () => Promise.resolve({ mode: "automatic", revision: 0 }),
-    setAutonomy: (mode, expectedRevision) => Promise.resolve({ mode, revision: expectedRevision + 1 }),
-    loadExtensions: () => Promise.resolve([
+    loadOrganization: () => fixturePromise(() => ({ version: 1, nodes: fixtureOrganizationNodes })),
+    loadAutonomy: () => fixturePromise(() => ({ mode: "automatic", revision: 0 })),
+    setAutonomy: (mode, expectedRevision) => fixturePromise(() => ({ mode, revision: expectedRevision + 1 })),
+    loadExtensions: () => fixturePromise(() => [
       ...fixtureExtensionEntries,
       ...marketplaceEntries(fixtureRegistryInventory, fixtureExtensionEntries.map((item) => item.packageName)),
     ]),
-    loadSettings: () => Promise.resolve(fixtureSettings),
-    connectZaiCodingPlan: () => Promise.resolve(),
-    registerProvider: () => Promise.resolve(),
-    registerEndpoint: () => Promise.resolve(),
-    addCredential: () => Promise.resolve(),
-    disableCredential: () => Promise.resolve(),
-    registerModel: () => Promise.resolve(),
-    configureRoute: () => Promise.resolve(),
-    addRouteCandidate: () => Promise.resolve(),
-    configureSubscriptionPolicy: () => Promise.resolve(),
-    searchRegistry: (query, limit = 20) => Promise.resolve(fixtureRegistryInventory.filter((item) => `${item.packageName} ${item.description}`.toLowerCase().includes(query.trim().toLowerCase())).slice(0, limit)),
-    loadRegistryInfo: (versionId) => Promise.resolve(fixtureRegistryDetail(versionId)),
-    loadCapabilities: () => Promise.resolve({ extensions: [], inventory: fixtureRegistryInventory }),
-    loadGrowth: () => Promise.resolve({
+    loadSettings: () => fixturePromise(() => fixtureSettings),
+    connectZaiCodingPlan: () => fixturePromise(() => undefined),
+    registerProvider: () => fixturePromise(() => undefined),
+    registerEndpoint: () => fixturePromise(() => undefined),
+    addCredential: () => fixturePromise(() => undefined),
+    disableCredential: () => fixturePromise(() => undefined),
+    registerModel: () => fixturePromise(() => undefined),
+    configureRoute: () => fixturePromise(() => undefined),
+    addRouteCandidate: () => fixturePromise(() => undefined),
+    configureSubscriptionPolicy: () => fixturePromise(() => undefined),
+    searchRegistry: (query, limit = 20) => fixturePromise(() => fixtureRegistryInventory.filter((item) => `${item.packageName} ${item.description}`.toLowerCase().includes(query.trim().toLowerCase())).slice(0, limit)),
+    loadRegistryInfo: (versionId) => fixturePromise(() => fixtureRegistryDetail(versionId)),
+    loadCapabilities: () => fixturePromise(() => ({ extensions: [], inventory: fixtureRegistryInventory })),
+    loadGrowth: () => fixturePromise(() => ({
       configuration: {
         reflectionEnabled: true,
         adoptionMode: "review" as const,
@@ -991,15 +996,15 @@ export function createFixtureDesktopService(): DesktopService {
           },
         },
       ],
-    }),
-    installRegistry: () => Promise.resolve({ outcome: "succeeded", installationId: "installation-fixture-0001" }),
-    submitDirective: () => Promise.resolve(),
-    decideApproval: () => Promise.resolve(),
-    cancelRun: () => Promise.resolve(),
-    resumeRun: () => Promise.resolve(),
-    startWork: () => Promise.resolve({ runId: "run-fixture-0001" }),
-    subscribeDurable: () => Promise.resolve(stop),
-    subscribeExecution: () => Promise.resolve(stop),
+    })),
+    installRegistry: () => fixturePromise(() => ({ outcome: "succeeded", installationId: "installation-fixture-0001" })),
+    submitDirective: () => fixturePromise(() => undefined),
+    decideApproval: () => fixturePromise(() => undefined),
+    cancelRun: () => fixturePromise(() => undefined),
+    resumeRun: () => fixturePromise(() => undefined),
+    startWork: () => fixturePromise(() => ({ runId: "run-fixture-0001" })),
+    subscribeDurable: () => fixturePromise(() => stop),
+    subscribeExecution: () => fixturePromise(() => stop),
   };
 }
 
