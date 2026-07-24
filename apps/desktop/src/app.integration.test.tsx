@@ -524,14 +524,20 @@ describe("AgentOS native data flow", () => {
         return async () => undefined;
       },
     });
-    render(<App service={fake} />);
+    const contextPicker = {
+      pickDirectory: vi.fn(async () => undefined),
+      pickFiles: vi.fn(async () => ["/tmp/contracts/src/contract.ts"]),
+    };
+    render(<App contextPicker={contextPicker} service={fake} />);
 
     await user.click(screen.getByRole("button", { name: "새 Work 만들기" }));
     const dialog = screen.getByRole("dialog", { name: "새 Work" });
     await user.type(within(dialog).getByRole("textbox", { name: "업무 요청" }), "파트너 계약 위험을 검토해줘");
     await user.click(await within(dialog).findByRole("button", { name: /계약 폴더/ }));
-    await user.type(within(dialog).getByRole("textbox", { name: "워크스페이스 상대 파일 경로" }), "src/contract.ts");
+    const attachmentStatus = within(dialog).getByRole("status", { name: "파일 첨부 상태" });
+    expect(attachmentStatus).toBeEmptyDOMElement();
     await user.click(within(dialog).getByRole("button", { name: "파일 첨부" }));
+    expect(attachmentStatus).toHaveTextContent("파일을 첨부했습니다: src/contract.ts");
     await user.click(within(dialog).getByRole("button", { name: "실행 시작" }));
 
     expect(await screen.findByText("Work 생성 중")).toBeInTheDocument();
@@ -541,6 +547,108 @@ describe("AgentOS native data flow", () => {
     createdVisible = true;
     durable?.({ sequence: 12, type: "work.created", resource: { type: "Work", id: created.id } });
     expect(await screen.findByRole("main", { name: created.title }, { timeout: 2_000 })).toBeInTheDocument();
+  });
+
+  it("네이티브 선택 취소와 워크스페이스 밖 파일은 현재 draft를 보존한다", async () => {
+    const user = userEvent.setup();
+    const workspace = {
+      workspaceId: "workspace-picker-0001", name: "선택 폴더", path: "/tmp/picker", kind: "local-directory" as const,
+      trust: "trusted" as const, status: "active" as const, revision: 1,
+      createdAt: "2026-07-24T00:00:00.000Z", lastUsedAt: "2026-07-24T00:00:00.000Z",
+    };
+    const contextPicker = {
+      pickDirectory: vi.fn(async () => undefined),
+      pickFiles: vi.fn()
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce(["/tmp/outside.ts"]),
+    };
+    render(<App contextPicker={contextPicker} service={service({ loadWorkspaces: async () => [workspace] })} />);
+
+    await user.click(screen.getByRole("button", { name: "새 Work 만들기" }));
+    const dialog = screen.getByRole("dialog", { name: "새 Work" });
+    const request = within(dialog).getByRole("textbox", { name: "업무 요청" });
+    await user.type(request, "선택 취소 뒤에도 남아야 하는 요청");
+    await user.click(await within(dialog).findByRole("button", { name: /선택 폴더/ }));
+    await user.click(within(dialog).getByRole("button", { name: "파일 첨부" }));
+    await user.click(within(dialog).getByRole("button", { name: "파일 첨부" }));
+
+    expect(request).toHaveValue("선택 취소 뒤에도 남아야 하는 요청");
+    expect(within(dialog).getByRole("button", { name: /선택 폴더/ })).toHaveAttribute("aria-pressed", "true");
+    expect(within(dialog).getByText("선택한 파일은 현재 워크스페이스 안에 있어야 합니다.")).toBeInTheDocument();
+  });
+
+  it("폴더 등록 중에는 Work 문맥을 바꾸거나 실행하지 않고 완료 후 새 폴더를 선택한다", async () => {
+    const user = userEvent.setup();
+    const registered = deferred<{
+      workspaceId: string; name: string; path: string; kind: "local-directory"; trust: "pending"; status: "active"; revision: number; createdAt: string; lastUsedAt: string;
+    }>();
+    const current = {
+      workspaceId: "workspace-current", name: "현재 폴더", path: "/tmp/current", kind: "local-directory" as const,
+      trust: "trusted" as const, status: "active" as const, revision: 1,
+      createdAt: "2026-07-24T00:00:00.000Z", lastUsedAt: "2026-07-24T00:00:00.000Z",
+    };
+    const added = {
+      workspaceId: "workspace-added", name: "새 폴더", path: "/tmp/added", kind: "local-directory" as const,
+      trust: "pending" as const, status: "active" as const, revision: 1,
+      createdAt: "2026-07-24T00:00:00.000Z", lastUsedAt: "2026-07-24T00:00:00.000Z",
+    };
+    const startWork = vi.fn(async () => ({ runId: "run-unexpected" }));
+    const registerWorkspace = vi.fn(async () => await registered.promise);
+    const contextPicker = {
+      pickDirectory: vi.fn(async () => "/tmp/added"),
+      pickFiles: vi.fn(async () => ["/tmp/current/src/keep.ts"]),
+    };
+    render(<App contextPicker={contextPicker} service={service({ loadWorkspaces: async () => [current], registerWorkspace, startWork })} />);
+
+    await user.click(screen.getByRole("button", { name: "새 Work 만들기" }));
+    const dialog = screen.getByRole("dialog", { name: "새 Work" });
+    await user.type(within(dialog).getByRole("textbox", { name: "업무 요청" }), "등록 중인 폴더를 기다려줘");
+    await user.click(await within(dialog).findByRole("button", { name: /현재 폴더/ }));
+    await user.click(within(dialog).getByRole("button", { name: "파일 첨부" }));
+    await user.click(within(dialog).getByRole("button", { name: "폴더 추가" }));
+    await waitFor(() => expect(registerWorkspace).toHaveBeenCalledWith("/tmp/added"));
+
+    expect(within(dialog).getByRole("button", { name: /현재 폴더/ })).toBeDisabled();
+    expect(within(dialog).getByRole("button", { name: "폴더 추가" })).toBeDisabled();
+    expect(within(dialog).getByRole("button", { name: "파일 첨부" })).toBeDisabled();
+    expect(within(dialog).getByRole("button", { name: "src/keep.ts 제거" })).toBeDisabled();
+    expect(within(dialog).getByRole("button", { name: "실행 시작" })).toBeDisabled();
+    expect(startWork).not.toHaveBeenCalled();
+
+    registered.resolve(added);
+    expect(await within(dialog).findByRole("button", { name: /새 폴더/ })).toHaveAttribute("aria-pressed", "true");
+    expect(within(dialog).queryByText("src/keep.ts")).not.toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: "폴더 추가" })).toBeEnabled();
+  });
+
+  it("네이티브 파일 선택기 오류를 표시하고 draft를 보존한다", async () => {
+    const user = userEvent.setup();
+    const workspace = {
+      workspaceId: "workspace-picker-error", name: "오류 확인 폴더", path: "/tmp/picker-error", kind: "local-directory" as const,
+      trust: "trusted" as const, status: "active" as const, revision: 1,
+      createdAt: "2026-07-24T00:00:00.000Z", lastUsedAt: "2026-07-24T00:00:00.000Z",
+    };
+    const contextPicker = {
+      pickDirectory: vi.fn(async () => undefined),
+      pickFiles: vi.fn()
+        .mockRejectedValueOnce(new Error("dialog unavailable"))
+        .mockResolvedValueOnce([]),
+    };
+    render(<App contextPicker={contextPicker} service={service({ loadWorkspaces: async () => [workspace] })} />);
+
+    await user.click(screen.getByRole("button", { name: "새 Work 만들기" }));
+    const dialog = screen.getByRole("dialog", { name: "새 Work" });
+    const request = within(dialog).getByRole("textbox", { name: "업무 요청" });
+    await user.type(request, "선택기 오류 뒤에도 남아야 하는 요청");
+    await user.click(await within(dialog).findByRole("button", { name: /오류 확인 폴더/ }));
+    await user.click(within(dialog).getByRole("button", { name: "파일 첨부" }));
+
+    expect(await within(dialog).findByText("파일 선택기를 열지 못했습니다.")).toBeInTheDocument();
+    expect(request).toHaveValue("선택기 오류 뒤에도 남아야 하는 요청");
+    expect(within(dialog).getByRole("button", { name: /오류 확인 폴더/ })).toHaveAttribute("aria-pressed", "true");
+    await user.click(within(dialog).getByRole("button", { name: "파일 첨부" }));
+    await waitFor(() => expect(within(dialog).queryByText("파일 선택기를 열지 못했습니다.")).not.toBeInTheDocument());
+    expect(request).toHaveValue("선택기 오류 뒤에도 남아야 하는 요청");
   });
 
   it("새 Work 요청 실패 시 입력을 보존하고 중복 실행을 막는다", async () => {
@@ -570,23 +678,26 @@ describe("AgentOS native data flow", () => {
     expect(within(dialog).getByRole("button", { name: /운영 폴더/ })).toHaveAttribute("aria-pressed", "true");
   });
 
-  it("다른 워크스페이스를 선택하면 이전 파일 입력 draft를 지운다", async () => {
+  it("다른 워크스페이스를 선택하면 이전 파일 첨부를 지운다", async () => {
     const user = userEvent.setup();
     const workspace = (workspaceId: string, name: string) => ({
       workspaceId, name, path: `/tmp/${workspaceId}`, kind: "local-directory" as const,
       trust: "trusted" as const, status: "active" as const, revision: 1,
       createdAt: "2026-07-24T00:00:00.000Z", lastUsedAt: "2026-07-24T00:00:00.000Z",
     });
-    render(<App service={service({ loadWorkspaces: async () => [workspace("workspace-a", "A 폴더"), workspace("workspace-b", "B 폴더")] })} />);
+    const contextPicker = {
+      pickDirectory: vi.fn(async () => undefined),
+      pickFiles: vi.fn(async () => ["/tmp/workspace-a/src/a.ts"]),
+    };
+    render(<App contextPicker={contextPicker} service={service({ loadWorkspaces: async () => [workspace("workspace-a", "A 폴더"), workspace("workspace-b", "B 폴더")] })} />);
 
     await user.click(screen.getByRole("button", { name: "새 Work 만들기" }));
     const dialog = screen.getByRole("dialog", { name: "새 Work" });
     await user.click(await within(dialog).findByRole("button", { name: /A 폴더/ }));
-    const file = within(dialog).getByRole("textbox", { name: "워크스페이스 상대 파일 경로" });
-    await user.type(file, "src/a.ts");
+    await user.click(within(dialog).getByRole("button", { name: "파일 첨부" }));
     await user.click(within(dialog).getByRole("button", { name: /B 폴더/ }));
 
-    expect(file).toHaveValue("");
+    expect(within(dialog).queryByText("src/a.ts")).not.toBeInTheDocument();
   });
 
   it("다시 열어 정상 목록을 받으면 이전 workspace load 오류를 지운다", async () => {
@@ -613,22 +724,22 @@ describe("AgentOS native data flow", () => {
     };
     const blocked = { ...active, trust: "blocked" as const, revision: 2 };
     const loadWorkspaces = vi.fn().mockResolvedValueOnce([active]).mockResolvedValueOnce([blocked]);
-    render(<App service={service({ loadWorkspaces })} />);
+    const contextPicker = {
+      pickDirectory: vi.fn(async () => undefined),
+      pickFiles: vi.fn(async () => ["/tmp/reconciled/src/attached.ts"]),
+    };
+    render(<App contextPicker={contextPicker} service={service({ loadWorkspaces })} />);
 
     await user.click(screen.getByRole("button", { name: "새 Work 만들기" }));
     let dialog = screen.getByRole("dialog", { name: "새 Work" });
     await user.click(await within(dialog).findByRole("button", { name: /변경될 폴더/ }));
-    const file = within(dialog).getByRole("textbox", { name: "워크스페이스 상대 파일 경로" });
-    await user.type(file, "src/attached.ts");
     await user.click(within(dialog).getByRole("button", { name: "파일 첨부" }));
-    await user.type(file, "src/unattached.ts");
     await user.click(within(dialog).getByRole("button", { name: "새 Work 닫기" }));
     await user.click(screen.getByRole("button", { name: "새 Work 만들기" }));
     dialog = screen.getByRole("dialog", { name: "새 Work" });
 
     expect(await within(dialog).findByText("차단된 폴더는 선택할 수 없습니다.")).toBeInTheDocument();
     expect(within(dialog).queryByText("src/attached.ts")).not.toBeInTheDocument();
-    expect(within(dialog).getByRole("textbox", { name: "워크스페이스 상대 파일 경로" })).toHaveValue("");
   });
 
   it("늦은 A 신뢰 응답이 이후 선택한 B workspace와 파일 draft를 덮어쓰지 않는다", async () => {
@@ -646,7 +757,11 @@ describe("AgentOS native data flow", () => {
       trust: "trusted" as const, status: "active" as const, revision: 1,
       createdAt: "2026-07-24T00:00:00.000Z", lastUsedAt: "2026-07-24T00:00:00.000Z",
     };
-    render(<App service={service({
+    const contextPicker = {
+      pickDirectory: vi.fn(async () => undefined),
+      pickFiles: vi.fn(async () => ["/tmp/b/src/b.ts"]),
+    };
+    render(<App contextPicker={contextPicker} service={service({
       loadWorkspaces: async () => [pending, trusted],
       decideWorkspaceTrust: async () => await trust.promise,
     })} />);
@@ -656,7 +771,6 @@ describe("AgentOS native data flow", () => {
     await user.click(await within(dialog).findByRole("button", { name: /A 폴더/ }));
     await user.click(within(dialog).getByRole("button", { name: "신뢰" }));
     await user.click(within(dialog).getByRole("button", { name: /B 폴더/ }));
-    await user.type(within(dialog).getByRole("textbox", { name: "워크스페이스 상대 파일 경로" }), "src/b.ts");
     await user.click(within(dialog).getByRole("button", { name: "파일 첨부" }));
     trust.resolve({ ...pending, trust: "trusted", revision: 2 });
 
@@ -699,7 +813,11 @@ describe("AgentOS native data flow", () => {
     };
     const refreshed = { ...added, revision: 2 };
     const loadWorkspaces = vi.fn().mockResolvedValueOnce([current]).mockResolvedValueOnce([refreshed]);
-    render(<App service={service({
+    const contextPicker = {
+      pickDirectory: vi.fn(async () => "/tmp/added"),
+      pickFiles: vi.fn(async () => ["/tmp/current/src/current.ts"]),
+    };
+    render(<App contextPicker={contextPicker} service={service({
       loadWorkspaces,
       registerWorkspace: async () => added,
       decideWorkspaceTrust: async () => { throw new Error("workspace revision이 일치하지 않습니다"); },
@@ -708,10 +826,8 @@ describe("AgentOS native data flow", () => {
     await user.click(screen.getByRole("button", { name: "새 Work 만들기" }));
     const dialog = screen.getByRole("dialog", { name: "새 Work" });
     await user.click(await within(dialog).findByRole("button", { name: /현재 폴더/ }));
-    await user.type(within(dialog).getByRole("textbox", { name: "워크스페이스 상대 파일 경로" }), "src/current.ts");
     await user.click(within(dialog).getByRole("button", { name: "파일 첨부" }));
     expect(within(dialog).getByText("src/current.ts")).toBeInTheDocument();
-    await user.type(within(dialog).getByRole("textbox", { name: "폴더 경로" }), "/tmp/added");
     await user.click(within(dialog).getByRole("button", { name: "폴더 추가" }));
     expect(within(dialog).queryByText("src/current.ts")).not.toBeInTheDocument();
     await user.click(within(dialog).getByRole("button", { name: "신뢰" }));

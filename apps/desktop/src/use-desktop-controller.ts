@@ -38,11 +38,11 @@ export function useDesktopController(service: DesktopService) {
   const [newWorkWorkspace, setNewWorkWorkspace] = useState<DesktopWorkspaceView | undefined>();
   const [newWorkWorkspaces, setNewWorkWorkspaces] = useState<readonly DesktopWorkspaceView[]>([]);
   const [newWorkWorkspacesLoading, setNewWorkWorkspacesLoading] = useState(false);
-  const [newWorkWorkspacePath, setNewWorkWorkspacePath] = useState("");
   const [newWorkWorkspacePaths, setNewWorkWorkspacePaths] = useState<readonly string[]>([]);
-  const [newWorkWorkspaceFile, setNewWorkWorkspaceFile] = useState("");
   const [newWorkError, setNewWorkError] = useState("");
+  const [newWorkPickerError, setNewWorkPickerError] = useState("");
   const [newWorkWorkspaceLoadError, setNewWorkWorkspaceLoadError] = useState("");
+  const [registeringWorkspace, setRegisteringWorkspace] = useState(false);
   const [startingWork, setStartingWork] = useState(false);
   const [executionNotice, setExecutionNotice] = useState<ExecutionNotice | undefined>();
   const [eventRevision, setEventRevision] = useState(0);
@@ -97,7 +97,6 @@ export function useDesktopController(service: DesktopService) {
             newWorkWorkspaceRef.current = undefined;
             setNewWorkWorkspace(undefined);
             setNewWorkWorkspacePaths([]);
-            setNewWorkWorkspaceFile("");
           } else if (selected !== undefined) {
             newWorkWorkspaceRef.current = refreshed;
             setNewWorkWorkspace(refreshed);
@@ -381,7 +380,7 @@ export function useDesktopController(service: DesktopService) {
 
   const startWork = async () => {
     const text = newWorkText.trim();
-    if (!text || commandLocks.current.has("start-work")) return;
+    if (!text || registeringWorkspace || commandLocks.current.has("start-work")) return;
     if (newWorkWorkspace?.trust === "pending") {
       setNewWorkError("선택한 폴더를 신뢰한 뒤 실행할 수 있습니다.");
       return;
@@ -407,7 +406,6 @@ export function useDesktopController(service: DesktopService) {
       newWorkWorkspaceRef.current = undefined;
       setNewWorkWorkspace(undefined);
       setNewWorkWorkspacePaths([]);
-      setNewWorkWorkspaceFile("");
       setAnnouncement("새 Work 실행을 시작했습니다. Work 생성을 기다리고 있습니다.");
       await reloadIndex();
     } catch (error) {
@@ -418,28 +416,27 @@ export function useDesktopController(service: DesktopService) {
     }
   };
 
-  const registerWorkspace = async () => {
-    const path = newWorkWorkspacePath.trim();
+  const registerWorkspace = async (path: string) => {
     if (!path || commandLocks.current.has("register-workspace")) return;
     commandLocks.current.add("register-workspace");
+    setRegisteringWorkspace(true);
     setNewWorkError("");
     try {
       const workspace = await service.registerWorkspace(path);
       setNewWorkWorkspaces((current) => [workspace, ...current.filter((item) => item.workspaceId !== workspace.workspaceId)]);
       newWorkWorkspaceRef.current = workspace;
       setNewWorkWorkspace(workspace);
-      setNewWorkWorkspacePath("");
       setNewWorkWorkspacePaths([]);
-      setNewWorkWorkspaceFile("");
     } catch (error) {
       setNewWorkError(errorMessage(error, "폴더를 추가하지 못했습니다."));
     } finally {
       commandLocks.current.delete("register-workspace");
+      setRegisteringWorkspace(false);
     }
   };
 
   const decideWorkspaceTrust = async (decision: "trusted" | "blocked") => {
-    if (!newWorkWorkspace || commandLocks.current.has("workspace-trust")) return;
+    if (registeringWorkspace || !newWorkWorkspace || commandLocks.current.has("workspace-trust")) return;
     const requestedWorkspaceId = newWorkWorkspace.workspaceId;
     commandLocks.current.add("workspace-trust");
     setNewWorkError("");
@@ -455,7 +452,6 @@ export function useDesktopController(service: DesktopService) {
         newWorkWorkspaceRef.current = undefined;
         setNewWorkWorkspace(undefined);
         setNewWorkWorkspacePaths([]);
-        setNewWorkWorkspaceFile("");
       }
     } catch (error) {
       setNewWorkWorkspaceLoadError("");
@@ -469,7 +465,6 @@ export function useDesktopController(service: DesktopService) {
             newWorkWorkspaceRef.current = undefined;
             setNewWorkWorkspace(undefined);
             setNewWorkWorkspacePaths([]);
-            setNewWorkWorkspaceFile("");
           } else {
             newWorkWorkspaceRef.current = refreshed;
             setNewWorkWorkspace(refreshed);
@@ -485,11 +480,22 @@ export function useDesktopController(service: DesktopService) {
     }
   };
 
-  const addWorkspacePath = () => {
-    const path = newWorkWorkspaceFile.trim();
-    if (!newWorkWorkspace || !path || newWorkWorkspacePaths.includes(path)) return;
-    setNewWorkWorkspacePaths((current) => current.length >= 20 ? current : [...current, path]);
-    setNewWorkWorkspaceFile("");
+  const addWorkspacePaths = (files: readonly string[]) => {
+    if (registeringWorkspace || !newWorkWorkspace || files.length === 0) return;
+    const paths = relativeWorkspacePaths(newWorkWorkspace.path, files);
+    if (paths === undefined) {
+      setNewWorkError("선택한 파일은 현재 워크스페이스 안에 있어야 합니다.");
+      return;
+    }
+    setNewWorkError("");
+    setNewWorkWorkspacePaths((current) => {
+      const next = [...current];
+      for (const path of paths) {
+        if (next.length >= 20) break;
+        if (!next.includes(path)) next.push(path);
+      }
+      return next;
+    });
   };
 
   const visibleWorks = works.filter((value) => {
@@ -508,33 +514,31 @@ export function useDesktopController(service: DesktopService) {
     eventRevision,
     filter,
     newWork: {
-      error: [newWorkError, newWorkWorkspaceLoadError].filter(Boolean).join(" "),
+      error: [newWorkError, newWorkPickerError, newWorkWorkspaceLoadError].filter(Boolean).join(" "),
       open: newWorkOpen,
       setOpen: setNewWorkOpen,
       setText: setNewWorkText,
       setWorkspace: (workspace: DesktopWorkspaceView | undefined) => {
-        if (workspace?.trust === "blocked") return;
+        if (registeringWorkspace || workspace?.trust === "blocked") return;
         newWorkWorkspaceRef.current = workspace;
         setNewWorkWorkspace(workspace);
         if (workspace?.workspaceId !== newWorkWorkspace?.workspaceId) {
           setNewWorkWorkspacePaths([]);
-          setNewWorkWorkspaceFile("");
         }
       },
-      setWorkspacePath: setNewWorkWorkspacePath,
-      setWorkspaceFile: setNewWorkWorkspaceFile,
-      addWorkspacePath,
+      addWorkspacePaths,
       removeWorkspacePath: (path: string) => {
+        if (registeringWorkspace) return;
         setNewWorkWorkspacePaths((current) => current.filter((item) => item !== path));
       },
       registerWorkspace,
+      registeringWorkspace,
+      setPickerError: setNewWorkPickerError,
       decideWorkspaceTrust,
       start: startWork,
       starting: startingWork,
       text: newWorkText,
       workspace: newWorkWorkspace,
-      workspaceFile: newWorkWorkspaceFile,
-      workspacePath: newWorkWorkspacePath,
       workspacePaths: newWorkWorkspacePaths,
       workspaces: newWorkWorkspaces,
       workspacesLoading: newWorkWorkspacesLoading,
@@ -560,6 +564,25 @@ export function useDesktopController(service: DesktopService) {
     work,
     works,
   };
+}
+
+export function relativeWorkspacePaths(rootPath: string, files: readonly string[]): readonly string[] | undefined {
+  const root = normalizeNativeRoot(rootPath);
+  if (!root) return undefined;
+  const rootDirectory = root === "/";
+  const prefix = rootDirectory ? root : `${root}/`;
+  const paths: string[] = [];
+  for (const file of files) {
+    if (!file || file === root || !file.startsWith(prefix)) return undefined;
+    const relativePath = file.slice(root.length + (rootDirectory ? 0 : 1));
+    if (!relativePath || relativePath.startsWith("/")) return undefined;
+    paths.push(relativePath);
+  }
+  return paths;
+}
+
+function normalizeNativeRoot(path: string): string {
+  return path === "/" ? path : path.replace(/\/+$/, "");
 }
 
 function errorMessage(error: unknown, fallback: string): string {

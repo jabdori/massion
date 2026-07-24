@@ -75,6 +75,7 @@ import {
 } from "@/model";
 import { agentIdentityToken, growthTargetToken } from "@massion/application/client";
 
+import { nativeContextPicker, type NativeContextPicker } from "@/native-context-picker";
 import { AgentAvatar, DecisionActions, OpenButton, ProposalActivity, RoomChapter, RoomHandoff, RoomMessage, RoomReference, RoomStatus, SpeakerRow } from "@/room";
 import { useDesktopController } from "@/use-desktop-controller";
 
@@ -138,10 +139,11 @@ const workStatusClass: Record<WorkStatus, string> = {
 };
 
 interface AppProps {
+  contextPicker?: NativeContextPicker;
   service: DesktopService;
 }
 
-export function App({ service }: AppProps) {
+export function App({ contextPicker = nativeContextPicker, service }: AppProps) {
   const controller = useDesktopController(service);
   const [surface, setSurface] = useState<DesktopSurface>("work");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -400,7 +402,7 @@ export function App({ service }: AppProps) {
         pending={pendingNotificationIds}
         works={controller.works}
       />
-      <NewWorkDialog {...controller.newWork} onOpenSettings={() => { controller.newWork.setOpen(false); setSurface("settings"); }} />
+      <NewWorkDialog {...controller.newWork} contextPicker={contextPicker} onOpenSettings={() => { controller.newWork.setOpen(false); setSurface("settings"); }} />
     </TooltipProvider>
   );
 }
@@ -3787,23 +3789,22 @@ function InspectorEmpty({ icon: Icon, message }: { icon: typeof Briefcase; messa
 }
 
 interface NewWorkDialogProps {
+  addWorkspacePaths: (files: readonly string[]) => void;
+  contextPicker: NativeContextPicker;
   error: string;
   open: boolean;
   setOpen: (open: boolean) => void;
   setText: (value: string) => void;
   setWorkspace: (workspace: import("./desktop-service").DesktopWorkspaceView | undefined) => void;
-  setWorkspacePath: (value: string) => void;
-  setWorkspaceFile: (value: string) => void;
-  addWorkspacePath: () => void;
   removeWorkspacePath: (path: string) => void;
-  registerWorkspace: () => Promise<void>;
+  registerWorkspace: (path: string) => Promise<void>;
+  registeringWorkspace: boolean;
+  setPickerError: (message: string) => void;
   decideWorkspaceTrust: (decision: "trusted" | "blocked") => Promise<void>;
   start: () => Promise<void>;
   starting: boolean;
   text: string;
   workspace: import("./desktop-service").DesktopWorkspaceView | undefined;
-  workspacePath: string;
-  workspaceFile: string;
   workspacePaths: readonly string[];
   workspaces: readonly import("./desktop-service").DesktopWorkspaceView[];
   workspacesLoading: boolean;
@@ -3811,28 +3812,45 @@ interface NewWorkDialogProps {
 }
 
 function NewWorkDialog({
+  addWorkspacePaths,
+  contextPicker,
   error,
   open,
   setOpen,
   setText,
   setWorkspace,
-  setWorkspacePath,
-  setWorkspaceFile,
-  addWorkspacePath,
   removeWorkspacePath,
   registerWorkspace,
+  registeringWorkspace,
+  setPickerError,
   decideWorkspaceTrust,
   start,
   starting,
   text,
   workspace,
-  workspacePath,
-  workspaceFile,
   workspacePaths,
   workspaces,
   workspacesLoading,
   onOpenSettings,
 }: NewWorkDialogProps) {
+  const addDirectory = async () => {
+    try {
+      setPickerError("");
+      const path = await contextPicker.pickDirectory();
+      if (path !== undefined) await registerWorkspace(path);
+    } catch {
+      setPickerError("폴더 선택기를 열지 못했습니다.");
+    }
+  };
+  const addFiles = async () => {
+    try {
+      setPickerError("");
+      const paths = await contextPicker.pickFiles();
+      addWorkspacePaths(paths);
+    } catch {
+      setPickerError("파일 선택기를 열지 못했습니다.");
+    }
+  };
   return (
     <Dialog
       onOpenChange={(nextOpen) => {
@@ -3884,13 +3902,13 @@ function NewWorkDialog({
                   <span className="block font-medium">{item.name} (차단됨)</span>
                   <span className="block font-mono text-xs">{item.path}</span>
                   <span className="block text-xs">차단된 폴더는 선택할 수 없습니다.</span>
-                  <Button onClick={onOpenSettings} size="sm" type="button" variant="outline">설정으로 이동</Button>
+                  <Button disabled={registeringWorkspace} onClick={onOpenSettings} size="sm" type="button" variant="outline">설정으로 이동</Button>
                 </div>
               ) : (
                 <button
                   aria-pressed={workspace?.workspaceId === item.workspaceId}
                   className="block w-full rounded px-2 py-1 text-left text-sm hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-50"
-                  disabled={starting}
+                  disabled={starting || registeringWorkspace}
                   key={item.workspaceId}
                   onClick={() => { setWorkspace(item); }}
                   type="button"
@@ -3900,44 +3918,28 @@ function NewWorkDialog({
                 </button>
               ))}
             </div>
-            <div className="flex gap-2">
-              <input
-                aria-label="폴더 경로"
-                className="h-9 min-w-0 flex-1 rounded-md border border-control bg-surface-1 px-3 text-sm text-primary outline-none focus:border-accent/70 focus:ring-2 focus:ring-accent/25"
-                disabled={starting}
-                onChange={(event) => { setWorkspacePath(event.target.value); }}
-                placeholder="/Users/me/project"
-                value={workspacePath}
-              />
-              <Button disabled={starting || !workspacePath.trim()} onClick={() => { void registerWorkspace(); }} type="button" variant="outline">폴더 추가</Button>
-            </div>
+            <p aria-live="polite" className="sr-only">{workspace === undefined ? "" : `${workspace.name} 폴더를 선택했습니다.`}</p>
+            <Button disabled={starting || registeringWorkspace} onClick={() => { void addDirectory(); }} type="button" variant="outline">폴더 추가</Button>
             {workspace?.trust === "pending" ? (
               <div className="rounded-md border border-warning/40 bg-warning/10 p-3 text-sm">
                 <p>이 폴더 안에서 에이전트가 읽기·쓰기 도구를 사용할 수 있습니다.</p>
                 <p className="mt-1 font-mono text-xs text-muted">{workspace.path}</p>
                 <div className="mt-2 flex gap-2">
-                  <Button disabled={starting} onClick={() => { void decideWorkspaceTrust("trusted"); }} size="sm" type="button" variant="primary">신뢰</Button>
-                  <Button disabled={starting} onClick={() => { void decideWorkspaceTrust("blocked"); }} size="sm" type="button" variant="outline">차단</Button>
+                  <Button disabled={starting || registeringWorkspace} onClick={() => { void decideWorkspaceTrust("trusted"); }} size="sm" type="button" variant="primary">신뢰</Button>
+                  <Button disabled={starting || registeringWorkspace} onClick={() => { void decideWorkspaceTrust("blocked"); }} size="sm" type="button" variant="outline">차단</Button>
                 </div>
               </div>
             ) : null}
           </fieldset>
           <fieldset className="space-y-2">
             <legend className="text-sm font-medium">파일 첨부 <span className="font-normal text-muted">(선택)</span></legend>
-            <div className="flex gap-2">
-              <input
-                aria-label="워크스페이스 상대 파일 경로"
-                className="h-9 min-w-0 flex-1 rounded-md border border-control bg-surface-1 px-3 text-sm text-primary outline-none focus:border-accent/70 focus:ring-2 focus:ring-accent/25"
-                disabled={starting || workspace === undefined || workspace.trust !== "trusted" || workspacePaths.length >= 20}
-                onChange={(event) => { setWorkspaceFile(event.target.value); }}
-                placeholder="src/index.ts"
-                value={workspaceFile}
-              />
-              <Button disabled={starting || workspace === undefined || workspace.trust !== "trusted" || !workspaceFile.trim() || workspacePaths.length >= 20} onClick={addWorkspacePath} type="button" variant="outline">파일 첨부</Button>
-            </div>
+            <Button disabled={starting || registeringWorkspace || workspace === undefined || workspace.trust !== "trusted" || workspacePaths.length >= 20} onClick={() => { void addFiles(); }} type="button" variant="outline">파일 첨부</Button>
+            <p aria-live="polite" aria-label="파일 첨부 상태" className="sr-only" role="status">
+              {workspacePaths.length === 0 ? "" : `파일을 첨부했습니다: ${workspacePaths.join(", ")}`}
+            </p>
             {workspacePaths.length > 0 ? <ul aria-live="polite" className="flex flex-wrap gap-2">
               {workspacePaths.map((path) => <li className="rounded bg-surface-2 px-2 py-1 font-mono text-xs" key={path}>
-                {path} <button aria-label={`${path} 제거`} className="ml-1 text-muted hover:text-primary" disabled={starting} onClick={() => { removeWorkspacePath(path); }} type="button">×</button>
+                {path} <button aria-label={`${path} 제거`} className="ml-1 text-muted hover:text-primary" disabled={starting || registeringWorkspace} onClick={() => { removeWorkspacePath(path); }} type="button">×</button>
               </li>)}
             </ul> : null}
           </fieldset>
@@ -3951,7 +3953,7 @@ function NewWorkDialog({
             >
               취소
             </DialogClose>
-            <Button disabled={!text.trim() || starting} type="submit" variant="primary">
+            <Button disabled={!text.trim() || starting || registeringWorkspace} type="submit" variant="primary">
               {starting ? "시작 중" : "실행 시작"}
             </Button>
           </div>
