@@ -303,3 +303,12 @@ export const EVIDENCE_SECRET_REDACTION_MIGRATION = defineMigration(
 DEFINE FIELD redactions_json ON source_file TYPE option<string>;
 `,
 );
+
+export const EVIDENCE_WORKSPACE_BINDING_MIGRATION = defineMigration(
+  "0033-evidence-workspace-binding",
+  `
+DEFINE FIELD workspace_id ON evidence_repository TYPE option<string>;
+DEFINE FIELD workspace_guard_key ON evidence_repository TYPE option<string>;
+DEFINE INDEX evidence_repository_workspace_guard ON evidence_repository FIELDS workspace_guard_key UNIQUE;
+`,
+);

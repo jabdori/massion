@@ -62,6 +62,120 @@ describe("Evidence repository와 immutable index catalog", () => {
     ).rejects.toThrow("다른 repository 명령");
   });
 
+  it("Workspace별 repository 등록은 root hash로 멱등이고 조직 경계를 지킨다", async () => {
+    const workspaceId = "workspace-1";
+    const first = await store.register(context, {
+      commandId: crypto.randomUUID(),
+      name: "workspace-massion",
+      providerKind: "git",
+      rootRef: "/workspace/massion",
+      rootRealPathHash: "a".repeat(64),
+      defaultBranch: "main",
+      workspaceId,
+    });
+    const repeated = await store.register(context, {
+      commandId: crypto.randomUUID(),
+      name: "workspace-massion-renamed",
+      providerKind: "git",
+      rootRef: "/workspace/massion",
+      rootRealPathHash: "a".repeat(64),
+      defaultBranch: "main",
+      workspaceId,
+    });
+    const identity = await IdentityService.create(database);
+    const other = await identity.registerPersonalUser({ email: "workspace-other@example.com", displayName: "Other" });
+    const otherContext = await organizations.resolveTenantContext(
+      other.user.user_id,
+      other.organization.organization_id,
+    );
+
+    expect(repeated.repository.repositoryId).toBe(first.repository.repositoryId);
+    expect(await store.findByWorkspace(context, workspaceId)).toMatchObject({
+      repositoryId: first.repository.repositoryId,
+      workspaceId,
+    });
+    await expect(store.findByWorkspace(otherContext, workspaceId)).resolves.toBeUndefined();
+    await expect(
+      store.register(context, {
+        commandId: crypto.randomUUID(),
+        name: "other-workspace-massion",
+        providerKind: "git",
+        rootRef: "/workspace/other",
+        rootRealPathHash: "b".repeat(64),
+        defaultBranch: "main",
+        workspaceId,
+      }),
+    ).rejects.toThrow("다른 root real path hash");
+  });
+
+  it("동시 Workspace 등록은 하나의 repository와 두 command event로 수렴한다", async () => {
+    const workspaceId = "workspace-concurrent";
+    const firstCommandId = crypto.randomUUID();
+    const secondCommandId = crypto.randomUUID();
+    const [first, second] = await Promise.all([
+      store.register(context, {
+        commandId: firstCommandId,
+        name: "concurrent-massion-a",
+        providerKind: "git",
+        rootRef: "/workspace/concurrent",
+        rootRealPathHash: "e".repeat(64),
+        defaultBranch: "main",
+        workspaceId,
+      }),
+      store.register(context, {
+        commandId: secondCommandId,
+        name: "concurrent-massion-b",
+        providerKind: "git",
+        rootRef: "/workspace/concurrent",
+        rootRealPathHash: "e".repeat(64),
+        defaultBranch: "main",
+        workspaceId,
+      }),
+    ]);
+    const repository = await store.findByWorkspace(context, workspaceId);
+    const workspaceGuardKey = `${context.organizationId}:${workspaceId}`;
+    const [repositories] = await database.query<[{ repository_id: string }[]]>(
+      "SELECT repository_id FROM evidence_repository WHERE organization_id = $organization_id AND workspace_guard_key = $workspace_guard_key;",
+      { organization_id: context.organizationId, workspace_guard_key: workspaceGuardKey },
+    );
+    const [events] = await database.query<[{ event_id: string }[]]>(
+      "SELECT event_id FROM evidence_index_event WHERE organization_id = $organization_id AND repository_id = $repository_id;",
+      { organization_id: context.organizationId, repository_id: first.repository.repositoryId },
+    );
+
+    expect(second.repository.repositoryId).toBe(first.repository.repositoryId);
+    expect(repository?.repositoryId).toBe(first.repository.repositoryId);
+    expect(repositories).toHaveLength(1);
+    expect(events).toHaveLength(2);
+  });
+
+  it("Workspace 없는 legacy repository 여러 건과 projectId를 유지한다", async () => {
+    const first = await store.register(context, {
+      commandId: crypto.randomUUID(),
+      projectId: "project-legacy-a",
+      name: "legacy-massion-a",
+      providerKind: "git",
+      rootRef: "/workspace/legacy-a",
+      rootRealPathHash: "c".repeat(64),
+      defaultBranch: "main",
+    });
+    const second = await store.register(context, {
+      commandId: crypto.randomUUID(),
+      projectId: "project-legacy-b",
+      name: "legacy-massion-b",
+      providerKind: "git",
+      rootRef: "/workspace/legacy-b",
+      rootRealPathHash: "d".repeat(64),
+      defaultBranch: "main",
+    });
+
+    expect(first.repository).toMatchObject({ projectId: "project-legacy-a" });
+    expect(second.repository).toMatchObject({ projectId: "project-legacy-b" });
+    expect(first.repository.workspaceId).toBeUndefined();
+    expect(second.repository.workspaceId).toBeUndefined();
+    expect(second.repository.repositoryId).not.toBe(first.repository.repositoryId);
+  });
+
   it("provider revision과 dirty fingerprint를 immutable snapshot으로 저장한다", async () => {
     const registered = await repository();
     const input = {

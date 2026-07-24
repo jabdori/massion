@@ -16,12 +16,18 @@ import type {
   RepositoryRevision,
   StartIndexInput,
 } from "./contracts.js";
-import { EVIDENCE_CONTENT_MIGRATION, EVIDENCE_INDEX_MIGRATION } from "./schema.js";
+import {
+  EVIDENCE_CONTENT_MIGRATION,
+  EVIDENCE_INDEX_MIGRATION,
+  EVIDENCE_WORKSPACE_BINDING_MIGRATION,
+} from "./schema.js";
 
 interface RepositoryRecord {
   readonly repository_id: string;
   readonly organization_id: string;
   readonly project_id?: string;
+  readonly workspace_id?: string;
+  readonly workspace_guard_key?: string;
   readonly name: string;
   readonly provider_kind: EvidenceRepository["providerKind"];
   readonly root_ref: string;
@@ -127,7 +133,11 @@ export class RepositoryStore {
   ) {}
 
   public static async create(database: MassionDatabase, organizations: OrganizationService): Promise<RepositoryStore> {
-    await applyMigrations(database, [EVIDENCE_INDEX_MIGRATION, EVIDENCE_CONTENT_MIGRATION]);
+    await applyMigrations(database, [
+      EVIDENCE_INDEX_MIGRATION,
+      EVIDENCE_CONTENT_MIGRATION,
+      EVIDENCE_WORKSPACE_BINDING_MIGRATION,
+    ]);
     return new RepositoryStore(database, organizations);
   }
 
@@ -137,6 +147,8 @@ export class RepositoryStore {
   ): Promise<{ readonly repository: EvidenceRepository }> {
     await this.organizations.verifyTenantContext(context);
     if (!input.name.trim() || !input.rootRef.trim()) throw new Error("Repository name과 root reference가 필요합니다");
+    const workspaceId = input.workspaceId?.trim();
+    if (input.workspaceId !== undefined && !workspaceId) throw new Error("Workspace ID는 공백일 수 없습니다");
     assertChecksum(input.rootRealPathHash, "Repository root real path hash");
     const requestHash = hashRequest(input);
     return await this.database.transaction(async (tx) => {
@@ -153,35 +165,55 @@ export class RepositoryStore {
           repository: this.repositoryView(await this.findRepository(tx, context.organizationId, repeated.repositoryId)),
         };
       }
-      const [sameNames] = await tx.query<[RepositoryRecord[]]>(
-        "SELECT * OMIT id FROM evidence_repository WHERE organization_id = $organization_id AND name = $name LIMIT 1;",
-        { organization_id: context.organizationId, name: input.name.trim() },
-      );
-      if (sameNames[0]) throw new Error(`같은 이름의 Repository가 이미 있습니다: ${input.name.trim()}`);
-      const [created] = await tx.query<[RepositoryRecord[]]>(
-        "CREATE evidence_repository CONTENT { repository_id: $repository_id, organization_id: $organization_id, project_id: $project_id, name: $name, provider_kind: $provider_kind, root_ref: $root_ref, root_real_path_hash: $root_real_path_hash, default_branch: $default_branch, status: 'active', created_by_user_id: $created_by_user_id, created_at: time::now(), updated_at: time::now() } RETURN AFTER;",
-        {
-          repository_id: randomUUID(),
-          organization_id: context.organizationId,
-          project_id: input.projectId,
-          name: input.name.trim(),
-          provider_kind: input.providerKind,
-          root_ref: input.rootRef.trim(),
-          root_real_path_hash: input.rootRealPathHash,
-          default_branch: input.defaultBranch?.trim(),
-          created_by_user_id: context.userId,
-        },
-      );
-      if (!created[0]) throw new Error("Repository 생성 결과가 없습니다");
-      const result = { repository: this.repositoryView(created[0]) };
+      const workspaceGuardKey = workspaceId ? `${context.organizationId}:${workspaceId}` : undefined;
+      let record = workspaceGuardKey
+        ? await this.findRepositoryByWorkspace(tx, context.organizationId, workspaceGuardKey)
+        : undefined;
+      if (record && record.root_real_path_hash !== input.rootRealPathHash)
+        throw new Error("같은 Workspace에는 다른 root real path hash로 Repository를 등록할 수 없습니다");
+      if (!record) {
+        const [sameNames] = await tx.query<[RepositoryRecord[]]>(
+          "SELECT * OMIT id FROM evidence_repository WHERE organization_id = $organization_id AND name = $name LIMIT 1;",
+          { organization_id: context.organizationId, name: input.name.trim() },
+        );
+        if (sameNames[0]) throw new Error(`같은 이름의 Repository가 이미 있습니다: ${input.name.trim()}`);
+        try {
+          const [created] = await tx.query<[RepositoryRecord[]]>(
+            "CREATE evidence_repository CONTENT { repository_id: $repository_id, organization_id: $organization_id, project_id: $project_id, workspace_id: $workspace_id, workspace_guard_key: $workspace_guard_key, name: $name, provider_kind: $provider_kind, root_ref: $root_ref, root_real_path_hash: $root_real_path_hash, default_branch: $default_branch, status: 'active', created_by_user_id: $created_by_user_id, created_at: time::now(), updated_at: time::now() } RETURN AFTER;",
+            {
+              repository_id: randomUUID(),
+              organization_id: context.organizationId,
+              project_id: input.projectId,
+              workspace_id: workspaceId,
+              workspace_guard_key: workspaceGuardKey,
+              name: input.name.trim(),
+              provider_kind: input.providerKind,
+              root_ref: input.rootRef.trim(),
+              root_real_path_hash: input.rootRealPathHash,
+              default_branch: input.defaultBranch?.trim(),
+              created_by_user_id: context.userId,
+            },
+          );
+          record = created[0];
+        } catch (error) {
+          record = workspaceGuardKey
+            ? await this.findRepositoryByWorkspace(tx, context.organizationId, workspaceGuardKey)
+            : undefined;
+          if (!record) throw error;
+          if (record.root_real_path_hash !== input.rootRealPathHash)
+            throw new Error("같은 Workspace에는 다른 root real path hash로 Repository를 등록할 수 없습니다");
+        }
+      }
+      if (!record) throw new Error("Repository 생성 결과가 없습니다");
+      const result = { repository: this.repositoryView(record) };
       await this.recordEvent(tx, context, {
-        repositoryId: created[0].repository_id,
+        repositoryId: record.repository_id,
         commandId: input.commandId,
         eventType: "repository_registered",
         requestHash,
         payload: { providerKind: input.providerKind },
         result,
-        replayResult: { repositoryId: created[0].repository_id },
+        replayResult: { repositoryId: record.repository_id },
       });
       return result;
     });
@@ -190,6 +222,18 @@ export class RepositoryStore {
   public async getRepository(context: TenantContext, repositoryId: string): Promise<EvidenceRepository> {
     await this.organizations.verifyTenantContext(context);
     return this.repositoryView(await this.findRepository(this.database, context.organizationId, repositoryId));
+  }
+
+  public async findByWorkspace(context: TenantContext, workspaceId: string): Promise<EvidenceRepository | undefined> {
+    await this.organizations.verifyTenantContext(context);
+    const normalizedWorkspaceId = workspaceId.trim();
+    if (!normalizedWorkspaceId) throw new Error("Workspace ID는 공백일 수 없습니다");
+    const record = await this.findRepositoryByWorkspace(
+      this.database,
+      context.organizationId,
+      `${context.organizationId}:${normalizedWorkspaceId}`,
+    );
+    return record ? this.repositoryView(record) : undefined;
   }
 
   public async captureRevision(
@@ -668,6 +712,18 @@ export class RepositoryStore {
     return records[0];
   }
 
+  private async findRepositoryByWorkspace(
+    executor: QueryExecutor,
+    organizationId: string,
+    workspaceGuardKey: string,
+  ): Promise<RepositoryRecord | undefined> {
+    const [records] = await executor.query<[RepositoryRecord[]]>(
+      "SELECT * OMIT id FROM evidence_repository WHERE organization_id = $organization_id AND workspace_guard_key = $workspace_guard_key LIMIT 1;",
+      { organization_id: organizationId, workspace_guard_key: workspaceGuardKey },
+    );
+    return records[0];
+  }
+
   private async listRevisionRecords(
     executor: QueryExecutor,
     organizationId: string,
@@ -747,6 +803,7 @@ export class RepositoryStore {
       repositoryId: record.repository_id,
       organizationId: record.organization_id,
       ...(record.project_id ? { projectId: record.project_id } : {}),
+      ...(record.workspace_id ? { workspaceId: record.workspace_id } : {}),
       name: record.name,
       providerKind: record.provider_kind,
       rootRef: record.root_ref,

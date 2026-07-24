@@ -4,6 +4,7 @@ export interface EvidenceRepository {
   readonly repositoryId: string;
   readonly organizationId: string;
   readonly projectId?: string;
+  readonly workspaceId?: string;
   readonly name: string;
   readonly providerKind: RepositoryProviderKind;
   readonly rootRef: string;
@@ -83,6 +84,7 @@ export interface IndexVersion {
 export interface RegisterRepositoryInput {
   readonly commandId: string;
   readonly projectId?: string;
+  readonly workspaceId?: string;
   readonly name: string;
   readonly providerKind: RepositoryProviderKind;
   readonly rootRef: string;
