@@ -13,7 +13,7 @@
 | 단계 | 현재 범위 | 상태 |
 |---|---|---|
 | 03-1 | Workspace와 Evidence Repository의 조직별 1:1 결속 | 코드 검증 완료 |
-| 03-2 | 첨부 경로 경계 안 검색·1-hop 관계·EvidenceBrief | 진행 중 — 03-2a·03-2b1 코드 검증 완료 |
+| 03-2 | 첨부 경로 경계 안 검색·1-hop 관계·EvidenceBrief | 코드 검증 완료 — 03-2a·03-2b1·03-2b2 완료 |
 | 03-3 | Work·대화·Agent 실행의 같은 Brief 계보 | 대기 |
 | 03-4 | 명시적 개인 기억의 version·Prompt·Runtime 계보 | 대기 |
 | 03-5 | 서버 생산 조립과 Desktop 출처·기억 UI | 대기 |
@@ -74,3 +74,20 @@
 | 대상 파일 `prettier --check`, `git diff --check` | 통과 — migration·저장소·회귀 테스트의 형식과 공백을 확인했습니다. |
 
 다음 03-2b2는 현재 Scanner·Indexer·Search·Graph·Brief를 실제 Work 준비 흐름으로 조립하고, 검증된 chunk만 실행 직전에 prompt 자료로 materialize합니다.
+
+### 03-2b2 — Work 코드 지식 조립과 prompt 자료화
+
+- `9a8f13010` — 기존 Scanner·Revision·Indexer·Search·Graph·EvidenceBrief를 `WorkspaceKnowledgeService` 하나의 동기 흐름으로 조립했습니다. 새 queue, watcher, embedding 공급자, 전역 그래프 저장소는 추가하지 않았습니다.
+- 같은 Work의 재시도는 파일을 다시 읽거나 현재 색인을 바꾸기 전에 자동 Brief의 scope·Brief checksum·RepositoryRevision·IndexVersion·snapshot checksum을 검증하고, 처음 Work가 고정한 근거를 반환합니다. 원 Workspace root가 사라진 뒤의 재시도도 이 저장된 snapshot으로 확인했습니다.
+- 새 Work는 Workspace 결속 Repository의 실제 root hash를 다시 확인한 뒤 현재 Revision과 구성(configuration)을 기준으로 complete IndexVersion을 재사용하거나, 같은 구성에서는 incremental·다른 구성에서는 full 색인을 만듭니다. 검색 결과가 선택한 IndexVersion과 달라지면 혼합하지 않고 오류로 멈춥니다.
+- 명시 첨부 경로는 정규화·정렬·중복 검증 뒤 scope checksum에 포함합니다. 첨부 범위에 usable chunk가 하나도 없으면 no-match로 조용히 진행하지 않고 차단합니다. 반대로 범위 없는 검색 결과 0건은 Work 이력에 `no_match` 영수증으로 남깁니다.
+- 검색 결과와 1-hop `imports`·`calls`·`implements` 관계는 최대 12개 redacted chunk로 정규화해 자동 ready Brief에 저장합니다. 수동 Brief와 자동 Brief는 공존하며, 모든 생성 경로가 IndexVersion의 저장된 snapshot checksum과 실제 snapshot을 대조합니다.
+- `EvidencePromptMaterializer`는 Work 소유 ready Brief의 chunk path·range·content hash·redaction·구성 checksum을 다시 확인하고, 원문을 자르지 않은 채 최대 24,000 estimated token을 반환합니다. 예산에 snippet 하나도 넣지 못하면 빈 근거로 실행하지 않고 오류를 냅니다.
+
+| 검증 | 결과 |
+|---|---|
+| `pnpm --filter @massion/evidence test` | 통과 — 19개 파일 중 18개 통과, 1개 의도된 skip, 66개 테스트 통과입니다. root 삭제 재시도, 범위 밖 관계 제외, usable chunk 없는 첨부 차단, 범위 없는 no-match, snapshot 변조 거부, token 예산 차단을 포함합니다. |
+| `pnpm --filter @massion/evidence typecheck` | 통과 — Evidence 공개 계약과 Work 지식·prompt 자료화 구현이 TypeScript 검사에 통과했습니다. |
+| 대상 파일 `prettier --check`, `git diff --check` | 통과 — 형식과 변경 공백을 확인했습니다. |
+
+이 하위 단계는 Evidence 패키지의 lower-level 준비 경계만 소유합니다. trusted·active Workspace 확인, blocked·archived Workspace 차단, Work·Room·SharedContext·ContextVersion·실행 prompt 연결은 다음 03-3 Core intake 단계에서 연결합니다.
