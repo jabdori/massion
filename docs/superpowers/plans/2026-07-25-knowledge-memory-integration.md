@@ -12,7 +12,7 @@
 
 ## 1. 실행 위치와 범위
 
-이 계획은 Phase 30 주 계획의 Task 2·3이 `workspaceId`, `workspacePaths`, native picker를 연결한 직후 실행합니다. Phase 30 Task 4의 Core UAT는 이 계획의 Task 1~6이 통과하기 전 시작하지 않습니다.
+이 계획은 Phase 30 주 계획의 Task 2·3이 `workspaceId`, `workspacePaths`, native picker를 연결한 직후 실행합니다. Phase 30 Task 4의 Core UAT는 이 계획의 Task 1~6이 통과하기 전 시작하지 않습니다. 이 계획은 explicit memory와 Prompt/Runtime 계보까지만 소유하며, 완료 Work에서 학습 후보를 만드는 생산 루프는 Phase 30 Task 7의 `2026-07-25-growth-production-loop.md`가 이어서 소유합니다.
 
 v1에 포함하는 최소 세로 흐름은 다음과 같습니다.
 
@@ -66,6 +66,7 @@ v1에 포함하는 최소 세로 흐름은 다음과 같습니다.
 | `apps/server/src/product.ts` | Evidence·Growth 생산 조립 |
 | `apps/desktop/src/desktop-service.ts` | typed Application view 소비 |
 | `apps/desktop/src/app.tsx` | Work 출처와 개선의 내 기억 UI |
+| `docs/superpowers/plans/2026-07-25-growth-production-loop.md` | 이 계획 뒤 Reflection·평가·채택·효과·복원을 잇는 후속 계획 |
 
 ## Task 1: Workspace와 Evidence Repository 결속
 
@@ -348,6 +349,8 @@ const instructions = new AgentInstructionRegistry(configuration);
 
 `OrganizationAgentTopology`에 `instructions`를 전달합니다. `EmbeddedVoltAgentRuntime`의 `memory: false`는 유지해 Work·Room·Message와 이중 대화 저장소를 만들지 않습니다.
 
+이 Task는 Growth worker를 시작하지 않습니다. Prompt·Memory의 생산 실행 계보만 닫고, Reflection generator·trigger·effect worker는 후속 Growth 계획에서 연결합니다.
+
 - [ ] **Step 3: bootstrap을 한 번만 연결합니다.**
 
 `ApplicationProductDependencies`에 기존 `GrowthBootstrap.start()`를 호출할 optional dependency를 추가하고, Core Office·policy 준비 뒤 실행합니다. 반복 bootstrap은 기존 active PromptDefinition·organization Memory·평가 전략을 재사용합니다.
@@ -420,7 +423,7 @@ git commit -m "feat(desktop): Work 지식 출처와 개인 기억 연결" \
 
 **Files:**
 
-- Create: `docs/evidence/phase-30/knowledge-memory-uat-YYYY-MM-DD.md`
+- Create: `docs/evidence/phase-30/knowledge-memory-uat-2026-07-25.md`
 - Modify: `docs/generated/requirements-traceability.tsv`
 - Modify: `PRODUCT.md`
 - Modify: `docs/product/constitution.md`
@@ -438,9 +441,9 @@ pnpm --filter @massion/desktop test
 pnpm --filter @massion/desktop typecheck
 ```
 
-- [ ] **Step 2: 실제 Tauri 앱에서 UAT-K01~K04를 실행합니다.**
+- [ ] **Step 2: Phase 30 Task 4의 UAT-K01~K04 근거를 확정합니다.**
 
-Computer Use로 접근성 트리를 매 행동 뒤 다시 읽습니다. 키, 전체 홈 경로, 개인 이메일, 기억 value 원문은 evidence 문서와 스크린샷에 남기지 않습니다.
+같은 후보 SHA의 Phase 30 Task 4에서 이미 실행한 결과·캡처가 필수 증거를 모두 가지면 재사용합니다. 후보 SHA가 바뀌었거나 증거가 빠졌을 때만 Computer Use로 해당 시나리오를 다시 실행합니다. 매 행동 뒤 접근성 트리를 다시 읽고, 키·전체 홈 경로·개인 이메일·기억 value 원문은 evidence 문서와 스크린샷에 남기지 않습니다.
 
 - [ ] **Step 3: read-only 데이터 조회로 계보를 확인합니다.**
 
@@ -461,12 +464,22 @@ Computer Use로 접근성 트리를 매 행동 뒤 다시 읽습니다. 키, 전
 - [ ] **Step 6: 증거를 커밋합니다.**
 
 ```sh
-git add docs/evidence/phase-30/knowledge-memory-uat-YYYY-MM-DD.md docs/generated/requirements-traceability.tsv PRODUCT.md docs/product/constitution.md
+git add docs/evidence/phase-30/knowledge-memory-uat-2026-07-25.md docs/generated/requirements-traceability.tsv PRODUCT.md docs/product/constitution.md
 git commit -m "docs(phase-30): 지식과 기억 실사용 근거 기록" \
   -m "Workspace 코드 그래프·RAG citation과 explicit memory 적용·사용 중지의 실제 데스크톱 결과를 같은 후보 SHA에 결속했습니다."
 ```
 
-## 4. 전체 완료 게이트
+## 4. 후속 Growth 계획과의 인계 경계
+
+이 계획의 Task 1~6을 끝낸 뒤 Phase 30 Task 4를 실행하고, 같은 후보의 UAT-K01~K04 근거로 Task 7을 확정한 다음 Phase 30 Task 5~6과 `2026-07-25-growth-production-loop.md`로 진행합니다.
+
+- 이 계획이 소유: Workspace EvidenceBrief, 1-hop graph, prompt materialization, explicit user memory, Work PromptVersion, RuntimeExecution memory lineage
+- Growth 계획이 소유: Records trigger, Reflection RuntimeExecution, 평가 receipt, `review | auto` 채택, 효과 표본, suspended/revert, UAT-G01~G02
+- 공유 파일은 `packages/growth/src/prompt-memory.ts`, `apps/server/src/product.ts`, Application 계약, desktop 표면이므로 두 계획을 병렬 실행하지 않습니다.
+- Growth 계획은 이 계획의 public memory command와 Prompt adapter를 재사용하고 두 번째 memory 저장소·composer를 만들지 않습니다.
+- 전체 권한 계획은 두 계획 뒤에 실행하며 `full-access` 동안의 유효 Growth auto만 추가합니다. 저장된 Growth 기본값 `review`는 바꾸지 않습니다.
+
+## 5. 전체 완료 게이트
 
 - [ ] Workspace current snapshot이 versioned index로 만들어지고 unchanged snapshot은 재사용됩니다.
 - [ ] 첨부 경로 밖의 source와 graph node가 검색·prompt·화면에 나오지 않습니다.
@@ -478,3 +491,4 @@ git commit -m "docs(phase-30): 지식과 기억 실사용 근거 기록" \
 - [ ] 다른 tenant·user·Workspace ID 추측이 모두 거부됩니다.
 - [ ] UAT-K01~K04와 Phase 30 Core UAT가 같은 후보 SHA에서 통과합니다.
 - [ ] LSP·embedding·native relation 미구현 상태를 구현 완료로 표시하지 않습니다.
+- [ ] Reflection·평가·효과 루프를 이 계획의 완료로 잘못 표시하지 않고 후속 Growth 계획의 미완료 상태로 추적합니다.

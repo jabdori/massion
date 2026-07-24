@@ -18,6 +18,8 @@
 
 `automatic`을 `full-access`로 재해석하지 않습니다. 기존 자동형의 안전 경계를 보존하고 별도 선택지를 추가해야 설정 문구와 실제 동작이 일치합니다.
 
+**REQ-FULL-ACCESS-001:** 개인용 조직은 기존 기본값 `automatic`을 유지하면서 owner가 `review | automatic | full-access`를 선택할 수 있어야 합니다. `full-access`는 한 번의 명시적 책임 경고 뒤 Massion 승인·정책 거부·Workspace 실행 샌드박스를 실제 실행기까지 우회하고, 재시작 지속·즉시 회수·긴급 정지와 정확성 계보를 보존해야 합니다.
+
 개선 채택 방식인 Growth `review | auto`는 별도 설정입니다. 전체 권한이 아니면 기존 Growth 설정과 Governance 중 더 엄격한 결과가 적용됩니다. 전체 권한에서는 Growth의 유효 채택 방식이 `auto`가 되어 Prompt·Memory·Policy·Organization 네 대상의 적격 후보를 별도 승인 없이 반영합니다.
 
 ## 2. 사용자가 허용하는 범위
@@ -90,7 +92,7 @@ interface AutonomyState {
 - Work와 RuntimeExecution에는 실행을 시작한 모드와 revision을 기록해 사후 설명에 사용합니다.
 - 실제 부작용 직전에는 현재 mode revision을 다시 읽습니다. 실행 시작 snapshot만 믿지 않으므로 사용자가 모드를 끈 뒤 새 부작용이 이전 전체 권한으로 진행되지 않습니다.
 
-전체 권한을 켤 때 이미 `awaiting-approval`인 실행은 한 번 재평가합니다. 승인만 남은 항목은 같은 command ID로 재개하고, 실제 입력 오류·Provider 실패·없는 Capability처럼 권한과 무관한 차단은 그대로 유지합니다.
+전체 권한을 켤 때 이미 `awaiting-approval`인 ApplicationRun·Runtime·Growth 실행은 한 번 재평가합니다. 승인만 남은 실행 연결 항목은 같은 domain command 계보로 재개하고, 실제 입력 오류·Provider 실패·없는 Capability처럼 권한과 무관한 차단은 그대로 유지합니다. 원 payload를 영속하지 않는 독립 Registry·Extension·Policy Application command는 과거 승인을 취소하고 `다시 실행 필요`로 표시합니다. 사용자가 새 command ID로 다시 실행하면 현재 full-access 판단을 사용합니다.
 
 ## 6. Governance 판단
 
@@ -122,6 +124,8 @@ interface SubscriptionAgentExecutionPolicy {
 ```
 
 전체 권한의 값은 `permissionMode: "full-access"`, `sandboxMode: "danger-full-access"`, `approvalPolicy: "never"`, `networkAccessEnabled: true`입니다. Workspace는 작업 디렉토리와 지식 문맥을 정하는 값으로 계속 전달하지만 쓰기 보안 경계로 사용하지 않습니다.
+
+Work와 RuntimeExecution뿐 아니라 model binding과 subscription receipt의 acquire·start·checkpoint·terminal·settlement에도 같은 autonomy mode/revision과 redacted permission summary를 남깁니다. receipt 기록 시 연결된 RuntimeExecution과 다르면 거부해 UAT가 실제 실행기 전달을 추적할 수 있게 합니다.
 
 연결기별 전달은 다음 한 군데에서 수행합니다.
 

@@ -36,8 +36,8 @@
 - **REQ-KNOWLEDGE-002:** Workspace Work는 사용자 요청과 명시적 첨부 경로를 기준으로 현재 인덱스를 검색하고, 결과를 Work 소유 Evidence Brief와 Context source로 고정한 뒤 실제 Agent 입력에 내용과 출처를 함께 전달합니다.
 - **REQ-MEMORY-001:** 사용자가 직접 저장한 개인 명시적 기억은 versioned Memory와 PromptVersion에 고정되고 새 Work부터 실제 Agent instruction에 적용됩니다. 사용 중지 뒤에는 이후 Work에서 제외되며 과거 계보는 변경되지 않습니다.
 - **REQ-GROWTH-001:** 완료 Work의 Records는 checksum으로 고정된 Reflection source와 개선 후보를 만들고, 결정론·독립·자기평가 신호를 구분한 평가를 통과한 후보만 채택 대상으로 올립니다.
-- **REQ-GROWTH-002:** 개선 반영은 기본 `review`와 사용자 선택 `auto`를 모두 지원합니다. 두 모드 모두 Prompt·Memory·Policy·Organization의 새 버전, 다음 Work 적용, Work·Assurance·Records로 검증된 효과 표본과 되돌리기 계보를 보존합니다. Growth `auto` 자체는 Policy·Governance 승인을 우회하지 않지만 사용자가 별도 전역 `full-access`를 켠 동안에는 Governance 승인 대기를 만들지 않습니다.
-- **REQ-KNOWLEDGE-UAT-001:** 실제 Tauri 앱에서 색인·검색·출처·재시작·stale 처리, 기억 저장·적용·사용 중지, 검토형·자동형 개선 순환을 검증하고 tenant·Workspace·비밀 경계를 침범하지 않습니다.
+- **REQ-GROWTH-002:** 개선 반영은 기본 `review`와 사용자 선택 `auto`를 모두 지원합니다. 두 모드 모두 Prompt·Memory·Policy·Organization의 새 버전, 다음 Work 적용, Work·Assurance와 성공 Work의 Records로 검증된 효과 표본 및 되돌리기 계보를 보존합니다. Growth `auto` 자체는 Policy·Governance 승인을 우회하지 않지만 사용자가 별도 전역 `full-access`를 켠 동안에는 Governance 승인 대기를 만들지 않습니다.
+- **REQ-KNOWLEDGE-UAT-001:** 실제 Tauri 앱에서 색인·검색·출처·재시작·stale 처리와 기억 저장·적용·사용 중지를 검증하고 tenant·Workspace·비밀 경계를 침범하지 않습니다. 검토형·자동형 개선 순환은 별도 Growth UAT 요구사항이 소유합니다.
 
 ## 3. 정본과 권위
 
@@ -230,11 +230,11 @@ Reflection 생성 실패, source drift, 독립 신호 부재와 Provider 부재�
 
 효과 점수는 Renderer나 공개 command가 숫자로 제출하지 않습니다. daemon의 기존 Assurance `MetricObservationStore`를 재사용하는 `GrowthEffectSampleAssembler`가 다음을 수행합니다.
 
-- v1 metric source는 `massion.growth.assurance-pass-rate.v1` 하나입니다. 같은 version lineage를 사용한 Work들의 terminal Assurance 판정에서 통과 비율과 표본 수를 계산하고, active EffectContract의 최소 표본·허용 오차·저하 임계값을 적용합니다.
+- v1 metric source는 `massion.growth.assurance-pass-rate.v1` 하나입니다. 같은 Assurance profile/version·criteria checksum과 target kind를 가진 Work들의 terminal Assurance 판정에서 통과 비율을 계산합니다. 고정 계약은 before/after 각 3건, stable tolerance 0.05, degradation threshold 0.20이며 raw caller 점수는 받지 않습니다. case-set checksum은 profile·criteria·target·metric identity, window checksum은 정렬·3건 선택 규칙에서 계산하고 실제 표본 identity는 별도 lineage checksum에 둡니다.
 - Prompt·Memory는 Work의 PromptVersion과 `memory_version_ids`, Policy는 `work.policy_version_id`, Organization은 `work.organization_version_id`로 before/after cohort를 가릅니다.
 - 각 표본은 `workId`, `assuranceRunId`, `verificationId`, 가능하면 `recordsRunId`·`workRecordId`, 사용 target version, 관련 metric observation ID와 source checksum을 정렬한 reference 목록으로 고정합니다.
-- baseline과 observation의 `sampleReferences`, `sampleChecksum`을 효과 기록에 함께 저장하고, 같은 tenant·Work·version·Assurance·Records 계보가 아니거나 checksum이 다르면 비교하지 않습니다.
-- Effect worker는 terminal Assurance/Records 사건에서 active adoption만 다시 계산합니다. `{adoptionId}:{windowChecksum}` 기반 command ID로 멱등 관찰하고, `degraded`이면 `{adoptionId}:{effectEvaluationId}` 기반 command ID로 `GrowthGateway.revert(reason: "degraded")`를 호출합니다. 실패·재시작은 기존 Growth recovery scan과 같은 operation command를 재사용해 복구합니다.
+- baseline과 observation의 `sampleReferences`, `sampleChecksum`을 효과 기록에 함께 저장하고, 같은 tenant·Work·version·Assurance 계보가 아니거나 checksum이 다르면 비교하지 않습니다. terminal passed Work는 Records까지 일치해야 하며 failed Work에는 존재하지 않는 Records를 요구하지 않습니다.
+- Effect worker는 terminal Assurance/Records 사건에서 active adoption만 다시 계산합니다. `{adoptionId}:{sampleLineageChecksum}` 기반 command ID로 멱등 관찰하고, `degraded`이면 `{adoptionId}:{effectEvaluationId}` 기반 command ID로 `GrowthGateway.revert(reason: "degraded")`를 호출합니다. 실패·재시작은 기존 Growth recovery scan과 같은 operation command를 재사용해 복구합니다.
 - `exposure_status: suspended`인 target은 실제 복원 완료 또는 승인 전까지 Work 생성의 version resolver가 실패 폐쇄합니다. 상태 표기만 바꾸고 새 Work가 계속 중단 version을 쓰게 두지 않습니다.
 
 초기 metric source 하나로 실제 업무 품질을 측정할 수 없는 후보는 효과를 꾸며내지 않고 `inconclusive`로 유지합니다. 측정 가능한 반복 실패가 확인될 때만 allowlisted metric adapter를 추가합니다.
@@ -288,7 +288,7 @@ Operations:
 - `growth.suggestion.evaluate`, `growth.suggestion.approve`, `growth.suggestion.reject`, `growth.adoption.revert`: 기존 Gateway 동작을 타입화한 제품 명령
 - 색인·freshness 차단 재시도는 기존 `run.resume`의 `retryBlocked` 경로를 사용하며 지식 전용 command를 추가하지 않음
 
-trigger claim·Reflection snapshot 생성·자동 채택·효과 표본 조립·관찰·자동 되돌리기는 daemon 내부 worker가 같은 Gateway를 호출합니다. `captureEffectBaseline`·`observeEffect`는 Work·Assurance·Records source를 검증한 내부 sample envelope만 받으며 Application command map에 노출하지 않습니다. Renderer에 raw score·내부 worker command·raw patch 적용 권한을 주지 않습니다.
+trigger claim·Reflection snapshot 생성·자동 채택·효과 표본 조립·관찰·자동 되돌리기는 daemon 내부 worker가 같은 Gateway를 호출합니다. `captureEffectBaseline`·`observeEffect`는 Work·Assurance와 성공 Work의 Records source를 검증한 내부 sample envelope만 받으며 Application command map에 노출하지 않습니다. Renderer에 raw score·내부 worker command·raw patch 적용 권한을 주지 않습니다.
 
 내부 Repository·Index ID는 감사/툴팁에만 쓰고 기본 UI label로 노출하지 않습니다.
 
@@ -344,7 +344,7 @@ Work 상세의 기존 활동 흐름에 `사용한 지식` 블록을 추가합니
 - Reflection source checksum·revision이 달라지거나 independent supporting 신호가 없으면 채택하지 않습니다.
 - `model-self` 신호만으로 `review` 승인 가능 또는 `auto` 채택 가능 상태를 만들지 않습니다.
 - Growth `auto`는 Policy·Governance를 우회하지 않습니다. 전역 `full-access`는 Policy·Governance의 권한 거부와 승인 요구를 우회하며 tenant 문맥·target schema·checksum·명시적 기억 충돌 같은 정확성 조건은 우회하지 않습니다.
-- 효과 표본은 Work·target version·Assurance·Records reference와 checksum이 없는 값을 거부하고, 중단된 target은 새 Work resolution에서 사용하지 않습니다.
+- 효과 표본은 Work·target version·Assurance reference와 checksum이 없는 값을 거부하고, terminal passed Work는 Records reference/checksum도 요구합니다. 중단된 target은 새 Work resolution에서 사용하지 않습니다.
 - 일반 모드에서는 Policy 위반 후보를 채택 전에 차단합니다. 채택 뒤 상위 Policy 변경으로 기존 target이 허용되지 않으면 새 Work 실행을 차단하고 기존 `explicit` 되돌리기로 복구하며, 이를 효과 저하 자동 복원으로 위장하지 않습니다. `full-access`가 유지되는 동안에는 이 권한 거부를 적용하지 않고, 모드를 해제한 다음 새 Work부터 다시 평가합니다.
 - hard erasure는 v1에서 제공하지 않으며 제품 문구와 로컬 데이터 정책에 이 사실을 표시합니다.
 
@@ -390,7 +390,7 @@ Tree-sitter+BM25 UAT에서 다음 실패가 재현될 때만 별도 설계를 �
 - [ ] 완료 Work에서 실제 근거를 가진 Prompt·Memory·Policy·Organization 개선 후보가 생성되고 독립 신호와 반대 근거를 평가합니다.
 - [ ] 기본 `review`에서는 사용자 승인 전 버전이 바뀌지 않고, 승인 뒤 다음 Work부터 새 버전이 적용됩니다.
 - [ ] 사용자가 설정한 `auto`에서는 적격·Governance allow 후보가 개별 승인 없이 적용되고, 악화 시 중단·되돌리기 뒤 다음 Work가 복원 버전을 사용합니다.
-- [ ] 효과 baseline·observation이 실제 Work·target version·Assurance·Records ID와 checksum을 가리키고 raw 사용자 점수를 받지 않습니다.
+- [ ] 효과 baseline·observation이 실제 Work·target version·Assurance ID와 checksum을 가리키며, 성공 Work의 Records도 대조하고 raw 사용자 점수를 받지 않습니다.
 - [ ] 사용자는 Growth 두 모드와 전역 전체 권한을 구분해 바꾸고 자동 채택의 근거·효과·되돌리기 계보를 확인할 수 있습니다.
 - [ ] tenant·Workspace·secret·checksum 경계 테스트와 UAT-K01~K04·UAT-G01~G02가 통과합니다.
 - [ ] LSP·embedding·native relation이 미구현임을 UI와 문서가 구현 완료로 주장하지 않습니다.

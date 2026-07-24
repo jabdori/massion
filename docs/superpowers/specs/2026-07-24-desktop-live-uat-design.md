@@ -162,6 +162,8 @@ Massion.app
 
 UAT-14는 아래 두 필수 하위 시나리오가 모두 통과해야 합니다.
 
+**REQ-GROWTH-UAT-001:** 실제 Tauri 앱에서 UAT-G01과 UAT-G02를 모두 통과해 기본 검토형과 사용자 선택 자동형의 후보 생성·평가·채택·다음 Work 적용·검증된 효과 측정·노출 중단·복원 계보를 증명해야 합니다.
+
 #### UAT-G01 기본 검토형 지속 발전
 
 - 깨끗한 개인 설치에서 `업무가 끝나면 개선 후보 찾기`가 켜져 있고 반영 방식이 `검토 후 반영(review)`인지 확인합니다.
@@ -176,9 +178,9 @@ UAT-14는 아래 두 필수 하위 시나리오가 모두 통과해야 합니다
 
 - 설정에서 영향을 읽고 `검증되면 자동 반영(auto)`을 명시적으로 선택합니다.
 - 실제 완료 Work에서 독립 신호를 포함한 eligible 개선 후보를 만들고, 개별 승인 없이 채택되며 수신함 검토 항목은 생기지 않는지 확인합니다.
-- 새 Work가 자동 채택된 version을 사용하고 개선 화면에서 source·evaluation·before/after version·EffectContract를 계속 열 수 있는지 확인합니다.
-- read-only query로 baseline과 observation이 실제 Work·사용 target version·AssuranceRun·Verification·Records·metric observation ID와 checksum을 가리키며 Renderer 요청에 raw score가 없음을 대조합니다.
-- 동일한 측정 계약의 후속 Work에서 실제 terminal Assurance 표본이 `degraded`가 되게 하고, 노출 중단 직후 새 Work가 suspended version을 사용하지 못하는지 확인합니다. 이어서 자동 또는 승인된 이전 version 복원을 확인한 뒤 다시 새 Work를 시작합니다.
+- 같은 Assurance profile·criteria와 before version을 쓰는 baseline Work 3건을 준비합니다. 자동 채택 뒤 같은 조건의 새 Work 3건이 after version을 사용하고 개선 화면에서 source·evaluation·before/after version·EffectContract를 계속 열 수 있는지 확인합니다.
+- read-only query로 baseline과 observation이 실제 Work·사용 target version·AssuranceRun·Verification·metric observation ID와 checksum을 가리키고, 성공 Work는 Records까지 연결되는지 대조합니다. Renderer 요청에는 raw score가 없어야 합니다.
+- after version의 3건 cohort에서 실제 terminal Assurance 통과율이 baseline보다 0.20 이상 낮아 `degraded`가 되게 하고, 노출 중단 직후 새 Work가 suspended version을 사용하지 못하는지 확인합니다. 이어서 자동 또는 승인된 이전 version 복원을 확인한 뒤 다시 새 Work를 시작합니다.
 - 설정을 `review`로 되돌리고 이후 후보가 자동 반영되지 않는지 확인합니다.
 
 통과: 사용자가 켠 기간에만 적격 후보가 자동 채택되고, Policy·Governance 승인 요구가 있는 후보는 검토 대기로 승격되며, 임의 점수가 아니라 검증된 업무 표본으로 저하를 판정하고 다음 Work는 suspended version이 아닌 복원 version을 사용합니다. Prompt·Memory·Policy·Organization 네 target의 동일 동작은 제품 통합 테스트의 표 기반 사례로 함께 증명합니다.
@@ -200,6 +202,8 @@ UAT-14는 아래 두 필수 하위 시나리오가 모두 통과해야 합니다
 ## 7. 전체 권한 필수 시나리오 2개
 
 두 시나리오는 실제 개인 데이터가 없는 격리된 macOS 테스트 계정, 임시 Workspace와 그 형제 임시 디렉토리에서만 실행합니다. 제품이 현재 연결기에 전체 권한을 전달하지 못하면 제한됨으로 표시하는 것은 정직한 진단이지만 출시 통과는 아닙니다.
+
+**REQ-FULL-ACCESS-UAT-001:** 서명·공증된 실제 Tauri 앱에서 UAT-P01과 UAT-P02를 모두 통과해 전체 권한의 실제 실행기 전달, 무승인 동작, 재시작 지속, Growth 연계, 해제와 긴급 정지를 증명해야 합니다.
 
 ### UAT-P01 전체 권한 활성화와 실행
 

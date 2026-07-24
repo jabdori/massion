@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: `subagent-driven-development`(권장) 또는 `executing-plans`로 작업을 순서대로 수행합니다. 각 단계는 체크박스로 추적하며, 공용 파일은 현재 작업 조각만 스테이징합니다.
 
-**Goal:** Z.AI Coding Plan `glm-5.2`를 개발·테스트 에이전트로 활용해 완성본 데스크톱 UI를 실제 Core·지식·기억·조직·개선·확장·설정 계약에 연결하고, Tauri 앱에서 핵심 UAT-01~12와 지식·기억 UAT-K01~K04, 개인용 배포 게이트를 통과시킵니다.
+**Goal:** Z.AI Coding Plan `glm-5.2`를 개발·테스트 에이전트로 활용해 완성본 데스크톱 UI를 실제 Core·지식·기억·조직·지속 발전·확장·설정·전체 권한 계약에 연결하고, Tauri 앱에서 핵심 UAT-01~12, UAT-G01~G02, UAT-K01~K04, UAT-P01~P02와 개인용 배포 게이트를 통과시킵니다.
 
-**Architecture:** 홈과 새 사명 입력을 먼저 닫은 뒤 기존 Evidence·CodeGraph·Growth Memory를 Work 실행에 연결하는 지식·기억 선행 게이트를 통과합니다. 그 다음 Core Work 완주, 협업·조직, 개선, 확장·설정을 같은 query/command/event 경계에 붙이고 실제 UAT에서 발견된 문제에만 최소 회귀 테스트를 추가합니다.
+**Architecture:** 홈과 새 사명 입력을 먼저 닫은 뒤 기존 Evidence·CodeGraph·Growth Memory를 Work 실행에 연결하는 지식·기억 선행 게이트를 통과합니다. 그 다음 Core Work 완주와 협업·조직을 연결하고, 전용 Growth 생산 루프와 전체 권한 계획을 순서대로 실행합니다. 확장·설정·수신함도 같은 query/command/event 경계에 붙이며 실제 UAT에서 발견된 문제에만 최소 회귀 테스트를 추가합니다.
 
 **Tech Stack:** TypeScript 5.9, React 19, Tauri 2, Rust, Vitest, SurrealDB 3.2.1, VoltAgent, 개인 BYOK Z.AI Coding Plan `glm-5.2`, Computer Use
 
@@ -36,6 +36,10 @@
 | `packages/evidence/src/**` | Workspace 코드 색인·BM25·1-hop graph·EvidenceBrief·prompt materialization |
 | `packages/growth/src/prompt-memory.ts` | 개인 explicit MemoryVersion과 PromptVersion 합성 |
 | `docs/superpowers/plans/2026-07-25-knowledge-memory-integration.md` | 지식·기억 선행 게이트의 구현 순서와 완료 조건 |
+| `docs/superpowers/plans/2026-07-25-growth-production-loop.md` | Reflection·평가·review/auto·효과·복원 생산 루프 |
+| `docs/superpowers/plans/2026-07-25-full-access-permission.md` | 세 번째 실행 모드·connector 전달·회수·긴급 정지 |
+| `packages/governance/src/**` | 자율성 mode/revision과 공통 권한 판단·승인·긴급 정지 |
+| `packages/runtime/src/subscriptions/**` | Codex·Claude의 실제 실행 권한 전달 |
 | `apps/server/src/product.ts` | recorder·gateway·status의 생산 조립 |
 | `apps/desktop/src/desktop-service.ts` | Application 계약→화면 뷰 연결 |
 | `apps/desktop/src/use-desktop-controller.ts` | Work 입력 draft와 사용자 명령 상태 |
@@ -46,34 +50,36 @@
 
 ## Task 1: 데스크톱 추적 소스 lint 기준선 복구
 
+**Status:** 완료. `f1b4aa25a`부터 `aeacbca45`까지 동작 동치 보정과 비동기 예외 계약 검토를 마쳤고, strict lint·desktop typecheck·69개 desktop test가 통과했습니다.
+
 **Files:**
 
 - Modify: `apps/desktop/src/app.tsx`
 - Modify as reported: other tracked files under `apps/desktop/src/**`
 
-- [ ] **Step 1: dirty worktree 전체 lint 실패와 제품 소스 실패를 구분합니다.**
+- [x] **Step 1: dirty worktree 전체 lint 실패와 제품 소스 실패를 구분합니다.**
 
 Run: `pnpm lint`
 
 Expected in the current worktree: 사용자 소유 `existing-data-capture.*` 안 제3자 config에서 `Unexpected non-object config`로 중단합니다. 이 디렉터리를 삭제하거나 제품 설정에 임시 이름을 박지 않습니다.
 
-- [ ] **Step 2: 데스크톱 추적 소스만 검사합니다.**
+- [x] **Step 2: 데스크톱 추적 소스만 검사합니다.**
 
 Run: `pnpm exec eslint apps/desktop/src`
 
 Expected at plan creation: 실제 strict lint 오류 78건.
 
-- [ ] **Step 3: 기계적 오류만 정리합니다.**
+- [x] **Step 3: 기계적 오류만 정리합니다.**
 
 unused import·불필요 assertion/optional chain을 삭제하고 void shorthand에 braces를 추가합니다. deprecated `FormEvent`는 현재 React 타입이 권장하는 `SyntheticEvent<HTMLFormElement>`로 바꿉니다. lint를 피하려고 rule을 끄거나 별도 config를 만들지 않습니다.
 
-- [ ] **Step 4: lint·타입·기존 UI 테스트를 확인합니다.**
+- [x] **Step 4: lint·타입·기존 UI 테스트를 확인합니다.**
 
 Run: `pnpm exec eslint apps/desktop/src && pnpm --filter @massion/desktop typecheck && pnpm --filter @massion/desktop test`
 
 Expected: 세 명령 exit 0.
 
-- [ ] **Step 5: 커밋합니다.**
+- [x] **Step 5: 커밋합니다.**
 
 ```sh
 git add apps/desktop/src
@@ -124,7 +130,7 @@ Expected: 새 경계 테스트가 구현 전 실패하고 최소 `realpath`·`st
 
 Run: `pnpm --filter @massion/desktop test && pnpm --filter @massion/desktop typecheck`
 
-Expected: 67개 기존 테스트와 새 집중 테스트 통과.
+Expected: 기존 테스트와 새 집중 테스트가 모두 통과하고 의도하지 않은 skip이 늘지 않음.
 
 - [ ] **Step 6: 계약과 표면을 분리 커밋합니다.**
 
@@ -183,12 +189,12 @@ git commit -m "feat(desktop): 네이티브 작업 문맥 선택 추가" \
 
 ## Mandatory Track: 지식·그래프·RAG·기억 복원
 
-Task 3이 끝나면 `2026-07-25-knowledge-memory-integration.md`의 Task 1~7을 순서대로 실행합니다. 이 트랙은 선택 기능이 아니라 Phase 30 Task 4의 선행 조건입니다.
+Task 3이 끝나면 `2026-07-25-knowledge-memory-integration.md`의 Task 1~6을 순서대로 실행합니다. 이 구현 트랙은 선택 기능이 아니라 Phase 30 Task 4의 선행 조건입니다. 실제 앱 증거를 확정하는 지식 계획 Task 7은 아래 Task 4에서 같은 후보 SHA로 UAT-K01~K04를 실행한 직후 완료합니다.
 
 - 기존 Tree-sitter·BM25·CodeGraphService·EvidenceBrief를 Workspace Work의 Representative·Strategy·Delivery 입력에 연결합니다.
 - Core Office SharedContextReference와 Work 상세에서 대화↔EvidenceBrief↔파일·symbol 관계를 읽을 수 있게 합니다.
 - 기존 Growth Memory·PromptVersion·RuntimeExecution seam을 생산 조립하고 개인 explicit 기억의 적용·사용 중지를 제공합니다.
-- UAT-K01~K04가 통과하기 전 Core 완주나 개인용 v1 완료를 주장하지 않습니다.
+- Task 1~6의 코드 gate가 통과하기 전 Core UAT를 시작하지 않고, UAT-K01~K04와 지식 계획 Task 7이 끝나기 전 Core 완주나 개인용 v1 완료를 주장하지 않습니다.
 - LSP·embedding·SurrealDB native relation은 해당 계획의 측정된 실패 게이트가 열릴 때만 별도 구현합니다.
 
 ## Task 4: 실제 Core Work 한 줄 검증과 발견 문제 패치
@@ -225,11 +231,15 @@ Expected: exit 0, stdout 없음.
 
 Run: `pnpm --filter @massion/application test && pnpm --filter @massion/server test && pnpm --filter @massion/desktop test`
 
-Expected: 각각 현재 기준 324, 237, 67개 이상 통과하고 건너뜀 수가 의도 없이 늘지 않음.
+Expected: 세 패키지 모두 exit 0이고 건너뜀 수가 의도 없이 늘지 않음.
 
 - [ ] **Step 6: 코드와 증거를 분리 커밋합니다.**
 
 코드 수정이 없으면 코드 커밋을 만들지 않습니다. 수정이 있으면 원인별 커밋 후 evidence 문서를 별도 커밋합니다.
+
+## Post-Core Gate: 지식·기억 UAT 근거 확정
+
+Task 4가 통과하면 `2026-07-25-knowledge-memory-integration.md`의 Task 7을 실행한 뒤 Task 5로 진행합니다. Task 4가 같은 후보 SHA에서 만든 UAT-K01~K04 결과와 캡처는 그대로 재사용하고, 후보 SHA가 바뀌었거나 필수 증거가 빠졌을 때만 해당 시나리오를 다시 실행합니다.
 
 ## Task 5: 실제 위임을 협업방에 기록
 
@@ -303,34 +313,16 @@ git commit -m "feat(organization): 조직 제안과 실계층을 데스크톱에
 
 ## Task 7: 개선의 평가·결정·효과 연결
 
-**Files:**
+Task 6이 끝나면 `2026-07-25-growth-production-loop.md`의 Task 1~6을 순서대로 실행합니다. 이 전용 계획이 다음 전체 범위를 소유하므로 여기서 일부만 중복 구현하지 않습니다.
 
-- Modify: `packages/growth/src/**`의 suggestion 상태 소유 파일
-- Modify: `packages/application/src/contracts.ts`
-- Modify: `packages/application/src/adapters/domain.ts`
-- Modify: `packages/application/src/query-registry.ts`
-- Modify: `apps/desktop/src/desktop-service.ts`
-- Modify: `apps/desktop/src/app.tsx`
-- Modify: related tests
+- Records 완료 trigger → 실제 Growth RuntimeExecution → Reflection source checksum
+- deterministic·independent·model-self 신호와 적격 평가
+- 기본 `review`, 사용자 선택 `auto`, 네 target의 revision·checksum 채택
+- Work·Assurance·Records 기반 효과 표본과 suspended/revert
+- typed Growth 계약, 개선 상세 결정, 설정, 탐색 전용 수신함
+- UAT-G01~G02와 `REQ-GROWTH-*` evidence
 
-- [ ] 상세 제안·평가·신호·adoption·측정 효과 조회를 타입화합니다.
-- [ ] 기존 `growth.adopt`·`growth.revert`를 유지하고 제품 이름 별칭을 추가합니다.
-- [ ] 명시적 reject를 도메인에 추가해 사유와 revision을 영속합니다.
-- [ ] Growth 사건으로 개선과 수신함 query를 무효화합니다.
-- [ ] fixture를 제거하고 기존 완성본 뷰 타입을 실제 데이터로 채웁니다.
-- [ ] 평가 없음·checksum drift·reject 기록만 한 표 기반 테스트로 고정합니다.
-- [ ] UAT-14를 실행합니다.
-
-Run: `pnpm --filter @massion/growth test && pnpm --filter @massion/application test && pnpm --filter @massion/desktop test`
-
-Expected: exit 0.
-
-Commit:
-
-```sh
-git commit -m "feat(growth): 개선 평가와 사용자 결정을 연결" \
-  -m "근거·반대 신호·diff를 실제 조회로 제공하고 승인·거절·효과·되돌리기를 같은 계보로 연결했습니다."
-```
+UAT-G01~G02가 통과하기 전 UAT-14 또는 지속 발전 기능을 완료로 표시하지 않습니다.
 
 ## Task 8: 설치된 확장의 Capability와 실제 Tool 연결
 
@@ -376,7 +368,7 @@ git commit -m "feat(extension): 설치 Capability를 실제 Work 실행에 연�
 - [ ] credential view에 secret 필드가 없음을 컴파일 가능한 계약으로 고정합니다.
 - [ ] `local.runtime.status`를 추가합니다.
 - [ ] 데스크톱 `unknown` 필드와 세 projection helper, 범용 파싱 helper를 삭제합니다.
-- [ ] UAT-16을 실행합니다.
+- [ ] UAT-16의 Provider·route·계정·quota·daemon·DB 타입 조회를 개발 앱에서 확인합니다. `full-access` 표시와 UAT-16 최종 통과 판정은 바로 다음 전체 권한 트랙 뒤로 미룹니다.
 
 Run: `pnpm --filter @massion/application test && pnpm --filter @massion/server test && pnpm --filter @massion/desktop test`
 
@@ -388,6 +380,18 @@ Commit:
 git commit -m "refactor(settings): 운영 조회를 타입 계약으로 수렴" \
   -m "Router·Subscription·로컬 runtime 조회를 타입화하고 데스크톱의 unknown 런타임 파서를 제거했습니다."
 ```
+
+## Mandatory Track: 개인용 전체 권한 실행
+
+Task 9가 끝나면 `2026-07-25-full-access-permission.md`의 Task 1~7을 순서대로 실행합니다. 이 트랙은 설정에 세 번째 라벨만 추가하는 작업이 아니라 실제 권한 전달과 회수까지 포함합니다.
+
+- `review | automatic | full-access`를 additive migration·CAS·GovernanceDecision에 기록합니다.
+- Work·RuntimeExecution에 시작 mode/revision을 고정합니다.
+- Codex `danger-full-access + never`, Claude `bypassPermissions + allowDangerouslySkipPermissions`를 실제 pinned SDK에 전달합니다.
+- 모드 해제와 긴급 정지는 active·suspended 실행을 취소하고 승인만 남은 실행 연결 Run을 재평가하며, 독립 Application command는 다시 실행 필요로 정리합니다.
+- full-access 동안 Growth 네 target은 승인 없이 적용하지만 평가·checksum·효과·복원은 유지합니다.
+- UAT-P01~P02가 통과하기 전 전체 권한이나 개인용 v1을 완료로 표시하지 않습니다.
+- 이 트랙 뒤 Task 11의 UAT-16에서 세 mode와 실제 runtime 상태를 최종 판정합니다.
 
 ## Task 10: 전역 집계와 실제 앱 회귀 확인
 
@@ -411,7 +415,7 @@ Expected: exit 0.
 **Files:**
 
 - Create: `docs/evidence/phase-30/desktop-live-uat-2026-07-24.md`
-- Create: `docs/evidence/phase-30/personal-desktop-release-YYYY-MM-DD.md`
+- Create: `docs/evidence/phase-30/personal-desktop-release-2026-07-25.md`
 - Create: `scripts/verify-desktop-release.mjs`
 - Create: `scripts/verify-desktop-release.test.mjs`
 - Create: `.github/workflows/desktop-release.yml`
@@ -421,26 +425,30 @@ Expected: exit 0.
 - Modify: `docs/product/constitution.md`
 - Modify: `docs/generated/requirements-traceability.tsv`
 
-- [ ] **Step 1: 같은 후보 SHA에서 전체 게이트를 실행합니다.**
+- [ ] **Step 1: 릴리스 설정과 검증 자동화를 먼저 구현하고 커밋합니다.**
+
+`tauri.release.conf.json`, 검증 스크립트와 테스트, 수동 승인 workflow를 구현합니다. 검증기는 `--candidate-sha`, `--app`, `--uat-evidence`를 필수 인자로 받아 앱 version·source SHA·서명·공증·sidecar·23개 결과의 일치를 검사합니다. 최소 테스트를 통과시킨 뒤 이 네 산출물만 먼저 커밋합니다.
 
 ```sh
+node --test scripts/verify-desktop-release.test.mjs
+git add apps/desktop/src-tauri/tauri.release.conf.json scripts/verify-desktop-release.mjs scripts/verify-desktop-release.test.mjs .github/workflows/desktop-release.yml
+git commit -m "build(desktop): 개인용 릴리스 게이트 고정" \
+  -m "서명·공증 설정과 같은 후보 SHA·UAT 근거를 검사하는 수동 릴리스 경로를 빌드 전에 고정했습니다."
+```
+
+- [ ] **Step 2: 위 커밋을 포함한 깨끗한 후보 SHA에서 전체 gate와 배포 빌드를 실행합니다.**
+
+```sh
+CANDIDATE_SHA="$(git rev-parse HEAD)"
 pnpm verify
 pnpm --filter @massion/desktop tauri:build
 ```
 
-Expected: 모두 exit 0. `pnpm verify:release`는 레거시 CLI·TUI·Web 묶음 검사라 개인용 데스크톱 완료 근거에서 제외합니다. 실패하면 UAT를 시작하지 않습니다.
+Developer ID와 공증 비밀은 CI secret으로만 빌드에 주입합니다. Expected: 모두 exit 0. `pnpm verify:release`는 레거시 CLI·TUI·Web 묶음 검사라 개인용 데스크톱 완료 근거에서 제외합니다. 실패하면 UAT를 시작하지 않습니다.
 
-- [ ] **Step 2: 빌드된 `.app`으로 UAT-01~16과 UAT-K01~K04를 실행합니다.**
+- [ ] **Step 3: macOS arm64 배포 신원을 검증합니다.**
 
-최소 조건은 핵심 UAT-01~12, 지식·기억 UAT-K01~K04, 구현된 UAT-13~16 전부 통과입니다. 한 건이라도 실패하면 완료로 표시하지 않습니다.
-
-- [ ] **Step 3: 재시작과 영속 상태를 다시 확인합니다.**
-
-Work, 협업 메시지, 승인 결과, 조직 version, 개선 adoption, 확장 상태가 앱 재실행 뒤 동일해야 합니다.
-
-- [ ] **Step 4: macOS arm64 배포 신원을 검증합니다.**
-
-Developer ID 서명과 Apple 공증을 같은 후보 SHA에서 수행합니다. 인증서는 CI secret으로만 주입하고 로그에 신원 외 비밀을 남기지 않습니다. 생성된 `.app` 또는 `.dmg`에 다음 검사를 실행합니다.
+Developer ID 서명과 Apple 공증을 같은 후보 SHA에서 수행합니다. 로그에는 신원 외 비밀을 남기지 않습니다. 생성된 `.app` 또는 `.dmg`에 다음 검사를 실행합니다.
 
 ```sh
 codesign --verify --deep --strict --verbose=2 Massion.app
@@ -450,34 +458,49 @@ xcrun stapler validate Massion.app
 
 세 명령과 앱 내부 Node.js·SurrealDB sidecar 서명 검사가 모두 통과해야 합니다. Ad-hoc 서명은 공개 후보로 인정하지 않습니다.
 
-- [ ] **Step 5: 깨끗한 Mac 설치·업데이트·제거를 검증합니다.**
+- [ ] **Step 4: 서명·공증된 후보를 깨끗한 Mac에 설치합니다.**
 
-개발 도구와 Massion 데이터가 없는 macOS arm64 사용자에서 최초 실행과 Gatekeeper 통과를 확인합니다. 이전 서명 후보를 설치한 상태에서 새 후보로 앱을 교체하는 수동 업데이트를 수행하고 Work·설정·데이터가 유지되는지 확인합니다. 앱을 제거한 뒤 데이터 보존 정책을 확인하고 재설치해 같은 데이터에 재연결합니다. 자동 업데이트 기능은 첫 1.0 필수 사양으로 만들지 않으며, 수동 교체가 실패할 때만 Tauri updater를 별도 범위로 추가합니다.
+개발 도구와 Massion 데이터가 없는 macOS arm64 사용자에서 최초 설치·Gatekeeper 통과와 앱 실행을 확인합니다.
 
-- [ ] **Step 6: 비정상 종료와 데이터 무결성을 검증합니다.**
+- [ ] **Step 5: 설치된 서명 후보로 모든 필수 UAT를 실행합니다.**
 
-실행 중 daemon과 SurrealDB sidecar를 각각 강제 종료하고 앱 재연결을 확인합니다. 재시작 뒤 Work·event·message가 중복되지 않고, 마지막 확정 transaction 이전 상태로 일관되게 복원되며, 데이터베이스 readiness와 핵심 query가 통과해야 합니다. 실패한 공통 경로에만 회귀 테스트 한 건을 추가합니다.
+최소 조건은 핵심 UAT-01~12, 조직·확장·설정 UAT-13·15·16, 지속 발전 UAT-G01~G02, 지식·기억 UAT-K01~K04, 전체 권한 UAT-P01~P02의 23개 원자 시나리오 전부 통과입니다. UAT-14는 G01·G02의 상위 묶음이므로 별도 통과 건수로 중복 계산하지 않습니다. 한 건이라도 실패하면 완료로 표시하지 않습니다.
 
-- [ ] **Step 7: 키보드·VoiceOver 접근성을 실측합니다.**
+- [ ] **Step 6: 재시작과 영속 상태를 다시 확인합니다.**
 
-마우스 없이 UAT-01~12와 UAT-K01~K04를 수행하고 모든 조작 요소의 초점 표시·논리적 순서·대화상자 복귀를 확인합니다. VoiceOver와 Accessibility Inspector로 홈·업무의 사용한 지식·수신함·조직 구조/지도·개선의 내 기억·확장·설정의 이름(name), 역할(role), 상태(state), 행동(action)을 확인합니다. 클릭 가능한데 VoiceOver로 실행할 수 없는 요소나 핵심 흐름을 막는 경고는 릴리스 차단입니다.
+Work, 협업 메시지, 승인 결과, 조직 version, 개선 adoption, 확장 상태가 앱 재실행 뒤 동일해야 합니다.
 
-- [ ] **Step 8: 개인 BYOK 경계를 증명합니다.**
+- [ ] **Step 7: 업데이트·제거·재설치를 검증합니다.**
+
+이전 서명 후보를 설치한 별도 상태에서 새 후보로 앱을 교체하는 수동 업데이트를 수행하고 Work·설정·데이터가 유지되는지 확인합니다. 앱을 제거한 뒤 데이터 보존 정책을 확인하고 재설치해 같은 데이터에 재연결합니다. 자동 업데이트 기능은 첫 1.0 필수 사양으로 만들지 않으며, 수동 교체가 실패할 때만 Tauri updater를 별도 범위로 추가합니다.
+
+- [ ] **Step 8: 비정상 종료와 데이터 무결성을 검증합니다.**
+
+실행 중 daemon과 SurrealDB sidecar를 각각 강제 종료하고 앱 재연결을 확인합니다. 재시작 뒤 Work·event·message·Growth trigger/adoption·AutonomyState가 중복되지 않고, 마지막 확정 transaction 이전 상태로 일관되게 복원되며, 데이터베이스 readiness와 핵심 query가 통과해야 합니다. 실패한 공통 경로에만 회귀 테스트 한 건을 추가합니다.
+
+- [ ] **Step 9: 키보드·VoiceOver 접근성을 실측합니다.**
+
+마우스 없이 UAT-01~12, G01~G02, K01~K04, P01~P02를 수행하고 모든 조작 요소의 초점 표시·논리적 순서·대화상자 복귀를 확인합니다. VoiceOver와 Accessibility Inspector로 홈·업무의 사용한 지식·수신함·조직 구조/지도·개선의 내 기억·확장·설정·전체 권한 경고·긴급 정지의 이름(name), 역할(role), 상태(state), 행동(action)을 확인합니다. 클릭 가능한데 VoiceOver로 실행할 수 없는 요소나 핵심 흐름을 막는 경고는 릴리스 차단입니다.
+
+- [ ] **Step 10: 개인 BYOK 경계를 증명합니다.**
 
 구현·테스트 작성·실패 분석·패치와 실제 개인용 Work는 소유자 본인의 Z.AI Coding Plan `glm-5.2` 키로 실행합니다. 키는 로컬 소유자 전용 저장소에만 두고 renderer·로그·스크린샷·evidence·원격 Massion 서비스에 전달하지 않습니다. 계정·할당량을 다른 사용자에게 공유·대여·판매·중계하는 경로가 없는지 확인합니다.
 
-- [ ] **Step 9: 재발 방지 릴리스 자동화를 연결합니다.**
+- [ ] **Step 11: 문서 주장과 최종 릴리스 검증을 실제 후보 SHA로 확정합니다.**
 
-`desktop-release.yml`은 수동 승인된 후보 SHA에서만 실행하고, 서명·공증 secret이 없으면 게시하지 않습니다. `verify-desktop-release.mjs`는 앱 버전·후보 SHA·서명·공증·sidecar·UAT evidence의 일치를 한 번만 검사합니다. GitHub Release는 모든 게이트가 같은 SHA로 통과한 뒤 마지막 단계에서만 생성합니다.
-
-- [ ] **Step 10: 문서 주장을 실제 SHA와 결과로 갱신합니다.**
-
-건너뛴 시나리오는 통과로 기록하지 않고 이유와 차단 조건을 씁니다.
-
-- [ ] **Step 11: 증거 커밋을 만듭니다.**
+건너뛴 시나리오는 통과로 기록하지 않고 이유와 차단 조건을 씁니다. 아래처럼 앱 버전·후보 SHA·서명·공증·sidecar·23개 UAT evidence의 일치를 검사합니다. `desktop-release.yml`은 수동 승인된 후보 SHA에서 이 검증이 통과하고 서명·공증 secret이 있을 때만 GitHub Release를 생성합니다.
 
 ```sh
-git add docs/evidence/phase-30/desktop-live-uat-2026-07-24.md docs/evidence/phase-30/personal-desktop-release-YYYY-MM-DD.md PRODUCT.md docs/product/constitution.md docs/generated/requirements-traceability.tsv
+node scripts/verify-desktop-release.mjs \
+  --candidate-sha "$CANDIDATE_SHA" \
+  --app "/Applications/Massion.app" \
+  --uat-evidence docs/evidence/phase-30/desktop-live-uat-2026-07-24.md
+```
+
+- [ ] **Step 12: 증거 커밋을 만듭니다.**
+
+```sh
+git add docs/evidence/phase-30/desktop-live-uat-2026-07-24.md docs/evidence/phase-30/personal-desktop-release-2026-07-25.md PRODUCT.md docs/product/constitution.md docs/generated/requirements-traceability.tsv
 git commit -m "test(desktop): 실제 AgentOS 사용자 시나리오 검증" \
   -m "Tauri 앱에서 Core·협업·조직·개선·확장·설정 시나리오와 재시작 지속성을 같은 릴리스 후보로 검증했습니다."
 ```
@@ -485,10 +508,12 @@ git commit -m "test(desktop): 실제 AgentOS 사용자 시나리오 검증" \
 ## 3. 계획 자체 검토
 
 - 모든 사용자 요구는 Task 2~11에 연결돼 있습니다.
-- 지식·그래프·RAG·기억 누락은 Task 3 뒤 Mandatory Track으로 복원됐으며 Task 4보다 먼저 실행합니다.
+- 지식·그래프·RAG·기억 구현은 Task 3 뒤 Task 1~6으로 복원하고, Task 4의 같은 후보 UAT 뒤 Task 7 증거를 확정합니다.
+- 지속 발전은 Task 7의 전용 생산 계획으로 분리했고 Reflection부터 효과 복원과 UAT-G01~G02까지 한 흐름으로 실행합니다.
+- 전체 권한은 Task 9 뒤 Mandatory Track으로 분리했고 Governance·실행기·회수·UAT-P01~P02를 모두 통과해야 합니다.
 - 파일 첨부는 workspace 내부 참조로 범위를 고정해 새 업로드 저장소를 만들지 않습니다.
 - 개발·테스트 패치와 개인용 도그푸딩에는 소유자 본인의 Coding Plan `glm-5.2`를 사용하고 BYOK 비공유 경계를 확인합니다.
 - 과도한 unit test를 피하고 신뢰 경계와 실제 실패만 테스트합니다.
 - 실제 앱 검증은 jsdom/브라우저가 아니라 빌드된 Tauri 앱과 Computer Use를 사용합니다.
-- 완료 판정은 테스트 개수가 아니라 12개 핵심 시나리오와 구현된 확장 시나리오의 전부 통과입니다.
-- 릴리스 판정은 서명·공증, 깨끗한 설치·업데이트·제거와 데이터 지속성, 비정상 종료, 키보드·VoiceOver, 개인 BYOK 격리까지 모두 같은 후보 SHA로 통과해야 합니다.
+- 완료 판정은 테스트 개수가 아니라 23개 필수 원자 시나리오의 전부 통과입니다.
+- 릴리스 자동화·설정을 먼저 커밋한 깨끗한 후보를 빌드·서명·공증·설치한 뒤, 23개 UAT와 업데이트·제거·데이터 지속성·비정상 종료·키보드·VoiceOver·개인 BYOK 격리를 모두 같은 후보 SHA로 통과해야 합니다.
