@@ -715,31 +715,33 @@ function fixtureRegistryDetail(versionId: string): unknown {
   };
 }
 
+/* eslint-disable @typescript-eslint/require-await -- fixture API intentionally mirrors async daemon methods. */
 export function createFixtureDesktopService(): DesktopService {
   const initialSnapshot = fixtureDataAdapter();
-  const stop: DesktopStreamStop = () => Promise.resolve();
+  const stop: DesktopStreamStop = async () => undefined;
 
   return {
     initialSnapshot,
-    bootstrap: () => Promise.resolve("ready"),
-    loadIndex: ({ filter, search }) => {
+    bootstrap: async () => "ready",
+    loadIndex: async ({ filter, search }) => {
       const normalizedSearch = search.trim().toLocaleLowerCase("ko");
-      return Promise.resolve(initialSnapshot.works.filter(
+      return initialSnapshot.works.filter(
         (work) =>
           workStatusFilter(work.status) === filter &&
           (normalizedSearch.length === 0 || work.title.toLocaleLowerCase("ko").includes(normalizedSearch)),
-      ));
+      );
     },
-    loadWork: (workId) => {
+    loadWork: async (workId) => {
       const work = initialSnapshot.works.find((candidate) => candidate.id === workId);
-      return work ? Promise.resolve(work) : Promise.reject(new Error("Fixture Work를 찾을 수 없습니다"));
+      if (!work) throw new Error("Fixture Work를 찾을 수 없습니다");
+      return work;
     },
-    loadPendingApprovals: () =>
-      Promise.resolve(initialSnapshot.works.flatMap((work) => work.approvals.filter((approval) => approval.status === "pending"))),
+    loadPendingApprovals: async () =>
+      initialSnapshot.works.flatMap((work) => work.approvals.filter((approval) => approval.status === "pending")),
     // fixture 방은 model.ts의 활동을 그대로 씁니다. 실 daemon에서는 loadRoom이 대체합니다.
-    loadRooms: (workId: string) => {
+    loadRooms: async (workId: string) => {
       const work = fixtureDataAdapter().works.find((candidate) => candidate.id === workId);
-      if (!work) return Promise.resolve([]);
+      if (!work) return [];
       const speak = (handle: string) => speakerFor({ authorKind: "agent", authorId: handle }, fixtureOrganizationNodes);
       const quill = speak("evidence-research");
       const vega = speak("delivery-coordination");
@@ -751,7 +753,7 @@ export function createFixtureDesktopService(): DesktopService {
 
       // 아직 아무도 말하지 않은 Work. 빈 방도 정상 상태입니다.
       if (work.activities.length === 0) {
-        return Promise.resolve([
+        return [
           {
             roomId: `${workId}-core-office`,
             name: "Core Office",
@@ -762,10 +764,10 @@ export function createFixtureDesktopService(): DesktopService {
             sharedContexts: [],
             activities: [],
           },
-        ]);
+        ];
       }
 
-      return Promise.resolve(withRoomReferences([
+      return withRoomReferences([
         {
           roomId: `${workId}-core-office`,
           name: "Core Office",
@@ -809,30 +811,30 @@ export function createFixtureDesktopService(): DesktopService {
             },
           ],
         },
-      ]));
+      ]);
     },
 
-    loadOrganization: () => Promise.resolve({ version: 1, nodes: fixtureOrganizationNodes }),
-    loadAutonomy: () => Promise.resolve({ mode: "automatic", revision: 0 }),
-    setAutonomy: (mode, expectedRevision) => Promise.resolve({ mode, revision: expectedRevision + 1 }),
-    loadExtensions: () => Promise.resolve([
+    loadOrganization: async () => ({ version: 1, nodes: fixtureOrganizationNodes }),
+    loadAutonomy: async () => ({ mode: "automatic", revision: 0 }),
+    setAutonomy: async (mode, expectedRevision) => ({ mode, revision: expectedRevision + 1 }),
+    loadExtensions: async () => [
       ...fixtureExtensionEntries,
       ...marketplaceEntries(fixtureRegistryInventory, fixtureExtensionEntries.map((item) => item.packageName)),
-    ]),
-    loadSettings: () => Promise.resolve(fixtureSettings),
-    connectZaiCodingPlan: () => Promise.resolve(),
-    registerProvider: () => Promise.resolve(),
-    registerEndpoint: () => Promise.resolve(),
-    addCredential: () => Promise.resolve(),
-    disableCredential: () => Promise.resolve(),
-    registerModel: () => Promise.resolve(),
-    configureRoute: () => Promise.resolve(),
-    addRouteCandidate: () => Promise.resolve(),
-    configureSubscriptionPolicy: () => Promise.resolve(),
-    searchRegistry: (query, limit = 20) => Promise.resolve(fixtureRegistryInventory.filter((item) => `${item.packageName} ${item.description}`.toLowerCase().includes(query.trim().toLowerCase())).slice(0, limit)),
-    loadRegistryInfo: (versionId) => Promise.resolve(fixtureRegistryDetail(versionId)),
-    loadCapabilities: () => Promise.resolve({ extensions: [], inventory: fixtureRegistryInventory }),
-    loadGrowth: () => Promise.resolve({
+    ],
+    loadSettings: async () => fixtureSettings,
+    connectZaiCodingPlan: async () => undefined,
+    registerProvider: async () => undefined,
+    registerEndpoint: async () => undefined,
+    addCredential: async () => undefined,
+    disableCredential: async () => undefined,
+    registerModel: async () => undefined,
+    configureRoute: async () => undefined,
+    addRouteCandidate: async () => undefined,
+    configureSubscriptionPolicy: async () => undefined,
+    searchRegistry: async (query, limit = 20) => fixtureRegistryInventory.filter((item) => `${item.packageName} ${item.description}`.toLowerCase().includes(query.trim().toLowerCase())).slice(0, limit),
+    loadRegistryInfo: async (versionId) => fixtureRegistryDetail(versionId),
+    loadCapabilities: async () => ({ extensions: [], inventory: fixtureRegistryInventory }),
+    loadGrowth: async () => ({
       configuration: {
         reflectionEnabled: true,
         adoptionMode: "review" as const,
@@ -992,16 +994,17 @@ export function createFixtureDesktopService(): DesktopService {
         },
       ],
     }),
-    installRegistry: () => Promise.resolve({ outcome: "succeeded", installationId: "installation-fixture-0001" }),
-    submitDirective: () => Promise.resolve(),
-    decideApproval: () => Promise.resolve(),
-    cancelRun: () => Promise.resolve(),
-    resumeRun: () => Promise.resolve(),
-    startWork: () => Promise.resolve({ runId: "run-fixture-0001" }),
-    subscribeDurable: () => Promise.resolve(stop),
-    subscribeExecution: () => Promise.resolve(stop),
+    installRegistry: async () => ({ outcome: "succeeded", installationId: "installation-fixture-0001" }),
+    submitDirective: async () => undefined,
+    decideApproval: async () => undefined,
+    cancelRun: async () => undefined,
+    resumeRun: async () => undefined,
+    startWork: async () => ({ runId: "run-fixture-0001" }),
+    subscribeDurable: async () => stop,
+    subscribeExecution: async () => stop,
   };
 }
+/* eslint-enable @typescript-eslint/require-await */
 
 function safeView(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(safeView);

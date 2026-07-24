@@ -2471,7 +2471,8 @@ function SettingsSurface({ service }: { service: DesktopService }) {
                                 ? "꺼져 있습니다"
                                 : route.candidateCount === 0
                                   ? "쓸 수 있는 모델이 없어 실행되지 않습니다"
-                                  : `모델 ${String(route.candidateCount)}개`}
+                                  // eslint-disable-next-line @typescript-eslint/restrict-template-expressions -- preserve existing template rendering.
+                                  : `모델 ${route.candidateCount}개`}
                               {route.totalBudgetMicros > 0
                                 ? ` · 예산 ${costText(route.spentMicros)} / ${costText(route.totalBudgetMicros)}`
                                 : ""}
