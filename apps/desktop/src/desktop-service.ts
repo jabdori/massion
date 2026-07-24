@@ -733,19 +733,17 @@ export function createFixtureDesktopService(): DesktopService {
           (normalizedSearch.length === 0 || work.title.toLocaleLowerCase("ko").includes(normalizedSearch)),
       );
     }),
-    loadWork: (workId) => {
+    loadWork: (workId) => fixturePromise(() => {
       const work = initialSnapshot.works.find((candidate) => candidate.id === workId);
-      return fixturePromise(() => {
-        if (!work) throw new Error("Fixture Work를 찾을 수 없습니다");
-        return work;
-      });
-    },
+      if (!work) throw new Error("Fixture Work를 찾을 수 없습니다");
+      return work;
+    }),
     loadPendingApprovals: () =>
       fixturePromise(() => initialSnapshot.works.flatMap((work) => work.approvals.filter((approval) => approval.status === "pending"))),
     // fixture 방은 model.ts의 활동을 그대로 씁니다. 실 daemon에서는 loadRoom이 대체합니다.
-    loadRooms: (workId: string) => {
+    loadRooms: (workId: string) => fixturePromise(() => {
       const work = fixtureDataAdapter().works.find((candidate) => candidate.id === workId);
-      if (!work) return fixturePromise(() => []);
+      if (!work) return [];
       const speak = (handle: string) => speakerFor({ authorKind: "agent", authorId: handle }, fixtureOrganizationNodes);
       const quill = speak("evidence-research");
       const vega = speak("delivery-coordination");
@@ -757,7 +755,7 @@ export function createFixtureDesktopService(): DesktopService {
 
       // 아직 아무도 말하지 않은 Work. 빈 방도 정상 상태입니다.
       if (work.activities.length === 0) {
-        return fixturePromise(() => [
+        return [
           {
             roomId: `${workId}-core-office`,
             name: "Core Office",
@@ -768,10 +766,10 @@ export function createFixtureDesktopService(): DesktopService {
             sharedContexts: [],
             activities: [],
           },
-        ]);
+        ];
       }
 
-      return fixturePromise(() => withRoomReferences([
+      return withRoomReferences([
         {
           roomId: `${workId}-core-office`,
           name: "Core Office",
@@ -815,8 +813,8 @@ export function createFixtureDesktopService(): DesktopService {
             },
           ],
         },
-      ]));
-    },
+      ]);
+    }),
 
     loadOrganization: () => fixturePromise(() => ({ version: 1, nodes: fixtureOrganizationNodes })),
     loadAutonomy: () => fixturePromise(() => ({ mode: "automatic", revision: 0 })),
