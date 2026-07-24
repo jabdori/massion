@@ -36,7 +36,7 @@
 - **REQ-KNOWLEDGE-002:** Workspace Work는 사용자 요청과 명시적 첨부 경로를 기준으로 현재 인덱스를 검색하고, 결과를 Work 소유 Evidence Brief와 Context source로 고정한 뒤 실제 Agent 입력에 내용과 출처를 함께 전달합니다.
 - **REQ-MEMORY-001:** 사용자가 직접 저장한 개인 명시적 기억은 versioned Memory와 PromptVersion에 고정되고 새 Work부터 실제 Agent instruction에 적용됩니다. 사용 중지 뒤에는 이후 Work에서 제외되며 과거 계보는 변경되지 않습니다.
 - **REQ-GROWTH-001:** 완료 Work의 Records는 checksum으로 고정된 Reflection source와 개선 후보를 만들고, 결정론·독립·자기평가 신호를 구분한 평가를 통과한 후보만 채택 대상으로 올립니다.
-- **REQ-GROWTH-002:** 개선 반영은 기본 `review`와 사용자 선택 `auto`를 모두 지원합니다. 두 모드 모두 Prompt·Memory·Policy·Organization의 새 버전, 다음 Work 적용, Work·Assurance·Records로 검증된 효과 표본과 되돌리기 계보를 보존하며 Policy·Governance·명시적 기억의 상위 권위를 우회하지 않습니다.
+- **REQ-GROWTH-002:** 개선 반영은 기본 `review`와 사용자 선택 `auto`를 모두 지원합니다. 두 모드 모두 Prompt·Memory·Policy·Organization의 새 버전, 다음 Work 적용, Work·Assurance·Records로 검증된 효과 표본과 되돌리기 계보를 보존합니다. Growth `auto` 자체는 Policy·Governance 승인을 우회하지 않지만 사용자가 별도 전역 `full-access`를 켠 동안에는 Governance 승인 대기를 만들지 않습니다.
 - **REQ-KNOWLEDGE-UAT-001:** 실제 Tauri 앱에서 색인·검색·출처·재시작·stale 처리, 기억 저장·적용·사용 중지, 검토형·자동형 개선 순환을 검증하고 tenant·Workspace·비밀 경계를 침범하지 않습니다.
 
 ## 3. 정본과 권위
@@ -125,9 +125,10 @@ Work에 `workspacePaths`가 있으면 명시적으로 첨부한 파일의 chunk�
 - `review`는 후보 생성과 평가까지 자동으로 수행한 뒤, 적격 후보를 `awaiting-review`로 두고 개선 화면에서 사용자가 승인·거절하게 합니다.
 - `auto`는 Prompt·Memory·Policy·Organization 네 target을 모두 자동 채택 대상으로 허용합니다. 다만 적격 평가, 현재 target checksum, Policy, Governance와 보안 검사를 모두 통과한 후보만 개별 승인 없이 적용합니다.
 - 상위 정책·불변식 또는 조직의 일반 자율성 설정이 사람 승인을 요구하면 `auto`라도 `awaiting-review`로 승격합니다. 자동 설정은 deny를 allow로 바꾸거나 필수 승인을 제거할 수 없습니다.
+- 사용자가 전역 `full-access`를 켠 동안에는 네 target의 적격 후보와 검증된 복원을 Policy·Governance 권한 판단과 승인 없이 실행합니다. 독립 평가·source/target checksum·명시적 기억 충돌·효과 표본·suspended/revert는 권한 검사가 아니라 정확성 조건이므로 그대로 유지합니다.
 - 사용자는 언제든 `review`로 되돌리고, 진행 중인 자동 채택을 중단하고, 적용된 버전의 근거·효과·되돌리기 계보를 열 수 있습니다.
 
-일반 실행 승인 모드인 Governance `automatic | review`와 개선 채택 모드인 Growth `auto | review`는 역할이 다릅니다. 전자는 모든 비읽기 실행에 승인을 추가할 수 있는 상위 조임 장치이고, 후자는 개선 후보의 개별 채택 방식을 정합니다. 둘 중 하나라도 검토를 요구하면 사람 검토가 우선합니다.
+일반 실행 승인 모드인 Governance `automatic | review | full-access`와 개선 채택 모드인 Growth `auto | review`는 역할이 다릅니다. `review | automatic`에서는 둘 중 하나라도 검토를 요구하면 사람 검토가 우선합니다. `full-access`는 사용자가 별도로 켠 전역 예외이며 Growth 채택 승인을 포함한 Massion 권한 게이트를 우회합니다.
 
 ## 5. 실행 흐름
 
@@ -221,9 +222,9 @@ flowchart LR
 3. source verifier는 각 참조의 tenant·Work·revision·checksum·freshness를 로컬에서 다시 확인합니다. 모델은 이 검증 권한을 갖지 않습니다.
 4. Reflection generator는 사용자가 구성한 Growth용 실제 Provider route로 snapshot만 전달하고, 네 target의 기존 operation schema에 맞는 bounded 후보만 반환합니다. 자유 형식 출력은 저장하지 않습니다.
 5. 기존 EvaluationStrategy가 lineage·target·candidate 필수 신호, 최소 한 개의 fresh independent supporting 신호와 conflict 부재를 확인합니다. `model-self` 신호 하나만으로 eligible이 될 수 없습니다.
-6. `review`는 적격 후보를 개선 화면과 수신함에 올리고, `auto`는 같은 적격 후보를 Governance가 allow한 경우에만 개별 클릭 없이 채택합니다. 상위 승인이 필요하면 실패시키지 않고 `awaiting-review`로 보냅니다.
+6. `review`는 적격 후보를 개선 화면과 수신함에 올리고, `auto`는 같은 적격 후보를 Governance가 allow한 경우에만 개별 클릭 없이 채택합니다. 상위 승인이 필요하면 실패시키지 않고 `awaiting-review`로 보냅니다. 전역 `full-access`에서는 이 승인 대기를 만들지 않습니다.
 7. 채택은 기존 GrowthTarget을 통해 immutable 새 버전을 만들고, 현재 실행 중인 Work가 아니라 다음 새 Work의 PromptVersion·Context에만 반영합니다.
-8. 채택 전 baseline과 채택 후 동일 EffectContract의 관측을 비교합니다. `inconclusive`는 계속 관찰하고, 검증된 `degraded`는 노출을 즉시 중단합니다. `auto`는 Governance가 허용하면 이전 버전으로 자동 복원하고, 상위 승인이 필요하면 복원 검토 항목을 만들되 새 Work가 중단된 version을 선택하지 못하게 합니다. 자동 모드도 사용자의 명시적 중단·거절·되돌리기를 막지 않습니다.
+8. 채택 전 baseline과 채택 후 동일 EffectContract의 관측을 비교합니다. `inconclusive`는 계속 관찰하고, 검증된 `degraded`는 노출을 즉시 중단합니다. `auto`는 Governance가 허용하면 이전 버전으로 자동 복원하고, 상위 승인이 필요하면 복원 검토 항목을 만들되 새 Work가 중단된 version을 선택하지 못하게 합니다. `full-access`는 이 복원 권한 판단과 승인을 생략합니다. 어느 모드도 사용자의 명시적 중단·거절·되돌리기를 막지 않습니다.
 
 Reflection 생성 실패, source drift, 독립 신호 부재와 Provider 부재는 개선 후보 하나를 blocked로 남기되 원래 완료 Work를 실패로 되돌리지 않습니다. 같은 trigger·snapshot·command replay는 새 후보나 새 버전을 중복 생성하지 않습니다.
 
@@ -316,7 +317,7 @@ Work 상세의 기존 활동 흐름에 `사용한 지식` 블록을 추가합니
 
 수신함에는 기억 CRUD를 넣지 않습니다. 기억은 멈춘 실행의 승인 항목이 아니라 개선 표면이 소유하는 설정입니다.
 
-개선 화면은 Reflection 후보, 평가 신호, 전후 diff, target version, 효과와 되돌리기 이력을 계속 소유합니다. `review` 후보만 수신함의 `개선 검토`에 나타나며 수신함에서는 결정하지 않고 개선 상세로 이동합니다. `auto`로 채택된 항목은 수신함을 만들지 않지만 개선 이력에서 근거·평가·적용·효과를 동일하게 확인할 수 있습니다. Governance가 자동 후보를 사람 검토로 승격하면 일반 `review` 후보처럼 수신함에 나타납니다.
+개선 화면은 Reflection 후보, 평가 신호, 전후 diff, target version, 효과와 되돌리기 이력을 계속 소유합니다. `review` 후보만 수신함의 `개선 검토`에 나타나며 수신함에서는 결정하지 않고 개선 상세로 이동합니다. `auto` 또는 전역 `full-access`로 채택된 항목은 수신함을 만들지 않지만 개선 이력에서 근거·평가·적용·효과를 동일하게 확인할 수 있습니다. 일반 모드에서 Governance가 자동 후보를 사람 검토로 승격하면 `review` 후보처럼 수신함에 나타납니다.
 
 ### 설정
 
@@ -327,6 +328,8 @@ Work 상세의 기존 활동 흐름에 `사용한 지식` 블록을 추가합니
 - `검증되면 자동 반영`: 사용자 선택 `adoptionMode: "auto"`
 
 자동 반영을 켤 때 Prompt·Memory·Policy·Organization이 모두 대상이며 상위 정책과 필수 승인은 유지되고, 변경은 다음 Work부터 적용되며, 근거·효과·중단·되돌리기가 남는다는 영향을 한 번 명확히 보여줍니다. 설정을 꺼도 과거 개선 이력은 사라지지 않습니다.
+
+별도 `전체 권한` 선택은 설정의 실행 정책 블록이 소유하며 [전체 권한 설계](2026-07-25-full-access-permission-design.md)의 사용자 책임 경고를 진입 때 한 번 보여줍니다. 이 모드는 Growth 승인을 생략하지만 선택한 Workspace·첨부 파일만 색인한다는 지식 범위를 넓히지 않습니다.
 
 ## 8. 보안·개인정보·오류
 
@@ -340,9 +343,9 @@ Work 상세의 기존 활동 흐름에 `사용한 지식` 블록을 추가합니
 - PromptVersion·MemoryVersion·EvidenceBrief checksum 불일치는 fail closed입니다.
 - Reflection source checksum·revision이 달라지거나 independent supporting 신호가 없으면 채택하지 않습니다.
 - `model-self` 신호만으로 `review` 승인 가능 또는 `auto` 채택 가능 상태를 만들지 않습니다.
-- 자동 반영은 Policy·Governance·tenant·target schema·명시적 기억 우선순위를 우회하지 않습니다.
+- Growth `auto`는 Policy·Governance를 우회하지 않습니다. 전역 `full-access`는 Policy·Governance의 권한 거부와 승인 요구를 우회하며 tenant 문맥·target schema·checksum·명시적 기억 충돌 같은 정확성 조건은 우회하지 않습니다.
 - 효과 표본은 Work·target version·Assurance·Records reference와 checksum이 없는 값을 거부하고, 중단된 target은 새 Work resolution에서 사용하지 않습니다.
-- Policy 위반 후보는 채택 전에 차단합니다. 채택 뒤 상위 Policy 변경으로 기존 target이 허용되지 않으면 새 Work 실행을 차단하고 기존 `explicit` 되돌리기로 복구하며, 이를 효과 저하 자동 복원으로 위장하지 않습니다.
+- 일반 모드에서는 Policy 위반 후보를 채택 전에 차단합니다. 채택 뒤 상위 Policy 변경으로 기존 target이 허용되지 않으면 새 Work 실행을 차단하고 기존 `explicit` 되돌리기로 복구하며, 이를 효과 저하 자동 복원으로 위장하지 않습니다. `full-access`가 유지되는 동안에는 이 권한 거부를 적용하지 않고, 모드를 해제한 다음 새 Work부터 다시 평가합니다.
 - hard erasure는 v1에서 제공하지 않으며 제품 문구와 로컬 데이터 정책에 이 사실을 표시합니다.
 
 ## 9. 최소 자동 검사와 UAT
@@ -366,7 +369,7 @@ Work 상세의 기존 활동 흐름에 `사용한 지식` 블록을 추가합니
 - embedding 생성기·vector index·HNSW/DISKANN
 - 모든 대화 문장을 자동 edge로 만드는 전역 지식 그래프
 - 조직·agent·project scope 명시적 memory 편집
-- 사용자 선택 없이 켜지는 자동 채택, 평가·Governance를 우회하는 자동 채택
+- 사용자 선택 없이 켜지는 자동 채택, 평가·checksum·효과 계보를 우회하는 자동 채택
 - 과거 모든 Work·Message의 semantic 검색과 문장 단위 relation 자동 생성
 - hard erasure와 과거 Records 재작성
 
@@ -388,6 +391,6 @@ Tree-sitter+BM25 UAT에서 다음 실패가 재현될 때만 별도 설계를 �
 - [ ] 기본 `review`에서는 사용자 승인 전 버전이 바뀌지 않고, 승인 뒤 다음 Work부터 새 버전이 적용됩니다.
 - [ ] 사용자가 설정한 `auto`에서는 적격·Governance allow 후보가 개별 승인 없이 적용되고, 악화 시 중단·되돌리기 뒤 다음 Work가 복원 버전을 사용합니다.
 - [ ] 효과 baseline·observation이 실제 Work·target version·Assurance·Records ID와 checksum을 가리키고 raw 사용자 점수를 받지 않습니다.
-- [ ] 사용자는 두 모드를 언제든 바꾸고 자동 채택의 근거·효과·되돌리기 계보를 확인할 수 있습니다.
+- [ ] 사용자는 Growth 두 모드와 전역 전체 권한을 구분해 바꾸고 자동 채택의 근거·효과·되돌리기 계보를 확인할 수 있습니다.
 - [ ] tenant·Workspace·secret·checksum 경계 테스트와 UAT-K01~K04·UAT-G01~G02가 통과합니다.
 - [ ] LSP·embedding·native relation이 미구현임을 UI와 문서가 구현 완료로 주장하지 않습니다.

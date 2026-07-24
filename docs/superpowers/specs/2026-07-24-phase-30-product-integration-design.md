@@ -48,15 +48,15 @@
 - 조직 계층·임시 범위·조직 변경 제안·영향·승인 연결
 - 완료 Work 기반 개선 후보 생성, 독립 평가, 기본 검토형과 사용자 선택 자동형 채택, 효과·되돌리기 연결
 - 설치된 확장의 Capability·권한 투영과 최소 Tool 사용 흐름
-- 설정 조회 타입화와 로컬 daemon·데이터 상태
+- 설정 조회 타입화, `review | automatic | full-access` 실행 정책과 로컬 daemon·데이터 상태
 - 수신함·홈·소유 화면의 동일 상태 투영
-- 최소 12개 실제 데스크톱 시나리오와 증거 문서
+- 최소 12개 핵심 시나리오와 지식·기억·지속 발전·전체 권한 실제 데스크톱 시나리오 및 증거 문서
 
 ### 제외
 
 - 제거 예정인 Web·TUI의 신규 기능이나 시각 보정
 - 다중 워크스페이스를 한 Work에 바인딩하는 새 도메인
-- 워크스페이스 밖 임의 파일을 복사·업로드하는 범용 첨부 저장소
+- 워크스페이스 밖 임의 파일을 RAG 문맥으로 복사·업로드하는 범용 첨부 저장소. 전체 권한의 실행 범위와 지식 색인 범위는 분리합니다.
 - 실제 실패가 확인되지 않은 성능 최적화와 추상화
 - EvidenceBrief 이외 Shared Context Reference와 Resource Lease의 생산 연결. 실제 공유 쓰기 충돌 시나리오가 생길 때 별도 설계합니다.
 - 실제 실패가 확인되지 않은 LSP daemon, embedding·vector index, SurrealDB native relation 전환과 전역 graph explorer
@@ -114,12 +114,12 @@
 1. 완료 Records가 만든 기존 Growth trigger를 daemon worker가 claim하고, Work·Message·Artifact·Evidence·검증과 당시 target version을 checksum으로 고정한 ReflectionSnapshot을 만듭니다.
 2. 실제 Growth Provider route를 사용하는 bounded generator와 로컬 source verifier를 연결해 Prompt·Memory·Policy·Organization 후보를 생성합니다.
 3. 상세 근거·평가·반대 신호 조회와 `evaluate`·`approve`·`reject`·`effect.observe`·`revert` 명령을 타입화합니다.
-4. 기본 `review`에서는 개선 상세에서 승인·거절하고, 사용자가 설정에서 `auto`를 켜면 같은 평가·Governance를 통과한 네 target 후보를 개별 승인 없이 채택합니다. 상위 승인 요구는 검토 대기로 승격합니다.
+4. 기본 `review`에서는 개선 상세에서 승인·거절하고, 사용자가 설정에서 Growth `auto`를 켜면 같은 평가·Governance를 통과한 네 target 후보를 개별 승인 없이 채택합니다. 상위 승인 요구는 검토 대기로 승격합니다. 별도 전역 `full-access`가 켜진 동안에만 이 Governance 승인 대기를 만들지 않습니다.
 5. 기존 Assurance MetricObservationStore 기반 effect assembler가 target version별 Work·Assurance·Records checksum에서 baseline과 후속 표본을 만들게 합니다. Renderer와 공개 command가 raw score를 제출하지 못하게 하고, v1은 allowlisted `assurance-pass-rate` source 하나만 사용합니다.
 6. 새 버전은 다음 Work부터 적용합니다. 동일 계약의 후속 효과가 `degraded`이면 노출을 중단하고, 멱등 effect worker가 기존 revert 경로를 호출합니다. 복원 승인 또는 완료 전에는 새 Work가 suspended version을 선택하지 못합니다. 사후 Policy 변경 충돌은 새 Work를 차단하고 사용자의 명시적 되돌리기로 처리합니다.
 7. UI는 이미 만든 완성본 레이아웃을 유지하고 fixture만 제거합니다. 설정은 모드를 소유하고 개선은 근거·평가·적용·효과·되돌리기 이력을 소유합니다.
 
-종료 조건: 실제 완료 Work가 개선 후보로 이어지고, UAT-G01에서 기본 검토형 승인 후 다음 Work 적용을, UAT-G02에서 사용자 선택 자동 채택과 악화 시 복원을 같은 계보로 증명합니다.
+종료 조건: 실제 완료 Work가 개선 후보로 이어지고, UAT-G01에서 기본 검토형 승인 후 다음 Work 적용을, UAT-G02에서 사용자 선택 자동 채택과 악화 시 복원을 같은 계보로 증명합니다. UAT-P02는 전체 권한에서도 평가·효과·복원 계보가 보존됨을 증명합니다.
 
 ### 단계 6 — 확장과 설정
 
@@ -127,8 +127,9 @@
 2. 공식 최소 확장 하나의 Tool을 Agent Runtime이 실제 Work에서 사용하게 연결합니다.
 3. Registry와 설정 조회를 타입화하고 데스크톱 런타임 파서를 삭제합니다.
 4. daemon 버전·상태와 데이터 위치를 읽기 전용으로 표시합니다.
+5. [전체 권한 설계](2026-07-25-full-access-permission-design.md)에 따라 한 번의 경고, mode revision, Codex·Claude·내장 실행기 전달, 재시작 지속, 해제와 긴급 정지를 연결합니다.
 
-종료 조건: 설치→승인→활성화→Capability 표시→Work 사용과 Provider·로컬 운영 상태 확인이 실제 앱에서 이어집니다.
+종료 조건: 설치→현재 실행 정책에 따른 권한 처리→활성화→Capability 표시→Work 사용과 Provider·로컬 운영 상태 확인이 실제 앱에서 이어지고, UAT-P01~P02가 통과합니다.
 
 ### 단계 7 — 실제 사용자 인수 검증
 
@@ -194,7 +195,7 @@ flowchart LR
 - Workspace 지식 색인·materialize·checksum 실패는 빈 근거로 진행하지 않고 기존 blocked retry로 보존합니다. current index와의 freshness 차이는 계획 당시 snapshot을 유지한 채 경고합니다.
 - 개인 기억 revision 충돌은 자동 덮어쓰지 않고 목록을 다시 읽어 재검토합니다.
 - Reflection source drift·독립 신호 부재·target checksum 불일치는 후보를 적용하지 않고 개선 실행만 blocked로 남깁니다. 완료된 원래 Work는 되돌리지 않습니다.
-- 자동 개선 모드에서도 상위 Policy·Governance 승인 요구는 우회하지 않고 사람 검토로 승격합니다.
+- Growth `auto`는 상위 Policy·Governance 승인 요구를 우회하지 않고 사람 검토로 승격합니다. 사용자가 별도로 켠 전역 `full-access`에서만 승인 요구를 만들지 않으며 평가·checksum·효과 검사는 그대로 유지합니다.
 - effect sample의 Work·target version·Assurance·Records checksum이 맞지 않으면 비교하지 않고, suspended target은 복원 전까지 새 Work version resolution에서 차단합니다.
 - 승인된 Provider·모델 사전 확인이 실패하면 다른 모델로 조용히 대체하지 않습니다.
 
@@ -224,7 +225,8 @@ flowchart LR
 - [ ] 완료 Work→Reflection→평가→검토형 또는 사용자 선택 자동형 채택→다음 Work 적용→검증된 Assurance 효과 표본→중단·되돌리기가 한 계보로 보인다
 - [ ] 확장 Capability가 설치 뒤 표시되고 Work에서 실제 사용된다
 - [ ] 설정이 Provider와 로컬 daemon 상태를 타입 안전하게 보여준다
-- [ ] 핵심 UAT-01~12, 지식·기억 UAT-K01~K04와 지속 발전 UAT-G01~G02가 오류 없이 통과한다
+- [ ] 설정의 전체 권한이 정확한 경고 뒤 실제 Codex·Claude·내장 실행기에 전달되고 해제·긴급 정지할 수 있다
+- [ ] 핵심 UAT-01~12, 지식·기억 UAT-K01~K04, 지속 발전 UAT-G01~G02와 전체 권한 UAT-P01~P02가 오류 없이 통과한다
 - [ ] `pnpm verify`, 데스크톱 릴리스 빌드, 재시작 지속성 검증이 같은 후보 커밋에서 통과한다
 - [ ] 같은 후보 SHA의 macOS arm64 앱이 Developer ID로 서명·공증·스테이플되고 `codesign`, Gatekeeper, `stapler` 검사를 통과한다
 - [ ] 깨끗한 macOS 사용자 환경에서 설치, 이전 후보 교체 업데이트, 앱 제거, 재설치를 수행해 앱 데이터 보존 정책과 실행 가능성을 확인한다

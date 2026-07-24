@@ -133,6 +133,7 @@ drag
 - 등록 조회: `growth.configuration.get`, `growth.memories`, `growth.suggestions`, `growth.effects`
 - 도메인 gateway: `evaluate`, `captureEffectBaseline`, `observeEffect`도 존재
 - 설정 계약: organization·user 범위 `reflectionEnabled`, 기본 `adoptionMode: "review"`, 선택 `"auto"`
+- 일반 실행 계약: Governance `automatic | review`에 개인용 `full-access`를 추가하고 mode revision을 모든 실행 결정에 기록
 - target 계약: Prompt·Memory·Policy·Organization의 versioned apply·revert가 모두 존재
 - 없는 것: 실제 Reflection generator·source verifier·trigger worker, 상세 근거 조회, 평가·명시적 거절·효과 관측 공개 명령, typed map, 데스크톱 연결
 
@@ -185,7 +186,7 @@ interface GrowthSuggestionDetailViewV1 {
 
 - 기본 `review`: 후보 생성과 독립 평가까지 자동 수행하고 적격 후보를 `awaiting-review`로 둡니다. 사용자는 개선 상세에서 승인·거절합니다.
 - 사용자 선택 `auto`: 적격 평가와 Governance allow를 모두 받은 Prompt·Memory·Policy·Organization 후보를 개별 승인 없이 채택합니다.
-- 상위 Policy·Governance·일반 자율성 설정이 승인을 요구하면 `auto`도 실패하지 않고 `awaiting-review`로 승격합니다. deny와 불변식은 어떤 설정으로도 우회하지 않습니다.
+- 상위 Policy·Governance·일반 자율성 설정이 승인을 요구하면 Growth `auto`도 실패하지 않고 `awaiting-review`로 승격합니다. 별도 전역 `full-access`가 켜진 동안에만 승인 대기를 만들지 않으며 평가·checksum·효과·되돌리기 불변식은 유지합니다.
 - 채택은 다음 새 Work부터 적용합니다. 동일 EffectContract의 결과가 `degraded`이면 노출을 중단하고 이전 version으로 되돌립니다. 사후 Policy 변경 충돌은 새 Work를 차단하고 기존 `explicit` 되돌리기로 복구합니다.
 - 설정은 `growth.configuration.get`과 기존 `growth.configure`를 typed map에 올려 설정 화면이 소유합니다. 개선 화면은 현재 모드와 이력만 보여주고 근거·평가·효과·되돌리기를 소유합니다.
 
@@ -277,6 +278,7 @@ Registry 검색
 - `subscription.accounts`
 - `subscription.quota`
 - `subscription.policy`
+- `governance.autonomy.get`
 
 `router.credentials` 타입에는 label·kind·상태만 있고 secret 필드는 존재하지 않습니다. 타입화 뒤 `SettingsView`의 `unknown`과 `projectModelRoutes()`·`projectProviderConnections()`·`projectSubscriptionAccounts()`·범용 parsing helper를 삭제합니다.
 
@@ -289,10 +291,15 @@ interface LocalRuntimeStatusViewV1 {
   readonly databaseVersion: string;
   readonly dataPath: string;
   readonly lastBackupAt?: string;
+  readonly autonomyMode: "review" | "automatic" | "full-access";
+  readonly autonomyRevision: number;
+  readonly runtimePermissionStatus: "governed" | "full-access" | "limited";
 }
 ```
 
 데이터 크기는 디렉터리 전체를 반복 순회해야 하므로 이번 범위에서 제외합니다. 실제 운영 판단에 필요하다는 사례가 생기면 daemon이 유지하는 metric으로 추가합니다.
+
+`full-access`는 [개인용 전체 권한 설계](2026-07-25-full-access-permission-design.md)의 공통 실행 정책으로만 전달합니다. Codex는 `danger-full-access + never`, Claude는 `bypassPermissions + unsandboxed`, 내장 Tool·MCP·Extension은 행동별 Governance prompt 생략으로 투영합니다. 실행기가 이를 지원하지 못하면 `runtimePermissionStatus: "limited"`를 반환하고 전체 권한이라고 표시하지 않습니다. 선택은 재시작 뒤 복원되며 해제 시 활성 실행을 중단한 뒤 다음 부작용부터 새 revision을 사용합니다.
 
 ## 8. 전역 수신함과 홈 집계
 
@@ -316,7 +323,8 @@ interface LocalRuntimeStatusViewV1 {
 | 조직 | snapshot 필드 투영과 stale revision 거부 테스트 각 1개 |
 | 개선 | 완료 Work trigger·검증 표본·평가 없는 승인·checksum drift·거절 기록·`review/auto` 네 target·suspended/revert를 한 표 기반 제품 테스트로 묶음 |
 | 확장 | 설치 manifest 선언 투영 + 실제 Tool 사용 제품 테스트 1개 |
-| 설정 | 일곱 typed query와 secret 부재 계약 테스트 1개 |
+| 설정 | 기존 일곱 typed query·autonomy 조회·secret 부재 계약 테스트 1개 |
+| 전체 권한 | 세 실행 모드의 Governance 결과와 Codex·Claude 전달을 한 표 기반 제품 테스트로 묶음 |
 
 그 밖의 실패는 실제 UAT에서 발견된 경우에만 회귀 테스트를 추가합니다.
 
@@ -327,6 +335,7 @@ interface LocalRuntimeStatusViewV1 {
 - [ ] 실제 agent delegation이 방에 인과 관계와 함께 남는다
 - [ ] 조직 변경이 영향·승인·revision을 우회하지 않는다
 - [ ] 완료 Work의 개선 후보가 기본 `review`와 사용자 선택 `auto`에서 실제 target version을 바꾸고 다음 Work에 적용된다
+- [ ] 사용자가 켠 `full-access`가 mode revision과 함께 모든 실행기에 전달되고 승인 항목 없이 동작하며 해제 뒤 회수된다
 - [ ] 효과가 Work·Assurance·Records checksum이 있는 표본만 사용하고 degraded 뒤 suspended target을 새 Work에 노출하지 않은 채 되돌린다
 - [ ] 설치된 확장의 Capability가 Work에서 실제 사용된다
 - [ ] Provider secret이 query·error·event·evidence에 존재하지 않는다

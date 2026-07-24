@@ -299,6 +299,8 @@ flowchart LR
 
 핵심 업무 조정기 실행(Application run)은 현재 단계와 실행 임대 세대(lease generation)를 저장합니다. 자동 정책은 사람을 기다리지 않고 진행하고, review 정책만 `awaiting-approval`에서 정지합니다. 모델 부재는 성공이나 일반 실패로 꾸미지 않고 재시도 가능한 `blocked` 상태로 보존합니다.
 
+현재 코드는 `automatic | review`와 Workspace sandbox만 구현합니다. 개인용 v1에 승인된 `full-access`는 아직 구현되지 않았으며, Massion 승인·Governance 사용자 권한 제한·Workspace 실행 sandbox 우회와 Codex·Claude 전달·해제 검증은 [ADR-001](ADR-001-personal-full-access.md)과 [전체 권한 설계](../superpowers/specs/2026-07-25-full-access-permission-design.md)의 예정 범위입니다.
+
 ```mermaid
 stateDiagram-v2
   classDef implementing fill:#dbeafe,stroke:#1d4ed8,color:#1e3a8a,stroke-width:3px;

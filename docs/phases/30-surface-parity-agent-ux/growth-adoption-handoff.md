@@ -6,7 +6,7 @@
 > **표면 이름:** `개선` (2026-07-23 확정. 구 `성장`)
 > **행동 용어:** `승인` / `거부`. 도메인 메서드는 `adopt()`이지만 화면과 명령 이름은 제품 전체의 승인 문법을 따릅니다.
 >
-> **2026-07-25 범위 복원:** 이 문서 작성 당시 화면 조각에서 미뤘던 `adoptionMode: "auto"`는 개인용 v1 필수 설정으로 복원합니다. 기본값은 `review`이고 사용자가 `auto`를 명시적으로 선택할 수 있습니다. 자동 모드도 독립 평가·Policy·Governance·효과 측정·되돌리기를 우회하지 않습니다. 정본은 `docs/superpowers/specs/2026-07-25-knowledge-memory-integration-design.md`입니다.
+> **2026-07-25 범위 복원:** 이 문서 작성 당시 화면 조각에서 미뤘던 `adoptionMode: "auto"`는 개인용 v1 필수 설정으로 복원합니다. 기본값은 `review`이고 사용자가 `auto`를 명시적으로 선택할 수 있습니다. Growth 자동 모드 자체는 독립 평가·Policy·Governance·효과 측정·되돌리기를 우회하지 않습니다. 별도 전역 `full-access`가 켜진 동안에만 Governance 승인 대기를 만들지 않으며 정확성 계보는 유지합니다. 정본은 `docs/superpowers/specs/2026-07-25-knowledge-memory-integration-design.md`와 [전체 권한 설계](../../superpowers/specs/2026-07-25-full-access-permission-design.md)입니다.
 
 ## 1. 한 줄 요약
 
@@ -188,6 +188,6 @@ growth.configuration.get · growth.effects · growth.memories · growth.suggesti
 ## 9. 복원된 v1 경계
 
 - **검토형과 자동형을 모두 연결합니다.** 기본 `review`는 사용자 승인·거절을 기다리고, 사용자가 설정한 `auto`는 독립 평가와 Governance allow를 받은 Prompt·Memory·Policy·Organization 후보를 개별 승인 없이 적용합니다.
-- **자동형은 `full-auto`가 아닙니다.** `model-self` 신호 하나, stale source·target, conflict 신호, Policy deny와 필수 승인을 우회할 수 없습니다. 상위 승인이 필요하면 수신함의 검토 대기로 승격합니다.
+- **Growth 자동형은 전역 전체 권한과 다릅니다.** `auto`는 `model-self` 신호 하나, stale source·target, conflict 신호, Policy deny와 필수 승인을 우회할 수 없고 상위 승인이 필요하면 수신함의 검토 대기로 승격합니다. 사용자가 별도로 `full-access`를 켠 경우에만 이 승인 대기를 생략합니다.
 - **완료 Records가 Reflection 시작점입니다.** 기존 `growth_trigger_on_records_completed`와 trigger store를 생산 worker에 연결하고, source checksum을 검증한 snapshot만 generator에 전달합니다.
 - **효과와 복원까지 한 기능입니다.** 기존 Assurance MetricObservationStore에서 Work·target version·Assurance·Records reference와 checksum이 있는 표본만 만들고, 다음 Work부터 새 version을 쓰며 동일 EffectContract로 관찰합니다. 검증된 `degraded`이면 노출을 중단하고 멱등 worker가 기존 revert 경로를 호출합니다. 복원 전에는 새 Work가 suspended version을 선택할 수 없습니다. 사후 Policy 변경 충돌은 새 Work를 차단하고 사용자의 명시적 되돌리기로 처리합니다.
