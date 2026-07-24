@@ -159,6 +159,7 @@ export class EvidenceIndexer {
           indexVersionId: started.index.indexVersionId,
         });
       }
+      await this.indexes.resolveRelations(context, started.index.indexVersionId);
       const snapshot = await this.indexes.getSnapshot(context, started.index.indexVersionId);
       if (snapshot.files.length !== scan.files.length)
         throw new Error(

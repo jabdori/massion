@@ -377,6 +377,45 @@ export class IndexStore {
     });
   }
 
+  public async resolveRelations(context: TenantContext, indexVersionId: string): Promise<void> {
+    await this.organizations.verifyTenantContext(context);
+    await this.database.transaction(async (tx) => {
+      await this.organizations.verifyTenantContext(context, undefined, tx);
+      const target = await this.findIndex(tx, context.organizationId, indexVersionId);
+      if (target.status !== "building") throw new Error("building IndexVersion에서만 relation을 해석할 수 있습니다");
+      const bindings = { organization_id: context.organizationId, index_version_id: indexVersionId };
+      const [[symbols], [relations]] = await Promise.all([
+        tx.query<[Pick<SymbolRecord, "name" | "qualified_name" | "symbol_key">[]]>(
+          "SELECT name, qualified_name, symbol_key FROM evidence_symbol WHERE organization_id = $organization_id AND index_version_id = $index_version_id;",
+          bindings,
+        ),
+        tx.query<[Pick<RelationRecord, "relation_id" | "kind" | "target_text">[]]>(
+          "SELECT relation_id, kind, target_text FROM evidence_relation WHERE organization_id = $organization_id AND index_version_id = $index_version_id AND kind IN ['imports', 'calls', 'implements'];",
+          bindings,
+        ),
+      ]);
+      for (const relation of relations) {
+        const targetName = (relation.target_text.match(/[A-Za-z_$][A-Za-z0-9_$]*/gu) ?? []).at(-1);
+        const candidates =
+          targetName && (relation.kind !== "calls" || relation.target_text === targetName)
+            ? symbols.filter((symbol) => symbol.name === targetName || symbol.qualified_name === targetName)
+            : [];
+        const candidate = candidates[0];
+        if (candidate && candidates.length === 1) {
+          await tx.query(
+            "UPDATE evidence_relation SET target_symbol_key = $target_symbol_key, resolved = true WHERE organization_id = $organization_id AND index_version_id = $index_version_id AND relation_id = $relation_id;",
+            { ...bindings, relation_id: relation.relation_id, target_symbol_key: candidate.symbol_key },
+          );
+        } else {
+          await tx.query(
+            "UPDATE evidence_relation SET target_symbol_key = NONE, resolved = false WHERE organization_id = $organization_id AND index_version_id = $index_version_id AND relation_id = $relation_id;",
+            { ...bindings, relation_id: relation.relation_id },
+          );
+        }
+      }
+    });
+  }
+
   public async getSnapshot(context: TenantContext, indexVersionId: string): Promise<IndexSnapshot> {
     await this.organizations.verifyTenantContext(context);
     await this.findIndex(this.database, context.organizationId, indexVersionId);

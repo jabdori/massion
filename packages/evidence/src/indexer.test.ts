@@ -255,6 +255,68 @@ describe("원자적 Repository index 작성", () => {
     expect(after.symbols.some((symbol) => symbol.relativePath === "renamed.ts")).toBe(true);
   });
 
+  it("incremental index가 삭제된 교차 파일 call 대상의 stale resolution을 제거한다", async () => {
+    await writeFile(path.join(root, "caller.ts"), "export function caller() { return target(); }\n");
+    await writeFile(path.join(root, "target.ts"), "export function target() { return 1; }\n");
+    const initial = await prepareRevision();
+    const configuration = await prepareConfiguration(initial.repository.repositoryId);
+    const indexer = new EvidenceIndexer(repositories, indexes, scanner, new EvidenceParser());
+    const first = await indexer.index(context, {
+      commandId: crypto.randomUUID(),
+      repositoryId: initial.repository.repositoryId,
+      repositoryRevisionId: initial.revision.repositoryRevisionId,
+      configurationId: configuration.configurationId,
+      mode: "full",
+      root,
+      scanOptions: SCAN_OPTIONS,
+    });
+    expect((await indexes.getSnapshot(context, first.index.indexVersionId)).relations).toEqual(
+      expect.arrayContaining([expect.objectContaining({ kind: "calls", targetText: "target", resolved: true })]),
+    );
+
+    await rm(path.join(root, "target.ts"));
+    const changed = await prepareRevision(initial.repository.repositoryId);
+    const second = await indexer.index(context, {
+      commandId: crypto.randomUUID(),
+      repositoryId: initial.repository.repositoryId,
+      repositoryRevisionId: changed.revision.repositoryRevisionId,
+      configurationId: configuration.configurationId,
+      mode: "incremental",
+      parentIndexVersionId: first.index.indexVersionId,
+      root,
+      scanOptions: SCAN_OPTIONS,
+    });
+
+    expect((await indexes.getSnapshot(context, second.index.indexVersionId)).relations).toEqual(
+      expect.arrayContaining([expect.objectContaining({ kind: "calls", targetText: "target", resolved: false })]),
+    );
+  });
+
+  it("전역 재해석이 member call을 같은 이름의 다른 파일 symbol에 연결하지 않는다", async () => {
+    await writeFile(
+      path.join(root, "caller.ts"),
+      "export function caller(client: { target(): number }) { return client.target(); }\n",
+    );
+    await writeFile(path.join(root, "target.ts"), "export function target() { return 1; }\n");
+    const initial = await prepareRevision();
+    const configuration = await prepareConfiguration(initial.repository.repositoryId);
+    const index = await new EvidenceIndexer(repositories, indexes, scanner, new EvidenceParser()).index(context, {
+      commandId: crypto.randomUUID(),
+      repositoryId: initial.repository.repositoryId,
+      repositoryRevisionId: initial.revision.repositoryRevisionId,
+      configurationId: configuration.configurationId,
+      mode: "full",
+      root,
+      scanOptions: SCAN_OPTIONS,
+    });
+
+    expect((await indexes.getSnapshot(context, index.index.indexVersionId)).relations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ kind: "calls", targetText: "client.target", resolved: false }),
+      ]),
+    );
+  });
+
   it("reconcile이 parent의 누락 파일과 drift를 실제 manifest로 교정하고 embedding 대기를 막지 않는다", async () => {
     await writeFile(path.join(root, "one.ts"), "export const one = 1;\n");
     await writeFile(path.join(root, "two.ts"), "export const two = 2;\n");

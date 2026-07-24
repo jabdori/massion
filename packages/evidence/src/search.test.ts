@@ -48,7 +48,10 @@ describe("versioned code search", () => {
       path.join(root, "service.ts"),
       "export class Service { durableOrchestration() { return reliableWorkflow(); } }\nfunction reliableWorkflow() { return 'durable evidence'; }\n",
     );
-    await writeFile(path.join(root, "notes.md"), "# Operations\n\nRecovery preserves the current complete index.\n");
+    await writeFile(
+      path.join(root, "notes.md"),
+      "# Operations\n\nreliableWorkflow recovery preserves the current complete index.\n",
+    );
     const scanner = new RepositoryScanner();
     const scan = await scanner.scan(root, OPTIONS);
     const repository = (
@@ -136,6 +139,43 @@ describe("versioned code search", () => {
       { organization_id: context.organizationId },
     );
     expect(JSON.stringify(events)).not.toContain("durable evidence");
+  });
+
+  it("허용 경로 scope 밖의 exact·lexical·embedding 후보를 반환하지 않는다", async () => {
+    const prepared = await indexed("complete");
+    const snapshot = await indexes.getSnapshot(context, prepared.index.indexVersionId);
+    const outsideChunk = snapshot.chunks.find((chunk) => chunk.relativePath === "notes.md");
+    expect(outsideChunk).toBeDefined();
+    const search = await CodeSearchService.create(database, repositories, indexes, {
+      search: async (input) => [
+        {
+          chunkId: outsideChunk?.chunkId ?? "missing",
+          indexVersionId: input.indexVersionId,
+          embeddingVersion: input.embeddingVersion,
+          score: 1,
+        },
+      ],
+    });
+
+    const result = await search.search(context, {
+      repositoryId: prepared.repository.repositoryId,
+      query: "reliableWorkflow",
+      limit: 10,
+      relativePaths: ["service.ts"],
+    });
+
+    expect(result.results).not.toHaveLength(0);
+    expect(result.results.every((item) => item.relativePath === "service.ts")).toBe(true);
+    expect(result.results.some((item) => item.matchModes.includes("exact"))).toBe(true);
+    expect(result.results.some((item) => item.matchModes.includes("lexical"))).toBe(true);
+    await expect(
+      search.search(context, {
+        repositoryId: prepared.repository.repositoryId,
+        query: "reliableWorkflow",
+        limit: 10,
+        relativePaths: ["service.ts", "service.ts"],
+      }),
+    ).rejects.toThrow();
   });
 
   it("같은 embedding version 후보만 hybrid로 결합하고 unavailable·오류·version mismatch는 lexical로 강등한다", async () => {

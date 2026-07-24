@@ -3,6 +3,7 @@ import { applyMigrations, type MassionDatabase } from "@massion/storage";
 
 import type { IndexedChunk, IndexedSymbol, IndexStore } from "./index-store.js";
 import type { EvidenceMetrics } from "./metrics.js";
+import { normalizeRepositoryPath } from "./path.js";
 import type { RepositoryStore } from "./repository-store.js";
 import {
   EVIDENCE_CONTENT_MIGRATION,
@@ -35,6 +36,7 @@ export interface CodeSearchInput {
   readonly repositoryId: string;
   readonly query: string;
   readonly limit: number;
+  readonly relativePaths?: readonly string[];
 }
 
 export type CodeSearchMatchMode = "exact" | "lexical" | "embedding";
@@ -85,6 +87,19 @@ interface RankedCandidate {
   readonly result: Omit<CodeSearchResult, "matchModes" | "rank">;
   readonly modes: Set<CodeSearchMatchMode>;
   score: number;
+}
+
+function scopedPaths(relativePaths: readonly string[] | undefined): ReadonlySet<string> | undefined {
+  if (!relativePaths) return undefined;
+  if (relativePaths.length > 20) throw new Error("Code search scope는 최대 20개 경로만 허용합니다");
+  const paths = new Set<string>();
+  for (const relativePath of relativePaths) {
+    if (normalizeRepositoryPath(relativePath) !== relativePath)
+      throw new Error("Code search scope에는 정규화된 POSIX 상대 경로가 필요합니다");
+    if (paths.has(relativePath)) throw new Error("Code search scope 경로는 중복될 수 없습니다");
+    paths.add(relativePath);
+  }
+  return paths;
 }
 
 function symbolResult(
@@ -165,6 +180,7 @@ export class CodeSearchService {
     if (!query || query.length > 2_000) throw new Error("Code search query는 1자 이상 2,000자 이하여야 합니다");
     if (!Number.isInteger(input.limit) || input.limit < 1 || input.limit > 100)
       throw new Error("Code search limit은 1 이상 100 이하여야 합니다");
+    const allowedPaths = scopedPaths(input.relativePaths);
     const current = await this.repositories.getCurrentIndex(context, input.repositoryId);
     if (!current || current.status !== "complete" || !current.current)
       throw new Error("검색할 current complete IndexVersion이 없습니다");
@@ -175,6 +191,7 @@ export class CodeSearchService {
       mode: CodeSearchMatchMode,
       score: number,
     ): void => {
+      if (allowedPaths && !allowedPaths.has(result.relativePath)) return;
       const existing = candidates.get(result.referenceId);
       if (existing) {
         existing.modes.add(mode);
@@ -201,13 +218,14 @@ export class CodeSearchService {
     }
 
     const [lexicalRecords] = await this.database.query<[LexicalChunkRecord[]]>(
-      "SELECT chunk_id, chunk_key, relative_path, symbol_key, start_byte, end_byte, start_line, end_line, content, content_hash, search::score(0) AS score FROM evidence_chunk WHERE organization_id = $organization_id AND repository_id = $repository_id AND index_version_id = $index_version_id AND content @0@ $query ORDER BY score DESC LIMIT $limit;",
+      `SELECT chunk_id, chunk_key, relative_path, symbol_key, start_byte, end_byte, start_line, end_line, content, content_hash, search::score(0) AS score FROM evidence_chunk WHERE organization_id = $organization_id AND repository_id = $repository_id AND index_version_id = $index_version_id${allowedPaths ? " AND relative_path IN $relative_paths" : ""} AND content @0@ $query ORDER BY score DESC LIMIT $limit;`,
       {
         organization_id: context.organizationId,
         repository_id: input.repositoryId,
         index_version_id: current.indexVersionId,
         query,
         limit: input.limit,
+        ...(allowedPaths ? { relative_paths: [...allowedPaths] } : {}),
       },
     );
     lexicalRecords.forEach((record, position) => {
