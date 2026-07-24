@@ -5,15 +5,17 @@ import { URL } from "node:url";
 
 const SHA_PIN = /uses:\s+[\w./-]+@[a-f0-9]{40}(?:\s+#.*)?$/mu;
 
-test("release workflow는 tag gate·OIDC attestation·SBOM·max provenance를 고정한다", async () => {
+test("레거시 release workflow는 수동 실행과 job 조건에서 이중으로 게시를 차단한다", async () => {
   const workflow = await readFile(new URL("../.github/workflows/release.yml", import.meta.url), "utf8");
   const uses = workflow.match(/^\s*uses:.*$/gmu) ?? [];
 
   assert.ok(uses.length >= 8, "release action 단계가 누락됐습니다");
   for (const line of uses) assert.match(line, SHA_PIN, `action을 commit SHA로 고정해야 합니다: ${line.trim()}`);
-  assert.match(workflow, /tags:\s*\["v1\.0\.0"\]/u);
-  assert.match(workflow, /id-token:\s*write/u);
-  assert.match(workflow, /attestations:\s*write/u);
+  assert.match(workflow, /^name: Legacy 1\.0 Release \(disabled\)$/mu);
+  assert.match(workflow, /^on:\n  workflow_dispatch:\n\npermissions:$/mu);
+  assert.doesNotMatch(workflow, /^  push:$/mu);
+  assert.match(workflow, /^    if: \$\{\{ false \}\}$/mu);
+  assert.doesNotMatch(workflow, /^\s+(?:artifact-metadata|attestations|id-token|packages):\s*write$/mu);
   assert.match(workflow, /provenance:\s*mode=max/u);
   assert.match(workflow, /sbom:\s*true/u);
   assert.match(workflow, /pnpm verify\b/u);

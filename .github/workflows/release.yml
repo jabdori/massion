@@ -1,22 +1,18 @@
-name: Massion 1.0 Release
+name: Legacy 1.0 Release (disabled)
 
 on:
-  push:
-    tags: ["v1.0.0"]
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
   release:
-    name: Verify, package, publish, and attest
+    if: ${{ false }}
+    name: Disabled legacy CLI/TUI/Web publisher
     runs-on: ubuntu-24.04
     permissions:
-      artifact-metadata: write
-      attestations: write
       contents: read
-      id-token: write
-      packages: write
     steps:
       - name: 소스 확인
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
