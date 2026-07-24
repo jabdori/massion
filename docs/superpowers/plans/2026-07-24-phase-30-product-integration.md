@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: `subagent-driven-development`(권장) 또는 `executing-plans`로 작업을 순서대로 수행합니다. 각 단계는 체크박스로 추적하며, 공용 파일은 현재 작업 조각만 스테이징합니다.
 
-**Goal:** Z.AI Coding Plan `glm-5.2`를 개발·테스트 에이전트로 활용해 완성본 데스크톱 UI를 실제 Core·조직·개선·확장·설정 계약에 연결하고, Tauri 앱에서 최소 12개 핵심 사용자 시나리오와 개인용 배포 게이트를 통과시킵니다.
+**Goal:** Z.AI Coding Plan `glm-5.2`를 개발·테스트 에이전트로 활용해 완성본 데스크톱 UI를 실제 Core·지식·기억·조직·개선·확장·설정 계약에 연결하고, Tauri 앱에서 핵심 UAT-01~12와 지식·기억 UAT-K01~K04, 개인용 배포 게이트를 통과시킵니다.
 
-**Architecture:** 홈과 새 사명 입력을 먼저 닫은 뒤 Core Work 완주를 첫 세로 흐름으로 고정합니다. 이후 협업·조직, 개선, 확장·설정을 같은 query/command/event 경계에 붙이고 실제 UAT에서 발견된 문제에만 최소 회귀 테스트를 추가합니다.
+**Architecture:** 홈과 새 사명 입력을 먼저 닫은 뒤 기존 Evidence·CodeGraph·Growth Memory를 Work 실행에 연결하는 지식·기억 선행 게이트를 통과합니다. 그 다음 Core Work 완주, 협업·조직, 개선, 확장·설정을 같은 query/command/event 경계에 붙이고 실제 UAT에서 발견된 문제에만 최소 회귀 테스트를 추가합니다.
 
 **Tech Stack:** TypeScript 5.9, React 19, Tauri 2, Rust, Vitest, SurrealDB 3.2.1, VoltAgent, 개인 BYOK Z.AI Coding Plan `glm-5.2`, Computer Use
 
@@ -33,6 +33,9 @@
 | `packages/runtime/src/contracts.ts` | 안전한 delegation delta |
 | `packages/runtime/src/voltagent-runner.ts` | Provider stream에서 안전 필드 추출 |
 | `packages/workspace/src/workspace.ts` | canonical directory와 신뢰 경계 |
+| `packages/evidence/src/**` | Workspace 코드 색인·BM25·1-hop graph·EvidenceBrief·prompt materialization |
+| `packages/growth/src/prompt-memory.ts` | 개인 explicit MemoryVersion과 PromptVersion 합성 |
+| `docs/superpowers/plans/2026-07-25-knowledge-memory-integration.md` | 지식·기억 선행 게이트의 구현 순서와 완료 조건 |
 | `apps/server/src/product.ts` | recorder·gateway·status의 생산 조립 |
 | `apps/desktop/src/desktop-service.ts` | Application 계약→화면 뷰 연결 |
 | `apps/desktop/src/use-desktop-controller.ts` | Work 입력 draft와 사용자 명령 상태 |
@@ -178,6 +181,16 @@ git commit -m "feat(desktop): 네이티브 작업 문맥 선택 추가" \
   -m "Tauri 공식 대화상자로 사용자 선택 폴더와 파일 경로만 받아 새 사명 흐름에 전달합니다."
 ```
 
+## Mandatory Track: 지식·그래프·RAG·기억 복원
+
+Task 3이 끝나면 `2026-07-25-knowledge-memory-integration.md`의 Task 1~7을 순서대로 실행합니다. 이 트랙은 선택 기능이 아니라 Phase 30 Task 4의 선행 조건입니다.
+
+- 기존 Tree-sitter·BM25·CodeGraphService·EvidenceBrief를 Workspace Work의 Representative·Strategy·Delivery 입력에 연결합니다.
+- Core Office SharedContextReference와 Work 상세에서 대화↔EvidenceBrief↔파일·symbol 관계를 읽을 수 있게 합니다.
+- 기존 Growth Memory·PromptVersion·RuntimeExecution seam을 생산 조립하고 개인 explicit 기억의 적용·사용 중지를 제공합니다.
+- UAT-K01~K04가 통과하기 전 Core 완주나 개인용 v1 완료를 주장하지 않습니다.
+- LSP·embedding·SurrealDB native relation은 해당 계획의 측정된 실패 게이트가 열릴 때만 별도 구현합니다.
+
 ## Task 4: 실제 Core Work 한 줄 검증과 발견 문제 패치
 
 **Files:**
@@ -200,7 +213,7 @@ Expected: exit 0, stdout 없음.
 
 `XDG_*`와 workspace fixture 경로는 evidence에 기록하되 사용자 홈 절대 경로는 마스킹합니다.
 
-- [ ] **Step 3: UAT-01~06과 UAT-12를 Computer Use로 실행합니다.**
+- [ ] **Step 3: UAT-01~06, UAT-12와 UAT-K01~K04를 Computer Use로 실행합니다.**
 
 각 행동 뒤 접근성 트리를 다시 읽고 필요한 화면만 캡처합니다.
 
@@ -417,9 +430,9 @@ pnpm --filter @massion/desktop tauri:build
 
 Expected: 모두 exit 0. `pnpm verify:release`는 레거시 CLI·TUI·Web 묶음 검사라 개인용 데스크톱 완료 근거에서 제외합니다. 실패하면 UAT를 시작하지 않습니다.
 
-- [ ] **Step 2: 빌드된 `.app`으로 UAT-01~16을 실행합니다.**
+- [ ] **Step 2: 빌드된 `.app`으로 UAT-01~16과 UAT-K01~K04를 실행합니다.**
 
-최소 조건은 핵심 UAT-01~12 전부와 구현된 UAT-13~16 전부 통과입니다. 한 건이라도 실패하면 완료로 표시하지 않습니다.
+최소 조건은 핵심 UAT-01~12, 지식·기억 UAT-K01~K04, 구현된 UAT-13~16 전부 통과입니다. 한 건이라도 실패하면 완료로 표시하지 않습니다.
 
 - [ ] **Step 3: 재시작과 영속 상태를 다시 확인합니다.**
 
@@ -447,7 +460,7 @@ xcrun stapler validate Massion.app
 
 - [ ] **Step 7: 키보드·VoiceOver 접근성을 실측합니다.**
 
-마우스 없이 UAT-01~12를 수행하고 모든 조작 요소의 초점 표시·논리적 순서·대화상자 복귀를 확인합니다. VoiceOver와 Accessibility Inspector로 홈·업무·수신함·조직 구조/지도·개선·확장·설정의 이름(name), 역할(role), 상태(state), 행동(action)을 확인합니다. 클릭 가능한데 VoiceOver로 실행할 수 없는 요소나 핵심 흐름을 막는 경고는 릴리스 차단입니다.
+마우스 없이 UAT-01~12와 UAT-K01~K04를 수행하고 모든 조작 요소의 초점 표시·논리적 순서·대화상자 복귀를 확인합니다. VoiceOver와 Accessibility Inspector로 홈·업무의 사용한 지식·수신함·조직 구조/지도·개선의 내 기억·확장·설정의 이름(name), 역할(role), 상태(state), 행동(action)을 확인합니다. 클릭 가능한데 VoiceOver로 실행할 수 없는 요소나 핵심 흐름을 막는 경고는 릴리스 차단입니다.
 
 - [ ] **Step 8: 개인 BYOK 경계를 증명합니다.**
 
@@ -472,6 +485,7 @@ git commit -m "test(desktop): 실제 AgentOS 사용자 시나리오 검증" \
 ## 3. 계획 자체 검토
 
 - 모든 사용자 요구는 Task 2~11에 연결돼 있습니다.
+- 지식·그래프·RAG·기억 누락은 Task 3 뒤 Mandatory Track으로 복원됐으며 Task 4보다 먼저 실행합니다.
 - 파일 첨부는 workspace 내부 참조로 범위를 고정해 새 업로드 저장소를 만들지 않습니다.
 - 개발·테스트 패치와 개인용 도그푸딩에는 소유자 본인의 Coding Plan `glm-5.2`를 사용하고 BYOK 비공유 경계를 확인합니다.
 - 과도한 unit test를 피하고 신뢰 경계와 실제 실패만 테스트합니다.

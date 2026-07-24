@@ -25,6 +25,8 @@
 | Server | 40개 파일 237개 테스트 통과, 2개 건너뜀 | 실제 데스크톱에서 Core 완주 재검증 필요 |
 | 전체 lint | 현재 dirty worktree의 untracked 캡처 안 제3자 config를 `eslint .`이 읽어 중단; 추적 대상 데스크톱 검사는 실제 오류 78건 보고 | 사용자 산출물은 건드리지 않고 데스크톱 오류를 기계적으로 정리한 뒤 clean clone에서 전체 gate 실행 |
 | GLM 개발·개인 BYOK | 개인 소유 Coding Plan `glm-5.2` Core UAT 2건과 키 존재 기록 | 개발·테스트·패치와 개인용 로컬 도그푸딩에 사용하고 키·계정·할당량의 소유자 격리를 확인 |
+| 코드 지식·RAG | Tree-sitter 인덱스, exact·BM25 검색, CodeGraphService, EvidenceBrief가 구현됨 | Workspace 자동 색인, 1-hop 관계 확장, Context·Agent prompt·출처 화면의 생산 연결 |
+| 기억 | Work·Room·Message와 versioned Growth Memory·PromptVersion·runtime lineage가 구현됨 | 개인 explicit memory 명령과 생산 WorkService·Runtime·Agent instruction 조립 |
 | 협업 | 방 도메인과 VoltAgent 위임은 존재 | 실제 위임이 방 메시지로 영속되지 않음 |
 | 조직 | 구조+지도 UI, 범용 `organization.command` 존재 | 실 계층·scope 투영, 제안/영향/승인, 데스크톱 명령 연결 |
 | 개선 | 도메인 평가·채택·효과·되돌리기, `growth.adopt`·`growth.revert` 존재 | 상세 조회, evaluate/reject, 타입 계약, 데스크톱 연결 |
@@ -39,6 +41,8 @@
 
 - 홈 대시보드와 새 사명 입력의 최종 UX
 - 네이티브 디렉터리 선택, 워크스페이스 등록·신뢰, 워크스페이스 안의 파일 첨부
+- 워크스페이스 파일·심볼·관계 색인, exact·BM25 검색, 1-hop 코드 그래프, EvidenceBrief citation
+- 개인 명시적 기억의 version·사용 중지·새 Work PromptVersion과 RuntimeExecution 계보
 - Tauri → bridge → daemon → Application → Core Office → Provider 전체 실행
 - 실제 에이전트 위임의 협업방 영속 기록
 - 조직 계층·임시 범위·조직 변경 제안·영향·승인 연결
@@ -54,7 +58,8 @@
 - 다중 워크스페이스를 한 Work에 바인딩하는 새 도메인
 - 워크스페이스 밖 임의 파일을 복사·업로드하는 범용 첨부 저장소
 - 실제 실패가 확인되지 않은 성능 최적화와 추상화
-- Shared Context Reference·Resource Lease의 생산 연결. 실제 공유 쓰기 충돌 시나리오가 생길 때 별도 설계합니다.
+- EvidenceBrief 이외 Shared Context Reference와 Resource Lease의 생산 연결. 실제 공유 쓰기 충돌 시나리오가 생길 때 별도 설계합니다.
+- 실제 실패가 확인되지 않은 LSP daemon, embedding·vector index, SurrealDB native relation 전환과 전역 graph explorer
 - 복수 Provider 계정 순환 실증. 계정 하나만 제공된 현재 환경에서는 구조 테스트만 유지합니다.
 
 ## 4. 구현 순서
@@ -76,7 +81,17 @@
 
 종료 조건: 사용자가 식별자를 입력하지 않고 빈 상태에서 폴더·파일 문맥이 있는 Work를 시작하고 자동으로 업무 상세로 이동합니다.
 
-### 단계 2 — Core Work 실제 완주
+### 단계 2 — 지식·기억 세로 흐름 복원
+
+1. 신뢰된 Workspace를 기존 Evidence Repository·Revision·IndexVersion에 결속합니다.
+2. 첨부 파일과 사용자 요청을 exact·BM25로 검색하고 기존 symbol relation을 1-hop 확장해 Work EvidenceBrief로 고정합니다.
+3. Evidence 원문은 ContextVersion에 복제하지 않고, Representative·Strategy·Delivery 실행 직전에 checksum을 검증해 citation과 함께 전달합니다.
+4. 기존 SharedContextReference로 Core Office 대화와 Brief를 잇고 Work 상세에서 사용한 파일·symbol을 읽습니다.
+5. 사용자 explicit MemoryVersion을 새 Work PromptVersion과 RuntimeExecution에만 적용하고 사용 중지 뒤 과거 계보는 유지합니다.
+
+종료 조건: `2026-07-25-knowledge-memory-integration-design.md`의 REQ-KNOWLEDGE-001·002, REQ-MEMORY-001과 UAT-K01~K04가 통과합니다.
+
+### 단계 3 — Core Work 실제 완주
 
 1. 구현·테스트 작성·실패 분석은 Z.AI Coding Plan `glm-5.2`로 수행합니다. 실제 Massion 실행도 개인 소유 키를 로컬 BYOK로 등록하되 키·계정·할당량을 소유자 밖으로 전달하지 않습니다.
 2. Representative→Context & Strategy→Evidence→Delivery→Assurance→Records의 실제 상태를 데스크톱이 사건 스트림으로 따라갑니다.
@@ -85,7 +100,7 @@
 
 종료 조건: 실제 Provider Work 하나가 데스크톱에서 `completed`까지 가며 산출물·검증·기록을 모두 열 수 있습니다.
 
-### 단계 3 — 협업과 조직
+### 단계 4 — 협업과 조직
 
 1. `delegate_task` 호출에 필요한 안전한 위임 메타데이터를 실행 델타에 보존합니다.
 2. 위임과 응답을 기존 Core Office 방에 `handoff`·`answer`로 영속합니다.
@@ -94,13 +109,13 @@
 
 종료 조건: 재시작 뒤에도 실제 에이전트 협업이 방에 남고, 조직 구조와 지도 선택이 같은 실데이터를 가리킵니다.
 
-### 단계 4 — 개선
+### 단계 5 — 개선
 
 상세 근거 조회와 타입 계약을 먼저 연결하고, 평가→승인 또는 거절→효과 관측→되돌리기 순서로 명령을 엽니다. UI는 이미 만든 완성본 레이아웃을 유지하고 fixture만 제거합니다.
 
 종료 조건: 실제 Work에서 나온 제안을 사용자가 근거·반대 신호·diff와 함께 판단하고 후속 효과 또는 되돌리기까지 추적합니다.
 
-### 단계 5 — 확장과 설정
+### 단계 6 — 확장과 설정
 
 1. 설치된 확장 manifest의 contributions·permissions를 `extension.list`에 싣습니다.
 2. 공식 최소 확장 하나의 Tool을 Agent Runtime이 실제 Work에서 사용하게 연결합니다.
@@ -109,7 +124,7 @@
 
 종료 조건: 설치→승인→활성화→Capability 표시→Work 사용과 Provider·로컬 운영 상태 확인이 실제 앱에서 이어집니다.
 
-### 단계 6 — 실제 사용자 인수 검증
+### 단계 7 — 실제 사용자 인수 검증
 
 `2026-07-24-desktop-live-uat-design.md`의 시나리오를 순서대로 실행합니다. 각 시나리오는 Computer Use 접근성 트리, 스크린샷, daemon 로그, 데이터 조회 중 필요한 최소 증거를 남깁니다.
 
@@ -122,6 +137,11 @@ flowchart LR
   T --> B["Node bridge"]
   B --> A["Application query·command·event"]
   A --> C["Core Office 파이프라인"]
+  C --> K["Evidence 색인·BM25·CodeGraph"]
+  K --> E["EvidenceBrief·Context reference"]
+  E --> C
+  A --> G["Growth Memory·PromptVersion"]
+  G --> C
   C --> R["VoltAgent·Router·Z.AI"]
   C --> S[("SurrealDB 정본")]
   R --> O["실행 델타 관찰"]
@@ -140,7 +160,10 @@ flowchart LR
 다음은 실패 후에야 발견하기에는 비용이 큰 신뢰 경계이므로 한 개의 집중 테스트를 먼저 둡니다.
 
 - 워크스페이스 경로·symlink·신뢰 경계
+- 첨부 경로 밖 검색·graph 결과를 거부하는 경계
+- EvidenceBrief·Context source·materialized prompt의 Work 소유권과 checksum 경계
 - command revision과 승인·채택의 비교 후 교환(CAS)
+- 개인 기억의 최초 version·stale revision·새 Work 적용 경계
 - 비밀값이 조회·오류·스크린샷에 나오지 않는 경계
 - 협업 메시지 멱등성과 실행을 죽이지 않는 기록 실패
 - 완료가 Assurance를 우회하지 않는 상태 전이
@@ -162,6 +185,8 @@ flowchart LR
 - 협업 기록 실패는 실행을 중단하지 않지만 운영 로그와 영속 진단 사건에 남깁니다.
 - 네이티브 파일 선택 취소는 오류가 아닙니다.
 - 워크스페이스 밖 파일, 외부로 빠지는 symlink, 존재하지 않는 경로는 Work 생성 전에 거부합니다.
+- Workspace 지식 색인·materialize·checksum 실패는 빈 근거로 진행하지 않고 기존 blocked retry로 보존합니다. current index와의 freshness 차이는 계획 당시 snapshot을 유지한 채 경고합니다.
+- 개인 기억 revision 충돌은 자동 덮어쓰지 않고 목록을 다시 읽어 재검토합니다.
 - 승인된 Provider·모델 사전 확인이 실패하면 다른 모델로 조용히 대체하지 않습니다.
 
 ## 8. 커밋과 증거
@@ -180,6 +205,9 @@ flowchart LR
 
 - [ ] 홈에서 식별자 입력 없이 무워크스페이스 Work와 워크스페이스 Work를 모두 시작할 수 있다
 - [ ] 워크스페이스 안 파일 첨부가 실제 Context & Strategy 입력에 남는다
+- [ ] 첨부 파일과 관련 1-hop 코드 관계가 EvidenceBrief와 Representative·Strategy·Delivery citation에 같은 checksum으로 남는다
+- [ ] Core Office 대화와 Work 상세에서 사용한 파일·symbol 출처를 읽을 수 있다
+- [ ] 개인 explicit 기억이 다음 새 Work부터 적용되고 사용 중지 뒤 이후 Work에서는 빠지며 과거 lineage는 유지된다
 - [ ] 실제 GLM Work가 Core 6단계와 독립 Assurance·Records를 거쳐 완료된다
 - [ ] 실제 위임이 재시작 뒤에도 협업방에서 읽힌다
 - [ ] 수신함·홈·업무의 승인·차단 수가 동일하다
@@ -187,7 +215,7 @@ flowchart LR
 - [ ] 개선 평가·승인/거절·효과·되돌리기가 한 계보로 보인다
 - [ ] 확장 Capability가 설치 뒤 표시되고 Work에서 실제 사용된다
 - [ ] 설정이 Provider와 로컬 daemon 상태를 타입 안전하게 보여준다
-- [ ] 실제 데스크톱 시나리오 12개 이상이 오류 없이 통과한다
+- [ ] 핵심 UAT-01~12와 지식·기억 UAT-K01~K04가 오류 없이 통과한다
 - [ ] `pnpm verify`, 데스크톱 릴리스 빌드, 재시작 지속성 검증이 같은 후보 커밋에서 통과한다
 - [ ] 같은 후보 SHA의 macOS arm64 앱이 Developer ID로 서명·공증·스테이플되고 `codesign`, Gatekeeper, `stapler` 검사를 통과한다
 - [ ] 깨끗한 macOS 사용자 환경에서 설치, 이전 후보 교체 업데이트, 앱 제거, 재설치를 수행해 앱 데이터 보존 정책과 실행 가능성을 확인한다

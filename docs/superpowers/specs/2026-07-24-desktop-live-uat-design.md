@@ -1,7 +1,7 @@
 # 실제 데스크톱 사용자 인수 검증 설계
 
 > **상태:** 실행 기준 설계
-> **최소 통과 수:** 핵심 12개 전부, 확장 4개는 해당 기능 구현 조각 종료 시 전부
+> **최소 통과 수:** 핵심 12개와 지식·기억 4개 전부, 확장 4개는 해당 기능 구현 조각 종료 시 전부
 > **조작:** 실제 Tauri 앱 + Computer Use
 
 ## 1. 검증 대상
@@ -179,7 +179,43 @@ Massion.app
 
 통과: 실제 값이 표시되고 secret은 없으며 읽기 실패를 숫자 0으로 위장하지 않습니다.
 
-## 7. 실패 처리 루프
+## 7. 지식·기억 필수 시나리오 4개
+
+### UAT-K01 Workspace 색인·코드 관계·citation
+
+- cross-file 호출 관계가 있는 작은 fixture 파일 두 개를 trusted Workspace에 둡니다. 검색 root 파일에만 고유 marker를 넣고 target 파일에는 그 marker를 넣지 않습니다.
+- 파일을 개별 첨부하지 않고 Workspace 전체 문맥에서 고유 marker를 요청해 실제 Provider Work를 실행합니다.
+- Work의 `사용한 지식`과 Core Office 공유 출처를 열어 검색 root와 graph로만 도달 가능한 관련 1-hop symbol, line range를 확인합니다.
+- read-only query로 EvidenceBrief와 Representative·Strategy·Delivery execution의 citation checksum을 대조합니다.
+
+통과: target 파일에 검색 marker가 없는데도 resolved relation을 통해 Brief에 포함되고, 같은 IndexVersion의 citation을 실제 세 Agent 입력과 화면이 가리킵니다.
+
+### UAT-K02 경로 경계·manifest 변경·stale 처리
+
+- Workspace 안 허용 파일 하나만 첨부하고, 유사한 문자열이 든 비첨부 파일도 함께 둡니다.
+- 첫 Work 뒤 허용 파일을 수정하고 두 번째 Work를 시작합니다.
+- 첫 Work의 Brief가 과거 snapshot을 유지하면서 stale로 판정되는지, 두 번째 Work가 새 IndexVersion을 쓰는지 확인합니다.
+- 비첨부 파일이 검색, 1-hop graph, prompt, 화면 어디에도 나오지 않는지 확인합니다.
+
+통과: manifest 미변경 시 index가 재사용되고 변경 시 새 version이 생기며, stale 상태를 숨기지 않고 첨부 allowlist 밖 source가 유출되지 않습니다.
+
+### UAT-K03 개인 기억 저장·재시작·새 Work 적용
+
+- 개선의 `내 기억`에 민감하지 않은 fixture preference를 저장합니다.
+- 앱과 daemon을 정상 종료한 뒤 다시 실행합니다.
+- 새 Work를 만들고 화면 안내, PromptVersion, RuntimeExecution `memory_version_ids`, 실제 Agent 응답을 확인합니다.
+
+통과: 재시작 뒤 기억이 남고 저장 이후 만든 Work만 해당 MemoryVersion을 사용하며, 기억 원문이나 개인 식별 정보가 로그·증거에 노출되지 않습니다.
+
+### UAT-K04 앞으로 사용하지 않음과 과거 계보 보존
+
+- UAT-K03 기억을 사용한 Work의 PromptVersion·RuntimeExecution ID를 기록합니다.
+- `앞으로 사용하지 않음`을 실행하고 새 Work를 만듭니다.
+- 앞 Work와 새 Work의 memory lineage를 비교합니다.
+
+통과: 새 Work에는 해당 key가 없고 앞 Work의 PromptVersion·Records·checksum은 변하지 않으며 UI가 hard delete로 오해시키지 않습니다.
+
+## 8. 실패 처리 루프
 
 ```text
 실제 시나리오 실패
@@ -194,7 +230,7 @@ Massion.app
 
 시각 불량은 먼저 스크린샷과 실제 치수로 재현합니다. 순수 스타일 문제에 서비스 유닛 테스트를 만들지 않습니다. 상태·계보·클릭 대상 같은 구조가 원인이면 기존 통합 테스트에 한 건만 추가합니다.
 
-## 8. 조각별 게이트와 최종 게이트
+## 9. 조각별 게이트와 최종 게이트
 
 조각 중에는 변경 영역의 typecheck·표적 test만 실행합니다. 단계 종료 때 해당 패키지 전체 test를 실행합니다. 최종 후보에서만 다음을 한 번 실행합니다.
 
@@ -203,17 +239,18 @@ pnpm verify
 pnpm --filter @massion/desktop tauri:build
 ```
 
-`pnpm verify:release`는 현재 레거시 CLI·TUI·Web 묶음을 검사하므로 개인용 데스크톱 완료 근거로 사용하지 않습니다. 그 뒤 같은 SHA에서 서명·공증한 `.app`으로 UAT-01~16 중 구현 범위에 해당하는 시나리오를 다시 실행합니다. 최소 출시 판정은 핵심 12개와 구현 완료된 확장 시나리오 전부 통과입니다.
+`pnpm verify:release`는 현재 레거시 CLI·TUI·Web 묶음을 검사하므로 개인용 데스크톱 완료 근거로 사용하지 않습니다. 그 뒤 같은 SHA에서 서명·공증한 `.app`으로 UAT-01~16과 UAT-K01~K04 중 구현 범위에 해당하는 시나리오를 다시 실행합니다. 최소 출시 판정은 핵심 12개, 지식·기억 4개와 구현 완료된 확장 시나리오 전부 통과입니다.
 
 추가로 깨끗한 macOS arm64 환경에서 설치·후보 교체 업데이트·제거·재설치 뒤 데이터 지속성과 daemon·SurrealDB sidecar 강제 종료 복구를 확인합니다. 키보드만으로 핵심 흐름을 완주하고 VoiceOver와 Accessibility Inspector로 각 화면의 이름·역할·상태·초점 순서를 실측합니다.
 
-## 9. 중단 조건
+## 10. 중단 조건
 
 - 데이터 손실 또는 tenant 경계 위반
 - secret 노출
 - 승인·Assurance 우회
 - 동일 command의 중복 부작용
 - Work·run·message 인과 계보 유실
+- EvidenceBrief·citation 또는 PromptVersion·MemoryVersion 계보 불일치
 - 앱 재시작 후 상태 복원 실패
 
 이 중 하나가 나오면 다음 시나리오로 진행하지 않고 원인 테스트와 패치를 먼저 닫습니다. 일반적인 문구·간격 문제는 현재 시나리오 묶음이 끝난 뒤 함께 조정합니다.

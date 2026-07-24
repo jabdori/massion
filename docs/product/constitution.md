@@ -323,7 +323,7 @@ Massion을 다음 중 하나로 축소하지 않습니다.
 
 2026-07-24 기준. 표면 여섯(홈, 업무, 조직, 개선, 확장, 설정)과 전역 수신함이 구현돼 있습니다. 도메인 표면은 같은 3열 골격을 쓰고 수신함은 현재 표면 위에 열립니다.
 
-남은 계약·Runtime·실제 데스크톱 검증의 통합 순서는 [Phase 30 제품 통합·정합성 설계](../superpowers/specs/2026-07-24-phase-30-product-integration-design.md)와 [구현 계획](../superpowers/plans/2026-07-24-phase-30-product-integration.md)이 소유합니다.
+남은 계약·Runtime·실제 데스크톱 검증의 통합 순서는 [Phase 30 제품 통합·정합성 설계](../superpowers/specs/2026-07-24-phase-30-product-integration-design.md)와 [구현 계획](../superpowers/plans/2026-07-24-phase-30-product-integration.md)이 소유합니다. 지식·그래프·RAG·기억의 선행 복원 범위는 [통합 설계](../superpowers/specs/2026-07-25-knowledge-memory-integration-design.md)와 [실행 계획](../superpowers/plans/2026-07-25-knowledge-memory-integration.md)이 소유합니다.
 
 - 남은 격차는 화면 추가보다 **계약과 실제 실행 연결**에 집중돼 있습니다. 표면을 완성본 기준으로 만들면서 도메인에는 있고 Application 계약이나 생산 호출 경로가 버리는 것이 반복해서 드러났습니다. 현재 네 인계 문서가 개선, 협업·조직, 확장, 설정 범위를 소유합니다(9.3·9.4·9.5, [설정 조회 계약](../phases/30-surface-parity-agent-ux/settings-contract-handoff.md)).
 - 조직 화면은 **구조(A) + 지도(B) 하이브리드**로 완성본 기준으로 그립니다(2026-07-24). 본문은 자식이 있는 노드를 접을 수 있는 중첩 구조, 우측은 전체 위치를 보여주는 지도이며 A가 읽기의 중심임을 유지하도록 55:45로 나눕니다. `NodeRole`은 총괄·조율·실행만 뜻하므로 `coordinator`를 부서나 팀으로 번역하지 않습니다. 에이전트는 `agentIdentityToken`으로 업무 화면과 같은 이름을 쓰고, scope:"work" 임시 팀은 분리·점선으로 구분합니다.
@@ -363,6 +363,14 @@ Massion을 다음 중 하나로 축소하지 않습니다.
 - 현재 공식 예시는 외부 연동 중심이며 Skill·Tool·조직 Template이 실제 Agent Runtime에 기여하는 완성 경로가 없습니다.
 - **Application 계약이 Capability 선언을 버립니다.** SDK에는 `ExtensionContributionDeclaration` 8종과 `ExtensionPermissionDeclaration` 8종이 있는데 `ExtensionInstallationViewV1`은 다섯 필드뿐이고 그중 어느 것도 Capability가 아닙니다. `registry.*` 조회 넷은 계약에 반환 타입 자체가 없어 `Promise<unknown>`입니다. 그래서 6절이 요구하는 *"조직에 추가된 Capability를 먼저"*를 **설치된 확장에 대해 만족할 수 없습니다.**
 - 인계 문서: [확장 Capability 핸드오프](../phases/30-surface-parity-agent-ux/extension-capability-handoff.md)
+
+### 9.6 지식·그래프·RAG·기억
+
+- Evidence에는 Tree-sitter 기반 SourceFile·Symbol·Chunk·Relation 인덱스, exact·BM25 검색, 선택적 embedding port, CodeGraphService와 EvidenceBrief가 구현돼 있습니다.
+- 그러나 생산 server는 Repository·Index·Brief store까지만 만들고 Scanner·Indexer·Search·CodeGraph를 Workspace Work에 조립하지 않습니다. Core Evidence 단계도 외부에서 넘긴 Brief ID만 검증하므로 실제 Agent가 자동으로 코드 근거를 받지 않습니다.
+- Work·Room·Message는 현재 대화의 정본이고 Growth에는 versioned MemoryVersion·PromptVersion과 RuntimeExecution lineage seam이 있습니다. 생산 WorkService·RuntimeExecutionStore·AgentInstructionRegistry에 이 seam이 주입되지 않아 다음 Work가 기억을 사용하지 않습니다.
+- v1은 기존 relation을 1-hop 검색 확장에 사용하고 EvidenceBrief를 SharedContextReference·ContextVersion·Agent prompt·Work citation에 연결합니다. 개인 explicit 기억은 새 Work의 immutable PromptVersion에만 적용하며 사용 중지 뒤 과거 계보를 재작성하지 않습니다.
+- 현재 저장소에는 LSP 구현이 없습니다. Tree-sitter+BM25+1-hop graph의 실제 UAT가 cross-file 정확도 때문에 반복 실패할 때만 LSP adapter 계획을 엽니다. embedding과 SurrealDB native relation 전환도 각각 검색 품질과 순회 성능 실패가 측정될 때만 추가합니다.
 
 ## 10. 다음 목표
 

@@ -119,6 +119,8 @@ Massion은 모델을 고를 수 있는 채팅 앱도, 에이전트 여러 개를
 - 개인 소유 Z.AI GLM Coding Plan 키의 로컬 실행 UAT 2건: `docs/evidence/phase-30/glm-dogfooding-uat-2026-07-20.md`, `glm-dogfooding-uat-2026-07-21.md`. 개발·테스트 작성·실패 패치와 개인용 Massion 도그푸딩에 `glm-5.2`를 계속 사용합니다. 키·계정·할당량은 소유자 밖으로 공유하지 않습니다.
 - 업무 협업 UAT: `docs/evidence/phase-30/work-collaboration-local-uat-2026-07-20.md`. Core Office 협업방 9명 참가자, handoff 정상.
 - Software Engineering 조직이 Git fixture에서 RED→GREEN 변경 후 독립 Assurance를 통과한 기록.
+- Evidence 패키지의 Tree-sitter 기반 파일·symbol·chunk·relation 인덱스, exact·BM25 검색, 선택적 embedding port, CodeGraphService와 EvidenceBrief 계약.
+- Growth 패키지의 versioned MemoryVersion·PromptVersion 합성 및 RuntimeExecution memory lineage 계약.
 - 품질 게이트 실측: ESLint 0, 4개 패키지 typecheck 통과, 테스트 518건 통과(commit `938709f` 기준).
 
 **없는 것 — 앞으로 지어내면 안 되는 것**
@@ -128,6 +130,9 @@ Massion은 모델을 고를 수 있는 채팅 앱도, 에이전트 여러 개를
 - Claude 소비자 구독 실계정 UAT.
 - 접근성 실측. 코드 구현은 있으나 스크린리더 실사용 확인은 하지 않았습니다.
 - 데스크톱 자체의 사용자 UAT. 데스크톱 구현체는 커밋됐고 fixture 기반 테스트는 통과하지만, Tauri → bridge → daemon → 실제 Provider를 거치는 사용자 조작 검증은 아직 없습니다.
+- Workspace 자동 색인·검색·CodeGraph 결과가 실제 Work의 Representative·Strategy·Delivery 입력과 데스크톱 citation으로 이어지는 생산 경로.
+- 개인 MemoryVersion이 생산 WorkService·Agent instruction에 주입되는 경로와 실제 재시작·사용 중지 UAT.
+- LSP client/server 구현. 현재 저장소에는 LSP 구현이나 의존성이 없으며 완료 기능으로 주장하지 않습니다.
 - 서명·공증된 앱의 깨끗한 Mac 설치·수동 업데이트·제거, 앱 교체·재시작 뒤 데이터 지속성, daemon 비정상 종료 복구, 키보드·VoiceOver 실측.
 
 ## Product Principles
