@@ -29,7 +29,7 @@
 | 기억 | Work·Room·Message와 versioned Growth Memory·PromptVersion·runtime lineage가 구현됨 | 개인 explicit memory 명령과 생산 WorkService·Runtime·Agent instruction 조립 |
 | 협업 | 방 도메인과 VoltAgent 위임은 존재 | 실제 위임이 방 메시지로 영속되지 않음 |
 | 조직 | 구조+지도 UI, 범용 `organization.command` 존재 | 실 계층·scope 투영, 제안/영향/승인, 데스크톱 명령 연결 |
-| 개선 | 도메인 평가·채택·효과·되돌리기, `growth.adopt`·`growth.revert` 존재 | 상세 조회, evaluate/reject, 타입 계약, 데스크톱 연결 |
+| 개선 | 완료 Records trigger와 Reflection·평가·Prompt/Memory/Policy/Organization 채택·효과·되돌리기 도메인, `review | auto` 설정 존재 | 실제 Reflection 생성기·근거 검증기·worker, evaluate/reject/effect 명령, 설정·데스크톱 연결 |
 | 확장 | lifecycle·worker·gateway·Registry 설치가 서버에 조립됨 | 설치 manifest Capability 투영과 Agent Runtime 소비 |
 | 설정 | 일곱 조회가 실제 등록됨 | 타입 계약과 로컬 운영 상태 조회 |
 
@@ -46,7 +46,7 @@
 - Tauri → bridge → daemon → Application → Core Office → Provider 전체 실행
 - 실제 에이전트 위임의 협업방 영속 기록
 - 조직 계층·임시 범위·조직 변경 제안·영향·승인 연결
-- 개선 평가·승인·거절·효과·되돌리기 연결
+- 완료 Work 기반 개선 후보 생성, 독립 평가, 기본 검토형과 사용자 선택 자동형 채택, 효과·되돌리기 연결
 - 설치된 확장의 Capability·권한 투영과 최소 Tool 사용 흐름
 - 설정 조회 타입화와 로컬 daemon·데이터 상태
 - 수신함·홈·소유 화면의 동일 상태 투영
@@ -111,9 +111,15 @@
 
 ### 단계 5 — 개선
 
-상세 근거 조회와 타입 계약을 먼저 연결하고, 평가→승인 또는 거절→효과 관측→되돌리기 순서로 명령을 엽니다. UI는 이미 만든 완성본 레이아웃을 유지하고 fixture만 제거합니다.
+1. 완료 Records가 만든 기존 Growth trigger를 daemon worker가 claim하고, Work·Message·Artifact·Evidence·검증과 당시 target version을 checksum으로 고정한 ReflectionSnapshot을 만듭니다.
+2. 실제 Growth Provider route를 사용하는 bounded generator와 로컬 source verifier를 연결해 Prompt·Memory·Policy·Organization 후보를 생성합니다.
+3. 상세 근거·평가·반대 신호 조회와 `evaluate`·`approve`·`reject`·`effect.observe`·`revert` 명령을 타입화합니다.
+4. 기본 `review`에서는 개선 상세에서 승인·거절하고, 사용자가 설정에서 `auto`를 켜면 같은 평가·Governance를 통과한 네 target 후보를 개별 승인 없이 채택합니다. 상위 승인 요구는 검토 대기로 승격합니다.
+5. 기존 Assurance MetricObservationStore 기반 effect assembler가 target version별 Work·Assurance·Records checksum에서 baseline과 후속 표본을 만들게 합니다. Renderer와 공개 command가 raw score를 제출하지 못하게 하고, v1은 allowlisted `assurance-pass-rate` source 하나만 사용합니다.
+6. 새 버전은 다음 Work부터 적용합니다. 동일 계약의 후속 효과가 `degraded`이면 노출을 중단하고, 멱등 effect worker가 기존 revert 경로를 호출합니다. 복원 승인 또는 완료 전에는 새 Work가 suspended version을 선택하지 못합니다. 사후 Policy 변경 충돌은 새 Work를 차단하고 사용자의 명시적 되돌리기로 처리합니다.
+7. UI는 이미 만든 완성본 레이아웃을 유지하고 fixture만 제거합니다. 설정은 모드를 소유하고 개선은 근거·평가·적용·효과·되돌리기 이력을 소유합니다.
 
-종료 조건: 실제 Work에서 나온 제안을 사용자가 근거·반대 신호·diff와 함께 판단하고 후속 효과 또는 되돌리기까지 추적합니다.
+종료 조건: 실제 완료 Work가 개선 후보로 이어지고, UAT-G01에서 기본 검토형 승인 후 다음 Work 적용을, UAT-G02에서 사용자 선택 자동 채택과 악화 시 복원을 같은 계보로 증명합니다.
 
 ### 단계 6 — 확장과 설정
 
@@ -187,6 +193,9 @@ flowchart LR
 - 워크스페이스 밖 파일, 외부로 빠지는 symlink, 존재하지 않는 경로는 Work 생성 전에 거부합니다.
 - Workspace 지식 색인·materialize·checksum 실패는 빈 근거로 진행하지 않고 기존 blocked retry로 보존합니다. current index와의 freshness 차이는 계획 당시 snapshot을 유지한 채 경고합니다.
 - 개인 기억 revision 충돌은 자동 덮어쓰지 않고 목록을 다시 읽어 재검토합니다.
+- Reflection source drift·독립 신호 부재·target checksum 불일치는 후보를 적용하지 않고 개선 실행만 blocked로 남깁니다. 완료된 원래 Work는 되돌리지 않습니다.
+- 자동 개선 모드에서도 상위 Policy·Governance 승인 요구는 우회하지 않고 사람 검토로 승격합니다.
+- effect sample의 Work·target version·Assurance·Records checksum이 맞지 않으면 비교하지 않고, suspended target은 복원 전까지 새 Work version resolution에서 차단합니다.
 - 승인된 Provider·모델 사전 확인이 실패하면 다른 모델로 조용히 대체하지 않습니다.
 
 ## 8. 커밋과 증거
@@ -212,10 +221,10 @@ flowchart LR
 - [ ] 실제 위임이 재시작 뒤에도 협업방에서 읽힌다
 - [ ] 수신함·홈·업무의 승인·차단 수가 동일하다
 - [ ] 조직 구조·지도·제안·승인이 같은 실데이터를 가리킨다
-- [ ] 개선 평가·승인/거절·효과·되돌리기가 한 계보로 보인다
+- [ ] 완료 Work→Reflection→평가→검토형 또는 사용자 선택 자동형 채택→다음 Work 적용→검증된 Assurance 효과 표본→중단·되돌리기가 한 계보로 보인다
 - [ ] 확장 Capability가 설치 뒤 표시되고 Work에서 실제 사용된다
 - [ ] 설정이 Provider와 로컬 daemon 상태를 타입 안전하게 보여준다
-- [ ] 핵심 UAT-01~12와 지식·기억 UAT-K01~K04가 오류 없이 통과한다
+- [ ] 핵심 UAT-01~12, 지식·기억 UAT-K01~K04와 지속 발전 UAT-G01~G02가 오류 없이 통과한다
 - [ ] `pnpm verify`, 데스크톱 릴리스 빌드, 재시작 지속성 검증이 같은 후보 커밋에서 통과한다
 - [ ] 같은 후보 SHA의 macOS arm64 앱이 Developer ID로 서명·공증·스테이플되고 `codesign`, Gatekeeper, `stapler` 검사를 통과한다
 - [ ] 깨끗한 macOS 사용자 환경에서 설치, 이전 후보 교체 업데이트, 앱 제거, 재설치를 수행해 앱 데이터 보존 정책과 실행 가능성을 확인한다

@@ -1,7 +1,7 @@
 # 실제 데스크톱 사용자 인수 검증 설계
 
 > **상태:** 실행 기준 설계
-> **최소 통과 수:** 핵심 12개와 지식·기억 4개 전부, 확장 4개는 해당 기능 구현 조각 종료 시 전부
+> **최소 통과 수:** 핵심 12개, 지식·기억 4개, 지속 발전 2개 전부. 조직·확장·설정 3개는 해당 기능 구현 조각 종료 시 전부
 > **조작:** 실제 Tauri 앱 + Computer Use
 
 ## 1. 검증 대상
@@ -159,11 +159,28 @@ Massion.app
 
 ### UAT-14 개선 평가·승인·효과·되돌리기
 
-- 완료 Work에서 생성된 개선 제안을 엽니다.
-- 필수·보강·반대 신호와 자기평가 구분, diff, 출처를 확인합니다.
-- 승인하고 효과를 관찰한 뒤 되돌립니다.
+UAT-14는 아래 두 필수 하위 시나리오가 모두 통과해야 합니다.
 
-통과: 전후 version과 효과 표본이 같은 계보에 있고 되돌린 뒤 다음 Work가 이전 version을 사용합니다.
+#### UAT-G01 기본 검토형 지속 발전
+
+- 깨끗한 개인 설치에서 `업무가 끝나면 개선 후보 찾기`가 켜져 있고 반영 방식이 `검토 후 반영(review)`인지 확인합니다.
+- 실제 Provider Work 하나를 독립 Assurance와 Records까지 완료하고, 그 Work가 만든 개선 후보를 엽니다.
+- 원인 Work·Message·Artifact·Evidence·검증 출처, 필수·보강·반대 신호, 자기평가와 독립 신호의 구분, target diff와 expected effect를 확인합니다.
+- 승인 전 target version이 바뀌지 않고 수신함·홈·개선 상세이 같은 검토 대기 항목을 가리키는지 확인합니다.
+- 개선 상세에서 승인하고 새 Work를 만들어 PromptVersion·MemoryVersion·PolicyVersion 또는 OrganizationVersion 중 해당 target의 after version이 다음 Work부터 사용되는지 확인합니다.
+
+통과: 완료 Work→ReflectionSnapshot→eligible Evaluation→사람 승인→새 target version→후속 Work가 같은 source·checksum 계보에 있고, 승인 전이나 기존 Work에는 변경이 소급되지 않습니다.
+
+#### UAT-G02 사용자 선택 자동 반영과 복원
+
+- 설정에서 영향을 읽고 `검증되면 자동 반영(auto)`을 명시적으로 선택합니다.
+- 실제 완료 Work에서 독립 신호를 포함한 eligible 개선 후보를 만들고, 개별 승인 없이 채택되며 수신함 검토 항목은 생기지 않는지 확인합니다.
+- 새 Work가 자동 채택된 version을 사용하고 개선 화면에서 source·evaluation·before/after version·EffectContract를 계속 열 수 있는지 확인합니다.
+- read-only query로 baseline과 observation이 실제 Work·사용 target version·AssuranceRun·Verification·Records·metric observation ID와 checksum을 가리키며 Renderer 요청에 raw score가 없음을 대조합니다.
+- 동일한 측정 계약의 후속 Work에서 실제 terminal Assurance 표본이 `degraded`가 되게 하고, 노출 중단 직후 새 Work가 suspended version을 사용하지 못하는지 확인합니다. 이어서 자동 또는 승인된 이전 version 복원을 확인한 뒤 다시 새 Work를 시작합니다.
+- 설정을 `review`로 되돌리고 이후 후보가 자동 반영되지 않는지 확인합니다.
+
+통과: 사용자가 켠 기간에만 적격 후보가 자동 채택되고, Policy·Governance 승인 요구가 있는 후보는 검토 대기로 승격되며, 임의 점수가 아니라 검증된 업무 표본으로 저하를 판정하고 다음 Work는 suspended version이 아닌 복원 version을 사용합니다. Prompt·Memory·Policy·Organization 네 target의 동일 동작은 제품 통합 테스트의 표 기반 사례로 함께 증명합니다.
 
 ### UAT-15 확장 설치와 실제 사용
 
@@ -239,7 +256,7 @@ pnpm verify
 pnpm --filter @massion/desktop tauri:build
 ```
 
-`pnpm verify:release`는 현재 레거시 CLI·TUI·Web 묶음을 검사하므로 개인용 데스크톱 완료 근거로 사용하지 않습니다. 그 뒤 같은 SHA에서 서명·공증한 `.app`으로 UAT-01~16과 UAT-K01~K04 중 구현 범위에 해당하는 시나리오를 다시 실행합니다. 최소 출시 판정은 핵심 12개, 지식·기억 4개와 구현 완료된 확장 시나리오 전부 통과입니다.
+`pnpm verify:release`는 현재 레거시 CLI·TUI·Web 묶음을 검사하므로 개인용 데스크톱 완료 근거로 사용하지 않습니다. 그 뒤 같은 SHA에서 서명·공증한 `.app`으로 UAT-01~16, UAT-K01~K04와 UAT-G01~G02 중 구현 범위에 해당하는 시나리오를 다시 실행합니다. 최소 출시 판정은 핵심 12개, 지식·기억 4개, 지속 발전 2개와 구현 완료된 조직·확장·설정 시나리오 전부 통과입니다.
 
 추가로 깨끗한 macOS arm64 환경에서 설치·후보 교체 업데이트·제거·재설치 뒤 데이터 지속성과 daemon·SurrealDB sidecar 강제 종료 복구를 확인합니다. 키보드만으로 핵심 흐름을 완주하고 VoiceOver와 Accessibility Inspector로 각 화면의 이름·역할·상태·초점 순서를 실측합니다.
 

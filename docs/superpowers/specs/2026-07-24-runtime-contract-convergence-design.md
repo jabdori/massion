@@ -132,7 +132,11 @@ drag
 - 등록 명령: `growth.configure`, `growth.adopt`, `growth.revert`
 - 등록 조회: `growth.configuration.get`, `growth.memories`, `growth.suggestions`, `growth.effects`
 - 도메인 gateway: `evaluate`, `captureEffectBaseline`, `observeEffect`도 존재
-- 없는 것: 상세 근거 조회, 평가·명시적 거절·효과 관측 공개 명령, typed map, 데스크톱 연결
+- 설정 계약: organization·user 범위 `reflectionEnabled`, 기본 `adoptionMode: "review"`, 선택 `"auto"`
+- target 계약: Prompt·Memory·Policy·Organization의 versioned apply·revert가 모두 존재
+- 없는 것: 실제 Reflection generator·source verifier·trigger worker, 상세 근거 조회, 평가·명시적 거절·효과 관측 공개 명령, typed map, 데스크톱 연결
+
+완료 Records가 만든 기존 `growth_trigger`를 daemon worker가 claim하고, Work·Message·Artifact·Evidence·검증과 당시 target version을 고정한 ReflectionSnapshot을 실제 generator에 전달합니다. source verifier는 tenant·revision·checksum을 로컬에서 검증하고, generator 출력은 기존 네 target operation schema로 제한합니다. 이 생산 연결 없이 준비된 fixture suggestion만 승인하는 것은 v1 완료가 아닙니다.
 
 ### 조회
 
@@ -173,9 +177,44 @@ interface GrowthSuggestionDetailViewV1 {
 - `growth.suggestion.approve`: 기존 `growth.adopt`의 제품 별칭. 기존 operation은 호환을 위해 유지
 - `growth.suggestion.reject`: suggestion 상태와 사유를 영속하는 작은 도메인 메서드 추가
 - `growth.adoption.revert`: 기존 `growth.revert`의 제품 별칭
-- `growth.effect.observe`: baseline과 observation을 명시적 payload로 구분
+- `captureEffectBaseline`·`observeEffect`: Application command map에 노출하지 않고 daemon effect worker만 호출. raw score가 아니라 검증된 sample envelope를 전달
 
 승인 가능 조건은 서버가 판정합니다. 데스크톱 `growthBlockers()`는 설명용이며 보안 경계가 아닙니다. 대상 checksum이 달라지면 conflict를 반환하고 상세을 다시 읽습니다.
+
+### 반영 모드
+
+- 기본 `review`: 후보 생성과 독립 평가까지 자동 수행하고 적격 후보를 `awaiting-review`로 둡니다. 사용자는 개선 상세에서 승인·거절합니다.
+- 사용자 선택 `auto`: 적격 평가와 Governance allow를 모두 받은 Prompt·Memory·Policy·Organization 후보를 개별 승인 없이 채택합니다.
+- 상위 Policy·Governance·일반 자율성 설정이 승인을 요구하면 `auto`도 실패하지 않고 `awaiting-review`로 승격합니다. deny와 불변식은 어떤 설정으로도 우회하지 않습니다.
+- 채택은 다음 새 Work부터 적용합니다. 동일 EffectContract의 결과가 `degraded`이면 노출을 중단하고 이전 version으로 되돌립니다. 사후 Policy 변경 충돌은 새 Work를 차단하고 기존 `explicit` 되돌리기로 복구합니다.
+- 설정은 `growth.configuration.get`과 기존 `growth.configure`를 typed map에 올려 설정 화면이 소유합니다. 개선 화면은 현재 모드와 이력만 보여주고 근거·평가·효과·되돌리기를 소유합니다.
+
+`model-self` 신호만으로 두 모드 모두 eligible이 될 수 없습니다. active explicit user memory와 충돌하는 learned memory 후보도 conflict로 판정합니다.
+
+### 효과 표본과 자동 복원
+
+기존 `GrowthEffectSample`의 숫자를 Renderer나 범용 Application command가 제출하게 두지 않습니다. daemon의 effect worker가 Assurance `MetricObservationStore`와 Work version lineage를 읽어 다음 내부 envelope를 만듭니다.
+
+```ts
+interface VerifiedGrowthEffectSampleV1 {
+  readonly sample: GrowthEffectSample;
+  readonly references: readonly {
+    readonly workId: string;
+    readonly assuranceRunId: string;
+    readonly verificationId: string;
+    readonly recordsRunId?: string;
+    readonly workRecordId?: string;
+    readonly targetVersionId: string;
+    readonly metricObservationIds: readonly string[];
+    readonly sourceChecksum: string;
+  }[];
+  readonly checksum: string;
+}
+```
+
+v1 adapter는 `massion.growth.assurance-pass-rate.v1` 하나이며 같은 target version lineage를 사용한 Work의 terminal Assurance 통과 비율을 계산합니다. Prompt·Memory는 composed PromptVersion, Policy·Organization은 Work의 고정 version으로 cohort를 나눕니다. source reference와 checksum을 다시 검증하고 minimum observation을 채우지 못하면 `inconclusive`입니다.
+
+`degraded` 관찰은 먼저 `exposure_status: suspended`로 바꾸고, Work version resolver가 해당 target을 새 Work에 적용하지 못하게 합니다. effect worker는 effect evaluation ID로 만든 멱등 command를 사용해 `growth.revert(reason: "degraded")`를 호출합니다. Governance allow면 복원하고, 승인이 필요하면 suspended 상태를 유지한 `awaiting-review` 복원 항목을 만들며, 재시작 시 기존 Growth recovery가 같은 command를 재개합니다.
 
 ### 공개 사건
 
@@ -275,7 +314,7 @@ interface LocalRuntimeStatusViewV1 {
 | Core | 실제 단계가 Assurance 없이 completed가 되지 않는 통합 테스트 1개 |
 | 협업 | delegate request/answer 영속·멱등·기록 실패 격리 통합 테스트 1개 |
 | 조직 | snapshot 필드 투영과 stale revision 거부 테스트 각 1개 |
-| 개선 | 평가 없는 승인, checksum drift, 거절 기록을 한 표 기반 테스트로 묶음 |
+| 개선 | 완료 Work trigger·검증 표본·평가 없는 승인·checksum drift·거절 기록·`review/auto` 네 target·suspended/revert를 한 표 기반 제품 테스트로 묶음 |
 | 확장 | 설치 manifest 선언 투영 + 실제 Tool 사용 제품 테스트 1개 |
 | 설정 | 일곱 typed query와 secret 부재 계약 테스트 1개 |
 
@@ -287,7 +326,7 @@ interface LocalRuntimeStatusViewV1 {
 - [ ] 데스크톱 서비스의 `unknown` 파싱이 Registry·설정·개선 경로에서 제거된다
 - [ ] 실제 agent delegation이 방에 인과 관계와 함께 남는다
 - [ ] 조직 변경이 영향·승인·revision을 우회하지 않는다
-- [ ] 개선 승인·거절·효과·되돌리기가 실제 명령을 실행한다
+- [ ] 완료 Work의 개선 후보가 기본 `review`와 사용자 선택 `auto`에서 실제 target version을 바꾸고 다음 Work에 적용된다
+- [ ] 효과가 Work·Assurance·Records checksum이 있는 표본만 사용하고 degraded 뒤 suspended target을 새 Work에 노출하지 않은 채 되돌린다
 - [ ] 설치된 확장의 Capability가 Work에서 실제 사용된다
 - [ ] Provider secret이 query·error·event·evidence에 존재하지 않는다
-

@@ -5,6 +5,8 @@
 > **관련 목표:** [제품 헌법 목표 3 — Growth를 1급 제품 표면으로 완성](../../product/constitution.md)
 > **표면 이름:** `개선` (2026-07-23 확정. 구 `성장`)
 > **행동 용어:** `승인` / `거부`. 도메인 메서드는 `adopt()`이지만 화면과 명령 이름은 제품 전체의 승인 문법을 따릅니다.
+>
+> **2026-07-25 범위 복원:** 이 문서 작성 당시 화면 조각에서 미뤘던 `adoptionMode: "auto"`는 개인용 v1 필수 설정으로 복원합니다. 기본값은 `review`이고 사용자가 `auto`를 명시적으로 선택할 수 있습니다. 자동 모드도 독립 평가·Policy·Governance·효과 측정·되돌리기를 우회하지 않습니다. 정본은 `docs/superpowers/specs/2026-07-25-knowledge-memory-integration-design.md`입니다.
 
 ## 1. 한 줄 요약
 
@@ -116,7 +118,7 @@ growth.configuration.get · growth.effects · growth.memories · growth.suggesti
 | `growth.suggestion.approve` | 기존 `growth.adopt` → `adoption.ts` `adopt()` | 제품 용어에 맞춰 별칭을 추가하거나 기존 명령을 타입화합니다. `evaluationRunId` · `expectedEvaluationInputHash` · `expectedTargetChecksum`이 필요합니다. |
 | `growth.suggestion.reject` | | 거부도 기록으로 남아야 함 |
 | `growth.adoption.revert` | 기존 `growth.revert` → `revert.ts` | 기존 명령을 타입화하고 데스크톱에 연결합니다. |
-| `growth.effect.observe` | `effect.ts` `observe()` · `captureBaseline()` | 승인 시 자동인지 별도인지 도메인 테스트로 확인 |
+| 내부 effect worker | `effect.ts` `observe()` · `captureBaseline()` | 공개 raw score 명령을 만들지 않고 Work·target version·Assurance·Records checksum에서 검증된 표본만 전달 |
 
 **Governance 게이트를 반드시 통과시키십시오.** `packages/growth/src/governance-adapter.ts`와 `GrowthAdoptionAuthorizer`가 있습니다. 헌법 4.6이 *"자기수정의 버전, 평가와 되돌리기"*를 사람의 통제 대상으로 규정합니다.
 
@@ -183,7 +185,9 @@ growth.configuration.get · growth.effects · growth.memories · growth.suggesti
 
 열거가 아니면 화면이 문구 표를 만들 수 없습니다. 지금은 원문을 mono로 강등해 두었습니다. **어떤 값을 쓸지 정하고 `ASSERT $value IN [...]`으로 고정하십시오.** 그 뒤에 화면이 한글 문구를 붙입니다.
 
-## 9. 범위 밖
+## 9. 복원된 v1 경계
 
-- **자동 승인.** `adoptionMode: "auto"`가 가능하지만 헌법 4.8이 *"LLM 자기평가 하나만으로 자동 채택할 수 없다"*고 못 박았습니다. `origin` 구분과 최소 표본·개선폭 게이트 설계가 먼저입니다.
-- **Reflection 트리거 시점.** `trigger.ts`가 언제 도는지, 사용자가 수동으로 돌릴 수 있어야 하는지는 별도 결정입니다.
+- **검토형과 자동형을 모두 연결합니다.** 기본 `review`는 사용자 승인·거절을 기다리고, 사용자가 설정한 `auto`는 독립 평가와 Governance allow를 받은 Prompt·Memory·Policy·Organization 후보를 개별 승인 없이 적용합니다.
+- **자동형은 `full-auto`가 아닙니다.** `model-self` 신호 하나, stale source·target, conflict 신호, Policy deny와 필수 승인을 우회할 수 없습니다. 상위 승인이 필요하면 수신함의 검토 대기로 승격합니다.
+- **완료 Records가 Reflection 시작점입니다.** 기존 `growth_trigger_on_records_completed`와 trigger store를 생산 worker에 연결하고, source checksum을 검증한 snapshot만 generator에 전달합니다.
+- **효과와 복원까지 한 기능입니다.** 기존 Assurance MetricObservationStore에서 Work·target version·Assurance·Records reference와 checksum이 있는 표본만 만들고, 다음 Work부터 새 version을 쓰며 동일 EffectContract로 관찰합니다. 검증된 `degraded`이면 노출을 중단하고 멱등 worker가 기존 revert 경로를 호출합니다. 복원 전에는 새 Work가 suspended version을 선택할 수 없습니다. 사후 Policy 변경 충돌은 새 Work를 차단하고 사용자의 명시적 되돌리기로 처리합니다.
