@@ -1,5 +1,7 @@
 # Phase 29 증거: 첫 실행 온보딩과 자동 로컬 서버
 
+> **2026-07-24 상태 정정:** 아래는 레거시 CLI·TUI·Web 온보딩을 당시 검증한 역사적 증거입니다. 현재 공개 설치 경로나 개인용 데스크톱 1.0 완료를 뜻하지 않습니다. 현재 릴리스 상태는 [철회 증거](../phase-30/withdrawn-v1.0.0-release-2026-07-24.md)를 따릅니다.
+
 ## 구현 커밋
 
 - `dc44307` — `feat(cli): automate personal onboarding and local startup`

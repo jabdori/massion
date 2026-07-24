@@ -1,4 +1,8 @@
-# macOS arm64 릴리스 빌드
+# 개인용 macOS arm64 릴리스 기준
+
+> **상태:** 1.0 후보 계약. 현재 공개 릴리스는 없습니다.
+
+## 1. 빌드 경계
 
 `apps/desktop`에서 릴리스 설정을 명시해 실행합니다.
 
@@ -6,10 +10,45 @@
 pnpm tauri:build
 ```
 
-빌드 단계는 `runtime-manifest.json`에 고정된 공식 Node.js와 SurrealDB 아카이브를 내려받아, 아카이브 SHA-256과 추출된 실행 파일 SHA-256을 모두 확인한 뒤 sidecar 입력을 준비합니다. 따라서 최종 사용자는 Node.js나 SurrealDB를 별도로 설치하거나 `PATH`에 등록할 필요가 없습니다.
+빌드는 renderer를 만들고 Node.js bridge·server와 고정된 Node.js·SurrealDB sidecar를 앱에 배치합니다. `runtime-manifest.json`의 아카이브·실행 파일 SHA-256이 다르면 중단합니다. 최종 사용자는 Node.js나 SurrealDB를 별도로 설치하지 않습니다.
 
-빌드 머신에는 네트워크, `curl`, `tar`가 필요합니다. 이미 검증된 SurrealDB 실행 파일을 쓰려면 `MASSION_SURREAL_BINARY`에 절대 경로를 지정할 수 있으며, 이 경우에도 manifest의 실행 파일 SHA-256과 일치하지 않으면 빌드가 중단됩니다.
+현재 `tauri.release.conf.json`은 sidecar와 resource staging만 설정합니다. Developer ID 서명, Apple 공증, DMG 배포 자동화는 아직 연결되지 않았으므로 `tauri:build` 성공만으로 공개할 수 없습니다.
 
-빌드 전 명령은 최신 renderer `dist`를 생성한 뒤, 브리지와 서버를 각각 의존성이 포함된 `.runtime-stage`로 배치합니다. 배포 앱은 SurrealDB 실행 파일을 앱 안에 포함하지만, 첫 실행 시 사용자 전용 데이터 경로에 무결성을 확인해 복사한 뒤 실행합니다. 데이터베이스 데이터도 같은 사용자 전용 경로에 저장되므로 앱 업데이트로 지워지지 않습니다.
+## 2. 필수 배포 게이트
 
-실제 배포 전에는 서명된 `.app`에서 두 외부 바이너리의 위치, 브리지 `hello`/`shutdown`, 서버 재사용을 별도로 검증해야 합니다.
+모든 항목은 같은 후보 commit SHA와 같은 artifact로 통과해야 합니다.
+
+- `pnpm verify`와 데스크톱 build·typecheck·test
+- 핵심 UAT-01~~12와 구현 완료된 UAT-13~~16
+- Developer ID Application 서명과 Apple 공증·스테이플
+- 앱 내부 Node.js·SurrealDB sidecar 서명 검증
+- 깨끗한 macOS arm64 사용자에서 최초 설치·Gatekeeper 실행
+- 이전 서명 후보에서 새 후보로 수동 교체 업데이트와 데이터 보존
+- 앱 제거·재설치와 데이터 보존 정책 확인
+- 개인 데이터 백업→빈 데이터 복구→핵심 query·checksum·migration 대조
+- daemon과 SurrealDB sidecar 강제 종료 뒤 재연결·중복 방지·데이터 무결성
+- 키보드만으로 핵심 흐름 완주, VoiceOver와 Accessibility Inspector 실측
+- 개인 사용자가 등록한 BYOK 키가 로컬 소유자 경계 밖으로 노출·공유·중계되지 않는지 확인
+
+Tauri 공식 문서에 따라 브라우저로 배포하는 macOS 앱은 Developer ID 서명과 공증을 사용합니다: [Tauri macOS code signing](https://v2.tauri.app/distribute/sign/macos/).
+
+## 3. artifact 검증
+
+```sh
+codesign --verify --deep --strict --verbose=2 Massion.app
+spctl --assess --type execute --verbose=4 Massion.app
+xcrun stapler validate Massion.app
+```
+
+Ad-hoc 서명은 개발 확인에만 쓸 수 있고 공개 후보로 인정하지 않습니다. CI는 인증서와 Apple credential을 secret으로만 주입하며 비밀값을 출력하거나 evidence에 남기지 않습니다.
+
+## 4. 게시 순서
+
+1. 후보 SHA를 고정합니다.
+2. 전체 검증과 실제 Tauri UAT를 통과합니다.
+3. 서명·공증한 artifact로 깨끗한 Mac 설치·업데이트·제거를 통과합니다.
+4. 같은 artifact로 백업·복구, 비정상 종료, 접근성을 통과합니다.
+5. artifact digest와 모든 증거의 후보 SHA가 일치하는지 확인합니다.
+6. 마지막 단계에서만 `v1.0.0` 태그와 GitHub Release를 만듭니다.
+
+하나라도 실패하거나 건너뛰면 draft도 정식 릴리스로 승격하지 않습니다.

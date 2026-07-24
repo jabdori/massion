@@ -4,15 +4,15 @@
 
 ## Platform
 
-web
+desktop
 
 ## Users
 
-주 사용자는 **자기 기계에 직접 설치해 쓰는 개인 개발자와 1인 팀**입니다. `install.sh`로 받아 macOS 또는 Linux 로컬에 설치하고, 로컬 daemon을 띄운 뒤 AI 에이전트 조직에 업무를 맡깁니다. 설계 기준은 "이 제품을 오늘 처음 설치한 외부 개인 개발자"이며, 사내 온보딩이나 사전 설명을 전제하지 않습니다.
+주 사용자는 **자기 Mac에 직접 설치해 쓰는 개인 개발자와 1인 팀**입니다. 서명·공증된 macOS 데스크톱 앱을 설치하고, 로컬 daemon과 AI 에이전트 조직에 업무를 맡기는 흐름이 첫 메인 릴리스 목표입니다. 설계 기준은 "이 제품을 오늘 처음 설치한 외부 개인 개발자"이며, 사내 온보딩이나 사전 설명을 전제하지 않습니다.
 
 근시일 최다 사용 시간은 소유자 본인의 도그푸딩에서 나오지만, 그것은 검증 경로이지 설계 대상이 아닙니다.
 
-팀 자체 호스팅(공유 조직·역할·membership)은 코드에 존재하는 배포 변형이나, 이번 프론트엔드의 1차 대상 사용자는 아닙니다.
+현재 공개 설치 가능한 릴리스는 없습니다. 2026-07-15에 게시됐던 `v1.0.0`은 개인용 데스크톱 완성·배포 게이트를 통과하지 못해 2026-07-24 릴리스와 원격 태그를 철회했습니다. 기존 `install.sh`, CLI·TUI·Web 묶음과 팀 자체 호스팅은 코드에 남은 레거시 배포 경로이며 개인용 메인 릴리스 표면이 아닙니다.
 
 ## Product Purpose
 
@@ -52,6 +52,7 @@ Massion은 모델을 고를 수 있는 채팅 앱도, 에이전트 여러 개를
 
 - Work의 종료 상태는 `completed`, `awaiting-approval`, `blocked`, `failed`, `cancelled` 다섯입니다. 모델 경로 소진은 실패가 아니라 재시도 가능한 `blocked`로 보존됩니다.
 - Provider 자격 증명이 없어도 조직·업무·기록·백업은 동작하며 모델 호출만 차단됩니다(제한 모드).
+- Provider 자격 증명은 개인 사용자가 자기 계정의 키를 자기 로컬 앱에 직접 등록합니다(BYOK). Massion은 자격 증명·계정·구독 할당량을 다른 사용자나 서버에 공유·대여·재판매·프록시하지 않습니다.
 - 승인이 필요한 실행은 사람의 결정 전까지 정지하며, 정책이 자동이면 사람을 기다리지 않습니다.
 - 여러 에이전트가 하나의 Work에 귀속된 협업방에서 메시지·handoff를 주고받고, 독립 Task는 병렬 실행됩니다.
 
@@ -115,7 +116,7 @@ Massion은 모델을 고를 수 있는 채팅 앱도, 에이전트 여러 개를
 
 **실재하는 것**
 
-- Z.AI GLM Coding Plan 단일 계정 실행 UAT 2건: `docs/evidence/phase-30/glm-dogfooding-uat-2026-07-20.md`, `glm-dogfooding-uat-2026-07-21.md`. 2차에서 코드 작성 요청이 delivery를 통과해 assurance에 도달하고 산출물 2개를 생성했습니다.
+- 개인 소유 Z.AI GLM Coding Plan 키의 로컬 실행 UAT 2건: `docs/evidence/phase-30/glm-dogfooding-uat-2026-07-20.md`, `glm-dogfooding-uat-2026-07-21.md`. 개발·테스트 작성·실패 패치와 개인용 Massion 도그푸딩에 `glm-5.2`를 계속 사용합니다. 키·계정·할당량은 소유자 밖으로 공유하지 않습니다.
 - 업무 협업 UAT: `docs/evidence/phase-30/work-collaboration-local-uat-2026-07-20.md`. Core Office 협업방 9명 참가자, handoff 정상.
 - Software Engineering 조직이 Git fixture에서 RED→GREEN 변경 후 독립 Assurance를 통과한 기록.
 - 품질 게이트 실측: ESLint 0, 4개 패키지 typecheck 통과, 테스트 518건 통과(commit `938709f` 기준).
@@ -127,6 +128,7 @@ Massion은 모델을 고를 수 있는 채팅 앱도, 에이전트 여러 개를
 - Claude 소비자 구독 실계정 UAT.
 - 접근성 실측. 코드 구현은 있으나 스크린리더 실사용 확인은 하지 않았습니다.
 - 데스크톱 자체의 사용자 UAT. 데스크톱 구현체는 커밋됐고 fixture 기반 테스트는 통과하지만, Tauri → bridge → daemon → 실제 Provider를 거치는 사용자 조작 검증은 아직 없습니다.
+- 서명·공증된 앱의 깨끗한 Mac 설치·수동 업데이트·제거, 개인 데이터 백업→복구, daemon 비정상 종료 복구, 키보드·VoiceOver 실측.
 
 ## Product Principles
 

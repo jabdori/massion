@@ -16,17 +16,18 @@ Massion.app
 → daemon
 → SurrealDB
 → Router
-→ Z.AI Coding Plan glm-5.2
+→ 자체 애플리케이션 호출이 허용된 실제 Provider
 ```
 
 ## 2. 환경과 비밀값
 
 1. 격리된 `XDG_CONFIG_HOME`, `XDG_DATA_HOME`, `XDG_STATE_HOME`과 임시 workspace fixture를 사용합니다.
-2. `~/.zshrc`의 `Z_AI_API_KEY`는 존재 여부만 출력해 사전 확인합니다.
+2. 개인 소유 Provider credential은 존재 여부만 비밀 출력 없이 사전 확인합니다.
 3. 키 값은 shell trace, 테스트 출력, 스크린샷, evidence 문서에 기록하지 않습니다.
 4. Massion의 기존 `subscription.server.connect-model` 경로로만 전달합니다.
-5. 공식 Coding endpoint와 `glm-5.2` 모델 사전 확인이 실패하면 다른 모델로 대체하지 않고 provider-contract drift로 중단합니다.
-6. 공식 문서는 Coding Plan 전용 endpoint 사용과 지원 도구 제한을 명시하므로, UAT 시작 시 현재 계정과 Massion 사용 허용 상태를 함께 확인합니다.
+5. Provider·모델 사전 확인이 실패하면 다른 모델로 대체하지 않고 provider-contract drift로 중단합니다.
+6. UAT 실행·분석·실패 재현 테스트·코드 패치와 개인용 Massion 도그푸딩은 Z.AI Coding Plan `glm-5.2`를 사용합니다.
+7. 키·계정·할당량은 개인 소유자의 로컬 경계에만 두고 공유·대여·판매·중계하지 않습니다. evidence에는 키 값이나 외부 계정 식별자를 남기지 않습니다.
 
 ## 3. 조작·관찰 방식
 
@@ -68,13 +69,13 @@ Massion.app
 
 통과: 빈 상태가 오류 없이 보이고 재실행 뒤 bootstrap이 중복 조직이나 daemon을 만들지 않습니다.
 
-### UAT-02 Z.AI GLM-5.2 연결
+### UAT-02 허용된 실제 Provider 연결
 
-- 설정에서 Z.AI Coding Plan 연결을 엽니다.
+- 설정에서 자체 애플리케이션 사용이 허용된 Provider 연결을 엽니다.
 - 환경의 키를 비밀 입력에 전달합니다.
 - 연결 완료와 Core route 준비 상태를 확인합니다.
 
-통과: 계정은 active/ready이고 Core 필수 route가 준비되며 화면·로그에 secret이 없습니다.
+통과: 개인 계정은 active/ready이고 Core 필수 route가 준비되며 화면·로그·원격 Massion 서비스에 secret이나 계정 식별자가 노출되지 않습니다.
 
 ### UAT-03 워크스페이스 없는 조사 Work
 
@@ -200,10 +201,11 @@ Massion.app
 ```sh
 pnpm verify
 pnpm --filter @massion/desktop tauri:build
-pnpm verify:release
 ```
 
-그 뒤 빌드된 `.app`으로 UAT-01~16 중 구현 범위에 해당하는 시나리오를 다시 실행합니다. 최소 출시 판정은 핵심 12개와 구현 완료된 확장 시나리오 전부 통과입니다.
+`pnpm verify:release`는 현재 레거시 CLI·TUI·Web 묶음을 검사하므로 개인용 데스크톱 완료 근거로 사용하지 않습니다. 그 뒤 같은 SHA에서 서명·공증한 `.app`으로 UAT-01~16 중 구현 범위에 해당하는 시나리오를 다시 실행합니다. 최소 출시 판정은 핵심 12개와 구현 완료된 확장 시나리오 전부 통과입니다.
+
+추가로 깨끗한 macOS arm64 환경에서 설치·후보 교체 업데이트·제거·재설치, 백업→복구, daemon·SurrealDB sidecar 강제 종료 복구를 수행합니다. 키보드만으로 핵심 흐름을 완주하고 VoiceOver와 Accessibility Inspector로 각 화면의 이름·역할·상태·초점 순서를 실측합니다.
 
 ## 9. 중단 조건
 
@@ -215,4 +217,3 @@ pnpm verify:release
 - 앱 재시작 후 상태 복원 실패
 
 이 중 하나가 나오면 다음 시나리오로 진행하지 않고 원인 테스트와 패치를 먼저 닫습니다. 일반적인 문구·간격 문제는 현재 시나리오 묶음이 끝난 뒤 함께 조정합니다.
-

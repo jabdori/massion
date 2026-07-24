@@ -1,5 +1,7 @@
 # Phase 30 Slice 1A 원격 SurrealDB 3.2.1 구현 계획
 
+> **2026-07-24 상태:** 구현 완료 뒤 보존된 역사적 계획입니다. 기존 `v1.0.0`의 존재를 전제로 한 조회·금지·후속 patch-version 지시는 폐기됐습니다. 해당 릴리스와 태그는 철회됐으며, 새 공개 릴리스는 개인용 데스크톱 게이트를 따릅니다. [철회 증거](../../evidence/phase-30/withdrawn-v1.0.0-release-2026-07-24.md)
+
 > **에이전트형 작업자(agentic workers):** 이 계획의 각 작업은 `subagent-driven-development` 절차로 구현하고, 구현 뒤 명세 검토와 품질 검토를 순서대로 수행합니다.
 
 **Goal:** 개인용 로컬 RocksDB를 건드리지 않고 원격 Docker·Compose·Kubernetes·릴리스 묶음과 미래 GitHub 릴리스가 SurrealDB 3.2.1 binary·안전한 QEMU 입력·올바른 이미지 이름을 일관되게 가리키도록 검증 가능한 소스 배포 계약으로 고정합니다.

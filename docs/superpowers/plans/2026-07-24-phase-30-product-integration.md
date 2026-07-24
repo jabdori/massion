@@ -2,11 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: `subagent-driven-development`(권장) 또는 `executing-plans`로 작업을 순서대로 수행합니다. 각 단계는 체크박스로 추적하며, 공용 파일은 현재 작업 조각만 스테이징합니다.
 
-**Goal:** 완성본 데스크톱 UI를 실제 Core·조직·개선·확장·설정 계약에 연결하고, 실제 GLM-5.2와 Tauri 앱에서 최소 12개 핵심 사용자 시나리오를 통과시킵니다.
+**Goal:** Z.AI Coding Plan `glm-5.2`를 개발·테스트 에이전트로 활용해 완성본 데스크톱 UI를 실제 Core·조직·개선·확장·설정 계약에 연결하고, Tauri 앱에서 최소 12개 핵심 사용자 시나리오와 개인용 배포 게이트를 통과시킵니다.
 
 **Architecture:** 홈과 새 사명 입력을 먼저 닫은 뒤 Core Work 완주를 첫 세로 흐름으로 고정합니다. 이후 협업·조직, 개선, 확장·설정을 같은 query/command/event 경계에 붙이고 실제 UAT에서 발견된 문제에만 최소 회귀 테스트를 추가합니다.
 
-**Tech Stack:** TypeScript 5.9, React 19, Tauri 2, Rust, Vitest, SurrealDB 3.2.1, VoltAgent, Z.AI Coding Plan `glm-5.2`, Computer Use
+**Tech Stack:** TypeScript 5.9, React 19, Tauri 2, Rust, Vitest, SurrealDB 3.2.1, VoltAgent, 개인 BYOK Z.AI Coding Plan `glm-5.2`, Computer Use
 
 ---
 
@@ -18,6 +18,7 @@
 - fixture 화면의 시각 완성도는 보존하고 실데이터 연결 때문에 레이아웃을 다시 만들지 않습니다.
 - 한 조각의 표적 테스트가 통과하기 전 다음 도메인으로 넘어가지 않습니다.
 - 전체 `pnpm verify`는 매 작은 수정마다 돌리지 않고 단계 종료와 최종 후보에서 실행합니다.
+- 구현·테스트 작성·실패 분석·패치와 개인용 로컬 도그푸딩에 Z.AI Coding Plan `glm-5.2`를 사용합니다. GLM이 제안한 변경도 같은 표적 검사와 실제 UAT를 통과해야 채택합니다.
 
 ## 2. 파일 책임 맵
 
@@ -392,11 +393,18 @@ Run: `pnpm --filter @massion/desktop test && pnpm --filter @massion/desktop type
 
 Expected: exit 0.
 
-## Task 11: 최종 데스크톱 UAT와 릴리스 게이트
+## Task 11: 최종 데스크톱 UAT와 개인용 릴리스 게이트
 
 **Files:**
 
 - Create: `docs/evidence/phase-30/desktop-live-uat-2026-07-24.md`
+- Create: `docs/evidence/phase-30/personal-desktop-release-YYYY-MM-DD.md`
+- Create: `scripts/verify-desktop-release.mjs`
+- Create: `scripts/verify-desktop-release.test.mjs`
+- Create: `.github/workflows/desktop-release.yml`
+- Modify: `apps/desktop/src-tauri/tauri.release.conf.json`
+- Modify: `packages/local-control/src/daemon.ts`
+- Modify: `apps/desktop/src/desktop-service.ts`
 - Modify: `PRODUCT.md`
 - Modify: `docs/product/constitution.md`
 - Modify: `docs/generated/requirements-traceability.tsv`
@@ -406,10 +414,9 @@ Expected: exit 0.
 ```sh
 pnpm verify
 pnpm --filter @massion/desktop tauri:build
-pnpm verify:release
 ```
 
-Expected: 모두 exit 0. 실패하면 UAT를 시작하지 않습니다.
+Expected: 모두 exit 0. `pnpm verify:release`는 레거시 CLI·TUI·Web 묶음 검사라 개인용 데스크톱 완료 근거에서 제외합니다. 실패하면 UAT를 시작하지 않습니다.
 
 - [ ] **Step 2: 빌드된 `.app`으로 UAT-01~16을 실행합니다.**
 
@@ -419,14 +426,50 @@ Expected: 모두 exit 0. 실패하면 UAT를 시작하지 않습니다.
 
 Work, 협업 메시지, 승인 결과, 조직 version, 개선 adoption, 확장 상태가 앱 재실행 뒤 동일해야 합니다.
 
-- [ ] **Step 4: 문서 주장을 실제 SHA와 결과로 갱신합니다.**
+- [ ] **Step 4: macOS arm64 배포 신원을 검증합니다.**
+
+Developer ID 서명과 Apple 공증을 같은 후보 SHA에서 수행합니다. 인증서는 CI secret으로만 주입하고 로그에 신원 외 비밀을 남기지 않습니다. 생성된 `.app` 또는 `.dmg`에 다음 검사를 실행합니다.
+
+```sh
+codesign --verify --deep --strict --verbose=2 Massion.app
+spctl --assess --type execute --verbose=4 Massion.app
+xcrun stapler validate Massion.app
+```
+
+세 명령과 앱 내부 Node.js·SurrealDB sidecar 서명 검사가 모두 통과해야 합니다. Ad-hoc 서명은 공개 후보로 인정하지 않습니다.
+
+- [ ] **Step 5: 깨끗한 Mac 설치·업데이트·제거를 검증합니다.**
+
+개발 도구와 Massion 데이터가 없는 macOS arm64 사용자에서 최초 실행과 Gatekeeper 통과를 확인합니다. 이전 서명 후보를 설치한 상태에서 새 후보로 앱을 교체하는 수동 업데이트를 수행하고 Work·설정·데이터가 유지되는지 확인합니다. 앱을 제거한 뒤 데이터 보존 정책을 확인하고 재설치해 같은 데이터에 재연결합니다. 자동 업데이트 기능은 첫 1.0 필수 사양으로 만들지 않으며, 수동 교체가 실패할 때만 Tauri updater를 별도 범위로 추가합니다.
+
+- [ ] **Step 6: 개인 데이터 백업→복구 왕복을 검증합니다.**
+
+현재 `LocalDaemonManager.backup()`은 존재하지만 개인용 복구 진입점은 없습니다. 같은 운영 백업 형식과 기존 `restoreOperationalBackup()`을 재사용해 daemon이 멈춘 상태에서 빈 새 데이터베이스로만 복구하는 명령을 추가합니다. 별도 복구 엔진을 만들지 않습니다. 고유 Work·조직 변경·승인·Records를 만든 뒤 백업하고, 격리된 빈 데이터 위치로 복구하여 핵심 query와 checksum·migration 계보를 대조합니다. 기존 데이터 덮어쓰기는 거부합니다.
+
+- [ ] **Step 7: 비정상 종료와 데이터 무결성을 검증합니다.**
+
+실행 중 daemon과 SurrealDB sidecar를 각각 강제 종료하고 앱 재연결을 확인합니다. 재시작 뒤 Work·event·message가 중복되지 않고, 마지막 확정 transaction 이전 상태로 일관되게 복원되며, 데이터베이스 readiness와 핵심 query가 통과해야 합니다. 실패한 공통 경로에만 회귀 테스트 한 건을 추가합니다.
+
+- [ ] **Step 8: 키보드·VoiceOver 접근성을 실측합니다.**
+
+마우스 없이 UAT-01~12를 수행하고 모든 조작 요소의 초점 표시·논리적 순서·대화상자 복귀를 확인합니다. VoiceOver와 Accessibility Inspector로 홈·업무·수신함·조직 구조/지도·개선·확장·설정의 이름(name), 역할(role), 상태(state), 행동(action)을 확인합니다. 클릭 가능한데 VoiceOver로 실행할 수 없는 요소나 핵심 흐름을 막는 경고는 릴리스 차단입니다.
+
+- [ ] **Step 9: 개인 BYOK 경계를 증명합니다.**
+
+구현·테스트 작성·실패 분석·패치와 실제 개인용 Work는 소유자 본인의 Z.AI Coding Plan `glm-5.2` 키로 실행합니다. 키는 로컬 소유자 전용 저장소에만 두고 renderer·로그·스크린샷·evidence·원격 Massion 서비스에 전달하지 않습니다. 계정·할당량을 다른 사용자에게 공유·대여·판매·중계하는 경로가 없는지 확인합니다.
+
+- [ ] **Step 10: 재발 방지 릴리스 자동화를 연결합니다.**
+
+`desktop-release.yml`은 수동 승인된 후보 SHA에서만 실행하고, 서명·공증 secret이 없으면 게시하지 않습니다. `verify-desktop-release.mjs`는 앱 버전·후보 SHA·서명·공증·sidecar·UAT evidence의 일치를 한 번만 검사합니다. GitHub Release는 모든 게이트가 같은 SHA로 통과한 뒤 마지막 단계에서만 생성합니다.
+
+- [ ] **Step 11: 문서 주장을 실제 SHA와 결과로 갱신합니다.**
 
 건너뛴 시나리오는 통과로 기록하지 않고 이유와 차단 조건을 씁니다.
 
-- [ ] **Step 5: 증거 커밋을 만듭니다.**
+- [ ] **Step 12: 증거 커밋을 만듭니다.**
 
 ```sh
-git add docs/evidence/phase-30/desktop-live-uat-2026-07-24.md PRODUCT.md docs/product/constitution.md docs/generated/requirements-traceability.tsv
+git add docs/evidence/phase-30/desktop-live-uat-2026-07-24.md docs/evidence/phase-30/personal-desktop-release-YYYY-MM-DD.md PRODUCT.md docs/product/constitution.md docs/generated/requirements-traceability.tsv
 git commit -m "test(desktop): 실제 AgentOS 사용자 시나리오 검증" \
   -m "Tauri 앱에서 Core·협업·조직·개선·확장·설정 시나리오와 재시작 지속성을 같은 릴리스 후보로 검증했습니다."
 ```
@@ -435,7 +478,8 @@ git commit -m "test(desktop): 실제 AgentOS 사용자 시나리오 검증" \
 
 - 모든 사용자 요구는 Task 2~11에 연결돼 있습니다.
 - 파일 첨부는 workspace 내부 참조로 범위를 고정해 새 업로드 저장소를 만들지 않습니다.
-- GLM-5.2는 사전 확인 실패 시 대체하지 않습니다.
+- 개발·테스트 패치와 개인용 도그푸딩에는 소유자 본인의 Coding Plan `glm-5.2`를 사용하고 BYOK 비공유 경계를 확인합니다.
 - 과도한 unit test를 피하고 신뢰 경계와 실제 실패만 테스트합니다.
 - 실제 앱 검증은 jsdom/브라우저가 아니라 빌드된 Tauri 앱과 Computer Use를 사용합니다.
 - 완료 판정은 테스트 개수가 아니라 12개 핵심 시나리오와 구현된 확장 시나리오의 전부 통과입니다.
+- 릴리스 판정은 서명·공증, 깨끗한 설치·업데이트·제거, 백업→복구, 비정상 종료, 키보드·VoiceOver, 개인 BYOK 격리까지 모두 같은 후보 SHA로 통과해야 합니다.

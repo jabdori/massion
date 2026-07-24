@@ -1,14 +1,22 @@
 # 변경 기록
 
-## 1.0.0 — 2026-07-12
+## Unreleased — 개인용 데스크톱 1.0 후보
+
+- 첫 메인 릴리스 표면을 macOS arm64 데스크톱 앱(`apps/desktop`)으로 확정했습니다.
+- 홈·업무·조직·개선·확장·설정·수신함을 실제 Core와 Application 계약에 연결하는 Phase 30 통합을 진행 중입니다.
+- 원격 SurrealDB 3.2.1, 개인 로컬 sidecar와 배포 코드의 버전 경계를 유지합니다.
+- 릴리스 전 필수 조건은 실제 앱 핵심 시나리오 12개 이상, Developer ID 서명·Apple 공증, 깨끗한 설치·후보 교체 업데이트·제거, 백업→복구, daemon·SurrealDB 장애 복구, 키보드·VoiceOver 실측, 개인 BYOK 자격 증명 격리 확인입니다.
+- CLI·TUI·Web 설치 묶음과 팀 배포는 개인용 1.0 메인 릴리스 범위가 아닙니다.
+
+## 1.0.0 — 철회됨 (2026-07-24)
+
+2026-07-15 게시된 GitHub Release와 `v1.0.0` 원격 태그를 2026-07-24 삭제했습니다. 당시 릴리스 workflow가 전체 품질 검증에서 실패했고, 현재 메인 표면인 개인용 데스크톱의 실제 UAT·서명·공증·설치·복구·장애·접근성 게이트가 완료되지 않았기 때문입니다. 소스 커밋과 아래 역사적 구현 범위는 보존하지만 공개 1.0 완료 근거로 사용하지 않습니다.
 
 - Core Office와 Software Engineering 기본 조직을 포함한 AgentOS 핵심 조직 모델
 - 작업, 직접 대화, 다자 대화방, 작업 할당, 중단·재개와 전체 계보
-- 검토 후 반영(review)과 자동 반영(automatic)을 조직별로 선택하는 승인 정책
-- 여러 계정·모델·공급자를 우선순위, 균형 분산, 장애 대체 정책으로 관리하는 모델 라우터
-- VoltAgent 기반 실행 어댑터와 공급자 독립 애플리케이션 경계
-- 근거, 코드 인텔리전스, TDD 개발, 품질 보증, 문서 기록, 회고·성장 파이프라인
-- Extension SDK·격리 실행·공식 Slack/Discord/GitHub 확장·npm 호환 공개 Registry
-- CLI·TUI·Web Console과 개인 로컬·Compose·Kubernetes 배포
-- 원격 SurrealDB 3.2.1, 소유자·런타임 자격 증명 분리, 백업·복구·보안·부하 검증
-- 자체 포함 설치 묶음, 깨끗한 환경 설치·복구 E2E, SBOM·provenance·GitHub OIDC 증명 자동화
+- 선택형 승인 정책, 모델 라우터, VoltAgent 실행 어댑터
+- 근거·품질 보증·기록·성장 파이프라인과 Extension 기반 코드
+- 레거시 CLI·TUI·Web Console, Compose·Kubernetes, 설치 묶음
+- 원격 SurrealDB 3.2.1과 백업·복구·배포 검증 코드
+
+철회 당시의 GitHub 메타데이터와 실패 실행은 [철회 증거](docs/evidence/phase-30/withdrawn-v1.0.0-release-2026-07-24.md)에 남깁니다. 새 `v1.0.0`은 Unreleased의 개인용 데스크톱 게이트를 같은 후보 SHA에서 모두 통과한 뒤에만 다시 만들 수 있습니다.

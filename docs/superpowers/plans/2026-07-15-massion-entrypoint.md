@@ -1,5 +1,7 @@
 # Massion Entry Point Implementation Plan
 
+> **2026-07-24 상태:** 레거시 CLI·TUI·Web 설치 경로의 역사적 구현 계획입니다. 개인용 데스크톱 메인 릴리스 계획으로 실행하지 않습니다.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Make `massion` the single user-facing entry point that opens TUI by default, opens the Web Console with `--web`, and guides an uninitialized user through `massion init`.

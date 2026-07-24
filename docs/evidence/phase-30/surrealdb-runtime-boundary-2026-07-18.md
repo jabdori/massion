@@ -1,5 +1,7 @@
 # Phase 30 — SurrealDB 배포·로컬 런타임 경계 조사
 
+> **2026-07-24 상태 정정:** 이 문서의 `v1.0.0` 공개 상태는 조사 당시의 역사적 관측입니다. 해당 릴리스와 원격 태그는 이후 철회됐습니다. 현재 상태는 [철회 증거](./withdrawn-v1.0.0-release-2026-07-24.md)를 따릅니다.
+
 > **조사 범위:** Slice 1의 SurrealDB 3.2.1 후보를 실제 배포 경로와 개인용 로컬 경로에 맞게 분리
 > **기준 소스 커밋(source commit):** `65922bd706580a0962b6eda81c6fa3d63b36b6a8`
 > **안전 커밋(safety commit):** `9b049f72a96457c46139811f86d36589f073df64`
@@ -76,7 +78,7 @@ node --input-type=module -e '
 
 이 범위는 workflow가 실제로 내려받는 runtime Buildx, Docker-container BuildKit image, Dockerfile frontend image를 source supply chain으로 고정하지 않습니다. 이 값들은 Release Recovery에서 별도 고정·회귀 test가 필요한 항목으로 남습니다.
 
-공개 `v1.0.0` tag는 새 Slice 1A 커밋으로 재실행하지 않았습니다. 2026-07-18T15:47:16Z에 재확인한 기존 release workflow는 `전체 품질 검증` 실패 뒤 build·publish·attestation 단계가 skipped된 상태였으며, 이를 새 registry release 성공으로 취급하지 않습니다.
+공개 `v1.0.0` tag는 새 Slice 1A 커밋으로 재실행하지 않았습니다. 2026-07-18T15:47:16Z에 재확인한 기존 release workflow는 `전체 품질 검증` 실패 뒤 build·publish·attestation 단계가 skipped된 상태였으며, 이를 새 registry release 성공으로 취급하지 않습니다. 이 릴리스와 태그는 2026-07-24 철회했습니다.
 
 ### Slice 1B — 실제 데이터베이스 버전 전달
 

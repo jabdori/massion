@@ -1,121 +1,57 @@
-# 개인용 설치·운영 안내
+# 개인용 데스크톱 설치·운영 안내
 
-Massion AgentOS 1.0은 macOS·Linux의 사용자 계정 아래에 설치됩니다. 관리자 권한은 필요하지 않습니다.
+> **현재 상태:** 설치 가능한 공개 artifact가 없습니다. 이 문서는 개인용 macOS arm64 1.0 후보의 운영 계약이며, GitHub Release가 새로 게시되기 전에는 `curl | bash`나 과거 `v1.0.0` 링크를 사용하면 안 됩니다.
 
-## 1. 준비
+## 1. 첫 릴리스 설치 경로
 
-- Node.js 24 이상
-- Bun 1.3 이상
-- SHA-256 검사 도구(`sha256sum` 또는 `shasum`)
+첫 메인 릴리스는 Developer ID로 서명하고 Apple 공증을 마친 `Massion.app` 또는 DMG입니다. 공개 시 GitHub Release에서 내려받고, macOS의 응용 프로그램 폴더에 설치합니다. 최종 artifact 이름과 지원 macOS 범위는 실제 서명 후보를 검증한 뒤 이 문서에 기록합니다.
 
-## 2. 권장 설치: curl 파이프라인
+다음 조건이 모두 충족되기 전에는 다운로드 명령을 추가하지 않습니다.
 
-공개 릴리스는 다음 명령으로 설치합니다.
+- 같은 후보 SHA의 전체 검증과 실제 Tauri UAT 통과
+- 앱과 Node.js·SurrealDB sidecar의 서명, 공증, Gatekeeper 통과
+- 깨끗한 Mac 최초 실행, 후보 교체 업데이트, 제거·재설치 통과
+- 개인 데이터 백업→복구와 daemon·sidecar 강제 종료 복구 통과
+- 키보드·VoiceOver 실측 통과
 
-```sh
-curl -fsSL https://raw.githubusercontent.com/jabdori/massion/main/install.sh | bash
-```
+## 2. 개발 실행
 
-스크립트를 먼저 검토하려면 저장한 뒤 실행합니다.
-
-```sh
-curl -fsSL https://raw.githubusercontent.com/jabdori/massion/main/install.sh -o /tmp/massion-install.sh
-less /tmp/massion-install.sh
-sh /tmp/massion-install.sh
-```
-
-`MASSION_VERSION`은 릴리스 버전(기본 `1.0.0`), `MASSION_PREFIX`는 설치 prefix(기본 `$HOME/.local`)입니다.
+개발자는 저장소에서 다음처럼 실행합니다.
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/jabdori/massion/main/install.sh \
-  | MASSION_VERSION=1.0.0 MASSION_PREFIX="$HOME/apps/massion" bash
+corepack enable
+corepack prepare pnpm@11.13.0 --activate
+pnpm install --frozen-lockfile
+pnpm --filter @massion/desktop tauri:dev
 ```
 
-설치에는 `curl`, `tar`, Node.js 24 이상, Bun 1.3 이상과 `sha256sum` 또는 `shasum`이 필요합니다.
+이 실행은 개발 빌드이며 공개 설치 검증을 대신하지 않습니다.
 
-## 3. 수동 설치와 첫 실행
+## 3. 업데이트와 제거 계약
 
-```sh
-mkdir massion-local-1.0.0
-tar -xzf massion-local-1.0.0.tar.gz -C massion-local-1.0.0
-cd massion-local-1.0.0
-./install.sh
-export PATH="$HOME/.local/bin:$PATH"
-massion version
-massion
-```
+1.0의 최소 업데이트 경로는 서명·공증된 새 앱으로 기존 `Massion.app`을 교체하는 수동 업데이트입니다. 앱 bundle과 사용자 데이터의 수명은 분리합니다.
 
-`massion init`은 소유자 이메일과 표시 이름을 묻습니다. 설정이 없는 상태에서 `massion`을 실행해도 같은 온보딩을 거칩니다. 자동화에서는 다음 형식을 사용합니다.
+- 앱 교체·삭제는 사용자 데이터와 Provider 설정을 지우지 않습니다.
+- 새 앱은 기존 데이터 epoch와 schema를 확인한 뒤 연결합니다.
+- 호환할 수 없는 데이터는 자동 삭제하지 않고 실행을 중단합니다.
+- 자동 업데이트는 수동 교체가 실제 사용자 흐름을 충족하지 못할 때 별도 사양으로 추가합니다.
 
-```sh
-massion init http://127.0.0.1:7331 owner@example.com "내 이름"
-```
+앱 제거는 `/Applications/Massion.app`을 삭제합니다. 전체 데이터 삭제는 검증된 백업을 만든 뒤 사용자가 별도로 명시해야 하며, 첫 1.0에서 앱 제거와 함께 자동 수행하지 않습니다.
 
-설치된 Massion의 버전 확인과 설치를 분리합니다.
+## 4. 로컬 데이터 위치
 
-```sh
-massion update          # 최신 릴리스 확인만 수행
-massion upgrade         # 최신 릴리스 확인·검증·설치
-```
+현재 로컬 daemon은 XDG 환경 변수가 없을 때 다음 경로를 사용합니다.
 
-호환되지 않는 운영체제·CPU·Node.js·Bun 또는 다른 주 버전은 자동 설치하지 않습니다.
+- 설정과 비밀 키: `$HOME/.config/massion-v1`
+- 데이터와 백업: `$HOME/.local/share/massion-v1`
+- 프로세스 상태와 로그: `$HOME/.local/state/massion-v1`
 
-다른 사용자 경로에 설치하려면 설치와 제거 때 같은 `MASSION_PREFIX`를 지정합니다.
+`XDG_CONFIG_HOME`, `XDG_DATA_HOME`, `XDG_STATE_HOME`을 지정하면 각 기준 경로 아래의 `massion-v1`을 사용합니다. 이 값은 `packages/local-control/src/daemon.ts`의 `resolveLocalPaths()`가 소유합니다.
 
-```sh
-MASSION_PREFIX="$HOME/apps/massion" ./install.sh
-```
+## 5. 백업·복구 상태
 
-## 4. 화면과 일상 명령
+개인 백업은 내부 `LocalDaemonManager.backup()`과 CLI 경로가 존재하지만, 개인용 데스크톱 복구 진입점과 실제 앱 왕복 UAT는 아직 없습니다. 따라서 현재 백업만으로 복구 가능하다고 안내하지 않습니다. 구현·검증 기준은 [백업·복구 Runbook](backup-restore.md)을 따릅니다.
 
-```sh
-massion
-massion --web
-```
+## 6. 레거시 경로
 
-`massion --web`은 저장된 profile로 5분 유효한 로그인 티켓을 발급합니다.
-
-TUI는 대화형 TTY와 최소 `80×24` 터미널이 필요합니다. 화면이 보이지 않으면 `command -v massion`, `massion version`, `stty size`를 확인하세요.
-
-```sh
-massion local status
-massion run "요청 내용" --detach
-massion local backup "$HOME/massion-backup.json"
-massion local stop
-```
-
-백업 명령은 실행 중인 로컬 서버를 안전하게 멈추고 백업한 뒤 다시 시작합니다. 백업 파일은 소유자만 읽을 수 있는 권한(0600)으로 생성되며 기존 파일을 덮어쓰지 않습니다.
-
-## 5. 데이터 위치
-
-XDG 환경 변수를 지정하지 않은 기본 위치는 다음과 같습니다.
-
-- 설정과 비밀 키: `$HOME/.config/massion`
-- 데이터와 백업: `$HOME/.local/share/massion`
-- 서버 연결기 계정별 프로필: `$HOME/.local/share/massion/connectors`
-- 프로세스 상태와 로그: `$HOME/.local/state/massion`
-
-`XDG_CONFIG_HOME`, `XDG_DATA_HOME`, `XDG_STATE_HOME`을 지정하면 해당 경로를 사용합니다.
-연결기 프로필 디렉터리는 시작할 때 소유자만 접근할 수 있는 권한(0700)인지 검사합니다.
-
-## 6. 사용자 기기 연결 수신
-
-개인 로컬 모드의 연결 장치 WebSocket 수신은 기본적으로 꺼져 있습니다. 같은 컴퓨터에서만 엣지 연결 장치(edge connector)를 시험해야 할 때 다음처럼 명시적으로 켤 수 있습니다. 로컬 서버는 계속 loopback 주소에만 묶이므로 다른 컴퓨터에서는 접근할 수 없습니다.
-
-```sh
-MASSION_EDGE_CONNECTOR_ENABLED=true \
-MASSION_CONNECTOR_HEARTBEAT_MS=45000 \
-massion local start
-```
-
-연결 장치 심박 유효 시간(heartbeat TTL)의 기본값은 30,000ms이고 허용 범위는 1,000~300,000ms입니다. 팀원의 다른 기기를 연결하려면 이 로컬 설정을 외부에 노출하지 말고 TLS가 적용된 팀 배포를 사용합니다.
-
-## 7. 제거
-
-설치된 버전의 제거 스크립트를 실행합니다.
-
-```sh
-$HOME/.local/lib/massion/1.0.0/uninstall.sh
-```
-
-제거는 Massion 실행 파일과 자신이 만든 심볼릭 링크(symbolic link)만 삭제합니다. 사용자 데이터·설정·백업은 보존합니다. 전체 데이터 삭제는 백업을 확인한 뒤 사용자가 직접 수행해야 합니다.
+루트 `install.sh`, `massion` CLI/TUI launcher, `massion --web`, Compose·Kubernetes 문서는 과거 배포 코드입니다. 개인용 데스크톱 1.0이 확정될 때까지 공식 사용자 설치 경로가 아닙니다.
