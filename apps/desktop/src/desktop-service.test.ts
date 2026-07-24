@@ -335,6 +335,22 @@ describe("Application desktop service", () => {
     );
   });
 
+  it("Workspace 유무별 Work team 표시값은 내부 ID를 노출하지 않는다", async () => {
+    const native = transport({ "work.index": { items: [{ ...detail }, { ...detail, workId: "work-0002", workspaceId: "workspace-secret-0001" }] } });
+    const service = createApplicationDesktopService(native);
+
+    await expect(service.loadIndex({ filter: "active", search: "" })).resolves.toEqual([
+      expect.objectContaining({ team: "Massion" }),
+      expect.objectContaining({ team: "워크스페이스" }),
+    ]);
+  });
+
+  it("잘못된 workspace 목록 항목을 runtime 경계에서 거부한다", async () => {
+    const service = createApplicationDesktopService(transport({ "workspace.list": [{ workspaceId: "workspace-invalid" }] }));
+
+    await expect(service.loadWorkspaces()).rejects.toThrow("Workspace 응답이 유효하지 않습니다");
+  });
+
   it("Settings 읽기와 변경 command가 실제 operation을 사용하며 secret을 view에 노출하지 않는다", async () => {
     const native = transport();
     const service = createApplicationDesktopService(native, { createId: () => "request-0001" });

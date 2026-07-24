@@ -509,8 +509,14 @@ describe("AgentOS native data flow", () => {
     let durable: ((event: unknown) => void) | undefined;
     let createdVisible = false;
     const startWork = vi.fn(async () => ({ runId: "run-created-0001" }));
+    const workspace = {
+      workspaceId: "workspace-0001", name: "계약 폴더", path: "/tmp/contracts", kind: "local-directory" as const,
+      trust: "trusted" as const, status: "active" as const, revision: 1,
+      createdAt: "2026-07-24T00:00:00.000Z", lastUsedAt: "2026-07-24T00:00:00.000Z",
+    };
     const fake = service({
       startWork,
+      loadWorkspaces: async () => [workspace],
       loadIndex: async () => (createdVisible ? [...snapshot.works, created] : snapshot.works),
       loadWork: async (workId) => (workId === created.id ? created : (snapshot.works[0] as WorkView)),
       subscribeDurable: async (handler) => {
@@ -523,12 +529,14 @@ describe("AgentOS native data flow", () => {
     await user.click(screen.getByRole("button", { name: "새 Work 만들기" }));
     const dialog = screen.getByRole("dialog", { name: "새 Work" });
     await user.type(within(dialog).getByRole("textbox", { name: "업무 요청" }), "파트너 계약 위험을 검토해줘");
-    await user.type(within(dialog).getByRole("textbox", { name: /워크스페이스 ID/ }), "workspace-0001");
+    await user.click(await within(dialog).findByRole("button", { name: /계약 폴더/ }));
+    await user.type(within(dialog).getByRole("textbox", { name: "워크스페이스 상대 파일 경로" }), "src/contract.ts");
+    await user.click(within(dialog).getByRole("button", { name: "파일 첨부" }));
     await user.click(within(dialog).getByRole("button", { name: "실행 시작" }));
 
     expect(await screen.findByText("Work 생성 중")).toBeInTheDocument();
     expect(screen.getByText("run-created-0001")).toBeInTheDocument();
-    expect(startWork).toHaveBeenCalledWith({ text: "파트너 계약 위험을 검토해줘", workspaceId: "workspace-0001" });
+    expect(startWork).toHaveBeenCalledWith({ text: "파트너 계약 위험을 검토해줘", workspaceId: "workspace-0001", workspacePaths: ["src/contract.ts"] });
 
     createdVisible = true;
     durable?.({ sequence: 12, type: "work.created", resource: { type: "Work", id: created.id } });
@@ -539,15 +547,19 @@ describe("AgentOS native data flow", () => {
     const user = userEvent.setup();
     const started = deferred<{ runId: string }>();
     const startWork = vi.fn(async () => await started.promise);
-    render(<App service={service({ startWork })} />);
+    const workspace = {
+      workspaceId: "workspace-0002", name: "운영 폴더", path: "/tmp/operations", kind: "local-directory" as const,
+      trust: "trusted" as const, status: "active" as const, revision: 1,
+      createdAt: "2026-07-24T00:00:00.000Z", lastUsedAt: "2026-07-24T00:00:00.000Z",
+    };
+    render(<App service={service({ startWork, loadWorkspaces: async () => [workspace] })} />);
 
     await user.click(screen.getByRole("button", { name: "새 Work 만들기" }));
     const dialog = screen.getByRole("dialog", { name: "새 Work" });
     const request = within(dialog).getByRole("textbox", { name: "업무 요청" });
-    const workspace = within(dialog).getByRole("textbox", { name: /워크스페이스 ID/ });
     const submit = within(dialog).getByRole("button", { name: "실행 시작" });
     await user.type(request, "월간 운영 지표를 분석해줘");
-    await user.type(workspace, "workspace-0002");
+    await user.click(await within(dialog).findByRole("button", { name: /운영 폴더/ }));
     await user.click(submit);
     await user.click(submit);
 
@@ -555,7 +567,158 @@ describe("AgentOS native data flow", () => {
     started.reject(new Error("실행을 시작하지 못했습니다"));
     expect(await within(dialog).findByText("실행을 시작하지 못했습니다")).toBeInTheDocument();
     expect(request).toHaveValue("월간 운영 지표를 분석해줘");
-    expect(workspace).toHaveValue("workspace-0002");
+    expect(within(dialog).getByRole("button", { name: /운영 폴더/ })).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("다른 워크스페이스를 선택하면 이전 파일 입력 draft를 지운다", async () => {
+    const user = userEvent.setup();
+    const workspace = (workspaceId: string, name: string) => ({
+      workspaceId, name, path: `/tmp/${workspaceId}`, kind: "local-directory" as const,
+      trust: "trusted" as const, status: "active" as const, revision: 1,
+      createdAt: "2026-07-24T00:00:00.000Z", lastUsedAt: "2026-07-24T00:00:00.000Z",
+    });
+    render(<App service={service({ loadWorkspaces: async () => [workspace("workspace-a", "A 폴더"), workspace("workspace-b", "B 폴더")] })} />);
+
+    await user.click(screen.getByRole("button", { name: "새 Work 만들기" }));
+    const dialog = screen.getByRole("dialog", { name: "새 Work" });
+    await user.click(await within(dialog).findByRole("button", { name: /A 폴더/ }));
+    const file = within(dialog).getByRole("textbox", { name: "워크스페이스 상대 파일 경로" });
+    await user.type(file, "src/a.ts");
+    await user.click(within(dialog).getByRole("button", { name: /B 폴더/ }));
+
+    expect(file).toHaveValue("");
+  });
+
+  it("다시 열어 정상 목록을 받으면 이전 workspace load 오류를 지운다", async () => {
+    const user = userEvent.setup();
+    const loadWorkspaces = vi.fn().mockRejectedValueOnce(new Error("워크스페이스를 불러오지 못했습니다")).mockResolvedValueOnce([]);
+    render(<App service={service({ loadWorkspaces })} />);
+
+    await user.click(screen.getByRole("button", { name: "새 Work 만들기" }));
+    const dialog = screen.getByRole("dialog", { name: "새 Work" });
+    expect(await within(dialog).findByText("워크스페이스를 불러오지 못했습니다")).toBeInTheDocument();
+    await user.click(within(dialog).getByRole("button", { name: "새 Work 닫기" }));
+    await user.click(screen.getByRole("button", { name: "새 Work 만들기" }));
+
+    expect(await screen.findByText("저장된 폴더가 없습니다.")).toBeInTheDocument();
+    expect(screen.queryByText("워크스페이스를 불러오지 못했습니다")).not.toBeInTheDocument();
+  });
+
+  it("다시 열 때 차단된 workspace는 선택과 파일 draft에서 제거한다", async () => {
+    const user = userEvent.setup();
+    const active = {
+      workspaceId: "workspace-reconciled-0001", name: "변경될 폴더", path: "/tmp/reconciled", kind: "local-directory" as const,
+      trust: "trusted" as const, status: "active" as const, revision: 1,
+      createdAt: "2026-07-24T00:00:00.000Z", lastUsedAt: "2026-07-24T00:00:00.000Z",
+    };
+    const blocked = { ...active, trust: "blocked" as const, revision: 2 };
+    const loadWorkspaces = vi.fn().mockResolvedValueOnce([active]).mockResolvedValueOnce([blocked]);
+    render(<App service={service({ loadWorkspaces })} />);
+
+    await user.click(screen.getByRole("button", { name: "새 Work 만들기" }));
+    let dialog = screen.getByRole("dialog", { name: "새 Work" });
+    await user.click(await within(dialog).findByRole("button", { name: /변경될 폴더/ }));
+    const file = within(dialog).getByRole("textbox", { name: "워크스페이스 상대 파일 경로" });
+    await user.type(file, "src/attached.ts");
+    await user.click(within(dialog).getByRole("button", { name: "파일 첨부" }));
+    await user.type(file, "src/unattached.ts");
+    await user.click(within(dialog).getByRole("button", { name: "새 Work 닫기" }));
+    await user.click(screen.getByRole("button", { name: "새 Work 만들기" }));
+    dialog = screen.getByRole("dialog", { name: "새 Work" });
+
+    expect(await within(dialog).findByText("차단된 폴더는 선택할 수 없습니다.")).toBeInTheDocument();
+    expect(within(dialog).queryByText("src/attached.ts")).not.toBeInTheDocument();
+    expect(within(dialog).getByRole("textbox", { name: "워크스페이스 상대 파일 경로" })).toHaveValue("");
+  });
+
+  it("늦은 A 신뢰 응답이 이후 선택한 B workspace와 파일 draft를 덮어쓰지 않는다", async () => {
+    const user = userEvent.setup();
+    const trust = deferred<{
+      workspaceId: string; name: string; path: string; kind: "local-directory"; trust: "trusted"; status: "active"; revision: number; createdAt: string; lastUsedAt: string;
+    }>();
+    const pending = {
+      workspaceId: "workspace-pending-a", name: "A 폴더", path: "/tmp/a", kind: "local-directory" as const,
+      trust: "pending" as const, status: "active" as const, revision: 1,
+      createdAt: "2026-07-24T00:00:00.000Z", lastUsedAt: "2026-07-24T00:00:00.000Z",
+    };
+    const trusted = {
+      workspaceId: "workspace-trusted-b", name: "B 폴더", path: "/tmp/b", kind: "local-directory" as const,
+      trust: "trusted" as const, status: "active" as const, revision: 1,
+      createdAt: "2026-07-24T00:00:00.000Z", lastUsedAt: "2026-07-24T00:00:00.000Z",
+    };
+    render(<App service={service({
+      loadWorkspaces: async () => [pending, trusted],
+      decideWorkspaceTrust: async () => await trust.promise,
+    })} />);
+
+    await user.click(screen.getByRole("button", { name: "새 Work 만들기" }));
+    const dialog = screen.getByRole("dialog", { name: "새 Work" });
+    await user.click(await within(dialog).findByRole("button", { name: /A 폴더/ }));
+    await user.click(within(dialog).getByRole("button", { name: "신뢰" }));
+    await user.click(within(dialog).getByRole("button", { name: /B 폴더/ }));
+    await user.type(within(dialog).getByRole("textbox", { name: "워크스페이스 상대 파일 경로" }), "src/b.ts");
+    await user.click(within(dialog).getByRole("button", { name: "파일 첨부" }));
+    trust.resolve({ ...pending, trust: "trusted", revision: 2 });
+
+    await waitFor(() => expect(within(dialog).getByRole("button", { name: /A 폴더/ })).toHaveTextContent("신뢰됨"));
+    await waitFor(() => expect(within(dialog).getByRole("button", { name: /B 폴더/ })).toHaveAttribute("aria-pressed", "true"));
+    expect(within(dialog).getByText("src/b.ts")).toBeInTheDocument();
+  });
+
+  it("워크스페이스를 불러오는 동안 공간을 유지하고 차단된 폴더는 설정으로 안내한다", async () => {
+    const user = userEvent.setup();
+    const loading = deferred<readonly {
+      workspaceId: string; name: string; path: string; kind: "local-directory"; trust: "blocked"; status: "active"; revision: number; createdAt: string; lastUsedAt: string;
+    }[]>();
+    render(<App service={service({ loadWorkspaces: async () => await loading.promise })} />);
+
+    await user.click(screen.getByRole("button", { name: "새 Work 만들기" }));
+    const dialog = screen.getByRole("dialog", { name: "새 Work" });
+    expect(within(dialog).getByLabelText("워크스페이스 불러오는 중")).toBeInTheDocument();
+    loading.resolve([{
+      workspaceId: "workspace-blocked-0001", name: "차단된 폴더", path: "/tmp/blocked", kind: "local-directory",
+      trust: "blocked", status: "active", revision: 1,
+      createdAt: "2026-07-24T00:00:00.000Z", lastUsedAt: "2026-07-24T00:00:00.000Z",
+    }]);
+    await user.click(await within(dialog).findByRole("button", { name: "설정으로 이동" }));
+
+    expect(await screen.findByRole("main", { name: "설정" })).toBeInTheDocument();
+  });
+
+  it("폴더 등록은 이전 파일 draft를 지우고 신뢰 충돌 뒤 목록을 다시 읽는다", async () => {
+    const user = userEvent.setup();
+    const current = {
+      workspaceId: "workspace-current-0001", name: "현재 폴더", path: "/tmp/current", kind: "local-directory" as const,
+      trust: "trusted" as const, status: "active" as const, revision: 1,
+      createdAt: "2026-07-24T00:00:00.000Z", lastUsedAt: "2026-07-24T00:00:00.000Z",
+    };
+    const added = {
+      workspaceId: "workspace-added-0001", name: "새 폴더", path: "/tmp/added", kind: "local-directory" as const,
+      trust: "pending" as const, status: "active" as const, revision: 1,
+      createdAt: "2026-07-24T00:00:00.000Z", lastUsedAt: "2026-07-24T00:00:00.000Z",
+    };
+    const refreshed = { ...added, revision: 2 };
+    const loadWorkspaces = vi.fn().mockResolvedValueOnce([current]).mockResolvedValueOnce([refreshed]);
+    render(<App service={service({
+      loadWorkspaces,
+      registerWorkspace: async () => added,
+      decideWorkspaceTrust: async () => { throw new Error("workspace revision이 일치하지 않습니다"); },
+    })} />);
+
+    await user.click(screen.getByRole("button", { name: "새 Work 만들기" }));
+    const dialog = screen.getByRole("dialog", { name: "새 Work" });
+    await user.click(await within(dialog).findByRole("button", { name: /현재 폴더/ }));
+    await user.type(within(dialog).getByRole("textbox", { name: "워크스페이스 상대 파일 경로" }), "src/current.ts");
+    await user.click(within(dialog).getByRole("button", { name: "파일 첨부" }));
+    expect(within(dialog).getByText("src/current.ts")).toBeInTheDocument();
+    await user.type(within(dialog).getByRole("textbox", { name: "폴더 경로" }), "/tmp/added");
+    await user.click(within(dialog).getByRole("button", { name: "폴더 추가" }));
+    expect(within(dialog).queryByText("src/current.ts")).not.toBeInTheDocument();
+    await user.click(within(dialog).getByRole("button", { name: "신뢰" }));
+
+    expect(await within(dialog).findByText("workspace revision이 일치하지 않습니다")).toBeInTheDocument();
+    expect(loadWorkspaces).toHaveBeenCalledTimes(2);
+    expect(within(dialog).getByRole("button", { name: /새 폴더/ })).toHaveAttribute("aria-pressed", "true");
   });
 
   it("동시에 생긴 다른 Work는 자동 선택하지 않고 run 계보가 맞는 Work만 선택한다", async () => {

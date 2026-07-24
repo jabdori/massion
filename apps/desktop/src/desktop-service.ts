@@ -18,6 +18,7 @@ import {
   type WorkActivityViewV1,
   type WorkDetailV1,
   type WorkSummaryV1,
+  type WorkspaceViewV1,
 } from "@massion/application/client";
 
 import {
@@ -54,7 +55,10 @@ export interface WorkIndexInput {
 export interface StartWorkInput {
   readonly text: string;
   readonly workspaceId?: string;
+  readonly workspacePaths?: readonly string[];
 }
+
+export type DesktopWorkspaceView = WorkspaceViewV1;
 
 export interface StartedWork {
   readonly runId: string;
@@ -320,6 +324,12 @@ export interface DesktopService {
   loadIndex(input: WorkIndexInput): Promise<WorkView[]>;
   loadWork(workId: string): Promise<WorkView>;
   loadPendingApprovals(): Promise<ApprovalView[]>;
+  loadWorkspaces(): Promise<readonly DesktopWorkspaceView[]>;
+  registerWorkspace(path: string): Promise<DesktopWorkspaceView>;
+  decideWorkspaceTrust(
+    workspace: DesktopWorkspaceView,
+    decision: "trusted" | "blocked",
+  ): Promise<DesktopWorkspaceView>;
   loadOrganization(): Promise<OrganizationView>;
   /**
    * 이 Work의 모든 협업방과 각 방의 메시지.
@@ -441,6 +451,24 @@ export function createApplicationDesktopService(
 
     async loadPendingApprovals() {
       return (await client.query("governance.approval.list", { status: "pending" })).map(projectApproval);
+    },
+
+    async loadWorkspaces() {
+      return (await client.query("workspace.list", {})).map(workspaceView);
+    },
+
+    async registerWorkspace(path) {
+      const result = await client.command("workspace.register", { path });
+      return workspaceView(result.data);
+    },
+
+    async decideWorkspaceTrust(workspace, decision) {
+      const result = await client.command(
+        "workspace.trust",
+        { workspaceId: workspace.workspaceId, decision },
+        { expectedRevision: workspace.revision },
+      );
+      return workspaceView(result.data);
     },
 
     async loadOrganization() {
@@ -570,6 +598,7 @@ export function createApplicationDesktopService(
           text: input.text,
           surface: "desktop",
           ...(input.workspaceId === undefined ? {} : { workspaceId: input.workspaceId }),
+          ...(input.workspacePaths === undefined ? {} : { workspacePaths: input.workspacePaths }),
         },
       });
       const runId = object(result.data)?.runId;
@@ -740,6 +769,13 @@ export function createFixtureDesktopService(): DesktopService {
     }),
     loadPendingApprovals: () =>
       fixturePromise(() => initialSnapshot.works.flatMap((work) => work.approvals.filter((approval) => approval.status === "pending"))),
+    loadWorkspaces: () => fixturePromise(() => []),
+    registerWorkspace: (path) => fixturePromise(() => ({
+      workspaceId: `workspace-${path}`, name: path.split("/").filter(Boolean).at(-1) ?? path, path,
+      kind: "local-directory", trust: "pending", status: "active", revision: 0,
+      createdAt: new Date(0).toISOString(), lastUsedAt: new Date(0).toISOString(),
+    })),
+    decideWorkspaceTrust: (workspace, decision) => fixturePromise(() => ({ ...workspace, trust: decision, revision: workspace.revision + 1 })),
     // fixture 방은 model.ts의 활동을 그대로 씁니다. 실 daemon에서는 loadRoom이 대체합니다.
     loadRooms: (workId: string) => fixturePromise(() => {
       const work = fixtureDataAdapter().works.find((candidate) => candidate.id === workId);
@@ -1013,6 +1049,23 @@ function safeView(value: unknown): unknown {
   return Object.fromEntries(
     Object.entries(value).flatMap(([key, child]) => /(?:secret|token|password|api[-_]?key)/i.test(key) ? [] : [[key, safeView(child)]]),
   );
+}
+
+function workspaceView(value: unknown): DesktopWorkspaceView {
+  const workspace = object(value);
+  if (
+    typeof workspace?.workspaceId !== "string" ||
+    typeof workspace.name !== "string" ||
+    typeof workspace.path !== "string" ||
+    workspace.kind !== "local-directory" ||
+    (workspace.trust !== "pending" && workspace.trust !== "trusted" && workspace.trust !== "blocked") ||
+    (workspace.status !== "active" && workspace.status !== "archived") ||
+    typeof workspace.revision !== "number" ||
+    typeof workspace.createdAt !== "string" ||
+    typeof workspace.lastUsedAt !== "string"
+  )
+    throw new Error("Workspace 응답이 유효하지 않습니다");
+  return workspace as unknown as DesktopWorkspaceView;
 }
 
 function projectOrganization(snapshot: Partial<OrganizationGraphSnapshotV1>): OrganizationView {
@@ -1406,7 +1459,7 @@ function projectWorkSummary(work: WorkSummaryV1): WorkView {
     status,
     revision: work.revision,
     sourceStatus: work.status,
-    team: work.workspaceId ?? "Massion",
+    team: work.workspaceId === undefined ? "Massion" : "워크스페이스",
     updatedAt: work.updatedAt ?? "",
     summary: work.title,
     progress: status === "complete" ? 100 : 0,
@@ -1442,7 +1495,7 @@ function projectWorkDetail(sources: WorkDetailSources): WorkView {
     status: projectWorkStatus(sources.detail.status),
     revision: sources.detail.revision,
     sourceStatus: sources.detail.status,
-    team: sources.detail.workspaceId ?? "Massion",
+    team: sources.detail.workspaceId === undefined ? "Massion" : "워크스페이스",
     updatedAt: sources.detail.updatedAt ?? sources.detail.createdAt ?? "",
     summary: sources.activities.find((activity) => activity.detail !== undefined)?.detail ?? sources.detail.title,
     progress,
