@@ -13,7 +13,7 @@
 | 단계 | 현재 범위 | 상태 |
 |---|---|---|
 | 03-1 | Workspace와 Evidence Repository의 조직별 1:1 결속 | 코드 검증 완료 |
-| 03-2 | 첨부 경로 경계 안 검색·1-hop 관계·EvidenceBrief | 진행 중 — 03-2a 코드 검증 완료 |
+| 03-2 | 첨부 경로 경계 안 검색·1-hop 관계·EvidenceBrief | 진행 중 — 03-2a·03-2b1 코드 검증 완료 |
 | 03-3 | Work·대화·Agent 실행의 같은 Brief 계보 | 대기 |
 | 03-4 | 명시적 개인 기억의 version·Prompt·Runtime 계보 | 대기 |
 | 03-5 | 서버 생산 조립과 Desktop 출처·기억 UI | 대기 |
@@ -59,3 +59,18 @@
 | 대상 파일 `prettier --check`, `git diff --check` | 통과 — 코드 형식과 변경 공백을 확인했습니다. |
 
 다음 03-2b는 빈 검색 결과도 Work 이력으로 남기는 no-match EvidenceBrief와 prompt materialization만 추가합니다. WorkspaceKnowledgeService·Work 조립·UI는 그 이후 단계의 책임으로 남습니다.
+
+### 03-2b1 — no-match EvidenceBrief 영수증
+
+- `d84b7d152` — 빈 검색 결과를 `no_match` EvidenceBrief로 저장할 수 있게 했습니다. 기존 수동 Brief는 계속 최소 한 개의 reference가 필요합니다.
+- 자동 no-match는 `organizationId:workId` guard로 Work당 하나만 허용합니다. 같은 scope checksum의 재시도는 같은 Brief를 반환하고, 다른 scope checksum은 새 이력을 만들지 않고 거부합니다.
+- `scopeChecksum`은 있을 때만 Brief checksum 입력에 들어가므로 이전 수동 Brief의 checksum 형식을 바꾸지 않습니다. checksum 또는 scope가 변조된 row는 조회에서 거부됩니다.
+- Work별 목록은 조직 범위와 생성 시각 순서를 사용하며, 같은 Work의 수동 Brief와 자동 no-match 영수증은 공존할 수 있습니다.
+
+| 검증 | 결과 |
+|---|---|
+| `pnpm --filter @massion/evidence test` | 통과 — 18개 파일 중 17개 통과, 1개 의도된 skip, 64개 테스트 통과입니다. |
+| `pnpm --filter @massion/evidence typecheck` | 통과 — no-match 공개 계약과 기존 Brief 계약이 TypeScript 검사에 통과했습니다. |
+| 대상 파일 `prettier --check`, `git diff --check` | 통과 — migration·저장소·회귀 테스트의 형식과 공백을 확인했습니다. |
+
+다음 03-2b2는 현재 Scanner·Indexer·Search·Graph·Brief를 실제 Work 준비 흐름으로 조립하고, 검증된 chunk만 실행 직전에 prompt 자료로 materialize합니다.
