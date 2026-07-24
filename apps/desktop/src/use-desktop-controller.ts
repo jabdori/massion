@@ -163,6 +163,7 @@ export function useDesktopController(service: DesktopService) {
   useEffect(() => {
     if (phase !== "ready") return;
     let disposed = false;
+    const isDisposed = () => disposed;
     let timer: ReturnType<typeof setTimeout> | undefined;
     let stop: (() => Promise<void>) | undefined;
     void service
@@ -187,8 +188,7 @@ export function useDesktopController(service: DesktopService) {
                   continue;
                 try {
                   const candidate = await service.loadWork(candidateId);
-                  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- disposal changes asynchronously.
-                  if (disposed || pendingCreationRef.current?.runId !== creation.runId) return;
+                  if (isDisposed() || pendingCreationRef.current?.runId !== creation.runId) return;
                   if (candidate.run?.runId !== creation.runId) continue;
                   detailRequestRef.current += 1;
                   pendingCreationRef.current = undefined;
@@ -201,8 +201,7 @@ export function useDesktopController(service: DesktopService) {
                   setAnnouncement("새 Work가 생성되어 선택했습니다.");
                   return;
                 } catch (error) {
-                  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- disposal changes asynchronously.
-                  if (!disposed) setAnnouncement(errorMessage(error, "새 Work의 실행 계보를 확인하지 못했습니다."));
+                  if (!isDisposed()) setAnnouncement(errorMessage(error, "새 Work의 실행 계보를 확인하지 못했습니다."));
                 }
               }
             }
