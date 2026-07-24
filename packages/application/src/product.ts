@@ -132,6 +132,7 @@ export class ApplicationProduct implements AsyncDisposable {
       runs,
       snapshot,
       memberships: dependencies.organizations,
+      ...(dependencies.domain.workspaces === undefined ? {} : { workspaces: dependencies.domain.workspaces }),
       audit: events,
       webSessions,
     });
@@ -170,6 +171,7 @@ export class ApplicationProduct implements AsyncDisposable {
     registerApplicationRunCommands(commands, {
       store: runs,
       coordinator,
+      ...(dependencies.domain.workspaces === undefined ? {} : { workspaces: dependencies.domain.workspaces }),
       schedule(context, runId) {
         if (!productReference.current) throw new Error("Application product 조립이 완료되지 않았습니다");
         productReference.current.schedule(context, runId);

@@ -148,6 +148,7 @@ interface CoreRequest {
   readonly surface: string;
   readonly projectId?: string;
   readonly workspaceId?: string;
+  readonly workspacePaths: readonly string[];
   readonly tokenBudget: number;
   readonly scopeIn: readonly string[];
   readonly scopeOut: readonly string[];
@@ -175,6 +176,7 @@ function request(value: unknown): CoreRequest {
     surface: typeof input.surface === "string" ? input.surface : "application",
     ...(typeof input.projectId === "string" ? { projectId: input.projectId } : {}),
     ...(typeof input.workspaceId === "string" ? { workspaceId: input.workspaceId } : {}),
+    workspacePaths: strings(input.workspacePaths),
     tokenBudget,
     scopeIn: strings(input.scopeIn),
     scopeOut: strings(input.scopeOut),

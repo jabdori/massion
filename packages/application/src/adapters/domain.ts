@@ -54,7 +54,7 @@ export interface ApplicationDomainDependencies {
     | "postMessage"
     | "assignTask"
   >;
-  readonly workspaces?: Pick<WorkspaceService, "register" | "decideTrust" | "archive">;
+  readonly workspaces?: Pick<WorkspaceService, "register" | "decideTrust" | "archive" | "get" | "list">;
   readonly autonomy?: Pick<AutonomyStore, "set">;
   readonly runtime?: Pick<AgentRunner, "execute" | "cancel" | "suspend" | "resume">;
   readonly approvals?: Pick<ApprovalStore, "vote" | "cancel">;
@@ -523,6 +523,8 @@ function workspaceData(workspace: WorkspaceView): Record<string, unknown> {
     trust: workspace.trust,
     status: workspace.status,
     revision: workspace.revision,
+    createdAt: String(workspace.createdAt),
+    lastUsedAt: String(workspace.lastUsedAt),
   };
 }
 

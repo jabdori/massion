@@ -42,6 +42,7 @@ export interface StartRunRequestV1 {
   readonly surface?: string;
   readonly projectId?: string;
   readonly workspaceId?: string;
+  readonly workspacePaths?: readonly string[];
   readonly tokenBudget?: number;
   readonly scopeIn?: readonly string[];
   readonly scopeOut?: readonly string[];
@@ -49,6 +50,18 @@ export interface StartRunRequestV1 {
   readonly assumptions?: readonly string[];
   readonly unknowns?: readonly string[];
   readonly decisions?: readonly string[];
+}
+
+export interface WorkspaceViewV1 {
+  readonly workspaceId: string;
+  readonly name: string;
+  readonly path: string;
+  readonly kind: "local-directory";
+  readonly trust: "pending" | "trusted" | "blocked";
+  readonly status: "active" | "archived";
+  readonly revision: number;
+  readonly createdAt: string;
+  readonly lastUsedAt: string;
 }
 
 export interface WorkSummaryV1 {
@@ -290,6 +303,8 @@ export interface DirectiveViewV1 {
 }
 
 export interface ApplicationQueryMapV1 {
+  readonly "workspace.list": { readonly payload: Record<string, never>; readonly data: readonly WorkspaceViewV1[] };
+  readonly "workspace.get": { readonly payload: { readonly workspaceId: string }; readonly data: WorkspaceViewV1 };
   readonly "work.index": {
     readonly payload: {
       readonly workspaceId?: string;
@@ -354,6 +369,9 @@ export interface ApplicationQueryMapV1 {
 }
 
 export interface ApplicationCommandMapV1 {
+  readonly "workspace.register": { readonly payload: { readonly path: string; readonly name?: string } };
+  readonly "workspace.trust": { readonly payload: { readonly workspaceId: string; readonly decision: "trusted" | "blocked" } };
+  readonly "workspace.archive": { readonly payload: { readonly workspaceId: string } };
   readonly "run.start": { readonly payload: { readonly request: StartRunRequestV1 } };
   readonly "run.cancel": { readonly payload: { readonly runId: string } };
   readonly "run.resume": { readonly payload: { readonly runId: string; readonly retryBlocked: true } };

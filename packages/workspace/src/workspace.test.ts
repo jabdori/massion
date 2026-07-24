@@ -1,4 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { mkdtemp, mkdir, realpath, rm, symlink, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 
 import { IdentityService, OrganizationService, type PersonalRegistration, type TenantContext } from "@massion/identity";
 import { createDatabase, type MassionDatabase } from "@massion/storage";
@@ -12,6 +15,13 @@ describe("Workspace 등록·신뢰·tenant 격리", () => {
   let workspaces: WorkspaceService;
   let owner: PersonalRegistration;
   let ownerContext: TenantContext;
+  let temporaryRoot: string;
+
+  async function directory(name: string): Promise<string> {
+    const path = join(temporaryRoot, name);
+    await mkdir(path);
+    return path;
+  }
 
   beforeEach(async () => {
     database = await createDatabase({ url: "mem://", namespace: "massion", database: crypto.randomUUID() });
@@ -20,17 +30,20 @@ describe("Workspace 등록·신뢰·tenant 격리", () => {
     workspaces = await WorkspaceService.create(database, organizations);
     owner = await identity.registerPersonalUser({ email: "owner@example.com", displayName: "Owner" });
     ownerContext = await organizations.resolveTenantContext(owner.user.user_id, owner.organization.organization_id);
+    temporaryRoot = await mkdtemp(join(tmpdir(), "massion-workspace-"));
   });
 
   afterEach(async () => {
     await database.close();
+    await rm(temporaryRoot, { recursive: true, force: true });
   });
 
   it("절대 경로를 pending 신뢰 상태로 등록하고 디렉토리 이름을 기본 이름으로 쓴다", async () => {
-    const workspace = await workspaces.register(ownerContext, { path: "/home/owner/projects/shop-api" });
+    const path = await directory("shop-api");
+    const workspace = await workspaces.register(ownerContext, { path });
 
     expect(workspace.workspaceId).toBeTruthy();
-    expect(workspace.path).toBe("/home/owner/projects/shop-api");
+    expect(workspace.path).toBe(await realpath(path));
     expect(workspace.name).toBe("shop-api");
     expect(workspace.kind).toBe("local-directory");
     expect(workspace.trust).toBe("pending");
@@ -39,8 +52,9 @@ describe("Workspace 등록·신뢰·tenant 격리", () => {
   });
 
   it("같은 경로를 다시 등록하면 새로 만들지 않고 기존 Workspace를 반환한다", async () => {
-    const first = await workspaces.register(ownerContext, { path: "/home/owner/projects/shop-api" });
-    const second = await workspaces.register(ownerContext, { path: "/home/owner/projects/shop-api/" });
+    const path = await directory("shop-api");
+    const first = await workspaces.register(ownerContext, { path });
+    const second = await workspaces.register(ownerContext, { path: `${path}/` });
 
     expect(second.workspaceId).toBe(first.workspaceId);
     expect(await workspaces.list(ownerContext)).toHaveLength(1);
@@ -55,8 +69,26 @@ describe("Workspace 등록·신뢰·tenant 격리", () => {
     );
   });
 
+  it.each([
+    ["일반 파일", async () => {
+      const path = join(temporaryRoot, "notes.txt");
+      await writeFile(path, "notes");
+      return path;
+    }],
+    ["외부 디렉터리를 가리키는 symlink", async () => {
+      const target = await directory("external");
+      const path = join(temporaryRoot, "linked");
+      await symlink(target, path);
+      return path;
+    }],
+  ])("%s는 workspace로 등록하지 않는다", async (_label, createPath) => {
+    await expect(workspaces.register(ownerContext, { path: await createPath() })).rejects.toThrow(
+      "Workspace 경로는 실제 디렉터리여야 합니다",
+    );
+  });
+
   it("expectedRevision이 일치할 때만 신뢰를 결정하고 revision을 올린다", async () => {
-    const workspace = await workspaces.register(ownerContext, { path: "/home/owner/projects/shop-api" });
+    const workspace = await workspaces.register(ownerContext, { path: await directory("shop-api") });
 
     const trusted = await workspaces.decideTrust(ownerContext, {
       workspaceId: workspace.workspaceId,
@@ -81,7 +113,7 @@ describe("Workspace 등록·신뢰·tenant 격리", () => {
       other.user.user_id,
       other.organization.organization_id,
     );
-    const workspace = await workspaces.register(ownerContext, { path: "/home/owner/projects/shop-api" });
+    const workspace = await workspaces.register(ownerContext, { path: await directory("shop-api") });
 
     expect(await workspaces.list(otherContext)).toHaveLength(0);
     await expect(workspaces.get(otherContext, workspace.workspaceId)).rejects.toThrow("Workspace를 찾을 수 없습니다");
@@ -95,8 +127,8 @@ describe("Workspace 등록·신뢰·tenant 격리", () => {
   });
 
   it("touch는 last_used_at을 갱신하고 list는 최근 사용 순으로 반환한다", async () => {
-    const first = await workspaces.register(ownerContext, { path: "/home/owner/projects/shop-api" });
-    const second = await workspaces.register(ownerContext, { path: "/home/owner/projects/mobile-app" });
+    const first = await workspaces.register(ownerContext, { path: await directory("shop-api") });
+    const second = await workspaces.register(ownerContext, { path: await directory("mobile-app") });
 
     await workspaces.touch(ownerContext, first.workspaceId);
     const listed = await workspaces.list(ownerContext);
@@ -105,7 +137,8 @@ describe("Workspace 등록·신뢰·tenant 격리", () => {
   });
 
   it("archive된 Workspace는 목록에서 제외되고 같은 경로 재등록 시 다시 활성화된다", async () => {
-    const workspace = await workspaces.register(ownerContext, { path: "/home/owner/projects/shop-api" });
+    const path = await directory("shop-api");
+    const workspace = await workspaces.register(ownerContext, { path });
 
     const archived = await workspaces.archive(ownerContext, {
       workspaceId: workspace.workspaceId,
@@ -114,7 +147,7 @@ describe("Workspace 등록·신뢰·tenant 격리", () => {
     expect(archived.status).toBe("archived");
     expect(await workspaces.list(ownerContext)).toHaveLength(0);
 
-    const revived = await workspaces.register(ownerContext, { path: "/home/owner/projects/shop-api" });
+    const revived = await workspaces.register(ownerContext, { path });
     expect(revived.workspaceId).toBe(workspace.workspaceId);
     expect(revived.status).toBe("active");
     expect(revived.trust).toBe("pending");

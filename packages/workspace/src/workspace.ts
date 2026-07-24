@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { lstat, realpath, stat } from "node:fs/promises";
 
 import type { OrganizationService, TenantContext } from "@massion/identity";
 import { applyMigrations, type MassionDatabase, type QueryExecutor } from "@massion/storage";
@@ -80,6 +81,18 @@ function defaultName(path: string): string {
   return segment ?? path;
 }
 
+async function canonicalDirectoryPath(input: string): Promise<string> {
+  try {
+    const provided = await lstat(input);
+    if (provided.isSymbolicLink()) throw new Error("symlink");
+    const canonical = await realpath(input);
+    if (!(await stat(canonical)).isDirectory()) throw new Error("directory");
+    return canonical;
+  } catch {
+    throw new Error("Workspace 경로는 실제 디렉터리여야 합니다");
+  }
+}
+
 async function findById(
   executor: QueryExecutor,
   context: TenantContext,
@@ -106,7 +119,7 @@ export class WorkspaceService {
   }
 
   public async register(context: TenantContext, input: RegisterWorkspaceInput): Promise<WorkspaceView> {
-    const path = normalizePath(input.path);
+    const path = await canonicalDirectoryPath(normalizePath(input.path));
     const name = input.name?.trim() || defaultName(path);
     return await this.database.transaction(async (transaction) => {
       await this.organizations.verifyTenantContext(context, undefined, transaction);

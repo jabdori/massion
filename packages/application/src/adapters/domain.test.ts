@@ -1,3 +1,7 @@
+import { mkdir, mkdtemp, realpath, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
 import { AutonomyStore, GovernanceApprovalRequiredError } from "@massion/governance";
 import { IdentityService, OrganizationService } from "@massion/identity";
 import { OrganizationGraphService } from "@massion/organization";
@@ -147,18 +151,30 @@ describe("Application domain adapters", () => {
     const workspaces = await WorkspaceService.create(database, organizations);
     const registry = new ApplicationCommandRegistry(await ApplicationCommandStore.create(database, organizations));
     registerApplicationDomainCommands(registry, { workspaces });
+    const temporaryRoot = await mkdtemp(join(tmpdir(), "massion-domain-workspace-"));
+    const workspacePath = join(temporaryRoot, "shop-api");
+    await mkdir(workspacePath);
+    const canonicalWorkspacePath = await realpath(workspacePath);
+
+    try {
 
     const registered = await registry.dispatch(context, ["workspace:write"], {
       schemaVersion: "massion.application.v1",
       commandId: "workspace-register-command-0001",
       correlationId: "workspace-register-correlation-0001",
       operation: "workspace.register",
-      payload: { path: "/home/owner/projects/shop-api" },
+      payload: { path: workspacePath },
     });
     expect(registered).toMatchObject({
       outcome: "succeeded",
       resource: { type: "Workspace", revision: 0 },
-      data: { path: "/home/owner/projects/shop-api", trust: "pending", status: "active" },
+      data: {
+        path: canonicalWorkspacePath,
+        trust: "pending",
+        status: "active",
+        createdAt: expect.any(String),
+        lastUsedAt: expect.any(String),
+      },
     });
     const workspaceId = (registered.data as { workspaceId: string }).workspaceId;
 
@@ -190,9 +206,12 @@ describe("Application domain adapters", () => {
         commandId: "workspace-scope-command-0001",
         correlationId: "workspace-scope-correlation-0001",
         operation: "workspace.register",
-        payload: { path: "/home/owner/projects/other" },
+        payload: { path: join(temporaryRoot, "other") },
       }),
     ).rejects.toMatchObject({ category: "authorization" });
+    } finally {
+      await rm(temporaryRoot, { recursive: true, force: true });
+    }
   });
 
   it("Extension review는 awaiting-approval로 반환하고 같은 command·artifact로 승인 재개한다", async () => {

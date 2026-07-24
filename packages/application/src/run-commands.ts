@@ -1,4 +1,8 @@
+import { lstat, realpath, stat } from "node:fs/promises";
+import { isAbsolute, posix, relative, resolve, sep } from "node:path";
+
 import type { TenantContext } from "@massion/identity";
+import type { WorkspaceService } from "@massion/workspace";
 
 import type { ApplicationCommandRegistry } from "./command-registry.js";
 import type { ApplicationCommandV1, ApplicationCommandResultV1 } from "./contracts.js";
@@ -9,6 +13,7 @@ interface RunCommandDependencies {
   readonly store: Pick<ApplicationRunStore, "start">;
   readonly coordinator: Pick<CoreWorkCoordinator, "cancel" | "retryBlocked">;
   readonly schedule: (context: TenantContext, runId: string) => void | Promise<void>;
+  readonly workspaces?: Pick<WorkspaceService, "get">;
 }
 
 function object(value: unknown, fields: readonly string[]): Record<string, unknown> {
@@ -24,6 +29,76 @@ function text(value: unknown, label: string): string {
   if (typeof value !== "string" || value.length < 8 || value.length > 128)
     throw new Error(`${label}가 유효하지 않습니다`);
   return value;
+}
+
+function workspacePath(value: unknown): string {
+  if (
+    typeof value !== "string" ||
+    value.length === 0 ||
+    value.includes("\0") ||
+    value.includes("\\") ||
+    posix.isAbsolute(value) ||
+    value.split("/").some((segment) => segment === "." || segment === "..")
+  )
+    throw new Error("workspace file 경로가 유효하지 않습니다");
+  const normalized = posix.normalize(value);
+  if (normalized === "." || normalized === ".." || normalized.startsWith("../"))
+    throw new Error("workspace file 경로가 유효하지 않습니다");
+  return normalized;
+}
+
+function runRequest(value: unknown): Record<string, unknown> {
+  const input = object(value, [
+    "text",
+    "surface",
+    "projectId",
+    "workspaceId",
+    "workspacePaths",
+    "tokenBudget",
+    "scopeIn",
+    "scopeOut",
+    "constraints",
+    "assumptions",
+    "unknowns",
+    "decisions",
+  ]);
+  if (typeof input.text !== "string" || input.text.trim().length === 0)
+    throw new Error("run request text가 유효하지 않습니다");
+  if (input.workspacePaths === undefined) return input;
+  if (typeof input.workspaceId !== "string" || input.workspaceId.trim().length === 0)
+    throw new Error("workspace file 경로에는 workspaceId가 필요합니다");
+  if (!Array.isArray(input.workspacePaths)) throw new Error("workspace file 경로가 유효하지 않습니다");
+  const workspacePaths = [...new Set(input.workspacePaths.map(workspacePath))];
+  if (workspacePaths.length > 20) throw new Error("workspace file 경로는 최대 20개까지 허용됩니다");
+  return {
+    ...input,
+    workspaceId: input.workspaceId.trim(),
+    workspacePaths,
+  };
+}
+
+async function verifyWorkspacePaths(
+  context: TenantContext,
+  request: Record<string, unknown>,
+  workspaces: RunCommandDependencies["workspaces"],
+): Promise<void> {
+  const paths = request.workspacePaths;
+  if (typeof request.workspaceId !== "string") return;
+  if (!workspaces) throw new Error("workspace file 경로를 확인할 WorkspaceService가 구성되지 않았습니다");
+  const workspace = await workspaces.get(context, request.workspaceId);
+  if (workspace.status !== "active") throw new Error("workspace는 active 상태여야 합니다");
+  if ((await lstat(workspace.path)).isSymbolicLink()) throw new Error("workspace 경로는 canonical directory여야 합니다");
+  const root = await realpath(workspace.path);
+  if (root !== workspace.path) throw new Error("workspace 경로는 canonical directory여야 합니다");
+  if (!(await stat(root)).isDirectory()) throw new Error("workspace 경로는 directory여야 합니다");
+  if (!Array.isArray(paths) || paths.length === 0) return;
+  for (const path of paths) {
+    const selected = await realpath(resolve(root, path as string));
+    const fromRoot = relative(root, selected);
+    if (fromRoot === "" || fromRoot === ".." || fromRoot.startsWith(`..${sep}`) || isAbsolute(fromRoot))
+      throw new Error("workspace 밖 파일은 첨부할 수 없습니다");
+    if (!(await stat(selected)).isFile()) throw new Error("workspace file 경로는 기존 파일이어야 합니다");
+  }
 }
 
 function result(
@@ -51,9 +126,10 @@ export function registerApplicationRunCommands(
     validate(value) {
       const payload = object(value, ["request"]);
       if (payload.request === undefined) throw new Error("run request가 필요합니다");
-      return payload as { request: unknown };
+      return { request: runRequest(payload.request) };
     },
     async handle(context, command, payload) {
+      await verifyWorkspacePaths(context, payload.request, dependencies.workspaces);
       const run = await dependencies.store.start(context, {
         commandId: command.commandId,
         correlationId: command.correlationId,

@@ -38,6 +38,7 @@ export type {
   WorkActivityViewV1,
   WorkDetailV1,
   WorkSummaryV1,
+  WorkspaceViewV1,
 } from "./contracts.js";
 
 export interface ApplicationClientTransport {
