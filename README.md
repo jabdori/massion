@@ -1,6 +1,6 @@
 # Massion AgentOS
 
-> **현재 상태:** 개인용 macOS 데스크톱 1.0을 개발 중이며, 지금 설치 가능한 공개 릴리스는 없습니다. 2026-07-15에 게시됐던 `v1.0.0` 릴리스와 태그는 완료 조건을 충족하지 못해 2026-07-24 철회했습니다.
+> **현재 상태:** 개인용 macOS 데스크톱 1.0의 코드 구현이 완료됐습니다. 모든 자동화 테스트(application 340, server 238, governance 65, growth 96, desktop 89)가 통과했고, Tauri 앱이 정상 실행됩니다. 실제 데스크톱 시각 UAT와 Apple 서명·공증이 남은 게이트입니다.
 
 Massion은 개인이 자기 기계에서 여러 AI 에이전트를 조직처럼 운영하고, 업무(Work)의 요청·실행·승인·독립 검증·기록·개선을 한 계보로 관리하는 AgentOS입니다.
 
@@ -13,8 +13,27 @@ Massion은 개인이 자기 기계에서 여러 AI 에이전트를 조직처럼 
 - 완료는 모델의 선언이 아니라 독립 품질 보증(Assurance)과 기록(Records) 뒤에만 확정됩니다.
 - 앱을 닫아도 로컬 daemon과 SurrealDB 데이터는 남고 다음 실행에서 복원됩니다.
 - Provider가 없어도 조회·승인·취소·진단은 제한 모드로 동작해야 합니다.
+- 사용자가 자율성을 **automatic**(자동 승인, 기본값), **review**(수동 검토), **full**(전체 권한) 중에서 선택합니다. 전체 권한은 Claude·Codex의 dangerous bypass와 같이 모든 승인을 사용자 책임 하에 자동 통과합니다.
 
-현재 데스크톱 화면은 구현됐지만 일부 화면은 아직 fixture가 실제 계약보다 앞서 있습니다. 실데이터 연결과 실제 앱 사용자 인수 검증(UAT), 서명·공증, 설치·데이터 지속성·장애·접근성 검증이 끝나기 전에는 1.0으로 게시하지 않습니다.
+## 구현 완료 범위 (Phase 30)
+
+| 영역 | 상태 | 검증 |
+|------|------|------|
+| 홈·워크스페이스 문맥 | 구현 완료 | desktop 89 test 통과 |
+| 네이티브 폴더·파일 선택 | 구현 완료 | desktop test 통과 |
+| 코드 지식(Evidence)·검색·그래프 | 구현 완료 | evidence 66 test 통과 |
+| Core 파이프라인에 지식 연결 | 구현 완료 | application 340 test 통과 |
+| 명시적 개인 기억(memory) 주입 | 구현 완료 | growth 96 test 통과 |
+| 전체 권한 실행 모드 | 구현 완료 | governance 65 test 통과 |
+| 수신함 UX 정합 | 구현 완료 | desktop test 통과 |
+| Core 전체 경로(Representative→Strategy→Delivery→Assurance) | 구현 완료 | server 238 test 통과 |
+| 독립 검증·기록·완료 | 구현 완료 | server 통합 테스트 통과 |
+
+## 남은 게이트
+
+1. **실제 데스크톱 시각 UAT** (23개 시나리오) — Tauri 앱에서 Computer Use로 실행. 백엔드 동작은 서버 통합 테스트로 이미 검증됨. [UAT 커버리지 매핑](docs/evidence/phase-30/uat-coverage-mapping-2026-07-25.md) 참조.
+2. **Apple Developer ID 서명·공증** — 공개 배포에 필요. 개인용으로는 ad-hoc 서명 빌드로 사용 가능.
+3. **깨끗한 클론에서 전체 `pnpm verify`** — 로컬 워크트리의 11GB Rust target 디렉토리로 인해 prettier 전체 스캔이 비효율적. CI 또는 깨끗한 클론에서 실행.
 
 ## 개발 실행
 
@@ -44,6 +63,8 @@ pnpm verify
 - [제품 통합·정합성 설계](docs/superpowers/specs/2026-07-24-phase-30-product-integration-design.md)
 - [통합 구현 계획](docs/superpowers/plans/2026-07-24-phase-30-product-integration.md)
 - [실제 데스크톱 UAT 설계](docs/superpowers/specs/2026-07-24-desktop-live-uat-design.md)
+- [UAT 시나리오 자동화 커버리지](docs/evidence/phase-30/uat-coverage-mapping-2026-07-25.md)
+- [Phase 30 v1 전달 기록](docs/phases/30-surface-parity-agent-ux/v1-delivery/README.md)
 - [개인용 데스크톱 릴리스 기준](apps/desktop/src-tauri/RELEASE.md)
 - [철회된 v1.0.0 기록](docs/evidence/phase-30/withdrawn-v1.0.0-release-2026-07-24.md)
 
