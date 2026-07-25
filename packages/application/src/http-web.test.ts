@@ -106,13 +106,33 @@ describe("ApplicationHttpServer frictionless local session", () => {
           return { context, tokenId: "web-token-id", scopes: ["application:*"] };
         },
       },
-      queries: { async query() { return { data: {} }; } },
-      commands: { async dispatch() { return { outcome: "succeeded" }; } },
-      events: { async read(_c, input) { return { events: [], cursor: input.after }; } },
-      health: { async readiness() { return { database: true }; } },
+      queries: {
+        async query() {
+          return { data: {} };
+        },
+      },
+      commands: {
+        async dispatch() {
+          return { outcome: "succeeded" };
+        },
+      },
+      events: {
+        async read(_c, input) {
+          return { events: [], cursor: input.after };
+        },
+      },
+      health: {
+        async readiness() {
+          return { database: true };
+        },
+      },
       webSessions: {
-        async issueLoginTicket() { throw new Error("unused"); },
-        async exchangeLoginTicket() { throw new Error("unused"); },
+        async issueLoginTicket() {
+          throw new Error("unused");
+        },
+        async exchangeLoginTicket() {
+          throw new Error("unused");
+        },
         async issueLocalSession(access) {
           return {
             sessionId: "local-1",
@@ -125,9 +145,15 @@ describe("ApplicationHttpServer frictionless local session", () => {
             idleExpiresAt: new Date(Date.now() + 1_800_000).toISOString(),
           };
         },
-        async authenticate() { throw new Error("unused"); },
-        async verifyCsrf() { return false; },
-        async rotateCsrf() { return "unused"; },
+        async authenticate() {
+          throw new Error("unused");
+        },
+        async verifyCsrf() {
+          return false;
+        },
+        async rotateCsrf() {
+          return "unused";
+        },
         async revoke() {},
       },
     };

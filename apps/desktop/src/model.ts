@@ -184,8 +184,21 @@ export interface ApprovalView {
  */
 export type InboxItem =
   | { readonly kind: "approval"; readonly id: string; readonly approval: ApprovalView }
-  | { readonly kind: "blocked"; readonly id: string; readonly workId: string; readonly title: string; readonly reason: string }
-  | { readonly kind: "growth"; readonly id: string; readonly suggestionId: string; readonly workId: string; readonly title: string; readonly reason: string };
+  | {
+      readonly kind: "blocked";
+      readonly id: string;
+      readonly workId: string;
+      readonly title: string;
+      readonly reason: string;
+    }
+  | {
+      readonly kind: "growth";
+      readonly id: string;
+      readonly suggestionId: string;
+      readonly workId: string;
+      readonly title: string;
+      readonly reason: string;
+    };
 
 export interface VerificationView {
   id: string;
@@ -454,7 +467,13 @@ const works: WorkView[] = [
     summary: "갱신 계약의 책임 범위와 해지 조건을 기존 정책에 대조합니다.",
     progress: 22,
     // 차단된 업무. 승인 대기와 달리 사람이 원인을 풀어야 진행됩니다(수신함 halt 항목).
-    run: { runId: "run-partner", status: "blocked", stage: "evidence", leaseGeneration: 1, blockedReason: "신뢰하지 않은 폴더 접근이 필요합니다" },
+    run: {
+      runId: "run-partner",
+      status: "blocked",
+      stage: "evidence",
+      leaseGeneration: 1,
+      blockedReason: "신뢰하지 않은 폴더 접근이 필요합니다",
+    },
     approvals: [],
     tasks: [
       { id: "terms", title: "계약 조항 검증", state: "active", time: "어제" },

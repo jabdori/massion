@@ -1270,7 +1270,8 @@ export function parseSubscriptionUatArguments(argv) {
       }
       index += 1;
     } else if (argument === "--interactive-provider-login") {
-      interactiveProviderLogin = true;    } else if (argument === "--timeout-ms") {
+      interactiveProviderLogin = true;
+    } else if (argument === "--timeout-ms") {
       const value = requiredOption(argv, index, argument);
       if (!/^[1-9][0-9]*$/u.test(value)) throw new Error("--timeout-ms가 유효하지 않습니다");
       timeoutMs = Number(value);
@@ -2214,10 +2215,7 @@ export async function runSubscriptionUat(options) {
   const assertions = [];
   const lifecycleLineage = [];
   const providerEvidence = new Map();
-  const providerPlans = planProviderScenarios(
-    options.providers,
-    options.interactiveProviderLogin,
-  );
+  const providerPlans = planProviderScenarios(options.providers, options.interactiveProviderLogin);
   const providerScenarios = [
     ...providerPlans.filter((plan) => plan.prerequisite).map((plan) => scenarioNotRun(plan, startedAt)),
     ...planUnsupportedLineageScenarios().map((plan) => scenarioNotRun(plan, startedAt)),

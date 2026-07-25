@@ -578,7 +578,8 @@ export class BuiltinModelRouteAssembler {
         profile.endpoint_id === input.endpointId &&
         profile.model_id === ZAI_CODING_PLAN_MODEL_ID,
     );
-    if (matchingProfiles.length > 1) throw new Error("Z.AI GLM-5.2 Core model profile 계보가 하나로 확정되지 않았습니다");
+    if (matchingProfiles.length > 1)
+      throw new Error("Z.AI GLM-5.2 Core model profile 계보가 하나로 확정되지 않았습니다");
     let profile = matchingProfiles[0];
     if (profile && !zaiCodingPlanProfileCompatible(profile, input)) {
       throw new Error("기존 Z.AI GLM-5.2 Core model profile 계약이 충돌합니다");

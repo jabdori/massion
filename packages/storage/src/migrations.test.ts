@@ -33,11 +33,9 @@ describe("SurrealDB migration", () => {
     const previous = defineMigration("0001-probe", "DEFINE TABLE compatibility_probe SCHEMAFULL;");
     await applyMigrations(db, [previous]);
 
-    const compatible = defineMigration(
-      "0001-probe",
-      "DEFINE TABLE OVERWRITE compatibility_probe SCHEMAFULL;",
-      { compatibleChecksums: [previous.checksum] },
-    );
+    const compatible = defineMigration("0001-probe", "DEFINE TABLE OVERWRITE compatibility_probe SCHEMAFULL;", {
+      compatibleChecksums: [previous.checksum],
+    });
     await expect(applyMigrations(db, [compatible])).resolves.toEqual([]);
   });
 

@@ -146,7 +146,9 @@ describe("ExtensionWorkerSupervisor", () => {
       healthTimeoutMs: 500,
       stopTimeoutMs: 500,
     });
-    await expect(worker.invoke("runtimeTool:probe", { action: "probe" }, 500)).resolves.toMatchObject({ fileWrite: "allowed" });
+    await expect(worker.invoke("runtimeTool:probe", { action: "probe" }, 500)).resolves.toMatchObject({
+      fileWrite: "allowed",
+    });
     await worker.stop();
   });
 });

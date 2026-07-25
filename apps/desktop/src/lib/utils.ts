@@ -7,12 +7,8 @@ function joinClassNames(classes: readonly StaticClassName[]): string {
 
 export function cn(...classes: readonly StaticClassName[]): string;
 export function cn<State>(...classes: readonly StatefulClassName<State>[]): string | ((state: State) => string);
-export function cn<State>(
-  ...classes: readonly StatefulClassName<State>[]
-): string | ((state: State) => string) {
-  const callbacks = classes.filter(
-    (value): value is (state: State) => StaticClassName => typeof value === "function",
-  );
+export function cn<State>(...classes: readonly StatefulClassName<State>[]): string | ((state: State) => string) {
+  const callbacks = classes.filter((value): value is (state: State) => StaticClassName => typeof value === "function");
   const staticClasses = classes.filter((value): value is StaticClassName => typeof value !== "function");
 
   if (callbacks.length === 0) return joinClassNames(staticClasses);

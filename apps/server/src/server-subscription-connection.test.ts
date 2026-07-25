@@ -209,7 +209,12 @@ describe("로컬 서버 구독 계정 준비", () => {
       );
     const connect = vi.fn().mockImplementation((_context, input) =>
       Promise.resolve({
-        account: { account_id: "account-claude-12345678", connector_id: input.connectorId, status: "offline", version: 1 },
+        account: {
+          account_id: "account-claude-12345678",
+          connector_id: input.connectorId,
+          status: "offline",
+          version: 1,
+        },
         binding: { providerId: input.providerId, executionKind: "agent-runtime" },
       }),
     );

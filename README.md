@@ -17,17 +17,17 @@ Massion은 개인이 자기 기계에서 여러 AI 에이전트를 조직처럼 
 
 ## 구현 완료 범위 (Phase 30)
 
-| 영역 | 상태 | 검증 |
-|------|------|------|
-| 홈·워크스페이스 문맥 | 구현 완료 | desktop 89 test 통과 |
-| 네이티브 폴더·파일 선택 | 구현 완료 | desktop test 통과 |
-| 코드 지식(Evidence)·검색·그래프 | 구현 완료 | evidence 66 test 통과 |
-| Core 파이프라인에 지식 연결 | 구현 완료 | application 340 test 통과 |
-| 명시적 개인 기억(memory) 주입 | 구현 완료 | growth 96 test 통과 |
-| 전체 권한 실행 모드 | 구현 완료 | governance 65 test 통과 |
-| 수신함 UX 정합 | 구현 완료 | desktop test 통과 |
-| Core 전체 경로(Representative→Strategy→Delivery→Assurance) | 구현 완료 | server 238 test 통과 |
-| 독립 검증·기록·완료 | 구현 완료 | server 통합 테스트 통과 |
+| 영역                                                       | 상태      | 검증                      |
+| ---------------------------------------------------------- | --------- | ------------------------- |
+| 홈·워크스페이스 문맥                                       | 구현 완료 | desktop 89 test 통과      |
+| 네이티브 폴더·파일 선택                                    | 구현 완료 | desktop test 통과         |
+| 코드 지식(Evidence)·검색·그래프                            | 구현 완료 | evidence 66 test 통과     |
+| Core 파이프라인에 지식 연결                                | 구현 완료 | application 340 test 통과 |
+| 명시적 개인 기억(memory) 주입                              | 구현 완료 | growth 96 test 통과       |
+| 전체 권한 실행 모드                                        | 구현 완료 | governance 65 test 통과   |
+| 수신함 UX 정합                                             | 구현 완료 | desktop test 통과         |
+| Core 전체 경로(Representative→Strategy→Delivery→Assurance) | 구현 완료 | server 238 test 통과      |
+| 독립 검증·기록·완료                                        | 구현 완료 | server 통합 테스트 통과   |
 
 ## 남은 게이트
 

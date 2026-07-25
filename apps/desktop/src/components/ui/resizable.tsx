@@ -19,10 +19,15 @@ function ResizableHandle({
   return (
     <PanelResizeHandle
       data-slot="resizable-handle"
-      className={cn("group relative flex w-px items-center justify-center bg-border outline-none transition-colors hover:bg-control focus-visible:bg-accent data-[panel-group-direction=vertical]:h-px data-[panel-group-direction=vertical]:w-full", className)}
+      className={cn(
+        "group relative flex w-px items-center justify-center bg-border outline-none transition-colors hover:bg-control focus-visible:bg-accent data-[panel-group-direction=vertical]:h-px data-[panel-group-direction=vertical]:w-full",
+        className,
+      )}
       {...props}
     >
-      {withHandle ? <span aria-hidden="true" className="size-1.5 rounded-full bg-muted-foreground group-hover:bg-primary" /> : null}
+      {withHandle ? (
+        <span aria-hidden="true" className="size-1.5 rounded-full bg-muted-foreground group-hover:bg-primary" />
+      ) : null}
     </PanelResizeHandle>
   );
 }

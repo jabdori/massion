@@ -24,7 +24,11 @@ export function DialogContent({ className, sheet = false, viewportClassName, ...
     <DialogPrimitive.Portal>
       <DialogPrimitive.Backdrop className="fixed inset-0 z-40 bg-black/55 backdrop-blur-[2px]" />
       <DialogPrimitive.Viewport
-        className={cn("fixed inset-0 z-50 grid", sheet ? "place-items-stretch justify-items-end" : "place-items-center p-4", viewportClassName)}
+        className={cn(
+          "fixed inset-0 z-50 grid",
+          sheet ? "place-items-stretch justify-items-end" : "place-items-center p-4",
+          viewportClassName,
+        )}
       >
         <DialogPrimitive.Popup
           className={cn(

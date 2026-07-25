@@ -198,12 +198,14 @@ describe("ExtensionLifecycleService", () => {
     await lifecycle.close();
 
     expect(launcher.workers[0]?.stopped).toBe(true);
-    await expect(lifecycle.invoke(context, {
-      packageName: activated.packageName,
-      contribution: "runtimeTools:echo",
-      payload: {},
-      timeoutMs: 100,
-    })).rejects.toThrow("healthy active Extension worker");
+    await expect(
+      lifecycle.invoke(context, {
+        packageName: activated.packageName,
+        contribution: "runtimeTools:echo",
+        payload: {},
+        timeoutMs: 100,
+      }),
+    ).rejects.toThrow("healthy active Extension worker");
   });
 
   it("bundled 공식 Extension도 검사·승인·health를 거쳐 built-in으로 설치한다", async () => {

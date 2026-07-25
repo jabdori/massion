@@ -125,7 +125,10 @@ export class ZaiCodingPlanSubscriptionVerifier {
         signal: AbortSignal.timeout(this.timeoutMs),
       });
       if (!response.ok) throw new Error("Provider 인증 거부");
-      if (completedModelId(JSON.parse(await boundedBody(response, this.maximumResponseBytes)) as unknown) !== input.requiredModelId) {
+      if (
+        completedModelId(JSON.parse(await boundedBody(response, this.maximumResponseBytes)) as unknown) !==
+        input.requiredModelId
+      ) {
         throw new Error("필수 model 불일치");
       }
       const observedAt = this.now();

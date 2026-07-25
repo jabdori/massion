@@ -1,18 +1,11 @@
 import { createHash } from "node:crypto";
 
-import {
-  compileAssuranceCriteria,
-  selectAssuranceProfile,
-  type AssuranceCheckBinding,
-} from "@massion/assurance";
+import { compileAssuranceCriteria, selectAssuranceProfile, type AssuranceCheckBinding } from "@massion/assurance";
 import { validateStrategyPlan } from "@massion/context-strategy";
 import { redactSecrets } from "@massion/evidence";
 import type { WorkRecoveryBundle } from "@massion/work";
 
-import type {
-  AutomaticAssuranceBindingRecipe,
-  SoftwareAssuranceRecipeResolver,
-} from "./core-assurance-stage.js";
+import type { AutomaticAssuranceBindingRecipe, SoftwareAssuranceRecipeResolver } from "./core-assurance-stage.js";
 
 const CODE_CHANGE_MEDIA_TYPE = "application/vnd.massion.code-change-manifest+json";
 const AUTOMATIC_EVIDENCE_MAXIMUM_AGE_MS = 300_000;
@@ -52,7 +45,8 @@ function assuranceCommand(value: unknown): AssuranceCommand | undefined {
     !Array.isArray(candidate.args) ||
     candidate.args.length > 50 ||
     candidate.args.some(
-      (argument) => typeof argument !== "string" || !argument.trim() || argument.length > 500 || argument.includes("\0"),
+      (argument) =>
+        typeof argument !== "string" || !argument.trim() || argument.length > 500 || argument.includes("\0"),
     ) ||
     typeof candidate.cwd !== "string" ||
     !candidate.cwd.trim() ||
@@ -83,7 +77,10 @@ function assuranceCommand(value: unknown): AssuranceCommand | undefined {
 function assuranceRecipe(value: unknown): AssuranceRecipe | undefined {
   if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
   const candidate = value as Record<string, unknown>;
-  if (candidate.schemaVersion !== "massion.software-assurance-recipe.v1" || !Array.isArray(candidate.validationCommands)) {
+  if (
+    candidate.schemaVersion !== "massion.software-assurance-recipe.v1" ||
+    !Array.isArray(candidate.validationCommands)
+  ) {
     return undefined;
   }
   const focusedCommand = assuranceCommand(candidate.focusedCommand);

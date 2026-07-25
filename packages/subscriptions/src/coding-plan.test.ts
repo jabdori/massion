@@ -63,11 +63,7 @@ describe("공식 Coding Plan preset", () => {
       authKinds: ["api-key"],
       billingKinds: ["coding-plan"],
     });
-    expect(codingPlanPreset("zai-coding-plan").routes[0]?.modelIds).toEqual([
-      "glm-5.2",
-      "glm-5-turbo",
-      "glm-4.7",
-    ]);
+    expect(codingPlanPreset("zai-coding-plan").routes[0]?.modelIds).toEqual(["glm-5.2", "glm-5-turbo", "glm-4.7"]);
     expect(codingPlanRouteForModel("zai-coding-plan", "glm-5.2")).toMatchObject({
       protocol: "openai",
       baseUrl: "https://api.z.ai/api/coding/paas/v4",

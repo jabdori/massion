@@ -3,3 +3,15 @@ node_modules/
 dist/
 coverage/
 .worktrees/
+target/
+.claude/
+.playwright-mcp/
+.superpowers/
+.scratch-*
+.runtime-stage/
+existing-data-capture.*
+existing-data-clone.*
+*.png
+history.txt
+apps/desktop/.impeccable/
+apps/studio/driver.mjs

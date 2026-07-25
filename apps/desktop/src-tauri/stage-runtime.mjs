@@ -29,8 +29,7 @@ async function validatePortablePackage(packageDirectory, entry) {
   for (const dependency of dependencies) {
     const dependencyPath = path.join(packageDirectory, "node_modules", ...dependency.split("/"));
     const metadata = await lstat(dependencyPath).catch(() => undefined);
-    if (!metadata)
-      throw new Error(`${packageJson.name}의 ${dependency} 의존성이 staging 경계에 없습니다`);
+    if (!metadata) throw new Error(`${packageJson.name}의 ${dependency} 의존성이 staging 경계에 없습니다`);
     if (metadata.isSymbolicLink()) {
       throw new Error(`${packageJson.name}의 직접 의존성 ${dependency}은 symbolic link일 수 없습니다`);
     }
@@ -103,11 +102,7 @@ export function buildEnvironment(environment = process.env) {
 }
 
 function deploy(workspace, packageName, destination) {
-  pnpm(
-    workspace,
-    deployArguments(packageName, destination),
-    `${packageName} portable deploy`,
-  );
+  pnpm(workspace, deployArguments(packageName, destination), `${packageName} portable deploy`);
 }
 
 export async function stageBundledExtensions(workspace, destination) {
@@ -132,10 +127,14 @@ export async function stageBundledExtensions(workspace, destination) {
       packageName,
       packageVersion: packageJson.version,
       archive,
-      artifactDigest: createHash("sha256").update(await readFile(path.join(destination, archive))).digest("hex"),
+      artifactDigest: createHash("sha256")
+        .update(await readFile(path.join(destination, archive)))
+        .digest("hex"),
     });
   }
-  await writeFile(path.join(destination, "official-extensions.json"), `${JSON.stringify(entries, null, 2)}\n`, { mode: 0o600 });
+  await writeFile(path.join(destination, "official-extensions.json"), `${JSON.stringify(entries, null, 2)}\n`, {
+    mode: 0o600,
+  });
 }
 
 export async function stageRuntime() {

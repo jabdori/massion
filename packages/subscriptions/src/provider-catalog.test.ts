@@ -127,7 +127,9 @@ describe("공식 구독·OAuth 제공자 catalog", () => {
       availability: "supported",
       officialDocumentation: "https://platform.claude.com/docs/en/agent-sdk/overview",
     });
-    expect(listSubscriptionProviderManifests().map((manifest) => manifest.displayName)).toContain("Anthropic Claude Code");
+    expect(listSubscriptionProviderManifests().map((manifest) => manifest.displayName)).toContain(
+      "Anthropic Claude Code",
+    );
   });
 
   it("Google 개인 구독과 기업 CLI를 분리하고 기계 판독할 수 없는 잔여 quota를 주장하지 않는다", () => {

@@ -192,22 +192,22 @@ test("tmux 실행은 최종 local archive를 요구하고 provider 로그인은 
   ]);
   assert.equal(defaults.mode, "tmux");
   assert.equal(defaults.interactiveProviderLogin, false);
- assert.deepEqual(defaults.providers, ["codex", "claude", "zai"]);
- assert.equal(defaults.timeoutMs, 120_000);
+  assert.deepEqual(defaults.providers, ["codex", "claude", "zai"]);
+  assert.equal(defaults.timeoutMs, 120_000);
 
- const optedIn = parseSubscriptionUatArguments([
-   "--tmux",
-   "--release",
-   "artifacts/release-1.0.0/massion-local-1.0.0.tar.gz",
-   "--providers",
-   "claude,codex",
-   "--interactive-provider-login",
-   "--timeout-ms",
-   "300000",
- ]);
- assert.equal(optedIn.interactiveProviderLogin, true);
- assert.deepEqual(optedIn.providers, ["claude", "codex"]);
- assert.equal(optedIn.timeoutMs, 300_000);
+  const optedIn = parseSubscriptionUatArguments([
+    "--tmux",
+    "--release",
+    "artifacts/release-1.0.0/massion-local-1.0.0.tar.gz",
+    "--providers",
+    "claude,codex",
+    "--interactive-provider-login",
+    "--timeout-ms",
+    "300000",
+  ]);
+  assert.equal(optedIn.interactiveProviderLogin, true);
+  assert.deepEqual(optedIn.providers, ["claude", "codex"]);
+  assert.equal(optedIn.timeoutMs, 300_000);
 });
 
 test("비대화형 구독 UAT는 사용자 승인 대기 없이 자동 승인 정책을 사용한다", () => {

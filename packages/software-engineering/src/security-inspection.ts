@@ -142,7 +142,10 @@ export class SoftwareSecurityInspectionExecutor implements TrustedAssuranceInspe
     reader: SoftwareAssuranceSourceReader,
     input: { readonly workspaceRoot: string },
   ): Promise<SoftwareSecurityInspectionExecutor> {
-    return new SoftwareSecurityInspectionExecutor(reader, await GitWorkspaceManager.create({ workspaceRoot: input.workspaceRoot }));
+    return new SoftwareSecurityInspectionExecutor(
+      reader,
+      await GitWorkspaceManager.create({ workspaceRoot: input.workspaceRoot }),
+    );
   }
 
   public async execute(

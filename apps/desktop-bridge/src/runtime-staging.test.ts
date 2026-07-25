@@ -74,7 +74,9 @@ describe("bundled SurrealDB runtime staging", () => {
     await Promise.all(
       [paths.configDirectory, paths.dataDirectory, paths.stateDirectory].map(async (directory) => {
         await expect(stat(join(directory, "stale"))).rejects.toMatchObject({ code: "ENOENT" });
-        await expect(readFile(join(directory, ".massion-data-epoch"), "utf8")).resolves.toBe("massion-v1-data-epoch-1\n");
+        await expect(readFile(join(directory, ".massion-data-epoch"), "utf8")).resolves.toBe(
+          "massion-v1-data-epoch-1\n",
+        );
       }),
     );
   });

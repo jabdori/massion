@@ -414,7 +414,9 @@ describe("서버 bundled runtime 건강 증명", () => {
           ]);
         }
         if (statement.includes("FROM credential_secret_version")) {
-          return Promise.resolve([[{ credential_id: "credential-zai-12345678", version: 1, algorithm: "aes-256-gcm" }]]);
+          return Promise.resolve([
+            [{ credential_id: "credential-zai-12345678", version: 1, algorithm: "aes-256-gcm" }],
+          ]);
         }
         return Promise.resolve([
           [

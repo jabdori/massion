@@ -17,10 +17,26 @@ index 1111111..2222222 100644
 
     expect(findings).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ sourceRule: "embedded-secret", severity: "major", location: { uri: "src/run.ts", line: 1 } }),
-        expect.objectContaining({ sourceRule: "dynamic-evaluation", severity: "major", location: { uri: "src/run.ts", line: 2 } }),
-        expect.objectContaining({ sourceRule: "shell-execution", severity: "minor", location: { uri: "src/run.ts", line: 3 } }),
-        expect.objectContaining({ sourceRule: "shell-true", severity: "major", location: { uri: "src/run.ts", line: 4 } }),
+        expect.objectContaining({
+          sourceRule: "embedded-secret",
+          severity: "major",
+          location: { uri: "src/run.ts", line: 1 },
+        }),
+        expect.objectContaining({
+          sourceRule: "dynamic-evaluation",
+          severity: "major",
+          location: { uri: "src/run.ts", line: 2 },
+        }),
+        expect.objectContaining({
+          sourceRule: "shell-execution",
+          severity: "minor",
+          location: { uri: "src/run.ts", line: 3 },
+        }),
+        expect.objectContaining({
+          sourceRule: "shell-true",
+          severity: "major",
+          location: { uri: "src/run.ts", line: 4 },
+        }),
       ]),
     );
     expect(JSON.stringify(findings)).not.toContain("sk-abcdefghijklmnopqrstuvwxyz123456");

@@ -76,7 +76,9 @@ test("검증된 SurrealDB 실행 파일만 Tauri sidecar 입력으로 복사한�
   await mkdir(path.dirname(source), { recursive: true });
   await writeFile(source, "#!/bin/sh\nprintf 'SurrealDB 3.2.1\\n'\n");
   await chmod(source, 0o700);
-  const sha256 = createHash("sha256").update(await readFile(source)).digest("hex");
+  const sha256 = createHash("sha256")
+    .update(await readFile(source))
+    .digest("hex");
 
   await stageRuntimeInput({ destination, expectedSha256: sha256, source });
 
@@ -112,10 +114,16 @@ test("릴리스 앱 전용 빌드는 최신 renderer와 runtime stage를 같은 
   const release = JSON.parse(await readFile(path.join(desktop, "src-tauri/tauri.release.conf.json"), "utf8"));
   const manifest = JSON.parse(await readFile(path.join(desktop, "src-tauri/runtime-stage.manifest.json"), "utf8"));
 
-  assert.equal(packageJson.scripts["tauri:build"], "cargo tauri build --bundles app --config src-tauri/tauri.release.conf.json");
+  assert.equal(
+    packageJson.scripts["tauri:build"],
+    "cargo tauri build --bundles app --config src-tauri/tauri.release.conf.json",
+  );
   assert.equal(release.build.beforeBuildCommand, "pnpm build && node src-tauri/stage-runtime.mjs");
   assert.deepEqual(manifest.build, ["@massion/server", "@massion/desktop-bridge"]);
-  assert.match(await readFile(path.join(desktop, "src-tauri/build.rs"), "utf8"), /rerun-if-changed=.runtime-stage\.stamp/);
+  assert.match(
+    await readFile(path.join(desktop, "src-tauri/build.rs"), "utf8"),
+    /rerun-if-changed=.runtime-stage\.stamp/,
+  );
 });
 
 test("변경된 runtime stage만 Cargo 감시 stamp를 갱신한다", async (context) => {
@@ -149,7 +157,11 @@ test("공식 Extension packaging은 세 개의 검증용 artifact metadata를 ru
   try {
     await stageBundledExtensions(root, destination);
     const entries = JSON.parse(await readFile(path.join(destination, "official-extensions.json"), "utf8"));
-    assert.deepEqual(entries.map((entry) => entry.packageName).sort(), ["@massion-ext/discord", "@massion-ext/github", "@massion-ext/slack"]);
+    assert.deepEqual(entries.map((entry) => entry.packageName).sort(), [
+      "@massion-ext/discord",
+      "@massion-ext/github",
+      "@massion-ext/slack",
+    ]);
     for (const entry of entries) {
       assert.match(entry.artifactDigest, /^[a-f0-9]{64}$/);
       assert.equal((await stat(path.join(destination, entry.archive))).isFile(), true);

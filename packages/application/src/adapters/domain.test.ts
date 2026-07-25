@@ -157,58 +157,57 @@ describe("Application domain adapters", () => {
     const canonicalWorkspacePath = await realpath(workspacePath);
 
     try {
-
-    const registered = await registry.dispatch(context, ["workspace:write"], {
-      schemaVersion: "massion.application.v1",
-      commandId: "workspace-register-command-0001",
-      correlationId: "workspace-register-correlation-0001",
-      operation: "workspace.register",
-      payload: { path: workspacePath },
-    });
-    expect(registered).toMatchObject({
-      outcome: "succeeded",
-      resource: { type: "Workspace", revision: 0 },
-      data: {
-        path: canonicalWorkspacePath,
-        trust: "pending",
-        status: "active",
-        createdAt: expect.any(String),
-        lastUsedAt: expect.any(String),
-      },
-    });
-    const workspaceId = (registered.data as { workspaceId: string }).workspaceId;
-
-    await expect(
-      registry.dispatch(context, ["workspace:write"], {
+      const registered = await registry.dispatch(context, ["workspace:write"], {
         schemaVersion: "massion.application.v1",
-        commandId: "workspace-trust-command-0001",
-        correlationId: "workspace-trust-correlation-0001",
-        operation: "workspace.trust",
-        expectedRevision: 0,
-        payload: { workspaceId, decision: "trusted" },
-      }),
-    ).resolves.toMatchObject({ outcome: "succeeded", data: { trust: "trusted" }, resource: { revision: 1 } });
-
-    await expect(
-      registry.dispatch(context, ["workspace:write"], {
-        schemaVersion: "massion.application.v1",
-        commandId: "workspace-archive-command-0001",
-        correlationId: "workspace-archive-correlation-0001",
-        operation: "workspace.archive",
-        expectedRevision: 1,
-        payload: { workspaceId },
-      }),
-    ).resolves.toMatchObject({ outcome: "succeeded", data: { status: "archived" } });
-
-    await expect(
-      registry.dispatch(context, ["work:write"], {
-        schemaVersion: "massion.application.v1",
-        commandId: "workspace-scope-command-0001",
-        correlationId: "workspace-scope-correlation-0001",
+        commandId: "workspace-register-command-0001",
+        correlationId: "workspace-register-correlation-0001",
         operation: "workspace.register",
-        payload: { path: join(temporaryRoot, "other") },
-      }),
-    ).rejects.toMatchObject({ category: "authorization" });
+        payload: { path: workspacePath },
+      });
+      expect(registered).toMatchObject({
+        outcome: "succeeded",
+        resource: { type: "Workspace", revision: 0 },
+        data: {
+          path: canonicalWorkspacePath,
+          trust: "pending",
+          status: "active",
+          createdAt: expect.any(String),
+          lastUsedAt: expect.any(String),
+        },
+      });
+      const workspaceId = (registered.data as { workspaceId: string }).workspaceId;
+
+      await expect(
+        registry.dispatch(context, ["workspace:write"], {
+          schemaVersion: "massion.application.v1",
+          commandId: "workspace-trust-command-0001",
+          correlationId: "workspace-trust-correlation-0001",
+          operation: "workspace.trust",
+          expectedRevision: 0,
+          payload: { workspaceId, decision: "trusted" },
+        }),
+      ).resolves.toMatchObject({ outcome: "succeeded", data: { trust: "trusted" }, resource: { revision: 1 } });
+
+      await expect(
+        registry.dispatch(context, ["workspace:write"], {
+          schemaVersion: "massion.application.v1",
+          commandId: "workspace-archive-command-0001",
+          correlationId: "workspace-archive-correlation-0001",
+          operation: "workspace.archive",
+          expectedRevision: 1,
+          payload: { workspaceId },
+        }),
+      ).resolves.toMatchObject({ outcome: "succeeded", data: { status: "archived" } });
+
+      await expect(
+        registry.dispatch(context, ["work:write"], {
+          schemaVersion: "massion.application.v1",
+          commandId: "workspace-scope-command-0001",
+          correlationId: "workspace-scope-correlation-0001",
+          operation: "workspace.register",
+          payload: { path: join(temporaryRoot, "other") },
+        }),
+      ).rejects.toMatchObject({ category: "authorization" });
     } finally {
       await rm(temporaryRoot, { recursive: true, force: true });
     }

@@ -70,17 +70,23 @@ describe("Workspace 등록·신뢰·tenant 격리", () => {
   });
 
   it.each([
-    ["일반 파일", async () => {
-      const path = join(temporaryRoot, "notes.txt");
-      await writeFile(path, "notes");
-      return path;
-    }],
-    ["외부 디렉터리를 가리키는 symlink", async () => {
-      const target = await directory("external");
-      const path = join(temporaryRoot, "linked");
-      await symlink(target, path);
-      return path;
-    }],
+    [
+      "일반 파일",
+      async () => {
+        const path = join(temporaryRoot, "notes.txt");
+        await writeFile(path, "notes");
+        return path;
+      },
+    ],
+    [
+      "외부 디렉터리를 가리키는 symlink",
+      async () => {
+        const target = await directory("external");
+        const path = join(temporaryRoot, "linked");
+        await symlink(target, path);
+        return path;
+      },
+    ],
   ])("%s는 workspace로 등록하지 않는다", async (_label, createPath) => {
     await expect(workspaces.register(ownerContext, { path: await createPath() })).rejects.toThrow(
       "Workspace 경로는 실제 디렉터리여야 합니다",

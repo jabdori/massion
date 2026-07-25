@@ -106,7 +106,10 @@ function directiveError(error: unknown, correlationId: string): never {
   throw error;
 }
 
-function result(command: ApplicationCommandV1, directive: Awaited<ReturnType<WorkDirectiveStore["submit"]>>): ApplicationCommandResultV1 {
+function result(
+  command: ApplicationCommandV1,
+  directive: Awaited<ReturnType<WorkDirectiveStore["submit"]>>,
+): ApplicationCommandResultV1 {
   return {
     schemaVersion: "massion.application.v1",
     commandId: command.commandId,

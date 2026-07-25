@@ -147,9 +147,7 @@ describe("CoreWorkCoordinator", () => {
     await expect(
       coordinator.resume(context, run.runId, { approvalId: "approval-validation-different-0001" }),
     ).rejects.toThrow("일치");
-    await expect(coordinator.resume(context, run.runId, { approvalId, extra: true })).rejects.toThrow(
-      "승인 재개 입력",
-    );
+    await expect(coordinator.resume(context, run.runId, { approvalId, extra: true })).rejects.toThrow("승인 재개 입력");
     await expect(coordinator.resume(context, run.runId, { approvalId: " " })).rejects.toThrow("승인 재개 입력");
     await expect(coordinator.resume(context, run.runId, approvalId)).rejects.toThrow("승인 재개 입력");
     expect(executorCalls).toBe(0);
@@ -253,7 +251,10 @@ describe("CoreWorkCoordinator", () => {
     await using database = await createDatabase({ url: "mem://", namespace: "massion", database: crypto.randomUUID() });
     const identities = await IdentityService.create(database);
     const organizations = await OrganizationService.create(database);
-    const owner = await identities.registerPersonalUser({ email: "coordinator-stage-failure@example.com", displayName: "Fail" });
+    const owner = await identities.registerPersonalUser({
+      email: "coordinator-stage-failure@example.com",
+      displayName: "Fail",
+    });
     const context = await organizations.resolveTenantContext(owner.user.user_id, owner.organization.organization_id);
     const store = await ApplicationRunStore.create(database, organizations);
     const coordinator = new CoreWorkCoordinator(store, {
@@ -1268,9 +1269,7 @@ describe("CoreWorkCoordinator", () => {
       blockedReason: "evidence-directive-unacknowledged",
     });
     await expect(directives.listByRun(context, run.runId)).resolves.toEqual(
-      submitted.map((directive) =>
-        expect.objectContaining({ directiveId: directive.directiveId, status: "failed" }),
-      ),
+      submitted.map((directive) => expect.objectContaining({ directiveId: directive.directiveId, status: "failed" })),
     );
 
     await expect(coordinator.recover(context, run.runId)).resolves.toMatchObject({
@@ -1284,9 +1283,7 @@ describe("CoreWorkCoordinator", () => {
     ).resolves.toMatchObject({ status: "completed", stage: "terminal" });
     expect(receivedDirectiveIds).toEqual([directiveIds, directiveIds]);
     await expect(directives.listByRun(context, run.runId)).resolves.toEqual(
-      submitted.map((directive) =>
-        expect.objectContaining({ directiveId: directive.directiveId, status: "applied" }),
-      ),
+      submitted.map((directive) => expect.objectContaining({ directiveId: directive.directiveId, status: "applied" })),
     );
   });
 

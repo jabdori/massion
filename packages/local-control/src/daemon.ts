@@ -157,7 +157,8 @@ async function ensureLocalDataEpochExclusive(paths: LocalPaths): Promise<void> {
 
       for (const root of roots) {
         try {
-          if ((await lstat(root)).isSymbolicLink()) throw new Error("Massion v1 data root에 symlink를 사용할 수 없습니다");
+          if ((await lstat(root)).isSymbolicLink())
+            throw new Error("Massion v1 data root에 symlink를 사용할 수 없습니다");
         } catch (error) {
           if (error instanceof Error && "code" in error && error.code === "ENOENT") continue;
           throw error;

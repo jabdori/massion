@@ -46,8 +46,14 @@ describe("Massion 공통 디자인 토큰", () => {
     // 빠진 handle은 fallback으로 자기 자신을 돌려주므로 화면에 handle이 그대로 나옵니다.
     // 조용히 통과하는 실패라 여기서 8개를 다 확인합니다.
     const coreOffice = [
-      "representative", "context-strategy", "evidence-research", "governance",
-      "delivery-coordination", "assurance", "records-documentation", "growth",
+      "representative",
+      "context-strategy",
+      "evidence-research",
+      "governance",
+      "delivery-coordination",
+      "assurance",
+      "records-documentation",
+      "growth",
     ];
     for (const handle of coreOffice) {
       expect(`${handle} → ${agentRoleToken(handle).friendlyLabel}`).not.toBe(`${handle} → ${handle}`);

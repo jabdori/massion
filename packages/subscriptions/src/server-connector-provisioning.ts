@@ -383,7 +383,10 @@ export class ServerConnectorProvisioningService {
           const attestedVersion = requireVersion(attested.version ?? connector.version);
           if (connector.runtime_id !== attestedRuntimeId)
             throw new Error("서버 Connector Runtime ID가 일치하지 않습니다");
-          if (connector.execution_kind === "agent-runtime" && connector.runtime_artifact_digest !== attestedArtifactDigest) {
+          if (
+            connector.execution_kind === "agent-runtime" &&
+            connector.runtime_artifact_digest !== attestedArtifactDigest
+          ) {
             throw new Error("서버 Connector runtime artifact digest가 일치하지 않습니다");
           }
           if (connector.execution_kind === "agent-runtime" && connector.version !== attestedVersion) {

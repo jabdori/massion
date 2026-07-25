@@ -126,7 +126,6 @@ describe("ApplicationBridgeAdapter operation", () => {
     expect(fixture.dependencies.startDaemon).not.toHaveBeenCalled();
     expect(fixture.dependencies.stopDaemon).toHaveBeenCalledOnce();
   });
-
 });
 
 describe("ApplicationBridgeAdapter streams", () => {

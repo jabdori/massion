@@ -48,7 +48,10 @@ describe("Application Registry operations", () => {
     await using database = await createDatabase({ url: "mem://", namespace: "massion", database: crypto.randomUUID() });
     const identities = await IdentityService.create(database);
     const organizations = await OrganizationService.create(database);
-    const owner = await identities.registerPersonalUser({ email: "registry-approval@example.com", displayName: "Owner" });
+    const owner = await identities.registerPersonalUser({
+      email: "registry-approval@example.com",
+      displayName: "Owner",
+    });
     const context = await organizations.resolveTenantContext(owner.user.user_id, owner.organization.organization_id);
     const commands = new ApplicationCommandRegistry(await ApplicationCommandStore.create(database, organizations));
     const queries = new ApplicationQueryRegistry();
@@ -57,8 +60,13 @@ describe("Application Registry operations", () => {
       info: async () => ({}),
       inventory: async () => [],
       install: async (_context: unknown, input: { readonly installApprovalId?: string }) => {
-        if (!input.installApprovalId) throw new GovernanceApprovalRequiredError("decision-registry", "approval-registry");
-        return { installationId: "installation-registry", packageName: "@massion-ext/registry", packageVersion: "1.0.0" };
+        if (!input.installApprovalId)
+          throw new GovernanceApprovalRequiredError("decision-registry", "approval-registry");
+        return {
+          installationId: "installation-registry",
+          packageName: "@massion-ext/registry",
+          packageVersion: "1.0.0",
+        };
       },
       recall: async () => ({ recallId: "recall-1", versionId: "version-1" }),
     };

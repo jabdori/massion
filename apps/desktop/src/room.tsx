@@ -1,6 +1,13 @@
 import { agentIdentityToken } from "@massion/application/client";
 
-import type { ComplianceCode, NodeRole, OrganizationChangeView, RoomMessageType, RoomQuote, SpeakerView } from "@/model";
+import type {
+  ComplianceCode,
+  NodeRole,
+  OrganizationChangeView,
+  RoomMessageType,
+  RoomQuote,
+  SpeakerView,
+} from "@/model";
 
 /**
  * 협업방 문법. 메시지 타입 10종은 색이 아니라 배치와 표기로 구분합니다.
@@ -80,15 +87,7 @@ export function DecisionActions({
  * 이 버튼이 유일한 진입점이고, 그래서 배경을 가진 면으로 서 있어야 눈에 걸립니다.
  * 테두리만 있는 이전 형태는 카드 테두리와 구분되지 않아 있는 줄도 몰랐습니다.
  */
-export function OpenButton({
-  label,
-  onOpen,
-  small = false,
-}: {
-  label: string;
-  onOpen: () => void;
-  small?: boolean;
-}) {
+export function OpenButton({ label, onOpen, small = false }: { label: string; onOpen: () => void; small?: boolean }) {
   return (
     <button
       aria-label={label}
@@ -108,13 +107,25 @@ export function OpenButton({
  * 배정은 @massion/application의 agentIdentityToken이 소유합니다.
  */
 const SLOT_TEXT = [
-  "text-agent-0", "text-agent-1", "text-agent-2", "text-agent-3",
-  "text-agent-4", "text-agent-5", "text-agent-6", "text-agent-7",
+  "text-agent-0",
+  "text-agent-1",
+  "text-agent-2",
+  "text-agent-3",
+  "text-agent-4",
+  "text-agent-5",
+  "text-agent-6",
+  "text-agent-7",
 ] as const;
 
 const SLOT_FILL = [
-  "bg-agent-0 text-bg-0", "bg-agent-1 text-bg-0", "bg-agent-2 text-bg-0", "bg-agent-3 text-bg-0",
-  "bg-agent-4 text-bg-0", "bg-agent-5 text-bg-0", "bg-agent-6 text-bg-0", "bg-agent-7 text-bg-0",
+  "bg-agent-0 text-bg-0",
+  "bg-agent-1 text-bg-0",
+  "bg-agent-2 text-bg-0",
+  "bg-agent-3 text-bg-0",
+  "bg-agent-4 text-bg-0",
+  "bg-agent-5 text-bg-0",
+  "bg-agent-6 text-bg-0",
+  "bg-agent-7 text-bg-0",
 ] as const;
 
 export function speakerText(speaker: Pick<SpeakerView, "accentSlot" | "human">): string {
@@ -168,7 +179,10 @@ export function SpeakerRow({ limit = 5, speakers }: { limit?: number; speakers: 
       {hidden > 0 ? (
         <span
           className="grid size-[18px] shrink-0 place-items-center rounded-[5px] border border-control text-[8px] font-semibold text-muted"
-          title={speakers.slice(limit).map((speaker) => speaker.name).join(" · ")}
+          title={speakers
+            .slice(limit)
+            .map((speaker) => speaker.name)
+            .join(" · ")}
         >
           +{hidden}
         </span>
@@ -182,14 +196,17 @@ export function SpeakerName({ speaker }: { speaker: SpeakerView }) {
   return (
     <>
       <span className={`text-[12px] font-medium ${speakerText(speaker)}`}>{speaker.name}</span>
-      <span className="rounded-[3px] border border-control px-1.5 text-[10px] font-medium text-muted">{speaker.role}</span>
+      <span className="rounded-[3px] border border-control px-1.5 text-[10px] font-medium text-muted">
+        {speaker.role}
+      </span>
     </>
   );
 }
 
 function TypeTag({ speaker, type }: { speaker?: SpeakerView; type: RoomMessageType }) {
   // 반론은 화자 색을 띱니다. 무엇에 대한 반론인지가 인용으로 이미 보이므로 색이 화자를 가리킵니다.
-  const toned = type === "challenge" && speaker ? `${speakerText(speaker)} border-current` : "text-muted border-control";
+  const toned =
+    type === "challenge" && speaker ? `${speakerText(speaker)} border-current` : "text-muted border-control";
   return (
     <span className={`rounded-[3px] border px-1.5 text-[10px] font-semibold tracking-[0.06em] ${toned}`}>
       {typeLabel[type]}
@@ -284,7 +301,9 @@ export function RoomMessage({
         <p className="text-[13px] leading-5 text-primary">{content}</p>
         {evidence ? (
           <p className="mt-1.5 flex flex-wrap items-center gap-2">
-            <span className={`rounded-[3px] border border-current px-1.5 text-[10px] font-semibold tracking-[0.06em] ${speakerText(speaker)}`}>
+            <span
+              className={`rounded-[3px] border border-current px-1.5 text-[10px] font-semibold tracking-[0.06em] ${speakerText(speaker)}`}
+            >
               근거
             </span>
             <span className="text-[12px] text-secondary">{evidence.label}</span>

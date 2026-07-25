@@ -341,10 +341,10 @@ export class WebSessionService {
    * exchangeLoginTicket의 세션 생성 로직과 동일하게 동작하지만, 티켓 소비 없이
    * 검증된 access 토큰의 계보를 그대로 세션 출처로 사용합니다.
    */
- public async issueLocalSession(
-   access: AuthenticatedApplicationAccess,
+  public async issueLocalSession(
+    access: AuthenticatedApplicationAccess,
     input: { readonly commandId?: string; readonly absoluteTtlSeconds?: number; readonly idleTtlSeconds?: number } = {},
- ): Promise<ExchangedWebSession> {
+  ): Promise<ExchangedWebSession> {
     const commandId = input.commandId ?? randomUUID();
     if (!COMMAND.test(commandId)) throw new Error("Local session commandId가 유효하지 않습니다");
     const absoluteTtlSeconds = input.absoluteTtlSeconds ?? 28_800;
@@ -388,7 +388,13 @@ export class WebSessionService {
         },
       );
       if (!created) throw new Error("Web session 생성 결과가 없습니다");
-      await this.event(transaction, verified.context.organizationId, verified.context.userId, { sessionId }, "session-issued");
+      await this.event(
+        transaction,
+        verified.context.organizationId,
+        verified.context.userId,
+        { sessionId },
+        "session-issued",
+      );
     });
     await this.observe(verified.context, { idempotencyKey: `session:${sessionId}`, action: "session-issued" });
     return {

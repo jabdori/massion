@@ -21,15 +21,34 @@ function Sidebar({ className, collapsed = false, ...props }: SidebarProps) {
 }
 
 function SidebarHeader({ className, ...props }: React.ComponentProps<"div">) {
-  return <div data-slot="sidebar-header" className={cn("border-b border-sidebar-border px-3 py-4 group-data-[collapsed=true]/sidebar:px-2", className)} {...props} />;
+  return (
+    <div
+      data-slot="sidebar-header"
+      className={cn("border-b border-sidebar-border px-3 py-4 group-data-[collapsed=true]/sidebar:px-2", className)}
+      {...props}
+    />
+  );
 }
 
 function SidebarContent({ className, ...props }: React.ComponentProps<"nav">) {
-  return <nav data-slot="sidebar-content" aria-label="주요 탐색" className={cn("min-h-0 flex-1 overflow-y-auto px-2 py-3 group-data-[collapsed=true]/sidebar:px-2", className)} {...props} />;
+  return (
+    <nav
+      data-slot="sidebar-content"
+      aria-label="주요 탐색"
+      className={cn("min-h-0 flex-1 overflow-y-auto px-2 py-3 group-data-[collapsed=true]/sidebar:px-2", className)}
+      {...props}
+    />
+  );
 }
 
 function SidebarFooter({ className, ...props }: React.ComponentProps<"div">) {
-  return <div data-slot="sidebar-footer" className={cn("border-t border-sidebar-border p-2 group-data-[collapsed=true]/sidebar:px-2", className)} {...props} />;
+  return (
+    <div
+      data-slot="sidebar-footer"
+      className={cn("border-t border-sidebar-border p-2 group-data-[collapsed=true]/sidebar:px-2", className)}
+      {...props}
+    />
+  );
 }
 
 function SidebarGroup({ className, ...props }: React.ComponentProps<"div">) {
@@ -37,7 +56,16 @@ function SidebarGroup({ className, ...props }: React.ComponentProps<"div">) {
 }
 
 function SidebarGroupLabel({ className, ...props }: React.ComponentProps<"p">) {
-  return <p data-slot="sidebar-group-label" className={cn("px-2.5 pb-1.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground group-data-[collapsed=true]/sidebar:hidden", className)} {...props} />;
+  return (
+    <p
+      data-slot="sidebar-group-label"
+      className={cn(
+        "px-2.5 pb-1.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground group-data-[collapsed=true]/sidebar:hidden",
+        className,
+      )}
+      {...props}
+    />
+  );
 }
 
 function SidebarMenu({ className, ...props }: React.ComponentProps<"ul">) {
@@ -68,4 +96,14 @@ function SidebarMenuButton({
   );
 }
 
-export { Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupLabel, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem };
+export {
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarGroup,
+  SidebarGroupLabel,
+  SidebarHeader,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+};

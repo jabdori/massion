@@ -33,7 +33,9 @@ const nodes: OrganizationNodeView[] = [
   },
 ];
 
-function message(overrides: Partial<RoomMessageViewV1> & Pick<RoomMessageViewV1, "messageId" | "sequence">): RoomMessageViewV1 {
+function message(
+  overrides: Partial<RoomMessageViewV1> & Pick<RoomMessageViewV1, "messageId" | "sequence">,
+): RoomMessageViewV1 {
   return {
     messageType: "status",
     authorKind: "agent",
@@ -68,7 +70,13 @@ describe("협업방 투영", () => {
   it("반론은 원본을 인용으로 물고 답변은 들여쓴다", () => {
     const activities = projectRoomActivities(
       [
-        message({ messageId: "q", sequence: 1, messageType: "question", authorId: "assurance", content: "기준이 뭔가요?" }),
+        message({
+          messageId: "q",
+          sequence: 1,
+          messageType: "question",
+          authorId: "assurance",
+          content: "기준이 뭔가요?",
+        }),
         message({
           messageId: "a",
           sequence: 2,
@@ -101,7 +109,15 @@ describe("협업방 투영", () => {
 
   it("계보가 없으면 인용도 들여쓰기도 만들지 않는다", () => {
     const activities = projectRoomActivities(
-      [message({ messageId: "c", sequence: 1, messageType: "challenge", authorId: "assurance", content: "반론만 있음" })],
+      [
+        message({
+          messageId: "c",
+          sequence: 1,
+          messageType: "challenge",
+          authorId: "assurance",
+          content: "반론만 있음",
+        }),
+      ],
       nodes,
     );
 

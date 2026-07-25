@@ -15,14 +15,17 @@ export function runtimePlatformForTarget(target) {
 }
 
 async function digest(file) {
-  return createHash("sha256").update(await readFile(file)).digest("hex");
+  return createHash("sha256")
+    .update(await readFile(file))
+    .digest("hex");
 }
 
 async function verifiedSource(source, expectedSha256) {
   const metadata = await lstat(source);
   if (!metadata.isFile() || metadata.isSymbolicLink() || (metadata.mode & 0o111) === 0)
     throw new Error("Massion native runtime은 실행 가능한 regular file이어야 합니다");
-  if ((await digest(source)) !== expectedSha256) throw new Error("Massion native runtime SHA-256이 manifest와 일치하지 않습니다");
+  if ((await digest(source)) !== expectedSha256)
+    throw new Error("Massion native runtime SHA-256이 manifest와 일치하지 않습니다");
   return source;
 }
 
@@ -106,12 +109,12 @@ export async function prepareDesktopRuntime({ environment = process.env, include
   runtimePlatformForTarget(manifest.target);
   const source = sourceOverride
     ? sourceOverride
-    : (await cachedSurrealRuntime(runtimeRoot, surrealdb.binarySha256)) ??
+    : ((await cachedSurrealRuntime(runtimeRoot, surrealdb.binarySha256)) ??
       (await downloadPinnedRuntime(
         surrealdb,
         "surreal",
         path.join(runtimeRoot, "runtime", "surrealdb", surrealdb.version, "darwin-arm64", "surreal"),
-      ));
+      )));
   const stagedSurrealdb = await stageRuntimeInput({
     destination: path.join(directory, surrealdb.input),
     expectedSha256: surrealdb.binarySha256,

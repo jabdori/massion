@@ -24,7 +24,13 @@ describe("AgentOS native data flow", () => {
   it("설정은 실제 읽기 전용 상태만 조회하고 자격증명 값을 표시하지 않는다", async () => {
     const user = userEvent.setup();
     const loadSettings = vi.fn(async () => ({
-      catalog: [], credentials: [{ value: "절대-표시되면-안됨" }], routes: [{ id: "route-1" }], providers: [{ id: "provider-1" }], accounts: [{ id: "account-1" }], quota: [], policy: [],
+      catalog: [],
+      credentials: [{ value: "절대-표시되면-안됨" }],
+      routes: [{ id: "route-1" }],
+      providers: [{ id: "provider-1" }],
+      accounts: [{ id: "account-1" }],
+      quota: [],
+      policy: [],
     }));
     render(<App service={service({ loadSettings })} />);
 
@@ -32,7 +38,9 @@ describe("AgentOS native data flow", () => {
     await screen.findByRole("main", { name: "설정" });
     // 네 구역이 모두 있고, 하나를 골라도 조회는 한 번뿐입니다.
     for (const title of ["모델 경로", "Provider 연결", "구독 계정", "로컬 환경"]) {
-      expect(screen.getByRole("button", { name: new RegExp(title), pressed: title === "모델 경로" })).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: new RegExp(title), pressed: title === "모델 경로" }),
+      ).toBeInTheDocument();
     }
     await user.click(screen.getByRole("button", { name: /구독 계정/ }));
     expect(screen.getByText("연결된 구독 계정이 없습니다.")).toBeInTheDocument();
@@ -46,10 +54,28 @@ describe("AgentOS native data flow", () => {
   it("Provider 인증 연결을 순서대로 저장하고 secret을 다시 표시하지 않는다", async () => {
     const user = userEvent.setup();
     const calls: string[] = [];
-    const loadSettings = vi.fn(async () => ({ catalog: { endpoints: [{ endpointId: "endpoint-1", providerId: "openai", name: "API", baseUrl: "https://api.openai.com/v1" }] }, credentials: [], routes: [], providers: [], accounts: [], quota: [], policy: [] }));
-    const registerProvider = vi.fn(async () => { calls.push("provider"); });
-    const registerEndpoint = vi.fn(async () => { calls.push("endpoint"); });
-    const addCredential = vi.fn(async () => { calls.push("credential"); });
+    const loadSettings = vi.fn(async () => ({
+      catalog: {
+        endpoints: [
+          { endpointId: "endpoint-1", providerId: "openai", name: "API", baseUrl: "https://api.openai.com/v1" },
+        ],
+      },
+      credentials: [],
+      routes: [],
+      providers: [],
+      accounts: [],
+      quota: [],
+      policy: [],
+    }));
+    const registerProvider = vi.fn(async () => {
+      calls.push("provider");
+    });
+    const registerEndpoint = vi.fn(async () => {
+      calls.push("endpoint");
+    });
+    const addCredential = vi.fn(async () => {
+      calls.push("credential");
+    });
     render(<App service={service({ loadSettings, registerProvider, registerEndpoint, addCredential })} />);
 
     await user.click(screen.getByRole("button", { name: "설정" }));
@@ -69,7 +95,9 @@ describe("AgentOS native data flow", () => {
 
     expect(await screen.findByText("Provider 인증 연결을 추가했습니다.")).toBeInTheDocument();
     expect(calls).toEqual(["provider", "endpoint", "credential"]);
-    expect(addCredential).toHaveBeenCalledWith(expect.objectContaining({ endpointId: "endpoint-1", secret: "never-render-this", priority: 0, weight: 100 }));
+    expect(addCredential).toHaveBeenCalledWith(
+      expect.objectContaining({ endpointId: "endpoint-1", secret: "never-render-this", priority: 0, weight: 100 }),
+    );
     expect(secret).toHaveValue("");
     expect(screen.queryByText("never-render-this")).not.toBeInTheDocument();
   });
@@ -80,8 +108,23 @@ describe("AgentOS native data flow", () => {
     const configureRoute = vi.fn(async () => undefined);
     const addRouteCandidate = vi.fn(async () => undefined);
     const loadSettings = vi.fn(async () => ({
-      catalog: { models: [{ modelProfileId: "profile-1", providerId: "openai", endpointId: "endpoint-1", modelId: "gpt-5", routeKind: "chat" }] },
-      credentials: [], routes: [{ routeId: "route-1", name: "default", routeKind: "chat" }], providers: [], accounts: [], quota: [], policy: [],
+      catalog: {
+        models: [
+          {
+            modelProfileId: "profile-1",
+            providerId: "openai",
+            endpointId: "endpoint-1",
+            modelId: "gpt-5",
+            routeKind: "chat",
+          },
+        ],
+      },
+      credentials: [],
+      routes: [{ routeId: "route-1", name: "default", routeKind: "chat" }],
+      providers: [],
+      accounts: [],
+      quota: [],
+      policy: [],
     }));
     render(<App service={service({ loadSettings, registerModel, configureRoute, addRouteCandidate })} />);
 
@@ -92,7 +135,15 @@ describe("AgentOS native data flow", () => {
     await user.type(within(model).getByRole("textbox", { name: "모델 Endpoint ID" }), "endpoint-1");
     await user.type(within(model).getByRole("textbox", { name: "모델 ID" }), "gpt-5");
     await user.click(within(model).getByRole("button", { name: "모델 등록" }));
-    expect(registerModel).toHaveBeenCalledWith(expect.objectContaining({ providerId: "openai", endpointId: "endpoint-1", modelId: "gpt-5", routeKind: "chat", verified: false }));
+    expect(registerModel).toHaveBeenCalledWith(
+      expect.objectContaining({
+        providerId: "openai",
+        endpointId: "endpoint-1",
+        modelId: "gpt-5",
+        routeKind: "chat",
+        verified: false,
+      }),
+    );
 
     const route = screen.getByRole("form", { name: "라우트 구성" });
     await user.type(within(route).getByRole("textbox", { name: "라우트 이름" }), "default");
@@ -217,12 +268,28 @@ describe("AgentOS native data flow", () => {
         permissions: [],
       },
     ]);
-    const installRegistry = vi.fn()
+    const installRegistry = vi
+      .fn()
       .mockResolvedValueOnce({ outcome: "awaiting-approval", approvalId: "approval-install-1" })
       .mockResolvedValueOnce({ outcome: "succeeded", installationId: "installation-1" });
-    const approval = { id: "approval-install-1", title: "Calendar 설치", description: "설치 승인", revision: 1, status: "pending" };
+    const approval = {
+      id: "approval-install-1",
+      title: "Calendar 설치",
+      description: "설치 승인",
+      revision: 1,
+      status: "pending",
+    };
     const decideApproval = vi.fn(async () => undefined);
-    render(<App service={service({ decideApproval, installRegistry, loadExtensions, loadPendingApprovals: async () => [approval] })} />);
+    render(
+      <App
+        service={service({
+          decideApproval,
+          installRegistry,
+          loadExtensions,
+          loadPendingApprovals: async () => [approval],
+        })}
+      />,
+    );
 
     await user.click(screen.getByRole("button", { name: "확장" }));
     await user.click(await screen.findByRole("button", { name: "설치" }));
@@ -238,7 +305,11 @@ describe("AgentOS native data flow", () => {
     await user.click(within(extension).getByRole("button", { name: "Calendar 설치 승인" }));
     expect(decideApproval).toHaveBeenCalledWith(approval, "approve", "데스크톱 확장에서 승인");
     await waitFor(() => expect(installRegistry).toHaveBeenCalledTimes(2));
-    expect(installRegistry).toHaveBeenNthCalledWith(2, { ...initialRequest, installApprovalId: "approval-install-1" }, identity);
+    expect(installRegistry).toHaveBeenNthCalledWith(
+      2,
+      { ...initialRequest, installApprovalId: "approval-install-1" },
+      identity,
+    );
     expect(screen.getByRole("button", { name: /수신함/ })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "승인 반영 후 설치 재개" })).not.toBeInTheDocument();
   });
@@ -321,7 +392,9 @@ describe("AgentOS native data flow", () => {
     await user.click(improvement);
     expect(screen.queryByRole("dialog", { name: "수신함" })).not.toBeInTheDocument();
     const growth = await screen.findByRole("main", { name: "개선" });
-    expect(within(growth).getByRole("heading", { name: "임시로 만든 계량분석 팀을 조직에 남깁니다." })).toBeInTheDocument();
+    expect(
+      within(growth).getByRole("heading", { name: "임시로 만든 계량분석 팀을 조직에 남깁니다." }),
+    ).toBeInTheDocument();
   });
 
   it("실행 자율성은 설정에서 실제 서비스 조회를 사용한다", async () => {
@@ -510,9 +583,15 @@ describe("AgentOS native data flow", () => {
     let createdVisible = false;
     const startWork = vi.fn(async () => ({ runId: "run-created-0001" }));
     const workspace = {
-      workspaceId: "workspace-0001", name: "계약 폴더", path: "/tmp/contracts", kind: "local-directory" as const,
-      trust: "trusted" as const, status: "active" as const, revision: 1,
-      createdAt: "2026-07-24T00:00:00.000Z", lastUsedAt: "2026-07-24T00:00:00.000Z",
+      workspaceId: "workspace-0001",
+      name: "계약 폴더",
+      path: "/tmp/contracts",
+      kind: "local-directory" as const,
+      trust: "trusted" as const,
+      status: "active" as const,
+      revision: 1,
+      createdAt: "2026-07-24T00:00:00.000Z",
+      lastUsedAt: "2026-07-24T00:00:00.000Z",
     };
     const fake = service({
       startWork,
@@ -542,7 +621,11 @@ describe("AgentOS native data flow", () => {
 
     expect(await screen.findByText("Work 생성 중")).toBeInTheDocument();
     expect(screen.getByText("run-created-0001")).toBeInTheDocument();
-    expect(startWork).toHaveBeenCalledWith({ text: "파트너 계약 위험을 검토해줘", workspaceId: "workspace-0001", workspacePaths: ["src/contract.ts"] });
+    expect(startWork).toHaveBeenCalledWith({
+      text: "파트너 계약 위험을 검토해줘",
+      workspaceId: "workspace-0001",
+      workspacePaths: ["src/contract.ts"],
+    });
 
     createdVisible = true;
     durable?.({ sequence: 12, type: "work.created", resource: { type: "Work", id: created.id } });
@@ -552,15 +635,19 @@ describe("AgentOS native data flow", () => {
   it("네이티브 선택 취소와 워크스페이스 밖 파일은 현재 draft를 보존한다", async () => {
     const user = userEvent.setup();
     const workspace = {
-      workspaceId: "workspace-picker-0001", name: "선택 폴더", path: "/tmp/picker", kind: "local-directory" as const,
-      trust: "trusted" as const, status: "active" as const, revision: 1,
-      createdAt: "2026-07-24T00:00:00.000Z", lastUsedAt: "2026-07-24T00:00:00.000Z",
+      workspaceId: "workspace-picker-0001",
+      name: "선택 폴더",
+      path: "/tmp/picker",
+      kind: "local-directory" as const,
+      trust: "trusted" as const,
+      status: "active" as const,
+      revision: 1,
+      createdAt: "2026-07-24T00:00:00.000Z",
+      lastUsedAt: "2026-07-24T00:00:00.000Z",
     };
     const contextPicker = {
       pickDirectory: vi.fn(async () => undefined),
-      pickFiles: vi.fn()
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce(["/tmp/outside.ts"]),
+      pickFiles: vi.fn().mockResolvedValueOnce([]).mockResolvedValueOnce(["/tmp/outside.ts"]),
     };
     render(<App contextPicker={contextPicker} service={service({ loadWorkspaces: async () => [workspace] })} />);
 
@@ -580,17 +667,37 @@ describe("AgentOS native data flow", () => {
   it("폴더 등록 중에는 Work 문맥을 바꾸거나 실행하지 않고 완료 후 새 폴더를 선택한다", async () => {
     const user = userEvent.setup();
     const registered = deferred<{
-      workspaceId: string; name: string; path: string; kind: "local-directory"; trust: "pending"; status: "active"; revision: number; createdAt: string; lastUsedAt: string;
+      workspaceId: string;
+      name: string;
+      path: string;
+      kind: "local-directory";
+      trust: "pending";
+      status: "active";
+      revision: number;
+      createdAt: string;
+      lastUsedAt: string;
     }>();
     const current = {
-      workspaceId: "workspace-current", name: "현재 폴더", path: "/tmp/current", kind: "local-directory" as const,
-      trust: "trusted" as const, status: "active" as const, revision: 1,
-      createdAt: "2026-07-24T00:00:00.000Z", lastUsedAt: "2026-07-24T00:00:00.000Z",
+      workspaceId: "workspace-current",
+      name: "현재 폴더",
+      path: "/tmp/current",
+      kind: "local-directory" as const,
+      trust: "trusted" as const,
+      status: "active" as const,
+      revision: 1,
+      createdAt: "2026-07-24T00:00:00.000Z",
+      lastUsedAt: "2026-07-24T00:00:00.000Z",
     };
     const added = {
-      workspaceId: "workspace-added", name: "새 폴더", path: "/tmp/added", kind: "local-directory" as const,
-      trust: "pending" as const, status: "active" as const, revision: 1,
-      createdAt: "2026-07-24T00:00:00.000Z", lastUsedAt: "2026-07-24T00:00:00.000Z",
+      workspaceId: "workspace-added",
+      name: "새 폴더",
+      path: "/tmp/added",
+      kind: "local-directory" as const,
+      trust: "pending" as const,
+      status: "active" as const,
+      revision: 1,
+      createdAt: "2026-07-24T00:00:00.000Z",
+      lastUsedAt: "2026-07-24T00:00:00.000Z",
     };
     const startWork = vi.fn(async () => ({ runId: "run-unexpected" }));
     const registerWorkspace = vi.fn(async () => await registered.promise);
@@ -598,7 +705,12 @@ describe("AgentOS native data flow", () => {
       pickDirectory: vi.fn(async () => "/tmp/added"),
       pickFiles: vi.fn(async () => ["/tmp/current/src/keep.ts"]),
     };
-    render(<App contextPicker={contextPicker} service={service({ loadWorkspaces: async () => [current], registerWorkspace, startWork })} />);
+    render(
+      <App
+        contextPicker={contextPicker}
+        service={service({ loadWorkspaces: async () => [current], registerWorkspace, startWork })}
+      />,
+    );
 
     await user.click(screen.getByRole("button", { name: "새 Work 만들기" }));
     const dialog = screen.getByRole("dialog", { name: "새 Work" });
@@ -624,15 +736,19 @@ describe("AgentOS native data flow", () => {
   it("네이티브 파일 선택기 오류를 표시하고 draft를 보존한다", async () => {
     const user = userEvent.setup();
     const workspace = {
-      workspaceId: "workspace-picker-error", name: "오류 확인 폴더", path: "/tmp/picker-error", kind: "local-directory" as const,
-      trust: "trusted" as const, status: "active" as const, revision: 1,
-      createdAt: "2026-07-24T00:00:00.000Z", lastUsedAt: "2026-07-24T00:00:00.000Z",
+      workspaceId: "workspace-picker-error",
+      name: "오류 확인 폴더",
+      path: "/tmp/picker-error",
+      kind: "local-directory" as const,
+      trust: "trusted" as const,
+      status: "active" as const,
+      revision: 1,
+      createdAt: "2026-07-24T00:00:00.000Z",
+      lastUsedAt: "2026-07-24T00:00:00.000Z",
     };
     const contextPicker = {
       pickDirectory: vi.fn(async () => undefined),
-      pickFiles: vi.fn()
-        .mockRejectedValueOnce(new Error("dialog unavailable"))
-        .mockResolvedValueOnce([]),
+      pickFiles: vi.fn().mockRejectedValueOnce(new Error("dialog unavailable")).mockResolvedValueOnce([]),
     };
     render(<App contextPicker={contextPicker} service={service({ loadWorkspaces: async () => [workspace] })} />);
 
@@ -656,9 +772,15 @@ describe("AgentOS native data flow", () => {
     const started = deferred<{ runId: string }>();
     const startWork = vi.fn(async () => await started.promise);
     const workspace = {
-      workspaceId: "workspace-0002", name: "운영 폴더", path: "/tmp/operations", kind: "local-directory" as const,
-      trust: "trusted" as const, status: "active" as const, revision: 1,
-      createdAt: "2026-07-24T00:00:00.000Z", lastUsedAt: "2026-07-24T00:00:00.000Z",
+      workspaceId: "workspace-0002",
+      name: "운영 폴더",
+      path: "/tmp/operations",
+      kind: "local-directory" as const,
+      trust: "trusted" as const,
+      status: "active" as const,
+      revision: 1,
+      createdAt: "2026-07-24T00:00:00.000Z",
+      lastUsedAt: "2026-07-24T00:00:00.000Z",
     };
     render(<App service={service({ startWork, loadWorkspaces: async () => [workspace] })} />);
 
@@ -681,15 +803,28 @@ describe("AgentOS native data flow", () => {
   it("다른 워크스페이스를 선택하면 이전 파일 첨부를 지운다", async () => {
     const user = userEvent.setup();
     const workspace = (workspaceId: string, name: string) => ({
-      workspaceId, name, path: `/tmp/${workspaceId}`, kind: "local-directory" as const,
-      trust: "trusted" as const, status: "active" as const, revision: 1,
-      createdAt: "2026-07-24T00:00:00.000Z", lastUsedAt: "2026-07-24T00:00:00.000Z",
+      workspaceId,
+      name,
+      path: `/tmp/${workspaceId}`,
+      kind: "local-directory" as const,
+      trust: "trusted" as const,
+      status: "active" as const,
+      revision: 1,
+      createdAt: "2026-07-24T00:00:00.000Z",
+      lastUsedAt: "2026-07-24T00:00:00.000Z",
     });
     const contextPicker = {
       pickDirectory: vi.fn(async () => undefined),
       pickFiles: vi.fn(async () => ["/tmp/workspace-a/src/a.ts"]),
     };
-    render(<App contextPicker={contextPicker} service={service({ loadWorkspaces: async () => [workspace("workspace-a", "A 폴더"), workspace("workspace-b", "B 폴더")] })} />);
+    render(
+      <App
+        contextPicker={contextPicker}
+        service={service({
+          loadWorkspaces: async () => [workspace("workspace-a", "A 폴더"), workspace("workspace-b", "B 폴더")],
+        })}
+      />,
+    );
 
     await user.click(screen.getByRole("button", { name: "새 Work 만들기" }));
     const dialog = screen.getByRole("dialog", { name: "새 Work" });
@@ -702,7 +837,10 @@ describe("AgentOS native data flow", () => {
 
   it("다시 열어 정상 목록을 받으면 이전 workspace load 오류를 지운다", async () => {
     const user = userEvent.setup();
-    const loadWorkspaces = vi.fn().mockRejectedValueOnce(new Error("워크스페이스를 불러오지 못했습니다")).mockResolvedValueOnce([]);
+    const loadWorkspaces = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("워크스페이스를 불러오지 못했습니다"))
+      .mockResolvedValueOnce([]);
     render(<App service={service({ loadWorkspaces })} />);
 
     await user.click(screen.getByRole("button", { name: "새 Work 만들기" }));
@@ -718,9 +856,15 @@ describe("AgentOS native data flow", () => {
   it("다시 열 때 차단된 workspace는 선택과 파일 draft에서 제거한다", async () => {
     const user = userEvent.setup();
     const active = {
-      workspaceId: "workspace-reconciled-0001", name: "변경될 폴더", path: "/tmp/reconciled", kind: "local-directory" as const,
-      trust: "trusted" as const, status: "active" as const, revision: 1,
-      createdAt: "2026-07-24T00:00:00.000Z", lastUsedAt: "2026-07-24T00:00:00.000Z",
+      workspaceId: "workspace-reconciled-0001",
+      name: "변경될 폴더",
+      path: "/tmp/reconciled",
+      kind: "local-directory" as const,
+      trust: "trusted" as const,
+      status: "active" as const,
+      revision: 1,
+      createdAt: "2026-07-24T00:00:00.000Z",
+      lastUsedAt: "2026-07-24T00:00:00.000Z",
     };
     const blocked = { ...active, trust: "blocked" as const, revision: 2 };
     const loadWorkspaces = vi.fn().mockResolvedValueOnce([active]).mockResolvedValueOnce([blocked]);
@@ -745,26 +889,51 @@ describe("AgentOS native data flow", () => {
   it("늦은 A 신뢰 응답이 이후 선택한 B workspace와 파일 draft를 덮어쓰지 않는다", async () => {
     const user = userEvent.setup();
     const trust = deferred<{
-      workspaceId: string; name: string; path: string; kind: "local-directory"; trust: "trusted"; status: "active"; revision: number; createdAt: string; lastUsedAt: string;
+      workspaceId: string;
+      name: string;
+      path: string;
+      kind: "local-directory";
+      trust: "trusted";
+      status: "active";
+      revision: number;
+      createdAt: string;
+      lastUsedAt: string;
     }>();
     const pending = {
-      workspaceId: "workspace-pending-a", name: "A 폴더", path: "/tmp/a", kind: "local-directory" as const,
-      trust: "pending" as const, status: "active" as const, revision: 1,
-      createdAt: "2026-07-24T00:00:00.000Z", lastUsedAt: "2026-07-24T00:00:00.000Z",
+      workspaceId: "workspace-pending-a",
+      name: "A 폴더",
+      path: "/tmp/a",
+      kind: "local-directory" as const,
+      trust: "pending" as const,
+      status: "active" as const,
+      revision: 1,
+      createdAt: "2026-07-24T00:00:00.000Z",
+      lastUsedAt: "2026-07-24T00:00:00.000Z",
     };
     const trusted = {
-      workspaceId: "workspace-trusted-b", name: "B 폴더", path: "/tmp/b", kind: "local-directory" as const,
-      trust: "trusted" as const, status: "active" as const, revision: 1,
-      createdAt: "2026-07-24T00:00:00.000Z", lastUsedAt: "2026-07-24T00:00:00.000Z",
+      workspaceId: "workspace-trusted-b",
+      name: "B 폴더",
+      path: "/tmp/b",
+      kind: "local-directory" as const,
+      trust: "trusted" as const,
+      status: "active" as const,
+      revision: 1,
+      createdAt: "2026-07-24T00:00:00.000Z",
+      lastUsedAt: "2026-07-24T00:00:00.000Z",
     };
     const contextPicker = {
       pickDirectory: vi.fn(async () => undefined),
       pickFiles: vi.fn(async () => ["/tmp/b/src/b.ts"]),
     };
-    render(<App contextPicker={contextPicker} service={service({
-      loadWorkspaces: async () => [pending, trusted],
-      decideWorkspaceTrust: async () => await trust.promise,
-    })} />);
+    render(
+      <App
+        contextPicker={contextPicker}
+        service={service({
+          loadWorkspaces: async () => [pending, trusted],
+          decideWorkspaceTrust: async () => await trust.promise,
+        })}
+      />,
+    );
 
     await user.click(screen.getByRole("button", { name: "새 Work 만들기" }));
     const dialog = screen.getByRole("dialog", { name: "새 Work" });
@@ -775,25 +944,45 @@ describe("AgentOS native data flow", () => {
     trust.resolve({ ...pending, trust: "trusted", revision: 2 });
 
     await waitFor(() => expect(within(dialog).getByRole("button", { name: /A 폴더/ })).toHaveTextContent("신뢰됨"));
-    await waitFor(() => expect(within(dialog).getByRole("button", { name: /B 폴더/ })).toHaveAttribute("aria-pressed", "true"));
+    await waitFor(() =>
+      expect(within(dialog).getByRole("button", { name: /B 폴더/ })).toHaveAttribute("aria-pressed", "true"),
+    );
     expect(within(dialog).getByText("src/b.ts")).toBeInTheDocument();
   });
 
   it("워크스페이스를 불러오는 동안 공간을 유지하고 차단된 폴더는 설정으로 안내한다", async () => {
     const user = userEvent.setup();
-    const loading = deferred<readonly {
-      workspaceId: string; name: string; path: string; kind: "local-directory"; trust: "blocked"; status: "active"; revision: number; createdAt: string; lastUsedAt: string;
-    }[]>();
+    const loading = deferred<
+      readonly {
+        workspaceId: string;
+        name: string;
+        path: string;
+        kind: "local-directory";
+        trust: "blocked";
+        status: "active";
+        revision: number;
+        createdAt: string;
+        lastUsedAt: string;
+      }[]
+    >();
     render(<App service={service({ loadWorkspaces: async () => await loading.promise })} />);
 
     await user.click(screen.getByRole("button", { name: "새 Work 만들기" }));
     const dialog = screen.getByRole("dialog", { name: "새 Work" });
     expect(within(dialog).getByLabelText("워크스페이스 불러오는 중")).toBeInTheDocument();
-    loading.resolve([{
-      workspaceId: "workspace-blocked-0001", name: "차단된 폴더", path: "/tmp/blocked", kind: "local-directory",
-      trust: "blocked", status: "active", revision: 1,
-      createdAt: "2026-07-24T00:00:00.000Z", lastUsedAt: "2026-07-24T00:00:00.000Z",
-    }]);
+    loading.resolve([
+      {
+        workspaceId: "workspace-blocked-0001",
+        name: "차단된 폴더",
+        path: "/tmp/blocked",
+        kind: "local-directory",
+        trust: "blocked",
+        status: "active",
+        revision: 1,
+        createdAt: "2026-07-24T00:00:00.000Z",
+        lastUsedAt: "2026-07-24T00:00:00.000Z",
+      },
+    ]);
     await user.click(await within(dialog).findByRole("button", { name: "설정으로 이동" }));
 
     expect(await screen.findByRole("main", { name: "설정" })).toBeInTheDocument();
@@ -802,14 +991,26 @@ describe("AgentOS native data flow", () => {
   it("폴더 등록은 이전 파일 draft를 지우고 신뢰 충돌 뒤 목록을 다시 읽는다", async () => {
     const user = userEvent.setup();
     const current = {
-      workspaceId: "workspace-current-0001", name: "현재 폴더", path: "/tmp/current", kind: "local-directory" as const,
-      trust: "trusted" as const, status: "active" as const, revision: 1,
-      createdAt: "2026-07-24T00:00:00.000Z", lastUsedAt: "2026-07-24T00:00:00.000Z",
+      workspaceId: "workspace-current-0001",
+      name: "현재 폴더",
+      path: "/tmp/current",
+      kind: "local-directory" as const,
+      trust: "trusted" as const,
+      status: "active" as const,
+      revision: 1,
+      createdAt: "2026-07-24T00:00:00.000Z",
+      lastUsedAt: "2026-07-24T00:00:00.000Z",
     };
     const added = {
-      workspaceId: "workspace-added-0001", name: "새 폴더", path: "/tmp/added", kind: "local-directory" as const,
-      trust: "pending" as const, status: "active" as const, revision: 1,
-      createdAt: "2026-07-24T00:00:00.000Z", lastUsedAt: "2026-07-24T00:00:00.000Z",
+      workspaceId: "workspace-added-0001",
+      name: "새 폴더",
+      path: "/tmp/added",
+      kind: "local-directory" as const,
+      trust: "pending" as const,
+      status: "active" as const,
+      revision: 1,
+      createdAt: "2026-07-24T00:00:00.000Z",
+      lastUsedAt: "2026-07-24T00:00:00.000Z",
     };
     const refreshed = { ...added, revision: 2 };
     const loadWorkspaces = vi.fn().mockResolvedValueOnce([current]).mockResolvedValueOnce([refreshed]);
@@ -817,11 +1018,18 @@ describe("AgentOS native data flow", () => {
       pickDirectory: vi.fn(async () => "/tmp/added"),
       pickFiles: vi.fn(async () => ["/tmp/current/src/current.ts"]),
     };
-    render(<App contextPicker={contextPicker} service={service({
-      loadWorkspaces,
-      registerWorkspace: async () => added,
-      decideWorkspaceTrust: async () => { throw new Error("workspace revision이 일치하지 않습니다"); },
-    })} />);
+    render(
+      <App
+        contextPicker={contextPicker}
+        service={service({
+          loadWorkspaces,
+          registerWorkspace: async () => added,
+          decideWorkspaceTrust: async () => {
+            throw new Error("workspace revision이 일치하지 않습니다");
+          },
+        })}
+      />,
+    );
 
     await user.click(screen.getByRole("button", { name: "새 Work 만들기" }));
     const dialog = screen.getByRole("dialog", { name: "새 Work" });

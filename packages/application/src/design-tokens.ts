@@ -19,7 +19,13 @@ export interface WorkStatusToken {
 export const WORK_STATUS_TOKENS: Readonly<Record<string, WorkStatusToken>> = {
   ready: { id: "ready", symbol: "○", label: "준비됨", friendlyLabel: "시작할 수 있어요", semantic: "ready" },
   running: { id: "running", symbol: "▶", label: "실행 중", friendlyLabel: "진행 중이에요", semantic: "running" },
-  "awaiting-approval": { id: "awaiting-approval", symbol: "?", label: "승인 대기", friendlyLabel: "확인이 필요해요", semantic: "approval" },
+  "awaiting-approval": {
+    id: "awaiting-approval",
+    symbol: "?",
+    label: "승인 대기",
+    friendlyLabel: "확인이 필요해요",
+    semantic: "approval",
+  },
   blocked: { id: "blocked", symbol: "!", label: "차단됨", friendlyLabel: "잠시 멈췄어요", semantic: "blocked" },
   failed: { id: "failed", symbol: "×", label: "실패", friendlyLabel: "문제가 생겼어요", semantic: "failed" },
   completed: { id: "completed", symbol: "✓", label: "완료", friendlyLabel: "완료됐어요", semantic: "completed" },
@@ -27,7 +33,9 @@ export const WORK_STATUS_TOKENS: Readonly<Record<string, WorkStatusToken>> = {
 } as const;
 
 export function workStatusToken(status: string): WorkStatusToken {
-  return WORK_STATUS_TOKENS[status] ?? { id: status, symbol: "?", label: status, friendlyLabel: status, semantic: "ready" };
+  return (
+    WORK_STATUS_TOKENS[status] ?? { id: status, symbol: "?", label: status, friendlyLabel: status, semantic: "ready" }
+  );
 }
 
 // ── 사용자용 4단계 진행 (UX Projection) ───────────────────────────
@@ -42,15 +50,38 @@ export interface UserStageToken {
 }
 
 export const USER_STAGES: readonly UserStageToken[] = [
-  { id: "understand", friendlyLabel: "요청 이해", technicalLabel: "Intake · Context", internalStages: ["intake", "context-strategy"] },
-  { id: "prepare", friendlyLabel: "자료와 계획 준비", technicalLabel: "Strategy · Evidence", internalStages: ["evidence"] },
+  {
+    id: "understand",
+    friendlyLabel: "요청 이해",
+    technicalLabel: "Intake · Context",
+    internalStages: ["intake", "context-strategy"],
+  },
+  {
+    id: "prepare",
+    friendlyLabel: "자료와 계획 준비",
+    technicalLabel: "Strategy · Evidence",
+    internalStages: ["evidence"],
+  },
   { id: "work", friendlyLabel: "작업 진행", technicalLabel: "Delivery · Runtime", internalStages: ["delivery"] },
-  { id: "verify", friendlyLabel: "결과 확인", technicalLabel: "Assurance · Records", internalStages: ["assurance", "records"] },
+  {
+    id: "verify",
+    friendlyLabel: "결과 확인",
+    technicalLabel: "Assurance · Records",
+    internalStages: ["assurance", "records"],
+  },
 ] as const;
 
 export function userStageForInternal(internalStage: string): UserStageToken {
   const found = USER_STAGES.find((stage) => stage.internalStages.includes(internalStage));
-  return found ?? USER_STAGES.find((s) => s.id === "understand") ?? { id: "understand", friendlyLabel: "요청 이해", technicalLabel: "Intake · Context", internalStages: ["intake", "context-strategy"] };
+  return (
+    found ??
+    USER_STAGES.find((s) => s.id === "understand") ?? {
+      id: "understand",
+      friendlyLabel: "요청 이해",
+      technicalLabel: "Intake · Context",
+      internalStages: ["intake", "context-strategy"],
+    }
+  );
 }
 
 export function userStageIndex(internalStage: string): number {
@@ -91,7 +122,12 @@ export const AGENT_ROLES: readonly AgentRoleToken[] = [
   { handle: "governance", abbreviation: "GOV", label: "Governance", friendlyLabel: "정책 승인" },
   { handle: "delivery-coordination", abbreviation: "DLV", label: "Delivery Coordination", friendlyLabel: "실행 조정" },
   { handle: "assurance", abbreviation: "ASR", label: "Assurance", friendlyLabel: "독립 검증" },
-  { handle: "records-documentation", abbreviation: "REC", label: "Records & Documentation", friendlyLabel: "기록 정리" },
+  {
+    handle: "records-documentation",
+    abbreviation: "REC",
+    label: "Records & Documentation",
+    friendlyLabel: "기록 정리",
+  },
   { handle: "growth", abbreviation: "GRW", label: "Growth", friendlyLabel: "개선 제안" },
 ] as const;
 
@@ -126,26 +162,46 @@ export const APPROVAL_RISK_TOKENS: Readonly<Record<string, ApprovalRiskToken>> =
 } as const;
 
 export function approvalRiskToken(risk: string): ApprovalRiskToken {
-  return APPROVAL_RISK_TOKENS[risk] ?? APPROVAL_RISK_TOKENS["medium"] ?? {
-    id: "medium", friendlyLabel: "주의가 필요합니다", description: "실행 중인 작업에 영향을 줄 수 있습니다.", semantic: "medium",
-  };
+  return (
+    APPROVAL_RISK_TOKENS[risk] ??
+    APPROVAL_RISK_TOKENS["medium"] ?? {
+      id: "medium",
+      friendlyLabel: "주의가 필요합니다",
+      description: "실행 중인 작업에 영향을 줄 수 있습니다.",
+      semantic: "medium",
+    }
+  );
 }
 
 export function approvalRiskFromPreview(preview: { kind?: string }): ApprovalRiskToken {
   const medium: ApprovalRiskToken = APPROVAL_RISK_TOKENS["medium"] ?? {
-    id: "medium", friendlyLabel: "주의가 필요합니다", description: "실행 중인 작업에 영향을 줄 수 있습니다.", semantic: "medium",
+    id: "medium",
+    friendlyLabel: "주의가 필요합니다",
+    description: "실행 중인 작업에 영향을 줄 수 있습니다.",
+    semantic: "medium",
   };
   if (preview.kind === "command") return medium;
-  if (preview.kind === "file-change") return APPROVAL_RISK_TOKENS["low"] ?? {
-    id: "low", friendlyLabel: "영향이 작습니다", description: "문서나 설정 내용만 변경됩니다.", semantic: "low",
-  };
+  if (preview.kind === "file-change")
+    return (
+      APPROVAL_RISK_TOKENS["low"] ?? {
+        id: "low",
+        friendlyLabel: "영향이 작습니다",
+        description: "문서나 설정 내용만 변경됩니다.",
+        semantic: "low",
+      }
+    );
   return medium;
 }
 
 export function agentRoleToken(handle: string): AgentRoleToken {
-  return AGENT_ROLES.find((role) => role.handle === handle) ?? {
-    handle, abbreviation: handle.slice(0, 3).toUpperCase(), label: handle, friendlyLabel: handle,
-  };
+  return (
+    AGENT_ROLES.find((role) => role.handle === handle) ?? {
+      handle,
+      abbreviation: handle.slice(0, 3).toUpperCase(),
+      label: handle,
+      friendlyLabel: handle,
+    }
+  );
 }
 
 // ── 개선 제안의 대상 ───────────────────────────────────────────────
@@ -199,23 +255,44 @@ export interface AgentIdentityToken {
  * 아바타가 한 글자만 보여주므로 동시 표시 24개까지 이니셜이 유일합니다.
  */
 export const AGENT_CALL_SIGNS: readonly string[] = [
-  "Atlas", "Lyra", "Quill", "Onyx", "Vega", "Iris", "Cedar", "Sage",
-  "Brook", "Dune", "Ember", "Flint", "Grove", "Haven", "Juno", "Kite",
-  "Mira", "Nova", "Prism", "Reef", "Terra", "Umbra", "Wren", "Zephyr",
+  "Atlas",
+  "Lyra",
+  "Quill",
+  "Onyx",
+  "Vega",
+  "Iris",
+  "Cedar",
+  "Sage",
+  "Brook",
+  "Dune",
+  "Ember",
+  "Flint",
+  "Grove",
+  "Haven",
+  "Juno",
+  "Kite",
+  "Mira",
+  "Nova",
+  "Prism",
+  "Reef",
+  "Terra",
+  "Umbra",
+  "Wren",
+  "Zephyr",
 ] as const;
 
 /** Core Office 8개는 이름과 색 슬롯을 고정합니다. 재시작해도 같은 이름과 같은 색입니다. */
 const CORE_OFFICE_IDENTITY: Readonly<Record<string, { readonly name: string; readonly accentSlot: number }>> = {
-  "representative": { name: "Atlas", accentSlot: 0 },
+  representative: { name: "Atlas", accentSlot: 0 },
   "context-strategy": { name: "Lyra", accentSlot: 1 },
   "evidence-research": { name: "Quill", accentSlot: 2 },
-  "evidence": { name: "Quill", accentSlot: 2 },
-  "governance": { name: "Onyx", accentSlot: 3 },
+  evidence: { name: "Quill", accentSlot: 2 },
+  governance: { name: "Onyx", accentSlot: 3 },
   "delivery-coordination": { name: "Vega", accentSlot: 4 },
-  "delivery": { name: "Vega", accentSlot: 4 },
-  "assurance": { name: "Iris", accentSlot: 5 },
+  delivery: { name: "Vega", accentSlot: 4 },
+  assurance: { name: "Iris", accentSlot: 5 },
   "records-documentation": { name: "Cedar", accentSlot: 6 },
-  "growth": { name: "Sage", accentSlot: 7 },
+  growth: { name: "Sage", accentSlot: 7 },
 };
 
 /** Core Office가 선점하지 않은 나머지 호출부호. 동적·설치 노드가 여기서 이름을 받습니다. */

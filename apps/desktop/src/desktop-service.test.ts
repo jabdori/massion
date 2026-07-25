@@ -24,7 +24,9 @@ function result(operation: string, data: unknown) {
   return { schemaVersion: "massion.application.v1", operation, data };
 }
 
-function transport(overrides: Record<string, unknown> = {}): NativeTransport & { query: ReturnType<typeof vi.fn>; command: ReturnType<typeof vi.fn> } {
+function transport(
+  overrides: Record<string, unknown> = {},
+): NativeTransport & { query: ReturnType<typeof vi.fn>; command: ReturnType<typeof vi.fn> } {
   const data: Record<string, unknown> = {
     "work.index": { items: [detail] },
     "work.detail": detail,
@@ -132,7 +134,9 @@ function transport(overrides: Record<string, unknown> = {}): NativeTransport & {
       operation: value.operation,
       outcome: "succeeded",
       ...(value.operation === "run.start" ? { data: { runId: "run-new-0001", status: "ready" } } : {}),
-      ...(value.operation === "registry.install" ? { outcome: "awaiting-approval", data: { approvalId: "approval-install-1" } } : {}),
+      ...(value.operation === "registry.install"
+        ? { outcome: "awaiting-approval", data: { approvalId: "approval-install-1" } }
+        : {}),
     };
   });
   return {
@@ -148,11 +152,13 @@ describe("Application desktop service", () => {
     const capabilities = await createFixtureDesktopService().loadCapabilities();
 
     expect(capabilities.extensions).toEqual([]);
-    expect(capabilities.inventory).toEqual(expect.arrayContaining([
-      expect.objectContaining({ packageName: "@massion-ext/slack", packageVersion: "1.0.0" }),
-      expect.objectContaining({ packageName: "@massion-ext/github", packageVersion: "1.0.0" }),
-      expect.objectContaining({ packageName: "@massion-ext/discord", packageVersion: "1.0.0" }),
-    ]));
+    expect(capabilities.inventory).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ packageName: "@massion-ext/slack", packageVersion: "1.0.0" }),
+        expect.objectContaining({ packageName: "@massion-ext/github", packageVersion: "1.0.0" }),
+        expect.objectContaining({ packageName: "@massion-ext/discord", packageVersion: "1.0.0" }),
+      ]),
+    );
   });
 
   it("없는 fixture Work 조회는 동기 throw 없이 rejected Promise를 반환한다", async () => {
@@ -161,7 +167,12 @@ describe("Application desktop service", () => {
   });
 
   it("fixture index 입력 평가 오류도 rejected Promise로 전달한다", async () => {
-    const input = { get filter(): "active" { throw new Error("fixture input error"); }, search: "" };
+    const input = {
+      get filter(): "active" {
+        throw new Error("fixture input error");
+      },
+      search: "",
+    };
     const promise = createFixtureDesktopService().loadIndex(input);
     await expect(promise).rejects.toThrow("fixture input error");
   });
@@ -200,7 +211,9 @@ describe("Application desktop service", () => {
 
   it("조직 스냅샷에 노드나 버전이 없으면 빈 조직 화면용 데이터를 반환한다", async () => {
     const native = transport();
-    native.query.mockImplementation(async (operation: string) => result(operation, operation === "organization.graph.snapshot" ? {} : undefined));
+    native.query.mockImplementation(async (operation: string) =>
+      result(operation, operation === "organization.graph.snapshot" ? {} : undefined),
+    );
     const service = createApplicationDesktopService(native, { createId: () => "request-0001" });
 
     await expect(service.loadOrganization()).resolves.toEqual({ nodes: [] });
@@ -243,15 +256,43 @@ describe("Application desktop service", () => {
       ],
       "work.activity.list": {
         items: [
-          { activityId: "activity-new", workId: detail.workId, kind: "message", title: "새 활동", createdAt: "2026-07-22T00:30:00.000Z" },
-          { activityId: "activity-old", workId: detail.workId, kind: "message", title: "이전 활동", createdAt: "2026-07-22T00:10:00.000Z" },
+          {
+            activityId: "activity-new",
+            workId: detail.workId,
+            kind: "message",
+            title: "새 활동",
+            createdAt: "2026-07-22T00:30:00.000Z",
+          },
+          {
+            activityId: "activity-old",
+            workId: detail.workId,
+            kind: "message",
+            title: "이전 활동",
+            createdAt: "2026-07-22T00:10:00.000Z",
+          },
         ],
       },
       "work.directive.list": [
-        { directiveId: "directive-1", workId: detail.workId, runId: run.runId, content: "중간 지시", createdAt: "2026-07-22T00:20:00.000Z" },
+        {
+          directiveId: "directive-1",
+          workId: detail.workId,
+          runId: run.runId,
+          content: "중간 지시",
+          createdAt: "2026-07-22T00:20:00.000Z",
+        },
       ],
       "work.artifacts": [
-        { artifactVersionId: "artifact-version-1", artifactId: "artifact-1", workId: detail.workId, name: "결과.txt", kind: "text", mediaType: "text/plain", checksum: "a".repeat(64), version: 1, createdAt: "2026-07-22T00:40:00.000Z" },
+        {
+          artifactVersionId: "artifact-version-1",
+          artifactId: "artifact-1",
+          workId: detail.workId,
+          name: "결과.txt",
+          kind: "text",
+          mediaType: "text/plain",
+          checksum: "a".repeat(64),
+          version: 1,
+          createdAt: "2026-07-22T00:40:00.000Z",
+        },
       ],
     });
     const service = createApplicationDesktopService(native, { createId: () => "request-0001" });
@@ -336,7 +377,11 @@ describe("Application desktop service", () => {
   });
 
   it("Workspace 유무별 Work team 표시값은 내부 ID를 노출하지 않는다", async () => {
-    const native = transport({ "work.index": { items: [{ ...detail }, { ...detail, workId: "work-0002", workspaceId: "workspace-secret-0001" }] } });
+    const native = transport({
+      "work.index": {
+        items: [{ ...detail }, { ...detail, workId: "work-0002", workspaceId: "workspace-secret-0001" }],
+      },
+    });
     const service = createApplicationDesktopService(native);
 
     await expect(service.loadIndex({ filter: "active", search: "" })).resolves.toEqual([
@@ -346,7 +391,9 @@ describe("Application desktop service", () => {
   });
 
   it("잘못된 workspace 목록 항목을 runtime 경계에서 거부한다", async () => {
-    const service = createApplicationDesktopService(transport({ "workspace.list": [{ workspaceId: "workspace-invalid" }] }));
+    const service = createApplicationDesktopService(
+      transport({ "workspace.list": [{ workspaceId: "workspace-invalid" }] }),
+    );
 
     await expect(service.loadWorkspaces()).rejects.toThrow("Workspace 응답이 유효하지 않습니다");
   });
@@ -356,15 +403,38 @@ describe("Application desktop service", () => {
     const service = createApplicationDesktopService(native, { createId: () => "request-0001" });
 
     const settings = await service.loadSettings();
-    await service.addCredential({ providerId: "openai", endpointId: "endpoint-1", label: "기본", credentialType: "api-key", secret: "input-only", priority: 1, weight: 1 });
+    await service.addCredential({
+      providerId: "openai",
+      endpointId: "endpoint-1",
+      label: "기본",
+      credentialType: "api-key",
+      secret: "input-only",
+      priority: 1,
+      weight: 1,
+    });
     await service.configureRoute({ name: "default", routeKind: "chat" });
 
     expect(JSON.stringify(settings)).not.toContain("never-return-this");
-    expect(native.query.mock.calls.map(([operation]) => operation)).toEqual(expect.arrayContaining([
-      "router.catalog", "router.credentials", "router.routes", "subscription.providers", "subscription.accounts", "subscription.quota", "subscription.policy",
-    ]));
-    expect(native.command).toHaveBeenCalledWith(expect.objectContaining({ operation: "router.credential.add", payload: expect.objectContaining({ secret: "input-only" }) }));
-    expect(native.command).toHaveBeenCalledWith(expect.objectContaining({ operation: "router.route.configure", payload: { name: "default", routeKind: "chat" } }));
+    expect(native.query.mock.calls.map(([operation]) => operation)).toEqual(
+      expect.arrayContaining([
+        "router.catalog",
+        "router.credentials",
+        "router.routes",
+        "subscription.providers",
+        "subscription.accounts",
+        "subscription.quota",
+        "subscription.policy",
+      ]),
+    );
+    expect(native.command).toHaveBeenCalledWith(
+      expect.objectContaining({
+        operation: "router.credential.add",
+        payload: expect.objectContaining({ secret: "input-only" }),
+      }),
+    );
+    expect(native.command).toHaveBeenCalledWith(
+      expect.objectContaining({ operation: "router.route.configure", payload: { name: "default", routeKind: "chat" } }),
+    );
   });
 
   it("Capabilities registry 조회·설치 결과에서 awaiting-approval 식별자를 보존한다", async () => {
@@ -373,35 +443,61 @@ describe("Application desktop service", () => {
 
     await expect(service.searchRegistry("calendar")).resolves.toEqual([{ versionId: "version-1" }]);
     await expect(service.loadRegistryInfo("version-1")).resolves.toEqual({ versionId: "version-1" });
-    await expect(service.loadCapabilities()).resolves.toEqual({ extensions: [], inventory: [{ packageName: "calendar" }] });
-    await expect(service.installRegistry({ versionId: "version-1", environment: "production", riskClass: "medium", executionId: "execution-1" })).resolves.toEqual({ outcome: "awaiting-approval", approvalId: "approval-install-1" });
+    await expect(service.loadCapabilities()).resolves.toEqual({
+      extensions: [],
+      inventory: [{ packageName: "calendar" }],
+    });
+    await expect(
+      service.installRegistry({
+        versionId: "version-1",
+        environment: "production",
+        riskClass: "medium",
+        executionId: "execution-1",
+      }),
+    ).resolves.toEqual({ outcome: "awaiting-approval", approvalId: "approval-install-1" });
     expect(native.query).toHaveBeenCalledWith("registry.search", { query: "calendar", limit: 20 });
     expect(native.query).toHaveBeenCalledWith("registry.info", { versionId: "version-1" });
     expect(native.query).toHaveBeenCalledWith("registry.inventory", {});
-    expect(native.command).toHaveBeenCalledWith(expect.objectContaining({ operation: "registry.install", payload: { versionId: "version-1", environment: "production", riskClass: "medium", executionId: "execution-1" } }));
+    expect(native.command).toHaveBeenCalledWith(
+      expect.objectContaining({
+        operation: "registry.install",
+        payload: { versionId: "version-1", environment: "production", riskClass: "medium", executionId: "execution-1" },
+      }),
+    );
   });
 
   it("승인 대기 Registry 설치는 같은 명령·상관관계 식별자와 승인 ID로 재개한다", async () => {
     const native = transport();
     const service = createApplicationDesktopService(native, { createId: () => "generated-id" });
-    const request = { versionId: "version-1", environment: "production", riskClass: "medium", executionId: "execution-1" };
+    const request = {
+      versionId: "version-1",
+      environment: "production",
+      riskClass: "medium",
+      executionId: "execution-1",
+    };
     const identity = { commandId: "registry-install-command-1", correlationId: "registry-install-correlation-1" };
 
     await service.installRegistry(request, identity);
     await service.installRegistry({ ...request, installApprovalId: "approval-install-1" }, identity);
 
-    expect(native.command).toHaveBeenNthCalledWith(1, expect.objectContaining({
-      commandId: "registry-install-command-1",
-      correlationId: "registry-install-correlation-1",
-      operation: "registry.install",
-      payload: request,
-    }));
-    expect(native.command).toHaveBeenNthCalledWith(2, expect.objectContaining({
-      commandId: "registry-install-command-1",
-      correlationId: "registry-install-correlation-1",
-      operation: "registry.install",
-      payload: { ...request, installApprovalId: "approval-install-1" },
-    }));
+    expect(native.command).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        commandId: "registry-install-command-1",
+        correlationId: "registry-install-correlation-1",
+        operation: "registry.install",
+        payload: request,
+      }),
+    );
+    expect(native.command).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        commandId: "registry-install-command-1",
+        correlationId: "registry-install-correlation-1",
+        operation: "registry.install",
+        payload: { ...request, installApprovalId: "approval-install-1" },
+      }),
+    );
   });
 
   it("성장 기록은 기존 읽기 전용 query 네 개로만 조회한다", async () => {
@@ -414,8 +510,8 @@ describe("Application desktop service", () => {
       suggestions: [{ status: "awaiting-review" }],
       effects: [{ result: "improved" }],
     });
-    expect(native.query.mock.calls.map(([operation]) => operation)).toEqual(expect.arrayContaining([
-      "growth.configuration.get", "growth.memories", "growth.suggestions", "growth.effects",
-    ]));
+    expect(native.query.mock.calls.map(([operation]) => operation)).toEqual(
+      expect.arrayContaining(["growth.configuration.get", "growth.memories", "growth.suggestions", "growth.effects"]),
+    );
   });
 });

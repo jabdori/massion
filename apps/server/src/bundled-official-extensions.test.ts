@@ -17,7 +17,10 @@ describe("Bundled official Extension seed", () => {
     await using database = await createDatabase({ url: "mem://", namespace: "registry", database: randomUUID() });
     try {
       const runtime = { agentOS: "1.0.0", node: process.versions.node, surrealDB: "3.2.0" };
-      const packed = await new ExtensionPackageService({ runtime }).pack(resolve(process.cwd(), "../../extensions/slack"), root);
+      const packed = await new ExtensionPackageService({ runtime }).pack(
+        resolve(process.cwd(), "../../extensions/slack"),
+        root,
+      );
       const archive = packed.tarballPath.split("/").pop();
       if (!archive) throw new Error("공식 Extension archive 이름이 없습니다");
       await writeFile(
@@ -41,7 +44,12 @@ describe("Bundled official Extension seed", () => {
       await seedBundledOfficialExtensions(input);
 
       const catalog = new RegistryCatalog(versions.catalogStore(), { tokenSecret: Buffer.alloc(32, 5) });
-      const discovered = await catalog.search({ organizationId: "fresh-organization", query: "slack", runtime, limit: 10 });
+      const discovered = await catalog.search({
+        organizationId: "fresh-organization",
+        query: "slack",
+        runtime,
+        limit: 10,
+      });
       expect(discovered.items).toHaveLength(1);
       expect(discovered.items[0]).toMatchObject({
         packageName: "@massion-ext/slack",

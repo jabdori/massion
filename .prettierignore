@@ -18,3 +18,12 @@ existing-data-clone.*
 apps/studio/driver.mjs
 history.txt
 apps/desktop/.impeccable
+apps/studio
+apps/cli
+apps/web
+apps/tui
+apps/desktop/src-tauri/gen
+apps/desktop-bridge/dist
+packages/*/dist
+artifacts
+.worktrees

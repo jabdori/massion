@@ -52,10 +52,7 @@ export function createProductionApplicationAdapter(
     startDaemon: async () => await daemon.start(),
     stopDaemon: async () => await daemon.stop(),
     openLocalSession: async () =>
-      bootstrapLocalSession(
-        endpoint,
-        async (input) => await ApplicationHttpClient.bootstrap(endpoint, input),
-      ),
+      bootstrapLocalSession(endpoint, async (input) => await ApplicationHttpClient.bootstrap(endpoint, input)),
     createClient: (endpoint, token) => new ApplicationHttpClient({ baseUrl: endpoint, token }),
     defaultEndpoint: endpoint,
   });
@@ -78,7 +75,10 @@ class ApplicationBridgeAdapter implements BridgeAdapter {
     exact(params, [], "connect params");
     await this.dependencies.startDaemon();
     if (this.client) return { status: "connected" };
-    const client = this.dependencies.createClient(this.dependencies.defaultEndpoint, await this.dependencies.openLocalSession());
+    const client = this.dependencies.createClient(
+      this.dependencies.defaultEndpoint,
+      await this.dependencies.openLocalSession(),
+    );
     await client.status();
     await client.me();
     this.client = client;
@@ -156,7 +156,8 @@ async function bootstrapLocalSession(
   });
   const access = response && typeof response === "object" ? (response as { access?: unknown }).access : undefined;
   const token = access && typeof access === "object" ? (access as { token?: unknown }).token : undefined;
-  if (typeof token !== "string" || !token.trim()) throw new Error(`local AgentOS access를 열지 못했습니다: ${endpoint}`);
+  if (typeof token !== "string" || !token.trim())
+    throw new Error(`local AgentOS access를 열지 못했습니다: ${endpoint}`);
   return token;
 }
 

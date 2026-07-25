@@ -92,7 +92,8 @@ export function useDesktopController(service: DesktopService) {
         if (active) {
           setNewWorkWorkspaces(workspaces);
           const selected = newWorkWorkspaceRef.current;
-          const refreshed = selected === undefined ? undefined : workspaces.find((item) => item.workspaceId === selected.workspaceId);
+          const refreshed =
+            selected === undefined ? undefined : workspaces.find((item) => item.workspaceId === selected.workspaceId);
           if (!refreshed || refreshed.status !== "active" || refreshed.trust === "blocked") {
             newWorkWorkspaceRef.current = undefined;
             setNewWorkWorkspace(undefined);
@@ -112,7 +113,9 @@ export function useDesktopController(service: DesktopService) {
         }
       },
     );
-    return () => { active = false; };
+    return () => {
+      active = false;
+    };
   }, [newWorkOpen, service]);
 
   const setSelectedId = useCallback(
@@ -423,7 +426,10 @@ export function useDesktopController(service: DesktopService) {
     setNewWorkError("");
     try {
       const workspace = await service.registerWorkspace(path);
-      setNewWorkWorkspaces((current) => [workspace, ...current.filter((item) => item.workspaceId !== workspace.workspaceId)]);
+      setNewWorkWorkspaces((current) => [
+        workspace,
+        ...current.filter((item) => item.workspaceId !== workspace.workspaceId),
+      ]);
       newWorkWorkspaceRef.current = workspace;
       setNewWorkWorkspace(workspace);
       setNewWorkWorkspacePaths([]);
@@ -442,13 +448,14 @@ export function useDesktopController(service: DesktopService) {
     setNewWorkError("");
     try {
       const workspace = await service.decideWorkspaceTrust(newWorkWorkspace, decision);
-      setNewWorkWorkspaces((current) => current.map((item) => item.workspaceId === workspace.workspaceId ? workspace : item));
+      setNewWorkWorkspaces((current) =>
+        current.map((item) => (item.workspaceId === workspace.workspaceId ? workspace : item)),
+      );
       if (newWorkWorkspaceRef.current?.workspaceId !== requestedWorkspaceId) return;
       if (decision === "trusted") {
         newWorkWorkspaceRef.current = workspace;
         setNewWorkWorkspace(workspace);
-      }
-      else {
+      } else {
         newWorkWorkspaceRef.current = undefined;
         setNewWorkWorkspace(undefined);
         setNewWorkWorkspacePaths([]);
@@ -500,7 +507,10 @@ export function useDesktopController(service: DesktopService) {
 
   const visibleWorks = works.filter((value) => {
     const search = query.trim().toLocaleLowerCase("ko");
-    return (filter === "active" ? value.status === "active" : value.status !== "active") && (!search || value.title.toLocaleLowerCase("ko").includes(search));
+    return (
+      (filter === "active" ? value.status === "active" : value.status !== "active") &&
+      (!search || value.title.toLocaleLowerCase("ko").includes(search))
+    );
   });
 
   return {

@@ -185,5 +185,7 @@ export function isSoftwareEngineeringTask(input: {
 }): boolean {
   const profileHandles = new Set<string>(SOFTWARE_ENGINEERING_TEAM_PROFILE.nodes.map((node) => node.handle));
   if (input.recommendedAgentHandles.some((handle) => profileHandles.has(handle))) return true;
-  return SOFTWARE_ENGINEERING_TEAM_PROFILE.nodes.some((node) => sameCapabilities(node.capabilities, input.requiredCapabilities));
+  return SOFTWARE_ENGINEERING_TEAM_PROFILE.nodes.some((node) =>
+    sameCapabilities(node.capabilities, input.requiredCapabilities),
+  );
 }

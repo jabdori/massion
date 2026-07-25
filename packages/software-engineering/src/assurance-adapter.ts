@@ -729,5 +729,4 @@ export class SoftwareAssuranceAdapter implements TrustedAssuranceCheckExecutor {
       maxExcerptBytes: this.options.maxExcerptBytes,
     });
   }
-
 }

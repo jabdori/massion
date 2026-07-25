@@ -107,11 +107,16 @@ describe("Work directive commands", () => {
     const descriptor = descriptors.get("work.directive.submit");
     if (!descriptor) throw new Error("work.directive.submit descriptor가 없습니다");
     expect(() => descriptor.validate({ ...directive, unknown: true })).toThrow("알 수 없는 필드");
-    expect(() => descriptor.validate({ workId: directive.workId, runId: directive.runId, content: " ", mode: "now" })).toThrow(
-      "content",
-    );
     expect(() =>
-      descriptor.validate({ workId: directive.workId, runId: directive.runId, content: directive.content, mode: "later" }),
+      descriptor.validate({ workId: directive.workId, runId: directive.runId, content: " ", mode: "now" }),
+    ).toThrow("content");
+    expect(() =>
+      descriptor.validate({
+        workId: directive.workId,
+        runId: directive.runId,
+        content: directive.content,
+        mode: "later",
+      }),
     ).toThrow("mode");
     const payload = descriptor.validate({
       workId: directive.workId,
@@ -129,7 +134,11 @@ describe("Work directive commands", () => {
     await expect(descriptor.handle(context, command, payload)).rejects.toThrow("expectedRevision");
     await descriptor.handle(context, { ...command, expectedRevision: 3 }, payload);
     status = "blocked";
-    await descriptor.handle(context, { ...command, commandId: "directive-command-submit-0003", expectedRevision: 3 }, payload);
+    await descriptor.handle(
+      context,
+      { ...command, commandId: "directive-command-submit-0003", expectedRevision: 3 },
+      payload,
+    );
     expect(scheduled).toEqual([]);
   });
 });
