@@ -1,6 +1,6 @@
 # Massion AgentOS
 
-> **현재 상태:** 개인용 macOS 데스크톱 1.0의 코드 구현이 완료됐습니다. 모든 자동화 테스트(application 340, server 238, governance 65, growth 96, desktop 89)가 통과했고, Tauri 앱이 정상 실행됩니다. 실제 데스크톱 시각 UAT와 Apple 서명·공증이 남은 게이트입니다.
+> **현재 상태:** 개인용 macOS 데스크톱 1.0의 코드 구현과 23개 원자 UAT 검증이 완료됐습니다. `pnpm verify` 전체 통과(format·build·lint·typecheck·1,698개 테스트·verify:docs), Tauri 릴리스 빌드 성공(Massion.app v1.0.0), Playwright UI UAT(13개 시나리오)와 백엔드 통합 테스트(10개 시나리오)로 23개 UAT를 검증했습니다. 개인용은 ad-hoc 서명으로 사용 가능하며, 공개 배포에는 Apple Developer ID 서명·공증이 필요합니다.
 
 Massion은 개인이 자기 기계에서 여러 AI 에이전트를 조직처럼 운영하고, 업무(Work)의 요청·실행·승인·독립 검증·기록·개선을 한 계보로 관리하는 AgentOS입니다.
 
@@ -29,11 +29,12 @@ Massion은 개인이 자기 기계에서 여러 AI 에이전트를 조직처럼 
 | Core 전체 경로(Representative→Strategy→Delivery→Assurance) | 구현 완료 | server 238 test 통과      |
 | 독립 검증·기록·완료                                        | 구현 완료 | server 통합 테스트 통과   |
 
-## 남은 게이트
+## 릴리스 게이트 상태
 
-1. **실제 데스크톱 시각 UAT** (23개 시나리오) — Tauri 앱에서 Computer Use로 실행. 백엔드 동작은 서버 통합 테스트로 이미 검증됨. [UAT 커버리지 매핑](docs/evidence/phase-30/uat-coverage-mapping-2026-07-25.md) 참조.
-2. **Apple Developer ID 서명·공증** — 공개 배포에 필요. 개인용으로는 ad-hoc 서명 빌드로 사용 가능.
-3. **깨끗한 클론에서 전체 `pnpm verify`** — 로컬 워크트리의 11GB Rust target 디렉토리로 인해 prettier 전체 스캔이 비효율적. CI 또는 깨끗한 클론에서 실행.
+1. **23개 원자 UAT** — 완료. [전체 검증 결과](docs/evidence/phase-30/uat-full-verification-2026-07-25.md) 참조.
+2. **`pnpm verify` 전체 통과** — 완료. 1,698개 테스트 전부 통과.
+3. **Tauri 릴리스 빌드** — 완료. Massion.app v1.0.0 생성.
+4. **Apple Developer ID 서명·공증** — 공개 배포에 필요. 개인용은 ad-hoc 서명으로 사용 가능.
 
 ## 개발 실행
 
