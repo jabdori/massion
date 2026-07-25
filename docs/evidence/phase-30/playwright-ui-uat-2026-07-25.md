@@ -66,3 +66,45 @@
 - discord 1.0.0 공식
 - slack 1.0.0 공식
 - 전문 조직 release-engineering, Skill pull-request-review, release-notes
+
+### UAT-07 실시간 협업방 — PASS (fixture)
+
+Work 상세에서 5개 에이전트(Atlas, Lyra, Quill, Vega, Iris)의 메시지가 모두 표시됨:
+- Atlas: 사용자 요청 접수, 조정, 결정
+- Lyra: 맥락 구성
+- Quill: 근거 조사, 답변
+- Vega: Task 배정, 실행
+- Iris: 독립 검증, 반론, 수정 요구
+- handoff 메시지(인계 Quill → Vega 등) 표시
+- 실행 계획 5단계 표시 (완료/진행 중/대기 상태)
+- 중간 산출물(이탈 분석 보고서.pdf, 코호트 데이터.csv) 표시
+
+### UAT-08 실행 중 추가 지시 — PASS (fixture)
+
+추가 지시 입력 필드가 표시됨:
+- placeholder: "대표에게 추가 지시..."
+- "지금 반영" 버튼 표시
+- "다음 단계" 버튼 표시
+
+### UAT-12 완료·산출물·Assurance — PASS (fixture)
+
+- Assurance(검증): Iris의 독립 검증·반론·수정 요구 표시
+- 산출물: 이탈 분석 보고서.pdf, 코호트 데이터.csv 표시
+- 완료 상태: 실행 계획 단계별 완료/진행 중 표시
+- 공유 컨텍스트: evidence-brief checksum 표시
+- 예산: 토큰 48.2k/200.0k, 비용 $0.31/$1.00, 라운드 6/100 표시
+
+## Playwright UAT 요약 (10개 시나리오)
+
+| UAT | 시나리오 | 결과 |
+|-----|---------|------|
+| 01 | 첫 실행과 탐색 (6개 탭) | PASS |
+| 03 | Work 입력 필드 | PASS |
+| 07 | 실시간 협업방 (5개 에이전트) | PASS |
+| 08 | 추가 지시 입력 | PASS |
+| 09 | 수신함 일관성 | PASS |
+| 12 | 완료·산출물·검증 | PASS |
+| 13 | 조직 구조·지도·제안 | PASS |
+| 14 | 개선 평가·승인 | PASS |
+| 15 | 확장 설치 | PASS |
+| 16 | 설정과 운영 상태 | PASS |
