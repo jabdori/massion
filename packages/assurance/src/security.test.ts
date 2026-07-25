@@ -15,7 +15,7 @@ const remoteUrl = process.env.SURREAL_TEST_URL;
 const remoteTest = remoteUrl ? it : it.skip;
 
 describe("Assurance security regression", () => {
- it("공개 API에서 내부 transition·test harness·DB·시스템 자격 증명을 노출하지 않는다", async () => {
+  it("공개 API에서 내부 transition·test harness·DB·시스템 자격 증명을 노출하지 않는다", async () => {
     await using database = await createDatabase({
       url: "mem://",
       namespace: "massion",
