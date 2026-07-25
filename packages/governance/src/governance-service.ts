@@ -160,6 +160,15 @@ export class GovernanceService {
             reasons = [...reasons, "autonomy-review"];
           }
         }
+        // full 모드(개인용 전체 권한, 레벨 3): 정책·불변식이 요구한 승인도 사용자 책임 하에 자동 통과.
+        if (outcome === "require_approval") {
+          const autonomyState = await this.autonomy.get(context);
+          if (autonomyState.mode === "full") {
+            requirement = undefined;
+            outcome = "allow";
+            reasons = [...reasons, "autonomy-full"];
+          }
+        }
       }
     }
     const decisionId = randomUUID();

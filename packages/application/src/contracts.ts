@@ -255,7 +255,7 @@ export interface OrganizationGraphSnapshotV1 {
 }
 
 export interface GovernanceAutonomyViewV1 {
-  readonly mode: "automatic" | "review";
+  readonly mode: "automatic" | "review" | "full";
   readonly revision: number;
 }
 
@@ -437,7 +437,7 @@ export interface ApplicationCommandMapV1 {
       readonly reason: string;
     };
   };
-  readonly "governance.autonomy.set": { readonly payload: { readonly mode: "automatic" | "review" } };
+  readonly "governance.autonomy.set": { readonly payload: { readonly mode: "automatic" | "review" | "full" } };
 }
 
 export interface ApplicationEventV1 {

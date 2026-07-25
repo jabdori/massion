@@ -109,6 +109,44 @@ describe("Governance Policy Decision", () => {
     expect(read.outcome).toBe("allow");
   });
 
+  it("자율성 full 모드는 정책이 요구한 승인을 자동 통과한다", async () => {
+    await activate("personal");
+    const autonomy = await AutonomyStore.create(database, organizations);
+
+    // 기본(automatic)에서는 위험 tool call이 승인을 요구합니다.
+    const before = await governance.evaluate(context, {
+      commandId: crypto.randomUUID(),
+      request: request("tool.call", { context: { environment: "local", riskClass: "write", external: false } }),
+    });
+    expect(before.outcome).toBe("require_approval");
+
+    await autonomy.set(context, { mode: "full", expectedRevision: 0 });
+
+    // full 모드는 같은 요청을 allow로 통과시키고 requirement를 비웁니다.
+    const bypassed = await governance.evaluate(context, {
+      commandId: crypto.randomUUID(),
+      request: request("tool.call", { context: { environment: "local", riskClass: "write", external: false } }),
+    });
+    expect(bypassed).toMatchObject({ outcome: "allow" });
+    expect(bypassed.requirement).toBeUndefined();
+    expect(bypassed.reasons).toContain("autonomy-full");
+  });
+
+  it("자율성 full 모드는 growth.adopt 불변식 승인도 통과한다", async () => {
+    await activate("personal");
+    const autonomy = await AutonomyStore.create(database, organizations);
+    await autonomy.set(context, { mode: "full", expectedRevision: 0 });
+
+    const result = await governance.evaluate(context, {
+      commandId: crypto.randomUUID(),
+      request: request("growth.adopt", {
+        context: { environment: "local", riskClass: "growth-adoption", external: false, automationMode: "review" },
+      }),
+    });
+    expect(result).toMatchObject({ outcome: "allow" });
+    expect(result.reasons).toContain("autonomy-full");
+  });
+
   it("team production 위험 작업은 분리된 지정 역할 승인을 요구한다", async () => {
     await activate("team");
 

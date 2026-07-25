@@ -547,7 +547,8 @@ function registerAutonomy(
     async handle(context, command, value) {
       try {
         const mode = string(value.mode, "mode");
-        if (mode !== "automatic" && mode !== "review") throw new Error("지원하지 않는 자율성 모드입니다");
+        if (mode !== "automatic" && mode !== "review" && mode !== "full")
+          throw new Error("지원하지 않는 자율성 모드입니다");
         const state = await autonomy.set(context, { mode, expectedRevision: expectedRevision(command) });
         return result(command, {
           resource: { type: "GovernanceAutonomy", id: context.organizationId, revision: state.revision },

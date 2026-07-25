@@ -52,4 +52,10 @@ describe("Governance 자율성 모드", () => {
     await autonomy.set(ownerContext, { mode: "review", expectedRevision: 0 });
     await expect(autonomy.get(otherContext)).resolves.toEqual({ mode: "automatic", revision: 0 });
   });
+
+  it("full 모드로 전환하고 저장된다", async () => {
+    const full = await autonomy.set(ownerContext, { mode: "full", expectedRevision: 0 });
+    expect(full).toEqual({ mode: "full", revision: 1 });
+    await expect(autonomy.get(ownerContext)).resolves.toEqual({ mode: "full", revision: 1 });
+  });
 });
