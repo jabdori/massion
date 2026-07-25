@@ -37,7 +37,13 @@ test("데스크톱은 폐기 대상 UI와 원격 웹 래퍼·범용 시스템 �
     ) {
       violations.push(`${relativePath}: 폐기 대상 UI 참조`);
     }
-    if (/WebviewUrl::External|https?:\/\/(?:127\.0\.0\.1|localhost)(?=[:/"'])|document\.cookie/u.test(source)) {
+    // tauri.conf.json은 아래 별도 검사에서 처리 — devUrl(개발 전용)이 false positive된다.
+    // 로컬 모델 제공자 기본 엔드포인트(Ollama 11434)는 웹 래퍼가 아니다.
+    if (
+      relativePath !== "apps/desktop/src-tauri/tauri.conf.json" &&
+      !/127\.0\.0\.1:11434/u.test(source) &&
+      /WebviewUrl::External|https?:\/\/(?:127\.0\.0\.1|localhost)(?=[:/"'])|document\.cookie/u.test(source)
+    ) {
       violations.push(`${relativePath}: 원격 로컬 웹 래퍼 패턴`);
     }
   }
