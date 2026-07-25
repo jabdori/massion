@@ -1,4 +1,4 @@
-import { hashContextContent } from "@massion/context-strategy";
+import { hashContextContent, type PlanStrategyInput } from "@massion/context-strategy";
 import { IdentityService, OrganizationService } from "@massion/identity";
 import { OrganizationGraphService } from "@massion/organization";
 import { createDatabase } from "@massion/storage";
@@ -85,6 +85,287 @@ describe("actual Core Work pipeline adapters", () => {
     const workId = (result as { workId: string }).workId;
     const work = await works.getWork(context, workId);
     expect(work.workspace_id).toBe("workspace-shop-api");
+  });
+
+  it("trusted Workspace 근거를 Intake retry에서 한 번 연결하고 Representative와 Strategy에 같은 lineage로 전달한다", async () => {
+    await using database = await createDatabase({ url: "mem://", namespace: "massion", database: crypto.randomUUID() });
+    const identities = await IdentityService.create(database);
+    const organizations = await OrganizationService.create(database);
+    const owner = await identities.registerPersonalUser({
+      email: "workspace-knowledge-pipeline@example.com",
+      displayName: "Workspace Knowledge",
+    });
+    const context = await organizations.resolveTenantContext(owner.user.user_id, owner.organization.organization_id);
+    const graph = await OrganizationGraphService.create(database, organizations);
+    await graph.bootstrap(context);
+    const works = await WorkService.create(database, organizations, graph);
+    const checksum = "a".repeat(64);
+    const brief = {
+      evidenceBriefId: "pipeline-evidence-brief-0001",
+      indexVersionId: "pipeline-index-version-0001",
+      status: "ready",
+      checksum,
+    } as const;
+    const materialized = {
+      evidenceBriefId: brief.evidenceBriefId,
+      indexVersionId: brief.indexVersionId,
+      briefChecksum: checksum,
+      snippets: [
+        {
+          referenceId: "pipeline-chunk-0001",
+          citation: "src/pipeline.ts:1-2",
+          relativePath: "src/pipeline.ts",
+          startLine: 1,
+          endLine: 2,
+          content: "export const pipeline = true;",
+          estimatedTokens: 8,
+        },
+      ],
+      estimatedTokens: 8,
+      truncated: false,
+    } as const;
+    const prepareInputs: unknown[] = [];
+    const materializeInputs: unknown[] = [];
+    const representativeInputs: { readonly estimatedTokens: number; readonly input: unknown }[] = [];
+    const binderInputs: unknown[] = [];
+    const planInputs: PlanStrategyInput[] = [];
+    const stages = createCoreWorkPipelineExecutors({
+      graph,
+      works,
+      workspaces: {
+        get: async () =>
+          ({
+            workspaceId: "pipeline-workspace-0001",
+            name: "Pipeline workspace",
+            path: "/workspace/pipeline",
+            status: "active",
+            trust: "trusted",
+          }) as never,
+      },
+      workspaceKnowledge: {
+        prepare: async (_context, input) => {
+          prepareInputs.push(input);
+          return { brief: { ...brief, workId: input.workId } } as never;
+        },
+      },
+      evidencePromptMaterializer: {
+        materialize: async (_context, input) => {
+          materializeInputs.push(input);
+          return materialized;
+        },
+      },
+      evidenceContextBinder: {
+        bind: async (_context, input) => {
+          binderInputs.push(input);
+          return {
+            kind: "evidence",
+            sourceId: brief.evidenceBriefId,
+            revision: brief.indexVersionId,
+            contentHash: checksum,
+            observedAt: "2026-07-25T00:00:00.000Z",
+            classification: "internal",
+            priority: 80,
+            estimatedTokens: 0,
+            mandatory: true,
+            content: { shouldNotPersist: true },
+          };
+        },
+      },
+      runtimeExecutions: { findExecutionIdByCommand: async () => undefined },
+      representative: {
+        execute: async (_context, input) => {
+          representativeInputs.push(input);
+          return { executionId: crypto.randomUUID(), status: "succeeded", output: "근거를 확인했습니다." };
+        },
+        cancel: async () => undefined,
+      },
+      strategy: {
+        plan: async (_context, input) => {
+          planInputs.push(input);
+          return {
+            contextVersion: { contextVersionId: "pipeline-context-version-0001" },
+            generation: { status: "applied", strategyGenerationId: "pipeline-strategy-generation-0001" },
+            projection: {},
+          } as never;
+        },
+      },
+      evidence: { execute: async () => ({ outcome: "advanced" }) },
+      delivery: { execute: async () => ({ outcome: "advanced" }) },
+      assurance: { execute: async () => ({ outcome: "advanced" }) },
+      records: { execute: async () => ({ outcome: "advanced" }) },
+    });
+    const request = {
+      text: "Workspace 근거로 계획해주세요",
+      surface: "test",
+      workspaceId: "pipeline-workspace-0001",
+      workspacePaths: ["src/pipeline.ts"],
+    };
+    const first = await stages.intake.execute(context, {
+      runId: "pipeline-knowledge-run-0001",
+      commandId: "pipeline-knowledge-run-0001:intake",
+      correlationId: "pipeline-knowledge-correlation-0001",
+      request,
+    });
+    if (first.outcome !== "advanced" || !first.workId) throw new Error("Workspace Intake가 진행되지 않았습니다");
+    await expect(
+      stages.intake.execute(context, {
+        runId: "pipeline-knowledge-run-0001",
+        workId: first.workId,
+        commandId: "pipeline-knowledge-run-0001:intake:retry:retry-0001",
+        correlationId: "pipeline-knowledge-correlation-0001",
+        request,
+      }),
+    ).resolves.toMatchObject({ outcome: "advanced", workId: first.workId });
+
+    expect(prepareInputs).toEqual([
+      {
+        commandId: "pipeline-knowledge-run-0001:knowledge",
+        workId: first.workId,
+        workspaceId: "pipeline-workspace-0001",
+        workspaceName: "Pipeline workspace",
+        root: "/workspace/pipeline",
+        query: request.text,
+        relativePaths: request.workspacePaths,
+      },
+      {
+        commandId: "pipeline-knowledge-run-0001:knowledge",
+        workId: first.workId,
+        workspaceId: "pipeline-workspace-0001",
+        workspaceName: "Pipeline workspace",
+        root: "/workspace/pipeline",
+        query: request.text,
+        relativePaths: request.workspacePaths,
+      },
+    ]);
+    expect(representativeInputs).toHaveLength(2);
+    for (const representativeInput of representativeInputs) {
+      expect(representativeInput).toMatchObject({
+        estimatedTokens: expect.any(Number),
+        input: {
+          operation: "coordinate_work",
+          knowledgeSources: [materialized],
+        },
+      });
+      expect(representativeInput.estimatedTokens).toBeLessThanOrEqual(32_000);
+    }
+    expect(materializeInputs).toEqual([
+      { workId: first.workId, evidenceBriefId: brief.evidenceBriefId, maxEstimatedTokens: 24_000 },
+      { workId: first.workId, evidenceBriefId: brief.evidenceBriefId, maxEstimatedTokens: 24_000 },
+    ]);
+    await expect(
+      stages.intake.execute(context, {
+        runId: "pipeline-low-budget-run-0001",
+        commandId: "pipeline-low-budget-run-0001:intake",
+        correlationId: "pipeline-low-budget-correlation-0001",
+        request: { ...request, tokenBudget: 1_000 },
+      }),
+    ).resolves.toMatchObject({ outcome: "blocked", reason: "evidence-invalid" });
+    expect(materializeInputs).toHaveLength(2);
+    const room = (await works.listRooms(context, first.workId))[0];
+    if (!room) throw new Error("Core Office 협업방이 없습니다");
+    await expect(works.listSharedContexts(context, first.workId, room.room_id)).resolves.toMatchObject([
+      {
+        source_kind: "evidence-brief",
+        source_id: brief.evidenceBriefId,
+        version_id: brief.indexVersionId,
+        checksum,
+      },
+    ]);
+    const latestRevision = (await works.getWork(context, first.workId)).revision;
+    await expect(
+      stages["context-strategy"].execute(context, {
+        runId: "pipeline-knowledge-run-0001",
+        workId: first.workId,
+        commandId: "pipeline-knowledge-run-0001:context-strategy",
+        correlationId: "pipeline-knowledge-correlation-0001",
+        request,
+      }),
+    ).resolves.toMatchObject({ outcome: "advanced" });
+    expect(binderInputs).toEqual([{ evidenceBriefId: brief.evidenceBriefId, policy: "warn" }]);
+    expect(planInputs[0]?.expectedWorkRevision).toBe(latestRevision);
+    const evidenceSource = planInputs[0]?.context.sources.find((source) => source.kind === "evidence");
+    expect(evidenceSource).toMatchObject({
+      sourceId: brief.evidenceBriefId,
+      revision: brief.indexVersionId,
+      contentHash: checksum,
+    });
+    expect(evidenceSource).not.toHaveProperty("content");
+
+    const current = await works.getWork(context, first.workId);
+    await works.addSharedContext(context, {
+      commandId: "pipeline-knowledge-duplicate-context-0001",
+      workId: first.workId,
+      expectedRevision: current.revision,
+      roomId: room.room_id,
+      sourceKind: "evidence-brief",
+      sourceId: "pipeline-evidence-brief-duplicate",
+      versionId: "pipeline-index-version-duplicate",
+      checksum: "b".repeat(64),
+    });
+    await expect(
+      stages["context-strategy"].execute(context, {
+        runId: "pipeline-knowledge-run-0001",
+        workId: first.workId,
+        commandId: "pipeline-knowledge-run-0001:context-strategy:duplicate",
+        correlationId: "pipeline-knowledge-correlation-0001",
+        request,
+      }),
+    ).resolves.toEqual({ outcome: "blocked", reason: "evidence-invalid" });
+  });
+
+  it("untrusted Workspace는 지식 준비와 Representative 실행 전에 Intake를 차단한다", async () => {
+    await using database = await createDatabase({ url: "mem://", namespace: "massion", database: crypto.randomUUID() });
+    const identities = await IdentityService.create(database);
+    const organizations = await OrganizationService.create(database);
+    const owner = await identities.registerPersonalUser({
+      email: "workspace-untrusted-pipeline@example.com",
+      displayName: "Untrusted Workspace",
+    });
+    const context = await organizations.resolveTenantContext(owner.user.user_id, owner.organization.organization_id);
+    const graph = await OrganizationGraphService.create(database, organizations);
+    await graph.bootstrap(context);
+    const works = await WorkService.create(database, organizations, graph);
+    let prepareCalls = 0;
+    let representativeCalls = 0;
+    const stages = createCoreWorkPipelineExecutors({
+      graph,
+      works,
+      workspaces: {
+        get: async () => ({ status: "active", trust: "pending" }) as never,
+      },
+      workspaceKnowledge: {
+        prepare: async () => {
+          prepareCalls += 1;
+          return {} as never;
+        },
+      },
+      evidencePromptMaterializer: { materialize: async () => ({}) as never },
+      evidenceContextBinder: { bind: async () => ({}) as never },
+      runtimeExecutions: { findExecutionIdByCommand: async () => undefined },
+      representative: {
+        execute: async () => {
+          representativeCalls += 1;
+          return { executionId: "untrusted-representative", status: "succeeded" };
+        },
+        cancel: async () => undefined,
+      },
+      strategy: { plan: async () => ({}) as never },
+      evidence: { execute: async () => ({ outcome: "advanced" }) },
+      delivery: { execute: async () => ({ outcome: "advanced" }) },
+      assurance: { execute: async () => ({ outcome: "advanced" }) },
+      records: { execute: async () => ({ outcome: "advanced" }) },
+    });
+    const result = await stages.intake.execute(context, {
+      runId: "pipeline-untrusted-run-0001",
+      commandId: "pipeline-untrusted-run-0001:intake",
+      correlationId: "pipeline-untrusted-correlation-0001",
+      request: { text: "신뢰 전 Workspace", workspaceId: "pipeline-untrusted-workspace-0001" },
+    });
+
+    expect(result).toMatchObject({ outcome: "blocked", reason: "workspace-untrusted", workId: expect.any(String) });
+    expect(prepareCalls).toBe(0);
+    expect(representativeCalls).toBe(0);
+    expect(await works.listRooms(context, (result as { workId: string }).workId)).toHaveLength(1);
   });
 
   it("재시도 intake는 기존 Work를 만들지 않고 같은 Work로 Representative를 다시 실행한다", async () => {
@@ -213,6 +494,10 @@ describe("actual Core Work pipeline adapters", () => {
         },
         postMessage: async () => ({ message: { message_id: "signal-core-office-message" } }) as never,
         listMessages: async () => [],
+        listSharedContexts: async () => [],
+        addSharedContext: async () => {
+          throw new Error("Workspace 없는 Intake에서 Shared Context를 추가하면 안 됩니다");
+        },
       },
       runtimeExecutions: { findExecutionIdByCommand: async () => undefined },
       representative: {
@@ -327,6 +612,10 @@ describe("actual Core Work pipeline adapters", () => {
           throw new Error("context-strategy에서 메시지를 쓰면 안 됩니다");
         },
         listMessages: async () => [],
+        listSharedContexts: async () => [],
+        addSharedContext: async () => {
+          throw new Error("context-strategy에서 Shared Context를 추가하면 안 됩니다");
+        },
       },
       runtimeExecutions: { findExecutionIdByCommand: async () => undefined },
       representative: {
@@ -463,9 +752,7 @@ describe("actual Core Work pipeline adapters", () => {
       context: {
         objective: "계획",
         constraints: ["근거"],
-        sources: expect.arrayContaining([
-          expect.objectContaining({ kind: "request", content: { text: "계획" } }),
-        ]),
+        sources: expect.arrayContaining([expect.objectContaining({ kind: "request", content: { text: "계획" } })]),
       },
     });
     const capturedInput = captured[0];

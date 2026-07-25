@@ -24,8 +24,8 @@ const PLAN: StrategyPlan = {
     {
       key: "criterion-recovered",
       statement: "계획이 한 번만 투영된다",
-      method: "inspection",
-      evidenceKinds: ["work-event"],
+      method: "evidence",
+      evidenceKinds: ["artifact-version"],
       planLevel: false,
     },
   ],

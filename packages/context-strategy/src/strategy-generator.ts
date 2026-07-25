@@ -90,10 +90,22 @@ export interface StrategyAgentDirectory {
   listNodes(context: TenantContext): Promise<readonly StrategyPlanningAgent[]>;
 }
 
-function validatedPlan(
-  value: unknown,
-  availableAgentHandles: ReadonlySet<string>,
-): StrategyPlan {
+export interface StrategyEvidenceMaterial {
+  readonly evidenceBriefId: string;
+  readonly indexVersionId: string;
+  readonly briefChecksum: string;
+  readonly snippets: readonly { readonly citation: string; readonly content: string }[];
+  readonly estimatedTokens: number;
+}
+
+export interface StrategyEvidenceMaterialResolver {
+  materialize(
+    context: TenantContext,
+    input: { readonly workId: string; readonly evidenceBriefId: string; readonly maxEstimatedTokens?: number },
+  ): Promise<StrategyEvidenceMaterial>;
+}
+
+function validatedPlan(value: unknown, availableAgentHandles: ReadonlySet<string>): StrategyPlan {
   const plan = validateAutomaticStrategyPlan(value);
   for (const task of plan.tasks) {
     if (task.recommendedAgentHandles.some((handle) => !availableAgentHandles.has(handle))) {
@@ -103,10 +115,7 @@ function validatedPlan(
   return plan;
 }
 
-function validateOutput(
-  value: unknown,
-  availableAgentHandles: ReadonlySet<string>,
-): StructuredOutputValidationResult {
+function validateOutput(value: unknown, availableAgentHandles: ReadonlySet<string>): StructuredOutputValidationResult {
   try {
     return { success: true, value: validatedPlan(value, availableAgentHandles) };
   } catch {
@@ -122,6 +131,7 @@ export class StrategyGenerator {
     private readonly contexts: Pick<ContextStore, "get">,
     private readonly works: Pick<WorkService, "getWork">,
     private readonly agents?: StrategyAgentDirectory,
+    private readonly evidence?: StrategyEvidenceMaterialResolver,
   ) {}
 
   public static async create(
@@ -131,9 +141,10 @@ export class StrategyGenerator {
     contexts: Pick<ContextStore, "get">,
     works: Pick<WorkService, "getWork">,
     agents?: StrategyAgentDirectory,
+    evidence?: StrategyEvidenceMaterialResolver,
   ): Promise<StrategyGenerator> {
     await applyMigrations(database, [STRATEGY_GENERATION_MIGRATION]);
-    return new StrategyGenerator(database, organizations, runner, contexts, works, agents);
+    return new StrategyGenerator(database, organizations, runner, contexts, works, agents, evidence);
   }
 
   public async generate(context: TenantContext, input: GenerateStrategyInput): Promise<StrategyGeneration> {
@@ -149,6 +160,47 @@ export class StrategyGenerator {
       throw new Error(`현재 Work revision은 ${String(work.revision)}입니다`);
     const contextVersion = await this.contexts.get(context, input.contextVersionId);
     if (contextVersion.workId !== input.workId) throw new Error("ContextVersion과 Work가 일치하지 않습니다");
+    const evidenceSources = contextVersion.selectedSources.filter((source) => source.kind === "evidence");
+    if (evidenceSources.length > 0 && !this.evidence) throw new Error("Strategy evidence resolver가 없습니다");
+    const baselineTokens = Math.min(contextVersion.tokenBudget, contextVersion.tokenTotal + 4_000);
+    const maxEvidenceTokens = Math.min(24_000, contextVersion.tokenBudget - baselineTokens);
+    if (evidenceSources.length > 0 && maxEvidenceTokens < 1)
+      throw new Error("Strategy evidence를 위한 Context 실행 예산이 부족합니다");
+    const evidenceMaterials: StrategyEvidenceMaterial[] = [];
+    let evidenceTokens = 0;
+    for (const source of evidenceSources) {
+      const reference = source.evidenceRef;
+      if (
+        source.content !== undefined ||
+        !reference ||
+        source.sourceId !== reference.evidenceBriefId ||
+        source.revision !== reference.indexVersionId ||
+        source.contentHash !== reference.briefChecksum
+      ) {
+        throw new Error("Strategy evidence source 계약이 일치하지 않습니다");
+      }
+      const materialized = await this.evidence!.materialize(context, {
+        workId: input.workId,
+        evidenceBriefId: reference.evidenceBriefId,
+        maxEstimatedTokens: maxEvidenceTokens - evidenceTokens,
+      });
+      if (
+        materialized.evidenceBriefId !== reference.evidenceBriefId ||
+        materialized.indexVersionId !== reference.indexVersionId ||
+        materialized.briefChecksum !== reference.briefChecksum
+      ) {
+        throw new Error("Strategy materialized evidence가 source와 일치하지 않습니다");
+      }
+      if (
+        !Number.isSafeInteger(materialized.estimatedTokens) ||
+        materialized.estimatedTokens < 1 ||
+        evidenceTokens + materialized.estimatedTokens > maxEvidenceTokens
+      ) {
+        throw new Error("Strategy evidence material token 합계가 Context 실행 예산을 초과했습니다");
+      }
+      evidenceTokens += materialized.estimatedTokens;
+      evidenceMaterials.push(materialized);
+    }
     const generationId = randomUUID();
     await this.database.transaction(async (tx) => {
       await this.organizations.verifyTenantContext(context, undefined, tx);
@@ -193,7 +245,7 @@ export class StrategyGenerator {
         agentHandle: "context-strategy",
         modelRoute: route,
         correlationId: input.commandId,
-        estimatedTokens: contextVersion.tokenTotal + 4_000,
+        estimatedTokens: baselineTokens + evidenceTokens,
         estimatedCostMicros: 0,
         ...(input.signal === undefined ? {} : { signal: input.signal }),
         input: {
@@ -207,6 +259,7 @@ export class StrategyGenerator {
           unknowns: contextVersion.unknowns,
           decisions: contextVersion.decisions,
           sources: contextVersion.selectedSources,
+          ...(evidenceMaterials.length === 0 ? {} : { evidenceMaterials }),
           availableAgents: availableAgents.map((agent) => ({
             handle: agent.handle,
             capabilities: agent.capabilities,

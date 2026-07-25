@@ -1250,8 +1250,90 @@ describe("협업방 조회", () => {
       workId: "query-work",
     });
     expect(result.data).toEqual([
-      { sharedContextReferenceId: "ref-1", roomId: "room-1", sourceKind: "evidence-brief", sourceId: "brief-1", versionId: "v3", checksum: "a3f1c8" },
+      {
+        sharedContextReferenceId: "ref-1",
+        roomId: "room-1",
+        sourceKind: "evidence-brief",
+        sourceId: "brief-1",
+        versionId: "v3",
+        checksum: "a3f1c8",
+      },
     ]);
+  });
+
+  it("Work 지식은 read scope 뒤에 metadata만 ready·no-match·blocked 상태로 투영한다", async () => {
+    const calls: string[] = [];
+    const registry = new ApplicationQueryRegistry();
+    registerApplicationQueries(registry, {
+      readModel,
+      workKnowledge: {
+        get: async (_context, workId) => {
+          calls.push(workId);
+          if (workId === "ready-work") {
+            return {
+              workId,
+              status: "ready" as const,
+              repositoryId: "repository-1",
+              repositoryRevisionId: "revision-1",
+              indexVersionId: "index-1",
+              evidenceBriefId: "brief-1",
+              freshnessStatus: "fresh" as const,
+              query: "결제 검증",
+              references: [
+                {
+                  referenceId: "chunk-1",
+                  kind: "chunk" as const,
+                  relativePath: "src/payment.ts",
+                  startLine: 3,
+                  endLine: 8,
+                  contentHash: "a".repeat(64),
+                  content: "sk-this-must-never-leave-the-server",
+                },
+              ],
+              prompt: "비공개 prompt",
+            } as never;
+          }
+          if (workId === "no-match-work") return { workId, status: "no-match", references: [] };
+          return { workId, status: "blocked", references: [], failureReason: "knowledge-integrity-check-failed" };
+        },
+      },
+    });
+
+    await expect(registry.query(context, [], "work.knowledge", { workId: "ready-work" })).rejects.toMatchObject({
+      category: "authorization",
+    });
+    expect(calls).toEqual([]);
+
+    const ready = await registry.query(context, ["work:read"], "work.knowledge", { workId: "ready-work" });
+    expect(ready.data).toEqual({
+      workId: "ready-work",
+      status: "ready",
+      repositoryId: "repository-1",
+      repositoryRevisionId: "revision-1",
+      indexVersionId: "index-1",
+      evidenceBriefId: "brief-1",
+      freshnessStatus: "fresh",
+      query: "결제 검증",
+      references: [
+        {
+          referenceId: "chunk-1",
+          kind: "chunk",
+          relativePath: "src/payment.ts",
+          startLine: 3,
+          endLine: 8,
+          contentHash: "a".repeat(64),
+        },
+      ],
+    });
+    expect(JSON.stringify(ready.data)).not.toMatch(/prompt|sk-this/u);
+    await expect(
+      registry.query(context, ["work:read"], "work.knowledge", { workId: "no-match-work" }),
+    ).resolves.toMatchObject({ data: { status: "no-match", references: [] } });
+    await expect(
+      registry.query(context, ["work:read"], "work.knowledge", { workId: "blocked-work" }),
+    ).resolves.toMatchObject({
+      data: { status: "blocked", references: [], failureReason: "knowledge-integrity-check-failed" },
+    });
   });
 
   it("방 목록이 참가자와 마지막 sequence를 함께 준다", async () => {
@@ -1261,7 +1343,13 @@ describe("협업방 조회", () => {
     await expect(
       registry.query(context, ["collaboration:read"], "work.rooms", { workId: "query-work" }),
     ).resolves.toMatchObject({
-      data: [{ roomId: "room-1", participantIds: ["representative", "evidence-research", "assurance"], lastMessageSequence: 3 }],
+      data: [
+        {
+          roomId: "room-1",
+          participantIds: ["representative", "evidence-research", "assurance"],
+          lastMessageSequence: 3,
+        },
+      ],
     });
   });
 

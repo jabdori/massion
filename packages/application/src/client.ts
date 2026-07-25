@@ -25,6 +25,7 @@ export type {
   ExtensionInstallationViewV1,
   ExecutionViewV1,
   GovernanceAutonomyViewV1,
+  KnowledgeReferenceViewV1,
   OrganizationGraphSnapshotV1,
   RoomMessageTypeV1,
   RoomMessageViewV1,
@@ -37,6 +38,7 @@ export type {
   VerificationViewV1,
   WorkActivityViewV1,
   WorkDetailV1,
+  WorkKnowledgeViewV1,
   WorkSummaryV1,
   WorkspaceViewV1,
 } from "./contracts.js";

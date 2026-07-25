@@ -18,6 +18,7 @@ import {
   createCoreWorkPipelineExecutors,
   type CoreWorkStage,
   type CoreWorkStageExecutor,
+  type WorkKnowledgeViewV1,
 } from "@massion/application";
 import {
   AssuranceBindingStore,
@@ -26,7 +27,21 @@ import {
   GovernanceBindingActivationAuthorizer,
 } from "@massion/assurance";
 import { ContextStore, StrategyGenerator, StrategyService } from "@massion/context-strategy";
-import { EvidenceBriefStore, IndexStore, RepositoryStore } from "@massion/evidence";
+import {
+  CodeGraphService,
+  CodeSearchService,
+  EvidenceBriefStore,
+  EvidenceContextBinder,
+  EvidenceFreshnessService,
+  EvidenceIndexer,
+  EvidenceParser,
+  EvidencePromptMaterializer,
+  IndexStore,
+  RepositoryRevisionCollector,
+  RepositoryScanner,
+  RepositoryStore,
+  WorkspaceKnowledgeService,
+} from "@massion/evidence";
 import {
   ExtensionGateway,
   ExtensionGovernanceAdapter,
@@ -518,11 +533,37 @@ export async function createMassionDaemon(
       },
     );
     const contexts = await ContextStore.create(database, organizations, works);
-    const strategyGenerator = await StrategyGenerator.create(database, organizations, runner, contexts, works, graph);
-    const strategy = StrategyService.create(contexts, strategyGenerator, works);
     const repositories = await RepositoryStore.create(database, organizations);
     const indexes = await IndexStore.create(database, organizations);
     const briefs = await EvidenceBriefStore.create(database, repositories, indexes);
+    const scanner = new RepositoryScanner();
+    const parser = new EvidenceParser();
+    const workspaceKnowledge = new WorkspaceKnowledgeService(
+      repositories,
+      indexes,
+      new RepositoryRevisionCollector(scanner),
+      new EvidenceIndexer(repositories, indexes, scanner, parser),
+      await CodeSearchService.create(database, repositories, indexes),
+      new CodeGraphService(repositories, indexes),
+      briefs,
+      {
+        scanOptions: { include: ["**/*"], exclude: [], maxFileBytes: 1_048_576 },
+        parserBundleVersion: parser.bundleVersion,
+      },
+    );
+    const evidencePromptMaterializer = new EvidencePromptMaterializer(repositories, indexes, briefs);
+    const evidenceFreshness = new EvidenceFreshnessService(repositories, { enqueue: async () => false });
+    const evidenceContextBinder = new EvidenceContextBinder(briefs, evidenceFreshness);
+    const strategyGenerator = await StrategyGenerator.create(
+      database,
+      organizations,
+      runner,
+      contexts,
+      works,
+      graph,
+      evidencePromptMaterializer,
+    );
+    const strategy = StrategyService.create(contexts, strategyGenerator, works);
     const assurance = await AssuranceBootstrap.create(database, organizations);
     const assuranceBindings = await AssuranceBindingStore.create(
       database,
@@ -741,8 +782,101 @@ export async function createMassionDaemon(
       finalizer: engineeringFinalizer,
       recovery: engineeringRecovery,
     });
-    const evidenceStage = new CoreEvidenceStage({ works, briefs });
-    const deliveryStage = new CoreDeliveryStage({ works, runner, runtimeExecutions, software, workspaces });
+    const evidenceStage = new CoreEvidenceStage({
+      works,
+      contexts,
+      briefs,
+      materializer: evidencePromptMaterializer,
+    });
+    const workKnowledge = {
+      async get(context: Parameters<typeof works.getWork>[0], workId: string): Promise<WorkKnowledgeViewV1> {
+        const work = await works.getWork(context, workId);
+        if (work.workspace_id === undefined) return { workId, status: "not-applicable", references: [] };
+        try {
+          const automatic = await briefs.findAutomaticByWork(context, workId);
+          let sources: Awaited<ReturnType<typeof contexts.get>>["selectedSources"] = [];
+          if (work.context_version_id) {
+            const contextVersion = await contexts.get(context, work.context_version_id);
+            if (contextVersion.workId !== workId) throw new Error("ContextVersion과 Work가 일치하지 않습니다");
+            sources = contextVersion.selectedSources.filter((source) => source.kind === "evidence");
+          }
+          if (sources.length === 0 && automatic?.status === "no_match") {
+            const verified = await evidencePromptMaterializer.verifyNoMatch(context, {
+              workId,
+              evidenceBriefId: automatic.evidenceBriefId,
+            });
+            const freshness = await evidenceFreshness.assess(context, verified, "warn");
+            if (freshness.status !== "fresh" && freshness.status !== "stale_warning")
+              throw new Error("no-match EvidenceBrief freshness를 계산할 수 없습니다");
+            return {
+              workId,
+              status: "no-match",
+              repositoryId: verified.repositoryId,
+              repositoryRevisionId: verified.repositoryRevisionId,
+              indexVersionId: verified.indexVersionId,
+              evidenceBriefId: verified.evidenceBriefId,
+              freshnessStatus: freshness.status,
+              query: verified.query,
+              references: [],
+            };
+          }
+          if (sources.length !== 1) throw new Error("active evidence source는 하나여야 합니다");
+          const reference = sources[0]?.evidenceRef;
+          if (!reference) throw new Error("Evidence reference가 없습니다");
+          if (automatic && automatic.evidenceBriefId !== reference.evidenceBriefId)
+            throw new Error("automatic EvidenceBrief와 active ContextVersion이 다릅니다");
+          const materials = await evidenceStage.materializeActive(context, workId);
+          if (materials.length !== 1 || materials[0]?.evidenceBriefId !== reference.evidenceBriefId)
+            throw new Error("active evidence materialization 결과가 일치하지 않습니다");
+          const brief = await briefs.getBrief(context, reference.evidenceBriefId);
+          if (brief.references.length === 0 || brief.references.some((item) => item.kind !== "code"))
+            throw new Error("ready EvidenceBrief에 코드 근거가 없습니다");
+          const snapshot = await indexes.getSnapshot(context, brief.indexVersionId);
+          const symbolByKey = new Map(snapshot.symbols.map((symbol) => [symbol.symbolKey, symbol]));
+          const freshness = await evidenceFreshness.assess(context, brief, "warn");
+          if (freshness.status !== "fresh" && freshness.status !== "stale_warning")
+            throw new Error("ready EvidenceBrief freshness를 계산할 수 없습니다");
+          return {
+            workId,
+            status: "ready",
+            repositoryId: brief.repositoryId,
+            repositoryRevisionId: brief.repositoryRevisionId,
+            indexVersionId: brief.indexVersionId,
+            evidenceBriefId: brief.evidenceBriefId,
+            freshnessStatus: freshness.status,
+            query: brief.query,
+            references: brief.references.map((item) => {
+              if (item.kind !== "code") throw new Error("코드 근거가 아닌 reference입니다");
+              const qualifiedName =
+                item.sourceKind === "symbol"
+                  ? snapshot.symbols.find((symbol) => symbol.symbolId === item.referenceId)?.qualifiedName
+                  : symbolByKey.get(
+                      snapshot.chunks.find((chunk) => chunk.chunkId === item.referenceId)?.symbolKey ?? "",
+                    )?.qualifiedName;
+              return {
+                referenceId: item.referenceId,
+                kind: item.sourceKind,
+                relativePath: item.relativePath,
+                startLine: item.startLine,
+                endLine: item.endLine,
+                contentHash: item.contentHash,
+                ...(qualifiedName ? { qualifiedName } : {}),
+              };
+            }),
+          };
+        } catch {
+          return { workId, status: "blocked", references: [], failureReason: "knowledge-integrity-check-failed" };
+        }
+      },
+    };
+    const deliveryStage = new CoreDeliveryStage({
+      works,
+      runner,
+      runtimeExecutions,
+      software,
+      workspaces,
+      evidence: evidenceStage,
+    });
     const assuranceStage = new CoreAssuranceStage({
       works,
       bindings: assuranceBindings,
@@ -760,6 +894,10 @@ export async function createMassionDaemon(
     const executors = createCoreWorkPipelineExecutors({
       graph,
       works,
+      workspaces,
+      workspaceKnowledge,
+      evidencePromptMaterializer,
+      evidenceContextBinder,
       representative: runner,
       runtimeExecutions,
       strategy,
@@ -848,6 +986,7 @@ export async function createMassionDaemon(
       queries: {
         runtime: runtimeExecutions,
         workspaces,
+        workKnowledge,
         autonomy: governance.autonomy,
         provenance: {
           listByWork: async (provenanceContext, workId) =>

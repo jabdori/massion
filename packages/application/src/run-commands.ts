@@ -55,6 +55,7 @@ function runRequest(value: unknown): Record<string, unknown> {
     "workspaceId",
     "workspacePaths",
     "tokenBudget",
+    "softwareDelivery",
     "scopeIn",
     "scopeOut",
     "constraints",
@@ -87,7 +88,8 @@ async function verifyWorkspacePaths(
   if (!workspaces) throw new Error("workspace file 경로를 확인할 WorkspaceService가 구성되지 않았습니다");
   const workspace = await workspaces.get(context, request.workspaceId);
   if (workspace.status !== "active") throw new Error("workspace는 active 상태여야 합니다");
-  if ((await lstat(workspace.path)).isSymbolicLink()) throw new Error("workspace 경로는 canonical directory여야 합니다");
+  if ((await lstat(workspace.path)).isSymbolicLink())
+    throw new Error("workspace 경로는 canonical directory여야 합니다");
   const root = await realpath(workspace.path);
   if (root !== workspace.path) throw new Error("workspace 경로는 canonical directory여야 합니다");
   if (!(await stat(root)).isDirectory()) throw new Error("workspace 경로는 directory여야 합니다");

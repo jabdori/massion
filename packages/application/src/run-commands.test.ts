@@ -83,12 +83,16 @@ describe("Application run commands", () => {
         },
         payload,
       );
-      expect(requests).toEqual([
-        { text: "파일 검토", workspaceId: "workspace-1", workspacePaths: ["src/index.ts"] },
-      ]);
-      expect(() => start.validate({
-        request: { text: "파일 검토", workspaceId: "workspace-1", workspacePaths: Array.from({ length: 21 }, (_, index) => `src/${index}.ts`) },
-      })).toThrow("workspace file 경로");
+      expect(requests).toEqual([{ text: "파일 검토", workspaceId: "workspace-1", workspacePaths: ["src/index.ts"] }]);
+      expect(() =>
+        start.validate({
+          request: {
+            text: "파일 검토",
+            workspaceId: "workspace-1",
+            workspacePaths: Array.from({ length: 21 }, (_, index) => `src/${index}.ts`),
+          },
+        }),
+      ).toThrow("workspace file 경로");
 
       const escaped = start.validate({
         request: { text: "파일 검토", workspaceId: "workspace-1", workspacePaths: ["outside.ts"] },
@@ -110,7 +114,10 @@ describe("Application run commands", () => {
       const workspaceOnly = start.validate({ request: { text: "파일 검토", workspaceId: "workspace-1" } });
       const archivedDescriptors = new Map<string, ApplicationCommandDescriptor>();
       registerApplicationRunCommands(
-        { register: (descriptor: ApplicationCommandDescriptor) => archivedDescriptors.set(descriptor.operation, descriptor) } as never,
+        {
+          register: (descriptor: ApplicationCommandDescriptor) =>
+            archivedDescriptors.set(descriptor.operation, descriptor),
+        } as never,
         {
           store: { start: async () => ({}) as never },
           coordinator: { cancel: async () => ({}) as never, retryBlocked: async () => ({}) as never },
@@ -120,15 +127,51 @@ describe("Application run commands", () => {
       );
       const archivedStart = archivedDescriptors.get("run.start");
       if (!archivedStart) throw new Error("run.start descriptor가 없습니다");
-      await expect(archivedStart.handle(context, { schemaVersion: "massion.application.v1", commandId: "run-workspace-paths-command-3", correlationId: "run-workspace-paths-correlation-3", operation: "run.start", payload: workspaceOnly }, workspaceOnly)).rejects.toThrow("active");
+      await expect(
+        archivedStart.handle(
+          context,
+          {
+            schemaVersion: "massion.application.v1",
+            commandId: "run-workspace-paths-command-3",
+            correlationId: "run-workspace-paths-correlation-3",
+            operation: "run.start",
+            payload: workspaceOnly,
+          },
+          workspaceOnly,
+        ),
+      ).rejects.toThrow("active");
 
       await rm(workspaceRoot, { recursive: true, force: true });
       await writeFile(workspaceRoot, "not a directory");
-      await expect(start.handle(context, { schemaVersion: "massion.application.v1", commandId: "run-workspace-paths-command-4", correlationId: "run-workspace-paths-correlation-4", operation: "run.start", payload: workspaceOnly }, workspaceOnly)).rejects.toThrow("directory");
+      await expect(
+        start.handle(
+          context,
+          {
+            schemaVersion: "massion.application.v1",
+            commandId: "run-workspace-paths-command-4",
+            correlationId: "run-workspace-paths-correlation-4",
+            operation: "run.start",
+            payload: workspaceOnly,
+          },
+          workspaceOnly,
+        ),
+      ).rejects.toThrow("directory");
       await rm(workspaceRoot);
       await rm(workspaceRoot, { recursive: true, force: true });
       await symlink(temporaryRoot, workspaceRoot);
-      await expect(start.handle(context, { schemaVersion: "massion.application.v1", commandId: "run-workspace-paths-command-5", correlationId: "run-workspace-paths-correlation-5", operation: "run.start", payload: workspaceOnly }, workspaceOnly)).rejects.toThrow("canonical");
+      await expect(
+        start.handle(
+          context,
+          {
+            schemaVersion: "massion.application.v1",
+            commandId: "run-workspace-paths-command-5",
+            correlationId: "run-workspace-paths-correlation-5",
+            operation: "run.start",
+            payload: workspaceOnly,
+          },
+          workspaceOnly,
+        ),
+      ).rejects.toThrow("canonical");
     } finally {
       await rm(temporaryRoot, { recursive: true, force: true });
     }
@@ -177,6 +220,22 @@ describe("Application run commands", () => {
     };
     const start = descriptors.get("run.start");
     if (!start) throw new Error("run.start descriptor가 없습니다");
+    expect(
+      start.validate({
+        request: {
+          text: "값 모듈 변경",
+          softwareDelivery: {
+            repositoryRoot: "/workspace/repository",
+            repositoryId: "repository-0001",
+            repositoryRevisionId: "repository-revision-0001",
+            baseRevision: "base-revision-0001",
+            profileVersion: "software-engineering-v1",
+            allowedPaths: ["src"],
+            testPaths: ["src/value.test.mjs"],
+          },
+        },
+      }),
+    ).toMatchObject({ request: { softwareDelivery: { repositoryId: "repository-0001" } } });
     const payload = start.validate({ request: { text: "제품화" } });
     await expect(start.handle(context, command, payload)).resolves.toMatchObject({
       outcome: "accepted",

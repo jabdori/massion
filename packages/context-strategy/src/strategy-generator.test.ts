@@ -125,9 +125,163 @@ describe("Strategy Generator", () => {
     expect(generated.plan).toEqual(VALID_STRATEGY_PLAN);
     expect(runner.executeStructured).toHaveBeenCalledWith(
       context,
-      expect.objectContaining({ agentHandle: "context-strategy", modelRoute: "planning-quality" }),
+      expect.objectContaining({
+        agentHandle: "context-strategy",
+        modelRoute: "planning-quality",
+        estimatedTokens: 1_000,
+      }),
       expect.objectContaining({ name: "massion-strategy-plan", validate: expect.any(Function) }),
     );
+  });
+
+  it("metadata-only evidence source를 materialize해 Strategy runner의 별도 field에 전달한다", async () => {
+    const checksum = "a".repeat(64);
+    const source = {
+      kind: "evidence" as const,
+      sourceId: "strategy-brief-1",
+      revision: "strategy-index-1",
+      contentHash: checksum,
+      observedAt: "2026-07-25T00:00:00.000Z",
+      classification: "internal" as const,
+      priority: 80,
+      estimatedTokens: 0,
+      mandatory: true,
+      evidenceRef: {
+        evidenceBriefId: "strategy-brief-1",
+        repositoryId: "strategy-repository-1",
+        repositoryRevisionId: "strategy-revision-1",
+        indexVersionId: "strategy-index-1",
+        briefChecksum: checksum,
+        freshnessStatus: "fresh" as const,
+      },
+    };
+    const version = await contextStore.create(context, {
+      commandId: crypto.randomUUID(),
+      workId,
+      tokenBudget: 10_000,
+      objective: "근거로 계획 생성",
+      scopeIn: [],
+      scopeOut: [],
+      constraints: [],
+      assumptions: [],
+      unknowns: [],
+      decisions: [],
+      sources: [source],
+    });
+    const materialized = {
+      evidenceBriefId: source.sourceId,
+      indexVersionId: source.revision,
+      briefChecksum: checksum,
+      snippets: [{ citation: "src/strategy.ts:1-1", content: "export const strategy = true;" }],
+      estimatedTokens: 8,
+    };
+    const executeStructured = vi.fn().mockResolvedValue({
+      executionId: "execution-evidence",
+      status: "succeeded",
+      output: VALID_STRATEGY_PLAN,
+    });
+    const materialize = vi.fn().mockResolvedValue(materialized);
+    const generator = await StrategyGenerator.create(
+      database,
+      organizations,
+      { executeStructured },
+      contextStore,
+      work,
+      undefined,
+      { materialize },
+    );
+
+    await expect(
+      generator.generate(context, {
+        commandId: crypto.randomUUID(),
+        workId,
+        expectedWorkRevision: 1,
+        contextVersionId: version.contextVersionId,
+      }),
+    ).resolves.toMatchObject({ status: "generated" });
+    expect(materialize).toHaveBeenCalledWith(context, {
+      workId,
+      evidenceBriefId: source.sourceId,
+      maxEstimatedTokens: 6_000,
+    });
+    expect(executeStructured).toHaveBeenCalledWith(
+      context,
+      expect.objectContaining({
+        estimatedTokens: 4_008,
+        input: expect.objectContaining({ sources: [source], evidenceMaterials: [materialized] }),
+      }),
+      expect.any(Object),
+    );
+    expect(version.selectedSources[0]).not.toHaveProperty("content");
+  });
+
+  it("materialized token이 Context의 남은 실행 예산을 넘으면 runner 호출 전에 차단한다", async () => {
+    const checksum = "b".repeat(64);
+    const source = (evidenceBriefId: string, indexVersionId: string) => ({
+      kind: "evidence" as const,
+      sourceId: evidenceBriefId,
+      revision: indexVersionId,
+      contentHash: checksum,
+      observedAt: "2026-07-25T00:00:00.000Z",
+      classification: "internal" as const,
+      priority: 80,
+      estimatedTokens: 0,
+      mandatory: true,
+      evidenceRef: {
+        evidenceBriefId,
+        repositoryId: `${evidenceBriefId}-repository`,
+        repositoryRevisionId: `${evidenceBriefId}-revision`,
+        indexVersionId,
+        briefChecksum: checksum,
+        freshnessStatus: "fresh" as const,
+      },
+    });
+    const version = await contextStore.create(context, {
+      commandId: crypto.randomUUID(),
+      workId,
+      tokenBudget: 10_000,
+      objective: "예산 초과 근거 계획",
+      scopeIn: [],
+      scopeOut: [],
+      constraints: [],
+      assumptions: [],
+      unknowns: [],
+      decisions: [],
+      sources: [source("strategy-brief-a", "strategy-index-a")],
+    });
+    const executeStructured = vi.fn().mockResolvedValue({
+      executionId: "execution-over-budget",
+      status: "succeeded",
+      output: VALID_STRATEGY_PLAN,
+    });
+    const generator = await StrategyGenerator.create(
+      database,
+      organizations,
+      { executeStructured } as never,
+      contextStore,
+      work,
+      undefined,
+      {
+        materialize: async (_context, input) => ({
+          evidenceBriefId: input.evidenceBriefId,
+          indexVersionId: "strategy-index-a",
+          briefChecksum: checksum,
+          snippets: [],
+          estimatedTokens: 6_001,
+          truncated: false,
+        }),
+      },
+    );
+
+    await expect(
+      generator.generate(context, {
+        commandId: crypto.randomUUID(),
+        workId,
+        expectedWorkRevision: 1,
+        contextVersionId: version.contextVersionId,
+      }),
+    ).rejects.toThrow("예산");
+    expect(executeStructured).not.toHaveBeenCalled();
   });
 
   it("local-private Context는 local-private Route만 사용한다", async () => {

@@ -14,6 +14,7 @@ import type { WorkService, WorkTask } from "@massion/work";
 import type { CoreSoftwareTaskPort } from "./core-delivery-stage.js";
 
 const APPLICATION_RUN_CANCELLED = "Application run cancelled";
+const STAGE_OUTPUT_RESERVE_TOKENS = 4_000;
 
 interface SoftwareDeliveryConfiguration {
   readonly repositoryRoot: string;
@@ -23,7 +24,6 @@ interface SoftwareDeliveryConfiguration {
   readonly profileVersion: string;
   readonly allowedPaths: readonly string[];
   readonly testPaths: readonly string[];
-  readonly evidenceBriefIds: readonly string[];
   readonly environment: string;
   readonly leaseTtlMs: number;
 }
@@ -59,8 +59,6 @@ function configuration(request: unknown): SoftwareDeliveryConfiguration | undefi
     profileVersion: record.profileVersion as string,
     allowedPaths: strings(record.allowedPaths, "Software Delivery allowed path"),
     testPaths: strings(record.testPaths, "Software Delivery test path"),
-    evidenceBriefIds:
-      record.evidenceBriefIds === undefined ? [] : strings(record.evidenceBriefIds, "Evidence Brief ID"),
     environment: typeof record.environment === "string" && record.environment ? record.environment : "local",
     leaseTtlMs,
   };
@@ -82,6 +80,25 @@ function criteria(task: WorkTask): readonly string[] {
     }
     throw new Error("Software Task acceptance criterion이 유효하지 않습니다");
   });
+}
+
+function requestedTokenBudget(request: unknown): number {
+  const value = request && typeof request === "object" && !Array.isArray(request) ? request : {};
+  const tokenBudget = (value as { tokenBudget?: unknown }).tokenBudget ?? 32_000;
+  if (!Number.isSafeInteger(tokenBudget) || (tokenBudget as number) < 1_000 || (tokenBudget as number) > 1_000_000) {
+    throw new Error("Core Work token budget이 유효하지 않습니다");
+  }
+  return tokenBudget as number;
+}
+
+function proposalBaseline(task: WorkTask, config: SoftwareDeliveryConfiguration, tokenBudget: number): number {
+  const prompt = {
+    objective: task.objective,
+    acceptanceCriteria: criteria(task),
+    allowedPaths: config.allowedPaths,
+    instruction: "testPatch와 implementationPatch를 분리해 제안하고 filesystem이나 process를 직접 실행하지 마세요.",
+  };
+  return Math.min(tokenBudget, Math.max(1, Math.ceil(JSON.stringify(prompt).length / 4)) + STAGE_OUTPUT_RESERVE_TOKENS);
 }
 
 export class CoreSoftwareTaskAdapter implements CoreSoftwareTaskPort {
@@ -111,6 +128,17 @@ export class CoreSoftwareTaskAdapter implements CoreSoftwareTaskPort {
       if (!config) return { outcome: "blocked", reason: "software-delivery-configuration-required" };
       const agentHandle = input.task.recommended_agent_handles?.[0];
       if (!agentHandle) return { outcome: "blocked", reason: "software-delivery-agent-required" };
+      const tokenBudget = requestedTokenBudget(input.request);
+      const baselineTokens = proposalBaseline(input.task, config, tokenBudget);
+      const knowledgeTokens = input.knowledgeSources?.reduce((total, source) => total + source.estimatedTokens, 0) ?? 0;
+      if (
+        input.knowledgeSources?.some(
+          (source) => !Number.isSafeInteger(source.estimatedTokens) || source.estimatedTokens < 1,
+        ) ||
+        baselineTokens + knowledgeTokens > tokenBudget
+      ) {
+        return { outcome: "blocked", reason: "evidence-invalid" };
+      }
       await this.throwIfCancelled(context, input, config);
       const startCommand = `${input.commandId}:engineering`;
       let delivery = await this.dependencies.deliveries.findByStartCommand(context, startCommand);
@@ -253,6 +281,8 @@ export class CoreSoftwareTaskAdapter implements CoreSoftwareTaskPort {
     delivery: EngineeringDelivery,
     agentHandle: string,
   ): Promise<EngineeringDelivery> {
+    const knowledgeTokens = input.knowledgeSources?.reduce((total, source) => total + source.estimatedTokens, 0) ?? 0;
+    const tokenBudget = requestedTokenBudget(input.request);
     const proposal = await this.dependencies.proposals.propose(context, {
       commandId: `${input.commandId}:proposal`,
       workId: input.workId,
@@ -260,11 +290,12 @@ export class CoreSoftwareTaskAdapter implements CoreSoftwareTaskPort {
       agentHandle,
       modelRoute: "software-engineering-quality",
       correlationId: input.correlationId,
-      estimatedTokens: 32_000,
+      estimatedTokens: proposalBaseline(input.task, config, tokenBudget) + knowledgeTokens,
       estimatedCostMicros: 0,
       objective: input.task.objective,
       acceptanceCriteria: criteria(input.task),
-      evidenceBriefIds: config.evidenceBriefIds,
+      evidenceBriefIds: input.knowledgeSources?.map((source) => source.evidenceBriefId) ?? [],
+      knowledgeSources: input.knowledgeSources ?? [],
       allowedPaths: config.allowedPaths,
     });
     await this.throwIfCancelled(context, input, config);

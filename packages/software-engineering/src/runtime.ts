@@ -289,6 +289,14 @@ export interface SoftwarePatchProposal {
   readonly commitMessage: string;
 }
 
+export interface SoftwareEvidenceMaterial {
+  readonly evidenceBriefId: string;
+  readonly indexVersionId: string;
+  readonly briefChecksum: string;
+  readonly snippets: readonly { readonly citation: string; readonly content: string }[];
+  readonly estimatedTokens: number;
+}
+
 export interface SoftwarePatchProposalRequest {
   readonly commandId: string;
   readonly workId: string;
@@ -301,6 +309,7 @@ export interface SoftwarePatchProposalRequest {
   readonly objective: string;
   readonly acceptanceCriteria: readonly string[];
   readonly evidenceBriefIds: readonly string[];
+  readonly knowledgeSources: readonly SoftwareEvidenceMaterial[];
   readonly allowedPaths: readonly string[];
 }
 
@@ -352,7 +361,9 @@ export class SoftwarePatchProposalService {
         input: {
           objective: request.objective,
           acceptanceCriteria: request.acceptanceCriteria,
-          evidenceBriefIds: request.evidenceBriefIds,
+          ...(request.knowledgeSources.length === 0
+            ? {}
+            : { evidenceBriefIds: request.evidenceBriefIds, knowledgeSources: request.knowledgeSources }),
           allowedPaths: request.allowedPaths,
           instruction:
             "testPatch와 implementationPatch를 분리해 제안하고 filesystem이나 process를 직접 실행하지 마세요.",

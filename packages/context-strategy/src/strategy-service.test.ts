@@ -25,8 +25,8 @@ const PLAN: StrategyPlan = {
     {
       key: "criterion-tests",
       statement: "테스트가 통과한다",
-      method: "test",
-      evidenceKinds: ["test-report"],
+      method: "evidence",
+      evidenceKinds: ["artifact-version"],
       planLevel: false,
     },
   ],

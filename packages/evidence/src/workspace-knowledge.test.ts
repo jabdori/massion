@@ -135,6 +135,26 @@ describe("Workspace 기반 자동 Evidence 지식 준비", () => {
       query: "NO_MATCH_QUERY_940851",
     });
     expect(noMatch.brief).toMatchObject({ status: "no_match", references: [] });
+    await expect(
+      materializer.verifyNoMatch(context, {
+        workId: noMatch.brief.workId,
+        evidenceBriefId: noMatch.brief.evidenceBriefId,
+      }),
+    ).resolves.toMatchObject({ status: "no_match", checksum: noMatch.brief.checksum });
+    await database.query(
+      "UPDATE evidence_brief SET checksum = $checksum WHERE organization_id = $organization_id AND evidence_brief_id = $evidence_brief_id;",
+      {
+        checksum: "0".repeat(64),
+        organization_id: context.organizationId,
+        evidence_brief_id: noMatch.brief.evidenceBriefId,
+      },
+    );
+    await expect(
+      materializer.verifyNoMatch(context, {
+        workId: noMatch.brief.workId,
+        evidenceBriefId: noMatch.brief.evidenceBriefId,
+      }),
+    ).rejects.toThrow("checksum");
 
     await writeFile(
       path.join(root, "src/allowed.ts"),

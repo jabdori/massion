@@ -5,10 +5,17 @@ import {
   type PlanStrategyResult,
   type StrategyService,
 } from "@massion/context-strategy";
+import type {
+  EvidenceContextBinder,
+  EvidencePromptMaterializer,
+  MaterializedEvidencePrompt,
+  WorkspaceKnowledgeService,
+} from "@massion/evidence";
 import type { TenantContext } from "@massion/identity";
 import { CORE_OFFICE_HANDLES, type OrganizationGraphService } from "@massion/organization";
 import type { AgentRunner, RuntimeExecutionStore } from "@massion/runtime";
 import { canTransitionWork, type WorkService } from "@massion/work";
+import type { WorkspaceService } from "@massion/workspace";
 
 import type {
   CoreWorkStage,
@@ -26,8 +33,20 @@ export interface CoreWorkPipelineDependencies {
   readonly graph: Pick<OrganizationGraphService, "getCurrentSnapshot">;
   readonly works: Pick<
     WorkService,
-    "createWork" | "getWork" | "transition" | "openRoom" | "postMessage" | "listRooms" | "listMessages"
+    | "createWork"
+    | "getWork"
+    | "transition"
+    | "openRoom"
+    | "postMessage"
+    | "listRooms"
+    | "listMessages"
+    | "listSharedContexts"
+    | "addSharedContext"
   >;
+  readonly workspaces?: Pick<WorkspaceService, "get">;
+  readonly workspaceKnowledge?: Pick<WorkspaceKnowledgeService, "prepare">;
+  readonly evidencePromptMaterializer?: Pick<EvidencePromptMaterializer, "materialize">;
+  readonly evidenceContextBinder?: Pick<EvidenceContextBinder, "bind">;
   readonly representative: Pick<AgentRunner, "execute" | "cancel">;
   readonly runtimeExecutions: Pick<RuntimeExecutionStore, "findExecutionIdByCommand">;
   readonly strategy: Pick<StrategyService, "plan">;
@@ -38,10 +57,14 @@ export interface CoreWorkPipelineDependencies {
 }
 
 const CORE_OFFICE_ROOM_TITLE = "Core Office";
+const MAX_KNOWLEDGE_TOKENS = 24_000;
+const STAGE_OUTPUT_RESERVE_TOKENS = 4_000;
 
-type CurrentOrganizationSnapshot = Awaited<
-  ReturnType<CoreWorkPipelineDependencies["graph"]["getCurrentSnapshot"]>
->;
+function promptTokens(value: unknown): number {
+  return Math.max(1, Math.ceil(JSON.stringify(value).length / 4));
+}
+
+type CurrentOrganizationSnapshot = Awaited<ReturnType<CoreWorkPipelineDependencies["graph"]["getCurrentSnapshot"]>>;
 
 function organizationDeclarationContent(snapshot: CurrentOrganizationSnapshot) {
   const nodes = Array.isArray(snapshot.nodes) ? snapshot.nodes : [];
@@ -69,10 +92,7 @@ function organizationDeclarationContent(snapshot: CurrentOrganizationSnapshot) {
   };
 }
 
-function organizationDeclarationSource(
-  snapshot: CurrentOrganizationSnapshot,
-  observedAt: string,
-): ContextSource {
+function organizationDeclarationSource(snapshot: CurrentOrganizationSnapshot, observedAt: string): ContextSource {
   const content = organizationDeclarationContent(snapshot);
   const serialized = JSON.stringify(content);
   return {
@@ -251,6 +271,15 @@ export function createCoreWorkPipelineExecutors(
       const value = request(input.request);
       const organizationSnapshot = await dependencies.graph.getCurrentSnapshot(context);
       throwIfCancelled(input);
+      const representativeInput = {
+        operation: "coordinate_work",
+        request: value,
+        organization: organizationDeclarationContent(organizationSnapshot),
+      };
+      const representativeBaseline = Math.min(
+        value.tokenBudget,
+        promptTokens(representativeInput) + STAGE_OUTPUT_RESERVE_TOKENS,
+      );
       let workId = input.workId;
       if (workId === undefined) {
         const created = await dependencies.works.createWork(context, {
@@ -267,6 +296,117 @@ export function createCoreWorkPipelineExecutors(
       if (input.signal?.aborted) await cancelAndThrowIfCancelled(context, input, workId);
       const room = await coreOfficeRoom(context, input, workId, value.tokenBudget);
       await cancelAndThrowIfCancelled(context, input, workId);
+      const currentWork = await dependencies.works.getWork(context, workId);
+      await cancelAndThrowIfCancelled(context, input, workId);
+      let knowledgeSources: readonly MaterializedEvidencePrompt[] | undefined;
+      if (currentWork.workspace_id !== undefined) {
+        if (!dependencies.workspaces)
+          return { outcome: "blocked", reason: "workspace-knowledge-not-configured", workId };
+        let workspace: Awaited<ReturnType<NonNullable<typeof dependencies.workspaces>["get"]>>;
+        try {
+          workspace = await dependencies.workspaces.get(context, currentWork.workspace_id);
+        } catch {
+          await cancelAndThrowIfCancelled(context, input, workId);
+          return { outcome: "blocked", reason: "workspace-inactive", workId };
+        }
+        await cancelAndThrowIfCancelled(context, input, workId);
+        if (workspace.status !== "active") return { outcome: "blocked", reason: "workspace-inactive", workId };
+        if (workspace.trust !== "trusted") return { outcome: "blocked", reason: "workspace-untrusted", workId };
+        if (
+          !dependencies.workspaceKnowledge ||
+          !dependencies.evidencePromptMaterializer ||
+          !dependencies.evidenceContextBinder
+        ) {
+          return { outcome: "blocked", reason: "workspace-knowledge-not-configured", workId };
+        }
+        let prepared: Awaited<ReturnType<typeof dependencies.workspaceKnowledge.prepare>>;
+        try {
+          prepared = await dependencies.workspaceKnowledge.prepare(context, {
+            commandId: `${input.runId}:knowledge`,
+            workId,
+            workspaceId: workspace.workspaceId,
+            workspaceName: workspace.name,
+            root: workspace.path,
+            query: value.text,
+            ...(value.workspacePaths.length === 0 ? {} : { relativePaths: value.workspacePaths }),
+          });
+        } catch {
+          await cancelAndThrowIfCancelled(context, input, workId);
+          return { outcome: "blocked", reason: "evidence-invalid", workId };
+        }
+        await cancelAndThrowIfCancelled(context, input, workId);
+        const { brief } = prepared;
+        if (brief.status === "ready") {
+          let existing: { readonly checksum: string } | undefined;
+          try {
+            existing = (await dependencies.works.listSharedContexts(context, workId, room.room_id)).find(
+              (reference) =>
+                reference.source_kind === "evidence-brief" &&
+                reference.source_id === brief.evidenceBriefId &&
+                reference.version_id === brief.indexVersionId,
+            );
+          } catch {
+            await cancelAndThrowIfCancelled(context, input, workId);
+            return { outcome: "blocked", reason: "evidence-invalid", workId };
+          }
+          await cancelAndThrowIfCancelled(context, input, workId);
+          if (existing && existing.checksum !== brief.checksum)
+            return { outcome: "blocked", reason: "evidence-invalid", workId };
+          if (!existing) {
+            let latestRevision: number;
+            try {
+              latestRevision = (await dependencies.works.getWork(context, workId)).revision;
+            } catch {
+              await cancelAndThrowIfCancelled(context, input, workId);
+              return { outcome: "blocked", reason: "evidence-invalid", workId };
+            }
+            await cancelAndThrowIfCancelled(context, input, workId);
+            try {
+              await dependencies.works.addSharedContext(context, {
+                commandId: `${input.runId}:knowledge-shared:${brief.evidenceBriefId}`,
+                workId,
+                expectedRevision: latestRevision,
+                roomId: room.room_id,
+                sourceKind: "evidence-brief",
+                sourceId: brief.evidenceBriefId,
+                versionId: brief.indexVersionId,
+                checksum: brief.checksum,
+              });
+            } catch {
+              await cancelAndThrowIfCancelled(context, input, workId);
+              return { outcome: "blocked", reason: "evidence-invalid", workId };
+            }
+            await cancelAndThrowIfCancelled(context, input, workId);
+          }
+          let materialized: MaterializedEvidencePrompt;
+          const maxKnowledgeTokens = Math.min(MAX_KNOWLEDGE_TOKENS, value.tokenBudget - representativeBaseline);
+          if (maxKnowledgeTokens < 1) return { outcome: "blocked", reason: "evidence-invalid", workId };
+          try {
+            materialized = await dependencies.evidencePromptMaterializer.materialize(context, {
+              workId,
+              evidenceBriefId: brief.evidenceBriefId,
+              maxEstimatedTokens: maxKnowledgeTokens,
+            });
+          } catch {
+            await cancelAndThrowIfCancelled(context, input, workId);
+            return { outcome: "blocked", reason: "evidence-invalid", workId };
+          }
+          await cancelAndThrowIfCancelled(context, input, workId);
+          if (
+            materialized.evidenceBriefId !== brief.evidenceBriefId ||
+            materialized.indexVersionId !== brief.indexVersionId ||
+            materialized.briefChecksum !== brief.checksum ||
+            !Number.isSafeInteger(materialized.estimatedTokens) ||
+            materialized.estimatedTokens < 1 ||
+            materialized.estimatedTokens > maxKnowledgeTokens
+          ) {
+            return { outcome: "blocked", reason: "evidence-invalid", workId };
+          }
+          knowledgeSources = [materialized];
+        } else if (brief.status !== "no_match") {
+          return { outcome: "blocked", reason: "evidence-invalid", workId };
+        }
+      }
       const requestMessage = await dependencies.works.postMessage(context, {
         commandId: `${input.runId}:core-office-request`,
         workId,
@@ -285,12 +425,11 @@ export function createCoreWorkPipelineExecutors(
         agentHandle: "representative",
         modelRoute: "orchestration-balanced",
         correlationId: input.correlationId,
-        estimatedTokens: value.tokenBudget,
+        estimatedTokens: representativeBaseline + (knowledgeSources?.[0]?.estimatedTokens ?? 0),
         estimatedCostMicros: 0,
         input: {
-          operation: "coordinate_work",
-          request: value,
-          organization: organizationDeclarationContent(organizationSnapshot),
+          ...representativeInput,
+          ...(knowledgeSources === undefined ? {} : { knowledgeSources }),
         },
         ...(input.signal === undefined ? {} : { signal: input.signal }),
       });
@@ -341,6 +480,14 @@ export function createCoreWorkPipelineExecutors(
       throwIfCancelled(input);
       const messages = room ? await dependencies.works.listMessages(context, input.workId, room.room_id) : [];
       throwIfCancelled(input);
+      const evidenceReferences =
+        room && work.workspace_id !== undefined
+          ? (await dependencies.works.listSharedContexts(context, input.workId, room.room_id)).filter(
+              (reference) => reference.source_kind === "evidence-brief",
+            )
+          : [];
+      throwIfCancelled(input);
+      if (evidenceReferences.length > 1) return { outcome: "blocked", reason: "evidence-invalid" };
       const observedAt = new Date().toISOString();
       const sources: ContextSource[] = [
         {
@@ -382,6 +529,29 @@ export function createCoreWorkPipelineExecutors(
           mandatory: false,
           content: collaborationContent,
         });
+      }
+      for (const reference of evidenceReferences) {
+        if (!dependencies.evidenceContextBinder) return { outcome: "blocked", reason: "evidence-invalid" };
+        let source: ContextSource;
+        try {
+          source = await dependencies.evidenceContextBinder.bind(context, {
+            evidenceBriefId: reference.source_id,
+            policy: "warn",
+          });
+        } catch {
+          throwIfCancelled(input);
+          return { outcome: "blocked", reason: "evidence-invalid" };
+        }
+        throwIfCancelled(input);
+        if (
+          source.sourceId !== reference.source_id ||
+          source.revision !== reference.version_id ||
+          source.contentHash !== reference.checksum
+        ) {
+          return { outcome: "blocked", reason: "evidence-invalid" };
+        }
+        const { content: _content, ...metadataOnly } = source;
+        sources.push(metadataOnly);
       }
       const planInput: PlanStrategyInput = {
         commandId: input.commandId,

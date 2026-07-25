@@ -42,6 +42,7 @@ import {
   runtimeSubscriptionLineage,
   runtimeSubscriptionLineagesByCorrelation,
 } from "./runtime-subscription-lineage.js";
+import type { WorkKnowledgeViewV1 } from "./contracts.js";
 
 export interface ApplicationQueryResultV1 {
   readonly schemaVersion: "massion.application.v1";
@@ -77,6 +78,9 @@ export interface ApplicationQueryDependencies {
   readonly memberships?: Pick<OrganizationService, "listMembers">;
   readonly workspaces?: Pick<WorkspaceService, "list" | "get">;
   readonly workTimeline?: WorkTimelineSources;
+  readonly workKnowledge?: {
+    get(context: TenantContext, workId: string): Promise<WorkKnowledgeViewV1>;
+  };
   readonly autonomy?: { get(context: TenantContext): Promise<{ readonly mode: string; readonly revision: number }> };
   readonly provenance?: {
     listByWork(
@@ -121,6 +125,29 @@ function publicRun(run: ApplicationRunView): Record<string, unknown> {
     leaseGeneration: run.leaseGeneration,
     ...(run.createdAt === undefined ? {} : { createdAt: run.createdAt }),
     ...(run.updatedAt === undefined ? {} : { updatedAt: run.updatedAt }),
+  };
+}
+
+function publicWorkKnowledge(view: WorkKnowledgeViewV1): WorkKnowledgeViewV1 {
+  return {
+    workId: view.workId,
+    status: view.status,
+    ...(view.repositoryId === undefined ? {} : { repositoryId: view.repositoryId }),
+    ...(view.repositoryRevisionId === undefined ? {} : { repositoryRevisionId: view.repositoryRevisionId }),
+    ...(view.indexVersionId === undefined ? {} : { indexVersionId: view.indexVersionId }),
+    ...(view.evidenceBriefId === undefined ? {} : { evidenceBriefId: view.evidenceBriefId }),
+    ...(view.freshnessStatus === undefined ? {} : { freshnessStatus: view.freshnessStatus }),
+    ...(view.query === undefined ? {} : { query: view.query }),
+    references: view.references.map((reference) => ({
+      referenceId: reference.referenceId,
+      kind: reference.kind,
+      relativePath: reference.relativePath,
+      ...(reference.qualifiedName === undefined ? {} : { qualifiedName: reference.qualifiedName }),
+      startLine: reference.startLine,
+      endLine: reference.endLine,
+      contentHash: reference.contentHash,
+    })),
+    ...(view.failureReason === undefined ? {} : { failureReason: view.failureReason }),
   };
 }
 
@@ -1006,6 +1033,21 @@ export function registerApplicationQueries(
             versionId: reference.versionId,
             checksum: reference.checksum,
           }));
+      },
+    });
+  }
+  const workKnowledge = dependencies.workKnowledge;
+  if (workKnowledge) {
+    registry.register({
+      operation: "work.knowledge",
+      requiredScopes: ["work:read"],
+      allowedRoles: EVERY_ROLE,
+      validate: (value) => object(value, ["workId"]),
+      handle: async (context, value) => {
+        const workId = text(value.workId, "workId");
+        const view = await workKnowledge.get(context, workId);
+        if (view.workId !== workId) throw new Error("Work knowledge와 요청한 Work가 일치하지 않습니다");
+        return publicWorkKnowledge(view);
       },
     });
   }

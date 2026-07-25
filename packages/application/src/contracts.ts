@@ -44,6 +44,17 @@ export interface StartRunRequestV1 {
   readonly workspaceId?: string;
   readonly workspacePaths?: readonly string[];
   readonly tokenBudget?: number;
+  readonly softwareDelivery?: {
+    readonly repositoryRoot: string;
+    readonly repositoryId: string;
+    readonly repositoryRevisionId: string;
+    readonly baseRevision: string;
+    readonly profileVersion: string;
+    readonly allowedPaths: readonly string[];
+    readonly testPaths: readonly string[];
+    readonly environment?: string;
+    readonly leaseTtlMs?: number;
+  };
   readonly scopeIn?: readonly string[];
   readonly scopeOut?: readonly string[];
   readonly constraints?: readonly string[];
@@ -302,6 +313,29 @@ export interface DirectiveViewV1 {
   readonly failureReason?: string;
 }
 
+export interface KnowledgeReferenceViewV1 {
+  readonly referenceId: string;
+  readonly kind: "symbol" | "chunk";
+  readonly relativePath: string;
+  readonly qualifiedName?: string;
+  readonly startLine: number;
+  readonly endLine: number;
+  readonly contentHash: string;
+}
+
+export interface WorkKnowledgeViewV1 {
+  readonly workId: string;
+  readonly status: "not-applicable" | "ready" | "no-match" | "blocked";
+  readonly repositoryId?: string;
+  readonly repositoryRevisionId?: string;
+  readonly indexVersionId?: string;
+  readonly evidenceBriefId?: string;
+  readonly freshnessStatus?: "fresh" | "stale_warning";
+  readonly query?: string;
+  readonly references: readonly KnowledgeReferenceViewV1[];
+  readonly failureReason?: string;
+}
+
 export interface ApplicationQueryMapV1 {
   readonly "workspace.list": { readonly payload: Record<string, never>; readonly data: readonly WorkspaceViewV1[] };
   readonly "workspace.get": { readonly payload: { readonly workspaceId: string }; readonly data: WorkspaceViewV1 };
@@ -363,14 +397,26 @@ export interface ApplicationQueryMapV1 {
     readonly payload: { readonly workId: string };
     readonly data: readonly SharedContextViewV1[];
   };
-  readonly "organization.graph.snapshot": { readonly payload: Record<string, never>; readonly data: OrganizationGraphSnapshotV1 };
+  readonly "work.knowledge": {
+    readonly payload: { readonly workId: string };
+    readonly data: WorkKnowledgeViewV1;
+  };
+  readonly "organization.graph.snapshot": {
+    readonly payload: Record<string, never>;
+    readonly data: OrganizationGraphSnapshotV1;
+  };
   readonly "governance.autonomy": { readonly payload: Record<string, never>; readonly data: GovernanceAutonomyViewV1 };
-  readonly "extension.list": { readonly payload: Record<string, never>; readonly data: readonly ExtensionInstallationViewV1[] };
+  readonly "extension.list": {
+    readonly payload: Record<string, never>;
+    readonly data: readonly ExtensionInstallationViewV1[];
+  };
 }
 
 export interface ApplicationCommandMapV1 {
   readonly "workspace.register": { readonly payload: { readonly path: string; readonly name?: string } };
-  readonly "workspace.trust": { readonly payload: { readonly workspaceId: string; readonly decision: "trusted" | "blocked" } };
+  readonly "workspace.trust": {
+    readonly payload: { readonly workspaceId: string; readonly decision: "trusted" | "blocked" };
+  };
   readonly "workspace.archive": { readonly payload: { readonly workspaceId: string } };
   readonly "run.start": { readonly payload: { readonly request: StartRunRequestV1 } };
   readonly "run.cancel": { readonly payload: { readonly runId: string } };

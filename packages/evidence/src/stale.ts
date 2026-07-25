@@ -63,9 +63,6 @@ export class EvidenceFreshnessService {
       });
     }
 
-    const requiresIndex = reasons.some((reason) =>
-      ["current_index_missing", "current_index_incomplete", "configuration_mismatch"].includes(reason),
-    );
     if (policy === "block") {
       return await this.measured(context, brief, {
         evidenceBriefId: brief.evidenceBriefId,
@@ -74,7 +71,7 @@ export class EvidenceFreshnessService {
         reasons,
       });
     }
-    if (policy === "warn" && !requiresIndex) {
+    if (policy === "warn") {
       return await this.measured(context, brief, {
         evidenceBriefId: brief.evidenceBriefId,
         status: "stale_warning",

@@ -26,6 +26,15 @@ describe("AgentRunner patch proposal 경계", () => {
       validationCommands: [],
       commitMessage: "feat: proposal",
     };
+    const knowledgeSources = [
+      {
+        evidenceBriefId: "brief-1",
+        indexVersionId: "index-1",
+        briefChecksum: "a".repeat(64),
+        snippets: [{ citation: "src/runtime.ts:1-1", content: "export const runtime = true;" }],
+        estimatedTokens: 8,
+      },
+    ];
     const executeStructured = vi.fn().mockResolvedValue({
       executionId: "execution-1",
       status: "succeeded",
@@ -46,12 +55,18 @@ describe("AgentRunner patch proposal 경계", () => {
         objective: "테스트 우선 변경",
         acceptanceCriteria: ["GREEN"],
         evidenceBriefIds: ["brief-1"],
+        knowledgeSources,
         allowedPaths: ["src", "test.ts"],
       }),
     ).resolves.toEqual(proposal);
     expect(executeStructured).toHaveBeenCalledWith(
       context,
-      expect.objectContaining({ input: expect.not.objectContaining({ workspacePath: expect.anything() }) }),
+      expect.objectContaining({
+        input: expect.objectContaining({
+          evidenceBriefIds: ["brief-1"],
+          knowledgeSources,
+        }),
+      }),
       expect.objectContaining({ name: "software_patch_proposal" }),
     );
     const source = await readFile(new URL("./runtime.ts", import.meta.url), "utf8");
@@ -78,6 +93,7 @@ describe("AgentRunner patch proposal 경계", () => {
       objective: "변경",
       acceptanceCriteria: ["GREEN"],
       evidenceBriefIds: [],
+      knowledgeSources: [],
       allowedPaths: ["src"],
     };
     await expect(service.propose(context, request)).rejects.toThrow("proposal execution");

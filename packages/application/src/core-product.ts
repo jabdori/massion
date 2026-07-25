@@ -1,10 +1,16 @@
 import type { AssuranceBindingStore, AssuranceRunGateway } from "@massion/assurance";
-import type { StrategyService } from "@massion/context-strategy";
-import type { EvidenceBriefStore } from "@massion/evidence";
+import type { ContextStore, StrategyService } from "@massion/context-strategy";
+import type {
+  EvidenceBriefStore,
+  EvidenceContextBinder,
+  EvidencePromptMaterializer,
+  WorkspaceKnowledgeService,
+} from "@massion/evidence";
 import type { OrganizationGraphService } from "@massion/organization";
 import type { RecordsService } from "@massion/records";
 import type { AgentRunner, RuntimeExecutionStore } from "@massion/runtime";
 import type { WorkService } from "@massion/work";
+import type { WorkspaceService } from "@massion/workspace";
 
 import { CoreAssuranceStage, type CoreAssuranceCheckOrchestrator } from "./core-assurance-stage.js";
 import { CoreDeliveryStage, type CoreSoftwareTaskPort } from "./core-delivery-stage.js";
@@ -13,6 +19,14 @@ import { createCoreWorkPipelineExecutors } from "./core-pipeline.js";
 import { CoreRecordsStage, type CoreRecordsDocumentPlanner } from "./core-records-stage.js";
 import { DeterministicRecordsDocumentPlanner } from "./records-document-planner.js";
 import type { CoreWorkStage, CoreWorkStageExecutor } from "./core-work-coordinator.js";
+
+export interface CoreProductKnowledgeDependencies {
+  readonly workspaces: Pick<WorkspaceService, "get">;
+  readonly workspaceKnowledge: Pick<WorkspaceKnowledgeService, "prepare">;
+  readonly evidencePromptMaterializer: Pick<EvidencePromptMaterializer, "materialize" | "verifyNoMatch">;
+  readonly evidenceContextBinder: Pick<EvidenceContextBinder, "bind">;
+  readonly contexts: Pick<ContextStore, "get">;
+}
 
 export interface CoreProductDependencies {
   readonly graph: OrganizationGraphService;
@@ -27,17 +41,27 @@ export interface CoreProductDependencies {
   readonly records: RecordsService;
   readonly recordDocuments?: CoreRecordsDocumentPlanner;
   readonly software: CoreSoftwareTaskPort;
+  readonly knowledge?: CoreProductKnowledgeDependencies;
 }
 
 export function createCoreProductExecutors(
   dependencies: CoreProductDependencies,
 ): Readonly<Record<CoreWorkStage, CoreWorkStageExecutor>> {
-  const evidence = new CoreEvidenceStage({ works: dependencies.works, briefs: dependencies.briefs });
+  const knowledge = dependencies.knowledge;
+  const evidence = new CoreEvidenceStage({
+    works: dependencies.works,
+    briefs: dependencies.briefs,
+    ...(knowledge === undefined
+      ? {}
+      : { contexts: knowledge.contexts, materializer: knowledge.evidencePromptMaterializer }),
+  });
   const delivery = new CoreDeliveryStage({
     works: dependencies.works,
     runner: dependencies.runner,
     runtimeExecutions: dependencies.runtimeExecutions,
     software: dependencies.software,
+    evidence,
+    ...(knowledge === undefined ? {} : { workspaces: knowledge.workspaces }),
   });
   const assurance = new CoreAssuranceStage({
     works: dependencies.works,
@@ -55,6 +79,14 @@ export function createCoreProductExecutors(
   return createCoreWorkPipelineExecutors({
     graph: dependencies.graph,
     works: dependencies.works,
+    ...(knowledge === undefined
+      ? {}
+      : {
+          workspaces: knowledge.workspaces,
+          workspaceKnowledge: knowledge.workspaceKnowledge,
+          evidencePromptMaterializer: knowledge.evidencePromptMaterializer,
+          evidenceContextBinder: knowledge.evidenceContextBinder,
+        }),
     representative: dependencies.runner,
     runtimeExecutions: dependencies.runtimeExecutions,
     strategy: dependencies.strategy,

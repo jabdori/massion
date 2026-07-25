@@ -279,6 +279,18 @@ describe("Collaboration Room과 resource lease", () => {
     });
 
     expect(shared.reference).toMatchObject({ source_id: "context-1", version_id: "v1", checksum });
+    await expect(service.listSharedContexts(context, work.work_id, opened.room.room_id)).resolves.toMatchObject([
+      {
+        organization_id: context.organizationId,
+        work_id: work.work_id,
+        room_id: opened.room.room_id,
+        shared_context_reference_id: shared.reference.shared_context_reference_id,
+        source_kind: "context",
+        source_id: "context-1",
+        version_id: "v1",
+        checksum,
+      },
+    ]);
     expect(released.lease.status).toBe("released");
     expect(released.lease.version).toBe(3);
   });

@@ -2,8 +2,8 @@ import { createHash } from "node:crypto";
 
 import type { TenantContext } from "@massion/identity";
 
-import type { EvidenceBriefStore } from "./evidence-store.js";
-import type { IndexStore } from "./index-store.js";
+import type { EvidenceBrief, EvidenceBriefStore } from "./evidence-store.js";
+import type { IndexSnapshot, IndexStore } from "./index-store.js";
 import type { RepositoryStore } from "./repository-store.js";
 import { redactSecrets } from "./scanner.js";
 
@@ -56,37 +56,11 @@ export class EvidencePromptMaterializer {
     if (!Number.isInteger(budget) || budget < 1 || budget > MAX_ESTIMATED_TOKENS)
       throw new Error("Prompt token budget은 1 이상 24,000 이하의 정수여야 합니다");
 
-    const brief = await this.briefs.getBrief(context, evidenceBriefId);
-    if (brief.workId !== workId) throw new Error("EvidenceBrief가 요청한 Work에 속하지 않습니다");
+    const { brief, snapshot } = await this.verifyBriefSnapshot(context, workId, evidenceBriefId);
     if (brief.status !== "ready" || !brief.scopeChecksum)
       throw new Error("준비 완료되고 scope가 검증된 EvidenceBrief만 materialize할 수 있습니다");
     if (brief.references.length < 1 || brief.references.length > 12)
       throw new Error("Materialize할 EvidenceBrief reference는 1개 이상 12개 이하여야 합니다");
-
-    const [repository, revision, index] = await Promise.all([
-      this.repositories.getRepository(context, brief.repositoryId),
-      this.repositories.getRevision(context, brief.repositoryRevisionId),
-      this.repositories.getIndex(context, brief.indexVersionId),
-    ]);
-    if (
-      revision.repositoryId !== repository.repositoryId ||
-      index.repositoryId !== repository.repositoryId ||
-      index.repositoryRevisionId !== revision.repositoryRevisionId ||
-      !["complete", "superseded"].includes(index.status)
-    ) {
-      throw new Error("EvidenceBrief의 Repository, revision 또는 IndexVersion 소유 관계가 다릅니다");
-    }
-    const configuration = await this.repositories.getConfiguration(context, index.configurationId);
-    if (
-      configuration.repositoryId !== repository.repositoryId ||
-      configuration.checksum !== index.configurationChecksum ||
-      brief.configurationChecksum !== index.configurationChecksum
-    ) {
-      throw new Error("EvidenceBrief의 IndexConfiguration checksum이 다릅니다");
-    }
-    const snapshot = await this.indexes.getSnapshot(context, index.indexVersionId);
-    if (!index.snapshotChecksum || index.snapshotChecksum !== snapshot.checksum)
-      throw new Error("EvidenceBrief의 snapshot checksum이 다릅니다");
 
     const chunkById = new Map(snapshot.chunks.map((chunk) => [chunk.chunkId, chunk]));
     const snippets: EvidencePromptSnippet[] = [];
@@ -96,9 +70,9 @@ export class EvidencePromptMaterializer {
       if (reference.kind !== "code" || reference.sourceKind !== "chunk")
         throw new Error("Prompt materialization은 code chunk reference만 허용합니다");
       if (
-        reference.repositoryId !== repository.repositoryId ||
-        reference.repositoryRevisionId !== revision.repositoryRevisionId ||
-        reference.indexVersionId !== index.indexVersionId
+        reference.repositoryId !== brief.repositoryId ||
+        reference.repositoryRevisionId !== brief.repositoryRevisionId ||
+        reference.indexVersionId !== brief.indexVersionId
       ) {
         throw new Error("Prompt reference의 Repository, revision 또는 IndexVersion이 다릅니다");
       }
@@ -142,5 +116,64 @@ export class EvidencePromptMaterializer {
       estimatedTokens,
       truncated,
     };
+  }
+
+  public async verifyNoMatch(context: TenantContext, input: MaterializeEvidencePromptInput): Promise<EvidenceBrief> {
+    const workId = input.workId.trim();
+    const evidenceBriefId = input.evidenceBriefId.trim();
+    if (!workId || !evidenceBriefId) throw new Error("Work ID와 EvidenceBrief ID가 필요합니다");
+    const { brief } = await this.verifyBriefSnapshot(context, workId, evidenceBriefId);
+    if (
+      brief.status !== "no_match" ||
+      !brief.query.trim() ||
+      !brief.scopeChecksum ||
+      !/^[a-f0-9]{64}$/u.test(brief.scopeChecksum) ||
+      brief.references.length !== 0 ||
+      brief.claims.length !== 0
+    ) {
+      throw new Error("no-match EvidenceBrief 불변량이 다릅니다");
+    }
+    return brief;
+  }
+
+  private async verifyBriefSnapshot(
+    context: TenantContext,
+    workId: string,
+    evidenceBriefId: string,
+  ): Promise<{ readonly brief: EvidenceBrief; readonly snapshot: IndexSnapshot }> {
+    const brief = await this.briefs.getBrief(context, evidenceBriefId);
+    if (brief.organizationId !== context.organizationId || brief.workId !== workId)
+      throw new Error("EvidenceBrief가 요청한 organization 또는 Work에 속하지 않습니다");
+    const [repository, revision, index] = await Promise.all([
+      this.repositories.getRepository(context, brief.repositoryId),
+      this.repositories.getRevision(context, brief.repositoryRevisionId),
+      this.repositories.getIndex(context, brief.indexVersionId),
+    ]);
+    if (
+      repository.organizationId !== context.organizationId ||
+      revision.repositoryId !== repository.repositoryId ||
+      index.repositoryId !== repository.repositoryId ||
+      index.repositoryRevisionId !== revision.repositoryRevisionId ||
+      !["complete", "superseded"].includes(index.status)
+    ) {
+      throw new Error("EvidenceBrief의 Repository, revision 또는 IndexVersion 소유 관계가 다릅니다");
+    }
+    const configuration = await this.repositories.getConfiguration(context, index.configurationId);
+    if (
+      configuration.repositoryId !== repository.repositoryId ||
+      configuration.checksum !== index.configurationChecksum ||
+      brief.configurationChecksum !== index.configurationChecksum
+    ) {
+      throw new Error("EvidenceBrief의 IndexConfiguration checksum이 다릅니다");
+    }
+    const snapshot = await this.indexes.getSnapshot(context, index.indexVersionId);
+    if (
+      snapshot.indexVersionId !== index.indexVersionId ||
+      !index.snapshotChecksum ||
+      index.snapshotChecksum !== snapshot.checksum
+    ) {
+      throw new Error("EvidenceBrief의 snapshot checksum이 다릅니다");
+    }
+    return { brief, snapshot };
   }
 }

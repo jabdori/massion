@@ -1,12 +1,53 @@
+import type { MaterializedEvidencePrompt } from "@massion/evidence";
 import type { TenantContext } from "@massion/identity";
 import type { AgentRunner, RuntimeExecutionStore } from "@massion/runtime";
 import { isSoftwareEngineeringTask } from "@massion/software-engineering";
 import type { WorkService, WorkTask } from "@massion/work";
 import type { WorkspaceService } from "@massion/workspace";
 
+import type { CoreEvidenceStage } from "./core-evidence-stage.js";
 import type { CoreWorkStageExecutor, CoreWorkStageInput, CoreWorkStageResult } from "./core-work-coordinator.js";
 
 const APPLICATION_RUN_CANCELLED = "Application run cancelled";
+const MAX_KNOWLEDGE_TOKENS = 24_000;
+const STAGE_OUTPUT_RESERVE_TOKENS = 4_000;
+
+function requestedTokenBudget(request: unknown): number {
+  const value = request && typeof request === "object" && !Array.isArray(request) ? request : {};
+  const tokenBudget = (value as { tokenBudget?: unknown }).tokenBudget ?? 32_000;
+  if (!Number.isSafeInteger(tokenBudget) || (tokenBudget as number) < 1_000 || (tokenBudget as number) > 1_000_000) {
+    throw new Error("Core Work token budget이 유효하지 않습니다");
+  }
+  return tokenBudget as number;
+}
+
+function promptTokens(value: unknown): number {
+  return Math.max(1, Math.ceil(JSON.stringify(value).length / 4));
+}
+
+function stageBaseline(value: unknown, tokenBudget: number): number {
+  return Math.min(tokenBudget, promptTokens(value) + STAGE_OUTPUT_RESERVE_TOKENS);
+}
+
+function softwarePrompt(task: WorkTask, request: unknown): unknown {
+  const softwareDelivery =
+    request && typeof request === "object" && !Array.isArray(request)
+      ? (request as { softwareDelivery?: unknown }).softwareDelivery
+      : undefined;
+  const allowedPaths =
+    softwareDelivery && typeof softwareDelivery === "object" && !Array.isArray(softwareDelivery)
+      ? (softwareDelivery as { allowedPaths?: unknown }).allowedPaths
+      : [];
+  return {
+    objective: task.objective,
+    acceptanceCriteria:
+      typeof task.acceptance_criteria_json === "string"
+        ? (JSON.parse(task.acceptance_criteria_json) as unknown)
+        : [],
+    allowedPaths,
+    instruction: "testPatch와 implementationPatch를 분리해 제안하고 filesystem이나 process를 직접 실행하지 마세요.",
+  };
+}
 
 function isSoftwareTask(task: WorkTask): boolean {
   return isSoftwareEngineeringTask({
@@ -24,6 +65,7 @@ export interface CoreSoftwareTaskPort {
       readonly workId: string;
       readonly task: WorkTask;
       readonly request: unknown;
+      readonly knowledgeSources?: readonly MaterializedEvidencePrompt[];
       readonly resumeInput?: unknown;
       readonly signal?: AbortSignal;
     },
@@ -49,6 +91,7 @@ export class CoreDeliveryStage implements CoreWorkStageExecutor {
       readonly runtimeExecutions: Pick<RuntimeExecutionStore, "findExecutionIdByCommand">;
       readonly software?: CoreSoftwareTaskPort;
       readonly workspaces?: Pick<WorkspaceService, "get">;
+      readonly evidence?: Pick<CoreEvidenceStage, "materializeActive">;
     },
   ) {}
 
@@ -64,6 +107,7 @@ export class CoreDeliveryStage implements CoreWorkStageExecutor {
       this.throwIfCancelled(input);
       if (workspace.trust !== "trusted") return { outcome: "blocked", reason: "workspace-untrusted" };
     }
+    const tokenBudget = requestedTokenBudget(input.request);
     const preassignedTaskIds = new Set<string>();
     if (initial.status === "planned") {
       const tasks = await this.dependencies.works.listTasks(context, input.workId);
@@ -139,15 +183,53 @@ export class CoreDeliveryStage implements CoreWorkStageExecutor {
             ? "delivery-task-failed"
             : "delivery-dependencies-blocked",
         };
-      if (isSoftwareTask(task)) {
-        if (!this.dependencies.software) return { outcome: "blocked", reason: "software-delivery-not-configured" };
+      const softwareTask = isSoftwareTask(task);
+      if (softwareTask && !this.dependencies.software) {
+        return { outcome: "blocked", reason: "software-delivery-not-configured" };
+      }
+      const runtimeInput = {
+        operation: "execute_work_task",
+        title: task.title,
+        objective: task.objective,
+        acceptanceCriteria:
+          typeof task.acceptance_criteria_json === "string"
+            ? (JSON.parse(task.acceptance_criteria_json) as unknown)
+            : [],
+      };
+      const baselineTokens = stageBaseline(
+        softwareTask ? softwarePrompt(task, input.request) : runtimeInput,
+        tokenBudget,
+      );
+      let knowledgeSources: readonly MaterializedEvidencePrompt[] | undefined;
+      if (initial.workspace_id !== undefined) {
+        if (!this.dependencies.evidence) return { outcome: "blocked", reason: "evidence-invalid" };
+        const maxKnowledgeTokens = Math.min(MAX_KNOWLEDGE_TOKENS, tokenBudget - baselineTokens);
+        if (maxKnowledgeTokens < 1) return { outcome: "blocked", reason: "evidence-invalid" };
+        try {
+          const materials = await this.dependencies.evidence.materializeActive(
+            context,
+            input.workId,
+            maxKnowledgeTokens,
+          );
+          if (materials.length > 0) knowledgeSources = materials;
+        } catch {
+          this.throwIfCancelled(input);
+          return { outcome: "blocked", reason: "evidence-invalid" };
+        }
         this.throwIfCancelled(input);
-        const result = await this.dependencies.software.executeTask(context, {
+      }
+      if (softwareTask) {
+        this.throwIfCancelled(input);
+        // ponytail: async 대기 후 속성이 변경될 수 있어 지역 변수로 좁힘 — 라인 187 가드와 동일 조건
+        const software = this.dependencies.software;
+        if (!software) return { outcome: "blocked", reason: "software-delivery-not-configured" };
+        const result = await software.executeTask(context, {
           commandId: `${input.commandId}:task:${task.task_id}`,
           correlationId: input.correlationId,
           workId: input.workId,
           task,
           request: input.request,
+          ...(knowledgeSources === undefined ? {} : { knowledgeSources }),
           ...(input.resumeInput === undefined ? {} : { resumeInput: input.resumeInput }),
           ...(input.signal === undefined ? {} : { signal: input.signal }),
         });
@@ -213,14 +295,12 @@ export class CoreDeliveryStage implements CoreWorkStageExecutor {
             agentHandle: task.recommended_agent_handles?.[0] ?? "delivery-coordination",
             modelRoute: "delivery-quality",
             correlationId: input.correlationId,
-            estimatedTokens: 16_000,
+            estimatedTokens: baselineTokens + (knowledgeSources?.[0]?.estimatedTokens ?? 0),
             estimatedCostMicros: 0,
             ...(input.signal === undefined ? {} : { signal: input.signal }),
             input: {
-              operation: "execute_work_task",
-              title: task.title,
-              objective: task.objective,
-              acceptanceCriteria: JSON.parse(task.acceptance_criteria_json) as unknown,
+              ...runtimeInput,
+              ...(knowledgeSources === undefined ? {} : { knowledgeSources }),
             },
           });
       this.throwIfCancelled(input);

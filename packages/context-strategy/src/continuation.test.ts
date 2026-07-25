@@ -26,8 +26,8 @@ const REPLAN: StrategyPlan = {
     {
       key: "criterion-deploy",
       statement: "배포 검증이 통과한다",
-      method: "test",
-      evidenceKinds: ["test-report"],
+      method: "evidence",
+      evidenceKinds: ["artifact-version"],
       planLevel: false,
     },
   ],

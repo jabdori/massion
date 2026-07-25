@@ -28,10 +28,29 @@ const request = {
     evidenceBriefIds: ["brief-1"],
   },
 };
+const knowledgeSources = [
+  {
+    evidenceBriefId: "brief-verified",
+    indexVersionId: "index-verified",
+    briefChecksum: "a".repeat(64),
+    snippets: [{
+      referenceId: "ref-verified",
+      citation: "src/verified.ts:1-1",
+      relativePath: "src/verified.ts",
+      startLine: 1,
+      endLine: 1,
+      content: "export const verified = true;",
+      estimatedTokens: 5,
+    }],
+    estimatedTokens: 8,
+    truncated: false,
+  },
+];
 
 describe("CoreSoftwareTaskAdapter", () => {
   it("배정→TDD→승인 대기 후 같은 Delivery를 승인 ID로 최종화한다", async () => {
     const calls: string[] = [];
+    const proposalInputs: unknown[] = [];
     let existing: { deliveryId: string; status: string } | undefined;
     const adapter = new CoreSoftwareTaskAdapter({
       works: {
@@ -55,8 +74,16 @@ describe("CoreSoftwareTaskAdapter", () => {
         },
       },
       proposals: {
-        propose: async (_context: unknown, input: { acceptanceCriteria: readonly string[] }) => {
+        propose: async (
+          _context: unknown,
+          input: {
+            acceptanceCriteria: readonly string[];
+            evidenceBriefIds: readonly string[];
+            knowledgeSources: readonly unknown[];
+          },
+        ) => {
           calls.push(`propose:${input.acceptanceCriteria[0]}`);
+          proposalInputs.push(input);
           return {
             testPatch: "test",
             implementationPatch: "implementation",
@@ -89,6 +116,7 @@ describe("CoreSoftwareTaskAdapter", () => {
       workId: "software-work",
       task,
       request,
+      knowledgeSources,
     };
     await expect(adapter.executeTask(context, common as never)).resolves.toEqual({
       outcome: "awaiting-approval",
@@ -105,6 +133,14 @@ describe("CoreSoftwareTaskAdapter", () => {
       "finalize:none",
       "finalize:approval-1",
     ]);
+    expect(proposalInputs).toEqual([
+      expect.objectContaining({
+        estimatedTokens: expect.any(Number),
+        evidenceBriefIds: ["brief-verified"],
+        knowledgeSources,
+      }),
+    ]);
+    expect((proposalInputs[0] as { estimatedTokens: number }).estimatedTokens).toBeLessThanOrEqual(32_000);
   });
 
   it("취소 시 Delivery를 terminal로 전이한 뒤 격리 workspace 복구 정리를 실행한다", async () => {
@@ -133,6 +169,39 @@ describe("CoreSoftwareTaskAdapter", () => {
       request,
     });
     expect(calls).toEqual(["cancelled", "recover"]);
+  });
+
+  it("1,000 token Work에서 검증된 근거가 proposal baseline을 넘으면 부수 효과 전에 차단한다", async () => {
+    let deliveryReads = 0;
+    let proposalCalls = 0;
+    const adapter = new CoreSoftwareTaskAdapter({
+      works: {},
+      deliveries: {
+        findByStartCommand: async () => {
+          deliveryReads += 1;
+          return undefined;
+        },
+      },
+      proposals: {
+        propose: async () => {
+          proposalCalls += 1;
+          return {};
+        },
+      },
+    } as never);
+
+    await expect(
+      adapter.executeTask(context, {
+        commandId: "software-low-budget-command",
+        correlationId: "software-low-budget-correlation",
+        workId: "software-work",
+        task: task as never,
+        request: { ...request, tokenBudget: 1_000 },
+        knowledgeSources,
+      }),
+    ).resolves.toEqual({ outcome: "blocked", reason: "evidence-invalid" });
+    expect(deliveryReads).toBe(0);
+    expect(proposalCalls).toBe(0);
   });
 
   it("Delivery 생성 전 취소 요청이 오면 Engineering delivery를 시작하지 않는다", async () => {

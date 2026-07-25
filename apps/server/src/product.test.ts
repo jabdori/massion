@@ -326,7 +326,7 @@ describe("Massion server product", () => {
       await daemon.close();
       await rm(workspaceRoot, { recursive: true, force: true });
     }
- }, 20_000);
+  }, 20_000);
 
   it("로컬 daemon과 owner 접근 토큰으로 extension.list를 조회하고 registry.info 누락 버전이 fallback 메시지로 실패하지 않는다", async () => {
     const workspaceRoot = await mkdtemp(join(tmpdir(), "massion-extension-registry-wiring-"));
@@ -474,6 +474,50 @@ describe("Massion server product", () => {
       MASSION_SOFTWARE_WORKSPACE_ROOT: workspaceRoot,
       MASSION_CONNECTOR_ROOT: join(workspaceRoot, "connectors"),
     });
+    const database = await createDatabase(parsed.database);
+    const daemon = await createMassionDaemon(
+      {
+        ...parsed,
+        server: { ...parsed.server, port: 0 },
+        metrics: { ...parsed.metrics, port: 0 },
+        registry: { ...parsed.registry, port: 0 },
+      },
+      { database },
+    );
+    const address = await daemon.start();
+    try {
+      const initialized = (await ApplicationHttpClient.bootstrap(address.url, {
+        commandId: "decisions-query-wiring-bootstrap-0001",
+      })) as { access: { token: string } };
+      const client = new ApplicationHttpClient({ baseUrl: address.url, token: initialized.access.token });
+
+      await expect(client.query("governance.approval.list", { status: "pending" })).resolves.toMatchObject({
+        data: [],
+      });
+      await expect(client.query("governance.autonomy", {})).resolves.toMatchObject({
+        data: { mode: "automatic", revision: 0 },
+      });
+    } finally {
+      await daemon.close();
+      await rm(workspaceRoot, { recursive: true, force: true });
+    }
+  }, 20_000);
+
+  it("trusted Workspace Work는 실제 코드 지식 조립을 거쳐 모델 경계까지 진행한다", async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), "massion-knowledge-wiring-"));
+    const repositoryRoot = join(workspaceRoot, "repository");
+    await mkdir(join(repositoryRoot, "src"), { recursive: true });
+    await writeFile(
+      join(repositoryRoot, "src", "order.ts"),
+      "export function calculateTotal(items: number[]): number { return items.reduce((sum, item) => sum + item, 0); }\n",
+    );
+    const parsed = parseServerConfig({
+      MASSION_TOKEN_KEY: Buffer.alloc(32, 81).toString("base64url"),
+      MASSION_CREDENTIAL_KEY: Buffer.alloc(32, 82).toString("base64url"),
+      MASSION_DATABASE_URL: "mem://",
+      MASSION_SOFTWARE_WORKSPACE_ROOT: join(workspaceRoot, "software"),
+      MASSION_CONNECTOR_ROOT: join(workspaceRoot, "connectors"),
+    });
     const daemon = await createMassionDaemon({
       ...parsed,
       server: { ...parsed.server, port: 0 },
@@ -483,19 +527,68 @@ describe("Massion server product", () => {
     const address = await daemon.start();
     try {
       const initialized = (await ApplicationHttpClient.bootstrap(address.url, {
-        commandId: "decisions-query-wiring-bootstrap-0001",
+        commandId: "knowledge-wiring-bootstrap-0001",
       })) as { access: { token: string } };
       const client = new ApplicationHttpClient({ baseUrl: address.url, token: initialized.access.token });
-
-      await expect(client.query("governance.approval.list", { status: "pending" })).resolves.toMatchObject({ data: [] });
-      await expect(client.query("governance.autonomy", {})).resolves.toMatchObject({
-        data: { mode: "automatic", revision: 0 },
+      const registered = (await client.command({
+        schemaVersion: "massion.application.v1",
+        commandId: "knowledge-wiring-workspace-register-0001",
+        correlationId: "knowledge-wiring-workspace-register-correlation-0001",
+        operation: "workspace.register",
+        payload: { path: repositoryRoot },
+      })) as { data: { workspaceId: string; revision: number } };
+      await client.command({
+        schemaVersion: "massion.application.v1",
+        commandId: "knowledge-wiring-workspace-trust-0001",
+        correlationId: "knowledge-wiring-workspace-trust-correlation-0001",
+        operation: "workspace.trust",
+        expectedRevision: registered.data.revision,
+        payload: { workspaceId: registered.data.workspaceId, decision: "trusted" },
       });
+      const accepted = (await client.command({
+        schemaVersion: "massion.application.v1",
+        commandId: "knowledge-wiring-run-0001",
+        correlationId: "knowledge-wiring-run-correlation-0001",
+        operation: "run.start",
+        payload: {
+          request: {
+            text: "calculateTotal 함수의 동작을 설명해주세요",
+            workspaceId: registered.data.workspaceId,
+            workspacePaths: ["src/order.ts"],
+          },
+        },
+      })) as { data: { runId: string } };
+
+      let run: { readonly workId?: string; readonly status?: string; readonly blockedReason?: string } | undefined;
+      for (let attempt = 0; attempt < 500; attempt += 1) {
+        const response = (await client.query("run.get", { runId: accepted.data.runId })) as { data: typeof run };
+        run = response.data;
+        if (run?.status === "blocked") break;
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+      expect(run).toMatchObject({ status: "blocked", blockedReason: "model-unavailable", workId: expect.any(String) });
+      await expect(client.query("work.knowledge", { workId: run?.workId })).resolves.toMatchObject({
+        data: {
+          status: "blocked",
+          references: [],
+          failureReason: "knowledge-integrity-check-failed",
+        },
+      });
+      const shared = (await client.query("work.shared-contexts", { workId: run?.workId })) as {
+        data: readonly unknown[];
+      };
+      expect(shared.data).toEqual([
+        expect.objectContaining({
+          sourceKind: "evidence-brief",
+          versionId: expect.any(String),
+          checksum: expect.any(String),
+        }),
+      ]);
     } finally {
       await daemon.close();
       await rm(workspaceRoot, { recursive: true, force: true });
     }
-  }, 20_000);
+  }, 30_000);
 
   it("초기 설치에서도 성장 조회는 실제 저장소의 빈 상태를 반환한다", async () => {
     const workspaceRoot = await mkdtemp(join(tmpdir(), "massion-growth-query-wiring-"));
@@ -669,6 +762,7 @@ describe("Massion server product", () => {
   }, 20_000);
 
   it("OpenAI 호환 route가 있으면 Representative→Strategy→Delivery 실제 Core 경로를 실행한다", async () => {
+    const sourceSecret = "sk-knowledge-secret-1234567890";
     const plan = {
       objective: "실제 Core 경로 검증",
       summary: "한 작업을 전달하고 검증 단계까지 진행한다",
@@ -700,11 +794,14 @@ describe("Massion server product", () => {
       ],
       evidenceRequests: [],
     };
+    const modelRequests: string[] = [];
     const modelServer = createServer((request, response) => {
       const chunks: Buffer[] = [];
       request.on("data", (chunk: Buffer) => chunks.push(chunk));
       request.on("end", () => {
-        const body = JSON.parse(Buffer.concat(chunks).toString("utf8")) as { response_format?: unknown };
+        const rawBody = Buffer.concat(chunks).toString("utf8");
+        modelRequests.push(rawBody);
+        const body = JSON.parse(rawBody) as { response_format?: unknown };
         response.setHeader("content-type", "application/json");
         response.end(
           JSON.stringify({
@@ -728,6 +825,13 @@ describe("Massion server product", () => {
     const modelAddress = modelServer.address();
     if (!modelAddress || typeof modelAddress === "string") throw new Error("테스트 모델 주소를 찾을 수 없습니다");
     const workspaceRoot = await mkdtemp(join(tmpdir(), "massion-live-core-"));
+    const repositoryRoot = join(workspaceRoot, "repository");
+    const sourcePath = join(repositoryRoot, "src", "order.ts");
+    await mkdir(join(repositoryRoot, "src"), { recursive: true });
+    await writeFile(
+      sourcePath,
+      `const apiKey = "${sourceSecret}";\nexport function calculateTotal(items: number[]): number {\n  return items.reduce((sum, item) => sum + item, 0);\n}\n`,
+    );
     const parsed = parseServerConfig({
       MASSION_TOKEN_KEY: Buffer.alloc(32, 21).toString("base64url"),
       MASSION_CREDENTIAL_KEY: Buffer.alloc(32, 22).toString("base64url"),
@@ -735,12 +839,16 @@ describe("Massion server product", () => {
       MASSION_SOFTWARE_WORKSPACE_ROOT: workspaceRoot,
       MASSION_CONNECTOR_ROOT: join(workspaceRoot, "connectors"),
     });
-    const daemon = await createMassionDaemon({
-      ...parsed,
-      server: { ...parsed.server, port: 0 },
-      metrics: { ...parsed.metrics, port: 0 },
-      registry: { ...parsed.registry, port: 0 },
-    });
+    const database = await createDatabase(parsed.database);
+    const daemon = await createMassionDaemon(
+      {
+        ...parsed,
+        server: { ...parsed.server, port: 0 },
+        metrics: { ...parsed.metrics, port: 0 },
+        registry: { ...parsed.registry, port: 0 },
+      },
+      { database },
+    );
     const address = await daemon.start();
     try {
       const initialized = (await ApplicationHttpClient.bootstrap(address.url, {
@@ -820,7 +928,24 @@ describe("Massion server product", () => {
         });
       }
       await expect(client.status()).resolves.toMatchObject({ data: { modelRuntime: "ready" } });
-      await command("run.start", { request: { text: "실제 Core 경로를 검증해주세요" } });
+      const registered = (await command("workspace.register", { path: repositoryRoot })) as {
+        data: { workspaceId: string; revision: number };
+      };
+      await client.command({
+        schemaVersion: "massion.application.v1",
+        commandId: crypto.randomUUID(),
+        correlationId: crypto.randomUUID(),
+        operation: "workspace.trust",
+        expectedRevision: registered.data.revision,
+        payload: { workspaceId: registered.data.workspaceId, decision: "trusted" },
+      });
+      const accepted = await command("run.start", {
+        request: {
+          text: "calculateTotal 함수의 동작을 검증해주세요",
+          workspaceId: registered.data.workspaceId,
+          workspacePaths: ["src/order.ts"],
+        },
+      });
       let snapshot: {
         data?: {
           works?: readonly { status: string }[];
@@ -845,6 +970,110 @@ describe("Massion server product", () => {
           expect.objectContaining({ agentHandle: "assurance", status: "succeeded" }),
         ]),
       );
+      let run = (await client.query("run.get", { runId: accepted.data.runId })) as {
+        data: { workId: string; status: string };
+      };
+      for (let attempt = 0; attempt < 300 && run.data.status !== "completed"; attempt += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        run = (await client.query("run.get", { runId: accepted.data.runId })) as typeof run;
+      }
+      expect(run.data.status).toBe("completed");
+      const ready = (await client.query("work.knowledge", { workId: run.data.workId })) as {
+        data: {
+          status: string;
+          evidenceBriefId?: string;
+          freshnessStatus?: string;
+          references: readonly {
+            relativePath?: string;
+            startLine?: number;
+            endLine?: number;
+          }[];
+        };
+      };
+      expect(ready.data).toMatchObject({
+        status: "ready",
+        freshnessStatus: "fresh",
+        references: expect.arrayContaining([
+          expect.objectContaining({
+            kind: "chunk",
+            relativePath: "src/order.ts",
+            qualifiedName: "calculateTotal",
+            startLine: 2,
+            endLine: 4,
+            contentHash: expect.stringMatching(/^[a-f0-9]{64}$/u),
+          }),
+        ]),
+      });
+      expect(JSON.stringify(ready.data)).not.toContain(sourceSecret);
+      const shared = (await client.query("work.shared-contexts", { workId: run.data.workId })) as {
+        data: readonly { sourceKind: string; sourceId: string; checksum: string }[];
+      };
+      const lineage = shared.data.filter((reference) => reference.sourceKind === "evidence-brief");
+      expect(lineage).toHaveLength(1);
+      const evidenceBriefId = ready.data.evidenceBriefId;
+      const briefChecksum = lineage[0]?.checksum;
+      const reference = ready.data.references[0];
+      if (
+        !evidenceBriefId ||
+        !briefChecksum ||
+        !reference?.relativePath ||
+        !reference.startLine ||
+        !reference.endLine
+      ) {
+        throw new Error("실제 Core 경로의 Evidence lineage를 찾을 수 없습니다");
+      }
+      const citation = `${reference.relativePath}:${String(reference.startLine)}-${String(reference.endLine)}`;
+      const stageRequest = (operation: string): string => {
+        const matches = modelRequests.filter((modelRequest) => modelRequest.includes(operation));
+        expect(matches, `${operation} model request`).toHaveLength(1);
+        return matches[0] as string;
+      };
+      for (const [stage, operation] of [
+        ["Representative", "coordinate_work"],
+        ["Strategy", "create_strategy_plan"],
+        ["Delivery", "execute_work_task"],
+      ] as const) {
+        const modelRequest = stageRequest(operation);
+        expect(modelRequest, `${stage} EvidenceBrief ID`).toContain(evidenceBriefId);
+        expect(modelRequest, `${stage} Brief checksum`).toContain(briefChecksum);
+        expect(modelRequest, `${stage} citation`).toContain(citation);
+        expect(modelRequest, `${stage} redacted source`).toContain("function calculateTotal");
+        expect(modelRequest, `${stage} secret redaction`).not.toContain(sourceSecret);
+      }
+
+      await writeFile(
+        sourcePath,
+        `const apiKey = "${sourceSecret}";\nexport function calculateTotal(items: number[]): number {\n  return items.reduce((sum, item) => sum + item, 1);\n}\n`,
+      );
+      const changed = await command("run.start", {
+        request: {
+          text: "변경된 calculateTotal 함수를 검증해주세요",
+          workspaceId: registered.data.workspaceId,
+          workspacePaths: ["src/order.ts"],
+        },
+      });
+      let changedStatus = "";
+      for (let attempt = 0; attempt < 300; attempt += 1) {
+        const changedRun = (await client.query("run.get", { runId: changed.data.runId })) as {
+          data: { status: string };
+        };
+        changedStatus = changedRun.data.status;
+        if (changedStatus === "completed") break;
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+      expect(changedStatus).toBe("completed");
+      await expect(client.query("work.knowledge", { workId: run.data.workId })).resolves.toMatchObject({
+        data: { status: "ready", freshnessStatus: "stale_warning" },
+      });
+      // Assurance가 검증한 Brief는 DB 이벤트가 변조를 차단한다 — 변조가 막히면 work.knowledge는 변하지 않는다
+      await expect(
+        database.query("UPDATE evidence_brief SET automatic_key = NONE WHERE evidence_brief_id = $evidence_brief_id;", {
+          evidence_brief_id: evidenceBriefId,
+        }),
+      ).rejects.toThrow();
+      await expect(client.query("work.knowledge", { workId: run.data.workId })).resolves.toMatchObject({
+        data: { status: "ready", freshnessStatus: "stale_warning" },
+      });
     } finally {
       await daemon.close();
       await rm(workspaceRoot, { recursive: true, force: true });

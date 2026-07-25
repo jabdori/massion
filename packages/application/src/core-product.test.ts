@@ -1,4 +1,5 @@
 import { IdentityService, OrganizationService } from "@massion/identity";
+import { OrganizationGraphService } from "@massion/organization";
 import { createDatabase } from "@massion/storage";
 import { WorkService } from "@massion/work";
 import { describe, expect, it } from "vitest";
@@ -33,6 +34,69 @@ describe("Core product composition", () => {
       "records",
     ]);
     expect(Object.values(executors).every((executor) => typeof executor.execute === "function")).toBe(true);
+  });
+
+  it("공개 조립 경로는 지식 의존성이 제공된 Workspace Work를 구성 누락으로 차단하지 않는다", async () => {
+    await using database = await createDatabase({
+      url: "mem://",
+      namespace: "massion",
+      database: crypto.randomUUID(),
+    });
+    const identities = await IdentityService.create(database);
+    const organizations = await OrganizationService.create(database);
+    const owner = await identities.registerPersonalUser({
+      email: "core-product-knowledge@example.com",
+      displayName: "Core Product Knowledge",
+    });
+    const context = await organizations.resolveTenantContext(owner.user.user_id, owner.organization.organization_id);
+    const graph = await OrganizationGraphService.create(database, organizations);
+    await graph.bootstrap(context);
+    const works = await WorkService.create(database, organizations, graph);
+    const prepare = async () => ({ brief: { status: "no_match" } }) as never;
+    const executors = createCoreProductExecutors({
+      graph,
+      works,
+      runner: {
+        execute: async () => ({
+          executionId: "core-product-knowledge-representative",
+          status: "blocked_model_unavailable",
+        }),
+        cancel: async () => undefined,
+      },
+      runtimeExecutions: { findExecutionIdByCommand: async () => undefined },
+      strategy: {},
+      briefs: {},
+      assurance: {},
+      assuranceBindings: {},
+      assuranceChecks: {},
+      records: {},
+      software: {},
+      knowledge: {
+        workspaces: {
+          get: async () =>
+            ({
+              workspaceId: "core-product-knowledge-workspace",
+              name: "Core Product Knowledge",
+              path: "/workspace/core-product-knowledge",
+              status: "active",
+              trust: "trusted",
+            }) as never,
+        },
+        workspaceKnowledge: { prepare },
+        evidencePromptMaterializer: { materialize: async () => ({}) as never },
+        evidenceContextBinder: { bind: async () => ({}) as never },
+        contexts: { get: async () => ({}) as never },
+      },
+    } as never);
+
+    await expect(
+      executors.intake.execute(context, {
+        runId: "core-product-knowledge-run-0001",
+        commandId: "core-product-knowledge-run-0001:intake",
+        correlationId: "core-product-knowledge-correlation-0001",
+        request: { text: "no-match 지식 경로", workspaceId: "core-product-knowledge-workspace" },
+      }),
+    ).resolves.toMatchObject({ outcome: "blocked", reason: "model-unavailable", workId: expect.any(String) });
   });
 
   it("표준 Evidence adapter가 자유 지시를 소비하지 않으면 applied로 오인하지 않고 실패 폐쇄한다", async () => {

@@ -69,6 +69,7 @@ describe("CoreDeliveryStage", () => {
       runner: {},
       runtimeExecutions: {},
       workspaces: { get: async () => ({ workspaceId: "workspace-1", trust: "trusted" }) },
+      evidence: { materializeActive: async () => [] },
     } as never);
     await expect(stage.execute(context, input)).resolves.toMatchObject({ outcome: "advanced" });
   });
@@ -182,6 +183,17 @@ describe("CoreDeliveryStage", () => {
 
   it("일반 Task는 assign→running→runtime→artifact→completed 순서를 지킨다", async () => {
     const calls: string[] = [];
+    const runtimeInputs: unknown[] = [];
+    const materializeInputs: unknown[] = [];
+    const knowledgeSources = [
+      {
+        evidenceBriefId: "delivery-brief-1",
+        indexVersionId: "delivery-index-1",
+        briefChecksum: "a".repeat(64),
+        snippets: [{ citation: "src/delivery.ts:1-1", content: "export const delivery = true;" }],
+        estimatedTokens: 8,
+      },
+    ];
     let taskStatus = "ready";
     let workStatus = "running";
     let revision = 1;
@@ -197,7 +209,7 @@ describe("CoreDeliveryStage", () => {
     });
     const works = {
       listTasks: async () => (taskStatus === "completed" ? [task()] : [task()]),
-      getWork: async () => ({ revision, status: workStatus }),
+      getWork: async () => ({ revision, status: workStatus, workspace_id: "workspace-delivery" }),
       transition: async (_context: unknown, value: { target: string }) => {
         calls.push(`work-${value.target}`);
         workStatus = value.target;
@@ -224,8 +236,9 @@ describe("CoreDeliveryStage", () => {
     const stage = new CoreDeliveryStage({
       works,
       runner: {
-        execute: async () => {
+        execute: async (_context: unknown, runtimeInput: unknown) => {
           calls.push("runtime");
+          runtimeInputs.push(runtimeInput);
           return { executionId: "execution-1", status: "succeeded", output: { answer: 42 } };
         },
         recover: async () => {
@@ -234,12 +247,112 @@ describe("CoreDeliveryStage", () => {
         cancel: async () => undefined,
       },
       runtimeExecutions: { findExecutionIdByCommand: async () => undefined },
+      workspaces: { get: async () => ({ trust: "trusted" }) },
+      evidence: {
+        materializeActive: async (...args: unknown[]) => {
+          materializeInputs.push(args);
+          return knowledgeSources;
+        },
+      },
     } as never);
     await expect(stage.execute(context, input)).resolves.toMatchObject({
       outcome: "advanced",
       data: { artifactVersionIds: ["artifact-version-1"] },
     });
     expect(calls).toEqual(["assign", "running", "runtime", "artifact", "completed", "work-verifying"]);
+    expect(materializeInputs).toEqual([[context, input.workId, 24_000]]);
+    expect(runtimeInputs).toEqual([
+      expect.objectContaining({
+        estimatedTokens: expect.any(Number),
+        input: expect.objectContaining({ operation: "execute_work_task", knowledgeSources }),
+      }),
+    ]);
+    expect((runtimeInputs[0] as { estimatedTokens: number }).estimatedTokens).toBeLessThanOrEqual(32_000);
+  });
+
+  it("검증된 Workspace 근거를 Software Engineering Task port에도 전달한다", async () => {
+    const knowledgeSources = [
+      {
+        evidenceBriefId: "software-brief-verified",
+        indexVersionId: "software-index-verified",
+        briefChecksum: "b".repeat(64),
+        snippets: [{ citation: "src/software.ts:1-1", content: "export const software = true;" }],
+        estimatedTokens: 8,
+      },
+    ];
+    const softwareInputs: unknown[] = [];
+    let listCalls = 0;
+    const task = {
+      task_id: "task-software-evidence",
+      status: "ready",
+      required_capabilities: ["backend-engineering"],
+      recommended_agent_handles: ["software-engineering.backend-specialist"],
+      revision: 1,
+    };
+    const stage = new CoreDeliveryStage({
+      works: {
+        listTasks: async () => (++listCalls === 1 ? [task] : []),
+        getWork: async () => ({ revision: 1, status: "running", workspace_id: "workspace-software" }),
+        transition: async () => ({ work: { revision: 2, status: "verifying" } }),
+      },
+      runner: {},
+      runtimeExecutions: {},
+      workspaces: { get: async () => ({ trust: "trusted" }) },
+      evidence: { materializeActive: async () => knowledgeSources },
+      software: {
+        executeTask: async (_context: unknown, softwareInput: unknown) => {
+          softwareInputs.push(softwareInput);
+          return { outcome: "completed" };
+        },
+        cancelTask: async () => undefined,
+      },
+    } as never);
+
+    await expect(stage.execute(context, input)).resolves.toMatchObject({ outcome: "advanced" });
+    expect(softwareInputs).toEqual([expect.objectContaining({ knowledgeSources })]);
+  });
+
+  it("1,000 token Work에서 stage baseline 뒤 근거 여유가 없으면 실행 전에 차단한다", async () => {
+    let materializeCalls = 0;
+    let runtimeCalls = 0;
+    const stage = new CoreDeliveryStage({
+      works: {
+        getWork: async () => ({ revision: 1, status: "running", workspace_id: "workspace-low-budget" }),
+        listTasks: async () => [
+          {
+            task_id: "task-low-budget",
+            title: "저예산 실행",
+            objective: "요청 예산 안에서 실행",
+            acceptance_criteria_json: "[]",
+            status: "ready",
+            required_capabilities: [],
+            recommended_agent_handles: ["delivery-coordination"],
+            revision: 1,
+          },
+        ],
+      },
+      workspaces: { get: async () => ({ trust: "trusted" }) },
+      evidence: {
+        materializeActive: async () => {
+          materializeCalls += 1;
+          return [];
+        },
+      },
+      runner: {
+        execute: async () => {
+          runtimeCalls += 1;
+          return {};
+        },
+      },
+      runtimeExecutions: {},
+    } as never);
+
+    await expect(stage.execute(context, { ...input, request: { tokenBudget: 1_000 } })).resolves.toEqual({
+      outcome: "blocked",
+      reason: "evidence-invalid",
+    });
+    expect(materializeCalls).toBe(0);
+    expect(runtimeCalls).toBe(0);
   });
 
   it("Work 조회 중 취소되면 Delivery 상태 변경을 시작하지 않는다", async () => {

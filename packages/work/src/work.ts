@@ -1824,6 +1824,19 @@ export class WorkService {
     return rooms;
   }
 
+  public async listSharedContexts(
+    context: TenantContext,
+    workId: string,
+    roomId: string,
+  ): Promise<SharedContextReference[]> {
+    await this.getWork(context, workId);
+    const [references] = await this.database.query<[SharedContextReference[]]>(
+      "SELECT * OMIT id FROM shared_context_reference WHERE organization_id = $organization_id AND work_id = $work_id AND room_id = $room_id ORDER BY created_at ASC;",
+      { organization_id: context.organizationId, work_id: workId, room_id: roomId },
+    );
+    return references;
+  }
+
   public async addSharedContext(
     context: TenantContext,
     input: AddSharedContextInput,
