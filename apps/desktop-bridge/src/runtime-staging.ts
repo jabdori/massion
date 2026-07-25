@@ -88,13 +88,22 @@ async function verifyOwnerDirectory(path: string): Promise<void> {
   }
 }
 
-async function verifyExistingRuntime(path: string, expectedDigest: string): Promise<void> {
-  if (!(await useExistingRuntime(path, expectedDigest))) {
+async function verifyExistingRuntime(
+  path: string,
+  expectedDigest: string,
+  options: { verifyHardlinks?: boolean } = {},
+): Promise<void> {
+  if (!(await useExistingRuntime(path, expectedDigest, options))) {
     throw new Error("per-user SurrealDB digest가 예상과 다릅니다");
   }
 }
 
-async function useExistingRuntime(path: string, expectedDigest: string): Promise<boolean> {
+async function useExistingRuntime(
+  path: string,
+  expectedDigest: string,
+  options: { verifyHardlinks?: boolean } = {},
+): Promise<boolean> {
+  const verifyHardlinks = options.verifyHardlinks ?? true;
   let handle: FileHandle;
   try {
     handle = await openNoFollow(path, constants.O_RDONLY | constants.O_NONBLOCK);
@@ -104,7 +113,7 @@ async function useExistingRuntime(path: string, expectedDigest: string): Promise
   }
   try {
     const metadata = await handle.stat();
-    verifyRuntimeFile(metadata, "per-user", true);
+    verifyRuntimeFile(metadata, "per-user", true, true, verifyHardlinks);
     if ((await digestHandle(handle)) !== expectedDigest) return false;
     await handle.chmod(0o500);
     await handle.sync();
@@ -149,7 +158,11 @@ async function copyVerifiedRuntime(sourcePath: string, destination: string, expe
     } finally {
       await directory.close();
     }
-    await verifyExistingRuntime(destination, expectedDigest);
+    // rename 직후 재검증: 동일 digest로 검증된 파일을 last-writer-wins로 배치한다.
+    // 다른 동시 호출이 destination을 덮어쓰면 방금 open한 inode의 nlink가 0으로 떨어지지만,
+    // 보안 검증(nlink·owner·chmod·digest)은 rename 전 temp 파일에서 이미 완료했다.
+    // 따라서 이 컨텍스트에서만 하드 링크 방어를 생략해 동시 staging 충돌을 허용한다.
+    await verifyExistingRuntime(destination, expectedDigest, { verifyHardlinks: false });
   } finally {
     await source.close();
     await target?.close().catch(() => undefined);
@@ -188,9 +201,14 @@ function verifyRuntimeFile(
   label: string,
   requireOwner: boolean,
   requireContent = true,
+  verifyHardlinks = true,
 ): void {
   if (!metadata.isFile()) throw new Error(`${label} SurrealDB 실행 파일은 regular file이어야 합니다`);
-  if (metadata.nlink !== 1) throw new Error(`${label} SurrealDB 실행 파일에 hard link를 사용할 수 없습니다`);
+  // ponytail: nlink 검사는 rename 직후 재검증에서는 동시 호출의 덮어쓰기(nlink=0)를 정상으로
+  // 다뤄야 하므로 옵션으로 끌 수 있게 했다. 외부 공격자의 하드 링크는 프로덕션 진입점
+  // (useExistingRuntime 기본 경로)에서 verifyHardlinks=true로 여전히 차단된다.
+  if (verifyHardlinks && metadata.nlink !== 1)
+    throw new Error(`${label} SurrealDB 실행 파일에 hard link를 사용할 수 없습니다`);
   if ((requireContent && metadata.size < 1) || metadata.size > MAX_RUNTIME_BYTES) {
     throw new Error(`${label} SurrealDB 실행 파일 크기가 유효하지 않습니다`);
   }
