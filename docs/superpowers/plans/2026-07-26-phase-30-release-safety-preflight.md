@@ -82,3 +82,50 @@ git commit -m "fix(local-control): 호환 불명 epoch에서 사용자 데이터
 - [x] 새 설치와 빈 root는 자동 초기화됩니다.
 - [x] daemon 시작·runtime staging·backup이 같은 공통 gate를 사용합니다.
 - [x] Task 11의 업데이트·제거·재설치 UAT 전, 자동 삭제 경로가 없다는 회귀 검증이 있습니다.
+
+---
+
+## Task 2: 깨끗한 checkout의 Tauri 개발 실행 준비
+
+**Files:**
+
+- Modify: `apps/desktop/src-tauri/tauri.conf.json`
+- Modify: `docs/superpowers/plans/2026-07-26-phase-30-release-safety-preflight.md`
+
+- [x] **Step 1: 현재 개발 실행의 누락된 build 의존을 재현합니다.**
+
+`RuntimePaths::development()`가 `desktop-bridge/dist/entry.js`와 `server/dist/main.js`를 필수로 요구하지만, 두 파일은 Git에서 추적하지 않습니다. 기존 `beforeDevCommand`가 sidecar와 Vite만 준비한다는 것을 설정과 실행 출력으로 기록합니다.
+
+- [x] **Step 2: 개발 전 단일 bootstrap에 server·bridge build를 추가합니다.**
+
+`tauri.conf.json`의 `beforeDevCommand` 앞에 기존 package script를 그대로 사용해 다음 순서를 둡니다.
+
+```text
+pnpm --filter @massion/server build
+pnpm --filter @massion/desktop-bridge build
+node src-tauri/prepare-runtime.mjs
+pnpm dev
+```
+
+별도 wrapper나 새 build script는 만들지 않습니다. 릴리스 staging도 같은 두 산출물을 이미 빌드하므로 개발 경로만 정합화합니다.
+
+- [x] **Step 3: GUI를 열지 않는 bootstrap 순서를 검증합니다.**
+
+Run: `env MASSION_SURREAL_BINARY=/dev/null pnpm --filter @massion/desktop tauri:dev`
+
+Expected: server와 desktop bridge build가 `prepare-runtime` 실패보다 먼저 실행되고, `/dev/null` 때문에 sidecar 입력 검증에서 exit 1로 끝납니다. 실제 GUI·native UAT는 이 명령으로 대체하지 않습니다.
+
+- [x] **Step 4: 타입·diff와 한 개의 분리 커밋을 검증합니다.**
+
+Run: `pnpm --filter @massion/desktop typecheck && git diff --check`
+
+```sh
+git add apps/desktop/src-tauri/tauri.conf.json docs/superpowers/plans/2026-07-26-phase-30-release-safety-preflight.md
+git commit -m "fix(desktop): Tauri 개발 실행 전에 bridge와 server를 빌드" -m "추적되지 않는 runtime entrypoint 때문에 깨끗한 checkout에서 앱이 시작하지 못하던 문제를 개발 bootstrap 순서에서 해결했습니다."
+```
+
+## 완료 조건
+
+- [x] `tauri:dev`가 ignored `server`·`desktop-bridge` 산출물을 스스로 준비합니다.
+- [x] sidecar 검증 실패는 build가 끝난 뒤에만 발생합니다.
+- [x] 실제 GUI UAT는 별도 증거로 남기며 이 bootstrap 검증을 UAT 완료로 표시하지 않았습니다.

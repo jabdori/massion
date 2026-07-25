@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "identifier": "dev.massion.desktop",
   "build": {
-    "beforeDevCommand": "node src-tauri/prepare-runtime.mjs && pnpm dev",
+    "beforeDevCommand": "pnpm --filter @massion/server build && pnpm --filter @massion/desktop-bridge build && node src-tauri/prepare-runtime.mjs && pnpm dev",
     "devUrl": "http://localhost:5173",
     "frontendDist": "../dist"
   },
