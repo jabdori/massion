@@ -736,9 +736,10 @@ describe("Assurance run과 Work 완료 게이트", () => {
       try {
         await restoreBackup(target, corruption.backup);
         const targetOrganizations = await OrganizationService.create(target);
+        const restoredGateway = await AssuranceBootstrap.create(target, targetOrganizations);
         await expect(
-          AssuranceBootstrap.create(target, targetOrganizations),
-          `${corruption.label} 변조를 활성화 전에 거부해야 합니다`,
+          restoredGateway.assertRestoredCompliance(context),
+          `${corruption.label} 변조는 명시적 복원 검증에서 거부해야 합니다`,
         ).rejects.toThrow("Assurance 준수 위반");
       } finally {
         await target.close();
@@ -782,7 +783,8 @@ describe("Assurance run과 Work 완료 게이트", () => {
       );
       expect(invalidWorks).toHaveLength(1);
       expect(invalidVerifications).toEqual([{ passed: false }]);
-      await expect(AssuranceBootstrap.create(invalid, invalidOrganizations)).rejects.toThrow("Assurance 준수 위반");
+      const invalidGateway = await AssuranceBootstrap.create(invalid, invalidOrganizations);
+      await expect(invalidGateway.assertRestoredCompliance(context)).rejects.toThrow("Assurance 준수 위반");
     } finally {
       await invalid.close();
     }

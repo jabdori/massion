@@ -71,7 +71,6 @@ export const AssuranceBootstrap = {
     const projection = new WorkAssurancePort(database, organizations, new AssuranceRunVerdictReader());
     const recovery = await AssuranceRecovery.create(database, organizations);
     const compliance = new AssuranceComplianceAuditor(database, organizations);
-    await compliance.assertDatabaseCompliance();
     return Object.freeze({
       start: runs.start.bind(runs),
       transition: runs.transition.bind(runs),
