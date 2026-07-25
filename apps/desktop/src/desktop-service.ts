@@ -73,12 +73,9 @@ export interface OrganizationNodeView {
   readonly status: string;
   readonly role: string;
   readonly capabilities: readonly string[];
-  /**
-   * 도메인의 `NodeScope`. **계약이 주지 않습니다** — `OrganizationNodeViewV1`에 없습니다.
-   * 실 경로에서는 undefined이고 화면이 "알 수 없음"으로 그립니다.
-   * 인계: docs/phases/30-surface-parity-agent-ux/agent-collaboration-runtime-handoff.md §7
-   */
+  /** 이전 응답과의 호환을 위해 optional이지만, 실제 조직 snapshot 투영은 항상 값을 보존합니다. */
   readonly scope?: "persistent" | "work";
+  readonly workId?: string;
 }
 
 export interface OrganizationView {
@@ -1283,6 +1280,8 @@ function projectOrganization(snapshot: Partial<OrganizationGraphSnapshotV1>): Or
       status: node.status,
       role: node.role,
       capabilities: node.capabilities,
+      scope: node.scope,
+      ...(node.work_id === undefined ? {} : { workId: node.work_id }),
     })),
   };
 }

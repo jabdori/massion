@@ -27,12 +27,24 @@ function source(overrides: Partial<ApplicationReadModel> = {}): ApplicationReadM
       version: 3,
       nodes: [
         {
+          nodeId: "node-representative",
           handle: "representative",
-          name: "Representative",
+          name: "Iris",
           responsibility: "사용자 요청 조정",
           capabilities: ["request-coordination"],
           status: "active",
           role: "orchestrator",
+          scope: "persistent",
+        },
+        {
+          nodeId: "node-strategy",
+          handle: "strategy",
+          name: "Lyra",
+          responsibility: "맥락 구성",
+          capabilities: ["analysis"],
+          parentHandle: "representative",
+          status: "active",
+          role: "coordinator",
           scope: "persistent",
         },
       ],
@@ -128,11 +140,19 @@ describe("CollaborationGraphSnapshotProjector", () => {
 
     expect(snapshot.organization).toMatchObject({ organizationId: context.organizationId, version: 3 });
     expect(snapshot.nodes[0]).toMatchObject({
+      nodeId: "node-representative",
       handle: "representative",
+      scope: "persistent",
       currentTaskId: "task-snapshot",
       executionId: "execution-snapshot",
       modelRoute: "balanced",
       costMicros: 500,
+    });
+    expect(snapshot.nodes[1]).toMatchObject({
+      nodeId: "node-strategy",
+      handle: "strategy",
+      parentHandle: "representative",
+      scope: "persistent",
     });
     expect(snapshot.works[0]).toMatchObject({
       workId: "work-snapshot",

@@ -17,13 +17,16 @@ import type {
 } from "./read-model.js";
 
 export interface CollaborationGraphNode {
+  readonly nodeId: string;
   readonly handle: string;
   readonly name: string;
   readonly responsibility: string;
   readonly capabilities: readonly string[];
+  readonly parentHandle?: string;
   readonly status: string;
   readonly role: string;
-  readonly scope: string;
+  readonly scope: "persistent" | "work";
+  readonly workId?: string;
   readonly currentTaskId?: string;
   readonly currentWorkId?: string;
   readonly executionId?: string;
@@ -160,13 +163,16 @@ export class CollaborationGraphSnapshotProjector {
       const assignment = assigned.get(node.handle);
       const execution = executing.get(node.handle);
       return {
+        nodeId: node.nodeId,
         handle: node.handle,
         name: node.name,
         responsibility: node.responsibility,
         capabilities: [...node.capabilities],
+        ...(node.parentHandle === undefined ? {} : { parentHandle: node.parentHandle }),
         status: node.status,
         role: node.role,
         scope: node.scope,
+        ...(node.workId === undefined ? {} : { workId: node.workId }),
         ...(assignment === undefined ? {} : { currentTaskId: assignment.taskId, currentWorkId: assignment.workId }),
         ...(execution === undefined
           ? {}

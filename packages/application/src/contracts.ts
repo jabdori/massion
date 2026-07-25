@@ -248,6 +248,8 @@ export interface OrganizationNodeViewV1 {
   readonly status: "active" | "inactive" | "retired";
   readonly role: "orchestrator" | "coordinator" | "operator";
   readonly capabilities: readonly string[];
+  readonly scope: "persistent" | "work";
+  readonly work_id?: string;
 }
 
 export interface OrganizationGraphSnapshotV1 {

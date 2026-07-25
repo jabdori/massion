@@ -172,6 +172,13 @@ describe("SurrealApplicationReadModel", () => {
     });
 
     const readModel = new SurrealApplicationReadModel(database, organizations);
+    const organization = await readModel.organization(context);
+    expect(organization.nodes.find((node) => node.handle === "context-strategy")).toMatchObject({
+      nodeId: expect.any(String),
+      parentHandle: "representative",
+      scope: "persistent",
+    });
+    expect(organization.nodes.find((node) => node.handle === "context-strategy")).not.toHaveProperty("workId");
     const snapshot = await new CollaborationGraphSnapshotProjector(readModel).project(context);
     expect(snapshot.works[0]).toMatchObject({
       workId: created.work.work_id,
@@ -269,4 +276,5 @@ describe("SurrealApplicationReadModel", () => {
     await expect(readModel.verifications?.(otherContext)).resolves.toEqual([]);
     await expect(readModel.directives?.(otherContext)).resolves.toEqual([]);
   }, 15_000);
+
 });

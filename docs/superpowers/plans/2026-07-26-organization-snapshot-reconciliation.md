@@ -21,7 +21,7 @@
 - Modify: `packages/application/src/snapshot.test.ts`
 - Modify: `packages/application/src/query-registry.test.ts`
 
-- [ ] **Step 1: snapshot fixture에 루트와 자식의 정본 계층 필드를 추가합니다.**
+- [x] **Step 1: snapshot fixture에 루트와 자식의 정본 계층 필드를 추가합니다.**
 
 `source()`의 organization fixture를 다음처럼 최소 두 노드로 만듭니다. root에는 `parentHandle`과 `workId`를 넣지 않고, 자식에는 root handle을 넣습니다.
 
@@ -51,7 +51,7 @@ nodes: [
 ],
 ```
 
-- [ ] **Step 2: public `organization.graph.snapshot`의 실패하는 기대값을 추가합니다.**
+- [x] **Step 2: public `organization.graph.snapshot`의 실패하는 기대값을 추가합니다.**
 
 `query-registry.test.ts`에서 `new CollaborationGraphSnapshotProjector(readModel)`을 `snapshot` dependency로 등록하고, `organization.graph.snapshot` 결과가 다음 DTO를 반환한다고 단언합니다.
 
@@ -70,7 +70,7 @@ expect(result.data).toMatchObject({
 });
 ```
 
-- [ ] **Step 3: 집중 테스트가 현재 구현에서 실패하는지 확인합니다.**
+- [x] **Step 3: 집중 테스트가 현재 구현에서 실패하는지 확인합니다.**
 
 Run: `pnpm --filter @massion/application test -- snapshot.test.ts query-registry.test.ts`
 
@@ -86,7 +86,7 @@ Expected: FAIL. 현재 handler는 `CollaborationGraphSnapshot`을 그대로 반�
 - Modify: `packages/application/src/snapshot.ts`
 - Modify: `packages/application/src/snapshot.test.ts`
 
-- [ ] **Step 1: read model source의 명시적 필드를 정의합니다.**
+- [x] **Step 1: read model source의 명시적 필드를 정의합니다.**
 
 `ApplicationOrganizationNodeSource`에 아래 필드를 추가합니다. source 안에서는 camelCase만 사용합니다.
 
@@ -98,7 +98,7 @@ readonly workId?: string;
 
 `scope`은 기존 값과 같은 `"persistent" | "work"`로 좁힙니다. 데이터베이스 값이 이 둘 밖이면 adapter에서 오류가 나야 하며 빈 문자열이나 임의 기본값으로 바꾸지 않습니다.
 
-- [ ] **Step 2: read model adapter가 정본 column을 모두 읽고 변환하게 합니다.**
+- [x] **Step 2: read model adapter가 정본 column을 모두 읽고 변환하게 합니다.**
 
 `OrganizationNodeRecord`에 `node_id`, `parent_handle?`, `work_id?`를 추가하고 SELECT를 다음 필드를 포함하도록 바꿉니다.
 
@@ -126,11 +126,11 @@ ORDER BY handle ASC;
 }
 ```
 
-- [ ] **Step 3: collaboration snapshot이 필드를 버리지 않게 합니다.**
+- [x] **Step 3: collaboration snapshot이 필드를 버리지 않게 합니다.**
 
 `CollaborationGraphNode`에 `nodeId`, `parentHandle?`, `workId?`를 추가하고, `CollaborationGraphSnapshotProjector.map()`에서 source의 동일 필드를 그대로 복사합니다. current task/work/execution의 실행 상태 필드는 기존대로 별도 유지합니다.
 
-- [ ] **Step 4: 실제 Surreal read model 회귀를 추가합니다.**
+- [x] **Step 4: 실제 Surreal read model 회귀를 추가합니다.**
 
 `adapters/read-model.test.ts`의 이미 bootstrap된 Core Office context에서 representative가 아닌 한 노드를 골라 다음을 검증합니다.
 
@@ -145,7 +145,7 @@ expect(organization.nodes.find((node) => node.handle === "strategy")).toMatchObj
 
 `workId`는 persistent Core Office에서 존재하지 않는 것도 함께 단언합니다. 별도의 synthetic database fixture나 mock table은 만들지 않습니다.
 
-- [ ] **Step 5: Application 집중 테스트를 통과시킵니다.**
+- [x] **Step 5: Application 집중 테스트를 통과시킵니다.**
 
 Run: `pnpm --filter @massion/application test -- adapters/read-model.test.ts snapshot.test.ts query-registry.test.ts`
 
@@ -162,7 +162,7 @@ Expected: PASS. read model·내부 snapshot이 parent relation을 보존하고 �
 - Modify: `apps/desktop/src/desktop-service.test.ts`
 - Modify: `apps/desktop/src/app.tsx`
 
-- [ ] **Step 1: public Organization DTO에 scope와 work id를 추가합니다.**
+- [x] **Step 1: public Organization DTO에 scope와 work id를 추가합니다.**
 
 `OrganizationNodeViewV1`에 다음만 추가합니다.
 
@@ -173,7 +173,7 @@ readonly work_id?: string;
 
 `node_id`, `parent_handle`의 snake_case는 이미 public DTO 문법이므로 camelCase alias를 추가하지 않습니다.
 
-- [ ] **Step 2: query registry에 전용 mapper를 둡니다.**
+- [x] **Step 2: query registry에 전용 mapper를 둡니다.**
 
 `query-registry.ts`에 `organizationGraphSnapshotView(snapshot)` 같은 file-local pure mapper를 추가합니다. mapper는 일반 collaboration snapshot을 다음 public shape으로 변환해야 합니다.
 
@@ -197,7 +197,7 @@ readonly work_id?: string;
 
 `organization.graph.snapshot` handler는 raw `dependencies.snapshot.project(context)` 대신 이 mapper의 결과만 반환합니다. collaboration snapshot 전체를 이 API의 우연한 공개 계약으로 노출하지 않습니다.
 
-- [ ] **Step 3: desktop projection이 공개 DTO의 모든 조직 필드를 보존하게 합니다.**
+- [x] **Step 3: desktop projection이 공개 DTO의 모든 조직 필드를 보존하게 합니다.**
 
 `OrganizationNodeView`에 `workId?`를 추가하고 `projectOrganization()`에서 `scope`·`work_id`를 그대로 camelCase로 옮깁니다.
 
@@ -209,7 +209,7 @@ scope: node.scope,
 
 `desktop-service.test.ts`에 parent가 있는 persistent node와 work scope node 하나를 반환하는 `organization.graph.snapshot` mock을 넣고, `loadOrganization()` 결과의 `id`, `parentHandle`, `scope`, `workId`를 단언합니다.
 
-- [ ] **Step 4: map node의 중복 선택 호출을 제거합니다.**
+- [x] **Step 4: map node의 중복 선택 호출을 제거합니다.**
 
 `app.tsx`의 `OrgMapNode` 클릭 handler는 정확히 한 번만 `onSelect(node.handle)`을 호출해야 합니다.
 
@@ -221,13 +221,13 @@ onClick={() => {
 
 선택 상태·조상 펼침·`scrollIntoView` 로직은 이미 `OrganizationSurface.select`에 있으므로 새 synchronization state나 이벤트 bus를 만들지 않습니다.
 
-- [ ] **Step 5: desktop·Application 검증을 통과시킵니다.**
+- [x] **Step 5: desktop·Application 검증을 통과시킵니다.**
 
 Run: `pnpm --filter @massion/application test -- query-registry.test.ts snapshot.test.ts adapters/read-model.test.ts && pnpm --filter @massion/desktop test -- desktop-service.test.ts && pnpm --filter @massion/desktop typecheck && git diff --check`
 
 Expected: PASS. fixture world가 아니라 typed public DTO가 hierarchy field를 받는 회귀를 막습니다.
 
-- [ ] **Step 6: 코드만 한 개의 독립 커밋으로 만듭니다.**
+- [x] **Step 6: 코드만 한 개의 독립 커밋으로 만듭니다.**
 
 ```sh
 git add packages/application/src/read-model.ts packages/application/src/adapters/read-model.ts packages/application/src/adapters/read-model.test.ts packages/application/src/snapshot.ts packages/application/src/snapshot.test.ts packages/application/src/contracts.ts packages/application/src/query-registry.ts packages/application/src/query-registry.test.ts apps/desktop/src/desktop-service.ts apps/desktop/src/desktop-service.test.ts apps/desktop/src/app.tsx
@@ -270,10 +270,10 @@ git commit -m "docs(evidence): 실제 조직 구조와 지도 UAT를 기록" -m 
 
 ## 완료 조건
 
-- [ ] 실제 read model query가 `node_id`·`parent_handle`·`scope`·`work_id`을 유실하지 않습니다.
-- [ ] public `organization.graph.snapshot`은 collaboration snapshot 내부 표현이 아니라 안정된 Organization DTO를 반환합니다.
+- [x] 실제 read model query가 `node_id`·`parent_handle`·`scope`·`work_id`을 유실하지 않습니다.
+- [x] public `organization.graph.snapshot`은 collaboration snapshot 내부 표현이 아니라 안정된 Organization DTO를 반환합니다.
 - [ ] desktop fixture가 아닌 실제 Tauri bundle에서 구조·지도 selection이 같은 노드를 가리킵니다.
-- [ ] 현재 공개 command가 없는 drag·조직 제안은 구현 완료로 주장하지 않습니다.
+- [x] 현재 공개 command가 없는 drag·조직 제안은 구현 완료로 주장하지 않습니다.
 
 ## Self-review
 

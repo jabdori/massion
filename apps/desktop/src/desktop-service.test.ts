@@ -219,6 +219,52 @@ describe("Application desktop service", () => {
     await expect(service.loadOrganization()).resolves.toEqual({ nodes: [] });
   });
 
+  it("공개 조직 DTO의 ID·부모·범위·업무 소속을 화면 투영에 보존한다", async () => {
+    const native = transport({
+      "organization.graph.snapshot": {
+        version: { version: 3 },
+        nodes: [
+          {
+            node_id: "node-representative",
+            handle: "representative",
+            name: "Iris",
+            responsibility: "사용자 요청 조정",
+            status: "active",
+            role: "orchestrator",
+            capabilities: ["request-coordination"],
+            scope: "persistent",
+          },
+          {
+            node_id: "node-analysis",
+            handle: "analysis",
+            name: "Lyra",
+            responsibility: "맥락 구성",
+            parent_handle: "representative",
+            status: "active",
+            role: "coordinator",
+            capabilities: ["analysis"],
+            scope: "work",
+            work_id: "work-0001",
+          },
+        ],
+      },
+    });
+    const service = createApplicationDesktopService(native, { createId: () => "request-0001" });
+
+    await expect(service.loadOrganization()).resolves.toMatchObject({
+      version: 3,
+      nodes: [
+        { id: "node-representative", scope: "persistent" },
+        {
+          id: "node-analysis",
+          parentHandle: "representative",
+          scope: "work",
+          workId: "work-0001",
+        },
+      ],
+    });
+  });
+
   it("Work 선택 시 상세 투영을 독립 query로 병렬 조회한다", async () => {
     const native = transport();
     const service = createApplicationDesktopService(native, { createId: () => "request-0001" });

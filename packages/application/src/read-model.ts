@@ -4,13 +4,16 @@ import type { TenantContext } from "@massion/identity";
 export type ApplicationSourceWatermarks = Readonly<Record<string, string | number>>;
 
 export interface ApplicationOrganizationNodeSource {
+  readonly nodeId: string;
   readonly handle: string;
   readonly name: string;
   readonly responsibility: string;
   readonly capabilities: readonly string[];
+  readonly parentHandle?: string;
   readonly status: string;
   readonly role: string;
-  readonly scope: string;
+  readonly scope: "persistent" | "work";
+  readonly workId?: string;
 }
 
 export interface ApplicationOrganizationSource {

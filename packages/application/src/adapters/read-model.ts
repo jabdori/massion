@@ -26,13 +26,16 @@ interface OrganizationVersionRecord {
 }
 
 interface OrganizationNodeRecord {
+  readonly node_id: string;
   readonly handle: string;
   readonly name: string;
   readonly responsibility: string;
   readonly capabilities: readonly string[];
+  readonly parent_handle?: string;
   readonly status: string;
   readonly role: string;
   readonly scope: string;
+  readonly work_id?: string;
 }
 
 interface WorkRecord {
@@ -320,6 +323,11 @@ function displayTitle(requestText: string): string {
   return Array.from(line.replace(/\s+/gu, " ")).slice(0, 160).join("");
 }
 
+function organizationNodeScope(scope: string): "persistent" | "work" {
+  if (scope !== "persistent" && scope !== "work") throw new Error("Organization node scope가 유효하지 않습니다");
+  return scope;
+}
+
 export class SurrealApplicationReadModel implements ApplicationReadModel {
   public constructor(
     private readonly database: MassionDatabase,
@@ -362,20 +370,23 @@ export class SurrealApplicationReadModel implements ApplicationReadModel {
     );
     if (!versions[0]) throw new Error("Application snapshot OrganizationVersion을 찾을 수 없습니다");
     const [nodes] = await this.database.query<[OrganizationNodeRecord[]]>(
-      "SELECT handle, name, responsibility, capabilities, status, role, scope FROM organization_node WHERE organization_id = $organization_id ORDER BY handle ASC;",
+      "SELECT node_id, handle, name, responsibility, capabilities, parent_handle, status, role, scope, work_id FROM organization_node WHERE organization_id = $organization_id ORDER BY handle ASC;",
       { organization_id: context.organizationId },
     );
     return {
       organizationId: context.organizationId,
       version: versions[0].version,
       nodes: nodes.map((node) => ({
+        nodeId: node.node_id,
         handle: node.handle,
         name: node.name,
         responsibility: node.responsibility,
         capabilities: node.capabilities,
+        ...(node.parent_handle === undefined ? {} : { parentHandle: node.parent_handle }),
         status: node.status,
         role: node.role,
-        scope: node.scope,
+        scope: organizationNodeScope(node.scope),
+        ...(node.work_id === undefined ? {} : { workId: node.work_id }),
       })),
     };
   }

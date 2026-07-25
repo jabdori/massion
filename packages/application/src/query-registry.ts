@@ -26,7 +26,7 @@ import type {
   ApplicationVerificationSource,
 } from "./read-model.js";
 import type { ApplicationRunStore, ApplicationRunView } from "./run-store.js";
-import type { CollaborationGraphSnapshotProjector } from "./snapshot.js";
+import type { CollaborationGraphSnapshot, CollaborationGraphSnapshotProjector } from "./snapshot.js";
 import type { WebSessionService } from "./web-session.js";
 import type {
   SubscriptionAccountQueries,
@@ -148,6 +148,24 @@ function publicWorkKnowledge(view: WorkKnowledgeViewV1): WorkKnowledgeViewV1 {
       contentHash: reference.contentHash,
     })),
     ...(view.failureReason === undefined ? {} : { failureReason: view.failureReason }),
+  };
+}
+
+function organizationGraphSnapshotView(snapshot: CollaborationGraphSnapshot) {
+  return {
+    version: { version: snapshot.organization.version },
+    nodes: snapshot.nodes.map((node) => ({
+      node_id: node.nodeId,
+      handle: node.handle,
+      name: node.name,
+      responsibility: node.responsibility,
+      ...(node.parentHandle === undefined ? {} : { parent_handle: node.parentHandle }),
+      status: node.status,
+      role: node.role,
+      capabilities: node.capabilities,
+      scope: node.scope,
+      ...(node.workId === undefined ? {} : { work_id: node.workId }),
+    })),
   };
 }
 
@@ -1162,13 +1180,14 @@ export function registerApplicationQueries(
         { organizationId: context.organizationId, membershipId: context.membershipId, role: context.role },
       ]),
   });
-  if (dependencies.snapshot) {
+  const snapshot = dependencies.snapshot;
+  if (snapshot) {
     registry.register({
       operation: "organization.graph.snapshot",
       requiredScopes: ["organization:read"],
       allowedRoles: EVERY_ROLE,
       validate: (value) => object(value, []),
-      handle: async (context) => await dependencies.snapshot?.project(context),
+      handle: async (context) => organizationGraphSnapshotView(await snapshot.project(context)),
     });
   }
   if (dependencies.runtime) {

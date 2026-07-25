@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { ApplicationEventCursorExpiredError } from "./event-store.js";
 import type { ApplicationReadModel } from "./read-model.js";
 import { ApplicationQueryRegistry, registerApplicationQueries } from "./query-registry.js";
+import { CollaborationGraphSnapshotProjector } from "./snapshot.js";
 
 const context: TenantContext = {
   userId: "query-user",
@@ -14,7 +15,33 @@ const context: TenantContext = {
 
 const readModel: ApplicationReadModel = {
   watermarks: async () => ({ work: 1 }),
-  organization: async () => ({ organizationId: context.organizationId, version: 1, nodes: [] }),
+  organization: async () => ({
+    organizationId: context.organizationId,
+    version: 1,
+    nodes: [
+      {
+        nodeId: "node-representative",
+        handle: "representative",
+        name: "Iris",
+        responsibility: "사용자 요청 조정",
+        capabilities: ["request-coordination"],
+        status: "active",
+        role: "orchestrator",
+        scope: "persistent",
+      },
+      {
+        nodeId: "node-strategy",
+        handle: "strategy",
+        name: "Lyra",
+        responsibility: "맥락 구성",
+        capabilities: ["analysis"],
+        parentHandle: "representative",
+        status: "active",
+        role: "coordinator",
+        scope: "persistent",
+      },
+    ],
+  }),
   works: async () => [
     { organizationId: context.organizationId, workId: "query-work", status: "running", revision: 2, artifactIds: [] },
     {
@@ -83,6 +110,29 @@ describe("ApplicationQueryRegistry", () => {
     );
     await expect(registry.query(context, ["work:read"], "governance.approval.list", {})).rejects.toMatchObject({
       category: "authorization",
+    });
+  });
+
+  it("조직 graph snapshot을 안정된 공개 DTO로 투영한다", async () => {
+    const registry = new ApplicationQueryRegistry();
+    registerApplicationQueries(registry, {
+      readModel,
+      snapshot: new CollaborationGraphSnapshotProjector(readModel),
+    });
+
+    const result = await registry.query(context, ["organization:read"], "organization.graph.snapshot", {});
+
+    expect(result.data).toMatchObject({
+      version: { version: 1 },
+      nodes: [
+        { node_id: "node-representative", scope: "persistent" },
+        {
+          node_id: "node-strategy",
+          handle: "strategy",
+          parent_handle: "representative",
+          scope: "persistent",
+        },
+      ],
     });
   });
 
