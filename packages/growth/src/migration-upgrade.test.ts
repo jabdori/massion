@@ -1,8 +1,18 @@
 import { afterEach, describe, expect, it } from "vitest";
 
-import { applyMigrations, createDatabase, listAppliedMigrations, type MassionDatabase } from "@massion/storage";
+import {
+  applyMigrations,
+  createDatabase,
+  defineMigration,
+  listAppliedMigrations,
+  type MassionDatabase,
+} from "@massion/storage";
 
-import { GROWTH_CONFIGURATION_MIGRATION, GROWTH_PROMPT_MEMORY_MIGRATION } from "./schema.js";
+import {
+  GROWTH_CONFIGURATION_MIGRATION,
+  GROWTH_PROMPT_MEMORY_MIGRATION,
+  GROWTH_REFLECTION_MIGRATION,
+} from "./schema.js";
 
 describe("Growth configuration migration", () => {
   let database: MassionDatabase | undefined;
@@ -54,5 +64,19 @@ describe("Growth configuration migration", () => {
     for (const table of ["prompt_definition_version", "prompt_version", "memory_version"]) {
       await expect(database.query(`INFO FOR TABLE ${table};`)).resolves.toBeDefined();
     }
+  });
+
+  it("0056의 이전 IF NOT EXISTS checksum을 허용한다", async () => {
+    database = await createDatabase({ url: "mem://", namespace: "massion", database: crypto.randomUUID() });
+    await applyMigrations(database, [defineMigration("0001-migration-record", "DEFINE TABLE migration_record SCHEMALESS;")]);
+    await database.query(
+      "CREATE system_migration CONTENT { migration_id: $migration_id, checksum: $checksum, applied_at: time::now() };",
+      {
+        migration_id: GROWTH_REFLECTION_MIGRATION.id,
+        checksum: "2d6b386464bcd9fda32221c58b5a45ac901e2ef8d9ad6da94cc2156d8df3c4e4",
+      },
+    );
+
+    await expect(applyMigrations(database, [GROWTH_REFLECTION_MIGRATION])).resolves.toEqual([]);
   });
 });

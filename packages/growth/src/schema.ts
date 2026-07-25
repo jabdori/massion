@@ -343,7 +343,10 @@ THEN {
   {
     // Application outbox가 이 테이블을 먼저 만들 수 있었던 이전 설치와,
     // 이미 적용된 정본 migration checksum을 모두 안전하게 수용합니다.
-    compatibleChecksums: ["233d3c60f9145d4bbf035fdcdc0488f41c6cebb575f31f992fccce39698a6d7d"],
+    compatibleChecksums: [
+      "233d3c60f9145d4bbf035fdcdc0488f41c6cebb575f31f992fccce39698a6d7d",
+      "2d6b386464bcd9fda32221c58b5a45ac901e2ef8d9ad6da94cc2156d8df3c4e4",
+    ],
   },
 );
 
