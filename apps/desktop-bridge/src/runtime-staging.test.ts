@@ -1,11 +1,15 @@
 import { createHash } from "node:crypto";
-import { chmod, link, lstat, mkdir, mkdtemp, readFile, stat, symlink, writeFile } from "node:fs/promises";
+import { chmod, link, lstat, mkdir, mkdtemp, readFile, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { resolveLocalPaths, resolveLocalSurrealRuntime } from "@massion/local-control/daemon";
+import {
+  LocalDataEpochMigrationRequiredError,
+  resolveLocalPaths,
+  resolveLocalSurrealRuntime,
+} from "@massion/local-control/daemon";
 
 import { prepareDesktopRuntimeEnvironment } from "./runtime-staging.js";
 
@@ -58,7 +62,7 @@ describe("bundled SurrealDB runtime staging", () => {
     });
   });
 
-  it("staging 전에 이전 v1 epoch의 config·data·state를 함께 초기화한다", async () => {
+  it("staging 전에 호환 불명 v1 epoch의 config·data·state를 보존하고 migration을 요구한다", async () => {
     const value = await fixture();
     const paths = resolveLocalPaths(value.environment);
     await Promise.all(
@@ -69,14 +73,14 @@ describe("bundled SurrealDB runtime staging", () => {
       }),
     );
 
-    await prepareDesktopRuntimeEnvironment(value.environment);
+    await expect(prepareDesktopRuntimeEnvironment(value.environment)).rejects.toBeInstanceOf(
+      LocalDataEpochMigrationRequiredError,
+    );
 
     await Promise.all(
       [paths.configDirectory, paths.dataDirectory, paths.stateDirectory].map(async (directory) => {
-        await expect(stat(join(directory, "stale"))).rejects.toMatchObject({ code: "ENOENT" });
-        await expect(readFile(join(directory, ".massion-data-epoch"), "utf8")).resolves.toBe(
-          "massion-v1-data-epoch-1\n",
-        );
+        await expect(readFile(join(directory, "stale"), "utf8")).resolves.toBe("stale");
+        await expect(readFile(join(directory, ".massion-data-epoch"), "utf8")).resolves.toBe("obsolete\n");
       }),
     );
   });

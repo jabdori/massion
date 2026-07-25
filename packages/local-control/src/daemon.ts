@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { closeSync, constants, openSync } from "node:fs";
-import { access, lstat, mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import { access, lstat, mkdir, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import { homedir, platform } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 
@@ -35,6 +35,13 @@ export interface LocalPaths {
 const LOCAL_DATA_EPOCH = "massion-v1-data-epoch-1";
 const LOCAL_DATA_ROOT = "massion-v1";
 const epochOperations = new Map<string, Promise<void>>();
+
+export class LocalDataEpochMigrationRequiredError extends Error {
+  public constructor() {
+    super("기존 Massion 데이터의 호환성을 확인할 수 없습니다. 데이터를 보존한 채 마이그레이션 또는 복구가 필요합니다.");
+    this.name = "LocalDataEpochMigrationRequiredError";
+  }
+}
 
 interface LocalPidRecordV1 {
   readonly schema: "massion.local-process.v1";
@@ -125,7 +132,7 @@ export function resolveLocalPaths(environment: Readonly<Record<string, string | 
   };
 }
 
-/** v1 개발 데이터는 호환하지 않으며, epoch 불일치 시 Massion 소유 root만 새로 만듭니다. */
+/** 새 설치 또는 빈 v1 root만 현재 epoch로 초기화하고, 기존 데이터는 자동으로 삭제하지 않습니다. */
 export async function ensureLocalDataEpoch(paths: LocalPaths): Promise<void> {
   const key = [paths.configDirectory, paths.dataDirectory, paths.stateDirectory].sort().join("\0");
   const previous = epochOperations.get(key) ?? Promise.resolve();
@@ -142,32 +149,23 @@ async function ensureLocalDataEpochExclusive(paths: LocalPaths): Promise<void> {
   const roots = [...new Set([paths.configDirectory, paths.dataDirectory, paths.stateDirectory])];
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
-      const markers = await Promise.all(
-        roots.map(async (root) => {
-          const marker = join(root, ".massion-data-epoch");
-          try {
-            return await readFile(marker, "utf8");
-          } catch (error) {
-            if (error instanceof Error && "code" in error && error.code === "ENOENT") return undefined;
-            throw error;
-          }
-        }),
-      );
-      if (markers.every((marker) => marker === `${LOCAL_DATA_EPOCH}\n`)) return;
+      const states = await Promise.all(roots.map(async (root) => await readLocalDataEpochRoot(root)));
+      if (states.every(({ marker }) => marker === `${LOCAL_DATA_EPOCH}\n`)) return;
+      if (states.some(({ dataBearing }) => dataBearing)) throw new LocalDataEpochMigrationRequiredError();
 
-      for (const root of roots) {
-        try {
-          if ((await lstat(root)).isSymbolicLink())
-            throw new Error("Massion v1 data root에 symlink를 사용할 수 없습니다");
-        } catch (error) {
-          if (error instanceof Error && "code" in error && error.code === "ENOENT") continue;
-          throw error;
-        }
-      }
-      for (const root of roots) await rm(root, { recursive: true, force: true });
-      for (const root of roots) {
+      for (const { root } of states) {
         await mkdir(root, { recursive: true, mode: 0o700 });
-        await writeFile(join(root, ".massion-data-epoch"), `${LOCAL_DATA_EPOCH}\n`, { mode: 0o600, flag: "wx" });
+      }
+      const initializedStates = [];
+      for (const root of roots) initializedStates.push(await readLocalDataEpochRoot(root));
+      if (initializedStates.every(({ marker }) => marker === `${LOCAL_DATA_EPOCH}\n`)) return;
+      if (initializedStates.some(({ dataBearing }) => dataBearing)) throw new LocalDataEpochMigrationRequiredError();
+
+      for (const { root, marker } of initializedStates) {
+        await writeFile(join(root, ".massion-data-epoch"), `${LOCAL_DATA_EPOCH}\n`, {
+          mode: 0o600,
+          flag: marker === undefined ? "wx" : "w",
+        });
       }
       return;
     } catch (error) {
@@ -180,6 +178,39 @@ async function ensureLocalDataEpochExclusive(paths: LocalPaths): Promise<void> {
         throw error;
     }
   }
+}
+
+async function readLocalDataEpochRoot(root: string): Promise<{
+  readonly root: string;
+  readonly marker: string | undefined;
+  readonly dataBearing: boolean;
+}> {
+  try {
+    const metadata = await lstat(root);
+    if (metadata.isSymbolicLink()) throw new Error("Massion v1 data root에 symlink를 사용할 수 없습니다");
+    if (!metadata.isDirectory()) throw new Error("Massion v1 data root는 directory여야 합니다");
+  } catch (error) {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") {
+      return { root, marker: undefined, dataBearing: false };
+    }
+    throw error;
+  }
+
+  const markerPath = join(root, ".massion-data-epoch");
+  let marker: string | undefined;
+  try {
+    if ((await lstat(markerPath)).isSymbolicLink()) {
+      throw new Error("Massion v1 data epoch marker에 symlink를 사용할 수 없습니다");
+    }
+    marker = await readFile(markerPath, "utf8");
+  } catch (error) {
+    if (!(error instanceof Error) || !("code" in error) || error.code !== "ENOENT") throw error;
+  }
+  return {
+    root,
+    marker,
+    dataBearing: (await readdir(root)).some((entry) => entry !== ".massion-data-epoch"),
+  };
 }
 
 async function ensureDirectories(paths: LocalPaths): Promise<void> {

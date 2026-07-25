@@ -6,10 +6,30 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ensureLocalDataEpoch, LocalDaemonManager, resolveLocalPaths, resolveLocalSurrealRuntime } from "./daemon.js";
 
+const epochRace = vi.hoisted(() => ({ configDirectory: "", dataFile: "", configReads: 0 }));
+
+vi.mock("node:fs/promises", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:fs/promises")>();
+  const readdir = async (file: unknown, options?: unknown) => {
+    const entries = await (actual.readdir as (path: unknown, options?: unknown) => Promise<unknown>)(file, options);
+    if (epochRace.dataFile && file === epochRace.configDirectory && epochRace.configReads++ === 1) {
+      await (actual.writeFile as (...arguments_: unknown[]) => Promise<void>)(epochRace.dataFile, "late data", {
+        mode: 0o600,
+        flag: "wx",
+      });
+    }
+    return entries;
+  };
+  return { ...actual, default: actual, readdir: readdir as typeof actual.readdir };
+});
+
 describe("공용 local daemon 제어", () => {
   const roots: string[] = [];
 
   afterEach(async () => {
+    epochRace.configDirectory = "";
+    epochRace.dataFile = "";
+    epochRace.configReads = 0;
     await Promise.all(roots.splice(0).map(async (root) => rm(root, { recursive: true, force: true })));
   });
 
@@ -34,7 +54,7 @@ describe("공용 local daemon 제어", () => {
     await expect(stat(paths.epochFile)).resolves.toMatchObject({ isFile: expect.any(Function) });
   });
 
-  it("v1 data epoch이 바뀌면 Massion 소유 세 root를 모두 비운 뒤 새 marker를 기록한다", async () => {
+  it("호환 불명 epoch의 data-bearing root를 보존하고 migration을 요구한다", async () => {
     const root = await mkdtemp(join(tmpdir(), "massion-local-control-v1-epoch-"));
     roots.push(root);
     const paths = resolveLocalPaths({ HOME: root });
@@ -46,11 +66,65 @@ describe("공용 local daemon 제어", () => {
       }),
     );
 
+    await expect(ensureLocalDataEpoch(paths)).rejects.toMatchObject({
+      name: "LocalDataEpochMigrationRequiredError",
+    });
+    await expect(readFile(join(paths.dataDirectory, "stale"), "utf8")).resolves.toBe("stale");
+    await expect(readFile(join(paths.configDirectory, ".massion-data-epoch"), "utf8")).resolves.toBe("obsolete\n");
+  });
+
+  it("marker 기록 전 재검사에서 새 data-bearing root가 생기면 migration을 요구한다", async () => {
+    const root = await mkdtemp(join(tmpdir(), "massion-local-control-v1-epoch-race-"));
+    roots.push(root);
+    const paths = resolveLocalPaths({ HOME: root });
+    await Promise.all(
+      [paths.configDirectory, paths.dataDirectory, paths.stateDirectory].map(
+        async (directory) => await mkdir(directory, { recursive: true, mode: 0o700 }),
+      ),
+    );
+    const lateData = join(paths.dataDirectory, "late-data");
+    epochRace.configDirectory = paths.configDirectory;
+    epochRace.dataFile = lateData;
+
+    await expect(ensureLocalDataEpoch(paths)).rejects.toMatchObject({
+      name: "LocalDataEpochMigrationRequiredError",
+    });
+    await expect(readFile(lateData, "utf8")).resolves.toBe("late data");
+    await expect(readFile(join(paths.configDirectory, ".massion-data-epoch"), "utf8")).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+  });
+
+  it("새 root에 현재 data epoch marker를 기록한다", async () => {
+    const root = await mkdtemp(join(tmpdir(), "massion-local-control-v1-new-epoch-"));
+    roots.push(root);
+    const paths = resolveLocalPaths({ HOME: root });
+
     await ensureLocalDataEpoch(paths);
 
     await Promise.all(
       [paths.configDirectory, paths.dataDirectory, paths.stateDirectory].map(async (directory) => {
-        await expect(stat(join(directory, "stale"))).rejects.toMatchObject({ code: "ENOENT" });
+        await expect(readFile(join(directory, ".massion-data-epoch"), "utf8")).resolves.toBe(
+          "massion-v1-data-epoch-1\n",
+        );
+        expect((await stat(directory)).mode & 0o077).toBe(0);
+      }),
+    );
+  });
+
+  it("marker가 없는 빈 root는 삭제하지 않고 marker만 기록한다", async () => {
+    const root = await mkdtemp(join(tmpdir(), "massion-local-control-v1-empty-epoch-"));
+    roots.push(root);
+    const paths = resolveLocalPaths({ HOME: root });
+    const directories = [paths.configDirectory, paths.dataDirectory, paths.stateDirectory];
+    await Promise.all(directories.map(async (directory) => await mkdir(directory, { recursive: true, mode: 0o700 })));
+    const inodes = await Promise.all(directories.map(async (directory) => (await stat(directory)).ino));
+
+    await expect(ensureLocalDataEpoch(paths)).resolves.toBeUndefined();
+
+    await Promise.all(
+      directories.map(async (directory, index) => {
+        expect((await stat(directory)).ino).toBe(inodes[index]);
         await expect(readFile(join(directory, ".massion-data-epoch"), "utf8")).resolves.toBe(
           "massion-v1-data-epoch-1\n",
         );
