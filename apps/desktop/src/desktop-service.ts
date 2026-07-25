@@ -87,7 +87,7 @@ export interface OrganizationView {
 }
 
 export interface AutonomyView {
-  readonly mode: "automatic" | "review";
+  readonly mode: "automatic" | "review" | "full";
   readonly revision: number;
 }
 
@@ -1285,7 +1285,11 @@ export function projectRoom(
 }
 
 function projectAutonomy(value: GovernanceAutonomyViewV1 | Record<string, unknown> | undefined): AutonomyView {
-  if (!value || (value.mode !== "automatic" && value.mode !== "review") || typeof value.revision !== "number")
+  if (
+    !value ||
+    (value.mode !== "automatic" && value.mode !== "review" && value.mode !== "full") ||
+    typeof value.revision !== "number"
+  )
     throw new Error("자율성 설정 응답이 유효하지 않습니다");
   return { mode: value.mode, revision: value.revision };
 }

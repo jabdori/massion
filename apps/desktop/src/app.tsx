@@ -1041,7 +1041,8 @@ function OrganizationSurface({ service }: { service: DesktopService }) {
   return (
     <main
       aria-label="조직"
-      className="col-span-3 grid min-h-0 min-w-0 grid-cols-[minmax(0,11fr)_minmax(0,9fr)] bg-canvas"
+      // 구조 패널과 지도 컬럼을 50:50으로 둡니다. 지도가 좁아 노드가 겹치던 것을 펴줍니다.
+      className="col-span-3 grid min-h-0 min-w-0 grid-cols-[minmax(0,1fr)_minmax(0,1fr)] bg-canvas"
     >
       {/* 본문 = 구조(A). 읽는 화면입니다: 부서는 상자, 구성원은 칩. */}
       <section aria-label="조직 구조" className="grid min-h-0 grid-rows-[46px_minmax(0,1fr)] border-r border-border">
@@ -2577,11 +2578,13 @@ function SettingsSurface({ service }: { service: DesktopService }) {
               {area.id === "autonomy" && autonomy ? (
                 <section aria-label="자율성 경계">
                   <GrowthSection title="실행 자율성">
-                    <p className="text-[13px] leading-5 text-secondary">
-                      {autonomy.mode === "automatic"
-                        ? "미리 승인된 범위에서는 사람을 기다리지 않고 실행합니다. 위험한 실행과 조직 변경은 여전히 수신함에서 확인을 받습니다."
-                        : "실행 전에 사람의 확인을 받습니다. 조직이 더 자주 멈추는 대신 개입 지점이 많아집니다."}
-                    </p>
+                   <p className="text-[13px] leading-5 text-secondary">
+                     {autonomy.mode === "automatic"
+                       ? "미리 승인된 범위에서는 사람을 기다리지 않고 실행합니다. 위험한 실행과 조직 변경은 여전히 수신함에서 확인을 받습니다."
+                        : autonomy.mode === "review"
+                          ? "실행 전에 사람의 확인을 받습니다. 조직이 더 자주 멈추는 대신 개입 지점이 많아집니다."
+                          : "사용자 책임 하에 정책과 불변식이 요구한 승인까지 모두 자동 통과합니다. 위험한 실행과 조직 변경도 묻지 않고 진행합니다."}
+                   </p>
                     <div className="mt-3 flex flex-wrap items-center gap-2">
                       <button
                         className={`rounded-[5px] border px-3 py-1 text-[12px] disabled:opacity-50 ${
@@ -2606,6 +2609,18 @@ function SettingsSurface({ service }: { service: DesktopService }) {
                         type="button"
                       >
                         검토 후 실행
+                      </button>
+                      <button
+                        className={`rounded-[5px] border px-3 py-1 text-[12px] disabled:opacity-50 ${
+                          autonomy.mode === "full"
+                            ? "border-control bg-surface-2 text-primary"
+                            : "border-border text-secondary"
+                        }`}
+                        disabled={autonomySaving || autonomy.mode === "full"}
+                        onClick={() => { void setAutonomyMode("full"); }}
+                        type="button"
+                      >
+                        전체 권한
                       </button>
                       <span className="font-mono text-[11px] text-muted">개정 {autonomy.revision}</span>
                     </div>
@@ -2671,11 +2686,12 @@ const SETTINGS_AREAS = [
     background: "구독으로 쓰는 계정의 남은 양입니다. 소진되면 그 계정을 쓰는 경로가 멈추므로 미리 보여야 합니다.",
   },
   {
-    id: "autonomy",
-    title: "실행 자율성",
-    hint: "언제 사람을 기다리나",
-    background: "미리 승인된 범위에서 자동으로 실행할지, 매 실행 전에 사람의 검토를 받을지 정합니다. 위험 경계는 어느 모드에서도 유지됩니다.",
-  },
+  id: "autonomy",
+  title: "실행 자율성",
+  hint: "언제 사람을 기다리나",
+  background:
+    "미리 승인된 범위에서 자동으로 실행할지, 매 실행 전에 사람의 검토를 받을지, 아니면 전체 권한으로 모든 승인을 자동 통과할지 정합니다. 위험 경계는 자동·검토 모드에서 유지되며, 전체 권한에서는 사용자 책임 하에 풀립니다.",
+},
   {
     id: "local",
     title: "로컬 환경",
