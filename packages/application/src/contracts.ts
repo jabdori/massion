@@ -228,7 +228,8 @@ export type RoomMessageTypeV1 =
 export interface RoomMessageViewV1 {
   readonly messageId: string;
   readonly sequence: number;
-  readonly messageType: RoomMessageTypeV1 | string;
+  // 문자열 리터럴 타입(RoomMessageTypeV1)은 string에 포함되므로 중복을 제거합니다.
+  readonly messageType: string;
   readonly authorKind: string;
   /** 에이전트면 조직 handle, 사람이면 사용자 식별자. 화자 정체성의 정본입니다. */
   readonly authorId: string;

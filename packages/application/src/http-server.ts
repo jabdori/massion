@@ -607,7 +607,8 @@ export class ApplicationHttpServer {
       if (!this.dependencies.webSessions) throw validation("Web session을 사용할 수 없습니다");
       // 로컬 프로파일 access 토큰(Authorization Bearer)으로 access를 검증합니다.
       const localAccess = await this.authenticate(request);
-      if (!localAccess.web) await this.browserOrigin(request);
+      // browserOrigin은 동기(void) 메서드이므로 await를 뺍니다(다른 호출 지점과 동일).
+      if (!localAccess.web) this.browserOrigin(request);
       this.acceptJson(request);
       const input = (await json(request)) as Record<string, unknown>;
       if (Object.keys(input).some((key) => key !== "commandId") || typeof input.commandId !== "string")

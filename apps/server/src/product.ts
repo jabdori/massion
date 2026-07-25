@@ -557,7 +557,8 @@ export async function createMassionDaemon(
       },
     );
     const evidencePromptMaterializer = new EvidencePromptMaterializer(repositories, indexes, briefs);
-    const evidenceFreshness = new EvidenceFreshnessService(repositories, { enqueue: async () => false });
+    // 동기 stub: await가 필요 없으므로 즉시 이행되는 Promise로 계약(Promise<boolean>)을 유지합니다.
+    const evidenceFreshness = new EvidenceFreshnessService(repositories, { enqueue: () => Promise.resolve(false) });
     const evidenceContextBinder = new EvidenceContextBinder(briefs, evidenceFreshness);
     const strategyGenerator = await StrategyGenerator.create(
       database,
@@ -591,12 +592,12 @@ export async function createMassionDaemon(
       database,
       organizations,
       {
-        async generate() {
+        generate() {
           throw new Error("Growth reflection 생성기는 현재 서버 runtime에 연결되지 않았습니다");
         },
       },
       {
-        async verify() {
+        verify() {
           throw new Error("Growth reflection 근거 검증기가 현재 서버 runtime에 연결되지 않았습니다");
         },
       },

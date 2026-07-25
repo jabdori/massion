@@ -203,7 +203,9 @@ describe("WorkDirectiveStore", () => {
         }),
       );
     }
-    const applying = submitted.at(-1)!;
+    // 단정 문법(!) 대신 런타임 가드로 undefined를 좁힙니다(101개를 push했으므로 항상 존재).
+    const applying = submitted.at(-1);
+    if (!applying) throw new Error("applying 지시가 존재해야 합니다");
     await database.query(
       "UPDATE application_work_directive SET status = 'applying', lease_generation = 1, lease_expires_at = <datetime>$lease_expires_at WHERE organization_id = $organization_id AND directive_id = $directive_id;",
       {

@@ -193,7 +193,8 @@ export class WorkspaceKnowledgeService {
           repositoryRevisionId: revision.repositoryRevisionId,
           configurationId: configuration.configurationId,
           mode: incremental ? "incremental" : "full",
-          ...(incremental && current ? { parentIndexVersionId: current.indexVersionId } : {}),
+          // incremental이 참이면 TS가 current를 정의된 값으로 좁히므로 중복 검사(&& current)를 뺍니다.
+          ...(incremental ? { parentIndexVersionId: current.indexVersionId } : {}),
           root: captured.rootRealPath,
           scanOptions: this.options.scanOptions,
         })

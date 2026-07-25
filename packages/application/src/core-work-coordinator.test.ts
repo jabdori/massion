@@ -1099,15 +1099,19 @@ describe("CoreWorkCoordinator", () => {
     string,
     (directiveIds: readonly string[]) => readonly string[] | undefined,
   ])[] = [
-    ["확인 값 없음", (_directiveIds: readonly string[]): readonly string[] | undefined => undefined],
-    ["일부 누락", (directiveIds: readonly string[]): readonly string[] | undefined => [directiveIds[0]!]],
+    // 미사용 매개변수를 제거하고, 단정 문법(!) 대신 slice로 안전하게 값을 가져옵니다.
+    ["확인 값 없음", (): readonly string[] | undefined => undefined],
+    ["일부 누락", (directiveIds: readonly string[]): readonly string[] | undefined => directiveIds.slice(0, 1)],
     [
       "알 수 없는 ID 추가",
       (directiveIds: readonly string[]): readonly string[] | undefined => [...directiveIds, "unknown-directive"],
     ],
     [
       "ID 중복",
-      (directiveIds: readonly string[]): readonly string[] | undefined => [...directiveIds, directiveIds[1]!],
+      (directiveIds: readonly string[]): readonly string[] | undefined => [
+        ...directiveIds,
+        ...directiveIds.slice(1, 2),
+      ],
     ],
   ];
 

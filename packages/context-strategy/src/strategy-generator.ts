@@ -179,7 +179,10 @@ export class StrategyGenerator {
       ) {
         throw new Error("Strategy evidence source 계약이 일치하지 않습니다");
       }
-      const materialized = await this.evidence!.materialize(context, {
+      // this.evidence는 이미 164줄에서 검증했지만 TS 좁히기를 위해 지역 변수로 고정합니다.
+      const evidence = this.evidence;
+      if (!evidence) throw new Error("Strategy evidence resolver가 없습니다");
+      const materialized = await evidence.materialize(context, {
         workId: input.workId,
         evidenceBriefId: reference.evidenceBriefId,
         maxEstimatedTokens: maxEvidenceTokens - evidenceTokens,

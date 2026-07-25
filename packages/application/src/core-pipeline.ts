@@ -550,7 +550,9 @@ export function createCoreWorkPipelineExecutors(
         ) {
           return { outcome: "blocked", reason: "evidence-invalid" };
         }
-        const { content: _content, ...metadataOnly } = source;
+        // content는 선택 속성(content?: unknown)이므로 정적 삭제로 메타데이터만 남깁니다.
+        const metadataOnly = { ...source };
+        delete metadataOnly.content;
         sources.push(metadataOnly);
       }
       const planInput: PlanStrategyInput = {

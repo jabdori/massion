@@ -261,8 +261,11 @@ export class CoreWorkCoordinator {
           if (current.status === "cancelled") return current;
           const reason = error instanceof WorkDirectiveBusyError ? `${stage}-directive-busy` : `${stage}-stage-failed`;
           await Promise.allSettled(
-            claimedDirectives.map((directive) =>
-              this.directives?.markFailed(context, directive.directiveId, directive.leaseGeneration, reason),
+            claimedDirectives.map(
+              (directive) =>
+                // directives가 없으면(undefined) 즉시 이행 Promise로 배열 요소를 Promise로 맞춥니다.
+                this.directives?.markFailed(context, directive.directiveId, directive.leaseGeneration, reason) ??
+                Promise.resolve(),
             ),
           );
           return await this.store.block(context, run.runId, claim.leaseGeneration, reason, run.workId);
@@ -280,15 +283,19 @@ export class CoreWorkCoordinator {
               ? result.reason
               : `${stage}-directive-unacknowledged`;
           await Promise.all(
-            claimedDirectives.map((directive) =>
-              this.directives?.markFailed(context, directive.directiveId, directive.leaseGeneration, reason),
+            claimedDirectives.map(
+              (directive) =>
+                this.directives?.markFailed(context, directive.directiveId, directive.leaseGeneration, reason) ??
+                Promise.resolve(),
             ),
           );
           return await this.store.block(context, run.runId, claim.leaseGeneration, reason, run.workId);
         }
         await Promise.all(
-          claimedDirectives.map((directive) =>
-            this.directives?.markApplied(context, directive.directiveId, directive.leaseGeneration),
+          claimedDirectives.map(
+            (directive) =>
+              this.directives?.markApplied(context, directive.directiveId, directive.leaseGeneration) ??
+              Promise.resolve(),
           ),
         );
         nextResumeInput = undefined;

@@ -201,7 +201,10 @@ export class RepositoryStore {
             : undefined;
           if (!record) throw error;
           if (record.root_real_path_hash !== input.rootRealPathHash)
-            throw new Error("같은 Workspace에는 다른 root real path hash로 Repository를 등록할 수 없습니다");
+            // catch로 잡은 원인 에러를 보존하기 위해 cause로 첨부합니다.
+            throw new Error("같은 Workspace에는 다른 root real path hash로 Repository를 등록할 수 없습니다", {
+              cause: error,
+            });
         }
       }
       if (!record) throw new Error("Repository 생성 결과가 없습니다");

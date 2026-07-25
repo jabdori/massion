@@ -141,13 +141,15 @@ export class SubscriptionQuotaSynchronizationService {
     return this.running && !this.closed && this.healthy;
   }
 
-  public async close(): Promise<void> {
-    if (this.closed) return;
+  // 동기 종료: await할 비동기 작업이 없으므로 계약(Promise<void>)을 유지하기 위해 즉시 이행 Promise를 반환합니다.
+  public close(): Promise<void> {
+    if (this.closed) return Promise.resolve();
     this.running = false;
     this.closed = true;
     this.healthy = false;
     if (this.timer) clearInterval(this.timer);
     this.timer = undefined;
+    return Promise.resolve();
   }
 
   /**

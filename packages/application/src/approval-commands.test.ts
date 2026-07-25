@@ -66,8 +66,8 @@ describe("Application approval commands", () => {
     expect(descriptor.validate(validPayload)).toEqual(validPayload);
     expect(() => descriptor.validate({ ...validPayload, extra: true })).toThrow("알 수 없는 필드");
     for (const field of Object.keys(validPayload)) {
-      const missing = { ...validPayload } as Record<string, unknown>;
-      delete missing[field];
+      // computed key 삭제 대신 해당 필드만 제외한 객체를 새로 만듭니다.
+      const missing = Object.fromEntries(Object.entries(validPayload).filter(([key]) => key !== field));
       expect(() => descriptor.validate(missing)).toThrow("정확히 네 필드");
     }
     expect(() => descriptor.validate({ ...validPayload, approvalId: "short" })).toThrow("approvalId");
