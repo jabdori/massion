@@ -2,7 +2,24 @@ import eslint from "@eslint/js";
 import tseslint from "typescript-eslint";
 
 export default tseslint.config(
-  { ignores: ["**/dist/**", "**/coverage/**", "**/node_modules/**", "apps/desktop/src-tauri/**"] },
+  {
+    ignores: [
+      "**/dist/**",
+      "**/coverage/**",
+      "**/node_modules/**",
+      "**/target/**",
+      "apps/desktop/src-tauri/**",
+      "apps/studio/**",
+      "apps/cli/**",
+      "apps/web/**",
+      "apps/tui/**",
+      ".claude/**",
+      ".playwright-mcp/**",
+      ".superpowers/**",
+      "existing-data-capture.*/**",
+      "existing-data-clone.*/**",
+    ],
+  },
   eslint.configs.recommended,
   ...tseslint.configs.strictTypeChecked,
   {

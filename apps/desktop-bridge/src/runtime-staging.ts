@@ -49,8 +49,9 @@ async function secureDirectoryTree(root: string, leaf: string): Promise<void> {
   let current = root;
   for (const part of relative(root, leaf).split(sep).filter(Boolean)) {
     current = resolve(current, part);
-    await mkdir(current, { mode: 0o700 }).catch((error: NodeJS.ErrnoException) => {
-      if (error.code !== "EEXIST") throw error;
+    await mkdir(current, { mode: 0o700 }).catch((error: unknown) => {
+      // NodeJS.ErrnoException로 단언하지 않고 EEXIST 외 오류만 다시 던진다
+      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
     });
     await verifyOwnerDirectory(current);
   }
@@ -171,10 +172,12 @@ async function digestHandle(handle: FileHandle): Promise<string> {
 
 async function openNoFollow(path: string, flags: number, mode?: number) {
   try {
+    // ponytail: O_NOFOLLOW 미지원 플랫폼 방어용 fallback. 타입은 항상 정의로 추론되지만 런타임 보호는 유지한다
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
     return await open(path, flags | (constants.O_NOFOLLOW ?? 0), mode);
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ELOOP") {
-      throw new Error("SurrealDB 실행 파일에 symlink를 사용할 수 없습니다");
+      throw new Error("SurrealDB 실행 파일에 symlink를 사용할 수 없습니다", { cause: error });
     }
     throw error;
   }

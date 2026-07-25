@@ -206,7 +206,9 @@ class DesktopBridge {
     const iterator = source(controller.signal)[Symbol.asyncIterator]();
     const state = { controller, iterator };
     this.streams.set(stream, state);
-    void this.pump(stream, state).catch(() => this.log(`${stream} 스트림 정리 실패`));
+    void this.pump(stream, state).catch(() => {
+      this.log(`${stream} 스트림 정리 실패`);
+    });
   }
 
   private stop(stream: StreamName): boolean {
@@ -215,7 +217,10 @@ class DesktopBridge {
     state.controller.abort();
     try {
       const completion = state.iterator.return?.();
-      if (completion) void completion.catch(() => this.log(`${stream} 스트림 정리 실패`));
+      if (completion)
+        void completion.catch(() => {
+          this.log(`${stream} 스트림 정리 실패`);
+        });
     } catch {
       this.log(`${stream} 스트림 정리 실패`);
     }
@@ -226,6 +231,8 @@ class DesktopBridge {
     try {
       while (!state.controller.signal.aborted) {
         const next = await state.iterator.next();
+        // ponytail: AbortSignal.aborted는 타입 추론상 항상 false지만 abort() 호출 후 true로 바뀐다
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
         if (state.controller.signal.aborted || this.streams.get(stream) !== state) break;
         if (next.done) break;
         await this.event(stream, next.value);
@@ -233,8 +240,10 @@ class DesktopBridge {
     } catch {
       if (!state.controller.signal.aborted) {
         this.log(`${stream} 스트림 실패`);
-        await this.event(stream, { error: { code: "STREAM_FAILED", message: "스트림을 읽지 못했습니다" } }).catch(() =>
-          this.log(`${stream} 스트림 오류 알림 실패`),
+        await this.event(stream, { error: { code: "STREAM_FAILED", message: "스트림을 읽지 못했습니다" } }).catch(
+          () => {
+            this.log(`${stream} 스트림 오류 알림 실패`);
+          },
         );
       }
     } finally {
@@ -351,12 +360,11 @@ function jsonByteLength(value: unknown, limit: number, seen: Set<object>, depth:
     return size;
   }
 
-  const prototype = Object.getPrototypeOf(value);
+  const prototype: unknown = Object.getPrototypeOf(value);
   if ((prototype !== Object.prototype && prototype !== null) || "toJSON" in value) return undefined;
   const descriptors = Object.getOwnPropertyDescriptors(value);
   let index = 0;
-  for (const key of Object.keys(descriptors)) {
-    const descriptor = descriptors[key]!;
+  for (const [key, descriptor] of Object.entries(descriptors)) {
     if (!descriptor.enumerable) continue;
     if (!("value" in descriptor)) return undefined;
     const keySize = jsonStringByteLength(key, limit - size);

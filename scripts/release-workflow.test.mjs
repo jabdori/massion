@@ -12,9 +12,9 @@ test("레거시 release workflow는 수동 실행과 job 조건에서 이중으�
   assert.ok(uses.length >= 8, "release action 단계가 누락됐습니다");
   for (const line of uses) assert.match(line, SHA_PIN, `action을 commit SHA로 고정해야 합니다: ${line.trim()}`);
   assert.match(workflow, /^name: Legacy 1\.0 Release \(disabled\)$/mu);
-  assert.match(workflow, /^on:\n  workflow_dispatch:\n\npermissions:$/mu);
-  assert.doesNotMatch(workflow, /^  push:$/mu);
-  assert.match(workflow, /^    if: \$\{\{ false \}\}$/mu);
+  assert.match(workflow, /^on:\n {2}workflow_dispatch:\n\npermissions:$/mu);
+  assert.doesNotMatch(workflow, /^ {2}push:$/mu);
+  assert.match(workflow, /^ {4}if: \$\{\{ false \}\}$/mu);
   assert.doesNotMatch(workflow, /^\s+(?:artifact-metadata|attestations|id-token|packages):\s*write$/mu);
   assert.match(workflow, /provenance:\s*mode=max/u);
   assert.match(workflow, /sbom:\s*true/u);

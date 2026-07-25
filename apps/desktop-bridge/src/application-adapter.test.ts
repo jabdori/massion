@@ -182,6 +182,7 @@ describe("ApplicationBridgeAdapter streams", () => {
     }).rejects.toThrow("재연결 상한");
 
     const denied = client({
+      // eslint-disable-next-line require-yield -- 의도적으로 연결 즉시 영구 오류를 던지는 에러 스트림
       streamEvents: async function* () {
         throw new ApplicationRemoteError(401, { authorization: "Bearer server-secret" });
       },

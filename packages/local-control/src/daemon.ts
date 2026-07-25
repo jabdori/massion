@@ -129,7 +129,7 @@ export function resolveLocalPaths(environment: Readonly<Record<string, string | 
 export async function ensureLocalDataEpoch(paths: LocalPaths): Promise<void> {
   const key = [paths.configDirectory, paths.dataDirectory, paths.stateDirectory].sort().join("\0");
   const previous = epochOperations.get(key) ?? Promise.resolve();
-  const current = previous.then(async () => await ensureLocalDataEpochExclusive(paths));
+  const current = previous.then(() => ensureLocalDataEpochExclusive(paths));
   epochOperations.set(key, current);
   try {
     await current;

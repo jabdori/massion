@@ -104,6 +104,8 @@ class ApplicationBridgeAdapter implements BridgeAdapter {
     while (!signal.aborted) {
       try {
         for await (const raw of client.streamEvents(cursor, signal)) {
+          // ponytail: AbortSignal.aborted는 타입 추론상 항상 false지만 abort() 호출 후 true로 바뀐다
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
           if (signal.aborted) return;
           const event = validateApplicationEvent(raw);
           if (event.sequence <= cursor) continue;
@@ -112,9 +114,11 @@ class ApplicationBridgeAdapter implements BridgeAdapter {
           yield event;
         }
       } catch (error) {
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
         if (signal.aborted) return;
-        if (!transient(error)) throw new Error("Application event stream에 다시 연결할 수 없습니다");
+        if (!transient(error)) throw new Error("Application event stream에 다시 연결할 수 없습니다", { cause: error });
       }
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
       if (signal.aborted) return;
       failures += 1;
       if (failures >= this.reconnectAttempts) {

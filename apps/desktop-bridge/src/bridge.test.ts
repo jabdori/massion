@@ -103,7 +103,9 @@ describe("desktop JSONL bridge", () => {
   it("durable과 execution stream을 각각 하나만 열고 stop으로 중단한다", async () => {
     let eventsSignal: AbortSignal | undefined;
     let executionsSignal: AbortSignal | undefined;
+    // eslint-disable-next-line @typescript-eslint/no-invalid-void-type -- 값 없는 동기 신호용 게이트
     const eventGate = deferred<void>();
+    // eslint-disable-next-line @typescript-eslint/no-invalid-void-type
     const executionGate = deferred<void>();
     const { bridge, values } = harness({
       events: async function* (_params, signal) {
@@ -155,6 +157,7 @@ describe("desktop JSONL bridge", () => {
   });
 
   it("stop 중인 스트림의 재시작과 늦은 이벤트를 막는다", async () => {
+    // eslint-disable-next-line @typescript-eslint/no-invalid-void-type
     const gate = deferred<void>();
     const { bridge, values } = harness({
       events: async function* () {
