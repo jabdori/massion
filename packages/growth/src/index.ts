@@ -6,6 +6,7 @@ export { GrowthComplianceAuditor } from "./compliance.js";
 export { GrowthEffectStore } from "./effect.js";
 export { GrowthEvaluationStore } from "./evaluation.js";
 export { GrowthGovernanceAdapter } from "./governance-adapter.js";
+export { GrowthWorkPromptAdapter } from "./work-prompt-adapter.js";
 export { PromptMemoryStore } from "./prompt-memory.js";
 export { ReflectionService } from "./reflection.js";
 export { GrowthRecoveryService } from "./recovery.js";

@@ -63,6 +63,7 @@ import {
   GrowthRecoveryService,
   GrowthRevertService,
   GrowthTargetRegistry,
+  GrowthWorkPromptAdapter,
   MemoryGrowthTarget,
   OrganizationGrowthTarget,
   PolicyGrowthTarget,
@@ -264,7 +265,11 @@ export async function createMassionDaemon(
       config.mode,
       approvals,
     );
-    const works = await WorkService.create(database, organizations, graph);
+    // growth의 PromptMemoryStore는 work 실행 시 agent 프롬프트에 장기 기억을 주입하는 PromptVersionResolver 어댑터로 연결된다.
+    const growthPrompts = await PromptMemoryStore.create(database, organizations);
+    const workPromptVersions = new GrowthWorkPromptAdapter(database, organizations, growthPrompts);
+    // governance 자리는 본 작업 범위 밖이므로 그대로 두고 promptVersions만 주입한다.
+    const works = await WorkService.create(database, organizations, graph, undefined, workPromptVersions);
     const workspaces = await WorkspaceService.create(database, organizations);
     const extensionStore = await ExtensionStore.create(database, organizations);
     const connectorEnrollment = await ConnectorEnrollmentService.create(database, organizations);
@@ -574,7 +579,6 @@ export async function createMassionDaemon(
     const records = await RecordsService.create(database, organizations);
     const growthAuthorizer = new GrowthGovernanceAdapter(governanceGate);
     const growthConfigurations = await GrowthConfigurationStore.create(database, organizations, growthAuthorizer);
-    const growthPrompts = await PromptMemoryStore.create(database, organizations);
     const growthEvaluations = await GrowthEvaluationStore.create(database, organizations);
     const growthRecovery = await GrowthRecoveryService.create(database, organizations);
     const growthTargets = new GrowthTargetRegistry({

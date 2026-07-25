@@ -20,7 +20,7 @@ import {
   WORK_STRATEGY_PROJECTION_MIGRATION,
   WORK_WORKSPACE_MIGRATION,
 } from "./schema.js";
-import type { PromptVersionResolver, ResolveWorkPromptInput } from "./prompt-version.js";
+import type { PromptVersionResolver, ResolveWorkPromptInput, ResolvedWorkPrompt } from "./prompt-version.js";
 
 export type WorkStatus =
   | "draft"
@@ -892,9 +892,16 @@ export class WorkService {
         ...(input.contextVersionId ? { contextVersionId: input.contextVersionId } : {}),
         ...(input.policyVersionId ? { policyVersionId: input.policyVersionId } : {}),
       };
-      const resolvedPrompt = this.promptVersions
-        ? await this.promptVersions.resolve(context, promptInput, transaction)
-        : undefined;
+      // 장기 기억 주입은 부가 기능이다. resolver 실패(정의 미시드·compose 예외) 시 메모리 없이 진행한다.
+      // ponytail: 예외를 조용히 무시한다. adapter 버그를 가릴 수 있으니 WorkService에 logger가 들어오면 기록하라.
+      let resolvedPrompt: ResolvedWorkPrompt | undefined;
+      if (this.promptVersions) {
+        try {
+          resolvedPrompt = await this.promptVersions.resolve(context, promptInput, transaction);
+        } catch {
+          resolvedPrompt = undefined;
+        }
+      }
       if (resolvedPrompt) {
         await this.promptVersions?.verify(context, resolvedPrompt.promptVersionId, transaction);
       }
