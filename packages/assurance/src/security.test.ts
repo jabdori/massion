@@ -15,7 +15,7 @@ const remoteUrl = process.env.SURREAL_TEST_URL;
 const remoteTest = remoteUrl ? it : it.skip;
 
 describe("Assurance security regression", () => {
-  it("공개 API에서 내부 transition·test harness·DB·시스템 자격 증명을 노출하지 않는다", async () => {
+ it("공개 API에서 내부 transition·test harness·DB·시스템 자격 증명을 노출하지 않는다", async () => {
     await using database = await createDatabase({
       url: "mem://",
       namespace: "massion",
@@ -38,18 +38,21 @@ describe("Assurance security regression", () => {
     ]) {
       expect(privateName in publicApi).toBe(false);
     }
+    // transition은 core-assurance-stage가 assurance run 상태를 전이할 때 필요하다.
     expect(Object.keys(gateway).sort()).toEqual([
       "assertRestoredCompliance",
       "auditCompletedWorks",
       "decide",
+      "findByStartCommand",
       "get",
       "listCriteria",
       "listEvents",
       "prepareSnapshot",
+      "projectVerdict",
       "recover",
       "start",
+      "transition",
     ]);
-    expect("transition" in gateway).toBe(false);
     expect(JSON.stringify({ context, gateway: Object.keys(gateway) })).not.toMatch(
       /root:root|password|credential|database/u,
     );

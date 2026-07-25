@@ -453,7 +453,8 @@ describe("Assurance run과 Work 완료 게이트", () => {
     expect("AssuranceRunStore" in publicApi).toBe(false);
     expect("AssuranceService" in publicApi).toBe(false);
     expect("createAssuranceServiceTestHarness" in publicApi).toBe(false);
-    expect("transition" in publicRuns).toBe(false);
+    // transition은 core-assurance-stage가 run 상태를 전이할 때 필요하다
+    expect("transition" in publicRuns).toBe(true);
     expect("decide" in publicRuns).toBe(true);
   });
 
