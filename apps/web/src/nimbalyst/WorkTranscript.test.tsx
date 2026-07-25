@@ -1,8 +1,18 @@
 import { render, screen, waitFor } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { WorkTranscript } from "./WorkTranscript.js";
 import type { TranscriptItem } from "./adapters/contract.js";
+
+// MarkdownRenderer(react-markdown + react-syntax-highlighter Prism)는 무거운 청크라
+// lazy dynamic import 로 불러온다. jsdom 테스트에서는 이 의존성 transform 이
+// 비결정적으로 느려(전체 실행 시 waitFor 기본 1000ms 초과) 본문이 resolve 되지 않는다.
+// 테스트 의도는 "본문 텍스트가 보이는가"이지 Prism 하이라이트 검증이 아니므로,
+// content 를 그대로 렌더하는 가벼운 stub 으로 치환해 결정적·빠르게 만든다.
+// ponytail: 프로덕션 lazy 청크 분리는 그대로 두고 테스트만 mock.
+vi.mock("@nimbalyst/runtime/ui/AgentTranscript/components/MarkdownRenderer", () => ({
+  MarkdownRenderer: ({ content }: { readonly content: string }) => <>{content}</>,
+}));
 
 describe("WorkTranscript", () => {
   it("빈 상태에서 안내 문구를 렌더한다", () => {
