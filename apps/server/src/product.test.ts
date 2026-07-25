@@ -590,7 +590,7 @@ describe("Massion server product", () => {
     }
   }, 30_000);
 
-  it("초기 설치에서도 성장 조회는 실제 저장소의 빈 상태를 반환한다", async () => {
+  it("초기 설치에서 onboarding이 시드한 조직 메모리와 빈 제안·효과를 반환한다", async () => {
     const workspaceRoot = await mkdtemp(join(tmpdir(), "massion-growth-query-wiring-"));
     const parsed = parseServerConfig({
       MASSION_TOKEN_KEY: Buffer.alloc(32, 71).toString("base64url"),
@@ -615,7 +615,19 @@ describe("Massion server product", () => {
       await expect(client.query("growth.configuration.get", {})).resolves.toMatchObject({
         data: { reflectionEnabled: true, adoptionMode: "review" },
       });
-      await expect(client.query("growth.memories", {})).resolves.toMatchObject({ data: [] });
+      // onboarding(growth.start)이 빈 entries로 조직 메모리 정본을 시드한다.
+      await expect(client.query("growth.memories", {})).resolves.toMatchObject({
+        data: [
+          {
+            scope: "organization",
+            subjectId: "organization",
+            version: 1,
+            status: "active",
+            entryKeys: [],
+            sourceReferenceIds: [],
+          },
+        ],
+      });
       await expect(client.query("growth.suggestions", { limit: 50 })).resolves.toMatchObject({ data: [] });
       await expect(client.query("growth.effects", { limit: 50 })).resolves.toMatchObject({ data: [] });
     } finally {

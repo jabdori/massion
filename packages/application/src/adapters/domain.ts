@@ -61,7 +61,8 @@ export interface ApplicationDomainDependencies {
   readonly assuranceBindings?: Pick<AssuranceBindingStore, "propose" | "activate">;
   readonly organization?: Pick<OrganizationGraphService, "execute">;
   readonly extension?: Pick<ExtensionGateway, "validate" | "link" | "pack" | "install" | "update" | "rollback">;
-  readonly growth?: Pick<GrowthGateway, "configure" | "adopt" | "revert">;
+  // `start`는 onboarding(LocalApplicationBootstrap)에서 메모리 시드 연결에 사용합니다.
+  readonly growth?: Pick<GrowthGateway, "configure" | "adopt" | "revert" | "start">;
   readonly providers?: Pick<
     ProviderService,
     "registerProvider" | "registerEndpoint" | "addCredential" | "revokeCredential"

@@ -1,4 +1,5 @@
 import { createDefaultPolicy, type PolicyStore } from "@massion/governance";
+import type { GrowthGateway } from "@massion/growth";
 import type { IdentityService, OrganizationService } from "@massion/identity";
 import type { OrganizationGraphService } from "@massion/organization";
 
@@ -28,6 +29,8 @@ export class LocalApplicationBootstrap {
     private readonly graph: OrganizationGraphService,
     private readonly policies: PolicyStore,
     private readonly tokens: ApplicationAccessTokenService,
+    // onboarding 시 Growth(메모리·프롬프트 정본) 시드를 활성화하기 위한 선택 의존성입니다.
+    private readonly growth?: Pick<GrowthGateway, "start">,
   ) {}
 
   public async initialize(input: InitializeLocalApplicationInput) {
@@ -41,6 +44,9 @@ export class LocalApplicationBootstrap {
       registration.organization.organization_id,
     );
     const coreOffice = await this.graph.bootstrap(context);
+    // 조직 graph가 만들어진 직후 Growth를 시작해 활성 PromptDefinitionVersion을 시드합니다.
+    // 멱등이므로 onboarding 재시작에도 안전합니다.
+    if (this.growth) await this.growth.start(context);
     let policy = await this.policies.getActive(context);
     if (!policy) {
       const defaults = createDefaultPolicy("personal");

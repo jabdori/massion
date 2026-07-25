@@ -165,6 +165,7 @@ export class ApplicationProduct implements AsyncDisposable {
       dependencies.graph,
       dependencies.policies,
       tokens,
+      dependencies.domain.growth,
     );
 
     const productReference: { current?: ApplicationProduct } = {};
