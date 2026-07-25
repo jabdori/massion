@@ -25,8 +25,25 @@ import {
   WarningCircleIcon as WarningCircle,
   XIcon as X,
 } from "@phosphor-icons/react";
-import { Component, type CSSProperties, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Background, Handle, Position, ReactFlow, type Edge as RFEdge, type Node as RFNode, type ReactFlowInstance } from "@xyflow/react";
+import {
+  Component,
+  type CSSProperties,
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import {
+  Background,
+  Handle,
+  Position,
+  ReactFlow,
+  type Edge as RFEdge,
+  type Node as RFNode,
+  type ReactFlowInstance,
+} from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -35,7 +52,17 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupLabel, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem } from "@/components/ui/sidebar";
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarGroup,
+  SidebarGroupLabel,
+  SidebarHeader,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+} from "@/components/ui/sidebar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -76,7 +103,18 @@ import {
 import { agentIdentityToken, growthTargetToken } from "@massion/application/client";
 
 import { nativeContextPicker, type NativeContextPicker } from "@/native-context-picker";
-import { AgentAvatar, DecisionActions, OpenButton, ProposalActivity, RoomChapter, RoomHandoff, RoomMessage, RoomReference, RoomStatus, SpeakerRow } from "@/room";
+import {
+  AgentAvatar,
+  DecisionActions,
+  OpenButton,
+  ProposalActivity,
+  RoomChapter,
+  RoomHandoff,
+  RoomMessage,
+  RoomReference,
+  RoomStatus,
+  SpeakerRow,
+} from "@/room";
 import { useDesktopController } from "@/use-desktop-controller";
 
 const navItems = [
@@ -96,16 +134,15 @@ type AwaitingRegistryInstall = {
   approvalId: string;
 };
 
-type ApprovalDestination =
-  | { readonly surface: "work"; readonly workId: string }
-  | { readonly surface: "capabilities" };
+type ApprovalDestination = { readonly surface: "work"; readonly workId: string } | { readonly surface: "capabilities" };
 
 function approvalDestination(
   approval: ApprovalView,
   registryApprovalId: string | undefined,
 ): ApprovalDestination | undefined {
   if (approval.workId !== undefined) return { surface: "work", workId: approval.workId };
-  if (approval.id === registryApprovalId || approval.action?.startsWith("extension.")) return { surface: "capabilities" };
+  if (approval.id === registryApprovalId || approval.action?.startsWith("extension."))
+    return { surface: "capabilities" };
   return undefined;
 }
 
@@ -224,15 +261,28 @@ export function App({ contextPicker = nativeContextPicker, service }: AppProps) 
   };
   useEffect(() => {
     const toggleSidebar = (event: KeyboardEvent) => {
-      if (event.key === "[" && !(event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement || event.target instanceof HTMLSelectElement)) setSidebarCollapsed((current) => !current);
+      if (
+        event.key === "[" &&
+        !(
+          event.target instanceof HTMLInputElement ||
+          event.target instanceof HTMLTextAreaElement ||
+          event.target instanceof HTMLSelectElement
+        )
+      )
+        setSidebarCollapsed((current) => !current);
     };
     window.addEventListener("keydown", toggleSidebar);
-    return () => { window.removeEventListener("keydown", toggleSidebar); };
+    return () => {
+      window.removeEventListener("keydown", toggleSidebar);
+    };
   }, []);
   const handleApprovalDecision = async (approvalId: string, vote: "approve" | "reject") => {
     const pending = awaitingRegistryInstall;
     if (!pending || pending.approvalId !== approvalId) return;
-    if (vote === "reject") { setAwaitingRegistryInstall(undefined); return; }
+    if (vote === "reject") {
+      setAwaitingRegistryInstall(undefined);
+      return;
+    }
     setAwaitingRegistryInstall(undefined);
     await service.installRegistry({ ...pending.request, installApprovalId: pending.approvalId }, pending.identity);
   };
@@ -245,11 +295,7 @@ export function App({ contextPicker = nativeContextPicker, service }: AppProps) 
     setPendingNotificationIds((current) => new Set(current).add(approval.id));
     setNotificationError("");
     try {
-      await service.decideApproval(
-        approval,
-        vote,
-        `데스크톱 ${source}에서 ${vote === "approve" ? "승인" : "거절"}`,
-      );
+      await service.decideApproval(approval, vote, `데스크톱 ${source}에서 ${vote === "approve" ? "승인" : "거절"}`);
       setNotifications((current) => current?.filter((item) => item.id !== approval.id));
       await handleApprovalDecision(approval.id, vote);
       if (approval.workId !== undefined && approval.workId === selectedWorkId) {
@@ -276,9 +322,10 @@ export function App({ contextPicker = nativeContextPicker, service }: AppProps) 
     [growth?.suggestions, notifications, controller.works],
   );
   const inboxError = [notificationError, growthError].filter(Boolean).join(" ");
-  const registryApproval = awaitingRegistryInstall === undefined
-    ? undefined
-    : notifications?.find((approval) => approval.id === awaitingRegistryInstall.approvalId);
+  const registryApproval =
+    awaitingRegistryInstall === undefined
+      ? undefined
+      : notifications?.find((approval) => approval.id === awaitingRegistryInstall.approvalId);
   const openInbox = () => {
     setNotificationsOpen(true);
     void refreshNotifications();
@@ -312,43 +359,61 @@ export function App({ contextPicker = nativeContextPicker, service }: AppProps) 
           notificationCount={inboxItems === undefined ? 0 : inboxItems.length}
           onOpenNotifications={openInbox}
           onSelect={setSurface}
-          onToggle={() => { setSidebarCollapsed((current) => !current); }}
+          onToggle={() => {
+            setSidebarCollapsed((current) => !current);
+          }}
         />
         {surface === "work" ? (
-          controller.work ? <>
-            <WorkList
-              filter={controller.filter}
-              onCreate={() => { controller.newWork.setOpen(true); }}
-              onFilterChange={controller.setFilter}
-              onQueryChange={controller.setQuery}
-              onSelect={controller.setSelectedId}
-              pendingRunId={controller.pendingCreation?.runId}
-              query={controller.query}
-              selectedId={controller.selectedId}
-              works={controller.visibleWorks}
+          controller.work ? (
+            <>
+              <WorkList
+                filter={controller.filter}
+                onCreate={() => {
+                  controller.newWork.setOpen(true);
+                }}
+                onFilterChange={controller.setFilter}
+                onQueryChange={controller.setQuery}
+                onSelect={controller.setSelectedId}
+                pendingRunId={controller.pendingCreation?.runId}
+                query={controller.query}
+                selectedId={controller.selectedId}
+                works={controller.visibleWorks}
+              />
+              <WorkActivity
+                announcement={controller.announcement}
+                approvalDecisions={controller.approvalDecisions}
+                detailLoading={controller.detailLoading}
+                executionNotice={controller.executionNotice?.message}
+                composer={controller.composer}
+                onAnnouncement={controller.setAnnouncement}
+                onComposerChange={controller.setComposer}
+                onControlRun={(action) => {
+                  void controller.controlRun(action);
+                }}
+                onDecideApproval={(approval, decision) => {
+                  void decideWorkApproval(approval, decision);
+                }}
+                onSubmitDirective={(mode) => {
+                  void controller.submitDirective(mode);
+                }}
+                pendingApprovals={controller.pendingApprovals}
+                pendingDirective={controller.pendingDirective}
+                pendingRunAction={controller.pendingRunAction}
+                onCloseRoom={closeRoom}
+                onSelectRoom={openRoom}
+                room={room}
+                rooms={rooms.filter((candidate) => openRoomIds.includes(candidate.roomId))}
+                work={controller.work}
+              />
+              <WorkInspector room={room} work={controller.work} />
+            </>
+          ) : (
+            <WorkEmptySurface
+              onCreate={() => {
+                controller.newWork.setOpen(true);
+              }}
             />
-            <WorkActivity
-              announcement={controller.announcement}
-              approvalDecisions={controller.approvalDecisions}
-              detailLoading={controller.detailLoading}
-              executionNotice={controller.executionNotice?.message}
-              composer={controller.composer}
-              onAnnouncement={controller.setAnnouncement}
-              onComposerChange={controller.setComposer}
-              onControlRun={(action) => { void controller.controlRun(action); }}
-              onDecideApproval={(approval, decision) => { void decideWorkApproval(approval, decision); }}
-              onSubmitDirective={(mode) => { void controller.submitDirective(mode); }}
-              pendingApprovals={controller.pendingApprovals}
-              pendingDirective={controller.pendingDirective}
-              pendingRunAction={controller.pendingRunAction}
-              onCloseRoom={closeRoom}
-              onSelectRoom={openRoom}
-              room={room}
-              rooms={rooms.filter((candidate) => openRoomIds.includes(candidate.roomId))}
-              work={controller.work}
-            />
-            <WorkInspector room={room} work={controller.work} />
-          </> : <WorkEmptySurface onCreate={() => { controller.newWork.setOpen(true); }} />
+          )
         ) : (
           <ProductSurface
             approvalBusy={registryApproval === undefined ? false : pendingNotificationIds.has(registryApproval.id)}
@@ -364,7 +429,9 @@ export function App({ contextPicker = nativeContextPicker, service }: AppProps) 
               controller.newWork.setOpen(true);
             }}
             onOpenNotifications={openInbox}
-            onRetryGrowth={() => { void refreshGrowth(); }}
+            onRetryGrowth={() => {
+              void refreshGrowth();
+            }}
             onOpenWork={(workId) => {
               controller.setSelectedId(workId);
               setSurface("work");
@@ -402,7 +469,14 @@ export function App({ contextPicker = nativeContextPicker, service }: AppProps) 
         pending={pendingNotificationIds}
         works={controller.works}
       />
-      <NewWorkDialog {...controller.newWork} contextPicker={contextPicker} onOpenSettings={() => { controller.newWork.setOpen(false); setSurface("settings"); }} />
+      <NewWorkDialog
+        {...controller.newWork}
+        contextPicker={contextPicker}
+        onOpenSettings={() => {
+          controller.newWork.setOpen(false);
+          setSurface("settings");
+        }}
+      />
     </TooltipProvider>
   );
 }
@@ -428,8 +502,17 @@ function GlobalRail({
         <span aria-hidden="true" className="flex size-7 items-center justify-center text-accent">
           <MassionMark />
         </span>
-        <span className="text-[15px] font-semibold tracking-[-0.02em] group-data-[collapsed=true]/sidebar:hidden">Massion</span>
-        <button aria-label={collapsed ? "사이드바 펼치기" : "사이드바 접기"} className="ml-auto rounded p-1 text-muted hover:text-primary group-data-[collapsed=true]/sidebar:ml-0" onClick={onToggle} type="button">{collapsed ? <CaretRight size={16} /> : <CaretDown className="-rotate-90" size={16} />}</button>
+        <span className="text-[15px] font-semibold tracking-[-0.02em] group-data-[collapsed=true]/sidebar:hidden">
+          Massion
+        </span>
+        <button
+          aria-label={collapsed ? "사이드바 펼치기" : "사이드바 접기"}
+          className="ml-auto rounded p-1 text-muted hover:text-primary group-data-[collapsed=true]/sidebar:ml-0"
+          onClick={onToggle}
+          type="button"
+        >
+          {collapsed ? <CaretRight size={16} /> : <CaretDown className="-rotate-90" size={16} />}
+        </button>
       </SidebarHeader>
       <SidebarContent>
         <SidebarGroup>
@@ -454,26 +537,45 @@ function GlobalRail({
         <SidebarGroup>
           <SidebarGroupLabel>운영</SidebarGroupLabel>
           <SidebarMenu>
-          {navItems.filter((item) => item.surface !== "settings").map(({ icon: Icon, label, surface }) => {
-            const current = activeSurface === surface;
-            return (
-              <SidebarMenuItem key={label}>
-                  <SidebarMenuButton active={current}
-                  aria-label={label}
-                  onClick={() => {
-                    onSelect(surface);
-                  }}
-                  >
-                  <Icon aria-hidden="true" size={21} weight="regular" />
-                  <span className="flex-1 text-left">{label}</span>
-                  </SidebarMenuButton>
-              </SidebarMenuItem>
-            );
-          })}
+            {navItems
+              .filter((item) => item.surface !== "settings")
+              .map(({ icon: Icon, label, surface }) => {
+                const current = activeSurface === surface;
+                return (
+                  <SidebarMenuItem key={label}>
+                    <SidebarMenuButton
+                      active={current}
+                      aria-label={label}
+                      onClick={() => {
+                        onSelect(surface);
+                      }}
+                    >
+                      <Icon aria-hidden="true" size={21} weight="regular" />
+                      <span className="flex-1 text-left">{label}</span>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                );
+              })}
           </SidebarMenu>
         </SidebarGroup>
       </SidebarContent>
-      <SidebarFooter><SidebarMenu><SidebarMenuItem><SidebarMenuButton active={activeSurface === "settings"} aria-label="설정" onClick={() => { onSelect("settings"); }}><Gear aria-hidden="true" size={20} /><span>설정</span></SidebarMenuButton></SidebarMenuItem></SidebarMenu><p className="mt-2 text-[11px] text-muted group-data-[collapsed=true]/sidebar:hidden">로컬 연결됨</p></SidebarFooter>
+      <SidebarFooter>
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              active={activeSurface === "settings"}
+              aria-label="설정"
+              onClick={() => {
+                onSelect("settings");
+              }}
+            >
+              <Gear aria-hidden="true" size={20} />
+              <span>설정</span>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
+        <p className="mt-2 text-[11px] text-muted group-data-[collapsed=true]/sidebar:hidden">로컬 연결됨</p>
+      </SidebarFooter>
     </Sidebar>
   );
 }
@@ -564,7 +666,9 @@ function WorkEmptySurface({ onCreate }: { onCreate: () => void }) {
         <Briefcase aria-hidden="true" className="mx-auto mb-4 text-muted" size={32} />
         <h1 className="text-lg font-semibold">아직 Work가 없습니다.</h1>
         <p className="mt-2 text-sm text-muted">첫 업무를 만들면 에이전트 실행 과정이 여기에 표시됩니다.</p>
-        <Button className="mt-5" onClick={onCreate} variant="primary"><Plus aria-hidden="true" size={16} />첫 Work 만들기</Button>
+        <Button className="mt-5" onClick={onCreate} variant="primary">
+          <Plus aria-hidden="true" size={16} />첫 Work 만들기
+        </Button>
       </div>
     </main>
   );
@@ -590,8 +694,12 @@ function HomeSurface({
     let disposed = false;
     void service
       .loadIndex({ filter: "active", search: "" })
-      .then((items) => { if (!disposed) setWorks(items); })
-      .catch((cause: unknown) => { if (!disposed) setError(surfaceErrorMessage(cause, "현황을 불러오지 못했습니다.")); });
+      .then((items) => {
+        if (!disposed) setWorks(items);
+      })
+      .catch((cause: unknown) => {
+        if (!disposed) setError(surfaceErrorMessage(cause, "현황을 불러오지 못했습니다."));
+      });
     return () => {
       disposed = true;
     };
@@ -637,7 +745,9 @@ function HomeSurface({
                       className="flex items-center gap-2.5 rounded-[7px] border border-gate-border bg-gate-wash px-3.5 py-2.5"
                       key={item.id}
                     >
-                      <span aria-hidden="true" className="text-gate">◇</span>
+                      <span aria-hidden="true" className="text-gate">
+                        ◇
+                      </span>
                       <span className="min-w-0 flex-1">
                         <span className="block truncate text-[13px] font-medium">{item.approval.title}</span>
                         <span className="block truncate text-xs text-secondary">{item.approval.description}</span>
@@ -667,7 +777,9 @@ function HomeSurface({
                         }}
                         type="button"
                       >
-                        <span aria-hidden="true" className="text-halt">⊘</span>
+                        <span aria-hidden="true" className="text-halt">
+                          ⊘
+                        </span>
                         <span className="min-w-0 flex-1">
                           <span className="block truncate text-[13px] font-medium">{item.title}</span>
                           {/* 차단 원인을 구별해 보입니다. 모델 부재와 폴더 신뢰는 할 일이 완전히 다릅니다. */}
@@ -713,7 +825,9 @@ function HomeSurface({
                               role: agent.role,
                             }))}
                           />
-                          <span className="font-mono text-[11px] text-muted">{work.run?.stage ?? work.sourceStatus}</span>
+                          <span className="font-mono text-[11px] text-muted">
+                            {work.run?.stage ?? work.sourceStatus}
+                          </span>
                         </span>
                       </span>
                       <time className="shrink-0 font-mono text-[11px] text-muted">{work.updatedAt}</time>
@@ -817,7 +931,9 @@ function InboxPanel({
             {error ? (
               <div>
                 <SurfaceError message={error} />
-                <Button onClick={onRetry} size="sm" type="button" variant="outline">다시 불러오기</Button>
+                <Button onClick={onRetry} size="sm" type="button" variant="outline">
+                  다시 불러오기
+                </Button>
               </div>
             ) : null}
             {items === undefined && !error ? <SurfaceLoading /> : null}
@@ -835,7 +951,9 @@ function InboxPanel({
                   approval={item.approval}
                   busy={pending.has(item.id)}
                   onDecide={onDecide}
-                  onOpen={() => { onOpenApproval(item.approval); }}
+                  onOpen={() => {
+                    onOpenApproval(item.approval);
+                  }}
                   routable={canOpenApproval(item.approval)}
                   workTitle={item.approval.workId === undefined ? undefined : workTitles.get(item.approval.workId)}
                 />
@@ -882,7 +1000,9 @@ function ApprovalInboxCard({
       <h3 className="text-[13px] font-medium">
         {!routable ? (
           <span className="flex min-h-6 items-center gap-2">
-            <span aria-hidden="true" className="text-gate">◇</span>
+            <span aria-hidden="true" className="text-gate">
+              ◇
+            </span>
             <span className="min-w-0 flex-1 truncate">{approval.title}</span>
             <span className="shrink-0 text-[11px] font-normal text-gate">승인 필요</span>
           </span>
@@ -893,7 +1013,9 @@ function ApprovalInboxCard({
             onClick={onOpen}
             type="button"
           >
-            <span aria-hidden="true" className="text-gate">◇</span>
+            <span aria-hidden="true" className="text-gate">
+              ◇
+            </span>
             <span className="min-w-0 flex-1 truncate">{approval.title}</span>
             <span className="shrink-0 text-[11px] font-normal text-gate">승인 필요</span>
             <CaretRight aria-hidden="true" className="shrink-0 text-muted" size={12} />
@@ -914,8 +1036,12 @@ function ApprovalInboxCard({
             approveName={approval.title}
             busy={busy}
             disabled={busy}
-            onApprove={() => { void onDecide(approval, "approve"); }}
-            onReject={() => { void onDecide(approval, "reject"); }}
+            onApprove={() => {
+              void onDecide(approval, "approve");
+            }}
+            onReject={() => {
+              void onDecide(approval, "reject");
+            }}
           />
         </div>
       ) : null}
@@ -942,10 +1068,14 @@ function BlockedInboxCard({
         <button
           aria-label={`업무로 이동: ${item.title}`}
           className="flex min-h-6 w-full items-center gap-2 rounded-[3px] text-left outline-none hover:text-primary focus-visible:ring-2 focus-visible:ring-halt/70"
-          onClick={() => { onOpenWork(item.workId); }}
+          onClick={() => {
+            onOpenWork(item.workId);
+          }}
           type="button"
         >
-          <span aria-hidden="true" className="text-halt">⊘</span>
+          <span aria-hidden="true" className="text-halt">
+            ⊘
+          </span>
           <span className="min-w-0 flex-1 truncate">{item.title}</span>
           <span className="shrink-0 text-[11px] font-normal text-halt">막힘</span>
           <CaretRight aria-hidden="true" className="shrink-0 text-muted" size={12} />
@@ -968,12 +1098,17 @@ function GrowthInboxCard({
   workTitle: string | undefined;
 }) {
   return (
-    <section className="rounded-[7px] border border-gate-border bg-gate-wash px-3.5 py-3" title={`개선 제안 ${item.suggestionId}`}>
+    <section
+      className="rounded-[7px] border border-gate-border bg-gate-wash px-3.5 py-3"
+      title={`개선 제안 ${item.suggestionId}`}
+    >
       <h3 className="text-[13px] font-medium">
         <button
           aria-label={`개선 검토 열기: ${item.title}`}
           className="flex min-h-6 w-full items-center gap-2 rounded-[3px] text-left outline-none hover:text-primary focus-visible:ring-2 focus-visible:ring-gate/70"
-          onClick={() => { onOpenGrowth(item.suggestionId); }}
+          onClick={() => {
+            onOpenGrowth(item.suggestionId);
+          }}
           type="button"
         >
           <Star aria-hidden="true" className="shrink-0 text-gate" size={14} />
@@ -996,8 +1131,17 @@ function OrganizationSurface({ service }: { service: DesktopService }) {
   const structureRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     let disposed = false;
-    void service.loadOrganization().then((value) => { if (!disposed) setOrganization(value); }).catch((cause: unknown) => { if (!disposed) setError(surfaceErrorMessage(cause, "조직 정보를 불러오지 못했습니다.")); });
-    return () => { disposed = true; };
+    void service
+      .loadOrganization()
+      .then((value) => {
+        if (!disposed) setOrganization(value);
+      })
+      .catch((cause: unknown) => {
+        if (!disposed) setError(surfaceErrorMessage(cause, "조직 정보를 불러오지 못했습니다."));
+      });
+    return () => {
+      disposed = true;
+    };
   }, [service]);
 
   const nodes = organization?.nodes ?? [];
@@ -1006,7 +1150,8 @@ function OrganizationSurface({ service }: { service: DesktopService }) {
   const selected = nodes.find((node) => node.handle === selectedHandle);
   const identity = selected ? agentIdentityToken(selected.handle, roleTextOf(selected)) : undefined;
   const children = selected ? nodes.filter((node) => node.parentHandle === selected.handle) : [];
-  const parent = selected?.parentHandle === undefined ? undefined : nodes.find((node) => node.handle === selected.parentHandle);
+  const parent =
+    selected?.parentHandle === undefined ? undefined : nodes.find((node) => node.handle === selected.parentHandle);
 
   useEffect(() => {
     if (!selectedHandle) return;
@@ -1048,12 +1193,16 @@ function OrganizationSurface({ service }: { service: DesktopService }) {
       <section aria-label="조직 구조" className="grid min-h-0 grid-rows-[46px_minmax(0,1fr)] border-r border-border">
         <header className="flex items-center gap-2 border-b border-border px-5">
           <h1 className="text-[15px] font-semibold tracking-[-0.015em]">조직</h1>
-          {organization?.version === undefined ? null : <span className="font-mono text-[11px] text-muted">v{organization.version}</span>}
+          {organization?.version === undefined ? null : (
+            <span className="font-mono text-[11px] text-muted">v{organization.version}</span>
+          )}
         </header>
         <div ref={structureRef} className="min-h-0 overflow-y-auto px-5 py-4">
           {error ? <SurfaceError message={error} /> : null}
           {!organization && !error ? <SurfaceLoading /> : null}
-          {organization && nodes.length === 0 ? <p className="text-sm text-muted">조직에 아직 아무도 없습니다.</p> : null}
+          {organization && nodes.length === 0 ? (
+            <p className="text-sm text-muted">조직에 아직 아무도 없습니다.</p>
+          ) : null}
           {root ? (
             <div className="mx-auto max-w-[720px]">
               <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.08em] text-muted">영속 조직</p>
@@ -1073,7 +1222,13 @@ function OrganizationSurface({ service }: { service: DesktopService }) {
                   </p>
                   <div className="space-y-2">
                     {workTeams.map((team) => (
-                      <OrgTempTeam key={team.handle} team={team} all={nodes} selected={team.handle === selected?.handle} onSelect={select} />
+                      <OrgTempTeam
+                        key={team.handle}
+                        team={team}
+                        all={nodes}
+                        selected={team.handle === selected?.handle}
+                        onSelect={select}
+                      />
                     ))}
                   </div>
                 </>
@@ -1102,7 +1257,9 @@ function OrganizationSurface({ service }: { service: DesktopService }) {
               <div className="flex items-center gap-2">
                 <AgentAvatar speaker={speakerOf(selected)} />
                 <span className="text-[13px] font-medium">{identity.name}</span>
-                <span className="rounded-[3px] border border-control px-1.5 text-[10px] text-muted">{roleTextOf(selected)}</span>
+                <span className="rounded-[3px] border border-control px-1.5 text-[10px] text-muted">
+                  {roleTextOf(selected)}
+                </span>
                 <span className="ml-auto text-[11px] text-muted">{nodeStatusLabel(selected.status)}</span>
               </div>
               <p className="mt-2 text-[12px] leading-5 text-secondary">{selected.responsibility}</p>
@@ -1113,12 +1270,16 @@ function OrganizationSurface({ service }: { service: DesktopService }) {
                 </li>
                 <li className="grid grid-cols-[64px_minmax(0,1fr)] items-baseline gap-2 py-2">
                   <span className="text-[11px] text-muted">위</span>
-                  <span className="text-[12px] text-primary">{parent === undefined ? "없음 — 꼭대기" : agentIdentityToken(parent.handle).name}</span>
+                  <span className="text-[12px] text-primary">
+                    {parent === undefined ? "없음 — 꼭대기" : agentIdentityToken(parent.handle).name}
+                  </span>
                 </li>
                 <li className="grid grid-cols-[64px_minmax(0,1fr)] items-baseline gap-2 py-2">
                   <span className="text-[11px] text-muted">아래</span>
                   <span className="text-[12px] text-primary">
-                    {children.length === 0 ? "없음" : children.map((child) => agentIdentityToken(child.handle).name).join(" · ")}
+                    {children.length === 0
+                      ? "없음"
+                      : children.map((child) => agentIdentityToken(child.handle).name).join(" · ")}
                   </span>
                 </li>
                 <li className="grid grid-cols-[64px_minmax(0,1fr)] items-baseline gap-2 py-2">
@@ -1135,7 +1296,8 @@ function OrganizationSurface({ service }: { service: DesktopService }) {
             </>
           ) : (
             <p className="text-[11px] leading-4 text-muted">
-              구조나 지도에서 하나를 누르면 그 자리·소속·머무는 기간을 봅니다. 편성·분리·병합은 계약에 명령이 열리면 이 지도에서 하게 됩니다.
+              구조나 지도에서 하나를 누르면 그 자리·소속·머무는 기간을 봅니다. 편성·분리·병합은 계약에 명령이 열리면 이
+              지도에서 하게 됩니다.
             </p>
           )}
         </div>
@@ -1176,7 +1338,10 @@ function OrgUnit({
   const selected = node.handle === selectedHandle;
   const collapsed = collapsedHandles.has(node.handle);
   return (
-    <div className="rounded-[7px] border border-border" style={{ background: depth === 0 ? "var(--bg-2)" : "var(--bg-1)" }}>
+    <div
+      className="rounded-[7px] border border-border"
+      style={{ background: depth === 0 ? "var(--bg-2)" : "var(--bg-1)" }}
+    >
       <div className="flex items-stretch border-b border-border">
         <button
           aria-pressed={selected}
@@ -1192,7 +1357,12 @@ function OrgUnit({
           <span className="rounded-[3px] border border-control px-1.5 text-[10px] text-muted">{unitWordOf(node)}</span>
           <span className="truncate text-[11px] text-muted">{roleTextOf(node)}</span>
           <span className="ml-auto shrink-0 text-[11px] text-muted">
-            {[members.length > 0 ? `구성원 ${String(members.length)}` : "", subUnits.length > 0 ? `하위 단위 ${String(subUnits.length)}` : ""].filter(Boolean).join(" · ")}
+            {[
+              members.length > 0 ? `구성원 ${String(members.length)}` : "",
+              subUnits.length > 0 ? `하위 단위 ${String(subUnits.length)}` : "",
+            ]
+              .filter(Boolean)
+              .join(" · ")}
           </span>
         </button>
         {children.length > 0 ? (
@@ -1233,7 +1403,10 @@ function OrgUnit({
         </div>
       ) : null}
       {!collapsed && subUnits.length > 0 ? (
-        <div className="space-y-2 py-2 pl-3 pr-2.5" style={{ borderLeft: "2px solid var(--line-strong)", marginLeft: 14 }}>
+        <div
+          className="space-y-2 py-2 pl-3 pr-2.5"
+          style={{ borderLeft: "2px solid var(--line-strong)", marginLeft: 14 }}
+        >
           {subUnits.map((child) => (
             <OrgUnit
               key={child.handle}
@@ -1298,7 +1471,11 @@ class MapBoundary extends Component<{ children: ReactNode }, { failed: boolean }
   }
   public override render() {
     if (this.state.failed) {
-      return <div className="flex h-full items-center justify-center px-3 text-center text-[11px] text-muted">지도를 그릴 수 없습니다</div>;
+      return (
+        <div className="flex h-full items-center justify-center px-3 text-center text-[11px] text-muted">
+          지도를 그릴 수 없습니다
+        </div>
+      );
     }
     return this.props.children;
   }
@@ -1307,7 +1484,11 @@ class MapBoundary extends Component<{ children: ReactNode }, { failed: boolean }
 const ORG_MAP_NODE_W = 132;
 const ORG_MAP_ROW_H = 74;
 
-function OrgMapNode({ data }: { data: { node: OrganizationNodeView; selected: boolean; unit: boolean; onSelect: (handle: string) => void } }) {
+function OrgMapNode({
+  data,
+}: {
+  data: { node: OrganizationNodeView; selected: boolean; unit: boolean; onSelect: (handle: string) => void };
+}) {
   const { node, selected, unit, onSelect } = data;
   const name = agentIdentityToken(node.handle).name;
   return (
@@ -1548,7 +1729,9 @@ function ExtensionSurface({
         setEntries(value);
         setSelectedId((current) => current ?? value[0]?.id);
       })
-      .catch((cause: unknown) => { if (!disposed) setError(surfaceErrorMessage(cause, "확장 목록을 불러오지 못했습니다.")); });
+      .catch((cause: unknown) => {
+        if (!disposed) setError(surfaceErrorMessage(cause, "확장 목록을 불러오지 못했습니다."));
+      });
     return () => {
       disposed = true;
     };
@@ -1560,7 +1743,8 @@ function ExtensionSurface({
   const visible = all.filter(
     (item) =>
       (filter === "all" || item.installed) &&
-      (normalized.length === 0 || `${item.packageName} ${item.description}`.toLocaleLowerCase("ko").includes(normalized)),
+      (normalized.length === 0 ||
+        `${item.packageName} ${item.description}`.toLocaleLowerCase("ko").includes(normalized)),
   );
   const selected = all.find((item) => item.id === selectedId);
 
@@ -1596,8 +1780,16 @@ function ExtensionSurface({
       const identity = { commandId: crypto.randomUUID(), correlationId: crypto.randomUUID() };
       const result = await service.installRegistry(request, identity);
       const waiting = result.outcome === "awaiting-approval" && result.approvalId !== undefined;
-      onAwaitingInstallChange(waiting && result.approvalId ? { identity, request, approvalId: result.approvalId } : undefined);
-      setNotice(waiting ? "설치가 승인을 기다립니다." : result.installationId ? "설치를 요청했습니다." : `설치 결과: ${result.outcome}`);
+      onAwaitingInstallChange(
+        waiting && result.approvalId ? { identity, request, approvalId: result.approvalId } : undefined,
+      );
+      setNotice(
+        waiting
+          ? "설치가 승인을 기다립니다."
+          : result.installationId
+            ? "설치를 요청했습니다."
+            : `설치 결과: ${result.outcome}`,
+      );
       setEntries(await service.loadExtensions());
     } catch (cause) {
       setError(surfaceErrorMessage(cause, "설치를 요청하지 못했습니다."));
@@ -1611,7 +1803,10 @@ function ExtensionSurface({
       aria-label="확장"
       className="col-span-3 grid min-h-0 min-w-0 grid-cols-[242px_minmax(0,1fr)_300px] bg-canvas min-[1440px]:grid-cols-[264px_minmax(0,1fr)_332px]"
     >
-      <section aria-label="확장 목록" className="grid min-h-0 grid-rows-[46px_auto_minmax(0,1fr)] border-r border-border bg-chrome">
+      <section
+        aria-label="확장 목록"
+        className="grid min-h-0 grid-rows-[46px_auto_minmax(0,1fr)] border-r border-border bg-chrome"
+      >
         <header className="flex items-center gap-2 border-b border-border px-3">
           <h1 className="text-[15px] font-semibold tracking-[-0.015em]">확장</h1>
           <span className="font-mono text-[11px] text-muted">{installedCount}</span>
@@ -1666,13 +1861,19 @@ function ExtensionSurface({
                       : "hover:bg-surface-1"
                   }`}
                   key={item.id}
-                  onClick={() => { void select(item); }}
+                  onClick={() => {
+                    void select(item);
+                  }}
                   type="button"
                 >
-                  <span className="block truncate text-[13px] font-medium">{extensionDisplayName(item.packageName)}</span>
+                  <span className="block truncate text-[13px] font-medium">
+                    {extensionDisplayName(item.packageName)}
+                  </span>
                   <span className="mt-0.5 flex items-baseline justify-between gap-2 text-[11px]">
                     <span className={item.installed ? "text-secondary" : "text-muted"}>
-                      {item.installed ? `● ${extensionStateLabel(item.state)}` : `○ ${provenanceLabel[item.provenance] ?? "받을 수 있음"}`}
+                      {item.installed
+                        ? `● ${extensionStateLabel(item.state)}`
+                        : `○ ${provenanceLabel[item.provenance] ?? "받을 수 있음"}`}
                     </span>
                     <span className="shrink-0 font-mono text-muted">{item.version}</span>
                   </span>
@@ -1687,7 +1888,9 @@ function ExtensionSurface({
         <header className="flex items-center gap-2 border-b border-border px-5">
           {selected ? (
             <>
-              <h2 className="truncate text-[15px] font-semibold tracking-[-0.015em]">{extensionDisplayName(selected.packageName)}</h2>
+              <h2 className="truncate text-[15px] font-semibold tracking-[-0.015em]">
+                {extensionDisplayName(selected.packageName)}
+              </h2>
               <span className="shrink-0 font-mono text-[11px] text-muted" title={selected.packageName}>
                 {selected.version}
               </span>
@@ -1698,7 +1901,9 @@ function ExtensionSurface({
                 <button
                   className="shrink-0 rounded-[5px] bg-gate px-3 py-1 text-[12px] font-medium text-gate-ink hover:brightness-110 disabled:opacity-50"
                   disabled={busy !== ""}
-                  onClick={() => { void install(selected.id); }}
+                  onClick={() => {
+                    void install(selected.id);
+                  }}
                   type="button"
                 >
                   {busy === `install:${selected.id}` ? "요청 중" : "설치"}
@@ -1716,9 +1921,9 @@ function ExtensionSurface({
               ) : null}
 
               {/*
-                * 헌법 6절: 확장 표면은 "조직에 추가된 Capability를 먼저" 보여야 합니다.
-                * 버전·출처보다 위에 둡니다 — 사용자가 판단하는 건 "무엇이 늘어나는가"입니다.
-                */}
+               * 헌법 6절: 확장 표면은 "조직에 추가된 Capability를 먼저" 보여야 합니다.
+               * 버전·출처보다 위에 둡니다 — 사용자가 판단하는 건 "무엇이 늘어나는가"입니다.
+               */}
               <GrowthSection title="조직이 무엇을 할 수 있게 되나">
                 {declarations && declarations.contributions.length > 0 ? (
                   <ul className="divide-y divide-border border-y border-border">
@@ -1787,8 +1992,12 @@ function ExtensionSurface({
                     approveName={approval.title}
                     busy={approvalBusy}
                     disabled={approvalBusy}
-                    onApprove={() => { void onDecideApproval(approval, "approve"); }}
-                    onReject={() => { void onDecideApproval(approval, "reject"); }}
+                    onApprove={() => {
+                      void onDecideApproval(approval, "approve");
+                    }}
+                    onReject={() => {
+                      void onDecideApproval(approval, "reject");
+                    }}
                   />
                 </div>
               )}
@@ -1807,7 +2016,8 @@ function ExtensionSurface({
             <h3 className="text-[10px] font-semibold tracking-[0.08em] text-muted">확장이 대체할 수 없는 것</h3>
             {/* 헌법 4.11. 설치 판단 옆에 항상 있어야 하는 경계입니다. */}
             <p className="mt-1.5 text-[11px] leading-4 text-secondary">
-              승인, 실행 기록, 기억 권위, 조직 거버넌스는 확장이 가져갈 수 없습니다. 설치·권한·활성화는 사람이 통제합니다.
+              승인, 실행 기록, 기억 권위, 조직 거버넌스는 확장이 가져갈 수 없습니다. 설치·권한·활성화는 사람이
+              통제합니다.
             </p>
           </section>
         </div>
@@ -1835,7 +2045,6 @@ function extensionStateLabel(state: string | undefined): string {
   return state === undefined ? "설치됨" : (labels[state] ?? state);
 }
 
-
 /**
  * 3열을 쓰는 이유를 각각 댑니다.
  *  - 목록: 제안이 여러 개일 때 스캔이 필요합니다. 상단 탭으로는 개수가 늘면 못 봅니다.
@@ -1861,10 +2070,11 @@ function GrowthSurface({
     if (growth === undefined) return;
     const requested = growth.suggestions.find((suggestion) => suggestion.suggestionId === requestedSuggestionId);
     if (requested !== undefined) setFilter("waiting");
-    setSelectedId((current) =>
-      requested?.suggestionId
-      ?? growth.suggestions.find((suggestion) => suggestion.suggestionId === current)?.suggestionId
-      ?? growth.suggestions[0]?.suggestionId,
+    setSelectedId(
+      (current) =>
+        requested?.suggestionId ??
+        growth.suggestions.find((suggestion) => suggestion.suggestionId === current)?.suggestionId ??
+        growth.suggestions[0]?.suggestionId,
     );
   }, [growth, requestedSuggestionId]);
 
@@ -1879,7 +2089,9 @@ function GrowthSurface({
     return (
       <main aria-label="개선" className="col-span-3 min-h-0 overflow-y-auto bg-canvas px-8 py-7">
         <SurfaceError message={error} />
-        <Button onClick={onRetry} size="sm" type="button" variant="outline">다시 불러오기</Button>
+        <Button onClick={onRetry} size="sm" type="button" variant="outline">
+          다시 불러오기
+        </Button>
       </main>
     );
   }
@@ -1932,7 +2144,9 @@ function GrowthSurface({
           {visible.length === 0 ? (
             // 제안이 하나도 없는 것과 필터에 걸리는 게 없는 것은 다른 사실입니다.
             <p className="px-3 py-8 text-center text-sm text-muted">
-              {suggestions.length === 0 ? "조직이 아직 바꾸자고 제안한 것이 없습니다." : "승인을 기다리는 제안이 없습니다."}
+              {suggestions.length === 0
+                ? "조직이 아직 바꾸자고 제안한 것이 없습니다."
+                : "승인을 기다리는 제안이 없습니다."}
             </p>
           ) : (
             // grid는 아이템의 min-width가 auto라 긴 제목이 열을 밀어냅니다. 업무 목록과 같은 방식을 씁니다.
@@ -1994,137 +2208,137 @@ function GrowthSurface({
           ) : null}
         </header>
         <div className="min-h-0 overflow-y-auto px-5 py-4">
-        {selected ? (
-          <article className="mx-auto max-w-[76ch]">
-            {/*
-              * growth_suggestion.operation은 스키마에 ASSERT가 없는 자유 문자열입니다(schema.ts:268).
-              * 열거가 아니라 문구 표를 만들 수 없으므로 원문을 mono로 강등해 둡니다.
-              */}
-            <p className="font-mono text-[11px] text-muted" title="개선 작업 종류">
-              {selected.operation}
-            </p>
+          {selected ? (
+            <article className="mx-auto max-w-[76ch]">
+              {/*
+               * growth_suggestion.operation은 스키마에 ASSERT가 없는 자유 문자열입니다(schema.ts:268).
+               * 열거가 아니라 문구 표를 만들 수 없으므로 원문을 mono로 강등해 둡니다.
+               */}
+              <p className="font-mono text-[11px] text-muted" title="개선 작업 종류">
+                {selected.operation}
+              </p>
 
-            {/* 어떤 작업에서 이 제안이 올라왔는지가 추적 가능해야 합니다. 헌법 목표 3의 완료 조건입니다. */}
-            <GrowthSection title="어디서 나왔나">
-              <ul className="grid gap-0 divide-y divide-border border-y border-border">
-                {selected.sourceReferenceIds?.map((reference) => (
-                  <GrowthSourceRow key={reference} onOpenWork={onOpenWork} reference={reference} />
-                ))}
-                {selected.reflectionRunId ? (
-                  <li className="grid grid-cols-[68px_minmax(0,1fr)] items-baseline gap-2 py-2">
-                    <span className="text-[12px] text-muted">회고</span>
-                    <span className="font-mono text-[11px] text-secondary">{selected.reflectionRunId}</span>
-                  </li>
-                ) : null}
-              </ul>
-            </GrowthSection>
-
-            <GrowthSection title="왜">
-              <p className="text-[13px] leading-6 text-primary">{selected.rationale}</p>
-            </GrowthSection>
-
-            {selected.evaluation ? (
-              <GrowthSection title="평가">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span
-                    className={`rounded-[3px] border px-1.5 py-0.5 text-[11px] ${
-                      selected.evaluation.outcome === "eligible"
-                        ? "border-control text-secondary"
-                        : "border-danger text-danger"
-                    }`}
-                  >
-                    {growthEvaluationLabel(selected.evaluation.outcome)}
-                  </span>
-                  <span className="text-[11px] text-muted">
-                    평가 전략 {selected.evaluation.strategyVersionId.replace(/^strategy-/u, "")}
-                  </span>
-                  <span
-                    className="font-mono text-[11px] text-muted"
-                    title={`평가 실행 ${selected.evaluation.evaluationRunId}`}
-                  >
-                    {selected.evaluation.evaluationRunId}
-                  </span>
-                </div>
-                <ul className="mt-2.5 grid gap-0 divide-y divide-border border-y border-border">
-                  {selected.evaluation.signals.map((signal) => (
-                    <GrowthSignalRow key={signal.signalId} signal={signal} />
+              {/* 어떤 작업에서 이 제안이 올라왔는지가 추적 가능해야 합니다. 헌법 목표 3의 완료 조건입니다. */}
+              <GrowthSection title="어디서 나왔나">
+                <ul className="grid gap-0 divide-y divide-border border-y border-border">
+                  {selected.sourceReferenceIds?.map((reference) => (
+                    <GrowthSourceRow key={reference} onOpenWork={onOpenWork} reference={reference} />
                   ))}
-                </ul>
-                {/* 4.8: LLM 자기평가 하나만으로 자동 채택할 수 없습니다. 화면이 그 구분을 유지합니다. */}
-                <p className="mt-2 text-[11px] leading-5 text-muted">
-                  자기평가 신호는 모델이 스스로 매긴 점수이며 독립 근거로 계산하지 않습니다.
-                </p>
-              </GrowthSection>
-            ) : null}
-
-            {selected.patch?.length ? (
-              <GrowthSection title="무엇이 바뀌나">
-                {selected.patch.map((line) => (
-                  <div className="grid gap-1" key={line.path}>
-                    <p className="text-[11px] text-muted">
-                      {line.targetHandle === undefined
-                        ? line.path
-                        : `${agentIdentityToken(line.targetHandle).name} · ${line.path}`}
-                    </p>
-                    <p className="rounded-[5px] border border-border bg-surface-1 px-3 py-2 text-[12px] leading-5 text-muted line-through">
-                      {line.before}
-                    </p>
-                    <p className="rounded-[5px] border border-line-strong bg-surface-1 px-3 py-2 text-[12px] leading-5 text-primary">
-                      {line.after}
-                    </p>
-                  </div>
-                ))}
-              </GrowthSection>
-            ) : null}
-
-            <GrowthSection title="승인하면">
-              <dl className="grid gap-1.5 text-[13px] leading-6">
-                <div className="grid grid-cols-[76px_minmax(0,1fr)] gap-2">
-                  <dt className="text-[12px] text-muted">나아지는 것</dt>
-                  <dd className="text-primary">{selected.expectedEffect}</dd>
-                </div>
-                <div className="grid grid-cols-[76px_minmax(0,1fr)] gap-2">
-                  <dt className="text-[12px] text-danger">감수할 것</dt>
-                  <dd className="text-primary">{selected.riskSummary}</dd>
-                </div>
-              </dl>
-            </GrowthSection>
-
-            {effect?.measure ? (
-              <GrowthSection title="적용 후 측정">
-                <p className="text-[13px] text-secondary">
-                  {effect.measure.unit} {effect.measure.baseline} → {effect.measure.score} (
-                  {effect.measure.direction === "lower" ? "낮을수록 좋음" : "높을수록 좋음"})
-                </p>
-                <p className="mt-1 font-mono text-[11px] text-muted">
-                  표본 {effect.measure.observationCount} / 최소 {effect.measure.minimumObservations} ·{" "}
-                  {growthEffectStatus(effect.result)}
-                </p>
-              </GrowthSection>
-            ) : null}
-
-            <footer className="mt-7 border-t border-border pt-3.5">
-              {blockers.length ? (
-                <ul className="mb-2.5 grid gap-1">
-                  {blockers.map((blocker) => (
-                    <li className="flex items-start gap-2 text-[12px] leading-5 text-danger" key={blocker}>
-                      <span aria-hidden="true">⊘</span>
-                      {blocker}
+                  {selected.reflectionRunId ? (
+                    <li className="grid grid-cols-[68px_minmax(0,1fr)] items-baseline gap-2 py-2">
+                      <span className="text-[12px] text-muted">회고</span>
+                      <span className="font-mono text-[11px] text-secondary">{selected.reflectionRunId}</span>
                     </li>
-                  ))}
+                  ) : null}
                 </ul>
+              </GrowthSection>
+
+              <GrowthSection title="왜">
+                <p className="text-[13px] leading-6 text-primary">{selected.rationale}</p>
+              </GrowthSection>
+
+              {selected.evaluation ? (
+                <GrowthSection title="평가">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span
+                      className={`rounded-[3px] border px-1.5 py-0.5 text-[11px] ${
+                        selected.evaluation.outcome === "eligible"
+                          ? "border-control text-secondary"
+                          : "border-danger text-danger"
+                      }`}
+                    >
+                      {growthEvaluationLabel(selected.evaluation.outcome)}
+                    </span>
+                    <span className="text-[11px] text-muted">
+                      평가 전략 {selected.evaluation.strategyVersionId.replace(/^strategy-/u, "")}
+                    </span>
+                    <span
+                      className="font-mono text-[11px] text-muted"
+                      title={`평가 실행 ${selected.evaluation.evaluationRunId}`}
+                    >
+                      {selected.evaluation.evaluationRunId}
+                    </span>
+                  </div>
+                  <ul className="mt-2.5 grid gap-0 divide-y divide-border border-y border-border">
+                    {selected.evaluation.signals.map((signal) => (
+                      <GrowthSignalRow key={signal.signalId} signal={signal} />
+                    ))}
+                  </ul>
+                  {/* 4.8: LLM 자기평가 하나만으로 자동 채택할 수 없습니다. 화면이 그 구분을 유지합니다. */}
+                  <p className="mt-2 text-[11px] leading-5 text-muted">
+                    자기평가 신호는 모델이 스스로 매긴 점수이며 독립 근거로 계산하지 않습니다.
+                  </p>
+                </GrowthSection>
               ) : null}
-              <div className="flex flex-wrap items-center gap-2">
-                {/*
-                  * 승인·거부 명령이 Application API에 아직 없습니다. 동작하지 않는 버튼을
-                  * 동작하는 것처럼 두지 않고, 무엇이 막혀 있는지 화면이 말합니다.
-                  */}
-                <span className="flex-1 text-[11px] text-muted">승인·거절 명령이 아직 연결되지 않았습니다</span>
-                <DecisionActions approveName={selected.summary} disabled />
-              </div>
-            </footer>
-          </article>
-        ) : null}
+
+              {selected.patch?.length ? (
+                <GrowthSection title="무엇이 바뀌나">
+                  {selected.patch.map((line) => (
+                    <div className="grid gap-1" key={line.path}>
+                      <p className="text-[11px] text-muted">
+                        {line.targetHandle === undefined
+                          ? line.path
+                          : `${agentIdentityToken(line.targetHandle).name} · ${line.path}`}
+                      </p>
+                      <p className="rounded-[5px] border border-border bg-surface-1 px-3 py-2 text-[12px] leading-5 text-muted line-through">
+                        {line.before}
+                      </p>
+                      <p className="rounded-[5px] border border-line-strong bg-surface-1 px-3 py-2 text-[12px] leading-5 text-primary">
+                        {line.after}
+                      </p>
+                    </div>
+                  ))}
+                </GrowthSection>
+              ) : null}
+
+              <GrowthSection title="승인하면">
+                <dl className="grid gap-1.5 text-[13px] leading-6">
+                  <div className="grid grid-cols-[76px_minmax(0,1fr)] gap-2">
+                    <dt className="text-[12px] text-muted">나아지는 것</dt>
+                    <dd className="text-primary">{selected.expectedEffect}</dd>
+                  </div>
+                  <div className="grid grid-cols-[76px_minmax(0,1fr)] gap-2">
+                    <dt className="text-[12px] text-danger">감수할 것</dt>
+                    <dd className="text-primary">{selected.riskSummary}</dd>
+                  </div>
+                </dl>
+              </GrowthSection>
+
+              {effect?.measure ? (
+                <GrowthSection title="적용 후 측정">
+                  <p className="text-[13px] text-secondary">
+                    {effect.measure.unit} {effect.measure.baseline} → {effect.measure.score} (
+                    {effect.measure.direction === "lower" ? "낮을수록 좋음" : "높을수록 좋음"})
+                  </p>
+                  <p className="mt-1 font-mono text-[11px] text-muted">
+                    표본 {effect.measure.observationCount} / 최소 {effect.measure.minimumObservations} ·{" "}
+                    {growthEffectStatus(effect.result)}
+                  </p>
+                </GrowthSection>
+              ) : null}
+
+              <footer className="mt-7 border-t border-border pt-3.5">
+                {blockers.length ? (
+                  <ul className="mb-2.5 grid gap-1">
+                    {blockers.map((blocker) => (
+                      <li className="flex items-start gap-2 text-[12px] leading-5 text-danger" key={blocker}>
+                        <span aria-hidden="true">⊘</span>
+                        {blocker}
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+                <div className="flex flex-wrap items-center gap-2">
+                  {/*
+                   * 승인·거부 명령이 Application API에 아직 없습니다. 동작하지 않는 버튼을
+                   * 동작하는 것처럼 두지 않고, 무엇이 막혀 있는지 화면이 말합니다.
+                   */}
+                  <span className="flex-1 text-[11px] text-muted">승인·거절 명령이 아직 연결되지 않았습니다</span>
+                  <DecisionActions approveName={selected.summary} disabled />
+                </div>
+              </footer>
+            </article>
+          ) : null}
         </div>
       </div>
 
@@ -2133,79 +2347,81 @@ function GrowthSurface({
           <span className="text-[13px] font-medium text-secondary">배경</span>
         </header>
         <div className="min-h-0 overflow-y-auto p-3">
-        <section aria-label="조직이 배운 것">
-          <h2 className="mb-2 flex items-baseline gap-2 text-[10px] font-semibold tracking-[0.08em] text-muted">
-            조직이 배운 것
-            <span className="font-mono text-[11px] font-normal">{growth.memories.length}</span>
-          </h2>
-          {growth.memories.length === 0 ? (
-            <p className="text-xs text-muted">저장된 기억이 없습니다.</p>
-          ) : (
-            <ul className="grid gap-1.5">
-              {growth.memories.map((memory) => (
-                <li className="rounded-[7px] border border-border bg-surface-1 px-3 py-2.5" key={memory.memoryVersionId}>
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    {/* subjectId는 조직 핸들입니다. 사용자에게는 이름으로 보입니다. */}
-                    <span className="text-[12px] font-medium">{agentIdentityToken(memory.subjectId).name}</span>
-                    <span className="rounded-[3px] border border-control px-1 text-[10px] text-muted">
-                      {agentIdentityToken(memory.subjectId).roleLabel}
-                    </span>
-                    <span className="font-mono text-[10px] text-muted">v{memory.version}</span>
-                  </div>
-                  <p className="mt-1 text-[12px] leading-5 text-primary">{memory.entryKeys.join(" · ")}</p>
-                  <p className="mt-1.5 text-[10px] leading-4 text-muted">
-                    근거 · {memory.sourceReferenceIds.map((reference) => growthSourceLabelOf(reference)).join(" · ")}
-                  </p>
-                </li>
-              ))}
-            </ul>
-          )}
-          {/* 4.9: 명시적 기억이 학습 기억보다 높은 권위를 가진다는 사실을 화면이 말합니다. */}
-          <p className="mt-2 text-[11px] leading-5 text-muted">
-            학습된 기억은 사람이 직접 준 지시를 덮어쓰지 않으며 다음 실행부터 적용됩니다.
-          </p>
-        </section>
-
-        {growth.effects.some((item) => item.suggestionId === undefined) ? (
-          <section aria-label="확인된 효과" className="mt-6">
-            <h2 className="mb-2 text-[10px] font-semibold tracking-[0.08em] text-muted">확인된 효과</h2>
-            <ul className="grid gap-1.5">
-              {growth.effects
-                .filter((item) => item.suggestionId === undefined)
-                .map((item) => (
+          <section aria-label="조직이 배운 것">
+            <h2 className="mb-2 flex items-baseline gap-2 text-[10px] font-semibold tracking-[0.08em] text-muted">
+              조직이 배운 것<span className="font-mono text-[11px] font-normal">{growth.memories.length}</span>
+            </h2>
+            {growth.memories.length === 0 ? (
+              <p className="text-xs text-muted">저장된 기억이 없습니다.</p>
+            ) : (
+              <ul className="grid gap-1.5">
+                {growth.memories.map((memory) => (
                   <li
-                    className="flex flex-wrap items-baseline gap-x-2 rounded-[7px] border border-border bg-surface-1 px-3 py-2 text-[12px]"
-                    key={item.effectEvaluationId}
+                    className="rounded-[7px] border border-border bg-surface-1 px-3 py-2.5"
+                    key={memory.memoryVersionId}
                   >
-                    <span className="flex-1 text-secondary">{growthEffectStatus(item.result)}</span>
-                    <span className="font-mono text-[10px] text-muted">{item.adoptionId}</span>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {/* subjectId는 조직 핸들입니다. 사용자에게는 이름으로 보입니다. */}
+                      <span className="text-[12px] font-medium">{agentIdentityToken(memory.subjectId).name}</span>
+                      <span className="rounded-[3px] border border-control px-1 text-[10px] text-muted">
+                        {agentIdentityToken(memory.subjectId).roleLabel}
+                      </span>
+                      <span className="font-mono text-[10px] text-muted">v{memory.version}</span>
+                    </div>
+                    <p className="mt-1 text-[12px] leading-5 text-primary">{memory.entryKeys.join(" · ")}</p>
+                    <p className="mt-1.5 text-[10px] leading-4 text-muted">
+                      근거 · {memory.sourceReferenceIds.map((reference) => growthSourceLabelOf(reference)).join(" · ")}
+                    </p>
                   </li>
                 ))}
-            </ul>
-            {/* 효과는 adoptionId만 갖고 어느 제안에서 왔는지는 계약에 없습니다. 연결되면 제안 상세로 옮깁니다. */}
+              </ul>
+            )}
+            {/* 4.9: 명시적 기억이 학습 기억보다 높은 권위를 가진다는 사실을 화면이 말합니다. */}
             <p className="mt-2 text-[11px] leading-5 text-muted">
-              어느 제안에서 온 효과인지는 아직 조회로 연결되지 않았습니다.
+              학습된 기억은 사람이 직접 준 지시를 덮어쓰지 않으며 다음 실행부터 적용됩니다.
             </p>
           </section>
-        ) : null}
 
-        {growth.configuration ? (
-          <section aria-label="개선 정책" className="mt-6">
-            <h2 className="mb-2 text-[10px] font-semibold tracking-[0.08em] text-muted">개선 정책</h2>
-            <p className="text-[12px] leading-5 text-secondary">
-              {growth.configuration.reflectionEnabled
-                ? "완료된 실행에서 개선 후보를 찾습니다."
-                : "개선 후보 수집이 중지돼 있습니다."}
-              {growth.configuration.adoptionMode === "review"
-                ? " 승인은 사람의 검토를 거칩니다."
-                : " 정책이 허용한 범위에서 자동 승인합니다."}
-            </p>
-            <p className="mt-1.5 text-[10px] leading-4 text-muted">
-              이 정책은 승인된 결정에 근거합니다{" "}
-              <span className="font-mono">{growth.configuration.governanceDecisionId}</span>
-            </p>
-          </section>
-        ) : null}
+          {growth.effects.some((item) => item.suggestionId === undefined) ? (
+            <section aria-label="확인된 효과" className="mt-6">
+              <h2 className="mb-2 text-[10px] font-semibold tracking-[0.08em] text-muted">확인된 효과</h2>
+              <ul className="grid gap-1.5">
+                {growth.effects
+                  .filter((item) => item.suggestionId === undefined)
+                  .map((item) => (
+                    <li
+                      className="flex flex-wrap items-baseline gap-x-2 rounded-[7px] border border-border bg-surface-1 px-3 py-2 text-[12px]"
+                      key={item.effectEvaluationId}
+                    >
+                      <span className="flex-1 text-secondary">{growthEffectStatus(item.result)}</span>
+                      <span className="font-mono text-[10px] text-muted">{item.adoptionId}</span>
+                    </li>
+                  ))}
+              </ul>
+              {/* 효과는 adoptionId만 갖고 어느 제안에서 왔는지는 계약에 없습니다. 연결되면 제안 상세로 옮깁니다. */}
+              <p className="mt-2 text-[11px] leading-5 text-muted">
+                어느 제안에서 온 효과인지는 아직 조회로 연결되지 않았습니다.
+              </p>
+            </section>
+          ) : null}
+
+          {growth.configuration ? (
+            <section aria-label="개선 정책" className="mt-6">
+              <h2 className="mb-2 text-[10px] font-semibold tracking-[0.08em] text-muted">개선 정책</h2>
+              <p className="text-[12px] leading-5 text-secondary">
+                {growth.configuration.reflectionEnabled
+                  ? "완료된 실행에서 개선 후보를 찾습니다."
+                  : "개선 후보 수집이 중지돼 있습니다."}
+                {growth.configuration.adoptionMode === "review"
+                  ? " 승인은 사람의 검토를 거칩니다."
+                  : " 정책이 허용한 범위에서 자동 승인합니다."}
+              </p>
+              <p className="mt-1.5 text-[10px] leading-4 text-muted">
+                이 정책은 승인된 결정에 근거합니다{" "}
+                <span className="font-mono">{growth.configuration.governanceDecisionId}</span>
+              </p>
+            </section>
+          ) : null}
         </div>
       </aside>
     </main>
@@ -2268,7 +2484,11 @@ function GrowthSection({ children, title }: { children: React.ReactNode; title: 
 }
 
 const growthSignalGroupLabel = { required: "필수", supporting: "보강", conflict: "반대" } as const;
-const growthSignalOriginLabel = { deterministic: "결정론", independent: "독립 검증", "model-self": "자기평가" } as const;
+const growthSignalOriginLabel = {
+  deterministic: "결정론",
+  independent: "독립 검증",
+  "model-self": "자기평가",
+} as const;
 
 function GrowthSignalRow({ signal }: { signal: GrowthSignalView }) {
   return (
@@ -2286,7 +2506,9 @@ function GrowthSignalRow({ signal }: { signal: GrowthSignalView }) {
       <span className={signal.origin === "model-self" ? "text-[11px] italic text-muted" : "text-[11px] text-muted"}>
         {growthSignalOriginLabel[signal.origin]}
       </span>
-      <span className={`text-right font-mono text-[11px] ${signal.outcome === "failed" ? "text-danger" : "text-secondary"}`}>
+      <span
+        className={`text-right font-mono text-[11px] ${signal.outcome === "failed" ? "text-danger" : "text-secondary"}`}
+      >
         {signal.score.toFixed(2)}
       </span>
     </li>
@@ -2303,9 +2525,12 @@ function growthEvaluationLabel(outcome: "eligible" | "ineligible" | "blocked"): 
 function growthBlockers(suggestion: GrowthView["suggestions"][number] | undefined): string[] {
   if (!suggestion) return [];
   const blockers: string[] = [];
-  if (suggestion.evaluation === undefined) blockers.push("평가가 아직 실행되지 않았습니다. 평가 없이는 승인할 수 없습니다.");
+  if (suggestion.evaluation === undefined)
+    blockers.push("평가가 아직 실행되지 않았습니다. 평가 없이는 승인할 수 없습니다.");
   else if (suggestion.evaluation.outcome !== "eligible") {
-    const failed = suggestion.evaluation.signals.filter((signal) => signal.group === "required" && signal.outcome === "failed");
+    const failed = suggestion.evaluation.signals.filter(
+      (signal) => signal.group === "required" && signal.outcome === "failed",
+    );
     blockers.push(
       failed.length
         ? `필수 신호가 통과하지 못했습니다 · ${failed.map((signal) => signal.adapterId).join(" · ")}`
@@ -2324,8 +2549,18 @@ function growthClock(createdAt: string | undefined): string {
   return Number.isNaN(parsed.getTime()) ? "" : parsed.toTimeString().slice(0, 5);
 }
 
-function growthSuggestionStatus(status: string): string { return status === "awaiting-review" ? "검토 대기" : status === "adopted" ? "반영됨" : status; }
-function growthEffectStatus(result: GrowthView["effects"][number]["result"]): string { return result === "improved" ? "개선 확인" : result === "stable" ? "변화 없음" : result === "degraded" ? "저하 관찰" : "판단 보류"; }
+function growthSuggestionStatus(status: string): string {
+  return status === "awaiting-review" ? "검토 대기" : status === "adopted" ? "반영됨" : status;
+}
+function growthEffectStatus(result: GrowthView["effects"][number]["result"]): string {
+  return result === "improved"
+    ? "개선 확인"
+    : result === "stable"
+      ? "변화 없음"
+      : result === "degraded"
+        ? "저하 관찰"
+        : "판단 보류";
+}
 
 function SettingsSurface({ service }: { service: DesktopService }) {
   const [settings, setSettings] = useState<SettingsView>();
@@ -2338,7 +2573,16 @@ function SettingsSurface({ service }: { service: DesktopService }) {
   const [zaiAlias, setZaiAlias] = useState("Z.ai GLM-5.2");
   const [zaiSecret, setZaiSecret] = useState("");
   const [providerFormOpen, setProviderFormOpen] = useState(false);
-  const [provider, setProvider] = useState({ providerId: "", displayName: "", adapterKind: "", endpointName: "", baseUrl: "", local: false, credentialLabel: "", credentialType: "api_key" });
+  const [provider, setProvider] = useState({
+    providerId: "",
+    displayName: "",
+    adapterKind: "",
+    endpointName: "",
+    baseUrl: "",
+    local: false,
+    credentialLabel: "",
+    credentialType: "api_key",
+  });
   const [secret, setSecret] = useState("");
   const [areaId, setAreaId] = useState<(typeof SETTINGS_AREAS)[number]["id"]>("routes");
   useEffect(() => {
@@ -2350,8 +2594,12 @@ function SettingsSurface({ service }: { service: DesktopService }) {
           setAutonomy(mode);
         }
       })
-      .catch((cause: unknown) => { if (!disposed) setError(surfaceErrorMessage(cause, "설정을 불러오지 못했습니다.")); });
-    return () => { disposed = true; };
+      .catch((cause: unknown) => {
+        if (!disposed) setError(surfaceErrorMessage(cause, "설정을 불러오지 못했습니다."));
+      });
+    return () => {
+      disposed = true;
+    };
   }, [service]);
   const setAutonomyMode = async (mode: AutonomyView["mode"]) => {
     if (!autonomy || autonomy.mode === mode || autonomySaving) return;
@@ -2372,33 +2620,62 @@ function SettingsSurface({ service }: { service: DesktopService }) {
     if (saving) return;
     const submittedSecret = secret;
     setSecret("");
-    setSaving(true); setError(""); setNotice("");
+    setSaving(true);
+    setError("");
+    setNotice("");
     try {
-      await service.registerProvider({ providerId: provider.providerId, displayName: provider.displayName, adapterKind: provider.adapterKind });
-      await service.registerEndpoint({ providerId: provider.providerId, name: provider.endpointName, baseUrl: provider.baseUrl, local: provider.local });
+      await service.registerProvider({
+        providerId: provider.providerId,
+        displayName: provider.displayName,
+        adapterKind: provider.adapterKind,
+      });
+      await service.registerEndpoint({
+        providerId: provider.providerId,
+        name: provider.endpointName,
+        baseUrl: provider.baseUrl,
+        local: provider.local,
+      });
       const refreshed = await service.loadSettings();
       const endpointId = endpointIdFor(refreshed.catalog, provider.providerId, provider.endpointName, provider.baseUrl);
       if (!endpointId) throw new Error("생성된 endpoint를 확인하지 못했습니다.");
-      await service.addCredential({ providerId: provider.providerId, endpointId, label: provider.credentialLabel, credentialType: provider.credentialType, secret: submittedSecret, priority: 0, weight: 100 });
+      await service.addCredential({
+        providerId: provider.providerId,
+        endpointId,
+        label: provider.credentialLabel,
+        credentialType: provider.credentialType,
+        secret: submittedSecret,
+        priority: 0,
+        weight: 100,
+      });
       setSettings(await service.loadSettings());
       setNotice("Provider 인증 연결을 추가했습니다.");
-    } catch (cause) { setError(surfaceErrorMessage(cause, "Provider 연결을 추가하지 못했습니다.")); }
-    finally { setSaving(false); }
+    } catch (cause) {
+      setError(surfaceErrorMessage(cause, "Provider 연결을 추가하지 못했습니다."));
+    } finally {
+      setSaving(false);
+    }
   };
   const submitZai = async (event: React.SyntheticEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (saving) return;
     const submittedSecret = zaiSecret;
     setZaiSecret("");
-    setSaving(true); setError(""); setNotice("");
+    setSaving(true);
+    setError("");
+    setNotice("");
     try {
       await service.connectZaiCodingPlan({ alias: zaiAlias, secret: submittedSecret });
       setSettings(await service.loadSettings());
       setNotice("Z.ai GLM-5.2 연결과 Core Route 5개 구성을 완료했습니다.");
-    } catch (cause) { setError(surfaceErrorMessage(cause, "Z.ai GLM-5.2 연결을 추가하지 못했습니다.")); }
-    finally { setSaving(false); }
+    } catch (cause) {
+      setError(surfaceErrorMessage(cause, "Z.ai GLM-5.2 연결을 추가하지 못했습니다."));
+    } finally {
+      setSaving(false);
+    }
   };
-  const setField = (field: keyof typeof provider, value: string | boolean) => { setProvider((current) => ({ ...current, [field]: value })); };
+  const setField = (field: keyof typeof provider, value: string | boolean) => {
+    setProvider((current) => ({ ...current, [field]: value }));
+  };
 
   const routes = settings ? projectModelRoutes(settings.routes, settings.catalog) : [];
   const connections = settings ? projectProviderConnections(settings.catalog) : [];
@@ -2410,15 +2687,18 @@ function SettingsSurface({ service }: { service: DesktopService }) {
       aria-label="설정"
       className="col-span-3 grid min-h-0 min-w-0 grid-cols-[242px_minmax(0,1fr)_300px] bg-canvas min-[1440px]:grid-cols-[264px_minmax(0,1fr)_332px]"
     >
-      <section aria-label="설정 구역" className="grid min-h-0 grid-rows-[46px_minmax(0,1fr)] border-r border-border bg-chrome">
+      <section
+        aria-label="설정 구역"
+        className="grid min-h-0 grid-rows-[46px_minmax(0,1fr)] border-r border-border bg-chrome"
+      >
         <header className="flex items-center border-b border-border px-3">
           <h1 className="text-[15px] font-semibold tracking-[-0.015em]">설정</h1>
         </header>
         <div className="min-h-0 overflow-y-auto">
           {/*
-            * 다른 표면의 열1은 "많은 항목 중 하나를 고르는" 목록이고 여기는 구역 넷입니다.
-            * 성격은 달라도 골격과 행 문법은 같습니다 — 표면을 옮겨도 같은 자리에서 같은 일을 합니다.
-            */}
+           * 다른 표면의 열1은 "많은 항목 중 하나를 고르는" 목록이고 여기는 구역 넷입니다.
+           * 성격은 달라도 골격과 행 문법은 같습니다 — 표면을 옮겨도 같은 자리에서 같은 일을 합니다.
+           */}
           <div className="divide-y divide-border border-b border-border">
             {SETTINGS_AREAS.map((item) => (
               <button
@@ -2456,7 +2736,9 @@ function SettingsSurface({ service }: { service: DesktopService }) {
                 <>
                   <GrowthSection title="요청이 어디로 가나">
                     {routes.length === 0 ? (
-                      <p className="text-[12px] text-muted">구성된 모델 경로가 없습니다. 아래에서 Provider를 먼저 연결하십시오.</p>
+                      <p className="text-[12px] text-muted">
+                        구성된 모델 경로가 없습니다. 아래에서 Provider를 먼저 연결하십시오.
+                      </p>
                     ) : (
                       <ul className="divide-y divide-border border-y border-border">
                         {routes.map((route) => (
@@ -2465,7 +2747,9 @@ function SettingsSurface({ service }: { service: DesktopService }) {
                               <span className="text-[13px] font-medium">{route.name}</span>
                               {/* 이름이 종류를 이미 말하면 같은 말을 두 번 하지 않습니다. */}
                               {routeKindLabel(route.routeKind) === route.name ? null : (
-                                <span className="shrink-0 text-[11px] text-muted">{routeKindLabel(route.routeKind)}</span>
+                                <span className="shrink-0 text-[11px] text-muted">
+                                  {routeKindLabel(route.routeKind)}
+                                </span>
                               )}
                             </div>
                             <p className="mt-0.5 text-[11px] text-muted">
@@ -2499,11 +2783,14 @@ function SettingsSurface({ service }: { service: DesktopService }) {
                           <li className="py-2.5" key={connection.providerId}>
                             <div className="flex items-baseline justify-between gap-2">
                               <span className="text-[13px] font-medium">{connection.displayName}</span>
-                              <span className="shrink-0 text-[11px] text-muted">{connection.enabled ? "사용 중" : "꺼짐"}</span>
+                              <span className="shrink-0 text-[11px] text-muted">
+                                {connection.enabled ? "사용 중" : "꺼짐"}
+                              </span>
                             </div>
                             {connection.endpoints.map((endpoint) => (
                               <p className="mt-0.5 text-[11px] text-muted" key={endpoint.baseUrl}>
-                                {endpoint.local ? "이 컴퓨터" : "외부"} · <span className="font-mono">{endpoint.baseUrl}</span>
+                                {endpoint.local ? "이 컴퓨터" : "외부"} ·{" "}
+                                <span className="font-mono">{endpoint.baseUrl}</span>
                               </p>
                             ))}
                           </li>
@@ -2514,14 +2801,18 @@ function SettingsSurface({ service }: { service: DesktopService }) {
                   <div className="mt-4 flex flex-wrap gap-2">
                     <button
                       className="rounded-[5px] border border-control px-3 py-1 text-[12px] text-secondary hover:border-fg-3 hover:text-primary"
-                      onClick={() => { setZaiFormOpen((open) => !open); }}
+                      onClick={() => {
+                        setZaiFormOpen((open) => !open);
+                      }}
                       type="button"
                     >
                       Z.ai GLM-5.2 연결
                     </button>
                     <button
                       className="rounded-[5px] border border-control px-3 py-1 text-[12px] text-secondary hover:border-fg-3 hover:text-primary"
-                      onClick={() => { setProviderFormOpen((open) => !open); }}
+                      onClick={() => {
+                        setProviderFormOpen((open) => !open);
+                      }}
                       type="button"
                     >
                       다른 Provider 연결
@@ -2560,7 +2851,9 @@ function SettingsSurface({ service }: { service: DesktopService }) {
                         <li className="py-2.5" key={account.accountId}>
                           <div className="flex items-baseline justify-between gap-2">
                             <span className="text-[13px] font-medium">{account.alias}</span>
-                            <span className={`shrink-0 text-[11px] ${account.quotaExhausted === true ? "text-halt" : "text-muted"}`}>
+                            <span
+                              className={`shrink-0 text-[11px] ${account.quotaExhausted === true ? "text-halt" : "text-muted"}`}
+                            >
                               {quotaText(account)}
                             </span>
                           </div>
@@ -2578,13 +2871,13 @@ function SettingsSurface({ service }: { service: DesktopService }) {
               {area.id === "autonomy" && autonomy ? (
                 <section aria-label="자율성 경계">
                   <GrowthSection title="실행 자율성">
-                   <p className="text-[13px] leading-5 text-secondary">
-                     {autonomy.mode === "automatic"
-                       ? "미리 승인된 범위에서는 사람을 기다리지 않고 실행합니다. 위험한 실행과 조직 변경은 여전히 수신함에서 확인을 받습니다."
+                    <p className="text-[13px] leading-5 text-secondary">
+                      {autonomy.mode === "automatic"
+                        ? "미리 승인된 범위에서는 사람을 기다리지 않고 실행합니다. 위험한 실행과 조직 변경은 여전히 수신함에서 확인을 받습니다."
                         : autonomy.mode === "review"
                           ? "실행 전에 사람의 확인을 받습니다. 조직이 더 자주 멈추는 대신 개입 지점이 많아집니다."
                           : "사용자 책임 하에 정책과 불변식이 요구한 승인까지 모두 자동 통과합니다. 위험한 실행과 조직 변경도 묻지 않고 진행합니다."}
-                   </p>
+                    </p>
                     <div className="mt-3 flex flex-wrap items-center gap-2">
                       <button
                         className={`rounded-[5px] border px-3 py-1 text-[12px] disabled:opacity-50 ${
@@ -2593,7 +2886,9 @@ function SettingsSurface({ service }: { service: DesktopService }) {
                             : "border-border text-secondary"
                         }`}
                         disabled={autonomySaving || autonomy.mode === "automatic"}
-                        onClick={() => { void setAutonomyMode("automatic"); }}
+                        onClick={() => {
+                          void setAutonomyMode("automatic");
+                        }}
                         type="button"
                       >
                         자동 실행
@@ -2605,7 +2900,9 @@ function SettingsSurface({ service }: { service: DesktopService }) {
                             : "border-border text-secondary"
                         }`}
                         disabled={autonomySaving || autonomy.mode === "review"}
-                        onClick={() => { void setAutonomyMode("review"); }}
+                        onClick={() => {
+                          void setAutonomyMode("review");
+                        }}
                         type="button"
                       >
                         검토 후 실행
@@ -2617,7 +2914,9 @@ function SettingsSurface({ service }: { service: DesktopService }) {
                             : "border-border text-secondary"
                         }`}
                         disabled={autonomySaving || autonomy.mode === "full"}
-                        onClick={() => { void setAutonomyMode("full"); }}
+                        onClick={() => {
+                          void setAutonomyMode("full");
+                        }}
                         type="button"
                       >
                         전체 권한
@@ -2632,7 +2931,8 @@ function SettingsSurface({ service }: { service: DesktopService }) {
                 <GrowthSection title="로컬 운영 환경">
                   {/* 없는 것을 있는 것처럼 그리지 않습니다. 무엇이 없는지 화면이 말합니다. */}
                   <p className="text-[12px] leading-5 text-muted">
-                    daemon 상태·데이터 위치·백업을 볼 조회가 아직 계약에 없습니다. 지금은 하단 표시줄의 연결 상태가 유일한 신호입니다.
+                    daemon 상태·데이터 위치·백업을 볼 조회가 아직 계약에 없습니다. 지금은 하단 표시줄의 연결 상태가
+                    유일한 신호입니다.
                   </p>
                 </GrowthSection>
               ) : null}
@@ -2671,7 +2971,8 @@ const SETTINGS_AREAS = [
     id: "routes",
     title: "모델 경로",
     hint: "어떤 요청이 어느 모델로",
-    background: "조직의 요청 종류마다 어느 모델을 쓸지, 예산을 얼마나 줄지 정합니다. 경로가 비면 그 종류의 실행이 멈춥니다.",
+    background:
+      "조직의 요청 종류마다 어느 모델을 쓸지, 예산을 얼마나 줄지 정합니다. 경로가 비면 그 종류의 실행이 멈춥니다.",
   },
   {
     id: "providers",
@@ -2686,12 +2987,12 @@ const SETTINGS_AREAS = [
     background: "구독으로 쓰는 계정의 남은 양입니다. 소진되면 그 계정을 쓰는 경로가 멈추므로 미리 보여야 합니다.",
   },
   {
-  id: "autonomy",
-  title: "실행 자율성",
-  hint: "언제 사람을 기다리나",
-  background:
-    "미리 승인된 범위에서 자동으로 실행할지, 매 실행 전에 사람의 검토를 받을지, 아니면 전체 권한으로 모든 승인을 자동 통과할지 정합니다. 위험 경계는 자동·검토 모드에서 유지되며, 전체 권한에서는 사용자 책임 하에 풀립니다.",
-},
+    id: "autonomy",
+    title: "실행 자율성",
+    hint: "언제 사람을 기다리나",
+    background:
+      "미리 승인된 범위에서 자동으로 실행할지, 매 실행 전에 사람의 검토를 받을지, 아니면 전체 권한으로 모든 승인을 자동 통과할지 정합니다. 위험 경계는 자동·검토 모드에서 유지되며, 전체 권한에서는 사용자 책임 하에 풀립니다.",
+  },
   {
     id: "local",
     title: "로컬 환경",
@@ -2713,7 +3014,11 @@ function routeKindLabel(kind: string): string {
 }
 
 function billingKindLabel(kind: string): string {
-  const labels: Record<string, string> = { "coding-plan": "구독 요금제", "api-key": "사용량 과금", subscription: "구독" };
+  const labels: Record<string, string> = {
+    "coding-plan": "구독 요금제",
+    "api-key": "사용량 과금",
+    subscription: "구독",
+  };
   return labels[kind] ?? kind;
 }
 
@@ -2732,32 +3037,507 @@ function resetText(iso: string): string {
   return Number.isNaN(at.getTime()) ? "" : `${String(at.getMonth() + 1)}월 ${String(at.getDate())}일 초기화`;
 }
 
-function ZaiCodingPlanConnectionForm({ alias, saving, secret, setAlias, setSecret, submit }: { alias: string; saving: boolean; secret: string; setAlias: (value: string) => void; setSecret: (value: string) => void; submit: (event: React.SyntheticEvent<HTMLFormElement>) => Promise<void> }) { return <form aria-label="Z.ai GLM-5.2 연결" className="mt-5 grid max-w-3xl grid-cols-2 gap-4 border-b border-border pb-5" onSubmit={(event) => { void submit(event); }}><SettingsField label="연결 이름"><Input aria-label="연결 이름" onChange={(event) => { setAlias(event.target.value); }} required value={alias} /></SettingsField><SettingsField label="Z.ai API Key"><Input aria-label="Z.ai API Key" onChange={(event) => { setSecret(event.target.value); }} required type="password" value={secret} /></SettingsField><p className="col-span-2 text-xs leading-5 text-muted">API Key는 로컬 자격 증명 저장소에만 기록되며, 이 화면에는 다시 표시되지 않습니다.</p><div className="col-span-2 flex justify-end"><Button disabled={saving} type="submit">{saving ? "연결 중…" : "연결하고 기본 Route 구성"}</Button></div></form>; }
-function ProviderConnectionForm({ provider, saving, secret, setField, setSecret, submit }: { provider: { providerId: string; displayName: string; adapterKind: string; endpointName: string; baseUrl: string; local: boolean; credentialLabel: string; credentialType: string }; saving: boolean; secret: string; setField: (field: keyof typeof provider, value: string | boolean) => void; setSecret: (value: string) => void; submit: (event: React.SyntheticEvent<HTMLFormElement>) => Promise<void> }) { return <form aria-label="Provider 연결 추가" className="mt-5 grid max-w-3xl grid-cols-2 gap-4 border-b border-border pb-5" onSubmit={(event) => { void submit(event); }}><SettingsField label="Provider ID"><Input aria-label="Provider ID" onChange={(event) => { setField("providerId", event.target.value); }} required value={provider.providerId} /></SettingsField><SettingsField label="표시 이름"><Input aria-label="표시 이름" onChange={(event) => { setField("displayName", event.target.value); }} required value={provider.displayName} /></SettingsField><SettingsField label="Adapter kind"><Input aria-label="Adapter kind" onChange={(event) => { setField("adapterKind", event.target.value); }} required value={provider.adapterKind} /></SettingsField><SettingsField label="Endpoint 이름"><Input aria-label="Endpoint 이름" onChange={(event) => { setField("endpointName", event.target.value); }} required value={provider.endpointName} /></SettingsField><SettingsField label="Base URL"><Input aria-label="Base URL" onChange={(event) => { setField("baseUrl", event.target.value); }} required type="url" value={provider.baseUrl} /></SettingsField><SettingsField label="Credential label"><Input aria-label="Credential label" onChange={(event) => { setField("credentialLabel", event.target.value); }} required value={provider.credentialLabel} /></SettingsField><SettingsField label="Credential type"><Input aria-label="Credential type" onChange={(event) => { setField("credentialType", event.target.value); }} required value={provider.credentialType} /></SettingsField><SettingsField label="Credential secret"><Input aria-label="Credential secret" onChange={(event) => { setSecret(event.target.value); }} required type="password" value={secret} /></SettingsField><label className="col-span-2 flex items-center gap-2 text-sm text-secondary"><input checked={provider.local} onChange={(event) => { setField("local", event.target.checked); }} type="checkbox" />로컬 endpoint</label><div className="col-span-2 flex justify-end"><Button disabled={saving} type="submit">{saving ? "연결 중…" : "Provider 연결 추가"}</Button></div></form>; }
-function SettingsField({ children, label }: { children: React.ReactNode; label: string }) { return <label className="grid gap-1.5 text-sm text-secondary"><span>{label}</span>{children}</label>; }
+function ZaiCodingPlanConnectionForm({
+  alias,
+  saving,
+  secret,
+  setAlias,
+  setSecret,
+  submit,
+}: {
+  alias: string;
+  saving: boolean;
+  secret: string;
+  setAlias: (value: string) => void;
+  setSecret: (value: string) => void;
+  submit: (event: React.SyntheticEvent<HTMLFormElement>) => Promise<void>;
+}) {
+  return (
+    <form
+      aria-label="Z.ai GLM-5.2 연결"
+      className="mt-5 grid max-w-3xl grid-cols-2 gap-4 border-b border-border pb-5"
+      onSubmit={(event) => {
+        void submit(event);
+      }}
+    >
+      <SettingsField label="연결 이름">
+        <Input
+          aria-label="연결 이름"
+          onChange={(event) => {
+            setAlias(event.target.value);
+          }}
+          required
+          value={alias}
+        />
+      </SettingsField>
+      <SettingsField label="Z.ai API Key">
+        <Input
+          aria-label="Z.ai API Key"
+          onChange={(event) => {
+            setSecret(event.target.value);
+          }}
+          required
+          type="password"
+          value={secret}
+        />
+      </SettingsField>
+      <p className="col-span-2 text-xs leading-5 text-muted">
+        API Key는 로컬 자격 증명 저장소에만 기록되며, 이 화면에는 다시 표시되지 않습니다.
+      </p>
+      <div className="col-span-2 flex justify-end">
+        <Button disabled={saving} type="submit">
+          {saving ? "연결 중…" : "연결하고 기본 Route 구성"}
+        </Button>
+      </div>
+    </form>
+  );
+}
+function ProviderConnectionForm({
+  provider,
+  saving,
+  secret,
+  setField,
+  setSecret,
+  submit,
+}: {
+  provider: {
+    providerId: string;
+    displayName: string;
+    adapterKind: string;
+    endpointName: string;
+    baseUrl: string;
+    local: boolean;
+    credentialLabel: string;
+    credentialType: string;
+  };
+  saving: boolean;
+  secret: string;
+  setField: (field: keyof typeof provider, value: string | boolean) => void;
+  setSecret: (value: string) => void;
+  submit: (event: React.SyntheticEvent<HTMLFormElement>) => Promise<void>;
+}) {
+  return (
+    <form
+      aria-label="Provider 연결 추가"
+      className="mt-5 grid max-w-3xl grid-cols-2 gap-4 border-b border-border pb-5"
+      onSubmit={(event) => {
+        void submit(event);
+      }}
+    >
+      <SettingsField label="Provider ID">
+        <Input
+          aria-label="Provider ID"
+          onChange={(event) => {
+            setField("providerId", event.target.value);
+          }}
+          required
+          value={provider.providerId}
+        />
+      </SettingsField>
+      <SettingsField label="표시 이름">
+        <Input
+          aria-label="표시 이름"
+          onChange={(event) => {
+            setField("displayName", event.target.value);
+          }}
+          required
+          value={provider.displayName}
+        />
+      </SettingsField>
+      <SettingsField label="Adapter kind">
+        <Input
+          aria-label="Adapter kind"
+          onChange={(event) => {
+            setField("adapterKind", event.target.value);
+          }}
+          required
+          value={provider.adapterKind}
+        />
+      </SettingsField>
+      <SettingsField label="Endpoint 이름">
+        <Input
+          aria-label="Endpoint 이름"
+          onChange={(event) => {
+            setField("endpointName", event.target.value);
+          }}
+          required
+          value={provider.endpointName}
+        />
+      </SettingsField>
+      <SettingsField label="Base URL">
+        <Input
+          aria-label="Base URL"
+          onChange={(event) => {
+            setField("baseUrl", event.target.value);
+          }}
+          required
+          type="url"
+          value={provider.baseUrl}
+        />
+      </SettingsField>
+      <SettingsField label="Credential label">
+        <Input
+          aria-label="Credential label"
+          onChange={(event) => {
+            setField("credentialLabel", event.target.value);
+          }}
+          required
+          value={provider.credentialLabel}
+        />
+      </SettingsField>
+      <SettingsField label="Credential type">
+        <Input
+          aria-label="Credential type"
+          onChange={(event) => {
+            setField("credentialType", event.target.value);
+          }}
+          required
+          value={provider.credentialType}
+        />
+      </SettingsField>
+      <SettingsField label="Credential secret">
+        <Input
+          aria-label="Credential secret"
+          onChange={(event) => {
+            setSecret(event.target.value);
+          }}
+          required
+          type="password"
+          value={secret}
+        />
+      </SettingsField>
+      <label className="col-span-2 flex items-center gap-2 text-sm text-secondary">
+        <input
+          checked={provider.local}
+          onChange={(event) => {
+            setField("local", event.target.checked);
+          }}
+          type="checkbox"
+        />
+        로컬 endpoint
+      </label>
+      <div className="col-span-2 flex justify-end">
+        <Button disabled={saving} type="submit">
+          {saving ? "연결 중…" : "Provider 연결 추가"}
+        </Button>
+      </div>
+    </form>
+  );
+}
+function SettingsField({ children, label }: { children: React.ReactNode; label: string }) {
+  return (
+    <label className="grid gap-1.5 text-sm text-secondary">
+      <span>{label}</span>
+      {children}
+    </label>
+  );
+}
 
-function RouterConfiguration({ service, settings, onRefresh }: { service: DesktopService; settings: SettingsView; onRefresh: (settings: SettingsView) => void }) {
+function RouterConfiguration({
+  service,
+  settings,
+  onRefresh,
+}: {
+  service: DesktopService;
+  settings: SettingsView;
+  onRefresh: (settings: SettingsView) => void;
+}) {
   const routes = routeItems(settings.routes);
   const models = modelProfiles(settings.catalog);
-  const [model, setModel] = useState({ providerId: "", endpointId: "", modelId: "", routeKind: "chat", contextWindow: "128000", equivalenceGroup: "general", evalScore: "0", inputCost: "0", outputCost: "0", verified: false });
+  const [model, setModel] = useState({
+    providerId: "",
+    endpointId: "",
+    modelId: "",
+    routeKind: "chat",
+    contextWindow: "128000",
+    equivalenceGroup: "general",
+    evalScore: "0",
+    inputCost: "0",
+    outputCost: "0",
+    verified: false,
+  });
   const [route, setRoute] = useState({ name: "", routeKind: "chat" });
-  const [candidate, setCandidate] = useState({ routeId: routes[0]?.routeId ?? "", modelProfileId: models[0]?.modelProfileId ?? "", priority: "0" });
+  const [candidate, setCandidate] = useState({
+    routeId: routes[0]?.routeId ?? "",
+    modelProfileId: models[0]?.modelProfileId ?? "",
+    priority: "0",
+  });
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
   const [advancedOpen, setAdvancedOpen] = useState(false);
-  const refresh = async () => { onRefresh(await service.loadSettings()); };
+  const refresh = async () => {
+    onRefresh(await service.loadSettings());
+  };
   const input = "rounded-[6px] border-border bg-canvas";
   const save = async (kind: string, action: () => Promise<void>, fallback: string) => {
     setBusy(kind);
     setError("");
-    try { await action(); await refresh(); }
-    catch (cause) { setError(surfaceErrorMessage(cause, fallback)); }
-    finally { setBusy(""); }
+    try {
+      await action();
+      await refresh();
+    } catch (cause) {
+      setError(surfaceErrorMessage(cause, fallback));
+    } finally {
+      setBusy("");
+    }
   };
-  const submitModel = async (event: React.SyntheticEvent<HTMLFormElement>) => { event.preventDefault(); await save("model", () => service.registerModel({ providerId: model.providerId, endpointId: model.endpointId, modelId: model.modelId, routeKind: model.routeKind, contextWindow: Number(model.contextWindow), supportsTools: true, supportsStructuredOutput: true, supportsVision: false, supportsStreaming: true, equivalenceGroup: model.equivalenceGroup, evalScore: Number(model.evalScore), inputCostMicrosPerMillion: Number(model.inputCost), outputCostMicrosPerMillion: Number(model.outputCost), verified: model.verified }), "모델 프로필을 등록하지 못했습니다."); };
-  const submitRoute = async (event: React.SyntheticEvent<HTMLFormElement>) => { event.preventDefault(); await save("route", () => service.configureRoute({ name: route.name, routeKind: route.routeKind }), "라우트를 저장하지 못했습니다."); };
-  const submitCandidate = async (event: React.SyntheticEvent<HTMLFormElement>) => { event.preventDefault(); await save("candidate", () => service.addRouteCandidate({ routeId: candidate.routeId, modelProfileId: candidate.modelProfileId, priority: Number(candidate.priority) }), "라우트 후보를 연결하지 못했습니다."); };
-  return <section className="mt-6 border-t border-border pt-5"><div className="flex items-center justify-between"><div><p className="text-[11px] font-medium tracking-[0.04em] text-muted">모델 라우팅</p><p className="mt-1 text-sm text-secondary">{models.length}개 모델 프로필 · {routes.length}개 라우트</p></div><Button onClick={() => { setAdvancedOpen((open) => !open); }} size="sm" type="button" variant="outline">고급 라우팅 설정</Button></div>{advancedOpen ? <div className="mt-5 grid gap-5 border-t border-border pt-5">{error ? <SurfaceError message={error} /> : null}<form aria-label="모델 프로필 등록" className="grid grid-cols-2 gap-4" onSubmit={(event) => { void submitModel(event); }}><SettingsField label="모델 Provider ID"><Input aria-label="모델 Provider ID" className={input} onChange={(event) => { setModel({ ...model, providerId: event.target.value }); }} required value={model.providerId} /></SettingsField><SettingsField label="모델 Endpoint ID"><Input aria-label="모델 Endpoint ID" className={input} onChange={(event) => { setModel({ ...model, endpointId: event.target.value }); }} required value={model.endpointId} /></SettingsField><SettingsField label="모델 ID"><Input aria-label="모델 ID" className={input} onChange={(event) => { setModel({ ...model, modelId: event.target.value }); }} required value={model.modelId} /></SettingsField><SettingsField label="Context window"><Input aria-label="Context window" className={input} min="1" onChange={(event) => { setModel({ ...model, contextWindow: event.target.value }); }} required type="number" value={model.contextWindow} /></SettingsField><SettingsField label="동등성 그룹"><Input aria-label="동등성 그룹" className={input} onChange={(event) => { setModel({ ...model, equivalenceGroup: event.target.value }); }} required value={model.equivalenceGroup} /></SettingsField><SettingsField label="평가 점수"><Input aria-label="평가 점수" className={input} min="0" onChange={(event) => { setModel({ ...model, evalScore: event.target.value }); }} required step="any" type="number" value={model.evalScore} /></SettingsField><SettingsField label="입력 비용 (micros/백만)"><Input aria-label="입력 비용 (micros/백만)" className={input} min="0" onChange={(event) => { setModel({ ...model, inputCost: event.target.value }); }} required type="number" value={model.inputCost} /></SettingsField><SettingsField label="출력 비용 (micros/백만)"><Input aria-label="출력 비용 (micros/백만)" className={input} min="0" onChange={(event) => { setModel({ ...model, outputCost: event.target.value }); }} required type="number" value={model.outputCost} /></SettingsField><label className="text-sm text-secondary"><input checked={model.verified} onChange={(event) => { setModel({ ...model, verified: event.target.checked }); }} type="checkbox" /> 검증됨</label><Button disabled={busy !== ""} type="submit">모델 등록</Button></form><form aria-label="라우트 구성" className="flex items-end gap-3" onSubmit={(event) => { void submitRoute(event); }}><SettingsField label="라우트 이름"><Input aria-label="라우트 이름" className={input} onChange={(event) => { setRoute({ ...route, name: event.target.value }); }} required value={route.name} /></SettingsField><Button disabled={busy !== ""} type="submit">라우트 저장</Button></form><form aria-label="라우트 후보 연결" className="grid grid-cols-[1fr_1fr_auto] items-end gap-3" onSubmit={(event) => { void submitCandidate(event); }}><SettingsField label="라우트"><select aria-label="라우트" className={`h-8 ${input}`} onChange={(event) => { setCandidate({ ...candidate, routeId: event.target.value }); }} required value={candidate.routeId}>{routes.map((item) => <option key={item.routeId} value={item.routeId}>{item.name}</option>)}</select></SettingsField><SettingsField label="모델 프로필"><select aria-label="모델 프로필" className={`h-8 ${input}`} onChange={(event) => { setCandidate({ ...candidate, modelProfileId: event.target.value }); }} required value={candidate.modelProfileId}>{models.map((item) => <option key={item.modelProfileId} value={item.modelProfileId}>{item.providerId}/{item.modelId}</option>)}</select></SettingsField><Button disabled={busy !== "" || !candidate.routeId || !candidate.modelProfileId} type="submit">후보 연결</Button></form></div> : null}</section>;
+  const submitModel = async (event: React.SyntheticEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    await save(
+      "model",
+      () =>
+        service.registerModel({
+          providerId: model.providerId,
+          endpointId: model.endpointId,
+          modelId: model.modelId,
+          routeKind: model.routeKind,
+          contextWindow: Number(model.contextWindow),
+          supportsTools: true,
+          supportsStructuredOutput: true,
+          supportsVision: false,
+          supportsStreaming: true,
+          equivalenceGroup: model.equivalenceGroup,
+          evalScore: Number(model.evalScore),
+          inputCostMicrosPerMillion: Number(model.inputCost),
+          outputCostMicrosPerMillion: Number(model.outputCost),
+          verified: model.verified,
+        }),
+      "모델 프로필을 등록하지 못했습니다.",
+    );
+  };
+  const submitRoute = async (event: React.SyntheticEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    await save(
+      "route",
+      () => service.configureRoute({ name: route.name, routeKind: route.routeKind }),
+      "라우트를 저장하지 못했습니다.",
+    );
+  };
+  const submitCandidate = async (event: React.SyntheticEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    await save(
+      "candidate",
+      () =>
+        service.addRouteCandidate({
+          routeId: candidate.routeId,
+          modelProfileId: candidate.modelProfileId,
+          priority: Number(candidate.priority),
+        }),
+      "라우트 후보를 연결하지 못했습니다.",
+    );
+  };
+  return (
+    <section className="mt-6 border-t border-border pt-5">
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-[11px] font-medium tracking-[0.04em] text-muted">모델 라우팅</p>
+          <p className="mt-1 text-sm text-secondary">
+            {models.length}개 모델 프로필 · {routes.length}개 라우트
+          </p>
+        </div>
+        <Button
+          onClick={() => {
+            setAdvancedOpen((open) => !open);
+          }}
+          size="sm"
+          type="button"
+          variant="outline"
+        >
+          고급 라우팅 설정
+        </Button>
+      </div>
+      {advancedOpen ? (
+        <div className="mt-5 grid gap-5 border-t border-border pt-5">
+          {error ? <SurfaceError message={error} /> : null}
+          <form
+            aria-label="모델 프로필 등록"
+            className="grid grid-cols-2 gap-4"
+            onSubmit={(event) => {
+              void submitModel(event);
+            }}
+          >
+            <SettingsField label="모델 Provider ID">
+              <Input
+                aria-label="모델 Provider ID"
+                className={input}
+                onChange={(event) => {
+                  setModel({ ...model, providerId: event.target.value });
+                }}
+                required
+                value={model.providerId}
+              />
+            </SettingsField>
+            <SettingsField label="모델 Endpoint ID">
+              <Input
+                aria-label="모델 Endpoint ID"
+                className={input}
+                onChange={(event) => {
+                  setModel({ ...model, endpointId: event.target.value });
+                }}
+                required
+                value={model.endpointId}
+              />
+            </SettingsField>
+            <SettingsField label="모델 ID">
+              <Input
+                aria-label="모델 ID"
+                className={input}
+                onChange={(event) => {
+                  setModel({ ...model, modelId: event.target.value });
+                }}
+                required
+                value={model.modelId}
+              />
+            </SettingsField>
+            <SettingsField label="Context window">
+              <Input
+                aria-label="Context window"
+                className={input}
+                min="1"
+                onChange={(event) => {
+                  setModel({ ...model, contextWindow: event.target.value });
+                }}
+                required
+                type="number"
+                value={model.contextWindow}
+              />
+            </SettingsField>
+            <SettingsField label="동등성 그룹">
+              <Input
+                aria-label="동등성 그룹"
+                className={input}
+                onChange={(event) => {
+                  setModel({ ...model, equivalenceGroup: event.target.value });
+                }}
+                required
+                value={model.equivalenceGroup}
+              />
+            </SettingsField>
+            <SettingsField label="평가 점수">
+              <Input
+                aria-label="평가 점수"
+                className={input}
+                min="0"
+                onChange={(event) => {
+                  setModel({ ...model, evalScore: event.target.value });
+                }}
+                required
+                step="any"
+                type="number"
+                value={model.evalScore}
+              />
+            </SettingsField>
+            <SettingsField label="입력 비용 (micros/백만)">
+              <Input
+                aria-label="입력 비용 (micros/백만)"
+                className={input}
+                min="0"
+                onChange={(event) => {
+                  setModel({ ...model, inputCost: event.target.value });
+                }}
+                required
+                type="number"
+                value={model.inputCost}
+              />
+            </SettingsField>
+            <SettingsField label="출력 비용 (micros/백만)">
+              <Input
+                aria-label="출력 비용 (micros/백만)"
+                className={input}
+                min="0"
+                onChange={(event) => {
+                  setModel({ ...model, outputCost: event.target.value });
+                }}
+                required
+                type="number"
+                value={model.outputCost}
+              />
+            </SettingsField>
+            <label className="text-sm text-secondary">
+              <input
+                checked={model.verified}
+                onChange={(event) => {
+                  setModel({ ...model, verified: event.target.checked });
+                }}
+                type="checkbox"
+              />{" "}
+              검증됨
+            </label>
+            <Button disabled={busy !== ""} type="submit">
+              모델 등록
+            </Button>
+          </form>
+          <form
+            aria-label="라우트 구성"
+            className="flex items-end gap-3"
+            onSubmit={(event) => {
+              void submitRoute(event);
+            }}
+          >
+            <SettingsField label="라우트 이름">
+              <Input
+                aria-label="라우트 이름"
+                className={input}
+                onChange={(event) => {
+                  setRoute({ ...route, name: event.target.value });
+                }}
+                required
+                value={route.name}
+              />
+            </SettingsField>
+            <Button disabled={busy !== ""} type="submit">
+              라우트 저장
+            </Button>
+          </form>
+          <form
+            aria-label="라우트 후보 연결"
+            className="grid grid-cols-[1fr_1fr_auto] items-end gap-3"
+            onSubmit={(event) => {
+              void submitCandidate(event);
+            }}
+          >
+            <SettingsField label="라우트">
+              <select
+                aria-label="라우트"
+                className={`h-8 ${input}`}
+                onChange={(event) => {
+                  setCandidate({ ...candidate, routeId: event.target.value });
+                }}
+                required
+                value={candidate.routeId}
+              >
+                {routes.map((item) => (
+                  <option key={item.routeId} value={item.routeId}>
+                    {item.name}
+                  </option>
+                ))}
+              </select>
+            </SettingsField>
+            <SettingsField label="모델 프로필">
+              <select
+                aria-label="모델 프로필"
+                className={`h-8 ${input}`}
+                onChange={(event) => {
+                  setCandidate({ ...candidate, modelProfileId: event.target.value });
+                }}
+                required
+                value={candidate.modelProfileId}
+              >
+                {models.map((item) => (
+                  <option key={item.modelProfileId} value={item.modelProfileId}>
+                    {item.providerId}/{item.modelId}
+                  </option>
+                ))}
+              </select>
+            </SettingsField>
+            <Button disabled={busy !== "" || !candidate.routeId || !candidate.modelProfileId} type="submit">
+              후보 연결
+            </Button>
+          </form>
+        </div>
+      ) : null}
+    </section>
+  );
 }
 
 function routeItems(value: unknown): readonly { routeId: string; name: string }[] {
@@ -2777,41 +3557,84 @@ function modelProfiles(value: unknown): readonly { modelProfileId: string; provi
   return models.flatMap((item) => {
     if (!item || typeof item !== "object") return [];
     const record = item as Record<string, unknown>;
-    return typeof record.modelProfileId === "string" && typeof record.providerId === "string" && typeof record.modelId === "string"
+    return typeof record.modelProfileId === "string" &&
+      typeof record.providerId === "string" &&
+      typeof record.modelId === "string"
       ? [{ modelProfileId: record.modelProfileId, providerId: record.providerId, modelId: record.modelId }]
       : [];
   });
 }
 
-interface RegistryVersionDetail { readonly packageVersion?: string; readonly description?: string; readonly visibility?: string; readonly ownerOrganizationId?: string; readonly assessment?: { readonly provenance?: string }; readonly manifest?: Record<string, unknown>; }
-interface RegistryDetail { readonly version?: RegistryVersionDetail; }
+interface RegistryVersionDetail {
+  readonly packageVersion?: string;
+  readonly description?: string;
+  readonly visibility?: string;
+  readonly ownerOrganizationId?: string;
+  readonly assessment?: { readonly provenance?: string };
+  readonly manifest?: Record<string, unknown>;
+}
+interface RegistryDetail {
+  readonly version?: RegistryVersionDetail;
+}
 function registryDetail(value: unknown): RegistryDetail {
   if (!value || typeof value !== "object" || Array.isArray(value)) return {};
   const source = value as Record<string, unknown>;
   const candidate = source.version;
   if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) return {};
   const version = candidate as Record<string, unknown>;
-  const manifest = version.manifest && typeof version.manifest === "object" && !Array.isArray(version.manifest) ? version.manifest as Record<string, unknown> : undefined;
-  const assessment = version.assessment && typeof version.assessment === "object" && !Array.isArray(version.assessment) ? version.assessment as Record<string, unknown> : undefined;
-  return { version: {
-    ...(typeof version.packageVersion === "string" ? { packageVersion: version.packageVersion } : {}),
-    ...(manifest && typeof manifest.description === "string" ? { description: manifest.description } : {}),
-    ...(typeof version.visibility === "string" ? { visibility: version.visibility } : {}),
-    ...(typeof version.ownerOrganizationId === "string" ? { ownerOrganizationId: version.ownerOrganizationId } : {}),
-    ...(assessment && typeof assessment.provenance === "string" ? { assessment: { provenance: assessment.provenance } } : {}),
-    ...(manifest ? { manifest } : {}),
-  } };
+  const manifest =
+    version.manifest && typeof version.manifest === "object" && !Array.isArray(version.manifest)
+      ? (version.manifest as Record<string, unknown>)
+      : undefined;
+  const assessment =
+    version.assessment && typeof version.assessment === "object" && !Array.isArray(version.assessment)
+      ? (version.assessment as Record<string, unknown>)
+      : undefined;
+  return {
+    version: {
+      ...(typeof version.packageVersion === "string" ? { packageVersion: version.packageVersion } : {}),
+      ...(manifest && typeof manifest.description === "string" ? { description: manifest.description } : {}),
+      ...(typeof version.visibility === "string" ? { visibility: version.visibility } : {}),
+      ...(typeof version.ownerOrganizationId === "string" ? { ownerOrganizationId: version.ownerOrganizationId } : {}),
+      ...(assessment && typeof assessment.provenance === "string"
+        ? { assessment: { provenance: assessment.provenance } }
+        : {}),
+      ...(manifest ? { manifest } : {}),
+    },
+  };
 }
 function endpointIdFor(catalog: unknown, providerId: string, name: string, baseUrl: string): string | undefined {
   if (!catalog || typeof catalog !== "object") return undefined;
   const endpoints = (catalog as { endpoints?: unknown }).endpoints;
   if (!Array.isArray(endpoints)) return undefined;
-  return endpoints.find((endpoint): endpoint is { endpointId: string } => !!endpoint && typeof endpoint === "object" && (endpoint as Record<string, unknown>).providerId === providerId && (endpoint as Record<string, unknown>).name === name && (endpoint as Record<string, unknown>).baseUrl === baseUrl && typeof (endpoint as Record<string, unknown>).endpointId === "string")?.endpointId;
+  return endpoints.find(
+    (endpoint): endpoint is { endpointId: string } =>
+      !!endpoint &&
+      typeof endpoint === "object" &&
+      (endpoint as Record<string, unknown>).providerId === providerId &&
+      (endpoint as Record<string, unknown>).name === name &&
+      (endpoint as Record<string, unknown>).baseUrl === baseUrl &&
+      typeof (endpoint as Record<string, unknown>).endpointId === "string",
+  )?.endpointId;
 }
 
-function SurfaceLoading() { return <div role="status" className="text-sm text-secondary">불러오는 중…</div>; }
-function SurfaceError({ message }: { message: string }) { return <p role="alert" className="mb-4 text-sm text-danger">{message}</p>; }
-function surfaceErrorMessage(error: unknown, fallback: string): string { return error instanceof Error && error.message ? error.message : fallback; }
+function SurfaceLoading() {
+  return (
+    <div role="status" className="text-sm text-secondary">
+      불러오는 중…
+    </div>
+  );
+}
+function SurfaceError({ message }: { message: string }) {
+  return (
+    <p role="alert" className="mb-4 text-sm text-danger">
+      {message}
+    </p>
+  );
+}
+function surfaceErrorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error && error.message ? error.message : fallback;
+}
 
 interface WorkListProps {
   works: WorkView[];
@@ -2872,10 +3695,16 @@ function WorkList({
           value={filter}
         >
           <TabsList aria-label="Work 상태" className="gap-1">
-            <TabsTrigger className="h-7 rounded-[5px] border px-2.5 text-[12px] data-[active]:border-control data-[active]:bg-surface-2 data-[active]:text-primary" value="active">
+            <TabsTrigger
+              className="h-7 rounded-[5px] border px-2.5 text-[12px] data-[active]:border-control data-[active]:bg-surface-2 data-[active]:text-primary"
+              value="active"
+            >
               진행 중
             </TabsTrigger>
-            <TabsTrigger className="h-7 rounded-[5px] border px-2.5 text-[12px] data-[active]:border-control data-[active]:bg-surface-2 data-[active]:text-primary" value="complete">
+            <TabsTrigger
+              className="h-7 rounded-[5px] border px-2.5 text-[12px] data-[active]:border-control data-[active]:bg-surface-2 data-[active]:text-primary"
+              value="complete"
+            >
               완료
             </TabsTrigger>
           </TabsList>
@@ -2916,9 +3745,7 @@ function WorkList({
                 >
                   <span className="block truncate text-[13px] font-medium text-primary">{work.title}</span>
                   <span className="mt-1 flex items-center justify-between gap-2 text-[11px]">
-                    <span
-                      className={`flex items-center gap-2 ${workStatusClass[work.status]}`}
-                    >
+                    <span className={`flex items-center gap-2 ${workStatusClass[work.status]}`}>
                       <span aria-hidden="true" className="size-1.5 rounded-full bg-current" />
                       {workStatusLabel[work.status]}
                     </span>
@@ -3006,7 +3833,10 @@ function WorkActivity({
           {room ? (
             <>
               <span aria-hidden="true" className="h-4 w-px shrink-0 bg-border" />
-              <span className="flex shrink-0 items-center gap-1.5" title={`협업방 참가 ${String(room.participants.length)}명`}>
+              <span
+                className="flex shrink-0 items-center gap-1.5"
+                title={`협업방 참가 ${String(room.participants.length)}명`}
+              >
                 <SpeakerRow limit={5} speakers={room.participants} />
                 <span className="font-mono text-[11px] text-muted">참가 {room.participants.length}</span>
               </span>
@@ -3032,7 +3862,9 @@ function WorkActivity({
           {canResume ? (
             <Button
               disabled={pendingRunAction !== undefined}
-              onClick={() => { onControlRun("resume"); }}
+              onClick={() => {
+                onControlRun("resume");
+              }}
               size="sm"
               variant="ghost"
             >
@@ -3042,7 +3874,9 @@ function WorkActivity({
           {canCancel ? (
             <Button
               disabled={pendingRunAction !== undefined}
-              onClick={() => { onControlRun("cancel"); }}
+              onClick={() => {
+                onControlRun("cancel");
+              }}
               size="sm"
               variant="ghost"
             >
@@ -3052,9 +3886,9 @@ function WorkActivity({
         </div>
       </header>
       {/*
-        * 탭 바는 "지금 어느 방에 있나"를 말하는 자리이므로 방이 하나여도 항상 그립니다.
-        * 래퍼는 방이 없을 때도 유지합니다. grid 행 수가 흔들리면 본문이 접힙니다.
-        */}
+       * 탭 바는 "지금 어느 방에 있나"를 말하는 자리이므로 방이 하나여도 항상 그립니다.
+       * 래퍼는 방이 없을 때도 유지합니다. grid 행 수가 흔들리면 본문이 접힙니다.
+       */}
       <div>
         {rooms.length > 0 ? (
           <nav aria-label="협업방" className="flex items-center gap-1 border-b border-border px-5 py-1.5">
@@ -3077,10 +3911,10 @@ function WorkActivity({
                   type="button"
                 >
                   {/*
-                    * 탭은 지금 보고 있지 않은 방을 보는 유일한 자리입니다.
-                    * 색이 "저 방엔 누가 있나"를 이름보다 빨리 말하므로 아바타를 유지하되,
-                    * 폭이 무한히 자라지 않게 둘로 제한하고 나머지는 +N으로 알립니다.
-                    */}
+                   * 탭은 지금 보고 있지 않은 방을 보는 유일한 자리입니다.
+                   * 색이 "저 방엔 누가 있나"를 이름보다 빨리 말하므로 아바타를 유지하되,
+                   * 폭이 무한히 자라지 않게 둘로 제한하고 나머지는 +N으로 알립니다.
+                   */}
                   <SpeakerRow limit={2} speakers={candidate.participants} />
                   <span className="text-[13px] font-medium">{candidate.name}</span>
                   {waiting ? (
@@ -3280,7 +4114,10 @@ function ActivityRow({
 }
 
 // 방 문법(chapter·roomStatus·handoff·room·proposal)은 ActivityRow에서 먼저 반환되므로 여기 오지 않습니다.
-type MarkedActivity = Extract<ActivityView, { kind: "message" | "plan" | "agents" | "approval" | "artifacts" | "event" }>;
+type MarkedActivity = Extract<
+  ActivityView,
+  { kind: "message" | "plan" | "agents" | "approval" | "artifacts" | "event" }
+>;
 
 function ActivityMarker({ value }: { value: MarkedActivity }) {
   if (value.kind === "message") {
@@ -3315,7 +4152,11 @@ function PlanActivity({ steps, title }: { steps: TaskView[]; title: string }) {
         <span className="font-mono text-[11px] font-normal text-muted">
           {steps.filter((step) => step.state === "done").length} / {steps.length}
         </span>
-        <CaretDown aria-hidden="true" className="ml-auto text-muted transition-transform group-open:rotate-180" size={16} />
+        <CaretDown
+          aria-hidden="true"
+          className="ml-auto text-muted transition-transform group-open:rotate-180"
+          size={16}
+        />
       </summary>
       <ol className="border-t border-border px-4 py-2">
         {steps.map((step, index) => (
@@ -3350,7 +4191,9 @@ function AgentsActivity({ agents, title }: { agents: AgentView[]; title: string 
             <div className="min-w-0">
               <p className="flex items-center gap-1.5">
                 <span className="truncate text-xs font-medium">{agent.name}</span>
-                <span className="shrink-0 rounded-[3px] border border-control px-1 text-[10px] text-muted">{agent.role}</span>
+                <span className="shrink-0 rounded-[3px] border border-control px-1 text-[10px] text-muted">
+                  {agent.role}
+                </span>
               </p>
               <p className={agent.state === "active" ? "text-[11px] text-primary" : "text-[11px] text-muted"}>
                 {agent.state === "active" ? "진행 중" : "대기"}
@@ -3374,7 +4217,9 @@ interface ApprovalActivityProps {
 
 function ApprovalActivity({ decision, description, disabled, onApprove, onReject, title }: ApprovalActivityProps) {
   return (
-    <div className={`rounded-[7px] border px-4 py-3 ${decision ? "border-border bg-surface-1" : "border-gate-border bg-gate-wash"}`}>
+    <div
+      className={`rounded-[7px] border px-4 py-3 ${decision ? "border-border bg-surface-1" : "border-gate-border bg-gate-wash"}`}
+    >
       <div className="flex items-start gap-3">
         <span className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-[5px] border border-control text-secondary">
           <Database aria-hidden="true" size={15} />
@@ -3396,7 +4241,13 @@ function ApprovalActivity({ decision, description, disabled, onApprove, onReject
       </div>
       {!decision ? (
         <div className="mt-3 flex justify-end">
-          <DecisionActions approveName={title} busy={disabled} disabled={disabled} onApprove={onApprove} onReject={onReject} />
+          <DecisionActions
+            approveName={title}
+            busy={disabled}
+            disabled={disabled}
+            onApprove={onApprove}
+            onReject={onReject}
+          />
         </div>
       ) : null}
     </div>
@@ -3543,7 +4394,10 @@ function InspectorRoom({ room }: { room: RoomView }) {
   return (
     <>
       <section aria-labelledby="room-participants" className="border border-border bg-surface-1">
-        <h2 className="border-b border-border px-3.5 py-2.5 text-[10px] font-semibold tracking-[0.08em] text-muted" id="room-participants">
+        <h2
+          className="border-b border-border px-3.5 py-2.5 text-[10px] font-semibold tracking-[0.08em] text-muted"
+          id="room-participants"
+        >
           이 방의 참가자 {room.participants.length}
         </h2>
         {room.participants.length ? (
@@ -3575,13 +4429,12 @@ function InspectorRoom({ room }: { room: RoomView }) {
                   <span>{budget.label}</span>
                   <span className="font-mono text-[11px] text-muted">{budget.display}</span>
                 </p>
-                <span
-                  aria-hidden="true"
-                  className="mt-1 block h-[3px] overflow-hidden rounded-sm bg-bg-3"
-                >
+                <span aria-hidden="true" className="mt-1 block h-[3px] overflow-hidden rounded-sm bg-bg-3">
                   <span
                     className="block h-full bg-muted"
-                    style={{ width: `${String(Math.min(100, Math.round((budget.used / Math.max(budget.limit, 1)) * 100)))}%` }}
+                    style={{
+                      width: `${String(Math.min(100, Math.round((budget.used / Math.max(budget.limit, 1)) * 100)))}%`,
+                    }}
                   />
                 </span>
               </div>
@@ -3725,7 +4578,9 @@ function InspectorAgents({ agents }: { agents: AgentView[] }) {
             </Avatar>
             <span className="flex min-w-0 flex-1 items-center gap-1.5">
               <span className="truncate text-xs font-medium text-primary">{agent.name}</span>
-              <span className="shrink-0 rounded-[3px] border border-control px-1.5 text-[10px] text-muted">{agent.role}</span>
+              <span className="shrink-0 rounded-[3px] border border-control px-1.5 text-[10px] text-muted">
+                {agent.role}
+              </span>
             </span>
             <span
               className={
@@ -3904,60 +4759,150 @@ function NewWorkDialog({
               className="mt-2 min-h-28 border border-control bg-surface-1 px-3 py-2"
               disabled={starting}
               id="new-work-text"
-              onChange={(event) => { setText(event.target.value); }}
+              onChange={(event) => {
+                setText(event.target.value);
+              }}
               placeholder="예: 파트너 계약의 주요 위험을 검토해줘"
               required
               value={text}
             />
           </label>
           <fieldset className="space-y-2">
-            <legend className="text-sm font-medium">워크스페이스 <span className="font-normal text-muted">(선택)</span></legend>
+            <legend className="text-sm font-medium">
+              워크스페이스 <span className="font-normal text-muted">(선택)</span>
+            </legend>
             <div className="min-h-[5.5rem] max-h-36 space-y-2 overflow-y-auto rounded-md border border-control bg-surface-1 p-2">
-              {workspacesLoading ? <div aria-label="워크스페이스 불러오는 중" className="h-14 animate-pulse rounded bg-surface-2" /> : workspaces.length === 0 ? <p className="px-1 py-2 text-xs text-muted">저장된 폴더가 없습니다.</p> : workspaces.map((item) => item.trust === "blocked" ? (
-                <div className="rounded px-2 py-1 text-sm text-muted" key={item.workspaceId}>
-                  <span className="block font-medium">{item.name} (차단됨)</span>
-                  <span className="block font-mono text-xs">{item.path}</span>
-                  <span className="block text-xs">차단된 폴더는 선택할 수 없습니다.</span>
-                  <Button disabled={registeringWorkspace} onClick={onOpenSettings} size="sm" type="button" variant="outline">설정으로 이동</Button>
-                </div>
+              {workspacesLoading ? (
+                <div aria-label="워크스페이스 불러오는 중" className="h-14 animate-pulse rounded bg-surface-2" />
+              ) : workspaces.length === 0 ? (
+                <p className="px-1 py-2 text-xs text-muted">저장된 폴더가 없습니다.</p>
               ) : (
-                <button
-                  aria-pressed={workspace?.workspaceId === item.workspaceId}
-                  className="block w-full rounded px-2 py-1 text-left text-sm hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-50"
-                  disabled={starting || registeringWorkspace}
-                  key={item.workspaceId}
-                  onClick={() => { setWorkspace(item); }}
-                  type="button"
-                >
-                  <span className="block font-medium">{item.name} <span className="font-normal text-muted">({item.trust === "trusted" ? "신뢰됨" : "신뢰 필요"})</span></span>
-                  <span className="block font-mono text-xs text-muted">{item.path}</span>
-                </button>
-              ))}
+                workspaces.map((item) =>
+                  item.trust === "blocked" ? (
+                    <div className="rounded px-2 py-1 text-sm text-muted" key={item.workspaceId}>
+                      <span className="block font-medium">{item.name} (차단됨)</span>
+                      <span className="block font-mono text-xs">{item.path}</span>
+                      <span className="block text-xs">차단된 폴더는 선택할 수 없습니다.</span>
+                      <Button
+                        disabled={registeringWorkspace}
+                        onClick={onOpenSettings}
+                        size="sm"
+                        type="button"
+                        variant="outline"
+                      >
+                        설정으로 이동
+                      </Button>
+                    </div>
+                  ) : (
+                    <button
+                      aria-pressed={workspace?.workspaceId === item.workspaceId}
+                      className="block w-full rounded px-2 py-1 text-left text-sm hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-50"
+                      disabled={starting || registeringWorkspace}
+                      key={item.workspaceId}
+                      onClick={() => {
+                        setWorkspace(item);
+                      }}
+                      type="button"
+                    >
+                      <span className="block font-medium">
+                        {item.name}{" "}
+                        <span className="font-normal text-muted">
+                          ({item.trust === "trusted" ? "신뢰됨" : "신뢰 필요"})
+                        </span>
+                      </span>
+                      <span className="block font-mono text-xs text-muted">{item.path}</span>
+                    </button>
+                  ),
+                )
+              )}
             </div>
-            <p aria-live="polite" className="sr-only">{workspace === undefined ? "" : `${workspace.name} 폴더를 선택했습니다.`}</p>
-            <Button disabled={starting || registeringWorkspace} onClick={() => { void addDirectory(); }} type="button" variant="outline">폴더 추가</Button>
+            <p aria-live="polite" className="sr-only">
+              {workspace === undefined ? "" : `${workspace.name} 폴더를 선택했습니다.`}
+            </p>
+            <Button
+              disabled={starting || registeringWorkspace}
+              onClick={() => {
+                void addDirectory();
+              }}
+              type="button"
+              variant="outline"
+            >
+              폴더 추가
+            </Button>
             {workspace?.trust === "pending" ? (
               <div className="rounded-md border border-warning/40 bg-warning/10 p-3 text-sm">
                 <p>이 폴더 안에서 에이전트가 읽기·쓰기 도구를 사용할 수 있습니다.</p>
                 <p className="mt-1 font-mono text-xs text-muted">{workspace.path}</p>
                 <div className="mt-2 flex gap-2">
-                  <Button disabled={starting || registeringWorkspace} onClick={() => { void decideWorkspaceTrust("trusted"); }} size="sm" type="button" variant="primary">신뢰</Button>
-                  <Button disabled={starting || registeringWorkspace} onClick={() => { void decideWorkspaceTrust("blocked"); }} size="sm" type="button" variant="outline">차단</Button>
+                  <Button
+                    disabled={starting || registeringWorkspace}
+                    onClick={() => {
+                      void decideWorkspaceTrust("trusted");
+                    }}
+                    size="sm"
+                    type="button"
+                    variant="primary"
+                  >
+                    신뢰
+                  </Button>
+                  <Button
+                    disabled={starting || registeringWorkspace}
+                    onClick={() => {
+                      void decideWorkspaceTrust("blocked");
+                    }}
+                    size="sm"
+                    type="button"
+                    variant="outline"
+                  >
+                    차단
+                  </Button>
                 </div>
               </div>
             ) : null}
           </fieldset>
           <fieldset className="space-y-2">
-            <legend className="text-sm font-medium">파일 첨부 <span className="font-normal text-muted">(선택)</span></legend>
-            <Button disabled={starting || registeringWorkspace || workspace === undefined || workspace.trust !== "trusted" || workspacePaths.length >= 20} onClick={() => { void addFiles(); }} type="button" variant="outline">파일 첨부</Button>
+            <legend className="text-sm font-medium">
+              파일 첨부 <span className="font-normal text-muted">(선택)</span>
+            </legend>
+            <Button
+              disabled={
+                starting ||
+                registeringWorkspace ||
+                workspace === undefined ||
+                workspace.trust !== "trusted" ||
+                workspacePaths.length >= 20
+              }
+              onClick={() => {
+                void addFiles();
+              }}
+              type="button"
+              variant="outline"
+            >
+              파일 첨부
+            </Button>
             <p aria-live="polite" aria-label="파일 첨부 상태" className="sr-only" role="status">
               {workspacePaths.length === 0 ? "" : `파일을 첨부했습니다: ${workspacePaths.join(", ")}`}
             </p>
-            {workspacePaths.length > 0 ? <ul aria-live="polite" className="flex flex-wrap gap-2">
-              {workspacePaths.map((path) => <li className="rounded bg-surface-2 px-2 py-1 font-mono text-xs" key={path}>
-                {path} <button aria-label={`${path} 제거`} className="ml-1 text-muted hover:text-primary" disabled={starting || registeringWorkspace} onClick={() => { removeWorkspacePath(path); }} type="button">×</button>
-              </li>)}
-            </ul> : null}
+            {workspacePaths.length > 0 ? (
+              <ul aria-live="polite" className="flex flex-wrap gap-2">
+                {workspacePaths.map((path) => (
+                  <li className="rounded bg-surface-2 px-2 py-1 font-mono text-xs" key={path}>
+                    {path}{" "}
+                    <button
+                      aria-label={`${path} 제거`}
+                      className="ml-1 text-muted hover:text-primary"
+                      disabled={starting || registeringWorkspace}
+                      onClick={() => {
+                        removeWorkspacePath(path);
+                      }}
+                      type="button"
+                    >
+                      ×
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
           </fieldset>
           <p aria-live="polite" className="min-h-5 text-xs text-danger" role="status">
             {error}

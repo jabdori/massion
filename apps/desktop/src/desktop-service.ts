@@ -149,7 +149,12 @@ export interface RouteView {
 }
 
 export interface RouterCatalogView {
-  readonly endpoints?: readonly { readonly endpointId: string; readonly providerId: string; readonly name: string; readonly baseUrl: string }[];
+  readonly endpoints?: readonly {
+    readonly endpointId: string;
+    readonly providerId: string;
+    readonly name: string;
+    readonly baseUrl: string;
+  }[];
   readonly models?: readonly ModelProfileView[];
 }
 
@@ -326,10 +331,7 @@ export interface DesktopService {
   loadPendingApprovals(): Promise<ApprovalView[]>;
   loadWorkspaces(): Promise<readonly DesktopWorkspaceView[]>;
   registerWorkspace(path: string): Promise<DesktopWorkspaceView>;
-  decideWorkspaceTrust(
-    workspace: DesktopWorkspaceView,
-    decision: "trusted" | "blocked",
-  ): Promise<DesktopWorkspaceView>;
+  decideWorkspaceTrust(workspace: DesktopWorkspaceView, decision: "trusted" | "blocked"): Promise<DesktopWorkspaceView>;
   loadOrganization(): Promise<OrganizationView>;
   /**
    * 이 Work의 모든 협업방과 각 방의 메시지.
@@ -382,14 +384,21 @@ export function createApplicationDesktopService(
   const createId = options.createId ?? (() => crypto.randomUUID());
   const query = async (operation: string, payload: unknown): Promise<unknown> => {
     const response = object(await native.query(operation, payload));
-    if (response?.operation !== operation || !("data" in response)) throw new Error("Application query 응답이 유효하지 않습니다");
+    if (response?.operation !== operation || !("data" in response))
+      throw new Error("Application query 응답이 유효하지 않습니다");
     return response.data;
   };
   const command = async (operation: string, payload: Record<string, unknown>, requestedIdentity?: CommandIdentity) => {
     const commandId = requestedIdentity?.commandId ?? createId();
     const correlationId = requestedIdentity?.correlationId ?? createId();
-    const response = object(await native.command({ schemaVersion: "massion.application.v1", commandId, correlationId, operation, payload }));
-    if (response?.operation !== operation || response.commandId !== commandId || response.correlationId !== correlationId)
+    const response = object(
+      await native.command({ schemaVersion: "massion.application.v1", commandId, correlationId, operation, payload }),
+    );
+    if (
+      response?.operation !== operation ||
+      response.commandId !== commandId ||
+      response.correlationId !== correlationId
+    )
       throw new Error("Application command 응답 계보가 일치하지 않습니다");
     return response;
   };
@@ -486,7 +495,9 @@ export function createApplicationDesktopService(
       const messageSets = await Promise.all(
         rooms.map(async (room) => client.query("work.messages", { workId, roomId: room.roomId })),
       );
-      return withRoomReferences(rooms.map((room, index) => projectRoom(room, messageSets[index] ?? [], nodes, sharedContexts)));
+      return withRoomReferences(
+        rooms.map((room, index) => projectRoom(room, messageSets[index] ?? [], nodes, sharedContexts)),
+      );
     },
 
     async loadAutonomy() {
@@ -500,10 +511,23 @@ export function createApplicationDesktopService(
 
     async loadSettings() {
       const [catalog, credentials, routes, providers, accounts, quota, policy] = await Promise.all([
-        query("router.catalog", {}), query("router.credentials", {}), query("router.routes", {}),
-        query("subscription.providers", {}), query("subscription.accounts", {}), query("subscription.quota", {}), query("subscription.policy", {}),
+        query("router.catalog", {}),
+        query("router.credentials", {}),
+        query("router.routes", {}),
+        query("subscription.providers", {}),
+        query("subscription.accounts", {}),
+        query("subscription.quota", {}),
+        query("subscription.policy", {}),
       ]);
-      return { catalog: safeView(catalog), credentials: safeView(credentials), routes: safeView(routes), providers: safeView(providers), accounts: safeView(accounts), quota: safeView(quota), policy: safeView(policy) };
+      return {
+        catalog: safeView(catalog),
+        credentials: safeView(credentials),
+        routes: safeView(routes),
+        providers: safeView(providers),
+        accounts: safeView(accounts),
+        quota: safeView(quota),
+        policy: safeView(policy),
+      };
     },
 
     async connectZaiCodingPlan(input) {
@@ -515,23 +539,49 @@ export function createApplicationDesktopService(
         secret: input.secret,
       });
     },
-    async registerProvider(input) { await command("router.provider.register", input); },
-    async registerEndpoint(input) { await command("router.endpoint.register", input); },
-    async addCredential(input) { await command("router.credential.add", input); },
-    async disableCredential(credentialId, expectedVersion) { await command("router.credential.disable", { credentialId, expectedVersion }); },
-    async registerModel(input) { await command("router.model.register", input); },
-    async configureRoute(input) { await command("router.route.configure", input); },
-    async addRouteCandidate(input) { await command("router.candidate.add", input); },
-    async configureSubscriptionPolicy(input) { await command("subscription.policy.configure", input); },
+    async registerProvider(input) {
+      await command("router.provider.register", input);
+    },
+    async registerEndpoint(input) {
+      await command("router.endpoint.register", input);
+    },
+    async addCredential(input) {
+      await command("router.credential.add", input);
+    },
+    async disableCredential(credentialId, expectedVersion) {
+      await command("router.credential.disable", { credentialId, expectedVersion });
+    },
+    async registerModel(input) {
+      await command("router.model.register", input);
+    },
+    async configureRoute(input) {
+      await command("router.route.configure", input);
+    },
+    async addRouteCandidate(input) {
+      await command("router.candidate.add", input);
+    },
+    async configureSubscriptionPolicy(input) {
+      await command("subscription.policy.configure", input);
+    },
 
-    async searchRegistry(queryText, limit = 20) { return safeView(await query("registry.search", { query: queryText, limit })); },
-    async loadRegistryInfo(versionId) { return safeView(await query("registry.info", { versionId })); },
+    async searchRegistry(queryText, limit = 20) {
+      return safeView(await query("registry.search", { query: queryText, limit }));
+    },
+    async loadRegistryInfo(versionId) {
+      return safeView(await query("registry.info", { versionId }));
+    },
     async loadCapabilities() {
-      const [extensions, inventory] = await Promise.all([client.query("extension.list", {}), query("registry.inventory", {})]);
+      const [extensions, inventory] = await Promise.all([
+        client.query("extension.list", {}),
+        query("registry.inventory", {}),
+      ]);
       return { extensions: extensions.map(projectExtension), inventory: safeView(inventory) };
     },
     async loadExtensions() {
-      const [extensions, inventory] = await Promise.all([client.query("extension.list", {}), query("registry.inventory", {})]);
+      const [extensions, inventory] = await Promise.all([
+        client.query("extension.list", {}),
+        query("registry.inventory", {}),
+      ]);
       /*
        * 설치된 확장은 contributions·permissions가 비어서 나옵니다. 계약이 주지 않기 때문이고,
        * 지어내면 안 되므로 그대로 둡니다. 화면이 "무엇이 늘었는지 알 수 없다"고 말합니다.
@@ -541,8 +591,10 @@ export function createApplicationDesktopService(
     },
     async loadGrowth() {
       const [configuration, memories, suggestions, effects] = await Promise.all([
-        query("growth.configuration.get", {}), query("growth.memories", {}),
-        query("growth.suggestions", { limit: 50 }), query("growth.effects", { limit: 50 }),
+        query("growth.configuration.get", {}),
+        query("growth.memories", {}),
+        query("growth.suggestions", { limit: 50 }),
+        query("growth.effects", { limit: 50 }),
       ]);
       return {
         ...(configuration === undefined
@@ -558,7 +610,11 @@ export function createApplicationDesktopService(
       const data = object(result.data);
       const approvalId = typeof data?.approvalId === "string" ? data.approvalId : undefined;
       const installationId = typeof data?.installationId === "string" ? data.installationId : undefined;
-      return { outcome: typeof result.outcome === "string" ? result.outcome : "unknown", ...(installationId === undefined ? {} : { installationId }), ...(approvalId === undefined ? {} : { approvalId }) };
+      return {
+        outcome: typeof result.outcome === "string" ? result.outcome : "unknown",
+        ...(installationId === undefined ? {} : { installationId }),
+        ...(approvalId === undefined ? {} : { approvalId }),
+      };
     },
 
     async submitDirective(work, content, mode) {
@@ -627,24 +683,100 @@ const fixtureSettings: SettingsView = {
       { providerId: "ollama", displayName: "Ollama", adapterKind: "ollama", enabled: true },
     ],
     endpoints: [
-      { endpointId: "endpoint-zai", providerId: "zai", name: "coding-plan", baseUrl: "https://api.z.ai/v1", local: false },
-      { endpointId: "endpoint-ollama", providerId: "ollama", name: "local", baseUrl: "http://127.0.0.1:11434", local: true },
+      {
+        endpointId: "endpoint-zai",
+        providerId: "zai",
+        name: "coding-plan",
+        baseUrl: "https://api.z.ai/v1",
+        local: false,
+      },
+      {
+        endpointId: "endpoint-ollama",
+        providerId: "ollama",
+        name: "local",
+        baseUrl: "http://127.0.0.1:11434",
+        local: true,
+      },
     ],
     models: [
-      { modelProfileId: "profile-glm", providerId: "zai", endpointId: "endpoint-zai", modelId: "glm-5.2", routeKind: "reasoning", verified: true, enabled: true },
-      { modelProfileId: "profile-qwen", providerId: "ollama", endpointId: "endpoint-ollama", modelId: "qwen3:8b", routeKind: "utility", verified: false, enabled: true },
+      {
+        modelProfileId: "profile-glm",
+        providerId: "zai",
+        endpointId: "endpoint-zai",
+        modelId: "glm-5.2",
+        routeKind: "reasoning",
+        verified: true,
+        enabled: true,
+      },
+      {
+        modelProfileId: "profile-qwen",
+        providerId: "ollama",
+        endpointId: "endpoint-ollama",
+        modelId: "qwen3:8b",
+        routeKind: "utility",
+        verified: false,
+        enabled: true,
+      },
     ],
     candidates: [
-      { candidateId: "candidate-1", routeId: "route-reasoning", modelProfileId: "profile-glm", priority: 0, enabled: true },
-      { candidateId: "candidate-2", routeId: "route-utility", modelProfileId: "profile-qwen", priority: 0, enabled: true },
-      { candidateId: "candidate-3", routeId: "route-embedding", modelProfileId: "profile-qwen", priority: 1, enabled: false },
+      {
+        candidateId: "candidate-1",
+        routeId: "route-reasoning",
+        modelProfileId: "profile-glm",
+        priority: 0,
+        enabled: true,
+      },
+      {
+        candidateId: "candidate-2",
+        routeId: "route-utility",
+        modelProfileId: "profile-qwen",
+        priority: 0,
+        enabled: true,
+      },
+      {
+        candidateId: "candidate-3",
+        routeId: "route-embedding",
+        modelProfileId: "profile-qwen",
+        priority: 1,
+        enabled: false,
+      },
     ],
   },
   credentials: [{ credentialId: "credential-zai", providerId: "zai", label: "coding-plan", credentialType: "api_key" }],
   routes: [
-    { routeId: "route-reasoning", name: "추론", routeKind: "reasoning", credentialPolicy: "required", dataPolicy: "cloud", equivalenceGroup: "reasoning", spentMicros: 482_000, totalBudgetMicros: 2_000_000, enabled: true },
-    { routeId: "route-utility", name: "보조 작업", routeKind: "utility", credentialPolicy: "optional", dataPolicy: "local", equivalenceGroup: "utility", spentMicros: 0, totalBudgetMicros: 500_000, enabled: true },
-    { routeId: "route-embedding", name: "임베딩", routeKind: "embedding", credentialPolicy: "optional", dataPolicy: "local", equivalenceGroup: "embedding", spentMicros: 0, totalBudgetMicros: 0, enabled: false },
+    {
+      routeId: "route-reasoning",
+      name: "추론",
+      routeKind: "reasoning",
+      credentialPolicy: "required",
+      dataPolicy: "cloud",
+      equivalenceGroup: "reasoning",
+      spentMicros: 482_000,
+      totalBudgetMicros: 2_000_000,
+      enabled: true,
+    },
+    {
+      routeId: "route-utility",
+      name: "보조 작업",
+      routeKind: "utility",
+      credentialPolicy: "optional",
+      dataPolicy: "local",
+      equivalenceGroup: "utility",
+      spentMicros: 0,
+      totalBudgetMicros: 500_000,
+      enabled: true,
+    },
+    {
+      routeId: "route-embedding",
+      name: "임베딩",
+      routeKind: "embedding",
+      credentialPolicy: "optional",
+      dataPolicy: "local",
+      equivalenceGroup: "embedding",
+      spentMicros: 0,
+      totalBudgetMicros: 0,
+      enabled: false,
+    },
   ],
   providers: [{ providerId: "zai-coding-plan", displayName: "Z.ai Coding Plan", billingKind: "coding-plan" }],
   accounts: [
@@ -727,7 +859,11 @@ const fixtureRegistryInventory = [
 function fixtureRegistryDetail(versionId: string): unknown {
   const item = fixtureRegistryInventory.find((candidate) => candidate.versionId === versionId);
   if (!item) return {};
-  const connector = item.packageName.endsWith("github") ? "github" : item.packageName.endsWith("discord") ? "discord" : "slack";
+  const connector = item.packageName.endsWith("github")
+    ? "github"
+    : item.packageName.endsWith("discord")
+      ? "discord"
+      : "slack";
   return {
     version: {
       packageVersion: item.packageVersion,
@@ -738,127 +874,183 @@ function fixtureRegistryDetail(versionId: string): unknown {
         name: item.packageName,
         description: item.description,
         permissions: { network: [connector], secrets: [connector] },
-        contributions: { surfaceConnectors: [{ id: connector }], eventConsumers: [{ id: `${connector}-notification` }] },
+        contributions: {
+          surfaceConnectors: [{ id: connector }],
+          eventConsumers: [{ id: `${connector}-notification` }],
+        },
       },
     },
   };
 }
 
-const fixturePromise = <T>(run: () => T): Promise<T> => new Promise((resolve) => { resolve(run()); });
+const fixturePromise = <T>(run: () => T): Promise<T> =>
+  new Promise((resolve) => {
+    resolve(run());
+  });
 
 export function createFixtureDesktopService(): DesktopService {
   const initialSnapshot = fixtureDataAdapter();
-  const stop: DesktopStreamStop = () => { return fixturePromise(() => undefined); };
+  const stop: DesktopStreamStop = () => {
+    return fixturePromise(() => undefined);
+  };
 
   return {
     initialSnapshot,
     bootstrap: () => fixturePromise(() => "ready"),
-    loadIndex: (input) => fixturePromise(() => {
-      const { filter, search } = input;
-      const normalizedSearch = search.trim().toLocaleLowerCase("ko");
-      return initialSnapshot.works.filter(
-        (work) =>
-          workStatusFilter(work.status) === filter &&
-          (normalizedSearch.length === 0 || work.title.toLocaleLowerCase("ko").includes(normalizedSearch)),
-      );
-    }),
-    loadWork: (workId) => fixturePromise(() => {
-      const work = initialSnapshot.works.find((candidate) => candidate.id === workId);
-      if (!work) throw new Error("Fixture Work를 찾을 수 없습니다");
-      return work;
-    }),
+    loadIndex: (input) =>
+      fixturePromise(() => {
+        const { filter, search } = input;
+        const normalizedSearch = search.trim().toLocaleLowerCase("ko");
+        return initialSnapshot.works.filter(
+          (work) =>
+            workStatusFilter(work.status) === filter &&
+            (normalizedSearch.length === 0 || work.title.toLocaleLowerCase("ko").includes(normalizedSearch)),
+        );
+      }),
+    loadWork: (workId) =>
+      fixturePromise(() => {
+        const work = initialSnapshot.works.find((candidate) => candidate.id === workId);
+        if (!work) throw new Error("Fixture Work를 찾을 수 없습니다");
+        return work;
+      }),
     loadPendingApprovals: () =>
-      fixturePromise(() => initialSnapshot.works.flatMap((work) => work.approvals.filter((approval) => approval.status === "pending"))),
+      fixturePromise(() =>
+        initialSnapshot.works.flatMap((work) => work.approvals.filter((approval) => approval.status === "pending")),
+      ),
     loadWorkspaces: () => fixturePromise(() => []),
-    registerWorkspace: (path) => fixturePromise(() => ({
-      workspaceId: `workspace-${path}`, name: path.split("/").filter(Boolean).at(-1) ?? path, path,
-      kind: "local-directory", trust: "pending", status: "active", revision: 0,
-      createdAt: new Date(0).toISOString(), lastUsedAt: new Date(0).toISOString(),
-    })),
-    decideWorkspaceTrust: (workspace, decision) => fixturePromise(() => ({ ...workspace, trust: decision, revision: workspace.revision + 1 })),
+    registerWorkspace: (path) =>
+      fixturePromise(() => ({
+        workspaceId: `workspace-${path}`,
+        name: path.split("/").filter(Boolean).at(-1) ?? path,
+        path,
+        kind: "local-directory",
+        trust: "pending",
+        status: "active",
+        revision: 0,
+        createdAt: new Date(0).toISOString(),
+        lastUsedAt: new Date(0).toISOString(),
+      })),
+    decideWorkspaceTrust: (workspace, decision) =>
+      fixturePromise(() => ({ ...workspace, trust: decision, revision: workspace.revision + 1 })),
     // fixture 방은 model.ts의 활동을 그대로 씁니다. 실 daemon에서는 loadRoom이 대체합니다.
-    loadRooms: (workId: string) => fixturePromise(() => {
-      const work = fixtureDataAdapter().works.find((candidate) => candidate.id === workId);
-      if (!work) return [];
-      const speak = (handle: string) => speakerFor({ authorKind: "agent", authorId: handle }, fixtureOrganizationNodes);
-      const quill = speak("evidence-research");
-      const vega = speak("delivery-coordination");
-      const budget = (roomId: string, name: string, rounds: number, maxRounds: number, tokens: number, maxTokens: number, cost: number, maxCost: number) =>
-        projectRoomBudgets({
-          workId, roomId, name, kind: "work", status: "active", participantIds: [], lastMessageSequence: 0,
-          roundCount: rounds, maxRounds, usedTokens: tokens, maxTokens, usedCostMicros: cost, maxCostMicros: maxCost,
-        });
+    loadRooms: (workId: string) =>
+      fixturePromise(() => {
+        const work = fixtureDataAdapter().works.find((candidate) => candidate.id === workId);
+        if (!work) return [];
+        const speak = (handle: string) =>
+          speakerFor({ authorKind: "agent", authorId: handle }, fixtureOrganizationNodes);
+        const quill = speak("evidence-research");
+        const vega = speak("delivery-coordination");
+        const budget = (
+          roomId: string,
+          name: string,
+          rounds: number,
+          maxRounds: number,
+          tokens: number,
+          maxTokens: number,
+          cost: number,
+          maxCost: number,
+        ) =>
+          projectRoomBudgets({
+            workId,
+            roomId,
+            name,
+            kind: "work",
+            status: "active",
+            participantIds: [],
+            lastMessageSequence: 0,
+            roundCount: rounds,
+            maxRounds,
+            usedTokens: tokens,
+            maxTokens,
+            usedCostMicros: cost,
+            maxCostMicros: maxCost,
+          });
 
-      // 아직 아무도 말하지 않은 Work. 빈 방도 정상 상태입니다.
-      if (work.activities.length === 0) {
-        return [
+        // 아직 아무도 말하지 않은 Work. 빈 방도 정상 상태입니다.
+        if (work.activities.length === 0) {
+          return [
+            {
+              roomId: `${workId}-core-office`,
+              name: "Core Office",
+              status: "active",
+              participants: [speak("representative")],
+              lastMessageSequence: 0,
+              budgets: budget(`${workId}-core-office`, "Core Office", 0, 100, 0, 200_000, 0, 1_000_000),
+              sharedContexts: [],
+              activities: [],
+            },
+          ];
+        }
+
+        return withRoomReferences([
           {
             roomId: `${workId}-core-office`,
             name: "Core Office",
             status: "active",
-            participants: [speak("representative")],
-            lastMessageSequence: 0,
-            budgets: budget(`${workId}-core-office`, "Core Office", 0, 100, 0, 200_000, 0, 1_000_000),
-            sharedContexts: [],
-            activities: [],
+            participants: [speak("representative"), speak("context-strategy"), quill, vega, speak("assurance")],
+            lastMessageSequence: work.activities.length,
+            budgets: budget(`${workId}-core-office`, "Core Office", 6, 100, 48_200, 200_000, 310_000, 1_000_000),
+            sharedContexts: [
+              { id: "ref-brief", label: "evidence-brief · 라벨링 기준 브리프", checksum: "a3f1c8" },
+              { id: "ref-log", label: "evidence-brief · 해지 로그 90일", checksum: "7c02b1" },
+            ],
+            activities: work.activities,
           },
-        ];
-      }
-
-      return withRoomReferences([
-        {
-          roomId: `${workId}-core-office`,
-          name: "Core Office",
-          status: "active",
-          participants: [
-            speak("representative"), speak("context-strategy"), quill, vega, speak("assurance"),
-          ],
-          lastMessageSequence: work.activities.length,
-          budgets: budget(`${workId}-core-office`, "Core Office", 6, 100, 48_200, 200_000, 310_000, 1_000_000),
-          sharedContexts: [
-            { id: "ref-brief", label: "evidence-brief · 라벨링 기준 브리프", checksum: "a3f1c8" },
-            { id: "ref-log", label: "evidence-brief · 해지 로그 90일", checksum: "7c02b1" },
-          ],
-          activities: work.activities,
-        },
-        // 에이전트 둘이 대표를 거치지 않고 직접 붙은 방. 도메인은 참가자 수만 다른 같은 협업방입니다.
-        {
-          roomId: `${workId}-cohort`,
-          name: "코호트 정의 정리",
-          status: "active",
-          participants: [quill, vega],
-          lastMessageSequence: 3,
-          budgets: budget(`${workId}-cohort`, "코호트 정의 정리", 2, 6, 9_400, 60_000, 61_000, 500_000),
-          sharedContexts: [{ id: "ref-cohort", label: "evidence-brief · 2분기 코호트 정의", checksum: "5be07d" }],
-          activities: [
-            {
-              id: "cohort-q", kind: "room", messageType: "question", time: "10:26",
-              speaker: vega, recipient: quill.name,
-              content: "2분기 코호트 정의를 3분기에 맞추려면 어떤 필드를 다시 계산해야 하나요?",
-            },
-            {
-              id: "cohort-a", kind: "room", messageType: "answer", time: "10:27",
-              speaker: quill, indented: true,
-              content: "가입 기준일과 해지 판정 유예 기간 둘입니다. 나머지는 그대로 씁니다.",
-              evidence: { label: "2분기 코호트 정의", checksum: "5be07d" },
-            },
-            {
-              id: "cohort-c", kind: "room", messageType: "change_request", time: "10:28",
-              speaker: vega, target: "코호트 데이터.csv",
-              content: "유예 기간을 14일로 통일해서 다시 뽑아 주세요.",
-            },
-          ],
-        },
-      ]);
-    }),
+          // 에이전트 둘이 대표를 거치지 않고 직접 붙은 방. 도메인은 참가자 수만 다른 같은 협업방입니다.
+          {
+            roomId: `${workId}-cohort`,
+            name: "코호트 정의 정리",
+            status: "active",
+            participants: [quill, vega],
+            lastMessageSequence: 3,
+            budgets: budget(`${workId}-cohort`, "코호트 정의 정리", 2, 6, 9_400, 60_000, 61_000, 500_000),
+            sharedContexts: [{ id: "ref-cohort", label: "evidence-brief · 2분기 코호트 정의", checksum: "5be07d" }],
+            activities: [
+              {
+                id: "cohort-q",
+                kind: "room",
+                messageType: "question",
+                time: "10:26",
+                speaker: vega,
+                recipient: quill.name,
+                content: "2분기 코호트 정의를 3분기에 맞추려면 어떤 필드를 다시 계산해야 하나요?",
+              },
+              {
+                id: "cohort-a",
+                kind: "room",
+                messageType: "answer",
+                time: "10:27",
+                speaker: quill,
+                indented: true,
+                content: "가입 기준일과 해지 판정 유예 기간 둘입니다. 나머지는 그대로 씁니다.",
+                evidence: { label: "2분기 코호트 정의", checksum: "5be07d" },
+              },
+              {
+                id: "cohort-c",
+                kind: "room",
+                messageType: "change_request",
+                time: "10:28",
+                speaker: vega,
+                target: "코호트 데이터.csv",
+                content: "유예 기간을 14일로 통일해서 다시 뽑아 주세요.",
+              },
+            ],
+          },
+        ]);
+      }),
 
     loadOrganization: () => fixturePromise(() => ({ version: 1, nodes: fixtureOrganizationNodes })),
     loadAutonomy: () => fixturePromise(() => ({ mode: "automatic", revision: 0 })),
     setAutonomy: (mode, expectedRevision) => fixturePromise(() => ({ mode, revision: expectedRevision + 1 })),
-    loadExtensions: () => fixturePromise(() => [
-      ...fixtureExtensionEntries,
-      ...marketplaceEntries(fixtureRegistryInventory, fixtureExtensionEntries.map((item) => item.packageName)),
-    ]),
+    loadExtensions: () =>
+      fixturePromise(() => [
+        ...fixtureExtensionEntries,
+        ...marketplaceEntries(
+          fixtureRegistryInventory,
+          fixtureExtensionEntries.map((item) => item.packageName),
+        ),
+      ]),
     loadSettings: () => fixturePromise(() => fixtureSettings),
     connectZaiCodingPlan: () => fixturePromise(() => undefined),
     registerProvider: () => fixturePromise(() => undefined),
@@ -869,170 +1061,179 @@ export function createFixtureDesktopService(): DesktopService {
     configureRoute: () => fixturePromise(() => undefined),
     addRouteCandidate: () => fixturePromise(() => undefined),
     configureSubscriptionPolicy: () => fixturePromise(() => undefined),
-    searchRegistry: (query, limit = 20) => fixturePromise(() => fixtureRegistryInventory.filter((item) => `${item.packageName} ${item.description}`.toLowerCase().includes(query.trim().toLowerCase())).slice(0, limit)),
+    searchRegistry: (query, limit = 20) =>
+      fixturePromise(() =>
+        fixtureRegistryInventory
+          .filter((item) =>
+            `${item.packageName} ${item.description}`.toLowerCase().includes(query.trim().toLowerCase()),
+          )
+          .slice(0, limit),
+      ),
     loadRegistryInfo: (versionId) => fixturePromise(() => fixtureRegistryDetail(versionId)),
     loadCapabilities: () => fixturePromise(() => ({ extensions: [], inventory: fixtureRegistryInventory })),
-    loadGrowth: () => fixturePromise(() => ({
-      configuration: {
-        reflectionEnabled: true,
-        adoptionMode: "review" as const,
-        governanceDecisionId: "decision-growth-0007",
-        activatedAt: "2026-07-21T09:12:00.000Z",
-      },
-      suggestions: [
-        {
-          suggestionId: "suggestion-cohort-guard",
-          workId: "churn-q3",
-          targetKind: "prompt",
-          operation: "replace-instruction",
-          summary: "분기 비교 요청에서 코호트 정의를 먼저 확인하게 합니다.",
-          revision: 3,
-          createdAt: "2026-07-23T10:31:00.000Z",
-          reflectionRunId: "reflection-0011",
-          sourceReferenceIds: ["work:churn-q3", "message:cohort-challenge", "verification:significance"],
-          patch: [
-            {
-              targetHandle: "context-strategy",
-              path: "완료 기준",
-              before: "분석 대상 기간과 지표를 명시한다",
-              after: "분석 대상 기간과 지표를 명시하고, 기간 간 비교가 포함되면 코호트 정의 일치를 먼저 확인한다",
-            },
-          ],
-          evaluation: {
-            evaluationRunId: "evaluation-0031",
-            outcome: "eligible" as const,
-            strategyVersionId: "strategy-v4",
-            signals: [
+    loadGrowth: () =>
+      fixturePromise(() => ({
+        configuration: {
+          reflectionEnabled: true,
+          adoptionMode: "review" as const,
+          governanceDecisionId: "decision-growth-0007",
+          activatedAt: "2026-07-21T09:12:00.000Z",
+        },
+        suggestions: [
+          {
+            suggestionId: "suggestion-cohort-guard",
+            workId: "churn-q3",
+            targetKind: "prompt",
+            operation: "replace-instruction",
+            summary: "분기 비교 요청에서 코호트 정의를 먼저 확인하게 합니다.",
+            revision: 3,
+            createdAt: "2026-07-23T10:31:00.000Z",
+            reflectionRunId: "reflection-0011",
+            sourceReferenceIds: ["work:churn-q3", "message:cohort-challenge", "verification:significance"],
+            patch: [
               {
-                signalId: "signal-rework",
-                group: "required" as const,
-                origin: "deterministic" as const,
-                outcome: "passed" as const,
-                score: 0.75,
-                adapterId: "rework-counter",
-                adapterVersion: "1.2.0",
-                note: "최근 12개 Work 중 3건이 같은 원인으로 재작업",
-              },
-              {
-                signalId: "signal-assurance",
-                group: "required" as const,
-                origin: "independent" as const,
-                outcome: "passed" as const,
-                score: 0.68,
-                adapterId: "assurance-verdict",
-                adapterVersion: "2.0.1",
-                note: "독립 검증이 같은 원인을 2회 반론으로 제기",
-              },
-              {
-                signalId: "signal-latency",
-                group: "conflict" as const,
-                origin: "deterministic" as const,
-                outcome: "failed" as const,
-                score: 0.31,
-                adapterId: "stage-duration",
-                adapterVersion: "1.0.4",
-                note: "맥락 단계 소요가 중앙값 기준 18% 늘어남",
-              },
-              {
-                signalId: "signal-selfcheck",
-                group: "supporting" as const,
-                origin: "model-self" as const,
-                outcome: "passed" as const,
-                score: 0.82,
-                adapterId: "reflection-selfcheck",
-                adapterVersion: "0.9.0",
-                note: "모델 자기평가. 독립 신호로 계산하지 않음",
+                targetHandle: "context-strategy",
+                path: "완료 기준",
+                before: "분석 대상 기간과 지표를 명시한다",
+                after: "분석 대상 기간과 지표를 명시하고, 기간 간 비교가 포함되면 코호트 정의 일치를 먼저 확인한다",
               },
             ],
-          },
-          targetDrifted: false,
-          rationale:
-            "3분기 이탈 분석에서 검증이 코호트 정의 불일치를 반론으로 제기했고, 같은 원인으로 이전 두 Work에서도 재작업이 있었습니다.",
-          expectedEffect: "분기 비교가 포함된 Work의 재작업이 줄어듭니다.",
-          riskSummary: "완료 기준이 하나 늘어 단순 요청의 맥락 단계가 길어질 수 있습니다.",
-          status: "awaiting-review",
-        },
-        {
-          suggestionId: "suggestion-quant-persist",
-          workId: "churn-q3",
-          targetKind: "organization",
-          operation: "promote-node",
-          summary: "임시로 만든 계량분석 팀을 조직에 남깁니다.",
-          revision: 1,
-          createdAt: "2026-07-23T10:44:00.000Z",
-          reflectionRunId: "reflection-0011",
-          sourceReferenceIds: ["work:churn-q3", "organization:version-13"],
-          patch: [
-            {
-              path: "계량분석 팀",
-              before: 'scope: "work" · 이 Work가 끝나면 사라짐',
-              after: 'scope: "persistent" · 조직에 남음',
+            evaluation: {
+              evaluationRunId: "evaluation-0031",
+              outcome: "eligible" as const,
+              strategyVersionId: "strategy-v4",
+              signals: [
+                {
+                  signalId: "signal-rework",
+                  group: "required" as const,
+                  origin: "deterministic" as const,
+                  outcome: "passed" as const,
+                  score: 0.75,
+                  adapterId: "rework-counter",
+                  adapterVersion: "1.2.0",
+                  note: "최근 12개 Work 중 3건이 같은 원인으로 재작업",
+                },
+                {
+                  signalId: "signal-assurance",
+                  group: "required" as const,
+                  origin: "independent" as const,
+                  outcome: "passed" as const,
+                  score: 0.68,
+                  adapterId: "assurance-verdict",
+                  adapterVersion: "2.0.1",
+                  note: "독립 검증이 같은 원인을 2회 반론으로 제기",
+                },
+                {
+                  signalId: "signal-latency",
+                  group: "conflict" as const,
+                  origin: "deterministic" as const,
+                  outcome: "failed" as const,
+                  score: 0.31,
+                  adapterId: "stage-duration",
+                  adapterVersion: "1.0.4",
+                  note: "맥락 단계 소요가 중앙값 기준 18% 늘어남",
+                },
+                {
+                  signalId: "signal-selfcheck",
+                  group: "supporting" as const,
+                  origin: "model-self" as const,
+                  outcome: "passed" as const,
+                  score: 0.82,
+                  adapterId: "reflection-selfcheck",
+                  adapterVersion: "0.9.0",
+                  note: "모델 자기평가. 독립 신호로 계산하지 않음",
+                },
+              ],
             },
-          ],
-          evaluation: {
-            evaluationRunId: "evaluation-0032",
-            outcome: "ineligible" as const,
-            strategyVersionId: "strategy-v4",
-            signals: [
+            targetDrifted: false,
+            rationale:
+              "3분기 이탈 분석에서 검증이 코호트 정의 불일치를 반론으로 제기했고, 같은 원인으로 이전 두 Work에서도 재작업이 있었습니다.",
+            expectedEffect: "분기 비교가 포함된 Work의 재작업이 줄어듭니다.",
+            riskSummary: "완료 기준이 하나 늘어 단순 요청의 맥락 단계가 길어질 수 있습니다.",
+            status: "awaiting-review",
+          },
+          {
+            suggestionId: "suggestion-quant-persist",
+            workId: "churn-q3",
+            targetKind: "organization",
+            operation: "promote-node",
+            summary: "임시로 만든 계량분석 팀을 조직에 남깁니다.",
+            revision: 1,
+            createdAt: "2026-07-23T10:44:00.000Z",
+            reflectionRunId: "reflection-0011",
+            sourceReferenceIds: ["work:churn-q3", "organization:version-13"],
+            patch: [
               {
-                signalId: "signal-demand",
-                group: "required" as const,
-                origin: "deterministic" as const,
-                outcome: "passed" as const,
-                score: 0.71,
-                adapterId: "capability-demand",
-                adapterVersion: "1.1.0",
-                note: "최근 4개 Work 중 3개가 통계 검정을 요구",
-              },
-              {
-                signalId: "signal-sample",
-                group: "required" as const,
-                origin: "deterministic" as const,
-                outcome: "failed" as const,
-                score: 0.22,
-                adapterId: "observation-window",
-                adapterVersion: "1.0.0",
-                note: "관측 표본 4건. 최소 표본 10건에 못 미침",
+                path: "계량분석 팀",
+                before: 'scope: "work" · 이 Work가 끝나면 사라짐',
+                after: 'scope: "persistent" · 조직에 남음',
               },
             ],
+            evaluation: {
+              evaluationRunId: "evaluation-0032",
+              outcome: "ineligible" as const,
+              strategyVersionId: "strategy-v4",
+              signals: [
+                {
+                  signalId: "signal-demand",
+                  group: "required" as const,
+                  origin: "deterministic" as const,
+                  outcome: "passed" as const,
+                  score: 0.71,
+                  adapterId: "capability-demand",
+                  adapterVersion: "1.1.0",
+                  note: "최근 4개 Work 중 3개가 통계 검정을 요구",
+                },
+                {
+                  signalId: "signal-sample",
+                  group: "required" as const,
+                  origin: "deterministic" as const,
+                  outcome: "failed" as const,
+                  score: 0.22,
+                  adapterId: "observation-window",
+                  adapterVersion: "1.0.0",
+                  note: "관측 표본 4건. 최소 표본 10건에 못 미침",
+                },
+              ],
+            },
+            targetDrifted: true,
+            rationale: "최근 4개 Work 중 3개가 통계 검정을 요구했고 매번 scope work 노드를 새로 만들었습니다.",
+            expectedEffect: "같은 팀을 반복 생성하지 않고 조직 버전이 안정됩니다.",
+            riskSummary: "쓰이지 않는 분기에도 노드가 남아 조직이 커집니다.",
+            status: "awaiting-review",
           },
-          targetDrifted: true,
-          rationale: "최근 4개 Work 중 3개가 통계 검정을 요구했고 매번 scope work 노드를 새로 만들었습니다.",
-          expectedEffect: "같은 팀을 반복 생성하지 않고 조직 버전이 안정됩니다.",
-          riskSummary: "쓰이지 않는 분기에도 노드가 남아 조직이 커집니다.",
-          status: "awaiting-review",
-        },
-      ],
-      memories: [
-        {
-          memoryVersionId: "memory-0004",
-          scope: "organization",
-          subjectId: "evidence-research",
-          version: 4,
-          status: "active",
-          entryKeys: ["해지 사유 라벨링 기준", "코호트 정의 출처"],
-          sourceReferenceIds: ["work:churn-q3", "message:cohort-challenge"],
-          checksum: "b21e77",
-        },
-      ],
-      effects: [
-        {
-          effectEvaluationId: "effect-0002",
-          adoptionId: "adoption-0002",
-          result: "improved" as const,
-          suggestionId: "suggestion-handoff-note",
-          measure: {
-            score: 0.34,
-            observationCount: 14,
-            minimumObservations: 10,
-            unit: "재작업 비율",
-            direction: "lower" as const,
-            baseline: 0.51,
+        ],
+        memories: [
+          {
+            memoryVersionId: "memory-0004",
+            scope: "organization",
+            subjectId: "evidence-research",
+            version: 4,
+            status: "active",
+            entryKeys: ["해지 사유 라벨링 기준", "코호트 정의 출처"],
+            sourceReferenceIds: ["work:churn-q3", "message:cohort-challenge"],
+            checksum: "b21e77",
           },
-        },
-      ],
-    })),
-    installRegistry: () => fixturePromise(() => ({ outcome: "succeeded", installationId: "installation-fixture-0001" })),
+        ],
+        effects: [
+          {
+            effectEvaluationId: "effect-0002",
+            adoptionId: "adoption-0002",
+            result: "improved" as const,
+            suggestionId: "suggestion-handoff-note",
+            measure: {
+              score: 0.34,
+              observationCount: 14,
+              minimumObservations: 10,
+              unit: "재작업 비율",
+              direction: "lower" as const,
+              baseline: 0.51,
+            },
+          },
+        ],
+      })),
+    installRegistry: () =>
+      fixturePromise(() => ({ outcome: "succeeded", installationId: "installation-fixture-0001" })),
     submitDirective: () => fixturePromise(() => undefined),
     decideApproval: () => fixturePromise(() => undefined),
     cancelRun: () => fixturePromise(() => undefined),
@@ -1047,7 +1248,9 @@ function safeView(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(safeView);
   if (!value || typeof value !== "object") return value;
   return Object.fromEntries(
-    Object.entries(value).flatMap(([key, child]) => /(?:secret|token|password|api[-_]?key)/i.test(key) ? [] : [[key, safeView(child)]]),
+    Object.entries(value).flatMap(([key, child]) =>
+      /(?:secret|token|password|api[-_]?key)/i.test(key) ? [] : [[key, safeView(child)]],
+    ),
   );
 }
 
@@ -1132,25 +1335,184 @@ function clockOf(createdAt: string): string {
  * name은 도메인 노드 이름 그대로 둡니다. 화면에 나오는 이름은 agentIdentityToken이 소유합니다.
  */
 const fixtureOrganizationNodes: OrganizationNodeView[] = [
-  { id: "representative", handle: "representative", name: "Representative", responsibility: "사용자 요청 접수, 조정, 최종 응답", status: "active", role: "orchestrator", capabilities: ["request-coordination"], scope: "persistent" },
-  { id: "context-strategy", handle: "context-strategy", name: "Context & Strategy", parentHandle: "representative", responsibility: "맥락 구성, 계획, 위험 분석", status: "active", role: "operator", capabilities: ["context-strategy"], scope: "persistent" },
-  { id: "evidence-research", handle: "evidence-research", name: "Evidence & Research", parentHandle: "representative", responsibility: "근거 조사, 출처 검증", status: "active", role: "operator", capabilities: ["evidence-research"], scope: "persistent" },
-  { id: "governance", handle: "governance", name: "Governance", parentHandle: "representative", responsibility: "실행·조직·Extension·자기수정 정책과 승인", status: "active", role: "operator", capabilities: ["governance"], scope: "persistent" },
-  { id: "delivery-coordination", handle: "delivery-coordination", name: "Delivery Coordination", parentHandle: "representative", responsibility: "Task 배정, 전문 팀 실행 조정, 결과 통합", status: "active", role: "coordinator", capabilities: ["delivery-coordination"], scope: "persistent" },
-  { id: "assurance", handle: "assurance", name: "Assurance", parentHandle: "representative", responsibility: "독립 리뷰, 테스트·보안·운영 검증", status: "active", role: "operator", capabilities: ["assurance"], scope: "persistent" },
-  { id: "records-documentation", handle: "records-documentation", name: "Records & Documentation", parentHandle: "representative", responsibility: "handoff·결정·계보 기록, 문서 영향 반영", status: "active", role: "operator", capabilities: ["records-documentation"], scope: "persistent" },
-  { id: "growth", handle: "growth", name: "Growth", parentHandle: "representative", responsibility: "Reflection, 개선안 평가·채택·효과 비교·되돌리기", status: "active", role: "operator", capabilities: ["growth"], scope: "persistent" },
+  {
+    id: "representative",
+    handle: "representative",
+    name: "Representative",
+    responsibility: "사용자 요청 접수, 조정, 최종 응답",
+    status: "active",
+    role: "orchestrator",
+    capabilities: ["request-coordination"],
+    scope: "persistent",
+  },
+  {
+    id: "context-strategy",
+    handle: "context-strategy",
+    name: "Context & Strategy",
+    parentHandle: "representative",
+    responsibility: "맥락 구성, 계획, 위험 분석",
+    status: "active",
+    role: "operator",
+    capabilities: ["context-strategy"],
+    scope: "persistent",
+  },
+  {
+    id: "evidence-research",
+    handle: "evidence-research",
+    name: "Evidence & Research",
+    parentHandle: "representative",
+    responsibility: "근거 조사, 출처 검증",
+    status: "active",
+    role: "operator",
+    capabilities: ["evidence-research"],
+    scope: "persistent",
+  },
+  {
+    id: "governance",
+    handle: "governance",
+    name: "Governance",
+    parentHandle: "representative",
+    responsibility: "실행·조직·Extension·자기수정 정책과 승인",
+    status: "active",
+    role: "operator",
+    capabilities: ["governance"],
+    scope: "persistent",
+  },
+  {
+    id: "delivery-coordination",
+    handle: "delivery-coordination",
+    name: "Delivery Coordination",
+    parentHandle: "representative",
+    responsibility: "Task 배정, 전문 팀 실행 조정, 결과 통합",
+    status: "active",
+    role: "coordinator",
+    capabilities: ["delivery-coordination"],
+    scope: "persistent",
+  },
+  {
+    id: "assurance",
+    handle: "assurance",
+    name: "Assurance",
+    parentHandle: "representative",
+    responsibility: "독립 리뷰, 테스트·보안·운영 검증",
+    status: "active",
+    role: "operator",
+    capabilities: ["assurance"],
+    scope: "persistent",
+  },
+  {
+    id: "records-documentation",
+    handle: "records-documentation",
+    name: "Records & Documentation",
+    parentHandle: "representative",
+    responsibility: "handoff·결정·계보 기록, 문서 영향 반영",
+    status: "active",
+    role: "operator",
+    capabilities: ["records-documentation"],
+    scope: "persistent",
+  },
+  {
+    id: "growth",
+    handle: "growth",
+    name: "Growth",
+    parentHandle: "representative",
+    responsibility: "Reflection, 개선안 평가·채택·효과 비교·되돌리기",
+    status: "active",
+    role: "operator",
+    capabilities: ["growth"],
+    scope: "persistent",
+  },
   // scope:"work"로 편성된 임시 팀. 승인되면 조직에 잠시 존재하고 업무가 끝나면 사라집니다.
-  { id: "quant-analysis", handle: "quant-analysis", name: "계량분석 팀", parentHandle: "delivery-coordination", responsibility: "코호트 정규화, 유의성 검정, 시계열 분해", status: "active", role: "operator", capabilities: ["quant-analysis"], scope: "work" },
+  {
+    id: "quant-analysis",
+    handle: "quant-analysis",
+    name: "계량분석 팀",
+    parentHandle: "delivery-coordination",
+    responsibility: "코호트 정규화, 유의성 검정, 시계열 분해",
+    status: "active",
+    role: "operator",
+    capabilities: ["quant-analysis"],
+    scope: "work",
+  },
   // Software Engineering 프로필(persistent). 설치 함수는 있으나 생산 Bootstrap 호출이 없어(헌법 9.2)
   // 실 조직은 Core Office 8로 평평합니다. 완성본 기준으로 편성된 조직의 실제 깊이를 보이려 넣습니다.
-  { id: "software-engineering", handle: "software-engineering", name: "Software Engineering", parentHandle: "delivery-coordination", responsibility: "개발 Task 분해, 전문 역할 조정과 변경 통합", status: "active", role: "coordinator", capabilities: ["software-delivery"], scope: "persistent" },
-  { id: "se-lead", handle: "software-engineering.engineering-lead", name: "Engineering Lead", parentHandle: "software-engineering", responsibility: "개발 Task 분해, 경로 충돌 조정과 기술 통합 판정", status: "active", role: "coordinator", capabilities: ["engineering-lead"], scope: "persistent" },
-  { id: "se-fe", handle: "software-engineering.frontend-specialist", name: "Frontend Specialist", parentHandle: "software-engineering", responsibility: "Web 인터페이스와 클라이언트 동작 구현", status: "active", role: "operator", capabilities: ["frontend-engineering"], scope: "persistent" },
-  { id: "se-be", handle: "software-engineering.backend-specialist", name: "Backend Specialist", parentHandle: "software-engineering", responsibility: "서비스, API와 서버 애플리케이션 구현", status: "active", role: "operator", capabilities: ["backend-engineering"], scope: "persistent" },
-  { id: "se-db", handle: "software-engineering.database-specialist", name: "Database Specialist", parentHandle: "software-engineering", responsibility: "데이터 모델, 질의와 마이그레이션 구현", status: "active", role: "operator", capabilities: ["database-engineering"], scope: "persistent" },
-  { id: "se-test", handle: "software-engineering.test-engineer", name: "Test Engineer", parentHandle: "software-engineering", responsibility: "실패 재현 테스트와 검증 시나리오 구현", status: "active", role: "operator", capabilities: ["test-engineering"], scope: "persistent" },
-  { id: "se-sec", handle: "software-engineering.security-reviewer", name: "Security Reviewer", parentHandle: "software-engineering", responsibility: "코드 변경의 위협·권한·비밀정보 노출 검토", status: "active", role: "operator", capabilities: ["secure-coding-review"], scope: "persistent" },
+  {
+    id: "software-engineering",
+    handle: "software-engineering",
+    name: "Software Engineering",
+    parentHandle: "delivery-coordination",
+    responsibility: "개발 Task 분해, 전문 역할 조정과 변경 통합",
+    status: "active",
+    role: "coordinator",
+    capabilities: ["software-delivery"],
+    scope: "persistent",
+  },
+  {
+    id: "se-lead",
+    handle: "software-engineering.engineering-lead",
+    name: "Engineering Lead",
+    parentHandle: "software-engineering",
+    responsibility: "개발 Task 분해, 경로 충돌 조정과 기술 통합 판정",
+    status: "active",
+    role: "coordinator",
+    capabilities: ["engineering-lead"],
+    scope: "persistent",
+  },
+  {
+    id: "se-fe",
+    handle: "software-engineering.frontend-specialist",
+    name: "Frontend Specialist",
+    parentHandle: "software-engineering",
+    responsibility: "Web 인터페이스와 클라이언트 동작 구현",
+    status: "active",
+    role: "operator",
+    capabilities: ["frontend-engineering"],
+    scope: "persistent",
+  },
+  {
+    id: "se-be",
+    handle: "software-engineering.backend-specialist",
+    name: "Backend Specialist",
+    parentHandle: "software-engineering",
+    responsibility: "서비스, API와 서버 애플리케이션 구현",
+    status: "active",
+    role: "operator",
+    capabilities: ["backend-engineering"],
+    scope: "persistent",
+  },
+  {
+    id: "se-db",
+    handle: "software-engineering.database-specialist",
+    name: "Database Specialist",
+    parentHandle: "software-engineering",
+    responsibility: "데이터 모델, 질의와 마이그레이션 구현",
+    status: "active",
+    role: "operator",
+    capabilities: ["database-engineering"],
+    scope: "persistent",
+  },
+  {
+    id: "se-test",
+    handle: "software-engineering.test-engineer",
+    name: "Test Engineer",
+    parentHandle: "software-engineering",
+    responsibility: "실패 재현 테스트와 검증 시나리오 구현",
+    status: "active",
+    role: "operator",
+    capabilities: ["test-engineering"],
+    scope: "persistent",
+  },
+  {
+    id: "se-sec",
+    handle: "software-engineering.security-reviewer",
+    name: "Security Reviewer",
+    parentHandle: "software-engineering",
+    responsibility: "코드 변경의 위협·권한·비밀정보 노출 검토",
+    status: "active",
+    role: "operator",
+    capabilities: ["secure-coding-review"],
+    scope: "persistent",
+  },
 ];
 
 export function projectRoomActivities(
@@ -1206,7 +1568,12 @@ export function projectRoomBudgets(room: RoomViewV1): RoomBudgetView[] {
   const budgets: RoomBudgetView[] = [];
   if (room.maxRounds !== undefined) {
     const used = room.roundCount ?? 0;
-    budgets.push({ label: "라운드", used, limit: room.maxRounds, display: `${String(used)} / ${String(room.maxRounds)}` });
+    budgets.push({
+      label: "라운드",
+      used,
+      limit: room.maxRounds,
+      display: `${String(used)} / ${String(room.maxRounds)}`,
+    });
   }
   if (room.maxTokens !== undefined) {
     const used = room.usedTokens ?? 0;
@@ -1310,7 +1677,9 @@ function rows(value: unknown): readonly Record<string, unknown>[] {
     : value && typeof value === "object" && Array.isArray((value as { items?: unknown }).items)
       ? (value as { items: unknown[] }).items
       : [];
-  return source.flatMap((row) => (row && typeof row === "object" && !Array.isArray(row) ? [row as Record<string, unknown>] : []));
+  return source.flatMap((row) =>
+    row && typeof row === "object" && !Array.isArray(row) ? [row as Record<string, unknown>] : [],
+  );
 }
 
 const str = (row: Record<string, unknown>, key: string): string => (typeof row[key] === "string" ? row[key] : "");
@@ -1318,61 +1687,92 @@ const num = (row: Record<string, unknown>, key: string): number => (typeof row[k
 const bool = (row: Record<string, unknown>, key: string): boolean => row[key] === true;
 
 export function projectModelRoutes(routes: unknown, catalog: unknown): readonly ModelRouteView[] {
-  const candidates = rows(catalog && typeof catalog === "object" ? (catalog as { candidates?: unknown }).candidates : undefined);
-  return rows(routes).filter((row) => typeof row.routeId === "string").map((row) => ({
-    routeId: str(row, "routeId"),
-    name: str(row, "name"),
-    routeKind: str(row, "routeKind"),
-    enabled: bool(row, "enabled"),
-    spentMicros: num(row, "spentMicros"),
-    totalBudgetMicros: num(row, "totalBudgetMicros"),
-    candidateCount: candidates.filter((candidate) => str(candidate, "routeId") === str(row, "routeId") && bool(candidate, "enabled")).length,
-  }));
+  const candidates = rows(
+    catalog && typeof catalog === "object" ? (catalog as { candidates?: unknown }).candidates : undefined,
+  );
+  return rows(routes)
+    .filter((row) => typeof row.routeId === "string")
+    .map((row) => ({
+      routeId: str(row, "routeId"),
+      name: str(row, "name"),
+      routeKind: str(row, "routeKind"),
+      enabled: bool(row, "enabled"),
+      spentMicros: num(row, "spentMicros"),
+      totalBudgetMicros: num(row, "totalBudgetMicros"),
+      candidateCount: candidates.filter(
+        (candidate) => str(candidate, "routeId") === str(row, "routeId") && bool(candidate, "enabled"),
+      ).length,
+    }));
 }
 
 export function projectProviderConnections(catalog: unknown): readonly ProviderConnectionView[] {
   const source = catalog && typeof catalog === "object" ? (catalog as Record<string, unknown>) : {};
   const endpoints = rows(source.endpoints);
-  return rows(source.providers).filter((row) => typeof row.providerId === "string").map((row) => ({
-    providerId: str(row, "providerId"),
-    displayName: str(row, "displayName"),
-    adapterKind: str(row, "adapterKind"),
-    enabled: bool(row, "enabled"),
-    endpoints: endpoints
-      .filter((endpoint) => str(endpoint, "providerId") === str(row, "providerId"))
-      .map((endpoint) => ({ name: str(endpoint, "name"), baseUrl: str(endpoint, "baseUrl"), local: bool(endpoint, "local") })),
-  }));
+  return rows(source.providers)
+    .filter((row) => typeof row.providerId === "string")
+    .map((row) => ({
+      providerId: str(row, "providerId"),
+      displayName: str(row, "displayName"),
+      adapterKind: str(row, "adapterKind"),
+      enabled: bool(row, "enabled"),
+      endpoints: endpoints
+        .filter((endpoint) => str(endpoint, "providerId") === str(row, "providerId"))
+        .map((endpoint) => ({
+          name: str(endpoint, "name"),
+          baseUrl: str(endpoint, "baseUrl"),
+          local: bool(endpoint, "local"),
+        })),
+    }));
 }
 
 export function projectSubscriptionAccounts(accounts: unknown): readonly SubscriptionAccountView[] {
   // 식별자 없는 행은 계정이 아닙니다. 빈 값으로 채워 넣으면 없는 계정이 목록에 생깁니다.
-  return rows(accounts).filter((row) => typeof row.accountId === "string").map((row) => ({
-    accountId: str(row, "accountId"),
-    providerId: str(row, "providerId"),
-    alias: str(row, "alias"),
-    status: str(row, "status"),
-    billingKind: str(row, "billingKind"),
-    ...(typeof row.quotaExhausted === "boolean" ? { quotaExhausted: row.quotaExhausted } : {}),
-    ...(typeof row.minimumRemainingRatio === "number" ? { minimumRemainingRatio: row.minimumRemainingRatio } : {}),
-    ...(typeof row.earliestResetAt === "string" ? { earliestResetAt: row.earliestResetAt } : {}),
-    ...(typeof row.cooldownUntil === "string" ? { cooldownUntil: row.cooldownUntil } : {}),
-  }));
+  return rows(accounts)
+    .filter((row) => typeof row.accountId === "string")
+    .map((row) => ({
+      accountId: str(row, "accountId"),
+      providerId: str(row, "providerId"),
+      alias: str(row, "alias"),
+      status: str(row, "status"),
+      billingKind: str(row, "billingKind"),
+      ...(typeof row.quotaExhausted === "boolean" ? { quotaExhausted: row.quotaExhausted } : {}),
+      ...(typeof row.minimumRemainingRatio === "number" ? { minimumRemainingRatio: row.minimumRemainingRatio } : {}),
+      ...(typeof row.earliestResetAt === "string" ? { earliestResetAt: row.earliestResetAt } : {}),
+      ...(typeof row.cooldownUntil === "string" ? { cooldownUntil: row.cooldownUntil } : {}),
+    }));
 }
 
 const CONTRIBUTION_KINDS: readonly ContributionKind[] = [
-  "runtimeTools", "organizationTemplates", "skills", "surfaceConnectors",
-  "growthSignals", "growthTargets", "eventConsumers", "modelEvaluationBundles",
+  "runtimeTools",
+  "organizationTemplates",
+  "skills",
+  "surfaceConnectors",
+  "growthSignals",
+  "growthTargets",
+  "eventConsumers",
+  "modelEvaluationBundles",
 ];
 
 const PERMISSION_KINDS: readonly PermissionKind[] = [
-  "tools", "network", "files", "secrets", "process", "mcp", "storage", "events",
+  "tools",
+  "network",
+  "files",
+  "secrets",
+  "process",
+  "mcp",
+  "storage",
+  "events",
 ];
 
 /** manifest의 선언을 뷰로 옮깁니다. 선언되지 않은 종류는 줄 자체를 만들지 않습니다. */
-export function projectManifestDeclarations(manifest: unknown): Pick<ExtensionEntryView, "contributions" | "permissions"> {
-  const source = manifest && typeof manifest === "object" && !Array.isArray(manifest) ? (manifest as Record<string, unknown>) : {};
+export function projectManifestDeclarations(
+  manifest: unknown,
+): Pick<ExtensionEntryView, "contributions" | "permissions"> {
+  const source =
+    manifest && typeof manifest === "object" && !Array.isArray(manifest) ? (manifest as Record<string, unknown>) : {};
   const read = (group: unknown, key: string): readonly string[] => {
-    const value = group && typeof group === "object" && !Array.isArray(group) ? (group as Record<string, unknown>)[key] : undefined;
+    const value =
+      group && typeof group === "object" && !Array.isArray(group) ? (group as Record<string, unknown>)[key] : undefined;
     if (Array.isArray(value)) {
       return value.map((item) =>
         typeof item === "string"
@@ -1398,7 +1798,10 @@ export function projectManifestDeclarations(manifest: unknown): Pick<ExtensionEn
 }
 
 /** registry.inventory 응답을 뷰로 옮깁니다. 이미 설치된 패키지는 목록에서 뺍니다. */
-export function marketplaceEntries(inventory: unknown, installedPackages: readonly string[]): readonly ExtensionEntryView[] {
+export function marketplaceEntries(
+  inventory: unknown,
+  installedPackages: readonly string[],
+): readonly ExtensionEntryView[] {
   const rows = Array.isArray(inventory)
     ? inventory
     : inventory && typeof inventory === "object" && Array.isArray((inventory as { items?: unknown }).items)
@@ -1410,16 +1813,18 @@ export function marketplaceEntries(inventory: unknown, installedPackages: readon
       const record = row as Record<string, unknown>;
       if (typeof record.versionId !== "string" || typeof record.packageName !== "string") return [];
       if (installedPackages.includes(record.packageName)) return [];
-      return [{
-        id: record.versionId,
-        packageName: record.packageName,
-        version: typeof record.packageVersion === "string" ? record.packageVersion : "",
-        description: typeof record.description === "string" ? record.description : "",
-        provenance: typeof record.provenance === "string" ? record.provenance : "",
-        installed: false,
-        // manifest는 registry.info에만 있습니다. 선택할 때 채워집니다.
-        ...projectManifestDeclarations(undefined),
-      }];
+      return [
+        {
+          id: record.versionId,
+          packageName: record.packageName,
+          version: typeof record.packageVersion === "string" ? record.packageVersion : "",
+          description: typeof record.description === "string" ? record.description : "",
+          provenance: typeof record.provenance === "string" ? record.provenance : "",
+          installed: false,
+          // manifest는 registry.info에만 있습니다. 선택할 때 채워집니다.
+          ...projectManifestDeclarations(undefined),
+        },
+      ];
     })
     .sort((left, right) => left.packageName.localeCompare(right.packageName));
 }
@@ -1428,7 +1833,10 @@ export function marketplaceEntries(inventory: unknown, installedPackages: readon
  * 설치된 확장을 먼저, 마켓플레이스를 뒤에 둡니다. 헌법 6절의 "조직에 추가된 Capability를 먼저"는
  * 상세 안의 순서만이 아니라 목록의 순서이기도 합니다.
  */
-export function projectExtensionEntries(installed: readonly ExtensionView[], inventory: unknown): readonly ExtensionEntryView[] {
+export function projectExtensionEntries(
+  installed: readonly ExtensionView[],
+  inventory: unknown,
+): readonly ExtensionEntryView[] {
   const entries = installed.map((item) => ({
     id: item.id,
     packageName: item.packageName,
@@ -1439,7 +1847,13 @@ export function projectExtensionEntries(installed: readonly ExtensionView[], inv
     state: item.status,
     ...projectManifestDeclarations(undefined),
   }));
-  return [...entries, ...marketplaceEntries(inventory, entries.map((item) => item.packageName))];
+  return [
+    ...entries,
+    ...marketplaceEntries(
+      inventory,
+      entries.map((item) => item.packageName),
+    ),
+  ];
 }
 
 interface WorkDetailSources {

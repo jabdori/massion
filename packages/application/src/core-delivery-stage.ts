@@ -41,9 +41,7 @@ function softwarePrompt(task: WorkTask, request: unknown): unknown {
   return {
     objective: task.objective,
     acceptanceCriteria:
-      typeof task.acceptance_criteria_json === "string"
-        ? (JSON.parse(task.acceptance_criteria_json) as unknown)
-        : [],
+      typeof task.acceptance_criteria_json === "string" ? (JSON.parse(task.acceptance_criteria_json) as unknown) : [],
     allowedPaths,
     instruction: "testPatch와 implementationPatch를 분리해 제안하고 filesystem이나 process를 직접 실행하지 마세요.",
   };

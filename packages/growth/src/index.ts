@@ -11,7 +11,13 @@ export { PromptMemoryStore } from "./prompt-memory.js";
 export { ReflectionService } from "./reflection.js";
 export { GrowthRecoveryService } from "./recovery.js";
 export { GrowthRevertService } from "./revert.js";
-export { GrowthTargetRegistry, MemoryGrowthTarget, OrganizationGrowthTarget, PolicyGrowthTarget, PromptGrowthTarget } from "./targets.js";
+export {
+  GrowthTargetRegistry,
+  MemoryGrowthTarget,
+  OrganizationGrowthTarget,
+  PolicyGrowthTarget,
+  PromptGrowthTarget,
+} from "./targets.js";
 
 export type { AdoptGrowthSuggestionInput, GrowthAdoptionResult, GrowthAdoptionStatus } from "./adoption.js";
 export type { ConfigureGrowthInput, GrowthConfigurationSubject, GrowthConfigurationVersion } from "./contracts.js";
