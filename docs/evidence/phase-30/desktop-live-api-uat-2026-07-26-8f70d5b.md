@@ -20,13 +20,15 @@
 | 실제 Provider Work | Run `completed/terminal`, Work `completed`, automatic autonomy revision 4 |
 | 실행 계보 | 4개 실행 모두 `succeeded`; artifact 2개, 독립 검증 `passed` |
 | 지식 계보 | `work.knowledge=ready`, 실제 파일 chunk reference 2개와 line/checksum 보존 |
+| 전체 권한 전환·회수 | `automatic(revision 4) → full-access(revision 5) → automatic(revision 6)`; 회수 뒤 `runtimePermissionStatus=governed`, pending approval 0건 |
+| 기억 적용 Work | memory `revision 3` 저장 후 후속 실제 Provider Work가 `completed`, 4개 실행 성공, 지식·검증 통과 |
 | 재시작·보존 | 같은 후보 앱과 daemon을 종료 후 재실행; Growth `auto` version 2, Workspace 1건 `trusted`, Work·지식·검증·실행 원장 복원 |
-| 개인 기억 | 이전 실제 흐름에서 저장한 기억의 `revision 2` 빈 active version과 `forget` 계보가 재시작 뒤 보존 |
+| 개인 기억 | 재시작 뒤 memory `revision 3`, `response.format` key와 `explicit` 계보가 복원 |
 | 입력 경계 | Workspace 밖 경로는 `400 / validation / APP_COMMAND_VALIDATION`으로 반환 |
 
 ## 앞선 실제 후보와의 연결
 
-`8f70d5bf31f0`은 입력 오류 경계 수정과 Growth 설정 선택 UI를 포함한 후속 후보입니다. 이전 후보에서 확인한 실제 Workspace 등록·신뢰·중복 등록, 개인 기억 저장→새 Work→재시작→forget, 전체 권한 `automatic → full-access → automatic` 전환과 pending approval 제거 데이터는 동일 격리 데이터에서 재시작 보존으로 확인했습니다. 이 문서에서 후속 후보 자체의 새 실제 Provider Work와 새 Growth auto 설정을 별도로 다시 확인했습니다.
+`8f70d5bf31f0`은 입력 오류 경계 수정과 Growth 설정 선택 UI를 포함한 후속 후보입니다. 이 후보 자체에서 Workspace 문맥 Provider Work, Growth auto 설정·replay, full-access 전환·회수, 개인 기억 저장 후 후속 Work, 재시작 보존을 다시 확인했습니다. 기존 격리 데이터의 이전 이력은 새 실행의 입력으로 사용하지 않고 저장소 보존 상태만 read-only로 대조했습니다.
 
 ## 완료로 세지 않는 항목
 
