@@ -7,7 +7,12 @@ import type { ConfigureGrowthInput } from "./contracts.js";
 import type { GrowthEffectSample, GrowthEffectStore } from "./effect.js";
 import type { GrowthEvaluationDetails, GrowthEvaluationStore, GrowthSignalReceiptInput } from "./evaluation.js";
 import type { ForgetExplicitMemoryInput, PromptMemoryStore, PutExplicitMemoryInput } from "./prompt-memory.js";
-import type { GrowthSuggestionRecord, ListGrowthSuggestionsInput, ReflectionService } from "./reflection.js";
+import type {
+  GrowthSuggestionDecision,
+  GrowthSuggestionRecord,
+  ListGrowthSuggestionsInput,
+  ReflectionService,
+} from "./reflection.js";
 import type { GrowthRecoveryService } from "./recovery.js";
 import type { GrowthRevertService, RevertGrowthAdoptionInput } from "./revert.js";
 import type { ReflectionSnapshot } from "./snapshot.js";
@@ -69,6 +74,17 @@ export class GrowthGateway {
   }
   public async listSuggestions(context: TenantContext, input: ListGrowthSuggestionsInput = {}) {
     return await this.dependencies.reflections.listSuggestions(context, input);
+  }
+  public async reject(
+    context: TenantContext,
+    input: {
+      readonly commandId: string;
+      readonly suggestionId: string;
+      readonly expectedRevision: number;
+      readonly reason: string;
+    },
+  ): Promise<GrowthSuggestionDecision> {
+    return await this.dependencies.reflections.reject(context, input);
   }
   public async listSuggestionDetails(
     context: TenantContext,

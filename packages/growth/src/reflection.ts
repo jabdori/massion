@@ -3,7 +3,11 @@ import type { OrganizationService } from "@massion/identity";
 import { applyMigrations, type MassionDatabase } from "@massion/storage";
 
 import { canonicalGrowthJson, growthChecksum } from "./prompt-memory.js";
-import { GROWTH_PRODUCTION_REFLECTION_LINEAGE_MIGRATION, GROWTH_REFLECTION_MIGRATION } from "./schema.js";
+import {
+  GROWTH_PRODUCTION_REFLECTION_LINEAGE_MIGRATION,
+  GROWTH_REFLECTION_MIGRATION,
+  GROWTH_SUGGESTION_DECISION_MIGRATION,
+} from "./schema.js";
 
 import { createReflectionSnapshot, type ReflectionSnapshot } from "./snapshot.js";
 import type { ReflectionSourceReference } from "./snapshot.js";
@@ -81,6 +85,19 @@ export interface GrowthSuggestionRecord {
   readonly revision: number;
   readonly status: "proposed" | "evaluated" | "awaiting-review" | "adopted" | "rejected" | "superseded";
   readonly created_at?: unknown;
+  readonly decision_reason?: string;
+  readonly decided_by_user_id?: string;
+  readonly decision_command_id?: string;
+  readonly decided_at?: unknown;
+}
+
+export interface GrowthSuggestionDecision {
+  readonly suggestionId: string;
+  readonly revision: number;
+  readonly status: "rejected";
+  readonly reason: string;
+  readonly decidedByUserId: string;
+  readonly commandId: string;
 }
 
 export interface ListGrowthSuggestionsInput {
@@ -150,7 +167,11 @@ export class ReflectionService {
     sourceVerifier: ReflectionSourceVerifier,
     runtimeVerifier: ReflectionRuntimeVerifier,
   ): Promise<ReflectionService> {
-    await applyMigrations(database, [GROWTH_REFLECTION_MIGRATION, GROWTH_PRODUCTION_REFLECTION_LINEAGE_MIGRATION]);
+    await applyMigrations(database, [
+      GROWTH_REFLECTION_MIGRATION,
+      GROWTH_PRODUCTION_REFLECTION_LINEAGE_MIGRATION,
+      GROWTH_SUGGESTION_DECISION_MIGRATION,
+    ]);
     return new ReflectionService(database, organizations, generator, sourceVerifier, runtimeVerifier);
   }
 
@@ -343,6 +364,81 @@ export class ReflectionService {
       },
     );
     return records;
+  }
+
+  public async reject(
+    context: TenantContext,
+    input: {
+      readonly commandId: string;
+      readonly suggestionId: string;
+      readonly expectedRevision: number;
+      readonly reason: string;
+    },
+  ): Promise<GrowthSuggestionDecision> {
+    await this.organizations.verifyTenantContext(context);
+    if (!input.suggestionId.trim()) throw new Error("Growth Suggestion ID가 유효하지 않습니다");
+    if (!Number.isSafeInteger(input.expectedRevision) || input.expectedRevision < 1)
+      throw new Error("Growth Suggestion revision이 유효하지 않습니다");
+    if (!input.reason.trim() || input.reason.length > 1_000)
+      throw new Error("Growth Suggestion 거절 사유는 1~1000자여야 합니다");
+    const requestHash = growthChecksum({
+      suggestionId: input.suggestionId,
+      expectedRevision: input.expectedRevision,
+      reason: input.reason,
+    });
+    return await this.database.transaction(async (executor) => {
+      const [records] = await executor.query<[GrowthSuggestionRecord[]]>(
+        "SELECT * FROM growth_suggestion WHERE organization_id = $organization_id AND suggestion_id = $suggestion_id LIMIT 1;",
+        { organization_id: context.organizationId, suggestion_id: input.suggestionId },
+      );
+      const current = records[0];
+      if (!current) throw new Error("Growth Suggestion을 찾을 수 없습니다");
+      if (current.status === "rejected") {
+        if (current.decision_command_id !== input.commandId || current.decision_reason !== input.reason)
+          throw new Error("Growth Suggestion은 이미 다른 사유로 거절됐습니다");
+        return {
+          suggestionId: current.suggestion_id,
+          revision: current.revision,
+          status: "rejected",
+          reason: current.decision_reason,
+          decidedByUserId: current.decided_by_user_id ?? context.userId,
+          commandId: current.decision_command_id,
+        };
+      }
+      if (!["proposed", "evaluated", "awaiting-review"].includes(current.status))
+        throw new Error("현재 상태의 Growth Suggestion은 거절할 수 없습니다");
+      if (current.revision !== input.expectedRevision) throw new Error("Growth Suggestion revision 충돌입니다");
+      const [updated] = await executor.query<[GrowthSuggestionRecord[]]>(
+        "UPDATE growth_suggestion SET status = 'rejected', decision_reason = $reason, decided_by_user_id = $user_id, decision_command_id = $command_id, decided_at = time::now() WHERE organization_id = $organization_id AND suggestion_id = $suggestion_id AND revision = $revision AND status IN ['proposed', 'evaluated', 'awaiting-review'] RETURN AFTER;",
+        {
+          organization_id: context.organizationId,
+          suggestion_id: input.suggestionId,
+          revision: input.expectedRevision,
+          reason: input.reason,
+          user_id: context.userId,
+          command_id: input.commandId,
+        },
+      );
+      const rejected = updated[0];
+      if (!rejected) throw new Error("Growth Suggestion 거절 동시성 충돌입니다");
+      await executor.query(
+        "CREATE growth_event CONTENT { event_id: $event_id, organization_id: $organization_id, aggregate_type: 'suggestion', aggregate_id: $suggestion_id, event_type: 'suggestion_rejected', payload_json: $payload_json, created_at: time::now() };",
+        {
+          event_id: crypto.randomUUID(),
+          organization_id: context.organizationId,
+          suggestion_id: input.suggestionId,
+          payload_json: canonicalGrowthJson({ reason: input.reason, requestHash }),
+        },
+      );
+      return {
+        suggestionId: rejected.suggestion_id,
+        revision: rejected.revision,
+        status: "rejected",
+        reason: input.reason,
+        decidedByUserId: context.userId,
+        commandId: input.commandId,
+      };
+    });
   }
 
   private async suggestions(organizationId: string, reflectionRunId: string): Promise<GrowthSuggestionRecord[]> {

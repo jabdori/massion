@@ -64,7 +64,7 @@ export interface ApplicationDomainDependencies {
   // `start`는 onboarding(LocalApplicationBootstrap)에서 메모리 시드 연결에 사용합니다.
   readonly growth?: Pick<
     GrowthGateway,
-    "configure" | "adopt" | "revert" | "start" | "putExplicitMemory" | "forgetExplicitMemory"
+    "configure" | "adopt" | "reject" | "revert" | "start" | "putExplicitMemory" | "forgetExplicitMemory"
   >;
   readonly providers?: Pick<
     ProviderService,
@@ -510,6 +510,10 @@ function growthData(value: unknown): Record<string, unknown> {
     "adoptionId",
     "revertOperationId",
     "suggestionId",
+    "revision",
+    "reason",
+    "decidedByUserId",
+    "commandId",
   ];
   const selected = Object.fromEntries(
     allowed.filter((key) => source[key] !== undefined).map((key) => [key, source[key]]),
@@ -1303,6 +1307,7 @@ function registerGrowth(
         "approvalId",
       ],
     ],
+    ["growth.suggestion.reject", "reject", ["suggestionId", "expectedRevision", "reason"]],
     ["growth.revert", "revert", ["adoptionId", "suggestionRevision", "reason", "approvalId"]],
   ] as const;
   for (const [operation, method, fields] of definitions) {

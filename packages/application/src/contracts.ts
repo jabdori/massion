@@ -466,6 +466,9 @@ export interface ApplicationCommandMapV1 {
     };
   };
   readonly "growth.memory.forget": { readonly payload: { readonly key: string } };
+  readonly "growth.suggestion.reject": {
+    readonly payload: { readonly suggestionId: string; readonly expectedRevision: number; readonly reason: string };
+  };
 }
 
 export interface ApplicationEventV1 {

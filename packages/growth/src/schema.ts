@@ -384,6 +384,28 @@ export const GROWTH_PRODUCTION_EFFECT_LINEAGE_MIGRATION = defineMigration(
   `DEFINE FIELD OVERWRITE status ON growth_adoption_run TYPE string ASSERT $value IN ['awaiting-review', 'observing', 'retained', 'rejected', 'reverted'];`,
 );
 
+// 후보를 거절해도 immutable 후보 본문과 revision은 보존하고 결정만 추가합니다.
+export const GROWTH_SUGGESTION_DECISION_MIGRATION = defineMigration(
+  "0112-growth-suggestion-decision",
+  `
+DEFINE FIELD decision_reason ON growth_suggestion TYPE option<string> ASSERT $value = NONE OR string::len($value) <= 1000;
+DEFINE FIELD decided_by_user_id ON growth_suggestion TYPE option<string>;
+DEFINE FIELD decision_command_id ON growth_suggestion TYPE option<string>;
+DEFINE FIELD decided_at ON growth_suggestion TYPE option<datetime>;
+DEFINE EVENT growth_suggestion_decision_immutable ON TABLE growth_suggestion
+WHEN $event = 'UPDATE'
+THEN {
+  IF $before.decision_command_id != NONE AND $after.decision_command_id != $before.decision_command_id {
+    THROW 'Growth Suggestion 결정은 immutable입니다';
+  };
+  IF $after.status = 'rejected' AND (
+    $after.decision_reason = NONE OR $after.decided_by_user_id = NONE OR
+    $after.decision_command_id = NONE OR $after.decided_at = NONE
+  ) { THROW '거절된 Growth Suggestion에는 결정 계보가 필요합니다'; };
+};
+`,
+);
+
 export const GROWTH_EVALUATION_MIGRATION = defineMigration(
   "0057-growth-evaluation",
   `

@@ -43,6 +43,7 @@ export type {
   PromptDefinitionVersion,
 } from "./prompt-memory.js";
 export type {
+  GrowthSuggestionDecision,
   GrowthSuggestionRecord,
   ListGrowthSuggestionsInput,
   ReflectionRunRecord,

@@ -583,12 +583,34 @@ describe("Application desktop service", () => {
 
     await expect((service as DesktopService & { loadGrowth(): Promise<unknown> }).loadGrowth()).resolves.toMatchObject({
       configuration: { governanceDecisionId: "decision-growth-0001" },
-      memories: [{ sourceReferenceIds: ["record-work-0001"] }],
+      memories: [{ memoryVersionId: "memory-0001", revision: 3, entries: [{ key: "verification-required" }] }],
       suggestions: [{ status: "awaiting-review" }],
       effects: [{ result: "improved" }],
     });
     expect(native.query.mock.calls.map(([operation]) => operation)).toEqual(
       expect.arrayContaining(["growth.configuration.get", "growth.memories", "growth.suggestions", "growth.effects"]),
+    );
+  });
+
+  it("개선 상세의 거절은 revision과 사유를 typed command로 보낸다", async () => {
+    const native = transport();
+    const service = createApplicationDesktopService(native, { createId: () => "request-0001" });
+
+    await service.rejectGrowthSuggestion({
+      suggestionId: "suggestion-0001",
+      expectedRevision: 2,
+      reason: "현재 근거가 부족합니다",
+    });
+
+    expect(native.command).toHaveBeenCalledWith(
+      expect.objectContaining({
+        operation: "growth.suggestion.reject",
+        payload: {
+          suggestionId: "suggestion-0001",
+          expectedRevision: 2,
+          reason: "현재 근거가 부족합니다",
+        },
+      }),
     );
   });
 });

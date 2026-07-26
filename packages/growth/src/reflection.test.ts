@@ -128,6 +128,25 @@ describe("Reflection suggestion validation", () => {
     await expect(service.listSuggestions(context, { workId: "work-1", limit: 10 })).resolves.toEqual([
       expect.objectContaining({ suggestion_id: result.suggestions[0]?.suggestion_id, summary: "설정 검증 강화" }),
     ]);
+    const rejected = await service.reject(context, {
+      commandId: "reflection-reject-1",
+      suggestionId: result.suggestions[0]?.suggestion_id ?? "",
+      expectedRevision: 1,
+      reason: "이번 Work 범위에서는 적용하지 않습니다",
+    });
+    expect(rejected).toMatchObject({
+      status: "rejected",
+      revision: 1,
+      reason: "이번 Work 범위에서는 적용하지 않습니다",
+    });
+    await expect(
+      service.reject(context, {
+        commandId: "reflection-reject-1",
+        suggestionId: rejected.suggestionId,
+        expectedRevision: 1,
+        reason: "이번 Work 범위에서는 적용하지 않습니다",
+      }),
+    ).resolves.toEqual(rejected);
     const [references] = await database.query<[Array<{ source_id: string; source_checksum: string }>]>(
       "SELECT source_id, source_checksum FROM growth_source_reference;",
     );

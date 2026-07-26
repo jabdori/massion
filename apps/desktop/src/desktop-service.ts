@@ -347,6 +347,11 @@ export interface DesktopService {
   /** 설치된 확장과 마켓플레이스 항목을 하나의 목록으로 줍니다. Capability가 먼저입니다. */
   loadExtensions(): Promise<readonly ExtensionEntryView[]>;
   loadGrowth(): Promise<GrowthView>;
+  rejectGrowthSuggestion(input: {
+    readonly suggestionId: string;
+    readonly expectedRevision: number;
+    readonly reason: string;
+  }): Promise<void>;
   putExplicitMemory(input: {
     readonly key: string;
     readonly kind: ExplicitMemoryViewV1["entries"][number]["kind"];
@@ -606,6 +611,13 @@ export function createApplicationDesktopService(
         suggestions: safeView(suggestions) as GrowthView["suggestions"],
         effects: safeView(effects) as GrowthView["effects"],
       };
+    },
+    async rejectGrowthSuggestion(input) {
+      await client.command("growth.suggestion.reject", {
+        suggestionId: input.suggestionId,
+        expectedRevision: input.expectedRevision,
+        reason: input.reason,
+      });
     },
     async putExplicitMemory(input) {
       await client.command(
@@ -1254,6 +1266,7 @@ export function createFixtureDesktopService(): DesktopService {
           },
         ],
       })),
+    rejectGrowthSuggestion: () => fixturePromise(() => undefined),
     installRegistry: () =>
       fixturePromise(() => ({ outcome: "succeeded", installationId: "installation-fixture-0001" })),
     submitDirective: () => fixturePromise(() => undefined),

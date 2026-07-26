@@ -2076,6 +2076,8 @@ function GrowthSurface({
   const [memoryValue, setMemoryValue] = useState("");
   const [memoryError, setMemoryError] = useState("");
   const [memorySaving, setMemorySaving] = useState(false);
+  const [decisionError, setDecisionError] = useState("");
+  const [decisionSaving, setDecisionSaving] = useState(false);
   useEffect(() => {
     if (growth === undefined) return;
     const requested = growth.suggestions.find((suggestion) => suggestion.suggestionId === requestedSuggestionId);
@@ -2130,6 +2132,24 @@ function GrowthSurface({
       onRetry();
     } finally {
       setMemorySaving(false);
+    }
+  };
+
+  const rejectSelected = async () => {
+    if (selected === undefined || selected.revision === undefined || decisionSaving) return;
+    setDecisionSaving(true);
+    setDecisionError("");
+    try {
+      await service.rejectGrowthSuggestion({
+        suggestionId: selected.suggestionId,
+        expectedRevision: selected.revision,
+        reason: "개선 상세에서 사용자가 거절했습니다",
+      });
+      onRetry();
+    } catch (cause) {
+      setDecisionError(surfaceErrorMessage(cause, "개선 제안을 거절하지 못했습니다."));
+    } finally {
+      setDecisionSaving(false);
     }
   };
 
@@ -2376,13 +2396,20 @@ function GrowthSurface({
                     ))}
                   </ul>
                 ) : null}
+                {decisionError ? <p className="mb-2.5 text-[12px] text-danger">{decisionError}</p> : null}
                 <div className="flex flex-wrap items-center gap-2">
-                  {/*
-                   * 승인·거부 명령이 Application API에 아직 없습니다. 동작하지 않는 버튼을
-                   * 동작하는 것처럼 두지 않고, 무엇이 막혀 있는지 화면이 말합니다.
-                   */}
-                  <span className="flex-1 text-[11px] text-muted">승인·거절 명령이 아직 연결되지 않았습니다</span>
-                  <DecisionActions approveName={selected.summary} disabled />
+                  <span className="flex-1 text-[11px] text-muted">
+                    승인은 아직 연결되지 않았습니다. 거절은 이 상세에서 기록합니다.
+                  </span>
+                  <DecisionActions
+                    approveName={selected.summary}
+                    approveDisabled
+                    busy={decisionSaving}
+                    onReject={() => {
+                      void rejectSelected();
+                    }}
+                    rejectDisabled={selected.revision === undefined || selected.status !== "awaiting-review"}
+                  />
                 </div>
               </footer>
             </article>

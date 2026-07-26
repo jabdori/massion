@@ -47,23 +47,27 @@ const scopeLabel: Record<OrganizationChangeView["scope"], string> = {
  */
 export function DecisionActions({
   approveName,
+  approveDisabled = false,
   busy = false,
   disabled = false,
   onApprove,
   onReject,
+  rejectDisabled = false,
 }: {
   approveName: string;
+  approveDisabled?: boolean;
   busy?: boolean;
   disabled?: boolean;
   onApprove?: () => void;
   onReject?: () => void;
+  rejectDisabled?: boolean;
 }) {
   return (
     <div className="flex shrink-0 items-center gap-1.5">
       <button
         aria-label={`${approveName} 거절`}
         className="rounded-[5px] border border-control px-3 py-1 text-[12px] text-secondary hover:border-fg-3 hover:text-primary disabled:opacity-50"
-        disabled={disabled}
+        disabled={disabled || rejectDisabled}
         onClick={onReject}
         type="button"
       >
@@ -72,7 +76,7 @@ export function DecisionActions({
       <button
         aria-label={`${approveName} 승인`}
         className="rounded-[5px] bg-gate px-3 py-1 text-[12px] font-medium text-gate-ink hover:brightness-110 disabled:opacity-50"
-        disabled={disabled}
+        disabled={disabled || approveDisabled}
         onClick={onApprove}
         type="button"
       >
