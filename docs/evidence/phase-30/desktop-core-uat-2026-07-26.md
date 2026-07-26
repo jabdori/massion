@@ -44,3 +44,5 @@ Provider를 연결한 첫 후보에서는 VoltAgent 위임 중 `Runtime Executio
 재시작 복구 뒤에는 같은 Work가 `terminal/completed`가 되었고 worker가 실제 Reflection RuntimeExecution(`agent_handle=growth`, `status=succeeded`)을 만들었습니다. 다만 provider가 일반 회고 문서 객체를 반환해 `SuggestionCandidate` 검증에서 ReflectionRun이 `blocked`되고 suggestion은 0건이었습니다. 이 관찰에 대한 최소 수정은 `1f787e210`의 structured output schema 고정이며, 수정 후보의 새 Tauri UAT는 아직 실행하지 않았습니다.
 
 `1f787e210` 후보를 새 번들에서 재실행했을 때는 후보 필드와 source ID는 맞았지만 `operation`이 `refine`, `add`, `update`로 반환되어 제품 allowlist(`replace-instruction`, `add-entry`, `replace-policy`, `change-node`)에서 다시 blocked되었습니다. 이 두 번째 관찰에 대한 최소 수정은 `9db9c013`이며, 해당 수정 후 새 Tauri UAT는 아직 통과하지 않았습니다.
+
+`9db9c013` 후보의 별도 `Massion Growth Allowlist UAT.app`에서는 같은 완료 Records trigger를 재시도해 `growth_trigger=completed`, `reflection_run=completed`, `runtime_execution(status=succeeded, agent_handle=growth)`, `growth_suggestion=3(status=proposed)`를 확인했습니다. 검증 뒤 exact Tauri·bridge·server·SurrealDB를 종료했고 7330–7333 listener가 없음을 확인했습니다. 이는 Reflection 제안 생성 증분의 통과이며, 평가·채택·효과·복원과 전체 v1 UAT 통과를 뜻하지 않습니다.
