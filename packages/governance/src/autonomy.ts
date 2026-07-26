@@ -80,7 +80,7 @@ export class AutonomyStore {
     input: { readonly mode: AutonomyMode; readonly expectedRevision: number },
   ): Promise<AutonomyState> {
     return await this.database.transaction(async (transaction) => {
-      await this.organizations.verifyTenantContext(context, ["owner", "admin"], transaction);
+      await this.organizations.verifyTenantContext(context, ["owner"], transaction);
       const [records] = await transaction.query<[AutonomyRecord[]]>(
         "SELECT organization_id, mode, revision FROM governance_autonomy WHERE organization_id = $organization_id LIMIT 1;",
         { organization_id: context.organizationId },
