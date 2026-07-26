@@ -21,7 +21,7 @@
 | 02 | 네이티브 폴더·파일 선택 | 코드 검증 완료 · native UAT 대기 | [페이즈 02](./phase-02-native-context-picker.md) |
 | 03 | 지식 그래프·검색·기억의 업무 연결 | 진행 중 | [페이즈 03](./phase-03-knowledge-memory.md) |
 | 04 | Core·협업·조직·개선·권한·수신함 정합화 | 부분 진행 — Core UAT·Growth Reflection 연결 증분 | [페이즈 04](./phase-04-core-collaboration-permission-inbox.md) |
-| 05 | 실제 데스크톱 UAT와 개인용 릴리스 후보 | 실제 Tauri·Provider API 수직 흐름 부분 통과 · native UAT 대기 | [최신 동일 후보 API UAT](../../../evidence/phase-30/desktop-live-api-uat-2026-07-26-8f70d5b.md) |
+| 05 | 실제 데스크톱 UAT와 개인용 릴리스 후보 | 최신 후보의 실제 Tauri 연결·API 준비 상태 부분 통과 · native UAT 대기 | [최신 동일 후보 Tauri/API UAT](../../../evidence/phase-30/desktop-live-tauri-uat-2026-07-26-d4f3b44.md) |
 
 ## 릴리스 전 데이터 보존 gate
 
