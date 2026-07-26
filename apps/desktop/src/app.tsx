@@ -2153,6 +2153,24 @@ function GrowthSurface({
     }
   };
 
+  const approveSelected = async () => {
+    if (selected === undefined || selected.revision === undefined || decisionSaving) return;
+    setDecisionSaving(true);
+    setDecisionError("");
+    try {
+      await service.approveGrowthSuggestion({
+        suggestionId: selected.suggestionId,
+        expectedRevision: selected.revision,
+        reason: "개선 상세에서 사용자가 승인했습니다",
+      });
+      onRetry();
+    } catch (cause) {
+      setDecisionError(surfaceErrorMessage(cause, "개선 제안을 승인하지 못했습니다."));
+    } finally {
+      setDecisionSaving(false);
+    }
+  };
+
   if (error) {
     return (
       <main aria-label="개선" className="col-span-3 min-h-0 overflow-y-auto bg-canvas px-8 py-7">
@@ -2398,16 +2416,17 @@ function GrowthSurface({
                 ) : null}
                 {decisionError ? <p className="mb-2.5 text-[12px] text-danger">{decisionError}</p> : null}
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="flex-1 text-[11px] text-muted">
-                    승인은 아직 연결되지 않았습니다. 거절은 이 상세에서 기록합니다.
-                  </span>
+                  <span className="flex-1 text-[11px] text-muted">결정은 이 상세의 근거를 확인한 뒤 기록합니다.</span>
                   <DecisionActions
                     approveName={selected.summary}
-                    approveDisabled
                     busy={decisionSaving}
+                    onApprove={() => {
+                      void approveSelected();
+                    }}
                     onReject={() => {
                       void rejectSelected();
                     }}
+                    approveDisabled={selected.revision === undefined || selected.status !== "awaiting-review"}
                     rejectDisabled={selected.revision === undefined || selected.status !== "awaiting-review"}
                   />
                 </div>

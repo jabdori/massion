@@ -15,6 +15,70 @@ import { ApplicationCommandStore } from "../command-store.js";
 import { registerApplicationDomainCommands } from "./domain.js";
 
 describe("Application domain adapters", () => {
+  it("Growth 승인은 저장된 Approval을 결정한 뒤 원래 Adoption command를 replay한다", async () => {
+    await using database = await createDatabase({
+      url: "mem://",
+      namespace: "massion",
+      database: crypto.randomUUID(),
+    });
+    const identities = await IdentityService.create(database);
+    const organizations = await OrganizationService.create(database);
+    const owner = await identities.registerPersonalUser({ email: "growth-approve@example.com", displayName: "Owner" });
+    const context = await organizations.resolveTenantContext(owner.user.user_id, owner.organization.organization_id);
+    const registry = new ApplicationCommandRegistry(await ApplicationCommandStore.create(database, organizations));
+    const getSuggestionDetails = vi.fn().mockResolvedValue({
+      suggestion: { suggestion_id: "suggestion-approve", revision: 2 },
+      evaluation: { evaluationRunId: "evaluation-approve", outcome: "eligible", inputHash: "e".repeat(64) },
+      adoption: {
+        adoptionId: "adoption-approve",
+        status: "awaiting-review",
+        commandId: "adoption-original-command",
+        approvalId: "approval-approve",
+        evaluationRunId: "evaluation-approve",
+        evaluationInputHash: "e".repeat(64),
+        beforeVersionId: "prompt-v1",
+        beforeChecksum: "b".repeat(64),
+      },
+    });
+    const adopt = vi.fn().mockResolvedValue({ adoption: { adoption_id: "adoption-approve", status: "observing" } });
+    const vote = vi.fn().mockResolvedValue({ approval_id: "approval-approve", status: "approved", revision: 2 });
+    registerApplicationDomainCommands(registry, {
+      growth: { getSuggestionDetails, adopt } as never,
+      approvals: {
+        get: vi.fn().mockResolvedValue({ approval_id: "approval-approve", revision: 1 }),
+        vote,
+        cancel: vi.fn(),
+      } as never,
+    });
+
+    await registry.dispatch(context, ["growth:write", "approval:write"], {
+      schemaVersion: "massion.application.v1",
+      commandId: "growth-approve-command",
+      correlationId: "growth-approve-correlation",
+      operation: "growth.suggestion.approve",
+      payload: { suggestionId: "suggestion-approve", expectedRevision: 2, reason: "근거를 확인했습니다" },
+    });
+
+    expect(vote).toHaveBeenCalledWith(
+      context,
+      expect.objectContaining({
+        commandId: "growth-approve-command:approval",
+        approvalId: "approval-approve",
+        expectedRevision: 1,
+        vote: "approve",
+      }),
+    );
+    expect(adopt).toHaveBeenCalledWith(context, {
+      commandId: "adoption-original-command",
+      suggestionId: "suggestion-approve",
+      suggestionRevision: 2,
+      evaluationRunId: "evaluation-approve",
+      expectedEvaluationInputHash: "e".repeat(64),
+      expectedTargetChecksum: "b".repeat(64),
+      approvalId: "approval-approve",
+    });
+  });
+
   it("승인 vote가 terminal이면 연결된 구독 Runtime 실행을 approvalId만으로 재개한다", async () => {
     await using database = await createDatabase({
       url: "mem://",

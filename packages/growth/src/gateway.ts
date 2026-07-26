@@ -1,6 +1,6 @@
 import type { TenantContext } from "@massion/identity";
 
-import type { GrowthAdoptionService, AdoptGrowthSuggestionInput } from "./adoption.js";
+import type { GrowthAdoptionService, GrowthAdoptionRecord, AdoptGrowthSuggestionInput } from "./adoption.js";
 import type { GrowthBootstrap } from "./bootstrap.js";
 import type { GrowthConfigurationStore } from "./configuration.js";
 import type { ConfigureGrowthInput } from "./contracts.js";
@@ -32,8 +32,37 @@ export interface GrowthGatewayDependencies {
 
 export interface GrowthSuggestionDetails {
   readonly suggestion: GrowthSuggestionRecord;
-  readonly patch: Readonly<Record<string, unknown>>;
+  readonly patch?: Readonly<Record<string, unknown>>;
   readonly evaluation?: GrowthEvaluationDetails;
+  readonly adoption?: GrowthAdoptionDetails;
+}
+
+export interface GrowthAdoptionDetails {
+  readonly adoptionId: string;
+  readonly status: GrowthAdoptionRecord["status"];
+  readonly commandId: string;
+  readonly approvalId?: string;
+  readonly evaluationRunId: string;
+  readonly evaluationInputHash: string;
+  readonly beforeVersionId: string;
+  readonly beforeChecksum: string;
+  readonly afterVersionId?: string;
+  readonly afterChecksum?: string;
+}
+
+function adoptionDetails(record: GrowthAdoptionRecord): GrowthAdoptionDetails {
+  return {
+    adoptionId: record.adoption_id,
+    status: record.status,
+    commandId: record.command_id,
+    ...(record.approval_id === undefined ? {} : { approvalId: record.approval_id }),
+    evaluationRunId: record.evaluation_run_id,
+    evaluationInputHash: record.evaluation_input_hash,
+    beforeVersionId: record.before_version_id,
+    beforeChecksum: record.before_checksum,
+    ...(record.after_version_id === undefined ? {} : { afterVersionId: record.after_version_id }),
+    ...(record.after_checksum === undefined ? {} : { afterChecksum: record.after_checksum }),
+  };
 }
 
 /** Growth의 허용된 제품 경로만 노출하는 façade입니다. */
@@ -94,13 +123,21 @@ export class GrowthGateway {
     return await Promise.all(
       suggestions.map(async (suggestion) => {
         const evaluation = await this.dependencies.evaluations.getForSuggestion(context, suggestion.suggestion_id);
+        const adoption = await this.dependencies.adoptions.findBySuggestion(context, suggestion.suggestion_id);
         return {
           suggestion,
           patch: JSON.parse(suggestion.patch_json) as Readonly<Record<string, unknown>>,
           ...(evaluation === undefined ? {} : { evaluation }),
+          ...(adoption === undefined ? {} : { adoption: adoptionDetails(adoption) }),
         };
       }),
     );
+  }
+  public async getSuggestionDetails(context: TenantContext, suggestionId: string): Promise<GrowthSuggestionDetails> {
+    const details = await this.listSuggestionDetails(context, {});
+    const detail = details.find((candidate) => candidate.suggestion.suggestion_id === suggestionId);
+    if (!detail) throw new Error("Growth Suggestion을 찾을 수 없습니다");
+    return detail;
   }
   public async evaluate(
     context: TenantContext,

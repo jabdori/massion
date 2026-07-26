@@ -27,6 +27,7 @@ export type {
   ExtensionInstallationViewV1,
   ExecutionViewV1,
   GovernanceAutonomyViewV1,
+  GrowthSuggestionViewV1,
   KnowledgeReferenceViewV1,
   OrganizationGraphSnapshotV1,
   RoomMessageTypeV1,

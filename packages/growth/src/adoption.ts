@@ -26,7 +26,7 @@ export function decideAdoptionTransition(input: {
   return "observing";
 }
 
-interface AdoptionRecord {
+export interface GrowthAdoptionRecord {
   readonly adoption_id: string;
   readonly organization_id: string;
   readonly suggestion_id: string;
@@ -83,7 +83,7 @@ export interface AdoptGrowthSuggestionInput {
 }
 
 export interface GrowthAdoptionResult {
-  readonly adoption: AdoptionRecord;
+  readonly adoption: GrowthAdoptionRecord;
   readonly beforeVersionId: string;
   readonly afterVersionId?: string;
   readonly approvalId?: string;
@@ -282,6 +282,19 @@ export class GrowthAdoptionService {
     );
   }
 
+  public async findBySuggestion(
+    context: TenantContext,
+    suggestionId: string,
+  ): Promise<GrowthAdoptionRecord | undefined> {
+    await this.organizations.verifyTenantContext(context);
+    if (!suggestionId.trim()) throw new Error("Growth Suggestion ID가 유효하지 않습니다");
+    const [records] = await this.database.query<[GrowthAdoptionRecord[]]>(
+      "SELECT * FROM growth_adoption_run WHERE organization_id = $organization_id AND suggestion_id = $suggestion_id LIMIT 1;",
+      { organization_id: context.organizationId, suggestion_id: suggestionId },
+    );
+    return records[0];
+  }
+
   private configurationView(organizationId: string, record: ConfigurationRecord): GrowthConfigurationVersion {
     return {
       configurationVersionId: record.configuration_version_id,
@@ -300,14 +313,18 @@ export class GrowthAdoptionService {
     };
   }
 
-  private async byCommand(org: string, command: string, executor: QueryExecutor): Promise<AdoptionRecord | undefined> {
-    const [r] = await executor.query<[AdoptionRecord[]]>(
+  private async byCommand(
+    org: string,
+    command: string,
+    executor: QueryExecutor,
+  ): Promise<GrowthAdoptionRecord | undefined> {
+    const [r] = await executor.query<[GrowthAdoptionRecord[]]>(
       "SELECT * FROM growth_adoption_run WHERE organization_id = $organization_id AND command_id = $command_id LIMIT 1;",
       { organization_id: org, command_id: command },
     );
     return r[0];
   }
-  private replay(record: AdoptionRecord, hash: string): GrowthAdoptionResult {
+  private replay(record: GrowthAdoptionRecord, hash: string): GrowthAdoptionResult {
     if (record.request_hash !== hash) throw new Error("같은 commandId에 다른 Adoption payload를 사용할 수 없습니다");
     return {
       adoption: record,
@@ -380,9 +397,9 @@ export class GrowthAdoptionService {
     approvalId?: string,
     afterVersion?: string,
     afterChecksum?: string,
-  ): Promise<AdoptionRecord> {
+  ): Promise<GrowthAdoptionRecord> {
     const id = randomUUID();
-    const [r] = await ex.query<[AdoptionRecord[]]>(
+    const [r] = await ex.query<[GrowthAdoptionRecord[]]>(
       "CREATE growth_adoption_run CONTENT { adoption_id: $id, organization_id: $organization_id, suggestion_id: $suggestion_id, target_kind: $target_kind, evaluation_run_id: $evaluation_run_id, evaluation_input_hash: $evaluation_input_hash, configuration_version_id: $configuration_version_id, runtime_execution_id: $runtime_execution_id, before_version_id: $before_version_id, before_checksum: $before_checksum, after_version_id: $after_version_id, after_checksum: $after_checksum, governance_decision_id: $governance_decision_id, approval_id: $approval_id, status: $status, command_id: $command_id, request_hash: $request_hash, created_by_user_id: $user_id, created_at: time::now(), updated_at: time::now(), active_target_guard: $guard } RETURN AFTER; CREATE growth_adoption_event CONTENT { event_id: $event_id, organization_id: $organization_id, adoption_id: $id, event_type: $status, payload_json: $payload, created_at: time::now() };",
       {
         id,
@@ -414,14 +431,14 @@ export class GrowthAdoptionService {
   private async completeAwaiting(
     ex: QueryExecutor,
     context: TenantContext,
-    current: AdoptionRecord,
+    current: GrowthAdoptionRecord,
     decisionId: string,
     approvalId: string | undefined,
     afterVersionId: string,
     afterChecksum: string,
-  ): Promise<AdoptionRecord> {
+  ): Promise<GrowthAdoptionRecord> {
     if (!approvalId) throw new Error("awaiting-review Adoption 재개에는 approvalId가 필요합니다");
-    const [records] = await ex.query<[AdoptionRecord[]]>(
+    const [records] = await ex.query<[GrowthAdoptionRecord[]]>(
       "UPDATE growth_adoption_run SET status = 'observing', governance_decision_id = $decision_id, approval_id = $approval_id, after_version_id = $after_version_id, after_checksum = $after_checksum, active_target_guard = $guard, updated_at = time::now() WHERE organization_id = $organization_id AND adoption_id = $adoption_id AND status = 'awaiting-review' RETURN AFTER; CREATE growth_adoption_event CONTENT { event_id: $event_id, organization_id: $organization_id, adoption_id: $adoption_id, event_type: 'adoption_resumed', payload_json: $payload, created_at: time::now() };",
       {
         organization_id: context.organizationId,

@@ -613,4 +613,26 @@ describe("Application desktop service", () => {
       }),
     );
   });
+
+  it("개선 상세의 승인은 revision과 사유를 typed command로 보낸다", async () => {
+    const native = transport();
+    const service = createApplicationDesktopService(native, { createId: () => "request-0001" });
+
+    await service.approveGrowthSuggestion({
+      suggestionId: "suggestion-0001",
+      expectedRevision: 2,
+      reason: "평가와 대상 checksum을 확인했습니다",
+    });
+
+    expect(native.command).toHaveBeenCalledWith(
+      expect.objectContaining({
+        operation: "growth.suggestion.approve",
+        payload: {
+          suggestionId: "suggestion-0001",
+          expectedRevision: 2,
+          reason: "평가와 대상 checksum을 확인했습니다",
+        },
+      }),
+    );
+  });
 });

@@ -57,14 +57,21 @@ export interface ApplicationDomainDependencies {
   readonly workspaces?: Pick<WorkspaceService, "register" | "decideTrust" | "archive" | "get" | "list">;
   readonly autonomy?: Pick<AutonomyStore, "set">;
   readonly runtime?: Pick<AgentRunner, "execute" | "cancel" | "suspend" | "resume">;
-  readonly approvals?: Pick<ApprovalStore, "vote" | "cancel">;
+  readonly approvals?: Pick<ApprovalStore, "get" | "vote" | "cancel">;
   readonly assuranceBindings?: Pick<AssuranceBindingStore, "propose" | "activate">;
   readonly organization?: Pick<OrganizationGraphService, "execute">;
   readonly extension?: Pick<ExtensionGateway, "validate" | "link" | "pack" | "install" | "update" | "rollback">;
   // `start`는 onboarding(LocalApplicationBootstrap)에서 메모리 시드 연결에 사용합니다.
   readonly growth?: Pick<
     GrowthGateway,
-    "configure" | "adopt" | "reject" | "revert" | "start" | "putExplicitMemory" | "forgetExplicitMemory"
+    | "configure"
+    | "adopt"
+    | "getSuggestionDetails"
+    | "reject"
+    | "revert"
+    | "start"
+    | "putExplicitMemory"
+    | "forgetExplicitMemory"
   >;
   readonly providers?: Pick<
     ProviderService,
@@ -1292,6 +1299,7 @@ function registerExtension(
 function registerGrowth(
   registry: ApplicationCommandRegistry,
   growth: NonNullable<ApplicationDomainDependencies["growth"]>,
+  approvals?: NonNullable<ApplicationDomainDependencies["approvals"]>,
 ): void {
   const definitions = [
     ["growth.configure", "configure", ["subject", "reflectionEnabled", "adoptionMode", "expectedVersion"]],
@@ -1323,6 +1331,65 @@ function registerGrowth(
         try {
           const output = await growth[method](context, { commandId: command.commandId, ...value } as never);
           return result(command, { data: growthData(output) });
+        } catch (error) {
+          if (error instanceof GovernanceApprovalRequiredError)
+            return result(command, {
+              outcome: "awaiting-approval",
+              data: { decisionId: error.decisionId, approvalId: error.approvalId },
+            });
+          return domainError(error, command.correlationId);
+        }
+      },
+    });
+  }
+  if (approvals) {
+    register(registry, {
+      operation: "growth.suggestion.approve",
+      requiredScopes: ["growth:write", "approval:write"],
+      allowedRoles: ["owner", "admin", "member"],
+      recovery: "replay-domain",
+      validate: (value) =>
+        payload(value, ["suggestionId", "expectedRevision", "reason"], ["suggestionId", "expectedRevision"]),
+      idempotencyPayload: (value) => value,
+      async handle(context, command, value) {
+        try {
+          const suggestionId = string(value.suggestionId, "suggestionId");
+          const expectedRevision = integer(value.expectedRevision, "expectedRevision", 1);
+          const detail = await growth.getSuggestionDetails(context, suggestionId);
+          if (detail.suggestion.revision !== expectedRevision) throw new Error("Growth Suggestion revision 충돌입니다");
+          const adoption = detail.adoption;
+          const evaluation = detail.evaluation;
+          if (!adoption?.approvalId || adoption.status !== "awaiting-review")
+            throw new Error("승인 대기 중인 Growth Adoption을 찾을 수 없습니다");
+          if (!evaluation || evaluation.outcome !== "eligible" || evaluation.inputHash !== adoption.evaluationInputHash)
+            throw new Error("Growth Suggestion의 eligible 평가 계보가 일치하지 않습니다");
+          const approval = await approvals.get(context, adoption.approvalId);
+          const voted = await approvals.vote(context, {
+            commandId: `${command.commandId}:approval`,
+            approvalId: adoption.approvalId,
+            expectedRevision: approval.revision,
+            vote: "approve",
+            reason: string(value.reason ?? "개선 상세에서 승인했습니다", "reason"),
+          });
+          if (voted.status !== "approved")
+            throw new Error("Growth Suggestion Approval이 아직 quorum을 충족하지 않았습니다");
+          const adopted = await growth.adopt(context, {
+            commandId: adoption.commandId,
+            suggestionId,
+            suggestionRevision: expectedRevision,
+            evaluationRunId: evaluation.evaluationRunId,
+            expectedEvaluationInputHash: adoption.evaluationInputHash,
+            expectedTargetChecksum: adoption.beforeChecksum,
+            approvalId: adoption.approvalId,
+          });
+          return result(command, {
+            resource: { type: "GrowthSuggestion", id: suggestionId, revision: expectedRevision },
+            data: {
+              approvalId: adoption.approvalId,
+              approvalStatus: voted.status,
+              adoption: growthData(adopted),
+            },
+          });
         } catch (error) {
           if (error instanceof GovernanceApprovalRequiredError)
             return result(command, {
@@ -2484,7 +2551,7 @@ export function registerApplicationDomainCommands(
   if (dependencies.assuranceBindings) registerAssuranceBindings(registry, dependencies.assuranceBindings);
   if (dependencies.organization) registerOrganization(registry, dependencies.organization);
   if (dependencies.extension) registerExtension(registry, dependencies.extension);
-  if (dependencies.growth) registerGrowth(registry, dependencies.growth);
+  if (dependencies.growth) registerGrowth(registry, dependencies.growth, dependencies.approvals);
   registerRouter(registry, dependencies);
   registerSubscriptions(registry, dependencies);
   registerOptimization(registry, dependencies);

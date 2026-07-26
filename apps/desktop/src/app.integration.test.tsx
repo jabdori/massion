@@ -488,7 +488,7 @@ describe("AgentOS native data flow", () => {
     // 문구가 아니라 disabled로 검사해야 나중에 버튼 라벨이 바뀌어도 규칙이 지켜집니다.
     expect(screen.getByRole("button", { name: "검증 근거 보강 승인" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "검증 근거 보강 거절" })).toBeDisabled();
-    expect(screen.getByText("승인은 아직 연결되지 않았습니다. 거절은 이 상세에서 기록합니다.")).toBeInTheDocument();
+    expect(screen.getByText("결정은 이 상세의 근거를 확인한 뒤 기록합니다.")).toBeInTheDocument();
   });
 
   it("성장 기록이 없으면 검증된 실행 기록을 기다리는 빈 상태를 표시한다", async () => {

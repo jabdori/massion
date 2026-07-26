@@ -709,6 +709,25 @@ describe("ApplicationQueryRegistry", () => {
             },
           },
         ],
+        getSuggestionDetails: async () =>
+          ({
+            suggestion: {
+              suggestion_id: "suggestion-detail",
+              work_id: "query-work",
+              target_kind: "prompt",
+              operation: "replace-instruction",
+              summary: "실제 근거 연결",
+              rationale: "완료 Work에서 반복된 근거",
+              expected_effect: "재작업 감소",
+              risk_summary: "지시문이 길어짐",
+              status: "awaiting-review",
+              revision: 2,
+              reflection_run_id: "reflection-detail",
+              source_reference_ids: ["work:query-work"],
+              patch_json: "{}",
+            },
+            patch: { instruction: "근거를 먼저 확인합니다" },
+          }) as never,
         listEffectEvaluations: async () => [],
       } as never,
     });
@@ -728,6 +747,11 @@ describe("ApplicationQueryRegistry", () => {
           },
         },
       ],
+    });
+    await expect(
+      registry.query(context, ["growth:read"], "growth.suggestion.get", { suggestionId: "suggestion-detail" }),
+    ).resolves.toMatchObject({
+      data: { suggestionId: "suggestion-detail", patch: { instruction: "근거를 먼저 확인합니다" } },
     });
   });
 

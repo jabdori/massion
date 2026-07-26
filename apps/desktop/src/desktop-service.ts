@@ -235,13 +235,30 @@ export interface GrowthSignalView {
   readonly adapterId: string;
   readonly adapterVersion: string;
   readonly note: string;
+  readonly sourceId?: string;
+  readonly sourceChecksum?: string;
+  readonly fresh?: boolean;
 }
 
 export interface GrowthEvaluationView {
   readonly evaluationRunId: string;
   readonly outcome: "eligible" | "ineligible" | "blocked";
   readonly strategyVersionId: string;
+  readonly inputHash?: string;
   readonly signals: readonly GrowthSignalView[];
+}
+
+export interface GrowthAdoptionView {
+  readonly adoptionId: string;
+  readonly status: string;
+  readonly commandId: string;
+  readonly approvalId?: string;
+  readonly evaluationRunId: string;
+  readonly evaluationInputHash: string;
+  readonly beforeVersionId: string;
+  readonly beforeChecksum: string;
+  readonly afterVersionId?: string;
+  readonly afterChecksum?: string;
 }
 
 export interface GrowthPatchLineView {
@@ -287,6 +304,7 @@ export interface GrowthView {
     /** 도메인 `patch_json`을 줄 단위로 푼 것. */
     readonly patch?: readonly GrowthPatchLineView[];
     readonly evaluation?: GrowthEvaluationView;
+    readonly adoption?: GrowthAdoptionView;
     /** 제안 당시 대상 checksum과 현재가 어긋나면 채택할 수 없습니다. */
     readonly targetDrifted?: boolean;
     readonly beforeVersionId?: string;
@@ -347,6 +365,11 @@ export interface DesktopService {
   /** 설치된 확장과 마켓플레이스 항목을 하나의 목록으로 줍니다. Capability가 먼저입니다. */
   loadExtensions(): Promise<readonly ExtensionEntryView[]>;
   loadGrowth(): Promise<GrowthView>;
+  approveGrowthSuggestion(input: {
+    readonly suggestionId: string;
+    readonly expectedRevision: number;
+    readonly reason: string;
+  }): Promise<void>;
   rejectGrowthSuggestion(input: {
     readonly suggestionId: string;
     readonly expectedRevision: number;
@@ -614,6 +637,13 @@ export function createApplicationDesktopService(
     },
     async rejectGrowthSuggestion(input) {
       await client.command("growth.suggestion.reject", {
+        suggestionId: input.suggestionId,
+        expectedRevision: input.expectedRevision,
+        reason: input.reason,
+      });
+    },
+    async approveGrowthSuggestion(input) {
+      await client.command("growth.suggestion.approve", {
         suggestionId: input.suggestionId,
         expectedRevision: input.expectedRevision,
         reason: input.reason,
@@ -1266,6 +1296,7 @@ export function createFixtureDesktopService(): DesktopService {
           },
         ],
       })),
+    approveGrowthSuggestion: () => fixturePromise(() => undefined),
     rejectGrowthSuggestion: () => fixturePromise(() => undefined),
     installRegistry: () =>
       fixturePromise(() => ({ outcome: "succeeded", installationId: "installation-fixture-0001" })),

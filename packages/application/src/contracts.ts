@@ -352,6 +352,54 @@ export interface ExplicitMemoryViewV1 {
   readonly entries: readonly ExplicitMemoryEntryViewV1[];
 }
 
+export interface GrowthSuggestionViewV1 {
+  readonly suggestionId: string;
+  readonly workId: string;
+  readonly targetKind: string;
+  readonly operation: string;
+  readonly summary: string;
+  readonly rationale: string;
+  readonly expectedEffect: string;
+  readonly riskSummary: string;
+  readonly status: string;
+  readonly revision: number;
+  readonly createdAt?: string;
+  readonly reflectionRunId: string;
+  readonly sourceReferenceIds: readonly string[];
+  readonly patch?: Readonly<Record<string, unknown>>;
+  readonly evaluation?: {
+    readonly evaluationRunId: string;
+    readonly outcome: "eligible" | "ineligible" | "blocked";
+    readonly strategyVersionId: string;
+    readonly inputHash: string;
+    readonly signals: readonly {
+      readonly signalId: string;
+      readonly group: "required" | "supporting" | "conflict";
+      readonly origin: "deterministic" | "independent" | "model-self";
+      readonly outcome: "passed" | "failed" | "unavailable";
+      readonly score: number;
+      readonly adapterId: string;
+      readonly adapterVersion: string;
+      readonly note: string;
+      readonly sourceId: string;
+      readonly sourceChecksum: string;
+      readonly fresh: boolean;
+    }[];
+  };
+  readonly adoption?: {
+    readonly adoptionId: string;
+    readonly status: string;
+    readonly commandId: string;
+    readonly approvalId?: string;
+    readonly evaluationRunId: string;
+    readonly evaluationInputHash: string;
+    readonly beforeVersionId: string;
+    readonly beforeChecksum: string;
+    readonly afterVersionId?: string;
+    readonly afterChecksum?: string;
+  };
+}
+
 export interface ApplicationQueryMapV1 {
   readonly "workspace.list": { readonly payload: Record<string, never>; readonly data: readonly WorkspaceViewV1[] };
   readonly "workspace.get": { readonly payload: { readonly workspaceId: string }; readonly data: WorkspaceViewV1 };
@@ -421,6 +469,14 @@ export interface ApplicationQueryMapV1 {
     readonly payload: Record<string, never>;
     readonly data: readonly ExplicitMemoryViewV1[];
   };
+  readonly "growth.suggestions": {
+    readonly payload: { readonly workId?: string; readonly status?: string; readonly limit?: number };
+    readonly data: readonly GrowthSuggestionViewV1[];
+  };
+  readonly "growth.suggestion.get": {
+    readonly payload: { readonly suggestionId: string };
+    readonly data: GrowthSuggestionViewV1;
+  };
   readonly "organization.graph.snapshot": {
     readonly payload: Record<string, never>;
     readonly data: OrganizationGraphSnapshotV1;
@@ -467,6 +523,9 @@ export interface ApplicationCommandMapV1 {
   };
   readonly "growth.memory.forget": { readonly payload: { readonly key: string } };
   readonly "growth.suggestion.reject": {
+    readonly payload: { readonly suggestionId: string; readonly expectedRevision: number; readonly reason: string };
+  };
+  readonly "growth.suggestion.approve": {
     readonly payload: { readonly suggestionId: string; readonly expectedRevision: number; readonly reason: string };
   };
 }
