@@ -118,7 +118,7 @@ test("릴리스 앱 전용 빌드는 최신 renderer와 runtime stage를 같은 
     packageJson.scripts["tauri:build"],
     "cargo tauri build --bundles app --config src-tauri/tauri.release.conf.json",
   );
-  assert.equal(release.build.beforeBuildCommand, "pnpm build && node src-tauri/stage-runtime.mjs");
+  assert.equal(release.build.beforeBuildCommand, "node src-tauri/stage-runtime.mjs && pnpm build");
   assert.deepEqual(manifest.build, ["@massion/server", "@massion/desktop-bridge"]);
   assert.match(
     await readFile(path.join(desktop, "src-tauri/build.rs"), "utf8"),
