@@ -374,6 +374,38 @@ describe("ApplicationRunStore", () => {
     );
   });
 
+  it("자율성 재평가는 승인 대기 run을 같은 요청 계보의 새 시도로 claim한다", async () => {
+    const run = await store.start(context, {
+      commandId: "application-run-autonomy-reevaluate-0001",
+      correlationId: "application-run-autonomy-reevaluate-correlation-0001",
+      request: { text: "기존 요청" },
+    });
+    const initial = await store.claim(context, run.runId);
+    if (initial.outcome !== "claimed") throw new Error("초기 run lease를 얻지 못했습니다");
+    await store.suspend(context, run.runId, initial.leaseGeneration, "approval-autonomy-0001");
+
+    await expect(
+      store.claim(context, run.runId, {
+        reevaluateAwaitingApproval: true,
+        approvalId: "wrong-approval-0001",
+        retryAttemptId: "autonomy:2",
+      }),
+    ).rejects.toThrow("자율성 재평가 Approval");
+    const reevaluated = await store.claim(context, run.runId, {
+      reevaluateAwaitingApproval: true,
+      approvalId: "approval-autonomy-0001",
+      retryAttemptId: "autonomy:2",
+    });
+    expect(reevaluated).toMatchObject({ outcome: "claimed", retryAttemptId: "autonomy:2" });
+    await expect(store.get(context, run.runId)).resolves.toMatchObject({
+      status: "running",
+      request: { text: "기존 요청" },
+      retryAttemptId: "autonomy:2",
+    });
+    await expect(store.get(context, run.runId)).resolves.not.toHaveProperty("approvalId");
+    await expect(store.get(context, run.runId)).resolves.not.toHaveProperty("resumeInput");
+  });
+
   it("승인 재개 ID는 block·일반 복구에서 보존하고 stage 전이·완료·새 승인·취소에서 제거한다", async () => {
     async function resumed(suffix: string) {
       const approvalId = `approval-resume-transition-${suffix}`;

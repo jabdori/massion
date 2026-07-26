@@ -221,6 +221,7 @@ export class ApplicationRunStore {
     runId: string,
     options: {
       readonly resumeAwaitingApproval?: boolean;
+      readonly reevaluateAwaitingApproval?: boolean;
       readonly resumeBlocked?: boolean;
       readonly retryAttemptId?: string;
       readonly approvalId?: string;
@@ -228,14 +229,20 @@ export class ApplicationRunStore {
   ): Promise<ClaimApplicationRunResult> {
     const retryAttemptId = validRetryAttemptId(options.retryAttemptId);
     const resumeApprovalId = validResumeApprovalId(options.approvalId);
-    if (retryAttemptId !== undefined && !options.resumeBlocked) {
+    if (retryAttemptId !== undefined && !options.resumeBlocked && !options.reevaluateAwaitingApproval) {
       throw new Error("재시도 시도 ID는 차단된 Application run 재시도에만 사용할 수 있습니다");
     }
-    if (options.resumeAwaitingApproval && resumeApprovalId === undefined) {
+    if (options.resumeAwaitingApproval && options.reevaluateAwaitingApproval) {
+      throw new Error("승인 재개와 자율성 재평가를 동시에 claim할 수 없습니다");
+    }
+    if ((options.resumeAwaitingApproval || options.reevaluateAwaitingApproval) && resumeApprovalId === undefined) {
       throw new Error("승인 재개 Approval ID가 필요합니다");
     }
-    if (!options.resumeAwaitingApproval && resumeApprovalId !== undefined) {
+    if (!options.resumeAwaitingApproval && !options.reevaluateAwaitingApproval && resumeApprovalId !== undefined) {
       throw new Error("Approval ID는 승인 재개 claim에만 사용할 수 있습니다");
+    }
+    if (options.reevaluateAwaitingApproval && !/^autonomy:\d+$/u.test(retryAttemptId ?? "")) {
+      throw new Error("자율성 재평가 retryAttemptId가 유효하지 않습니다");
     }
     await this.organizations.verifyTenantContext(context);
     return await this.database.transaction(async (transaction) => {
@@ -247,14 +254,24 @@ export class ApplicationRunStore {
       ) {
         throw new Error("Application run의 승인 재개 Approval 연결이 일치하지 않습니다");
       }
-      if (retryAttemptId !== undefined && !(record.status === "blocked" && options.resumeBlocked)) {
+      if (
+        options.reevaluateAwaitingApproval &&
+        (record.status !== "awaiting-approval" || record.approval_id !== resumeApprovalId)
+      ) {
+        throw new Error("Application run의 자율성 재평가 Approval 연결이 일치하지 않습니다");
+      }
+      if (
+        retryAttemptId !== undefined &&
+        !(record.status === "blocked" && options.resumeBlocked) &&
+        !(record.status === "awaiting-approval" && options.reevaluateAwaitingApproval)
+      ) {
         throw new Error("새 재시도 시도 ID는 차단된 Application run에만 사용할 수 있습니다");
       }
       if (["completed", "failed", "cancelled"].includes(record.status)) {
         return { outcome: "terminal", run: this.view(record) };
       }
       if (record.status === "blocked" && !options.resumeBlocked) return { outcome: "terminal", run: this.view(record) };
-      if (record.status === "awaiting-approval" && !options.resumeAwaitingApproval) {
+      if (record.status === "awaiting-approval" && !options.resumeAwaitingApproval && !options.reevaluateAwaitingApproval) {
         return { outcome: "terminal", run: this.view(record) };
       }
       if (
@@ -268,10 +285,18 @@ export class ApplicationRunStore {
       const generation = record.lease_generation + 1;
       const expiresAt = new Date(this.clock.now.getTime() + this.leaseMs).toISOString();
       const nextRetryAttemptId = retryAttemptId ?? record.retry_attempt_id;
-      const nextRetryReplayId = retryAttemptId === undefined ? record.retry_replay_id : undefined;
-      const nextResumeApprovalId = resumeApprovalId ?? record.resume_approval_id;
+      const nextRetryReplayId = options.reevaluateAwaitingApproval
+        ? undefined
+        : retryAttemptId === undefined
+          ? record.retry_replay_id
+          : undefined;
+      const nextResumeApprovalId = options.reevaluateAwaitingApproval
+        ? undefined
+        : (resumeApprovalId ?? record.resume_approval_id);
       await transaction.query(
-        options.resumeAwaitingApproval
+        options.reevaluateAwaitingApproval
+          ? "UPDATE application_run SET status = 'running', lease_generation = $generation, lease_expires_at = <datetime>$expires_at, approval_id = NONE, resume_approval_id = NONE, blocked_reason = NONE, retry_attempt_id = $retry_attempt_id, retry_replay_id = NONE, updated_at = <datetime>$updated_at WHERE organization_id = $organization_id AND run_id = $run_id AND status = $previous_status AND lease_generation = $previous_generation AND approval_id = $approval_id;"
+          : options.resumeAwaitingApproval
           ? "UPDATE application_run SET status = 'running', lease_generation = $generation, lease_expires_at = <datetime>$expires_at, approval_id = NONE, resume_approval_id = $resume_approval_id, blocked_reason = NONE, retry_attempt_id = $retry_attempt_id, retry_replay_id = $retry_replay_id, updated_at = <datetime>$updated_at WHERE organization_id = $organization_id AND run_id = $run_id AND status = $previous_status AND lease_generation = $previous_generation AND approval_id = $resume_approval_id;"
           : "UPDATE application_run SET status = 'running', lease_generation = $generation, lease_expires_at = <datetime>$expires_at, approval_id = NONE, resume_approval_id = $resume_approval_id, blocked_reason = NONE, retry_attempt_id = $retry_attempt_id, retry_replay_id = $retry_replay_id, updated_at = <datetime>$updated_at WHERE organization_id = $organization_id AND run_id = $run_id AND status = $previous_status AND lease_generation = $previous_generation;",
         {
@@ -284,6 +309,7 @@ export class ApplicationRunStore {
           retry_attempt_id: nextRetryAttemptId,
           retry_replay_id: nextRetryReplayId,
           resume_approval_id: nextResumeApprovalId,
+          approval_id: resumeApprovalId,
           updated_at: this.clock.now.toISOString(),
         },
       );
@@ -291,7 +317,8 @@ export class ApplicationRunStore {
       if (
         claimed.status !== "running" ||
         claimed.lease_generation !== generation ||
-        claimed.resume_approval_id !== nextResumeApprovalId
+        claimed.resume_approval_id !== nextResumeApprovalId ||
+        (options.reevaluateAwaitingApproval && claimed.approval_id !== undefined)
       ) {
         throw new Error("Application run lease 회수 동시성 충돌입니다");
       }

@@ -462,6 +462,25 @@ export class RuntimeExecutionStore {
     return executions;
   }
 
+  public async listActiveByAutonomy(
+    context: TenantContext,
+    input: { readonly mode: "automatic" | "review" | "full-access"; readonly revision: number },
+  ): Promise<RuntimeExecution[]> {
+    await this.organizations.verifyTenantContext(context, ["owner", "admin"]);
+    if (!Number.isSafeInteger(input.revision) || input.revision < 0) {
+      throw new Error("자율성 revision이 유효하지 않습니다");
+    }
+    const [executions] = await this.database.query<[RuntimeExecution[]]>(
+      "SELECT * OMIT id FROM runtime_execution WHERE organization_id = $organization_id AND status IN ['running', 'suspended'] AND autonomy_mode = $autonomy_mode AND autonomy_revision = $autonomy_revision ORDER BY created_at ASC, execution_id ASC;",
+      {
+        organization_id: context.organizationId,
+        autonomy_mode: input.mode,
+        autonomy_revision: input.revision,
+      },
+    );
+    return executions;
+  }
+
   public async listByCorrelation(context: TenantContext, correlationId: string): Promise<RuntimeExecution[]> {
     await this.organizations.verifyTenantContext(context);
     const normalizedCorrelationId = correlationId.trim();

@@ -198,6 +198,42 @@ describe("Runtime Execution Store", () => {
     await expect(store.listByCorrelation(context, " \n")).rejects.toThrow("상관관계");
   });
 
+  it("owner가 자율성 mode·revision으로 조직의 활성 실행을 조회하고 member 접근은 거부한다", async () => {
+    const lineageStore = await RuntimeExecutionStore.create(database, await OrganizationService.create(database), undefined, async () => ({
+      mode: "full-access",
+      revision: 2,
+    }));
+    const created = await lineageStore.createExecution(context, {
+      commandId: "autonomy-active-list-command",
+      workId: "autonomy-active-list-work",
+      agentHandle: "representative",
+      modelRoute: "coding-balanced",
+      correlationId: "autonomy-active-list-correlation",
+      estimatedTokens: 1,
+      estimatedCostMicros: 1,
+      input: { text: "active" },
+    });
+    await lineageStore.transition(context, {
+      commandId: "autonomy-active-list-running",
+      executionId: created.execution.execution_id,
+      expectedVersion: 1,
+      target: "running",
+      payload: {},
+    });
+
+    await expect(lineageStore.listActiveByAutonomy(context, { mode: "full-access", revision: 2 })).resolves.toEqual([
+      expect.objectContaining({ execution_id: created.execution.execution_id, autonomy_revision: 2 }),
+    ]);
+    const identity = await IdentityService.create(database);
+    const organizations = await OrganizationService.create(database);
+    const other = await identity.registerPersonalUser({ email: "autonomy-active-member@example.com", displayName: "Member" });
+    await organizations.addMember(context, other.user.user_id, "member");
+    const otherContext = await organizations.resolveTenantContext(other.user.user_id, context.organizationId);
+    await expect(lineageStore.listActiveByAutonomy(otherContext, { mode: "full-access", revision: 2 })).rejects.toThrow(
+      "권한",
+    );
+  });
+
   it("workflow binding과 recovery snapshot을 저장하고 tenant 위조를 거부한다", async () => {
     const created = await createExecution();
     await store.bindWorkflow(context, {
