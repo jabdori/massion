@@ -116,6 +116,29 @@ describe("completed Records Growth trigger", () => {
     expect(result).toMatchObject({ outcome: "skipped", reason: "reflection-disabled" });
   });
 
+  it("만료된 claim은 고정한 configuration version을 보존한 채 다시 claim할 수 있다", async () => {
+    await insertWorkAndRecord("records-run-expired");
+    await triggers.backfill(context);
+    const first = await triggers.claim(context, { workerId: "worker-a", leaseMs: 1 });
+    expect(first).toMatchObject({ outcome: "claimed" });
+    if (first.outcome !== "claimed") throw new Error("Growth trigger를 claim하지 못했습니다");
+
+    await configurations.configure(context, {
+      commandId: "disable-after-claim",
+      subject: { type: "organization" },
+      reflectionEnabled: false,
+      adoptionMode: "review",
+      expectedVersion: 1,
+    });
+
+    await expect(triggers.requeueExpired(context, new Date(Date.now() + 60_000))).resolves.toBe(1);
+    const second = await triggers.claim(context, { workerId: "worker-b", leaseMs: 60_000 });
+    expect(second).toMatchObject({
+      outcome: "claimed",
+      trigger: { configuration_version_id: first.trigger.configuration_version_id },
+    });
+  });
+
   it("completed가 아닌 run과 legacy WorkRecord는 backfill하지 않는다", async () => {
     await insertWorkAndRecord("records-run-finalized", "finalized");
     await insertWorkAndRecord("records-run-legacy", "completed", false);

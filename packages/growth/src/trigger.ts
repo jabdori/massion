@@ -30,6 +30,18 @@ interface CompletedRun {
   readonly assurance_run_id: string;
 }
 
+interface ClaimConfiguration {
+  readonly configurationVersionId: string;
+  readonly reflectionEnabled: boolean;
+}
+
+interface StoredConfigurationRecord {
+  readonly configuration_version_id: string;
+  readonly subject_type: "organization" | "user";
+  readonly subject_id?: string;
+  readonly reflection_enabled: boolean;
+}
+
 function triggerId(organizationId: string, recordsRunId: string): string {
   return createHash("sha256").update(`${organizationId}|${recordsRunId}`).digest("hex");
 }
@@ -99,6 +111,16 @@ export class GrowthTriggerStore {
     return { created, existing };
   }
 
+  public async requeueExpired(context: TenantContext, now = new Date()): Promise<number> {
+    await this.organizations.verifyTenantContext(context);
+    if (Number.isNaN(now.getTime())) throw new Error("Growth trigger 재시도 시각이 유효하지 않습니다");
+    const [updated] = await this.database.query<[GrowthTrigger[]]>(
+      "UPDATE growth_trigger SET status = 'pending', worker_id = NONE, lease_expires_at = NONE, updated_at = time::now() WHERE organization_id = $organization_id AND status = 'claimed' AND lease_expires_at <= type::datetime($now) RETURN AFTER;",
+      { organization_id: context.organizationId, now: now.toISOString() },
+    );
+    return updated.length;
+  }
+
   public async claim(
     context: TenantContext,
     input: { readonly workerId: string; readonly leaseMs: number },
@@ -113,7 +135,12 @@ export class GrowthTriggerStore {
     );
     const candidate = pending[0];
     if (!candidate) return { outcome: "none" };
-    const configuration = await this.configurations.resolve(context, candidate.requester_user_id);
+    const configuration: ClaimConfiguration = candidate.configuration_version_id
+      ? await this.storedConfiguration(context, candidate)
+      : await this.configurations.resolve(context, candidate.requester_user_id).then((value) => ({
+        configurationVersionId: value.configurationVersionId,
+        reflectionEnabled: value.reflectionEnabled,
+      }));
     if (!configuration.reflectionEnabled) {
       const skipped = await this.database.transaction(async (transaction) => {
         const [updated] = await transaction.query<[GrowthTrigger[]]>(
@@ -145,5 +172,20 @@ export class GrowthTriggerStore {
       return updated;
     });
     return claimed[0] ? { outcome: "claimed", trigger: claimed[0] } : { outcome: "none" };
+  }
+
+  private async storedConfiguration(context: TenantContext, trigger: GrowthTrigger): Promise<ClaimConfiguration> {
+    const configurationVersionId = trigger.configuration_version_id;
+    if (!configurationVersionId) throw new Error("Growth trigger configuration version이 필요합니다");
+    const [records] = await this.database.query<[StoredConfigurationRecord[]]>(
+      "SELECT configuration_version_id, subject_type, subject_id, reflection_enabled FROM growth_configuration_version WHERE organization_id = $organization_id AND configuration_version_id = $configuration_version_id LIMIT 1;",
+      { organization_id: context.organizationId, configuration_version_id: configurationVersionId },
+    );
+    const record = records[0];
+    if (!record) throw new Error("Growth trigger의 configuration version을 찾을 수 없습니다");
+    if (record.subject_type === "user" && record.subject_id !== trigger.requester_user_id) {
+      throw new Error("Growth trigger configuration의 요청자 경계가 일치하지 않습니다");
+    }
+    return { configurationVersionId: record.configuration_version_id, reflectionEnabled: record.reflection_enabled };
   }
 }
