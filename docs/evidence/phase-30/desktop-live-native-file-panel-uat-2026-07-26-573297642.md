@@ -2,6 +2,9 @@
 
 > 이 기록은 제품 소스 후보 `573297642`에서 실제 Tauri 앱의 폴더·파일 패널을 호출한 증분 증거입니다. 파일 선택 완료·같은 Work 실행·23개 전체 UAT·서명·공증을 통과했다고 주장하지 않습니다.
 
+<!-- desktop-uat-evidence: actual-tauri -->
+<!-- desktop-release-candidate-sha: 573297642a41088a662aa58690ca16f2a43e84b6 -->
+
 ## 실행 경계
 
 - 제품 후보 SHA: `573297642a41088a662aa58690ca16f2a43e84b6`
