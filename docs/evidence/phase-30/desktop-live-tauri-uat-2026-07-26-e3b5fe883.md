@@ -25,6 +25,7 @@
 | 수신함 | `governance.approval.list`가 기존 approval 상태를 반환하며 만료 항목을 숨기지 않음 |
 | Growth·기억 | `growth.configuration.get`, `growth.suggestions`, `growth.effects`, `growth.memories`를 실제 API로 조회. 명시적 memory put/forget도 revision `7→8→9`로 성공했고 재시작 후 version 9와 기존 key가 보존됨. 현재 effect cohort는 0건이며 성공으로 세지 않음 |
 | Provider 진단 | `subscription.doctor`가 개인 Z.AI 연결을 `ready`로 반환 |
+| 전체 권한 | 실제 bundled 앱에서 `automatic(revision 10) → full-access(revision 11) → automatic(revision 12)` 전환과 `runtimePermissionStatus` 전파를 확인 |
 | 재시작 보존 | 앱·sidecar를 종료 후 같은 번들을 재기동하고, 같은 Work의 `completed`·artifact 2개·5개 성공 실행·workspace ID를 재조회 |
 
 ## 제한과 미완료
