@@ -1,8 +1,8 @@
 # 페이즈 03 — 지식 그래프·검색·기억의 업무 연결
 
-> **상태:** 진행 중
+> **상태:** 코드·실제 Tauri 증분 검증 완료, 전체 K UAT 대기
 > **시작 기준:** 워크스페이스 선택과 네이티브 파일 첨부의 코드 검증 완료
-> **다음 게이트:** 동일 후보 SHA의 실제 Tauri 앱에서 UAT-K01~K04를 끝까지 재현
+> **다음 게이트:** native picker를 포함한 전체 UAT-K01~K04와 릴리스 설치 게이트
 
 ## 목표
 
@@ -109,7 +109,7 @@
 ### 03-5 — 서버 생산 조립과 Desktop 출처·기억 UI
 
 - `8ef9a9816` — DesktopService가 typed `work.knowledge`를 조회하고 Work 세부 정보에 `지식` 탭을 추가했습니다. ready/no-match/blocked/not-applicable 상태는 사람이 읽는 문구로 분리했고, ready reference만 Core Office 공유 출처로 이동합니다.
-- 실제 격리 macOS 번들(`dev.massion.desktop.knowledge-uat`)에서 Workspace 없는 Work를 만든 뒤 `지식` 탭을 확인했습니다. `이 Work는 워크스페이스 지식을 사용하지 않았습니다.`와 `워크스페이스를 선택한 새 Work에서 코드 근거를 사용할 수 있습니다.`만 표시됐고, 기존 산출물 빈 화면 문구는 표시되지 않았습니다. 검증 직후 번들을 종료했고 이후 Massion GUI 프로세스가 없음을 확인했습니다.
+- 실제 후보 `e3b5fe883` 번들에서 workspace의 `README.md`를 첨부한 Work를 실행하고 `work.knowledge=ready`, README reference 2개, 완료 Work·재시작 보존을 확인했습니다. 전체 K01~K04와 native picker는 아직 대기 중입니다. [최신 증거](../../../evidence/phase-30/desktop-live-tauri-uat-2026-07-26-e3b5fe883.md)
 
 | 검증 | 결과 |
 |---|---|
