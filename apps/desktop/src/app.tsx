@@ -2077,6 +2077,8 @@ function GrowthSurface({
   const [memoryValue, setMemoryValue] = useState("");
   const [memoryError, setMemoryError] = useState("");
   const [memorySaving, setMemorySaving] = useState(false);
+  const [configurationError, setConfigurationError] = useState("");
+  const [configurationSaving, setConfigurationSaving] = useState(false);
   const [decisionError, setDecisionError] = useState("");
   const [decisionSaving, setDecisionSaving] = useState(false);
   useEffect(() => {
@@ -2133,6 +2135,25 @@ function GrowthSurface({
       onRetry();
     } finally {
       setMemorySaving(false);
+    }
+  };
+
+  const configureAdoptionMode = async (adoptionMode: "review" | "auto") => {
+    const configuration = growth?.configuration;
+    if (configuration === undefined || configuration.adoptionMode === adoptionMode || configurationSaving) return;
+    setConfigurationSaving(true);
+    setConfigurationError("");
+    try {
+      await service.configureGrowth({
+        reflectionEnabled: configuration.reflectionEnabled,
+        adoptionMode,
+        ...(configuration.version === undefined ? {} : { expectedVersion: configuration.version }),
+      });
+      onRetry();
+    } catch (cause) {
+      setConfigurationError(surfaceErrorMessage(cause, "개선 반영 방식을 바꾸지 못했습니다."));
+    } finally {
+      setConfigurationSaving(false);
     }
   };
 
@@ -2565,6 +2586,26 @@ function GrowthSurface({
                   ? " 승인은 사람의 검토를 거칩니다."
                   : " 정책이 허용한 범위에서 자동 승인합니다."}
               </p>
+              <label className="mt-3 grid gap-1 text-[11px] text-muted">
+                반영 방식
+                <select
+                  aria-label="개선 반영 방식"
+                  className="h-8 rounded-[5px] border border-border bg-surface-1 px-2 text-[12px] text-primary outline-none focus:border-control disabled:opacity-50"
+                  disabled={configurationSaving}
+                  onChange={(event) => {
+                    void configureAdoptionMode(event.target.value as "review" | "auto");
+                  }}
+                  value={growth.configuration.adoptionMode}
+                >
+                  <option value="review">검토 후 반영</option>
+                  <option value="auto">검증되면 자동 반영</option>
+                </select>
+              </label>
+              {configurationError ? (
+                <p role="alert" className="mt-2 text-[11px] leading-5 text-danger">
+                  {configurationError}
+                </p>
+              ) : null}
               <p className="mt-1.5 text-[10px] leading-4 text-muted">
                 이 정책은 승인된 결정에 근거합니다{" "}
                 <span className="font-mono">{growth.configuration.governanceDecisionId}</span>

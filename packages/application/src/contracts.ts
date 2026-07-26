@@ -534,6 +534,14 @@ export interface ApplicationCommandMapV1 {
   };
   readonly "governance.autonomy.set": { readonly payload: { readonly mode: "automatic" | "review" | "full-access" } };
   readonly "governance.emergency.activate": { readonly payload: { readonly reason: string } };
+  readonly "growth.configure": {
+    readonly payload: {
+      readonly subject: { readonly type: "organization" };
+      readonly reflectionEnabled: boolean;
+      readonly adoptionMode: "review" | "auto";
+      readonly expectedVersion?: number;
+    };
+  };
   readonly "growth.memory.put": {
     readonly payload: {
       readonly key: string;

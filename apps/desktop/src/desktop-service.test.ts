@@ -211,6 +211,33 @@ describe("Application desktop service", () => {
     expect(native.query).toHaveBeenCalledWith("work.index", { search: "이탈", limit: 50 });
   });
 
+  it("개선 정책 변경은 조직 대상과 현재 version을 command에 전달한다", async () => {
+    const native = transport();
+    const service = createApplicationDesktopService(native, { createId: () => "request-0001" });
+
+    await (
+      service as DesktopService & {
+        configureGrowth(input: {
+          readonly reflectionEnabled: boolean;
+          readonly adoptionMode: "review" | "auto";
+          readonly expectedVersion?: number;
+        }): Promise<void>;
+      }
+    ).configureGrowth({ reflectionEnabled: true, adoptionMode: "auto", expectedVersion: 1 });
+
+    expect(native.command).toHaveBeenCalledWith(
+      expect.objectContaining({
+        operation: "growth.configure",
+        payload: {
+          subject: { type: "organization" },
+          reflectionEnabled: true,
+          adoptionMode: "auto",
+          expectedVersion: 1,
+        },
+      }),
+    );
+  });
+
   it("조직 스냅샷에 노드나 버전이 없으면 빈 조직 화면용 데이터를 반환한다", async () => {
     const native = transport();
     native.query.mockImplementation(async (operation: string) =>

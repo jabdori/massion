@@ -291,6 +291,7 @@ export interface GrowthView {
   readonly configuration?: {
     readonly reflectionEnabled: boolean;
     readonly adoptionMode: "review" | "auto";
+    readonly version?: number;
     readonly governanceDecisionId: string;
     readonly activatedAt: string;
   };
@@ -376,6 +377,11 @@ export interface DesktopService {
   /** 설치된 확장과 마켓플레이스 항목을 하나의 목록으로 줍니다. Capability가 먼저입니다. */
   loadExtensions(): Promise<readonly ExtensionEntryView[]>;
   loadGrowth(): Promise<GrowthView>;
+  configureGrowth(input: {
+    readonly reflectionEnabled: boolean;
+    readonly adoptionMode: "review" | "auto";
+    readonly expectedVersion?: number;
+  }): Promise<void>;
   approveGrowthSuggestion(input: {
     readonly suggestionId: string;
     readonly expectedRevision: number;
@@ -654,6 +660,14 @@ export function createApplicationDesktopService(
         suggestions: safeView(suggestions) as GrowthView["suggestions"],
         effects: safeView(effects) as GrowthView["effects"],
       };
+    },
+    async configureGrowth(input) {
+      await client.command("growth.configure", {
+        subject: { type: "organization" },
+        reflectionEnabled: input.reflectionEnabled,
+        adoptionMode: input.adoptionMode,
+        ...(input.expectedVersion === undefined ? {} : { expectedVersion: input.expectedVersion }),
+      });
     },
     async rejectGrowthSuggestion(input) {
       await client.command("growth.suggestion.reject", {
@@ -1160,6 +1174,7 @@ export function createFixtureDesktopService(): DesktopService {
       ),
     loadRegistryInfo: (versionId) => fixturePromise(() => fixtureRegistryDetail(versionId)),
     loadCapabilities: () => fixturePromise(() => ({ extensions: [], inventory: fixtureRegistryInventory })),
+    configureGrowth: () => fixturePromise(() => undefined),
     putExplicitMemory: () => fixturePromise(() => undefined),
     forgetExplicitMemory: () => fixturePromise(() => undefined),
     loadGrowth: () =>
