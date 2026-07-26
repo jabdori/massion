@@ -80,10 +80,34 @@ describe("Growth worker production loop", () => {
         if (sql.includes("assurance_run"))
           return [[{ organization_id: context.organizationId, work_id: trigger.work_id }]];
         if (sql.includes("work_event")) return [[]];
+        if (sql.includes("work WHERE"))
+          return [
+            [
+              {
+                prompt_version_id: "prompt-version-1",
+                policy_version_id: "policy-1",
+                organization_version_id: "organization-1",
+              },
+            ],
+          ];
+        if (sql.includes("prompt_version"))
+          return [
+            [
+              {
+                prompt_definition_version_id: "prompt-1",
+                prompt_definition_checksum: "a".repeat(64),
+                memory_version_ids: [],
+                memory_checksums: [],
+              },
+            ],
+          ];
+        if (sql.includes("governance_policy_version"))
+          return [[{ policy_version_id: "policy-1", checksum: "b".repeat(64) }]];
         if (sql.includes("prompt_definition_version"))
           return [[{ prompt_definition_version_id: "prompt-1", checksum: "a".repeat(64) }]];
         if (sql.includes("memory_version")) return [[]];
-        if (sql.includes("organization_version")) return [[]];
+        if (sql.includes("organization_version"))
+          return [[{ version_id: "organization-1", version: 1, before_json: "{}", after_json: "{}" }]];
         return [[]];
       }),
     } as never;
@@ -110,6 +134,77 @@ describe("Growth worker production loop", () => {
         evaluationRunId: "evaluation-1",
         expectedTargetChecksum: "a".repeat(64),
       }),
+    );
+  });
+
+  it("Reflection snapshot은 현재 대상이 아니라 Work가 고정한 계보를 사용한다", async () => {
+    const database = {
+      query: vi.fn(async (sql: string) => {
+        if (sql.includes("work_record"))
+          return [[{ organization_id: context.organizationId, work_id: trigger.work_id, artifact_version_ids: [] }]];
+        if (sql.includes("work_verification"))
+          return [[{ organization_id: context.organizationId, work_id: trigger.work_id }]];
+        if (sql.includes("assurance_run"))
+          return [[{ organization_id: context.organizationId, work_id: trigger.work_id }]];
+        if (sql.includes("work_event")) return [[]];
+        if (sql.includes("work WHERE"))
+          return [
+            [
+              {
+                prompt_version_id: "prompt-version-1",
+                policy_version_id: "policy-1",
+                organization_version_id: "organization-1",
+              },
+            ],
+          ];
+        if (sql.includes("prompt_version"))
+          return [
+            [
+              {
+                prompt_definition_version_id: "prompt-fixed",
+                prompt_definition_checksum: "d".repeat(64),
+                memory_version_ids: ["memory-fixed"],
+                memory_checksums: ["e".repeat(64)],
+              },
+            ],
+          ];
+        if (sql.includes("governance_policy_version"))
+          return [[{ policy_version_id: "policy-1", checksum: "f".repeat(64) }]];
+        if (sql.includes("prompt_definition_version"))
+          return [[{ prompt_definition_version_id: "prompt-current", checksum: "a".repeat(64) }]];
+        if (sql.includes("memory_version"))
+          return [[{ memory_version_id: "memory-current", checksum: "b".repeat(64) }]];
+        if (sql.includes("organization_version"))
+          return [[{ version_id: "organization-1", version: 1, before_json: "{}", after_json: "{}" }]];
+        return [[]];
+      }),
+    } as never;
+    const worker = new GrowthWorker({
+      database,
+      organizations: {} as never,
+      triggers: {} as never,
+      gateway: {} as never,
+      runner: {} as never,
+    });
+
+    const snapshot = await (
+      worker as unknown as {
+        snapshot(
+          inputContext: TenantContext,
+          inputTrigger: GrowthTrigger,
+        ): Promise<{ material: { activeVersions: readonly { kind: string; versionId: string }[] } }>;
+      }
+    ).snapshot(context, trigger);
+
+    expect(snapshot.material.activeVersions).toEqual(
+      expect.arrayContaining([
+        { kind: "prompt", versionId: "prompt-fixed", checksum: "d".repeat(64) },
+        { kind: "memory", versionId: "memory-fixed", checksum: "e".repeat(64) },
+        { kind: "policy", versionId: "policy-1", checksum: "f".repeat(64) },
+      ]),
+    );
+    expect(snapshot.material.activeVersions).not.toEqual(
+      expect.arrayContaining([{ kind: "prompt", versionId: "prompt-current", checksum: "a".repeat(64) }]),
     );
   });
 });

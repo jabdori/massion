@@ -376,36 +376,63 @@ export class GrowthWorker {
       for (const artifact of artifacts.map(row))
         sources.push(source("artifact", artifact, String(artifact.artifact_version_id)));
     }
-    const [[promptRows], [memoryRows], [organizationRows]] = await Promise.all([
+    const [workRows] = await this.dependencies.database.query<[Row[]]>(
+      "SELECT prompt_version_id, policy_version_id, organization_version_id FROM work WHERE organization_id = $organization_id AND work_id = $work_id LIMIT 1;",
+      { organization_id: context.organizationId, work_id: trigger.work_id },
+    );
+    const work = workRows[0];
+    if (!work) throw new Error("Growth Reflection source Work를 찾을 수 없습니다");
+    const [[promptRows], [policyRows], [organizationRows]] = await Promise.all([
+      typeof work.prompt_version_id === "string"
+        ? this.dependencies.database.query<[Row[]]>(
+            "SELECT prompt_definition_version_id, prompt_definition_checksum, memory_version_ids, memory_checksums FROM prompt_version WHERE organization_id = $organization_id AND prompt_version_id = $prompt_version_id LIMIT 1;",
+            { organization_id: context.organizationId, prompt_version_id: work.prompt_version_id },
+          )
+        : Promise.resolve([[]] as [Row[]]),
+      typeof work.policy_version_id === "string"
+        ? this.dependencies.database.query<[Row[]]>(
+            "SELECT policy_version_id, checksum FROM governance_policy_version WHERE organization_id = $organization_id AND policy_version_id = $policy_version_id LIMIT 1;",
+            { organization_id: context.organizationId, policy_version_id: work.policy_version_id },
+          )
+        : Promise.resolve([[]] as [Row[]]),
       this.dependencies.database.query<[Row[]]>(
-        "SELECT prompt_definition_version_id, checksum FROM prompt_definition_version WHERE organization_id = $organization_id AND status = 'active';",
-        { organization_id: context.organizationId },
-      ),
-      this.dependencies.database.query<[Row[]]>(
-        "SELECT memory_version_id, checksum FROM memory_version WHERE organization_id = $organization_id AND status = 'active';",
-        { organization_id: context.organizationId },
-      ),
-      this.dependencies.database.query<[Row[]]>(
-        "SELECT version_id, version, before_json, after_json FROM organization_version WHERE organization_id = $organization_id ORDER BY version DESC LIMIT 1;",
-        { organization_id: context.organizationId },
+        "SELECT version_id, version, before_json, after_json FROM organization_version WHERE organization_id = $organization_id AND version_id = $organization_version_id LIMIT 1;",
+        { organization_id: context.organizationId, organization_version_id: work.organization_version_id },
       ),
     ]);
+    const prompt = promptRows[0];
+    const policy = policyRows[0];
+    const organization = organizationRows[0];
+    if (!organization) throw new Error("Growth Reflection source Organization version을 찾을 수 없습니다");
     const activeVersions = [
-      ...promptRows.map((item) => ({
-        kind: "prompt" as const,
-        versionId: String(item.prompt_definition_version_id),
-        checksum: String(item.checksum),
-      })),
-      ...memoryRows.map((item) => ({
-        kind: "memory" as const,
-        versionId: String(item.memory_version_id),
-        checksum: String(item.checksum),
-      })),
-      ...organizationRows.map((item) => ({
+      ...(prompt === undefined
+        ? []
+        : [
+            {
+              kind: "prompt" as const,
+              versionId: String(prompt.prompt_definition_version_id),
+              checksum: String(prompt.prompt_definition_checksum),
+            },
+            ...(Array.isArray(prompt.memory_version_ids) ? prompt.memory_version_ids : []).map((versionId, index) => ({
+              kind: "memory" as const,
+              versionId: String(versionId),
+              checksum: String(Array.isArray(prompt.memory_checksums) ? prompt.memory_checksums[index] : ""),
+            })),
+          ]),
+      ...(policy === undefined
+        ? []
+        : [
+            { kind: "policy" as const, versionId: String(policy.policy_version_id), checksum: String(policy.checksum) },
+          ]),
+      {
         kind: "organization" as const,
-        versionId: String(item.version_id),
-        checksum: growthChecksum({ version: item.version, before: item.before_json, after: item.after_json }),
-      })),
+        versionId: String(organization.version_id),
+        checksum: growthChecksum({
+          version: organization.version,
+          before: organization.before_json,
+          after: organization.after_json,
+        }),
+      },
     ];
     return createReflectionSnapshot({
       organizationId: context.organizationId,

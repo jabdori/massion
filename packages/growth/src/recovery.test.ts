@@ -44,4 +44,35 @@ describe("Growth crash recovery classification", () => {
     await expect(service.recover(context, input)).resolves.toEqual(first);
     expect(first.action).toBe("finish-adoption");
   });
+
+  it("snapshot이 바뀌면 상태별 command로 새 recovery 판단을 기록한다", async () => {
+    database = await createDatabase({ url: "mem://", namespace: "massion", database: crypto.randomUUID() });
+    const identity = await IdentityService.create(database);
+    const organizations = await OrganizationService.create(database);
+    const owner = await identity.registerPersonalUser({
+      email: "recovery-state@example.com",
+      displayName: "Recovery state",
+    });
+    const context = await organizations.resolveTenantContext(owner.user.user_id, owner.organization.organization_id);
+    const service = await GrowthRecoveryService.create(database, organizations);
+    const base = { aggregateId: "trigger-1", stage: "trigger" } as const;
+
+    const active = await service.recover(context, {
+      ...base,
+      state: { trigger: "claimed", leaseExpired: false },
+    });
+    const expired = await service.recover(context, {
+      ...base,
+      state: { trigger: "claimed", leaseExpired: true },
+    });
+
+    expect(expired.command_id).toBe(`growth-recovery:trigger:trigger-1:${expired.request_hash}`);
+    expect(expired.command_id).not.toBe(active.command_id);
+    await expect(
+      service.recover(context, {
+        ...base,
+        state: { trigger: "claimed", leaseExpired: true },
+      }),
+    ).resolves.toEqual(expired);
+  });
 });

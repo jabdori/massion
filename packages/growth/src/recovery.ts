@@ -80,8 +80,8 @@ export class GrowthRecoveryService {
     input: { readonly aggregateId: string; readonly stage: string; readonly state: GrowthRecoveryState },
   ): Promise<GrowthRecoveryRecord> {
     await this.organizations.verifyTenantContext(context);
-    const commandId = `growth-recovery:${input.stage}:${input.aggregateId}`;
     const requestHash = growthChecksum(input);
+    const commandId = `growth-recovery:${input.stage}:${input.aggregateId}:${requestHash}`;
     const [existing] = await this.database.query<[GrowthRecoveryRecord[]]>(
       "SELECT * FROM growth_recovery_operation WHERE organization_id = $organization_id AND command_id = $command_id LIMIT 1;",
       { organization_id: context.organizationId, command_id: commandId },
