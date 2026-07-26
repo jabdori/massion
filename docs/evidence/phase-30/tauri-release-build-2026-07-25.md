@@ -1,7 +1,9 @@
-# Tauri 릴리즈 빌드 검증 — 2026-07-25
+# Tauri ad-hoc 패키징 smoke — 2026-07-25
 
 > 후보 SHA: c57f19c4b (feat/phase-30-reconciled HEAD)
 > 빌드 시간: 1분 23초 (Rust release profile)
+>
+> 이 기록은 ad-hoc 패키징과 기동 smoke만 보존합니다. 실제 Tauri UAT, 동일 후보 SHA의 릴리스 게이트, 서명·공증, 공개 Release의 근거가 아닙니다.
 
 ## 빌드 결과
 

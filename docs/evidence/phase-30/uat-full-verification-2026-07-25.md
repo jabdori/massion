@@ -1,7 +1,6 @@
-# UAT 전체 검증 — 2026-07-25
+# UAT 자동화 대응 검증 — 2026-07-25
 
-> 23개 원자 UAT 시나리오를 Playwright UI 검증(실제 프론트엔드 코드, fixture 데이터)과
-> 백엔드 통합 테스트(실제 SurrealDB)의 조합으로 검증한 결과.
+> 이 문서는 Playwright UI(실제 프론트엔드 코드, fixture 데이터)와 백엔드 통합 테스트(실제 SurrealDB)의 결과를 보존합니다. 실제 Tauri 앱에서의 사용자 인수 테스트, 네이티브 대화상자, 설치·업데이트·복구, 서명·공증을 대체하지 않습니다.
 
 ## 검증 방법
 
@@ -14,12 +13,12 @@
 ## 전제
 
 - pnpm verify 전체 통과 (format·build·lint·typecheck·모든 패키지 테스트·verify:docs)
-- Tauri 릴리스 빌드 성공 (Massion.app v1.0.0, ad-hoc 서명, 정상 실행)
+- Tauri ad-hoc 패키징 smoke 확인 (공개 릴리스 후보·실제 UAT 근거 아님)
 - Z.AI GLM-5.2 Provider 연결 확인됨
 
 ---
 
-## UI 검증 시나리오 (Playwright)
+## UI 자동화 시나리오 (Playwright)
 
 ### UAT-01 첫 실행과 재연결 — PASS
 

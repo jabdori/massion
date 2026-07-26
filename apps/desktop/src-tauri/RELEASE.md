@@ -19,7 +19,7 @@ pnpm tauri:build
 모든 항목은 같은 후보 commit SHA와 같은 artifact로 통과해야 합니다.
 
 - `pnpm verify`와 데스크톱 build·typecheck·test
-- 핵심 UAT-01–12와 구현 완료된 UAT-13–16
+- 핵심 UAT-01–12와 구현된 UAT-13–16을 실제 Tauri 앱에서 동일 후보 SHA로 실행
 - Developer ID Application 서명과 Apple 공증·스테이플
 - 앱 내부 Node.js·SurrealDB sidecar 서명 검증
 - 깨끗한 macOS arm64 사용자에서 최초 설치·Gatekeeper 실행
@@ -28,6 +28,8 @@ pnpm tauri:build
 - daemon과 SurrealDB sidecar 강제 종료 뒤 재연결·중복 방지·데이터 무결성
 - 키보드만으로 핵심 흐름 완주, VoiceOver와 Accessibility Inspector 실측
 - 개인 사용자가 등록한 BYOK 키가 로컬 소유자 경계 밖으로 노출·공유·중계되지 않는지 확인
+
+보존된 감사 기준선 `v1.0.0` 태그는 이동하거나 재사용하지 않습니다. 모든 공개 릴리스는 이후 새 버전 태그와 동일 후보 SHA로 생성합니다.
 
 Tauri 공식 문서에 따라 브라우저로 배포하는 macOS 앱은 Developer ID 서명과 공증을 사용합니다: [Tauri macOS code signing](https://v2.tauri.app/distribute/sign/macos/).
 
