@@ -25,11 +25,41 @@ const SOURCE_TABLES = {
 
 const reflectionOutput: StructuredOutputSpec = {
   name: "growth-reflection-candidates",
-  description: "검증된 Work 기록에서 개선 제안 목록을 반환합니다.",
+  description:
+    "검증된 Work 기록에서 SuggestionCandidate 배열만 반환합니다. 각 후보는 targetKind·operation·patch·summary·rationale·expectedEffect·riskSummary·sourceReferenceIds 필드를 반드시 가져야 하며 일반 회고 문서나 임의 필드는 반환하지 않습니다.",
   jsonSchema: {
     type: "object",
     additionalProperties: false,
-    properties: { candidates: { type: "array", maxItems: 100, items: { type: "object" } } },
+    properties: {
+      candidates: {
+        type: "array",
+        maxItems: 100,
+        items: {
+          type: "object",
+          additionalProperties: false,
+          required: [
+            "targetKind",
+            "operation",
+            "patch",
+            "summary",
+            "rationale",
+            "expectedEffect",
+            "riskSummary",
+            "sourceReferenceIds",
+          ],
+          properties: {
+            targetKind: { type: "string", enum: ["prompt", "memory", "policy", "organization"] },
+            operation: { type: "string" },
+            patch: { type: "object", additionalProperties: { type: "string" } },
+            summary: { type: "string", minLength: 1, maxLength: 2_000 },
+            rationale: { type: "string", minLength: 1, maxLength: 2_000 },
+            expectedEffect: { type: "string", minLength: 1, maxLength: 2_000 },
+            riskSummary: { type: "string", minLength: 1, maxLength: 2_000 },
+            sourceReferenceIds: { type: "array", minItems: 1, maxItems: 100, items: { type: "string" } },
+          },
+        },
+      },
+    },
     required: ["candidates"],
   },
   validate(value) {
