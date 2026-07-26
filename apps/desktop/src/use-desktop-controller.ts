@@ -234,7 +234,12 @@ export function useDesktopController(service: DesktopService) {
                 try {
                   const candidate = await service.loadWork(candidateId);
                   if (isDisposed() || pendingCreationRef.current?.runId !== creation.runId) return;
-                  if (candidate.run?.runId !== creation.runId) continue;
+                  if (candidate.run?.runId !== creation.runId) {
+                    // Work 생성 이벤트가 실행 원장보다 먼저 도착할 수 있습니다. 다음 durable event에서
+                    // 같은 후보를 다시 확인해야 임시 "생성 중" 행이 영구히 남지 않습니다.
+                    durableWorkCandidatesRef.current.add(candidateId);
+                    continue;
+                  }
                   detailRequestRef.current += 1;
                   pendingCreationRef.current = undefined;
                   setPendingCreationState(undefined);

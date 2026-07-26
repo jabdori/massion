@@ -652,6 +652,55 @@ describe("AgentOS native data flow", () => {
     expect(await screen.findByRole("main", { name: created.title }, { timeout: 2_000 })).toBeInTheDocument();
   });
 
+  it("Work 생성 이벤트가 실행 원장보다 먼저 와도 다음 이벤트에서 임시 행을 해소한다", async () => {
+    const user = userEvent.setup();
+    const snapshot = fixtureDataAdapter();
+    const created = {
+      ...(snapshot.works[1] as WorkView),
+      id: "work-created-before-run-0001",
+      title: "실행 원장 순서 확인",
+      run: { runId: "run-created-before-run-0001", status: "running", stage: "intake", leaseGeneration: 1 },
+    };
+    let durable: ((event: unknown) => void) | undefined;
+    let createdVisible = false;
+    let runVisible = false;
+    const startWork = vi.fn(async () => ({ runId: "run-created-before-run-0001" }));
+    const fake = service({
+      startWork,
+      loadIndex: async () => (createdVisible ? [...snapshot.works, { ...created, run: undefined }] : snapshot.works),
+      loadWork: async (workId) =>
+        workId === created.id
+          ? runVisible
+            ? created
+            : { ...created, run: undefined }
+          : (snapshot.works[0] as WorkView),
+      subscribeDurable: async (handler) => {
+        durable = handler;
+        return async () => undefined;
+      },
+    });
+    render(<App service={fake} />);
+
+    await user.click(screen.getByRole("button", { name: "새 Work 만들기" }));
+    const dialog = screen.getByRole("dialog", { name: "새 Work" });
+    await user.type(within(dialog).getByRole("textbox", { name: "업무 요청" }), "실행 원장 순서를 확인해줘");
+    await user.click(within(dialog).getByRole("button", { name: "실행 시작" }));
+    expect(await screen.findByText("Work 생성 중")).toBeInTheDocument();
+
+    createdVisible = true;
+    durable?.({ sequence: 12, type: "work.created", resource: { type: "Work", id: created.id } });
+    await waitFor(() => expect(screen.getByText("Work 생성 중")).toBeInTheDocument());
+
+    runVisible = true;
+    durable?.({
+      sequence: 13,
+      type: "runtime.execution-running",
+      resource: { type: "Execution", id: "execution-0001" },
+    });
+    expect(await screen.findByRole("main", { name: created.title }, { timeout: 2_000 })).toBeInTheDocument();
+    expect(startWork).toHaveBeenCalledOnce();
+  });
+
   it("네이티브 선택 취소와 워크스페이스 밖 파일은 현재 draft를 보존한다", async () => {
     const user = userEvent.setup();
     const workspace = {
