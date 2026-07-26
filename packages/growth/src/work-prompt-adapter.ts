@@ -1,19 +1,29 @@
 import type { OrganizationService, TenantContext } from "@massion/identity";
-import type { MassionDatabase, QueryExecutor } from "@massion/storage";
+import { applyMigrations, type MassionDatabase, type QueryExecutor } from "@massion/storage";
 import type { PromptVersionResolver, ResolveWorkPromptInput, ResolvedWorkPrompt } from "@massion/work";
 
 import { canonicalGrowthJson, growthChecksum, type PromptMemoryStore } from "./prompt-memory.js";
+import { GROWTH_ADOPTION_MIGRATION, GROWTH_EFFECT_REVERT_MIGRATION } from "./schema.js";
 
 interface ChecksumRecord {
   readonly checksum: string;
 }
 
 export class GrowthWorkPromptAdapter implements PromptVersionResolver {
-  public constructor(
+  private constructor(
     private readonly database: MassionDatabase,
     private readonly organizations: OrganizationService,
     private readonly prompts: PromptMemoryStore,
   ) {}
+
+  public static async create(
+    database: MassionDatabase,
+    organizations: OrganizationService,
+    prompts: PromptMemoryStore,
+  ): Promise<GrowthWorkPromptAdapter> {
+    await applyMigrations(database, [GROWTH_ADOPTION_MIGRATION, GROWTH_EFFECT_REVERT_MIGRATION]);
+    return new GrowthWorkPromptAdapter(database, organizations, prompts);
+  }
 
   public async resolve(
     context: TenantContext,
@@ -61,6 +71,16 @@ export class GrowthWorkPromptAdapter implements PromptVersionResolver {
       },
       executor,
     );
+    await this.assertNotSuspended(
+      executor,
+      context.organizationId,
+      [
+        composed.promptDefinitionVersionId,
+        ...composed.memoryVersionIds,
+        composed.policyVersionId,
+        composed.organizationVersionId,
+      ].filter((value): value is string => value !== undefined),
+    );
     return { promptVersionId: composed.promptVersionId, schemaVersion: composed.schemaVersion };
   }
 
@@ -99,5 +119,17 @@ export class GrowthWorkPromptAdapter implements PromptVersionResolver {
     );
     if (!records[0]) throw new Error(`${idField} 참조를 찾을 수 없습니다: ${id}`);
     return records[0].checksum;
+  }
+
+  private async assertNotSuspended(
+    executor: QueryExecutor,
+    organizationId: string,
+    versionIds: readonly string[],
+  ): Promise<void> {
+    const [records] = await executor.query<[Array<{ after_version_id: string }>]>(
+      "SELECT after_version_id FROM growth_adoption_run WHERE organization_id = $organization_id AND exposure_status = 'suspended' AND after_version_id IN $version_ids LIMIT 1;",
+      { organization_id: organizationId, version_ids: versionIds },
+    );
+    if (records[0]) throw new Error("중단된 Growth version은 새 Work에 사용할 수 없습니다");
   }
 }

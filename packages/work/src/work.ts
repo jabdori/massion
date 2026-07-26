@@ -892,16 +892,11 @@ export class WorkService {
         ...(input.contextVersionId ? { contextVersionId: input.contextVersionId } : {}),
         ...(input.policyVersionId ? { policyVersionId: input.policyVersionId } : {}),
       };
-      // 장기 기억 주입은 부가 기능이다. resolver 실패(정의 미시드·compose 예외) 시 메모리 없이 진행한다.
-      // ponytail: 예외를 조용히 무시한다. adapter 버그를 가릴 수 있으니 WorkService에 logger가 들어오면 기록하라.
-      let resolvedPrompt: ResolvedWorkPrompt | undefined;
-      if (this.promptVersions) {
-        try {
-          resolvedPrompt = await this.promptVersions.resolve(context, promptInput, transaction);
-        } catch {
-          resolvedPrompt = undefined;
-        }
-      }
+      // Growth-aware Work는 검증된 PromptVersion 없이 생성하지 않습니다.
+      // suspended·손상된 version을 무시하면 새 Work가 잘못된 계보를 갖게 됩니다.
+      const resolvedPrompt = this.promptVersions
+        ? await this.promptVersions.resolve(context, promptInput, transaction)
+        : undefined;
       if (resolvedPrompt) {
         await this.promptVersions?.verify(context, resolvedPrompt.promptVersionId, transaction);
       }

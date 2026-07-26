@@ -30,7 +30,7 @@ describe("Growth Work PromptVersion adapter", () => {
     organizationVersionId = bootstrapped.version.version_id;
     store = await PromptMemoryStore.create(database, organizations);
     await store.bootstrap(context, bootstrapped.nodes);
-    adapter = new GrowthWorkPromptAdapter(database, organizations, store);
+    adapter = await GrowthWorkPromptAdapter.create(database, organizations, store);
     work = await WorkService.create(database, organizations, graph, undefined, adapter);
   });
 
@@ -94,5 +94,21 @@ describe("Growth Work PromptVersion adapter", () => {
     await database.query("REMOVE EVENT prompt_version_immutable ON TABLE prompt_version;");
     await database.query(tamperQuery, tamperBindings);
     await expect(adapter.verify(context, promptVersionId(created), database)).rejects.toThrow("checksum");
+  });
+
+  it("중단된 Growth target은 새 Work의 PromptVersion으로 조용히 제외하지 않는다", async () => {
+    const definition = await store.getActivePromptDefinition(context);
+    await database.query(
+      "CREATE growth_adoption_run CONTENT { adoption_id: 'suspended-prompt', organization_id: $organization_id, suggestion_id: 'suggestion-1', target_kind: 'prompt', evaluation_run_id: 'evaluation-1', evaluation_input_hash: $checksum, configuration_version_id: 'configuration-1', runtime_execution_id: 'runtime-1', before_version_id: 'prompt-before', before_checksum: $checksum, after_version_id: $after_version_id, after_checksum: $checksum, governance_decision_id: 'decision-1', approval_id: NONE, status: 'observing', command_id: 'adopt-1', request_hash: $checksum, created_by_user_id: $user_id, active_target_guard: $guard, exposure_status: 'suspended', created_at: time::now(), updated_at: time::now() };",
+      {
+        organization_id: context.organizationId,
+        user_id: context.userId,
+        after_version_id: definition.promptDefinitionVersionId,
+        checksum: definition.checksum,
+        guard: `${context.organizationId}:prompt`,
+      },
+    );
+
+    await expect(createWork("suspended-growth-target")).rejects.toThrow("중단된 Growth version");
   });
 });

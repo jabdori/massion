@@ -29,7 +29,7 @@ describe("Growth Runtime AgentConfiguration adapter", () => {
     organizationVersionId = bootstrapped.version.version_id;
     const prompts = await PromptMemoryStore.create(database, organizations);
     await prompts.bootstrap(context, bootstrapped.nodes);
-    const resolver = new GrowthWorkPromptAdapter(database, organizations, prompts);
+    const resolver = await GrowthWorkPromptAdapter.create(database, organizations, prompts);
     work = await WorkService.create(database, organizations, graph, undefined, resolver);
     reader = new GrowthAgentConfigurationReader(database, organizations, prompts);
     executions = await RuntimeExecutionStore.create(database, organizations, reader);

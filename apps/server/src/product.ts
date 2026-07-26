@@ -269,7 +269,7 @@ export async function createMassionDaemon(
     );
     // growth의 PromptMemoryStore는 work 실행 시 agent 프롬프트에 장기 기억을 주입하는 PromptVersionResolver 어댑터로 연결된다.
     const growthPrompts = await PromptMemoryStore.create(database, organizations);
-    const workPromptVersions = new GrowthWorkPromptAdapter(database, organizations, growthPrompts);
+    const workPromptVersions = await GrowthWorkPromptAdapter.create(database, organizations, growthPrompts);
     const agentConfigurations = new GrowthAgentConfigurationReader(database, organizations, growthPrompts);
     const instructions = new AgentInstructionRegistry(agentConfigurations);
     // governance 자리는 본 작업 범위 밖이므로 그대로 두고 promptVersions만 주입한다.
