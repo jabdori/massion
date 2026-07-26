@@ -305,7 +305,10 @@ export class GrowthWorker {
     await this.dependencies.triggers.requeueExpired(context);
     await this.dependencies.triggers.backfill(context);
     const claimed = await this.dependencies.triggers.claim(context, { workerId: "growth-worker", leaseMs: 120_000 });
-    if (claimed.outcome !== "claimed") return { outcome: "none" };
+    if (claimed.outcome !== "claimed") {
+      await this.processEffects(context);
+      return { outcome: "none" };
+    }
     const snapshot = await this.snapshot(context, claimed.trigger);
     const result = await this.dependencies.gateway.reflect(context, {
       commandId: `${claimed.trigger.trigger_id}:reflection`,

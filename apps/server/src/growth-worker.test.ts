@@ -299,4 +299,26 @@ describe("Growth worker production loop", () => {
     );
     expect(sample).toMatchObject({ score: 2 / 3, observationCount: 3, lineage: { targetVersionId: "prompt-v1" } });
   });
+
+  it("새 trigger가 없어도 관찰 중인 Growth Adoption을 처리한다", async () => {
+    const database = { query: vi.fn(async () => [[]]) } as never;
+    const worker = new GrowthWorker({
+      database,
+      organizations: {} as never,
+      triggers: {
+        requeueExpired: vi.fn().mockResolvedValue(0),
+        backfill: vi.fn().mockResolvedValue({ created: 0, existing: 0 }),
+        claim: vi.fn().mockResolvedValue({ outcome: "none" }),
+      } as never,
+      gateway: {} as never,
+      runner: {} as never,
+      metricObservations: { record: vi.fn() } as never,
+    });
+
+    await expect(worker.tick(context)).resolves.toEqual({ outcome: "none" });
+    expect(database.query).toHaveBeenCalledWith(
+      expect.stringContaining("growth_adoption_run"),
+      expect.objectContaining({ organization_id: context.organizationId }),
+    );
+  });
 });
