@@ -16,11 +16,12 @@ describe("구독 실행 crash-safe receipt", () => {
   let context: TenantContext;
   let otherContext: TenantContext;
   let store: RuntimeExecutionStore;
+  let organizations: OrganizationService;
 
   beforeEach(async () => {
     database = await createDatabase({ url: "mem://", namespace: "massion", database: crypto.randomUUID() });
     const identities = await IdentityService.create(database);
-    const organizations = await OrganizationService.create(database);
+    organizations = await OrganizationService.create(database);
     const owner = await identities.registerPersonalUser({ email: "receipt-owner@example.com", displayName: "Owner" });
     const other = await identities.registerPersonalUser({ email: "receipt-other@example.com", displayName: "Other" });
     context = await organizations.resolveTenantContext(owner.user.user_id, owner.organization.organization_id);
@@ -169,6 +170,50 @@ describe("구독 실행 crash-safe receipt", () => {
     expect(dependencies.counts()).toEqual({ routerSettlements: 1, leaseSettlements: 1 });
     expect(snapshot.terminal?.providerSessionId).toBe("provider-session-1");
     expect(snapshot.settled).toBeDefined();
+  });
+
+  it("Receipt는 Runtime Execution의 자율성 mode·revision을 caller 값보다 우선해 고정한다", async () => {
+    const lineageStore = await RuntimeExecutionStore.create(database, organizations, undefined, async () => ({
+      mode: "full-access" as const,
+      revision: 3,
+    }));
+    const created = await lineageStore.createExecution(context, {
+      commandId: crypto.randomUUID(),
+      workId: "work-1",
+      agentHandle: "software-engineering.backend-specialist",
+      modelRoute: "subscription-balanced",
+      correlationId: crypto.randomUUID(),
+      estimatedTokens: 100,
+      estimatedCostMicros: 0,
+      input: { objective: "계보" },
+    });
+    const state = await lineageStore.transition(context, {
+      commandId: crypto.randomUUID(),
+      executionId: created.execution.execution_id,
+      expectedVersion: created.execution.version,
+      target: "running",
+      payload: {},
+    });
+    const value = lineage(state.execution.execution_id);
+    const dependencies = ports(value);
+    const coordinator = new SubscriptionExecutionReceiptCoordinator(
+      lineageStore,
+      dependencies.router,
+      dependencies.broker,
+    );
+
+    await coordinator.recordRouteSessionAcquired(context, {
+      commandId: crypto.randomUUID(),
+      ...value,
+      autonomyMode: "review",
+      autonomyRevision: 999,
+    });
+    const events = await lineageStore.listEvents(context, value.executionId);
+    const receipt = events.find((event) => event.event_type === "subscription_route_session_acquired");
+    expect(JSON.parse(receipt?.payload_json ?? "{}")).toMatchObject({
+      autonomyMode: "full-access",
+      autonomyRevision: 3,
+    });
   });
 
   it("started만 남으면 두 reconciler가 동시 실행돼도 재호출·fallback 없이 interrupted로 한 번 정산한다", async () => {

@@ -15,6 +15,7 @@ const RECEIPT_EVENT_TYPES = new Set([
   "subscription_terminal_observed",
   "subscription_settlement_completed",
 ]);
+const AUTONOMY_MODES = new Set(["automatic", "review", "full-access"]);
 
 export type JsonValue = null | boolean | number | string | readonly JsonValue[] | { readonly [key: string]: JsonValue };
 
@@ -32,6 +33,8 @@ export interface SubscriptionReceiptLineage {
   readonly connectorId: string;
   readonly adapterId: string;
   readonly quotaSnapshotId?: string;
+  readonly autonomyMode?: "automatic" | "review" | "full-access";
+  readonly autonomyRevision?: number;
 }
 
 interface ReceiptCommand {
@@ -175,6 +178,9 @@ function checksum(value: unknown): string {
 }
 
 function lineagePayload(input: SubscriptionReceiptLineage): SubscriptionReceiptLineage {
+  if (input.autonomyMode !== undefined && !AUTONOMY_MODES.has(input.autonomyMode)) {
+    throw new Error("자율성 mode가 유효하지 않습니다");
+  }
   return {
     executionId: text(input.executionId, "Execution ID"),
     workId: text(input.workId, "Work ID"),
@@ -185,6 +191,10 @@ function lineagePayload(input: SubscriptionReceiptLineage): SubscriptionReceiptL
     connectorId: text(input.connectorId, "Connector ID"),
     adapterId: text(input.adapterId, "Subscription Adapter ID"),
     ...(input.quotaSnapshotId ? { quotaSnapshotId: text(input.quotaSnapshotId, "Quota Snapshot ID") } : {}),
+    ...(input.autonomyMode === undefined ? {} : { autonomyMode: input.autonomyMode }),
+    ...(input.autonomyRevision === undefined
+      ? {}
+      : { autonomyRevision: nonnegativeInteger(input.autonomyRevision, "자율성 revision") }),
   };
 }
 
@@ -210,6 +220,10 @@ function parseLineage(payload: Record<string, unknown>): SubscriptionReceiptLine
     connectorId: stringValue(payload.connectorId),
     adapterId: stringValue(payload.adapterId),
     ...(typeof payload.quotaSnapshotId === "string" ? { quotaSnapshotId: payload.quotaSnapshotId } : {}),
+    ...(typeof payload.autonomyMode === "string"
+      ? { autonomyMode: payload.autonomyMode as "automatic" | "review" | "full-access" }
+      : {}),
+    ...(payload.autonomyRevision === undefined ? {} : { autonomyRevision: payload.autonomyRevision as number }),
   });
 }
 
@@ -324,6 +338,7 @@ export class SubscriptionExecutionReceiptCoordinator {
       if (lineage.executionId !== recovery.execution.execution_id) {
         throw new Error("Subscription Receipt Execution 계보가 일치하지 않습니다");
       }
+      this.assertAutonomyLineage(recovery.execution, lineage);
       const key = `${lineage.routeAttemptId}\u0000${lineage.leaseId}`;
       let attempt = byLineage.get(key);
       if (!attempt) {
@@ -486,7 +501,30 @@ export class SubscriptionExecutionReceiptCoordinator {
     if (recovery.execution.work_id !== lineage.workId || recovery.execution.agent_handle !== lineage.agentHandle) {
       throw new Error("Subscription Receipt Work·Agent 계보가 Runtime Execution과 일치하지 않습니다");
     }
-    return lineage;
+    const normalized: SubscriptionReceiptLineage = {
+      ...lineage,
+      ...(recovery.execution.autonomy_mode === undefined ? {} : { autonomyMode: recovery.execution.autonomy_mode }),
+      ...(recovery.execution.autonomy_revision === undefined
+        ? {}
+        : { autonomyRevision: recovery.execution.autonomy_revision }),
+    };
+    this.assertAutonomyLineage(recovery.execution, normalized);
+    return normalized;
+  }
+
+  private assertAutonomyLineage(execution: RuntimeExecution, lineage: SubscriptionReceiptLineage): void {
+    const hasMode = execution.autonomy_mode !== undefined;
+    const hasRevision = execution.autonomy_revision !== undefined;
+    if (hasMode !== hasRevision) throw new Error("Runtime 자율성 계보가 불완전합니다");
+    if (!hasMode) {
+      if (lineage.autonomyMode !== undefined || lineage.autonomyRevision !== undefined) {
+        throw new Error("Legacy Runtime에 자율성 Receipt 계보를 기록할 수 없습니다");
+      }
+      return;
+    }
+    if (lineage.autonomyMode !== execution.autonomy_mode || lineage.autonomyRevision !== execution.autonomy_revision) {
+      throw new Error("Subscription Receipt 자율성 계보가 Runtime Execution과 일치하지 않습니다");
+    }
   }
 
   private parseTerminal(payload: Record<string, unknown>): SubscriptionReceiptTerminal {

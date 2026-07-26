@@ -15,6 +15,7 @@ const RECEIPT_EVENT_TYPES = new Set([
 const ATTEMPT_STATUSES = new Set(["reserved", "failed", "interrupted", "succeeded"]);
 const TERMINAL_OUTCOMES = new Set(["completed", "failed", "cancelled", "interrupted"]);
 const FAILURE_KINDS = new Set(["http", "timeout", "network", "input", "policy", "cancelled", "unknown"]);
+const AUTONOMY_MODES = new Set(["automatic", "review", "full-access"]);
 
 interface RuntimeLineageReader {
   getRecovery(
@@ -42,6 +43,8 @@ interface ReceiptLineage {
   readonly connectorId: string;
   readonly adapterId: string;
   readonly quotaSnapshotId?: string;
+  readonly autonomyMode?: "automatic" | "review" | "full-access";
+  readonly autonomyRevision?: number;
 }
 
 interface ProjectedAttempt {
@@ -152,6 +155,10 @@ function parsePayload(event: RuntimeEvent): Record<string, unknown> {
 }
 
 function lineage(payload: Record<string, unknown>): ReceiptLineage {
+  const autonomyMode = payload.autonomyMode === undefined ? undefined : identifier(payload.autonomyMode, "자율성 mode");
+  if (autonomyMode !== undefined && !AUTONOMY_MODES.has(autonomyMode)) {
+    throw new Error("자율성 mode가 유효하지 않습니다");
+  }
   return {
     executionId: identifier(payload.executionId, "실행 ID"),
     workId: identifier(payload.workId, "Work ID"),
@@ -164,6 +171,10 @@ function lineage(payload: Record<string, unknown>): ReceiptLineage {
     ...(payload.quotaSnapshotId === undefined
       ? {}
       : { quotaSnapshotId: identifier(payload.quotaSnapshotId, "Quota Snapshot ID") }),
+    ...(autonomyMode === undefined ? {} : { autonomyMode: autonomyMode as "automatic" | "review" | "full-access" }),
+    ...(payload.autonomyRevision === undefined
+      ? {}
+      : { autonomyRevision: nonnegativeInteger(payload.autonomyRevision, "자율성 revision") }),
   };
 }
 
@@ -238,6 +249,11 @@ function projectReceipts(execution: RuntimeExecution, events: readonly RuntimeEv
       parsedLineage.agentHandle !== execution.agent_handle
     ) {
       throw new Error("구독 실행 영수증의 Execution·Work·Agent 계보가 일치하지 않습니다");
+    }
+    const expectedMode = execution.autonomy_mode;
+    const expectedRevision = execution.autonomy_revision;
+    if (parsedLineage.autonomyMode !== expectedMode || parsedLineage.autonomyRevision !== expectedRevision) {
+      throw new Error("구독 실행 영수증의 자율성 계보가 Runtime과 일치하지 않습니다");
     }
     let attempt = byAttempt.get(parsedLineage.routeAttemptId);
     if (!attempt) {
