@@ -143,6 +143,12 @@ export class GrowthRecoveryService {
         stage: "adoption",
         state: { adoption: run.status, targetVersionExists: Boolean(run.after_version_id) },
       });
+    const [baselines] = await this.database.query<[Array<{ baseline_id: string; status: string }>]>(
+      "SELECT baseline_id, status FROM growth_effect_baseline WHERE organization_id = $organization_id AND status = 'pending';",
+      { organization_id: context.organizationId },
+    );
+    for (const baseline of baselines)
+      candidates.push({ aggregateId: baseline.baseline_id, stage: "effect", state: { adoption: "observing" } });
     const [reverts] = await this.database.query<
       [Array<{ revert_operation_id: string; status: string; reverted_version_id?: string }>]
     >(
