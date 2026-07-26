@@ -30,5 +30,13 @@ Provider를 연결한 첫 후보에서는 VoltAgent 위임 중 `Runtime Executio
 ## 남은 게이트
 
 - 동일 후보 SHA의 UAT-K01~K04, UAT-G01~G02, UAT-P01~P02와 나머지 핵심 시나리오는 아직 최종 후보에서 통과하지 않았습니다.
-- 전체 권한 runtime 전달·해제·긴급 정지와 Growth production worker는 아직 구현·실제 UAT 대기입니다.
+- 전체 권한 runtime 전달·해제·긴급 정지와 Growth production loop의 평가·채택·효과·복원은 아직 구현·실제 UAT 대기입니다.
 - 서명·공증·업데이트·제거·재설치 및 공개 릴리스는 진행하지 않았습니다.
+
+## Growth Reflection 연결 증분 — 미통과 기록
+
+- 후보 커밋: `a00ccfc22`
+- 별도 번들: `Massion Growth UAT.app` (`dev.massion.desktop.growth-uat`)
+- 확인: 실제 Z.ai 연결 명령이 `succeeded`, `status=active`, `connectorStatus=ready`를 반환했고 `run.start`도 `accepted`로 기록되었습니다.
+- 실행 상태: 실제 representative·context-strategy·delivery 실행은 일부 `succeeded`였으나, 세션 종료 시 Work run이 `delivery/running`에 남아 `records_run` 완료와 Growth trigger·Reflection suggestion을 만들지 못했습니다.
+- 판정: Growth UAT 통과로 세지 않습니다. bundle·SurrealDB·server·bridge는 exact PID로 종료했고 7330–7333 포트가 비었음을 확인했습니다.
