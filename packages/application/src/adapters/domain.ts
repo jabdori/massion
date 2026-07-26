@@ -4,6 +4,7 @@ import {
   EmergencyControl,
   GovernanceApprovalRequiredError,
   GovernanceDeniedError,
+  type GovernanceGate,
   type ApprovalStore,
 } from "@massion/governance";
 import type { GrowthGateway } from "@massion/growth";
@@ -65,7 +66,8 @@ export interface ApplicationDomainDependencies {
   readonly autonomyTransition?: Pick<AutonomyTransitionCoordinator, "set">;
   readonly runtime?: Pick<AgentRunner, "execute" | "cancel" | "suspend" | "resume"> &
     Partial<Pick<AgentRunner, "cancelOrganization">>;
-  readonly emergency?: Pick<EmergencyControl, "activate">;
+  readonly emergency?: Pick<EmergencyControl, "activate" | "release" | "get">;
+  readonly governanceGate?: Pick<GovernanceGate, "authorize">;
   readonly approvals?: Pick<ApprovalStore, "get" | "vote" | "cancel">;
   readonly assuranceBindings?: Pick<AssuranceBindingStore, "propose" | "activate">;
   readonly organization?: Pick<OrganizationGraphService, "execute">;
@@ -612,6 +614,8 @@ function registerEmergency(
   registry: ApplicationCommandRegistry,
   emergency: NonNullable<ApplicationDomainDependencies["emergency"]>,
   runtime: NonNullable<ApplicationDomainDependencies["runtime"]>,
+  approvals?: ApplicationDomainDependencies["approvals"],
+  governanceGate?: ApplicationDomainDependencies["governanceGate"],
 ): void {
   register(registry, {
     operation: "governance.emergency.activate",
@@ -640,6 +644,71 @@ function registerEmergency(
       } catch (error) {
         return domainError(error, command.correlationId);
       }
+    },
+  });
+  if (!approvals || !governanceGate) return;
+  register(registry, {
+    operation: "governance.emergency.release",
+    requiredScopes: ["governance:write"],
+    allowedRoles: ["owner", "admin"],
+    recovery: "operator-action",
+    validate: (value) => payload(value, ["approvalId", "reason"], ["reason"]),
+    idempotencyPayload: (value) => Object.fromEntries(Object.entries(value).filter(([key]) => key !== "approvalId")),
+    resumeAwaitingApproval: (value) => value.approvalId !== undefined,
+    async handle(context, command, value) {
+      const reason = string(value.reason, "reason");
+      const approvalId = value.approvalId === undefined ? undefined : string(value.approvalId, "approvalId");
+      if (approvalId === undefined) {
+        const current = await emergency.get(context);
+        if (!current?.active) throw new Error("긴급 중단이 활성 상태가 아닙니다");
+        try {
+          await governanceGate.authorize(context, {
+            commandId: `${command.commandId}:approval`,
+            action: "emergency.stop.disable",
+            resource: { type: "Organization", id: context.organizationId, revision: current.revision },
+            environment: "local",
+            riskClass: "destructive",
+            external: false,
+            executionId: `emergency-release:${context.organizationId}:${String(current.revision)}`,
+            approvalPreview: {
+              kind: "provider",
+              title: "긴급 정지 해제",
+              reason: "긴급 정지 상태를 해제하고 새 실행을 허용합니다.",
+            },
+          });
+        } catch (error) {
+          if (error instanceof GovernanceApprovalRequiredError) {
+            return result(command, {
+              outcome: "awaiting-approval",
+              resource: { type: "GovernanceEmergency", id: context.organizationId, revision: current.revision },
+              data: { active: true, revision: current.revision, approvalId: error.approvalId },
+            });
+          }
+          throw error;
+        }
+        throw new Error("긴급 정지 해제에는 승인 Permit이 필요합니다");
+      }
+      const approval = await approvals.get(context, approvalId);
+      if (approval.resource_revision === undefined)
+        throw new Error("긴급 정지 해제 Approval에 resource revision이 없습니다");
+      const state = await emergency.release(context, {
+        commandId: command.commandId,
+        approvalId: approval.approval_id,
+        requestHash: approval.request_hash,
+        policyVersionId: approval.policy_version_id,
+        resourceRevision: approval.resource_revision,
+        reason,
+      });
+      return result(command, {
+        resource: { type: "GovernanceEmergency", id: context.organizationId, revision: state.revision },
+        data: {
+          active: state.active,
+          reason: state.reason,
+          revision: state.revision,
+          changedByUserId: state.changed_by_user_id,
+          changedAt: String(state.changed_at),
+        },
+      });
     },
   });
 }
@@ -2608,7 +2677,13 @@ export function registerApplicationDomainCommands(
   if (dependencies.workspaces) registerWorkspace(registry, dependencies.workspaces);
   if (dependencies.autonomy) registerAutonomy(registry, dependencies.autonomy, dependencies.autonomyTransition);
   if (dependencies.emergency && dependencies.runtime?.cancelOrganization)
-    registerEmergency(registry, dependencies.emergency, dependencies.runtime);
+    registerEmergency(
+      registry,
+      dependencies.emergency,
+      dependencies.runtime,
+      dependencies.approvals,
+      dependencies.governanceGate,
+    );
   if (dependencies.runtime) registerRuntime(registry, dependencies.runtime);
   if (dependencies.approvals) registerApprovals(registry, dependencies.approvals, dependencies.runtime);
   if (dependencies.assuranceBindings) registerAssuranceBindings(registry, dependencies.assuranceBindings);

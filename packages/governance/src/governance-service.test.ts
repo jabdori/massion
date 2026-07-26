@@ -147,6 +147,32 @@ describe("Governance Policy Decision", () => {
     expect(result.reasons).toContain("full-access-user-opt-in");
   });
 
+  it("full-access에서도 긴급 중단 해제는 사람 승인을 요구한다", async () => {
+    await activate("personal");
+    const autonomy = await AutonomyStore.create(database, organizations);
+    await autonomy.set(context, { mode: "full-access", expectedRevision: 0 });
+
+    const result = await governance.evaluate(context, {
+      commandId: crypto.randomUUID(),
+      request: request("emergency.stop.disable", {
+        resource: {
+          type: "Organization",
+          id: context.organizationId,
+          organizationId: context.organizationId,
+          revision: 1,
+          attributes: { dataClassification: "internal" },
+        },
+        context: { environment: "local", riskClass: "write", external: false },
+      }),
+    });
+
+    expect(result).toMatchObject({
+      outcome: "require_approval",
+      requirement: { requirementId: "invariant-emergency-stop-disable" },
+    });
+    expect(result.reasons).toContain("full-access-non-bypassable");
+  });
+
   it("full-access는 tenant 검증 뒤 활성 정책 부재만 우회한다", async () => {
     const autonomy = await AutonomyStore.create(database, organizations);
     await autonomy.set(context, { mode: "full-access", expectedRevision: 0 });

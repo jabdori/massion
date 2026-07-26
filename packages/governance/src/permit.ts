@@ -14,6 +14,10 @@ export interface ConsumeApprovalInput {
   readonly policyVersionId: string;
   readonly resourceRevision?: number;
   readonly executionId: string;
+  /** 소비 목적이 승인된 Policy 요청과 같은지 확인할 때만 사용합니다. */
+  readonly expectedAction?: string;
+  readonly expectedResourceType?: string;
+  readonly expectedResourceId?: string;
 }
 
 export interface ExecutionPermit {
@@ -57,6 +61,9 @@ export interface BypassGrant {
 }
 
 interface DecisionSummaryRecord {
+  readonly action: string;
+  readonly resource_type: string;
+  readonly resource_id: string;
   readonly request_summary_json: string;
 }
 
@@ -110,7 +117,7 @@ export class PermitStore {
         return repeated[0];
       }
       const approval = await this.approval(tx, context.organizationId, input.approvalId);
-      this.verifyApproval(approval, input);
+      await this.verifyApproval(tx, context.organizationId, approval, input);
       const permitId = randomUUID();
       const consumed = await this.markConsumed(tx, context, approval, input.commandId, canonicalJson(input), {
         executionId: input.executionId,
@@ -146,7 +153,7 @@ export class PermitStore {
       );
       if (repeated[0]) return repeated[0];
       const approval = await this.approval(tx, context.organizationId, input.approvalId);
-      this.verifyApproval(approval, input);
+      await this.verifyApproval(tx, context.organizationId, approval, input);
       const [decisions] = await tx.query<[DecisionSummaryRecord[]]>(
         "SELECT request_summary_json FROM governance_policy_decision WHERE organization_id = $organization_id AND decision_id = $decision_id LIMIT 1;",
         { organization_id: context.organizationId, decision_id: approval.decision_id },
@@ -200,10 +207,20 @@ export class PermitStore {
     );
   }
 
-  private verifyApproval(
+  private async verifyApproval(
+    executor: QueryExecutor,
+    organizationId: string,
     approval: ApprovalRecord,
-    input: Pick<ConsumeApprovalInput, "requestHash" | "policyVersionId" | "resourceRevision">,
-  ): void {
+    input: Pick<
+      ConsumeApprovalInput,
+      | "requestHash"
+      | "policyVersionId"
+      | "resourceRevision"
+      | "expectedAction"
+      | "expectedResourceType"
+      | "expectedResourceId"
+    >,
+  ): Promise<void> {
     if (approval.status !== "approved") throw new Error(`approved Approval만 소비할 수 있습니다: ${approval.status}`);
     if (instant(approval.expires_at) <= this.clock.now().getTime()) throw new Error("Approval이 만료됐습니다");
     if (approval.request_hash !== input.requestHash) throw new Error("request hash precondition이 일치하지 않습니다");
@@ -211,6 +228,21 @@ export class PermitStore {
       throw new Error("policy version precondition이 일치하지 않습니다");
     if (approval.resource_revision !== input.resourceRevision)
       throw new Error("resource revision precondition이 일치하지 않습니다");
+    if (input.expectedAction || input.expectedResourceType || input.expectedResourceId) {
+      const [decisions] = await executor.query<[DecisionSummaryRecord[]]>(
+        "SELECT action, resource_type, resource_id, request_summary_json FROM governance_policy_decision WHERE organization_id = $organization_id AND decision_id = $decision_id LIMIT 1;",
+        { organization_id: organizationId, decision_id: approval.decision_id },
+      );
+      const decision = decisions[0];
+      if (
+        !decision ||
+        (input.expectedAction !== undefined && decision.action !== input.expectedAction) ||
+        (input.expectedResourceType !== undefined && decision.resource_type !== input.expectedResourceType) ||
+        (input.expectedResourceId !== undefined && decision.resource_id !== input.expectedResourceId)
+      ) {
+        throw new Error("Permit 범위가 승인된 Policy 요청과 일치하지 않습니다");
+      }
+    }
   }
 
   private async markConsumed(

@@ -113,6 +113,9 @@ export class EmergencyControl {
       policyVersionId: input.policyVersionId,
       resourceRevision: input.resourceRevision,
       executionId: `emergency-release:${context.organizationId}:${String(input.resourceRevision)}`,
+      expectedAction: "emergency.stop.disable",
+      expectedResourceType: "Organization",
+      expectedResourceId: context.organizationId,
     });
     return await this.database.transaction(async (tx) => {
       await this.organizations.verifyTenantContext(context, ["owner", "admin"], tx);

@@ -1022,6 +1022,7 @@ export async function createMassionDaemon(
         workspaces,
         autonomy: governance.autonomy,
         emergency,
+        governanceGate,
         organization: graph,
         runtime: runner,
         approvals,

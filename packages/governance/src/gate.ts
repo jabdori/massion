@@ -90,7 +90,7 @@ export class GovernanceGate {
     input: GovernedActionInput,
     executor?: QueryExecutor,
   ): Promise<GovernanceAuthorization> {
-    if (input.action !== "work.read" && input.action !== "emergency.stop")
+    if (input.action !== "work.read" && input.action !== "emergency.stop" && input.action !== "emergency.stop.disable")
       await this.emergency.assertExecutionAllowed(context);
     const request = this.request(context, input);
     return await this.authorizeRequest(context, input, request, executor);

@@ -432,6 +432,9 @@ export function App({ contextPicker = nativeContextPicker, service }: AppProps) 
               controller.newWork.setOpen(true);
             }}
             onOpenNotifications={openInbox}
+            onEmergencyChanged={() => {
+              void refreshNotifications();
+            }}
             onRetryGrowth={() => {
               void refreshGrowth();
             }}
@@ -592,6 +595,7 @@ function ProductSurface({
   onAwaitingRegistryInstallChange,
   onCreate,
   onDecideApproval,
+  onEmergencyChanged,
   onOpenNotifications,
   onOpenWork,
   onRetryGrowth,
@@ -608,6 +612,7 @@ function ProductSurface({
   onAwaitingRegistryInstallChange: (value: AwaitingRegistryInstall | undefined) => void;
   onCreate: () => void;
   onDecideApproval: (approval: ApprovalView, vote: "approve" | "reject") => Promise<void>;
+  onEmergencyChanged: () => void;
   onOpenNotifications: () => void;
   onOpenWork: (workId: string) => void;
   onRetryGrowth: () => void;
@@ -649,7 +654,7 @@ function ProductSurface({
         service={service}
       />
     );
-  return <SettingsSurface service={service} />;
+  return <SettingsSurface onEmergencyChanged={onEmergencyChanged} service={service} />;
 }
 
 function SurfaceFrame({ children, title }: { children: React.ReactNode; title: string }) {
@@ -2758,7 +2763,7 @@ function growthEffectStatus(result: GrowthView["effects"][number]["result"]): st
         : "판단 보류";
 }
 
-function SettingsSurface({ service }: { service: DesktopService }) {
+function SettingsSurface({ onEmergencyChanged, service }: { onEmergencyChanged: () => void; service: DesktopService }) {
   const [settings, setSettings] = useState<SettingsView>();
   const [autonomy, setAutonomy] = useState<AutonomyView>();
   const [emergency, setEmergency] = useState<EmergencyView>();
@@ -2830,9 +2835,30 @@ function SettingsSurface({ service }: { service: DesktopService }) {
     try {
       const state = await service.activateEmergency("사용자 긴급 정지");
       setEmergency(state);
+      onEmergencyChanged();
       setNotice("긴급 정지를 활성화했습니다. 새 실행은 차단됩니다.");
     } catch (cause) {
       setError(surfaceErrorMessage(cause, "긴급 정지를 활성화하지 못했습니다."));
+    } finally {
+      setAutonomySaving(false);
+    }
+  };
+  const requestEmergencyRelease = async () => {
+    if (!emergency?.active || emergency.approvalId !== undefined || autonomySaving) return;
+    setAutonomySaving(true);
+    setError("");
+    setNotice("");
+    try {
+      const state = await service.releaseEmergency(undefined, "사용자 긴급 정지 해제 요청");
+      setEmergency(state);
+      onEmergencyChanged();
+      setNotice(
+        state.approvalId === undefined
+          ? "긴급 정지를 해제했습니다."
+          : "해제 승인 요청을 수신함에 보냈습니다. 승인 전까지 새 실행은 계속 차단됩니다.",
+      );
+    } catch (cause) {
+      setError(surfaceErrorMessage(cause, "긴급 정지 해제 승인을 요청하지 못했습니다."));
     } finally {
       setAutonomySaving(false);
     }
@@ -3188,7 +3214,19 @@ function SettingsSurface({ service }: { service: DesktopService }) {
                         {emergency?.active === true ? "긴급 정지 활성" : "긴급 정지"}
                       </button>
                       {emergency?.active === true ? (
-                        <span className="text-[11px] text-halt">{emergency.reason ?? "새 실행 차단 중"}</span>
+                        <>
+                          <span className="text-[11px] text-halt">{emergency.reason ?? "새 실행 차단 중"}</span>
+                          <button
+                            className="rounded-[5px] border border-control px-3 py-1 text-[12px] text-secondary disabled:opacity-50"
+                            disabled={autonomySaving || emergency.approvalId !== undefined}
+                            onClick={() => {
+                              void requestEmergencyRelease();
+                            }}
+                            type="button"
+                          >
+                            {emergency.approvalId === undefined ? "해제 승인 요청" : "해제 승인 대기"}
+                          </button>
+                        </>
                       ) : null}
                     </div>
                   </GrowthSection>

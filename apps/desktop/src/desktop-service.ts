@@ -97,6 +97,7 @@ export interface EmergencyView {
   readonly active: boolean;
   readonly reason?: string;
   readonly revision: number;
+  readonly approvalId?: string;
 }
 
 export interface ExtensionView {
@@ -361,6 +362,7 @@ export interface DesktopService {
   setAutonomy(mode: AutonomyView["mode"], expectedRevision: number): Promise<AutonomyView>;
   loadEmergency(): Promise<EmergencyView>;
   activateEmergency(reason: string): Promise<EmergencyView>;
+  releaseEmergency(approvalId: string | undefined, reason: string): Promise<EmergencyView>;
   loadSettings(): Promise<SettingsView>;
   connectZaiCodingPlan(input: ZaiCodingPlanConnectionInput): Promise<void>;
   registerProvider(input: Record<string, unknown>): Promise<void>;
@@ -565,6 +567,14 @@ export function createApplicationDesktopService(
       return projectEmergency(result.data);
     },
 
+    async releaseEmergency(approvalId, reason) {
+      const result = await client.command(
+        "governance.emergency.release",
+        approvalId === undefined ? { reason } : { approvalId, reason },
+      );
+      return projectEmergency(result.data);
+    },
+
     async loadSettings() {
       const [catalog, credentials, routes, providers, accounts, quota, policy] = await Promise.all([
         query("router.catalog", {}),
@@ -722,6 +732,12 @@ export function createApplicationDesktopService(
         vote,
         reason,
       });
+      if (vote === "approve" && approval.action === "emergency.stop.disable") {
+        await client.command("governance.emergency.release", {
+          approvalId: approval.id,
+          reason: "수신함 승인으로 긴급 정지 해제",
+        });
+      }
     },
 
     async cancelRun(work) {
@@ -1146,6 +1162,7 @@ export function createFixtureDesktopService(): DesktopService {
       })),
     loadEmergency: () => fixturePromise(() => ({ active: false, revision: 0 })),
     activateEmergency: (reason) => fixturePromise(() => ({ active: true, reason, revision: 1 })),
+    releaseEmergency: (_approvalId, reason) => fixturePromise(() => ({ active: false, reason, revision: 2 })),
     loadExtensions: () =>
       fixturePromise(() => [
         ...fixtureExtensionEntries,
@@ -1795,6 +1812,7 @@ function projectEmergency(value: unknown): EmergencyView {
     active: source.active,
     revision: source.revision as number,
     ...(typeof source.reason === "string" ? { reason: source.reason } : {}),
+    ...(typeof source.approvalId === "string" ? { approvalId: source.approvalId } : {}),
   };
 }
 

@@ -2,7 +2,17 @@ import { mkdir, mkdtemp, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { AutonomyStore, EmergencyControl, GovernanceApprovalRequiredError, PermitStore } from "@massion/governance";
+import {
+  AutonomyStore,
+  createDefaultPolicy,
+  EmergencyControl,
+  GovernanceApprovalRequiredError,
+  GovernanceGate,
+  GovernanceService,
+  ApprovalStore,
+  PermitStore,
+  PolicyStore,
+} from "@massion/governance";
 import { IdentityService, OrganizationService } from "@massion/identity";
 import { OrganizationGraphService } from "@massion/organization";
 import { createDatabase } from "@massion/storage";
@@ -280,6 +290,87 @@ describe("Application domain adapters", () => {
     ).resolves.toMatchObject({ outcome: "succeeded", data: { active: true, revision: 1 } });
     expect(cancelOrganization).toHaveBeenCalledWith(context, "emergency_stop");
     await expect(emergency.get(context)).resolves.toMatchObject({ active: true, revision: 1 });
+  });
+
+  it("긴급 정지 뒤 수신함 승인으로 해제 command가 Permit을 한 번 소비한다", async () => {
+    await using database = await createDatabase({
+      url: "mem://",
+      namespace: "massion",
+      database: crypto.randomUUID(),
+    });
+    const identities = await IdentityService.create(database);
+    const organizations = await OrganizationService.create(database);
+    const owner = await identities.registerPersonalUser({ email: "emergency-release@example.com", displayName: "Owner" });
+    const context = await organizations.resolveTenantContext(owner.user.user_id, owner.organization.organization_id);
+    const policies = await PolicyStore.create(database, organizations);
+    const governance = await GovernanceService.create(database, organizations, policies);
+    const approvals = await ApprovalStore.create(database, organizations, governance);
+    const permits = await PermitStore.create(database, organizations);
+    const emergency = await EmergencyControl.create(database, organizations, permits);
+    const gate = new GovernanceGate(governance, approvals, permits, emergency);
+    const defaults = createDefaultPolicy("personal");
+    const draft = await policies.createDraft(context, {
+      commandId: "emergency-release-policy-draft",
+      bundle: defaults.bundle,
+      requirements: defaults.requirements,
+    });
+    await policies.activate(context, {
+      commandId: "emergency-release-policy-activate",
+      policyVersionId: draft.policy_version_id,
+    });
+    const cancelOrganization = vi.fn().mockResolvedValue(undefined);
+    const registry = new ApplicationCommandRegistry(await ApplicationCommandStore.create(database, organizations));
+    registerApplicationDomainCommands(registry, {
+      emergency,
+      approvals,
+      governanceGate: gate,
+      runtime: { cancelOrganization } as never,
+    });
+
+    const activated = await registry.dispatch(context, ["governance:write"], {
+      schemaVersion: "massion.application.v1",
+      commandId: "emergency-release-activate",
+      correlationId: "emergency-release-activate-correlation",
+      operation: "governance.emergency.activate",
+      payload: { reason: "credential 유출 대응" },
+    });
+    expect(activated).toMatchObject({ outcome: "succeeded", data: { active: true, revision: 1 } });
+    const requested = await registry.dispatch(context, ["governance:write"], {
+      schemaVersion: "massion.application.v1",
+      commandId: "emergency-release-command",
+      correlationId: "emergency-release-correlation",
+      operation: "governance.emergency.release",
+      payload: { reason: "복구 확인" },
+    });
+    expect(requested).toMatchObject({
+      outcome: "awaiting-approval",
+      data: { active: true, approvalId: expect.any(String) },
+    });
+    const approvalId = (requested.data as { approvalId: string }).approvalId;
+    const pending = await approvals.get(context, approvalId);
+    expect(pending).toMatchObject({ status: "pending", resource_revision: 1 });
+    const approved = await approvals.vote(context, {
+      commandId: "emergency-release-approval-vote",
+      approvalId,
+      expectedRevision: pending.revision,
+      vote: "approve",
+      reason: "incident resolved",
+    });
+
+    await expect(
+      registry.dispatch(context, ["governance:write"], {
+        schemaVersion: "massion.application.v1",
+        commandId: "emergency-release-command",
+        correlationId: "emergency-release-correlation",
+        operation: "governance.emergency.release",
+        payload: { approvalId: approved.approval_id, reason: "복구 확인" },
+      }),
+    ).resolves.toMatchObject({ outcome: "succeeded", data: { active: false, revision: 2 } });
+    expect((await approvals.get(context, approvalId)).status).toBe("consumed");
+    expect((await emergency.listEvents(context)).map((event) => event.event_type)).toEqual([
+      "emergency_stop_activated",
+      "emergency_stop_released",
+    ]);
   });
 
   it("workspace 명령을 command registry에 연결하고 등록·신뢰·archive를 처리한다", async () => {

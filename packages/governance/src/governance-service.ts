@@ -141,9 +141,15 @@ export class GovernanceService {
     ) {
       reasons = ["tenant-context"];
     } else if (autonomyState.mode === "full-access") {
-      // full-access는 tenant·멱등성 검증 뒤에만 Governance 정책·승인 경계를 우회합니다.
-      outcome = "allow";
-      reasons = ["full-access-user-opt-in"];
+      // full-access도 안전 불변식(non-bypassable)은 우회하지 않습니다.
+      requirement = invariantRequirement(input.request.action, mode);
+      if (requirement) {
+        outcome = "require_approval";
+        reasons = ["full-access-non-bypassable"];
+      } else {
+        outcome = "allow";
+        reasons = ["full-access-user-opt-in"];
+      }
     } else if (!active) {
       errors = ["active_policy_missing"];
     } else {
