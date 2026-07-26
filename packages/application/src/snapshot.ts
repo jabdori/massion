@@ -45,6 +45,8 @@ export interface CollaborationGraphWork {
   readonly taskIds: readonly string[];
   readonly roomIds: readonly string[];
   readonly workspaceId?: string;
+  readonly autonomyMode?: "automatic" | "review" | "full-access";
+  readonly autonomyRevision?: number;
 }
 
 export interface CollaborationGraphSnapshot {
@@ -192,6 +194,8 @@ export class CollaborationGraphSnapshotProjector {
       revision: work.revision,
       artifactIds: [...work.artifactIds],
       ...(work.workspaceId === undefined ? {} : { workspaceId: work.workspaceId }),
+      ...(work.autonomyMode === undefined ? {} : { autonomyMode: work.autonomyMode }),
+      ...(work.autonomyRevision === undefined ? {} : { autonomyRevision: work.autonomyRevision }),
       taskIds: sources.tasks.filter((task) => task.workId === work.workId).map((task) => task.taskId),
       roomIds: sources.rooms.filter((room) => room.workId === work.workId).map((room) => room.roomId),
     }));
@@ -229,6 +233,8 @@ export class CollaborationGraphSnapshotProjector {
         inputTokens: execution.inputTokens,
         outputTokens: execution.outputTokens,
         costMicros: execution.costMicros,
+        ...(execution.autonomyMode === undefined ? {} : { autonomyMode: execution.autonomyMode }),
+        ...(execution.autonomyRevision === undefined ? {} : { autonomyRevision: execution.autonomyRevision }),
       })),
       rooms: sources.rooms.map((room) => ({
         workId: room.workId,

@@ -7,6 +7,7 @@ import type { AgentExecutionInput, RuntimeExecutionStatus } from "./contracts.js
 import type { AgentConfigurationReader, ResolvedAgentConfiguration } from "./agent-configuration.js";
 import {
   RUNTIME_ACTOR_LINEAGE_MIGRATION,
+  RUNTIME_AUTONOMY_LINEAGE_MIGRATION,
   RUNTIME_BLOCKED_TRANSITION_MIGRATION,
   RUNTIME_EXECUTION_MIGRATION,
   RUNTIME_PROMPT_LINEAGE_MIGRATION,
@@ -31,6 +32,8 @@ export interface RuntimeExecution {
   readonly prompt_checksum?: string;
   readonly memory_version_ids?: readonly string[];
   readonly agent_instruction_checksum?: string;
+  readonly autonomy_mode?: "automatic" | "review" | "full-access";
+  readonly autonomy_revision?: number;
   readonly started_at?: unknown;
   readonly ended_at?: unknown;
   readonly created_at: unknown;
@@ -148,20 +151,29 @@ export class RuntimeExecutionStore {
     private readonly database: MassionDatabase,
     private readonly organizations: OrganizationService,
     private readonly configurations?: AgentConfigurationReader,
+    private readonly autonomy?: (context: TenantContext, executor: QueryExecutor) => Promise<{
+      readonly mode: "automatic" | "review" | "full-access";
+      readonly revision: number;
+    }>,
   ) {}
 
   public static async create(
     database: MassionDatabase,
     organizations: OrganizationService,
     configurations?: AgentConfigurationReader,
+    autonomy?: (context: TenantContext, executor: QueryExecutor) => Promise<{
+      readonly mode: "automatic" | "review" | "full-access";
+      readonly revision: number;
+    }>,
   ): Promise<RuntimeExecutionStore> {
     await applyMigrations(database, [
       RUNTIME_EXECUTION_MIGRATION,
       RUNTIME_BLOCKED_TRANSITION_MIGRATION,
       RUNTIME_PROMPT_LINEAGE_MIGRATION,
       RUNTIME_ACTOR_LINEAGE_MIGRATION,
+      RUNTIME_AUTONOMY_LINEAGE_MIGRATION,
     ]);
-    return new RuntimeExecutionStore(database, organizations, configurations);
+    return new RuntimeExecutionStore(database, organizations, configurations, autonomy);
   }
 
   public async createExecution(
@@ -174,9 +186,10 @@ export class RuntimeExecutionStore {
       await this.organizations.verifyTenantContext(context, undefined, tx);
       const repeated = await this.repeated(tx, context, input.commandId, requestJson);
       if (repeated) return await this.resultFromEvent(tx, context, repeated);
+      const autonomy = this.autonomy ? await this.autonomy(context, tx) : undefined;
       const executionId = randomUUID();
       const [executions] = await tx.query<[RuntimeExecution[]]>(
-        "CREATE runtime_execution CONTENT { execution_id: $execution_id, organization_id: $organization_id, actor_user_id: $actor_user_id, work_id: $work_id, task_id: $task_id, agent_handle: $agent_handle, model_route: $model_route, correlation_id: $correlation_id, input_json: $input_json, status: 'queued', version: 1, event_sequence: 1, created_at: time::now(), updated_at: time::now() } RETURN AFTER;",
+        "CREATE runtime_execution CONTENT { execution_id: $execution_id, organization_id: $organization_id, actor_user_id: $actor_user_id, work_id: $work_id, task_id: $task_id, agent_handle: $agent_handle, model_route: $model_route, correlation_id: $correlation_id, input_json: $input_json, autonomy_mode: $autonomy_mode, autonomy_revision: $autonomy_revision, status: 'queued', version: 1, event_sequence: 1, created_at: time::now(), updated_at: time::now() } RETURN AFTER;",
         {
           execution_id: executionId,
           organization_id: context.organizationId,
@@ -187,6 +200,8 @@ export class RuntimeExecutionStore {
           model_route: input.modelRoute,
           correlation_id: input.correlationId,
           input_json: canonicalJson(input.input),
+          autonomy_mode: autonomy?.mode,
+          autonomy_revision: autonomy?.revision,
         },
       );
       const execution = executions[0];

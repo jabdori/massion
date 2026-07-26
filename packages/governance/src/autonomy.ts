@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 import type { OrganizationService, TenantContext } from "@massion/identity";
-import { applyMigrations, defineMigration, type MassionDatabase } from "@massion/storage";
+import { applyMigrations, defineMigration, type MassionDatabase, type QueryExecutor } from "@massion/storage";
 
 // 자율성 다이얼: 조직 단위 실행 승인 모드입니다.
 // - automatic: 정책이 허용하면 자동 실행(레벨 2, 기본값).
@@ -65,9 +65,9 @@ export class AutonomyStore {
     return new AutonomyStore(database, organizations);
   }
 
-  public async get(context: TenantContext): Promise<AutonomyState> {
-    await this.organizations.verifyTenantContext(context);
-    const [records] = await this.database.query<[AutonomyRecord[]]>(
+  public async get(context: TenantContext, executor: QueryExecutor = this.database): Promise<AutonomyState> {
+    await this.organizations.verifyTenantContext(context, undefined, executor);
+    const [records] = await executor.query<[AutonomyRecord[]]>(
       "SELECT organization_id, mode, revision FROM governance_autonomy WHERE organization_id = $organization_id LIMIT 1;",
       { organization_id: context.organizationId },
     );

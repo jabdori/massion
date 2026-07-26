@@ -117,6 +117,29 @@ THEN {
 `,
 );
 
+export const RUNTIME_AUTONOMY_LINEAGE_MIGRATION = defineMigration(
+  "0113-runtime-autonomy-lineage",
+  `
+DEFINE FIELD autonomy_mode ON runtime_execution TYPE option<string>
+  ASSERT $value = NONE OR $value IN ['automatic', 'review', 'full-access'];
+DEFINE FIELD autonomy_revision ON runtime_execution TYPE option<int>
+  ASSERT $value = NONE OR $value >= 0;
+DEFINE EVENT runtime_autonomy_lineage_invariant ON runtime_execution
+WHEN $event IN ['CREATE', 'UPDATE']
+THEN {
+  IF ($after.autonomy_mode = NONE) != ($after.autonomy_revision = NONE) {
+    THROW 'Runtime 자율성 계보는 mode와 revision을 함께 저장해야 합니다';
+  };
+  IF $event = 'UPDATE' AND $before.autonomy_mode != NONE AND (
+    $after.autonomy_mode != $before.autonomy_mode OR
+    $after.autonomy_revision != $before.autonomy_revision
+  ) {
+    THROW 'Runtime 자율성 계보는 immutable입니다';
+  };
+};
+`,
+);
+
 export const RUNTIME_BLOCKED_TRANSITION_MIGRATION = defineMigration(
   "0015-runtime-blocked-transition",
   `

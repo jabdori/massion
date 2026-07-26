@@ -46,6 +46,8 @@ interface WorkRecord {
   readonly revision: number;
   readonly artifact_version_ids: readonly string[];
   readonly workspace_id?: string;
+  readonly autonomy_mode?: "automatic" | "review" | "full-access";
+  readonly autonomy_revision?: number;
   readonly created_at: unknown;
   readonly updated_at: unknown;
 }
@@ -92,6 +94,8 @@ interface ExecutionRecord {
   readonly agent_handle: string;
   readonly model_route: string;
   readonly status: string;
+  readonly autonomy_mode?: "automatic" | "review" | "full-access";
+  readonly autonomy_revision?: number;
   readonly created_at: unknown;
   readonly updated_at: unknown;
 }
@@ -394,7 +398,7 @@ export class SurrealApplicationReadModel implements ApplicationReadModel {
   public async works(context: TenantContext): Promise<readonly ApplicationWorkSource[]> {
     await this.organizations.verifyTenantContext(context);
     const [records] = await this.database.query<[WorkRecord[]]>(
-      "SELECT organization_id, work_id, request_id, status, revision, artifact_version_ids, workspace_id, created_at, updated_at FROM work WHERE organization_id = $organization_id ORDER BY updated_at DESC, work_id ASC;",
+      "SELECT organization_id, work_id, request_id, status, revision, artifact_version_ids, workspace_id, autonomy_mode, autonomy_revision, created_at, updated_at FROM work WHERE organization_id = $organization_id ORDER BY updated_at DESC, work_id ASC;",
       { organization_id: context.organizationId },
     );
     const [requests] = await this.database.query<[WorkRequestRecord[]]>(
@@ -413,6 +417,8 @@ export class SurrealApplicationReadModel implements ApplicationReadModel {
         revision: record.revision,
         artifactIds: record.artifact_version_ids,
         ...(record.workspace_id === undefined ? {} : { workspaceId: record.workspace_id }),
+        ...(record.autonomy_mode === undefined ? {} : { autonomyMode: record.autonomy_mode }),
+        ...(record.autonomy_revision === undefined ? {} : { autonomyRevision: record.autonomy_revision }),
         createdAt: iso(record.created_at),
         updatedAt: iso(record.updated_at),
       };
@@ -467,7 +473,7 @@ export class SurrealApplicationReadModel implements ApplicationReadModel {
   public async executions(context: TenantContext): Promise<readonly ApplicationExecutionSource[]> {
     await this.organizations.verifyTenantContext(context);
     const [records] = await this.database.query<[ExecutionRecord[]]>(
-      "SELECT organization_id, execution_id, work_id, task_id, agent_handle, model_route, status, created_at, updated_at FROM runtime_execution WHERE organization_id = $organization_id ORDER BY created_at ASC, execution_id ASC;",
+      "SELECT organization_id, execution_id, work_id, task_id, agent_handle, model_route, status, autonomy_mode, autonomy_revision, created_at, updated_at FROM runtime_execution WHERE organization_id = $organization_id ORDER BY created_at ASC, execution_id ASC;",
       { organization_id: context.organizationId },
     );
     const [usages] = await this.database.query<[UsageRecord[]]>(
@@ -484,6 +490,8 @@ export class SurrealApplicationReadModel implements ApplicationReadModel {
         agentHandle: record.agent_handle,
         modelRoute: record.model_route,
         status: record.status,
+        ...(record.autonomy_mode === undefined ? {} : { autonomyMode: record.autonomy_mode }),
+        ...(record.autonomy_revision === undefined ? {} : { autonomyRevision: record.autonomy_revision }),
         inputTokens: linked.reduce((sum, usage) => sum + usage.token_count, 0),
         outputTokens: 0,
         costMicros: linked.reduce((sum, usage) => sum + usage.cost_micros, 0),

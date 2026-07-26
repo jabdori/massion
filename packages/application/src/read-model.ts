@@ -29,6 +29,8 @@ export interface ApplicationWorkSource {
   readonly revision: number;
   readonly artifactIds: readonly string[];
   readonly workspaceId?: string;
+  readonly autonomyMode?: "automatic" | "review" | "full-access";
+  readonly autonomyRevision?: number;
   readonly title?: string;
   readonly createdAt?: string;
   readonly updatedAt?: string;
@@ -74,6 +76,8 @@ export interface ApplicationExecutionSource {
   readonly inputTokens: number;
   readonly outputTokens: number;
   readonly costMicros: number;
+  readonly autonomyMode?: "automatic" | "review" | "full-access";
+  readonly autonomyRevision?: number;
   readonly createdAt?: string;
   readonly updatedAt?: string;
 }

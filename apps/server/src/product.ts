@@ -277,7 +277,14 @@ export async function createMassionDaemon(
     const agentConfigurations = new GrowthAgentConfigurationReader(database, organizations, growthPrompts);
     const instructions = new AgentInstructionRegistry(agentConfigurations);
     // governance 자리는 본 작업 범위 밖이므로 그대로 두고 promptVersions만 주입한다.
-    const works = await WorkService.create(database, organizations, graph, undefined, workPromptVersions);
+    const works = await WorkService.create(
+      database,
+      organizations,
+      graph,
+      undefined,
+      workPromptVersions,
+      (context, executor) => governance.autonomy.get(context, executor),
+    );
     const workspaces = await WorkspaceService.create(database, organizations);
     const extensionStore = await ExtensionStore.create(database, organizations);
     const connectorEnrollment = await ConnectorEnrollmentService.create(database, organizations);
@@ -441,7 +448,12 @@ export async function createMassionDaemon(
       subscriptionQuotaSynchronization,
       new ZaiCodingPlanSubscriptionVerifier(),
     );
-    const runtimeExecutions = await RuntimeExecutionStore.create(database, organizations, agentConfigurations);
+    const runtimeExecutions = await RuntimeExecutionStore.create(
+      database,
+      organizations,
+      agentConfigurations,
+      (context, executor) => governance.autonomy.get(context, executor),
+    );
     const directExecutionLifecycle = new DirectExecutionLifecycle(
       new RuntimeRecovery(runtimeExecutions, { getWorkflowState: () => Promise.resolve(null) }),
     );

@@ -629,3 +629,26 @@ DEFINE FIELD workspace_id ON work TYPE option<string>;
 DEFINE INDEX work_by_workspace ON work FIELDS organization_id, workspace_id;
 `,
 );
+
+export const WORK_AUTONOMY_LINEAGE_MIGRATION = defineMigration(
+  "0112-work-autonomy-lineage",
+  `
+DEFINE FIELD autonomy_mode ON work TYPE option<string>
+  ASSERT $value = NONE OR $value IN ['automatic', 'review', 'full-access'];
+DEFINE FIELD autonomy_revision ON work TYPE option<int>
+  ASSERT $value = NONE OR $value >= 0;
+DEFINE EVENT work_autonomy_lineage_invariant ON work
+WHEN $event IN ['CREATE', 'UPDATE']
+THEN {
+  IF ($after.autonomy_mode = NONE) != ($after.autonomy_revision = NONE) {
+    THROW 'Work 자율성 계보는 mode와 revision을 함께 저장해야 합니다';
+  };
+  IF $event = 'UPDATE' AND $before.autonomy_mode != NONE AND (
+    $after.autonomy_mode != $before.autonomy_mode OR
+    $after.autonomy_revision != $before.autonomy_revision
+  ) {
+    THROW 'Work 자율성 계보는 immutable입니다';
+  };
+};
+`,
+);

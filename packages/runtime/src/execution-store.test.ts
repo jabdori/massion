@@ -86,6 +86,33 @@ describe("Runtime Execution Store", () => {
     ]);
   });
 
+  it("새 Runtime Execution은 생성 시점의 자율성 snapshot을 고정하고 replay에서는 유지한다", async () => {
+    let snapshot: { readonly mode: "automatic" | "review" | "full-access"; readonly revision: number } = {
+      mode: "full-access",
+      revision: 9,
+    };
+    const lineageStore = await RuntimeExecutionStore.create(database, organizations, undefined, async () => snapshot);
+    const input = {
+      commandId: crypto.randomUUID(),
+      workId: "work-lineage",
+      taskId: "task-lineage",
+      agentHandle: "delivery-coordination",
+      modelRoute: "coding-balanced",
+      correlationId: "correlation-lineage",
+      estimatedTokens: 100,
+      estimatedCostMicros: 100,
+      input: { objective: "lineage" },
+    };
+    const first = await lineageStore.createExecution(context, input);
+    snapshot = { mode: "review", revision: 10 };
+    const replay = await lineageStore.createExecution(context, input);
+    const next = await lineageStore.createExecution(context, { ...input, commandId: crypto.randomUUID() });
+
+    expect(first.execution).toMatchObject({ autonomy_mode: "full-access", autonomy_revision: 9 });
+    expect(replay.execution).toMatchObject({ autonomy_mode: "full-access", autonomy_revision: 9 });
+    expect(next.execution).toMatchObject({ autonomy_mode: "review", autonomy_revision: 10 });
+  });
+
   it("잘못된 상태 전이와 stale version을 거부한다", async () => {
     const created = await createExecution();
     await expect(

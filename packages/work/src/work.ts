@@ -11,6 +11,7 @@ import { applyMigrations, type MassionDatabase, type QueryExecutor } from "@mass
 
 import {
   WORK_ASSURANCE_FAIL_CLOSED_GUARD,
+  WORK_AUTONOMY_LINEAGE_MIGRATION,
   WORK_COLLABORATION_MIGRATION,
   WORK_CONSTRAINTS_MIGRATION,
   WORK_CORE_MIGRATION,
@@ -61,6 +62,8 @@ export interface Work {
   readonly prompt_schema_version?: string;
   readonly artifact_version_ids: readonly string[];
   readonly records_schema_version?: string;
+  readonly autonomy_mode?: "automatic" | "review" | "full-access";
+  readonly autonomy_revision?: number;
   readonly created_at: unknown;
   readonly updated_at: unknown;
 }
@@ -843,6 +846,10 @@ export class WorkService {
     private readonly graph?: OrganizationGraphService,
     private readonly governance?: Pick<GovernanceGate, "authorize" | "getApprovalStatus">,
     private readonly promptVersions?: PromptVersionResolver,
+    private readonly autonomy?: (context: TenantContext, executor: QueryExecutor) => Promise<{
+      readonly mode: "automatic" | "review" | "full-access";
+      readonly revision: number;
+    }>,
   ) {}
 
   public static async create(
@@ -851,6 +858,10 @@ export class WorkService {
     graph?: OrganizationGraphService,
     governance?: Pick<GovernanceGate, "authorize" | "getApprovalStatus">,
     promptVersions?: PromptVersionResolver,
+    autonomy?: (context: TenantContext, executor: QueryExecutor) => Promise<{
+      readonly mode: "automatic" | "review" | "full-access";
+      readonly revision: number;
+    }>,
   ): Promise<WorkService> {
     await applyMigrations(database, [
       WORK_CORE_MIGRATION,
@@ -861,9 +872,10 @@ export class WorkService {
       WORK_STRATEGY_PROJECTION_MIGRATION,
       WORK_PROMPT_VERSION_MIGRATION,
       WORK_WORKSPACE_MIGRATION,
+      WORK_AUTONOMY_LINEAGE_MIGRATION,
     ]);
     await database.query(WORK_ASSURANCE_FAIL_CLOSED_GUARD);
-    return new WorkService(database, organizations, graph, governance, promptVersions);
+    return new WorkService(database, organizations, graph, governance, promptVersions, autonomy);
   }
 
   private async verify(context: TenantContext): Promise<void> {
@@ -883,6 +895,7 @@ export class WorkService {
       await this.organizations.verifyTenantContext(context, undefined, transaction);
       const repeated = await findCommand(transaction, context.organizationId, input.commandId);
       if (repeated) return this.replay(repeated, requestJson) as CreateWorkResult;
+      const autonomy = this.autonomy ? await this.autonomy(context, transaction) : undefined;
       const requestId = randomUUID();
       const workId = randomUUID();
       const promptInput: ResolveWorkPromptInput = {
@@ -911,7 +924,7 @@ export class WorkService {
         },
       );
       const [works] = await transaction.query<[Work[]]>(
-        "CREATE work CONTENT { work_id: $work_id, organization_id: $organization_id, request_id: $request_id, project_id: $project_id, workspace_id: $workspace_id, status: 'draft', revision: 1, organization_version_id: $organization_version_id, context_version_id: $context_version_id, policy_version_id: $policy_version_id, prompt_version_id: $prompt_version_id, prompt_schema_version: $prompt_schema_version, artifact_version_ids: [], created_at: time::now(), updated_at: time::now() } RETURN AFTER;",
+        "CREATE work CONTENT { work_id: $work_id, organization_id: $organization_id, request_id: $request_id, project_id: $project_id, workspace_id: $workspace_id, status: 'draft', revision: 1, organization_version_id: $organization_version_id, context_version_id: $context_version_id, policy_version_id: $policy_version_id, prompt_version_id: $prompt_version_id, prompt_schema_version: $prompt_schema_version, autonomy_mode: $autonomy_mode, autonomy_revision: $autonomy_revision, artifact_version_ids: [], created_at: time::now(), updated_at: time::now() } RETURN AFTER;",
         {
           work_id: workId,
           organization_id: context.organizationId,
@@ -923,6 +936,8 @@ export class WorkService {
           policy_version_id: input.policyVersionId,
           prompt_version_id: resolvedPrompt?.promptVersionId ?? input.promptVersionId,
           prompt_schema_version: resolvedPrompt?.schemaVersion,
+          autonomy_mode: autonomy?.mode,
+          autonomy_revision: autonomy?.revision,
         },
       );
       const request = requests[0];
@@ -1001,6 +1016,7 @@ export class WorkService {
       if (repeated) return this.replay(repeated, requestJson) as CreateFollowUpWorkResult;
       const parent = await findWork(transaction, context.organizationId, input.parentWorkId);
       if (!parent) throw new Error(`부모 Work를 찾을 수 없습니다: ${input.parentWorkId}`);
+      const autonomy = this.autonomy ? await this.autonomy(context, transaction) : undefined;
 
       const requestId = randomUUID();
       const workId = randomUUID();
@@ -1015,7 +1031,7 @@ export class WorkService {
         },
       );
       const [works] = await transaction.query<[Work[]]>(
-        "CREATE work CONTENT { work_id: $work_id, organization_id: $organization_id, request_id: $request_id, parent_work_id: $parent_work_id, project_id: $project_id, workspace_id: $workspace_id, status: 'draft', revision: 1, organization_version_id: $organization_version_id, context_version_id: $context_version_id, policy_version_id: $policy_version_id, prompt_version_id: $prompt_version_id, prompt_schema_version: $prompt_schema_version, artifact_version_ids: $artifact_version_ids, created_at: time::now(), updated_at: time::now() } RETURN AFTER;",
+        "CREATE work CONTENT { work_id: $work_id, organization_id: $organization_id, request_id: $request_id, parent_work_id: $parent_work_id, project_id: $project_id, workspace_id: $workspace_id, status: 'draft', revision: 1, organization_version_id: $organization_version_id, context_version_id: $context_version_id, policy_version_id: $policy_version_id, prompt_version_id: $prompt_version_id, prompt_schema_version: $prompt_schema_version, autonomy_mode: $autonomy_mode, autonomy_revision: $autonomy_revision, artifact_version_ids: $artifact_version_ids, created_at: time::now(), updated_at: time::now() } RETURN AFTER;",
         {
           work_id: workId,
           organization_id: context.organizationId,
@@ -1028,6 +1044,8 @@ export class WorkService {
           policy_version_id: parent.policy_version_id,
           prompt_version_id: parent.prompt_version_id,
           prompt_schema_version: parent.prompt_schema_version,
+          autonomy_mode: autonomy?.mode,
+          autonomy_revision: autonomy?.revision,
           artifact_version_ids: parent.artifact_version_ids,
         },
       );
@@ -1982,6 +2000,7 @@ export class WorkService {
     const objective = input.objective.trim();
     if (!objective) throw new Error("자식 Work objective는 비어 있을 수 없습니다");
     return await this.mutate(context, input, "work_forked", async (transaction, parent) => {
+      const autonomy = this.autonomy ? await this.autonomy(context, transaction) : undefined;
       const requestId = randomUUID();
       const childWorkId = randomUUID();
       const [requests] = await transaction.query<[WorkRequest[]]>(
@@ -1994,7 +2013,7 @@ export class WorkService {
         },
       );
       const [works] = await transaction.query<[Work[]]>(
-        "CREATE work CONTENT { work_id: $work_id, organization_id: $organization_id, request_id: $request_id, parent_work_id: $parent_work_id, project_id: $project_id, workspace_id: $workspace_id, status: 'draft', revision: 1, organization_version_id: $organization_version_id, context_version_id: $context_version_id, policy_version_id: $policy_version_id, prompt_version_id: $prompt_version_id, prompt_schema_version: $prompt_schema_version, artifact_version_ids: $artifact_version_ids, created_at: time::now(), updated_at: time::now() } RETURN AFTER;",
+        "CREATE work CONTENT { work_id: $work_id, organization_id: $organization_id, request_id: $request_id, parent_work_id: $parent_work_id, project_id: $project_id, workspace_id: $workspace_id, status: 'draft', revision: 1, organization_version_id: $organization_version_id, context_version_id: $context_version_id, policy_version_id: $policy_version_id, prompt_version_id: $prompt_version_id, prompt_schema_version: $prompt_schema_version, autonomy_mode: $autonomy_mode, autonomy_revision: $autonomy_revision, artifact_version_ids: $artifact_version_ids, created_at: time::now(), updated_at: time::now() } RETURN AFTER;",
         {
           work_id: childWorkId,
           organization_id: context.organizationId,
@@ -2007,6 +2026,8 @@ export class WorkService {
           policy_version_id: parent.policy_version_id,
           prompt_version_id: parent.prompt_version_id,
           prompt_schema_version: parent.prompt_schema_version,
+          autonomy_mode: autonomy?.mode,
+          autonomy_revision: autonomy?.revision,
           artifact_version_ids: parent.artifact_version_ids,
         },
       );

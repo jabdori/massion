@@ -9,11 +9,12 @@ describe("Request와 Work 상태 머신", () => {
   let database: MassionDatabase;
   let context: TenantContext;
   let service: WorkService;
+  let organizations: OrganizationService;
 
   beforeEach(async () => {
     database = await createDatabase({ url: "mem://", namespace: "massion", database: crypto.randomUUID() });
     const identity = await IdentityService.create(database);
-    const organizations = await OrganizationService.create(database);
+    organizations = await OrganizationService.create(database);
     const owner = await identity.registerPersonalUser({ email: "owner@example.com", displayName: "Owner" });
     context = await organizations.resolveTenantContext(owner.user.user_id, owner.organization.organization_id);
     service = await WorkService.create(database, organizations);
@@ -32,6 +33,40 @@ describe("Request와 Work 상태 머신", () => {
     expect(result.request.text).toBe("제품을 구현해주세요");
     expect(result.work).toMatchObject({ status: "draft", revision: 1 });
     expect(result.event).toMatchObject({ sequence: 1, event_type: "work_created" });
+  });
+
+  it("새 Work는 생성 시점의 자율성 snapshot을 고정하고 replay에서는 유지한다", async () => {
+    let snapshot: { readonly mode: "automatic" | "review" | "full-access"; readonly revision: number } = {
+      mode: "full-access",
+      revision: 4,
+    };
+    const lineageService = await WorkService.create(
+      database,
+      organizations,
+      undefined,
+      undefined,
+      undefined,
+      async () => snapshot,
+    );
+    const input = {
+      commandId: crypto.randomUUID(),
+      text: "자율성 계보 요청",
+      surface: "desktop",
+      organizationVersionId: "org-v1",
+    };
+    const first = await lineageService.createWork(context, input);
+    snapshot = { mode: "review", revision: 5 };
+    const replay = await lineageService.createWork(context, input);
+    const followUp = await lineageService.createFollowUpWork(context, {
+      commandId: crypto.randomUUID(),
+      parentWorkId: first.work.work_id,
+      text: "새 모드의 후속 요청",
+      surface: "desktop",
+    });
+
+    expect(first.work).toMatchObject({ autonomy_mode: "full-access", autonomy_revision: 4 });
+    expect(replay.work).toMatchObject({ autonomy_mode: "full-access", autonomy_revision: 4 });
+    expect(followUp.work).toMatchObject({ autonomy_mode: "review", autonomy_revision: 5 });
   });
 
   it("명세의 모든 Work 상태 전이 간선을 정확히 허용한다", () => {

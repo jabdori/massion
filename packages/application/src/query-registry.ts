@@ -399,6 +399,8 @@ function publicWork(value: Awaited<ReturnType<ApplicationReadModel["works"]>>[nu
     artifactIds: value.artifactIds,
     artifactVersionIds: value.artifactIds,
     ...(value.workspaceId === undefined ? {} : { workspaceId: value.workspaceId }),
+    ...(value.autonomyMode === undefined ? {} : { autonomyMode: value.autonomyMode }),
+    ...(value.autonomyRevision === undefined ? {} : { autonomyRevision: value.autonomyRevision }),
     ...(value.createdAt === undefined ? {} : { createdAt: value.createdAt }),
     ...(value.updatedAt === undefined ? {} : { updatedAt: value.updatedAt }),
   };
@@ -415,6 +417,8 @@ function publicExecution(execution: ApplicationExecutionSource) {
     inputTokens: execution.inputTokens,
     outputTokens: execution.outputTokens,
     costMicros: execution.costMicros,
+    ...(execution.autonomyMode === undefined ? {} : { autonomyMode: execution.autonomyMode }),
+    ...(execution.autonomyRevision === undefined ? {} : { autonomyRevision: execution.autonomyRevision }),
     ...(execution.createdAt === undefined ? {} : { createdAt: execution.createdAt }),
     ...(execution.updatedAt === undefined ? {} : { updatedAt: execution.updatedAt }),
   };

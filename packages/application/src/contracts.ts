@@ -81,6 +81,8 @@ export interface WorkSummaryV1 {
   readonly status: string;
   readonly revision: number;
   readonly workspaceId?: string;
+  readonly autonomyMode?: "automatic" | "review" | "full-access";
+  readonly autonomyRevision?: number;
   readonly updatedAt?: string;
 }
 
@@ -164,6 +166,8 @@ export interface ExecutionViewV1 {
   readonly inputTokens: number;
   readonly outputTokens: number;
   readonly costMicros: number;
+  readonly autonomyMode?: "automatic" | "review" | "full-access";
+  readonly autonomyRevision?: number;
   readonly createdAt?: string;
   readonly updatedAt?: string;
 }
