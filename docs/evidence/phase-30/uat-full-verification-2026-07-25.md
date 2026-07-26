@@ -122,8 +122,8 @@
 
 ## 남은 릴리스 게이트
 
-1. ~~23개 시나리오 UAT~~ — 완료
+1. 23개 실제 Tauri 원자 UAT — 미완료 (이 문서는 fixture UI·백엔드 자동화 대응 검증이며 실제 UAT를 대체하지 않음)
 2. ~~pnpm verify~~ — 완료
 3. ~~tauri:build~~ — 완료 (Massion.app v1.0.0)
-4. Apple Developer ID 서명·공증 — 개인 사용은 ad-hoc 서명으로 충분
-5. v1.0.0 태그·GitHub Release — 대기 중
+4. Apple Developer ID 서명·공증 — 미완료. ad-hoc 서명은 개발 smoke에만 사용
+5. 공개 GitHub Release — 만들지 않음. 검증 후보는 비공개 Actions artifact로만 보관

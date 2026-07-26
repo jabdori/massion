@@ -7,19 +7,19 @@
 `apps/desktop`에서 릴리스 설정을 명시해 실행합니다.
 
 ```sh
-pnpm tauri:build
+pnpm --filter @massion/desktop tauri:build
 ```
 
 빌드는 renderer를 만들고 Node.js bridge·server와 고정된 Node.js·SurrealDB sidecar를 앱에 배치합니다. `runtime-manifest.json`의 아카이브·실행 파일 SHA-256이 다르면 중단합니다. 최종 사용자는 Node.js나 SurrealDB를 별도로 설치하지 않습니다.
 
-현재 `tauri.release.conf.json`은 sidecar와 resource staging만 설정합니다. Developer ID 서명, Apple 공증, DMG 배포 자동화는 아직 연결되지 않았으므로 `tauri:build` 성공만으로 공개할 수 없습니다.
+`tauri.release.conf.json`은 sidecar·resource staging과 macOS 최소 버전·hardened runtime을 고정합니다. Developer ID 서명·Apple 공증 자격 증명은 CI secret으로만 주입하며, `tauri:build` 성공만으로 공개할 수 없습니다.
 
 ## 2. 필수 배포 게이트
 
 모든 항목은 같은 후보 commit SHA와 같은 artifact로 통과해야 합니다.
 
 - `pnpm verify`와 데스크톱 build·typecheck·test
-- 핵심 UAT-01–12와 구현된 UAT-13–16을 실제 Tauri 앱에서 동일 후보 SHA로 실행
+- 핵심 UAT-01–12, UAT-13·15·16, UAT-G01·G02, UAT-K01–K04, UAT-P01·P02의 23개 원자 시나리오를 실제 Tauri 앱에서 동일 후보 SHA로 실행
 - Developer ID Application 서명과 Apple 공증·스테이플
 - 앱 내부 Node.js·SurrealDB sidecar 서명 검증
 - 깨끗한 macOS arm64 사용자에서 최초 설치·Gatekeeper 실행
@@ -29,7 +29,7 @@ pnpm tauri:build
 - 키보드만으로 핵심 흐름 완주, VoiceOver와 Accessibility Inspector 실측
 - 개인 사용자가 등록한 BYOK 키가 로컬 소유자 경계 밖으로 노출·공유·중계되지 않는지 확인
 
-보존된 감사 기준선 `v1.0.0` 태그는 이동하거나 재사용하지 않습니다. 모든 공개 릴리스는 이후 새 버전 태그와 동일 후보 SHA로 생성합니다.
+보존된 감사 기준선 `v1.0.0` 태그는 이동하거나 재사용하지 않습니다. 공개 릴리스는 현재 만들지 않으며, 후보 검증이 필요하면 수동 승인된 비공개 Actions artifact만 보관합니다.
 
 Tauri 공식 문서에 따라 브라우저로 배포하는 macOS 앱은 Developer ID 서명과 공증을 사용합니다: [Tauri macOS code signing](https://v2.tauri.app/distribute/sign/macos/).
 
@@ -49,7 +49,7 @@ Ad-hoc 서명은 개발 확인에만 쓸 수 있고 공개 후보로 인정하�
 2. 전체 검증과 실제 Tauri UAT를 통과합니다.
 3. 서명·공증한 artifact로 깨끗한 Mac 설치·업데이트·제거를 통과합니다.
 4. 같은 artifact로 데이터 지속성, 비정상 종료, 접근성을 통과합니다.
-5. artifact digest와 모든 증거의 후보 SHA가 일치하는지 확인합니다.
-6. 마지막 단계에서만 보존된 감사 태그를 이동하지 않고 새 릴리스 버전 태그와 GitHub Release를 만듭니다.
+5. `scripts/verify-desktop-release.mjs`로 artifact와 모든 증거의 후보 SHA가 일치하는지 확인합니다.
+6. 공개 GitHub Release는 만들지 않고, 필요한 경우 수동 승인 workflow의 비공개 artifact만 보관합니다.
 
 하나라도 실패하거나 건너뛰면 draft도 정식 릴리스로 승격하지 않습니다.
