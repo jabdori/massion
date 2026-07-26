@@ -9,6 +9,8 @@ import {
   type ReflectionSnapshot,
   type ReflectionSourceReference,
   type SuggestionCandidate,
+  type GrowthSignalReceiptInput,
+  type GrowthSuggestionRecord,
 } from "@massion/growth";
 import type { AgentExecutionResult, StructuredAgentRunner, StructuredOutputSpec } from "@massion/runtime";
 import type { MassionDatabase } from "@massion/storage";
@@ -81,7 +83,8 @@ const reflectionOutput: StructuredOutputSpec = {
 };
 
 function row(value: unknown): Row {
-  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Growth source row가 유효하지 않습니다");
+  if (!value || typeof value !== "object" || Array.isArray(value))
+    throw new Error("Growth source row가 유효하지 않습니다");
   return value as Row;
 }
 
@@ -110,7 +113,8 @@ function source(kind: ReflectionSourceReference["kind"], value: Row, referenceId
 function outputCandidates(result: AgentExecutionResult): readonly SuggestionCandidate[] {
   if (result.status !== "succeeded") throw new Error(`Growth Reflection 실행이 종료되지 않았습니다: ${result.status}`);
   const value = result.output;
-  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Growth Reflection 출력이 object가 아닙니다");
+  if (!value || typeof value !== "object" || Array.isArray(value))
+    throw new Error("Growth Reflection 출력이 object가 아닙니다");
   const candidates = (value as { candidates?: unknown }).candidates;
   if (!Array.isArray(candidates)) throw new Error("Growth Reflection candidates가 없습니다");
   return candidates as SuggestionCandidate[];
@@ -178,7 +182,161 @@ export class GrowthWorker {
       trigger: claimed.trigger,
       snapshot,
     });
+    await this.evaluateAndAdopt(context, claimed.trigger, snapshot, result.suggestions);
     return { outcome: "claimed", trigger: claimed.trigger, suggestions: result.suggestions.length };
+  }
+
+  private async evaluateAndAdopt(
+    context: TenantContext,
+    trigger: GrowthTrigger,
+    snapshot: ReflectionSnapshot,
+    suggestions: readonly GrowthSuggestionRecord[],
+  ): Promise<void> {
+    const assurance = snapshot.material.sources.find((candidate) => candidate.referenceId === trigger.assurance_run_id);
+    if (!assurance) throw new Error("Growth 평가에 필요한 Assurance source가 없습니다");
+    for (const suggestion of suggestions) {
+      const patch = JSON.parse(suggestion.patch_json) as Readonly<Record<string, unknown>>;
+      const target = await this.dependencies.gateway.inspectTarget(context, {
+        targetKind: suggestion.target_kind,
+        suggestionId: suggestion.suggestion_id,
+        patch,
+      });
+      const explicitMemory = await this.explicitMemoryConflict(context, suggestion, patch);
+      const candidate = {
+        targetKind: suggestion.target_kind,
+        operation: suggestion.operation,
+        patch,
+        summary: suggestion.summary,
+        rationale: suggestion.rationale,
+        expectedEffect: suggestion.expected_effect,
+        riskSummary: suggestion.risk_summary,
+        sourceReferenceIds: suggestion.source_reference_ids,
+      } satisfies SuggestionCandidate;
+      const signals: GrowthSignalReceiptInput[] = [
+        this.signal(trigger, suggestion, {
+          signalId: "lineage",
+          group: "required",
+          origin: "deterministic",
+          sourceId: trigger.records_run_id,
+          sourceChecksum: snapshot.hash,
+          evidence: { recordsRunId: trigger.records_run_id, snapshotHash: snapshot.hash },
+        }),
+        this.signal(trigger, suggestion, {
+          signalId: "target",
+          group: "required",
+          origin: "deterministic",
+          sourceId: target.versionId,
+          sourceChecksum: target.checksum,
+          evidence: { targetKind: target.targetKind, versionId: target.versionId, revision: target.revision },
+        }),
+        this.signal(trigger, suggestion, {
+          signalId: "candidate",
+          group: "required",
+          origin: "deterministic",
+          sourceId: suggestion.suggestion_id,
+          sourceChecksum: growthChecksum(candidate),
+          evidence: { operation: suggestion.operation, targetKind: suggestion.target_kind },
+        }),
+        this.signal(trigger, suggestion, {
+          signalId: "self",
+          group: "supporting",
+          origin: "model-self",
+          sourceId: suggestion.reflection_run_id,
+          sourceChecksum: growthChecksum({
+            rationale: suggestion.rationale,
+            expectedEffect: suggestion.expected_effect,
+          }),
+          evidence: { reflectionRunId: suggestion.reflection_run_id },
+        }),
+        this.signal(trigger, suggestion, {
+          signalId: "assurance",
+          group: "supporting",
+          origin: "independent",
+          sourceId: assurance.referenceId,
+          sourceChecksum: assurance.checksum,
+          evidence: { sourceKind: assurance.kind, capturedRevision: assurance.capturedRevision },
+        }),
+      ];
+      if (explicitMemory) {
+        signals.push(
+          this.signal(trigger, suggestion, {
+            signalId: "explicit-memory-conflict",
+            group: "conflict",
+            origin: "deterministic",
+            sourceId: explicitMemory.memory_version_id,
+            sourceChecksum: explicitMemory.checksum,
+            evidence: { key: patch.key, memoryVersionId: explicitMemory.memory_version_id },
+          }),
+        );
+      }
+      const receipts = [];
+      for (const signal of signals) receipts.push(await this.dependencies.gateway.recordSignal(context, signal));
+      const evaluation = await this.dependencies.gateway.evaluate(context, {
+        commandId: `growth:${suggestion.suggestion_id}:evaluate`,
+        suggestionId: suggestion.suggestion_id,
+        receiptIds: receipts.map((receipt) => receipt.receiptId),
+      });
+      if (evaluation.outcome !== "eligible") continue;
+      await this.dependencies.gateway.adopt(context, {
+        commandId: `growth:${suggestion.suggestion_id}:adopt`,
+        suggestionId: suggestion.suggestion_id,
+        suggestionRevision: suggestion.revision,
+        evaluationRunId: evaluation.evaluationRunId,
+        expectedEvaluationInputHash: evaluation.inputHash,
+        expectedTargetChecksum: target.checksum,
+      });
+    }
+  }
+
+  private async explicitMemoryConflict(
+    context: TenantContext,
+    suggestion: GrowthSuggestionRecord,
+    patch: Readonly<Record<string, unknown>>,
+  ): Promise<{ readonly memory_version_id: string; readonly checksum: string } | undefined> {
+    if (suggestion.target_kind !== "memory" || typeof patch.key !== "string" || !patch.key.trim()) return undefined;
+    const [rows] = await this.dependencies.database.query<
+      [Array<{ readonly memory_version_id: string; readonly checksum: string; readonly entries_json: string }>]
+    >(
+      "SELECT memory_version_id, checksum, entries_json FROM memory_version WHERE organization_id = $organization_id AND scope = 'user' AND subject_id = $user_id AND status = 'active' LIMIT 1;",
+      { organization_id: context.organizationId, user_id: context.userId },
+    );
+    const active = rows[0];
+    if (!active) return undefined;
+    const entries = JSON.parse(active.entries_json) as Array<{ readonly key?: unknown }>;
+    return entries.some((entry) => entry.key === patch.key)
+      ? { memory_version_id: active.memory_version_id, checksum: active.checksum }
+      : undefined;
+  }
+
+  private signal(
+    trigger: GrowthTrigger,
+    suggestion: GrowthSuggestionRecord,
+    input: Omit<
+      GrowthSignalReceiptInput,
+      | "commandId"
+      | "suggestionId"
+      | "adapterId"
+      | "adapterVersion"
+      | "outcome"
+      | "score"
+      | "unit"
+      | "fresh"
+      | "evidence"
+    > & {
+      readonly evidence: Readonly<Record<string, unknown>>;
+    },
+  ): GrowthSignalReceiptInput {
+    return {
+      commandId: `growth:${suggestion.suggestion_id}:signal:${input.signalId}`,
+      suggestionId: suggestion.suggestion_id,
+      adapterId: `growth-worker:${trigger.trigger_id}`,
+      adapterVersion: "1",
+      outcome: "passed",
+      score: 1,
+      unit: "boolean",
+      fresh: true,
+      ...input,
+    };
   }
 
   private async snapshot(context: TenantContext, trigger: GrowthTrigger): Promise<ReflectionSnapshot> {
@@ -215,7 +373,8 @@ export class GrowthWorker {
         "SELECT * FROM artifact_version WHERE organization_id = $organization_id AND work_id = $work_id AND artifact_version_id IN $artifact_ids LIMIT 20;",
         { organization_id: context.organizationId, work_id: trigger.work_id, artifact_ids: artifactIds.slice(0, 20) },
       );
-      for (const artifact of artifacts.map(row)) sources.push(source("artifact", artifact, String(artifact.artifact_version_id)));
+      for (const artifact of artifacts.map(row))
+        sources.push(source("artifact", artifact, String(artifact.artifact_version_id)));
     }
     const [[promptRows], [memoryRows], [organizationRows]] = await Promise.all([
       this.dependencies.database.query<[Row[]]>(
@@ -232,8 +391,16 @@ export class GrowthWorker {
       ),
     ]);
     const activeVersions = [
-      ...promptRows.map((item) => ({ kind: "prompt" as const, versionId: String(item.prompt_definition_version_id), checksum: String(item.checksum) })),
-      ...memoryRows.map((item) => ({ kind: "memory" as const, versionId: String(item.memory_version_id), checksum: String(item.checksum) })),
+      ...promptRows.map((item) => ({
+        kind: "prompt" as const,
+        versionId: String(item.prompt_definition_version_id),
+        checksum: String(item.checksum),
+      })),
+      ...memoryRows.map((item) => ({
+        kind: "memory" as const,
+        versionId: String(item.memory_version_id),
+        checksum: String(item.checksum),
+      })),
       ...organizationRows.map((item) => ({
         kind: "organization" as const,
         versionId: String(item.version_id),
@@ -306,12 +473,19 @@ export function createGrowthReflectionAdapters(
       };
     },
     async verifyRuntime(context: TenantContext, input: { workId: string; runtimeExecutionId: string }) {
-      const [rows] = await database.query<[Array<{ organization_id: string; work_id: string; agent_handle: string; status: string }>]>(
+      const [rows] = await database.query<
+        [Array<{ organization_id: string; work_id: string; agent_handle: string; status: string }>]
+      >(
         "SELECT organization_id, work_id, agent_handle, status FROM runtime_execution WHERE organization_id = $organization_id AND execution_id = $execution_id LIMIT 1;",
         { organization_id: context.organizationId, execution_id: input.runtimeExecutionId },
       );
       const execution = rows[0];
-      if (!execution || execution.work_id !== input.workId || execution.agent_handle !== "growth" || execution.status !== "succeeded")
+      if (
+        !execution ||
+        execution.work_id !== input.workId ||
+        execution.agent_handle !== "growth" ||
+        execution.status !== "succeeded"
+      )
         throw new Error("Growth Runtime Execution 검증에 실패했습니다");
     },
   };

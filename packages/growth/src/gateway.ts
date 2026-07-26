@@ -5,7 +5,7 @@ import type { GrowthBootstrap } from "./bootstrap.js";
 import type { GrowthConfigurationStore } from "./configuration.js";
 import type { ConfigureGrowthInput } from "./contracts.js";
 import type { GrowthEffectSample, GrowthEffectStore } from "./effect.js";
-import type { GrowthEvaluationStore } from "./evaluation.js";
+import type { GrowthEvaluationStore, GrowthSignalReceiptInput } from "./evaluation.js";
 import type { ForgetExplicitMemoryInput, PromptMemoryStore, PutExplicitMemoryInput } from "./prompt-memory.js";
 import type { ListGrowthSuggestionsInput, ReflectionService } from "./reflection.js";
 import type { GrowthRecoveryService } from "./recovery.js";
@@ -69,6 +69,19 @@ export class GrowthGateway {
     input: { readonly commandId: string; readonly suggestionId: string; readonly receiptIds: readonly string[] },
   ) {
     return await this.dependencies.evaluations.evaluate(context, input);
+  }
+  public async recordSignal(context: TenantContext, input: GrowthSignalReceiptInput) {
+    return await this.dependencies.evaluations.recordSignal(context, input);
+  }
+  public async inspectTarget(
+    context: TenantContext,
+    input: {
+      readonly targetKind: "prompt" | "memory" | "policy" | "organization";
+      readonly suggestionId: string;
+      readonly patch: Readonly<Record<string, unknown>>;
+    },
+  ) {
+    return await this.dependencies.adoptions.inspectTarget(context, input);
   }
   public async adopt(context: TenantContext, input: AdoptGrowthSuggestionInput) {
     return await this.dependencies.adoptions.adopt(context, input);

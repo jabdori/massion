@@ -26,7 +26,12 @@ export {
 export type { AdoptGrowthSuggestionInput, GrowthAdoptionResult, GrowthAdoptionStatus } from "./adoption.js";
 export type { ConfigureGrowthInput, GrowthConfigurationSubject, GrowthConfigurationVersion } from "./contracts.js";
 export type { GrowthEffectComparison, GrowthEffectContract, GrowthEffectSample } from "./effect.js";
-export type { GrowthEvaluationOutcome, GrowthEvaluationRun, GrowthEvaluationStrategyVersion } from "./evaluation.js";
+export type {
+  GrowthEvaluationOutcome,
+  GrowthEvaluationRun,
+  GrowthEvaluationStrategyVersion,
+  GrowthSignalReceiptInput,
+} from "./evaluation.js";
 export type {
   EffectivePromptVersion,
   ForgetExplicitMemoryInput,

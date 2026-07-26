@@ -9,7 +9,7 @@ import type { AuthorizeGrowthAdoptionInput } from "./governance-adapter.js";
 import { canonicalGrowthJson, growthChecksum } from "./prompt-memory.js";
 import type { GrowthSuggestionRecord, SuggestionTargetKind } from "./reflection.js";
 import { GROWTH_ADOPTION_MIGRATION } from "./schema.js";
-import { GrowthTargetRegistry } from "./targets.js";
+import { GrowthTargetRegistry, type GrowthTargetState } from "./targets.js";
 
 export type GrowthAdoptionStatus = "awaiting-review" | "observing" | "retained" | "rejected" | "reverted";
 
@@ -121,7 +121,8 @@ export class GrowthAdoptionService {
       const suggestion = await this.suggestion(context.organizationId, input.suggestionId, transaction);
       if (!["proposed", "evaluated", "awaiting-review"].includes(suggestion.status))
         throw new Error("Suggestion은 채택 가능한 상태가 아닙니다");
-      if (suggestion.revision !== input.suggestionRevision) throw new Error("Suggestion revision precondition이 일치하지 않습니다");
+      if (suggestion.revision !== input.suggestionRevision)
+        throw new Error("Suggestion revision precondition이 일치하지 않습니다");
       const evaluation = await this.evaluation(context.organizationId, input.evaluationRunId, transaction);
       if (
         evaluation.suggestion_id !== suggestion.suggestion_id ||
@@ -262,6 +263,23 @@ export class GrowthAdoptionService {
         ...(input.approvalId ? { approvalId: input.approvalId } : {}),
       };
     });
+  }
+
+  public async inspectTarget(
+    context: TenantContext,
+    input: {
+      readonly targetKind: SuggestionTargetKind;
+      readonly suggestionId: string;
+      readonly patch: Readonly<Record<string, unknown>>;
+    },
+  ): Promise<GrowthTargetState> {
+    await this.organizations.verifyTenantContext(context);
+    return await this.database.transaction(
+      async (executor) =>
+        await this.targets
+          .get(input.targetKind)
+          .inspect(context, { suggestionId: input.suggestionId, patch: input.patch }, executor),
+    );
   }
 
   private configurationView(organizationId: string, record: ConfigurationRecord): GrowthConfigurationVersion {

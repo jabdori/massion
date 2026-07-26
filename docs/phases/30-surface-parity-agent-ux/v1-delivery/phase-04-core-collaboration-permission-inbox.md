@@ -14,7 +14,7 @@ Core 파이프라인, 권한 모드, 수신함 UX, 메모리 주입 경로가 �
 |---|---|---|
 | 04-1 | 코드 근거를 Work와 Agent 실행에 연결 (Task 3) | 코드 검증 완료 |
 | 04-2 | 전체 권한 실행 모드 추가 | 부분 구현 — 저장·Governance 우회·Codex/Claude 정책 전달까지; 계보·회수·실제 UAT는 남음 |
-| 04-3 | 메모리 주입 경로 연결 | 부분 구현 — 실제 Growth worker가 완료 Records→Reflection까지 연결됨; 평가·채택·효과는 남음 |
+| 04-3 | 메모리 주입 경로 연결 | 부분 구현 — 완료 Records→Reflection→평가·채택 호출까지; 효과·복원과 실제 UAT는 남음 |
 | 04-4 | 수신함 UX 정합 (지도 비율) | 코드 검증 완료 |
 | 04-5 | 전체 빌드 + 데스크톱 UAT | 부분 통과 — Core UAT-01·02·03·07·12 및 재시작 보존 |
 
@@ -36,7 +36,7 @@ Core 파이프라인, 권한 모드, 수신함 UX, 메모리 주입 경로가 �
 
 - `60bfcda94` — GrowthWorkPromptAdapter를 WorkService.create의 promptVersions 자리에 주입.
 
-`70e255ca4`가 onboarding 시점 PromptDefinitionVersion 시드를 보완했습니다. `GrowthWorker`는 완료된 Records를 backfill·claim하고 WorkRecord·Verification·Assurance·event·artifact를 redaction된 bounded snapshot으로 묶어 실제 `planning-quality` structured 실행과 Reflection 저장까지 연결합니다. 평가·채택·효과·복원은 아직 남아 있어 지속 발전 생산 루프 완료를 뜻하지 않습니다.
+`70e255ca4`가 onboarding 시점 PromptDefinitionVersion 시드를 보완했습니다. `GrowthWorker`는 완료된 Records를 backfill·claim하고 WorkRecord·Verification·Assurance·event·artifact를 redaction된 bounded snapshot으로 묶어 실제 `planning-quality` structured 실행과 Reflection 저장까지 연결합니다. 현재 후보별 target checksum·독립 Assurance signal·Evaluation과 기존 Adoption 호출까지 연결됐지만 효과 표본·degraded 복원·명시적 memory conflict는 아직 남아 있어 지속 발전 생산 루프 완료를 뜻하지 않습니다.
 
 ### Growth Reflection 생산 연결 증분
 
