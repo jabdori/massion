@@ -95,6 +95,10 @@ export class GrowthAdoptionService {
     private readonly organizations: OrganizationService,
     private readonly authorizer: GrowthAdoptionAuthorizer,
     private readonly targets: GrowthTargetRegistry,
+    private readonly autonomy?: (
+      context: TenantContext,
+      executor: QueryExecutor,
+    ) => Promise<{ readonly mode: "automatic" | "review" | "full-access"; readonly revision: number }>,
   ) {}
 
   public static async create(
@@ -102,9 +106,13 @@ export class GrowthAdoptionService {
     organizations: OrganizationService,
     authorizer: GrowthAdoptionAuthorizer,
     targets: GrowthTargetRegistry,
+    autonomy?: (
+      context: TenantContext,
+      executor: QueryExecutor,
+    ) => Promise<{ readonly mode: "automatic" | "review" | "full-access"; readonly revision: number }>,
   ): Promise<GrowthAdoptionService> {
     await applyMigrations(database, [GROWTH_ADOPTION_MIGRATION]);
-    return new GrowthAdoptionService(database, organizations, authorizer, targets);
+    return new GrowthAdoptionService(database, organizations, authorizer, targets, autonomy);
   }
 
   public async adopt(context: TenantContext, input: AdoptGrowthSuggestionInput): Promise<GrowthAdoptionResult> {
@@ -145,6 +153,9 @@ export class GrowthAdoptionService {
         transaction,
       );
       if (configuration.status !== "active") throw new Error("Growth configuration이 더 이상 active가 아닙니다");
+      const autonomy = await this.autonomy?.(context, transaction);
+      // 저장된 Growth 설정은 보존하고, 전체 권한 동안에만 실제 채택 판단을 auto로 승격합니다.
+      const effectiveAdoptionMode = autonomy?.mode === "full-access" ? "auto" : configuration.adoption_mode;
       const port = this.targets.get(suggestion.target_kind);
       const patch = JSON.parse(suggestion.patch_json) as Record<string, unknown>;
       const before = await port.inspect(context, { suggestionId: suggestion.suggestion_id, patch }, transaction);
@@ -159,13 +170,16 @@ export class GrowthAdoptionService {
             suggestionId: suggestion.suggestion_id,
             suggestionRevision: input.suggestionRevision,
             reflectionExecutionId: reflection.runtime_execution_id,
-            configuration: this.configurationView(context.organizationId, configuration),
+            configuration: {
+              ...this.configurationView(context.organizationId, configuration),
+              adoptionMode: effectiveAdoptionMode,
+            },
             ...(input.approvalId ? { approvalId: input.approvalId } : {}),
           },
           transaction,
         );
       } catch (error) {
-        if (!(error instanceof GovernanceApprovalRequiredError) || configuration.adoption_mode !== "review")
+        if (!(error instanceof GovernanceApprovalRequiredError) || effectiveAdoptionMode !== "review")
           throw error;
         const waiting = await this.createRun(
           transaction,
@@ -188,7 +202,7 @@ export class GrowthAdoptionService {
         );
         return { adoption: waiting, beforeVersionId: before.versionId, approvalId: error.approvalId };
       }
-      if (configuration.adoption_mode === "review" && !input.approvalId)
+      if (effectiveAdoptionMode === "review" && !input.approvalId)
         throw new Error("review mode는 승인 permit이 필요합니다");
       await port.validate(
         context,
