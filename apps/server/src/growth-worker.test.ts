@@ -235,4 +235,68 @@ describe("Growth worker production loop", () => {
       metricObservationChecksum({ ...input, value: 1, unit: "ratio", measuredAt: completedAt, sourceChecksum: "a".repeat(64) }),
     );
   });
+
+  it("효과 표본은 target 버전에 결속된 terminal Assurance 3건만 평균낸다", async () => {
+    const worker = new GrowthWorker({
+      database: {
+        query: vi.fn(async (sql: string, parameters?: { readonly assurance_run_id?: string }) => {
+          if (sql.includes("FROM assurance_run"))
+            return [
+              [
+                { assurance_run_id: "assurance-1", work_id: "work-1", status: "passed", profile_id: "profile", profile_version: "1", completed_at: "2026-07-01T00:00:00.000Z" },
+                { assurance_run_id: "assurance-2", work_id: "work-2", status: "failed", profile_id: "profile", profile_version: "1", completed_at: "2026-07-02T00:00:00.000Z" },
+                { assurance_run_id: "assurance-3", work_id: "work-3", status: "passed", profile_id: "profile", profile_version: "1", completed_at: "2026-07-03T00:00:00.000Z" },
+              ],
+            ];
+          if (sql.includes("FROM work WHERE")) return [[{ prompt_version_id: "prompt-work" }]];
+          if (sql.includes("FROM prompt_version")) return [[{ prompt_definition_version_id: "prompt-v1", memory_version_ids: [] }]];
+          if (sql.includes("FROM work_verification"))
+            return [[{ verification_id: `verification-${parameters?.assurance_run_id?.slice(-1)}`, evidence_artifact_version_id: "artifact-1" }]];
+          if (sql.includes("FROM growth_evaluation_run")) return [[{ strategy_version_id: "strategy-1" }]];
+          return [[]];
+        }),
+      } as never,
+      organizations: {} as never,
+      triggers: {} as never,
+      gateway: {} as never,
+      runner: {} as never,
+      metricObservations: {
+        record: vi.fn(async (_context, input: { readonly workId: string; readonly commandId: string }) => ({
+          observationId: `metric-${input.workId}`,
+          value: input.workId === "work-2" ? 0 : 1,
+          checksum: "b".repeat(64),
+        })),
+      } as never,
+    });
+    const sample = await (
+      worker as unknown as {
+        effectSample(
+          inputContext: TenantContext,
+          adoption: {
+            adoption_id: string;
+            suggestion_id: string;
+            target_kind: "prompt";
+            evaluation_run_id: string;
+            before_version_id: string;
+            status: "observing";
+          },
+          targetVersionId: string,
+          order: "latest" | "earliest",
+        ): Promise<{ score: number; observationCount: number; lineage: { targetVersionId: string } }>;
+      }
+    ).effectSample(
+      context,
+      {
+        adoption_id: "adoption-1",
+        suggestion_id: "suggestion-1",
+        target_kind: "prompt",
+        evaluation_run_id: "evaluation-1",
+        before_version_id: "prompt-v1",
+        status: "observing",
+      },
+      "prompt-v1",
+      "latest",
+    );
+    expect(sample).toMatchObject({ score: 2 / 3, observationCount: 3, lineage: { targetVersionId: "prompt-v1" } });
+  });
 });

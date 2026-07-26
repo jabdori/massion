@@ -12,6 +12,7 @@ import {
   type SuggestionCandidate,
   type GrowthSignalReceiptInput,
   type GrowthSuggestionRecord,
+  type GrowthEffectSample,
 } from "@massion/growth";
 import type { AgentExecutionResult, StructuredAgentRunner, StructuredOutputSpec } from "@massion/runtime";
 import type { MassionDatabase } from "@massion/storage";
@@ -220,6 +221,50 @@ export interface GrowthWorkerDependencies {
   readonly intervalMs?: number;
 }
 
+interface EffectAdoptionRow {
+  readonly adoption_id: string;
+  readonly suggestion_id: string;
+  readonly target_kind: "prompt" | "memory" | "policy" | "organization";
+  readonly evaluation_run_id: string;
+  readonly before_version_id: string;
+  readonly after_version_id?: string;
+  readonly status: "observing";
+}
+
+interface EffectBaselineRow {
+  readonly baseline_id: string;
+  readonly status: "pending" | "captured" | "closed";
+}
+
+interface EffectRunRow {
+  readonly assurance_run_id: string;
+  readonly work_id: string;
+  readonly status: "passed" | "failed";
+  readonly profile_id: string;
+  readonly profile_version: string;
+  readonly completed_at: unknown;
+}
+
+interface EffectWorkRow {
+  readonly prompt_version_id?: string;
+  readonly policy_version_id?: string;
+  readonly organization_version_id?: string;
+}
+
+interface EffectPromptRow {
+  readonly prompt_definition_version_id: string;
+  readonly memory_version_ids: readonly string[];
+}
+
+interface EffectVerificationRow {
+  readonly verification_id: string;
+  readonly evidence_artifact_version_id: string;
+}
+
+interface EffectStrategyRow {
+  readonly strategy_version_id: string;
+}
+
 export class GrowthWorker {
   private timer: ReturnType<typeof setInterval> | undefined;
   private running: Promise<GrowthWorkerResult> | undefined;
@@ -268,6 +313,7 @@ export class GrowthWorker {
       snapshot,
     });
     await this.evaluateAndAdopt(context, claimed.trigger, snapshot, result.suggestions);
+    await this.processEffects(context);
     return { outcome: "claimed", trigger: claimed.trigger, suggestions: result.suggestions.length };
   }
 
@@ -371,6 +417,154 @@ export class GrowthWorker {
         expectedTargetChecksum: target.checksum,
       });
     }
+  }
+
+  private async processEffects(context: TenantContext): Promise<void> {
+    const metricObservations = this.dependencies.metricObservations;
+    if (!metricObservations) return;
+    const [adoptions] = await this.dependencies.database.query<[EffectAdoptionRow[]]>(
+      "SELECT adoption_id, suggestion_id, target_kind, evaluation_run_id, before_version_id, after_version_id, status FROM growth_adoption_run WHERE organization_id = $organization_id AND status = 'observing' AND after_version_id != NONE ORDER BY updated_at ASC LIMIT 20;",
+      { organization_id: context.organizationId },
+    );
+    for (const adoption of adoptions) {
+      const [baselines] = await this.dependencies.database.query<[EffectBaselineRow[]]>(
+        "SELECT baseline_id, status FROM growth_effect_baseline WHERE organization_id = $organization_id AND adoption_id = $adoption_id LIMIT 1;",
+        { organization_id: context.organizationId, adoption_id: adoption.adoption_id },
+      );
+      const baseline = baselines[0];
+      if (!baseline) continue;
+      if (baseline.status === "pending") {
+        const sample = await this.effectSample(context, adoption, adoption.before_version_id, "latest");
+        if (sample) {
+          await this.dependencies.gateway.captureEffectBaseline(context, {
+            commandId: `growth-effect-baseline:${adoption.adoption_id}:${sample.lineage.targetVersionId}:${growthChecksum(sample.lineage)}`,
+            adoptionId: adoption.adoption_id,
+            sample,
+          });
+        }
+        continue;
+      }
+      if (baseline.status !== "captured" || !adoption.after_version_id) continue;
+      const sample = await this.effectSample(context, adoption, adoption.after_version_id, "earliest");
+      if (!sample) continue;
+      const lineageChecksum = growthChecksum(sample.lineage);
+      const evaluation = await this.dependencies.gateway.observeEffect(context, {
+        commandId: `growth-effect-observe:${adoption.adoption_id}:${lineageChecksum}`,
+        adoptionId: adoption.adoption_id,
+        sample,
+      });
+      if (evaluation.result === "degraded") {
+        const [suggestions] = await this.dependencies.database.query<[Array<{ revision: number }>]>(
+          "SELECT revision FROM growth_suggestion WHERE organization_id = $organization_id AND suggestion_id = $suggestion_id LIMIT 1;",
+          { organization_id: context.organizationId, suggestion_id: adoption.suggestion_id },
+        );
+        const suggestion = suggestions[0];
+        if (!suggestion) continue;
+        await this.dependencies.gateway.revert(context, {
+          commandId: `growth-effect-revert:${adoption.adoption_id}:${evaluation.effect_evaluation_id}`,
+          adoptionId: adoption.adoption_id,
+          suggestionRevision: suggestion.revision,
+          reason: "degraded",
+        });
+      }
+    }
+  }
+
+  private async effectSample(
+    context: TenantContext,
+    adoption: EffectAdoptionRow,
+    targetVersionId: string,
+    order: "latest" | "earliest",
+  ): Promise<GrowthEffectSample | undefined> {
+    const [runs] = await this.dependencies.database.query<[EffectRunRow[]]>(
+      `SELECT assurance_run_id, work_id, status, profile_id, profile_version, completed_at FROM assurance_run WHERE organization_id = $organization_id AND status IN ['passed', 'failed'] AND completed_at != NONE ORDER BY completed_at ${order === "latest" ? "DESC" : "ASC"}, assurance_run_id ASC LIMIT 30;`,
+      { organization_id: context.organizationId },
+    );
+    const samples: GrowthEffectSample["lineage"]["samples"] extends readonly (infer T)[] ? T[] : never = [];
+    const values: number[] = [];
+    let contractProfile: { readonly profileId: string; readonly profileVersion: string } | undefined;
+    for (const run of runs) {
+      if (samples.length >= 3) break;
+      const [workRows] = await this.dependencies.database.query<[EffectWorkRow[]]>(
+        "SELECT prompt_version_id, policy_version_id, organization_version_id FROM work WHERE organization_id = $organization_id AND work_id = $work_id LIMIT 1;",
+        { organization_id: context.organizationId, work_id: run.work_id },
+      );
+      const work = workRows[0];
+      if (!work || !(await this.workUsesTarget(context, adoption.target_kind, work, targetVersionId))) continue;
+      const [verificationRows] = await this.dependencies.database.query<[EffectVerificationRow[]]>(
+        "SELECT verification_id, evidence_artifact_version_id FROM work_verification WHERE organization_id = $organization_id AND work_id = $work_id AND assurance_run_id = $assurance_run_id LIMIT 1;",
+        {
+          organization_id: context.organizationId,
+          work_id: run.work_id,
+          assurance_run_id: run.assurance_run_id,
+        },
+      );
+      const verification = verificationRows[0];
+      if (!verification) continue;
+      contractProfile ??= { profileId: run.profile_id, profileVersion: run.profile_version };
+      if (contractProfile.profileId !== run.profile_id || contractProfile.profileVersion !== run.profile_version) continue;
+      const metric = await this.dependencies.metricObservations?.record(context, {
+        commandId: `growth-effect-metric:${adoption.adoption_id}:${run.work_id}:${run.assurance_run_id}`,
+        workId: run.work_id,
+        producer: { kind: "system_adapter", id: GROWTH_EFFECT_METRIC_SOURCE_ID },
+        source: { kind: "artifact_version", id: verification.evidence_artifact_version_id },
+        expectedUnit: "ratio",
+        maximumAgeMs: 30 * 24 * 60 * 60 * 1_000,
+      });
+      if (!metric) continue;
+      values.push(metric.value);
+      samples.push({
+        workId: run.work_id,
+        assuranceRunId: run.assurance_run_id,
+        verificationId: verification.verification_id,
+        metricObservationId: metric.observationId,
+        sourceChecksum: metric.checksum,
+      });
+    }
+    if (samples.length < 3 || !contractProfile) return undefined;
+    const [strategyRows] = await this.dependencies.database.query<[EffectStrategyRow[]]>(
+      "SELECT strategy_version_id FROM growth_evaluation_run WHERE organization_id = $organization_id AND evaluation_run_id = $evaluation_run_id LIMIT 1;",
+      { organization_id: context.organizationId, evaluation_run_id: adoption.evaluation_run_id },
+    );
+    const strategy = strategyRows[0];
+    if (!strategy) return undefined;
+    const contract = {
+      strategyVersionId: strategy.strategy_version_id,
+      caseSetChecksum: growthChecksum({ ...contractProfile, targetKind: adoption.target_kind, metricSourceId: GROWTH_EFFECT_METRIC_SOURCE_ID }),
+      metricSourceId: GROWTH_EFFECT_METRIC_SOURCE_ID,
+      metricSourceVersion: "1.0.0",
+      unit: "ratio",
+      windowChecksum: growthChecksum({
+        schemaVersion: "massion.growth.effect-window.v1",
+        selection: "three-terminal-assurances",
+        order: "terminalAt,assuranceRunId",
+        minimumObservations: 3,
+      }),
+      direction: "higher" as const,
+      stableTolerance: 0.05,
+      degradationThreshold: 0.2,
+      minimumObservations: 3,
+    };
+    return { score: values.reduce((total, value) => total + value, 0) / values.length, observationCount: values.length, contract, lineage: { targetVersionId, samples } };
+  }
+
+  private async workUsesTarget(
+    context: TenantContext,
+    kind: EffectAdoptionRow["target_kind"],
+    work: EffectWorkRow,
+    targetVersionId: string,
+  ): Promise<boolean> {
+    if (kind === "policy") return work.policy_version_id === targetVersionId;
+    if (kind === "organization") return work.organization_version_id === targetVersionId;
+    if (!work.prompt_version_id) return false;
+    const [prompts] = await this.dependencies.database.query<[EffectPromptRow[]]>(
+      "SELECT prompt_definition_version_id, memory_version_ids FROM prompt_version WHERE organization_id = $organization_id AND prompt_version_id = $prompt_version_id LIMIT 1;",
+      { organization_id: context.organizationId, prompt_version_id: work.prompt_version_id },
+    );
+    const prompt = prompts[0];
+    return kind === "prompt"
+      ? prompt?.prompt_definition_version_id === targetVersionId
+      : Boolean(prompt?.memory_version_ids.includes(targetVersionId));
   }
 
   private async explicitMemoryConflict(
