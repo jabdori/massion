@@ -384,6 +384,31 @@ export const GROWTH_PRODUCTION_EFFECT_LINEAGE_MIGRATION = defineMigration(
   `DEFINE FIELD OVERWRITE status ON growth_adoption_run TYPE string ASSERT $value IN ['awaiting-review', 'observing', 'retained', 'rejected', 'reverted'];`,
 );
 
+export const GROWTH_EFFECT_SAMPLE_LINEAGE_MIGRATION = defineMigration(
+  "0113-growth-effect-sample-lineage",
+  `
+DEFINE FIELD sample_lineage_json ON growth_effect_baseline TYPE option<string> ASSERT $value = NONE OR string::len($value) <= 131072;
+DEFINE FIELD sample_lineage_checksum ON growth_effect_baseline TYPE option<string> ASSERT $value = NONE OR string::len($value) = 64;
+DEFINE FIELD sample_lineage_json ON growth_effect_observation TYPE option<string> ASSERT $value = NONE OR string::len($value) <= 131072;
+DEFINE FIELD sample_lineage_checksum ON growth_effect_observation TYPE option<string> ASSERT $value = NONE OR string::len($value) = 64;
+DEFINE EVENT growth_effect_baseline_lineage_immutable ON TABLE growth_effect_baseline
+WHEN $event IN ['UPDATE', 'DELETE']
+THEN {
+  IF $event = 'DELETE' { THROW 'Growth effect baseline은 삭제할 수 없습니다'; };
+  IF $before.status IN ['captured', 'closed'] AND (
+    $after.organization_id != $before.organization_id OR
+    $after.adoption_id != $before.adoption_id OR
+    $after.target_version_id != $before.target_version_id OR
+    $after.metrics_json != $before.metrics_json OR
+    $after.contract_json != $before.contract_json OR
+    $after.sample_lineage_json != $before.sample_lineage_json OR
+    $after.sample_lineage_checksum != $before.sample_lineage_checksum OR
+    $after.checksum != $before.checksum
+  ) { THROW 'captured Growth effect baseline 계보는 immutable입니다'; };
+};
+`,
+);
+
 // 후보를 거절해도 immutable 후보 본문과 revision은 보존하고 결정만 추가합니다.
 export const GROWTH_SUGGESTION_DECISION_MIGRATION = defineMigration(
   "0112-growth-suggestion-decision",

@@ -4,12 +4,31 @@ import { IdentityService, OrganizationService } from "@massion/identity";
 import { applyMigrations, createDatabase, type MassionDatabase } from "@massion/storage";
 
 import { compareGrowthEffect, GrowthEffectStore, type GrowthEffectSample } from "./effect.js";
-import { GROWTH_ADOPTION_MIGRATION, GROWTH_EFFECT_REVERT_MIGRATION } from "./schema.js";
+import {
+  GROWTH_ADOPTION_MIGRATION,
+  GROWTH_EFFECT_REVERT_MIGRATION,
+  GROWTH_EFFECT_SAMPLE_LINEAGE_MIGRATION,
+} from "./schema.js";
 
-function sample(score: number, caseSetChecksum = "case-v1", observationCount = 10): GrowthEffectSample {
+function sample(
+  score: number,
+  caseSetChecksum = "case-v1",
+  observationCount = 10,
+  targetVersionId = "prompt-v2",
+): GrowthEffectSample {
   return {
     score,
     observationCount,
+    lineage: {
+      targetVersionId,
+      samples: Array.from({ length: observationCount }, (_, index) => ({
+        workId: `work-${index}`,
+        assuranceRunId: `assurance-${index}`,
+        verificationId: `verification-${index}`,
+        metricObservationId: `metric-${index}`,
+        sourceChecksum: `${String(index).padStart(2, "0")}${"a".repeat(62)}`,
+      })),
+    },
     contract: {
       strategyVersionId: "strategy-v1",
       caseSetChecksum,
@@ -36,6 +55,36 @@ describe("Growth effect comparison", () => {
     );
   });
 
+  it("효과 표본의 target과 Assurance 계보를 checksum과 함께 보존한다", async () => {
+    database = await createDatabase({ url: "mem://", namespace: "massion", database: crypto.randomUUID() });
+    const identity = await IdentityService.create(database);
+    const organizations = await OrganizationService.create(database);
+    const owner = await identity.registerPersonalUser({ email: "lineage@example.com", displayName: "Lineage" });
+    const context = await organizations.resolveTenantContext(owner.user.user_id, owner.organization.organization_id);
+    await applyMigrations(database, [GROWTH_ADOPTION_MIGRATION]);
+    await database.query(
+      `CREATE growth_adoption_run CONTENT { adoption_id: 'adoption-lineage', organization_id: $organization_id, suggestion_id: 'suggestion-lineage', target_kind: 'prompt', evaluation_run_id: 'evaluation-lineage', evaluation_input_hash: $hash, configuration_version_id: 'config-1', runtime_execution_id: 'runtime-1', before_version_id: 'prompt-v1', before_checksum: $hash, after_version_id: 'prompt-v2', after_checksum: $hash, governance_decision_id: 'decision-1', approval_id: NONE, status: 'observing', command_id: 'adopt-lineage', request_hash: $hash, created_by_user_id: $user_id, active_target_guard: $guard, created_at: time::now(), updated_at: time::now() }; CREATE growth_effect_baseline CONTENT { baseline_id: 'baseline-lineage', organization_id: $organization_id, adoption_id: 'adoption-lineage', suggestion_id: 'suggestion-lineage', target_kind: 'prompt', target_version_id: 'prompt-v1', status: 'pending', metrics_json: '{}', checksum: $hash, created_at: time::now() };`,
+      {
+        organization_id: context.organizationId,
+        user_id: context.userId,
+        hash: "c".repeat(64),
+        guard: `${context.organizationId}:prompt`,
+      },
+    );
+    const store = await GrowthEffectStore.create(database, organizations);
+    const baseline = sample(0.7, "case-v1", 10, "prompt-v1");
+    await store.captureBaseline(context, { commandId: "baseline-lineage", adoptionId: "adoption-lineage", sample: baseline });
+    const [rows] = await database.query<[{ sample_lineage_json: string; sample_lineage_checksum: string }[]]>(
+      "SELECT sample_lineage_json, sample_lineage_checksum FROM growth_effect_baseline WHERE organization_id = $organization_id AND adoption_id = 'adoption-lineage';",
+      { organization_id: context.organizationId },
+    );
+    const stored = rows[0];
+    expect(stored).toBeDefined();
+    if (!stored) throw new Error("Growth baseline lineage가 저장되지 않았습니다");
+    expect(JSON.parse(stored.sample_lineage_json)).toEqual(baseline.lineage);
+    expect(stored.sample_lineage_checksum).toMatch(/^[a-f0-9]{64}$/u);
+  });
+
   it("동일 계약의 개선·안정·악화를 결정론적으로 분류한다", () => {
     expect(compareGrowthEffect(sample(0.7), sample(0.82))).toMatchObject({ result: "improved" });
     expect(compareGrowthEffect(sample(0.7), sample(0.69))).toMatchObject({ result: "stable" });
@@ -58,7 +107,7 @@ describe("Growth effect comparison", () => {
     const context = await organizations.resolveTenantContext(owner.user.user_id, owner.organization.organization_id);
     await applyMigrations(database, [GROWTH_ADOPTION_MIGRATION]);
     await database.query(
-      "CREATE growth_adoption_run CONTENT { adoption_id: 'adoption-1', organization_id: $organization_id, suggestion_id: 'suggestion-1', target_kind: 'prompt', evaluation_run_id: 'evaluation-1', evaluation_input_hash: $hash, configuration_version_id: 'config-1', runtime_execution_id: 'runtime-1', before_version_id: 'prompt-v1', before_checksum: $hash, after_version_id: 'prompt-v2', after_checksum: $hash, governance_decision_id: 'decision-1', approval_id: NONE, status: 'observing', command_id: 'adopt-1', request_hash: $hash, created_by_user_id: $user_id, active_target_guard: $guard, created_at: time::now(), updated_at: time::now() }; CREATE growth_effect_baseline CONTENT { baseline_id: 'baseline-1', organization_id: $organization_id, adoption_id: 'adoption-1', suggestion_id: 'suggestion-1', target_kind: 'prompt', target_version_id: 'prompt-v2', status: 'pending', metrics_json: '{}', checksum: $hash, created_at: time::now() };",
+      "CREATE growth_adoption_run CONTENT { adoption_id: 'adoption-1', organization_id: $organization_id, suggestion_id: 'suggestion-1', target_kind: 'prompt', evaluation_run_id: 'evaluation-1', evaluation_input_hash: $hash, configuration_version_id: 'config-1', runtime_execution_id: 'runtime-1', before_version_id: 'prompt-v1', before_checksum: $hash, after_version_id: 'prompt-v2', after_checksum: $hash, governance_decision_id: 'decision-1', approval_id: NONE, status: 'observing', command_id: 'adopt-1', request_hash: $hash, created_by_user_id: $user_id, active_target_guard: $guard, created_at: time::now(), updated_at: time::now() }; CREATE growth_effect_baseline CONTENT { baseline_id: 'baseline-1', organization_id: $organization_id, adoption_id: 'adoption-1', suggestion_id: 'suggestion-1', target_kind: 'prompt', target_version_id: 'prompt-v1', status: 'pending', metrics_json: '{}', checksum: $hash, created_at: time::now() };",
       {
         organization_id: context.organizationId,
         user_id: context.userId,
@@ -67,7 +116,11 @@ describe("Growth effect comparison", () => {
       },
     );
     const store = await GrowthEffectStore.create(database, organizations);
-    await store.captureBaseline(context, { commandId: "baseline-1", adoptionId: "adoption-1", sample: sample(0.7) });
+    await store.captureBaseline(context, {
+      commandId: "baseline-1",
+      adoptionId: "adoption-1",
+      sample: sample(0.7, "case-v1", 10, "prompt-v1"),
+    });
     const evaluation = await store.observe(context, {
       commandId: "observe-1",
       adoptionId: "adoption-1",
@@ -99,7 +152,7 @@ describe("Growth effect comparison", () => {
     const context = await organizations.resolveTenantContext(owner.user.user_id, owner.organization.organization_id);
     await applyMigrations(database, [GROWTH_ADOPTION_MIGRATION]);
     await database.query(
-      "CREATE growth_adoption_run CONTENT { adoption_id: 'adoption-retained', organization_id: $organization_id, suggestion_id: 'suggestion-retained', target_kind: 'prompt', evaluation_run_id: 'evaluation-retained', evaluation_input_hash: $hash, configuration_version_id: 'config-1', runtime_execution_id: 'runtime-1', before_version_id: 'prompt-v1', before_checksum: $hash, after_version_id: 'prompt-v2', after_checksum: $hash, governance_decision_id: 'decision-1', approval_id: NONE, status: 'observing', command_id: 'adopt-retained', request_hash: $hash, created_by_user_id: $user_id, active_target_guard: $guard, created_at: time::now(), updated_at: time::now() }; CREATE growth_effect_baseline CONTENT { baseline_id: 'baseline-retained', organization_id: $organization_id, adoption_id: 'adoption-retained', suggestion_id: 'suggestion-retained', target_kind: 'prompt', target_version_id: 'prompt-v2', status: 'pending', metrics_json: '{}', checksum: $hash, created_at: time::now() };",
+      "CREATE growth_adoption_run CONTENT { adoption_id: 'adoption-retained', organization_id: $organization_id, suggestion_id: 'suggestion-retained', target_kind: 'prompt', evaluation_run_id: 'evaluation-retained', evaluation_input_hash: $hash, configuration_version_id: 'config-1', runtime_execution_id: 'runtime-1', before_version_id: 'prompt-v1', before_checksum: $hash, after_version_id: 'prompt-v2', after_checksum: $hash, governance_decision_id: 'decision-1', approval_id: NONE, status: 'observing', command_id: 'adopt-retained', request_hash: $hash, created_by_user_id: $user_id, active_target_guard: $guard, created_at: time::now(), updated_at: time::now() }; CREATE growth_effect_baseline CONTENT { baseline_id: 'baseline-retained', organization_id: $organization_id, adoption_id: 'adoption-retained', suggestion_id: 'suggestion-retained', target_kind: 'prompt', target_version_id: 'prompt-v1', status: 'pending', metrics_json: '{}', checksum: $hash, created_at: time::now() };",
       {
         organization_id: context.organizationId,
         user_id: context.userId,
@@ -108,7 +161,11 @@ describe("Growth effect comparison", () => {
       },
     );
     const store = await GrowthEffectStore.create(database, organizations);
-    await store.captureBaseline(context, { commandId: "baseline-retained", adoptionId: "adoption-retained", sample: sample(0.7) });
+    await store.captureBaseline(context, {
+      commandId: "baseline-retained",
+      adoptionId: "adoption-retained",
+      sample: sample(0.7, "case-v1", 10, "prompt-v1"),
+    });
     await expect(
       store.observe(context, { commandId: "observe-retained", adoptionId: "adoption-retained", sample: sample(0.82) }),
     ).resolves.toMatchObject({ result: "improved" });

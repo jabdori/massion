@@ -35,7 +35,13 @@ export type {
   GrowthAdoptionStatus,
 } from "./adoption.js";
 export type { ConfigureGrowthInput, GrowthConfigurationSubject, GrowthConfigurationVersion } from "./contracts.js";
-export type { GrowthEffectComparison, GrowthEffectContract, GrowthEffectSample } from "./effect.js";
+export type {
+  GrowthEffectComparison,
+  GrowthEffectContract,
+  GrowthEffectSample,
+  GrowthEffectSampleLineage,
+} from "./effect.js";
+export { growthEffectSampleLineageChecksum } from "./effect.js";
 export type {
   GrowthEvaluationDetails,
   GrowthEvaluationOutcome,

@@ -266,7 +266,7 @@ export class GrowthAdoptionService {
           adoption_id: run.adoption_id,
           suggestion_id: suggestion.suggestion_id,
           target_kind: suggestion.target_kind,
-          target_version_id: applied.after.versionId,
+          target_version_id: applied.before.versionId,
           checksum: growthChecksum({}),
         },
       );

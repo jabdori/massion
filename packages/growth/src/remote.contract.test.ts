@@ -186,16 +186,27 @@ describe("remote Growth contract", () => {
       degradationThreshold: 0.1,
       minimumObservations: 5,
     };
+    const baselineLineage = {
+      targetVersionId: adopted.value.adoption.before_version_id,
+      samples: Array.from({ length: 10 }, (_, index) => ({
+        workId: `remote-work-${index}`,
+        assuranceRunId: `remote-assurance-${index}`,
+        verificationId: `remote-verification-${index}`,
+        metricObservationId: `remote-metric-${index}`,
+        sourceChecksum: "a".repeat(64),
+      })),
+    } as const;
+    const observationLineage = { ...baselineLineage, targetVersionId: adopted.value.afterVersionId };
     await effect.captureBaseline(context, {
       commandId: "remote-baseline",
       adoptionId: adopted.value.adoption.adoption_id,
-      sample: { score: 0.8, observationCount: 10, contract },
+      sample: { score: 0.8, observationCount: 10, contract, lineage: baselineLineage },
     });
     await expect(
       effect.observe(context, {
         commandId: "remote-observation",
         adoptionId: adopted.value.adoption.adoption_id,
-        sample: { score: 0.4, observationCount: 10, contract },
+        sample: { score: 0.4, observationCount: 10, contract, lineage: observationLineage },
       }),
     ).resolves.toMatchObject({ result: "degraded" });
     const reverts = await GrowthRevertService.create(

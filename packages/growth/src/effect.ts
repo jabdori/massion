@@ -4,7 +4,11 @@ import type { OrganizationService, TenantContext } from "@massion/identity";
 import { applyMigrations, type MassionDatabase, type QueryExecutor } from "@massion/storage";
 
 import { canonicalGrowthJson, growthChecksum } from "./prompt-memory.js";
-import { GROWTH_EFFECT_REVERT_MIGRATION, GROWTH_PRODUCTION_EFFECT_LINEAGE_MIGRATION } from "./schema.js";
+import {
+  GROWTH_EFFECT_REVERT_MIGRATION,
+  GROWTH_EFFECT_SAMPLE_LINEAGE_MIGRATION,
+  GROWTH_PRODUCTION_EFFECT_LINEAGE_MIGRATION,
+} from "./schema.js";
 
 export interface GrowthEffectContract {
   readonly strategyVersionId: string;
@@ -19,10 +23,24 @@ export interface GrowthEffectContract {
   readonly minimumObservations: number;
 }
 
+export interface GrowthEffectSampleLineage {
+  readonly targetVersionId: string;
+  readonly samples: readonly {
+    readonly workId: string;
+    readonly assuranceRunId: string;
+    readonly verificationId: string;
+    readonly recordsRunId?: string;
+    readonly workRecordId?: string;
+    readonly metricObservationId: string;
+    readonly sourceChecksum: string;
+  }[];
+}
+
 export interface GrowthEffectSample {
   readonly score: number;
   readonly observationCount: number;
   readonly contract: GrowthEffectContract;
+  readonly lineage: GrowthEffectSampleLineage;
 }
 
 export interface GrowthEffectComparison {
@@ -37,6 +55,25 @@ function assertSample(sample: GrowthEffectSample): void {
   if (!Number.isInteger(sample.observationCount) || sample.observationCount < 0)
     throw new Error("Growth effect observation count가 유효하지 않습니다");
   const contract = sample.contract;
+  if (!sample.lineage.targetVersionId.trim() || sample.lineage.samples.length !== sample.observationCount) {
+    throw new Error("Growth effect sample lineage와 observation count가 일치하지 않습니다");
+  }
+  for (const reference of sample.lineage.samples) {
+    for (const value of [
+      reference.workId,
+      reference.assuranceRunId,
+      reference.verificationId,
+      reference.metricObservationId,
+      reference.sourceChecksum,
+    ]) {
+      if (!value?.trim()) throw new Error("Growth effect sample lineage 값이 비었습니다");
+    }
+    if (!/^[a-f0-9]{64}$/u.test(reference.sourceChecksum))
+      throw new Error("Growth effect sample source checksum이 유효하지 않습니다");
+    for (const value of [reference.recordsRunId, reference.workRecordId]) {
+      if (value !== undefined && !value.trim()) throw new Error("Growth effect optional lineage 값이 비었습니다");
+    }
+  }
   for (const value of [
     contract.strategyVersionId,
     contract.caseSetChecksum,
@@ -57,6 +94,19 @@ function assertSample(sample: GrowthEffectSample): void {
   ) {
     throw new Error("Growth effect threshold 또는 minimum observation이 유효하지 않습니다");
   }
+}
+
+function normalizedLineage(lineage: GrowthEffectSampleLineage): GrowthEffectSampleLineage {
+  return {
+    targetVersionId: lineage.targetVersionId,
+    samples: [...lineage.samples].sort((left, right) =>
+      `${left.workId}\u0000${left.assuranceRunId}`.localeCompare(`${right.workId}\u0000${right.assuranceRunId}`),
+    ),
+  };
+}
+
+export function growthEffectSampleLineageChecksum(lineage: GrowthEffectSampleLineage): string {
+  return growthChecksum(normalizedLineage(lineage));
 }
 
 export function compareGrowthEffect(
@@ -86,10 +136,17 @@ interface BaselineRecord {
   readonly baseline_id: string;
   readonly organization_id: string;
   readonly adoption_id: string;
+  readonly target_version_id: string;
   readonly status: "pending" | "captured" | "closed";
   readonly metrics_json: string;
   readonly contract_json?: string;
   readonly checksum: string;
+  readonly sample_lineage_json?: string;
+  readonly sample_lineage_checksum?: string;
+}
+interface AdoptionLineageRecord {
+  readonly before_version_id: string;
+  readonly after_version_id?: string;
 }
 export interface GrowthEffectEvaluationRecord {
   readonly effect_evaluation_id: string;
@@ -121,7 +178,11 @@ export class GrowthEffectStore {
     database: MassionDatabase,
     organizations: OrganizationService,
   ): Promise<GrowthEffectStore> {
-    await applyMigrations(database, [GROWTH_EFFECT_REVERT_MIGRATION, GROWTH_PRODUCTION_EFFECT_LINEAGE_MIGRATION]);
+    await applyMigrations(database, [
+      GROWTH_EFFECT_REVERT_MIGRATION,
+      GROWTH_PRODUCTION_EFFECT_LINEAGE_MIGRATION,
+      GROWTH_EFFECT_SAMPLE_LINEAGE_MIGRATION,
+    ]);
     return new GrowthEffectStore(database, organizations);
   }
 
@@ -134,13 +195,17 @@ export class GrowthEffectStore {
     await this.database.transaction(async (executor) => {
       const baseline = await this.baseline(context.organizationId, input.adoptionId, executor);
       const checksum = growthChecksum(input.sample);
+      const sampleLineage = normalizedLineage(input.sample.lineage);
+      const sampleLineageChecksum = growthEffectSampleLineageChecksum(sampleLineage);
+      if (sampleLineage.targetVersionId !== baseline.target_version_id)
+        throw new Error("Growth baseline target version과 sample lineage가 일치하지 않습니다");
       if (baseline.status === "captured") {
         if (baseline.checksum !== checksum) throw new Error("Growth baseline은 이미 다른 값으로 확정됐습니다");
         return;
       }
       if (baseline.status !== "pending") throw new Error("Growth baseline을 캡처할 수 없는 상태입니다");
       const [updated] = await executor.query<[BaselineRecord[]]>(
-        "UPDATE growth_effect_baseline SET status = 'captured', metrics_json = $metrics_json, contract_json = $contract_json, checksum = $checksum, captured_at = time::now() WHERE organization_id = $organization_id AND baseline_id = $baseline_id AND status = 'pending' RETURN AFTER;",
+        "UPDATE growth_effect_baseline SET status = 'captured', metrics_json = $metrics_json, contract_json = $contract_json, sample_lineage_json = $sample_lineage_json, sample_lineage_checksum = $sample_lineage_checksum, checksum = $checksum, captured_at = time::now() WHERE organization_id = $organization_id AND baseline_id = $baseline_id AND status = 'pending' RETURN AFTER;",
         {
           organization_id: context.organizationId,
           baseline_id: baseline.baseline_id,
@@ -149,6 +214,8 @@ export class GrowthEffectStore {
             observationCount: input.sample.observationCount,
           }),
           contract_json: canonicalGrowthJson(input.sample.contract),
+          sample_lineage_json: canonicalGrowthJson(sampleLineage),
+          sample_lineage_checksum: sampleLineageChecksum,
           checksum,
         },
       );
@@ -176,14 +243,33 @@ export class GrowthEffectStore {
       const baseline = await this.baseline(context.organizationId, input.adoptionId, executor);
       if (baseline.status !== "captured" || !baseline.contract_json)
         throw new Error("captured Growth baseline이 필요합니다");
+      if (!baseline.sample_lineage_json || !baseline.sample_lineage_checksum)
+        throw new Error("Growth baseline sample lineage가 없습니다");
+      if (growthEffectSampleLineageChecksum(JSON.parse(baseline.sample_lineage_json) as GrowthEffectSampleLineage) !== baseline.sample_lineage_checksum)
+        throw new Error("Growth baseline sample lineage checksum이 일치하지 않습니다");
+      const [adoptionRows] = await executor.query<[AdoptionLineageRecord[]]>(
+        "SELECT before_version_id, after_version_id FROM growth_adoption_run WHERE organization_id = $organization_id AND adoption_id = $adoption_id LIMIT 1;",
+        { organization_id: context.organizationId, adoption_id: input.adoptionId },
+      );
+      const adoption = adoptionRows[0];
+      if (!adoption || baseline.target_version_id !== adoption.before_version_id)
+        throw new Error("Growth baseline은 Adoption before target 계보여야 합니다");
       const metrics = JSON.parse(baseline.metrics_json) as { score: number; observationCount: number };
       const comparison = compareGrowthEffect(
-        { ...metrics, contract: JSON.parse(baseline.contract_json) as GrowthEffectContract },
+        {
+          ...metrics,
+          lineage: JSON.parse(baseline.sample_lineage_json) as GrowthEffectSampleLineage,
+          contract: JSON.parse(baseline.contract_json) as GrowthEffectContract,
+        },
         input.sample,
       );
       const observationId = randomUUID();
+      const sampleLineage = normalizedLineage(input.sample.lineage);
+      const sampleLineageChecksum = growthEffectSampleLineageChecksum(sampleLineage);
+      if (sampleLineage.targetVersionId !== adoption.after_version_id)
+        throw new Error("Growth observation target version과 Adoption after 계보가 일치하지 않습니다");
       await executor.query(
-        "CREATE growth_effect_observation CONTENT { observation_id: $observation_id, organization_id: $organization_id, adoption_id: $adoption_id, score: $score, observation_count: $observation_count, contract_json: $contract_json, contract_checksum: $contract_checksum, command_id: $command_id, request_hash: $request_hash, created_at: time::now() };",
+        "CREATE growth_effect_observation CONTENT { observation_id: $observation_id, organization_id: $organization_id, adoption_id: $adoption_id, score: $score, observation_count: $observation_count, contract_json: $contract_json, contract_checksum: $contract_checksum, sample_lineage_json: $sample_lineage_json, sample_lineage_checksum: $sample_lineage_checksum, command_id: $command_id, request_hash: $request_hash, created_at: time::now() };",
         {
           observation_id: observationId,
           organization_id: context.organizationId,
@@ -192,6 +278,8 @@ export class GrowthEffectStore {
           observation_count: input.sample.observationCount,
           contract_json: canonicalGrowthJson(input.sample.contract),
           contract_checksum: comparison.contractChecksum,
+          sample_lineage_json: canonicalGrowthJson(sampleLineage),
+          sample_lineage_checksum: sampleLineageChecksum,
           command_id: input.commandId,
           request_hash: requestHash,
         },
