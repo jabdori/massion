@@ -36,6 +36,18 @@ function applicationErrorFromStored(input: ReturnType<ApplicationError["publicVi
   });
 }
 
+function commandValidationError(cause: unknown, correlationId?: string): ApplicationError {
+  return new ApplicationError({
+    category: "validation",
+    severity: "error",
+    retryable: false,
+    userMessage: "Application command 입력이 유효하지 않습니다",
+    operatorCode: "APP_COMMAND_VALIDATION",
+    ...(correlationId === undefined ? {} : { correlationId }),
+    cause,
+  });
+}
+
 export class ApplicationCommandRegistry {
   private readonly descriptors = new Map<string, ApplicationCommandDescriptor>();
 
@@ -61,7 +73,12 @@ export class ApplicationCommandRegistry {
     callerScopes: readonly string[],
     input: unknown,
   ): Promise<ApplicationCommandResultV1> {
-    const command = validateApplicationCommand(input);
+    let command: ApplicationCommandV1;
+    try {
+      command = validateApplicationCommand(input);
+    } catch (error) {
+      throw commandValidationError(error);
+    }
     const descriptor = this.descriptors.get(command.operation);
     if (!descriptor) {
       throw new ApplicationError({
@@ -96,7 +113,12 @@ export class ApplicationCommandRegistry {
         correlationId: command.correlationId,
       });
     }
-    const payload = descriptor.validate(command.payload);
+    let payload: unknown;
+    try {
+      payload = descriptor.validate(command.payload);
+    } catch (error) {
+      throw commandValidationError(error, command.correlationId);
+    }
     const identityCommand: ApplicationCommandV1 = {
       ...command,
       payload: descriptor.idempotencyPayload ? descriptor.idempotencyPayload(payload) : command.payload,

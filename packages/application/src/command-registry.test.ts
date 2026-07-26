@@ -92,8 +92,8 @@ describe("ApplicationCommandRegistry", () => {
       payload: { text: "valid" },
     };
     await expect(registry.dispatch(context, ["work:read"], input)).rejects.toThrow("scope");
-    await expect(registry.dispatch(context, ["work:write"], { ...input, payload: { text: "bad" } })).rejects.toThrow(
-      "payload",
+    await expect(registry.dispatch(context, ["work:write"], { ...input, payload: { text: "bad" } })).rejects.toMatchObject(
+      { category: "validation" },
     );
     await expect(registry.dispatch(context, ["work:write"], input)).resolves.toMatchObject({
       outcome: "succeeded",
@@ -101,6 +101,18 @@ describe("ApplicationCommandRegistry", () => {
     });
     await expect(registry.dispatch(context, ["work:write"], input)).resolves.toMatchObject({ outcome: "succeeded" });
     expect(calls).toBe(1);
+  });
+
+  it("descriptor payload 검증 실패를 사용자 입력 validation 오류로 반환한다", async () => {
+    await expect(
+      registry.dispatch(context, ["work:write"], {
+        schemaVersion: "massion.application.v1",
+        commandId: "registry-invalid-payload-command-0001",
+        correlationId: "registry-invalid-payload-correlation-0001",
+        operation: "work.create",
+        payload: { text: "bad" },
+      }),
+    ).rejects.toMatchObject({ category: "validation", operatorCode: "APP_COMMAND_VALIDATION" });
   });
 
   it("등록되지 않은 operation과 in-progress 명령을 구조화 conflict로 거부한다", async () => {
