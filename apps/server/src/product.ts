@@ -993,6 +993,13 @@ export async function createMassionDaemon(
       policies,
       tokenKey: config.tokenKey,
       executors,
+      autonomyTransition: {
+        autonomy: governance.autonomy,
+        approvals,
+        runtime: runner,
+        runtimeExecutions,
+        emergency,
+      },
       domain: {
         works,
         workspaces,

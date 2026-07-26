@@ -32,6 +32,7 @@ import type { WorkspaceService, WorkspaceView } from "@massion/workspace";
 import type { AutonomyStore } from "@massion/governance";
 
 import type { ApplicationCommandDescriptor, ApplicationCommandRegistry } from "../command-registry.js";
+import type { AutonomyTransitionCoordinator } from "../autonomy-transition-coordinator.js";
 import type { ApplicationCommandResultV1, ApplicationCommandV1 } from "../contracts.js";
 import { ApplicationError } from "../errors.js";
 import type {
@@ -61,6 +62,7 @@ export interface ApplicationDomainDependencies {
   >;
   readonly workspaces?: Pick<WorkspaceService, "register" | "decideTrust" | "archive" | "get" | "list">;
   readonly autonomy?: Pick<AutonomyStore, "set">;
+  readonly autonomyTransition?: Pick<AutonomyTransitionCoordinator, "set">;
   readonly runtime?: Pick<AgentRunner, "execute" | "cancel" | "suspend" | "resume"> &
     Partial<Pick<AgentRunner, "cancelOrganization">>;
   readonly emergency?: Pick<EmergencyControl, "activate">;
@@ -566,6 +568,7 @@ function workspaceTrustDecision(value: unknown): "trusted" | "blocked" {
 function registerAutonomy(
   registry: ApplicationCommandRegistry,
   autonomy: NonNullable<ApplicationDomainDependencies["autonomy"]>,
+  transition?: NonNullable<ApplicationDomainDependencies["autonomyTransition"]>,
 ): void {
   register(registry, {
     operation: "governance.autonomy.set",
@@ -578,10 +581,25 @@ function registerAutonomy(
         const mode = string(value.mode, "mode");
         if (mode !== "automatic" && mode !== "review" && mode !== "full-access")
           throw new Error("지원하지 않는 자율성 모드입니다");
-        const state = await autonomy.set(context, { mode, expectedRevision: expectedRevision(command) });
+        const state = transition
+          ? await transition.set(context, { mode, expectedRevision: expectedRevision(command) })
+          : await autonomy.set(context, { mode, expectedRevision: expectedRevision(command) });
+        const runtimePermissionStatus =
+          "runtimePermissionStatus" in state ? state.runtimePermissionStatus : undefined;
         return result(command, {
           resource: { type: "GovernanceAutonomy", id: context.organizationId, revision: state.revision },
-          data: { mode: state.mode, revision: state.revision },
+          data: {
+            mode: state.mode,
+            revision: state.revision,
+            ...(runtimePermissionStatus === undefined
+              ? {}
+              : {
+                  runtimePermissionStatus,
+                  ...("limitedReason" in state && state.limitedReason !== undefined
+                    ? { limitedReason: state.limitedReason }
+                    : {}),
+                }),
+          },
         });
       } catch (error) {
         return domainError(error, command.correlationId);
@@ -2588,7 +2606,7 @@ export function registerApplicationDomainCommands(
 ): void {
   if (dependencies.works) registerWork(registry, dependencies.works);
   if (dependencies.workspaces) registerWorkspace(registry, dependencies.workspaces);
-  if (dependencies.autonomy) registerAutonomy(registry, dependencies.autonomy);
+  if (dependencies.autonomy) registerAutonomy(registry, dependencies.autonomy, dependencies.autonomyTransition);
   if (dependencies.emergency && dependencies.runtime?.cancelOrganization)
     registerEmergency(registry, dependencies.emergency, dependencies.runtime);
   if (dependencies.runtime) registerRuntime(registry, dependencies.runtime);

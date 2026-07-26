@@ -1,6 +1,11 @@
 import type { TenantContext } from "@massion/identity";
 
-import { type ApplicationRunStage, type ApplicationRunView, ApplicationRunStore } from "./run-store.js";
+import {
+  type ApplicationRunStage,
+  type ApplicationRunView,
+  type ClaimApplicationRunResult,
+  ApplicationRunStore,
+} from "./run-store.js";
 import {
   WorkDirectiveBusyError,
   type WorkDirectiveMode,
@@ -131,6 +136,28 @@ export class CoreWorkCoordinator {
     return await this.execute(context, run, run.resumeInput, false);
   }
 
+  public async reevaluateAwaitingApproval(
+    context: TenantContext,
+    runId: string,
+    approvalId: string,
+    retryAttemptId: string,
+  ): Promise<ApplicationRunView> {
+    const run = await this.store.get(context, runId);
+    if (run.status !== "awaiting-approval" || run.approvalId !== approvalId) {
+      throw new Error("자율성 재평가 대상 Approval 연결이 일치하지 않습니다");
+    }
+    const claim = await this.store.claim(context, runId, {
+      reevaluateAwaitingApproval: true,
+      approvalId,
+      retryAttemptId,
+    });
+    if (claim.outcome !== "claimed") {
+      if (claim.outcome === "terminal") return claim.run;
+      return await this.store.get(context, runId);
+    }
+    return await this.execute(context, run, undefined, false, false, undefined, claim);
+  }
+
   public async retryBlocked(
     context: TenantContext,
     runId: string,
@@ -188,6 +215,7 @@ export class CoreWorkCoordinator {
     resumeAwaitingApproval: boolean,
     resumeBlocked = false,
     retryAttemptId?: string,
+    initialClaim?: Extract<ClaimApplicationRunResult, { readonly outcome: "claimed" }>,
   ): Promise<ApplicationRunView> {
     let run = initial;
     if (run.stage === "terminal") {
@@ -202,12 +230,13 @@ export class CoreWorkCoordinator {
       const explicitRetryAttemptId = resumeBlocked ? nextRetryAttemptId : undefined;
       let claim: Awaited<ReturnType<ApplicationRunStore["claim"]>>;
       try {
-        claim = await this.store.claim(context, run.runId, {
+        claim = initialClaim ?? (await this.store.claim(context, run.runId, {
           resumeAwaitingApproval: shouldResume,
           resumeBlocked,
           ...(nextRetryAttemptId === undefined ? {} : { retryAttemptId: nextRetryAttemptId }),
           ...(shouldResume && nextResumeInput !== undefined ? { approvalId: nextResumeInput.approvalId } : {}),
-        });
+        }));
+        initialClaim = undefined;
         if (claim.outcome === "claimed" && explicitRetryAttemptId !== undefined) {
           if (claim.retryAttemptId !== explicitRetryAttemptId) {
             throw new Error("Application run retry attempt가 지시 재큐잉 요청과 일치하지 않습니다");

@@ -11,6 +11,7 @@ export * from "./command-store.js";
 export * from "./client.js";
 export * from "./contracts.js";
 export * from "./core-work-coordinator.js";
+export * from "./autonomy-transition-coordinator.js";
 export * from "./core-pipeline.js";
 export * from "./core-product.js";
 export * from "./core-evidence-stage.js";

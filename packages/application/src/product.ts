@@ -1,9 +1,10 @@
 import { createHash, createHmac, randomUUID } from "node:crypto";
 
-import type { PolicyStore } from "@massion/governance";
+import type { ApprovalStore, AutonomyStore, EmergencyControl, PolicyStore } from "@massion/governance";
 import type { IdentityService, OrganizationService, TenantContext } from "@massion/identity";
 import type { OrganizationGraphService } from "@massion/organization";
 import type { MassionDatabase } from "@massion/storage";
+import type { AgentRunner, RuntimeExecutionStore } from "@massion/runtime";
 
 import { registerApplicationDomainCommands, type ApplicationDomainDependencies } from "./adapters/domain.js";
 import type { ExecutionStreamRegistry } from "./execution-stream.js";
@@ -36,6 +37,7 @@ import {
 import { registerApplicationRunCommands } from "./run-commands.js";
 import { registerApplicationRegistryOperations, type ApplicationRegistryOperations } from "./registry-operations.js";
 import { ApplicationRunStore } from "./run-store.js";
+import { AutonomyTransitionCoordinator } from "./autonomy-transition-coordinator.js";
 import { CollaborationGraphSnapshotProjector } from "./snapshot.js";
 import { WebSessionService } from "./web-session.js";
 import { registerWorkDirectiveCommands } from "./work-directive-commands.js";
@@ -50,6 +52,13 @@ export interface ApplicationProductDependencies {
   readonly tokenKey: { readonly keyId: string; readonly key: Buffer };
   readonly executors: Readonly<Record<CoreWorkStage, CoreWorkStageExecutor>>;
   readonly domain: ApplicationDomainDependencies;
+  readonly autonomyTransition?: {
+    readonly autonomy: Pick<AutonomyStore, "get" | "set">;
+    readonly approvals: Pick<ApprovalStore, "listPending" | "cancel">;
+    readonly runtime: Pick<AgentRunner, "cancel" | "cancelOrganization">;
+    readonly runtimeExecutions: Pick<RuntimeExecutionStore, "listActiveByAutonomy">;
+    readonly emergency: Pick<EmergencyControl, "get" | "activate">;
+  };
   readonly queries?: Omit<
     ApplicationQueryDependencies,
     "readModel" | "runs" | "snapshot" | "memberships" | "audit" | "webSessions"
@@ -90,9 +99,23 @@ export class ApplicationProduct implements AsyncDisposable {
     const runs = await ApplicationRunStore.create(dependencies.database, dependencies.organizations);
     const directives = await WorkDirectiveStore.create(dependencies.database, dependencies.organizations);
     const coordinator = new CoreWorkCoordinator(runs, dependencies.executors, {}, directives);
+    const autonomyTransition = dependencies.autonomyTransition
+      ? new AutonomyTransitionCoordinator(
+          dependencies.autonomyTransition.autonomy,
+          dependencies.autonomyTransition.approvals,
+          runs,
+          coordinator,
+          dependencies.autonomyTransition.runtime,
+          dependencies.autonomyTransition.runtimeExecutions,
+          dependencies.autonomyTransition.emergency,
+        )
+      : undefined;
     const commandStore = await ApplicationCommandStore.create(dependencies.database, dependencies.organizations);
     const commands = new ApplicationCommandRegistry(commandStore);
-    registerApplicationDomainCommands(commands, dependencies.domain);
+    registerApplicationDomainCommands(commands, {
+      ...dependencies.domain,
+      ...(autonomyTransition === undefined ? {} : { autonomyTransition }),
+    });
     if (dependencies.domain.approvals) {
       registerApplicationApprovalCommands(commands, {
         approvals: dependencies.domain.approvals,
