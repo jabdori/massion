@@ -2,7 +2,7 @@
 
 > **상태:** 진행 중
 > **시작 기준:** 페이즈 03의 코드 근거 Work 연결 완료
-> **다음 게이트:** 전체 빌드 통과, 데스크톱 UAT 시나리오 10종 이상 통과
+> **다음 게이트:** Growth 생산 worker와 전체 권한의 실제 실행·회수 경계를 연결한 뒤, 동일 후보에서 데스크톱 UAT 시나리오 10종 이상 통과
 
 ## 목표
 
@@ -13,8 +13,8 @@ Core 파이프라인, 권한 모드, 수신함 UX, 메모리 주입 경로가 �
 | 단계 | 현재 범위 | 상태 |
 |---|---|---|
 | 04-1 | 코드 근거를 Work와 Agent 실행에 연결 (Task 3) | 코드 검증 완료 |
-| 04-2 | 전체 권한 실행 모드 추가 | 코드 검증 완료 |
-| 04-3 | 메모리 주입 경로 연결 | 코드 검증 완료 · 시드 연결 대기 |
+| 04-2 | 전체 권한 실행 모드 추가 | 부분 구현 — 저장·일부 Governance 승인 우회·버튼만 존재 |
+| 04-3 | 메모리 주입 경로 연결 | 코드 경로 존재 — 생산 실패 폐쇄와 Growth worker 연결 대기 |
 | 04-4 | 수신함 UX 정합 (지도 비율) | 코드 검증 완료 |
 | 04-5 | 전체 빌드 + 데스크톱 UAT | 대기 |
 
@@ -29,13 +29,13 @@ Core 파이프라인, 권한 모드, 수신함 UX, 메모리 주입 경로가 �
 - `e746202d4` — 거버넌스 자율성 모드에 full(레벨 3) 추가.
 - `123fb1bf0` — 데스크톱 설정 화면에 "전체 권한" 버튼과 설명문 추가.
 
-full 모드는 require_approval만 allow로 내리고 deny outcome은 건드리지 않는다.
+현재 `full` 모드는 이미 allow인 요청의 `require_approval`만 allow로 내리고 Cedar deny·active policy 부재는 그대로 막습니다. Codex·Claude SDK의 전체 권한 option, Work·Runtime의 mode/revision 계보, 실행 중 회수, 긴급 정지 연결, 사용자 책임 경고는 아직 구현되지 않았습니다. 따라서 실제 전체 권한으로 완료 처리하지 않습니다.
 
 ### 04-3 — 메모리 주입 경로 연결
 
 - `60bfcda94` — GrowthWorkPromptAdapter를 WorkService.create의 promptVersions 자리에 주입.
 
-알려진 제약: 서버 흐름에서 PromptDefinitionVersion이 아직 시드되지 않아 compose가 매번 예외를 던지고 try-catch로 우회된다.
+`70e255ca4`가 onboarding 시점 PromptDefinitionVersion 시드를 보완했습니다. 다만 WorkService는 resolver 예외를 현재 Work에서 조용히 제외하는 경로를 남기고 있고, Reflection·평가·채택을 실제로 이어 주는 Growth worker도 없습니다. 명시적 기억의 실사용 계보는 페이즈 03으로 확인했지만, 지속 발전 생산 루프 완료를 뜻하지 않습니다.
 
 ### 04-4 — 수신함 UX 정합
 
@@ -43,4 +43,4 @@ full 모드는 require_approval만 allow로 내리고 deny outcome은 건드리�
 
 ### 04-5 — 전체 빌드 + 데스크톱 UAT
 
-대기 중.
+대기 중. GrowthWorker와 전체 권한 실행 경계가 없는 상태에서는 이 항목을 시작하지 않습니다.
