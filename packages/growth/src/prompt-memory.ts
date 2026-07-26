@@ -88,6 +88,11 @@ interface DefinitionRecord {
   readonly request_hash: string;
 }
 
+interface OrganizationVersionRecord {
+  readonly version_id: string;
+  readonly after_json: string;
+}
+
 interface MemoryRecord {
   readonly memory_version_id: string;
   readonly organization_id: string;
@@ -708,7 +713,45 @@ export class PromptMemoryStore {
       ),
     );
     const baseSections = JSON.parse(activeDefinition.sections_json) as PromptAgentSection[];
-    const sections = baseSections.map((section) => ({
+    const [organizationVersions] = await executor.query<[OrganizationVersionRecord[]]>(
+      "SELECT version_id, after_json FROM organization_version WHERE organization_id = $organization_id AND version_id = $version_id LIMIT 1;",
+      { organization_id: context.organizationId, version_id: input.organizationVersionId },
+    );
+    const organizationVersion = organizationVersions[0];
+    if (!organizationVersion) throw new Error("OrganizationVersion을 찾을 수 없습니다");
+    const organizationNodes = JSON.parse(organizationVersion.after_json) as Array<{
+      readonly handle?: unknown;
+      readonly responsibility?: unknown;
+      readonly outputs?: unknown;
+      readonly capabilities?: unknown;
+      readonly status?: unknown;
+    }>;
+    if (!Array.isArray(organizationNodes)) throw new Error("OrganizationVersion snapshot이 유효하지 않습니다");
+    const knownHandles = new Set(baseSections.map((section) => section.agentHandle));
+    const organizationSections = organizationNodes
+      .filter((node) => node.status === "active")
+      .map((node) => {
+        if (
+          typeof node.handle !== "string" ||
+          typeof node.responsibility !== "string" ||
+          !Array.isArray(node.outputs) ||
+          !node.outputs.every((value) => typeof value === "string") ||
+          !Array.isArray(node.capabilities) ||
+          !node.capabilities.every((value) => typeof value === "string")
+        ) {
+          throw new Error("OrganizationVersion node가 유효하지 않습니다");
+        }
+        return {
+          agentHandle: node.handle,
+          instruction: `${node.responsibility}\n주요 산출물: ${(node.outputs as string[]).join(", ")}`,
+          capabilityReferences: [...(node.capabilities as string[])].sort(),
+        } satisfies PromptAgentSection;
+      })
+      .filter((section) => !knownHandles.has(section.agentHandle));
+    const sections = [...baseSections, ...organizationSections].sort((left, right) =>
+      left.agentHandle.localeCompare(right.agentHandle),
+    );
+    const composedSections = sections.map((section) => ({
       ...section,
       instruction:
         memoryLines.length === 0
@@ -733,7 +776,7 @@ export class PromptMemoryStore {
       ...(input.policyChecksum ? { policy_checksum: input.policyChecksum } : {}),
       memory_version_ids: memories.map((record) => record.memory_version_id),
       memory_checksums: memories.map((record) => record.checksum),
-      agent_sections_json: canonicalGrowthJson(sections),
+      agent_sections_json: canonicalGrowthJson(composedSections),
     };
     const checksum = growthChecksum(promptContent(recordWithoutChecksum));
     const [created] = await executor.query<[PromptRecord[]]>(

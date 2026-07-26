@@ -7,6 +7,7 @@ import {
   RepositoryScanner,
   RepositoryStore,
 } from "@massion/evidence";
+import { PromptMemoryStore } from "@massion/growth";
 import { IdentityService, OrganizationService } from "@massion/identity";
 import { OrganizationGraphService } from "@massion/organization";
 import { RuntimeExecutionStore } from "@massion/runtime";
@@ -56,6 +57,24 @@ async function connectorUpgradeStatus(baseUrl: string): Promise<number> {
     });
     upgrade.end();
   });
+}
+
+async function productWorkState(client: ApplicationHttpClient) {
+  const listed = (await client.query("work.list", {})) as {
+    data?: readonly { workId: string; status: string; artifactIds: readonly string[] }[];
+  };
+  const works = listed.data ?? [];
+  const executions = (
+    await Promise.all(
+      works.map(async (work) => {
+        const response = (await client.query("work.executions", { workId: work.workId })) as {
+          data?: readonly { agentHandle: string; status: string }[];
+        };
+        return response.data ?? [];
+      }),
+    )
+  ).flat();
+  return { data: { works, executions } };
 }
 
 describe("Massion server product", () => {
@@ -242,6 +261,9 @@ describe("Massion server product", () => {
     const graph = await OrganizationGraphService.create(seedDatabase, organizations);
     await graph.bootstrap(ownerContext);
     await graph.bootstrap(ownerPersonalContext);
+    const prompts = await PromptMemoryStore.create(seedDatabase, organizations);
+    await prompts.bootstrap(ownerContext, await graph.listNodes(ownerContext));
+    await prompts.bootstrap(ownerPersonalContext, await graph.listNodes(ownerPersonalContext));
     const daemon = await createMassionDaemon(
       {
         ...parsed,
@@ -729,7 +751,7 @@ describe("Massion server product", () => {
           }
         | undefined;
       for (let attempt = 0; attempt < 300; attempt += 1) {
-        snapshot = (await client.snapshot()) as typeof snapshot;
+        snapshot = (await productWorkState(client)) as typeof snapshot;
         if (
           snapshot?.data?.executions?.some(
             (execution) =>
@@ -953,7 +975,7 @@ describe("Massion server product", () => {
         };
       } = {};
       for (let attempt = 0; attempt < 300; attempt += 1) {
-        snapshot = (await client.snapshot()) as typeof snapshot;
+        snapshot = (await productWorkState(client)) as typeof snapshot;
         if (
           (snapshot.data?.executions?.length ?? 0) >= 4 &&
           snapshot.data?.works?.some((work) => work.status === "completed")
@@ -1207,7 +1229,7 @@ describe("Massion server product", () => {
         };
       } = {};
       for (let attempt = 0; attempt < 300; attempt += 1) {
-        snapshot = (await client.snapshot()) as typeof snapshot;
+        snapshot = (await productWorkState(client)) as typeof snapshot;
         if (
           (snapshot.data?.executions?.length ?? 0) >= 4 &&
           snapshot.data?.works?.some((work) => work.status === "completed")
@@ -1506,7 +1528,7 @@ describe("Massion server product", () => {
         repositoryId: registered.repository.repositoryId,
         repositoryRevisionId: revision.revision.repositoryRevisionId,
         configurationId: indexConfiguration.configuration.configurationId,
-        mode: "full-access",
+        mode: "full",
         root: repositoryRoot,
         scanOptions,
       });
@@ -1532,7 +1554,7 @@ describe("Massion server product", () => {
         };
       } = {};
       for (let attempt = 0; attempt < 2400; attempt += 1) {
-        snapshot = (await client.snapshot()) as typeof snapshot;
+        snapshot = (await productWorkState(client)) as typeof snapshot;
         const completed = snapshot.data?.works?.some(
           (work) => work.status === "completed" && work.artifactIds.length > 0,
         );

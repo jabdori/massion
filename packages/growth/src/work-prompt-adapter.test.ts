@@ -15,6 +15,7 @@ describe("Growth Work PromptVersion adapter", () => {
   let store: PromptMemoryStore;
   let adapter: GrowthWorkPromptAdapter;
   let work: WorkService;
+  let graph: OrganizationGraphService;
   let organizationVersionId: string;
 
   beforeEach(async () => {
@@ -25,7 +26,7 @@ describe("Growth Work PromptVersion adapter", () => {
     const other = await identity.registerPersonalUser({ email: "prompt-work-other@example.com", displayName: "Other" });
     context = await organizations.resolveTenantContext(owner.user.user_id, owner.organization.organization_id);
     otherContext = await organizations.resolveTenantContext(other.user.user_id, other.organization.organization_id);
-    const graph = await OrganizationGraphService.create(database, organizations);
+    graph = await OrganizationGraphService.create(database, organizations);
     const bootstrapped = await graph.bootstrap(context);
     organizationVersionId = bootstrapped.version.version_id;
     store = await PromptMemoryStore.create(database, organizations);
@@ -76,6 +77,44 @@ describe("Growth Work PromptVersion adapter", () => {
     expect(firstPrompt.promptVersionId).not.toBe(secondPrompt.promptVersionId);
     expect(firstPrompt.checksum).not.toBe(secondPrompt.checksum);
     expect((await work.getWork(context, first.work.work_id)).prompt_version_id).toBe(firstPrompt.promptVersionId);
+  });
+
+  it("최신 OrganizationVersion에 추가된 Agent section을 새 Work Prompt에 고정한다", async () => {
+    const changed = await graph.execute(context, {
+      commandId: "organization-prompt-section-add",
+      expectedVersion: 1,
+      kind: "install-profile",
+      profileId: "software-engineering",
+      profileVersion: "1.0.0",
+      nodes: [
+        {
+          handle: "software-engineering.backend-specialist",
+          name: "Backend Specialist",
+          responsibility: "백엔드 구현",
+          outputs: ["변경 코드"],
+          capabilities: ["backend-engineering"],
+          parentHandle: "delivery-coordination",
+          scope: "persistent",
+          role: "operator",
+        },
+      ],
+    });
+    const created = await work.createWork(context, {
+      commandId: "organization-prompt-section-work",
+      text: "백엔드 변경",
+      surface: "test",
+      organizationVersionId: changed.version.version_id,
+    });
+    const prompt = await store.getPromptVersion(context, promptVersionId(created));
+
+    expect(prompt.sections).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          agentHandle: "software-engineering.backend-specialist",
+          instruction: expect.stringContaining("백엔드 구현"),
+        }),
+      ]),
+    );
   });
 
   it("다른 tenant와 저장된 bundle 변조를 거부한다", async () => {
