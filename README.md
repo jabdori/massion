@@ -35,7 +35,7 @@ Massion은 개인이 자기 기계에서 여러 AI 에이전트를 조직처럼 
 
 1. **실제 Tauri UAT** — 진행 중. fixture UI와 백엔드 테스트는 대체 증거가 아닙니다.
 2. **`pnpm verify`·패키지별 자동화** — 코드 회귀 근거로 사용하며, 릴리스 완료와 분리합니다.
-3. **Tauri 릴리스 후보** — ad-hoc 패키징 smoke는 있으나 동일 후보 SHA의 실제 UAT·설치 검증은 남아 있습니다.
+3. **Tauri 릴리스 후보** — `e3b5fe883`에서 실제 Tauri·Provider·workspace 파일 문맥·재시작 증분 UAT를 통과했지만, 전체 원자 UAT와 설치·서명 검증은 남아 있습니다. [증거](docs/evidence/phase-30/desktop-live-tauri-uat-2026-07-26-e3b5fe883.md)
 4. **Apple Developer ID 서명·공증·설치/업데이트/제거·복구·접근성** — 미완료입니다.
 
 ## 개발 실행

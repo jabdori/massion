@@ -48,6 +48,8 @@ gh release delete v1.0.0 --cleanup-tag --yes
 - `git ls-remote --tags origin`: 원격 태그 없음
 - 로컬 태그: 없음
 
+> 위 태그 부재는 2026-07-24 당시 관측입니다. 현재 원격 `v1.0.0` 태그는 감사 기준선으로 보존되어 있으며, 공개 Release나 다운로드 artifact를 뜻하지 않습니다.
+
 대상 커밋은 `main`과 후속 브랜치 이력에 남아 있어 코드 계보는 보존됩니다.
 
 ## 재게시 조건

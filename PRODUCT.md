@@ -56,9 +56,9 @@ Massion은 모델을 고를 수 있는 채팅 앱도, 에이전트 여러 개를
 - 일반 모드에서 승인이 필요한 실행은 사람의 결정 전까지 정지하며, 정책이 자동이면 사람을 기다리지 않습니다.
 - 여러 에이전트가 하나의 Work에 귀속된 협업방에서 메시지·handoff를 주고받고, 독립 Task는 병렬 실행됩니다.
 
-**승인됐지만 아직 구현되지 않은 v1 목표**
+**구현됐지만 최종 실측 게이트가 남은 v1 목표**
 
-- 실행 정책에 `review | automatic | full-access`를 제공합니다. 기본 `automatic`은 기존 정책·필수 승인·Workspace 경계를 유지하고, 사용자가 한 번 경고를 확인해 켜는 `full-access`만 Massion 승인과 실행 샌드박스를 우회합니다. 재시작 지속·해제·긴급정지·런타임 전파와 실제 앱 검증은 [전체 권한 설계](docs/superpowers/specs/2026-07-25-full-access-permission-design.md)가 소유합니다.
+- 실행 정책에 `review | automatic | full-access`를 제공합니다. 기본 `automatic`은 기존 정책·필수 승인·Workspace 경계를 유지하고, 사용자가 한 번 경고를 확인해 켜는 `full-access`는 사용자 책임 하에 Massion 승인과 실행 샌드박스를 우회합니다. 코드·재시작·해제 경로는 구현됐고, 전체 원자 Tauri UAT와 긴급정지 실측은 [전체 권한 설계](docs/superpowers/specs/2026-07-25-full-access-permission-design.md)가 소유합니다.
 
 **기술 제약 (설계 취향이 아니라 런타임 사실)**
 
@@ -134,9 +134,9 @@ Massion은 모델을 고를 수 있는 채팅 앱도, 에이전트 여러 개를
 - 복수 Provider 계정의 quota 소진·fallback 실증. 단일 GLM 계정만 검증됐습니다.
 - Claude 소비자 구독 실계정 UAT.
 - 접근성 실측. 코드 구현은 있으나 스크린리더 실사용 확인은 하지 않았습니다.
-- 데스크톱 자체의 사용자 UAT. 데스크톱 구현체는 커밋됐고 fixture 기반 테스트는 통과하지만, Tauri → bridge → daemon → 실제 Provider를 거치는 사용자 조작 검증은 아직 없습니다.
+- 데스크톱 자체의 전체 사용자 UAT. `e3b5fe883`에서 Tauri → bridge → daemon → 실제 Provider, workspace 파일 문맥, Knowledge, 재시작 보존의 증분 검증은 통과했지만 native picker·업데이트·제거·접근성 실측은 남아 있습니다. [최신 증거](docs/evidence/phase-30/desktop-live-tauri-uat-2026-07-26-e3b5fe883.md)
 - Workspace 자동 색인·검색·CodeGraph 결과가 실제 Work의 Representative·Strategy·Delivery 입력과 데스크톱 citation으로 이어지는 생산 경로.
-- 개인 MemoryVersion이 생산 WorkService·Agent instruction에 주입되는 경로와 실제 재시작·사용 중지 UAT.
+- 개인 MemoryVersion의 실제 자동 Work 주입·재시작·사용 중지 전체 UAT. API·코드 경로 증거는 있으나 전체 화면 시나리오는 남아 있습니다.
 - LSP client/server 구현. 현재 저장소에는 LSP 구현이나 의존성이 없으며 완료 기능으로 주장하지 않습니다.
 - 서명·공증된 앱의 깨끗한 Mac 설치·수동 업데이트·제거, 앱 교체·재시작 뒤 데이터 지속성, daemon 비정상 종료 복구, 키보드·VoiceOver 실측.
 

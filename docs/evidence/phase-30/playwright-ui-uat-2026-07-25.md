@@ -1,4 +1,4 @@
-# Playwright UI fixture 회귀 검증 — 2026-07-25
+# Playwright UI fixture 회귀 검증(실제 Tauri UAT 아님) — 2026-07-25
 
 > 후보 SHA: feat/phase-30-reconciled HEAD
 > 검증 방식: Vite 개발 서버(localhost:5173)를 Playwright로 조작. fixture 데이터 사용.
