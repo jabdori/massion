@@ -1,9 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 
 import type { TenantContext } from "@massion/identity";
+import { metricObservationChecksum } from "@massion/assurance";
 import type { GrowthGateway, GrowthTrigger } from "@massion/growth";
 
-import { GrowthWorker } from "./growth-worker.js";
+import { createGrowthEffectMetricReader, GROWTH_EFFECT_METRIC_SOURCE_ID, GrowthWorker } from "./growth-worker.js";
 
 const context: TenantContext = {
   userId: "user-1",
@@ -205,6 +206,33 @@ describe("Growth worker production loop", () => {
     );
     expect(snapshot.material.activeVersions).not.toEqual(
       expect.arrayContaining([{ kind: "prompt", versionId: "prompt-current", checksum: "a".repeat(64) }]),
+    );
+  });
+
+  it("Growth 효과 metric은 caller 점수가 아니라 terminal Assurance와 artifact에서 계산한다", async () => {
+    const completedAt = "2026-07-26T12:00:00.000Z";
+    const reader = createGrowthEffectMetricReader();
+    const input = {
+      organizationId: context.organizationId,
+      commandId: "growth-effect-metric:adoption:work:assurance",
+      workId: "work-1",
+      producer: { kind: "system_adapter" as const, id: GROWTH_EFFECT_METRIC_SOURCE_ID },
+      source: { kind: "artifact_version" as const, id: "artifact-1" },
+      expectedUnit: "ratio",
+      maximumAgeMs: 86_400_000,
+    };
+    const executor = {
+      query: vi.fn(async (sql: string) => {
+        if (sql.includes("work_verification"))
+          return [[{ verification_id: "verification-1", assurance_run_id: "assurance-1", passed: true }]];
+        if (sql.includes("artifact_version")) return [[{ checksum: "a".repeat(64) }]];
+        return [[{ assurance_run_id: "assurance-1", status: "passed", completed_at: completedAt }]];
+      }),
+    } as never;
+    const result = await reader.observe(executor, input);
+    expect(result).toMatchObject({ value: 1, unit: "ratio", measuredAt: completedAt, sourceChecksum: "a".repeat(64) });
+    expect(result.checksum).toBe(
+      metricObservationChecksum({ ...input, value: 1, unit: "ratio", measuredAt: completedAt, sourceChecksum: "a".repeat(64) }),
     );
   });
 });

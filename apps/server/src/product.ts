@@ -25,6 +25,7 @@ import {
   AssuranceBootstrap,
   AssuranceCheckStore,
   GovernanceBindingActivationAuthorizer,
+  MetricObservationStore,
 } from "@massion/assurance";
 import { ContextStore, StrategyGenerator, StrategyService } from "@massion/context-strategy";
 import {
@@ -166,7 +167,12 @@ import { MassionSubscriptionRuntimeResolver } from "./subscription-runtime-resol
 import { GovernanceSubscriptionSharingAuthorizer } from "./subscription-sharing.js";
 import { JsonOperationalLogger, MetricRegistry, MetricsHttpServer } from "./telemetry.js";
 import { seedBundledOfficialExtensions } from "./bundled-official-extensions.js";
-import { createGrowthReflectionAdapters, GrowthWorker } from "./growth-worker.js";
+import {
+  createGrowthEffectMetricReader,
+  createGrowthReflectionAdapters,
+  GROWTH_EFFECT_METRIC_SOURCE_ID,
+  GrowthWorker,
+} from "./growth-worker.js";
 
 const CORE_MODEL_ROUTES = BUILTIN_CORE_MODEL_ROUTES.map((route) => route.name);
 
@@ -593,6 +599,9 @@ export async function createMassionDaemon(
     );
     const strategy = StrategyService.create(contexts, strategyGenerator, works);
     const assurance = await AssuranceBootstrap.create(database, organizations);
+    const growthMetricObservations = new MetricObservationStore(database, organizations, {
+      systemAdapters: { [GROWTH_EFFECT_METRIC_SOURCE_ID]: createGrowthEffectMetricReader() },
+    });
     const assuranceBindings = await AssuranceBindingStore.create(
       database,
       organizations,
@@ -648,6 +657,7 @@ export async function createMassionDaemon(
       triggers: growthTriggers,
       gateway: growth,
       runner,
+      metricObservations: growthMetricObservations,
     });
     const deliveryPrerequisites: DeliveryPrerequisiteReader = {
       async getWork(context, workId) {

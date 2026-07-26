@@ -1,4 +1,5 @@
 import { redactSecrets } from "@massion/evidence";
+import { metricObservationChecksum, type MetricObservationReader, type MetricObservationStore } from "@massion/assurance";
 import type { OrganizationService, TenantContext } from "@massion/identity";
 import {
   GrowthGateway,
@@ -14,6 +15,89 @@ import {
 } from "@massion/growth";
 import type { AgentExecutionResult, StructuredAgentRunner, StructuredOutputSpec } from "@massion/runtime";
 import type { MassionDatabase } from "@massion/storage";
+
+export const GROWTH_EFFECT_METRIC_SOURCE_ID = "massion.growth.assurance-pass-rate.v1";
+
+interface GrowthEffectMetricArtifact {
+  readonly checksum: string;
+}
+
+interface GrowthEffectMetricVerification {
+  readonly verification_id: string;
+  readonly assurance_run_id: string;
+  readonly passed: boolean;
+}
+
+interface GrowthEffectMetricRun {
+  readonly assurance_run_id: string;
+  readonly status: "passed" | "failed";
+  readonly completed_at: unknown;
+}
+
+function metricIsoDateTime(value: unknown): string {
+  const raw =
+    typeof value === "string"
+      ? value
+      : value && typeof value === "object" && "toISOString" in value
+        ? String((value as { toISOString(): unknown }).toISOString())
+        : undefined;
+  if (!raw || !Number.isFinite(new Date(raw).getTime())) throw new Error("Growth Metric completedAt가 유효하지 않습니다");
+  return new Date(raw).toISOString();
+}
+
+/** 서버가 terminal Assurance와 검증 artifact를 재조회해 만드는 단일 v1 효과 지표입니다. */
+export function createGrowthEffectMetricReader(): MetricObservationReader {
+  return {
+    async observe(executor, input) {
+      if (input.producer.kind !== "system_adapter" || input.producer.id !== GROWTH_EFFECT_METRIC_SOURCE_ID)
+        throw new Error("Growth effect metric adapter가 아닙니다");
+      if (input.source.kind !== "artifact_version")
+        throw new Error("Growth effect metric source는 검증 artifact여야 합니다");
+      const [[artifacts], [verifications]] = await Promise.all([
+        executor.query<[GrowthEffectMetricArtifact[]]>(
+          "SELECT checksum FROM artifact_version WHERE organization_id = $organization_id AND work_id = $work_id AND artifact_version_id = $artifact_version_id LIMIT 1;",
+          {
+            organization_id: input.organizationId,
+            work_id: input.workId,
+            artifact_version_id: input.source.id,
+          },
+        ),
+        executor.query<[GrowthEffectMetricVerification[]]>(
+          "SELECT verification_id, assurance_run_id, passed FROM work_verification WHERE organization_id = $organization_id AND work_id = $work_id AND evidence_artifact_version_id = $artifact_version_id LIMIT 1;",
+          {
+            organization_id: input.organizationId,
+            work_id: input.workId,
+            artifact_version_id: input.source.id,
+          },
+        ),
+      ]);
+      const artifact = artifacts[0];
+      const verification = verifications[0];
+      if (!artifact || !verification) throw new Error("Growth effect metric의 artifact·verification 계보가 없습니다");
+      const [runs] = await executor.query<[GrowthEffectMetricRun[]]>(
+        "SELECT assurance_run_id, status, completed_at FROM assurance_run WHERE organization_id = $organization_id AND work_id = $work_id AND assurance_run_id = $assurance_run_id AND status IN ['passed', 'failed'] LIMIT 1;",
+        {
+          organization_id: input.organizationId,
+          work_id: input.workId,
+          assurance_run_id: verification.assurance_run_id,
+        },
+      );
+      const run = runs[0];
+      if (!run || verification.passed !== (run.status === "passed"))
+        throw new Error("Growth effect metric의 terminal Assurance verdict가 verification과 다릅니다");
+      const measuredAt = metricIsoDateTime(run.completed_at);
+      const value = run.status === "passed" ? 1 : 0;
+      const unit = "ratio";
+      return {
+        value,
+        unit,
+        measuredAt,
+        sourceChecksum: artifact.checksum,
+        checksum: metricObservationChecksum({ ...input, value, unit, measuredAt, sourceChecksum: artifact.checksum }),
+      };
+    },
+  };
+}
 
 type Row = Record<string, unknown>;
 
@@ -132,6 +216,7 @@ export interface GrowthWorkerDependencies {
   readonly triggers: GrowthTriggerStore;
   readonly gateway: GrowthGateway;
   readonly runner: StructuredAgentRunner;
+  readonly metricObservations?: Pick<MetricObservationStore, "record">;
   readonly intervalMs?: number;
 }
 
