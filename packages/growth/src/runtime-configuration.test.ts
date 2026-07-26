@@ -66,5 +66,11 @@ describe("Growth Runtime AgentConfiguration adapter", () => {
       agent_instruction_checksum: resolved.instructionChecksum,
     });
     expect(resolved.instruction).toContain("독립 리뷰");
+
+    const delegated = await reader.resolve(context, {
+      executionId: created.execution.execution_id,
+      agentHandle: "context-strategy",
+    });
+    expect(delegated.instruction).toContain("맥락");
   });
 });

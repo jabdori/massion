@@ -33,8 +33,8 @@ export class GrowthAgentConfigurationReader implements AgentConfigurationReader 
     );
     const execution = executions[0];
     if (!execution) throw new Error("Runtime Execution을 찾을 수 없습니다");
-    if (execution.agent_handle !== input.agentHandle)
-      throw new Error("Runtime Execution의 Agent handle이 일치하지 않습니다");
+    // VoltAgent 위임은 부모 Work의 Runtime Execution을 공유하면서 대상 Agent section을 실행합니다.
+    // 따라서 execution.agent_handle과 대상 section의 handle은 1:1로 같지 않을 수 있습니다.
     const [works] = await this.database.query<[WorkLineage[]]>(
       "SELECT prompt_version_id, prompt_schema_version FROM work WHERE organization_id = $organization_id AND work_id = $work_id LIMIT 1;",
       { organization_id: context.organizationId, work_id: execution.work_id },
