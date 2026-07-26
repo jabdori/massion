@@ -687,7 +687,7 @@ describe("ApplicationQueryRegistry", () => {
               reflection_run_id: "reflection-detail",
               source_reference_ids: ["work:query-work"],
               patch_json: "{}",
-              created_at: "2026-07-26T06:00:00.000Z",
+              created_at: { toISOString: () => "2026-07-26T06:00:00.000Z" },
             },
             patch: { agentHandle: "context", instruction: "근거를 먼저 확인합니다" },
             evaluation: {
@@ -717,6 +717,7 @@ describe("ApplicationQueryRegistry", () => {
       data: [
         {
           suggestionId: "suggestion-detail",
+          createdAt: "2026-07-26T06:00:00.000Z",
           revision: 2,
           sourceReferenceIds: ["work:query-work"],
           patch: { instruction: "근거를 먼저 확인합니다" },

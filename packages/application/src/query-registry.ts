@@ -497,6 +497,15 @@ function timestamp(value: unknown, label: string): string {
   if (value instanceof Date) return value.toISOString();
   if (typeof value === "string") return value;
   if (typeof value === "number" && Number.isFinite(value)) return new Date(value).toISOString();
+  if (
+    value !== null &&
+    typeof value === "object" &&
+    "toISOString" in value &&
+    typeof value.toISOString === "function"
+  ) {
+    const serialized = value.toISOString();
+    if (typeof serialized === "string") return serialized;
+  }
   throw new Error(`${label} 시각이 유효하지 않습니다`);
 }
 
