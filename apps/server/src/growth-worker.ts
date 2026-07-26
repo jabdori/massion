@@ -26,7 +26,7 @@ const SOURCE_TABLES = {
 const reflectionOutput: StructuredOutputSpec = {
   name: "growth-reflection-candidates",
   description:
-    "검증된 Work 기록에서 SuggestionCandidate 배열만 반환합니다. 각 후보는 targetKind·operation·patch·summary·rationale·expectedEffect·riskSummary·sourceReferenceIds 필드를 반드시 가져야 하며 일반 회고 문서나 임의 필드는 반환하지 않습니다.",
+    "검증된 Work 기록에서 SuggestionCandidate 배열만 반환합니다. 각 후보는 targetKind·operation·patch·summary·rationale·expectedEffect·riskSummary·sourceReferenceIds 필드를 반드시 가져야 합니다. operation은 prompt=replace-instruction, memory=add-entry, policy=replace-policy, organization=change-node 중 하나이며 일반 회고 문서나 임의 operation은 반환하지 않습니다.",
   jsonSchema: {
     type: "object",
     additionalProperties: false,
@@ -49,8 +49,16 @@ const reflectionOutput: StructuredOutputSpec = {
           ],
           properties: {
             targetKind: { type: "string", enum: ["prompt", "memory", "policy", "organization"] },
-            operation: { type: "string" },
-            patch: { type: "object", additionalProperties: { type: "string" } },
+            operation: {
+              type: "string",
+              enum: ["replace-instruction", "add-entry", "replace-policy", "change-node"],
+            },
+            patch: {
+              type: "object",
+              additionalProperties: { type: "string" },
+              description:
+                "targetKind별 patch 키는 prompt replace-instruction={agentHandle,instruction}, memory add-entry={kind,key,value}, policy replace-policy={policyId,policyText}, organization change-node={handle,responsibility}입니다.",
+            },
             summary: { type: "string", minLength: 1, maxLength: 2_000 },
             rationale: { type: "string", minLength: 1, maxLength: 2_000 },
             expectedEffect: { type: "string", minLength: 1, maxLength: 2_000 },
