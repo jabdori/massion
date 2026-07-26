@@ -19,7 +19,7 @@
 | 실제 Provider Work | `workspace.register` → `workspace.trust` → `run.start`에서 README 파일 범위를 지정; Work가 `completed`, representative/context-strategy/assurance/growth를 포함한 5개 실행이 모두 `succeeded` |
 | 파일·workspace context | 실제 workspace의 `README.md`를 등록·신뢰하고 `workspacePaths=["README.md"]`로 실행 |
 | Knowledge/RAG | `work.knowledge=ready`, README chunk reference 2개와 fresh index/evidence brief 반환 |
-| Growth | `growth.configuration.get`이 reflection enabled·auto·version 2 반환; Reflection 후 18개 suggestion이 저장됨; 현재 effect evaluation은 cohort 최소 3건 전이라 0건이며 이를 성공으로 세지 않음 |
+| Growth | `growth.configuration.get`이 reflection enabled·auto·version 2 반환; Reflection 후 18개 suggestion이 저장됨. 재시작 뒤 worker catch-up에서 1개 `adopted`, 5개 `awaiting-review`, 12개 `proposed`로 확인됨. 현재 effect evaluation은 cohort 최소 3건 전이라 0건이며 이를 성공으로 세지 않음 |
 | 전체 권한 | `automatic(revision 8) → full-access(revision 9) → automatic(revision 10)`, 회수 후 runtime permission은 governed |
 | 기억 | explicit memory put `revision 5→6`, forget `6→7`; 최종 active key는 기존 `response.format`만 남음 |
 | 조직·수신함 | organization graph snapshot은 8 persistent nodes 반환; pending approval inbox는 0건 |
