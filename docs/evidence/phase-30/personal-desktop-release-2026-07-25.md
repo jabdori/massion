@@ -10,6 +10,7 @@
 - 제품 후보 SHA: `573297642a41088a662aa58690ca16f2a43e84b6`
 - Bundle: `apps/desktop/src-tauri/target/release/bundle/macos/Massion.app`
 - 실제 Tauri·Provider·workspace·재시작 증분: [기존 Tauri/API 증거](./desktop-live-tauri-uat-2026-07-26-e3b5fe883.md)
+- 최신 실제 Provider Work·재시작 보존: [후보 증거](./desktop-live-provider-restart-uat-2026-07-27-573297642.md)
 - 최신 native folder/file panel 증분: [제품 후보 증거](./desktop-live-native-file-panel-uat-2026-07-26-573297642.md)
 
 ## 릴리스 gate 상태
