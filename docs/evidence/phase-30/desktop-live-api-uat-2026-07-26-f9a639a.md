@@ -28,6 +28,9 @@
 | API-12 | 앱·daemon을 종료하고 같은 후보를 재실행 | 새 bootstrap 뒤 Workspace 1건·`trusted`, Work `completed`, 지식 `ready`, 검증 통과, 실행 원장과 Growth suggestion이 보존 |
 | API-13 | 재시작 뒤 자율성 조회 | `automatic`, revision 4, `governed`가 그대로 복원 |
 | API-14 | 재시작 뒤 Growth·수신함 조회 | Growth suggestion 5건과 pending approval 0건을 실제 저장소에서 재조회 |
+| API-15 | 명시적 개인 기억 저장 후 새 Work 실행 | `growth.memory.put=succeeded`, revision 1; 후속 실제 Provider Work가 `completed`·Assurance 통과 |
+| API-16 | 앱·daemon 재시작 후 개인 기억과 후속 Work 조회 | 같은 memory revision 1, `explicit` authority, key 목록과 Work `completed`·지식 `ready`가 복원 |
+| API-17 | `앞으로 사용하지 않음`으로 기억 비활성화 | `growth.memory.forget=succeeded`, 새 revision 2가 활성화되고 이전 key는 active entries에서 제거됨 |
 
 ## 실제 실패와 수정
 
@@ -51,7 +54,7 @@ completed Work: completed / terminal
 - Computer Use 런타임 초기화가 `@oai/cdp-browser-backend` 누락으로 실패하여 실제 Tauri 화면·native picker·접근성 트리 증거를 만들지 못했습니다.
 - 따라서 UAT-01~UAT-16, UAT-K01~K04, UAT-G01~G02, UAT-P01~P02 전체 완료로 표시하지 않습니다.
 - full-access에서 실제 파일 생성·삭제, 프로세스·네트워크·Tool 호출을 수행한 P01과 해제 중 실행 중단·긴급 정지를 수행한 P02는 별도 검증이 남아 있습니다.
-- 개인 기억 저장·재시작·앞으로 사용하지 않음의 실제 화면/새 Work 계보는 별도 UAT가 남아 있습니다.
+- 개인 기억의 실제 화면·새 Work에서 memory version ID가 노출되는 UI 계보는 별도 UAT가 남아 있습니다. API 경계에서는 저장·재시작·forget을 통과했습니다.
 - 공개 Release는 생성하지 않았고, 기존 공개 `v1.0.0` 제거 상태도 유지합니다.
 
 이 기록은 실제 동일 후보 SHA의 통합 관측을 남기는 문서이며, 화면 UAT 제한을 성공으로 소급하지 않습니다.
