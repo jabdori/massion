@@ -109,7 +109,7 @@
 ### 03-5 — 서버 생산 조립과 Desktop 출처·기억 UI
 
 - `8ef9a9816` — DesktopService가 typed `work.knowledge`를 조회하고 Work 세부 정보에 `지식` 탭을 추가했습니다. ready/no-match/blocked/not-applicable 상태는 사람이 읽는 문구로 분리했고, ready reference만 Core Office 공유 출처로 이동합니다.
-- 실제 후보 `e3b5fe883` 번들에서 workspace의 `README.md`를 첨부한 Work를 실행하고 `work.knowledge=ready`, README reference 2개, 완료 Work·재시작 보존을 확인했습니다. 후속 후보 `40a6ffbc8`에서는 `workspaceId`만 지정한 디렉터리 문맥 Work도 완료했으며, 디렉터리를 파일 첨부 경로로 잘못 넣은 입력은 `APP_WORKSPACE_PATH_VALIDATION`으로 반환합니다. 전체 K01~K04와 native picker는 아직 대기 중입니다. [최신 workspace 증거](../../../evidence/phase-30/desktop-live-workspace-directory-uat-2026-07-26-40a6ffbc8.md)
+- 실제 후보 `e3b5fe883` 번들에서 workspace의 `README.md`를 첨부한 Work를 실행하고 `work.knowledge=ready`, README reference 2개, 완료 Work·재시작 보존을 확인했습니다. 후속 후보 `40a6ffbc8`에서는 `workspaceId`만 지정한 디렉터리 문맥 Work도 완료했으며, 디렉터리를 파일 첨부 경로로 잘못 넣은 입력은 `APP_WORKSPACE_PATH_VALIDATION`으로 반환합니다. 최신 후보 `573297642`에서는 실제 Provider Work의 `work.knowledge=ready`, reference 2개와 재시작 후 동일 지식·기억 계보 보존을 확인했습니다. 전체 K01~K04와 native picker는 아직 대기 중입니다. [workspace 경계 증거](../../../evidence/phase-30/desktop-live-workspace-directory-uat-2026-07-26-40a6ffbc8.md) · [최신 Provider·재시작 증거](../../../evidence/phase-30/desktop-live-provider-restart-uat-2026-07-27-573297642.md)
 
 | 검증 | 결과 |
 |---|---|
