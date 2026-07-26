@@ -378,6 +378,12 @@ THEN {
 `,
 );
 
+// 관찰이 성공으로 끝난 adoption은 다음 개선을 막지 않도록 terminal retained 상태로 닫습니다.
+export const GROWTH_PRODUCTION_EFFECT_LINEAGE_MIGRATION = defineMigration(
+  "0110-growth-production-effect-lineage",
+  `DEFINE FIELD OVERWRITE status ON growth_adoption_run TYPE string ASSERT $value IN ['awaiting-review', 'observing', 'retained', 'rejected', 'reverted'];`,
+);
+
 export const GROWTH_EVALUATION_MIGRATION = defineMigration(
   "0057-growth-evaluation",
   `

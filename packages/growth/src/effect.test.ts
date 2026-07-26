@@ -90,4 +90,32 @@ describe("Growth effect comparison", () => {
     expect(adoptions[0]?.exposure_status).toBe("suspended");
     await expect(database.query("DELETE growth_effect_observation;")).rejects.toThrow("immutable");
   });
+
+  it("improved 관찰은 adoption을 retained로 닫고 다음 개선 guard를 해제한다", async () => {
+    database = await createDatabase({ url: "mem://", namespace: "massion", database: crypto.randomUUID() });
+    const identity = await IdentityService.create(database);
+    const organizations = await OrganizationService.create(database);
+    const owner = await identity.registerPersonalUser({ email: "effect-retained@example.com", displayName: "Effect" });
+    const context = await organizations.resolveTenantContext(owner.user.user_id, owner.organization.organization_id);
+    await applyMigrations(database, [GROWTH_ADOPTION_MIGRATION]);
+    await database.query(
+      "CREATE growth_adoption_run CONTENT { adoption_id: 'adoption-retained', organization_id: $organization_id, suggestion_id: 'suggestion-retained', target_kind: 'prompt', evaluation_run_id: 'evaluation-retained', evaluation_input_hash: $hash, configuration_version_id: 'config-1', runtime_execution_id: 'runtime-1', before_version_id: 'prompt-v1', before_checksum: $hash, after_version_id: 'prompt-v2', after_checksum: $hash, governance_decision_id: 'decision-1', approval_id: NONE, status: 'observing', command_id: 'adopt-retained', request_hash: $hash, created_by_user_id: $user_id, active_target_guard: $guard, created_at: time::now(), updated_at: time::now() }; CREATE growth_effect_baseline CONTENT { baseline_id: 'baseline-retained', organization_id: $organization_id, adoption_id: 'adoption-retained', suggestion_id: 'suggestion-retained', target_kind: 'prompt', target_version_id: 'prompt-v2', status: 'pending', metrics_json: '{}', checksum: $hash, created_at: time::now() };",
+      {
+        organization_id: context.organizationId,
+        user_id: context.userId,
+        hash: "b".repeat(64),
+        guard: `${context.organizationId}:prompt`,
+      },
+    );
+    const store = await GrowthEffectStore.create(database, organizations);
+    await store.captureBaseline(context, { commandId: "baseline-retained", adoptionId: "adoption-retained", sample: sample(0.7) });
+    await expect(
+      store.observe(context, { commandId: "observe-retained", adoptionId: "adoption-retained", sample: sample(0.82) }),
+    ).resolves.toMatchObject({ result: "improved" });
+    const [adoptions] = await database.query<[Array<{ status: string; active_target_guard?: string }>]>(
+      "SELECT status, active_target_guard FROM growth_adoption_run WHERE organization_id = $organization_id AND adoption_id = 'adoption-retained';",
+      { organization_id: context.organizationId },
+    );
+    expect(adoptions[0]).toEqual({ status: "retained", active_target_guard: undefined });
+  });
 });

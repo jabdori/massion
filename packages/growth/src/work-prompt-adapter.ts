@@ -3,7 +3,11 @@ import { applyMigrations, type MassionDatabase, type QueryExecutor } from "@mass
 import type { PromptVersionResolver, ResolveWorkPromptInput, ResolvedWorkPrompt } from "@massion/work";
 
 import { canonicalGrowthJson, growthChecksum, type PromptMemoryStore } from "./prompt-memory.js";
-import { GROWTH_ADOPTION_MIGRATION, GROWTH_EFFECT_REVERT_MIGRATION } from "./schema.js";
+import {
+  GROWTH_ADOPTION_MIGRATION,
+  GROWTH_EFFECT_REVERT_MIGRATION,
+  GROWTH_PRODUCTION_EFFECT_LINEAGE_MIGRATION,
+} from "./schema.js";
 
 interface ChecksumRecord {
   readonly checksum: string;
@@ -21,7 +25,11 @@ export class GrowthWorkPromptAdapter implements PromptVersionResolver {
     organizations: OrganizationService,
     prompts: PromptMemoryStore,
   ): Promise<GrowthWorkPromptAdapter> {
-    await applyMigrations(database, [GROWTH_ADOPTION_MIGRATION, GROWTH_EFFECT_REVERT_MIGRATION]);
+    await applyMigrations(database, [
+      GROWTH_ADOPTION_MIGRATION,
+      GROWTH_EFFECT_REVERT_MIGRATION,
+      GROWTH_PRODUCTION_EFFECT_LINEAGE_MIGRATION,
+    ]);
     return new GrowthWorkPromptAdapter(database, organizations, prompts);
   }
 

@@ -11,7 +11,7 @@ import type { GrowthSuggestionRecord, SuggestionTargetKind } from "./reflection.
 import { GROWTH_ADOPTION_MIGRATION } from "./schema.js";
 import { GrowthTargetRegistry } from "./targets.js";
 
-export type GrowthAdoptionStatus = "awaiting-review" | "observing" | "rejected" | "reverted";
+export type GrowthAdoptionStatus = "awaiting-review" | "observing" | "retained" | "rejected" | "reverted";
 
 export function decideAdoptionTransition(input: {
   readonly mode: "review" | "auto";

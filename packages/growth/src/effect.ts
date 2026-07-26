@@ -4,7 +4,7 @@ import type { OrganizationService, TenantContext } from "@massion/identity";
 import { applyMigrations, type MassionDatabase, type QueryExecutor } from "@massion/storage";
 
 import { canonicalGrowthJson, growthChecksum } from "./prompt-memory.js";
-import { GROWTH_EFFECT_REVERT_MIGRATION } from "./schema.js";
+import { GROWTH_EFFECT_REVERT_MIGRATION, GROWTH_PRODUCTION_EFFECT_LINEAGE_MIGRATION } from "./schema.js";
 
 export interface GrowthEffectContract {
   readonly strategyVersionId: string;
@@ -121,7 +121,7 @@ export class GrowthEffectStore {
     database: MassionDatabase,
     organizations: OrganizationService,
   ): Promise<GrowthEffectStore> {
-    await applyMigrations(database, [GROWTH_EFFECT_REVERT_MIGRATION]);
+    await applyMigrations(database, [GROWTH_EFFECT_REVERT_MIGRATION, GROWTH_PRODUCTION_EFFECT_LINEAGE_MIGRATION]);
     return new GrowthEffectStore(database, organizations);
   }
 
@@ -212,7 +212,13 @@ export class GrowthEffectStore {
         },
       );
       if (!created[0]) throw new Error("Growth effect evaluation 생성 결과가 없습니다");
-      if (comparison.result === "degraded")
+      if (comparison.result === "improved" || comparison.result === "stable") {
+        const [retained] = await executor.query<[Array<{ adoption_id: string }>]>(
+          "UPDATE growth_adoption_run SET status = 'retained', active_target_guard = NONE, exposure_status = 'active', updated_at = time::now() WHERE organization_id = $organization_id AND adoption_id = $adoption_id AND status = 'observing' RETURN AFTER; UPDATE growth_effect_baseline SET status = 'closed' WHERE organization_id = $organization_id AND adoption_id = $adoption_id AND status = 'captured';",
+          { organization_id: context.organizationId, adoption_id: input.adoptionId },
+        );
+        if (!retained[0]) throw new Error("Growth Adoption을 retained 상태로 전이하지 못했습니다");
+      } else if (comparison.result === "degraded")
         await executor.query(
           "UPDATE growth_adoption_run SET exposure_status = 'suspended', updated_at = time::now() WHERE organization_id = $organization_id AND adoption_id = $adoption_id AND status = 'observing';",
           { organization_id: context.organizationId, adoption_id: input.adoptionId },
