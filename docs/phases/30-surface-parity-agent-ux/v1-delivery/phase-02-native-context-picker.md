@@ -1,6 +1,6 @@
 # 페이즈 02 — 네이티브 폴더·파일 선택
 
-> **상태:** 코드 검증 완료 · native UAT 대기
+> **상태:** 실제 Tauri folder/file panel 호출·취소 증분 확인 · 파일 선택 완료와 전체 native UAT 대기
 > **시작 기준:** 2026-07-25 제품 통합 계획 Task 3
 > **다음 게이트:** 지식 그래프·검색·기억의 업무 연결
 
@@ -22,7 +22,7 @@
 
 - 프로젝트는 Tauri 2.11 계열과 Rust `tauri = "2"`를 사용합니다.
 - 공식 Tauri dialog 문서는 JavaScript `open({ directory, multiple })`, Rust plugin 등록, `dialog:allow-open` 권한을 요구합니다.
-- 현재 데스크톱은 Task 2의 typed 경로 fallback만 갖고 있고 native picker 구현은 없습니다.
+- 현재 데스크톱은 `@tauri-apps/plugin-dialog` 기반 native folder/file picker를 갖고 있습니다. 단, 실제 파일 선택 결과를 같은 workspace의 Work까지 연결한 증거는 아직 없습니다.
 
 ## 구현과 커밋
 
