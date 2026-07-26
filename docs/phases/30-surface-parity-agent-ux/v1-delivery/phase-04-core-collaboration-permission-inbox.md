@@ -43,7 +43,7 @@ Core 파이프라인, 권한 모드, 수신함 UX, 메모리 주입 경로가 �
 - 서버의 throw-only Reflection adapter를 실제 routed runner·source verifier·runtime verifier로 교체했습니다.
 - 로컬 bootstrap 뒤 worker timer를 시작하고 daemon drain에서 worker를 먼저 닫도록 연결했습니다.
 - 실제 provider 출력 검증 실패가 background rejection으로 daemon을 종료시키지 않도록 worker tick 경계를 격리했습니다.
-- 후보 `e3b5fe883` 실제 Work에서 Growth execution이 `succeeded`했고, `growth.configuration.get`·suggestions·memories를 조회했습니다. effect cohort 최소 조건 미달과 전체 채택·복원 UAT는 남아 있습니다.
+- 후보 `e3b5fe883` 실제 Work에서 Growth execution이 `succeeded`했고, `growth.configuration.get`·suggestions·memories를 조회했습니다. 후속 후보 `40a6ffbc8`에서는 workspace 디렉터리 문맥 Work와 첨부 경계 검증도 실제 bundled 앱에서 확인했습니다. effect cohort 최소 조건 미달과 전체 채택·복원 UAT는 남아 있습니다.
 
 ### 04-4 — 수신함 UX 정합
 
@@ -56,4 +56,4 @@ Core 파이프라인, 권한 모드, 수신함 UX, 메모리 주입 경로가 �
 
 ### 04-5 — 전체 빌드 + 데스크톱 UAT
 
-후보 `e3b5fe883`에서 실제 Tauri·Provider·workspace 파일 문맥·Knowledge·Growth·full-access·재시작 증분은 통과했습니다. 전체 원자 UAT, native picker, 평가·채택·효과·복원, 서명·공증·설치 게이트는 남아 있으므로 04-5와 개인용 v1 완료를 전체 통과로 표시하지 않습니다. [최신 증거](../../../evidence/phase-30/desktop-live-tauri-uat-2026-07-26-e3b5fe883.md)
+후보 `40a6ffbc8`에서 실제 Tauri·Provider·workspace 파일·디렉터리 문맥·Knowledge·Growth·full-access·재시작 증분은 통과했습니다. 전체 원자 UAT, native picker, 평가·채택·효과·복원, 서명·공증·설치 게이트는 남아 있으므로 04-5와 개인용 v1 완료를 전체 통과로 표시하지 않습니다. [최신 workspace 증거](../../../evidence/phase-30/desktop-live-workspace-directory-uat-2026-07-26-40a6ffbc8.md)
