@@ -41,6 +41,7 @@ Core 파이프라인, 권한 모드, 수신함 UX, 메모리 주입 경로가 �
 
 - 서버의 throw-only Reflection adapter를 실제 routed runner·source verifier·runtime verifier로 교체했습니다.
 - 로컬 bootstrap 뒤 worker timer를 시작하고 daemon drain에서 worker를 먼저 닫도록 연결했습니다.
+- 실제 provider 출력 검증 실패가 background rejection으로 daemon을 종료시키지 않도록 worker tick 경계를 격리했습니다.
 - 이 증분은 코드·typecheck와 실제 앱의 provider 연결/Work 실행 시작까지 확인했지만, 완료 Records에서 제안이 생성되는 실제 Growth UAT는 아직 통과하지 않았습니다.
 
 ### 04-4 — 수신함 UX 정합
