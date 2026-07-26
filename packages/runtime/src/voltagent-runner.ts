@@ -47,6 +47,8 @@ export interface SessionRenewalClock {
 
 export interface VoltAgentRunnerOptions {
   readonly sessionRenewalClock?: SessionRenewalClock;
+  /** 테스트에서만 짧게 검증할 수 있는 Provider 응답 상한입니다. 운영 기본값은 120초입니다. */
+  readonly agentRuntimeTimeoutMs?: number;
   readonly deltaObserver?: ExecutionDeltaObserver;
   readonly subscriptionReceipts?: Pick<
     SubscriptionExecutionReceiptCoordinator,
@@ -201,8 +203,8 @@ function isModelUnavailable(error: unknown): boolean {
 }
 
 /** 모든 모델 호출은 상위 취소를 보존하면서도 외부 응답 대기를 유한하게 제한합니다. */
-function modelAbortSignal(parent: AbortSignal): AbortSignal {
-  return AbortSignal.any([parent, AbortSignal.timeout(MODEL_TOTAL_TIMEOUT_MS)]);
+function modelAbortSignal(parent: AbortSignal, timeoutMs = MODEL_TOTAL_TIMEOUT_MS): AbortSignal {
+  return AbortSignal.any([parent, AbortSignal.timeout(timeoutMs)]);
 }
 
 export function normalizeVoltAgentStreamPart(
@@ -927,6 +929,9 @@ export class VoltAgentRunner implements AgentRunner, StructuredAgentRunner {
   ): Promise<RoutedAgentRuntimeResult> {
     this.agent(context, input.agentHandle);
     const renewal = this.startSessionRenewal(executionId, lease, abortSignal);
+    // 일반 모델과 동일하게 Provider가 응답하지 않는 구독 실행도 유한하게 종료합니다.
+    // ponytail: 고정 120초 상한, Provider별 timeout 정책이 필요해질 때 실행 정책 계보와 함께 분리합니다.
+    const boundedSignal = modelAbortSignal(renewal.signal, this.options.agentRuntimeTimeoutMs);
     try {
       let result: RoutedAgentRuntimeResult;
       if (output) {
@@ -934,11 +939,11 @@ export class VoltAgentRunner implements AgentRunner, StructuredAgentRunner {
           throw new Error("선택한 Agent runtime은 구조화 출력을 지원하지 않습니다");
         }
         result = await lease.executor.executeStructured(
-          { executionId, prompt: inputPrompt, abortSignal: renewal.signal },
+          { executionId, prompt: inputPrompt, abortSignal: boundedSignal },
           output,
         );
       } else {
-        result = await lease.executor.execute({ executionId, prompt: inputPrompt, abortSignal: renewal.signal });
+        result = await lease.executor.execute({ executionId, prompt: inputPrompt, abortSignal: boundedSignal });
       }
       const lateRenewalError = renewal.error();
       if (lateRenewalError) throw lateRenewalError;

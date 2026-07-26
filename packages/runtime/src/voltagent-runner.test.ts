@@ -396,6 +396,33 @@ describe("VoltAgent AgentRunner", () => {
     );
   });
 
+  it("응답하지 않는 Agent runtime은 공통 모델 timeout 뒤 failed로 종료된다", async () => {
+    const routed = agentLease({
+      outcome: "completed",
+      executionId: "provider-execution-timeout",
+      sessionId: "provider-session-timeout",
+      value: "사용되지 않음",
+    });
+    routed.executor.execute = vi.fn(
+      async ({ abortSignal }) =>
+        await new Promise<RoutedAgentRuntimeResult>((_resolve, reject) => {
+          abortSignal?.addEventListener("abort", () => reject(abortSignal.reason), { once: true });
+        }),
+    );
+    const runner = new VoltAgentRunner(
+      voltAgent,
+      store,
+      { acquire: vi.fn().mockResolvedValue(routed) },
+      registry,
+      undefined,
+      undefined,
+      { agentRuntimeTimeoutMs: 1 },
+    );
+
+    await expect(runner.execute(context, input())).resolves.toMatchObject({ status: "failed" });
+    expect(routed.fail).toHaveBeenCalledWith(expect.objectContaining({ signal: { kind: "timeout" } }));
+  });
+
   it("구독 승인 ID만 받아 정본 결정을 소비한 뒤 같은 lease를 terminal까지 재개한다", async () => {
     const routed = agentLease(
       {
