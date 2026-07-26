@@ -6,7 +6,7 @@ import type { GrowthConfigurationStore } from "./configuration.js";
 import type { ConfigureGrowthInput } from "./contracts.js";
 import type { GrowthEffectSample, GrowthEffectStore } from "./effect.js";
 import type { GrowthEvaluationStore } from "./evaluation.js";
-import type { PromptMemoryStore } from "./prompt-memory.js";
+import type { ForgetExplicitMemoryInput, PromptMemoryStore, PutExplicitMemoryInput } from "./prompt-memory.js";
 import type { ListGrowthSuggestionsInput, ReflectionService } from "./reflection.js";
 import type { GrowthRecoveryService } from "./recovery.js";
 import type { GrowthRevertService, RevertGrowthAdoptionInput } from "./revert.js";
@@ -42,6 +42,15 @@ export class GrowthGateway {
   }
   public async getActiveMemories(context: TenantContext, requesterUserId?: string) {
     return await this.dependencies.prompts.getActiveMemories(context, requesterUserId);
+  }
+  public async getActiveExplicitMemory(context: TenantContext) {
+    return await this.dependencies.prompts.getActiveExplicitMemory(context);
+  }
+  public async putExplicitMemory(context: TenantContext, input: PutExplicitMemoryInput) {
+    return await this.dependencies.prompts.putExplicitMemory(context, input);
+  }
+  public async forgetExplicitMemory(context: TenantContext, input: ForgetExplicitMemoryInput) {
+    return await this.dependencies.prompts.forgetExplicitMemory(context, input);
   }
   public async getActiveEvaluationStrategy(context: TenantContext) {
     return await this.dependencies.evaluations.getActiveStrategy(context);

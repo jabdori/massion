@@ -7,6 +7,7 @@ export { GrowthEffectStore } from "./effect.js";
 export { GrowthEvaluationStore } from "./evaluation.js";
 export { GrowthGovernanceAdapter } from "./governance-adapter.js";
 export { GrowthWorkPromptAdapter } from "./work-prompt-adapter.js";
+export { GrowthAgentConfigurationReader } from "./runtime-configuration.js";
 export { PromptMemoryStore } from "./prompt-memory.js";
 export { ReflectionService } from "./reflection.js";
 export { GrowthRecoveryService } from "./recovery.js";
@@ -25,8 +26,10 @@ export type { GrowthEffectComparison, GrowthEffectContract, GrowthEffectSample }
 export type { GrowthEvaluationOutcome, GrowthEvaluationRun, GrowthEvaluationStrategyVersion } from "./evaluation.js";
 export type {
   EffectivePromptVersion,
+  ForgetExplicitMemoryInput,
   MemoryEntry,
   MemoryVersion,
+  PutExplicitMemoryInput,
   PromptAgentSection,
   PromptDefinitionVersion,
 } from "./prompt-memory.js";

@@ -71,7 +71,7 @@ export interface ApplicationQueryDependencies {
     GrowthGateway,
     | "resolveConfiguration"
     | "getActiveEvaluationStrategy"
-    | "getActiveMemories"
+    | "getActiveExplicitMemory"
     | "listSuggestions"
     | "listEffectEvaluations"
   >;
@@ -1251,29 +1251,29 @@ export function registerApplicationQueries(
       operation: "growth.memories",
       requiredScopes: ["growth:read"],
       allowedRoles: EVERY_ROLE,
-      validate: (value) => object(value, ["requesterUserId"]),
-      handle: async (context, value) => {
-        const requesterUserId =
-          value.requesterUserId === undefined ? context.userId : text(value.requesterUserId, "requesterUserId");
-        if (requesterUserId !== context.userId && context.role === "member") {
-          throw new ApplicationError({
-            category: "authorization",
-            severity: "error",
-            retryable: false,
-            userMessage: "다른 사용자의 기억을 조회할 권한이 없습니다",
-            operatorCode: "APP_MEMORY_USER_REQUIRED",
-          });
-        }
-        return ((await dependencies.growth?.getActiveMemories(context, requesterUserId)) ?? []).map((memory) => ({
-          memoryVersionId: memory.memoryVersionId,
-          scope: memory.scope,
-          subjectId: memory.subjectId,
-          version: memory.version,
-          status: memory.status,
-          entryKeys: memory.entries.map((entry) => entry.key),
-          sourceReferenceIds: [...new Set(memory.entries.flatMap((entry) => entry.sourceReferenceIds))].sort(),
-          checksum: memory.checksum,
-        }));
+      validate: (value) => object(value, []),
+      handle: async (context) => {
+        const memory = await dependencies.growth?.getActiveExplicitMemory(context);
+        if (memory === undefined) return [];
+        return [
+          {
+            memoryVersionId: memory.memoryVersionId,
+            scope: "user",
+            subjectId: context.userId,
+            version: memory.version,
+            revision: memory.version,
+            status: memory.status,
+            entryKeys: memory.entries.map((entry) => entry.key),
+            sourceReferenceIds: [...new Set(memory.entries.flatMap((entry) => entry.sourceReferenceIds))].sort(),
+            checksum: memory.checksum,
+            entries: memory.entries.map((entry) => ({
+              key: entry.key,
+              kind: entry.kind,
+              value: entry.value,
+              authority: "explicit" as const,
+            })),
+          },
+        ];
       },
     });
     registry.register({

@@ -339,6 +339,19 @@ export interface WorkKnowledgeViewV1 {
   readonly failureReason?: string;
 }
 
+export interface ExplicitMemoryEntryViewV1 {
+  readonly key: string;
+  readonly kind: "fact" | "preference" | "procedure";
+  readonly value: string;
+  readonly authority: "explicit";
+}
+
+export interface ExplicitMemoryViewV1 {
+  readonly memoryVersionId: string;
+  readonly revision: number;
+  readonly entries: readonly ExplicitMemoryEntryViewV1[];
+}
+
 export interface ApplicationQueryMapV1 {
   readonly "workspace.list": { readonly payload: Record<string, never>; readonly data: readonly WorkspaceViewV1[] };
   readonly "workspace.get": { readonly payload: { readonly workspaceId: string }; readonly data: WorkspaceViewV1 };
@@ -404,6 +417,7 @@ export interface ApplicationQueryMapV1 {
     readonly payload: { readonly workId: string };
     readonly data: WorkKnowledgeViewV1;
   };
+  readonly "growth.memories": { readonly payload: Record<string, never>; readonly data: readonly ExplicitMemoryViewV1[] };
   readonly "organization.graph.snapshot": {
     readonly payload: Record<string, never>;
     readonly data: OrganizationGraphSnapshotV1;
@@ -441,6 +455,10 @@ export interface ApplicationCommandMapV1 {
     };
   };
   readonly "governance.autonomy.set": { readonly payload: { readonly mode: "automatic" | "review" | "full" } };
+  readonly "growth.memory.put": {
+    readonly payload: { readonly key: string; readonly kind: "fact" | "preference" | "procedure"; readonly value: string };
+  };
+  readonly "growth.memory.forget": { readonly payload: { readonly key: string } };
 }
 
 export interface ApplicationEventV1 {

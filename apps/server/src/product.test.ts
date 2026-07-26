@@ -590,7 +590,7 @@ describe("Massion server product", () => {
     }
   }, 30_000);
 
-  it("초기 설치에서 onboarding이 시드한 조직 메모리와 빈 제안·효과를 반환한다", async () => {
+  it("초기 설치에서 개인 기억은 비어 있고 제안·효과를 반환한다", async () => {
     const workspaceRoot = await mkdtemp(join(tmpdir(), "massion-growth-query-wiring-"));
     const parsed = parseServerConfig({
       MASSION_TOKEN_KEY: Buffer.alloc(32, 71).toString("base64url"),
@@ -615,19 +615,7 @@ describe("Massion server product", () => {
       await expect(client.query("growth.configuration.get", {})).resolves.toMatchObject({
         data: { reflectionEnabled: true, adoptionMode: "review" },
       });
-      // onboarding(growth.start)이 빈 entries로 조직 메모리 정본을 시드한다.
-      await expect(client.query("growth.memories", {})).resolves.toMatchObject({
-        data: [
-          {
-            scope: "organization",
-            subjectId: "organization",
-            version: 1,
-            status: "active",
-            entryKeys: [],
-            sourceReferenceIds: [],
-          },
-        ],
-      });
+      await expect(client.query("growth.memories", {})).resolves.toMatchObject({ data: [] });
       await expect(client.query("growth.suggestions", { limit: 50 })).resolves.toMatchObject({ data: [] });
       await expect(client.query("growth.effects", { limit: 50 })).resolves.toMatchObject({ data: [] });
     } finally {
@@ -1580,7 +1568,7 @@ describe("Massion server product", () => {
     }
   }, 90_000);
 
-  it("clean install에서 Z.AI Coding Plan connect-model 하나로 Core route·ready 상태·실제 run을 완성한다", async () => {
+  it("clean install에서 Z.AI Core 실행의 RuntimeExecution에 개인 기억 계보를 고정한다", async () => {
     const plan = {
       objective: "Z.AI 자동 Core 경로 검증",
       summary: "구독 연결 직후 Core 실행 경로를 검증한다",
@@ -1670,12 +1658,16 @@ describe("Massion server product", () => {
       MASSION_SOFTWARE_WORKSPACE_ROOT: workspaceRoot,
       MASSION_CONNECTOR_ROOT: join(workspaceRoot, "connectors"),
     });
-    const daemon = await createMassionDaemon({
-      ...parsed,
-      server: { ...parsed.server, port: 0 },
-      metrics: { ...parsed.metrics, port: 0 },
-      registry: { ...parsed.registry, port: 0 },
-    });
+    const database = await createDatabase(parsed.database);
+    const daemon = await createMassionDaemon(
+      {
+        ...parsed,
+        server: { ...parsed.server, port: 0 },
+        metrics: { ...parsed.metrics, port: 0 },
+        registry: { ...parsed.registry, port: 0 },
+      },
+      { database },
+    );
     const secret = "zai-product-secret-never-returned";
     const address = await daemon.start();
     try {
@@ -1683,6 +1675,15 @@ describe("Massion server product", () => {
         commandId: "zai-core-bootstrap-command-0001",
       })) as { access: { token: string } };
       const client = new ApplicationHttpClient({ baseUrl: address.url, token: initialized.access.token });
+      const memory = (await client.command({
+        schemaVersion: "massion.application.v1",
+        commandId: "zai-core-memory-command-0001",
+        correlationId: "zai-core-memory-correlation-0001",
+        operation: "growth.memory.put",
+        expectedRevision: 0,
+        payload: { key: "answer-style", kind: "preference", value: "첫 문장에 결론을 먼저 쓴다" },
+      })) as { data: { memoryVersionId: string; revision: number } };
+      expect(memory.data).toMatchObject({ memoryVersionId: expect.any(String), revision: 1 });
       const connected = await client.command({
         schemaVersion: "massion.application.v1",
         commandId: "zai-core-connect-command-0001",
@@ -1708,38 +1709,24 @@ describe("Massion server product", () => {
       await expect(client.status()).resolves.toMatchObject({
         data: { status: "ready", mode: "local", modelRuntime: "ready" },
       });
-      await client.command({
+      const accepted = (await client.command({
         schemaVersion: "massion.application.v1",
         commandId: "zai-core-run-command-0001",
         correlationId: "zai-core-run-correlation-0001",
         operation: "run.start",
         payload: { request: { text: "자동 Z.AI Core 경로를 검증해주세요" } },
-      });
-      let snapshot: {
-        data?: {
-          works?: readonly { status: string }[];
-          executions?: readonly { agentHandle: string; status: string }[];
-        };
-      } = {};
-      for (let attempt = 0; attempt < 300; attempt += 1) {
-        snapshot = (await client.snapshot()) as typeof snapshot;
-        if (
-          (snapshot.data?.executions?.length ?? 0) >= 4 &&
-          snapshot.data?.works?.some((work) => work.status === "completed")
-        ) {
-          break;
-        }
-        await new Promise((resolve) => setTimeout(resolve, 10));
+      })) as { data: { runId: string } };
+      let run = (await client.query("run.get", { runId: accepted.data.runId })) as {
+        data?: { status?: string; workId?: string };
+      };
+      for (let attempt = 0; attempt < 600; attempt += 1) {
+        if (run.data?.status === "completed" && typeof run.data.workId === "string") break;
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        run = (await client.query("run.get", { runId: accepted.data.runId })) as typeof run;
       }
-      expect(snapshot.data?.works).toEqual([expect.objectContaining({ status: "completed" })]);
-      expect(snapshot.data?.executions).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({ agentHandle: "representative", status: "succeeded" }),
-          expect.objectContaining({ agentHandle: "context-strategy", status: "succeeded" }),
-          expect.objectContaining({ agentHandle: "delivery-coordination", status: "succeeded" }),
-          expect.objectContaining({ agentHandle: "assurance", status: "succeeded" }),
-        ]),
-      );
+      expect(run.data).toMatchObject({ status: "completed", workId: expect.any(String) });
+      const workId = run.data?.workId;
+      if (!workId) throw new Error("완료된 Z.AI Core Work ID가 없습니다");
       expect(
         upstreamRequests.filter((request) => request.url.endsWith("/chat/completions")).length,
       ).toBeGreaterThanOrEqual(4);
@@ -1747,6 +1734,22 @@ describe("Massion server product", () => {
       expect(upstreamRequests.some((request) => request.responseFormatType === "json_object")).toBe(true);
       expect(upstreamRequests.some((request) => request.includesOutputSchema)).toBe(true);
       expect(upstreamRequests.every((request) => request.authorization === `Bearer ${secret}`)).toBe(true);
+      const [executions] = await database.query<
+        [{ agent_handle: string; status: string; memory_version_ids?: readonly string[] }[]]
+      >(
+        "SELECT agent_handle, status, memory_version_ids FROM runtime_execution WHERE work_id = $work_id;",
+        { work_id: workId },
+      );
+      expect(executions).toHaveLength(4);
+      expect(executions).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ agent_handle: "representative", status: "succeeded" }),
+          expect.objectContaining({ agent_handle: "context-strategy", status: "succeeded" }),
+          expect.objectContaining({ agent_handle: "delivery-coordination", status: "succeeded" }),
+          expect.objectContaining({ agent_handle: "assurance", status: "succeeded" }),
+        ]),
+      );
+      expect(executions.every((execution) => execution.memory_version_ids?.includes(memory.data.memoryVersionId))).toBe(true);
     } finally {
       await daemon.close();
       await rm(workspaceRoot, { recursive: true, force: true });

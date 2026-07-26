@@ -22,6 +22,8 @@ export type {
   AssignmentViewV1,
   CursorPageV1,
   DirectiveViewV1,
+  ExplicitMemoryEntryViewV1,
+  ExplicitMemoryViewV1,
   ExtensionInstallationViewV1,
   ExecutionViewV1,
   GovernanceAutonomyViewV1,

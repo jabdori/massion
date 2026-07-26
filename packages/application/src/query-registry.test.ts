@@ -795,7 +795,7 @@ describe("ApplicationQueryRegistry", () => {
     expect(policy.data).toEqual([expect.objectContaining({ policyVersionId: "policy-1", checksum: "a".repeat(64) })]);
   });
 
-  it("웹 운영 화면용 구성원·기억·감사·session을 secret 없이 조회한다", async () => {
+  it("웹 운영 화면용 구성원·개인 기억·감사·session을 필요한 범위로 조회한다", async () => {
     const registry = new ApplicationQueryRegistry();
     registerApplicationQueries(registry, {
       readModel,
@@ -814,18 +814,16 @@ describe("ApplicationQueryRegistry", () => {
         ],
       },
       growth: {
-        getActiveMemories: async () => [
-          {
-            memoryVersionId: "memory-1",
-            organizationId: context.organizationId,
-            scope: "organization",
-            subjectId: "organization",
-            version: 1,
-            status: "active",
-            entries: [{ kind: "fact", key: "release", value: "공개하면 안 되는 값", sourceReferenceIds: ["record-1"] }],
-            checksum: "a".repeat(64),
-          },
-        ],
+        getActiveExplicitMemory: async () => ({
+          memoryVersionId: "memory-1",
+          organizationId: context.organizationId,
+          scope: "user",
+          subjectId: context.userId,
+          version: 1,
+          status: "active",
+          entries: [{ kind: "preference", key: "answer-style", value: "결론부터 답한다", sourceReferenceIds: ["command-1"] }],
+          checksum: "a".repeat(64),
+        }),
         resolveConfiguration: async () => ({}),
         getActiveEvaluationStrategy: async () => ({}),
         listSuggestions: async () => [],
@@ -853,8 +851,15 @@ describe("ApplicationQueryRegistry", () => {
     expect(members).toMatchObject({ data: [{ userId: "query-user", displayName: "Member" }] });
     expect(JSON.stringify(members)).not.toContain("member@example.com");
     const memories = await registry.query(context, ["growth:read"], "growth.memories", {});
-    expect(memories).toMatchObject({ data: [{ memoryVersionId: "memory-1", entryKeys: ["release"] }] });
-    expect(JSON.stringify(memories)).not.toContain("공개하면 안 되는 값");
+    expect(memories).toMatchObject({
+      data: [
+        {
+          memoryVersionId: "memory-1",
+          revision: 1,
+          entries: [{ key: "answer-style", kind: "preference", value: "결론부터 답한다", authority: "explicit" }],
+        },
+      ],
+    });
     await expect(registry.query(context, ["audit:read"], "application.audit", {})).resolves.toMatchObject({
       data: { events: [{ type: "work.created" }], cursor: 1 },
     });

@@ -30,6 +30,20 @@ export interface MemoryEntry {
   readonly sourceReferenceIds: readonly string[];
 }
 
+export interface PutExplicitMemoryInput {
+  readonly commandId: string;
+  readonly expectedRevision: number;
+  readonly key: string;
+  readonly kind: MemoryEntry["kind"];
+  readonly value: string;
+}
+
+export interface ForgetExplicitMemoryInput {
+  readonly commandId: string;
+  readonly expectedRevision: number;
+  readonly key: string;
+}
+
 export interface MemoryVersion {
   readonly memoryVersionId: string;
   readonly organizationId: string;
@@ -253,6 +267,14 @@ function validateEntries(entries: readonly MemoryEntry[]): void {
   }
 }
 
+function validateExplicitMemoryKey(key: string): void {
+  if (!key.trim() || key.length > 120) throw new Error("개인 Memory key는 1~120자여야 합니다");
+}
+
+function validateExplicitMemoryValue(value: string): void {
+  if (!value.trim() || value.length > 4_000) throw new Error("개인 Memory value는 1~4000자여야 합니다");
+}
+
 export class PromptMemoryStore {
   private constructor(
     private readonly database: MassionDatabase,
@@ -331,6 +353,96 @@ export class PromptMemoryStore {
       }
     }
     return records.map(checkedMemory);
+  }
+
+  public async getActiveExplicitMemory(context: TenantContext): Promise<MemoryVersion | undefined> {
+    await this.organizations.verifyTenantContext(context);
+    const record = await this.activeMemory(this.database, context.organizationId, `user:${context.userId}`);
+    return record === undefined ? undefined : checkedMemory(record);
+  }
+
+  public async putExplicitMemory(context: TenantContext, input: PutExplicitMemoryInput): Promise<MemoryVersion> {
+    validateExplicitMemoryKey(input.key);
+    validateExplicitMemoryValue(input.value);
+    return await this.database.transaction(async (executor) => {
+      await this.organizations.verifyTenantContext(context, undefined, executor);
+      const requestHash = growthChecksum({ operation: "growth.memory.put", ...input });
+      const repeated = await this.memoryByCommand(executor, context.organizationId, input.commandId);
+      if (repeated) {
+        if (repeated.request_hash !== requestHash)
+          throw new Error("같은 commandId에 다른 explicit Memory payload를 사용할 수 없습니다");
+        return checkedMemory(repeated);
+      }
+      const current = await this.activeMemory(executor, context.organizationId, `user:${context.userId}`);
+      const active = current === undefined ? undefined : checkedMemory(current);
+      if ((active?.version ?? 0) !== input.expectedRevision)
+        throw new Error("개인 Memory version precondition이 일치하지 않습니다");
+      const entries = [
+        ...(active?.entries.filter((entry) => entry.key !== input.key) ?? []),
+        {
+          kind: input.kind,
+          key: input.key,
+          value: input.value,
+          sourceReferenceIds: [`application-command:${input.commandId}`],
+        },
+      ];
+      if (entries.length > 100) throw new Error("개인 Memory entry는 100개 이하여야 합니다");
+      validateEntries(entries);
+      if (current) {
+        await executor.query(
+          "UPDATE memory_version SET status = 'superseded', active_guard_key = NONE, superseded_at = time::now() WHERE organization_id = $organization_id AND memory_version_id = $version_id;",
+          { organization_id: context.organizationId, version_id: current.memory_version_id },
+        );
+      }
+      return checkedMemory(
+        await this.createMemory(
+          executor,
+          context,
+          input.commandId,
+          requestHash,
+          "user",
+          context.userId,
+          entries,
+          current,
+        ),
+      );
+    });
+  }
+
+  public async forgetExplicitMemory(context: TenantContext, input: ForgetExplicitMemoryInput): Promise<MemoryVersion> {
+    validateExplicitMemoryKey(input.key);
+    return await this.database.transaction(async (executor) => {
+      await this.organizations.verifyTenantContext(context, undefined, executor);
+      const requestHash = growthChecksum({ operation: "growth.memory.forget", ...input });
+      const repeated = await this.memoryByCommand(executor, context.organizationId, input.commandId);
+      if (repeated) {
+        if (repeated.request_hash !== requestHash)
+          throw new Error("같은 commandId에 다른 explicit Memory payload를 사용할 수 없습니다");
+        return checkedMemory(repeated);
+      }
+      const current = await this.activeMemory(executor, context.organizationId, `user:${context.userId}`);
+      if (!current || current.version !== input.expectedRevision)
+        throw new Error("개인 Memory version precondition이 일치하지 않습니다");
+      const active = checkedMemory(current);
+      const entries = active.entries.filter((entry) => entry.key !== input.key);
+      if (entries.length === active.entries.length) throw new Error("개인 Memory key를 찾을 수 없습니다");
+      await executor.query(
+        "UPDATE memory_version SET status = 'superseded', active_guard_key = NONE, superseded_at = time::now() WHERE organization_id = $organization_id AND memory_version_id = $version_id;",
+        { organization_id: context.organizationId, version_id: current.memory_version_id },
+      );
+      return checkedMemory(
+        await this.createMemory(
+          executor,
+          context,
+          input.commandId,
+          requestHash,
+          "user",
+          context.userId,
+          entries,
+          current,
+        ),
+      );
+    });
   }
 
   public async inspectPromptGrowth(context: TenantContext, executor: QueryExecutor): Promise<PromptDefinitionVersion> {
@@ -540,13 +652,16 @@ export class PromptMemoryStore {
         return checkedMemory(repeated);
       }
       const current = await this.activeMemory(executor, context.organizationId, key);
-      if (!current || current.version !== input.expectedVersion)
+      const canCreateUserMemory = input.scope === "user" && current === undefined && input.expectedVersion === 0;
+      if (!canCreateUserMemory && (!current || current.version !== input.expectedVersion))
         throw new Error("Memory version precondition이 일치하지 않습니다");
-      checkedMemory(current);
-      await executor.query(
-        "UPDATE memory_version SET status = 'superseded', active_guard_key = NONE, superseded_at = time::now() WHERE organization_id = $organization_id AND memory_version_id = $version_id;",
-        { organization_id: context.organizationId, version_id: current.memory_version_id },
-      );
+      if (current) {
+        checkedMemory(current);
+        await executor.query(
+          "UPDATE memory_version SET status = 'superseded', active_guard_key = NONE, superseded_at = time::now() WHERE organization_id = $organization_id AND memory_version_id = $version_id;",
+          { organization_id: context.organizationId, version_id: current.memory_version_id },
+        );
+      }
       return checkedMemory(
         await this.createMemory(
           executor,

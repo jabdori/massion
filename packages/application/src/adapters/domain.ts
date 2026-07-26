@@ -62,7 +62,10 @@ export interface ApplicationDomainDependencies {
   readonly organization?: Pick<OrganizationGraphService, "execute">;
   readonly extension?: Pick<ExtensionGateway, "validate" | "link" | "pack" | "install" | "update" | "rollback">;
   // `start`는 onboarding(LocalApplicationBootstrap)에서 메모리 시드 연결에 사용합니다.
-  readonly growth?: Pick<GrowthGateway, "configure" | "adopt" | "revert" | "start">;
+  readonly growth?: Pick<
+    GrowthGateway,
+    "configure" | "adopt" | "revert" | "start" | "putExplicitMemory" | "forgetExplicitMemory"
+  >;
   readonly providers?: Pick<
     ProviderService,
     "registerProvider" | "registerEndpoint" | "addCredential" | "revokeCredential"
@@ -109,6 +112,13 @@ function string(value: unknown, label: string): string {
   if (typeof value !== "string" || value.length === 0 || value.length > 1024 * 1024)
     throw new Error(`${label} 문자열이 유효하지 않습니다`);
   return value;
+}
+
+function explicitMemoryKind(value: unknown): "fact" | "preference" | "procedure" {
+  const kind = string(value, "kind");
+  if (kind !== "fact" && kind !== "preference" && kind !== "procedure")
+    throw new Error("지원하지 않는 개인 Memory kind입니다");
+  return kind;
 }
 
 function integer(value: unknown, label: string, minimum = 0): number {
@@ -1319,6 +1329,44 @@ function registerGrowth(
       },
     });
   }
+  register(registry, {
+    operation: "growth.memory.put",
+    requiredScopes: ["growth:write"],
+    allowedRoles: ["owner", "admin", "member"],
+    recovery: "replay-domain",
+    validate: (value) => payload(value, ["key", "kind", "value"], ["key", "kind", "value"]),
+    async handle(context, command, value) {
+      const memory = await growth.putExplicitMemory(context, {
+        commandId: command.commandId,
+        expectedRevision: expectedRevision(command),
+        key: string(value.key, "key"),
+        kind: explicitMemoryKind(value.kind),
+        value: string(value.value, "value"),
+      });
+      return result(command, {
+        resource: { type: "ExplicitMemory", id: memory.memoryVersionId, revision: memory.version },
+        data: { memoryVersionId: memory.memoryVersionId, revision: memory.version },
+      });
+    },
+  });
+  register(registry, {
+    operation: "growth.memory.forget",
+    requiredScopes: ["growth:write"],
+    allowedRoles: ["owner", "admin", "member"],
+    recovery: "replay-domain",
+    validate: (value) => payload(value, ["key"], ["key"]),
+    async handle(context, command, value) {
+      const memory = await growth.forgetExplicitMemory(context, {
+        commandId: command.commandId,
+        expectedRevision: expectedRevision(command),
+        key: string(value.key, "key"),
+      });
+      return result(command, {
+        resource: { type: "ExplicitMemory", id: memory.memoryVersionId, revision: memory.version },
+        data: { memoryVersionId: memory.memoryVersionId, revision: memory.version },
+      });
+    },
+  });
 }
 
 function registerRouter(registry: ApplicationCommandRegistry, dependencies: ApplicationDomainDependencies): void {

@@ -5,6 +5,7 @@ import {
   type ArtifactViewV1,
   type AssignmentViewV1,
   type DirectiveViewV1,
+  type ExplicitMemoryViewV1,
   type ExecutionViewV1,
   type ExtensionInstallationViewV1,
   type GovernanceAutonomyViewV1,
@@ -266,16 +267,7 @@ export interface GrowthView {
     readonly governanceDecisionId: string;
     readonly activatedAt: string;
   };
-  readonly memories: readonly {
-    readonly memoryVersionId: string;
-    readonly scope: string;
-    readonly subjectId: string;
-    readonly version: number;
-    readonly status: string;
-    readonly entryKeys: readonly string[];
-    readonly sourceReferenceIds: readonly string[];
-    readonly checksum: string;
-  }[];
+  readonly memories: readonly ExplicitMemoryViewV1[];
   readonly suggestions: readonly {
     readonly suggestionId: string;
     readonly workId: string;
@@ -353,6 +345,13 @@ export interface DesktopService {
   /** 설치된 확장과 마켓플레이스 항목을 하나의 목록으로 줍니다. Capability가 먼저입니다. */
   loadExtensions(): Promise<readonly ExtensionEntryView[]>;
   loadGrowth(): Promise<GrowthView>;
+  putExplicitMemory(input: {
+    readonly key: string;
+    readonly kind: ExplicitMemoryViewV1["entries"][number]["kind"];
+    readonly value: string;
+    readonly revision: number;
+  }): Promise<void>;
+  forgetExplicitMemory(input: { readonly key: string; readonly revision: number }): Promise<void>;
   installRegistry(input: Record<string, unknown>, identity?: CommandIdentity): Promise<RegistryInstallView>;
   submitDirective(work: WorkView, content: string, mode: DirectiveMode): Promise<void>;
   decideApproval(approval: ApprovalView, vote: ApprovalVote, reason: string): Promise<void>;
@@ -589,7 +588,7 @@ export function createApplicationDesktopService(
     async loadGrowth() {
       const [configuration, memories, suggestions, effects] = await Promise.all([
         query("growth.configuration.get", {}),
-        query("growth.memories", {}),
+        client.query("growth.memories", {}),
         query("growth.suggestions", { limit: 50 }),
         query("growth.effects", { limit: 50 }),
       ]);
@@ -597,10 +596,20 @@ export function createApplicationDesktopService(
         ...(configuration === undefined
           ? {}
           : { configuration: safeView(configuration) as NonNullable<GrowthView["configuration"]> }),
-        memories: safeView(memories) as GrowthView["memories"],
+        memories,
         suggestions: safeView(suggestions) as GrowthView["suggestions"],
         effects: safeView(effects) as GrowthView["effects"],
       };
+    },
+    async putExplicitMemory(input) {
+      await client.command(
+        "growth.memory.put",
+        { key: input.key, kind: input.kind, value: input.value },
+        { expectedRevision: input.revision },
+      );
+    },
+    async forgetExplicitMemory(input) {
+      await client.command("growth.memory.forget", { key: input.key }, { expectedRevision: input.revision });
     },
     async installRegistry(input, identity) {
       const result = await command("registry.install", input, identity);
@@ -1068,6 +1077,8 @@ export function createFixtureDesktopService(): DesktopService {
       ),
     loadRegistryInfo: (versionId) => fixturePromise(() => fixtureRegistryDetail(versionId)),
     loadCapabilities: () => fixturePromise(() => ({ extensions: [], inventory: fixtureRegistryInventory })),
+    putExplicitMemory: () => fixturePromise(() => undefined),
+    forgetExplicitMemory: () => fixturePromise(() => undefined),
     loadGrowth: () =>
       fixturePromise(() => ({
         configuration: {
@@ -1203,13 +1214,15 @@ export function createFixtureDesktopService(): DesktopService {
         memories: [
           {
             memoryVersionId: "memory-0004",
-            scope: "organization",
-            subjectId: "evidence-research",
-            version: 4,
-            status: "active",
-            entryKeys: ["해지 사유 라벨링 기준", "코호트 정의 출처"],
-            sourceReferenceIds: ["work:churn-q3", "message:cohort-challenge"],
-            checksum: "b21e77",
+            revision: 4,
+            entries: [
+              {
+                key: "answer-style",
+                kind: "preference" as const,
+                value: "분석 결과는 결론부터 설명한다",
+                authority: "explicit" as const,
+              },
+            ],
           },
         ],
         effects: [

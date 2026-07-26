@@ -106,4 +106,45 @@ describe("PromptDefinitionVersion과 MemoryVersion", () => {
     await database.query(tamper, bindings);
     await expect(store.getActivePromptDefinition(context)).rejects.toThrow("checksum");
   });
+
+  it("개인 기억은 최초 생성·CAS 갱신·사용 중지를 version 이력으로 남긴다", async () => {
+    const firstInput = {
+      commandId: "explicit-memory-first",
+      expectedRevision: 0,
+      key: "answer-style",
+      kind: "preference" as const,
+      value: "답변은 먼저 결론을 말한다",
+    };
+
+    const first = await store.putExplicitMemory(context, firstInput);
+    expect(first).toMatchObject({
+      scope: "user",
+      subjectId: context.userId,
+      version: 1,
+      entries: [{ key: "answer-style", kind: "preference", value: "답변은 먼저 결론을 말한다" }],
+    });
+    await expect(store.putExplicitMemory(context, firstInput)).resolves.toEqual(first);
+    await expect(
+      store.putExplicitMemory(context, {
+        ...firstInput,
+        commandId: "explicit-memory-stale",
+        value: "다른 값",
+      }),
+    ).rejects.toThrow("precondition");
+
+    const replaced = await store.putExplicitMemory(context, {
+      ...firstInput,
+      commandId: "explicit-memory-replace",
+      expectedRevision: 1,
+      value: "답변은 짧게 결론부터 말한다",
+    });
+    const forgotten = await store.forgetExplicitMemory(context, {
+      commandId: "explicit-memory-forget",
+      expectedRevision: 2,
+      key: "answer-style",
+    });
+
+    expect(replaced).toMatchObject({ version: 2, parentVersionId: first.memoryVersionId });
+    expect(forgotten).toMatchObject({ version: 3, parentVersionId: replaced.memoryVersionId, entries: [] });
+  });
 });

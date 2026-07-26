@@ -634,6 +634,7 @@ function ProductSurface({
         onOpenWork={onOpenWork}
         onRetry={onRetryGrowth}
         requestedSuggestionId={requestedGrowthSuggestionId}
+        service={service}
       />
     );
   if (surface === "capabilities")
@@ -2059,15 +2060,22 @@ function GrowthSurface({
   onOpenWork,
   onRetry,
   requestedSuggestionId,
+  service,
 }: {
   error: string;
   growth: GrowthView | undefined;
   onOpenWork: (workId: string) => void;
   onRetry: () => void;
   requestedSuggestionId: string | undefined;
+  service: DesktopService;
 }) {
   const [selectedId, setSelectedId] = useState<string>();
   const [filter, setFilter] = useState<"waiting" | "all">("waiting");
+  const [memoryKey, setMemoryKey] = useState("");
+  const [memoryKind, setMemoryKind] = useState<"fact" | "preference" | "procedure">("preference");
+  const [memoryValue, setMemoryValue] = useState("");
+  const [memoryError, setMemoryError] = useState("");
+  const [memorySaving, setMemorySaving] = useState(false);
   useEffect(() => {
     if (growth === undefined) return;
     const requested = growth.suggestions.find((suggestion) => suggestion.suggestionId === requestedSuggestionId);
@@ -2086,6 +2094,44 @@ function GrowthSurface({
   const effect = growth?.effects.find((item) => item.suggestionId === selected?.suggestionId);
   const blockers = growthBlockers(selected);
   const waitingCount = suggestions.filter((item) => item.status === "awaiting-review").length;
+  const explicitMemory = growth?.memories[0];
+  const memoryEntries = explicitMemory?.entries ?? [];
+  const memoryRevision = explicitMemory?.revision ?? 0;
+
+  const saveMemory = async (event: React.SyntheticEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const key = memoryKey.trim();
+    const value = memoryValue.trim();
+    if (!key || !value || memorySaving) return;
+    setMemorySaving(true);
+    setMemoryError("");
+    try {
+      await service.putExplicitMemory({ key, kind: memoryKind, value, revision: memoryRevision });
+      setMemoryKey("");
+      setMemoryValue("");
+      onRetry();
+    } catch (cause) {
+      setMemoryError(surfaceErrorMessage(cause, "개인 기억을 저장하지 못했습니다."));
+      onRetry();
+    } finally {
+      setMemorySaving(false);
+    }
+  };
+
+  const forgetMemory = async (key: string) => {
+    if (memorySaving) return;
+    setMemorySaving(true);
+    setMemoryError("");
+    try {
+      await service.forgetExplicitMemory({ key, revision: memoryRevision });
+      onRetry();
+    } catch (cause) {
+      setMemoryError(surfaceErrorMessage(cause, "개인 기억을 사용 중지하지 못했습니다."));
+      onRetry();
+    } finally {
+      setMemorySaving(false);
+    }
+  };
 
   if (error) {
     return (
@@ -2349,39 +2395,87 @@ function GrowthSurface({
           <span className="text-[13px] font-medium text-secondary">배경</span>
         </header>
         <div className="min-h-0 overflow-y-auto p-3">
-          <section aria-label="조직이 배운 것">
+          <section aria-label="내 기억">
             <h2 className="mb-2 flex items-baseline gap-2 text-[10px] font-semibold tracking-[0.08em] text-muted">
-              조직이 배운 것<span className="font-mono text-[11px] font-normal">{growth.memories.length}</span>
+              내 기억<span className="font-mono text-[11px] font-normal">{memoryEntries.length}</span>
             </h2>
-            {growth.memories.length === 0 ? (
-              <p className="text-xs text-muted">저장된 기억이 없습니다.</p>
+            {memoryEntries.length === 0 ? (
+              <p className="text-xs text-muted">직접 저장한 기억이 없습니다.</p>
             ) : (
               <ul className="grid gap-1.5">
-                {growth.memories.map((memory) => (
+                {memoryEntries.map((memory) => (
                   <li
                     className="rounded-[7px] border border-border bg-surface-1 px-3 py-2.5"
-                    key={memory.memoryVersionId}
+                    key={memory.key}
                   >
                     <div className="flex flex-wrap items-center gap-1.5">
-                      {/* subjectId는 조직 핸들입니다. 사용자에게는 이름으로 보입니다. */}
-                      <span className="text-[12px] font-medium">{agentIdentityToken(memory.subjectId).name}</span>
+                      <span className="text-[12px] font-medium">{memory.key}</span>
                       <span className="rounded-[3px] border border-control px-1 text-[10px] text-muted">
-                        {agentIdentityToken(memory.subjectId).roleLabel}
+                        {explicitMemoryKindLabel[memory.kind]}
                       </span>
-                      <span className="font-mono text-[10px] text-muted">v{memory.version}</span>
+                      <span className="font-mono text-[10px] text-muted">v{memoryRevision}</span>
                     </div>
-                    <p className="mt-1 text-[12px] leading-5 text-primary">{memory.entryKeys.join(" · ")}</p>
-                    <p className="mt-1.5 text-[10px] leading-4 text-muted">
-                      근거 · {memory.sourceReferenceIds.map((reference) => growthSourceLabelOf(reference)).join(" · ")}
-                    </p>
+                    <p className="mt-1 text-[12px] leading-5 text-primary">{memory.value}</p>
+                    <button
+                      className="mt-2 text-[11px] text-muted underline-offset-2 hover:text-primary hover:underline disabled:opacity-45"
+                      disabled={memorySaving}
+                      onClick={() => {
+                        void forgetMemory(memory.key);
+                      }}
+                      type="button"
+                    >
+                      앞으로 사용하지 않음
+                    </button>
                   </li>
                 ))}
               </ul>
             )}
-            {/* 4.9: 명시적 기억이 학습 기억보다 높은 권위를 가진다는 사실을 화면이 말합니다. */}
             <p className="mt-2 text-[11px] leading-5 text-muted">
-              학습된 기억은 사람이 직접 준 지시를 덮어쓰지 않으며 다음 실행부터 적용됩니다.
+              직접 저장한 기억은 다음 새 업무부터 적용됩니다. 과거 업무의 실행 계보는 바뀌지 않습니다.
             </p>
+            <form aria-label="개인 기억 저장" className="mt-3 grid gap-2" onSubmit={(event) => void saveMemory(event)}>
+              <Input
+                aria-label="기억 키"
+                disabled={memorySaving}
+                maxLength={120}
+                onChange={(event) => {
+                  setMemoryKey(event.target.value);
+                }}
+                placeholder="기억 키"
+                value={memoryKey}
+              />
+              <label className="grid gap-1 text-[11px] text-muted">
+                종류
+                <select
+                  aria-label="기억 종류"
+                  className="h-8 rounded-[5px] border border-border bg-surface-1 px-2 text-[12px] text-primary outline-none focus:border-control"
+                  disabled={memorySaving}
+                  onChange={(event) => {
+                    setMemoryKind(event.target.value as "fact" | "preference" | "procedure");
+                  }}
+                  value={memoryKind}
+                >
+                  <option value="fact">사실</option>
+                  <option value="preference">선호</option>
+                  <option value="procedure">절차</option>
+                </select>
+              </label>
+              <Textarea
+                aria-label="기억 내용"
+                disabled={memorySaving}
+                maxLength={4000}
+                onChange={(event) => {
+                  setMemoryValue(event.target.value);
+                }}
+                placeholder="다음 업무부터 기억할 내용을 적어주세요"
+                rows={3}
+                value={memoryValue}
+              />
+              <Button disabled={memorySaving || !memoryKey.trim() || !memoryValue.trim()} size="sm" type="submit" variant="outline">
+                {memorySaving ? "저장 중…" : "기억 저장"}
+              </Button>
+            </form>
+            {memoryError ? <p role="alert" className="mt-2 text-[11px] leading-5 text-danger">{memoryError}</p> : null}
           </section>
 
           {growth.effects.some((item) => item.suggestionId === undefined) ? (
@@ -2447,6 +2541,12 @@ const growthSourceLabel: Record<string, string> = {
   execution: "실행",
   artifact: "산출물",
 };
+
+const explicitMemoryKindLabel = {
+  fact: "사실",
+  preference: "선호",
+  procedure: "절차",
+} as const;
 
 /** `kind:id` 형태의 source reference를 사람이 읽는 줄로 풉니다. 업무는 그 자리에서 열 수 있습니다. */
 function GrowthSourceRow({ onOpenWork, reference }: { onOpenWork: (workId: string) => void; reference: string }) {

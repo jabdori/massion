@@ -412,7 +412,7 @@ describe("AgentOS native data flow", () => {
     });
   });
 
-  it("성장 화면은 승인 근거가 있는 저장 기록만 읽기 전용으로 표시한다", async () => {
+  it("성장 화면은 개인 기억과 승인 근거를 함께 표시한다", async () => {
     const user = userEvent.setup();
     const loadGrowth = vi.fn(async () => ({
       configuration: {
@@ -424,13 +424,15 @@ describe("AgentOS native data flow", () => {
       memories: [
         {
           memoryVersionId: "memory-0001",
-          scope: "organization",
-          subjectId: "organization",
-          version: 3,
-          status: "active",
-          entryKeys: ["verification-required"],
-          sourceReferenceIds: ["record-work-0001"],
-          checksum: "a".repeat(64),
+          revision: 3,
+          entries: [
+            {
+              key: "verification-required",
+              kind: "procedure" as const,
+              value: "검증 근거를 남긴다",
+              authority: "explicit" as const,
+            },
+          ],
         },
       ],
       suggestions: [
@@ -455,7 +457,8 @@ describe("AgentOS native data flow", () => {
     // 마스터-디테일이므로 요약은 목록과 본문 양쪽에 있습니다.
     expect(await screen.findAllByText("검증 근거 보강")).toHaveLength(2);
     expect(screen.getByText(/decision-growth-0001/)).toBeInTheDocument();
-    expect(screen.getByText(/record-work-0001/)).toBeInTheDocument();
+    expect(screen.getByText("검증 근거를 남긴다")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "앞으로 사용하지 않음" })).toBeInTheDocument();
     // 판단에 필요한 증거가 순서대로 있어야 합니다. 요약만 보고 채택하면 승인 버튼 하나와 같습니다.
     expect(screen.getByRole("region", { name: "왜" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "승인하면" })).toBeInTheDocument();
@@ -464,7 +467,7 @@ describe("AgentOS native data flow", () => {
     expect(screen.getByText("개선 확인")).toBeInTheDocument();
     expect(loadGrowth).toHaveBeenCalledOnce();
 
-    // 채택 command가 아직 없으므로 이 화면은 아무것도 실행하지 않습니다.
+    // 채택 command가 아직 없으므로 제안 판단은 여전히 실행하지 않습니다.
     // 문구가 아니라 disabled로 검사해야 나중에 버튼 라벨이 바뀌어도 규칙이 지켜집니다.
     expect(screen.getByRole("button", { name: "검증 근거 보강 승인" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "검증 근거 보강 거절" })).toBeDisabled();
@@ -479,7 +482,7 @@ describe("AgentOS native data flow", () => {
     await user.click(screen.getByRole("button", { name: "개선" }));
 
     expect(await screen.findByText("조직이 아직 바꾸자고 제안한 것이 없습니다.")).toBeInTheDocument();
-    expect(screen.getByText("저장된 기억이 없습니다.")).toBeInTheDocument();
+    expect(screen.getByText("직접 저장한 기억이 없습니다.")).toBeInTheDocument();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 

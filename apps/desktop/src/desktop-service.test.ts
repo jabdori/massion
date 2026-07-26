@@ -99,13 +99,15 @@ function transport(
     "growth.memories": [
       {
         memoryVersionId: "memory-0001",
-        scope: "organization",
-        subjectId: "organization",
-        version: 3,
-        status: "active",
-        entryKeys: ["verification-required"],
-        sourceReferenceIds: ["record-work-0001"],
-        checksum: "a".repeat(64),
+        revision: 3,
+        entries: [
+          {
+            key: "verification-required",
+            kind: "procedure",
+            value: "검증 근거를 남긴다",
+            authority: "explicit",
+          },
+        ],
       },
     ],
     "growth.suggestions": [
