@@ -77,6 +77,40 @@ describe("공식 Codex 구독 Connector", () => {
     });
   });
 
+  it("전체 권한은 SDK에 danger-full-access와 네트워크 허용을 그대로 전달한다", async () => {
+    const run = vi.fn().mockResolvedValue({ finalResponse: "완료", items: [] });
+    const startThread = vi.fn().mockReturnValue({ id: "thread-full-access", run });
+    const create = vi.fn().mockReturnValue({ startThread, resumeThread: vi.fn() });
+    const connector = new CodexSubscriptionConnector({ create } satisfies CodexSdkFactory, {
+      allowedEnvironment: ["PATH"],
+      threadPolicy: {
+        sandboxMode: "danger-full-access" as never,
+        approvalPolicy: "never",
+        networkAccessEnabled: true,
+      },
+    });
+
+    await connector.execute(context, {
+      executionId: "execution-full-access",
+      workId: "work-full-access",
+      agentHandle: "representative",
+      prompt: "전체 권한을 확인하세요",
+      workspaceRoot: "/tmp/work-full-access",
+      profileRoot: "/tmp/profile-full-access",
+      environment: { PATH: "/usr/bin" },
+      allowedTools: [],
+      disallowedTools: [],
+    });
+
+    expect(startThread).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sandboxMode: "danger-full-access",
+        approvalPolicy: "never",
+        networkAccessEnabled: true,
+      }),
+    );
+  });
+
   it("위험한 전체 접근 sandbox와 상대 실행 파일을 거부한다", () => {
     const factory = { create: vi.fn() } satisfies CodexSdkFactory;
     expect(

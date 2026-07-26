@@ -86,7 +86,7 @@ export interface OrganizationView {
 }
 
 export interface AutonomyView {
-  readonly mode: "automatic" | "review" | "full";
+  readonly mode: "automatic" | "review" | "full-access";
   readonly revision: number;
 }
 
@@ -1678,7 +1678,7 @@ export function projectRoom(
 function projectAutonomy(value: GovernanceAutonomyViewV1 | Record<string, unknown> | undefined): AutonomyView {
   if (
     !value ||
-    (value.mode !== "automatic" && value.mode !== "review" && value.mode !== "full") ||
+    (value.mode !== "automatic" && value.mode !== "review" && value.mode !== "full-access") ||
     typeof value.revision !== "number"
   )
     throw new Error("자율성 설정 응답이 유효하지 않습니다");

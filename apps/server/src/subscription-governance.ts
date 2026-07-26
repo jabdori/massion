@@ -36,6 +36,12 @@ interface SubscriptionApprovalModeReader {
   ): Promise<{ readonly approvalMode: "automatic" | "review" | "deny" }>;
 }
 
+interface AutonomyReader {
+  get(
+    context: TenantContext,
+  ): Promise<{ readonly mode: "automatic" | "review" | "full-access"; readonly revision: number }>;
+}
+
 function matches(values: readonly string[], value: string): boolean {
   return values.includes("*") || values.includes(value);
 }
@@ -182,6 +188,7 @@ export class SubscriptionAgentPolicyResolver implements SubscriptionAgentPolicyP
     private readonly policies: ActivePolicyReader,
     private readonly environment: "local" | "team",
     private readonly subscriptionPolicies?: SubscriptionApprovalModeReader,
+    private readonly autonomy?: AutonomyReader,
   ) {}
 
   public async resolve(
@@ -201,6 +208,16 @@ export class SubscriptionAgentPolicyResolver implements SubscriptionAgentPolicyP
     void input.accountId;
     void input.connectorId;
     void input.workspaceRoot;
+    const autonomy = (await this.autonomy?.get(context)) ?? { mode: "automatic" as const, revision: 0 };
+    if (autonomy.mode === "full-access") {
+      return {
+        permissionMode: "full-access",
+        sandboxMode: "danger-full-access",
+        approvalPolicy: "never",
+        networkAccessEnabled: true,
+        autonomyRevision: autonomy.revision,
+      };
+    }
     const [active, subscription] = await Promise.all([
       this.policies.getActivePolicy(context),
       this.subscriptionPolicies?.resolve(context, input.providerId),
@@ -212,9 +229,11 @@ export class SubscriptionAgentPolicyResolver implements SubscriptionAgentPolicyP
       throw new Error("구독 검토 방식에는 활성 Governance tool.call 승인 요구사항이 필요합니다");
     }
     return {
+      permissionMode: "governed",
       sandboxMode: canWriteWorkspace(input.agentHandle) ? "workspace-write" : "read-only",
       approvalPolicy: approvalMode === "automatic" ? "never" : approvalMode === "review" ? "on-request" : "deny",
       networkAccessEnabled: false,
+      autonomyRevision: autonomy.revision,
     };
   }
 }

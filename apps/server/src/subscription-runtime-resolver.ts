@@ -42,9 +42,11 @@ export type NativeSubscriptionAgentAdapterId =
   "codex" | "claude" | "gemini-acp" | "copilot-acp" | "grok-acp" | "antigravity";
 
 export interface SubscriptionAgentExecutionPolicy {
-  readonly sandboxMode: "read-only" | "workspace-write";
+  readonly permissionMode: "governed" | "full-access";
+  readonly sandboxMode: "read-only" | "workspace-write" | "danger-full-access";
   readonly approvalPolicy: "never" | "on-request" | "deny";
   readonly networkAccessEnabled: boolean;
+  readonly autonomyRevision: number;
 }
 
 export interface WorkspaceCapabilityView {
@@ -219,9 +221,12 @@ function safeToolList(values: readonly string[], label: string): readonly string
 
 function requirePolicy(value: SubscriptionAgentExecutionPolicy): SubscriptionAgentExecutionPolicy {
   if (
-    !new Set(["read-only", "workspace-write"]).has(value.sandboxMode) ||
+    !new Set(["read-only", "workspace-write", "danger-full-access"]).has(value.sandboxMode) ||
     !new Set(["never", "on-request", "deny"]).has(value.approvalPolicy) ||
-    typeof value.networkAccessEnabled !== "boolean"
+    typeof value.networkAccessEnabled !== "boolean" ||
+    !new Set(["governed", "full-access"]).has(value.permissionMode) ||
+    !Number.isSafeInteger(value.autonomyRevision) ||
+    value.autonomyRevision < 0
   ) {
     throw new Error("구독 Agent 실행 정책이 유효하지 않습니다");
   }
@@ -649,12 +654,19 @@ class BuiltinNativeSubscriptionAgentFactory implements NativeSubscriptionAgentFa
     const policy = input.policy as SubscriptionAgentExecutionPolicy & {
       readonly approvalPolicy: "never" | "on-request";
     };
+    if (policy.permissionMode === "full-access" && policy.approvalPolicy !== "never") {
+      throw new Error("전체 권한 실행 정책은 승인 대기와 함께 사용할 수 없습니다");
+    }
     if (input.adapterId === "codex") {
       if (policy.approvalPolicy === "on-request") {
         if (!this.permissions.codex) throw new Error("Codex app-server Governance 승인 bridge가 필요합니다");
         return new CodexAppServerSubscriptionConnector(this.permissions.codex, {
           model: input.modelId,
-          policy: { ...policy, approvalPolicy: "on-request" },
+          policy: {
+            sandboxMode: policy.sandboxMode as "read-only" | "workspace-write",
+            approvalPolicy: "on-request",
+            networkAccessEnabled: policy.networkAccessEnabled,
+          },
           ...(input.executable
             ? { runtime: () => Promise.resolve({ command: input.executable as string, commandArguments: [] }) }
             : {}),
@@ -664,10 +676,28 @@ class BuiltinNativeSubscriptionAgentFactory implements NativeSubscriptionAgentFa
         allowedEnvironment: ["PATH", "CODEX_HOME", "LANG", "LC_ALL"],
         managedProfile: true,
         ...(input.executable ? { executable: input.executable } : {}),
-        threadPolicy: { ...policy, model: input.modelId },
+        threadPolicy: {
+          sandboxMode: policy.sandboxMode,
+          approvalPolicy: policy.approvalPolicy,
+          networkAccessEnabled: policy.networkAccessEnabled,
+          model: input.modelId,
+        },
       });
     }
     if (input.adapterId === "claude") {
+      if (policy.permissionMode === "full-access") {
+        return new ClaudeSubscriptionConnector(undefined, undefined, {
+          ...(input.executable ? { executable: input.executable } : {}),
+          permissionMode: "bypassPermissions",
+          allowDangerouslySkipPermissions: true,
+          ...(input.modelId ? { model: input.modelId } : {}),
+        });
+      }
+      const governedPolicy = policy as SubscriptionAgentExecutionPolicy & {
+        readonly permissionMode: "governed";
+        readonly sandboxMode: "read-only" | "workspace-write";
+        readonly approvalPolicy: "never" | "on-request";
+      };
       const sandbox: ClaudeSubscriptionConnectorOptions["sandbox"] = {
         enabled: true,
         failIfUnavailable: true,
@@ -694,7 +724,7 @@ class BuiltinNativeSubscriptionAgentFactory implements NativeSubscriptionAgentFa
           : this.permissions.claude;
       return new ClaudeSubscriptionConnector(undefined, permissionBridge, {
         ...(input.executable ? { executable: input.executable } : {}),
-        permissionMode: policy.approvalPolicy === "never" ? "auto" : "default",
+        permissionMode: governedPolicy.approvalPolicy === "never" ? "auto" : "default",
         sandbox,
         model: input.modelId,
       });

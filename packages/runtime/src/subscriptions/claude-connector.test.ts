@@ -43,6 +43,44 @@ async function invokePreToolUse(
 }
 
 describe("공식 Claude Agent SDK 구독 Connector", () => {
+  it("전체 권한은 Claude bypassPermissions만 전달하고 Massion sandbox·hook을 생략한다", async () => {
+    const query: ClaudeAgentQuery = vi.fn().mockImplementation(async function* () {
+      yield { type: "result", subtype: "success", session_id: "session-full-access", result: "완료", usage: {} };
+    });
+    const connector = new ClaudeSubscriptionConnector(query, undefined, {
+      executable: "/opt/massion/connectors/claude",
+      permissionMode: "bypassPermissions" as never,
+      allowDangerouslySkipPermissions: true,
+      model: "claude-opus-4-8",
+    } as never);
+
+    await connector.execute(context, {
+      executionId: "execution-full-access",
+      workId: "work-full-access",
+      agentHandle: "representative",
+      prompt: "전체 권한을 확인하세요",
+      workspaceRoot: "/tmp/work-full-access",
+      profileRoot: "/tmp/claude-profile-full-access",
+      environment: { PATH: "/opt/massion/connectors" },
+      allowedTools: [],
+      disallowedTools: [],
+    });
+
+    expect(query).toHaveBeenCalledWith(
+      expect.objectContaining({
+        options: expect.objectContaining({
+          permissionMode: "bypassPermissions",
+          allowDangerouslySkipPermissions: true,
+          pathToClaudeCodeExecutable: "/opt/massion/connectors/claude",
+        }),
+      }),
+    );
+    const options = vi.mocked(query).mock.calls[0]?.[0]?.options;
+    expect(options.sandbox).toBeUndefined();
+    expect(options.hooks).toBeUndefined();
+    expect(options.canUseTool).toBeUndefined();
+  });
+
   it("허용된 실행 파일과 fail-closed sandbox 정책을 공식 SDK query에 전달한다", async () => {
     const query: ClaudeAgentQuery = vi.fn().mockImplementation(async function* () {
       yield { type: "result", subtype: "success", session_id: "session-policy", result: "완료", usage: {} };

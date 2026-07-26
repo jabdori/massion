@@ -1506,7 +1506,7 @@ describe("Massion server product", () => {
         repositoryId: registered.repository.repositoryId,
         repositoryRevisionId: revision.revision.repositoryRevisionId,
         configurationId: indexConfiguration.configuration.configurationId,
-        mode: "full",
+        mode: "full-access",
         root: repositoryRoot,
         scanOptions,
       });
@@ -1736,10 +1736,9 @@ describe("Massion server product", () => {
       expect(upstreamRequests.every((request) => request.authorization === `Bearer ${secret}`)).toBe(true);
       const [executions] = await database.query<
         [{ agent_handle: string; status: string; memory_version_ids?: readonly string[] }[]]
-      >(
-        "SELECT agent_handle, status, memory_version_ids FROM runtime_execution WHERE work_id = $work_id;",
-        { work_id: workId },
-      );
+      >("SELECT agent_handle, status, memory_version_ids FROM runtime_execution WHERE work_id = $work_id;", {
+        work_id: workId,
+      });
       expect(executions).toHaveLength(4);
       expect(executions).toEqual(
         expect.arrayContaining([
@@ -1749,7 +1748,9 @@ describe("Massion server product", () => {
           expect.objectContaining({ agent_handle: "assurance", status: "succeeded" }),
         ]),
       );
-      expect(executions.every((execution) => execution.memory_version_ids?.includes(memory.data.memoryVersionId))).toBe(true);
+      expect(executions.every((execution) => execution.memory_version_ids?.includes(memory.data.memoryVersionId))).toBe(
+        true,
+      );
     } finally {
       await daemon.close();
       await rm(workspaceRoot, { recursive: true, force: true });

@@ -13,7 +13,7 @@ Core 파이프라인, 권한 모드, 수신함 UX, 메모리 주입 경로가 �
 | 단계 | 현재 범위 | 상태 |
 |---|---|---|
 | 04-1 | 코드 근거를 Work와 Agent 실행에 연결 (Task 3) | 코드 검증 완료 |
-| 04-2 | 전체 권한 실행 모드 추가 | 부분 구현 — 저장·일부 Governance 승인 우회·버튼만 존재 |
+| 04-2 | 전체 권한 실행 모드 추가 | 부분 구현 — 저장·Governance 우회·Codex/Claude 정책 전달까지; 계보·회수·실제 UAT는 남음 |
 | 04-3 | 메모리 주입 경로 연결 | 부분 구현 — 실제 Growth worker가 완료 Records→Reflection까지 연결됨; 평가·채택·효과는 남음 |
 | 04-4 | 수신함 UX 정합 (지도 비율) | 코드 검증 완료 |
 | 04-5 | 전체 빌드 + 데스크톱 UAT | 부분 통과 — Core UAT-01·02·03·07·12 및 재시작 보존 |
@@ -26,10 +26,11 @@ Core 파이프라인, 권한 모드, 수신함 UX, 메모리 주입 경로가 �
 
 ### 04-2 — 전체 권한 실행 모드 추가
 
-- `e746202d4` — 거버넌스 자율성 모드에 full(레벨 3) 추가.
+- `e746202d4` — 거버넌스 자율성 모드에 전체 권한(레벨 3) 저장을 추가.
 - `123fb1bf0` — 데스크톱 설정 화면에 "전체 권한" 버튼과 설명문 추가.
+- 현재 후보 변경 — 저장 값을 정본 `full-access`로 정규화하고, 구독 정책 resolver가 `danger-full-access`, `never`, 네트워크 허용, 자율성 revision을 반환하도록 연결했습니다. Codex SDK와 Claude Agent SDK는 각각 `danger-full-access`와 `bypassPermissions + allowDangerouslySkipPermissions`를 전달하며 Claude의 Massion sandbox·permission hook은 전체 권한에서 생략합니다.
 
-현재 `full` 모드는 이미 allow인 요청의 `require_approval`만 allow로 내리고 Cedar deny·active policy 부재는 그대로 막습니다. Codex·Claude SDK의 전체 권한 option, Work·Runtime의 mode/revision 계보, 실행 중 회수, 긴급 정지 연결, 사용자 책임 경고는 아직 구현되지 않았습니다. 따라서 실제 전체 권한으로 완료 처리하지 않습니다.
+현재 전체 권한은 tenant·멱등성 검증 뒤 Governance 정책·승인과 활성 정책 부재를 우회하고 실행기 option까지 전달합니다. Work·Runtime의 mode/revision 영속 계보, mode 해제 시 실행 회수·긴급 정지, capability probe·`limited` 상태, 사용자 책임 경고와 실제 P01/P02 UAT는 아직 구현되지 않았습니다. 따라서 실제 전체 권한으로 완료 처리하지 않습니다.
 
 ### 04-3 — 메모리 주입 경로 연결
 

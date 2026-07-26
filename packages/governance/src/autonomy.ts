@@ -7,9 +7,9 @@ import { applyMigrations, defineMigration, type MassionDatabase } from "@massion
 // - automatic: 정책이 허용하면 자동 실행(레벨 2, 기본값).
 // - review: 읽기 외 allow를 사람 승인으로 승격합니다. 정책 상한 원칙에 따라 승인 요구를
 //   "추가"만 하고 정책·불변식이 요구한 승인을 없애지 못합니다.
-// - full: 개인용 v1에서 사용자가 옵션으로 켜는 전체 권한 모드(레벨 3). 사용자 책임 하에
+// - full-access: 개인용 v1에서 사용자가 옵션으로 켜는 전체 권한 모드(레벨 3). 사용자 책임 하에
 //   정책·불변식이 요구한 승인까지 자동 통과합니다.
-export type AutonomyMode = "automatic" | "review" | "full";
+export type AutonomyMode = "automatic" | "review" | "full-access";
 
 export interface AutonomyState {
   readonly mode: AutonomyMode;
@@ -38,6 +38,12 @@ export const GOVERNANCE_AUTONOMY_FULL_MIGRATION = defineMigration(
   `DEFINE FIELD OVERWRITE mode ON governance_autonomy TYPE string ASSERT $value IN ["automatic", "review", "full"];`,
 );
 
+export const GOVERNANCE_AUTONOMY_FULL_ACCESS_MIGRATION = defineMigration(
+  "0111-governance-autonomy-full-access",
+  `DEFINE FIELD OVERWRITE mode ON governance_autonomy TYPE string ASSERT $value IN ["automatic", "review", "full-access"];
+UPDATE governance_autonomy SET mode = "full-access" WHERE mode = "full";`,
+);
+
 interface AutonomyRecord {
   readonly organization_id: string;
   readonly mode: AutonomyMode;
@@ -51,7 +57,11 @@ export class AutonomyStore {
   ) {}
 
   public static async create(database: MassionDatabase, organizations: OrganizationService): Promise<AutonomyStore> {
-    await applyMigrations(database, [GOVERNANCE_AUTONOMY_MIGRATION, GOVERNANCE_AUTONOMY_FULL_MIGRATION]);
+    await applyMigrations(database, [
+      GOVERNANCE_AUTONOMY_MIGRATION,
+      GOVERNANCE_AUTONOMY_FULL_MIGRATION,
+      GOVERNANCE_AUTONOMY_FULL_ACCESS_MIGRATION,
+    ]);
     return new AutonomyStore(database, organizations);
   }
 

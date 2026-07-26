@@ -119,7 +119,7 @@ export const SURFACE_PALETTE_ITEMS: readonly SurfacePaletteItem[] = [
     id: "autonomy.toggle",
     title: "자율성 모드 전환 (자동 ↔ 검토)",
     category: "설정",
-    keywords: ["autonomy", "자율성", "승인", "review", "automatic", "full", "전체 권한", "모드"],
+    keywords: ["autonomy", "자율성", "승인", "review", "automatic", "full-access", "전체 권한", "모드"],
     risky: true,
     surfaces: ["tui", "web"],
   },

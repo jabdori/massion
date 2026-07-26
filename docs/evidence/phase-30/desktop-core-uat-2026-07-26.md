@@ -30,7 +30,7 @@ Provider를 연결한 첫 후보에서는 VoltAgent 위임 중 `Runtime Executio
 ## 남은 게이트
 
 - 동일 후보 SHA의 UAT-K01~K04, UAT-G01~G02, UAT-P01~P02와 나머지 핵심 시나리오는 아직 최종 후보에서 통과하지 않았습니다.
-- 전체 권한 runtime 전달·해제·긴급 정지와 Growth production loop의 평가·채택·효과·복원은 아직 구현·실제 UAT 대기입니다.
+- 전체 권한의 Governance·resolver·Codex/Claude option 전달은 로컬 회귀 테스트까지 확인했지만, Work·Runtime mode/revision 영속 계보·해제·긴급 정지·capability probe와 실제 Tauri P01/P02는 아직 구현·UAT 대기입니다.
 - 서명·공증·업데이트·제거·재설치 및 공개 릴리스는 진행하지 않았습니다.
 
 ## Growth Reflection 연결 증분 — 미통과 기록

@@ -42,7 +42,7 @@ export interface CodexSubscriptionConnectorOptions {
   readonly managedProfile?: boolean;
   readonly executable?: string;
   readonly threadPolicy?: {
-    readonly sandboxMode: Exclude<SandboxMode, "danger-full-access">;
+    readonly sandboxMode: SandboxMode;
     readonly approvalPolicy: Extract<ApprovalMode, "never" | "on-request">;
     readonly networkAccessEnabled: boolean;
     readonly model?: string;
@@ -73,7 +73,7 @@ export class CodexSubscriptionConnector implements SubscriptionAgentAdapter {
     const policy = options.threadPolicy;
     if (
       policy &&
-      (!new Set(["read-only", "workspace-write"]).has(policy.sandboxMode) ||
+      (!new Set(["read-only", "workspace-write", "danger-full-access"]).has(policy.sandboxMode) ||
         !new Set(["never", "on-request"]).has(policy.approvalPolicy) ||
         typeof policy.networkAccessEnabled !== "boolean" ||
         (policy.model !== undefined && !policy.model.trim()))

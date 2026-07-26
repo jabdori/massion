@@ -24,6 +24,33 @@ const decision: PolicyDecision = {
 };
 
 describe("구독 Agent 정책과 도구 승인", () => {
+  it("전체 권한 자율성은 실행기 우회 정책과 revision을 반환한다", async () => {
+    const resolver = Reflect.construct(SubscriptionAgentPolicyResolver, [
+      { getActivePolicy: async () => undefined },
+      "local",
+      undefined,
+      { get: async () => ({ mode: "full-access", revision: 7 }) },
+    ]) as SubscriptionAgentPolicyResolver;
+
+    await expect(
+      resolver.resolve(context, {
+        executionId: "execution-full-access",
+        workId: "work-full-access",
+        agentHandle: "representative",
+        providerId: "anthropic-claude-code",
+        accountId: "account-1",
+        connectorId: "connector-1",
+        workspaceRoot: "/tmp/work-full-access",
+      }),
+    ).resolves.toEqual({
+      permissionMode: "full-access",
+      sandboxMode: "danger-full-access",
+      approvalPolicy: "never",
+      networkAccessEnabled: true,
+      autonomyRevision: 7,
+    });
+  });
+
   it("제공자별 명시적 automatic·review·deny를 실행 정책으로 해석한다", async () => {
     const getActivePolicy = vi
       .fn()
@@ -58,19 +85,25 @@ describe("구독 Agent 정책과 도구 승인", () => {
     await expect(
       resolver.resolve(context, { ...base, agentHandle: "software-engineering.backend-specialist" }),
     ).resolves.toEqual({
+      permissionMode: "governed",
       sandboxMode: "workspace-write",
       approvalPolicy: "on-request",
       networkAccessEnabled: false,
+      autonomyRevision: 0,
     });
     await expect(resolver.resolve(context, { ...base, agentHandle: "representative" })).resolves.toEqual({
+      permissionMode: "governed",
       sandboxMode: "read-only",
       approvalPolicy: "never",
       networkAccessEnabled: false,
+      autonomyRevision: 0,
     });
     await expect(resolver.resolve(context, { ...base, agentHandle: "representative" })).resolves.toEqual({
+      permissionMode: "governed",
       sandboxMode: "read-only",
       approvalPolicy: "deny",
       networkAccessEnabled: false,
+      autonomyRevision: 0,
     });
   });
 

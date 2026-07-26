@@ -57,12 +57,21 @@ export type ClaudeAgentQuery = (input: {
   readonly options: Options;
 }) => ClaudeQueryHandle;
 
-export interface ClaudeSubscriptionConnectorOptions {
-  readonly executable?: string;
-  readonly permissionMode: Extract<NonNullable<Options["permissionMode"]>, "default" | "auto" | "dontAsk" | "plan">;
-  readonly sandbox: NonNullable<Options["sandbox"]>;
-  readonly model?: string;
-}
+export type ClaudeSubscriptionConnectorOptions =
+  | {
+      readonly executable?: string;
+      readonly permissionMode: Extract<NonNullable<Options["permissionMode"]>, "default" | "auto" | "dontAsk" | "plan">;
+      readonly sandbox: NonNullable<Options["sandbox"]>;
+      readonly model?: string;
+      readonly allowDangerouslySkipPermissions?: never;
+    }
+  | {
+      readonly executable?: string;
+      readonly permissionMode: "bypassPermissions";
+      readonly allowDangerouslySkipPermissions: true;
+      readonly sandbox?: never;
+      readonly model?: string;
+    };
 
 const OFFICIAL_QUERY: ClaudeAgentQuery = (input) => officialQuery(input);
 
@@ -149,10 +158,11 @@ export class ClaudeSubscriptionConnector implements SubscriptionAgentAdapter {
     if (options.executable !== undefined && !isAbsolute(options.executable)) {
       throw new Error("Claude SDK 실행 파일은 절대 경로여야 합니다");
     }
-    if (!new Set(["default", "auto", "dontAsk", "plan"]).has(options.permissionMode)) {
-      throw new Error("Claude SDK 승인 정책이 유효하지 않습니다");
-    }
-    if (
+    if (options.permissionMode === "bypassPermissions") {
+      if (options.allowDangerouslySkipPermissions !== true) {
+        throw new Error("Claude 전체 권한에는 allowDangerouslySkipPermissions 확인이 필요합니다");
+      }
+    } else if (
       options.sandbox.enabled !== true ||
       options.sandbox.failIfUnavailable !== true ||
       options.sandbox.allowUnsandboxedCommands !== false
@@ -246,6 +256,7 @@ export class ClaudeSubscriptionConnector implements SubscriptionAgentAdapter {
     environment.CLAUDE_CONFIG_DIR = input.profileRoot;
     environment.CLAUDE_CODE_DISABLE_AUTO_MEMORY = "1";
     environment.CLAUDE_AGENT_SDK_CLIENT_APP = "massion/1.0.0";
+    const fullAccess = this.options?.permissionMode === "bypassPermissions";
     const options: Options = {
       cwd: input.workspaceRoot,
       env: environment,
@@ -253,171 +264,184 @@ export class ClaudeSubscriptionConnector implements SubscriptionAgentAdapter {
       allowedTools: [...input.allowedTools],
       disallowedTools: [...input.disallowedTools],
       permissionMode: this.options?.permissionMode ?? "default",
+      ...(fullAccess ? { allowDangerouslySkipPermissions: true } : {}),
       settingSources: [],
       ...(this.options
         ? {
             ...(this.options.executable ? { pathToClaudeCodeExecutable: this.options.executable } : {}),
-            sandbox: this.options.sandbox,
+            ...(!fullAccess ? { sandbox: this.options.sandbox } : {}),
             ...(this.options.model ? { model: this.options.model } : {}),
           }
         : {}),
       ...(input.sessionId ? { resume: input.sessionId } : {}),
       ...(output ? { outputFormat: { type: "json_schema", schema: output.jsonSchema } } : {}),
-      hooks: {
-        PreToolUse: [
-          {
-            hooks: [
-              async (hookInput, hookToolUseId) => {
-                const deny = (reason: string) => ({
-                  hookSpecificOutput: {
-                    hookEventName: "PreToolUse" as const,
-                    permissionDecision: "deny" as const,
-                    permissionDecisionReason: reason,
-                  },
-                });
-                if (hookInput.hook_event_name !== "PreToolUse") {
-                  return deny("Massion PreToolUse hook 입력이 아닙니다");
-                }
-                const preToolUse = hookInput;
-                if (
-                  !preToolUse.session_id ||
-                  !preToolUse.tool_use_id ||
-                  !hookToolUseId ||
-                  hookToolUseId !== preToolUse.tool_use_id ||
-                  !preToolUse.tool_name ||
-                  !plainRecord(preToolUse.tool_input)
-                ) {
-                  return deny("Claude PreToolUse 도구 식별 정보가 유효하지 않습니다");
-                }
-                const toolInput = preToolUse.tool_input;
-                let inputDigest: string;
-                try {
-                  inputDigest = toolInputDigest(toolInput);
-                } catch {
-                  return deny("Claude PreToolUse 도구 입력을 안전하게 검증할 수 없습니다");
-                }
-                const permissionRequestId = hookPermissionRequestId(
-                  preToolUse.session_id,
-                  preToolUse.tool_use_id,
-                  inputDigest,
-                );
-                const authorizationKey = toolAuthorizationKey(
-                  preToolUse.tool_name,
-                  preToolUse.tool_use_id,
-                  inputDigest,
-                );
-                return await serializeHookDecision(async () => {
-                  if (
-                    approvedPermission &&
-                    approvalState.approvedConsumed &&
-                    preToolUse.tool_use_id === approvedPermission.toolUseId
-                  ) {
-                    approvalState.approvedHookReplay = true;
-                    return deny("승인된 원래 Claude 도구 호출이 두 번 전달되었습니다");
-                  }
-                  if (approvedPermission && !approvalState.approvedConsumed) {
-                    if (
-                      preToolUse.session_id !== approvedPermission.sessionId ||
-                      preToolUse.tool_name !== approvedPermission.toolName ||
-                      preToolUse.tool_use_id !== approvedPermission.toolUseId ||
-                      permissionRequestId !== approvedPermission.permissionRequestId ||
-                      inputDigest !== approvedPermission.inputDigest
-                    ) {
-                      approvalState.approvedMismatch = true;
-                      return deny("승인된 원래 Claude 도구 호출과 일치하지 않습니다");
-                    }
-                    approvalState.approvedConsumed = true;
-                    providerAuthorizations.add(authorizationKey);
-                    return {
-                      hookSpecificOutput: {
-                        hookEventName: "PreToolUse" as const,
-                        permissionDecision: "allow" as const,
-                        permissionDecisionReason: "Massion Governance에서 원 도구 호출을 승인했습니다",
-                      },
-                    };
-                  }
-                  if (approvalState.deferredPermission) {
-                    approvalState.deferredConflict = true;
-                    return deny("Claude defer는 한 turn의 단일 도구 호출만 지원합니다");
-                  }
-                  let decision: Awaited<ReturnType<SubscriptionPermissionBridge["request"]>>;
-                  try {
-                    decision = await this.permissions.request(context, {
-                      executionId: input.executionId,
-                      workId: input.workId,
-                      agentHandle: input.agentHandle,
-                      toolName: preToolUse.tool_name,
-                      toolInput,
-                      toolUseId: preToolUse.tool_use_id,
-                      permissionRequestId,
-                    });
-                  } catch {
-                    return deny("Governance 도구 승인 상태를 확인할 수 없습니다");
-                  }
-                  if (decision.outcome === "allow") {
-                    providerAuthorizations.add(authorizationKey);
-                    return {
-                      hookSpecificOutput: {
-                        hookEventName: "PreToolUse" as const,
-                        permissionDecision: "allow" as const,
-                        permissionDecisionReason: "Massion Governance 정책이 허용했습니다",
-                      },
-                    };
-                  }
-                  if (decision.outcome === "deny") return deny(decision.reason);
-                  approvalState.deferredPermission = {
-                    approvalId: decision.approvalId,
-                    sessionId: preToolUse.session_id,
-                    organizationId: context.organizationId,
-                    userId: context.userId,
-                    toolName: preToolUse.tool_name,
-                    toolUseId: preToolUse.tool_use_id,
-                    permissionRequestId,
-                    inputDigest,
-                    ...(output ? { output } : {}),
-                  };
-                  return {
-                    hookSpecificOutput: {
-                      hookEventName: "PreToolUse" as const,
-                      permissionDecision: "defer" as const,
+      ...(!fullAccess
+        ? {
+            hooks: {
+              PreToolUse: [
+                {
+                  hooks: [
+                    async (hookInput, hookToolUseId) => {
+                      const deny = (reason: string) => ({
+                        hookSpecificOutput: {
+                          hookEventName: "PreToolUse" as const,
+                          permissionDecision: "deny" as const,
+                          permissionDecisionReason: reason,
+                        },
+                      });
+                      if (hookInput.hook_event_name !== "PreToolUse") {
+                        return deny("Massion PreToolUse hook 입력이 아닙니다");
+                      }
+                      const preToolUse = hookInput;
+                      if (
+                        !preToolUse.session_id ||
+                        !preToolUse.tool_use_id ||
+                        !hookToolUseId ||
+                        hookToolUseId !== preToolUse.tool_use_id ||
+                        !preToolUse.tool_name ||
+                        !plainRecord(preToolUse.tool_input)
+                      ) {
+                        return deny("Claude PreToolUse 도구 식별 정보가 유효하지 않습니다");
+                      }
+                      const toolInput = preToolUse.tool_input;
+                      let inputDigest: string;
+                      try {
+                        inputDigest = toolInputDigest(toolInput);
+                      } catch {
+                        return deny("Claude PreToolUse 도구 입력을 안전하게 검증할 수 없습니다");
+                      }
+                      const permissionRequestId = hookPermissionRequestId(
+                        preToolUse.session_id,
+                        preToolUse.tool_use_id,
+                        inputDigest,
+                      );
+                      const authorizationKey = toolAuthorizationKey(
+                        preToolUse.tool_name,
+                        preToolUse.tool_use_id,
+                        inputDigest,
+                      );
+                      return await serializeHookDecision(async () => {
+                        if (
+                          approvedPermission &&
+                          approvalState.approvedConsumed &&
+                          preToolUse.tool_use_id === approvedPermission.toolUseId
+                        ) {
+                          approvalState.approvedHookReplay = true;
+                          return deny("승인된 원래 Claude 도구 호출이 두 번 전달되었습니다");
+                        }
+                        if (approvedPermission && !approvalState.approvedConsumed) {
+                          if (
+                            preToolUse.session_id !== approvedPermission.sessionId ||
+                            preToolUse.tool_name !== approvedPermission.toolName ||
+                            preToolUse.tool_use_id !== approvedPermission.toolUseId ||
+                            permissionRequestId !== approvedPermission.permissionRequestId ||
+                            inputDigest !== approvedPermission.inputDigest
+                          ) {
+                            approvalState.approvedMismatch = true;
+                            return deny("승인된 원래 Claude 도구 호출과 일치하지 않습니다");
+                          }
+                          approvalState.approvedConsumed = true;
+                          providerAuthorizations.add(authorizationKey);
+                          return {
+                            hookSpecificOutput: {
+                              hookEventName: "PreToolUse" as const,
+                              permissionDecision: "allow" as const,
+                              permissionDecisionReason: "Massion Governance에서 원 도구 호출을 승인했습니다",
+                            },
+                          };
+                        }
+                        if (approvalState.deferredPermission) {
+                          approvalState.deferredConflict = true;
+                          return deny("Claude defer는 한 turn의 단일 도구 호출만 지원합니다");
+                        }
+                        let decision: Awaited<ReturnType<SubscriptionPermissionBridge["request"]>>;
+                        try {
+                          decision = await this.permissions.request(context, {
+                            executionId: input.executionId,
+                            workId: input.workId,
+                            agentHandle: input.agentHandle,
+                            toolName: preToolUse.tool_name,
+                            toolInput,
+                            toolUseId: preToolUse.tool_use_id,
+                            permissionRequestId,
+                          });
+                        } catch {
+                          return deny("Governance 도구 승인 상태를 확인할 수 없습니다");
+                        }
+                        if (decision.outcome === "allow") {
+                          providerAuthorizations.add(authorizationKey);
+                          return {
+                            hookSpecificOutput: {
+                              hookEventName: "PreToolUse" as const,
+                              permissionDecision: "allow" as const,
+                              permissionDecisionReason: "Massion Governance 정책이 허용했습니다",
+                            },
+                          };
+                        }
+                        if (decision.outcome === "deny") return deny(decision.reason);
+                        approvalState.deferredPermission = {
+                          approvalId: decision.approvalId,
+                          sessionId: preToolUse.session_id,
+                          organizationId: context.organizationId,
+                          userId: context.userId,
+                          toolName: preToolUse.tool_name,
+                          toolUseId: preToolUse.tool_use_id,
+                          permissionRequestId,
+                          inputDigest,
+                          ...(output ? { output } : {}),
+                        };
+                        return {
+                          hookSpecificOutput: {
+                            hookEventName: "PreToolUse" as const,
+                            permissionDecision: "defer" as const,
+                          },
+                        };
+                      });
                     },
-                  };
-                });
-              },
-            ],
-          },
-        ],
-      },
-      canUseTool: (toolName, toolInput, permissionContext): Promise<PermissionResult> => {
-        let inputDigest: string;
-        try {
-          inputDigest = toolInputDigest(toolInput);
-        } catch {
-          return Promise.resolve({
-            behavior: "deny",
-            message: "Claude provider 권한 요청 입력을 안전하게 검증할 수 없습니다",
-            decisionClassification: "user_reject",
-          });
-        }
-        const authorizationKey = toolAuthorizationKey(toolName, permissionContext.toolUseID, inputDigest);
-        if (providerAuthorizations.has(authorizationKey)) {
-          if (consumedProviderAuthorizations.has(authorizationKey)) {
-            approvalState.providerPermissionReplay = true;
-            return Promise.resolve({
-              behavior: "deny",
-              message: "같은 Claude provider 권한 요청이 두 번 전달되었습니다",
-              decisionClassification: "user_reject",
-            });
+                  ],
+                },
+              ],
+            },
           }
-          consumedProviderAuthorizations.add(authorizationKey);
-          return Promise.resolve({ behavior: "allow", decisionClassification: "user_temporary" });
-        }
-        return Promise.resolve({
-          behavior: "deny",
-          message: "Massion PreToolUse 승인이 없는 provider 권한 요청입니다",
-          decisionClassification: "user_reject",
-        });
-      },
+        : {}),
+      ...(!fullAccess
+        ? {
+            canUseTool: (
+              toolName: string,
+              toolInput: Readonly<Record<string, unknown>>,
+              permissionContext: { toolUseID: string },
+            ): Promise<PermissionResult> => {
+              let inputDigest: string;
+              try {
+                inputDigest = toolInputDigest(toolInput);
+              } catch {
+                return Promise.resolve({
+                  behavior: "deny",
+                  message: "Claude provider 권한 요청 입력을 안전하게 검증할 수 없습니다",
+                  decisionClassification: "user_reject",
+                });
+              }
+              const authorizationKey = toolAuthorizationKey(toolName, permissionContext.toolUseID, inputDigest);
+              if (providerAuthorizations.has(authorizationKey)) {
+                if (consumedProviderAuthorizations.has(authorizationKey)) {
+                  approvalState.providerPermissionReplay = true;
+                  return Promise.resolve({
+                    behavior: "deny",
+                    message: "같은 Claude provider 권한 요청이 두 번 전달되었습니다",
+                    decisionClassification: "user_reject",
+                  });
+                }
+                consumedProviderAuthorizations.add(authorizationKey);
+                return Promise.resolve({ behavior: "allow", decisionClassification: "user_temporary" });
+              }
+              return Promise.resolve({
+                behavior: "deny",
+                message: "Massion PreToolUse 승인이 없는 provider 권한 요청입니다",
+                decisionClassification: "user_reject",
+              });
+            },
+          }
+        : {}),
     };
     const handle = this.query({ prompt: approvedPermission ? emptyResumePrompt() : input.prompt, options });
     this.active.set(input.executionId, handle);

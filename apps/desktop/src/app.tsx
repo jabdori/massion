@@ -2404,10 +2404,7 @@ function GrowthSurface({
             ) : (
               <ul className="grid gap-1.5">
                 {memoryEntries.map((memory) => (
-                  <li
-                    className="rounded-[7px] border border-border bg-surface-1 px-3 py-2.5"
-                    key={memory.key}
-                  >
+                  <li className="rounded-[7px] border border-border bg-surface-1 px-3 py-2.5" key={memory.key}>
                     <div className="flex flex-wrap items-center gap-1.5">
                       <span className="text-[12px] font-medium">{memory.key}</span>
                       <span className="rounded-[3px] border border-control px-1 text-[10px] text-muted">
@@ -2471,11 +2468,20 @@ function GrowthSurface({
                 rows={3}
                 value={memoryValue}
               />
-              <Button disabled={memorySaving || !memoryKey.trim() || !memoryValue.trim()} size="sm" type="submit" variant="outline">
+              <Button
+                disabled={memorySaving || !memoryKey.trim() || !memoryValue.trim()}
+                size="sm"
+                type="submit"
+                variant="outline"
+              >
                 {memorySaving ? "저장 중…" : "기억 저장"}
               </Button>
             </form>
-            {memoryError ? <p role="alert" className="mt-2 text-[11px] leading-5 text-danger">{memoryError}</p> : null}
+            {memoryError ? (
+              <p role="alert" className="mt-2 text-[11px] leading-5 text-danger">
+                {memoryError}
+              </p>
+            ) : null}
           </section>
 
           {growth.effects.some((item) => item.suggestionId === undefined) ? (
@@ -3011,13 +3017,13 @@ function SettingsSurface({ service }: { service: DesktopService }) {
                       </button>
                       <button
                         className={`rounded-[5px] border px-3 py-1 text-[12px] disabled:opacity-50 ${
-                          autonomy.mode === "full"
+                          autonomy.mode === "full-access"
                             ? "border-control bg-surface-2 text-primary"
                             : "border-border text-secondary"
                         }`}
-                        disabled={autonomySaving || autonomy.mode === "full"}
+                        disabled={autonomySaving || autonomy.mode === "full-access"}
                         onClick={() => {
-                          void setAutonomyMode("full");
+                          void setAutonomyMode("full-access");
                         }}
                         type="button"
                       >
@@ -4564,7 +4570,15 @@ function InspectorRoom({ room }: { room: RoomView }) {
   );
 }
 
-function WorkInspector({ room, service, work }: { room: RoomView | undefined; service: DesktopService; work: WorkView }) {
+function WorkInspector({
+  room,
+  service,
+  work,
+}: {
+  room: RoomView | undefined;
+  service: DesktopService;
+  work: WorkView;
+}) {
   const [tab, setTab] = useState("work");
   const [knowledge, setKnowledge] = useState<WorkKnowledgeViewV1>();
   const [knowledgeError, setKnowledgeError] = useState("");
@@ -4753,7 +4767,9 @@ function WorkKnowledgeInspector({
                     {reference.qualifiedName ?? "코드 범위"} · {reference.startLine}–{reference.endLine}
                   </span>
                 </span>
-                {sharedContextAvailable ? <CaretRight aria-hidden="true" className="shrink-0 text-muted" size={14} /> : null}
+                {sharedContextAvailable ? (
+                  <CaretRight aria-hidden="true" className="shrink-0 text-muted" size={14} />
+                ) : null}
               </button>
             </li>
           ))}

@@ -450,7 +450,7 @@ export async function createMassionDaemon(
       connectors: subscriptionConnectors,
       broker: connectorBroker,
       workspaceCapabilities: subscriptionExecutionContext,
-      policies: new SubscriptionAgentPolicyResolver(policies, config.mode, subscriptionPolicies),
+      policies: new SubscriptionAgentPolicyResolver(policies, config.mode, subscriptionPolicies, governance.autonomy),
       profileRoot: join(config.connectors.root, "profiles"),
       executableAllowlist: config.connectors.executables,
       permissions: {

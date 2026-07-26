@@ -258,7 +258,7 @@ export interface OrganizationGraphSnapshotV1 {
 }
 
 export interface GovernanceAutonomyViewV1 {
-  readonly mode: "automatic" | "review" | "full";
+  readonly mode: "automatic" | "review" | "full-access";
   readonly revision: number;
 }
 
@@ -417,7 +417,10 @@ export interface ApplicationQueryMapV1 {
     readonly payload: { readonly workId: string };
     readonly data: WorkKnowledgeViewV1;
   };
-  readonly "growth.memories": { readonly payload: Record<string, never>; readonly data: readonly ExplicitMemoryViewV1[] };
+  readonly "growth.memories": {
+    readonly payload: Record<string, never>;
+    readonly data: readonly ExplicitMemoryViewV1[];
+  };
   readonly "organization.graph.snapshot": {
     readonly payload: Record<string, never>;
     readonly data: OrganizationGraphSnapshotV1;
@@ -454,9 +457,13 @@ export interface ApplicationCommandMapV1 {
       readonly reason: string;
     };
   };
-  readonly "governance.autonomy.set": { readonly payload: { readonly mode: "automatic" | "review" | "full" } };
+  readonly "governance.autonomy.set": { readonly payload: { readonly mode: "automatic" | "review" | "full-access" } };
   readonly "growth.memory.put": {
-    readonly payload: { readonly key: string; readonly kind: "fact" | "preference" | "procedure"; readonly value: string };
+    readonly payload: {
+      readonly key: string;
+      readonly kind: "fact" | "preference" | "procedure";
+      readonly value: string;
+    };
   };
   readonly "growth.memory.forget": { readonly payload: { readonly key: string } };
 }

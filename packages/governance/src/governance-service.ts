@@ -134,13 +134,18 @@ export class GovernanceService {
     let requirement: ApprovalRequirement | undefined;
     const mode = automationMode(input.request);
     const active = await this.policies.getActivePolicy(context);
-    if (!active) {
-      errors = ["active_policy_missing"];
-    } else if (
+    const autonomyState = await this.autonomy.get(context);
+    if (
       input.request.principal.organizationId !== context.organizationId ||
       input.request.resource.organizationId !== context.organizationId
     ) {
       reasons = ["tenant-context"];
+    } else if (autonomyState.mode === "full-access") {
+      // full-access는 tenant·멱등성 검증 뒤에만 Governance 정책·승인 경계를 우회합니다.
+      outcome = "allow";
+      reasons = ["full-access-user-opt-in"];
+    } else if (!active) {
+      errors = ["active_policy_missing"];
     } else {
       const authorization = this.authorizer.authorize(active.bundle, input.request);
       reasons = authorization.reasons;
@@ -153,20 +158,10 @@ export class GovernanceService {
         // 자율성 다이얼(조이기 전용): review 모드는 읽기 외 allow를 승인 요구로 승격합니다.
         // deny와 정책·불변식이 요구한 승인은 이 설정으로 바뀌지 않습니다.
         if (outcome === "allow" && !isReadAction(input.request.action)) {
-          const autonomyState = await this.autonomy.get(context);
           if (autonomyState.mode === "review") {
             requirement = autonomyReviewRequirement(input.request.action);
             outcome = "require_approval";
             reasons = [...reasons, "autonomy-review"];
-          }
-        }
-        // full 모드(개인용 전체 권한, 레벨 3): 정책·불변식이 요구한 승인도 사용자 책임 하에 자동 통과.
-        if (outcome === "require_approval") {
-          const autonomyState = await this.autonomy.get(context);
-          if (autonomyState.mode === "full") {
-            requirement = undefined;
-            outcome = "allow";
-            reasons = [...reasons, "autonomy-full"];
           }
         }
       }

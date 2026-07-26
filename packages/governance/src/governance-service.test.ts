@@ -109,7 +109,7 @@ describe("Governance Policy Decision", () => {
     expect(read.outcome).toBe("allow");
   });
 
-  it("자율성 full 모드는 정책이 요구한 승인을 자동 통과한다", async () => {
+  it("자율성 full-access 모드는 정책이 요구한 승인을 자동 통과한다", async () => {
     await activate("personal");
     const autonomy = await AutonomyStore.create(database, organizations);
 
@@ -120,22 +120,22 @@ describe("Governance Policy Decision", () => {
     });
     expect(before.outcome).toBe("require_approval");
 
-    await autonomy.set(context, { mode: "full", expectedRevision: 0 });
+    await autonomy.set(context, { mode: "full-access", expectedRevision: 0 });
 
-    // full 모드는 같은 요청을 allow로 통과시키고 requirement를 비웁니다.
+    // full-access 모드는 같은 요청을 allow로 통과시키고 requirement를 비웁니다.
     const bypassed = await governance.evaluate(context, {
       commandId: crypto.randomUUID(),
       request: request("tool.call", { context: { environment: "local", riskClass: "write", external: false } }),
     });
     expect(bypassed).toMatchObject({ outcome: "allow" });
     expect(bypassed.requirement).toBeUndefined();
-    expect(bypassed.reasons).toContain("autonomy-full");
+    expect(bypassed.reasons).toContain("full-access-user-opt-in");
   });
 
-  it("자율성 full 모드는 growth.adopt 불변식 승인도 통과한다", async () => {
+  it("자율성 full-access 모드는 growth.adopt 불변식 승인도 통과한다", async () => {
     await activate("personal");
     const autonomy = await AutonomyStore.create(database, organizations);
-    await autonomy.set(context, { mode: "full", expectedRevision: 0 });
+    await autonomy.set(context, { mode: "full-access", expectedRevision: 0 });
 
     const result = await governance.evaluate(context, {
       commandId: crypto.randomUUID(),
@@ -144,7 +144,21 @@ describe("Governance Policy Decision", () => {
       }),
     });
     expect(result).toMatchObject({ outcome: "allow" });
-    expect(result.reasons).toContain("autonomy-full");
+    expect(result.reasons).toContain("full-access-user-opt-in");
+  });
+
+  it("full-access는 tenant 검증 뒤 활성 정책 부재만 우회한다", async () => {
+    const autonomy = await AutonomyStore.create(database, organizations);
+    await autonomy.set(context, { mode: "full-access", expectedRevision: 0 });
+
+    const result = await governance.evaluate(context, {
+      commandId: crypto.randomUUID(),
+      request: request("tool.call", { context: { environment: "local", riskClass: "write", external: false } }),
+    });
+
+    expect(result).toMatchObject({ outcome: "allow" });
+    expect(result.reasons).toContain("full-access-user-opt-in");
+    expect(result.errors).toEqual([]);
   });
 
   it("team production 위험 작업은 분리된 지정 역할 승인을 요구한다", async () => {
