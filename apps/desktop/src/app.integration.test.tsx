@@ -665,15 +665,12 @@ describe("AgentOS native data flow", () => {
     let createdVisible = false;
     let runVisible = false;
     const startWork = vi.fn(async () => ({ runId: "run-created-before-run-0001" }));
+    const { run: _createdRun, ...createdWithoutRun } = created;
     const fake = service({
       startWork,
-      loadIndex: async () => (createdVisible ? [...snapshot.works, { ...created, run: undefined }] : snapshot.works),
+      loadIndex: async () => (createdVisible ? [...snapshot.works, createdWithoutRun] : snapshot.works),
       loadWork: async (workId) =>
-        workId === created.id
-          ? runVisible
-            ? created
-            : { ...created, run: undefined }
-          : (snapshot.works[0] as WorkView),
+        workId === created.id ? (runVisible ? created : createdWithoutRun) : (snapshot.works[0] as WorkView),
       subscribeDurable: async (handler) => {
         durable = handler;
         return async () => undefined;
