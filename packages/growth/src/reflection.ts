@@ -189,13 +189,16 @@ export class ReflectionService {
       "SELECT * FROM reflection_run WHERE organization_id = $organization_id AND command_id = $command_id LIMIT 1;",
       { organization_id: context.organizationId, command_id: input.commandId },
     );
-    if (replayed[0]) {
-      if (replayed[0].request_hash !== requestHash)
+    const replayedRun = replayed[0];
+    if (replayedRun) {
+      if (replayedRun.request_hash !== requestHash)
         throw new Error("같은 commandId에 다른 Reflection 요청을 사용할 수 없습니다");
-      return {
-        run: replayed[0],
-        suggestions: await this.suggestions(context.organizationId, replayed[0].reflection_run_id),
-      };
+      if (replayedRun.status !== "generating") {
+        return {
+          run: replayedRun,
+          suggestions: await this.suggestions(context.organizationId, replayedRun.reflection_run_id),
+        };
+      }
     }
     const canonical = createReflectionSnapshot(input.snapshot.material);
     if (canonical.hash !== input.snapshot.hash) throw new Error("ReflectionSnapshot hash가 일치하지 않습니다");
@@ -225,22 +228,40 @@ export class ReflectionService {
     ) {
       throw new Error("Growth trigger와 ReflectionSnapshot 계보가 일치하지 않습니다");
     }
-    const reflectionRunId = crypto.randomUUID();
-    const [created] = await this.database.query<[ReflectionRunRecord[]]>(
-      "CREATE reflection_run CONTENT { reflection_run_id: $reflection_run_id, organization_id: $organization_id, work_id: $work_id, records_run_id: $records_run_id, trigger_id: $trigger_id, configuration_version_id: $configuration_version_id, snapshot_hash: $snapshot_hash, status: 'generating', version: 1, attempt: 1, command_id: $command_id, request_hash: $request_hash, created_at: time::now(), updated_at: time::now() } RETURN AFTER;",
-      {
-        reflection_run_id: reflectionRunId,
-        organization_id: context.organizationId,
-        work_id: trigger.work_id,
-        records_run_id: trigger.records_run_id,
-        trigger_id: trigger.trigger_id,
-        configuration_version_id: trigger.configuration_version_id,
-        snapshot_hash: canonical.hash,
-        command_id: input.commandId,
-        request_hash: requestHash,
-      },
-    );
-    if (!created[0]) throw new Error("ReflectionRun 생성 결과가 없습니다");
+    let reflectionRun = replayedRun;
+    if (reflectionRun) {
+      const existingSuggestions = await this.suggestions(context.organizationId, reflectionRun.reflection_run_id);
+      if (existingSuggestions.length > 0) {
+        const [blocked] = await this.database.query<[ReflectionRunRecord[]]>(
+          "UPDATE reflection_run SET status = 'blocked', version += 1, updated_at = time::now() WHERE organization_id = $organization_id AND reflection_run_id = $reflection_run_id RETURN AFTER; UPDATE growth_trigger SET status = 'blocked', worker_id = NONE, lease_expires_at = NONE, updated_at = time::now() WHERE organization_id = $organization_id AND trigger_id = $trigger_id;",
+          {
+            organization_id: context.organizationId,
+            reflection_run_id: reflectionRun.reflection_run_id,
+            trigger_id: trigger.trigger_id,
+          },
+        );
+        if (!blocked[0]) throw new Error("부분 생성 Reflection 차단 결과가 없습니다");
+        return { run: blocked[0], suggestions: [] };
+      }
+    } else {
+      const [created] = await this.database.query<[ReflectionRunRecord[]]>(
+        "CREATE reflection_run CONTENT { reflection_run_id: $reflection_run_id, organization_id: $organization_id, work_id: $work_id, records_run_id: $records_run_id, trigger_id: $trigger_id, configuration_version_id: $configuration_version_id, snapshot_hash: $snapshot_hash, status: 'generating', version: 1, attempt: 1, command_id: $command_id, request_hash: $request_hash, created_at: time::now(), updated_at: time::now() } RETURN AFTER;",
+        {
+          reflection_run_id: crypto.randomUUID(),
+          organization_id: context.organizationId,
+          work_id: trigger.work_id,
+          records_run_id: trigger.records_run_id,
+          trigger_id: trigger.trigger_id,
+          configuration_version_id: trigger.configuration_version_id,
+          snapshot_hash: canonical.hash,
+          command_id: input.commandId,
+          request_hash: requestHash,
+        },
+      );
+      reflectionRun = created[0];
+    }
+    if (!reflectionRun) throw new Error("ReflectionRun 생성 결과가 없습니다");
+    const reflectionRunId = reflectionRun.reflection_run_id;
     try {
       const generated = await this.generator.generate(context, { reflectionRunId, snapshot: canonical });
       if (!generated.runtimeExecutionId.trim()) throw new Error("Growth Runtime Execution ID가 필요합니다");

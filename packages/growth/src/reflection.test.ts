@@ -4,6 +4,7 @@ import { IdentityService, OrganizationService } from "@massion/identity";
 import { createDatabase, type MassionDatabase } from "@massion/storage";
 
 import { ReflectionService, validateSuggestionCandidate, type SuggestionCandidate } from "./reflection.js";
+import { growthChecksum } from "./prompt-memory.js";
 import { GROWTH_REFLECTION_MIGRATION } from "./schema.js";
 import { createReflectionSnapshot, type ReflectionSnapshotBundle } from "./snapshot.js";
 
@@ -155,5 +156,76 @@ describe("Reflection suggestion validation", () => {
     expect(GROWTH_REFLECTION_MIGRATION.checksum).toBe(
       "4043afa33ffa9c4950ec69ed44fb40740f5e879baed6353dd833c3c7fb1a4004",
     );
+  });
+
+  it("generating Reflection은 같은 snapshot으로 재시작해 완료한다", async () => {
+    database = await createDatabase({ url: "mem://", namespace: "massion", database: crypto.randomUUID() });
+    const identity = await IdentityService.create(database);
+    const organizations = await OrganizationService.create(database);
+    const owner = await identity.registerPersonalUser({
+      email: "reflection-resume@example.com",
+      displayName: "Reflection resume",
+    });
+    const context = await organizations.resolveTenantContext(owner.user.user_id, owner.organization.organization_id);
+    let generated = 0;
+    const service = await ReflectionService.create(
+      database,
+      organizations,
+      {
+        generate: async () => {
+          generated += 1;
+          return { runtimeExecutionId: "runtime-resume-1", candidates: [candidate()] };
+        },
+      },
+      {
+        verify: async (_context, source) => ({
+          checksum: source.checksum,
+          capturedRevision: source.capturedRevision,
+          fresh: true,
+        }),
+      },
+      { verify: async () => undefined },
+    );
+    const trigger = {
+      trigger_id: "trigger-resume-1",
+      organization_id: context.organizationId,
+      work_id: "work-1",
+      records_run_id: "records-run-1",
+      work_record_id: "work-record-1",
+      verification_id: "verification-1",
+      assurance_run_id: "assurance-run-1",
+      requester_user_id: context.userId,
+      status: "claimed" as const,
+      configuration_version_id: "configuration-1",
+    };
+    await database.query(
+      "CREATE growth_trigger CONTENT { trigger_id: $trigger_id, organization_id: $organization_id, work_id: $work_id, records_run_id: $records_run_id, work_record_id: $work_record_id, verification_id: $verification_id, assurance_run_id: $assurance_run_id, requester_user_id: $user_id, status: 'claimed', configuration_version_id: $configuration_version_id, created_at: time::now(), updated_at: time::now() };",
+      { ...trigger, trigger_id: trigger.trigger_id, organization_id: context.organizationId, user_id: context.userId },
+    );
+    const commandId = "reflection-resume-1";
+    const ownedSnapshot = createReflectionSnapshot({
+      ...snapshot.material,
+      organizationId: context.organizationId,
+      sources: snapshot.material.sources.map((source) => ({ ...source, organizationId: context.organizationId })),
+    });
+    const requestHash = growthChecksum({ commandId, triggerId: trigger.trigger_id, snapshotHash: ownedSnapshot.hash });
+    await database.query(
+      "CREATE reflection_run CONTENT { reflection_run_id: 'reflection-resume-1', organization_id: $organization_id, work_id: $work_id, records_run_id: $records_run_id, trigger_id: $trigger_id, configuration_version_id: $configuration_version_id, snapshot_hash: $snapshot_hash, status: 'generating', version: 1, attempt: 1, command_id: $command_id, request_hash: $request_hash, created_at: time::now(), updated_at: time::now() };",
+      {
+        organization_id: context.organizationId,
+        work_id: trigger.work_id,
+        records_run_id: trigger.records_run_id,
+        trigger_id: trigger.trigger_id,
+        configuration_version_id: trigger.configuration_version_id,
+        snapshot_hash: ownedSnapshot.hash,
+        command_id: commandId,
+        request_hash: requestHash,
+      },
+    );
+
+    const result = await service.run(context, { commandId, trigger, snapshot: ownedSnapshot });
+
+    expect(generated).toBe(1);
+    expect(result.run).toMatchObject({ status: "completed", reflection_run_id: "reflection-resume-1" });
   });
 });
