@@ -5,7 +5,7 @@ export { GrowthConfigurationStore } from "./configuration.js";
 export { GrowthComplianceAuditor } from "./compliance.js";
 export { GrowthEffectStore } from "./effect.js";
 export { GrowthEvaluationStore } from "./evaluation.js";
-export { GrowthGovernanceAdapter } from "./governance-adapter.js";
+export { GrowthGovernanceAdapter, GrowthRuntimeAgentIdentityReader } from "./governance-adapter.js";
 export { GrowthWorkPromptAdapter } from "./work-prompt-adapter.js";
 export { GrowthAgentConfigurationReader } from "./runtime-configuration.js";
 export { PromptMemoryStore } from "./prompt-memory.js";

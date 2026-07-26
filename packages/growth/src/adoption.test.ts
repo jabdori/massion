@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 
+import { GovernanceApprovalRequiredError } from "@massion/governance";
 import { applyMigrations, createDatabase, type MassionDatabase } from "@massion/storage";
 import { IdentityService, OrganizationService } from "@massion/identity";
 
@@ -23,6 +24,68 @@ describe("Growth Adoption 상태 전이", () => {
   it("review는 승인을 기다리고 auto allow는 관찰을 시작한다", () => {
     expect(decideAdoptionTransition({ mode: "review", authorization: "require-approval" })).toBe("awaiting-review");
     expect(decideAdoptionTransition({ mode: "auto", authorization: "allow" })).toBe("observing");
+  });
+
+  it("실제 SurrealDB review 채택은 승인 대기 원장과 approval을 남긴다", async () => {
+    database = await createDatabase({ url: "mem:", namespace: "massion", database: crypto.randomUUID() });
+    const identity = await IdentityService.create(database);
+    const organizations = await OrganizationService.create(database);
+    const owner = await identity.registerPersonalUser({ email: "adoption-review@example.com", displayName: "Review" });
+    const context = await organizations.resolveTenantContext(owner.user.user_id, owner.organization.organization_id);
+    await database.query(
+      "DEFINE TABLE growth_configuration_version SCHEMALESS; DEFINE TABLE reflection_run SCHEMALESS; DEFINE TABLE growth_suggestion SCHEMALESS; DEFINE TABLE growth_evaluation_run SCHEMALESS; DEFINE TABLE runtime_execution SCHEMALESS; DEFINE TABLE test_growth_target SCHEMALESS;",
+    );
+    const checksum = "a".repeat(64);
+    await database.query(
+      "CREATE growth_configuration_version CONTENT { configuration_version_id: 'config-review', organization_id: $organization_id, adoption_mode: 'review', status: 'active', checksum: $checksum }; CREATE reflection_run CONTENT { reflection_run_id: 'reflection-review', organization_id: $organization_id, work_id: 'work-review', configuration_version_id: 'config-review', runtime_execution_id: 'runtime-growth-review' }; CREATE growth_suggestion CONTENT { suggestion_id: 'suggestion-review', organization_id: $organization_id, work_id: 'work-review', reflection_run_id: 'reflection-review', target_kind: 'prompt', operation: 'replace-instruction', patch_json: $patch, revision: 1, status: 'proposed' }; CREATE growth_evaluation_run CONTENT { evaluation_run_id: 'evaluation-review', organization_id: $organization_id, suggestion_id: 'suggestion-review', input_hash: $checksum, outcome: 'eligible' }; CREATE runtime_execution CONTENT { organization_id: $organization_id, work_id: 'work-review', execution_id: 'runtime-growth-review', agent_handle: 'growth', status: 'succeeded' };",
+      {
+        organization_id: context.organizationId,
+        checksum,
+        patch: JSON.stringify({ agentHandle: "assurance", instruction: "검증" }),
+      },
+    );
+    const target: GrowthTargetPort = {
+      inspect: async () => ({
+        targetKind: "prompt",
+        versionId: "prompt-review-v1",
+        revision: 1,
+        checksum,
+        snapshot: { sections: [] },
+      }),
+      validate: async () => undefined,
+      apply: async () => {
+        throw new Error("review에서는 적용하지 않아야 합니다");
+      },
+      revert: async () => {
+        throw new Error("review에서는 되돌리지 않아야 합니다");
+      },
+    };
+    const service = await GrowthAdoptionService.create(
+      database,
+      organizations,
+      {
+        authorizeAdoption: async () => {
+          throw new GovernanceApprovalRequiredError("decision-review", "approval-review");
+        },
+      },
+      new GrowthTargetRegistry({ prompt: target, memory: target, policy: target, organization: target }),
+    );
+
+    const result = await service.adopt(context, {
+      commandId: "adopt-review",
+      suggestionId: "suggestion-review",
+      suggestionRevision: 1,
+      evaluationRunId: "evaluation-review",
+      expectedEvaluationInputHash: checksum,
+      expectedTargetChecksum: checksum,
+    });
+
+    expect(result.adoption).toMatchObject({ status: "awaiting-review", approval_id: "approval-review" });
+    const [rows] = await database.query<[Array<{ status: string; approval_id: string }>]>(
+      "SELECT status, approval_id FROM growth_adoption_run WHERE organization_id = $organization_id;",
+      { organization_id: context.organizationId },
+    );
+    expect(rows).toEqual([{ status: "awaiting-review", approval_id: "approval-review" }]);
   });
 
   it("deny와 승인 없는 review 실행을 fail-closed로 거부한다", () => {

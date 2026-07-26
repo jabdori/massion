@@ -63,6 +63,7 @@ import {
   GrowthGovernanceAdapter,
   GrowthRecoveryService,
   GrowthRevertService,
+  GrowthRuntimeAgentIdentityReader,
   GrowthTriggerStore,
   GrowthTargetRegistry,
   GrowthWorkPromptAdapter,
@@ -263,7 +264,8 @@ export async function createMassionDaemon(
     const approvals = await ApprovalStore.create(database, organizations, governance);
     const permits = await PermitStore.create(database, organizations);
     const emergency = await EmergencyControl.create(database, organizations, permits);
-    const governanceGate = new GovernanceGate(governance, approvals, permits, emergency);
+    const growthRuntimeIdentities = new GrowthRuntimeAgentIdentityReader(database, organizations);
+    const governanceGate = new GovernanceGate(governance, approvals, permits, emergency, growthRuntimeIdentities);
     const subscriptionPermissionBridge = new GovernanceSubscriptionPermissionBridge(
       governanceGate,
       config.mode,
