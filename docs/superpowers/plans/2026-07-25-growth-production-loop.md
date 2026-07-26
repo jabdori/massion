@@ -170,6 +170,8 @@ git commit -m "feat(growth): 생산 계보와 노출 차단 경계 보강" \
 
 ## Task 2: Records trigger를 실제 Reflection 실행에 연결
 
+> **2026-07-26 증분:** `apps/server/src/growth-worker.ts`와 제품 조립이 연결되었습니다. 완료 Records backfill·lease claim·bounded Work snapshot·실제 structured Growth 실행·source/runtime 검증·Reflection 저장까지 구현했으며, 평가·채택·효과·복원은 Task 3 이후로 남아 있습니다. 전용 worker 통합 테스트와 실제 완료 Records→suggestion 데스크톱 UAT가 남아 있으므로 Task 2 전체 완료로 표시하지 않습니다.
+
 **Files:**
 
 - Create: `apps/server/src/growth-worker.ts`

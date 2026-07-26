@@ -14,7 +14,7 @@ Core 파이프라인, 권한 모드, 수신함 UX, 메모리 주입 경로가 �
 |---|---|---|
 | 04-1 | 코드 근거를 Work와 Agent 실행에 연결 (Task 3) | 코드 검증 완료 |
 | 04-2 | 전체 권한 실행 모드 추가 | 부분 구현 — 저장·일부 Governance 승인 우회·버튼만 존재 |
-| 04-3 | 메모리 주입 경로 연결 | 코드 경로 존재 — 생산 실패 폐쇄와 Growth worker 연결 대기 |
+| 04-3 | 메모리 주입 경로 연결 | 부분 구현 — 실제 Growth worker가 완료 Records→Reflection까지 연결됨; 평가·채택·효과는 남음 |
 | 04-4 | 수신함 UX 정합 (지도 비율) | 코드 검증 완료 |
 | 04-5 | 전체 빌드 + 데스크톱 UAT | 부분 통과 — Core UAT-01·02·03·07·12 및 재시작 보존 |
 
@@ -35,7 +35,13 @@ Core 파이프라인, 권한 모드, 수신함 UX, 메모리 주입 경로가 �
 
 - `60bfcda94` — GrowthWorkPromptAdapter를 WorkService.create의 promptVersions 자리에 주입.
 
-`70e255ca4`가 onboarding 시점 PromptDefinitionVersion 시드를 보완했습니다. 다만 WorkService는 resolver 예외를 현재 Work에서 조용히 제외하는 경로를 남기고 있고, Reflection·평가·채택을 실제로 이어 주는 Growth worker도 없습니다. 명시적 기억의 실사용 계보는 페이즈 03으로 확인했지만, 지속 발전 생산 루프 완료를 뜻하지 않습니다.
+`70e255ca4`가 onboarding 시점 PromptDefinitionVersion 시드를 보완했습니다. `GrowthWorker`는 완료된 Records를 backfill·claim하고 WorkRecord·Verification·Assurance·event·artifact를 redaction된 bounded snapshot으로 묶어 실제 `planning-quality` structured 실행과 Reflection 저장까지 연결합니다. 평가·채택·효과·복원은 아직 남아 있어 지속 발전 생산 루프 완료를 뜻하지 않습니다.
+
+### Growth Reflection 생산 연결 증분
+
+- 서버의 throw-only Reflection adapter를 실제 routed runner·source verifier·runtime verifier로 교체했습니다.
+- 로컬 bootstrap 뒤 worker timer를 시작하고 daemon drain에서 worker를 먼저 닫도록 연결했습니다.
+- 이 증분은 코드·typecheck와 실제 앱의 provider 연결/Work 실행 시작까지 확인했지만, 완료 Records에서 제안이 생성되는 실제 Growth UAT는 아직 통과하지 않았습니다.
 
 ### 04-4 — 수신함 UX 정합
 
@@ -48,4 +54,4 @@ Core 파이프라인, 권한 모드, 수신함 UX, 메모리 주입 경로가 �
 
 ### 04-5 — 전체 빌드 + 데스크톱 UAT
 
-Core UAT의 일부 시나리오는 통과했지만, GrowthWorker와 전체 권한 실행 경계는 아직 없습니다. 따라서 04-5와 개인용 v1 완료를 전체 통과로 표시하지 않습니다.
+Core UAT의 일부 시나리오와 GrowthWorker 코드 연결은 통과했지만, 평가·채택·효과·복원과 전체 권한 실행 경계, Growth 실제 완료 UAT는 아직 남아 있습니다. 따라서 04-5와 개인용 v1 완료를 전체 통과로 표시하지 않습니다.
