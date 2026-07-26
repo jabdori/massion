@@ -80,6 +80,8 @@ export interface AgentRunner {
   execute(context: TenantContext, input: AgentExecutionInput): Promise<AgentExecutionResult>;
   stream(context: TenantContext, input: AgentExecutionInput): AsyncIterable<AgentExecutionEvent>;
   cancel(context: TenantContext, executionId: string, reason?: string): Promise<void>;
+  /** 한 조직의 현재 프로세스 실행을 모두 취소합니다. 새 실행 수락은 유지합니다. */
+  cancelOrganization(context: TenantContext, reason?: string): Promise<void>;
   suspend(context: TenantContext, executionId: string, reason?: string): Promise<void>;
   resume(context: TenantContext, executionId: string, input?: unknown): Promise<AgentExecutionResult>;
   recover(context: TenantContext, executionId: string): Promise<AgentExecutionResult>;

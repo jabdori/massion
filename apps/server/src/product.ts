@@ -997,6 +997,7 @@ export async function createMassionDaemon(
         works,
         workspaces,
         autonomy: governance.autonomy,
+        emergency,
         organization: graph,
         runtime: runner,
         approvals,
@@ -1016,6 +1017,7 @@ export async function createMassionDaemon(
         workspaces,
         workKnowledge,
         autonomy: governance.autonomy,
+        emergency,
         provenance: {
           listByWork: async (provenanceContext, workId) =>
             (await engineeringDeliveries.listByWork(provenanceContext, workId)).map((delivery) => ({

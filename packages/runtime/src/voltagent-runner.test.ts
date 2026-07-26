@@ -582,6 +582,26 @@ describe("VoltAgent AgentRunner", () => {
     expect(routed.fail).toHaveBeenCalledWith(expect.objectContaining({ signal: { kind: "cancelled" } }));
   });
 
+  it("조직 취소는 현재 조직의 승인 대기 실행을 모두 회수하고 다른 실행 수락은 유지한다", async () => {
+    const routed = agentLease({
+      outcome: "suspended",
+      executionId: "runtime에서-대체",
+      sessionId: "provider-session-organization-cancel",
+      approvalId: "approval-organization-cancel",
+    });
+    routed.executor.cancel = vi.fn().mockResolvedValue(undefined);
+    const runner = new VoltAgentRunner(voltAgent, store, { acquire: vi.fn().mockResolvedValue(routed) }, registry);
+
+    const suspended = await runner.execute(context, input());
+    await runner.cancelOrganization(context, "autonomy_revoked");
+
+    expect(suspended.status).toBe("suspended");
+    expect(runner.activeExecutionIds()).toEqual([]);
+    expect(routed.executor.cancel).toHaveBeenCalledOnce();
+    await expect(runner.execute(context, input())).resolves.toMatchObject({ status: "suspended" });
+    await runner.cancelOrganization(context, "test_cleanup");
+  });
+
   it("Agent runtime이 다른 execution ID의 결과를 반환하면 fallback 없이 interrupted로 격리한다", async () => {
     const routed = agentLease(
       {

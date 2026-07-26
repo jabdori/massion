@@ -39,12 +39,14 @@ describe("Governance 긴급 중단", () => {
   });
 
   it("owner가 즉시 중단하고 모든 일반 실행을 차단한다", async () => {
+    await expect(emergency.get(context)).resolves.toBeUndefined();
     const stopped = await emergency.activate(context, {
       commandId: crypto.randomUUID(),
       reason: "credential 유출 대응",
     });
 
     expect(stopped.active).toBe(true);
+    await expect(emergency.get(context)).resolves.toMatchObject({ active: true, revision: 1 });
     await expect(emergency.assertExecutionAllowed(context)).rejects.toThrow("긴급 중단");
     expect((await emergency.listEvents(context)).map((event) => event.event_type)).toEqual([
       "emergency_stop_activated",

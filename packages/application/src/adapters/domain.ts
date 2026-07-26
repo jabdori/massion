@@ -1,6 +1,11 @@
 import type { ExtensionGateway } from "@massion/extension-host";
 import type { AssuranceBindingStore } from "@massion/assurance";
-import { GovernanceApprovalRequiredError, GovernanceDeniedError, type ApprovalStore } from "@massion/governance";
+import {
+  EmergencyControl,
+  GovernanceApprovalRequiredError,
+  GovernanceDeniedError,
+  type ApprovalStore,
+} from "@massion/governance";
 import type { GrowthGateway } from "@massion/growth";
 import type { OrganizationGraphService } from "@massion/organization";
 import type { ModelRouter, ProviderService } from "@massion/router";
@@ -56,7 +61,9 @@ export interface ApplicationDomainDependencies {
   >;
   readonly workspaces?: Pick<WorkspaceService, "register" | "decideTrust" | "archive" | "get" | "list">;
   readonly autonomy?: Pick<AutonomyStore, "set">;
-  readonly runtime?: Pick<AgentRunner, "execute" | "cancel" | "suspend" | "resume">;
+  readonly runtime?: Pick<AgentRunner, "execute" | "cancel" | "suspend" | "resume"> &
+    Partial<Pick<AgentRunner, "cancelOrganization">>;
+  readonly emergency?: Pick<EmergencyControl, "activate">;
   readonly approvals?: Pick<ApprovalStore, "get" | "vote" | "cancel">;
   readonly assuranceBindings?: Pick<AssuranceBindingStore, "propose" | "activate">;
   readonly organization?: Pick<OrganizationGraphService, "execute">;
@@ -575,6 +582,42 @@ function registerAutonomy(
         return result(command, {
           resource: { type: "GovernanceAutonomy", id: context.organizationId, revision: state.revision },
           data: { mode: state.mode, revision: state.revision },
+        });
+      } catch (error) {
+        return domainError(error, command.correlationId);
+      }
+    },
+  });
+}
+
+function registerEmergency(
+  registry: ApplicationCommandRegistry,
+  emergency: NonNullable<ApplicationDomainDependencies["emergency"]>,
+  runtime: NonNullable<ApplicationDomainDependencies["runtime"]>,
+): void {
+  register(registry, {
+    operation: "governance.emergency.activate",
+    requiredScopes: ["governance:write"],
+    allowedRoles: ["owner"],
+    recovery: "operator-action",
+    validate: (value) => payload(value, ["reason"], ["reason"]),
+    async handle(context, command, value) {
+      try {
+        const state = await emergency.activate(context, {
+          commandId: command.commandId,
+          reason: string(value.reason, "reason"),
+        });
+        if (!runtime.cancelOrganization) throw new Error("조직 실행 취소 경로가 구성되지 않았습니다");
+        await runtime.cancelOrganization(context, "emergency_stop");
+        return result(command, {
+          resource: { type: "GovernanceEmergency", id: context.organizationId, revision: state.revision },
+          data: {
+            active: state.active,
+            reason: state.reason,
+            revision: state.revision,
+            changedByUserId: state.changed_by_user_id,
+            changedAt: String(state.changed_at),
+          },
         });
       } catch (error) {
         return domainError(error, command.correlationId);
@@ -2546,6 +2589,8 @@ export function registerApplicationDomainCommands(
   if (dependencies.works) registerWork(registry, dependencies.works);
   if (dependencies.workspaces) registerWorkspace(registry, dependencies.workspaces);
   if (dependencies.autonomy) registerAutonomy(registry, dependencies.autonomy);
+  if (dependencies.emergency && dependencies.runtime?.cancelOrganization)
+    registerEmergency(registry, dependencies.emergency, dependencies.runtime);
   if (dependencies.runtime) registerRuntime(registry, dependencies.runtime);
   if (dependencies.approvals) registerApprovals(registry, dependencies.approvals, dependencies.runtime);
   if (dependencies.assuranceBindings) registerAssuranceBindings(registry, dependencies.assuranceBindings);

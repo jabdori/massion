@@ -146,6 +146,11 @@ export class EmergencyControl {
     if (current?.active) throw new Error(`조직이 긴급 중단 상태입니다: ${current.reason}`);
   }
 
+  public async get(context: TenantContext): Promise<EmergencyState | undefined> {
+    await this.organizations.verifyTenantContext(context);
+    return await this.optionalState(this.database, context.organizationId);
+  }
+
   public async listEvents(context: TenantContext): Promise<EmergencyEvent[]> {
     await this.organizations.verifyTenantContext(context);
     const [events] = await this.database.query<[EmergencyEvent[]]>(

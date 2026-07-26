@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import type { ExtensionGateway } from "@massion/extension-host";
 import type { AssuranceBindingStore } from "@massion/assurance";
 import type { GrowthGateway, GrowthSuggestionDetails } from "@massion/growth";
+import type { EmergencyControl } from "@massion/governance";
 import type { MembershipRole, OrganizationService, TenantContext } from "@massion/identity";
 import type { ModelRouter, ProviderService } from "@massion/router";
 import {
@@ -83,6 +84,7 @@ export interface ApplicationQueryDependencies {
     get(context: TenantContext, workId: string): Promise<WorkKnowledgeViewV1>;
   };
   readonly autonomy?: { get(context: TenantContext): Promise<{ readonly mode: string; readonly revision: number }> };
+  readonly emergency?: Pick<EmergencyControl, "get">;
   readonly provenance?: {
     listByWork(
       context: TenantContext,
@@ -808,6 +810,26 @@ export function registerApplicationQueries(
       allowedRoles: EVERY_ROLE,
       validate: (value) => object(value, []),
       handle: async (context) => await autonomy.get(context),
+    });
+  }
+  if (dependencies.emergency) {
+    const emergency = dependencies.emergency;
+    registry.register({
+      operation: "governance.emergency",
+      requiredScopes: ["governance:read"],
+      allowedRoles: EVERY_ROLE,
+      validate: (value) => object(value, []),
+      handle: async (context) => {
+        const state = await emergency.get(context);
+        if (!state) return undefined;
+        return {
+          active: state.active,
+          reason: state.reason,
+          revision: state.revision,
+          changedByUserId: state.changed_by_user_id,
+          changedAt: String(state.changed_at),
+        };
+      },
     });
   }
   if (dependencies.provenance) {

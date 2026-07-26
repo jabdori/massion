@@ -188,6 +188,14 @@ export interface ApprovalViewV1 {
   readonly displayPreview?: ApprovalDisplayPreview;
 }
 
+export interface EmergencyStateViewV1 {
+  readonly active: boolean;
+  readonly reason?: string;
+  readonly revision: number;
+  readonly changedByUserId?: string;
+  readonly changedAt?: string;
+}
+
 export interface RoomViewV1 {
   readonly workId: string;
   readonly roomId: string;
@@ -486,6 +494,10 @@ export interface ApplicationQueryMapV1 {
     readonly data: OrganizationGraphSnapshotV1;
   };
   readonly "governance.autonomy": { readonly payload: Record<string, never>; readonly data: GovernanceAutonomyViewV1 };
+  readonly "governance.emergency": {
+    readonly payload: Record<string, never>;
+    readonly data: EmergencyStateViewV1 | undefined;
+  };
   readonly "extension.list": {
     readonly payload: Record<string, never>;
     readonly data: readonly ExtensionInstallationViewV1[];
@@ -518,6 +530,7 @@ export interface ApplicationCommandMapV1 {
     };
   };
   readonly "governance.autonomy.set": { readonly payload: { readonly mode: "automatic" | "review" | "full-access" } };
+  readonly "governance.emergency.activate": { readonly payload: { readonly reason: string } };
   readonly "growth.memory.put": {
     readonly payload: {
       readonly key: string;

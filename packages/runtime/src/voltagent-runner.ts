@@ -600,6 +600,24 @@ export class VoltAgentRunner implements AgentRunner, StructuredAgentRunner {
     });
   }
 
+  public async cancelOrganization(context: TenantContext, reason = "organization_cancelled"): Promise<void> {
+    const executionIds = this.activeExecutionIds().filter((executionId) => {
+      const active = this.active.get(executionId);
+      if (active) return active.context.organizationId === context.organizationId;
+      const suspended = this.suspendedSubscriptions.get(executionId);
+      return suspended?.context.organizationId === context.organizationId;
+    });
+    const settled = await Promise.allSettled(executionIds.map((executionId) => this.cancel(context, executionId, reason)));
+    const failures = settled.flatMap((result) => (result.status === "rejected" ? [result.reason] : []));
+    if (failures.length > 0) throw new AggregateError(failures, "조직 실행 취소에 실패했습니다");
+    const remaining = this.activeExecutionIds().filter((executionId) => {
+      const active = this.active.get(executionId);
+      if (active) return active.context.organizationId === context.organizationId;
+      return this.suspendedSubscriptions.get(executionId)?.context.organizationId === context.organizationId;
+    });
+    if (remaining.length > 0) throw new AggregateError(remaining, "조직 실행이 남아 있습니다");
+  }
+
   public async suspend(context: TenantContext, executionId: string, reason?: string): Promise<void> {
     await this.requireLifecycle().suspend(context, executionId, reason);
   }

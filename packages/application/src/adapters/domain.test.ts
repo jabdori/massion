@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { AutonomyStore, GovernanceApprovalRequiredError } from "@massion/governance";
+import { AutonomyStore, EmergencyControl, GovernanceApprovalRequiredError, PermitStore } from "@massion/governance";
 import { IdentityService, OrganizationService } from "@massion/identity";
 import { OrganizationGraphService } from "@massion/organization";
 import { createDatabase } from "@massion/storage";
@@ -248,6 +248,38 @@ describe("Application domain adapters", () => {
       }),
     ).resolves.toMatchObject({ outcome: "succeeded", data: { mode: "review", revision: 1 } });
     await expect(autonomy.get(context)).resolves.toEqual({ mode: "review", revision: 1 });
+  });
+
+  it("긴급 정지 command는 상태를 활성화한 뒤 같은 조직의 실행을 취소한다", async () => {
+    await using database = await createDatabase({
+      url: "mem://",
+      namespace: "massion",
+      database: crypto.randomUUID(),
+    });
+    const identities = await IdentityService.create(database);
+    const organizations = await OrganizationService.create(database);
+    const owner = await identities.registerPersonalUser({ email: "emergency-command@example.com", displayName: "Owner" });
+    const context = await organizations.resolveTenantContext(owner.user.user_id, owner.organization.organization_id);
+    const permits = await PermitStore.create(database, organizations);
+    const emergency = await EmergencyControl.create(database, organizations, permits);
+    const cancelOrganization = vi.fn().mockResolvedValue(undefined);
+    const registry = new ApplicationCommandRegistry(await ApplicationCommandStore.create(database, organizations));
+    registerApplicationDomainCommands(registry, {
+      emergency,
+      runtime: { cancelOrganization } as never,
+    });
+
+    await expect(
+      registry.dispatch(context, ["governance:write"], {
+        schemaVersion: "massion.application.v1",
+        commandId: "emergency-command-0001",
+        correlationId: "emergency-correlation-0001",
+        operation: "governance.emergency.activate",
+        payload: { reason: "비밀값 노출 대응" },
+      }),
+    ).resolves.toMatchObject({ outcome: "succeeded", data: { active: true, revision: 1 } });
+    expect(cancelOrganization).toHaveBeenCalledWith(context, "emergency_stop");
+    await expect(emergency.get(context)).resolves.toMatchObject({ active: true, revision: 1 });
   });
 
   it("workspace 명령을 command registry에 연결하고 등록·신뢰·archive를 처리한다", async () => {
