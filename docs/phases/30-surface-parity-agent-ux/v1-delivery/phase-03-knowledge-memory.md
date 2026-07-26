@@ -2,7 +2,7 @@
 
 > **상태:** 진행 중
 > **시작 기준:** 워크스페이스 선택과 네이티브 파일 첨부의 코드 검증 완료
-> **다음 게이트:** Work·대화·실행·데스크톱에서 같은 출처와 기억 계보를 조회
+> **다음 게이트:** 동일 후보 SHA의 실제 Tauri 앱에서 UAT-K01~K04를 끝까지 재현
 
 ## 목표
 
@@ -14,16 +14,19 @@
 |---|---|---|
 | 03-1 | Workspace와 Evidence Repository의 조직별 1:1 결속 | 코드 검증 완료 |
 | 03-2 | 첨부 경로 경계 안 검색·1-hop 관계·EvidenceBrief | 코드 검증 완료 — 03-2a·03-2b1·03-2b2 완료 |
-| 03-3 | Work·대화·Agent 실행의 같은 Brief 계보 | 대기 |
-| 03-4 | 명시적 개인 기억의 version·Prompt·Runtime 계보 | 대기 |
-| 03-5 | 서버 생산 조립과 Desktop 출처·기억 UI | 대기 |
+| 03-3 | Work·대화·Agent 실행의 같은 Brief 계보 | 구현 완료 — `138414f36` |
+| 03-4 | 명시적 개인 기억의 version·Prompt·Runtime 계보 | 구현 및 실제 GLM 계보 확인 완료 — `74873ec2b` |
+| 03-5 | 서버 생산 조립과 Desktop 출처·기억 UI | 구현 및 격리 Tauri 화면 확인 완료 — `8ef9a9816`; 전체 UAT-K01~K04 대기 |
 
 ## 현재 구현 경계
 
 - Repository는 결속된 경우에만 `workspaceId`와 조직별 guard를 보관합니다. 기존 프로젝트 기반 또는 독립 Repository의 의미는 바꾸지 않습니다.
 - 동일 조직에서 같은 Workspace를 다시 등록하면 기존 Repository를 재사용하고, 다른 Repository로 바꾸려는 요청은 거부해야 합니다.
 - 다른 조직은 같은 Workspace 식별자를 알더라도 조회할 수 없어야 합니다.
-- 실제 디렉터리 canonical path 재검증, blocked·archived Workspace 차단, 색인 실행 연결은 다음 Work intake 조립 단계에서 함께 검증합니다. 이 첫 단계에서 별도 adapter나 background process를 만들지 않습니다.
+- Work intake는 active·trusted Workspace만 통과시키고 기존 Scanner·Indexer·Search·CodeGraph·EvidenceBrief를 동기 조립합니다. 새 watcher·queue·embedding 공급자·전역 graph explorer는 만들지 않습니다.
+- ready Brief는 Core Office 공유 출처와 ContextVersion metadata source에 고정하고, Representative·Strategy·Delivery는 실행 직전에 같은 snapshot을 자료화합니다.
+- 명시적 개인 기억은 새 Work의 PromptVersion·RuntimeExecution에만 고정합니다. `앞으로 사용하지 않음`은 새 version을 만들며 과거 계보를 지우지 않습니다.
+- LSP, embedding 공급자, SurrealDB native relation/DB traversal은 실제 UAT 실패 근거가 생길 때까지 v1 범위 밖입니다.
 
 ## 완료 근거 기록
 
@@ -91,3 +94,28 @@
 | 대상 파일 `prettier --check`, `git diff --check` | 통과 — 형식과 변경 공백을 확인했습니다. |
 
 이 하위 단계는 Evidence 패키지의 lower-level 준비 경계만 소유합니다. trusted·active Workspace 확인, blocked·archived Workspace 차단, Work·Room·SharedContext·ContextVersion·실행 prompt 연결은 다음 03-3 Core intake 단계에서 연결합니다.
+
+### 03-3 — Work·대화·Agent 실행의 같은 Brief 계보
+
+- `138414f36` — Intake가 trusted·active Workspace의 EvidenceBrief를 한 번 준비하고 Core Office 공유 출처와 ContextVersion metadata source에 같은 checksum으로 연결합니다.
+- Representative·Strategy·Delivery와 software task는 요청 payload의 임의 Brief ID가 아니라 활성 ContextVersion의 검증된 출처만 자료화합니다. snapshot 손상·다른 Work 소유·hash 불일치는 `evidence-invalid`로 막습니다.
+- `work.knowledge`는 Work가 실제로 사용한 path·symbol·line range와 fresh/stale 상태만 반환합니다. Repository·Index의 내부 ID나 전역 그래프 탐색기는 화면 계약에 넣지 않습니다.
+
+### 03-4 — 명시적 개인 기억의 version·Prompt·Runtime 계보
+
+- `74873ec2b` — 개인 기억의 최초 생성, CAS 갱신, `앞으로 사용하지 않음`을 사용자 범위 명령으로 연결했습니다. 새 Work만 해당 MemoryVersion을 PromptVersion·RuntimeExecution에 고정하고 과거 계보는 바꾸지 않습니다.
+- 표적 생산 조립 검증으로 `pnpm --filter @massion/growth build && pnpm --filter @massion/server exec vitest run src/product.test.ts -t 'clean install에서 Z.AI Core 실행의 RuntimeExecution에 개인 기억 계보를 고정한다'`를 실행했습니다. 1개 통과, 15개는 이름 필터로 skip되었습니다.
+
+### 03-5 — 서버 생산 조립과 Desktop 출처·기억 UI
+
+- `8ef9a9816` — DesktopService가 typed `work.knowledge`를 조회하고 Work 세부 정보에 `지식` 탭을 추가했습니다. ready/no-match/blocked/not-applicable 상태는 사람이 읽는 문구로 분리했고, ready reference만 Core Office 공유 출처로 이동합니다.
+- 실제 격리 macOS 번들(`dev.massion.desktop.knowledge-uat`)에서 Workspace 없는 Work를 만든 뒤 `지식` 탭을 확인했습니다. `이 Work는 워크스페이스 지식을 사용하지 않았습니다.`와 `워크스페이스를 선택한 새 Work에서 코드 근거를 사용할 수 있습니다.`만 표시됐고, 기존 산출물 빈 화면 문구는 표시되지 않았습니다. 검증 직후 번들을 종료했고 이후 Massion GUI 프로세스가 없음을 확인했습니다.
+
+| 검증 | 결과 |
+|---|---|
+| `pnpm --filter @massion/desktop exec vitest run src/desktop-service.test.ts -t 'Work의 사용한 지식은 typed work.knowledge 조회로 반환한다'` | 통과 — 1개 통과, 17개 이름 필터 skip |
+| `pnpm --filter @massion/desktop exec vitest run src/app.integration.test.tsx -t '워크스페이스 없는 Work의 지식 빈 상태는 산출물 안내를 재사용하지 않는다'` | 통과 — 1개 통과, 31개 이름 필터 skip |
+| `pnpm --filter @massion/desktop typecheck` | 통과 |
+| 격리 릴리스 번들 생성 및 실제 화면 확인 | 통과 — 최종 공개 후보·서명·공증·전체 UAT를 뜻하지 않음 |
+
+세부 관측과 남은 동일 후보 SHA 게이트는 [2026-07-26 증분 UAT 기록](../../../evidence/phase-30/knowledge-memory-uat-2026-07-26.md)에 남깁니다.
