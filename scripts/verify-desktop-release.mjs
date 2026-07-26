@@ -55,6 +55,14 @@ export function parseArguments(arguments_) {
   return values;
 }
 
+export function verificationOptions(arguments_) {
+  return {
+    candidateSha: arguments_["candidate-sha"],
+    app: arguments_.app,
+    uatEvidence: arguments_["uat-evidence"],
+  };
+}
+
 export function parseUatEvidence(text) {
   if (!text.includes("<!-- desktop-uat-evidence: actual-tauri -->")) {
     throw new Error("UAT evidence가 실제 Tauri 실행 증거로 표시되지 않았습니다");
@@ -128,7 +136,7 @@ export async function verifyDesktopRelease({
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
     const arguments_ = parseArguments(process.argv.slice(2));
-    const result = await verifyDesktopRelease(arguments_);
+    const result = await verifyDesktopRelease(verificationOptions(arguments_));
     console.log(`개인용 데스크톱 후보 검증 통과: ${result.version} ${result.candidateSha} (${result.uatCount}개 UAT)`);
   } catch (error) {
     console.error(error instanceof Error ? error.message : "개인용 데스크톱 후보 검증이 실패했습니다");

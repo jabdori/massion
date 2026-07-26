@@ -3,7 +3,7 @@ import { chmod, mkdir, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { parseArguments, parseUatEvidence, verifyDesktopRelease } from "./verify-desktop-release.mjs";
+import { parseArguments, parseUatEvidence, verificationOptions, verifyDesktopRelease } from "./verify-desktop-release.mjs";
 
 const candidateSha = "a".repeat(40);
 const uatIds = [
@@ -40,10 +40,16 @@ test("실제 Tauri 표식과 23개 원자 UAT만 통과한 증거를 수락한�
 test("fixture 표식·누락 결과·인자 오류를 완료 근거로 허용하지 않는다", () => {
   assert.throws(() => parseUatEvidence(evidence().replace("actual-tauri", "fixture")), /실제 Tauri/u);
   assert.throws(() => parseUatEvidence(evidence().replace(/<!-- desktop-uat: UAT-P02=passed -->\n?/u, "")), /UAT-P02/u);
-  assert.deepEqual(parseArguments(["--candidate-sha", candidateSha, "--app", "/tmp/Massion.app", "--uat-evidence", "/tmp/uat.md"]), {
+  const parsed = parseArguments(["--candidate-sha", candidateSha, "--app", "/tmp/Massion.app", "--uat-evidence", "/tmp/uat.md"]);
+  assert.deepEqual(parsed, {
     "candidate-sha": candidateSha,
     app: "/tmp/Massion.app",
     "uat-evidence": "/tmp/uat.md",
+  });
+  assert.deepEqual(verificationOptions(parsed), {
+    candidateSha,
+    app: "/tmp/Massion.app",
+    uatEvidence: "/tmp/uat.md",
   });
   assert.throws(() => parseArguments(["--candidate-sha", candidateSha, "--app", "/tmp/Massion.app"]), /uat-evidence/u);
 });
