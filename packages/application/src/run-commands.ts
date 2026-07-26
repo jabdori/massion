@@ -7,6 +7,7 @@ import type { WorkspaceService } from "@massion/workspace";
 import type { ApplicationCommandRegistry } from "./command-registry.js";
 import type { ApplicationCommandV1, ApplicationCommandResultV1 } from "./contracts.js";
 import type { CoreWorkCoordinator } from "./core-work-coordinator.js";
+import { ApplicationError } from "./errors.js";
 import type { ApplicationRunStore } from "./run-store.js";
 
 interface RunCommandDependencies {
@@ -82,6 +83,7 @@ async function verifyWorkspacePaths(
   context: TenantContext,
   request: Record<string, unknown>,
   workspaces: RunCommandDependencies["workspaces"],
+  correlationId: string,
 ): Promise<void> {
   const paths = request.workspacePaths;
   if (typeof request.workspaceId !== "string") return;
@@ -99,7 +101,15 @@ async function verifyWorkspacePaths(
     const fromRoot = relative(root, selected);
     if (fromRoot === "" || fromRoot === ".." || fromRoot.startsWith(`..${sep}`) || isAbsolute(fromRoot))
       throw new Error("workspace 밖 파일은 첨부할 수 없습니다");
-    if (!(await stat(selected)).isFile()) throw new Error("workspace file 경로는 기존 파일이어야 합니다");
+    if (!(await stat(selected)).isFile())
+      throw new ApplicationError({
+        category: "validation",
+        severity: "error",
+        retryable: false,
+        userMessage: "첨부 경로는 workspace 안의 기존 파일이어야 합니다",
+        operatorCode: "APP_WORKSPACE_PATH_VALIDATION",
+        correlationId,
+      });
   }
 }
 
@@ -131,7 +141,7 @@ export function registerApplicationRunCommands(
       return { request: runRequest(payload.request) };
     },
     async handle(context, command, payload) {
-      await verifyWorkspacePaths(context, payload.request, dependencies.workspaces);
+      await verifyWorkspacePaths(context, payload.request, dependencies.workspaces, command.correlationId);
       const run = await dependencies.store.start(context, {
         commandId: command.commandId,
         correlationId: command.correlationId,

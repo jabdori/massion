@@ -94,6 +94,27 @@ describe("Application run commands", () => {
         }),
       ).toThrow("workspace file 경로");
 
+      const directory = start.validate({
+        request: { text: "파일 검토", workspaceId: "workspace-1", workspacePaths: ["src"] },
+      });
+      await expect(
+        start.handle(
+          context,
+          {
+            schemaVersion: "massion.application.v1",
+            commandId: "run-workspace-paths-command-directory",
+            correlationId: "run-workspace-paths-correlation-directory",
+            operation: "run.start",
+            payload: directory,
+          },
+          directory,
+        ),
+      ).rejects.toMatchObject({
+        category: "validation",
+        operatorCode: "APP_WORKSPACE_PATH_VALIDATION",
+        correlationId: "run-workspace-paths-correlation-directory",
+      });
+
       const escaped = start.validate({
         request: { text: "파일 검토", workspaceId: "workspace-1", workspacePaths: ["outside.ts"] },
       });
