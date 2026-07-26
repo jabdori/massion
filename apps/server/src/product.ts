@@ -606,6 +606,11 @@ export async function createMassionDaemon(
           throw new Error("Growth reflection 근거 검증기가 현재 서버 runtime에 연결되지 않았습니다");
         },
       },
+      {
+        verify() {
+          throw new Error("Growth reflection RuntimeExecution 검증기가 현재 서버 runtime에 연결되지 않았습니다");
+        },
+      },
     );
     const growth = new GrowthGateway({
       bootstrap: new GrowthBootstrap(

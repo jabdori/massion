@@ -71,12 +71,12 @@ describe("Reflection suggestion validation", () => {
     const organizations = await OrganizationService.create(database);
     const owner = await identity.registerPersonalUser({ email: "reflection@example.com", displayName: "Reflection" });
     const context = await organizations.resolveTenantContext(owner.user.user_id, owner.organization.organization_id);
-    await database.query("DEFINE TABLE records_run SCHEMALESS;");
+    await database.query("DEFINE TABLE records_run SCHEMALESS; DEFINE TABLE runtime_execution SCHEMALESS;");
     const service = await ReflectionService.create(
       database,
       organizations,
       {
-        generate: async () => [candidate()],
+        generate: async () => ({ runtimeExecutionId: "runtime-growth-1", candidates: [candidate()] }),
       },
       {
         verify: async (_context, source) => ({
@@ -84,6 +84,11 @@ describe("Reflection suggestion validation", () => {
           capturedRevision: source.capturedRevision,
           fresh: true,
         }),
+      },
+      {
+        verify: async (_context, input) => {
+          expect(input).toEqual({ runtimeExecutionId: "runtime-growth-1", workId: "work-1" });
+        },
       },
     );
     await database.query(
@@ -116,8 +121,10 @@ describe("Reflection suggestion validation", () => {
       snapshot: ownedSnapshot,
     });
 
-    expect(result.run.status).toBe("completed");
-    expect(result.suggestions).toEqual([expect.objectContaining({ target_kind: "prompt", status: "proposed" })]);
+    expect(result.run).toMatchObject({ status: "completed", runtime_execution_id: "runtime-growth-1" });
+    expect(result.suggestions).toEqual([
+      expect.objectContaining({ target_kind: "prompt", status: "proposed", revision: 1 }),
+    ]);
     await expect(service.listSuggestions(context, { workId: "work-1", limit: 10 })).resolves.toEqual([
       expect.objectContaining({ suggestion_id: result.suggestions[0]?.suggestion_id, summary: "설정 검증 강화" }),
     ]);

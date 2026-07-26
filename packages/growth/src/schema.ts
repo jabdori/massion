@@ -350,6 +350,34 @@ THEN {
   },
 );
 
+// 기존 Reflection 원장은 유지한 채, 실제 생성 실행과 제안 개정의 계보만 추가합니다.
+// 과거 row는 revision 1로 읽을 수 있게 backfill하고 새 완료 Reflection만 runtime 실행 ID를 강제합니다.
+export const GROWTH_PRODUCTION_REFLECTION_LINEAGE_MIGRATION = defineMigration(
+  "0110-growth-production-reflection-lineage",
+  `
+DEFINE FIELD revision ON growth_suggestion TYPE option<int>;
+UPDATE growth_suggestion SET revision = 1 WHERE revision = NONE;
+DEFINE FIELD OVERWRITE revision ON growth_suggestion TYPE int ASSERT $value >= 1;
+
+DEFINE EVENT growth_suggestion_revision_immutable ON TABLE growth_suggestion
+WHEN $event = 'UPDATE'
+THEN {
+  IF $after.revision != $before.revision { THROW 'Growth Suggestion revision은 immutable입니다'; };
+};
+
+DEFINE EVENT reflection_run_runtime_lineage ON TABLE reflection_run
+WHEN $event = 'UPDATE'
+THEN {
+  IF $after.status = 'completed' AND $after.runtime_execution_id = NONE {
+    THROW '완료된 Reflection에는 Runtime Execution 계보가 필요합니다';
+  };
+  IF $before.runtime_execution_id != NONE AND $after.runtime_execution_id != $before.runtime_execution_id {
+    THROW 'Reflection Runtime Execution 계보는 immutable입니다';
+  };
+};
+`,
+);
+
 export const GROWTH_EVALUATION_MIGRATION = defineMigration(
   "0057-growth-evaluation",
   `

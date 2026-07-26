@@ -3,7 +3,7 @@ import type { OrganizationService } from "@massion/identity";
 import { applyMigrations, type MassionDatabase } from "@massion/storage";
 
 import { canonicalGrowthJson, growthChecksum } from "./prompt-memory.js";
-import { GROWTH_REFLECTION_MIGRATION } from "./schema.js";
+import { GROWTH_PRODUCTION_REFLECTION_LINEAGE_MIGRATION, GROWTH_REFLECTION_MIGRATION } from "./schema.js";
 
 import { createReflectionSnapshot, type ReflectionSnapshot } from "./snapshot.js";
 import type { ReflectionSourceReference } from "./snapshot.js";
@@ -27,7 +27,19 @@ export interface ReflectionGenerator {
   generate(
     context: TenantContext,
     input: { readonly reflectionRunId: string; readonly snapshot: ReflectionSnapshot },
-  ): Promise<readonly SuggestionCandidate[]>;
+  ): Promise<GeneratedReflection>;
+}
+
+export interface GeneratedReflection {
+  readonly runtimeExecutionId: string;
+  readonly candidates: readonly SuggestionCandidate[];
+}
+
+export interface ReflectionRuntimeVerifier {
+  verify(
+    context: TenantContext,
+    input: { readonly workId: string; readonly runtimeExecutionId: string },
+  ): Promise<void>;
 }
 
 export interface ReflectionSourceVerifier {
@@ -44,6 +56,7 @@ export interface ReflectionRunRecord {
   readonly records_run_id: string;
   readonly trigger_id: string;
   readonly configuration_version_id: string;
+  readonly runtime_execution_id?: string;
   readonly snapshot_hash: string;
   readonly status: "planned" | "generating" | "validated" | "completed" | "blocked" | "cancelled";
   readonly version: number;
@@ -65,6 +78,7 @@ export interface GrowthSuggestionRecord {
   readonly expected_effect: string;
   readonly risk_summary: string;
   readonly source_reference_ids: readonly string[];
+  readonly revision: number;
   readonly status: "proposed" | "evaluated" | "awaiting-review" | "adopted" | "rejected" | "superseded";
 }
 
@@ -125,6 +139,7 @@ export class ReflectionService {
     private readonly organizations: OrganizationService,
     private readonly generator: ReflectionGenerator,
     private readonly sourceVerifier: ReflectionSourceVerifier,
+    private readonly runtimeVerifier: ReflectionRuntimeVerifier,
   ) {}
 
   public static async create(
@@ -132,9 +147,10 @@ export class ReflectionService {
     organizations: OrganizationService,
     generator: ReflectionGenerator,
     sourceVerifier: ReflectionSourceVerifier,
+    runtimeVerifier: ReflectionRuntimeVerifier,
   ): Promise<ReflectionService> {
-    await applyMigrations(database, [GROWTH_REFLECTION_MIGRATION]);
-    return new ReflectionService(database, organizations, generator, sourceVerifier);
+    await applyMigrations(database, [GROWTH_REFLECTION_MIGRATION, GROWTH_PRODUCTION_REFLECTION_LINEAGE_MIGRATION]);
+    return new ReflectionService(database, organizations, generator, sourceVerifier, runtimeVerifier);
   }
 
   public async run(
@@ -204,14 +220,20 @@ export class ReflectionService {
     );
     if (!created[0]) throw new Error("ReflectionRun 생성 결과가 없습니다");
     try {
-      const candidates = await this.generator.generate(context, { reflectionRunId, snapshot: canonical });
+      const generated = await this.generator.generate(context, { reflectionRunId, snapshot: canonical });
+      if (!generated.runtimeExecutionId.trim()) throw new Error("Growth Runtime Execution ID가 필요합니다");
+      await this.runtimeVerifier.verify(context, {
+        workId: trigger.work_id,
+        runtimeExecutionId: generated.runtimeExecutionId,
+      });
+      const candidates = generated.candidates;
       if (candidates.length > 100) throw new Error("Reflection suggestion은 100개 이하여야 합니다");
       const suggestions: GrowthSuggestionRecord[] = [];
       for (const raw of candidates) {
         const candidate = validateSuggestionCandidate(raw, canonical);
         const suggestionId = crypto.randomUUID();
         const [records] = await this.database.query<[GrowthSuggestionRecord[]]>(
-          "CREATE growth_suggestion CONTENT { suggestion_id: $suggestion_id, organization_id: $organization_id, work_id: $work_id, reflection_run_id: $reflection_run_id, target_kind: $target_kind, operation: $operation, patch_json: $patch_json, summary: $summary, rationale: $rationale, expected_effect: $expected_effect, risk_summary: $risk_summary, source_reference_ids: $source_reference_ids, status: 'proposed', created_at: time::now() } RETURN AFTER;",
+          "CREATE growth_suggestion CONTENT { suggestion_id: $suggestion_id, organization_id: $organization_id, work_id: $work_id, reflection_run_id: $reflection_run_id, target_kind: $target_kind, operation: $operation, patch_json: $patch_json, summary: $summary, rationale: $rationale, expected_effect: $expected_effect, risk_summary: $risk_summary, source_reference_ids: $source_reference_ids, revision: 1, status: 'proposed', created_at: time::now() } RETURN AFTER;",
           {
             suggestion_id: suggestionId,
             organization_id: context.organizationId,
@@ -248,11 +270,12 @@ export class ReflectionService {
         }
       }
       const [completed] = await this.database.query<[ReflectionRunRecord[]]>(
-        "UPDATE reflection_run SET status = 'completed', version += 1, updated_at = time::now() WHERE organization_id = $organization_id AND reflection_run_id = $reflection_run_id RETURN AFTER; UPDATE growth_trigger SET status = 'completed', worker_id = NONE, lease_expires_at = NONE, updated_at = time::now() WHERE organization_id = $organization_id AND trigger_id = $trigger_id;",
+        "UPDATE reflection_run SET runtime_execution_id = $runtime_execution_id, status = 'completed', version += 1, updated_at = time::now() WHERE organization_id = $organization_id AND reflection_run_id = $reflection_run_id RETURN AFTER; UPDATE growth_trigger SET status = 'completed', worker_id = NONE, lease_expires_at = NONE, updated_at = time::now() WHERE organization_id = $organization_id AND trigger_id = $trigger_id;",
         {
           organization_id: context.organizationId,
           reflection_run_id: reflectionRunId,
           trigger_id: trigger.trigger_id,
+          runtime_execution_id: generated.runtimeExecutionId,
         },
       );
       if (!completed[0]) throw new Error("ReflectionRun 완료 결과가 없습니다");
