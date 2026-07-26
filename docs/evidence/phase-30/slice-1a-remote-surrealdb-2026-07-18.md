@@ -1,6 +1,6 @@
 # Phase 30 — Slice 1A 원격 SurrealDB 3.2.1 검증 증거
 
-> **2026-07-24 상태 정정:** 아래 GitHub `v1.0.0` 관측은 2026-07-18 당시의 역사적 사실입니다. 해당 릴리스와 원격 태그는 2026-07-24 철회됐습니다. 로컬 배포 계약 검증은 보존하지만 현재 공개 릴리스나 개인용 데스크톱 완료 근거로 사용하지 않습니다. [철회 증거](./withdrawn-v1.0.0-release-2026-07-24.md)
+> **현재 상태 정정:** 아래 GitHub `v1.0.0` 관측은 2026-07-18 당시의 역사적 사실입니다. GitHub Release는 2026-07-24 삭제됐지만 원격 `v1.0.0` 태그는 현재 감사 기준선으로 보존되어 있습니다. 로컬 배포 계약 검증은 보존하지만 현재 공개 릴리스나 개인용 데스크톱 완료 근거로 사용하지 않습니다. [철회 증거](./withdrawn-v1.0.0-release-2026-07-24.md)
 
 > **검증 범위:** 원격 배포 SurrealDB 3.2.1 계약(Slice 1A)과 깨끗한 복제본(clean clone) 릴리스 복구
 > **최종 검증 소스 커밋(source commit):** `0dff1f3a3ead8e005fe45058196b845e70344934`
@@ -66,7 +66,7 @@ Slice 1A 코드·테스트 근거는 다음과 같습니다.
 - [Massion AgentOS 1.0.0 공개 릴리스](https://github.com/jabdori/massion/releases/tag/v1.0.0)는 2026-07-15T18:05:57Z에 게시됐고 draft·prerelease 모두 `false`였습니다.
 - [Massion 1.0 Release 실행 29439133101](https://github.com/jabdori/massion/actions/runs/29439133101)은 같은 커밋에서 `completed`/`failure`였습니다. `전체 품질 검증` 단계가 실패했고, 그 뒤 보안·강건성, 설치·배포 묶음, Docker Buildx, registry 로그인, 세 image build·publish, image·bundle 증명과 bundle 보관은 모두 skipped였습니다.
 
-따라서 이 Slice 1A의 로컬 검증을 공개 registry 게시, attestation, 새 release 성공으로 해석하지 않습니다. 당시에는 기존 `v1.0.0` tag를 이동하거나 재생성하지 않았습니다. 그 릴리스와 태그는 2026-07-24 별도 상태 정정에서 철회했습니다.
+따라서 이 Slice 1A의 로컬 검증을 공개 registry 게시, attestation, 새 release 성공으로 해석하지 않습니다. 당시에는 기존 `v1.0.0` tag를 이동하거나 재생성하지 않았습니다. 해당 GitHub Release는 2026-07-24 삭제됐고, 태그는 현재 감사 기준선으로 보존되어 공개 릴리스나 다운로드 artifact를 뜻하지 않습니다.
 
 ## 증명하지 않는 범위
 

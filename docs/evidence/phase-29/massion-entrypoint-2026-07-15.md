@@ -1,6 +1,6 @@
 # Phase 29 증거: 단일 진입점과 설치 UX
 
-> **2026-07-24 상태 정정:** 아래는 레거시 CLI·TUI·Web 설치 묶음을 당시 실행한 역사적 증거입니다. 공개 `v1.0.0` 릴리스와 태그는 이후 철회됐으며, 현재 설치 가능성이나 개인용 데스크톱 1.0 완료를 뜻하지 않습니다. 현재 상태는 [철회 증거](../phase-30/withdrawn-v1.0.0-release-2026-07-24.md)를 따릅니다.
+> **현재 상태 정정:** 아래는 레거시 CLI·TUI·Web 설치 묶음을 당시 실행한 역사적 증거입니다. GitHub Release `v1.0.0`은 이후 삭제됐고 원격 태그는 감사 기준선으로 보존되어 있으며, 현재 설치 가능성이나 개인용 데스크톱 1.0 완료를 뜻하지 않습니다. 현재 상태는 [철회 증거](../phase-30/withdrawn-v1.0.0-release-2026-07-24.md)를 따릅니다.
 
 ## 범위
 
@@ -40,16 +40,16 @@ CI=true pnpm verify:release /private/tmp/massion-release-20260716-final
 
 릴리스 검증은 빈 임시 prefix에서 `massion version`·Connector doctor·local start·owner init·limited status·Work 접수·backup·restore·uninstall 및 데이터 보존을 확인하고 `status: passed`를 반환했습니다. 개인용 아카이브는 382,069,402 bytes이며 매니페스트에 SHA-256 `sha256:b57b4ebbcf30e196de714caa10bd57581a71b80b2669e55c585cc18d3a5ad509`가 기록됐습니다.
 
-## 공개 릴리스 설치 검증
+## 과거 공개 Release 당시 설치 검증(역사 기록)
 
-GitHub Release [`v1.0.0`](https://github.com/jabdori/massion/releases/tag/v1.0.0)에 개인용·배포용 아카이브와 `release-manifest.json`을 게시했습니다. `v1.0.0` 태그와 릴리스 자산의 소스 커밋은 `ecd35b1b34e4e8797da6e458c4d69e857bd90656`으로 고정되어 있습니다.
+당시 GitHub Release [`v1.0.0`](https://github.com/jabdori/massion/releases/tag/v1.0.0)에 개인용·배포용 아카이브와 `release-manifest.json`이 게시됐습니다. 현재 Release는 삭제됐고, 원격 `v1.0.0` 태그는 감사 기준선으로만 보존됩니다. 당시 `v1.0.0` 태그와 릴리스 자산의 소스 커밋은 `ecd35b1b34e4e8797da6e458c4d69e857bd90656`으로 고정되어 있었습니다.
 
 ```text
 curl -fsSL https://raw.githubusercontent.com/jabdori/massion/main/install.sh | MASSION_PREFIX=/private/tmp/massion-curl-release.IEbYPG bash
 Massion AgentOS 1.0.0
 ```
 
-공개 Raw URL에서 설치 스크립트를 내려받아 임시 prefix에 설치한 뒤 `massion version`이 `Massion AgentOS 1.0.0`을 반환하는 것을 확인했습니다.
+당시 공개 Raw URL에서 설치 스크립트를 내려받아 임시 prefix에 설치한 뒤 `massion version`이 `Massion AgentOS 1.0.0`을 반환하는 것을 확인했습니다. 이 URL과 artifact는 현재 공개 설치 경로가 아닙니다.
 
 ## 외부 환경에서 남은 검증
 
