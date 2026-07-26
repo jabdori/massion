@@ -72,6 +72,7 @@ import type {
   ContributionKind,
   DesktopFilter,
   DesktopService,
+  EmergencyView,
   ExtensionEntryView,
   GrowthSignalView,
   GrowthView,
@@ -2719,10 +2720,12 @@ function growthEffectStatus(result: GrowthView["effects"][number]["result"]): st
 function SettingsSurface({ service }: { service: DesktopService }) {
   const [settings, setSettings] = useState<SettingsView>();
   const [autonomy, setAutonomy] = useState<AutonomyView>();
+  const [emergency, setEmergency] = useState<EmergencyView>();
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [saving, setSaving] = useState(false);
   const [autonomySaving, setAutonomySaving] = useState(false);
+  const [fullAccessPending, setFullAccessPending] = useState(false);
   const [zaiFormOpen, setZaiFormOpen] = useState(false);
   const [zaiAlias, setZaiAlias] = useState("Z.ai GLM-5.2");
   const [zaiSecret, setZaiSecret] = useState("");
@@ -2741,11 +2744,12 @@ function SettingsSurface({ service }: { service: DesktopService }) {
   const [areaId, setAreaId] = useState<(typeof SETTINGS_AREAS)[number]["id"]>("routes");
   useEffect(() => {
     let disposed = false;
-    void Promise.all([service.loadSettings(), service.loadAutonomy()])
-      .then(([value, mode]) => {
+    void Promise.all([service.loadSettings(), service.loadAutonomy(), service.loadEmergency()])
+      .then(([value, mode, emergencyState]) => {
         if (!disposed) {
           setSettings(value);
           setAutonomy(mode);
+          setEmergency(emergencyState);
         }
       })
       .catch((cause: unknown) => {
@@ -2757,6 +2761,14 @@ function SettingsSurface({ service }: { service: DesktopService }) {
   }, [service]);
   const setAutonomyMode = async (mode: AutonomyView["mode"]) => {
     if (!autonomy || autonomy.mode === mode || autonomySaving) return;
+    if (mode === "full-access") {
+      setFullAccessPending(true);
+      return;
+    }
+    await commitAutonomyMode(mode);
+  };
+  const commitAutonomyMode = async (mode: AutonomyView["mode"]) => {
+    if (!autonomy || autonomy.mode === mode || autonomySaving) return;
     setAutonomySaving(true);
     setError("");
     setNotice("");
@@ -2765,6 +2777,21 @@ function SettingsSurface({ service }: { service: DesktopService }) {
       setNotice("실행 자율성 경계를 저장했습니다.");
     } catch (cause) {
       setError(surfaceErrorMessage(cause, "자율성 경계를 변경하지 못했습니다."));
+    } finally {
+      setAutonomySaving(false);
+    }
+  };
+  const activateEmergency = async () => {
+    if (autonomySaving || emergency?.active === true) return;
+    setAutonomySaving(true);
+    setError("");
+    setNotice("");
+    try {
+      const state = await service.activateEmergency("사용자 긴급 정지");
+      setEmergency(state);
+      setNotice("긴급 정지를 활성화했습니다. 새 실행은 차단됩니다.");
+    } catch (cause) {
+      setError(surfaceErrorMessage(cause, "긴급 정지를 활성화하지 못했습니다."));
     } finally {
       setAutonomySaving(false);
     }
@@ -3030,8 +3057,35 @@ function SettingsSurface({ service }: { service: DesktopService }) {
                         ? "미리 승인된 범위에서는 사람을 기다리지 않고 실행합니다. 위험한 실행과 조직 변경은 여전히 수신함에서 확인을 받습니다."
                         : autonomy.mode === "review"
                           ? "실행 전에 사람의 확인을 받습니다. 조직이 더 자주 멈추는 대신 개입 지점이 많아집니다."
-                          : "사용자 책임 하에 정책과 불변식이 요구한 승인까지 모두 자동 통과합니다. 위험한 실행과 조직 변경도 묻지 않고 진행합니다."}
+                        : "사용자 책임 하에 정책과 불변식이 요구한 승인까지 모두 자동 통과합니다. 위험한 실행과 조직 변경도 묻지 않고 진행합니다."}
                     </p>
+                    {fullAccessPending ? (
+                      <div className="mt-3 rounded-[5px] border border-halt/40 bg-surface-1 p-3" role="alert">
+                        <p className="text-[12px] leading-5 text-primary">
+                          에이전트가 현재 macOS 사용자와 같은 범위에서 파일을 읽고 변경·삭제하며, 명령과 네트워크 요청을 실행하고
+                          연결된 계정과 확장을 사용할 수 있습니다. 그 결과에 대한 책임은 사용자에게 있습니다.
+                        </p>
+                        <div className="mt-2 flex items-center gap-2">
+                          <button
+                            className="rounded-[5px] border border-border px-3 py-1 text-[12px] text-secondary"
+                            onClick={() => setFullAccessPending(false)}
+                            type="button"
+                          >
+                            취소
+                          </button>
+                          <button
+                            className="rounded-[5px] border border-halt px-3 py-1 text-[12px] text-halt"
+                            onClick={() => {
+                              setFullAccessPending(false);
+                              void commitAutonomyMode("full-access");
+                            }}
+                            type="button"
+                          >
+                            확인하고 켜기
+                          </button>
+                        </div>
+                      </div>
+                    ) : null}
                     <div className="mt-3 flex flex-wrap items-center gap-2">
                       <button
                         className={`rounded-[5px] border px-3 py-1 text-[12px] disabled:opacity-50 ${
@@ -3076,6 +3130,25 @@ function SettingsSurface({ service }: { service: DesktopService }) {
                         전체 권한
                       </button>
                       <span className="font-mono text-[11px] text-muted">개정 {autonomy.revision}</span>
+                    </div>
+                    <p className="mt-2 text-[11px] text-muted">
+                      실행 상태: {autonomy.emergencyStopActive ? "긴급 정지로 제한됨" : autonomy.runtimePermissionStatus === "full-access" ? "전체 권한" : "정책 적용"}
+                      {autonomy.permissionLimitReason === undefined ? "" : ` · ${autonomy.permissionLimitReason}`}
+                    </p>
+                    <div className="mt-3 flex items-center gap-2">
+                      <button
+                        className="rounded-[5px] border border-halt px-3 py-1 text-[12px] text-halt disabled:opacity-50"
+                        disabled={autonomySaving || emergency?.active === true}
+                        onClick={() => {
+                          void activateEmergency();
+                        }}
+                        type="button"
+                      >
+                        {emergency?.active === true ? "긴급 정지 활성" : "긴급 정지"}
+                      </button>
+                      {emergency?.active === true ? (
+                        <span className="text-[11px] text-halt">{emergency.reason ?? "새 실행 차단 중"}</span>
+                      ) : null}
                     </div>
                   </GrowthSection>
                 </section>

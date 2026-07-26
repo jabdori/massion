@@ -88,6 +88,15 @@ export interface OrganizationView {
 export interface AutonomyView {
   readonly mode: "automatic" | "review" | "full-access";
   readonly revision: number;
+  readonly runtimePermissionStatus: "governed" | "full-access" | "limited";
+  readonly permissionLimitReason?: string;
+  readonly emergencyStopActive: boolean;
+}
+
+export interface EmergencyView {
+  readonly active: boolean;
+  readonly reason?: string;
+  readonly revision: number;
 }
 
 export interface ExtensionView {
@@ -349,6 +358,8 @@ export interface DesktopService {
   loadRooms(workId: string): Promise<RoomView[]>;
   loadAutonomy(): Promise<AutonomyView>;
   setAutonomy(mode: AutonomyView["mode"], expectedRevision: number): Promise<AutonomyView>;
+  loadEmergency(): Promise<EmergencyView>;
+  activateEmergency(reason: string): Promise<EmergencyView>;
   loadSettings(): Promise<SettingsView>;
   connectZaiCodingPlan(input: ZaiCodingPlanConnectionInput): Promise<void>;
   registerProvider(input: Record<string, unknown>): Promise<void>;
@@ -537,6 +548,15 @@ export function createApplicationDesktopService(
     async setAutonomy(mode, expectedRevision) {
       const result = await client.command("governance.autonomy.set", { mode }, { expectedRevision });
       return projectAutonomy(object(result.data));
+    },
+
+    async loadEmergency() {
+      return projectEmergency(await client.query("governance.emergency", {}));
+    },
+
+    async activateEmergency(reason) {
+      const result = await client.command("governance.emergency.activate", { reason });
+      return projectEmergency(result.data);
     },
 
     async loadSettings() {
@@ -1101,8 +1121,17 @@ export function createFixtureDesktopService(): DesktopService {
       }),
 
     loadOrganization: () => fixturePromise(() => ({ version: 1, nodes: fixtureOrganizationNodes })),
-    loadAutonomy: () => fixturePromise(() => ({ mode: "automatic", revision: 0 })),
-    setAutonomy: (mode, expectedRevision) => fixturePromise(() => ({ mode, revision: expectedRevision + 1 })),
+    loadAutonomy: () =>
+      fixturePromise(() => ({ mode: "automatic", revision: 0, runtimePermissionStatus: "governed", emergencyStopActive: false })),
+    setAutonomy: (mode, expectedRevision) =>
+      fixturePromise(() => ({
+        mode,
+        revision: expectedRevision + 1,
+        runtimePermissionStatus: mode === "full-access" ? "full-access" : "governed",
+        emergencyStopActive: false,
+      })),
+    loadEmergency: () => fixturePromise(() => ({ active: false, revision: 0 })),
+    activateEmergency: (reason) => fixturePromise(() => ({ active: true, reason, revision: 1 })),
     loadExtensions: () =>
       fixturePromise(() => [
         ...fixtureExtensionEntries,
@@ -1726,7 +1755,32 @@ function projectAutonomy(value: GovernanceAutonomyViewV1 | Record<string, unknow
     typeof value.revision !== "number"
   )
     throw new Error("자율성 설정 응답이 유효하지 않습니다");
-  return { mode: value.mode, revision: value.revision };
+  const source = value as Record<string, unknown>;
+  const runtimePermissionStatus =
+    source.runtimePermissionStatus === "limited" || source.runtimePermissionStatus === "full-access"
+      ? source.runtimePermissionStatus
+      : value.mode === "full-access"
+        ? "full-access"
+        : "governed";
+  return {
+    mode: value.mode,
+    revision: value.revision,
+    runtimePermissionStatus,
+    ...(typeof source.permissionLimitReason === "string" ? { permissionLimitReason: source.permissionLimitReason } : {}),
+    emergencyStopActive: source.emergencyStopActive === true,
+  };
+}
+
+function projectEmergency(value: unknown): EmergencyView {
+  const source = value && typeof value === "object" ? (value as Record<string, unknown>) : undefined;
+  if (!source || typeof source.active !== "boolean" || !Number.isSafeInteger(source.revision)) {
+    return { active: false, revision: 0 };
+  }
+  return {
+    active: source.active,
+    revision: source.revision as number,
+    ...(typeof source.reason === "string" ? { reason: source.reason } : {}),
+  };
 }
 
 function projectExtension(extension: ExtensionInstallationViewV1): ExtensionView {

@@ -272,6 +272,9 @@ export interface OrganizationGraphSnapshotV1 {
 export interface GovernanceAutonomyViewV1 {
   readonly mode: "automatic" | "review" | "full-access";
   readonly revision: number;
+  readonly runtimePermissionStatus?: "governed" | "full-access" | "limited";
+  readonly permissionLimitReason?: string;
+  readonly emergencyStopActive?: boolean;
 }
 
 export interface ExtensionInstallationViewV1 {

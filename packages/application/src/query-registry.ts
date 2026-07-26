@@ -809,7 +809,21 @@ export function registerApplicationQueries(
       requiredScopes: ["governance:read"],
       allowedRoles: EVERY_ROLE,
       validate: (value) => object(value, []),
-      handle: async (context) => await autonomy.get(context),
+      handle: async (context) => {
+        const state = await autonomy.get(context);
+        const emergencyState = await dependencies.emergency?.get(context);
+        return {
+          mode: state.mode,
+          revision: state.revision,
+          runtimePermissionStatus: emergencyState?.active
+            ? "limited"
+            : state.mode === "full-access"
+              ? "full-access"
+              : "governed",
+          ...(emergencyState?.active ? { permissionLimitReason: emergencyState.reason } : {}),
+          emergencyStopActive: emergencyState?.active === true,
+        };
+      },
     });
   }
   if (dependencies.emergency) {
