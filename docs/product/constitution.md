@@ -372,9 +372,9 @@ Massion을 다음 중 하나로 축소하지 않습니다.
 ### 9.6 지식·그래프·RAG·기억
 
 - Evidence에는 Tree-sitter 기반 SourceFile·Symbol·Chunk·Relation 인덱스, exact·BM25 검색, 선택적 embedding port, CodeGraphService와 EvidenceBrief가 구현돼 있습니다.
-- 그러나 생산 server는 Repository·Index·Brief store까지만 만들고 Scanner·Indexer·Search·CodeGraph를 Workspace Work에 조립하지 않습니다. Core Evidence 단계도 외부에서 넘긴 Brief ID만 검증하므로 실제 Agent가 자동으로 코드 근거를 받지 않습니다.
-- Work·Room·Message는 현재 대화의 정본이고 Growth에는 versioned MemoryVersion·PromptVersion과 RuntimeExecution lineage seam이 있습니다. 생산 WorkService·RuntimeExecutionStore·AgentInstructionRegistry에 이 seam이 주입되지 않아 다음 Work가 기억을 사용하지 않습니다.
-- v1은 기존 relation을 1-hop 검색 확장에 사용하고 EvidenceBrief를 SharedContextReference·ContextVersion·Agent prompt·Work citation에 연결합니다. 개인 explicit 기억은 새 Work의 immutable PromptVersion에만 적용하며 사용 중지 뒤 과거 계보를 재작성하지 않습니다.
+- 생산 server는 `WorkspaceKnowledgeService`를 통해 Repository·Revision·Indexer·Search·CodeGraph·EvidenceBrief를 Workspace Work intake에 조립하고, 검증된 prompt 자료와 citation을 Agent 실행에 전달합니다. 실제 Provider Work에서도 `work.knowledge=ready`와 reference 2개를 확인했지만, 화면 기반 K01~K04 전체 UAT는 아직 남아 있습니다.
+- Work·Room·Message를 정본으로 유지하면서 Growth의 versioned MemoryVersion·PromptVersion·RuntimeExecution 계보를 생산 WorkService·Agent instruction에 주입했습니다. 명시적 기억은 다음 새 Work부터 적용되고 사용 중지 뒤 이후 Work에서 제외되며 과거 계보는 재작성하지 않습니다. 실제 Provider 재시작 증거에서 memory revision과 Work 실행 계보가 보존됐지만, K03·K04 화면 UAT는 미완료입니다.
+- v1은 기존 relation을 1-hop 검색 확장에 사용하고 EvidenceBrief를 SharedContextReference·ContextVersion·Agent prompt·Work citation에 연결합니다. LSP, embedding provider, SurrealDB native relation 전환은 실제 품질·성능 실패가 측정될 때만 별도 계획을 엽니다.
 - 현재 저장소에는 LSP 구현이 없습니다. Tree-sitter+BM25+1-hop graph의 실제 UAT가 cross-file 정확도 때문에 반복 실패할 때만 LSP adapter 계획을 엽니다. embedding과 SurrealDB native relation 전환도 각각 검색 품질과 순회 성능 실패가 측정될 때만 추가합니다.
 
 ## 10. 다음 목표
