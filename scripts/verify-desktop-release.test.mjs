@@ -3,7 +3,13 @@ import { chmod, mkdir, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { parseArguments, parseUatEvidence, verificationOptions, verifyDesktopRelease } from "./verify-desktop-release.mjs";
+import {
+  assertProductSourceMatches,
+  parseArguments,
+  parseUatEvidence,
+  verificationOptions,
+  verifyDesktopRelease,
+} from "./verify-desktop-release.mjs";
 
 const candidateSha = "a".repeat(40);
 const uatIds = [
@@ -51,6 +57,11 @@ test("fixture 표식·누락 결과·인자 오류를 완료 근거로 허용하
     app: "/tmp/Massion.app",
     uatEvidence: "/tmp/uat.md",
   });
+  assert.doesNotThrow(() => assertProductSourceMatches({ candidateSha, currentSha: "b".repeat(40), changedFiles: "" }));
+  assert.throws(
+    () => assertProductSourceMatches({ candidateSha, currentSha: "b".repeat(40), changedFiles: "apps/desktop/src/app.tsx" }),
+    /제품 소스/u,
+  );
   assert.throws(() => parseArguments(["--candidate-sha", candidateSha, "--app", "/tmp/Massion.app"]), /uat-evidence/u);
 });
 

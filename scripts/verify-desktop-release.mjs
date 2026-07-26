@@ -20,6 +20,17 @@ const UAT_IDS = [
   "UAT-P02",
 ];
 const UAT_ID_SET = new Set(UAT_IDS);
+const PRODUCT_SOURCE_PATHS = [
+  "apps",
+  "packages",
+  "extensions",
+  "Cargo.toml",
+  "Cargo.lock",
+  "package.json",
+  "pnpm-lock.yaml",
+  "pnpm-workspace.yaml",
+  "tsconfig.json",
+];
 
 function command(commandName, arguments_, options = {}) {
   const result = spawnSync(commandName, arguments_, {
@@ -61,6 +72,12 @@ export function verificationOptions(arguments_) {
     app: arguments_.app,
     uatEvidence: arguments_["uat-evidence"],
   };
+}
+
+export function assertProductSourceMatches({ candidateSha, currentSha, changedFiles }) {
+  if (candidateSha !== currentSha && changedFiles.trim()) {
+    throw new Error("후보 SHA 이후 제품 소스가 변경되었습니다");
+  }
 }
 
 export function parseUatEvidence(text) {
@@ -112,7 +129,13 @@ export async function verifyDesktopRelease({
   const appPath = resolve(app);
   const evidencePath = resolve(uatEvidence);
   const currentSha = run("git", ["rev-parse", "HEAD"], { cwd: repoRoot });
-  if (currentSha !== candidateSha) throw new Error("현재 소스와 릴리스 후보 SHA가 다릅니다");
+  if (currentSha !== candidateSha) {
+    run("git", ["merge-base", "--is-ancestor", candidateSha, "HEAD"], { cwd: repoRoot });
+    const changedFiles = run("git", ["diff", "--name-only", `${candidateSha}..HEAD`, "--", ...PRODUCT_SOURCE_PATHS], {
+      cwd: repoRoot,
+    });
+    assertProductSourceMatches({ candidateSha, currentSha, changedFiles });
+  }
 
   const packageJson = JSON.parse(await readFile(join(repoRoot, "package.json"), "utf8"));
   const version = expectedVersion ?? packageJson.version;

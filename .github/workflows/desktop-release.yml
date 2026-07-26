@@ -25,7 +25,8 @@ jobs:
       - name: 후보 소스 확인
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          ref: ${{ inputs.candidate_sha }}
+          # 증거 문서는 후보 코드 커밋 뒤에 별도 커밋될 수 있으므로 현재 실행 ref를 검사합니다.
+          ref: ${{ github.ref }}
           fetch-depth: 0
           persist-credentials: false
 
