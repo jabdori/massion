@@ -21,7 +21,7 @@
 | 02 | 네이티브 폴더·파일 선택 | 실제 folder/file panel 호출·취소 증분 확인 · 파일 선택·전체 native UAT 대기 | [페이즈 02](./phase-02-native-context-picker.md) |
 | 03 | 지식 그래프·검색·기억의 업무 연결 | 진행 중 | [페이즈 03](./phase-03-knowledge-memory.md) |
 | 04 | Core·협업·조직·개선·권한·수신함 정합화 | 부분 진행 — Core UAT·Growth Reflection 연결 증분 | [페이즈 04](./phase-04-core-collaboration-permission-inbox.md) |
-| 05 | 실제 데스크톱 UAT와 개인용 릴리스 후보 | `40a6ffbc8` workspace·native picker·첨부 경계까지 증분 통과 · 전체 native UAT·릴리스 게이트 대기 | [최신 동일 후보 Tauri/API UAT](../../../evidence/phase-30/desktop-live-tauri-uat-2026-07-26-e3b5fe883.md), [workspace 경계 UAT](../../../evidence/phase-30/desktop-live-workspace-directory-uat-2026-07-26-40a6ffbc8.md), [native picker UAT](../../../evidence/phase-30/desktop-live-native-picker-uat-2026-07-26-40a6ffbc8.md) |
+| 05 | 실제 데스크톱 UAT와 개인용 릴리스 후보 | `be7a552cb` workspace·native picker·첨부 경계까지 증분 통과 · 전체 native UAT·릴리스 게이트 대기 | [동일 후보 Tauri/API UAT](../../../evidence/phase-30/desktop-live-tauri-uat-2026-07-26-e3b5fe883.md), [workspace 경계 UAT](../../../evidence/phase-30/desktop-live-workspace-directory-uat-2026-07-26-40a6ffbc8.md), [folder/file panel 증분](../../../evidence/phase-30/desktop-live-native-picker-uat-2026-07-26-40a6ffbc8.md), [새 후보 file panel](../../../evidence/phase-30/desktop-live-native-file-panel-uat-2026-07-26-be7a552cb.md) |
 
 ## 릴리스 전 데이터 보존 gate
 
