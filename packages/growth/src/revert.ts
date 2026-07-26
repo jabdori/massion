@@ -104,8 +104,21 @@ export class GrowthRevertService {
       if (concurrent && (concurrent.status !== "awaiting-review" || !input.approvalId))
         return this.replay(concurrent, requestHash);
       const adoption = await this.adoption(context.organizationId, input.adoptionId, executor);
-      if (adoption.status !== "observing" || !adoption.after_version_id || !adoption.after_checksum)
-        throw new Error("observing Growth Adoption만 되돌릴 수 있습니다");
+      if (!adoption.after_version_id || !adoption.after_checksum)
+        throw new Error("되돌릴 Growth Adoption의 after target 계보가 없습니다");
+      if (input.reason === "degraded" && adoption.status !== "observing")
+        throw new Error("degraded Growth Revert는 observing Adoption만 허용합니다");
+      if (input.reason === "explicit" && !["observing", "retained"].includes(adoption.status))
+        throw new Error("명시적 Growth Revert는 observing 또는 retained Adoption만 허용합니다");
+      if (input.reason === "explicit" && adoption.status === "retained") {
+        const current = await this.targets.get(adoption.target_kind).inspect(
+          context,
+          { suggestionId: adoption.suggestion_id, patch: {} },
+          executor,
+        );
+        if (current.versionId !== adoption.after_version_id || current.checksum !== adoption.after_checksum)
+          throw new Error("retained Growth Adoption의 현재 target이 이미 변경됐습니다");
+      }
       if (input.reason === "degraded")
         await this.assertDegraded(context.organizationId, adoption.adoption_id, executor);
       await executor.query(
