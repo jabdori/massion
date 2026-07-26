@@ -53,6 +53,8 @@ Application query `growth.suggestions`는 source reference, patch, evaluation in
 
 패치가 포함된 새 Tauri 번들(`Massion Timeout UAT.app`, `dev.massion.desktop.timeout-uat`)을 같은 격리 데이터와 개인 Provider 경로로 실행했습니다. 화면 조작은 Computer Use 의존성 누락으로 수행하지 못했지만, 실제 Tauri·bridge·server·SurrealDB와 Application HTTP 계약을 통과시켰습니다.
 
+- 번들 후보 SHA: `16562639f` (`a5b285aec` timeout 패치 포함)
+
 | 항목 | 관측 |
 | --- | --- |
 | `run.start` | `accepted`, `ready` |
