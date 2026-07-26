@@ -45,6 +45,10 @@ Application query `growth.suggestions`는 source reference, patch, evaluation in
 
 따라서 이 Work는 완료·Records 확정·새 승인 후보 생성으로 세지 않습니다. 재시작 후 기존 Work·실행 원장과 차단 사유가 유지된 것은 보존 경계의 부분 통과이며, assurance 정체는 제품 실패입니다.
 
+## 정체 원인과 최소 패치
+
+코드 추적 결과 일반 모델 경로에는 120초 응답 상한이 있었지만, 실제 Provider 구독 경로(`agent-runtime`)에는 세션 갱신 신호만 전달되어 Provider 무응답 시 `running`이 무기한 유지될 수 있었습니다. `a5b285aec`에서 같은 120초 상한을 구독 경로에도 연결하고, 무응답 Provider가 `failed`로 종료되는 최소 회귀 테스트를 추가했습니다. 이 패치는 새 동일 후보 번들에서 재실행해야 하며, 본 문서의 실제 UAT 실패 관측을 성공으로 소급하지 않습니다.
+
 ## 아직 확인하지 않은 항목
 
 - 실제 새 eligible 후보의 승인 투표와 같은 Adoption command replay 성공
