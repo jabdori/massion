@@ -49,6 +49,23 @@ Application query `growth.suggestions`는 source reference, patch, evaluation in
 
 코드 추적 결과 일반 모델 경로에는 120초 응답 상한이 있었지만, 실제 Provider 구독 경로(`agent-runtime`)에는 세션 갱신 신호만 전달되어 Provider 무응답 시 `running`이 무기한 유지될 수 있었습니다. `a5b285aec`에서 같은 120초 상한을 구독 경로에도 연결하고, 무응답 Provider가 `failed`로 종료되는 최소 회귀 테스트를 추가했습니다. 이 패치는 새 동일 후보 번들에서 재실행해야 하며, 본 문서의 실제 UAT 실패 관측을 성공으로 소급하지 않습니다.
 
+## timeout 패치 후 실제 재실행 — 부분 통과
+
+패치가 포함된 새 Tauri 번들(`Massion Timeout UAT.app`, `dev.massion.desktop.timeout-uat`)을 같은 격리 데이터와 개인 Provider 경로로 실행했습니다. 화면 조작은 Computer Use 의존성 누락으로 수행하지 못했지만, 실제 Tauri·bridge·server·SurrealDB와 Application HTTP 계약을 통과시켰습니다.
+
+| 항목 | 관측 |
+| --- | --- |
+| `run.start` | `accepted`, `ready` |
+| Run | `completed`, `terminal` |
+| Work | `completed`, revision 15 |
+| Representative | `succeeded` |
+| Context/Delivery | `succeeded` |
+| 독립 Assurance | `succeeded` |
+| Growth | `succeeded` |
+| 자율성 계보 | Work·모든 실행 `automatic`, revision 0 |
+
+실행 시작부터 Work 완료까지 약 40초 내였고, 패치 전처럼 독립 Assurance가 장시간 `running`에 남지 않았습니다. 이는 timeout 경계와 실제 Provider 경로의 재검증 근거이지만, 승인 성공·full-access·화면 UAT·최종 10개 이상 시나리오 완료를 증명하지는 않습니다.
+
 ## 아직 확인하지 않은 항목
 
 - 실제 새 eligible 후보의 승인 투표와 같은 Adoption command replay 성공
