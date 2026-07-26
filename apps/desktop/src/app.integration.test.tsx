@@ -21,6 +21,23 @@ function service(overrides: Partial<DesktopService> = {}): DesktopService {
 }
 
 describe("AgentOS native data flow", () => {
+  it("워크스페이스 없는 Work의 지식 빈 상태는 산출물 안내를 재사용하지 않는다", async () => {
+    const user = userEvent.setup();
+    render(
+      <App
+        service={service({
+          loadWorkKnowledge: async (workId) => ({ workId, status: "not-applicable", references: [] }),
+        })}
+      />,
+    );
+
+    await user.click(await screen.findByRole("tab", { name: "지식" }));
+
+    expect(await screen.findByText("이 Work는 워크스페이스 지식을 사용하지 않았습니다.")).toBeInTheDocument();
+    expect(screen.getByText("워크스페이스를 선택한 새 Work에서 코드 근거를 사용할 수 있습니다.")).toBeInTheDocument();
+    expect(screen.queryByText("실행이 산출물을 만들면 여기에 표시됩니다.")).not.toBeInTheDocument();
+  });
+
   it("설정은 실제 읽기 전용 상태만 조회하고 자격증명 값을 표시하지 않는다", async () => {
     const user = userEvent.setup();
     const loadSettings = vi.fn(async () => ({

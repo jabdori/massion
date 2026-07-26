@@ -100,7 +100,7 @@ import {
   type WorkStatus,
   type WorkView,
 } from "@/model";
-import { agentIdentityToken, growthTargetToken } from "@massion/application/client";
+import { agentIdentityToken, growthTargetToken, type WorkKnowledgeViewV1 } from "@massion/application/client";
 
 import { nativeContextPicker, type NativeContextPicker } from "@/native-context-picker";
 import {
@@ -406,7 +406,7 @@ export function App({ contextPicker = nativeContextPicker, service }: AppProps) 
                   rooms={rooms.filter((candidate) => openRoomIds.includes(candidate.roomId))}
                   work={controller.work}
                 />
-                <WorkInspector room={room} work={controller.work} />
+                <WorkInspector key={controller.work.id} room={room} service={service} work={controller.work} />
               </>
             ) : (
               <WorkEmptySurface
@@ -4564,13 +4564,41 @@ function InspectorRoom({ room }: { room: RoomView }) {
   );
 }
 
-function WorkInspector({ room, work }: { room: RoomView | undefined; work: WorkView }) {
+function WorkInspector({ room, service, work }: { room: RoomView | undefined; service: DesktopService; work: WorkView }) {
+  const [tab, setTab] = useState("work");
+  const [knowledge, setKnowledge] = useState<WorkKnowledgeViewV1>();
+  const [knowledgeError, setKnowledgeError] = useState("");
+
+  useEffect(() => {
+    if (tab !== "knowledge") return;
+    let disposed = false;
+    setKnowledge(undefined);
+    setKnowledgeError("");
+    void service.loadWorkKnowledge(work.id).then(
+      (value) => {
+        if (!disposed) setKnowledge(value);
+      },
+      (cause: unknown) => {
+        if (!disposed) setKnowledgeError(surfaceErrorMessage(cause, "사용한 지식을 불러오지 못했습니다."));
+      },
+    );
+    return () => {
+      disposed = true;
+    };
+  }, [service, tab, work.id]);
+
   return (
     <aside
       aria-label="Work 세부 정보"
       className="grid h-full min-h-0 min-w-0 grid-rows-[46px_minmax(0,1fr)] border-l border-border bg-chrome"
     >
-      <Tabs className="contents" defaultValue="work" key={work.id}>
+      <Tabs
+        className="contents"
+        onValueChange={(value) => {
+          setTab(value === null ? "work" : String(value));
+        }}
+        value={tab}
+      >
         <header className="flex items-end border-b border-border px-2">
           <TabsList aria-label="세부 정보 보기" className="h-full w-full justify-between">
             <TabsTrigger className="h-full flex-1 px-1" value="work">
@@ -4581,6 +4609,9 @@ function WorkInspector({ room, work }: { room: RoomView | undefined; work: WorkV
             </TabsTrigger>
             <TabsTrigger className="h-full flex-1 px-1" value="verification">
               검증
+            </TabsTrigger>
+            <TabsTrigger className="h-full flex-1 px-1" value="knowledge">
+              지식
             </TabsTrigger>
           </TabsList>
         </header>
@@ -4621,9 +4652,119 @@ function WorkInspector({ room, work }: { room: RoomView | undefined; work: WorkV
           <TabsContent value="verification">
             <InspectorVerifications values={work.verifications} />
           </TabsContent>
+          <TabsContent value="knowledge">
+            <WorkKnowledgeInspector
+              error={knowledgeError}
+              knowledge={knowledge}
+              onOpenSharedContext={() => {
+                setTab("work");
+              }}
+              sharedContextAvailable={(room?.sharedContexts.length ?? 0) > 0}
+            />
+          </TabsContent>
         </div>
       </Tabs>
     </aside>
+  );
+}
+
+function WorkKnowledgeInspector({
+  error,
+  knowledge,
+  onOpenSharedContext,
+  sharedContextAvailable,
+}: {
+  error: string;
+  knowledge: WorkKnowledgeViewV1 | undefined;
+  onOpenSharedContext: () => void;
+  sharedContextAvailable: boolean;
+}) {
+  if (error)
+    return (
+      <section aria-label="사용한 지식" className="border border-danger/50 bg-surface-1 px-3.5 py-3">
+        <h2 className="text-sm font-semibold">사용한 지식</h2>
+        <p className="mt-1.5 text-xs leading-5 text-danger">{error}</p>
+      </section>
+    );
+  if (knowledge === undefined)
+    return (
+      <section aria-busy="true" aria-label="사용한 지식 불러오는 중" className="space-y-2">
+        <Skeleton className="h-12" />
+        <Skeleton className="h-12" />
+      </section>
+    );
+  if (knowledge.status === "not-applicable")
+    return (
+      <InspectorEmpty
+        detail="워크스페이스를 선택한 새 Work에서 코드 근거를 사용할 수 있습니다."
+        icon={Database}
+        message="이 Work는 워크스페이스 지식을 사용하지 않았습니다."
+      />
+    );
+  if (knowledge.status === "no-match")
+    return (
+      <InspectorEmpty
+        detail="새 Work에서 다른 요청이나 파일 범위로 다시 검색할 수 있습니다."
+        icon={MagnifyingGlass}
+        message="검색했지만 이 Work에서 사용할 코드 근거를 찾지 못했습니다."
+      />
+    );
+  if (knowledge.status === "blocked")
+    return (
+      <section aria-label="사용한 지식" className="border border-danger/50 bg-surface-1 px-3.5 py-3">
+        <h2 className="text-sm font-semibold">사용한 지식</h2>
+        <p className="mt-1.5 text-xs leading-5 text-danger">
+          지식 스냅샷을 검증하지 못했습니다. 업무 화면에서 실행을 재개하거나 새 Work를 시작해 주세요.
+        </p>
+      </section>
+    );
+
+  const freshness = knowledge.freshnessStatus === "stale_warning" ? "이후 파일 변경됨" : "현재 스냅샷";
+  const freshnessDetail =
+    knowledge.freshnessStatus === "stale_warning"
+      ? "이 Work는 시작 당시의 근거를 계속 사용합니다. 새 Work는 현재 파일을 다시 읽습니다."
+      : "이 Work에서 사용한 파일과 코드 범위입니다.";
+
+  return (
+    <section aria-label="사용한 지식" className="border border-border bg-surface-1">
+      <header className="border-b border-border px-3.5 py-3">
+        <div className="flex items-center justify-between gap-2">
+          <h2 className="text-sm font-semibold">사용한 지식</h2>
+          <span className="rounded-[3px] border border-control px-1.5 text-[10px] text-muted">{freshness}</span>
+        </div>
+        <p className="mt-1 text-[11px] leading-4 text-muted">{freshnessDetail}</p>
+      </header>
+      {knowledge.references.length === 0 ? (
+        <p className="px-3.5 py-3 text-xs text-muted">사용한 코드 범위가 없습니다.</p>
+      ) : (
+        <ul className="divide-y divide-border">
+          {knowledge.references.map((reference) => (
+            <li key={reference.referenceId}>
+              <button
+                aria-label={`${reference.relativePath} 출처 보기`}
+                className="flex w-full items-center gap-2 px-3.5 py-3 text-left outline-none hover:bg-surface-2 disabled:cursor-default disabled:hover:bg-transparent"
+                disabled={!sharedContextAvailable}
+                onClick={onOpenSharedContext}
+                type="button"
+              >
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate font-mono text-[11px] text-primary">{reference.relativePath}</span>
+                  <span className="mt-0.5 block truncate text-[11px] text-muted">
+                    {reference.qualifiedName ?? "코드 범위"} · {reference.startLine}–{reference.endLine}
+                  </span>
+                </span>
+                {sharedContextAvailable ? <CaretRight aria-hidden="true" className="shrink-0 text-muted" size={14} /> : null}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {sharedContextAvailable ? (
+        <p className="border-t border-border px-3.5 py-2.5 text-[11px] leading-4 text-muted">
+          항목을 누르면 Core Office가 공유한 출처로 이동합니다.
+        </p>
+      ) : null}
+    </section>
   );
 }
 
@@ -4751,12 +4892,12 @@ function StateIcon({ state }: { state: StepState }) {
   );
 }
 
-function InspectorEmpty({ icon: Icon, message }: { icon: typeof Briefcase; message: string }) {
+function InspectorEmpty({ detail, icon: Icon, message }: { detail?: string; icon: typeof Briefcase; message: string }) {
   return (
     <div className="px-5 py-14 text-center">
       <Icon aria-hidden="true" className="mx-auto mb-3 text-muted" size={28} />
       <p className="text-sm text-secondary">{message}</p>
-      <p className="mt-1 text-xs text-muted">실행이 산출물을 만들면 여기에 표시됩니다.</p>
+      <p className="mt-1 text-xs text-muted">{detail ?? "실행이 산출물을 만들면 여기에 표시됩니다."}</p>
     </div>
   );
 }

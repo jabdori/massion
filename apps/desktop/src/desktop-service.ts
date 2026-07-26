@@ -18,6 +18,7 @@ import {
   type VerificationViewV1,
   type WorkActivityViewV1,
   type WorkDetailV1,
+  type WorkKnowledgeViewV1,
   type WorkSummaryV1,
   type WorkspaceViewV1,
 } from "@massion/application/client";
@@ -317,6 +318,7 @@ export interface DesktopService {
   bootstrap(): Promise<DesktopBootstrapState>;
   loadIndex(input: WorkIndexInput): Promise<WorkView[]>;
   loadWork(workId: string): Promise<WorkView>;
+  loadWorkKnowledge(workId: string): Promise<WorkKnowledgeViewV1>;
   loadPendingApprovals(): Promise<ApprovalView[]>;
   loadWorkspaces(): Promise<readonly DesktopWorkspaceView[]>;
   registerWorkspace(path: string): Promise<DesktopWorkspaceView>;
@@ -452,6 +454,10 @@ export function createApplicationDesktopService(
         approvals,
         directives,
       });
+    },
+
+    async loadWorkKnowledge(workId) {
+      return await client.query("work.knowledge", { workId });
     },
 
     async loadPendingApprovals() {
@@ -919,6 +925,12 @@ export function createFixtureDesktopService(): DesktopService {
         if (!work) throw new Error("Fixture Work를 찾을 수 없습니다");
         return work;
       }),
+    loadWorkKnowledge: (workId) =>
+      fixturePromise(() => ({
+        workId,
+        status: "not-applicable" as const,
+        references: [],
+      })),
     loadPendingApprovals: () =>
       fixturePromise(() =>
         initialSnapshot.works.flatMap((work) => work.approvals.filter((approval) => approval.status === "pending")),

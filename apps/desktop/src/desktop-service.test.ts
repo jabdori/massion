@@ -295,6 +295,35 @@ describe("Application desktop service", () => {
     });
   });
 
+  it("Work의 사용한 지식은 typed work.knowledge 조회로 반환한다", async () => {
+    const native = transport({
+      "work.knowledge": {
+        workId: detail.workId,
+        status: "ready",
+        freshnessStatus: "fresh",
+        evidenceBriefId: "brief-0001",
+        references: [
+          {
+            referenceId: "chunk-0001",
+            kind: "chunk",
+            relativePath: "src/order.ts",
+            qualifiedName: "calculateTotal",
+            startLine: 3,
+            endLine: 6,
+            contentHash: "a".repeat(64),
+          },
+        ],
+      },
+    });
+    const service = createApplicationDesktopService(native, { createId: () => "request-0001" });
+
+    await expect(service.loadWorkKnowledge(detail.workId)).resolves.toMatchObject({
+      status: "ready",
+      references: [expect.objectContaining({ relativePath: "src/order.ts", qualifiedName: "calculateTotal" })],
+    });
+    expect(native.query).toHaveBeenCalledWith("work.knowledge", { workId: detail.workId });
+  });
+
   it("현재 run과 종료 Work 상태 및 병합 활동의 시간순을 보존한다", async () => {
     const native = transport({
       "work.detail": { ...detail, status: "failed" },
