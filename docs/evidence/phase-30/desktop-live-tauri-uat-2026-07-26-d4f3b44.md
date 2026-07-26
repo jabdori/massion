@@ -23,6 +23,7 @@
 | 최신 후보 실제 Provider Work | `tokenBudget=32768`로 시작한 Work가 `completed/terminal`; 대표·context·evidence·assurance·Growth를 포함한 8개 실행 모두 `succeeded` |
 | 최신 Work 지식·산출물 | `work.knowledge=ready`, README chunk reference 2개, artifact 4개가 같은 Work에 연결 |
 | 입력 예산 경계 | `tokenBudget=2048` 요청은 `intake blocked / evidence-invalid`; 지식 예산이 부족한 입력 경계로 기록하고 성공으로 세지 않음 |
+| 전체 권한 전환·회수 | 재시작 뒤 실제 명령으로 `automatic(revision 6) → full-access(revision 7) → automatic(revision 8)`; 회수 후 `runtimePermissionStatus=governed`, 긴급 정지 없음 |
 | 재시작 경계 수정 | Growth 복구 상태 hash를 command ID에 포함하고 Work 고정 Prompt·Memory·Policy·Organization 계보를 사용하도록 수정 |
 | 중단 Reflection 수정 | 동일 snapshot의 `generating` Reflection을 기존 run ID로 재개하고 부분 Suggestion은 중복 생성을 막기 위해 차단 |
 | 동일 번들 재시작·보존 | 앱과 daemon을 종료 후 같은 번들을 재실행; `/health/ready`와 `system.status`가 다시 `ready`, Growth auto version 2·trusted Workspace·memory revision 3 복원 |
