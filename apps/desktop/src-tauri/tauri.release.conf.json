@@ -5,6 +5,10 @@
   },
   "bundle": {
     "externalBin": ["binaries/node", "binaries/surrealdb"],
+    "macOS": {
+      "minimumSystemVersion": "13.0",
+      "hardenedRuntime": true
+    },
     "resources": {
       ".runtime-stage/": ""
     }
