@@ -79,6 +79,54 @@ describe("Application domain adapters", () => {
     });
   });
 
+  it("만료된 Growth Approval은 내부 오류가 아니라 사용자 검증 오류로 반환한다", async () => {
+    await using database = await createDatabase({
+      url: "mem://",
+      namespace: "massion",
+      database: crypto.randomUUID(),
+    });
+    const identities = await IdentityService.create(database);
+    const organizations = await OrganizationService.create(database);
+    const owner = await identities.registerPersonalUser({ email: "growth-expired@example.com", displayName: "Owner" });
+    const context = await organizations.resolveTenantContext(owner.user.user_id, owner.organization.organization_id);
+    const registry = new ApplicationCommandRegistry(await ApplicationCommandStore.create(database, organizations));
+    registerApplicationDomainCommands(registry, {
+      growth: {
+        getSuggestionDetails: async () =>
+          ({
+            suggestion: { suggestion_id: "suggestion-expired", revision: 1 },
+            evaluation: { evaluationRunId: "evaluation-expired", outcome: "eligible", inputHash: "e".repeat(64) },
+            adoption: {
+              adoptionId: "adoption-expired",
+              status: "awaiting-review",
+              commandId: "adoption-expired-command",
+              approvalId: "approval-expired",
+              evaluationRunId: "evaluation-expired",
+              evaluationInputHash: "e".repeat(64),
+              beforeVersionId: "before",
+              beforeChecksum: "b".repeat(64),
+            },
+          }) as never,
+        adopt: vi.fn(),
+      } as never,
+      approvals: {
+        get: vi.fn().mockResolvedValue({ approval_id: "approval-expired", status: "expired", revision: 2 }),
+        vote: vi.fn().mockRejectedValue(new Error("Approval이 만료됐습니다")),
+        cancel: vi.fn(),
+      } as never,
+    });
+
+    await expect(
+      registry.dispatch(context, ["growth:write", "approval:write"], {
+        schemaVersion: "massion.application.v1",
+        commandId: "growth-expired-command",
+        correlationId: "growth-expired-correlation",
+        operation: "growth.suggestion.approve",
+        payload: { suggestionId: "suggestion-expired", expectedRevision: 1, reason: "승인" },
+      }),
+    ).rejects.toMatchObject({ operatorCode: "APP_DOMAIN_VALIDATION" });
+  });
+
   it("승인 vote가 terminal이면 연결된 구독 Runtime 실행을 approvalId만으로 재개한다", async () => {
     await using database = await createDatabase({
       url: "mem://",
