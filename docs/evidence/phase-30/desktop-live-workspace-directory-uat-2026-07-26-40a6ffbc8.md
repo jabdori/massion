@@ -19,6 +19,14 @@
 | Work 계보 | 완료 Work가 artifact 6개와 `indexVersionId`를 보존. 해당 자연어 질의는 `work.knowledge.status=no-match`였으며 오류가 아닌 신선한 빈 검색 결과로 반환 |
 | 잘못된 디렉터리 첨부 | `workspacePaths:["src"]` 입력이 `APP_WORKSPACE_PATH_VALIDATION` 검증 오류로 반환. `APP_INTERNAL`로 숨겨지지 않음 |
 
+## 동일 후보 재기동 확인
+
+같은 `40a6ffbc8` 코드 번들을 다시 시작한 뒤 다음 14개 Application 조회가 모두 오류 없이 응답했습니다: `identity.me`, `organization.graph.snapshot`, `workspace.list`, `workspace.get`, `work.list`, `work.index`, `work.knowledge`, `work.executions`, `governance.approval.list`, `growth.configuration.get`, `growth.suggestions`, `growth.effects`, `growth.memories`, `subscription.doctor`.
+
+- 기존 README 첨부 Work의 `work.knowledge`는 `ready`, reference 2개, 같은 index version을 반환했습니다.
+- 실제 `governance.autonomy.set`은 `automatic(revision 12) → full-access(revision 13, runtimePermissionStatus=full-access) → automatic(revision 14, governed)`로 전파됐습니다.
+- 앱·server·SurrealDB는 검증 뒤 종료했습니다.
+
 ## 코드·자동화 확인
 
 - `pnpm --filter @massion/application exec vitest run src/run-commands.test.ts --no-file-parallelism --maxWorkers=1 --reporter=dot` — 4/4 통과
