@@ -65,6 +65,7 @@ export interface ApplicationProductDependencies {
   readonly connectorEnrollments?: NonNullable<ApplicationHttpDependencies["connectorEnrollments"]>;
   readonly health?: NonNullable<ApplicationHttpDependencies["health"]>;
   readonly server?: ApplicationHttpServerOptions;
+  readonly onInitialized?: (context: import("@massion/identity").TenantContext) => void | Promise<void>;
 }
 
 export class ApplicationProduct implements AsyncDisposable {
@@ -166,6 +167,7 @@ export class ApplicationProduct implements AsyncDisposable {
       dependencies.policies,
       tokens,
       dependencies.domain.growth,
+      dependencies.onInitialized,
     );
 
     const productReference: { current?: ApplicationProduct } = {};

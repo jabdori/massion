@@ -63,6 +63,7 @@ import {
   GrowthGovernanceAdapter,
   GrowthRecoveryService,
   GrowthRevertService,
+  GrowthTriggerStore,
   GrowthTargetRegistry,
   GrowthWorkPromptAdapter,
   MemoryGrowthTarget,
@@ -164,6 +165,7 @@ import { MassionSubscriptionRuntimeResolver } from "./subscription-runtime-resol
 import { GovernanceSubscriptionSharingAuthorizer } from "./subscription-sharing.js";
 import { JsonOperationalLogger, MetricRegistry, MetricsHttpServer } from "./telemetry.js";
 import { seedBundledOfficialExtensions } from "./bundled-official-extensions.js";
+import { createGrowthReflectionAdapters, GrowthWorker } from "./growth-worker.js";
 
 const CORE_MODEL_ROUTES = BUILTIN_CORE_MODEL_ROUTES.map((route) => route.name);
 
@@ -593,24 +595,13 @@ export async function createMassionDaemon(
       policy: new PolicyGrowthTarget(new PolicyGrowthProjection(policies)),
       organization: new OrganizationGrowthTarget(new OrganizationGrowthProjection(graph)),
     });
+    const reflectionAdapters = createGrowthReflectionAdapters(database, organizations, runner);
     const growthReflections = await ReflectionService.create(
       database,
       organizations,
-      {
-        generate() {
-          throw new Error("Growth reflection 생성기는 현재 서버 runtime에 연결되지 않았습니다");
-        },
-      },
-      {
-        verify() {
-          throw new Error("Growth reflection 근거 검증기가 현재 서버 runtime에 연결되지 않았습니다");
-        },
-      },
-      {
-        verify() {
-          throw new Error("Growth reflection RuntimeExecution 검증기가 현재 서버 runtime에 연결되지 않았습니다");
-        },
-      },
+      { generate: reflectionAdapters.generate },
+      { verify: reflectionAdapters.verifySource },
+      { verify: reflectionAdapters.verifyRuntime },
     );
     const growth = new GrowthGateway({
       bootstrap: new GrowthBootstrap(
@@ -628,6 +619,14 @@ export async function createMassionDaemon(
       effects: await GrowthEffectStore.create(database, organizations),
       reverts: await GrowthRevertService.create(database, organizations, growthAuthorizer, growthTargets),
       recovery: growthRecovery,
+    });
+    const growthTriggers = await GrowthTriggerStore.create(database, organizations, growthConfigurations);
+    const growthWorker = new GrowthWorker({
+      database,
+      organizations,
+      triggers: growthTriggers,
+      gateway: growth,
+      runner,
     });
     const deliveryPrerequisites: DeliveryPrerequisiteReader = {
       async getWork(context, workId) {
@@ -1062,6 +1061,7 @@ export async function createMassionDaemon(
             ? await daemonReference.current.readiness()
             : { database: true, migrations: true, connectors: true },
       },
+      onInitialized: (context) => growthWorker.start(context),
       server: config.server,
     });
     const applicationRunRecovery = new ApplicationRunStartupRecoveryService(
@@ -1135,6 +1135,11 @@ export async function createMassionDaemon(
         {
           close: async () => {
             await extensionLifecycle.close();
+          },
+        },
+        {
+          close: async () => {
+            await growthWorker.close();
           },
         },
         {

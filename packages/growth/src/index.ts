@@ -12,6 +12,9 @@ export { PromptMemoryStore } from "./prompt-memory.js";
 export { ReflectionService } from "./reflection.js";
 export { GrowthRecoveryService } from "./recovery.js";
 export { GrowthRevertService } from "./revert.js";
+export { GrowthTriggerStore } from "./trigger.js";
+export { canonicalGrowthJson, growthChecksum } from "./prompt-memory.js";
+export { createReflectionSnapshot } from "./snapshot.js";
 export {
   GrowthTargetRegistry,
   MemoryGrowthTarget,
@@ -44,3 +47,4 @@ export type { GrowthRecoveryAction, GrowthRecoveryRecord } from "./recovery.js";
 export type { GrowthRevertOperation, RevertGrowthAdoptionInput } from "./revert.js";
 export type { ReflectionSnapshot, ReflectionSnapshotBundle } from "./snapshot.js";
 export type { GrowthTrigger } from "./trigger.js";
+export type { ReflectionSourceReference, ReflectionVersionReference } from "./snapshot.js";

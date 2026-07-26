@@ -4,6 +4,7 @@ import type { IdentityService, OrganizationService } from "@massion/identity";
 import type { OrganizationGraphService } from "@massion/organization";
 
 import type { ApplicationAccessTokenService } from "./auth.js";
+import type { TenantContext } from "@massion/identity";
 
 export interface InitializeLocalApplicationInput {
   readonly commandId: string;
@@ -31,6 +32,8 @@ export class LocalApplicationBootstrap {
     private readonly tokens: ApplicationAccessTokenService,
     // onboarding 시 Growth(메모리·프롬프트 정본) 시드를 활성화하기 위한 선택 의존성입니다.
     private readonly growth?: Pick<GrowthGateway, "start">,
+    // 조직 컨텍스트가 준비된 뒤 시작해야 하는 제품 worker 연결점입니다.
+    private readonly onInitialized?: (context: TenantContext) => void | Promise<void>,
   ) {}
 
   public async initialize(input: InitializeLocalApplicationInput) {
@@ -47,6 +50,7 @@ export class LocalApplicationBootstrap {
     // 조직 graph가 만들어진 직후 Growth를 시작해 활성 PromptDefinitionVersion을 시드합니다.
     // 멱등이므로 onboarding 재시작에도 안전합니다.
     if (this.growth) await this.growth.start(context);
+    await this.onInitialized?.(context);
     let policy = await this.policies.getActive(context);
     if (!policy) {
       const defaults = createDefaultPolicy("personal");

@@ -7,12 +7,22 @@ export interface ReflectionVersionReference {
 }
 
 export interface ReflectionSourceReference {
-  readonly kind: "work-record" | "event" | "message" | "artifact" | "evidence" | "symbol" | "memory";
+  readonly kind:
+    | "work-record"
+    | "verification"
+    | "assurance"
+    | "event"
+    | "message"
+    | "artifact"
+    | "evidence"
+    | "symbol"
+    | "memory";
   readonly referenceId: string;
   readonly organizationId: string;
   readonly workId: string;
   readonly checksum: string;
   readonly capturedRevision: string;
+  readonly excerpt?: string;
 }
 
 export interface ReflectionSnapshotBundle {
