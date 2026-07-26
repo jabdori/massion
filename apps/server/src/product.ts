@@ -537,6 +537,7 @@ export async function createMassionDaemon(
         yield* routedRunner.stream(context, input);
       },
       cancel: routedRunner.cancel.bind(routedRunner),
+      cancelOrganization: routedRunner.cancelOrganization.bind(routedRunner),
       suspend: routedRunner.suspend.bind(routedRunner),
       resume: routedRunner.resume.bind(routedRunner),
       recover: routedRunner.recover.bind(routedRunner),
