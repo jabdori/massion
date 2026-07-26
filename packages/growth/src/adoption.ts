@@ -121,6 +121,7 @@ export class GrowthAdoptionService {
       const suggestion = await this.suggestion(context.organizationId, input.suggestionId, transaction);
       if (!["proposed", "evaluated", "awaiting-review"].includes(suggestion.status))
         throw new Error("Suggestion은 채택 가능한 상태가 아닙니다");
+      if (suggestion.revision !== input.suggestionRevision) throw new Error("Suggestion revision precondition이 일치하지 않습니다");
       const evaluation = await this.evaluation(context.organizationId, input.evaluationRunId, transaction);
       if (
         evaluation.suggestion_id !== suggestion.suggestion_id ||

@@ -42,7 +42,7 @@ describe("Growth Adoption 상태 전이", () => {
     const beforeSnapshot = { sections: [{ agentHandle: "assurance", instruction: "검증", capabilityReferences: [] }] };
     const beforeChecksum = growthTargetChecksum(beforeSnapshot);
     await database.query(
-      "CREATE growth_configuration_version CONTENT { configuration_version_id: 'config-1', organization_id: $organization_id, adoption_mode: 'auto', status: 'active', checksum: $checksum }; CREATE reflection_run CONTENT { reflection_run_id: 'reflection-1', organization_id: $organization_id, configuration_version_id: 'config-1', runtime_execution_id: 'runtime-growth-1' }; CREATE growth_suggestion CONTENT { suggestion_id: 'suggestion-1', organization_id: $organization_id, work_id: 'work-1', reflection_run_id: 'reflection-1', target_kind: 'prompt', operation: 'replace-instruction', patch_json: $patch, status: 'evaluated' }; CREATE growth_evaluation_run CONTENT { evaluation_run_id: 'evaluation-1', organization_id: $organization_id, suggestion_id: 'suggestion-1', input_hash: $input_hash, outcome: 'eligible' }; CREATE runtime_execution CONTENT { organization_id: $organization_id, work_id: 'work-1', execution_id: 'runtime-growth-1', agent_handle: 'growth', status: 'succeeded' }; CREATE test_growth_target CONTENT { organization_id: $organization_id, version_id: 'prompt-v1', revision: 1, checksum: $before_checksum, snapshot_json: $snapshot_json, active: true };",
+      "CREATE growth_configuration_version CONTENT { configuration_version_id: 'config-1', organization_id: $organization_id, adoption_mode: 'auto', status: 'active', checksum: $checksum }; CREATE reflection_run CONTENT { reflection_run_id: 'reflection-1', organization_id: $organization_id, configuration_version_id: 'config-1', runtime_execution_id: 'runtime-growth-1' }; CREATE growth_suggestion CONTENT { suggestion_id: 'suggestion-1', organization_id: $organization_id, work_id: 'work-1', reflection_run_id: 'reflection-1', target_kind: 'prompt', operation: 'replace-instruction', patch_json: $patch, revision: 1, status: 'evaluated' }; CREATE growth_evaluation_run CONTENT { evaluation_run_id: 'evaluation-1', organization_id: $organization_id, suggestion_id: 'suggestion-1', input_hash: $input_hash, outcome: 'eligible' }; CREATE runtime_execution CONTENT { organization_id: $organization_id, work_id: 'work-1', execution_id: 'runtime-growth-1', agent_handle: 'growth', status: 'succeeded' }; CREATE test_growth_target CONTENT { organization_id: $organization_id, version_id: 'prompt-v1', revision: 1, checksum: $before_checksum, snapshot_json: $snapshot_json, active: true };",
       {
         organization_id: context.organizationId,
         checksum: "c".repeat(64),
@@ -110,14 +110,20 @@ describe("Growth Adoption 상태 전이", () => {
       },
       new GrowthTargetRegistry({ prompt: target, memory: target, policy: target, organization: target }),
     );
-    const result = await service.adopt(context, {
+    const input = {
       commandId: "adopt-1",
       suggestionId: "suggestion-1",
       suggestionRevision: 1,
       evaluationRunId: "evaluation-1",
       expectedEvaluationInputHash: "e".repeat(64),
       expectedTargetChecksum: beforeChecksum,
-    });
+    } as const;
+
+    await expect(service.adopt(context, { ...input, commandId: "adopt-stale", suggestionRevision: 2 })).rejects.toThrow(
+      "Suggestion revision",
+    );
+
+    const result = await service.adopt(context, input);
 
     expect(result.adoption.status).toBe("observing");
     expect(result.afterVersionId).toBe("prompt-v2");

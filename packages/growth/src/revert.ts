@@ -118,11 +118,13 @@ export class GrowthRevertService {
         executor,
       );
       const mode = input.reason === "explicit" ? "explicit" : configuration.adoption_mode;
-      const [suggestions] = await executor.query<[Array<{ work_id: string }>]>(
-        "SELECT work_id FROM growth_suggestion WHERE organization_id = $organization_id AND suggestion_id = $suggestion_id LIMIT 1;",
+      const [suggestions] = await executor.query<[Array<{ work_id: string; revision: number }>]>(
+        "SELECT work_id, revision FROM growth_suggestion WHERE organization_id = $organization_id AND suggestion_id = $suggestion_id LIMIT 1;",
         { organization_id: context.organizationId, suggestion_id: adoption.suggestion_id },
       );
       if (!suggestions[0]) throw new Error("Growth Revert Suggestion을 찾을 수 없습니다");
+      if (suggestions[0].revision !== input.suggestionRevision)
+        throw new Error("Suggestion revision precondition이 일치하지 않습니다");
       const preview = {
         targetKind: adoption.target_kind,
         currentVersionId: adoption.after_version_id,
