@@ -663,6 +663,73 @@ describe("ApplicationQueryRegistry", () => {
     });
   });
 
+  it("실제 Growth 상세 조회의 평가·계보·patch를 개선 화면 계약으로 투영한다", async () => {
+    const registry = new ApplicationQueryRegistry();
+    registerApplicationQueries(registry, {
+      readModel,
+      growth: {
+        resolveConfiguration: async () => ({}),
+        getActiveEvaluationStrategy: async () => ({}),
+        listSuggestions: async () => [],
+        listSuggestionDetails: async () => [
+          {
+            suggestion: {
+              suggestion_id: "suggestion-detail",
+              work_id: "query-work",
+              target_kind: "prompt",
+              operation: "replace-instruction",
+              summary: "실제 근거 연결",
+              rationale: "완료 Work에서 반복된 근거",
+              expected_effect: "재작업 감소",
+              risk_summary: "지시문이 길어짐",
+              status: "awaiting-review",
+              revision: 2,
+              reflection_run_id: "reflection-detail",
+              source_reference_ids: ["work:query-work"],
+              patch_json: "{}",
+              created_at: "2026-07-26T06:00:00.000Z",
+            },
+            patch: { agentHandle: "context", instruction: "근거를 먼저 확인합니다" },
+            evaluation: {
+              evaluationRunId: "evaluation-detail",
+              outcome: "eligible",
+              strategyVersionId: "strategy-detail",
+              signals: [
+                {
+                  signalId: "lineage",
+                  group: "required",
+                  origin: "deterministic",
+                  outcome: "passed",
+                  score: 1,
+                  adapterId: "lineage",
+                  adapterVersion: "1",
+                  unit: "boolean",
+                },
+              ],
+            },
+          },
+        ],
+        listEffectEvaluations: async () => [],
+      } as never,
+    });
+
+    await expect(registry.query(context, ["growth:read"], "growth.suggestions", {})).resolves.toMatchObject({
+      data: [
+        {
+          suggestionId: "suggestion-detail",
+          revision: 2,
+          sourceReferenceIds: ["work:query-work"],
+          patch: { instruction: "근거를 먼저 확인합니다" },
+          evaluation: {
+            evaluationRunId: "evaluation-detail",
+            outcome: "eligible",
+            signals: [{ signalId: "lineage", note: "boolean" }],
+          },
+        },
+      ],
+    });
+  });
+
   it("모델 route의 운영 상태와 예산만 공개한다", async () => {
     const registry = new ApplicationQueryRegistry();
     registerApplicationQueries(registry, {
@@ -821,7 +888,9 @@ describe("ApplicationQueryRegistry", () => {
           subjectId: context.userId,
           version: 1,
           status: "active",
-          entries: [{ kind: "preference", key: "answer-style", value: "결론부터 답한다", sourceReferenceIds: ["command-1"] }],
+          entries: [
+            { kind: "preference", key: "answer-style", value: "결론부터 답한다", sourceReferenceIds: ["command-1"] },
+          ],
           checksum: "a".repeat(64),
         }),
         resolveConfiguration: async () => ({}),

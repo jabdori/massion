@@ -74,7 +74,7 @@ export interface ApplicationQueryDependencies {
     | "getActiveExplicitMemory"
     | "listSuggestions"
     | "listEffectEvaluations"
-  >;
+  > & { readonly listSuggestionDetails?: GrowthGateway["listSuggestionDetails"] };
   readonly memberships?: Pick<OrganizationService, "listMembers">;
   readonly workspaces?: Pick<WorkspaceService, "list" | "get">;
   readonly workTimeline?: WorkTimelineSources;
@@ -1292,24 +1292,65 @@ export function registerApplicationQueries(
       requiredScopes: ["growth:read"],
       allowedRoles: EVERY_ROLE,
       validate: (value) => object(value, ["workId", "status", "limit"]),
-      handle: async (context, value) =>
-        (
-          (await dependencies.growth?.listSuggestions(context, {
+      handle: async (context, value) => {
+        const details =
+          (await dependencies.growth?.listSuggestionDetails?.(context, {
             ...(value.workId === undefined ? {} : { workId: text(value.workId, "workId") }),
             ...(value.status === undefined ? {} : { status: text(value.status, "status") as never }),
             limit: boundedInteger(value.limit, "limit", 100),
-          })) ?? []
-        ).map((suggestion) => ({
-          suggestionId: suggestion.suggestion_id,
-          workId: suggestion.work_id,
-          targetKind: suggestion.target_kind,
-          operation: suggestion.operation,
-          summary: suggestion.summary,
-          rationale: suggestion.rationale,
-          expectedEffect: suggestion.expected_effect,
-          riskSummary: suggestion.risk_summary,
-          status: suggestion.status,
-        })),
+          })) ??
+          (
+            await dependencies.growth?.listSuggestions(context, {
+              ...(value.workId === undefined ? {} : { workId: text(value.workId, "workId") }),
+              ...(value.status === undefined ? {} : { status: text(value.status, "status") as never }),
+              limit: boundedInteger(value.limit, "limit", 100),
+            })
+          )?.map((suggestion) => ({
+            suggestion,
+          })) ??
+          [];
+        return details.map((detail) => {
+          const { suggestion } = detail;
+          const evaluation = "evaluation" in detail ? detail.evaluation : undefined;
+          return {
+            suggestionId: suggestion.suggestion_id,
+            workId: suggestion.work_id,
+            targetKind: suggestion.target_kind,
+            operation: suggestion.operation,
+            summary: suggestion.summary,
+            rationale: suggestion.rationale,
+            expectedEffect: suggestion.expected_effect,
+            riskSummary: suggestion.risk_summary,
+            status: suggestion.status,
+            revision: suggestion.revision,
+            ...(typeof suggestion.created_at === "undefined"
+              ? {}
+              : { createdAt: timestamp(suggestion.created_at, "Growth Suggestion") }),
+            reflectionRunId: suggestion.reflection_run_id,
+            sourceReferenceIds: suggestion.source_reference_ids,
+            ...("patch" in detail ? { patch: detail.patch } : {}),
+            ...(evaluation === undefined
+              ? {}
+              : {
+                  evaluation: {
+                    evaluationRunId: evaluation.evaluationRunId,
+                    outcome: evaluation.outcome,
+                    strategyVersionId: evaluation.strategyVersionId,
+                    signals: evaluation.signals.map((signal) => ({
+                      signalId: signal.signalId,
+                      group: signal.group,
+                      origin: signal.origin,
+                      outcome: signal.outcome,
+                      score: signal.score,
+                      adapterId: signal.adapterId,
+                      adapterVersion: signal.adapterVersion,
+                      note: signal.unit,
+                    })),
+                  },
+                }),
+          };
+        });
+      },
     });
     registry.register({
       operation: "growth.effects",

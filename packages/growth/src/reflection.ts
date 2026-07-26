@@ -80,6 +80,7 @@ export interface GrowthSuggestionRecord {
   readonly source_reference_ids: readonly string[];
   readonly revision: number;
   readonly status: "proposed" | "evaluated" | "awaiting-review" | "adopted" | "rejected" | "superseded";
+  readonly created_at?: unknown;
 }
 
 export interface ListGrowthSuggestionsInput {

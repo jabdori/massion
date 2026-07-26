@@ -1,5 +1,5 @@
 export { GrowthBootstrap, decideGrowthBootstrap } from "./bootstrap.js";
-export { GrowthGateway, type GrowthGatewayDependencies } from "./gateway.js";
+export { GrowthGateway, type GrowthGatewayDependencies, type GrowthSuggestionDetails } from "./gateway.js";
 export { GrowthAdoptionService } from "./adoption.js";
 export { GrowthConfigurationStore } from "./configuration.js";
 export { GrowthComplianceAuditor } from "./compliance.js";
@@ -27,6 +27,7 @@ export type { AdoptGrowthSuggestionInput, GrowthAdoptionResult, GrowthAdoptionSt
 export type { ConfigureGrowthInput, GrowthConfigurationSubject, GrowthConfigurationVersion } from "./contracts.js";
 export type { GrowthEffectComparison, GrowthEffectContract, GrowthEffectSample } from "./effect.js";
 export type {
+  GrowthEvaluationDetails,
   GrowthEvaluationOutcome,
   GrowthEvaluationRun,
   GrowthEvaluationStrategyVersion,

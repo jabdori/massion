@@ -5,9 +5,9 @@ import type { GrowthBootstrap } from "./bootstrap.js";
 import type { GrowthConfigurationStore } from "./configuration.js";
 import type { ConfigureGrowthInput } from "./contracts.js";
 import type { GrowthEffectSample, GrowthEffectStore } from "./effect.js";
-import type { GrowthEvaluationStore, GrowthSignalReceiptInput } from "./evaluation.js";
+import type { GrowthEvaluationDetails, GrowthEvaluationStore, GrowthSignalReceiptInput } from "./evaluation.js";
 import type { ForgetExplicitMemoryInput, PromptMemoryStore, PutExplicitMemoryInput } from "./prompt-memory.js";
-import type { ListGrowthSuggestionsInput, ReflectionService } from "./reflection.js";
+import type { GrowthSuggestionRecord, ListGrowthSuggestionsInput, ReflectionService } from "./reflection.js";
 import type { GrowthRecoveryService } from "./recovery.js";
 import type { GrowthRevertService, RevertGrowthAdoptionInput } from "./revert.js";
 import type { ReflectionSnapshot } from "./snapshot.js";
@@ -23,6 +23,12 @@ export interface GrowthGatewayDependencies {
   readonly effects: GrowthEffectStore;
   readonly reverts: GrowthRevertService;
   readonly recovery: GrowthRecoveryService;
+}
+
+export interface GrowthSuggestionDetails {
+  readonly suggestion: GrowthSuggestionRecord;
+  readonly patch: Readonly<Record<string, unknown>>;
+  readonly evaluation?: GrowthEvaluationDetails;
 }
 
 /** Growth의 허용된 제품 경로만 노출하는 façade입니다. */
@@ -63,6 +69,22 @@ export class GrowthGateway {
   }
   public async listSuggestions(context: TenantContext, input: ListGrowthSuggestionsInput = {}) {
     return await this.dependencies.reflections.listSuggestions(context, input);
+  }
+  public async listSuggestionDetails(
+    context: TenantContext,
+    input: ListGrowthSuggestionsInput = {},
+  ): Promise<readonly GrowthSuggestionDetails[]> {
+    const suggestions = await this.dependencies.reflections.listSuggestions(context, input);
+    return await Promise.all(
+      suggestions.map(async (suggestion) => {
+        const evaluation = await this.dependencies.evaluations.getForSuggestion(context, suggestion.suggestion_id);
+        return {
+          suggestion,
+          patch: JSON.parse(suggestion.patch_json) as Readonly<Record<string, unknown>>,
+          ...(evaluation === undefined ? {} : { evaluation }),
+        };
+      }),
+    );
   }
   public async evaluate(
     context: TenantContext,

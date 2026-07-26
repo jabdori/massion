@@ -94,6 +94,10 @@ export interface GrowthEvaluationRun {
   readonly outcome: GrowthEvaluationOutcome;
 }
 
+export interface GrowthEvaluationDetails extends GrowthEvaluationRun {
+  readonly signals: readonly GrowthSignalReceipt[];
+}
+
 interface EvaluationRecord {
   readonly evaluation_run_id: string;
   readonly organization_id: string;
@@ -378,6 +382,25 @@ export class GrowthEvaluationStore {
     );
     if (!created[0]) throw new Error("Growth evaluation run 생성 결과가 없습니다");
     return this.evaluation(created[0]);
+  }
+
+  public async getForSuggestion(
+    context: TenantContext,
+    suggestionId: string,
+  ): Promise<GrowthEvaluationDetails | undefined> {
+    await this.organizations.verifyTenantContext(context);
+    if (!suggestionId.trim()) throw new Error("Growth Suggestion ID가 유효하지 않습니다");
+    const [evaluations] = await this.database.query<[EvaluationRecord[]]>(
+      "SELECT * FROM growth_evaluation_run WHERE organization_id = $organization_id AND suggestion_id = $suggestion_id ORDER BY created_at DESC LIMIT 1;",
+      { organization_id: context.organizationId, suggestion_id: suggestionId },
+    );
+    const record = evaluations[0];
+    if (!record) return undefined;
+    const [signals] = await this.database.query<[ReceiptRecord[]]>(
+      "SELECT * FROM growth_signal_receipt WHERE organization_id = $organization_id AND receipt_id IN $receipt_ids;",
+      { organization_id: context.organizationId, receipt_ids: record.receipt_ids },
+    );
+    return { ...this.evaluation(record), signals: signals.map(receipt) };
   }
 
   private async active(
