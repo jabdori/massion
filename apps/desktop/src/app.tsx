@@ -364,56 +364,58 @@ export function App({ contextPicker = nativeContextPicker, service }: AppProps) 
           }}
         />
         {surface === "work" ? (
-          controller.work ? (
-            <>
-              <WorkList
-                filter={controller.filter}
-                onCreate={() => {
-                  controller.newWork.setOpen(true);
-                }}
-                onFilterChange={controller.setFilter}
-                onQueryChange={controller.setQuery}
-                onSelect={controller.setSelectedId}
-                pendingRunId={controller.pendingCreation?.runId}
-                query={controller.query}
-                selectedId={controller.selectedId}
-                works={controller.visibleWorks}
-              />
-              <WorkActivity
-                announcement={controller.announcement}
-                approvalDecisions={controller.approvalDecisions}
-                detailLoading={controller.detailLoading}
-                executionNotice={controller.executionNotice?.message}
-                composer={controller.composer}
-                onAnnouncement={controller.setAnnouncement}
-                onComposerChange={controller.setComposer}
-                onControlRun={(action) => {
-                  void controller.controlRun(action);
-                }}
-                onDecideApproval={(approval, decision) => {
-                  void decideWorkApproval(approval, decision);
-                }}
-                onSubmitDirective={(mode) => {
-                  void controller.submitDirective(mode);
-                }}
-                pendingApprovals={controller.pendingApprovals}
-                pendingDirective={controller.pendingDirective}
-                pendingRunAction={controller.pendingRunAction}
-                onCloseRoom={closeRoom}
-                onSelectRoom={openRoom}
-                room={room}
-                rooms={rooms.filter((candidate) => openRoomIds.includes(candidate.roomId))}
-                work={controller.work}
-              />
-              <WorkInspector room={room} work={controller.work} />
-            </>
-          ) : (
-            <WorkEmptySurface
+          <>
+            <WorkList
+              filter={controller.filter}
               onCreate={() => {
                 controller.newWork.setOpen(true);
               }}
+              onFilterChange={controller.setFilter}
+              onQueryChange={controller.setQuery}
+              onSelect={controller.setSelectedId}
+              pendingRunId={controller.pendingCreation?.runId}
+              query={controller.query}
+              selectedId={controller.selectedId}
+              works={controller.visibleWorks}
             />
-          )
+            {controller.work ? (
+              <>
+                <WorkActivity
+                  announcement={controller.announcement}
+                  approvalDecisions={controller.approvalDecisions}
+                  detailLoading={controller.detailLoading}
+                  executionNotice={controller.executionNotice?.message}
+                  composer={controller.composer}
+                  onAnnouncement={controller.setAnnouncement}
+                  onComposerChange={controller.setComposer}
+                  onControlRun={(action) => {
+                    void controller.controlRun(action);
+                  }}
+                  onDecideApproval={(approval, decision) => {
+                    void decideWorkApproval(approval, decision);
+                  }}
+                  onSubmitDirective={(mode) => {
+                    void controller.submitDirective(mode);
+                  }}
+                  pendingApprovals={controller.pendingApprovals}
+                  pendingDirective={controller.pendingDirective}
+                  pendingRunAction={controller.pendingRunAction}
+                  onCloseRoom={closeRoom}
+                  onSelectRoom={openRoom}
+                  room={room}
+                  rooms={rooms.filter((candidate) => openRoomIds.includes(candidate.roomId))}
+                  work={controller.work}
+                />
+                <WorkInspector room={room} work={controller.work} />
+              </>
+            ) : (
+              <WorkEmptySurface
+                onCreate={() => {
+                  controller.newWork.setOpen(true);
+                }}
+              />
+            )}
+          </>
         ) : (
           <ProductSurface
             approvalBusy={registryApproval === undefined ? false : pendingNotificationIds.has(registryApproval.id)}
@@ -661,11 +663,11 @@ function SurfaceFrame({ children, title }: { children: React.ReactNode; title: s
 
 function WorkEmptySurface({ onCreate }: { onCreate: () => void }) {
   return (
-    <main aria-label="업무" className="col-span-3 flex min-h-0 items-center justify-center bg-canvas text-primary">
+    <main aria-label="업무" className="col-span-2 flex min-h-0 items-center justify-center bg-canvas text-primary">
       <div className="text-center">
         <Briefcase aria-hidden="true" className="mx-auto mb-4 text-muted" size={32} />
-        <h1 className="text-lg font-semibold">아직 Work가 없습니다.</h1>
-        <p className="mt-2 text-sm text-muted">첫 업무를 만들면 에이전트 실행 과정이 여기에 표시됩니다.</p>
+        <h1 className="text-lg font-semibold">선택한 상태에 Work가 없습니다.</h1>
+        <p className="mt-2 text-sm text-muted">왼쪽에서 상태를 바꾸거나 첫 Work를 만들어주세요.</p>
         <Button className="mt-5" onClick={onCreate} variant="primary">
           <Plus aria-hidden="true" size={16} />첫 Work 만들기
         </Button>

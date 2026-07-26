@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import { App } from "./app";
 import { createFixtureDesktopService } from "./desktop-service";
+import type { WorkView } from "./model";
 
 function renderApp() {
   return render(<App service={createFixtureDesktopService()} />);
@@ -44,6 +45,28 @@ describe("AgentOS 데스크톱", () => {
     await user.clear(within(list).getByRole("searchbox"));
     await user.click(within(list).getByRole("tab", { name: "완료" }));
     expect(await within(list).findByText("완료된 Work가 없습니다.")).toBeInTheDocument();
+  });
+
+  it("진행 중 Work가 없어도 완료 탭에서 종료된 Work를 다시 연다", async () => {
+    const user = userEvent.setup();
+    const fixture = createFixtureDesktopService();
+    const seed = fixture.initialSnapshot?.works[0];
+    if (!seed) throw new Error("fixture Work가 필요합니다.");
+    const completed: WorkView = { ...seed, status: "complete" };
+    render(
+      <App
+        service={{
+          ...fixture,
+          initialSnapshot: { works: [] },
+          loadIndex: async ({ filter }) => (filter === "complete" ? [completed] : []),
+          loadWork: async () => completed,
+        }}
+      />,
+    );
+
+    const list = screen.getByRole("region", { name: "Work 목록" });
+    await user.click(within(list).getByRole("tab", { name: "완료" }));
+    expect(await within(list).findByRole("button", { name: new RegExp(completed.title) })).toBeInTheDocument();
   });
 
   it("다른 Work를 선택하면 중앙 제목과 inspector가 함께 바뀐다", async () => {
