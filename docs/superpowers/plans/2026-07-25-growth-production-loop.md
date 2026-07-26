@@ -266,6 +266,8 @@ git commit -m "feat(growth): 완료 업무를 Reflection worker에 연결" \
 
 > **2026-07-26 증분:** `GrowthWorker`가 Reflection 후보별 target inspect, lineage·target·candidate 필수 신호와 독립 Assurance supporting 신호 기록, Evaluation, 기존 Adoption 호출까지 연결되었습니다. 효과 표본·degraded 복원·명시적 memory conflict와 네 target 동등성은 아직 남아 있어 Task 3 전체 완료로 표시하지 않습니다.
 
+> **2026-07-26 효과 증분:** 효과 표본 계보를 `before_version_id`/`after_version_id`와 Work·Assurance·Verification·MetricObservation checksum으로 고정하고, `massion.growth.assurance-pass-rate.v1` 서버 어댑터와 terminal Assurance 3건 cohort worker를 연결했습니다. `degraded` 결과는 같은 tick에서 기존 Revert 경로로 전달하며, 실제 Records checksum 결속·recovery action 재실행·네 target × 두 mode 통합 검증은 아직 남아 있습니다.
+
 **Files:**
 
 - Modify: `apps/server/src/growth-worker.ts`
