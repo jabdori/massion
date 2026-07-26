@@ -352,7 +352,7 @@ function domainError(error: unknown, correlationId: string): never {
       cause: error,
     });
   }
-  if (/유효하지|필요합니다|허용되지|비어 있을 수 없|상한/iu.test(message)) {
+  if (/유효하지|필요합니다|허용되지|비어 있을 수 없|상한|만료|expired/iu.test(message)) {
     throw new ApplicationError({
       category: "validation",
       severity: "error",
