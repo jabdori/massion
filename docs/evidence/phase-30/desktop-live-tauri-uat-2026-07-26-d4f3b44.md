@@ -20,6 +20,7 @@
 | API 상태 | `system.status=ready`, `mode=local`, `database=surrealdb-3.2.1`, `modelRuntime=ready`, missing/blocked route 없음 |
 | Growth 설정 | `growth.configuration.get`이 `reflectionEnabled=true`, `adoptionMode=auto`, version 2를 반환 |
 | 기억 조회 | `growth.memories`가 저장된 사용자 기억 revision 3을 반환 |
+| 최신 후보 기억 변경 | 실제 Tauri API에서 explicit memory `revision 3 → 4` 저장 후 동일 key를 `revision 5`에서 비활성화; 최종 active memory는 revision 5 |
 | 최신 후보 실제 Provider Work | `tokenBudget=32768`로 시작한 Work가 `completed/terminal`; 대표·context·evidence·assurance·Growth를 포함한 8개 실행 모두 `succeeded` |
 | 최신 Work 지식·산출물 | `work.knowledge=ready`, README chunk reference 2개, artifact 4개가 같은 Work에 연결 |
 | 입력 예산 경계 | `tokenBudget=2048` 요청은 `intake blocked / evidence-invalid`; 지식 예산이 부족한 입력 경계로 기록하고 성공으로 세지 않음 |
