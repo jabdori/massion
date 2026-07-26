@@ -40,3 +40,5 @@ Provider를 연결한 첫 후보에서는 VoltAgent 위임 중 `Runtime Executio
 - 확인: 실제 Z.ai 연결 명령이 `succeeded`, `status=active`, `connectorStatus=ready`를 반환했고 `run.start`도 `accepted`로 기록되었습니다.
 - 실행 상태: 실제 representative·context-strategy·delivery 실행은 일부 `succeeded`였으나, 세션 종료 시 Work run이 `delivery/running`에 남아 `records_run` 완료와 Growth trigger·Reflection suggestion을 만들지 못했습니다.
 - 판정: Growth UAT 통과로 세지 않습니다. bundle·SurrealDB·server·bridge는 exact PID로 종료했고 7330–7333 포트가 비었음을 확인했습니다.
+
+재시작 복구 뒤에는 같은 Work가 `terminal/completed`가 되었고 worker가 실제 Reflection RuntimeExecution(`agent_handle=growth`, `status=succeeded`)을 만들었습니다. 다만 provider가 일반 회고 문서 객체를 반환해 `SuggestionCandidate` 검증에서 ReflectionRun이 `blocked`되고 suggestion은 0건이었습니다. 이 관찰에 대한 최소 수정은 `1f787e210`의 structured output schema 고정이며, 수정 후보의 새 Tauri UAT는 아직 실행하지 않았습니다.
