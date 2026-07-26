@@ -141,8 +141,8 @@ export class GrowthWorker {
   public start(context: TenantContext): void {
     if (this.timer || this.closed) return;
     const intervalMs = Math.max(5_000, this.dependencies.intervalMs ?? 30_000);
-    this.timer = setInterval(() => void this.tick(context), intervalMs);
-    void this.tick(context);
+    this.timer = setInterval(() => this.schedule(context), intervalMs);
+    this.schedule(context);
   }
 
   public async tick(context: TenantContext): Promise<GrowthWorkerResult> {
@@ -160,6 +160,11 @@ export class GrowthWorker {
     if (this.timer) clearInterval(this.timer);
     this.timer = undefined;
     await this.running;
+  }
+
+  private schedule(context: TenantContext): void {
+    // ponytail: 실패는 Reflection/trigger에 기록하고 daemon process까지 전파하지 않습니다.
+    void this.tick(context).catch(() => undefined);
   }
 
   private async run(context: TenantContext): Promise<GrowthWorkerResult> {
