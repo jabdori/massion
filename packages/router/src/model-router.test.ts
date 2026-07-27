@@ -1240,6 +1240,64 @@ describe("Model Route simulation과 reservation", () => {
     expect(fallback.credential?.credential_id).not.toBe(first.credential?.credential_id);
   });
 
+  it("구조화 출력 실패는 같은 Credential의 다른 Model Candidate로 fallback한다", async () => {
+    const created = await route();
+    const fallbackProfile = (
+      await router.registerModel(context, {
+        commandId: crypto.randomUUID(),
+        providerId: "openai",
+        endpointId: endpoint.endpoint_id,
+        modelId: "gpt-coding-fallback",
+        routeKind: "chat",
+        contextWindow: 128_000,
+        supportsTools: true,
+        supportsStructuredOutput: true,
+        supportsVision: false,
+        supportsStreaming: true,
+        equivalenceGroup: "coding-balanced",
+        evalScore: 0.9,
+        inputCostMicrosPerMillion: 1_000_000,
+        outputCostMicrosPerMillion: 1_000_000,
+        verified: true,
+      })
+    ).profile;
+    await router.addCandidate(context, {
+      commandId: crypto.randomUUID(),
+      routeId: created.route_id,
+      modelProfileId: fallbackProfile.model_profile_id,
+      priority: 2,
+    });
+    const request = { routeName: created.name, estimatedTokens: 10, estimatedCostMicros: 10 };
+    const first = await router.reserve(context, { ...request, commandId: crypto.randomUUID() });
+    if (!first.credential) throw new Error("첫 번째 Credential fixture가 없습니다");
+    await database.query(
+      "UPDATE provider_credential SET status = 'disabled' WHERE organization_id = $organization_id AND credential_id != $credential_id;",
+      { organization_id: context.organizationId, credential_id: first.credential.credential_id },
+    );
+
+    const outcome = await router.reportFailure(context, {
+      commandId: crypto.randomUUID(),
+      attemptId: first.attempt.attempt_id,
+      signal: { kind: "output" },
+      emittedTokens: 0,
+      sideEffectsStarted: false,
+      actualInputTokens: 0,
+      actualOutputTokens: 0,
+      actualCostMicros: 0,
+    });
+
+    expect(outcome.attempt.fallback_allowed).toBe(true);
+    expect(outcome.next?.profile?.model_id).toBe("gpt-coding-fallback");
+    expect(outcome.next?.credential?.credential_id).toBe(first.credential.credential_id);
+    const fallback = await router.reserve(context, {
+      ...request,
+      commandId: crypto.randomUUID(),
+      fallbackFromAttemptId: first.attempt.attempt_id,
+    });
+    expect(fallback.profile?.model_id).toBe("gpt-coding-fallback");
+    expect(fallback.credential?.credential_id).toBe(first.credential.credential_id);
+  });
+
   it("구독 401은 계정을 needs-reauth로 전이하고 검증 복구 전까지 Credential을 제외한다", async () => {
     await database.query(
       `UPDATE provider_credential SET status = 'disabled' WHERE organization_id = $organization_id;

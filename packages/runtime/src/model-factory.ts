@@ -38,6 +38,7 @@ export interface ProviderModelSelection {
   readonly modelId: string;
   readonly credentialId: string;
   readonly secret: string;
+  readonly supportsStructuredOutputs: boolean;
 }
 
 export interface ProviderModelBuilder {
@@ -290,6 +291,7 @@ export class OpenAICompatibleModelBuilder implements ProviderModelBuilder {
         apiKey: selection.secret,
         baseURL,
         includeUsage: true,
+        supportsStructuredOutputs: selection.supportsStructuredOutputs,
       })(selection.modelId);
     }
     const provider = createOpenAI({
@@ -358,6 +360,7 @@ export class MassionModelFactory implements RoutedModelFactory {
       modelId: profile.model_id,
       credentialId: credential.credential_id,
       secret: reservation.material.secret,
+      supportsStructuredOutputs: profile.supports_structured_output,
     });
     const attemptId = reservation.attempt.attempt_id;
     const costFor = (usage: ModelCompletionUsage) =>

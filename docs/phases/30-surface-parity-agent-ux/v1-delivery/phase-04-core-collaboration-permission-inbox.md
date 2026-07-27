@@ -65,6 +65,12 @@ Core 파이프라인, 권한 모드, 수신함 UX, 메모리 주입 경로가 �
 
 재개 클릭 후에도 실제 Provider 구조화 응답 실패가 반복되어, 이번 변경은 오류 가시성·재개 연결을 닫은 것이며 Provider 호환성 해결이나 Core Work 완료를 의미하지 않습니다. 상세 실행 ID와 번들 해시는 [실제 증거 기록](../../../evidence/phase-30/emergency-release-flow-2026-07-27.md)에 남겼습니다.
 
+### Provider capability·fallback·로컬 runtime 증분
+
+사용자 모델의 Provider capability를 Model Builder까지 전달하고, 구조화 출력 파싱 실패를 `output` 실패로 분류해 다른 Model Candidate로 fallback하도록 연결했습니다. 번들 SurrealDB는 사용자 data directory의 검증된 runtime 경계로 복사한 뒤 실행합니다.
+
+최신 후보 `f23380048e`를 실제 Tauri와 격리된 OpenRouter 프로필에서 실행해 Work `caba29fc-0eda-4199-8769-f116da511bf9` / Run `b4fca03d-aa2c-4c38-9e2c-8b0e02f6d8f8`가 `terminal·completed`에 도달하고 작업 `1/1·100%`임을 확인했습니다. 이 실행에서는 모든 Provider 호출이 성공해 실제 fallback 전이는 없었으며, 동일 Credential의 다른 Model fallback은 `router` focused 회귀 테스트로 고정했습니다. Growth 후속 실행의 `unknown` 실패와 전체 Provider 모델 편차는 남은 범위입니다. 상세 증거는 [Provider capability·fallback·runtime 증분](../../../evidence/phase-30/emergency-release-flow-2026-07-27.md)에 기록했습니다.
+
 ### 04-5 — 전체 빌드 + 데스크톱 UAT
 
-후보 `40a6ffbc8`에서 실제 Tauri·Provider·workspace 파일·디렉터리 문맥·Knowledge·Growth·full-access·재시작 증분을 확인했고, 최신 후보 `573297642`에서 Provider Work·Knowledge·Memory·Growth 조회·재시작 보존을 재확인했습니다. 전체 원자 UAT, native picker 완료, 평가·채택·효과·복원, 서명·공증·설치 게이트는 남아 있으므로 04-5와 개인용 v1 완료를 전체 통과로 표시하지 않습니다. [workspace 경계 증거](../../../evidence/phase-30/desktop-live-workspace-directory-uat-2026-07-26-40a6ffbc8.md) · [최신 Provider·재시작 증거](../../../evidence/phase-30/desktop-live-provider-restart-uat-2026-07-27-573297642.md)
+후보 `40a6ffbc8`에서 실제 Tauri·Provider·workspace 파일·디렉터리 문맥·Knowledge·Growth·full-access·재시작 증분을 확인했고, 최신 후보 `573297642`에서 Provider Work·Knowledge·Memory·Growth 조회·재시작 보존을 재확인했습니다. 이번 후보 `f23380048e`에서는 실제 OpenRouter Work 완료와 bundled SurrealDB self-start를 추가 확인했습니다. 전체 원자 UAT, native picker 완료, 평가·채택·효과·복원, 서명·공증·설치 게이트는 남아 있으므로 04-5와 개인용 v1 완료를 전체 통과로 표시하지 않습니다. [workspace 경계 증거](../../../evidence/phase-30/desktop-live-workspace-directory-uat-2026-07-26-40a6ffbc8.md) · [최신 Provider·재시작 증거](../../../evidence/phase-30/desktop-live-provider-restart-uat-2026-07-27-573297642.md)

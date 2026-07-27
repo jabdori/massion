@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { closeSync, constants, openSync } from "node:fs";
-import { access, lstat, mkdir, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
+import { access, chmod, copyFile, lstat, mkdir, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import { homedir, platform } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 
@@ -559,9 +559,18 @@ export class LocalDaemonManager {
       ...(this.#environment.HOME === undefined ? {} : { home: this.#environment.HOME }),
       ...(this.#environment.XDG_DATA_HOME === undefined ? {} : { xdgDataHome: this.#environment.XDG_DATA_HOME }),
     });
-    const executable = resolve(binary);
-    if (executable !== runtime.binaryPath)
-      throw new Error("Massion native SurrealDB runtime 경로가 현재 사용자 data directory와 일치하지 않습니다");
+    const sourceExecutable = resolve(binary);
+    let executable = runtime.binaryPath;
+    if (sourceExecutable !== runtime.binaryPath) {
+      const sourceMetadata = await lstat(sourceExecutable);
+      if (sourceMetadata.isSymbolicLink() || !sourceMetadata.isFile() || (sourceMetadata.mode & 0o111) === 0) {
+        throw new Error("Massion native SurrealDB bundle이 실행 가능한 regular file이 아닙니다");
+      }
+      // 번들 sidecar를 사용자 전용 runtime 경계로 복사한 뒤 기존 digest·소유권 검증을 적용합니다.
+      await mkdir(dirname(runtime.binaryPath), { recursive: true, mode: 0o700 });
+      await copyFile(sourceExecutable, runtime.binaryPath);
+      await chmod(runtime.binaryPath, 0o700);
+    }
     const sidecarPort = surrealPort(this.#environment);
     if (sidecarPort === port(this.#environment))
       throw new Error("MASSION_SURREAL_PORT와 MASSION_LOCAL_PORT는 달라야 합니다");

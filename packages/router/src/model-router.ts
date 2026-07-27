@@ -883,13 +883,13 @@ export class ModelRouter {
 
   public async simulate(context: TenantContext, request: RouteRequest): Promise<RouteSimulation> {
     await this.organizations.verifyTenantContext(context);
-    const excludedCredentialIds = request.fallbackFromAttemptId
-      ? await this.fallbackCredentialIds(this.database, context, {
+    const excludedAttemptKeys = request.fallbackFromAttemptId
+      ? await this.fallbackAttemptKeys(this.database, context, {
           ...request,
           fallbackFromAttemptId: request.fallbackFromAttemptId,
         })
       : undefined;
-    return await this.select(this.database, context, request, excludedCredentialIds);
+    return await this.select(this.database, context, request, excludedAttemptKeys);
   }
 
   public async diagnose(context: TenantContext, requests: readonly RouteRequest[]): Promise<RouterDiagnostic> {
@@ -938,13 +938,13 @@ export class ModelRouter {
         await this.requireCommandActor(tx, context, input.commandId);
         return await this.reservationFromAttempt(tx, context, repeated[0], requestJson);
       }
-      const excludedCredentialIds = input.fallbackFromAttemptId
-        ? await this.fallbackCredentialIds(tx, context, {
+      const excludedAttemptKeys = input.fallbackFromAttemptId
+        ? await this.fallbackAttemptKeys(tx, context, {
             ...input,
             fallbackFromAttemptId: input.fallbackFromAttemptId,
           })
         : undefined;
-      const simulation = await this.select(tx, context, input, excludedCredentialIds);
+      const simulation = await this.select(tx, context, input, excludedAttemptKeys);
       if (
         simulation.status !== "selected" ||
         !simulation.candidate ||
@@ -1185,7 +1185,7 @@ export class ModelRouter {
         if (!attempt) throw new Error("Route Attempt 실패 처리 결과가 없습니다");
         if (!fallbackAllowed) return { attempt };
         const route = await this.routeById(tx, context.organizationId, current.route_id);
-        const excludedCredentialIds = await this.fallbackCredentialIds(tx, context, {
+        const excludedAttemptKeys = await this.fallbackAttemptKeys(tx, context, {
           routeName: route.name,
           estimatedTokens: current.estimated_tokens,
           estimatedCostMicros: current.reserved_cost_micros,
@@ -1200,7 +1200,7 @@ export class ModelRouter {
             estimatedCostMicros: current.reserved_cost_micros,
             fallbackFromAttemptId: current.attempt_id,
           },
-          excludedCredentialIds,
+          excludedAttemptKeys,
         );
         return { attempt, next };
       },
@@ -1260,7 +1260,7 @@ export class ModelRouter {
     executor: QueryExecutor,
     context: TenantContext,
     request: RouteRequest,
-    excludedCredentialIds?: ReadonlySet<string>,
+    excludedAttemptKeys?: ReadonlySet<string>,
   ): Promise<RouteSimulation> {
     const route = await this.routeByName(executor, context.organizationId, request.routeName);
     const budgetFailures: string[] = [];
@@ -1326,8 +1326,8 @@ export class ModelRouter {
       const now = Date.now();
       const eligible: CredentialSelectionView[] = [];
       for (const credential of credentials) {
-        if (excludedCredentialIds?.has(credential.credential_id)) {
-          excluded.push(`${profile.model_id}/${credential.label}: 이전 실패 Credential 제외`);
+        if (excludedAttemptKeys?.has(`${profile.model_profile_id}:${credential.credential_id}`)) {
+          excluded.push(`${profile.model_id}/${credential.label}: 이전 실패 Model/Credential 조합 제외`);
           continue;
         }
         const credentialCircuit = await this.circuit(
@@ -1494,14 +1494,14 @@ export class ModelRouter {
     return failures;
   }
 
-  private async fallbackCredentialIds(
+  private async fallbackAttemptKeys(
     executor: QueryExecutor,
     context: TenantContext,
     request: RouteRequest & { readonly fallbackFromAttemptId: string },
   ): Promise<ReadonlySet<string>> {
     const route = await this.routeByName(executor, context.organizationId, request.routeName);
     const attemptIds = new Set<string>();
-    const credentialIds = new Set<string>();
+    const attemptKeys = new Set<string>();
     let attemptId: string | undefined = request.fallbackFromAttemptId;
     let childSequence: number | undefined;
     for (let depth = 0; attemptId !== undefined; depth += 1) {
@@ -1518,10 +1518,10 @@ export class ModelRouter {
         throw new Error("fallback Attempt 선택 순서가 유효하지 않습니다");
       }
       childSequence = attempt.selection_sequence;
-      credentialIds.add(attempt.credential_id);
+      attemptKeys.add(`${attempt.model_profile_id}:${attempt.credential_id}`);
       attemptId = attempt.fallback_from_attempt_id;
     }
-    return credentialIds;
+    return attemptKeys;
   }
 
   private async reservationFromAttempt(

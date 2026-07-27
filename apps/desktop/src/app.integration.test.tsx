@@ -158,6 +158,7 @@ describe("AgentOS native data flow", () => {
         endpointId: "endpoint-1",
         modelId: "gpt-5",
         routeKind: "chat",
+        supportsStructuredOutput: false,
         verified: false,
       }),
     );

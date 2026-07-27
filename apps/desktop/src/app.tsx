@@ -3599,7 +3599,8 @@ function RouterConfiguration({
           routeKind: model.routeKind,
           contextWindow: Number(model.contextWindow),
           supportsTools: true,
-          supportsStructuredOutput: true,
+          // 사용자 모델은 Provider별 capability 편차가 있으므로 검증 전에는 JSON prompt 경로를 사용합니다.
+          supportsStructuredOutput: false,
           supportsVision: false,
           supportsStreaming: true,
           equivalenceGroup: model.equivalenceGroup,

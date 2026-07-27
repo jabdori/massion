@@ -1040,6 +1040,45 @@ describe("VoltAgent AgentRunner", () => {
     expect(acquire.mock.calls[1]?.[1]).toMatchObject({ fallbackFromAttemptId: "structured-attempt-1" });
   });
 
+  it("structured output 파싱 실패도 동급 모델로 fallback한다", async () => {
+    const first = lease(
+      new MockLanguageModelV3({
+        doGenerate: async () => {
+          throw new Error("Invalid JSON response");
+        },
+      }),
+      "structured-output-attempt-1",
+      true,
+    );
+    const second = lease(
+      new MockLanguageModelV3({
+        doGenerate: {
+          content: [{ type: "text", text: JSON.stringify({ objective: "fallback plan" }) }],
+          finishReason: { unified: "stop", raw: undefined },
+          usage: USAGE,
+          warnings: [],
+        },
+      }),
+      "structured-output-attempt-2",
+    );
+    const acquire = vi.fn().mockResolvedValueOnce(first).mockResolvedValueOnce(second);
+    const runner = new VoltAgentRunner(voltAgent, store, { acquire }, registry);
+
+    const result = await runner.executeStructured(context, input(), {
+      name: "strategy-plan",
+      description: "계획",
+      jsonSchema: {
+        type: "object",
+        required: ["objective"],
+        properties: { objective: { type: "string" } },
+      },
+    });
+
+    expect(result).toMatchObject({ status: "succeeded", output: { objective: "fallback plan" } });
+    expect(first.fail).toHaveBeenCalledWith(expect.objectContaining({ signal: { kind: "output" } }));
+    expect(acquire.mock.calls[1]?.[1]).toMatchObject({ fallbackFromAttemptId: "structured-output-attempt-1" });
+  });
+
   it("structured schema 실패와 모델 부재를 secret 없는 terminal 상태로 기록한다", async () => {
     const invalid = lease(
       new MockLanguageModelV3({

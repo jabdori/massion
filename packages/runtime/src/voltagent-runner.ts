@@ -188,6 +188,14 @@ function nonNativeStructuredGenerationOptions(lease: RoutedLanguageModelLease) {
 }
 
 function failureSignal(error: unknown): FailureSignal {
+  if (
+    error instanceof Error &&
+    (error.message.startsWith("No object generated:") ||
+      error.message === "Invalid JSON response" ||
+      error.message.includes("구조화 출력"))
+  ) {
+    return { kind: "output" };
+  }
   if (error && typeof error === "object") {
     const record = error as Record<string, unknown>;
     const statusCode = record.statusCode;

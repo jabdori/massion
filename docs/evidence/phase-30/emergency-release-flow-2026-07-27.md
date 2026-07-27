@@ -45,6 +45,21 @@ operatorCode: APP_HTTP_AUTH
 
 따라서 이번 증분은 “오류가 수신함에만 남고 대화에서는 보이지 않는 문제”를 해결했음을 증명하지만, Provider의 구조화 출력 호환성 문제를 해결했음을 뜻하지 않습니다.
 
+## Provider capability·fallback·로컬 runtime 증분
+
+앞선 실패 실행과 별개로, 구조화 출력 capability를 실제 Model Builder에 전달하고 출력 파싱 실패를 다른 Model Candidate로 넘기는 최신 후보를 실제 Tauri 앱에서 다시 실행했습니다.
+
+- 번들 실행 바이너리 SHA-256: `f23380048ed8bf657b396174d9f7dccb13cd1ce99b1c1f8cb1af7bd6d7bac061`
+- 실제 Work: `caba29fc-0eda-4199-8769-f116da511bf9`
+- 실제 실행: `b4fca03d-aa2c-4c38-9e2c-8b0e02f6d8f8`
+- 실제 실행 화면: 새 Work를 만들고 `OpenRouter fallback 경로를 한 문장으로 확인해줘`를 제출한 뒤, 중앙 Work 화면에서 `실행 중` → `완료`, 작업 `1/1`, 진행률 `100%`를 확인했습니다.
+- 실제 실행 경로: `orchestration-balanced` 성공, `planning-quality` 성공, `delivery-quality` 성공, Assurance 성공.
+- SurrealDB route attempt: `55b99547-433a-4ff2-8b3a-47e1bb70b006`, `4e492aaa-0106-4abb-963c-fad950157a8b`, `099c7766-4d83-4b6e-a86b-81e054c0acca`, `60d1ea7a-7edd-4a30-acb1-59a28c0d95c1`가 모두 `succeeded`로 기록됐습니다. 이 실행에서는 Provider가 모두 성공했으므로 실제 fallback 전이는 발생하지 않았고, fallback 자체는 focused 회귀 테스트로 검증했습니다.
+- 실제 로컬 경계: 앱이 번들 SurrealDB를 사용자 data directory의 `runtime/surrealdb/3.2.1/darwin-arm64/surreal`로 복사한 뒤 실행했고, `server.json`·`surrealdb.json`의 loopback endpoint가 준비됐습니다. 복사된 실행 파일은 owner-only 실행 권한(`-r-x------`)입니다.
+- 후속 비차단 관측: Work가 terminal `completed`가 된 뒤 Growth 실행 하나가 `unknown`으로 실패했습니다. 이는 이번 Provider Work 완료를 막지는 않았지만, Growth background provider 호환성은 아직 별도 미완료 범위입니다.
+
+이번 증분의 의미는 사용자 모델을 검증 전 native structured output으로 오인하지 않고 JSON prompt 경로로 시작하며, `Invalid JSON response`·`No object generated`를 output 실패로 분류해 같은 Credential의 다른 Model Candidate를 선택할 수 있게 한 것입니다. 실제 앱 성공은 확보했지만, 무료 Provider의 모델별 출력 편차와 Growth 후속 실패까지 해결했다는 뜻은 아닙니다.
+
 ## 남은 범위
 
 1. 실제 Tauri 부트스트랩 access token이 발급 키와 검증 키를 동일하게 사용하는지 확인합니다.

@@ -27,6 +27,7 @@ function buildOpenAiModelFixture({
   readonly baseUrl: string;
   readonly modelId: string;
   readonly providerId?: string;
+  readonly supportsStructuredOutputs?: boolean;
 }): LanguageModel {
   const builder = new OpenAICompatibleModelBuilder();
   const provider: ModelProvider = {
@@ -55,6 +56,7 @@ function buildOpenAiModelFixture({
     modelId,
     credentialId: "openai-api-key",
     secret: "openai-secret",
+    supportsStructuredOutputs: supportsStructuredOutputs ?? true,
   });
 }
 
@@ -171,6 +173,10 @@ describe("Massion routed model factory", () => {
     });
 
     expect(build.mock.calls[0]?.[0].secret).toMatch(/^secret-account-/u);
+    expect(
+      (build.mock.calls[0]?.[0] as ProviderModelSelection & { readonly supportsStructuredOutputs?: boolean })
+        .supportsStructuredOutputs,
+    ).toBe(true);
     expect(JSON.stringify(lease)).not.toContain("secret-account");
     expect(lease.model.modelId).toBe("coding-model");
     const completed = await lease.complete({
@@ -429,6 +435,7 @@ describe("Massion routed model factory", () => {
       modelId: "qwen3:8b",
       credentialId: "local",
       secret: "ollama-secret",
+      supportsStructuredOutputs: false,
     });
     try {
       const result = await generateText({ model, prompt: "hello" });
@@ -498,6 +505,7 @@ describe("Massion routed model factory", () => {
       modelId: "MiniMax-M2.7",
       credentialId: "minimax-subscription-key",
       secret: "subscription-key-value",
+      supportsStructuredOutputs: false,
     });
     try {
       const result = await generateText({ model, prompt: "hello", maxRetries: 0 });

@@ -8,10 +8,11 @@ export type FailureClass =
   | "input"
   | "policy"
   | "cancelled"
+  | "output"
   | "unknown";
 
 export interface FailureSignal {
-  readonly kind: "http" | "timeout" | "network" | "input" | "policy" | "cancelled" | "unknown";
+  readonly kind: "http" | "timeout" | "network" | "input" | "policy" | "cancelled" | "output" | "unknown";
   readonly statusCode?: number;
   readonly retryAfter?: string;
 }
@@ -36,6 +37,7 @@ export function classifyFailure(signal: FailureSignal, now = Date.now()): Classi
   if (signal.kind === "input") return { failureClass: "input", fallbackEligible: false };
   if (signal.kind === "timeout") return { failureClass: "timeout", fallbackEligible: true };
   if (signal.kind === "network") return { failureClass: "network", fallbackEligible: true };
+  if (signal.kind === "output") return { failureClass: "output", fallbackEligible: true };
   if (signal.kind !== "http" || signal.statusCode === undefined) {
     return { failureClass: "unknown", fallbackEligible: false };
   }

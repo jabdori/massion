@@ -18,6 +18,7 @@ describe("Provider 실패 분류", () => {
     [{ kind: "policy" }, "policy", false],
     [{ kind: "cancelled" }, "cancelled", false],
     [{ kind: "unknown" }, "unknown", false],
+    [{ kind: "output" } as FailureSignal, "output", true],
   ])("$signal을 $failureClass로 분류한다", (signal, failureClass, fallbackEligible) => {
     expect(classifyFailure(signal)).toMatchObject({ failureClass, fallbackEligible });
   });
