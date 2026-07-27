@@ -321,4 +321,28 @@ describe("Growth worker production loop", () => {
       expect.objectContaining({ organization_id: context.organizationId }),
     );
   });
+
+  it("효과 worker의 SurrealDB 정렬 필드는 SELECT projection에도 포함한다", async () => {
+    const database = {
+      query: vi.fn(async (sql: string) => {
+        if (sql.includes("FROM growth_adoption_run")) {
+          const projection = sql.slice(sql.indexOf("SELECT ") + 7, sql.indexOf(" FROM growth_adoption_run"));
+          if (!projection.split(", ").includes("updated_at")) throw new Error("Missing order idiom updated_at");
+        }
+        return [[]];
+      }),
+    } as never;
+    const worker = new GrowthWorker({
+      database,
+      organizations: {} as never,
+      triggers: {} as never,
+      gateway: {} as never,
+      runner: {} as never,
+      metricObservations: { record: vi.fn() } as never,
+    });
+
+    await expect(
+      (worker as unknown as { processEffects(inputContext: TenantContext): Promise<void> }).processEffects(context),
+    ).resolves.toBeUndefined();
+  });
 });

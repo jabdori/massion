@@ -96,6 +96,22 @@ operatorCode: APP_HTTP_AUTH
 
 따라서 이번 증분은 승인된 adoption의 **재시작 복구**를 실제로 닫았지만, Provider 실행 실패로 인해 효과 cohort·악화 복원은 완료하지 못했습니다. 해당 실패를 성공으로 우회하거나 fixture로 대체하지 않습니다.
 
+## Growth effect worker SurrealDB 정렬 결함 증분
+
+효과 baseline이 계속 `pending`인 실제 DB 상태를 조사한 결과, worker의 adoption 조회가 `updated_at`을 `ORDER BY`하면서 projection에는 포함하지 않아 SurrealDB 3.2에서 다음 파싱 오류를 냈습니다.
+
+```text
+Parse error: Missing order idiom `updated_at`
+```
+
+- 수정: `apps/server/src/growth-worker.ts`의 adoption 조회 projection에 `updated_at`을 추가했습니다.
+- 회귀 검증: `pnpm --filter @massion/server exec vitest run src/growth-worker.test.ts -t '효과 worker의 SurrealDB 정렬 필드는 SELECT projection에도 포함한다' --reporter=dot` — 1개 통과.
+- 타입 검증: `pnpm --filter @massion/server typecheck` 통과.
+- 실제 Tauri/Provider 재실행: 새 Work `4956b609-d3de-4e84-b17c-38f9179575e9`를 실제 OpenRouter에서 실행했습니다. 대표·전략·첫 Assurance 실행은 성공했지만 두 번째 Assurance Runtime `9d6e0bf4-0a68-4a05-954b-ebf25a1d98b1`이 `running`에 남아 Work는 `verifying` 상태로 멈췄습니다.
+- 현재 효과 상태: 기존 완료 Work 3건으로 baseline을 만들 수 있는 데이터는 있으나, 실제 Tauri worker가 baseline을 `captured`로 전환했다는 증거는 아직 없습니다. `assurance_metric_observation`·effect observation/evaluation도 0건입니다.
+
+따라서 이번 수정은 실제 파싱 결함을 닫았지만, 실제 앱의 Assurance 정체와 Provider 모델 출력 편차 때문에 효과 cohort 완료로 표시하지 않습니다.
+
 ## 남은 범위
 
 1. 실제 Tauri 부트스트랩 access token이 발급 키와 검증 키를 동일하게 사용하는지 확인합니다.

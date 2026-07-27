@@ -81,6 +81,8 @@ Core 파이프라인, 권한 모드, 수신함 UX, 메모리 주입 경로가 �
 
 재시작 뒤 실제 Provider Work `0029bb83-ff36-41c2-b22a-dab331137bf7`를 실행했으나 OpenRouter 무료 모델의 `delegate_task` 오류로 Work가 `draft`, Runtime이 `running`에 머물렀습니다. 따라서 이 실행에서는 terminal Assurance 표본 3건, baseline capture, effect observation/evaluation이 생성되지 않았습니다. 재시작 복구는 통과했지만 효과 cohort와 degraded 복원은 여전히 남은 범위입니다. 상세 DB·화면 증거는 [Growth observing 재시작·효과 증분](../../../evidence/phase-30/emergency-release-flow-2026-07-27.md)에 기록했습니다.
 
+이후 효과 baseline이 계속 대기한 원인을 실제 SurrealDB 쿼리로 재현했습니다. `growth_adoption_run` 조회가 `ORDER BY updated_at`을 사용하면서 projection에 `updated_at`을 포함하지 않아 `Missing order idiom updated_at` 파싱 오류가 발생했습니다. projection을 정합화하고 실제 실패 회귀 테스트를 추가했습니다. 최신 번들에서 후속 Work `4956b609-d3de-4e84-b17c-38f9179575e9`를 실제 Provider로 다시 실행했으나 Assurance Runtime 하나가 계속 `running`으로 남아 Work가 `verifying`에서 진행하지 않았습니다. 따라서 baseline capture·효과 observation/evaluation·degraded 복원은 아직 닫지 않았습니다. [effect worker 정렬 결함 증거](../../../evidence/phase-30/emergency-release-flow-2026-07-27.md)
+
 ### 04-5 — 전체 빌드 + 데스크톱 UAT
 
 후보 `40a6ffbc8`에서 실제 Tauri·Provider·workspace 파일·디렉터리 문맥·Knowledge·Growth·full-access·재시작 증분을 확인했고, 최신 후보 `573297642`에서 Provider Work·Knowledge·Memory·Growth 조회·재시작 보존을 재확인했습니다. 이번 후보 `f23380048e`에서는 실제 OpenRouter Work 완료와 bundled SurrealDB self-start를 추가 확인했습니다. 전체 원자 UAT, native picker 완료, 평가·채택·효과·복원, 서명·공증·설치 게이트는 남아 있으므로 04-5와 개인용 v1 완료를 전체 통과로 표시하지 않습니다. [workspace 경계 증거](../../../evidence/phase-30/desktop-live-workspace-directory-uat-2026-07-26-40a6ffbc8.md) · [최신 Provider·재시작 증거](../../../evidence/phase-30/desktop-live-provider-restart-uat-2026-07-27-573297642.md)

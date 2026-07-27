@@ -426,7 +426,7 @@ export class GrowthWorker {
     const metricObservations = this.dependencies.metricObservations;
     if (!metricObservations) return;
     const [adoptions] = await this.dependencies.database.query<[EffectAdoptionRow[]]>(
-      "SELECT adoption_id, suggestion_id, target_kind, evaluation_run_id, before_version_id, after_version_id, status FROM growth_adoption_run WHERE organization_id = $organization_id AND status = 'observing' AND after_version_id != NONE ORDER BY updated_at ASC LIMIT 20;",
+      "SELECT adoption_id, suggestion_id, target_kind, evaluation_run_id, before_version_id, after_version_id, status, updated_at FROM growth_adoption_run WHERE organization_id = $organization_id AND status = 'observing' AND after_version_id != NONE ORDER BY updated_at ASC LIMIT 20;",
       { organization_id: context.organizationId },
     );
     for (const adoption of adoptions) {
