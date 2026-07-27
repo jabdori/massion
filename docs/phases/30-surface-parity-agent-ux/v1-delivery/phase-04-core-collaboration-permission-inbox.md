@@ -1,6 +1,6 @@
 # 페이즈 04 — Core·협업·조직·개선·권한·수신함 정합화
 
-> **상태:** 코드·실제 Tauri 증분 검증 완료, 전체 UAT·효과 게이트 대기
+> **상태:** 코드·실제 Tauri·Growth 효과 cohort 증분 검증 완료, 전체 UAT·릴리스 게이트 대기
 > **시작 기준:** 페이즈 03의 코드 근거 Work 연결 완료
 > **다음 게이트:** 전체 원자 데스크톱 UAT 10종 이상, 긴급 정지·업데이트·효과 cohort
 
@@ -14,9 +14,9 @@ Core 파이프라인, 권한 모드, 수신함 UX, 메모리 주입 경로가 �
 |---|---|---|
 | 04-1 | 코드 근거를 Work와 Agent 실행에 연결 (Task 3) | 코드 검증 완료 |
 | 04-2 | 전체 권한 실행 모드 추가 | 코드·실제 bundled 앱 전환 검증 완료 — 긴급 정지·전체 원자 UAT는 남음 |
-| 04-3 | 메모리 주입 경로 연결 | Work Prompt/Runtime 계보와 실제 memory put/forget·Growth 실행 검증 완료 — 효과 cohort는 남음 |
+| 04-3 | 메모리 주입 경로 연결 | Work Prompt/Runtime 계보와 실제 memory put/forget·Growth 실행·effect cohort stable/retained 검증 완료 — degraded 복원·전체 UAT는 남음 |
 | 04-4 | 수신함 UX 정합 (지도 비율) | 코드 검증 완료 |
-| 04-5 | 전체 빌드 + 데스크톱 UAT | 부분 통과 — Core UAT-01·02·03·07·12 및 재시작 보존 |
+| 04-5 | 전체 빌드 + 데스크톱 UAT | 부분 통과 — Core UAT-01·02·03·07·12, 실제 verifier 독립성·효과 cohort, 재시작 보존 |
 
 ## 완료 근거 기록
 
@@ -83,6 +83,8 @@ Core 파이프라인, 권한 모드, 수신함 UX, 메모리 주입 경로가 �
 
 이후 효과 baseline이 계속 대기한 원인을 실제 SurrealDB 쿼리로 재현했습니다. `growth_adoption_run` 조회가 `ORDER BY updated_at`을 사용하면서 projection에 `updated_at`을 포함하지 않아 `Missing order idiom updated_at` 파싱 오류가 발생했습니다. projection을 정합화하고 실제 실패 회귀 테스트를 추가했습니다. 최신 번들에서 후속 Work `4956b609-d3de-4e84-b17c-38f9179575e9`를 실제 Provider로 다시 실행했으나 Assurance Runtime 하나가 계속 `running`으로 남아 Work가 `verifying`에서 진행하지 않았습니다. 따라서 baseline capture·효과 observation/evaluation·degraded 복원은 아직 닫지 않았습니다. [effect worker 정렬 결함 증거](../../../evidence/phase-30/emergency-release-flow-2026-07-27.md)
 
+후속 재현에서 Work Task의 `recommended_agent_handles=["assurance"]`가 산출물 담당자와 최종 verifier를 겹치게 만든 독립성 오류를 확인했습니다. Delivery 담당자 선택을 공통화해 `assurance` 추천을 `delivery-coordination`으로 대체하고, focused 회귀 테스트를 추가했습니다. 최신 번들에서 실제 OpenRouter Work `6b56d429-6e11-44db-a989-a08cc29e653b`와 `3d352cf5-1789-4285-9d89-72d5f3209f52`가 각각 `완료·1/1·100%`에 도달했으며 Assurance가 passed 됐습니다. 세 번째 after-version 표본까지 확보한 뒤 기존 adoption `af44d129-887c-4299-8d5c-26772cd98089`가 `observing → retained`, baseline이 `closed`, effect evaluation이 `stable`로 전환됐습니다. 잘못된 Assignment를 가진 기존 Work `4956b609-d3de-4e84-b17c-38f9179575e9`는 자동 수정하지 않고 실패 상태를 보존합니다. [독립성·효과 cohort 증거](../../../evidence/phase-30/emergency-release-flow-2026-07-27.md)
+
 ### 04-5 — 전체 빌드 + 데스크톱 UAT
 
-후보 `40a6ffbc8`에서 실제 Tauri·Provider·workspace 파일·디렉터리 문맥·Knowledge·Growth·full-access·재시작 증분을 확인했고, 최신 후보 `573297642`에서 Provider Work·Knowledge·Memory·Growth 조회·재시작 보존을 재확인했습니다. 이번 후보 `f23380048e`에서는 실제 OpenRouter Work 완료와 bundled SurrealDB self-start를 추가 확인했습니다. 전체 원자 UAT, native picker 완료, 평가·채택·효과·복원, 서명·공증·설치 게이트는 남아 있으므로 04-5와 개인용 v1 완료를 전체 통과로 표시하지 않습니다. [workspace 경계 증거](../../../evidence/phase-30/desktop-live-workspace-directory-uat-2026-07-26-40a6ffbc8.md) · [최신 Provider·재시작 증거](../../../evidence/phase-30/desktop-live-provider-restart-uat-2026-07-27-573297642.md)
+후보 `40a6ffbc8`에서 실제 Tauri·Provider·workspace 파일·디렉터리 문맥·Knowledge·Growth·full-access·재시작 증분을 확인했고, 최신 후보 `573297642`에서 Provider Work·Knowledge·Memory·Growth 조회·재시작 보존을 재확인했습니다. 이번 후보 `f23380048e`에서는 실제 OpenRouter Work 완료, bundled SurrealDB self-start, verifier 독립성 보정, 세 표본 효과 cohort의 `stable/retained` 전환까지 확인했습니다. 전체 원자 UAT, native picker 완료, 파일 첨부·workspace 디렉터리 전체 시나리오, 서명·공증·설치 게이트는 남아 있으므로 04-5와 개인용 v1 완료를 전체 통과로 표시하지 않습니다. [workspace 경계 증거](../../../evidence/phase-30/desktop-live-workspace-directory-uat-2026-07-26-40a6ffbc8.md) · [최신 Provider·재시작 증거](../../../evidence/phase-30/desktop-live-provider-restart-uat-2026-07-27-573297642.md)

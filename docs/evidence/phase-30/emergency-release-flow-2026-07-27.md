@@ -112,6 +112,23 @@ Parse error: Missing order idiom `updated_at`
 
 따라서 이번 수정은 실제 파싱 결함을 닫았지만, 실제 앱의 Assurance 정체와 Provider 모델 출력 편차 때문에 효과 cohort 완료로 표시하지 않습니다.
 
+## Assurance 독립 검증 담당자 선택·실제 효과 cohort 증분
+
+이전 `verifying` 정체의 최초 공통 원인을 실제 DB와 동일한 독립성 검증 함수로 재현했습니다. Work `4956b609-d3de-4e84-b17c-38f9179575e9`의 Task가 `recommended_agent_handles=["assurance"]`로 저장되어 산출물 생성자와 최종 verifier가 같은 담당자가 되었고, 검증 함수가 다음 오류를 반환했습니다.
+
+```text
+Work contributor는 최종 verifier가 될 수 없습니다
+```
+
+- 수정: `packages/application/src/core-delivery-stage.ts`에 공통 담당자 선택을 두고 `assurance` 추천을 Delivery 담당자로 사용하지 않도록 `delivery-coordination`으로 대체했습니다.
+- 집중 회귀 검증: `pnpm --filter @massion/application exec vitest run src/core-delivery-stage.test.ts -t '최종 verifier 추천은 Delivery 담당자로 선택하지 않는다' --reporter=dot` — 1개 통과(나머지 15개는 실행하지 않음).
+- 실제 번들 재생성: 실행 바이너리 SHA-256 `f23380048ed8bf657b396174d9f7dccb13cd1ce99b1c1f8cb1af7bd6d7bac061`.
+- 실제 Tauri·OpenRouter 실행 1: Work `6b56d429-6e11-44db-a989-a08cc29e653b`, Runtime `8cc3d07d-9237-4560-a033-76607ee32f54` → `81d64292-3ced-486b-92b9-9acee96b5aff` → `7ea894f4-62e6-4c15-b98d-37030e285eaf` → Assurance `79ae4109-e86d-4708-8149-100566830f92`, 모두 성공. 화면에서 Work `완료`, 작업 `1/1`, 진행률 `100%`를 확인했습니다.
+- 실제 Tauri·OpenRouter 실행 2: Work `3d352cf5-1789-4285-9d89-72d5f3209f52`, Runtime `51edbe61-6b02-4de2-be68-3fbb1a5067e8` → `107dddd7-b0d7-4d56-b855-665a215b5252` → `f7a21525-4aa6-4cae-a553-a1a756c9aef0` → Assurance `9cdd7811-be6d-468b-9961-804c9e93b990`, 모두 성공. 화면에서 Work `완료`, 작업 `1/1`, 진행률 `100%`를 확인했습니다.
+- 실제 Growth 후속: Growth Runtime `6464dcb2-8a61-4511-8ab8-120d5a324535`가 성공했습니다. 기존 adoption `af44d129-887c-4299-8d5c-26772cd98089`의 baseline `dfbf8a9b-118d-42ea-960f-ef0a5af5ef47`가 `closed`, effect observation `6e175045-ca11-43fe-94bb-21abdd61f507`가 `observation_count=3`, `score=1`, effect evaluation `7e312438-91c1-47e4-90f1-cbb6068b325b`가 `stable`, adoption이 `retained`로 전환됐습니다.
+
+이 증분으로 `assurance` 담당자 독립성 오류 수정 → 실제 Provider Work 완료 → 세 개의 실제 terminal Assurance 표본 → baseline·effect 평가·retained 전환까지 하나의 실제 계보를 닫았습니다. 기존 실패 Work `4956b609-d3de-4e84-b17c-38f9179575e9`는 기존 잘못된 Assignment를 자동 수정하지 않았으므로 `verifying` 상태로 남아 있으며, 이를 성공으로 재사용하지 않습니다.
+
 ## 남은 범위
 
 1. 실제 Tauri 부트스트랩 access token이 발급 키와 검증 키를 동일하게 사용하는지 확인합니다.

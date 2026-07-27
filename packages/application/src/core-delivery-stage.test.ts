@@ -144,6 +144,40 @@ describe("CoreDeliveryStage", () => {
     expect(assignedTaskIds).toEqual(["task-first", "task-dependent"]);
   });
 
+  it("최종 verifier 추천은 Delivery 담당자로 선택하지 않는다", async () => {
+    const assignedHandles: string[] = [];
+    let status = "planned";
+    let revision = 1;
+    let listCalls = 0;
+    const task = {
+      task_id: "task-assurance-recommended",
+      status: "ready",
+      recommended_agent_handles: ["assurance"],
+      revision: 1,
+    };
+    const stage = new CoreDeliveryStage({
+      works: {
+        listTasks: async () => (++listCalls === 1 ? [task] : []),
+        getWork: async () => ({ revision, status }),
+        assignTask: async (_context: unknown, value: { agentHandle: string }) => {
+          assignedHandles.push(value.agentHandle);
+          revision += 1;
+          return { work: { revision } };
+        },
+        transition: async (_context: unknown, value: { target: string }) => {
+          status = value.target;
+          revision += 1;
+          return { work: { revision, status } };
+        },
+      },
+      runner: {},
+      runtimeExecutions: {},
+    } as never);
+
+    await expect(stage.execute(context, input)).resolves.toMatchObject({ outcome: "advanced" });
+    expect(assignedHandles).toEqual(["delivery-coordination"]);
+  });
+
   it("승인 대기 Work는 승인 재개 입력 없이 실행하지 않는다", async () => {
     const stage = new CoreDeliveryStage({
       works: {

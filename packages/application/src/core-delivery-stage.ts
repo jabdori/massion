@@ -54,6 +54,10 @@ function isSoftwareTask(task: WorkTask): boolean {
   });
 }
 
+function deliveryAgentHandle(task: WorkTask): string {
+  return task.recommended_agent_handles?.find((handle) => handle !== "assurance") ?? "delivery-coordination";
+}
+
 export interface CoreSoftwareTaskPort {
   executeTask(
     context: TenantContext,
@@ -117,7 +121,7 @@ export class CoreDeliveryStage implements CoreWorkStageExecutor {
           workId: input.workId,
           expectedRevision: initial.revision,
           taskId: task.task_id,
-          agentHandle: task.recommended_agent_handles?.[0] ?? "delivery-coordination",
+          agentHandle: deliveryAgentHandle(task),
         });
         this.throwIfCancelled(input);
         initial = assigned.work;
@@ -256,7 +260,7 @@ export class CoreDeliveryStage implements CoreWorkStageExecutor {
       this.throwIfCancelled(input);
       let active = task;
       if (task.status === "ready") {
-        const agentHandle = task.recommended_agent_handles?.[0] ?? "delivery-coordination";
+        const agentHandle = deliveryAgentHandle(task);
         if (!preassignedTaskIds.has(task.task_id)) {
           this.throwIfCancelled(input);
           const assigned = await this.dependencies.works.assignTask(context, {
@@ -290,7 +294,7 @@ export class CoreDeliveryStage implements CoreWorkStageExecutor {
             commandId: runtimeCommand,
             workId: input.workId,
             taskId: task.task_id,
-            agentHandle: task.recommended_agent_handles?.[0] ?? "delivery-coordination",
+            agentHandle: deliveryAgentHandle(task),
             modelRoute: "delivery-quality",
             correlationId: input.correlationId,
             estimatedTokens: baselineTokens + (knowledgeSources?.[0]?.estimatedTokens ?? 0),
@@ -314,7 +318,7 @@ export class CoreDeliveryStage implements CoreWorkStageExecutor {
         name: `task-${task.task_id}`,
         mediaType: "application/json",
         content: execution.output ?? null,
-        creatorAgentHandle: task.recommended_agent_handles?.[0] ?? "delivery-coordination",
+        creatorAgentHandle: deliveryAgentHandle(task),
         creatorExecutionId: execution.executionId,
       });
       this.throwIfCancelled(input);

@@ -20,7 +20,7 @@
 | 01 | 홈의 워크스페이스·파일 문맥 | 코드 검증 완료 · native UAT 대기 | [페이즈 01](./phase-01-workspace-context.md) |
 | 02 | 네이티브 폴더·파일 선택 | 실제 folder/file panel 호출·취소 증분 확인 · 파일 선택·전체 native UAT 대기 | [페이즈 02](./phase-02-native-context-picker.md) |
 | 03 | 지식 그래프·검색·기억의 업무 연결 | 진행 중 | [페이즈 03](./phase-03-knowledge-memory.md) |
-| 04 | Core·협업·조직·개선·권한·수신함 정합화 | 부분 진행 — Core UAT·Growth review/adoption·재시작 계보 정합화·effect worker 정렬 결함 수정·timeout/fallback·Work 오류 가시성·Provider capability/fallback·bundled runtime 증분; 효과 cohort는 Assurance 정체로 대기 | [페이즈 04](./phase-04-core-collaboration-permission-inbox.md) |
+| 04 | Core·협업·조직·개선·권한·수신함 정합화 | 부분 진행 — Core UAT·Growth review/adoption·재시작 계보 정합화·effect worker 정렬 결함·verifier 독립성 수정·timeout/fallback·Work 오류 가시성·Provider capability/fallback·bundled runtime 증분; 실제 effect cohort는 `stable/retained`까지 확인했으며 전체 UAT는 대기 | [페이즈 04](./phase-04-core-collaboration-permission-inbox.md) |
 | 05 | 실제 데스크톱 UAT와 개인용 릴리스 후보 | 제품 후보 `573297642`에서 workspace·native folder/file panel 호출과 실제 Provider Work·재시작 보존을 증분 확인 · 파일 선택·전체 native UAT·릴리스 게이트 대기 | [기존 Tauri/API UAT](../../../evidence/phase-30/desktop-live-tauri-uat-2026-07-26-e3b5fe883.md), [workspace 경계 UAT](../../../evidence/phase-30/desktop-live-workspace-directory-uat-2026-07-26-40a6ffbc8.md), [folder/file panel 증분](../../../evidence/phase-30/desktop-live-native-picker-uat-2026-07-26-40a6ffbc8.md), [제품 후보 file panel](../../../evidence/phase-30/desktop-live-native-file-panel-uat-2026-07-26-573297642.md), [Provider Work·재시작 보존](../../../evidence/phase-30/desktop-live-provider-restart-uat-2026-07-27-573297642.md) |
 
 ## 릴리스 전 데이터 보존 gate
