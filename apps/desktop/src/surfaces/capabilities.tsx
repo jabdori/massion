@@ -1,10 +1,11 @@
-import { useEffect, useState } from "react";
+import { agentIdentityToken } from "@massion/application/client";
+import { useEffect, useState, type ReactNode } from "react";
 
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type {
   CommandIdentity,
   DesktopService,
   ExtensionEntryView,
+  OrganizationNodeView,
   PermissionKind,
   ContributionKind,
 } from "@/desktop-service";
@@ -12,7 +13,7 @@ import { projectManifestDeclarations } from "@/desktop-service";
 import type { ApprovalView } from "@/model";
 
 import { DecisionActions } from "@/room";
-import { GrowthSection, SurfaceError, SurfaceLoading, surfaceErrorMessage } from "@/ui/surface";
+import { SurfaceLoading, surfaceErrorMessage } from "@/ui/surface";
 
 export type AwaitingRegistryInstall = {
   identity: CommandIdentity;
@@ -36,6 +37,17 @@ const contributionLabel: Record<ContributionKind, string> = {
   modelEvaluationBundles: "모델 평가 번들",
 };
 
+const contributionDescription: Record<ContributionKind, string> = {
+  runtimeTools: "실행 중 호출할 수 있는 도구",
+  organizationTemplates: "편성할 수 있는 전문 조직",
+  skills: "노드에 붙일 수 있는 Skill",
+  surfaceConnectors: "요청과 결과가 오가는 외부 표면",
+  growthSignals: "개선 평가가 읽는 신호",
+  growthTargets: "개선이 바꿀 수 있는 대상",
+  eventConsumers: "사건을 받아 도는 구독자",
+  modelEvaluationBundles: "모델 평가에 쓰는 번들",
+};
+
 /** `ExtensionPermissionDeclaration`(같은 파일 `:16`). 확장이 **요구하는** 것이라 승인 판단의 근거입니다. */
 const permissionLabel: Record<PermissionKind, string> = {
   tools: "도구 호출",
@@ -46,6 +58,23 @@ const permissionLabel: Record<PermissionKind, string> = {
   mcp: "MCP 서버",
   storage: "저장 공간",
   events: "사건 수신",
+};
+
+const permissionDescription: Record<PermissionKind, string> = {
+  tools: "다른 확장이 등록한 도구를 호출합니다",
+  network: "이 호스트로 나가는 요청",
+  files: "이 경로를 읽고 씁니다",
+  secrets: "이 비밀 값을 꺼내 씁니다",
+  process: "이 프로세스를 실행합니다",
+  mcp: "이 MCP 서버에 붙습니다",
+  storage: "확장 전용 저장 공간을 씁니다",
+  events: "이 사건을 받습니다",
+};
+
+const nodeRoleLabel: Record<string, string> = {
+  orchestrator: "총괄",
+  coordinator: "조율",
+  operator: "실행",
 };
 
 const provenanceLabel: Record<string, string> = {
@@ -70,10 +99,9 @@ export function ExtensionSurface({
   service: DesktopService;
 }) {
   const [entries, setEntries] = useState<readonly ExtensionEntryView[]>();
-  const [query, setQuery] = useState("");
-  const [filter, setFilter] = useState<"installed" | "all">("all");
   const [selectedId, setSelectedId] = useState<string>();
   const [detail, setDetail] = useState<RegistryDetail>();
+  const [organizationNodes, setOrganizationNodes] = useState<readonly OrganizationNodeView[]>();
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
@@ -95,16 +123,29 @@ export function ExtensionSurface({
     };
   }, [service]);
 
+  useEffect(() => {
+    let disposed = false;
+    void service
+      .loadOrganization()
+      .then(({ nodes }) => {
+        if (!disposed) setOrganizationNodes(nodes);
+      })
+      .catch(() => undefined);
+    return () => {
+      disposed = true;
+    };
+  }, [service]);
+
   const all = entries ?? [];
-  const installedCount = all.filter((item) => item.installed).length;
-  const normalized = query.trim().toLocaleLowerCase("ko");
-  const visible = all.filter(
-    (item) =>
-      (filter === "all" || item.installed) &&
-      (normalized.length === 0 ||
-        `${item.packageName} ${item.description}`.toLocaleLowerCase("ko").includes(normalized)),
-  );
   const selected = all.find((item) => item.id === selectedId);
+  const governanceNode = organizationNodes?.find((node) => node.capabilities.includes("governance"));
+  const organizationRows =
+    organizationNodes?.flatMap((node) =>
+      node.status === "active" ? node.capabilities.map((capability) => ({ capability, node })) : [],
+    ) ?? [];
+  const organizationNodeCount = organizationNodes?.filter(
+    (node) => node.status === "active" && node.capabilities.length > 0,
+  ).length;
 
   // 마켓플레이스 항목의 Capability는 registry.info의 manifest에만 있습니다. 고를 때 채웁니다.
   const declarations =
@@ -159,228 +200,322 @@ export function ExtensionSurface({
   return (
     <main
       aria-label="확장"
-      className="col-span-3 grid min-h-0 min-w-0 grid-cols-[242px_minmax(0,1fr)_300px] bg-canvas min-[1440px]:grid-cols-[264px_minmax(0,1fr)_332px]"
+      className="col-span-3 grid min-h-0 min-w-0 grid-rows-[48px_32px_32px_minmax(0,1fr)_32px] bg-bg-0"
     >
-      <section
-        aria-label="확장 목록"
-        className="grid min-h-0 grid-rows-[46px_auto_minmax(0,1fr)] border-r border-border bg-chrome"
-      >
-        <header className="flex items-center gap-2 border-b border-border px-3">
-          <h1 className="text-[15px] font-semibold tracking-[-0.015em]">확장</h1>
-          <span className="font-mono text-[11px] text-muted">{installedCount}</span>
-        </header>
-        <div className="grid gap-2 border-b border-border px-2.5 py-2.5">
-          <input
-            aria-label="확장 검색"
-            className="h-7 w-full rounded-[5px] border border-border bg-canvas px-2.5 text-[12px] outline-none placeholder:text-muted focus:border-control"
-            onChange={(event) => {
-              setQuery(event.target.value);
+      <header className="flex min-w-0 items-center gap-3 border-b border-line-strong px-4">
+        <h1 className="shrink-0 text-[15px] font-semibold leading-6 tracking-[-0.008em] text-fg-2">확장</h1>
+        <span className="shrink-0 text-[13px] leading-5 tabular-nums text-fg-4">{all.length}</span>
+        <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
+          {all.map((item) => (
+            <button
+              aria-label={extensionDisplayName(item.packageName)}
+              aria-pressed={item.id === selectedId}
+              className={`flex h-[30px] shrink-0 items-center gap-2 rounded-[4px] px-2.5 text-[13px] leading-5 tracking-[-0.005em] transition-colors duration-150 ${
+                item.id === selectedId ? "bg-white/[0.047] text-fg" : "text-fg-2 hover:bg-white/[0.027]"
+              }`}
+              key={item.id}
+              onClick={() => {
+                void select(item);
+              }}
+              type="button"
+            >
+              <span className={item.installed ? "text-fg-3" : "text-fg-4"}>{item.installed ? "◉" : "○"}</span>
+              <span className="truncate">{extensionDisplayName(item.packageName)}</span>
+              <span className="font-mono text-[11px] text-fg-4">{item.version}</span>
+            </button>
+          ))}
+        </div>
+        {organizationNodes !== undefined ? (
+          <div className="ml-auto flex shrink-0 items-center gap-1">
+            <span className="text-[12px] text-fg-4">조직 능력</span>
+            <span className="text-[13px] tabular-nums text-fg-2">{organizationRows.length}</span>
+            <span className="px-1 text-[12px] text-fg-4">·</span>
+            <span className="text-[12px] text-fg-4">노드</span>
+            <span className="text-[13px] tabular-nums text-fg-2">{organizationNodeCount}</span>
+          </div>
+        ) : null}
+        {selected && !selected.installed ? (
+          <button
+            className="h-[30px] shrink-0 rounded-[4px] bg-gate px-3 text-[13px] font-medium leading-5 text-gate-ink disabled:opacity-50"
+            disabled={busy !== ""}
+            onClick={() => {
+              void install(selected.id);
             }}
-            placeholder="이름 또는 설명 검색"
-            value={query}
-          />
-          {/* 업무·개선과 같은 자리, 같은 모양의 필터입니다. */}
-          <Tabs
-            onValueChange={(value) => {
-              setFilter(value as "installed" | "all");
-            }}
-            value={filter}
+            type="button"
           >
-            <TabsList aria-label="확장 범위" className="gap-1">
-              <TabsTrigger
-                className="h-7 rounded-[5px] border px-2.5 text-[12px] data-[active]:border-control data-[active]:bg-surface-2 data-[active]:text-primary"
-                value="all"
-              >
-                전체 {all.length}
-              </TabsTrigger>
-              <TabsTrigger
-                className="h-7 rounded-[5px] border px-2.5 text-[12px] data-[active]:border-control data-[active]:bg-surface-2 data-[active]:text-primary"
-                value="installed"
-              >
-                설치됨 {installedCount}
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
-        </div>
-        <div className="min-h-0 overflow-y-auto">
-          {entries === undefined && !error ? <SurfaceLoading /> : null}
-          {entries !== undefined && visible.length === 0 ? (
-            <p className="px-3 py-8 text-center text-sm text-muted">
-              {all.length === 0 ? "설치된 확장도, 받을 수 있는 확장도 없습니다." : "검색과 일치하는 확장이 없습니다."}
-            </p>
-          ) : (
-            <div className="divide-y divide-border border-b border-border">
-              {visible.map((item) => (
-                <button
-                  aria-pressed={item.id === selectedId}
-                  className={`relative w-full px-3 py-2.5 text-left outline-none transition-colors duration-150 ${
-                    item.id === selectedId
-                      ? "bg-surface-2 before:absolute before:inset-y-0 before:left-0 before:w-0.5 before:bg-primary"
-                      : "hover:bg-surface-1"
-                  }`}
-                  key={item.id}
-                  onClick={() => {
-                    void select(item);
-                  }}
-                  type="button"
-                >
-                  <span className="block truncate text-[13px] font-medium">
-                    {extensionDisplayName(item.packageName)}
-                  </span>
-                  <span className="mt-0.5 flex items-baseline justify-between gap-2 text-[11px]">
-                    <span className={item.installed ? "text-secondary" : "text-muted"}>
-                      {item.installed
-                        ? `● ${extensionStateLabel(item.state)}`
-                        : `○ ${provenanceLabel[item.provenance] ?? "받을 수 있음"}`}
-                    </span>
-                    <span className="shrink-0 font-mono text-muted">{item.version}</span>
-                  </span>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-      </section>
+            {busy === `install:${selected.id}` ? "요청 중" : "설치"}
+          </button>
+        ) : null}
+      </header>
 
-      <div className="grid min-h-0 grid-rows-[46px_minmax(0,1fr)] border-r border-border">
-        <header className="flex items-center gap-2 border-b border-border px-5">
-          {selected ? (
-            <>
-              <h2 className="truncate text-[15px] font-semibold tracking-[-0.015em]">
-                {extensionDisplayName(selected.packageName)}
-              </h2>
-              <span className="shrink-0 font-mono text-[11px] text-muted" title={selected.packageName}>
-                {selected.version}
+      <div className="flex min-w-0 items-center gap-2 border-b border-line px-4">
+        {selected ? (
+          <>
+            <h2 className="truncate text-[17px] font-semibold leading-[26px] tracking-[-0.012em] text-fg">
+              {extensionDisplayName(selected.packageName)}
+            </h2>
+            <span className="shrink-0 font-mono text-[11px] text-fg-4">{selected.version}</span>
+            {selected.installed ? (
+              <span className="shrink-0 text-[13px] leading-5 tracking-[-0.005em] text-fg-3">
+                {extensionStateLabel(selected.state)}
               </span>
-              <span className="flex-1" />
-              {selected.installed ? (
-                <span className="shrink-0 text-[11px] text-secondary">{extensionStateLabel(selected.state)}</span>
-              ) : (
-                <button
-                  className="shrink-0 rounded-[5px] bg-gate px-3 py-1 text-[12px] font-medium text-gate-ink hover:brightness-110 disabled:opacity-50"
-                  disabled={busy !== ""}
-                  onClick={() => {
-                    void install(selected.id);
-                  }}
-                  type="button"
-                >
-                  {busy === `install:${selected.id}` ? "요청 중" : "설치"}
-                </button>
-              )}
-            </>
-          ) : null}
-        </header>
-        <div className="min-h-0 overflow-y-auto px-5 py-4">
-          {error ? <SurfaceError message={error} /> : null}
-          {selected ? (
-            <article className="mx-auto max-w-[76ch]">
-              {selected.description ? (
-                <p className="text-[13px] leading-5 text-primary">{selected.description}</p>
-              ) : null}
+            ) : null}
+            {selected.description ? (
+              <span className="ml-auto min-w-0 truncate text-[13px] leading-5 tracking-[-0.005em] text-fg-3">
+                {selected.description}
+              </span>
+            ) : null}
+          </>
+        ) : null}
+      </div>
 
-              {/*
-               * 헌법 6절: 확장 표면은 "조직에 추가된 Capability를 먼저" 보여야 합니다.
-               * 버전·출처보다 위에 둡니다 — 사용자가 판단하는 건 "무엇이 늘어나는가"입니다.
-               */}
-              <GrowthSection title="조직이 무엇을 할 수 있게 되나">
+      <div className="flex min-w-0 items-center gap-2 border-b border-line px-4 text-[13px] leading-5 tracking-[-0.005em]">
+        {governanceNode ? (
+          <>
+            <span className="text-[12px] text-fg-4">요청</span>
+            <span className="font-mono text-[11px] text-fg-3">{selected?.packageName}</span>
+            <span className="text-[12px] text-fg-4">→</span>
+            <span className="text-[12px] text-fg-4">부여 판정</span>
+            <span
+              aria-hidden="true"
+              className="size-1.5 shrink-0 rounded-full"
+              style={{ background: `var(--agent-${agentRailSlot(governanceNode.handle)})` }}
+            />
+            <span className="shrink-0 text-[13px] font-medium text-fg-2">{governanceNode.name}</span>
+            <span className="min-w-0 truncate text-[13px] text-fg-3">{governanceNode.responsibility}</span>
+            <span className="ml-auto shrink-0 text-[13px] text-fg-3">설치·권한·활성화는 사람이 통제합니다</span>
+          </>
+        ) : null}
+      </div>
+
+      <div className="min-h-0 overflow-y-auto">
+        {awaitingInstall ? (
+          <section aria-label="설치 승인" className="flex h-16 items-center gap-2 border-b border-gate-border bg-gate-wash px-4">
+            <span className="text-[14px] text-gate">◇</span>
+            <span className="text-[13px] leading-5 tracking-[-0.005em] text-gate">설치가 승인을 기다립니다.</span>
+            <span className="font-mono text-[11px] text-fg-4">{awaitingInstall.approvalId}</span>
+            {approval === undefined ? (
+              <span className="ml-auto text-[12px] text-fg-4">승인 정보를 불러오는 중입니다</span>
+            ) : (
+              <div className="ml-auto flex shrink-0 items-center">
+                <DecisionActions
+                  approveName={approval.title}
+                  busy={approvalBusy}
+                  disabled={approvalBusy}
+                  onApprove={() => {
+                    void onDecideApproval(approval, "approve");
+                  }}
+                  onReject={() => {
+                    void onDecideApproval(approval, "reject");
+                  }}
+                />
+              </div>
+            )}
+          </section>
+        ) : null}
+
+        {error ? <p role="alert" className="px-4 py-3 text-[13px] leading-5 tracking-[-0.005em] text-fg-3">{error}</p> : null}
+        {entries === undefined && !error ? <SurfaceLoading /> : null}
+        {selected ? (
+          <div className="min-w-0 pb-4">
+            <div className="grid min-w-0 grid-cols-2">
+              <section aria-label="조직이 무엇을 할 수 있게 되나" className="min-w-0">
+                <GroupHeader label="조직이 무엇을 할 수 있게 되나" count={contributionRows(declarations).length} />
                 {declarations && declarations.contributions.length > 0 ? (
-                  <ul className="divide-y divide-border border-y border-border">
-                    {declarations.contributions.map((entry) => (
-                      <li className="grid grid-cols-[92px_minmax(0,1fr)] items-baseline gap-2 py-2" key={entry.kind}>
-                        <span className="text-[12px] text-muted">{contributionLabel[entry.kind]}</span>
-                        <span className="min-w-0 text-[12px] text-primary">{entry.items.join(" · ")}</span>
-                      </li>
+                  <div className="grid gap-0.5">
+                    {contributionRows(declarations).map((row, index) => (
+                      <LedgerRow
+                        description={row.description}
+                        glyph={selected.installed ? "◉" : "○"}
+                        glyphClassName={selected.installed ? "text-fg-3" : "text-fg-4"}
+                        identifier={row.item}
+                        identifierWidth="w-[232px]"
+                        key={`${row.kind}-${index}`}
+                        name={row.name}
+                        nameWidth="w-[208px]"
+                      />
                     ))}
-                  </ul>
+                  </div>
                 ) : (
-                  <p className="text-[12px] leading-5 text-muted">
+                  <div className="flex h-[30px] items-center px-4 text-[13px] leading-5 tracking-[-0.005em] text-fg-4">
                     {busy === selected.id
                       ? "선언을 읽는 중…"
                       : "이 확장이 조직에 무엇을 더하는지 계약이 알려주지 않습니다. 설치 레코드만 있습니다."}
-                  </p>
+                  </div>
                 )}
-              </GrowthSection>
+              </section>
 
-              <GrowthSection title="무엇을 요구하나">
+              <section aria-label="이 확장이 요구하는 것" className="min-w-0 border-l border-line">
+                <GroupHeader label="이 확장이 요구하는 것" count={permissionRows(declarations).length} />
                 {declarations && declarations.permissions.length > 0 ? (
-                  <ul className="divide-y divide-border border-y border-border">
-                    {declarations.permissions.map((entry) => (
-                      <li className="grid grid-cols-[92px_minmax(0,1fr)] items-baseline gap-2 py-2" key={entry.kind}>
-                        <span className="text-[12px] text-muted">{permissionLabel[entry.kind]}</span>
-                        <span className="min-w-0 font-mono text-[11px] text-primary">
-                          {entry.items.filter((item) => item.length > 0).join(" · ") || "사용함"}
-                        </span>
-                      </li>
+                  <div className="grid gap-0.5">
+                    {permissionRows(declarations).map((row, index) => (
+                      <LedgerRow
+                        description={row.description}
+                        glyph={selected.installed ? "◉" : "○"}
+                        glyphClassName={selected.installed ? "text-fg-3" : "text-fg-4"}
+                        identifier={row.item}
+                        identifierWidth="w-[232px]"
+                        key={`${row.kind}-${index}`}
+                        name={row.name}
+                        nameWidth="w-[208px]"
+                      />
                     ))}
-                  </ul>
+                  </div>
                 ) : (
-                  <p className="text-[12px] leading-5 text-muted">선언된 권한이 없습니다.</p>
+                  <div className="flex h-[30px] items-center px-4 text-[13px] leading-5 tracking-[-0.005em] text-fg-4">
+                    선언된 권한이 없습니다.
+                  </div>
                 )}
-              </GrowthSection>
+              </section>
+            </div>
 
-              {notice ? <p className="mt-4 text-[12px] text-gate">{notice}</p> : null}
-            </article>
-          ) : (
-            <p className="mx-auto max-w-[76ch] text-[13px] leading-5 text-muted">
-              확장을 고르면 조직에 무엇이 늘어나고 무엇을 요구하는지 보여줍니다.
-            </p>
-          )}
-        </div>
+            {organizationNodes !== undefined ? (
+              <section aria-label="조직이 이미 보유한 것" className="border-t border-line">
+                <GroupHeader label="조직이 이미 보유한 것" count={organizationRows.length} />
+                <div className="grid gap-0.5">
+                  {organizationRows.map(({ capability, node }) => {
+                    const parent = node.parentHandle
+                      ? organizationNodes.find((candidate) => candidate.handle === node.parentHandle)
+                      : undefined;
+                    return (
+                      <LedgerRow
+                        description={node.responsibility}
+                        glyph="●"
+                        glyphClassName="text-fg-3"
+                        identifier={capability}
+                        identifierWidth="w-[232px]"
+                        key={`${node.handle}-${capability}`}
+                        meta={
+                          <span className="text-[12px] text-fg-4">
+                            {`${nodeRoleLabel[node.role] ?? node.role}${parent ? ` · ${parent.name}` : ""}`}
+                          </span>
+                        }
+                        name={node.name}
+                        nameWidth="w-[208px]"
+                        railSlot={agentRailSlot(node.handle)}
+                      />
+                    );
+                  })}
+                </div>
+              </section>
+            ) : null}
+          </div>
+        ) : null}
       </div>
 
-      <aside aria-label="배경" className="grid min-h-0 grid-rows-[46px_minmax(0,1fr)] border-l border-border bg-chrome">
-        <header className="flex items-center border-b border-border px-3">
-          <h2 className="text-[11px] font-semibold tracking-[0.08em] text-muted">배경</h2>
-        </header>
-        <div className="min-h-0 space-y-4 overflow-y-auto px-3 py-3">
-          {awaitingInstall ? (
-            <section aria-label="설치 승인" className="rounded-[7px] border border-gate-border bg-gate-wash p-3">
-              <p className="text-[12px] font-medium text-gate">설치가 승인을 기다립니다</p>
-              <p className="mt-1 text-[11px] leading-4 text-secondary">
-                요청한 권한과 출처를 확인한 뒤 여기서 결정합니다.
-              </p>
-              <p className="mt-1.5 font-mono text-[11px] text-fg-3" title={`승인 요청 ${awaitingInstall.approvalId}`}>
-                {awaitingInstall.approvalId}
-              </p>
-              {approval === undefined ? (
-                <p className="mt-2 text-[11px] text-muted">승인 정보를 불러오는 중입니다.</p>
-              ) : (
-                <div className="mt-3 flex justify-end">
-                  <DecisionActions
-                    approveName={approval.title}
-                    busy={approvalBusy}
-                    disabled={approvalBusy}
-                    onApprove={() => {
-                      void onDecideApproval(approval, "approve");
-                    }}
-                    onReject={() => {
-                      void onDecideApproval(approval, "reject");
-                    }}
-                  />
-                </div>
-              )}
-            </section>
-          ) : null}
-          {selected ? (
-            <section>
-              <h3 className="text-[10px] font-semibold tracking-[0.08em] text-muted">출처</h3>
-              <p className="mt-1.5 text-[12px] text-primary">{provenanceLabel[selected.provenance] ?? "알 수 없음"}</p>
-              <p className="mt-0.5 font-mono text-[11px] text-fg-3" title="패키지 이름">
-                {selected.packageName}
-              </p>
-            </section>
-          ) : null}
-          <section>
-            <h3 className="text-[10px] font-semibold tracking-[0.08em] text-muted">확장이 대체할 수 없는 것</h3>
-            {/* 헌법 4.11. 설치 판단 옆에 항상 있어야 하는 경계입니다. */}
-            <p className="mt-1.5 text-[11px] leading-4 text-secondary">
-              승인, 실행 기록, 기억 권위, 조직 거버넌스는 확장이 가져갈 수 없습니다. 설치·권한·활성화는 사람이
-              통제합니다.
-            </p>
-          </section>
+      <footer className="flex min-w-0 shrink-0 items-center gap-2 border-t border-line-strong px-4">
+        {selected ? (
+          <>
+            <span className="shrink-0 text-[12px] text-fg-4">출처</span>
+            {provenanceLabel[selected.provenance] ? (
+              <span className="shrink-0 text-[13px] leading-5 tracking-[-0.005em] text-fg-2">
+                {provenanceLabel[selected.provenance]}
+              </span>
+            ) : null}
+            <span className="shrink-0 font-mono text-[11px] text-fg-4">{selected.packageName}</span>
+            {notice && !awaitingInstall ? <span className="min-w-0 flex-1 truncate text-[13px] text-gate">{notice}</span> : null}
+          </>
+        ) : null}
+        <div className="ml-auto flex shrink-0 items-center gap-2">
+          <span className="text-[12px] text-fg-4">확장이 대체할 수 없는 것</span>
+          <span className="text-[13px] leading-5 tracking-[-0.005em] text-fg-3">승인 · 실행 기록 · 기억 권위 · 조직 거버넌스</span>
         </div>
-      </aside>
+      </footer>
     </main>
+  );
+}
+
+type DeclarationRows = Pick<ExtensionEntryView, "contributions" | "permissions">;
+type DeclarationRow = {
+  readonly kind: ContributionKind | PermissionKind;
+  readonly item: string;
+  readonly name: string;
+  readonly description: string;
+};
+
+function contributionRows(declarations: DeclarationRows | undefined): readonly DeclarationRow[] {
+  return (
+    declarations?.contributions.flatMap(({ kind, items }) =>
+      items.map((item, index) => ({
+        kind,
+        item,
+        name: index === 0 ? contributionLabel[kind] : "",
+        description: index === 0 ? contributionDescription[kind] : "",
+      })),
+    ) ?? []
+  );
+}
+
+function permissionRows(declarations: DeclarationRows | undefined): readonly DeclarationRow[] {
+  return (
+    declarations?.permissions.flatMap(({ kind, items }) =>
+      items.map((item, index) => ({
+        kind,
+        item,
+        name: index === 0 ? permissionLabel[kind] : "",
+        description: index === 0 ? permissionDescription[kind] : "",
+      })),
+    ) ?? []
+  );
+}
+
+function agentRailSlot(handle: string): number {
+  const slot = agentIdentityToken(handle).accentSlot;
+  return slot >= 0 && slot <= 7 ? slot : 0;
+}
+
+function GroupHeader({ label, count }: { label: string; count: number }) {
+  return (
+    <div className="flex h-[30px] items-center gap-2 px-4 text-[13px] leading-5 tracking-[-0.005em] text-fg-3">
+      <span aria-hidden="true" className="h-3.5 w-0.5 shrink-0" />
+      <span aria-hidden="true" className="w-3.5 shrink-0" />
+      <span>{label}</span>
+      {count > 0 ? <span className="tabular-nums text-fg-4">{count}</span> : null}
+    </div>
+  );
+}
+
+function LedgerRow({
+  description,
+  glyph,
+  glyphClassName,
+  identifier,
+  identifierWidth,
+  meta,
+  name,
+  nameWidth,
+  railSlot,
+}: {
+  description: ReactNode;
+  glyph: string;
+  glyphClassName: string;
+  identifier: string;
+  identifierWidth: string;
+  meta?: ReactNode;
+  name: string;
+  nameWidth: string;
+  railSlot?: number;
+}) {
+  return (
+    <div className="flex h-[30px] min-w-0 items-center gap-2 px-4 transition-colors duration-150 hover:bg-white/[0.027]">
+      {railSlot === undefined ? (
+        <span aria-hidden="true" className="h-3.5 w-0.5 shrink-0" />
+      ) : (
+        <span
+          aria-hidden="true"
+          className="h-3.5 w-0.5 shrink-0 rounded-full"
+          style={{ background: `var(--agent-${railSlot})` }}
+        />
+      )}
+      <span className={`flex size-3.5 shrink-0 items-center justify-center text-[14px] leading-5 ${glyphClassName}`}>
+        {glyph}
+      </span>
+      <span className={`${nameWidth} shrink-0 truncate text-[13px] leading-5 tracking-[-0.005em] text-fg-2`}>{name}</span>
+      <span className={`${identifierWidth} shrink-0 truncate font-mono text-[11px] text-fg-3`}>{identifier}</span>
+      <span className="min-w-0 flex-1 truncate text-[13px] leading-5 tracking-[-0.005em] text-fg-3">{description}</span>
+      {meta ? <span className="w-[260px] shrink-0 truncate">{meta}</span> : null}
+    </div>
   );
 }
 
