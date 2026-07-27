@@ -4,28 +4,20 @@ import {
   Briefcase,
   CaretDown,
   CaretRight,
-  CheckCircle,
-  Clock,
   Database,
   FileCsv,
   FilePdf,
   Lightning,
-  ListChecks,
   MagnifyingGlass,
   Paperclip,
   Plus,
-  ShieldCheck,
-  UsersThree,
-  WarningCircle,
   X,
 } from "@phosphor-icons/react";
-import { useEffect, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import type { DesktopFilter, DesktopService } from "@/desktop-service";
@@ -33,8 +25,8 @@ import type {
   ActivityView,
   AgentView,
   ApprovalView,
-  ArtifactView,
   RoomView,
+  SpeakerView,
   TaskView,
   WorkStatus,
   WorkView,
@@ -42,18 +34,8 @@ import type {
 import type { WorkKnowledgeViewV1 } from "@massion/application/client";
 import type { NativeContextPicker } from "@/native-context-picker";
 
-import {
-  AgentAvatar,
-  DecisionActions,
-  ProposalActivity,
-  RoomChapter,
-  RoomHandoff,
-  RoomMessage,
-  RoomReference,
-  RoomStatus,
-  SpeakerRow,
-} from "@/room";
-import { stateClass, stateLabel, criterionStatusClass, criterionStatusLabel, StateIcon } from "@/ui/state";
+import { speakerText } from "@/room";
+import { criterionStatusClass, criterionStatusLabel, stateClass, stateLabel } from "@/ui/state";
 import { surfaceErrorMessage } from "@/ui/surface";
 
 const workStatusLabel: Record<WorkStatus, string> = {
@@ -63,21 +45,157 @@ const workStatusLabel: Record<WorkStatus, string> = {
   cancelled: "취소됨",
 };
 
-const workStatusClass: Record<WorkStatus, string> = {
-  active: "text-primary",
-  complete: "text-muted",
-  failed: "text-danger",
-  cancelled: "text-muted",
-};
+type GlyphKind = "idle" | "running" | "done" | "verified" | "gate" | "halt";
+
+/** 상태는 색이 아니라 모양이 말합니다(LEDGER-SPEC §3). */
+function Glyph({ kind, label, progress }: { kind: GlyphKind; label?: string | undefined; progress?: number | undefined }) {
+  const aria = label === undefined ? { "aria-hidden": true } : { "aria-label": label };
+  if (kind === "gate" || kind === "halt") {
+    return (
+      <span
+        {...aria}
+        className={`grid size-[14px] shrink-0 place-items-center text-[13px] leading-[14px] ${
+          kind === "gate" ? "text-gate" : "text-halt"
+        }`}
+      >
+        {kind === "gate" ? "◇" : "⊘"}
+      </span>
+    );
+  }
+  if (kind === "verified") {
+    return (
+      <span {...aria} className="grid size-[14px] shrink-0 place-items-center rounded-full text-fg-2">
+        <span className="grid size-[14px] place-items-center rounded-full border-[0.5px] border-current">
+          <span className="size-2 rounded-full bg-current" />
+        </span>
+      </span>
+    );
+  }
+  if (kind === "done") {
+    return <span {...aria} className="size-[10px] shrink-0 rounded-full bg-fg-3" />;
+  }
+  const pct = progress === undefined ? undefined : Math.max(0, Math.min(100, progress));
+  return (
+    <span
+      {...aria}
+      className={`grid size-[10px] shrink-0 place-items-center rounded-full border-[0.5px] ${
+        kind === "idle" ? "border-fg-4" : pct === undefined ? "border-fg-2 text-fg-2" : "border-fg-4 text-fg-3"
+      }`}
+      style={
+        kind === "running" && pct !== undefined
+          ? { background: `conic-gradient(currentColor ${String(pct)}%, transparent 0)` }
+          : undefined
+      }
+    >
+      {kind === "running" && pct === undefined ? null : null}
+    </span>
+  );
+}
+
+const SLOT_RAIL = [
+  "bg-agent-0",
+  "bg-agent-1",
+  "bg-agent-2",
+  "bg-agent-3",
+  "bg-agent-4",
+  "bg-agent-5",
+  "bg-agent-6",
+  "bg-agent-7",
+] as const;
+
+function railClass(accentSlot: number, human?: boolean): string {
+  if (human === true || accentSlot < 0) return "bg-user";
+  return SLOT_RAIL[accentSlot % SLOT_RAIL.length] ?? "bg-user";
+}
+
+function LedgerRow({
+  time,
+  speaker,
+  label,
+  meta,
+  glyph,
+  indent = false,
+  onClick,
+  expanded = false,
+  mono = false,
+}: {
+  time?: string | undefined;
+  speaker?: SpeakerView | undefined;
+  label: ReactNode;
+  meta?: ReactNode | undefined;
+  glyph?: ReactNode | undefined;
+  indent?: boolean | undefined;
+  onClick?: (() => void) | undefined;
+  expanded?: boolean | undefined;
+  mono?: boolean | undefined;
+}) {
+  const content = (
+    <>
+      {time ? (
+        <time className="w-[38px] shrink-0 text-right font-mono text-[11px] leading-4 text-fg-4 tabular-nums">{time}</time>
+      ) : (
+        <span aria-hidden="true" className="w-[38px] shrink-0" />
+      )}
+      {speaker ? (
+        <span aria-hidden="true" className={`h-[16px] w-[2px] shrink-0 ${railClass(speaker.accentSlot, speaker.human)}`} />
+      ) : (
+        <span aria-hidden="true" className="h-[16px] w-[2px] shrink-0 bg-transparent" />
+      )}
+      {speaker ? <span className={`shrink-0 text-[13px] leading-5 ${speakerText(speaker)}`}>{speaker.name}</span> : null}
+      {indent ? <span aria-hidden="true" className="w-8 shrink-0" /> : null}
+      <span
+        className={`min-w-0 flex-1 truncate leading-5 tracking-[-0.005em] ${
+          mono ? "font-mono text-[11px] text-fg-3" : "text-[13px] text-fg-2"
+        }`}
+      >
+        {label}
+      </span>
+      {meta ? <span className="shrink-0 text-[12px] leading-[18px] text-fg-4">{meta}</span> : null}
+      {onClick ? (
+        <CaretRight
+          aria-hidden="true"
+          className={`shrink-0 text-fg-4 transition-transform duration-100 ${expanded ? "rotate-90" : ""}`}
+          size={12}
+        />
+      ) : (
+        <span aria-hidden="true" className="w-3 shrink-0" />
+      )}
+      {glyph}
+    </>
+  );
+  const className = `flex h-[30px] w-full items-center gap-2 rounded-[4px] px-2 text-left ${
+    onClick ? `hover:bg-[rgb(255_255_255/0.027)] ${expanded ? "bg-[rgb(255_255_255/0.047)]" : ""}` : ""
+  }`;
+  return onClick ? (
+    <button className={className} onClick={onClick} type="button">
+      {content}
+    </button>
+  ) : (
+    <div className={className}>{content}</div>
+  );
+}
+
+function LedgerStage({ index, name, count, summary, dim = false }: { index: number; name: string; count?: number | undefined; summary?: ReactNode | undefined; dim?: boolean | undefined }) {
+  return (
+    <div className="flex h-[30px] items-center gap-2 px-2">
+      <span className="w-[38px] shrink-0 text-right font-mono text-[11px] leading-4 text-fg-4 tabular-nums">{index}</span>
+      <span aria-hidden="true" className="w-[2px] shrink-0" />
+      <span className={`text-[13px] font-medium leading-5 ${dim ? "text-fg-4" : "text-fg-2"}`}>{name}</span>
+      {count ? <span className="text-[12px] leading-[18px] text-fg-4">{count}</span> : null}
+      <span className="min-w-0 flex-1" />
+      {summary ? <span className="truncate text-[12px] leading-[18px] text-fg-4">{summary}</span> : null}
+    </div>
+  );
+}
 
 export function WorkEmptySurface({ onCreate }: { onCreate: () => void }) {
   return (
     <main aria-label="업무" className="col-span-2 flex min-h-0 items-center justify-center bg-canvas text-primary">
       <div className="text-center">
         <Briefcase aria-hidden="true" className="mx-auto mb-4 text-muted" size={32} />
-        <h1 className="text-lg font-semibold">선택한 상태에 Work가 없습니다.</h1>
-        <p className="mt-2 text-sm text-muted">왼쪽에서 상태를 바꾸거나 첫 Work를 만들어주세요.</p>
-        <Button className="mt-5" onClick={onCreate} variant="primary">
+        <h1 className="text-[17px] font-semibold tracking-[-0.012em] text-fg-2">선택한 상태에 Work가 없습니다.</h1>
+        <p className="mt-2 text-[13px] text-fg-4">왼쪽에서 상태를 바꾸거나 첫 Work를 만들어주세요.</p>
+        <Button className="mt-5 rounded-[4px]" onClick={onCreate} variant="primary">
           <Plus aria-hidden="true" size={16} />첫 Work 만들기
         </Button>
       </div>
@@ -111,24 +229,29 @@ export function WorkList({
   return (
     <section
       aria-label="Work 목록"
-      className="grid h-full min-h-0 min-w-0 grid-rows-[46px_auto_minmax(0,1fr)] border-r border-border bg-chrome"
+      className="grid h-full min-h-0 min-w-0 grid-rows-[48px_auto_minmax(0,1fr)] border-r border-line-strong bg-bg-1"
     >
-      <header className="flex items-center justify-between border-b border-border px-3">
-        <h2 className="text-[15px] font-semibold tracking-[-0.015em]">업무</h2>
-        <Button aria-label="새 Work 만들기" onClick={onCreate} size="icon" variant="ghost">
+      <header className="flex items-center justify-between border-b border-line px-3">
+        <h2 className="text-[15px] font-semibold tracking-[-0.008em] text-fg-2">업무</h2>
+        <button
+          aria-label="새 Work 만들기"
+          className="flex size-7 items-center justify-center rounded-[4px] text-fg-4 hover:text-fg-2"
+          onClick={onCreate}
+          type="button"
+        >
           <Plus aria-hidden="true" size={17} />
-        </Button>
+        </button>
       </header>
-      <div className="space-y-2 border-b border-border px-2.5 py-2.5">
+      <div className="space-y-1.5 border-b border-line px-2 py-2">
         <label className="relative block">
           <span className="sr-only">Work 검색</span>
           <MagnifyingGlass
             aria-hidden="true"
-            className="absolute left-3 top-1/2 -translate-y-1/2 text-muted"
-            size={16}
+            className="absolute left-2.5 top-1/2 -translate-y-1/2 text-fg-4"
+            size={14}
           />
           <input
-            className="h-8 w-full rounded-[5px] border border-border bg-surface-1 pl-8 pr-3 text-[13px] text-primary outline-none placeholder:text-muted focus:border-control"
+            className="h-[30px] w-full rounded-[4px] border border-line bg-bg-2 pl-8 pr-2 text-[13px] text-fg-2 placeholder:text-fg-4 outline-none focus:border-line-strong"
             onChange={(event) => {
               onQueryChange(event.target.value);
             }}
@@ -145,13 +268,13 @@ export function WorkList({
         >
           <TabsList aria-label="Work 상태" className="gap-1">
             <TabsTrigger
-              className="h-7 rounded-[5px] border px-2.5 text-[12px] data-[active]:border-control data-[active]:bg-surface-2 data-[active]:text-primary"
+              className="h-[30px] rounded-[4px] px-2.5 text-[12px] text-fg-4 data-[active]:bg-[rgb(255_255_255/0.047)] data-[active]:text-fg-2"
               value="active"
             >
               진행 중
             </TabsTrigger>
             <TabsTrigger
-              className="h-7 rounded-[5px] border px-2.5 text-[12px] data-[active]:border-control data-[active]:bg-surface-2 data-[active]:text-primary"
+              className="h-[30px] rounded-[4px] px-2.5 text-[12px] text-fg-4 data-[active]:bg-[rgb(255_255_255/0.047)] data-[active]:text-fg-2"
               value="complete"
             >
               완료
@@ -159,32 +282,40 @@ export function WorkList({
           </TabsList>
         </Tabs>
       </div>
-      <div className="min-h-0 overflow-y-auto">
+      <div className="min-h-0 overflow-y-auto px-2 py-2">
         {works.length || (pendingRunId && filter === "active") ? (
-          // 둥근 행에 여백을 주면 사이 구분이 약합니다. 전폭 행과 1px 선이 밀도와 구분감을 같이 만듭니다.
-          <div className="divide-y divide-border border-b border-border">
+          <div className="flex flex-col gap-[2px]">
             {pendingRunId && filter === "active" ? (
               <div
                 aria-label={`Work 생성 중 ${pendingRunId}`}
-                className="border-b border-dashed border-control bg-surface-1 px-3 py-2.5"
+                className="flex h-[30px] w-full items-center gap-2 rounded-[4px] px-2"
                 role="status"
               >
-                <span className="flex items-center gap-2 text-sm font-medium text-secondary">
-                  <span aria-hidden="true" className="size-2 animate-pulse rounded-full bg-accent" />
-                  Work 생성 중
-                </span>
-                <span className="mt-2 block truncate font-mono text-[10px] text-muted">{pendingRunId}</span>
+                <Glyph kind="idle" />
+                <span className="min-w-0 flex-1 truncate text-[13px] text-fg-2">Work 생성 중</span>
+                <span className="max-w-[90px] truncate font-mono text-[11px] text-fg-4">{pendingRunId}</span>
               </div>
             ) : null}
             {works.map((work) => {
               const selected = work.id === selectedId;
+              const glyph: GlyphKind =
+                work.run?.status === "blocked"
+                  ? "halt"
+                  : work.approvals.some((approval) => approval.status === "pending")
+                    ? "gate"
+                    : work.status === "complete" && work.verifications.some((verification) => verification.state === "done")
+                      ? "verified"
+                      : work.status === "complete"
+                        ? "done"
+                        : work.status === "failed"
+                          ? "halt"
+                          : "running";
               return (
                 <button
+                  aria-label={`${work.title} ${workStatusLabel[work.status]} ${work.updatedAt}`}
                   aria-pressed={selected}
-                  className={`relative w-full px-3 py-2.5 text-left outline-none transition-colors duration-150 ${
-                    selected
-                      ? "bg-surface-2 before:absolute before:inset-y-0 before:left-0 before:w-0.5 before:bg-primary"
-                      : "hover:bg-surface-1"
+                  className={`flex h-[30px] w-full items-center gap-2 rounded-[4px] px-2 text-left ${
+                    selected ? "bg-[rgb(255_255_255/0.047)]" : "hover:bg-[rgb(255_255_255/0.027)]"
                   }`}
                   key={work.id}
                   onClick={() => {
@@ -192,23 +323,17 @@ export function WorkList({
                   }}
                   type="button"
                 >
-                  <span className="block truncate text-[13px] font-medium text-primary">{work.title}</span>
-                  <span className="mt-1 flex items-center justify-between gap-2 text-[11px]">
-                    <span className={`flex items-center gap-2 ${workStatusClass[work.status]}`}>
-                      <span aria-hidden="true" className="size-1.5 rounded-full bg-current" />
-                      {workStatusLabel[work.status]}
-                    </span>
-                    <time className="font-mono text-muted">{work.updatedAt}</time>
-                  </span>
+                  <Glyph kind={glyph} progress={glyph === "running" ? work.progress : undefined} />
+                  <span className="min-w-0 flex-1 truncate text-[13px] text-fg-2">{work.title}</span>
+                  <time className="shrink-0 font-mono text-[11px] text-fg-4">{work.updatedAt}</time>
                 </button>
               );
             })}
           </div>
         ) : (
-          <div className="px-3 py-12 text-center">
-            <Briefcase aria-hidden="true" className="mx-auto mb-3 text-muted" size={26} />
-            <p className="text-sm text-secondary">{query ? "검색 결과가 없습니다." : "완료된 Work가 없습니다."}</p>
-            <p className="mt-1 text-xs text-muted">
+          <div className="px-2 py-8 text-center">
+            <p className="text-[13px] text-fg-3">{query ? "검색 결과가 없습니다." : "완료된 Work가 없습니다."}</p>
+            <p className="mt-1 text-[12px] text-fg-4">
               {query ? "검색어를 바꿔보세요." : "완료된 업무가 여기에 표시됩니다."}
             </p>
           </div>
@@ -261,98 +386,294 @@ export function WorkActivity({
 }: WorkActivityProps) {
   const canCancel = work.run && ["ready", "running", "awaiting-approval", "blocked"].includes(work.run.status);
   const canResume = work.run?.status === "blocked";
-  // 방이 있으면 대화는 방이 정본입니다. 없으면 Work의 활동 타임라인이 계속 나옵니다.
   const activities = room ? room.activities : work.activities;
+  const [expandedId, setExpandedId] = useState<string>();
+
+  // 메시지 타입으로만 원장 마디를 배정합니다. 문자열이나 화면 추측으로 분류하지 않습니다.
+  const requestActivities = activities.filter(
+    (activity) =>
+      (activity.kind === "room" && activity.speaker.human === true) ||
+      activity.kind === "message" ||
+      (activity.kind === "room" && activity.messageType === "decision"),
+  );
+  const batchActivities = activities.filter((activity) => ["agents", "proposal", "approval"].includes(activity.kind));
+  const executionActivities = activities.filter((activity) => {
+    if (activity.kind === "room") return ["question", "answer", "evidence"].includes(activity.messageType);
+    return ["plan", "handoff", "artifacts", "roomStatus", "roomRef", "event"].includes(activity.kind);
+  });
+  const judgmentActivities = activities.filter(
+    (activity) => activity.kind === "room" && ["challenge", "change_request", "review_request"].includes(activity.messageType),
+  );
+  const verification = work.verifications[0];
+  const verifierSpeaker = verification ? room?.participants.find((participant) => participant.handle === verification.verifier) : undefined;
+  const verifierAgent = verification ? work.agents.find((agent) => agent.id === verification.verifier) : undefined;
+  const verifierName = verifierSpeaker?.name ?? verifierAgent?.name ?? verification?.verifier;
+  const contributors = new Set(
+    executionActivities.flatMap((activity) => ("speaker" in activity && !activity.speaker.human ? [activity.speaker.handle] : [])),
+  );
+  const contributorNames = [...contributors].map(
+    (handle) => room?.participants.find((participant) => participant.handle === handle)?.name ?? work.agents.find((agent) => agent.id === handle)?.name ?? handle,
+  );
+  const independent = verification ? !contributors.has(verification.verifier) : true;
+  const workGlyph: GlyphKind =
+    work.run?.status === "blocked"
+      ? "halt"
+      : work.approvals.some((approval) => approval.status === "pending")
+        ? "gate"
+        : work.status === "complete" && work.verifications.some((item) => item.state === "done")
+          ? "verified"
+          : work.status === "complete"
+            ? "done"
+            : work.status === "failed"
+              ? "halt"
+              : "running";
+  const participants = room?.participants ?? [];
+  const participantCount = room?.participants.length ?? work.agents.length;
+
+  const renderMessage = (activity: Extract<ActivityView, { kind: "message" | "room" | "proposal" }>, time: string | undefined, meta: ReactNode, speaker?: SpeakerView) => {
+    const expanded = expandedId === activity.id;
+    const content = activity.content;
+    const quoted = activity.kind === "room" ? activity.quoted : undefined;
+    return (
+      <div key={activity.id}>
+        <LedgerRow
+          expanded={expanded}
+          label={activity.kind === "proposal" ? `조직 제안 ${activity.change.name}` : content}
+          meta={meta}
+          onClick={() => {
+            setExpandedId((current) => (current === activity.id ? undefined : activity.id));
+          }}
+          speaker={speaker}
+          time={time}
+        />
+        {expanded ? (
+          <div className="pl-[80px] pr-2 py-1.5">
+            {quoted ? <p className="border-l border-line pl-2 text-[12px] leading-[18px] text-fg-4">{quoted.author} · {quoted.time} · {quoted.content}</p> : null}
+            <p className="text-[14px] leading-[21px] tracking-[-0.006em] text-fg-2">{content}</p>
+          </div>
+        ) : null}
+      </div>
+    );
+  };
+
+  const renderActivity = (activity: ActivityView, time: string | undefined): ReactNode => {
+    if (activity.kind === "message") return renderMessage(activity, time, "요청");
+    if (activity.kind === "room") {
+      if (activity.speaker.human === true && activity.messageType !== "decision") {
+        return renderMessage(activity, time, "요청", activity.speaker);
+      }
+      if (activity.messageType === "question") {
+        return renderMessage(activity, time, <>질문{activity.recipient ? ` → ${activity.recipient}` : ""}</>, activity.speaker);
+      }
+      if (activity.messageType === "answer") {
+        return renderMessage(
+          activity,
+          time,
+          <>답변{activity.evidence ? <> · <span className="font-mono">{activity.evidence.checksum}</span></> : null}</>,
+          activity.speaker,
+        );
+      }
+      if (activity.messageType === "evidence") {
+        return renderMessage(
+          activity,
+          time,
+          activity.evidence ? <>근거 {activity.evidence.label} <span className="font-mono">{activity.evidence.checksum}</span></> : "근거",
+          activity.speaker,
+        );
+      }
+      if (activity.messageType === "decision") {
+        return renderMessage(
+          activity,
+          time,
+          activity.signature ? `서명 ${activity.signature.by} · rev ${activity.signature.revision}` : undefined,
+          activity.speaker,
+        );
+      }
+      if (activity.messageType === "challenge") {
+        return renderMessage(
+          activity,
+          time,
+          <>반론{activity.quoted ? <> · {activity.quoted.author} {activity.quoted.time}</> : null}</>,
+          activity.speaker,
+        );
+      }
+      if (activity.messageType === "change_request") {
+        return renderMessage(activity, time, activity.target ? `수정 요구 · ${activity.target}` : "수정 요구", activity.speaker);
+      }
+      if (activity.messageType === "review_request") {
+        return renderMessage(activity, time, activity.recipient ? `검토 요청 → ${activity.recipient}` : "검토 요청", activity.speaker);
+      }
+    }
+    if (activity.kind === "agents") {
+      return (
+        <div key={activity.id}>
+          <LedgerRow label="편성" meta={undefined} time={time} />
+          {work.agents.map((agent) => {
+            const speaker = room?.participants.find((participant) => participant.handle === agent.id);
+            return <LedgerRow indent key={agent.id} label={speaker ? agent.role : `${agent.name} · ${agent.role}`} speaker={speaker} />;
+          })}
+        </div>
+      );
+    }
+    if (activity.kind === "proposal") {
+      return renderMessage(
+        activity,
+        time,
+        `v${activity.change.fromVersion} → v${activity.change.toVersion} · 영향 노드 ${activity.change.impactNodes}`,
+        activity.speaker,
+      );
+    }
+    if (activity.kind === "approval") {
+      const approval = work.approvals.find((item) => item.id === activity.approvalId);
+      const decision = approvalDecisions[activity.approvalId];
+      return (
+        <LedgerRow
+          key={activity.id}
+          glyph={<Glyph kind="gate" label="승인 필요" />}
+          label={activity.title}
+          meta={
+            decision ? (
+              <span className="text-fg-4">{decision === "approved" ? "승인됨" : "거절됨"}</span>
+            ) : (
+              <span className="flex items-center gap-1">
+                <button
+                  aria-label={`${activity.title} 승인`}
+                  className="h-[22px] rounded-[4px] bg-[rgb(255_255_255/0.09)] px-2 text-[12px] text-fg-2 disabled:opacity-40"
+                  disabled={!approval || pendingApprovals.has(activity.approvalId)}
+                  onClick={() => {
+                    if (approval) onDecideApproval(approval, "approved");
+                  }}
+                  type="button"
+                >
+                  승인
+                </button>
+                <button
+                  aria-label={`${activity.title} 거절`}
+                  className="h-[22px] rounded-[4px] px-2 text-[12px] text-fg-4 hover:text-fg-2 disabled:opacity-40"
+                  disabled={!approval || pendingApprovals.has(activity.approvalId)}
+                  onClick={() => {
+                    if (approval) onDecideApproval(approval, "rejected");
+                  }}
+                  type="button"
+                >
+                  거절
+                </button>
+              </span>
+            )
+          }
+          time={time}
+        />
+      );
+    }
+    if (activity.kind === "plan") {
+      const done = activity.steps.filter((step) => step.state === "done").length;
+      return <LedgerRow key={activity.id} label={`${activity.title} ${done} / ${activity.steps.length}`} time={time} />;
+    }
+    if (activity.kind === "handoff") {
+      return <LedgerRow key={activity.id} label={activity.to ? `인계 ${activity.from.name} → ${activity.to.name}` : `인계 ${activity.from.name}`} speaker={activity.from} time={time} />;
+    }
+    if (activity.kind === "artifacts") {
+      return (
+        <div key={activity.id}>
+          <LedgerRow label={`${activity.title} ${activity.artifacts.length}`} time={time} />
+          {activity.artifacts.map((artifact) => (
+            <LedgerRow indent key={artifact.id} label={artifact.name} meta={<span className="font-mono text-[11px]">{artifact.format} · {artifact.size}</span>} />
+          ))}
+        </div>
+      );
+    }
+    if (activity.kind === "roomStatus") return <LedgerRow key={activity.id} label={activity.content} time={time} />;
+    if (activity.kind === "roomRef") {
+      return <LedgerRow key={activity.id} label={activity.name} meta={`발언 ${activity.messageCount}`} onClick={() => onSelectRoom(activity.roomId)} time={time} />;
+    }
+    if (activity.kind === "event") return <LedgerRow key={activity.id} label={activity.title} meta={activity.detail} time={time} />;
+    return null;
+  };
+
+  const renderActivities = (items: ActivityView[]) => {
+    let previousTime: string | undefined;
+    return items
+      .slice()
+      .reverse()
+      .map((activity) => {
+        const time = "time" in activity && activity.time !== previousTime ? activity.time : undefined;
+        previousTime = "time" in activity ? activity.time : previousTime;
+        return renderActivity(activity, time);
+      });
+  };
+
+  const verifierSummary = verification ? (
+    <span className={independent ? "" : "text-halt"}>
+      {verifierName} · {independent ? "실행 기여자 아님" : "실행에도 참여함"}
+    </span>
+  ) : undefined;
   return (
     <main
       aria-busy={detailLoading || undefined}
       aria-label={work.title}
-      className="grid h-full min-h-0 min-w-0 grid-rows-[46px_auto_minmax(0,1fr)_auto] bg-canvas"
+      className="grid h-full min-h-0 min-w-0 grid-rows-[48px_auto_minmax(0,1fr)_auto] bg-bg-0"
     >
-      <header className="flex min-w-0 items-center justify-between gap-4 border-b border-border px-4">
-        <div className="flex min-w-0 items-center gap-2.5">
-          <h1 className="truncate text-[16px] font-semibold tracking-[-0.02em]">{work.title}</h1>
-          <Badge tone={work.status === "complete" ? "success" : work.status === "failed" ? "danger" : "accent"}>
-            {workStatusLabel[work.status]}
-          </Badge>
-          {/*
-           * 방이 화면의 주인이라는 사실을 헤더가 말해야 합니다.
-           * 참가자 얼굴과 라운드·비용이 여기 없으면 중앙이 그냥 대화 목록으로 읽힙니다.
-           */}
-          {room ? (
-            <>
-              <span aria-hidden="true" className="h-4 w-px shrink-0 bg-border" />
-              <span
-                className="flex shrink-0 items-center gap-1.5"
-                title={`협업방 참가 ${String(room.participants.length)}명`}
-              >
-                <SpeakerRow limit={5} speakers={room.participants} />
-                <span className="font-mono text-[11px] text-muted">참가 {room.participants.length}</span>
-              </span>
-              {room.budgets.length ? (
-                <span className="hidden shrink-0 font-mono text-[11px] text-muted min-[1360px]:inline">
-                  {room.budgets.map((budget) => `${budget.label} ${budget.display}`).join(" · ")}
-                </span>
-              ) : null}
-            </>
-          ) : (
-            <Badge className="max-[1320px]:hidden">{work.team}</Badge>
-          )}
-        </div>
-        <div className="flex items-center gap-1">
+      <header className="flex min-w-0 items-center gap-3 border-b border-line px-4">
+        <Glyph kind={workGlyph} progress={workGlyph === "running" ? work.progress : undefined} />
+        <h1 className="truncate text-[17px] font-semibold leading-[26px] tracking-[-0.012em] text-fg">{work.title}</h1>
+        <span className="shrink-0 text-[13px] leading-5 text-fg-3">{work.team}{room ? ` · ${room.name}` : ""}</span>
+        <span className="flex shrink-0 items-center gap-1" title={`참가 ${String(participantCount)}`}>
+          {participants.length ? participants.slice(0, 5).map((participant) => <span aria-hidden="true" className={`size-2 rounded-full ${railClass(participant.accentSlot, participant.human)}`} key={participant.handle} />) : work.agents.slice(0, 5).map((agent) => <span aria-hidden="true" className="size-2 rounded-full bg-user" key={agent.id} />)}
+          <span className="text-[12px] text-fg-4">참가 {participantCount}</span>
+        </span>
+        {room?.budgets.length ? (
+          <span className="hidden shrink-0 font-mono text-[11px] text-fg-4 min-[1360px]:inline">
+            {room.budgets.map((budget) => `${budget.label} ${budget.display}`).join(" · ")}
+          </span>
+        ) : null}
+        <div className="ml-auto flex items-center gap-1">
           {executionNotice ? (
-            <span aria-live="polite" className="mr-2 max-w-48 truncate text-xs text-accent" role="status">
+            <span aria-live="polite" className="mr-2 max-w-48 truncate text-[12px] text-fg-4" role="status">
               {executionNotice}
             </span>
           ) : null}
           {work.run?.status === "awaiting-approval" ? (
-            <span className="mr-2 text-xs text-gate">승인 결정 대기 중</span>
+            <span className="mr-2 text-[12px] text-gate">승인 결정 대기 중</span>
           ) : null}
           {canResume ? (
-            <Button
+            <button
+              aria-label="실행 재개"
+              className="h-[26px] shrink-0 rounded-[4px] px-2 text-[12px] text-fg-3 hover:bg-[rgb(255_255_255/0.047)] hover:text-fg-2 disabled:opacity-40"
               disabled={pendingRunAction !== undefined}
               onClick={() => {
                 onControlRun("resume");
               }}
-              size="sm"
-              variant="ghost"
+              type="button"
             >
-              {pendingRunAction === "resume" ? "재개 중" : "실행 재개"}
-            </Button>
+              실행 재개
+            </button>
           ) : null}
           {canCancel ? (
-            <Button
+            <button
+              aria-label="실행 취소"
+              className="h-[26px] shrink-0 rounded-[4px] px-2 text-[12px] text-fg-3 hover:bg-[rgb(255_255_255/0.047)] hover:text-fg-2 disabled:opacity-40"
               disabled={pendingRunAction !== undefined}
               onClick={() => {
                 onControlRun("cancel");
               }}
-              size="sm"
-              variant="ghost"
+              type="button"
             >
-              {pendingRunAction === "cancel" ? "취소 중" : "실행 취소"}
-            </Button>
+              실행 취소
+            </button>
           ) : null}
         </div>
       </header>
-      {/*
-       * 탭 바는 "지금 어느 방에 있나"를 말하는 자리이므로 방이 하나여도 항상 그립니다.
-       * 래퍼는 방이 없을 때도 유지합니다. grid 행 수가 흔들리면 본문이 접힙니다.
-       */}
       <div>
-        {work.run ? <RunStatusCard run={work.run} /> : null}
-        {rooms.length > 0 ? (
-          <nav aria-label="협업방" className="flex items-center gap-1 border-b border-border px-5 py-1.5">
+        {work.run && ["blocked", "awaiting-approval", "running"].includes(work.run.status) ? <RunStatusCard run={work.run} /> : null}
+        {rooms.length > 1 ? (
+          <nav aria-label="협업방" className="flex h-[30px] items-center gap-1 px-4">
             {rooms.map((candidate, index) => {
               const current = candidate.roomId === room?.roomId;
-              // 어느 방이 사람을 기다리는지. 노랑은 여기서도 같은 뜻입니다.
-              const waiting = candidate.activities.some(
-                (activity) => activity.kind === "proposal" || activity.kind === "approval",
-              );
               return (
                 <button
                   aria-current={current ? "true" : undefined}
-                  className={`flex items-center gap-2 rounded-[5px] px-2.5 py-1 text-left outline-none ${
-                    current ? "bg-surface-2 text-primary" : "text-secondary hover:bg-surface-1"
+                  className={`flex h-[30px] items-center gap-2 rounded-[4px] px-2.5 text-[13px] ${
+                    current ? "bg-[rgb(255_255_255/0.047)] text-fg-2" : "text-fg-4 hover:bg-[rgb(255_255_255/0.027)]"
                   }`}
                   key={candidate.roomId}
                   onClick={() => {
@@ -360,22 +681,12 @@ export function WorkActivity({
                   }}
                   type="button"
                 >
-                  {/*
-                   * 탭은 지금 보고 있지 않은 방을 보는 유일한 자리입니다.
-                   * 색이 "저 방엔 누가 있나"를 이름보다 빨리 말하므로 아바타를 유지하되,
-                   * 폭이 무한히 자라지 않게 둘로 제한하고 나머지는 +N으로 알립니다.
-                   */}
-                  <SpeakerRow limit={2} speakers={candidate.participants} />
-                  <span className="text-[13px] font-medium">{candidate.name}</span>
-                  {waiting ? (
-                    <span aria-label="확인 필요" className="text-[11px] text-gate">
-                      ◇
-                    </span>
-                  ) : null}
+                  {candidate.participants.slice(0, 2).map((participant) => <span aria-hidden="true" className={`size-2 rounded-full ${railClass(participant.accentSlot, participant.human)}`} key={participant.handle} />)}
+                  <span>{candidate.name}</span>
                   {index === 0 ? null : (
                     <span
                       aria-label={`${candidate.name} 닫기`}
-                      className="ml-0.5 rounded-[3px] px-1 text-[11px] text-muted hover:text-primary"
+                      className="ml-0.5 px-1 text-[11px] text-fg-4 hover:text-fg-2"
                       onClick={(event) => {
                         event.stopPropagation();
                         onCloseRoom(candidate.roomId);
@@ -392,24 +703,89 @@ export function WorkActivity({
           </nav>
         ) : null}
       </div>
-      <section aria-label={room ? `협업방 ${room.name}` : "Work 활동"} className="min-h-0 overflow-y-auto px-5 py-3">
-        <div className="mx-auto max-w-[860px]">
-          {room && activities.length === 0 ? (
-            <p className="py-10 text-center text-sm text-muted">
-              아직 이 방에서 오간 말이 없습니다. 아래에 지시를 쓰면 조직이 시작합니다.
-            </p>
-          ) : null}
-          {activities.map((activity) => (
-            <ActivityRow
-              approvalDecision={activity.kind === "approval" ? approvalDecisions[activity.approvalId] : undefined}
-              approvals={work.approvals}
-              key={activity.id}
-              onAnnouncement={onAnnouncement}
-              onDecideApproval={onDecideApproval}
-              onOpenRoom={onSelectRoom}
-              pendingApprovals={pendingApprovals}
-              value={activity}
-            />
+      <section aria-label="Work 활동" className="min-h-0 overflow-y-auto px-3 py-2">
+        <div className="flex flex-col">
+          {[
+            {
+              index: 6,
+              name: "효과",
+              count: 0,
+              rows: null,
+            },
+            {
+              index: 5,
+              name: "개선",
+              count: 0,
+              rows: null,
+            },
+            {
+              index: 4,
+              name: "판정",
+              count: judgmentActivities.length + work.verifications.length,
+              summary: verifierSummary,
+              rows: (
+                <>
+                  {verification ? (
+                    <>
+                      <LedgerRow label="판정자" meta={<span className={independent ? "" : "text-halt"}>{independent ? "실행 기여자 아님" : "실행에도 참여함"}</span>} mono={!verifierSpeaker} speaker={verifierSpeaker} />
+                      <LedgerRow label="실행 기여자" meta={contributorNames.length ? contributorNames.join(" · ") : undefined} />
+                      {work.verifications.map((item) => {
+                        const itemSpeaker = room?.participants.find((participant) => participant.handle === item.verifier);
+                        return (
+                          <div key={item.id}>
+                            <LedgerRow
+                              glyph={<Glyph kind={item.state === "done" ? "verified" : item.state === "failed" ? "halt" : "running"} />}
+                              label={`판정 ${stateLabel[item.state]}`}
+                              meta={`기준 ${item.criteria.length}`}
+                              speaker={itemSpeaker}
+                            />
+                            {item.criteria.map((criterion) => (
+                              <LedgerRow
+                                indent
+                                key={criterion.key}
+                                label={criterion.key}
+                                meta={<span className={criterionStatusClass[criterion.status]}>{criterionStatusLabel[criterion.status]}</span>}
+                                mono
+                              />
+                            ))}
+                            {item.evidence ? <LedgerRow indent label="근거" meta={item.evidence} mono /> : null}
+                          </div>
+                        );
+                      })}
+                    </>
+                  ) : null}
+                  {renderActivities(judgmentActivities)}
+                </>
+              ),
+            },
+            {
+              index: 3,
+              name: "실행",
+              count: executionActivities.length,
+              rows: renderActivities(executionActivities),
+            },
+            {
+              index: 2,
+              name: "배치",
+              count: batchActivities.length,
+              rows: renderActivities(batchActivities),
+            },
+            {
+              index: 1,
+              name: "요청",
+              count: requestActivities.length + (work.summary ? 1 : 0),
+              rows: (
+                <>
+                  {renderActivities(requestActivities)}
+                  {work.summary ? <LedgerRow label={work.summary} meta="개요" /> : null}
+                </>
+              ),
+            },
+          ].map((stage, stageIndex) => (
+            <div className={stageIndex === 0 ? "" : "mt-4"} key={stage.index}>
+              <LedgerStage count={stage.count} dim={stage.count === 0} index={stage.index} name={stage.name} summary={stage.summary} />
+              {stage.rows ? <div className="flex flex-col gap-[2px]">{stage.rows}</div> : null}
+            </div>
           ))}
         </div>
       </section>
@@ -458,24 +834,24 @@ function blockedReasonText(reason: string | undefined): string {
 function RunStatusCard({ run }: { run: NonNullable<WorkView["run"]> }) {
   const blocked = run.status === "blocked";
   const awaitingApproval = run.status === "awaiting-approval";
-  const active = ["ready", "running"].includes(run.status);
+  const active = run.status === "running";
   if (!blocked && !awaitingApproval && !active) return null;
 
   if (blocked) {
     return (
-      <section aria-label="실행 상태" className="border-b border-danger/40 bg-surface-1 px-5 py-3" role="status">
-        <div className="mx-auto flex max-w-[860px] items-start gap-3">
-          <WarningCircle aria-hidden="true" className="mt-0.5 shrink-0 text-danger" size={18} />
+      <section aria-label="실행 상태" className="border-b border-line px-4 py-2" role="status">
+        <div className="flex items-start gap-2">
+          <Glyph kind="halt" />
           <div className="min-w-0 flex-1">
-            <p className="text-[13px] font-semibold text-primary">실행이 멈췄습니다</p>
-            <p className="mt-1 text-[12px] leading-5 text-danger">{blockedReasonText(run.blockedReason)}</p>
-            <p className="mt-1 text-[11px] text-muted">
+            <p className="text-[13px] text-fg-2">실행이 멈췄습니다</p>
+            <p className="mt-1 text-[12px] leading-[18px] text-halt">{blockedReasonText(run.blockedReason)}</p>
+            <p className="mt-1 text-[11px] text-fg-4">
               현재 단계: {runStageText(run.stage)}
               {run.blockedReason ? (
-                <code className="ml-2 font-mono text-[10px] text-muted">{run.blockedReason}</code>
+                <code className="ml-2 font-mono text-[11px] text-fg-4">{run.blockedReason}</code>
               ) : null}
             </p>
-            <p className="mt-1 text-[11px] text-muted">상단의 실행 재개를 누르면 이 단계부터 다시 시도합니다.</p>
+            <p className="mt-1 text-[11px] text-fg-4">상단의 실행 재개를 누르면 이 단계부터 다시 시도합니다.</p>
           </div>
         </div>
       </section>
@@ -484,12 +860,12 @@ function RunStatusCard({ run }: { run: NonNullable<WorkView["run"]> }) {
 
   if (awaitingApproval) {
     return (
-      <section aria-label="실행 상태" className="border-b border-gate/40 bg-surface-1 px-5 py-3" role="status">
-        <div className="mx-auto flex max-w-[860px] items-start gap-3">
-          <ShieldCheck aria-hidden="true" className="mt-0.5 shrink-0 text-gate" size={18} />
+      <section aria-label="실행 상태" className="border-b border-line px-4 py-2" role="status">
+        <div className="flex items-start gap-2">
+          <Glyph kind="gate" />
           <div>
-            <p className="text-[13px] font-semibold text-primary">사람의 결정을 기다리는 중입니다</p>
-            <p className="mt-1 text-[12px] leading-5 text-gate">
+            <p className="text-[13px] text-fg-2">사람의 결정을 기다리는 중입니다</p>
+            <p className="mt-1 text-[12px] leading-[18px] text-gate">
               수신함에서 승인 여부를 결정하면 다음 단계로 진행합니다.
             </p>
           </div>
@@ -499,345 +875,14 @@ function RunStatusCard({ run }: { run: NonNullable<WorkView["run"]> }) {
   }
 
   return (
-    <section aria-label="실행 상태" className="border-b border-control/40 bg-surface-1 px-5 py-3" role="status">
-      <div className="mx-auto flex max-w-[860px] items-center gap-3">
-        <span aria-hidden="true" className="size-2 shrink-0 animate-pulse rounded-full bg-accent" />
-        <p className="text-[13px] font-medium text-primary">실행 중</p>
-        <span className="text-[12px] text-secondary">{runStageText(run.stage)}</span>
-        <span className="ml-auto font-mono text-[10px] text-muted">개정 {run.leaseGeneration}</span>
+    <section aria-label="실행 상태" className="border-b border-line px-4 py-2" role="status">
+      <div className="flex items-center gap-2">
+        <Glyph kind="running" />
+        <p className="text-[13px] text-fg-2">실행 중</p>
+        <span className="text-[12px] text-fg-3">{runStageText(run.stage)}</span>
+        <span className="ml-auto font-mono text-[11px] text-fg-4">개정 {run.leaseGeneration}</span>
       </div>
     </section>
-  );
-}
-
-interface ActivityRowProps {
-  onOpenRoom: (roomId: string) => void;
-  value: ActivityView;
-  approvalDecision: "approved" | "rejected" | undefined;
-  approvals: ApprovalView[];
-  pendingApprovals: ReadonlySet<string>;
-  onAnnouncement: (message: string) => void;
-  onDecideApproval: (approval: ApprovalView, decision: "approved" | "rejected") => void;
-}
-
-function ActivityRow({
-  approvalDecision,
-  approvals,
-  onAnnouncement,
-  onOpenRoom,
-  onDecideApproval,
-  pendingApprovals,
-  value,
-}: ActivityRowProps) {
-  const approval = value.kind === "approval" ? approvals.find((item) => item.id === value.approvalId) : undefined;
-
-  // 방 문법은 40px 거터 격자를 쓰지 않습니다. 구분선·상태·인계는 폭 전체를 씁니다.
-  if (value.kind === "chapter") {
-    return (
-      <div className="py-2">
-        <RoomChapter label={value.label} time={value.time} until={value.until} />
-      </div>
-    );
-  }
-  if (value.kind === "roomStatus") {
-    return (
-      <div className="py-2">
-        <RoomStatus content={value.content} />
-      </div>
-    );
-  }
-  if (value.kind === "roomRef") {
-    return (
-      <div className="py-2">
-        <RoomReference
-          messageCount={value.messageCount}
-          name={value.name}
-          onOpen={() => {
-            onOpenRoom(value.roomId);
-          }}
-          participants={value.participants}
-          lastLine={value.lastLine}
-          time={value.time}
-          waiting={value.waiting}
-        />
-      </div>
-    );
-  }
-  if (value.kind === "handoff") {
-    return (
-      <div className="py-2">
-        <RoomHandoff from={value.from} time={value.time} to={value.to} />
-      </div>
-    );
-  }
-  if (value.kind === "room") {
-    return (
-      <div className="py-2.5">
-        <RoomMessage
-          speaker={value.speaker}
-          content={value.content}
-          evidence={value.evidence}
-          indented={value.indented}
-          quoted={value.quoted}
-          recipient={value.recipient}
-          signature={value.signature}
-          target={value.target}
-          time={value.time}
-          type={value.messageType}
-        />
-      </div>
-    );
-  }
-  if (value.kind === "proposal") {
-    return (
-      <div className="py-2.5">
-        <ProposalActivity
-          speaker={value.speaker}
-          change={value.change}
-          content={value.content}
-          decided={false}
-          disabled={false}
-          // ponytail: 조직 변경 command는 슬라이스 4에서 연결합니다. 지금은 결과를 알림으로만 알립니다.
-          onApprove={() => {
-            onAnnouncement(`${value.change.name} 신설을 승인했습니다.`);
-          }}
-          onReject={() => {
-            onAnnouncement(`${value.change.name} 신설을 거절했습니다.`);
-          }}
-          time={value.time}
-        />
-      </div>
-    );
-  }
-
-  return (
-    <article className="grid grid-cols-[40px_minmax(0,1fr)] gap-3 border-b border-border/70 py-4 last:border-b-0">
-      <ActivityMarker value={value} />
-      <div className="min-w-0">
-        <div className="mb-2 flex items-center gap-2 text-xs text-muted">
-          {value.kind === "message" ? <span className="font-medium text-secondary">{value.author}</span> : null}
-          <time className="font-mono">{value.time}</time>
-        </div>
-        {value.kind === "message" ? (
-          <p className="rounded-md border border-border bg-surface-1 px-4 py-3 text-sm leading-6 text-secondary">
-            {value.content}
-          </p>
-        ) : null}
-        {value.kind === "plan" ? <PlanActivity title={value.title} steps={value.steps} /> : null}
-        {value.kind === "agents" ? <AgentsActivity agents={value.agents} title={value.title} /> : null}
-        {value.kind === "approval" ? (
-          <ApprovalActivity
-            decision={approvalDecision}
-            description={value.description}
-            disabled={!approval || pendingApprovals.has(value.approvalId)}
-            onApprove={() => {
-              if (approval) onDecideApproval(approval, "approved");
-            }}
-            onReject={() => {
-              if (approval) onDecideApproval(approval, "rejected");
-            }}
-            title={value.title}
-          />
-        ) : null}
-        {value.kind === "artifacts" ? <ArtifactsActivity artifacts={value.artifacts} title={value.title} /> : null}
-        {value.kind === "event" ? (
-          <EventActivity detail={value.detail} status={value.status} title={value.title} />
-        ) : null}
-      </div>
-    </article>
-  );
-}
-
-// 방 문법(chapter·roomStatus·handoff·room·proposal)은 ActivityRow에서 먼저 반환되므로 여기 오지 않습니다.
-type MarkedActivity = Extract<
-  ActivityView,
-  { kind: "message" | "plan" | "agents" | "approval" | "artifacts" | "event" }
->;
-
-function ActivityMarker({ value }: { value: MarkedActivity }) {
-  if (value.kind === "message") {
-    return (
-      <Avatar
-        className={
-          value.initials === "M"
-            ? "rounded-md border border-accent/60 bg-surface-1 text-accent"
-            : "border border-border"
-        }
-      >
-        <AvatarFallback className={value.initials === "M" ? "text-accent" : ""}>{value.initials}</AvatarFallback>
-      </Avatar>
-    );
-  }
-
-  const icons = { plan: ListChecks, agents: UsersThree, approval: ShieldCheck, artifacts: Briefcase, event: Clock };
-  const Icon = icons[value.kind];
-  return (
-    <span className="flex size-8 items-center justify-center rounded-md border border-control text-secondary">
-      <Icon aria-hidden="true" size={17} />
-    </span>
-  );
-}
-
-function PlanActivity({ steps, title }: { steps: TaskView[]; title: string }) {
-  return (
-    <details className="group rounded-md border border-border bg-surface-1" open>
-      <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 px-4 text-sm font-medium outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/70">
-        {title}
-        {/* 단계 수를 말합니다. 몇 개 중 몇 개를 보고 있는지 모르면 목록이 거짓말을 합니다. */}
-        <span className="font-mono text-[11px] font-normal text-muted">
-          {steps.filter((step) => step.state === "done").length} / {steps.length}
-        </span>
-        <CaretDown
-          aria-hidden="true"
-          className="ml-auto text-muted transition-transform group-open:rotate-180"
-          size={16}
-        />
-      </summary>
-      <ol className="border-t border-border px-4 py-2">
-        {steps.map((step, index) => (
-          <li className="flex min-h-8 items-center gap-3 text-sm" key={step.id}>
-            <span
-              className={`flex size-5 items-center justify-center rounded-full border font-mono text-[10px] ${stateClass[step.state]}`}
-            >
-              {step.state === "done" ? <CheckCircle aria-hidden="true" size={14} weight="fill" /> : index + 1}
-            </span>
-            <span className="flex-1 text-secondary">{step.title}</span>
-            <span className={`text-xs ${stateClass[step.state]}`}>{stateLabel[step.state]}</span>
-          </li>
-        ))}
-      </ol>
-    </details>
-  );
-}
-
-function AgentsActivity({ agents, title }: { agents: AgentView[]; title: string }) {
-  return (
-    <div className="rounded-md border border-border bg-surface-1 px-4 py-3">
-      <h3 className="mb-3 text-sm font-medium">{title}</h3>
-      <div className="flex items-center gap-2 overflow-x-auto pb-1">
-        {agents.map((agent) => (
-          <div
-            className="flex min-w-[122px] items-center gap-2 rounded-md border border-border px-2.5 py-2"
-            key={agent.id}
-          >
-            <Avatar className="size-7">
-              <AvatarFallback>{agent.initials}</AvatarFallback>
-            </Avatar>
-            <div className="min-w-0">
-              <p className="flex items-center gap-1.5">
-                <span className="truncate text-xs font-medium">{agent.name}</span>
-                <span className="shrink-0 rounded-[3px] border border-control px-1 text-[10px] text-muted">
-                  {agent.role}
-                </span>
-              </p>
-              <p className={agent.state === "active" ? "text-[11px] text-primary" : "text-[11px] text-muted"}>
-                {agent.state === "active" ? "진행 중" : "대기"}
-              </p>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-interface ApprovalActivityProps {
-  title: string;
-  description: string;
-  decision: "approved" | "rejected" | undefined;
-  disabled: boolean;
-  onApprove: () => void;
-  onReject: () => void;
-}
-
-function ApprovalActivity({ decision, description, disabled, onApprove, onReject, title }: ApprovalActivityProps) {
-  return (
-    <div
-      className={`rounded-[7px] border px-4 py-3 ${decision ? "border-border bg-surface-1" : "border-gate-border bg-gate-wash"}`}
-    >
-      <div className="flex items-start gap-3">
-        <span className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-[5px] border border-control text-secondary">
-          <Database aria-hidden="true" size={15} />
-        </span>
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center justify-between gap-3">
-            <h3 className="text-sm font-medium">{title}</h3>
-            {decision ? (
-              <Badge tone={decision === "approved" ? "success" : "danger"}>
-                {decision === "approved" ? "승인됨" : "거절됨"}
-              </Badge>
-            ) : (
-              <span className="text-xs font-medium text-gate">승인 필요</span>
-            )}
-          </div>
-          <p className="mt-1 text-xs leading-5 text-muted">{description}</p>
-          <p className="text-xs leading-5 text-muted">영향: 승인 전까지 관련 실행이 대기합니다.</p>
-        </div>
-      </div>
-      {!decision ? (
-        <div className="mt-3 flex justify-end">
-          <DecisionActions
-            approveName={title}
-            busy={disabled}
-            disabled={disabled}
-            onApprove={onApprove}
-            onReject={onReject}
-          />
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-function ArtifactsActivity({ artifacts, title }: { artifacts: ArtifactView[]; title: string }) {
-  return (
-    <div className="rounded-md border border-border bg-surface-1 px-4 py-3">
-      <h3 className="mb-3 text-sm font-medium">{title}</h3>
-      <div className="grid grid-cols-2 gap-2">
-        {artifacts.map((artifact) => {
-          const Icon = artifact.format === "PDF" ? FilePdf : FileCsv;
-          return (
-            <div
-              aria-label={`${artifact.name} 메타데이터`}
-              className="flex min-w-0 items-center gap-3 rounded-md border border-border px-3 py-2 text-left"
-              key={artifact.id}
-            >
-              <Icon
-                aria-hidden="true"
-                className={artifact.format === "PDF" ? "text-danger" : "text-success"}
-                size={24}
-                weight="fill"
-              />
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-xs text-primary">{artifact.name}</span>
-                <span className="font-mono text-[10px] text-muted">{artifact.size}</span>
-              </span>
-              <span className="shrink-0 text-[10px] text-muted">열기·다운로드 미지원</span>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-function EventActivity({
-  detail,
-  status,
-  title,
-}: {
-  detail: string | undefined;
-  status: string | undefined;
-  title: string;
-}) {
-  return (
-    <div className="rounded-md border border-border bg-surface-1 px-4 py-3">
-      <div className="flex items-center justify-between gap-3">
-        <h3 className="text-sm font-medium">{title}</h3>
-        {status ? <Badge>{status}</Badge> : null}
-      </div>
-      {detail ? <p className="mt-1 text-xs leading-5 text-muted">{detail}</p> : null}
-    </div>
   );
 }
 
@@ -852,8 +897,8 @@ interface ComposerProps {
 
 function Composer({ announcement, onAnnouncement, onChange, onSubmit, pending, value }: ComposerProps) {
   return (
-    <div className="border-t border-border bg-canvas px-5 pb-4 pt-3" data-testid="directive-composer">
-      <div className="mx-auto max-w-[860px] rounded-lg border border-control bg-surface-1 p-3 focus-within:border-accent/70">
+    <div className="border-t border-line bg-bg-0 px-3 pb-3 pt-2" data-testid="directive-composer">
+      <div className="rounded-[4px] border border-line bg-bg-1 p-2 focus-within:border-line-strong">
         <label className="sr-only" htmlFor="directive">
           추가 지시
         </label>
@@ -870,6 +915,7 @@ function Composer({ announcement, onAnnouncement, onChange, onSubmit, pending, v
           <div className="flex items-center gap-1">
             <Button
               aria-label="파일 첨부"
+              className="rounded-[4px]"
               onClick={() => {
                 onAnnouncement("파일 첨부 준비가 되었습니다.");
               }}
@@ -880,6 +926,7 @@ function Composer({ announcement, onAnnouncement, onChange, onSubmit, pending, v
             </Button>
             <Button
               aria-label="에이전트 멘션"
+              className="rounded-[4px]"
               onClick={() => {
                 onAnnouncement("멘션할 에이전트를 선택하세요.");
               }}
@@ -891,6 +938,7 @@ function Composer({ announcement, onAnnouncement, onChange, onSubmit, pending, v
           </div>
           <div className="flex items-center gap-2">
             <Button
+              className="rounded-[4px]"
               disabled={!value.trim() || pending}
               onClick={() => {
                 onSubmit("now");
@@ -901,6 +949,7 @@ function Composer({ announcement, onAnnouncement, onChange, onSubmit, pending, v
             </Button>
             <Button
               aria-label="다음 단계에 반영"
+              className="rounded-[4px]"
               disabled={!value.trim() || pending}
               onClick={() => {
                 onSubmit("next-stage");
@@ -927,49 +976,35 @@ function Composer({ announcement, onAnnouncement, onChange, onSubmit, pending, v
 
 function InspectorRoom({ room }: { room: RoomView }) {
   return (
-    <>
-      <section aria-labelledby="room-participants" className="border border-border bg-surface-1">
-        <h2
-          className="border-b border-border px-3.5 py-2.5 text-[10px] font-semibold tracking-[0.08em] text-muted"
-          id="room-participants"
-        >
-          이 방의 참가자 {room.participants.length}
-        </h2>
-        {room.participants.length ? (
-          <ul className="divide-y divide-border">
+    <div className="flex flex-col gap-4">
+      {room.participants.length ? (
+        <section aria-labelledby="room-participants" className="rounded-[4px] border border-line bg-bg-2">
+          <h2 className="px-2 py-2 text-[13px] leading-5 text-fg-4" id="room-participants">이 방의 참가자 {room.participants.length}</h2>
+          <ul className="flex flex-col gap-[2px] px-2 pb-2">
             {room.participants.map((participant) => (
-              <li className="flex items-center gap-2 px-3.5 py-2" key={participant.handle}>
-                <AgentAvatar speaker={participant} />
-                <span className="truncate text-xs font-medium text-primary">{participant.name}</span>
-                <span className="shrink-0 rounded-[3px] border border-control px-1.5 text-[10px] text-muted">
-                  {participant.role}
-                </span>
+              <li className="flex h-[30px] items-center gap-2 rounded-[4px] px-2" key={participant.handle}>
+                <span aria-hidden="true" className={`size-2 shrink-0 rounded-full ${railClass(participant.accentSlot, participant.human)}`} />
+                <span className={`min-w-0 flex-1 truncate text-[13px] ${speakerText(participant)}`}>{participant.name}</span>
+                <span className="shrink-0 text-[12px] text-fg-4">{participant.role}</span>
               </li>
             ))}
           </ul>
-        ) : (
-          <p className="px-3.5 py-3 text-xs text-muted">참가자 정보가 아직 없습니다.</p>
-        )}
-      </section>
-
+        </section>
+      ) : null}
       {room.budgets.length ? (
-        <section aria-labelledby="room-budget" className="border border-border bg-surface-1 px-3.5 py-3">
-          <h2 className="text-[10px] font-semibold tracking-[0.08em] text-muted" id="room-budget">
-            방 한도
-          </h2>
-          <div className="mt-2.5 grid gap-2.5">
+        <section aria-labelledby="room-budget" className="rounded-[4px] border border-line bg-bg-2 px-2 py-2">
+          <h2 className="text-[13px] leading-5 text-fg-4" id="room-budget">방 한도</h2>
+          <div className="mt-2 flex flex-col gap-3">
             {room.budgets.map((budget) => (
               <div key={budget.label}>
-                <p className="flex items-center justify-between text-xs text-secondary">
+                <p className="flex items-center justify-between text-[12px] text-fg-3">
                   <span>{budget.label}</span>
-                  <span className="font-mono text-[11px] text-muted">{budget.display}</span>
+                  <span className="font-mono text-[11px] text-fg-4">{budget.display}</span>
                 </p>
-                <span aria-hidden="true" className="mt-1 block h-[3px] overflow-hidden rounded-sm bg-bg-3">
+                <span aria-hidden="true" className="mt-1 block h-[3px] bg-bg-3">
                   <span
-                    className="block h-full bg-muted"
-                    style={{
-                      width: `${String(Math.min(100, Math.round((budget.used / Math.max(budget.limit, 1)) * 100)))}%`,
-                    }}
+                    className="block h-full bg-fg-4 transition-[width] duration-[250ms] ease-linear"
+                    style={{ width: `${String(Math.min(100, Math.round((budget.used / Math.max(budget.limit, 1)) * 100)))}%` }}
                   />
                 </span>
               </div>
@@ -977,23 +1012,20 @@ function InspectorRoom({ room }: { room: RoomView }) {
           </div>
         </section>
       ) : null}
-
       {room.sharedContexts.length ? (
-        <section aria-labelledby="room-shared" className="border border-border bg-surface-1 px-3.5 py-3">
-          <h2 className="text-[10px] font-semibold tracking-[0.08em] text-muted" id="room-shared">
-            공유 컨텍스트
-          </h2>
-          <ul className="mt-2 grid gap-1.5">
+        <section aria-labelledby="room-shared" className="rounded-[4px] border border-line bg-bg-2 px-2 py-2">
+          <h2 className="text-[13px] leading-5 text-fg-4" id="room-shared">공유 컨텍스트</h2>
+          <ul className="mt-2 flex flex-col gap-[2px]">
             {room.sharedContexts.map((reference) => (
-              <li className="text-xs text-secondary" key={reference.id}>
-                <span className="block truncate">{reference.label}</span>
-                <span className="font-mono text-[10px] text-muted">checksum {reference.checksum}</span>
+              <li className="flex h-[30px] items-center justify-between gap-2 rounded-[4px] px-2" key={reference.id}>
+                <span className="min-w-0 truncate text-[13px] text-fg-2">{reference.label}</span>
+                <span className="shrink-0 font-mono text-[11px] text-fg-4">{reference.checksum}</span>
               </li>
             ))}
           </ul>
         </section>
       ) : null}
-    </>
+    </div>
   );
 }
 
@@ -1031,7 +1063,7 @@ export function WorkInspector({
   return (
     <aside
       aria-label="Work 세부 정보"
-      className="grid h-full min-h-0 min-w-0 grid-rows-[46px_minmax(0,1fr)] border-l border-border bg-chrome"
+      className="grid h-full min-h-0 min-w-0 grid-rows-[48px_minmax(0,1fr)] border-l border-line-strong bg-bg-1"
     >
       <Tabs
         className="contents"
@@ -1040,7 +1072,7 @@ export function WorkInspector({
         }}
         value={tab}
       >
-        <header className="flex items-end border-b border-border px-2">
+        <header className="flex items-end px-2">
           <TabsList aria-label="세부 정보 보기" className="h-full w-full justify-between">
             <TabsTrigger className="h-full flex-1 px-1" value="work">
               편성
@@ -1056,32 +1088,27 @@ export function WorkInspector({
             </TabsTrigger>
           </TabsList>
         </header>
-        <div className="min-h-0 overflow-y-auto p-3">
-          <TabsContent className="space-y-3" value="work">
+        <div className="min-h-0 overflow-y-auto p-2">
+          <TabsContent className="space-y-4" value="work">
             {room ? <InspectorRoom room={room} /> : <InspectorAgents agents={work.agents} />}
             <InspectorTasks progress={work.progress} tasks={work.tasks} />
           </TabsContent>
           <TabsContent value="artifacts">
             {work.artifacts.length ? (
-              <section aria-labelledby="artifact-title" className="border border-border bg-surface-1">
-                <h2 className="border-b border-border px-4 py-3 text-sm font-semibold" id="artifact-title">
+              <section aria-labelledby="artifact-title" className="rounded-[4px] border border-line bg-bg-2">
+                <h2 className="px-2 py-2 text-[13px] leading-5 text-fg-4" id="artifact-title">
                   산출물 {work.artifacts.length}
                 </h2>
-                <div className="divide-y divide-border">
+                <div className="flex flex-col gap-[2px] px-2 pb-2">
                   {work.artifacts.map((artifact) => (
-                    <div className="flex w-full items-center gap-3 px-4 py-3 text-left" key={artifact.id}>
+                    <div className="flex h-[30px] w-full items-center gap-2 rounded-[4px] px-2 text-left" key={artifact.id}>
                       {artifact.format === "PDF" ? (
-                        <FilePdf aria-hidden="true" className="text-danger" size={20} />
+                        <FilePdf aria-hidden="true" className="text-fg-3" size={16} />
                       ) : (
-                        <FileCsv aria-hidden="true" className="text-success" size={20} />
+                        <FileCsv aria-hidden="true" className="text-fg-3" size={16} />
                       )}
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate text-xs text-primary">{artifact.name}</span>
-                        <span className="font-mono text-[10px] text-muted">
-                          {artifact.format} · {artifact.size} · {artifact.createdAt}
-                        </span>
-                      </span>
-                      <span className="shrink-0 text-[10px] text-muted">메타데이터만</span>
+                      <span className="min-w-0 flex-1 truncate text-[13px] text-fg-2">{artifact.name}</span>
+                      <span className="shrink-0 font-mono text-[11px] text-fg-4">{artifact.format} · {artifact.size} · {artifact.createdAt}</span>
                     </div>
                   ))}
                 </div>
@@ -1122,18 +1149,13 @@ function WorkKnowledgeInspector({
 }) {
   if (error)
     return (
-      <section aria-label="사용한 지식" className="border border-danger/50 bg-surface-1 px-3.5 py-3">
-        <h2 className="text-sm font-semibold">사용한 지식</h2>
-        <p className="mt-1.5 text-xs leading-5 text-danger">{error}</p>
+      <section aria-label="사용한 지식" className="rounded-[4px] border border-line bg-bg-2 px-2 py-2">
+        <h2 className="text-[13px] leading-5 text-fg-4">사용한 지식</h2>
+        <p className="mt-1.5 text-[12px] leading-[18px] text-halt">{error}</p>
       </section>
     );
   if (knowledge === undefined)
-    return (
-      <section aria-busy="true" aria-label="사용한 지식 불러오는 중" className="space-y-2">
-        <Skeleton className="h-12" />
-        <Skeleton className="h-12" />
-      </section>
-    );
+    return <section aria-busy="true" aria-label="사용한 지식 불러오는 중" className="h-8" />;
   if (knowledge.status === "not-applicable")
     return (
       <InspectorEmpty
@@ -1152,9 +1174,9 @@ function WorkKnowledgeInspector({
     );
   if (knowledge.status === "blocked")
     return (
-      <section aria-label="사용한 지식" className="border border-danger/50 bg-surface-1 px-3.5 py-3">
-        <h2 className="text-sm font-semibold">사용한 지식</h2>
-        <p className="mt-1.5 text-xs leading-5 text-danger">
+      <section aria-label="사용한 지식" className="rounded-[4px] border border-line bg-bg-2 px-2 py-2">
+        <h2 className="text-[13px] leading-5 text-fg-4">사용한 지식</h2>
+        <p className="mt-1.5 text-[12px] leading-[18px] text-halt">
           지식 스냅샷을 검증하지 못했습니다. 업무 화면에서 실행을 재개하거나 새 Work를 시작해 주세요.
         </p>
       </section>
@@ -1167,35 +1189,35 @@ function WorkKnowledgeInspector({
       : "이 Work에서 사용한 파일과 코드 범위입니다.";
 
   return (
-    <section aria-label="사용한 지식" className="border border-border bg-surface-1">
-      <header className="border-b border-border px-3.5 py-3">
+    <section aria-label="사용한 지식" className="rounded-[4px] border border-line bg-bg-2">
+      <header className="px-2 py-2">
         <div className="flex items-center justify-between gap-2">
-          <h2 className="text-sm font-semibold">사용한 지식</h2>
-          <span className="rounded-[3px] border border-control px-1.5 text-[10px] text-muted">{freshness}</span>
+          <h2 className="text-[13px] leading-5 text-fg-4">사용한 지식</h2>
+          <span className="text-[12px] text-fg-4">{freshness}</span>
         </div>
-        <p className="mt-1 text-[11px] leading-4 text-muted">{freshnessDetail}</p>
+        <p className="mt-1 text-[12px] leading-[18px] text-fg-4">{freshnessDetail}</p>
       </header>
       {knowledge.references.length === 0 ? (
-        <p className="px-3.5 py-3 text-xs text-muted">사용한 코드 범위가 없습니다.</p>
+        <p className="px-2 py-2 text-[12px] text-fg-4">사용한 코드 범위가 없습니다.</p>
       ) : (
-        <ul className="divide-y divide-border">
+        <ul className="flex flex-col gap-[2px] px-2 pb-2">
           {knowledge.references.map((reference) => (
             <li key={reference.referenceId}>
               <button
                 aria-label={`${reference.relativePath} 출처 보기`}
-                className="flex w-full items-center gap-2 px-3.5 py-3 text-left outline-none hover:bg-surface-2 disabled:cursor-default disabled:hover:bg-transparent"
+                className="flex h-[30px] w-full items-center gap-2 rounded-[4px] px-2 text-left hover:bg-[rgb(255_255_255/0.027)] disabled:cursor-default disabled:hover:bg-transparent"
                 disabled={!sharedContextAvailable}
                 onClick={onOpenSharedContext}
                 type="button"
               >
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate font-mono text-[11px] text-primary">{reference.relativePath}</span>
-                  <span className="mt-0.5 block truncate text-[11px] text-muted">
+                  <span className="block truncate font-mono text-[11px] text-fg-2">{reference.relativePath}</span>
+                  <span className="mt-0.5 block truncate text-[11px] text-fg-4">
                     {reference.qualifiedName ?? "코드 범위"} · {reference.startLine}–{reference.endLine}
                   </span>
                 </span>
                 {sharedContextAvailable ? (
-                  <CaretRight aria-hidden="true" className="shrink-0 text-muted" size={14} />
+                  <CaretRight aria-hidden="true" className="shrink-0 text-fg-4" size={12} />
                 ) : null}
               </button>
             </li>
@@ -1203,7 +1225,7 @@ function WorkKnowledgeInspector({
         </ul>
       )}
       {sharedContextAvailable ? (
-        <p className="border-t border-border px-3.5 py-2.5 text-[11px] leading-4 text-muted">
+        <p className="px-2 py-2 text-[11px] leading-4 text-fg-4">
           항목을 누르면 Core Office가 공유한 출처로 이동합니다.
         </p>
       ) : null}
@@ -1214,34 +1236,37 @@ function WorkKnowledgeInspector({
 function InspectorTasks({ progress, tasks }: { progress: number; tasks: TaskView[] }) {
   const complete = tasks.filter((task) => task.state === "done").length;
   return (
-    <details className="border border-border bg-surface-1" open>
-      <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between px-4 text-sm font-semibold outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/70">
+    <details className="rounded-[4px] border border-line bg-bg-2" open>
+      <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between px-2 text-[13px] leading-5 text-fg-4">
         <span>
           작업{" "}
-          <span className="ml-1 font-mono font-normal text-muted">
+          <span className="ml-1 font-mono text-[11px] text-fg-4">
             {complete}/{tasks.length}
           </span>
         </span>
-        <CaretDown aria-hidden="true" className="text-muted" size={15} />
+        <CaretDown aria-hidden="true" className="text-fg-4" size={15} />
       </summary>
-      <div className="px-4 pb-2">
+      <div className="px-2 pb-2">
         <div
           aria-label={`작업 진행률 ${String(progress)}%`}
           aria-valuemax={100}
           aria-valuemin={0}
           aria-valuenow={progress}
-          className="mb-2 h-1 overflow-hidden rounded-full bg-border"
+          className="mb-2 h-[3px] bg-bg-3"
           role="progressbar"
         >
-          <span className="block h-full bg-accent" style={{ width: `${String(progress)}%` }} />
+          <span className="block h-full bg-fg-4 transition-[width] duration-[250ms] ease-linear" style={{ width: `${String(progress)}%` }} />
         </div>
-        <ul className="divide-y divide-border">
+        <ul className="flex flex-col gap-[2px]">
           {tasks.map((task) => (
-            <li className="flex min-h-10 items-center gap-2 text-xs" key={task.id}>
-              <StateIcon state={task.state} />
-              <span className="min-w-0 flex-1 truncate text-secondary">{task.title}</span>
-              <span className={`shrink-0 ${stateClass[task.state]}`}>{task.time ?? stateLabel[task.state]}</span>
-              <CaretRight aria-hidden="true" className="text-muted" size={13} />
+            <li className="flex h-[30px] items-center gap-2 rounded-[4px] px-2 text-[12px]" key={task.id}>
+              <Glyph
+                kind={task.state === "done" ? "done" : task.state === "failed" ? "halt" : task.state === "active" ? "running" : "idle"}
+                label={stateLabel[task.state]}
+              />
+              <span className="min-w-0 flex-1 truncate text-fg-2">{task.title}</span>
+              <span className={`shrink-0 text-[12px] ${stateClass[task.state]}`}>{task.time ?? stateLabel[task.state]}</span>
+              <CaretRight aria-hidden="true" className="text-fg-4" size={13} />
             </li>
           ))}
         </ul>
@@ -1252,36 +1277,34 @@ function InspectorTasks({ progress, tasks }: { progress: number; tasks: TaskView
 
 function InspectorAgents({ agents }: { agents: AgentView[] }) {
   return (
-    <section aria-labelledby="agent-title" className="border border-border bg-surface-1 px-4 py-3">
-      <h2 className="mb-2 text-sm font-semibold" id="agent-title">
+    <section aria-labelledby="agent-title" className="rounded-[4px] border border-line bg-bg-2 px-2 py-2">
+      <h2 className="mb-2 text-[13px] leading-5 text-fg-4" id="agent-title">
         담당 에이전트
       </h2>
-      <ul className="divide-y divide-border">
+      <ul className="flex flex-col gap-[2px]">
         {agents.map((agent) => (
-          <li className="flex min-h-10 items-center gap-2" key={agent.id}>
+          <li className="flex h-[30px] items-center gap-2 rounded-[4px] px-2" key={agent.id}>
             <Avatar className="size-7">
               <AvatarFallback>{agent.initials}</AvatarFallback>
             </Avatar>
             <span className="flex min-w-0 flex-1 items-center gap-1.5">
-              <span className="truncate text-xs font-medium text-primary">{agent.name}</span>
-              <span className="shrink-0 rounded-[3px] border border-control px-1.5 text-[10px] text-muted">
-                {agent.role}
-              </span>
+              <span className="truncate text-[12px] text-fg-2">{agent.name}</span>
+              <span className="shrink-0 text-[12px] text-fg-4">{agent.role}</span>
             </span>
             <span
               className={
                 agent.state === "active"
-                  ? "flex items-center gap-1 text-[11px] text-primary"
-                  : "flex items-center gap-1 text-[11px] text-muted"
+                  ? "flex items-center gap-1 text-[12px] text-fg-3"
+                  : "flex items-center gap-1 text-[12px] text-fg-4"
               }
             >
               <span
                 aria-hidden="true"
-                className={`size-1.5 rounded-full ${agent.state === "active" ? "bg-success" : "bg-muted"}`}
+                className={`size-2 rounded-full ${agent.state === "active" ? "bg-fg-3" : "bg-fg-4"}`}
               />
               {agent.state === "active" ? "진행 중" : "대기"}
             </span>
-            <CaretRight aria-hidden="true" className="text-muted" size={13} />
+            <CaretRight aria-hidden="true" className="text-fg-4" size={13} />
           </li>
         ))}
       </ul>
@@ -1292,32 +1315,35 @@ function InspectorAgents({ agents }: { agents: AgentView[] }) {
 function InspectorVerifications({ values }: { values: WorkView["verifications"] }) {
   const complete = values.filter((item) => item.state === "done").length;
   return (
-    <details className="border border-border bg-surface-1" open>
-      <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between px-4 text-sm font-semibold outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/70">
+    <details className="rounded-[4px] border border-line bg-bg-2" open>
+      <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between px-2 text-[13px] leading-5 text-fg-4">
         <span>
           검증 기준{" "}
-          <span className="ml-1 font-mono font-normal text-muted">
+          <span className="ml-1 font-mono text-[11px] text-fg-4">
             {complete}/{values.length}
           </span>
         </span>
-        <CaretDown aria-hidden="true" className="text-muted" size={15} />
+        <CaretDown aria-hidden="true" className="text-fg-4" size={15} />
       </summary>
-      <ul className="divide-y divide-border px-4 pb-2">
+      <ul className="flex flex-col gap-[2px] px-2 pb-2">
         {values.map((verification) => (
-          <li className="py-2.5" key={verification.id}>
-            <div className="flex items-center gap-2 text-xs">
-              <StateIcon state={verification.state} />
-              <span className="text-muted">판정</span>
-              <span className="min-w-0 flex-1 truncate text-secondary">{verification.verifier}</span>
-              <span className={stateClass[verification.state]}>{stateLabel[verification.state]}</span>
-              <CaretRight aria-hidden="true" className="text-muted" size={13} />
+          <li className="rounded-[4px] px-2 py-1" key={verification.id}>
+            <div className="flex h-[30px] items-center gap-2 text-[12px]">
+              <Glyph
+                kind={verification.state === "done" ? "verified" : verification.state === "failed" ? "halt" : verification.state === "active" ? "running" : "idle"}
+                label={stateLabel[verification.state]}
+              />
+              <span className="text-fg-4">판정</span>
+              <span className="min-w-0 flex-1 truncate text-fg-2">{verification.verifier}</span>
+              <span className={`text-[12px] ${stateClass[verification.state]}`}>{stateLabel[verification.state]}</span>
+              <CaretRight aria-hidden="true" className="text-fg-4" size={13} />
             </div>
             {verification.criteria.length === 0 ? null : (
               <ul className="mt-1.5 space-y-1 pl-6">
                 {verification.criteria.map((criterion) => (
-                  <li className="flex items-center gap-2 text-[11px]" key={criterion.key}>
-                    <span className="min-w-0 flex-1 truncate font-mono text-muted">{criterion.key}</span>
-                    <span className={criterionStatusClass[criterion.status]}>
+                  <li className="flex items-center gap-2 text-[12px]" key={criterion.key}>
+                    <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-fg-4">{criterion.key}</span>
+                    <span className={`text-[12px] ${criterionStatusClass[criterion.status]}`}>
                       {criterionStatusLabel[criterion.status]}
                     </span>
                   </li>
@@ -1325,7 +1351,7 @@ function InspectorVerifications({ values }: { values: WorkView["verifications"] 
               </ul>
             )}
             {verification.evidence ? (
-              <p className="mt-1 pl-6 font-mono text-[10px] text-muted">{verification.evidence}</p>
+              <p className="mt-1 pl-6 font-mono text-[11px] text-fg-4">{verification.evidence}</p>
             ) : null}
           </li>
         ))}
@@ -1334,12 +1360,12 @@ function InspectorVerifications({ values }: { values: WorkView["verifications"] 
   );
 }
 
-function InspectorEmpty({ detail, icon: Icon, message }: { detail?: string; icon: typeof Briefcase; message: string }) {
+function InspectorEmpty({ detail, icon: Icon, message }: { detail?: string | undefined; icon: typeof Briefcase; message: string }) {
   return (
     <div className="px-5 py-14 text-center">
       <Icon aria-hidden="true" className="mx-auto mb-3 text-muted" size={28} />
-      <p className="text-sm text-secondary">{message}</p>
-      <p className="mt-1 text-xs text-muted">{detail ?? "실행이 산출물을 만들면 여기에 표시됩니다."}</p>
+      <p className="text-[13px] text-fg-2">{message}</p>
+      <p className="mt-1 text-[12px] text-fg-4">{detail ?? "실행이 산출물을 만들면 여기에 표시됩니다."}</p>
     </div>
   );
 }
@@ -1424,7 +1450,7 @@ export function NewWorkDialog({
           </div>
           <DialogClose
             aria-label="새 Work 닫기"
-            className="flex size-8 shrink-0 items-center justify-center rounded-md text-muted outline-none hover:bg-surface-2 hover:text-primary focus-visible:ring-2 focus-visible:ring-accent/70"
+            className="flex size-8 shrink-0 items-center justify-center rounded-[4px] text-muted outline-none hover:bg-surface-2 hover:text-primary"
             disabled={starting}
           >
             <X aria-hidden="true" size={17} />
@@ -1456,15 +1482,15 @@ export function NewWorkDialog({
             <legend className="text-sm font-medium">
               워크스페이스 <span className="font-normal text-muted">(선택)</span>
             </legend>
-            <div className="min-h-[5.5rem] max-h-36 space-y-2 overflow-y-auto rounded-md border border-control bg-surface-1 p-2">
+            <div className="min-h-[5.5rem] max-h-36 space-y-2 overflow-y-auto rounded-[4px] border border-control bg-surface-1 p-2">
               {workspacesLoading ? (
-                <div aria-label="워크스페이스 불러오는 중" className="h-14 animate-pulse rounded bg-surface-2" />
+                <div aria-label="워크스페이스 불러오는 중" className="h-14 rounded-[4px] bg-surface-2" />
               ) : workspaces.length === 0 ? (
                 <p className="px-1 py-2 text-xs text-muted">저장된 폴더가 없습니다.</p>
               ) : (
                 workspaces.map((item) =>
                   item.trust === "blocked" ? (
-                    <div className="rounded px-2 py-1 text-sm text-muted" key={item.workspaceId}>
+                    <div className="rounded-[4px] px-2 py-1 text-sm text-muted" key={item.workspaceId}>
                       <span className="block font-medium">{item.name} (차단됨)</span>
                       <span className="block font-mono text-xs">{item.path}</span>
                       <span className="block text-xs">차단된 폴더는 선택할 수 없습니다.</span>
@@ -1481,7 +1507,7 @@ export function NewWorkDialog({
                   ) : (
                     <button
                       aria-pressed={workspace?.workspaceId === item.workspaceId}
-                      className="block w-full rounded px-2 py-1 text-left text-sm hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-50"
+                      className="block w-full rounded-[4px] px-2 py-1 text-left text-sm hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-50"
                       disabled={starting || registeringWorkspace}
                       key={item.workspaceId}
                       onClick={() => {
@@ -1515,7 +1541,7 @@ export function NewWorkDialog({
               폴더 추가
             </Button>
             {workspace?.trust === "pending" ? (
-              <div className="rounded-md border border-warning/40 bg-warning/10 p-3 text-sm">
+              <div className="rounded-[4px] border border-warning/40 bg-warning/10 p-3 text-sm">
                 <p>이 폴더 안에서 에이전트가 읽기·쓰기 도구를 사용할 수 있습니다.</p>
                 <p className="mt-1 font-mono text-xs text-muted">{workspace.path}</p>
                 <div className="mt-2 flex gap-2">
@@ -1571,7 +1597,7 @@ export function NewWorkDialog({
             {workspacePaths.length > 0 ? (
               <ul aria-live="polite" className="flex flex-wrap gap-2">
                 {workspacePaths.map((path) => (
-                  <li className="rounded bg-surface-2 px-2 py-1 font-mono text-xs" key={path}>
+                  <li className="rounded-[4px] bg-surface-2 px-2 py-1 font-mono text-xs" key={path}>
                     {path}{" "}
                     <button
                       aria-label={`${path} 제거`}
@@ -1594,7 +1620,7 @@ export function NewWorkDialog({
           </p>
           <div className="flex justify-end gap-2">
             <DialogClose
-              className="inline-flex h-9 items-center justify-center rounded-md px-3 text-sm text-secondary outline-none hover:bg-surface-2 focus-visible:ring-2 focus-visible:ring-accent/70 disabled:opacity-50"
+              className="inline-flex h-9 items-center justify-center rounded-[4px] px-3 text-sm text-secondary outline-none hover:bg-surface-2 disabled:opacity-50"
               disabled={starting}
             >
               취소
