@@ -196,6 +196,13 @@ function failureSignal(error: unknown): FailureSignal {
   ) {
     return { kind: "output" };
   }
+  if (
+    error instanceof Error &&
+    error.message.toLowerCase().includes("operation aborted") &&
+    error.message.toLowerCase().includes("timeout")
+  ) {
+    return { kind: "timeout" };
+  }
   if (error && typeof error === "object") {
     const record = error as Record<string, unknown>;
     const statusCode = record.statusCode;

@@ -60,6 +60,19 @@ operatorCode: APP_HTTP_AUTH
 
 이번 증분의 의미는 사용자 모델을 검증 전 native structured output으로 오인하지 않고 JSON prompt 경로로 시작하며, `Invalid JSON response`·`No object generated`를 output 실패로 분류해 같은 Credential의 다른 Model Candidate를 선택할 수 있게 한 것입니다. 실제 앱 성공은 확보했지만, 무료 Provider의 모델별 출력 편차와 Growth 후속 실패까지 해결했다는 뜻은 아닙니다.
 
+## Growth timeout·fallback 재실행 증분
+
+앞선 Work의 Growth Reflection이 `Operation aborted: The operation was aborted due to timeout`을 `unknown`으로 기록하고 중단된 실제 실패를 기준으로, timeout 분류기를 추가한 최신 후보를 실제 Tauri·OpenRouter에서 재실행했습니다.
+
+- 번들 실행 바이너리 SHA-256: `f23380048ed8bf657b396174d9f7dccb13cd1ce99b1c1f8cb1af7bd6d7bac061`
+- 실제 Work: `96bf5335-8502-4bcf-a282-dc4c75f9345b`
+- 실제 화면: `Growth timeout fallback을 실제로 확인해줘` Work가 `실행 중`에서 `완료`로 전환되고 작업 `7/7`, 진행률 `100%`를 확인했습니다.
+- 실제 Work 실행: 대표·context-strategy·evidence-research·delivery-coordination·records-documentation·Assurance가 모두 성공했습니다.
+- 실제 fallback: context-strategy의 gpt attempt `6fb4e76f-2b97-4423-9e54-9f49e9b2da50`가 `timeout`·`fallback_allowed=true`로 실패한 뒤 nvidia attempt `24e6ec62-36b5-42b5-84ca-378c79e59b6c`가 성공했습니다. 이어 nvidia attempt `56eabae0-00c6-42bd-8669-aec741fcebec`의 `output` 실패도 gpt attempt `cdf1e81d-519e-4518-91a8-cb867dabbb95`로 fallback되어 성공했습니다.
+- 실제 Growth: trigger `f7bb87ccfcb6762f69a2fb1d5213e2db4c57aee98c641090a0be8bffd4339e9b`가 `claimed → completed`, Growth execution `ae2a3708-2d35-4a39-901b-d6dd1997f0cf`가 `succeeded`, Growth route attempt `8c524927-7274-4f11-a619-2efa699cee2d`가 `succeeded`로 기록됐습니다. 제안 `1962d001-d2ba-4bf8-ac8b-5ab5769913ad`도 `awaiting-review`로 생성됐습니다.
+
+이 결과는 실제 timeout 오류가 fallback 가능한 timeout으로 정합화되고, 완료 Work에서 Growth Reflection이 실제 Provider를 통해 성공한 것을 증명합니다. Growth의 review 승인·auto 채택·효과 측정·복원은 이 흐름에 포함하지 않았으므로 여전히 별도 릴리스 게이트입니다.
+
 ## 남은 범위
 
 1. 실제 Tauri 부트스트랩 access token이 발급 키와 검증 키를 동일하게 사용하는지 확인합니다.
