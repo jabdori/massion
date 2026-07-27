@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { DesktopService, OrganizationNodeView, OrganizationView } from "@/desktop-service";
 import { agentIdentityToken } from "@massion/application/client";
-import type { VerificationView, WorkView } from "@/model";
+import type { ActivityView, VerificationView, WorkView } from "@/model";
 import { SurfaceError, surfaceErrorMessage } from "@/ui/surface";
 
 type WorkRelation = "execution" | "judgment";
@@ -17,9 +17,20 @@ interface LedgerEvent {
   time: string;
   body: string;
   meta: string;
-  subject: OrganizationNodeView;
-  targetHandle: string;
+  subject?: OrganizationNodeView;
+  targetHandle?: string;
+  human?: boolean;
 }
+
+const ROOM_MESSAGE_LABELS: Readonly<Record<string, string>> = {
+  question: "질문",
+  answer: "답변",
+  evidence: "근거",
+  challenge: "반론",
+  change_request: "변경 요청",
+  decision: "결정",
+  review_request: "검토 요청",
+};
 
 export function OrganizationSurface({ service }: { service: DesktopService }) {
   const [organization, setOrganization] = useState<OrganizationView>();
@@ -38,7 +49,9 @@ export function OrganizationSurface({ service }: { service: DesktopService }) {
           service.loadIndex({ filter: "complete", search: "" }),
         ]);
         const summaries = [...active, ...complete].slice(0, 8);
-        const loadedWorks = await Promise.all(summaries.map((summary) => service.loadWork(summary.id).catch(() => summary)));
+        const loadedWorks = await Promise.all(
+          summaries.map((summary) => service.loadWork(summary.id).catch(() => summary)),
+        );
         if (!disposed) {
           setOrganization(org);
           setWorks(loadedWorks);
@@ -66,13 +79,14 @@ export function OrganizationSurface({ service }: { service: DesktopService }) {
   const descendants = useMemo(() => (selected ? descendantsOf(selected, nodes) : []), [nodes, selected]);
   const selectedWorkHistory = useMemo(() => (selected ? workHistoryFor(selected, works) : []), [selected, works]);
   const selectedVerifications = useMemo(
-    () => (selected ? verificationsFor(selected, works) : []),
-    [selected, works],
+    () => (selected ? verificationsFor(descendants, works) : []),
+    [descendants, selected, works],
   );
   const ledgerEvents = useMemo(
-    () => (selected ? ledgerEventsFor(descendants, nodes, works) : []),
-    [descendants, nodes, selected, works],
+    () => (selected ? ledgerEventsFor(descendants, nodes, works, selectedWorkHistory) : []),
+    [descendants, nodes, selected, selectedWorkHistory, works],
   );
+  const orphanAgents = useMemo(() => agentsOutsideOrganization(works, nodes), [nodes, works]);
 
   useEffect(() => {
     if (!selectedHandle) return;
@@ -89,10 +103,7 @@ export function OrganizationSurface({ service }: { service: DesktopService }) {
   };
 
   return (
-    <main
-      aria-label="조직"
-      className="col-span-3 grid min-h-0 min-w-0 grid-cols-[380px_minmax(0,1fr)_320px] bg-bg-0"
-    >
+    <main aria-label="조직" className="col-span-3 grid min-h-0 min-w-0 grid-cols-[340px_minmax(0,1fr)_320px] bg-bg-0">
       <section aria-label="조직 구조" className="grid min-h-0 grid-rows-[48px_minmax(0,1fr)] bg-bg-1">
         <header className="flex h-12 items-center gap-2 border-b border-line-strong px-3">
           <h1 className="text-[15px] font-semibold tracking-[-0.008em] text-fg-2">조직</h1>
@@ -103,7 +114,9 @@ export function OrganizationSurface({ service }: { service: DesktopService }) {
         <div ref={structureRef} className="min-h-0 overflow-y-auto px-2 py-3">
           {error ? <SurfaceError message={error} /> : null}
           {!organization && !error ? <p className="px-2 text-[13px] text-fg-3">불러오는 중입니다.</p> : null}
-          {organization && nodes.length === 0 ? <p className="px-2 text-[13px] text-fg-3">조직에 아직 자리가 없습니다.</p> : null}
+          {organization && nodes.length === 0 ? (
+            <p className="px-2 text-[13px] text-fg-3">조직에 아직 자리가 없습니다.</p>
+          ) : null}
           {root ? (
             <>
               <p className="flex h-6 items-center px-2 text-[12px] text-fg-4">영속 조직</p>
@@ -140,17 +153,53 @@ export function OrganizationSurface({ service }: { service: DesktopService }) {
                   </div>
                 </>
               ) : null}
+              {orphanAgents.length > 0 ? (
+                <>
+                  <p className="mt-4 flex h-6 items-center px-2 text-[12px] text-fg-4">
+                    조직 그래프에 없는 실행자 {orphanAgents.length}
+                  </p>
+                  <div className="space-y-0.5">
+                    {orphanAgents.map((agent) => (
+                      <div key={agent.id} className="flex h-[30px] w-full items-center gap-2 rounded px-2">
+                        <span
+                          className="flex h-[14px] w-[14px] shrink-0 items-center justify-center"
+                          aria-hidden="true"
+                        >
+                          <span
+                            className="h-[6px] w-[6px]"
+                            style={{
+                              boxSizing: "border-box",
+                              border: "1px dashed var(--agent-provisional)",
+                              backgroundColor: "transparent",
+                            }}
+                          />
+                        </span>
+                        <span className="min-w-0 truncate text-[13px] text-fg-2">{agent.name}</span>
+                        <span className="shrink-0 text-[12px] text-fg-4">{agent.role}</span>
+                        <span className="ml-auto shrink-0 tabular-nums text-[12px] text-fg-4">
+                          관여 {agent.involvement}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              ) : null}
             </>
           ) : null}
         </div>
       </section>
 
-      <section aria-label="자리" className="grid min-h-0 grid-rows-[48px_minmax(0,1fr)] border-l border-line-strong bg-bg-0">
+      <section
+        aria-label="자리"
+        className="grid min-h-0 grid-rows-[48px_minmax(0,1fr)] border-l border-line-strong bg-bg-0"
+      >
         <header className="flex h-12 items-center gap-2 border-b border-line-strong px-3">
           {selected ? <NodeMarker node={selected} hasChildren={hasChildren(selected, nodes)} /> : null}
           {selected ? (
             <>
-              <h2 className="text-[17px] font-semibold tracking-[-0.012em] text-fg">{agentIdentityToken(selected.handle).name}</h2>
+              <h2 className="text-[17px] font-semibold tracking-[-0.012em] text-fg">
+                {agentIdentityToken(selected.handle).name}
+              </h2>
               <span className="text-[13px] text-fg-3">{nodeRoleTextOf(selected.role)}</span>
               <StatusGlyph kind={nodeStatusGlyph(selected.status)} />
               <span className="ml-auto font-mono text-[11px] text-fg-4">{selected.handle}</span>
@@ -174,7 +223,10 @@ export function OrganizationSurface({ service }: { service: DesktopService }) {
         </div>
       </section>
 
-      <aside aria-label="원장" className="grid min-h-0 grid-rows-[48px_minmax(0,1fr)] border-l border-line-strong bg-bg-1">
+      <aside
+        aria-label="원장"
+        className="grid min-h-0 grid-rows-[48px_minmax(0,1fr)] border-l border-line-strong bg-bg-1"
+      >
         <header className="flex h-12 items-center gap-2 border-b border-line-strong px-3">
           <h2 className="text-[15px] font-semibold tracking-[-0.008em] text-fg-2">원장</h2>
           {selected ? (
@@ -187,7 +239,12 @@ export function OrganizationSurface({ service }: { service: DesktopService }) {
           {selected && ledgerEvents.length > 0 ? (
             <div className="space-y-0.5">
               {ledgerEvents.map((event, index) => (
-                <LedgerRow key={event.id} event={event} previousTime={ledgerEvents[index - 1]?.time} onSelect={select} />
+                <LedgerRow
+                  key={event.id}
+                  event={event}
+                  previousTime={ledgerEvents[index - 1]?.time}
+                  onSelect={select}
+                />
               ))}
             </div>
           ) : selected ? (
@@ -331,7 +388,10 @@ function NodeDetail({
           <DetailSectionHeader label="이 자리가 걸어온 업무" count={history.length} />
           <div className="space-y-0.5">
             {history.map((entry, index) => (
-              <div key={`${entry.work.id}-${entry.relation}-${String(index)}`} className="grid h-[30px] grid-cols-[20px_minmax(0,1fr)_auto_52px] items-center gap-2 rounded px-2">
+              <div
+                key={`${entry.work.id}-${entry.relation}-${String(index)}`}
+                className="grid h-[30px] grid-cols-[20px_minmax(0,1fr)_auto_52px] items-center gap-2 rounded px-2"
+              >
                 <StatusGlyph kind={workStatusGlyph(entry.work)} />
                 <span className="min-w-0 truncate text-[13px] text-fg-2">{entry.work.title}</span>
                 <span className="text-[12px] text-fg-4">{entry.relation === "execution" ? "실행 배치" : "판정"}</span>
@@ -344,10 +404,25 @@ function NodeDetail({
 
       {verifications.length > 0 ? (
         <>
-          <DetailSectionHeader label="판정" count={verifications.length} />
-          <div className="space-y-3">
+          <DetailSectionHeader
+            label={
+              verifications.some(
+                ({ verification }) =>
+                  !verifierMatches(verification.verifier, node.handle, agentIdentityToken(node.handle).name),
+              )
+                ? "이 자리와 아래에서 이뤄진 판정"
+                : "판정"
+            }
+            count={verifications.length}
+          />
+          <div className="space-y-0.5">
             {verifications.map(({ work, verification }) => (
-              <VerificationBlock key={`${work.id}-${verification.id}`} work={work} verification={verification} />
+              <VerificationBlock
+                key={`${work.id}-${verification.id}`}
+                nodes={nodes}
+                work={work}
+                verification={verification}
+              />
             ))}
           </div>
         </>
@@ -368,7 +443,9 @@ function NodeDetail({
                 className="flex h-[30px] w-full min-w-0 items-center gap-2 rounded px-2 text-left transition-[background-color] duration-150 hover:bg-[rgb(255_255_255_/_0.027)] focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-[var(--fg)]"
               >
                 <NodeMarker node={relatedNode} hasChildren={hasChildren(relatedNode, nodes)} />
-                <span className="min-w-0 truncate text-[13px] text-fg-2">{agentIdentityToken(relatedNode.handle).name}</span>
+                <span className="min-w-0 truncate text-[13px] text-fg-2">
+                  {agentIdentityToken(relatedNode.handle).name}
+                </span>
                 <span className="shrink-0 text-[12px] text-fg-4">{relation}</span>
                 <span className="shrink-0 text-[12px] text-fg-4">{nodeRoleTextOf(relatedNode.role)}</span>
                 <span className="ml-auto min-w-0 truncate text-[12px] text-fg-4">{relatedNode.responsibility}</span>
@@ -381,26 +458,57 @@ function NodeDetail({
   );
 }
 
-function VerificationBlock({ work, verification }: { work: WorkView; verification: VerificationView }) {
+function VerificationBlock({
+  nodes,
+  work,
+  verification,
+}: {
+  nodes: readonly OrganizationNodeView[];
+  work: WorkView;
+  verification: VerificationView;
+}) {
   const counts = criterionCounts(verification);
   const contributors = work.agents.map((agent) => agent.name).filter(Boolean);
   const separated = !work.agents.some((agent) => verifierMatches(verification.verifier, agent.id, agent.name));
+  const verifierNode = nodes.find((node) =>
+    verifierMatches(verification.verifier, node.handle, agentIdentityToken(node.handle).name),
+  );
+  const verifier = agentIdentityToken(verifierNode?.handle ?? verification.verifier);
+  const verificationGlyph = verificationGlyphFor(verification);
   return (
     <div className="space-y-0.5">
       <div className="flex h-[30px] items-center gap-2 rounded px-2">
+        <span
+          aria-label={verificationGlyph.label}
+          className={`inline-flex h-5 w-5 shrink-0 items-center justify-center text-[14px] ${verificationGlyph.className}`}
+        >
+          {verificationGlyph.symbol}
+        </span>
         <span className="min-w-0 flex-1 truncate text-[13px] text-fg-2">{work.title}</span>
+        <span className="flex min-w-0 shrink-0 items-center gap-1 text-[12px] text-fg-3">
+          <span
+            className="h-1 w-1 shrink-0"
+            aria-hidden="true"
+            style={{ backgroundColor: accentColor(verifier.accentSlot) }}
+          />
+          <span className="max-w-[104px] truncate">{verifier.name}</span>
+        </span>
         <span className="shrink-0 tabular-nums text-[12px] text-fg-4">
           {[
             counts.passed > 0 ? `통과 ${String(counts.passed)}` : "",
             counts.failed > 0 ? `미통과 ${String(counts.failed)}` : "",
             counts.blocked > 0 ? `막힘 ${String(counts.blocked)}` : "",
+            counts.excluded > 0 ? `제외 ${String(counts.excluded)}` : "",
           ]
             .filter(Boolean)
             .join(" · ")}
         </span>
       </div>
       {verification.criteria.map((criterion) => (
-        <div key={criterion.key} className="grid h-[30px] grid-cols-[20px_132px_minmax(0,1fr)] items-center gap-2 rounded px-2">
+        <div
+          key={criterion.key}
+          className="grid h-[30px] grid-cols-[20px_132px_minmax(0,1fr)] items-center gap-2 rounded px-2"
+        >
           <CriterionGlyph status={criterion.status} />
           <span className="font-mono text-[11px] text-fg-3">{criterion.key}</span>
           <span className="text-[12px] text-fg-2">{criterionStatusLabel(criterion.status)}</span>
@@ -413,9 +521,9 @@ function VerificationBlock({ work, verification }: { work: WorkView; verificatio
         </div>
       ) : null}
       {contributors.length > 0 ? (
-        <div className="grid min-h-[30px] grid-cols-[96px_minmax(0,1fr)] items-center gap-2 rounded px-2">
+        <div className="grid h-[30px] grid-cols-[96px_minmax(0,1fr)] items-center gap-2 rounded px-2">
           <span className="text-[12px] text-fg-4">실행 기여자</span>
-          <span className="min-w-0 truncate text-[12px] text-fg-2">
+          <span className="min-w-0 truncate text-[13px] text-fg-2">
             {contributors.join(" · ")}
             {separated ? <span className="text-fg-4"> · 판정자와 분리됨</span> : null}
           </span>
@@ -425,7 +533,15 @@ function VerificationBlock({ work, verification }: { work: WorkView; verificatio
   );
 }
 
-function DefinitionRow({ label, children, valueClassName = "" }: { label: string; children: React.ReactNode; valueClassName?: string }) {
+function DefinitionRow({
+  label,
+  children,
+  valueClassName = "",
+}: {
+  label: string;
+  children: React.ReactNode;
+  valueClassName?: string;
+}) {
   return (
     <div className="grid h-[30px] grid-cols-[96px_minmax(0,1fr)] items-center gap-2 rounded px-2">
       <span className="text-[12px] text-fg-4">{label}</span>
@@ -436,41 +552,76 @@ function DefinitionRow({ label, children, valueClassName = "" }: { label: string
 
 function DetailSectionHeader({ label, count }: { label: string; count?: number }) {
   return (
-    <p className="mt-4 flex h-6 items-center text-[12px] text-fg-4">
+    <p className="mt-4 flex h-6 items-center px-2 text-[12px] text-fg-4">
       {label}
       {count === undefined ? null : <span className="ml-1 tabular-nums">{count}</span>}
     </p>
   );
 }
 
-function LedgerRow({ event, previousTime, onSelect }: { event: LedgerEvent; previousTime: string | undefined; onSelect: (handle: string) => void }) {
+function LedgerRow({
+  event,
+  previousTime,
+  onSelect,
+}: {
+  event: LedgerEvent;
+  previousTime: string | undefined;
+  onSelect: (handle: string) => void;
+}) {
   const time = event.time === previousTime ? "" : event.time;
-  return (
-    <button
-      type="button"
-      aria-pressed={false}
-      onClick={() => {
-        onSelect(event.targetHandle);
-      }}
-      className="grid h-[30px] w-full grid-cols-[40px_6px_2px_8px_minmax(0,1fr)_auto_12px] items-center gap-0 rounded px-2 text-left transition-[background-color] duration-150 hover:bg-[rgb(255_255_255_/_0.027)] focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-[var(--fg)]"
-    >
+  const content = (
+    <>
       <span className="font-mono text-right text-[11px] tabular-nums text-fg-4">{time}</span>
-      <span aria-hidden="true" />
-      <span className="h-4 w-0.5" aria-hidden="true" style={{ backgroundColor: subjectColor(event.subject) }} />
+      <span className="flex items-center justify-center" aria-hidden="true">
+        {event.human ? (
+          <span className="h-[6px] w-[6px] rounded-full bg-fg-4" />
+        ) : (
+          <span
+            className="h-1 w-1"
+            style={{ backgroundColor: event.subject ? subjectColor(event.subject) : "var(--fg-4)" }}
+          />
+        )}
+      </span>
+      <span
+        className="h-4 w-0.5"
+        aria-hidden="true"
+        style={{
+          backgroundColor: event.human ? "var(--fg-4)" : event.subject ? subjectColor(event.subject) : "var(--fg-4)",
+        }}
+      />
       <span aria-hidden="true" />
       <span className="min-w-0 truncate text-[13px] text-fg-2">{event.body}</span>
       <span className="ml-2 min-w-0 truncate text-[12px] text-fg-4">{event.meta}</span>
       <span className="text-right text-[12px] text-fg-4" aria-hidden="true">
-        ›
+        {event.human ? "" : event.targetHandle ? "›" : ""}
       </span>
+    </>
+  );
+  const className =
+    "grid h-[30px] w-full grid-cols-[40px_6px_2px_8px_minmax(0,1fr)_auto_12px] items-center gap-0 rounded px-2 text-left";
+  return event.targetHandle ? (
+    <button
+      type="button"
+      aria-pressed={false}
+      onClick={() => {
+        onSelect(event.targetHandle as string);
+      }}
+      className={`${className} transition-[background-color] duration-150 hover:bg-[rgb(255_255_255_/_0.027)] focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-[var(--fg)]`}
+    >
+      {content}
     </button>
+  ) : (
+    <div className={className}>{content}</div>
   );
 }
 
 function StatusGlyph({ kind }: { kind: GlyphKind }) {
   const glyph = glyphFor(kind);
   return (
-    <span aria-label={glyph.label} className={`inline-flex h-5 w-5 shrink-0 items-center justify-center text-[14px] ${glyph.className}`}>
+    <span
+      aria-label={glyph.label}
+      className={`inline-flex h-5 w-5 shrink-0 items-center justify-center text-[14px] ${glyph.className}`}
+    >
       {glyph.symbol}
     </span>
   );
@@ -486,10 +637,23 @@ function CriterionGlyph({ status }: { status: VerificationView["criteria"][numbe
           ? { symbol: "⊘", className: "text-gate", label: "막힘" }
           : { symbol: "○", className: "text-fg-4", label: "제외" };
   return (
-    <span aria-label={glyph.label} className={`inline-flex h-5 w-5 items-center justify-center text-[14px] ${glyph.className}`}>
+    <span
+      aria-label={glyph.label}
+      className={`inline-flex h-5 w-5 items-center justify-center text-[14px] ${glyph.className}`}
+    >
       {glyph.symbol}
     </span>
   );
+}
+
+function verificationGlyphFor(verification: VerificationView): { symbol: string; className: string; label: string } {
+  if (verification.criteria.every((criterion) => criterion.status === "passed")) {
+    return { symbol: "◉", className: "text-fg-2", label: "검증 완료" };
+  }
+  if (verification.criteria.some((criterion) => criterion.status === "blocked")) {
+    return { symbol: "⊘", className: "text-gate", label: "막힘" };
+  }
+  return { symbol: "⊘", className: "text-halt", label: "미통과" };
 }
 
 type GlyphKind = "complete" | "verified" | "gate" | "blocked" | "pending";
@@ -514,35 +678,56 @@ function nodeStatusGlyph(status: string): GlyphKind {
 }
 
 function hasPassedVerification(work: WorkView): boolean {
-  return work.verifications.some((verification) => verification.state === "done" && verification.criteria.some((criterion) => criterion.status === "passed"));
+  return work.verifications.some(
+    (verification) =>
+      verification.state === "done" && verification.criteria.some((criterion) => criterion.status === "passed"),
+  );
 }
 
 function workHistoryFor(node: OrganizationNodeView, works: readonly WorkView[]): WorkHistoryEntry[] {
   return [...works].reverse().flatMap((work) => {
     const entries: WorkHistoryEntry[] = [];
     if (work.agents.some((agent) => agent.id === node.handle)) entries.push({ work, relation: "execution" });
-    if (work.verifications.some((verification) => verifierMatches(verification.verifier, node.handle, agentIdentityToken(node.handle).name))) {
+    if (
+      work.verifications.some((verification) =>
+        verifierMatches(verification.verifier, node.handle, agentIdentityToken(node.handle).name),
+      )
+    ) {
       entries.push({ work, relation: "judgment" });
     }
     return entries;
   });
 }
 
-function verificationsFor(node: OrganizationNodeView, works: readonly WorkView[]) {
-  return [...works].reverse().flatMap((work) =>
-    work.verifications
-      .filter((verification) => verifierMatches(verification.verifier, node.handle, agentIdentityToken(node.handle).name))
-      .map((verification) => ({ work, verification })),
-  );
+function verificationsFor(scope: readonly OrganizationNodeView[], works: readonly WorkView[]) {
+  return [...works]
+    .reverse()
+    .flatMap((work) =>
+      work.verifications
+        .filter((verification) =>
+          scope.some((node) =>
+            verifierMatches(verification.verifier, node.handle, agentIdentityToken(node.handle).name),
+          ),
+        )
+        .map((verification) => ({ work, verification })),
+    );
 }
 
 function ledgerEventsFor(
   descendants: readonly OrganizationNodeView[],
   nodes: readonly OrganizationNodeView[],
   works: readonly WorkView[],
+  history: readonly WorkHistoryEntry[],
 ): LedgerEvent[] {
   const events: LedgerEvent[] = [];
+  const nodeByHandle = new Map(nodes.map((node) => [node.handle, node]));
+  const descendantHandles = new Set(descendants.map((node) => node.handle));
+  const historyWorkIds = new Set(history.map((entry) => entry.work.id));
   for (const work of [...works].reverse()) {
+    for (const activity of work.activities) {
+      const event = activityLedgerEvent(activity, work, nodeByHandle, descendantHandles, historyWorkIds);
+      if (event) events.push(event);
+    }
     for (const subject of descendants) {
       if (work.agents.some((agent) => agent.id === subject.handle)) {
         events.push({
@@ -571,7 +756,9 @@ function ledgerEventsFor(
     }
   }
   for (const subject of descendants.filter((candidate) => candidate.scope === "work")) {
-    const parent = subject.parentHandle ? nodes.find((candidate) => candidate.handle === subject.parentHandle) : undefined;
+    const parent = subject.parentHandle
+      ? nodes.find((candidate) => candidate.handle === subject.parentHandle)
+      : undefined;
     events.push({
       id: `${subject.handle}-formation`,
       time: "",
@@ -582,6 +769,67 @@ function ledgerEventsFor(
     });
   }
   return events;
+}
+
+function activityLedgerEvent(
+  activity: ActivityView,
+  work: WorkView,
+  nodeByHandle: ReadonlyMap<string, OrganizationNodeView>,
+  descendantHandles: ReadonlySet<string>,
+  historyWorkIds: ReadonlySet<string>,
+): LedgerEvent | undefined {
+  if (activity.kind === "message") {
+    if (!historyWorkIds.has(work.id)) return undefined;
+    return {
+      id: `${work.id}-${activity.id}`,
+      time: activity.time,
+      body: `${work.title} 요청`,
+      meta: activity.author,
+      human: true,
+    };
+  }
+
+  if (activity.kind === "room") {
+    const subject = nodeByHandle.get(activity.speaker.handle);
+    const messageType = ROOM_MESSAGE_LABELS[activity.messageType];
+    if (!subject || !descendantHandles.has(subject.handle) || !messageType) return undefined;
+    return {
+      id: `${work.id}-${activity.id}`,
+      time: activity.time,
+      body: messageType,
+      meta: activity.content,
+      subject,
+      targetHandle: subject.handle,
+    };
+  }
+
+  if (activity.kind === "handoff") {
+    const subject = nodeByHandle.get(activity.from.handle);
+    if (!subject || !descendantHandles.has(subject.handle)) return undefined;
+    return {
+      id: `${work.id}-${activity.id}`,
+      time: activity.time,
+      body: "인계",
+      meta: activity.to ? `${activity.from.name} → ${activity.to.name}` : activity.from.name,
+      subject,
+      targetHandle: subject.handle,
+    };
+  }
+
+  if (activity.kind === "proposal") {
+    const subject = nodeByHandle.get(activity.speaker.handle);
+    if (!subject || !descendantHandles.has(subject.handle)) return undefined;
+    return {
+      id: `${work.id}-${activity.id}`,
+      time: activity.time,
+      body: "조직 변경 제안",
+      meta: activity.content,
+      subject,
+      targetHandle: subject.handle,
+    };
+  }
+
+  return undefined;
 }
 
 function criterionCounts(verification: VerificationView) {
@@ -660,9 +908,31 @@ function hasChildren(node: OrganizationNodeView, nodes: readonly OrganizationNod
 function involvementCount(node: OrganizationNodeView, works: readonly WorkView[]): number {
   return works.reduce((count, work) => {
     const assigned = work.agents.some((agent) => agent.id === node.handle);
-    const judged = work.verifications.some((verification) => verifierMatches(verification.verifier, node.handle, agentIdentityToken(node.handle).name));
+    const judged = work.verifications.some((verification) =>
+      verifierMatches(verification.verifier, node.handle, agentIdentityToken(node.handle).name),
+    );
     return count + (assigned ? 1 : 0) + (judged ? 1 : 0);
   }, 0);
+}
+
+function agentsOutsideOrganization(
+  works: readonly WorkView[],
+  nodes: readonly OrganizationNodeView[],
+): Array<{ id: string; name: string; role: string; involvement: number }> {
+  const nodeHandles = new Set(nodes.map((node) => node.handle));
+  const agents = new Map<string, { id: string; name: string; role: string; involvement: number }>();
+  for (const work of works) {
+    for (const agent of work.agents) {
+      if (nodeHandles.has(agent.id)) continue;
+      const existing = agents.get(agent.id);
+      if (existing) {
+        existing.involvement += 1;
+      } else {
+        agents.set(agent.id, { id: agent.id, name: agent.name, role: agent.role, involvement: 1 });
+      }
+    }
+  }
+  return [...agents.values()];
 }
 
 function roleTextOf(node: OrganizationNodeView): string {
