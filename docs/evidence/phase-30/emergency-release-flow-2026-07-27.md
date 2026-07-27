@@ -30,6 +30,21 @@ operatorCode: APP_HTTP_AUTH
 
 따라서 이 기록은 실제 Tauri 성공 증거가 아니며, 기존 후보의 UAT 결과를 재사용하지 않습니다. 인증 발급·검증 경계의 구체적인 원인을 확인하기 전에는 같은 Computer Use 조작을 반복하지 않습니다.
 
+## 별도 Work 실행 상태 가시성 증분
+
+긴급 정지 흐름과 별개로, 최신 릴리스 번들에서 실제 Provider Work가 전략 단계에서 막힌 경우를 Computer Use로 다시 확인했습니다. 이 증분은 긴급 정지 해제 흐름의 완료 증거가 아닙니다.
+
+- 번들: `apps/desktop/src-tauri/target/release/bundle/macos/Massion.app`
+- 실행 바이너리 SHA-256: `580f2ecb36c40e10ad57686659f3a434eb8f30bec7d64b0994762449d968237c`
+- Provider: 격리 프로필에 등록한 OpenRouter 연결(키와 원문은 기록하지 않음)
+- 실제 Work: `ed167c46-d9c4-4699-bbe7-15605329c3ed`
+- 실제 실행: `4a0ae3c6-64ba-4b87-b80f-049a94f9d0ee`
+- 관측: `orchestration-balanced`는 성공했지만 `planning-quality`의 구조화 응답을 파싱하지 못해 `context-strategy-stage-failed`로 막힘
+- 화면: 중앙 대화에 `실행이 멈췄습니다`, Provider 오류 설명, `현재 단계: 맥락·전략 구성`, 재개 안내가 표시됨
+- 재개: 상단 `실행 재개`를 눌렀을 때 같은 실제 Provider 경로가 다시 실행되고, 동일 단계의 실패가 화면에 갱신됨
+
+따라서 이번 증분은 “오류가 수신함에만 남고 대화에서는 보이지 않는 문제”를 해결했음을 증명하지만, Provider의 구조화 출력 호환성 문제를 해결했음을 뜻하지 않습니다.
+
 ## 남은 범위
 
 1. 실제 Tauri 부트스트랩 access token이 발급 키와 검증 키를 동일하게 사용하는지 확인합니다.

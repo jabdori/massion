@@ -1,6 +1,6 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { App } from "./app";
 import { createFixtureDesktopService } from "./desktop-service";
@@ -77,6 +77,45 @@ describe("AgentOS 데스크톱", () => {
     expect(screen.getByRole("main")).toHaveAccessibleName("파트너 계약서 검토");
     expect(screen.getByRole("heading", { name: "파트너 계약서 검토" })).toBeInTheDocument();
     expect(screen.getByText("계약 조항 검증")).toBeInTheDocument();
+  });
+
+  it("막힌 Work의 실행 단계와 오류를 중앙 대화에 표시하고 재개를 제공한다", async () => {
+    const user = userEvent.setup();
+    const fixture = createFixtureDesktopService();
+    const seed = fixture.initialSnapshot?.works[0];
+    if (!seed) throw new Error("fixture Work가 필요합니다.");
+    const blocked: WorkView = {
+      ...seed,
+      id: "work-context-strategy-failed",
+      title: "전략 계획이 멈춘 업무",
+      run: {
+        runId: "run-context-strategy-failed",
+        status: "blocked",
+        stage: "context-strategy",
+        leaseGeneration: 2,
+        blockedReason: "strategy-failed",
+      },
+    };
+    const resumeRun = vi.fn(async () => undefined);
+    render(
+      <App
+        service={{
+          ...fixture,
+          initialSnapshot: { works: [blocked] },
+          loadIndex: async () => [blocked],
+          loadWork: async () => blocked,
+          resumeRun,
+        }}
+      />,
+    );
+
+    const status = screen.getByRole("status", { name: "실행 상태" });
+    expect(status).toHaveTextContent("실행이 멈췄습니다");
+    expect(status).toHaveTextContent("Provider가 전략 계획의 구조화 응답을 완성하지 못했습니다.");
+    expect(status).toHaveTextContent("현재 단계: 맥락·전략 구성");
+    expect(status).toHaveTextContent("상단의 실행 재개를 누르면 이 단계부터 다시 시도합니다.");
+    await user.click(screen.getByRole("button", { name: "실행 재개" }));
+    expect(resumeRun).toHaveBeenCalledWith(blocked);
   });
 
   it("승인 결정을 반영하고 중복 결정을 막는다", async () => {

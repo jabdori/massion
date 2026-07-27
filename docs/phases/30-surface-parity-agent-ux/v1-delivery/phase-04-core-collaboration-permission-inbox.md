@@ -54,6 +54,17 @@ Core 파이프라인, 권한 모드, 수신함 UX, 메모리 주입 경로가 �
 - `7708d5f33` — 실제 Provider Work에서 확인한 VoltAgent 위임의 Prompt section handle 불일치를 수정하고 회귀 사례를 고정했습니다.
 - [실제 Core UAT 증거](../../../evidence/phase-30/desktop-core-uat-2026-07-26.md) — 같은 수정 커밋의 Tauri 번들에서 Provider 연결, workspace 없는 Work, 협업·Assurance·Records, 재시작 보존을 확인했습니다.
 
+### 실제 Work 오류 가시성 증분
+
+최신 릴리스 번들에서 실제 Provider Work가 `context-strategy` 단계에서 막히는 상황을 Computer Use로 확인했습니다. 기존에는 수신함의 내부 reason만으로 표시되던 실패를 중앙 대화에도 연결해 다음 정보를 함께 보여줍니다.
+
+- 실행 상태: `실행이 멈췄습니다`
+- 사용자 설명: Provider가 전략 계획의 구조화 응답을 완성하지 못했다는 원인
+- 현재 단계: `맥락·전략 구성`
+- 조치 안내: 상단 `실행 재개`로 같은 단계부터 재시도
+
+재개 클릭 후에도 실제 Provider 구조화 응답 실패가 반복되어, 이번 변경은 오류 가시성·재개 연결을 닫은 것이며 Provider 호환성 해결이나 Core Work 완료를 의미하지 않습니다. 상세 실행 ID와 번들 해시는 [실제 증거 기록](../../../evidence/phase-30/emergency-release-flow-2026-07-27.md)에 남겼습니다.
+
 ### 04-5 — 전체 빌드 + 데스크톱 UAT
 
 후보 `40a6ffbc8`에서 실제 Tauri·Provider·workspace 파일·디렉터리 문맥·Knowledge·Growth·full-access·재시작 증분을 확인했고, 최신 후보 `573297642`에서 Provider Work·Knowledge·Memory·Growth 조회·재시작 보존을 재확인했습니다. 전체 원자 UAT, native picker 완료, 평가·채택·효과·복원, 서명·공증·설치 게이트는 남아 있으므로 04-5와 개인용 v1 완료를 전체 통과로 표시하지 않습니다. [workspace 경계 증거](../../../evidence/phase-30/desktop-live-workspace-directory-uat-2026-07-26-40a6ffbc8.md) · [최신 Provider·재시작 증거](../../../evidence/phase-30/desktop-live-provider-restart-uat-2026-07-27-573297642.md)

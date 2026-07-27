@@ -4196,6 +4196,9 @@ function WorkActivity({
        * 래퍼는 방이 없을 때도 유지합니다. grid 행 수가 흔들리면 본문이 접힙니다.
        */}
       <div>
+        {work.run ? (
+          <RunStatusCard run={work.run} />
+        ) : null}
         {rooms.length > 0 ? (
           <nav aria-label="협업방" className="flex items-center gap-1 border-b border-border px-5 py-1.5">
             {rooms.map((candidate, index) => {
@@ -4278,6 +4281,93 @@ function WorkActivity({
         value={composer}
       />
     </main>
+  );
+}
+
+const runStageLabel: Record<string, string> = {
+  intake: "요청 접수",
+  "context-strategy": "맥락·전략 구성",
+  evidence: "근거 확인",
+  delivery: "실행",
+  assurance: "검증",
+  records: "결과 기록",
+  terminal: "완료 정리",
+};
+
+function runStageText(stage: string): string {
+  return runStageLabel[stage] ?? stage;
+}
+
+function blockedReasonText(reason: string | undefined): string {
+  switch (reason) {
+    case "context-strategy-stage-failed":
+    case "strategy-failed":
+      return "Provider가 전략 계획의 구조화 응답을 완성하지 못했습니다.";
+    case "model-unavailable":
+      return "사용 가능한 Provider 모델을 찾지 못했습니다.";
+    case "evidence-invalid":
+      return "업무에 연결된 근거를 검증하지 못했습니다.";
+    case "workspace-untrusted":
+      return "워크스페이스 신뢰 확인이 필요합니다.";
+    default:
+      return "실행 단계에서 오류가 발생했습니다.";
+  }
+}
+
+function RunStatusCard({ run }: { run: NonNullable<WorkView["run"]> }) {
+  const blocked = run.status === "blocked";
+  const awaitingApproval = run.status === "awaiting-approval";
+  const active = ["ready", "running"].includes(run.status);
+  if (!blocked && !awaitingApproval && !active) return null;
+
+  if (blocked) {
+    return (
+      <section
+        aria-label="실행 상태"
+        className="border-b border-danger/40 bg-surface-1 px-5 py-3"
+        role="status"
+      >
+        <div className="mx-auto flex max-w-[860px] items-start gap-3">
+          <WarningCircle aria-hidden="true" className="mt-0.5 shrink-0 text-danger" size={18} />
+          <div className="min-w-0 flex-1">
+            <p className="text-[13px] font-semibold text-primary">실행이 멈췄습니다</p>
+            <p className="mt-1 text-[12px] leading-5 text-danger">{blockedReasonText(run.blockedReason)}</p>
+            <p className="mt-1 text-[11px] text-muted">
+              현재 단계: {runStageText(run.stage)}
+              {run.blockedReason ? (
+                <code className="ml-2 font-mono text-[10px] text-muted">{run.blockedReason}</code>
+              ) : null}
+            </p>
+            <p className="mt-1 text-[11px] text-muted">상단의 실행 재개를 누르면 이 단계부터 다시 시도합니다.</p>
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  if (awaitingApproval) {
+    return (
+      <section aria-label="실행 상태" className="border-b border-gate/40 bg-surface-1 px-5 py-3" role="status">
+        <div className="mx-auto flex max-w-[860px] items-start gap-3">
+          <ShieldCheck aria-hidden="true" className="mt-0.5 shrink-0 text-gate" size={18} />
+          <div>
+            <p className="text-[13px] font-semibold text-primary">사람의 결정을 기다리는 중입니다</p>
+            <p className="mt-1 text-[12px] leading-5 text-gate">수신함에서 승인 여부를 결정하면 다음 단계로 진행합니다.</p>
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <section aria-label="실행 상태" className="border-b border-control/40 bg-surface-1 px-5 py-3" role="status">
+      <div className="mx-auto flex max-w-[860px] items-center gap-3">
+        <span aria-hidden="true" className="size-2 shrink-0 animate-pulse rounded-full bg-accent" />
+        <p className="text-[13px] font-medium text-primary">실행 중</p>
+        <span className="text-[12px] text-secondary">{runStageText(run.stage)}</span>
+        <span className="ml-auto font-mono text-[10px] text-muted">개정 {run.leaseGeneration}</span>
+      </div>
+    </section>
   );
 }
 

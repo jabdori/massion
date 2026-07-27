@@ -1,7 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "build": {
-    "beforeBuildCommand": "node src-tauri/stage-runtime.mjs && pnpm build"
+    "beforeBuildCommand": "node src-tauri/stage-runtime.mjs && pnpm build",
+    "frontendDist": "../dist"
   },
   "bundle": {
     "externalBin": ["binaries/node", "binaries/surrealdb"],
