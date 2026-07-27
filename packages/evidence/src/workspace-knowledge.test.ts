@@ -119,6 +119,9 @@ describe("Workspace 기반 자동 Evidence 지식 준비", () => {
         (reference) => reference.kind === "code" && reference.relativePath === "src/allowed.ts",
       ),
     ).toBe(true);
+    expect((await indexes.getSnapshot(context, scoped.brief.indexVersionId)).files.map((file) => file.relativePath)).toEqual([
+      "src/allowed.ts",
+    ]);
     await expect(
       knowledge.prepare(context, {
         ...base,
@@ -178,6 +181,7 @@ describe("Workspace 기반 자동 Evidence 지식 준비", () => {
     expect(prompt.indexVersionId).toBe(first.brief.indexVersionId);
     expect(prompt.estimatedTokens).toBeLessThanOrEqual(24_000);
     expect(prompt.snippets).not.toHaveLength(0);
+    expect(prompt.snippets.every((snippet) => snippet.citation.startsWith("/"))).toBe(true);
     for (const snippet of prompt.snippets) {
       expect(createHash("sha256").update(snippet.content).digest("hex")).toBe(
         references.get(snippet.referenceId)?.contentHash,
@@ -190,5 +194,25 @@ describe("Workspace 기반 자동 Evidence 지식 준비", () => {
         maxEstimatedTokens: 1,
       }),
     ).rejects.toThrow("snippet");
+  });
+
+  it("첨부한 ignore 파일을 workspace 지식 범위로 준비한다", async () => {
+    await writeFile(path.join(root, ".gitignore"), "history.txt\n");
+    await writeFile(path.join(root, "history.txt"), `const marker = "${QUERY}";\n`);
+
+    const prepared = await knowledge.prepare(context, {
+      commandId: crypto.randomUUID(),
+      workId: "work-ignored-attachment",
+      workspaceId: "workspace-ignored-attachment",
+      workspaceName: "Ignored attachment",
+      root,
+      query: QUERY,
+      relativePaths: ["history.txt"],
+    });
+
+    expect(prepared.brief.status).toBe("ready");
+    expect(prepared.brief.references).toEqual(
+      expect.arrayContaining([expect.objectContaining({ kind: "code", relativePath: "history.txt" })]),
+    );
   });
 });

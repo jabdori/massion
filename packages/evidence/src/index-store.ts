@@ -321,9 +321,9 @@ export class IndexStore {
           },
         );
       }
-      for (const relation of input.evidence.relations) {
+      for (const [relationIndex, relation] of input.evidence.relations.entries()) {
         const relationKey = sha256(
-          `${input.relativePath}\0${relation.kind}\0${relation.sourceSymbolKey ?? ""}\0${relation.targetText}\0${String(relation.startLine)}`,
+          `${input.relativePath}\0${relation.kind}\0${relation.sourceSymbolKey ?? ""}\0${relation.targetText}\0${String(relation.startLine)}\0${String(relationIndex)}`,
         );
         await tx.query(
           "CREATE evidence_relation CONTENT { relation_id: $relation_id, relation_key: $relation_key, organization_id: $organization_id, repository_id: $repository_id, index_version_id: $index_version_id, source_file_id: $source_file_id, relative_path: $relative_path, kind: $kind, source_symbol_key: $source_symbol_key, target_symbol_key: $target_symbol_key, target_text: $target_text, resolved: $resolved, start_line: $start_line, created_at: time::now() };",

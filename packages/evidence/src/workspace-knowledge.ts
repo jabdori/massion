@@ -121,6 +121,14 @@ export class WorkspaceKnowledgeService {
     rawInput: PrepareWorkspaceKnowledgeInput,
   ): Promise<PrepareWorkspaceKnowledgeResult> {
     const input = normalizedInput(rawInput);
+    const scanOptions = input.relativePaths
+      ? {
+          ...this.options.scanOptions,
+          // 첨부 범위가 있으면 선택 파일만 인덱싱해 대규모 workspace 전체 스캔을 피합니다.
+          include: input.relativePaths,
+          includeIgnoredPaths: input.relativePaths,
+        }
+      : this.options.scanOptions;
     const existing = await this.briefs.findAutomaticByWork(context, input.workId);
     if (existing) {
       if (existing.scopeChecksum !== input.scopeChecksum)
@@ -131,7 +139,7 @@ export class WorkspaceKnowledgeService {
       return { brief: existing };
     }
 
-    const captured = await this.revisions.capture(input.root, this.options.scanOptions);
+    const captured = await this.revisions.capture(input.root, scanOptions);
     let repository = await this.repositories.findByWorkspace(context, input.workspaceId);
     if (!repository) {
       repository = (
@@ -152,7 +160,7 @@ export class WorkspaceKnowledgeService {
       parserBundleVersion: this.options.parserBundleVersion,
       schemaVersion: SCHEMA_VERSION,
       embeddingStatus: "unavailable" as const,
-      settings: this.options.scanOptions,
+      settings: scanOptions,
     };
     const configuration = (
       await this.repositories.createConfiguration(context, {
@@ -179,11 +187,15 @@ export class WorkspaceKnowledgeService {
     if (current && (current.status !== "complete" || !current.current))
       throw new Error("Repository current IndexVersion이 complete 상태가 아닙니다");
     let index: IndexVersion;
-    if (
-      current?.repositoryRevisionId === revision.repositoryRevisionId &&
-      current.configurationId === configuration.configurationId
-    ) {
-      index = current;
+    const reusable = (await this.repositories.listIndexes(context, repository.repositoryId)).find(
+      (candidate) =>
+        candidate.repositoryRevisionId === revision.repositoryRevisionId &&
+        candidate.configurationId === configuration.configurationId &&
+        (candidate.status === "complete" || candidate.status === "superseded"),
+    );
+    if (reusable) {
+      // 동일 revision·configuration의 immutable index는 Work 재시도에서 재사용합니다.
+      index = reusable;
     } else {
       const incremental = current?.configurationId === configuration.configurationId;
       index = (
@@ -196,7 +208,7 @@ export class WorkspaceKnowledgeService {
           // incremental이 참이면 TS가 current를 정의된 값으로 좁히므로 중복 검사(&& current)를 뺍니다.
           ...(incremental ? { parentIndexVersionId: current.indexVersionId } : {}),
           root: captured.rootRealPath,
-          scanOptions: this.options.scanOptions,
+          scanOptions,
         })
       ).index;
     }
@@ -219,6 +231,7 @@ export class WorkspaceKnowledgeService {
       throw new Error("명시된 Workspace knowledge scope에서 usable chunk를 찾을 수 없습니다");
     const searched = await this.search.search(context, {
       repositoryId: repository.repositoryId,
+      indexVersionId: index.indexVersionId,
       query: input.query,
       limit: MAX_REFERENCES,
       ...(input.relativePaths ? { relativePaths: input.relativePaths } : {}),

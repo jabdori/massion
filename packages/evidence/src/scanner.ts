@@ -12,6 +12,8 @@ export interface ScanOptions {
   readonly include: readonly string[];
   readonly exclude: readonly string[];
   readonly maxFileBytes: number;
+  /** 사용자가 명시한 첨부 경로는 ignore 규칙을 우회하되, exclude 규칙은 계속 적용합니다. */
+  readonly includeIgnoredPaths?: readonly string[];
 }
 
 export type ScannedFileStatus = "indexed";
@@ -155,6 +157,19 @@ function matches(patterns: readonly string[], relativePath: string): boolean {
   return patterns.some((pattern) => minimatch(relativePath, pattern, { dot: true, matchBase: false }));
 }
 
+function explicitlyIncluded(relativePath: string, paths: readonly string[]): boolean {
+  return paths.includes(relativePath);
+}
+
+function hasExplicitDescendant(relativePath: string, paths: readonly string[]): boolean {
+  const prefix = `${relativePath}/`;
+  return paths.some((path) => path.startsWith(prefix));
+}
+
+function isDefaultIgnoredPath(relativePath: string): boolean {
+  return relativePath.split("/").some((segment) => DEFAULT_IGNORED_DIRECTORIES.has(segment));
+}
+
 async function loadIgnore(rootRealPath: string): Promise<Ignore> {
   const rules = createIgnore();
   for (const filename of [".gitignore", ".massionignore"]) {
@@ -269,6 +284,7 @@ export class RepositoryScanner {
     nonRegular: string[],
   ): Promise<void> {
     const directory = path.join(rootRealPath, ...relativeDirectory.split("/").filter(Boolean));
+    const includeIgnoredPaths = options.includeIgnoredPaths ?? [];
     const entries = [];
     for await (const entry of await opendir(directory)) entries.push(entry);
     entries.sort((left, right) => left.name.localeCompare(right.name));
@@ -277,17 +293,22 @@ export class RepositoryScanner {
         relativeDirectory ? `${relativeDirectory}/${entry.name}` : entry.name,
       );
       if (entry.isDirectory()) {
+        const ignoredByDirectory = DEFAULT_IGNORED_DIRECTORIES.has(entry.name) || ignore.ignores(`${relativePath}/`);
         if (
-          DEFAULT_IGNORED_DIRECTORIES.has(entry.name) ||
-          ignore.ignores(`${relativePath}/`) ||
-          matches(options.exclude, `${relativePath}/`)
+          matches(options.exclude, `${relativePath}/`) ||
+          (ignoredByDirectory && !hasExplicitDescendant(relativePath, includeIgnoredPaths))
         ) {
           continue;
         }
         await this.walk(rootRealPath, relativePath, ignore, options, candidates, symlinks, nonRegular);
         continue;
       }
-      if (ignore.ignores(relativePath) || matches(options.exclude, relativePath)) continue;
+      if (
+        matches(options.exclude, relativePath) ||
+        (isDefaultIgnoredPath(relativePath) && !explicitlyIncluded(relativePath, includeIgnoredPaths)) ||
+        (ignore.ignores(relativePath) && !explicitlyIncluded(relativePath, includeIgnoredPaths))
+      )
+        continue;
       if (!matches(options.include, relativePath)) continue;
       if (entry.isSymbolicLink()) {
         symlinks.push(relativePath);

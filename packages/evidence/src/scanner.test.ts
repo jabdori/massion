@@ -32,6 +32,22 @@ describe("Repository scanner", () => {
     expect(first.rootRealPathHash).toMatch(/^[a-f0-9]{64}$/u);
   });
 
+  it("사용자가 명시한 첨부 경로는 ignore되더라도 읽는다", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "massion-scan-explicit-"));
+    await writeFile(path.join(root, ".gitignore"), "history.txt\n");
+    await writeFile(path.join(root, "history.txt"), "explicit attachment\n");
+    const scanner = new RepositoryScanner();
+
+    const result = await scanner.scan(root, {
+      include: ["**/*"],
+      exclude: [],
+      maxFileBytes: 1_024,
+      includeIgnoredPaths: ["history.txt"],
+    });
+
+    expect(result.files.map((file) => file.relativePath)).toContain("history.txt");
+  });
+
   it("binary·oversized·invalid UTF-8과 symlink를 content 없이 제외한다", async () => {
     const root = await mkdtemp(path.join(tmpdir(), "massion-scan-exclude-"));
     const outside = await mkdtemp(path.join(tmpdir(), "massion-scan-outside-"));

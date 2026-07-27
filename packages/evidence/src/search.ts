@@ -34,6 +34,8 @@ export interface EmbeddingSearchPort {
 
 export interface CodeSearchInput {
   readonly repositoryId: string;
+  /** 지정하면 current 포인터가 바뀌어도 해당 immutable IndexVersion을 검색합니다. */
+  readonly indexVersionId?: string;
   readonly query: string;
   readonly limit: number;
   readonly relativePaths?: readonly string[];
@@ -181,8 +183,11 @@ export class CodeSearchService {
     if (!Number.isInteger(input.limit) || input.limit < 1 || input.limit > 100)
       throw new Error("Code search limit은 1 이상 100 이하여야 합니다");
     const allowedPaths = scopedPaths(input.relativePaths);
-    const current = await this.repositories.getCurrentIndex(context, input.repositoryId);
-    if (!current || current.status !== "complete" || !current.current)
+    const current = input.indexVersionId
+      ? await this.repositories.getIndex(context, input.indexVersionId)
+      : await this.repositories.getCurrentIndex(context, input.repositoryId);
+    const usable = current?.status === "complete" || (input.indexVersionId !== undefined && current?.status === "superseded");
+    if (!current || !usable || (!input.indexVersionId && !current.current))
       throw new Error("검색할 current complete IndexVersion이 없습니다");
     const snapshot = await this.indexes.getSnapshot(context, current.indexVersionId);
     const candidates = new Map<string, RankedCandidate>();

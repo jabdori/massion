@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { join } from "node:path";
 
 import type { TenantContext } from "@massion/identity";
 
@@ -56,7 +57,7 @@ export class EvidencePromptMaterializer {
     if (!Number.isInteger(budget) || budget < 1 || budget > MAX_ESTIMATED_TOKENS)
       throw new Error("Prompt token budget은 1 이상 24,000 이하의 정수여야 합니다");
 
-    const { brief, snapshot } = await this.verifyBriefSnapshot(context, workId, evidenceBriefId);
+    const { brief, repository, snapshot } = await this.verifyBriefSnapshot(context, workId, evidenceBriefId);
     if (brief.status !== "ready" || !brief.scopeChecksum)
       throw new Error("준비 완료되고 scope가 검증된 EvidenceBrief만 materialize할 수 있습니다");
     if (brief.references.length < 1 || brief.references.length > 12)
@@ -98,7 +99,7 @@ export class EvidencePromptMaterializer {
       }
       snippets.push({
         referenceId: reference.referenceId,
-        citation: `${reference.relativePath}:${String(reference.startLine)}-${String(reference.endLine)}`,
+        citation: `${join(repository.rootRef, reference.relativePath)}:${String(reference.startLine)}-${String(reference.endLine)}`,
         relativePath: reference.relativePath,
         startLine: reference.startLine,
         endLine: reference.endLine,
@@ -140,7 +141,7 @@ export class EvidencePromptMaterializer {
     context: TenantContext,
     workId: string,
     evidenceBriefId: string,
-  ): Promise<{ readonly brief: EvidenceBrief; readonly snapshot: IndexSnapshot }> {
+  ): Promise<{ readonly brief: EvidenceBrief; readonly repository: Awaited<ReturnType<RepositoryStore["getRepository"]>>; readonly snapshot: IndexSnapshot }> {
     const brief = await this.briefs.getBrief(context, evidenceBriefId);
     if (brief.organizationId !== context.organizationId || brief.workId !== workId)
       throw new Error("EvidenceBrief가 요청한 organization 또는 Work에 속하지 않습니다");
@@ -174,6 +175,6 @@ export class EvidencePromptMaterializer {
     ) {
       throw new Error("EvidenceBrief의 snapshot checksum이 다릅니다");
     }
-    return { brief, snapshot };
+    return { brief, repository, snapshot };
   }
 }

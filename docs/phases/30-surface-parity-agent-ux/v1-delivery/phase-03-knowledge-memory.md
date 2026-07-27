@@ -119,3 +119,20 @@
 | 격리 릴리스 번들 생성 및 실제 화면 확인 | 통과 — 최종 공개 후보·서명·공증·전체 UAT를 뜻하지 않음 |
 
 세부 관측과 남은 동일 후보 SHA 게이트는 [2026-07-26 증분 UAT 기록](../../../evidence/phase-30/knowledge-memory-uat-2026-07-26.md)에 남깁니다.
+
+### 03-6 — 실제 네이티브 첨부·선택 범위·절대 경로 citation
+
+- 실제 Tauri에서 folder picker로 trusted workspace를 선택하고, native file picker로 `history.txt`와 `README.md`를 첨부한 뒤 실제 OpenRouter Work를 완료했습니다. 상세 ID와 실행 증거는 [2026-07-27 파일 지식 UAT](../../../evidence/phase-30/desktop-live-workspace-file-knowledge-uat-2026-07-27.md)에 기록했습니다.
+- 명시 첨부 파일이 `.gitignore`에 있어도 읽히도록 scanner 경계를 고쳤고, 같은 줄의 중복 호출 relation key 충돌을 순번으로 고유화했습니다.
+- `workspacePaths`가 있으면 선택한 파일만 인덱싱해 전체 workspace 스캔을 피합니다. 이번 실제 IndexVersion은 파일 2개만 포함했고 완료까지 즉시 진행됐습니다.
+- Evidence prompt citation은 repository root를 포함한 절대 경로로 전달하며, 실제 최종 artifact에도 두 절대 경로가 기록됐습니다.
+
+| 검증 | 결과 |
+|---|---|
+| `pnpm --filter @massion/evidence exec vitest run src/indexer.test.ts -t '같은 줄의 동일 호출 관계도 고유 키로 저장한다' --reporter=dot` | 통과 — 1개 |
+| `pnpm --filter @massion/evidence exec vitest run src/scanner.test.ts src/workspace-knowledge.test.ts src/repository-store.test.ts --reporter=dot` | 통과 — 14개 |
+| `pnpm --filter @massion/evidence exec vitest run src/workspace-knowledge.test.ts --reporter=dot` | 통과 — 2개 |
+| `pnpm --filter @massion/evidence typecheck` | 통과 |
+| `pnpm --filter @massion/desktop tauri:build` | 통과 |
+
+이 검증은 파일 첨부·workspace 지식의 단일 실제 흐름만 닫습니다. 전체 K01~K04, 10개 이상 시나리오, 재시작·설치·서명·공증 및 공개 릴리스 게이트는 남아 있습니다.

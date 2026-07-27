@@ -134,6 +134,25 @@ describe("원자적 Repository index 작성", () => {
     });
   });
 
+  it("같은 줄의 동일 호출 관계도 고유 키로 저장한다", async () => {
+    await writeFile(path.join(root, "duplicate.ts"), "export function run() { return required(); required(); }\n");
+    const { repository, revision } = await prepareRevision();
+    const configuration = await prepareConfiguration(repository.repositoryId);
+    const index = await new EvidenceIndexer(repositories, indexes, scanner, new EvidenceParser()).index(context, {
+      commandId: crypto.randomUUID(),
+      repositoryId: repository.repositoryId,
+      repositoryRevisionId: revision.repositoryRevisionId,
+      configurationId: configuration.configurationId,
+      mode: "full",
+      root,
+      scanOptions: SCAN_OPTIONS,
+    });
+
+    const snapshot = await indexes.getSnapshot(context, index.index.indexVersionId);
+    expect(index.index.status).toBe("complete");
+    expect(snapshot.relations.filter((relation) => relation.kind === "calls")).toHaveLength(2);
+  });
+
   it("parser 실패와 실행 crash는 이전 current를 보존하고 각각 partial과 failed version을 남긴다", async () => {
     await writeFile(path.join(root, "stable.ts"), "export const stable = 1;\n");
     const firstRevision = await prepareRevision();
