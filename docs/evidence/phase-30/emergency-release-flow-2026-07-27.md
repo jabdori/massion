@@ -84,6 +84,18 @@ operatorCode: APP_HTTP_AUTH
 
 검토 승인과 Prompt adoption 시작은 실제 사용자 흐름으로 닫혔습니다. 현재 adoption은 `observing`이므로 효과 표본 측정·악화 시 복원은 다음 별도 흐름이며, 이 기록에서 완료로 표시하지 않습니다.
 
+## Growth observing 재시작 계보·효과 측정 증분
+
+승인 직후 재시작에서 Growth bootstrap이 baseline의 잘못된 버전 비교 때문에 실패하는 실제 결함을 확인하고, 같은 수직 흐름 안에서 최소 수정과 재실행을 진행했습니다.
+
+- 결함 증거: 승인된 adoption `af44d129-887c-4299-8d5c-26772cd98089`의 baseline은 `target_version_id=ff1bb895-d67f-4c8e-a29f-cb713235dc81`(adoption 전 버전), 상태 `pending`이었습니다. 기존 감사기는 이를 `after_version_id=7fa2dd5b-a430-40db-93a9-b6523171312f`와 비교해 `/api/v1/bootstrap`을 `APP_INTERNAL`로 거부했습니다.
+- 수정: `GrowthComplianceAuditor`가 baseline을 `before_version_id`와 비교하고, `pending`·`captured`·`closed` 상태를 허용하도록 정합화했습니다. `observing` 직후 baseline이 아직 표본을 캡처하지 않은 상태를 정상적인 중간 상태로 취급합니다.
+- 회귀 검증: `pnpm --filter @massion/growth exec vitest run src/compliance.test.ts -t 'observing adoption의 pending baseline은 before version 기준으로 재시작을 허용한다' --reporter=dot` — 1개 통과.
+- 실제 Tauri 재시작: 번들 SHA-256 `f23380048ed8bf657b396174d9f7dccb13cd1ce99b1c1f8cb1af7bd6d7bac061`에서 앱이 `로컬 연결됨`으로 부트스트랩되고 개선 화면의 채택 제안이 `반영됨`으로 표시됐습니다. 동일 프로필의 실제 DB에서도 adoption `observing`과 baseline `pending / before_version`을 확인했습니다.
+- 효과 표본 재실행: 재시작 후 실제 Tauri에서 Work `0029bb83-ff36-41c2-b22a-dab331137bf7`를 생성하고 실제 OpenRouter Provider 실행 `39576126-19e7-4d14-8792-511afe1b2cd6`을 시작했습니다. 무료 모델의 `delegate_task` 실행 오류가 발생해 Work는 `draft`, Runtime은 `running`으로 남았고, terminal Assurance 3건이 만들어지지 않아 baseline은 `pending`, effect observation/evaluation은 0건입니다.
+
+따라서 이번 증분은 승인된 adoption의 **재시작 복구**를 실제로 닫았지만, Provider 실행 실패로 인해 효과 cohort·악화 복원은 완료하지 못했습니다. 해당 실패를 성공으로 우회하거나 fixture로 대체하지 않습니다.
+
 ## 남은 범위
 
 1. 실제 Tauri 부트스트랩 access token이 발급 키와 검증 키를 동일하게 사용하는지 확인합니다.

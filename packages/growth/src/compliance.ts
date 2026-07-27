@@ -41,6 +41,7 @@ interface AdoptionAuditRecord {
   readonly evaluation_run_id: string;
   readonly evaluation_input_hash: string;
   readonly runtime_execution_id: string;
+  readonly before_version_id: string;
   readonly after_version_id?: string;
   readonly after_checksum?: string;
   readonly governance_decision_id?: string;
@@ -92,8 +93,10 @@ export class GrowthComplianceAuditor {
       "SELECT action, resource_id FROM governance_policy_decision WHERE organization_id = $organization_id AND decision_id = $decision_id LIMIT 1;",
       { organization_id: org, decision_id: adoption.governance_decision_id },
     );
-    const [baselines] = await this.database.query<[Array<{ target_version_id: string }>]>(
-      "SELECT target_version_id FROM growth_effect_baseline WHERE organization_id = $organization_id AND adoption_id = $adoption_id LIMIT 1;",
+    const [baselines] = await this.database.query<[
+      Array<{ target_version_id: string; status: "pending" | "captured" | "closed" }>
+    ]>(
+      "SELECT target_version_id, status FROM growth_effect_baseline WHERE organization_id = $organization_id AND adoption_id = $adoption_id LIMIT 1;",
       { organization_id: org, adoption_id: adoption.adoption_id },
     );
     const [effects] = await this.database.query<[Array<{ result: string }>]>(
@@ -134,7 +137,10 @@ export class GrowthComplianceAuditor {
         decision && decision.action === "growth.adopt" && decision.resource_id === adoption.suggestion_id,
       ),
       targetVersionMatches,
-      baselineMatches: baselines[0]?.target_version_id === adoption.after_version_id,
+      // baseline은 adoption 전 버전을 비교 기준으로 고정합니다. observing 직후에는 pending일 수 있습니다.
+      baselineMatches:
+        baselines[0]?.target_version_id === adoption.before_version_id &&
+        ["pending", "captured", "closed"].includes(baselines[0]?.status ?? ""),
       effectSequenceMatches: adoption.status === "observing" || effects.length > 0 || reverts[0]?.mode === "explicit",
       revertSequenceMatches: adoption.status !== "reverted" || reverts[0]?.status === "completed",
     };

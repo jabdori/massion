@@ -77,6 +77,10 @@ Core 파이프라인, 권한 모드, 수신함 UX, 메모리 주입 경로가 �
 
 같은 후보의 실제 Tauri 수신함에서 제안 `1962d001-d2ba-4bf8-ac8b-5ab5769913ad` 상세를 열고 승인했습니다. 화면의 승인 대기 수가 `1→0`이 되었고, DB에서 제안 `adopted`, 승인 `consumed`, adoption `observing`, after version 생성까지 확인했습니다. 효과 표본 측정과 악화 시 복원은 아직 닫지 않았습니다. [Growth review·adoption 증거](../../../evidence/phase-30/emergency-release-flow-2026-07-27.md)
 
+승인 후 재시작에서 baseline을 adoption 후 버전으로 잘못 비교하던 준수 감사 결함을 확인했습니다. baseline은 adoption 전 버전을 기준으로 삼아야 하므로 `GrowthComplianceAuditor`를 `before_version_id`와 `pending/captured/closed` 상태 기준으로 수정하고, 해당 중간 상태의 재시작 회귀 테스트를 추가했습니다. 최신 번들 `f23380048e`를 실제 Tauri로 재시작한 결과 앱은 `로컬 연결됨`으로 부트스트랩됐고 개선 화면의 채택 제안이 정상 표시됐습니다.
+
+재시작 뒤 실제 Provider Work `0029bb83-ff36-41c2-b22a-dab331137bf7`를 실행했으나 OpenRouter 무료 모델의 `delegate_task` 오류로 Work가 `draft`, Runtime이 `running`에 머물렀습니다. 따라서 이 실행에서는 terminal Assurance 표본 3건, baseline capture, effect observation/evaluation이 생성되지 않았습니다. 재시작 복구는 통과했지만 효과 cohort와 degraded 복원은 여전히 남은 범위입니다. 상세 DB·화면 증거는 [Growth observing 재시작·효과 증분](../../../evidence/phase-30/emergency-release-flow-2026-07-27.md)에 기록했습니다.
+
 ### 04-5 — 전체 빌드 + 데스크톱 UAT
 
 후보 `40a6ffbc8`에서 실제 Tauri·Provider·workspace 파일·디렉터리 문맥·Knowledge·Growth·full-access·재시작 증분을 확인했고, 최신 후보 `573297642`에서 Provider Work·Knowledge·Memory·Growth 조회·재시작 보존을 재확인했습니다. 이번 후보 `f23380048e`에서는 실제 OpenRouter Work 완료와 bundled SurrealDB self-start를 추가 확인했습니다. 전체 원자 UAT, native picker 완료, 평가·채택·효과·복원, 서명·공증·설치 게이트는 남아 있으므로 04-5와 개인용 v1 완료를 전체 통과로 표시하지 않습니다. [workspace 경계 증거](../../../evidence/phase-30/desktop-live-workspace-directory-uat-2026-07-26-40a6ffbc8.md) · [최신 Provider·재시작 증거](../../../evidence/phase-30/desktop-live-provider-restart-uat-2026-07-27-573297642.md)
