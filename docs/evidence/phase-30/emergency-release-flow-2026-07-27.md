@@ -73,6 +73,17 @@ operatorCode: APP_HTTP_AUTH
 
 이 결과는 실제 timeout 오류가 fallback 가능한 timeout으로 정합화되고, 완료 Work에서 Growth Reflection이 실제 Provider를 통해 성공한 것을 증명합니다. Growth의 review 승인·auto 채택·효과 측정·복원은 이 흐름에 포함하지 않았으므로 여전히 별도 릴리스 게이트입니다.
 
+## Growth review 승인·adoption 재실행 증분
+
+실제 Growth Reflection이 만든 제안의 검토·승인 경로를 같은 Tauri 후보에서 실행했습니다.
+
+- 번들 실행 바이너리 SHA-256: `f23380048ed8bf657b396174d9f7dccb13cd1ce99b1c1f8cb1af7bd6d7bac061`
+- 실제 제안: `1962d001-d2ba-4bf8-ac8b-5ab5769913ad`
+- 실제 화면: 수신함에서 `개선 검토 열기`로 제안 상세를 열고 `승인`을 눌렀습니다. 개선 화면의 `승인 대기` 수가 `1 → 0`으로 바뀌었습니다.
+- 실제 Application/DB 결과: 제안 status=`adopted`, 승인 `9d4fc444-1f3c-479b-952b-40d72aa30283` status=`consumed`, adoption `af44d129-887c-4299-8d5c-26772cd98089` status=`observing`, before version=`ff1bb895-d67f-4c8e-a29f-cb713235dc81`, after version=`7fa2dd5b-a430-40db-93a9-b6523171312f`.
+
+검토 승인과 Prompt adoption 시작은 실제 사용자 흐름으로 닫혔습니다. 현재 adoption은 `observing`이므로 효과 표본 측정·악화 시 복원은 다음 별도 흐름이며, 이 기록에서 완료로 표시하지 않습니다.
+
 ## 남은 범위
 
 1. 실제 Tauri 부트스트랩 access token이 발급 키와 검증 키를 동일하게 사용하는지 확인합니다.
