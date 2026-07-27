@@ -176,6 +176,8 @@ async function options(
         sandboxMode: "workspace-write",
         approvalPolicy: "never",
         networkAccessEnabled: false,
+        permissionMode: "governed",
+        autonomyRevision: 0,
       }),
     },
     profileRoot: root,
@@ -249,6 +251,8 @@ describe("구독 실행 해석기", () => {
           sandboxMode: "workspace-write",
           approvalPolicy: "never",
           networkAccessEnabled: false,
+          permissionMode: "governed",
+          autonomyRevision: 0,
         },
       }),
     );
@@ -566,6 +570,8 @@ describe("구독 실행 해석기", () => {
       sandboxMode: "workspace-write",
       approvalPolicy: "on-request",
       networkAccessEnabled: false,
+      permissionMode: "governed",
+      autonomyRevision: 0,
     });
     const resolver = new MassionSubscriptionRuntimeResolver(configured);
 
@@ -590,6 +596,8 @@ describe("구독 실행 해석기", () => {
       sandboxMode: "workspace-write",
       approvalPolicy: "on-request",
       networkAccessEnabled: false,
+      permissionMode: "governed",
+      autonomyRevision: 0,
     });
 
     const binding = await new MassionSubscriptionRuntimeResolver(configured).resolve(context, resolution());
@@ -611,6 +619,8 @@ describe("구독 실행 해석기", () => {
       sandboxMode: "workspace-write",
       approvalPolicy: "deny",
       networkAccessEnabled: false,
+      permissionMode: "governed",
+      autonomyRevision: 0,
     });
     await expect(new MassionSubscriptionRuntimeResolver(native).resolve(context, resolution())).rejects.toThrow(
       "조직 정책에서 차단",
@@ -623,6 +633,8 @@ describe("구독 실행 해석기", () => {
       sandboxMode: "workspace-write",
       approvalPolicy: "deny",
       networkAccessEnabled: false,
+      permissionMode: "governed",
+      autonomyRevision: 0,
     });
     await expect(new MassionSubscriptionRuntimeResolver(edge).resolve(context, resolution())).rejects.toThrow(
       "조직 정책에서 차단",

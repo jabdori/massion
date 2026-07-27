@@ -55,16 +55,31 @@ describe("스타일 의미 토큰", () => {
 
   it("초점 표시에 gate를 쓰지 않습니다", () => {
     // 노랑은 "사람이 필요함" 전용어입니다. 초점 링이 노랑이면 예약어가 무의미해집니다.
-    expect(styles).toMatch(/--focus-ring:\s*var\(--agent-strategy\);/);
+    const found = /--focus-ring:\s*var\((--[\w-]+)\);/.exec(styles);
+    expect(found?.[1]).toBeDefined();
+    expect(found?.[1]).not.toBe("--gate");
+  });
+
+  it("초점 링이 실재하는 변수를 가리킵니다", () => {
+    // CSS는 미정의 var를 만나면 그 선언 전체를 무효로 돌립니다. 이전에는 --focus-ring이
+    // 정의된 적 없는 --agent-strategy를 가리켜 outline·--color-ring·::selection이 함께 죽었고,
+    // "gate가 아니다"만 보던 위 검사는 그 상태를 통과시켰습니다. 참조 대상의 «실재»를 검사합니다.
+    const code = styles.replaceAll(/\/\*[\s\S]*?\*\//g, "");
+    const undefinedNames = [...code.matchAll(/var\((--[\w-]+)\)/g)]
+      .map((found) => found[1] ?? "")
+      .filter((name) => !name.startsWith("--tw-"))
+      .filter((name) => !new RegExp(`^\\s*${name}:`, "m").test(code));
+    expect([...new Set(undefinedNames)]).toEqual([]);
   });
 
   it("메타 텍스트가 WCAG AA 대비를 넘습니다", () => {
     // fg-3는 11px 시각·checksum·경로에 쓰므로 소형 텍스트 기준 4.5:1을 넘겨야 합니다.
     // bg-3는 nav 활성 배경과 진행바 트랙이라 메타 텍스트가 얹히지 않습니다.
     const bg = hex(styles, "--bg-0");
-    for (const surface of ["--bg-0", "--bg-1", "--bg-2"]) {
-      expect(`${surface} ${contrast(hex(styles, "--fg-3"), hex(styles, surface)).toFixed(2)}`).toBe(
-        `${surface} ${Math.max(4.5, contrast(hex(styles, "--fg-3"), hex(styles, surface))).toFixed(2)}`,
+    // fg-4는 팝오버·다이얼로그 바닥(bg-3)에도 얹히므로 네 면 전부에서 넘겨야 합니다.
+    for (const surface of ["--bg-0", "--bg-1", "--bg-2", "--bg-3"]) {
+      expect(`${surface} ${contrast(hex(styles, "--fg-4"), hex(styles, surface)).toFixed(2)}`).toBe(
+        `${surface} ${Math.max(4.5, contrast(hex(styles, "--fg-4"), hex(styles, surface))).toFixed(2)}`,
       );
     }
     expect(contrast(hex(styles, "--fg-2"), bg)).toBeGreaterThanOrEqual(4.5);

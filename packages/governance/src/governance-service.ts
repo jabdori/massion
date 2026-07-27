@@ -82,10 +82,23 @@ function autonomyReviewRequirement(action: string): ApprovalRequirement {
   };
 }
 
-function invariantRequirement(action: string, mode?: GrowthAutomationMode): ApprovalRequirement | undefined {
-  const governed = new Set(["policy.activate", "emergency.stop.disable", "declaration.apply"]);
-  if (action === "growth.adopt" && mode !== "auto") governed.add(action);
-  if (action === "growth.revert" && mode !== "auto") governed.add(action);
+/** full-access도 우회하지 못하는 안전 불변식. 통제 장치 자체를 바꾸는 행동입니다. */
+const NON_BYPASSABLE_ACTIONS = new Set(["policy.activate", "emergency.stop.disable", "declaration.apply"]);
+
+/**
+ * `hardOnly`는 full-access 경로가 씁니다. 자가개선 채택·되돌리기는 사용자가 고른 채택 모드를 표현하는
+ * 다이얼이지 통제 장치가 아니므로, 사용자가 명시적으로 전체 권한을 켰다면 그 선택이 이깁니다.
+ */
+function invariantRequirement(
+  action: string,
+  mode?: GrowthAutomationMode,
+  options?: { readonly hardOnly?: boolean },
+): ApprovalRequirement | undefined {
+  const governed = new Set(NON_BYPASSABLE_ACTIONS);
+  if (!options?.hardOnly) {
+    if (action === "growth.adopt" && mode !== "auto") governed.add(action);
+    if (action === "growth.revert" && mode !== "auto") governed.add(action);
+  }
   if (!governed.has(action)) return undefined;
   return {
     requirementId: `invariant-${action.replaceAll(".", "-")}`,
@@ -142,7 +155,7 @@ export class GovernanceService {
       reasons = ["tenant-context"];
     } else if (autonomyState.mode === "full-access") {
       // full-access도 안전 불변식(non-bypassable)은 우회하지 않습니다.
-      requirement = invariantRequirement(input.request.action, mode);
+      requirement = invariantRequirement(input.request.action, mode, { hardOnly: true });
       if (requirement) {
         outcome = "require_approval";
         reasons = ["full-access-non-bypassable"];

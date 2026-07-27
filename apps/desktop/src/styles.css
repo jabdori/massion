@@ -11,21 +11,34 @@
    * 깊이를 층위와 1px 선으로만 만들기로 했으므로 그 둘이 실제로 보여야 합니다.
    * 이전 값은 면 분리 1.048, 선 1.279로 사실상 보이지 않았습니다.
    */
-  --bg-0: #0e0e10;
-  --bg-1: #191a1d;
-  --bg-2: #1f2024;
-  --bg-3: #2a2b30;
-  --line: #2e2f34;
-  --line-strong: #3a3b42;
-
-  --fg: #ededef;
-  --fg-2: #a0a0a8;
   /*
-   * 11px 메타 텍스트(시각·checksum·경로·adapter 버전)에 씁니다.
-   * 메타가 얹히는 세 면 bg-0·bg-1·bg-2 모두에서 WCAG AA 4.5:1을 넘겨야 합니다.
-   * 이전 #6e6e76은 bg-0에서 3.82였고, #82828a는 bg-2에서 4.27로 부족했습니다.
+   * 「원장」 램프. 참조 제품(Linear)의 4단계 구성은 가져오되 값은 다시 계산했습니다.
+   * 그쪽 진폭 17포인트를 그대로 옮기면 면 분리가 1.05·1.10, 선이 1.24로 떨어지는데,
+   * 이 저장소는 위 주석대로 그 구간을 이미 시도했다가 "보이지 않는다"로 되돌린 이력이 있습니다.
+   * 그래서 측정 하한(1.08 / 1.15 / 1.40)을 만족하는 최소값으로 압축했습니다 — 진폭 28 → 21.
    */
-  --fg-3: #8a8a92;
+  --bg-0: #0b0c0e;
+  --bg-1: #15171a;
+  --bg-2: #1b1d20;
+  --bg-3: #202225;
+  /* 선은 두 계열입니다. line은 컨테이너 «안쪽» 분절, line-strong은 열과 열 사이 seam입니다. */
+  --line: #2b2d30;
+  --line-strong: #3a3c3f;
+
+  /*
+   * 글자 4단계. 위계는 크기나 웨이트가 아니라 이 네 값이 만듭니다.
+   * 본문 기본값은 1단계가 아니라 2단계입니다 — 1단계는 지금 보고 있는 대상의 제목 하나에만 씁니다.
+   * 이 한 칸이 밀도의 핵심이라 --fg를 기본값으로 쓰던 것을 내렸습니다.
+   */
+  --fg: #f4f5f7;
+  --fg-2: #c8cdd6;
+  --fg-3: #a2a8b4;
+  /*
+   * 반복돼서 안 읽는 것(시각·checksum·경로·상태 단어·섹션 헤더·카운트)에 씁니다.
+   * 참조 제품의 4단계 하한 #62666d는 근-검정 위 3.3:1이라 쓰지 않았습니다.
+   * 이 값은 메타가 얹히는 네 면 bg-0~bg-3 전부에서 AA 4.5:1을 넘깁니다(최악 bg-3에서 4.53).
+   */
+  --fg-4: #838993;
 
   /*
    * 에이전트 색. 아바타·화자 이름·좌측 레일·진행률 막대 네 곳에만 씁니다.
@@ -38,24 +51,37 @@
    * 노랑·초록 계열은 넣지 않습니다. 노랑은 "사람이 필요함" 예약어이고,
    * 초록은 성공 표시로 오독됩니다.
    */
-  --agent-0: #e4e4e8;
-  --agent-1: #7c9eff;
-  --agent-2: #4fc3a1;
-  --agent-3: #c99bff;
-  --agent-4: #6fd3e8;
-  --agent-5: #f58fb0;
-  --agent-6: #e88ad8;
-  --agent-7: #8fa8c4;
+  /*
+   * 슬롯 1~7은 OKLCH(0.78, 0.105, h)에서 h를 27°씩 돌려 뽑았습니다. L·C가 같으므로
+   * 목록에서 어느 하나가 더 밝게 튀지 않습니다. 이전 값은 손으로 골라 명도가 제각각이라
+   * 참가자 줄에서 특정 화자만 앞으로 나왔습니다.
+   * hue 대역 60~175(노랑·초록)는 비워 둡니다 — 위 예약어 규칙 때문입니다.
+   * 슬롯 0은 대표(Representative)입니다. 조직의 목소리이지 전문가가 아니므로 색상을 갖지 않습니다.
+   */
+  --agent-0: #dcdee3;
+  --agent-1: #3fc8cb;
+  --agent-2: #5dc0ea;
+  --agent-3: #85b4f7;
+  --agent-4: #ada8f8;
+  --agent-5: #c9a0ee;
+  --agent-6: #e399da;
+  --agent-7: #f398be;
   /* 아직 조직에 없는 노드. 채우지 않고 점선으로만 표기합니다. */
   --agent-provisional: #9ba8c4;
   --user: #3a3a40;
 
-  /* 예약어. gate는 사람이 필요한 곳에만, halt는 차단·실패에만 씁니다. 초록은 없습니다. */
-  --gate: #f5c451;
+  /*
+   * 예약어 셋. gate는 사람이 필요한 곳, halt는 실행이 막힌 곳, emergency는 사람이 조직을 세운 곳입니다.
+   * halt(막힘)와 emergency(긴급 정지)는 반대 사실이므로 같은 색을 쓰지 않습니다.
+   * emergency만 화면에서 큰 면적을 갖습니다 — 반전된 레일을 채울 때뿐입니다.
+   * 초록은 없습니다.
+   */
+  --gate: #f0bc4b;
   --gate-ink: #241d07;
   --gate-wash: #231d0e;
   --gate-border: #4a3c15;
-  --halt: #ff6b6b;
+  --halt: #f5766e;
+  --emergency: #e8442e;
 
   /* scope:"work"와 미승인 표기. 점선은 이 두 뜻으로만 씁니다. */
   --provisional-border: 1px dashed var(--agent-provisional);
@@ -69,9 +95,11 @@
   --surface-2: var(--bg-2);
   --border: var(--line);
   --control: var(--line-strong);
+  /* 본문 기본값은 secondary(글-2)입니다. primary는 열린 대상의 제목 하나에만 씁니다. */
   --primary: var(--fg);
   --secondary: var(--fg-2);
-  --muted: var(--fg-3);
+  --tertiary: var(--fg-3);
+  --muted: var(--fg-4);
   /*
    * accent는 중성 강조입니다. gate로 이어붙이면 bg-accent를 쓰는 모든 장식이 노랑이 되고
    * "노랑 = 사람이 필요함" 예약어가 무의미해집니다. gate는 반드시 명시적으로만 씁니다.
@@ -80,9 +108,14 @@
   --accent-ink: var(--bg-0);
   --danger: var(--halt);
 
-  /* 초점 표시는 gate를 쓰지 않습니다. 노랑은 "사람이 필요함" 전용어입니다. */
-  --focus-ring: var(--agent-strategy);
-  --selection-background: color-mix(in srgb, var(--agent-strategy) 32%, transparent);
+  /*
+   * 초점 표시는 gate를 쓰지 않습니다. 노랑은 "사람이 필요함" 전용어입니다.
+   * 이전 값 var(--agent-strategy)는 :root에 정의된 적이 없는 변수였습니다. CSS는 미정의 var를
+   * 만나면 그 선언 전체를 무효로 돌리므로 outline·--color-ring·--color-sidebar-ring·::selection이
+   * 함께 죽어 키보드 초점 링이 «렌더되지 않았습니다». 실재하는 글-1로 고정합니다.
+   */
+  --focus-ring: var(--fg);
+  --selection-background: color-mix(in srgb, var(--fg) 24%, transparent);
   --selection-foreground: var(--fg);
   --overlay: rgb(0 0 0 / 0.6);
 }
@@ -97,6 +130,7 @@
   --color-fg: var(--fg);
   --color-fg-2: var(--fg-2);
   --color-fg-3: var(--fg-3);
+  --color-fg-4: var(--fg-4);
 
   --color-agent-0: var(--agent-0);
   --color-agent-1: var(--agent-1);
@@ -114,6 +148,8 @@
   --color-gate-wash: var(--gate-wash);
   --color-gate-border: var(--gate-border);
   --color-halt: var(--halt);
+  --color-emergency: var(--emergency);
+  --color-tertiary: var(--tertiary);
 
   --color-canvas: var(--canvas);
   --color-chrome: var(--chrome);

@@ -18,6 +18,7 @@ import {
   type VerificationViewV1,
   type WorkActivityViewV1,
   type WorkDetailV1,
+  type KnowledgeReferenceViewV1,
   type WorkKnowledgeViewV1,
   type WorkSummaryV1,
   type WorkspaceViewV1,
@@ -36,6 +37,8 @@ import {
   type SpeakerView,
   type StepState,
   type TaskView,
+  type VerificationCriterionStatus,
+  type VerificationCriterionView,
   type VerificationView,
   type WorkStatus,
   type WorkView,
@@ -194,6 +197,472 @@ export interface ModelRouteView {
   readonly totalBudgetMicros: number;
   /** 이 경로가 쓸 수 있는 모델 수. 0이면 경로가 있어도 실행되지 않습니다. */
   readonly candidateCount: number;
+  /** 우선순위가 가장 높은 후보의 모델 id. 이 경로가 실제로 부르는 모델입니다. */
+  readonly primaryModelId?: string;
+  /** 그 모델이 이 컴퓨터에서 도는지. 로컬 우선 제품이라 데이터가 나가는지가 먼저 보여야 합니다. */
+  readonly primaryLocal?: boolean;
+  /** 그 모델 프로필이 검증됐는지. */
+  readonly primaryVerified?: boolean;
+}
+
+/*
+ * ── 근거 그래프 ───────────────────────────────────────────────────
+ *
+ * 도메인은 관계를 이미 갖고 있습니다: `packages/evidence/src/extractors.ts:31`이
+ * `contains | imports | calls | implements | documents`를 뽑고,
+ * `CodeGraphService.neighbors()`(graph.ts:29)가 depth 1~5로 실제 순회합니다.
+ *
+ * **계약이 이를 하나도 노출하지 않습니다.** `WorkKnowledgeViewV1.references`는 평평한 목록이고
+ * graph 조회 자체가 없습니다. 아래 타입은 완성본 화면이 기다리는 모양이며,
+ * 인계: docs/phases/30-surface-parity-agent-ux/knowledge-graph-handoff.md
+ */
+
+/** @massion/evidence의 relation kind. 한글 문구는 화면이 소유합니다. */
+export type KnowledgeRelationKind = "contains" | "imports" | "calls" | "implements" | "documents";
+
+export interface KnowledgeRelationView {
+  readonly kind: KnowledgeRelationKind;
+  /** outgoing = 이 심볼이 상대를 가리킴, incoming = 상대가 이 심볼을 가리킴. */
+  readonly direction: "outgoing" | "incoming";
+  readonly qualifiedName: string;
+  readonly relativePath: string;
+  /**
+   * 인덱스 밖을 가리켜 아직 이어지지 않은 관계(`CodeGraphResult.unresolved`).
+   * 없는 연결을 이어진 것처럼 그리지 않기 위해 그대로 표시합니다.
+   */
+  readonly unresolved?: boolean;
+}
+
+export interface KnowledgeReferenceView extends KnowledgeReferenceViewV1 {
+  readonly relations?: readonly KnowledgeRelationView[];
+}
+
+export interface WorkKnowledgeView extends Omit<WorkKnowledgeViewV1, "references"> {
+  readonly references: readonly KnowledgeReferenceView[];
+}
+
+/**
+ * 완성본 기준 지식. 관계 셋을 한 이웃 목록으로 합친 모습입니다 —
+ * 코드 관계(evidence)뿐 아니라 이 심볼을 쓴 Work·산출물·에이전트까지 한 자리에서 봅니다.
+ * 그게 ADR-002가 말한 "합쳐진 이웃 조회"의 결과 모양입니다.
+ */
+const fixtureKnowledgeNodes: readonly KnowledgeNodeView[] = [
+  { nodeId: "work:churn-q3", kind: "work", label: "3분기 고객 이탈 원인 분석", detail: "진행 중" },
+  { nodeId: "work:partner-contract", kind: "work", label: "파트너 계약서 검토", detail: "막힘" },
+  { nodeId: "work:weekly-ops", kind: "work", label: "주간 운영 보고서", detail: "진행 중" },
+  {
+    nodeId: "document:cohort-md",
+    kind: "document",
+    label: "코호트 정의 규칙",
+    detail: "docs/analytics/cohort.md",
+    group: "analytics",
+  },
+  { nodeId: "document:runbook-md", kind: "document", label: "운영 런북", detail: "docs/ops/runbook.md", group: "ops" },
+  {
+    nodeId: "document:metrics-md",
+    kind: "document",
+    label: "지표 사전",
+    detail: "docs/analytics/metrics.md",
+    group: "analytics",
+  },
+  { nodeId: "file:cohort-ts", kind: "file", label: "cohort.ts", detail: "src/analytics", group: "analytics" },
+  { nodeId: "file:window-ts", kind: "file", label: "window.ts", detail: "src/analytics", group: "analytics" },
+  { nodeId: "file:segment-ts", kind: "file", label: "segment.ts", detail: "src/analytics", group: "analytics" },
+  { nodeId: "file:churn-ts", kind: "file", label: "churn.ts", detail: "src/report", group: "report" },
+  { nodeId: "file:ports-ts", kind: "file", label: "ports.ts", detail: "src/analytics", group: "analytics" },
+  { nodeId: "symbol:resolveCohort", kind: "symbol", label: "resolveCohort", detail: "cohort.ts:42–88" },
+  { nodeId: "symbol:normalizeWindow", kind: "symbol", label: "normalizeWindow", detail: "window.ts:12–39" },
+  { nodeId: "symbol:loadSegments", kind: "symbol", label: "loadSegments", detail: "segment.ts:8–51" },
+  { nodeId: "symbol:buildChurnReport", kind: "symbol", label: "buildChurnReport", detail: "churn.ts:20–96" },
+  { nodeId: "symbol:CohortResolver", kind: "symbol", label: "CohortResolver", detail: "ports.ts:5–18" },
+  { nodeId: "artifact:churn-brief", kind: "artifact", label: "라벨링 기준 브리프", detail: "evidence-brief" },
+];
+
+/**
+ * 하나의 평평한 간선 목록. 관계 저장소 셋(evidence·organization·growth)을 합치면
+ * 이 모양이 됩니다. 렌즈별 그래프와 노드별 연결 목록을 둘 다 여기서 파생합니다.
+ */
+const fixtureKnowledgeEdges: readonly KnowledgeGraphEdgeView[] = [
+  { kind: "contains", sourceId: "file:cohort-ts", targetId: "symbol:resolveCohort" },
+  { kind: "contains", sourceId: "file:window-ts", targetId: "symbol:normalizeWindow" },
+  { kind: "contains", sourceId: "file:segment-ts", targetId: "symbol:loadSegments" },
+  { kind: "contains", sourceId: "file:churn-ts", targetId: "symbol:buildChurnReport" },
+  { kind: "contains", sourceId: "file:ports-ts", targetId: "symbol:CohortResolver" },
+  { kind: "calls", sourceId: "symbol:resolveCohort", targetId: "symbol:normalizeWindow" },
+  { kind: "calls", sourceId: "symbol:resolveCohort", targetId: "symbol:loadSegments" },
+  { kind: "calls", sourceId: "symbol:buildChurnReport", targetId: "symbol:resolveCohort" },
+  { kind: "implements", sourceId: "symbol:resolveCohort", targetId: "symbol:CohortResolver" },
+  // 파일끼리는 import가 실재하는 동종 관계입니다.
+  { kind: "imports", sourceId: "file:churn-ts", targetId: "file:cohort-ts" },
+  { kind: "imports", sourceId: "file:cohort-ts", targetId: "file:window-ts" },
+  { kind: "imports", sourceId: "file:cohort-ts", targetId: "file:segment-ts" },
+  { kind: "imports", sourceId: "file:cohort-ts", targetId: "file:ports-ts" },
+  // 문서끼리도 서로를 가리킵니다.
+  { kind: "documents", sourceId: "document:cohort-md", targetId: "document:metrics-md" },
+  { kind: "documents", sourceId: "document:runbook-md", targetId: "document:metrics-md" },
+  { kind: "documents", sourceId: "document:cohort-md", targetId: "symbol:resolveCohort" },
+  { kind: "documents", sourceId: "document:cohort-md", targetId: "file:cohort-ts" },
+  // 코드 밖 관계. 저장소를 합쳐야만 한 그래프에 나옵니다.
+  { kind: "documents", sourceId: "work:churn-q3", targetId: "file:cohort-ts" },
+  { kind: "documents", sourceId: "work:churn-q3", targetId: "file:churn-ts" },
+  { kind: "documents", sourceId: "work:churn-q3", targetId: "document:cohort-md" },
+  { kind: "documents", sourceId: "work:churn-q3", targetId: "artifact:churn-brief" },
+  { kind: "documents", sourceId: "work:weekly-ops", targetId: "document:runbook-md" },
+  { kind: "documents", sourceId: "work:weekly-ops", targetId: "file:churn-ts" },
+  { kind: "documents", sourceId: "work:weekly-ops", targetId: "document:metrics-md" },
+  { kind: "documents", sourceId: "work:partner-contract", targetId: "document:runbook-md" },
+];
+
+/*
+ * 규모 시험용 더미. 색인 상태가 말하는 수(파일 214 · 심볼 1,836)와 실제 노드 수를 맞춥니다.
+ * 화면이 "관계 4,902"라고 써놓고 노드 다섯 개만 그리면 규모에서 무엇이 무너지는지 알 수 없습니다.
+ *
+ * 난수를 쓰지 않습니다. 시드가 인덱스인 LCG라 다시 열어도 같은 그래프가 나옵니다.
+ */
+function seeded(index: number): number {
+  const value = Math.sin(index * 12.9898) * 43758.5453;
+  return value - Math.floor(value);
+}
+
+const FILE_AREAS = ["analytics", "report", "ingest", "billing", "auth", "ops", "ui", "shared"] as const;
+
+function buildScaleNodes(): { nodes: KnowledgeNodeView[]; edges: KnowledgeGraphEdgeView[] } {
+  const nodes: KnowledgeNodeView[] = [];
+  const edges: KnowledgeGraphEdgeView[] = [];
+
+  // 파일 214개. 손으로 쓴 다섯 개는 앞에 두어 이름으로 찾을 수 있게 합니다.
+  const handFiles = fixtureKnowledgeNodes.filter((node) => node.kind === "file");
+  for (let i = handFiles.length; i < 214; i += 1) {
+    const area = FILE_AREAS[i % FILE_AREAS.length] ?? "shared";
+    nodes.push({
+      nodeId: `file:gen-${String(i)}`,
+      kind: "file",
+      label: `${area}-${String(i)}.ts`,
+      detail: `src/${area}`,
+      group: area,
+    });
+  }
+  // 심볼 1,836개.
+  const handSymbols = fixtureKnowledgeNodes.filter((node) => node.kind === "symbol");
+  for (let i = handSymbols.length; i < 1836; i += 1) {
+    const area = FILE_AREAS[i % FILE_AREAS.length] ?? "shared";
+    nodes.push({
+      nodeId: `symbol:gen-${String(i)}`,
+      kind: "symbol",
+      label: `${area}Handler${String(i)}`,
+      detail: `${area}-${String(i % 214)}.ts`,
+      group: area,
+    });
+  }
+  // 문서 40개.
+  const handDocs = fixtureKnowledgeNodes.filter((node) => node.kind === "document");
+  for (let i = handDocs.length; i < 40; i += 1) {
+    nodes.push({
+      nodeId: `document:gen-${String(i)}`,
+      kind: "document",
+      label: `설계 노트 ${String(i)}`,
+      detail: `docs/notes/${String(i)}.md`,
+      group: "notes",
+    });
+  }
+
+  const files = [...handFiles, ...nodes.filter((node) => node.kind === "file")];
+  const symbols = [...handSymbols, ...nodes.filter((node) => node.kind === "symbol")];
+  const docs = [...handDocs, ...nodes.filter((node) => node.kind === "document")];
+
+  // 파일끼리 import. 앞쪽 파일을 더 많이 물리게 해서 허브가 생기게 합니다(실제 코드가 그렇습니다).
+  for (let i = 1; i < files.length; i += 1) {
+    const links = 1 + Math.floor(seeded(i) * 3);
+    for (let n = 0; n < links; n += 1) {
+      const targetIndex = Math.floor(seeded(i * 7 + n) ** 2 * i);
+      const source = files[i];
+      const target = files[targetIndex];
+      if (!source || !target || source.nodeId === target.nodeId) continue;
+      edges.push({ kind: "imports", sourceId: source.nodeId, targetId: target.nodeId });
+    }
+  }
+  // 심볼끼리 call.
+  for (let i = 1; i < symbols.length; i += 1) {
+    const links = 1 + Math.floor(seeded(i * 3) * 2);
+    for (let n = 0; n < links; n += 1) {
+      const targetIndex = Math.floor(seeded(i * 11 + n) ** 2 * i);
+      const source = symbols[i];
+      const target = symbols[targetIndex];
+      if (!source || !target || source.nodeId === target.nodeId) continue;
+      edges.push({ kind: "calls", sourceId: source.nodeId, targetId: target.nodeId });
+    }
+  }
+  // 문서끼리 참조.
+  for (let i = 1; i < docs.length; i += 1) {
+    const source = docs[i];
+    const target = docs[Math.floor(seeded(i * 5) * i)];
+    if (!source || !target || source.nodeId === target.nodeId) continue;
+    edges.push({ kind: "documents", sourceId: source.nodeId, targetId: target.nodeId });
+  }
+  return { nodes, edges };
+}
+
+const scale = buildScaleNodes();
+const allKnowledgeNodes: readonly KnowledgeNodeView[] = [...fixtureKnowledgeNodes, ...scale.nodes];
+const allKnowledgeEdges: readonly KnowledgeGraphEdgeView[] = [...fixtureKnowledgeEdges, ...scale.edges];
+
+/**
+ * 렌즈 그래프. **같은 종류끼리만 잇습니다.** 업무 지도에는 업무만, 파일 지도에는 파일만 있습니다.
+ * 이종 연결(업무↔문서↔파일↔심볼)은 캔버스가 아니라 노드를 눌렀을 때 시트가 보여줍니다.
+ *
+ * 같은 종류를 잇는 근거는 둘입니다.
+ *  - 직접: 파일의 `imports`, 심볼의 `calls`·`implements`처럼 도메인에 실재하는 동종 관계
+ *  - 공유: 같은 것을 쓴 사이. 업무끼리가 여기 해당합니다 — 같은 파일을 건드린 업무는 이어져 있습니다
+ */
+function fixtureGraph(lens: KnowledgeNodeKind): KnowledgeGraphView {
+  const nodes = allKnowledgeNodes.filter((node) => node.kind === lens);
+  const ids = new Set(nodes.map((node) => node.nodeId));
+  const label = new Map(allKnowledgeNodes.map((node) => [node.nodeId, node.label]));
+
+  const direct = allKnowledgeEdges.filter((edge) => ids.has(edge.sourceId) && ids.has(edge.targetId));
+  const seen = new Set(direct.map((edge) => [edge.sourceId, edge.targetId].sort().join("|")));
+
+  // 이웃을 공유하는 쌍을 찾습니다. 방향이 없으므로 한 쌍당 하나만 만듭니다.
+  const neighbors = new Map<string, Set<string>>();
+  for (const edge of allKnowledgeEdges) {
+    for (const [self, other] of [
+      [edge.sourceId, edge.targetId],
+      [edge.targetId, edge.sourceId],
+    ] as const) {
+      if (!ids.has(self) || ids.has(other)) continue;
+      neighbors.set(self, (neighbors.get(self) ?? new Set()).add(other));
+    }
+  }
+  const derived: KnowledgeGraphEdgeView[] = [];
+  const list = [...neighbors];
+  for (let i = 0; i < list.length; i += 1) {
+    for (let j = i + 1; j < list.length; j += 1) {
+      const first = list[i];
+      const second = list[j];
+      if (!first || !second) continue;
+      const [leftId, left] = first;
+      const [rightId, right] = second;
+      const key = [leftId, rightId].sort().join("|");
+      if (seen.has(key)) continue;
+      const shared = [...left].find((id) => right.has(id));
+      if (shared === undefined) continue;
+      seen.add(key);
+      derived.push({
+        kind: "documents",
+        sourceId: leftId,
+        targetId: rightId,
+        derivedVia: label.get(shared) ?? shared,
+      });
+    }
+  }
+  return { lens, nodes, edges: [...direct, ...derived] };
+}
+
+/** 노드 하나의 전체 연결. 렌즈로 좁히지 않습니다. */
+function fixtureLinks(nodeId: string): readonly KnowledgeLinkView[] {
+  const byId = new Map(allKnowledgeNodes.map((node) => [node.nodeId, node]));
+  return allKnowledgeEdges.flatMap((edge) => {
+    const otherId = edge.sourceId === nodeId ? edge.targetId : edge.targetId === nodeId ? edge.sourceId : undefined;
+    if (otherId === undefined) return [];
+    const node = byId.get(otherId);
+    if (!node) return [];
+    return [
+      {
+        node,
+        kind: edge.kind,
+        direction: edge.sourceId === nodeId ? ("outgoing" as const) : ("incoming" as const),
+        ...(edge.unresolved === true ? { unresolved: true } : {}),
+      },
+    ];
+  });
+}
+
+/**
+ * 완성본 기준 근거. 워크스페이스를 고른 Work만 지식을 씁니다.
+ * 실 경로는 관계를 못 받으므로 `relations`가 비고, 화면은 목록만 그립니다.
+ */
+function fixtureKnowledge(workId: string): WorkKnowledgeView {
+  if (workId !== "churn-q3") return { workId, status: "not-applicable", references: [] };
+  return {
+    workId,
+    status: "ready",
+    repositoryId: "repository-analytics",
+    repositoryRevisionId: "revision-8f21c4",
+    indexVersionId: "index-2f9a10",
+    evidenceBriefId: "evidence-brief-churn",
+    freshnessStatus: "fresh",
+    query: "코호트 정의 이탈 집계",
+    references: [
+      {
+        referenceId: "reference-cohort",
+        kind: "symbol",
+        relativePath: "src/analytics/cohort.ts",
+        qualifiedName: "resolveCohort",
+        startLine: 42,
+        endLine: 88,
+        contentHash: "a3f1c8",
+        relations: [
+          {
+            kind: "calls",
+            direction: "outgoing",
+            qualifiedName: "normalizeWindow",
+            relativePath: "src/analytics/window.ts",
+          },
+          {
+            kind: "calls",
+            direction: "outgoing",
+            qualifiedName: "loadSegments",
+            relativePath: "src/analytics/segment.ts",
+          },
+          {
+            kind: "calls",
+            direction: "incoming",
+            qualifiedName: "buildChurnReport",
+            relativePath: "src/report/churn.ts",
+          },
+          {
+            kind: "calls",
+            direction: "incoming",
+            qualifiedName: "compareQuarters",
+            relativePath: "src/report/compare.ts",
+          },
+          {
+            kind: "implements",
+            direction: "outgoing",
+            qualifiedName: "CohortResolver",
+            relativePath: "src/analytics/ports.ts",
+          },
+          {
+            kind: "documents",
+            direction: "incoming",
+            qualifiedName: "코호트 정의 규칙",
+            relativePath: "docs/analytics/cohort.md",
+          },
+        ],
+      },
+      {
+        referenceId: "reference-window",
+        kind: "symbol",
+        relativePath: "src/analytics/window.ts",
+        qualifiedName: "normalizeWindow",
+        startLine: 12,
+        endLine: 39,
+        contentHash: "7c02b1",
+        relations: [
+          {
+            kind: "imports",
+            direction: "outgoing",
+            qualifiedName: "startOfQuarter",
+            relativePath: "src/time/quarter.ts",
+          },
+          {
+            kind: "calls",
+            direction: "incoming",
+            qualifiedName: "resolveCohort",
+            relativePath: "src/analytics/cohort.ts",
+          },
+          // 인덱스 밖을 가리키는 관계는 이어진 것처럼 그리지 않고 그대로 남깁니다.
+          {
+            kind: "calls",
+            direction: "outgoing",
+            qualifiedName: "dayjs",
+            relativePath: "node_modules",
+            unresolved: true,
+          },
+        ],
+      },
+      {
+        referenceId: "reference-churn-doc",
+        kind: "chunk",
+        relativePath: "docs/analytics/cohort.md",
+        startLine: 1,
+        endLine: 34,
+        contentHash: "5be914",
+        relations: [
+          {
+            kind: "documents",
+            direction: "outgoing",
+            qualifiedName: "resolveCohort",
+            relativePath: "src/analytics/cohort.ts",
+          },
+        ],
+      },
+    ],
+  };
+}
+
+/*
+ * ── 지식 표면 (ADR-002) ──────────────────────────────────────────
+ *
+ * 관계 저장소가 셋으로 갈려 있습니다: evidence(코드 관계), organization(OrganizationReference),
+ * growth(source_reference_ids). 단일 간선 테이블이 없으므로 **application 계층 조인**으로
+ * 하나의 이웃 조회를 만들어야 합니다. SurrealDB native relation은 §9.6이 성능 실패가
+ * 측정될 때만 열라고 했으므로 여기서 열지 않습니다.
+ *
+ * 인계: docs/phases/30-surface-parity-agent-ux/knowledge-surface-handoff.md
+ */
+
+/** 마인드맵 노드가 가리킬 수 있는 것. 코드에 한정하지 않습니다. */
+export type KnowledgeNodeKind = "symbol" | "file" | "document" | "work" | "artifact" | "agent";
+
+export interface KnowledgeNodeView {
+  readonly nodeId: string;
+  readonly kind: KnowledgeNodeKind;
+  /** 사람이 읽는 이름. 심볼이면 qualifiedName, 파일이면 파일명. */
+  readonly label: string;
+  /** 어디에 있는지. 파일 경로이거나 Work 제목입니다. */
+  readonly detail?: string;
+  /**
+   * 색을 나누는 기준. 보통 폴더입니다(옵시디언이 폴더로 묶는 것과 같습니다).
+   * 무작위 색이 아니라 이것으로 칠해야 뭉친 색덩이가 실제 구조를 뜻하게 됩니다.
+   */
+  readonly group?: string;
+}
+
+/** 그래프 간선. 방향은 source→target이고, 화면이 중심에 따라 안팎을 정합니다. */
+export interface KnowledgeGraphEdgeView {
+  readonly kind: KnowledgeRelationKind;
+  readonly sourceId: string;
+  readonly targetId: string;
+  /** 인덱스 밖을 가리켜 아직 이어지지 않은 관계. 이어진 것처럼 그리지 않습니다. */
+  readonly unresolved?: boolean;
+  /**
+   * 직접 관계가 아니라 **공유한 것**으로 이어진 경우 그 이름.
+   * 업무끼리는 서로를 부르지 않습니다 — 같은 파일·문서를 썼기 때문에 이어집니다.
+   * 왜 이어졌는지 말하지 못하면 사용자에게는 우연한 선으로 보입니다.
+   */
+  readonly derivedVia?: string;
+}
+
+/**
+ * 렌즈 하나의 그래프. 렌즈는 "무엇의 지도를 볼 것인가"이고,
+ * 그 종류의 노드와 거기 직접 걸린 것만 담습니다. 전체를 담지 않습니다.
+ */
+export interface KnowledgeGraphView {
+  readonly lens: KnowledgeNodeKind;
+  readonly nodes: readonly KnowledgeNodeView[];
+  readonly edges: readonly KnowledgeGraphEdgeView[];
+}
+
+/** 시트가 보여주는 "무엇과 이어져 있나" 한 줄. */
+export interface KnowledgeLinkView {
+  readonly node: KnowledgeNodeView;
+  readonly kind: KnowledgeRelationKind;
+  readonly direction: "outgoing" | "incoming";
+  readonly unresolved?: boolean;
+}
+
+/** 워크스페이스가 무엇으로 색인됐나. */
+export interface KnowledgeIndexView {
+  readonly workspaceId: string;
+  readonly status: "ready" | "indexing" | "stale" | "none";
+  readonly indexVersionId?: string;
+  readonly fileCount: number;
+  readonly symbolCount: number;
+  readonly relationCount: number;
+  readonly indexedAt?: string;
+  /** 색인에서 빠진 것. 없는 것을 아는 것도 지식입니다. */
+  readonly excluded: readonly string[];
 }
 
 /** `router.catalog.providers` + `.endpoints`. */
@@ -347,7 +816,17 @@ export interface DesktopService {
   bootstrap(): Promise<DesktopBootstrapState>;
   loadIndex(input: WorkIndexInput): Promise<WorkView[]>;
   loadWork(workId: string): Promise<WorkView>;
-  loadWorkKnowledge(workId: string): Promise<WorkKnowledgeViewV1>;
+  loadWorkKnowledge(workId: string): Promise<WorkKnowledgeView>;
+  /** 워크스페이스 색인 상태. 계약 없음 — ADR-002 인계 문서 참조. */
+  loadKnowledgeIndex(workspaceId: string): Promise<KnowledgeIndexView>;
+  /** 중심 하나의 이웃. 계약 없음 — application 계층 조인이 필요합니다. */
+  loadKnowledgeGraph(workspaceId: string, lens: KnowledgeNodeKind): Promise<KnowledgeGraphView>;
+  /**
+   * 노드 하나가 무엇과 이어져 있나. **렌즈와 무관하게 전부** 돌려줍니다.
+   * 지도는 렌즈로 좁혀 보지만, 고른 것의 연결까지 좁히면 "여러 업무·여러 문서에 걸려 있다"를
+   * 볼 수 없게 됩니다. 계약 없음 — 인계 문서 참조.
+   */
+  loadKnowledgeLinks(workspaceId: string, nodeId: string): Promise<readonly KnowledgeLinkView[]>;
   loadPendingApprovals(): Promise<ApprovalView[]>;
   loadWorkspaces(): Promise<readonly DesktopWorkspaceView[]>;
   registerWorkspace(path: string): Promise<DesktopWorkspaceView>;
@@ -506,6 +985,22 @@ export function createApplicationDesktopService(
     async loadWorkKnowledge(workId) {
       return await client.query("work.knowledge", { workId });
     },
+
+    /*
+     * 아래 둘은 계약이 아직 없습니다(ADR-002). 없는 조회를 부르는 대신 "모른다"를 돌려주고
+     * 화면이 그 사실을 말하게 합니다. 숫자 0으로 색인된 척하지 않습니다.
+     */
+    loadKnowledgeIndex: (workspaceId) =>
+      Promise.resolve({
+        workspaceId,
+        status: "none" as const,
+        fileCount: 0,
+        symbolCount: 0,
+        relationCount: 0,
+        excluded: [],
+      }),
+    loadKnowledgeGraph: (workspaceId, lens) => Promise.resolve({ lens, nodes: [], edges: [] }),
+    loadKnowledgeLinks: () => Promise.resolve([]),
 
     async loadPendingApprovals() {
       return (await client.query("governance.approval.list", { status: "pending" })).map(projectApproval);
@@ -1017,17 +1512,65 @@ export function createFixtureDesktopService(): DesktopService {
         if (!work) throw new Error("Fixture Work를 찾을 수 없습니다");
         return work;
       }),
-    loadWorkKnowledge: (workId) =>
-      fixturePromise(() => ({
-        workId,
-        status: "not-applicable" as const,
-        references: [],
-      })),
+    loadWorkKnowledge: (workId) => fixturePromise(() => fixtureKnowledge(workId)),
     loadPendingApprovals: () =>
       fixturePromise(() =>
         initialSnapshot.works.flatMap((work) => work.approvals.filter((approval) => approval.status === "pending")),
       ),
-    loadWorkspaces: () => fixturePromise(() => []),
+    loadWorkspaces: () =>
+      fixturePromise(() => [
+        {
+          workspaceId: "workspace-analytics",
+          name: "analytics",
+          path: "/Users/me/code/analytics",
+          kind: "local-directory" as const,
+          trust: "trusted" as const,
+          status: "active" as const,
+          revision: 3,
+          createdAt: "2026-07-01T09:00:00.000Z",
+          lastUsedAt: "2026-07-27T10:24:00.000Z",
+        },
+        {
+          workspaceId: "workspace-ops",
+          name: "ops-runbook",
+          path: "/Users/me/code/ops-runbook",
+          kind: "local-directory" as const,
+          trust: "pending" as const,
+          status: "active" as const,
+          revision: 1,
+          createdAt: "2026-07-20T09:00:00.000Z",
+          lastUsedAt: "2026-07-20T09:00:00.000Z",
+        },
+      ]),
+    loadKnowledgeIndex: (workspaceId) =>
+      fixturePromise(() =>
+        workspaceId === "workspace-analytics"
+          ? {
+              workspaceId,
+              status: "ready" as const,
+              indexVersionId: "index-2f9a10",
+              fileCount: 214,
+              symbolCount: 1_836,
+              relationCount: 4_902,
+              indexedAt: "2026-07-27T09:41:00.000Z",
+              // 없는 것을 아는 것도 지식입니다. 왜 안 보이는지 여기서 답합니다.
+              excluded: ["node_modules", "dist", ".git", "*.lock"],
+            }
+          : {
+              workspaceId,
+              status: "none" as const,
+              fileCount: 0,
+              symbolCount: 0,
+              relationCount: 0,
+              excluded: [],
+            },
+      ),
+    loadKnowledgeGraph: (workspaceId, lens) =>
+      fixturePromise(() =>
+        workspaceId === "workspace-analytics" ? fixtureGraph(lens) : { lens, nodes: [], edges: [] },
+      ),
+    loadKnowledgeLinks: (workspaceId, nodeId) =>
+      fixturePromise(() => (workspaceId === "workspace-analytics" ? fixtureLinks(nodeId) : [])),
     registerWorkspace: (path) =>
       fixturePromise(() => ({
         workspaceId: `workspace-${path}`,
@@ -1152,7 +1695,12 @@ export function createFixtureDesktopService(): DesktopService {
 
     loadOrganization: () => fixturePromise(() => ({ version: 1, nodes: fixtureOrganizationNodes })),
     loadAutonomy: () =>
-      fixturePromise(() => ({ mode: "automatic", revision: 0, runtimePermissionStatus: "governed", emergencyStopActive: false })),
+      fixturePromise(() => ({
+        mode: "automatic",
+        revision: 0,
+        runtimePermissionStatus: "governed",
+        emergencyStopActive: false,
+      })),
     setAutonomy: (mode, expectedRevision) =>
       fixturePromise(() => ({
         mode,
@@ -1798,7 +2346,9 @@ function projectAutonomy(value: GovernanceAutonomyViewV1 | Record<string, unknow
     mode: value.mode,
     revision: value.revision,
     runtimePermissionStatus,
-    ...(typeof source.permissionLimitReason === "string" ? { permissionLimitReason: source.permissionLimitReason } : {}),
+    ...(typeof source.permissionLimitReason === "string"
+      ? { permissionLimitReason: source.permissionLimitReason }
+      : {}),
     emergencyStopActive: source.emergencyStopActive === true,
   };
 }
@@ -1842,22 +2392,34 @@ const num = (row: Record<string, unknown>, key: string): number => (typeof row[k
 const bool = (row: Record<string, unknown>, key: string): boolean => row[key] === true;
 
 export function projectModelRoutes(routes: unknown, catalog: unknown): readonly ModelRouteView[] {
-  const candidates = rows(
-    catalog && typeof catalog === "object" ? (catalog as { candidates?: unknown }).candidates : undefined,
-  );
+  const source = catalog && typeof catalog === "object" ? (catalog as Record<string, unknown>) : {};
+  const candidates = rows(source.candidates);
+  const models = rows(source.models);
+  const endpoints = rows(source.endpoints);
   return rows(routes)
     .filter((row) => typeof row.routeId === "string")
-    .map((row) => ({
-      routeId: str(row, "routeId"),
-      name: str(row, "name"),
-      routeKind: str(row, "routeKind"),
-      enabled: bool(row, "enabled"),
-      spentMicros: num(row, "spentMicros"),
-      totalBudgetMicros: num(row, "totalBudgetMicros"),
-      candidateCount: candidates.filter(
-        (candidate) => str(candidate, "routeId") === str(row, "routeId") && bool(candidate, "enabled"),
-      ).length,
-    }));
+    .map((row) => {
+      const mine = candidates
+        .filter((candidate) => str(candidate, "routeId") === str(row, "routeId") && bool(candidate, "enabled"))
+        .sort((left, right) => num(left, "priority") - num(right, "priority"));
+      // 후보가 여럿이어도 실제로 먼저 불리는 것은 우선순위 0입니다. 화면은 그 하나를 말합니다.
+      const primary = models.find((model) => str(model, "modelProfileId") === str(mine[0] ?? {}, "modelProfileId"));
+      const endpoint = primary
+        ? endpoints.find((item) => str(item, "endpointId") === str(primary, "endpointId"))
+        : undefined;
+      return {
+        routeId: str(row, "routeId"),
+        name: str(row, "name"),
+        routeKind: str(row, "routeKind"),
+        enabled: bool(row, "enabled"),
+        spentMicros: num(row, "spentMicros"),
+        totalBudgetMicros: num(row, "totalBudgetMicros"),
+        candidateCount: mine.length,
+        ...(primary === undefined ? {} : { primaryModelId: str(primary, "modelId") }),
+        ...(primary === undefined ? {} : { primaryVerified: bool(primary, "verified") }),
+        ...(endpoint === undefined ? {} : { primaryLocal: bool(endpoint, "local") }),
+      };
+    });
 }
 
 export function projectProviderConnections(catalog: unknown): readonly ProviderConnectionView[] {
@@ -2179,11 +2741,33 @@ function artifactFormat(artifact: ArtifactViewV1): string {
     : extension.toLocaleUpperCase();
 }
 
+const VERIFICATION_CRITERION_STATUSES = new Set<VerificationCriterionStatus>([
+  "passed",
+  "failed",
+  "blocked",
+  "excluded",
+]);
+
+/** 계약이 criteria를 unknown으로 싣기 때문에 화면 경계에서 좁힙니다. 알 수 없는 항목은 지어내지 않고 버립니다. */
+function projectVerificationCriteria(value: unknown): VerificationCriterionView[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item): VerificationCriterionView[] => {
+    if (!item || typeof item !== "object") return [];
+    const { criterionKey, status } = item as Record<string, unknown>;
+    if (typeof criterionKey !== "string" || !criterionKey) return [];
+    if (typeof status !== "string" || !VERIFICATION_CRITERION_STATUSES.has(status as VerificationCriterionStatus)) {
+      return [];
+    }
+    return [{ key: criterionKey, status: status as VerificationCriterionStatus }];
+  });
+}
+
 function projectVerification(verification: VerificationViewV1): VerificationView {
   return {
     id: verification.verificationId,
-    title: `검증 · ${verification.verifierId}`,
+    verifier: verification.verifierId,
     state: verification.passed ? "done" : "failed",
+    criteria: projectVerificationCriteria(verification.criteria),
     ...(verification.evidenceArtifactVersionIds.length === 0
       ? {}
       : { evidence: verification.evidenceArtifactVersionIds.join(", ") }),

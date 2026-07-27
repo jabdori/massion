@@ -21,7 +21,7 @@ function service(overrides: Partial<DesktopService> = {}): DesktopService {
 }
 
 describe("AgentOS native data flow", () => {
-  it("워크스페이스 없는 Work의 지식 빈 상태는 산출물 안내를 재사용하지 않는다", async () => {
+  it("워크스페이스 없는 Work의 근거 빈 상태는 산출물 안내를 재사용하지 않는다", async () => {
     const user = userEvent.setup();
     render(
       <App
@@ -31,9 +31,9 @@ describe("AgentOS native data flow", () => {
       />,
     );
 
-    await user.click(await screen.findByRole("tab", { name: "지식" }));
+    await user.click(await screen.findByRole("tab", { name: "근거" }));
 
-    expect(await screen.findByText("이 Work는 워크스페이스 지식을 사용하지 않았습니다.")).toBeInTheDocument();
+    expect(await screen.findByText("이 Work는 워크스페이스 근거를 사용하지 않았습니다.")).toBeInTheDocument();
     expect(screen.getByText("워크스페이스를 선택한 새 Work에서 코드 근거를 사용할 수 있습니다.")).toBeInTheDocument();
     expect(screen.queryByText("실행이 산출물을 만들면 여기에 표시됩니다.")).not.toBeInTheDocument();
   });
@@ -666,7 +666,8 @@ describe("AgentOS native data flow", () => {
     let createdVisible = false;
     let runVisible = false;
     const startWork = vi.fn(async () => ({ runId: "run-created-before-run-0001" }));
-    const { run: _createdRun, ...createdWithoutRun } = created;
+    const { run: _unusedRun, ...createdWithoutRun } = created;
+    void _unusedRun;
     const fake = service({
       startWork,
       loadIndex: async () => (createdVisible ? [...snapshot.works, createdWithoutRun] : snapshot.works),

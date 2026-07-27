@@ -200,10 +200,20 @@ export type InboxItem =
       readonly reason: string;
     };
 
+export type VerificationCriterionStatus = "passed" | "failed" | "blocked" | "excluded";
+
+export interface VerificationCriterionView {
+  key: string;
+  status: VerificationCriterionStatus;
+}
+
 export interface VerificationView {
   id: string;
-  title: string;
+  /** 판정한 조직 노드입니다. 실행자와 분리된 주체이므로 제목에 뭉개지 않습니다. */
+  verifier: string;
   state: StepState;
+  /** 무엇을 기준으로 판정했는지입니다. Assurance 판정 투영이 1개 이상 100개 이하로 보증합니다. */
+  criteria: VerificationCriterionView[];
   evidence?: string;
 }
 
@@ -323,10 +333,18 @@ const works: WorkView[] = [
     agents: churnAgents,
     artifacts: churnArtifacts,
     verifications: [
-      { id: "accuracy", title: "데이터 정확성 검증", state: "done", evidence: "CRM 표본 2,418건 일치" },
-      { id: "significance", title: "이탈 요인 통계적 유의성 검증", state: "done", evidence: "p < 0.05 기준 통과" },
-      { id: "feasibility", title: "개선안 실행 가능성 검증", state: "active" },
-      { id: "impact", title: "개선안 기대 효과 검증", state: "pending" },
+      {
+        id: "verification-churn",
+        verifier: "iris",
+        state: "done",
+        criteria: [
+          { key: "data-accuracy", status: "passed" },
+          { key: "statistical-significance", status: "passed" },
+          { key: "improvement-feasibility", status: "blocked" },
+          { key: "expected-impact", status: "excluded" },
+        ],
+        evidence: "CRM 표본 2,418건 일치",
+      },
     ],
     activities: [
       {
@@ -486,8 +504,15 @@ const works: WorkView[] = [
     ],
     artifacts: [],
     verifications: [
-      { id: "policy", title: "표준 계약 정책 대조", state: "active" },
-      { id: "liability", title: "책임 범위 검증", state: "pending" },
+      {
+        id: "verification-contract",
+        verifier: "onyx",
+        state: "failed",
+        criteria: [
+          { key: "standard-policy-match", status: "failed" },
+          { key: "liability-scope", status: "blocked" },
+        ],
+      },
     ],
     activities: [
       {
@@ -526,7 +551,14 @@ const works: WorkView[] = [
     ],
     agents: [{ id: "ops", role: "분석", name: "오재희", initials: "오", state: "active" }],
     artifacts: [],
-    verifications: [{ id: "numbers", title: "원본 지표 대조", state: "active" }],
+    verifications: [
+      {
+        id: "verification-metrics",
+        verifier: "vega",
+        state: "done",
+        criteria: [{ key: "source-metric-match", status: "passed" }],
+      },
+    ],
     activities: [
       {
         id: "accepted",

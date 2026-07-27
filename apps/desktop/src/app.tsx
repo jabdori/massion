@@ -98,6 +98,7 @@ import {
   type TaskView,
   type RoomView,
   type SpeakerView,
+  type VerificationCriterionStatus,
   type WorkStatus,
   type WorkView,
 } from "@/model";
@@ -160,6 +161,21 @@ const stateClass: Record<StepState, string> = {
   active: "text-primary",
   pending: "text-muted",
   failed: "text-danger",
+};
+
+const criterionStatusLabel: Record<VerificationCriterionStatus, string> = {
+  passed: "통과",
+  failed: "미통과",
+  blocked: "막힘",
+  excluded: "제외",
+};
+
+// 통과가 기본값이라 가라앉힙니다. 막힘은 사람이 손대야 풀리므로 gate 예약어를 씁니다.
+const criterionStatusClass: Record<VerificationCriterionStatus, string> = {
+  passed: "text-muted",
+  failed: "text-danger",
+  blocked: "text-gate",
+  excluded: "text-muted",
 };
 
 const workStatusLabel: Record<WorkStatus, string> = {
@@ -4914,7 +4930,7 @@ function WorkInspector({
               검증
             </TabsTrigger>
             <TabsTrigger className="h-full flex-1 px-1" value="knowledge">
-              지식
+              근거
             </TabsTrigger>
           </TabsList>
         </header>
@@ -5001,7 +5017,7 @@ function WorkKnowledgeInspector({
       <InspectorEmpty
         detail="워크스페이스를 선택한 새 Work에서 코드 근거를 사용할 수 있습니다."
         icon={Database}
-        message="이 Work는 워크스페이스 지식을 사용하지 않았습니다."
+        message="이 Work는 워크스페이스 근거를 사용하지 않았습니다."
       />
     );
   if (knowledge.status === "no-match")
@@ -5169,10 +5185,23 @@ function InspectorVerifications({ values }: { values: WorkView["verifications"] 
           <li className="py-2.5" key={verification.id}>
             <div className="flex items-center gap-2 text-xs">
               <StateIcon state={verification.state} />
-              <span className="min-w-0 flex-1 text-secondary">{verification.title}</span>
+              <span className="text-muted">판정</span>
+              <span className="min-w-0 flex-1 truncate text-secondary">{verification.verifier}</span>
               <span className={stateClass[verification.state]}>{stateLabel[verification.state]}</span>
               <CaretRight aria-hidden="true" className="text-muted" size={13} />
             </div>
+            {verification.criteria.length === 0 ? null : (
+              <ul className="mt-1.5 space-y-1 pl-6">
+                {verification.criteria.map((criterion) => (
+                  <li className="flex items-center gap-2 text-[11px]" key={criterion.key}>
+                    <span className="min-w-0 flex-1 truncate font-mono text-muted">{criterion.key}</span>
+                    <span className={criterionStatusClass[criterion.status]}>
+                      {criterionStatusLabel[criterion.status]}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
             {verification.evidence ? (
               <p className="mt-1 pl-6 font-mono text-[10px] text-muted">{verification.evidence}</p>
             ) : null}
