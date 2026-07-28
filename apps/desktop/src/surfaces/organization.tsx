@@ -20,6 +20,7 @@ interface LedgerEvent {
   subject?: OrganizationNodeView;
   targetHandle?: string;
   human?: boolean;
+  gate?: boolean;
 }
 
 const ROOM_MESSAGE_LABELS: Readonly<Record<string, string>> = {
@@ -77,7 +78,10 @@ export function OrganizationSurface({ service }: { service: DesktopService }) {
 
   const selected = nodes.find((node) => node.handle === selectedHandle) ?? root;
   const descendants = useMemo(() => (selected ? descendantsOf(selected, nodes) : []), [nodes, selected]);
-  const selectedWorkHistory = useMemo(() => (selected ? workHistoryFor(selected, works) : []), [selected, works]);
+  const selectedWorkHistory = useMemo(
+    () => (selected ? workHistoryFor(descendants, works) : []),
+    [descendants, selected, works],
+  );
   const selectedVerifications = useMemo(
     () => (selected ? verificationsFor(descendants, works) : []),
     [descendants, selected, works],
@@ -385,7 +389,10 @@ function NodeDetail({
 
       {history.length > 0 ? (
         <>
-          <DetailSectionHeader label="이 자리가 걸어온 업무" count={history.length} />
+          <DetailSectionHeader
+            label={descendantsOf(node, nodes).length > 1 ? "이 자리와 아래가 걸어온 업무" : "이 자리가 걸어온 업무"}
+            count={history.length}
+          />
           <div className="space-y-0.5">
             {history.map((entry, index) => (
               <div
@@ -505,13 +512,12 @@ function VerificationBlock({
         </span>
       </div>
       {verification.criteria.map((criterion) => (
-        <div
-          key={criterion.key}
-          className="grid h-[30px] grid-cols-[20px_132px_minmax(0,1fr)] items-center gap-2 rounded px-2"
-        >
+        <div key={criterion.key} className="flex h-[30px] items-center gap-2 rounded px-2">
           <CriterionGlyph status={criterion.status} />
-          <span className="font-mono text-[11px] text-fg-3">{criterion.key}</span>
-          <span className="text-[12px] text-fg-2">{criterionStatusLabel(criterion.status)}</span>
+          <span className="min-w-0 flex-1 truncate whitespace-nowrap font-mono text-[11px] text-fg-3">
+            {criterion.key}
+          </span>
+          <span className="shrink-0 text-[12px] text-fg-2">{criterionStatusLabel(criterion.status)}</span>
         </div>
       ))}
       {verification.evidence ? (
@@ -573,8 +579,8 @@ function LedgerRow({
     <>
       <span className="font-mono text-right text-[11px] tabular-nums text-fg-4">{time}</span>
       <span className="flex items-center justify-center" aria-hidden="true">
-        {event.human ? (
-          <span className="h-[6px] w-[6px] rounded-full bg-fg-4" />
+        {event.human || event.gate ? (
+          <span className={`h-[6px] w-[6px] rounded-full ${event.gate ? "bg-gate" : "bg-fg-4"}`} />
         ) : (
           <span
             className="h-1 w-1"
@@ -586,11 +592,17 @@ function LedgerRow({
         className="h-4 w-0.5"
         aria-hidden="true"
         style={{
-          backgroundColor: event.human ? "var(--fg-4)" : event.subject ? subjectColor(event.subject) : "var(--fg-4)",
+          backgroundColor: event.gate
+            ? "var(--gate)"
+            : event.human
+              ? "var(--fg-4)"
+              : event.subject
+                ? subjectColor(event.subject)
+                : "var(--fg-4)",
         }}
       />
       <span aria-hidden="true" />
-      <span className="min-w-0 truncate text-[13px] text-fg-2">{event.body}</span>
+      <span className="min-w-max shrink-0 truncate whitespace-nowrap text-[13px] text-fg-2">{event.body}</span>
       <span className="ml-2 min-w-0 truncate text-[12px] text-fg-4">{event.meta}</span>
       <span className="text-right text-[12px] text-fg-4" aria-hidden="true">
         {event.human ? "" : event.targetHandle ? "›" : ""}
@@ -598,7 +610,7 @@ function LedgerRow({
     </>
   );
   const className =
-    "grid h-[30px] w-full grid-cols-[40px_6px_2px_8px_minmax(0,1fr)_auto_12px] items-center gap-0 rounded px-2 text-left";
+    "grid h-[30px] w-full grid-cols-[40px_6px_2px_8px_auto_minmax(0,1fr)_12px] items-center gap-0 rounded px-2 text-left";
   return event.targetHandle ? (
     <button
       type="button"
@@ -634,7 +646,7 @@ function CriterionGlyph({ status }: { status: VerificationView["criteria"][numbe
       : status === "failed"
         ? { symbol: "⊘", className: "text-halt", label: "미통과" }
         : status === "blocked"
-          ? { symbol: "⊘", className: "text-gate", label: "막힘" }
+          ? { symbol: "◇", className: "text-gate", label: "막힘" }
           : { symbol: "○", className: "text-fg-4", label: "제외" };
   return (
     <span
@@ -647,13 +659,16 @@ function CriterionGlyph({ status }: { status: VerificationView["criteria"][numbe
 }
 
 function verificationGlyphFor(verification: VerificationView): { symbol: string; className: string; label: string } {
-  if (verification.criteria.every((criterion) => criterion.status === "passed")) {
+  if (verification.criteria.length > 0 && verification.criteria.every((criterion) => criterion.status === "passed")) {
     return { symbol: "◉", className: "text-fg-2", label: "검증 완료" };
   }
-  if (verification.criteria.some((criterion) => criterion.status === "blocked")) {
-    return { symbol: "⊘", className: "text-gate", label: "막힘" };
+  if (verification.criteria.some((criterion) => criterion.status === "failed")) {
+    return { symbol: "⊘", className: "text-halt", label: "미통과" };
   }
-  return { symbol: "⊘", className: "text-halt", label: "미통과" };
+  if (verification.criteria.some((criterion) => criterion.status === "blocked")) {
+    return { symbol: "◇", className: "text-gate", label: "막힘" };
+  }
+  return { symbol: "●", className: "text-fg-4", label: "완료" };
 }
 
 type GlyphKind = "complete" | "verified" | "gate" | "blocked" | "pending";
@@ -684,13 +699,15 @@ function hasPassedVerification(work: WorkView): boolean {
   );
 }
 
-function workHistoryFor(node: OrganizationNodeView, works: readonly WorkView[]): WorkHistoryEntry[] {
+function workHistoryFor(scope: readonly OrganizationNodeView[], works: readonly WorkView[]): WorkHistoryEntry[] {
   return [...works].reverse().flatMap((work) => {
     const entries: WorkHistoryEntry[] = [];
-    if (work.agents.some((agent) => agent.id === node.handle)) entries.push({ work, relation: "execution" });
+    if (work.agents.some((agent) => scope.some((node) => agent.id === node.handle))) {
+      entries.push({ work, relation: "execution" });
+    }
     if (
       work.verifications.some((verification) =>
-        verifierMatches(verification.verifier, node.handle, agentIdentityToken(node.handle).name),
+        scope.some((node) => verifierMatches(verification.verifier, node.handle, agentIdentityToken(node.handle).name)),
       )
     ) {
       entries.push({ work, relation: "judgment" });
@@ -783,9 +800,20 @@ function activityLedgerEvent(
     return {
       id: `${work.id}-${activity.id}`,
       time: activity.time,
-      body: `${work.title} 요청`,
-      meta: activity.author,
+      body: `요청 · ${activity.author}`,
+      meta: activity.content,
       human: true,
+    };
+  }
+
+  if (activity.kind === "approval") {
+    if (!historyWorkIds.has(work.id)) return undefined;
+    return {
+      id: `${work.id}-${activity.id}`,
+      time: activity.time,
+      body: "승인 요청",
+      meta: activity.title,
+      gate: true,
     };
   }
 
@@ -796,7 +824,13 @@ function activityLedgerEvent(
     return {
       id: `${work.id}-${activity.id}`,
       time: activity.time,
-      body: messageType,
+      body: activity.recipient
+        ? `${messageType} · ${activity.recipient}`
+        : activity.target
+          ? `${messageType} · ${activity.target}`
+          : activity.signature
+            ? `${messageType} · 서명 ${activity.signature.by}`
+            : messageType,
       meta: activity.content,
       subject,
       targetHandle: subject.handle,
