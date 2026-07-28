@@ -20,14 +20,13 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
-import type { DesktopFilter, DesktopService } from "@/desktop-service";
+import type { DesktopFilter, DesktopService, ExecutionLineageAttemptView, ExecutionLineageView } from "@/desktop-service";
 import type {
   ActivityView,
   AgentView,
   ApprovalView,
   RoomView,
   SpeakerView,
-  TaskView,
   WorkStatus,
   WorkView,
 } from "@/model";
@@ -43,6 +42,13 @@ const workStatusLabel: Record<WorkStatus, string> = {
   complete: "완료",
   failed: "실패",
   cancelled: "취소됨",
+};
+
+const executionLineageStatusLabel: Record<ExecutionLineageAttemptView["status"], string> = {
+  reserved: "예약",
+  failed: "실패",
+  interrupted: "중단",
+  succeeded: "성공",
 };
 
 type GlyphKind = "idle" | "running" | "done" | "verified" | "gate" | "halt";
@@ -108,12 +114,40 @@ function railClass(accentSlot: number, human?: boolean): string {
   return SLOT_RAIL[accentSlot % SLOT_RAIL.length] ?? "bg-user";
 }
 
+type StageBuckets = {
+  request: ActivityView[];
+  batch: ActivityView[];
+  execution: ActivityView[];
+  judgment: ActivityView[];
+};
+
+function stageBuckets(activities: ActivityView[]): StageBuckets {
+  return {
+    request: activities.filter(
+      (activity) =>
+        activity.kind === "message" ||
+        (activity.kind === "room" && (activity.speaker.human === true || activity.messageType === "decision")),
+    ),
+    batch: activities.filter((activity) => ["agents", "proposal", "approval"].includes(activity.kind)),
+    execution: activities.filter((activity) => {
+      if (activity.kind === "room") return ["question", "answer", "evidence"].includes(activity.messageType);
+      return ["plan", "handoff", "artifacts", "roomStatus", "roomRef", "event"].includes(activity.kind);
+    }),
+    judgment: activities.filter(
+      (activity) =>
+        activity.kind === "room" && ["challenge", "change_request", "review_request"].includes(activity.messageType),
+    ),
+  };
+}
+
 function LedgerRow({
   time,
   speaker,
   label,
   meta,
   glyph,
+  speakerName,
+  speakerMono = false,
   indent = false,
   onClick,
   expanded = false,
@@ -124,6 +158,8 @@ function LedgerRow({
   label: ReactNode;
   meta?: ReactNode | undefined;
   glyph?: ReactNode | undefined;
+  speakerName?: ReactNode | undefined;
+  speakerMono?: boolean | undefined;
   indent?: boolean | undefined;
   onClick?: (() => void) | undefined;
   expanded?: boolean | undefined;
@@ -141,7 +177,18 @@ function LedgerRow({
       ) : (
         <span aria-hidden="true" className="h-[16px] w-[2px] shrink-0 bg-transparent" />
       )}
-      {speaker ? <span className={`shrink-0 text-[13px] leading-5 ${speakerText(speaker)}`}>{speaker.name}</span> : null}
+      <span className="grid w-[14px] shrink-0 place-items-center">{glyph}</span>
+      <span
+        className={`w-[44px] shrink-0 truncate leading-5 ${
+          speakerMono
+            ? "font-mono text-[11px] text-fg-3"
+            : speaker
+              ? `text-[13px] ${speakerText(speaker)}`
+              : "text-[13px] text-fg-2"
+        }`}
+      >
+        {speaker?.name ?? speakerName}
+      </span>
       {indent ? <span aria-hidden="true" className="w-8 shrink-0" /> : null}
       <span
         className={`min-w-0 flex-1 truncate leading-5 tracking-[-0.005em] ${
@@ -160,7 +207,6 @@ function LedgerRow({
       ) : (
         <span aria-hidden="true" className="w-3 shrink-0" />
       )}
-      {glyph}
     </>
   );
   const className = `flex h-[30px] w-full items-center gap-2 rounded-[4px] px-2 text-left ${
@@ -226,6 +272,38 @@ export function WorkList({
   selectedId,
   works,
 }: WorkListProps) {
+  const selectedWork = works.find((work) => work.id === selectedId);
+  const selectedBuckets = selectedWork ? stageBuckets(selectedWork.activities) : undefined;
+  const chainStages = selectedWork && selectedBuckets
+    ? [
+        { index: 1, name: "요청", count: selectedBuckets.request.length + (selectedWork.summary ? 1 : 0) },
+        { index: 2, name: "배치", count: selectedBuckets.batch.length, summary: selectedWork.agents.length ? `${selectedWork.agents.length}명` : undefined },
+        { index: 3, name: "실행", count: selectedBuckets.execution.length },
+        {
+          index: 4,
+          name: "판정",
+          count: selectedBuckets.judgment.length + selectedWork.verifications.length,
+          summary:
+            selectedWork.verifications[0] === undefined
+              ? undefined
+              : selectedWork.agents.find((agent) => agent.id === selectedWork.verifications[0]?.verifier)?.name ??
+                selectedWork.verifications[0].verifier,
+        },
+        { index: 5, name: "개선", count: 0 },
+        { index: 6, name: "효과", count: 0 },
+      ]
+    : [];
+  const pendingItems = selectedWork
+    ? [
+        ...selectedWork.approvals
+          .filter((approval) => approval.status === "pending")
+          .map((approval) => ({ kind: "gate" as const, id: approval.id, title: approval.title, status: "승인 필요" })),
+        ...(selectedWork.run?.status === "blocked"
+          ? [{ kind: "halt" as const, id: `${selectedWork.id}:blocked`, title: selectedWork.title, status: "막힘" }]
+          : []),
+      ]
+    : [];
+  const completedTaskCount = selectedWork?.tasks.filter((task) => task.state === "done").length ?? 0;
   return (
     <section
       aria-label="Work 목록"
@@ -329,6 +407,86 @@ export function WorkList({
                 </button>
               );
             })}
+            {selectedWork ? (
+              <>
+                <section className="mt-4">
+                  <h2 className="flex h-[30px] items-center px-2 text-[13px] leading-5 text-fg-4">
+                    사슬 <span className="ml-1 text-[12px] text-fg-4">{chainStages.filter((stage) => stage.count > 0).length}</span>
+                  </h2>
+                  <div className="flex flex-col gap-[2px]">
+                    {chainStages.map((stage) => (
+                      <button
+                        className="flex h-[30px] w-full items-center gap-2 rounded-[4px] px-2 text-left hover:bg-[rgb(255_255_255/0.027)]"
+                        key={stage.index}
+                        onClick={() => {
+                          document
+                            .getElementById(`ledger-stage-${String(stage.index)}`)
+                            ?.scrollIntoView({ block: "start", behavior: "smooth" });
+                        }}
+                        type="button"
+                      >
+                        <span className="w-[20px] shrink-0 text-right font-mono text-[11px] leading-4 text-fg-4 tabular-nums">
+                          {stage.index}
+                        </span>
+                        <span className={`min-w-0 truncate text-[13px] leading-5 ${stage.count === 0 ? "text-fg-4" : "text-fg-2"}`}>
+                          {stage.name}
+                        </span>
+                        {stage.count > 0 ? <span className="shrink-0 text-[12px] leading-[18px] text-fg-4">{stage.count}</span> : null}
+                        <span className="min-w-0 flex-1" />
+                        {stage.summary ? <span className="max-w-[96px] truncate text-[12px] leading-[18px] text-fg-4">{stage.summary}</span> : null}
+                        <CaretRight aria-hidden="true" className="shrink-0 text-fg-4" size={12} />
+                      </button>
+                    ))}
+                  </div>
+                </section>
+                {pendingItems.length ? (
+                  <section className="mt-4">
+                    <h2 className="flex h-[30px] items-center px-2 text-[13px] leading-5 text-fg-4">사람이 필요한 것</h2>
+                    <div className="flex flex-col gap-[2px]">
+                      {pendingItems.map((item) => (
+                        <div className="flex h-[30px] items-center gap-2 rounded-[4px] px-2" key={item.id}>
+                          <Glyph kind={item.kind} />
+                          <span className="min-w-0 flex-1 truncate text-[13px] text-fg-2">{item.title}</span>
+                          <span className="shrink-0 text-[12px] text-fg-4">{item.status}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+                ) : null}
+                {selectedWork.tasks.length ? (
+                  <section className="mt-4">
+                    <h2 className="flex h-[30px] items-center px-2 text-[13px] leading-5 text-fg-4">
+                      작업 <span className="ml-1 text-fg-4 tabular-nums">{completedTaskCount}/{selectedWork.tasks.length}</span>
+                    </h2>
+                    <div
+                      aria-label={`작업 진행률 ${String(selectedWork.progress)}%`}
+                      aria-valuemax={100}
+                      aria-valuemin={0}
+                      aria-valuenow={selectedWork.progress}
+                      className="mb-2 h-[3px] bg-bg-3"
+                      role="progressbar"
+                    >
+                      <span
+                        className="block h-full bg-fg-4 transition-[width] duration-[250ms] ease-linear"
+                        style={{ width: `${String(selectedWork.progress)}%` }}
+                      />
+                    </div>
+                    <div className="flex flex-col gap-[2px]">
+                      {selectedWork.tasks.map((task) => (
+                        <div className="flex h-[30px] items-center gap-[2px] rounded-[4px] px-2" key={task.id}>
+                          <Glyph
+                            kind={task.state === "done" ? "done" : task.state === "failed" ? "halt" : task.state === "active" ? "running" : "idle"}
+                            label={stateLabel[task.state]}
+                          />
+                          <span className="min-w-0 flex-1 truncate text-[13px] text-fg-2">{task.title}</span>
+                          {task.time ? <span className="shrink-0 font-mono text-[11px] text-fg-4">{task.time}</span> : null}
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+                ) : null}
+              </>
+            ) : null}
           </div>
         ) : (
           <div className="px-2 py-8 text-center">
@@ -344,6 +502,7 @@ export function WorkList({
 }
 
 interface WorkActivityProps {
+  service: DesktopService;
   onCloseRoom: (roomId: string) => void;
   onSelectRoom: (roomId: string) => void;
   room?: RoomView | undefined;
@@ -378,32 +537,38 @@ export function WorkActivity({
   pendingApprovals,
   pendingDirective,
   pendingRunAction,
+  service,
   onCloseRoom,
   onSelectRoom,
   room,
   rooms,
   work,
 }: WorkActivityProps) {
+  const [lineage, setLineage] = useState<ExecutionLineageView>();
+  useEffect(() => {
+    const executionId = work.activeExecutionId;
+    let disposed = false;
+    setLineage(undefined);
+    if (executionId === undefined) return;
+    void service.loadExecutionLineage(executionId).then(
+      (value) => {
+        if (!disposed) setLineage(value);
+      },
+      () => {
+        if (!disposed) setLineage(undefined);
+      },
+    );
+    return () => {
+      disposed = true;
+    };
+  }, [service, work.activeExecutionId, work.id]);
+
   const canCancel = work.run && ["ready", "running", "awaiting-approval", "blocked"].includes(work.run.status);
   const canResume = work.run?.status === "blocked";
   const activities = room ? room.activities : work.activities;
   const [expandedId, setExpandedId] = useState<string>();
-
-  // 메시지 타입으로만 원장 마디를 배정합니다. 문자열이나 화면 추측으로 분류하지 않습니다.
-  const requestActivities = activities.filter(
-    (activity) =>
-      (activity.kind === "room" && activity.speaker.human === true) ||
-      activity.kind === "message" ||
-      (activity.kind === "room" && activity.messageType === "decision"),
-  );
-  const batchActivities = activities.filter((activity) => ["agents", "proposal", "approval"].includes(activity.kind));
-  const executionActivities = activities.filter((activity) => {
-    if (activity.kind === "room") return ["question", "answer", "evidence"].includes(activity.messageType);
-    return ["plan", "handoff", "artifacts", "roomStatus", "roomRef", "event"].includes(activity.kind);
-  });
-  const judgmentActivities = activities.filter(
-    (activity) => activity.kind === "room" && ["challenge", "change_request", "review_request"].includes(activity.messageType),
-  );
+  const { request: requestActivities, batch: batchActivities, execution: executionActivities, judgment: judgmentActivities } =
+    stageBuckets(activities);
   const verification = work.verifications[0];
   const verifierSpeaker = verification ? room?.participants.find((participant) => participant.handle === verification.verifier) : undefined;
   const verifierAgent = verification ? work.agents.find((agent) => agent.id === verification.verifier) : undefined;
@@ -429,6 +594,48 @@ export function WorkActivity({
               : "running";
   const participants = room?.participants ?? [];
   const participantCount = room?.participants.length ?? work.agents.length;
+  const lineageAttempts = lineage?.attempts ?? [];
+  const selectedLineageAttempt =
+    [...lineageAttempts].reverse().find((attempt) => attempt.status === "succeeded") ?? lineageAttempts.at(-1);
+  const lineageRows = selectedLineageAttempt ? (
+    <>
+      <LedgerRow
+        label={`${selectedLineageAttempt.providerId} · ${selectedLineageAttempt.modelId}`}
+        meta={lineageAttempts.length >= 2 ? `시도 ${lineageAttempts.length}` : undefined}
+        mono
+        speakerName="모델"
+      />
+      <LedgerRow
+        label={selectedLineageAttempt.accountId}
+        meta={
+          selectedLineageAttempt.connectorId ? (
+            <span className="font-mono text-[11px]">{selectedLineageAttempt.connectorId}</span>
+          ) : undefined
+        }
+        mono
+        speakerName="계정"
+      />
+      {lineageAttempts.length >= 2
+        ? lineageAttempts.map((attempt) => {
+            const halt = attempt.status === "failed" || attempt.status === "interrupted";
+            return (
+              <LedgerRow
+                indent
+                key={attempt.attemptId}
+                label={`시도 ${attempt.sequence} · ${attempt.providerId} · ${attempt.modelId}`}
+                meta={
+                  <span className={halt ? "text-halt" : undefined}>
+                    {executionLineageStatusLabel[attempt.status]}
+                    {attempt.failureClass ? ` · ${attempt.failureClass}` : ""}
+                  </span>
+                }
+                mono
+              />
+            );
+          })
+        : null}
+    </>
+  ) : null;
 
   const renderMessage = (activity: Extract<ActivityView, { kind: "message" | "room" | "proposal" }>, time: string | undefined, meta: ReactNode, speaker?: SpeakerView) => {
     const expanded = expandedId === activity.id;
@@ -524,7 +731,6 @@ export function WorkActivity({
       );
     }
     if (activity.kind === "approval") {
-      const approval = work.approvals.find((item) => item.id === activity.approvalId);
       const decision = approvalDecisions[activity.approvalId];
       return (
         <LedgerRow
@@ -535,30 +741,7 @@ export function WorkActivity({
             decision ? (
               <span className="text-fg-4">{decision === "approved" ? "승인됨" : "거절됨"}</span>
             ) : (
-              <span className="flex items-center gap-1">
-                <button
-                  aria-label={`${activity.title} 승인`}
-                  className="h-[22px] rounded-[4px] bg-[rgb(255_255_255/0.09)] px-2 text-[12px] text-fg-2 disabled:opacity-40"
-                  disabled={!approval || pendingApprovals.has(activity.approvalId)}
-                  onClick={() => {
-                    if (approval) onDecideApproval(approval, "approved");
-                  }}
-                  type="button"
-                >
-                  승인
-                </button>
-                <button
-                  aria-label={`${activity.title} 거절`}
-                  className="h-[22px] rounded-[4px] px-2 text-[12px] text-fg-4 hover:text-fg-2 disabled:opacity-40"
-                  disabled={!approval || pendingApprovals.has(activity.approvalId)}
-                  onClick={() => {
-                    if (approval) onDecideApproval(approval, "rejected");
-                  }}
-                  type="button"
-                >
-                  거절
-                </button>
-              </span>
+              <span className="text-gate">사람 필요</span>
             )
           }
           time={time}
@@ -603,10 +786,102 @@ export function WorkActivity({
   };
 
   const verifierSummary = verification ? (
-    <span className={independent ? "" : "text-halt"}>
-      {verifierName} · {independent ? "실행 기여자 아님" : "실행에도 참여함"}
-    </span>
+    <span className={independent ? "" : "text-halt"}>{independent ? "독립 판정" : "분리 실패"}</span>
   ) : undefined;
+  const pendingApprovalItems = work.approvals.filter((approval) => approval.status === "pending");
+  const teamRoom = [work.team, room?.name].filter(Boolean).join(" · ");
+  const ledgerStages = [
+    {
+      index: 6,
+      name: "효과",
+      count: 0,
+      rows: null,
+    },
+    {
+      index: 5,
+      name: "개선",
+      count: 0,
+      rows: null,
+    },
+    {
+      index: 4,
+      name: "판정",
+      count: judgmentActivities.length + work.verifications.length,
+      summary: verifierSummary,
+      rows: (
+        <>
+          {verification ? (
+            <>
+              <LedgerRow
+                label="판정자"
+                meta={<span className={independent ? "" : "text-halt"}>{independent ? "실행 기여자 아님" : "실행에도 참여함"}</span>}
+                speaker={verifierSpeaker}
+                speakerMono={!verifierSpeaker}
+                speakerName={verifierName}
+              />
+              <LedgerRow label="실행 기여자" meta={contributorNames.length ? contributorNames.join(" · ") : undefined} />
+              {work.verifications.map((item) => {
+                const itemSpeaker = room?.participants.find((participant) => participant.handle === item.verifier);
+                const itemAgent = work.agents.find((agent) => agent.id === item.verifier);
+                return (
+                  <div key={item.id}>
+                    <LedgerRow
+                      glyph={<Glyph kind={item.state === "done" ? "verified" : item.state === "failed" ? "halt" : "running"} />}
+                      label={`판정 ${stateLabel[item.state]}`}
+                      meta={`기준 ${item.criteria.length}`}
+                      speaker={itemSpeaker}
+                      speakerMono={!itemSpeaker}
+                      speakerName={itemSpeaker?.name ?? itemAgent?.name ?? item.verifier}
+                    />
+                    {item.criteria.map((criterion) => (
+                      <LedgerRow
+                        indent
+                        key={criterion.key}
+                        label={criterion.key}
+                        meta={<span className={criterionStatusClass[criterion.status]}>{criterionStatusLabel[criterion.status]}</span>}
+                        mono
+                      />
+                    ))}
+                    {item.evidence ? <LedgerRow indent label="근거" meta={item.evidence} mono /> : null}
+                  </div>
+                );
+              })}
+            </>
+          ) : null}
+          {renderActivities(judgmentActivities)}
+        </>
+      ),
+    },
+    {
+      index: 3,
+      name: "실행",
+      count: executionActivities.length + (lineageRows ? 2 + (lineageAttempts.length >= 2 ? lineageAttempts.length : 0) : 0),
+      rows: (
+        <>
+          {lineageRows}
+          {renderActivities(executionActivities)}
+        </>
+      ),
+    },
+    {
+      index: 2,
+      name: "배치",
+      count: batchActivities.length,
+      rows: renderActivities(batchActivities),
+    },
+    {
+      index: 1,
+      name: "요청",
+      count: requestActivities.length + (work.summary ? 1 : 0),
+      rows: (
+        <>
+          {renderActivities(requestActivities)}
+          {work.summary ? <LedgerRow label={work.summary} meta="개요" /> : null}
+        </>
+      ),
+    },
+  ];
+  const notYetStages = ledgerStages.filter((stage) => stage.count === 0).sort((left, right) => left.index - right.index);
   return (
     <main
       aria-busy={detailLoading || undefined}
@@ -615,18 +890,24 @@ export function WorkActivity({
     >
       <header className="flex min-w-0 items-center gap-3 border-b border-line px-4">
         <Glyph kind={workGlyph} progress={workGlyph === "running" ? work.progress : undefined} />
-        <h1 className="truncate text-[17px] font-semibold leading-[26px] tracking-[-0.012em] text-fg">{work.title}</h1>
-        <span className="shrink-0 text-[13px] leading-5 text-fg-3">{work.team}{room ? ` · ${room.name}` : ""}</span>
-        <span className="flex shrink-0 items-center gap-1" title={`참가 ${String(participantCount)}`}>
-          {participants.length ? participants.slice(0, 5).map((participant) => <span aria-hidden="true" className={`size-2 rounded-full ${railClass(participant.accentSlot, participant.human)}`} key={participant.handle} />) : work.agents.slice(0, 5).map((agent) => <span aria-hidden="true" className="size-2 rounded-full bg-user" key={agent.id} />)}
-          <span className="text-[12px] text-fg-4">참가 {participantCount}</span>
-        </span>
-        {room?.budgets.length ? (
-          <span className="hidden shrink-0 font-mono text-[11px] text-fg-4 min-[1360px]:inline">
-            {room.budgets.map((budget) => `${budget.label} ${budget.display}`).join(" · ")}
+        <h1 className="min-w-0 flex-1 truncate text-[17px] font-semibold leading-[26px] tracking-[-0.012em] text-fg">{work.title}</h1>
+        <div className="ml-auto flex shrink-0 items-center gap-3">
+          {teamRoom ? <span className="text-[12px] leading-[18px] text-fg-4">{teamRoom}</span> : null}
+          <span className="flex shrink-0 items-center gap-1" title={`참가 ${String(participantCount)}`}>
+            {participants.length
+              ? participants.slice(0, 5).map((participant) => (
+                  <span aria-hidden="true" className={`size-2 rounded-full ${railClass(participant.accentSlot, participant.human)}`} key={participant.handle} />
+                ))
+              : work.agents.slice(0, 5).map((agent) => <span aria-hidden="true" className="size-2 rounded-full bg-user" key={agent.id} />)}
+            <span className="text-[12px] text-fg-4">참가 {participantCount}</span>
           </span>
-        ) : null}
-        <div className="ml-auto flex items-center gap-1">
+          {room?.budgets.length ? (
+            <span className="hidden shrink-0 font-mono text-[11px] text-fg-4 min-[1440px]:inline">
+              {room.budgets.map((budget) => `${budget.label} ${budget.display}`).join(" · ")}
+            </span>
+          ) : null}
+        </div>
+        <div className="flex shrink-0 items-center gap-1">
           {executionNotice ? (
             <span aria-live="polite" className="mr-2 max-w-48 truncate text-[12px] text-fg-4" role="status">
               {executionNotice}
@@ -664,6 +945,47 @@ export function WorkActivity({
         </div>
       </header>
       <div>
+        {pendingApprovalItems.length ? (
+          <div className="flex min-h-[30px] items-center gap-3 border-b border-line bg-gate-wash px-4">
+            {pendingApprovalItems.map((approval) => {
+              const decision = approvalDecisions[approval.id];
+              return (
+                <div className="flex min-w-0 flex-1 items-center gap-2" key={approval.id}>
+                  <Glyph kind="gate" label="승인 필요" />
+                  <span className="min-w-0 flex-1 truncate text-[13px] text-fg-2">승인 요청 {approval.title}</span>
+                  {decision ? (
+                    <span className="shrink-0 text-[12px] text-fg-4">{decision === "approved" ? "승인됨" : "거절됨"}</span>
+                  ) : (
+                    <span className="flex shrink-0 items-center gap-1">
+                      <button
+                        aria-label={`${approval.title} 승인`}
+                        className="h-[22px] rounded-[4px] bg-[rgb(255_255_255/0.09)] px-2 text-[12px] text-fg-2"
+                        disabled={pendingApprovals.has(approval.id)}
+                        onClick={() => {
+                          onDecideApproval(approval, "approved");
+                        }}
+                        type="button"
+                      >
+                        승인
+                      </button>
+                      <button
+                        aria-label={`${approval.title} 거절`}
+                        className="h-[22px] rounded-[4px] px-2 text-[12px] text-fg-4 hover:text-fg-2"
+                        disabled={pendingApprovals.has(approval.id)}
+                        onClick={() => {
+                          onDecideApproval(approval, "rejected");
+                        }}
+                        type="button"
+                      >
+                        거절
+                      </button>
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        ) : null}
         {work.run && ["blocked", "awaiting-approval", "running"].includes(work.run.status) ? <RunStatusCard run={work.run} /> : null}
         {rooms.length > 1 ? (
           <nav aria-label="협업방" className="flex h-[30px] items-center gap-1 px-4">
@@ -705,84 +1027,17 @@ export function WorkActivity({
       </div>
       <section aria-label="Work 활동" className="min-h-0 overflow-y-auto px-3 py-2">
         <div className="flex flex-col">
-          {[
-            {
-              index: 6,
-              name: "효과",
-              count: 0,
-              rows: null,
-            },
-            {
-              index: 5,
-              name: "개선",
-              count: 0,
-              rows: null,
-            },
-            {
-              index: 4,
-              name: "판정",
-              count: judgmentActivities.length + work.verifications.length,
-              summary: verifierSummary,
-              rows: (
-                <>
-                  {verification ? (
-                    <>
-                      <LedgerRow label="판정자" meta={<span className={independent ? "" : "text-halt"}>{independent ? "실행 기여자 아님" : "실행에도 참여함"}</span>} mono={!verifierSpeaker} speaker={verifierSpeaker} />
-                      <LedgerRow label="실행 기여자" meta={contributorNames.length ? contributorNames.join(" · ") : undefined} />
-                      {work.verifications.map((item) => {
-                        const itemSpeaker = room?.participants.find((participant) => participant.handle === item.verifier);
-                        return (
-                          <div key={item.id}>
-                            <LedgerRow
-                              glyph={<Glyph kind={item.state === "done" ? "verified" : item.state === "failed" ? "halt" : "running"} />}
-                              label={`판정 ${stateLabel[item.state]}`}
-                              meta={`기준 ${item.criteria.length}`}
-                              speaker={itemSpeaker}
-                            />
-                            {item.criteria.map((criterion) => (
-                              <LedgerRow
-                                indent
-                                key={criterion.key}
-                                label={criterion.key}
-                                meta={<span className={criterionStatusClass[criterion.status]}>{criterionStatusLabel[criterion.status]}</span>}
-                                mono
-                              />
-                            ))}
-                            {item.evidence ? <LedgerRow indent label="근거" meta={item.evidence} mono /> : null}
-                          </div>
-                        );
-                      })}
-                    </>
-                  ) : null}
-                  {renderActivities(judgmentActivities)}
-                </>
-              ),
-            },
-            {
-              index: 3,
-              name: "실행",
-              count: executionActivities.length,
-              rows: renderActivities(executionActivities),
-            },
-            {
-              index: 2,
-              name: "배치",
-              count: batchActivities.length,
-              rows: renderActivities(batchActivities),
-            },
-            {
-              index: 1,
-              name: "요청",
-              count: requestActivities.length + (work.summary ? 1 : 0),
-              rows: (
-                <>
-                  {renderActivities(requestActivities)}
-                  {work.summary ? <LedgerRow label={work.summary} meta="개요" /> : null}
-                </>
-              ),
-            },
-          ].map((stage, stageIndex) => (
-            <div className={stageIndex === 0 ? "" : "mt-4"} key={stage.index}>
+          {notYetStages.length ? (
+            <div className="flex h-[30px] items-center gap-2 px-2">
+              <span aria-hidden="true" className="w-[38px] shrink-0" />
+              <span className="text-[13px] text-fg-4">아직 이르지 않음</span>
+              <span className="text-[13px] text-fg-4">
+                {notYetStages.map((stage) => `${String(stage.index)} ${stage.name}`).join(" · ")}
+              </span>
+            </div>
+          ) : null}
+          {ledgerStages.filter((stage) => stage.count > 0).map((stage, stageIndex) => (
+            <div className={stageIndex === 0 ? "" : "mt-4"} id={`ledger-stage-${String(stage.index)}`} key={stage.index}>
               <LedgerStage count={stage.count} dim={stage.count === 0} index={stage.index} name={stage.name} summary={stage.summary} />
               {stage.rows ? <div className="flex flex-col gap-[2px]">{stage.rows}</div> : null}
             </div>
@@ -897,13 +1152,14 @@ interface ComposerProps {
 
 function Composer({ announcement, onAnnouncement, onChange, onSubmit, pending, value }: ComposerProps) {
   return (
-    <div className="border-t border-line bg-bg-0 px-3 pb-3 pt-2" data-testid="directive-composer">
+    <div className="border-t border-line bg-bg-0 px-3 pb-2 pt-2" data-testid="directive-composer">
       <div className="rounded-[4px] border border-line bg-bg-1 p-2 focus-within:border-line-strong">
         <label className="sr-only" htmlFor="directive">
           추가 지시
         </label>
         <Textarea
           aria-label="추가 지시"
+          className="min-h-[30px] resize-none py-1"
           id="directive"
           onChange={(event) => {
             onChange(event.target.value);
@@ -915,7 +1171,7 @@ function Composer({ announcement, onAnnouncement, onChange, onSubmit, pending, v
           <div className="flex items-center gap-1">
             <Button
               aria-label="파일 첨부"
-              className="rounded-[4px]"
+              className="size-[26px] rounded-[4px]"
               onClick={() => {
                 onAnnouncement("파일 첨부 준비가 되었습니다.");
               }}
@@ -926,7 +1182,7 @@ function Composer({ announcement, onAnnouncement, onChange, onSubmit, pending, v
             </Button>
             <Button
               aria-label="에이전트 멘션"
-              className="rounded-[4px]"
+              className="size-[26px] rounded-[4px]"
               onClick={() => {
                 onAnnouncement("멘션할 에이전트를 선택하세요.");
               }}
@@ -938,7 +1194,7 @@ function Composer({ announcement, onAnnouncement, onChange, onSubmit, pending, v
           </div>
           <div className="flex items-center gap-2">
             <Button
-              className="rounded-[4px]"
+              className="h-[26px] rounded-[4px]"
               disabled={!value.trim() || pending}
               onClick={() => {
                 onSubmit("now");
@@ -949,7 +1205,7 @@ function Composer({ announcement, onAnnouncement, onChange, onSubmit, pending, v
             </Button>
             <Button
               aria-label="다음 단계에 반영"
-              className="rounded-[4px]"
+              className="h-[26px] rounded-[4px]"
               disabled={!value.trim() || pending}
               onClick={() => {
                 onSubmit("next-stage");
@@ -964,7 +1220,7 @@ function Composer({ announcement, onAnnouncement, onChange, onSubmit, pending, v
         <p
           aria-atomic="true"
           aria-live="polite"
-          className="mt-2 min-h-4 text-right text-[11px] text-muted"
+          className={announcement ? "mt-2 text-right text-[11px] text-muted" : "h-0 overflow-hidden"}
           role="status"
         >
           {announcement}
@@ -1077,12 +1333,6 @@ export function WorkInspector({
             <TabsTrigger className="h-full flex-1 px-1" value="work">
               편성
             </TabsTrigger>
-            <TabsTrigger className="h-full flex-1 px-1" value="artifacts">
-              산출물
-            </TabsTrigger>
-            <TabsTrigger className="h-full flex-1 px-1" value="verification">
-              검증
-            </TabsTrigger>
             <TabsTrigger className="h-full flex-1 px-1" value="knowledge">
               근거
             </TabsTrigger>
@@ -1091,9 +1341,6 @@ export function WorkInspector({
         <div className="min-h-0 overflow-y-auto p-2">
           <TabsContent className="space-y-4" value="work">
             {room ? <InspectorRoom room={room} /> : <InspectorAgents agents={work.agents} />}
-            <InspectorTasks progress={work.progress} tasks={work.tasks} />
-          </TabsContent>
-          <TabsContent value="artifacts">
             {work.artifacts.length ? (
               <section aria-labelledby="artifact-title" className="rounded-[4px] border border-line bg-bg-2">
                 <h2 className="px-2 py-2 text-[13px] leading-5 text-fg-4" id="artifact-title">
@@ -1113,12 +1360,8 @@ export function WorkInspector({
                   ))}
                 </div>
               </section>
-            ) : (
-              <InspectorEmpty icon={Briefcase} message="아직 생성된 산출물이 없습니다." />
-            )}
-          </TabsContent>
-          <TabsContent value="verification">
-            <InspectorVerifications values={work.verifications} />
+            ) : null}
+            {work.verifications.length ? <InspectorVerifications values={work.verifications} /> : null}
           </TabsContent>
           <TabsContent value="knowledge">
             <WorkKnowledgeInspector
@@ -1230,48 +1473,6 @@ function WorkKnowledgeInspector({
         </p>
       ) : null}
     </section>
-  );
-}
-
-function InspectorTasks({ progress, tasks }: { progress: number; tasks: TaskView[] }) {
-  const complete = tasks.filter((task) => task.state === "done").length;
-  return (
-    <details className="rounded-[4px] border border-line bg-bg-2" open>
-      <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between px-2 text-[13px] leading-5 text-fg-4">
-        <span>
-          작업{" "}
-          <span className="ml-1 font-mono text-[11px] text-fg-4">
-            {complete}/{tasks.length}
-          </span>
-        </span>
-        <CaretDown aria-hidden="true" className="text-fg-4" size={15} />
-      </summary>
-      <div className="px-2 pb-2">
-        <div
-          aria-label={`작업 진행률 ${String(progress)}%`}
-          aria-valuemax={100}
-          aria-valuemin={0}
-          aria-valuenow={progress}
-          className="mb-2 h-[3px] bg-bg-3"
-          role="progressbar"
-        >
-          <span className="block h-full bg-fg-4 transition-[width] duration-[250ms] ease-linear" style={{ width: `${String(progress)}%` }} />
-        </div>
-        <ul className="flex flex-col gap-[2px]">
-          {tasks.map((task) => (
-            <li className="flex h-[30px] items-center gap-2 rounded-[4px] px-2 text-[12px]" key={task.id}>
-              <Glyph
-                kind={task.state === "done" ? "done" : task.state === "failed" ? "halt" : task.state === "active" ? "running" : "idle"}
-                label={stateLabel[task.state]}
-              />
-              <span className="min-w-0 flex-1 truncate text-fg-2">{task.title}</span>
-              <span className={`shrink-0 text-[12px] ${stateClass[task.state]}`}>{task.time ?? stateLabel[task.state]}</span>
-              <CaretRight aria-hidden="true" className="text-fg-4" size={13} />
-            </li>
-          ))}
-        </ul>
-      </div>
-    </details>
   );
 }
 

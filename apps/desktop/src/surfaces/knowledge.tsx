@@ -145,13 +145,34 @@ export function KnowledgeSurface({
     return [...byNode.values()].sort((left, right) => right.count - left.count || pathOf(left.node).localeCompare(pathOf(right.node)));
   }, [workEvidence]);
 
+  const uncitedRelationCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    if (loaded === undefined) return counts;
+    for (const edge of [...loaded.graph.edges, ...loaded.docs.edges]) {
+      counts.set(edge.sourceId, (counts.get(edge.sourceId) ?? 0) + 1);
+      counts.set(edge.targetId, (counts.get(edge.targetId) ?? 0) + 1);
+    }
+    return counts;
+  }, [loaded]);
+
   const uncited = useMemo(() => {
     if (loaded === undefined) return [];
     const indexed = new Map<string, KnowledgeNodeView>();
     for (const node of [...loaded.graph.nodes, ...loaded.docs.nodes]) indexed.set(node.nodeId, node);
     const cited = new Set(citedEvidence.map((entry) => entry.node.nodeId));
-    return [...indexed.values()].filter((node) => !cited.has(node.nodeId));
-  }, [citedEvidence, loaded]);
+    return [...indexed.values()]
+      .filter((node) => !cited.has(node.nodeId))
+      .sort(
+        (left, right) =>
+          (uncitedRelationCounts.get(right.nodeId) ?? 0) - (uncitedRelationCounts.get(left.nodeId) ?? 0) ||
+          pathOf(left).localeCompare(pathOf(right)),
+      );
+  }, [citedEvidence, loaded, uncitedRelationCounts]);
+
+  const citationCounts = useMemo(
+    () => new Map(citedEvidence.map((entry) => [entry.node.nodeId, entry.count] as const)),
+    [citedEvidence],
+  );
 
   const visibleBlocks = useMemo(
     () =>
@@ -179,6 +200,7 @@ export function KnowledgeSurface({
         grouped.set(identity.verifierKey, {
           ...current,
           criteriaCount: current.criteriaCount + identity.criteriaCount,
+          blockedCount: current.blockedCount + identity.blockedCount,
           state:
             current.state === "failed" || identity.state === "failed"
               ? "failed"
@@ -211,7 +233,7 @@ export function KnowledgeSurface({
             <div className="min-h-0 overflow-y-auto px-2 py-3">
               <section aria-label={`워크스페이스 ${loaded.workspaces.length}`}>
                 <SectionTitle label="워크스페이스" count={loaded.workspaces.length} />
-                <ul className="mt-1 grid gap-0.5">
+                <ul className="mt-0.5 grid gap-0.5">
                   {loaded.workspaces.map((workspace) => (
                     <li key={workspace.workspaceId}>
                       <button
@@ -232,9 +254,9 @@ export function KnowledgeSurface({
                 </ul>
               </section>
 
-              <section aria-label="색인" className="mt-5">
+              <section aria-label="색인" className="mt-4">
                 <SectionTitle label="색인" />
-                <ul className="mt-1 grid gap-0.5">
+                <ul className="mt-0.5 grid gap-0.5">
                   <IndexRow label="상태" value={indexStatusLabel(loaded.index.status)} />
                   {loaded.index.indexVersionId ? <IndexRow label="판" value={loaded.index.indexVersionId} mono /> : null}
                   <IndexRow label="파일" value={formatCount(loaded.index.fileCount)} mono />
@@ -244,9 +266,9 @@ export function KnowledgeSurface({
                 </ul>
               </section>
 
-              <section aria-label={`제외 ${loaded.index.excluded.length}`} className="mt-5">
+              <section aria-label={`제외 ${loaded.index.excluded.length}`} className="mt-4">
                 <SectionTitle count={loaded.index.excluded.length} label="제외" />
-                <ul className="mt-1 grid gap-0.5">
+                <ul className="mt-0.5 grid gap-0.5">
                   {loaded.index.excluded.map((pattern) => (
                     <li className="flex h-[30px] min-h-[30px] items-center px-2 font-mono text-[11px] text-muted" key={pattern}>
                       {pattern}
@@ -255,9 +277,9 @@ export function KnowledgeSurface({
                 </ul>
               </section>
 
-              <section aria-label={`인용된 근거 ${citedEvidence.length}`} className="mt-5">
+              <section aria-label={`인용된 근거 ${citedEvidence.length}`} className="mt-4">
                 <SectionTitle count={citedEvidence.length} label="인용된 근거" />
-                <ul className="mt-1 grid gap-0.5">
+                <ul className="mt-0.5 grid gap-0.5">
                   {citedEvidence.map((entry) => {
                     const selected = entry.node.nodeId === selectedEvidenceId;
                     return (
@@ -279,9 +301,9 @@ export function KnowledgeSurface({
                   })}
                 </ul>
               </section>
-              <section aria-label={`판정 ${verificationSummaries.length}`} className="mt-5">
+              <section aria-label={`판정 ${verificationSummaries.length}`} className="mt-4">
                 <SectionTitle count={verificationSummaries.length} label="판정" />
-                <ul className="mt-1 grid gap-0.5">
+                <ul className="mt-0.5 grid gap-0.5">
                   {verificationSummaries.map((summary) => (
                     <li
                       className="grid h-[30px] min-h-[30px] grid-cols-[2px_minmax(0,1fr)_auto] items-center gap-2 px-2"
@@ -290,12 +312,17 @@ export function KnowledgeSurface({
                       <span className="h-5 w-[2px]" style={{ backgroundColor: `var(--agent-${summary.accentSlot})` }} />
                       <span className="flex min-w-0 items-center gap-2">
                         <VerificationStatusGlyph state={summary.state} />
-                        <span className="min-w-0 truncate text-[13px] text-secondary">
-                          {summary.verifierLabel}
+                        <span className="flex min-w-0 items-center gap-1 truncate">
+                          <span className={`${summary.isHandle ? "font-mono text-[11px]" : "text-[13px]"} truncate text-secondary`}>
+                            {summary.verifierLabel}
+                          </span>
                           {summary.verifierRole ? <span className="text-muted"> · {summary.verifierRole}</span> : null}
                         </span>
                       </span>
-                      <span className="font-mono text-[11px] tabular-nums text-muted">기준 {summary.criteriaCount}</span>
+                      <span className="font-mono text-[11px] tabular-nums text-muted">
+                        기준 {summary.criteriaCount}
+                        {summary.blockedCount > 0 ? ` · 막힘 ${summary.blockedCount}` : ""}
+                      </span>
                     </li>
                   ))}
                 </ul>
@@ -329,7 +356,15 @@ export function KnowledgeSurface({
               <ul className="grid gap-2">
                 {visibleBlocks.map((block) => (
                   <li key={block.work.id}>
-                    <WorkLedgerBlock block={block} onOpenWork={onOpenWork} />
+                    <WorkLedgerBlock
+                      block={block}
+                      citationCounts={citationCounts}
+                      onOpenWork={onOpenWork}
+                      onSelectEvidence={(evidenceId) =>
+                        setSelectedEvidenceId((current) => (current === evidenceId ? undefined : evidenceId))
+                      }
+                      selectedEvidenceId={selectedEvidenceId}
+                    />
                   </li>
                 ))}
               </ul>
@@ -338,7 +373,9 @@ export function KnowledgeSurface({
 
           <aside aria-label="인용 안 됨" className="grid min-h-0 grid-rows-[48px_minmax(0,1fr)] border-l border-control bg-surface-1">
             <header className="flex h-12 items-center border-b border-control px-4">
-              <h2 className="text-[15px] font-semibold tracking-[-0.008em] text-secondary">인용 안 됨</h2>
+              <h2 className="text-[15px] font-semibold tracking-[-0.008em] text-secondary">
+                인용 안 됨 <span className="text-muted">{uncited.length}</span>
+              </h2>
               <span className="ml-auto font-mono text-[11px] tabular-nums text-muted">
                 색인 {uncited.length + citedEvidence.length} · 인용 {citedEvidence.length}
               </span>
@@ -346,8 +383,11 @@ export function KnowledgeSurface({
             <div className="min-h-0 overflow-y-auto px-4 py-3">
               <ul className="grid gap-0.5">
                 {uncited.map((node) => (
-                  <li className="flex h-[30px] min-h-[30px] items-center truncate font-mono text-[11px] text-muted" key={node.nodeId}>
-                    {pathOf(node)}
+                  <li className="flex h-[30px] min-h-[30px] min-w-0 items-center font-mono text-[11px] text-muted" key={node.nodeId}>
+                    <span className="min-w-0 flex-1 truncate">{pathOf(node)}</span>
+                    {(uncitedRelationCounts.get(node.nodeId) ?? 0) > 0 ? (
+                      <span className="ml-3 shrink-0 text-right tabular-nums">관계 {uncitedRelationCounts.get(node.nodeId)}</span>
+                    ) : null}
                   </li>
                 ))}
               </ul>
@@ -371,7 +411,7 @@ function rowClass(selected: boolean): string {
 
 function SectionTitle({ count, label }: { count?: number; label: string }) {
   return (
-    <h2 className="text-[12px] leading-[18px] text-muted">
+    <h2 className="flex h-[30px] min-h-[30px] items-center px-2 text-[12px] leading-[18px] text-muted">
       {label}
       {count === undefined ? null : ` ${count.toLocaleString("ko-KR")}`}
     </h2>
@@ -392,24 +432,40 @@ function verificationIdentity(work: WorkView, verification: VerificationView) {
     (agent) =>
       agent.name.toLowerCase() === verification.verifier.toLowerCase() || agent.id === verification.verifier,
   );
+  const isHandle = matched === undefined;
   const executors = work.agents.filter((agent) => agent.role !== "검증");
   const separated = !executors.some(
     (agent) =>
       agent.name.toLowerCase() === verification.verifier.toLowerCase() || agent.id === verification.verifier,
   );
+  const counts = criterionCounts(verification);
   return {
     id: `${work.id}-${verification.id}`,
     verifierKey: matched?.id ?? verification.verifier.toLowerCase(),
     state: verification.state,
     verifierLabel: matched ? matched.name : verification.verifier,
     verifierRole: matched?.role,
+    isHandle,
     accentSlot: agentIdentityToken(matched?.id ?? verification.verifier).accentSlot,
-    criteriaCount: verification.criteria.length,
+    criteriaCount: counts.total,
+    blockedCount: counts.blocked,
     separated,
   };
 }
 
-function WorkLedgerBlock({ block, onOpenWork }: { block: WorkEvidence; onOpenWork: (workId: string) => void }) {
+function WorkLedgerBlock({
+  block,
+  citationCounts,
+  onOpenWork,
+  onSelectEvidence,
+  selectedEvidenceId,
+}: {
+  block: WorkEvidence;
+  citationCounts: ReadonlyMap<string, number>;
+  onOpenWork: (workId: string) => void;
+  onSelectEvidence: (evidenceId: string) => void;
+  selectedEvidenceId: string | undefined;
+}) {
   return (
     <section aria-label={block.work.title} className="grid gap-0.5">
       <button
@@ -433,17 +489,42 @@ function WorkLedgerBlock({ block, onOpenWork }: { block: WorkEvidence; onOpenWor
         </span>
       </button>
 
+      {block.work.summary ? <RequestRow work={block.work} /> : null}
       <AssignmentRow work={block.work} />
+      {block.work.approvals.map((approval) => (
+        <ApprovalRow approval={approval} key={approval.id} onOpenWork={() => onOpenWork(block.work.id)} />
+      ))}
       {block.work.verifications.map((verification) => (
         <VerificationRows key={verification.id} work={block.work} verification={verification} />
       ))}
       {block.evidence.map((entry) => (
-        <EvidenceRow entry={entry} key={`${block.work.id}-${entry.node.nodeId}`} />
+        <EvidenceRow
+          citationCount={citationCounts.get(entry.node.nodeId) ?? 0}
+          entry={entry}
+          key={`${block.work.id}-${entry.node.nodeId}`}
+          onSelect={() => onSelectEvidence(entry.node.nodeId)}
+          selected={entry.node.nodeId === selectedEvidenceId}
+        />
       ))}
       {block.work.artifacts.map((artifact) => (
         <ArtifactRow artifact={artifact} key={`${block.work.id}-${artifact.id}`} />
       ))}
     </section>
+  );
+}
+
+function RequestRow({ work }: { work: WorkView }) {
+  return (
+    <div className="grid h-[30px] min-h-[30px] grid-cols-[44px_2px_minmax(0,1fr)_auto_14px] items-center gap-2">
+      <span aria-hidden="true" />
+      <span className="h-5 w-[2px] bg-transparent" />
+      <span className="col-start-3 flex min-w-0 truncate pl-8 text-[12px] text-muted">
+        <span className="shrink-0">요청</span>
+        <span className="ml-2 truncate text-[13px] text-secondary">{work.summary}</span>
+      </span>
+      <span aria-hidden="true" />
+      <span aria-hidden="true" />
+    </div>
   );
 }
 
@@ -474,6 +555,49 @@ function AssignmentRow({ work }: { work: WorkView }) {
   );
 }
 
+function ApprovalRow({
+  approval,
+  onOpenWork,
+}: {
+  approval: WorkView["approvals"][number];
+  onOpenWork: () => void;
+}) {
+  return (
+    <button
+      className="grid h-[30px] min-h-[30px] w-full grid-cols-[44px_2px_minmax(0,1fr)_auto_14px] items-center gap-2 rounded-[4px] text-left transition-colors duration-150 hover:bg-white/[0.027]"
+      onClick={onOpenWork}
+      type="button"
+    >
+      <span aria-hidden="true" />
+      <span className="h-5 w-[2px] bg-transparent" />
+      <span className="col-start-3 flex min-w-0 items-center gap-2 overflow-hidden pl-8">
+        <StatusGlyph kind={approval.status === "pending" ? "gate" : "empty"} muted={approval.status !== "pending"} />
+        <span className="shrink-0 text-[12px] text-muted">승인</span>
+        <span className="min-w-0 truncate text-[13px] text-secondary">{approval.title}</span>
+      </span>
+      <span className={`${approvalStatusClass(approval.status)} whitespace-nowrap font-mono text-[11px] tabular-nums`}>
+        {approvalStatusLabel(approval.status)}
+      </span>
+      <span aria-hidden="true" className="text-[14px] text-muted">
+        ›
+      </span>
+    </button>
+  );
+}
+
+function approvalStatusLabel(status: string): string {
+  if (status === "pending") return "사람 대기";
+  if (status === "approved") return "승인됨";
+  if (status === "rejected") return "거절됨";
+  return status;
+}
+
+function approvalStatusClass(status: string): string {
+  if (status === "pending") return "text-gate";
+  if (status === "rejected") return "text-danger";
+  return "text-muted";
+}
+
 function VerificationRows({
   work,
   verification,
@@ -500,8 +624,10 @@ function VerificationRows({
         <span className="h-5 w-[2px]" style={{ backgroundColor: `var(--agent-${identity.accentSlot})` }} />
         <span className="flex min-w-0 items-center gap-2 pl-8">
           <VerificationStatusGlyph state={verification.state} />
-          <span className="flex min-w-0 items-center gap-1 truncate text-[13px] tracking-[-0.005em]">
-            <span className="truncate text-secondary">판정 {identity.verifierLabel}</span>
+          <span className="flex min-w-0 items-center gap-1 truncate tracking-[-0.005em]">
+            <span className={`${identity.isHandle ? "font-mono text-[11px]" : "text-[13px]"} truncate text-secondary`}>
+              판정 {identity.verifierLabel}
+            </span>
             {identity.verifierRole ? <span className="shrink-0 text-muted"> · {identity.verifierRole}</span> : null}
           </span>
         </span>
@@ -537,7 +663,17 @@ function VerificationRows({
   );
 }
 
-function EvidenceRow({ entry }: { entry: EvidenceEntry }) {
+function EvidenceRow({
+  entry,
+  citationCount,
+  onSelect,
+  selected,
+}: {
+  entry: EvidenceEntry;
+  citationCount: number;
+  onSelect: () => void;
+  selected: boolean;
+}) {
   const reference = entry.reference;
   const qualified = reference?.qualifiedName
     ? `${reference.qualifiedName}:${reference.startLine}–${reference.endLine}`
@@ -545,7 +681,14 @@ function EvidenceRow({ entry }: { entry: EvidenceEntry }) {
       ? `${reference.startLine}–${reference.endLine}`
       : undefined;
   return (
-    <div className="grid h-[30px] min-h-[30px] grid-cols-[44px_2px_minmax(0,1fr)_auto_14px] items-center gap-2">
+    <button
+      aria-pressed={selected}
+      className={`grid h-[30px] min-h-[30px] w-full grid-cols-[44px_2px_minmax(0,1fr)_auto_14px] items-center gap-2 rounded-[4px] px-2 text-left transition-colors duration-150 hover:bg-white/[0.027] ${
+        selected ? "bg-white/[0.047]" : ""
+      }`}
+      onClick={onSelect}
+      type="button"
+    >
       <span aria-hidden="true" />
       <span className="h-5 w-[2px] bg-transparent" />
       <span className="col-start-3 flex min-w-0 items-center gap-2 overflow-hidden pl-8">
@@ -555,13 +698,14 @@ function EvidenceRow({ entry }: { entry: EvidenceEntry }) {
           {qualified ? <span className="font-mono text-muted"> {qualified}</span> : null}
           {entry.node.group ? <span className="text-muted"> · {entry.node.group}</span> : null}
           {entry.relationCount > 0 ? <span className="text-muted"> · 관계 {entry.relationCount}</span> : null}
+          {reference?.contentHash ? <span className="font-mono text-muted"> · {reference.contentHash}</span> : null}
         </span>
       </span>
       <span className="whitespace-nowrap text-right font-mono text-[11px] tabular-nums text-muted">
-        {reference?.contentHash}
+        인용 {citationCount}
       </span>
       <span aria-hidden="true" />
-    </div>
+    </button>
   );
 }
 
@@ -596,7 +740,7 @@ function criterionCounts(verification: VerificationView) {
 
 function criterionStatusClass(status: VerificationCriterionStatus): string {
   if (status === "failed") return "text-[12px] text-danger";
-  if (status === "blocked") return "text-[12px] text-gate";
+  if (status === "blocked") return "text-[12px] text-danger";
   return "text-[12px] text-muted";
 }
 
@@ -633,7 +777,9 @@ function VerificationStatusGlyph({ state }: { state: VerificationView["state"] }
 function CriterionStatusGlyph({ status }: { status: VerificationCriterionStatus }) {
   return (
     <StatusGlyph
-      kind={status === "passed" ? "complete" : status === "failed" ? "failed" : status === "blocked" ? "gate" : "empty"}
+      kind={
+        status === "passed" ? "complete" : status === "failed" ? "failed" : status === "blocked" ? "blocked" : "empty"
+      }
       size="compact"
       muted={status === "passed" || status === "excluded"}
     />
@@ -646,7 +792,7 @@ function StatusGlyph({
   progress = 0,
   size = "regular",
 }: {
-  kind: "empty" | "progress" | "complete" | "verified" | "gate" | "failed";
+  kind: "empty" | "progress" | "complete" | "verified" | "gate" | "blocked" | "failed";
   muted?: boolean;
   progress?: number;
   size?: "compact" | "regular";
@@ -665,6 +811,14 @@ function StatusGlyph({
       <svg aria-hidden="true" className={`${sizeClass} shrink-0 text-danger`} viewBox="0 0 14 14">
         <circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" strokeWidth="1" />
         <path d="m4 4 6 6" fill="none" stroke="currentColor" strokeWidth="1" />
+      </svg>
+    );
+  }
+  if (kind === "blocked") {
+    return (
+      <svg aria-hidden="true" className={`${sizeClass} shrink-0 text-danger`} viewBox="0 0 14 14">
+        <circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" strokeWidth="1" />
+        <path d="M4 7h6" fill="none" stroke="currentColor" strokeWidth="1" />
       </svg>
     );
   }

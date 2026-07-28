@@ -805,6 +805,23 @@ export interface RegistryInstallView {
   readonly approvalId?: string;
 }
 
+/** runtime.execution.subscription-lineage를 화면 경계에서 좁힌 결과. 형태가 안 맞는 항목은 버립니다. */
+export interface ExecutionLineageAttemptView {
+  readonly attemptId: string;
+  readonly sequence: number;
+  readonly accountId: string;
+  readonly providerId: string;
+  readonly modelId: string;
+  readonly status: "reserved" | "failed" | "interrupted" | "succeeded";
+  readonly failureClass?: string;
+  readonly connectorId?: string;
+}
+
+export interface ExecutionLineageView {
+  readonly executionId: string;
+  readonly attempts: readonly ExecutionLineageAttemptView[];
+}
+
 // 승인 대기 command는 payload 일부가 바뀌어도 같은 실행 계보를 이어야 합니다.
 export interface CommandIdentity {
   readonly commandId: string;
@@ -817,6 +834,7 @@ export interface DesktopService {
   loadIndex(input: WorkIndexInput): Promise<WorkView[]>;
   loadWork(workId: string): Promise<WorkView>;
   loadWorkKnowledge(workId: string): Promise<WorkKnowledgeView>;
+  loadExecutionLineage(executionId: string): Promise<ExecutionLineageView>;
   /** 워크스페이스 색인 상태. 계약 없음 — ADR-002 인계 문서 참조. */
   loadKnowledgeIndex(workspaceId: string): Promise<KnowledgeIndexView>;
   /** 중심 하나의 이웃. 계약 없음 — application 계층 조인이 필요합니다. */
@@ -984,6 +1002,41 @@ export function createApplicationDesktopService(
 
     async loadWorkKnowledge(workId) {
       return await client.query("work.knowledge", { workId });
+    },
+
+    async loadExecutionLineage(executionId) {
+      const data = object(await query("runtime.execution.subscription-lineage", { executionId }));
+      const attempts = Array.isArray(data?.attempts)
+        ? data.attempts.flatMap((candidate): ExecutionLineageAttemptView[] => {
+            const row = object(candidate);
+            const status = row?.status;
+            const lease = object(row?.lease);
+            if (
+              !row ||
+              typeof row.attemptId !== "string" ||
+              typeof row.sequence !== "number" ||
+              typeof row.accountId !== "string" ||
+              typeof row.providerId !== "string" ||
+              typeof row.modelId !== "string" ||
+              (status !== "reserved" && status !== "failed" && status !== "interrupted" && status !== "succeeded")
+            )
+              return [];
+            return [
+              {
+                attemptId: row.attemptId,
+                sequence: row.sequence,
+                accountId: row.accountId,
+                providerId: row.providerId,
+                modelId: row.modelId,
+                status,
+                ...(typeof row.failureClass === "string" ? { failureClass: row.failureClass } : {}),
+                ...(typeof lease?.connectorId === "string" ? { connectorId: lease.connectorId } : {}),
+              },
+            ];
+          })
+        : [];
+      attempts.sort((left, right) => left.sequence - right.sequence);
+      return { executionId, attempts };
     },
 
     /*
@@ -1513,6 +1566,25 @@ export function createFixtureDesktopService(): DesktopService {
         return work;
       }),
     loadWorkKnowledge: (workId) => fixturePromise(() => fixtureKnowledge(workId)),
+    loadExecutionLineage: (executionId) =>
+      fixturePromise(() =>
+        executionId === "execution-churn-q3"
+          ? {
+              executionId,
+              attempts: [
+                {
+                  attemptId: "attempt-churn-1",
+                  sequence: 1,
+                  accountId: "account-zai",
+                  providerId: "zai",
+                  modelId: "glm-5.2",
+                  status: "succeeded" as const,
+                  connectorId: "connector-zai-coding-plan",
+                },
+              ],
+            }
+          : { executionId, attempts: [] },
+      ),
     loadPendingApprovals: () =>
       fixturePromise(() =>
         initialSnapshot.works.flatMap((work) => work.approvals.filter((approval) => approval.status === "pending")),

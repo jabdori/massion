@@ -7,6 +7,8 @@ import type {
   DesktopService,
   EmergencyView,
   ModelRouteView,
+  OrganizationView,
+  ProviderConnectionView,
   SettingsView,
   SubscriptionAccountView,
 } from "@/desktop-service";
@@ -22,6 +24,7 @@ export function SettingsSurface({
   service: DesktopService;
 }) {
   const [settings, setSettings] = useState<SettingsView>();
+  const [organization, setOrganization] = useState<OrganizationView>();
   const [autonomy, setAutonomy] = useState<AutonomyView>();
   const [emergency, setEmergency] = useState<EmergencyView>();
   const [error, setError] = useState("");
@@ -49,12 +52,18 @@ export function SettingsSurface({
   const sectionRefs = useRef<Partial<Record<(typeof SETTINGS_AREAS)[number]["id"], HTMLElement | null>>>({});
   useEffect(() => {
     let disposed = false;
-    void Promise.all([service.loadSettings(), service.loadAutonomy(), service.loadEmergency()])
-      .then(([value, mode, emergencyState]) => {
+    void Promise.all([
+      service.loadSettings(),
+      service.loadAutonomy(),
+      service.loadEmergency(),
+      service.loadOrganization().catch(() => undefined),
+    ])
+      .then(([value, mode, emergencyState, organizationState]) => {
         if (!disposed) {
           setSettings(value);
           setAutonomy(mode);
           setEmergency(emergencyState);
+          if (organizationState) setOrganization(organizationState);
         }
       })
       .catch((cause: unknown) => {
@@ -184,7 +193,7 @@ export function SettingsSurface({
     setProvider((current) => ({ ...current, [field]: value }));
   };
 
-  const routes = settings ? projectModelRoutes(settings.routes, settings.catalog) : [];
+  const routes = settings ? projectSettingsRoutes(settings.routes, settings.catalog) : [];
   const connections = settings ? projectProviderConnections(settings.catalog) : [];
   const accounts = settings ? projectSubscriptionAccounts(settings.accounts) : [];
   const models = settings ? modelProfiles(settings.catalog) : [];
@@ -199,18 +208,28 @@ export function SettingsSurface({
   const fullAccess = autonomy?.mode === "full-access" || autonomy?.runtimePermissionStatus === "full-access";
   const emergencyActive = emergency?.active === true || autonomy?.emergencyStopActive === true;
   const mainRing = emergencyActive ? "ring-2 ring-inset ring-emergency" : fullAccess ? "ring-2 ring-inset ring-halt" : "";
-  const localRoutes = routes.filter((route) => route.primaryLocal === true);
-  const externalRoutes = routes.filter((route) => route.primaryLocal === false);
+  const activeNodes = organization?.nodes.filter((node) => node.status === "active") ?? [];
+  const governanceNodes = activeNodes.filter((node) => node.capabilities.includes("governance"));
+  const localRoutes = routes.filter(routeIsLocal);
+  const externalRoutes = routes.filter((route) => !routeIsLocal(route));
   const localConnections = connections.flatMap((connection) => {
-    const localEndpoints = connection.endpoints.filter((endpoint) => endpoint.local && endpoint.baseUrl.length > 0);
+    const localEndpoints = connection.endpoints.filter((endpoint) => endpoint.local);
     return localEndpoints.length > 0 ? [{ ...connection, endpoints: localEndpoints }] : [];
   });
   const externalConnections = connections.flatMap((connection) => {
-    const externalEndpoints = connection.endpoints.filter((endpoint) => !endpoint.local && endpoint.baseUrl.length > 0);
+    const externalEndpoints = connection.endpoints.filter((endpoint) => !endpoint.local);
     return externalEndpoints.length > 0 ? [{ ...connection, endpoints: externalEndpoints }] : [];
   });
   const localModels = modelsForSide(models, endpoints, true);
   const externalModels = modelsForSide(models, endpoints, false);
+  const localEndpoints = endpoints?.filter((endpoint) => endpoint.local) ?? [];
+  const externalEndpoints = endpoints?.filter((endpoint) => !endpoint.local) ?? [];
+  const localCredentials = credentials.filter((credential) => credentialIsLocal(credential, endpoints, localConnections, externalConnections));
+  const externalCredentials = credentials.filter((credential) => !credentialIsLocal(credential, endpoints, localConnections, externalConnections));
+  const candidateItems = settings ? catalogCandidates(settings.catalog) : [];
+  const boundaryColumnClass = fullAccess ? "border-l-2 border-halt bg-halt/[0.06]" : "border-l border-line-strong";
+  const unavailableRoutes = routes.filter((route) => route.candidateCount === 0);
+  const governanceNode = governanceNodes[0];
 
   return (
     <main
@@ -298,6 +317,31 @@ export function SettingsSurface({
               ) : null}
               {settings ? <SummaryRow label="자격 증명" value={String(credentials.length)} /> : null}
             </div>
+            {organization ? (
+              <div className="mt-6">
+                <div className="flex min-h-[18px] items-center justify-between px-2">
+                  <SummaryLabel>
+                    조직 <span className="font-mono text-[12px] tabular-nums text-fg-4">{activeNodes.length}</span>
+                  </SummaryLabel>
+                  {organization.version !== undefined ? (
+                    <span className="font-mono text-[11px] tabular-nums text-fg-4">개정 {organization.version}</span>
+                  ) : null}
+                </div>
+                <div className="mt-1 space-y-[2px]">
+                  {activeNodes.map((node) => (
+                    <div
+                      className="grid h-[30px] grid-cols-[16px_minmax(0,1fr)_auto] items-center gap-2 rounded-[4px] px-2"
+                      key={node.id}
+                      title={node.responsibility}
+                    >
+                      <span className="text-[14px] leading-5 text-gate">{node.capabilities.includes("governance") ? "◇" : ""}</span>
+                      <span className="truncate text-[13px] leading-5 tracking-[-0.005em] text-fg-2">{node.name}</span>
+                      <span className="max-w-[92px] truncate font-mono text-[11px] tabular-nums text-fg-4">{node.handle}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
           </div>
         </div>
       </section>
@@ -305,9 +349,11 @@ export function SettingsSurface({
       <div className="grid min-h-0 grid-rows-[48px_minmax(0,1fr)]">
         <header className="flex items-center justify-between border-b border-line-strong px-5">
           <h2 className="truncate text-[15px] font-semibold tracking-[-0.008em] text-primary">운영 기반</h2>
-          <span className="font-mono text-[11px] tabular-nums text-fg-4">
-            경로 {routes.length} · Provider {connections.length} · 계정 {accounts.length}
-          </span>
+          {settings ? (
+            <span className="font-mono text-[11px] tabular-nums text-fg-4">
+              조직 {activeNodes.length} · 경로 {routes.length} · 모델 {models.length} · 계정 {accounts.length}
+            </span>
+          ) : null}
         </header>
         <div className="min-h-0 overflow-y-auto px-5 py-4">
           {error ? <SurfaceError message={error} /> : null}
@@ -320,7 +366,7 @@ export function SettingsSurface({
                   sectionRefs.current.autonomy = node;
                 }}
               >
-                <div className="flex min-h-[30px] items-center justify-between gap-4">
+                <div className="flex min-h-[30px] items-center justify-between gap-4 px-2">
                   <p className="text-[12px] leading-[18px] text-fg-4">권한 경계</p>
                   {autonomy ? (
                     <div className="flex shrink-0 items-center gap-2">
@@ -347,7 +393,7 @@ export function SettingsSurface({
                 </div>
                 {autonomy ? (
                   <>
-                    <p className="mt-2 text-[13px] leading-5 text-fg-2">
+                    <p className="mt-2 px-2 text-[13px] leading-5 text-fg-2">
                       {autonomy.mode === "automatic"
                         ? "미리 승인된 범위에서는 사람을 기다리지 않고 실행합니다. 위험한 실행과 조직 변경은 여전히 수신함에서 확인을 받습니다."
                         : autonomy.mode === "review"
@@ -384,212 +430,176 @@ export function SettingsSurface({
                   </>
                 ) : null}
               </section>
-              <div className="mt-6 grid min-w-0 grid-cols-2">
-                <div
-                  className="flex min-w-0 flex-col gap-6 pr-5"
-                  ref={(node) => {
-                    sectionRefs.current.routes = node;
-                  }}
-                >
-                  {localRoutes.length > 0 ? (
-                    <BoundaryBand
-                      endpoints={boundaryEndpoints(routes, endpoints, models, true)}
-                      label="이 컴퓨터"
-                      routes={localRoutes}
-                    />
-                  ) : null}
-                  <section>
-                    <div className="flex min-h-[30px] items-center justify-between gap-3">
-                      <p className="text-[12px] leading-[18px] text-fg-4">사람이 필요한 지점</p>
-                      <button
-                        className="h-7 shrink-0 rounded-[4px] border border-halt px-3 text-[12px] text-halt disabled:opacity-50"
-                        disabled={autonomySaving || emergency?.active === true}
-                        onClick={() => {
-                          void activateEmergency();
-                        }}
-                        type="button"
-                      >
-                        {emergency?.active === true ? "긴급 정지 활성" : "긴급 정지"}
-                      </button>
-                    </div>
-                    <div className="mt-1 space-y-[2px]">
-                      {autonomy?.mode === "full-access" || autonomy?.runtimePermissionStatus === "full-access" ? (
-                        <p className="h-[30px] rounded-[4px] pl-8 pr-2 text-[13px] leading-[30px] text-halt">⊘ 사람 확인 지점 없음</p>
-                      ) : (
-                        (autonomy?.mode === "review" ? ["모든 실행", "위험한 실행", "조직 변경"] : ["위험한 실행", "조직 변경"]).map(
-                          (label) => (
-                            <p className="h-[30px] rounded-[4px] pl-8 pr-2 text-[13px] leading-[30px] text-fg-2" key={label}>
-                              <span className="mr-2 inline-block w-6 text-center text-gate">◇</span>
-                              {label}
-                            </p>
-                          ),
-                        )
-                      )}
-                      <p className="h-[30px] rounded-[4px] pl-8 pr-2 text-[13px] leading-[30px] text-fg-2">
-                        <span className="mr-2 inline-block w-6 text-center text-gate">{fullAccess ? "" : "◇"}</span>
-                        긴급 정지 해제 승인
-                      </p>
-                      {emergency?.active === true ? (
-                        <div className="flex h-[30px] items-center gap-2 pl-8 pr-2">
-                          <span className="truncate text-[12px] text-halt">{emergency.reason ?? "새 실행 차단 중"}</span>
-                          <button
-                            className="h-7 shrink-0 rounded-[4px] border border-line-strong px-3 text-[12px] text-fg-2 disabled:opacity-50"
-                            disabled={autonomySaving || emergency.approvalId !== undefined}
-                            onClick={() => {
-                              void requestEmergencyRelease();
-                            }}
-                            type="button"
-                          >
-                            {emergency.approvalId === undefined ? "해제 승인 요청" : "해제 승인 대기"}
-                          </button>
+
+              <section aria-label="자원 경계" className="mt-6 min-w-0">
+                <div className="grid min-w-0 grid-cols-[112px_minmax(0,1fr)_minmax(0,1fr)]">
+                  <div className="h-[30px]" />
+                  <div className="flex h-[30px] min-w-0 items-center justify-between gap-2 px-2 text-[12px] leading-[18px] text-fg-4">
+                    <span>이 컴퓨터</span>
+                    <span className="font-mono tabular-nums">{localEndpoints.length}</span>
+                  </div>
+                  <div className={`flex h-[30px] min-w-0 items-center justify-between gap-2 px-2 text-[12px] leading-[18px] text-fg-4 ${boundaryColumnClass}`}>
+                    <span>외부로 나감</span>
+                    <span className="flex items-center gap-2">
+                      {fullAccess ? <span className="text-halt">⊘ 경계 없음</span> : null}
+                      <span className="font-mono tabular-nums">{externalEndpoints.length}</span>
+                    </span>
+                  </div>
+
+                  <div className="flex min-h-[30px] items-center px-2 text-[12px] leading-[18px] text-fg-4">요청 경로</div>
+                  <div className="min-w-0">
+                    <div className="space-y-[2px]">
+                      {localRoutes.map((route) => (
+                        <div className="grid h-[30px] grid-cols-[20px_88px_minmax(0,1fr)_96px_104px] items-center gap-2 rounded-[4px] px-2 transition-colors duration-150 hover:duration-0 hover:bg-white/[0.027] motion-reduce:transition-none" key={route.routeId}>
+                          <span className={`text-center text-[14px] leading-5 ${route.candidateCount === 0 ? "text-halt" : "text-fg-3"}`}>
+                            {route.candidateCount === 0 ? "⊘" : route.primaryVerified ? "◉" : "●"}
+                          </span>
+                          <span className="min-w-0 truncate text-[13px] leading-5 tracking-[-0.005em] text-fg-2">{routeKindLabel(route.routeKind)}</span>
+                          <span className="min-w-0 truncate font-mono text-[11px] text-fg-3">{route.primaryModelId ?? ""}</span>
+                          <span>{route.totalBudgetMicros > 0 ? <SummaryProgress value={route.spentMicros / route.totalBudgetMicros} /> : null}</span>
+                          <span className="truncate text-right font-mono text-[11px] tabular-nums text-fg-4">{route.totalBudgetMicros > 0 ? `${costText(route.spentMicros)} / ${costText(route.totalBudgetMicros)}` : ""}</span>
                         </div>
-                      ) : null}
-                      {autonomy?.emergencyStopActive ? <p className="h-[30px] pl-8 pr-2 text-[12px] leading-[30px] text-halt">긴급 정지로 제한됨</p> : null}
+                      ))}
                     </div>
-                  </section>
-                  {localConnections.length > 0 ? (
-                    <section
-                      ref={(node) => {
-                        sectionRefs.current.providers = node;
-                      }}
-                    >
-                      <SectionIntro title="Provider" background="Provider와 endpoint를 이 컴퓨터와 외부 경계로 나눠 보여줍니다." />
-                      <div className="mt-1 space-y-[2px]">
-                        {localConnections.map((connection) => (
-                          <div key={connection.providerId}>
-                            <div className="flex h-[30px] items-center justify-between gap-3 rounded-[4px] pl-8 pr-2">
-                              <div className="flex min-w-0 items-center gap-3">
-                                <span className="truncate text-[13px] tracking-[-0.005em] text-fg-2">{connection.displayName}</span>
-                                {connection.adapterKind ? <span className="font-mono text-[11px] text-fg-4">{connection.adapterKind}</span> : null}
-                              </div>
-                              <span className="shrink-0 text-[12px] text-fg-4">{connection.enabled ? "사용 중" : "꺼짐"}</span>
-                            </div>
-                            {connection.endpoints.map((endpoint) => (
-                              <div className="flex h-[30px] items-center gap-3 rounded-[4px] pl-8" key={`${endpoint.name}-${endpoint.baseUrl}`}>
-                                <span className="w-16 shrink-0 text-[12px] text-fg-3">이 컴퓨터</span>
-                                <span className="truncate font-mono text-[11px] text-fg-4">{endpoint.baseUrl}</span>
-                              </div>
-                            ))}
-                          </div>
-                        ))}
-                      </div>
-                    </section>
-                  ) : null}
-                  {localModels.length > 0 ? (
-                    <section>
-                      <SectionIntro title="모델" background="이 컴퓨터에서 실행되는 모델과 검증 상태입니다." />
-                      <ModelList models={localModels} />
-                    </section>
-                  ) : null}
-                  <section
-                    ref={(node) => {
-                      sectionRefs.current.local = node;
-                    }}
-                  >
-                    <SectionIntro title="이 컴퓨터의 daemon" background="이 컴퓨터에서 도는 daemon과 데이터가 있는 곳입니다." />
-                    <p className="mt-1 text-[13px] leading-5 text-fg-3">조회가 아직 계약에 없습니다.</p>
-                  </section>
-                </div>
-                <div className={`flex min-w-0 flex-col gap-6 pl-5 ${fullAccess ? "border-l-2 border-halt bg-halt/[0.06]" : "border-l border-line-strong"}`}>
-                  {externalRoutes.length > 0 ? (
-                    <BoundaryBand
-                      endpoints={boundaryEndpoints(routes, endpoints, models, false)}
-                      label="외부로 나감"
-                      routes={externalRoutes}
-                    />
-                  ) : null}
-                  {routes.some((route) => route.candidateCount === 0) ? (
-                    <section>
-                      <SectionIntro title="실행되지 않는 요청" background="후보 모델이 없는 요청은 실행되지 않습니다." />
-                      <div className="mt-1 space-y-[2px]">
-                        {routes
-                          .filter((route) => route.candidateCount === 0)
-                          .map((route) => (
-                            <p className="h-[30px] rounded-[4px] pl-8 pr-2 text-[13px] leading-[30px] text-halt" key={route.routeId}>
-                              ⊘ {routeKindLabel(route.routeKind)} 쓸 수 있는 모델이 없어 실행되지 않습니다
-                            </p>
-                          ))}
-                      </div>
-                    </section>
-                  ) : null}
-                  {externalConnections.length > 0 ? (
-                    <section>
-                      <SectionIntro title="Provider" background="외부 Provider와 endpoint 주소입니다." />
-                      <div className="mt-1 space-y-[2px]">
-                        {externalConnections.map((connection) => (
-                          <div key={connection.providerId}>
-                            <div className="flex h-[30px] items-center justify-between gap-3 rounded-[4px] pl-8 pr-2">
-                              <div className="flex min-w-0 items-center gap-3">
-                                <span className="truncate text-[13px] tracking-[-0.005em] text-fg-2">{connection.displayName}</span>
-                                {connection.adapterKind ? <span className="font-mono text-[11px] text-fg-4">{connection.adapterKind}</span> : null}
-                              </div>
-                              <span className="shrink-0 text-[12px] text-fg-4">{connection.enabled ? "사용 중" : "꺼짐"}</span>
-                            </div>
-                            {connection.endpoints.map((endpoint) => (
-                              <div className="flex h-[30px] items-center gap-3 rounded-[4px] pl-8" key={`${endpoint.name}-${endpoint.baseUrl}`}>
-                                <span className="w-16 shrink-0 text-[12px] text-fg-3">외부</span>
-                                <span className="truncate font-mono text-[11px] text-fg-4">{endpoint.baseUrl}</span>
-                              </div>
-                            ))}
-                          </div>
-                        ))}
-                      </div>
-                    </section>
-                  ) : null}
-                  {externalModels.length > 0 ? (
-                    <section>
-                      <SectionIntro title="모델" background="외부 endpoint에 연결된 모델과 검증 상태입니다." />
-                      <ModelList models={externalModels} />
-                    </section>
-                  ) : null}
-                  <section
-                    ref={(node) => {
-                      sectionRefs.current.accounts = node;
-                    }}
-                  >
-                    <SectionIntro title="계정" background="구독 계정별 잔여량과 초기화 시각을 보여줍니다." />
+                  </div>
+                  <div className={`min-w-0 ${boundaryColumnClass}`}>
+                    <div className="space-y-[2px]">
+                      {externalRoutes.map((route) => (
+                        <div className="grid h-[30px] grid-cols-[20px_88px_minmax(0,1fr)_96px_104px] items-center gap-2 rounded-[4px] px-2 transition-colors duration-150 hover:duration-0 hover:bg-white/[0.027] motion-reduce:transition-none" key={route.routeId}>
+                          <span className={`text-center text-[14px] leading-5 ${route.candidateCount === 0 ? "text-halt" : "text-fg-3"}`}>
+                            {route.candidateCount === 0 ? "⊘" : route.primaryVerified ? "◉" : "●"}
+                          </span>
+                          <span className="min-w-0 truncate text-[13px] leading-5 tracking-[-0.005em] text-fg-2">{routeKindLabel(route.routeKind)}</span>
+                          <span className="min-w-0 truncate font-mono text-[11px] text-fg-3">{route.primaryModelId ?? ""}</span>
+                          <span>{route.totalBudgetMicros > 0 ? <SummaryProgress value={route.spentMicros / route.totalBudgetMicros} /> : null}</span>
+                          <span className="truncate text-right font-mono text-[11px] tabular-nums text-fg-4">{route.totalBudgetMicros > 0 ? `${costText(route.spentMicros)} / ${costText(route.totalBudgetMicros)}` : ""}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="flex min-h-[30px] items-center px-2 text-[12px] leading-[18px] text-fg-4">모델</div>
+                  <div className="min-w-0">
+                    <ModelList models={localModels} />
+                  </div>
+                  <div className={`min-w-0 ${boundaryColumnClass}`}>
+                    <ModelList models={externalModels} />
+                  </div>
+
+                  <div className="flex min-h-[30px] items-center px-2 text-[12px] leading-[18px] text-fg-4">Provider</div>
+                  <div className="min-w-0">
+                    <ProviderList connections={localConnections} />
+                  </div>
+                  <div className={`min-w-0 ${boundaryColumnClass}`}>
+                    <ProviderList connections={externalConnections} />
+                  </div>
+
+                  <div className="flex min-h-[30px] items-center px-2 text-[12px] leading-[18px] text-fg-4">주소</div>
+                  <div className="min-w-0">
+                    <EndpointList endpoints={localEndpoints} />
+                  </div>
+                  <div className={`min-w-0 ${boundaryColumnClass}`}>
+                    <EndpointList endpoints={externalEndpoints} />
+                  </div>
+
+                  <div className="flex min-h-[30px] items-center px-2 text-[12px] leading-[18px] text-fg-4">자격 증명</div>
+                  <div className="min-w-0">
+                    <CredentialList credentials={localCredentials} />
+                  </div>
+                  <div className={`min-w-0 ${boundaryColumnClass}`}>
+                    <CredentialList credentials={externalCredentials} />
+                  </div>
+
+                  <div className="flex min-h-[30px] items-center px-2 text-[12px] leading-[18px] text-fg-4">계정</div>
+                  <div className="min-w-0" />
+                  <div className={`min-w-0 ${boundaryColumnClass}`}>
                     {accounts.length === 0 ? (
-                      <p className="mt-1 text-[13px] leading-5 text-fg-3">연결된 구독 계정이 없습니다.</p>
+                      <p className="flex h-[30px] items-center px-2 text-[13px] leading-5 text-fg-3">연결된 구독 계정이 없습니다.</p>
                     ) : (
-                      <div className="mt-1 space-y-[2px]">
+                      <div className="space-y-[2px]">
                         {accounts.map((account) => (
-                          <div className="flex h-[30px] items-center justify-between gap-3 rounded-[4px] pl-8 pr-2" key={account.accountId}>
-                            <div className="flex min-w-0 items-center gap-3">
-                              <span className="truncate text-[13px] tracking-[-0.005em] text-fg-2">{account.alias}</span>
-                              {account.billingKind ? <span className="shrink-0 text-[12px] text-fg-4">{billingKindLabel(account.billingKind)}</span> : null}
-                            </div>
-                            <span className="flex shrink-0 items-center gap-2">
-                              {account.minimumRemainingRatio !== undefined ? <SummaryProgress value={account.minimumRemainingRatio} /> : null}
-                              <span className="font-mono text-[11px] tabular-nums text-fg-4">{quotaText(account)}</span>
-                              {account.earliestResetAt !== undefined && resetText(account.earliestResetAt) ? (
-                                <span className="font-mono text-[11px] tabular-nums text-fg-4">{resetText(account.earliestResetAt)}</span>
-                              ) : null}
-                            </span>
+                          <div className="grid h-[30px] grid-cols-[minmax(0,1fr)_96px_72px_96px_80px_112px] items-center gap-2 rounded-[4px] px-2" key={account.accountId}>
+                            <span className="min-w-0 truncate text-[13px] leading-5 tracking-[-0.005em] text-fg-2">{account.alias}</span>
+                            <span className="min-w-0 truncate text-[12px] text-fg-4">{account.billingKind ? billingKindLabel(account.billingKind) : ""}</span>
+                            <span className="truncate font-mono text-[11px] tabular-nums text-fg-4">{account.status}</span>
+                            <span>{account.minimumRemainingRatio !== undefined ? <SummaryProgress value={account.minimumRemainingRatio} /> : null}</span>
+                            <span className="truncate font-mono text-[11px] tabular-nums text-fg-4">{quotaText(account)}</span>
+                            <span className="truncate font-mono text-[11px] tabular-nums text-fg-4">{account.earliestResetAt !== undefined ? resetText(account.earliestResetAt) : ""}</span>
                           </div>
                         ))}
                       </div>
                     )}
-                  </section>
-                  {credentials.length > 0 ? (
-                    <section>
-                      <SectionIntro title="자격 증명" background="저장된 자격 증명의 식별 정보만 표시합니다." />
-                      <div className="mt-1 space-y-[2px]">
-                        {credentials.map((credential) => (
-                          <div className="flex h-[30px] items-center gap-4 rounded-[4px] pl-8 pr-2" key={credential.credentialId}>
-                            {credential.label ? <span className="text-[13px] tracking-[-0.005em] text-fg-2">{credential.label}</span> : null}
-                            {credential.credentialType ? <span className="font-mono text-[11px] text-fg-4">{credential.credentialType}</span> : null}
-                            {credential.providerId ? <span className="font-mono text-[11px] text-fg-4">{credential.providerId}</span> : null}
-                          </div>
-                        ))}
+                  </div>
+
+                  <div className="flex min-h-[30px] items-center px-2 text-[12px] leading-[18px] text-fg-4">daemon</div>
+                  <div className="min-w-0">
+                    <p className="flex h-[30px] items-center px-2 text-[13px] leading-5 text-fg-3">조회가 아직 계약에 없습니다.</p>
+                  </div>
+                  <div className={`min-w-0 ${boundaryColumnClass}`} />
+                </div>
+              </section>
+
+              <section className="mt-6">
+                <div className="flex min-h-[30px] items-center justify-between gap-3 px-2">
+                  <p className="text-[12px] leading-[18px] text-fg-4">사람이 필요한 지점</p>
+                  <div className="flex shrink-0 items-center gap-3">
+                    <span className="font-mono text-[11px] tabular-nums text-fg-4">승인 capability {governanceNodes.length} / 노드 {activeNodes.length}</span>
+                    <button
+                      className="h-7 rounded-[4px] border border-halt px-3 text-[12px] text-halt disabled:opacity-50"
+                      disabled={autonomySaving || emergency?.active === true}
+                      onClick={() => {
+                        void activateEmergency();
+                      }}
+                      type="button"
+                    >
+                      {emergency?.active === true ? "긴급 정지 활성" : "긴급 정지"}
+                    </button>
+                  </div>
+                </div>
+                <div className="mt-1 space-y-[2px]">
+                  {fullAccess ? (
+                    <p className="flex h-[30px] items-center gap-2 rounded-[4px] px-2 text-[13px] leading-5 text-halt">⊘ 사람 확인 지점 없음</p>
+                  ) : (
+                    (autonomy?.mode === "review" ? ["모든 실행", "위험한 실행", "조직 변경"] : ["위험한 실행", "조직 변경", "긴급 정지 해제 승인"]).map((label) => (
+                      <div className="grid h-[30px] grid-cols-[20px_minmax(0,1fr)_160px_96px] items-center gap-2 rounded-[4px] px-2" key={label}>
+                        <span className="text-center text-[14px] leading-5 text-gate">◇</span>
+                        <span className="truncate text-[13px] leading-5 tracking-[-0.005em] text-fg-2">{label}</span>
+                        <span className="truncate text-[13px] leading-5 text-fg-2">{governanceNode?.name ?? ""}</span>
+                        <span className="truncate font-mono text-[11px] tabular-nums text-fg-4">{governanceNode?.handle ?? ""}</span>
                       </div>
-                      <p className="mt-1 text-[13px] leading-5 text-fg-3">저장된 값은 다시 표시되지 않습니다.</p>
-                    </section>
+                    ))
+                  )}
+                  {emergencyActive ? (
+                    <div className="grid h-[30px] grid-cols-[20px_minmax(0,1fr)_auto] items-center gap-2 rounded-[4px] px-2">
+                      <span className="text-center text-[14px] leading-5 text-halt">⊘</span>
+                      <span className="truncate text-[12px] text-halt">{emergency?.reason ?? "새 실행 차단 중"}</span>
+                      {emergency?.active === true ? (
+                        <button
+                          className="h-7 shrink-0 rounded-[4px] border border-line-strong px-3 text-[12px] text-fg-2 disabled:opacity-50"
+                          disabled={autonomySaving || emergency.approvalId !== undefined}
+                          onClick={() => {
+                            void requestEmergencyRelease();
+                          }}
+                          type="button"
+                        >
+                          {emergency.approvalId === undefined ? "해제 승인 요청" : "해제 승인 대기"}
+                        </button>
+                      ) : null}
+                    </div>
                   ) : null}
                 </div>
-              </div>
-              <section className="mt-6 w-full">
-                <div className="flex min-h-[30px] items-center justify-between gap-3">
-                  <p className="text-[12px] leading-[18px] text-fg-4">관리</p>
+              </section>
+
+              <section
+                className="mt-6 w-full"
+                ref={(node) => {
+                  sectionRefs.current.routes = node;
+                }}
+              >
+                <div className="flex min-h-[30px] items-center justify-between gap-3 px-2">
+                  <p className="text-[12px] leading-[18px] text-fg-4">
+                    경로 후보 <span className="font-mono text-[12px] tabular-nums text-fg-4">{candidateItems.length}</span>
+                  </p>
                   <div className="flex flex-wrap justify-end gap-2">
                     <button
                       className="h-6 rounded-[4px] border border-line px-3 text-[12px] text-fg-3 transition-colors duration-150 hover:duration-0 hover:bg-white/[0.027] hover:text-fg motion-reduce:transition-none"
@@ -618,6 +628,17 @@ export function SettingsSurface({
                     </button>
                   </div>
                 </div>
+                {unavailableRoutes.length > 0 ? (
+                  <div className="mt-1 space-y-[2px]">
+                    {unavailableRoutes.map((route) => (
+                      <p className="flex h-[30px] items-center gap-2 rounded-[4px] px-2 text-[13px] leading-5 text-fg-2" key={route.routeId}>
+                        <span className="text-halt">⊘</span>
+                        <span className="truncate">{routeKindLabel(route.routeKind)} · 쓸 수 있는 모델이 없어 실행되지 않습니다</span>
+                      </p>
+                    ))}
+                  </div>
+                ) : null}
+                <CandidateList candidates={candidateItems} models={models} routes={routes} />
                 {zaiFormOpen ? (
                   <ZaiCodingPlanConnectionForm
                     alias={zaiAlias}
@@ -644,7 +665,7 @@ export function SettingsSurface({
                   service={service}
                   settings={settings}
                 />
-                {notice ? <p className="mt-3 text-[13px] leading-5 text-fg-3">{notice}</p> : null}
+                {notice ? <p className="mt-3 px-2 text-[13px] leading-5 text-fg-3">{notice}</p> : null}
               </section>
             </div>
           ) : null}
@@ -659,31 +680,26 @@ const SETTINGS_AREAS = [
     id: "routes",
     title: "모델 경로",
     hint: "어떤 요청이 어느 모델로",
-    background: "요청 종류별 모델 경로와 예산을 보여줍니다.",
   },
   {
     id: "providers",
     title: "Provider 연결",
     hint: "모델을 어디서 받나",
-    background: "Provider와 endpoint를 이 컴퓨터와 외부 경계로 나눠 보여줍니다.",
   },
   {
     id: "accounts",
     title: "구독 계정",
     hint: "남은 할당량",
-    background: "구독 계정별 잔여량과 초기화 시각을 보여줍니다.",
   },
   {
     id: "autonomy",
     title: "실행 자율성",
     hint: "언제 사람을 기다리나",
-    background: "실행 전 사람 확인이 필요한 경계를 정합니다.",
   },
   {
     id: "local",
     title: "로컬 환경",
     hint: "daemon과 데이터",
-    background: "이 컴퓨터에서 도는 daemon과 데이터가 있는 곳입니다.",
   },
 ] as const;
 
@@ -734,6 +750,7 @@ type CatalogEndpoint = {
 type CredentialItem = {
   credentialId: string;
   providerId: string;
+  endpointId?: string;
   label: string;
   credentialType: string;
 };
@@ -744,8 +761,43 @@ type SettingsModel = {
   endpointId: string;
   modelId: string;
   routeKind: string;
+  equivalenceGroup: string;
   verified: boolean;
 };
+
+type SettingsRoute = ModelRouteView & {
+  credentialPolicy?: "required" | "optional";
+  dataPolicy?: "local" | "cloud";
+  equivalenceGroup?: string;
+};
+
+function projectSettingsRoutes(value: unknown, catalog: unknown): readonly SettingsRoute[] {
+  const metadata = routeMetadata(value);
+  return projectModelRoutes(value, catalog).map((route) => ({
+    ...route,
+    ...(metadata.get(route.routeId) ?? {}),
+  }));
+}
+
+function routeMetadata(value: unknown): ReadonlyMap<string, Pick<SettingsRoute, "credentialPolicy" | "dataPolicy" | "equivalenceGroup">> {
+  if (!Array.isArray(value)) return new Map();
+  return new Map(
+    value.flatMap((item) => {
+      if (!item || typeof item !== "object") return [];
+      const record = item as Record<string, unknown>;
+      if (typeof record.routeId !== "string") return [];
+      const metadata: Pick<SettingsRoute, "credentialPolicy" | "dataPolicy" | "equivalenceGroup"> = {};
+      if (record.credentialPolicy === "required" || record.credentialPolicy === "optional") {
+        metadata.credentialPolicy = record.credentialPolicy;
+      }
+      if (record.dataPolicy === "local" || record.dataPolicy === "cloud") {
+        metadata.dataPolicy = record.dataPolicy;
+      }
+      if (typeof record.equivalenceGroup === "string") metadata.equivalenceGroup = record.equivalenceGroup;
+      return [[record.routeId, metadata] as const];
+    }),
+  );
+}
 
 function modelsForSide(
   models: readonly SettingsModel[],
@@ -754,6 +806,25 @@ function modelsForSide(
 ): readonly SettingsModel[] {
   if (!endpoints) return [];
   return models.filter((model) => endpoints.some((endpoint) => endpoint.endpointId === model.endpointId && endpoint.local === local));
+}
+
+function routeIsLocal(route: SettingsRoute): boolean {
+  return route.dataPolicy === "local" || (route.dataPolicy === undefined && route.primaryLocal === true);
+}
+
+function credentialIsLocal(
+  credential: CredentialItem,
+  endpoints: readonly CatalogEndpoint[] | undefined,
+  localConnections: readonly ProviderConnectionView[],
+  externalConnections: readonly ProviderConnectionView[],
+): boolean {
+  if (credential.endpointId && endpoints) {
+    const endpoint = endpoints.find((item) => item.endpointId === credential.endpointId);
+    if (endpoint) return endpoint.local;
+  }
+  const hasLocal = localConnections.some((connection) => connection.providerId === credential.providerId);
+  const hasExternal = externalConnections.some((connection) => connection.providerId === credential.providerId);
+  return hasLocal && !hasExternal;
 }
 
 function autonomyModeShortLabel(mode: AutonomyView["mode"]): string {
@@ -773,16 +844,61 @@ function runtimeStatusLabel(autonomy: AutonomyView, emergency: EmergencyView | u
 }
 
 function ModelList({ models }: { models: readonly SettingsModel[] }) {
+  if (models.length === 0) return null;
   return (
     <div className="mt-1 space-y-[2px]">
       {models.map((model) => (
-        <div className="flex h-[30px] items-center justify-between gap-3 rounded-[4px] pl-8 pr-2" key={model.modelProfileId}>
-          <div className="flex min-w-0 items-center gap-2">
-            <span className="w-6 shrink-0 text-center text-[14px] leading-5 text-fg-3">{model.verified ? "◉" : "●"}</span>
-            <span className="truncate font-mono text-[11px] text-fg-2">{model.modelId}</span>
-            {model.routeKind ? <span className="shrink-0 text-[13px] tracking-[-0.005em] text-fg-2">{routeKindLabel(model.routeKind)}</span> : null}
-          </div>
-          <span className="shrink-0 text-[12px] text-fg-4">{model.verified ? "검증됨" : "미검증"}</span>
+        <div className="grid h-[30px] grid-cols-[20px_minmax(0,1fr)_88px_minmax(0,1fr)_72px] items-center gap-2 rounded-[4px] px-2" key={model.modelProfileId}>
+          <span className="text-center text-[14px] leading-5 text-fg-3">{model.verified ? "◉" : "●"}</span>
+          <span className="min-w-0 truncate font-mono text-[11px] text-fg-2">{model.modelId}</span>
+          <span className="min-w-0 truncate text-[13px] tracking-[-0.005em] text-fg-2">{model.routeKind ? routeKindLabel(model.routeKind) : ""}</span>
+          <span className="min-w-0 truncate font-mono text-[11px] text-fg-4">{model.equivalenceGroup}</span>
+          <span className="truncate text-right text-[12px] text-fg-4">{model.verified ? "검증됨" : "미검증"}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ProviderList({ connections }: { connections: readonly ProviderConnectionView[] }) {
+  if (connections.length === 0) return null;
+  return (
+    <div className="mt-1 space-y-[2px]">
+      {connections.map((connection) => (
+        <div className="grid h-[30px] grid-cols-[minmax(0,1fr)_112px_56px_72px] items-center gap-2 rounded-[4px] px-2" key={connection.providerId}>
+          <span className="truncate text-[13px] leading-5 tracking-[-0.005em] text-fg-2">{connection.displayName}</span>
+          <span className="truncate font-mono text-[11px] text-fg-4">{connection.adapterKind}</span>
+          <span className="font-mono text-[11px] tabular-nums text-fg-4">{connection.endpoints.length}</span>
+          <span className="truncate text-right text-[12px] text-fg-4">{connection.enabled ? "사용 중" : "꺼짐"}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function EndpointList({ endpoints }: { endpoints: readonly CatalogEndpoint[] }) {
+  const rows = endpoints.filter((endpoint) => endpoint.baseUrl.length > 0);
+  if (rows.length === 0) return null;
+  return (
+    <div className="mt-1 space-y-[2px]">
+      {rows.map((endpoint) => (
+        <div className="flex h-[30px] items-center rounded-[4px] px-2" key={endpoint.endpointId}>
+          <span className="min-w-0 truncate font-mono text-[11px] text-fg-4">{endpoint.baseUrl}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function CredentialList({ credentials }: { credentials: readonly CredentialItem[] }) {
+  if (credentials.length === 0) return null;
+  return (
+    <div className="mt-1 space-y-[2px]">
+      {credentials.map((credential) => (
+        <div className="grid h-[30px] grid-cols-[minmax(0,1fr)_112px_96px] items-center gap-2 rounded-[4px] px-2" key={credential.credentialId}>
+          <span className="min-w-0 truncate text-[13px] leading-5 tracking-[-0.005em] text-fg-2">{credential.label}</span>
+          <span className="min-w-0 truncate font-mono text-[11px] text-fg-4">{credential.credentialType}</span>
+          <span className="min-w-0 truncate font-mono text-[11px] text-fg-4">{credential.providerId}</span>
         </div>
       ))}
     </div>
@@ -818,59 +934,69 @@ function SummaryProgress({ value }: { value: number }) {
   );
 }
 
-function SectionIntro({ title, background }: { title: string; background: string | undefined }) {
+function SectionIntro({ title }: { title: string }) {
+  return <p className="text-[12px] leading-[18px] text-fg-4">{title}</p>;
+}
+
+type CatalogCandidate = {
+  routeId: string;
+  modelProfileId: string;
+  enabled: boolean;
+  priority?: number;
+};
+
+function catalogCandidates(value: unknown): readonly CatalogCandidate[] {
+  const candidates = value && typeof value === "object" ? (value as { candidates?: unknown }).candidates : undefined;
+  if (!Array.isArray(candidates)) return [];
+  return candidates.flatMap((item) => {
+    if (!item || typeof item !== "object") return [];
+    const record = item as Record<string, unknown>;
+    if (typeof record.routeId !== "string" || typeof record.modelProfileId !== "string" || typeof record.enabled !== "boolean") return [];
+    return [{
+      routeId: record.routeId,
+      modelProfileId: record.modelProfileId,
+      enabled: record.enabled,
+      ...(typeof record.priority === "number" ? { priority: record.priority } : {}),
+    }];
+  });
+}
+
+function CandidateList({
+  candidates,
+  models,
+  routes,
+}: {
+  candidates: readonly CatalogCandidate[];
+  models: readonly SettingsModel[];
+  routes: readonly SettingsRoute[];
+}) {
+  const rows = candidates.flatMap((candidate) => {
+    const route = routes.find((item) => item.routeId === candidate.routeId);
+    const model = models.find((item) => item.modelProfileId === candidate.modelProfileId);
+    return route && model ? [{ candidate, model, route }] : [];
+  });
+  if (rows.length === 0) return null;
   return (
-    <div className="w-full">
-      <p className="text-[12px] leading-[18px] text-fg-4">{title}</p>
-      {background ? (
-        <p className="mt-1 text-[13px] leading-5 text-fg-3">{background}</p>
-      ) : null}
+    <div className="mt-1 space-y-[2px]">
+      {rows.map(({ candidate, model, route }) => (
+        <div className="grid h-[30px] grid-cols-[24px_128px_120px_96px_64px_96px_1fr] items-center rounded-[4px] pl-2 pr-2" key={`${candidate.routeId}-${candidate.modelProfileId}`}>
+          <span className={candidate.enabled ? "text-center text-[14px] leading-5 text-fg-3" : "text-center text-[14px] leading-5 text-halt"}>
+            {candidate.enabled ? (model.verified ? "◉" : "●") : "⊘"}
+          </span>
+          <span className="min-w-0 truncate text-[13px] tracking-[-0.005em] text-fg-2">{route.name}</span>
+          <span className="min-w-0 truncate font-mono text-[11px] text-fg-3">{model.modelId}</span>
+          <span className="min-w-0 truncate font-mono text-[11px] text-fg-4">{model.providerId}</span>
+          <span className="truncate font-mono text-[11px] tabular-nums text-fg-4">{candidate.priority === undefined ? "" : candidate.priority}</span>
+          <span className="truncate text-[12px] text-fg-4">{dataPolicyLabel(route.dataPolicy)}</span>
+          <span className="text-right text-[12px] text-fg-4">{candidate.enabled ? "" : "꺼짐"}</span>
+        </div>
+      ))}
     </div>
   );
 }
 
-function BoundaryBand({ endpoints, label, routes }: {
-  endpoints: readonly string[];
-  label: string;
-  routes: readonly ModelRouteView[];
-}) {
-  return (
-    <section className="w-full min-w-0">
-      <div className="flex h-[30px] items-center justify-between gap-2">
-        <span className="text-[12px] leading-[18px] text-fg-4">{label}</span>
-        <span className="font-mono text-[11px] tabular-nums text-fg-4">{routes.length}</span>
-      </div>
-      {endpoints.length > 0 ? (
-        <div className="space-y-[2px]">
-          {endpoints.map((endpoint) => (
-            <div className="flex h-[30px] items-center gap-3 rounded-[4px] pl-8" key={endpoint}>
-              <span className="w-16 shrink-0 text-[12px] text-fg-3">{label}</span>
-              <span className="truncate font-mono text-[11px] text-fg-4">{endpoint}</span>
-            </div>
-          ))}
-        </div>
-      ) : null}
-      <div className="mt-1 space-y-[2px]">
-        {routes.map((route) => (
-          <div className="flex h-[30px] items-center gap-2 rounded-[4px] pl-8 pr-2 transition-colors duration-150 hover:duration-0 hover:bg-white/[0.027] motion-reduce:transition-none" key={route.routeId}>
-              <span className="w-6 shrink-0 text-center text-[14px] leading-5 text-fg-3">
-                {route.primaryVerified === true ? "◉" : "●"}
-              </span>
-              <span className="truncate text-[13px] leading-5 tracking-[-0.005em] text-fg-2">{routeKindLabel(route.routeKind)}</span>
-              {route.primaryModelId ? (
-                <span className="min-w-0 truncate font-mono text-[11px] text-fg-3">{route.primaryModelId}</span>
-              ) : null}
-              {route.totalBudgetMicros > 0 ? (
-                <span className="ml-auto flex shrink-0 items-center gap-2 font-mono text-[11px] tabular-nums text-fg-4">
-                  <SummaryProgress value={route.spentMicros / route.totalBudgetMicros} />
-                  <span>{costText(route.spentMicros)} / {costText(route.totalBudgetMicros)}</span>
-                </span>
-              ) : null}
-          </div>
-        ))}
-      </div>
-    </section>
-  );
+function dataPolicyLabel(value: SettingsRoute["dataPolicy"]): string {
+  return value === "local" ? "이 컴퓨터" : value === "cloud" ? "외부" : "";
 }
 
 function catalogEndpoints(value: unknown): readonly CatalogEndpoint[] | undefined {
@@ -900,22 +1026,6 @@ function catalogEndpoints(value: unknown): readonly CatalogEndpoint[] | undefine
   });
 }
 
-function boundaryEndpoints(
-  routes: readonly ModelRouteView[],
-  endpoints: readonly CatalogEndpoint[] | undefined,
-  models: readonly { modelProfileId: string; providerId: string; endpointId: string; modelId: string; routeKind: string; verified: boolean }[],
-  local: boolean,
-): readonly string[] {
-  if (!endpoints) return [];
-  const urls = routes.flatMap((route) => {
-    if (!route.primaryModelId) return [];
-    const model = models.find((item) => item.modelId === route.primaryModelId);
-    const endpoint = model ? endpoints.find((item) => item.endpointId === model.endpointId) : undefined;
-    return endpoint?.local === local && endpoint.baseUrl ? [endpoint.baseUrl] : [];
-  });
-  return [...new Set(urls)];
-}
-
 function credentialItems(value: unknown): readonly CredentialItem[] {
   if (!Array.isArray(value)) return [];
   return value.flatMap((item, index) => {
@@ -926,6 +1036,7 @@ function credentialItems(value: unknown): readonly CredentialItem[] {
       {
         credentialId,
         providerId: typeof record.providerId === "string" ? record.providerId : "",
+        ...(typeof record.endpointId === "string" ? { endpointId: record.endpointId } : {}),
         label: typeof record.label === "string" ? record.label : "",
         credentialType: typeof record.credentialType === "string" ? record.credentialType : "",
       },
@@ -1451,6 +1562,7 @@ function modelProfiles(value: unknown): readonly {
   endpointId: string;
   modelId: string;
   routeKind: string;
+  equivalenceGroup: string;
   verified: boolean;
 }[] {
   const models = value && typeof value === "object" ? (value as { models?: unknown }).models : undefined;
@@ -1469,6 +1581,7 @@ function modelProfiles(value: unknown): readonly {
             endpointId: record.endpointId,
             modelId: record.modelId,
             routeKind: typeof record.routeKind === "string" ? record.routeKind : "",
+            equivalenceGroup: typeof record.equivalenceGroup === "string" ? record.equivalenceGroup : "",
             verified: record.verified === true,
           },
         ]

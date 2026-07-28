@@ -319,6 +319,7 @@ const works: WorkView[] = [
     updatedAt: "10:24",
     summary: "최근 90일의 이탈 신호를 분석하고 실행 가능한 개선안을 정리합니다.",
     progress: 36,
+    activeExecutionId: "execution-churn-q3",
     approvals: [
       {
         id: "approval-crm-access",

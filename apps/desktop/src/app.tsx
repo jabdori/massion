@@ -279,6 +279,7 @@ export function App({ contextPicker = nativeContextPicker, service }: AppProps) 
                   detailLoading={controller.detailLoading}
                   executionNotice={controller.executionNotice?.message}
                   composer={controller.composer}
+                  service={service}
                   onAnnouncement={controller.setAnnouncement}
                   onComposerChange={controller.setComposer}
                   onControlRun={(action) => {
@@ -424,7 +425,7 @@ function GlobalRail({
                 <Bell aria-hidden="true" size={21} weight="regular" />
                 <span className="flex-1 text-left">수신함</span>
                 {notificationCount ? (
-                  <span className="rail-label flex min-w-5 items-center justify-center rounded-full bg-gate px-1.5 font-mono text-[11px] font-semibold text-gate-ink">
+                  <span className="rail-label shrink-0 font-mono text-[11px] leading-4 tabular-nums text-fg-4">
                     {notificationCount}
                   </span>
                 ) : null}

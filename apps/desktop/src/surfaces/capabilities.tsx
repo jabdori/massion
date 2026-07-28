@@ -143,9 +143,6 @@ export function ExtensionSurface({
     organizationNodes?.flatMap((node) =>
       node.status === "active" ? node.capabilities.map((capability) => ({ capability, node })) : [],
     ) ?? [];
-  const organizationNodeCount = organizationNodes?.filter(
-    (node) => node.status === "active" && node.capabilities.length > 0,
-  ).length;
 
   // 마켓플레이스 항목의 Capability는 registry.info의 manifest에만 있습니다. 고를 때 채웁니다.
   const declarations =
@@ -225,15 +222,6 @@ export function ExtensionSurface({
             </button>
           ))}
         </div>
-        {organizationNodes !== undefined ? (
-          <div className="ml-auto flex shrink-0 items-center gap-1">
-            <span className="text-[12px] text-fg-4">조직 능력</span>
-            <span className="text-[13px] tabular-nums text-fg-2">{organizationRows.length}</span>
-            <span className="px-1 text-[12px] text-fg-4">·</span>
-            <span className="text-[12px] text-fg-4">노드</span>
-            <span className="text-[13px] tabular-nums text-fg-2">{organizationNodeCount}</span>
-          </div>
-        ) : null}
         {selected && !selected.installed ? (
           <button
             className="h-[30px] shrink-0 rounded-[4px] bg-gate px-3 text-[13px] font-medium leading-5 text-gate-ink disabled:opacity-50"
@@ -290,7 +278,7 @@ export function ExtensionSurface({
 
       <div className="min-h-0 overflow-y-auto">
         {awaitingInstall ? (
-          <section aria-label="설치 승인" className="flex h-16 items-center gap-2 border-b border-gate-border bg-gate-wash px-4">
+          <section aria-label="설치 승인" className="flex h-[30px] items-center gap-2 border-b border-gate-border bg-gate-wash px-4">
             <span className="text-[14px] text-gate">◇</span>
             <span className="text-[13px] leading-5 tracking-[-0.005em] text-gate">설치가 승인을 기다립니다.</span>
             <span className="font-mono text-[11px] text-fg-4">{awaitingInstall.approvalId}</span>
@@ -318,61 +306,72 @@ export function ExtensionSurface({
         {entries === undefined && !error ? <SurfaceLoading /> : null}
         {selected ? (
           <div className="min-w-0 pb-4">
-            <div className="grid min-w-0 grid-cols-2">
-              <section aria-label="조직이 무엇을 할 수 있게 되나" className="min-w-0">
-                <GroupHeader label="조직이 무엇을 할 수 있게 되나" count={contributionRows(declarations).length} />
-                {declarations && declarations.contributions.length > 0 ? (
-                  <div className="grid gap-0.5">
-                    {contributionRows(declarations).map((row, index) => (
-                      <LedgerRow
-                        description={row.description}
-                        glyph={selected.installed ? "◉" : "○"}
-                        glyphClassName={selected.installed ? "text-fg-3" : "text-fg-4"}
-                        identifier={row.item}
-                        identifierWidth="w-[232px]"
-                        key={`${row.kind}-${index}`}
-                        name={row.name}
-                        nameWidth="w-[208px]"
-                      />
-                    ))}
-                  </div>
-                ) : (
-                  <div className="flex h-[30px] items-center px-4 text-[13px] leading-5 tracking-[-0.005em] text-fg-4">
-                    {busy === selected.id
-                      ? "선언을 읽는 중…"
-                      : "이 확장이 조직에 무엇을 더하는지 계약이 알려주지 않습니다. 설치 레코드만 있습니다."}
-                  </div>
-                )}
-              </section>
+            <section aria-label="조직이 무엇을 할 수 있게 되나" className="min-w-0">
+              <GroupHeader
+                label="조직이 무엇을 할 수 있게 되나"
+                count={contributionRows(declarations).length}
+                trailing={
+                  governanceNode ? (
+                    <span className={`ml-auto shrink-0 text-[13px] ${selected.installed ? "text-fg-3" : "text-gate"}`}>
+                      {selected.installed ? "Governance 부여됨" : "Governance 판정 대기"}
+                    </span>
+                  ) : undefined
+                }
+              />
+              {declarations && declarations.contributions.length > 0 ? (
+                <div className="grid gap-0.5">
+                  {contributionRows(declarations).map((row, index) => (
+                    <LedgerRow
+                      description={row.description}
+                      descriptionClassName={row.descriptionClassName}
+                      glyph={selected.installed ? "◉" : "◇"}
+                      glyphClassName={selected.installed ? "text-fg-3" : "text-gate"}
+                      identifier={row.item}
+                      identifierWidth="w-[232px]"
+                      key={`${row.kind}-${index}`}
+                      meta={<span className="text-[12px] text-fg-4">{selected.installed ? "부여됨" : "미부여"}</span>}
+                      name={row.name}
+                      nameWidth="w-[208px]"
+                    />
+                  ))}
+                </div>
+              ) : (
+                <div className="flex h-[30px] min-w-0 items-center truncate px-4 text-[13px] leading-5 tracking-[-0.005em] text-fg-4">
+                  {busy === selected.id
+                    ? "선언을 읽는 중…"
+                    : "이 확장이 조직에 무엇을 더하는지 계약이 알려주지 않습니다. 설치 레코드만 있습니다."}
+                </div>
+              )}
+            </section>
 
-              <section aria-label="이 확장이 요구하는 것" className="min-w-0 border-l border-line">
-                <GroupHeader label="이 확장이 요구하는 것" count={permissionRows(declarations).length} />
-                {declarations && declarations.permissions.length > 0 ? (
-                  <div className="grid gap-0.5">
-                    {permissionRows(declarations).map((row, index) => (
-                      <LedgerRow
-                        description={row.description}
-                        glyph={selected.installed ? "◉" : "○"}
-                        glyphClassName={selected.installed ? "text-fg-3" : "text-fg-4"}
-                        identifier={row.item}
-                        identifierWidth="w-[232px]"
-                        key={`${row.kind}-${index}`}
-                        name={row.name}
-                        nameWidth="w-[208px]"
-                      />
-                    ))}
-                  </div>
-                ) : (
-                  <div className="flex h-[30px] items-center px-4 text-[13px] leading-5 tracking-[-0.005em] text-fg-4">
-                    선언된 권한이 없습니다.
-                  </div>
-                )}
-              </section>
-            </div>
+            <section aria-label="그 대가로 조직이 내주는 것" className="min-w-0">
+              <GroupHeader label="그 대가로 조직이 내주는 것" count={permissionRows(declarations).length} />
+              {declarations && declarations.permissions.length > 0 ? (
+                <div className="grid gap-0.5">
+                  {permissionRows(declarations).map((row, index) => (
+                    <LedgerRow
+                      description={row.description}
+                      descriptionClassName={row.descriptionClassName}
+                      glyph={selected.installed ? "◉" : "◇"}
+                      glyphClassName={selected.installed ? "text-fg-3" : "text-gate"}
+                      identifier={row.item}
+                      identifierWidth="w-[232px]"
+                      key={`${row.kind}-${index}`}
+                      name={row.name}
+                      nameWidth="w-[208px]"
+                    />
+                  ))}
+                </div>
+              ) : (
+                <div className="flex h-[30px] min-w-0 items-center truncate px-4 text-[13px] leading-5 tracking-[-0.005em] text-fg-4">
+                  선언된 권한이 없습니다.
+                </div>
+              )}
+            </section>
 
             {organizationNodes !== undefined ? (
-              <section aria-label="조직이 이미 보유한 것" className="border-t border-line">
-                <GroupHeader label="조직이 이미 보유한 것" count={organizationRows.length} />
+              <section aria-label="조직이 이미 할 수 있는 것" className="min-w-0">
+                <GroupHeader label="조직이 이미 할 수 있는 것" count={organizationRows.length} />
                 <div className="grid gap-0.5">
                   {organizationRows.map(({ capability, node }) => {
                     const parent = node.parentHandle
@@ -432,6 +431,7 @@ type DeclarationRow = {
   readonly item: string;
   readonly name: string;
   readonly description: string;
+  readonly descriptionClassName: "text-fg-3" | "text-fg-4";
 };
 
 function contributionRows(declarations: DeclarationRows | undefined): readonly DeclarationRow[] {
@@ -441,7 +441,8 @@ function contributionRows(declarations: DeclarationRows | undefined): readonly D
         kind,
         item,
         name: index === 0 ? contributionLabel[kind] : "",
-        description: index === 0 ? contributionDescription[kind] : "",
+        description: contributionDescription[kind],
+        descriptionClassName: index === 0 ? "text-fg-3" : "text-fg-4",
       })),
     ) ?? []
   );
@@ -454,7 +455,8 @@ function permissionRows(declarations: DeclarationRows | undefined): readonly Dec
         kind,
         item,
         name: index === 0 ? permissionLabel[kind] : "",
-        description: index === 0 ? permissionDescription[kind] : "",
+        description: permissionDescription[kind],
+        descriptionClassName: index === 0 ? "text-fg-3" : "text-fg-4",
       })),
     ) ?? []
   );
@@ -465,19 +467,21 @@ function agentRailSlot(handle: string): number {
   return slot >= 0 && slot <= 7 ? slot : 0;
 }
 
-function GroupHeader({ label, count }: { label: string; count: number }) {
+function GroupHeader({ label, count, trailing }: { label: string; count: number; trailing?: ReactNode }) {
   return (
     <div className="flex h-[30px] items-center gap-2 px-4 text-[13px] leading-5 tracking-[-0.005em] text-fg-3">
       <span aria-hidden="true" className="h-3.5 w-0.5 shrink-0" />
       <span aria-hidden="true" className="w-3.5 shrink-0" />
       <span>{label}</span>
-      {count > 0 ? <span className="tabular-nums text-fg-4">{count}</span> : null}
+      <span className="tabular-nums text-fg-4">{count}</span>
+      {trailing}
     </div>
   );
 }
 
 function LedgerRow({
   description,
+  descriptionClassName,
   glyph,
   glyphClassName,
   identifier,
@@ -488,6 +492,7 @@ function LedgerRow({
   railSlot,
 }: {
   description: ReactNode;
+  descriptionClassName?: string;
   glyph: string;
   glyphClassName: string;
   identifier: string;
@@ -513,8 +518,12 @@ function LedgerRow({
       </span>
       <span className={`${nameWidth} shrink-0 truncate text-[13px] leading-5 tracking-[-0.005em] text-fg-2`}>{name}</span>
       <span className={`${identifierWidth} shrink-0 truncate font-mono text-[11px] text-fg-3`}>{identifier}</span>
-      <span className="min-w-0 flex-1 truncate text-[13px] leading-5 tracking-[-0.005em] text-fg-3">{description}</span>
-      {meta ? <span className="w-[260px] shrink-0 truncate">{meta}</span> : null}
+      <span
+        className={`w-[420px] shrink-0 truncate text-[13px] leading-5 tracking-[-0.005em] ${descriptionClassName ?? "text-fg-3"}`}
+      >
+        {description}
+      </span>
+      {meta ? <span className="ml-auto max-w-[260px] shrink-0 truncate text-right">{meta}</span> : null}
     </div>
   );
 }

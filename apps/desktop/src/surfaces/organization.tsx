@@ -9,7 +9,7 @@ type WorkRelation = "execution" | "judgment";
 
 interface WorkHistoryEntry {
   work: WorkView;
-  relation: WorkRelation;
+  relations: WorkRelation[];
 }
 
 interface LedgerEvent {
@@ -107,7 +107,7 @@ export function OrganizationSurface({ service }: { service: DesktopService }) {
   };
 
   return (
-    <main aria-label="조직" className="col-span-3 grid min-h-0 min-w-0 grid-cols-[340px_minmax(0,1fr)_320px] bg-bg-0">
+    <main aria-label="조직" className="col-span-3 grid min-h-0 min-w-0 grid-cols-[420px_minmax(0,1fr)_320px] bg-bg-0">
       <section aria-label="조직 구조" className="grid min-h-0 grid-rows-[48px_minmax(0,1fr)] bg-bg-1">
         <header className="flex h-12 items-center gap-2 border-b border-line-strong px-3">
           <h1 className="text-[15px] font-semibold tracking-[-0.008em] text-fg-2">조직</h1>
@@ -123,7 +123,7 @@ export function OrganizationSurface({ service }: { service: DesktopService }) {
           ) : null}
           {root ? (
             <>
-              <p className="flex h-6 items-center px-2 text-[12px] text-fg-4">영속 조직</p>
+              <p className="mt-0 flex h-8 items-center px-2 text-[12px] text-fg-4">영속 조직</p>
               <div className="space-y-0.5">
                 {nodes
                   .filter((node) => node.scope !== "work")
@@ -141,7 +141,7 @@ export function OrganizationSurface({ service }: { service: DesktopService }) {
               </div>
               {workTeams.length > 0 ? (
                 <>
-                  <p className="mt-4 flex h-6 items-center px-2 text-[12px] text-fg-4">임시 편성 {workTeams.length}</p>
+                  <p className="mt-4 flex h-8 items-center px-2 text-[12px] text-fg-4">임시 편성 {workTeams.length}</p>
                   <div className="space-y-0.5">
                     {workTeams.map((node) => (
                       <OrganizationRow
@@ -159,7 +159,7 @@ export function OrganizationSurface({ service }: { service: DesktopService }) {
               ) : null}
               {orphanAgents.length > 0 ? (
                 <>
-                  <p className="mt-4 flex h-6 items-center px-2 text-[12px] text-fg-4">
+                  <p className="mt-4 flex h-8 items-center px-2 text-[12px] text-fg-4">
                     조직 그래프에 없는 실행자 {orphanAgents.length}
                   </p>
                   <div className="space-y-0.5">
@@ -202,11 +202,19 @@ export function OrganizationSurface({ service }: { service: DesktopService }) {
           {selected ? (
             <>
               <h2 className="text-[17px] font-semibold tracking-[-0.012em] text-fg">
-                {agentIdentityToken(selected.handle).name}
+                {selected.name}
               </h2>
               <span className="text-[13px] text-fg-3">{nodeRoleTextOf(selected.role)}</span>
-              <StatusGlyph kind={nodeStatusGlyph(selected.status)} />
-              <span className="ml-auto font-mono text-[11px] text-fg-4">{selected.handle}</span>
+              <span className="min-w-0 flex-1 truncate text-[13px] text-fg-3">{selected.responsibility}</span>
+              {selected.scope === "work" ? <span className="shrink-0 text-[12px] text-fg-4">임시</span> : null}
+              {selected.status !== "active" ? (
+                <span className="shrink-0 text-[12px] text-fg-4">{nodeStatusLabel(selected.status)}</span>
+              ) : null}
+              <span className="flex shrink-0 items-center gap-1">
+                <span className="h-1 w-1 shrink-0" aria-hidden="true" style={{ backgroundColor: subjectColor(selected) }} />
+                <span className="font-mono text-[11px] text-fg-4">{agentIdentityToken(selected.handle).name}</span>
+                <span className="font-mono text-[11px] text-fg-4">{selected.handle}</span>
+              </span>
             </>
           ) : (
             <h2 className="text-[15px] font-semibold tracking-[-0.008em] text-fg-2">자리</h2>
@@ -275,7 +283,6 @@ function OrganizationRow({
   hasChildren: boolean;
   onSelect: (handle: string) => void;
 }) {
-  const identity = agentIdentityToken(node.handle, roleTextOf(node));
   return (
     <button
       type="button"
@@ -285,44 +292,41 @@ function OrganizationRow({
         onSelect(node.handle);
       }}
       className={`flex h-[30px] w-full items-center gap-2 rounded px-2 text-left transition-[background-color] duration-150 focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-[var(--fg)] ${selected ? "bg-[rgb(255_255_255_/_0.047)]" : "hover:bg-[rgb(255_255_255_/_0.027)]"}`}
-      style={{ paddingLeft: 8 + depth * 20 }}
+      style={{ paddingLeft: 8 + depth * 32 }}
     >
       <NodeMarker node={node} hasChildren={childExists} />
-      <span className={`min-w-0 truncate text-[13px] ${selected ? "text-fg" : "text-fg-2"}`}>{identity.name}</span>
+      <span className={`min-w-0 truncate text-[13px] ${selected ? "text-fg" : "text-fg-2"}`}>{node.name}</span>
       <span className="shrink-0 text-[12px] text-fg-4">{nodeRoleTextOf(node.role)}</span>
-      {node.scope === "work" ? <span className="shrink-0 text-[12px] text-fg-4">임시</span> : null}
+      <span className="min-w-0 flex-1 truncate text-[12px] text-fg-4">{node.responsibility}</span>
       {count > 0 ? <span className="ml-auto shrink-0 tabular-nums text-[12px] text-fg-4">{count}</span> : null}
     </button>
   );
 }
 
 function NodeMarker({ node, hasChildren }: { node: OrganizationNodeView; hasChildren: boolean }) {
-  const identity = agentIdentityToken(node.handle);
   if (node.scope === "work") {
     return (
       <span className="flex h-[14px] w-[14px] shrink-0 items-center justify-center" aria-hidden="true">
-        <span className="h-1 w-1" style={{ boxSizing: "border-box", border: "1px solid var(--agent-provisional)" }} />
+        <span
+          className="h-1 w-1"
+          style={{ boxSizing: "border-box", border: "1px dashed var(--agent-provisional)", backgroundColor: "transparent" }}
+        />
       </span>
     );
   }
-  if (node.role === "orchestrator" || node.role === "coordinator" || hasChildren) {
-    const accent = accentColor(identity.accentSlot);
+  if (hasChildren) {
     return (
       <span
-        className="flex h-[14px] w-[14px] shrink-0 items-center justify-center rounded"
+        className="flex h-[14px] w-[14px] shrink-0 items-center justify-center"
         aria-hidden="true"
-        style={{
-          backgroundColor: `color-mix(in srgb, ${accent} 22%, transparent)`,
-          border: `1px solid ${accent}`,
-        }}
       >
-        <span className="text-[11px] leading-none text-fg-2">{identity.initial}</span>
+        <span className="h-[14px] w-0.5" aria-hidden="true" style={{ backgroundColor: subjectColor(node) }} />
       </span>
     );
   }
   return (
     <span className="flex h-[14px] w-[14px] shrink-0 items-center justify-center" aria-hidden="true">
-      <span className="h-1 w-1" style={{ backgroundColor: accentColor(identity.accentSlot) }} />
+      <span className="h-1 w-1" style={{ backgroundColor: subjectColor(node) }} />
     </span>
   );
 }
@@ -371,19 +375,13 @@ function NodeDetail({
                     }}
                     className="truncate text-[13px] text-fg-2 focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-[var(--fg)]"
                   >
-                    {agentIdentityToken(ancestor.handle).name}
+                    {ancestor.name}
                   </button>
                 </span>
               ))}
             </span>
           </DefinitionRow>
         ) : null}
-        <DefinitionRow label="직책">{nodeRoleTextOf(node.role)}</DefinitionRow>
-        {node.scope ? <DefinitionRow label="범위">{scopeTextOf(node.scope)}</DefinitionRow> : null}
-        <DefinitionRow label="상태">{nodeStatusLabel(node.status)}</DefinitionRow>
-        <DefinitionRow label="책임" valueClassName="line-clamp-1">
-          {node.responsibility}
-        </DefinitionRow>
         {extras.length > 0 ? <DefinitionRow label="역량">{extras.join(" · ")}</DefinitionRow> : null}
       </div>
 
@@ -394,16 +392,8 @@ function NodeDetail({
             count={history.length}
           />
           <div className="space-y-0.5">
-            {history.map((entry, index) => (
-              <div
-                key={`${entry.work.id}-${entry.relation}-${String(index)}`}
-                className="grid h-[30px] grid-cols-[20px_minmax(0,1fr)_auto_52px] items-center gap-2 rounded px-2"
-              >
-                <StatusGlyph kind={workStatusGlyph(entry.work)} />
-                <span className="min-w-0 truncate text-[13px] text-fg-2">{entry.work.title}</span>
-                <span className="text-[12px] text-fg-4">{entry.relation === "execution" ? "실행 배치" : "판정"}</span>
-                <span className="font-mono text-right text-[11px] tabular-nums text-fg-4">{entry.work.updatedAt}</span>
-              </div>
+            {history.map((entry) => (
+              <WorkHistoryRow key={entry.work.id} entry={entry} nodes={nodes} onSelect={onSelect} />
             ))}
           </div>
         </>
@@ -429,6 +419,7 @@ function NodeDetail({
                 nodes={nodes}
                 work={work}
                 verification={verification}
+                onSelect={onSelect}
               />
             ))}
           </div>
@@ -451,11 +442,11 @@ function NodeDetail({
               >
                 <NodeMarker node={relatedNode} hasChildren={hasChildren(relatedNode, nodes)} />
                 <span className="min-w-0 truncate text-[13px] text-fg-2">
-                  {agentIdentityToken(relatedNode.handle).name}
+                  {relatedNode.name}
                 </span>
                 <span className="shrink-0 text-[12px] text-fg-4">{relation}</span>
                 <span className="shrink-0 text-[12px] text-fg-4">{nodeRoleTextOf(relatedNode.role)}</span>
-                <span className="ml-auto min-w-0 truncate text-[12px] text-fg-4">{relatedNode.responsibility}</span>
+                <span className="min-w-0 flex-1 truncate text-[12px] text-fg-4">{relatedNode.responsibility}</span>
               </button>
             ))}
           </div>
@@ -465,76 +456,146 @@ function NodeDetail({
   );
 }
 
+function WorkHistoryRow({
+  entry,
+  nodes,
+  onSelect,
+}: {
+  entry: WorkHistoryEntry;
+  nodes: readonly OrganizationNodeView[];
+  onSelect: (handle: string) => void;
+}) {
+  const verification = entry.work.verifications[0];
+  const verifierNode = verification ? verifierNodeFor(verification.verifier, nodes) : undefined;
+  const verifier = verification ? agentIdentityToken(verifierNode?.handle ?? verification.verifier) : undefined;
+  const counts = verification ? criterionSummary(criterionCountsFor(entry.work.verifications)) : "";
+  const content = (
+    <>
+      <span className="flex h-[14px] w-[14px] shrink-0 items-center justify-center">
+        <WorkHistoryGlyph work={entry.work} />
+      </span>
+      <span className="min-w-0 flex-1 truncate text-[13px] text-fg-2">{entry.work.title}</span>
+      <span className="shrink-0 text-[12px] text-fg-4">
+        {entry.relations.map((relation) => (relation === "execution" ? "실행 배치" : "판정")).join(" · ")}
+      </span>
+      {verifier ? (
+        <span className="flex min-w-0 shrink-0 items-center gap-1 text-[12px] text-fg-3">
+          <span className="h-1 w-1 shrink-0" aria-hidden="true" style={{ backgroundColor: accentColor(verifier.accentSlot) }} />
+          <span className="max-w-[104px] truncate">{verifier.name}</span>
+        </span>
+      ) : null}
+      {counts ? <span className="shrink-0 tabular-nums text-[12px] text-fg-4">{counts}</span> : null}
+      <span className="w-[52px] shrink-0 font-mono text-right text-[11px] tabular-nums text-fg-4">
+        {entry.work.updatedAt}
+      </span>
+      {verifierNode ? <span className="w-3 shrink-0 text-right text-[12px] text-fg-4">›</span> : null}
+    </>
+  );
+  const className =
+    "flex h-[30px] w-full min-w-0 items-center gap-2 rounded px-2 text-left transition-[background-color] duration-150 hover:bg-[rgb(255_255_255_/_0.027)] focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-[var(--fg)]";
+  return verifierNode ? (
+    <button
+      type="button"
+      aria-pressed={false}
+      onClick={() => {
+        onSelect(verifierNode.handle);
+      }}
+      className={className}
+    >
+      {content}
+    </button>
+  ) : (
+    <div className={className}>{content}</div>
+  );
+}
+
 function VerificationBlock({
   nodes,
   work,
   verification,
+  onSelect,
 }: {
   nodes: readonly OrganizationNodeView[];
   work: WorkView;
   verification: VerificationView;
+  onSelect: (handle: string) => void;
 }) {
   const counts = criterionCounts(verification);
-  const contributors = work.agents.map((agent) => agent.name).filter(Boolean);
-  const separated = !work.agents.some((agent) => verifierMatches(verification.verifier, agent.id, agent.name));
-  const verifierNode = nodes.find((node) =>
-    verifierMatches(verification.verifier, node.handle, agentIdentityToken(node.handle).name),
-  );
+  const contributors = work.agents.filter((agent) => agent.name);
+  const verifierNode = verifierNodeFor(verification.verifier, nodes);
   const verifier = agentIdentityToken(verifierNode?.handle ?? verification.verifier);
-  const verificationGlyph = verificationGlyphFor(verification);
+  const verificationGlyph = verificationGlyphFor([verification]);
+  const row2 = (
+    <span className="flex h-[30px] min-w-0 items-center gap-2 rounded px-2 text-left">
+      <span className="h-[14px] w-[14px] shrink-0" aria-hidden="true" />
+      {contributors.length > 0 ? (
+        <>
+          <span className="shrink-0 text-[12px] text-fg-4">실행</span>
+          <span className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden whitespace-nowrap text-[13px] text-fg-2">
+            {contributors.map((agent, index) => {
+              const agentNode = nodeForAgent(agent, nodes);
+              return (
+                <span key={`${agent.id}-${String(index)}`} className="flex shrink-0 items-center gap-1">
+                  {index > 0 ? <span className="text-[12px] text-fg-4">·</span> : null}
+                  <span
+                    className="h-1 w-1 shrink-0"
+                    aria-hidden="true"
+                    style={{ backgroundColor: agentNode ? subjectColor(agentNode) : accentColor(agentIdentityToken(agent.id).accentSlot) }}
+                  />
+                  <span>{agent.name}</span>
+                </span>
+              );
+            })}
+          </span>
+        </>
+      ) : null}
+      <span className="shrink-0 text-[12px] text-fg-4">판정</span>
+      <span className="flex min-w-0 shrink-0 items-center gap-1 text-[13px] text-fg-2">
+        <span className="h-1 w-1 shrink-0" aria-hidden="true" style={{ backgroundColor: accentColor(verifier.accentSlot) }} />
+        <span className="max-w-[104px] truncate">{verifier.name}</span>
+      </span>
+      {verifierNode ? <span className="w-3 shrink-0 text-right text-[12px] text-fg-4">›</span> : null}
+    </span>
+  );
   return (
     <div className="space-y-0.5">
       <div className="flex h-[30px] items-center gap-2 rounded px-2">
-        <span
-          aria-label={verificationGlyph.label}
-          className={`inline-flex h-5 w-5 shrink-0 items-center justify-center text-[14px] ${verificationGlyph.className}`}
-        >
-          {verificationGlyph.symbol}
-        </span>
+        <StatusGlyph glyph={verificationGlyph} />
         <span className="min-w-0 flex-1 truncate text-[13px] text-fg-2">{work.title}</span>
-        <span className="flex min-w-0 shrink-0 items-center gap-1 text-[12px] text-fg-3">
-          <span
-            className="h-1 w-1 shrink-0"
-            aria-hidden="true"
-            style={{ backgroundColor: accentColor(verifier.accentSlot) }}
-          />
-          <span className="max-w-[104px] truncate">{verifier.name}</span>
-        </span>
-        <span className="shrink-0 tabular-nums text-[12px] text-fg-4">
-          {[
-            counts.passed > 0 ? `통과 ${String(counts.passed)}` : "",
-            counts.failed > 0 ? `미통과 ${String(counts.failed)}` : "",
-            counts.blocked > 0 ? `막힘 ${String(counts.blocked)}` : "",
-            counts.excluded > 0 ? `제외 ${String(counts.excluded)}` : "",
-          ]
-            .filter(Boolean)
-            .join(" · ")}
-        </span>
+        <span className="shrink-0 tabular-nums text-[12px] text-fg-4">{criterionSummary(counts)}</span>
       </div>
-      {verification.criteria.map((criterion) => (
-        <div key={criterion.key} className="flex h-[30px] items-center gap-2 rounded px-2">
-          <CriterionGlyph status={criterion.status} />
-          <span className="min-w-0 flex-1 truncate whitespace-nowrap font-mono text-[11px] text-fg-3">
-            {criterion.key}
+      {verifierNode ? (
+        <button
+          type="button"
+          aria-pressed={false}
+          onClick={() => {
+            onSelect(verifierNode.handle);
+          }}
+          className="w-full text-left transition-[background-color] duration-150 hover:bg-[rgb(255_255_255_/_0.027)] focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-[var(--fg)]"
+        >
+          {row2}
+        </button>
+      ) : (
+        row2
+      )}
+      {verification.criteria.length > 0 ? (
+        <div className="flex h-[30px] min-w-0 items-center gap-2 rounded px-2">
+          <span className="h-[14px] w-[14px] shrink-0" aria-hidden="true" />
+          <span className="shrink-0 text-[12px] text-fg-4">기준</span>
+          <span className="min-w-0 flex-1 truncate whitespace-nowrap">
+            {verification.criteria.map((criterion, index) => (
+              <span key={criterion.key}>
+                {index > 0 ? <span className="px-1 text-[12px] text-fg-4">·</span> : null}
+                <span className="font-mono text-[11px] text-fg-3">{criterion.key}</span>{" "}
+                <span className={`text-[12px] ${criterionStatusClass(criterion.status)}`}>
+                  {criterionStatusLabel(criterion.status)}
+                </span>
+              </span>
+            ))}
           </span>
-          <span className="shrink-0 text-[12px] text-fg-2">{criterionStatusLabel(criterion.status)}</span>
-        </div>
-      ))}
-      {verification.evidence ? (
-        <div className="grid h-[30px] grid-cols-[96px_minmax(0,1fr)] items-center gap-2 rounded px-2">
-          <span className="text-[12px] text-fg-4">근거</span>
-          <span className="min-w-0 truncate text-[13px] text-fg-2">{verification.evidence}</span>
         </div>
       ) : null}
-      {contributors.length > 0 ? (
-        <div className="grid h-[30px] grid-cols-[96px_minmax(0,1fr)] items-center gap-2 rounded px-2">
-          <span className="text-[12px] text-fg-4">실행 기여자</span>
-          <span className="min-w-0 truncate text-[13px] text-fg-2">
-            {contributors.join(" · ")}
-            {separated ? <span className="text-fg-4"> · 판정자와 분리됨</span> : null}
-          </span>
-        </div>
-      ) : null}
+      {verification.evidence ? <DefinitionRow label="근거">{verification.evidence}</DefinitionRow> : null}
     </div>
   );
 }
@@ -549,7 +610,8 @@ function DefinitionRow({
   valueClassName?: string;
 }) {
   return (
-    <div className="grid h-[30px] grid-cols-[96px_minmax(0,1fr)] items-center gap-2 rounded px-2">
+    <div className="grid h-[30px] grid-cols-[20px_auto_minmax(0,1fr)] items-center gap-2 rounded px-2">
+      <span className="h-[14px] w-[14px] shrink-0" aria-hidden="true" />
       <span className="text-[12px] text-fg-4">{label}</span>
       <span className={`min-w-0 truncate text-[13px] text-fg-2 ${valueClassName}`}>{children}</span>
     </div>
@@ -558,7 +620,7 @@ function DefinitionRow({
 
 function DetailSectionHeader({ label, count }: { label: string; count?: number }) {
   return (
-    <p className="mt-4 flex h-6 items-center px-2 text-[12px] text-fg-4">
+    <p className="mt-4 flex h-8 items-center px-2 text-[12px] text-fg-4">
       {label}
       {count === undefined ? null : <span className="ml-1 tabular-nums">{count}</span>}
     </p>
@@ -583,34 +645,21 @@ function LedgerRow({
           <span className={`h-[6px] w-[6px] rounded-full ${event.gate ? "bg-gate" : "bg-fg-4"}`} />
         ) : (
           <span
-            className="h-1 w-1"
+            className="h-4 w-0.5"
             style={{ backgroundColor: event.subject ? subjectColor(event.subject) : "var(--fg-4)" }}
           />
         )}
       </span>
-      <span
-        className="h-4 w-0.5"
-        aria-hidden="true"
-        style={{
-          backgroundColor: event.gate
-            ? "var(--gate)"
-            : event.human
-              ? "var(--fg-4)"
-              : event.subject
-                ? subjectColor(event.subject)
-                : "var(--fg-4)",
-        }}
-      />
       <span aria-hidden="true" />
-      <span className="min-w-max shrink-0 truncate whitespace-nowrap text-[13px] text-fg-2">{event.body}</span>
-      <span className="ml-2 min-w-0 truncate text-[12px] text-fg-4">{event.meta}</span>
+      <span className="min-w-0 truncate whitespace-nowrap text-[13px] text-fg-2">{event.body}</span>
+      <span className="min-w-0 truncate text-[12px] text-fg-4">{event.meta}</span>
       <span className="text-right text-[12px] text-fg-4" aria-hidden="true">
         {event.human ? "" : event.targetHandle ? "›" : ""}
       </span>
     </>
   );
   const className =
-    "grid h-[30px] w-full grid-cols-[40px_6px_2px_8px_auto_minmax(0,1fr)_12px] items-center gap-0 rounded px-2 text-left";
+    "grid h-[30px] w-full grid-cols-[40px_8px_8px_minmax(0,auto)_minmax(0,1fr)_12px] items-center gap-0 rounded px-2 text-left";
   return event.targetHandle ? (
     <button
       type="button"
@@ -627,45 +676,29 @@ function LedgerRow({
   );
 }
 
-function StatusGlyph({ kind }: { kind: GlyphKind }) {
-  const glyph = glyphFor(kind);
+type Glyph = { symbol: string; className: string; label: string };
+
+function StatusGlyph({ kind, glyph }: { kind?: GlyphKind; glyph?: Glyph }) {
+  const resolvedGlyph = glyph ?? glyphFor(kind ?? "pending");
   return (
     <span
-      aria-label={glyph.label}
-      className={`inline-flex h-5 w-5 shrink-0 items-center justify-center text-[14px] ${glyph.className}`}
+      aria-label={resolvedGlyph.label}
+      className={`inline-flex h-[14px] w-[14px] shrink-0 items-center justify-center text-[14px] ${resolvedGlyph.className}`}
     >
-      {glyph.symbol}
+      {resolvedGlyph.symbol}
     </span>
   );
 }
 
-function CriterionGlyph({ status }: { status: VerificationView["criteria"][number]["status"] }) {
-  const glyph =
-    status === "passed"
-      ? { symbol: "●", className: "text-fg-4", label: "통과" }
-      : status === "failed"
-        ? { symbol: "⊘", className: "text-halt", label: "미통과" }
-        : status === "blocked"
-          ? { symbol: "◇", className: "text-gate", label: "막힘" }
-          : { symbol: "○", className: "text-fg-4", label: "제외" };
-  return (
-    <span
-      aria-label={glyph.label}
-      className={`inline-flex h-5 w-5 items-center justify-center text-[14px] ${glyph.className}`}
-    >
-      {glyph.symbol}
-    </span>
-  );
-}
-
-function verificationGlyphFor(verification: VerificationView): { symbol: string; className: string; label: string } {
-  if (verification.criteria.length > 0 && verification.criteria.every((criterion) => criterion.status === "passed")) {
+function verificationGlyphFor(verifications: readonly VerificationView[]): Glyph {
+  const criteria = verifications.flatMap((verification) => verification.criteria);
+  if (criteria.length > 0 && criteria.every((criterion) => criterion.status === "passed")) {
     return { symbol: "◉", className: "text-fg-2", label: "검증 완료" };
   }
-  if (verification.criteria.some((criterion) => criterion.status === "failed")) {
+  if (criteria.some((criterion) => criterion.status === "failed")) {
     return { symbol: "⊘", className: "text-halt", label: "미통과" };
   }
-  if (verification.criteria.some((criterion) => criterion.status === "blocked")) {
+  if (criteria.some((criterion) => criterion.status === "blocked")) {
     return { symbol: "◇", className: "text-gate", label: "막힘" };
   }
   return { symbol: "●", className: "text-fg-4", label: "완료" };
@@ -681,38 +714,37 @@ function glyphFor(kind: GlyphKind): { symbol: string; className: string; label: 
   return { symbol: "○", className: "text-fg-4", label: "미시작" };
 }
 
-function workStatusGlyph(work: WorkView): GlyphKind {
-  if (work.status === "complete") return hasPassedVerification(work) ? "verified" : "complete";
-  if (work.status === "failed") return "blocked";
-  if (work.approvals.some((approval) => approval.status === "pending")) return "gate";
-  return "pending";
-}
-
-function nodeStatusGlyph(status: string): GlyphKind {
-  return status === "active" ? "complete" : "pending";
-}
-
-function hasPassedVerification(work: WorkView): boolean {
-  return work.verifications.some(
-    (verification) =>
-      verification.state === "done" && verification.criteria.some((criterion) => criterion.status === "passed"),
-  );
+function WorkHistoryGlyph({ work }: { work: WorkView }) {
+  if (work.verifications.length > 0) return <StatusGlyph glyph={verificationGlyphFor(work.verifications)} />;
+  if (work.progress > 0) {
+    return (
+      <span
+        aria-hidden="true"
+        className="size-[14px] shrink-0 rounded-full"
+        style={{
+          background: `conic-gradient(var(--fg-3) ${String(work.progress)}%, transparent 0)`,
+          boxShadow: "inset 0 0 0 0.5px var(--fg-4)",
+        }}
+      />
+    );
+  }
+  return <StatusGlyph kind="pending" />;
 }
 
 function workHistoryFor(scope: readonly OrganizationNodeView[], works: readonly WorkView[]): WorkHistoryEntry[] {
   return [...works].reverse().flatMap((work) => {
-    const entries: WorkHistoryEntry[] = [];
+    const relations: WorkRelation[] = [];
     if (work.agents.some((agent) => scope.some((node) => agent.id === node.handle))) {
-      entries.push({ work, relation: "execution" });
+      relations.push("execution");
     }
     if (
       work.verifications.some((verification) =>
         scope.some((node) => verifierMatches(verification.verifier, node.handle, agentIdentityToken(node.handle).name)),
       )
     ) {
-      entries.push({ work, relation: "judgment" });
+      relations.push("judgment");
     }
-    return entries;
+    return relations.length > 0 ? [{ work, relations }] : [];
   });
 }
 
@@ -745,17 +777,21 @@ function ledgerEventsFor(
       const event = activityLedgerEvent(activity, work, nodeByHandle, descendantHandles, historyWorkIds);
       if (event) events.push(event);
     }
+    const assignedSubjects = descendants.filter((subject) =>
+      work.agents.some((agent) => agentNodeMatches(agent, subject)),
+    );
+    const firstAssigned = assignedSubjects[0];
+    if (firstAssigned) {
+      events.push({
+        id: `${work.id}-assignment`,
+        time: work.updatedAt,
+        body: `${work.title} 배치`,
+        meta: assignedSubjects.map((subject) => agentIdentityToken(subject.handle).name).join(" · "),
+        subject: firstAssigned,
+        targetHandle: firstAssigned.handle,
+      });
+    }
     for (const subject of descendants) {
-      if (work.agents.some((agent) => agent.id === subject.handle)) {
-        events.push({
-          id: `${work.id}-${subject.handle}-assignment`,
-          time: work.updatedAt,
-          body: `${work.title} 배치`,
-          meta: agentIdentityToken(subject.handle).name,
-          subject,
-          targetHandle: subject.handle,
-        });
-      }
       const matchingVerifications = work.verifications.filter((verification) =>
         verifierMatches(verification.verifier, subject.handle, agentIdentityToken(subject.handle).name),
       );
@@ -880,14 +916,19 @@ function criterionCountsFor(verifications: readonly VerificationView[]) {
   );
 }
 
-function verificationMeta(counts: ReturnType<typeof criterionCountsFor>): string {
+function criterionSummary(counts: ReturnType<typeof criterionCountsFor>): string {
   return [
     counts.passed > 0 ? `통과 ${String(counts.passed)}` : "",
-    counts.blocked > 0 ? `막힘 ${String(counts.blocked)}` : "",
     counts.failed > 0 ? `미통과 ${String(counts.failed)}` : "",
+    counts.blocked > 0 ? `막힘 ${String(counts.blocked)}` : "",
+    counts.excluded > 0 ? `제외 ${String(counts.excluded)}` : "",
   ]
     .filter(Boolean)
     .join(" · ");
+}
+
+function verificationMeta(counts: ReturnType<typeof criterionCountsFor>): string {
+  return criterionSummary(counts);
 }
 
 function verifierMatches(verifier: string, handle: string, name: string): boolean {
@@ -895,8 +936,31 @@ function verifierMatches(verifier: string, handle: string, name: string): boolea
   return value === handle.toLowerCase() || value === name.toLowerCase();
 }
 
+function verifierNodeFor(verifier: string, nodes: readonly OrganizationNodeView[]): OrganizationNodeView | undefined {
+  return nodes.find((node) => verifierMatches(verifier, node.handle, agentIdentityToken(node.handle).name));
+}
+
+function nodeForAgent(agent: WorkView["agents"][number], nodes: readonly OrganizationNodeView[]) {
+  return nodes.find((node) => agentNodeMatches(agent, node));
+}
+
+function agentNodeMatches(agent: WorkView["agents"][number], node: OrganizationNodeView): boolean {
+  const nodeName = agentIdentityToken(node.handle).name;
+  return verifierMatches(agent.id, node.handle, nodeName) || verifierMatches(agent.name, node.handle, nodeName);
+}
+
 function criterionStatusLabel(status: VerificationView["criteria"][number]["status"]): string {
   return status === "passed" ? "통과" : status === "failed" ? "미통과" : status === "blocked" ? "막힘" : "제외";
+}
+
+function criterionStatusClass(status: VerificationView["criteria"][number]["status"]): string {
+  return status === "passed"
+    ? "text-fg-2"
+    : status === "failed"
+      ? "text-halt"
+      : status === "blocked"
+        ? "text-gate"
+        : "text-fg-4";
 }
 
 function descendantsOf(node: OrganizationNodeView, nodes: readonly OrganizationNodeView[]): OrganizationNodeView[] {
@@ -969,21 +1033,12 @@ function agentsOutsideOrganization(
   return [...agents.values()];
 }
 
-function roleTextOf(node: OrganizationNodeView): string {
-  const token = agentIdentityToken(node.handle);
-  return token.builtin ? token.roleLabel : node.responsibility.split(",")[0]?.trim() || token.roleLabel;
-}
-
 function nodeRoleTextOf(role: string): string {
   return ({ orchestrator: "총괄", coordinator: "조율", operator: "실행" } as Record<string, string>)[role] ?? role;
 }
 
 function nodeStatusLabel(status: string): string {
   return ({ active: "일하는 중", inactive: "쉬는 중", retired: "물러남" } as Record<string, string>)[status] ?? status;
-}
-
-function scopeTextOf(scope: "persistent" | "work"): string {
-  return scope === "work" ? "이 업무가 끝나면 사라집니다" : "조직에 계속 남습니다";
 }
 
 function extraCapabilitiesOf(node: OrganizationNodeView): readonly string[] {
