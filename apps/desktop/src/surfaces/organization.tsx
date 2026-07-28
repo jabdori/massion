@@ -1,67 +1,39 @@
+import {
+  Background,
+  Handle,
+  Position,
+  ReactFlow,
+  type Edge as RFEdge,
+  type Node as RFNode,
+  type ReactFlowInstance,
+} from "@xyflow/react";
+import "@xyflow/react/dist/style.css";
+import { CaretDown, CaretRight } from "@phosphor-icons/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { DesktopService, OrganizationNodeView, OrganizationView } from "@/desktop-service";
+import type { SpeakerView } from "@/model";
 import { agentIdentityToken } from "@massion/application/client";
-import type { ActivityView, VerificationView, WorkView } from "@/model";
-import { SurfaceError, surfaceErrorMessage } from "@/ui/surface";
 
-type WorkRelation = "execution" | "judgment";
-
-interface WorkHistoryEntry {
-  work: WorkView;
-  relations: WorkRelation[];
-}
-
-interface LedgerEvent {
-  id: string;
-  time: string;
-  body: string;
-  meta: string;
-  subject?: OrganizationNodeView;
-  targetHandle?: string;
-  human?: boolean;
-  gate?: boolean;
-}
-
-const ROOM_MESSAGE_LABELS: Readonly<Record<string, string>> = {
-  question: "질문",
-  answer: "답변",
-  evidence: "근거",
-  challenge: "반론",
-  change_request: "변경 요청",
-  decision: "결정",
-  review_request: "검토 요청",
-};
+import { AgentAvatar } from "@/room";
+import { MapBoundary, SurfaceError, SurfaceLoading, surfaceErrorMessage } from "@/ui/surface";
 
 export function OrganizationSurface({ service }: { service: DesktopService }) {
   const [organization, setOrganization] = useState<OrganizationView>();
-  const [works, setWorks] = useState<WorkView[]>([]);
   const [selectedHandle, setSelectedHandle] = useState<string>();
+  const [collapsedHandles, setCollapsedHandles] = useState<ReadonlySet<string>>(new Set());
   const [error, setError] = useState("");
   const structureRef = useRef<HTMLDivElement>(null);
-
   useEffect(() => {
     let disposed = false;
-    const load = async () => {
-      try {
-        const [org, active, complete] = await Promise.all([
-          service.loadOrganization(),
-          service.loadIndex({ filter: "active", search: "" }),
-          service.loadIndex({ filter: "complete", search: "" }),
-        ]);
-        const summaries = [...active, ...complete].slice(0, 8);
-        const loadedWorks = await Promise.all(
-          summaries.map((summary) => service.loadWork(summary.id).catch(() => summary)),
-        );
-        if (!disposed) {
-          setOrganization(org);
-          setWorks(loadedWorks);
-        }
-      } catch (cause: unknown) {
+    void service
+      .loadOrganization()
+      .then((value) => {
+        if (!disposed) setOrganization(value);
+      })
+      .catch((cause: unknown) => {
         if (!disposed) setError(surfaceErrorMessage(cause, "조직 정보를 불러오지 못했습니다."));
-      }
-    };
-    void load();
+      });
     return () => {
       disposed = true;
     };
@@ -70,986 +42,497 @@ export function OrganizationSurface({ service }: { service: DesktopService }) {
   const nodes = organization?.nodes ?? [];
   const root = nodes.find((node) => node.parentHandle === undefined);
   const workTeams = nodes.filter((node) => node.scope === "work");
-
-  useEffect(() => {
-    if (!root) return;
-    if (!selectedHandle || !nodes.some((node) => node.handle === selectedHandle)) setSelectedHandle(root.handle);
-  }, [nodes, root, selectedHandle]);
-
-  const selected = nodes.find((node) => node.handle === selectedHandle) ?? root;
-  const descendants = useMemo(() => (selected ? descendantsOf(selected, nodes) : []), [nodes, selected]);
-  const selectedWorkHistory = useMemo(
-    () => (selected ? workHistoryFor(descendants, works) : []),
-    [descendants, selected, works],
-  );
-  const selectedVerifications = useMemo(
-    () => (selected ? verificationsFor(descendants, works) : []),
-    [descendants, selected, works],
-  );
-  const ledgerEvents = useMemo(
-    () => (selected ? ledgerEventsFor(descendants, nodes, works, selectedWorkHistory) : []),
-    [descendants, nodes, selected, selectedWorkHistory, works],
-  );
-  const orphanAgents = useMemo(() => agentsOutsideOrganization(works, nodes), [nodes, works]);
+  const selected = nodes.find((node) => node.handle === selectedHandle);
+  const identity = selected ? agentIdentityToken(selected.handle, roleTextOf(selected)) : undefined;
+  const children = selected ? nodes.filter((node) => node.parentHandle === selected.handle) : [];
+  const parent =
+    selected?.parentHandle === undefined ? undefined : nodes.find((node) => node.handle === selected.parentHandle);
 
   useEffect(() => {
     if (!selectedHandle) return;
-    const target = Array.from(structureRef.current?.querySelectorAll<HTMLElement>("[data-node]") ?? []).find(
-      (element) => element.dataset.node === selectedHandle,
-    );
-    if (target && typeof target.scrollIntoView === "function") {
-      target.scrollIntoView({ block: "nearest", behavior: "smooth" });
-    }
-  }, [selectedHandle]);
+    structureRef.current
+      ?.querySelector(`[data-node="${selectedHandle}"]`)
+      ?.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, [collapsedHandles, selectedHandle]);
 
+  // 어느 표면에서 골라도 접힌 상위 단위를 먼저 열고 같은 선택 상태를 공유합니다.
   const select = (handle: string) => {
+    const ancestors = new Set<string>();
+    let current = nodes.find((node) => node.handle === handle);
+    while (current?.parentHandle) {
+      ancestors.add(current.parentHandle);
+      current = nodes.find((node) => node.handle === current?.parentHandle);
+    }
+    setCollapsedHandles((collapsed) => {
+      const next = new Set([...collapsed].filter((candidate) => !ancestors.has(candidate)));
+      return next.size === collapsed.size ? collapsed : next;
+    });
     setSelectedHandle(handle);
+  };
+  const toggle = (handle: string) => {
+    setCollapsedHandles((current) => {
+      const next = new Set(current);
+      if (next.has(handle)) next.delete(handle);
+      else next.add(handle);
+      return next;
+    });
   };
 
   return (
-    <main aria-label="조직" className="col-span-3 grid min-h-0 min-w-0 grid-cols-[420px_minmax(0,1fr)_320px] bg-bg-0">
-      <section aria-label="조직 구조" className="grid min-h-0 grid-rows-[48px_minmax(0,1fr)] bg-bg-1">
-        <header className="flex h-12 items-center gap-2 border-b border-line-strong px-3">
-          <h1 className="text-[15px] font-semibold tracking-[-0.008em] text-fg-2">조직</h1>
+    <main
+      aria-label="조직"
+      // 구조 패널과 지도 컬럼을 50:50으로 둡니다. 지도가 좁아 노드가 겹치던 것을 펴줍니다.
+      className="col-span-3 grid min-h-0 min-w-0 grid-cols-[minmax(0,1fr)_minmax(0,1fr)] bg-canvas"
+    >
+      {/* 본문 = 구조(A). 읽는 화면입니다: 부서는 상자, 구성원은 칩. */}
+      <section aria-label="조직 구조" className="grid min-h-0 grid-rows-[46px_minmax(0,1fr)] border-r border-border">
+        <header className="flex items-center gap-2 border-b border-border px-5">
+          <h1 className="text-[15px] font-semibold tracking-[-0.015em]">조직</h1>
           {organization?.version === undefined ? null : (
-            <span className="font-mono text-[11px] text-fg-4">v{organization.version}</span>
+            <span className="font-mono text-[11px] text-muted">v{organization.version}</span>
           )}
         </header>
-        <div ref={structureRef} className="min-h-0 overflow-y-auto px-2 py-3">
+        <div ref={structureRef} className="min-h-0 overflow-y-auto px-5 py-4">
           {error ? <SurfaceError message={error} /> : null}
-          {!organization && !error ? <p className="px-2 text-[13px] text-fg-3">불러오는 중입니다.</p> : null}
+          {!organization && !error ? <SurfaceLoading /> : null}
           {organization && nodes.length === 0 ? (
-            <p className="px-2 text-[13px] text-fg-3">조직에 아직 자리가 없습니다.</p>
+            <p className="text-sm text-muted">조직에 아직 아무도 없습니다.</p>
           ) : null}
           {root ? (
-            <>
-              <p className="mt-0 flex h-8 items-center px-2 text-[12px] text-fg-4">영속 조직</p>
-              <div className="space-y-0.5">
-                {nodes
-                  .filter((node) => node.scope !== "work")
-                  .map((node) => (
-                    <OrganizationRow
-                      key={node.handle}
-                      node={node}
-                      depth={depthOf(node, nodes)}
-                      selected={node.handle === selected?.handle}
-                      involvementCount={involvementCount(node, works)}
-                      hasChildren={hasChildren(node, nodes)}
-                      onSelect={select}
-                    />
-                  ))}
-              </div>
+            <div className="mx-auto max-w-[720px]">
+              <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.08em] text-muted">영속 조직</p>
+              <OrgUnit
+                node={root}
+                all={nodes}
+                collapsedHandles={collapsedHandles}
+                depth={0}
+                selectedHandle={selected?.handle}
+                onSelect={select}
+                onToggle={toggle}
+              />
               {workTeams.length > 0 ? (
                 <>
-                  <p className="mt-4 flex h-8 items-center px-2 text-[12px] text-fg-4">임시 편성 {workTeams.length}</p>
-                  <div className="space-y-0.5">
-                    {workTeams.map((node) => (
-                      <OrganizationRow
-                        key={node.handle}
-                        node={node}
-                        depth={depthOf(node, nodes)}
-                        selected={node.handle === selected?.handle}
-                        involvementCount={involvementCount(node, works)}
-                        hasChildren={hasChildren(node, nodes)}
+                  <p className="mb-2 mt-4 text-[10px] font-semibold uppercase tracking-[0.08em] text-muted">
+                    지금 편성된 임시 팀 · {workTeams.length}
+                  </p>
+                  <div className="space-y-2">
+                    {workTeams.map((team) => (
+                      <OrgTempTeam
+                        key={team.handle}
+                        team={team}
+                        all={nodes}
+                        selected={team.handle === selected?.handle}
                         onSelect={select}
                       />
                     ))}
                   </div>
                 </>
               ) : null}
-              {orphanAgents.length > 0 ? (
-                <>
-                  <p className="mt-4 flex h-8 items-center px-2 text-[12px] text-fg-4">
-                    조직 그래프에 없는 실행자 {orphanAgents.length}
-                  </p>
-                  <div className="space-y-0.5">
-                    {orphanAgents.map((agent) => (
-                      <div key={agent.id} className="flex h-[30px] w-full items-center gap-2 rounded px-2">
-                        <span
-                          className="flex h-[14px] w-[14px] shrink-0 items-center justify-center"
-                          aria-hidden="true"
-                        >
-                          <span
-                            className="h-[6px] w-[6px]"
-                            style={{
-                              boxSizing: "border-box",
-                              border: "1px dashed var(--agent-provisional)",
-                              backgroundColor: "transparent",
-                            }}
-                          />
-                        </span>
-                        <span className="min-w-0 truncate text-[13px] text-fg-2">{agent.name}</span>
-                        <span className="shrink-0 text-[12px] text-fg-4">{agent.role}</span>
-                        <span className="ml-auto shrink-0 tabular-nums text-[12px] text-fg-4">
-                          관여 {agent.involvement}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </>
-              ) : null}
-            </>
-          ) : null}
-        </div>
-      </section>
-
-      <section
-        aria-label="자리"
-        className="grid min-h-0 grid-rows-[48px_minmax(0,1fr)] border-l border-line-strong bg-bg-0"
-      >
-        <header className="flex h-12 items-center gap-2 border-b border-line-strong px-3">
-          {selected ? <NodeMarker node={selected} hasChildren={hasChildren(selected, nodes)} /> : null}
-          {selected ? (
-            <>
-              <h2 className="text-[17px] font-semibold tracking-[-0.012em] text-fg">
-                {selected.name}
-              </h2>
-              <span className="text-[13px] text-fg-3">{nodeRoleTextOf(selected.role)}</span>
-              <span className="min-w-0 flex-1 truncate text-[13px] text-fg-3">{selected.responsibility}</span>
-              {selected.scope === "work" ? <span className="shrink-0 text-[12px] text-fg-4">임시</span> : null}
-              {selected.status !== "active" ? (
-                <span className="shrink-0 text-[12px] text-fg-4">{nodeStatusLabel(selected.status)}</span>
-              ) : null}
-              <span className="flex shrink-0 items-center gap-1">
-                <span className="h-1 w-1 shrink-0" aria-hidden="true" style={{ backgroundColor: subjectColor(selected) }} />
-                <span className="font-mono text-[11px] text-fg-4">{agentIdentityToken(selected.handle).name}</span>
-                <span className="font-mono text-[11px] text-fg-4">{selected.handle}</span>
-              </span>
-            </>
-          ) : (
-            <h2 className="text-[15px] font-semibold tracking-[-0.008em] text-fg-2">자리</h2>
-          )}
-        </header>
-        <div className="min-h-0 overflow-y-auto px-3 pb-6">
-          {selected ? (
-            <NodeDetail
-              node={selected}
-              nodes={nodes}
-              history={selectedWorkHistory}
-              verifications={selectedVerifications}
-              onSelect={select}
-            />
-          ) : (
-            <p className="mt-4 text-[13px] text-fg-3">조직에 선택할 자리가 없습니다.</p>
-          )}
-        </div>
-      </section>
-
-      <aside
-        aria-label="원장"
-        className="grid min-h-0 grid-rows-[48px_minmax(0,1fr)] border-l border-line-strong bg-bg-1"
-      >
-        <header className="flex h-12 items-center gap-2 border-b border-line-strong px-3">
-          <h2 className="text-[15px] font-semibold tracking-[-0.008em] text-fg-2">원장</h2>
-          {selected ? (
-            <span className="ml-auto text-[12px] text-fg-4">
-              {descendants.length > 1 ? `이 자리와 아래 ${String(descendants.length - 1)}` : "이 자리"}
-            </span>
-          ) : null}
-        </header>
-        <div className="min-h-0 overflow-y-auto px-2 py-3">
-          {selected && ledgerEvents.length > 0 ? (
-            <div className="space-y-0.5">
-              {ledgerEvents.map((event, index) => (
-                <LedgerRow
-                  key={event.id}
-                  event={event}
-                  previousTime={ledgerEvents[index - 1]?.time}
-                  onSelect={select}
-                />
-              ))}
             </div>
-          ) : selected ? (
-            <p className="px-2 text-[13px] text-fg-3">이 자리에 아직 쌓인 사건이 없습니다.</p>
           ) : null}
+        </div>
+      </section>
+
+      {/* 우측 = 지도(B) + 선택 노드 상세. 지도는 라벨이 아니라 모양과 "지금 여기"를 읽습니다. */}
+      <aside aria-label="조직 지도" className="grid min-h-0 grid-rows-[46px_minmax(0,1fr)_minmax(0,1fr)] bg-chrome">
+        <header className="flex items-center border-b border-border px-3">
+          <h2 className="text-[11px] font-semibold tracking-[0.08em] text-muted">지도</h2>
+          <span className="ml-auto text-[10px] text-muted">눌러서 이동</span>
+        </header>
+        <div className="min-h-0 border-b border-border">
+          {nodes.length > 0 ? (
+            <MapBoundary>
+              <OrgMap nodes={nodes} selectedHandle={selected?.handle} onSelect={select} />
+            </MapBoundary>
+          ) : null}
+        </div>
+        <div className="min-h-0 overflow-y-auto px-3 py-3">
+          {selected && identity ? (
+            <>
+              <div className="flex items-center gap-2">
+                <AgentAvatar speaker={speakerOf(selected)} />
+                <span className="text-[13px] font-medium">{identity.name}</span>
+                <span className="rounded-[3px] border border-control px-1.5 text-[10px] text-muted">
+                  {roleTextOf(selected)}
+                </span>
+                <span className="ml-auto text-[11px] text-muted">{nodeStatusLabel(selected.status)}</span>
+              </div>
+              <p className="mt-2 text-[12px] leading-5 text-secondary">{selected.responsibility}</p>
+              <ul className="mt-3 divide-y divide-border border-y border-border">
+                <li className="grid grid-cols-[64px_minmax(0,1fr)] items-baseline gap-2 py-2">
+                  <span className="text-[11px] text-muted">직책</span>
+                  <span className="text-[12px] text-primary">{nodeRoleTextOf(selected.role)}</span>
+                </li>
+                <li className="grid grid-cols-[64px_minmax(0,1fr)] items-baseline gap-2 py-2">
+                  <span className="text-[11px] text-muted">위</span>
+                  <span className="text-[12px] text-primary">
+                    {parent === undefined ? "없음 — 꼭대기" : agentIdentityToken(parent.handle).name}
+                  </span>
+                </li>
+                <li className="grid grid-cols-[64px_minmax(0,1fr)] items-baseline gap-2 py-2">
+                  <span className="text-[11px] text-muted">아래</span>
+                  <span className="text-[12px] text-primary">
+                    {children.length === 0
+                      ? "없음"
+                      : children.map((child) => agentIdentityToken(child.handle).name).join(" · ")}
+                  </span>
+                </li>
+                <li className="grid grid-cols-[64px_minmax(0,1fr)] items-baseline gap-2 py-2">
+                  <span className="text-[11px] text-muted">기간</span>
+                  <span className="text-[12px] text-primary">{scopeTextOf(selected.scope)}</span>
+                </li>
+              </ul>
+              {extraCapabilitiesOf(selected).length > 0 ? (
+                <div className="mt-3">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted">더해진 역량</p>
+                  <p className="mt-1 text-[12px] leading-5 text-primary">{extraCapabilitiesOf(selected).join(" · ")}</p>
+                </div>
+              ) : null}
+            </>
+          ) : (
+            <p className="text-[11px] leading-4 text-muted">
+              구조나 지도에서 하나를 누르면 그 자리·소속·머무는 기간을 봅니다. 편성·분리·병합은 계약에 명령이 열리면 이
+              지도에서 하게 됩니다.
+            </p>
+          )}
         </div>
       </aside>
     </main>
   );
 }
 
-function OrganizationRow({
+// ── 조직 구조 (A) ─────────────────────────────────────────────────
+function hasNestedNodes(node: OrganizationNodeView, all: readonly OrganizationNodeView[]): boolean {
+  return all.some((candidate) => candidate.parentHandle === node.handle && candidate.scope !== "work");
+}
+function unitWordOf(node: OrganizationNodeView): string {
+  return node.role === "orchestrator" ? "총괄" : "조율";
+}
+
+function OrgUnit({
   node,
+  all,
+  collapsedHandles,
   depth,
-  selected,
-  involvementCount: count,
-  hasChildren: childExists,
+  selectedHandle,
   onSelect,
+  onToggle,
 }: {
   node: OrganizationNodeView;
+  all: readonly OrganizationNodeView[];
+  collapsedHandles: ReadonlySet<string>;
   depth: number;
-  selected: boolean;
-  involvementCount: number;
-  hasChildren: boolean;
+  selectedHandle: string | undefined;
   onSelect: (handle: string) => void;
+  onToggle: (handle: string) => void;
 }) {
+  const token = agentIdentityToken(node.handle, roleTextOf(node));
+  const children = all.filter((candidate) => candidate.parentHandle === node.handle && candidate.scope !== "work");
+  const members = children.filter((child) => !hasNestedNodes(child, all));
+  const subUnits = children.filter((child) => hasNestedNodes(child, all));
+  const selected = node.handle === selectedHandle;
+  const collapsed = collapsedHandles.has(node.handle);
   return (
-    <button
-      type="button"
-      aria-pressed={selected}
-      data-node={node.handle}
-      onClick={() => {
-        onSelect(node.handle);
-      }}
-      className={`flex h-[30px] w-full items-center gap-2 rounded px-2 text-left transition-[background-color] duration-150 focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-[var(--fg)] ${selected ? "bg-[rgb(255_255_255_/_0.047)]" : "hover:bg-[rgb(255_255_255_/_0.027)]"}`}
-      style={{ paddingLeft: 8 + depth * 32 }}
+    <div
+      className="rounded-[7px] border border-border"
+      style={{ background: depth === 0 ? "var(--bg-2)" : "var(--bg-1)" }}
     >
-      <NodeMarker node={node} hasChildren={childExists} />
-      <span className={`min-w-0 truncate text-[13px] ${selected ? "text-fg" : "text-fg-2"}`}>{node.name}</span>
-      <span className="shrink-0 text-[12px] text-fg-4">{nodeRoleTextOf(node.role)}</span>
-      <span className="min-w-0 flex-1 truncate text-[12px] text-fg-4">{node.responsibility}</span>
-      {count > 0 ? <span className="ml-auto shrink-0 tabular-nums text-[12px] text-fg-4">{count}</span> : null}
-    </button>
-  );
-}
-
-function NodeMarker({ node, hasChildren }: { node: OrganizationNodeView; hasChildren: boolean }) {
-  if (node.scope === "work") {
-    return (
-      <span className="flex h-[14px] w-[14px] shrink-0 items-center justify-center" aria-hidden="true">
-        <span
-          className="h-1 w-1"
-          style={{ boxSizing: "border-box", border: "1px dashed var(--agent-provisional)", backgroundColor: "transparent" }}
-        />
-      </span>
-    );
-  }
-  if (hasChildren) {
-    return (
-      <span
-        className="flex h-[14px] w-[14px] shrink-0 items-center justify-center"
-        aria-hidden="true"
-      >
-        <span className="h-[14px] w-0.5" aria-hidden="true" style={{ backgroundColor: subjectColor(node) }} />
-      </span>
-    );
-  }
-  return (
-    <span className="flex h-[14px] w-[14px] shrink-0 items-center justify-center" aria-hidden="true">
-      <span className="h-1 w-1" style={{ backgroundColor: subjectColor(node) }} />
-    </span>
-  );
-}
-
-function NodeDetail({
-  node,
-  nodes,
-  history,
-  verifications,
-  onSelect,
-}: {
-  node: OrganizationNodeView;
-  nodes: readonly OrganizationNodeView[];
-  history: readonly WorkHistoryEntry[];
-  verifications: readonly { work: WorkView; verification: VerificationView }[];
-  onSelect: (handle: string) => void;
-}) {
-  const parent = node.parentHandle ? nodes.find((candidate) => candidate.handle === node.parentHandle) : undefined;
-  const children = nodes.filter((candidate) => candidate.parentHandle === node.handle);
-  const siblings = node.parentHandle
-    ? nodes.filter((candidate) => candidate.parentHandle === node.parentHandle && candidate.handle !== node.handle)
-    : [];
-  const related = [
-    ...(parent ? [{ node: parent, relation: "위" }] : []),
-    ...siblings.map((candidate) => ({ node: candidate, relation: "같은 층" })),
-    ...children.map((candidate) => ({ node: candidate, relation: "아래" })),
-  ];
-  const lineage = lineageOf(node, nodes);
-  const extras = extraCapabilitiesOf(node);
-
-  return (
-    <>
-      <DetailSectionHeader label="자리" />
-      <div className="space-y-0.5">
-        {lineage.length > 1 ? (
-          <DefinitionRow label="계보">
-            <span className="flex min-w-0 items-center gap-1 truncate">
-              {lineage.map((ancestor, index) => (
-                <span key={ancestor.handle} className="flex min-w-0 items-center gap-1">
-                  {index > 0 ? <span className="text-[12px] text-fg-4">›</span> : null}
-                  <button
-                    type="button"
-                    aria-pressed={ancestor.handle === node.handle}
-                    onClick={() => {
-                      onSelect(ancestor.handle);
-                    }}
-                    className="truncate text-[13px] text-fg-2 focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-[var(--fg)]"
-                  >
-                    {ancestor.name}
-                  </button>
-                </span>
-              ))}
-            </span>
-          </DefinitionRow>
-        ) : null}
-        {extras.length > 0 ? <DefinitionRow label="역량">{extras.join(" · ")}</DefinitionRow> : null}
-      </div>
-
-      {history.length > 0 ? (
-        <>
-          <DetailSectionHeader
-            label={descendantsOf(node, nodes).length > 1 ? "이 자리와 아래가 걸어온 업무" : "이 자리가 걸어온 업무"}
-            count={history.length}
-          />
-          <div className="space-y-0.5">
-            {history.map((entry) => (
-              <WorkHistoryRow key={entry.work.id} entry={entry} nodes={nodes} onSelect={onSelect} />
-            ))}
-          </div>
-        </>
-      ) : null}
-
-      {verifications.length > 0 ? (
-        <>
-          <DetailSectionHeader
-            label={
-              verifications.some(
-                ({ verification }) =>
-                  !verifierMatches(verification.verifier, node.handle, agentIdentityToken(node.handle).name),
-              )
-                ? "이 자리와 아래에서 이뤄진 판정"
-                : "판정"
-            }
-            count={verifications.length}
-          />
-          <div className="space-y-0.5">
-            {verifications.map(({ work, verification }) => (
-              <VerificationBlock
-                key={`${work.id}-${verification.id}`}
-                nodes={nodes}
-                work={work}
-                verification={verification}
-                onSelect={onSelect}
-              />
-            ))}
-          </div>
-        </>
-      ) : null}
-
-      {related.length > 0 ? (
-        <>
-          <DetailSectionHeader label="이어진 자리" count={related.length} />
-          <div className="space-y-0.5">
-            {related.map(({ node: relatedNode, relation }) => (
-              <button
-                key={relatedNode.handle}
-                type="button"
-                aria-pressed={relatedNode.handle === node.handle}
-                onClick={() => {
-                  onSelect(relatedNode.handle);
-                }}
-                className="flex h-[30px] w-full min-w-0 items-center gap-2 rounded px-2 text-left transition-[background-color] duration-150 hover:bg-[rgb(255_255_255_/_0.027)] focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-[var(--fg)]"
-              >
-                <NodeMarker node={relatedNode} hasChildren={hasChildren(relatedNode, nodes)} />
-                <span className="min-w-0 truncate text-[13px] text-fg-2">
-                  {relatedNode.name}
-                </span>
-                <span className="shrink-0 text-[12px] text-fg-4">{relation}</span>
-                <span className="shrink-0 text-[12px] text-fg-4">{nodeRoleTextOf(relatedNode.role)}</span>
-                <span className="min-w-0 flex-1 truncate text-[12px] text-fg-4">{relatedNode.responsibility}</span>
-              </button>
-            ))}
-          </div>
-        </>
-      ) : null}
-    </>
-  );
-}
-
-function WorkHistoryRow({
-  entry,
-  nodes,
-  onSelect,
-}: {
-  entry: WorkHistoryEntry;
-  nodes: readonly OrganizationNodeView[];
-  onSelect: (handle: string) => void;
-}) {
-  const verification = entry.work.verifications[0];
-  const verifierNode = verification ? verifierNodeFor(verification.verifier, nodes) : undefined;
-  const verifier = verification ? agentIdentityToken(verifierNode?.handle ?? verification.verifier) : undefined;
-  const counts = verification ? criterionSummary(criterionCountsFor(entry.work.verifications)) : "";
-  const content = (
-    <>
-      <span className="flex h-[14px] w-[14px] shrink-0 items-center justify-center">
-        <WorkHistoryGlyph work={entry.work} />
-      </span>
-      <span className="min-w-0 flex-1 truncate text-[13px] text-fg-2">{entry.work.title}</span>
-      <span className="shrink-0 text-[12px] text-fg-4">
-        {entry.relations.map((relation) => (relation === "execution" ? "실행 배치" : "판정")).join(" · ")}
-      </span>
-      {verifier ? (
-        <span className="flex min-w-0 shrink-0 items-center gap-1 text-[12px] text-fg-3">
-          <span className="h-1 w-1 shrink-0" aria-hidden="true" style={{ backgroundColor: accentColor(verifier.accentSlot) }} />
-          <span className="max-w-[104px] truncate">{verifier.name}</span>
-        </span>
-      ) : null}
-      {counts ? <span className="shrink-0 tabular-nums text-[12px] text-fg-4">{counts}</span> : null}
-      <span className="w-[52px] shrink-0 font-mono text-right text-[11px] tabular-nums text-fg-4">
-        {entry.work.updatedAt}
-      </span>
-      {verifierNode ? <span className="w-3 shrink-0 text-right text-[12px] text-fg-4">›</span> : null}
-    </>
-  );
-  const className =
-    "flex h-[30px] w-full min-w-0 items-center gap-2 rounded px-2 text-left transition-[background-color] duration-150 hover:bg-[rgb(255_255_255_/_0.027)] focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-[var(--fg)]";
-  return verifierNode ? (
-    <button
-      type="button"
-      aria-pressed={false}
-      onClick={() => {
-        onSelect(verifierNode.handle);
-      }}
-      className={className}
-    >
-      {content}
-    </button>
-  ) : (
-    <div className={className}>{content}</div>
-  );
-}
-
-function VerificationBlock({
-  nodes,
-  work,
-  verification,
-  onSelect,
-}: {
-  nodes: readonly OrganizationNodeView[];
-  work: WorkView;
-  verification: VerificationView;
-  onSelect: (handle: string) => void;
-}) {
-  const counts = criterionCounts(verification);
-  const contributors = work.agents.filter((agent) => agent.name);
-  const verifierNode = verifierNodeFor(verification.verifier, nodes);
-  const verifier = agentIdentityToken(verifierNode?.handle ?? verification.verifier);
-  const verificationGlyph = verificationGlyphFor([verification]);
-  const row2 = (
-    <span className="flex h-[30px] min-w-0 items-center gap-2 rounded px-2 text-left">
-      <span className="h-[14px] w-[14px] shrink-0" aria-hidden="true" />
-      {contributors.length > 0 ? (
-        <>
-          <span className="shrink-0 text-[12px] text-fg-4">실행</span>
-          <span className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden whitespace-nowrap text-[13px] text-fg-2">
-            {contributors.map((agent, index) => {
-              const agentNode = nodeForAgent(agent, nodes);
-              return (
-                <span key={`${agent.id}-${String(index)}`} className="flex shrink-0 items-center gap-1">
-                  {index > 0 ? <span className="text-[12px] text-fg-4">·</span> : null}
-                  <span
-                    className="h-1 w-1 shrink-0"
-                    aria-hidden="true"
-                    style={{ backgroundColor: agentNode ? subjectColor(agentNode) : accentColor(agentIdentityToken(agent.id).accentSlot) }}
-                  />
-                  <span>{agent.name}</span>
-                </span>
-              );
-            })}
-          </span>
-        </>
-      ) : null}
-      <span className="shrink-0 text-[12px] text-fg-4">판정</span>
-      <span className="flex min-w-0 shrink-0 items-center gap-1 text-[13px] text-fg-2">
-        <span className="h-1 w-1 shrink-0" aria-hidden="true" style={{ backgroundColor: accentColor(verifier.accentSlot) }} />
-        <span className="max-w-[104px] truncate">{verifier.name}</span>
-      </span>
-      {verifierNode ? <span className="w-3 shrink-0 text-right text-[12px] text-fg-4">›</span> : null}
-    </span>
-  );
-  return (
-    <div className="space-y-0.5">
-      <div className="flex h-[30px] items-center gap-2 rounded px-2">
-        <StatusGlyph glyph={verificationGlyph} />
-        <span className="min-w-0 flex-1 truncate text-[13px] text-fg-2">{work.title}</span>
-        <span className="shrink-0 tabular-nums text-[12px] text-fg-4">{criterionSummary(counts)}</span>
-      </div>
-      {verifierNode ? (
+      <div className="flex items-stretch border-b border-border">
         <button
-          type="button"
-          aria-pressed={false}
+          aria-pressed={selected}
+          data-node={node.handle}
+          className={`flex min-w-0 flex-1 items-center gap-2 px-3 py-2.5 text-left outline-none ${selected ? "bg-surface-2" : "hover:bg-surface-1"}`}
           onClick={() => {
-            onSelect(verifierNode.handle);
+            onSelect(node.handle);
           }}
-          className="w-full text-left transition-[background-color] duration-150 hover:bg-[rgb(255_255_255_/_0.027)] focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-[var(--fg)]"
+          type="button"
         >
-          {row2}
-        </button>
-      ) : (
-        row2
-      )}
-      {verification.criteria.length > 0 ? (
-        <div className="flex h-[30px] min-w-0 items-center gap-2 rounded px-2">
-          <span className="h-[14px] w-[14px] shrink-0" aria-hidden="true" />
-          <span className="shrink-0 text-[12px] text-fg-4">기준</span>
-          <span className="min-w-0 flex-1 truncate whitespace-nowrap">
-            {verification.criteria.map((criterion, index) => (
-              <span key={criterion.key}>
-                {index > 0 ? <span className="px-1 text-[12px] text-fg-4">·</span> : null}
-                <span className="font-mono text-[11px] text-fg-3">{criterion.key}</span>{" "}
-                <span className={`text-[12px] ${criterionStatusClass(criterion.status)}`}>
-                  {criterionStatusLabel(criterion.status)}
-                </span>
-              </span>
-            ))}
+          <AgentAvatar speaker={speakerOf(node)} />
+          <span className="text-[13px] font-medium">{token.name}</span>
+          <span className="rounded-[3px] border border-control px-1.5 text-[10px] text-muted">{unitWordOf(node)}</span>
+          <span className="truncate text-[11px] text-muted">{roleTextOf(node)}</span>
+          <span className="ml-auto shrink-0 text-[11px] text-muted">
+            {[
+              members.length > 0 ? `구성원 ${String(members.length)}` : "",
+              subUnits.length > 0 ? `하위 단위 ${String(subUnits.length)}` : "",
+            ]
+              .filter(Boolean)
+              .join(" · ")}
           </span>
+        </button>
+        {children.length > 0 ? (
+          <button
+            aria-expanded={!collapsed}
+            aria-label={`${token.name} 하위 ${collapsed ? "펼치기" : "접기"}`}
+            className="mx-1 my-1 flex w-7 shrink-0 items-center justify-center rounded-[5px] text-muted hover:bg-surface-2 hover:text-primary"
+            onClick={() => {
+              onToggle(node.handle);
+            }}
+            type="button"
+          >
+            {collapsed ? <CaretRight aria-hidden="true" size={14} /> : <CaretDown aria-hidden="true" size={14} />}
+          </button>
+        ) : null}
+      </div>
+      {!collapsed && members.length > 0 ? (
+        <div className="flex flex-wrap gap-1.5 p-2.5">
+          {members.map((member) => {
+            const active = member.handle === selectedHandle;
+            return (
+              <button
+                key={member.handle}
+                aria-pressed={active}
+                data-node={member.handle}
+                className={`inline-flex items-center gap-1.5 rounded-[5px] border py-1 pl-1.5 pr-2 text-[12px] outline-none ${active ? "border-control bg-surface-2" : "border-border bg-surface-1 hover:border-control"}`}
+                onClick={() => {
+                  onSelect(member.handle);
+                }}
+                type="button"
+              >
+                <AgentAvatar speaker={speakerOf(member)} />
+                <span className="font-medium">{agentIdentityToken(member.handle).name}</span>
+                <span className="text-[11px] text-muted">{roleTextOf(member)}</span>
+              </button>
+            );
+          })}
         </div>
       ) : null}
-      {verification.evidence ? <DefinitionRow label="근거">{verification.evidence}</DefinitionRow> : null}
+      {!collapsed && subUnits.length > 0 ? (
+        <div
+          className="space-y-2 py-2 pl-3 pr-2.5"
+          style={{ borderLeft: "2px solid var(--line-strong)", marginLeft: 14 }}
+        >
+          {subUnits.map((child) => (
+            <OrgUnit
+              key={child.handle}
+              node={child}
+              all={all}
+              collapsedHandles={collapsedHandles}
+              depth={depth + 1}
+              selectedHandle={selectedHandle}
+              onSelect={onSelect}
+              onToggle={onToggle}
+            />
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }
 
-function DefinitionRow({
-  label,
-  children,
-  valueClassName = "",
-}: {
-  label: string;
-  children: React.ReactNode;
-  valueClassName?: string;
-}) {
-  return (
-    <div className="grid h-[30px] grid-cols-[20px_auto_minmax(0,1fr)] items-center gap-2 rounded px-2">
-      <span className="h-[14px] w-[14px] shrink-0" aria-hidden="true" />
-      <span className="text-[12px] text-fg-4">{label}</span>
-      <span className={`min-w-0 truncate text-[13px] text-fg-2 ${valueClassName}`}>{children}</span>
-    </div>
-  );
-}
-
-function DetailSectionHeader({ label, count }: { label: string; count?: number }) {
-  return (
-    <p className="mt-4 flex h-8 items-center px-2 text-[12px] text-fg-4">
-      {label}
-      {count === undefined ? null : <span className="ml-1 tabular-nums">{count}</span>}
-    </p>
-  );
-}
-
-function LedgerRow({
-  event,
-  previousTime,
+function OrgTempTeam({
+  team,
+  all,
+  selected,
   onSelect,
 }: {
-  event: LedgerEvent;
-  previousTime: string | undefined;
+  team: OrganizationNodeView;
+  all: readonly OrganizationNodeView[];
+  selected: boolean;
   onSelect: (handle: string) => void;
 }) {
-  const time = event.time === previousTime ? "" : event.time;
-  const content = (
-    <>
-      <span className="font-mono text-right text-[11px] tabular-nums text-fg-4">{time}</span>
-      <span className="flex items-center justify-center" aria-hidden="true">
-        {event.human || event.gate ? (
-          <span className={`h-[6px] w-[6px] rounded-full ${event.gate ? "bg-gate" : "bg-fg-4"}`} />
-        ) : (
-          <span
-            className="h-4 w-0.5"
-            style={{ backgroundColor: event.subject ? subjectColor(event.subject) : "var(--fg-4)" }}
-          />
-        )}
-      </span>
-      <span aria-hidden="true" />
-      <span className="min-w-0 truncate whitespace-nowrap text-[13px] text-fg-2">{event.body}</span>
-      <span className="min-w-0 truncate text-[12px] text-fg-4">{event.meta}</span>
-      <span className="text-right text-[12px] text-fg-4" aria-hidden="true">
-        {event.human ? "" : event.targetHandle ? "›" : ""}
-      </span>
-    </>
-  );
-  const className =
-    "grid h-[30px] w-full grid-cols-[40px_8px_8px_minmax(0,auto)_minmax(0,1fr)_12px] items-center gap-0 rounded px-2 text-left";
-  return event.targetHandle ? (
-    <button
-      type="button"
-      aria-pressed={false}
-      onClick={() => {
-        onSelect(event.targetHandle as string);
-      }}
-      className={`${className} transition-[background-color] duration-150 hover:bg-[rgb(255_255_255_/_0.027)] focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-[var(--fg)]`}
-    >
-      {content}
-    </button>
-  ) : (
-    <div className={className}>{content}</div>
-  );
-}
-
-type Glyph = { symbol: string; className: string; label: string };
-
-function StatusGlyph({ kind, glyph }: { kind?: GlyphKind; glyph?: Glyph }) {
-  const resolvedGlyph = glyph ?? glyphFor(kind ?? "pending");
+  const parent = all.find((node) => node.handle === team.parentHandle);
   return (
-    <span
-      aria-label={resolvedGlyph.label}
-      className={`inline-flex h-[14px] w-[14px] shrink-0 items-center justify-center text-[14px] ${resolvedGlyph.className}`}
+    <button
+      aria-pressed={selected}
+      data-node={team.handle}
+      className={`block w-full rounded-[7px] border border-dashed border-agent-provisional px-3 py-2.5 text-left outline-none ${selected ? "bg-surface-1" : "hover:bg-surface-1"}`}
+      onClick={() => {
+        onSelect(team.handle);
+      }}
+      type="button"
     >
-      {resolvedGlyph.symbol}
-    </span>
+      <div className="flex items-center gap-2">
+        <AgentAvatar speaker={speakerOf(team)} />
+        <span className="text-[13px] font-medium">{agentIdentityToken(team.handle).name}</span>
+        <span className="text-[11px] text-muted">{team.name}</span>
+      </div>
+      <p className="mt-1 text-[11px] text-muted">
+        {parent ? `${agentIdentityToken(parent.handle).name} 아래 편성 · ` : ""}업무가 끝나면 사라집니다
+      </p>
+    </button>
   );
 }
 
-function verificationGlyphFor(verifications: readonly VerificationView[]): Glyph {
-  const criteria = verifications.flatMap((verification) => verification.criteria);
-  if (criteria.length > 0 && criteria.every((criterion) => criterion.status === "passed")) {
-    return { symbol: "◉", className: "text-fg-2", label: "검증 완료" };
-  }
-  if (criteria.some((criterion) => criterion.status === "failed")) {
-    return { symbol: "⊘", className: "text-halt", label: "미통과" };
-  }
-  if (criteria.some((criterion) => criterion.status === "blocked")) {
-    return { symbol: "◇", className: "text-gate", label: "막힘" };
-  }
-  return { symbol: "●", className: "text-fg-4", label: "완료" };
-}
+// ── 조직 지도 (B) ─────────────────────────────────────────────────
 
-type GlyphKind = "complete" | "verified" | "gate" | "blocked" | "pending";
+const ORG_MAP_NODE_W = 132;
+const ORG_MAP_ROW_H = 74;
 
-function glyphFor(kind: GlyphKind): { symbol: string; className: string; label: string } {
-  if (kind === "verified") return { symbol: "◉", className: "text-fg-2", label: "검증 완료" };
-  if (kind === "complete") return { symbol: "●", className: "text-fg-4", label: "완료" };
-  if (kind === "gate") return { symbol: "◇", className: "text-gate", label: "사람이 필요함" };
-  if (kind === "blocked") return { symbol: "⊘", className: "text-halt", label: "막힘" };
-  return { symbol: "○", className: "text-fg-4", label: "미시작" };
-}
-
-function WorkHistoryGlyph({ work }: { work: WorkView }) {
-  if (work.verifications.length > 0) return <StatusGlyph glyph={verificationGlyphFor(work.verifications)} />;
-  if (work.progress > 0) {
-    return (
-      <span
-        aria-hidden="true"
-        className="size-[14px] shrink-0 rounded-full"
-        style={{
-          background: `conic-gradient(var(--fg-3) ${String(work.progress)}%, transparent 0)`,
-          boxShadow: "inset 0 0 0 0.5px var(--fg-4)",
+function OrgMapNode({
+  data,
+}: {
+  data: { node: OrganizationNodeView; selected: boolean; unit: boolean; onSelect: (handle: string) => void };
+}) {
+  const { node, selected, unit, onSelect } = data;
+  const name = agentIdentityToken(node.handle).name;
+  return (
+    <div
+      className="rounded-[6px] p-0.5"
+      style={{
+        outline: selected ? "2px solid var(--focus-ring)" : "none",
+        outlineOffset: 1,
+        border: unit && node.scope !== "work" ? "1px solid var(--agent-4)" : "1px solid transparent",
+        borderRadius: 7,
+      }}
+    >
+      <Handle type="target" position={Position.Top} style={{ opacity: 0 }} />
+      <button
+        aria-label={`지도에서 ${name} 선택`}
+        aria-pressed={selected}
+        className="nopan block rounded-[5px]"
+        onClick={() => {
+          onSelect(node.handle);
         }}
-      />
-    );
-  }
-  return <StatusGlyph kind="pending" />;
-}
-
-function workHistoryFor(scope: readonly OrganizationNodeView[], works: readonly WorkView[]): WorkHistoryEntry[] {
-  return [...works].reverse().flatMap((work) => {
-    const relations: WorkRelation[] = [];
-    if (work.agents.some((agent) => scope.some((node) => agent.id === node.handle))) {
-      relations.push("execution");
-    }
-    if (
-      work.verifications.some((verification) =>
-        scope.some((node) => verifierMatches(verification.verifier, node.handle, agentIdentityToken(node.handle).name)),
-      )
-    ) {
-      relations.push("judgment");
-    }
-    return relations.length > 0 ? [{ work, relations }] : [];
-  });
-}
-
-function verificationsFor(scope: readonly OrganizationNodeView[], works: readonly WorkView[]) {
-  return [...works]
-    .reverse()
-    .flatMap((work) =>
-      work.verifications
-        .filter((verification) =>
-          scope.some((node) =>
-            verifierMatches(verification.verifier, node.handle, agentIdentityToken(node.handle).name),
-          ),
-        )
-        .map((verification) => ({ work, verification })),
-    );
-}
-
-function ledgerEventsFor(
-  descendants: readonly OrganizationNodeView[],
-  nodes: readonly OrganizationNodeView[],
-  works: readonly WorkView[],
-  history: readonly WorkHistoryEntry[],
-): LedgerEvent[] {
-  const events: LedgerEvent[] = [];
-  const nodeByHandle = new Map(nodes.map((node) => [node.handle, node]));
-  const descendantHandles = new Set(descendants.map((node) => node.handle));
-  const historyWorkIds = new Set(history.map((entry) => entry.work.id));
-  for (const work of [...works].reverse()) {
-    for (const activity of work.activities) {
-      const event = activityLedgerEvent(activity, work, nodeByHandle, descendantHandles, historyWorkIds);
-      if (event) events.push(event);
-    }
-    const assignedSubjects = descendants.filter((subject) =>
-      work.agents.some((agent) => agentNodeMatches(agent, subject)),
-    );
-    const firstAssigned = assignedSubjects[0];
-    if (firstAssigned) {
-      events.push({
-        id: `${work.id}-assignment`,
-        time: work.updatedAt,
-        body: `${work.title} 배치`,
-        meta: assignedSubjects.map((subject) => agentIdentityToken(subject.handle).name).join(" · "),
-        subject: firstAssigned,
-        targetHandle: firstAssigned.handle,
-      });
-    }
-    for (const subject of descendants) {
-      const matchingVerifications = work.verifications.filter((verification) =>
-        verifierMatches(verification.verifier, subject.handle, agentIdentityToken(subject.handle).name),
-      );
-      if (matchingVerifications.length > 0) {
-        const counts = criterionCountsFor(matchingVerifications);
-        events.push({
-          id: `${work.id}-${subject.handle}-judgment`,
-          time: work.updatedAt,
-          body: `${work.title} 판정`,
-          meta: verificationMeta(counts),
-          subject,
-          targetHandle: subject.handle,
-        });
-      }
-    }
-  }
-  for (const subject of descendants.filter((candidate) => candidate.scope === "work")) {
-    const parent = subject.parentHandle
-      ? nodes.find((candidate) => candidate.handle === subject.parentHandle)
-      : undefined;
-    events.push({
-      id: `${subject.handle}-formation`,
-      time: "",
-      body: `${agentIdentityToken(subject.handle).name} 편성`,
-      meta: parent ? `${agentIdentityToken(parent.handle).name} 아래` : "",
-      subject,
-      targetHandle: subject.handle,
-    });
-  }
-  return events;
-}
-
-function activityLedgerEvent(
-  activity: ActivityView,
-  work: WorkView,
-  nodeByHandle: ReadonlyMap<string, OrganizationNodeView>,
-  descendantHandles: ReadonlySet<string>,
-  historyWorkIds: ReadonlySet<string>,
-): LedgerEvent | undefined {
-  if (activity.kind === "message") {
-    if (!historyWorkIds.has(work.id)) return undefined;
-    return {
-      id: `${work.id}-${activity.id}`,
-      time: activity.time,
-      body: `요청 · ${activity.author}`,
-      meta: activity.content,
-      human: true,
-    };
-  }
-
-  if (activity.kind === "approval") {
-    if (!historyWorkIds.has(work.id)) return undefined;
-    return {
-      id: `${work.id}-${activity.id}`,
-      time: activity.time,
-      body: "승인 요청",
-      meta: activity.title,
-      gate: true,
-    };
-  }
-
-  if (activity.kind === "room") {
-    const subject = nodeByHandle.get(activity.speaker.handle);
-    const messageType = ROOM_MESSAGE_LABELS[activity.messageType];
-    if (!subject || !descendantHandles.has(subject.handle) || !messageType) return undefined;
-    return {
-      id: `${work.id}-${activity.id}`,
-      time: activity.time,
-      body: activity.recipient
-        ? `${messageType} · ${activity.recipient}`
-        : activity.target
-          ? `${messageType} · ${activity.target}`
-          : activity.signature
-            ? `${messageType} · 서명 ${activity.signature.by}`
-            : messageType,
-      meta: activity.content,
-      subject,
-      targetHandle: subject.handle,
-    };
-  }
-
-  if (activity.kind === "handoff") {
-    const subject = nodeByHandle.get(activity.from.handle);
-    if (!subject || !descendantHandles.has(subject.handle)) return undefined;
-    return {
-      id: `${work.id}-${activity.id}`,
-      time: activity.time,
-      body: "인계",
-      meta: activity.to ? `${activity.from.name} → ${activity.to.name}` : activity.from.name,
-      subject,
-      targetHandle: subject.handle,
-    };
-  }
-
-  if (activity.kind === "proposal") {
-    const subject = nodeByHandle.get(activity.speaker.handle);
-    if (!subject || !descendantHandles.has(subject.handle)) return undefined;
-    return {
-      id: `${work.id}-${activity.id}`,
-      time: activity.time,
-      body: "조직 변경 제안",
-      meta: activity.content,
-      subject,
-      targetHandle: subject.handle,
-    };
-  }
-
-  return undefined;
-}
-
-function criterionCounts(verification: VerificationView) {
-  return criterionCountsFor([verification]);
-}
-
-function criterionCountsFor(verifications: readonly VerificationView[]) {
-  return verifications.reduce(
-    (counts, verification) => {
-      for (const criterion of verification.criteria) counts[criterion.status] += 1;
-      return counts;
-    },
-    { passed: 0, failed: 0, blocked: 0, excluded: 0 },
+        type="button"
+      >
+        <AgentAvatar speaker={speakerOf(node)} />
+      </button>
+      <Handle type="source" position={Position.Bottom} style={{ opacity: 0 }} />
+    </div>
   );
 }
 
-function criterionSummary(counts: ReturnType<typeof criterionCountsFor>): string {
-  return [
-    counts.passed > 0 ? `통과 ${String(counts.passed)}` : "",
-    counts.failed > 0 ? `미통과 ${String(counts.failed)}` : "",
-    counts.blocked > 0 ? `막힘 ${String(counts.blocked)}` : "",
-    counts.excluded > 0 ? `제외 ${String(counts.excluded)}` : "",
-  ]
-    .filter(Boolean)
-    .join(" · ");
-}
+const orgMapNodeTypes = { orgMap: OrgMapNode };
 
-function verificationMeta(counts: ReturnType<typeof criterionCountsFor>): string {
-  return criterionSummary(counts);
-}
-
-function verifierMatches(verifier: string, handle: string, name: string): boolean {
-  const value = verifier.trim().toLowerCase();
-  return value === handle.toLowerCase() || value === name.toLowerCase();
-}
-
-function verifierNodeFor(verifier: string, nodes: readonly OrganizationNodeView[]): OrganizationNodeView | undefined {
-  return nodes.find((node) => verifierMatches(verifier, node.handle, agentIdentityToken(node.handle).name));
-}
-
-function nodeForAgent(agent: WorkView["agents"][number], nodes: readonly OrganizationNodeView[]) {
-  return nodes.find((node) => agentNodeMatches(agent, node));
-}
-
-function agentNodeMatches(agent: WorkView["agents"][number], node: OrganizationNodeView): boolean {
-  const nodeName = agentIdentityToken(node.handle).name;
-  return verifierMatches(agent.id, node.handle, nodeName) || verifierMatches(agent.name, node.handle, nodeName);
-}
-
-function criterionStatusLabel(status: VerificationView["criteria"][number]["status"]): string {
-  return status === "passed" ? "통과" : status === "failed" ? "미통과" : status === "blocked" ? "막힘" : "제외";
-}
-
-function criterionStatusClass(status: VerificationView["criteria"][number]["status"]): string {
-  return status === "passed"
-    ? "text-fg-2"
-    : status === "failed"
-      ? "text-halt"
-      : status === "blocked"
-        ? "text-gate"
-        : "text-fg-4";
-}
-
-function descendantsOf(node: OrganizationNodeView, nodes: readonly OrganizationNodeView[]): OrganizationNodeView[] {
-  const result: OrganizationNodeView[] = [node];
-  for (let index = 0; index < result.length; index += 1) {
-    const current = result[index];
-    if (!current) break;
-    result.push(...nodes.filter((candidate) => candidate.parentHandle === current.handle));
-  }
-  return result;
-}
-
-function lineageOf(node: OrganizationNodeView, nodes: readonly OrganizationNodeView[]): OrganizationNodeView[] {
-  const result: OrganizationNodeView[] = [node];
-  let current = node;
-  while (current.parentHandle) {
-    const parent = nodes.find((candidate) => candidate.handle === current.parentHandle);
-    if (!parent) break;
-    result.unshift(parent);
-    current = parent;
-  }
-  return result;
-}
-
-function depthOf(node: OrganizationNodeView, nodes: readonly OrganizationNodeView[]): number {
-  let depth = 0;
-  let current = node;
-  const seen = new Set<string>();
-  while (current.parentHandle && !seen.has(current.handle)) {
-    seen.add(current.handle);
-    const parent = nodes.find((candidate) => candidate.handle === current.parentHandle);
-    if (!parent) break;
-    depth += 1;
-    current = parent;
-  }
-  return depth;
-}
-
-function hasChildren(node: OrganizationNodeView, nodes: readonly OrganizationNodeView[]): boolean {
-  return nodes.some((candidate) => candidate.parentHandle === node.handle);
-}
-
-function involvementCount(node: OrganizationNodeView, works: readonly WorkView[]): number {
-  return works.reduce((count, work) => {
-    const assigned = work.agents.some((agent) => agent.id === node.handle);
-    const judged = work.verifications.some((verification) =>
-      verifierMatches(verification.verifier, node.handle, agentIdentityToken(node.handle).name),
-    );
-    return count + (assigned ? 1 : 0) + (judged ? 1 : 0);
-  }, 0);
-}
-
-function agentsOutsideOrganization(
-  works: readonly WorkView[],
-  nodes: readonly OrganizationNodeView[],
-): Array<{ id: string; name: string; role: string; involvement: number }> {
-  const nodeHandles = new Set(nodes.map((node) => node.handle));
-  const agents = new Map<string, { id: string; name: string; role: string; involvement: number }>();
-  for (const work of works) {
-    for (const agent of work.agents) {
-      if (nodeHandles.has(agent.id)) continue;
-      const existing = agents.get(agent.id);
-      if (existing) {
-        existing.involvement += 1;
+function OrgMap({
+  nodes,
+  selectedHandle,
+  onSelect,
+}: {
+  nodes: readonly OrganizationNodeView[];
+  selectedHandle: string | undefined;
+  onSelect: (handle: string) => void;
+}) {
+  const flow = useRef<ReactFlowInstance>(null);
+  const { rfNodes, rfEdges } = useMemo(() => {
+    const childrenOf = (handle: string) => nodes.filter((node) => node.parentHandle === handle);
+    const pos = new Map<string, { x: number; y: number }>();
+    let cursor = 0;
+    const place = (node: OrganizationNodeView, depth: number): number => {
+      const kids = childrenOf(node.handle);
+      let x: number;
+      if (kids.length === 0) {
+        x = cursor * ORG_MAP_NODE_W;
+        cursor += 1;
       } else {
-        agents.set(agent.id, { id: agent.id, name: agent.name, role: agent.role, involvement: 1 });
+        const xs = kids.map((kid) => place(kid, depth + 1));
+        const first = xs[0] ?? 0;
+        const last = xs[xs.length - 1] ?? first;
+        x = (first + last) / 2;
       }
-    }
-  }
-  return [...agents.values()];
+      pos.set(node.handle, { x, y: depth * ORG_MAP_ROW_H });
+      return x;
+    };
+    const rootNode = nodes.find((node) => node.parentHandle === undefined);
+    if (rootNode) place(rootNode, 0);
+    const rfNodes: RFNode[] = nodes.map((node) => ({
+      id: node.handle,
+      type: "orgMap",
+      position: pos.get(node.handle) ?? { x: 0, y: 0 },
+      data: { node, selected: node.handle === selectedHandle, unit: hasNestedNodes(node, nodes), onSelect },
+      draggable: false,
+      selectable: true,
+    }));
+    const rfEdges: RFEdge[] = nodes
+      .filter((node) => node.parentHandle !== undefined)
+      .map((node) => ({
+        id: `${node.parentHandle ?? ""}-${node.handle}`,
+        source: node.parentHandle ?? "",
+        target: node.handle,
+        type: "smoothstep",
+        style: {
+          stroke: node.scope === "work" ? "var(--agent-provisional)" : "var(--line-strong)",
+          strokeDasharray: node.scope === "work" ? "4 4" : undefined,
+          strokeWidth: 1.5,
+        },
+      }));
+    return { rfNodes, rfEdges };
+  }, [nodes, onSelect, selectedHandle]);
+
+  useEffect(() => {
+    if (!selectedHandle || !flow.current) return;
+    const selected = rfNodes.find((node) => node.id === selectedHandle);
+    if (!selected) return;
+    void flow.current.setCenter(selected.position.x + 12, selected.position.y + 12, {
+      duration: 180,
+      zoom: Math.max(flow.current.getZoom(), 0.65),
+    });
+  }, [rfNodes, selectedHandle]);
+
+  return (
+    <ReactFlow
+      nodes={rfNodes}
+      edges={rfEdges}
+      nodeTypes={orgMapNodeTypes}
+      fitView
+      fitViewOptions={{ padding: 0.12 }}
+      minZoom={0.3}
+      nodesDraggable={false}
+      nodesConnectable={false}
+      nodesFocusable={false}
+      edgesFocusable={false}
+      elementsSelectable={false}
+      proOptions={{ hideAttribution: true }}
+      colorMode="dark"
+      onInit={(instance) => {
+        flow.current = instance;
+      }}
+    >
+      <Background color="var(--line)" gap={20} />
+    </ReactFlow>
+  );
 }
 
+/**
+ * 배지에 들어가는 짧은 역할 문구.
+ *
+ * 내장 노드는 AGENT_ROLES의 표준 문구를 씁니다 — `Reflection, 개선안 평가…`의 첫 구절을 쓰면
+ * "Reflection"만 남습니다. 하지만 scope:"work"로 편성된 동적 노드는 AGENT_ROLES에 없어
+ * roleLabel이 handle로 떨어지므로(`quant-analysis`), 그때만 책임 첫 구절을 씁니다.
+ */
+function roleTextOf(node: OrganizationNodeView): string {
+  const token = agentIdentityToken(node.handle);
+  if (token.builtin) return token.roleLabel;
+  return node.responsibility.split(",")[0]?.trim() || token.roleLabel;
+}
+
+function speakerOf(node: OrganizationNodeView): SpeakerView {
+  const token = agentIdentityToken(node.handle, roleTextOf(node));
+  return {
+    handle: token.handle,
+    name: token.name,
+    initial: token.initial,
+    accentSlot: token.accentSlot,
+    role: token.roleLabel,
+    // scope:"work" 노드는 채우지 않고 점선으로만 그립니다. 협업방과 같은 문법입니다.
+    ...(node.scope === "work" ? { provisional: true } : {}),
+  };
+}
+
+/** NodeRole. room.tsx의 표와 같은 값을 쓰지만 여기서는 "직책"으로 읽힙니다. */
 function nodeRoleTextOf(role: string): string {
-  return ({ orchestrator: "총괄", coordinator: "조율", operator: "실행" } as Record<string, string>)[role] ?? role;
+  const labels: Record<string, string> = { orchestrator: "총괄", coordinator: "조율", operator: "실행" };
+  return labels[role] ?? role;
 }
 
 function nodeStatusLabel(status: string): string {
-  return ({ active: "일하는 중", inactive: "쉬는 중", retired: "물러남" } as Record<string, string>)[status] ?? status;
+  const labels: Record<string, string> = { active: "일하는 중", inactive: "쉬는 중", retired: "물러남" };
+  return labels[status] ?? status;
 }
 
+function scopeTextOf(scope: OrganizationNodeView["scope"]): string {
+  if (scope === "work") return "이 업무가 끝나면 사라집니다";
+  if (scope === "persistent") return "조직에 계속 남습니다";
+  // 계약이 scope를 주지 않습니다. 모르는 것을 "영속"으로 단정하면 임시 팀이 영구로 보입니다.
+  return "알 수 없습니다 — 계약이 범위를 알려주지 않습니다";
+}
+
+/**
+ * 노드 자신을 가리키는 capability(handle과 1:1, 또는 representative의 request-coordination)를
+ * 뺀 나머지. 여기 남는 것이 Extension·전문 조직이 실제로 더한 역량입니다.
+ */
 function extraCapabilitiesOf(node: OrganizationNodeView): readonly string[] {
   const own = new Set([node.handle, "request-coordination"]);
   return node.capabilities.filter((capability) => !own.has(capability));
-}
-
-function accentColor(slot: number): string {
-  return slot >= 0 && slot <= 7 ? `var(--agent-${String(slot)})` : "var(--fg-4)";
-}
-
-function subjectColor(node: OrganizationNodeView): string {
-  return accentColor(agentIdentityToken(node.handle).accentSlot);
 }
