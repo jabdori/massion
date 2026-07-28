@@ -1,5 +1,6 @@
 import {
   BellIcon as Bell,
+  BookOpenTextIcon as BookOpenText,
   BriefcaseIcon as Briefcase,
   CaretDownIcon as CaretDown,
   CaretRightIcon as CaretRight,
@@ -36,6 +37,7 @@ import { DecisionActions } from "@/room";
 import { ExtensionSurface, type AwaitingRegistryInstall } from "@/surfaces/capabilities";
 import { GrowthSurface } from "@/surfaces/growth";
 import { HomeSurface } from "@/surfaces/home";
+import { KnowledgeSurface } from "@/surfaces/knowledge";
 import { OrganizationSurface } from "@/surfaces/organization";
 import { SettingsSurface } from "@/surfaces/settings";
 import { NewWorkDialog, WorkActivity, WorkEmptySurface, WorkInspector, WorkList } from "@/surfaces/work";
@@ -46,6 +48,7 @@ const navItems = [
   { label: "홈", icon: House, surface: "home" },
   { label: "업무", icon: Briefcase, surface: "work" },
   { label: "조직", icon: TreeStructure, surface: "organization" },
+  { label: "지식", icon: BookOpenText, surface: "knowledge" },
   { label: "개선", icon: Star, surface: "growth" },
   { label: "확장", icon: PuzzlePiece, surface: "capabilities" },
   { label: "설정", icon: Gear, surface: "settings" },
@@ -521,6 +524,7 @@ function ProductSurface({
       />
     );
   if (surface === "organization") return <OrganizationSurface service={service} />;
+  if (surface === "knowledge") return <KnowledgeSurface onOpenWork={onOpenWork} service={service} />;
   if (surface === "growth")
     return (
       <GrowthSurface
