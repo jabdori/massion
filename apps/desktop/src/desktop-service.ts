@@ -217,6 +217,22 @@ export interface ModelRouteView {
   readonly primaryLocal?: boolean;
   /** 그 모델 프로필이 검증됐는지. */
   readonly primaryVerified?: boolean;
+  /**
+   * 우선순위 순서 그대로의 후보 사슬입니다. 첫 번째가 막히면 다음으로 넘어갑니다.
+   * 「모델 하나가 죽어도 조직은 계속 돈다」가 이 목록으로만 증명됩니다 — 개수만으로는 안 됩니다.
+   */
+  readonly candidates: readonly ModelRouteCandidateView[];
+}
+
+export interface ModelRouteCandidateView {
+  readonly modelId: string;
+  readonly providerId: string;
+  /** 이 모델이 이 컴퓨터에서 도는지. 로컬 우선 제품이라 데이터가 나가는지가 먼저 보여야 합니다. */
+  readonly local: boolean;
+  /** `model_verification_evidence`가 있는지. 카탈로그에 있는 것과 응답하는 것은 다릅니다. */
+  readonly verified: boolean;
+  /** 이 후보가 속한 Provider의 circuit이 열려 있으면 지금은 건너뜁니다. */
+  readonly blocked?: boolean;
 }
 
 /*
@@ -1390,6 +1406,15 @@ const fixtureSettings: SettingsView = {
         enabled: true,
       },
       {
+        modelProfileId: "profile-haiku",
+        providerId: "anthropic",
+        endpointId: "endpoint-anthropic",
+        modelId: "claude-haiku-4-5",
+        routeKind: "reasoning",
+        verified: true,
+        enabled: true,
+      },
+      {
         modelProfileId: "profile-qwen",
         providerId: "ollama",
         endpointId: "endpoint-ollama",
@@ -1405,6 +1430,20 @@ const fixtureSettings: SettingsView = {
         routeId: "route-reasoning",
         modelProfileId: "profile-glm",
         priority: 0,
+        enabled: true,
+      },
+      {
+        candidateId: "candidate-1b",
+        routeId: "route-reasoning",
+        modelProfileId: "profile-haiku",
+        priority: 1,
+        enabled: true,
+      },
+      {
+        candidateId: "candidate-1c",
+        routeId: "route-reasoning",
+        modelProfileId: "profile-qwen",
+        priority: 2,
         enabled: true,
       },
       {
@@ -2482,6 +2521,12 @@ export function projectModelRoutes(routes: unknown, catalog: unknown): readonly 
   const candidates = rows(source.candidates);
   const models = rows(source.models);
   const endpoints = rows(source.endpoints);
+  // circuit이 열린 Provider의 후보는 지금 건너뛰어집니다. 목록에서 지우지 않고 «건너뜀»으로 보입니다.
+  const openCircuits = new Set(
+    rows(source.circuits)
+      .filter((row) => str(row, "state") === "open")
+      .map((row) => str(row, "providerId")),
+  );
   return rows(routes)
     .filter((row) => typeof row.routeId === "string")
     .map((row) => {
@@ -2504,6 +2549,22 @@ export function projectModelRoutes(routes: unknown, catalog: unknown): readonly 
         ...(primary === undefined ? {} : { primaryModelId: str(primary, "modelId") }),
         ...(primary === undefined ? {} : { primaryVerified: bool(primary, "verified") }),
         ...(endpoint === undefined ? {} : { primaryLocal: bool(endpoint, "local") }),
+        candidates: mine.flatMap((candidate): ModelRouteCandidateView[] => {
+          const model = models.find((item) => str(item, "modelProfileId") === str(candidate, "modelProfileId"));
+          if (!model) return [];
+          const modelEndpoint = endpoints.find((item) => str(item, "endpointId") === str(model, "endpointId"));
+          const providerId = modelEndpoint ? str(modelEndpoint, "providerId") : "";
+          const circuit = openCircuits.has(providerId);
+          return [
+            {
+              modelId: str(model, "modelId"),
+              providerId,
+              local: modelEndpoint ? bool(modelEndpoint, "local") : false,
+              verified: bool(model, "verified"),
+              ...(circuit ? { blocked: true } : {}),
+            },
+          ];
+        }),
       };
     });
 }

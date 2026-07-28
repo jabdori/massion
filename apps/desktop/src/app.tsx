@@ -85,6 +85,7 @@ import type {
   ExtensionEntryView,
   GrowthSignalView,
   GrowthView,
+  ModelRouteView,
   KnowledgeGraphView,
   KnowledgeIndexView,
   KnowledgeLinkView,
@@ -3097,15 +3098,6 @@ function GrowthSurface({
   );
 }
 
-/** `kind:id`를 사람이 읽는 한 줄로. 조직 핸들이면 에이전트 이름으로 풉니다. */
-function growthSourceLabelOf(reference: string): string {
-  const separator = reference.indexOf(":");
-  if (separator < 0) return reference;
-  const kind = reference.slice(0, separator);
-  const id = reference.slice(separator + 1);
-  return `${growthSourceLabel[kind] ?? kind} ${id}`;
-}
-
 const growthSourceLabel: Record<string, string> = {
   work: "업무",
   message: "협업방 발언",
@@ -3235,6 +3227,70 @@ function growthEffectStatus(result: GrowthView["effects"][number]["result"]): st
       : result === "degraded"
         ? "저하 관찰"
         : "판단 보류";
+}
+
+/**
+ * 이 구역의 질문은 「어떤 요청이 어느 모델로」입니다. 그러니 모델 이름이 먼저 나와야 하고,
+ * 첫 모델이 막혔을 때 어디로 넘어가는지가 같이 보여야 합니다. 개수만 세면 둘 다 답하지 못합니다.
+ */
+function ModelRouteRow({ route }: { route: ModelRouteView }) {
+  const usable = route.candidates.filter((candidate) => candidate.blocked !== true);
+  const spentRatio = route.totalBudgetMicros > 0 ? Math.min(1, route.spentMicros / route.totalBudgetMicros) : undefined;
+  return (
+    <li className="py-2.5">
+      <div className="flex items-baseline gap-2">
+        <span className="text-[13px] font-medium text-primary">{route.name}</span>
+        {routeKindLabel(route.routeKind) === route.name ? null : (
+          <span className="text-[11px] text-muted">{routeKindLabel(route.routeKind)}</span>
+        )}
+        {route.totalBudgetMicros > 0 ? (
+          <span className="ml-auto shrink-0 font-mono text-[11px] text-muted">
+            {costText(route.spentMicros)} / {costText(route.totalBudgetMicros)}
+          </span>
+        ) : null}
+      </div>
+      {spentRatio === undefined ? null : (
+        <div className="mt-1 h-px w-full bg-border">
+          {/* 막대는 데이터라 이징하지 않습니다. 중간 프레임이 실제 값과 달라집니다. */}
+          <div
+            className="h-px bg-fg-3 transition-[width] duration-[250ms] ease-linear"
+            style={{ width: `${String(spentRatio * 100)}%` }}
+          />
+        </div>
+      )}
+      {!route.enabled ? (
+        <p className="mt-1.5 text-[11px] text-muted">꺼져 있습니다</p>
+      ) : route.candidates.length === 0 ? (
+        <p className="mt-1.5 text-[11px] text-danger">쓸 수 있는 모델이 없어 실행되지 않습니다</p>
+      ) : (
+        <ol className="mt-1.5 space-y-0.5">
+          {route.candidates.map((candidate, index) => {
+            // 지금 실제로 불릴 것은 «막히지 않은 첫 번째»입니다. 1순위가 막혔으면 2순위가 현재입니다.
+            const active = candidate === usable[0];
+            return (
+              <li className="flex items-baseline gap-2 text-[11px]" key={`${candidate.modelId}-${String(index)}`}>
+                <span className={`w-3 shrink-0 tabular-nums ${active ? "text-secondary" : "text-muted"}`}>
+                  {index + 1}
+                </span>
+                <span
+                  className={`font-mono ${candidate.blocked === true ? "text-muted line-through" : active ? "text-secondary" : "text-muted"}`}
+                >
+                  {candidate.modelId}
+                </span>
+                <span className="text-muted">{candidate.local ? "이 컴퓨터" : "외부"}</span>
+                {candidate.verified ? null : <span className="text-muted">확인 안 됨</span>}
+                {candidate.blocked === true ? <span className="text-danger">건너뜀</span> : null}
+                {active ? <span className="ml-auto shrink-0 text-muted">지금 이것</span> : null}
+              </li>
+            );
+          })}
+        </ol>
+      )}
+      {route.enabled && usable.length === 0 && route.candidates.length > 0 ? (
+        <p className="mt-1 text-[11px] text-danger">후보가 모두 막혀 이 종류의 실행이 멈춥니다</p>
+      ) : null}
+    </li>
+  );
 }
 
 /*
@@ -3613,28 +3669,7 @@ function SettingsSurface({ onEmergencyChanged, service }: { onEmergencyChanged: 
                     ) : (
                       <ul className="divide-y divide-border border-y border-border">
                         {routes.map((route) => (
-                          <li className="py-2.5" key={route.routeId}>
-                            <div className="flex items-baseline justify-between gap-2">
-                              <span className="text-[13px] font-medium">{route.name}</span>
-                              {/* 이름이 종류를 이미 말하면 같은 말을 두 번 하지 않습니다. */}
-                              {routeKindLabel(route.routeKind) === route.name ? null : (
-                                <span className="shrink-0 text-[11px] text-muted">
-                                  {routeKindLabel(route.routeKind)}
-                                </span>
-                              )}
-                            </div>
-                            <p className="mt-0.5 text-[11px] text-muted">
-                              {/* 경로가 켜져 있어도 후보가 없으면 실행되지 않습니다. 그 사실이 먼저입니다. */}
-                              {!route.enabled
-                                ? "꺼져 있습니다"
-                                : route.candidateCount === 0
-                                  ? "쓸 수 있는 모델이 없어 실행되지 않습니다"
-                                  : `모델 ${String(route.candidateCount)}개`}
-                              {route.totalBudgetMicros > 0
-                                ? ` · 예산 ${costText(route.spentMicros)} / ${costText(route.totalBudgetMicros)}`
-                                : ""}
-                            </p>
-                          </li>
+                          <ModelRouteRow key={route.routeId} route={route} />
                         ))}
                       </ul>
                     )}
@@ -3746,7 +3781,9 @@ function SettingsSurface({ onEmergencyChanged, service }: { onEmergencyChanged: 
                         <div className="mt-2 flex items-center gap-2">
                           <button
                             className="rounded-[5px] border border-border px-3 py-1 text-[12px] text-secondary"
-                            onClick={() => setFullAccessPending(false)}
+                            onClick={() => {
+                              setFullAccessPending(false);
+                            }}
                             type="button"
                           >
                             취소
