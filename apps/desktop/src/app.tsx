@@ -94,10 +94,13 @@ import type {
   OrganizationNodeView,
   OrganizationView,
   PermissionKind,
+  ProviderConnectionView,
+  ProviderHealthView,
   SettingsView,
   SubscriptionAccountView,
 } from "@/desktop-service";
 import {
+  effectiveGrowthMode,
   projectManifestDeclarations,
   projectModelRoutes,
   projectProviderConnections,
@@ -3234,6 +3237,155 @@ function growthEffectStatus(result: GrowthView["effects"][number]["result"]): st
         : "판단 보류";
 }
 
+/*
+ * 실패는 두 종류이고 사용자가 할 일이 다릅니다. 인증 실패는 사람이 키를 갈아야 풀리므로 gate,
+ * 나머지는 기다리거나 경로를 바꿔야 하므로 halt입니다. 한 색으로 뭉치면 무엇을 해야 할지 사라집니다.
+ */
+const PROVIDER_FAILURE_LABEL: Record<NonNullable<ProviderHealthView["lastFailureClass"]>, string> = {
+  authentication: "인증 거부",
+  "rate-limit": "요청 한도",
+  timeout: "응답 없음",
+  network: "연결 실패",
+  server: "서버 오류",
+  unknown: "원인 불명",
+};
+
+function providerNeedsPerson(health: ProviderHealthView | undefined): boolean {
+  return health?.lastFailureClass === "authentication";
+}
+
+/** 켜짐/꺼짐이 아니라 «지금 성한가»입니다. 초록은 쓰지 않으므로 정상은 가라앉힙니다. */
+function ProviderHealthMark({ health }: { health: ProviderHealthView | undefined }) {
+  if (!health) return <span className="text-muted">○</span>;
+  if (health.state === "closed") return <span className="text-muted">●</span>;
+  const tone = providerNeedsPerson(health) ? "text-gate" : "text-danger";
+  return <span className={tone}>{health.state === "open" ? "⊘" : "◐"}</span>;
+}
+
+/**
+ * 「모델을 지금 쓸 수 있나」에 먼저 답합니다. 전 경로가 막히면 그게 제한 모드이고,
+ * 제한 모드에서도 무엇이 계속 되는지를 말해야 «실패로 위장하지 않는다»가 화면에 섭니다
+ * (PRODUCT.md 원칙 4).
+ */
+function ModelPathHealth({ connections }: { connections: readonly ProviderConnectionView[] }) {
+  if (connections.length === 0) return null;
+  const usable = connections.filter((item) => item.enabled && item.health?.state !== "open");
+  const shaky = connections.filter((item) => item.enabled && item.health?.state === "half-open");
+  const blocked = connections.filter((item) => item.enabled && item.health?.state === "open");
+  const limited = usable.length === 0;
+  return (
+    <section
+      aria-label="모델 경로 상태"
+      className={`mb-4 border-y px-3 py-2.5 ${limited ? "border-danger/40 bg-surface-1" : "border-border"}`}
+    >
+      <div className="flex items-baseline gap-2">
+        <span className={limited ? "text-danger" : "text-muted"}>{limited ? "⊘" : "●"}</span>
+        <span className={`text-[13px] ${limited ? "font-medium text-danger" : "text-secondary"}`}>
+          {limited ? "제한 모드 · 쓸 수 있는 모델 경로가 없습니다" : `모델 경로 ${String(usable.length)}개 사용 가능`}
+        </span>
+        {shaky.length + blocked.length > 0 && !limited ? (
+          <span className="ml-auto text-[11px] text-muted">
+            {blocked.length ? `막힘 ${String(blocked.length)}` : ""}
+            {blocked.length && shaky.length ? " · " : ""}
+            {shaky.length ? `흔들림 ${String(shaky.length)}` : ""}
+          </span>
+        ) : null}
+      </div>
+      {limited ? (
+        // 무엇이 죽었는지보다 무엇이 살아 있는지가 먼저 필요합니다. 사용자는 지금 뭘 할 수 있나를 묻습니다.
+        <p className="mt-1.5 text-[12px] leading-5 text-secondary">
+          조회 · 승인 · 취소 · 진단 · 복구는 계속 동작합니다. 진행 중이던 실행은 실패가 아니라 재시도 가능한 상태로
+          남습니다.
+        </p>
+      ) : null}
+    </section>
+  );
+}
+
+function ProviderRow({ connection }: { connection: ProviderConnectionView }) {
+  const health = connection.health;
+  const failure = health?.lastFailureClass;
+  return (
+    <li className="py-2.5">
+      <div className="flex items-baseline gap-2">
+        <ProviderHealthMark health={health} />
+        <span className="text-[13px] font-medium text-primary">{connection.displayName}</span>
+        {connection.enabled ? null : <span className="text-[11px] text-muted">꺼짐</span>}
+        <span className="ml-auto shrink-0 text-[11px] text-muted">
+          {connection.verifiedModelCount === undefined ? (
+            // 검증 증거가 없는 것과 0개인 것은 다릅니다. 없으면 «모른다»고 말합니다.
+            "모델 확인 안 됨"
+          ) : (
+            <>
+              모델 <span className="tabular-nums">{connection.verifiedModelCount}</span>개 확인
+            </>
+          )}
+        </span>
+      </div>
+      {connection.endpoints.map((endpoint) => (
+        <p className="mt-0.5 pl-5 text-[11px] text-muted" key={endpoint.baseUrl}>
+          {endpoint.local ? "이 컴퓨터" : "외부"} · <span className="font-mono">{endpoint.baseUrl}</span>
+          {connection.credentialVersion === undefined ? null : (
+            <span className="font-mono"> · 키 v{connection.credentialVersion}</span>
+          )}
+        </p>
+      ))}
+      {health && health.state !== "closed" ? (
+        <p className={`mt-1 pl-5 text-[11px] ${providerNeedsPerson(health) ? "text-gate" : "text-danger"}`}>
+          {failure === undefined ? "실패" : PROVIDER_FAILURE_LABEL[failure]}
+          {health.failureCount > 0 ? <span className="tabular-nums"> · 연속 {health.failureCount}회</span> : null}
+          {health.state === "open" && health.openUntil !== undefined ? (
+            <span className="tabular-nums"> · {new Date(health.openUntil).toTimeString().slice(0, 5)}에 재시도</span>
+          ) : null}
+          {providerNeedsPerson(health) ? " · 키를 다시 등록해야 풀립니다" : ""}
+        </p>
+      ) : null}
+    </li>
+  );
+}
+
+/**
+ * 자가개선 채택은 실행 자율성과 다른 축입니다. 실행은 「이 일을 사람 없이 해도 되나」이고
+ * 자가개선은 「조직이 자기 프롬프트·기억·정책·조직을 사람 없이 고쳐도 되나」입니다.
+ * 전체 권한은 둘 다 묻지 않겠다는 선언이므로 여기서 파생되고 따로 고를 수 없습니다.
+ */
+function GrowthAdoptionBoundary({ autonomy }: { autonomy: AutonomyView }) {
+  const derived = autonomy.mode === "full-access";
+  const mode = effectiveGrowthMode(autonomy);
+  return (
+    <GrowthSection title="자가개선 채택">
+      <p className="text-[13px] leading-5 text-secondary">
+        {mode === undefined
+          ? "채택 방식이 아직 정해지지 않았습니다."
+          : mode === "auto"
+            ? "독립 신호 평가를 통과한 개선을 사람 확인 없이 채택합니다. 효과 비교와 되돌리기는 그대로 남습니다."
+            : "평가를 통과한 개선도 사람이 근거를 보고 승인해야 반영됩니다."}
+      </p>
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <span
+          className={`rounded-[5px] border px-3 py-1 text-[12px] ${
+            mode === "review" ? "border-control bg-surface-2 text-primary" : "border-border text-muted"
+          }`}
+        >
+          사람이 검토
+        </span>
+        <span
+          className={`rounded-[5px] border px-3 py-1 text-[12px] ${
+            mode === "auto" ? "border-control bg-surface-2 text-primary" : "border-border text-muted"
+          }`}
+        >
+          자동 채택
+        </span>
+        {derived ? <span className="text-[11px] text-muted">전체 권한이라 자동으로 고정됩니다</span> : null}
+      </div>
+      {/* 자동 채택이어도 사라지지 않는 것을 말합니다. 이게 «모델이 스스로 고치는 기능»과 갈리는 지점입니다. */}
+      <p className="mt-2 text-[11px] leading-4 text-muted">
+        어느 쪽이든 독립 신호 최소 1건, 채택 전후 효과 비교, 악화 시 되돌리기는 제거되지 않습니다.
+      </p>
+    </GrowthSection>
+  );
+}
+
 function SettingsSurface({ onEmergencyChanged, service }: { onEmergencyChanged: () => void; service: DesktopService }) {
   const [settings, setSettings] = useState<SettingsView>();
   const [autonomy, setAutonomy] = useState<AutonomyView>();
@@ -3493,26 +3645,14 @@ function SettingsSurface({ onEmergencyChanged, service }: { onEmergencyChanged: 
 
               {area.id === "providers" ? (
                 <>
+                  <ModelPathHealth connections={connections} />
                   <GrowthSection title="연결된 Provider">
                     {connections.length === 0 ? (
                       <p className="text-[12px] text-muted">연결된 Provider가 없습니다.</p>
                     ) : (
                       <ul className="divide-y divide-border border-y border-border">
                         {connections.map((connection) => (
-                          <li className="py-2.5" key={connection.providerId}>
-                            <div className="flex items-baseline justify-between gap-2">
-                              <span className="text-[13px] font-medium">{connection.displayName}</span>
-                              <span className="shrink-0 text-[11px] text-muted">
-                                {connection.enabled ? "사용 중" : "꺼짐"}
-                              </span>
-                            </div>
-                            {connection.endpoints.map((endpoint) => (
-                              <p className="mt-0.5 text-[11px] text-muted" key={endpoint.baseUrl}>
-                                {endpoint.local ? "이 컴퓨터" : "외부"} ·{" "}
-                                <span className="font-mono">{endpoint.baseUrl}</span>
-                              </p>
-                            ))}
-                          </li>
+                          <ProviderRow connection={connection} key={connection.providerId} />
                         ))}
                       </ul>
                     )}
@@ -3706,6 +3846,7 @@ function SettingsSurface({ onEmergencyChanged, service }: { onEmergencyChanged: 
                       ) : null}
                     </div>
                   </GrowthSection>
+                  <GrowthAdoptionBoundary autonomy={autonomy} />
                 </section>
               ) : null}
 

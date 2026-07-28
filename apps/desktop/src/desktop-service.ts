@@ -88,12 +88,26 @@ export interface OrganizationView {
   readonly nodes: readonly OrganizationNodeView[];
 }
 
+/**
+ * `GrowthAutomationMode`(packages/governance/src/contracts.ts:58). 실행 자율성과 «다른 축»입니다.
+ * 실행은 「지금 이 일을 사람 없이 해도 되나」이고, 자가개선은 「조직이 자기를 고쳐도 되나」입니다.
+ * 전체 권한은 둘 다 사람을 거치지 않겠다는 선언이므로 자가개선도 자동으로 물려받습니다.
+ */
+export type GrowthAdoptionMode = "review" | "auto";
+
 export interface AutonomyView {
   readonly mode: "automatic" | "review" | "full-access";
   readonly revision: number;
   readonly runtimePermissionStatus: "governed" | "full-access" | "limited";
   readonly permissionLimitReason?: string;
   readonly emergencyStopActive: boolean;
+  /** 없으면 아직 정해지지 않은 것이라 `review`로 단정하지 않고 화면이 «모른다»를 말합니다. */
+  readonly growthMode?: GrowthAdoptionMode;
+}
+
+/** 전체 권한이면 자가개선도 자동입니다. 이 파생은 화면이 아니라 여기 한 곳이 소유합니다. */
+export function effectiveGrowthMode(autonomy: AutonomyView): GrowthAdoptionMode | undefined {
+  return autonomy.mode === "full-access" ? "auto" : autonomy.growthMode;
 }
 
 export interface EmergencyView {
@@ -666,12 +680,40 @@ export interface KnowledgeIndexView {
 }
 
 /** `router.catalog.providers` + `.endpoints`. */
+/**
+ * `router_circuit.state`(packages/router/src/schema.ts). 이 Provider가 «지금 성한지»입니다.
+ * 설정이 구성만 보이고 상태를 안 보이면 사용자는 안 될 때 왜 안 되는지 알 수 없습니다.
+ */
+export type ProviderCircuitState = "closed" | "half-open" | "open";
+
+/** `router_circuit` 투영. 켜짐/꺼짐과 다른 축입니다 — 켜져 있는데 죽어 있을 수 있습니다. */
+export interface ProviderHealthView {
+  readonly state: ProviderCircuitState;
+  /** 연속 실패 횟수. closed여도 0이 아닐 수 있습니다. */
+  readonly failureCount: number;
+  /** open일 때 언제 다시 시도하는지. */
+  readonly openUntil?: string;
+  /** `route_attempt.failure_class`. 사용자가 할 일이 종류마다 다릅니다. */
+  readonly lastFailureClass?: "authentication" | "rate-limit" | "timeout" | "network" | "server" | "unknown";
+  readonly lastSucceededAt?: string;
+}
+
 export interface ProviderConnectionView {
   readonly providerId: string;
   readonly displayName: string;
   readonly adapterKind: string;
   readonly enabled: boolean;
   readonly endpoints: readonly { readonly name: string; readonly baseUrl: string; readonly local: boolean }[];
+  /** 없으면 «아직 한 번도 부르지 않았다»입니다. 성하다고 단정하지 않습니다. */
+  readonly health?: ProviderHealthView;
+  /**
+   * `model_verification_evidence`(immutable). 이 Provider의 모델이 실재한다는 증거입니다.
+   * 카탈로그에 이름이 있는 것과 실제로 응답하는 것은 다른 사실입니다.
+   */
+  readonly verifiedModelCount?: number;
+  readonly verifiedAt?: string;
+  /** `provider_credential.secret_version`. 키를 언제 갈았는지입니다. */
+  readonly credentialVersion?: number;
 }
 
 /** `subscription.accounts`. quota가 계정 행에 함께 실려 옵니다. */
@@ -1279,7 +1321,40 @@ const fixtureSettings: SettingsView = {
   catalog: {
     providers: [
       { providerId: "zai", displayName: "Z.ai", adapterKind: "openai-compatible", enabled: true },
+      { providerId: "anthropic", displayName: "Anthropic", adapterKind: "anthropic", enabled: true },
       { providerId: "ollama", displayName: "Ollama", adapterKind: "ollama", enabled: true },
+    ],
+    /*
+     * `router_circuit`. 켜짐/꺼짐과 다른 축이라 셋을 다 세워 둡니다 — 성한 것, 흔들리는 것,
+     * 막힌 것. 화면이 이 셋을 구분하지 못하면 사용자는 안 될 때 원인을 못 찾습니다.
+     */
+    circuits: [
+      { providerId: "zai", state: "closed", failureCount: 0, lastSucceededAt: "2026-07-28T02:24:11.000Z" },
+      {
+        providerId: "anthropic",
+        state: "half-open",
+        failureCount: 3,
+        lastFailureClass: "rate-limit",
+        lastSucceededAt: "2026-07-28T01:58:02.000Z",
+      },
+      {
+        providerId: "ollama",
+        state: "open",
+        failureCount: 7,
+        openUntil: "2026-07-28T02:41:00.000Z",
+        lastFailureClass: "network",
+        lastSucceededAt: "2026-07-27T22:03:40.000Z",
+      },
+    ],
+    /* `model_verification_evidence`(immutable). 카탈로그에 이름이 있는 것과 응답하는 것은 다릅니다. */
+    verificationEvidence: [
+      { providerId: "zai", modelId: "glm-5.2", verifiedAt: "2026-07-27T09:41:00.000Z" },
+      { providerId: "zai", modelId: "glm-5.2-air", verifiedAt: "2026-07-27T09:41:12.000Z" },
+      { providerId: "anthropic", modelId: "claude-haiku-4-5", verifiedAt: "2026-07-26T14:02:00.000Z" },
+    ],
+    credentials: [
+      { providerId: "zai", secretVersion: 3 },
+      { providerId: "anthropic", secretVersion: 1 },
     ],
     endpoints: [
       {
@@ -1287,6 +1362,13 @@ const fixtureSettings: SettingsView = {
         providerId: "zai",
         name: "coding-plan",
         baseUrl: "https://api.z.ai/v1",
+        local: false,
+      },
+      {
+        endpointId: "endpoint-anthropic",
+        providerId: "anthropic",
+        name: "messages",
+        baseUrl: "https://api.anthropic.com/v1",
         local: false,
       },
       {
@@ -1699,6 +1781,7 @@ export function createFixtureDesktopService(): DesktopService {
         mode: "automatic",
         revision: 0,
         runtimePermissionStatus: "governed",
+        growthMode: "review",
         emergencyStopActive: false,
       })),
     setAutonomy: (mode, expectedRevision) =>
@@ -1706,6 +1789,8 @@ export function createFixtureDesktopService(): DesktopService {
         mode,
         revision: expectedRevision + 1,
         runtimePermissionStatus: mode === "full-access" ? "full-access" : "governed",
+        // 전체 권한은 자가개선 채택도 사람을 거치지 않습니다. 파생이지 별도 설정이 아닙니다.
+        growthMode: mode === "full-access" ? "auto" : "review",
         emergencyStopActive: false,
       })),
     loadEmergency: () => fixturePromise(() => ({ active: false, revision: 0 })),
@@ -2349,6 +2434,7 @@ function projectAutonomy(value: GovernanceAutonomyViewV1 | Record<string, unknow
     ...(typeof source.permissionLimitReason === "string"
       ? { permissionLimitReason: source.permissionLimitReason }
       : {}),
+    ...(source.growthMode === "review" || source.growthMode === "auto" ? { growthMode: source.growthMode } : {}),
     emergencyStopActive: source.emergencyStopActive === true,
   };
 }
@@ -2422,24 +2508,67 @@ export function projectModelRoutes(routes: unknown, catalog: unknown): readonly 
     });
 }
 
+const CIRCUIT_STATES = new Set<ProviderCircuitState>(["closed", "half-open", "open"]);
+const FAILURE_CLASSES = new Set(["authentication", "rate-limit", "timeout", "network", "server", "unknown"]);
+
+/**
+ * `router.circuit` 행을 상태로 좁힙니다. 상태를 모르는 것과 성한 것은 다른 사실이므로
+ * 알아볼 수 없는 행은 `closed`로 채우지 않고 통째로 버립니다.
+ */
+function projectProviderHealth(row: Record<string, unknown> | undefined): ProviderHealthView | undefined {
+  if (!row) return undefined;
+  const state = row.state;
+  if (typeof state !== "string" || !CIRCUIT_STATES.has(state as ProviderCircuitState)) return undefined;
+  const failureClass = typeof row.lastFailureClass === "string" ? row.lastFailureClass : undefined;
+  return {
+    state: state as ProviderCircuitState,
+    failureCount: typeof row.failureCount === "number" && Number.isSafeInteger(row.failureCount) ? row.failureCount : 0,
+    ...(typeof row.openUntil === "string" ? { openUntil: row.openUntil } : {}),
+    ...(failureClass !== undefined && FAILURE_CLASSES.has(failureClass)
+      ? { lastFailureClass: failureClass as NonNullable<ProviderHealthView["lastFailureClass"]> }
+      : {}),
+    ...(typeof row.lastSucceededAt === "string" ? { lastSucceededAt: row.lastSucceededAt } : {}),
+  };
+}
+
 export function projectProviderConnections(catalog: unknown): readonly ProviderConnectionView[] {
   const source = catalog && typeof catalog === "object" ? (catalog as Record<string, unknown>) : {};
   const endpoints = rows(source.endpoints);
+  const circuits = rows(source.circuits);
+  const evidence = rows(source.verificationEvidence);
+  const credentials = rows(source.credentials);
   return rows(source.providers)
     .filter((row) => typeof row.providerId === "string")
-    .map((row) => ({
-      providerId: str(row, "providerId"),
-      displayName: str(row, "displayName"),
-      adapterKind: str(row, "adapterKind"),
-      enabled: bool(row, "enabled"),
-      endpoints: endpoints
-        .filter((endpoint) => str(endpoint, "providerId") === str(row, "providerId"))
-        .map((endpoint) => ({
-          name: str(endpoint, "name"),
-          baseUrl: str(endpoint, "baseUrl"),
-          local: bool(endpoint, "local"),
-        })),
-    }));
+    .map((row) => {
+      const providerId = str(row, "providerId");
+      const health = projectProviderHealth(circuits.find((item) => str(item, "providerId") === providerId));
+      const verified = evidence.filter((item) => str(item, "providerId") === providerId);
+      const credential = credentials.find((item) => str(item, "providerId") === providerId);
+      const verifiedAt = verified
+        .map((item) => str(item, "verifiedAt"))
+        .filter(Boolean)
+        .sort()
+        .at(-1);
+      return {
+        providerId,
+        displayName: str(row, "displayName"),
+        adapterKind: str(row, "adapterKind"),
+        enabled: bool(row, "enabled"),
+        endpoints: endpoints
+          .filter((endpoint) => str(endpoint, "providerId") === providerId)
+          .map((endpoint) => ({
+            name: str(endpoint, "name"),
+            baseUrl: str(endpoint, "baseUrl"),
+            local: bool(endpoint, "local"),
+          })),
+        ...(health ? { health } : {}),
+        ...(verified.length ? { verifiedModelCount: verified.length } : {}),
+        ...(verifiedAt ? { verifiedAt } : {}),
+        ...(credential && typeof credential.secretVersion === "number"
+          ? { credentialVersion: credential.secretVersion }
+          : {}),
+      };
+    });
 }
 
 export function projectSubscriptionAccounts(accounts: unknown): readonly SubscriptionAccountView[] {
