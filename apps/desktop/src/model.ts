@@ -595,7 +595,8 @@ const works: WorkView[] = [
       status: "blocked",
       stage: "evidence",
       leaseGeneration: 1,
-      blockedReason: "신뢰하지 않은 폴더 접근이 필요합니다",
+      // 도메인의 enum 슬러그입니다. 문장을 넣으면 화면의 원인 구별 분기가 통째로 죽습니다.
+      blockedReason: "workspace-untrusted",
     },
     approvals: [],
     tasks: [

@@ -217,6 +217,21 @@ const workStatusLabel: Record<WorkStatus, string> = {
   cancelled: "취소됨",
 };
 
+/** 목록 행은 Work 상태보다 «지금 무엇에 걸려 있나»를 먼저 말합니다. */
+function workRowLabel(work: WorkView): string {
+  if (work.status !== "active") return workStatusLabel[work.status];
+  if (work.run?.status === "blocked") return "중단됨";
+  if (work.run?.status === "awaiting-approval") return "승인 대기";
+  return workStatusLabel.active;
+}
+
+function workRowTone(work: WorkView): string {
+  if (work.status !== "active") return workStatusClass[work.status];
+  if (work.run?.status === "blocked") return "text-danger";
+  if (work.run?.status === "awaiting-approval") return "text-gate";
+  return workStatusClass.active;
+}
+
 const workStatusClass: Record<WorkStatus, string> = {
   active: "text-primary",
   complete: "text-muted",
@@ -5137,10 +5152,11 @@ function WorkList({
                   type="button"
                 >
                   <span className="block truncate text-[13px] font-medium text-primary">{work.title}</span>
+                  {/* 막힌 것과 승인을 기다리는 것은 「진행 중」이 아닙니다. 행이 상태를 말해야 찾아갈 수 있습니다. */}
                   <span className="mt-1 flex items-center justify-between gap-2 text-[11px]">
-                    <span className={`flex items-center gap-2 ${workStatusClass[work.status]}`}>
+                    <span className={`flex items-center gap-2 ${workRowTone(work)}`}>
                       <span aria-hidden="true" className="size-1.5 rounded-full bg-current" />
-                      {workStatusLabel[work.status]}
+                      {workRowLabel(work)}
                     </span>
                     <time className="font-mono text-muted">{work.updatedAt}</time>
                   </span>
@@ -5264,33 +5280,34 @@ function WorkActivity({
       className="grid h-full min-h-0 min-w-0 grid-rows-[46px_auto_minmax(0,1fr)_auto] bg-canvas"
     >
       <header className="flex min-w-0 items-center justify-between gap-4 border-b border-border px-4">
+        {/*
+         * 좁아질 때 무엇이 먼저 사라지는지가 곧 우선순위입니다. 제목과 상태, 그리고 방의 한도는
+         * 끝까지 남습니다 — 한도는 「항상 보인다」가 규칙입니다(DESIGN.md). 참가자 얼굴이 먼저
+         * 물러납니다. 편성 패널이 같은 사실을 다시 말하기 때문입니다.
+         *
+         * 제목만 shrink 가능하게 두면 제목이 모든 압축을 혼자 흡수해 다섯 글자로 잘립니다.
+         */}
         <div className="flex min-w-0 items-center gap-2.5">
-          <h1 className="truncate text-[16px] font-semibold tracking-[-0.02em]">{work.title}</h1>
-          <Badge tone={work.status === "complete" ? "success" : work.status === "failed" ? "danger" : "accent"}>
+          <h1 className="min-w-0 flex-1 truncate text-[16px] font-semibold tracking-[-0.02em]">{work.title}</h1>
+          <Badge
+            className="shrink-0 whitespace-nowrap"
+            tone={work.status === "complete" ? "success" : work.status === "failed" ? "danger" : "accent"}
+          >
             {workStatusLabel[work.status]}
           </Badge>
-          {/*
-           * 방이 화면의 주인이라는 사실을 헤더가 말해야 합니다.
-           * 참가자 얼굴과 라운드·비용이 여기 없으면 중앙이 그냥 대화 목록으로 읽힙니다.
-           */}
           {room ? (
             <>
-              <span aria-hidden="true" className="h-4 w-px shrink-0 bg-border" />
+              <span aria-hidden="true" className="hidden h-4 w-px shrink-0 bg-border min-[1280px]:block" />
               <span
-                className="flex shrink-0 items-center gap-1.5"
+                className="hidden shrink-0 items-center gap-1.5 min-[1280px]:flex"
                 title={`협업방 참가 ${String(room.participants.length)}명`}
               >
                 <SpeakerRow limit={5} speakers={room.participants} />
                 <span className="font-mono text-[11px] text-muted">참가 {room.participants.length}</span>
               </span>
-              {room.budgets.length ? (
-                <span className="hidden shrink-0 font-mono text-[11px] text-muted min-[1360px]:inline">
-                  {room.budgets.map((budget) => `${budget.label} ${budget.display}`).join(" · ")}
-                </span>
-              ) : null}
             </>
           ) : (
-            <Badge className="max-[1320px]:hidden">{work.team}</Badge>
+            <Badge className="hidden shrink-0 min-[1320px]:inline-flex">{work.team}</Badge>
           )}
         </div>
         <div className="flex items-center gap-1">
@@ -5335,7 +5352,7 @@ function WorkActivity({
                    * 폭이 무한히 자라지 않게 둘로 제한하고 나머지는 +N으로 알립니다.
                    */}
                   <SpeakerRow limit={2} speakers={candidate.participants} />
-                  <span className="text-[13px] font-medium">{candidate.name}</span>
+                  <span className="whitespace-nowrap text-[13px] font-medium">{candidate.name}</span>
                   {waiting ? (
                     <span aria-label="확인 필요" className="text-[11px] text-gate">
                       ◇
@@ -5388,6 +5405,7 @@ function WorkActivity({
       <Composer
         announcement={announcement}
         autonomyMode={work.autonomyMode ?? "automatic"}
+        closed={work.status !== "active"}
         effort={effort}
         models={models}
         onAnnouncement={onAnnouncement}
@@ -5440,6 +5458,12 @@ function runStageText(stage: string): string {
   return runStageLabel[stage] ?? stage;
 }
 
+/** 이 원인은 재시도로 풀리지 않습니다. 무엇을 먼저 해야 하는지가 버튼 라벨이어야 합니다. */
+function blockedActionText(reason: string | undefined): string | undefined {
+  if (reason === "workspace-untrusted") return "폴더 신뢰";
+  return undefined;
+}
+
 function blockedReasonText(reason: string | undefined): string {
   switch (reason) {
     case "context-strategy-stage-failed":
@@ -5481,9 +5505,11 @@ function RunStatusCard({
           <WarningCircle aria-hidden="true" className="mt-0.5 shrink-0 text-danger" size={16} />
           <div className="min-w-0 flex-1">
             <p className="text-[13px] text-danger">{blockedReasonText(run.blockedReason)}</p>
-            <p className="mt-0.5 text-[11px] text-muted">
-              {runStageText(run.stage)}에서 멈춤
-              {run.blockedReason ? <span className="ml-1.5 font-mono">{run.blockedReason}</span> : null}
+            <p className="mt-0.5 flex items-baseline gap-1.5 text-[11px] text-muted">
+              <span>{runStageText(run.stage)}에서 멈춤</span>
+              {run.blockedReason === undefined ? null : (
+                <span className="font-mono text-fg-4">{run.blockedReason}</span>
+              )}
             </p>
           </div>
           <button
@@ -5494,7 +5520,7 @@ function RunStatusCard({
             }}
             type="button"
           >
-            {pendingRunAction === "resume" ? "재개 중" : "다시 시도"}
+            {pendingRunAction === "resume" ? "재개 중" : (blockedActionText(run.blockedReason) ?? "다시 시도")}
           </button>
         </div>
       </div>
@@ -5514,19 +5540,12 @@ function RunStatusCard({
     );
   }
 
+  // 중단은 인풋이 소유합니다(Esc + 「중단」). 여기 또 두면 같은 행동이 두 낱말로 460px 떨어져 섭니다.
   return (
-    <div aria-label="실행 상태" className="my-2 flex items-center gap-2.5 px-1 py-1" role="status">
-      <span className="text-[11px] text-muted">{runStageText(run.stage)} 진행 중</span>
-      <button
-        className="ml-auto shrink-0 rounded-[4px] px-2 py-0.5 text-[11px] text-muted outline-none transition-colors duration-150 hover:text-danger disabled:opacity-50"
-        disabled={pendingRunAction !== undefined}
-        onClick={() => {
-          onControlRun("cancel");
-        }}
-        type="button"
-      >
-        {pendingRunAction === "cancel" ? "중단 중" : "중단"}
-      </button>
+    <div aria-label="실행 상태" className="my-2 flex items-baseline gap-2 px-1 py-1" role="status">
+      <span className="text-[11px] text-muted">{runStageText(run.stage)}</span>
+      <span className="text-[11px] text-fg-4">진행 중</span>
+      {pendingRunAction === "cancel" ? <span className="text-[11px] text-danger">중단 중</span> : null}
     </div>
   );
 }
@@ -5640,11 +5659,7 @@ function ActivityRow({
           {value.kind === "message" ? <span className="font-medium text-secondary">{value.author}</span> : null}
           <time className="font-mono">{value.time}</time>
         </div>
-        {value.kind === "message" ? (
-          <p className="rounded-md border border-border bg-surface-1 px-4 py-3 text-sm leading-6 text-secondary">
-            {value.content}
-          </p>
-        ) : null}
+        {value.kind === "message" ? <p className="text-sm leading-6 text-secondary">{value.content}</p> : null}
         {value.kind === "plan" ? <PlanActivity title={value.title} steps={value.steps} /> : null}
         {value.kind === "agents" ? <AgentsActivity agents={value.agents} title={value.title} /> : null}
         {value.kind === "approval" ? (
@@ -5679,14 +5694,8 @@ type MarkedActivity = Extract<
 function ActivityMarker({ value }: { value: MarkedActivity }) {
   if (value.kind === "message") {
     return (
-      <Avatar
-        className={
-          value.initials === "M"
-            ? "rounded-md border border-accent/60 bg-surface-1 text-accent"
-            : "border border-border"
-        }
-      >
-        <AvatarFallback className={value.initials === "M" ? "text-accent" : ""}>{value.initials}</AvatarFallback>
+      <Avatar className="border border-border">
+        <AvatarFallback>{value.initials}</AvatarFallback>
       </Avatar>
     );
   }
@@ -5694,7 +5703,7 @@ function ActivityMarker({ value }: { value: MarkedActivity }) {
   const icons = { plan: ListChecks, agents: UsersThree, approval: ShieldCheck, artifacts: Briefcase, event: Clock };
   const Icon = icons[value.kind];
   return (
-    <span className="flex size-8 items-center justify-center rounded-md border border-control text-secondary">
+    <span className="flex size-8 items-center justify-center rounded-[5px] border border-control text-secondary">
       <Icon aria-hidden="true" size={17} />
     </span>
   );
@@ -5702,7 +5711,7 @@ function ActivityMarker({ value }: { value: MarkedActivity }) {
 
 function PlanActivity({ steps, title }: { steps: TaskView[]; title: string }) {
   return (
-    <details className="group rounded-md border border-border bg-surface-1" open>
+    <details className="group rounded-[5px] border border-border bg-surface-1" open>
       <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 px-4 text-sm font-medium outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/70">
         {title}
         {/* 단계 수를 말합니다. 몇 개 중 몇 개를 보고 있는지 모르면 목록이 거짓말을 합니다. */}
@@ -5821,20 +5830,15 @@ function ArtifactsActivity({ artifacts, title }: { artifacts: ArtifactView[]; ti
           return (
             <div
               aria-label={`${artifact.name} 메타데이터`}
-              className="flex min-w-0 items-center gap-3 rounded-md border border-border px-3 py-2 text-left"
+              className="flex min-w-0 items-center gap-3 rounded-[5px] border border-border px-3 py-2 text-left"
               key={artifact.id}
             >
-              <Icon
-                aria-hidden="true"
-                className={artifact.format === "PDF" ? "text-danger" : "text-success"}
-                size={24}
-                weight="fill"
-              />
+              {/* 형식은 상태가 아닙니다. danger는 「막힘」 예약어라 PDF에 쓰지 않습니다. */}
+              <Icon aria-hidden="true" className="shrink-0 text-fg-3" size={24} weight="fill" />
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-xs text-primary">{artifact.name}</span>
                 <span className="font-mono text-[10px] text-muted">{artifact.size}</span>
               </span>
-              <span className="shrink-0 text-[10px] text-muted">열기·다운로드 미지원</span>
             </div>
           );
         })}
@@ -5873,6 +5877,8 @@ const EFFORT_LABEL: Record<ReasoningEffort, string> = { low: "낮음", medium: "
 
 interface ComposerProps {
   autonomyMode: WorkAutonomyMode;
+  /** 끝난 Work는 지시를 받지 않습니다. */
+  closed: boolean;
   effort: ReasoningEffort;
   modelId?: string;
   models: readonly string[];
@@ -5903,6 +5909,7 @@ interface ComposerProps {
 function Composer({
   announcement,
   autonomyMode,
+  closed,
   effort,
   modelId,
   models,
@@ -5979,7 +5986,8 @@ function Composer({
             onChange={(event) => {
               onChange(event.target.value);
             }}
-            placeholder="무엇이든 요청하세요"
+            disabled={closed}
+            placeholder={closed ? "끝난 업무입니다" : "무엇이든 요청하세요"}
             value={value}
           />
           <div className="flex items-center gap-1.5 px-2 pb-2">
@@ -6064,7 +6072,7 @@ function Composer({
               <button
                 aria-label="보내기"
                 className="ml-1 grid size-7 place-items-center rounded-full bg-fg text-canvas outline-none transition-opacity duration-150 hover:opacity-80 disabled:opacity-40"
-                disabled={!value.trim() || pending}
+                disabled={closed || !value.trim() || pending}
                 onClick={onSubmit}
                 type="button"
               >
@@ -6237,7 +6245,7 @@ function WorkInspector({
                       {artifact.format === "PDF" ? (
                         <FilePdf aria-hidden="true" className="text-danger" size={20} />
                       ) : (
-                        <FileCsv aria-hidden="true" className="text-success" size={20} />
+                        <FileCsv aria-hidden="true" className="text-fg-3" size={20} />
                       )}
                       <span className="min-w-0 flex-1">
                         <span className="block truncate text-xs text-primary">{artifact.name}</span>
@@ -6444,7 +6452,7 @@ function InspectorAgents({ agents }: { agents: AgentView[] }) {
             >
               <span
                 aria-hidden="true"
-                className={`size-1.5 rounded-full ${agent.state === "active" ? "bg-success" : "bg-muted"}`}
+                className={`size-1.5 rounded-full ${agent.state === "active" ? "bg-fg-3" : "bg-fg-4"}`}
               />
               {agent.state === "active" ? "진행 중" : "대기"}
             </span>
@@ -6672,8 +6680,7 @@ function InspectorRecords({
 }
 
 function StateIcon({ state }: { state: StepState }) {
-  if (state === "done")
-    return <CheckCircle aria-label="완료" className="shrink-0 text-success" size={16} weight="fill" />;
+  if (state === "done") return <CheckCircle aria-label="완료" className="shrink-0 text-fg-3" size={16} weight="fill" />;
   if (state === "failed")
     return <WarningCircle aria-label="실패" className="shrink-0 text-danger" size={16} weight="fill" />;
   return (
