@@ -10,7 +10,7 @@ import {
 } from "@massion/work";
 import type { MassionDatabase } from "@massion/storage";
 
-import type { RecordsRun } from "./contracts.js";
+import type { DocumentationImpactAssessment, RecordsRun } from "./contracts.js";
 import {
   evaluateDocumentationImpacts,
   type DocumentationImpactEvaluationInput,
@@ -21,7 +21,6 @@ import { renderDocument, type RecordsDocumentSource } from "./renderer.js";
 import {
   type CancelRecordsRunInput,
   RecordsRunStore,
-  type CompleteRecordsRunInput,
   type RecordDocumentationImpactsResult,
   type StartRecordsRunInput,
 } from "./run-store.js";
@@ -54,6 +53,8 @@ export interface RecordsCompletionResult {
 interface RecordsRunGateway {
   start(context: TenantContext, input: StartRecordsRunInput): Promise<RecordsRun>;
   get(context: TenantContext, recordsRunId: string): Promise<RecordsRun>;
+  findByStartCommand(context: TenantContext, startCommandId: string): Promise<RecordsRun | undefined>;
+  listAssessments(context: TenantContext, recordsRunId: string): Promise<readonly DocumentationImpactAssessment[]>;
   cancel(context: TenantContext, input: CancelRecordsRunInput): Promise<RecordsRun>;
   recordImpacts(
     context: TenantContext,
@@ -62,7 +63,6 @@ interface RecordsRunGateway {
     evaluation: ReturnType<typeof evaluateDocumentationImpacts>,
     proposals?: readonly DocumentationImpactProposalInput[],
   ): Promise<RecordDocumentationImpactsResult>;
-  complete(context: TenantContext, input: CompleteRecordsRunInput): Promise<RecordsRun>;
 }
 
 interface WorkRecordsProjectionGateway {
@@ -88,6 +88,17 @@ export class RecordsService {
 
   public async start(context: TenantContext, input: StartRecordsRunInput): Promise<RecordsRun> {
     return await this.runs.start(context, input);
+  }
+
+  public async findByStartCommand(context: TenantContext, startCommandId: string): Promise<RecordsRun | undefined> {
+    return await this.runs.findByStartCommand(context, startCommandId);
+  }
+
+  public async listAssessments(
+    context: TenantContext,
+    recordsRunId: string,
+  ): Promise<readonly DocumentationImpactAssessment[]> {
+    return await this.runs.listAssessments(context, recordsRunId);
   }
 
   public async cancel(context: TenantContext, input: CancelRecordsRunInput): Promise<RecordsRun> {
@@ -158,12 +169,10 @@ export class RecordsService {
       recordsRunId: run.recordsRunId,
       recordsSnapshotHash: run.snapshotHash,
       verificationId: run.verificationId,
+      expectedRecordsVersion: run.version,
     });
-    const completed = await this.runs.complete(context, {
-      commandId: `${run.recordsRunId}:terminal`,
-      recordsRunId: run.recordsRunId,
-      expectedVersion: run.version,
-    });
+    const completed = await this.runs.get(context, run.recordsRunId);
+    if (completed.status !== "completed") throw new Error("Records completion projection 결과가 completed가 아닙니다");
     return { run: completed, projection };
   }
 }

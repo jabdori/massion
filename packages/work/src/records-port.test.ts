@@ -7,6 +7,7 @@ import { createDatabase, type MassionDatabase } from "@massion/storage";
 
 import {
   WorkRecordsPort,
+  type CompleteRecordsProjectionInput,
   type FinalizeRecordsProjectionInput,
   type RecordsProjectionDocumentInput,
 } from "./records-port.js";
@@ -113,6 +114,21 @@ CREATE documentation_impact_assessment CONTENT { assessment_id: 'assessment-runb
     };
   }
 
+  function completionInput(
+    expectedRevision: number,
+    commandId: string = "records-run-1:complete",
+  ): CompleteRecordsProjectionInput {
+    return {
+      commandId,
+      workId,
+      expectedRevision,
+      expectedRecordsVersion: 3,
+      recordsRunId: "records-run-1",
+      recordsSnapshotHash: "a".repeat(64),
+      verificationId: "verification-1",
+    };
+  }
+
   it("문서 ArtifactVersion·WorkRecord·event와 Work N+2를 한 transaction에 만든다", async () => {
     const result = await port.finalize(context, input());
 
@@ -195,28 +211,143 @@ CREATE documentation_impact_assessment CONTENT { assessment_id: 'assessment-runb
     ).rejects.toThrow("Records projection");
   });
 
-  it("N+2 계보와 문서 checksum이 정확할 때만 N+3 completed를 만든다", async () => {
+  it("Work와 Records 완료를 함께 확정하고 replay·동시 호출에도 완료 event를 한 번만 만든다", async () => {
     const finalized = await port.finalize(context, input());
-    const completed = await port.complete(context, {
-      commandId: "records-run-1:complete",
-      workId,
-      expectedRevision: finalized.work.revision,
-      recordsRunId: "records-run-1",
-      recordsSnapshotHash: "a".repeat(64),
-      verificationId: "verification-1",
-    });
+    const completion = completionInput(finalized.work.revision);
+    const [completed, concurrent] = await Promise.all([
+      port.complete(context, completion),
+      port.complete(context, completion),
+    ]);
 
     expect(completed.work).toMatchObject({ status: "completed", revision: 7 });
     expect(completed.event.event_type).toBe("work_state_changed");
-    const repeated = await port.complete(context, {
-      commandId: "records-run-1:complete",
-      workId,
-      expectedRevision: finalized.work.revision,
-      recordsRunId: "records-run-1",
-      recordsSnapshotHash: "a".repeat(64),
-      verificationId: "verification-1",
-    });
+    expect(concurrent.event.event_id).toBe(completed.event.event_id);
+    const repeated = await port.complete(context, completion);
     expect(repeated.event.event_id).toBe(completed.event.event_id);
+    const [runs] = await database.query<
+      [Array<{ status: string; version: number; released: boolean; timestamped: boolean }>]
+    >(
+      "SELECT status, version, active_guard_key = NONE AS released, completed_at != NONE AS timestamped FROM records_run WHERE records_run_id = 'records-run-1';",
+    );
+    expect(runs).toEqual([{ status: "completed", version: 4, released: true, timestamped: true }]);
+    const [recordsEvents] = await database.query<
+      [Array<{ command_id: string; sequence: number; event_type: string; request_hash: string }>]
+    >(
+      "SELECT command_id, sequence, event_type, request_hash FROM records_event WHERE records_run_id = 'records-run-1' AND event_type = 'records_run_completed';",
+    );
+    expect(recordsEvents).toEqual([
+      {
+        command_id: "records-run-1:terminal",
+        sequence: 4,
+        event_type: "records_run_completed",
+        request_hash: sha256(
+          '{"input":{"commandId":"records-run-1:terminal","expectedVersion":3,"recordsRunId":"records-run-1"},"operation":"complete"}',
+        ),
+      },
+    ]);
+    const [workEvents] = await database.query<[Array<{ event_id: string }>]>(
+      "SELECT event_id FROM work_event WHERE organization_id = $organization_id AND command_id = 'records-run-1:complete';",
+      { organization_id: context.organizationId },
+    );
+    expect(workEvents).toHaveLength(1);
+  });
+
+  it("기존 분리 완료 상태를 replay하면 Work event 중복 없이 Records terminal을 복구한다", async () => {
+    const finalized = await port.finalize(context, input());
+    const completion = completionInput(finalized.work.revision);
+    const legacyEventId = crypto.randomUUID();
+    const legacyRequestJson = JSON.stringify({
+      commandId: completion.commandId,
+      expectedRevision: completion.expectedRevision,
+      recordsRunId: completion.recordsRunId,
+      recordsSnapshotHash: completion.recordsSnapshotHash,
+      verificationId: completion.verificationId,
+      workId: completion.workId,
+    });
+    await database.transaction(async (transaction) => {
+      await transaction.query(
+        "UPDATE work SET status = 'completed', revision += 1, updated_at = time::now() WHERE organization_id = $organization_id AND work_id = $work_id;",
+        { organization_id: context.organizationId, work_id: workId },
+      );
+      const [worksAfter] = await transaction.query<[Array<Record<string, unknown>>]>(
+        "SELECT * OMIT id FROM work WHERE organization_id = $organization_id AND work_id = $work_id;",
+        { organization_id: context.organizationId, work_id: workId },
+      );
+      const [eventsBefore] = await transaction.query<[Array<{ sequence: number }>]>(
+        "SELECT sequence FROM work_event WHERE organization_id = $organization_id AND work_id = $work_id;",
+        { organization_id: context.organizationId, work_id: workId },
+      );
+      const resultJson = JSON.stringify({
+        work: worksAfter[0],
+        event: { event_id: legacyEventId, event_type: "work_state_changed" },
+      });
+      await transaction.query(
+        "CREATE work_event CONTENT { event_id: $event_id, organization_id: $organization_id, work_id: $work_id, sequence: $sequence, command_id: $command_id, event_type: 'work_state_changed', actor_user_id: $actor_user_id, request_json: $request_json, payload_json: $payload_json, result_json: $result_json, created_at: time::now() };",
+        {
+          event_id: legacyEventId,
+          organization_id: context.organizationId,
+          work_id: workId,
+          sequence: eventsBefore.reduce((maximum, event) => Math.max(maximum, event.sequence), 0) + 1,
+          command_id: completion.commandId,
+          actor_user_id: context.userId,
+          request_json: legacyRequestJson,
+          payload_json: JSON.stringify({ from: "verifying", to: "completed", recordsRunId: completion.recordsRunId }),
+          result_json: resultJson,
+        },
+      );
+    });
+
+    const recovered = await port.complete(context, completion);
+
+    expect(recovered.event.event_id).toBe(legacyEventId);
+    const [runs] = await database.query<[Array<{ status: string; version: number }>]>(
+      "SELECT status, version FROM records_run WHERE records_run_id = 'records-run-1';",
+    );
+    expect(runs).toEqual([{ status: "completed", version: 4 }]);
+    const [workEvents] = await database.query<[Array<{ event_id: string }>]>(
+      "SELECT event_id FROM work_event WHERE organization_id = $organization_id AND command_id = $command_id;",
+      { organization_id: context.organizationId, command_id: completion.commandId },
+    );
+    expect(workEvents).toEqual([{ event_id: legacyEventId }]);
+  });
+
+  it("Records terminal write가 실패하면 Work와 Records 상태를 모두 유지한다", async () => {
+    const finalized = await port.finalize(context, input());
+    await database.query(
+      "DEFINE EVENT fail_records_terminal_write ON TABLE records_run WHEN $event = 'UPDATE' AND $after.status = 'completed' THEN { THROW 'injected records terminal failure'; };",
+    );
+
+    await expect(port.complete(context, completionInput(finalized.work.revision))).rejects.toThrow(
+      "injected records terminal failure",
+    );
+    const [worksAfter] = await database.query<[Array<{ status: string; revision: number }>]>(
+      "SELECT status, revision FROM work WHERE organization_id = $organization_id AND work_id = $work_id;",
+      { organization_id: context.organizationId, work_id: workId },
+    );
+    const [runsAfter] = await database.query<[Array<{ status: string; version: number }>]>(
+      "SELECT status, version FROM records_run WHERE organization_id = $organization_id AND records_run_id = 'records-run-1';",
+      { organization_id: context.organizationId },
+    );
+    expect(worksAfter).toEqual([{ status: "verifying", revision: 6 }]);
+    expect(runsAfter).toEqual([{ status: "finalized", version: 3 }]);
+  });
+
+  it("완료 transaction에서 tenant와 Records 계보 전체를 검증한다", async () => {
+    const finalized = await port.finalize(context, input());
+    const completion = completionInput(finalized.work.revision);
+
+    await expect(port.complete(otherContext, completion)).rejects.toThrow("찾을 수 없습니다");
+    await expect(port.complete(context, { ...completion, workId: "other-work" })).rejects.toThrow("찾을 수 없습니다");
+    await expect(port.complete(context, { ...completion, expectedRevision: 5 })).rejects.toThrow("상태 또는 revision");
+    await expect(port.complete(context, { ...completion, expectedRecordsVersion: 2 })).rejects.toThrow("계보");
+    await expect(port.complete(context, { ...completion, verificationId: "other-verification" })).rejects.toThrow(
+      "계보",
+    );
+    await expect(port.complete(context, { ...completion, recordsSnapshotHash: "b".repeat(64) })).rejects.toThrow(
+      "계보",
+    );
+    await database.query("UPDATE records_run SET target_work_revision = 4 WHERE records_run_id = 'records-run-1';");
+    await expect(port.complete(context, completion)).rejects.toThrow("계보");
   });
 
   it("문서 Artifact 내용 변조와 direct completed 우회를 DB gate에서 거부한다", async () => {
@@ -237,12 +368,7 @@ CREATE documentation_impact_assessment CONTENT { assessment_id: 'assessment-runb
     );
     await expect(
       port.complete(context, {
-        commandId: "records-run-1:complete",
-        workId,
-        expectedRevision: finalized.work.revision,
-        recordsRunId: "records-run-1",
-        recordsSnapshotHash: "a".repeat(64),
-        verificationId: "verification-1",
+        ...completionInput(finalized.work.revision),
       }),
     ).rejects.toThrow("checksum");
   });

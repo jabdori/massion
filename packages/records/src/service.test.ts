@@ -45,6 +45,8 @@ function dependencies() {
   const runStore = {
     start: vi.fn(async () => current),
     get: vi.fn(async () => current),
+    findByStartCommand: vi.fn(async () => current),
+    listAssessments: vi.fn(async () => []),
     cancel: vi.fn(async () => {
       current = { ...run("cancelled"), completedAt: now };
       return current;
@@ -63,9 +65,10 @@ function dependencies() {
       current = { ...run("finalized"), version: 3 };
       return { input } as unknown as FinalizeRecordsProjectionResult;
     }),
-    complete: vi.fn(
-      async (_context: TenantContext, input: unknown) => ({ input }) as unknown as CompleteRecordsProjectionResult,
-    ),
+    complete: vi.fn(async (_context: TenantContext, input: unknown) => {
+      current = { ...run("completed"), version: 4, completedAt: now };
+      return { input } as unknown as CompleteRecordsProjectionResult;
+    }),
   };
   return { runStore, workPort };
 }
@@ -86,6 +89,16 @@ describe("Records service orchestration", () => {
 
     expect(await service.start(context, input)).toEqual(run());
     expect(deps.runStore.start).toHaveBeenCalledWith(context, input);
+  });
+
+  it("start command 조회와 assessment 조회를 RecordsRunStore에 위임한다", async () => {
+    const deps = dependencies();
+    const service = new RecordsService(deps.runStore, deps.workPort);
+
+    await expect(service.findByStartCommand(context, "records:start")).resolves.toEqual(run());
+    await expect(service.listAssessments(context, "records-run-1")).resolves.toEqual([]);
+    expect(deps.runStore.findByStartCommand).toHaveBeenCalledWith(context, "records:start");
+    expect(deps.runStore.listAssessments).toHaveBeenCalledWith(context, "records-run-1");
   });
 
   it("active Records run cancellation을 RecordsRunStore에 위임한다", async () => {
@@ -188,23 +201,22 @@ describe("Records service orchestration", () => {
     ).rejects.toThrow("rendering");
   });
 
-  it("N+3 Work completion 뒤 Records run을 terminal completed로 확정한다", async () => {
+  it("Work와 Records run을 한 projection에서 완료하고 저장된 completed run을 다시 읽는다", async () => {
     const deps = dependencies();
     await deps.runStore.recordImpacts(context, "prepare", "records-run-1", {} as DocumentationImpactEvaluation);
     await deps.workPort.finalize(context, {} as FinalizeRecordsProjectionInput);
     const service = new RecordsService(deps.runStore, deps.workPort);
+    deps.runStore.get.mockClear();
+    deps.runStore.complete.mockClear();
 
     const result = await service.complete(context, { recordsRunId: "records-run-1" });
 
     expect(result.run.status).toBe("completed");
     expect(deps.workPort.complete).toHaveBeenCalledWith(
       context,
-      expect.objectContaining({ commandId: "records-run-1:complete", expectedRevision: 10 }),
+      expect.objectContaining({ commandId: "records-run-1:complete", expectedRevision: 10, expectedRecordsVersion: 3 }),
     );
-    expect(deps.runStore.complete).toHaveBeenCalledWith(context, {
-      commandId: "records-run-1:terminal",
-      recordsRunId: "records-run-1",
-      expectedVersion: 3,
-    });
+    expect(deps.runStore.complete).not.toHaveBeenCalled();
+    expect(deps.runStore.get).toHaveBeenCalledTimes(2);
   });
 });

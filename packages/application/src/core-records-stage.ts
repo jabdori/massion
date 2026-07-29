@@ -66,7 +66,10 @@ export class CoreRecordsStage implements CoreWorkStageExecutor {
   public constructor(
     private readonly dependencies: {
       readonly works: Pick<WorkService, "recoverWork">;
-      readonly records: Pick<RecordsService, "start" | "cancel" | "proposeImpacts" | "finalize" | "complete">;
+      readonly records: Pick<
+        RecordsService,
+        "start" | "findByStartCommand" | "listAssessments" | "cancel" | "proposeImpacts" | "finalize" | "complete"
+      >;
       readonly documents: CoreRecordsDocumentPlanner;
     },
   ) {}
@@ -82,169 +85,215 @@ export class CoreRecordsStage implements CoreWorkStageExecutor {
     this.throwIfCancelled(input);
     if (!input.workId) throw new Error("Records stage에 Work ID가 없습니다");
     const workId = input.workId;
-    const recovery = await this.dependencies.works.recoverWork(context, workId);
-    this.throwIfCancelled(input);
-    const verification = [...recovery.verifications]
-      .filter((item) => item.passed)
-      .sort((left, right) => left.projected_work_revision - right.projected_work_revision)
-      .at(-1);
-    if (!verification) return { outcome: "blocked", reason: "passed-verification-required" };
-    const plan = recovery.plans.find((candidate) => candidate.plan_version_id === recovery.work.active_plan_version_id);
-    if (!plan) return { outcome: "blocked", reason: "strategy-plan-missing" };
-    const artifacts = new Map(recovery.artifacts.map((artifact) => [artifact.artifact_id, artifact]));
-    const snapshot = createRecordsSnapshot({
-      organizationId: context.organizationId,
-      rendererVersion: RECORDS_MARKDOWN_RENDERER_VERSION,
-      work: {
-        organizationId: context.organizationId,
-        workId,
-        status: recovery.work.status,
-        revision: recovery.work.revision,
-        organizationVersionId: recovery.work.organization_version_id,
-        activePlanVersionId: plan.plan_version_id,
-        ...(recovery.work.context_version_id ? { contextVersionId: recovery.work.context_version_id } : {}),
-        ...(recovery.work.policy_version_id ? { policyVersionId: recovery.work.policy_version_id } : {}),
-        ...(recovery.work.prompt_version_id ? { promptVersionId: recovery.work.prompt_version_id } : {}),
-        artifactVersionIds: recovery.work.artifact_version_ids,
-      },
-      plan: {
-        organizationId: context.organizationId,
-        workId,
-        planVersionId: plan.plan_version_id,
-        checksum: sha256(plan.content_json),
-      },
-      events: recovery.events.map((event) => ({
-        organizationId: context.organizationId,
-        workId,
-        eventId: event.event_id,
-        sequence: event.sequence,
-        eventType: event.event_type,
-        requestHash: sha256(event.request_json),
-        resultHash: sha256(event.result_json),
-        ...(event.caused_by_event_id ? { causedByEventId: event.caused_by_event_id } : {}),
-      })),
-      decisionMessages: recovery.messages
-        .filter((message) => message.message_type === "decision")
-        .map((message) => ({
-          organizationId: context.organizationId,
-          workId,
-          messageId: message.message_id,
-          sequence: message.sequence,
-          contentHash: sha256(message.content),
-          ...(message.reply_to_message_id ? { replyToMessageId: message.reply_to_message_id } : {}),
-          ...(message.caused_by_message_id ? { causedByMessageId: message.caused_by_message_id } : {}),
-        })),
-      artifactVersions: recovery.artifactVersions.map((version) => {
-        const artifact = artifacts.get(version.artifact_id);
-        if (!artifact) throw new Error("ArtifactVersion의 Artifact를 찾을 수 없습니다");
-        return {
-          organizationId: context.organizationId,
-          workId,
-          artifactId: artifact.artifact_id,
-          artifactVersionId: version.artifact_version_id,
-          kind: artifact.kind,
-          name: artifact.name,
-          checksum: version.checksum,
-        };
-      }),
-      verification: {
-        organizationId: context.organizationId,
-        workId,
-        verificationId: verification.verification_id,
-        passed: verification.passed,
-        targetWorkRevision: verification.target_work_revision,
-        projectedWorkRevision: verification.projected_work_revision,
-        assuranceRunId: verification.assurance_run_id,
-        assuranceSnapshotHash: verification.snapshot_hash,
-        profileId: verification.profile_id,
-        profileVersion: verification.profile_version,
-        bindingVersionId: verification.binding_version_id,
-        evidenceArtifactVersionId: verification.evidence_artifact_version_id,
-      },
-      governanceReferences: [],
-    });
-    this.throwIfCancelled(input);
-    const run = await this.dependencies.records.start(context, {
-      commandId: `${input.commandId}:start`,
-      workId,
-      targetWorkRevision: recovery.work.revision,
-      verificationId: verification.verification_id,
-      assuranceRunId: verification.assurance_run_id,
-      snapshotHash: snapshot.hash,
-      rendererVersion: RECORDS_MARKDOWN_RENDERER_VERSION,
-    });
-    if (run.status === "completed") {
-      this.throwIfCancelled(input);
-      return { outcome: "advanced", data: { recordsRunId: run.recordsRunId } };
+    let run = await this.dependencies.records.findByStartCommand(context, `${input.commandId}:start`);
+    if (run && run.workId !== workId) throw new Error("Records run의 Work가 stage Work와 다릅니다");
+    if (run?.status === "completed") {
+      return { outcome: "advanced", data: { recordsRunId: run.recordsRunId, snapshotHash: run.snapshotHash } };
     }
-    const active: ActiveRecordsRun = { recordsRunId: run.recordsRunId };
-    this.activeRecordsRuns.set(input.commandId, active);
+    if (run?.status === "blocked" || run?.status === "cancelled") {
+      return { outcome: "blocked", reason: `records-${run.status}` };
+    }
+    if (!run) this.throwIfCancelled(input);
+    let active: ActiveRecordsRun | undefined = run ? { recordsRunId: run.recordsRunId } : undefined;
+    if (active) this.activeRecordsRuns.set(input.commandId, active);
     try {
-      await this.cancelAndThrowIfCancelled(context, input, run.recordsRunId);
-      const sourceReferences: DocumentationSourceReference[] = [
-        {
-          referenceId: verification.verification_id,
-          organizationId: context.organizationId,
+      if (run) await this.cancelAndThrowIfCancelled(context, input, run.recordsRunId);
+      let continuation:
+        | {
+            readonly recovery: WorkRecoveryBundle;
+            readonly verification: WorkRecoveryBundle["verifications"][number];
+          }
+        | undefined;
+      if (run?.status !== "finalized") {
+        const recovery = await this.dependencies.works.recoverWork(context, workId);
+        if (run) await this.cancelAndThrowIfCancelled(context, input, run.recordsRunId);
+        else this.throwIfCancelled(input);
+        const verification = run
+          ? recovery.verifications.find((item) => item.passed && item.verification_id === run?.verificationId)
+          : [...recovery.verifications]
+              .filter((item) => item.passed)
+              .sort((left, right) => left.projected_work_revision - right.projected_work_revision)
+              .at(-1);
+        if (!verification) return { outcome: "blocked", reason: "passed-verification-required" };
+        const plan = recovery.plans.find(
+          (candidate) => candidate.plan_version_id === recovery.work.active_plan_version_id,
+        );
+        if (!plan) return { outcome: "blocked", reason: "strategy-plan-missing" };
+        continuation = { recovery, verification };
+        if (!run) {
+          const artifacts = new Map(recovery.artifacts.map((artifact) => [artifact.artifact_id, artifact]));
+          const snapshot = createRecordsSnapshot({
+            organizationId: context.organizationId,
+            rendererVersion: RECORDS_MARKDOWN_RENDERER_VERSION,
+            work: {
+              organizationId: context.organizationId,
+              workId,
+              status: recovery.work.status,
+              revision: recovery.work.revision,
+              organizationVersionId: recovery.work.organization_version_id,
+              activePlanVersionId: plan.plan_version_id,
+              ...(recovery.work.context_version_id ? { contextVersionId: recovery.work.context_version_id } : {}),
+              ...(recovery.work.policy_version_id ? { policyVersionId: recovery.work.policy_version_id } : {}),
+              ...(recovery.work.prompt_version_id ? { promptVersionId: recovery.work.prompt_version_id } : {}),
+              artifactVersionIds: recovery.work.artifact_version_ids,
+            },
+            plan: {
+              organizationId: context.organizationId,
+              workId,
+              planVersionId: plan.plan_version_id,
+              checksum: sha256(plan.content_json),
+            },
+            events: recovery.events.map((event) => ({
+              organizationId: context.organizationId,
+              workId,
+              eventId: event.event_id,
+              sequence: event.sequence,
+              eventType: event.event_type,
+              requestHash: sha256(event.request_json),
+              resultHash: sha256(event.result_json),
+              ...(event.caused_by_event_id ? { causedByEventId: event.caused_by_event_id } : {}),
+            })),
+            decisionMessages: recovery.messages
+              .filter((message) => message.message_type === "decision")
+              .map((message) => ({
+                organizationId: context.organizationId,
+                workId,
+                messageId: message.message_id,
+                sequence: message.sequence,
+                contentHash: sha256(message.content),
+                ...(message.reply_to_message_id ? { replyToMessageId: message.reply_to_message_id } : {}),
+                ...(message.caused_by_message_id ? { causedByMessageId: message.caused_by_message_id } : {}),
+              })),
+            artifactVersions: recovery.artifactVersions.map((version) => {
+              const artifact = artifacts.get(version.artifact_id);
+              if (!artifact) throw new Error("ArtifactVersion의 Artifact를 찾을 수 없습니다");
+              return {
+                organizationId: context.organizationId,
+                workId,
+                artifactId: artifact.artifact_id,
+                artifactVersionId: version.artifact_version_id,
+                kind: artifact.kind,
+                name: artifact.name,
+                checksum: version.checksum,
+              };
+            }),
+            verification: {
+              organizationId: context.organizationId,
+              workId,
+              verificationId: verification.verification_id,
+              passed: verification.passed,
+              targetWorkRevision: verification.target_work_revision,
+              projectedWorkRevision: verification.projected_work_revision,
+              assuranceRunId: verification.assurance_run_id,
+              assuranceSnapshotHash: verification.snapshot_hash,
+              profileId: verification.profile_id,
+              profileVersion: verification.profile_version,
+              bindingVersionId: verification.binding_version_id,
+              evidenceArtifactVersionId: verification.evidence_artifact_version_id,
+            },
+            governanceReferences: [],
+          });
+          this.throwIfCancelled(input);
+          run = await this.dependencies.records.start(context, {
+            commandId: `${input.commandId}:start`,
+            workId,
+            targetWorkRevision: recovery.work.revision,
+            verificationId: verification.verification_id,
+            assuranceRunId: verification.assurance_run_id,
+            snapshotHash: snapshot.hash,
+            rendererVersion: RECORDS_MARKDOWN_RENDERER_VERSION,
+          });
+          if (run.status === "completed") {
+            this.throwIfCancelled(input);
+            return { outcome: "advanced", data: { recordsRunId: run.recordsRunId, snapshotHash: run.snapshotHash } };
+          }
+          if (run.status === "blocked" || run.status === "cancelled") {
+            this.throwIfCancelled(input);
+            return { outcome: "blocked", reason: `records-${run.status}` };
+          }
+          active = { recordsRunId: run.recordsRunId };
+          this.activeRecordsRuns.set(input.commandId, active);
+          await this.cancelAndThrowIfCancelled(context, input, run.recordsRunId);
+        }
+      }
+      if (!run) throw new Error("Records run을 시작하지 못했습니다");
+      if (run.status !== "finalized") {
+        if (!continuation) throw new Error("Records continuation 정본이 없습니다");
+        const { recovery, verification } = continuation;
+        const sourceReferences: DocumentationSourceReference[] = [
+          {
+            referenceId: verification.verification_id,
+            organizationId: context.organizationId,
+            workId,
+            sourceType: "verification",
+          },
+          ...recovery.events.map((event) => ({
+            referenceId: event.event_id,
+            organizationId: context.organizationId,
+            workId,
+            sourceType: "event" as const,
+          })),
+          ...recovery.messages.map((message) => ({
+            referenceId: message.message_id,
+            organizationId: context.organizationId,
+            workId,
+            sourceType: "message" as const,
+          })),
+          ...recovery.artifactVersions.map((artifact) => ({
+            referenceId: artifact.artifact_version_id,
+            organizationId: context.organizationId,
+            workId,
+            sourceType: "artifact" as const,
+          })),
+        ];
+        await this.cancelAndThrowIfCancelled(context, input, run.recordsRunId);
+        const assessments =
+          run.status === "planned"
+            ? (
+                await this.dependencies.records.proposeImpacts(context, {
+                  commandId: `${input.commandId}:impacts`,
+                  recordsRunId: run.recordsRunId,
+                  evaluatedAt: isoDateTime(
+                    recovery.events.at(-1)?.created_at ?? recovery.work.updated_at,
+                    "Records 평가 시각",
+                  ),
+                  proposals: proposals(input.request),
+                  sources: sourceReferences,
+                })
+              ).assessments
+            : await this.dependencies.records.listAssessments(context, run.recordsRunId);
+        await this.cancelAndThrowIfCancelled(context, input, run.recordsRunId);
+        const requiredKinds = assessments
+          .filter((assessment) => assessment.outcome === "required" && assessment.kind !== "work-record")
+          .map((assessment) => assessment.kind as "adr" | "changelog" | "runbook");
+        await this.cancelAndThrowIfCancelled(context, input, run.recordsRunId);
+        const documents = await this.dependencies.documents.plan(context, {
+          commandId: `${input.commandId}:documents`,
           workId,
-          sourceType: "verification",
-        },
-        ...recovery.events.map((event) => ({
-          referenceId: event.event_id,
-          organizationId: context.organizationId,
-          workId,
-          sourceType: "event" as const,
-        })),
-        ...recovery.messages.map((message) => ({
-          referenceId: message.message_id,
-          organizationId: context.organizationId,
-          workId,
-          sourceType: "message" as const,
-        })),
-        ...recovery.artifactVersions.map((artifact) => ({
-          referenceId: artifact.artifact_version_id,
-          organizationId: context.organizationId,
-          workId,
-          sourceType: "artifact" as const,
-        })),
-      ];
-      await this.cancelAndThrowIfCancelled(context, input, run.recordsRunId);
-      const impacts = await this.dependencies.records.proposeImpacts(context, {
-        commandId: `${input.commandId}:impacts`,
-        recordsRunId: run.recordsRunId,
-        evaluatedAt: isoDateTime(recovery.events.at(-1)?.created_at ?? recovery.work.updated_at, "Records 평가 시각"),
-        proposals: proposals(input.request),
-        sources: sourceReferences,
-      });
-      await this.cancelAndThrowIfCancelled(context, input, run.recordsRunId);
-      const requiredKinds = impacts.assessments
-        .filter((assessment) => assessment.outcome === "required" && assessment.kind !== "work-record")
-        .map((assessment) => assessment.kind as "adr" | "changelog" | "runbook");
-      await this.cancelAndThrowIfCancelled(context, input, run.recordsRunId);
-      const documents = await this.dependencies.documents.plan(context, {
-        commandId: `${input.commandId}:documents`,
-        workId,
-        requiredKinds,
-        sourceReferences,
-        recovery,
-      });
-      await this.cancelAndThrowIfCancelled(context, input, run.recordsRunId);
-      if (requiredKinds.some((kind) => !documents.some((document) => document.kind === kind)))
-        return { outcome: "blocked", reason: "records-document-required" };
-      await this.cancelAndThrowIfCancelled(context, input, run.recordsRunId);
-      await this.dependencies.records.finalize(context, {
-        commandId: `${input.commandId}:finalize`,
-        recordsRunId: run.recordsRunId,
-        expectedWorkRevision: run.targetWorkRevision,
-        documentSources: documents,
-      });
-      await this.cancelAndThrowIfCancelled(context, input, run.recordsRunId);
+          requiredKinds,
+          sourceReferences,
+          recovery,
+        });
+        await this.cancelAndThrowIfCancelled(context, input, run.recordsRunId);
+        if (requiredKinds.some((kind) => !documents.some((document) => document.kind === kind)))
+          return { outcome: "blocked", reason: "records-document-required" };
+        await this.cancelAndThrowIfCancelled(context, input, run.recordsRunId);
+        await this.dependencies.records.finalize(context, {
+          commandId: `${input.commandId}:finalize`,
+          recordsRunId: run.recordsRunId,
+          expectedWorkRevision: run.targetWorkRevision,
+          documentSources: documents,
+        });
+        await this.cancelAndThrowIfCancelled(context, input, run.recordsRunId);
+      }
       const completed = await this.dependencies.records.complete(context, { recordsRunId: run.recordsRunId });
       await this.cancelAndThrowIfCancelled(context, input, run.recordsRunId);
       return completed.run.status === "completed"
-        ? { outcome: "advanced", data: { recordsRunId: completed.run.recordsRunId, snapshotHash: snapshot.hash } }
+        ? { outcome: "advanced", data: { recordsRunId: completed.run.recordsRunId, snapshotHash: run.snapshotHash } }
         : { outcome: "blocked", reason: `records-${completed.run.status}` };
     } finally {
-      if (this.activeRecordsRuns.get(input.commandId) === active) this.activeRecordsRuns.delete(input.commandId);
+      if (active && this.activeRecordsRuns.get(input.commandId) === active)
+        this.activeRecordsRuns.delete(input.commandId);
     }
   }
 

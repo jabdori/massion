@@ -169,6 +169,15 @@ CREATE work_verification CONTENT { organization_id: $organization_id, work_id: '
     await expect(store.get(otherContext, run.recordsRunId)).rejects.toThrow("찾을 수 없습니다");
   });
 
+  it("같은 조직의 start command로 run을 찾고 다른 조직에는 노출하지 않는다", async () => {
+    const commandId = crypto.randomUUID();
+    const started = await store.start(context, input(commandId));
+
+    await expect(store.findByStartCommand(context, commandId)).resolves.toEqual(started);
+    await expect(store.findByStartCommand(context, crypto.randomUUID())).resolves.toBeUndefined();
+    await expect(store.findByStartCommand(otherContext, commandId)).resolves.toBeUndefined();
+  });
+
   it("네 impact assessment와 proposal을 원자 저장하고 rendering으로 전이한다", async () => {
     const started = await store.start(context, input());
     const proposals = [
@@ -208,6 +217,8 @@ CREATE work_verification CONTENT { organization_id: $organization_id, work_id: '
     expect(first.run).toMatchObject({ status: "rendering", version: 2 });
     expect(first.assessments).toHaveLength(4);
     expect(repeated).toEqual(first);
+    await expect(store.listAssessments(context, started.recordsRunId)).resolves.toEqual(first.assessments);
+    await expect(store.listAssessments(otherContext, started.recordsRunId)).rejects.toThrow("찾을 수 없습니다");
     const [counts] = await database.query<[{ count: number }[]]>(
       "SELECT count() FROM documentation_impact_proposal GROUP ALL;",
     );

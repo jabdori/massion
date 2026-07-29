@@ -76,6 +76,18 @@ function passedRecovery() {
   };
 }
 
+function savedRun(status: "planned" | "rendering" | "finalized" | "completed" | "blocked" | "cancelled") {
+  return {
+    recordsRunId: "records-1",
+    workId: input.workId,
+    targetWorkRevision: 9,
+    verificationId: "verification-1",
+    snapshotHash: "c".repeat(64),
+    status,
+    version: status === "planned" ? 1 : status === "rendering" ? 2 : status === "finalized" ? 3 : 4,
+  };
+}
+
 describe("CoreRecordsStage", () => {
   it("passed verification 정본으로 start→impact→documents→finalize→complete를 수행한다", async () => {
     const calls: string[] = [];
@@ -147,6 +159,7 @@ describe("CoreRecordsStage", () => {
       records: [],
     };
     const records = {
+      findByStartCommand: async () => undefined,
       start: async (_context: unknown, value: { targetWorkRevision: number }) => {
         calls.push("start");
         return { recordsRunId: "records-1", status: "planned", targetWorkRevision: value.targetWorkRevision };
@@ -185,9 +198,234 @@ describe("CoreRecordsStage", () => {
     expect(calls).toEqual(["start", "impact", "documents", "finalize", "complete"]);
   });
 
+  it("planned 재시작은 저장 run에서 impact부터 이어간다", async () => {
+    const calls: string[] = [];
+    const stage = new CoreRecordsStage({
+      works: {
+        recoverWork: async () => {
+          calls.push("recover");
+          return passedRecovery();
+        },
+      },
+      records: {
+        findByStartCommand: async (_context: unknown, commandId: string) => {
+          calls.push("find");
+          expect(commandId).toBe(`${input.commandId}:start`);
+          return savedRun("planned");
+        },
+        start: async () => {
+          throw new Error("start를 다시 호출하면 안 됩니다");
+        },
+        proposeImpacts: async () => {
+          calls.push("impact");
+          return { assessments: [{ kind: "adr", outcome: "required" }] };
+        },
+        finalize: async () => {
+          calls.push("finalize");
+          return {};
+        },
+        complete: async () => {
+          calls.push("complete");
+          return { run: savedRun("completed") };
+        },
+      },
+      documents: {
+        plan: async () => {
+          calls.push("documents");
+          return [{ kind: "adr" }];
+        },
+      },
+    } as never);
+
+    await expect(stage.execute(context, input)).resolves.toEqual({
+      outcome: "advanced",
+      data: { recordsRunId: "records-1", snapshotHash: "c".repeat(64) },
+    });
+    expect(calls).toEqual(["find", "recover", "impact", "documents", "finalize", "complete"]);
+  });
+
+  it("rendering 재시작은 저장 assessment에서 documents→finalize→complete로 이어간다", async () => {
+    const calls: string[] = [];
+    const stage = new CoreRecordsStage({
+      works: { recoverWork: async () => passedRecovery() },
+      records: {
+        findByStartCommand: async () => {
+          calls.push("find");
+          return savedRun("rendering");
+        },
+        start: async () => {
+          throw new Error("start를 다시 호출하면 안 됩니다");
+        },
+        proposeImpacts: async () => {
+          throw new Error("impact를 다시 제안하면 안 됩니다");
+        },
+        listAssessments: async () => {
+          calls.push("assessments");
+          return [{ kind: "adr", outcome: "required" }];
+        },
+        finalize: async () => {
+          calls.push("finalize");
+          return {};
+        },
+        complete: async () => {
+          calls.push("complete");
+          return { run: savedRun("completed") };
+        },
+      },
+      documents: {
+        plan: async () => {
+          calls.push("documents");
+          return [{ kind: "adr" }];
+        },
+      },
+    } as never);
+
+    await expect(stage.execute(context, input)).resolves.toMatchObject({ outcome: "advanced" });
+    expect(calls).toEqual(["find", "assessments", "documents", "finalize", "complete"]);
+  });
+
+  it("finalized 재시작은 변경된 현재 Work를 읽지 않고 complete만 실행한다", async () => {
+    const calls: string[] = [];
+    const stage = new CoreRecordsStage({
+      works: {
+        recoverWork: async () => {
+          throw new Error("finalized 재시작에서 현재 Work를 읽으면 안 됩니다");
+        },
+      },
+      records: {
+        findByStartCommand: async () => {
+          calls.push("find");
+          return savedRun("finalized");
+        },
+        complete: async () => {
+          calls.push("complete");
+          return { run: savedRun("completed") };
+        },
+      },
+      documents: { plan: async () => [] },
+    } as never);
+
+    await expect(stage.execute(context, input)).resolves.toEqual({
+      outcome: "advanced",
+      data: { recordsRunId: "records-1", snapshotHash: "c".repeat(64) },
+    });
+    expect(calls).toEqual(["find", "complete"]);
+  });
+
+  it.each(["planned", "rendering", "finalized"] as const)(
+    "%s run 조회 중 abort하면 저장 run을 한 번 cancel하고 후속 작업을 열지 않는다",
+    async (status) => {
+      let releaseFind!: (value: ReturnType<typeof savedRun>) => void;
+      let enteredFind!: () => void;
+      const findEntered = new Promise<void>((resolve) => {
+        enteredFind = resolve;
+      });
+      const found = new Promise<ReturnType<typeof savedRun>>((resolve) => {
+        releaseFind = resolve;
+      });
+      const calls: string[] = [];
+      const controller = new AbortController();
+      const stage = new CoreRecordsStage({
+        works: {
+          recoverWork: async () => {
+            calls.push("recover");
+            return passedRecovery();
+          },
+        },
+        records: {
+          findByStartCommand: async () => {
+            calls.push("find");
+            enteredFind();
+            return await found;
+          },
+          cancel: async (_context: unknown, value: { readonly commandId: string; readonly recordsRunId: string }) => {
+            calls.push("cancel");
+            expect(value).toEqual({ commandId: `${input.commandId}:cancel`, recordsRunId: "records-1" });
+            return savedRun("cancelled");
+          },
+          proposeImpacts: async () => {
+            calls.push("impacts");
+            return { assessments: [] };
+          },
+          listAssessments: async () => {
+            calls.push("assessments");
+            return [];
+          },
+          finalize: async () => {
+            calls.push("finalize");
+            return {};
+          },
+          complete: async () => {
+            calls.push("complete");
+            return { run: savedRun("completed") };
+          },
+        },
+        documents: {
+          plan: async () => {
+            calls.push("documents");
+            return [];
+          },
+        },
+      } as never);
+
+      const executing = stage.execute(context, { ...input, signal: controller.signal });
+      await findEntered;
+      controller.abort();
+      releaseFind(savedRun(status));
+
+      await expect(executing).rejects.toThrow("Application run cancelled");
+      expect(calls).toEqual(["find", "cancel"]);
+    },
+  );
+
+  it.each([
+    ["completed", { outcome: "advanced", data: { recordsRunId: "records-1", snapshotHash: "c".repeat(64) } }],
+    ["blocked", { outcome: "blocked", reason: "records-blocked" }],
+    ["cancelled", { outcome: "blocked", reason: "records-cancelled" }],
+  ] as const)("%s 재시작은 저장 상태를 반환하고 side effect를 만들지 않는다", async (status, expected) => {
+    let releaseFind!: (value: ReturnType<typeof savedRun>) => void;
+    let enteredFind!: () => void;
+    const findEntered = new Promise<void>((resolve) => {
+      enteredFind = resolve;
+    });
+    const found = new Promise<ReturnType<typeof savedRun>>((resolve) => {
+      releaseFind = resolve;
+    });
+    const calls: string[] = [];
+    const controller = new AbortController();
+    const stage = new CoreRecordsStage({
+      works: {
+        recoverWork: async () => {
+          throw new Error("terminal 재시작에서 현재 Work를 읽으면 안 됩니다");
+        },
+      },
+      records: {
+        findByStartCommand: async () => {
+          calls.push("find");
+          enteredFind();
+          return await found;
+        },
+        cancel: async () => {
+          calls.push("cancel");
+          return savedRun("cancelled");
+        },
+      },
+      documents: { plan: async () => [] },
+    } as never);
+
+    const executing = stage.execute(context, { ...input, signal: controller.signal });
+    await findEntered;
+    controller.abort();
+    releaseFind(savedRun(status));
+
+    await expect(executing).resolves.toEqual(expected);
+    expect(calls).toEqual(["find"]);
+  });
+
   it("passed verification이 없거나 required 문서가 누락되면 명시 차단한다", async () => {
     const noVerification = new CoreRecordsStage({
       works: { recoverWork: async () => ({ verifications: [] }) },
+      records: { findByStartCommand: async () => undefined },
     } as never);
     await expect(noVerification.execute(context, input)).resolves.toMatchObject({
       outcome: "blocked",
@@ -214,6 +452,7 @@ describe("CoreRecordsStage", () => {
         },
       },
       records: {
+        findByStartCommand: async () => undefined,
         start: async () => {
           starts += 1;
           return { recordsRunId: "records-1", status: "planned" };
@@ -253,6 +492,7 @@ describe("CoreRecordsStage", () => {
     const stage = new CoreRecordsStage({
       works: { recoverWork: async () => passedRecovery() },
       records: {
+        findByStartCommand: async () => undefined,
         start: async () => {
           calls.push("start");
           enteredStart();
@@ -307,6 +547,7 @@ describe("CoreRecordsStage", () => {
     const stage = new CoreRecordsStage({
       works: { recoverWork: async () => passedRecovery() },
       records: {
+        findByStartCommand: async () => undefined,
         start: async () => {
           calls.push("start");
           return { recordsRunId: "records-1", status: "planned", targetWorkRevision: 9 };
@@ -365,6 +606,7 @@ describe("CoreRecordsStage", () => {
     const stage = new CoreRecordsStage({
       works: { recoverWork: async () => passedRecovery() },
       records: {
+        findByStartCommand: async () => undefined,
         start: async () => ({ recordsRunId: "records-1", status: "planned", targetWorkRevision: 9 }),
         cancel: async () => {
           cancellationAttempts += 1;

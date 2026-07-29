@@ -217,6 +217,26 @@ export class RecordsRunStore {
     return this.view(await this.find(this.database, context.organizationId, recordsRunId));
   }
 
+  public async findByStartCommand(context: TenantContext, startCommandId: string): Promise<RecordsRun | undefined> {
+    await this.organizations.verifyTenantContext(context);
+    assertIdentifier(startCommandId, "Records run 시작 command ID");
+    const [runs] = await this.database.query<[RunRecord[]]>(
+      "SELECT * OMIT id FROM records_run WHERE organization_id = $organization_id AND command_id = $command_id LIMIT 1;",
+      { organization_id: context.organizationId, command_id: startCommandId },
+    );
+    return runs[0] ? this.view(runs[0]) : undefined;
+  }
+
+  public async listAssessments(
+    context: TenantContext,
+    recordsRunId: string,
+  ): Promise<readonly DocumentationImpactAssessment[]> {
+    await this.organizations.verifyTenantContext(context);
+    assertIdentifier(recordsRunId, "Records run ID");
+    await this.find(this.database, context.organizationId, recordsRunId);
+    return await this.queryAssessments(this.database, context.organizationId, recordsRunId);
+  }
+
   public async cancel(context: TenantContext, input: CancelRecordsRunInput): Promise<RecordsRun> {
     await this.organizations.verifyTenantContext(context);
     assertIdentifier(input.commandId, "Command ID");
@@ -356,7 +376,7 @@ export class RecordsRunStore {
         if (events[0].request_hash !== hash)
           throw new Error("같은 command ID에 다른 impact payload를 사용할 수 없습니다");
         const run = this.view(await this.find(transaction, context.organizationId, recordsRunId));
-        return { run, assessments: await this.listAssessments(transaction, context.organizationId, recordsRunId) };
+        return { run, assessments: await this.queryAssessments(transaction, context.organizationId, recordsRunId) };
       }
       const current = await this.find(transaction, context.organizationId, recordsRunId);
       if (current.status !== "planned") throw new Error("Documentation impact는 planned Records run에서만 확정합니다");
@@ -512,7 +532,7 @@ export class RecordsRunStore {
     return runs[0];
   }
 
-  private async listAssessments(
+  private async queryAssessments(
     executor: QueryExecutor,
     organizationId: string,
     recordsRunId: string,

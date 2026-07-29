@@ -57,6 +57,7 @@ export interface CompleteRecordsProjectionInput {
   readonly commandId: string;
   readonly workId: string;
   readonly expectedRevision: number;
+  readonly expectedRecordsVersion: number;
   readonly recordsRunId: string;
   readonly recordsSnapshotHash: string;
   readonly verificationId: string;
@@ -145,25 +146,36 @@ export class WorkRecordsPort {
     if (!Number.isSafeInteger(input.expectedRevision) || input.expectedRevision < 1) {
       throw new Error("Records completion expected revision이 잘못됐습니다");
     }
+    if (!Number.isSafeInteger(input.expectedRecordsVersion) || input.expectedRecordsVersion < 1) {
+      throw new Error("Records completion expected Records version이 잘못됐습니다");
+    }
     if (!/^[a-f0-9]{64}$/u.test(input.recordsSnapshotHash)) {
       throw new Error("Records completion snapshot hash가 잘못됐습니다");
     }
     const requestJson = canonicalJson(input);
+    const legacyRequestJson = canonicalJson({
+      commandId: input.commandId,
+      workId: input.workId,
+      expectedRevision: input.expectedRevision,
+      recordsRunId: input.recordsRunId,
+      recordsSnapshotHash: input.recordsSnapshotHash,
+      verificationId: input.verificationId,
+    });
     return await this.database.transaction(async (transaction) => {
       await this.organizations.verifyTenantContext(context, undefined, transaction);
       const [replayed] = await transaction.query<[WorkEvent[]]>(
         "SELECT * OMIT id FROM work_event WHERE organization_id = $organization_id AND command_id = $command_id LIMIT 1;",
         { organization_id: context.organizationId, command_id: input.commandId },
       );
-      if (replayed[0]) {
-        if (replayed[0].request_json !== requestJson) {
+      const replayedEvent = replayed[0];
+      if (replayedEvent) {
+        if (replayedEvent.request_json !== requestJson && replayedEvent.request_json !== legacyRequestJson) {
           throw new Error("같은 commandId에 다른 Records completion 명령을 사용할 수 없습니다");
         }
-        return JSON.parse(replayed[0].result_json) as CompleteRecordsProjectionResult;
       }
       const work = await findWork(transaction, context.organizationId, input.workId);
       if (!work) throw new Error(`Work를 찾을 수 없습니다: ${input.workId}`);
-      if (work.status !== "verifying" || work.revision !== input.expectedRevision) {
+      if (!replayedEvent && (work.status !== "verifying" || work.revision !== input.expectedRevision)) {
         throw new Error("Records completion Work 상태 또는 revision이 다릅니다");
       }
       const [runs] = await transaction.query<[RecordsRunRecord[]]>(
@@ -177,28 +189,74 @@ export class WorkRecordsPort {
       const run = runs[0];
       if (
         !run ||
-        run.status !== "finalized" ||
         run.snapshot_hash !== input.recordsSnapshotHash ||
         run.verification_id !== input.verificationId ||
-        run.target_work_revision + 1 !== work.revision
+        run.target_work_revision + 1 !== input.expectedRevision
       ) {
         throw new Error("Records completion run 계보가 유효하지 않습니다");
       }
-      await transaction.query(
-        "UPDATE work SET status = 'completed', revision = $revision, updated_at = time::now() WHERE organization_id = $organization_id AND work_id = $work_id;",
+      if (replayedEvent) {
+        if (work.status !== "completed" || work.revision !== input.expectedRevision + 1) {
+          throw new Error("Records completion replay Work 상태 또는 revision이 다릅니다");
+        }
+        if (run.status === "completed" && run.version === input.expectedRecordsVersion + 1) {
+          return JSON.parse(replayedEvent.result_json) as CompleteRecordsProjectionResult;
+        }
+      }
+      if (run.status !== "finalized" || run.version !== input.expectedRecordsVersion) {
+        throw new Error("Records completion run 계보가 유효하지 않습니다");
+      }
+      let completedWork = work;
+      if (!replayedEvent) {
+        await transaction.query(
+          "UPDATE work SET status = 'completed', revision = $revision, updated_at = time::now() WHERE organization_id = $organization_id AND work_id = $work_id;",
+          {
+            revision: work.revision + 1,
+            organization_id: context.organizationId,
+            work_id: input.workId,
+          },
+        );
+        const updated = await findWork(transaction, context.organizationId, input.workId);
+        if (!updated) throw new Error("Records completed Work를 찾을 수 없습니다");
+        completedWork = updated;
+      }
+      const [completedRuns] = await transaction.query<[RecordsRunRecord[]]>(
+        "UPDATE records_run SET status = 'completed', version += 1, active_guard_key = NONE, completed_at = time::now(), updated_at = time::now() WHERE organization_id = $organization_id AND work_id = $work_id AND records_run_id = $records_run_id AND status = 'finalized' AND version = $expected_records_version RETURN AFTER;",
         {
-          revision: work.revision + 1,
           organization_id: context.organizationId,
           work_id: input.workId,
+          records_run_id: input.recordsRunId,
+          expected_records_version: input.expectedRecordsVersion,
         },
       );
-      const updated = await findWork(transaction, context.organizationId, input.workId);
-      if (!updated) throw new Error("Records completed Work를 찾을 수 없습니다");
+      const completedRun = completedRuns[0];
+      if (!completedRun) throw new Error("Records completion run CAS 결과가 없습니다");
+      const terminalCommandId = `${input.recordsRunId}:terminal`;
+      const terminalInput = {
+        commandId: terminalCommandId,
+        recordsRunId: input.recordsRunId,
+        expectedVersion: input.expectedRecordsVersion,
+      };
+      await transaction.query(
+        "CREATE records_event CONTENT { event_id: $event_id, organization_id: $organization_id, work_id: $work_id, records_run_id: $records_run_id, command_id: $command_id, sequence: $sequence, event_type: 'records_run_completed', request_hash: $request_hash, payload_json: $payload_json, actor_user_id: $actor_user_id, created_at: time::now() };",
+        {
+          event_id: randomUUID(),
+          organization_id: context.organizationId,
+          work_id: input.workId,
+          records_run_id: input.recordsRunId,
+          command_id: terminalCommandId,
+          sequence: completedRun.version,
+          request_hash: sha256(canonicalJson({ operation: "complete", input: terminalInput })),
+          payload_json: canonicalJson({ status: "completed", workRevision: completedWork.revision }),
+          actor_user_id: context.userId,
+        },
+      );
+      if (replayedEvent) return JSON.parse(replayedEvent.result_json) as CompleteRecordsProjectionResult;
       const [existing] = await transaction.query<[WorkEvent[]]>(
         "SELECT * OMIT id FROM work_event WHERE organization_id = $organization_id AND work_id = $work_id ORDER BY sequence ASC;",
         { organization_id: context.organizationId, work_id: input.workId },
       );
-      const provisional = { work: updated };
+      const provisional = { work: completedWork };
       const [events] = await transaction.query<[WorkEvent[]]>(
         "CREATE work_event CONTENT { event_id: $event_id, organization_id: $organization_id, work_id: $work_id, sequence: $sequence, command_id: $command_id, event_type: 'work_state_changed', actor_user_id: $actor_user_id, request_json: $request_json, payload_json: $payload_json, result_json: $result_json, created_at: time::now() } RETURN AFTER;",
         {
@@ -215,7 +273,7 @@ export class WorkRecordsPort {
       );
       const event = events[0];
       if (!event) throw new Error("Records completion WorkEvent 생성 결과가 없습니다");
-      const result = { work: updated, event };
+      const result = { work: completedWork, event };
       await transaction.query("UPDATE work_event SET result_json = $result_json WHERE event_id = $event_id;", {
         result_json: JSON.stringify(result),
         event_id: event.event_id,
