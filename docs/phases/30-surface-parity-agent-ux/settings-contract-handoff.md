@@ -82,3 +82,35 @@ export interface SubscriptionAccountViewV1 { accountId; providerId; alias; scope
 - [ ] `work` 조회가 미반영 지시 목록을 돌려준다
 - [ ] Work 단위 모델·추론 수준을 읽고 쓰는 명령이 등록된다
 - [ ] `WorkActivity`의 세 `*Override` 상태가 삭제된다
+
+## 7. 설정 표면 정리에서 드러난 것
+
+### route_kind 어휘가 둘입니다 — 확인 필요
+
+| 출처 | 값 |
+|---|---|
+| `packages/router/src/model-router.ts` `RouteKind` | `"chat" \| "embedding"` |
+| 픽스처 카탈로그·`model_profile.route_kind` 데이터 | `"reasoning" \| "utility" \| "embedding"` |
+
+화면은 어느 쪽도 박지 않고 **카탈로그에 실제로 있는 값**에서 고르게 했습니다(`routeKinds`).
+어느 쪽이 정본인지 정해야 합니다. 전에는 폼이 `"chat"`을 하드코딩해서, 손으로 등록한 모델이
+세 라우트 중 어디에도 붙지 않았습니다.
+
+### 사람이 「검증됨」을 주장할 수 없게 했습니다
+
+`router.model.register`에 `verified: false`를 고정합니다. 검증은 `model_verification_evidence`가
+정하는 것이지 등록자가 체크박스로 선언할 값이 아닙니다. 전에는 체크하면 프로바이더 표면의
+「미확인」 표시가 근거 없이 사라졌습니다.
+
+### 후보 우선순위가 화면에 없었습니다
+
+`addRouteCandidate`는 `priority`를 받는데 입력이 없어 늘 `0`으로 나갔습니다. fallback 순서가
+정해지지 않는다는 뜻입니다. 입력을 세웠습니다.
+
+### 자가개선 채택 모드를 쓰는 명령이 없습니다
+
+읽기(`AutonomyView.growthMode`)만 있고 쓰기가 없어 화면 상태(`growthModeOverride`)로 서 있습니다.
+전체 권한일 때 `auto`로 파생되는 규칙은 `effectiveGrowthMode()`가 이미 갖고 있습니다.
+
+- [ ] `route_kind` 정본 어휘를 정한다
+- [ ] 자가개선 채택 모드를 쓰는 명령이 등록된다

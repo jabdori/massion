@@ -53,9 +53,9 @@ describe("AgentOS native data flow", () => {
 
     await user.click(screen.getByRole("button", { name: "설정" }));
     await screen.findByRole("main", { name: "설정" });
-    // 설정은 탭이 아니라 한 문서입니다. 목차는 이동만 하고 세 구역이 함께 보입니다.
-    for (const title of ["예산", "실행 자율성", "로컬 환경"]) {
-      expect(screen.getByRole("link", { name: title })).toBeInTheDocument();
+    // 설정은 탭도 목록도 아닌 한 문서입니다. 세 구역이 함께 보입니다.
+    for (const title of ["예산", "실행 자율성 기본값", "로컬 환경"]) {
+      expect(screen.getByRole("region", { name: title })).toBeInTheDocument();
     }
     // 프로바이더와 계정은 프로바이더 표면이 소유합니다.
     expect(screen.queryByText(/Provider 연결/)).not.toBeInTheDocument();
@@ -120,6 +120,7 @@ describe("AgentOS native data flow", () => {
     const addRouteCandidate = vi.fn(async () => undefined);
     const loadSettings = vi.fn(async () => ({
       catalog: {
+        endpoints: [{ endpointId: "endpoint-1", providerId: "openai", name: "api", baseUrl: "https://api.openai.com" }],
         models: [
           {
             modelProfileId: "profile-1",
@@ -142,9 +143,10 @@ describe("AgentOS native data flow", () => {
     await user.click(screen.getByRole("button", { name: "설정" }));
     await user.click(await screen.findByRole("button", { name: "고급 라우팅 설정" }));
     const model = await screen.findByRole("form", { name: "모델 프로필 등록" });
-    await user.type(within(model).getByRole("textbox", { name: "모델 Provider ID" }), "openai");
-    await user.type(within(model).getByRole("textbox", { name: "모델 Endpoint ID" }), "endpoint-1");
-    await user.type(within(model).getByRole("textbox", { name: "모델 ID" }), "gpt-5");
+    // Provider와 Endpoint는 카탈로그에서 고릅니다. ID를 외워 적지 않습니다.
+    await user.selectOptions(within(model).getByRole("combobox", { name: "프로바이더" }), "openai");
+    await user.selectOptions(within(model).getByRole("combobox", { name: "엔드포인트" }), "endpoint-1");
+    await user.type(within(model).getByRole("textbox", { name: "모델 이름" }), "gpt-5");
     await user.click(within(model).getByRole("button", { name: "모델 등록" }));
     expect(registerModel).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -177,9 +179,9 @@ describe("AgentOS native data flow", () => {
     await user.click(screen.getByRole("button", { name: "설정" }));
     await user.click(await screen.findByRole("button", { name: "고급 라우팅 설정" }));
     const model = await screen.findByRole("form", { name: "모델 프로필 등록" });
-    await user.type(within(model).getByRole("textbox", { name: "모델 Provider ID" }), "openai");
-    await user.type(within(model).getByRole("textbox", { name: "모델 Endpoint ID" }), "endpoint-1");
-    await user.type(within(model).getByRole("textbox", { name: "모델 ID" }), "gpt-5");
+    await user.selectOptions(within(model).getByRole("combobox", { name: "프로바이더" }), "zai");
+    await user.selectOptions(within(model).getByRole("combobox", { name: "엔드포인트" }), "ep-zai");
+    await user.type(within(model).getByRole("textbox", { name: "모델 이름" }), "glm-5.2");
     await user.click(within(model).getByRole("button", { name: "모델 등록" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("모델 카탈로그에 연결하지 못했습니다");

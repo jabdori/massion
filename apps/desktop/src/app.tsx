@@ -102,6 +102,7 @@ import type {
 } from "@/desktop-service";
 import {
   effectiveGrowthMode,
+  type GrowthAdoptionMode,
   projectManifestDeclarations,
   projectModelRoutes,
   projectProviderConnections,
@@ -3225,7 +3226,7 @@ function GrowthSourceRow({ onOpenWork, reference }: { onOpenWork: (workId: strin
 function GrowthSection({ children, title }: { children: React.ReactNode; title: string }) {
   return (
     <section aria-label={title} className="mt-7">
-      <h3 className="mb-2.5 text-[10px] font-semibold tracking-[0.08em] text-muted">{title}</h3>
+      <h3 className="mb-2.5 text-[12px] font-semibold tracking-[0.01em] text-fg-3">{title}</h3>
       {children}
     </section>
   );
@@ -3322,19 +3323,25 @@ function RouteBudgetRow({ route }: { route: ModelRouteView }) {
         <span className="min-w-0 flex-1 truncate text-[13px] text-secondary">{route.name}</span>
         <span className="shrink-0 font-mono text-[12px] tabular-nums text-muted">
           {route.totalBudgetMicros === 0
-            ? "—"
+            ? "한도 없음"
             : `${costText(route.spentMicros)} / ${costText(route.totalBudgetMicros)}`}
         </span>
       </div>
-      {ratio === undefined ? null : (
-        <div className="mt-1.5 h-px w-full bg-border">
-          {/* 막대는 데이터라 이징하지 않습니다. 중간 프레임이 실제 값과 달라집니다. */}
+      {/*
+       * 트랙은 값이 없는 행에도 그립니다. 채워진 조각만 그리면 라벨 밑에 짧은 선 하나가 남아
+       * 게이지가 아니라 입력 밑줄로 읽힙니다.
+       */}
+      <div className="mt-2 h-[3px] w-full rounded-full bg-surface-2">
+        {ratio === undefined ? null : (
+          // 막대는 데이터라 이징하지 않습니다. 중간 프레임이 실제 값과 달라집니다.
           <div
-            className={`h-px transition-[width] duration-[250ms] ease-linear ${ratio >= 0.8 ? "bg-danger" : "bg-fg-3"}`}
+            className={`h-[3px] rounded-full transition-[width] duration-[250ms] ease-linear ${
+              ratio >= 0.8 ? "bg-danger" : "bg-fg-3"
+            }`}
             style={{ width: `${String(ratio * 100)}%` }}
           />
-        </div>
-      )}
+        )}
+      </div>
     </li>
   );
 }
@@ -3344,7 +3351,70 @@ function RouteBudgetRow({ route }: { route: ModelRouteView }) {
  * 자가개선은 「조직이 자기 프롬프트·기억·정책·조직을 사람 없이 고쳐도 되나」입니다.
  * 전체 권한은 둘 다 묻지 않겠다는 선언이므로 여기서 파생되고 따로 고를 수 없습니다.
  */
-function GrowthAdoptionBoundary({ autonomy }: { autonomy: AutonomyView }) {
+/**
+ * 고른 것이 가장 밝아야 합니다. 전에는 «현재 값»을 disabled로 잠가서 고른 쪽이 제일 흐렸습니다 —
+ * 상태 표시와 조작 불가 표시가 같은 시각 신호를 쓰면 읽는 사람이 정확히 반대로 읽습니다.
+ */
+function ChoiceGroup<T extends string>({
+  busy = false,
+  locked,
+  onSelect,
+  options,
+  value,
+}: {
+  busy?: boolean;
+  locked?: string;
+  onSelect?: (value: T) => void;
+  options: readonly { value: T; label: string }[];
+  value: T | undefined;
+}) {
+  return (
+    <div className="mt-3 flex flex-wrap items-center gap-2">
+      <div className="inline-flex gap-0.5 rounded-[5px] border border-border p-0.5">
+        {options.map((option) => {
+          const active = option.value === value;
+          const frozen = onSelect === undefined || busy;
+          return (
+            <button
+              aria-pressed={active}
+              className={`rounded-[4px] px-3 py-1 text-[12px] transition-colors duration-150 ${
+                active ? "bg-surface-2 text-primary" : "text-muted"
+              } ${frozen ? "cursor-default" : "hover:text-secondary"}`}
+              disabled={frozen}
+              key={option.value}
+              onClick={() => {
+                onSelect?.(option.value);
+              }}
+              type="button"
+            >
+              {option.label}
+            </button>
+          );
+        })}
+      </div>
+      {locked === undefined ? null : <span className="text-[11px] text-muted">{locked}</span>}
+    </div>
+  );
+}
+
+const AUTONOMY_OPTIONS = [
+  { value: "automatic", label: "자동 실행" },
+  { value: "review", label: "검토 후 실행" },
+  { value: "full-access", label: "전체 권한" },
+] as const;
+
+const GROWTH_OPTIONS = [
+  { value: "review", label: "사람이 검토" },
+  { value: "auto", label: "자동 채택" },
+] as const;
+
+function GrowthAdoptionBoundary({
+  autonomy,
+  onSelect,
+}: {
+  autonomy: AutonomyView;
+  onSelect: (mode: GrowthAdoptionMode) => void;
+}) {
   const derived = autonomy.mode === "full-access";
   const mode = effectiveGrowthMode(autonomy);
   return (
@@ -3356,23 +3426,11 @@ function GrowthAdoptionBoundary({ autonomy }: { autonomy: AutonomyView }) {
             ? "독립 신호 평가를 통과한 개선을 사람 확인 없이 채택합니다. 효과 비교와 되돌리기는 그대로 남습니다."
             : "평가를 통과한 개선도 사람이 근거를 보고 승인해야 반영됩니다."}
       </p>
-      <div className="mt-3 flex flex-wrap items-center gap-2">
-        <span
-          className={`rounded-[5px] border px-3 py-1 text-[12px] ${
-            mode === "review" ? "border-control bg-surface-2 text-primary" : "border-border text-muted"
-          }`}
-        >
-          사람이 검토
-        </span>
-        <span
-          className={`rounded-[5px] border px-3 py-1 text-[12px] ${
-            mode === "auto" ? "border-control bg-surface-2 text-primary" : "border-border text-muted"
-          }`}
-        >
-          자동 채택
-        </span>
-        {derived ? <span className="text-[11px] text-muted">전체 권한이라 자동으로 고정됩니다</span> : null}
-      </div>
+      <ChoiceGroup
+        options={GROWTH_OPTIONS}
+        value={mode}
+        {...(derived ? { locked: "전체 권한이라 자동으로 고정됩니다" } : { onSelect })}
+      />
       {/* 자동 채택이어도 사라지지 않는 것을 말합니다. 이게 «모델이 스스로 고치는 기능»과 갈리는 지점입니다. */}
       <p className="mt-2 text-[11px] leading-4 text-muted">
         어느 쪽이든 독립 신호 최소 1건, 채택 전후 효과 비교, 악화 시 되돌리기는 제거되지 않습니다.
@@ -3951,6 +4009,11 @@ function SettingsSurface({ service }: { service: DesktopService }) {
   const [notice, setNotice] = useState("");
   const [autonomySaving, setAutonomySaving] = useState(false);
   const [fullAccessPending, setFullAccessPending] = useState(false);
+  /*
+   * 자가개선 채택은 실행 자율성과 다른 축이라 따로 고를 수 있어야 합니다. 쓰는 명령이 아직
+   * 계약에 없어 화면이 앞세웁니다. 인계: docs/phases/30-surface-parity-agent-ux/settings-contract-handoff.md
+   */
+  const [growthModeOverride, setGrowthModeOverride] = useState<GrowthAdoptionMode>();
   useEffect(() => {
     let disposed = false;
     void Promise.all([service.loadSettings(), service.loadAutonomy()])
@@ -3993,182 +4056,109 @@ function SettingsSurface({ service }: { service: DesktopService }) {
   const routes = settings ? projectModelRoutes(settings.routes, settings.catalog) : [];
 
   return (
-    <main
-      aria-label="설정"
-      className="col-span-3 grid min-h-0 min-w-0 grid-cols-[242px_minmax(0,1fr)] bg-canvas min-[1440px]:grid-cols-[264px_minmax(0,1fr)]"
-    >
-      {/*
-       * 구역이 셋뿐이라 목록 열이 «고르는 곳»이 아니라 목차입니다. 그리고 셋째 열에 둘 «맥락»이
-       * 없어 설명문으로 때우고 있었으므로 뺐습니다. DESIGN.md의 3열 골격을 깨는 대가는
-       * 읽히는 것이 늘어야 정당한데, 여기서는 골격을 지킬수록 줄었습니다.
-       */}
-      <nav
-        aria-label="설정 목차"
-        className="grid min-h-0 grid-rows-[46px_minmax(0,1fr)] border-r border-border bg-chrome"
-      >
-        <header className="flex items-center px-3">
-          <h1 className="text-[15px] font-semibold tracking-[-0.008em]">설정</h1>
-        </header>
-        <ul className="min-h-0 overflow-y-auto p-2">
-          {SETTINGS_SECTIONS.map((section) => (
-            <li key={section.id}>
-              <a
-                className="block truncate rounded-[4px] px-2.5 py-1.5 text-[13px] text-secondary outline-none transition-colors duration-150 hover:bg-[rgb(255_255_255/0.027)]"
-                href={`#설정-${section.id}`}
-              >
-                {section.title}
-              </a>
-            </li>
-          ))}
-        </ul>
-      </nav>
+    <main aria-label="설정" className="col-span-3 grid min-h-0 min-w-0 grid-rows-[46px_minmax(0,1fr)] bg-canvas">
+      <header className="flex items-center border-b border-border px-5">
+        <h1 className="text-[15px] font-semibold tracking-[-0.008em] text-primary">설정</h1>
+      </header>
+      <div className="min-h-0 overflow-y-auto px-5 py-4">
+        {error ? <SurfaceError message={error} /> : null}
+        {!settings && !error ? <SurfaceLoading /> : null}
+        {settings ? (
+          <div className="mx-auto max-w-[76ch] pb-8">
+            <GrowthSection title="예산">
+              {routes.length === 0 ? (
+                <p className="text-[12px] text-muted">구성된 모델 경로가 없습니다. 프로바이더를 먼저 연결하십시오.</p>
+              ) : (
+                <ul className="divide-y divide-border border-y border-border">
+                  {routes.map((route) => (
+                    <RouteBudgetRow key={route.routeId} route={route} />
+                  ))}
+                </ul>
+              )}
+              <RouterConfiguration onRefresh={setSettings} service={service} settings={settings} />
+            </GrowthSection>
 
-      <div className="grid min-h-0 min-w-0 grid-rows-[46px_minmax(0,1fr)]">
-        <header className="flex items-center border-b border-border px-5">
-          <h2 className="text-[15px] font-semibold tracking-[-0.008em] text-primary">설정</h2>
-        </header>
-        <div className="min-h-0 overflow-y-auto px-5 py-4">
-          {error ? <SurfaceError message={error} /> : null}
-          {!settings && !error ? <SurfaceLoading /> : null}
-          {settings ? (
-            <div className="max-w-[76ch] space-y-8">
-              <section id="설정-budget">
-                <h3 className="mb-2 text-[13px] text-muted">예산</h3>
-                {routes.length === 0 ? (
-                  <p className="text-[12px] text-muted">구성된 모델 경로가 없습니다. 프로바이더를 먼저 연결하십시오.</p>
-                ) : (
-                  <ul className="divide-y divide-border border-y border-border">
-                    {routes.map((route) => (
-                      <RouteBudgetRow key={route.routeId} route={route} />
-                    ))}
-                  </ul>
-                )}
-                <RouterConfiguration onRefresh={setSettings} service={service} settings={settings} />
-              </section>
-
-              {autonomy ? (
-                <section aria-label="자율성 경계" id="설정-autonomy">
-                  <GrowthSection title="실행 자율성 기본값">
-                    <p className="text-[13px] leading-5 text-secondary">
-                      {autonomy.mode === "automatic"
-                        ? "미리 승인된 범위에서는 사람을 기다리지 않고 실행합니다. 위험한 실행과 조직 변경은 여전히 수신함에서 확인을 받습니다."
-                        : autonomy.mode === "review"
-                          ? "실행 전에 사람의 확인을 받습니다. 조직이 더 자주 멈추는 대신 개입 지점이 많아집니다."
-                          : "사용자 책임 하에 정책과 불변식이 요구한 승인까지 모두 자동 통과합니다. 위험한 실행과 조직 변경도 묻지 않고 진행합니다."}
-                    </p>
-                    {fullAccessPending ? (
-                      <div className="mt-3 rounded-[5px] border border-halt/40 bg-surface-1 p-3" role="alert">
-                        <p className="text-[12px] leading-5 text-primary">
-                          에이전트가 현재 macOS 사용자와 같은 범위에서 파일을 읽고 변경·삭제하며, 명령과 네트워크 요청을
-                          실행하고 연결된 계정과 확장을 사용할 수 있습니다. 그 결과에 대한 책임은 사용자에게 있습니다.
-                        </p>
-                        <div className="mt-2 flex items-center gap-2">
-                          <button
-                            className="rounded-[5px] border border-border px-3 py-1 text-[12px] text-secondary"
-                            onClick={() => {
-                              setFullAccessPending(false);
-                            }}
-                            type="button"
-                          >
-                            취소
-                          </button>
-                          <button
-                            className="rounded-[5px] border border-halt px-3 py-1 text-[12px] text-halt"
-                            onClick={() => {
-                              setFullAccessPending(false);
-                              void commitAutonomyMode("full-access");
-                            }}
-                            type="button"
-                          >
-                            확인하고 켜기
-                          </button>
-                        </div>
+            {autonomy ? (
+              <section aria-label="자율성 경계">
+                <GrowthSection title="실행 자율성 기본값">
+                  <p className="text-[13px] leading-5 text-secondary">
+                    {autonomy.mode === "automatic"
+                      ? "미리 승인된 범위에서는 사람을 기다리지 않고 실행합니다. 위험한 실행과 조직 변경은 여전히 수신함에서 확인을 받습니다."
+                      : autonomy.mode === "review"
+                        ? "실행 전에 사람의 확인을 받습니다. 조직이 더 자주 멈추는 대신 개입 지점이 많아집니다."
+                        : "사용자 책임 하에 정책과 불변식이 요구한 승인까지 모두 자동 통과합니다. 위험한 실행과 조직 변경도 묻지 않고 진행합니다."}
+                  </p>
+                  {fullAccessPending ? (
+                    <div className="mt-3 rounded-[5px] border border-halt/40 bg-surface-1 p-3" role="alert">
+                      <p className="text-[12px] leading-5 text-primary">
+                        에이전트가 현재 macOS 사용자와 같은 범위에서 파일을 읽고 변경·삭제하며, 명령과 네트워크 요청을
+                        실행하고 연결된 계정과 확장을 사용할 수 있습니다. 그 결과에 대한 책임은 사용자에게 있습니다.
+                      </p>
+                      <div className="mt-2 flex items-center gap-2">
+                        <button
+                          className="rounded-[5px] border border-border px-3 py-1 text-[12px] text-secondary"
+                          onClick={() => {
+                            setFullAccessPending(false);
+                          }}
+                          type="button"
+                        >
+                          취소
+                        </button>
+                        <button
+                          className="rounded-[5px] border border-halt px-3 py-1 text-[12px] text-halt"
+                          onClick={() => {
+                            setFullAccessPending(false);
+                            void commitAutonomyMode("full-access");
+                          }}
+                          type="button"
+                        >
+                          확인하고 켜기
+                        </button>
                       </div>
-                    ) : null}
-                    <div className="mt-3 flex flex-wrap items-center gap-2">
-                      <button
-                        className={`rounded-[5px] border px-3 py-1 text-[12px] disabled:opacity-50 ${
-                          autonomy.mode === "automatic"
-                            ? "border-control bg-surface-2 text-primary"
-                            : "border-border text-secondary"
-                        }`}
-                        disabled={autonomySaving || autonomy.mode === "automatic"}
-                        onClick={() => {
-                          void setAutonomyMode("automatic");
-                        }}
-                        type="button"
-                      >
-                        자동 실행
-                      </button>
-                      <button
-                        className={`rounded-[5px] border px-3 py-1 text-[12px] disabled:opacity-50 ${
-                          autonomy.mode === "review"
-                            ? "border-control bg-surface-2 text-primary"
-                            : "border-border text-secondary"
-                        }`}
-                        disabled={autonomySaving || autonomy.mode === "review"}
-                        onClick={() => {
-                          void setAutonomyMode("review");
-                        }}
-                        type="button"
-                      >
-                        검토 후 실행
-                      </button>
-                      <button
-                        className={`rounded-[5px] border px-3 py-1 text-[12px] disabled:opacity-50 ${
-                          autonomy.mode === "full-access"
-                            ? "border-control bg-surface-2 text-primary"
-                            : "border-border text-secondary"
-                        }`}
-                        disabled={autonomySaving || autonomy.mode === "full-access"}
-                        onClick={() => {
-                          void setAutonomyMode("full-access");
-                        }}
-                        type="button"
-                      >
-                        전체 권한
-                      </button>
-                      <span className="font-mono text-[11px] text-muted">개정 {autonomy.revision}</span>
                     </div>
-                    <p className="mt-2 text-[11px] text-muted">
-                      실행 상태:{" "}
-                      {autonomy.emergencyStopActive
-                        ? "긴급 정지로 제한됨"
-                        : autonomy.runtimePermissionStatus === "full-access"
-                          ? "전체 권한"
-                          : "정책 적용"}
+                  ) : null}
+                  <ChoiceGroup
+                    busy={autonomySaving}
+                    onSelect={(mode: AutonomyView["mode"]) => {
+                      void setAutonomyMode(mode);
+                    }}
+                    options={AUTONOMY_OPTIONS}
+                    value={autonomy.mode}
+                  />
+                  {/* 고른 값과 실제로 걸린 값이 다를 때만 말합니다. 같으면 위 그룹이 이미 말했습니다. */}
+                  {autonomy.emergencyStopActive || autonomy.permissionLimitReason !== undefined ? (
+                    <p className="mt-2 text-[11px] text-gate">
+                      {autonomy.emergencyStopActive ? "긴급 정지로 제한됨" : "제한됨"}
                       {autonomy.permissionLimitReason === undefined ? "" : ` · ${autonomy.permissionLimitReason}`}
                     </p>
-                  </GrowthSection>
-                  <GrowthAdoptionBoundary autonomy={autonomy} />
-                </section>
-              ) : null}
-
-              <section id="설정-local">
-                <h3 className="mb-2 text-[13px] text-muted">로컬 환경</h3>
-                <p className="text-[13px] leading-5 text-secondary">
-                  daemon은 앱 창과 수명이 같지 않습니다. 앱을 닫아도 조직·업무·기록은 남습니다.
-                </p>
-                {/* 계약이 아직 daemon 상태를 주지 않습니다. 숫자를 지어내지 않고 그 사실을 말합니다. */}
-                <p className="mt-1.5 text-[12px] text-muted">
-                  daemon 상태와 데이터 위치를 읽는 조회가 아직 계약에 없습니다.
-                </p>
+                  ) : null}
+                </GrowthSection>
+                <GrowthAdoptionBoundary
+                  autonomy={
+                    growthModeOverride === undefined ? autonomy : { ...autonomy, growthMode: growthModeOverride }
+                  }
+                  onSelect={setGrowthModeOverride}
+                />
               </section>
+            ) : null}
 
-              {notice ? <p className="text-[12px] text-gate">{notice}</p> : null}
-            </div>
-          ) : null}
-        </div>
+            <GrowthSection title="로컬 환경">
+              <p className="text-[13px] leading-5 text-secondary">
+                daemon은 앱 창과 수명이 같지 않습니다. 앱을 닫아도 조직·업무·기록은 남습니다.
+              </p>
+              {/* 계약이 아직 daemon 상태를 주지 않습니다. 숫자를 지어내지 않고 그 사실을 말합니다. */}
+              <p className="mt-1.5 text-[12px] text-muted">
+                daemon 상태와 데이터 위치를 읽는 조회가 아직 계약에 없습니다.
+              </p>
+            </GrowthSection>
+
+            {notice ? <p className="text-[12px] text-gate">{notice}</p> : null}
+          </div>
+        ) : null}
       </div>
     </main>
   );
 }
-
-const SETTINGS_SECTIONS = [
-  { id: "budget", title: "예산" },
-  { id: "autonomy", title: "실행 자율성" },
-  { id: "local", title: "로컬 환경" },
-] as const;
 
 function costText(micros: number): string {
   return `$${(micros / 1_000_000).toFixed(2)}`;
@@ -4194,19 +4184,25 @@ function RouterConfiguration({
 }) {
   const routes = routeItems(settings.routes);
   const models = modelProfiles(settings.catalog);
+  const endpoints = endpointItems(settings.catalog);
+  const providerIds = [...new Set(endpoints.map((endpoint) => endpoint.providerId))].sort();
+  /*
+   * 종류는 목록을 박아두지 않고 카탈로그에 실제로 있는 값에서 고릅니다. 도메인의 `RouteKind`는
+   * chat|embedding인데 데이터는 reasoning|utility|embedding을 씁니다 — 어느 쪽을 박아도 틀립니다.
+   */
+  const routeKinds = [...new Set(models.map((profile) => profile.routeKind).filter(Boolean))];
   const [model, setModel] = useState({
     providerId: "",
     endpointId: "",
     modelId: "",
-    routeKind: "chat",
+    routeKind: "",
     contextWindow: "128000",
     equivalenceGroup: "general",
     evalScore: "0",
     inputCost: "0",
     outputCost: "0",
-    verified: false,
   });
-  const [route, setRoute] = useState({ name: "", routeKind: "chat" });
+  const [route, setRoute] = useState({ name: "", routeKind: "" });
   const [candidate, setCandidate] = useState({
     routeId: routes[0]?.routeId ?? "",
     modelProfileId: models[0]?.modelProfileId ?? "",
@@ -4215,6 +4211,9 @@ function RouterConfiguration({
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
   const [advancedOpen, setAdvancedOpen] = useState(false);
+  const modelKind = model.routeKind || (routeKinds[0] ?? "");
+  const newRouteKind = route.routeKind || (routeKinds[0] ?? "");
+
   const refresh = async () => {
     onRefresh(await service.loadSettings());
   };
@@ -4240,7 +4239,7 @@ function RouterConfiguration({
           providerId: model.providerId,
           endpointId: model.endpointId,
           modelId: model.modelId,
-          routeKind: model.routeKind,
+          routeKind: modelKind,
           contextWindow: Number(model.contextWindow),
           supportsTools: true,
           // 사용자 모델은 Provider별 capability 편차가 있으므로 검증 전에는 JSON prompt 경로를 사용합니다.
@@ -4251,7 +4250,8 @@ function RouterConfiguration({
           evalScore: Number(model.evalScore),
           inputCostMicrosPerMillion: Number(model.inputCost),
           outputCostMicrosPerMillion: Number(model.outputCost),
-          verified: model.verified,
+          // 검증은 사람이 주장하는 게 아니라 model_verification_evidence가 정합니다. 등록 시점엔 항상 거짓입니다.
+          verified: false,
         }),
       "모델 프로필을 등록하지 못했습니다.",
     );
@@ -4260,7 +4260,7 @@ function RouterConfiguration({
     event.preventDefault();
     await save(
       "route",
-      () => service.configureRoute({ name: route.name, routeKind: route.routeKind }),
+      () => service.configureRoute({ name: route.name, routeKind: newRouteKind }),
       "라우트를 저장하지 못했습니다.",
     );
   };
@@ -4297,188 +4297,267 @@ function RouterConfiguration({
           {error ? <SurfaceError message={error} /> : null}
           <form
             aria-label="모델 프로필 등록"
-            className="grid grid-cols-2 gap-4"
+            className="grid gap-4"
             onSubmit={(event) => {
               void submitModel(event);
             }}
           >
-            <SettingsField label="모델 Provider ID">
-              <Input
-                aria-label="모델 Provider ID"
-                className={input}
-                onChange={(event) => {
-                  setModel({ ...model, providerId: event.target.value });
-                }}
-                required
-                value={model.providerId}
-              />
-            </SettingsField>
-            <SettingsField label="모델 Endpoint ID">
-              <Input
-                aria-label="모델 Endpoint ID"
-                className={input}
-                onChange={(event) => {
-                  setModel({ ...model, endpointId: event.target.value });
-                }}
-                required
-                value={model.endpointId}
-              />
-            </SettingsField>
-            <SettingsField label="모델 ID">
-              <Input
-                aria-label="모델 ID"
-                className={input}
-                onChange={(event) => {
-                  setModel({ ...model, modelId: event.target.value });
-                }}
-                required
-                value={model.modelId}
-              />
-            </SettingsField>
-            <SettingsField label="Context window">
-              <Input
-                aria-label="Context window"
-                className={input}
-                min="1"
-                onChange={(event) => {
-                  setModel({ ...model, contextWindow: event.target.value });
-                }}
-                required
-                type="number"
-                value={model.contextWindow}
-              />
-            </SettingsField>
-            <SettingsField label="동등성 그룹">
-              <Input
-                aria-label="동등성 그룹"
-                className={input}
-                onChange={(event) => {
-                  setModel({ ...model, equivalenceGroup: event.target.value });
-                }}
-                required
-                value={model.equivalenceGroup}
-              />
-            </SettingsField>
-            <SettingsField label="평가 점수">
-              <Input
-                aria-label="평가 점수"
-                className={input}
-                min="0"
-                onChange={(event) => {
-                  setModel({ ...model, evalScore: event.target.value });
-                }}
-                required
-                step="any"
-                type="number"
-                value={model.evalScore}
-              />
-            </SettingsField>
-            <SettingsField label="입력 비용 (micros/백만)">
-              <Input
-                aria-label="입력 비용 (micros/백만)"
-                className={input}
-                min="0"
-                onChange={(event) => {
-                  setModel({ ...model, inputCost: event.target.value });
-                }}
-                required
-                type="number"
-                value={model.inputCost}
-              />
-            </SettingsField>
-            <SettingsField label="출력 비용 (micros/백만)">
-              <Input
-                aria-label="출력 비용 (micros/백만)"
-                className={input}
-                min="0"
-                onChange={(event) => {
-                  setModel({ ...model, outputCost: event.target.value });
-                }}
-                required
-                type="number"
-                value={model.outputCost}
-              />
-            </SettingsField>
-            <label className="text-sm text-secondary">
-              <input
-                checked={model.verified}
-                onChange={(event) => {
-                  setModel({ ...model, verified: event.target.checked });
-                }}
-                type="checkbox"
-              />{" "}
-              검증됨
-            </label>
-            <Button disabled={busy !== ""} type="submit">
-              모델 등록
-            </Button>
+            <h4 className="text-[12px] font-semibold text-fg-3">모델 등록</h4>
+            {/* Provider와 Endpoint는 카탈로그가 이미 갖고 있습니다. ID를 외워 적게 하지 않습니다. */}
+            <div className="grid grid-cols-2 gap-4">
+              <SettingsField label="프로바이더">
+                <select
+                  aria-label="프로바이더"
+                  className={`h-8 ${input}`}
+                  onChange={(event) => {
+                    setModel({ ...model, providerId: event.target.value, endpointId: "" });
+                  }}
+                  required
+                  value={model.providerId}
+                >
+                  <option value="">고르세요</option>
+                  {providerIds.map((providerId) => (
+                    <option key={providerId} value={providerId}>
+                      {providerId}
+                    </option>
+                  ))}
+                </select>
+              </SettingsField>
+              <SettingsField label="엔드포인트">
+                <select
+                  aria-label="엔드포인트"
+                  className={`h-8 ${input}`}
+                  disabled={model.providerId === ""}
+                  onChange={(event) => {
+                    setModel({ ...model, endpointId: event.target.value });
+                  }}
+                  required
+                  value={model.endpointId}
+                >
+                  <option value="">고르세요</option>
+                  {endpoints
+                    .filter((endpoint) => endpoint.providerId === model.providerId)
+                    .map((endpoint) => (
+                      <option key={endpoint.endpointId} value={endpoint.endpointId}>
+                        {endpoint.name} · {endpoint.baseUrl}
+                      </option>
+                    ))}
+                </select>
+              </SettingsField>
+              <SettingsField label="모델 이름">
+                <Input
+                  aria-label="모델 이름"
+                  className={input}
+                  onChange={(event) => {
+                    setModel({ ...model, modelId: event.target.value });
+                  }}
+                  placeholder="qwen3:8b"
+                  required
+                  value={model.modelId}
+                />
+              </SettingsField>
+              <SettingsField label="종류">
+                <select
+                  aria-label="종류"
+                  className={`h-8 ${input}`}
+                  onChange={(event) => {
+                    setModel({ ...model, routeKind: event.target.value });
+                  }}
+                  required
+                  value={modelKind}
+                >
+                  {routeKinds.map((kind) => (
+                    <option key={kind} value={kind}>
+                      {kind}
+                    </option>
+                  ))}
+                </select>
+              </SettingsField>
+              <SettingsField label="문맥 창(토큰)">
+                <Input
+                  aria-label="문맥 창(토큰)"
+                  className={input}
+                  min="1"
+                  onChange={(event) => {
+                    setModel({ ...model, contextWindow: event.target.value });
+                  }}
+                  required
+                  type="number"
+                  value={model.contextWindow}
+                />
+              </SettingsField>
+              <SettingsField label="100만 토큰당 입력 비용(µ$)">
+                <Input
+                  aria-label="100만 토큰당 입력 비용(µ$)"
+                  className={input}
+                  min="0"
+                  onChange={(event) => {
+                    setModel({ ...model, inputCost: event.target.value });
+                  }}
+                  required
+                  type="number"
+                  value={model.inputCost}
+                />
+              </SettingsField>
+              <SettingsField label="100만 토큰당 출력 비용(µ$)">
+                <Input
+                  aria-label="100만 토큰당 출력 비용(µ$)"
+                  className={input}
+                  min="0"
+                  onChange={(event) => {
+                    setModel({ ...model, outputCost: event.target.value });
+                  }}
+                  required
+                  type="number"
+                  value={model.outputCost}
+                />
+              </SettingsField>
+            </div>
+            {/*
+             * 동등성 그룹과 평가 점수는 배치가 쓰는 값이지 사람이 매 등록마다 정할 값이 아닙니다.
+             * 기본값으로 두고, 바꿔야 할 때만 엽니다.
+             */}
+            <details className="text-[12px] text-muted">
+              <summary className="cursor-pointer select-none py-1">배치 기준 조정</summary>
+              <div className="mt-2 grid grid-cols-2 gap-4">
+                <SettingsField label="동등성 그룹">
+                  <Input
+                    aria-label="동등성 그룹"
+                    className={input}
+                    onChange={(event) => {
+                      setModel({ ...model, equivalenceGroup: event.target.value });
+                    }}
+                    required
+                    value={model.equivalenceGroup}
+                  />
+                </SettingsField>
+                <SettingsField label="평가 점수">
+                  <Input
+                    aria-label="평가 점수"
+                    className={input}
+                    min="0"
+                    onChange={(event) => {
+                      setModel({ ...model, evalScore: event.target.value });
+                    }}
+                    required
+                    step="any"
+                    type="number"
+                    value={model.evalScore}
+                  />
+                </SettingsField>
+              </div>
+            </details>
+            <div className="flex items-center gap-3">
+              <Button disabled={busy !== ""} type="submit">
+                모델 등록
+              </Button>
+              {/* 등록은 이름을 카탈로그에 올리는 것뿐입니다. 응답하는지는 아직 모릅니다. */}
+              <span className="text-[11px] text-muted">등록해도 응답을 확인하기 전까지는 「미확인」입니다.</span>
+            </div>
           </form>
           <form
             aria-label="라우트 구성"
-            className="flex items-end gap-3"
+            className="grid gap-3 border-t border-border pt-5"
             onSubmit={(event) => {
               void submitRoute(event);
             }}
           >
-            <SettingsField label="라우트 이름">
-              <Input
-                aria-label="라우트 이름"
-                className={input}
-                onChange={(event) => {
-                  setRoute({ ...route, name: event.target.value });
-                }}
-                required
-                value={route.name}
-              />
-            </SettingsField>
-            <Button disabled={busy !== ""} type="submit">
-              라우트 저장
-            </Button>
+            <h4 className="text-[12px] font-semibold text-fg-3">라우트</h4>
+            <div className="flex items-end gap-3">
+              <SettingsField label="라우트 이름">
+                <Input
+                  aria-label="라우트 이름"
+                  className={input}
+                  onChange={(event) => {
+                    setRoute({ ...route, name: event.target.value });
+                  }}
+                  required
+                  value={route.name}
+                />
+              </SettingsField>
+              <SettingsField label="라우트 종류">
+                <select
+                  aria-label="라우트 종류"
+                  className={`h-8 ${input}`}
+                  onChange={(event) => {
+                    setRoute({ ...route, routeKind: event.target.value });
+                  }}
+                  required
+                  value={newRouteKind}
+                >
+                  {routeKinds.map((kind) => (
+                    <option key={kind} value={kind}>
+                      {kind}
+                    </option>
+                  ))}
+                </select>
+              </SettingsField>
+              <Button disabled={busy !== ""} type="submit">
+                라우트 저장
+              </Button>
+            </div>
           </form>
           <form
             aria-label="라우트 후보 연결"
-            className="grid grid-cols-[1fr_1fr_auto] items-end gap-3"
+            className="grid gap-3 border-t border-border pt-5"
             onSubmit={(event) => {
               void submitCandidate(event);
             }}
           >
-            <SettingsField label="라우트">
-              <select
-                aria-label="라우트"
-                className={`h-8 ${input}`}
-                onChange={(event) => {
-                  setCandidate({ ...candidate, routeId: event.target.value });
-                }}
-                required
-                value={candidate.routeId}
-              >
-                {routes.map((item) => (
-                  <option key={item.routeId} value={item.routeId}>
-                    {item.name}
-                  </option>
-                ))}
-              </select>
-            </SettingsField>
-            <SettingsField label="모델 프로필">
-              <select
-                aria-label="모델 프로필"
-                className={`h-8 ${input}`}
-                onChange={(event) => {
-                  setCandidate({ ...candidate, modelProfileId: event.target.value });
-                }}
-                required
-                value={candidate.modelProfileId}
-              >
-                {models.map((item) => (
-                  <option key={item.modelProfileId} value={item.modelProfileId}>
-                    {item.providerId}/{item.modelId}
-                  </option>
-                ))}
-              </select>
-            </SettingsField>
-            <Button disabled={busy !== "" || !candidate.routeId || !candidate.modelProfileId} type="submit">
-              후보 연결
-            </Button>
+            <h4 className="text-[12px] font-semibold text-fg-3">후보 연결</h4>
+            <div className="grid grid-cols-[1fr_1fr_88px_auto] items-end gap-3">
+              <SettingsField label="라우트">
+                <select
+                  aria-label="라우트"
+                  className={`h-8 ${input}`}
+                  onChange={(event) => {
+                    setCandidate({ ...candidate, routeId: event.target.value });
+                  }}
+                  required
+                  value={candidate.routeId}
+                >
+                  {routes.map((item) => (
+                    <option key={item.routeId} value={item.routeId}>
+                      {item.name}
+                    </option>
+                  ))}
+                </select>
+              </SettingsField>
+              <SettingsField label="모델 프로필">
+                <select
+                  aria-label="모델 프로필"
+                  className={`h-8 ${input}`}
+                  onChange={(event) => {
+                    setCandidate({ ...candidate, modelProfileId: event.target.value });
+                  }}
+                  required
+                  value={candidate.modelProfileId}
+                >
+                  {models.map((item) => (
+                    <option key={item.modelProfileId} value={item.modelProfileId}>
+                      {item.providerId}/{item.modelId}
+                    </option>
+                  ))}
+                </select>
+              </SettingsField>
+              {/* 우선순위가 fallback 순서를 정합니다. 화면에 없어서 늘 0으로 나가고 있었습니다. */}
+              <SettingsField label="우선순위">
+                <Input
+                  aria-label="우선순위"
+                  className={input}
+                  min="0"
+                  onChange={(event) => {
+                    setCandidate({ ...candidate, priority: event.target.value });
+                  }}
+                  required
+                  type="number"
+                  value={candidate.priority}
+                />
+              </SettingsField>
+              <Button disabled={busy !== "" || !candidate.routeId || !candidate.modelProfileId} type="submit">
+                후보 연결
+              </Button>
+            </div>
           </form>
         </div>
       ) : null}
@@ -4497,7 +4576,9 @@ function routeItems(value: unknown): readonly { routeId: string; name: string }[
   });
 }
 
-function modelProfiles(value: unknown): readonly { modelProfileId: string; providerId: string; modelId: string }[] {
+function modelProfiles(
+  value: unknown,
+): readonly { modelProfileId: string; providerId: string; modelId: string; routeKind: string }[] {
   const models = value && typeof value === "object" ? (value as { models?: unknown }).models : undefined;
   if (!Array.isArray(models)) return [];
   return models.flatMap((item) => {
@@ -4506,7 +4587,38 @@ function modelProfiles(value: unknown): readonly { modelProfileId: string; provi
     return typeof record.modelProfileId === "string" &&
       typeof record.providerId === "string" &&
       typeof record.modelId === "string"
-      ? [{ modelProfileId: record.modelProfileId, providerId: record.providerId, modelId: record.modelId }]
+      ? [
+          {
+            modelProfileId: record.modelProfileId,
+            providerId: record.providerId,
+            modelId: record.modelId,
+            routeKind: typeof record.routeKind === "string" ? record.routeKind : "",
+          },
+        ]
+      : [];
+  });
+}
+
+function endpointItems(
+  value: unknown,
+): readonly { endpointId: string; providerId: string; name: string; baseUrl: string }[] {
+  const endpoints = value && typeof value === "object" ? (value as { endpoints?: unknown }).endpoints : undefined;
+  if (!Array.isArray(endpoints)) return [];
+  return endpoints.flatMap((item) => {
+    if (!item || typeof item !== "object") return [];
+    const record = item as Record<string, unknown>;
+    return typeof record.endpointId === "string" &&
+      typeof record.providerId === "string" &&
+      typeof record.name === "string" &&
+      typeof record.baseUrl === "string"
+      ? [
+          {
+            endpointId: record.endpointId,
+            providerId: record.providerId,
+            name: record.name,
+            baseUrl: record.baseUrl,
+          },
+        ]
       : [];
   });
 }
