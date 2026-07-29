@@ -51,6 +51,79 @@ describe("Codex app-server 구독 실행 adapter", () => {
     await Promise.all(profiles.splice(0).map(async (profile) => await rm(profile, { recursive: true, force: true })));
   });
 
+  function failedTurnConnector(
+    error: unknown,
+    beforeFailure: readonly { readonly method: string; readonly params: unknown }[] = [],
+    outputTokens = 0,
+    notificationError: unknown = error,
+  ): CodexAppServerSubscriptionConnector {
+    let options: CodexAppServerOptions | undefined;
+    const connection: CodexAppServerConnection = {
+      get closed() {
+        return false;
+      },
+      close: vi.fn(async () => undefined),
+      notify: vi.fn(async () => undefined),
+      request: vi.fn(async (method: string) => {
+        if (method === "thread/start") return { thread: { id: "thread-auth-failed" } };
+        if (method === "turn/start") {
+          queueMicrotask(() => {
+            void (async () => {
+              await options?.onNotification?.({
+                method: "turn/started",
+                params: {
+                  threadId: "thread-auth-failed",
+                  turn: { id: "turn-auth-failed", status: "inProgress", error: null },
+                },
+              });
+              for (const notification of beforeFailure) await options?.onNotification?.(notification);
+              await options?.onNotification?.({
+                method: "thread/tokenUsage/updated",
+                params: {
+                  threadId: "thread-auth-failed",
+                  turnId: "turn-auth-failed",
+                  tokenUsage: {
+                    last: { totalTokens: outputTokens, inputTokens: 0, cachedInputTokens: 0, outputTokens },
+                  },
+                },
+              });
+              await options?.onNotification?.({
+                method: "error",
+                params: {
+                  threadId: "thread-auth-failed",
+                  turnId: "turn-auth-failed",
+                  error: notificationError,
+                  willRetry: false,
+                },
+              });
+              await options?.onNotification?.({
+                method: "turn/completed",
+                params: {
+                  threadId: "thread-auth-failed",
+                  turn: { id: "turn-auth-failed", status: "failed", error, items: [] },
+                },
+              });
+            })();
+          });
+          return { turn: { id: "turn-auth-failed" } };
+        }
+        throw new Error(`예상하지 않은 method: ${method}`);
+      }),
+    };
+    return new CodexAppServerSubscriptionConnector(
+      { request: vi.fn() },
+      {
+        model: "gpt-5.6-codex",
+        policy: { sandboxMode: "workspace-write", approvalPolicy: "on-request", networkAccessEnabled: false },
+        runtime: async () => ({ command: "/usr/bin/node", commandArguments: ["/runtime/codex.js"] }),
+      },
+      vi.fn(async (_command, _arguments, _environment, configuredOptions) => {
+        options = configuredOptions;
+        return connection;
+      }),
+    );
+  }
+
   it("관리 Codex profile의 auth.json이 없으면 app-server process를 열지 않고 실행을 거부한다", async () => {
     await rm(join(input.profileRoot, "auth.json"));
     const open = vi.fn() satisfies CodexAppServerOpen;
@@ -326,6 +399,135 @@ describe("Codex app-server 구독 실행 adapter", () => {
       params: { threadId: "thread-existing", turnId: "turn-cancel" },
     });
     expect(closed).toBe(true);
+  });
+
+  it.each([
+    ["명시적인 unauthorized", "unauthorized"],
+    ["명시적인 HTTP 401", { httpConnectionFailed: { httpStatusCode: 401 } }],
+  ])("출력이나 도구 이벤트 전의 %s 오류만 fallback 가능한 실패로 반환한다", async (_label, codexErrorInfo) => {
+    const connector = failedTurnConnector({
+      message: "인증이 필요합니다",
+      codexErrorInfo,
+      additionalDetails: null,
+    });
+
+    await expect(connector.execute(context, input)).resolves.toMatchObject({
+      outcome: "failed",
+      signal: { kind: "http", statusCode: 401 },
+      emittedTokens: 0,
+      sideEffectsStarted: false,
+    });
+  });
+
+  it.each([
+    [
+      "assistant delta",
+      [
+        {
+          method: "item/agentMessage/delta",
+          params: {
+            threadId: "thread-auth-failed",
+            turnId: "turn-auth-failed",
+            itemId: "message-auth-failed",
+            delta: "한",
+          },
+        },
+      ],
+      0,
+    ],
+    [
+      "도구 시작",
+      [
+        {
+          method: "item/started",
+          params: {
+            threadId: "thread-auth-failed",
+            turnId: "turn-auth-failed",
+            item: { id: "command-auth-failed", type: "commandExecution", command: "pwd", status: "inProgress" },
+          },
+        },
+      ],
+      0,
+    ],
+    ["출력 token", [], 1],
+    [
+      "알 수 없는 단계",
+      [
+        {
+          method: "provider/futureStage",
+          params: { threadId: "thread-auth-failed", turnId: "turn-auth-failed" },
+        },
+      ],
+      0,
+    ],
+  ])("%s 뒤의 app-server 401은 fallback 가능한 실패로 낮추지 않는다", async (_label, notifications, outputTokens) => {
+    const connector = failedTurnConnector(
+      {
+        message: "인증이 필요합니다",
+        codexErrorInfo: { httpConnectionFailed: { httpStatusCode: 401 } },
+        additionalDetails: null,
+      },
+      notifications,
+      outputTokens,
+    );
+
+    const result = await connector.execute(context, input);
+
+    expect(result).toMatchObject({ outcome: "failed", sideEffectsStarted: true });
+    expect(result.outcome === "failed" ? result.signal : undefined).toBeUndefined();
+  });
+
+  it("401이 아닌 구조화 오류는 출력 전이어도 fallback 가능한 실패로 낮추지 않는다", async () => {
+    const connector = failedTurnConnector({
+      message: "요청이 제한됐습니다",
+      codexErrorInfo: { httpConnectionFailed: { httpStatusCode: 429 } },
+      additionalDetails: null,
+    });
+
+    const result = await connector.execute(context, input);
+
+    expect(result).toMatchObject({ outcome: "failed", sideEffectsStarted: true });
+    expect(result.outcome === "failed" ? result.signal : undefined).toBeUndefined();
+  });
+
+  it.each([
+    ["top-level statusCode", { statusCode: 401 }],
+    ["top-level code", { code: 401 }],
+    ["cause statusCode", { cause: { statusCode: 401 } }],
+    ["알 수 없는 Codex variant", { codexErrorInfo: { futureFailure: { httpStatusCode: 401 } } }],
+  ])("공식 app-server 오류가 아닌 %s 형태는 fallback 가능한 실패로 분류하지 않는다", async (_label, error) => {
+    const connector = failedTurnConnector(error);
+
+    const result = await connector.execute(context, input);
+
+    expect(result).toMatchObject({ outcome: "failed", sideEffectsStarted: true });
+    expect(result.outcome === "failed" ? result.signal : undefined).toBeUndefined();
+  });
+
+  it.each([
+    ["429", { httpConnectionFailed: { httpStatusCode: 429 } }],
+    ["503", { httpConnectionFailed: { httpStatusCode: 503 } }],
+    ["unknown", "other"],
+  ])("앞선 error notification만 401이고 최종 turn.error가 %s이면 fallback하지 않는다", async (_label, finalError) => {
+    const connector = failedTurnConnector(
+      {
+        message: "최종 인증 외 오류입니다",
+        codexErrorInfo: finalError,
+        additionalDetails: null,
+      },
+      [],
+      0,
+      {
+        message: "인증이 필요합니다",
+        codexErrorInfo: "unauthorized",
+        additionalDetails: null,
+      },
+    );
+
+    const result = await connector.execute(context, input);
+
+    expect(result).toMatchObject({ outcome: "failed", sideEffectsStarted: true });
+    expect(result.outcome === "failed" ? result.signal : undefined).toBeUndefined();
   });
 
   it("실제 NDJSON transport에서 thread→turn→승인→완료 순서를 수행한다", async () => {

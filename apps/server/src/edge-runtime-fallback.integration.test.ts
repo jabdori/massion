@@ -1,5 +1,5 @@
 import { randomBytes, randomUUID } from "node:crypto";
-import { mkdir, mkdtemp, realpath, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -28,9 +28,13 @@ import {
 
 import { EdgeRequestExecutor } from "../../connector/src/executor.js";
 import { ConnectorIdentityStore, type ActiveConnectorIdentity } from "../../connector/src/identity-store.js";
-import { ProviderReauthenticationRequiredError } from "../../connector/src/profile-health.js";
 import type { ConnectorRequestFrame } from "../../connector/src/protocol.js";
-import { MassionSubscriptionRuntimeResolver } from "./subscription-runtime-resolver.js";
+import { CodexAppServerSubscriptionConnector, type CodexAppServerOpen } from "./codex-app-server-agent.js";
+import type { CodexAppServerConnection, CodexAppServerOptions } from "./codex-app-server.js";
+import {
+  MassionSubscriptionRuntimeResolver,
+  type SubscriptionAgentExecutionPolicy,
+} from "./subscription-runtime-resolver.js";
 
 describe("실제 Edge 구독 fallback 통합", () => {
   const roots: string[] = [];
@@ -55,6 +59,7 @@ describe("실제 Edge 구독 fallback 통합", () => {
   ): Promise<ActiveConnectorIdentity> {
     const profileRoot = join(root, `${connectorId}-profile`);
     await mkdir(profileRoot, { mode: 0o700 });
+    await writeFile(join(profileRoot, "auth.json"), "integration-login-fixture", { mode: 0o600 });
     const identityPath = join(root, `${connectorId}-identity.json`);
     const pending = await ConnectorIdentityStore.createPending(identityPath, {
       baseUrl: "https://massion.example",
@@ -72,7 +77,7 @@ describe("실제 Edge 구독 fallback 통합", () => {
     return await new ConnectorIdentityStore(identityPath).activate(pending, context);
   }
 
-  it("첫 계정의 SDK 시작 전 401을 실제 lease에 정산하고 다음 계정으로 성공한다", async () => {
+  it("첫 계정의 app-server 인증 전 401을 실제 lease에 정산하고 다음 계정으로 성공한다", async () => {
     const root = await realpath(await mkdtemp(join(tmpdir(), "massion-edge-runtime-fallback-")));
     roots.push(root);
     const workspaceRoot = join(root, "workspace");
@@ -303,7 +308,87 @@ describe("실제 Edge 구독 fallback 통합", () => {
       priority: 1,
     });
 
-    const adapterAFactory = vi.fn();
+    const authenticationError = {
+      message: "인증이 필요합니다",
+      codexErrorInfo: "unauthorized",
+      additionalDetails: null,
+    };
+    let appServerOptions: CodexAppServerOptions | undefined;
+    let appServerClosed = false;
+    const appServerConnection: CodexAppServerConnection = {
+      get closed() {
+        return appServerClosed;
+      },
+      close: vi.fn(async () => {
+        appServerClosed = true;
+      }),
+      notify: vi.fn(async () => undefined),
+      request: vi.fn(async (method: string) => {
+        if (method === "thread/start") return { thread: { id: "provider-session-a" } };
+        if (method === "turn/start") {
+          queueMicrotask(() => {
+            void (async () => {
+              await appServerOptions?.onNotification?.({
+                method: "turn/started",
+                params: {
+                  threadId: "provider-session-a",
+                  turn: { id: "provider-turn-a", status: "inProgress", error: null },
+                },
+              });
+              await appServerOptions?.onNotification?.({
+                method: "thread/tokenUsage/updated",
+                params: {
+                  threadId: "provider-session-a",
+                  turnId: "provider-turn-a",
+                  tokenUsage: {
+                    last: { totalTokens: 0, inputTokens: 0, cachedInputTokens: 0, outputTokens: 0 },
+                  },
+                },
+              });
+              await appServerOptions?.onNotification?.({
+                method: "error",
+                params: {
+                  threadId: "provider-session-a",
+                  turnId: "provider-turn-a",
+                  error: authenticationError,
+                  willRetry: false,
+                },
+              });
+              await appServerOptions?.onNotification?.({
+                method: "turn/completed",
+                params: {
+                  threadId: "provider-session-a",
+                  turn: {
+                    id: "provider-turn-a",
+                    status: "failed",
+                    error: authenticationError,
+                    items: [],
+                  },
+                },
+              });
+            })();
+          });
+          return { turn: { id: "provider-turn-a" } };
+        }
+        throw new Error(`예상하지 않은 app-server method: ${method}`);
+      }),
+    };
+    const appServerOpen = vi.fn(async (_command, _arguments, _environment, options) => {
+      appServerOptions = options;
+      return appServerConnection;
+    }) satisfies CodexAppServerOpen;
+    const adapterAFactory = vi.fn(
+      () =>
+        new CodexAppServerSubscriptionConnector(
+          { request: async () => ({ outcome: "deny", reason: "호출되지 않아야 합니다" }) },
+          {
+            model: "gpt-5.6-codex",
+            policy: { sandboxMode: "workspace-write", approvalPolicy: "on-request", networkAccessEnabled: false },
+            runtime: async () => ({ command: "/usr/bin/node", commandArguments: ["/runtime/codex.js"] }),
+          },
+          appServerOpen,
+        ),
+    );
     const adapterB: SubscriptionAgentAdapter = {
       execute: vi.fn().mockImplementation((_context, input) =>
         Promise.resolve({
@@ -323,7 +408,7 @@ describe("실제 Edge 구독 fallback 통합", () => {
         new EdgeRequestExecutor({
           identity: identityA,
           factory: { create: adapterAFactory },
-          healthProbe: { verify: () => Promise.reject(new ProviderReauthenticationRequiredError()) },
+          healthProbe: { verify: async (input) => ({ authKind: input.expectedAuthKind }) },
         }),
       ],
       [
@@ -351,6 +436,17 @@ describe("실제 Edge 구독 fallback 통합", () => {
       },
     };
     const broker = await SubscriptionConnectorBroker.create(database, organizations, accounts, { transport });
+    const edgePolicy = Object.defineProperties(
+      {
+        sandboxMode: "workspace-write",
+        approvalPolicy: "never",
+        networkAccessEnabled: false,
+      },
+      {
+        permissionMode: { value: "governed" },
+        autonomyRevision: { value: 0 },
+      },
+    ) as SubscriptionAgentExecutionPolicy;
     const resolver = new MassionSubscriptionRuntimeResolver({
       accounts,
       connectors: connectorRegistry,
@@ -359,11 +455,7 @@ describe("실제 Edge 구독 fallback 통합", () => {
         verify: async () => ({ workspaceRoot, allowedTools: [], disallowedTools: [] }),
       },
       policies: {
-        resolve: async () => ({
-          sandboxMode: "workspace-write",
-          approvalPolicy: "never",
-          networkAccessEnabled: false,
-        }),
+        resolve: async () => edgePolicy,
       },
       profileRoot: join(root, "server-profiles"),
       executableAllowlist: {},
@@ -405,6 +497,7 @@ describe("실제 Edge 구독 fallback 통합", () => {
       [
         Array<{ account_id: string; status: string }>,
         Array<{
+          attempt_id: string;
           credential_id: string;
           status: string;
           failure_class?: string;
@@ -413,15 +506,16 @@ describe("실제 Edge 구독 fallback 통합", () => {
           side_effects_started: boolean;
           selection_sequence: number;
         }>,
-        Array<{ account_id: string; status: string; route_attempt_id: string; created_at: unknown }>,
+        Array<{ lease_id: string; account_id: string; status: string; route_attempt_id: string; created_at: unknown }>,
       ]
     >(
       `SELECT account_id, status FROM subscription_account
        WHERE organization_id = $organization_id ORDER BY account_id ASC;
-       SELECT credential_id, status, failure_class, fallback_from_attempt_id, emitted_tokens, side_effects_started,
+       SELECT attempt_id, credential_id, status, failure_class, fallback_from_attempt_id, emitted_tokens,
+              side_effects_started,
               selection_sequence
        FROM route_attempt WHERE organization_id = $organization_id ORDER BY selection_sequence ASC;
-       SELECT account_id, status, route_attempt_id, created_at FROM subscription_session_lease
+       SELECT lease_id, account_id, status, route_attempt_id, created_at FROM subscription_session_lease
        WHERE organization_id = $organization_id ORDER BY created_at ASC;`,
       { organization_id: context.organizationId },
     );
@@ -430,7 +524,7 @@ describe("실제 Edge 구독 fallback 통합", () => {
       status: "succeeded",
       output: "두 번째 계정 성공",
     });
-    expect(adapterAFactory).not.toHaveBeenCalled();
+    expect(adapterAFactory).toHaveBeenCalledOnce();
     expect(adapterB.execute).toHaveBeenCalledOnce();
     expect(accountRows.find((account) => account.account_id === accountA.account_id)?.status).toBe("needs-reauth");
     expect(accountRows.find((account) => account.account_id === accountB.account_id)?.status).toBe("active");
@@ -448,8 +542,20 @@ describe("실제 Edge 구독 fallback 통합", () => {
         fallback_from_attempt_id: expect.any(String),
       }),
     ]);
-    expect(leaseRows.map((lease) => lease.status)).toEqual(["failed", "completed"]);
-    expect(new Set(leaseRows.map((lease) => lease.route_attempt_id)).size).toBe(2);
+    expect(attemptRows[1]?.fallback_from_attempt_id).toBe(attemptRows[0]?.attempt_id);
+    expect(leaseRows).toEqual([
+      expect.objectContaining({
+        account_id: accountA.account_id,
+        status: "failed",
+        route_attempt_id: attemptRows[0]?.attempt_id,
+      }),
+      expect.objectContaining({
+        account_id: accountB.account_id,
+        status: "completed",
+        route_attempt_id: attemptRows[1]?.attempt_id,
+      }),
+    ]);
+    expect(new Set(leaseRows.map((lease) => lease.lease_id)).size).toBe(2);
     expect(JSON.stringify({ result, accountRows, attemptRows, leaseRows })).not.toMatch(
       /profile-a|profile-b|edge-fallback-owner@example\.com/iu,
     );

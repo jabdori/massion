@@ -258,6 +258,44 @@ describe("공식 Codex 구독 Connector", () => {
     expect(resumeThread).toHaveBeenCalledWith("thread-existing", { workingDirectory: "/tmp/work-1" });
   });
 
+  it.each([
+    ["메시지", new Error("HTTP 401 Unauthorized")],
+    ["status", Object.assign(new Error("인증이 필요합니다"), { status: 401 })],
+    ["statusCode", Object.assign(new Error("인증이 필요합니다"), { statusCode: 401 })],
+    ["code", Object.assign(new Error("인증이 필요합니다"), { code: 401 })],
+    ["cause", new Error("SDK 실행 실패", { cause: { statusCode: 401 } })],
+  ])("공식 SDK에 없는 %s 401 형태는 fallback 가능한 실패로 분류하지 않는다", async (_label, failure) => {
+    const connector = new CodexSubscriptionConnector({
+      create: () => ({
+        startThread: () => ({
+          id: "thread-untrusted-401",
+          run: vi.fn().mockRejectedValue(failure),
+          runStreamed: vi.fn().mockResolvedValue({
+            events: (async function* () {
+              yield { type: "turn.started" };
+              throw failure;
+            })(),
+          }),
+        }),
+        resumeThread: vi.fn(),
+      }),
+    } as CodexSdkFactory);
+
+    await expect(
+      connector.execute(context, {
+        executionId: "execution-untrusted-401",
+        workId: "work-untrusted-401",
+        agentHandle: "representative",
+        prompt: "신뢰할 수 없는 오류를 확인하세요",
+        workspaceRoot: "/tmp/work-untrusted-401",
+        profileRoot: "/tmp/profile-untrusted-401",
+        environment: {},
+        allowedTools: [],
+        disallowedTools: [],
+      }),
+    ).rejects.toBe(failure);
+  });
+
   it("실행 중인 turn을 취소하면 SDK AbortSignal을 중단한다", async () => {
     let turnSignal: AbortSignal | undefined;
     const run = vi.fn().mockImplementation(

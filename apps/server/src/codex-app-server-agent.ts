@@ -65,6 +65,8 @@ interface ActiveTurn {
   turnId?: string;
   finalText?: string;
   usage?: { readonly inputTokens: number; readonly outputTokens: number };
+  emittedTokens: number;
+  sideEffectsStarted: boolean;
   pending: PendingApproval | undefined;
 }
 
@@ -107,6 +109,34 @@ function optionalText(value: unknown, label: string, maximum = 16_384): string |
 function safeInteger(value: unknown, label: string): number {
   if (!Number.isSafeInteger(value) || Number(value) < 0) throw new Error(`${label}이 유효하지 않습니다`);
   return Number(value);
+}
+
+function optionalRecord(value: unknown): JsonRecord | undefined {
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as JsonRecord) : undefined;
+}
+
+function appServerAuthenticationFailed(error: unknown): boolean {
+  const codexErrorInfo = optionalRecord(error)?.codexErrorInfo;
+  if (codexErrorInfo === "unauthorized") return true;
+  const structured = optionalRecord(codexErrorInfo);
+  if (!structured || Object.keys(structured).length !== 1) return false;
+  const [kind] = Object.keys(structured);
+  switch (kind) {
+    case "httpConnectionFailed":
+    case "responseStreamConnectionFailed":
+    case "responseStreamDisconnected":
+    case "responseTooManyFailedAttempts": {
+      const details = optionalRecord(structured[kind]);
+      return details !== undefined && Object.keys(details).length === 1 && details.httpStatusCode === 401;
+    }
+    default:
+      return false;
+  }
+}
+
+function turnItemsHaveSideEffects(value: unknown): boolean {
+  if (!Array.isArray(value)) return true;
+  return value.some((item) => optionalRecord(item)?.type !== "userMessage");
 }
 
 function inside(root: string, candidate: string): boolean {
@@ -256,6 +286,8 @@ export class CodexAppServerSubscriptionConnector implements SubscriptionAgentAda
       output,
       completion: deferred(),
       suspension: deferred(),
+      emittedTokens: 0,
+      sideEffectsStarted: false,
       pending: undefined,
     };
     this.active = active;
@@ -339,6 +371,7 @@ export class CodexAppServerSubscriptionConnector implements SubscriptionAgentAda
       throw new Error("Codex app-server 승인 계보가 일치하지 않습니다");
     }
     active.turnId = turnId;
+    active.sideEffectsStarted = true;
     if (active.pending) throw new Error("Codex app-server 동시 승인 요청은 허용하지 않습니다");
     const reason = optionalText(params.reason, "Codex 승인 이유");
     const toolInput: Record<string, unknown> = {};
@@ -388,12 +421,29 @@ export class CodexAppServerSubscriptionConnector implements SubscriptionAgentAda
   }
 
   private notification(active: ActiveTurn, method: string, value: unknown): void {
-    if (method === "item/completed") {
-      const params = record(value, "Codex item/completed");
+    if (method === "thread/started" || method === "thread/status/changed") return;
+    if (method === "turn/started") {
+      const params = record(value, "Codex turn/started");
+      this.notificationLineage(active, params.threadId, record(params.turn, "Codex started turn").id);
+      return;
+    }
+    if (method === "item/agentMessage/delta") {
+      const params = record(value, "Codex agent message delta");
       this.notificationLineage(active, params.threadId, params.turnId);
-      const item = record(params.item, "Codex completed item");
+      optionalText(params.delta, "Codex agent message delta", 16 * 1024 * 1024);
+      active.emittedTokens += 1;
+      active.sideEffectsStarted = true;
+      return;
+    }
+    if (method === "item/started" || method === "item/completed") {
+      const params = record(value, `Codex ${method}`);
+      this.notificationLineage(active, params.threadId, params.turnId);
+      const item = record(params.item, `Codex ${method} item`);
+      if (item.type !== "userMessage") active.sideEffectsStarted = true;
       if (item.type === "agentMessage") {
-        active.finalText = optionalText(item.text, "Codex 최종 응답", 16 * 1024 * 1024) ?? "";
+        const text = optionalText(item.text, "Codex agent 응답", 16 * 1024 * 1024) ?? "";
+        if (text) active.emittedTokens += 1;
+        if (method === "item/completed") active.finalText = text;
       }
       return;
     }
@@ -405,9 +455,18 @@ export class CodexAppServerSubscriptionConnector implements SubscriptionAgentAda
         inputTokens: safeInteger(last.inputTokens, "Codex 입력 token"),
         outputTokens: safeInteger(last.outputTokens, "Codex 출력 token"),
       };
+      if (active.usage.outputTokens > 0) active.sideEffectsStarted = true;
       return;
     }
-    if (method !== "turn/completed") return;
+    if (method === "error") {
+      const params = record(value, "Codex error");
+      this.notificationLineage(active, params.threadId, params.turnId);
+      return;
+    }
+    if (method !== "turn/completed") {
+      if (active.turnId) active.sideEffectsStarted = true;
+      return;
+    }
     const params = record(value, "Codex turn/completed");
     const turn = record(params.turn, "Codex completed turn");
     this.notificationLineage(active, params.threadId, turn.id);
@@ -418,14 +477,20 @@ export class CodexAppServerSubscriptionConnector implements SubscriptionAgentAda
       return;
     }
     if (turn.status === "failed") {
+      if (turnItemsHaveSideEffects(turn.items)) active.sideEffectsStarted = true;
+      const emittedTokens = Math.max(active.emittedTokens, active.usage?.outputTokens ?? 0);
+      const authenticationFailed = appServerAuthenticationFailed(turn.error);
+      const safeAuthenticationFailure =
+        authenticationFailed && active.usage?.outputTokens === 0 && emittedTokens === 0 && !active.sideEffectsStarted;
       active.completion.resolve({
         outcome: "failed",
         executionId: active.input.executionId,
         sessionId: threadId,
         category: "codex-turn-failed",
-        retryable: false,
-        emittedTokens: active.finalText ? 1 : 0,
-        sideEffectsStarted: true,
+        retryable: safeAuthenticationFailure,
+        ...(safeAuthenticationFailure ? { signal: { kind: "http", statusCode: 401 } as const } : {}),
+        emittedTokens,
+        sideEffectsStarted: safeAuthenticationFailure ? false : true,
       });
       return;
     }
