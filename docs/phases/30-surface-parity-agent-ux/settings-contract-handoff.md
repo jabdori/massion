@@ -221,3 +221,27 @@ Work는 다시 읽히지만 **방은 다시 읽히지 않아**, 같은 Work를 �
 선택을 보존하는 갱신이 같이 서야 합니다.
 
 - [ ] Work가 다시 읽힐 때 방도 다시 읽는다 — 열려 있는 방 선택을 보존하면서
+
+---
+
+# 부록 A. 업무 표면 — Records(기록)
+
+Work 상세에 `기록` 탭을 세우고 완료된 Work 픽스처(`refund-delay`)를 넣으면서 확인한 경계입니다.
+탭이 그리는 값은 전부 `WorkRecord`(`packages/work/src/work.ts` `:542`)와 `RecordsDocument`
+(`packages/records/src/contracts.ts` `:47`)에 실재합니다. 아래는 **도메인에 없어서 화면이 앞세운 것**입니다.
+
+| 화면이 앞세운 것 | 위치 | 도메인 현황 | 필요한 것 |
+|---|---|---|---|
+| `work.records` 결과를 실제로 싣기 | `desktop-service.ts` `projectWorkDetail()`·`projectWorkSummary()` — 둘 다 `records: []` | `work.records` 조회는 `query-registry.ts` `:1150`에 **있으나** client 계약(`ApplicationQueryMapV1`)에 없음 | `WorkRecordViewV1` 등록. `handle`이 이미 `recordId·version·summary·artifactIds·verificationIds·finalizedAt`로 돌려줌 |
+| `recordedRevision`·`finalizedBy`·`snapshotHash`·`eventRange`·`decisionIds`·`documents` | `model.ts` `RecordView` | 테이블 `work_record`에 `recorded_work_revision`·`finalized_by`·`records_snapshot_hash`·`event_start_sequence`/`event_end_sequence`·`decision_message_ids`·`document_ids` **전부 있음** | `work.records`의 `handle` 반환에 이 여섯을 추가. 새 계산 없음 |
+| 문서의 `kind`·`checksum` | `model.ts` `RecordDocumentView` | `records_document`에 `kind`·`markdown_checksum` 있음. **Work 조회 경로에는 노출되지 않음** | `work.records`가 `document_ids`를 문서 요약으로 풀거나 `records.documents` 조회 신설 |
+| 결정 본문 | `app.tsx` `InspectorRecords()` — `decisionIds`를 `work.activities`의 `decision` 메시지에서 해소 | `decision_message_ids`는 **ID만** 보존. 본문은 `collaboration_message` | 지금 방식(활동 흐름에서 해소)이 맞음. 계약 변경 불필요 |
+| 승인 이력 | `app.tsx` `InspectorRecords()` — `work.approvals`를 별도 구역으로 | `WorkRecord`에 **승인 참조가 없음**. 기록이 아니라 Work가 지나온 승인 | 기록이 승인을 보존해야 한다면 `work_record`에 approval 참조 필드가 먼저 필요 |
+| 최종 응답 표시(`final`) | `model.ts` `ActivityView.room.final`, `room.tsx` `RoomMessage` | `collaboration_message`에 **최종 응답 표식이 없음**. 대표 에이전트의 책임으로만 존재(`packages/organization/src/organization.ts` `:23`, 헌법 §5) | Records 완료 시점의 Representative `answer`를 도메인이 표시하거나, 화면이 「Work 완료 + 마지막 `answer` + 수신자=사용자」로 계속 파생 |
+
+### 완료 판정
+
+- [ ] `work.records`가 `ApplicationQueryMapV1`에 타입과 함께 등록된다
+- [ ] `projectWorkDetail()`의 `records: []`가 실제 투영으로 바뀐다
+- [ ] `RecordView`의 여섯 필드가 계약에서 온다
+- [ ] 최종 응답이 화면 파생이 아니라 도메인 사실로 읽힌다

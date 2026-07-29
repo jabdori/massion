@@ -269,6 +269,8 @@ export interface RoomMessageProps {
   speaker: SpeakerView;
   content: string;
   evidence?: { label: string; checksum: string } | undefined;
+  /** 조직이 사용자에게 돌려준 답. 흐름의 마지막 한 줄이 다른 발언과 같은 무게로 지나가지 않게 합니다. */
+  final?: boolean | undefined;
   indented?: boolean | undefined;
   quoted?: RoomQuote | undefined;
   recipient?: string | undefined;
@@ -282,6 +284,7 @@ export function RoomMessage({
   speaker,
   content,
   evidence,
+  final,
   indented,
   quoted,
   recipient,
@@ -297,6 +300,11 @@ export function RoomMessage({
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
           <SpeakerName speaker={speaker} />
           <TypeTag speaker={speaker} type={type} />
+          {final ? (
+            <span className="rounded-[3px] border border-primary px-1.5 text-[10px] font-semibold tracking-[0.06em] text-primary">
+              최종
+            </span>
+          ) : null}
           <time className="font-mono text-[11px] text-muted">
             {recipient ? `→ ${recipient} · ` : ""}
             {target ? `${target} · ` : ""}
@@ -308,7 +316,9 @@ export function RoomMessage({
             {quoted.author} · {quoted.time} — {quoted.content}
           </blockquote>
         ) : null}
-        <p className="text-[13px] leading-5 text-primary">{content}</p>
+        <p className={`text-[13px] leading-5 text-primary ${final ? "mt-1 border-l-2 border-primary pl-2.5" : ""}`}>
+          {content}
+        </p>
         {evidence ? (
           <p className="mt-1.5 flex flex-wrap items-center gap-2">
             <span

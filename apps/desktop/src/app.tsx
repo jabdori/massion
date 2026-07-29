@@ -115,6 +115,7 @@ import {
   type ApprovalView,
   type InboxItem,
   type ArtifactView,
+  type RecordDocumentKind,
   type StepState,
   type TaskView,
   type RoomView,
@@ -5402,6 +5403,7 @@ function ActivityRow({
           speaker={value.speaker}
           content={value.content}
           evidence={value.evidence}
+          final={value.final}
           indented={value.indented}
           quoted={value.quoted}
           recipient={value.recipient}
@@ -6015,6 +6017,9 @@ function WorkInspector({
             <TabsTrigger className="h-full flex-1 px-1" value="verification">
               검증
             </TabsTrigger>
+            <TabsTrigger className="h-full flex-1 px-1" value="records">
+              기록
+            </TabsTrigger>
             <TabsTrigger className="h-full flex-1 px-1" value="knowledge">
               근거
             </TabsTrigger>
@@ -6056,6 +6061,9 @@ function WorkInspector({
           </TabsContent>
           <TabsContent value="verification">
             <InspectorVerifications values={work.verifications} />
+          </TabsContent>
+          <TabsContent className="space-y-3" value="records">
+            <InspectorRecords approvals={work.approvals} activities={work.activities} values={work.records} />
           </TabsContent>
           <TabsContent value="knowledge">
             <WorkKnowledgeInspector
@@ -6295,6 +6303,172 @@ function InspectorVerifications({ values }: { values: WorkView["verifications"] 
         ))}
       </ul>
     </details>
+  );
+}
+
+const recordDocumentLabel: Record<RecordDocumentKind, string> = {
+  adr: "ADR",
+  changelog: "CHANGELOG",
+  runbook: "RUNBOOK",
+};
+
+const approvalStatusLabel: Record<string, string> = {
+  approved: "승인됨",
+  pending: "대기",
+  rejected: "거절됨",
+};
+
+/** 값과 상태만 놓습니다. 이름이 곧 설명이라 문장을 덧붙이지 않습니다. */
+function RecordRow({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="flex items-baseline gap-3 py-1">
+      <span className="w-14 shrink-0 text-[11px] text-muted">{label}</span>
+      <span className="min-w-0 flex-1 font-mono text-[11px] text-secondary">{children}</span>
+    </div>
+  );
+}
+
+/**
+ * Records 단계가 남긴 것. `WorkRecord`(packages/work/src/work.ts `:542`)의 필드를 그대로 놓습니다.
+ * 도메인이 ID로만 가진 것은 ID로 둡니다. 결정은 이 Work의 decision 메시지를 가리키므로 본문까지 풉니다.
+ */
+function InspectorRecords({
+  activities,
+  approvals,
+  values,
+}: {
+  activities: WorkView["activities"];
+  approvals: WorkView["approvals"];
+  values: WorkView["records"];
+}) {
+  if (values.length === 0)
+    return (
+      <InspectorEmpty
+        detail="독립 검증을 통과한 뒤 Records가 남깁니다."
+        icon={ListChecks}
+        message="아직 남은 기록이 없습니다."
+      />
+    );
+  return (
+    <>
+      {values.map((record) => {
+        const decisions = record.decisionIds
+          .map((id) => activities.find((activity) => activity.id === id))
+          .filter((activity) => activity?.kind === "room" && activity.messageType === "decision");
+        return (
+          <section aria-labelledby={`record-${record.id}`} className="border border-border bg-surface-1" key={record.id}>
+            <h2
+              className="flex items-baseline justify-between gap-3 border-b border-border px-4 py-3 text-sm font-semibold"
+              id={`record-${record.id}`}
+            >
+              <span>
+                기록 <span className="ml-1 font-mono font-normal text-muted">v{record.version}</span>
+              </span>
+              <span className="font-mono text-[11px] font-normal text-muted">개정 {record.recordedRevision}</span>
+            </h2>
+            <div className="px-4 py-3">
+              <p className="mb-2 break-all font-mono text-[11px] text-muted">{record.summary}</p>
+              <RecordRow label="확정">
+                {record.finalizedBy} · {record.finalizedAt}
+              </RecordRow>
+              {/* 되돌릴 수 있는 지점. records_snapshot_hash가 가리키는 것이 이 값입니다. */}
+              <RecordRow label="스냅샷">{record.snapshotHash}</RecordRow>
+              <RecordRow label="사건">
+                {record.eventRange[0]} – {record.eventRange[1]}
+              </RecordRow>
+            </div>
+
+            {decisions.length ? (
+              <div className="border-t border-border px-4 py-3">
+                <h3 className="text-[11px] text-muted">
+                  결정 <span className="ml-1 font-mono">{decisions.length}</span>
+                </h3>
+                <ul className="mt-1.5 space-y-2">
+                  {decisions.map((decision) =>
+                    decision?.kind === "room" ? (
+                      <li key={decision.id}>
+                        <p className="text-[12px] leading-5 text-secondary">{decision.content}</p>
+                        {decision.signature ? (
+                          <p className="mt-0.5 font-mono text-[10px] text-muted">
+                            서명 {decision.signature.by} · 개정 {decision.signature.revision}
+                          </p>
+                        ) : null}
+                      </li>
+                    ) : null,
+                  )}
+                </ul>
+              </div>
+            ) : null}
+
+            {record.documents.length ? (
+              <div className="border-t border-border px-4 py-3">
+                <h3 className="text-[11px] text-muted">
+                  문서 <span className="ml-1 font-mono">{record.documents.length}</span>
+                </h3>
+                <ul className="mt-1.5 space-y-1">
+                  {record.documents.map((document) => (
+                    <li className="flex items-baseline gap-3 text-[11px]" key={document.id}>
+                      <span className="w-24 shrink-0 font-mono text-secondary">
+                        {recordDocumentLabel[document.kind]}
+                      </span>
+                      <span className="font-mono text-muted">markdown {document.checksum}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+
+            <div className="grid gap-3 border-t border-border px-4 py-3 sm:grid-cols-2">
+              <div>
+                <h3 className="text-[11px] text-muted">
+                  검증 <span className="ml-1 font-mono">{record.verificationIds.length}</span>
+                </h3>
+                <ul className="mt-1 space-y-0.5">
+                  {record.verificationIds.map((id) => (
+                    <li className="truncate font-mono text-[10px] text-secondary" key={id}>
+                      {id}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              <div>
+                <h3 className="text-[11px] text-muted">
+                  산출물 <span className="ml-1 font-mono">{record.artifactVersionIds.length}</span>
+                </h3>
+                <ul className="mt-1 space-y-0.5">
+                  {record.artifactVersionIds.map((id) => (
+                    <li className="truncate font-mono text-[10px] text-secondary" key={id}>
+                      {id}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          </section>
+        );
+      })}
+
+      {/*
+       * 승인은 WorkRecord가 참조하지 않습니다. 기록이 아니라 이 Work가 지나온 승인이므로 따로 둡니다.
+       */}
+      {approvals.length ? (
+        <section aria-labelledby="record-approvals" className="border border-border bg-surface-1">
+          <h2 className="border-b border-border px-4 py-3 text-sm font-semibold" id="record-approvals">
+            승인 <span className="ml-1 font-mono font-normal text-muted">{approvals.length}</span>
+          </h2>
+          <ul className="divide-y divide-border">
+            {approvals.map((approval) => (
+              <li className="flex items-center gap-3 px-4 py-2.5 text-[12px]" key={approval.id}>
+                <span className="min-w-0 flex-1 truncate text-secondary">{approval.title}</span>
+                <span className={`shrink-0 text-[11px] ${approval.status === "pending" ? "text-gate" : "text-muted"}`}>
+                  {approvalStatusLabel[approval.status] ?? approval.status}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+    </>
   );
 }
 
