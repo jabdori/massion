@@ -195,3 +195,29 @@ export interface SubscriptionAccountViewV1 { accountId; providerId; alias; scope
 - [ ] `command_id`에서 Work를 잇는다 — 이게 없으면 「어느 Work가 얼마를 썼나」에 답할 수 없다
 - [ ] `route_attempt`에 `duration_ms` · `cache_read_tokens` · `cache_write_tokens` · `reasoning_tokens` · `effort`를 더한다
 - [ ] `explanation_json`을 상세로 펼친다 (왜 이 모델이 골렸는지 = 인과 사슬의 「모델」 마디)
+
+## 11. 픽스처 실행 제어 — 도메인 전이를 그대로 씁니다
+
+`createFixtureDesktopService()`의 `cancelRun`·`resumeRun`·`submitDirective`가 픽스처 상태를 실제로 바꿉니다.
+**앞세운 전이는 없습니다.** 넷 다 도메인에 있는 것입니다.
+
+| 픽스처 | 도메인 정본 | 결과 |
+|---|---|---|
+| `cancelRun` | `ApplicationRunStore.cancel` | `status: cancelled` · `stage: terminal` · `approvalId` 해제 (`blockedReason`은 도메인도 남깁니다) |
+| `resumeRun` | `CoreWorkCoordinator.retryBlocked` = `claim(resumeBlocked)` + `advance` | `blockedReason` 해제 · `leaseGeneration + 1` · 다음 단계 · `status: ready` |
+| `submitDirective` | `WorkDirectiveStore.submit` → `projectActivities` | 활동 흐름에 `kind: "message"` · `author: "사용자"` 한 줄 |
+
+픽스처는 실행기가 없어 **`claim` 직후 단계가 성공한 경로 하나만** 밟습니다. 도메인에서는 재개 뒤에도
+다시 `blocked`·`awaiting-approval`로 갈 수 있습니다. Work 상태는 건드리지 않습니다 — `run.cancel`도
+Work로 전이를 흘리지 않습니다(`run-commands.ts:159`).
+
+### 남은 갭 — 방이 지시를 늦게 봅니다
+
+`app.tsx`의 방 조회 effect가 `[selectedWorkId, service]`에만 겁니다(`app.tsx:300`). 지시를 보내면
+Work는 다시 읽히지만 **방은 다시 읽히지 않아**, 같은 Work를 다시 고르기 전까지 흐름에 안 나타납니다.
+실 daemon도 같습니다 — 방 발언이 durable event로 늘어도 화면이 안 따라갑니다.
+
+의존성만 더하면 `setSelectedRoomId(value[0]?.roomId)`가 매번 다시 돌아 **사람이 열어 둔 갈라진 방이 닫힙니다.**
+선택을 보존하는 갱신이 같이 서야 합니다.
+
+- [ ] Work가 다시 읽힐 때 방도 다시 읽는다 — 열려 있는 방 선택을 보존하면서

@@ -1750,10 +1750,28 @@ const fixturePromise = <T>(run: () => T): Promise<T> =>
 
 const settingsState: SettingsView = structuredClone(fixtureSettings);
 
+/** `APPLICATION_RUN_STAGES`(packages/application/src/core-work-coordinator.ts)와 같은 순서입니다. */
+const FIXTURE_RUN_STAGES = ["intake", "context-strategy", "evidence", "delivery", "assurance", "records"];
+
+const fixtureTime = (): string => {
+  const now = new Date();
+  return `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+};
+
 export function createFixtureDesktopService(): DesktopService {
-  const initialSnapshot = fixtureDataAdapter();
+  /* 픽스처가 상태를 바꾸므로 모듈 상수가 아니라 사본을 소유합니다. */
+  const initialSnapshot: DesktopSnapshot = structuredClone(fixtureDataAdapter());
+  let directiveSequence = 0;
   const stop: DesktopStreamStop = () => {
     return fixturePromise(() => undefined);
+  };
+
+  /** 조회가 다시 읽는 자리를 바꿉니다. 화면은 loadWork로 따라옵니다. */
+  const mutateWork = (workId: string, change: (current: WorkView) => WorkView): void => {
+    const index = initialSnapshot.works.findIndex((candidate) => candidate.id === workId);
+    const current = initialSnapshot.works[index];
+    if (!current) throw new Error("Fixture Work를 찾을 수 없습니다");
+    initialSnapshot.works[index] = change(current);
   };
 
   return {
@@ -1848,10 +1866,10 @@ export function createFixtureDesktopService(): DesktopService {
       })),
     decideWorkspaceTrust: (workspace, decision) =>
       fixturePromise(() => ({ ...workspace, trust: decision, revision: workspace.revision + 1 })),
-    // fixture 방은 model.ts의 활동을 그대로 씁니다. 실 daemon에서는 loadRoom이 대체합니다.
+    // fixture 방은 이 서비스가 들고 있는 활동을 그대로 씁니다. 실 daemon에서는 loadRoom이 대체합니다.
     loadRooms: (workId: string) =>
       fixturePromise(() => {
-        const work = fixtureDataAdapter().works.find((candidate) => candidate.id === workId);
+        const work = initialSnapshot.works.find((candidate) => candidate.id === workId);
         if (!work) return [];
         const speak = (handle: string) =>
           speakerFor({ authorKind: "agent", authorId: handle }, fixtureOrganizationNodes);
@@ -2209,10 +2227,63 @@ export function createFixtureDesktopService(): DesktopService {
     rejectGrowthSuggestion: () => fixturePromise(() => undefined),
     installRegistry: () =>
       fixturePromise(() => ({ outcome: "succeeded", installationId: "installation-fixture-0001" })),
-    submitDirective: () => fixturePromise(() => undefined),
+    /* 도메인은 지시를 status 'queued'로 남기고, 투영이 활동 흐름의 message 한 줄로 옮깁니다. */
+    submitDirective: (work, content) =>
+      fixturePromise(() => {
+        directiveSequence += 1;
+        const directiveId = `directive:fixture-${String(directiveSequence)}`;
+        mutateWork(work.id, (current) => ({
+          ...current,
+          activities: [
+            ...current.activities,
+            {
+              id: directiveId,
+              kind: "message",
+              /* 픽스처의 시각은 실제 시계가 아닙니다. 방이 시각으로 정렬하므로 마지막 발언과 같은 자리에 둡니다. */
+              time: current.activities.at(-1)?.time ?? fixtureTime(),
+              author: "사용자",
+              initials: "U",
+              content,
+            },
+          ],
+        }));
+      }),
     decideApproval: () => fixturePromise(() => undefined),
-    cancelRun: () => fixturePromise(() => undefined),
-    resumeRun: () => fixturePromise(() => undefined),
+    /* ApplicationRunStore.cancel: status 'cancelled', stage 'terminal', approvalId 해제. */
+    cancelRun: (work) =>
+      fixturePromise(() => {
+        mutateWork(work.id, (current) => {
+          const run = requireRun(current);
+          return {
+            ...current,
+            run: {
+              runId: run.runId,
+              status: "cancelled",
+              stage: "terminal",
+              leaseGeneration: run.leaseGeneration,
+              ...(run.blockedReason === undefined ? {} : { blockedReason: run.blockedReason }),
+            },
+          };
+        });
+      }),
+    /* CoreWorkCoordinator.retryBlocked: claim(blocked 해제·lease +1) 뒤 advance(다음 단계·status 'ready'). */
+    resumeRun: (work) =>
+      fixturePromise(() => {
+        mutateWork(work.id, (current) => {
+          const run = requireRun(current);
+          if (run.status !== "blocked") throw new Error("차단된 실행만 다시 시도할 수 있습니다");
+          const following = FIXTURE_RUN_STAGES[FIXTURE_RUN_STAGES.indexOf(run.stage) + 1] ?? "terminal";
+          return {
+            ...current,
+            run: {
+              runId: run.runId,
+              status: following === "terminal" ? "completed" : "ready",
+              stage: following,
+              leaseGeneration: run.leaseGeneration + 1,
+            },
+          };
+        });
+      }),
     startWork: () => fixturePromise(() => ({ runId: "run-fixture-0001" })),
     subscribeDurable: () => fixturePromise(() => stop),
     subscribeExecution: () => fixturePromise(() => stop),
