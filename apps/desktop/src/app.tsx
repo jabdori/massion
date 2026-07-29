@@ -3543,7 +3543,8 @@ function UsageStats({ attempts }: { attempts: readonly RouteAttemptView[] }) {
  */
 const WEEKDAY_LABEL = ["", "월", "", "수", "", "금", ""];
 const MONTH_LABEL = ["1월", "2월", "3월", "4월", "5월", "6월", "7월", "8월", "9월", "10월", "11월", "12월"];
-const HEATMAP_WEEKS = 26;
+const HEATMAP_CELL = 11;
+const HEATMAP_GAP = 3;
 
 /**
  * 날짜별 밀도. 합계는 조직이 «언제» 일했는지를 말해주지 않습니다.
@@ -3553,6 +3554,24 @@ const HEATMAP_WEEKS = 26;
  */
 function DailyActivity({ attempts }: { attempts: readonly RouteAttemptView[] }) {
   const [hovered, setHovered] = useState<{ day: string; x: number; y: number }>();
+  /*
+   * 몇 주를 그릴지는 남는 너비가 정합니다. 주 수를 박아두면 창이 넓어질수록 오른쪽이 남고,
+   * 그 여백은 「기록이 없다」로 읽힙니다. 칸을 키우는 게 아니라 과거를 더 그려 채웁니다.
+   */
+  const [weeks, setWeeks] = useState(26);
+  const gridRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const node = gridRef.current;
+    if (node === null) return;
+    const observer = new ResizeObserver((entries) => {
+      const width = entries[0]?.contentRect.width ?? 0;
+      setWeeks(Math.max(8, Math.floor((width + HEATMAP_GAP) / (HEATMAP_CELL + HEATMAP_GAP))));
+    });
+    observer.observe(node);
+    return () => {
+      observer.disconnect();
+    };
+  }, []);
   const byDay = new Map<string, { calls: number; tokens: number; cost: number }>();
   for (const attempt of attempts) {
     const day = attempt.at.slice(0, 10);
@@ -3568,7 +3587,7 @@ function DailyActivity({ attempts }: { attempts: readonly RouteAttemptView[] }) 
   const end = new Date(`${latest}T00:00:00Z`);
   // 마지막 열이 «가장 최근이 든 주»가 되도록 그 주의 토요일까지 채웁니다.
   const lastColumn = new Date(end.getTime() + (6 - end.getUTCDay()) * 86_400_000);
-  const origin = new Date(lastColumn.getTime() - (HEATMAP_WEEKS * 7 - 1) * 86_400_000);
+  const origin = new Date(lastColumn.getTime() - (weeks * 7 - 1) * 86_400_000);
   const peak = Math.max(...[...byDay.values()].map((value) => value.tokens));
   const dayAt = (week: number, weekday: number): string =>
     new Date(origin.getTime() + (week * 7 + weekday) * 86_400_000).toISOString().slice(0, 10);
@@ -3596,7 +3615,11 @@ function DailyActivity({ attempts }: { attempts: readonly RouteAttemptView[] }) 
           )}
         </div>
       )}
-      <div className="flex gap-1.5 overflow-x-auto">
+      {/*
+       * 칸 크기는 고정입니다. 남는 너비는 «과거를 더 그려» 채웁니다 — 칸을 키우면 밀도가 사라져
+       * 잔디가 잔디가 아니게 됩니다. 몇 주가 들어가는지는 실제 폭을 재서 정합니다.
+       */}
+      <div className="flex gap-1.5">
         <div className="mt-[15px] flex shrink-0 flex-col gap-[3px]">
           {WEEKDAY_LABEL.map((label, weekday) => (
             <span className="h-[11px] text-[9px] leading-[11px] text-muted" key={weekday}>
@@ -3604,14 +3627,15 @@ function DailyActivity({ attempts }: { attempts: readonly RouteAttemptView[] }) 
             </span>
           ))}
         </div>
-        <div className="flex shrink-0 gap-[3px]">
-          {Array.from({ length: HEATMAP_WEEKS }, (_, week) => {
+        <div className="flex min-w-0 flex-1 gap-[3px] overflow-hidden" ref={gridRef}>
+          {Array.from({ length: weeks }, (_, week) => {
             const columnStart = new Date(origin.getTime() + week * 7 * 86_400_000);
             const previous = new Date(columnStart.getTime() - 7 * 86_400_000);
             const isNewMonth = week === 0 || columnStart.getUTCMonth() !== previous.getUTCMonth();
             return (
-              <div className="flex flex-col gap-[3px]" key={week}>
-                <span className="h-3 whitespace-nowrap text-[9px] leading-3 text-muted">
+              <div className="flex w-[11px] shrink-0 flex-col gap-[3px]" key={week}>
+                {/* 월 이름이 칸보다 넓습니다. 폭을 칸에 묶고 글자만 넘치게 해야 열이 벌어지지 않습니다. */}
+                <span className="h-3 w-[11px] whitespace-nowrap text-[9px] leading-3 text-muted">
                   {isNewMonth ? MONTH_LABEL[columnStart.getUTCMonth()] : ""}
                 </span>
                 {Array.from({ length: 7 }, (_, weekday) => {
@@ -3631,6 +3655,7 @@ function DailyActivity({ attempts }: { attempts: readonly RouteAttemptView[] }) 
                       }`}
                       key={weekday}
                       onMouseEnter={(event) => {
+                        // 칸의 상자를 기준으로 잡습니다. 커서 좌표를 쓰면 카드가 따라다닙니다.
                         const box = event.currentTarget.getBoundingClientRect();
                         setHovered({ day: key, x: box.left + box.width / 2, y: box.top });
                       }}
