@@ -168,6 +168,55 @@ describe("Application desktop service", () => {
     await expect(promise).rejects.toThrow("Fixture Work를 찾을 수 없습니다");
   });
 
+  it("fixture 재개는 차단을 풀고 다음 단계로 옮긴다", async () => {
+    const service = createFixtureDesktopService();
+    const blocked = await service.loadWork("partner-contract");
+    expect(blocked.run).toMatchObject({ status: "blocked", stage: "evidence", leaseGeneration: 1 });
+
+    await service.resumeRun(blocked);
+
+    const resumed = await service.loadWork("partner-contract");
+    expect(resumed.run).toEqual({
+      runId: "run-partner",
+      status: "ready",
+      stage: "delivery",
+      leaseGeneration: 2,
+    });
+  });
+
+  it("fixture 취소는 실행을 terminal로 보낸다", async () => {
+    const service = createFixtureDesktopService();
+    const work = await service.loadWork("partner-contract");
+
+    await service.cancelRun(work);
+
+    const cancelled = await service.loadWork("partner-contract");
+    expect(cancelled.run).toMatchObject({ status: "cancelled", stage: "terminal" });
+  });
+
+  it("fixture 지시는 활동 흐름에 남는다", async () => {
+    const service = createFixtureDesktopService();
+    const work = await service.loadWork("churn-q3");
+
+    await service.submitDirective(work, "코호트를 계약 규모별로도 나눠줘", "next-stage");
+
+    const updated = await service.loadWork("churn-q3");
+    expect(updated.activities).toHaveLength(work.activities.length + 1);
+    expect(updated.activities.at(-1)).toMatchObject({
+      kind: "message",
+      author: "사용자",
+      content: "코호트를 계약 규모별로도 나눠줘",
+    });
+  });
+
+  it("fixture 상태 변경은 서비스 인스턴스 밖으로 새지 않는다", async () => {
+    const changed = createFixtureDesktopService();
+    await changed.cancelRun(await changed.loadWork("partner-contract"));
+
+    const fresh = await createFixtureDesktopService().loadWork("partner-contract");
+    expect(fresh.run).toMatchObject({ status: "blocked" });
+  });
+
   it("fixture index 입력 평가 오류도 rejected Promise로 전달한다", async () => {
     const input = {
       get filter(): "active" {
