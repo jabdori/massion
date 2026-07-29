@@ -829,8 +829,10 @@ export interface GrowthEvaluationView {
 
 export interface GrowthAdoptionView {
   readonly adoptionId: string;
+  /** 도메인 `growth_adoption_run.status`. awaiting-review·observing·retained·rejected·reverted. */
   readonly status: string;
   readonly commandId: string;
+  /** 있으면 사람이 승인한 것, 없으면 auto mode가 적용한 것입니다. */
   readonly approvalId?: string;
   readonly evaluationRunId: string;
   readonly evaluationInputHash: string;
@@ -838,6 +840,10 @@ export interface GrowthAdoptionView {
   readonly beforeChecksum: string;
   readonly afterVersionId?: string;
   readonly afterChecksum?: string;
+  /** 도메인 `growth_adoption_run.created_at`. */
+  readonly adoptedAt?: string;
+  /** 도메인 `growth_revert_operation.updated_at`. */
+  readonly revertedAt?: string;
 }
 
 export interface GrowthPatchLineView {
@@ -885,6 +891,9 @@ export interface GrowthView {
     readonly patch?: readonly GrowthPatchLineView[];
     readonly evaluation?: GrowthEvaluationView;
     readonly adoption?: GrowthAdoptionView;
+    /** 거절 결정 계보. 도메인 `decision_reason`·`decided_at`이며 거절에는 필수입니다. */
+    readonly decisionReason?: string;
+    readonly decidedAt?: string;
     /** 제안 당시 대상 checksum과 현재가 어긋나면 채택할 수 없습니다. */
     readonly targetDrifted?: boolean;
     readonly beforeVersionId?: string;
@@ -2173,6 +2182,188 @@ export function createFixtureDesktopService(): DesktopService {
             riskSummary: "쓰이지 않는 분기에도 노드가 남아 조직이 커집니다.",
             status: "awaiting-review",
           },
+          {
+            // 자동 반영(approvalId 없음) → 효과 개선 확인 → retained.
+            suggestionId: "suggestion-handoff-note",
+            workId: "contract-review",
+            targetKind: "prompt",
+            operation: "append-instruction",
+            summary: "인계할 때 해소하지 못한 질문을 함께 넘깁니다.",
+            revision: 2,
+            createdAt: "2026-07-16T14:05:00.000Z",
+            reflectionRunId: "reflection-0008",
+            sourceReferenceIds: ["work:contract-review", "message:handoff-gap", "verification:handoff-completeness"],
+            patch: [
+              {
+                targetHandle: "delivery",
+                path: "인계 규칙",
+                before: "완료한 것을 요약해 넘긴다",
+                after: "완료한 것과 함께 해소하지 못한 질문을 목록으로 넘긴다",
+              },
+            ],
+            evaluation: {
+              evaluationRunId: "evaluation-0024",
+              outcome: "eligible" as const,
+              strategyVersionId: "strategy-v4",
+              signals: [
+                {
+                  signalId: "signal-handoff-rework",
+                  group: "required" as const,
+                  origin: "deterministic" as const,
+                  outcome: "passed" as const,
+                  score: 0.79,
+                  adapterId: "rework-counter",
+                  adapterVersion: "1.2.0",
+                  note: "인계 직후 재질문이 최근 9개 Work 중 5건",
+                },
+                {
+                  signalId: "signal-handoff-verdict",
+                  group: "required" as const,
+                  origin: "independent" as const,
+                  outcome: "passed" as const,
+                  score: 0.74,
+                  adapterId: "assurance-verdict",
+                  adapterVersion: "2.0.1",
+                  note: "독립 검증이 인계 누락을 3회 지적",
+                },
+              ],
+            },
+            targetDrifted: false,
+            rationale: "인계 직후 같은 질문이 다시 올라오는 일이 최근 9개 Work 중 5건이었습니다.",
+            expectedEffect: "인계 후 재작업이 줄어듭니다.",
+            riskSummary: "인계 문서가 길어져 읽는 시간이 늘어납니다.",
+            status: "adopted",
+            adoption: {
+              adoptionId: "adoption-0002",
+              status: "retained",
+              commandId: "command-growth-0041",
+              evaluationRunId: "evaluation-0024",
+              evaluationInputHash: "6b1f0d4a92c7e35810ba4fd6c208e9713f5a4c8e2d0b7691a3f4c5e8d2b0179a",
+              beforeVersionId: "prompt-delivery-v7",
+              beforeChecksum: "a41c7e0932b58d16fe4a09c3d7b25801e6f39a4c8b0d2517e93f6a4c1b8d05e2",
+              afterVersionId: "prompt-delivery-v8",
+              afterChecksum: "d80b5f2a6c19e473a05d8b3f61c94207e5a83d1f0b62c748e91a3f5d0c26b481",
+              adoptedAt: "2026-07-16T14:22:00.000Z",
+            },
+          },
+          {
+            // 사람이 승인 → 효과 저하 관찰 → 되돌림.
+            suggestionId: "suggestion-verify-depth",
+            workId: "pricing-model",
+            targetKind: "policy",
+            operation: "raise-threshold",
+            summary: "수치 결론에는 독립 검증을 두 번 거칩니다.",
+            revision: 1,
+            createdAt: "2026-07-19T09:40:00.000Z",
+            reflectionRunId: "reflection-0009",
+            sourceReferenceIds: ["work:pricing-model", "verification:number-check"],
+            patch: [
+              {
+                path: "검증 횟수",
+                before: "수치 결론은 독립 검증 1회",
+                after: "수치 결론은 독립 검증 2회",
+              },
+            ],
+            evaluation: {
+              evaluationRunId: "evaluation-0027",
+              outcome: "eligible" as const,
+              strategyVersionId: "strategy-v4",
+              signals: [
+                {
+                  signalId: "signal-number-defect",
+                  group: "required" as const,
+                  origin: "independent" as const,
+                  outcome: "passed" as const,
+                  score: 0.7,
+                  adapterId: "assurance-verdict",
+                  adapterVersion: "2.0.1",
+                  note: "수치 오류가 검증 이후 단계에서 2회 발견",
+                },
+                {
+                  signalId: "signal-verify-cost",
+                  group: "conflict" as const,
+                  origin: "deterministic" as const,
+                  outcome: "failed" as const,
+                  score: 0.38,
+                  adapterId: "stage-duration",
+                  adapterVersion: "1.0.4",
+                  note: "검증 단계 소요가 중앙값 기준 2배",
+                },
+              ],
+            },
+            targetDrifted: false,
+            rationale: "가격 모델 Work에서 수치 오류가 검증을 통과한 뒤 두 번 발견됐습니다.",
+            expectedEffect: "수치 결론의 오류가 줄어듭니다.",
+            riskSummary: "모든 수치 Work의 검증 단계가 길어집니다.",
+            status: "adopted",
+            adoption: {
+              adoptionId: "adoption-0003",
+              status: "reverted",
+              commandId: "command-growth-0052",
+              approvalId: "approval-growth-0018",
+              evaluationRunId: "evaluation-0027",
+              evaluationInputHash: "3c9a7e15d0b846f2917c5a0e3d8b6412f7095c2a8e4d1b63095f7a2c4e8d61b0",
+              beforeVersionId: "policy-assurance-v3",
+              beforeChecksum: "5e2d90a7c13b846f095a2d7e4c1b830956f7a2e4d0c8b1739e5a2f6c04d8b319",
+              afterVersionId: "policy-assurance-v4",
+              afterChecksum: "91f4c7a205e8d3b607a4f9c2e50d8b3617f2a9c4e0d5b8317a6f2c9e40d5b8371",
+              adoptedAt: "2026-07-19T10:02:00.000Z",
+              revertedAt: "2026-07-24T08:15:00.000Z",
+            },
+          },
+          {
+            // 사람이 거부. 도메인이 거절에 결정 계보를 강제합니다.
+            suggestionId: "suggestion-tone-brief",
+            workId: "churn-q3",
+            targetKind: "memory",
+            operation: "add-entry",
+            summary: "모든 보고를 5줄 이내로 고정합니다.",
+            revision: 1,
+            createdAt: "2026-07-22T16:10:00.000Z",
+            reflectionRunId: "reflection-0010",
+            sourceReferenceIds: ["work:churn-q3", "message:length-complaint"],
+            patch: [
+              {
+                path: "answer-style",
+                before: "분석 결과는 결론부터 설명한다",
+                after: "분석 결과는 결론부터 설명하고 본문을 5줄 이내로 쓴다",
+              },
+            ],
+            evaluation: {
+              evaluationRunId: "evaluation-0029",
+              outcome: "eligible" as const,
+              strategyVersionId: "strategy-v4",
+              signals: [
+                {
+                  signalId: "signal-length-complaint",
+                  group: "required" as const,
+                  origin: "deterministic" as const,
+                  outcome: "passed" as const,
+                  score: 0.66,
+                  adapterId: "message-sentiment",
+                  adapterVersion: "1.0.2",
+                  note: "보고가 길다는 발언이 최근 6개 Work 중 4건",
+                },
+                {
+                  signalId: "signal-length-selfcheck",
+                  group: "supporting" as const,
+                  origin: "model-self" as const,
+                  outcome: "passed" as const,
+                  score: 0.88,
+                  adapterId: "reflection-selfcheck",
+                  adapterVersion: "0.9.0",
+                  note: "모델 자기평가. 독립 신호로 계산하지 않음",
+                },
+              ],
+            },
+            targetDrifted: false,
+            rationale: "보고가 길다는 발언이 최근 6개 Work 중 4건이었습니다.",
+            expectedEffect: "보고를 읽는 시간이 줄어듭니다.",
+            riskSummary: "근거를 함께 읽어야 하는 보고에서 판단에 필요한 값이 잘립니다.",
+            status: "rejected",
+            decisionReason: "규제 검토 보고는 근거를 줄이면 다시 물어야 해서 길이를 고정하지 않는다",
+            decidedAt: "2026-07-22T16:38:00.000Z",
+          },
         ],
         memories: [
           {
@@ -2201,6 +2392,21 @@ export function createFixtureDesktopService(): DesktopService {
               unit: "재작업 비율",
               direction: "lower" as const,
               baseline: 0.51,
+            },
+          },
+          {
+            // 저하가 확인돼 adoption-0003이 되돌아갔습니다.
+            effectEvaluationId: "effect-0003",
+            adoptionId: "adoption-0003",
+            result: "degraded" as const,
+            suggestionId: "suggestion-verify-depth",
+            measure: {
+              score: 0.44,
+              observationCount: 12,
+              minimumObservations: 10,
+              unit: "재작업 비율",
+              direction: "lower" as const,
+              baseline: 0.28,
             },
           },
         ],
