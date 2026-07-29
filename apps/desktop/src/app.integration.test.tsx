@@ -412,6 +412,44 @@ describe("AgentOS native data flow", () => {
     expect(screen.getByText("결정은 이 상세의 근거를 확인한 뒤 기록합니다.")).toBeInTheDocument();
   });
 
+  // 헌법 4.8의 «보수적 채택»은 채택 전후 효과 비교와 악화 시 되돌리기로만 증명됩니다.
+  // 검토 대기만 보이면 그 근거가 화면에 없는 것과 같으므로 네 상태를 함께 고정합니다.
+  it("개선은 검토 대기·채택·되돌림·거부를 한 화면에서 구분한다", async () => {
+    const user = userEvent.setup();
+    render(<App service={service()} />);
+
+    await user.click(screen.getByRole("button", { name: "개선" }));
+    const growth = await screen.findByRole("main", { name: "개선" });
+    const list = within(growth).getByRole("region", { name: "개선 제안 목록" });
+
+    await user.click(within(list).getByRole("tab", { name: /전체/u }));
+    for (const label of ["승인 대기", "반영됨", "되돌림", "거부됨"]) {
+      expect(within(list).getAllByText(label).length).toBeGreaterThan(0);
+    }
+
+    // 자동 채택 + 개선 확인. 무엇을 어떻게 쟀는지가 표본 수와 함께 보여야 합니다.
+    await user.click(within(list).getByText("인계할 때 해소하지 못한 질문을 함께 넘깁니다."));
+    expect(within(growth).getByRole("region", { name: "채택" })).toHaveTextContent("자동");
+    expect(within(growth).getByRole("region", { name: "적용 후 측정" })).toHaveTextContent("표본 14 / 최소 10");
+    expect(within(growth).getByText("개선 확인")).toBeInTheDocument();
+
+    // 사람 채택 + 저하 관찰 → 되돌림. 되돌린 시각이 채택 계보와 같은 자리에 있어야 합니다.
+    await user.click(within(list).getByText("수치 결론에는 독립 검증을 두 번 거칩니다."));
+    const adoption = within(growth).getByRole("region", { name: "채택" });
+    expect(adoption).toHaveTextContent("사람");
+    expect(adoption).toHaveTextContent("approval-growth-0018");
+    expect(adoption).toHaveTextContent("policy-assurance-v3 → policy-assurance-v4");
+    expect(adoption).toHaveTextContent("효과 저하");
+    expect(within(growth).getByText("저하 관찰")).toBeInTheDocument();
+
+    // 사람이 거부한 것은 사유가 남아야 합니다. 도메인이 거절에 결정 계보를 강제합니다.
+    await user.click(within(list).getByText("모든 보고를 5줄 이내로 고정합니다."));
+    expect(within(growth).getByRole("region", { name: "거부" })).toHaveTextContent(
+      "규제 검토 보고는 근거를 줄이면 다시 물어야 해서 길이를 고정하지 않는다",
+    );
+    expect(within(growth).queryByRole("region", { name: "채택" })).not.toBeInTheDocument();
+  });
+
   it("성장 기록이 없으면 검증된 실행 기록을 기다리는 빈 상태를 표시한다", async () => {
     const user = userEvent.setup();
     const loadGrowth = vi.fn(async () => ({ memories: [], suggestions: [], effects: [] }));

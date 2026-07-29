@@ -245,3 +245,33 @@ Work 상세에 `기록` 탭을 세우고 완료된 Work 픽스처(`refund-delay`
 - [ ] `projectWorkDetail()`의 `records: []`가 실제 투영으로 바뀐다
 - [ ] `RecordView`의 여섯 필드가 계약에서 온다
 - [ ] 최종 응답이 화면 파생이 아니라 도메인 사실로 읽힌다
+
+## 12. 「개선」 표면 — 채택 이후가 계약에 없습니다
+
+픽스처가 자가개선 한 바퀴(검토 대기 → 채택 → 효과 → 되돌림 / 거부)를 그리도록 채웠습니다.
+헌법 §4.8의 「보수적 채택」은 **채택 전후 효과 비교와 악화 시 되돌리기**로만 증명되는데,
+그 두 가지가 정확히 계약에서 빠져 있던 부분입니다.
+
+도메인에는 있고 `growth.*` 조회 투영에만 없는 것 — **투영을 넓히면 그대로 채워집니다.**
+
+| 화면이 앞세운 것 | 도메인 | 조회 |
+|---|---|---|
+| `adoption.adoptedAt` | `growth_adoption_run.created_at` | `growth.suggestions` 투영에 없음 |
+| `adoption` 전체 | `growth_adoption_run` | `growth.adoption.get` 조회 자체가 없음 |
+| `suggestion.decisionReason` · `decidedAt` | `growth_suggestion.decision_reason` · `decided_at` (마이그레이션 0112, 거절에 **필수**) | 투영에 없음 |
+| `effect.measure` (`score` · `observationCount` · `minimumObservations` · `unit` · `direction` · `baseline`) | `growth_effect_baseline.metrics_json` · `contract_json` · `growth_effect_observation` | `growth.effects`가 `rawDelta` · `directionalDelta` · `contractChecksum`만 돌려줌 |
+| `effect.suggestionId` | `growth_effect_baseline.suggestion_id` | 투영에 없음 — 없으면 효과를 제안 옆에 세울 수 없습니다 |
+| `adoption.revertedAt` | `growth_revert_operation.updated_at` | revert 조회가 없음 |
+
+도메인에도 없어 화면이 **파생으로 대신한 것** — 값을 지어내지 않고 다른 사실에서 읽습니다.
+
+| 화면이 보여주는 것 | 무엇으로 대신했나 | 왜 도메인에 없나 |
+|---|---|---|
+| 채택 주체 「사람 / 자동」 | `adoption.approvalId` 유무 | 별도 필드가 없습니다. review mode는 `approval_id`를 요구하고 auto mode는 비웁니다(`adoption.ts` `decideAdoptionTransition`). `created_by_user_id`는 auto에서도 채워져 구분이 안 됩니다 |
+| 되돌린 사유 「효과 저하」 | 연결된 `effect.result === "degraded"` | **`reason`이 저장되지 않습니다.** `RevertGrowthAdoptionInput.reason`(`degraded` \| `explicit`)은 전이 검사에만 쓰이고 버려집니다. `growth_revert_operation`에 남는 건 `mode`(`auto` \| `review` \| `explicit`)뿐입니다 |
+
+- [ ] `growth.suggestions` 투영에 `adoption` · `decision_reason` · `decided_at`을 더한다
+- [ ] `growth.effects`에 `suggestion_id`와 측정 계약(`unit` · `direction` · `minimumObservations` · `baseline` · `score` · `observationCount`)을 더한다
+- [ ] `growth_revert_operation`에 `reason`을 저장한다 — 지금은 되돌린 이유를 되물을 수 없습니다
+- [ ] revert 조회를 등록한다 (`revertedAt` · `revertedVersionId` · `status`)
+- [ ] `growth_adoption_run.exposure_status`(`active` \| `suspended` \| `reverted`)를 노출한다 — 저하로 중단된 상태와 되돌린 상태는 다릅니다

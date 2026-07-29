@@ -2796,7 +2796,6 @@ function GrowthSurface({
             <div className="divide-y divide-border border-b border-border">
               {visible.map((suggestion) => {
                 const current = suggestion.suggestionId === selected?.suggestionId;
-                const waiting = suggestion.status === "awaiting-review";
                 return (
                   <button
                     aria-pressed={current}
@@ -2813,9 +2812,9 @@ function GrowthSurface({
                   >
                     <span className="block truncate text-[13px] font-medium text-primary">{suggestion.summary}</span>
                     <span className="mt-1 flex items-center justify-between gap-2 text-[11px]">
-                      <span className={`flex items-center gap-2 ${waiting ? "text-gate" : "text-muted"}`}>
+                      <span className={`flex items-center gap-2 ${growthStatusTone(suggestion)}`}>
                         <span aria-hidden="true" className="size-1.5 rounded-full bg-current" />
-                        {waiting ? "승인 대기" : growthSuggestionStatus(suggestion.status)}
+                        {growthStatusLabel(suggestion)}
                       </span>
                       <time className="font-mono text-muted">{growthClock(suggestion.createdAt)}</time>
                     </span>
@@ -2839,11 +2838,7 @@ function GrowthSurface({
               >
                 {growthTargetToken(selected.targetKind).label}
               </span>
-              <span
-                className={`shrink-0 text-[11px] ${selected.status === "awaiting-review" ? "text-gate" : "text-muted"}`}
-              >
-                {selected.status === "awaiting-review" ? "승인 대기" : growthSuggestionStatus(selected.status)}
-              </span>
+              <span className={`shrink-0 text-[11px] ${growthStatusTone(selected)}`}>{growthStatusLabel(selected)}</span>
               <span className="ml-auto shrink-0 font-mono text-[11px] text-muted">
                 {selected.revision === undefined ? "" : `rev ${String(selected.revision)}`}
               </span>
@@ -2947,6 +2942,62 @@ function GrowthSurface({
                 </dl>
               </GrowthSection>
 
+              {selected.adoption ? (
+                <GrowthSection title="채택">
+                  <dl className="grid gap-1.5 text-[13px] leading-6">
+                    <div className="grid grid-cols-[76px_minmax(0,1fr)] gap-2">
+                      <dt className="text-[12px] text-muted">결정</dt>
+                      <dd className="flex flex-wrap items-baseline gap-2 text-primary">
+                        {selected.adoption.approvalId === undefined ? "자동" : "사람"}
+                        {selected.adoption.approvalId === undefined ? null : (
+                          <span className="font-mono text-[11px] text-muted">{selected.adoption.approvalId}</span>
+                        )}
+                      </dd>
+                    </div>
+                    <div className="grid grid-cols-[76px_minmax(0,1fr)] gap-2">
+                      <dt className="text-[12px] text-muted">시각</dt>
+                      <dd className="font-mono text-[12px] text-secondary">
+                        {growthDate(selected.adoption.adoptedAt)}
+                      </dd>
+                    </div>
+                    <div className="grid grid-cols-[76px_minmax(0,1fr)] gap-2">
+                      <dt className="text-[12px] text-muted">계보</dt>
+                      <dd className="min-w-0 break-all font-mono text-[11px] text-secondary">
+                        {selected.adoption.beforeVersionId}
+                        {selected.adoption.afterVersionId === undefined
+                          ? null
+                          : ` → ${selected.adoption.afterVersionId}`}
+                      </dd>
+                    </div>
+                    {selected.adoption.status === "reverted" ? (
+                      <div className="grid grid-cols-[76px_minmax(0,1fr)] gap-2">
+                        <dt className="text-[12px] text-danger">되돌림</dt>
+                        <dd className="flex flex-wrap items-baseline gap-2 text-danger">
+                          {/* 되돌린 사유는 도메인에 저장되지 않아 연결된 효과 판정에서 읽습니다. */}
+                          {effect?.result === "degraded" ? "효과 저하" : "명시적 되돌리기"}
+                          <span className="font-mono text-[11px]">{growthDate(selected.adoption.revertedAt)}</span>
+                        </dd>
+                      </div>
+                    ) : null}
+                  </dl>
+                </GrowthSection>
+              ) : null}
+
+              {selected.status === "rejected" ? (
+                <GrowthSection title="거부">
+                  <dl className="grid gap-1.5 text-[13px] leading-6">
+                    <div className="grid grid-cols-[76px_minmax(0,1fr)] gap-2">
+                      <dt className="text-[12px] text-muted">시각</dt>
+                      <dd className="font-mono text-[12px] text-secondary">{growthDate(selected.decidedAt)}</dd>
+                    </div>
+                    <div className="grid grid-cols-[76px_minmax(0,1fr)] gap-2">
+                      <dt className="text-[12px] text-muted">사유</dt>
+                      <dd className="text-primary">{selected.decisionReason}</dd>
+                    </div>
+                  </dl>
+                </GrowthSection>
+              ) : null}
+
               {effect?.measure ? (
                 <GrowthSection title="적용 후 측정">
                   <p className="text-[13px] text-secondary">
@@ -2955,7 +3006,10 @@ function GrowthSurface({
                   </p>
                   <p className="mt-1 font-mono text-[11px] text-muted">
                     표본 {effect.measure.observationCount} / 최소 {effect.measure.minimumObservations} ·{" "}
-                    {growthEffectStatus(effect.result)}
+                    {/* 개선에 초록을 쓰지 않습니다. 악화만 danger로 올립니다. */}
+                    <span className={effect.result === "degraded" ? "text-danger" : "text-primary"}>
+                      {growthEffectStatus(effect.result)}
+                    </span>
                   </p>
                 </GrowthSection>
               ) : null}
@@ -3271,8 +3325,38 @@ function growthClock(createdAt: string | undefined): string {
   return Number.isNaN(parsed.getTime()) ? "" : parsed.toTimeString().slice(0, 5);
 }
 
-function growthSuggestionStatus(status: string): string {
-  return status === "awaiting-review" ? "검토 대기" : status === "adopted" ? "반영됨" : status;
+/** 채택·거부·되돌림은 며칠에 걸쳐 일어나므로 날짜까지 씁니다. */
+function growthDate(at: string | undefined): string {
+  if (at === undefined) return "";
+  const parsed = new Date(at);
+  if (Number.isNaN(parsed.getTime())) return "";
+  const month = String(parsed.getMonth() + 1).padStart(2, "0");
+  const day = String(parsed.getDate()).padStart(2, "0");
+  return `${month}-${day} ${parsed.toTimeString().slice(0, 5)}`;
+}
+
+const growthSuggestionStatusLabel: Record<string, string> = {
+  proposed: "제안됨",
+  evaluated: "평가됨",
+  "awaiting-review": "승인 대기",
+  adopted: "반영됨",
+  rejected: "거부됨",
+  superseded: "대체됨",
+};
+
+/**
+ * 되돌린 제안의 `suggestion.status`는 여전히 `adopted`입니다. 채택 상태가 더 나중 사실이므로
+ * 그것을 앞세웁니다.
+ */
+function growthStatusLabel(suggestion: GrowthView["suggestions"][number]): string {
+  if (suggestion.adoption?.status === "reverted") return "되돌림";
+  return growthSuggestionStatusLabel[suggestion.status] ?? suggestion.status;
+}
+
+/** gate는 사람의 결정이 필요한 곳, danger는 막히거나 악화된 곳에만 씁니다. */
+function growthStatusTone(suggestion: GrowthView["suggestions"][number]): string {
+  if (suggestion.adoption?.status === "reverted") return "text-danger";
+  return suggestion.status === "awaiting-review" ? "text-gate" : "text-muted";
 }
 function growthEffectStatus(result: GrowthView["effects"][number]["result"]): string {
   return result === "improved"
