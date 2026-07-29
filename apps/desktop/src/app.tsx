@@ -97,7 +97,6 @@ import type {
   OrganizationView,
   PermissionKind,
   ProviderConnectionView,
-  ProviderHealthView,
   SettingsView,
   SubscriptionAccountView,
 } from "@/desktop-service";
@@ -3297,31 +3296,6 @@ function ModelRouteRow({ route }: { route: ModelRouteView }) {
   );
 }
 
-/*
- * 실패는 두 종류이고 사용자가 할 일이 다릅니다. 인증 실패는 사람이 키를 갈아야 풀리므로 gate,
- * 나머지는 기다리거나 경로를 바꿔야 하므로 halt입니다. 한 색으로 뭉치면 무엇을 해야 할지 사라집니다.
- */
-const PROVIDER_FAILURE_LABEL: Record<NonNullable<ProviderHealthView["lastFailureClass"]>, string> = {
-  authentication: "인증 거부",
-  "rate-limit": "요청 한도",
-  timeout: "응답 없음",
-  network: "연결 실패",
-  server: "서버 오류",
-  unknown: "원인 불명",
-};
-
-function providerNeedsPerson(health: ProviderHealthView | undefined): boolean {
-  return health?.lastFailureClass === "authentication";
-}
-
-/** 켜짐/꺼짐이 아니라 «지금 성한가»입니다. 초록은 쓰지 않으므로 정상은 가라앉힙니다. */
-function ProviderHealthMark({ health }: { health: ProviderHealthView | undefined }) {
-  if (!health) return <span className="text-muted">○</span>;
-  if (health.state === "closed") return <span className="text-muted">●</span>;
-  const tone = providerNeedsPerson(health) ? "text-gate" : "text-danger";
-  return <span className={tone}>{health.state === "open" ? "⊘" : "◐"}</span>;
-}
-
 /**
  * 「모델을 지금 쓸 수 있나」에 먼저 답합니다. 전 경로가 막히면 그게 제한 모드이고,
  * 제한 모드에서도 무엇이 계속 되는지를 말해야 «실패로 위장하지 않는다»가 화면에 섭니다
@@ -3359,48 +3333,6 @@ function ModelPathHealth({ connections }: { connections: readonly ProviderConnec
         </p>
       ) : null}
     </section>
-  );
-}
-
-function ProviderRow({ connection }: { connection: ProviderConnectionView }) {
-  const health = connection.health;
-  const failure = health?.lastFailureClass;
-  return (
-    <li className="py-2.5">
-      <div className="flex items-baseline gap-2">
-        <ProviderHealthMark health={health} />
-        <span className="text-[13px] font-medium text-primary">{connection.displayName}</span>
-        {connection.enabled ? null : <span className="text-[11px] text-muted">꺼짐</span>}
-        <span className="ml-auto shrink-0 text-[11px] text-muted">
-          {connection.verifiedModelCount === undefined ? (
-            // 검증 증거가 없는 것과 0개인 것은 다릅니다. 없으면 «모른다»고 말합니다.
-            "모델 확인 안 됨"
-          ) : (
-            <>
-              모델 <span className="tabular-nums">{connection.verifiedModelCount}</span>개 확인
-            </>
-          )}
-        </span>
-      </div>
-      {connection.endpoints.map((endpoint) => (
-        <p className="mt-0.5 pl-5 text-[11px] text-muted" key={endpoint.baseUrl}>
-          {endpoint.local ? "이 컴퓨터" : "외부"} · <span className="font-mono">{endpoint.baseUrl}</span>
-          {connection.credentialVersion === undefined ? null : (
-            <span className="font-mono"> · 키 v{connection.credentialVersion}</span>
-          )}
-        </p>
-      ))}
-      {health && health.state !== "closed" ? (
-        <p className={`mt-1 pl-5 text-[11px] ${providerNeedsPerson(health) ? "text-gate" : "text-danger"}`}>
-          {failure === undefined ? "실패" : PROVIDER_FAILURE_LABEL[failure]}
-          {health.failureCount > 0 ? <span className="tabular-nums"> · 연속 {health.failureCount}회</span> : null}
-          {health.state === "open" && health.openUntil !== undefined ? (
-            <span className="tabular-nums"> · {new Date(health.openUntil).toTimeString().slice(0, 5)}에 재시도</span>
-          ) : null}
-          {providerNeedsPerson(health) ? " · 키를 다시 등록해야 풀립니다" : ""}
-        </p>
-      ) : null}
-    </li>
   );
 }
 
@@ -4015,24 +3947,8 @@ function SettingsSurface({ onEmergencyChanged, service }: { onEmergencyChanged: 
   const [emergency, setEmergency] = useState<EmergencyView>();
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
-  const [saving, setSaving] = useState(false);
   const [autonomySaving, setAutonomySaving] = useState(false);
   const [fullAccessPending, setFullAccessPending] = useState(false);
-  const [zaiFormOpen, setZaiFormOpen] = useState(false);
-  const [zaiAlias, setZaiAlias] = useState("Z.ai GLM-5.2");
-  const [zaiSecret, setZaiSecret] = useState("");
-  const [providerFormOpen, setProviderFormOpen] = useState(false);
-  const [provider, setProvider] = useState({
-    providerId: "",
-    displayName: "",
-    adapterKind: "",
-    endpointName: "",
-    baseUrl: "",
-    local: false,
-    credentialLabel: "",
-    credentialType: "api_key",
-  });
-  const [secret, setSecret] = useState("");
   const [areaId, setAreaId] = useState<(typeof SETTINGS_AREAS)[number]["id"]>("routes");
   useEffect(() => {
     let disposed = false;
@@ -4109,71 +4025,9 @@ function SettingsSurface({ onEmergencyChanged, service }: { onEmergencyChanged: 
       setAutonomySaving(false);
     }
   };
-  const submit = async (event: React.SyntheticEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (saving) return;
-    const submittedSecret = secret;
-    setSecret("");
-    setSaving(true);
-    setError("");
-    setNotice("");
-    try {
-      await service.registerProvider({
-        providerId: provider.providerId,
-        displayName: provider.displayName,
-        adapterKind: provider.adapterKind,
-      });
-      await service.registerEndpoint({
-        providerId: provider.providerId,
-        name: provider.endpointName,
-        baseUrl: provider.baseUrl,
-        local: provider.local,
-      });
-      const refreshed = await service.loadSettings();
-      const endpointId = endpointIdFor(refreshed.catalog, provider.providerId, provider.endpointName, provider.baseUrl);
-      if (!endpointId) throw new Error("생성된 endpoint를 확인하지 못했습니다.");
-      await service.addCredential({
-        providerId: provider.providerId,
-        endpointId,
-        label: provider.credentialLabel,
-        credentialType: provider.credentialType,
-        secret: submittedSecret,
-        priority: 0,
-        weight: 100,
-      });
-      setSettings(await service.loadSettings());
-      setNotice("Provider 인증 연결을 추가했습니다.");
-    } catch (cause) {
-      setError(surfaceErrorMessage(cause, "Provider 연결을 추가하지 못했습니다."));
-    } finally {
-      setSaving(false);
-    }
-  };
-  const submitZai = async (event: React.SyntheticEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (saving) return;
-    const submittedSecret = zaiSecret;
-    setZaiSecret("");
-    setSaving(true);
-    setError("");
-    setNotice("");
-    try {
-      await service.connectZaiCodingPlan({ alias: zaiAlias, secret: submittedSecret });
-      setSettings(await service.loadSettings());
-      setNotice("Z.ai GLM-5.2 연결과 Core Route 5개 구성을 완료했습니다.");
-    } catch (cause) {
-      setError(surfaceErrorMessage(cause, "Z.ai GLM-5.2 연결을 추가하지 못했습니다."));
-    } finally {
-      setSaving(false);
-    }
-  };
-  const setField = (field: keyof typeof provider, value: string | boolean) => {
-    setProvider((current) => ({ ...current, [field]: value }));
-  };
 
   const routes = settings ? projectModelRoutes(settings.routes, settings.catalog) : [];
   const connections = settings ? projectProviderConnections(settings.catalog) : [];
-  const accounts = settings ? projectSubscriptionAccounts(settings.accounts) : [];
   const area = SETTINGS_AREAS.find((item) => item.id === areaId) ?? SETTINGS_AREAS[0];
 
   return (
@@ -4228,10 +4082,11 @@ function SettingsSurface({ onEmergencyChanged, service }: { onEmergencyChanged: 
             <div className="mx-auto max-w-[76ch]">
               {area.id === "routes" ? (
                 <>
+                  <ModelPathHealth connections={connections} />
                   <GrowthSection title="요청이 어디로 가나">
                     {routes.length === 0 ? (
                       <p className="text-[12px] text-muted">
-                        구성된 모델 경로가 없습니다. 아래에서 Provider를 먼저 연결하십시오.
+                        구성된 모델 경로가 없습니다. 프로바이더를 먼저 연결하십시오.
                       </p>
                     ) : (
                       <ul className="divide-y divide-border border-y border-border">
@@ -4243,90 +4098,6 @@ function SettingsSurface({ onEmergencyChanged, service }: { onEmergencyChanged: 
                   </GrowthSection>
                   <RouterConfiguration onRefresh={setSettings} service={service} settings={settings} />
                 </>
-              ) : null}
-
-              {area.id === "providers" ? (
-                <>
-                  <ModelPathHealth connections={connections} />
-                  <GrowthSection title="연결된 Provider">
-                    {connections.length === 0 ? (
-                      <p className="text-[12px] text-muted">연결된 Provider가 없습니다.</p>
-                    ) : (
-                      <ul className="divide-y divide-border border-y border-border">
-                        {connections.map((connection) => (
-                          <ProviderRow connection={connection} key={connection.providerId} />
-                        ))}
-                      </ul>
-                    )}
-                  </GrowthSection>
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    <button
-                      className="rounded-[5px] border border-control px-3 py-1 text-[12px] text-secondary hover:border-fg-3 hover:text-primary"
-                      onClick={() => {
-                        setZaiFormOpen((open) => !open);
-                      }}
-                      type="button"
-                    >
-                      Z.ai GLM-5.2 연결
-                    </button>
-                    <button
-                      className="rounded-[5px] border border-control px-3 py-1 text-[12px] text-secondary hover:border-fg-3 hover:text-primary"
-                      onClick={() => {
-                        setProviderFormOpen((open) => !open);
-                      }}
-                      type="button"
-                    >
-                      다른 Provider 연결
-                    </button>
-                  </div>
-                  {zaiFormOpen ? (
-                    <ZaiCodingPlanConnectionForm
-                      alias={zaiAlias}
-                      saving={saving}
-                      secret={zaiSecret}
-                      setAlias={setZaiAlias}
-                      setSecret={setZaiSecret}
-                      submit={submitZai}
-                    />
-                  ) : null}
-                  {providerFormOpen ? (
-                    <ProviderConnectionForm
-                      provider={provider}
-                      saving={saving}
-                      secret={secret}
-                      setField={setField}
-                      setSecret={setSecret}
-                      submit={submit}
-                    />
-                  ) : null}
-                </>
-              ) : null}
-
-              {area.id === "accounts" ? (
-                <GrowthSection title="구독 계정">
-                  {accounts.length === 0 ? (
-                    <p className="text-[12px] text-muted">연결된 구독 계정이 없습니다.</p>
-                  ) : (
-                    <ul className="divide-y divide-border border-y border-border">
-                      {accounts.map((account) => (
-                        <li className="py-2.5" key={account.accountId}>
-                          <div className="flex items-baseline justify-between gap-2">
-                            <span className="text-[13px] font-medium">{account.alias}</span>
-                            <span
-                              className={`shrink-0 text-[11px] ${account.quotaExhausted === true ? "text-halt" : "text-muted"}`}
-                            >
-                              {quotaText(account)}
-                            </span>
-                          </div>
-                          <p className="mt-0.5 text-[11px] text-muted">
-                            {billingKindLabel(account.billingKind)}
-                            {account.earliestResetAt === undefined ? "" : ` · ${resetText(account.earliestResetAt)}`}
-                          </p>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </GrowthSection>
               ) : null}
 
               {area.id === "autonomy" && autonomy ? (
@@ -4479,14 +4250,6 @@ function SettingsSurface({ onEmergencyChanged, service }: { onEmergencyChanged: 
             <h3 className="text-[10px] font-semibold tracking-[0.08em] text-muted">이 구역이 정하는 것</h3>
             <p className="mt-1.5 text-[11px] leading-4 text-secondary">{area.background}</p>
           </section>
-          {area.id === "providers" ? (
-            <section>
-              <h3 className="text-[10px] font-semibold tracking-[0.08em] text-muted">자격 증명</h3>
-              <p className="mt-1.5 text-[11px] leading-4 text-secondary">
-                저장된 값은 화면에 다시 표시되지 않습니다. 새로 입력한 값은 저장 직후 입력란에서 지워집니다.
-              </p>
-            </section>
-          ) : null}
         </div>
       </aside>
     </main>
@@ -4500,18 +4263,6 @@ const SETTINGS_AREAS = [
     hint: "어떤 요청이 어느 모델로",
     background:
       "조직의 요청 종류마다 어느 모델을 쓸지, 예산을 얼마나 줄지 정합니다. 경로가 비면 그 종류의 실행이 멈춥니다.",
-  },
-  {
-    id: "providers",
-    title: "Provider 연결",
-    hint: "모델을 어디서 받나",
-    background: "모델을 제공하는 곳과 그 주소입니다. 이 컴퓨터에서 도는 것과 외부로 나가는 것이 구분되어야 합니다.",
-  },
-  {
-    id: "accounts",
-    title: "구독 계정",
-    hint: "남은 할당량",
-    background: "구독으로 쓰는 계정의 남은 양입니다. 소진되면 그 계정을 쓰는 경로가 멈추므로 미리 보여야 합니다.",
   },
   {
     id: "autonomy",
@@ -4540,217 +4291,10 @@ function routeKindLabel(kind: string): string {
   return labels[kind] ?? kind;
 }
 
-function billingKindLabel(kind: string): string {
-  const labels: Record<string, string> = {
-    "coding-plan": "구독 요금제",
-    "api-key": "사용량 과금",
-    subscription: "구독",
-  };
-  return labels[kind] ?? kind;
-}
-
 function costText(micros: number): string {
   return `$${(micros / 1_000_000).toFixed(2)}`;
 }
 
-function quotaText(account: SubscriptionAccountView): string {
-  if (account.quotaExhausted === true) return "할당량 소진";
-  if (account.minimumRemainingRatio === undefined) return account.status === "active" ? "사용 중" : account.status;
-  return `${String(Math.round(account.minimumRemainingRatio * 100))}% 남음`;
-}
-
-function resetText(iso: string): string {
-  const at = new Date(iso);
-  return Number.isNaN(at.getTime()) ? "" : `${String(at.getMonth() + 1)}월 ${String(at.getDate())}일 초기화`;
-}
-
-function ZaiCodingPlanConnectionForm({
-  alias,
-  saving,
-  secret,
-  setAlias,
-  setSecret,
-  submit,
-}: {
-  alias: string;
-  saving: boolean;
-  secret: string;
-  setAlias: (value: string) => void;
-  setSecret: (value: string) => void;
-  submit: (event: React.SyntheticEvent<HTMLFormElement>) => Promise<void>;
-}) {
-  return (
-    <form
-      aria-label="Z.ai GLM-5.2 연결"
-      className="mt-5 grid max-w-3xl grid-cols-2 gap-4 border-b border-border pb-5"
-      onSubmit={(event) => {
-        void submit(event);
-      }}
-    >
-      <SettingsField label="연결 이름">
-        <Input
-          aria-label="연결 이름"
-          onChange={(event) => {
-            setAlias(event.target.value);
-          }}
-          required
-          value={alias}
-        />
-      </SettingsField>
-      <SettingsField label="Z.ai API Key">
-        <Input
-          aria-label="Z.ai API Key"
-          onChange={(event) => {
-            setSecret(event.target.value);
-          }}
-          required
-          type="password"
-          value={secret}
-        />
-      </SettingsField>
-      <p className="col-span-2 text-xs leading-5 text-muted">
-        API Key는 로컬 자격 증명 저장소에만 기록되며, 이 화면에는 다시 표시되지 않습니다.
-      </p>
-      <div className="col-span-2 flex justify-end">
-        <Button disabled={saving} type="submit">
-          {saving ? "연결 중…" : "연결하고 기본 Route 구성"}
-        </Button>
-      </div>
-    </form>
-  );
-}
-function ProviderConnectionForm({
-  provider,
-  saving,
-  secret,
-  setField,
-  setSecret,
-  submit,
-}: {
-  provider: {
-    providerId: string;
-    displayName: string;
-    adapterKind: string;
-    endpointName: string;
-    baseUrl: string;
-    local: boolean;
-    credentialLabel: string;
-    credentialType: string;
-  };
-  saving: boolean;
-  secret: string;
-  setField: (field: keyof typeof provider, value: string | boolean) => void;
-  setSecret: (value: string) => void;
-  submit: (event: React.SyntheticEvent<HTMLFormElement>) => Promise<void>;
-}) {
-  return (
-    <form
-      aria-label="Provider 연결 추가"
-      className="mt-5 grid max-w-3xl grid-cols-2 gap-4 border-b border-border pb-5"
-      onSubmit={(event) => {
-        void submit(event);
-      }}
-    >
-      <SettingsField label="Provider ID">
-        <Input
-          aria-label="Provider ID"
-          onChange={(event) => {
-            setField("providerId", event.target.value);
-          }}
-          required
-          value={provider.providerId}
-        />
-      </SettingsField>
-      <SettingsField label="표시 이름">
-        <Input
-          aria-label="표시 이름"
-          onChange={(event) => {
-            setField("displayName", event.target.value);
-          }}
-          required
-          value={provider.displayName}
-        />
-      </SettingsField>
-      <SettingsField label="Adapter kind">
-        <Input
-          aria-label="Adapter kind"
-          onChange={(event) => {
-            setField("adapterKind", event.target.value);
-          }}
-          required
-          value={provider.adapterKind}
-        />
-      </SettingsField>
-      <SettingsField label="Endpoint 이름">
-        <Input
-          aria-label="Endpoint 이름"
-          onChange={(event) => {
-            setField("endpointName", event.target.value);
-          }}
-          required
-          value={provider.endpointName}
-        />
-      </SettingsField>
-      <SettingsField label="Base URL">
-        <Input
-          aria-label="Base URL"
-          onChange={(event) => {
-            setField("baseUrl", event.target.value);
-          }}
-          required
-          type="url"
-          value={provider.baseUrl}
-        />
-      </SettingsField>
-      <SettingsField label="Credential label">
-        <Input
-          aria-label="Credential label"
-          onChange={(event) => {
-            setField("credentialLabel", event.target.value);
-          }}
-          required
-          value={provider.credentialLabel}
-        />
-      </SettingsField>
-      <SettingsField label="Credential type">
-        <Input
-          aria-label="Credential type"
-          onChange={(event) => {
-            setField("credentialType", event.target.value);
-          }}
-          required
-          value={provider.credentialType}
-        />
-      </SettingsField>
-      <SettingsField label="Credential secret">
-        <Input
-          aria-label="Credential secret"
-          onChange={(event) => {
-            setSecret(event.target.value);
-          }}
-          required
-          type="password"
-          value={secret}
-        />
-      </SettingsField>
-      <label className="col-span-2 flex items-center gap-2 text-sm text-secondary">
-        <input
-          checked={provider.local}
-          onChange={(event) => {
-            setField("local", event.target.checked);
-          }}
-          type="checkbox"
-        />
-        로컬 endpoint
-      </label>
-      <div className="col-span-2 flex justify-end">
-        <Button disabled={saving} type="submit">
-          {saving ? "연결 중…" : "Provider 연결 추가"}
-        </Button>
-      </div>
-    </form>
-  );
-}
 function SettingsField({ children, label }: { children: React.ReactNode; label: string }) {
   return (
     <label className="grid gap-1.5 text-sm text-secondary">

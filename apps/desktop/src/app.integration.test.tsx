@@ -53,14 +53,14 @@ describe("AgentOS native data flow", () => {
 
     await user.click(screen.getByRole("button", { name: "설정" }));
     await screen.findByRole("main", { name: "설정" });
-    // 네 구역이 모두 있고, 하나를 골라도 조회는 한 번뿐입니다.
-    for (const title of ["모델 경로", "Provider 연결", "구독 계정", "로컬 환경"]) {
+    // 프로바이더와 계정은 프로바이더 표면이 소유하므로 설정에는 세 구역만 남습니다.
+    for (const title of ["모델 경로", "실행 자율성", "로컬 환경"]) {
       expect(
         screen.getByRole("button", { name: new RegExp(title), pressed: title === "모델 경로" }),
       ).toBeInTheDocument();
     }
-    await user.click(screen.getByRole("button", { name: /구독 계정/ }));
-    expect(screen.getByText("연결된 구독 계정이 없습니다.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Provider 연결/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /구독 계정/ })).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /로컬 환경/ }));
     // 조회가 없는 구역은 없다고 말합니다. 숫자 0으로 있는 척하지 않습니다.
     expect(screen.getByText(/조회가 아직 계약에 없습니다/)).toBeInTheDocument();
@@ -74,7 +74,7 @@ describe("AgentOS native data flow", () => {
     const loadSettings = vi.fn(async () => ({
       catalog: {
         endpoints: [
-          { endpointId: "endpoint-1", providerId: "openai", name: "API", baseUrl: "https://api.openai.com/v1" },
+          { endpointId: "endpoint-1", providerId: "openai", name: "api", baseUrl: "https://api.openai.com/v1" },
         ],
       },
       credentials: [],
@@ -95,22 +95,17 @@ describe("AgentOS native data flow", () => {
     });
     render(<App service={service({ loadSettings, registerProvider, registerEndpoint, addCredential })} />);
 
-    await user.click(screen.getByRole("button", { name: "설정" }));
-    await user.click(await screen.findByRole("button", { name: /^Provider 연결/ }));
-    await user.click(await screen.findByRole("button", { name: "다른 Provider 연결" }));
-    const form = await screen.findByRole("form", { name: "Provider 연결 추가" });
-    await user.type(within(form).getByRole("textbox", { name: "Provider ID" }), "openai");
-    await user.type(within(form).getByRole("textbox", { name: "표시 이름" }), "OpenAI");
-    await user.type(within(form).getByRole("textbox", { name: "Adapter kind" }), "openai-compatible");
-    await user.type(within(form).getByRole("textbox", { name: "Endpoint 이름" }), "API");
+    await user.click(screen.getByRole("button", { name: "프로바이더" }));
+    await user.click(await screen.findByRole("button", { name: "프로바이더 추가" }));
+    const form = await screen.findByRole("form", { name: "프로바이더 추가" });
+    // 사람이 대는 것은 넷뿐이고 내부 id·endpoint 이름·자격 종류는 도출합니다.
+    await user.type(within(form).getByRole("textbox", { name: "이름" }), "OpenAI");
     await user.type(within(form).getByRole("textbox", { name: "Base URL" }), "https://api.openai.com/v1");
-    await user.type(within(form).getByRole("textbox", { name: "Credential label" }), "운영 키");
-    await user.type(within(form).getByRole("textbox", { name: "Credential type" }), "api_key");
-    const secret = within(form).getByLabelText("Credential secret");
+    const secret = within(form).getByLabelText(/키/);
     await user.type(secret, "never-render-this");
-    await user.click(within(form).getByRole("button", { name: "Provider 연결 추가" }));
+    await user.click(within(form).getByRole("button", { name: "추가" }));
 
-    expect(await screen.findByText("Provider 인증 연결을 추가했습니다.")).toBeInTheDocument();
+    expect(await screen.findByText("프로바이더를 추가했습니다.")).toBeInTheDocument();
     expect(calls).toEqual(["provider", "endpoint", "credential"]);
     expect(addCredential).toHaveBeenCalledWith(
       expect.objectContaining({ endpointId: "endpoint-1", secret: "never-render-this", priority: 0, weight: 100 }),
