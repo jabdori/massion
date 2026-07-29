@@ -3375,16 +3375,15 @@ function BudgetSurface({ service }: { service: DesktopService }) {
     days === 0 || latest === ""
       ? ""
       : new Date(new Date(latest).getTime() - days * 86_400_000).toISOString().slice(0, 19);
-  const shown = all.filter(
-    (attempt) => (selectedId === undefined || attempt.routeId === selectedId) && attempt.at >= cutoff,
-  );
+  const routeScoped = all.filter((attempt) => selectedId === undefined || attempt.routeId === selectedId);
+  const shown = routeScoped.filter((attempt) => attempt.at >= cutoff);
 
   const spent = routes.reduce((total, route) => total + route.spentMicros, 0);
   const guardOf = (route: ModelRouteView): RouteGuards =>
     guards[route.routeId] ?? { hardMicros: route.totalBudgetMicros, softMicros: [] };
 
   return (
-    <main aria-label="예산" className="col-span-3 grid min-h-0 min-w-0 grid-cols-[264px_minmax(0,1fr)] bg-canvas">
+    <main aria-label="예산" className="col-span-3 grid min-h-0 min-w-0 grid-cols-[240px_minmax(0,1fr)_312px] bg-canvas">
       <aside className="grid min-h-0 grid-rows-[46px_minmax(0,1fr)] border-r border-border bg-chrome">
         <header className="flex items-baseline gap-2 px-3">
           <h1 className="text-[15px] font-semibold tracking-[-0.008em]">예산</h1>
@@ -3477,13 +3476,22 @@ function BudgetSurface({ service }: { service: DesktopService }) {
                   }}
                 />
               )}
-              <DailyActivity attempts={shown} />
+              <DailyActivity attempts={routeScoped} />
               <AttemptTable attempts={shown} onOpen={setOpenAttempt} />
-              <UsageBreakdown attempts={shown} />
             </>
           )}
         </div>
       </div>
+
+      {/* 집계는 기록과 다른 속도로 읽힙니다. 같은 스크롤에 두면 둘 다 못 봅니다. */}
+      <aside className="grid min-h-0 grid-rows-[46px_minmax(0,1fr)] border-l border-border bg-chrome">
+        <header className="flex items-center px-3">
+          <h2 className="text-[13px] text-muted">어디에 쓰였나</h2>
+        </header>
+        <div className="min-h-0 overflow-y-auto px-3 pb-4">
+          <UsageBreakdown attempts={shown} />
+        </div>
+      </aside>
 
       <AttemptDetail
         attempt={openAttempt}
@@ -3533,43 +3541,98 @@ function UsageStats({ attempts }: { attempts: readonly RouteAttemptView[] }) {
  * 날짜별 밀도. 조직이 언제 일했는지는 합계가 말해주지 않습니다.
  * 값이 없는 날은 «0»이 아니라 «없음»으로 둡니다 — 배경색 그대로입니다.
  */
+const WEEKDAY_LABEL = ["", "월", "", "수", "", "금", ""];
+const MONTH_LABEL = ["1월", "2월", "3월", "4월", "5월", "6월", "7월", "8월", "9월", "10월", "11월", "12월"];
+const HEATMAP_WEEKS = 26;
+
+/**
+ * 날짜별 밀도. 합계는 조직이 «언제» 일했는지를 말해주지 않습니다.
+ *
+ * 오른쪽 끝이 가장 최근이고 과거가 왼쪽으로 밀립니다 — 기록이 적어도 눈이 「지금」을 먼저
+ * 찾습니다. 값 없는 날은 0이 아니라 배경 그대로입니다.
+ */
 function DailyActivity({ attempts }: { attempts: readonly RouteAttemptView[] }) {
-  const byDay = new Map<string, number>();
+  const [hovered, setHovered] = useState<string>();
+  const byDay = new Map<string, { calls: number; tokens: number; cost: number }>();
   for (const attempt of attempts) {
     const day = attempt.at.slice(0, 10);
-    byDay.set(day, (byDay.get(day) ?? 0) + tokensOf(attempt));
+    const current = byDay.get(day) ?? { calls: 0, tokens: 0, cost: 0 };
+    byDay.set(day, {
+      calls: current.calls + 1,
+      tokens: current.tokens + tokensOf(attempt),
+      cost: current.cost + attempt.costMicros,
+    });
   }
   if (byDay.size === 0) return null;
-  const days = [...byDay.keys()].sort();
-  const first = new Date(`${days[0] ?? ""}T00:00:00Z`);
-  const last = new Date(`${days[days.length - 1] ?? ""}T00:00:00Z`);
-  // 주 단위 열로 세웁니다. 시작을 그 주의 일요일로 당겨야 요일 행이 어긋나지 않습니다.
-  const origin = new Date(first.getTime() - first.getUTCDay() * 86_400_000);
-  const weeks = Math.floor((last.getTime() - origin.getTime()) / (7 * 86_400_000)) + 1;
-  const peak = Math.max(...byDay.values());
+  const latest = [...byDay.keys()].sort().at(-1) ?? "";
+  const end = new Date(`${latest}T00:00:00Z`);
+  // 마지막 열이 «가장 최근이 든 주»가 되도록 그 주의 토요일까지 채웁니다.
+  const lastColumn = new Date(end.getTime() + (6 - end.getUTCDay()) * 86_400_000);
+  const origin = new Date(lastColumn.getTime() - (HEATMAP_WEEKS * 7 - 1) * 86_400_000);
+  const peak = Math.max(...[...byDay.values()].map((value) => value.tokens));
+  const dayAt = (week: number, weekday: number): string =>
+    new Date(origin.getTime() + (week * 7 + weekday) * 86_400_000).toISOString().slice(0, 10);
+  const shownDay = hovered === undefined ? undefined : byDay.get(hovered);
   return (
     <section aria-label="일별 활동" className="border-t border-border px-5 py-4">
-      <h3 className="mb-2.5 text-[12px] font-semibold tracking-[0.01em] text-fg-3">일별 활동</h3>
-      <div className="flex gap-[3px] overflow-x-auto">
-        {Array.from({ length: weeks }, (_, week) => (
-          <div className="flex shrink-0 flex-col gap-[3px]" key={week}>
-            {Array.from({ length: 7 }, (_, weekday) => {
-              const date = new Date(origin.getTime() + (week * 7 + weekday) * 86_400_000);
-              const key = date.toISOString().slice(0, 10);
-              const value = byDay.get(key);
-              const level = value === undefined ? 0 : Math.ceil((value / peak) * 3);
-              return (
-                <span
-                  className={`size-[11px] rounded-[2px] ${
-                    level === 0 ? "bg-surface-2" : level === 1 ? "bg-fg-4/30" : level === 2 ? "bg-fg-4/60" : "bg-fg-3"
-                  }`}
-                  key={weekday}
-                  title={value === undefined ? key : `${key} · ${tokenText(value)} 토큰`}
-                />
-              );
-            })}
-          </div>
-        ))}
+      <div className="mb-2.5 flex items-baseline gap-3">
+        <h3 className="text-[12px] font-semibold tracking-[0.01em] text-fg-3">일별 활동</h3>
+        {/* 칸에 올린 날의 값. 자리를 늘 잡아둬서 표가 위아래로 흔들리지 않습니다. */}
+        <p className="min-h-4 flex-1 truncate text-[11px] text-muted">
+          {hovered === undefined
+            ? null
+            : shownDay === undefined
+              ? `${hovered} · 호출 없음`
+              : `${hovered} · 호출 ${countText(shownDay.calls)} · ${tokenText(shownDay.tokens)} 토큰 · ${costText(shownDay.cost)}`}
+        </p>
+      </div>
+      <div className="flex gap-1.5 overflow-x-auto">
+        <div className="mt-[15px] flex shrink-0 flex-col gap-[3px]">
+          {WEEKDAY_LABEL.map((label, weekday) => (
+            <span className="h-[11px] text-[9px] leading-[11px] text-muted" key={weekday}>
+              {label}
+            </span>
+          ))}
+        </div>
+        <div className="flex shrink-0 gap-[3px]">
+          {Array.from({ length: HEATMAP_WEEKS }, (_, week) => {
+            const columnStart = new Date(origin.getTime() + week * 7 * 86_400_000);
+            const previous = new Date(columnStart.getTime() - 7 * 86_400_000);
+            const isNewMonth = week === 0 || columnStart.getUTCMonth() !== previous.getUTCMonth();
+            return (
+              <div className="flex flex-col gap-[3px]" key={week}>
+                <span className="h-3 whitespace-nowrap text-[9px] leading-3 text-muted">
+                  {isNewMonth ? MONTH_LABEL[columnStart.getUTCMonth()] : ""}
+                </span>
+                {Array.from({ length: 7 }, (_, weekday) => {
+                  const key = dayAt(week, weekday);
+                  const value = byDay.get(key);
+                  const level = value === undefined ? 0 : Math.ceil((value.tokens / peak) * 3);
+                  return (
+                    <span
+                      className={`size-[11px] rounded-[2px] ${
+                        level === 0
+                          ? "bg-surface-2"
+                          : level === 1
+                            ? "bg-fg-4/30"
+                            : level === 2
+                              ? "bg-fg-4/60"
+                              : "bg-fg-3"
+                      }`}
+                      key={weekday}
+                      onMouseEnter={() => {
+                        setHovered(key);
+                      }}
+                      onMouseLeave={() => {
+                        setHovered(undefined);
+                      }}
+                    />
+                  );
+                })}
+              </div>
+            );
+          })}
+        </div>
       </div>
     </section>
   );
@@ -3651,7 +3714,7 @@ function AttemptRow({ attempt, onOpen }: { attempt: RouteAttemptView; onOpen: (a
       <td className="whitespace-nowrap px-3 py-1.5 font-mono text-[12px] text-muted">{attempt.effort ?? "—"}</td>
       <td className="whitespace-nowrap px-3 py-1.5 font-mono text-[12px] text-muted">{attempt.providerId}</td>
       <td className={`whitespace-nowrap px-3 py-1.5 font-mono text-[12px] ${failed ? "text-danger" : "text-muted"}`}>
-        {attempt.status === "running" ? "진행" : (attempt.statusCode ?? "")}
+        {attempt.statusCode ?? "—"}
       </td>
       <td className="max-w-[200px] truncate py-1.5 pl-3 pr-5 text-[12px] text-secondary">{attempt.workTitle ?? "—"}</td>
     </tr>
@@ -3675,14 +3738,15 @@ function UsageBreakdown({ attempts }: { attempts: readonly RouteAttemptView[] })
     return [...map.entries()].sort((left, right) => right[1].tokens - left[1].tokens);
   };
   return (
-    <div className="grid gap-6 px-5 py-5 min-[1180px]:grid-cols-2">
-      <BreakdownTable heading="모델" rows={fold((attempt) => attempt.modelId)} />
-      <BreakdownTable heading="프로바이더" rows={fold((attempt) => attempt.providerId)} />
-    </div>
+    <>
+      <BreakdownList heading="모델" rows={fold((attempt) => attempt.modelId)} />
+      <BreakdownList heading="프로바이더" rows={fold((attempt) => attempt.providerId)} />
+    </>
   );
 }
 
-function BreakdownTable({
+/** 좁은 열이라 표가 아니라 목록입니다. 이름 아래에 값을 접어 넣습니다. */
+function BreakdownList({
   heading,
   rows,
 }: {
@@ -3691,43 +3755,33 @@ function BreakdownTable({
 }) {
   const peak = Math.max(...rows.map(([, value]) => value.tokens), 1);
   return (
-    <section aria-label={heading}>
-      <h3 className="mb-2 text-[12px] font-semibold tracking-[0.01em] text-fg-3">{heading}</h3>
-      <table className="w-full border-collapse">
-        <thead>
-          <tr className="border-b border-border text-left text-[11px] text-muted">
-            <th className="py-1.5 pr-3 font-normal">{heading}</th>
-            <th className="px-3 py-1.5 text-right font-normal">호출</th>
-            <th className="px-3 py-1.5 text-right font-normal">토큰</th>
-            <th className="px-3 py-1.5 text-right font-normal">비용</th>
-            <th className="w-[88px] py-1.5 pl-3 font-normal" />
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map(([id, value]) => (
-            <tr className="border-b border-border/60" key={id}>
-              <td className="max-w-[180px] truncate py-1.5 pr-3 font-mono text-[12px] text-secondary">{id}</td>
-              <td className="px-3 py-1.5 text-right font-mono text-[12px] tabular-nums text-muted">
-                {countText(value.calls)}
-              </td>
-              <td className="px-3 py-1.5 text-right font-mono text-[12px] tabular-nums text-secondary">
-                {tokenText(value.tokens)}
-              </td>
-              <td className="px-3 py-1.5 text-right font-mono text-[12px] tabular-nums text-secondary">
-                {value.cost === 0 ? "—" : costText(value.cost)}
-              </td>
-              <td className="py-1.5 pl-3">
-                <div className="h-[3px] w-full rounded-full bg-surface-2">
-                  <div
-                    className="h-[3px] rounded-full bg-fg-3"
-                    style={{ width: `${String((value.tokens / peak) * 100)}%` }}
-                  />
-                </div>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+    <section aria-label={heading} className="mt-3 first:mt-1">
+      <h3 className="mb-1.5 text-[11px] font-semibold tracking-[0.01em] text-fg-3">{heading}</h3>
+      <ul>
+        {rows.map(([id, value]) => (
+          <li className="py-1.5" key={id}>
+            <div className="flex items-baseline gap-2">
+              <span className="min-w-0 flex-1 truncate font-mono text-[12px] text-secondary">{id}</span>
+              <span className="shrink-0 font-mono text-[11px] tabular-nums text-muted">{tokenText(value.tokens)}</span>
+            </div>
+            <div className="mt-1 h-[3px] w-full rounded-full bg-surface-2">
+              <div
+                className="h-[3px] rounded-full bg-fg-3"
+                style={{ width: `${String((value.tokens / peak) * 100)}%` }}
+              />
+            </div>
+            <div className="mt-1 flex items-baseline gap-1.5 font-mono text-[11px] tabular-nums text-muted">
+              <span>{countText(value.calls)}회</span>
+              {value.cost === 0 ? null : (
+                <>
+                  <span>·</span>
+                  <span>{costText(value.cost)}</span>
+                </>
+              )}
+            </div>
+          </li>
+        ))}
+      </ul>
     </section>
   );
 }
