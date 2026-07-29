@@ -154,14 +154,20 @@ describe("AgentOS 데스크톱", () => {
     expect(await screen.findByRole("main", { name: "설정" })).toBeInTheDocument();
   });
 
-  it("지시문은 실행 시점을 선택한 뒤 제출한다", async () => {
+  // 반영 시점은 보내기 «전»이 아니라 «후»에 고릅니다. 보낸 지시는 인풋 위에 카드로 섭니다.
+  it("보낸 지시는 대기 카드로 서고 거기서 현재 작업에 반영한다", async () => {
     const user = userEvent.setup();
     renderApp();
 
     await user.type(screen.getByRole("textbox", { name: "추가 지시" }), "산업군별 이탈률도 분리해줘");
-    await user.click(screen.getByRole("button", { name: "다음 단계에 반영" }));
+    await user.click(screen.getByRole("button", { name: "보내기" }));
 
     expect(screen.getByRole("status")).toHaveTextContent("다음 단계에 반영하도록 예약했습니다");
     expect(screen.getByRole("textbox", { name: "추가 지시" })).toHaveValue("");
+    expect(screen.getByText("산업군별 이탈률도 분리해줘")).toBeInTheDocument();
+
+    const cards = screen.getAllByRole("button", { name: /현재 작업 조정/ });
+    await user.click(cards[cards.length - 1] as HTMLElement);
+    expect(screen.getByRole("status")).toHaveTextContent("안전한 실행 경계에서 지금 반영합니다");
   });
 });

@@ -314,16 +314,17 @@ export function useDesktopController(service: DesktopService) {
     setQueryState(next);
   };
 
-  const submitDirective = async (mode: "now" | "next-stage") => {
+  /** `override`가 있으면 인풋이 아니라 그 내용을 보냅니다 — 대기 카드가 자기 내용을 다시 보낼 때 씁니다. */
+  const submitDirective = async (mode: "now" | "next-stage", override?: string) => {
     const current = workRef.current;
-    const content = composer.trim();
+    const content = (override ?? composer).trim();
     if (!current || !content || commandLocks.current.has("directive")) return;
     commandLocks.current.add("directive");
     setPendingDirective(true);
     setAnnouncement("지시를 저장하고 있습니다.");
     try {
       await service.submitDirective(current, content, mode);
-      setComposer("");
+      if (override === undefined) setComposer("");
       setAnnouncement(
         mode === "now" ? "안전한 실행 경계에서 지금 반영합니다." : "다음 단계에 반영하도록 예약했습니다.",
       );

@@ -1,4 +1,5 @@
 import {
+  ArrowBendDownRightIcon as ArrowBendDownRight,
   ArrowRightIcon as ArrowRight,
   AtIcon as At,
   BellIcon as Bell,
@@ -12,7 +13,6 @@ import {
   FilePdfIcon as FilePdf,
   GearIcon as Gear,
   HouseIcon as House,
-  LightningIcon as Lightning,
   ListChecksIcon as ListChecks,
   MagnifyingGlassIcon as MagnifyingGlass,
   PaperclipIcon as Paperclip,
@@ -118,6 +118,9 @@ import {
   type RoomView,
   type SpeakerView,
   type VerificationCriterionStatus,
+  type QueuedDirectiveView,
+  type ReasoningEffort,
+  type WorkAutonomyMode,
   type WorkStatus,
   type WorkView,
 } from "@/model";
@@ -229,6 +232,10 @@ export function App({ contextPicker = nativeContextPicker, service }: AppProps) 
   const [notificationError, setNotificationError] = useState("");
   const [growth, setGrowth] = useState<GrowthView>();
   const [emergency, setEmergency] = useState<EmergencyView>();
+  /* Work 단위 권한. 도메인의 AutonomyStore가 조직 단위라 계약이 열릴 때까지 화면이 앞세웁니다. */
+  const [workAutonomy, setWorkAutonomy] = useState<Record<string, WorkAutonomyMode>>({});
+  /* 인풋의 모델 셀렉트가 쓰는 목록. 프로바이더가 켜 둔 모델만 고를 수 있습니다. */
+  const [availableModels, setAvailableModels] = useState<readonly string[]>([]);
   const [growthError, setGrowthError] = useState("");
   const [requestedGrowthSuggestionId, setRequestedGrowthSuggestionId] = useState<string>();
   const [pendingNotificationIds, setPendingNotificationIds] = useState<ReadonlySet<string>>(new Set());
@@ -376,6 +383,27 @@ export function App({ contextPicker = nativeContextPicker, service }: AppProps) 
     await controller.decideApproval(approval, decision);
     await refreshNotifications();
   };
+  useEffect(() => {
+    let disposed = false;
+    void service
+      .loadSettings()
+      .then((value) => {
+        if (disposed) return;
+        const ids = projectProviderConnections(value.catalog)
+          .flatMap((connection) => connection.models)
+          // 임베딩 모델은 지시를 받는 자리가 아닙니다.
+          .filter((model) => model.enabled && model.routeKind !== "embedding")
+          .map((model) => model.modelId);
+        setAvailableModels([...new Set(ids)].sort());
+      })
+      .catch(() => {
+        // 모델 목록을 못 불러와도 인풋은 살아 있어야 합니다. 지금 쓰는 모델만 남습니다.
+      });
+    return () => {
+      disposed = true;
+    };
+  }, [service]);
+
   // 수신함 한 원천. 배지·수신함·홈이 모두 이 배열을 봅니다. 각 표면이 따로 세지 않습니다.
   const inboxItems = useMemo(
     () => buildInboxItems(notifications, controller.works, growth?.suggestions ?? []),
@@ -446,6 +474,9 @@ export function App({ contextPicker = nativeContextPicker, service }: AppProps) 
               <>
                 <WorkActivity
                   announcement={controller.announcement}
+                  onSetAutonomy={(mode) => {
+                    setWorkAutonomy((current) => ({ ...current, [controller.work?.id ?? ""]: mode }));
+                  }}
                   approvalDecisions={controller.approvalDecisions}
                   detailLoading={controller.detailLoading}
                   executionNotice={controller.executionNotice?.message}
@@ -458,8 +489,9 @@ export function App({ contextPicker = nativeContextPicker, service }: AppProps) 
                   onDecideApproval={(approval, decision) => {
                     void decideWorkApproval(approval, decision);
                   }}
-                  onSubmitDirective={(mode) => {
-                    void controller.submitDirective(mode);
+                  models={availableModels}
+                  onSubmitDirective={(mode, content) => {
+                    void controller.submitDirective(mode, content);
                   }}
                   pendingApprovals={controller.pendingApprovals}
                   pendingDirective={controller.pendingDirective}
@@ -468,7 +500,12 @@ export function App({ contextPicker = nativeContextPicker, service }: AppProps) 
                   onSelectRoom={openRoom}
                   room={room}
                   rooms={rooms.filter((candidate) => openRoomIds.includes(candidate.roomId))}
-                  work={controller.work}
+                  work={{
+                    ...controller.work,
+                    ...(workAutonomy[controller.work.id] === undefined
+                      ? {}
+                      : { autonomyMode: workAutonomy[controller.work.id] }),
+                  }}
                 />
                 <WorkInspector key={controller.work.id} room={room} service={service} work={controller.work} />
               </>
@@ -4696,7 +4733,9 @@ interface WorkActivityProps {
   onAnnouncement: (message: string) => void;
   onControlRun: (action: "cancel" | "resume") => void;
   onDecideApproval: (approval: ApprovalView, decision: "approved" | "rejected") => void;
-  onSubmitDirective: (mode: "now" | "next-stage") => void;
+  onSetAutonomy: (mode: WorkAutonomyMode) => void;
+  models: readonly string[];
+  onSubmitDirective: (mode: "now" | "next-stage", content?: string) => void;
 }
 
 function WorkActivity({
@@ -4704,11 +4743,13 @@ function WorkActivity({
   approvalDecisions,
   composer,
   detailLoading,
+  models,
   executionNotice,
   onAnnouncement,
   onComposerChange,
   onControlRun,
   onDecideApproval,
+  onSetAutonomy,
   onSubmitDirective,
   pendingApprovals,
   pendingDirective,
@@ -4721,6 +4762,33 @@ function WorkActivity({
 }: WorkActivityProps) {
   // 방이 있으면 대화는 방이 정본입니다. 없으면 Work의 활동 타임라인이 계속 나옵니다.
   const activities = room ? room.activities : work.activities;
+  const lastModelId = room?.activities.findLast((item) => item.kind === "room")?.speaker.modelId;
+  /*
+   * 모델·추론 수준·대기 지시는 이 Work에만 겁니다. 도메인이 아직 셋 다 돌려주지 않아 화면이 앞세웁니다.
+   * 인계: docs/phases/30-surface-parity-agent-ux/settings-contract-handoff.md
+   */
+  const [modelOverride, setModelOverride] = useState<string>();
+  const [effortOverride, setEffortOverride] = useState<ReasoningEffort>();
+  const [queuedOverride, setQueuedOverride] = useState<QueuedDirectiveView[]>();
+  useEffect(() => {
+    setModelOverride(undefined);
+    setEffortOverride(undefined);
+    setQueuedOverride(undefined);
+  }, [work.id]);
+  const modelId = modelOverride ?? work.modelId ?? lastModelId;
+  const effort = effortOverride ?? work.reasoningEffort ?? "medium";
+  const queued = queuedOverride ?? work.queuedDirectives ?? [];
+  const setModelId = setModelOverride;
+  const setEffort = setEffortOverride;
+  const setQueued = setQueuedOverride;
+  /* 권한은 이 Work에만 겁니다. 계약이 열릴 때까지 화면 상태로 둡니다. */
+  const cycleAutonomy = () => {
+    const order: WorkAutonomyMode[] = ["automatic", "review", "full-access"];
+    const next = order[(order.indexOf(work.autonomyMode ?? "automatic") + 1) % order.length] ?? "automatic";
+    onAnnouncement(`이 업무 권한을 ${AUTONOMY_LABEL[next]}(으)로 바꿨습니다.`);
+    onSetAutonomy(next);
+  };
+
   return (
     <main
       aria-busy={detailLoading || undefined}
@@ -4851,11 +4919,40 @@ function WorkActivity({
       </section>
       <Composer
         announcement={announcement}
+        autonomyMode={work.autonomyMode ?? "automatic"}
+        effort={effort}
+        models={models}
         onAnnouncement={onAnnouncement}
+        onApplyQueued={(id) => {
+          const directive = queued.find((item) => item.id === id);
+          if (directive === undefined) return;
+          setQueued(queued.filter((item) => item.id !== id));
+          onSubmitDirective("now", directive.content);
+        }}
+        onAutonomyCycle={() => {
+          cycleAutonomy();
+        }}
         onChange={onComposerChange}
-        onSubmit={onSubmitDirective}
+        onDropQueued={(id) => {
+          setQueued(queued.filter((item) => item.id !== id));
+        }}
+        onEffortChange={setEffort}
+        onModelChange={setModelId}
+        onStop={() => {
+          onControlRun("cancel");
+        }}
+        onSubmit={() => {
+          const content = composer.trim();
+          if (!content) return;
+          setQueued([...queued, { id: `queued-${String(queued.length)}-${content.slice(0, 12)}`, content }]);
+          onSubmitDirective("next-stage");
+        }}
         pending={pendingDirective}
+        queued={queued}
+        running={work.run?.status === "running" || work.run?.status === "ready"}
         value={composer}
+        {...(modelId === undefined ? {} : { modelId })}
+        {...(work.workspace === undefined ? {} : { workspace: work.workspace })}
       />
     </main>
   );
@@ -5297,81 +5394,219 @@ function EventActivity({
   );
 }
 
+const AUTONOMY_LABEL: Record<WorkAutonomyMode, string> = {
+  automatic: "자동",
+  review: "검토",
+  "full-access": "권한 무시",
+};
+
+const EFFORT_LABEL: Record<ReasoningEffort, string> = { low: "낮음", medium: "보통", high: "높음" };
+
 interface ComposerProps {
+  autonomyMode: WorkAutonomyMode;
+  effort: ReasoningEffort;
+  modelId?: string;
+  models: readonly string[];
+  queued: readonly QueuedDirectiveView[];
   value: string;
   announcement: string;
   pending: boolean;
+  running: boolean;
+  workspace?: { name: string; trusted: boolean };
+  onAutonomyCycle: () => void;
+  onEffortChange: (effort: ReasoningEffort) => void;
+  onModelChange: (modelId: string) => void;
+  onApplyQueued: (id: string) => void;
+  onDropQueued: (id: string) => void;
   onChange: (value: string) => void;
   onAnnouncement: (message: string) => void;
-  onSubmit: (mode: "now" | "next-stage") => void;
+  onStop: () => void;
+  onSubmit: () => void;
 }
 
-function Composer({ announcement, onAnnouncement, onChange, onSubmit, pending, value }: ComposerProps) {
+/**
+ * 인풋은 «이 요청이 어떤 조건으로 나가는가»를 함께 말합니다. 권한·모델·추론 수준이 여기 없으면
+ * 사용자는 보낸 뒤에야 조건을 알게 됩니다.
+ *
+ * 보내기 «전에» 반영 시점을 고르게 하지 않습니다. 보내면 위에 카드로 서고, 무엇이 대기 중인지
+ * 보이는 상태에서 「현재 작업 조정」을 고릅니다 — Codex가 같은 자리에 두는 순서입니다.
+ */
+function Composer({
+  announcement,
+  autonomyMode,
+  effort,
+  modelId,
+  models,
+  onAnnouncement,
+  onApplyQueued,
+  onAutonomyCycle,
+  onChange,
+  onDropQueued,
+  onEffortChange,
+  onModelChange,
+  onStop,
+  onSubmit,
+  pending,
+  queued,
+  running,
+  value,
+  workspace,
+}: ComposerProps) {
+  const fullAccess = autonomyMode === "full-access";
+  const selectClass =
+    "cursor-pointer rounded-[4px] border border-transparent bg-transparent py-0.5 pl-1.5 pr-0.5 text-[11px] text-muted outline-none transition-colors duration-150 hover:border-border hover:text-secondary focus-visible:border-fg-3";
   return (
     <div className="border-t border-border bg-canvas px-5 pb-4 pt-3" data-testid="directive-composer">
-      <div className="mx-auto max-w-[860px] rounded-lg border border-control bg-surface-1 p-3 focus-within:border-accent/70">
-        <label className="sr-only" htmlFor="directive">
-          추가 지시
-        </label>
-        <Textarea
-          aria-label="추가 지시"
-          id="directive"
-          onChange={(event) => {
-            onChange(event.target.value);
-          }}
-          placeholder="대표에게 추가 지시..."
-          value={value}
-        />
-        <div className="flex items-end justify-between gap-3">
-          <div className="flex items-center gap-1">
-            <Button
+      <div className="mx-auto max-w-[860px]">
+        {/* 아직 반영되지 않은 지시. 인풋 위에 서서 처리 시점을 고르게 합니다. */}
+        {queued.map((directive) => (
+          <div
+            className="mb-1.5 flex items-center gap-2 rounded-[4px] border border-border bg-surface-1 px-2.5 py-1.5"
+            key={directive.id}
+          >
+            <span className="min-w-0 flex-1 truncate text-[12px] text-secondary">{directive.content}</span>
+            <button
+              className="inline-flex shrink-0 items-center gap-1 rounded-[4px] px-1.5 py-0.5 text-[11px] text-muted outline-none transition-colors duration-150 hover:text-primary"
+              onClick={() => {
+                onApplyQueued(directive.id);
+              }}
+              type="button"
+            >
+              <ArrowBendDownRight aria-hidden="true" size={12} />
+              현재 작업 조정
+            </button>
+            <button
+              aria-label="대기 지시 삭제"
+              className="shrink-0 rounded-[4px] p-0.5 text-muted outline-none transition-colors duration-150 hover:text-danger"
+              onClick={() => {
+                onDropQueued(directive.id);
+              }}
+              type="button"
+            >
+              <X aria-hidden="true" size={12} />
+            </button>
+          </div>
+        ))}
+        {/* 문맥 칩. 이 요청이 어느 워크스페이스에서 도는지가 보내기 전에 보여야 합니다. */}
+        {workspace === undefined ? null : (
+          <div className="mb-2 flex items-center gap-1.5">
+            <span className="inline-flex items-center gap-1.5 rounded-[4px] border border-border px-2 py-0.5 text-[11px] text-muted">
+              <Database aria-hidden="true" size={12} />
+              {workspace.name}
+            </span>
+            {workspace.trusted ? null : (
+              <span className="rounded-[4px] border border-gate/40 px-2 py-0.5 text-[11px] text-gate">신뢰 안 됨</span>
+            )}
+          </div>
+        )}
+        <div className="rounded-[4px] border border-control bg-surface-1 focus-within:border-fg-3">
+          <label className="sr-only" htmlFor="directive">
+            추가 지시
+          </label>
+          <Textarea
+            aria-label="추가 지시"
+            className="border-0 bg-transparent px-3 pt-3"
+            id="directive"
+            onChange={(event) => {
+              onChange(event.target.value);
+            }}
+            placeholder="무엇이든 요청하세요"
+            value={value}
+          />
+          <div className="flex items-center gap-1.5 px-2 pb-2">
+            <button
               aria-label="파일 첨부"
+              className="rounded-[4px] p-1 text-muted outline-none transition-colors duration-150 hover:text-primary"
               onClick={() => {
                 onAnnouncement("파일 첨부 준비가 되었습니다.");
               }}
-              size="icon"
-              variant="ghost"
+              type="button"
             >
-              <Paperclip aria-hidden="true" size={18} />
-            </Button>
-            <Button
+              <Paperclip aria-hidden="true" size={16} />
+            </button>
+            <button
               aria-label="에이전트 멘션"
+              className="rounded-[4px] p-1 text-muted outline-none transition-colors duration-150 hover:text-primary"
               onClick={() => {
                 onAnnouncement("멘션할 에이전트를 선택하세요.");
               }}
-              size="icon"
-              variant="ghost"
+              type="button"
             >
-              <At aria-hidden="true" size={18} />
-            </Button>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button
-              disabled={!value.trim() || pending}
-              onClick={() => {
-                onSubmit("now");
-              }}
+              <At aria-hidden="true" size={16} />
+            </button>
+            {/*
+             * 권한은 보내기 전에 보이고 그 자리에서 바뀌어야 합니다. 전체 권한만 색을 갖습니다 —
+             * 승인과 샌드박스를 우회하는 상태라 안 보면 안 되는 종류입니다.
+             */}
+            <button
+              className={`ml-1 rounded-[4px] border px-2 py-0.5 text-[11px] outline-none transition-colors duration-150 ${
+                fullAccess
+                  ? "border-gate/50 text-gate"
+                  : "border-transparent text-muted hover:border-border hover:text-secondary"
+              }`}
+              onClick={onAutonomyCycle}
+              title="이 업무에만 적용됩니다"
+              type="button"
             >
-              <Lightning aria-hidden="true" size={16} />
-              지금 반영
-            </Button>
-            <Button
-              aria-label="다음 단계에 반영"
-              disabled={!value.trim() || pending}
-              onClick={() => {
-                onSubmit("next-stage");
-              }}
-              variant="primary"
-            >
-              다음 단계
-              <ArrowRight aria-hidden="true" size={16} />
-            </Button>
+              {AUTONOMY_LABEL[autonomyMode]}
+            </button>
+            <div className="ml-auto flex items-center gap-1">
+              {/* 모델과 추론 수준은 다른 축입니다. 같은 모델을 더 오래 생각하게 할 수 있습니다. */}
+              <select
+                aria-label="모델"
+                className={`${selectClass} font-mono`}
+                onChange={(event) => {
+                  onModelChange(event.target.value);
+                }}
+                value={modelId ?? ""}
+              >
+                {modelId === undefined || models.includes(modelId) ? null : <option value={modelId}>{modelId}</option>}
+                {models.map((candidate) => (
+                  <option key={candidate} value={candidate}>
+                    {candidate}
+                  </option>
+                ))}
+              </select>
+              <select
+                aria-label="추론 수준"
+                className={selectClass}
+                onChange={(event) => {
+                  onEffortChange(event.target.value as ReasoningEffort);
+                }}
+                value={effort}
+              >
+                {(["low", "medium", "high"] as const).map((level) => (
+                  <option key={level} value={level}>
+                    {EFFORT_LABEL[level]}
+                  </option>
+                ))}
+              </select>
+              {/* 실행 중에도 지시는 대기열에 들어갑니다. 중단은 보내기를 대체하지 않습니다. */}
+              {running ? (
+                <button
+                  className="ml-1 rounded-[4px] px-2 py-1 text-[12px] text-muted outline-none transition-colors duration-150 hover:text-danger"
+                  onClick={onStop}
+                  type="button"
+                >
+                  중단
+                </button>
+              ) : null}
+              <button
+                aria-label="보내기"
+                className="ml-1 grid size-7 place-items-center rounded-full bg-fg text-canvas outline-none transition-opacity duration-150 hover:opacity-80 disabled:opacity-40"
+                disabled={!value.trim() || pending}
+                onClick={onSubmit}
+                type="button"
+              >
+                <ArrowRight aria-hidden="true" size={14} />
+              </button>
+            </div>
           </div>
         </div>
         <p
           aria-atomic="true"
           aria-live="polite"
-          className="mt-2 min-h-4 text-right text-[11px] text-muted"
+          className="mt-1.5 min-h-4 text-right text-[11px] text-muted"
           role="status"
         >
           {announcement}

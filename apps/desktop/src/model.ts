@@ -222,8 +222,34 @@ export interface VerificationView {
   evidence?: string;
 }
 
+/**
+ * 이 Work에만 거는 실행 권한. Claude Code의 권한 모드처럼 세션 안에서 바뀝니다.
+ * 조직 기본값(설정)을 따르면 `undefined`이고, 여기서 바꾸면 이 Work만 달라집니다.
+ * 도메인의 AutonomyStore는 조직 단위라 Work 단위 계약이 아직 없습니다 —
+ * 인계: docs/phases/30-surface-parity-agent-ux/settings-contract-handoff.md
+ */
+export type WorkAutonomyMode = "automatic" | "review" | "full-access";
+
+/** 같은 모델에 얼마나 생각하게 할지. 모델 선택과는 다른 축입니다. */
+export type ReasoningEffort = "low" | "medium" | "high";
+
+/** 아직 반영되지 않은 지시. 인풋 위에 서서, 현재 작업에 끼워 넣을지 고를 수 있습니다. */
+export interface QueuedDirectiveView {
+  id: string;
+  content: string;
+}
+
 export interface WorkView {
   id: string;
+  /** 없으면 조직 기본값을 따릅니다. */
+  autonomyMode?: WorkAutonomyMode;
+  /** 이 Work가 묶인 워크스페이스. 없으면 디렉토리 없는 업무입니다. */
+  workspace?: { name: string; trusted: boolean };
+  /** 이 업무가 쓰는 모델과 추론 수준. 없으면 조직이 배치한 값을 따릅니다. */
+  modelId?: string;
+  reasoningEffort?: ReasoningEffort;
+  /** 보냈지만 아직 반영되지 않은 지시. */
+  queuedDirectives?: QueuedDirectiveView[];
   title: string;
   status: WorkStatus;
   revision: number;
@@ -317,6 +343,11 @@ const churnArtifacts: ArtifactView[] = [
 const works: WorkView[] = [
   {
     id: "churn-q3",
+    workspace: { name: "customer-ops", trusted: true },
+    modelId: "claude-sonnet-5",
+    reasoningEffort: "high",
+    // 보냈지만 아직 반영되지 않은 지시. 인풋 위에 서서 사람이 처리 시점을 고릅니다.
+    queuedDirectives: [{ id: "queued-cohort", content: "코호트를 계약 규모별로도 나눠줘" }],
     title: "3분기 고객 이탈 원인 분석",
     status: "active",
     revision: 1,

@@ -62,7 +62,8 @@ describe("AgentOS native data flow", () => {
     expect(screen.queryByText("구독 계정")).not.toBeInTheDocument();
     // 조회가 없는 구역은 없다고 말합니다. 숫자 0으로 있는 척하지 않습니다.
     expect(screen.getByText(/조회가 아직 계약에 없습니다/)).toBeInTheDocument();
-    expect(loadSettings).toHaveBeenCalledOnce();
+    // 인풋의 모델 목록도 같은 조회를 씁니다. 설정 표면 진입이 조회를 유발했는지만 봅니다.
+    expect(loadSettings).toHaveBeenCalled();
     expect(screen.queryByText("절대-표시되면-안됨")).not.toBeInTheDocument();
   });
 
@@ -576,7 +577,7 @@ describe("AgentOS native data flow", () => {
 
     const input = screen.getByRole("textbox", { name: "추가 지시" });
     await user.type(input, "산업군별 이탈률도 분리해줘");
-    await user.click(screen.getByRole("button", { name: "다음 단계에 반영" }));
+    await user.click(screen.getByRole("button", { name: "보내기" }));
 
     expect(await screen.findByText("지시를 저장하지 못했습니다")).toBeInTheDocument();
     expect(input).toHaveValue("산업군별 이탈률도 분리해줘");

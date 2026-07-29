@@ -62,3 +62,23 @@ export interface SubscriptionAccountViewV1 { accountId; providerId; alias; scope
 - [ ] `desktop-service.ts`의 `project*` 셋과 `rows()`/`str()`/`num()`/`bool()` 헬퍼가 삭제된다
 - [ ] `SettingsView`의 `unknown` 일곱이 사라진다
 - [ ] `router.credentials`가 secret을 싣지 않음이 타입으로 보장된다
+
+## 6. 인풋(Composer)이 앞세운 세 가지
+
+인풋은 「이 요청이 어떤 조건으로 나가는가」를 보내기 전에 말합니다. 셋 다 도메인이 아직 돌려주지 않아
+화면 상태로 서 있습니다. 위치는 `app.tsx`의 `WorkActivity` — `modelOverride`·`effortOverride`·`queuedOverride`.
+
+| 화면이 세운 것 | 뷰 타입 | 필요한 계약 |
+|---|---|---|
+| Work별 모델 선택 | `WorkView.modelId` | Work 단위 모델 배치를 읽고 쓰는 명령. 지금은 조직이 배치한 결과만 활동 로그에서 «읽습니다» |
+| 추론 수준 | `WorkView.reasoningEffort` | 도메인에 개념 자체가 없습니다. `router` 스키마에 `reasoning_effort` 축이 서야 합니다 |
+| 대기 중인 지시 | `WorkView.queuedDirectives` | `work.directives`가 미반영 지시를 돌려줘야 합니다. 지금은 제출 성공만 알고 큐를 못 봅니다 |
+
+「현재 작업 조정」은 대기 카드의 내용을 `submitDirective(work, content, "now")`로 다시 보냅니다.
+`DirectiveMode`는 실제 계약이라 그대로 씁니다 — 바뀐 것은 **고르는 시점**뿐입니다(보내기 전 → 보낸 후).
+
+### 완료 판정 (추가)
+
+- [ ] `work` 조회가 미반영 지시 목록을 돌려준다
+- [ ] Work 단위 모델·추론 수준을 읽고 쓰는 명령이 등록된다
+- [ ] `WorkActivity`의 세 `*Override` 상태가 삭제된다
