@@ -54,14 +54,12 @@ describe("AgentOS native data flow", () => {
     await user.click(screen.getByRole("button", { name: "설정" }));
     await screen.findByRole("main", { name: "설정" });
     // 설정은 탭도 목록도 아닌 한 문서입니다. 세 구역이 함께 보입니다.
-    for (const title of ["예산", "실행 자율성 기본값", "로컬 환경"]) {
+    for (const title of ["예산", "권한", "자가개선"]) {
       expect(screen.getByRole("region", { name: title })).toBeInTheDocument();
     }
     // 프로바이더와 계정은 프로바이더 표면이 소유합니다.
     expect(screen.queryByText(/Provider 연결/)).not.toBeInTheDocument();
     expect(screen.queryByText("구독 계정")).not.toBeInTheDocument();
-    // 조회가 없는 구역은 없다고 말합니다. 숫자 0으로 있는 척하지 않습니다.
-    expect(screen.getByText(/조회가 아직 계약에 없습니다/)).toBeInTheDocument();
     // 인풋의 모델 목록도 같은 조회를 씁니다. 설정 표면 진입이 조회를 유발했는지만 봅니다.
     expect(loadSettings).toHaveBeenCalled();
     expect(screen.queryByText("절대-표시되면-안됨")).not.toBeInTheDocument();
@@ -113,79 +111,6 @@ describe("AgentOS native data flow", () => {
     expect(screen.queryByText("never-render-this")).not.toBeInTheDocument();
   });
 
-  it("모델 프로필·라우트·후보를 설정 화면에서 차례로 구성한다", async () => {
-    const user = userEvent.setup();
-    const registerModel = vi.fn(async () => undefined);
-    const configureRoute = vi.fn(async () => undefined);
-    const addRouteCandidate = vi.fn(async () => undefined);
-    const loadSettings = vi.fn(async () => ({
-      catalog: {
-        endpoints: [{ endpointId: "endpoint-1", providerId: "openai", name: "api", baseUrl: "https://api.openai.com" }],
-        models: [
-          {
-            modelProfileId: "profile-1",
-            providerId: "openai",
-            endpointId: "endpoint-1",
-            modelId: "gpt-5",
-            routeKind: "chat",
-          },
-        ],
-      },
-      credentials: [],
-      routes: [{ routeId: "route-1", name: "default", routeKind: "chat" }],
-      providers: [],
-      accounts: [],
-      quota: [],
-      policy: [],
-    }));
-    render(<App service={service({ loadSettings, registerModel, configureRoute, addRouteCandidate })} />);
-
-    await user.click(screen.getByRole("button", { name: "설정" }));
-    await user.click(await screen.findByRole("button", { name: "고급 라우팅 설정" }));
-    const model = await screen.findByRole("form", { name: "모델 프로필 등록" });
-    // Provider와 Endpoint는 카탈로그에서 고릅니다. ID를 외워 적지 않습니다.
-    await user.selectOptions(within(model).getByRole("combobox", { name: "프로바이더" }), "openai");
-    await user.selectOptions(within(model).getByRole("combobox", { name: "엔드포인트" }), "endpoint-1");
-    await user.type(within(model).getByRole("textbox", { name: "모델 이름" }), "gpt-5");
-    await user.click(within(model).getByRole("button", { name: "모델 등록" }));
-    expect(registerModel).toHaveBeenCalledWith(
-      expect.objectContaining({
-        providerId: "openai",
-        endpointId: "endpoint-1",
-        modelId: "gpt-5",
-        routeKind: "chat",
-        supportsStructuredOutput: false,
-        verified: false,
-      }),
-    );
-
-    const route = screen.getByRole("form", { name: "라우트 구성" });
-    await user.type(within(route).getByRole("textbox", { name: "라우트 이름" }), "default");
-    await user.click(within(route).getByRole("button", { name: "라우트 저장" }));
-    expect(configureRoute).toHaveBeenCalledWith({ name: "default", routeKind: "chat" });
-
-    const candidate = screen.getByRole("form", { name: "라우트 후보 연결" });
-    await user.click(within(candidate).getByRole("button", { name: "후보 연결" }));
-    expect(addRouteCandidate).toHaveBeenCalledWith({ routeId: "route-1", modelProfileId: "profile-1", priority: 0 });
-  });
-
-  it("모델 프로필 저장 실패를 설정 화면에 표시한다", async () => {
-    const user = userEvent.setup();
-    const registerModel = vi.fn(async () => {
-      throw new Error("모델 카탈로그에 연결하지 못했습니다");
-    });
-    render(<App service={service({ registerModel })} />);
-
-    await user.click(screen.getByRole("button", { name: "설정" }));
-    await user.click(await screen.findByRole("button", { name: "고급 라우팅 설정" }));
-    const model = await screen.findByRole("form", { name: "모델 프로필 등록" });
-    await user.selectOptions(within(model).getByRole("combobox", { name: "프로바이더" }), "zai");
-    await user.selectOptions(within(model).getByRole("combobox", { name: "엔드포인트" }), "ep-zai");
-    await user.type(within(model).getByRole("textbox", { name: "모델 이름" }), "glm-5.2");
-    await user.click(within(model).getByRole("button", { name: "모델 등록" }));
-
-    expect(await screen.findByRole("alert")).toHaveTextContent("모델 카탈로그에 연결하지 못했습니다");
-  });
 
   it("확장 화면은 조직에 늘어난 Capability를 버전·출처보다 먼저 보인다", async () => {
     const user = userEvent.setup();
@@ -411,14 +336,14 @@ describe("AgentOS native data flow", () => {
     ).toBeInTheDocument();
   });
 
-  it("실행 자율성은 설정에서 실제 서비스 조회를 사용한다", async () => {
+  it("권한은 설정에서 실제 서비스 조회를 사용한다", async () => {
     const user = userEvent.setup();
     const loadPendingApprovals = vi.fn(createFixtureDesktopService().loadPendingApprovals);
     const loadAutonomy = vi.fn(createFixtureDesktopService().loadAutonomy);
     render(<App service={service({ loadPendingApprovals, loadAutonomy })} />);
 
     await user.click(screen.getByRole("button", { name: "설정" }));
-    expect(await screen.findByRole("region", { name: "자율성 경계" })).toBeInTheDocument();
+    expect(await screen.findByRole("region", { name: "권한과 자가개선" })).toBeInTheDocument();
     await waitFor(() => {
       expect(loadPendingApprovals).toHaveBeenCalledOnce();
       expect(loadAutonomy).toHaveBeenCalledOnce();
