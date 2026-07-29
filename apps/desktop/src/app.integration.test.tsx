@@ -54,7 +54,7 @@ describe("AgentOS native data flow", () => {
     await user.click(screen.getByRole("button", { name: "설정" }));
     await screen.findByRole("main", { name: "설정" });
     // 설정은 탭도 목록도 아닌 한 문서입니다. 세 구역이 함께 보입니다.
-    for (const title of ["예산", "권한", "자가개선"]) {
+    for (const title of ["권한", "자가개선"]) {
       expect(screen.getByRole("region", { name: title })).toBeInTheDocument();
     }
     // 프로바이더와 계정은 프로바이더 표면이 소유합니다.

@@ -16,6 +16,7 @@ import {
   ListChecksIcon as ListChecks,
   MagnifyingGlassIcon as MagnifyingGlass,
   PaperclipIcon as Paperclip,
+  CoinsIcon as Coins,
   PlugsIcon as Plugs,
   PlusIcon as Plus,
   PuzzlePieceIcon as PuzzlePiece,
@@ -105,6 +106,7 @@ import {
   projectManifestDeclarations,
   projectModelRoutes,
   projectProviderConnections,
+  type RouteAttemptView,
   projectSubscriptionAccounts,
 } from "@/desktop-service";
 import {
@@ -151,6 +153,8 @@ const navItems = [
   { label: "확장", icon: PuzzlePiece, surface: "capabilities" },
   // 모델을 공급해 조직이 할 수 있는 일을 늘립니다. 확장과 같은 종류라 나란히 둡니다(헌법 4.11).
   { label: "프로바이더", icon: Plugs, surface: "providers" },
+  // 프로바이더가 무엇을 공급하는지 옆에, 그것이 얼마를 썼는지를 둡니다.
+  { label: "예산", icon: Coins, surface: "budget" },
   { label: "설정", icon: Gear, surface: "settings" },
 ] as const;
 
@@ -718,6 +722,7 @@ function ProductSurface({
     );
   if (surface === "knowledge") return <KnowledgeSurface onOpenWork={onOpenWork} service={service} />;
   if (surface === "providers") return <ProviderSurface service={service} />;
+  if (surface === "budget") return <BudgetSurface service={service} />;
   if (surface === "organization") return <OrganizationSurface service={service} />;
   if (surface === "growth")
     return (
@@ -3282,10 +3287,172 @@ function growthEffectStatus(result: GrowthView["effects"][number]["result"]): st
  * 설정에 남는 것은 «사람이 정한 경계»뿐입니다. 어느 모델이 도는지는 조직이 역할과 난이도로
  * 배치하고(ADR-003), 배치 결과는 프로바이더 표면이 말합니다. 여기서는 한도만 봅니다.
  */
+const FAILURE_LABEL: Record<string, string> = {
+  quota_exhausted: "한도 소진",
+  rate_limited: "속도 제한",
+  auth_failed: "인증 거부",
+  timeout: "시간 초과",
+};
+
+/**
+ * 예산은 설정의 「사람이 정한 경계」가 아니라 관측 대상입니다. 그래서 경계 옆이 아니라
+ * 그 경계가 실제로 어떻게 쓰였는지를 보여주는 기록 옆에 섭니다.
+ *
+ * 왼쪽 경로를 고르면 오른쪽 기록이 그 경로로 좁혀집니다 — 「$0.48을 누가 썼나」가 두 번의
+ * 이동 없이 이어집니다.
+ */
+function BudgetSurface({ service }: { service: DesktopService }) {
+  const [settings, setSettings] = useState<SettingsView>();
+  const [attempts, setAttempts] = useState<readonly RouteAttemptView[]>();
+  const [error, setError] = useState("");
+  const [attemptError, setAttemptError] = useState("");
+  const [routeFilter, setRouteFilter] = useState<string>();
+
+  useEffect(() => {
+    let disposed = false;
+    void service
+      .loadSettings()
+      .then((value) => {
+        if (!disposed) setSettings(value);
+      })
+      .catch((cause: unknown) => {
+        if (!disposed) setError(surfaceErrorMessage(cause, "예산을 불러오지 못했습니다."));
+      });
+    void service
+      .loadRouteAttempts()
+      .then((value) => {
+        if (!disposed) setAttempts(value);
+      })
+      .catch((cause: unknown) => {
+        if (!disposed) setAttemptError(surfaceErrorMessage(cause, "호출 기록을 불러오지 못했습니다."));
+      });
+    return () => {
+      disposed = true;
+    };
+  }, [service]);
+
+  const routes = settings ? projectModelRoutes(settings.routes, settings.catalog) : [];
+  const shown = (attempts ?? []).filter((attempt) => routeFilter === undefined || attempt.routeId === routeFilter);
+  const spent = routes.reduce((total, route) => total + route.spentMicros, 0);
+  const budget = routes.reduce((total, route) => total + route.totalBudgetMicros, 0);
+
+  return (
+    <main aria-label="예산" className="col-span-3 grid min-h-0 min-w-0 grid-cols-[264px_minmax(0,1fr)] bg-canvas">
+      <aside className="grid min-h-0 grid-rows-[46px_minmax(0,1fr)] border-r border-border bg-chrome">
+        <header className="flex items-baseline gap-2 px-3">
+          <h1 className="text-[15px] font-semibold tracking-[-0.008em]">예산</h1>
+          {budget === 0 ? null : (
+            <span className="font-mono text-[11px] tabular-nums text-muted">
+              {costText(spent)} / {costText(budget)}
+            </span>
+          )}
+        </header>
+        <div className="min-h-0 overflow-y-auto px-2 pb-3">
+          {error ? <SurfaceError message={error} /> : null}
+          {!settings && !error ? <SurfaceLoading /> : null}
+          {settings && routes.length === 0 ? (
+            <p className="px-1 py-2 text-[12px] text-muted">구성된 경로가 없습니다.</p>
+          ) : null}
+          <ul>
+            <li>
+              <button
+                aria-pressed={routeFilter === undefined}
+                className={`w-full rounded-[4px] px-2 py-1.5 text-left text-[13px] transition-colors duration-150 ${
+                  routeFilter === undefined
+                    ? "bg-surface-2 text-primary"
+                    : "text-secondary hover:bg-[rgb(255_255_255/0.027)]"
+                }`}
+                onClick={() => {
+                  setRouteFilter(undefined);
+                }}
+                type="button"
+              >
+                전체
+              </button>
+            </li>
+            {routes.map((route) => (
+              <li key={route.routeId}>
+                <button
+                  aria-pressed={routeFilter === route.routeId}
+                  className={`w-full rounded-[4px] px-2 py-2 text-left transition-colors duration-150 ${
+                    routeFilter === route.routeId ? "bg-surface-2" : "hover:bg-[rgb(255_255_255/0.027)]"
+                  }`}
+                  onClick={() => {
+                    setRouteFilter(route.routeId);
+                  }}
+                  type="button"
+                >
+                  <RouteBudgetRow route={route} />
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </aside>
+
+      <div className="grid min-h-0 min-w-0 grid-rows-[46px_minmax(0,1fr)]">
+        <header className="flex items-baseline gap-2 border-b border-border px-5">
+          <h2 className="text-[15px] font-semibold tracking-[-0.008em] text-primary">호출 기록</h2>
+          {attempts === undefined ? null : (
+            <span className="font-mono text-[11px] tabular-nums text-muted">{shown.length}</span>
+          )}
+        </header>
+        <div className="min-h-0 overflow-y-auto px-5 py-3">
+          {attemptError ? <SurfaceError message={attemptError} /> : null}
+          {attempts === undefined && !attemptError ? <SurfaceLoading /> : null}
+          {attempts !== undefined && shown.length === 0 ? (
+            <p className="text-[12px] text-muted">이 경로로 나간 호출이 없습니다.</p>
+          ) : null}
+          {shown.length === 0 ? null : (
+            <ul className="max-w-[940px] divide-y divide-border">
+              {shown.map((attempt) => (
+                <AttemptRow attempt={attempt} key={attempt.attemptId} />
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
+    </main>
+  );
+}
+
+/** 한 줄이 호출 한 번입니다. fallback으로 넘어온 시도는 들여써서 사슬이 보이게 합니다. */
+function AttemptRow({ attempt }: { attempt: RouteAttemptView }) {
+  const failed = attempt.status === "failed";
+  return (
+    <li className={`py-2 ${attempt.fallbackFrom === undefined ? "" : "pl-4"}`}>
+      <div className="flex items-baseline gap-3">
+        <span className="w-[68px] shrink-0 font-mono text-[11px] tabular-nums text-muted">{attempt.at}</span>
+        <span className="min-w-0 flex-1 truncate text-[13px] text-secondary">
+          {attempt.workTitle ?? "이 호출이 어느 Work의 것인지 아직 모릅니다"}
+        </span>
+        <span className="shrink-0 font-mono text-[12px] text-muted">{attempt.modelId}</span>
+        <span
+          className={`w-[72px] shrink-0 text-right font-mono text-[12px] tabular-nums ${
+            failed ? "text-danger" : "text-secondary"
+          }`}
+        >
+          {failed ? (FAILURE_LABEL[attempt.failureClass ?? ""] ?? "실패") : costText(attempt.costMicros)}
+        </span>
+      </div>
+      <div className="mt-0.5 flex items-baseline gap-2 pl-[80px] text-[11px] text-muted">
+        {attempt.fallbackFrom === undefined ? null : <span>앞선 시도가 막혀 넘어옴</span>}
+        {attempt.status === "running" ? (
+          <span>진행 중</span>
+        ) : (
+          <span className="font-mono tabular-nums">
+            {attempt.inputTokens.toLocaleString("ko-KR")} → {attempt.outputTokens.toLocaleString("ko-KR")} 토큰
+          </span>
+        )}
+      </div>
+    </li>
+  );
+}
+
 function RouteBudgetRow({ route }: { route: ModelRouteView }) {
   const ratio = route.totalBudgetMicros > 0 ? Math.min(1, route.spentMicros / route.totalBudgetMicros) : undefined;
   return (
-    <li className="py-2.5">
+    <div>
       <div className="flex items-baseline gap-3">
         <span className="min-w-0 flex-1 truncate text-[13px] text-secondary">{route.name}</span>
         <span className="shrink-0 font-mono text-[12px] tabular-nums text-muted">
@@ -3309,7 +3476,7 @@ function RouteBudgetRow({ route }: { route: ModelRouteView }) {
           />
         )}
       </div>
-    </li>
+    </div>
   );
 }
 
@@ -4009,8 +4176,6 @@ function SettingsSurface({ service }: { service: DesktopService }) {
     }
   };
 
-  const routes = settings ? projectModelRoutes(settings.routes, settings.catalog) : [];
-
   return (
     <main aria-label="설정" className="col-span-3 grid min-h-0 min-w-0 grid-rows-[46px_minmax(0,1fr)] bg-canvas">
       <header className="flex items-center border-b border-border px-5">
@@ -4021,18 +4186,6 @@ function SettingsSurface({ service }: { service: DesktopService }) {
         {!settings && !error ? <SurfaceLoading /> : null}
         {settings ? (
           <div className="mx-auto max-w-[76ch] pb-8">
-            <GrowthSection title="예산">
-              {routes.length === 0 ? (
-                <p className="text-[12px] text-muted">구성된 모델 경로가 없습니다. 프로바이더를 먼저 연결하십시오.</p>
-              ) : (
-                <ul className="divide-y divide-border border-y border-border">
-                  {routes.map((route) => (
-                    <RouteBudgetRow key={route.routeId} route={route} />
-                  ))}
-                </ul>
-              )}
-            </GrowthSection>
-
             {autonomy ? (
               <section aria-label="권한과 자가개선">
                 <GrowthSection title="권한">

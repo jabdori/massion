@@ -149,3 +149,32 @@ export interface SubscriptionAccountViewV1 { accountId; providerId; alias; scope
 
 - [ ] daemon이 붙은 SurrealDB가 로컬인지 원격인지 돌려주는 조회가 선다
 - [ ] 연결이 끊겼을 때를 구분한다 (지금은 점 색이 늘 같습니다)
+
+## 10. 「예산」 표면 — `route_attempt` 조회가 없습니다
+
+예산을 설정에서 빼 프로바이더 아래 전용 표면으로 옮겼습니다. 예산은 **사람이 정한 경계**가
+아니라 **관측 대상**이라, 그 경계가 실제로 어떻게 쓰였는지를 보여주는 기록 옆에 서야 합니다.
+
+| 열 | 데이터 | 상태 |
+|---|---|---|
+| 왼쪽: 경로별 예산 | `router.routes` | **실제 조회** |
+| 오른쪽: 호출 기록 | `route_attempt` | **조회 없음** — 픽스처만 |
+
+`packages/router/src/schema.ts`에 `route_attempt`가 이미 있고 필요한 필드를 다 갖고 있습니다:
+
+| 화면이 쓰는 것 | 스키마 필드 |
+|---|---|
+| 언제 | `created_at` |
+| 어느 모델 | `model_profile_id` → `model_profile.model_id` |
+| 얼마 | `actual_cost_micros` · `actual_input_tokens` · `actual_output_tokens` |
+| 실패 이유 | `status` · `failure_class` |
+| fallback 사슬 | `fallback_from_attempt_id` |
+| **어느 Work** | `command_id` → **Work로 잇는 경로가 없습니다** |
+
+`ApplicationQueryMapV1`에 `router.attempts`가 없어 `loadRouteAttempts()`의 실제 구현은
+빈 배열이 아니라 **거부**합니다. 「모르는 것」과 「없는 것」은 다르고, 빈 배열은 「호출이 없었다」로
+읽힙니다. Tauri에서 이 표면은 지금 그 사실을 그대로 말합니다.
+
+- [ ] `router.attempts` 조회를 등록한다 (`router:read`, 최근순, 페이징)
+- [ ] `command_id`에서 Work를 잇는다 — 이게 없으면 「어느 Work가 얼마를 썼나」에 답할 수 없다
+- [ ] `explanation_json`을 상세로 펼친다 (왜 이 모델이 골렸는지 = 인과 사슬의 「모델」 마디)

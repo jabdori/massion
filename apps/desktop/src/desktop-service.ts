@@ -202,6 +202,26 @@ export interface SettingsView {
  */
 
 /** `router.routes` + `router.catalog.candidates`. 요청이 어느 모델로 가는지입니다. */
+/**
+ * `route_attempt` 한 줄. 모델 호출 한 번이 어느 Work에서 나와 얼마를 썼는지입니다.
+ * `fallbackFrom`이 있으면 앞선 시도가 막혀서 넘어온 것입니다 — 사슬이 여기서 보입니다.
+ */
+export interface RouteAttemptView {
+  readonly attemptId: string;
+  readonly at: string;
+  readonly routeId: string;
+  readonly modelId: string;
+  readonly status: "succeeded" | "failed" | "running";
+  readonly failureClass?: string;
+  readonly inputTokens: number;
+  readonly outputTokens: number;
+  readonly costMicros: number;
+  readonly fallbackFrom?: string;
+  /** `command_id`가 어느 Work의 것인지. 계약이 아직 이 연결을 돌려주지 않습니다. */
+  readonly workId?: string;
+  readonly workTitle?: string;
+}
+
 export interface ModelRouteView {
   readonly routeId: string;
   readonly name: string;
@@ -911,6 +931,8 @@ export interface DesktopService {
   loadAutonomy(): Promise<AutonomyView>;
   setAutonomy(mode: AutonomyView["mode"], expectedRevision: number): Promise<AutonomyView>;
   loadEmergency(): Promise<EmergencyView>;
+  /** 모델 호출 기록. 최근 것이 먼저 옵니다. */
+  loadRouteAttempts(): Promise<readonly RouteAttemptView[]>;
   activateEmergency(reason: string): Promise<EmergencyView>;
   releaseEmergency(approvalId: string | undefined, reason: string): Promise<EmergencyView>;
   loadSettings(): Promise<SettingsView>;
@@ -1126,6 +1148,15 @@ export function createApplicationDesktopService(
 
     async loadEmergency() {
       return projectEmergency(await client.query("governance.emergency", {}));
+    },
+
+    /*
+     * `route_attempt` 테이블은 있는데 조회가 `ApplicationQueryMapV1`에 등록돼 있지 않습니다.
+     * 빈 배열로 돌려주면 「호출이 없었다」로 읽힙니다 — 모르는 것과 없는 것은 다릅니다.
+     * 인계: docs/phases/30-surface-parity-agent-ux/settings-contract-handoff.md
+     */
+    loadRouteAttempts() {
+      return Promise.reject(new Error("모델 호출 기록을 읽는 조회가 아직 계약에 없습니다."));
     },
 
     async activateEmergency(reason) {
@@ -1935,6 +1966,7 @@ export function createFixtureDesktopService(): DesktopService {
         emergencyStopActive: false,
       })),
     loadEmergency: () => fixturePromise(() => ({ active: false, revision: 0 })),
+    loadRouteAttempts: () => fixturePromise(() => fixtureAttempts),
     activateEmergency: (reason) => fixturePromise(() => ({ active: true, reason, revision: 1 })),
     releaseEmergency: (_approvalId, reason) => fixturePromise(() => ({ active: false, reason, revision: 2 })),
     loadExtensions: () =>
@@ -2651,6 +2683,97 @@ function rows(value: unknown): readonly Record<string, unknown>[] {
 const str = (row: Record<string, unknown>, key: string): string => (typeof row[key] === "string" ? row[key] : "");
 const num = (row: Record<string, unknown>, key: string): number => (typeof row[key] === "number" ? row[key] : 0);
 const bool = (row: Record<string, unknown>, key: string): boolean => row[key] === true;
+
+/*
+ * 최근 것이 먼저입니다. `attempt-cohort-2`는 `attempt-cohort-1`이 quota로 막혀 넘어온 시도라
+ * 사슬로 붙습니다 — 「막혔다」가 아니라 「막혀서 어디로 갔다」가 보여야 합니다.
+ */
+const fixtureAttempts: readonly RouteAttemptView[] = [
+  {
+    attemptId: "attempt-verify",
+    at: "10:24",
+    routeId: "route-reasoning",
+    modelId: "claude-sonnet-5",
+    status: "running",
+    inputTokens: 18_400,
+    outputTokens: 0,
+    costMicros: 0,
+    workId: "churn-q3",
+    workTitle: "3분기 고객 이탈 원인 분석",
+  },
+  {
+    attemptId: "attempt-cohort-2",
+    at: "10:23",
+    routeId: "route-reasoning",
+    modelId: "glm-5.2",
+    status: "succeeded",
+    inputTokens: 32_100,
+    outputTokens: 4_820,
+    costMicros: 96_000,
+    fallbackFrom: "attempt-cohort-1",
+    workId: "churn-q3",
+    workTitle: "3분기 고객 이탈 원인 분석",
+  },
+  {
+    attemptId: "attempt-cohort-1",
+    at: "10:23",
+    routeId: "route-reasoning",
+    modelId: "gpt-5.6-luna",
+    status: "failed",
+    failureClass: "quota_exhausted",
+    inputTokens: 0,
+    outputTokens: 0,
+    costMicros: 0,
+    workId: "churn-q3",
+    workTitle: "3분기 고객 이탈 원인 분석",
+  },
+  {
+    attemptId: "attempt-labeling",
+    at: "10:23",
+    routeId: "route-reasoning",
+    modelId: "claude-sonnet-5",
+    status: "succeeded",
+    inputTokens: 21_700,
+    outputTokens: 3_140,
+    costMicros: 214_000,
+    workId: "churn-q3",
+    workTitle: "3분기 고객 이탈 원인 분석",
+  },
+  {
+    attemptId: "attempt-contract",
+    at: "어제 17:02",
+    routeId: "route-reasoning",
+    modelId: "claude-sonnet-5",
+    status: "succeeded",
+    inputTokens: 12_050,
+    outputTokens: 2_610,
+    costMicros: 172_000,
+    workId: "partner-contract",
+    workTitle: "파트너 계약서 검토",
+  },
+];
+
+export function projectRouteAttempts(value: unknown): readonly RouteAttemptView[] {
+  return rows(value)
+    .filter((row) => typeof row.attemptId === "string")
+    .map((row) => {
+      const status = str(row, "status");
+      return {
+        attemptId: str(row, "attemptId"),
+        at: str(row, "at"),
+        routeId: str(row, "routeId"),
+        modelId: str(row, "modelId"),
+        status: status === "succeeded" || status === "failed" ? status : "running",
+        inputTokens: num(row, "inputTokens"),
+        outputTokens: num(row, "outputTokens"),
+        costMicros: num(row, "costMicros"),
+        ...(typeof row.failureClass === "string" ? { failureClass: row.failureClass } : {}),
+        ...(typeof row.fallbackFrom === "string" ? { fallbackFrom: row.fallbackFrom } : {}),
+        ...(typeof row.workId === "string" ? { workId: row.workId } : {}),
+        ...(typeof row.workTitle === "string" ? { workTitle: row.workTitle } : {}),
+      };
+    });
+}
 
 export function projectModelRoutes(routes: unknown, catalog: unknown): readonly ModelRouteView[] {
   const source = catalog && typeof catalog === "object" ? (catalog as Record<string, unknown>) : {};
