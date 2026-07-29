@@ -44,7 +44,43 @@ describe("AgentOS 데스크톱", () => {
 
     await user.clear(within(list).getByRole("searchbox"));
     await user.click(within(list).getByRole("tab", { name: "완료" }));
-    expect(await within(list).findByText("완료된 Work가 없습니다.")).toBeInTheDocument();
+    expect(await within(list).findByRole("button", { name: /환불 지연 원인 제거/ })).toBeInTheDocument();
+    expect(within(list).queryByRole("button", { name: /3분기 고객 이탈 원인 분석/ })).not.toBeInTheDocument();
+  });
+
+  it("완료된 Work는 통과한 검증·최종 응답·기록을 함께 보여준다", async () => {
+    const user = userEvent.setup();
+    renderApp();
+    const list = screen.getByRole("region", { name: "Work 목록" });
+
+    await user.click(within(list).getByRole("tab", { name: "완료" }));
+    await user.click(await within(list).findByRole("button", { name: /환불 지연 원인 제거/ }));
+
+    // 최종 응답은 활동 흐름 안에서 다른 발언과 갈립니다.
+    expect(await screen.findByText(/정산 배치 대기였습니다/)).toBeInTheDocument();
+    expect(screen.getByText("최종")).toBeInTheDocument();
+
+    const inspector = screen.getByRole("complementary", { name: "Work 세부 정보" });
+    await user.click(within(inspector).getByRole("tab", { name: "검증" }));
+    expect(within(inspector).getByText("검증 기준")).toBeInTheDocument();
+    expect(within(inspector).getByText("rollback-path-exists")).toBeInTheDocument();
+
+    await user.click(within(inspector).getByRole("tab", { name: "기록" }));
+    // 되돌릴 수 있는 지점과 결정이 기록에서 읽힙니다.
+    expect(within(inspector).getByText("4f9c1ab7")).toBeInTheDocument();
+    expect(within(inspector).getByText(/정산 배치 주기를 4시간으로 바꿉니다/)).toBeInTheDocument();
+    expect(within(inspector).getByText("CHANGELOG")).toBeInTheDocument();
+    expect(within(inspector).getByText("승인됨")).toBeInTheDocument();
+  });
+
+  it("기록이 없는 Work의 기록 탭은 산출물 빈 상태를 재사용하지 않는다", async () => {
+    const user = userEvent.setup();
+    renderApp();
+
+    const inspector = screen.getByRole("complementary", { name: "Work 세부 정보" });
+    await user.click(within(inspector).getByRole("tab", { name: "기록" }));
+    expect(await within(inspector).findByText("아직 남은 기록이 없습니다.")).toBeInTheDocument();
+    expect(within(inspector).queryByText("실행이 산출물을 만들면 여기에 표시됩니다.")).not.toBeInTheDocument();
   });
 
   it("진행 중 Work가 없어도 완료 탭에서 종료된 Work를 다시 연다", async () => {

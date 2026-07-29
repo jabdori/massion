@@ -145,6 +145,11 @@ export type ActivityView =
       target?: string;
       /** `decision`의 서명자와 개정 */
       signature?: { by: string; revision: number };
+      /**
+       * 대표 에이전트가 사용자에게 돌려준 답. 헌법 §5의 「Records와 최종 응답」이 끝나는 지점입니다.
+       * 새 도메인 개념이 아니라 Representative(요청 접수·조정·최종 응답)의 `answer`를 표시로 가립니다.
+       */
+      final?: boolean;
     }
   | {
       id: string;
@@ -217,6 +222,44 @@ export interface VerificationView {
   evidence?: string;
 }
 
+/** `RecordsDocument`(packages/records/src/contracts.ts)의 kind. work-record는 문서가 아니라 기록 자신입니다. */
+export type RecordDocumentKind = "adr" | "changelog" | "runbook";
+
+export interface RecordDocumentView {
+  id: string;
+  kind: RecordDocumentKind;
+  /** `markdown_checksum`. 렌더된 문서가 바뀌지 않았다는 사실이 여기서 확인됩니다. */
+  checksum: string;
+}
+
+/**
+ * `WorkRecord`(packages/work/src/work.ts `:542`)를 화면 문법으로 옮깁니다.
+ * Records 단계가 실제로 남기는 것만 싣습니다. 도메인이 ID로만 가진 것은 ID로 둡니다.
+ */
+export interface RecordView {
+  /** `work_record_id` */
+  id: string;
+  version: number;
+  summary: string;
+  /** `recorded_work_revision` */
+  recordedRevision: number;
+  /** `finalized_by` */
+  finalizedBy: string;
+  /** `finalized_at` */
+  finalizedAt: string;
+  /** `records_snapshot_hash`. 이 기록이 가리키는 되돌릴 수 있는 지점입니다. */
+  snapshotHash: string;
+  /** `event_start_sequence` – `event_end_sequence` */
+  eventRange: [number, number];
+  /** `decision_message_ids`. activities의 decision 메시지 id를 가리킵니다. */
+  decisionIds: string[];
+  /** `verification_ids` */
+  verificationIds: string[];
+  /** `artifact_version_ids` */
+  artifactVersionIds: string[];
+  documents: RecordDocumentView[];
+}
+
 export interface WorkView {
   id: string;
   title: string;
@@ -234,6 +277,8 @@ export interface WorkView {
   agents: AgentView[];
   artifacts: ArtifactView[];
   verifications: VerificationView[];
+  /** Records 단계가 남긴 것. 검증이 끝나기 전에는 비어 있습니다. */
+  records: RecordView[];
   activities: ActivityView[];
 }
 
@@ -308,6 +353,28 @@ const churnArtifacts: ArtifactView[] = [
   { id: "cohort", name: "코호트 데이터.csv", format: "CSV", size: "1.1 MB", createdAt: "10:24" },
 ];
 
+/** 완료된 Work의 산출물. `artifactVersionId`가 WorkRecord의 `artifact_version_ids`와 같은 값을 가리킵니다. */
+const refundArtifacts: ArtifactView[] = [
+  {
+    id: "refund-report",
+    name: "환불 지연 분석.pdf",
+    format: "PDF",
+    size: "1.8 MB",
+    createdAt: "07.24",
+    artifactVersionId: "artifact-version-refund-report",
+    checksum: "9e13c0",
+  },
+  {
+    id: "refund-latency",
+    name: "구간별 지연.csv",
+    format: "CSV",
+    size: "412 KB",
+    createdAt: "07.22",
+    artifactVersionId: "artifact-version-refund-latency",
+    checksum: "d40f7a",
+  },
+];
+
 const works: WorkView[] = [
   {
     id: "churn-q3",
@@ -346,6 +413,7 @@ const works: WorkView[] = [
         evidence: "CRM 표본 2,418건 일치",
       },
     ],
+    records: [],
     activities: [
       {
         id: "request",
@@ -514,6 +582,7 @@ const works: WorkView[] = [
         ],
       },
     ],
+    records: [],
     activities: [
       {
         id: "request",
@@ -559,6 +628,7 @@ const works: WorkView[] = [
         criteria: [{ key: "source-metric-match", status: "passed" }],
       },
     ],
+    records: [],
     activities: [
       {
         id: "accepted",
@@ -567,6 +637,157 @@ const works: WorkView[] = [
         author: "대표 에이전트",
         initials: "M",
         content: "지난주 대비 변동 폭이 큰 운영 지표부터 확인하고 있습니다.",
+      },
+    ],
+  },
+  {
+    // 검증을 통과해 닫힌 Work. 헌법 §4.7의 완료가 화면에서 어떤 모습인지 여기서만 볼 수 있습니다.
+    id: "refund-delay",
+    title: "환불 지연 원인 제거",
+    status: "complete",
+    revision: 12,
+    sourceStatus: "completed",
+    team: "결제 운영팀",
+    updatedAt: "07.24",
+    summary: "환불 요청부터 입금까지 걸린 시간을 구간별로 분해하고 지연 구간을 제거합니다.",
+    progress: 100,
+    run: { runId: "run-refund", status: "completed", stage: "terminal", leaseGeneration: 3 },
+    approvals: [
+      {
+        id: "approval-refund-ledger",
+        title: "결제 원장 읽기",
+        description: "환불 건의 상태 전이 기록에 읽기 전용으로 접근합니다.",
+        workId: "refund-delay",
+        revision: 4,
+        status: "approved",
+      },
+    ],
+    tasks: [
+      { id: "decompose", title: "지연 구간 분해", state: "done", time: "07.22" },
+      { id: "locate", title: "정산 배치 대기 확인", state: "done", time: "07.23" },
+      { id: "fix", title: "배치 주기 변경안 작성", state: "done", time: "07.23" },
+      { id: "verify", title: "변경안 독립 검증", state: "done", time: "07.24" },
+      { id: "record", title: "결과 기록", state: "done", time: "07.24" },
+    ],
+    agents: [
+      { id: atlas.handle, role: atlas.role, name: atlas.name, initials: atlas.initial, state: "waiting" },
+      { id: quill.handle, role: quill.role, name: quill.name, initials: quill.initial, state: "waiting" },
+      { id: vega.handle, role: vega.role, name: vega.name, initials: vega.initial, state: "waiting" },
+      { id: iris.handle, role: iris.role, name: iris.name, initials: iris.initial, state: "waiting" },
+    ],
+    artifacts: refundArtifacts,
+    verifications: [
+      {
+        id: "verification-refund",
+        verifier: "iris",
+        state: "done",
+        criteria: [
+          { key: "stage-latency-decomposed", status: "passed" },
+          { key: "batch-window-reproduced", status: "passed" },
+          { key: "rollback-path-exists", status: "passed" },
+        ],
+        evidence: "환불 건 9,204건 재계산 일치",
+      },
+    ],
+    records: [
+      {
+        id: "work-record-refund-1",
+        version: 1,
+        // `summary`는 Records projection이 씁니다(packages/work/src/records-port.ts `:353`).
+        summary: "Records run records-run-refund finalized 2 document(s)",
+        recordedRevision: 12,
+        finalizedBy: "나",
+        finalizedAt: "07.24 16:41",
+        snapshotHash: "4f9c1ab7",
+        eventRange: [1, 47],
+        decisionIds: ["decision-batch-window", "decision-rollback"],
+        verificationIds: ["verification-refund"],
+        artifactVersionIds: ["artifact-version-refund-report", "artifact-version-refund-latency"],
+        documents: [
+          { id: "document-refund-adr", kind: "adr", checksum: "a91c22" },
+          { id: "document-refund-changelog", kind: "changelog", checksum: "5b0e14" },
+        ],
+      },
+    ],
+    activities: [
+      {
+        id: "request",
+        kind: "room",
+        messageType: "question",
+        time: "07.22",
+        speaker: me,
+        content: "환불이 왜 이렇게 오래 걸리는지 구간을 나눠서 확인하고, 고칠 수 있는 곳은 고쳐줘.",
+      },
+      { id: "chapter-evidence", kind: "chapter", time: "07.22", stage: "evidence", label: "근거", until: "07.23" },
+      {
+        id: "latency-evidence",
+        kind: "room",
+        messageType: "evidence",
+        time: "07.22",
+        speaker: quill,
+        content: "요청 접수 0.4시간 · 심사 1.1시간 · 정산 배치 대기 38.6시간 · 송금 0.9시간입니다.",
+        evidence: { label: "구간별 지연.csv", checksum: "d40f7a" },
+      },
+      { id: "handoff-research-delivery", kind: "handoff", time: "07.23", from: quill, to: vega },
+      { id: "chapter-delivery", kind: "chapter", time: "07.23", stage: "delivery", label: "실행", until: "07.24" },
+      {
+        id: "batch-change",
+        kind: "room",
+        messageType: "change_request",
+        time: "07.23",
+        speaker: vega,
+        target: "정산 배치 주기",
+        content: "1일 1회에서 4시간 주기로 바꾸면 대기가 38.6시간에서 2.3시간으로 내려갑니다.",
+      },
+      {
+        id: "batch-challenge",
+        kind: "room",
+        messageType: "challenge",
+        time: "07.23",
+        speaker: iris,
+        quoted: { author: vega.name, time: "07.23", content: "대기가 38.6시간에서 2.3시간으로 내려갑니다" },
+        content: "되돌릴 경로가 없으면 이 변경은 판정하지 않습니다. 주기를 되돌리는 절차부터 쓰십시오.",
+      },
+      {
+        id: "decision-batch-window",
+        kind: "room",
+        messageType: "decision",
+        time: "07.23",
+        speaker: atlas,
+        content: "정산 배치 주기를 4시간으로 바꿉니다.",
+        signature: { by: "나", revision: 10 },
+      },
+      {
+        id: "decision-rollback",
+        kind: "room",
+        messageType: "decision",
+        time: "07.23",
+        speaker: atlas,
+        content: "이전 주기로 돌아가는 절차를 변경안과 같은 문서에 넣고, 되돌린 뒤 재검증하기로 합니다.",
+        signature: { by: "나", revision: 11 },
+      },
+      { id: "artifacts", kind: "artifacts", time: "07.24", title: "산출물", artifacts: refundArtifacts },
+      { id: "chapter-assurance", kind: "chapter", time: "07.24", stage: "assurance", label: "검증", until: "07.24" },
+      {
+        id: "verdict",
+        kind: "room",
+        messageType: "answer",
+        time: "07.24",
+        speaker: iris,
+        recipient: atlas.name,
+        content: "기준 3개를 모두 통과했습니다. 환불 건 9,204건을 재계산해 구간 값이 일치하는 것을 확인했습니다.",
+      },
+      { id: "chapter-records", kind: "chapter", time: "07.24", stage: "records", label: "기록" },
+      {
+        id: "final-response",
+        kind: "room",
+        messageType: "answer",
+        time: "07.24",
+        speaker: atlas,
+        recipient: me.name,
+        final: true,
+        content:
+          "환불 지연의 94%는 정산 배치 대기였습니다. 주기를 4시간으로 바꿔 평균 40.9시간에서 4.7시간이 됐고, 검증 기준 3개를 모두 통과했습니다. 되돌리려면 기록의 스냅샷 4f9c1ab7에서 이전 주기로 복구합니다.",
       },
     ],
   },

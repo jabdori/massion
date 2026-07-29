@@ -2793,6 +2793,8 @@ function projectWorkSummary(work: WorkSummaryV1): WorkView {
     agents: [],
     artifacts: [],
     verifications: [],
+    // work.records 조회는 Application에 있지만 client 계약이 아직 없습니다. 목록은 기록을 싣지 않습니다.
+    records: [],
     activities: [],
   };
 }
@@ -2831,6 +2833,8 @@ function projectWorkDetail(sources: WorkDetailSources): WorkView {
     agents,
     artifacts,
     verifications: sources.verifications.map(projectVerification),
+    // work.records 조회는 Application에 있지만 client 계약이 아직 없습니다. 연결 전까지 비어 있습니다.
+    records: [],
     activities: projectActivities(sources.activities, sources.approvals, sources.directives, artifacts),
   };
 }
