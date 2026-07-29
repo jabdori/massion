@@ -228,6 +228,7 @@ export function App({ contextPicker = nativeContextPicker, service }: AppProps) 
   const [notifications, setNotifications] = useState<ApprovalView[]>();
   const [notificationError, setNotificationError] = useState("");
   const [growth, setGrowth] = useState<GrowthView>();
+  const [emergency, setEmergency] = useState<EmergencyView>();
   const [growthError, setGrowthError] = useState("");
   const [requestedGrowthSuggestionId, setRequestedGrowthSuggestionId] = useState<string>();
   const [pendingNotificationIds, setPendingNotificationIds] = useState<ReadonlySet<string>>(new Set());
@@ -246,6 +247,24 @@ export function App({ contextPicker = nativeContextPicker, service }: AppProps) 
       setNotificationError(surfaceErrorMessage(cause, "수신함을 불러오지 못했습니다."));
     }
   }, [service]);
+  const refreshEmergency = useCallback(async () => {
+    try {
+      setEmergency(await service.loadEmergency());
+    } catch {
+      // 긴급 상태를 못 읽어도 화면은 살아 있어야 합니다. 모르면 표시하지 않습니다.
+    }
+  }, [service]);
+  const toggleEmergency = async () => {
+    try {
+      setEmergency(
+        emergency?.active === true
+          ? await service.releaseEmergency(undefined, "사용자 긴급 정지 해제 요청")
+          : await service.activateEmergency("사용자 긴급 정지"),
+      );
+    } catch {
+      await refreshEmergency();
+    }
+  };
   const refreshGrowth = useCallback(async () => {
     try {
       setGrowth(await service.loadGrowth());
@@ -258,7 +277,8 @@ export function App({ contextPicker = nativeContextPicker, service }: AppProps) 
     if (controller.phase !== "ready") return;
     void refreshNotifications();
     void refreshGrowth();
-  }, [controller.eventRevision, controller.phase, refreshGrowth, refreshNotifications]);
+    void refreshEmergency();
+  }, [controller.eventRevision, controller.phase, refreshEmergency, refreshGrowth, refreshNotifications]);
   useEffect(() => {
     if (selectedWorkId === undefined) {
       setRooms([]);
@@ -396,7 +416,11 @@ export function App({ contextPicker = nativeContextPicker, service }: AppProps) 
         <GlobalRail
           activeSurface={surface}
           collapsed={sidebarCollapsed}
+          emergencyActive={emergency?.active === true}
           notificationCount={inboxItems === undefined ? 0 : inboxItems.length}
+          onEmergency={() => {
+            void toggleEmergency();
+          }}
           onOpenNotifications={openInbox}
           onSelect={setSurface}
           onToggle={() => {
@@ -471,9 +495,6 @@ export function App({ contextPicker = nativeContextPicker, service }: AppProps) 
               controller.newWork.setOpen(true);
             }}
             onOpenNotifications={openInbox}
-            onEmergencyChanged={() => {
-              void refreshNotifications();
-            }}
             onRetryGrowth={() => {
               void refreshGrowth();
             }}
@@ -529,14 +550,18 @@ export function App({ contextPicker = nativeContextPicker, service }: AppProps) 
 function GlobalRail({
   activeSurface,
   collapsed,
+  emergencyActive,
   notificationCount,
+  onEmergency,
   onOpenNotifications,
   onSelect,
   onToggle,
 }: {
   activeSurface: DesktopSurface;
   collapsed: boolean;
+  emergencyActive: boolean;
   notificationCount: number;
+  onEmergency: () => void;
   onOpenNotifications: () => void;
   onSelect: (surface: DesktopSurface) => void;
   onToggle: () => void;
@@ -619,6 +644,24 @@ function GlobalRail({
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
+        {/*
+         * 헌법 4.6과 PRODUCT.md 원칙 3이 "언제든" 세울 수 있어야 한다고 못박습니다.
+         * 설정으로 들어가 스크롤해서 찾게 두면 그 "언제든"이 성립하지 않습니다.
+         */}
+        <button
+          className={`mt-2 flex w-full items-center gap-2.5 rounded-[4px] px-2.5 py-1.5 text-left text-[13px] outline-none transition-colors duration-150 ${
+            emergencyActive
+              ? "bg-emergency text-canvas"
+              : "text-muted hover:bg-[rgb(255_255_255/0.027)] hover:text-danger"
+          }`}
+          onClick={onEmergency}
+          type="button"
+        >
+          <WarningCircle aria-hidden="true" size={20} />
+          <span className="group-data-[collapsed=true]/sidebar:hidden">
+            {emergencyActive ? "긴급 정지 중" : "긴급 정지"}
+          </span>
+        </button>
         <p className="mt-2 text-[11px] text-muted group-data-[collapsed=true]/sidebar:hidden">로컬 연결됨</p>
       </SidebarFooter>
     </Sidebar>
@@ -634,7 +677,6 @@ function ProductSurface({
   onAwaitingRegistryInstallChange,
   onCreate,
   onDecideApproval,
-  onEmergencyChanged,
   onOpenNotifications,
   onOpenWork,
   onRetryGrowth,
@@ -651,7 +693,6 @@ function ProductSurface({
   onAwaitingRegistryInstallChange: (value: AwaitingRegistryInstall | undefined) => void;
   onCreate: () => void;
   onDecideApproval: (approval: ApprovalView, vote: "approve" | "reject") => Promise<void>;
-  onEmergencyChanged: () => void;
   onOpenNotifications: () => void;
   onOpenWork: (workId: string) => void;
   onRetryGrowth: () => void;
@@ -695,7 +736,7 @@ function ProductSurface({
         service={service}
       />
     );
-  return <SettingsSurface onEmergencyChanged={onEmergencyChanged} service={service} />;
+  return <SettingsSurface service={service} />;
 }
 
 function SurfaceFrame({ children, title }: { children: React.ReactNode; title: string }) {
@@ -3866,22 +3907,20 @@ function AccountCard({ account }: { account: SubscriptionAccountView }) {
   );
 }
 
-function SettingsSurface({ onEmergencyChanged, service }: { onEmergencyChanged: () => void; service: DesktopService }) {
+function SettingsSurface({ service }: { service: DesktopService }) {
   const [settings, setSettings] = useState<SettingsView>();
   const [autonomy, setAutonomy] = useState<AutonomyView>();
-  const [emergency, setEmergency] = useState<EmergencyView>();
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [autonomySaving, setAutonomySaving] = useState(false);
   const [fullAccessPending, setFullAccessPending] = useState(false);
   useEffect(() => {
     let disposed = false;
-    void Promise.all([service.loadSettings(), service.loadAutonomy(), service.loadEmergency()])
-      .then(([value, mode, emergencyState]) => {
+    void Promise.all([service.loadSettings(), service.loadAutonomy()])
+      .then(([value, mode]) => {
         if (!disposed) {
           setSettings(value);
           setAutonomy(mode);
-          setEmergency(emergencyState);
         }
       })
       .catch((cause: unknown) => {
@@ -3909,42 +3948,6 @@ function SettingsSurface({ onEmergencyChanged, service }: { onEmergencyChanged: 
       setNotice("실행 자율성 경계를 저장했습니다.");
     } catch (cause) {
       setError(surfaceErrorMessage(cause, "자율성 경계를 변경하지 못했습니다."));
-    } finally {
-      setAutonomySaving(false);
-    }
-  };
-  const activateEmergency = async () => {
-    if (autonomySaving || emergency?.active === true) return;
-    setAutonomySaving(true);
-    setError("");
-    setNotice("");
-    try {
-      const state = await service.activateEmergency("사용자 긴급 정지");
-      setEmergency(state);
-      onEmergencyChanged();
-      setNotice("긴급 정지를 활성화했습니다. 새 실행은 차단됩니다.");
-    } catch (cause) {
-      setError(surfaceErrorMessage(cause, "긴급 정지를 활성화하지 못했습니다."));
-    } finally {
-      setAutonomySaving(false);
-    }
-  };
-  const requestEmergencyRelease = async () => {
-    if (!emergency?.active || emergency.approvalId !== undefined || autonomySaving) return;
-    setAutonomySaving(true);
-    setError("");
-    setNotice("");
-    try {
-      const state = await service.releaseEmergency(undefined, "사용자 긴급 정지 해제 요청");
-      setEmergency(state);
-      onEmergencyChanged();
-      setNotice(
-        state.approvalId === undefined
-          ? "긴급 정지를 해제했습니다."
-          : "해제 승인 요청을 수신함에 보냈습니다. 승인 전까지 새 실행은 계속 차단됩니다.",
-      );
-    } catch (cause) {
-      setError(surfaceErrorMessage(cause, "긴급 정지 해제 승인을 요청하지 못했습니다."));
     } finally {
       setAutonomySaving(false);
     }
@@ -4008,7 +4011,7 @@ function SettingsSurface({ onEmergencyChanged, service }: { onEmergencyChanged: 
 
               {autonomy ? (
                 <section aria-label="자율성 경계" id="설정-autonomy">
-                  <GrowthSection title="실행 자율성">
+                  <GrowthSection title="실행 자율성 기본값">
                     <p className="text-[13px] leading-5 text-secondary">
                       {autonomy.mode === "automatic"
                         ? "미리 승인된 범위에서는 사람을 기다리지 않고 실행합니다. 위험한 실행과 조직 변경은 여전히 수신함에서 확인을 받습니다."
@@ -4099,33 +4102,6 @@ function SettingsSurface({ onEmergencyChanged, service }: { onEmergencyChanged: 
                           : "정책 적용"}
                       {autonomy.permissionLimitReason === undefined ? "" : ` · ${autonomy.permissionLimitReason}`}
                     </p>
-                    <div className="mt-3 flex items-center gap-2">
-                      <button
-                        className="rounded-[5px] border border-halt px-3 py-1 text-[12px] text-halt disabled:opacity-50"
-                        disabled={autonomySaving || emergency?.active === true}
-                        onClick={() => {
-                          void activateEmergency();
-                        }}
-                        type="button"
-                      >
-                        {emergency?.active === true ? "긴급 정지 활성" : "긴급 정지"}
-                      </button>
-                      {emergency?.active === true ? (
-                        <>
-                          <span className="text-[11px] text-halt">{emergency.reason ?? "새 실행 차단 중"}</span>
-                          <button
-                            className="rounded-[5px] border border-control px-3 py-1 text-[12px] text-secondary disabled:opacity-50"
-                            disabled={autonomySaving || emergency.approvalId !== undefined}
-                            onClick={() => {
-                              void requestEmergencyRelease();
-                            }}
-                            type="button"
-                          >
-                            {emergency.approvalId === undefined ? "해제 승인 요청" : "해제 승인 대기"}
-                          </button>
-                        </>
-                      ) : null}
-                    </div>
                   </GrowthSection>
                   <GrowthAdoptionBoundary autonomy={autonomy} />
                 </section>
@@ -4743,8 +4719,6 @@ function WorkActivity({
   rooms,
   work,
 }: WorkActivityProps) {
-  const canCancel = work.run && ["ready", "running", "awaiting-approval", "blocked"].includes(work.run.status);
-  const canResume = work.run?.status === "blocked";
   // 방이 있으면 대화는 방이 정본입니다. 없으면 Work의 활동 타임라인이 계속 나옵니다.
   const activities = room ? room.activities : work.activities;
   return (
@@ -4792,30 +4766,6 @@ function WorkActivity({
           {work.run?.status === "awaiting-approval" ? (
             <span className="mr-2 text-xs text-gate">승인 결정 대기 중</span>
           ) : null}
-          {canResume ? (
-            <Button
-              disabled={pendingRunAction !== undefined}
-              onClick={() => {
-                onControlRun("resume");
-              }}
-              size="sm"
-              variant="ghost"
-            >
-              {pendingRunAction === "resume" ? "재개 중" : "실행 재개"}
-            </Button>
-          ) : null}
-          {canCancel ? (
-            <Button
-              disabled={pendingRunAction !== undefined}
-              onClick={() => {
-                onControlRun("cancel");
-              }}
-              size="sm"
-              variant="ghost"
-            >
-              {pendingRunAction === "cancel" ? "취소 중" : "실행 취소"}
-            </Button>
-          ) : null}
         </div>
       </header>
       {/*
@@ -4823,7 +4773,6 @@ function WorkActivity({
        * 래퍼는 방이 없을 때도 유지합니다. grid 행 수가 흔들리면 본문이 접힙니다.
        */}
       <div>
-        {work.run ? <RunStatusCard run={work.run} /> : null}
         {rooms.length > 0 ? (
           <nav aria-label="협업방" className="flex items-center gap-1 border-b border-border px-5 py-1.5">
             {rooms.map((candidate, index) => {
@@ -4895,6 +4844,9 @@ function WorkActivity({
               value={activity}
             />
           ))}
+          {work.run ? (
+            <RunStatusCard onControlRun={onControlRun} pendingRunAction={pendingRunAction} run={work.run} />
+          ) : null}
         </div>
       </section>
       <Composer
@@ -4939,7 +4891,19 @@ function blockedReasonText(reason: string | undefined): string {
   }
 }
 
-function RunStatusCard({ run }: { run: NonNullable<WorkView["run"]> }) {
+/**
+ * 실행 상태는 스트림 «안»에 놓습니다. 상단 배너로 빼면 대화의 어느 시점에 멈췄는지가 사라지고,
+ * 재개 버튼이 원인 설명에서 멀어져 "상단의 무엇을 누르라"는 안내가 필요해집니다.
+ */
+function RunStatusCard({
+  onControlRun,
+  pendingRunAction,
+  run,
+}: {
+  onControlRun: (action: "cancel" | "resume") => void;
+  pendingRunAction: "cancel" | "resume" | undefined;
+  run: NonNullable<WorkView["run"]>;
+}) {
   const blocked = run.status === "blocked";
   const awaitingApproval = run.status === "awaiting-approval";
   const active = ["ready", "running"].includes(run.status);
@@ -4947,50 +4911,58 @@ function RunStatusCard({ run }: { run: NonNullable<WorkView["run"]> }) {
 
   if (blocked) {
     return (
-      <section aria-label="실행 상태" className="border-b border-danger/40 bg-surface-1 px-5 py-3" role="status">
-        <div className="mx-auto flex max-w-[860px] items-start gap-3">
-          <WarningCircle aria-hidden="true" className="mt-0.5 shrink-0 text-danger" size={18} />
+      <div aria-label="실행 상태" className="my-2 rounded-[4px] border border-danger/40 px-3 py-2.5" role="status">
+        <div className="flex items-start gap-2.5">
+          <WarningCircle aria-hidden="true" className="mt-0.5 shrink-0 text-danger" size={16} />
           <div className="min-w-0 flex-1">
-            <p className="text-[13px] font-semibold text-primary">실행이 멈췄습니다</p>
-            <p className="mt-1 text-[12px] leading-5 text-danger">{blockedReasonText(run.blockedReason)}</p>
-            <p className="mt-1 text-[11px] text-muted">
-              현재 단계: {runStageText(run.stage)}
-              {run.blockedReason ? (
-                <code className="ml-2 font-mono text-[10px] text-muted">{run.blockedReason}</code>
-              ) : null}
+            <p className="text-[13px] text-danger">{blockedReasonText(run.blockedReason)}</p>
+            <p className="mt-0.5 text-[11px] text-muted">
+              {runStageText(run.stage)}에서 멈춤
+              {run.blockedReason ? <span className="ml-1.5 font-mono">{run.blockedReason}</span> : null}
             </p>
-            <p className="mt-1 text-[11px] text-muted">상단의 실행 재개를 누르면 이 단계부터 다시 시도합니다.</p>
           </div>
+          <button
+            className="shrink-0 rounded-[4px] border border-control px-2.5 py-1 text-[12px] text-secondary transition-colors duration-150 hover:border-fg-3 hover:text-primary disabled:opacity-50"
+            disabled={pendingRunAction !== undefined}
+            onClick={() => {
+              onControlRun("resume");
+            }}
+            type="button"
+          >
+            {pendingRunAction === "resume" ? "재개 중" : "다시 시도"}
+          </button>
         </div>
-      </section>
+      </div>
     );
   }
 
   if (awaitingApproval) {
     return (
-      <section aria-label="실행 상태" className="border-b border-gate/40 bg-surface-1 px-5 py-3" role="status">
-        <div className="mx-auto flex max-w-[860px] items-start gap-3">
-          <ShieldCheck aria-hidden="true" className="mt-0.5 shrink-0 text-gate" size={18} />
-          <div>
-            <p className="text-[13px] font-semibold text-primary">사람의 결정을 기다리는 중입니다</p>
-            <p className="mt-1 text-[12px] leading-5 text-gate">
-              수신함에서 승인 여부를 결정하면 다음 단계로 진행합니다.
-            </p>
-          </div>
-        </div>
-      </section>
+      <div
+        aria-label="실행 상태"
+        className="my-2 flex items-center gap-2.5 rounded-[4px] border border-gate/40 px-3 py-2.5"
+        role="status"
+      >
+        <ShieldCheck aria-hidden="true" className="shrink-0 text-gate" size={16} />
+        <p className="min-w-0 flex-1 text-[13px] text-gate">수신함에서 결정하면 다음 단계로 진행합니다</p>
+      </div>
     );
   }
 
   return (
-    <section aria-label="실행 상태" className="border-b border-control/40 bg-surface-1 px-5 py-3" role="status">
-      <div className="mx-auto flex max-w-[860px] items-center gap-3">
-        <span aria-hidden="true" className="size-2 shrink-0 animate-pulse rounded-full bg-accent" />
-        <p className="text-[13px] font-medium text-primary">실행 중</p>
-        <span className="text-[12px] text-secondary">{runStageText(run.stage)}</span>
-        <span className="ml-auto font-mono text-[10px] text-muted">개정 {run.leaseGeneration}</span>
-      </div>
-    </section>
+    <div aria-label="실행 상태" className="my-2 flex items-center gap-2.5 px-1 py-1" role="status">
+      <span className="text-[11px] text-muted">{runStageText(run.stage)} 진행 중</span>
+      <button
+        className="ml-auto shrink-0 rounded-[4px] px-2 py-0.5 text-[11px] text-muted outline-none transition-colors duration-150 hover:text-danger disabled:opacity-50"
+        disabled={pendingRunAction !== undefined}
+        onClick={() => {
+          onControlRun("cancel");
+        }}
+        type="button"
+      >
+        {pendingRunAction === "cancel" ? "중단 중" : "중단"}
+      </button>
+    </div>
   );
 }
 

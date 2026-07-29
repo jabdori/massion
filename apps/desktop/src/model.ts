@@ -65,6 +65,11 @@ export interface SpeakerView {
   human?: boolean;
   /** scope:"work"이거나 아직 승인되지 않은 노드. 점선으로 표기합니다. */
   provisional?: boolean;
+  /**
+   * 이 발화를 만든 모델. 조직이 역할과 난이도로 배치하므로 같은 화자도 발화마다 다를 수 있습니다.
+   * `route_attempt.model_profile_id` 계보에서 옵니다. 사람 참가자에게는 없습니다.
+   */
+  modelId?: string;
 }
 
 export interface RoomQuote {
@@ -270,7 +275,7 @@ export interface DesktopSnapshot {
 export type DesktopDataAdapter = () => DesktopSnapshot;
 
 /** 이름·이니셜·색 슬롯은 공유 계층이 정합니다. 표면마다 다르게 부르면 같은 에이전트를 알아볼 수 없습니다. */
-function speaker(handle: string, role: string, options?: { provisional?: boolean }): SpeakerView {
+function speaker(handle: string, role: string, options?: { provisional?: boolean; modelId?: string }): SpeakerView {
   const identity = agentIdentityToken(handle, role);
   return {
     handle: identity.handle,
@@ -279,14 +284,15 @@ function speaker(handle: string, role: string, options?: { provisional?: boolean
     accentSlot: identity.accentSlot,
     role,
     ...(options?.provisional === true ? { provisional: true } : {}),
+    ...(options?.modelId === undefined ? {} : { modelId: options.modelId }),
   };
 }
 
 const me: SpeakerView = { handle: "user", name: "나", initial: "나", accentSlot: -1, role: "사람", human: true };
-const atlas = speaker("representative", "조정");
-const quill = speaker("evidence-research", "조사");
-const vega = speaker("delivery-coordination", "실행");
-const iris = speaker("assurance", "검증");
+const atlas = speaker("representative", "조정", { modelId: "claude-sonnet-5" });
+const quill = speaker("evidence-research", "조사", { modelId: "glm-5.2" });
+const vega = speaker("delivery-coordination", "실행", { modelId: "claude-sonnet-5" });
+const iris = speaker("assurance", "검증", { modelId: "gpt-5.6-luna" });
 
 const churnAgents: AgentView[] = [
   { id: atlas.handle, role: atlas.role, name: atlas.name, initials: atlas.initial, state: "active" },

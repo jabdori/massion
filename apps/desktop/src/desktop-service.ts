@@ -2237,7 +2237,7 @@ function roleLabelFor(handle: string, nodes: readonly OrganizationNodeView[]): s
 }
 
 function speakerFor(
-  message: Pick<RoomMessageViewV1, "authorKind" | "authorId">,
+  message: Pick<RoomMessageViewV1, "authorKind" | "authorId"> & { readonly modelId?: string },
   nodes: readonly OrganizationNodeView[],
 ): SpeakerView {
   if (message.authorKind !== "agent") {
@@ -2254,6 +2254,7 @@ function speakerFor(
     role,
     // 조직 그래프에 없는 handle이 말하고 있으면 아직 승인되지 않았거나 scope:"work" 노드입니다.
     ...(node ? {} : { provisional: true }),
+    ...(typeof message.modelId === "string" && message.modelId ? { modelId: message.modelId } : {}),
   };
 }
 

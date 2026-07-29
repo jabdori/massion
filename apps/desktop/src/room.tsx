@@ -203,6 +203,12 @@ export function SpeakerName({ speaker }: { speaker: SpeakerView }) {
       <span className="rounded-[3px] border border-control px-1.5 text-[10px] font-medium text-muted">
         {speaker.role}
       </span>
+      {/* 조직이 모델을 배치하므로 "누가 말했나"에는 "무엇으로 말했나"가 따라붙습니다. */}
+      {speaker.modelId === undefined ? null : (
+        <span className="font-mono text-[10px] text-muted" title="이 발화를 만든 모델">
+          {speaker.modelId}
+        </span>
+      )}
     </>
   );
 }

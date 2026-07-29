@@ -1172,7 +1172,7 @@ describe("AgentOS native data flow", () => {
       resumeRun,
     });
     const view = render(<App service={awaitingService} />);
-    expect(screen.queryByRole("button", { name: "실행 재개" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "다시 시도" })).not.toBeInTheDocument();
     view.unmount();
 
     const blocked = {
@@ -1189,7 +1189,7 @@ describe("AgentOS native data flow", () => {
         })}
       />,
     );
-    await user.click(screen.getByRole("button", { name: "실행 재개" }));
+    await user.click(screen.getByRole("button", { name: "다시 시도" }));
     expect(resumeRun).toHaveBeenCalledWith(blocked);
   });
 });

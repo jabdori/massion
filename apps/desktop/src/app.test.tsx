@@ -109,12 +109,11 @@ describe("AgentOS 데스크톱", () => {
       />,
     );
 
+    // 멈춤은 스트림 안에 놓이고 재시도가 원인 바로 옆에 붙습니다.
     const status = screen.getByRole("status", { name: "실행 상태" });
-    expect(status).toHaveTextContent("실행이 멈췄습니다");
     expect(status).toHaveTextContent("Provider가 전략 계획의 구조화 응답을 완성하지 못했습니다.");
-    expect(status).toHaveTextContent("현재 단계: 맥락·전략 구성");
-    expect(status).toHaveTextContent("상단의 실행 재개를 누르면 이 단계부터 다시 시도합니다.");
-    await user.click(screen.getByRole("button", { name: "실행 재개" }));
+    expect(status).toHaveTextContent("맥락·전략 구성에서 멈춤");
+    await user.click(screen.getByRole("button", { name: "다시 시도" }));
     expect(resumeRun).toHaveBeenCalledWith(blocked);
   });
 
