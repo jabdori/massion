@@ -3294,19 +3294,25 @@ const FAILURE_LABEL: Record<string, string> = {
   timeout: "시간 초과",
 };
 
-/**
- * 예산은 설정의 「사람이 정한 경계」가 아니라 관측 대상입니다. 그래서 경계 옆이 아니라
- * 그 경계가 실제로 어떻게 쓰였는지를 보여주는 기록 옆에 섭니다.
- *
- * 왼쪽 경로를 고르면 오른쪽 기록이 그 경로로 좁혀집니다 — 「$0.48을 누가 썼나」가 두 번의
- * 이동 없이 이어집니다.
- */
+/** 호출 한 건은 몇 센트 단위라 소수점 둘로는 전부 $0.00이 됩니다. */
+const microText = (micros: number): string => `$${(micros / 1_000_000).toFixed(4)}`;
+
+interface RouteGuards {
+  /** 도달하면 차단합니다. `model_route.total_budget_micros`가 이미 이 역할입니다. */
+  hardMicros: number;
+  /** 도달하면 알립니다. 여러 개 걸 수 있습니다. */
+  softMicros: readonly number[];
+}
+
 function BudgetSurface({ service }: { service: DesktopService }) {
   const [settings, setSettings] = useState<SettingsView>();
   const [attempts, setAttempts] = useState<readonly RouteAttemptView[]>();
   const [error, setError] = useState("");
   const [attemptError, setAttemptError] = useState("");
-  const [routeFilter, setRouteFilter] = useState<string>();
+  const [selectedId, setSelectedId] = useState<string>();
+  /* 가드를 쓰는 명령이 아직 계약에 없습니다. 인계: docs/phases/30-surface-parity-agent-ux/settings-contract-handoff.md */
+  const [guards, setGuards] = useState<Record<string, RouteGuards>>({});
+  const [draft, setDraft] = useState("");
 
   useEffect(() => {
     let disposed = false;
@@ -3332,38 +3338,36 @@ function BudgetSurface({ service }: { service: DesktopService }) {
   }, [service]);
 
   const routes = settings ? projectModelRoutes(settings.routes, settings.catalog) : [];
-  const shown = (attempts ?? []).filter((attempt) => routeFilter === undefined || attempt.routeId === routeFilter);
+  const selected = routes.find((route) => route.routeId === selectedId);
+  const shown = (attempts ?? []).filter((attempt) => selectedId === undefined || attempt.routeId === selectedId);
   const spent = routes.reduce((total, route) => total + route.spentMicros, 0);
-  const budget = routes.reduce((total, route) => total + route.totalBudgetMicros, 0);
+  const guardOf = (route: ModelRouteView): RouteGuards =>
+    guards[route.routeId] ?? { hardMicros: route.totalBudgetMicros, softMicros: [] };
+  const setGuard = (routeId: string, next: RouteGuards) => {
+    setGuards({ ...guards, [routeId]: next });
+  };
 
   return (
     <main aria-label="예산" className="col-span-3 grid min-h-0 min-w-0 grid-cols-[264px_minmax(0,1fr)] bg-canvas">
       <aside className="grid min-h-0 grid-rows-[46px_minmax(0,1fr)] border-r border-border bg-chrome">
         <header className="flex items-baseline gap-2 px-3">
           <h1 className="text-[15px] font-semibold tracking-[-0.008em]">예산</h1>
-          {budget === 0 ? null : (
-            <span className="font-mono text-[11px] tabular-nums text-muted">
-              {costText(spent)} / {costText(budget)}
-            </span>
-          )}
+          <span className="font-mono text-[11px] tabular-nums text-muted">{costText(spent)}</span>
         </header>
         <div className="min-h-0 overflow-y-auto px-2 pb-3">
           {error ? <SurfaceError message={error} /> : null}
           {!settings && !error ? <SurfaceLoading /> : null}
-          {settings && routes.length === 0 ? (
-            <p className="px-1 py-2 text-[12px] text-muted">구성된 경로가 없습니다.</p>
-          ) : null}
           <ul>
             <li>
               <button
-                aria-pressed={routeFilter === undefined}
+                aria-pressed={selectedId === undefined}
                 className={`w-full rounded-[4px] px-2 py-1.5 text-left text-[13px] transition-colors duration-150 ${
-                  routeFilter === undefined
+                  selectedId === undefined
                     ? "bg-surface-2 text-primary"
                     : "text-secondary hover:bg-[rgb(255_255_255/0.027)]"
                 }`}
                 onClick={() => {
-                  setRouteFilter(undefined);
+                  setSelectedId(undefined);
                 }}
                 type="button"
               >
@@ -3373,16 +3377,17 @@ function BudgetSurface({ service }: { service: DesktopService }) {
             {routes.map((route) => (
               <li key={route.routeId}>
                 <button
-                  aria-pressed={routeFilter === route.routeId}
+                  aria-pressed={selectedId === route.routeId}
                   className={`w-full rounded-[4px] px-2 py-2 text-left transition-colors duration-150 ${
-                    routeFilter === route.routeId ? "bg-surface-2" : "hover:bg-[rgb(255_255_255/0.027)]"
+                    selectedId === route.routeId ? "bg-surface-2" : "hover:bg-[rgb(255_255_255/0.027)]"
                   }`}
                   onClick={() => {
-                    setRouteFilter(route.routeId);
+                    setSelectedId(route.routeId);
+                    setDraft("");
                   }}
                   type="button"
                 >
-                  <RouteBudgetRow route={route} />
+                  <RouteBudgetRow guard={guardOf(route)} route={route} />
                 </button>
               </li>
             ))}
@@ -3390,25 +3395,61 @@ function BudgetSurface({ service }: { service: DesktopService }) {
         </div>
       </aside>
 
-      <div className="grid min-h-0 min-w-0 grid-rows-[46px_minmax(0,1fr)]">
+      <div className="grid min-h-0 min-w-0 grid-rows-[46px_auto_minmax(0,1fr)]">
         <header className="flex items-baseline gap-2 border-b border-border px-5">
           <h2 className="text-[15px] font-semibold tracking-[-0.008em] text-primary">호출 기록</h2>
           {attempts === undefined ? null : (
             <span className="font-mono text-[11px] tabular-nums text-muted">{shown.length}</span>
           )}
         </header>
-        <div className="min-h-0 overflow-y-auto px-5 py-3">
-          {attemptError ? <SurfaceError message={attemptError} /> : null}
-          {attempts === undefined && !attemptError ? <SurfaceLoading /> : null}
+
+        {selected === undefined ? (
+          <div />
+        ) : (
+          <RouteGuardBar
+            draft={draft}
+            guard={guardOf(selected)}
+            onChangeDraft={setDraft}
+            onChangeGuard={(next) => {
+              setGuard(selected.routeId, next);
+            }}
+            route={selected}
+          />
+        )}
+
+        <div className="min-h-0 overflow-x-auto overflow-y-auto">
+          {attemptError ? (
+            <div className="px-5 py-3">
+              <SurfaceError message={attemptError} />
+            </div>
+          ) : null}
+          {attempts === undefined && !attemptError ? (
+            <div className="px-5 py-3">
+              <SurfaceLoading />
+            </div>
+          ) : null}
           {attempts !== undefined && shown.length === 0 ? (
-            <p className="text-[12px] text-muted">이 경로로 나간 호출이 없습니다.</p>
+            <p className="px-5 py-3 text-[12px] text-muted">호출이 없습니다.</p>
           ) : null}
           {shown.length === 0 ? null : (
-            <ul className="max-w-[940px] divide-y divide-border">
-              {shown.map((attempt) => (
-                <AttemptRow attempt={attempt} key={attempt.attemptId} />
-              ))}
-            </ul>
+            <table className="w-full min-w-[820px] border-collapse">
+              <thead>
+                <tr className="border-b border-border text-left text-[11px] text-muted">
+                  <th className="py-2 pl-5 pr-3 font-normal">시간</th>
+                  <th className="px-3 py-2 text-right font-normal">토큰</th>
+                  <th className="px-3 py-2 text-right font-normal">~$</th>
+                  <th className="px-3 py-2 font-normal">모델</th>
+                  <th className="px-3 py-2 font-normal">프로바이더</th>
+                  <th className="px-3 py-2 font-normal">상태</th>
+                  <th className="py-2 pl-3 pr-5 font-normal">Work</th>
+                </tr>
+              </thead>
+              <tbody>
+                {shown.map((attempt) => (
+                  <AttemptRow attempt={attempt} key={attempt.attemptId} />
+                ))}
+              </tbody>
+            </table>
           )}
         </div>
       </div>
@@ -3416,61 +3457,134 @@ function BudgetSurface({ service }: { service: DesktopService }) {
   );
 }
 
-/** 한 줄이 호출 한 번입니다. fallback으로 넘어온 시도는 들여써서 사슬이 보이게 합니다. */
-function AttemptRow({ attempt }: { attempt: RouteAttemptView }) {
-  const failed = attempt.status === "failed";
+/** 한도는 하나, 알림은 여럿. 둘 다 금액이라 같은 줄에 둡니다. */
+function RouteGuardBar({
+  draft,
+  guard,
+  onChangeDraft,
+  onChangeGuard,
+  route,
+}: {
+  draft: string;
+  guard: RouteGuards;
+  onChangeDraft: (value: string) => void;
+  onChangeGuard: (next: RouteGuards) => void;
+  route: ModelRouteView;
+}) {
+  const addSoft = () => {
+    const dollars = Number(draft);
+    if (!Number.isFinite(dollars) || dollars <= 0) return;
+    const micros = Math.round(dollars * 1_000_000);
+    if (guard.softMicros.includes(micros)) return;
+    onChangeGuard({ ...guard, softMicros: [...guard.softMicros, micros].sort((a, b) => a - b) });
+    onChangeDraft("");
+  };
   return (
-    <li className={`py-2 ${attempt.fallbackFrom === undefined ? "" : "pl-4"}`}>
-      <div className="flex items-baseline gap-3">
-        <span className="w-[68px] shrink-0 font-mono text-[11px] tabular-nums text-muted">{attempt.at}</span>
-        <span className="min-w-0 flex-1 truncate text-[13px] text-secondary">
-          {attempt.workTitle ?? "이 호출이 어느 Work의 것인지 아직 모릅니다"}
-        </span>
-        <span className="shrink-0 font-mono text-[12px] text-muted">{attempt.modelId}</span>
-        <span
-          className={`w-[72px] shrink-0 text-right font-mono text-[12px] tabular-nums ${
-            failed ? "text-danger" : "text-secondary"
-          }`}
-        >
-          {failed ? (FAILURE_LABEL[attempt.failureClass ?? ""] ?? "실패") : costText(attempt.costMicros)}
-        </span>
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-border px-5 py-2.5">
+      <span className="text-[12px] text-muted">{route.name}</span>
+      <label className="flex items-center gap-2">
+        <span className="text-[12px] text-muted">차단</span>
+        <input
+          aria-label="차단 한도"
+          className="w-[92px] rounded-[4px] border border-border bg-canvas px-2 py-1 text-right font-mono text-[12px] tabular-nums text-secondary outline-none focus-visible:border-fg-3"
+          min="0"
+          onChange={(event) => {
+            onChangeGuard({ ...guard, hardMicros: Math.round(Number(event.target.value) * 1_000_000) });
+          }}
+          step="0.01"
+          type="number"
+          value={(guard.hardMicros / 1_000_000).toFixed(2)}
+        />
+      </label>
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className="text-[12px] text-muted">알림</span>
+        {guard.softMicros.map((micros) => (
+          <button
+            aria-label={`알림 ${costText(micros)} 제거`}
+            className="inline-flex items-center gap-1 rounded-[4px] border border-gate/40 px-1.5 py-0.5 font-mono text-[11px] tabular-nums text-gate outline-none transition-colors duration-150 hover:border-danger hover:text-danger"
+            key={micros}
+            onClick={() => {
+              onChangeGuard({ ...guard, softMicros: guard.softMicros.filter((value) => value !== micros) });
+            }}
+            type="button"
+          >
+            {costText(micros)}
+            <X aria-hidden="true" size={10} />
+          </button>
+        ))}
+        <input
+          aria-label="알림 추가"
+          className="w-[76px] rounded-[4px] border border-border bg-canvas px-2 py-0.5 text-right font-mono text-[11px] tabular-nums text-secondary outline-none placeholder:text-muted focus-visible:border-fg-3"
+          onChange={(event) => {
+            onChangeDraft(event.target.value);
+          }}
+          onKeyDown={(event) => {
+            if (event.key !== "Enter") return;
+            event.preventDefault();
+            addSoft();
+          }}
+          placeholder="1.00"
+          step="0.01"
+          type="number"
+          value={draft}
+        />
       </div>
-      <div className="mt-0.5 flex items-baseline gap-2 pl-[80px] text-[11px] text-muted">
-        {attempt.fallbackFrom === undefined ? null : <span>앞선 시도가 막혀 넘어옴</span>}
-        {attempt.status === "running" ? (
-          <span>진행 중</span>
-        ) : (
-          <span className="font-mono tabular-nums">
-            {attempt.inputTokens.toLocaleString("ko-KR")} → {attempt.outputTokens.toLocaleString("ko-KR")} 토큰
-          </span>
-        )}
-      </div>
-    </li>
+    </div>
   );
 }
 
-function RouteBudgetRow({ route }: { route: ModelRouteView }) {
-  const ratio = route.totalBudgetMicros > 0 ? Math.min(1, route.spentMicros / route.totalBudgetMicros) : undefined;
+function AttemptRow({ attempt }: { attempt: RouteAttemptView }) {
+  const failed = attempt.status === "failed";
+  return (
+    <tr className="border-b border-border/60">
+      <td className="whitespace-nowrap py-2 pl-5 pr-3 font-mono text-[12px] tabular-nums text-muted">{attempt.at}</td>
+      <td className="whitespace-nowrap px-3 py-2 text-right font-mono text-[12px] tabular-nums text-secondary">
+        {attempt.status === "failed" ? "—" : (attempt.inputTokens + attempt.outputTokens).toLocaleString("ko-KR")}
+      </td>
+      <td className="whitespace-nowrap px-3 py-2 text-right font-mono text-[12px] tabular-nums text-secondary">
+        {attempt.costMicros === 0 ? "—" : microText(attempt.costMicros)}
+      </td>
+      <td className="whitespace-nowrap px-3 py-2 font-mono text-[12px] text-secondary">
+        {/* fallback으로 넘어온 시도는 사슬로 붙습니다. */}
+        {attempt.fallbackFrom === undefined ? null : (
+          <ArrowBendDownRight aria-label="넘어옴" className="mr-1 inline text-muted" size={12} />
+        )}
+        {attempt.modelId}
+      </td>
+      <td className="whitespace-nowrap px-3 py-2 font-mono text-[12px] text-muted">{attempt.providerId}</td>
+      <td className={`whitespace-nowrap px-3 py-2 text-[12px] ${failed ? "text-danger" : "text-muted"}`}>
+        {failed
+          ? (FAILURE_LABEL[attempt.failureClass ?? ""] ?? "실패")
+          : attempt.status === "running"
+            ? "진행"
+            : "성공"}
+      </td>
+      <td className="max-w-[220px] truncate py-2 pl-3 pr-5 text-[12px] text-secondary">{attempt.workTitle ?? "—"}</td>
+    </tr>
+  );
+}
+
+function RouteBudgetRow({ guard, route }: { guard: RouteGuards; route: ModelRouteView }) {
+  const ratio = guard.hardMicros > 0 ? Math.min(1, route.spentMicros / guard.hardMicros) : undefined;
+  const alerted = guard.softMicros.filter((micros) => route.spentMicros >= micros).length;
   return (
     <div>
-      <div className="flex items-baseline gap-3">
+      <div className="flex items-baseline gap-2">
         <span className="min-w-0 flex-1 truncate text-[13px] text-secondary">{route.name}</span>
+        {alerted === 0 ? null : (
+          <span className="shrink-0 font-mono text-[11px] tabular-nums text-gate">{alerted}</span>
+        )}
         <span className="shrink-0 font-mono text-[12px] tabular-nums text-muted">
-          {route.totalBudgetMicros === 0
-            ? "한도 없음"
-            : `${costText(route.spentMicros)} / ${costText(route.totalBudgetMicros)}`}
+          {guard.hardMicros === 0
+            ? costText(route.spentMicros)
+            : `${costText(route.spentMicros)} / ${costText(guard.hardMicros)}`}
         </span>
       </div>
-      {/*
-       * 트랙은 값이 없는 행에도 그립니다. 채워진 조각만 그리면 라벨 밑에 짧은 선 하나가 남아
-       * 게이지가 아니라 입력 밑줄로 읽힙니다.
-       */}
       <div className="mt-2 h-[3px] w-full rounded-full bg-surface-2">
         {ratio === undefined ? null : (
-          // 막대는 데이터라 이징하지 않습니다. 중간 프레임이 실제 값과 달라집니다.
           <div
             className={`h-[3px] rounded-full transition-[width] duration-[250ms] ease-linear ${
-              ratio >= 0.8 ? "bg-danger" : "bg-fg-3"
+              ratio >= 1 ? "bg-danger" : alerted > 0 ? "bg-gate" : "bg-fg-3"
             }`}
             style={{ width: `${String(ratio * 100)}%` }}
           />

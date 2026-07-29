@@ -211,6 +211,7 @@ export interface RouteAttemptView {
   readonly at: string;
   readonly routeId: string;
   readonly modelId: string;
+  readonly providerId: string;
   readonly status: "succeeded" | "failed" | "running";
   readonly failureClass?: string;
   readonly inputTokens: number;
@@ -2691,6 +2692,7 @@ const bool = (row: Record<string, unknown>, key: string): boolean => row[key] ==
 const fixtureAttempts: readonly RouteAttemptView[] = [
   {
     attemptId: "attempt-verify",
+    providerId: "anthropic-claude-code",
     at: "10:24",
     routeId: "route-reasoning",
     modelId: "claude-sonnet-5",
@@ -2703,6 +2705,7 @@ const fixtureAttempts: readonly RouteAttemptView[] = [
   },
   {
     attemptId: "attempt-cohort-2",
+    providerId: "zai",
     at: "10:23",
     routeId: "route-reasoning",
     modelId: "glm-5.2",
@@ -2716,6 +2719,7 @@ const fixtureAttempts: readonly RouteAttemptView[] = [
   },
   {
     attemptId: "attempt-cohort-1",
+    providerId: "openai-codex",
     at: "10:23",
     routeId: "route-reasoning",
     modelId: "gpt-5.6-luna",
@@ -2729,6 +2733,7 @@ const fixtureAttempts: readonly RouteAttemptView[] = [
   },
   {
     attemptId: "attempt-labeling",
+    providerId: "anthropic-claude-code",
     at: "10:23",
     routeId: "route-reasoning",
     modelId: "claude-sonnet-5",
@@ -2741,6 +2746,7 @@ const fixtureAttempts: readonly RouteAttemptView[] = [
   },
   {
     attemptId: "attempt-contract",
+    providerId: "anthropic-claude-code",
     at: "어제 17:02",
     routeId: "route-reasoning",
     modelId: "claude-sonnet-5",
@@ -2763,6 +2769,7 @@ export function projectRouteAttempts(value: unknown): readonly RouteAttemptView[
         at: str(row, "at"),
         routeId: str(row, "routeId"),
         modelId: str(row, "modelId"),
+        providerId: str(row, "providerId"),
         status: status === "succeeded" || status === "failed" ? status : "running",
         inputTokens: num(row, "inputTokens"),
         outputTokens: num(row, "outputTokens"),

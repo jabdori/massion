@@ -175,6 +175,18 @@ export interface SubscriptionAccountViewV1 { accountId; providerId; alias; scope
 빈 배열이 아니라 **거부**합니다. 「모르는 것」과 「없는 것」은 다르고, 빈 배열은 「호출이 없었다」로
 읽힙니다. Tauri에서 이 표면은 지금 그 사실을 그대로 말합니다.
 
+### 가드 — 하드는 있고 소프트는 없습니다
+
+| 가드 | 뜻 | 도메인 |
+|---|---|---|
+| 하드 | 도달하면 **차단** | **있습니다.** `model_route.total_budget_micros`, 검사는 `model-router.ts:967` |
+| 소프트 | 도달하면 **알림**, 여러 개 | **없습니다.** 개념 자체가 스키마에 없습니다 |
+
+화면은 둘 다 세웠습니다(`RouteGuardBar`). 하드는 기존 필드에 대응하지만 **쓰는 명령이 없어**
+지금은 둘 다 화면 상태(`guards`)입니다.
+
+- [ ] `total_budget_micros`를 바꾸는 명령이 선다 (지금은 라우트 생성 때만 정해집니다)
+- [ ] 소프트 가드 테이블이 선다 — 라우트당 여러 임계값, 넘으면 수신함으로
 - [ ] `router.attempts` 조회를 등록한다 (`router:read`, 최근순, 페이징)
 - [ ] `command_id`에서 Work를 잇는다 — 이게 없으면 「어느 Work가 얼마를 썼나」에 답할 수 없다
 - [ ] `explanation_json`을 상세로 펼친다 (왜 이 모델이 골렸는지 = 인과 사슬의 「모델」 마디)
