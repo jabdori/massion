@@ -2019,7 +2019,9 @@ const fixtureSettings: SettingsView = {
       { candidateId: "c-e1", routeId: "route-embedding", modelProfileId: "mp-embed", priority: 0, enabled: true },
     ],
   },
-  credentials: [{ credentialId: "credential-zai", providerId: "zai", label: "coding-plan", credentialType: "api_key" }],
+  credentials: [
+    { credentialId: "credential-zai", providerId: "zai", endpointId: "ep-zai", label: "coding-plan", status: "active", priority: 1, weight: 1 },
+  ],
   routes: [
     {
       routeId: "route-reasoning",
@@ -2253,6 +2255,20 @@ export function createFixtureDesktopService(): DesktopService {
   const settingsState: SettingsView = structuredClone(fixtureSettings);
   let growthConfiguration = { ...fixtureGrowthConfiguration };
   const growthSuggestionLineages = structuredClone(fixtureGrowthSuggestionLineages);
+  const credentialVersions = new Map<string, number>([["credential-zai", 1]]);
+  let explicitMemorySequence = 4;
+  let explicitMemory: ExplicitMemoryViewV1 = {
+    memoryVersionId: "memory-0004",
+    revision: 4,
+    entries: [
+      {
+        key: "answer-style",
+        kind: "preference",
+        value: "분석 결과는 결론부터 설명한다",
+        authority: "explicit",
+      },
+    ],
+  };
   const growthSuggestionOverrides = new Map<
     string,
     Pick<GrowthView["suggestions"][number], "status" | "revision" | "adoption" | "decisionReason" | "decidedAt">
@@ -2617,8 +2633,43 @@ export function createFixtureDesktopService(): DesktopService {
           fixtureExtensionEntries.map((item) => item.packageName),
         ),
       ]),
-    loadSettings: () => fixturePromise(() => settingsState),
-    connectZaiCodingPlan: () => fixturePromise(() => undefined),
+    loadSettings: () => fixturePromise(() => structuredClone(settingsState)),
+    connectZaiCodingPlan: (input) =>
+      fixturePromise(() => {
+        if (!input.secret.trim()) throw new Error("구독 Credential secret은 비어 있을 수 없습니다");
+        const accounts = settingsState.accounts as Array<Record<string, unknown>>;
+        const account = accounts.find((row) => row.providerId === "zai-coding-plan");
+        const accountId = account ? String(account.accountId) : "account-zai-fixture-0001";
+        if (account) {
+          account.alias = input.alias;
+          account.status = "active";
+          account.version = Number(account.version ?? 0) + 1;
+        } else {
+          accounts.push({ accountId, providerId: "zai-coding-plan", alias: input.alias, scope: "organization", status: "active", billingKind: "coding-plan", version: 1 });
+        }
+        const catalog = settingsState.catalog as {
+          providers: Array<Record<string, unknown>>;
+          endpoints: Array<Record<string, unknown>>;
+        };
+        const endpointId = "ep-zai-coding-plan";
+        if (!catalog.providers.some((row) => row.providerId === "zai-coding-plan")) {
+          catalog.providers.push({ providerId: "zai-coding-plan", displayName: "Z.ai Coding Plan", adapterKind: "openai-compatible", enabled: true });
+        }
+        if (!catalog.endpoints.some((row) => row.endpointId === endpointId)) {
+          catalog.endpoints.push({ endpointId, providerId: "zai-coding-plan", name: "coding-plan", baseUrl: "https://api.z.ai/api/coding/paas/v4", local: false });
+        }
+        const credentialId = `credential-${accountId}`;
+        const credentials = settingsState.credentials as Array<Record<string, unknown>>;
+        const credential = credentials.find((row) => row.credentialId === credentialId);
+        if (credential) {
+          credential.endpointId = endpointId;
+          credential.label = input.alias;
+          credential.status = "active";
+        } else {
+          credentials.push({ credentialId, providerId: "zai-coding-plan", endpointId, label: input.alias, status: "active", priority: 1, weight: 1 });
+          credentialVersions.set(credentialId, 1);
+        }
+      }),
     /*
      * 픽스처는 등록을 실제로 반영합니다. no-op이면 추가 흐름이 화면에서 끝까지 서지 않고,
      * 무엇이 빠졌는지도 드러나지 않습니다(PRODUCT.md 2026-07-23: 화면은 완성본 기준).
@@ -2637,10 +2688,11 @@ export function createFixtureDesktopService(): DesktopService {
       }),
     registerEndpoint: (input) =>
       fixturePromise(() => {
-        const catalog = settingsState.catalog as { endpoints: Record<string, unknown>[] };
+        const catalog = settingsState.catalog as { providers: Record<string, unknown>[]; endpoints: Record<string, unknown>[] };
+        if (!catalog.providers.some((row) => row.providerId === input.providerId)) throw new Error("Fixture Provider를 찾을 수 없습니다");
         if (!catalog.endpoints.some((row) => row.providerId === input.providerId && row.baseUrl === input.baseUrl)) {
           catalog.endpoints.push({
-            endpointId: `ep-${String(input.providerId)}`,
+            endpointId: `ep-${String(input.providerId)}${input.name === "api" ? "" : `-${String(input.name)}`}`,
             providerId: input.providerId,
             name: input.name,
             baseUrl: input.baseUrl,
@@ -2650,16 +2702,170 @@ export function createFixtureDesktopService(): DesktopService {
       }),
     addCredential: (input) =>
       fixturePromise(() => {
-        const catalog = settingsState.catalog as { credentials: Record<string, unknown>[] };
-        const existing = catalog.credentials.find((row) => row.providerId === input.providerId);
+        const catalog = settingsState.catalog as {
+          providers: Record<string, unknown>[];
+          endpoints: Record<string, unknown>[];
+          credentials: Record<string, unknown>[];
+        };
+        if (!catalog.providers.some((row) => row.providerId === input.providerId)) throw new Error("Fixture Provider를 찾을 수 없습니다");
+        const endpoint = catalog.endpoints.find((row) => row.endpointId === input.endpointId);
+        if (!endpoint || endpoint.providerId !== input.providerId) throw new Error("Fixture Endpoint를 찾을 수 없습니다");
+        const existing = catalog.credentials.find(
+          (row) => row.providerId === input.providerId && row.endpointId === input.endpointId && row.label === input.label,
+        );
         if (existing) existing.secretVersion = Number(existing.secretVersion ?? 0) + 1;
-        else catalog.credentials.push({ providerId: input.providerId, secretVersion: 1 });
+        else catalog.credentials.push({ providerId: input.providerId, endpointId: input.endpointId, label: input.label, secretVersion: 1 });
+        const credentials = settingsState.credentials as Array<Record<string, unknown>>;
+        const credential = credentials.find(
+          (row) => row.providerId === input.providerId && row.endpointId === input.endpointId && row.label === input.label,
+        );
+        if (credential) {
+          credential.status = "active";
+          const credentialId = String(credential.credentialId);
+          credentialVersions.set(credentialId, (credentialVersions.get(credentialId) ?? 0) + 1);
+        } else {
+          credentials.push({
+            credentialId: `credential-${String(input.providerId)}-${String(input.endpointId)}-${String(input.label)}`,
+            providerId: input.providerId,
+            endpointId: input.endpointId,
+            label: input.label,
+            status: "active",
+            priority: input.priority,
+            weight: input.weight,
+          });
+          credentialVersions.set(`credential-${String(input.providerId)}-${String(input.endpointId)}-${String(input.label)}`, 1);
+        }
       }),
-    disableCredential: () => fixturePromise(() => undefined),
-    registerModel: () => fixturePromise(() => undefined),
-    configureRoute: () => fixturePromise(() => undefined),
-    addRouteCandidate: () => fixturePromise(() => undefined),
-    configureSubscriptionPolicy: () => fixturePromise(() => undefined),
+    disableCredential: (credentialId, expectedVersion) =>
+      fixturePromise(() => {
+        const credentials = settingsState.credentials as Array<Record<string, unknown>>;
+        const credential = credentials.find((row) => row.credentialId === credentialId);
+        if (!credential) throw new Error("Fixture Credential을 찾을 수 없습니다");
+        if (credentialVersions.get(credentialId) !== expectedVersion) throw new Error("Credential version precondition이 일치하지 않습니다");
+        credential.status = "revoked";
+        credentialVersions.set(credentialId, expectedVersion + 1);
+      }),
+    registerModel: (input) =>
+      fixturePromise(() => {
+        const catalog = settingsState.catalog as {
+          providers: Array<Record<string, unknown>>;
+          endpoints: Array<Record<string, unknown>>;
+          models: Array<Record<string, unknown>>;
+        };
+        if (!catalog.providers.some((row) => row.providerId === input.providerId)) throw new Error("Fixture Provider를 찾을 수 없습니다");
+        const endpoint = catalog.endpoints.find((row) => row.endpointId === input.endpointId);
+        if (!endpoint) throw new Error("Fixture Endpoint를 찾을 수 없습니다");
+        if (endpoint.providerId !== input.providerId) throw new Error("Model Profile의 Provider와 Endpoint가 다릅니다");
+        if (catalog.models.some((row) => row.providerId === input.providerId && row.endpointId === input.endpointId && row.modelId === input.modelId)) throw new Error("중복 Model Profile입니다");
+        catalog.models.push({
+          modelProfileId: `mp-${String(input.modelId)}`,
+          providerId: input.providerId,
+          endpointId: input.endpointId,
+          modelId: input.modelId,
+          routeKind: input.routeKind,
+          contextWindow: input.contextWindow,
+          supportsTools: input.supportsTools,
+          supportsStructuredOutput: input.supportsStructuredOutput,
+          supportsVision: input.supportsVision,
+          supportsStreaming: input.supportsStreaming,
+          equivalenceGroup: input.equivalenceGroup,
+          evalScore: input.evalScore,
+          inputCostMicrosPerMillion: input.inputCostMicrosPerMillion,
+          outputCostMicrosPerMillion: input.outputCostMicrosPerMillion,
+          verified: input.verified,
+          enabled: true,
+        });
+      }),
+    configureRoute: (input) =>
+      fixturePromise(() => {
+        const routes = settingsState.routes as Array<Record<string, unknown>>;
+        const existing = routes.find((row) => row.name === input.name);
+        const routeId = `route-${String(input.name).toLowerCase().replace(/[^a-z0-9]+/gu, "-")}`;
+        if (existing) throw new Error("중복 Model Route 이름입니다");
+        routes.push({
+          routeId,
+          name: input.name,
+          routeKind: input.routeKind,
+          credentialPolicy: input.credentialPolicy,
+          dataPolicy: input.dataPolicy,
+          equivalenceGroup: input.equivalenceGroup,
+          minEvalScore: input.minEvalScore,
+          requireTools: input.requireTools,
+          requireStructuredOutput: input.requireStructuredOutput,
+          requireVision: input.requireVision,
+          requireStreaming: input.requireStreaming,
+          maxContextTokens: input.maxContextTokens,
+          requestBudgetMicros: input.requestBudgetMicros,
+          totalBudgetMicros: input.totalBudgetMicros,
+          enabled: true,
+          spentMicros: 0,
+        });
+      }),
+    addRouteCandidate: (input) =>
+      fixturePromise(() => {
+        const catalog = settingsState.catalog as { models: Array<Record<string, unknown>>; candidates: Array<Record<string, unknown>> };
+        const routes = settingsState.routes as Array<Record<string, unknown>>;
+        const route = routes.find((row) => row.routeId === input.routeId);
+        if (!route) throw new Error("Fixture Model Route를 찾을 수 없습니다");
+        const model = catalog.models.find((row) => row.modelProfileId === input.modelProfileId);
+        if (!model) throw new Error("Fixture Model Profile을 찾을 수 없습니다");
+        if (catalog.candidates.some((row) => row.routeId === input.routeId && row.modelProfileId === input.modelProfileId)) throw new Error("중복 Route Candidate입니다");
+        const endpoint = (settingsState.catalog as { endpoints: Array<Record<string, unknown>> }).endpoints.find(
+          (row) => row.endpointId === model.endpointId,
+        );
+        if (
+          !endpoint ||
+          model.enabled !== true ||
+          model.verified !== true ||
+          model.routeKind !== route.routeKind ||
+          model.equivalenceGroup !== route.equivalenceGroup ||
+          Number(model.evalScore) < Number(route.minEvalScore) ||
+          Number(model.contextWindow) < Number(route.maxContextTokens) ||
+          (route.requireTools === true && model.supportsTools !== true) ||
+          (route.requireStructuredOutput === true && model.supportsStructuredOutput !== true) ||
+          (route.requireVision === true && model.supportsVision !== true) ||
+          (route.requireStreaming === true && model.supportsStreaming !== true) ||
+          (route.dataPolicy === "local-private" && endpoint.local !== true)
+        ) {
+          throw new Error("Route Candidate가 요구사항을 충족하지 않습니다");
+        }
+        catalog.candidates.push({
+          candidateId: `candidate-${String(input.routeId)}-${String(input.modelProfileId)}`,
+          routeId: input.routeId,
+          modelProfileId: input.modelProfileId,
+          priority: input.priority,
+          enabled: true,
+        });
+      }),
+    configureSubscriptionPolicy: (input) =>
+      fixturePromise(() => {
+        const credentialPolicies = new Set(["adaptive", "priority", "fill-first", "round-robin", "weighted", "least-used", "quota-headroom", "reset-aware", "sticky"]);
+        const approvalModes = new Set(["automatic", "review", "deny"]);
+        if (!credentialPolicies.has(String(input.credentialPolicy))) throw new Error("지원하지 않는 구독 계정 선택 정책입니다");
+        if (input.approvalMode !== undefined && !approvalModes.has(String(input.approvalMode))) throw new Error("지원하지 않는 구독 승인 방식입니다");
+        const policies = settingsState.policy as Array<Record<string, unknown>>;
+        const existing = policies.find((row) => row.providerId === input.providerId);
+        const provider = (
+          settingsState.catalog as { providers: Array<Record<string, unknown>> }
+        ).providers.find((row) => row.providerId === input.providerId);
+        const commonSurfaceProviders = new Set([
+          "anthropic-claude-code",
+          "openai-codex",
+          "google-gemini-cli-enterprise",
+          "github-copilot",
+          "google-antigravity-cli",
+          "xai-grok-build",
+        ]);
+        const defaultApprovalMode =
+          input.providerId === "zai-coding-plan"
+            ? "deny"
+            : provider?.enabled === true && commonSurfaceProviders.has(String(input.providerId))
+              ? "automatic"
+              : "deny";
+        const approvalMode = input.approvalMode ?? (existing ? String(existing.approvalMode) : defaultApprovalMode);
+        if (existing) Object.assign(existing, { providerId: input.providerId, credentialPolicy: input.credentialPolicy, approvalMode, version: Number(existing.version ?? 0) + 1, source: "configured", updatedAt: new Date().toISOString() });
+        else policies.push({ providerId: input.providerId, credentialPolicy: input.credentialPolicy, approvalMode, version: 1, source: "configured", updatedAt: new Date().toISOString() });
+      }),
     searchRegistry: (query, limit = 20) =>
       fixturePromise(() =>
         fixtureRegistryInventory
@@ -2691,8 +2897,31 @@ export function createFixtureDesktopService(): DesktopService {
           activatedAt: new Date().toISOString(),
         };
       }),
-    putExplicitMemory: () => fixturePromise(() => undefined),
-    forgetExplicitMemory: () => fixturePromise(() => undefined),
+    putExplicitMemory: (input) =>
+      fixturePromise(() => {
+        if (explicitMemory.revision !== input.revision) throw new Error("개인 Memory version precondition이 일치하지 않습니다");
+        explicitMemory = {
+          ...explicitMemory,
+          memoryVersionId: `memory-fixture-${String(++explicitMemorySequence).padStart(4, "0")}`,
+          revision: explicitMemory.revision + 1,
+          entries: [
+            ...explicitMemory.entries.filter((entry) => entry.key !== input.key),
+            { key: input.key, kind: input.kind, value: input.value, authority: "explicit" },
+          ],
+        };
+      }),
+    forgetExplicitMemory: (input) =>
+      fixturePromise(() => {
+        if (explicitMemory.revision !== input.revision) throw new Error("개인 Memory version precondition이 일치하지 않습니다");
+        const entries = explicitMemory.entries.filter((entry) => entry.key !== input.key);
+        if (entries.length === explicitMemory.entries.length) throw new Error("개인 Memory key를 찾을 수 없습니다");
+        explicitMemory = {
+          ...explicitMemory,
+          memoryVersionId: `memory-fixture-${String(++explicitMemorySequence).padStart(4, "0")}`,
+          revision: explicitMemory.revision + 1,
+          entries,
+        };
+      }),
     loadGrowth: () =>
       fixturePromise(() => {
         const view = {
@@ -3100,6 +3329,7 @@ export function createFixtureDesktopService(): DesktopService {
         return structuredClone({
           ...view,
           configuration: { ...growthConfiguration },
+          memories: [explicitMemory],
           suggestions: view.suggestions.map((suggestion) => {
             const override = growthSuggestionOverrides.get(suggestion.suggestionId);
             if (!override) return suggestion;

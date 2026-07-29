@@ -234,6 +234,200 @@ describe("Application desktop service", () => {
     await expect(fresh.loadWork("work-fixture-0001")).rejects.toThrow("Fixture Work를 찾을 수 없습니다");
   });
 
+  it("fixture Provider·route 설정 명령은 재조회에 반영하고 secret을 보존하지 않는다", async () => {
+    const service = createFixtureDesktopService();
+    const before = await service.loadSettings();
+    const credential = (before.credentials as Array<{ credentialId: string }>).find(
+      (item) => item.credentialId === "credential-zai",
+    );
+    if (!credential) throw new Error("fixture credential이 필요합니다");
+
+    await service.registerProvider({ providerId: "fixture-provider", displayName: "Fixture Provider", adapterKind: "openai-compatible" });
+    await service.registerEndpoint({ providerId: "fixture-provider", name: "api", baseUrl: "https://fixture.example/v1", local: false });
+    await service.addCredential({
+      providerId: "fixture-provider",
+      endpointId: "ep-fixture-provider",
+      label: "기본 키",
+      credentialType: "api_key",
+      secret: "fixture-api-secret",
+      priority: 0,
+      weight: 100,
+    });
+    await service.registerEndpoint({ providerId: "fixture-provider", name: "backup", baseUrl: "https://fixture.example/backup", local: false });
+    await service.addCredential({
+      providerId: "fixture-provider",
+      endpointId: "ep-fixture-provider-backup",
+      label: "기본 키",
+      credentialType: "api_key",
+      secret: "fixture-backup-secret",
+      priority: 1,
+      weight: 50,
+    });
+    await service.connectZaiCodingPlan({ alias: "개인 Coding Plan", secret: "fixture-secret" });
+    await service.disableCredential(credential.credentialId, 1);
+    await service.registerModel({
+      providerId: "fixture-provider",
+      endpointId: "ep-fixture-provider",
+      modelId: "glm-fixture",
+      routeKind: "reasoning",
+      contextWindow: 128_000,
+      supportsTools: true,
+      supportsStructuredOutput: false,
+      supportsVision: false,
+      supportsStreaming: true,
+      equivalenceGroup: "reasoning",
+      evalScore: 0.9,
+      inputCostMicrosPerMillion: 1,
+      outputCostMicrosPerMillion: 2,
+      verified: true,
+      token: "model-token",
+    });
+    await service.configureRoute({
+      name: "Fixture 추론",
+      routeKind: "reasoning",
+      credentialPolicy: "required",
+      dataPolicy: "cloud",
+      equivalenceGroup: "reasoning",
+      minEvalScore: 0.9,
+      requireTools: true,
+      requireStructuredOutput: false,
+      requireVision: false,
+      requireStreaming: true,
+      maxContextTokens: 128_000,
+      requestBudgetMicros: 10_000,
+      totalBudgetMicros: 100_000,
+      secret: "route-secret",
+    });
+    await service.addRouteCandidate({ routeId: "route-fixture-", modelProfileId: "mp-glm-fixture", priority: 0, token: "candidate-token" });
+    await service.configureSubscriptionPolicy({ providerId: "zai-coding-plan", credentialPolicy: "round-robin", approvalMode: "automatic", secret: "policy-secret" });
+
+    const changed = await service.loadSettings();
+    expect(JSON.stringify(changed)).toContain("glm-fixture");
+    expect(JSON.stringify(changed)).toContain("Fixture Provider");
+    expect(JSON.stringify(changed)).toContain("Fixture 추론");
+    expect(JSON.stringify(changed)).toContain("round-robin");
+    expect(JSON.stringify(changed)).toContain("개인 Coding Plan");
+    expect(JSON.stringify(changed)).not.toContain("fixture-secret");
+    expect(JSON.stringify(changed)).not.toContain("fixture-api-secret");
+    expect(JSON.stringify(changed)).not.toContain("model-token");
+    expect(JSON.stringify(changed)).not.toContain("route-secret");
+    expect(JSON.stringify(changed)).not.toContain("candidate-token");
+    expect(JSON.stringify(changed)).not.toContain("policy-secret");
+    expect(changed.credentials).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ credentialId: credential.credentialId, status: "revoked" }),
+        expect.objectContaining({ providerId: "fixture-provider", label: "기본 키", status: "active" }),
+        expect.objectContaining({ providerId: "fixture-provider", endpointId: "ep-fixture-provider-backup", label: "기본 키", status: "active" }),
+      ]),
+    );
+    const fixtureCredentials = (changed.credentials as Array<{ credentialId: string; endpointId: string; status: string }>).filter(
+      (item) => item.endpointId.startsWith("ep-fixture-provider"),
+    );
+    const primaryCredential = fixtureCredentials.find((item) => item.endpointId === "ep-fixture-provider");
+    const backupCredential = fixtureCredentials.find((item) => item.endpointId === "ep-fixture-provider-backup");
+    if (!primaryCredential || !backupCredential) throw new Error("endpoint별 fixture credential이 필요합니다");
+    expect(primaryCredential.credentialId).not.toBe(backupCredential.credentialId);
+    await service.disableCredential(primaryCredential.credentialId, 1);
+    expect(await service.loadSettings()).toMatchObject({
+      credentials: expect.arrayContaining([
+        expect.objectContaining({ credentialId: primaryCredential.credentialId, status: "revoked" }),
+        expect.objectContaining({ credentialId: backupCredential.credentialId, status: "active" }),
+      ]),
+    });
+    expect(changed.catalog).toMatchObject({
+      providers: expect.arrayContaining([expect.objectContaining({ providerId: "zai-coding-plan" })]),
+      endpoints: expect.arrayContaining([expect.objectContaining({ providerId: "zai-coding-plan" })]),
+    });
+    expect(changed.credentials).toEqual(
+      expect.arrayContaining([expect.objectContaining({ credentialId: "credential-account-zai", label: "개인 Coding Plan" })]),
+    );
+    expect(changed.policy).toEqual(
+      expect.arrayContaining([expect.objectContaining({ source: "configured", updatedAt: expect.any(String) })]),
+    );
+    const returnedModel = (changed.catalog as { models: Array<{ modelId: string }> }).models.find(
+      (model) => model.modelId === "glm-fixture",
+    );
+    if (!returnedModel) throw new Error("반환된 fixture model이 필요합니다");
+    returnedModel.modelId = "외부 mutation";
+    expect(JSON.stringify(await service.loadSettings())).not.toContain("외부 mutation");
+    await expect(service.disableCredential(credential.credentialId, 1)).rejects.toThrow("version");
+    expect(JSON.stringify(await createFixtureDesktopService().loadSettings())).not.toContain("glm-fixture");
+  });
+
+  it("fixture router 저장은 참조와 중복을 거부한다", async () => {
+    const service = createFixtureDesktopService();
+    const model = {
+      providerId: "zai",
+      endpointId: "ep-zai",
+      modelId: "glm-conflict",
+      routeKind: "reasoning",
+      contextWindow: 128_000,
+      supportsTools: true,
+      supportsStructuredOutput: false,
+      supportsVision: false,
+      supportsStreaming: true,
+      equivalenceGroup: "reasoning",
+      evalScore: 0.9,
+      inputCostMicrosPerMillion: 1,
+      outputCostMicrosPerMillion: 2,
+      verified: true,
+    };
+    await expect(service.registerModel({ ...model, endpointId: "없는-endpoint" })).rejects.toThrow("Endpoint");
+    await service.registerModel(model);
+    await expect(service.registerModel(model)).rejects.toThrow("중복");
+    await expect(service.configureRoute({ name: "추론", routeKind: "reasoning" })).rejects.toThrow("중복");
+    await expect(service.addRouteCandidate({ routeId: "없는-route", modelProfileId: "mp-glm-conflict", priority: 0 })).rejects.toThrow("Route");
+    await expect(service.configureSubscriptionPolicy({ providerId: "zai-coding-plan", credentialPolicy: "없는-policy" })).rejects.toThrow("정책");
+    await expect(service.configureSubscriptionPolicy({ providerId: "zai-coding-plan", credentialPolicy: "adaptive", approvalMode: "없는-mode" })).rejects.toThrow("승인");
+  });
+
+  it("fixture subscription policy는 기존 mode와 provider 기본 mode를 따른다", async () => {
+    const service = createFixtureDesktopService();
+
+    await service.configureSubscriptionPolicy({ providerId: "zai-coding-plan", credentialPolicy: "adaptive" });
+    expect(await service.loadSettings()).toMatchObject({ policy: [expect.objectContaining({ providerId: "zai-coding-plan", approvalMode: "deny" })] });
+    await service.configureSubscriptionPolicy({ providerId: "zai-coding-plan", credentialPolicy: "priority", approvalMode: "review" });
+    await service.configureSubscriptionPolicy({ providerId: "zai-coding-plan", credentialPolicy: "weighted" });
+    expect(await service.loadSettings()).toMatchObject({ policy: [expect.objectContaining({ providerId: "zai-coding-plan", approvalMode: "review" })] });
+
+    await service.configureSubscriptionPolicy({ providerId: "openai-codex", credentialPolicy: "adaptive" });
+    expect(await service.loadSettings()).toMatchObject({
+      policy: expect.arrayContaining([expect.objectContaining({ providerId: "openai-codex", approvalMode: "automatic" })]),
+    });
+    await service.configureSubscriptionPolicy({ providerId: "xai-grok-build", credentialPolicy: "adaptive" });
+    await service.configureSubscriptionPolicy({ providerId: "manifest-없는-provider", credentialPolicy: "adaptive" });
+    expect(await service.loadSettings()).toMatchObject({
+      policy: expect.arrayContaining([
+        expect.objectContaining({ providerId: "xai-grok-build", approvalMode: "deny" }),
+        expect.objectContaining({ providerId: "manifest-없는-provider", approvalMode: "deny" }),
+      ]),
+    });
+  });
+
+  it("fixture explicit memory는 revision CAS로 재조회되고 반환 mutation이 새지 않는다", async () => {
+    const service = createFixtureDesktopService();
+    const initial = await service.loadGrowth();
+    const memory = initial.memories[0];
+    if (!memory) throw new Error("fixture explicit memory가 필요합니다");
+
+    await service.putExplicitMemory({ key: "fixture-rule", kind: "procedure", value: "재조회로 확인합니다", revision: memory.revision });
+    const updated = (await service.loadGrowth()).memories[0];
+    expect(updated?.memoryVersionId).not.toBe(memory.memoryVersionId);
+    expect(updated?.revision).toBe(memory.revision + 1);
+    expect(updated?.entries).toContainEqual(expect.objectContaining({ key: "fixture-rule" }));
+    await expect(
+      service.putExplicitMemory({ key: "stale", kind: "fact", value: "거부", revision: memory.revision }),
+    ).rejects.toThrow("precondition");
+    await service.forgetExplicitMemory({ key: "fixture-rule", revision: updated?.revision ?? 0 });
+    expect((await service.loadGrowth()).memories[0]).toMatchObject({ revision: memory.revision + 2 });
+
+    const returnedEntry = updated?.entries[0];
+    if (!returnedEntry) throw new Error("반환된 explicit memory entry가 필요합니다");
+    (returnedEntry as { value: string }).value = "외부 mutation";
+    expect((await service.loadGrowth()).memories[0]?.entries[0]?.value).not.toBe("외부 mutation");
+    expect(JSON.stringify(await createFixtureDesktopService().loadGrowth())).not.toContain("fixture-rule");
+  });
+
   it("fixture Growth 설정은 CAS 갱신 뒤 재조회되고 새 서비스에는 새지 않는다", async () => {
     const service = createFixtureDesktopService();
     const initial = await service.loadGrowth();
