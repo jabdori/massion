@@ -29,16 +29,26 @@ const REQUIRED_DEPLOYMENT_MARKERS = {
   caddy: ["@registry path /npm/*", "MASSION_REGISTRY_UPSTREAM"],
 };
 
-export function assertAuditReport(report) {
+export function assertAuditReport(report, scope = "production") {
   const vulnerabilities = report?.metadata?.vulnerabilities;
   if (!vulnerabilities || typeof vulnerabilities !== "object")
-    throw new Error("production audit report 구조가 유효하지 않습니다");
+    throw new Error(`${scope} audit report 구조가 유효하지 않습니다`);
   for (const severity of ["moderate", "high", "critical"]) {
     const count = vulnerabilities[severity];
-    if (!Number.isSafeInteger(count) || count < 0) throw new Error(`${severity} audit 수치가 유효하지 않습니다`);
-    if (count > 0) throw new Error(`${severity} production advisory ${String(count)}건이 남아 있습니다`);
+    if (!Number.isSafeInteger(count) || count < 0)
+      throw new Error(`${severity} ${scope} audit 수치가 유효하지 않습니다`);
+    if (count > 0) throw new Error(`${severity} ${scope} advisory ${String(count)}건이 남아 있습니다`);
   }
   return vulnerabilities;
+}
+
+export function parseAuditReport(output, scope) {
+  try {
+    return assertAuditReport(JSON.parse(output), scope);
+  } catch (error) {
+    if (error instanceof SyntaxError) throw new Error(`${scope} audit report JSON이 유효하지 않습니다`);
+    throw error;
+  }
 }
 
 export function assertDeploymentSecurity(files) {
@@ -92,9 +102,12 @@ async function main() {
   if (candidates.length < 10) throw new Error("보안 test suite가 예상보다 적습니다");
   run("pnpm", ["exec", "vitest", "run", ...candidates]);
 
-  const audit = run("pnpm", ["audit", "--prod", "--json"], { capture: true, allowFailure: true });
-  if (!audit.stdout) throw new Error("production audit report를 생성하지 못했습니다");
-  const vulnerabilities = assertAuditReport(JSON.parse(audit.stdout));
+  const productionAudit = run("pnpm", ["audit", "--prod", "--json"], { capture: true, allowFailure: true });
+  const fullAudit = run("pnpm", ["audit", "--json"], { capture: true, allowFailure: true });
+  if (!productionAudit.stdout) throw new Error("production audit report를 생성하지 못했습니다");
+  if (!fullAudit.stdout) throw new Error("full audit report를 생성하지 못했습니다");
+  const productionVulnerabilities = parseAuditReport(productionAudit.stdout, "production");
+  const fullVulnerabilities = parseAuditReport(fullAudit.stdout, "full");
 
   assertDeploymentSecurity({
     dockerfile: await readFile(resolve(root, "Dockerfile"), "utf8"),
@@ -103,7 +116,7 @@ async function main() {
     caddy: await readFile(resolve(root, "deploy/caddy/Caddyfile"), "utf8"),
   });
   process.stdout.write(
-    `보안 게이트 통과: ${String(candidates.length)}개 test file, moderate/high/critical 0, low ${String(vulnerabilities.low ?? 0)}\n`,
+    `보안 게이트 통과: ${String(candidates.length)}개 test file, production moderate/high/critical 0 (low ${String(productionVulnerabilities.low ?? 0)}), full moderate/high/critical 0 (low ${String(fullVulnerabilities.low ?? 0)})\n`,
   );
 }
 

@@ -725,6 +725,7 @@ mod tests {
             json!([
                 "core:event:allow-listen",
                 "core:event:allow-unlisten",
+                "dialog:allow-open",
                 "allow-bootstrap",
                 "allow-query",
                 "allow-command",

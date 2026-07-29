@@ -50,7 +50,7 @@ function workflowStepByName(workflow, name) {
   assert.equal(matches.length, 1, `${name} workflow step은 정확히 하나여야 합니다`);
   const [match] = matches;
   const start = match.index;
-  const end = workflow.indexOf("\n      - name: ", start + 1);
+  const end = workflow.indexOf("\n      - ", start + 1);
   return { content: workflow.slice(start, end === -1 ? undefined : end), offset: start };
 }
 
@@ -421,4 +421,67 @@ test("원격 SurrealDB의 Compose와 Kubernetes runtime 보안 profile을 고정
     "          volumeMounts:\n            - name: data\n              mountPath: /data\n            - name: runtime-secrets\n              mountPath: /run/massion-secrets\n              readOnly: true\n            - name: tmp\n              mountPath: /tmp",
     "Kubernetes SurrealDB writable·secret mount가 다릅니다",
   );
+});
+
+test("desktop release는 고정 의존성 설치 뒤 서명 build 전에 보안·Rust gate를 순서대로 통과한다", async () => {
+  const workflow = await readFile(new URL("../.github/workflows/desktop-release.yml", import.meta.url), "utf8");
+  const installStep = workflowStepByName(workflow, "고정 의존성 설치");
+  const securityStep = workflowStepByName(workflow, "서명 전 보안 검증");
+  const rustStep = workflowStepByName(workflow, "Tauri Rust 검증");
+  const buildStep = workflowStepByName(workflow, "개인용 후보 빌드");
+
+  assert.ok(
+    installStep.offset < securityStep.offset &&
+      securityStep.offset < rustStep.offset &&
+      rustStep.offset < buildStep.offset,
+    "desktop release gate 순서가 고정 의존성 설치 → 보안 → Rust → 서명 build가 아닙니다",
+  );
+  expectSingleProperty(securityStep.content, 8, "run", "pnpm verify:security", "desktop 보안 gate 명령이 다릅니다");
+  expectSingleProperty(
+    rustStep.content,
+    8,
+    "run",
+    "cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml --locked",
+    "desktop Rust gate 명령이 다릅니다",
+  );
+
+  const outsideBuild = `${workflow.slice(0, buildStep.offset)}${workflow.slice(buildStep.offset + buildStep.content.length)}`;
+  const anonymousSecretStep = '      - run: echo "${{ secrets.APPLE_ID }}"';
+  const leakedWorkflow = workflow.replace(
+    "\n      - name: 개인용 후보 검증",
+    `\n${anonymousSecretStep}\n\n      - name: 개인용 후보 검증`,
+  );
+  const leakedBuildStep = workflowStepByName(leakedWorkflow, "개인용 후보 빌드");
+  const outsideLeakedBuild = `${leakedWorkflow.slice(0, leakedBuildStep.offset)}${leakedWorkflow.slice(leakedBuildStep.offset + leakedBuildStep.content.length)}`;
+  assert.equal(
+    leakedBuildStep.content.includes(anonymousSecretStep),
+    false,
+    "익명 workflow 단계를 build 단계로 오인하면 안 됩니다",
+  );
+  assert.equal(
+    outsideLeakedBuild.includes(anonymousSecretStep),
+    true,
+    "build 직후 익명 단계의 secret 참조를 놓치면 안 됩니다",
+  );
+  for (const secret of [
+    "APPLE_CERTIFICATE",
+    "APPLE_CERTIFICATE_PASSWORD",
+    "APPLE_SIGNING_IDENTITY",
+    "APPLE_ID",
+    "APPLE_PASSWORD",
+    "APPLE_TEAM_ID",
+  ]) {
+    expectSingleProperty(
+      buildStep.content,
+      10,
+      secret,
+      `\${{ secrets.${secret} }}`,
+      `${secret} signing secret이 build 단계에 정확히 하나 있어야 합니다`,
+    );
+    assert.doesNotMatch(
+      outsideBuild,
+      new RegExp(`secrets\\.${secret}\\b`, "u"),
+      `${secret}는 build 밖에서 사용하면 안 됩니다`,
+    );
+  }
 });

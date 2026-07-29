@@ -44,6 +44,12 @@ jobs:
       - name: 고정 의존성 설치
         run: pnpm install --frozen-lockfile
 
+      - name: 서명 전 보안 검증
+        run: pnpm verify:security
+
+      - name: Tauri Rust 검증
+        run: cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml --locked
+
       - name: 개인용 후보 빌드
         env:
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}

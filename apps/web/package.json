@@ -46,7 +46,7 @@
     "@types/react-dom": "19.2.3",
     "@vitejs/plugin-react": "6.0.3",
     "autoprefixer": "10.4.20",
-    "postcss": "8.4.49",
+    "postcss": "8.5.25",
     "tailwindcss": "3.4.17",
     "@massion/application": "workspace:*",
     "@massion/extension-host": "workspace:*",
