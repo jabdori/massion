@@ -284,3 +284,13 @@ DEFINE INDEX model_verification_evidence_account ON model_verification_evidence 
 DEFINE EVENT model_verification_evidence_immutable ON TABLE model_verification_evidence WHEN $event IN ['UPDATE', 'DELETE'] THEN { THROW 'Model verification evidence는 immutable입니다'; };
 `,
 );
+
+// prettier-ignore -- migration SQL의 공백도 checksum에 포함됩니다.
+export const ROUTE_ATTEMPT_EXECUTION_LINEAGE_MIGRATION = defineMigration(
+  "0099-route-attempt-execution-lineage",
+  `
+DEFINE FIELD execution_id ON route_attempt TYPE option<string>;
+DEFINE FIELD optimization_batch_id ON route_attempt TYPE option<string>;
+DEFINE INDEX route_attempt_execution ON route_attempt FIELDS organization_id, execution_id;
+`,
+);

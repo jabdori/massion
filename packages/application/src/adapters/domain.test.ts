@@ -16,6 +16,7 @@ import {
 import { IdentityService, OrganizationService } from "@massion/identity";
 import { OrganizationGraphService } from "@massion/organization";
 import { createDatabase } from "@massion/storage";
+import { SubscriptionPolicyStore } from "@massion/subscriptions";
 import { WorkService } from "@massion/work";
 import { WorkspaceService } from "@massion/workspace";
 import { describe, expect, it, vi } from "vitest";
@@ -268,7 +269,10 @@ describe("Application domain adapters", () => {
     });
     const identities = await IdentityService.create(database);
     const organizations = await OrganizationService.create(database);
-    const owner = await identities.registerPersonalUser({ email: "emergency-command@example.com", displayName: "Owner" });
+    const owner = await identities.registerPersonalUser({
+      email: "emergency-command@example.com",
+      displayName: "Owner",
+    });
     const context = await organizations.resolveTenantContext(owner.user.user_id, owner.organization.organization_id);
     const permits = await PermitStore.create(database, organizations);
     const emergency = await EmergencyControl.create(database, organizations, permits);
@@ -300,7 +304,10 @@ describe("Application domain adapters", () => {
     });
     const identities = await IdentityService.create(database);
     const organizations = await OrganizationService.create(database);
-    const owner = await identities.registerPersonalUser({ email: "emergency-release@example.com", displayName: "Owner" });
+    const owner = await identities.registerPersonalUser({
+      email: "emergency-release@example.com",
+      displayName: "Owner",
+    });
     const context = await organizations.resolveTenantContext(owner.user.user_id, owner.organization.organization_id);
     const policies = await PolicyStore.create(database, organizations);
     const governance = await GovernanceService.create(database, organizations, policies);
@@ -952,6 +959,45 @@ describe("Application domain adapters", () => {
     ]) {
       expect(serialized).not.toContain(forbidden);
     }
+  });
+
+  it("구독 승인 방식 생략은 실제 Store의 공통·활성 기본값과 연결 불가 계약에 위임한다", async () => {
+    await using database = await createDatabase({ url: "mem://", namespace: "massion", database: crypto.randomUUID() });
+    const identities = await IdentityService.create(database);
+    const organizations = await OrganizationService.create(database);
+    const owner = await identities.registerPersonalUser({ email: "policy-default@example.com", displayName: "Owner" });
+    const context = await organizations.resolveTenantContext(owner.user.user_id, owner.organization.organization_id);
+    const policies = await SubscriptionPolicyStore.create(database, organizations);
+    const registry = new ApplicationCommandRegistry(await ApplicationCommandStore.create(database, organizations));
+    registerApplicationDomainCommands(registry, { subscriptionPolicy: policies });
+    const configure = async (providerId: string, approvalMode?: unknown, expectedRevision?: number) =>
+      await registry.dispatch(context, ["subscription:write"], {
+        schemaVersion: "massion.application.v1",
+        commandId: crypto.randomUUID(),
+        correlationId: crypto.randomUUID(),
+        operation: "subscription.policy.configure",
+        ...(expectedRevision === undefined ? {} : { expectedRevision }),
+        payload: {
+          providerId,
+          credentialPolicy: "adaptive",
+          ...(approvalMode === undefined ? {} : { approvalMode }),
+        },
+      });
+
+    await expect(configure("openai-codex")).resolves.toMatchObject({
+      data: { providerId: "openai-codex", approvalMode: "automatic", version: 1 },
+    });
+    await expect(configure("openai-codex", "automatic", 1)).resolves.toMatchObject({
+      data: { approvalMode: "automatic", version: 2 },
+    });
+    await expect(configure("openai-codex", undefined, 2)).resolves.toMatchObject({
+      data: { approvalMode: "automatic", version: 3 },
+    });
+    await expect(configure("private-provider")).resolves.toMatchObject({
+      data: { providerId: "private-provider", approvalMode: "deny", version: 1 },
+    });
+    await expect(configure("google-antigravity-cli")).rejects.toThrow();
+    await expect(configure("openai-codex", "unknown", 3)).rejects.toThrow();
   });
 
   it("구독 공유는 조직 정책이 요구할 때만 awaiting-approval이 되고 같은 명령으로 재개된다", async () => {

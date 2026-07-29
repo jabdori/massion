@@ -77,12 +77,18 @@ function providerManifest(providerId: string) {
 
 function providerDefaultApprovalMode(normalizedProviderId: string): SubscriptionApprovalMode {
   const manifest = providerManifest(normalizedProviderId);
-  if (manifest?.connectionSurface === "unavailable") return "deny";
-  const declared = manifest ? subscriptionProviderApprovalModes(manifest) : undefined;
-  if (!declared) return "review";
-  if (declared.includes("review")) return "review";
-  if (declared.includes("deny")) return "deny";
-  return declared[0] ?? "deny";
+  if (!manifest || manifest.connectionSurface === "unavailable") return "deny";
+  const surfaces: readonly ("server" | "edge")[] =
+    manifest.connectionSurface === "server-and-edge"
+      ? ["server", "edge"]
+      : manifest.connectionSurface === "server-only"
+        ? ["server"]
+        : ["edge"];
+  return (
+    (["automatic", "deny", "review"] as const).find((mode) =>
+      surfaces.every((surface) => subscriptionProviderApprovalModes(manifest, surface)?.includes(mode) === true),
+    ) ?? "deny"
+  );
 }
 
 function assertProviderApprovalMode(normalizedProviderId: string, approvalMode: SubscriptionApprovalMode): void {

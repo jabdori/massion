@@ -216,14 +216,7 @@ function providerApprovalMode(providerId: string, value: unknown): SubscriptionP
     throw new Error("공개 연결 표면이 없는 Provider에는 구독 실행 정책이 허용되지 않습니다");
   }
   const declared = manifest ? subscriptionProviderApprovalModes(manifest) : undefined;
-  const selected =
-    value === undefined
-      ? declared?.includes("review")
-        ? "review"
-        : declared?.includes("deny")
-          ? "deny"
-          : (declared?.[0] ?? "review")
-      : subscriptionApprovalMode(value);
+  const selected = subscriptionApprovalMode(value);
   if (declared && !declared.includes(selected)) {
     throw new Error(`이 Provider에서 허용되지 않는 구독 승인 방식입니다: ${selected}`);
   }
@@ -586,8 +579,7 @@ function registerAutonomy(
         const state = transition
           ? await transition.set(context, { mode, expectedRevision: expectedRevision(command) })
           : await autonomy.set(context, { mode, expectedRevision: expectedRevision(command) });
-        const runtimePermissionStatus =
-          "runtimePermissionStatus" in state ? state.runtimePermissionStatus : undefined;
+        const runtimePermissionStatus = "runtimePermissionStatus" in state ? state.runtimePermissionStatus : undefined;
         return result(command, {
           resource: { type: "GovernanceAutonomy", id: context.organizationId, revision: state.revision },
           data: {
@@ -2234,7 +2226,9 @@ function registerSubscriptions(
           commandId: command.commandId,
           providerId,
           credentialPolicy: subscriptionCredentialPolicy(value.credentialPolicy),
-          approvalMode: providerApprovalMode(providerId, value.approvalMode),
+          ...(value.approvalMode === undefined
+            ? {}
+            : { approvalMode: providerApprovalMode(providerId, value.approvalMode) }),
           ...(command.expectedRevision === undefined ? {} : { expectedVersion: command.expectedRevision }),
         });
         return result(command, {

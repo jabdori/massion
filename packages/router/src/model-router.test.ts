@@ -184,6 +184,7 @@ describe("Model Route simulation과 reservation", () => {
     });
     quota = await SubscriptionQuotaService.create(database, organizations);
     policies = await SubscriptionPolicyStore.create(database, organizations);
+    await database.query("DEFINE FIELD trust_origin ON subscription_connector TYPE option<string>;");
     providers = await ProviderService.create(database, organizations, new CredentialVault(randomBytes(32)), {
       accounts,
     });
@@ -277,6 +278,64 @@ describe("Model Route simulation과 reservation", () => {
     expect(reserved.attempt.status).toBe("reserved");
   });
 
+  it("reservation은 실행과 최적화 batch 계보를 route attempt에 저장한다", async () => {
+    const created = await route();
+    const reserved = await router.reserve(context, {
+      commandId: crypto.randomUUID(),
+      executionId: "execution-lineage-1",
+      optimizationBatchId: "optimization-batch-1",
+      routeName: created.name,
+      estimatedTokens: 100,
+      estimatedCostMicros: 1_000,
+    });
+
+    expect(reserved.attempt).toMatchObject({
+      execution_id: "execution-lineage-1",
+      optimization_batch_id: "optimization-batch-1",
+    });
+    const [stored] = await database.query<[Array<{ execution_id?: string; optimization_batch_id?: string }>]>(
+      "SELECT execution_id, optimization_batch_id FROM route_attempt WHERE organization_id = $organization_id AND attempt_id = $attempt_id LIMIT 1;",
+      { organization_id: context.organizationId, attempt_id: reserved.attempt.attempt_id },
+    );
+    expect(stored[0]).toEqual({
+      execution_id: "execution-lineage-1",
+      optimization_batch_id: "optimization-batch-1",
+    });
+  });
+
+  it("새 계보 필드가 없는 reservation은 기존 경로대로 동작한다", async () => {
+    const created = await route();
+    const reserved = await router.reserve(context, {
+      commandId: crypto.randomUUID(),
+      routeName: created.name,
+      estimatedTokens: 100,
+      estimatedCostMicros: 1_000,
+    });
+
+    expect(reserved.attempt).not.toHaveProperty("execution_id");
+    expect(reserved.attempt).not.toHaveProperty("optimization_batch_id");
+  });
+
+  it("같은 commandId의 계보 필드가 같은 재전송은 재사용하고 다른 요청은 거부한다", async () => {
+    const created = await route();
+    const commandId = crypto.randomUUID();
+    const request = {
+      commandId,
+      executionId: "execution-lineage-1",
+      optimizationBatchId: "optimization-batch-1",
+      routeName: created.name,
+      estimatedTokens: 100,
+      estimatedCostMicros: 1_000,
+    };
+    const first = await router.reserve(context, request);
+    const repeated = await router.reserve(context, request);
+
+    expect(repeated.attempt.attempt_id).toBe(first.attempt.attempt_id);
+    await expect(router.reserve(context, { ...request, optimizationBatchId: "optimization-batch-2" })).rejects.toThrow(
+      "같은 commandId에 다른 route 요청을 사용할 수 없습니다",
+    );
+  });
+
   it("조직에 설정된 route를 secret 없이 목록으로 조회한다", async () => {
     const created = await route("weighted");
     await expect(router.listModels(context)).resolves.toEqual([
@@ -310,7 +369,7 @@ describe("Model Route simulation과 reservation", () => {
     await database.query(
       `CREATE subscription_connector CONTENT {
          connector_id: 'codex-evidence-connector', organization_id: $organization_id,
-         owner_user_id: $owner_user_id, location: 'edge',
+         owner_user_id: $owner_user_id, location: 'edge', trust_origin: 'edge-device',
          execution_kind: 'agent-runtime', protocol: 'massion-connector-v1', version: '1.0.0',
          public_key: 'fixture', capabilities: ['openai-codex'], status: 'ready',
          created_at: time::now(), updated_at: time::now()
@@ -428,14 +487,14 @@ describe("Model Route simulation과 reservation", () => {
     await database.query(
       `CREATE subscription_connector CONTENT {
          connector_id: 'codex-review-server', organization_id: $organization_id,
-         owner_user_id: $owner_user_id, location: 'server',
+         owner_user_id: $owner_user_id, location: 'server', trust_origin: 'server-managed',
          execution_kind: 'agent-runtime', protocol: 'codex-app-server', version: '0.144.1',
          public_key: 'server-fixture', capabilities: ['openai-codex'], status: 'ready',
          created_at: time::now(), updated_at: time::now()
        };
        CREATE subscription_connector CONTENT {
          connector_id: 'codex-review-edge', organization_id: $organization_id,
-         owner_user_id: $owner_user_id, location: 'edge',
+         owner_user_id: $owner_user_id, location: 'edge', trust_origin: 'edge-device',
          execution_kind: 'agent-runtime', protocol: 'massion-connector-v1', version: '1.0.0',
          public_key: 'fixture', capabilities: ['openai-codex'], status: 'ready',
          created_at: time::now(), updated_at: time::now()
@@ -570,6 +629,116 @@ describe("Model Route simulation과 reservation", () => {
     expect(reservation.explanation.excluded.join(" ")).toMatch(/Edge 연결 표면.*review/u);
   });
 
+  it.each([
+    {
+      name: "server+edge-device",
+      invalidLocation: "server",
+      invalidTrustOrigin: "edge-device",
+      validLocation: "server",
+      validTrustOrigin: "server-managed",
+    },
+    {
+      name: "edge+server-managed",
+      invalidLocation: "edge",
+      invalidTrustOrigin: "server-managed",
+      validLocation: "edge",
+      validTrustOrigin: "edge-device",
+    },
+    {
+      name: "trust_origin 누락",
+      invalidLocation: "edge",
+      invalidTrustOrigin: undefined,
+      validLocation: "edge",
+      validTrustOrigin: "edge-device",
+    },
+  ] as const)("$name Connector는 제외하고 같은 Provider의 정상 Credential로 넘어간다", async (fixture) => {
+    const suffix = crypto.randomUUID();
+    const invalidConnectorId = `invalid-${suffix}`;
+    const validConnectorId = `valid-${suffix}`;
+    const privateProfileLocator = `private-${suffix}`;
+    const invalidTrustOrigin = fixture.invalidTrustOrigin === undefined ? "" : "trust_origin: $invalid_trust_origin,";
+    await database.query(
+      `CREATE subscription_connector CONTENT {
+         connector_id: $invalid_connector_id, organization_id: $organization_id,
+         owner_user_id: $owner_user_id, location: $invalid_location, ${invalidTrustOrigin}
+         execution_kind: 'agent-runtime', protocol: 'massion.connector.v1', version: '1.0.0',
+         public_key: 'invalid-fixture', capabilities: ['openai'], status: 'ready',
+         created_at: time::now(), updated_at: time::now()
+       };
+       CREATE subscription_connector CONTENT {
+         connector_id: $valid_connector_id, organization_id: $organization_id,
+         owner_user_id: $owner_user_id, location: $valid_location, trust_origin: $valid_trust_origin,
+         execution_kind: 'agent-runtime', protocol: 'massion.connector.v1', version: '1.0.0',
+         public_key: 'valid-fixture', capabilities: ['openai'], status: 'ready',
+         created_at: time::now(), updated_at: time::now()
+       };`,
+      {
+        organization_id: context.organizationId,
+        owner_user_id: context.userId,
+        invalid_connector_id: invalidConnectorId,
+        invalid_location: fixture.invalidLocation,
+        invalid_trust_origin: fixture.invalidTrustOrigin,
+        valid_connector_id: validConnectorId,
+        valid_location: fixture.validLocation,
+        valid_trust_origin: fixture.validTrustOrigin,
+      },
+    );
+    const invalidAccount = await accounts.register(context, {
+      commandId: crypto.randomUUID(),
+      providerId: "openai",
+      alias: `Invalid ${fixture.name}`,
+      connectorId: invalidConnectorId,
+      profileLocator: privateProfileLocator,
+      billingKind: "api-usage",
+    });
+    const validAccount = await accounts.register(context, {
+      commandId: crypto.randomUUID(),
+      providerId: "openai",
+      alias: `Valid ${fixture.name}`,
+      connectorId: validConnectorId,
+      profileLocator: `valid-${suffix}`,
+      billingKind: "api-usage",
+    });
+    await database.query(
+      "UPDATE provider_credential SET priority = 10 WHERE organization_id = $organization_id AND provider_id = 'openai';",
+      { organization_id: context.organizationId },
+    );
+    await providers.addConnectorCredential(context, {
+      commandId: crypto.randomUUID(),
+      providerId: "openai",
+      endpointId: endpoint.endpoint_id,
+      label: `invalid-${fixture.name}`,
+      accountId: invalidAccount.account_id,
+      connectorId: invalidConnectorId,
+      scope: "personal",
+      priority: 0,
+      weight: 1,
+    });
+    await providers.addConnectorCredential(context, {
+      commandId: crypto.randomUUID(),
+      providerId: "openai",
+      endpointId: endpoint.endpoint_id,
+      label: `valid-${fixture.name}`,
+      accountId: validAccount.account_id,
+      connectorId: validConnectorId,
+      scope: "personal",
+      priority: 1,
+      weight: 1,
+    });
+    const created = await route("priority");
+
+    const reservation = await router.reserve(context, {
+      commandId: crypto.randomUUID(),
+      routeName: created.name,
+      estimatedTokens: 10,
+      estimatedCostMicros: 10,
+    });
+
+    expect(reservation.credential?.subscription_connector_id).toBe(validConnectorId);
+    expect(reservation.explanation.excluded.join(" ")).toMatch(/Connector.*신뢰 출처.*조합/u);
+    expect(reservation.explanation.excluded.join(" ")).not.toContain(privateProfileLocator);
+  });
+
   it("제공자별 구독 정책을 실제 credential 선택에 적용하고 사용한 version을 Attempt에 고정한다", async () => {
     const created = await route("round-robin");
     const [credentials] = await database.query<[Array<{ credential_id: string; label: string }>]>(
@@ -699,7 +868,7 @@ describe("Model Route simulation과 reservation", () => {
       `UPDATE provider_credential SET status = 'disabled' WHERE organization_id = $organization_id;
        CREATE subscription_connector CONTENT {
          connector_id: 'router-edge', organization_id: $organization_id, owner_user_id: $owner_user_id,
-         location: 'edge', execution_kind: 'agent-runtime', protocol: 'massion-connector-v1', version: '1.0.0',
+         location: 'edge', trust_origin: 'edge-device', execution_kind: 'agent-runtime', protocol: 'massion-connector-v1', version: '1.0.0',
          public_key: 'fixture', capabilities: ['openai'], status: 'ready', created_at: time::now(), updated_at: time::now()
        };`,
       { organization_id: context.organizationId, owner_user_id: context.userId },
@@ -782,7 +951,7 @@ describe("Model Route simulation과 reservation", () => {
       `UPDATE provider_credential SET status = 'disabled' WHERE organization_id = $organization_id;
        CREATE subscription_connector CONTENT {
          connector_id: 'shared-edge', organization_id: $organization_id, owner_user_id: $owner_user_id,
-         location: 'edge', execution_kind: 'agent-runtime', protocol: 'massion-connector-v1', version: '1.0.0',
+         location: 'edge', trust_origin: 'edge-device', execution_kind: 'agent-runtime', protocol: 'massion-connector-v1', version: '1.0.0',
          public_key: 'fixture', capabilities: ['openai'], status: 'ready', created_at: time::now(), updated_at: time::now()
        };`,
       { organization_id: context.organizationId, owner_user_id: context.userId },
@@ -889,7 +1058,7 @@ describe("Model Route simulation과 reservation", () => {
       `UPDATE provider_credential SET status = 'disabled' WHERE organization_id = $organization_id;
        CREATE subscription_connector CONTENT {
          connector_id: 'encrypted-model', organization_id: $organization_id, owner_user_id: $owner_user_id,
-         location: 'server', execution_kind: 'model', protocol: 'massion-connector-v1', version: '1.0.0',
+         location: 'server', trust_origin: 'server-managed', execution_kind: 'model', protocol: 'massion-connector-v1', version: '1.0.0',
          public_key: 'fixture', capabilities: ['minimax-token-plan'], status: 'ready',
          created_at: time::now(), updated_at: time::now()
        };`,
@@ -1077,7 +1246,7 @@ describe("Model Route simulation과 reservation", () => {
       `UPDATE provider_credential SET status = 'disabled' WHERE organization_id = $organization_id;
        CREATE subscription_connector CONTENT {
          connector_id: 'lineage-edge', organization_id: $organization_id, owner_user_id: $owner_user_id,
-         location: 'edge', execution_kind: 'agent-runtime', protocol: 'massion-connector-v1', version: '1.0.0',
+         location: 'edge', trust_origin: 'edge-device', execution_kind: 'agent-runtime', protocol: 'massion-connector-v1', version: '1.0.0',
          public_key: 'fixture', capabilities: ['openai'], status: 'ready', created_at: time::now(), updated_at: time::now()
        };`,
       { organization_id: context.organizationId, owner_user_id: context.userId },
@@ -1303,12 +1472,12 @@ describe("Model Route simulation과 reservation", () => {
       `UPDATE provider_credential SET status = 'disabled' WHERE organization_id = $organization_id;
        CREATE subscription_connector CONTENT {
          connector_id: 'reauth-edge-a', organization_id: $organization_id, owner_user_id: $owner_user_id,
-         location: 'edge', execution_kind: 'agent-runtime', protocol: 'massion.connector.v1', version: '1.0.0',
+         location: 'edge', trust_origin: 'edge-device', execution_kind: 'agent-runtime', protocol: 'massion.connector.v1', version: '1.0.0',
          public_key: 'fixture-a', capabilities: ['openai'], status: 'ready', created_at: time::now(), updated_at: time::now()
        };
        CREATE subscription_connector CONTENT {
          connector_id: 'reauth-edge-b', organization_id: $organization_id, owner_user_id: $owner_user_id,
-         location: 'edge', execution_kind: 'agent-runtime', protocol: 'massion.connector.v1', version: '1.0.0',
+         location: 'edge', trust_origin: 'edge-device', execution_kind: 'agent-runtime', protocol: 'massion.connector.v1', version: '1.0.0',
          public_key: 'fixture-b', capabilities: ['openai'], status: 'ready', created_at: time::now(), updated_at: time::now()
        };`,
       { organization_id: context.organizationId, owner_user_id: context.userId },

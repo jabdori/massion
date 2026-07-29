@@ -7,6 +7,7 @@ import {
   subscriptionProviderApprovalModes,
   type SubscriptionAccountService,
   type ConnectorLocation,
+  type ConnectorTrustOrigin,
   type SubscriptionPolicyStore,
   type SubscriptionQuotaService,
 } from "@massion/subscriptions";
@@ -31,6 +32,7 @@ import {
   ROUTER_SUBSCRIPTION_ENDPOINT_MIGRATION,
   ROUTER_SUBSCRIPTION_MATERIAL_MIGRATION,
   ROUTER_SUBSCRIPTION_REAUTH_MIGRATION,
+  ROUTE_ATTEMPT_EXECUTION_LINEAGE_MIGRATION,
 } from "./schema.js";
 
 export type RouteKind = "chat" | "embedding";
@@ -144,6 +146,8 @@ export interface RouteAttempt {
   readonly credential_id: string;
   readonly credential_secret_version: number;
   readonly command_id: string;
+  readonly execution_id?: string;
+  readonly optimization_batch_id?: string;
   readonly status: string;
   readonly failure_class?: string;
   readonly status_code?: number;
@@ -242,6 +246,8 @@ export interface RouteRequest {
   readonly routeName: string;
   readonly estimatedTokens: number;
   readonly estimatedCostMicros: number;
+  readonly executionId?: string;
+  readonly optimizationBatchId?: string;
   /** 모델 평가실이 활성 배치에서 선택한 선호 model profile 순서입니다. */
   readonly preferredModelProfileIds?: readonly string[];
   readonly stickyKey?: string;
@@ -639,6 +645,7 @@ export class ModelRouter {
       ROUTE_ATTEMPT_SIDE_EFFECT_MIGRATION,
       ROUTER_SUBSCRIPTION_REAUTH_MIGRATION,
       MODEL_VERIFICATION_EVIDENCE_MIGRATION,
+      ROUTE_ATTEMPT_EXECUTION_LINEAGE_MIGRATION,
     ]);
     return new ModelRouter(database, organizations, providers, subscriptions);
   }
@@ -924,6 +931,8 @@ export class ModelRouter {
       routeName: input.routeName,
       estimatedTokens: input.estimatedTokens,
       estimatedCostMicros: input.estimatedCostMicros,
+      ...(input.executionId !== undefined ? { executionId: input.executionId } : {}),
+      ...(input.optimizationBatchId !== undefined ? { optimizationBatchId: input.optimizationBatchId } : {}),
       ...(input.preferredModelProfileIds ? { preferredModelProfileIds: input.preferredModelProfileIds } : {}),
       ...(stickyKeyHash ? { stickyKeyHash } : {}),
       ...(input.fallbackFromAttemptId ? { fallbackFromAttemptId: input.fallbackFromAttemptId } : {}),
@@ -970,7 +979,7 @@ export class ModelRouter {
         },
       );
       const [attempts] = await tx.query<[RouteAttempt[]]>(
-        "CREATE route_attempt CONTENT { attempt_id: $attempt_id, organization_id: $organization_id, route_id: $route_id, candidate_id: $candidate_id, model_profile_id: $profile_id, credential_id: $credential_id, credential_secret_version: $secret_version, command_id: $command_id, status: 'reserved', selection_sequence: $sequence, estimated_tokens: $tokens, reserved_cost_micros: $cost, sticky_key_hash: $sticky_hash, fallback_from_attempt_id: $fallback_from, quota_snapshot_id: $quota_snapshot_id, routing_policy_version: $routing_policy_version, effective_credential_policy: $effective_credential_policy, subscription_policy_version_id: $subscription_policy_version_id, subscription_policy_version: $subscription_policy_version, explanation_json: $explanation_json, created_at: time::now(), updated_at: time::now() } RETURN AFTER;",
+        "CREATE route_attempt CONTENT { attempt_id: $attempt_id, organization_id: $organization_id, execution_id: $execution_id, optimization_batch_id: $optimization_batch_id, route_id: $route_id, candidate_id: $candidate_id, model_profile_id: $profile_id, credential_id: $credential_id, credential_secret_version: $secret_version, command_id: $command_id, status: 'reserved', selection_sequence: $sequence, estimated_tokens: $tokens, reserved_cost_micros: $cost, sticky_key_hash: $sticky_hash, fallback_from_attempt_id: $fallback_from, quota_snapshot_id: $quota_snapshot_id, routing_policy_version: $routing_policy_version, effective_credential_policy: $effective_credential_policy, subscription_policy_version_id: $subscription_policy_version_id, subscription_policy_version: $subscription_policy_version, explanation_json: $explanation_json, created_at: time::now(), updated_at: time::now() } RETURN AFTER;",
         {
           attempt_id: randomUUID(),
           organization_id: context.organizationId,
@@ -980,6 +989,8 @@ export class ModelRouter {
           credential_id: simulation.credential.credential_id,
           secret_version: simulation.credential.secret_version,
           command_id: input.commandId,
+          execution_id: input.executionId,
+          optimization_batch_id: input.optimizationBatchId,
           sequence,
           tokens: input.estimatedTokens,
           cost: input.estimatedCostMicros,
@@ -1357,14 +1368,22 @@ export class ModelRouter {
             const account = access.account;
             if (account.provider_id !== credential.provider_id) throw new Error("Provider binding 불일치");
             if (account.connector_id !== connectorId) throw new Error("Connector binding 불일치");
+            const [connectors] = await executor.query<
+              [Array<{ readonly location: ConnectorLocation; readonly trust_origin?: ConnectorTrustOrigin }>]
+            >(
+              `SELECT location, trust_origin FROM subscription_connector
+               WHERE organization_id = $organization_id AND connector_id = $connector_id LIMIT 1;`,
+              { organization_id: context.organizationId, connector_id: connectorId },
+            );
+            const connector = connectors[0];
+            if (!connector) throw new Error("Connector 연결 표면을 찾을 수 없습니다");
+            if (!(
+              (connector.location === "server" && connector.trust_origin === "server-managed") ||
+              (connector.location === "edge" && connector.trust_origin === "edge-device")
+            )) {
+              throw new Error("Connector 위치와 신뢰 출처 조합이 유효하지 않습니다");
+            }
             if (subscriptionManifest && subscriptionPolicy) {
-              const [connectors] = await executor.query<[Array<{ readonly location: ConnectorLocation }>]>(
-                `SELECT location FROM subscription_connector
-                 WHERE organization_id = $organization_id AND connector_id = $connector_id LIMIT 1;`,
-                { organization_id: context.organizationId, connector_id: connectorId },
-              );
-              const connector = connectors[0];
-              if (!connector) throw new Error("Connector 연결 표면을 찾을 수 없습니다");
               const supportedApprovalModes = subscriptionProviderApprovalModes(
                 subscriptionManifest,
                 connector.location,

@@ -108,15 +108,32 @@ describe("구독 제공자별 계정 선택 정책 정본", () => {
     ).rejects.toThrow();
   });
 
-  it("미설정 Edge ACP 제공자는 지원하지 않는 review 대신 안전한 deny 기본값을 반환한다", async () => {
+  it("미설정 Edge ACP 제공자는 공통 지원 방식 중 automatic을 기본값으로 반환한다", async () => {
     await expect(policies.resolve(context, "github-copilot")).resolves.toEqual({
       providerId: "github-copilot",
       credentialPolicy: "adaptive",
-      approvalMode: "deny",
+      approvalMode: "automatic",
       version: 0,
       source: "default",
     });
   });
+
+  it("Codex 혼합 연결 표면은 합집합의 review가 아니라 공통 automatic을 기본값으로 반환한다", async () => {
+    await expect(policies.resolve(context, "openai-codex")).resolves.toEqual({
+      providerId: "openai-codex",
+      credentialPolicy: "adaptive",
+      approvalMode: "automatic",
+      version: 0,
+      source: "default",
+    });
+  });
+
+  it.each(["minimax-token-plan", "private-provider", "google-antigravity-cli"])(
+    "활성 표면의 공통 승인 방식을 확인할 수 없는 %s Provider는 deny를 기본값으로 반환한다",
+    async (providerId) => {
+      await expect(policies.resolve(context, providerId)).resolves.toMatchObject({ approvalMode: "deny" });
+    },
+  );
 
   it("Codex Provider 정책은 서버 연결에서 지원하는 review를 저장할 수 있다", async () => {
     await expect(
