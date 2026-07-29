@@ -24,7 +24,11 @@ function SidebarHeader({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="sidebar-header"
-      className={cn("border-b border-sidebar-border px-3 py-4 group-data-[collapsed=true]/sidebar:px-2", className)}
+      /* 46px. 네 열의 헤더 밴드가 같은 높이여야 가로선이 화면을 가로지릅니다(DESIGN.md). */
+      className={cn(
+        "flex h-[46px] items-center border-b border-sidebar-border px-3 group-data-[collapsed=true]/sidebar:px-2",
+        className,
+      )}
       {...props}
     />
   );

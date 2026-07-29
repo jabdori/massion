@@ -2987,7 +2987,7 @@ function GrowthSurface({
                       {/* 자동 채택은 사람을 거치지 않았다는 안전 정보라 타임스탬프와 같은 무게로 두지 않습니다. */}
                       <dd className="flex flex-wrap items-baseline gap-2 text-primary">
                         {selected.adoption.approvalId === undefined ? (
-                          <span className="rounded-[4px] border border-gate/50 px-1.5 py-0.5 text-[12px] text-gate">
+                          <span className="rounded-[5px] border border-gate/50 px-1.5 py-0.5 text-[12px] text-gate">
                             자동
                           </span>
                         ) : (
@@ -3599,7 +3599,7 @@ function BudgetSurface({ service }: { service: DesktopService }) {
             <li>
               <button
                 aria-pressed={selectedId === undefined}
-                className={`w-full rounded-[4px] px-2 py-1.5 text-left text-[13px] transition-colors duration-150 ${
+                className={`w-full rounded-[5px] px-2 py-1.5 text-left text-[13px] transition-colors duration-150 ${
                   selectedId === undefined
                     ? "bg-surface-2 text-primary"
                     : "text-secondary hover:bg-[rgb(255_255_255/0.027)]"
@@ -3616,7 +3616,7 @@ function BudgetSurface({ service }: { service: DesktopService }) {
               <li key={route.routeId}>
                 <button
                   aria-pressed={selectedId === route.routeId}
-                  className={`w-full rounded-[4px] px-2 py-2 text-left transition-colors duration-150 ${
+                  className={`w-full rounded-[5px] px-2 py-2 text-left transition-colors duration-150 ${
                     selectedId === route.routeId ? "bg-surface-2" : "hover:bg-[rgb(255_255_255/0.027)]"
                   }`}
                   onClick={() => {
@@ -3640,7 +3640,7 @@ function BudgetSurface({ service }: { service: DesktopService }) {
             {RANGES.map((range) => (
               <button
                 aria-pressed={days === range.value}
-                className={`rounded-[4px] px-2.5 py-0.5 text-[12px] transition-colors duration-150 ${
+                className={`rounded-[5px] px-2.5 py-0.5 text-[12px] transition-colors duration-150 ${
                   days === range.value ? "bg-surface-2 text-primary" : "text-muted hover:text-secondary"
                 }`}
                 key={range.value}
@@ -3805,7 +3805,7 @@ function DailyActivity({ attempts }: { attempts: readonly RouteAttemptView[] }) 
        */}
       {hovered === undefined ? null : (
         <div
-          className="pointer-events-none fixed z-50 -translate-x-1/2 -translate-y-[calc(100%+8px)] whitespace-nowrap rounded-[4px] border border-line-strong bg-surface-2 px-2 py-1 text-[11px] text-secondary"
+          className="pointer-events-none fixed z-50 -translate-x-1/2 -translate-y-[calc(100%+8px)] whitespace-nowrap rounded-[5px] border border-line-strong bg-surface-2 px-2 py-1 text-[11px] text-secondary"
           role="tooltip"
           style={{ left: hovered.x, top: hovered.y }}
         >
@@ -3858,6 +3858,13 @@ function DailyActivity({ attempts }: { attempts: readonly RouteAttemptView[] }) 
                               : "bg-fg-3"
                       }`}
                       key={weekday}
+                      onBlur={() => {
+                        setHovered(undefined);
+                      }}
+                      onFocus={(event) => {
+                        const box = event.currentTarget.getBoundingClientRect();
+                        setHovered({ day: key, x: box.left + box.width / 2, y: box.top });
+                      }}
                       onMouseEnter={(event) => {
                         // 칸의 상자를 기준으로 잡습니다. 커서 좌표를 쓰면 카드가 따라다닙니다.
                         const box = event.currentTarget.getBoundingClientRect();
@@ -3866,6 +3873,7 @@ function DailyActivity({ attempts }: { attempts: readonly RouteAttemptView[] }) 
                       onMouseLeave={() => {
                         setHovered(undefined);
                       }}
+                      tabIndex={value === undefined ? -1 : 0}
                     />
                   );
                 })}
@@ -3924,10 +3932,17 @@ function AttemptRow({ attempt, onOpen }: { attempt: RouteAttemptView; onOpen: (a
   const speed = speedOf(attempt);
   return (
     <tr
-      className="cursor-pointer border-b border-border/60 hover:bg-[rgb(255_255_255/0.027)]"
+      className="cursor-pointer border-b border-border/60 outline-none hover:bg-[rgb(255_255_255/0.027)] focus-visible:bg-[rgb(255_255_255/0.047)]"
       onClick={() => {
         onOpen(attempt);
       }}
+      onKeyDown={(event) => {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        event.preventDefault();
+        onOpen(attempt);
+      }}
+      role="button"
+      tabIndex={0}
     >
       <td className="whitespace-nowrap py-1.5 pl-5 pr-3 font-mono text-[12px] tabular-nums text-muted">
         {attempt.at.slice(5, 16).replace("T", " ")}
@@ -4127,7 +4142,7 @@ function RouteGuardBar({
         <span className="text-[12px] text-muted">차단 $</span>
         <input
           aria-label="차단 한도"
-          className="w-[92px] rounded-[4px] border border-border bg-canvas px-2 py-1 text-right font-mono text-[12px] tabular-nums text-secondary outline-none focus-visible:border-fg-3"
+          className="w-[92px] rounded-[5px] border border-border bg-canvas px-2 py-1 text-right font-mono text-[12px] tabular-nums text-secondary outline-none focus-visible:border-fg-3"
           min="0"
           onChange={(event) => {
             onChangeGuard({ ...guard, hardMicros: Math.round(Number(event.target.value) * 1_000_000) });
@@ -4142,7 +4157,7 @@ function RouteGuardBar({
         {guard.softMicros.map((micros) => (
           <button
             aria-label={`알림 ${costText(micros)} 제거`}
-            className="inline-flex items-center gap-1 rounded-[4px] border border-gate/40 px-1.5 py-0.5 font-mono text-[11px] tabular-nums text-gate outline-none transition-colors duration-150 hover:border-danger hover:text-danger"
+            className="inline-flex items-center gap-1 rounded-[5px] border border-gate/40 px-1.5 py-0.5 font-mono text-[11px] tabular-nums text-gate outline-none transition-colors duration-150 hover:border-danger hover:text-danger"
             key={micros}
             onClick={() => {
               onChangeGuard({ ...guard, softMicros: guard.softMicros.filter((value) => value !== micros) });
@@ -4155,7 +4170,7 @@ function RouteGuardBar({
         ))}
         <input
           aria-label="알림 추가"
-          className="w-[76px] rounded-[4px] border border-border bg-canvas px-2 py-0.5 text-right font-mono text-[11px] tabular-nums text-secondary outline-none placeholder:text-muted focus-visible:border-fg-3"
+          className="w-[76px] rounded-[5px] border border-border bg-canvas px-2 py-0.5 text-right font-mono text-[11px] tabular-nums text-secondary outline-none placeholder:text-muted focus-visible:border-fg-3"
           onChange={(event) => {
             onChangeDraft(event.target.value);
           }}
@@ -4237,7 +4252,7 @@ function ChoiceGroup<T extends string>({
           return (
             <button
               aria-pressed={active}
-              className={`rounded-[4px] px-3 py-1 text-[12px] transition-colors duration-150 ${
+              className={`rounded-[5px] px-3 py-1 text-[12px] transition-colors duration-150 ${
                 active ? "bg-surface-2 text-primary" : "text-muted"
               } ${frozen ? "cursor-default" : "hover:text-secondary"}`}
               disabled={frozen}
@@ -4335,7 +4350,7 @@ function ProviderAddForm({
       <label className="grid gap-1.5">
         <span className="text-[12px] text-muted">이름</span>
         <input
-          className="rounded-[4px] border border-border bg-canvas px-2.5 py-1.5 text-[13px] text-secondary outline-none placeholder:text-muted focus-visible:border-fg-3"
+          className="rounded-[5px] border border-border bg-canvas px-2.5 py-1.5 text-[13px] text-secondary outline-none placeholder:text-muted focus-visible:border-fg-3"
           onChange={(event) => {
             setDraft({ ...draft, displayName: event.target.value });
           }}
@@ -4346,7 +4361,7 @@ function ProviderAddForm({
       <label className="grid gap-1.5">
         <span className="text-[12px] text-muted">어댑터</span>
         <select
-          className="rounded-[4px] border border-border bg-canvas px-2.5 py-1.5 text-[13px] text-secondary outline-none focus-visible:border-fg-3"
+          className="rounded-[5px] border border-border bg-canvas px-2.5 py-1.5 text-[13px] text-secondary outline-none focus-visible:border-fg-3"
           onChange={(event) => {
             setDraft({ ...draft, adapterKind: event.target.value });
           }}
@@ -4362,7 +4377,7 @@ function ProviderAddForm({
       <label className="grid gap-1.5">
         <span className="text-[12px] text-muted">Base URL</span>
         <input
-          className="rounded-[4px] border border-border bg-canvas px-2.5 py-1.5 font-mono text-[12px] text-secondary outline-none placeholder:text-muted focus-visible:border-fg-3"
+          className="rounded-[5px] border border-border bg-canvas px-2.5 py-1.5 font-mono text-[12px] text-secondary outline-none placeholder:text-muted focus-visible:border-fg-3"
           onChange={(event) => {
             setDraft({ ...draft, baseUrl: event.target.value });
           }}
@@ -4376,7 +4391,7 @@ function ProviderAddForm({
         </span>
         <input
           autoComplete="off"
-          className="rounded-[4px] border border-border bg-canvas px-2.5 py-1.5 font-mono text-[12px] text-secondary outline-none placeholder:text-muted focus-visible:border-fg-3"
+          className="rounded-[5px] border border-border bg-canvas px-2.5 py-1.5 font-mono text-[12px] text-secondary outline-none placeholder:text-muted focus-visible:border-fg-3"
           onChange={(event) => {
             setSecret(event.target.value);
           }}
@@ -4386,7 +4401,7 @@ function ProviderAddForm({
       </label>
       <div className="flex justify-end">
         <button
-          className="rounded-[4px] border border-control px-3 py-1.5 text-[13px] text-secondary transition-colors duration-150 hover:border-fg-3 hover:text-primary disabled:opacity-50"
+          className="rounded-[5px] border border-control px-3 py-1.5 text-[13px] text-secondary transition-colors duration-150 hover:border-fg-3 hover:text-primary disabled:opacity-50"
           disabled={saving || !draft.displayName.trim() || !draft.baseUrl.trim()}
           type="submit"
         >
@@ -4510,7 +4525,7 @@ function ProviderSurface({ service }: { service: DesktopService }) {
         <div className="px-2 pb-2">
           <input
             aria-label="프로바이더 검색"
-            className="w-full rounded-[4px] border border-border bg-canvas px-2.5 py-1.5 text-[13px] text-secondary outline-none placeholder:text-muted focus-visible:border-fg-3"
+            className="w-full rounded-[5px] border border-border bg-canvas px-2.5 py-1.5 text-[13px] text-secondary outline-none placeholder:text-muted focus-visible:border-fg-3"
             onChange={(event) => {
               setQuery(event.target.value);
             }}
@@ -4567,7 +4582,7 @@ function ProviderSurface({ service }: { service: DesktopService }) {
         </nav>
         <div className="border-t border-border p-2">
           <button
-            className="w-full rounded-[4px] border border-control px-2.5 py-1.5 text-[13px] text-secondary transition-colors duration-150 hover:border-fg-3 hover:text-primary"
+            className="w-full rounded-[5px] border border-control px-2.5 py-1.5 text-[13px] text-secondary transition-colors duration-150 hover:border-fg-3 hover:text-primary"
             onClick={() => {
               setAddOpen((open) => !open);
             }}
@@ -4616,7 +4631,7 @@ function ProviderSurface({ service }: { service: DesktopService }) {
           {selected === undefined || selected.models.length === 0 ? null : (
             <span className="ml-auto flex gap-1">
               <button
-                className="rounded-[4px] border border-border px-1.5 py-0.5 text-[11px] text-muted transition-colors duration-150 hover:border-control hover:text-secondary"
+                className="rounded-[5px] border border-border px-1.5 py-0.5 text-[11px] text-muted transition-colors duration-150 hover:border-control hover:text-secondary"
                 onClick={() => {
                   setDisabledModels(new Set());
                 }}
@@ -4625,7 +4640,7 @@ function ProviderSurface({ service }: { service: DesktopService }) {
                 모두 켜기
               </button>
               <button
-                className="rounded-[4px] border border-border px-1.5 py-0.5 text-[11px] text-muted transition-colors duration-150 hover:border-control hover:text-secondary"
+                className="rounded-[5px] border border-border px-1.5 py-0.5 text-[11px] text-muted transition-colors duration-150 hover:border-control hover:text-secondary"
                 onClick={() => {
                   setDisabledModels(new Set(selected.models.map((model) => model.modelProfileId)));
                 }}
@@ -4667,7 +4682,7 @@ function ProviderSurface({ service }: { service: DesktopService }) {
               </div>
               <DialogClose
                 aria-label="닫기"
-                className="shrink-0 rounded-[4px] p-1 text-muted outline-none hover:text-primary"
+                className="shrink-0 rounded-[5px] p-1 text-muted outline-none hover:text-primary"
               >
                 <X aria-hidden="true" size={15} />
               </DialogClose>
@@ -4709,7 +4724,7 @@ function ProviderModelList({
           <li key={model.modelProfileId}>
             <button
               aria-pressed={on}
-              className="flex w-full items-center gap-2.5 rounded-[4px] px-2 py-1.5 text-left outline-none transition-colors duration-150 hover:bg-[rgb(255_255_255/0.027)]"
+              className="flex w-full items-center gap-2.5 rounded-[5px] px-2 py-1.5 text-left outline-none transition-colors duration-150 hover:bg-[rgb(255_255_255/0.027)]"
               onClick={() => {
                 onToggle(model.modelProfileId);
               }}
@@ -4784,7 +4799,7 @@ function ProviderOverviewTab({
           <span className="font-mono text-[11px] tabular-nums text-muted">{mine.length}</span>
         </div>
         {mine.length === 0 ? (
-          <div className="rounded-[4px] border border-border px-3 py-6 text-center">
+          <div className="rounded-[5px] border border-border px-3 py-6 text-center">
             <p className="text-[12px] text-muted">
               {usesAccounts ? "연결된 계정이 없습니다." : "등록된 키가 없습니다."}
             </p>
@@ -4797,7 +4812,7 @@ function ProviderOverviewTab({
           </ul>
         )}
         <button
-          className="mt-2 w-full rounded-[4px] border border-control px-3 py-1.5 text-[12px] text-secondary transition-colors duration-150 hover:border-fg-3 hover:text-primary"
+          className="mt-2 w-full rounded-[5px] border border-control px-3 py-1.5 text-[12px] text-secondary transition-colors duration-150 hover:border-fg-3 hover:text-primary"
           type="button"
         >
           {usesAccounts ? "계정 추가" : "API 키 추가"}
@@ -4814,7 +4829,7 @@ function ProviderOverviewTab({
 function AccountCard({ account }: { account: SubscriptionAccountView }) {
   const used = account.minimumRemainingRatio === undefined ? undefined : 1 - account.minimumRemainingRatio;
   return (
-    <li className="rounded-[4px] border border-border px-3 py-2.5">
+    <li className="rounded-[5px] border border-border px-3 py-2.5">
       <div className="flex items-baseline gap-2">
         <span className="shrink-0 text-[11px]">
           {account.quotaExhausted === true ? (
@@ -5514,7 +5529,7 @@ function RunStatusCard({
 
   if (blocked) {
     return (
-      <div aria-label="실행 상태" className="my-2 rounded-[4px] border border-danger/40 px-3 py-2.5" role="status">
+      <div aria-label="실행 상태" className="my-2 rounded-[5px] border border-danger/40 px-3 py-2.5" role="status">
         <div className="flex items-start gap-2.5">
           <WarningCircle aria-hidden="true" className="mt-0.5 shrink-0 text-danger" size={16} />
           <div className="min-w-0 flex-1">
@@ -5527,7 +5542,7 @@ function RunStatusCard({
             </p>
           </div>
           <button
-            className="shrink-0 rounded-[4px] border border-control px-2.5 py-1 text-[12px] text-secondary transition-colors duration-150 hover:border-fg-3 hover:text-primary disabled:opacity-50"
+            className="shrink-0 rounded-[5px] border border-control px-2.5 py-1 text-[12px] text-secondary transition-colors duration-150 hover:border-fg-3 hover:text-primary disabled:opacity-50"
             disabled={pendingRunAction !== undefined}
             onClick={() => {
               onControlRun("resume");
@@ -5545,7 +5560,7 @@ function RunStatusCard({
     return (
       <div
         aria-label="실행 상태"
-        className="my-2 flex items-center gap-2.5 rounded-[4px] border border-gate/40 px-3 py-2.5"
+        className="my-2 flex items-center gap-2.5 rounded-[5px] border border-gate/40 px-3 py-2.5"
         role="status"
       >
         <ShieldCheck aria-hidden="true" className="shrink-0 text-gate" size={16} />
@@ -5944,19 +5959,19 @@ function Composer({
 }: ComposerProps) {
   const fullAccess = autonomyMode === "full-access";
   const selectClass =
-    "cursor-pointer rounded-[4px] border border-transparent bg-transparent py-0.5 pl-1.5 pr-0.5 text-[11px] text-muted outline-none transition-colors duration-150 hover:border-border hover:text-secondary focus-visible:border-fg-3";
+    "cursor-pointer rounded-[5px] border border-transparent bg-transparent py-0.5 pl-1.5 pr-0.5 text-[11px] text-muted outline-none transition-colors duration-150 hover:border-border hover:text-secondary focus-visible:border-fg-3";
   return (
     <div className="border-t border-border bg-canvas px-5 pb-4 pt-3" data-testid="directive-composer">
       <div className="mx-auto max-w-[860px]">
         {/* 아직 반영되지 않은 지시. 인풋 위에 서서 처리 시점을 고르게 합니다. */}
         {queued.map((directive) => (
           <div
-            className="mb-1.5 flex items-center gap-2 rounded-[4px] border border-border bg-surface-1 px-2.5 py-1.5"
+            className="mb-1.5 flex items-center gap-2 rounded-[5px] border border-border bg-surface-1 px-2.5 py-1.5"
             key={directive.id}
           >
             <span className="min-w-0 flex-1 truncate text-[12px] text-secondary">{directive.content}</span>
             <button
-              className="inline-flex shrink-0 items-center gap-1 rounded-[4px] px-1.5 py-0.5 text-[11px] text-muted outline-none transition-colors duration-150 hover:text-primary"
+              className="inline-flex shrink-0 items-center gap-1 rounded-[5px] px-1.5 py-0.5 text-[11px] text-muted outline-none transition-colors duration-150 hover:text-primary"
               onClick={() => {
                 onApplyQueued(directive.id);
               }}
@@ -5967,7 +5982,7 @@ function Composer({
             </button>
             <button
               aria-label="대기 지시 삭제"
-              className="shrink-0 rounded-[4px] p-0.5 text-muted outline-none transition-colors duration-150 hover:text-danger"
+              className="shrink-0 rounded-[5px] p-0.5 text-muted outline-none transition-colors duration-150 hover:text-danger"
               onClick={() => {
                 onDropQueued(directive.id);
               }}
@@ -5980,16 +5995,16 @@ function Composer({
         {/* 문맥 칩. 이 요청이 어느 워크스페이스에서 도는지가 보내기 전에 보여야 합니다. */}
         {workspace === undefined ? null : (
           <div className="mb-2 flex items-center gap-1.5">
-            <span className="inline-flex items-center gap-1.5 rounded-[4px] border border-border px-2 py-0.5 text-[11px] text-muted">
+            <span className="inline-flex items-center gap-1.5 rounded-[5px] border border-border px-2 py-0.5 text-[11px] text-muted">
               <Database aria-hidden="true" size={12} />
               {workspace.name}
             </span>
             {workspace.trusted ? null : (
-              <span className="rounded-[4px] border border-gate/40 px-2 py-0.5 text-[11px] text-gate">신뢰 안 됨</span>
+              <span className="rounded-[5px] border border-gate/40 px-2 py-0.5 text-[11px] text-gate">신뢰 안 됨</span>
             )}
           </div>
         )}
-        <div className="rounded-[4px] border border-control bg-surface-1 focus-within:border-fg-3">
+        <div className="rounded-[5px] border border-control bg-surface-1 focus-within:border-fg-3">
           <label className="sr-only" htmlFor="directive">
             추가 지시
           </label>
@@ -6007,7 +6022,7 @@ function Composer({
           <div className="flex items-center gap-1.5 px-2 pb-2">
             <button
               aria-label="파일 첨부"
-              className="rounded-[4px] p-1 text-muted outline-none transition-colors duration-150 hover:text-primary"
+              className="rounded-[5px] p-1 text-muted outline-none transition-colors duration-150 hover:text-primary"
               onClick={() => {
                 onAnnouncement("파일 첨부 준비가 되었습니다.");
               }}
@@ -6017,7 +6032,7 @@ function Composer({
             </button>
             <button
               aria-label="에이전트 멘션"
-              className="rounded-[4px] p-1 text-muted outline-none transition-colors duration-150 hover:text-primary"
+              className="rounded-[5px] p-1 text-muted outline-none transition-colors duration-150 hover:text-primary"
               onClick={() => {
                 onAnnouncement("멘션할 에이전트를 선택하세요.");
               }}
@@ -6030,7 +6045,7 @@ function Composer({
              * 승인과 샌드박스를 우회하는 상태라 안 보면 안 되는 종류입니다.
              */}
             <button
-              className={`ml-1 rounded-[4px] border px-2 py-0.5 text-[11px] outline-none transition-colors duration-150 ${
+              className={`ml-1 rounded-[5px] border px-2 py-0.5 text-[11px] outline-none transition-colors duration-150 ${
                 fullAccess
                   ? "border-gate/50 text-gate"
                   : "border-transparent text-muted hover:border-border hover:text-secondary"
@@ -6075,7 +6090,7 @@ function Composer({
               {/* 실행 중에도 지시는 대기열에 들어갑니다. 중단은 보내기를 대체하지 않습니다. */}
               {running ? (
                 <button
-                  className="ml-1 rounded-[4px] px-2 py-1 text-[12px] text-muted outline-none transition-colors duration-150 hover:text-danger"
+                  className="ml-1 rounded-[5px] px-2 py-1 text-[12px] text-muted outline-none transition-colors duration-150 hover:text-danger"
                   onClick={onStop}
                   type="button"
                 >
@@ -6562,11 +6577,7 @@ function InspectorRecords({
 }) {
   if (values.length === 0)
     return (
-      <InspectorEmpty
-        detail="독립 검증을 통과한 뒤 Records가 남깁니다."
-        icon={ListChecks}
-        message="아직 남은 기록이 없습니다."
-      />
+      <InspectorEmpty detail="독립 검증을 통과하면 남습니다." icon={ListChecks} message="아직 남은 기록이 없습니다." />
     );
   return (
     <>

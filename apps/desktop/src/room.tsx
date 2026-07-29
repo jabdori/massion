@@ -230,7 +230,10 @@ export function RoomChapter({ label, time, until }: { label: string; time: strin
     <div className="flex items-center gap-2.5 py-1">
       <span className="text-[10px] font-semibold tracking-[0.08em] text-muted">{label}</span>
       <span aria-hidden="true" className="h-px flex-1 bg-border" />
-      <time className="font-mono text-[11px] text-muted">{until ? `${time} – ${until}` : `${time} –`}</time>
+      {/* 범위는 두 끝이 다를 때만 범위입니다. 끝이 없으면 대시가 허공에 뜹니다. */}
+      <time className="font-mono text-[11px] text-muted">
+        {until !== undefined && until !== time ? `${time} – ${until}` : time}
+      </time>
     </div>
   );
 }

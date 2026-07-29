@@ -25,7 +25,26 @@ export function useDesktopController(service: DesktopService) {
   const [filter, setFilterState] = useState<DesktopFilter>("active");
   const [query, setQueryState] = useState("");
   const [composer, setComposer] = useState("");
-  const [announcement, setAnnouncement] = useState("");
+  const [announcement, setAnnouncementState] = useState("");
+  /*
+   * 알림은 스스로 사라져야 합니다. 남겨 두면 Work를 세 번 갈아탄 뒤에도 「실행 재개를
+   * 요청했습니다」가 화면 아래에 걸려 있고, 그 문장이 지금 화면과 아무 관계가 없어집니다.
+   */
+  const announcementTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const setAnnouncement = useCallback((message: string) => {
+    setAnnouncementState(message);
+    clearTimeout(announcementTimer.current);
+    if (message === "") return;
+    announcementTimer.current = setTimeout(() => {
+      setAnnouncementState("");
+    }, 6000);
+  }, []);
+  useEffect(
+    () => () => {
+      clearTimeout(announcementTimer.current);
+    },
+    [],
+  );
   const [rootError, setRootError] = useState("");
   const [detailLoading, setDetailLoading] = useState(false);
   const [pendingDirective, setPendingDirective] = useState(false);
