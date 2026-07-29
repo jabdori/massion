@@ -167,9 +167,13 @@ export interface SubscriptionAccountViewV1 { accountId; providerId; alias; scope
 | 언제 | `created_at` |
 | 어느 모델 | `model_profile_id` → `model_profile.model_id` |
 | 얼마 | `actual_cost_micros` · `actual_input_tokens` · `actual_output_tokens` |
-| 실패 이유 | `status` · `failure_class` |
+| 실패 이유 | `status` · `status_code` · `failure_class` |
 | fallback 사슬 | `fallback_from_attempt_id` |
 | **어느 Work** | `command_id` → **Work로 잇는 경로가 없습니다** |
+| **캐시 히트·생성** | **없습니다** — 캐시 토큰이 비용의 대부분을 가르는데 기록되지 않습니다 |
+| **추론 토큰** | **없습니다** |
+| **소요 시간** | **없습니다** — tok/s를 낼 수 없습니다 |
+| **추론 강도** | **없습니다** — 같은 모델도 강도에 따라 비용이 갈립니다 |
 
 `ApplicationQueryMapV1`에 `router.attempts`가 없어 `loadRouteAttempts()`의 실제 구현은
 빈 배열이 아니라 **거부**합니다. 「모르는 것」과 「없는 것」은 다르고, 빈 배열은 「호출이 없었다」로
@@ -189,4 +193,5 @@ export interface SubscriptionAccountViewV1 { accountId; providerId; alias; scope
 - [ ] 소프트 가드 테이블이 선다 — 라우트당 여러 임계값, 넘으면 수신함으로
 - [ ] `router.attempts` 조회를 등록한다 (`router:read`, 최근순, 페이징)
 - [ ] `command_id`에서 Work를 잇는다 — 이게 없으면 「어느 Work가 얼마를 썼나」에 답할 수 없다
+- [ ] `route_attempt`에 `duration_ms` · `cache_read_tokens` · `cache_write_tokens` · `reasoning_tokens` · `effort`를 더한다
 - [ ] `explanation_json`을 상세로 펼친다 (왜 이 모델이 골렸는지 = 인과 사슬의 「모델」 마디)

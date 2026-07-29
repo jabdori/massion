@@ -3291,11 +3291,25 @@ const FAILURE_LABEL: Record<string, string> = {
   quota_exhausted: "한도 소진",
   rate_limited: "속도 제한",
   auth_failed: "인증 거부",
+  upstream_error: "업스트림 오류",
   timeout: "시간 초과",
 };
 
-/** 호출 한 건은 몇 센트 단위라 소수점 둘로는 전부 $0.00이 됩니다. */
+/** 호출 한 건은 몇 센트라 소수점 둘로는 전부 $0.00이 됩니다. 합계는 둘, 행은 넷. */
 const microText = (micros: number): string => `$${(micros / 1_000_000).toFixed(4)}`;
+const countText = (value: number): string => value.toLocaleString("ko-KR");
+const tokenText = (value: number): string =>
+  value >= 100_000_000
+    ? `${(value / 100_000_000).toFixed(1)}억`
+    : value >= 10_000
+      ? `${(value / 10_000).toFixed(1)}만`
+      : countText(value);
+
+const RANGES = [
+  { value: 0, label: "전체" },
+  { value: 30, label: "30일" },
+  { value: 7, label: "7일" },
+] as const;
 
 interface RouteGuards {
   /** 도달하면 차단합니다. `model_route.total_budget_micros`가 이미 이 역할입니다. */
@@ -3304,12 +3318,24 @@ interface RouteGuards {
   softMicros: readonly number[];
 }
 
+function tokensOf(attempt: RouteAttemptView): number {
+  return attempt.inputTokens + attempt.outputTokens;
+}
+
+/** 초당 토큰. 출력과 소요 시간이 둘 다 있어야 말할 수 있습니다. 없으면 말하지 않습니다. */
+function speedOf(attempt: RouteAttemptView): number | undefined {
+  if (attempt.durationMs === undefined || attempt.durationMs <= 0 || attempt.outputTokens === 0) return undefined;
+  return (attempt.outputTokens / attempt.durationMs) * 1000;
+}
+
 function BudgetSurface({ service }: { service: DesktopService }) {
   const [settings, setSettings] = useState<SettingsView>();
   const [attempts, setAttempts] = useState<readonly RouteAttemptView[]>();
   const [error, setError] = useState("");
   const [attemptError, setAttemptError] = useState("");
   const [selectedId, setSelectedId] = useState<string>();
+  const [days, setDays] = useState<number>(30);
+  const [openAttempt, setOpenAttempt] = useState<RouteAttemptView>();
   /* 가드를 쓰는 명령이 아직 계약에 없습니다. 인계: docs/phases/30-surface-parity-agent-ux/settings-contract-handoff.md */
   const [guards, setGuards] = useState<Record<string, RouteGuards>>({});
   const [draft, setDraft] = useState("");
@@ -3339,13 +3365,23 @@ function BudgetSurface({ service }: { service: DesktopService }) {
 
   const routes = settings ? projectModelRoutes(settings.routes, settings.catalog) : [];
   const selected = routes.find((route) => route.routeId === selectedId);
-  const shown = (attempts ?? []).filter((attempt) => selectedId === undefined || attempt.routeId === selectedId);
+  const all = attempts ?? [];
+  /*
+   * 기간은 가장 최근 호출을 기준으로 셉니다. 지금 시각으로 자르면 기록이 하루만 밀려도
+   * 화면이 통째로 비고, 그건 「호출이 없었다」로 읽힙니다.
+   */
+  const latest = all.reduce((newest, attempt) => (attempt.at > newest ? attempt.at : newest), "");
+  const cutoff =
+    days === 0 || latest === ""
+      ? ""
+      : new Date(new Date(latest).getTime() - days * 86_400_000).toISOString().slice(0, 19);
+  const shown = all.filter(
+    (attempt) => (selectedId === undefined || attempt.routeId === selectedId) && attempt.at >= cutoff,
+  );
+
   const spent = routes.reduce((total, route) => total + route.spentMicros, 0);
   const guardOf = (route: ModelRouteView): RouteGuards =>
     guards[route.routeId] ?? { hardMicros: route.totalBudgetMicros, softMicros: [] };
-  const setGuard = (routeId: string, next: RouteGuards) => {
-    setGuards({ ...guards, [routeId]: next });
-  };
 
   return (
     <main aria-label="예산" className="col-span-3 grid min-h-0 min-w-0 grid-cols-[264px_minmax(0,1fr)] bg-canvas">
@@ -3395,29 +3431,29 @@ function BudgetSurface({ service }: { service: DesktopService }) {
         </div>
       </aside>
 
-      <div className="grid min-h-0 min-w-0 grid-rows-[46px_auto_minmax(0,1fr)]">
-        <header className="flex items-baseline gap-2 border-b border-border px-5">
-          <h2 className="text-[15px] font-semibold tracking-[-0.008em] text-primary">호출 기록</h2>
-          {attempts === undefined ? null : (
-            <span className="font-mono text-[11px] tabular-nums text-muted">{shown.length}</span>
-          )}
+      <div className="grid min-h-0 min-w-0 grid-rows-[46px_minmax(0,1fr)]">
+        <header className="flex items-center gap-3 border-b border-border px-5">
+          <h2 className="text-[15px] font-semibold tracking-[-0.008em] text-primary">{selected?.name ?? "전체"}</h2>
+          <div className="ml-auto inline-flex gap-0.5 rounded-[5px] border border-border p-0.5">
+            {RANGES.map((range) => (
+              <button
+                aria-pressed={days === range.value}
+                className={`rounded-[4px] px-2.5 py-0.5 text-[12px] transition-colors duration-150 ${
+                  days === range.value ? "bg-surface-2 text-primary" : "text-muted hover:text-secondary"
+                }`}
+                key={range.value}
+                onClick={() => {
+                  setDays(range.value);
+                }}
+                type="button"
+              >
+                {range.label}
+              </button>
+            ))}
+          </div>
         </header>
 
-        {selected === undefined ? (
-          <div />
-        ) : (
-          <RouteGuardBar
-            draft={draft}
-            guard={guardOf(selected)}
-            onChangeDraft={setDraft}
-            onChangeGuard={(next) => {
-              setGuard(selected.routeId, next);
-            }}
-            route={selected}
-          />
-        )}
-
-        <div className="min-h-0 overflow-x-auto overflow-y-auto">
+        <div className="min-h-0 overflow-y-auto">
           {attemptError ? (
             <div className="px-5 py-3">
               <SurfaceError message={attemptError} />
@@ -3428,32 +3464,334 @@ function BudgetSurface({ service }: { service: DesktopService }) {
               <SurfaceLoading />
             </div>
           ) : null}
-          {attempts !== undefined && shown.length === 0 ? (
-            <p className="px-5 py-3 text-[12px] text-muted">호출이 없습니다.</p>
-          ) : null}
-          {shown.length === 0 ? null : (
-            <table className="w-full min-w-[820px] border-collapse">
-              <thead>
-                <tr className="border-b border-border text-left text-[11px] text-muted">
-                  <th className="py-2 pl-5 pr-3 font-normal">시간</th>
-                  <th className="px-3 py-2 text-right font-normal">토큰</th>
-                  <th className="px-3 py-2 text-right font-normal">~$</th>
-                  <th className="px-3 py-2 font-normal">모델</th>
-                  <th className="px-3 py-2 font-normal">프로바이더</th>
-                  <th className="px-3 py-2 font-normal">상태</th>
-                  <th className="py-2 pl-3 pr-5 font-normal">Work</th>
-                </tr>
-              </thead>
-              <tbody>
-                {shown.map((attempt) => (
-                  <AttemptRow attempt={attempt} key={attempt.attemptId} />
-                ))}
-              </tbody>
-            </table>
+          {attempts === undefined ? null : (
+            <>
+              <UsageStats attempts={shown} />
+              {selected === undefined ? null : (
+                <RouteGuardBar
+                  draft={draft}
+                  guard={guardOf(selected)}
+                  onChangeDraft={setDraft}
+                  onChangeGuard={(next) => {
+                    setGuards({ ...guards, [selected.routeId]: next });
+                  }}
+                />
+              )}
+              <DailyActivity attempts={shown} />
+              <AttemptTable attempts={shown} onOpen={setOpenAttempt} />
+              <UsageBreakdown attempts={shown} />
+            </>
           )}
         </div>
       </div>
+
+      <AttemptDetail
+        attempt={openAttempt}
+        onClose={() => {
+          setOpenAttempt(undefined);
+        }}
+      />
     </main>
+  );
+}
+
+/** 숫자만 있는 칸입니다. 각 칸이 무엇인지는 라벨이 말하고, 문장은 붙이지 않습니다. */
+function UsageStats({ attempts }: { attempts: readonly RouteAttemptView[] }) {
+  const done = attempts.filter((attempt) => attempt.status !== "running");
+  const failed = done.filter((attempt) => attempt.status === "failed").length;
+  const tokens = attempts.reduce((total, attempt) => total + tokensOf(attempt), 0);
+  const cached = attempts.reduce((total, attempt) => total + attempt.cacheReadTokens, 0);
+  const written = attempts.reduce((total, attempt) => total + attempt.cacheWriteTokens, 0);
+  const cost = attempts.reduce((total, attempt) => total + attempt.costMicros, 0);
+  const activeDays = new Set(attempts.map((attempt) => attempt.at.slice(0, 10))).size;
+  const cells: { label: string; value: string; sub?: string | undefined }[] = [
+    { label: "호출", value: countText(attempts.length) },
+    { label: "실패", value: countText(failed) },
+    { label: "토큰", value: tokenText(tokens) },
+    {
+      label: "캐시 히트",
+      value: tokenText(cached),
+      sub: written === 0 ? undefined : `캐시 생성 ${tokenText(written)}`,
+    },
+    { label: "비용", value: costText(cost) },
+    { label: "활동일", value: countText(activeDays) },
+  ];
+  return (
+    <div className="grid grid-cols-2 gap-2 px-5 py-4 min-[880px]:grid-cols-3 min-[1180px]:grid-cols-6">
+      {cells.map((cell) => (
+        <div className="rounded-[5px] border border-border px-3 py-2.5" key={cell.label}>
+          <div className="text-[11px] text-muted">{cell.label}</div>
+          <div className="mt-1 font-mono text-[18px] tabular-nums text-primary">{cell.value}</div>
+          {cell.sub === undefined ? null : <div className="mt-0.5 text-[11px] text-muted">{cell.sub}</div>}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * 날짜별 밀도. 조직이 언제 일했는지는 합계가 말해주지 않습니다.
+ * 값이 없는 날은 «0»이 아니라 «없음»으로 둡니다 — 배경색 그대로입니다.
+ */
+function DailyActivity({ attempts }: { attempts: readonly RouteAttemptView[] }) {
+  const byDay = new Map<string, number>();
+  for (const attempt of attempts) {
+    const day = attempt.at.slice(0, 10);
+    byDay.set(day, (byDay.get(day) ?? 0) + tokensOf(attempt));
+  }
+  if (byDay.size === 0) return null;
+  const days = [...byDay.keys()].sort();
+  const first = new Date(`${days[0] ?? ""}T00:00:00Z`);
+  const last = new Date(`${days[days.length - 1] ?? ""}T00:00:00Z`);
+  // 주 단위 열로 세웁니다. 시작을 그 주의 일요일로 당겨야 요일 행이 어긋나지 않습니다.
+  const origin = new Date(first.getTime() - first.getUTCDay() * 86_400_000);
+  const weeks = Math.floor((last.getTime() - origin.getTime()) / (7 * 86_400_000)) + 1;
+  const peak = Math.max(...byDay.values());
+  return (
+    <section aria-label="일별 활동" className="border-t border-border px-5 py-4">
+      <h3 className="mb-2.5 text-[12px] font-semibold tracking-[0.01em] text-fg-3">일별 활동</h3>
+      <div className="flex gap-[3px] overflow-x-auto">
+        {Array.from({ length: weeks }, (_, week) => (
+          <div className="flex shrink-0 flex-col gap-[3px]" key={week}>
+            {Array.from({ length: 7 }, (_, weekday) => {
+              const date = new Date(origin.getTime() + (week * 7 + weekday) * 86_400_000);
+              const key = date.toISOString().slice(0, 10);
+              const value = byDay.get(key);
+              const level = value === undefined ? 0 : Math.ceil((value / peak) * 3);
+              return (
+                <span
+                  className={`size-[11px] rounded-[2px] ${
+                    level === 0 ? "bg-surface-2" : level === 1 ? "bg-fg-4/30" : level === 2 ? "bg-fg-4/60" : "bg-fg-3"
+                  }`}
+                  key={weekday}
+                  title={value === undefined ? key : `${key} · ${tokenText(value)} 토큰`}
+                />
+              );
+            })}
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function AttemptTable({
+  attempts,
+  onOpen,
+}: {
+  attempts: readonly RouteAttemptView[];
+  onOpen: (attempt: RouteAttemptView) => void;
+}) {
+  if (attempts.length === 0)
+    return <p className="border-t border-border px-5 py-4 text-[12px] text-muted">호출이 없습니다.</p>;
+  return (
+    <section aria-label="호출 기록" className="border-t border-border pt-4">
+      <h3 className="mb-2 flex items-baseline gap-2 px-5 text-[12px] font-semibold tracking-[0.01em] text-fg-3">
+        호출 기록
+        <span className="font-mono text-[11px] font-normal tabular-nums text-muted">{attempts.length}</span>
+      </h3>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[900px] border-collapse">
+          <thead>
+            <tr className="border-y border-border text-left text-[11px] text-muted">
+              <th className="py-1.5 pl-5 pr-3 font-normal">시간</th>
+              <th className="px-3 py-1.5 text-right font-normal">토큰</th>
+              <th className="px-3 py-1.5 text-right font-normal">tok/s</th>
+              <th className="px-3 py-1.5 text-right font-normal">~$</th>
+              <th className="px-3 py-1.5 font-normal">모델</th>
+              <th className="px-3 py-1.5 font-normal">추론</th>
+              <th className="px-3 py-1.5 font-normal">프로바이더</th>
+              <th className="px-3 py-1.5 font-normal">상태</th>
+              <th className="py-1.5 pl-3 pr-5 font-normal">Work</th>
+            </tr>
+          </thead>
+          <tbody>
+            {attempts.map((attempt) => (
+              <AttemptRow attempt={attempt} key={attempt.attemptId} onOpen={onOpen} />
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
+function AttemptRow({ attempt, onOpen }: { attempt: RouteAttemptView; onOpen: (attempt: RouteAttemptView) => void }) {
+  const failed = attempt.status === "failed";
+  const speed = speedOf(attempt);
+  return (
+    <tr
+      className="cursor-pointer border-b border-border/60 hover:bg-[rgb(255_255_255/0.027)]"
+      onClick={() => {
+        onOpen(attempt);
+      }}
+    >
+      <td className="whitespace-nowrap py-1.5 pl-5 pr-3 font-mono text-[12px] tabular-nums text-muted">
+        {attempt.at.slice(5, 16).replace("T", " ")}
+      </td>
+      <td className="whitespace-nowrap px-3 py-1.5 text-right font-mono text-[12px] tabular-nums text-secondary">
+        {failed ? "—" : countText(tokensOf(attempt))}
+        {attempt.cacheReadTokens === 0 ? null : (
+          <span className="ml-1.5 text-muted">c {tokenText(attempt.cacheReadTokens)}</span>
+        )}
+      </td>
+      <td className="whitespace-nowrap px-3 py-1.5 text-right font-mono text-[12px] tabular-nums text-muted">
+        {speed === undefined ? "—" : speed.toFixed(1)}
+      </td>
+      <td className="whitespace-nowrap px-3 py-1.5 text-right font-mono text-[12px] tabular-nums text-secondary">
+        {attempt.costMicros === 0 ? "—" : microText(attempt.costMicros)}
+      </td>
+      <td className="whitespace-nowrap px-3 py-1.5 font-mono text-[12px] text-secondary">
+        {/* fallback으로 넘어온 시도는 사슬로 붙습니다. */}
+        {attempt.fallbackFrom === undefined ? null : (
+          <ArrowBendDownRight aria-label="넘어옴" className="mr-1 inline text-muted" size={12} />
+        )}
+        {attempt.modelId}
+      </td>
+      <td className="whitespace-nowrap px-3 py-1.5 font-mono text-[12px] text-muted">{attempt.effort ?? "—"}</td>
+      <td className="whitespace-nowrap px-3 py-1.5 font-mono text-[12px] text-muted">{attempt.providerId}</td>
+      <td className={`whitespace-nowrap px-3 py-1.5 font-mono text-[12px] ${failed ? "text-danger" : "text-muted"}`}>
+        {attempt.status === "running" ? "진행" : (attempt.statusCode ?? "")}
+      </td>
+      <td className="max-w-[200px] truncate py-1.5 pl-3 pr-5 text-[12px] text-secondary">{attempt.workTitle ?? "—"}</td>
+    </tr>
+  );
+}
+
+/** 같은 기록을 모델과 프로바이더로 접습니다. 「어디에 쓰였나」는 행이 아니라 합에서 보입니다. */
+function UsageBreakdown({ attempts }: { attempts: readonly RouteAttemptView[] }) {
+  if (attempts.length === 0) return null;
+  const fold = (key: (attempt: RouteAttemptView) => string) => {
+    const map = new Map<string, { calls: number; tokens: number; cost: number }>();
+    for (const attempt of attempts) {
+      const id = key(attempt);
+      const current = map.get(id) ?? { calls: 0, tokens: 0, cost: 0 };
+      map.set(id, {
+        calls: current.calls + 1,
+        tokens: current.tokens + tokensOf(attempt),
+        cost: current.cost + attempt.costMicros,
+      });
+    }
+    return [...map.entries()].sort((left, right) => right[1].tokens - left[1].tokens);
+  };
+  return (
+    <div className="grid gap-6 px-5 py-5 min-[1180px]:grid-cols-2">
+      <BreakdownTable heading="모델" rows={fold((attempt) => attempt.modelId)} />
+      <BreakdownTable heading="프로바이더" rows={fold((attempt) => attempt.providerId)} />
+    </div>
+  );
+}
+
+function BreakdownTable({
+  heading,
+  rows,
+}: {
+  heading: string;
+  rows: readonly (readonly [string, { calls: number; tokens: number; cost: number }])[];
+}) {
+  const peak = Math.max(...rows.map(([, value]) => value.tokens), 1);
+  return (
+    <section aria-label={heading}>
+      <h3 className="mb-2 text-[12px] font-semibold tracking-[0.01em] text-fg-3">{heading}</h3>
+      <table className="w-full border-collapse">
+        <thead>
+          <tr className="border-b border-border text-left text-[11px] text-muted">
+            <th className="py-1.5 pr-3 font-normal">{heading}</th>
+            <th className="px-3 py-1.5 text-right font-normal">호출</th>
+            <th className="px-3 py-1.5 text-right font-normal">토큰</th>
+            <th className="px-3 py-1.5 text-right font-normal">비용</th>
+            <th className="w-[88px] py-1.5 pl-3 font-normal" />
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map(([id, value]) => (
+            <tr className="border-b border-border/60" key={id}>
+              <td className="max-w-[180px] truncate py-1.5 pr-3 font-mono text-[12px] text-secondary">{id}</td>
+              <td className="px-3 py-1.5 text-right font-mono text-[12px] tabular-nums text-muted">
+                {countText(value.calls)}
+              </td>
+              <td className="px-3 py-1.5 text-right font-mono text-[12px] tabular-nums text-secondary">
+                {tokenText(value.tokens)}
+              </td>
+              <td className="px-3 py-1.5 text-right font-mono text-[12px] tabular-nums text-secondary">
+                {value.cost === 0 ? "—" : costText(value.cost)}
+              </td>
+              <td className="py-1.5 pl-3">
+                <div className="h-[3px] w-full rounded-full bg-surface-2">
+                  <div
+                    className="h-[3px] rounded-full bg-fg-3"
+                    style={{ width: `${String((value.tokens / peak) * 100)}%` }}
+                  />
+                </div>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </section>
+  );
+}
+
+/** 한 호출의 전부. 값이 없는 줄은 «—»로 두고 0으로 채우지 않습니다. */
+function AttemptDetail({ attempt, onClose }: { attempt: RouteAttemptView | undefined; onClose: () => void }) {
+  const speed = attempt === undefined ? undefined : speedOf(attempt);
+  return (
+    <Dialog
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+      open={attempt !== undefined}
+    >
+      <DialogContent className="max-w-[520px]">
+        {attempt === undefined ? null : (
+          <>
+            <DialogTitle className="flex items-baseline gap-2">
+              <span className={`font-mono ${attempt.status === "failed" ? "text-danger" : "text-primary"}`}>
+                {attempt.status === "running" ? "진행" : (attempt.statusCode ?? "")}
+              </span>
+              <span className="font-mono text-[13px] font-normal text-secondary">{attempt.modelId}</span>
+            </DialogTitle>
+            <dl className="mt-1">
+              <DetailRow label="시간">{attempt.at.replace("T", " ")}</DetailRow>
+              <DetailRow label="Work">{attempt.workTitle ?? "—"}</DetailRow>
+              <DetailRow label="프로바이더">{attempt.providerId}</DetailRow>
+              <DetailRow label="추론">{attempt.effort ?? "—"}</DetailRow>
+              {attempt.failureClass === undefined ? null : (
+                <DetailRow label="오류">
+                  <span className="text-danger">{FAILURE_LABEL[attempt.failureClass] ?? attempt.failureClass}</span>
+                </DetailRow>
+              )}
+              {attempt.fallbackFrom === undefined ? null : <DetailRow label="넘어옴">{attempt.fallbackFrom}</DetailRow>}
+            </dl>
+            <h4 className="mt-4 text-[12px] font-semibold text-fg-3">성능</h4>
+            <dl>
+              <DetailRow label="소요">
+                {attempt.durationMs === undefined ? "—" : `${countText(attempt.durationMs)}ms`}
+              </DetailRow>
+              <DetailRow label="tok/s">{speed === undefined ? "—" : speed.toFixed(1)}</DetailRow>
+            </dl>
+            <h4 className="mt-4 text-[12px] font-semibold text-fg-3">토큰</h4>
+            <dl>
+              <DetailRow label="입력">{countText(attempt.inputTokens)}</DetailRow>
+              <DetailRow label="출력">{countText(attempt.outputTokens)}</DetailRow>
+              <DetailRow label="캐시 히트">{countText(attempt.cacheReadTokens)}</DetailRow>
+              <DetailRow label="캐시 생성">{countText(attempt.cacheWriteTokens)}</DetailRow>
+              <DetailRow label="추론">{countText(attempt.reasoningTokens)}</DetailRow>
+              <DetailRow label="비용">{attempt.costMicros === 0 ? "—" : microText(attempt.costMicros)}</DetailRow>
+            </dl>
+          </>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function DetailRow({ children, label }: { children: ReactNode; label: string }) {
+  return (
+    <div className="grid grid-cols-[92px_minmax(0,1fr)] items-baseline gap-3 py-1">
+      <dt className="text-[12px] text-muted">{label}</dt>
+      <dd className="min-w-0 truncate font-mono text-[12px] text-secondary">{children}</dd>
+    </div>
   );
 }
 
@@ -3463,25 +3801,22 @@ function RouteGuardBar({
   guard,
   onChangeDraft,
   onChangeGuard,
-  route,
 }: {
   draft: string;
   guard: RouteGuards;
   onChangeDraft: (value: string) => void;
   onChangeGuard: (next: RouteGuards) => void;
-  route: ModelRouteView;
 }) {
   const addSoft = () => {
     const dollars = Number(draft);
     if (!Number.isFinite(dollars) || dollars <= 0) return;
     const micros = Math.round(dollars * 1_000_000);
     if (guard.softMicros.includes(micros)) return;
-    onChangeGuard({ ...guard, softMicros: [...guard.softMicros, micros].sort((a, b) => a - b) });
+    onChangeGuard({ ...guard, softMicros: [...guard.softMicros, micros].sort((left, right) => left - right) });
     onChangeDraft("");
   };
   return (
-    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-border px-5 py-2.5">
-      <span className="text-[12px] text-muted">{route.name}</span>
+    <div className="flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-border px-5 py-2.5">
       <label className="flex items-center gap-2">
         <span className="text-[12px] text-muted">차단</span>
         <input
@@ -3530,37 +3865,6 @@ function RouteGuardBar({
         />
       </div>
     </div>
-  );
-}
-
-function AttemptRow({ attempt }: { attempt: RouteAttemptView }) {
-  const failed = attempt.status === "failed";
-  return (
-    <tr className="border-b border-border/60">
-      <td className="whitespace-nowrap py-2 pl-5 pr-3 font-mono text-[12px] tabular-nums text-muted">{attempt.at}</td>
-      <td className="whitespace-nowrap px-3 py-2 text-right font-mono text-[12px] tabular-nums text-secondary">
-        {attempt.status === "failed" ? "—" : (attempt.inputTokens + attempt.outputTokens).toLocaleString("ko-KR")}
-      </td>
-      <td className="whitespace-nowrap px-3 py-2 text-right font-mono text-[12px] tabular-nums text-secondary">
-        {attempt.costMicros === 0 ? "—" : microText(attempt.costMicros)}
-      </td>
-      <td className="whitespace-nowrap px-3 py-2 font-mono text-[12px] text-secondary">
-        {/* fallback으로 넘어온 시도는 사슬로 붙습니다. */}
-        {attempt.fallbackFrom === undefined ? null : (
-          <ArrowBendDownRight aria-label="넘어옴" className="mr-1 inline text-muted" size={12} />
-        )}
-        {attempt.modelId}
-      </td>
-      <td className="whitespace-nowrap px-3 py-2 font-mono text-[12px] text-muted">{attempt.providerId}</td>
-      <td className={`whitespace-nowrap px-3 py-2 text-[12px] ${failed ? "text-danger" : "text-muted"}`}>
-        {failed
-          ? (FAILURE_LABEL[attempt.failureClass ?? ""] ?? "실패")
-          : attempt.status === "running"
-            ? "진행"
-            : "성공"}
-      </td>
-      <td className="max-w-[220px] truncate py-2 pl-3 pr-5 text-[12px] text-secondary">{attempt.workTitle ?? "—"}</td>
-    </tr>
   );
 }
 
