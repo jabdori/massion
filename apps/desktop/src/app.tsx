@@ -5032,6 +5032,27 @@ function WorkActivity({
   const setModelId = setModelOverride;
   const setEffort = setEffortOverride;
   const setQueued = setQueuedOverride;
+  const running = work.run?.status === "running" || work.run?.status === "ready";
+  /*
+   * Esc가 실행을 끊습니다. 정지는 Work 단위이므로(헌법 4.6) 이 키가 사람이 조직을 세우는 수단입니다.
+   * Claude Code·Codex가 같은 자리에서 같은 키를 쓰므로 관습을 그대로 따릅니다.
+   *
+   * 인풋에 글자를 치는 중에도 걸립니다 — 멈추려는 사람에게 「먼저 포커스를 옮기라」고 요구할 수 없습니다.
+   * 대화상자가 열려 있을 때만 비켜섭니다. 그때 Esc는 그 상자를 닫는 키입니다.
+   */
+  useEffect(() => {
+    if (!running) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented) return;
+      if (document.querySelector('[role="dialog"]') !== null) return;
+      event.preventDefault();
+      onControlRun("cancel");
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [onControlRun, running]);
   /* 권한은 이 Work에만 겁니다. 계약이 열릴 때까지 화면 상태로 둡니다. */
   const cycleAutonomy = () => {
     const order: WorkAutonomyMode[] = ["automatic", "review", "full-access"];
@@ -5200,7 +5221,7 @@ function WorkActivity({
         }}
         pending={pendingDirective}
         queued={queued}
-        running={work.run?.status === "running" || work.run?.status === "ready"}
+        running={running}
         value={composer}
         {...(modelId === undefined ? {} : { modelId })}
         {...(work.workspace === undefined ? {} : { workspace: work.workspace })}
@@ -5840,6 +5861,7 @@ function Composer({
                   type="button"
                 >
                   중단
+                  <kbd className="ml-1.5 font-mono text-[10px] text-muted">esc</kbd>
                 </button>
               ) : null}
               <button
