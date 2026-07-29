@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
 
+import app from "./app.tsx?raw";
+import badge from "./components/ui/badge.tsx?raw";
+import room from "./room.tsx?raw";
 import styles from "./styles.css?raw";
 
 function hex(css: string, token: string): string {
@@ -91,6 +94,26 @@ describe("스타일 의미 토큰", () => {
     expect(contrast(hex(styles, "--bg-1"), hex(styles, "--bg-0"))).toBeGreaterThanOrEqual(1.08);
     expect(contrast(hex(styles, "--bg-2"), hex(styles, "--bg-0"))).toBeGreaterThanOrEqual(1.15);
     expect(contrast(hex(styles, "--line"), hex(styles, "--bg-0"))).toBeGreaterThanOrEqual(1.4);
+  });
+
+  /*
+   * 이 부류가 두 번 났습니다. --focus-ring이 정의 0회짜리 변수를 가리켜 outline이 통째로 죽었고,
+   * text-success·bg-success가 --color-success 없이 쓰여 완료 아이콘과 상태 점이 안 보였습니다.
+   * 둘 다 타입도 lint도 못 잡습니다 — 문자열이라 조용히 사라집니다.
+   */
+  it("화면이 쓰는 색 유틸리티는 전부 정의된 토큰이어야 합니다", () => {
+    const defined = new Set([...styles.matchAll(/--color-([a-z0-9-]+):/gu)].map((match) => match[1]));
+    // Tailwind 기본 팔레트가 아니라 이 제품이 정의한 이름만 검사합니다.
+    const builtin = /^(?:transparent|current|inherit|black|white|popover|border|input|ring|background|foreground)/u;
+    const used = new Set(
+      [...`${app}${room}${badge}`.matchAll(/\b(?:text|bg|border|ring|fill|stroke|divide)-([a-z][a-z0-9-]*)/gu)]
+        .map((match) => match[1] ?? "")
+        .filter((name) => name !== "" && !builtin.test(name)),
+    );
+    const missing = [...used].filter((name) => !defined.has(name) && !defined.has(name.replace(/-\d+$/u, "")));
+    expect(
+      missing.filter((name) => /^(?:success|danger|gate|halt|emergency|agent|fg|bg|line|muted)/u.test(name)),
+    ).toEqual([]);
   });
 
   it("scope work·미승인 표기를 점선 토큰 하나로 고정합니다", () => {

@@ -3,26 +3,35 @@ version: "4.0"
 name: "Massion — 협업방"
 description: "에이전트 조직이 서로 묻고 반론하고 인계하는 장면을 사람이 읽고 개입하는 로컬 AgentOS"
 colors:
-  bg-0: "#0E0E10"
-  bg-1: "#141416"
-  bg-2: "#1A1A1D"
-  bg-3: "#232327"
-  line: "#26262A"
-  line-strong: "#35353B"
-  fg: "#EDEDEF"
-  fg-2: "#A0A0A8"
-  fg-3: "#6E6E76"
-  agent-representative: "#E4E4E8"
-  agent-strategy: "#7C9EFF"
-  agent-research: "#4FC3A1"
-  agent-delivery: "#C99BFF"
-  agent-assurance: "#F58FB0"
-  agent-temporary: "#9BA8C4"
-  gate: "#F5C451"
-  gate-wash: "#231D0E"
-  gate-border: "#4A3C15"
-  halt: "#FF6B6B"
-  user: "#3A3A40"
+  # styles.css가 정본입니다. 이 표는 그 값을 그대로 옮긴 것이고, 갈라지면 styles.css가 이깁니다.
+  bg-0: "#0b0c0e"
+  bg-1: "#15171a"
+  bg-2: "#1b1d20"
+  bg-3: "#202225"
+  line: "#2b2d30"
+  line-strong: "#3a3c3f"
+  # 글자는 4단계입니다. 본문 기본값은 fg가 아니라 fg-2입니다.
+  fg: "#f4f5f7"
+  fg-2: "#c8cdd6"
+  fg-3: "#a2a8b4"
+  fg-4: "#838993"
+  # 에이전트 색은 역할이 아니라 정체성(handle)에 붙는 슬롯입니다.
+  # OKLCH(0.78, 0.105, h)에서 27°씩 돌려 뽑아 명도가 같습니다. 슬롯 0은 대표라 무채입니다.
+  # hue 60~175(노랑·초록)는 비워 둡니다 — 노랑은 예약어, 초록은 성공으로 오독됩니다.
+  agent-0: "#dcdee3"
+  agent-1: "#3fc8cb"
+  agent-2: "#5dc0ea"
+  agent-3: "#85b4f7"
+  agent-4: "#ada8f8"
+  agent-5: "#c9a0ee"
+  agent-6: "#e399da"
+  agent-7: "#f398be"
+  gate: "#f0bc4b"
+  gate-ink: "#241d07"
+  gate-wash: "#231d0e"
+  gate-border: "#4a3c15"
+  halt: "#f5766e"
+  emergency: "#e8442e"
 typography:
   screen-title:
     fontFamily: "Pretendard Variable, Pretendard, ui-sans-serif, system-ui, sans-serif"
@@ -297,7 +306,7 @@ components:
 
 ### 컨텍스트 열
 
-참가자(역할·발언 수·상태), 방 한도(라운드·토큰·비용, 각각 얇은 막대), 공유 컨텍스트(`SharedContextReference`를 checksum 축약과 함께). 승인 대기 중인 항목은 `gate` 색으로.
+참가자(역할·발언 수·상태), **방 한도**(라운드·토큰·비용, 각각 얇은 막대 — 이 열이 유일한 소유자다), 공유 컨텍스트(`SharedContextReference`를 checksum 축약과 함께). 승인 대기 중인 항목은 `gate` 색으로.
 
 ### 업무 목록 행
 
@@ -364,7 +373,7 @@ components:
 - 조직 변경은 영향과 되돌리기를 버튼보다 먼저 보인다.
 - 점선은 `scope:"work"`와 미승인에만 쓴다.
 - 노랑은 사람이 필요한 곳에만 쓴다.
-- 라운드·토큰·비용 한도를 항상 보인다. 방에는 예산이 있고 사용자가 그걸 알아야 한다.
+- 라운드·토큰·비용 한도는 **컨텍스트 열의 「편성」이 소유한다**(2026-07-30 완화). 방에는 예산이 있고 사용자가 그걸 알아야 하지만, 그 사실을 헤더에 겹쳐 쓰지 않는다 — 같은 값이 두 자리에 있으면 둘 다 안 읽히고, 헤더는 탭이 늘어날 자리라 중복이 자리를 뺏는다. 좁은 창에서 헤더에 셋을 밀어 넣으면 Work 제목이 먼저 죽는다(1180에서 14px까지 눌렸다).
 - 차단의 원인을 구별한다. `model-unavailable`과 `workspace-untrusted`는 사용자가 할 일이 다르다.
 
 **하지 않는다**
