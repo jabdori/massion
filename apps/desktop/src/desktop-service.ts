@@ -2164,8 +2164,6 @@ const fixturePromise = <T>(run: () => T): Promise<T> =>
     resolve(run());
   });
 
-const settingsState: SettingsView = structuredClone(fixtureSettings);
-
 /** `APPLICATION_RUN_STAGES`(packages/application/src/core-work-coordinator.ts)와 같은 순서입니다. */
 const FIXTURE_RUN_STAGES = ["intake", "context-strategy", "evidence", "delivery", "assurance", "records"];
 
@@ -2177,9 +2175,116 @@ const fixtureTime = (): string => {
 export function createFixtureDesktopService(): DesktopService {
   /* 픽스처가 상태를 바꾸므로 모듈 상수가 아니라 사본을 소유합니다. */
   const initialSnapshot: DesktopSnapshot = structuredClone(fixtureDataAdapter());
+  const settingsState: SettingsView = structuredClone(fixtureSettings);
   let directiveSequence = 0;
-  const stop: DesktopStreamStop = () => {
-    return fixturePromise(() => undefined);
+  let runSequence = 0;
+  let eventSequence = 0;
+  const durableHandlers = new Set<DesktopStreamHandler>();
+  const executionHandlers = new Map<string, Map<DesktopStreamHandler, number>>();
+  const executionSequences = new Map<string, number>();
+  const executionHistory = new Map<
+    string,
+    { readonly workId: string; readonly runId: string; readonly deltas: { readonly sequence: number }[]; completed: boolean }
+  >();
+  const completionPending = new Set<string>();
+
+  const publishDurable = (
+    type: string,
+    resource: { readonly type: string; readonly id: string; readonly revision: number },
+    payload: unknown,
+  ): void => {
+    const event = {
+      schemaVersion: "massion.application.event.v1",
+      eventId: `event-fixture-${String(++eventSequence).padStart(4, "0")}`,
+      organizationId: "fixture-organization",
+      sequence: eventSequence,
+      type,
+      author: { kind: "system" as const, id: "fixture" },
+      resource,
+      occurredAt: "2026-07-30T00:00:00.000Z",
+      payload,
+    };
+    queueMicrotask(() => {
+      for (const handler of durableHandlers) {
+        try {
+          handler(event);
+        } catch {
+          // 실제 스트림처럼 한 화면의 처리 오류가 다른 구독을 끊지 않습니다.
+        }
+      }
+    });
+  };
+
+  const publishExecution = (executionId: string, summary: string): void => {
+    const sequence = (executionSequences.get(executionId) ?? 0) + 1;
+    executionSequences.set(executionId, sequence);
+    const delta = {
+      executionId,
+      agentHandle: "representative",
+      sequence,
+      kind: "lifecycle" as const,
+      summary,
+      occurredAt: "2026-07-30T00:00:00.000Z",
+    };
+    executionHistory.get(executionId)?.deltas.push(delta);
+    queueMicrotask(() => {
+      const handlers = executionHandlers.get(executionId);
+      if (handlers) for (const handler of handlers.keys()) deliverExecution(handlers, handler, delta);
+    });
+  };
+
+  const deliverExecution = (
+    handlers: Map<DesktopStreamHandler, number>,
+    handler: DesktopStreamHandler,
+    delta: { readonly sequence: number },
+  ): void => {
+    const lastDelivered = handlers.get(handler);
+    if (lastDelivered === undefined || delta.sequence <= lastDelivered) return;
+    handlers.set(handler, delta.sequence);
+    try {
+      handler(delta);
+    } catch {
+      // 실제 실행 스트림처럼 구독자 오류는 실행 흐름에 전파하지 않습니다.
+    }
+  };
+
+  const scheduleCompletion = (executionId: string): void => {
+    const execution = executionHistory.get(executionId);
+    const work = execution && initialSnapshot.works.find((candidate) => candidate.id === execution.workId);
+    if (
+      !execution ||
+      !work ||
+      execution.completed ||
+      completionPending.has(executionId) ||
+      work.run?.runId !== execution.runId ||
+      work.run.status !== "ready"
+    )
+      return;
+    completionPending.add(executionId);
+    queueMicrotask(() => {
+      if (!completionPending.delete(executionId)) return;
+      const current = initialSnapshot.works.find((candidate) => candidate.id === execution.workId);
+      if (!current || current.run?.runId !== execution.runId || current.run.status !== "ready") return;
+      const completed = { ...current };
+      delete completed.activeExecutionId;
+      mutateWork(execution.workId, () => ({
+        ...completed,
+        status: "complete",
+        revision: current.revision + 1,
+        sourceStatus: "completed",
+        progress: 100,
+        run: { runId: execution.runId, status: "completed", stage: "terminal", leaseGeneration: 0 },
+        tasks: current.tasks.map((task) => ({ ...task, state: "done" })),
+        agents: current.agents.map((agent) => ({ ...agent, state: "waiting" })),
+      }));
+      execution.completed = true;
+      publishDurable("run.completed", { type: "ApplicationRun", id: execution.runId, revision: 0 }, { stage: "terminal" });
+      publishExecution(executionId, "finish");
+    });
+  };
+
+  const stop = (handlers: Set<DesktopStreamHandler>, handler: DesktopStreamHandler): DesktopStreamStop => async () => {
+    handlers.delete(handler);
   };
 
   /** 조회가 다시 읽는 자리를 바꿉니다. 화면은 loadWork로 따라옵니다. */
@@ -2876,10 +2981,16 @@ export function createFixtureDesktopService(): DesktopService {
     /* ApplicationRunStore.cancel: status 'cancelled', stage 'terminal', approvalId 해제. */
     cancelRun: (work) =>
       fixturePromise(() => {
+        let executionId: string | undefined;
         mutateWork(work.id, (current) => {
           const run = requireRun(current);
+          executionId = current.activeExecutionId;
+          const cancelled = { ...current };
+          delete cancelled.activeExecutionId;
           return {
-            ...current,
+            ...cancelled,
+            status: "cancelled",
+            sourceStatus: "cancelled",
             run: {
               runId: run.runId,
               status: "cancelled",
@@ -2889,6 +3000,7 @@ export function createFixtureDesktopService(): DesktopService {
             },
           };
         });
+        if (executionId !== undefined) completionPending.delete(executionId);
       }),
     /* CoreWorkCoordinator.retryBlocked: claim(blocked 해제·lease +1) 뒤 advance(다음 단계·status 'ready'). */
     resumeRun: (work) =>
@@ -2908,9 +3020,64 @@ export function createFixtureDesktopService(): DesktopService {
           };
         });
       }),
-    startWork: () => fixturePromise(() => ({ runId: "run-fixture-0001" })),
-    subscribeDurable: () => fixturePromise(() => stop),
-    subscribeExecution: () => fixturePromise(() => stop),
+    startWork: (input) =>
+      fixturePromise(() => {
+        const sequence = ++runSequence;
+        const suffix = String(sequence).padStart(4, "0");
+        const workId = `work-fixture-${suffix}`;
+        const runId = `run-fixture-${suffix}`;
+        const executionId = `execution-fixture-${suffix}`;
+        initialSnapshot.works.push({
+          id: workId,
+          ...(input.workspaceId === undefined ? {} : { workspace: { name: input.workspaceId, trusted: true } }),
+          title: input.text,
+          status: "active",
+          revision: 1,
+          sourceStatus: "running",
+          team: input.workspaceId === undefined ? "Massion" : "워크스페이스",
+          updatedAt: "방금",
+          summary: input.text,
+          progress: 0,
+          run: { runId, status: "ready", stage: "intake", leaseGeneration: 0 },
+          activeExecutionId: executionId,
+          approvals: [],
+          tasks: [{ id: `task-fixture-${suffix}`, title: "요청 분석", state: "active" }],
+          agents: [{ id: "representative", role: "대표", name: "Atlas", initials: "A", state: "active" }],
+          artifacts: [],
+          verifications: [],
+          records: [],
+          activities: [{ id: `request-fixture-${suffix}`, kind: "message", time: "방금", author: "사용자", initials: "U", content: input.text }],
+        });
+        executionHistory.set(executionId, { workId, runId, deltas: [], completed: false });
+        publishDurable("run.started", { type: "ApplicationRun", id: runId, revision: 0 }, { stage: "intake" });
+        publishDurable("work.created", { type: "Work", id: workId, revision: 1 }, { domainSequence: 1 });
+        publishExecution(executionId, "started");
+        if ((executionHandlers.get(executionId)?.size ?? 0) > 0) scheduleCompletion(executionId);
+        return { runId };
+      }),
+    subscribeDurable: (handler, _after) =>
+      fixturePromise(() => {
+        durableHandlers.add(handler);
+        return stop(durableHandlers, handler);
+      }),
+    subscribeExecution: (executionId, handler) =>
+      fixturePromise(() => {
+        const handlers = executionHandlers.get(executionId) ?? new Map<DesktopStreamHandler, number>();
+        handlers.set(handler, 0);
+        executionHandlers.set(executionId, handlers);
+        const history = executionHistory.get(executionId);
+        if (history) {
+          queueMicrotask(() => {
+            if (!handlers.has(handler)) return;
+            for (const delta of history.deltas) deliverExecution(handlers, handler, delta);
+            scheduleCompletion(executionId);
+          });
+        }
+        return async () => {
+          handlers.delete(handler);
+          if (handlers.size === 0 && executionHandlers.get(executionId) === handlers) executionHandlers.delete(executionId);
+        };
+      }),
   };
 }
 

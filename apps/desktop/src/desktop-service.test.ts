@@ -24,6 +24,12 @@ function result(operation: string, data: unknown) {
   return { schemaVersion: "massion.application.v1", operation, data };
 }
 
+async function flushFixtureEvents(): Promise<void> {
+  await Promise.resolve();
+  await Promise.resolve();
+  await Promise.resolve();
+}
+
 function transport(
   overrides: Record<string, unknown> = {},
 ): NativeTransport & { query: ReturnType<typeof vi.fn>; command: ReturnType<typeof vi.fn> } {
@@ -215,6 +221,137 @@ describe("Application desktop service", () => {
 
     const fresh = await createFixtureDesktopService().loadWork("partner-contract");
     expect(fresh.run).toMatchObject({ status: "blocked" });
+  });
+
+  it("fixture 설정과 새 Work 상태는 서비스 인스턴스마다 독립적이다", async () => {
+    const changed = createFixtureDesktopService();
+    await changed.registerProvider({ providerId: "isolated-provider", displayName: "격리 제공자", adapterKind: "test" });
+    await changed.startWork({ text: "격리된 Work", workspaceId: "workspace-analytics" });
+
+    const fresh = createFixtureDesktopService();
+    expect(JSON.stringify(await changed.loadSettings())).toContain("isolated-provider");
+    expect(JSON.stringify(await fresh.loadSettings())).not.toContain("isolated-provider");
+    await expect(fresh.loadWork("work-fixture-0001")).rejects.toThrow("Fixture Work를 찾을 수 없습니다");
+  });
+
+  it("fixture startWork는 입력별 Work·실행 계보를 만들고 목록과 상세에서 다시 읽는다", async () => {
+    const service = createFixtureDesktopService();
+    const first = await service.startWork({ text: "첫 번째 계약 검토", workspaceId: "workspace-analytics" });
+    const second = await service.startWork({ text: "두 번째 계약 검토", workspaceId: "workspace-ops" });
+
+    expect(first.runId).not.toBe(second.runId);
+    const works = await service.loadIndex({ filter: "active", search: "계약 검토" });
+    expect(works.map((work) => work.id)).toEqual(["work-fixture-0001", "work-fixture-0002"]);
+    await expect(service.loadWork("work-fixture-0001")).resolves.toMatchObject({
+      title: "첫 번째 계약 검토",
+      workspace: { name: "workspace-analytics", trusted: true },
+      run: { runId: first.runId, status: "ready", stage: "intake", leaseGeneration: 0 },
+      activeExecutionId: "execution-fixture-0001",
+    });
+    await expect(service.loadWork("work-fixture-0002")).resolves.toMatchObject({
+      title: "두 번째 계약 검토",
+      workspace: { name: "workspace-ops", trusted: true },
+      run: { runId: second.runId, status: "ready", stage: "intake", leaseGeneration: 0 },
+      activeExecutionId: "execution-fixture-0002",
+    });
+  });
+
+  it("fixture 구독은 실행별 lifecycle을 비동기로 전달하고 중지·서비스 경계를 지킨다", async () => {
+    const service = createFixtureDesktopService();
+    const otherService = createFixtureDesktopService();
+    const durable = vi.fn();
+    const foreignDurable = vi.fn();
+    const execution = vi.fn();
+    const otherExecution = vi.fn();
+    const stopDurable = await service.subscribeDurable(durable);
+    const stopForeignDurable = await otherService.subscribeDurable(foreignDurable);
+    const stopOtherExecution = await service.subscribeExecution("execution-fixture-0002", otherExecution);
+
+    const first = await service.startWork({ text: "구독 Work" });
+    await flushFixtureEvents();
+
+    expect(durable).toHaveBeenCalledWith(
+      expect.objectContaining({
+        schemaVersion: "massion.application.event.v1",
+        type: "work.created",
+        resource: { type: "Work", id: "work-fixture-0001", revision: 1 },
+      }),
+    );
+    const stopExecution = await service.subscribeExecution("execution-fixture-0001", execution);
+    await flushFixtureEvents();
+
+    expect(execution).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ executionId: "execution-fixture-0001", sequence: 1, kind: "lifecycle", summary: "started" }),
+    );
+    expect(execution).toHaveBeenLastCalledWith(
+      expect.objectContaining({ executionId: "execution-fixture-0001", sequence: 2, kind: "lifecycle", summary: "finish" }),
+    );
+    expect(otherExecution).not.toHaveBeenCalled();
+    expect(foreignDurable).not.toHaveBeenCalled();
+    await expect(service.loadWork("work-fixture-0001")).resolves.toMatchObject({
+      run: { runId: first.runId, status: "completed", stage: "terminal", leaseGeneration: 0 },
+    });
+
+    const durableCalls = durable.mock.calls.length;
+    const executionCalls = execution.mock.calls.length;
+    await stopDurable();
+    await stopExecution();
+    await service.startWork({ text: "중지 뒤 Work" });
+    await flushFixtureEvents();
+
+    expect(durable).toHaveBeenCalledTimes(durableCalls);
+    expect(execution).toHaveBeenCalledTimes(executionCalls);
+    await stopForeignDurable();
+    await stopOtherExecution();
+  });
+
+  it("fixture 취소는 예약된 완료 lifecycle과 durable 완료 사건을 발행하지 않는다", async () => {
+    const service = createFixtureDesktopService();
+    const durable = vi.fn();
+    const execution = vi.fn();
+    await service.subscribeDurable(durable);
+    await service.startWork({ text: "취소 Work" });
+    await flushFixtureEvents();
+    const work = await service.loadWork("work-fixture-0001");
+
+    await service.subscribeExecution("execution-fixture-0001", execution);
+    await service.cancelRun(work);
+    await flushFixtureEvents();
+
+    await expect(service.loadWork(work.id)).resolves.toMatchObject({
+      status: "cancelled",
+      run: { status: "cancelled", stage: "terminal" },
+    });
+    expect(execution).toHaveBeenCalledWith(expect.objectContaining({ summary: "started" }));
+    expect(execution).not.toHaveBeenCalledWith(expect.objectContaining({ summary: "finish" }));
+    expect(durable).not.toHaveBeenCalledWith(expect.objectContaining({ type: "run.completed" }));
+  });
+
+  it("startWork 중 실행 구독도 lifecycle sequence를 한 번씩만 받는다", async () => {
+    const service = createFixtureDesktopService();
+    const received: unknown[] = [];
+
+    const starting = service.startWork({ text: "경합 Work" });
+    await service.subscribeExecution("execution-fixture-0001", (delta) => received.push(delta));
+    await starting;
+    await flushFixtureEvents();
+
+    expect(received.map((delta) => (delta as { sequence: number }).sequence)).toEqual([1, 2]);
+  });
+
+  it("오래된 실행 중지는 새 구독자의 handler를 제거하지 않는다", async () => {
+    const service = createFixtureDesktopService();
+    const staleStop = await service.subscribeExecution("execution-fixture-0001", vi.fn());
+    await staleStop();
+    const received: unknown[] = [];
+    await service.subscribeExecution("execution-fixture-0001", (delta) => received.push(delta));
+    await staleStop();
+
+    await service.startWork({ text: "수명 격리 Work" });
+    await flushFixtureEvents();
+
+    expect(received.map((delta) => (delta as { sequence: number }).sequence)).toEqual([1, 2]);
   });
 
   it("fixture index 입력 평가 오류도 rejected Promise로 전달한다", async () => {
