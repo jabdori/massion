@@ -29,8 +29,24 @@ describe("AgentOS 데스크톱", () => {
     expect(screen.getByRole("region", { name: "Work 목록" })).toHaveClass("min-h-0", "h-full");
     expect(screen.getByRole("main")).toHaveClass("min-h-0", "h-full");
     expect(screen.getByRole("region", { name: "Work 활동" })).toHaveClass("min-h-0", "overflow-y-auto");
-    expect(screen.getByRole("complementary", { name: "Work 세부 정보" })).toHaveClass("min-h-0", "h-full");
+    const inspector = screen.getByRole("complementary", { name: "Work 세부 정보" });
+    expect(inspector).toHaveClass("min-h-0", "h-full");
+    for (const label of ["편성", "산출물", "검증", "기록", "근거"]) {
+      expect(within(inspector).getByRole("tab", { name: label })).toHaveClass("whitespace-nowrap");
+    }
     expect(screen.getByTestId("directive-composer")).toBeInTheDocument();
+  });
+
+  it("Work 요청 조건은 조직이 자동 배치하고 저장되지 않는 로컬 제어를 노출하지 않는다", () => {
+    renderApp();
+    const composer = screen.getByTestId("directive-composer");
+
+    expect(within(composer).queryByRole("combobox", { name: "모델" })).not.toBeInTheDocument();
+    expect(within(composer).queryByRole("combobox", { name: "추론 수준" })).not.toBeInTheDocument();
+    expect(
+      within(composer).queryByRole("button", { name: /^(?:자동|수동|바이패스|전체 권한)$/u }),
+    ).not.toBeInTheDocument();
+    expect(screen.getAllByText("조직이 실행 조건을 자동 배치합니다")).toHaveLength(1);
   });
 
   it("검색과 상태 필터로 Work 목록을 좁힌다", async () => {
@@ -116,7 +132,7 @@ describe("AgentOS 데스크톱", () => {
     expect(screen.getByText("계약 조항 검증")).toBeInTheDocument();
   });
 
-  it("막힌 Work의 실행 단계와 오류를 중앙 대화에 표시하고 재개를 제공한다", async () => {
+  it("차단된 Work의 실행 단계와 오류를 중앙 대화에 표시하고 재개를 제공한다", async () => {
     const user = userEvent.setup();
     const fixture = createFixtureDesktopService();
     const seed = fixture.initialSnapshot?.works[0];
@@ -146,10 +162,12 @@ describe("AgentOS 데스크톱", () => {
       />,
     );
 
-    // 멈춤은 스트림 안에 놓이고 재시도가 원인 바로 옆에 붙습니다.
+    // 차단 상태는 스트림 안에 놓이고 재시도가 원인 바로 옆에 붙습니다.
     const status = screen.getByRole("status", { name: "실행 상태" });
+    expect(within(status).getByText("차단됨")).toHaveClass("text-halt");
     expect(status).toHaveTextContent("Provider가 전략 계획의 구조화 응답을 완성하지 못했습니다.");
-    expect(status).toHaveTextContent("맥락·전략 구성에서 멈춤");
+    expect(status).toHaveTextContent("맥락·전략 구성");
+    expect(status).not.toHaveTextContent(/막힘|중단됨|에서 멈춤/u);
     await user.click(screen.getByRole("button", { name: "다시 시도" }));
     expect(resumeRun).toHaveBeenCalledWith(blocked);
   });

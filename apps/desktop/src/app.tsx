@@ -124,7 +124,6 @@ import {
   type VerificationCriterionStatus,
   type QueuedDirectiveView,
   type ReasoningEffort,
-  type WorkAutonomyMode,
   type WorkStatus,
   type WorkView,
 } from "@/model";
@@ -212,15 +211,15 @@ const criterionLabel: Record<string, string> = {
 const criterionStatusLabel: Record<VerificationCriterionStatus, string> = {
   passed: "통과",
   failed: "미통과",
-  blocked: "막힘",
+  blocked: "차단됨",
   excluded: "제외",
 };
 
-// 통과가 기본값이라 가라앉힙니다. 막힘은 사람이 손대야 풀리므로 gate 예약어를 씁니다.
+// 통과가 기본값이라 가라앉힙니다. 실행 차단은 halt 예약어를 씁니다.
 const criterionStatusClass: Record<VerificationCriterionStatus, string> = {
   passed: "text-muted",
   failed: "text-danger",
-  blocked: "text-gate",
+  blocked: "text-halt",
   excluded: "text-muted",
 };
 
@@ -234,14 +233,14 @@ const workStatusLabel: Record<WorkStatus, string> = {
 /** 목록 행은 Work 상태보다 «지금 무엇에 걸려 있나»를 먼저 말합니다. */
 function workRowLabel(work: WorkView): string {
   if (work.status !== "active") return workStatusLabel[work.status];
-  if (work.run?.status === "blocked") return "중단됨";
+  if (work.run?.status === "blocked") return "차단됨";
   if (work.run?.status === "awaiting-approval") return "승인 대기";
   return workStatusLabel.active;
 }
 
 function workRowTone(work: WorkView): string {
   if (work.status !== "active") return workStatusClass[work.status];
-  if (work.run?.status === "blocked") return "text-danger";
+  if (work.run?.status === "blocked") return "text-halt";
   if (work.run?.status === "awaiting-approval") return "text-gate";
   return workStatusClass.active;
 }
@@ -266,10 +265,6 @@ export function App({ contextPicker = nativeContextPicker, service }: AppProps) 
   const [notifications, setNotifications] = useState<ApprovalView[]>();
   const [notificationError, setNotificationError] = useState("");
   const [growth, setGrowth] = useState<GrowthView>();
-  /* Work 단위 권한. 도메인의 AutonomyStore가 조직 단위라 계약이 열릴 때까지 화면이 앞세웁니다. */
-  const [workAutonomy, setWorkAutonomy] = useState<Record<string, WorkAutonomyMode>>({});
-  /* 인풋의 모델 셀렉트가 쓰는 목록. 프로바이더가 켜 둔 모델만 고를 수 있습니다. */
-  const [availableModels, setAvailableModels] = useState<readonly string[]>([]);
   const [growthError, setGrowthError] = useState("");
   const [requestedGrowthSuggestionId, setRequestedGrowthSuggestionId] = useState<string>();
   const [pendingNotificationIds, setPendingNotificationIds] = useState<ReadonlySet<string>>(new Set());
@@ -398,27 +393,6 @@ export function App({ contextPicker = nativeContextPicker, service }: AppProps) 
     await controller.decideApproval(approval, decision);
     await refreshNotifications();
   };
-  useEffect(() => {
-    let disposed = false;
-    void service
-      .loadSettings()
-      .then((value) => {
-        if (disposed) return;
-        const ids = projectProviderConnections(value.catalog)
-          .flatMap((connection) => connection.models)
-          // 임베딩 모델은 지시를 받는 자리가 아닙니다.
-          .filter((model) => model.enabled && model.routeKind !== "embedding")
-          .map((model) => model.modelId);
-        setAvailableModels([...new Set(ids)].sort());
-      })
-      .catch(() => {
-        // 모델 목록을 못 불러와도 인풋은 살아 있어야 합니다. 지금 쓰는 모델만 남습니다.
-      });
-    return () => {
-      disposed = true;
-    };
-  }, [service]);
-
   // 수신함 한 원천. 배지·수신함·홈이 모두 이 배열을 봅니다. 각 표면이 따로 세지 않습니다.
   const inboxItems = useMemo(
     () => buildInboxItems(notifications, controller.works, growth?.suggestions ?? []),
@@ -487,9 +461,6 @@ export function App({ contextPicker = nativeContextPicker, service }: AppProps) 
               <>
                 <WorkActivity
                   announcement={controller.announcement}
-                  onSetAutonomy={(mode) => {
-                    setWorkAutonomy((current) => ({ ...current, [controller.work?.id ?? ""]: mode }));
-                  }}
                   approvalDecisions={controller.approvalDecisions}
                   detailLoading={controller.detailLoading}
                   executionNotice={controller.executionNotice?.message}
@@ -502,7 +473,6 @@ export function App({ contextPicker = nativeContextPicker, service }: AppProps) 
                   onDecideApproval={(approval, decision) => {
                     void decideWorkApproval(approval, decision);
                   }}
-                  models={availableModels}
                   onSubmitDirective={(mode, content) => {
                     void controller.submitDirective(mode, content);
                   }}
@@ -513,12 +483,7 @@ export function App({ contextPicker = nativeContextPicker, service }: AppProps) 
                   onSelectRoom={openRoom}
                   room={room}
                   rooms={rooms.filter((candidate) => openRoomIds.includes(candidate.roomId))}
-                  work={{
-                    ...controller.work,
-                    ...(workAutonomy[controller.work.id] === undefined
-                      ? {}
-                      : { autonomyMode: workAutonomy[controller.work.id] }),
-                  }}
+                  work={controller.work}
                 />
                 <WorkInspector key={controller.work.id} room={room} service={service} work={controller.work} />
               </>
@@ -838,7 +803,9 @@ function HomeSurface({
   }, [service]);
 
   // 차단은 수신함과 같은 원천(inboxItems)에서 옵니다. 홈이 따로 세지 않아 숫자가 갈리지 않습니다.
-  const running = (works ?? []).filter((work) => work.status === "active" && work.run?.status !== "blocked");
+  const running = (works ?? []).filter(
+    (work) => work.status === "active" && (work.run?.status === "ready" || work.run?.status === "running"),
+  );
   const waiting = inboxItems ?? [];
 
   return (
@@ -884,7 +851,7 @@ function HomeSurface({
                         <span className="block truncate text-[13px] font-medium">{item.approval.title}</span>
                         <span className="block truncate text-xs text-secondary">{item.approval.description}</span>
                       </span>
-                      <span className="shrink-0 text-[11px] text-gate">승인 필요</span>
+                      <span className="shrink-0 text-[11px] text-gate">승인 대기</span>
                       <OpenButton label={`${item.approval.title} 수신함에서 보기`} onOpen={onOpenNotifications} />
                     </li>
                   ) : item.kind === "growth" ? (
@@ -917,7 +884,7 @@ function HomeSurface({
                           {/* 차단 원인을 구별해 보입니다. 모델 부재와 폴더 신뢰는 할 일이 완전히 다릅니다. */}
                           <span className="block truncate font-mono text-[11px] text-halt">{item.reason}</span>
                         </span>
-                        <span className="shrink-0 text-[11px] text-halt">막힘</span>
+                        <span className="shrink-0 text-[11px] text-halt">차단됨</span>
                       </button>
                     </li>
                   ),
@@ -977,7 +944,7 @@ function HomeSurface({
 
 /**
  * 수신함 한 원천. 승인 대기·차단·검토 대기 개선을 한 목록으로 투영합니다.
- * 막힘(halt)이 승인 대기보다 급하므로 먼저 둡니다. 배지·수신함·홈이 전부 이 결과를 봅니다.
+ * 차단(halt)이 승인 대기보다 급하므로 먼저 둡니다. 배지·수신함·홈이 전부 이 결과를 봅니다.
  * approvals가 아직 undefined(로딩 중)면 목록도 undefined로 두어 로딩 상태를 구분합니다.
  */
 function buildInboxItems(
@@ -1073,7 +1040,7 @@ function InboxPanel({
               <div className="py-12 text-center">
                 <Bell aria-hidden="true" className="mx-auto text-muted" size={28} />
                 <p className="mt-3 text-[13px] font-medium">수신함이 비어 있습니다.</p>
-                <p className="mt-1 text-[12px] text-muted">지금 사람을 기다리거나 막힌 것이 없습니다.</p>
+                <p className="mt-1 text-[12px] text-muted">지금 사람을 기다리거나 차단된 것이 없습니다.</p>
               </div>
             ) : null}
             {items?.map((item) =>
@@ -1136,7 +1103,7 @@ function ApprovalInboxCard({
               ◇
             </span>
             <span className="min-w-0 flex-1 truncate">{approval.title}</span>
-            <span className="shrink-0 text-[11px] font-normal text-gate">승인 필요</span>
+            <span className="shrink-0 text-[11px] font-normal text-gate">승인 대기</span>
           </span>
         ) : (
           <button
@@ -1149,7 +1116,7 @@ function ApprovalInboxCard({
               ◇
             </span>
             <span className="min-w-0 flex-1 truncate">{approval.title}</span>
-            <span className="shrink-0 text-[11px] font-normal text-gate">승인 필요</span>
+            <span className="shrink-0 text-[11px] font-normal text-gate">승인 대기</span>
             <CaretRight aria-hidden="true" className="shrink-0 text-muted" size={12} />
           </button>
         )}
@@ -1209,7 +1176,7 @@ function BlockedInboxCard({
             ⊘
           </span>
           <span className="min-w-0 flex-1 truncate">{item.title}</span>
-          <span className="shrink-0 text-[11px] font-normal text-halt">막힘</span>
+          <span className="shrink-0 text-[11px] font-normal text-halt">차단됨</span>
           <CaretRight aria-hidden="true" className="shrink-0 text-muted" size={12} />
         </button>
       </h3>
@@ -4332,7 +4299,7 @@ function ChoiceGroup<T extends string>({
 const AUTONOMY_OPTIONS = [
   { value: "automatic", label: "자동" },
   { value: "review", label: "수동" },
-  { value: "full-access", label: "바이패스" },
+  { value: "full-access", label: "전체 권한" },
 ] as const;
 
 const GROWTH_OPTIONS = [
@@ -5282,8 +5249,6 @@ interface WorkActivityProps {
   onAnnouncement: (message: string) => void;
   onControlRun: (action: "cancel" | "resume") => void;
   onDecideApproval: (approval: ApprovalView, decision: "approved" | "rejected") => void;
-  onSetAutonomy: (mode: WorkAutonomyMode) => void;
-  models: readonly string[];
   onSubmitDirective: (mode: "now" | "next-stage", content?: string) => void;
 }
 
@@ -5292,13 +5257,11 @@ function WorkActivity({
   approvalDecisions,
   composer,
   detailLoading,
-  models,
   executionNotice,
   onAnnouncement,
   onComposerChange,
   onControlRun,
   onDecideApproval,
-  onSetAutonomy,
   onSubmitDirective,
   pendingApprovals,
   pendingDirective,
@@ -5311,24 +5274,11 @@ function WorkActivity({
 }: WorkActivityProps) {
   // 방이 있으면 대화는 방이 정본입니다. 없으면 Work의 활동 타임라인이 계속 나옵니다.
   const activities = room ? room.activities : work.activities;
-  const lastModelId = room?.activities.findLast((item) => item.kind === "room")?.speaker.modelId;
-  /*
-   * 모델·추론 수준·대기 지시는 이 Work에만 겁니다. 도메인이 아직 셋 다 돌려주지 않아 화면이 앞세웁니다.
-   * 인계: docs/phases/30-surface-parity-agent-ux/settings-contract-handoff.md
-   */
-  const [modelOverride, setModelOverride] = useState<string>();
-  const [effortOverride, setEffortOverride] = useState<ReasoningEffort>();
   const [queuedOverride, setQueuedOverride] = useState<QueuedDirectiveView[]>();
   useEffect(() => {
-    setModelOverride(undefined);
-    setEffortOverride(undefined);
     setQueuedOverride(undefined);
   }, [work.id]);
-  const modelId = modelOverride ?? work.modelId ?? lastModelId;
-  const effort = effortOverride ?? work.reasoningEffort ?? "medium";
   const queued = queuedOverride ?? work.queuedDirectives ?? [];
-  const setModelId = setModelOverride;
-  const setEffort = setEffortOverride;
   const setQueued = setQueuedOverride;
   const running = work.run?.status === "running" || work.run?.status === "ready";
   /*
@@ -5351,14 +5301,6 @@ function WorkActivity({
       window.removeEventListener("keydown", onKeyDown);
     };
   }, [onControlRun, running]);
-  /* 권한은 이 Work에만 겁니다. 계약이 열릴 때까지 화면 상태로 둡니다. */
-  const cycleAutonomy = () => {
-    const order: WorkAutonomyMode[] = ["automatic", "review", "full-access"];
-    const next = order[(order.indexOf(work.autonomyMode ?? "automatic") + 1) % order.length] ?? "automatic";
-    onAnnouncement(`이 업무 권한을 ${AUTONOMY_LABEL[next]}(으)로 바꿨습니다.`);
-    onSetAutonomy(next);
-  };
-
   return (
     <main
       aria-busy={detailLoading || undefined}
@@ -5376,10 +5318,28 @@ function WorkActivity({
         <div className="flex min-w-0 items-center gap-2.5">
           <h1 className="min-w-0 flex-1 truncate text-[16px] font-semibold tracking-[-0.02em]">{work.title}</h1>
           <Badge
-            className="shrink-0 whitespace-nowrap"
-            tone={work.status === "complete" ? "success" : work.status === "failed" ? "danger" : "accent"}
+            className={`shrink-0 whitespace-nowrap ${
+              work.run?.status === "blocked"
+                ? "border-halt/40 text-halt"
+                : work.run?.status === "awaiting-approval"
+                  ? "border-gate/40 text-gate"
+                  : work.status === "cancelled"
+                    ? "text-muted"
+                    : ""
+            }`}
+            tone={
+              work.status === "complete"
+                ? "success"
+                : work.status === "failed"
+                  ? "danger"
+                  : work.run?.status === "blocked" ||
+                      work.run?.status === "awaiting-approval" ||
+                      work.status === "cancelled"
+                    ? "neutral"
+                    : "accent"
+            }
           >
-            {workStatusLabel[work.status]}
+            {workRowLabel(work)}
           </Badge>
           {room ? (
             <>
@@ -5401,9 +5361,6 @@ function WorkActivity({
             <span aria-live="polite" className="mr-2 max-w-48 truncate text-xs text-accent" role="status">
               {executionNotice}
             </span>
-          ) : null}
-          {work.run?.status === "awaiting-approval" ? (
-            <span className="mr-2 text-xs text-gate">승인 결정 대기 중</span>
           ) : null}
         </div>
       </header>
@@ -5490,10 +5447,7 @@ function WorkActivity({
       </section>
       <Composer
         announcement={announcement}
-        autonomyMode={work.autonomyMode ?? "automatic"}
         closed={work.status !== "active"}
-        effort={effort}
-        models={models}
         onAnnouncement={onAnnouncement}
         onApplyQueued={(id) => {
           const directive = queued.find((item) => item.id === id);
@@ -5501,15 +5455,10 @@ function WorkActivity({
           setQueued(queued.filter((item) => item.id !== id));
           onSubmitDirective("now", directive.content);
         }}
-        onAutonomyCycle={() => {
-          cycleAutonomy();
-        }}
         onChange={onComposerChange}
         onDropQueued={(id) => {
           setQueued(queued.filter((item) => item.id !== id));
         }}
-        onEffortChange={setEffort}
-        onModelChange={setModelId}
         onStop={() => {
           onControlRun("cancel");
         }}
@@ -5523,7 +5472,6 @@ function WorkActivity({
         queued={queued}
         running={running}
         value={composer}
-        {...(modelId === undefined ? {} : { modelId })}
         {...(work.workspace === undefined ? {} : { workspace: work.workspace })}
       />
     </main>
@@ -5567,7 +5515,7 @@ function blockedReasonText(reason: string | undefined): string {
 }
 
 /**
- * 실행 상태는 스트림 «안»에 놓습니다. 상단 배너로 빼면 대화의 어느 시점에 멈췄는지가 사라지고,
+ * 실행 상태는 스트림 «안»에 놓습니다. 상단 배너로 빼면 대화의 어느 시점에 차단됐는지가 사라지고,
  * 재개 버튼이 원인 설명에서 멀어져 "상단의 무엇을 누르라"는 안내가 필요해집니다.
  */
 function RunStatusCard({
@@ -5586,13 +5534,16 @@ function RunStatusCard({
 
   if (blocked) {
     return (
-      <div aria-label="실행 상태" className="my-2 rounded-[5px] border border-danger/40 px-3 py-2.5" role="status">
+      <div aria-label="실행 상태" className="my-2 rounded-[5px] border border-halt/40 px-3 py-2.5" role="status">
         <div className="flex items-start gap-2.5">
-          <WarningCircle aria-hidden="true" className="mt-0.5 shrink-0 text-danger" size={16} />
+          <WarningCircle aria-hidden="true" className="mt-0.5 shrink-0 text-halt" size={16} />
           <div className="min-w-0 flex-1">
-            <p className="text-[13px] text-danger">{blockedReasonText(run.blockedReason)}</p>
+            <p className="flex items-baseline gap-1.5 text-[13px] text-halt">
+              <span className="shrink-0 font-medium text-halt">차단됨</span>
+              <span>{blockedReasonText(run.blockedReason)}</span>
+            </p>
             <p className="mt-0.5 flex items-baseline gap-1.5 text-[11px] text-muted">
-              <span>{runStageText(run.stage)}에서 멈춤</span>
+              <span>{runStageText(run.stage)}</span>
               {run.blockedReason === undefined ? null : (
                 <span className="font-mono text-fg-4">{run.blockedReason}</span>
               )}
@@ -5621,7 +5572,10 @@ function RunStatusCard({
         role="status"
       >
         <ShieldCheck aria-hidden="true" className="shrink-0 text-gate" size={16} />
-        <p className="min-w-0 flex-1 text-[13px] text-gate">수신함에서 결정하면 다음 단계로 진행합니다</p>
+        <p className="min-w-0 flex-1 text-[13px] text-gate">
+          <span className="font-medium text-gate">승인 대기</span>
+          <span className="ml-1.5">수신함에서 결정하면 다음 단계로 진행합니다</span>
+        </p>
       </div>
     );
   }
@@ -5884,7 +5838,7 @@ function ApprovalActivity({ decision, description, disabled, onApprove, onReject
                 {decision === "approved" ? "승인됨" : "거절됨"}
               </Badge>
             ) : (
-              <span className="text-xs font-medium text-gate">승인 필요</span>
+              <span className="text-xs font-medium text-gate">승인 대기</span>
             )}
           </div>
           <p className="mt-1 text-xs leading-5 text-muted">{description}</p>
@@ -5919,7 +5873,7 @@ function ArtifactsActivity({ artifacts, title }: { artifacts: ArtifactView[]; ti
               className="flex min-w-0 items-center gap-3 rounded-[5px] border border-border px-3 py-2 text-left"
               key={artifact.id}
             >
-              {/* 형식은 상태가 아닙니다. danger는 「막힘」 예약어라 PDF에 쓰지 않습니다. */}
+              {/* 형식은 상태가 아닙니다. danger는 「실패」 예약어라 PDF에 쓰지 않습니다. */}
               <Icon aria-hidden="true" className="shrink-0 text-fg-3" size={24} weight="fill" />
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-xs text-primary">{artifact.name}</span>
@@ -5953,30 +5907,17 @@ function EventActivity({
   );
 }
 
-const AUTONOMY_LABEL: Record<WorkAutonomyMode, string> = {
-  automatic: "자동",
-  review: "수동",
-  "full-access": "바이패스",
-};
-
 const EFFORT_LABEL: Record<ReasoningEffort, string> = { low: "낮음", medium: "보통", high: "높음" };
 
 interface ComposerProps {
-  autonomyMode: WorkAutonomyMode;
   /** 끝난 Work는 지시를 받지 않습니다. */
   closed: boolean;
-  effort: ReasoningEffort;
-  modelId?: string;
-  models: readonly string[];
   queued: readonly QueuedDirectiveView[];
   value: string;
   announcement: string;
   pending: boolean;
   running: boolean;
   workspace?: { name: string; trusted: boolean };
-  onAutonomyCycle: () => void;
-  onEffortChange: (effort: ReasoningEffort) => void;
-  onModelChange: (modelId: string) => void;
   onApplyQueued: (id: string) => void;
   onDropQueued: (id: string) => void;
   onChange: (value: string) => void;
@@ -5986,26 +5927,17 @@ interface ComposerProps {
 }
 
 /**
- * 인풋은 «이 요청이 어떤 조건으로 나가는가»를 함께 말합니다. 권한·모델·추론 수준이 여기 없으면
- * 사용자는 보낸 뒤에야 조건을 알게 됩니다.
- *
+ * 실행 조건은 조직이 역할·난이도·Provider 공급을 바탕으로 배치합니다. 인풋은 요청만 받습니다.
  * 보내기 «전에» 반영 시점을 고르게 하지 않습니다. 보내면 위에 카드로 서고, 무엇이 대기 중인지
  * 보이는 상태에서 「현재 작업 조정」을 고릅니다 — Codex가 같은 자리에 두는 순서입니다.
  */
 function Composer({
   announcement,
-  autonomyMode,
   closed,
-  effort,
-  modelId,
-  models,
   onAnnouncement,
   onApplyQueued,
-  onAutonomyCycle,
   onChange,
   onDropQueued,
-  onEffortChange,
-  onModelChange,
   onStop,
   onSubmit,
   pending,
@@ -6014,9 +5946,6 @@ function Composer({
   value,
   workspace,
 }: ComposerProps) {
-  const fullAccess = autonomyMode === "full-access";
-  const selectClass =
-    "cursor-pointer rounded-[5px] border border-transparent bg-transparent py-0.5 pl-1.5 pr-0.5 text-[11px] text-muted outline-none transition-colors duration-150 hover:border-border hover:text-secondary focus-visible:border-fg-3";
   return (
     <div className="border-t border-border bg-canvas px-5 pb-4 pt-3" data-testid="directive-composer">
       <div className="mx-auto max-w-[860px]">
@@ -6097,53 +6026,8 @@ function Composer({
             >
               <At aria-hidden="true" size={16} />
             </button>
-            {/*
-             * 권한은 보내기 전에 보이고 그 자리에서 바뀌어야 합니다. 전체 권한만 색을 갖습니다 —
-             * 승인과 샌드박스를 우회하는 상태라 안 보면 안 되는 종류입니다.
-             */}
-            <button
-              className={`ml-1 rounded-[5px] border px-2 py-0.5 text-[11px] outline-none transition-colors duration-150 ${
-                fullAccess
-                  ? "border-gate/50 text-gate"
-                  : "border-transparent text-muted hover:border-border hover:text-secondary"
-              }`}
-              onClick={onAutonomyCycle}
-              title="이 업무에만 적용됩니다"
-              type="button"
-            >
-              {AUTONOMY_LABEL[autonomyMode]}
-            </button>
+            <span className="ml-1 min-w-0 truncate text-[11px] text-muted">조직이 실행 조건을 자동 배치합니다</span>
             <div className="ml-auto flex items-center gap-1">
-              {/* 모델과 추론 수준은 다른 축입니다. 같은 모델을 더 오래 생각하게 할 수 있습니다. */}
-              <select
-                aria-label="모델"
-                className={`${selectClass} font-mono`}
-                onChange={(event) => {
-                  onModelChange(event.target.value);
-                }}
-                value={modelId ?? ""}
-              >
-                {modelId === undefined || models.includes(modelId) ? null : <option value={modelId}>{modelId}</option>}
-                {models.map((candidate) => (
-                  <option key={candidate} value={candidate}>
-                    {candidate}
-                  </option>
-                ))}
-              </select>
-              <select
-                aria-label="추론 수준"
-                className={selectClass}
-                onChange={(event) => {
-                  onEffortChange(event.target.value as ReasoningEffort);
-                }}
-                value={effort}
-              >
-                {(["low", "medium", "high"] as const).map((level) => (
-                  <option key={level} value={level}>
-                    {EFFORT_LABEL[level]}
-                  </option>
-                ))}
-              </select>
               {/* 실행 중에도 지시는 대기열에 들어갑니다. 중단은 보내기를 대체하지 않습니다. */}
               {running ? (
                 <button
@@ -6297,19 +6181,19 @@ function WorkInspector({
       >
         <header className="flex items-end border-b border-border px-2">
           <TabsList aria-label="세부 정보 보기" className="h-full w-full justify-between">
-            <TabsTrigger className="h-full flex-1 px-1" value="work">
+            <TabsTrigger className="h-full flex-1 whitespace-nowrap px-1" value="work">
               편성
             </TabsTrigger>
-            <TabsTrigger className="h-full flex-1 px-1" value="artifacts">
+            <TabsTrigger className="h-full flex-1 whitespace-nowrap px-1" value="artifacts">
               산출물
             </TabsTrigger>
-            <TabsTrigger className="h-full flex-1 px-1" value="verification">
+            <TabsTrigger className="h-full flex-1 whitespace-nowrap px-1" value="verification">
               검증
             </TabsTrigger>
-            <TabsTrigger className="h-full flex-1 px-1" value="records">
+            <TabsTrigger className="h-full flex-1 whitespace-nowrap px-1" value="records">
               기록
             </TabsTrigger>
-            <TabsTrigger className="h-full flex-1 px-1" value="knowledge">
+            <TabsTrigger className="h-full flex-1 whitespace-nowrap px-1" value="knowledge">
               근거
             </TabsTrigger>
           </TabsList>

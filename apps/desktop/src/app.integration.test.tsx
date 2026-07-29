@@ -60,7 +60,7 @@ describe("AgentOS native data flow", () => {
     // 프로바이더와 계정은 프로바이더 표면이 소유합니다.
     expect(screen.queryByText(/Provider 연결/)).not.toBeInTheDocument();
     expect(screen.queryByText("구독 계정")).not.toBeInTheDocument();
-    // 인풋의 모델 목록도 같은 조회를 씁니다. 설정 표면 진입이 조회를 유발했는지만 봅니다.
+    // 설정 표면 진입이 실제 조회를 유발했는지만 봅니다.
     expect(loadSettings).toHaveBeenCalled();
     expect(screen.queryByText("절대-표시되면-안됨")).not.toBeInTheDocument();
   });
@@ -292,17 +292,23 @@ describe("AgentOS native data flow", () => {
     expect(await screen.findByText("CRM 고객 데이터 읽기")).toBeInTheDocument();
   });
 
-  it("수신함 항목은 상단 행 맨 오른쪽 꺾쇠로 업무에 이동한다", async () => {
+  it("같은 차단 실행을 Home·Inbox·Work에서 같은 상태와 행동으로 표시한다", async () => {
     const user = userEvent.setup();
-    render(<App service={service()} />);
+    const resumeRun = vi.fn(async () => undefined);
+    render(<App service={service({ resumeRun })} />);
+
+    await user.click(screen.getByRole("button", { name: "홈" }));
+    const home = await screen.findByRole("main", { name: "홈" });
+    const homeBlocked = within(home).getByRole("button", { name: /파트너 계약서 검토/u });
+    expect(within(homeBlocked).getByText("차단됨")).toHaveClass("text-halt");
 
     await user.click(await screen.findByRole("button", { name: /수신함, 미해결/ }));
     const panel = await screen.findByRole("dialog", { name: "수신함" });
     const approvalSource = within(panel).getByRole("button", { name: "승인 검토 열기: CRM 고객 데이터 읽기" });
     const blockedSource = within(panel).getByRole("button", { name: "업무로 이동: 파트너 계약서 검토" });
 
-    expect(approvalSource).toHaveTextContent("CRM 고객 데이터 읽기승인 필요");
-    expect(blockedSource).toHaveTextContent("파트너 계약서 검토막힘");
+    expect(approvalSource).toHaveTextContent("CRM 고객 데이터 읽기승인 대기");
+    expect(within(blockedSource).getByText("차단됨")).toHaveClass("text-halt");
     expect(approvalSource.lastElementChild?.tagName).toBe("svg");
     expect(blockedSource.lastElementChild?.tagName).toBe("svg");
     expect(approvalSource.parentElement?.tagName).toBe("H3");
@@ -313,7 +319,132 @@ describe("AgentOS native data flow", () => {
 
     await user.click(blockedSource);
     expect(screen.queryByRole("dialog", { name: "수신함" })).not.toBeInTheDocument();
-    expect(screen.getByRole("main", { name: "파트너 계약서 검토" })).toBeInTheDocument();
+    const work = screen.getByRole("main", { name: "파트너 계약서 검토" });
+    const workList = screen.getByRole("region", { name: "Work 목록" });
+    const workRow = within(workList).getByRole("button", { name: /파트너 계약서 검토/u });
+    const runStatus = within(work).getByRole("status", { name: "실행 상태" });
+    expect(within(workRow).getByText("차단됨")).toHaveClass("text-halt");
+    expect(within(runStatus).getByText("차단됨")).toHaveClass("text-halt");
+    expect(runStatus).not.toHaveTextContent(/막힘|중단됨|에서 멈춤/u);
+    await user.click(within(runStatus).getByRole("button", { name: "폴더 신뢰" }));
+    expect(resumeRun).toHaveBeenCalledWith(expect.objectContaining({ id: "partner-contract" }));
+  });
+
+  it("승인 대기 실행은 Home·Inbox·Work에서 gate 상태로 일치한다", async () => {
+    const user = userEvent.setup();
+    const base = fixtureDataAdapter().works[0] as WorkView;
+    const awaiting: WorkView = {
+      ...base,
+      run: { runId: "run-awaiting-status", status: "awaiting-approval", stage: "evidence", leaseGeneration: 1 },
+    };
+    const ready: WorkView = {
+      ...base,
+      approvals: [],
+      id: "work-ready-status",
+      title: "준비된 업무",
+      run: { runId: "run-ready-status", status: "ready", stage: "intake", leaseGeneration: 1 },
+    };
+    const running: WorkView = {
+      ...base,
+      approvals: [],
+      id: "work-running-status",
+      title: "실행 중인 업무",
+      run: { runId: "run-running-status", status: "running", stage: "delivery", leaseGeneration: 1 },
+    };
+    const excluded = (["blocked", "cancelled", "completed", "failed"] as const).map((status): WorkView => ({
+      ...base,
+      approvals: [],
+      id: `work-${status}-status`,
+      title: `${status} 실행 업무`,
+      run: { runId: `run-${status}-status`, status, stage: "delivery", leaseGeneration: 1 },
+    }));
+    const withoutRun: WorkView = { ...base, approvals: [], id: "work-without-run", title: "실행 없는 업무" };
+    const works = [awaiting, ready, running, withoutRun, ...excluded];
+    render(
+      <App
+        service={service({
+          initialSnapshot: { works },
+          loadIndex: async () => works,
+          loadWork: async () => awaiting,
+        })}
+      />,
+    );
+
+    const workList = screen.getByRole("region", { name: "Work 목록" });
+    expect(within(workList).getByText("승인 대기")).toHaveClass("text-gate");
+
+    await user.click(screen.getByRole("button", { name: "홈" }));
+    const home = await screen.findByRole("main", { name: "홈" });
+    const waiting = within(home).getByRole("region", { name: "나를 기다리는 것" });
+    const active = within(home).getByRole("region", { name: "지금 도는 것" });
+    expect(within(waiting).getByText("CRM 고객 데이터 읽기")).toBeInTheDocument();
+    expect(within(waiting).getByText("승인 대기")).toHaveClass("text-gate");
+    expect(within(active).getByRole("button", { name: /준비된 업무/u })).toBeInTheDocument();
+    expect(within(active).getByRole("button", { name: /실행 중인 업무/u })).toBeInTheDocument();
+    for (const title of [awaiting.title, withoutRun.title, ...excluded.map((work) => work.title)]) {
+      expect(within(active).queryByRole("button", { name: new RegExp(title, "u") })).not.toBeInTheDocument();
+    }
+
+    await user.click(await screen.findByRole("button", { name: /수신함, 미해결/u }));
+    const panel = await screen.findByRole("dialog", { name: "수신함" });
+    const approvalSource = within(panel).getByRole("button", { name: "승인 검토 열기: CRM 고객 데이터 읽기" });
+    expect(within(approvalSource).getByText("승인 대기")).toHaveClass("text-gate");
+
+    await user.click(approvalSource);
+    const work = screen.getByRole("main", { name: awaiting.title });
+    const runStatus = within(work).getByRole("status", { name: "실행 상태" });
+    expect(within(runStatus).getByText("승인 대기")).toHaveClass("text-gate");
+    expect(within(runStatus).queryByRole("button", { name: "다시 시도" })).not.toBeInTheDocument();
+  });
+
+  it("빈 Inbox는 차단 상태의 정본 용어를 사용한다", async () => {
+    const user = userEvent.setup();
+    const fixture = createFixtureDesktopService();
+    const growth = await fixture.loadGrowth();
+    render(
+      <App
+        service={{
+          ...fixture,
+          initialSnapshot: { works: [] },
+          loadGrowth: async () => ({ ...growth, suggestions: [] }),
+          loadIndex: async () => [],
+          loadPendingApprovals: async () => [],
+        }}
+      />,
+    );
+
+    await user.click(await screen.findByRole("button", { name: "수신함" }));
+    const inbox = await screen.findByRole("dialog", { name: "수신함" });
+    expect(within(inbox).getByText("지금 사람을 기다리거나 차단된 것이 없습니다.")).toBeInTheDocument();
+    expect(within(inbox).queryByText(/막힌 것이/u)).not.toBeInTheDocument();
+  });
+
+  it("취소와 실패 상태는 Work 목록과 상세에서 정본 용어와 색을 유지한다", async () => {
+    const user = userEvent.setup();
+    const base = fixtureDataAdapter().works[0] as WorkView;
+    const cancelled: WorkView = { ...base, id: "work-cancelled", title: "취소한 업무", status: "cancelled" };
+    const failed: WorkView = { ...base, id: "work-failed", title: "실패한 업무", status: "failed" };
+    render(
+      <App
+        service={service({
+          initialSnapshot: { works: [cancelled, failed] },
+          loadIndex: async () => [cancelled, failed],
+          loadWork: async (workId) => (workId === failed.id ? failed : cancelled),
+        })}
+      />,
+    );
+
+    const list = screen.getByRole("region", { name: "Work 목록" });
+    await user.click(within(list).getByRole("tab", { name: "완료" }));
+    const cancelledRow = await within(list).findByRole("button", { name: /취소한 업무/u });
+    expect(within(cancelledRow).getByText("취소됨")).toHaveClass("text-muted");
+    expect(screen.getByRole("heading", { name: cancelled.title }).nextElementSibling).toHaveClass("text-muted");
+
+    const failedRow = within(list).getByRole("button", { name: /실패한 업무/u });
+    expect(within(failedRow).getByText("실패")).toHaveClass("text-danger");
+    await user.click(failedRow);
+    expect(await screen.findByRole("main", { name: failed.title })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: failed.title }).nextElementSibling).toHaveClass("text-danger");
   });
 
   it("수신함은 검토 대기 개선을 집계하고 해당 개선 상세로 이동한다", async () => {
@@ -347,6 +478,21 @@ describe("AgentOS native data flow", () => {
       expect(loadPendingApprovals).toHaveBeenCalledOnce();
       expect(loadAutonomy).toHaveBeenCalledOnce();
     });
+  });
+
+  it("Settings의 전체 권한은 확인 뒤 실제 지속 권한 명령으로 저장한다", async () => {
+    const user = userEvent.setup();
+    const setAutonomy = vi.fn(createFixtureDesktopService().setAutonomy);
+    render(<App service={service({ setAutonomy })} />);
+
+    await user.click(screen.getByRole("button", { name: "설정" }));
+    const settings = await screen.findByRole("region", { name: "권한과 자가개선" });
+    expect(within(settings).queryByText("바이패스")).not.toBeInTheDocument();
+    await user.click(within(settings).getByRole("button", { name: "전체 권한" }));
+    await user.click(within(settings).getByRole("button", { name: "승인" }));
+
+    await waitFor(() => expect(setAutonomy).toHaveBeenCalledWith("full-access", 0));
+    expect(screen.getByText("권한을 저장했습니다.")).toBeInTheDocument();
   });
 
   it("성장 화면은 개인 기억과 승인 근거를 함께 표시한다", async () => {
