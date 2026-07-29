@@ -298,13 +298,14 @@ export function RoomMessage({
       <AgentAvatar speaker={speaker} />
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-          <SpeakerName speaker={speaker} />
-          <TypeTag speaker={speaker} type={type} />
+          {/* 최종 응답은 칩 하나로 줄 세우지 않습니다. 이 방에서 하나뿐인 줄이라 먼저 섭니다. */}
           {final ? (
-            <span className="rounded-[3px] border border-primary px-1.5 text-[10px] font-semibold tracking-[0.06em] text-primary">
-              최종
+            <span className="rounded-[3px] bg-fg px-1.5 py-0.5 text-[10px] font-semibold tracking-[0.06em] text-canvas">
+              최종 응답
             </span>
           ) : null}
+          <SpeakerName speaker={speaker} />
+          <TypeTag speaker={speaker} type={type} />
           <time className="font-mono text-[11px] text-muted">
             {recipient ? `→ ${recipient} · ` : ""}
             {target ? `${target} · ` : ""}

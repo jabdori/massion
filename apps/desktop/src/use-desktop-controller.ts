@@ -256,8 +256,11 @@ export function useDesktopController(service: DesktopService) {
               }
             }
 
-            const current = workRef.current;
-            if (current) setSelectedId(current.id);
+            /*
+             * 여기서 선택을 다시 밀지 않습니다. 스트림 이벤트마다(100ms 디바운스) 이전 Work로
+             * 되돌려서, 사용자가 방금 누른 Work가 간헐적으로 버려졌습니다. 목록 갱신은 아래
+             * setWorks가 이미 합니다 — 선택은 사용자만 바꿉니다.
+             */
             const value = asRecord(event);
             if (typeof value?.sequence === "number")
               setAnnouncement(`업데이트 ${String(value.sequence)}을 반영했습니다.`);

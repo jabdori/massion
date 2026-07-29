@@ -1749,6 +1749,60 @@ function fixtureSpent(routeId: string): number {
     .reduce((total, attempt) => total + attempt.costMicros, 0);
 }
 
+/**
+ * Work마다 다른 편성·한도·근거입니다. 하나를 돌려 쓰면 완료된 Work 끝에 다른 Work의
+ * 오늘자 미해결 질문이 붙고, 우측 열 숫자가 Work를 옮겨도 그대로입니다.
+ */
+interface FixtureRoomShape {
+  participants: readonly string[];
+  rounds: number;
+  tokens: number;
+  cost: number;
+  sharedContexts: { id: string; label: string; checksum: string }[];
+}
+
+const fixtureDefaultRoom: FixtureRoomShape = {
+  participants: ["representative", "context-strategy", "delivery-coordination"],
+  rounds: 2,
+  tokens: 11_400,
+  cost: 42_000,
+  sharedContexts: [],
+};
+
+const fixtureRoomShapes: Record<string, FixtureRoomShape> = {
+  "churn-q3": {
+    participants: ["representative", "context-strategy", "evidence-research", "delivery-coordination", "assurance"],
+    rounds: 6,
+    tokens: 48_200,
+    cost: 310_000,
+    sharedContexts: [
+      { id: "ref-brief", label: "evidence-brief · 라벨링 기준 브리프", checksum: "a3f1c8" },
+      { id: "ref-log", label: "evidence-brief · 해지 로그 90일", checksum: "7c02b1" },
+    ],
+  },
+  "partner-contract": {
+    participants: ["representative", "evidence-research", "assurance"],
+    rounds: 3,
+    tokens: 19_800,
+    cost: 172_000,
+    sharedContexts: [{ id: "ref-terms", label: "evidence-brief · 기존 계약 책임 범위", checksum: "d41e90" }],
+  },
+  "refund-delay": {
+    participants: ["representative", "context-strategy", "evidence-research", "delivery-coordination", "assurance"],
+    rounds: 9,
+    tokens: 34_100,
+    cost: 187_000,
+    sharedContexts: [{ id: "ref-delay", label: "구간별 지연.csv", checksum: "d40f7a" }],
+  },
+  "weekly-ops": {
+    participants: ["representative", "delivery-coordination"],
+    rounds: 4,
+    tokens: 27_600,
+    cost: 118_000,
+    sharedContexts: [{ id: "ref-ops", label: "evidence-brief · 주간 운영 지표", checksum: "b18c47" }],
+  },
+};
+
 const fixtureSettings: SettingsView = {
   catalog: {
     /*
@@ -2279,20 +2333,31 @@ export function createFixtureDesktopService(): DesktopService {
           ];
         }
 
+        const room = fixtureRoomShapes[workId] ?? fixtureDefaultRoom;
+        const core = {
+          roomId: `${workId}-core-office`,
+          name: "Core Office",
+          status: "active",
+          participants: room.participants.map(speak),
+          lastMessageSequence: work.activities.length,
+          budgets: budget(
+            `${workId}-core-office`,
+            "Core Office",
+            room.rounds,
+            100,
+            room.tokens,
+            200_000,
+            room.cost,
+            1_000_000,
+          ),
+          sharedContexts: [...room.sharedContexts],
+          activities: work.activities,
+        };
+        // 갈라진 방은 그 대화를 실제로 나눈 Work에만 붙습니다.
+        if (workId !== "churn-q3") return withRoomReferences([core]);
+
         return withRoomReferences([
-          {
-            roomId: `${workId}-core-office`,
-            name: "Core Office",
-            status: "active",
-            participants: [speak("representative"), speak("context-strategy"), quill, vega, speak("assurance")],
-            lastMessageSequence: work.activities.length,
-            budgets: budget(`${workId}-core-office`, "Core Office", 6, 100, 48_200, 200_000, 310_000, 1_000_000),
-            sharedContexts: [
-              { id: "ref-brief", label: "evidence-brief · 라벨링 기준 브리프", checksum: "a3f1c8" },
-              { id: "ref-log", label: "evidence-brief · 해지 로그 90일", checksum: "7c02b1" },
-            ],
-            activities: work.activities,
-          },
+          core,
           // 에이전트 둘이 대표를 거치지 않고 직접 붙은 방. 도메인은 참가자 수만 다른 같은 협업방입니다.
           {
             roomId: `${workId}-cohort`,

@@ -58,12 +58,13 @@ describe("AgentOS 데스크톱", () => {
 
     // 최종 응답은 활동 흐름 안에서 다른 발언과 갈립니다.
     expect(await screen.findByText(/정산 배치 대기였습니다/)).toBeInTheDocument();
-    expect(screen.getByText("최종")).toBeInTheDocument();
+    expect(screen.getByText("최종 응답")).toBeInTheDocument();
 
     const inspector = screen.getByRole("complementary", { name: "Work 세부 정보" });
     await user.click(within(inspector).getByRole("tab", { name: "검증" }));
     expect(within(inspector).getByText("검증 기준")).toBeInTheDocument();
-    expect(within(inspector).getByText("rollback-path-exists")).toBeInTheDocument();
+    // 도메인 슬러그는 화면에 그대로 나오지 않습니다. 사람이 읽는 말이 서고 슬러그는 툴팁입니다.
+    expect(within(inspector).getByText("되돌릴 경로 존재")).toHaveAttribute("title", "rollback-path-exists");
 
     await user.click(within(inspector).getByRole("tab", { name: "기록" }));
     // 되돌릴 수 있는 지점과 결정이 기록에서 읽힙니다.

@@ -439,7 +439,7 @@ const works: WorkView[] = [
     verifications: [
       {
         id: "verification-churn",
-        verifier: "iris",
+        verifier: "Iris",
         state: "done",
         criteria: [
           { key: "data-accuracy", status: "passed" },
@@ -612,7 +612,7 @@ const works: WorkView[] = [
     verifications: [
       {
         id: "verification-contract",
-        verifier: "onyx",
+        verifier: "Onyx",
         state: "failed",
         criteria: [
           { key: "standard-policy-match", status: "failed" },
@@ -634,8 +634,8 @@ const works: WorkView[] = [
         id: "accepted",
         kind: "message",
         time: "어제",
-        author: "대표 에이전트",
-        initials: "M",
+        author: "Atlas",
+        initials: "A",
         content: "계약 원문과 내부 표준 정책을 대조하고 있습니다.",
       },
     ],
@@ -661,7 +661,7 @@ const works: WorkView[] = [
     verifications: [
       {
         id: "verification-metrics",
-        verifier: "vega",
+        verifier: "Vega",
         state: "done",
         criteria: [{ key: "source-metric-match", status: "passed" }],
       },
@@ -672,8 +672,8 @@ const works: WorkView[] = [
         id: "accepted",
         kind: "message",
         time: "09.02",
-        author: "대표 에이전트",
-        initials: "M",
+        author: "Atlas",
+        initials: "A",
         content: "지난주 대비 변동 폭이 큰 운영 지표부터 확인하고 있습니다.",
       },
     ],
@@ -717,7 +717,7 @@ const works: WorkView[] = [
     verifications: [
       {
         id: "verification-refund",
-        verifier: "iris",
+        verifier: "Iris",
         state: "done",
         criteria: [
           { key: "stage-latency-decomposed", status: "passed" },

@@ -195,6 +195,20 @@ const stateClass: Record<StepState, string> = {
   failed: "text-danger",
 };
 
+/** 도메인 식별자는 화면에 그대로 내보내지 않습니다. 슬러그는 툴팁으로 내립니다. */
+const criterionLabel: Record<string, string> = {
+  "data-accuracy": "데이터 정확성",
+  "statistical-significance": "통계적 유의성",
+  "improvement-feasibility": "개선안 실행 가능성",
+  "expected-impact": "예상 효과",
+  "liability-scope": "책임 범위",
+  "standard-policy-match": "표준 정책 일치",
+  "source-metric-match": "원본 지표 일치",
+  "stage-latency-decomposed": "단계별 지연 분해",
+  "batch-window-reproduced": "배치 구간 재현",
+  "rollback-path-exists": "되돌릴 경로 존재",
+};
+
 const criterionStatusLabel: Record<VerificationCriterionStatus, string> = {
   passed: "통과",
   failed: "미통과",
@@ -6491,7 +6505,9 @@ function InspectorVerifications({ values }: { values: WorkView["verifications"] 
               <ul className="mt-1.5 space-y-1 pl-6">
                 {verification.criteria.map((criterion) => (
                   <li className="flex items-center gap-2 text-[11px]" key={criterion.key}>
-                    <span className="min-w-0 flex-1 truncate font-mono text-muted">{criterion.key}</span>
+                    <span className="min-w-0 flex-1 truncate text-muted" title={criterion.key}>
+                      {criterionLabel[criterion.key] ?? criterion.key}
+                    </span>
                     <span className={criterionStatusClass[criterion.status]}>
                       {criterionStatusLabel[criterion.status]}
                     </span>
