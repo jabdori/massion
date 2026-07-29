@@ -730,6 +730,19 @@ export interface ProviderConnectionView {
   readonly verifiedAt?: string;
   /** `provider_credential.secret_version`. 키를 언제 갈았는지입니다. */
   readonly credentialVersion?: number;
+  /** 이 Provider가 제공하는 모델 프로필입니다. */
+  readonly models: readonly ProviderModelView[];
+}
+
+export interface ProviderModelView {
+  readonly modelProfileId: string;
+  readonly modelId: string;
+  /** 이 모델이 어느 종류의 요청에 배치되는지. */
+  readonly routeKind: string;
+  readonly enabled: boolean;
+  /** `model_verification_evidence`가 있는지. 카탈로그에 이름이 있는 것과 응답하는 것은 다릅니다. */
+  readonly verified: boolean;
+  readonly local: boolean;
 }
 
 /** `subscription.accounts`. quota가 계정 행에 함께 실려 옵니다. */
@@ -1333,25 +1346,70 @@ export function createApplicationDesktopService(
  * 완성본 기준 설정. 조회가 실제로 돌려주는 모양 그대로 두고, 투영이 화면 뷰로 옮깁니다.
  * 계약이 타입을 주지 않으므로 여기서도 형태로만 고정합니다.
  */
+/* 등록을 반영하려면 사본이 필요합니다. 원본을 그대로 쓰면 모듈 상수를 변형하게 됩니다. */
 const fixtureSettings: SettingsView = {
   catalog: {
+    /*
+     * 구독 커넥터 6종(codex·claude·gemini·copilot·grok·antigravity)과 API 어댑터를 지원합니다.
+     * 실제 지원 목록은 packages/subscriptions와 apps/connector의 provider id가 정본입니다.
+     */
     providers: [
+      {
+        providerId: "anthropic-claude-code",
+        displayName: "Claude Code",
+        adapterKind: "subscription-connector",
+        enabled: true,
+      },
+      { providerId: "openai-codex", displayName: "OpenAI Codex", adapterKind: "subscription-connector", enabled: true },
       { providerId: "zai", displayName: "Z.ai", adapterKind: "openai-compatible", enabled: true },
-      { providerId: "anthropic", displayName: "Anthropic", adapterKind: "anthropic", enabled: true },
+      {
+        providerId: "google-gemini-cli-enterprise",
+        displayName: "Gemini CLI",
+        adapterKind: "subscription-connector",
+        enabled: true,
+      },
+      {
+        providerId: "github-copilot",
+        displayName: "GitHub Copilot",
+        adapterKind: "subscription-connector",
+        enabled: true,
+      },
       { providerId: "ollama", displayName: "Ollama", adapterKind: "ollama", enabled: true },
+      { providerId: "xai-grok-build", displayName: "xAI Grok", adapterKind: "subscription-connector", enabled: false },
+      {
+        providerId: "google-antigravity-cli",
+        displayName: "Antigravity",
+        adapterKind: "subscription-connector",
+        enabled: false,
+      },
     ],
     /*
      * `router_circuit`. 켜짐/꺼짐과 다른 축이라 셋을 다 세워 둡니다 — 성한 것, 흔들리는 것,
      * 막힌 것. 화면이 이 셋을 구분하지 못하면 사용자는 안 될 때 원인을 못 찾습니다.
      */
     circuits: [
+      {
+        providerId: "anthropic-claude-code",
+        state: "closed",
+        failureCount: 0,
+        lastSucceededAt: "2026-07-28T02:31:04.000Z",
+      },
+      { providerId: "openai-codex", state: "closed", failureCount: 0, lastSucceededAt: "2026-07-28T02:18:40.000Z" },
       { providerId: "zai", state: "closed", failureCount: 0, lastSucceededAt: "2026-07-28T02:24:11.000Z" },
       {
-        providerId: "anthropic",
+        providerId: "google-gemini-cli-enterprise",
         state: "half-open",
         failureCount: 3,
         lastFailureClass: "rate-limit",
         lastSucceededAt: "2026-07-28T01:58:02.000Z",
+      },
+      {
+        providerId: "github-copilot",
+        state: "open",
+        failureCount: 5,
+        openUntil: "2026-07-28T02:47:00.000Z",
+        lastFailureClass: "authentication",
+        lastSucceededAt: "2026-07-27T18:22:10.000Z",
       },
       {
         providerId: "ollama",
@@ -1364,102 +1422,144 @@ const fixtureSettings: SettingsView = {
     ],
     /* `model_verification_evidence`(immutable). 카탈로그에 이름이 있는 것과 응답하는 것은 다릅니다. */
     verificationEvidence: [
+      { providerId: "anthropic-claude-code", modelId: "claude-sonnet-5", verifiedAt: "2026-07-28T02:31:04.000Z" },
+      { providerId: "anthropic-claude-code", modelId: "claude-haiku-4-5", verifiedAt: "2026-07-28T02:31:09.000Z" },
+      { providerId: "openai-codex", modelId: "gpt-5.6-luna", verifiedAt: "2026-07-28T02:18:40.000Z" },
       { providerId: "zai", modelId: "glm-5.2", verifiedAt: "2026-07-27T09:41:00.000Z" },
       { providerId: "zai", modelId: "glm-5.2-air", verifiedAt: "2026-07-27T09:41:12.000Z" },
-      { providerId: "anthropic", modelId: "claude-haiku-4-5", verifiedAt: "2026-07-26T14:02:00.000Z" },
+      { providerId: "google-gemini-cli-enterprise", modelId: "gemini-3-pro", verifiedAt: "2026-07-28T01:58:02.000Z" },
     ],
     credentials: [
+      { providerId: "anthropic-claude-code", secretVersion: 2 },
+      { providerId: "openai-codex", secretVersion: 1 },
       { providerId: "zai", secretVersion: 3 },
-      { providerId: "anthropic", secretVersion: 1 },
+      { providerId: "google-gemini-cli-enterprise", secretVersion: 1 },
+      { providerId: "github-copilot", secretVersion: 1 },
     ],
     endpoints: [
       {
-        endpointId: "endpoint-zai",
-        providerId: "zai",
-        name: "coding-plan",
-        baseUrl: "https://api.z.ai/v1",
-        local: false,
+        endpointId: "ep-claude",
+        providerId: "anthropic-claude-code",
+        name: "claude-code",
+        baseUrl: "cli://claude",
+        local: true,
+      },
+      { endpointId: "ep-codex", providerId: "openai-codex", name: "codex", baseUrl: "cli://codex", local: true },
+      { endpointId: "ep-zai", providerId: "zai", name: "coding-plan", baseUrl: "https://api.z.ai/v1", local: false },
+      {
+        endpointId: "ep-gemini",
+        providerId: "google-gemini-cli-enterprise",
+        name: "gemini-cli",
+        baseUrl: "cli://gemini",
+        local: true,
       },
       {
-        endpointId: "endpoint-anthropic",
-        providerId: "anthropic",
-        name: "messages",
-        baseUrl: "https://api.anthropic.com/v1",
-        local: false,
+        endpointId: "ep-copilot",
+        providerId: "github-copilot",
+        name: "copilot-acp",
+        baseUrl: "acp://copilot",
+        local: true,
       },
+      { endpointId: "ep-ollama", providerId: "ollama", name: "local", baseUrl: "http://127.0.0.1:11434", local: true },
+      { endpointId: "ep-grok", providerId: "xai-grok-build", name: "grok-acp", baseUrl: "acp://grok", local: true },
       {
-        endpointId: "endpoint-ollama",
-        providerId: "ollama",
-        name: "local",
-        baseUrl: "http://127.0.0.1:11434",
+        endpointId: "ep-antigravity",
+        providerId: "google-antigravity-cli",
+        name: "antigravity",
+        baseUrl: "cli://antigravity",
         local: true,
       },
     ],
     models: [
       {
-        modelProfileId: "profile-glm",
+        modelProfileId: "mp-sonnet",
+        providerId: "anthropic-claude-code",
+        endpointId: "ep-claude",
+        modelId: "claude-sonnet-5",
+        routeKind: "reasoning",
+        verified: true,
+        enabled: true,
+      },
+      {
+        modelProfileId: "mp-haiku",
+        providerId: "anthropic-claude-code",
+        endpointId: "ep-claude",
+        modelId: "claude-haiku-4-5",
+        routeKind: "utility",
+        verified: true,
+        enabled: true,
+      },
+      {
+        modelProfileId: "mp-luna",
+        providerId: "openai-codex",
+        endpointId: "ep-codex",
+        modelId: "gpt-5.6-luna",
+        routeKind: "reasoning",
+        verified: true,
+        enabled: true,
+      },
+      {
+        modelProfileId: "mp-glm",
         providerId: "zai",
-        endpointId: "endpoint-zai",
+        endpointId: "ep-zai",
         modelId: "glm-5.2",
         routeKind: "reasoning",
         verified: true,
         enabled: true,
       },
       {
-        modelProfileId: "profile-haiku",
-        providerId: "anthropic",
-        endpointId: "endpoint-anthropic",
-        modelId: "claude-haiku-4-5",
+        modelProfileId: "mp-glm-air",
+        providerId: "zai",
+        endpointId: "ep-zai",
+        modelId: "glm-5.2-air",
+        routeKind: "utility",
+        verified: true,
+        enabled: true,
+      },
+      {
+        modelProfileId: "mp-gemini",
+        providerId: "google-gemini-cli-enterprise",
+        endpointId: "ep-gemini",
+        modelId: "gemini-3-pro",
         routeKind: "reasoning",
         verified: true,
         enabled: true,
       },
       {
-        modelProfileId: "profile-qwen",
+        modelProfileId: "mp-copilot",
+        providerId: "github-copilot",
+        endpointId: "ep-copilot",
+        modelId: "gpt-5.6-copilot",
+        routeKind: "utility",
+        verified: false,
+        enabled: true,
+      },
+      {
+        modelProfileId: "mp-qwen",
         providerId: "ollama",
-        endpointId: "endpoint-ollama",
+        endpointId: "ep-ollama",
         modelId: "qwen3:8b",
         routeKind: "utility",
         verified: false,
         enabled: true,
       },
+      {
+        modelProfileId: "mp-embed",
+        providerId: "ollama",
+        endpointId: "ep-ollama",
+        modelId: "nomic-embed-text",
+        routeKind: "embedding",
+        verified: false,
+        enabled: true,
+      },
     ],
     candidates: [
-      {
-        candidateId: "candidate-1",
-        routeId: "route-reasoning",
-        modelProfileId: "profile-glm",
-        priority: 0,
-        enabled: true,
-      },
-      {
-        candidateId: "candidate-1b",
-        routeId: "route-reasoning",
-        modelProfileId: "profile-haiku",
-        priority: 1,
-        enabled: true,
-      },
-      {
-        candidateId: "candidate-1c",
-        routeId: "route-reasoning",
-        modelProfileId: "profile-qwen",
-        priority: 2,
-        enabled: true,
-      },
-      {
-        candidateId: "candidate-2",
-        routeId: "route-utility",
-        modelProfileId: "profile-qwen",
-        priority: 0,
-        enabled: true,
-      },
-      {
-        candidateId: "candidate-3",
-        routeId: "route-embedding",
-        modelProfileId: "profile-qwen",
-        priority: 1,
-        enabled: false,
-      },
+      { candidateId: "c-r1", routeId: "route-reasoning", modelProfileId: "mp-sonnet", priority: 0, enabled: true },
+      { candidateId: "c-r2", routeId: "route-reasoning", modelProfileId: "mp-glm", priority: 1, enabled: true },
+      { candidateId: "c-r3", routeId: "route-reasoning", modelProfileId: "mp-gemini", priority: 2, enabled: true },
+      { candidateId: "c-u1", routeId: "route-utility", modelProfileId: "mp-haiku", priority: 0, enabled: true },
+      { candidateId: "c-u2", routeId: "route-utility", modelProfileId: "mp-qwen", priority: 1, enabled: true },
+      { candidateId: "c-e1", routeId: "route-embedding", modelProfileId: "mp-embed", priority: 0, enabled: true },
     ],
   },
   credentials: [{ credentialId: "credential-zai", providerId: "zai", label: "coding-plan", credentialType: "api_key" }],
@@ -1607,6 +1707,8 @@ const fixturePromise = <T>(run: () => T): Promise<T> =>
   new Promise((resolve) => {
     resolve(run());
   });
+
+const settingsState: SettingsView = structuredClone(fixtureSettings);
 
 export function createFixtureDesktopService(): DesktopService {
   const initialSnapshot = fixtureDataAdapter();
@@ -1843,11 +1945,44 @@ export function createFixtureDesktopService(): DesktopService {
           fixtureExtensionEntries.map((item) => item.packageName),
         ),
       ]),
-    loadSettings: () => fixturePromise(() => fixtureSettings),
+    loadSettings: () => fixturePromise(() => settingsState),
     connectZaiCodingPlan: () => fixturePromise(() => undefined),
-    registerProvider: () => fixturePromise(() => undefined),
-    registerEndpoint: () => fixturePromise(() => undefined),
-    addCredential: () => fixturePromise(() => undefined),
+    /*
+     * 픽스처는 등록을 실제로 반영합니다. no-op이면 추가 흐름이 화면에서 끝까지 서지 않고,
+     * 무엇이 빠졌는지도 드러나지 않습니다(PRODUCT.md 2026-07-23: 화면은 완성본 기준).
+     */
+    registerProvider: (input) =>
+      fixturePromise(() => {
+        const catalog = settingsState.catalog as { providers: Record<string, unknown>[] };
+        if (!catalog.providers.some((row) => row.providerId === input.providerId)) {
+          catalog.providers.push({
+            providerId: input.providerId,
+            displayName: input.displayName,
+            adapterKind: input.adapterKind,
+            enabled: true,
+          });
+        }
+      }),
+    registerEndpoint: (input) =>
+      fixturePromise(() => {
+        const catalog = settingsState.catalog as { endpoints: Record<string, unknown>[] };
+        if (!catalog.endpoints.some((row) => row.providerId === input.providerId && row.baseUrl === input.baseUrl)) {
+          catalog.endpoints.push({
+            endpointId: `ep-${String(input.providerId)}`,
+            providerId: input.providerId,
+            name: input.name,
+            baseUrl: input.baseUrl,
+            local: input.local,
+          });
+        }
+      }),
+    addCredential: (input) =>
+      fixturePromise(() => {
+        const catalog = settingsState.catalog as { credentials: Record<string, unknown>[] };
+        const existing = catalog.credentials.find((row) => row.providerId === input.providerId);
+        if (existing) existing.secretVersion = Number(existing.secretVersion ?? 0) + 1;
+        else catalog.credentials.push({ providerId: input.providerId, secretVersion: 1 });
+      }),
     disableCredential: () => fixturePromise(() => undefined),
     registerModel: () => fixturePromise(() => undefined),
     configureRoute: () => fixturePromise(() => undefined),
@@ -2598,6 +2733,7 @@ export function projectProviderConnections(catalog: unknown): readonly ProviderC
   const circuits = rows(source.circuits);
   const evidence = rows(source.verificationEvidence);
   const credentials = rows(source.credentials);
+  const models = rows(source.models);
   return rows(source.providers)
     .filter((row) => typeof row.providerId === "string")
     .map((row) => {
@@ -2622,6 +2758,19 @@ export function projectProviderConnections(catalog: unknown): readonly ProviderC
             baseUrl: str(endpoint, "baseUrl"),
             local: bool(endpoint, "local"),
           })),
+        models: models
+          .filter((item) => str(item, "providerId") === providerId)
+          .map((item) => {
+            const modelEndpoint = endpoints.find((row) => str(row, "endpointId") === str(item, "endpointId"));
+            return {
+              modelProfileId: str(item, "modelProfileId"),
+              modelId: str(item, "modelId"),
+              routeKind: str(item, "routeKind"),
+              enabled: bool(item, "enabled"),
+              verified: bool(item, "verified"),
+              local: modelEndpoint ? bool(modelEndpoint, "local") : false,
+            };
+          }),
         ...(health ? { health } : {}),
         ...(verified.length ? { verifiedModelCount: verified.length } : {}),
         ...(verifiedAt ? { verifiedAt } : {}),
