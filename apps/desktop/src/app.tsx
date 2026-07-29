@@ -2500,7 +2500,7 @@ function ExtensionSurface({
                 )}
               </GrowthSection>
 
-              {notice ? <p className="mt-4 text-[12px] text-gate">{notice}</p> : null}
+              {notice ? <p className="mt-4 text-[12px] text-fg-3">{notice}</p> : null}
             </article>
           ) : (
             <p className="mx-auto max-w-[76ch] text-[13px] leading-5 text-muted">
@@ -3698,12 +3698,13 @@ function UsageStats({ attempts }: { attempts: readonly RouteAttemptView[] }) {
     { label: "비용", value: costText(cost) },
     { label: "활동일", value: countText(activeDays) },
   ];
+  // 1180에서 6열은 카드가 65px이 되어 「32.6만」이 두 줄로 접힙니다. 숫자는 절대 접지 않습니다.
   return (
-    <div className="grid grid-cols-2 gap-2 px-5 py-4 min-[880px]:grid-cols-3 min-[1180px]:grid-cols-6">
+    <div className="grid grid-cols-2 gap-2 px-5 py-4 min-[900px]:grid-cols-3 min-[1560px]:grid-cols-6">
       {cells.map((cell) => (
         <div className="rounded-[5px] border border-border px-3 py-2.5" key={cell.label}>
-          <div className="text-[11px] text-muted">{cell.label}</div>
-          <div className="mt-1 font-mono text-[18px] tabular-nums text-primary">{cell.value}</div>
+          <div className="whitespace-nowrap text-[11px] text-muted">{cell.label}</div>
+          <div className="mt-1 whitespace-nowrap font-mono text-[18px] tabular-nums text-primary">{cell.value}</div>
           {cell.sub === undefined ? null : <div className="mt-0.5 text-[11px] text-muted">{cell.sub}</div>}
         </div>
       ))}
@@ -3921,10 +3922,18 @@ function AttemptRow({ attempt, onOpen }: { attempt: RouteAttemptView; onOpen: (a
         )}
         {attempt.modelId}
       </td>
-      <td className="whitespace-nowrap px-3 py-1.5 font-mono text-[12px] text-muted">{attempt.effort ?? "—"}</td>
+      <td className="whitespace-nowrap px-3 py-1.5 text-[12px] text-muted">
+        {attempt.effort === undefined
+          ? "—"
+          : ((EFFORT_LABEL[attempt.effort as ReasoningEffort] as string | undefined) ?? attempt.effort)}
+      </td>
       <td className="whitespace-nowrap px-3 py-1.5 font-mono text-[12px] text-muted">{attempt.providerId}</td>
-      <td className={`whitespace-nowrap px-3 py-1.5 font-mono text-[12px] ${failed ? "text-danger" : "text-muted"}`}>
-        {attempt.statusCode ?? "—"}
+      <td className={`whitespace-nowrap px-3 py-1.5 text-[12px] ${failed ? "text-danger" : "text-muted"}`}>
+        {failed ? (
+          (FAILURE_LABEL[attempt.failureClass ?? ""] ?? "실패")
+        ) : (
+          <span className="font-mono">{attempt.statusCode ?? "—"}</span>
+        )}
       </td>
       <td className="max-w-[200px] truncate py-1.5 pl-3 pr-5 text-[12px] text-secondary">{attempt.workTitle ?? "—"}</td>
     </tr>
@@ -4019,7 +4028,11 @@ function AttemptDetail({ attempt, onClose }: { attempt: RouteAttemptView | undef
               <DetailRow label="시간">{attempt.at.replace("T", " ")}</DetailRow>
               <DetailRow label="Work">{attempt.workTitle ?? "—"}</DetailRow>
               <DetailRow label="프로바이더">{attempt.providerId}</DetailRow>
-              <DetailRow label="추론">{attempt.effort ?? "—"}</DetailRow>
+              <DetailRow label="추론 강도">
+                {attempt.effort === undefined
+                  ? "—"
+                  : ((EFFORT_LABEL[attempt.effort as ReasoningEffort] as string | undefined) ?? attempt.effort)}
+              </DetailRow>
               {attempt.failureClass === undefined ? null : (
                 <DetailRow label="오류">
                   <span className="text-danger">{FAILURE_LABEL[attempt.failureClass] ?? attempt.failureClass}</span>
@@ -4040,7 +4053,7 @@ function AttemptDetail({ attempt, onClose }: { attempt: RouteAttemptView | undef
               <DetailRow label="출력">{countText(attempt.outputTokens)}</DetailRow>
               <DetailRow label="캐시 히트">{countText(attempt.cacheReadTokens)}</DetailRow>
               <DetailRow label="캐시 생성">{countText(attempt.cacheWriteTokens)}</DetailRow>
-              <DetailRow label="추론">{countText(attempt.reasoningTokens)}</DetailRow>
+              <DetailRow label="추론 토큰">{countText(attempt.reasoningTokens)}</DetailRow>
               <DetailRow label="비용">{attempt.costMicros === 0 ? "—" : microText(attempt.costMicros)}</DetailRow>
             </dl>
           </>
@@ -4082,7 +4095,7 @@ function RouteGuardBar({
   return (
     <div className="flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-border px-5 py-2.5">
       <label className="flex items-center gap-2">
-        <span className="text-[12px] text-muted">차단</span>
+        <span className="text-[12px] text-muted">차단 $</span>
         <input
           aria-label="차단 한도"
           className="w-[92px] rounded-[4px] border border-border bg-canvas px-2 py-1 text-right font-mono text-[12px] tabular-nums text-secondary outline-none focus-visible:border-fg-3"
@@ -4096,7 +4109,7 @@ function RouteGuardBar({
         />
       </label>
       <div className="flex flex-wrap items-center gap-1.5">
-        <span className="text-[12px] text-muted">알림</span>
+        <span className="text-[12px] text-muted">알림 $</span>
         {guard.softMicros.map((micros) => (
           <button
             aria-label={`알림 ${costText(micros)} 제거`}
@@ -4128,6 +4141,8 @@ function RouteGuardBar({
           value={draft}
         />
       </div>
+      {/* 쓰는 명령이 계약에 없습니다. 「됐다가 안 본 사이 없어지는」 것이 「안 된다」보다 나쁩니다. */}
+      <span className="text-[11px] text-gate">이 창에서만 유지됩니다</span>
     </div>
   );
 }
@@ -4449,7 +4464,7 @@ function ProviderSurface({ service }: { service: DesktopService }) {
   );
   // 그룹은 사용자가 켜고 끈 것으로만 가릅니다. 회로 상태는 분류가 아니라 그 항목의 상태입니다.
   const groups = [
-    { title: "준비됨", items: matched.filter((connection) => connection.enabled) },
+    { title: "활성", items: matched.filter((connection) => connection.enabled) },
     { title: "비활성", items: matched.filter((connection) => !connection.enabled) },
   ].filter((group) => group.items.length > 0);
   const selected = matched.find((connection) => connection.providerId === selectedId) ?? matched[0];
@@ -4485,16 +4500,16 @@ function ProviderSurface({ service }: { service: DesktopService }) {
                 <div className="mb-1 border-b border-border px-2.5 pb-1.5">
                   <span className="text-[11px] text-muted">{group.title}</span>
                 </div>
-                <ul>
+                {/* 행은 전폭이고 사이는 여백이 아니라 선으로 가릅니다. 둥근 인셋은 카드라는 다른 뜻을 갖습니다. */}
+                <ul className="divide-y divide-border">
                   {group.items.map((connection) => (
                     <li key={connection.providerId}>
                       <button
                         aria-current={connection.providerId === selected?.providerId ? "true" : undefined}
-                        /* 선택은 채움만으로는 약합니다. 참고 화면처럼 테두리까지 세워 카드로 서게 합니다. */
-                        className={`flex w-full items-center gap-2.5 rounded-[4px] border px-2.5 py-2 text-left outline-none transition-colors duration-150 ${
+                        className={`flex w-full items-center gap-2.5 px-2.5 py-2 text-left outline-none transition-colors duration-150 ${
                           connection.providerId === selected?.providerId
-                            ? "border-control bg-[rgb(255_255_255/0.047)]"
-                            : "border-transparent hover:bg-[rgb(255_255_255/0.027)]"
+                            ? "bg-[rgb(255_255_255/0.047)]"
+                            : "hover:bg-[rgb(255_255_255/0.027)]"
                         }`}
                         onClick={() => {
                           setSelectedId(connection.providerId);
@@ -4503,8 +4518,14 @@ function ProviderSurface({ service }: { service: DesktopService }) {
                       >
                         <span className="min-w-0 flex-1">
                           <span className="block truncate text-[13px] text-secondary">{connection.displayName}</span>
-                          <span className="block text-[11px] text-muted">
-                            모델 <span className="tabular-nums">{connection.models.length}</span>개
+                          <span className="flex items-baseline gap-1.5 text-[11px] text-muted">
+                            <span aria-hidden="true" className={connection.enabled ? "text-fg-3" : "text-muted"}>
+                              ●
+                            </span>
+                            <span className="tabular-nums">
+                              {connection.models.filter((model) => model.enabled).length}/{connection.models.length}
+                            </span>
+                            <span>모델</span>
                           </span>
                         </span>
                       </button>
@@ -4550,7 +4571,7 @@ function ProviderSurface({ service }: { service: DesktopService }) {
               <ProviderOverviewTab accounts={accounts} connection={selected} />
             </>
           )}
-          {notice ? <p className="mt-4 text-[12px] text-gate">{notice}</p> : null}
+          {notice ? <p className="mt-4 text-[12px] text-fg-3">{notice}</p> : null}
         </div>
       </div>
 
@@ -4734,7 +4755,7 @@ function ProviderOverviewTab({
           <span className="font-mono text-[11px] tabular-nums text-muted">{mine.length}</span>
         </div>
         {mine.length === 0 ? (
-          <div className="rounded-[4px] border border-dashed border-border px-3 py-6 text-center">
+          <div className="rounded-[4px] border border-border px-3 py-6 text-center">
             <p className="text-[12px] text-muted">
               {usesAccounts ? "연결된 계정이 없습니다." : "등록된 키가 없습니다."}
             </p>
@@ -4871,8 +4892,9 @@ function SettingsSurface({ service }: { service: DesktopService }) {
             {autonomy ? (
               <section aria-label="권한과 자가개선">
                 <GrowthSection title="권한">
+                  {/* 막힌 것이 아니라 사람이 결정할 자리입니다. halt가 아니라 gate를 씁니다. */}
                   {fullAccessPending ? (
-                    <div className="mt-3 rounded-[5px] border border-halt/40 bg-surface-1 p-3" role="alert">
+                    <div className="mt-3 rounded-[5px] border border-gate/50 bg-surface-1 p-3" role="alert">
                       <p className="text-[12px] leading-5 text-primary">
                         승인 없이 파일·명령·네트워크·계정을 씁니다. 책임은 사용자에게 있습니다.
                       </p>
@@ -4894,7 +4916,7 @@ function SettingsSurface({ service }: { service: DesktopService }) {
                           }}
                           type="button"
                         >
-                          바이패스
+                          승인
                         </button>
                       </div>
                     </div>
@@ -4924,7 +4946,7 @@ function SettingsSurface({ service }: { service: DesktopService }) {
               </section>
             ) : null}
 
-            {notice ? <p className="text-[12px] text-gate">{notice}</p> : null}
+            {notice ? <p className="text-[12px] text-fg-3">{notice}</p> : null}
           </div>
         ) : null}
       </div>
