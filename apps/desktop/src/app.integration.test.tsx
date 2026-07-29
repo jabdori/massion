@@ -53,15 +53,13 @@ describe("AgentOS native data flow", () => {
 
     await user.click(screen.getByRole("button", { name: "설정" }));
     await screen.findByRole("main", { name: "설정" });
-    // 프로바이더와 계정은 프로바이더 표면이 소유하므로 설정에는 세 구역만 남습니다.
-    for (const title of ["모델 경로", "실행 자율성", "로컬 환경"]) {
-      expect(
-        screen.getByRole("button", { name: new RegExp(title), pressed: title === "모델 경로" }),
-      ).toBeInTheDocument();
+    // 설정은 탭이 아니라 한 문서입니다. 목차는 이동만 하고 세 구역이 함께 보입니다.
+    for (const title of ["예산", "실행 자율성", "로컬 환경"]) {
+      expect(screen.getByRole("link", { name: title })).toBeInTheDocument();
     }
-    expect(screen.queryByRole("button", { name: /Provider 연결/ })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /구독 계정/ })).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /로컬 환경/ }));
+    // 프로바이더와 계정은 프로바이더 표면이 소유합니다.
+    expect(screen.queryByText(/Provider 연결/)).not.toBeInTheDocument();
+    expect(screen.queryByText("구독 계정")).not.toBeInTheDocument();
     // 조회가 없는 구역은 없다고 말합니다. 숫자 0으로 있는 척하지 않습니다.
     expect(screen.getByText(/조회가 아직 계약에 없습니다/)).toBeInTheDocument();
     expect(loadSettings).toHaveBeenCalledOnce();
@@ -417,8 +415,7 @@ describe("AgentOS native data flow", () => {
     render(<App service={service({ loadPendingApprovals, loadAutonomy })} />);
 
     await user.click(screen.getByRole("button", { name: "설정" }));
-    await user.click(await screen.findByRole("button", { name: /실행 자율성/ }));
-    expect(screen.getByRole("region", { name: "자율성 경계" })).toBeInTheDocument();
+    expect(await screen.findByRole("region", { name: "자율성 경계" })).toBeInTheDocument();
     await waitFor(() => {
       expect(loadPendingApprovals).toHaveBeenCalledOnce();
       expect(loadAutonomy).toHaveBeenCalledOnce();

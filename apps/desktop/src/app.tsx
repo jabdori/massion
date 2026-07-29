@@ -3233,106 +3233,31 @@ function growthEffectStatus(result: GrowthView["effects"][number]["result"]): st
 }
 
 /**
- * 이 구역의 질문은 「어떤 요청이 어느 모델로」입니다. 그러니 모델 이름이 먼저 나와야 하고,
- * 첫 모델이 막혔을 때 어디로 넘어가는지가 같이 보여야 합니다. 개수만 세면 둘 다 답하지 못합니다.
+ * 설정에 남는 것은 «사람이 정한 경계»뿐입니다. 어느 모델이 도는지는 조직이 역할과 난이도로
+ * 배치하고(ADR-003), 배치 결과는 프로바이더 표면이 말합니다. 여기서는 한도만 봅니다.
  */
-function ModelRouteRow({ route }: { route: ModelRouteView }) {
-  const usable = route.candidates.filter((candidate) => candidate.blocked !== true);
-  const spentRatio = route.totalBudgetMicros > 0 ? Math.min(1, route.spentMicros / route.totalBudgetMicros) : undefined;
+function RouteBudgetRow({ route }: { route: ModelRouteView }) {
+  const ratio = route.totalBudgetMicros > 0 ? Math.min(1, route.spentMicros / route.totalBudgetMicros) : undefined;
   return (
     <li className="py-2.5">
-      <div className="flex items-baseline gap-2">
-        <span className="text-[13px] font-medium text-primary">{route.name}</span>
-        {routeKindLabel(route.routeKind) === route.name ? null : (
-          <span className="text-[11px] text-muted">{routeKindLabel(route.routeKind)}</span>
-        )}
-        {route.totalBudgetMicros > 0 ? (
-          <span className="ml-auto shrink-0 font-mono text-[11px] text-muted">
-            {costText(route.spentMicros)} / {costText(route.totalBudgetMicros)}
-          </span>
-        ) : null}
+      <div className="flex items-baseline gap-3">
+        <span className="min-w-0 flex-1 truncate text-[13px] text-secondary">{route.name}</span>
+        <span className="shrink-0 font-mono text-[12px] tabular-nums text-muted">
+          {route.totalBudgetMicros === 0
+            ? "—"
+            : `${costText(route.spentMicros)} / ${costText(route.totalBudgetMicros)}`}
+        </span>
       </div>
-      {spentRatio === undefined ? null : (
-        <div className="mt-1 h-px w-full bg-border">
+      {ratio === undefined ? null : (
+        <div className="mt-1.5 h-px w-full bg-border">
           {/* 막대는 데이터라 이징하지 않습니다. 중간 프레임이 실제 값과 달라집니다. */}
           <div
-            className="h-px bg-fg-3 transition-[width] duration-[250ms] ease-linear"
-            style={{ width: `${String(spentRatio * 100)}%` }}
+            className={`h-px transition-[width] duration-[250ms] ease-linear ${ratio >= 0.8 ? "bg-danger" : "bg-fg-3"}`}
+            style={{ width: `${String(ratio * 100)}%` }}
           />
         </div>
       )}
-      {!route.enabled ? (
-        <p className="mt-1.5 text-[11px] text-muted">꺼져 있습니다</p>
-      ) : route.candidates.length === 0 ? (
-        <p className="mt-1.5 text-[11px] text-danger">쓸 수 있는 모델이 없어 실행되지 않습니다</p>
-      ) : (
-        <ol className="mt-1.5 space-y-0.5">
-          {route.candidates.map((candidate, index) => {
-            // 지금 실제로 불릴 것은 «막히지 않은 첫 번째»입니다. 1순위가 막혔으면 2순위가 현재입니다.
-            const active = candidate === usable[0];
-            return (
-              <li className="flex items-baseline gap-2 text-[11px]" key={`${candidate.modelId}-${String(index)}`}>
-                <span className={`w-3 shrink-0 tabular-nums ${active ? "text-secondary" : "text-muted"}`}>
-                  {index + 1}
-                </span>
-                <span
-                  className={`font-mono ${candidate.blocked === true ? "text-muted line-through" : active ? "text-secondary" : "text-muted"}`}
-                >
-                  {candidate.modelId}
-                </span>
-                <span className="text-muted">{candidate.local ? "이 컴퓨터" : "외부"}</span>
-                {candidate.verified ? null : <span className="text-muted">확인 안 됨</span>}
-                {candidate.blocked === true ? <span className="text-danger">건너뜀</span> : null}
-                {active ? <span className="ml-auto shrink-0 text-muted">지금 이것</span> : null}
-              </li>
-            );
-          })}
-        </ol>
-      )}
-      {route.enabled && usable.length === 0 && route.candidates.length > 0 ? (
-        <p className="mt-1 text-[11px] text-danger">후보가 모두 막혀 이 종류의 실행이 멈춥니다</p>
-      ) : null}
     </li>
-  );
-}
-
-/**
- * 「모델을 지금 쓸 수 있나」에 먼저 답합니다. 전 경로가 막히면 그게 제한 모드이고,
- * 제한 모드에서도 무엇이 계속 되는지를 말해야 «실패로 위장하지 않는다»가 화면에 섭니다
- * (PRODUCT.md 원칙 4).
- */
-function ModelPathHealth({ connections }: { connections: readonly ProviderConnectionView[] }) {
-  if (connections.length === 0) return null;
-  const usable = connections.filter((item) => item.enabled && item.health?.state !== "open");
-  const shaky = connections.filter((item) => item.enabled && item.health?.state === "half-open");
-  const blocked = connections.filter((item) => item.enabled && item.health?.state === "open");
-  const limited = usable.length === 0;
-  return (
-    <section
-      aria-label="모델 경로 상태"
-      className={`mb-4 border-y px-3 py-2.5 ${limited ? "border-danger/40 bg-surface-1" : "border-border"}`}
-    >
-      <div className="flex items-baseline gap-2">
-        <span className={limited ? "text-danger" : "text-muted"}>{limited ? "⊘" : "●"}</span>
-        <span className={`text-[13px] ${limited ? "font-medium text-danger" : "text-secondary"}`}>
-          {limited ? "제한 모드 · 쓸 수 있는 모델 경로가 없습니다" : `모델 경로 ${String(usable.length)}개 사용 가능`}
-        </span>
-        {shaky.length + blocked.length > 0 && !limited ? (
-          <span className="ml-auto text-[11px] text-muted">
-            {blocked.length ? `막힘 ${String(blocked.length)}` : ""}
-            {blocked.length && shaky.length ? " · " : ""}
-            {shaky.length ? `흔들림 ${String(shaky.length)}` : ""}
-          </span>
-        ) : null}
-      </div>
-      {limited ? (
-        // 무엇이 죽었는지보다 무엇이 살아 있는지가 먼저 필요합니다. 사용자는 지금 뭘 할 수 있나를 묻습니다.
-        <p className="mt-1.5 text-[12px] leading-5 text-secondary">
-          조회 · 승인 · 취소 · 진단 · 복구는 계속 동작합니다. 진행 중이던 실행은 실패가 아니라 재시도 가능한 상태로
-          남습니다.
-        </p>
-      ) : null}
-    </section>
   );
 }
 
@@ -3949,7 +3874,6 @@ function SettingsSurface({ onEmergencyChanged, service }: { onEmergencyChanged: 
   const [notice, setNotice] = useState("");
   const [autonomySaving, setAutonomySaving] = useState(false);
   const [fullAccessPending, setFullAccessPending] = useState(false);
-  const [areaId, setAreaId] = useState<(typeof SETTINGS_AREAS)[number]["id"]>("routes");
   useEffect(() => {
     let disposed = false;
     void Promise.all([service.loadSettings(), service.loadAutonomy(), service.loadEmergency()])
@@ -4027,81 +3951,63 @@ function SettingsSurface({ onEmergencyChanged, service }: { onEmergencyChanged: 
   };
 
   const routes = settings ? projectModelRoutes(settings.routes, settings.catalog) : [];
-  const connections = settings ? projectProviderConnections(settings.catalog) : [];
-  const area = SETTINGS_AREAS.find((item) => item.id === areaId) ?? SETTINGS_AREAS[0];
 
   return (
     <main
       aria-label="설정"
-      className="col-span-3 grid min-h-0 min-w-0 grid-cols-[242px_minmax(0,1fr)_300px] bg-canvas min-[1440px]:grid-cols-[264px_minmax(0,1fr)_332px]"
+      className="col-span-3 grid min-h-0 min-w-0 grid-cols-[242px_minmax(0,1fr)] bg-canvas min-[1440px]:grid-cols-[264px_minmax(0,1fr)]"
     >
-      <section
-        aria-label="설정 구역"
+      {/*
+       * 구역이 셋뿐이라 목록 열이 «고르는 곳»이 아니라 목차입니다. 그리고 셋째 열에 둘 «맥락»이
+       * 없어 설명문으로 때우고 있었으므로 뺐습니다. DESIGN.md의 3열 골격을 깨는 대가는
+       * 읽히는 것이 늘어야 정당한데, 여기서는 골격을 지킬수록 줄었습니다.
+       */}
+      <nav
+        aria-label="설정 목차"
         className="grid min-h-0 grid-rows-[46px_minmax(0,1fr)] border-r border-border bg-chrome"
       >
-        <header className="flex items-center border-b border-border px-3">
-          <h1 className="text-[15px] font-semibold tracking-[-0.015em]">설정</h1>
+        <header className="flex items-center px-3">
+          <h1 className="text-[15px] font-semibold tracking-[-0.008em]">설정</h1>
         </header>
-        <div className="min-h-0 overflow-y-auto">
-          {/*
-           * 다른 표면의 열1은 "많은 항목 중 하나를 고르는" 목록이고 여기는 구역 넷입니다.
-           * 성격은 달라도 골격과 행 문법은 같습니다 — 표면을 옮겨도 같은 자리에서 같은 일을 합니다.
-           */}
-          <div className="divide-y divide-border border-b border-border">
-            {SETTINGS_AREAS.map((item) => (
-              <button
-                aria-pressed={item.id === area.id}
-                className={`relative w-full px-3 py-2.5 text-left outline-none transition-colors duration-150 ${
-                  item.id === area.id
-                    ? "bg-surface-2 before:absolute before:inset-y-0 before:left-0 before:w-0.5 before:bg-primary"
-                    : "hover:bg-surface-1"
-                }`}
-                key={item.id}
-                onClick={() => {
-                  setAreaId(item.id);
-                  setNotice("");
-                }}
-                type="button"
+        <ul className="min-h-0 overflow-y-auto p-2">
+          {SETTINGS_SECTIONS.map((section) => (
+            <li key={section.id}>
+              <a
+                className="block truncate rounded-[4px] px-2.5 py-1.5 text-[13px] text-secondary outline-none transition-colors duration-150 hover:bg-[rgb(255_255_255/0.027)]"
+                href={`#설정-${section.id}`}
               >
-                <span className="block truncate text-[13px] font-medium">{item.title}</span>
-                <span className="mt-0.5 block truncate text-[11px] text-muted">{item.hint}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-      </section>
+                {section.title}
+              </a>
+            </li>
+          ))}
+        </ul>
+      </nav>
 
-      <div className="grid min-h-0 grid-rows-[46px_minmax(0,1fr)] border-r border-border">
+      <div className="grid min-h-0 min-w-0 grid-rows-[46px_minmax(0,1fr)]">
         <header className="flex items-center border-b border-border px-5">
-          <h2 className="truncate text-[15px] font-semibold tracking-[-0.015em]">{area.title}</h2>
+          <h2 className="text-[15px] font-semibold tracking-[-0.008em] text-primary">설정</h2>
         </header>
         <div className="min-h-0 overflow-y-auto px-5 py-4">
           {error ? <SurfaceError message={error} /> : null}
           {!settings && !error ? <SurfaceLoading /> : null}
           {settings ? (
-            <div className="mx-auto max-w-[76ch]">
-              {area.id === "routes" ? (
-                <>
-                  <ModelPathHealth connections={connections} />
-                  <GrowthSection title="요청이 어디로 가나">
-                    {routes.length === 0 ? (
-                      <p className="text-[12px] text-muted">
-                        구성된 모델 경로가 없습니다. 프로바이더를 먼저 연결하십시오.
-                      </p>
-                    ) : (
-                      <ul className="divide-y divide-border border-y border-border">
-                        {routes.map((route) => (
-                          <ModelRouteRow key={route.routeId} route={route} />
-                        ))}
-                      </ul>
-                    )}
-                  </GrowthSection>
-                  <RouterConfiguration onRefresh={setSettings} service={service} settings={settings} />
-                </>
-              ) : null}
+            <div className="max-w-[76ch] space-y-8">
+              <section id="설정-budget">
+                <h3 className="mb-2 text-[13px] text-muted">예산</h3>
+                {routes.length === 0 ? (
+                  <p className="text-[12px] text-muted">구성된 모델 경로가 없습니다. 프로바이더를 먼저 연결하십시오.</p>
+                ) : (
+                  <ul className="divide-y divide-border border-y border-border">
+                    {routes.map((route) => (
+                      <RouteBudgetRow key={route.routeId} route={route} />
+                    ))}
+                  </ul>
+                )}
+                <RouterConfiguration onRefresh={setSettings} service={service} settings={settings} />
+              </section>
 
-              {area.id === "autonomy" && autonomy ? (
-                <section aria-label="자율성 경계">
+              {autonomy ? (
+                <section aria-label="자율성 경계" id="설정-autonomy">
                   <GrowthSection title="실행 자율성">
                     <p className="text-[13px] leading-5 text-secondary">
                       {autonomy.mode === "automatic"
@@ -4225,71 +4131,31 @@ function SettingsSurface({ onEmergencyChanged, service }: { onEmergencyChanged: 
                 </section>
               ) : null}
 
-              {area.id === "local" ? (
-                <GrowthSection title="로컬 운영 환경">
-                  {/* 없는 것을 있는 것처럼 그리지 않습니다. 무엇이 없는지 화면이 말합니다. */}
-                  <p className="text-[12px] leading-5 text-muted">
-                    daemon 상태·데이터 위치·백업을 볼 조회가 아직 계약에 없습니다. 지금은 하단 표시줄의 연결 상태가
-                    유일한 신호입니다.
-                  </p>
-                </GrowthSection>
-              ) : null}
+              <section id="설정-local">
+                <h3 className="mb-2 text-[13px] text-muted">로컬 환경</h3>
+                <p className="text-[13px] leading-5 text-secondary">
+                  daemon은 앱 창과 수명이 같지 않습니다. 앱을 닫아도 조직·업무·기록은 남습니다.
+                </p>
+                {/* 계약이 아직 daemon 상태를 주지 않습니다. 숫자를 지어내지 않고 그 사실을 말합니다. */}
+                <p className="mt-1.5 text-[12px] text-muted">
+                  daemon 상태와 데이터 위치를 읽는 조회가 아직 계약에 없습니다.
+                </p>
+              </section>
 
-              {notice ? <p className="mt-4 text-[12px] text-gate">{notice}</p> : null}
+              {notice ? <p className="text-[12px] text-gate">{notice}</p> : null}
             </div>
           ) : null}
         </div>
       </div>
-
-      <aside aria-label="배경" className="grid min-h-0 grid-rows-[46px_minmax(0,1fr)] border-l border-border bg-chrome">
-        <header className="flex items-center border-b border-border px-3">
-          <h2 className="text-[11px] font-semibold tracking-[0.08em] text-muted">배경</h2>
-        </header>
-        <div className="min-h-0 space-y-4 overflow-y-auto px-3 py-3">
-          <section>
-            <h3 className="text-[10px] font-semibold tracking-[0.08em] text-muted">이 구역이 정하는 것</h3>
-            <p className="mt-1.5 text-[11px] leading-4 text-secondary">{area.background}</p>
-          </section>
-        </div>
-      </aside>
     </main>
   );
 }
 
-const SETTINGS_AREAS = [
-  {
-    id: "routes",
-    title: "모델 경로",
-    hint: "어떤 요청이 어느 모델로",
-    background:
-      "조직의 요청 종류마다 어느 모델을 쓸지, 예산을 얼마나 줄지 정합니다. 경로가 비면 그 종류의 실행이 멈춥니다.",
-  },
-  {
-    id: "autonomy",
-    title: "실행 자율성",
-    hint: "언제 사람을 기다리나",
-    background:
-      "미리 승인된 범위에서 자동으로 실행할지, 매 실행 전에 사람의 검토를 받을지, 아니면 전체 권한으로 모든 승인을 자동 통과할지 정합니다. 위험 경계는 자동·검토 모드에서 유지되며, 전체 권한에서는 사용자 책임 하에 풀립니다.",
-  },
-  {
-    id: "local",
-    title: "로컬 환경",
-    hint: "daemon과 데이터",
-    background: "이 컴퓨터에서 도는 daemon과 데이터가 있는 곳입니다.",
-  },
+const SETTINGS_SECTIONS = [
+  { id: "budget", title: "예산" },
+  { id: "autonomy", title: "실행 자율성" },
+  { id: "local", title: "로컬 환경" },
 ] as const;
-
-/** RouteKind. 도메인 값을 사람의 말로 옮깁니다. */
-function routeKindLabel(kind: string): string {
-  const labels: Record<string, string> = {
-    reasoning: "추론",
-    chat: "대화",
-    utility: "보조 작업",
-    embedding: "임베딩",
-    vision: "이미지",
-  };
-  return labels[kind] ?? kind;
-}
 
 function costText(micros: number): string {
   return `$${(micros / 1_000_000).toFixed(2)}`;
@@ -4401,12 +4267,7 @@ function RouterConfiguration({
   return (
     <section className="mt-6 border-t border-border pt-5">
       <div className="flex items-center justify-between">
-        <div>
-          <p className="text-[11px] font-medium tracking-[0.04em] text-muted">모델 라우팅</p>
-          <p className="mt-1 text-sm text-secondary">
-            {models.length}개 모델 프로필 · {routes.length}개 라우트
-          </p>
-        </div>
+        <p className="text-[12px] text-muted">모델 배치는 조직이 정합니다. 직접 손대려면 여기서 엽니다.</p>
         <Button
           onClick={() => {
             setAdvancedOpen((open) => !open);
