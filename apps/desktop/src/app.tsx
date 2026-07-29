@@ -3514,11 +3514,26 @@ const RANGES = [
   { value: 7, label: "7일" },
 ] as const;
 
-interface RouteGuards {
-  /** 도달하면 차단합니다. `model_route.total_budget_micros`가 이미 이 역할입니다. */
-  hardMicros: number;
-  /** 도달하면 알립니다. 여러 개 걸 수 있습니다. */
-  softMicros: readonly number[];
+/**
+ * 예산 알림 하나. 범위·금액·동작 셋으로 이뤄집니다 — AWS Budgets·GCP 예산 알림과 같은 모양입니다.
+ * 「차단」과 「알림」을 다른 기능으로 두지 않습니다. 같은 임계값에 동작만 다른 것이고,
+ * 그래야 한 목록에서 「무엇이 언제 무슨 일을 하는가」가 한눈에 읽힙니다.
+ */
+interface BudgetAlert {
+  id: string;
+  /** `"*"`는 조직 전체, 그 외는 routeId. */
+  scope: string;
+  thresholdMicros: number;
+  action: "notify" | "block";
+}
+
+const ALL_SCOPE = "*";
+
+const alertActionLabel: Record<BudgetAlert["action"], string> = { notify: "알림", block: "차단" };
+
+/** 이 범위에서 이미 넘긴 알림들. 차단이 하나라도 넘겼으면 그게 우선입니다. */
+function crossedAlerts(alerts: readonly BudgetAlert[], scope: string, spent: number): readonly BudgetAlert[] {
+  return alerts.filter((alert) => alert.scope === scope && spent >= alert.thresholdMicros);
 }
 
 function tokensOf(attempt: RouteAttemptView): number {
@@ -3539,9 +3554,8 @@ function BudgetSurface({ service }: { service: DesktopService }) {
   const [selectedId, setSelectedId] = useState<string>();
   const [days, setDays] = useState<number>(30);
   const [openAttempt, setOpenAttempt] = useState<RouteAttemptView>();
-  /* 가드를 쓰는 명령이 아직 계약에 없습니다. 인계: docs/phases/30-surface-parity-agent-ux/settings-contract-handoff.md */
-  const [guards, setGuards] = useState<Record<string, RouteGuards>>({});
-  const [draft, setDraft] = useState("");
+  /* 알림을 쓰는 명령이 아직 계약에 없습니다. 인계: docs/phases/30-surface-parity-agent-ux/settings-contract-handoff.md */
+  const [alerts, setAlerts] = useState<readonly BudgetAlert[]>([]);
 
   useEffect(() => {
     let disposed = false;
@@ -3582,12 +3596,12 @@ function BudgetSurface({ service }: { service: DesktopService }) {
   const shown = routeScoped.filter((attempt) => attempt.at >= cutoff);
 
   const spent = routes.reduce((total, route) => total + route.spentMicros, 0);
-  const guardOf = (route: ModelRouteView): RouteGuards =>
-    guards[route.routeId] ?? { hardMicros: route.totalBudgetMicros, softMicros: [] };
+  const spentOf = (scope: string) =>
+    scope === ALL_SCOPE ? spent : (routes.find((route) => route.routeId === scope)?.spentMicros ?? 0);
 
   return (
     <main aria-label="예산" className="col-span-3 grid min-h-0 min-w-0 grid-cols-[240px_minmax(0,1fr)_312px] bg-canvas">
-      <aside className="grid min-h-0 grid-rows-[46px_minmax(0,1fr)] border-r border-border bg-chrome">
+      <aside className="grid min-h-0 grid-rows-[46px_minmax(0,1fr)_auto] border-r border-border bg-chrome">
         <header className="flex items-baseline gap-2 px-3">
           <h1 className="text-[15px] font-semibold tracking-[-0.008em]">예산</h1>
           <span className="font-mono text-[11px] tabular-nums text-muted">{costText(spent)}</span>
@@ -3600,17 +3614,15 @@ function BudgetSurface({ service }: { service: DesktopService }) {
             <li>
               <button
                 aria-pressed={selectedId === undefined}
-                className={`w-full px-3 py-2 text-left text-[13px] transition-colors duration-150 ${
-                  selectedId === undefined
-                    ? "bg-[rgb(255_255_255/0.047)] text-primary"
-                    : "text-secondary hover:bg-[rgb(255_255_255/0.027)]"
+                className={`w-full px-3 py-2 text-left transition-colors duration-150 ${
+                  selectedId === undefined ? "bg-[rgb(255_255_255/0.047)]" : "hover:bg-[rgb(255_255_255/0.027)]"
                 }`}
                 onClick={() => {
                   setSelectedId(undefined);
                 }}
                 type="button"
               >
-                전체
+                <RouteBudgetRow crossed={crossedAlerts(alerts, ALL_SCOPE, spent)} label="전체" spent={spent} />
               </button>
             </li>
             {routes.map((route) => (
@@ -3622,16 +3634,30 @@ function BudgetSurface({ service }: { service: DesktopService }) {
                   }`}
                   onClick={() => {
                     setSelectedId(route.routeId);
-                    setDraft("");
                   }}
                   type="button"
                 >
-                  <RouteBudgetRow guard={guardOf(route)} route={route} />
+                  <RouteBudgetRow
+                    crossed={crossedAlerts(alerts, route.routeId, route.spentMicros)}
+                    label={route.name}
+                    spent={route.spentMicros}
+                  />
                 </button>
               </li>
             ))}
           </ul>
         </div>
+        <BudgetAlerts
+          alerts={alerts}
+          onAdd={(alert) => {
+            setAlerts([...alerts, alert].sort((left, right) => left.thresholdMicros - right.thresholdMicros));
+          }}
+          onRemove={(id) => {
+            setAlerts(alerts.filter((alert) => alert.id !== id));
+          }}
+          routes={routes}
+          spentOf={spentOf}
+        />
       </aside>
 
       <div className="grid min-h-0 min-w-0 grid-rows-[46px_minmax(0,1fr)]">
@@ -3670,24 +3696,6 @@ function BudgetSurface({ service }: { service: DesktopService }) {
           {attempts === undefined ? null : (
             <>
               <UsageStats attempts={shown} />
-              {/*
-               * 한도는 경로마다 걸립니다. 「전체」에서는 걸 대상이 없으므로, 조정하는 자리가
-               * 어디인지만 말합니다 — 전에는 아무것도 없어서 조정 기능 자체가 없는 것으로 읽혔습니다.
-               */}
-              {selected === undefined ? (
-                <p className="border-t border-border px-5 py-2.5 text-[12px] text-muted">
-                  왼쪽에서 경로를 고르면 차단 한도와 알림을 겁니다.
-                </p>
-              ) : (
-                <RouteGuardBar
-                  draft={draft}
-                  guard={guardOf(selected)}
-                  onChangeDraft={setDraft}
-                  onChangeGuard={(next) => {
-                    setGuards({ ...guards, [selected.routeId]: next });
-                  }}
-                />
-              )}
               <DailyActivity attempts={routeScoped} />
               <AttemptTable attempts={shown} onOpen={setOpenAttempt} />
             </>
@@ -3698,7 +3706,7 @@ function BudgetSurface({ service }: { service: DesktopService }) {
       {/* 집계는 기록과 다른 속도로 읽힙니다. 같은 스크롤에 두면 둘 다 못 봅니다. */}
       <aside className="grid min-h-0 grid-rows-[46px_minmax(0,1fr)] border-l border-border bg-chrome">
         <header className="flex items-center px-3">
-          <h2 className="text-[13px] text-muted">사용처</h2>
+          <h2 className="text-[13px] text-muted">사용</h2>
         </header>
         <div className="min-h-0 overflow-y-auto pb-4">
           <UsageBreakdown attempts={shown} />
@@ -4123,108 +4131,150 @@ function DetailRow({ children, label }: { children: ReactNode; label: string }) 
   );
 }
 
-/** 한도는 하나, 알림은 여럿. 둘 다 금액이라 같은 줄에 둡니다. */
-function RouteGuardBar({
-  draft,
-  guard,
-  onChangeDraft,
-  onChangeGuard,
-}: {
-  draft: string;
-  guard: RouteGuards;
-  onChangeDraft: (value: string) => void;
-  onChangeGuard: (next: RouteGuards) => void;
-}) {
-  const addSoft = () => {
-    const dollars = Number(draft);
-    if (!Number.isFinite(dollars) || dollars <= 0) return;
-    const micros = Math.round(dollars * 1_000_000);
-    if (guard.softMicros.includes(micros)) return;
-    onChangeGuard({ ...guard, softMicros: [...guard.softMicros, micros].sort((left, right) => left - right) });
-    onChangeDraft("");
-  };
+/**
+ * 한 행. 게이지가 가리키는 것은 예산이 아니라 «가장 가까운 알림»입니다 — 알림이 없으면
+ * 잴 기준이 없으므로 막대도 그리지 않습니다. 차단을 넘겼으면 danger, 알림만 넘겼으면 gate.
+ */
+function RouteBudgetRow({ crossed, label, spent }: { crossed: readonly BudgetAlert[]; label: string; spent: number }) {
+  const blocked = crossed.some((alert) => alert.action === "block");
   return (
-    <div className="flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-border px-5 py-2.5">
-      <label className="flex items-center gap-2">
-        <span className="text-[12px] text-muted">차단 $</span>
-        <input
-          aria-label="차단 한도"
-          className="w-[92px] rounded-[5px] border border-border bg-canvas px-2 py-1 text-right font-mono text-[12px] tabular-nums text-secondary outline-none focus-visible:border-fg-3"
-          min="0"
-          onChange={(event) => {
-            onChangeGuard({ ...guard, hardMicros: Math.round(Number(event.target.value) * 1_000_000) });
-          }}
-          step="0.01"
-          type="number"
-          value={(guard.hardMicros / 1_000_000).toFixed(2)}
-        />
-      </label>
-      <div className="flex flex-wrap items-center gap-1.5">
-        <span className="text-[12px] text-muted">알림 $</span>
-        {guard.softMicros.map((micros) => (
-          <button
-            aria-label={`알림 ${costText(micros)} 제거`}
-            className="inline-flex items-center gap-1 rounded-[5px] border border-gate/40 px-1.5 py-0.5 font-mono text-[11px] tabular-nums text-gate outline-none transition-colors duration-150 hover:border-danger hover:text-danger"
-            key={micros}
-            onClick={() => {
-              onChangeGuard({ ...guard, softMicros: guard.softMicros.filter((value) => value !== micros) });
-            }}
-            type="button"
-          >
-            {costText(micros)}
-            <X aria-hidden="true" size={10} />
-          </button>
-        ))}
-        <input
-          aria-label="알림 추가"
-          className="w-[76px] rounded-[5px] border border-border bg-canvas px-2 py-0.5 text-right font-mono text-[11px] tabular-nums text-secondary outline-none placeholder:text-muted focus-visible:border-fg-3"
-          onChange={(event) => {
-            onChangeDraft(event.target.value);
-          }}
-          onKeyDown={(event) => {
-            if (event.key !== "Enter") return;
-            event.preventDefault();
-            addSoft();
-          }}
-          placeholder="1.00"
-          step="0.01"
-          type="number"
-          value={draft}
-        />
+    <div>
+      <div className="flex items-baseline gap-2">
+        <span className="min-w-0 flex-1 truncate text-[13px] text-secondary">{label}</span>
+        {blocked ? <span className="shrink-0 text-[11px] text-danger">차단됨</span> : null}
+        {!blocked && crossed.length > 0 ? (
+          <span className="shrink-0 font-mono text-[11px] tabular-nums text-gate">{crossed.length}</span>
+        ) : null}
+        <span className={`shrink-0 font-mono text-[12px] tabular-nums ${blocked ? "text-danger" : "text-muted"}`}>
+          {costText(spent)}
+        </span>
       </div>
-      {/* 쓰는 명령이 계약에 없습니다. 「됐다가 안 본 사이 없어지는」 것이 「안 된다」보다 나쁩니다. */}
-      <span className="text-[11px] text-gate">이 창에서만 유지됩니다</span>
     </div>
   );
 }
 
-function RouteBudgetRow({ guard, route }: { guard: RouteGuards; route: ModelRouteView }) {
-  const ratio = guard.hardMicros > 0 ? Math.min(1, route.spentMicros / guard.hardMicros) : undefined;
-  const alerted = guard.softMicros.filter((micros) => route.spentMicros >= micros).length;
+/**
+ * 예산 알림 목록. 클라우드 콘솔의 budget alert와 같은 모양입니다 — 범위·금액·동작을 정해
+ * 추가하면 목록에 서고, 넘긴 것은 그 자리에서 상태로 보입니다.
+ *
+ * 「차단」을 별도 기능으로 두지 않습니다. 같은 임계값에 동작만 다른 것이라 한 목록에서
+ * 「무엇이 언제 무슨 일을 하는가」가 한눈에 읽혀야 합니다.
+ */
+function BudgetAlerts({
+  alerts,
+  onAdd,
+  onRemove,
+  routes,
+  spentOf,
+}: {
+  alerts: readonly BudgetAlert[];
+  onAdd: (alert: BudgetAlert) => void;
+  onRemove: (id: string) => void;
+  routes: readonly ModelRouteView[];
+  spentOf: (scope: string) => number;
+}) {
+  const [scope, setScope] = useState(ALL_SCOPE);
+  const [amount, setAmount] = useState("");
+  const [action, setAction] = useState<BudgetAlert["action"]>("notify");
+  const scopeLabel = (value: string) =>
+    value === ALL_SCOPE ? "전체" : (routes.find((route) => route.routeId === value)?.name ?? value);
+  const submit = () => {
+    const dollars = Number(amount);
+    if (!Number.isFinite(dollars) || dollars <= 0) return;
+    const thresholdMicros = Math.round(dollars * 1_000_000);
+    if (alerts.some((alert) => alert.scope === scope && alert.thresholdMicros === thresholdMicros)) return;
+    onAdd({ id: `${scope}-${String(thresholdMicros)}-${action}`, scope, thresholdMicros, action });
+    setAmount("");
+  };
+  const field =
+    "rounded-[5px] border border-border bg-canvas px-2 py-1 text-[12px] text-secondary outline-none focus-visible:border-fg-3";
   return (
-    <div>
-      <div className="flex items-baseline gap-2">
-        <span className="min-w-0 flex-1 truncate text-[13px] text-secondary">{route.name}</span>
-        {alerted === 0 ? null : (
-          <span className="shrink-0 font-mono text-[11px] tabular-nums text-gate">{alerted}</span>
-        )}
-        <span className="shrink-0 font-mono text-[12px] tabular-nums text-muted">
-          {guard.hardMicros === 0
-            ? costText(route.spentMicros)
-            : `${costText(route.spentMicros)} / ${costText(guard.hardMicros)}`}
-        </span>
+    <section aria-label="예산 알림" className="border-t border-border">
+      <div className="flex items-baseline gap-2 border-b border-border px-3 py-1.5">
+        <h2 className="text-[11px] text-muted">알림</h2>
+        <span className="font-mono text-[11px] tabular-nums text-muted">{alerts.length}</span>
       </div>
-      <div className="mt-2 h-[3px] w-full rounded-full bg-surface-2">
-        {ratio === undefined ? null : (
-          <div
-            className={`h-[3px] rounded-full transition-[width] duration-[250ms] ease-linear ${
-              ratio >= 1 ? "bg-danger" : alerted > 0 ? "bg-gate" : "bg-fg-3"
-            }`}
-            style={{ width: `${String(ratio * 100)}%` }}
-          />
-        )}
+      {alerts.length === 0 ? null : (
+        <ul className="max-h-40 divide-y divide-border overflow-y-auto">
+          {alerts.map((alert) => {
+            const crossed = spentOf(alert.scope) >= alert.thresholdMicros;
+            const tone = !crossed ? "text-muted" : alert.action === "block" ? "text-danger" : "text-gate";
+            return (
+              <li className="flex items-baseline gap-2 px-3 py-1.5" key={alert.id}>
+                <span className="min-w-0 flex-1 truncate text-[12px] text-secondary">{scopeLabel(alert.scope)}</span>
+                <span className="shrink-0 font-mono text-[12px] tabular-nums text-secondary">
+                  {costText(alert.thresholdMicros)}
+                </span>
+                <span className={`w-7 shrink-0 text-right text-[11px] ${tone}`}>{alertActionLabel[alert.action]}</span>
+                <button
+                  aria-label={`${scopeLabel(alert.scope)} ${costText(alert.thresholdMicros)} 알림 삭제`}
+                  className="shrink-0 rounded-[5px] p-0.5 text-muted outline-none transition-colors duration-150 hover:text-danger"
+                  onClick={() => {
+                    onRemove(alert.id);
+                  }}
+                  type="button"
+                >
+                  <X aria-hidden="true" size={11} />
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      <div className="grid grid-cols-[1fr_auto] gap-1.5 border-t border-border p-2">
+        <select
+          aria-label="알림 범위"
+          className={field}
+          onChange={(event) => {
+            setScope(event.target.value);
+          }}
+          value={scope}
+        >
+          <option value={ALL_SCOPE}>전체</option>
+          {routes.map((route) => (
+            <option key={route.routeId} value={route.routeId}>
+              {route.name}
+            </option>
+          ))}
+        </select>
+        <select
+          aria-label="알림 동작"
+          className={field}
+          onChange={(event) => {
+            setAction(event.target.value as BudgetAlert["action"]);
+          }}
+          value={action}
+        >
+          <option value="notify">알림</option>
+          <option value="block">차단</option>
+        </select>
+        <input
+          aria-label="알림 금액"
+          className={`${field} text-right font-mono tabular-nums`}
+          min="0"
+          onChange={(event) => {
+            setAmount(event.target.value);
+          }}
+          onKeyDown={(event) => {
+            if (event.key !== "Enter") return;
+            event.preventDefault();
+            submit();
+          }}
+          placeholder="$ 1.00"
+          step="0.01"
+          type="number"
+          value={amount}
+        />
+        <button
+          className="rounded-[5px] border border-control px-2.5 text-[12px] text-secondary outline-none transition-colors duration-150 hover:border-fg-3 hover:text-primary disabled:opacity-40"
+          disabled={amount === ""}
+          onClick={submit}
+          type="button"
+        >
+          추가
+        </button>
       </div>
-    </div>
+    </section>
   );
 }
 
