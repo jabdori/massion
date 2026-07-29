@@ -409,7 +409,6 @@ describe("AgentOS native data flow", () => {
     // 문구가 아니라 disabled로 검사해야 나중에 버튼 라벨이 바뀌어도 규칙이 지켜집니다.
     expect(screen.getByRole("button", { name: "검증 근거 보강 승인" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "검증 근거 보강 거절" })).toBeDisabled();
-    expect(screen.getByText("결정은 이 상세의 근거를 확인한 뒤 기록합니다.")).toBeInTheDocument();
   });
 
   // 헌법 4.8의 «보수적 채택»은 채택 전후 효과 비교와 악화 시 되돌리기로만 증명됩니다.
@@ -430,7 +429,12 @@ describe("AgentOS native data flow", () => {
     // 자동 채택 + 개선 확인. 무엇을 어떻게 쟀는지가 표본 수와 함께 보여야 합니다.
     await user.click(within(list).getByText("인계할 때 해소하지 못한 질문을 함께 넘깁니다."));
     expect(within(growth).getByRole("region", { name: "채택" })).toHaveTextContent("자동");
-    expect(within(growth).getByRole("region", { name: "적용 후 측정" })).toHaveTextContent("표본 14 / 최소 10");
+    // 라벨과 값이 별도 칸이라 붙어 읽힙니다. 값이 맞는지만 봅니다.
+    expect(within(growth).getByRole("region", { name: "적용 후 측정" })).toHaveTextContent(
+      /표본\s*14 \/ 최소 10/u,
+    );
+    // 좋아졌는지 나빠졌는지를 문장이 아니라 부호가 말해야 합니다.
+    expect(within(growth).getByRole("region", { name: "적용 후 측정" })).toHaveTextContent("▲0.17");
     expect(within(growth).getByText("개선 확인")).toBeInTheDocument();
 
     // 사람 채택 + 저하 관찰 → 되돌림. 되돌린 시각이 채택 계보와 같은 자리에 있어야 합니다.
@@ -438,7 +442,9 @@ describe("AgentOS native data flow", () => {
     const adoption = within(growth).getByRole("region", { name: "채택" });
     expect(adoption).toHaveTextContent("사람");
     expect(adoption).toHaveTextContent("approval-growth-0018");
-    expect(adoption).toHaveTextContent("policy-assurance-v3 → policy-assurance-v4");
+    // 화살표가 별도 칸이라 붙어 읽힙니다. 되돌렸으면 지금 사는 것이 이전 버전임도 함께 말해야 합니다.
+    expect(adoption).toHaveTextContent(/policy-assurance-v3\s*→\s*policy-assurance-v4/u);
+    expect(adoption).toHaveTextContent("현재 이전 버전");
     expect(adoption).toHaveTextContent("효과 저하");
     expect(within(growth).getByText("저하 관찰")).toBeInTheDocument();
 

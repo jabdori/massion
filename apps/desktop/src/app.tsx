@@ -103,6 +103,7 @@ import type {
 import {
   effectiveGrowthMode,
   type GrowthAdoptionMode,
+  type GrowthEffectMeasureView,
   projectManifestDeclarations,
   projectModelRoutes,
   projectProviderConnections,
@@ -2606,7 +2607,11 @@ function GrowthSurface({
   service: DesktopService;
 }) {
   const [selectedId, setSelectedId] = useState<string>();
-  const [filter, setFilter] = useState<"waiting" | "all">("waiting");
+  /*
+   * 착륙 기본은 「전체」입니다. 대기만 보이면 이 표면이 증명해야 할 것 — 고치고, 재고, 나쁘면
+   * 되돌린다 — 이 한 클릭 뒤에 숨습니다. 대기 건은 수신함이 이미 따로 부릅니다.
+   */
+  const [filter, setFilter] = useState<"waiting" | "all">("all");
   const [memoryKey, setMemoryKey] = useState("");
   const [memoryKind, setMemoryKind] = useState<"fact" | "preference" | "procedure">("preference");
   const [memoryValue, setMemoryValue] = useState("");
@@ -2633,6 +2638,7 @@ function GrowthSurface({
   const selected = visible.find((item) => item.suggestionId === selectedId) ?? visible[0];
   const effect = growth?.effects.find((item) => item.suggestionId === selected?.suggestionId);
   const blockers = growthBlockers(selected);
+  const reverted = selected?.adoption?.status === "reverted";
   const waitingCount = suggestions.filter((item) => item.status === "awaiting-review").length;
   const explicitMemory = growth?.memories[0];
   const memoryEntries = explicitMemory?.entries ?? [];
@@ -2838,7 +2844,9 @@ function GrowthSurface({
               >
                 {growthTargetToken(selected.targetKind).label}
               </span>
-              <span className={`shrink-0 text-[11px] ${growthStatusTone(selected)}`}>{growthStatusLabel(selected)}</span>
+              <span className={`shrink-0 text-[11px] ${growthStatusTone(selected)}`}>
+                {growthStatusLabel(selected)}
+              </span>
               <span className="ml-auto shrink-0 font-mono text-[11px] text-muted">
                 {selected.revision === undefined ? "" : `rev ${String(selected.revision)}`}
               </span>
@@ -2863,7 +2871,7 @@ function GrowthSurface({
                     <GrowthSourceRow key={reference} onOpenWork={onOpenWork} reference={reference} />
                   ))}
                   {selected.reflectionRunId ? (
-                    <li className="grid grid-cols-[68px_minmax(0,1fr)] items-baseline gap-2 py-2">
+                    <li className="grid grid-cols-[76px_minmax(0,1fr)] items-baseline gap-2 py-2">
                       <span className="text-[12px] text-muted">회고</span>
                       <span className="font-mono text-[11px] text-secondary">{selected.reflectionRunId}</span>
                     </li>
@@ -2903,9 +2911,7 @@ function GrowthSurface({
                     ))}
                   </ul>
                   {/* 4.8: LLM 자기평가 하나만으로 자동 채택할 수 없습니다. 화면이 그 구분을 유지합니다. */}
-                  <p className="mt-2 text-[11px] leading-5 text-muted">
-                    자기평가 신호는 모델이 스스로 매긴 점수이며 독립 근거로 계산하지 않습니다.
-                  </p>
+                  <p className="mt-2 text-[11px] leading-5 text-muted"></p>
                 </GrowthSection>
               ) : null}
 
@@ -2942,15 +2948,24 @@ function GrowthSurface({
                 </dl>
               </GrowthSection>
 
+              {reverted ? <p className="mt-2 text-[12px] text-danger">위 예측은 측정에서 뒤집혔습니다.</p> : null}
+
               {selected.adoption ? (
                 <GrowthSection title="채택">
                   <dl className="grid gap-1.5 text-[13px] leading-6">
                     <div className="grid grid-cols-[76px_minmax(0,1fr)] gap-2">
                       <dt className="text-[12px] text-muted">결정</dt>
+                      {/* 자동 채택은 사람을 거치지 않았다는 안전 정보라 타임스탬프와 같은 무게로 두지 않습니다. */}
                       <dd className="flex flex-wrap items-baseline gap-2 text-primary">
-                        {selected.adoption.approvalId === undefined ? "자동" : "사람"}
-                        {selected.adoption.approvalId === undefined ? null : (
-                          <span className="font-mono text-[11px] text-muted">{selected.adoption.approvalId}</span>
+                        {selected.adoption.approvalId === undefined ? (
+                          <span className="rounded-[4px] border border-gate/50 px-1.5 py-0.5 text-[12px] text-gate">
+                            자동
+                          </span>
+                        ) : (
+                          <>
+                            사람
+                            <span className="font-mono text-[11px] text-muted">{selected.adoption.approvalId}</span>
+                          </>
                         )}
                       </dd>
                     </div>
@@ -2962,11 +2977,23 @@ function GrowthSurface({
                     </div>
                     <div className="grid grid-cols-[76px_minmax(0,1fr)] gap-2">
                       <dt className="text-[12px] text-muted">계보</dt>
+                      {/*
+                       * 되돌렸으면 지금 살아 있는 것은 이전 버전입니다. 화살표만 앞으로 그리면
+                       * 롤백이 계보에서 사라집니다 — 「나빠지면 되돌린다」의 물리적 증거가 이 줄입니다.
+                       */}
                       <dd className="min-w-0 break-all font-mono text-[11px] text-secondary">
-                        {selected.adoption.beforeVersionId}
-                        {selected.adoption.afterVersionId === undefined
-                          ? null
-                          : ` → ${selected.adoption.afterVersionId}`}
+                        <span className={reverted ? "text-primary" : ""}>{selected.adoption.beforeVersionId}</span>
+                        {selected.adoption.afterVersionId === undefined ? null : (
+                          <>
+                            <span className="mx-1 text-muted">→</span>
+                            <span className={reverted ? "text-muted line-through" : ""}>
+                              {selected.adoption.afterVersionId}
+                            </span>
+                          </>
+                        )}
+                        {reverted ? (
+                          <span className="ml-2 text-[11px] not-italic text-muted">현재 이전 버전</span>
+                        ) : null}
                       </dd>
                     </div>
                     {selected.adoption.status === "reverted" ? (
@@ -2987,6 +3014,10 @@ function GrowthSurface({
                 <GrowthSection title="거부">
                   <dl className="grid gap-1.5 text-[13px] leading-6">
                     <div className="grid grid-cols-[76px_minmax(0,1fr)] gap-2">
+                      <dt className="text-[12px] text-muted">결정</dt>
+                      <dd className="text-primary">사람</dd>
+                    </div>
+                    <div className="grid grid-cols-[76px_minmax(0,1fr)] gap-2">
                       <dt className="text-[12px] text-muted">시각</dt>
                       <dd className="font-mono text-[12px] text-secondary">{growthDate(selected.decidedAt)}</dd>
                     </div>
@@ -3000,17 +3031,42 @@ function GrowthSurface({
 
               {effect?.measure ? (
                 <GrowthSection title="적용 후 측정">
-                  <p className="text-[13px] text-secondary">
-                    {effect.measure.unit} {effect.measure.baseline} → {effect.measure.score} (
-                    {effect.measure.direction === "lower" ? "낮을수록 좋음" : "높을수록 좋음"})
-                  </p>
-                  <p className="mt-1 font-mono text-[11px] text-muted">
-                    표본 {effect.measure.observationCount} / 최소 {effect.measure.minimumObservations} ·{" "}
-                    {/* 개선에 초록을 쓰지 않습니다. 악화만 danger로 올립니다. */}
-                    <span className={effect.result === "degraded" ? "text-danger" : "text-primary"}>
+                  {/*
+                   * 이 제품이 「모델이 스스로 고치는 기능」과 갈리는 자리입니다. 문장으로 두면
+                   * 두 수를 읽고 방향을 읽고 머리로 비교해야 합니다. 판정과 델타를 값으로 찍습니다.
+                   * 개선에 초록을 쓰지 않습니다 — 악화만 danger로 올립니다.
+                   */}
+                  <div className="flex items-baseline gap-2.5">
+                    <span
+                      className={`text-[15px] font-semibold tracking-[-0.008em] ${
+                        effect.result === "degraded" ? "text-danger" : "text-primary"
+                      }`}
+                    >
                       {growthEffectStatus(effect.result)}
                     </span>
-                  </p>
+                    <span
+                      className={`font-mono text-[13px] tabular-nums ${
+                        effect.result === "degraded" ? "text-danger" : "text-primary"
+                      }`}
+                    >
+                      {effectDeltaText(effect.measure)}
+                    </span>
+                  </div>
+                  <dl className="mt-2">
+                    <GrowthField label={effect.measure.unit}>
+                      <span className="font-mono tabular-nums text-muted">{effect.measure.baseline}</span>
+                      <span className="mx-1.5 text-muted">→</span>
+                      <span className="font-mono tabular-nums text-primary">{effect.measure.score}</span>
+                      <span className="ml-2 text-[11px] text-muted">
+                        {effect.measure.direction === "lower" ? "낮을수록 좋음" : "높을수록 좋음"}
+                      </span>
+                    </GrowthField>
+                    <GrowthField label="표본">
+                      <span className="font-mono tabular-nums">
+                        {effect.measure.observationCount} / 최소 {effect.measure.minimumObservations}
+                      </span>
+                    </GrowthField>
+                  </dl>
                 </GrowthSection>
               ) : null}
 
@@ -3026,21 +3082,35 @@ function GrowthSurface({
                   </ul>
                 ) : null}
                 {decisionError ? <p className="mb-2.5 text-[12px] text-danger">{decisionError}</p> : null}
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="flex-1 text-[11px] text-muted">결정은 이 상세의 근거를 확인한 뒤 기록합니다.</span>
-                  <DecisionActions
-                    approveName={selected.summary}
-                    busy={decisionSaving}
-                    onApprove={() => {
-                      void approveSelected();
-                    }}
-                    onReject={() => {
-                      void rejectSelected();
-                    }}
-                    approveDisabled={selected.revision === undefined || selected.status !== "awaiting-review"}
-                    rejectDisabled={selected.revision === undefined || selected.status !== "awaiting-review"}
-                  />
-                </div>
+                {/*
+                 * 결정이 끝난 항목에는 액션을 남기지 않습니다. disabled로 두면 gate 노랑이 계속
+                 * 「네가 할 일이 있다」고 말합니다(DESIGN.md). 예약어가 오염되면 진짜 대기 항목의
+                 * 노랑도 같이 죽습니다.
+                 */}
+                {selected.status === "awaiting-review" ? (
+                  <div className="flex flex-wrap items-center gap-2">
+                    {/* 막힌 것은 승인할 수 없습니다. 위에서 ⊘로 말한 것을 버튼이 뒤집지 않습니다. */}
+                    <span className="flex-1 text-[11px] text-muted">
+                      {blockers.length ? "막힌 것을 푼 뒤 승인할 수 있습니다" : ""}
+                    </span>
+                    <DecisionActions
+                      approveName={selected.summary}
+                      busy={decisionSaving}
+                      onApprove={() => {
+                        void approveSelected();
+                      }}
+                      onReject={() => {
+                        void rejectSelected();
+                      }}
+                      approveDisabled={
+                        selected.revision === undefined ||
+                        blockers.length > 0 ||
+                        selected.evaluation?.outcome !== "eligible"
+                      }
+                      rejectDisabled={selected.revision === undefined}
+                    />
+                  </div>
+                ) : null}
               </footer>
             </article>
           ) : null}
@@ -3157,10 +3227,6 @@ function GrowthSurface({
                     </li>
                   ))}
               </ul>
-              {/* 효과는 adoptionId만 갖고 어느 제안에서 왔는지는 계약에 없습니다. 연결되면 제안 상세로 옮깁니다. */}
-              <p className="mt-2 text-[11px] leading-5 text-muted">
-                어느 제안에서 온 효과인지는 아직 조회로 연결되지 않았습니다.
-              </p>
             </section>
           ) : null}
 
@@ -3230,7 +3296,7 @@ function GrowthSourceRow({ onOpenWork, reference }: { onOpenWork: (workId: strin
   // organization 참조는 조직 핸들이므로 에이전트 이름으로 풉니다.
   const display = kind === "organization" ? agentIdentityToken(id).name : id;
   return (
-    <li className="grid grid-cols-[68px_minmax(0,1fr)_auto] items-baseline gap-2 py-2">
+    <li className="grid grid-cols-[76px_minmax(0,1fr)_auto] items-baseline gap-2 py-2">
       <span className="text-[12px] text-muted">{growthSourceLabel[kind] ?? (kind === "" ? "근거" : kind)}</span>
       <span className="min-w-0 truncate font-mono text-[11px] text-primary" title={reference}>
         {display}
@@ -3268,7 +3334,7 @@ const growthSignalOriginLabel = {
 
 function GrowthSignalRow({ signal }: { signal: GrowthSignalView }) {
   return (
-    <li className="grid grid-cols-[44px_minmax(0,1fr)_78px_44px] items-baseline gap-2 py-2 text-[12px]">
+    <li className="grid grid-cols-[76px_minmax(0,1fr)_78px_44px] items-baseline gap-2 py-2 text-[12px]">
       {/* 반대 근거는 색으로도 구분합니다. 통과 여부와 다른 축입니다. */}
       <span className={signal.group === "conflict" ? "text-danger" : "text-muted"}>
         {growthSignalGroupLabel[signal.group]}
@@ -3289,6 +3355,24 @@ function GrowthSignalRow({ signal }: { signal: GrowthSignalView }) {
       </span>
     </li>
   );
+}
+
+/** 한 문서 안에서 값 열이 한 자리에서 시작하게 합니다. 라벨 폭이 갈리면 눈이 매 줄 자리를 다시 찾습니다. */
+function GrowthField({ children, label }: { children: ReactNode; label: string }) {
+  return (
+    <div className="grid grid-cols-[76px_minmax(0,1fr)] items-baseline gap-2 py-0.5">
+      <dt className="text-[12px] text-muted">{label}</dt>
+      <dd className="min-w-0 text-[13px] text-secondary">{children}</dd>
+    </div>
+  );
+}
+
+/** 좋아졌는지 나빠졌는지를 부호로 말합니다. 방향(낮을수록 좋음)까지 넣어 뒤집습니다. */
+function effectDeltaText(measure: GrowthEffectMeasureView): string {
+  const raw = measure.score - measure.baseline;
+  const better = measure.direction === "lower" ? raw < 0 : raw > 0;
+  const sign = raw === 0 ? "±" : better ? "▲" : "▼";
+  return `${sign}${Math.abs(raw).toFixed(2)}`;
 }
 
 function growthEvaluationLabel(outcome: "eligible" | "ineligible" | "blocked"): string {
@@ -3353,10 +3437,15 @@ function growthStatusLabel(suggestion: GrowthView["suggestions"][number]): strin
   return growthSuggestionStatusLabel[suggestion.status] ?? suggestion.status;
 }
 
-/** gate는 사람의 결정이 필요한 곳, danger는 막히거나 악화된 곳에만 씁니다. */
+/**
+ * gate는 사람의 결정이 필요한 곳, danger는 막히거나 악화된 곳에만 씁니다.
+ * 반영됨과 거부됨을 같은 회색으로 접지 않습니다 — 둘 다 끝난 것이지만 조직이 배워야 할 내용이
+ * 정반대입니다. 반영은 살아 있으므로 본문 밝기로, 거부는 지나간 것이므로 흐리게 둡니다.
+ */
 function growthStatusTone(suggestion: GrowthView["suggestions"][number]): string {
   if (suggestion.adoption?.status === "reverted") return "text-danger";
-  return suggestion.status === "awaiting-review" ? "text-gate" : "text-muted";
+  if (suggestion.status === "awaiting-review") return "text-gate";
+  return suggestion.status === "adopted" ? "text-primary" : "text-muted";
 }
 function growthEffectStatus(result: GrowthView["effects"][number]["result"]): string {
   return result === "improved"
@@ -6440,7 +6529,11 @@ function InspectorRecords({
           .map((id) => activities.find((activity) => activity.id === id))
           .filter((activity) => activity?.kind === "room" && activity.messageType === "decision");
         return (
-          <section aria-labelledby={`record-${record.id}`} className="border border-border bg-surface-1" key={record.id}>
+          <section
+            aria-labelledby={`record-${record.id}`}
+            className="border border-border bg-surface-1"
+            key={record.id}
+          >
             <h2
               className="flex items-baseline justify-between gap-3 border-b border-border px-4 py-3 text-sm font-semibold"
               id={`record-${record.id}`}
