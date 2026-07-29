@@ -6,8 +6,22 @@ packages:
   - extensions/*
   - packages/*
 
+# 아래 열 건은 전이 의존성의 공개된 취약점입니다. 직접 의존이 아니라 상위 패키지가
+# 끌고 오는 것이라 패치 버전으로 끌어올립니다. verify:security가 moderate 이상 0건을 요구합니다.
 overrides:
   "@opentelemetry/core": 2.8.0
   uuid: 11.1.1
+  "@ai-sdk/provider-utils": ">=3.0.98"
+  "@babel/core": ">=7.29.1"
+  "@hono/node-server": ">=2.0.5"
+  brace-expansion: ">=5.0.8"
+  diff: ">=8.0.3"
+  dompurify: ">=3.3.2"
+  fast-uri: ">=3.1.4"
+  js-yaml: ">=4.1.1"
+  # gray-matter@4는 v4에서 사라진 safeLoad를 씁니다. 그 경로만 3.x로 되돌립니다.
+  "gray-matter>js-yaml": "^3.14.1"
+  prismjs: ">=1.30.0"
+  tar: ">=7.5.21"
 
 allowBuilds: { protobufjs: false }

@@ -3592,16 +3592,17 @@ function BudgetSurface({ service }: { service: DesktopService }) {
           <h1 className="text-[15px] font-semibold tracking-[-0.008em]">예산</h1>
           <span className="font-mono text-[11px] tabular-nums text-muted">{costText(spent)}</span>
         </header>
-        <div className="min-h-0 overflow-y-auto px-2 pb-3">
+        {/* 목록 문법은 프로바이더 표면과 같습니다 — 전폭 행, 사이는 선. 표면을 옮길 때 눈이 자리를 다시 찾지 않습니다. */}
+        <div className="min-h-0 overflow-y-auto pb-3">
           {error ? <SurfaceError message={error} /> : null}
           {!settings && !error ? <SurfaceLoading /> : null}
-          <ul>
+          <ul className="divide-y divide-border">
             <li>
               <button
                 aria-pressed={selectedId === undefined}
-                className={`w-full rounded-[5px] px-2 py-1.5 text-left text-[13px] transition-colors duration-150 ${
+                className={`w-full px-3 py-2 text-left text-[13px] transition-colors duration-150 ${
                   selectedId === undefined
-                    ? "bg-surface-2 text-primary"
+                    ? "bg-[rgb(255_255_255/0.047)] text-primary"
                     : "text-secondary hover:bg-[rgb(255_255_255/0.027)]"
                 }`}
                 onClick={() => {
@@ -3616,8 +3617,8 @@ function BudgetSurface({ service }: { service: DesktopService }) {
               <li key={route.routeId}>
                 <button
                   aria-pressed={selectedId === route.routeId}
-                  className={`w-full rounded-[5px] px-2 py-2 text-left transition-colors duration-150 ${
-                    selectedId === route.routeId ? "bg-surface-2" : "hover:bg-[rgb(255_255_255/0.027)]"
+                  className={`w-full px-3 py-2 text-left transition-colors duration-150 ${
+                    selectedId === route.routeId ? "bg-[rgb(255_255_255/0.047)]" : "hover:bg-[rgb(255_255_255/0.027)]"
                   }`}
                   onClick={() => {
                     setSelectedId(route.routeId);
@@ -3669,7 +3670,15 @@ function BudgetSurface({ service }: { service: DesktopService }) {
           {attempts === undefined ? null : (
             <>
               <UsageStats attempts={shown} />
-              {selected === undefined ? null : (
+              {/*
+               * 한도는 경로마다 걸립니다. 「전체」에서는 걸 대상이 없으므로, 조정하는 자리가
+               * 어디인지만 말합니다 — 전에는 아무것도 없어서 조정 기능 자체가 없는 것으로 읽혔습니다.
+               */}
+              {selected === undefined ? (
+                <p className="border-t border-border px-5 py-2.5 text-[12px] text-muted">
+                  왼쪽에서 경로를 고르면 차단 한도와 알림을 겁니다.
+                </p>
+              ) : (
                 <RouteGuardBar
                   draft={draft}
                   guard={guardOf(selected)}
@@ -3689,9 +3698,9 @@ function BudgetSurface({ service }: { service: DesktopService }) {
       {/* 집계는 기록과 다른 속도로 읽힙니다. 같은 스크롤에 두면 둘 다 못 봅니다. */}
       <aside className="grid min-h-0 grid-rows-[46px_minmax(0,1fr)] border-l border-border bg-chrome">
         <header className="flex items-center px-3">
-          <h2 className="text-[13px] text-muted">어디에 쓰였나</h2>
+          <h2 className="text-[13px] text-muted">사용처</h2>
         </header>
-        <div className="min-h-0 overflow-y-auto px-3 pb-4">
+        <div className="min-h-0 overflow-y-auto pb-4">
           <UsageBreakdown attempts={shown} />
         </div>
       </aside>
@@ -4018,29 +4027,27 @@ function BreakdownList({
 }) {
   const peak = Math.max(...rows.map(([, value]) => value.tokens), 1);
   return (
-    <section aria-label={heading} className="mt-3 first:mt-1">
-      <h3 className="mb-1.5 text-[11px] font-semibold tracking-[0.01em] text-fg-3">{heading}</h3>
-      <ul>
+    <section aria-label={heading}>
+      <div className="border-b border-border px-3 py-1.5">
+        <span className="text-[11px] text-muted">{heading}</span>
+      </div>
+      {/* 왼쪽 경로 목록과 같은 문법입니다 — 전폭 행, 사이는 선, 이름 왼쪽·값 오른쪽. */}
+      <ul className="divide-y divide-border">
         {rows.map(([id, value]) => (
-          <li className="py-1.5" key={id}>
+          <li className="px-3 py-2" key={id}>
             <div className="flex items-baseline gap-2">
               <span className="min-w-0 flex-1 truncate font-mono text-[12px] text-secondary">{id}</span>
-              <span className="shrink-0 font-mono text-[11px] tabular-nums text-muted">{tokenText(value.tokens)}</span>
+              <span className="shrink-0 font-mono text-[12px] tabular-nums text-muted">
+                {value.cost === 0
+                  ? `${countText(value.calls)}회`
+                  : `${countText(value.calls)}회 · ${costText(value.cost)}`}
+              </span>
             </div>
-            <div className="mt-1 h-[3px] w-full rounded-full bg-surface-2">
+            <div className="mt-2 h-[3px] w-full rounded-full bg-surface-2">
               <div
                 className="h-[3px] rounded-full bg-fg-3"
                 style={{ width: `${String((value.tokens / peak) * 100)}%` }}
               />
-            </div>
-            <div className="mt-1 flex items-baseline gap-1.5 font-mono text-[11px] tabular-nums text-muted">
-              <span>{countText(value.calls)}회</span>
-              {value.cost === 0 ? null : (
-                <>
-                  <span>·</span>
-                  <span>{costText(value.cost)}</span>
-                </>
-              )}
             </div>
           </li>
         ))}

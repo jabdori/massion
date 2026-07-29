@@ -121,7 +121,7 @@ export async function verifyDesktopRelease({
   candidateSha,
   app,
   uatEvidence,
-  repoRoot = resolve(fileURLToPath(new URL("..", import.meta.url))),
+  repoRoot = resolve(fileURLToPath(new globalThis.URL("..", import.meta.url))),
   expectedVersion,
   run = command,
 }) {
@@ -160,9 +160,11 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   try {
     const arguments_ = parseArguments(process.argv.slice(2));
     const result = await verifyDesktopRelease(verificationOptions(arguments_));
-    console.log(`개인용 데스크톱 후보 검증 통과: ${result.version} ${result.candidateSha} (${result.uatCount}개 UAT)`);
+    process.stdout.write(
+      `개인용 데스크톱 후보 검증 통과: ${result.version} ${result.candidateSha} (${result.uatCount}개 UAT)\n`,
+    );
   } catch (error) {
-    console.error(error instanceof Error ? error.message : "개인용 데스크톱 후보 검증이 실패했습니다");
+    process.stderr.write(`${error instanceof Error ? error.message : "개인용 데스크톱 후보 검증이 실패했습니다"}\n`);
     process.exitCode = 1;
   }
 }

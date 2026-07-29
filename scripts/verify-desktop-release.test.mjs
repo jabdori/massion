@@ -46,7 +46,14 @@ test("실제 Tauri 표식과 23개 원자 UAT만 통과한 증거를 수락한�
 test("fixture 표식·누락 결과·인자 오류를 완료 근거로 허용하지 않는다", () => {
   assert.throws(() => parseUatEvidence(evidence().replace("actual-tauri", "fixture")), /실제 Tauri/u);
   assert.throws(() => parseUatEvidence(evidence().replace(/<!-- desktop-uat: UAT-P02=passed -->\n?/u, "")), /UAT-P02/u);
-  const parsed = parseArguments(["--candidate-sha", candidateSha, "--app", "/tmp/Massion.app", "--uat-evidence", "/tmp/uat.md"]);
+  const parsed = parseArguments([
+    "--candidate-sha",
+    candidateSha,
+    "--app",
+    "/tmp/Massion.app",
+    "--uat-evidence",
+    "/tmp/uat.md",
+  ]);
   assert.deepEqual(parsed, {
     "candidate-sha": candidateSha,
     app: "/tmp/Massion.app",
@@ -59,7 +66,12 @@ test("fixture 표식·누락 결과·인자 오류를 완료 근거로 허용하
   });
   assert.doesNotThrow(() => assertProductSourceMatches({ candidateSha, currentSha: "b".repeat(40), changedFiles: "" }));
   assert.throws(
-    () => assertProductSourceMatches({ candidateSha, currentSha: "b".repeat(40), changedFiles: "apps/desktop/src/app.tsx" }),
+    () =>
+      assertProductSourceMatches({
+        candidateSha,
+        currentSha: "b".repeat(40),
+        changedFiles: "apps/desktop/src/app.tsx",
+      }),
     /제품 소스/u,
   );
   assert.throws(() => parseArguments(["--candidate-sha", candidateSha, "--app", "/tmp/Massion.app"]), /uat-evidence/u);
@@ -79,7 +91,10 @@ test("동일 후보의 version·서명·sidecar·manifest를 한 번에 검증�
   await writeFile(path.join(app, "Contents/MacOS/surrealdb"), "surrealdb");
   await chmod(path.join(app, "Contents/MacOS/node"), 0o700);
   await chmod(path.join(app, "Contents/MacOS/surrealdb"), 0o700);
-  await writeFile(path.join(app, "Contents/Resources/runtime-manifest.json"), JSON.stringify({ runtimes: { node: {}, surrealdb: {} } }));
+  await writeFile(
+    path.join(app, "Contents/Resources/runtime-manifest.json"),
+    JSON.stringify({ runtimes: { node: {}, surrealdb: {} } }),
+  );
   context.after(() => rm(directory, { recursive: true, force: true }));
 
   const calls = [];
@@ -97,5 +112,8 @@ test("동일 후보의 version·서명·sidecar·manifest를 한 번에 검증�
     run,
   });
   assert.equal(result.uatCount, 23);
-  assert.deepEqual(calls.map(([name]) => name), ["git", "plutil", "codesign", "spctl", "xcrun"]);
+  assert.deepEqual(
+    calls.map(([name]) => name),
+    ["git", "plutil", "codesign", "spctl", "xcrun"],
+  );
 });

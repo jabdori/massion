@@ -50,13 +50,23 @@ export function assertDeploymentSecurity(files) {
   }
 }
 
-async function filesUnder(path) {
+/*
+ * 재귀 + push(...spread)는 서브트리 전체를 인자로 펼칩니다. 파일이 수만 개가 되면
+ * 인자 한도를 넘어 stack overflow로 죽습니다 — 검증 스크립트가 검증 전에 죽었습니다.
+ * 큐로 훑고 한 번에 하나씩 담습니다. .git 같은 숨은 디렉토리도 볼 이유가 없습니다.
+ */
+async function filesUnder(root) {
   const result = [];
-  for (const entry of await readdir(path, { withFileTypes: true })) {
-    if (entry.name === "dist" || entry.name === "node_modules") continue;
-    const child = resolve(path, entry.name);
-    if (entry.isDirectory()) result.push(...(await filesUnder(child)));
-    else result.push(child);
+  const pending = [root];
+  while (pending.length > 0) {
+    const path = pending.pop();
+    if (path === undefined) break;
+    for (const entry of await readdir(path, { withFileTypes: true })) {
+      if (entry.name === "dist" || entry.name === "node_modules" || entry.name.startsWith(".")) continue;
+      const child = resolve(path, entry.name);
+      if (entry.isDirectory()) pending.push(child);
+      else result.push(child);
+    }
   }
   return result;
 }
@@ -70,9 +80,14 @@ function run(command, arguments_, options = {}) {
 
 async function main() {
   const root = resolve(fileURLToPath(new globalThis.URL("..", import.meta.url)));
+  /*
+   * 이 제품의 소스만 봅니다. 전에는 마케팅 폴더 안의 샘플 프로젝트(supertest를 import하고
+   * 의존성도 없는)를 보안 test suite로 쓸어 담아, 보안 검증이 자기 수집 때문에 실패했습니다.
+   */
   const candidates = (await filesUnder(root))
     .filter((path) => /(?:security|auth|sandbox|provenance|oauth)\.test\.ts$/u.test(path))
     .map((path) => path.slice(root.length + 1))
+    .filter((path) => /^(?:apps|packages)\//u.test(path) && !/\/(?:fixtures|marketing|examples)\//u.test(path))
     .sort();
   if (candidates.length < 10) throw new Error("보안 test suite가 예상보다 적습니다");
   run("pnpm", ["exec", "vitest", "run", ...candidates]);

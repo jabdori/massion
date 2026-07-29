@@ -111,7 +111,6 @@ describe("AgentOS native data flow", () => {
     expect(screen.queryByText("never-render-this")).not.toBeInTheDocument();
   });
 
-
   it("확장 화면은 조직에 늘어난 Capability를 버전·출처보다 먼저 보인다", async () => {
     const user = userEvent.setup();
     const loadExtensions = vi.fn(async () => [
@@ -430,9 +429,7 @@ describe("AgentOS native data flow", () => {
     await user.click(within(list).getByText("인계할 때 해소하지 못한 질문을 함께 넘깁니다."));
     expect(within(growth).getByRole("region", { name: "채택" })).toHaveTextContent("자동");
     // 라벨과 값이 별도 칸이라 붙어 읽힙니다. 값이 맞는지만 봅니다.
-    expect(within(growth).getByRole("region", { name: "적용 후 측정" })).toHaveTextContent(
-      /표본\s*14 \/ 최소 10/u,
-    );
+    expect(within(growth).getByRole("region", { name: "적용 후 측정" })).toHaveTextContent(/표본\s*14 \/ 최소 10/u);
     // 좋아졌는지 나빠졌는지를 문장이 아니라 부호가 말해야 합니다.
     expect(within(growth).getByRole("region", { name: "적용 후 측정" })).toHaveTextContent("▲0.17");
     expect(within(growth).getByText("개선 확인")).toBeInTheDocument();
