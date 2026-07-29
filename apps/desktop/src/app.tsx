@@ -3552,7 +3552,7 @@ const HEATMAP_WEEKS = 26;
  * 찾습니다. 값 없는 날은 0이 아니라 배경 그대로입니다.
  */
 function DailyActivity({ attempts }: { attempts: readonly RouteAttemptView[] }) {
-  const [hovered, setHovered] = useState<string>();
+  const [hovered, setHovered] = useState<{ day: string; x: number; y: number }>();
   const byDay = new Map<string, { calls: number; tokens: number; cost: number }>();
   for (const attempt of attempts) {
     const day = attempt.at.slice(0, 10);
@@ -3572,20 +3572,30 @@ function DailyActivity({ attempts }: { attempts: readonly RouteAttemptView[] }) 
   const peak = Math.max(...[...byDay.values()].map((value) => value.tokens));
   const dayAt = (week: number, weekday: number): string =>
     new Date(origin.getTime() + (week * 7 + weekday) * 86_400_000).toISOString().slice(0, 10);
-  const shownDay = hovered === undefined ? undefined : byDay.get(hovered);
+  const shownDay = hovered === undefined ? undefined : byDay.get(hovered.day);
   return (
     <section aria-label="일별 활동" className="border-t border-border px-5 py-4">
-      <div className="mb-2.5 flex items-baseline gap-3">
-        <h3 className="text-[12px] font-semibold tracking-[0.01em] text-fg-3">일별 활동</h3>
-        {/* 칸에 올린 날의 값. 자리를 늘 잡아둬서 표가 위아래로 흔들리지 않습니다. */}
-        <p className="min-h-4 flex-1 truncate text-[11px] text-muted">
-          {hovered === undefined
-            ? null
-            : shownDay === undefined
-              ? `${hovered} · 호출 없음`
-              : `${hovered} · 호출 ${countText(shownDay.calls)} · ${tokenText(shownDay.tokens)} 토큰 · ${costText(shownDay.cost)}`}
-        </p>
-      </div>
+      <h3 className="mb-2.5 text-[12px] font-semibold tracking-[0.01em] text-fg-3">일별 활동</h3>
+      {/*
+       * 칸 위에 뜹니다. 제목 옆에 두면 눈이 칸과 값 사이를 오가야 하고, 문서 흐름에 있으면
+       * 마우스가 지날 때마다 아래 표가 흔들립니다. 그래서 fixed로 띄우고 칸 위에 세웁니다.
+       */}
+      {hovered === undefined ? null : (
+        <div
+          className="pointer-events-none fixed z-50 -translate-x-1/2 -translate-y-[calc(100%+8px)] whitespace-nowrap rounded-[4px] border border-line-strong bg-surface-2 px-2 py-1 text-[11px] text-secondary"
+          role="tooltip"
+          style={{ left: hovered.x, top: hovered.y }}
+        >
+          <span className="font-mono tabular-nums text-muted">{hovered.day}</span>
+          {shownDay === undefined ? (
+            <span className="ml-2 text-muted">호출 없음</span>
+          ) : (
+            <span className="ml-2 font-mono tabular-nums">
+              {countText(shownDay.calls)}회 · {tokenText(shownDay.tokens)} 토큰 · {costText(shownDay.cost)}
+            </span>
+          )}
+        </div>
+      )}
       <div className="flex gap-1.5 overflow-x-auto">
         <div className="mt-[15px] flex shrink-0 flex-col gap-[3px]">
           {WEEKDAY_LABEL.map((label, weekday) => (
@@ -3620,8 +3630,9 @@ function DailyActivity({ attempts }: { attempts: readonly RouteAttemptView[] }) 
                               : "bg-fg-3"
                       }`}
                       key={weekday}
-                      onMouseEnter={() => {
-                        setHovered(key);
+                      onMouseEnter={(event) => {
+                        const box = event.currentTarget.getBoundingClientRect();
+                        setHovered({ day: key, x: box.left + box.width / 2, y: box.top });
                       }}
                       onMouseLeave={() => {
                         setHovered(undefined);
