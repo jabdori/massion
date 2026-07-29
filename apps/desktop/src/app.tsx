@@ -424,6 +424,8 @@ export function App({ contextPicker = nativeContextPicker, service }: AppProps) 
         <GlobalRail
           activeSurface={surface}
           collapsed={sidebarCollapsed}
+          // 연결 대상을 읽는 조회가 아직 계약에 없습니다. 인계에 기록.
+          connection="local"
           notificationCount={inboxItems === undefined ? 0 : inboxItems.length}
           onOpenNotifications={openInbox}
           onSelect={setSurface}
@@ -563,6 +565,7 @@ export function App({ contextPicker = nativeContextPicker, service }: AppProps) 
 function GlobalRail({
   activeSurface,
   collapsed,
+  connection,
   notificationCount,
   onOpenNotifications,
   onSelect,
@@ -570,6 +573,8 @@ function GlobalRail({
 }: {
   activeSurface: DesktopSurface;
   collapsed: boolean;
+  /** 조직이 이 컴퓨터에 있는지 원격 SurrealDB에 있는지. */
+  connection: "local" | "remote";
   notificationCount: number;
   onOpenNotifications: () => void;
   onSelect: (surface: DesktopSurface) => void;
@@ -653,7 +658,16 @@ function GlobalRail({
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
-        <p className="mt-2 text-[11px] text-muted group-data-[collapsed=true]/sidebar:hidden">로컬 연결됨</p>
+        {/*
+         * 조직이 이 컴퓨터에 있는지 다른 데 있는지는 늘 보여야 하는 사실입니다. 캡션으로 떠 있으면
+         * 어디에도 속하지 않아 읽히지 않습니다. 선으로 끊고 점을 붙여 상태 줄로 세웁니다.
+         */}
+        <div className="mt-2 flex items-center gap-2 border-t border-border px-2.5 pt-2.5">
+          <span aria-hidden="true" className="size-1.5 shrink-0 rounded-full bg-fg-3" />
+          <span className="text-[12px] text-secondary group-data-[collapsed=true]/sidebar:hidden">
+            {connection === "local" ? "로컬" : "원격"}
+          </span>
+        </div>
       </SidebarFooter>
     </Sidebar>
   );
