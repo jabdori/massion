@@ -868,6 +868,7 @@ export interface GrowthView {
     readonly reflectionEnabled: boolean;
     readonly adoptionMode: "review" | "auto";
     readonly version?: number;
+    readonly checksum?: string;
     readonly governanceDecisionId: string;
     readonly activatedAt: string;
   };
@@ -2164,6 +2165,80 @@ const fixturePromise = <T>(run: () => T): Promise<T> =>
     resolve(run());
   });
 
+type FixtureGrowthConfiguration = Omit<NonNullable<GrowthView["configuration"]>, "version" | "checksum"> & {
+  readonly version: number;
+  readonly checksum: string;
+};
+
+const fixtureGrowthConfiguration: FixtureGrowthConfiguration = Object.freeze({
+  reflectionEnabled: true,
+  adoptionMode: "review" as const,
+  version: 1,
+  checksum: "fixture-growth-configuration-1-enabled-review",
+  governanceDecisionId: "decision-growth-0007",
+  activatedAt: "2026-07-21T09:12:00.000Z",
+});
+
+const fixtureGrowthSuggestionLineages: Readonly<
+  Record<
+    string,
+    {
+      readonly status: string;
+      readonly revision: number;
+      readonly targetDrifted: boolean;
+      readonly evaluation?: Pick<GrowthEvaluationView, "evaluationRunId" | "outcome" | "inputHash">;
+      readonly adoption?: GrowthAdoptionView;
+    }
+  >
+> = Object.freeze({
+  "suggestion-cohort-guard": {
+    status: "awaiting-review",
+    revision: 3,
+    targetDrifted: false,
+    evaluation: { evaluationRunId: "evaluation-0031", outcome: "eligible", inputHash: "fixture-evaluation-cohort" },
+    adoption: {
+      adoptionId: "adoption-fixture-cohort",
+      status: "awaiting-review",
+      commandId: "command-growth-fixture-cohort",
+      approvalId: "approval-growth-fixture-cohort",
+      evaluationRunId: "evaluation-0031",
+      evaluationInputHash: "fixture-evaluation-cohort",
+      beforeVersionId: "prompt-context-strategy-v1",
+      beforeChecksum: "fixture-growth-before-cohort",
+    },
+  },
+  "suggestion-quant-persist": {
+    status: "evaluated",
+    revision: 1,
+    targetDrifted: true,
+    evaluation: { evaluationRunId: "evaluation-0032", outcome: "ineligible", inputHash: "fixture-evaluation-quant" },
+  },
+  "suggestion-target-drift-fixture": {
+    status: "awaiting-review",
+    revision: 1,
+    targetDrifted: true,
+    evaluation: { evaluationRunId: "evaluation-target-drift", outcome: "eligible", inputHash: "fixture-evaluation-drift" },
+    adoption: {
+      adoptionId: "adoption-fixture-target-drift",
+      status: "awaiting-review",
+      commandId: "command-growth-fixture-target-drift",
+      approvalId: "approval-growth-fixture-target-drift",
+      evaluationRunId: "evaluation-target-drift",
+      evaluationInputHash: "fixture-evaluation-drift",
+      beforeVersionId: "prompt-context-strategy-v1",
+      beforeChecksum: "fixture-growth-before-target-drift",
+    },
+  },
+  "suggestion-proposed-fixture": { status: "proposed", revision: 1, targetDrifted: false },
+  "suggestion-evaluated-fixture": { status: "evaluated", revision: 1, targetDrifted: false },
+  "suggestion-handoff-note": { status: "adopted", revision: 2, targetDrifted: false },
+  "suggestion-verify-depth": { status: "adopted", revision: 1, targetDrifted: false },
+  "suggestion-tone-brief": { status: "rejected", revision: 1, targetDrifted: false },
+});
+
+const fixtureGrowthChecksum = (version: number, reflectionEnabled: boolean, adoptionMode: GrowthAdoptionMode): string =>
+  `fixture-growth-configuration-${String(version)}-${reflectionEnabled ? "enabled" : "disabled"}-${adoptionMode}`;
+
 /** `APPLICATION_RUN_STAGES`(packages/application/src/core-work-coordinator.ts)와 같은 순서입니다. */
 const FIXTURE_RUN_STAGES = ["intake", "context-strategy", "evidence", "delivery", "assurance", "records"];
 
@@ -2176,6 +2251,12 @@ export function createFixtureDesktopService(): DesktopService {
   /* 픽스처가 상태를 바꾸므로 모듈 상수가 아니라 사본을 소유합니다. */
   const initialSnapshot: DesktopSnapshot = structuredClone(fixtureDataAdapter());
   const settingsState: SettingsView = structuredClone(fixtureSettings);
+  let growthConfiguration = { ...fixtureGrowthConfiguration };
+  const growthSuggestionLineages = structuredClone(fixtureGrowthSuggestionLineages);
+  const growthSuggestionOverrides = new Map<
+    string,
+    Pick<GrowthView["suggestions"][number], "status" | "revision" | "adoption" | "decisionReason" | "decidedAt">
+  >();
   let directiveSequence = 0;
   let runSequence = 0;
   let eventSequence = 0;
@@ -2589,17 +2670,33 @@ export function createFixtureDesktopService(): DesktopService {
       ),
     loadRegistryInfo: (versionId) => fixturePromise(() => fixtureRegistryDetail(versionId)),
     loadCapabilities: () => fixturePromise(() => ({ extensions: [], inventory: fixtureRegistryInventory })),
-    configureGrowth: () => fixturePromise(() => undefined),
+    configureGrowth: (input) =>
+      fixturePromise(() => {
+        if (typeof input.reflectionEnabled !== "boolean")
+          throw new Error("Growth reflectionEnabled는 boolean이어야 합니다");
+        if (input.adoptionMode !== "review" && input.adoptionMode !== "auto") {
+          throw new Error("Growth adoptionMode는 review 또는 auto여야 합니다");
+        }
+        if (input.expectedVersion !== undefined && input.expectedVersion !== growthConfiguration.version) {
+          throw new Error("Growth configuration version precondition이 일치하지 않습니다");
+        }
+        const version = growthConfiguration.version + 1;
+        growthConfiguration = {
+          ...growthConfiguration,
+          reflectionEnabled: input.reflectionEnabled,
+          adoptionMode: input.adoptionMode,
+          version,
+          checksum: fixtureGrowthChecksum(version, input.reflectionEnabled, input.adoptionMode),
+          governanceDecisionId: `decision-growth-fixture-${String(version)}`,
+          activatedAt: new Date().toISOString(),
+        };
+      }),
     putExplicitMemory: () => fixturePromise(() => undefined),
     forgetExplicitMemory: () => fixturePromise(() => undefined),
     loadGrowth: () =>
-      fixturePromise(() => ({
-        configuration: {
-          reflectionEnabled: true,
-          adoptionMode: "review" as const,
-          governanceDecisionId: "decision-growth-0007",
-          activatedAt: "2026-07-21T09:12:00.000Z",
-        },
+      fixturePromise(() => {
+        const view = {
+          configuration: { ...growthConfiguration },
         suggestions: [
           {
             suggestionId: "suggestion-cohort-guard",
@@ -2622,6 +2719,7 @@ export function createFixtureDesktopService(): DesktopService {
             evaluation: {
               evaluationRunId: "evaluation-0031",
               outcome: "eligible" as const,
+              inputHash: "fixture-evaluation-cohort",
               strategyVersionId: "strategy-v4",
               signals: [
                 {
@@ -2672,6 +2770,7 @@ export function createFixtureDesktopService(): DesktopService {
             expectedEffect: "분기 비교가 포함된 Work의 재작업이 줄어듭니다.",
             riskSummary: "완료 기준이 하나 늘어 단순 요청의 맥락 단계가 길어질 수 있습니다.",
             status: "awaiting-review",
+            adoption: growthSuggestionLineages["suggestion-cohort-guard"]!.adoption!,
           },
           {
             suggestionId: "suggestion-quant-persist",
@@ -2693,6 +2792,7 @@ export function createFixtureDesktopService(): DesktopService {
             evaluation: {
               evaluationRunId: "evaluation-0032",
               outcome: "ineligible" as const,
+              inputHash: "fixture-evaluation-quant",
               strategyVersionId: "strategy-v4",
               signals: [
                 {
@@ -2721,7 +2821,52 @@ export function createFixtureDesktopService(): DesktopService {
             rationale: "최근 4개 Work 중 3개가 통계 검정을 요구했고 매번 scope work 노드를 새로 만들었습니다.",
             expectedEffect: "같은 팀을 반복 생성하지 않고 조직 버전이 안정됩니다.",
             riskSummary: "쓰이지 않는 분기에도 노드가 남아 조직이 커집니다.",
-            status: "awaiting-review",
+            status: "evaluated",
+            },
+            {
+              suggestionId: "suggestion-target-drift-fixture",
+              workId: "churn-q3",
+              targetKind: "prompt",
+              operation: "replace-instruction",
+              summary: "대상 checksum이 바뀐 제안은 승인하지 않습니다.",
+              revision: 1,
+              rationale: "제안한 뒤 대상 지시문이 갱신됐습니다.",
+              expectedEffect: "오래된 대상을 덮어쓰지 않습니다.",
+              riskSummary: "다시 평가해야 합니다.",
+              status: "awaiting-review",
+              targetDrifted: true,
+              evaluation: {
+                evaluationRunId: "evaluation-target-drift",
+                outcome: "eligible" as const,
+                inputHash: "fixture-evaluation-drift",
+                strategyVersionId: "strategy-v4",
+                signals: [],
+              },
+              adoption: growthSuggestionLineages["suggestion-target-drift-fixture"]!.adoption!,
+            },
+            {
+              suggestionId: "suggestion-proposed-fixture",
+              workId: "churn-q3",
+              targetKind: "prompt",
+              operation: "append-instruction",
+              summary: "검증 전 제안의 거절 경로를 보여줍니다.",
+              revision: 1,
+              rationale: "같은 실패를 재현했지만 아직 평가가 끝나지 않았습니다.",
+              expectedEffect: "검증 기준을 빠뜨리지 않습니다.",
+              riskSummary: "평가 전에는 근거가 부족할 수 있습니다.",
+              status: "proposed",
+            },
+            {
+              suggestionId: "suggestion-evaluated-fixture",
+              workId: "churn-q3",
+              targetKind: "memory",
+              operation: "add-entry",
+              summary: "평가 완료 제안의 거절 경로를 보여줍니다.",
+              revision: 1,
+              rationale: "평가는 끝났지만 사람이 채택을 결정하지 않았습니다.",
+              expectedEffect: "검토 근거를 기억에 남깁니다.",
+              riskSummary: "현재 업무에는 적용 범위가 넓습니다.",
+              status: "evaluated",
           },
           {
             // 자동 반영(approvalId 없음) → 효과 개선 확인 → retained.
@@ -2951,9 +3096,81 @@ export function createFixtureDesktopService(): DesktopService {
             },
           },
         ],
-      })),
-    approveGrowthSuggestion: () => fixturePromise(() => undefined),
-    rejectGrowthSuggestion: () => fixturePromise(() => undefined),
+        };
+        return structuredClone({
+          ...view,
+          configuration: { ...growthConfiguration },
+          suggestions: view.suggestions.map((suggestion) => {
+            const override = growthSuggestionOverrides.get(suggestion.suggestionId);
+            if (!override) return suggestion;
+            return {
+              ...suggestion,
+              status: override.status,
+              ...(override.revision === undefined ? {} : { revision: override.revision }),
+              ...(override.adoption === undefined ? {} : { adoption: override.adoption }),
+              ...(override.decisionReason === undefined ? {} : { decisionReason: override.decisionReason }),
+              ...(override.decidedAt === undefined ? {} : { decidedAt: override.decidedAt }),
+            };
+          }),
+        });
+      }),
+    approveGrowthSuggestion: (input) =>
+      fixturePromise(() => {
+        const base = growthSuggestionLineages[input.suggestionId];
+        if (!base) throw new Error("Growth Suggestion을 찾을 수 없습니다");
+        if (!Number.isSafeInteger(input.expectedRevision) || input.expectedRevision < 1) {
+          throw new Error("Growth Suggestion revision이 유효하지 않습니다");
+        }
+        if (!input.reason.trim()) throw new Error("Growth Suggestion 승인 사유가 필요합니다");
+        const current = { ...base, ...growthSuggestionOverrides.get(input.suggestionId) };
+        if (current.revision !== input.expectedRevision) throw new Error("Growth Suggestion revision 충돌입니다");
+        if (current.status !== "awaiting-review") throw new Error("승인 대기 중인 Growth Suggestion이 아닙니다");
+        if (!current.evaluation || current.evaluation.outcome !== "eligible") {
+          throw new Error("eligible Growth Suggestion만 승인할 수 있습니다");
+        }
+        if (!current.adoption || current.adoption.status !== "awaiting-review" || !current.adoption.approvalId) {
+          throw new Error("승인 대기 중인 Growth Adoption을 찾을 수 없습니다");
+        }
+        if (
+          current.evaluation.evaluationRunId !== current.adoption.evaluationRunId ||
+          current.evaluation.inputHash !== current.adoption.evaluationInputHash
+        ) {
+          throw new Error("Growth Suggestion의 eligible 평가 계보가 일치하지 않습니다");
+        }
+        if (current.targetDrifted) throw new Error("대상 checksum이 바뀐 Growth Suggestion은 승인할 수 없습니다");
+        growthSuggestionOverrides.set(input.suggestionId, {
+          status: "adopted",
+          revision: current.revision,
+          adoption: {
+            ...current.adoption,
+            status: "observing",
+            afterVersionId: `${current.adoption.beforeVersionId}:adopted`,
+            afterChecksum: `${current.adoption.beforeChecksum}:adopted`,
+            adoptedAt: new Date().toISOString(),
+          },
+        });
+      }),
+    rejectGrowthSuggestion: (input) =>
+      fixturePromise(() => {
+        const base = growthSuggestionLineages[input.suggestionId];
+        if (!base) throw new Error("Growth Suggestion을 찾을 수 없습니다");
+        if (!Number.isSafeInteger(input.expectedRevision) || input.expectedRevision < 1) {
+          throw new Error("Growth Suggestion revision이 유효하지 않습니다");
+        }
+        if (!input.reason.trim()) throw new Error("Growth Suggestion 거절 사유가 필요합니다");
+        const current = { ...base, ...growthSuggestionOverrides.get(input.suggestionId) };
+        if (current.revision !== input.expectedRevision) throw new Error("Growth Suggestion revision 충돌입니다");
+        if (!["proposed", "evaluated", "awaiting-review"].includes(current.status)) {
+          throw new Error("현재 상태의 Growth Suggestion은 거절할 수 없습니다");
+        }
+        growthSuggestionOverrides.set(input.suggestionId, {
+          status: "rejected",
+          revision: current.revision,
+          ...(current.adoption === undefined ? {} : { adoption: { ...current.adoption, status: "rejected" } }),
+          decisionReason: input.reason,
+          decidedAt: new Date().toISOString(),
+        });
+      }),
     installRegistry: () =>
       fixturePromise(() => ({ outcome: "succeeded", installationId: "installation-fixture-0001" })),
     /* 도메인은 지시를 status 'queued'로 남기고, 투영이 활동 흐름의 message 한 줄로 옮깁니다. */

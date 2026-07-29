@@ -454,7 +454,7 @@ describe("AgentOS native data flow", () => {
     await user.click(await screen.findByRole("button", { name: "수신함, 미해결 4개" }));
     const panel = await screen.findByRole("dialog", { name: "수신함" });
     const improvement = within(panel).getByRole("button", {
-      name: "개선 검토 열기: 임시로 만든 계량분석 팀을 조직에 남깁니다.",
+      name: "개선 검토 열기: 분기 비교 요청에서 코호트 정의를 먼저 확인하게 합니다.",
     });
     expect(improvement).toHaveTextContent("검토 대기");
 
@@ -462,8 +462,11 @@ describe("AgentOS native data flow", () => {
     expect(screen.queryByRole("dialog", { name: "수신함" })).not.toBeInTheDocument();
     const growth = await screen.findByRole("main", { name: "개선" });
     expect(
-      within(growth).getByRole("heading", { name: "임시로 만든 계량분석 팀을 조직에 남깁니다." }),
+      within(growth).getByRole("heading", { name: "분기 비교 요청에서 코호트 정의를 먼저 확인하게 합니다." }),
     ).toBeInTheDocument();
+    expect(
+      within(growth).getByRole("button", { name: "분기 비교 요청에서 코호트 정의를 먼저 확인하게 합니다. 승인" }),
+    ).toBeEnabled();
   });
 
   it("권한은 설정에서 실제 서비스 조회를 사용한다", async () => {

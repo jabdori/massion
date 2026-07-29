@@ -234,6 +234,239 @@ describe("Application desktop service", () => {
     await expect(fresh.loadWork("work-fixture-0001")).rejects.toThrow("Fixture Work를 찾을 수 없습니다");
   });
 
+  it("fixture Growth 설정은 CAS 갱신 뒤 재조회되고 새 서비스에는 새지 않는다", async () => {
+    const service = createFixtureDesktopService();
+    const initial = await service.loadGrowth();
+    const configuration = initial.configuration;
+    if (!configuration?.version || !configuration.checksum)
+      throw new Error("초기 Growth 설정 version과 checksum이 필요합니다");
+
+    await service.configureGrowth({
+      reflectionEnabled: false,
+      adoptionMode: "auto",
+      expectedVersion: configuration.version,
+    });
+
+    await expect(service.loadGrowth()).resolves.toMatchObject({
+      configuration: {
+        reflectionEnabled: false,
+        adoptionMode: "auto",
+        version: configuration.version + 1,
+        governanceDecisionId: "decision-growth-fixture-2",
+        activatedAt: expect.any(String),
+      },
+    });
+    expect((await service.loadGrowth()).configuration?.checksum).not.toBe(configuration.checksum);
+    await expect(
+      service.configureGrowth({ reflectionEnabled: false, adoptionMode: "auto", expectedVersion: 0 }),
+    ).rejects.toThrow("version");
+    await expect(
+      service.configureGrowth({
+        reflectionEnabled: true,
+        adoptionMode: "review",
+        expectedVersion: configuration.version,
+      }),
+    ).rejects.toThrow("version");
+    await service.configureGrowth({ reflectionEnabled: false, adoptionMode: "auto" });
+    await expect(service.loadGrowth()).resolves.toMatchObject({
+      configuration: { version: configuration.version + 2, governanceDecisionId: "decision-growth-fixture-3" },
+    });
+
+    await expect(createFixtureDesktopService().loadGrowth()).resolves.toMatchObject({
+      configuration: { reflectionEnabled: true, adoptionMode: "review", version: configuration.version },
+    });
+  });
+
+  it("fixture Growth 승인는 eligible 대기 제안을 observing으로 옮기고 stale 재요청을 막는다", async () => {
+    const service = createFixtureDesktopService();
+    const initial = await service.loadGrowth();
+    const suggestion = initial.suggestions.find((item) => item.suggestionId === "suggestion-cohort-guard");
+    if (!suggestion?.revision) throw new Error("승인 대기 Growth 제안 revision이 필요합니다");
+    expect(suggestion).toMatchObject({
+      evaluation: { outcome: "eligible", inputHash: expect.any(String) },
+      adoption: {
+        status: "awaiting-review",
+        approvalId: expect.any(String),
+        evaluationRunId: suggestion.evaluation?.evaluationRunId,
+        beforeChecksum: expect.any(String),
+      },
+    });
+    await expect(
+      service.approveGrowthSuggestion({
+        suggestionId: suggestion.suggestionId,
+        expectedRevision: suggestion.revision + 1,
+        reason: "오래된 revision입니다",
+      }),
+    ).rejects.toThrow("revision");
+
+    await service.approveGrowthSuggestion({
+      suggestionId: suggestion.suggestionId,
+      expectedRevision: suggestion.revision,
+      reason: "평가와 대상 checksum을 확인했습니다",
+    });
+
+    const approved = (await service.loadGrowth()).suggestions.find(
+      (item) => item.suggestionId === suggestion.suggestionId,
+    );
+    expect(approved).toMatchObject({
+      status: "adopted",
+      revision: suggestion.revision,
+      adoption: { status: "observing" },
+    });
+    expect(approved).not.toHaveProperty("decisionReason");
+    expect(approved).not.toHaveProperty("decidedAt");
+    expect(
+      (await service.loadGrowth()).suggestions.filter((item) => item.status === "awaiting-review"),
+    ).not.toContainEqual(expect.objectContaining({ suggestionId: suggestion.suggestionId }));
+    await expect(
+      service.approveGrowthSuggestion({
+        suggestionId: suggestion.suggestionId,
+        expectedRevision: suggestion.revision,
+        reason: "같은 승인 재시도",
+      }),
+    ).rejects.toThrow("승인 대기");
+  });
+
+  it("fixture Growth 거절은 CAS 사유를 보존하고 새 서비스와 다른 제안에 영향을 주지 않는다", async () => {
+    const service = createFixtureDesktopService();
+    const initial = await service.loadGrowth();
+    const suggestion = initial.suggestions.find((item) => item.suggestionId === "suggestion-quant-persist");
+    if (!suggestion?.revision) throw new Error("거절할 Growth 제안 revision이 필요합니다");
+    expect(suggestion).toMatchObject({ status: "evaluated" });
+    expect(suggestion).not.toHaveProperty("adoption");
+
+    await service.rejectGrowthSuggestion({
+      suggestionId: suggestion.suggestionId,
+      expectedRevision: suggestion.revision,
+      reason: "관측 표본이 아직 부족합니다",
+    });
+    await expect(
+      service.rejectGrowthSuggestion({
+        suggestionId: suggestion.suggestionId,
+        expectedRevision: suggestion.revision + 1,
+        reason: "오래된 revision입니다",
+      }),
+    ).rejects.toThrow("revision");
+
+    const rejected = (await service.loadGrowth()).suggestions.find(
+      (item) => item.suggestionId === suggestion.suggestionId,
+    );
+    expect(rejected).toMatchObject({
+      status: "rejected",
+      revision: suggestion.revision,
+      decisionReason: "관측 표본이 아직 부족합니다",
+      decidedAt: expect.any(String),
+    });
+    expect(
+      (await service.loadGrowth()).suggestions.find((item) => item.suggestionId === "suggestion-cohort-guard"),
+    ).toMatchObject({
+      status: "awaiting-review",
+    });
+    await expect(
+      service.rejectGrowthSuggestion({
+        suggestionId: suggestion.suggestionId,
+        expectedRevision: suggestion.revision,
+        reason: "다시 거절",
+      }),
+    ).rejects.toThrow("거절");
+    expect(
+      (await createFixtureDesktopService().loadGrowth()).suggestions.find(
+        (item) => item.suggestionId === suggestion.suggestionId,
+      ),
+    ).toMatchObject({ status: "evaluated" });
+  });
+
+  it("fixture Growth 대기 제안 거절은 adoption도 rejected로 전이하고 계보를 보존한다", async () => {
+    const service = createFixtureDesktopService();
+    const initial = (await service.loadGrowth()).suggestions.find((item) => item.suggestionId === "suggestion-cohort-guard");
+    if (!initial?.revision || !initial.adoption || !initial.evaluation) throw new Error("대기 Growth 제안 계보가 필요합니다");
+
+    await service.rejectGrowthSuggestion({
+      suggestionId: initial.suggestionId,
+      expectedRevision: initial.revision,
+      reason: "현재 변경은 보류합니다",
+    });
+
+    const rejected = (await service.loadGrowth()).suggestions.find((item) => item.suggestionId === initial.suggestionId);
+    expect(rejected).toMatchObject({
+      status: "rejected",
+      decisionReason: "현재 변경은 보류합니다",
+      adoption: {
+        status: "rejected",
+        adoptionId: initial.adoption.adoptionId,
+        evaluationRunId: initial.evaluation.evaluationRunId,
+        evaluationInputHash: initial.adoption.evaluationInputHash,
+      },
+    });
+  });
+
+  it("fixture Growth 반환의 nested 계보 mutation은 같은 서비스와 새 서비스에 새지 않는다", async () => {
+    const service = createFixtureDesktopService();
+    const returned = (await service.loadGrowth()).suggestions.find((item) => item.suggestionId === "suggestion-cohort-guard");
+    if (!returned?.adoption || !returned.evaluation?.signals[0]) throw new Error("Growth nested 계보가 필요합니다");
+
+    (returned.adoption as { status: string }).status = "observing";
+    (returned.evaluation.signals[0] as { score: number }).score = 0;
+
+    const reread = (await service.loadGrowth()).suggestions.find((item) => item.suggestionId === returned.suggestionId);
+    const fresh = (await createFixtureDesktopService().loadGrowth()).suggestions.find(
+      (item) => item.suggestionId === returned.suggestionId,
+    );
+    expect(reread?.adoption?.status).toBe("awaiting-review");
+    expect(reread?.evaluation?.signals[0]?.score).toBe(0.75);
+    expect(fresh?.adoption?.status).toBe("awaiting-review");
+    expect(fresh?.evaluation?.signals[0]?.score).toBe(0.75);
+  });
+
+  it("fixture Growth 거절은 proposed와 evaluated 제안도 terminal 상태로 옮긴다", async () => {
+    const service = createFixtureDesktopService();
+
+    for (const suggestionId of ["suggestion-proposed-fixture", "suggestion-evaluated-fixture"]) {
+      await service.rejectGrowthSuggestion({
+        suggestionId,
+        expectedRevision: 1,
+        reason: "현재 범위에는 맞지 않습니다",
+      });
+    }
+
+    const suggestions = await service.loadGrowth();
+    expect(suggestions.suggestions.find((item) => item.suggestionId === "suggestion-proposed-fixture")).toMatchObject({
+      status: "rejected",
+      decisionReason: "현재 범위에는 맞지 않습니다",
+    });
+    expect(suggestions.suggestions.find((item) => item.suggestionId === "suggestion-evaluated-fixture")).toMatchObject({
+      status: "rejected",
+      decisionReason: "현재 범위에는 맞지 않습니다",
+    });
+  });
+
+  it("fixture Growth 승인은 ineligible·종료·알 수 없는 제안을 거부한다", async () => {
+    const service = createFixtureDesktopService();
+    const reason = "승인 근거";
+
+    await expect(
+      service.approveGrowthSuggestion({ suggestionId: "suggestion-quant-persist", expectedRevision: 1, reason }),
+    ).rejects.toThrow();
+    await expect(
+      service.approveGrowthSuggestion({ suggestionId: "suggestion-target-drift-fixture", expectedRevision: 1, reason }),
+    ).rejects.toThrow("checksum");
+    await expect(
+      service.approveGrowthSuggestion({ suggestionId: "suggestion-handoff-note", expectedRevision: 2, reason }),
+    ).rejects.toThrow();
+    await expect(
+      service.approveGrowthSuggestion({ suggestionId: "suggestion-tone-brief", expectedRevision: 1, reason }),
+    ).rejects.toThrow();
+    await expect(
+      service.approveGrowthSuggestion({ suggestionId: "없는-suggestion", expectedRevision: 1, reason }),
+    ).rejects.toThrow();
+    await expect(
+      service.rejectGrowthSuggestion({ suggestionId: "없는-suggestion", expectedRevision: 1, reason }),
+    ).rejects.toThrow();
+    await expect(
+      service.approveGrowthSuggestion({ suggestionId: "suggestion-cohort-guard", expectedRevision: 3, reason: " " }),
+    ).rejects.toThrow("사유");
+  });
+
   it("fixture startWork는 입력별 Work·실행 계보를 만들고 목록과 상세에서 다시 읽는다", async () => {
     const service = createFixtureDesktopService();
     const first = await service.startWork({ text: "첫 번째 계약 검토", workspaceId: "workspace-analytics" });
