@@ -83,11 +83,36 @@ describe("massion-server process", () => {
         await ready;
         child.kill(signal);
         const result = await new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolve) =>
-          child.once("exit", (code, signal) => resolve({ code, signal })),
+          child.once("close", (code, signal) => resolve({ code, signal })),
         );
         expect(result).toEqual({ code: 0, signal: null });
         expect(events).toEqual(["server.ready", "server.shutdown.started", "server.shutdown.completed"]);
-        expect(stderr).toEqual([]);
+        const operationalEvents = stderr
+          .join("")
+          .trim()
+          .split("\n")
+          .map((line) => JSON.parse(line) as Readonly<Record<string, unknown>>);
+        expect(operationalEvents).toHaveLength(3);
+        expect(operationalEvents).toMatchObject([
+          {
+            event: "subscription.server_connector.lifecycle",
+            phase: "startup",
+            connectorCount: 0,
+            accountCount: 0,
+          },
+          {
+            event: "subscription.server_connector.startup_recovery",
+            attempted: 0,
+            restored: 0,
+            unavailable: 0,
+          },
+          {
+            event: "subscription.server_connector.lifecycle",
+            phase: "shutdown",
+            connectorCount: 0,
+            accountCount: 0,
+          },
+        ]);
       } finally {
         lines.close();
         if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
