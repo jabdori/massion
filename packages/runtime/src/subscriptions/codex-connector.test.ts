@@ -172,10 +172,12 @@ describe("공식 Codex 구독 Connector", () => {
       config: { cli_auth_credentials_store: "file" },
     });
     expect(startThread).toHaveBeenCalledWith({ workingDirectory: "/tmp/work-1", skipGitRepoCheck: true });
-    expect(run).toHaveBeenCalledWith(
-      "상태를 확인하세요",
-      expect.objectContaining({ outputSchema: expect.objectContaining({ type: "object" }) }),
-    );
+    const [structuredPrompt, turnOptions] = run.mock.calls[0] ?? [];
+    expect(structuredPrompt).toContain("상태를 확인하세요");
+    expect(structuredPrompt).toContain("Massion JSON output schema (status)");
+    expect(structuredPrompt).toContain('"type":"object"');
+    expect(structuredPrompt).toContain("도구 호출");
+    expect(turnOptions).not.toHaveProperty("outputSchema");
     expect(result).toMatchObject({ outcome: "completed", sessionId: "thread-1", value: { status: "ok" } });
     expect(JSON.stringify(result)).not.toContain("SECRET_TOKEN");
   });

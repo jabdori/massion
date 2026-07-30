@@ -148,10 +148,16 @@ export class CodexSubscriptionConnector implements SubscriptionAgentAdapter {
     const abortController = new AbortController();
     this.active.set(input.executionId, abortController);
     try {
-      const turn = await thread.run(input.prompt, {
-        ...(output ? { outputSchema: output.jsonSchema } : {}),
-        signal: abortController.signal,
-      });
+      const prompt = output
+        ? [
+            input.prompt,
+            "",
+            `Massion JSON output schema (${output.name}):`,
+            JSON.stringify(output.jsonSchema),
+            "응답은 위 schema를 만족하는 JSON object 하나만 즉시 반환하세요. 도구 호출, workspace 검사, 진행 메시지, Markdown code fence, 설명을 포함하지 마세요.",
+          ].join("\n")
+        : input.prompt;
+      const turn = await thread.run(prompt, { signal: abortController.signal });
       const sessionId = thread.id;
       if (!sessionId) throw new Error("Codex thread ID가 생성되지 않았습니다");
       let value: unknown = turn.finalResponse;
