@@ -303,7 +303,7 @@ describe("Interrupted Engineering Delivery recovery", { timeout: 60_000 }, () =>
     const removeWorkspace = manager.removeDeliveryWorkspaceIfExists.bind(manager);
     vi.spyOn(manager, "removeDeliveryWorkspaceIfExists").mockImplementation(async (input) => {
       calls.push("workspace");
-      await removeWorkspace(input);
+      return await removeWorkspace(input);
     });
     const resetForRetry = deliveries.resetForRetry.bind(deliveries);
     vi.spyOn(deliveries, "resetForRetry").mockImplementation(async (resetContext, input) => {

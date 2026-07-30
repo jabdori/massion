@@ -643,10 +643,12 @@ export class EngineeringDeliveryStore {
         "SELECT lease_id, acquire_command_id FROM engineering_path_lease WHERE organization_id = $organization_id AND delivery_id = $delivery_id AND (status = 'active' OR status = 'expired');",
         { organization_id: context.organizationId, delivery_id: input.deliveryId },
       );
+      const activeLease = activeLeases[0];
       if (
         activeLeases.length !== 1 ||
-        activeLeases[0].lease_id !== input.ownership.leaseId ||
-        activeLeases[0].acquire_command_id !== input.ownership.ownerCommandId
+        !activeLease ||
+        activeLease.lease_id !== input.ownership.leaseId ||
+        activeLease.acquire_command_id !== input.ownership.ownerCommandId
       ) {
         throw new Error("active path lease가 있는 Delivery는 rollback할 수 없습니다");
       }
