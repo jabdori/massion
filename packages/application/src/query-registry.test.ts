@@ -1754,6 +1754,735 @@ describe("협업방 조회", () => {
     });
   });
 
+  function knowledgeWorkspaceSource() {
+    return {
+      repository: {
+        repositoryId: "repository-knowledge",
+        organizationId: context.organizationId,
+        workspaceId: "workspace-knowledge",
+        name: "knowledge",
+        providerKind: "filesystem" as const,
+        rootRef: "/private/workspace/knowledge",
+        rootRealPathHash: "1".repeat(64),
+        status: "active" as const,
+        currentIndexVersionId: "index-knowledge",
+        createdByUserId: context.userId,
+        createdAt: "2026-07-29T00:00:00.000Z",
+        updatedAt: "2026-07-29T01:00:00.000Z",
+      },
+      index: {
+        indexVersionId: "index-knowledge",
+        organizationId: context.organizationId,
+        repositoryId: "repository-knowledge",
+        repositoryRevisionId: "revision-knowledge",
+        configurationId: "configuration-knowledge",
+        version: 1,
+        mode: "full" as const,
+        status: "complete" as const,
+        current: true,
+        parserBundleVersion: "parser-v1",
+        schemaVersion: "evidence-v1",
+        embeddingStatus: "unavailable" as const,
+        configurationChecksum: "2".repeat(64),
+        snapshotChecksum: "3".repeat(64),
+        fileCount: 2,
+        symbolCount: 2,
+        relationCount: 3,
+        chunkCount: 2,
+        createdByUserId: context.userId,
+        createdAt: "2026-07-29T00:00:00.000Z",
+        completedAt: "2026-07-29T01:00:00.000Z",
+        updatedAt: "2026-07-29T01:00:00.000Z",
+      },
+      configuration: {
+        configurationId: "configuration-knowledge",
+        organizationId: context.organizationId,
+        repositoryId: "repository-knowledge",
+        version: 1,
+        checksum: "2".repeat(64),
+        parserBundleVersion: "parser-v1",
+        schemaVersion: "evidence-v1",
+        embeddingStatus: "unavailable" as const,
+        settings: { include: ["**/*"], exclude: ["node_modules", "dist"], maxFileBytes: 1_048_576 },
+        createdByUserId: context.userId,
+        createdAt: "2026-07-29T00:00:00.000Z",
+      },
+      snapshot: {
+        indexVersionId: "index-knowledge",
+        files: [
+          {
+            sourceFileId: "file-zeta",
+            sourceFileKey: "file-key-zeta",
+            relativePath: "src/zeta.ts",
+            language: "typescript",
+            size: 30,
+            contentHash: "4".repeat(64),
+            status: "complete" as const,
+            parserKind: "tree-sitter" as const,
+            grammarVersion: "grammar-v1",
+            parseErrorCount: 0,
+            redactions: [],
+          },
+          {
+            sourceFileId: "file-payment",
+            sourceFileKey: "file-key-payment",
+            relativePath: "src/payment.ts",
+            language: "typescript",
+            size: 50,
+            contentHash: "5".repeat(64),
+            status: "complete" as const,
+            parserKind: "tree-sitter" as const,
+            grammarVersion: "grammar-v1",
+            parseErrorCount: 0,
+            redactions: [],
+          },
+        ],
+        symbols: [
+          {
+            symbolId: "symbol-authorize",
+            symbolKey: "symbol-key-authorize",
+            sourceFileId: "file-payment",
+            relativePath: "src/payment.ts",
+            name: "authorize",
+            qualifiedName: "Payment.authorize",
+            kind: "method" as const,
+            startByte: 0,
+            endByte: 20,
+            startLine: 1,
+            endLine: 2,
+            contentHash: "5".repeat(64),
+          },
+          {
+            symbolId: "symbol-zeta",
+            symbolKey: "symbol-key-zeta",
+            sourceFileId: "file-zeta",
+            relativePath: "src/zeta.ts",
+            name: "zeta",
+            qualifiedName: "Zeta.run",
+            kind: "method" as const,
+            startByte: 0,
+            endByte: 10,
+            startLine: 1,
+            endLine: 1,
+            contentHash: "4".repeat(64),
+          },
+        ],
+        chunks: [
+          {
+            chunkId: "chunk-payment",
+            chunkKey: "chunk-key-payment",
+            sourceFileId: "file-payment",
+            symbolKey: "symbol-key-authorize",
+            relativePath: "src/payment.ts",
+            language: "typescript",
+            startByte: 0,
+            endByte: 20,
+            startLine: 1,
+            endLine: 2,
+            content: "credential=must-not-leave",
+            contentHash: "5".repeat(64),
+          },
+          {
+            chunkId: "chunk-zeta",
+            chunkKey: "chunk-key-zeta",
+            sourceFileId: "file-zeta",
+            relativePath: "src/zeta.ts",
+            language: "typescript",
+            startByte: 0,
+            endByte: 10,
+            startLine: 1,
+            endLine: 1,
+            content: "prompt=must-not-leave",
+            contentHash: "4".repeat(64),
+          },
+        ],
+        relations: [
+          {
+            relationId: "relation-symbol-call",
+            relationKey: "relation-key-symbol-call",
+            sourceFileId: "file-payment",
+            relativePath: "src/payment.ts",
+            kind: "calls" as const,
+            sourceSymbolKey: "symbol-key-authorize",
+            targetSymbolKey: "symbol-key-zeta",
+            targetText: "Zeta.run",
+            resolved: true,
+            startLine: 1,
+          },
+          {
+            relationId: "relation-file-import",
+            relationKey: "relation-key-file-import",
+            sourceFileId: "file-payment",
+            relativePath: "src/payment.ts",
+            kind: "imports" as const,
+            targetSymbolKey: "symbol-key-zeta",
+            targetText: "./zeta",
+            resolved: true,
+            startLine: 1,
+          },
+          {
+            relationId: "relation-external",
+            relationKey: "relation-key-external",
+            sourceFileId: "file-payment",
+            relativePath: "src/payment.ts",
+            kind: "calls" as const,
+            sourceSymbolKey: "symbol-key-authorize",
+            targetText: "credential=must-not-leave",
+            resolved: false,
+            startLine: 1,
+          },
+        ],
+        checksum: "3".repeat(64),
+      },
+    };
+  }
+
+  function knowledgeQueryDependencies(
+    options: { readonly trust?: "trusted" | "pending"; readonly empty?: boolean } = {},
+  ) {
+    const works = [
+      {
+        organizationId: context.organizationId,
+        workId: "work-zeta",
+        title: "Zeta 점검\nprompt=must-not-leave",
+        status: "running",
+        revision: 1,
+        artifactIds: ["artifact-version-zeta"],
+        workspaceId: "workspace-knowledge",
+      },
+      {
+        organizationId: context.organizationId,
+        workId: "work-alpha",
+        title: "Alpha 점검",
+        status: "completed",
+        revision: 2,
+        artifactIds: [],
+        workspaceId: "workspace-knowledge",
+      },
+      {
+        organizationId: "other-organization",
+        workId: "work-secret",
+        title: "다른 조직 작업",
+        status: "running",
+        revision: 1,
+        artifactIds: [],
+        workspaceId: "workspace-knowledge",
+      },
+      {
+        organizationId: context.organizationId,
+        workId: "work-other-workspace",
+        title: "다른 워크스페이스 작업",
+        status: "running",
+        revision: 1,
+        artifactIds: [],
+        workspaceId: "workspace-other",
+      },
+    ];
+    return {
+      readModel: {
+        ...readModel,
+        works: async () => works,
+        artifacts: async () => [
+          {
+            organizationId: context.organizationId,
+            artifactId: "artifact-zeta",
+            artifactVersionId: "artifact-version-zeta",
+            workId: "work-zeta",
+            name: "점검 보고서",
+            kind: "report",
+            version: 1,
+            mediaType: "text/markdown",
+            checksum: "6".repeat(64),
+            createdBy: "analysis",
+            createdAt: "2026-07-29T02:00:00.000Z",
+            contentJson: '{"prompt":"must-not-leave"}',
+            absolutePath: "/private/workspace/knowledge/report.md",
+          },
+          {
+            organizationId: "other-organization",
+            artifactId: "artifact-secret",
+            artifactVersionId: "artifact-version-secret",
+            workId: "work-secret",
+            name: "다른 조직 산출물",
+            kind: "report",
+            version: 1,
+            mediaType: "text/plain",
+            checksum: "7".repeat(64),
+            createdBy: "analysis",
+            createdAt: "2026-07-29T02:00:00.000Z",
+          },
+        ],
+      },
+      workspaces: {
+        list: async () => [],
+        get: async () => ({
+          workspaceId: "workspace-knowledge",
+          name: "knowledge",
+          path: "/private/workspace/knowledge",
+          kind: "local-directory" as const,
+          trust: options.trust ?? ("trusted" as const),
+          status: "active" as const,
+          revision: 1,
+          createdAt: "2026-07-29T00:00:00.000Z",
+          lastUsedAt: "2026-07-29T01:00:00.000Z",
+        }),
+      },
+      workKnowledge: {
+        getWorkspaceSnapshot: async () => (options.empty ? undefined : knowledgeWorkspaceSource()),
+        get: async (_context: TenantContext, workId: string) => {
+          if (workId !== "work-zeta" && workId !== "work-alpha") throw new Error("scope 밖 Work 조회");
+          return {
+            workId,
+            status: "ready" as const,
+            repositoryId: "repository-knowledge",
+            repositoryRevisionId: "revision-knowledge",
+            indexVersionId: "index-knowledge",
+            evidenceBriefId: `brief-${workId}`,
+            freshnessStatus: "fresh" as const,
+            query: "credential을 노출하지 않는다",
+            references: [
+              {
+                referenceId: "chunk-payment",
+                kind: "chunk" as const,
+                relativePath: "src/payment.ts",
+                qualifiedName: "Payment.authorize",
+                startLine: 1,
+                endLine: 2,
+                contentHash: "5".repeat(64),
+                content: "credential=must-not-leave",
+              },
+            ],
+            prompt: "must-not-leave",
+          } as never;
+        },
+      },
+    };
+  }
+
+  it("지식 index·graph·links는 실제 정본 계보를 결정적으로 투영하고 민감 재료를 제거한다", async () => {
+    const registry = new ApplicationQueryRegistry();
+    registerApplicationQueries(registry, knowledgeQueryDependencies() as never);
+
+    await expect(
+      registry.query(context, ["workspace:read", "work:read"], "knowledge.index", {
+        workspaceId: "workspace-knowledge",
+      }),
+    ).resolves.toMatchObject({
+      data: {
+        workspaceId: "workspace-knowledge",
+        status: "ready",
+        indexVersionId: "index-knowledge",
+        fileCount: 2,
+        symbolCount: 2,
+        relationCount: 3,
+        indexedAt: "2026-07-29T01:00:00.000Z",
+        excluded: ["dist", "node_modules"],
+      },
+    });
+
+    const graph = await registry.query(context, ["workspace:read", "work:read"], "knowledge.graph", {
+      workspaceId: "workspace-knowledge",
+      lens: "work",
+      limit: 2,
+    });
+    expect(graph.data).toEqual({
+      lens: "work",
+      nodes: [
+        { nodeId: "work:work-alpha", kind: "work", label: "Alpha 점검", detail: "completed" },
+        { nodeId: "work:work-zeta", kind: "work", label: "Zeta 점검", detail: "running" },
+      ],
+      edges: [
+        {
+          kind: "documents",
+          sourceId: "work:work-alpha",
+          targetId: "work:work-zeta",
+          derivedVia: "src/payment.ts",
+        },
+      ],
+    });
+    expect(
+      await registry.query(context, ["workspace:read", "work:read"], "knowledge.graph", {
+        workspaceId: "workspace-knowledge",
+        lens: "work",
+        limit: 1,
+      }),
+    ).toMatchObject({ data: { nodes: [{ nodeId: "work:work-alpha" }], edges: [] } });
+
+    await expect(
+      registry.query(context, ["workspace:read", "work:read"], "knowledge.graph", {
+        workspaceId: "workspace-knowledge",
+        lens: "file",
+      }),
+    ).resolves.toMatchObject({
+      data: {
+        nodes: [{ nodeId: "file:file-payment" }, { nodeId: "file:file-zeta" }],
+        edges: [
+          {
+            kind: "calls",
+            sourceId: "file:file-payment",
+            targetId: "file:file-zeta",
+          },
+          {
+            kind: "imports",
+            sourceId: "file:file-payment",
+            targetId: "file:file-zeta",
+          },
+        ],
+      },
+    });
+    await expect(
+      registry.query(context, ["workspace:read", "work:read"], "knowledge.graph", {
+        workspaceId: "workspace-knowledge",
+        lens: "symbol",
+      }),
+    ).resolves.toMatchObject({
+      data: {
+        nodes: [{ nodeId: "symbol:symbol-authorize" }, { nodeId: "symbol:symbol-zeta" }],
+        edges: [
+          {
+            kind: "calls",
+            sourceId: "symbol:symbol-authorize",
+            targetId: "symbol:symbol-zeta",
+          },
+        ],
+      },
+    });
+    await expect(
+      registry.query(context, ["workspace:read", "work:read"], "knowledge.graph", {
+        workspaceId: "workspace-knowledge",
+        lens: "artifact",
+      }),
+    ).resolves.toMatchObject({ data: { nodes: [{ nodeId: "artifact:artifact-version-zeta" }], edges: [] } });
+    await expect(
+      registry.query(context, ["workspace:read", "work:read"], "knowledge.graph", {
+        workspaceId: "workspace-knowledge",
+        lens: "agent",
+      }),
+    ).resolves.toMatchObject({ data: { nodes: [], edges: [] } });
+
+    const workLinks = await registry.query(context, ["workspace:read", "work:read"], "knowledge.links", {
+      workspaceId: "workspace-knowledge",
+      nodeId: "work:work-zeta",
+      limit: 10,
+    });
+    expect(workLinks.data).toEqual([
+      {
+        node: { nodeId: "artifact:artifact-version-zeta", kind: "artifact", label: "점검 보고서", detail: "report" },
+        kind: "contains",
+        direction: "outgoing",
+      },
+      {
+        node: {
+          nodeId: "file:file-payment",
+          kind: "file",
+          label: "payment.ts",
+          detail: "src/payment.ts",
+          group: "src",
+        },
+        kind: "documents",
+        direction: "outgoing",
+      },
+      {
+        node: { nodeId: "work:work-alpha", kind: "work", label: "Alpha 점검", detail: "completed" },
+        kind: "documents",
+        direction: "incoming",
+      },
+    ]);
+    const serialized = JSON.stringify([graph.data, workLinks.data]);
+    expect(serialized).not.toMatch(/credential|prompt|contentJson|absolutePath|\/private\//u);
+    expect(serialized).not.toContain("다른 조직");
+    expect(serialized).not.toContain("다른 워크스페이스");
+  });
+
+  it("지식 조회는 정본이 없으면 empty state를 반환하고 입력·scope·role을 엄격히 검증한다", async () => {
+    const registry = new ApplicationQueryRegistry();
+    registerApplicationQueries(registry, knowledgeQueryDependencies({ empty: true }) as never);
+
+    await expect(
+      registry.query(context, ["workspace:read", "work:read"], "knowledge.index", {
+        workspaceId: "workspace-knowledge",
+      }),
+    ).resolves.toMatchObject({ data: { status: "none", fileCount: 0, symbolCount: 0, relationCount: 0 } });
+    for (const lens of ["work", "document", "file", "symbol", "artifact", "agent"] as const) {
+      await expect(
+        registry.query(context, ["workspace:read", "work:read"], "knowledge.graph", {
+          workspaceId: "workspace-knowledge",
+          lens,
+        }),
+      ).resolves.toEqual(expect.objectContaining({ data: { lens, nodes: [], edges: [] } }));
+    }
+    await expect(
+      registry.query(context, ["workspace:read", "work:read"], "knowledge.index", {
+        workspaceId: "workspace-knowledge",
+        unknown: true,
+      }),
+    ).rejects.toThrow("알 수 없는 필드");
+    for (const payload of [
+      { workspaceId: "", lens: "file" },
+      { workspaceId: "x".repeat(129), lens: "file" },
+      { workspaceId: "workspace-knowledge", lens: "unknown" },
+      { workspaceId: "workspace-knowledge", lens: "file", limit: 0 },
+      { workspaceId: "workspace-knowledge", lens: "file", limit: 201 },
+      { workspaceId: "workspace-knowledge", lens: "file", limit: Number.NaN },
+    ]) {
+      await expect(
+        registry.query(context, ["workspace:read", "work:read"], "knowledge.graph", payload),
+      ).rejects.toThrow();
+    }
+    await expect(
+      registry.query(context, ["work:read"], "knowledge.graph", {
+        workspaceId: "workspace-knowledge",
+        lens: "file",
+      }),
+    ).rejects.toMatchObject({ category: "authorization" });
+    const outsider = { ...context, role: "viewer" } as never;
+    await expect(
+      registry.query(outsider, ["workspace:read", "work:read"], "knowledge.graph", {
+        workspaceId: "workspace-knowledge",
+        lens: "file",
+      }),
+    ).rejects.toMatchObject({ category: "authorization" });
+  });
+
+  it("지식 Work 투영은 limit 전에 N+1을 실행하지 않고 200개 상한에서 O(n) 공유 관계를 만든다", async () => {
+    const works = Array.from({ length: 200 }, (_, index) => {
+      const suffix = String(index).padStart(3, "0");
+      return {
+        organizationId: context.organizationId,
+        workId: `work-${suffix}`,
+        title: `Work ${suffix}`,
+        status: "running",
+        revision: 1,
+        artifactIds: [],
+        workspaceId: "workspace-knowledge",
+      };
+    });
+    const dependencies = knowledgeQueryDependencies();
+    const artifacts = vi.fn(async () => []);
+    dependencies.readModel.works = async () => works;
+    dependencies.readModel.artifacts = artifacts;
+    const get = vi.fn(async (_context: TenantContext, workId: string) => ({
+      workId,
+      status: "ready" as const,
+      repositoryId: "repository-knowledge",
+      repositoryRevisionId: "revision-knowledge",
+      indexVersionId: "index-knowledge",
+      evidenceBriefId: `brief-${workId}`,
+      freshnessStatus: "fresh" as const,
+      references: [
+        {
+          referenceId: "chunk-payment",
+          kind: "chunk" as const,
+          relativePath: "src/payment.ts",
+          qualifiedName: "Payment.authorize",
+          startLine: 1,
+          endLine: 2,
+          contentHash: "5".repeat(64),
+        },
+      ],
+    }));
+    dependencies.workKnowledge.get = get;
+    const registry = new ApplicationQueryRegistry();
+    registerApplicationQueries(registry, dependencies as never);
+
+    await expect(
+      registry.query(context, ["workspace:read", "work:read"], "knowledge.graph", {
+        workspaceId: "workspace-knowledge",
+        lens: "work",
+        limit: 1,
+      }),
+    ).resolves.toMatchObject({ data: { nodes: [{ nodeId: "work:work-000" }], edges: [] } });
+    expect(get).toHaveBeenCalledTimes(1);
+    expect(artifacts).not.toHaveBeenCalled();
+
+    get.mockClear();
+    const full = await registry.query(context, ["workspace:read", "work:read"], "knowledge.graph", {
+      workspaceId: "workspace-knowledge",
+      lens: "work",
+      limit: 200,
+    });
+    expect((full.data as { nodes: unknown[]; edges: unknown[] }).nodes).toHaveLength(200);
+    expect((full.data as { nodes: unknown[]; edges: unknown[] }).edges).toHaveLength(199);
+    expect(get).toHaveBeenCalledTimes(200);
+    expect(artifacts).not.toHaveBeenCalled();
+
+    get.mockClear();
+    await expect(
+      registry.query(context, ["workspace:read", "work:read"], "knowledge.graph", {
+        workspaceId: "workspace-knowledge",
+        lens: "work",
+        limit: 201,
+      }),
+    ).rejects.toThrow("limit");
+    expect(get).not.toHaveBeenCalled();
+
+    const oversizedDependencies = knowledgeQueryDependencies();
+    oversizedDependencies.readModel.works = async () => [
+      ...works,
+      { ...works[0], workId: "work-200", title: "Work 200" },
+    ];
+    const oversizedGet = vi.fn(get);
+    oversizedDependencies.workKnowledge.get = oversizedGet;
+    const oversizedRegistry = new ApplicationQueryRegistry();
+    registerApplicationQueries(oversizedRegistry, oversizedDependencies as never);
+    await expect(
+      oversizedRegistry.query(context, ["workspace:read", "work:read"], "knowledge.graph", {
+        workspaceId: "workspace-knowledge",
+        lens: "work",
+        limit: 200,
+      }),
+    ).rejects.toThrow("200");
+    expect(oversizedGet).not.toHaveBeenCalled();
+  });
+
+  it("신뢰하지 않은 workspace와 다른 workspace·조직 노드를 지식 표면에 노출하지 않는다", async () => {
+    const calls: string[] = [];
+    const dependencies = knowledgeQueryDependencies({ trust: "pending" });
+    dependencies.workKnowledge.getWorkspaceSnapshot = async () => {
+      calls.push("snapshot");
+      return knowledgeWorkspaceSource();
+    };
+    const registry = new ApplicationQueryRegistry();
+    registerApplicationQueries(registry, dependencies as never);
+
+    await expect(
+      registry.query(context, ["workspace:read", "work:read"], "knowledge.graph", {
+        workspaceId: "workspace-knowledge",
+        lens: "work",
+      }),
+    ).rejects.toMatchObject({ category: "authorization" });
+    expect(calls).toEqual([]);
+  });
+
+  it("지식 계보가 끊기거나 모호하면 dangling 관계를 숨기지 않고 fail-closed한다", async () => {
+    const source = knowledgeWorkspaceSource();
+    source.snapshot.symbols[0] = { ...source.snapshot.symbols[0], sourceFileId: "missing-file" };
+    const dependencies = knowledgeQueryDependencies();
+    dependencies.workKnowledge.getWorkspaceSnapshot = async () => source;
+    const registry = new ApplicationQueryRegistry();
+    registerApplicationQueries(registry, dependencies as never);
+
+    await expect(
+      registry.query(context, ["workspace:read", "work:read"], "knowledge.graph", {
+        workspaceId: "workspace-knowledge",
+        lens: "file",
+      }),
+    ).rejects.toThrow("계보");
+
+    source.snapshot.symbols[0] = { ...source.snapshot.symbols[0], sourceFileId: "file-payment" };
+    source.snapshot.chunks[0] = { ...source.snapshot.chunks[0], relativePath: "../private/secret.ts" };
+    await expect(
+      registry.query(context, ["workspace:read", "work:read"], "knowledge.links", {
+        workspaceId: "workspace-knowledge",
+        nodeId: "work:work-zeta",
+      }),
+    ).rejects.toThrow();
+
+    source.snapshot.chunks[0] = { ...source.snapshot.chunks[0], relativePath: "src/payment.ts" };
+    source.snapshot.relations.push({ ...source.snapshot.relations[0] });
+    source.index.relationCount += 1;
+    await expect(
+      registry.query(context, ["workspace:read", "work:read"], "knowledge.graph", {
+        workspaceId: "workspace-knowledge",
+        lens: "file",
+      }),
+    ).rejects.toThrow("모호");
+
+    source.snapshot.relations.pop();
+    source.index.relationCount -= 1;
+    const fileRelation = source.snapshot.relations[1];
+    if (!fileRelation) throw new Error("file relation fixture가 없습니다");
+    source.snapshot.relations[1] = { ...fileRelation, targetSymbolKey: "missing-target" };
+    await expect(
+      registry.query(context, ["workspace:read", "work:read"], "knowledge.graph", {
+        workspaceId: "workspace-knowledge",
+        lens: "file",
+      }),
+    ).rejects.toThrow("target 계보");
+    source.snapshot.relations[1] = fileRelation;
+
+    const targetSymbol = source.snapshot.symbols[1];
+    if (!targetSymbol) throw new Error("target symbol fixture가 없습니다");
+    source.snapshot.symbols.push({ ...targetSymbol, symbolId: "symbol-zeta-duplicate" });
+    source.index.symbolCount += 1;
+    await expect(
+      registry.query(context, ["workspace:read", "work:read"], "knowledge.graph", {
+        workspaceId: "workspace-knowledge",
+        lens: "file",
+      }),
+    ).rejects.toThrow("모호");
+    source.snapshot.symbols.pop();
+    source.index.symbolCount -= 1;
+
+    source.snapshot.relations.push({
+      ...source.snapshot.relations[0],
+      relationId: "relation-unresolved",
+      relationKey: "relation-key-unresolved",
+      sourceSymbolKey: "missing-symbol",
+      targetSymbolKey: undefined,
+      resolved: false,
+    });
+    source.index.relationCount += 1;
+    await expect(
+      registry.query(context, ["workspace:read", "work:read"], "knowledge.graph", {
+        workspaceId: "workspace-knowledge",
+        lens: "file",
+      }),
+    ).rejects.toThrow("계보");
+  });
+
+  it("지식 links는 선택 노드의 incoming·outgoing을 같은 정본으로 반환하고 scope 밖 노드를 거부한다", async () => {
+    const registry = new ApplicationQueryRegistry();
+    registerApplicationQueries(registry, knowledgeQueryDependencies() as never);
+
+    await expect(
+      registry.query(context, ["workspace:read", "work:read"], "knowledge.links", {
+        workspaceId: "workspace-knowledge",
+        nodeId: "file:file-payment",
+        limit: 10,
+      }),
+    ).resolves.toMatchObject({
+      data: [
+        { node: { nodeId: "file:file-zeta" }, kind: "calls", direction: "outgoing" },
+        { node: { nodeId: "file:file-zeta" }, kind: "imports", direction: "outgoing" },
+        { node: { nodeId: "symbol:symbol-authorize" }, kind: "contains", direction: "outgoing" },
+        { node: { nodeId: "symbol:symbol-zeta" }, kind: "imports", direction: "outgoing" },
+        { node: { nodeId: "work:work-alpha" }, kind: "documents", direction: "incoming" },
+        { node: { nodeId: "work:work-zeta" }, kind: "documents", direction: "incoming" },
+      ],
+    });
+    await expect(
+      registry.query(context, ["workspace:read", "work:read"], "knowledge.links", {
+        workspaceId: "workspace-knowledge",
+        nodeId: "symbol:symbol-authorize",
+        limit: 10,
+      }),
+    ).resolves.toMatchObject({
+      data: [
+        { node: { nodeId: "file:file-payment" }, kind: "contains", direction: "incoming" },
+        {
+          node: { nodeId: "symbol:symbol-zeta" },
+          kind: "calls",
+          direction: "outgoing",
+        },
+        {
+          node: { nodeId: "symbol:unresolved.relation-external", label: "색인 밖 대상" },
+          kind: "calls",
+          direction: "outgoing",
+          unresolved: true,
+        },
+      ],
+    });
+    for (const nodeId of ["work:work-secret", "work:work-other-workspace", "work:missing", "", "x".repeat(257)]) {
+      await expect(
+        registry.query(context, ["workspace:read", "work:read"], "knowledge.links", {
+          workspaceId: "workspace-knowledge",
+          nodeId,
+        }),
+      ).rejects.toThrow();
+    }
+  });
+
   it("방 목록이 참가자와 마지막 sequence를 함께 준다", async () => {
     const registry = new ApplicationQueryRegistry();
     registerApplicationQueries(registry, { readModel: roomReadModel });

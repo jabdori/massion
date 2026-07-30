@@ -936,6 +936,17 @@ export async function createMassionDaemon(
           return { workId, status: "blocked", references: [], failureReason: "knowledge-integrity-check-failed" };
         }
       },
+      async getWorkspaceSnapshot(context: Parameters<typeof works.getWork>[0], workspaceId: string) {
+        const repository = await repositories.findByWorkspace(context, workspaceId);
+        if (!repository) return undefined;
+        const index = await repositories.getCurrentIndex(context, repository.repositoryId);
+        if (!index) return undefined;
+        const [configuration, snapshot] = await Promise.all([
+          repositories.getConfiguration(context, index.configurationId),
+          indexes.getSnapshot(context, index.indexVersionId),
+        ]);
+        return { repository, index, configuration, snapshot };
+      },
     };
     const deliveryStage = new CoreDeliveryStage({
       works,

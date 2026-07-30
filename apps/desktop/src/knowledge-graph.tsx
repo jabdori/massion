@@ -782,7 +782,7 @@ export function KnowledgeGraphCanvas({
       />
       <p className="sr-only" id="knowledge-graph-help">
         드래그로 이동, 휠로 확대·축소. 방향키로 이동하고 Shift로 빠르게. 더하기·빼기로 확대·축소, 0으로 전체 보기. 점을
-        누르면 오른쪽에 자세히 나옵니다.
+        누르거나 왼쪽의 노드 탐색 목록에서 이름을 선택하면 오른쪽에 자세히 나옵니다.
       </p>
       {settling > 0 ? (
         <div className="pointer-events-none absolute bottom-3 right-3 flex items-center gap-2 rounded-[5px] border border-border bg-chrome px-2.5 py-1.5">
@@ -829,6 +829,66 @@ export function KnowledgeGraphCanvas({
         ))}
       </div>
     </div>
+  );
+}
+
+/** 캔버스와 같은 선택 상태를 공유하는 키보드·스크린 리더용 정본 노드 목록입니다. */
+export function KnowledgeNodeExplorer({
+  graph,
+  onSelect,
+  selectedId,
+}: {
+  graph: KnowledgeGraphView;
+  onSelect: (nodeId: string) => void;
+  selectedId: string | undefined;
+}) {
+  const nodes = [...graph.nodes]
+    .sort((left, right) => left.label.localeCompare(right.label) || left.nodeId.localeCompare(right.nodeId))
+    .slice(0, 200);
+  if (nodes.length === 0) return null;
+  return (
+    <details className="group border-b border-border">
+      <summary
+        className="flex cursor-pointer list-none items-center gap-2 px-3 py-2 text-[11px] text-secondary outline-none marker:hidden hover:text-primary focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-[-1px] focus-visible:outline-fg-2 [&::-webkit-details-marker]:hidden"
+        onKeyDown={(event) => {
+          if (event.key !== "Enter" && event.key !== " ") return;
+          event.preventDefault();
+          const details = event.currentTarget.parentElement;
+          if (details instanceof HTMLDetailsElement) details.open = !details.open;
+        }}
+        tabIndex={0}
+      >
+        <span className="min-w-0 flex-1 font-medium">노드 탐색</span>
+        <span className="shrink-0 tabular-nums text-muted">{nodes.length.toLocaleString()}</span>
+        <span aria-hidden="true" className="text-muted group-open:rotate-90">
+          ›
+        </span>
+      </summary>
+      <ul aria-label="지도 노드" className="max-h-52 overflow-y-auto border-t border-border py-1">
+        {nodes.map((node) => {
+          const selected = node.nodeId === selectedId;
+          return (
+            <li key={node.nodeId}>
+              <button
+                aria-label={`${node.label} 선택`}
+                aria-pressed={selected}
+                className={`relative flex w-full items-center px-3 py-1.5 text-left text-[11px] outline-none hover:bg-surface-1 hover:text-primary focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-[-1px] focus-visible:outline-fg-2 ${
+                  selected
+                    ? "bg-surface-2 text-primary before:absolute before:inset-y-1 before:left-0 before:w-0.5 before:bg-primary"
+                    : "text-secondary"
+                }`}
+                onClick={() => {
+                  onSelect(node.nodeId);
+                }}
+                type="button"
+              >
+                <span className="truncate">{node.label}</span>
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+    </details>
   );
 }
 

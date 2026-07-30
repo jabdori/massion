@@ -19,6 +19,7 @@ import {
   type WorkActivityViewV1,
   type WorkDetailV1,
   type KnowledgeReferenceViewV1,
+  type KnowledgeGraphLensV1,
   type WorkKnowledgeViewV1,
   type WorkSummaryV1,
   type WorkspaceViewV1,
@@ -267,8 +268,8 @@ export interface ModelRouteCandidateView {
  * `contains | imports | calls | implements | documents`를 뽑고,
  * `CodeGraphService.neighbors()`(graph.ts:29)가 depth 1~5로 실제 순회합니다.
  *
- * **계약이 이를 하나도 노출하지 않습니다.** `WorkKnowledgeViewV1.references`는 평평한 목록이고
- * graph 조회 자체가 없습니다. 아래 타입은 완성본 화면이 기다리는 모양이며,
+ * 전역 graph는 Application 계약이 Work·reference·artifact 정본으로 제공합니다.
+ * `WorkKnowledgeViewV1.references`의 코드 관계는 아직 평평하므로 아래 Work 상세의 관계는 fixture 표현입니다.
  * 인계: docs/phases/30-surface-parity-agent-ux/knowledge-graph-handoff.md
  */
 
@@ -650,8 +651,8 @@ function fixtureKnowledge(workId: string): WorkKnowledgeView {
  * ── 지식 표면 (ADR-002) ──────────────────────────────────────────
  *
  * 관계 저장소가 셋으로 갈려 있습니다: evidence(코드 관계), organization(OrganizationReference),
- * growth(source_reference_ids). 단일 간선 테이블이 없으므로 **application 계층 조인**으로
- * 하나의 이웃 조회를 만들어야 합니다. SurrealDB native relation은 §9.6이 성능 실패가
+ * growth(source_reference_ids). 단일 간선 테이블이 없으므로 실제 경로는 **application 계층 조인**으로
+ * 하나의 이웃 조회를 만듭니다. SurrealDB native relation은 §9.6이 성능 실패가
  * 측정될 때만 열라고 했으므로 여기서 열지 않습니다.
  *
  * 인계: docs/phases/30-surface-parity-agent-ux/knowledge-surface-handoff.md
@@ -718,6 +719,204 @@ export interface KnowledgeIndexView {
   readonly indexedAt?: string;
   /** 색인에서 빠진 것. 없는 것을 아는 것도 지식입니다. */
   readonly excluded: readonly string[];
+}
+
+const KNOWLEDGE_NODE_KINDS = new Set<KnowledgeNodeKind>(["symbol", "file", "document", "work", "artifact", "agent"]);
+const KNOWLEDGE_RELATION_KINDS = new Set<KnowledgeRelationKind>([
+  "contains",
+  "imports",
+  "calls",
+  "implements",
+  "documents",
+]);
+const KNOWLEDGE_GRAPH_LENSES = new Set<KnowledgeGraphLensV1>([
+  "work",
+  "document",
+  "file",
+  "symbol",
+  "artifact",
+  "agent",
+]);
+const KNOWLEDGE_INSTANT =
+  /^\d{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])T(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d\.\d{3}Z$/u;
+
+function knowledgeRecord(value: unknown, allowed: readonly string[], label: string): Readonly<Record<string, unknown>> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error(`${label}이(가) 유효하지 않습니다`);
+  const record = value as Record<string, unknown>;
+  if (Object.keys(record).some((key) => !allowed.includes(key)))
+    throw new Error(`${label}에 알 수 없는 필드가 있습니다`);
+  return record;
+}
+
+function knowledgeString(value: unknown, label: string, maximum = 256): string {
+  if (
+    typeof value !== "string" ||
+    value.trim() !== value ||
+    value.length === 0 ||
+    value.length > maximum ||
+    /[\0\r\n]/u.test(value)
+  )
+    throw new Error(`${label}이(가) 유효하지 않습니다`);
+  return value;
+}
+
+function knowledgeId(value: unknown, label: string): string {
+  const id = knowledgeString(value, label, 256);
+  const separator = id.indexOf(":");
+  const kind = id.slice(0, separator) as KnowledgeNodeKind;
+  if (!KNOWLEDGE_NODE_KINDS.has(kind) || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u.test(id.slice(separator + 1)))
+    throw new Error(`${label}이(가) 유효하지 않습니다`);
+  return id;
+}
+
+function knowledgeCount(value: unknown, label: string): number {
+  if (!Number.isSafeInteger(value) || (value as number) < 0) throw new Error(`${label}이(가) 유효하지 않습니다`);
+  return value as number;
+}
+
+function knowledgeInstant(value: unknown): string {
+  const instant = knowledgeString(value, "Knowledge 색인 시각", 32);
+  const parsed = new Date(instant);
+  if (!KNOWLEDGE_INSTANT.test(instant) || !Number.isFinite(parsed.getTime()) || parsed.toISOString() !== instant)
+    throw new Error("Knowledge 색인 시각이 유효하지 않습니다");
+  return instant;
+}
+
+function projectKnowledgeNode(value: unknown): KnowledgeNodeView {
+  const row = knowledgeRecord(value, ["nodeId", "kind", "label", "detail", "group"], "Knowledge node");
+  if (!KNOWLEDGE_NODE_KINDS.has(row.kind as KnowledgeNodeKind))
+    throw new Error("Knowledge node 종류가 유효하지 않습니다");
+  const kind = row.kind as KnowledgeNodeKind;
+  const nodeId = knowledgeId(row.nodeId, "Knowledge node ID");
+  if (!nodeId.startsWith(`${kind}:`)) throw new Error("Knowledge node ID와 종류가 일치하지 않습니다");
+  const detail = row.detail === undefined ? undefined : knowledgeString(row.detail, "Knowledge node detail", 1_024);
+  if ((kind === "file" || kind === "document") && detail?.startsWith("/"))
+    throw new Error("Knowledge node에 절대 경로를 노출할 수 없습니다");
+  return {
+    nodeId,
+    kind,
+    label: knowledgeString(row.label, "Knowledge node label"),
+    ...(detail === undefined ? {} : { detail }),
+    ...(row.group === undefined ? {} : { group: knowledgeString(row.group, "Knowledge node group", 1_024) }),
+  };
+}
+
+function projectKnowledgeIndex(value: unknown, workspaceId: string): KnowledgeIndexView {
+  const row = knowledgeRecord(
+    value,
+    ["workspaceId", "status", "indexVersionId", "fileCount", "symbolCount", "relationCount", "indexedAt", "excluded"],
+    "Knowledge index",
+  );
+  if (row.workspaceId !== workspaceId) throw new Error("Knowledge index Workspace 계보가 일치하지 않습니다");
+  if (row.status !== "ready" && row.status !== "indexing" && row.status !== "stale" && row.status !== "none")
+    throw new Error("Knowledge index 상태가 유효하지 않습니다");
+  if (!Array.isArray(row.excluded) || row.excluded.length > 100)
+    throw new Error("Knowledge index 제외 목록이 유효하지 않습니다");
+  const excluded = row.excluded.map((item) => knowledgeString(item, "Knowledge index 제외 규칙"));
+  const sortedExcluded = [...excluded].sort((left, right) => left.localeCompare(right));
+  if (new Set(excluded).size !== excluded.length || excluded.some((item, index) => item !== sortedExcluded[index]))
+    throw new Error("Knowledge index 제외 목록 순서가 유효하지 않습니다");
+  const fileCount = knowledgeCount(row.fileCount, "Knowledge file count");
+  const symbolCount = knowledgeCount(row.symbolCount, "Knowledge symbol count");
+  const relationCount = knowledgeCount(row.relationCount, "Knowledge relation count");
+  if (
+    (row.status === "ready" && row.indexVersionId === undefined) ||
+    (row.status === "none" &&
+      (row.indexVersionId !== undefined ||
+        row.indexedAt !== undefined ||
+        fileCount !== 0 ||
+        symbolCount !== 0 ||
+        relationCount !== 0))
+  )
+    throw new Error("Knowledge index 상태 계보가 일치하지 않습니다");
+  return {
+    workspaceId,
+    status: row.status,
+    ...(row.indexVersionId === undefined
+      ? {}
+      : { indexVersionId: knowledgeString(row.indexVersionId, "Knowledge index version ID", 128) }),
+    fileCount,
+    symbolCount,
+    relationCount,
+    ...(row.indexedAt === undefined ? {} : { indexedAt: knowledgeInstant(row.indexedAt) }),
+    excluded,
+  };
+}
+
+function projectKnowledgeGraph(value: unknown, expectedLens: KnowledgeGraphLensV1): KnowledgeGraphView {
+  const row = knowledgeRecord(value, ["lens", "nodes", "edges"], "Knowledge graph");
+  if (row.lens !== expectedLens || !Array.isArray(row.nodes) || !Array.isArray(row.edges))
+    throw new Error("Knowledge graph 렌즈 계보가 일치하지 않습니다");
+  const nodes = row.nodes.map(projectKnowledgeNode);
+  if (nodes.some((node) => node.kind !== expectedLens)) throw new Error("Knowledge graph에 렌즈 밖 node가 있습니다");
+  const nodeIds = new Set(nodes.map((node) => node.nodeId));
+  const sortedNodes = [...nodes].sort((left, right) => left.nodeId.localeCompare(right.nodeId));
+  if (nodeIds.size !== nodes.length || nodes.some((node, index) => node.nodeId !== sortedNodes[index]?.nodeId))
+    throw new Error("Knowledge graph node 순서가 유효하지 않습니다");
+  const edges = row.edges.map((value): KnowledgeGraphEdgeView => {
+    const edge = knowledgeRecord(value, ["kind", "sourceId", "targetId", "unresolved", "derivedVia"], "Knowledge edge");
+    if (!KNOWLEDGE_RELATION_KINDS.has(edge.kind as KnowledgeRelationKind))
+      throw new Error("Knowledge edge 종류가 유효하지 않습니다");
+    const sourceId = knowledgeId(edge.sourceId, "Knowledge edge source ID");
+    const targetId = knowledgeId(edge.targetId, "Knowledge edge target ID");
+    if (!nodeIds.has(sourceId) || !nodeIds.has(targetId) || sourceId === targetId)
+      throw new Error("Knowledge edge endpoint 계보가 끊겼습니다");
+    if (edge.unresolved !== undefined && typeof edge.unresolved !== "boolean")
+      throw new Error("Knowledge edge unresolved 상태가 유효하지 않습니다");
+    return {
+      kind: edge.kind as KnowledgeRelationKind,
+      sourceId,
+      targetId,
+      ...(edge.unresolved === undefined ? {} : { unresolved: edge.unresolved }),
+      ...(edge.derivedVia === undefined
+        ? {}
+        : { derivedVia: knowledgeString(edge.derivedVia, "Knowledge edge 공유 근거", 1_024) }),
+    };
+  });
+  const sortedEdges = [...edges].sort(
+    (left, right) =>
+      left.sourceId.localeCompare(right.sourceId) ||
+      left.targetId.localeCompare(right.targetId) ||
+      left.kind.localeCompare(right.kind) ||
+      (left.derivedVia ?? "").localeCompare(right.derivedVia ?? ""),
+  );
+  const edgeKeys = edges.map((edge) =>
+    [edge.sourceId, edge.targetId, edge.kind, edge.unresolved ? "1" : "0", edge.derivedVia ?? ""].join("\0"),
+  );
+  if (new Set(edgeKeys).size !== edgeKeys.length || edges.some((edge, index) => edge !== sortedEdges[index]))
+    throw new Error("Knowledge graph edge 순서가 유효하지 않습니다");
+  return { lens: expectedLens, nodes, edges };
+}
+
+function projectKnowledgeLinks(value: unknown): readonly KnowledgeLinkView[] {
+  if (!Array.isArray(value)) throw new Error("Knowledge links가 유효하지 않습니다");
+  const links = value.map((item): KnowledgeLinkView => {
+    const row = knowledgeRecord(item, ["node", "kind", "direction", "unresolved"], "Knowledge link");
+    if (!KNOWLEDGE_RELATION_KINDS.has(row.kind as KnowledgeRelationKind))
+      throw new Error("Knowledge link 종류가 유효하지 않습니다");
+    if (row.direction !== "outgoing" && row.direction !== "incoming")
+      throw new Error("Knowledge link 방향이 유효하지 않습니다");
+    if (row.unresolved !== undefined && typeof row.unresolved !== "boolean")
+      throw new Error("Knowledge link unresolved 상태가 유효하지 않습니다");
+    return {
+      node: projectKnowledgeNode(row.node),
+      kind: row.kind as KnowledgeRelationKind,
+      direction: row.direction,
+      ...(row.unresolved === undefined ? {} : { unresolved: row.unresolved }),
+    };
+  });
+  const keys = links.map((link) =>
+    [link.node.nodeId, link.kind, link.direction, link.unresolved ? "1" : "0"].join("\0"),
+  );
+  const sortedLinks = [...links].sort(
+    (left, right) =>
+      left.node.nodeId.localeCompare(right.node.nodeId) ||
+      left.kind.localeCompare(right.kind) ||
+      left.direction.localeCompare(right.direction),
+  );
+  if (new Set(keys).size !== keys.length || links.some((link, index) => link !== sortedLinks[index]))
+    throw new Error("Knowledge links 순서가 유효하지 않습니다");
+  return links;
 }
 
 /** `router.catalog.providers` + `.endpoints`. */
@@ -923,14 +1122,14 @@ export interface DesktopService {
   loadIndex(input: WorkIndexInput): Promise<WorkView[]>;
   loadWork(workId: string): Promise<WorkView>;
   loadWorkKnowledge(workId: string): Promise<WorkKnowledgeView>;
-  /** 워크스페이스 색인 상태. 계약 없음 — ADR-002 인계 문서 참조. */
+  /** 워크스페이스의 현재 불변 색인 상태. */
   loadKnowledgeIndex(workspaceId: string): Promise<KnowledgeIndexView>;
-  /** 중심 하나의 이웃. 계약 없음 — application 계층 조인이 필요합니다. */
+  /** 렌즈 종류의 노드만 담은 결정적 지식 지도. */
   loadKnowledgeGraph(workspaceId: string, lens: KnowledgeNodeKind): Promise<KnowledgeGraphView>;
   /**
    * 노드 하나가 무엇과 이어져 있나. **렌즈와 무관하게 전부** 돌려줍니다.
    * 지도는 렌즈로 좁혀 보지만, 고른 것의 연결까지 좁히면 "여러 업무·여러 문서에 걸려 있다"를
-   * 볼 수 없게 됩니다. 계약 없음 — 인계 문서 참조.
+   * 볼 수 없게 됩니다.
    */
   loadKnowledgeLinks(workspaceId: string, nodeId: string): Promise<readonly KnowledgeLinkView[]>;
   loadPendingApprovals(): Promise<ApprovalView[]>;
@@ -1094,21 +1293,21 @@ export function createApplicationDesktopService(
       return await client.query("work.knowledge", { workId });
     },
 
-    /*
-     * 아래 둘은 계약이 아직 없습니다(ADR-002). 없는 조회를 부르는 대신 "모른다"를 돌려주고
-     * 화면이 그 사실을 말하게 합니다. 숫자 0으로 색인된 척하지 않습니다.
-     */
-    loadKnowledgeIndex: (workspaceId) =>
-      Promise.resolve({
-        workspaceId,
-        status: "none" as const,
-        fileCount: 0,
-        symbolCount: 0,
-        relationCount: 0,
-        excluded: [],
-      }),
-    loadKnowledgeGraph: (workspaceId, lens) => Promise.resolve({ lens, nodes: [], edges: [] }),
-    loadKnowledgeLinks: () => Promise.resolve([]),
+    async loadKnowledgeIndex(workspaceId) {
+      return projectKnowledgeIndex(await client.query("knowledge.index", { workspaceId }), workspaceId);
+    },
+
+    async loadKnowledgeGraph(workspaceId, lens) {
+      if (!KNOWLEDGE_GRAPH_LENSES.has(lens as KnowledgeGraphLensV1))
+        throw new Error("Knowledge graph lens가 유효하지 않습니다");
+      const graphLens = lens as KnowledgeGraphLensV1;
+      return projectKnowledgeGraph(await client.query("knowledge.graph", { workspaceId, lens: graphLens }), graphLens);
+    },
+
+    async loadKnowledgeLinks(workspaceId, nodeId) {
+      knowledgeId(nodeId, "Knowledge node ID");
+      return projectKnowledgeLinks(await client.query("knowledge.links", { workspaceId, nodeId }));
+    },
 
     async loadPendingApprovals() {
       return (await client.query("governance.approval.list", { status: "pending" })).map(projectApproval);

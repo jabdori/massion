@@ -1,7 +1,15 @@
 import { createHash } from "node:crypto";
+import { posix } from "node:path";
 
 import type { ExtensionGateway } from "@massion/extension-host";
 import type { AssuranceBindingStore } from "@massion/assurance";
+import {
+  normalizeRepositoryPath,
+  type EvidenceRepository,
+  type IndexConfiguration,
+  type IndexSnapshot,
+  type IndexVersion,
+} from "@massion/evidence";
 import type { GrowthGateway, GrowthSuggestionDetails } from "@massion/growth";
 import type { EmergencyControl } from "@massion/governance";
 import type { MembershipRole, OrganizationService, TenantContext } from "@massion/identity";
@@ -43,7 +51,16 @@ import {
   runtimeSubscriptionLineage,
   runtimeSubscriptionLineagesByCorrelation,
 } from "./runtime-subscription-lineage.js";
-import type { WorkKnowledgeViewV1 } from "./contracts.js";
+import type {
+  KnowledgeGraphEdgeViewV1,
+  KnowledgeGraphLensV1,
+  KnowledgeIndexViewV1,
+  KnowledgeLinkViewV1,
+  KnowledgeNodeKindV1,
+  KnowledgeNodeViewV1,
+  KnowledgeRelationKindV1,
+  WorkKnowledgeViewV1,
+} from "./contracts.js";
 
 export interface ApplicationQueryResultV1 {
   readonly schemaVersion: "massion.application.v1";
@@ -82,6 +99,18 @@ export interface ApplicationQueryDependencies {
   readonly workTimeline?: WorkTimelineSources;
   readonly workKnowledge?: {
     get(context: TenantContext, workId: string): Promise<WorkKnowledgeViewV1>;
+    getWorkspaceSnapshot?(
+      context: TenantContext,
+      workspaceId: string,
+    ): Promise<
+      | {
+          readonly repository: EvidenceRepository;
+          readonly index: IndexVersion;
+          readonly configuration: IndexConfiguration;
+          readonly snapshot: IndexSnapshot;
+        }
+      | undefined
+    >;
   };
   readonly autonomy?: { get(context: TenantContext): Promise<{ readonly mode: string; readonly revision: number }> };
   readonly emergency?: Pick<EmergencyControl, "get">;
@@ -155,6 +184,585 @@ function publicWorkKnowledge(view: WorkKnowledgeViewV1): WorkKnowledgeViewV1 {
     })),
     ...(view.failureReason === undefined ? {} : { failureReason: view.failureReason }),
   };
+}
+
+const KNOWLEDGE_RELATION_KINDS = new Set<KnowledgeRelationKindV1>([
+  "contains",
+  "imports",
+  "calls",
+  "implements",
+  "documents",
+]);
+const KNOWLEDGE_GRAPH_LENSES = new Set<KnowledgeGraphLensV1>([
+  "work",
+  "document",
+  "file",
+  "symbol",
+  "artifact",
+  "agent",
+]);
+const KNOWLEDGE_DOCUMENT_EXTENSIONS = new Set([".adoc", ".md", ".mdx", ".rst", ".txt"]);
+const KNOWLEDGE_INSTANT =
+  /^\d{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])T(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d\.\d{3}Z$/u;
+
+type WorkspaceKnowledgeSnapshotReader = NonNullable<
+  NonNullable<ApplicationQueryDependencies["workKnowledge"]>["getWorkspaceSnapshot"]
+>;
+type WorkspaceKnowledgeSnapshot = NonNullable<Awaited<ReturnType<WorkspaceKnowledgeSnapshotReader>>>;
+
+interface KnowledgeProjection {
+  readonly index: KnowledgeIndexViewV1;
+  readonly nodes: ReadonlyMap<string, KnowledgeNodeViewV1>;
+  readonly edges: readonly KnowledgeGraphEdgeViewV1[];
+  readonly nonCanonicalNodeIds: ReadonlySet<string>;
+}
+
+type KnowledgeProjectionRequest =
+  | { readonly kind: "graph"; readonly lens: KnowledgeGraphLensV1; readonly limit: number }
+  | { readonly kind: "links"; readonly nodeId: string; readonly limit: number };
+
+const MAX_KNOWLEDGE_WORKS = 200;
+
+function knowledgeSourceId(value: unknown, label: string): string {
+  if (typeof value !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u.test(value))
+    throw new Error(`Knowledge ${label} 계보가 유효하지 않습니다`);
+  return value;
+}
+
+function knowledgeNodeId(value: unknown): string {
+  if (typeof value !== "string" || value.length > 256) throw new Error("Knowledge node ID가 유효하지 않습니다");
+  const separator = value.indexOf(":");
+  const kind = value.slice(0, separator) as KnowledgeNodeKindV1;
+  const sourceId = value.slice(separator + 1);
+  if (!new Set<KnowledgeNodeKindV1>(["symbol", "file", "document", "work", "artifact", "agent"]).has(kind))
+    throw new Error("Knowledge node ID가 유효하지 않습니다");
+  knowledgeSourceId(sourceId, "node source ID");
+  return value;
+}
+
+function knowledgeDisplayText(value: unknown, label: string, maximum = 256): string {
+  if (
+    typeof value !== "string" ||
+    value.trim() !== value ||
+    value.length === 0 ||
+    value.length > maximum ||
+    /[\0\r\n]/u.test(value)
+  )
+    throw new Error(`Knowledge ${label}이(가) 유효하지 않습니다`);
+  return value;
+}
+
+function knowledgeShortLabel(value: unknown, fallback: string): string {
+  if (value === undefined) return fallback;
+  if (typeof value !== "string" || value.includes("\0")) throw new Error("Knowledge Work label이 유효하지 않습니다");
+  const firstLine = value.trim().split(/\r?\n/u, 1)[0]?.trim();
+  return firstLine ? [...firstLine].slice(0, 128).join("") : fallback;
+}
+
+function knowledgeRelativePath(value: unknown): string {
+  if (typeof value !== "string" || value.length === 0 || value.length > 1_024)
+    throw new Error("Knowledge 상대 경로 계보가 유효하지 않습니다");
+  if (normalizeRepositoryPath(value) !== value) throw new Error("Knowledge 상대 경로 계보가 유효하지 않습니다");
+  return value;
+}
+
+function knowledgeHash(value: unknown, label: string): string {
+  if (typeof value !== "string" || !/^[a-f0-9]{64}$/u.test(value))
+    throw new Error(`Knowledge ${label} 계보가 유효하지 않습니다`);
+  return value;
+}
+
+function knowledgeLine(value: unknown, label: string): number {
+  if (!Number.isSafeInteger(value) || (value as number) < 1)
+    throw new Error(`Knowledge ${label} 계보가 유효하지 않습니다`);
+  return value as number;
+}
+
+function knowledgeCount(value: unknown, label: string): number {
+  if (!Number.isSafeInteger(value) || (value as number) < 0)
+    throw new Error(`Knowledge ${label} 계보가 유효하지 않습니다`);
+  return value as number;
+}
+
+function knowledgeInstant(value: unknown): string {
+  let serialized: unknown;
+  try {
+    serialized =
+      typeof value === "string"
+        ? value
+        : value instanceof Date
+          ? value.toISOString()
+          : value !== null &&
+              typeof value === "object" &&
+              "toISOString" in value &&
+              typeof value.toISOString === "function"
+            ? (value as { toISOString: () => unknown }).toISOString()
+            : undefined;
+  } catch {
+    throw new Error("Knowledge 색인 시각 계보가 유효하지 않습니다");
+  }
+  if (typeof serialized !== "string" || !KNOWLEDGE_INSTANT.test(serialized))
+    throw new Error("Knowledge 색인 시각 계보가 유효하지 않습니다");
+  const parsed = new Date(serialized);
+  if (!Number.isFinite(parsed.getTime()) || parsed.toISOString() !== serialized)
+    throw new Error("Knowledge 색인 시각 계보가 유효하지 않습니다");
+  return serialized;
+}
+
+function knowledgeExcluded(configuration: IndexConfiguration): readonly string[] {
+  if (!configuration.settings || typeof configuration.settings !== "object" || Array.isArray(configuration.settings))
+    throw new Error("Knowledge 색인 설정 계보가 유효하지 않습니다");
+  const exclude = (configuration.settings as { readonly exclude?: unknown }).exclude;
+  if (exclude === undefined) return [];
+  if (!Array.isArray(exclude) || exclude.length > 100) throw new Error("Knowledge 제외 규칙 계보가 유효하지 않습니다");
+  const values = exclude.map((item) => {
+    if (
+      typeof item !== "string" ||
+      item.trim() !== item ||
+      item.length === 0 ||
+      item.length > 256 ||
+      item.startsWith("/") ||
+      /^[A-Za-z]:|\\|(?:^|\/)\.\.(?:\/|$)|[\0\r\n]/u.test(item)
+    )
+      throw new Error("Knowledge 제외 규칙 계보가 유효하지 않습니다");
+    return item;
+  });
+  return [...new Set(values)].sort((left, right) => left.localeCompare(right));
+}
+
+function knowledgeIndexView(
+  context: TenantContext,
+  workspaceId: string,
+  source: WorkspaceKnowledgeSnapshot | undefined,
+): KnowledgeIndexViewV1 {
+  if (!source) {
+    return { workspaceId, status: "none", fileCount: 0, symbolCount: 0, relationCount: 0, excluded: [] };
+  }
+  const { repository, index, configuration, snapshot } = source;
+  const fileCount = knowledgeCount(index.fileCount, "file count");
+  const symbolCount = knowledgeCount(index.symbolCount, "symbol count");
+  const relationCount = knowledgeCount(index.relationCount, "relation count");
+  const chunkCount = knowledgeCount(index.chunkCount, "chunk count");
+  if (
+    repository.organizationId !== context.organizationId ||
+    repository.workspaceId !== workspaceId ||
+    repository.status !== "active" ||
+    repository.currentIndexVersionId !== index.indexVersionId ||
+    index.organizationId !== context.organizationId ||
+    index.repositoryId !== repository.repositoryId ||
+    index.status !== "complete" ||
+    !index.current ||
+    configuration.organizationId !== context.organizationId ||
+    configuration.repositoryId !== repository.repositoryId ||
+    configuration.configurationId !== index.configurationId ||
+    configuration.checksum !== index.configurationChecksum ||
+    snapshot.indexVersionId !== index.indexVersionId ||
+    snapshot.checksum !== index.snapshotChecksum ||
+    snapshot.files.length !== fileCount ||
+    snapshot.symbols.length !== symbolCount ||
+    snapshot.relations.length !== relationCount ||
+    snapshot.chunks.length !== chunkCount
+  ) {
+    throw new Error("Knowledge workspace·repository·index 계보가 일치하지 않습니다");
+  }
+  knowledgeSourceId(repository.repositoryId, "repository ID");
+  knowledgeSourceId(index.indexVersionId, "index ID");
+  knowledgeHash(index.configurationChecksum, "configuration checksum");
+  knowledgeHash(index.snapshotChecksum, "snapshot checksum");
+  return {
+    workspaceId,
+    status: "ready",
+    indexVersionId: index.indexVersionId,
+    fileCount,
+    symbolCount,
+    relationCount,
+    ...(index.completedAt === undefined ? {} : { indexedAt: knowledgeInstant(index.completedAt) }),
+    excluded: knowledgeExcluded(configuration),
+  };
+}
+
+function knowledgeNodeKindForPath(relativePath: string): Extract<KnowledgeNodeKindV1, "file" | "document"> {
+  return KNOWLEDGE_DOCUMENT_EXTENSIONS.has(posix.extname(relativePath).toLocaleLowerCase()) ? "document" : "file";
+}
+
+function knowledgeNode(
+  kind: KnowledgeNodeKindV1,
+  sourceId: string,
+  label: string,
+  detail?: string,
+  group?: string,
+): KnowledgeNodeViewV1 {
+  const nodeId = `${kind}:${knowledgeSourceId(sourceId, `${kind} ID`)}`;
+  return {
+    nodeId,
+    kind,
+    label: knowledgeDisplayText(label, `${kind} label`),
+    ...(detail === undefined ? {} : { detail: knowledgeDisplayText(detail, `${kind} detail`, 1_024) }),
+    ...(group === undefined ? {} : { group: knowledgeDisplayText(group, `${kind} group`, 1_024) }),
+  };
+}
+
+function addKnowledgeNode(nodes: Map<string, KnowledgeNodeViewV1>, node: KnowledgeNodeViewV1): void {
+  const existing = nodes.get(node.nodeId);
+  if (existing && JSON.stringify(existing) !== JSON.stringify(node))
+    throw new Error(`Knowledge node 계보가 모호합니다: ${node.nodeId}`);
+  nodes.set(node.nodeId, node);
+}
+
+function addKnowledgeEdge(edges: Map<string, KnowledgeGraphEdgeViewV1>, edge: KnowledgeGraphEdgeViewV1): void {
+  if (edge.sourceId === edge.targetId) return;
+  const key = [edge.kind, edge.sourceId, edge.targetId, edge.unresolved ? "1" : "0", edge.derivedVia ?? ""].join("\0");
+  edges.set(key, edge);
+}
+
+function compareKnowledgeNode(left: KnowledgeNodeViewV1, right: KnowledgeNodeViewV1): number {
+  return left.nodeId.localeCompare(right.nodeId);
+}
+
+function compareKnowledgeEdge(left: KnowledgeGraphEdgeViewV1, right: KnowledgeGraphEdgeViewV1): number {
+  return (
+    left.sourceId.localeCompare(right.sourceId) ||
+    left.targetId.localeCompare(right.targetId) ||
+    left.kind.localeCompare(right.kind) ||
+    (left.derivedVia ?? "").localeCompare(right.derivedVia ?? "")
+  );
+}
+
+async function projectKnowledge(
+  dependencies: ApplicationQueryDependencies,
+  context: TenantContext,
+  workspaceId: string,
+  source: WorkspaceKnowledgeSnapshot | undefined,
+  request: KnowledgeProjectionRequest,
+): Promise<KnowledgeProjection> {
+  const index = knowledgeIndexView(context, workspaceId, source);
+  if (!source) return { index, nodes: new Map(), edges: [], nonCanonicalNodeIds: new Set() };
+  const nodes = new Map<string, KnowledgeNodeViewV1>();
+  const edges = new Map<string, KnowledgeGraphEdgeViewV1>();
+  const nonCanonicalNodeIds = new Set<string>();
+  const filesById = new Map<string, IndexSnapshot["files"][number]>();
+  const fileIdsByPath = new Map<string, string>();
+  const fileNodesById = new Map<string, KnowledgeNodeViewV1>();
+  const symbolsById = new Map<string, IndexSnapshot["symbols"][number]>();
+  const symbolsByKey = new Map<string, IndexSnapshot["symbols"][number]>();
+  const chunksById = new Map<string, IndexSnapshot["chunks"][number]>();
+  const relationIds = new Set<string>();
+  const relationKeys = new Set<string>();
+
+  for (const file of source.snapshot.files) {
+    const sourceFileId = knowledgeSourceId(file.sourceFileId, "source file ID");
+    const relativePath = knowledgeRelativePath(file.relativePath);
+    knowledgeHash(file.contentHash, "file content hash");
+    if (filesById.has(sourceFileId) || fileIdsByPath.has(relativePath))
+      throw new Error(`Knowledge file 계보가 모호합니다: ${sourceFileId}`);
+    filesById.set(sourceFileId, file);
+    fileIdsByPath.set(relativePath, sourceFileId);
+    const kind = knowledgeNodeKindForPath(relativePath);
+    const directory = posix.dirname(relativePath);
+    const node = knowledgeNode(
+      kind,
+      sourceFileId,
+      posix.basename(relativePath),
+      relativePath,
+      directory === "." ? undefined : directory,
+    );
+    fileNodesById.set(sourceFileId, node);
+    addKnowledgeNode(nodes, node);
+  }
+
+  for (const symbol of source.snapshot.symbols) {
+    const symbolId = knowledgeSourceId(symbol.symbolId, "symbol ID");
+    const symbolKey = knowledgeSourceId(symbol.symbolKey, "symbol key");
+    const file = filesById.get(knowledgeSourceId(symbol.sourceFileId, "symbol source file ID"));
+    const relativePath = knowledgeRelativePath(symbol.relativePath);
+    if (!file || file.relativePath !== relativePath)
+      throw new Error(`Knowledge symbol→file 계보가 끊겼습니다: ${symbolId}`);
+    if (symbolsById.has(symbolId) || symbolsByKey.has(symbolKey))
+      throw new Error(`Knowledge symbol 계보가 모호합니다: ${symbolId}`);
+    knowledgeHash(symbol.contentHash, "symbol content hash");
+    const startLine = knowledgeLine(symbol.startLine, "symbol start line");
+    const endLine = knowledgeLine(symbol.endLine, "symbol end line");
+    if (endLine < startLine) throw new Error(`Knowledge symbol line 계보가 유효하지 않습니다: ${symbolId}`);
+    symbolsById.set(symbolId, symbol);
+    symbolsByKey.set(symbolKey, symbol);
+    const node = knowledgeNode(
+      "symbol",
+      symbolId,
+      knowledgeShortLabel(symbol.qualifiedName, symbolId),
+      `${relativePath}:${startLine}`,
+    );
+    addKnowledgeNode(nodes, node);
+    addKnowledgeEdge(edges, {
+      kind: "contains",
+      sourceId: fileNodesById.get(symbol.sourceFileId)?.nodeId ?? "",
+      targetId: node.nodeId,
+    });
+  }
+
+  for (const chunk of source.snapshot.chunks) {
+    const chunkId = knowledgeSourceId(chunk.chunkId, "chunk ID");
+    const file = filesById.get(knowledgeSourceId(chunk.sourceFileId, "chunk source file ID"));
+    const relativePath = knowledgeRelativePath(chunk.relativePath);
+    if (!file || file.relativePath !== relativePath)
+      throw new Error(`Knowledge chunk→file 계보가 끊겼습니다: ${chunkId}`);
+    if (chunksById.has(chunkId) || symbolsById.has(chunkId))
+      throw new Error(`Knowledge reference 계보가 모호합니다: ${chunkId}`);
+    if (chunk.symbolKey !== undefined) {
+      const symbol = symbolsByKey.get(knowledgeSourceId(chunk.symbolKey, "chunk symbol key"));
+      if (!symbol || symbol.sourceFileId !== chunk.sourceFileId)
+        throw new Error(`Knowledge chunk→symbol 계보가 끊겼습니다: ${chunkId}`);
+    }
+    knowledgeHash(chunk.contentHash, "chunk content hash");
+    const startLine = knowledgeLine(chunk.startLine, "chunk start line");
+    const endLine = knowledgeLine(chunk.endLine, "chunk end line");
+    if (endLine < startLine) throw new Error(`Knowledge chunk line 계보가 유효하지 않습니다: ${chunkId}`);
+    chunksById.set(chunkId, chunk);
+  }
+
+  for (const relation of source.snapshot.relations) {
+    const relationId = knowledgeSourceId(relation.relationId, "relation ID");
+    const relationKey = knowledgeSourceId(relation.relationKey, "relation key");
+    if (relationIds.has(relationId) || relationKeys.has(relationKey))
+      throw new Error(`Knowledge relation 계보가 모호합니다: ${relationId}`);
+    relationIds.add(relationId);
+    relationKeys.add(relationKey);
+    const kind = relation.kind;
+    if (!KNOWLEDGE_RELATION_KINDS.has(kind))
+      throw new Error(`Knowledge relation 종류가 유효하지 않습니다: ${relationId}`);
+    const sourceFile = filesById.get(knowledgeSourceId(relation.sourceFileId, "relation source file ID"));
+    if (!sourceFile || sourceFile.relativePath !== knowledgeRelativePath(relation.relativePath))
+      throw new Error(`Knowledge relation→file 계보가 끊겼습니다: ${relationId}`);
+    const sourceSymbol =
+      relation.sourceSymbolKey === undefined
+        ? undefined
+        : symbolsByKey.get(knowledgeSourceId(relation.sourceSymbolKey, "relation source symbol key"));
+    const targetSymbol =
+      relation.targetSymbolKey === undefined
+        ? undefined
+        : symbolsByKey.get(knowledgeSourceId(relation.targetSymbolKey, "relation target symbol key"));
+    if (
+      relation.sourceSymbolKey !== undefined &&
+      (!sourceSymbol || sourceSymbol.sourceFileId !== relation.sourceFileId)
+    )
+      throw new Error(`Knowledge relation source 계보가 끊겼습니다: ${relationId}`);
+    if (relation.targetSymbolKey !== undefined && !targetSymbol)
+      throw new Error(`Knowledge relation target 계보가 끊겼습니다: ${relationId}`);
+    if (!relation.resolved) {
+      if (targetSymbol) throw new Error(`Knowledge unresolved relation 계보가 모호합니다: ${relationId}`);
+      const sourceNode = sourceSymbol
+        ? nodes.get(`symbol:${sourceSymbol.symbolId}`)
+        : fileNodesById.get(relation.sourceFileId);
+      if (!sourceNode) throw new Error(`Knowledge unresolved relation source 계보가 끊겼습니다: ${relationId}`);
+      const placeholder = knowledgeNode("symbol", `unresolved.${relationId}`, "색인 밖 대상");
+      addKnowledgeNode(nodes, placeholder);
+      nonCanonicalNodeIds.add(placeholder.nodeId);
+      addKnowledgeEdge(edges, {
+        kind,
+        sourceId: sourceNode.nodeId,
+        targetId: placeholder.nodeId,
+        unresolved: true,
+      });
+      continue;
+    }
+    if (!targetSymbol) throw new Error(`Knowledge resolved relation 계보가 끊겼습니다: ${relationId}`);
+    const relationSourceNode = sourceSymbol
+      ? nodes.get(`symbol:${sourceSymbol.symbolId}`)
+      : fileNodesById.get(relation.sourceFileId);
+    if (!relationSourceNode) throw new Error(`Knowledge relation source node 계보가 끊겼습니다: ${relationId}`);
+    addKnowledgeEdge(edges, {
+      kind,
+      sourceId: relationSourceNode.nodeId,
+      targetId: `symbol:${targetSymbol.symbolId}`,
+    });
+    const sourceNode = fileNodesById.get(relation.sourceFileId);
+    const targetNode = fileNodesById.get(targetSymbol.sourceFileId);
+    if (!sourceNode || !targetNode) throw new Error(`Knowledge relation node 계보가 끊겼습니다: ${relationId}`);
+    addKnowledgeEdge(edges, { kind, sourceId: sourceNode.nodeId, targetId: targetNode.nodeId });
+  }
+
+  if (request.kind === "graph" && ["document", "file", "symbol"].includes(request.lens)) {
+    return { index, nodes, edges: [...edges.values()].sort(compareKnowledgeEdge), nonCanonicalNodeIds };
+  }
+
+  const workspaceWorks = (await dependencies.readModel.works(context))
+    .filter((work) => work.organizationId === context.organizationId && work.workspaceId === workspaceId)
+    .sort((left, right) => left.workId.localeCompare(right.workId));
+  if (workspaceWorks.length > MAX_KNOWLEDGE_WORKS)
+    throw new Error(`Knowledge Workspace는 최대 ${MAX_KNOWLEDGE_WORKS}개 Work만 투영할 수 있습니다`);
+  const works =
+    request.kind === "graph" && request.lens === "work" ? workspaceWorks.slice(0, request.limit) : workspaceWorks;
+  const worksById = new Map<string, (typeof works)[number]>();
+  for (const work of works) {
+    const workId = knowledgeSourceId(work.workId, "work ID");
+    if (worksById.has(workId)) throw new Error(`Knowledge Work 계보가 모호합니다: ${workId}`);
+    worksById.set(workId, work);
+    addKnowledgeNode(nodes, knowledgeNode("work", workId, knowledgeShortLabel(work.title, workId), work.status));
+  }
+
+  const includeArtifacts =
+    (request.kind === "graph" && request.lens === "artifact") ||
+    (request.kind === "links" && (request.nodeId.startsWith("work:") || request.nodeId.startsWith("artifact:")));
+  const includeAgents =
+    (request.kind === "graph" && request.lens === "agent") ||
+    (request.kind === "links" && (request.nodeId.startsWith("work:") || request.nodeId.startsWith("agent:")));
+  const includeReferences =
+    (request.kind === "graph" && request.lens === "work") ||
+    (request.kind === "links" &&
+      ["work:", "document:", "file:", "symbol:"].some((prefix) => request.nodeId.startsWith(prefix)));
+  const artifacts = includeArtifacts
+    ? ((await dependencies.readModel.artifacts?.(context)) ?? []).filter(
+        (artifact) => artifact.organizationId === context.organizationId && worksById.has(artifact.workId),
+      )
+    : [];
+  const artifactsByVersion = new Map<string, ApplicationArtifactSource>();
+  for (const artifact of artifacts) {
+    const versionId = knowledgeSourceId(artifact.artifactVersionId, "artifact version ID");
+    knowledgeSourceId(artifact.artifactId, "artifact ID");
+    if (artifactsByVersion.has(versionId)) throw new Error(`Knowledge artifact 계보가 모호합니다: ${versionId}`);
+    artifactsByVersion.set(versionId, artifact);
+  }
+
+  if (includeArtifacts) {
+    for (const work of works) {
+      const artifactIds = new Set<string>();
+      for (const rawArtifactVersionId of work.artifactIds) {
+        const artifactVersionId = knowledgeSourceId(rawArtifactVersionId, "Work artifact version ID");
+        if (artifactIds.has(artifactVersionId))
+          throw new Error(`Knowledge Work artifact 계보가 모호합니다: ${artifactVersionId}`);
+        artifactIds.add(artifactVersionId);
+        const artifact = artifactsByVersion.get(artifactVersionId);
+        if (!artifact || artifact.workId !== work.workId)
+          throw new Error(`Knowledge Work→artifact 계보가 끊겼습니다: ${artifactVersionId}`);
+        const node = knowledgeNode(
+          "artifact",
+          artifactVersionId,
+          knowledgeShortLabel(artifact.name, artifactVersionId),
+          artifact.kind,
+        );
+        addKnowledgeNode(nodes, node);
+        addKnowledgeEdge(edges, { kind: "contains", sourceId: `work:${work.workId}`, targetId: node.nodeId });
+      }
+    }
+  }
+
+  if (includeAgents) {
+    const organization = await dependencies.readModel.organization(context);
+    if (organization.organizationId !== context.organizationId)
+      throw new Error("Knowledge agent→organization 계보가 일치하지 않습니다");
+    for (const agent of organization.nodes) {
+      if (agent.scope !== "work") continue;
+      if (agent.workId === undefined) throw new Error(`Knowledge agent→Work 계보가 끊겼습니다: ${agent.nodeId}`);
+      const work = worksById.get(agent.workId);
+      if (!work) continue;
+      const node = knowledgeNode(
+        "agent",
+        agent.nodeId,
+        knowledgeShortLabel(agent.name, agent.nodeId),
+        agent.responsibility,
+        agent.role,
+      );
+      addKnowledgeNode(nodes, node);
+      addKnowledgeEdge(edges, { kind: "contains", sourceId: `work:${work.workId}`, targetId: node.nodeId });
+    }
+  }
+
+  const knowledgeViews = includeReferences
+    ? await Promise.all(
+        works.map(async (work) => {
+          const view = await dependencies.workKnowledge?.get(context, work.workId);
+          if (!view || view.workId !== work.workId)
+            throw new Error(`Knowledge Work reference 계보가 끊겼습니다: ${work.workId}`);
+          return [work, view] as const;
+        }),
+      )
+    : [];
+  const referenceUsers = new Map<string, Set<string>>();
+  for (const [work, view] of knowledgeViews) {
+    if (
+      view.status !== "not-applicable" &&
+      view.status !== "ready" &&
+      view.status !== "no-match" &&
+      view.status !== "blocked"
+    )
+      throw new Error(`Knowledge Work 상태가 유효하지 않습니다: ${work.workId}`);
+    if (view.status === "blocked") throw new Error(`Knowledge Work 계보가 차단되었습니다: ${work.workId}`);
+    if ((view.status === "ready") === (view.references.length === 0))
+      throw new Error(`Knowledge Work 상태와 reference 계보가 일치하지 않습니다: ${work.workId}`);
+    if (
+      view.status === "ready" &&
+      (view.repositoryId !== source.repository.repositoryId ||
+        view.repositoryRevisionId !== source.index.repositoryRevisionId ||
+        view.indexVersionId !== source.index.indexVersionId)
+    )
+      throw new Error(`Knowledge Work→index 계보가 일치하지 않습니다: ${work.workId}`);
+    const usedTargets = new Set<string>();
+    for (const reference of view.references) {
+      const referenceId = knowledgeSourceId(reference.referenceId, "reference ID");
+      const relativePath = knowledgeRelativePath(reference.relativePath);
+      const startLine = knowledgeLine(reference.startLine, "reference start line");
+      const endLine = knowledgeLine(reference.endLine, "reference end line");
+      knowledgeHash(reference.contentHash, "reference content hash");
+      if (endLine < startLine) throw new Error(`Knowledge reference line 계보가 유효하지 않습니다: ${referenceId}`);
+      let target: KnowledgeNodeViewV1 | undefined;
+      if (reference.kind === "symbol") {
+        const symbol = symbolsById.get(referenceId);
+        if (
+          !symbol ||
+          symbol.relativePath !== relativePath ||
+          symbol.startLine !== startLine ||
+          symbol.endLine !== endLine ||
+          symbol.contentHash !== reference.contentHash ||
+          (reference.qualifiedName !== undefined && symbol.qualifiedName !== reference.qualifiedName)
+        )
+          throw new Error(`Knowledge symbol reference 계보가 일치하지 않습니다: ${referenceId}`);
+        target = nodes.get(`symbol:${referenceId}`);
+      } else if (reference.kind === "chunk") {
+        const chunk = chunksById.get(referenceId);
+        const chunkSymbol = chunk?.symbolKey === undefined ? undefined : symbolsByKey.get(chunk.symbolKey);
+        if (
+          !chunk ||
+          chunk.relativePath !== relativePath ||
+          chunk.startLine !== startLine ||
+          chunk.endLine !== endLine ||
+          chunk.contentHash !== reference.contentHash ||
+          (reference.qualifiedName !== undefined && chunkSymbol?.qualifiedName !== reference.qualifiedName)
+        )
+          throw new Error(`Knowledge chunk reference 계보가 일치하지 않습니다: ${referenceId}`);
+        target = fileNodesById.get(chunk.sourceFileId);
+      } else {
+        throw new Error(`Knowledge reference 종류가 유효하지 않습니다: ${referenceId}`);
+      }
+      if (!target) throw new Error(`Knowledge reference node 계보가 끊겼습니다: ${referenceId}`);
+      if (usedTargets.has(target.nodeId)) continue;
+      usedTargets.add(target.nodeId);
+      addKnowledgeEdge(edges, { kind: "documents", sourceId: `work:${work.workId}`, targetId: target.nodeId });
+      const users = referenceUsers.get(target.nodeId) ?? new Set<string>();
+      users.add(`work:${work.workId}`);
+      referenceUsers.set(target.nodeId, users);
+    }
+  }
+
+  for (const [targetId, users] of referenceUsers) {
+    const sorted = [...users].sort((left, right) => left.localeCompare(right));
+    const target = nodes.get(targetId);
+    if (!target) throw new Error(`Knowledge shared reference 계보가 끊겼습니다: ${targetId}`);
+    const [anchor, ...others] = sorted;
+    if (anchor === undefined) continue;
+    for (const other of others) {
+      addKnowledgeEdge(edges, {
+        kind: "documents",
+        sourceId: anchor,
+        targetId: other,
+        derivedVia: target.detail ?? target.label,
+      });
+    }
+  }
+
+  for (const edge of edges.values()) {
+    if (!nodes.has(edge.sourceId) || !nodes.has(edge.targetId))
+      throw new Error(`Knowledge edge endpoint 계보가 끊겼습니다: ${edge.sourceId}→${edge.targetId}`);
+  }
+  return { index, nodes, edges: [...edges.values()].sort(compareKnowledgeEdge), nonCanonicalNodeIds };
 }
 
 function organizationGraphSnapshotView(snapshot: CollaborationGraphSnapshot) {
@@ -1215,6 +1823,136 @@ export function registerApplicationQueries(
         const view = await workKnowledge.get(context, workId);
         if (view.workId !== workId) throw new Error("Work knowledge와 요청한 Work가 일치하지 않습니다");
         return publicWorkKnowledge(view);
+      },
+    });
+  }
+  if (workKnowledge?.getWorkspaceSnapshot && dependencies.workspaces) {
+    const getWorkspaceSnapshot = workKnowledge.getWorkspaceSnapshot.bind(workKnowledge);
+    const verifyWorkspace = async (context: TenantContext, workspaceId: string): Promise<void> => {
+      const workspace = await dependencies.workspaces?.get(context, workspaceId);
+      if (
+        !workspace ||
+        workspace.workspaceId !== workspaceId ||
+        workspace.status !== "active" ||
+        workspace.trust !== "trusted"
+      ) {
+        throw new ApplicationError({
+          category: "authorization",
+          severity: "error",
+          retryable: false,
+          userMessage: "신뢰한 활성 Workspace의 Knowledge만 읽을 수 있습니다",
+          operatorCode: "APP_KNOWLEDGE_WORKSPACE_TRUST_REQUIRED",
+        });
+      }
+    };
+    const loadProjection = async (
+      context: TenantContext,
+      workspaceId: string,
+      request: KnowledgeProjectionRequest,
+    ): Promise<KnowledgeProjection> => {
+      await verifyWorkspace(context, workspaceId);
+      const source = await getWorkspaceSnapshot(context, workspaceId);
+      return await projectKnowledge(dependencies, context, workspaceId, source, request);
+    };
+    registry.register({
+      operation: "knowledge.index",
+      requiredScopes: ["workspace:read", "work:read"],
+      allowedRoles: EVERY_ROLE,
+      validate: (value) => {
+        const parsed = object(value, ["workspaceId"]);
+        return { workspaceId: knowledgeSourceId(parsed.workspaceId, "workspace ID") };
+      },
+      handle: async (context, value) => {
+        await verifyWorkspace(context, value.workspaceId);
+        return knowledgeIndexView(context, value.workspaceId, await getWorkspaceSnapshot(context, value.workspaceId));
+      },
+    });
+    registry.register({
+      operation: "knowledge.graph",
+      requiredScopes: ["workspace:read", "work:read"],
+      allowedRoles: EVERY_ROLE,
+      validate: (value) => {
+        const parsed = object(value, ["workspaceId", "lens", "limit"]);
+        if (!KNOWLEDGE_GRAPH_LENSES.has(parsed.lens as KnowledgeGraphLensV1))
+          throw new Error("Knowledge graph lens가 유효하지 않습니다");
+        const limit = boundedInteger(parsed.limit, "Knowledge graph limit", 200);
+        if (limit > 200) throw new Error("Knowledge graph limit가 유효하지 않습니다");
+        return {
+          workspaceId: knowledgeSourceId(parsed.workspaceId, "workspace ID"),
+          lens: parsed.lens as KnowledgeGraphLensV1,
+          limit,
+        };
+      },
+      handle: async (context, value) => {
+        const projection = await loadProjection(context, value.workspaceId, {
+          kind: "graph",
+          lens: value.lens,
+          limit: value.limit,
+        });
+        const nodes = [...projection.nodes.values()]
+          .filter((node) => node.kind === value.lens && !projection.nonCanonicalNodeIds.has(node.nodeId))
+          .sort(compareKnowledgeNode)
+          .slice(0, value.limit);
+        const selected = new Set(nodes.map((node) => node.nodeId));
+        return {
+          lens: value.lens,
+          nodes,
+          edges: projection.edges.filter((edge) => selected.has(edge.sourceId) && selected.has(edge.targetId)),
+        } satisfies KnowledgeGraphViewV1;
+      },
+    });
+    registry.register({
+      operation: "knowledge.links",
+      requiredScopes: ["workspace:read", "work:read"],
+      allowedRoles: EVERY_ROLE,
+      validate: (value) => {
+        const parsed = object(value, ["workspaceId", "nodeId", "limit"]);
+        const limit = boundedInteger(parsed.limit, "Knowledge links limit", 100);
+        if (limit > 200) throw new Error("Knowledge links limit가 유효하지 않습니다");
+        return {
+          workspaceId: knowledgeSourceId(parsed.workspaceId, "workspace ID"),
+          nodeId: knowledgeNodeId(parsed.nodeId),
+          limit,
+        };
+      },
+      handle: async (context, value) => {
+        const projection = await loadProjection(context, value.workspaceId, {
+          kind: "links",
+          nodeId: value.nodeId,
+          limit: value.limit,
+        });
+        if (!projection.nodes.has(value.nodeId)) {
+          throw new ApplicationError({
+            category: "not-found",
+            severity: "error",
+            retryable: false,
+            userMessage: "Workspace Knowledge node를 찾을 수 없습니다",
+            operatorCode: "APP_KNOWLEDGE_NODE_NOT_FOUND",
+          });
+        }
+        const links = new Map<string, KnowledgeLinkViewV1>();
+        for (const edge of projection.edges) {
+          const outgoing = edge.sourceId === value.nodeId;
+          const incoming = edge.targetId === value.nodeId;
+          if (!outgoing && !incoming) continue;
+          const node = projection.nodes.get(outgoing ? edge.targetId : edge.sourceId);
+          if (!node) throw new Error("Knowledge link endpoint 계보가 끊겼습니다");
+          const link: KnowledgeLinkViewV1 = {
+            node,
+            kind: edge.kind,
+            direction: outgoing ? "outgoing" : "incoming",
+            ...(edge.unresolved === undefined ? {} : { unresolved: edge.unresolved }),
+          };
+          links.set([node.nodeId, link.kind, link.direction, link.unresolved ? "1" : "0"].join("\0"), link);
+        }
+        return [...links.values()]
+          .sort(
+            (left, right) =>
+              left.node.nodeId.localeCompare(right.node.nodeId) ||
+              left.kind.localeCompare(right.kind) ||
+              left.direction.localeCompare(right.direction),
+          )
+          .slice(0, value.limit);
       },
     });
   }

@@ -377,6 +377,50 @@ export interface WorkKnowledgeViewV1 {
   readonly failureReason?: string;
 }
 
+export type KnowledgeRelationKindV1 = "contains" | "imports" | "calls" | "implements" | "documents";
+export type KnowledgeNodeKindV1 = "symbol" | "file" | "document" | "work" | "artifact" | "agent";
+export type KnowledgeGraphLensV1 = KnowledgeNodeKindV1;
+
+export interface KnowledgeNodeViewV1 {
+  readonly nodeId: string;
+  readonly kind: KnowledgeNodeKindV1;
+  readonly label: string;
+  readonly detail?: string;
+  readonly group?: string;
+}
+
+export interface KnowledgeGraphEdgeViewV1 {
+  readonly kind: KnowledgeRelationKindV1;
+  readonly sourceId: string;
+  readonly targetId: string;
+  readonly unresolved?: boolean;
+  readonly derivedVia?: string;
+}
+
+export interface KnowledgeGraphViewV1 {
+  readonly lens: KnowledgeGraphLensV1;
+  readonly nodes: readonly KnowledgeNodeViewV1[];
+  readonly edges: readonly KnowledgeGraphEdgeViewV1[];
+}
+
+export interface KnowledgeLinkViewV1 {
+  readonly node: KnowledgeNodeViewV1;
+  readonly kind: KnowledgeRelationKindV1;
+  readonly direction: "outgoing" | "incoming";
+  readonly unresolved?: boolean;
+}
+
+export interface KnowledgeIndexViewV1 {
+  readonly workspaceId: string;
+  readonly status: "ready" | "indexing" | "stale" | "none";
+  readonly indexVersionId?: string;
+  readonly fileCount: number;
+  readonly symbolCount: number;
+  readonly relationCount: number;
+  readonly indexedAt?: string;
+  readonly excluded: readonly string[];
+}
+
 export interface ExplicitMemoryEntryViewV1 {
   readonly key: string;
   readonly kind: "fact" | "preference" | "procedure";
@@ -502,6 +546,22 @@ export interface ApplicationQueryMapV1 {
   readonly "work.knowledge": {
     readonly payload: { readonly workId: string };
     readonly data: WorkKnowledgeViewV1;
+  };
+  readonly "knowledge.index": {
+    readonly payload: { readonly workspaceId: string };
+    readonly data: KnowledgeIndexViewV1;
+  };
+  readonly "knowledge.graph": {
+    readonly payload: {
+      readonly workspaceId: string;
+      readonly lens: KnowledgeGraphLensV1;
+      readonly limit?: number;
+    };
+    readonly data: KnowledgeGraphViewV1;
+  };
+  readonly "knowledge.links": {
+    readonly payload: { readonly workspaceId: string; readonly nodeId: string; readonly limit?: number };
+    readonly data: readonly KnowledgeLinkViewV1[];
   };
   readonly "growth.memories": {
     readonly payload: Record<string, never>;

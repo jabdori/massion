@@ -1,9 +1,16 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import { App } from "./app";
-import { createFixtureDesktopService, type DesktopService, type DesktopWorkspaceView } from "./desktop-service";
+import {
+  createFixtureDesktopService,
+  type DesktopService,
+  type DesktopWorkspaceView,
+  type KnowledgeGraphView,
+  type KnowledgeIndexView,
+  type KnowledgeNodeKind,
+} from "./desktop-service";
 import { fixtureDataAdapter, type WorkView } from "./model";
 
 function deferred<T>() {
@@ -40,6 +47,23 @@ function workspaceFixture(
   };
 }
 
+function knowledgeIndexFixture(workspaceId: string): KnowledgeIndexView {
+  return {
+    workspaceId,
+    status: "ready",
+    indexVersionId: `index-${workspaceId}`,
+    fileCount: 1,
+    symbolCount: 1,
+    relationCount: 0,
+    indexedAt: "2026-07-29T01:00:00.000Z",
+    excluded: [],
+  };
+}
+
+function knowledgeGraphFixture(lens: KnowledgeNodeKind, nodeId: string, label: string): KnowledgeGraphView {
+  return { lens, nodes: [{ nodeId: `${lens}:${nodeId}`, kind: lens, label }], edges: [] };
+}
+
 describe("AgentOS native data flow", () => {
   it("워크스페이스 없는 Work의 근거 빈 상태는 산출물 안내를 재사용하지 않는다", async () => {
     const user = userEvent.setup();
@@ -56,6 +80,208 @@ describe("AgentOS native data flow", () => {
     expect(await screen.findByText("이 Work는 워크스페이스 근거를 사용하지 않았습니다.")).toBeInTheDocument();
     expect(screen.getByText("워크스페이스를 선택한 새 Work에서 코드 근거를 사용할 수 있습니다.")).toBeInTheDocument();
     expect(screen.queryByText("실행이 산출물을 만들면 여기에 표시됩니다.")).not.toBeInTheDocument();
+  });
+
+  it("지식 workspace를 A에서 차단된 B로 바꾸는 첫 render부터 A graph·count·detail을 숨긴다", async () => {
+    const user = userEvent.setup();
+    const workspaceA = workspaceFixture("workspace-a", "A 폴더", "/tmp/a", "trusted", 1);
+    const workspaceB = workspaceFixture("workspace-b", "B 폴더", "/tmp/b", "blocked", 1);
+    const bIndex = deferred<KnowledgeIndexView>();
+    const bGraph = deferred<KnowledgeGraphView>();
+    let staleAtBRequest: { label: boolean; count: boolean; detail: boolean } | undefined;
+    render(
+      <App
+        service={service({
+          loadWorkspaces: async () => [workspaceA, workspaceB],
+          loadKnowledgeIndex: async (workspaceId) => {
+            if (workspaceId === workspaceB.workspaceId) {
+              staleAtBRequest = {
+                label: screen.queryAllByText("A 전용 노드").length > 0,
+                count: screen.queryByText(/1개 · 0개 연결/u) !== null,
+                detail: screen.queryByRole("complementary", { name: "노드 상세" }) !== null,
+              };
+              return await bIndex.promise;
+            }
+            return knowledgeIndexFixture(workspaceId);
+          },
+          loadKnowledgeGraph: async (workspaceId, lens) => {
+            if (workspaceId === workspaceB.workspaceId) return await bGraph.promise;
+            return knowledgeGraphFixture(lens, "a", "A 전용 노드");
+          },
+        })}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "지식" }));
+    expect(await screen.findByText("A 전용 노드")).toBeInTheDocument();
+    for (const label of ["업무별", "문서별", "파일별", "심볼별", "산출물별", "담당별"]) {
+      expect(screen.getByRole("button", { name: `${label} 지도` })).toBeInTheDocument();
+    }
+    const explorer = screen.getByText("노드 탐색").closest("details");
+    if (!explorer) throw new Error("노드 탐색 구역이 없습니다");
+    await user.click(within(explorer).getByText("노드 탐색"));
+    await user.click(within(explorer).getByRole("button", { name: "A 전용 노드 선택" }));
+    expect(screen.getByRole("complementary", { name: "노드 상세" })).toHaveTextContent("A 전용 노드");
+
+    await user.selectOptions(screen.getByLabelText("워크스페이스"), workspaceB.workspaceId);
+    expect(staleAtBRequest).toEqual({ label: false, count: false, detail: false });
+    expect(screen.queryByText("A 전용 노드")).not.toBeInTheDocument();
+    expect(screen.queryByText(/1개 · 0개 연결/u)).not.toBeInTheDocument();
+    expect(screen.queryByRole("complementary", { name: "노드 상세" })).not.toBeInTheDocument();
+
+    await act(async () => {
+      bIndex.reject(new Error("B 폴더는 차단되었습니다"));
+      bGraph.resolve(knowledgeGraphFixture("work", "b", "B 비공개 노드"));
+    });
+    expect(await screen.findByRole("alert")).toHaveTextContent("B 폴더는 차단되었습니다");
+    expect(screen.queryByText("A 전용 노드")).not.toBeInTheDocument();
+    expect(screen.queryByText("B 비공개 노드")).not.toBeInTheDocument();
+  });
+
+  it("느린 A workspace 응답이 빠른 B 선택 뒤에 도착해도 B graph를 덮지 않는다", async () => {
+    const user = userEvent.setup();
+    const workspaceA = workspaceFixture("workspace-a", "A 폴더", "/tmp/a", "trusted", 1);
+    const workspaceB = workspaceFixture("workspace-b", "B 폴더", "/tmp/b", "trusted", 1);
+    const aIndex = deferred<KnowledgeIndexView>();
+    const aGraph = deferred<KnowledgeGraphView>();
+    const loadKnowledgeGraph = vi.fn(async (workspaceId: string, lens: KnowledgeNodeKind) =>
+      workspaceId === workspaceA.workspaceId ? await aGraph.promise : knowledgeGraphFixture(lens, "b", "B 전용 노드"),
+    );
+    render(
+      <App
+        service={service({
+          loadWorkspaces: async () => [workspaceA, workspaceB],
+          loadKnowledgeIndex: async (workspaceId) =>
+            workspaceId === workspaceA.workspaceId ? await aIndex.promise : knowledgeIndexFixture(workspaceId),
+          loadKnowledgeGraph,
+        })}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "지식" }));
+    await waitFor(() => expect(loadKnowledgeGraph).toHaveBeenCalledWith(workspaceA.workspaceId, "work"));
+    await user.selectOptions(screen.getByLabelText("워크스페이스"), workspaceB.workspaceId);
+    expect(await screen.findByText("B 전용 노드")).toBeInTheDocument();
+
+    await act(async () => {
+      aIndex.reject(new Error("A 지연 오류"));
+      aGraph.resolve(knowledgeGraphFixture("work", "a", "A 지연 노드"));
+    });
+    expect(screen.getByText("B 전용 노드")).toBeInTheDocument();
+    expect(screen.queryByText("A 지연 노드")).not.toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("느린 이전 lens가 새 lens보다 늦게 끝나도 새 graph를 덮지 않는다", async () => {
+    const user = userEvent.setup();
+    const workspace = workspaceFixture("workspace-a", "A 폴더", "/tmp/a", "trusted", 1);
+    const fileGraph = deferred<KnowledgeGraphView>();
+    let staleAtFileRequest: { label: boolean; count: boolean; detail: boolean } | undefined;
+    const loadKnowledgeGraph = vi.fn(async (_workspaceId: string, lens: KnowledgeNodeKind) => {
+      if (lens === "file") {
+        staleAtFileRequest = {
+          label: screen.queryAllByText("이전 업무 노드").length > 0,
+          count: screen.queryByText(/1개 · 0개 연결/u) !== null,
+          detail: screen.queryByRole("complementary", { name: "노드 상세" }) !== null,
+        };
+        return await fileGraph.promise;
+      }
+      if (lens === "symbol") return knowledgeGraphFixture(lens, "new", "새 심볼 노드");
+      return knowledgeGraphFixture(lens, "old", "이전 업무 노드");
+    });
+    render(
+      <App
+        service={service({
+          loadWorkspaces: async () => [workspace],
+          loadKnowledgeIndex: async () => knowledgeIndexFixture(workspace.workspaceId),
+          loadKnowledgeGraph,
+        })}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "지식" }));
+    expect(await screen.findByText("이전 업무 노드")).toBeInTheDocument();
+    const explorer = screen.getByText("노드 탐색").closest("details");
+    if (!explorer) throw new Error("노드 탐색 구역이 없습니다");
+    await user.click(within(explorer).getByText("노드 탐색"));
+    await user.click(within(explorer).getByRole("button", { name: "이전 업무 노드 선택" }));
+    expect(screen.getByRole("complementary", { name: "노드 상세" })).toHaveTextContent("이전 업무 노드");
+    await user.click(screen.getByRole("button", { name: "파일별 지도" }));
+    await waitFor(() => expect(loadKnowledgeGraph).toHaveBeenCalledWith(workspace.workspaceId, "file"));
+    expect(staleAtFileRequest).toEqual({ label: false, count: false, detail: false });
+    expect(screen.queryByText("이전 업무 노드")).not.toBeInTheDocument();
+    expect(screen.queryByText(/1개 · 0개 연결/u)).not.toBeInTheDocument();
+    expect(screen.queryByRole("complementary", { name: "노드 상세" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "심볼별 지도" }));
+    expect(await screen.findByText("새 심볼 노드")).toBeInTheDocument();
+
+    await act(async () => {
+      fileGraph.resolve(knowledgeGraphFixture("file", "late", "늦은 파일 노드"));
+    });
+    expect(screen.getByText("새 심볼 노드")).toBeInTheDocument();
+    expect(screen.queryByText("늦은 파일 노드")).not.toBeInTheDocument();
+  });
+
+  it("노드 탐색은 Tab·Enter로 열고 선택하여 pointer와 같은 상세·links·선택 상태를 제공한다", async () => {
+    const user = userEvent.setup();
+    const workspace = workspaceFixture("workspace-keyboard", "키보드 폴더", "/tmp/keyboard", "trusted", 1);
+    const alpha = {
+      nodeId: "work:alpha",
+      kind: "work" as const,
+      label: "Alpha 노드",
+      detail: "alpha detail",
+    };
+    const zeta = {
+      nodeId: "work:zeta",
+      kind: "work" as const,
+      label: "Zeta 노드",
+      detail: "zeta detail",
+    };
+    const graph: KnowledgeGraphView = { lens: "work", nodes: [zeta, alpha], edges: [] };
+    const loadKnowledgeLinks = vi.fn(async (_workspaceId: string, nodeId: string) =>
+      nodeId === alpha.nodeId ? [{ node: zeta, kind: "documents" as const, direction: "outgoing" as const }] : [],
+    );
+    render(
+      <App
+        service={service({
+          loadWorkspaces: async () => [workspace],
+          loadKnowledgeIndex: async () => knowledgeIndexFixture(workspace.workspaceId),
+          loadKnowledgeGraph: async () => graph,
+          loadKnowledgeLinks,
+        })}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "지식" }));
+    const details = (await screen.findByText("노드 탐색")).closest("details");
+    if (!details) throw new Error("노드 탐색 구역이 없습니다");
+    expect(details).not.toHaveAttribute("open");
+    expect(within(details).getByRole("button", { name: "Alpha 노드 선택" })).not.toBeVisible();
+
+    screen.getByRole("button", { name: "담당별 지도" }).focus();
+    await user.tab();
+    expect(details.querySelector("summary")).toHaveFocus();
+    await user.keyboard("{Enter}");
+    expect(details).toHaveAttribute("open");
+
+    await user.tab();
+    const alphaButton = within(details).getByRole("button", { name: "Alpha 노드 선택" });
+    const zetaButton = within(details).getByRole("button", { name: "Zeta 노드 선택" });
+    expect(alphaButton).toHaveFocus();
+    await user.keyboard("{Enter}");
+    expect(alphaButton).toHaveAttribute("aria-pressed", "true");
+    expect(zetaButton).toHaveAttribute("aria-pressed", "false");
+    const inspector = await screen.findByRole("complementary", { name: "노드 상세" });
+    expect(within(inspector).getByRole("heading", { name: "Alpha 노드" })).toBeInTheDocument();
+    await waitFor(() => expect(loadKnowledgeLinks).toHaveBeenCalledWith(workspace.workspaceId, alpha.nodeId));
+    expect(within(inspector).getByRole("button", { name: "Zeta 노드(으)로 이동" })).toBeInTheDocument();
+
+    await user.click(zetaButton);
+    expect(alphaButton).toHaveAttribute("aria-pressed", "false");
+    expect(zetaButton).toHaveAttribute("aria-pressed", "true");
+    expect(within(inspector).getByRole("heading", { name: "Zeta 노드" })).toBeInTheDocument();
+    await waitFor(() => expect(loadKnowledgeLinks).toHaveBeenCalledWith(workspace.workspaceId, zeta.nodeId));
+    expect(within(inspector).getByText("이어진 것이 없습니다.")).toBeInTheDocument();
   });
 
   it("설정은 실제 읽기 전용 상태만 조회하고 자격증명 값을 표시하지 않는다", async () => {

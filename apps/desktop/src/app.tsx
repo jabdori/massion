@@ -80,6 +80,7 @@ import {
   KnowledgeForcePanel,
   KnowledgeGraphCanvas,
   KnowledgeGroupLegend,
+  KnowledgeNodeExplorer,
   type KnowledgeForceSettings,
 } from "@/knowledge-graph";
 
@@ -1260,17 +1261,14 @@ const knowledgeNodeKindLabel: Record<KnowledgeNodeKind, string> = {
   agent: "담당",
 };
 
-/**
- * 렌즈 = "무엇의 지도를 볼 것인가".
- *
- * **심볼은 렌즈가 아닙니다.** 심볼 1,800개를 한 캔버스에 펼치면 답하는 질문이 없습니다 —
- * 찾을 방법 없이 점만 많고, 실제로 알고 싶은 "이 심볼이 무엇과 엮였나"는 파일을 눌렀을 때
- * 시트의 «품고 있는 것»과 업무의 `근거` 탭이 이미 답합니다. 자료는 그대로 있고 지도만 뺍니다.
- */
+/** 렌즈 = "무엇의 지도를 볼 것인가". 정본 노드 여섯 종류를 같은 계약으로 제공합니다. */
 const KNOWLEDGE_LENSES: readonly { kind: KnowledgeNodeKind; title: string; hint: string }[] = [
   { kind: "work", title: "업무별", hint: "어떤 일이 무엇을 썼나" },
   { kind: "document", title: "문서별", hint: "어떤 문서가 무엇을 설명하나" },
   { kind: "file", title: "파일별", hint: "어떤 파일이 어디에 엮이나" },
+  { kind: "symbol", title: "심볼별", hint: "어떤 심볼이 무엇을 부르나" },
+  { kind: "artifact", title: "산출물별", hint: "어떤 결과물이 어느 일에서 나왔나" },
+  { kind: "agent", title: "담당별", hint: "누가 어떤 일을 맡았나" },
 ];
 
 /*
@@ -1289,18 +1287,52 @@ const knowledgeEdgeLabel: Record<KnowledgeRelationKind, { outgoing: string; inco
   documents: { outgoing: "이것이 참고한 것", incoming: "이것을 참고한 것" },
 };
 
+interface KnowledgeRenderSnapshot {
+  readonly key: string;
+  readonly index: KnowledgeIndexView;
+  readonly graph: KnowledgeGraphView;
+}
+
+interface KnowledgeSelectionSnapshot {
+  readonly key: string;
+  readonly nodeId: string;
+  readonly node?: KnowledgeNodeView;
+}
+
+interface KnowledgeLinksSnapshot {
+  readonly key: string;
+  readonly links: readonly KnowledgeLinkView[];
+}
+
+interface KnowledgeErrorSnapshot {
+  readonly key: string;
+  readonly message: string;
+}
+
 function KnowledgeSurface({ onOpenWork, service }: { onOpenWork: (workId: string) => void; service: DesktopService }) {
   const [workspaces, setWorkspaces] = useState<readonly DesktopWorkspaceView[]>();
   const [workspaceId, setWorkspaceId] = useState<string>();
   const [lens, setLens] = useState<KnowledgeNodeKind>("work");
-  const [index, setIndex] = useState<KnowledgeIndexView>();
-  const [graph, setGraph] = useState<KnowledgeGraphView>();
-  const [selectedId, setSelectedId] = useState<string>();
+  const [renderSnapshot, setRenderSnapshot] = useState<KnowledgeRenderSnapshot>();
+  const [selectionSnapshot, setSelectionSnapshot] = useState<KnowledgeSelectionSnapshot>();
   const [forces, setForces] = useState<KnowledgeForceSettings>(KNOWLEDGE_FORCE_DEFAULTS);
   const [forcesOpen, setForcesOpen] = useState(false);
-  const [links, setLinks] = useState<readonly KnowledgeLinkView[]>([]);
-  const [selectedNode, setSelectedNode] = useState<KnowledgeNodeView>();
-  const [error, setError] = useState("");
+  const [linksSnapshot, setLinksSnapshot] = useState<KnowledgeLinksSnapshot>();
+  const [knowledgeError, setKnowledgeError] = useState<KnowledgeErrorSnapshot>();
+  const [workspaceError, setWorkspaceError] = useState("");
+  const graphRequestGeneration = useRef(0);
+  const linksRequestGeneration = useRef(0);
+  const graphKey = workspaceId === undefined ? undefined : `${workspaceId}\0${lens}`;
+  const currentRender = graphKey !== undefined && renderSnapshot?.key === graphKey ? renderSnapshot : undefined;
+  const index = currentRender?.index;
+  const graph = currentRender?.graph;
+  const currentSelection =
+    graphKey !== undefined && selectionSnapshot?.key === graphKey ? selectionSnapshot : undefined;
+  const selectedId = currentSelection?.nodeId;
+  const selectionKey = graphKey === undefined || selectedId === undefined ? undefined : `${graphKey}\0${selectedId}`;
+  const links = selectionKey !== undefined && linksSnapshot?.key === selectionKey ? linksSnapshot.links : [];
+  const error =
+    workspaceError || (graphKey !== undefined && knowledgeError?.key === graphKey ? knowledgeError.message : "");
 
   useEffect(() => {
     let disposed = false;
@@ -1308,11 +1340,12 @@ function KnowledgeSurface({ onOpenWork, service }: { onOpenWork: (workId: string
       .loadWorkspaces()
       .then((items) => {
         if (disposed) return;
+        setWorkspaceError("");
         setWorkspaces(items);
         setWorkspaceId((current) => current ?? items[0]?.workspaceId);
       })
       .catch((cause: unknown) => {
-        if (!disposed) setError(surfaceErrorMessage(cause, "워크스페이스를 불러오지 못했습니다."));
+        if (!disposed) setWorkspaceError(surfaceErrorMessage(cause, "워크스페이스를 불러오지 못했습니다."));
       });
     return () => {
       disposed = true;
@@ -1320,48 +1353,66 @@ function KnowledgeSurface({ onOpenWork, service }: { onOpenWork: (workId: string
   }, [service]);
 
   useEffect(() => {
-    if (workspaceId === undefined) return;
+    const generation = ++graphRequestGeneration.current;
     let disposed = false;
-    setSelectedId(undefined);
+    setRenderSnapshot(undefined);
+    setSelectionSnapshot(undefined);
+    setLinksSnapshot(undefined);
+    setKnowledgeError(undefined);
+    if (workspaceId === undefined || graphKey === undefined) {
+      return () => {
+        disposed = true;
+      };
+    }
+    const requestKey = graphKey;
     void Promise.all([service.loadKnowledgeIndex(workspaceId), service.loadKnowledgeGraph(workspaceId, lens)])
       .then(([indexView, graphView]) => {
-        if (disposed) return;
-        setIndex(indexView);
-        setGraph(graphView);
+        if (disposed || generation !== graphRequestGeneration.current) return;
+        setRenderSnapshot({ key: requestKey, index: indexView, graph: graphView });
       })
       .catch((cause: unknown) => {
-        if (!disposed) setError(surfaceErrorMessage(cause, "지식 상태를 불러오지 못했습니다."));
+        if (disposed || generation !== graphRequestGeneration.current) return;
+        setRenderSnapshot(undefined);
+        setKnowledgeError({
+          key: requestKey,
+          message: surfaceErrorMessage(cause, "지식 상태를 불러오지 못했습니다."),
+        });
       });
     return () => {
       disposed = true;
     };
-  }, [lens, service, workspaceId]);
+  }, [graphKey, lens, service, workspaceId]);
 
   // 고른 노드의 연결은 렌즈와 무관하게 전부 읽습니다.
   useEffect(() => {
-    if (workspaceId === undefined || selectedId === undefined || selectedId === "") {
-      setLinks([]);
-      setSelectedNode(undefined);
-      return;
-    }
+    const generation = ++linksRequestGeneration.current;
     let disposed = false;
+    setLinksSnapshot(undefined);
+    if (workspaceId === undefined || selectedId === undefined || selectedId === "" || selectionKey === undefined) {
+      return () => {
+        disposed = true;
+      };
+    }
+    const requestKey = selectionKey;
     void service
       .loadKnowledgeLinks(workspaceId, selectedId)
       .then((items) => {
-        if (!disposed) setLinks(items);
+        if (!disposed && generation === linksRequestGeneration.current)
+          setLinksSnapshot({ key: requestKey, links: items });
       })
       .catch(() => {
-        if (!disposed) setLinks([]);
+        if (!disposed && generation === linksRequestGeneration.current)
+          setLinksSnapshot({ key: requestKey, links: [] });
       });
     return () => {
       disposed = true;
     };
-  }, [selectedId, service, workspaceId]);
+  }, [selectedId, selectionKey, service, workspaceId]);
 
   const workspace = workspaces?.find((item) => item.workspaceId === workspaceId);
   // 지도 밖 노드로 건너뛰어도 시트가 유지되도록 마지막으로 안 노드를 기억합니다.
   const onCanvas = graph?.nodes.find((node) => node.nodeId === selectedId);
-  const selected = onCanvas ?? selectedNode;
+  const selected = onCanvas ?? currentSelection?.node;
 
   return (
     <main
@@ -1444,9 +1495,18 @@ function KnowledgeSurface({ onOpenWork, service }: { onOpenWork: (workId: string
                 })}
               </div>
               {graph && index?.status === "ready" ? (
-                <div className="border-b border-border p-3">
-                  <KnowledgeGroupLegend graph={graph} />
-                </div>
+                <>
+                  <div className="border-b border-border p-3">
+                    <KnowledgeGroupLegend graph={graph} />
+                  </div>
+                  <KnowledgeNodeExplorer
+                    graph={graph}
+                    onSelect={(nodeId) => {
+                      if (graphKey !== undefined) setSelectionSnapshot({ key: graphKey, nodeId });
+                    }}
+                    selectedId={selectedId}
+                  />
+                </>
               ) : null}
             </>
           ) : null}
@@ -1517,7 +1577,7 @@ function KnowledgeSurface({ onOpenWork, service }: { onOpenWork: (workId: string
                 <p className="text-[13px] leading-5 text-primary">이 워크스페이스는 아직 색인되지 않았습니다.</p>
                 <p className="mt-1.5 text-[12px] leading-5 text-muted">
                   {workspace?.trust === "trusted"
-                    ? "색인 상태와 관계를 볼 조회가 아직 계약에 없습니다."
+                    ? "현재 사용할 수 있는 색인이 없습니다. 새 업무가 이 폴더를 사용하면 자동으로 색인됩니다."
                     : "폴더를 신뢰해야 조직이 내용을 읽습니다."}
                 </p>
               </div>
@@ -1531,7 +1591,8 @@ function KnowledgeSurface({ onOpenWork, service }: { onOpenWork: (workId: string
                   graph={graph}
                   label={KNOWLEDGE_LENSES.find((item) => item.kind === lens)?.title ?? "지도"}
                   onSelect={(nodeId) => {
-                    setSelectedId(nodeId);
+                    if (graphKey === undefined) return;
+                    setSelectionSnapshot(nodeId === undefined ? undefined : { key: graphKey, nodeId });
                   }}
                   selectedId={selectedId}
                 />
@@ -1552,7 +1613,7 @@ function KnowledgeSurface({ onOpenWork, service }: { onOpenWork: (workId: string
               aria-label="상세 닫기"
               className="flex size-7 shrink-0 items-center justify-center rounded-[5px] text-muted outline-none hover:bg-surface-2 hover:text-primary"
               onClick={() => {
-                setSelectedId(undefined);
+                setSelectionSnapshot(undefined);
               }}
               type="button"
             >
@@ -1583,8 +1644,7 @@ function KnowledgeSurface({ onOpenWork, service }: { onOpenWork: (workId: string
             <KnowledgeLinkList
               links={links}
               onSelect={(node) => {
-                setSelectedNode(node);
-                setSelectedId(node.nodeId);
+                if (graphKey !== undefined) setSelectionSnapshot({ key: graphKey, nodeId: node.nodeId, node });
               }}
             />
           </div>

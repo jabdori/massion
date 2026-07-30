@@ -1047,6 +1047,136 @@ describe("Application desktop service", () => {
     expect(native.query).toHaveBeenCalledWith("work.knowledge", { workId: detail.workId });
   });
 
+  it("실제 지식 표면은 typed index·graph·links query를 호출하고 canonical DTO를 보존한다", async () => {
+    const native = transport({
+      "knowledge.index": {
+        workspaceId: "workspace-knowledge",
+        status: "ready",
+        indexVersionId: "index-knowledge",
+        fileCount: 2,
+        symbolCount: 1,
+        relationCount: 1,
+        indexedAt: "2026-07-29T01:00:00.000Z",
+        excluded: ["dist", "node_modules"],
+      },
+      "knowledge.graph": {
+        lens: "work",
+        nodes: [
+          { nodeId: "work:work-alpha", kind: "work", label: "Alpha 점검", detail: "completed" },
+          { nodeId: "work:work-zeta", kind: "work", label: "Zeta 점검", detail: "running" },
+        ],
+        edges: [
+          {
+            kind: "documents",
+            sourceId: "work:work-alpha",
+            targetId: "work:work-zeta",
+            derivedVia: "src/payment.ts",
+          },
+        ],
+      },
+      "knowledge.links": [
+        {
+          node: {
+            nodeId: "file:file-payment",
+            kind: "file",
+            label: "payment.ts",
+            detail: "src/payment.ts",
+            group: "src",
+          },
+          kind: "documents",
+          direction: "outgoing",
+        },
+      ],
+    });
+    const service = createApplicationDesktopService(native, { createId: () => "request-0001" });
+
+    await expect(service.loadKnowledgeIndex("workspace-knowledge")).resolves.toMatchObject({
+      status: "ready",
+      indexVersionId: "index-knowledge",
+      excluded: ["dist", "node_modules"],
+    });
+    await expect(service.loadKnowledgeGraph("workspace-knowledge", "work")).resolves.toMatchObject({
+      lens: "work",
+      nodes: [{ nodeId: "work:work-alpha" }, { nodeId: "work:work-zeta" }],
+      edges: [{ kind: "documents", derivedVia: "src/payment.ts" }],
+    });
+    await expect(service.loadKnowledgeLinks("workspace-knowledge", "work:work-alpha")).resolves.toMatchObject([
+      { node: { nodeId: "file:file-payment" }, kind: "documents", direction: "outgoing" },
+    ]);
+    expect(native.query).toHaveBeenCalledWith("knowledge.index", { workspaceId: "workspace-knowledge" });
+    expect(native.query).toHaveBeenCalledWith("knowledge.graph", {
+      workspaceId: "workspace-knowledge",
+      lens: "work",
+    });
+    expect(native.query).toHaveBeenCalledWith("knowledge.links", {
+      workspaceId: "workspace-knowledge",
+      nodeId: "work:work-alpha",
+    });
+  });
+
+  it("실제 지식 투영은 6개 렌즈의 정상 empty state를 validation 오류로 바꾸지 않는다", async () => {
+    for (const lens of ["work", "document", "file", "symbol", "artifact", "agent"] as const) {
+      const native = transport({ "knowledge.graph": { lens, nodes: [], edges: [] } });
+      const service = createApplicationDesktopService(native, { createId: () => "request-0001" });
+
+      await expect(service.loadKnowledgeGraph("workspace-knowledge", lens)).resolves.toEqual({
+        lens,
+        nodes: [],
+        edges: [],
+      });
+      expect(native.query).toHaveBeenCalledWith("knowledge.graph", { workspaceId: "workspace-knowledge", lens });
+    }
+  });
+
+  it("실제 지식 투영은 손상된 상태·렌즈·노드·dangling edge를 빈 그래프로 숨기지 않는다", async () => {
+    const invalidIndex = createApplicationDesktopService(
+      transport({
+        "knowledge.index": {
+          workspaceId: "workspace-knowledge",
+          status: "complete",
+          fileCount: 0,
+          symbolCount: 0,
+          relationCount: 0,
+          excluded: [],
+        },
+      }),
+    );
+    const mismatchedGraph = createApplicationDesktopService(
+      transport({
+        "knowledge.graph": {
+          lens: "file",
+          nodes: [{ nodeId: "work:work-alpha", kind: "work", label: "Alpha", secret: "must-not-pass" }],
+          edges: [],
+        },
+      }),
+    );
+    const danglingGraph = createApplicationDesktopService(
+      transport({
+        "knowledge.graph": {
+          lens: "work",
+          nodes: [{ nodeId: "work:work-alpha", kind: "work", label: "Alpha" }],
+          edges: [{ kind: "documents", sourceId: "work:work-alpha", targetId: "work:missing" }],
+        },
+      }),
+    );
+    const invalidLinks = createApplicationDesktopService(
+      transport({
+        "knowledge.links": [
+          {
+            node: { nodeId: "file:file-payment", kind: "file", label: "payment.ts" },
+            kind: "documents",
+            direction: "sideways",
+          },
+        ],
+      }),
+    );
+
+    await expect(invalidIndex.loadKnowledgeIndex("workspace-knowledge")).rejects.toThrow();
+    await expect(mismatchedGraph.loadKnowledgeGraph("workspace-knowledge", "work")).rejects.toThrow();
+    await expect(danglingGraph.loadKnowledgeGraph("workspace-knowledge", "work")).rejects.toThrow();
+    await expect(invalidLinks.loadKnowledgeLinks("workspace-knowledge", "file:file-payment")).rejects.toThrow();
+  });
+
   it("현재 run과 종료 Work 상태 및 병합 활동의 시간순을 보존한다", async () => {
     const native = transport({
       "work.detail": { ...detail, status: "failed" },
