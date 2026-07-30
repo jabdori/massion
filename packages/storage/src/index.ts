@@ -1,5 +1,11 @@
 export { createBackup, restoreBackup, type BackupManifest, type DatabaseBackup } from "./backup.js";
-export { createDatabase, MassionDatabase, type DatabaseConfig, type QueryExecutor } from "./database.js";
+export {
+  createDatabase,
+  MassionDatabase,
+  serializeSurrealDateTime,
+  type DatabaseConfig,
+  type QueryExecutor,
+} from "./database.js";
 export {
   DeclarationStore,
   type DeclarationApplyOptions,

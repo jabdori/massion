@@ -9,10 +9,15 @@ import {
   listAppliedMigrations,
   type MassionDatabase,
 } from "@massion/storage";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ApplicationRunStore, type ApplicationRunClock } from "./run-store.js";
 import { APPLICATION_MIGRATIONS, APPLICATION_RUN_MIGRATION } from "./schema.js";
+
+vi.mock("@massion/storage", async (importOriginal) => ({
+  ...(await importOriginal()),
+  serializeSurrealDateTime: (await import("../../storage/src/database.js")).serializeSurrealDateTime,
+}));
 
 class MutableRunClock implements ApplicationRunClock {
   public constructor(public now: Date) {}
@@ -542,22 +547,161 @@ describe("ApplicationRunStore", () => {
     await store.cancel(context, cancelled.runId);
 
     const expected = [
-      { runId: ready.runId, organizationId: context.organizationId, actorUserId: context.userId },
-      { runId: expired.runId, organizationId: context.organizationId, actorUserId: context.userId },
-      { runId: otherReady.runId, organizationId: otherContext.organizationId, actorUserId: otherContext.userId },
+      {
+        runId: ready.runId,
+        organizationId: context.organizationId,
+        actorUserId: context.userId,
+        createdAt: "2026-07-11T06:00:00.000Z",
+      },
+      {
+        runId: expired.runId,
+        organizationId: context.organizationId,
+        actorUserId: context.userId,
+        createdAt: "2026-07-11T06:00:01.000Z",
+      },
+      {
+        runId: otherReady.runId,
+        organizationId: otherContext.organizationId,
+        actorUserId: otherContext.userId,
+        createdAt: "2026-07-11T06:00:02.000Z",
+      },
       ...tied
         .toSorted((left, right) => left.runId.localeCompare(right.runId))
         .map((candidate) => ({
           runId: candidate.runId,
           organizationId: context.organizationId,
           actorUserId: context.userId,
+          createdAt: "2026-07-11T06:00:03.000Z",
         })),
     ];
     await expect(store.listStartupRecoverable()).resolves.toEqual(expected);
-    await expect(store.listStartupRecoverable(2)).resolves.toEqual(expected.slice(0, 2));
-    for (const limit of [0, 1.5, 1_001]) {
+    const pages = [];
+    let cursor: { readonly createdAt: string; readonly runId: string } | undefined;
+    for (;;) {
+      const page = await store.listStartupRecoverable(2, cursor);
+      pages.push(...page);
+      const last = page.at(-1);
+      if (!last) break;
+      cursor = { createdAt: last.createdAt, runId: last.runId };
+    }
+    expect(pages).toEqual(expected);
+    for (const limit of [0, 1.5, 101]) {
       await expect(store.listStartupRecoverable(limit)).rejects.toThrow("조회 개수");
     }
+  });
+
+  it("시작 복구 cursor를 엄격히 검증한다", async () => {
+    const query = vi.spyOn(database, "query");
+    const invalidCursors = [
+      { createdAt: "invalid", runId: "run-1" },
+      { createdAt: "2026-07-11T06:00:00.000Z", runId: "" },
+      { createdAt: "2026-07-11T06:00:00.000Z", runId: "x".repeat(129) },
+      { createdAt: "2026-07-11T06:00:00.000Z", runId: "run-1", organizationId: "foreign" },
+    ];
+
+    for (const cursor of invalidCursors) {
+      await expect(store.listStartupRecoverable(100, cursor)).rejects.toThrow("cursor");
+    }
+    expect(query).not.toHaveBeenCalled();
+  });
+
+  it("저장 생성 시각은 canonical ISO 문자열·Date·SurrealDB DateTime만 허용한다", async () => {
+    const canonical = "2026-07-11T06:00:00.000Z";
+    const [surrealDateTime] = await database.query<[unknown]>("RETURN <datetime>$created_at;", {
+      created_at: canonical,
+    });
+    expect(surrealDateTime).not.toBeInstanceOf(Date);
+    expect(surrealDateTime).toEqual(expect.objectContaining({ toISOString: expect.any(Function) }));
+
+    const query = vi.spyOn(database, "query");
+    const storedRecord = (createdAt: unknown) => [
+      [
+        {
+          run_id: "run-stored-created-at",
+          organization_id: context.organizationId,
+          actor_user_id: context.userId,
+          created_at: createdAt,
+        },
+      ],
+    ];
+
+    for (const createdAt of [canonical, new Date(canonical), surrealDateTime]) {
+      query.mockResolvedValueOnce(storedRecord(createdAt));
+      await expect(store.listStartupRecoverable()).resolves.toEqual([
+        {
+          runId: "run-stored-created-at",
+          organizationId: context.organizationId,
+          actorUserId: context.userId,
+          createdAt: canonical,
+        },
+      ]);
+    }
+
+    for (const createdAt of [
+      0,
+      true,
+      {},
+      { toString: () => canonical },
+      "",
+      "07/11/2026 06:00:00",
+      new Date(Number.NaN),
+    ]) {
+      query.mockResolvedValueOnce(storedRecord(createdAt));
+      await expect(store.listStartupRecoverable()).rejects.toThrow("생성 시각");
+    }
+
+    let fakeCalls = 0;
+    class DateTimeMimic {
+      public toCompact(): readonly [bigint, bigint] {
+        fakeCalls += 1;
+        return [0n, 0n];
+      }
+
+      public toISOString(): string {
+        fakeCalls += 1;
+        return canonical;
+      }
+    }
+    const forged = new DateTimeMimic() as DateTimeMimic & Record<symbol, unknown>;
+    forged[Symbol.for("surrealdb.Value")] = true;
+    forged[Symbol.for("surrealdb.DateTime")] = true;
+    const prototypeMimic = Object.create(surrealDateTime as object) as Record<string, unknown>;
+    Object.defineProperty(prototypeMimic, "toISOString", {
+      value: () => {
+        fakeCalls += 1;
+        return canonical;
+      },
+    });
+    const fakeResults = await Promise.allSettled(
+      [
+        {
+          toISOString: () => {
+            fakeCalls += 1;
+            return canonical;
+          },
+        },
+        new DateTimeMimic(),
+        forged,
+        prototypeMimic,
+        {
+          toISOString: () => {
+            fakeCalls += 1;
+            throw new Error("가짜 DateTime 변환기가 호출됐습니다");
+          },
+        },
+      ].map(async (createdAt) => {
+        query.mockResolvedValueOnce(storedRecord(createdAt));
+        return await store.listStartupRecoverable();
+      }),
+    );
+    expect.soft(fakeCalls).toBe(0);
+    expect(fakeResults.map((result) => result.status)).toEqual([
+      "rejected",
+      "rejected",
+      "rejected",
+      "rejected",
+      "rejected",
+    ]);
   });
 
   it("차단된 run도 cancel하고 Work별 run을 조회한다", async () => {

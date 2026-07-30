@@ -4,10 +4,19 @@ export interface ApplicationRunStartupRecoveryCandidate {
   readonly runId: string;
   readonly organizationId: string;
   readonly actorUserId?: string;
+  readonly createdAt: string;
+}
+
+export interface ApplicationRunStartupRecoveryCursor {
+  readonly createdAt: string;
+  readonly runId: string;
 }
 
 export interface ApplicationRunStartupRecoverySource {
-  listStartupRecoverable(): Promise<readonly ApplicationRunStartupRecoveryCandidate[]>;
+  listStartupRecoverable(
+    limit: number,
+    cursor?: ApplicationRunStartupRecoveryCursor,
+  ): Promise<readonly ApplicationRunStartupRecoveryCandidate[]>;
 }
 
 export interface ApplicationRunRecoveryContextResolver {
@@ -30,6 +39,27 @@ export interface ApplicationRunStartupRecoveryFailure {
 
 export interface ApplicationRunStartupRecoveryOptions {
   readonly onFailure?: (failure: ApplicationRunStartupRecoveryFailure) => void | Promise<void>;
+}
+
+const STARTUP_RECOVERY_PAGE_SIZE = 100;
+
+function recoveryCursor(candidate: ApplicationRunStartupRecoveryCandidate): ApplicationRunStartupRecoveryCursor {
+  if (typeof candidate.createdAt !== "string") {
+    throw new Error("ApplicationRun 시작 복구 후보 생성 시각이 유효하지 않습니다");
+  }
+  const createdAt = new Date(candidate.createdAt);
+  if (Number.isNaN(createdAt.getTime()) || createdAt.toISOString() !== candidate.createdAt) {
+    throw new Error("ApplicationRun 시작 복구 후보 생성 시각이 유효하지 않습니다");
+  }
+  if (
+    typeof candidate.runId !== "string" ||
+    candidate.runId.length === 0 ||
+    candidate.runId.length > 128 ||
+    candidate.runId.trim() !== candidate.runId
+  ) {
+    throw new Error("ApplicationRun 시작 복구 후보 실행 ID가 유효하지 않습니다");
+  }
+  return { createdAt: candidate.createdAt, runId: candidate.runId };
 }
 
 export class ApplicationRunStartupRecoveryService {
@@ -74,55 +104,82 @@ export class ApplicationRunStartupRecoveryService {
   }
 
   private async recoverAll(): Promise<void> {
-    let candidates: readonly ApplicationRunStartupRecoveryCandidate[];
-    try {
-      candidates = await this.source.listStartupRecoverable();
-    } catch (error) {
-      await this.report({ reason: "candidate_list_failed", cause: error });
-      return;
-    }
-
     let healthy = true;
-    for (const candidate of candidates) {
-      if (this.closed) {
+    let cursor: ApplicationRunStartupRecoveryCursor | undefined;
+    while (!this.closed) {
+      let candidates: readonly ApplicationRunStartupRecoveryCandidate[];
+      try {
+        candidates = await this.source.listStartupRecoverable(STARTUP_RECOVERY_PAGE_SIZE, cursor);
+      } catch (error) {
+        await this.report({ reason: "candidate_list_failed", cause: error });
+        return;
+      }
+
+      if (this.closed) return;
+      if (candidates.length === 0) break;
+
+      let nextCursor: ApplicationRunStartupRecoveryCursor;
+      try {
+        nextCursor = recoveryCursor(candidates.at(-1)!);
+        if (
+          cursor &&
+          (nextCursor.createdAt < cursor.createdAt ||
+            (nextCursor.createdAt === cursor.createdAt && nextCursor.runId <= cursor.runId))
+        ) {
+          throw new Error("ApplicationRun 시작 복구 page cursor가 엄격히 증가하지 않습니다");
+        }
+      } catch (error) {
         healthy = false;
+        await this.report({ reason: "candidate_list_failed", cause: error });
         break;
       }
-      if (!candidate.actorUserId) {
-        healthy = false;
-        await this.report({
-          reason: "legacy_actor_lineage_missing",
-          runId: candidate.runId,
-          organizationId: candidate.organizationId,
-        });
-        continue;
-      }
 
-      let context: TenantContext;
-      try {
-        context = await this.contexts.resolveTenantContext(candidate.actorUserId, candidate.organizationId);
-      } catch (error) {
-        healthy = false;
-        await this.report({
-          reason: "membership_unavailable",
-          runId: candidate.runId,
-          organizationId: candidate.organizationId,
-          cause: error,
-        });
-        continue;
-      }
+      for (const candidate of candidates) {
+        if (this.closed) {
+          healthy = false;
+          break;
+        }
+        if (!candidate.actorUserId) {
+          healthy = false;
+          await this.report({
+            reason: "legacy_actor_lineage_missing",
+            runId: candidate.runId,
+            organizationId: candidate.organizationId,
+          });
+          continue;
+        }
 
-      try {
-        await this.target.recover(context, candidate.runId);
-      } catch (error) {
-        healthy = false;
-        await this.report({
-          reason: "recovery_failed",
-          runId: candidate.runId,
-          organizationId: candidate.organizationId,
-          cause: error,
-        });
+        let context: TenantContext;
+        try {
+          context = await this.contexts.resolveTenantContext(candidate.actorUserId, candidate.organizationId);
+        } catch (error) {
+          healthy = false;
+          await this.report({
+            reason: "membership_unavailable",
+            runId: candidate.runId,
+            organizationId: candidate.organizationId,
+            cause: error,
+          });
+          continue;
+        }
+
+        if (this.closed) {
+          healthy = false;
+          break;
+        }
+        try {
+          await this.target.recover(context, candidate.runId);
+        } catch (error) {
+          healthy = false;
+          await this.report({
+            reason: "recovery_failed",
+            runId: candidate.runId,
+            organizationId: candidate.organizationId,
+            cause: error,
+          });
+        }
       }
+      cursor = nextCursor;
     }
     if (!this.closed) this.healthy = healthy;
   }

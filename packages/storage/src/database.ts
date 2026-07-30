@@ -1,5 +1,5 @@
 import { createNodeEngines } from "@surrealdb/node";
-import { createRemoteEngines, isRetryableConflict, Surreal, type SurrealTransaction } from "surrealdb";
+import { createRemoteEngines, DateTime, isRetryableConflict, Surreal, type SurrealTransaction } from "surrealdb";
 
 const SUPPORTED_PROTOCOLS = new Set(["mem:", "rocksdb:", "http:", "https:", "ws:", "wss:"]);
 const LEGACY_CONFLICT_PREFIX = "Transaction conflict: Write conflict";
@@ -11,6 +11,14 @@ function isCompatibleRetryableConflict(error: unknown): boolean {
       error.message.startsWith(LEGACY_CONFLICT_PREFIX) &&
       error.message.endsWith("can be retried"))
   );
+}
+
+export function serializeSurrealDateTime(value: unknown): string | undefined {
+  try {
+    return DateTime.prototype.toISOString.call(value);
+  } catch {
+    return undefined;
+  }
 }
 
 export interface DatabaseConfig {

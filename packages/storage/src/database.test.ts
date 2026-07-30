@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { createDatabase } from "./database.js";
+import { createDatabase, serializeSurrealDateTime } from "./database.js";
 
 describe("SurrealDB 연결", () => {
   it("embedded memory DB에 연결하고 namespace와 database를 선택한다", async () => {
@@ -43,5 +43,48 @@ describe("SurrealDB 연결", () => {
       "SELECT payload FROM concurrent_probe ORDER BY payload ASC;",
     );
     expect(records).toEqual([{ payload: 1 }, { payload: 2 }]);
+  });
+
+  it("SDK DateTime prototype private field로 genuine datetime만 직렬화한다", async () => {
+    await using db = await createDatabase({ url: "mem://", namespace: "massion", database: "datetime_guard" });
+    const canonical = "2026-07-11T06:00:00.000Z";
+    const [genuine] = await db.query<[unknown]>("RETURN <datetime>$value;", { value: canonical });
+    let fakeCalls = 0;
+    class DateTimeMimic {
+      public toCompact(): readonly [bigint, bigint] {
+        fakeCalls += 1;
+        return [0n, 0n];
+      }
+
+      public toISOString(): string {
+        fakeCalls += 1;
+        return canonical;
+      }
+    }
+    const forged = new DateTimeMimic() as DateTimeMimic & Record<symbol, unknown>;
+    forged[Symbol.for("surrealdb.Value")] = true;
+    forged[Symbol.for("surrealdb.DateTime")] = true;
+    const prototypeMimic = Object.create(genuine as object) as Record<string, unknown>;
+    prototypeMimic.toCompact = () => {
+      fakeCalls += 1;
+      return [0n, 0n];
+    };
+    prototypeMimic.toISOString = () => {
+      fakeCalls += 1;
+      return canonical;
+    };
+
+    expect(serializeSurrealDateTime(genuine)).toBe(canonical);
+    for (const fake of [
+      { toISOString: () => canonical },
+      new DateTimeMimic(),
+      forged,
+      prototypeMimic,
+      canonical,
+      new Date(canonical),
+    ]) {
+      expect(serializeSurrealDateTime(fake)).toBeUndefined();
+    }
+    expect(fakeCalls).toBe(0);
   });
 });

@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 
 import type { OrganizationService, TenantContext } from "@massion/identity";
-import { applyMigrations, type MassionDatabase, type QueryExecutor } from "@massion/storage";
+import { applyMigrations, serializeSurrealDateTime, type MassionDatabase, type QueryExecutor } from "@massion/storage";
 
 import {
   APPLICATION_RUN_APPROVAL_RESUME_MIGRATION,
@@ -42,6 +42,7 @@ interface StartupRecoveryRecord {
   readonly run_id: string;
   readonly organization_id: string;
   readonly actor_user_id?: string;
+  readonly created_at: unknown;
 }
 
 export interface ApplicationRunClock {
@@ -78,6 +79,12 @@ export interface ApplicationRunStartupRecoveryCandidate {
   readonly runId: string;
   readonly organizationId: string;
   readonly actorUserId?: string;
+  readonly createdAt: string;
+}
+
+export interface ApplicationRunStartupRecoveryCursor {
+  readonly createdAt: string;
+  readonly runId: string;
 }
 
 export type ClaimApplicationRunResult =
@@ -133,6 +140,48 @@ function validResumeApprovalId(value: unknown): string | undefined {
     throw new Error("승인 재개 Approval ID가 유효하지 않습니다");
   }
   return value;
+}
+
+function startupRecoveryCreatedAt(value: unknown): string {
+  let serialized: unknown = typeof value === "string" ? value : undefined;
+  if (value instanceof Date) {
+    if (!Number.isFinite(value.getTime())) {
+      throw new Error("Application run 시작 복구 생성 시각이 유효하지 않습니다");
+    }
+    serialized = value.toISOString();
+  } else if (value && typeof value === "object") {
+    serialized = serializeSurrealDateTime(value);
+  }
+  if (typeof serialized === "string") {
+    const date = new Date(serialized);
+    if (Number.isFinite(date.getTime()) && date.toISOString() === serialized) return serialized;
+  }
+  throw new Error("Application run 시작 복구 생성 시각이 유효하지 않습니다");
+}
+
+function startupRecoveryRunId(value: unknown): string {
+  if (typeof value !== "string" || value.length === 0 || value.length > 128 || value.trim() !== value) {
+    throw new Error("Application run 시작 복구 실행 ID가 유효하지 않습니다");
+  }
+  return value;
+}
+
+function startupRecoveryCursor(value: unknown): ApplicationRunStartupRecoveryCursor {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("Application run 시작 복구 cursor가 유효하지 않습니다");
+  }
+  const keys = Object.keys(value);
+  if (keys.length !== 2 || !keys.includes("createdAt") || !keys.includes("runId")) {
+    throw new Error("Application run 시작 복구 cursor가 유효하지 않습니다");
+  }
+  const candidate = value as Record<string, unknown>;
+  try {
+    const createdAt = startupRecoveryCreatedAt(candidate.createdAt);
+    if (createdAt !== candidate.createdAt) throw new Error("invalid cursor datetime");
+    return { createdAt, runId: startupRecoveryRunId(candidate.runId) };
+  } catch {
+    throw new Error("Application run 시작 복구 cursor가 유효하지 않습니다");
+  }
 }
 
 export class ApplicationRunStore {
@@ -577,19 +626,35 @@ export class ApplicationRunStore {
     return records.map((record) => this.view(record));
   }
 
-  public async listStartupRecoverable(limit = 100): Promise<readonly ApplicationRunStartupRecoveryCandidate[]> {
-    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 1_000) {
+  public async listStartupRecoverable(
+    limit = 100,
+    cursor?: ApplicationRunStartupRecoveryCursor,
+  ): Promise<readonly ApplicationRunStartupRecoveryCandidate[]> {
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100) {
       throw new Error("Application run 시작 복구 조회 개수가 유효하지 않습니다");
     }
+    const validatedCursor = cursor === undefined ? undefined : startupRecoveryCursor(cursor);
     const [records] = await this.database.query<[StartupRecoveryRecord[]]>(
-      "SELECT run_id, organization_id, actor_user_id, created_at FROM application_run WHERE status = 'ready' OR (status = 'running' AND lease_expires_at <= <datetime>$now) ORDER BY created_at ASC, run_id ASC LIMIT $limit;",
-      { now: this.clock.now.toISOString(), limit },
+      `SELECT run_id, organization_id, actor_user_id, created_at FROM application_run
+       WHERE (status = 'ready' OR (status = 'running' AND lease_expires_at <= <datetime>$now))${validatedCursor ? " AND (created_at > <datetime>$cursor_created_at OR (created_at = <datetime>$cursor_created_at AND run_id > $cursor_run_id))" : ""}
+       ORDER BY created_at ASC, run_id ASC LIMIT $limit;`,
+      {
+        now: this.clock.now.toISOString(),
+        limit,
+        ...(validatedCursor
+          ? { cursor_created_at: validatedCursor.createdAt, cursor_run_id: validatedCursor.runId }
+          : {}),
+      },
     );
-    return records.map((record) => ({
-      runId: record.run_id,
-      organizationId: record.organization_id,
-      ...(record.actor_user_id === undefined ? {} : { actorUserId: record.actor_user_id }),
-    }));
+    return records.map((record) => {
+      const createdAt = startupRecoveryCreatedAt(record.created_at);
+      return {
+        runId: startupRecoveryRunId(record.run_id),
+        organizationId: record.organization_id,
+        ...(record.actor_user_id === undefined ? {} : { actorUserId: record.actor_user_id }),
+        createdAt,
+      };
+    });
   }
 
   private async finish(
