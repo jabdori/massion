@@ -1394,6 +1394,49 @@ export class WorkService {
       const tasks = await listActiveTasksWith(transaction, context.organizationId, work);
       if (!tasks.some((task) => task.task_id === input.taskId))
         throw new Error(`Task를 찾을 수 없습니다: ${input.taskId}`);
+      const [rooms] = await transaction.query<[CollaborationRoom[]]>(
+        "SELECT * OMIT id FROM collaboration_room WHERE organization_id = $organization_id AND work_id = $work_id AND title = 'Core Office' AND coordinator_handle = 'representative' AND status = 'active' LIMIT 1;",
+        { organization_id: context.organizationId, work_id: work.work_id },
+      );
+      const room = rooms[0];
+      if (room) {
+        const [participants] = await transaction.query<[CollaborationParticipant[]]>(
+          "SELECT * OMIT id FROM collaboration_participant WHERE organization_id = $organization_id AND room_id = $room_id AND kind = 'agent' AND subject_id = $subject_id LIMIT 1;",
+          {
+            organization_id: context.organizationId,
+            room_id: room.room_id,
+            subject_id: input.agentHandle,
+          },
+        );
+        const participant = participants[0];
+        if (participant?.status !== "active") {
+          if (participant) {
+            await transaction.query(
+              "UPDATE collaboration_participant SET role = 'participant', status = 'active', joined_at = time::now() WHERE organization_id = $organization_id AND participant_id = $participant_id;",
+              { organization_id: context.organizationId, participant_id: participant.participant_id },
+            );
+          } else {
+            await transaction.query(
+              "CREATE collaboration_participant CONTENT { participant_id: $participant_id, organization_id: $organization_id, work_id: $work_id, room_id: $room_id, kind: 'agent', subject_id: $subject_id, role: 'participant', status: 'active', joined_at: time::now() };",
+              {
+                participant_id: randomUUID(),
+                organization_id: context.organizationId,
+                work_id: work.work_id,
+                room_id: room.room_id,
+                subject_id: input.agentHandle,
+              },
+            );
+          }
+          await transaction.query(
+            "UPDATE collaboration_room SET revision = $revision, updated_at = time::now() WHERE organization_id = $organization_id AND room_id = $room_id;",
+            {
+              revision: room.revision + 1,
+              organization_id: context.organizationId,
+              room_id: room.room_id,
+            },
+          );
+        }
+      }
       const assignments = await listAssignmentsWith(transaction, context.organizationId, work.work_id);
       const active = assignments.find(
         (assignment) => assignment.task_id === input.taskId && assignment.status === "assigned",

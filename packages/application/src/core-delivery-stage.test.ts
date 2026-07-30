@@ -198,11 +198,24 @@ describe("CoreDeliveryStage", () => {
             },
           ];
         },
+        listAssignments: async () =>
+          assignedTaskIds.map((taskId) => ({
+            task_id: taskId,
+            agent_handle: taskId === "task-first" ? "delivery-coordination" : "records-documentation",
+            status: "assigned",
+          })),
         getWork: async () => ({ revision, status }),
         assignTask: async (_context: unknown, value: { taskId: string }) => {
           assignedTaskIds.push(value.taskId);
           revision += 1;
-          return { work: { revision } };
+          return {
+            work: { revision },
+            assignment: {
+              task_id: value.taskId,
+              agent_handle: value.taskId === "task-first" ? "delivery-coordination" : "records-documentation",
+              status: "assigned",
+            },
+          };
         },
         transition: async (_context: unknown, value: { target: string }) => {
           if (value.target === "ready" && assignedTaskIds.length !== 2) {
@@ -235,11 +248,19 @@ describe("CoreDeliveryStage", () => {
     const stage = new CoreDeliveryStage({
       works: {
         listTasks: async () => (++listCalls === 1 ? [task] : []),
+        listAssignments: async () => [],
         getWork: async () => ({ revision, status }),
         assignTask: async (_context: unknown, value: { agentHandle: string }) => {
           assignedHandles.push(value.agentHandle);
           revision += 1;
-          return { work: { revision } };
+          return {
+            work: { revision },
+            assignment: {
+              task_id: task.task_id,
+              agent_handle: value.agentHandle,
+              status: "assigned",
+            },
+          };
         },
         transition: async (_context: unknown, value: { target: string }) => {
           status = value.target;
@@ -403,6 +424,7 @@ describe("CoreDeliveryStage", () => {
     let taskStatus = "ready";
     let workStatus = "running";
     let revision = 1;
+    let assigned = false;
     const task = () => ({
       task_id: "task-general",
       title: "분석",
@@ -415,6 +437,8 @@ describe("CoreDeliveryStage", () => {
     });
     const works = {
       listTasks: async () => (taskStatus === "completed" ? [task()] : [task()]),
+      listAssignments: async () =>
+        assigned ? [{ task_id: "task-general", agent_handle: "data-analysis", status: "assigned" }] : [],
       getWork: async () => ({ revision, status: workStatus, workspace_id: "workspace-delivery" }),
       transition: async (_context: unknown, value: { target: string }) => {
         calls.push(`work-${value.target}`);
@@ -424,8 +448,12 @@ describe("CoreDeliveryStage", () => {
       },
       assignTask: async () => {
         calls.push("assign");
+        assigned = true;
         revision += 1;
-        return { work: { revision } };
+        return {
+          work: { revision },
+          assignment: { task_id: "task-general", agent_handle: "data-analysis", status: "assigned" },
+        };
       },
       transitionTask: async (_context: unknown, value: { target: string }) => {
         calls.push(value.target);
@@ -482,6 +510,74 @@ describe("CoreDeliveryStage", () => {
         creatorExecutionId: "execution-1",
       }),
     ]);
+  });
+
+  it("동적 Staffing이 만든 활성 Assignment를 덮어쓰지 않고 같은 Agent로 실행·산출한다", async () => {
+    let taskStatus = "ready";
+    let workStatus = "running";
+    let revision = 4;
+    const runtimeInputs: Array<{ readonly agentHandle: string }> = [];
+    const artifactInputs: Array<{ readonly creatorAgentHandle: string }> = [];
+    const task = () => ({
+      task_id: "task-dynamic-staffing",
+      title: "계량 분석",
+      objective: "동적으로 배치된 전문 Agent가 분석한다",
+      acceptance_criteria_json: "[]",
+      status: taskStatus,
+      required_capabilities: ["quant-analysis"],
+      recommended_agent_handles: [],
+      revision,
+    });
+    const stage = new CoreDeliveryStage({
+      works: {
+        listTasks: async () => [task()],
+        listAssignments: async () => [
+          {
+            assignment_id: "assignment-dynamic-staffing",
+            task_id: "task-dynamic-staffing",
+            agent_handle: "work-quant-specialist",
+            status: "assigned",
+          },
+        ],
+        getWork: async () => ({ revision, status: workStatus }),
+        assignTask: async () => {
+          throw new Error("동적 Staffing의 활성 Assignment를 덮어쓰면 안 됩니다");
+        },
+        transitionTask: async (_context: unknown, value: { target: string }) => {
+          taskStatus = value.target;
+          revision += 1;
+          return { work: { revision }, task: task() };
+        },
+        createArtifactVersion: async (_context: unknown, value: { creatorAgentHandle: string }) => {
+          artifactInputs.push(value);
+          revision += 1;
+          return { work: { revision }, artifactVersion: { artifact_version_id: "artifact-dynamic-staffing" } };
+        },
+        transition: async (_context: unknown, value: { target: string }) => {
+          workStatus = value.target;
+          revision += 1;
+          return { work: { revision, status: workStatus } };
+        },
+      },
+      runner: {
+        execute: async (_context: unknown, value: { agentHandle: string }) => {
+          runtimeInputs.push(value);
+          return { executionId: "execution-dynamic-staffing", status: "succeeded", output: { result: "done" } };
+        },
+        recover: async () => {
+          throw new Error("not used");
+        },
+        cancel: async () => undefined,
+      },
+      runtimeExecutions: { findExecutionIdByCommand: async () => undefined },
+    } as never);
+
+    await expect(stage.execute(context, input)).resolves.toMatchObject({
+      outcome: "advanced",
+      data: { artifactVersionIds: ["artifact-dynamic-staffing"] },
+    });
+    expect(runtimeInputs).toEqual([expect.objectContaining({ agentHandle: "work-quant-specialist" })]);
+    expect(artifactInputs).toEqual([expect.objectContaining({ creatorAgentHandle: "work-quant-specialist" })]);
   });
 
   it("검증된 Workspace 근거를 Software Engineering Task port에도 전달한다", async () => {
@@ -616,6 +712,9 @@ describe("CoreDeliveryStage", () => {
     const stage = new CoreDeliveryStage({
       works: {
         listTasks: async () => [task],
+        listAssignments: async () => [
+          { task_id: task.task_id, agent_handle: "delivery-coordination", status: "assigned" },
+        ],
         getWork: async () => ({ revision: 1, status: "running" }),
         assignTask: async () => ({ work: { revision: 2 } }),
         transitionTask: async () => ({ work: { revision: 3 }, task: { ...task, status: "running" } }),
@@ -656,6 +755,9 @@ describe("CoreDeliveryStage", () => {
     const stage = new CoreDeliveryStage({
       works: {
         listTasks: async () => [task],
+        listAssignments: async () => [
+          { task_id: task.task_id, agent_handle: "delivery-coordination", status: "assigned" },
+        ],
         getWork: async () => ({ revision: 1, status: "running" }),
         createArtifactVersion: async () => {
           calls.push("artifact");
@@ -697,6 +799,9 @@ describe("CoreDeliveryStage", () => {
     const stage = new CoreDeliveryStage({
       works: {
         listTasks: async () => [task],
+        listAssignments: async () => [
+          { task_id: task.task_id, agent_handle: "delivery-coordination", status: "assigned" },
+        ],
         getWork: async () => ({ revision: 1, status: "running" }),
       },
       runner: {

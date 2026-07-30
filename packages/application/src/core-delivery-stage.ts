@@ -101,7 +101,13 @@ export class CoreDeliveryStage implements CoreWorkStageExecutor {
     private readonly dependencies: {
       readonly works: Pick<
         WorkService,
-        "listTasks" | "getWork" | "transition" | "assignTask" | "transitionTask" | "createArtifactVersion"
+        | "listTasks"
+        | "listAssignments"
+        | "getWork"
+        | "transition"
+        | "assignTask"
+        | "transitionTask"
+        | "createArtifactVersion"
       >;
       readonly runner: Pick<AgentRunner, "execute" | "recover" | "cancel">;
       readonly runtimeExecutions: Pick<RuntimeExecutionStore, "findExecutionIdByCommand">;
@@ -183,12 +189,16 @@ export class CoreDeliveryStage implements CoreWorkStageExecutor {
       if (workspace.trust !== "trusted") return { outcome: "blocked", reason: "workspace-untrusted" };
     }
     const tokenBudget = requestedTokenBudget(input.request);
-    const preassignedTaskIds = new Set<string>();
     if (initial.status === "planned") {
       const tasks = await this.dependencies.works.listTasks(context, input.workId);
       this.throwIfCancelled(input);
       for (const task of tasks.filter((candidate) => candidate.status !== "cancelled")) {
         this.throwIfCancelled(input);
+        const existing = (await this.dependencies.works.listAssignments(context, input.workId)).find(
+          (assignment) => assignment.task_id === task.task_id && assignment.status === "assigned",
+        );
+        this.throwIfCancelled(input);
+        if (existing) continue;
         const assigned = await this.dependencies.works.assignTask(context, {
           commandId: `${input.commandId}:task:${task.task_id}:assign`,
           workId: input.workId,
@@ -198,7 +208,6 @@ export class CoreDeliveryStage implements CoreWorkStageExecutor {
         });
         this.throwIfCancelled(input);
         initial = assigned.work;
-        preassignedTaskIds.add(task.task_id);
       }
       this.throwIfCancelled(input);
       initial = (
@@ -365,19 +374,23 @@ export class CoreDeliveryStage implements CoreWorkStageExecutor {
       let work = await this.dependencies.works.getWork(context, input.workId);
       this.throwIfCancelled(input);
       let active = task;
+      let assignment = (await this.dependencies.works.listAssignments(context, input.workId)).find(
+        (candidate) => candidate.task_id === task.task_id && candidate.status === "assigned",
+      );
+      this.throwIfCancelled(input);
       if (task.status === "ready") {
-        const agentHandle = deliveryAgentHandle(task);
-        if (!preassignedTaskIds.has(task.task_id)) {
+        if (!assignment) {
           this.throwIfCancelled(input);
           const assigned = await this.dependencies.works.assignTask(context, {
             commandId: `${root}:assign`,
             workId: input.workId,
             expectedRevision: work.revision,
             taskId: task.task_id,
-            agentHandle,
+            agentHandle: deliveryAgentHandle(task),
           });
           this.throwIfCancelled(input);
           work = assigned.work;
+          assignment = assigned.assignment;
         }
         this.throwIfCancelled(input);
         const started = await this.dependencies.works.transitionTask(context, {
@@ -391,6 +404,8 @@ export class CoreDeliveryStage implements CoreWorkStageExecutor {
         this.throwIfCancelled(input);
         active = started.task;
       }
+      if (!assignment) return { outcome: "blocked", reason: "delivery-assignment-missing" };
+      const agentHandle = assignment.agent_handle;
       const runtimeCommand = `${root}:runtime`;
       const executionId = await this.dependencies.runtimeExecutions.findExecutionIdByCommand(context, runtimeCommand);
       this.throwIfCancelled(input);
@@ -400,7 +415,7 @@ export class CoreDeliveryStage implements CoreWorkStageExecutor {
             commandId: runtimeCommand,
             workId: input.workId,
             taskId: task.task_id,
-            agentHandle: deliveryAgentHandle(task),
+            agentHandle,
             modelRoute: "delivery-quality",
             correlationId: input.correlationId,
             estimatedTokens: baselineTokens + (knowledgeSources?.[0]?.estimatedTokens ?? 0),
@@ -424,7 +439,7 @@ export class CoreDeliveryStage implements CoreWorkStageExecutor {
         name: `task-${task.task_id}`,
         mediaType: "application/json",
         content: execution.output ?? null,
-        creatorAgentHandle: deliveryAgentHandle(task),
+        creatorAgentHandle: agentHandle,
         creatorExecutionId: execution.executionId,
         creatorTaskId: task.task_id,
       });

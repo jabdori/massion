@@ -26,6 +26,7 @@ describe("Collaboration Room과 resource lease", () => {
   let database: MassionDatabase;
   let context: TenantContext;
   let service: WorkService;
+  let graph: OrganizationGraphService;
   let created: CreateWorkResult;
 
   beforeEach(async () => {
@@ -34,7 +35,7 @@ describe("Collaboration Room과 resource lease", () => {
     const organizations = await OrganizationService.create(database);
     const owner = await identity.registerPersonalUser({ email: "owner@example.com", displayName: "Owner" });
     context = await organizations.resolveTenantContext(owner.user.user_id, owner.organization.organization_id);
-    const graph = await OrganizationGraphService.create(database, organizations);
+    graph = await OrganizationGraphService.create(database, organizations);
     await graph.bootstrap(context);
     service = await WorkService.create(database, organizations, graph);
     created = await service.createWork(context, {
@@ -117,16 +118,33 @@ describe("Collaboration Room과 resource lease", () => {
   it("Delivery Artifact·Task·Runtime·Collaboration 계보를 한 revision에 원자 기록하고 replay에서 중복하지 않는다", async () => {
     await database.query("DEFINE TABLE runtime_execution SCHEMALESS;");
     await applyMigrations(database, [WORK_ASSURANCE_LINK_MIGRATION]);
+    await graph.execute(context, {
+      commandId: "delivery-lineage-dynamic-agent",
+      expectedVersion: 1,
+      kind: "install-profile",
+      profileId: "delivery-lineage-dynamic",
+      profileVersion: "1.0.0",
+      nodes: [
+        {
+          handle: "work-quant-specialist",
+          name: "Work Quant Specialist",
+          responsibility: "현재 Work의 계량 분석",
+          outputs: ["Delivery"],
+          capabilities: ["quant-analysis"],
+          parentHandle: "delivery-coordination",
+          scope: "work",
+          workId: created.work.work_id,
+          role: "operator",
+        },
+      ],
+    });
     const opened = await service.openRoom(context, {
       commandId: "delivery-lineage-room",
       workId: created.work.work_id,
       expectedRevision: (await service.getWork(context, created.work.work_id)).revision,
       title: "Core Office",
       coordinatorHandle: "representative",
-      participants: [
-        { kind: "agent", subjectId: "representative", role: "coordinator" },
-        { kind: "agent", subjectId: "delivery-coordination", role: "participant" },
-      ],
+      participants: [{ kind: "agent", subjectId: "representative", role: "coordinator" }],
       limits: { maxParallel: 2, maxTokens: 10_000, maxCostMicros: 1_000_000, maxRounds: 10 },
     });
     const handoff = await service.postMessage(context, {
@@ -166,8 +184,13 @@ describe("Collaboration Room과 resource lease", () => {
       workId: created.work.work_id,
       expectedRevision: task.work.revision,
       taskId: task.task.task_id,
-      agentHandle: "delivery-coordination",
+      agentHandle: "work-quant-specialist",
     });
+    const [joined] = await database.query<[Array<{ readonly subject_id: string; readonly status: string }>]>(
+      "SELECT subject_id, status FROM collaboration_participant WHERE organization_id = $organization_id AND room_id = $room_id AND subject_id = 'work-quant-specialist';",
+      { organization_id: context.organizationId, room_id: opened.room.room_id },
+    );
+    expect(joined).toEqual([{ subject_id: "work-quant-specialist", status: "active" }]);
     const ready = await service.transition(context, {
       commandId: "delivery-lineage-ready",
       workId: created.work.work_id,
@@ -190,7 +213,7 @@ describe("Collaboration Room과 resource lease", () => {
     });
     const executionId = "delivery-lineage-execution";
     await database.query(
-      "CREATE runtime_execution CONTENT { execution_id: $execution_id, organization_id: $organization_id, work_id: $work_id, task_id: $task_id, agent_handle: 'delivery-coordination', status: 'succeeded' };",
+      "CREATE runtime_execution CONTENT { execution_id: $execution_id, organization_id: $organization_id, work_id: $work_id, task_id: $task_id, agent_handle: 'work-quant-specialist', status: 'succeeded' };",
       {
         execution_id: executionId,
         organization_id: context.organizationId,
@@ -206,7 +229,7 @@ describe("Collaboration Room과 resource lease", () => {
       name: `task-${task.task.task_id}`,
       mediaType: "application/json",
       content: "DELIVERY_ATOMIC_RESULT",
-      creatorAgentHandle: "delivery-coordination",
+      creatorAgentHandle: "work-quant-specialist",
       creatorExecutionId: executionId,
       creatorTaskId: task.task.task_id,
     };
@@ -219,7 +242,7 @@ describe("Collaboration Room과 resource lease", () => {
       expect.objectContaining({
         sequence: 2,
         message_type: "evidence",
-        author_id: "delivery-coordination",
+        author_id: "work-quant-specialist",
         reply_to_message_id: handoff.message.message_id,
         caused_by_message_id: handoff.message.message_id,
         task_id: task.task.task_id,
