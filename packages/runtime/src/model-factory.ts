@@ -48,6 +48,7 @@ export interface ProviderModelBuilder {
 export interface AcquireModelInput {
   readonly commandId: string;
   readonly executionId?: string;
+  readonly optimizationRunId?: string;
   readonly workId?: string;
   readonly agentHandle?: string;
   readonly workspaceRoot?: string;
@@ -329,6 +330,8 @@ export class MassionModelFactory implements RoutedModelFactory {
     const reservation = await this.router
       .reserve(context, {
         commandId: input.commandId,
+        ...(input.executionId !== undefined ? { executionId: input.executionId } : {}),
+        ...(input.optimizationRunId !== undefined ? { optimizationRunId: input.optimizationRunId } : {}),
         routeName: input.routeName,
         estimatedTokens: input.estimatedTokens,
         estimatedCostMicros: input.estimatedCostMicros,

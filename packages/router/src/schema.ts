@@ -294,3 +294,12 @@ DEFINE FIELD optimization_batch_id ON route_attempt TYPE option<string>;
 DEFINE INDEX route_attempt_execution ON route_attempt FIELDS organization_id, execution_id;
 `,
 );
+
+// prettier-ignore -- migration SQL의 공백도 checksum에 포함됩니다.
+export const ROUTE_ATTEMPT_OPTIMIZATION_RUN_LINEAGE_MIGRATION = defineMigration(
+  "0115-route-attempt-optimization-run-lineage",
+  `
+DEFINE FIELD optimization_run_id ON route_attempt TYPE option<string>;
+DEFINE INDEX route_attempt_optimization_run ON route_attempt FIELDS organization_id, optimization_run_id;
+`,
+);

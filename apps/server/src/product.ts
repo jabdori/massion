@@ -371,7 +371,7 @@ export async function createMassionDaemon(
           });
           const lease = await modelFactory.acquire(input.context, {
             commandId: `${input.run.runId}:${input.case.caseId}:reserve`,
-            executionId: input.run.runId,
+            optimizationRunId: input.run.runId,
             workId,
             agentHandle: input.roleKey,
             workspaceRoot: workspace.workspaceRoot,

@@ -194,13 +194,6 @@ export interface SettingsView {
   readonly policy: unknown;
 }
 
-/*
- * 아래 셋은 `router.*`·`subscription.*` 조회가 실제로 돌려주는 모양입니다.
- * 조회는 등록돼 있지만 `ApplicationQueryMapV1`에 항목이 없어 데스크톱이 `unknown`으로 받습니다.
- * 그래서 화면이 런타임 파싱을 합니다. 계약이 타입을 주면 이 투영은 그대로 사라집니다.
- * 인계: docs/phases/30-surface-parity-agent-ux/settings-contract-handoff.md
- */
-
 /** `router.routes` + `router.catalog.candidates`. 요청이 어느 모델로 가는지입니다. */
 /**
  * `route_attempt` 한 줄. 모델 호출 한 번이 어느 Work에서 나와 얼마를 썼는지입니다.
@@ -213,7 +206,10 @@ export interface RouteAttemptView {
   readonly routeId: string;
   readonly modelId: string;
   readonly providerId: string;
-  readonly status: "succeeded" | "failed" | "running";
+  readonly executionId?: string;
+  readonly optimizationRunId?: string;
+  readonly optimizationBatchId?: string;
+  readonly status: "succeeded" | "failed" | "interrupted" | "running";
   readonly statusCode?: number;
   readonly failureClass?: string;
   /** 어느 정도로 생각하게 했는지. 같은 모델이라도 비용이 갈립니다. */
@@ -226,7 +222,7 @@ export interface RouteAttemptView {
   readonly costMicros: number;
   readonly durationMs?: number;
   readonly fallbackFrom?: string;
-  /** `command_id`가 어느 Work의 것인지. 계약이 아직 이 연결을 돌려주지 않습니다. */
+  /** 실행 계보(`executionId`)가 가리키는 Work입니다. */
   readonly workId?: string;
   readonly workTitle?: string;
 }
@@ -1169,13 +1165,8 @@ export function createApplicationDesktopService(
       return projectEmergency(await client.query("governance.emergency", {}));
     },
 
-    /*
-     * `route_attempt` 테이블은 있는데 조회가 `ApplicationQueryMapV1`에 등록돼 있지 않습니다.
-     * 빈 배열로 돌려주면 「호출이 없었다」로 읽힙니다 — 모르는 것과 없는 것은 다릅니다.
-     * 인계: docs/phases/30-surface-parity-agent-ux/settings-contract-handoff.md
-     */
-    loadRouteAttempts() {
-      return Promise.reject(new Error("모델 호출 기록을 읽는 조회가 아직 계약에 없습니다."));
+    async loadRouteAttempts() {
+      return projectRouteAttempts(await client.query("router.attempts", { limit: 50 }));
     },
 
     async activateEmergency(reason) {
@@ -4127,38 +4118,94 @@ const str = (row: Record<string, unknown>, key: string): string => (typeof row[k
 const num = (row: Record<string, unknown>, key: string): number => (typeof row[key] === "number" ? row[key] : 0);
 const bool = (row: Record<string, unknown>, key: string): boolean => row[key] === true;
 
+function routeAttemptRows(value: unknown): readonly Record<string, unknown>[] {
+  if (!Array.isArray(value)) throw new Error("Route Attempt 응답은 배열이어야 합니다");
+  return value.map((row) => {
+    if (!row || typeof row !== "object" || Array.isArray(row))
+      throw new Error("Route Attempt 응답 행이 유효하지 않습니다");
+    return row as Record<string, unknown>;
+  });
+}
+
+function routeAttemptString(row: Record<string, unknown>, key: string): string {
+  const value = row[key];
+  if (typeof value !== "string" || value.length === 0 || value.length > 256)
+    throw new Error(`Route Attempt ${key}가 유효하지 않습니다`);
+  return value;
+}
+
+function routeAttemptOptionalString(row: Record<string, unknown>, key: string): string | undefined {
+  return row[key] === undefined ? undefined : routeAttemptString(row, key);
+}
+
+function routeAttemptNumber(row: Record<string, unknown>, key: string): number {
+  const value = row[key];
+  if (!Number.isSafeInteger(value) || (value as number) < 0)
+    throw new Error(`Route Attempt ${key}가 유효하지 않습니다`);
+  return value as number;
+}
+
+function routeAttemptOptionalNumber(row: Record<string, unknown>, key: string): number | undefined {
+  return row[key] === undefined ? undefined : routeAttemptNumber(row, key);
+}
+
+const ROUTE_ATTEMPT_INSTANT =
+  /^\d{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])T(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d\.\d{3}Z$/u;
+
+function routeAttemptInstant(row: Record<string, unknown>): string {
+  const value = routeAttemptString(row, "at");
+  const parsed = new Date(value);
+  if (!ROUTE_ATTEMPT_INSTANT.test(value) || !Number.isFinite(parsed.getTime()) || parsed.toISOString() !== value)
+    throw new Error("Route Attempt at이 유효하지 않습니다");
+  return value;
+}
+
 /*
  * 최근 것이 먼저입니다. `attempt-cohort-2`는 `attempt-cohort-1`이 quota로 막혀 넘어온 시도라
  * 사슬로 붙습니다 — 「막혔다」가 아니라 「막혀서 어디로 갔다」가 보여야 합니다.
  */
 
 export function projectRouteAttempts(value: unknown): readonly RouteAttemptView[] {
-  return rows(value)
-    .filter((row) => typeof row.attemptId === "string")
-    .map((row) => {
-      const status = str(row, "status");
-      return {
-        attemptId: str(row, "attemptId"),
-        at: str(row, "at"),
-        routeId: str(row, "routeId"),
-        modelId: str(row, "modelId"),
-        providerId: str(row, "providerId"),
-        status: status === "succeeded" || status === "failed" ? status : "running",
-        inputTokens: num(row, "inputTokens"),
-        outputTokens: num(row, "outputTokens"),
-        cacheReadTokens: num(row, "cacheReadTokens"),
-        cacheWriteTokens: num(row, "cacheWriteTokens"),
-        reasoningTokens: num(row, "reasoningTokens"),
-        costMicros: num(row, "costMicros"),
-        ...(typeof row.statusCode === "number" ? { statusCode: row.statusCode } : {}),
-        ...(typeof row.durationMs === "number" ? { durationMs: row.durationMs } : {}),
-        ...(typeof row.failureClass === "string" ? { failureClass: row.failureClass } : {}),
-        ...(typeof row.effort === "string" ? { effort: row.effort } : {}),
-        ...(typeof row.fallbackFrom === "string" ? { fallbackFrom: row.fallbackFrom } : {}),
-        ...(typeof row.workId === "string" ? { workId: row.workId } : {}),
-        ...(typeof row.workTitle === "string" ? { workTitle: row.workTitle } : {}),
-      };
-    });
+  return routeAttemptRows(value).map((row) => {
+    const at = routeAttemptInstant(row);
+    const status = routeAttemptString(row, "status");
+    if (status !== "succeeded" && status !== "failed" && status !== "interrupted" && status !== "running")
+      throw new Error("Route Attempt status가 유효하지 않습니다");
+    const executionId = routeAttemptOptionalString(row, "executionId");
+    const optimizationRunId = routeAttemptOptionalString(row, "optimizationRunId");
+    const optimizationBatchId = routeAttemptOptionalString(row, "optimizationBatchId");
+    const statusCode = routeAttemptOptionalNumber(row, "statusCode");
+    const durationMs = routeAttemptOptionalNumber(row, "durationMs");
+    const failureClass = routeAttemptOptionalString(row, "failureClass");
+    const effort = routeAttemptOptionalString(row, "effort");
+    const fallbackFrom = routeAttemptOptionalString(row, "fallbackFrom");
+    const workId = routeAttemptOptionalString(row, "workId");
+    const workTitle = routeAttemptOptionalString(row, "workTitle");
+    return {
+      attemptId: routeAttemptString(row, "attemptId"),
+      at,
+      routeId: routeAttemptString(row, "routeId"),
+      modelId: routeAttemptString(row, "modelId"),
+      providerId: routeAttemptString(row, "providerId"),
+      ...(executionId === undefined ? {} : { executionId }),
+      ...(optimizationRunId === undefined ? {} : { optimizationRunId }),
+      ...(optimizationBatchId === undefined ? {} : { optimizationBatchId }),
+      status,
+      inputTokens: routeAttemptNumber(row, "inputTokens"),
+      outputTokens: routeAttemptNumber(row, "outputTokens"),
+      cacheReadTokens: routeAttemptNumber(row, "cacheReadTokens"),
+      cacheWriteTokens: routeAttemptNumber(row, "cacheWriteTokens"),
+      reasoningTokens: routeAttemptNumber(row, "reasoningTokens"),
+      costMicros: routeAttemptNumber(row, "costMicros"),
+      ...(statusCode === undefined ? {} : { statusCode }),
+      ...(durationMs === undefined ? {} : { durationMs }),
+      ...(failureClass === undefined ? {} : { failureClass }),
+      ...(effort === undefined ? {} : { effort }),
+      ...(fallbackFrom === undefined ? {} : { fallbackFrom }),
+      ...(workId === undefined ? {} : { workId }),
+      ...(workTitle === undefined ? {} : { workTitle }),
+    };
+  });
 }
 
 export function projectModelRoutes(routes: unknown, catalog: unknown): readonly ModelRouteView[] {

@@ -1,6 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { createApplicationDesktopService, createFixtureDesktopService, type DesktopService } from "./desktop-service";
+import {
+  createApplicationDesktopService,
+  createFixtureDesktopService,
+  projectRouteAttempts,
+  type DesktopService,
+} from "./desktop-service";
 import type { NativeTransport } from "./native-transport";
 
 const detail = {
@@ -88,6 +93,7 @@ function transport(
     "router.catalog": { providers: [{ providerId: "openai", apiKey: "never-return-this" }] },
     "router.credentials": [{ credentialId: "credential-1", token: "never-return-this" }],
     "router.routes": [],
+    "router.attempts": [],
     "subscription.providers": [],
     "subscription.accounts": [],
     "subscription.quota": [],
@@ -1229,6 +1235,95 @@ describe("Application desktop service", () => {
     expect(native.command).toHaveBeenCalledWith(
       expect.objectContaining({ operation: "router.route.configure", payload: { name: "default", routeKind: "chat" } }),
     );
+  });
+
+  it("실제 Desktop service가 최근 모델 호출 기록을 조회하고 사람용 view로 투영한다", async () => {
+    const native = transport({
+      "router.attempts": [
+        {
+          attemptId: "attempt-live-1",
+          at: "2026-07-30T01:00:00.000Z",
+          routeId: "route-reasoning",
+          modelId: "gpt-coding",
+          providerId: "openai",
+          optimizationRunId: "optimization-run-live-1",
+          optimizationBatchId: "batch-live-1",
+          status: "interrupted",
+          failureClass: "network",
+          inputTokens: 13,
+          outputTokens: 8,
+          cacheReadTokens: 0,
+          cacheWriteTokens: 0,
+          reasoningTokens: 0,
+          costMicros: 21,
+          fallbackFrom: "attempt-live-0",
+          workId: "work-0001",
+          workTitle: "고객 이탈 원인 분석",
+          credentialSecretVersion: 9,
+          explanation: "never-return-this",
+        },
+      ],
+    });
+    const service = createApplicationDesktopService(native, { createId: () => "request-0001" });
+
+    const attempts = await service.loadRouteAttempts();
+
+    expect(native.query).toHaveBeenCalledWith("router.attempts", { limit: 50 });
+    expect(attempts).toEqual([
+      {
+        attemptId: "attempt-live-1",
+        at: "2026-07-30T01:00:00.000Z",
+        routeId: "route-reasoning",
+        modelId: "gpt-coding",
+        providerId: "openai",
+        optimizationRunId: "optimization-run-live-1",
+        optimizationBatchId: "batch-live-1",
+        status: "interrupted",
+        failureClass: "network",
+        inputTokens: 13,
+        outputTokens: 8,
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0,
+        reasoningTokens: 0,
+        costMicros: 21,
+        fallbackFrom: "attempt-live-0",
+        workId: "work-0001",
+        workTitle: "고객 이탈 원인 분석",
+      },
+    ]);
+    expect(JSON.stringify(attempts)).not.toContain("never-return-this");
+  });
+
+  it("모델 호출 기록 응답이 손상되면 호출 없음으로 숨기지 않는다", async () => {
+    const service = createApplicationDesktopService(
+      transport({ "router.attempts": [{ attemptId: "attempt-malformed" }] }),
+    );
+
+    await expect(service.loadRouteAttempts()).rejects.toThrow("Route Attempt");
+  });
+
+  it("모델 호출 기록 시각은 canonical ISO instant만 허용한다", () => {
+    const attempt = (at: unknown) => ({
+      attemptId: "attempt-time",
+      at,
+      routeId: "route-1",
+      modelId: "gpt",
+      providerId: "openai",
+      status: "succeeded",
+      inputTokens: 1,
+      outputTokens: 1,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+      reasoningTokens: 0,
+      costMicros: 1,
+    });
+
+    expect(() => projectRouteAttempts([attempt(0)])).toThrow("at");
+    expect(() => projectRouteAttempts([attempt("2026-02-30T00:00:00.000Z")])).toThrow("at");
+    expect(() => projectRouteAttempts([attempt(new Date(Number.NaN))])).toThrow("at");
+    expect(projectRouteAttempts([attempt("2026-07-30T01:02:03.004Z")])).toMatchObject([
+      { at: "2026-07-30T01:02:03.004Z" },
+    ]);
   });
 
   it("Capabilities registry 조회·설치 결과에서 awaiting-approval 식별자를 보존한다", async () => {

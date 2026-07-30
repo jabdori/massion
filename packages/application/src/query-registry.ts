@@ -104,7 +104,7 @@ export interface ApplicationQueryDependencies {
   readonly audit?: Pick<ApplicationEventStore, "read">;
   readonly webSessions?: Pick<WebSessionService, "list">;
   readonly providers?: Pick<ProviderService, "listProviders" | "listEndpoints" | "listCredentials">;
-  readonly router?: Pick<ModelRouter, "listModels" | "listRoutes" | "listCandidates" | "readAttempt">;
+  readonly router?: Pick<ModelRouter, "listModels" | "listRoutes" | "listCandidates" | "listAttempts" | "readAttempt">;
   readonly status?: (context: TenantContext) => Promise<unknown>;
   readonly subscriptionAccounts?: SubscriptionAccountQueries;
   readonly subscriptionConnectors?: SubscriptionConnectorQueries;
@@ -112,8 +112,11 @@ export interface ApplicationQueryDependencies {
   readonly subscriptionQuota?: SubscriptionQuotaQueries;
   readonly subscriptionPolicy?: SubscriptionPolicyStore;
   readonly optimization?: {
-    readonly evaluations: Pick<ModelOptimizationStore, "getActivePolicy" | "listReceipts" | "listRecommendations">;
-    readonly batches: Pick<OptimizationBatchService, "getActiveBatch" | "listObservations">;
+    readonly evaluations: Pick<
+      ModelOptimizationStore,
+      "getActivePolicy" | "listReceipts" | "listRecommendations" | "hasEvaluationRun"
+    >;
+    readonly batches: Pick<OptimizationBatchService, "getActiveBatch" | "listObservations" | "hasBatch">;
   };
 }
 
@@ -510,10 +513,106 @@ function timestamp(value: unknown, label: string): string {
     "toISOString" in value &&
     typeof value.toISOString === "function"
   ) {
-    const serialized = value.toISOString();
+    const serialized = (value as { toISOString: () => unknown }).toISOString();
     if (typeof serialized === "string") return serialized;
   }
   throw new Error(`${label} 시각이 유효하지 않습니다`);
+}
+
+function routeAttemptText(value: unknown, label: string): string {
+  if (typeof value !== "string" || value.length === 0 || value.length > 256)
+    throw new Error(`Route Attempt ${label}이(가) 유효하지 않습니다`);
+  return value;
+}
+
+function routeAttemptOptionalText(value: unknown, label: string): string | undefined {
+  return value === undefined ? undefined : routeAttemptText(value, label);
+}
+
+function routeAttemptCount(value: unknown, label: string): number {
+  if (!Number.isSafeInteger(value) || (value as number) < 0)
+    throw new Error(`Route Attempt ${label}이(가) 유효하지 않습니다`);
+  return value as number;
+}
+
+const ROUTE_ATTEMPT_INSTANT =
+  /^\d{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])T(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d\.\d{3}Z$/u;
+
+function routeAttemptInstant(value: unknown): string {
+  let serialized: unknown;
+  try {
+    serialized =
+      typeof value === "string"
+        ? value
+        : value instanceof Date
+          ? value.toISOString()
+          : value !== null &&
+              typeof value === "object" &&
+              "toISOString" in value &&
+              typeof value.toISOString === "function"
+            ? (value as { toISOString: () => unknown }).toISOString()
+            : undefined;
+  } catch {
+    throw new Error("Route Attempt 시각이 유효하지 않습니다");
+  }
+  if (typeof serialized !== "string" || !ROUTE_ATTEMPT_INSTANT.test(serialized))
+    throw new Error("Route Attempt 시각이 유효하지 않습니다");
+  const parsed = new Date(serialized);
+  if (!Number.isFinite(parsed.getTime()) || parsed.toISOString() !== serialized)
+    throw new Error("Route Attempt 시각이 유효하지 않습니다");
+  return serialized;
+}
+
+interface RouteAttemptPublicLineage {
+  readonly execution?: ApplicationExecutionSource;
+  readonly work?: Awaited<ReturnType<ApplicationReadModel["works"]>>[number];
+  readonly optimizationRunId?: string;
+}
+
+function publicRouteAttempt(value: unknown, lineage: RouteAttemptPublicLineage = {}) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Route Attempt가 유효하지 않습니다");
+  const attempt = value as Record<string, unknown>;
+  const rawStatus = attempt.status;
+  if (rawStatus !== "reserved" && rawStatus !== "succeeded" && rawStatus !== "failed" && rawStatus !== "interrupted")
+    throw new Error("Route Attempt 상태가 유효하지 않습니다");
+  const rawExecutionId = routeAttemptOptionalText(attempt.execution_id, "실행 ID");
+  const rawOptimizationRunId = routeAttemptOptionalText(attempt.optimization_run_id, "최적화 평가 run ID");
+  if (
+    lineage.execution !== undefined &&
+    (rawExecutionId !== lineage.execution.executionId || lineage.optimizationRunId !== undefined)
+  )
+    throw new Error("Route Attempt 실행 계보가 유효하지 않습니다");
+  if (lineage.execution === undefined && rawExecutionId !== undefined && rawExecutionId !== lineage.optimizationRunId)
+    throw new Error("Route Attempt 실행 계보가 유효하지 않습니다");
+  if (rawOptimizationRunId !== undefined && rawOptimizationRunId !== lineage.optimizationRunId)
+    throw new Error("Route Attempt 최적화 계보가 유효하지 않습니다");
+  const optimizationBatchId = routeAttemptOptionalText(attempt.optimization_batch_id, "최적화 배치 ID");
+  const statusCode =
+    attempt.status_code === undefined ? undefined : routeAttemptCount(attempt.status_code, "상태 코드");
+  const failureClass = routeAttemptOptionalText(attempt.failure_class, "실패 분류");
+  const fallbackFrom = routeAttemptOptionalText(attempt.fallback_from_attempt_id, "fallback 원본 ID");
+  return {
+    attemptId: routeAttemptText(attempt.attempt_id, "시도 ID"),
+    at: routeAttemptInstant(attempt.created_at),
+    routeId: routeAttemptText(attempt.route_id, "경로 ID"),
+    modelId: routeAttemptText(attempt.model_id, "모델 ID"),
+    providerId: routeAttemptText(attempt.provider_id, "Provider ID"),
+    ...(lineage.execution === undefined ? {} : { executionId: lineage.execution.executionId }),
+    ...(lineage.optimizationRunId === undefined ? {} : { optimizationRunId: lineage.optimizationRunId }),
+    ...(optimizationBatchId === undefined ? {} : { optimizationBatchId }),
+    status: rawStatus === "reserved" ? ("running" as const) : rawStatus,
+    ...(statusCode === undefined ? {} : { statusCode }),
+    ...(failureClass === undefined ? {} : { failureClass }),
+    inputTokens: routeAttemptCount(attempt.actual_input_tokens, "입력 토큰"),
+    outputTokens: routeAttemptCount(attempt.actual_output_tokens, "출력 토큰"),
+    cacheReadTokens: 0,
+    cacheWriteTokens: 0,
+    reasoningTokens: 0,
+    costMicros: routeAttemptCount(attempt.actual_cost_micros, "비용"),
+    ...(fallbackFrom === undefined ? {} : { fallbackFrom }),
+    ...(lineage.execution === undefined ? {} : { workId: lineage.execution.workId }),
+    ...(lineage.work?.title === undefined ? {} : { workTitle: lineage.work.title }),
+  };
 }
 
 function publicSubscriptionProvider(provider: SubscriptionProviderView) {
@@ -1487,6 +1586,93 @@ export function registerApplicationQueries(
     });
   }
   if (dependencies.router) {
+    registry.register({
+      operation: "router.attempts",
+      requiredScopes: ["router:read"],
+      allowedRoles: EVERY_ROLE,
+      validate: (value) => {
+        const parsed = object(value, ["limit"]);
+        const limit = boundedInteger(parsed.limit, "limit", 50);
+        if (limit > 200) throw new Error("limit가 유효하지 않습니다");
+        return { limit };
+      },
+      handle: async (context, value) => {
+        const attempts = await dependencies.router?.listAttempts(context, value.limit);
+        if (!attempts) return [];
+        const withLineage = attempts.map((attempt) => {
+          const raw = attempt as unknown as Record<string, unknown>;
+          return {
+            attempt,
+            executionId: routeAttemptOptionalText(raw.execution_id, "실행 ID"),
+            optimizationRunId: routeAttemptOptionalText(raw.optimization_run_id, "최적화 평가 run ID"),
+            optimizationBatchId: routeAttemptOptionalText(raw.optimization_batch_id, "최적화 배치 ID"),
+          };
+        });
+        const executionIds = new Set(withLineage.flatMap((item) => (item.executionId ? [item.executionId] : [])));
+        const optimizationRunIds = new Set([
+          ...executionIds,
+          ...withLineage.flatMap((item) => (item.optimizationRunId ? [item.optimizationRunId] : [])),
+        ]);
+        const optimizationBatchIds = new Set(
+          withLineage.flatMap((item) => (item.optimizationBatchId ? [item.optimizationBatchId] : [])),
+        );
+        const [executions, works] =
+          executionIds.size === 0
+            ? [[], []]
+            : await Promise.all([dependencies.readModel.executions(context), dependencies.readModel.works(context)]);
+        const executionsById = new Map(
+          executions
+            .filter(
+              (execution) =>
+                execution.organizationId === context.organizationId && executionIds.has(execution.executionId),
+            )
+            .map((execution) => [execution.executionId, execution]),
+        );
+        const worksById = new Map(
+          works.filter((work) => work.organizationId === context.organizationId).map((work) => [work.workId, work]),
+        );
+        const evaluationRuns = new Map(
+          await Promise.all(
+            [...optimizationRunIds].map(
+              async (runId) =>
+                [
+                  runId,
+                  (await dependencies.optimization?.evaluations.hasEvaluationRun(context, runId)) ?? false,
+                ] as const,
+            ),
+          ),
+        );
+        const optimizationBatches = new Map(
+          await Promise.all(
+            [...optimizationBatchIds].map(
+              async (batchId) =>
+                [batchId, (await dependencies.optimization?.batches.hasBatch(context, batchId)) ?? false] as const,
+            ),
+          ),
+        );
+        return withLineage.map((item) => {
+          if (item.optimizationBatchId !== undefined && !optimizationBatches.get(item.optimizationBatchId))
+            throw new Error("Route Attempt 최적화 batch 계보가 유효하지 않습니다");
+          if (item.optimizationRunId !== undefined) {
+            if (item.executionId !== undefined || !evaluationRuns.get(item.optimizationRunId))
+              throw new Error("Route Attempt 최적화 run 계보가 유효하지 않습니다");
+            return publicRouteAttempt(item.attempt, { optimizationRunId: item.optimizationRunId });
+          }
+          if (item.executionId === undefined) return publicRouteAttempt(item.attempt);
+          const execution = executionsById.get(item.executionId);
+          const legacyEvaluation = evaluationRuns.get(item.executionId) === true;
+          if (execution && legacyEvaluation) throw new Error("Route Attempt 실행 계보가 모호합니다");
+          if (!execution) {
+            if (!legacyEvaluation || item.optimizationBatchId !== undefined)
+              throw new Error("Route Attempt 실행 계보가 유효하지 않습니다");
+            return publicRouteAttempt(item.attempt, { optimizationRunId: item.executionId });
+          }
+          const work = worksById.get(execution.workId);
+          if (!work) throw new Error("Route Attempt 실행의 Work 계보가 유효하지 않습니다");
+          return publicRouteAttempt(item.attempt, { execution, work });
+        });
+      },
+    });
     registry.register({
       operation: "router.routes",
       requiredScopes: ["router:read"],

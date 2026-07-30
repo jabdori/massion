@@ -172,6 +172,29 @@ export interface ExecutionViewV1 {
   readonly updatedAt?: string;
 }
 
+export interface RouteAttemptViewV1 {
+  readonly attemptId: string;
+  readonly at: string;
+  readonly routeId: string;
+  readonly modelId: string;
+  readonly providerId: string;
+  readonly executionId?: string;
+  readonly optimizationRunId?: string;
+  readonly optimizationBatchId?: string;
+  readonly status: "succeeded" | "failed" | "interrupted" | "running";
+  readonly statusCode?: number;
+  readonly failureClass?: string;
+  readonly inputTokens: number;
+  readonly outputTokens: number;
+  readonly cacheReadTokens: number;
+  readonly cacheWriteTokens: number;
+  readonly reasoningTokens: number;
+  readonly costMicros: number;
+  readonly fallbackFrom?: string;
+  readonly workId?: string;
+  readonly workTitle?: string;
+}
+
 export interface ApprovalViewV1 {
   readonly approvalId: string;
   readonly action: string;
@@ -500,6 +523,10 @@ export interface ApplicationQueryMapV1 {
   readonly "governance.emergency": {
     readonly payload: Record<string, never>;
     readonly data: EmergencyStateViewV1 | undefined;
+  };
+  readonly "router.attempts": {
+    readonly payload: { readonly limit?: number };
+    readonly data: readonly RouteAttemptViewV1[];
   };
   readonly "extension.list": {
     readonly payload: Record<string, never>;

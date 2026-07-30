@@ -1,5 +1,5 @@
 import type { TenantContext } from "@massion/identity";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { ApplicationEventCursorExpiredError } from "./event-store.js";
 import type { ApplicationReadModel } from "./read-model.js";
@@ -831,6 +831,275 @@ describe("ApplicationQueryRegistry", () => {
         candidates: [{ candidateId: "candidate-1" }],
       },
     });
+  });
+
+  it("모델 호출 기록은 scope·role·strict limit 계약을 지킨다", async () => {
+    const calls: Array<{ context: TenantContext; limit: number }> = [];
+    const registry = new ApplicationQueryRegistry();
+    registerApplicationQueries(registry, {
+      readModel,
+      router: {
+        listAttempts: async (queryContext: TenantContext, limit: number) => {
+          calls.push({ context: queryContext, limit });
+          return [];
+        },
+      } as never,
+    });
+
+    await expect(registry.query(context, [], "router.attempts", {})).rejects.toMatchObject({
+      category: "authorization",
+    });
+    await expect(
+      registry.query({ ...context, role: "guest" as never }, ["router:read"], "router.attempts", {}),
+    ).rejects.toMatchObject({ category: "authorization" });
+    await expect(registry.query(context, ["router:read"], "router.attempts", { cursor: "0" })).rejects.toThrow(
+      "알 수 없는 필드",
+    );
+    await expect(registry.query(context, ["router:read"], "router.attempts", { limit: 0 })).rejects.toThrow("limit");
+    await expect(registry.query(context, ["router:read"], "router.attempts", { limit: Number.NaN })).rejects.toThrow(
+      "limit",
+    );
+    await expect(registry.query(context, ["router:read"], "router.attempts", { limit: 201 })).rejects.toThrow("limit");
+    await expect(registry.query(context, ["router:read"], "router.attempts", {})).resolves.toMatchObject({
+      data: [],
+    });
+    await expect(registry.query(context, ["router:read"], "router.attempts", { limit: 200 })).resolves.toMatchObject({
+      data: [],
+    });
+    expect(calls).toEqual([
+      { context, limit: 50 },
+      { context, limit: 200 },
+    ]);
+  });
+
+  it("모델 호출 기록은 실행·Work 계보만 사람용 view로 공개하고 내부 선택 재료를 redaction한다", async () => {
+    const hasBatch = vi.fn(async (_context: TenantContext, batchId: string) => batchId === "batch-attempt-1");
+    const registry = new ApplicationQueryRegistry();
+    registerApplicationQueries(registry, {
+      readModel: {
+        ...readModel,
+        executions: async () => [
+          {
+            organizationId: context.organizationId,
+            executionId: "execution-attempt-1",
+            workId: "query-work",
+            agentHandle: "representative",
+            modelRoute: "coding-balanced",
+            status: "succeeded",
+            inputTokens: 13,
+            outputTokens: 8,
+            costMicros: 21,
+          },
+        ],
+        works: async () => [
+          {
+            organizationId: context.organizationId,
+            workId: "query-work",
+            title: "고객 이탈 원인 분석",
+            status: "completed",
+            revision: 3,
+            artifactIds: [],
+          },
+        ],
+      },
+      router: {
+        listAttempts: async () => [
+          {
+            attempt_id: "attempt-public-1",
+            route_id: "route-reasoning",
+            model_id: "gpt-coding",
+            provider_id: "openai",
+            execution_id: "execution-attempt-1",
+            optimization_batch_id: "batch-attempt-1",
+            status: "succeeded",
+            status_code: 200,
+            actual_input_tokens: 13,
+            actual_output_tokens: 8,
+            actual_cost_micros: 21,
+            fallback_from_attempt_id: "attempt-public-0",
+            created_at: new Date("2026-07-30T01:00:00.000Z"),
+            credential_id: "credential-private",
+            credential_secret_version: 7,
+            sticky_key_hash: "sticky-private",
+            effective_credential_policy: "weighted",
+            explanation_json: '{"secret":"unsafe-explanation"}',
+          },
+        ],
+      } as never,
+      optimization: {
+        evaluations: { hasEvaluationRun: async () => false } as never,
+        batches: { hasBatch } as never,
+      },
+    });
+
+    const result = await registry.query(context, ["router:read"], "router.attempts", {});
+
+    expect(result.data).toEqual([
+      {
+        attemptId: "attempt-public-1",
+        at: "2026-07-30T01:00:00.000Z",
+        routeId: "route-reasoning",
+        modelId: "gpt-coding",
+        providerId: "openai",
+        executionId: "execution-attempt-1",
+        optimizationBatchId: "batch-attempt-1",
+        status: "succeeded",
+        statusCode: 200,
+        inputTokens: 13,
+        outputTokens: 8,
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0,
+        reasoningTokens: 0,
+        costMicros: 21,
+        fallbackFrom: "attempt-public-0",
+        workId: "query-work",
+        workTitle: "고객 이탈 원인 분석",
+      },
+    ]);
+    expect(hasBatch).toHaveBeenCalledWith(context, "batch-attempt-1");
+    expect(JSON.stringify(result.data)).not.toMatch(/credential|sticky|policy|explanation|unsafe/iu);
+  });
+
+  it("중단 상태와 신규·기존 모델 평가 run 계보를 runtime Work 없이 명시적으로 투영한다", async () => {
+    const hasEvaluationRun = vi.fn(async (_context: TenantContext, runId: string) =>
+      ["optimization-run-new", "optimization-run-legacy"].includes(runId),
+    );
+    const registry = new ApplicationQueryRegistry();
+    registerApplicationQueries(registry, {
+      readModel,
+      router: {
+        listAttempts: async () => [
+          {
+            attempt_id: "attempt-interrupted",
+            route_id: "route-1",
+            model_id: "gpt",
+            provider_id: "openai",
+            optimization_run_id: "optimization-run-new",
+            status: "interrupted",
+            failure_class: "network",
+            actual_input_tokens: 3,
+            actual_output_tokens: 1,
+            actual_cost_micros: 4,
+            created_at: "2026-07-30T03:00:00.000Z",
+          },
+          {
+            attempt_id: "attempt-legacy-evaluation",
+            route_id: "route-1",
+            model_id: "gpt",
+            provider_id: "openai",
+            execution_id: "optimization-run-legacy",
+            status: "succeeded",
+            actual_input_tokens: 2,
+            actual_output_tokens: 1,
+            actual_cost_micros: 3,
+            created_at: "2026-07-30T02:00:00.000Z",
+          },
+        ],
+      } as never,
+      optimization: {
+        evaluations: { hasEvaluationRun } as never,
+        batches: {} as never,
+      },
+    });
+
+    await expect(registry.query(context, ["router:read"], "router.attempts", {})).resolves.toMatchObject({
+      data: [
+        {
+          attemptId: "attempt-interrupted",
+          optimizationRunId: "optimization-run-new",
+          status: "interrupted",
+        },
+        {
+          attemptId: "attempt-legacy-evaluation",
+          optimizationRunId: "optimization-run-legacy",
+          status: "succeeded",
+        },
+      ],
+    });
+    expect(hasEvaluationRun).toHaveBeenCalledWith(context, "optimization-run-new");
+    expect(hasEvaluationRun).toHaveBeenCalledWith(context, "optimization-run-legacy");
+  });
+
+  it("runtime·optimization 어느 정본에도 없는 기존 execution 계보는 fail-closed한다", async () => {
+    const registry = new ApplicationQueryRegistry();
+    registerApplicationQueries(registry, {
+      readModel,
+      router: {
+        listAttempts: async () => [
+          {
+            attempt_id: "attempt-orphan-lineage",
+            route_id: "route-1",
+            model_id: "gpt",
+            provider_id: "openai",
+            execution_id: "orphan-lineage",
+            status: "succeeded",
+            actual_input_tokens: 1,
+            actual_output_tokens: 1,
+            actual_cost_micros: 1,
+            created_at: "2026-07-30T01:00:00.000Z",
+          },
+        ],
+      } as never,
+      optimization: {
+        evaluations: { hasEvaluationRun: async () => false } as never,
+        batches: {} as never,
+      },
+    });
+
+    await expect(registry.query(context, ["router:read"], "router.attempts", {})).rejects.toThrow("계보");
+  });
+
+  it("Route Attempt 시각은 canonical ISO instant만 허용하고 DB datetime object를 투영한다", async () => {
+    const attempt = (createdAt: unknown) => ({
+      attempt_id: "attempt-time",
+      route_id: "route-1",
+      model_id: "gpt",
+      provider_id: "openai",
+      status: "succeeded",
+      actual_input_tokens: 1,
+      actual_output_tokens: 1,
+      actual_cost_micros: 1,
+      created_at: createdAt,
+    });
+    const query = async (createdAt: unknown) => {
+      const registry = new ApplicationQueryRegistry();
+      registerApplicationQueries(registry, {
+        readModel,
+        router: { listAttempts: async () => [attempt(createdAt)] } as never,
+      });
+      return await registry.query(context, ["router:read"], "router.attempts", {});
+    };
+
+    await expect(query(0)).rejects.toThrow("시각");
+    await expect(query("2026-02-30T00:00:00.000Z")).rejects.toThrow("시각");
+    await expect(query(new Date(Number.NaN))).rejects.toThrow("시각");
+    await expect(query({ toISOString: () => "2026-07-30T01:02:03.004Z" })).resolves.toMatchObject({
+      data: [{ at: "2026-07-30T01:02:03.004Z" }],
+    });
+  });
+
+  it("손상된 모델 호출 기록을 빈 값으로 숨기지 않고 fail-closed한다", async () => {
+    const registry = new ApplicationQueryRegistry();
+    registerApplicationQueries(registry, {
+      readModel,
+      router: {
+        listAttempts: async () => [
+          {
+            attempt_id: "attempt-malformed",
+            route_id: "route-1",
+            model_id: "gpt",
+            provider_id: "openai",
+            status: "succeeded",
+            actual_input_tokens: "13",
+            actual_output_tokens: 8,
+            actual_cost_micros: 21,
+            created_at: "2026-07-30T01:00:00.000Z",
+          },
+        ],
+      } as never,
+    });
+
+    await expect(registry.query(context, ["router:read"], "router.attempts", {})).rejects.toThrow("Route Attempt");
   });
 
   it("모델 최적화 조회는 adapter가 덧붙인 prompt·credential 필드를 redaction한다", async () => {

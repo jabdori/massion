@@ -33,6 +33,7 @@ import {
   ROUTER_SUBSCRIPTION_MATERIAL_MIGRATION,
   ROUTER_SUBSCRIPTION_REAUTH_MIGRATION,
   ROUTE_ATTEMPT_EXECUTION_LINEAGE_MIGRATION,
+  ROUTE_ATTEMPT_OPTIMIZATION_RUN_LINEAGE_MIGRATION,
 } from "./schema.js";
 
 export type RouteKind = "chat" | "embedding";
@@ -147,6 +148,7 @@ export interface RouteAttempt {
   readonly credential_secret_version: number;
   readonly command_id: string;
   readonly execution_id?: string;
+  readonly optimization_run_id?: string;
   readonly optimization_batch_id?: string;
   readonly status: string;
   readonly failure_class?: string;
@@ -171,6 +173,29 @@ export interface RouteAttempt {
   readonly explanation_json: string;
   readonly created_at: unknown;
   readonly updated_at: unknown;
+}
+
+export interface RouteAttemptListItem {
+  readonly attempt_id: string;
+  readonly route_id: string;
+  readonly model_id: string;
+  readonly provider_id: string;
+  readonly execution_id?: string;
+  readonly optimization_run_id?: string;
+  readonly optimization_batch_id?: string;
+  readonly status: "reserved" | "succeeded" | "failed" | "interrupted";
+  readonly failure_class?: string;
+  readonly status_code?: number;
+  readonly actual_input_tokens: number;
+  readonly actual_output_tokens: number;
+  readonly actual_cost_micros: number;
+  readonly fallback_from_attempt_id?: string;
+  readonly created_at: unknown;
+}
+
+interface RouteAttemptListRow extends Omit<RouteAttemptListItem, "model_id" | "provider_id"> {
+  readonly organization_id: string;
+  readonly model_profile_id: string;
 }
 
 export interface CredentialSelectionView {
@@ -247,6 +272,7 @@ export interface RouteRequest {
   readonly estimatedTokens: number;
   readonly estimatedCostMicros: number;
   readonly executionId?: string;
+  readonly optimizationRunId?: string;
   readonly optimizationBatchId?: string;
   /** 모델 평가실이 활성 배치에서 선택한 선호 model profile 순서입니다. */
   readonly preferredModelProfileIds?: readonly string[];
@@ -353,6 +379,57 @@ function serializedMillis(value: unknown): number {
   return typeof parsed === "string" || typeof parsed === "number"
     ? new Date(parsed).getTime()
     : Number.POSITIVE_INFINITY;
+}
+
+function attemptRowText(value: unknown, label: string): string {
+  if (typeof value !== "string" || value.length === 0 || value.length > 256)
+    throw new Error(`Route Attempt 행의 ${label}이(가) 유효하지 않습니다`);
+  return value;
+}
+
+function attemptRowOptionalText(value: unknown, label: string): string | undefined {
+  return value === undefined ? undefined : attemptRowText(value, label);
+}
+
+function attemptRowCount(value: unknown, label: string): number {
+  if (!Number.isSafeInteger(value) || (value as number) < 0)
+    throw new Error(`Route Attempt 행의 ${label}이(가) 유효하지 않습니다`);
+  return value as number;
+}
+
+function routeAttemptListRow(value: unknown, organizationId: string): RouteAttemptListRow {
+  if (!value || typeof value !== "object" || Array.isArray(value))
+    throw new Error("Route Attempt 행이 유효하지 않습니다");
+  const row = value as Record<string, unknown>;
+  const status = row.status;
+  if (status !== "reserved" && status !== "succeeded" && status !== "failed" && status !== "interrupted")
+    throw new Error("Route Attempt 행의 상태가 유효하지 않습니다");
+  if (row.organization_id !== organizationId) throw new Error("Route Attempt 행의 조직 계보가 유효하지 않습니다");
+  if (!Number.isFinite(serializedMillis(row.created_at)))
+    throw new Error("Route Attempt 행의 생성 시각이 유효하지 않습니다");
+  const executionId = attemptRowOptionalText(row.execution_id, "실행 ID");
+  const optimizationRunId = attemptRowOptionalText(row.optimization_run_id, "최적화 평가 run ID");
+  const optimizationBatchId = attemptRowOptionalText(row.optimization_batch_id, "최적화 배치 ID");
+  const failureClass = attemptRowOptionalText(row.failure_class, "실패 분류");
+  const fallbackFromAttemptId = attemptRowOptionalText(row.fallback_from_attempt_id, "fallback 원본 ID");
+  const statusCode = row.status_code === undefined ? undefined : attemptRowCount(row.status_code, "상태 코드");
+  return {
+    attempt_id: attemptRowText(row.attempt_id, "시도 ID"),
+    organization_id: organizationId,
+    route_id: attemptRowText(row.route_id, "경로 ID"),
+    model_profile_id: attemptRowText(row.model_profile_id, "모델 프로필 ID"),
+    ...(executionId === undefined ? {} : { execution_id: executionId }),
+    ...(optimizationRunId === undefined ? {} : { optimization_run_id: optimizationRunId }),
+    ...(optimizationBatchId === undefined ? {} : { optimization_batch_id: optimizationBatchId }),
+    status,
+    ...(failureClass === undefined ? {} : { failure_class: failureClass }),
+    ...(statusCode === undefined ? {} : { status_code: statusCode }),
+    actual_input_tokens: attemptRowCount(row.actual_input_tokens, "입력 토큰"),
+    actual_output_tokens: attemptRowCount(row.actual_output_tokens, "출력 토큰"),
+    actual_cost_micros: attemptRowCount(row.actual_cost_micros, "비용"),
+    ...(fallbackFromAttemptId === undefined ? {} : { fallback_from_attempt_id: fallbackFromAttemptId }),
+    created_at: row.created_at,
+  };
 }
 
 function isSubscriptionCredential(credential: ProviderCredential): boolean {
@@ -646,6 +723,7 @@ export class ModelRouter {
       ROUTER_SUBSCRIPTION_REAUTH_MIGRATION,
       MODEL_VERIFICATION_EVIDENCE_MIGRATION,
       ROUTE_ATTEMPT_EXECUTION_LINEAGE_MIGRATION,
+      ROUTE_ATTEMPT_OPTIMIZATION_RUN_LINEAGE_MIGRATION,
     ]);
     return new ModelRouter(database, organizations, providers, subscriptions);
   }
@@ -847,6 +925,48 @@ export class ModelRouter {
     return attempt;
   }
 
+  public async listAttempts(context: TenantContext, limit = 50): Promise<readonly RouteAttemptListItem[]> {
+    await this.organizations.verifyTenantContext(context);
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 200)
+      throw new Error("Route Attempt 조회 개수가 유효하지 않습니다");
+    const [records] = await this.database.query<[unknown[]]>(
+      `SELECT attempt_id, organization_id, route_id, model_profile_id, execution_id, optimization_run_id,
+              optimization_batch_id,
+              status, failure_class, status_code, actual_input_tokens, actual_output_tokens, actual_cost_micros,
+              fallback_from_attempt_id, created_at
+       FROM route_attempt WHERE organization_id = $organization_id
+       ORDER BY created_at DESC, attempt_id DESC LIMIT $limit;`,
+      { organization_id: context.organizationId, limit },
+    );
+    if (records.length === 0) return [];
+    const profiles = new Map((await this.listModels(context)).map((profile) => [profile.model_profile_id, profile]));
+    return records.map((value) => {
+      const row = routeAttemptListRow(value, context.organizationId);
+      const profile = profiles.get(row.model_profile_id);
+      if (!profile || profile.organization_id !== context.organizationId)
+        throw new Error("Route Attempt 행의 모델 계보가 유효하지 않습니다");
+      return {
+        attempt_id: row.attempt_id,
+        route_id: row.route_id,
+        model_id: attemptRowText(profile.model_id, "모델 ID"),
+        provider_id: attemptRowText(profile.provider_id, "Provider ID"),
+        ...(row.execution_id === undefined ? {} : { execution_id: row.execution_id }),
+        ...(row.optimization_run_id === undefined ? {} : { optimization_run_id: row.optimization_run_id }),
+        ...(row.optimization_batch_id === undefined ? {} : { optimization_batch_id: row.optimization_batch_id }),
+        status: row.status,
+        ...(row.failure_class === undefined ? {} : { failure_class: row.failure_class }),
+        ...(row.status_code === undefined ? {} : { status_code: row.status_code }),
+        actual_input_tokens: row.actual_input_tokens,
+        actual_output_tokens: row.actual_output_tokens,
+        actual_cost_micros: row.actual_cost_micros,
+        ...(row.fallback_from_attempt_id === undefined
+          ? {}
+          : { fallback_from_attempt_id: row.fallback_from_attempt_id }),
+        created_at: row.created_at,
+      };
+    });
+  }
+
   public async addCandidate(
     context: TenantContext,
     input: AddCandidateInput,
@@ -932,6 +1052,7 @@ export class ModelRouter {
       estimatedTokens: input.estimatedTokens,
       estimatedCostMicros: input.estimatedCostMicros,
       ...(input.executionId !== undefined ? { executionId: input.executionId } : {}),
+      ...(input.optimizationRunId !== undefined ? { optimizationRunId: input.optimizationRunId } : {}),
       ...(input.optimizationBatchId !== undefined ? { optimizationBatchId: input.optimizationBatchId } : {}),
       ...(input.preferredModelProfileIds ? { preferredModelProfileIds: input.preferredModelProfileIds } : {}),
       ...(stickyKeyHash ? { stickyKeyHash } : {}),
@@ -979,7 +1100,7 @@ export class ModelRouter {
         },
       );
       const [attempts] = await tx.query<[RouteAttempt[]]>(
-        "CREATE route_attempt CONTENT { attempt_id: $attempt_id, organization_id: $organization_id, execution_id: $execution_id, optimization_batch_id: $optimization_batch_id, route_id: $route_id, candidate_id: $candidate_id, model_profile_id: $profile_id, credential_id: $credential_id, credential_secret_version: $secret_version, command_id: $command_id, status: 'reserved', selection_sequence: $sequence, estimated_tokens: $tokens, reserved_cost_micros: $cost, sticky_key_hash: $sticky_hash, fallback_from_attempt_id: $fallback_from, quota_snapshot_id: $quota_snapshot_id, routing_policy_version: $routing_policy_version, effective_credential_policy: $effective_credential_policy, subscription_policy_version_id: $subscription_policy_version_id, subscription_policy_version: $subscription_policy_version, explanation_json: $explanation_json, created_at: time::now(), updated_at: time::now() } RETURN AFTER;",
+        "CREATE route_attempt CONTENT { attempt_id: $attempt_id, organization_id: $organization_id, execution_id: $execution_id, optimization_run_id: $optimization_run_id, optimization_batch_id: $optimization_batch_id, route_id: $route_id, candidate_id: $candidate_id, model_profile_id: $profile_id, credential_id: $credential_id, credential_secret_version: $secret_version, command_id: $command_id, status: 'reserved', selection_sequence: $sequence, estimated_tokens: $tokens, reserved_cost_micros: $cost, sticky_key_hash: $sticky_hash, fallback_from_attempt_id: $fallback_from, quota_snapshot_id: $quota_snapshot_id, routing_policy_version: $routing_policy_version, effective_credential_policy: $effective_credential_policy, subscription_policy_version_id: $subscription_policy_version_id, subscription_policy_version: $subscription_policy_version, explanation_json: $explanation_json, created_at: time::now(), updated_at: time::now() } RETURN AFTER;",
         {
           attempt_id: randomUUID(),
           organization_id: context.organizationId,
@@ -990,6 +1111,7 @@ export class ModelRouter {
           secret_version: simulation.credential.secret_version,
           command_id: input.commandId,
           execution_id: input.executionId,
+          optimization_run_id: input.optimizationRunId,
           optimization_batch_id: input.optimizationBatchId,
           sequence,
           tokens: input.estimatedTokens,

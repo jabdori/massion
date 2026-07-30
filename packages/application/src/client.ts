@@ -30,6 +30,7 @@ export type {
   GrowthSuggestionViewV1,
   KnowledgeReferenceViewV1,
   OrganizationGraphSnapshotV1,
+  RouteAttemptViewV1,
   RoomMessageTypeV1,
   RoomMessageViewV1,
   RoomViewV1,

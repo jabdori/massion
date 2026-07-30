@@ -350,6 +350,133 @@ describe("Model Route simulation과 reservation", () => {
     expect(JSON.stringify(await router.listRoutes(context))).not.toContain("secret-account");
   });
 
+  it("최근 Route Attempt를 tenant별로 정렬한 뒤 limit의 정확한 subset만 반환한다", async () => {
+    const created = await route();
+    const reserve = async () =>
+      await router.reserve(context, {
+        commandId: crypto.randomUUID(),
+        routeName: created.name,
+        estimatedTokens: 10,
+        estimatedCostMicros: 0,
+      });
+    const old = await reserve();
+    const middle = await reserve();
+    const tiedA = await reserve();
+    const tiedB = await reserve();
+    const tiedC = await reserve();
+    const newest = await reserve();
+    const foreign = await reserve();
+    const other = await identity.registerPersonalUser({
+      email: `attempt-list-${crypto.randomUUID()}@example.com`,
+      displayName: "Attempt List Other",
+    });
+    await database.query(
+      `UPDATE route_attempt SET created_at = <datetime>$old_at WHERE attempt_id = $old_id;
+       UPDATE route_attempt SET created_at = <datetime>$middle_at WHERE attempt_id = $middle_id;
+       UPDATE route_attempt SET created_at = <datetime>$tied_at
+       WHERE attempt_id IN [$tied_a_id, $tied_b_id, $tied_c_id];
+       UPDATE route_attempt SET created_at = <datetime>$newest_at WHERE attempt_id = $newest_id;
+       UPDATE route_attempt SET organization_id = $other_organization_id, created_at = <datetime>$foreign_at
+       WHERE attempt_id = $foreign_id;`,
+      {
+        old_at: "2026-07-30T00:00:00.000Z",
+        middle_at: "2026-07-30T01:00:00.000Z",
+        tied_at: "2026-07-30T02:00:00.000Z",
+        newest_at: "2026-07-30T03:00:00.000Z",
+        foreign_at: "2026-07-30T04:00:00.000Z",
+        old_id: old.attempt.attempt_id,
+        middle_id: middle.attempt.attempt_id,
+        tied_a_id: tiedA.attempt.attempt_id,
+        tied_b_id: tiedB.attempt.attempt_id,
+        tied_c_id: tiedC.attempt.attempt_id,
+        newest_id: newest.attempt.attempt_id,
+        foreign_id: foreign.attempt.attempt_id,
+        other_organization_id: other.organization.organization_id,
+      },
+    );
+
+    const tied = [tiedA.attempt.attempt_id, tiedB.attempt.attempt_id, tiedC.attempt.attempt_id].sort().reverse();
+    const attempts = await router.listAttempts(context, 3);
+
+    expect(attempts.map((attempt) => attempt.attempt_id)).toEqual([newest.attempt.attempt_id, ...tied.slice(0, 2)]);
+    expect(attempts.map((attempt) => attempt.attempt_id)).not.toContain(tied[2]);
+    expect(attempts.map((attempt) => attempt.attempt_id)).not.toContain(middle.attempt.attempt_id);
+    expect(attempts.map((attempt) => attempt.attempt_id)).not.toContain(old.attempt.attempt_id);
+    expect(JSON.stringify(attempts)).not.toContain(foreign.attempt.attempt_id);
+    expect(attempts[0]).toMatchObject({ model_id: "gpt-coding", provider_id: "openai" });
+  });
+
+  it("Route Attempt 목록은 없음·기본 50·최대 200 경계를 지킨다", async () => {
+    await expect(router.listAttempts(context)).resolves.toEqual([]);
+    const created = await route();
+    for (let index = 0; index < 51; index += 1) {
+      await router.reserve(context, {
+        commandId: crypto.randomUUID(),
+        routeName: created.name,
+        estimatedTokens: 1,
+        estimatedCostMicros: 0,
+      });
+    }
+
+    await expect(router.listAttempts(context)).resolves.toHaveLength(50);
+    await expect(router.listAttempts(context, 200)).resolves.toHaveLength(51);
+    await expect(router.listAttempts(context, 1)).resolves.toHaveLength(1);
+    await expect(router.listAttempts(context, Number.NaN)).rejects.toThrow("개수");
+    await expect(router.listAttempts(context, 0)).rejects.toThrow("개수");
+    await expect(router.listAttempts(context, 201)).rejects.toThrow("개수");
+  });
+
+  it("중단된 Route Attempt와 모델 평가 run 계보를 최근 목록에 보존한다", async () => {
+    const created = await route();
+    const interrupted = await router.reserve(context, {
+      commandId: crypto.randomUUID(),
+      executionId: "runtime-execution-interrupted",
+      routeName: created.name,
+      estimatedTokens: 1,
+      estimatedCostMicros: 0,
+    });
+    await router.reportFailure(context, {
+      commandId: crypto.randomUUID(),
+      attemptId: interrupted.attempt.attempt_id,
+      signal: { kind: "network" },
+      emittedTokens: 1,
+      sideEffectsStarted: false,
+      actualInputTokens: 3,
+      actualOutputTokens: 1,
+      actualCostMicros: 4,
+    });
+    const evaluation = await router.reserve(context, {
+      commandId: crypto.randomUUID(),
+      optimizationRunId: "optimization-run-1",
+      routeName: created.name,
+      estimatedTokens: 1,
+      estimatedCostMicros: 0,
+    });
+
+    await expect(router.listAttempts(context, 2)).resolves.toEqual([
+      expect.objectContaining({
+        attempt_id: evaluation.attempt.attempt_id,
+        optimization_run_id: "optimization-run-1",
+      }),
+      expect.objectContaining({ attempt_id: interrupted.attempt.attempt_id, status: "interrupted" }),
+    ]);
+  });
+
+  it("손상된 Route Attempt 행은 목록 경계에서 fail-closed한다", async () => {
+    const created = await route();
+    const reserved = await router.reserve(context, {
+      commandId: crypto.randomUUID(),
+      routeName: created.name,
+      estimatedTokens: 1,
+      estimatedCostMicros: 0,
+    });
+    await database.query("UPDATE route_attempt SET actual_input_tokens = -1 WHERE attempt_id = $attempt_id;", {
+      attempt_id: reserved.attempt.attempt_id,
+    });
+
+    await expect(router.listAttempts(context)).rejects.toThrow("Route Attempt 행");
+  });
+
   it("Codex 검증 profile은 runtime 가용성·공식 능력·attested runtime 근거를 append-only로 각각 보존한다", async () => {
     await providers.registerProvider(context, {
       commandId: crypto.randomUUID(),

@@ -3946,6 +3946,7 @@ function AttemptTable({
 
 function AttemptRow({ attempt, onOpen }: { attempt: RouteAttemptView; onOpen: (attempt: RouteAttemptView) => void }) {
   const failed = attempt.status === "failed";
+  const interrupted = attempt.status === "interrupted";
   const speed = speedOf(attempt);
   return (
     <tr
@@ -3989,14 +3990,20 @@ function AttemptRow({ attempt, onOpen }: { attempt: RouteAttemptView; onOpen: (a
           : ((EFFORT_LABEL[attempt.effort as ReasoningEffort] as string | undefined) ?? attempt.effort)}
       </td>
       <td className="whitespace-nowrap px-3 py-1.5 font-mono text-[12px] text-muted">{attempt.providerId}</td>
-      <td className={`whitespace-nowrap px-3 py-1.5 text-[12px] ${failed ? "text-danger" : "text-muted"}`}>
+      <td
+        className={`whitespace-nowrap px-3 py-1.5 text-[12px] ${failed || interrupted ? "text-danger" : "text-muted"}`}
+      >
         {failed ? (
           (FAILURE_LABEL[attempt.failureClass ?? ""] ?? "실패")
+        ) : interrupted ? (
+          "중단"
         ) : (
           <span className="font-mono">{attempt.statusCode ?? "—"}</span>
         )}
       </td>
-      <td className="max-w-[200px] truncate py-1.5 pl-3 pr-5 text-[12px] text-secondary">{attempt.workTitle ?? "—"}</td>
+      <td className="max-w-[200px] truncate py-1.5 pl-3 pr-5 text-[12px] text-secondary">
+        {attempt.workTitle ?? (attempt.optimizationRunId === undefined ? "—" : "모델 평가")}
+      </td>
     </tr>
   );
 }
@@ -4078,14 +4085,29 @@ function AttemptDetail({ attempt, onClose }: { attempt: RouteAttemptView | undef
         {attempt === undefined ? null : (
           <>
             <DialogTitle className="flex items-baseline gap-2">
-              <span className={`font-mono ${attempt.status === "failed" ? "text-danger" : "text-primary"}`}>
-                {attempt.status === "running" ? "진행" : (attempt.statusCode ?? "")}
+              <span
+                className={`font-mono ${attempt.status === "failed" || attempt.status === "interrupted" ? "text-danger" : "text-primary"}`}
+              >
+                {attempt.status === "running"
+                  ? "진행"
+                  : attempt.status === "interrupted"
+                    ? "중단"
+                    : attempt.status === "failed"
+                      ? "실패"
+                      : (attempt.statusCode ?? "성공")}
               </span>
               <span className="font-mono text-[13px] font-normal text-secondary">{attempt.modelId}</span>
             </DialogTitle>
             <dl className="mt-1">
               <DetailRow label="시간">{attempt.at.replace("T", " ")}</DetailRow>
               <DetailRow label="Work">{attempt.workTitle ?? "—"}</DetailRow>
+              {attempt.executionId === undefined ? null : <DetailRow label="실행">{attempt.executionId}</DetailRow>}
+              {attempt.optimizationRunId === undefined ? null : (
+                <DetailRow label="모델 평가">{attempt.optimizationRunId}</DetailRow>
+              )}
+              {attempt.optimizationBatchId === undefined ? null : (
+                <DetailRow label="최적화 배치">{attempt.optimizationBatchId}</DetailRow>
+              )}
               <DetailRow label="프로바이더">{attempt.providerId}</DetailRow>
               <DetailRow label="추론 강도">
                 {attempt.effort === undefined

@@ -416,6 +416,17 @@ export class OptimizationBatchService {
     return batches[0] ? batchView(batches[0]) : undefined;
   }
 
+  public async hasBatch(context: TenantContext, batchId: string): Promise<boolean> {
+    await this.organizations.verifyTenantContext(context);
+    const normalized = batchId.trim();
+    if (!normalized || normalized.length > 256) throw new Error("모델 batch 식별자가 유효하지 않습니다");
+    const [batches] = await this.database.query<[Array<{ readonly batch_id: string }>]>(
+      "SELECT batch_id FROM optimization_batch WHERE organization_id = $organization_id AND batch_id = $batch_id LIMIT 1;",
+      { organization_id: context.organizationId, batch_id: normalized },
+    );
+    return batches.length === 1;
+  }
+
   public async listObservations(context: TenantContext, batchId?: string): Promise<readonly OptimizationObservation[]> {
     await this.organizations.verifyTenantContext(context);
     const [records] = await this.database.query<[ObservationRecord[]]>(
