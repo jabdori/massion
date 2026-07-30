@@ -26,6 +26,7 @@ test("pnpm 11 실행 계약은 manifest·workspace·CI·Docker·개발 안내에
   assert.equal(manifest.pnpm, undefined, "pnpm 11에서는 root pnpm 설정을 pnpm-workspace.yaml에 둬야 합니다");
   assert.match(workspace, /^overrides:\n {2}"@opentelemetry\/core": 2\.8\.0\n {2}uuid: 11\.1\.1$/mu);
   assert.match(workspace, /^ {2}"@babel\/core": "\^7\.29\.1"$/mu);
+  assert.match(workspace, /^ {2}js-yaml: "\^4\.1\.1"$/mu);
   assert.match(workspace, /^allowBuilds: \{ protobufjs: false \}$/mu);
   assert.doesNotMatch(workspace, /onlyBuiltDependencies/u);
 
