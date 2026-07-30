@@ -201,7 +201,7 @@ describe("VoltAgent AgentRunner", () => {
     const runner = new VoltAgentRunner(voltAgent, store, { acquire: vi.fn().mockResolvedValue(routed) }, registry);
 
     const pending = runner.execute(context, input());
-    await vi.waitFor(() => expect(runner.activeCount).toBe(1));
+    await vi.waitFor(() => expect(routed.executor.execute).toHaveBeenCalledOnce());
     const first = runner.shutdown("daemon_shutdown");
     const second = runner.shutdown("ignored_second_reason");
     let completed = false;
