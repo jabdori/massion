@@ -100,9 +100,21 @@ export interface GrowthSuggestionDecision {
   readonly commandId: string;
 }
 
+export interface GrowthSuggestionQuarantine {
+  readonly suggestionId: string;
+  readonly revision: number;
+  readonly status: "superseded";
+  readonly reason: string;
+  readonly actor: "system:growth-worker";
+  readonly commandId: string;
+}
+
 export interface ListGrowthSuggestionsInput {
+  readonly suggestionId?: string;
   readonly workId?: string;
-  readonly status?: GrowthSuggestionRecord["status"];
+  readonly status?: GrowthSuggestionRecord["status"] | readonly GrowthSuggestionRecord["status"][];
+  readonly recoverableOnly?: boolean;
+  readonly oldestFirst?: boolean;
   readonly limit?: number;
 }
 
@@ -354,8 +366,14 @@ export class ReflectionService {
     input: ListGrowthSuggestionsInput = {},
   ): Promise<readonly GrowthSuggestionRecord[]> {
     await this.organizations.verifyTenantContext(context);
+    if (input.suggestionId !== undefined && (!input.suggestionId.trim() || input.suggestionId.length > 200)) {
+      throw new Error("Growth Suggestion ID가 유효하지 않습니다");
+    }
     if (input.workId !== undefined && (!input.workId.trim() || input.workId.length > 128)) {
       throw new Error("Growth Suggestion Work ID가 유효하지 않습니다");
+    }
+    if (input.recoverableOnly !== undefined && typeof input.recoverableOnly !== "boolean") {
+      throw new Error("Growth Suggestion 복구 필터가 유효하지 않습니다");
     }
     const statuses: readonly GrowthSuggestionRecord["status"][] = [
       "proposed",
@@ -365,7 +383,12 @@ export class ReflectionService {
       "rejected",
       "superseded",
     ];
-    if (input.status !== undefined && !statuses.includes(input.status)) {
+    const requestedStatuses =
+      input.status === undefined ? undefined : typeof input.status === "string" ? [input.status] : input.status;
+    if (
+      requestedStatuses !== undefined &&
+      (requestedStatuses.length === 0 || requestedStatuses.some((status) => !statuses.includes(status)))
+    ) {
       throw new Error("Growth Suggestion 상태가 유효하지 않습니다");
     }
     const limit = input.limit ?? 100;
@@ -373,14 +396,21 @@ export class ReflectionService {
       throw new Error("Growth Suggestion 조회 개수가 유효하지 않습니다");
     }
     const clauses = ["organization_id = $organization_id"];
+    if (input.suggestionId !== undefined) clauses.push("suggestion_id = $suggestion_id");
     if (input.workId !== undefined) clauses.push("work_id = $work_id");
-    if (input.status !== undefined) clauses.push("status = $status");
+    if (requestedStatuses !== undefined) clauses.push("status IN $statuses");
+    if (input.recoverableOnly) {
+      clauses.push(
+        "reflection_run_id IN (SELECT VALUE reflection_run_id FROM reflection_run WHERE organization_id = $organization_id AND status = 'completed' AND trigger_id IN (SELECT VALUE trigger_id FROM growth_trigger WHERE organization_id = $organization_id AND status = 'completed'))",
+      );
+    }
     const [records] = await this.database.query<[GrowthSuggestionRecord[]]>(
-      `SELECT * FROM growth_suggestion WHERE ${clauses.join(" AND ")} ORDER BY created_at DESC, suggestion_id ASC LIMIT $limit;`,
+      `SELECT * FROM growth_suggestion WHERE ${clauses.join(" AND ")} ORDER BY created_at ${input.oldestFirst ? "ASC" : "DESC"}, suggestion_id ASC LIMIT $limit;`,
       {
         organization_id: context.organizationId,
+        ...(input.suggestionId === undefined ? {} : { suggestion_id: input.suggestionId }),
         ...(input.workId === undefined ? {} : { work_id: input.workId }),
-        ...(input.status === undefined ? {} : { status: input.status }),
+        ...(requestedStatuses === undefined ? {} : { statuses: requestedStatuses }),
         limit,
       },
     );
@@ -457,6 +487,77 @@ export class ReflectionService {
         status: "rejected",
         reason: input.reason,
         decidedByUserId: context.userId,
+        commandId: input.commandId,
+      };
+    });
+  }
+
+  public async quarantine(
+    context: TenantContext,
+    input: {
+      readonly commandId: string;
+      readonly suggestionId: string;
+      readonly expectedRevision: number;
+      readonly reason: string;
+    },
+  ): Promise<GrowthSuggestionQuarantine> {
+    await this.organizations.verifyTenantContext(context);
+    if (!input.suggestionId.trim()) throw new Error("Growth Suggestion ID가 유효하지 않습니다");
+    if (!Number.isSafeInteger(input.expectedRevision) || input.expectedRevision < 1)
+      throw new Error("Growth Suggestion revision이 유효하지 않습니다");
+    if (!input.reason.trim() || input.reason.length > 1_000)
+      throw new Error("Growth Suggestion 격리 사유는 1~1000자여야 합니다");
+    const actor = "system:growth-worker" as const;
+    const requestHash = growthChecksum({ ...input, actor });
+    return await this.database.transaction(async (executor) => {
+      const [records] = await executor.query<[GrowthSuggestionRecord[]]>(
+        "SELECT * FROM growth_suggestion WHERE organization_id = $organization_id AND suggestion_id = $suggestion_id LIMIT 1;",
+        { organization_id: context.organizationId, suggestion_id: input.suggestionId },
+      );
+      const current = records[0];
+      if (!current) throw new Error("Growth Suggestion을 찾을 수 없습니다");
+      if (current.status === "superseded") {
+        if (current.decision_command_id !== input.commandId || current.decision_reason !== input.reason)
+          throw new Error("Growth Suggestion은 이미 다른 계보로 종료됐습니다");
+        return {
+          suggestionId: current.suggestion_id,
+          revision: current.revision,
+          status: "superseded",
+          reason: current.decision_reason,
+          actor,
+          commandId: current.decision_command_id,
+        };
+      }
+      if (current.status !== "proposed" && current.status !== "evaluated")
+        throw new Error("현재 상태의 Growth Suggestion은 시스템 격리할 수 없습니다");
+      if (current.revision !== input.expectedRevision) throw new Error("Growth Suggestion revision 충돌입니다");
+      const [updated] = await executor.query<[GrowthSuggestionRecord[]]>(
+        "UPDATE growth_suggestion SET status = 'superseded', decision_reason = $reason, decided_by_user_id = NONE, decision_command_id = $command_id, decided_at = time::now() WHERE organization_id = $organization_id AND suggestion_id = $suggestion_id AND revision = $revision AND status IN ['proposed', 'evaluated'] RETURN AFTER;",
+        {
+          organization_id: context.organizationId,
+          suggestion_id: input.suggestionId,
+          revision: input.expectedRevision,
+          reason: input.reason,
+          command_id: input.commandId,
+        },
+      );
+      const quarantined = updated[0];
+      if (!quarantined) throw new Error("Growth Suggestion 격리 동시성 충돌입니다");
+      await executor.query(
+        "CREATE growth_event CONTENT { event_id: $event_id, organization_id: $organization_id, aggregate_type: 'suggestion', aggregate_id: $suggestion_id, event_type: 'suggestion_quarantined', payload_json: $payload_json, created_at: time::now() };",
+        {
+          event_id: crypto.randomUUID(),
+          organization_id: context.organizationId,
+          suggestion_id: input.suggestionId,
+          payload_json: canonicalGrowthJson({ actor, reason: input.reason, requestHash }),
+        },
+      );
+      return {
+        suggestionId: quarantined.suggestion_id,
+        revision: quarantined.revision,
+        status: "superseded",
+        reason: input.reason,
+        actor,
         commandId: input.commandId,
       };
     });

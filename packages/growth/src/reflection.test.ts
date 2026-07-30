@@ -148,6 +148,56 @@ describe("Reflection suggestion validation", () => {
         reason: "이번 Work 범위에서는 적용하지 않습니다",
       }),
     ).resolves.toEqual(rejected);
+    await database.query(
+      "CREATE reflection_run CONTENT { reflection_run_id: 'reflection-nonterminal', organization_id: $organization_id, work_id: 'work-1', records_run_id: 'records-nonterminal', trigger_id: 'trigger-nonterminal', configuration_version_id: 'configuration-1', snapshot_hash: $snapshot_hash, status: 'generating', version: 1, attempt: 1, command_id: 'reflection-nonterminal', request_hash: $snapshot_hash, created_at: type::datetime('2024-01-01T00:00:00.000Z'), updated_at: type::datetime('2024-01-01T00:00:00.000Z') }; CREATE growth_suggestion CONTENT { suggestion_id: 'suggestion-nonterminal', organization_id: $organization_id, work_id: 'work-1', reflection_run_id: 'reflection-nonterminal', target_kind: 'prompt', operation: 'replace-instruction', patch_json: '{}', summary: 'nonterminal', rationale: 'nonterminal', expected_effect: 'nonterminal', risk_summary: 'nonterminal', source_reference_ids: [], revision: 1, status: 'proposed', created_at: type::datetime('2024-01-01T00:00:00.000Z') }; CREATE growth_suggestion CONTENT { suggestion_id: 'suggestion-oldest', organization_id: $organization_id, work_id: 'work-1', reflection_run_id: $reflection_run_id, target_kind: 'prompt', operation: 'replace-instruction', patch_json: '{}', summary: 'oldest', rationale: 'oldest', expected_effect: 'oldest', risk_summary: 'oldest', source_reference_ids: [], revision: 1, status: 'evaluated', created_at: type::datetime('2026-01-01T00:00:00.000Z') }; CREATE growth_suggestion CONTENT { suggestion_id: 'suggestion-other-tenant', organization_id: 'organization-other', work_id: 'work-1', reflection_run_id: $reflection_run_id, target_kind: 'prompt', operation: 'replace-instruction', patch_json: '{}', summary: 'other', rationale: 'other', expected_effect: 'other', risk_summary: 'other', source_reference_ids: [], revision: 1, status: 'proposed', created_at: type::datetime('2025-01-01T00:00:00.000Z') };",
+      {
+        organization_id: context.organizationId,
+        reflection_run_id: result.run.reflection_run_id,
+        snapshot_hash: ownedSnapshot.hash,
+      },
+    );
+    await expect(
+      service.listSuggestions(context, {
+        status: ["proposed", "evaluated"],
+        recoverableOnly: true,
+        oldestFirst: true,
+        limit: 1,
+      }),
+    ).resolves.toEqual([expect.objectContaining({ suggestion_id: "suggestion-oldest", status: "evaluated" })]);
+    const quarantine = (
+      service as unknown as {
+        quarantine?: (
+          inputContext: typeof context,
+          input: { commandId: string; suggestionId: string; expectedRevision: number; reason: string },
+        ) => Promise<{ status: string; actor: string }>;
+      }
+    ).quarantine;
+    expect(quarantine).toBeTypeOf("function");
+    if (!quarantine) return;
+    await expect(
+      quarantine.call(service, context, {
+        commandId: "growth:suggestion-oldest:orphan-quarantine",
+        suggestionId: "suggestion-oldest",
+        expectedRevision: 1,
+        reason: "복구 계보가 유효하지 않습니다",
+      }),
+    ).resolves.toMatchObject({ status: "superseded", actor: "system:growth-worker" });
+    const [quarantined] = await database.query<
+      [Array<{ status: string; decision_command_id: string; decided_by_user_id?: string }>]
+    >(
+      "SELECT status, decision_command_id, decided_by_user_id FROM growth_suggestion WHERE organization_id = $organization_id AND suggestion_id = 'suggestion-oldest';",
+      { organization_id: context.organizationId },
+    );
+    expect(quarantined[0]).toMatchObject({
+      status: "superseded",
+      decision_command_id: "growth:suggestion-oldest:orphan-quarantine",
+    });
+    expect(quarantined[0]?.decided_by_user_id).toBeUndefined();
+    const [quarantineEvents] = await database.query<[Array<{ payload_json: string }>]>(
+      "SELECT payload_json FROM growth_event WHERE organization_id = $organization_id AND aggregate_id = 'suggestion-oldest' AND event_type = 'suggestion_quarantined';",
+      { organization_id: context.organizationId },
+    );
+    expect(JSON.parse(quarantineEvents[0]?.payload_json ?? "{}")).toMatchObject({ actor: "system:growth-worker" });
     const [references] = await database.query<[Array<{ source_id: string; source_checksum: string }>]>(
       "SELECT source_id, source_checksum FROM growth_source_reference;",
     );

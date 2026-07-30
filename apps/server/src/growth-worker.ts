@@ -1,18 +1,27 @@
 import { redactSecrets } from "@massion/evidence";
-import { metricObservationChecksum, type MetricObservationReader, type MetricObservationStore } from "@massion/assurance";
+import {
+  metricObservationChecksum,
+  type MetricObservationReader,
+  type MetricObservationStore,
+} from "@massion/assurance";
 import type { OrganizationService, TenantContext } from "@massion/identity";
 import {
   GrowthGateway,
+  GrowthEvaluationIntegrityError,
   GrowthTriggerStore,
   createReflectionSnapshot,
   growthChecksum,
+  growthTargetChecksum,
+  validateSuggestionCandidate,
   type GrowthTrigger,
   type ReflectionSnapshot,
   type ReflectionSourceReference,
   type SuggestionCandidate,
   type GrowthSignalReceiptInput,
+  type GrowthSuggestionDetails,
   type GrowthSuggestionRecord,
   type GrowthEffectSample,
+  type ReflectionRunRecord,
 } from "@massion/growth";
 import type { AgentExecutionResult, StructuredAgentRunner, StructuredOutputSpec } from "@massion/runtime";
 import type { MassionDatabase } from "@massion/storage";
@@ -42,7 +51,8 @@ function metricIsoDateTime(value: unknown): string {
       : value && typeof value === "object" && "toISOString" in value
         ? String((value as { toISOString(): unknown }).toISOString())
         : undefined;
-  if (!raw || !Number.isFinite(new Date(raw).getTime())) throw new Error("Growth Metric completedAt가 유효하지 않습니다");
+  if (!raw || !Number.isFinite(new Date(raw).getTime()))
+    throw new Error("Growth Metric completedAt가 유효하지 않습니다");
   return new Date(raw).toISOString();
 }
 
@@ -175,6 +185,10 @@ function row(value: unknown): Row {
 
 function rowRevision(value: Row): string {
   const revision = value.version ?? value.sequence ?? value.created_at ?? "1";
+  // Row = Record<string, unknown>이라 타입상 object 가능성이 남지만, 실제 스키마는
+  // version/sequence: int, created_at: datetime이며 SurrealDB 드라이버는 이 값들을
+  // 원시값 또는 자체 toString(ISO 8601)을 가진 값으로 내려줍니다(plain object 아님).
+  // eslint-disable-next-line @typescript-eslint/no-base-to-string
   return String(revision);
 }
 
@@ -265,6 +279,23 @@ interface EffectStrategyRow {
   readonly strategy_version_id: string;
 }
 
+interface OrphanSourceReferenceRow {
+  readonly organization_id: string;
+  readonly work_id: string;
+  readonly suggestion_id: string;
+  readonly source_kind: ReflectionSourceReference["kind"];
+  readonly source_id: string;
+  readonly source_checksum: string;
+  readonly captured_revision: string;
+}
+
+interface OrphanConfigurationRow {
+  readonly configuration_version_id: string;
+  readonly status: "active" | "superseded";
+}
+
+class GrowthOrphanValidationError extends Error {}
+
 export class GrowthWorker {
   private timer: ReturnType<typeof setInterval> | undefined;
   private running: Promise<GrowthWorkerResult> | undefined;
@@ -275,7 +306,9 @@ export class GrowthWorker {
   public start(context: TenantContext): void {
     if (this.timer || this.closed) return;
     const intervalMs = Math.max(5_000, this.dependencies.intervalMs ?? 30_000);
-    this.timer = setInterval(() => this.schedule(context), intervalMs);
+    this.timer = setInterval(() => {
+      this.schedule(context);
+    }, intervalMs);
     this.schedule(context);
   }
 
@@ -302,13 +335,20 @@ export class GrowthWorker {
   }
 
   private async run(context: TenantContext): Promise<GrowthWorkerResult> {
+    try {
+      await this.processEffects(context);
+    } catch {
+      // 효과 목록 조회 자체가 실패해도 독립적인 orphan/trigger 단계는 계속 진행합니다.
+    }
+    try {
+      await this.resumeOrphanSuggestions(context);
+    } catch {
+      // orphan 목록 조회 자체가 실패해도 새 trigger 처리는 계속 진행합니다.
+    }
     await this.dependencies.triggers.requeueExpired(context);
     await this.dependencies.triggers.backfill(context);
     const claimed = await this.dependencies.triggers.claim(context, { workerId: "growth-worker", leaseMs: 120_000 });
-    if (claimed.outcome !== "claimed") {
-      await this.processEffects(context);
-      return { outcome: "none" };
-    }
+    if (claimed.outcome !== "claimed") return { outcome: "none" };
     const snapshot = await this.snapshot(context, claimed.trigger);
     const result = await this.dependencies.gateway.reflect(context, {
       commandId: `${claimed.trigger.trigger_id}:reflection`,
@@ -316,8 +356,233 @@ export class GrowthWorker {
       snapshot,
     });
     await this.evaluateAndAdopt(context, claimed.trigger, snapshot, result.suggestions);
-    await this.processEffects(context);
     return { outcome: "claimed", trigger: claimed.trigger, suggestions: result.suggestions.length };
+  }
+
+  private async resumeOrphanSuggestions(context: TenantContext): Promise<void> {
+    const suggestions = await this.dependencies.gateway.listSuggestions(context, {
+      status: ["proposed", "evaluated"],
+      recoverableOnly: true,
+      oldestFirst: true,
+      limit: 20,
+    });
+    for (const suggestion of suggestions) {
+      if (suggestion.status !== "proposed" && suggestion.status !== "evaluated") continue;
+      try {
+        const detail = await this.dependencies.gateway.getSuggestionDetails(context, suggestion.suggestion_id);
+        if (detail.suggestion.suggestion_id !== suggestion.suggestion_id) {
+          throw new GrowthOrphanValidationError("Growth Suggestion 상세 계보가 일치하지 않습니다");
+        }
+        if (detail.suggestion.status !== "proposed" && detail.suggestion.status !== "evaluated") continue;
+        await this.resumeOrphanSuggestion(context, detail);
+      } catch (error) {
+        const reason =
+          error instanceof GrowthOrphanValidationError
+            ? error.message
+            : error instanceof GrowthEvaluationIntegrityError
+              ? "저장된 Growth evaluation 계보가 유효하지 않습니다"
+              : error instanceof SyntaxError
+                ? "Growth Suggestion 상세 JSON이 유효하지 않습니다"
+                : undefined;
+        if (!reason) continue;
+        try {
+          await this.dependencies.gateway.quarantine(context, {
+            commandId: `growth:${suggestion.suggestion_id}:orphan-quarantine`,
+            suggestionId: suggestion.suggestion_id,
+            expectedRevision: suggestion.revision,
+            reason: `자동 복구 격리: ${reason}`.slice(0, 1_000),
+          });
+        } catch {
+          // 다른 worker가 먼저 수렴했거나 저장소가 일시 실패해도 다음 후보를 계속 처리합니다.
+        }
+      }
+    }
+  }
+
+  private async resumeOrphanSuggestion(context: TenantContext, detail: GrowthSuggestionDetails): Promise<void> {
+    const { suggestion } = detail;
+    const { trigger, snapshot } = await this.orphanLineage(context, suggestion);
+    if (suggestion.status === "proposed") {
+      const outcome = await this.evaluateAndAdoptSuggestion(context, trigger, snapshot, suggestion, true);
+      if (outcome !== "eligible") throw new GrowthOrphanValidationError(`저장된 평가 결과가 ${outcome}입니다`);
+      return;
+    }
+    const evaluation = detail.evaluation;
+    if (
+      !evaluation ||
+      evaluation.organizationId !== context.organizationId ||
+      evaluation.suggestionId !== suggestion.suggestion_id
+    ) {
+      throw new GrowthOrphanValidationError("eligible Evaluation 계보가 없습니다");
+    }
+    if (evaluation.outcome !== "eligible") {
+      throw new GrowthOrphanValidationError(`저장된 평가 결과가 ${evaluation.outcome}입니다`);
+    }
+    const candidate = this.validatedSuggestionCandidate(suggestion, snapshot);
+    const patch = candidate.patch;
+    const receiptIds = new Set(evaluation.receiptIds);
+    if (
+      receiptIds.size !== evaluation.receiptIds.length ||
+      evaluation.signals.length !== receiptIds.size ||
+      evaluation.signals.some(
+        (signal) =>
+          !receiptIds.has(signal.receiptId) ||
+          signal.organizationId !== context.organizationId ||
+          signal.suggestionId !== suggestion.suggestion_id,
+      )
+    ) {
+      throw new GrowthOrphanValidationError("저장된 Evaluation receipt 집합이 유효하지 않습니다");
+    }
+    const requiredSignal = (signalId: "lineage" | "target" | "candidate") => {
+      const signals = evaluation.signals.filter(
+        (signal) =>
+          signal.signalId === signalId && signal.group === "required" && signal.outcome === "passed" && signal.fresh,
+      );
+      if (signals.length !== 1) throw new GrowthOrphanValidationError(`저장된 ${signalId} signal이 유효하지 않습니다`);
+      return signals[0];
+    };
+    const lineageSignal = requiredSignal("lineage");
+    const targetSignal = requiredSignal("target");
+    const candidateSignal = requiredSignal("candidate");
+    const hasWorkerSignalLineage = (
+      signal: (typeof evaluation.signals)[number] | undefined,
+      signalId: "lineage" | "target" | "candidate" | "assurance",
+    ) =>
+      signal?.commandId === `growth:${suggestion.suggestion_id}:signal:${signalId}` &&
+      signal.adapterId === `growth-worker:${trigger.trigger_id}` &&
+      signal.adapterVersion === "1";
+    const assuranceSignals = evaluation.signals.filter(
+      (signal) =>
+        signal.signalId === "assurance" &&
+        signal.group === "supporting" &&
+        signal.origin === "independent" &&
+        signal.outcome === "passed" &&
+        signal.fresh,
+    );
+    const assurance = snapshot.material.sources.find(
+      (source) => source.kind === "assurance" && source.referenceId === trigger.assurance_run_id,
+    );
+    if (
+      !hasWorkerSignalLineage(lineageSignal, "lineage") ||
+      !hasWorkerSignalLineage(targetSignal, "target") ||
+      !hasWorkerSignalLineage(candidateSignal, "candidate") ||
+      !hasWorkerSignalLineage(assuranceSignals[0], "assurance") ||
+      lineageSignal?.sourceId !== trigger.records_run_id ||
+      lineageSignal.sourceChecksum !== snapshot.hash ||
+      candidateSignal?.sourceId !== suggestion.suggestion_id ||
+      candidateSignal.sourceChecksum !== growthChecksum(candidate) ||
+      !assurance ||
+      assuranceSignals.length !== 1 ||
+      assuranceSignals[0]?.sourceId !== assurance.referenceId ||
+      assuranceSignals[0].sourceChecksum !== assurance.checksum
+    ) {
+      throw new GrowthOrphanValidationError("저장된 Evaluation source 계보가 유효하지 않습니다");
+    }
+    const target = await this.dependencies.gateway.inspectTarget(context, {
+      targetKind: suggestion.target_kind,
+      suggestionId: suggestion.suggestion_id,
+      patch,
+    });
+    await this.assertOrphanTarget(snapshot, suggestion, target);
+    if (targetSignal?.sourceId !== target.versionId || targetSignal.sourceChecksum !== target.checksum) {
+      throw new GrowthOrphanValidationError("저장된 평가 뒤 Growth target이 변경됐습니다");
+    }
+    await this.dependencies.gateway.adopt(context, {
+      commandId: `growth:${suggestion.suggestion_id}:adopt`,
+      suggestionId: suggestion.suggestion_id,
+      suggestionRevision: suggestion.revision,
+      evaluationRunId: evaluation.evaluationRunId,
+      expectedEvaluationInputHash: evaluation.inputHash,
+      expectedTargetChecksum: targetSignal.sourceChecksum,
+    });
+  }
+
+  private async orphanLineage(
+    context: TenantContext,
+    suggestion: GrowthSuggestionRecord,
+  ): Promise<{ readonly trigger: GrowthTrigger; readonly snapshot: ReflectionSnapshot }> {
+    if (suggestion.organization_id !== context.organizationId) {
+      throw new GrowthOrphanValidationError("Suggestion 조직 계보가 일치하지 않습니다");
+    }
+    const [reflections] = await this.dependencies.database.query<[ReflectionRunRecord[]]>(
+      "SELECT * FROM reflection_run WHERE organization_id = $organization_id AND reflection_run_id = $reflection_run_id LIMIT 1;",
+      { organization_id: context.organizationId, reflection_run_id: suggestion.reflection_run_id },
+    );
+    const reflection = reflections[0];
+    if (
+      !reflection ||
+      reflection.organization_id !== context.organizationId ||
+      reflection.status !== "completed" ||
+      reflection.work_id !== suggestion.work_id
+    ) {
+      throw new GrowthOrphanValidationError("terminal completed Reflection 계보가 없습니다");
+    }
+    const [triggers] = await this.dependencies.database.query<[GrowthTrigger[]]>(
+      "SELECT * FROM growth_trigger WHERE organization_id = $organization_id AND trigger_id = $trigger_id LIMIT 1;",
+      { organization_id: context.organizationId, trigger_id: reflection.trigger_id },
+    );
+    const trigger = triggers[0];
+    if (
+      !trigger ||
+      trigger.organization_id !== context.organizationId ||
+      trigger.status !== "completed" ||
+      trigger.work_id !== reflection.work_id ||
+      trigger.records_run_id !== reflection.records_run_id ||
+      trigger.configuration_version_id !== reflection.configuration_version_id
+    ) {
+      throw new GrowthOrphanValidationError("completed Growth trigger 계보가 없습니다");
+    }
+    const [configurations] = await this.dependencies.database.query<[OrphanConfigurationRow[]]>(
+      "SELECT configuration_version_id, status FROM growth_configuration_version WHERE organization_id = $organization_id AND configuration_version_id = $configuration_version_id LIMIT 1;",
+      {
+        organization_id: context.organizationId,
+        configuration_version_id: trigger.configuration_version_id,
+      },
+    );
+    const configuration = configurations[0];
+    if (
+      !configuration ||
+      configuration.configuration_version_id !== trigger.configuration_version_id ||
+      configuration.status !== "active"
+    ) {
+      throw new GrowthOrphanValidationError("Growth configuration version이 active가 아닙니다");
+    }
+    const snapshot = await this.snapshot(context, trigger);
+    if (snapshot.hash !== reflection.snapshot_hash) {
+      throw new GrowthOrphanValidationError("Reflection snapshot source가 변경됐습니다");
+    }
+    if (
+      !snapshot.material.sources.some(
+        (source) => source.kind === "assurance" && source.referenceId === trigger.assurance_run_id,
+      )
+    ) {
+      throw new GrowthOrphanValidationError("Growth 평가에 필요한 Assurance source가 없습니다");
+    }
+    const [storedSources] = await this.dependencies.database.query<[OrphanSourceReferenceRow[]]>(
+      "SELECT organization_id, work_id, suggestion_id, source_kind, source_id, source_checksum, captured_revision FROM growth_source_reference WHERE organization_id = $organization_id AND suggestion_id = $suggestion_id ORDER BY source_id ASC;",
+      { organization_id: context.organizationId, suggestion_id: suggestion.suggestion_id },
+    );
+    const sourceIds = new Set(suggestion.source_reference_ids);
+    if (sourceIds.size !== suggestion.source_reference_ids.length || storedSources.length !== sourceIds.size) {
+      throw new GrowthOrphanValidationError("Suggestion source reference 집합이 일치하지 않습니다");
+    }
+    for (const sourceId of sourceIds) {
+      const snapshotSource = snapshot.material.sources.find((source) => source.referenceId === sourceId);
+      const stored = storedSources.find((source) => source.source_id === sourceId);
+      if (
+        !snapshotSource ||
+        !stored ||
+        stored.organization_id !== context.organizationId ||
+        stored.work_id !== suggestion.work_id ||
+        stored.suggestion_id !== suggestion.suggestion_id ||
+        stored.source_kind !== snapshotSource.kind ||
+        stored.source_checksum !== snapshotSource.checksum ||
+        stored.captured_revision !== snapshotSource.capturedRevision
+      ) {
+        throw new GrowthOrphanValidationError("Suggestion source 계보가 변경됐습니다");
+      }
+    }
+    return { trigger, snapshot };
   }
 
   private async evaluateAndAdopt(
@@ -326,99 +591,169 @@ export class GrowthWorker {
     snapshot: ReflectionSnapshot,
     suggestions: readonly GrowthSuggestionRecord[],
   ): Promise<void> {
+    for (const suggestion of suggestions) {
+      await this.evaluateAndAdoptSuggestion(context, trigger, snapshot, suggestion);
+    }
+  }
+
+  private async evaluateAndAdoptSuggestion(
+    context: TenantContext,
+    trigger: GrowthTrigger,
+    snapshot: ReflectionSnapshot,
+    suggestion: GrowthSuggestionRecord,
+    verifySnapshotTarget = false,
+  ): Promise<"eligible" | "ineligible" | "blocked"> {
+    const candidate = this.validatedSuggestionCandidate(suggestion, snapshot);
+    const patch = candidate.patch;
     const assurance = snapshot.material.sources.find((candidate) => candidate.referenceId === trigger.assurance_run_id);
     if (!assurance) throw new Error("Growth 평가에 필요한 Assurance source가 없습니다");
-    for (const suggestion of suggestions) {
-      const patch = JSON.parse(suggestion.patch_json) as Readonly<Record<string, unknown>>;
-      const target = await this.dependencies.gateway.inspectTarget(context, {
-        targetKind: suggestion.target_kind,
-        suggestionId: suggestion.suggestion_id,
-        patch,
-      });
-      const explicitMemory = await this.explicitMemoryConflict(context, suggestion, patch);
-      const candidate = {
-        targetKind: suggestion.target_kind,
-        operation: suggestion.operation,
-        patch,
-        summary: suggestion.summary,
-        rationale: suggestion.rationale,
-        expectedEffect: suggestion.expected_effect,
-        riskSummary: suggestion.risk_summary,
-        sourceReferenceIds: suggestion.source_reference_ids,
-      } satisfies SuggestionCandidate;
-      const signals: GrowthSignalReceiptInput[] = [
+    const target = await this.dependencies.gateway.inspectTarget(context, {
+      targetKind: suggestion.target_kind,
+      suggestionId: suggestion.suggestion_id,
+      patch,
+    });
+    if (verifySnapshotTarget) await this.assertOrphanTarget(snapshot, suggestion, target);
+    const explicitMemory = await this.explicitMemoryConflict(context, suggestion, patch);
+    const signals: GrowthSignalReceiptInput[] = [
+      this.signal(trigger, suggestion, {
+        signalId: "lineage",
+        group: "required",
+        origin: "deterministic",
+        sourceId: trigger.records_run_id,
+        sourceChecksum: snapshot.hash,
+        evidence: { recordsRunId: trigger.records_run_id, snapshotHash: snapshot.hash },
+      }),
+      this.signal(trigger, suggestion, {
+        signalId: "target",
+        group: "required",
+        origin: "deterministic",
+        sourceId: target.versionId,
+        sourceChecksum: target.checksum,
+        evidence: { targetKind: target.targetKind, versionId: target.versionId, revision: target.revision },
+      }),
+      this.signal(trigger, suggestion, {
+        signalId: "candidate",
+        group: "required",
+        origin: "deterministic",
+        sourceId: suggestion.suggestion_id,
+        sourceChecksum: growthChecksum(candidate),
+        evidence: { operation: suggestion.operation, targetKind: suggestion.target_kind },
+      }),
+      this.signal(trigger, suggestion, {
+        signalId: "self",
+        group: "supporting",
+        origin: "model-self",
+        sourceId: suggestion.reflection_run_id,
+        sourceChecksum: growthChecksum({
+          rationale: suggestion.rationale,
+          expectedEffect: suggestion.expected_effect,
+        }),
+        evidence: { reflectionRunId: suggestion.reflection_run_id },
+      }),
+      this.signal(trigger, suggestion, {
+        signalId: "assurance",
+        group: "supporting",
+        origin: "independent",
+        sourceId: assurance.referenceId,
+        sourceChecksum: assurance.checksum,
+        evidence: { sourceKind: assurance.kind, capturedRevision: assurance.capturedRevision },
+      }),
+    ];
+    if (explicitMemory) {
+      signals.push(
         this.signal(trigger, suggestion, {
-          signalId: "lineage",
-          group: "required",
+          signalId: "explicit-memory-conflict",
+          group: "conflict",
           origin: "deterministic",
-          sourceId: trigger.records_run_id,
-          sourceChecksum: snapshot.hash,
-          evidence: { recordsRunId: trigger.records_run_id, snapshotHash: snapshot.hash },
+          sourceId: explicitMemory.memory_version_id,
+          sourceChecksum: explicitMemory.checksum,
+          evidence: { key: patch.key, memoryVersionId: explicitMemory.memory_version_id },
         }),
-        this.signal(trigger, suggestion, {
-          signalId: "target",
-          group: "required",
-          origin: "deterministic",
-          sourceId: target.versionId,
-          sourceChecksum: target.checksum,
-          evidence: { targetKind: target.targetKind, versionId: target.versionId, revision: target.revision },
-        }),
-        this.signal(trigger, suggestion, {
-          signalId: "candidate",
-          group: "required",
-          origin: "deterministic",
-          sourceId: suggestion.suggestion_id,
-          sourceChecksum: growthChecksum(candidate),
-          evidence: { operation: suggestion.operation, targetKind: suggestion.target_kind },
-        }),
-        this.signal(trigger, suggestion, {
-          signalId: "self",
-          group: "supporting",
-          origin: "model-self",
-          sourceId: suggestion.reflection_run_id,
-          sourceChecksum: growthChecksum({
-            rationale: suggestion.rationale,
-            expectedEffect: suggestion.expected_effect,
-          }),
-          evidence: { reflectionRunId: suggestion.reflection_run_id },
-        }),
-        this.signal(trigger, suggestion, {
-          signalId: "assurance",
-          group: "supporting",
-          origin: "independent",
-          sourceId: assurance.referenceId,
-          sourceChecksum: assurance.checksum,
-          evidence: { sourceKind: assurance.kind, capturedRevision: assurance.capturedRevision },
-        }),
-      ];
-      if (explicitMemory) {
-        signals.push(
-          this.signal(trigger, suggestion, {
-            signalId: "explicit-memory-conflict",
-            group: "conflict",
-            origin: "deterministic",
-            sourceId: explicitMemory.memory_version_id,
-            sourceChecksum: explicitMemory.checksum,
-            evidence: { key: patch.key, memoryVersionId: explicitMemory.memory_version_id },
-          }),
-        );
+      );
+    }
+    const receipts = [];
+    for (const signal of signals) receipts.push(await this.dependencies.gateway.recordSignal(context, signal));
+    const evaluation = await this.dependencies.gateway.evaluate(context, {
+      commandId: `growth:${suggestion.suggestion_id}:evaluate`,
+      suggestionId: suggestion.suggestion_id,
+      receiptIds: receipts.map((receipt) => receipt.receiptId),
+    });
+    if (evaluation.outcome !== "eligible") return evaluation.outcome;
+    await this.dependencies.gateway.adopt(context, {
+      commandId: `growth:${suggestion.suggestion_id}:adopt`,
+      suggestionId: suggestion.suggestion_id,
+      suggestionRevision: suggestion.revision,
+      evaluationRunId: evaluation.evaluationRunId,
+      expectedEvaluationInputHash: evaluation.inputHash,
+      expectedTargetChecksum: target.checksum,
+    });
+    return evaluation.outcome;
+  }
+
+  private suggestionPatch(suggestion: GrowthSuggestionRecord): Readonly<Record<string, unknown>> {
+    try {
+      const patch = JSON.parse(suggestion.patch_json) as unknown;
+      if (!patch || typeof patch !== "object" || Array.isArray(patch)) {
+        throw new Error("object가 아닙니다");
       }
-      const receipts = [];
-      for (const signal of signals) receipts.push(await this.dependencies.gateway.recordSignal(context, signal));
-      const evaluation = await this.dependencies.gateway.evaluate(context, {
-        commandId: `growth:${suggestion.suggestion_id}:evaluate`,
-        suggestionId: suggestion.suggestion_id,
-        receiptIds: receipts.map((receipt) => receipt.receiptId),
-      });
-      if (evaluation.outcome !== "eligible") continue;
-      await this.dependencies.gateway.adopt(context, {
-        commandId: `growth:${suggestion.suggestion_id}:adopt`,
-        suggestionId: suggestion.suggestion_id,
-        suggestionRevision: suggestion.revision,
-        evaluationRunId: evaluation.evaluationRunId,
-        expectedEvaluationInputHash: evaluation.inputHash,
-        expectedTargetChecksum: target.checksum,
-      });
+      return patch as Readonly<Record<string, unknown>>;
+    } catch {
+      throw new GrowthOrphanValidationError("Suggestion patch JSON이 유효하지 않습니다");
+    }
+  }
+
+  private validatedSuggestionCandidate(
+    suggestion: GrowthSuggestionRecord,
+    snapshot: ReflectionSnapshot,
+  ): SuggestionCandidate {
+    const candidate = {
+      targetKind: suggestion.target_kind,
+      operation: suggestion.operation,
+      patch: this.suggestionPatch(suggestion),
+      summary: suggestion.summary,
+      rationale: suggestion.rationale,
+      expectedEffect: suggestion.expected_effect,
+      riskSummary: suggestion.risk_summary,
+      sourceReferenceIds: suggestion.source_reference_ids,
+    } satisfies SuggestionCandidate;
+    try {
+      return validateSuggestionCandidate(candidate, snapshot);
+    } catch (error) {
+      if (error instanceof GrowthOrphanValidationError) throw error;
+      throw new GrowthOrphanValidationError(
+        error instanceof Error ? error.message : "Growth Suggestion domain 검증에 실패했습니다",
+      );
+    }
+  }
+
+  private async assertOrphanTarget(
+    snapshot: ReflectionSnapshot,
+    suggestion: GrowthSuggestionRecord,
+    target: { readonly versionId: string; readonly checksum: string },
+  ): Promise<void> {
+    if (suggestion.target_kind === "organization") {
+      const version = snapshot.material.activeVersions.find((candidate) => candidate.kind === "organization");
+      if (!version || version.versionId !== target.versionId)
+        throw new GrowthOrphanValidationError("Reflection 뒤 Growth target이 변경됐습니다");
+      const [rows] = await this.dependencies.database.query<[Array<{ readonly after_json: string }>]>(
+        "SELECT after_json FROM organization_version WHERE organization_id = $organization_id AND version_id = $version_id LIMIT 1;",
+        { organization_id: snapshot.material.organizationId, version_id: version.versionId },
+      );
+      const nodes = rows[0] ? (JSON.parse(rows[0].after_json) as unknown) : undefined;
+      if (!Array.isArray(nodes) || growthTargetChecksum({ versionId: version.versionId, nodes }) !== target.checksum) {
+        throw new GrowthOrphanValidationError("Reflection 뒤 Growth target이 변경됐습니다");
+      }
+      return;
+    }
+    if (
+      !snapshot.material.activeVersions.some(
+        (version) =>
+          version.kind === suggestion.target_kind &&
+          version.versionId === target.versionId &&
+          version.checksum === target.checksum,
+      )
+    ) {
+      throw new GrowthOrphanValidationError("Reflection 뒤 Growth target이 변경됐습니다");
     }
   }
 
@@ -430,46 +765,54 @@ export class GrowthWorker {
       { organization_id: context.organizationId },
     );
     for (const adoption of adoptions) {
-      const [baselines] = await this.dependencies.database.query<[EffectBaselineRow[]]>(
-        "SELECT baseline_id, status FROM growth_effect_baseline WHERE organization_id = $organization_id AND adoption_id = $adoption_id LIMIT 1;",
-        { organization_id: context.organizationId, adoption_id: adoption.adoption_id },
-      );
-      const baseline = baselines[0];
-      if (!baseline) continue;
-      if (baseline.status === "pending") {
-        const sample = await this.effectSample(context, adoption, adoption.before_version_id, "latest");
-        if (sample) {
-          await this.dependencies.gateway.captureEffectBaseline(context, {
-            commandId: `growth-effect-baseline:${adoption.adoption_id}:${sample.lineage.targetVersionId}:${growthChecksum(sample.lineage)}`,
-            adoptionId: adoption.adoption_id,
-            sample,
-          });
-        }
-        continue;
+      try {
+        await this.processEffect(context, adoption);
+      } catch {
+        // 한 effect 후보의 계보/저장소 오류가 다음 후보를 막지 않습니다.
       }
-      if (baseline.status !== "captured" || !adoption.after_version_id) continue;
-      const sample = await this.effectSample(context, adoption, adoption.after_version_id, "earliest");
-      if (!sample) continue;
-      const lineageChecksum = growthChecksum(sample.lineage);
-      const evaluation = await this.dependencies.gateway.observeEffect(context, {
-        commandId: `growth-effect-observe:${adoption.adoption_id}:${lineageChecksum}`,
-        adoptionId: adoption.adoption_id,
-        sample,
-      });
-      if (evaluation.result === "degraded") {
-        const [suggestions] = await this.dependencies.database.query<[Array<{ revision: number }>]>(
-          "SELECT revision FROM growth_suggestion WHERE organization_id = $organization_id AND suggestion_id = $suggestion_id LIMIT 1;",
-          { organization_id: context.organizationId, suggestion_id: adoption.suggestion_id },
-        );
-        const suggestion = suggestions[0];
-        if (!suggestion) continue;
-        await this.dependencies.gateway.revert(context, {
-          commandId: `growth-effect-revert:${adoption.adoption_id}:${evaluation.effect_evaluation_id}`,
+    }
+  }
+
+  private async processEffect(context: TenantContext, adoption: EffectAdoptionRow): Promise<void> {
+    const [baselines] = await this.dependencies.database.query<[EffectBaselineRow[]]>(
+      "SELECT baseline_id, status FROM growth_effect_baseline WHERE organization_id = $organization_id AND adoption_id = $adoption_id LIMIT 1;",
+      { organization_id: context.organizationId, adoption_id: adoption.adoption_id },
+    );
+    const baseline = baselines[0];
+    if (!baseline) return;
+    if (baseline.status === "pending") {
+      const sample = await this.effectSample(context, adoption, adoption.before_version_id, "latest");
+      if (sample) {
+        await this.dependencies.gateway.captureEffectBaseline(context, {
+          commandId: `growth-effect-baseline:${adoption.adoption_id}:${sample.lineage.targetVersionId}:${growthChecksum(sample.lineage)}`,
           adoptionId: adoption.adoption_id,
-          suggestionRevision: suggestion.revision,
-          reason: "degraded",
+          sample,
         });
       }
+      return;
+    }
+    if (baseline.status !== "captured" || !adoption.after_version_id) return;
+    const sample = await this.effectSample(context, adoption, adoption.after_version_id, "earliest");
+    if (!sample) return;
+    const lineageChecksum = growthChecksum(sample.lineage);
+    const evaluation = await this.dependencies.gateway.observeEffect(context, {
+      commandId: `growth-effect-observe:${adoption.adoption_id}:${lineageChecksum}`,
+      adoptionId: adoption.adoption_id,
+      sample,
+    });
+    if (evaluation.result === "degraded") {
+      const [suggestions] = await this.dependencies.database.query<[Array<{ revision: number }>]>(
+        "SELECT revision FROM growth_suggestion WHERE organization_id = $organization_id AND suggestion_id = $suggestion_id LIMIT 1;",
+        { organization_id: context.organizationId, suggestion_id: adoption.suggestion_id },
+      );
+      const suggestion = suggestions[0];
+      if (!suggestion) return;
+      await this.dependencies.gateway.revert(context, {
+        commandId: `growth-effect-revert:${adoption.adoption_id}:${evaluation.effect_evaluation_id}`,
+        adoptionId: adoption.adoption_id,
+        suggestionRevision: suggestion.revision,
+        reason: "degraded",
+      });
     }
   }
 
@@ -505,7 +848,8 @@ export class GrowthWorker {
       const verification = verificationRows[0];
       if (!verification) continue;
       contractProfile ??= { profileId: run.profile_id, profileVersion: run.profile_version };
-      if (contractProfile.profileId !== run.profile_id || contractProfile.profileVersion !== run.profile_version) continue;
+      if (contractProfile.profileId !== run.profile_id || contractProfile.profileVersion !== run.profile_version)
+        continue;
       const metric = await this.dependencies.metricObservations?.record(context, {
         commandId: `growth-effect-metric:${adoption.adoption_id}:${run.work_id}:${run.assurance_run_id}`,
         workId: run.work_id,
@@ -533,7 +877,11 @@ export class GrowthWorker {
     if (!strategy) return undefined;
     const contract = {
       strategyVersionId: strategy.strategy_version_id,
-      caseSetChecksum: growthChecksum({ ...contractProfile, targetKind: adoption.target_kind, metricSourceId: GROWTH_EFFECT_METRIC_SOURCE_ID }),
+      caseSetChecksum: growthChecksum({
+        ...contractProfile,
+        targetKind: adoption.target_kind,
+        metricSourceId: GROWTH_EFFECT_METRIC_SOURCE_ID,
+      }),
       metricSourceId: GROWTH_EFFECT_METRIC_SOURCE_ID,
       metricSourceVersion: "1.0.0",
       unit: "ratio",
@@ -548,7 +896,12 @@ export class GrowthWorker {
       degradationThreshold: 0.2,
       minimumObservations: 3,
     };
-    return { score: values.reduce((total, value) => total + value, 0) / values.length, observationCount: values.length, contract, lineage: { targetVersionId, samples } };
+    return {
+      score: values.reduce((total, value) => total + value, 0) / values.length,
+      observationCount: values.length,
+      contract,
+      lineage: { targetVersionId, samples },
+    };
   }
 
   private async workUsesTarget(
@@ -637,7 +990,8 @@ export class GrowthWorker {
     const record = recordRows[0] ? row(recordRows[0]) : undefined;
     const verification = verificationRows[0] ? row(verificationRows[0]) : undefined;
     const assurance = assuranceRows[0] ? row(assuranceRows[0]) : undefined;
-    if (!record || !verification || !assurance) throw new Error("Growth Reflection에 필요한 완료 기록이 없습니다");
+    if (!record || !verification || !assurance)
+      throw new GrowthOrphanValidationError("Growth Reflection에 필요한 완료 기록이 없습니다");
 
     const sources: ReflectionSourceReference[] = [
       source("work-record", record, trigger.work_record_id),
@@ -663,7 +1017,7 @@ export class GrowthWorker {
       { organization_id: context.organizationId, work_id: trigger.work_id },
     );
     const work = workRows[0];
-    if (!work) throw new Error("Growth Reflection source Work를 찾을 수 없습니다");
+    if (!work) throw new GrowthOrphanValidationError("Growth Reflection source Work를 찾을 수 없습니다");
     const [[promptRows], [policyRows], [organizationRows]] = await Promise.all([
       typeof work.prompt_version_id === "string"
         ? this.dependencies.database.query<[Row[]]>(
@@ -685,7 +1039,8 @@ export class GrowthWorker {
     const prompt = promptRows[0];
     const policy = policyRows[0];
     const organization = organizationRows[0];
-    if (!organization) throw new Error("Growth Reflection source Organization version을 찾을 수 없습니다");
+    if (!organization)
+      throw new GrowthOrphanValidationError("Growth Reflection source Organization version을 찾을 수 없습니다");
     const activeVersions = [
       ...(prompt === undefined
         ? []
@@ -736,7 +1091,7 @@ export function createGrowthReflectionAdapters(
   runner: StructuredAgentRunner,
 ) {
   return {
-    async generate(context: TenantContext, input: { reflectionRunId: string; snapshot: ReflectionSnapshot }) {
+    generate: async (context: TenantContext, input: { reflectionRunId: string; snapshot: ReflectionSnapshot }) => {
       const result = await runner.executeStructured(
         context,
         {
@@ -756,8 +1111,10 @@ export function createGrowthReflectionAdapters(
       );
       return { runtimeExecutionId: result.executionId, candidates: outputCandidates(result) };
     },
-    async verifySource(context: TenantContext, reference: ReflectionSourceReference) {
-      const table = SOURCE_TABLES[reference.kind as keyof typeof SOURCE_TABLES];
+    verifySource: async (context: TenantContext, reference: ReflectionSourceReference) => {
+      // ReflectionSourceReference["kind"]는 SOURCE_TABLES가 다루지 않는 값(message/evidence/symbol/memory)도
+      // 허용하므로, 실제로는 undefined가 나올 수 있는 부분 매핑입니다(as keyof는 이 사실을 숨기는 거짓 캐스팅).
+      const table = (SOURCE_TABLES as Partial<Record<ReflectionSourceReference["kind"], string>>)[reference.kind];
       if (!table) throw new Error(`Growth source kind을 검증할 수 없습니다: ${reference.kind}`);
       const field =
         reference.kind === "work-record"
@@ -781,7 +1138,7 @@ export function createGrowthReflectionAdapters(
         fresh: true,
       };
     },
-    async verifyRuntime(context: TenantContext, input: { workId: string; runtimeExecutionId: string }) {
+    verifyRuntime: async (context: TenantContext, input: { workId: string; runtimeExecutionId: string }) => {
       const [rows] = await database.query<
         [Array<{ organization_id: string; work_id: string; agent_handle: string; status: string }>]
       >(
