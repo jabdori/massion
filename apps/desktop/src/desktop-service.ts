@@ -3233,6 +3233,8 @@ export function createFixtureDesktopService(): DesktopService {
       }),
     loadGrowth: () =>
       fixturePromise(() => {
+        const cohortAdoption = growthSuggestionLineages["suggestion-cohort-guard"]?.adoption;
+        const targetDriftAdoption = growthSuggestionLineages["suggestion-target-drift-fixture"]?.adoption;
         const view = {
           configuration: { ...growthConfiguration },
           suggestions: [
@@ -3308,7 +3310,7 @@ export function createFixtureDesktopService(): DesktopService {
               expectedEffect: "분기 비교가 포함된 Work의 재작업이 줄어듭니다.",
               riskSummary: "완료 기준이 하나 늘어 단순 요청의 맥락 단계가 길어질 수 있습니다.",
               status: "awaiting-review",
-              adoption: growthSuggestionLineages["suggestion-cohort-guard"]?.adoption,
+              ...(cohortAdoption === undefined ? {} : { adoption: cohortAdoption }),
             },
             {
               suggestionId: "suggestion-quant-persist",
@@ -3380,7 +3382,7 @@ export function createFixtureDesktopService(): DesktopService {
                 strategyVersionId: "strategy-v4",
                 signals: [],
               },
-              adoption: growthSuggestionLineages["suggestion-target-drift-fixture"]?.adoption,
+              ...(targetDriftAdoption === undefined ? {} : { adoption: targetDriftAdoption }),
             },
             {
               suggestionId: "suggestion-proposed-fixture",
