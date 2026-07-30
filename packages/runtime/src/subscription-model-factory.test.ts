@@ -6,8 +6,10 @@ import type { LanguageModel } from "ai";
 
 import { IdentityService, OrganizationService, type TenantContext } from "@massion/identity";
 import { CredentialVault, ModelRouter, ProviderService } from "@massion/router";
-import { createDatabase, type MassionDatabase } from "@massion/storage";
+import { applyMigrations, createDatabase, type MassionDatabase } from "@massion/storage";
 import {
+  SUBSCRIPTION_EDGE_READY_MIGRATION,
+  SUBSCRIPTION_SERVER_CONNECTOR_MIGRATION,
   SubscriptionAccountService,
   type ConnectorSessionLease,
   SubscriptionQuotaService,
@@ -46,18 +48,23 @@ describe("구독 실행 Runtime–Broker 브리지", () => {
       accounts,
     });
     router = await ModelRouter.create(database, organizations, providers, { accounts, quota });
+    await applyMigrations(database, [SUBSCRIPTION_SERVER_CONNECTOR_MIGRATION, SUBSCRIPTION_EDGE_READY_MIGRATION]);
 
     await database.query(
       `CREATE subscription_connector CONTENT {
         connector_id: 'connector-a', organization_id: $organization_id, owner_user_id: $owner_user_id,
-        location: 'server', execution_kind: 'agent-runtime', protocol: 'massion.connector.v1', version: '1.0.0',
-        public_key: 'fixture-a', capabilities: ['agent-turn'], status: 'ready',
+        location: 'server', trust_origin: 'server-managed', provider_id: 'subscription-provider',
+        execution_kind: 'agent-runtime', protocol: 'massion.connector.v1', version: '1.0.0',
+        runtime_id: 'fixture-runtime-a', runtime_artifact_digest: $runtime_digest_a,
+        process_generation: 1, last_health_at: time::now(), capabilities: ['subscription-provider'], status: 'ready',
         created_at: time::now(), updated_at: time::now()
       };
       CREATE subscription_connector CONTENT {
         connector_id: 'connector-b', organization_id: $organization_id, owner_user_id: $owner_user_id,
-        location: 'server', execution_kind: 'agent-runtime', protocol: 'massion.connector.v1', version: '1.0.0',
-        public_key: 'fixture-b', capabilities: ['agent-turn'], status: 'ready',
+        location: 'server', trust_origin: 'server-managed', provider_id: 'subscription-provider',
+        execution_kind: 'agent-runtime', protocol: 'massion.connector.v1', version: '1.0.0',
+        runtime_id: 'fixture-runtime-b', runtime_artifact_digest: $runtime_digest_b,
+        process_generation: 1, last_health_at: time::now(), capabilities: ['subscription-provider'], status: 'ready',
         created_at: time::now(), updated_at: time::now()
       };
       CREATE subscription_account CONTENT {
@@ -77,6 +84,8 @@ describe("구독 실행 Runtime–Broker 브리지", () => {
         owner_user_id: context.userId,
         fingerprint_a: "a".repeat(64),
         fingerprint_b: "b".repeat(64),
+        runtime_digest_a: "c".repeat(64),
+        runtime_digest_b: "d".repeat(64),
       },
     );
 
