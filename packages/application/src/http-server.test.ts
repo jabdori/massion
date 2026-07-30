@@ -255,8 +255,10 @@ describe("ApplicationHttpServer", () => {
     const invalid = await request(`MassionBootstrap ${Buffer.alloc(32, 8).toString("base64url")}`);
     expect(missing.status).toBe(401);
     expect(invalid.status).toBe(401);
-    const { errorId: _missingErrorId, ...missingError } = (await missing.json()) as Record<string, unknown>;
-    const { errorId: _invalidErrorId, ...invalidError } = (await invalid.json()) as Record<string, unknown>;
+    const { errorId: missingErrorId, ...missingError } = (await missing.json()) as Record<string, unknown>;
+    const { errorId: invalidErrorId, ...invalidError } = (await invalid.json()) as Record<string, unknown>;
+    expect(missingErrorId).toEqual(expect.any(String));
+    expect(invalidErrorId).toEqual(expect.any(String));
     expect(invalidError).toEqual(missingError);
 
     const response = await request(`MassionBootstrap ${bootstrapCapability}`);

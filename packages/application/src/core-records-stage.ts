@@ -216,7 +216,6 @@ export class CoreRecordsStage implements CoreWorkStageExecutor {
           await this.cancelAndThrowIfCancelled(context, input, run.recordsRunId);
         }
       }
-      if (!run) throw new Error("Records run을 시작하지 못했습니다");
       if (run.status !== "finalized") {
         if (!continuation) throw new Error("Records continuation 정본이 없습니다");
         const { recovery, verification } = continuation;

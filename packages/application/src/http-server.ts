@@ -75,13 +75,13 @@ export class ApplicationBootstrapCapability implements ApplicationBootstrapAutho
     const candidateValid = decoded?.length === BOOTSTRAP_CAPABILITY_BYTES && decoded.toString("base64url") === encoded;
     const candidate = candidateValid ? decoded : Buffer.alloc(BOOTSTRAP_CAPABILITY_BYTES);
     const capability = this.#capability;
-    const dummy = capability === undefined ? Buffer.alloc(BOOTSTRAP_CAPABILITY_BYTES, 0xff) : undefined;
-    let matches = false;
+    const comparison = capability ?? Buffer.alloc(BOOTSTRAP_CAPABILITY_BYTES, 0xff);
+    let matches: boolean;
     try {
-      matches = timingSafeEqual(candidate, capability ?? dummy!);
+      matches = timingSafeEqual(candidate, comparison);
     } finally {
       candidate.fill(0);
-      dummy?.fill(0);
+      if (capability === undefined) comparison.fill(0);
     }
     if (this.#clock() >= this.#expiresAt) {
       await this.#dispose("expired");
@@ -121,11 +121,14 @@ export class ApplicationBootstrapCapability implements ApplicationBootstrapAutho
       },
       Math.min(remaining, 2_147_483_647),
     );
-    this.#expiryTimer.unref?.();
+    this.#expiryTimer.unref();
   }
 
   async #dispose(reason: ApplicationBootstrapDisposalReason): Promise<void> {
-    if (this.#cleanup) return await this.#cleanup;
+    if (this.#cleanup) {
+      await this.#cleanup;
+      return;
+    }
     if (this.#disposed) return;
     this.#disposed = true;
     this.#inFlight = false;

@@ -300,8 +300,9 @@ export class CoreSoftwareTaskAdapter implements CoreSoftwareTaskPort {
           lease = coordinated.lease;
         } catch (error) {
           const terminal = await this.dependencies.deliveries.findByStartCommand(context, startCommand);
-          const result = terminal && terminalDeliveryResult(terminal);
-          if (result && terminal) return await this.finishTerminal(context, input, config, terminal);
+          if (terminal && terminalDeliveryResult(terminal)) {
+            return await this.finishTerminal(context, input, config, terminal);
+          }
           if (isPathLeaseContention(error)) {
             return { outcome: "blocked", reason: "software-delivery-owned" };
           }
@@ -309,7 +310,6 @@ export class CoreSoftwareTaskAdapter implements CoreSoftwareTaskPort {
         }
         await this.throwIfCancelled(context, input, config);
       }
-      if (!delivery) throw new Error("Software Delivery가 시작되지 않았습니다");
       const deliveryId = delivery.deliveryId;
       const terminal = terminalDeliveryResult(delivery);
       if (terminal) return await this.finishTerminal(context, input, config, delivery);
@@ -391,7 +391,7 @@ export class CoreSoftwareTaskAdapter implements CoreSoftwareTaskPort {
                   : {}),
               }),
           );
-          delivery = recovered.delivery ?? delivery;
+          delivery = (recovered as { readonly delivery?: EngineeringDelivery }).delivery ?? delivery;
         } catch (error) {
           return {
             outcome: "blocked",
@@ -456,7 +456,7 @@ export class CoreSoftwareTaskAdapter implements CoreSoftwareTaskPort {
               })
             ).delivery;
             const cancelled = terminalDeliveryResult(delivery);
-            if (!cancelled) throw new Error("취소된 Delivery가 terminal 상태가 아닙니다");
+            if (!cancelled) throw new Error("취소된 Delivery가 terminal 상태가 아닙니다", { cause: error });
             return await this.finishTerminal(context, input, config, delivery);
           }
           if (delivery.status !== "preparing") {
@@ -473,7 +473,7 @@ export class CoreSoftwareTaskAdapter implements CoreSoftwareTaskPort {
             })
           ).delivery;
           const finalizedFailure = terminalDeliveryResult(delivery);
-          if (!finalizedFailure) throw new Error("실패한 Delivery가 terminal 상태가 아닙니다");
+          if (!finalizedFailure) throw new Error("실패한 Delivery가 terminal 상태가 아닙니다", { cause: error });
           return await this.finishTerminal(context, input, config, delivery);
         }
         await this.throwIfCancelled(context, input, config);
@@ -556,7 +556,9 @@ export class CoreSoftwareTaskAdapter implements CoreSoftwareTaskPort {
     void settled.catch(() => undefined);
     const active = { ownerCommandId, controller, settled, filesystemStarted: false };
     this.activeDeliveryExecutions.set(deliveryId, active);
-    const abort = () => controller.abort(parentSignal?.reason);
+    const abort = () => {
+      controller.abort(parentSignal?.reason);
+    };
     parentSignal?.addEventListener("abort", abort, { once: true });
     if (parentSignal?.aborted) abort();
     let unsafeFailure: Error | undefined;
@@ -824,7 +826,7 @@ export class CoreSoftwareTaskAdapter implements CoreSoftwareTaskPort {
     await Promise.allSettled(metricTasks);
     try {
       await this.dependencies.recovery.recover(context, {
-        commandId: `${delivery.startCommandId ?? input.runId}:terminal-cleanup`,
+        commandId: `${delivery.startCommandId}:terminal-cleanup`,
         deliveryId: delivery.deliveryId,
         repositoryRoot: config.repositoryRoot,
         repositoryId: config.repositoryId,

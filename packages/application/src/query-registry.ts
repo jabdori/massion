@@ -257,7 +257,7 @@ function knowledgeShortLabel(value: unknown, fallback: string): string {
   if (value === undefined) return fallback;
   if (typeof value !== "string" || value.includes("\0")) throw new Error("Knowledge Work label이 유효하지 않습니다");
   const firstLine = value.trim().split(/\r?\n/u, 1)[0]?.trim();
-  return firstLine ? [...firstLine].slice(0, 128).join("") : fallback;
+  return firstLine ? Array.from(firstLine).slice(0, 128).join("") : fallback;
 }
 
 function knowledgeRelativePath(value: unknown): string {
@@ -490,7 +490,7 @@ async function projectKnowledge(
       "symbol",
       symbolId,
       knowledgeShortLabel(symbol.qualifiedName, symbolId),
-      `${relativePath}:${startLine}`,
+      `${relativePath}:${String(startLine)}`,
     );
     addKnowledgeNode(nodes, node);
     addKnowledgeEdge(edges, {
@@ -589,7 +589,7 @@ async function projectKnowledge(
     .filter((work) => work.organizationId === context.organizationId && work.workspaceId === workspaceId)
     .sort((left, right) => left.workId.localeCompare(right.workId));
   if (workspaceWorks.length > MAX_KNOWLEDGE_WORKS)
-    throw new Error(`Knowledge Workspace는 최대 ${MAX_KNOWLEDGE_WORKS}개 Work만 투영할 수 있습니다`);
+    throw new Error(`Knowledge Workspace는 최대 ${String(MAX_KNOWLEDGE_WORKS)}개 Work만 투영할 수 있습니다`);
   const works =
     request.kind === "graph" && request.lens === "work" ? workspaceWorks.slice(0, request.limit) : workspaceWorks;
   const worksById = new Map<string, (typeof works)[number]>();
@@ -679,12 +679,7 @@ async function projectKnowledge(
     : [];
   const referenceUsers = new Map<string, Set<string>>();
   for (const [work, view] of knowledgeViews) {
-    if (
-      view.status !== "not-applicable" &&
-      view.status !== "ready" &&
-      view.status !== "no-match" &&
-      view.status !== "blocked"
-    )
+    if (!new Set<string>(["not-applicable", "ready", "no-match", "blocked"]).has(view.status))
       throw new Error(`Knowledge Work 상태가 유효하지 않습니다: ${work.workId}`);
     if (view.status === "blocked") throw new Error(`Knowledge Work 계보가 차단되었습니다: ${work.workId}`);
     if ((view.status === "ready") === (view.references.length === 0))
@@ -699,6 +694,8 @@ async function projectKnowledge(
     const usedTargets = new Set<string>();
     for (const reference of view.references) {
       const referenceId = knowledgeSourceId(reference.referenceId, "reference ID");
+      if (!new Set<string>(["symbol", "chunk"]).has(reference.kind))
+        throw new Error(`Knowledge reference 종류가 유효하지 않습니다: ${referenceId}`);
       const relativePath = knowledgeRelativePath(reference.relativePath);
       const startLine = knowledgeLine(reference.startLine, "reference start line");
       const endLine = knowledgeLine(reference.endLine, "reference end line");
@@ -717,7 +714,7 @@ async function projectKnowledge(
         )
           throw new Error(`Knowledge symbol reference 계보가 일치하지 않습니다: ${referenceId}`);
         target = nodes.get(`symbol:${referenceId}`);
-      } else if (reference.kind === "chunk") {
+      } else {
         const chunk = chunksById.get(referenceId);
         const chunkSymbol = chunk?.symbolKey === undefined ? undefined : symbolsByKey.get(chunk.symbolKey);
         if (
@@ -730,8 +727,6 @@ async function projectKnowledge(
         )
           throw new Error(`Knowledge chunk reference 계보가 일치하지 않습니다: ${referenceId}`);
         target = fileNodesById.get(chunk.sourceFileId);
-      } else {
-        throw new Error(`Knowledge reference 종류가 유효하지 않습니다: ${referenceId}`);
       }
       if (!target) throw new Error(`Knowledge reference node 계보가 끊겼습니다: ${referenceId}`);
       if (usedTargets.has(target.nodeId)) continue;

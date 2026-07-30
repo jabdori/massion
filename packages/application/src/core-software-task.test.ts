@@ -757,7 +757,7 @@ describe("CoreSoftwareTaskAdapter", () => {
 
   it("retryable cleanup 실패는 blocked로 가장하지 않고 metric을 남긴 채 소유권을 보존한다", async () => {
     const metricInputs: unknown[] = [];
-    let delivery = {
+    const delivery = {
       deliveryId: "delivery-retryable-cleanup-failure",
       version: 1,
       status: "preparing",
