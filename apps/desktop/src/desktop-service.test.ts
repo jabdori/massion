@@ -78,6 +78,16 @@ function transport(
     ],
     "work.artifacts": [],
     "work.verifications": [],
+    "work.records": [
+      {
+        recordId: "record-0001",
+        version: 1,
+        summary: "Records run records-run-0001 finalized 0 document(s)",
+        artifactIds: ["artifact-version-0001"],
+        verificationIds: ["verification-0001"],
+        finalizedAt: "2026-07-22T00:25:00.000Z",
+      },
+    ],
     "governance.approval.list": [
       {
         approvalId: "approval-0001",
@@ -1006,6 +1016,7 @@ describe("Application desktop service", () => {
         "work.executions",
         "work.artifacts",
         "work.verifications",
+        "work.records",
         "governance.approval.list",
         "work.directive.list",
       ]),
@@ -1015,6 +1026,16 @@ describe("Application desktop service", () => {
       revision: 7,
       run: { runId: run.runId },
       activeExecutionId: "execution-0001",
+      records: [
+        {
+          id: "record-0001",
+          version: 1,
+          summary: "업무 결과와 검증 기록을 확정했습니다.",
+          artifactVersionIds: ["artifact-version-0001"],
+          verificationIds: ["verification-0001"],
+          finalizedAt: "2026-07-22T00:25:00.000Z",
+        },
+      ],
     });
   });
 

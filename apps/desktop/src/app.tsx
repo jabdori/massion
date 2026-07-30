@@ -6825,7 +6825,7 @@ function InspectorRecords({
   return (
     <>
       {values.map((record) => {
-        const decisions = record.decisionIds
+        const decisions = (record.decisionIds ?? [])
           .map((id) => activities.find((activity) => activity.id === id))
           .filter((activity) => activity?.kind === "room" && activity.messageType === "decision");
         return (
@@ -6841,18 +6841,24 @@ function InspectorRecords({
               <span>
                 기록 <span className="ml-1 font-mono font-normal text-muted">v{record.version}</span>
               </span>
-              <span className="font-mono text-[11px] font-normal text-muted">개정 {record.recordedRevision}</span>
+              {record.recordedRevision === undefined ? null : (
+                <span className="font-mono text-[11px] font-normal text-muted">개정 {record.recordedRevision}</span>
+              )}
             </h2>
             <div className="px-4 py-3">
-              <p className="mb-2 break-all font-mono text-[11px] text-muted">{record.summary}</p>
+              <p className="mb-2 text-[12px] leading-5 text-secondary">{record.summary}</p>
               <RecordRow label="확정">
-                {record.finalizedBy} · {record.finalizedAt}
+                {record.finalizedBy === undefined
+                  ? record.finalizedAt
+                  : `${record.finalizedBy} · ${record.finalizedAt}`}
               </RecordRow>
               {/* 되돌릴 수 있는 지점. records_snapshot_hash가 가리키는 것이 이 값입니다. */}
-              <RecordRow label="스냅샷">{record.snapshotHash}</RecordRow>
-              <RecordRow label="사건">
-                {record.eventRange[0]} – {record.eventRange[1]}
-              </RecordRow>
+              {record.snapshotHash === undefined ? null : <RecordRow label="스냅샷">{record.snapshotHash}</RecordRow>}
+              {record.eventRange === undefined ? null : (
+                <RecordRow label="사건">
+                  {record.eventRange[0]} – {record.eventRange[1]}
+                </RecordRow>
+              )}
             </div>
 
             {decisions.length ? (
@@ -6877,7 +6883,7 @@ function InspectorRecords({
               </div>
             ) : null}
 
-            {record.documents.length ? (
+            {record.documents?.length ? (
               <div className="border-t border-border px-4 py-3">
                 <h3 className="text-[11px] text-muted">
                   문서 <span className="ml-1 font-mono">{record.documents.length}</span>

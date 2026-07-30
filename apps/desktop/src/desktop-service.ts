@@ -21,6 +21,7 @@ import {
   type KnowledgeReferenceViewV1,
   type KnowledgeGraphLensV1,
   type WorkKnowledgeViewV1,
+  type WorkRecordViewV1,
   type WorkSummaryV1,
   type WorkspaceViewV1,
 } from "@massion/application/client";
@@ -34,6 +35,7 @@ import {
   type DesktopSnapshot,
   type RoomBudgetView,
   type RoomView,
+  type RecordView,
   type RunView,
   type SpeakerView,
   type StepState,
@@ -1260,6 +1262,7 @@ export function createApplicationDesktopService(
         executions,
         artifacts,
         verifications,
+        records,
         approvals,
         directives,
       ] = await Promise.all([
@@ -1271,6 +1274,7 @@ export function createApplicationDesktopService(
         client.query("work.executions", { workId }),
         client.query("work.artifacts", { workId }),
         client.query("work.verifications", { workId }),
+        client.query("work.records", { workId }),
         client.query("governance.approval.list", { workId }),
         client.query("work.directive.list", { workId }),
       ]);
@@ -1284,6 +1288,7 @@ export function createApplicationDesktopService(
         executions,
         artifacts,
         verifications,
+        records,
         approvals,
         directives,
       });
@@ -4684,6 +4689,7 @@ interface WorkDetailSources {
   readonly executions: readonly ExecutionViewV1[];
   readonly artifacts: readonly ArtifactViewV1[];
   readonly verifications: readonly VerificationViewV1[];
+  readonly records: readonly WorkRecordViewV1[];
   readonly approvals: readonly ApprovalViewV1[];
   readonly directives: readonly DirectiveViewV1[];
 }
@@ -4705,7 +4711,6 @@ function projectWorkSummary(work: WorkSummaryV1): WorkView {
     agents: [],
     artifacts: [],
     verifications: [],
-    // work.records 조회는 Application에 있지만 client 계약이 아직 없습니다. 목록은 기록을 싣지 않습니다.
     records: [],
     activities: [],
   };
@@ -4745,8 +4750,7 @@ function projectWorkDetail(sources: WorkDetailSources): WorkView {
     agents,
     artifacts,
     verifications: sources.verifications.map(projectVerification),
-    // work.records 조회는 Application에 있지만 client 계약이 아직 없습니다. 연결 전까지 비어 있습니다.
-    records: [],
+    records: sources.records.map(projectRecord),
     activities: projectActivities(sources.activities, sources.approvals, sources.directives, artifacts),
   };
 }
@@ -4877,6 +4881,22 @@ function projectVerification(verification: VerificationViewV1): VerificationView
     ...(verification.evidenceArtifactVersionIds.length === 0
       ? {}
       : { evidence: verification.evidenceArtifactVersionIds.join(", ") }),
+  };
+}
+
+function projectRecord(record: WorkRecordViewV1): RecordView {
+  const internal = /^Records run .+ finalized (\d+) document\(s\)$/u.exec(record.summary);
+  const documentCount = internal?.[1];
+  return {
+    id: record.recordId,
+    version: record.version,
+    summary:
+      internal === null
+        ? record.summary
+        : `업무 결과와 검증 기록을 확정했습니다.${documentCount === undefined || documentCount === "0" ? "" : ` 문서 ${documentCount}건을 포함합니다.`}`,
+    finalizedAt: record.finalizedAt,
+    verificationIds: [...record.verificationIds],
+    artifactVersionIds: [...record.artifactIds],
   };
 }
 

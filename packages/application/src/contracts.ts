@@ -340,6 +340,15 @@ export interface VerificationViewV1 {
   readonly createdAt: string;
 }
 
+export interface WorkRecordViewV1 {
+  readonly recordId: string;
+  readonly version: number;
+  readonly summary: string;
+  readonly artifactIds: readonly string[];
+  readonly verificationIds: readonly string[];
+  readonly finalizedAt: string;
+}
+
 export interface DirectiveViewV1 {
   readonly directiveId: string;
   readonly workId: string;
@@ -521,6 +530,10 @@ export interface ApplicationQueryMapV1 {
   readonly "work.verifications": {
     readonly payload: { readonly workId: string };
     readonly data: readonly VerificationViewV1[];
+  };
+  readonly "work.records": {
+    readonly payload: { readonly workId: string };
+    readonly data: readonly WorkRecordViewV1[];
   };
   readonly "work.directive.list": {
     readonly payload: { readonly workId: string; readonly runId?: string };

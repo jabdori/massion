@@ -264,22 +264,22 @@ export interface RecordView {
   version: number;
   summary: string;
   /** `recorded_work_revision` */
-  recordedRevision: number;
+  recordedRevision?: number;
   /** `finalized_by` */
-  finalizedBy: string;
+  finalizedBy?: string;
   /** `finalized_at` */
   finalizedAt: string;
   /** `records_snapshot_hash`. 이 기록이 가리키는 되돌릴 수 있는 지점입니다. */
-  snapshotHash: string;
+  snapshotHash?: string;
   /** `event_start_sequence` – `event_end_sequence` */
-  eventRange: [number, number];
+  eventRange?: [number, number];
   /** `decision_message_ids`. activities의 decision 메시지 id를 가리킵니다. */
-  decisionIds: string[];
+  decisionIds?: string[];
   /** `verification_ids` */
   verificationIds: string[];
   /** `artifact_version_ids` */
   artifactVersionIds: string[];
-  documents: RecordDocumentView[];
+  documents?: RecordDocumentView[];
 }
 
 export interface WorkView {
