@@ -358,9 +358,11 @@ describe("versioned Growth evaluation", () => {
       suggestionId,
     });
     const ids = receipts.map((receipt) => receipt.receiptId);
-    const cases = [
+    const firstId = ids[0];
+    if (!firstId) throw new Error("receipt fixture가 없습니다");
+    const cases: ReadonlyArray<readonly [string, readonly string[]]> = [
       ["empty", []],
-      ["duplicate", [...ids, ids[0]]],
+      ["duplicate", [...ids, firstId]],
       ["missing", [...ids.slice(0, -1), "receipt-missing"]],
       ["foreign-tenant", [...ids.slice(0, -1), foreignTenant.receiptId]],
       ["foreign-suggestion", [...ids.slice(0, -1), foreignSuggestion.receiptId]],
@@ -411,9 +413,7 @@ describe("versioned Growth evaluation", () => {
     const receipts = await Promise.all(
       eligibleInputs(suggestionId, "create-receipt-hash").map(
         async (input) =>
-          await createRawReceipt(input, {
-            stored: input.signalId === "candidate" ? { score: 0.5 } : undefined,
-          }),
+          await createRawReceipt(input, input.signalId === "candidate" ? { stored: { score: 0.5 } } : {}),
       ),
     );
 
@@ -463,11 +463,13 @@ describe("versioned Growth evaluation", () => {
     );
     const active = await store.getActiveStrategy(context);
     const receiptIds = receipts.map((receipt) => receipt.receiptId);
+    const firstReceiptId = receiptIds[0];
+    if (!firstReceiptId) throw new Error("receipt fixture가 없습니다");
     await createRawEvaluation({
       evaluationRunId: `evaluation-receipt-set-${mode}`,
       suggestionId,
       strategyVersionId: active.strategyVersionId,
-      receiptIds: mode === "missing" ? [...receiptIds, "receipt-missing"] : [...receiptIds, receiptIds[0]],
+      receiptIds: mode === "missing" ? [...receiptIds, "receipt-missing"] : [...receiptIds, firstReceiptId],
       inputHash: "f".repeat(64),
       outcome: "eligible",
     });
@@ -541,9 +543,10 @@ describe("versioned Growth evaluation", () => {
     const receipts = await Promise.all(
       eligibleInputs(suggestionId, `tampered-${name}`).map(
         async (input) =>
-          await createRawReceipt(input, {
-            stored: input.signalId === signalId ? (mutation as Partial<GrowthSignalReceiptInput>) : undefined,
-          }),
+          await createRawReceipt(
+            input,
+            input.signalId === signalId ? { stored: mutation as Partial<GrowthSignalReceiptInput> } : {},
+          ),
       ),
     );
     const active = await store.getActiveStrategy(context);
@@ -570,8 +573,7 @@ describe("versioned Growth evaluation", () => {
     const suggestionId = `suggestion-evidence-${name}`;
     const receipts = await Promise.all(
       eligibleInputs(suggestionId, `evidence-${name}`).map(
-        async (input) =>
-          await createRawReceipt(input, { evidenceJson: input.signalId === "candidate" ? evidenceJson : undefined }),
+        async (input) => await createRawReceipt(input, input.signalId === "candidate" ? { evidenceJson } : {}),
       ),
     );
     const active = await store.getActiveStrategy(context);
@@ -657,7 +659,11 @@ describe("versioned Growth evaluation", () => {
   ] as const)("stored %s outcome을 receipt로 재계산한다", async (actualOutcome, forgedOutcome) => {
     const suggestionId = `suggestion-outcome-${actualOutcome}`;
     const inputs = eligibleInputs(suggestionId, `outcome-${actualOutcome}`);
-    if (actualOutcome === "blocked") inputs[2] = { ...inputs[2], outcome: "failed" };
+    if (actualOutcome === "blocked") {
+      const candidate = inputs[2];
+      if (!candidate) throw new Error("candidate fixture가 없습니다");
+      inputs[2] = { ...candidate, outcome: "failed" };
+    }
     if (actualOutcome === "ineligible") {
       inputs.push({
         ...required("security"),
@@ -757,9 +763,7 @@ describe("versioned Growth evaluation", () => {
     const receipts = await Promise.all(
       eligibleInputs(suggestionId, "replay-receipt-corrupt").map(
         async (input) =>
-          await createRawReceipt(input, {
-            stored: input.signalId === "candidate" ? { score: 0.5 } : undefined,
-          }),
+          await createRawReceipt(input, input.signalId === "candidate" ? { stored: { score: 0.5 } } : {}),
       ),
     );
     const active = await store.getActiveStrategy(context);
