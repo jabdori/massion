@@ -26,7 +26,7 @@ export const acceptanceCriterionSchema = z
 
 const automaticAcceptanceCriterionSchema = acceptanceCriterionSchema.extend({
   method: z.literal("evidence"),
-  evidenceKinds: z.tuple([z.literal("artifact-version")]),
+  evidenceKinds: z.array(z.literal("artifact-version")).length(1),
 });
 
 export const strategyRiskSchema = z

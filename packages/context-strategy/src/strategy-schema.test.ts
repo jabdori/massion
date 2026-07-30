@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { validateStrategyPlan, type StrategyPlan } from "./index.js";
+import { automaticStrategyPlanJsonSchema, validateStrategyPlan, type StrategyPlan } from "./index.js";
 
 export const VALID_STRATEGY_PLAN: StrategyPlan = {
   objective: "Massion 완제품을 구현한다",
@@ -59,6 +59,20 @@ function required<Value>(value: Value | undefined, label: string): Value {
 }
 
 describe("StrategyPlan schema", () => {
+  it("자동 계획의 모든 배열에 구조화 출력 item schema를 제공한다", () => {
+    const missing: string[] = [];
+    const visit = (value: unknown, path: string): void => {
+      if (!value || typeof value !== "object") return;
+      const record = value as Record<string, unknown>;
+      if (record.type === "array" && !("items" in record)) missing.push(path);
+      for (const [key, child] of Object.entries(record)) visit(child, `${path}.${key}`);
+    };
+
+    visit(automaticStrategyPlanJsonSchema, "schema");
+
+    expect(missing).toEqual([]);
+  });
+
   it("유효한 계획을 정규화한다", () => {
     expect(validateStrategyPlan(VALID_STRATEGY_PLAN)).toEqual(VALID_STRATEGY_PLAN);
   });
