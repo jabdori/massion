@@ -15,6 +15,7 @@ import { runtimePlatformForTarget, stageRuntimeInput } from "./prepare-runtime.m
 
 const manifest = {
   bridge: { destination: "desktop-bridge", entry: "dist/entry.js" },
+  cli: { destination: "cli", entry: "dist/desktop-login.js" },
   server: { destination: "server", entry: "dist/main.js" },
 };
 
@@ -29,11 +30,12 @@ async function portablePackage(directory, name, entry) {
   await writeFile(path.join(directory, "node_modules", "dependency", "package.json"), "{}");
 }
 
-test("staging은 bridge와 server의 의존성을 자신의 경계 안에 보존한다", async () => {
+test("staging은 bridge와 server와 CLI의 의존성을 자신의 경계 안에 보존한다", async () => {
   const stage = path.join(os.tmpdir(), `massion-stage-${process.pid}-${Date.now()}`);
   await mkdir(stage, { recursive: true });
   try {
     await portablePackage(path.join(stage, "desktop-bridge"), "@massion/desktop-bridge", "dist/entry.js");
+    await portablePackage(path.join(stage, "cli"), "@massion/cli", "dist/desktop-login.js");
     await portablePackage(path.join(stage, "server"), "@massion/server", "dist/main.js");
     await validateStage(stage, manifest);
 
@@ -57,6 +59,7 @@ test("Tauri resource copy 전에도 직접 runtime 의존성은 symlink가 아�
   try {
     const bridge = path.join(stage, "desktop-bridge");
     await portablePackage(bridge, "@massion/desktop-bridge", "dist/entry.js");
+    await portablePackage(path.join(stage, "cli"), "@massion/cli", "dist/desktop-login.js");
     await portablePackage(path.join(stage, "server"), "@massion/server", "dist/main.js");
     const dependency = path.join(bridge, "node_modules", "dependency");
     await rename(dependency, `${dependency}-physical`);
@@ -111,6 +114,7 @@ test("runtime staging의 pnpm 명령은 비대화 환경에서도 의존성 배�
 test("릴리스 앱 전용 빌드는 최신 renderer와 runtime stage를 같은 작업 디렉터리에서 준비한다", async () => {
   const desktop = path.resolve(import.meta.dirname, "..");
   const packageJson = JSON.parse(await readFile(path.join(desktop, "package.json"), "utf8"));
+  const development = JSON.parse(await readFile(path.join(desktop, "src-tauri/tauri.conf.json"), "utf8"));
   const release = JSON.parse(await readFile(path.join(desktop, "src-tauri/tauri.release.conf.json"), "utf8"));
   const manifest = JSON.parse(await readFile(path.join(desktop, "src-tauri/runtime-stage.manifest.json"), "utf8"));
 
@@ -119,8 +123,10 @@ test("릴리스 앱 전용 빌드는 최신 renderer와 runtime stage를 같은 
     "cargo tauri build --bundles app --config src-tauri/tauri.release.conf.json",
   );
   assert.equal(release.build.beforeBuildCommand, "node src-tauri/stage-runtime.mjs && pnpm build");
+  assert.match(development.build.beforeDevCommand, /--filter @massion\/cli build/u);
   assert.equal(release.build.frontendDist, "../dist");
-  assert.deepEqual(manifest.build, ["@massion/server", "@massion/desktop-bridge"]);
+  assert.deepEqual(manifest.build, ["@massion/server", "@massion/desktop-bridge", "@massion/cli"]);
+  assert.equal(manifest.cli.entry, "dist/desktop-login.js");
   assert.match(
     await readFile(path.join(desktop, "src-tauri/build.rs"), "utf8"),
     /rerun-if-changed=.runtime-stage\.stamp/,

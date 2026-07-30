@@ -39,6 +39,7 @@ async function validatePortablePackage(packageDirectory, entry) {
 export async function validateStage(stageDirectory, manifest) {
   await validatePortablePackage(path.join(stageDirectory, manifest.bridge.destination), manifest.bridge.entry);
   await validatePortablePackage(path.join(stageDirectory, manifest.server.destination), manifest.server.entry);
+  await validatePortablePackage(path.join(stageDirectory, manifest.cli.destination), manifest.cli.entry);
 }
 
 async function runtimeStageDigest(directory) {
@@ -154,11 +155,14 @@ export async function stageRuntime() {
   try {
     const bridge = path.join(temporary, manifest.bridge.destination);
     const server = path.join(temporary, manifest.server.destination);
+    const cli = path.join(temporary, manifest.cli.destination);
     await stageBundledExtensions(workspace, path.join(temporary, "extensions"));
     deploy(workspace, manifest.bridge.package, bridge);
     await removeEscapingDeploySelfReference(bridge, manifest.bridge.package);
     deploy(workspace, manifest.server.package, server);
     await removeEscapingDeploySelfReference(server, manifest.server.package);
+    deploy(workspace, manifest.cli.package, cli);
+    await removeEscapingDeploySelfReference(cli, manifest.cli.package);
     await validateStage(temporary, manifest);
     await cp(path.join(directory, "runtime-manifest.json"), path.join(temporary, "runtime-manifest.json"));
     await rm(output, { recursive: true, force: true });

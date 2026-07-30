@@ -10,6 +10,7 @@ fn main() {
             "bootstrap",
             "query",
             "command",
+            "codex_login",
             "stream_start",
             "stream_stop",
         ]),

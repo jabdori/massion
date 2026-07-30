@@ -4,17 +4,21 @@ use std::collections::HashMap;
 use std::ffi::OsString;
 use std::fmt;
 use std::io::{BufRead, BufReader, Read, Write};
+#[cfg(unix)]
+use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tauri::{Emitter, Manager};
 
 const MAX_REQUEST_BYTES: usize = 1024 * 1024;
 const MAX_INCOMING_BYTES: usize = 4 * 1024 * 1024;
 const MAX_PENDING_REQUESTS: usize = 128;
 const RESPONSE_TIMEOUT: Duration = Duration::from_secs(30);
+const CODEX_LOGIN_TIMEOUT: Duration = Duration::from_secs(10 * 60);
+const CODEX_LOGIN_POLL: Duration = Duration::from_millis(200);
 const BRIDGE_EVENT: &str = "massion://bridge-event";
 
 #[derive(Clone, Copy)]
@@ -210,9 +214,11 @@ fn bridge_closed() -> PublicError {
     PublicError::new("bridge_unavailable", "데스크톱 브릿지에 연결할 수 없습니다")
 }
 
+#[derive(Clone)]
 struct RuntimePaths {
     node: PathBuf,
     bridge_entry: PathBuf,
+    desktop_login_entry: PathBuf,
     server_entry: PathBuf,
     surrealdb: PathBuf,
     surreal_sha256: String,
@@ -228,6 +234,9 @@ impl RuntimePaths {
         Ok(Self {
             node: required_file(node)?,
             bridge_entry: required_file(&manifest_dir.join("../../desktop-bridge/dist/entry.js"))?,
+            desktop_login_entry: required_file(
+                &manifest_dir.join("../../cli/dist/desktop-login.js"),
+            )?,
             server_entry: required_file(&manifest_dir.join("../../server/dist/main.js"))?,
             surrealdb: required_file(surrealdb)?,
             surreal_sha256: pinned_surreal_sha256()?,
@@ -239,6 +248,7 @@ impl RuntimePaths {
         Ok(Self {
             node: required_file(&executable_dir.join("node"))?,
             bridge_entry: required_file(&resources.join("desktop-bridge/dist/entry.js"))?,
+            desktop_login_entry: required_file(&resources.join("cli/dist/desktop-login.js"))?,
             server_entry: required_file(&resources.join("server/dist/main.js"))?,
             surrealdb: required_file(&executable_dir.join("surrealdb"))?,
             surreal_sha256: pinned_surreal_sha256()?,
@@ -315,6 +325,191 @@ fn pinned_surreal_sha256() -> Result<String, PublicError> {
         .filter(|value| value.len() == 64 && value.bytes().all(|byte| byte.is_ascii_hexdigit()))
         .ok_or_else(bridge_closed)?;
     Ok(digest.to_owned())
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CodexLoginInput {
+    alias: String,
+    new_account: bool,
+}
+
+struct ValidatedCodexLogin {
+    alias: String,
+    new_account: bool,
+}
+
+fn validate_codex_login_input(input: CodexLoginInput) -> Result<ValidatedCodexLogin, PublicError> {
+    let alias = input.alias.trim().to_owned();
+    if alias.is_empty() || alias.chars().count() > 128 || alias.contains(['\0', '\r', '\n']) {
+        return Err(PublicError::new(
+            "invalid_input",
+            "Codex 계정 이름이 유효하지 않습니다",
+        ));
+    }
+    Ok(ValidatedCodexLogin {
+        alias,
+        new_account: input.new_account,
+    })
+}
+
+fn codex_login_arguments(entry: &Path, input: &ValidatedCodexLogin) -> Vec<OsString> {
+    vec![
+        entry.as_os_str().to_owned(),
+        OsString::from(&input.alias),
+        OsString::from(if input.new_account { "new" } else { "reuse" }),
+    ]
+}
+
+struct ActiveCodexLogin {
+    id: u64,
+    child: Child,
+}
+
+#[derive(Default)]
+struct CodexLoginProcess {
+    active: Mutex<Option<ActiveCodexLogin>>,
+    next_id: AtomicU64,
+}
+
+impl CodexLoginProcess {
+    fn run(&self, paths: &RuntimePaths, input: CodexLoginInput) -> Result<Value, PublicError> {
+        let input = validate_codex_login_input(input)?;
+        let mut active = self.active.lock().map_err(|_| {
+            PublicError::new(
+                "codex_login_unavailable",
+                "Codex 로그인을 시작하지 못했습니다",
+            )
+        })?;
+        if active.is_some() {
+            return Err(PublicError::new(
+                "codex_login_busy",
+                "Codex 로그인이 이미 진행 중입니다",
+            ));
+        }
+        let mut command = Command::new(&paths.node);
+        command
+            .args(codex_login_arguments(&paths.desktop_login_entry, &input))
+            .env_remove("MASSION_SURREALDB_BINARY")
+            .envs(paths.child_environment())
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null());
+        #[cfg(unix)]
+        command.process_group(0);
+        let child = command.spawn().map_err(|_| {
+            PublicError::new(
+                "codex_login_unavailable",
+                "Codex 로그인을 시작하지 못했습니다",
+            )
+        })?;
+        let id = self.next_id.fetch_add(1, Ordering::Relaxed) + 1;
+        *active = Some(ActiveCodexLogin { id, child });
+        drop(active);
+
+        let deadline = Instant::now() + CODEX_LOGIN_TIMEOUT;
+        loop {
+            let status = {
+                let mut active = self.active.lock().map_err(|_| {
+                    PublicError::new(
+                        "codex_login_unavailable",
+                        "Codex 로그인 상태를 확인하지 못했습니다",
+                    )
+                })?;
+                let Some(login) = active.as_mut() else {
+                    return Err(PublicError::new(
+                        "codex_login_cancelled",
+                        "Codex 로그인이 중단되었습니다",
+                    ));
+                };
+                if login.id != id {
+                    return Err(PublicError::new(
+                        "codex_login_cancelled",
+                        "Codex 로그인이 중단되었습니다",
+                    ));
+                }
+                match login.child.try_wait() {
+                    Ok(Some(status)) => {
+                        *active = None;
+                        Some(status)
+                    }
+                    Ok(None) => None,
+                    Err(_) => {
+                        Self::stop_locked(&mut active, id);
+                        return Err(PublicError::new(
+                            "codex_login_unavailable",
+                            "Codex 로그인 상태를 확인하지 못했습니다",
+                        ));
+                    }
+                }
+            };
+            if let Some(status) = status {
+                return status
+                    .success()
+                    .then(|| json!({ "status": "ready" }))
+                    .ok_or_else(|| {
+                        PublicError::new(
+                            "codex_login_failed",
+                            "Codex 계정 연결을 완료하지 못했습니다",
+                        )
+                    });
+            }
+            if Instant::now() >= deadline {
+                if let Ok(mut active) = self.active.lock() {
+                    Self::stop_locked(&mut active, id);
+                }
+                return Err(PublicError::new(
+                    "codex_login_timeout",
+                    "Codex 로그인이 시간 안에 완료되지 않았습니다",
+                ));
+            }
+            std::thread::sleep(CODEX_LOGIN_POLL);
+        }
+    }
+
+    fn stop_locked(active: &mut Option<ActiveCodexLogin>, id: u64) {
+        if active.as_ref().is_none_or(|login| login.id != id) {
+            return;
+        }
+        if let Some(mut login) = active.take() {
+            Self::terminate(&mut login.child);
+        }
+    }
+
+    #[cfg(unix)]
+    fn terminate(child: &mut Child) {
+        let group = format!("-{}", child.id());
+        let signal_group = |signal: &str| {
+            Command::new("/bin/kill")
+                .args([signal, &group])
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .status()
+                .is_ok_and(|status| status.success())
+        };
+        let _ = signal_group("-TERM");
+        std::thread::sleep(Duration::from_millis(250));
+        if !signal_group("-KILL") {
+            let _ = child.kill();
+        }
+        let _ = child.wait();
+    }
+
+    #[cfg(not(unix))]
+    fn terminate(child: &mut Child) {
+        let _ = child.kill();
+        let _ = child.wait();
+    }
+
+    fn shutdown(&self) {
+        if let Ok(mut active) = self.active.lock() {
+            if let Some(login) = active.as_ref() {
+                let id = login.id;
+                Self::stop_locked(&mut active, id);
+            }
+        }
+    }
 }
 
 struct Bridge {
@@ -502,6 +697,24 @@ bridge_command!(query, BridgeMethod::Query);
 bridge_command!(command, BridgeMethod::Command);
 
 #[tauri::command]
+async fn codex_login(
+    login: tauri::State<'_, Arc<CodexLoginProcess>>,
+    paths: tauri::State<'_, Arc<RuntimePaths>>,
+    input: CodexLoginInput,
+) -> Result<Value, PublicError> {
+    let login = Arc::clone(login.inner());
+    let paths = Arc::clone(paths.inner());
+    tauri::async_runtime::spawn_blocking(move || login.run(&paths, input))
+        .await
+        .map_err(|_| {
+            PublicError::new(
+                "codex_login_unavailable",
+                "Codex 로그인을 완료하지 못했습니다",
+            )
+        })?
+}
+
+#[tauri::command]
 async fn stream_start(
     state: tauri::State<'_, Arc<Bridge>>,
     input: StreamInput,
@@ -557,15 +770,18 @@ pub fn run() {
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
-            let bridge =
-                Bridge::spawn(RuntimePaths::discover(&app.handle())?, app.handle().clone())?;
+            let paths = RuntimePaths::discover(app.handle())?;
+            let bridge = Bridge::spawn(paths.clone(), app.handle().clone())?;
+            app.manage(Arc::new(paths));
             app.manage(Arc::new(bridge));
+            app.manage(Arc::new(CodexLoginProcess::default()));
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             bootstrap,
             query,
             command,
+            codex_login,
             stream_start,
             stream_stop
         ])
@@ -583,6 +799,9 @@ pub fn run() {
             _ => BridgeShutdownEvent::Other,
         };
         if should_shutdown_bridge(shutdown_event) {
+            if let Some(login) = app_handle.try_state::<Arc<CodexLoginProcess>>() {
+                login.shutdown();
+            }
             if let Some(bridge) = app_handle.try_state::<Arc<Bridge>>() {
                 bridge.shutdown();
             }
@@ -740,6 +959,7 @@ mod tests {
                 "allow-bootstrap",
                 "allow-query",
                 "allow-command",
+                "allow-codex-login",
                 "allow-stream-start",
                 "allow-stream-stop"
             ])
@@ -818,10 +1038,17 @@ mod tests {
         write_file(&node);
         write_file(&surreal);
         write_file(&root.join("apps/desktop-bridge/dist/entry.js"));
+        write_file(&root.join("apps/cli/dist/desktop-login.js"));
         write_file(&root.join("apps/server/dist/main.js"));
 
         let paths = RuntimePaths::development(&manifest_dir, &node, &surreal).unwrap();
         assert!(paths.bridge_entry.is_absolute());
+        assert_eq!(
+            paths.desktop_login_entry,
+            root.join("apps/cli/dist/desktop-login.js")
+                .canonicalize()
+                .unwrap()
+        );
         assert_eq!(
             paths.bridge_entry,
             root.join("apps/desktop-bridge/dist/entry.js")
@@ -889,6 +1116,7 @@ mod tests {
         write_file(&executable_dir.join("node"));
         write_file(&executable_dir.join("surrealdb"));
         write_file(&resources.join("desktop-bridge/dist/entry.js"));
+        write_file(&resources.join("cli/dist/desktop-login.js"));
         write_file(&resources.join("server/dist/main.js"));
 
         let paths = RuntimePaths::bundled(&executable_dir, &resources).unwrap();
@@ -900,6 +1128,13 @@ mod tests {
             paths.bridge_entry,
             resources
                 .join("desktop-bridge/dist/entry.js")
+                .canonicalize()
+                .unwrap()
+        );
+        assert_eq!(
+            paths.desktop_login_entry,
+            resources
+                .join("cli/dist/desktop-login.js")
                 .canonicalize()
                 .unwrap()
         );
@@ -926,12 +1161,110 @@ mod tests {
             .expect("runtime stage manifest JSON");
         assert_eq!(
             staging["build"],
-            json!(["@massion/server", "@massion/desktop-bridge"])
+            json!(["@massion/server", "@massion/desktop-bridge", "@massion/cli"])
         );
         assert_eq!(staging["bridge"]["package"], "@massion/desktop-bridge");
         assert_eq!(staging["bridge"]["entry"], "dist/entry.js");
         assert_eq!(staging["server"]["package"], "@massion/server");
         assert_eq!(staging["server"]["entry"], "dist/main.js");
+        assert_eq!(staging["cli"]["package"], "@massion/cli");
+        assert_eq!(staging["cli"]["entry"], "dist/desktop-login.js");
         assert_eq!(staging["deployment"], "pnpm-deploy-prod-isolated");
+    }
+
+    #[test]
+    fn codex_login_accepts_only_a_bounded_single_line_alias_and_fixed_intent() {
+        let input = validate_codex_login_input(CodexLoginInput {
+            alias: "  OpenAI Codex  ".to_owned(),
+            new_account: true,
+        })
+        .expect("유효한 Codex login 입력");
+        assert_eq!(input.alias, "OpenAI Codex");
+        assert_eq!(
+            codex_login_arguments(Path::new("/runtime/desktop-login.js"), &input),
+            vec![
+                OsString::from("/runtime/desktop-login.js"),
+                OsString::from("OpenAI Codex"),
+                OsString::from("new")
+            ]
+        );
+
+        for alias in ["", "bad\nalias", "bad\ralias", &"x".repeat(129)] {
+            assert!(validate_codex_login_input(CodexLoginInput {
+                alias: alias.to_owned(),
+                new_account: false,
+            })
+            .is_err());
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn codex_login_shutdown_terminates_the_wrapper_and_its_descendants() {
+        let root = std::env::temp_dir().join(format!(
+            "massion-codex-login-tree-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir_all(&root).unwrap();
+        let script = root.join("login.sh");
+        let descendant_pid = root.join("descendant.pid");
+        fs::write(
+            &script,
+            "#!/bin/sh\nsleep 30 &\nprintf '%s' \"$!\" > \"$1\"\nwait\n",
+        )
+        .unwrap();
+        let paths = RuntimePaths {
+            node: PathBuf::from("/bin/sh"),
+            bridge_entry: PathBuf::from("/unused/bridge.js"),
+            desktop_login_entry: script,
+            server_entry: PathBuf::from("/unused/server.js"),
+            surrealdb: PathBuf::from("/unused/surrealdb"),
+            surreal_sha256: "0".repeat(64),
+            bundled_extensions: None,
+        };
+        let login = Arc::new(CodexLoginProcess::default());
+        let running = Arc::clone(&login);
+        let alias = descendant_pid.to_string_lossy().into_owned();
+        assert!(alias.chars().count() <= 128);
+        let runner = std::thread::spawn(move || {
+            running.run(
+                &paths,
+                CodexLoginInput {
+                    alias,
+                    new_account: false,
+                },
+            )
+        });
+
+        for _ in 0..100 {
+            if descendant_pid.exists() {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        let pid = fs::read_to_string(&descendant_pid).expect("손자 process pid");
+        login.shutdown();
+        assert_eq!(
+            runner.join().unwrap().unwrap_err().code,
+            "codex_login_cancelled"
+        );
+        for _ in 0..100 {
+            if !Command::new("/bin/kill")
+                .args(["-0", pid.trim()])
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .status()
+                .is_ok_and(|status| status.success())
+            {
+                fs::remove_dir_all(root).unwrap();
+                return;
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        panic!("Codex login 손자 process가 종료되지 않았습니다");
     }
 }

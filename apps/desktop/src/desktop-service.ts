@@ -993,6 +993,12 @@ export interface ZaiCodingPlanConnectionInput {
   readonly secret: string;
 }
 
+export interface SubscriptionLoginInput {
+  readonly providerId: "openai-codex";
+  readonly alias: string;
+  readonly newAccount: boolean;
+}
+
 export interface CapabilitiesView {
   readonly extensions: readonly ExtensionView[];
   readonly inventory: unknown;
@@ -1155,6 +1161,7 @@ export interface DesktopService {
   activateEmergency(reason: string): Promise<EmergencyView>;
   releaseEmergency(approvalId: string | undefined, reason: string): Promise<EmergencyView>;
   loadSettings(): Promise<SettingsView>;
+  loginSubscription(input: SubscriptionLoginInput): Promise<void>;
   connectZaiCodingPlan(input: ZaiCodingPlanConnectionInput): Promise<void>;
   registerProvider(input: Record<string, unknown>): Promise<void>;
   registerEndpoint(input: Record<string, unknown>): Promise<void>;
@@ -1238,14 +1245,15 @@ export function createApplicationDesktopService(
       throw new Error("Application command 응답 계보가 일치하지 않습니다");
     return response;
   };
+  const bootstrap = async (): Promise<DesktopBootstrapState> => {
+    const response = object(await native.bootstrap());
+    const status = object(response?.connection)?.status;
+    if (status === "connected") return "ready";
+    throw new Error("Desktop bootstrap 연결 상태가 유효하지 않습니다");
+  };
 
   return {
-    async bootstrap() {
-      const response = object(await native.bootstrap());
-      const status = object(response?.connection)?.status;
-      if (status === "connected") return "ready";
-      throw new Error("Desktop bootstrap 연결 상태가 유효하지 않습니다");
-    },
+    bootstrap,
 
     async loadIndex(input) {
       const page = await client.query("work.index", {
@@ -1413,6 +1421,12 @@ export function createApplicationDesktopService(
         quota: safeView(quota),
         policy: safeView(policy),
       };
+    },
+
+    async loginSubscription(input) {
+      const result = object(await native.loginCodex({ alias: input.alias, newAccount: input.newAccount }));
+      if (result?.status !== "ready") throw new Error("Codex 로그인 결과가 유효하지 않습니다");
+      await bootstrap();
     },
 
     async connectZaiCodingPlan(input) {
@@ -2864,6 +2878,25 @@ export function createFixtureDesktopService(): DesktopService {
         ),
       ]),
     loadSettings: () => fixturePromise(() => structuredClone(settingsState)),
+    loginSubscription: (input) =>
+      fixturePromise(() => {
+        const accounts = settingsState.accounts as Array<Record<string, unknown>>;
+        const existing = accounts.find((row) => row.providerId === input.providerId);
+        if (existing && !input.newAccount) {
+          existing.alias = input.alias;
+          existing.status = "active";
+          return;
+        }
+        accounts.push({
+          accountId: `account-codex-fixture-${String(accounts.length + 1)}`,
+          providerId: input.providerId,
+          alias: input.alias,
+          scope: "organization",
+          status: "active",
+          billingKind: "consumer-subscription",
+          version: 1,
+        });
+      }),
     connectZaiCodingPlan: (input) =>
       fixturePromise(() => {
         if (!input.secret.trim()) throw new Error("구독 Credential secret은 비어 있을 수 없습니다");

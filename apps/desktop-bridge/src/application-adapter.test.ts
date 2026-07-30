@@ -175,6 +175,25 @@ describe("ApplicationBridgeAdapter 연결", () => {
 
     expect(fixture.dependencies.openLocalSession).toHaveBeenCalledOnce();
   });
+
+  it("캐시된 local access가 만료되면 file token을 다시 읽어 client를 교체한다", async () => {
+    const stale = client({
+      status: vi
+        .fn()
+        .mockResolvedValueOnce({ status: "ready" })
+        .mockRejectedValueOnce(new ApplicationRemoteError(401, { category: "authentication" })),
+    });
+    const fresh = client();
+    const createClient = vi.fn().mockReturnValueOnce(stale).mockReturnValueOnce(fresh);
+    const openLocalSession = vi.fn().mockResolvedValueOnce("mat_expired").mockResolvedValueOnce("mat_refreshed");
+    const adapter = createApplicationAdapter(dependencies({ createClient, openLocalSession }).dependencies);
+
+    await adapter.connect({});
+    await adapter.connect({});
+
+    expect(openLocalSession).toHaveBeenCalledTimes(2);
+    expect(createClient.mock.calls.map(([, token]) => token)).toEqual(["mat_expired", "mat_refreshed"]);
+  });
 });
 
 describe("ApplicationBridgeAdapter operation", () => {
@@ -214,6 +233,37 @@ describe("ApplicationBridgeAdapter operation", () => {
 });
 
 describe("ApplicationBridgeAdapter streams", () => {
+  it("만료된 event stream access를 file token으로 갱신하고 현재 client에서 이어 받는다", async () => {
+    const controller = new AbortController();
+    const stale = client({
+      status: vi
+        .fn()
+        .mockResolvedValueOnce({ status: "ready" })
+        .mockRejectedValueOnce(new ApplicationRemoteError(401, { category: "authentication" })),
+      // eslint-disable-next-line require-yield -- 인증 실패 재연결 경계를 검증합니다
+      streamEvents: async function* () {
+        throw new ApplicationRemoteError(401, { category: "authentication" });
+      },
+    });
+    const fresh = client({
+      streamEvents: async function* (after = 0) {
+        yield event(after + 1);
+      },
+    });
+    const createClient = vi.fn().mockReturnValueOnce(stale).mockReturnValueOnce(fresh);
+    const openLocalSession = vi.fn().mockResolvedValueOnce("mat_expired").mockResolvedValueOnce("mat_refreshed");
+    const { adapter } = await connected({ createClient, openLocalSession, wait: async () => undefined });
+    const values: unknown[] = [];
+
+    for await (const value of adapter.events({}, controller.signal)) {
+      values.push(value);
+      controller.abort();
+    }
+
+    expect(values).toEqual([event(1)]);
+    expect(createClient.mock.calls.map(([, token]) => token)).toEqual(["mat_expired", "mat_refreshed"]);
+  });
+
   it("새 sequence가 진행되면 reconnect failure를 reset한다", async () => {
     const cursors: number[] = [];
     const controller = new AbortController();

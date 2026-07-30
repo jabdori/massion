@@ -10,6 +10,7 @@
     "allow-bootstrap",
     "allow-query",
     "allow-command",
+    "allow-codex-login",
     "allow-stream-start",
     "allow-stream-stop"
   ]

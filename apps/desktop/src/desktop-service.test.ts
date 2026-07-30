@@ -35,9 +35,11 @@ async function flushFixtureEvents(): Promise<void> {
   await Promise.resolve();
 }
 
-function transport(
-  overrides: Record<string, unknown> = {},
-): NativeTransport & { query: ReturnType<typeof vi.fn>; command: ReturnType<typeof vi.fn> } {
+function transport(overrides: Record<string, unknown> = {}): NativeTransport & {
+  query: ReturnType<typeof vi.fn>;
+  command: ReturnType<typeof vi.fn>;
+  loginCodex: ReturnType<typeof vi.fn>;
+} {
   const data: Record<string, unknown> = {
     "work.index": { items: [detail] },
     "work.detail": detail,
@@ -163,10 +165,12 @@ function transport(
         : {}),
     };
   });
+  const loginCodex = vi.fn(async () => ({ status: "ready" }));
   return {
     bootstrap: async () => ({ connection: { status: "connected" } }),
     query,
     command,
+    loginCodex,
     startStream: async () => async () => undefined,
   };
 }
@@ -1441,6 +1445,17 @@ describe("Application desktop service", () => {
     expect(native.command).toHaveBeenCalledWith(
       expect.objectContaining({ operation: "router.route.configure", payload: { name: "default", routeKind: "chat" } }),
     );
+  });
+
+  it("Codex 로그인 뒤 native 연결을 다시 열어 갱신된 local access를 사용한다", async () => {
+    const native = transport();
+    const bootstrap = vi.spyOn(native, "bootstrap");
+    const service = createApplicationDesktopService(native);
+
+    await service.loginSubscription({ providerId: "openai-codex", alias: "OpenAI Codex", newAccount: true });
+
+    expect(native.loginCodex).toHaveBeenCalledWith({ alias: "OpenAI Codex", newAccount: true });
+    expect(bootstrap).toHaveBeenCalledOnce();
   });
 
   it("권한 조회에 실제 자가개선 설정과 동시성 version을 함께 투영한다", async () => {

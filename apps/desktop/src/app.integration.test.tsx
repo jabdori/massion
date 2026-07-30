@@ -411,6 +411,58 @@ describe("AgentOS native data flow", () => {
     expect(screen.queryByText("등록되지 않았습니다")).not.toBeInTheDocument();
   });
 
+  it.each([
+    ["첫 로그인", [], "Codex 로그인", false, "OpenAI Codex"],
+    ["기존 계정 재연결", [{ status: "offline" }], "다시 연결", false, "Codex"],
+    ["비활성 계정 옆 새 계정", [{ status: "offline" }], "새 계정 추가", true, "OpenAI Codex"],
+    ["활성 계정 옆 추가", [{ status: "active" }], "계정 추가", true, "OpenAI Codex"],
+  ] as const)(
+    "구독 커넥터의 %s 동작을 실제 로그인 워크플로에 연결한다",
+    async (_case, rows, label, newAccount, alias) => {
+      const user = userEvent.setup();
+      const loginSubscription = vi.fn(async () => undefined);
+      const loadSettings = vi.fn(async () => ({
+        catalog: {
+          providers: [
+            {
+              providerId: "openai-codex",
+              displayName: "OpenAI Codex",
+              adapterKind: "subscription-connector",
+              enabled: true,
+            },
+          ],
+          endpoints: [],
+          models: [],
+          credentials: [],
+        },
+        credentials: [],
+        routes: [],
+        providers: [],
+        accounts: rows.map((account) => ({
+          accountId: "account-codex",
+          providerId: "openai-codex",
+          alias: "Codex",
+          status: account.status,
+          billingKind: "consumer-subscription",
+        })),
+        quota: [],
+        policy: [],
+      }));
+      render(<App service={service({ loadSettings, loginSubscription })} />);
+
+      await user.click(screen.getByRole("button", { name: "프로바이더" }));
+      await user.click(await screen.findByRole("button", { name: label }));
+
+      expect(loginSubscription).toHaveBeenCalledWith({
+        providerId: "openai-codex",
+        alias,
+        newAccount,
+      });
+      expect(loadSettings).toHaveBeenCalledTimes(2);
+      expect(await screen.findByText("Codex 계정 연결을 완료했습니다.")).toBeInTheDocument();
+    },
+  );
+
   it("확장 화면은 조직에 늘어난 Capability를 버전·출처보다 먼저 보인다", async () => {
     const user = userEvent.setup();
     const loadExtensions = vi.fn(async () => [

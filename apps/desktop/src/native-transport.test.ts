@@ -10,11 +10,13 @@ describe("Tauri native transport", () => {
     await transport.bootstrap({ profile: "desktop" });
     await transport.query("work.index", { status: "running" });
     await transport.command({ schemaVersion: "massion.application.v1", operation: "run.cancel" });
+    await transport.loginCodex({ alias: "OpenAI Codex", newAccount: true });
 
     expect(invoke.mock.calls).toEqual([
       ["bootstrap", { input: { profile: "desktop" } }],
       ["query", { input: { operation: "work.index", payload: { status: "running" } } }],
       ["command", { input: { schemaVersion: "massion.application.v1", operation: "run.cancel" } }],
+      ["codex_login", { input: { alias: "OpenAI Codex", newAccount: true } }],
     ]);
   });
 

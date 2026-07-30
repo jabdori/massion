@@ -3,10 +3,16 @@ import { listen } from "@tauri-apps/api/event";
 
 export type NativeStream = "events" | "executions";
 
+export interface CodexLoginInput {
+  readonly alias: string;
+  readonly newAccount: boolean;
+}
+
 export interface NativeTransport {
   bootstrap(input?: Readonly<Record<string, unknown>>): Promise<unknown>;
   query(operation: string, payload: unknown): Promise<unknown>;
   command(input: unknown): Promise<unknown>;
+  loginCodex(input: CodexLoginInput): Promise<unknown>;
   startStream(
     stream: NativeStream,
     params: Readonly<Record<string, unknown>>,
@@ -41,6 +47,7 @@ export function createTauriNativeTransport(bindings: TauriBindings = defaultBind
     bootstrap: async (input = {}) => await call("bootstrap", { input }),
     query: async (operation, payload) => await call("query", { input: { operation, payload } }),
     command: async (input) => await call("command", { input }),
+    loginCodex: async (input) => await call("codex_login", { input }),
     async startStream(stream, params, onPayload) {
       const unlisten = await bindings.listen("massion://bridge-event", (event) => {
         const envelope = record(event.payload);

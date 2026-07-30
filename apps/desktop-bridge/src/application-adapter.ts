@@ -125,7 +125,15 @@ class ApplicationBridgeAdapter implements BridgeAdapter {
   public async connect(params: Readonly<Record<string, unknown>>): Promise<unknown> {
     exact(params, [], "connect params");
     await this.dependencies.startDaemon();
-    if (this.client) return { status: "connected" };
+    if (this.client) {
+      try {
+        await this.client.status();
+        return { status: "connected" };
+      } catch (error) {
+        if (!authenticationFailure(error)) throw error;
+        this.client = undefined;
+      }
+    }
     const client = this.dependencies.createClient(
       this.dependencies.defaultEndpoint,
       await this.dependencies.openLocalSession(),
@@ -150,11 +158,10 @@ class ApplicationBridgeAdapter implements BridgeAdapter {
   public async *events(params: Readonly<Record<string, unknown>>, signal: AbortSignal): AsyncIterable<unknown> {
     exact(params, ["after"], "events params");
     let cursor = params.after === undefined ? 0 : cursorValue(params.after);
-    const client = this.connectedClient();
     let failures = 0;
     while (!signal.aborted) {
       try {
-        for await (const raw of client.streamEvents(cursor, signal)) {
+        for await (const raw of this.connectedClient().streamEvents(cursor, signal)) {
           // ponytail: AbortSignal.aborted는 타입 추론상 항상 false지만 abort() 호출 후 true로 바뀐다
           // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
           if (signal.aborted) return;
@@ -167,7 +174,9 @@ class ApplicationBridgeAdapter implements BridgeAdapter {
       } catch (error) {
         // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
         if (signal.aborted) return;
-        if (!transient(error)) throw new Error("Application event stream에 다시 연결할 수 없습니다", { cause: error });
+        if (authenticationFailure(error)) await this.connect({});
+        else if (!transient(error))
+          throw new Error("Application event stream에 다시 연결할 수 없습니다", { cause: error });
       }
       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
       if (signal.aborted) return;
@@ -242,6 +251,16 @@ function transient(error: unknown): boolean {
   if (error instanceof ApplicationRemoteError)
     return error.status === 408 || error.status === 429 || error.status >= 500;
   return false;
+}
+
+function authenticationFailure(error: unknown): boolean {
+  return (
+    error instanceof ApplicationRemoteError &&
+    error.status === 401 &&
+    !!error.body &&
+    typeof error.body === "object" &&
+    (error.body as { category?: unknown }).category === "authentication"
+  );
 }
 
 async function waitForReconnect(milliseconds: number, signal: AbortSignal): Promise<void> {

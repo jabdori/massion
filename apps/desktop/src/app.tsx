@@ -4553,7 +4553,7 @@ function ProviderAddForm({
       </label>
       <label className="grid gap-1.5">
         <span className="flex items-baseline gap-1.5 text-[12px] text-muted">
-          키<span className="text-[11px]">선택 · 나중에 더할 수 있습니다</span>
+          키<span className="text-[11px]">선택</span>
         </span>
         <input
           autoComplete="off"
@@ -4590,6 +4590,7 @@ function ProviderSurface({ service }: { service: DesktopService }) {
    */
   const [disabledModels, setDisabledModels] = useState<ReadonlySet<string>>(new Set());
   const [saving, setSaving] = useState(false);
+  const [loginBusy, setLoginBusy] = useState(false);
   const [notice, setNotice] = useState("");
   const [secret, setSecret] = useState("");
   const [draft, setDraft] = useState({ displayName: "", adapterKind: "openai-compatible", baseUrl: "" });
@@ -4661,6 +4662,30 @@ function ProviderSurface({ service }: { service: DesktopService }) {
       setError(surfaceErrorMessage(cause, "프로바이더를 추가하지 못했습니다."));
     } finally {
       setSaving(false);
+    }
+  };
+
+  const loginSubscription = async (connection: ProviderConnectionView, newAccount: boolean, alias: string) => {
+    if (loginBusy) return;
+    if (connection.providerId !== "openai-codex") {
+      setError("이 앱에서 로그인할 수 있는 구독 프로바이더가 아닙니다.");
+      return;
+    }
+    setLoginBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      await service.loginSubscription({
+        providerId: "openai-codex",
+        alias,
+        newAccount,
+      });
+      setSettings(await service.loadSettings());
+      setNotice("Codex 계정 연결을 완료했습니다.");
+    } catch (cause) {
+      setError(surfaceErrorMessage(cause, "Codex 계정을 연결하지 못했습니다."));
+    } finally {
+      setLoginBusy(false);
     }
   };
 
@@ -4778,7 +4803,12 @@ function ProviderSurface({ service }: { service: DesktopService }) {
             </p>
           ) : (
             <>
-              <ProviderOverviewTab accounts={accounts} connection={selected} />
+              <ProviderOverviewTab
+                accounts={accounts}
+                connection={selected}
+                loginBusy={loginBusy}
+                onLogin={(newAccount, alias) => void loginSubscription(selected, newAccount, alias)}
+              />
             </>
           )}
           {notice ? <p className="mt-4 text-[12px] text-fg-3">{notice}</p> : null}
@@ -4923,14 +4953,30 @@ function ProviderModelList({
 function ProviderOverviewTab({
   accounts,
   connection,
+  loginBusy,
+  onLogin,
 }: {
   accounts: readonly SubscriptionAccountView[];
   connection: ProviderConnectionView;
+  loginBusy: boolean;
+  onLogin: (newAccount: boolean, alias: string) => void;
 }) {
-  const mine = accounts.filter((account) => account.providerId.startsWith(connection.providerId));
+  const mine = accounts.filter((account) => account.providerId === connection.providerId);
   // 구독 커넥터는 계정을 갖고, API 어댑터는 키를 갖습니다. 없는 쪽을 빈 목록으로 보이면 잘못된 인상을 줍니다.
   const usesAccounts = connection.adapterKind === "subscription-connector";
   const activeAccount = mine.some((account) => account.status === "active");
+  const canLogin = usesAccounts && connection.providerId === "openai-codex";
+  const reconnectAccount = mine.find((account) => account.status !== "active");
+  const primaryLogin =
+    mine.length === 0
+      ? ({ alias: connection.displayName, label: "Codex 로그인", newAccount: false } as const)
+      : activeAccount
+        ? ({ alias: connection.displayName, label: "계정 추가", newAccount: true } as const)
+        : ({
+            alias: reconnectAccount?.alias ?? connection.displayName,
+            label: "다시 연결",
+            newAccount: false,
+          } as const);
   return (
     <>
       <section className="mb-6">
@@ -4986,12 +5032,32 @@ function ProviderOverviewTab({
             ))}
           </ul>
         )}
-        <button
-          className="mt-2 w-full rounded-[5px] border border-control px-3 py-1.5 text-[12px] text-secondary transition-colors duration-150 hover:border-fg-3 hover:text-primary"
-          type="button"
-        >
-          {usesAccounts ? "계정 추가" : "API 키 추가"}
-        </button>
+        {canLogin ? (
+          <div aria-busy={loginBusy} className="mt-2 grid gap-2">
+            <button
+              className="w-full rounded-[5px] border border-control px-3 py-1.5 text-[12px] text-secondary transition-colors duration-150 hover:border-fg-3 hover:text-primary disabled:cursor-wait disabled:opacity-50"
+              disabled={loginBusy}
+              onClick={() => {
+                onLogin(primaryLogin.newAccount, primaryLogin.alias);
+              }}
+              type="button"
+            >
+              {loginBusy ? "브라우저에서 로그인 중…" : primaryLogin.label}
+            </button>
+            {!activeAccount && mine.length > 0 ? (
+              <button
+                className="w-full rounded-[5px] border border-border px-3 py-1.5 text-[12px] text-muted transition-colors duration-150 hover:border-control hover:text-secondary disabled:cursor-wait disabled:opacity-50"
+                disabled={loginBusy}
+                onClick={() => {
+                  onLogin(true, connection.displayName);
+                }}
+                type="button"
+              >
+                새 계정 추가
+              </button>
+            ) : null}
+          </div>
+        ) : null}
       </section>
     </>
   );
