@@ -65,10 +65,16 @@ describe("Organization Graph와 Core Office", () => {
       scope: "persistent" as const,
     };
 
-    const first = await graph.execute(context, command);
+    const first = await graph.execute(context, { ...command, governanceApprovalId: "approval-original" });
     const repeated = await graph.execute(context, command);
+    const repeatedWithDifferentApproval = await graph.execute(context, {
+      ...command,
+      governanceApprovalId: "approval-different",
+    });
     expect(first.version.version).toBe(2);
     expect(repeated.version.version).toBe(2);
+    expect(repeatedWithDifferentApproval.version.version_id).toBe(first.version.version_id);
+    expect(first.version.request_json).not.toContain("approval-original");
     await expect(graph.execute(context, { ...command, handle: "different" })).rejects.toThrow(
       "같은 commandId에 다른 명령",
     );

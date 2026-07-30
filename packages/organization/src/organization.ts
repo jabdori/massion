@@ -157,6 +157,12 @@ export interface RoleCommand extends CommandBase {
   readonly role: NodeRole;
 }
 
+export interface ScopePromotionCommand extends CommandBase {
+  readonly kind: "promote-scope";
+  readonly handle: string;
+  readonly workId: string;
+}
+
 export interface SplitCommand extends CommandBase {
   readonly kind: "split";
   readonly sourceHandle: string;
@@ -209,6 +215,7 @@ export type OrganizationCommand =
   | TargetCommand
   | MoveCommand
   | RoleCommand
+  | ScopePromotionCommand
   | SplitCommand
   | MergeCommand
   | RevertCommand
@@ -300,6 +307,20 @@ function canonicalJson(value: unknown): string {
       .join(",")}}`;
   }
   return JSON.stringify(value);
+}
+
+function logicalCommandJson(command: OrganizationCommand): string {
+  const logicalCommand: Record<string, unknown> = { ...command };
+  delete logicalCommand.governanceApprovalId;
+  return canonicalJson(logicalCommand);
+}
+
+function recordedLogicalCommandJson(requestJson: string): string | undefined {
+  try {
+    return logicalCommandJson(JSON.parse(requestJson) as OrganizationCommand);
+  } catch {
+    return undefined;
+  }
 }
 
 function descendants(nodes: readonly OrganizationNode[], roots: readonly string[]): string[] {
@@ -528,10 +549,11 @@ export class OrganizationGraphService {
 
   public async execute(context: TenantContext, command: OrganizationCommand): Promise<GraphChangeResult> {
     await this.verify(context, true);
+    const requestJson = logicalCommandJson(command);
     const observedVersions = await listVersions(this.database, context.organizationId);
     const observedReplay = observedVersions.find((version) => version.command_id === command.commandId);
     if (observedReplay) {
-      if (observedReplay.request_json !== canonicalJson(command)) {
+      if (recordedLogicalCommandJson(observedReplay.request_json) !== requestJson) {
         throw new Error("같은 commandId에 다른 명령을 사용할 수 없습니다");
       }
       return {
@@ -550,7 +572,7 @@ export class OrganizationGraphService {
       const versions = await listVersions(transaction, context.organizationId);
       const repeated = versions.find((version) => version.command_id === command.commandId);
       if (repeated) {
-        if (repeated.request_json !== canonicalJson(command))
+        if (recordedLogicalCommandJson(repeated.request_json) !== requestJson)
           throw new Error("같은 commandId에 다른 명령을 사용할 수 없습니다");
         return {
           nodes: normalizeSnapshot(JSON.parse(repeated.after_json) as StoredOrganizationNode[]),
@@ -584,7 +606,7 @@ export class OrganizationGraphService {
         current.version,
         command.commandId,
         command.kind,
-        canonicalJson(command),
+        requestJson,
         impact,
         before,
         storedAfter,
@@ -839,6 +861,14 @@ export class OrganizationGraphService {
       }
     } else if (command.kind === "move") {
       mutable(command.handle).parent_handle = find(command.parentHandle).handle;
+    } else if (command.kind === "promote-scope") {
+      const target = mutable(command.handle);
+      if (target.status !== "active") throw new Error("영구 승격 대상은 active 상태여야 합니다");
+      if (target.scope !== "work" || !target.work_id) throw new Error("영구 승격 대상은 Work 범위여야 합니다");
+      if (target.work_id !== command.workId)
+        throw new Error("Work 범위 OrganizationNode를 다른 Work에서 승격할 수 없습니다");
+      target.scope = "persistent";
+      delete target.work_id;
     } else if (command.kind === "change-role" || command.kind === "promote") {
       const target = mutable(command.handle);
       if (command.kind === "promote") {

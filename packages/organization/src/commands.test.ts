@@ -169,6 +169,215 @@ describe("버전 기반 조직 명령", () => {
     await expect(graph.analyzeImpact(context, ["missing"])).rejects.toThrow("대상 노드");
   });
 
+  it("Work 범위 Agent를 동일 정체성·역할·참조를 유지한 영구 Agent로 승격하고 재실행한다", async () => {
+    const created = await execute({
+      kind: "install-profile",
+      profileId: "work-agent",
+      profileVersion: "1.0.0",
+      nodes: [
+        {
+          handle: "work-specialist",
+          name: "Work Specialist",
+          responsibility: "Work 전용 구현",
+          outputs: ["Delivery"],
+          capabilities: ["typescript"],
+          parentHandle: "delivery-coordination",
+          scope: "work",
+          workId: "work-owner",
+          role: "coordinator",
+        },
+      ],
+    });
+    const before = created.nodes.find((node) => node.handle === "work-specialist");
+    const reference = await graph.registerReference(context, "work-specialist", "task", "task-1");
+    const command = {
+      commandId: crypto.randomUUID(),
+      expectedVersion: version,
+      kind: "promote-scope" as const,
+      handle: "work-specialist",
+      workId: "work-owner",
+      governanceEnvironment: "local",
+    };
+
+    const promoted = await graph.execute(context, { ...command, governanceApprovalId: "approval-original" });
+    const repeated = await graph.execute(context, command);
+    const repeatedWithDifferentApproval = await graph.execute(context, {
+      ...command,
+      governanceApprovalId: "approval-different",
+    });
+    const promotedNode = promoted.nodes.find((node) => node.handle === "work-specialist");
+
+    expect(promotedNode).toMatchObject({
+      node_id: before?.node_id,
+      handle: "work-specialist",
+      scope: "persistent",
+      work_id: undefined,
+      role: "coordinator",
+      capabilities: ["typescript"],
+      status: "active",
+    });
+    expect(promotedNode?.created_at).toBe(before?.created_at);
+    const expectedReference = {
+      reference_id: reference.reference_id,
+      organization_id: context.organizationId,
+      node_handle: "work-specialist",
+      kind: "task",
+      target_id: "task-1",
+    };
+    expect(promoted.impact).toEqual({ nodeHandles: ["work-specialist"], references: [expectedReference] });
+    expect(promoted.version).toMatchObject({
+      version: 3,
+      previous_version: 2,
+      command_kind: "promote-scope",
+      actor_user_id: context.userId,
+    });
+    expect(JSON.parse(promoted.version.before_json)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ handle: "work-specialist", scope: "work", work_id: "work-owner" }),
+      ]),
+    );
+    const afterAudit = JSON.parse(promoted.version.after_json) as Record<string, unknown>[];
+    const promotedAuditNode = afterAudit.find((node) => node.handle === "work-specialist");
+    expect(promotedAuditNode).toMatchObject({ handle: "work-specialist", scope: "persistent" });
+    expect(promotedAuditNode).not.toHaveProperty("work_id");
+    expect(repeated.version.version_id).toBe(promoted.version.version_id);
+    expect(repeatedWithDifferentApproval.version.version_id).toBe(promoted.version.version_id);
+    expect(promoted.version.request_json).not.toContain("approval-original");
+    await expect(graph.execute(context, { ...command, workId: "work-other" })).rejects.toThrow(
+      "같은 commandId에 다른 명령",
+    );
+    await expect(graph.execute(context, { ...command, handle: "other-specialist" })).rejects.toThrow(
+      "같은 commandId에 다른 명령",
+    );
+    expect(await graph.analyzeImpact(context, ["work-specialist"])).toEqual({
+      nodeHandles: ["work-specialist"],
+      references: [expectedReference],
+    });
+  });
+
+  it("영구 범위 승격은 대상 상태·원래 Work·부모 범위·version 경계를 모두 강제한다", async () => {
+    await execute({
+      kind: "install-profile",
+      profileId: "scope-boundaries",
+      profileVersion: "1.0.0",
+      nodes: [
+        {
+          handle: "persistent-agent",
+          name: "Persistent Agent",
+          responsibility: "영구 Agent",
+          outputs: ["Delivery"],
+          capabilities: ["delivery"],
+          parentHandle: "delivery-coordination",
+          scope: "persistent",
+          role: "operator",
+        },
+        {
+          handle: "active-work-agent",
+          name: "Active Work Agent",
+          responsibility: "활성 Work Agent",
+          outputs: ["Delivery"],
+          capabilities: ["delivery"],
+          parentHandle: "delivery-coordination",
+          scope: "work",
+          workId: "work-owner",
+          role: "operator",
+        },
+        {
+          handle: "inactive-work-agent",
+          name: "Inactive Work Agent",
+          responsibility: "비활성 Work Agent",
+          outputs: ["Delivery"],
+          capabilities: ["delivery"],
+          parentHandle: "delivery-coordination",
+          scope: "work",
+          workId: "work-owner",
+          role: "operator",
+        },
+        {
+          handle: "retired-work-agent",
+          name: "Retired Work Agent",
+          responsibility: "폐기 Work Agent",
+          outputs: ["Delivery"],
+          capabilities: ["delivery"],
+          parentHandle: "delivery-coordination",
+          scope: "work",
+          workId: "work-owner",
+          role: "operator",
+        },
+        {
+          handle: "work-parent",
+          name: "Work Parent",
+          responsibility: "Work 부모",
+          outputs: ["Coordination"],
+          capabilities: ["coordination"],
+          parentHandle: "delivery-coordination",
+          scope: "work",
+          workId: "work-owner",
+          role: "coordinator",
+        },
+        {
+          handle: "work-child",
+          name: "Work Child",
+          responsibility: "Work 자식",
+          outputs: ["Delivery"],
+          capabilities: ["delivery"],
+          parentHandle: "work-parent",
+          scope: "work",
+          workId: "work-owner",
+          role: "operator",
+        },
+      ],
+    });
+    await execute({ kind: "deactivate", handle: "inactive-work-agent" });
+    await execute({ kind: "retire", handle: "retired-work-agent" });
+
+    const currentVersion = version;
+    const promote = (handle: string, workId = "work-owner", expectedVersion = currentVersion) =>
+      graph.execute(context, {
+        commandId: crypto.randomUUID(),
+        expectedVersion,
+        kind: "promote-scope",
+        handle,
+        workId,
+      });
+
+    await expect(promote("representative")).rejects.toThrow("Core Office");
+    await expect(promote("persistent-agent")).rejects.toThrow("Work 범위");
+    await expect(promote("inactive-work-agent")).rejects.toThrow("active");
+    await expect(promote("retired-work-agent")).rejects.toThrow("active");
+    await expect(promote("active-work-agent", "work-other")).rejects.toThrow("다른 Work");
+    await expect(promote("work-child")).rejects.toThrow("persistent 노드는 Work 범위 부모");
+    await expect(promote("active-work-agent", "work-owner", currentVersion - 1)).rejects.toThrow(
+      "현재 OrganizationVersion",
+    );
+    expect((await graph.getCurrentSnapshot(context)).version.version).toBe(currentVersion);
+    expect((await graph.listNodes(context)).find((node) => node.handle === "active-work-agent")).toMatchObject({
+      scope: "work",
+      work_id: "work-owner",
+      status: "active",
+    });
+
+    const identity = await IdentityService.create(database);
+    const organizations = await OrganizationService.create(database);
+    const other = await identity.registerPersonalUser({ email: "scope-other@example.com", displayName: "Other" });
+    const otherContext = await organizations.resolveTenantContext(
+      other.user.user_id,
+      other.organization.organization_id,
+    );
+    await expect(
+      graph.execute(
+        { ...otherContext, organizationId: context.organizationId },
+        {
+          commandId: crypto.randomUUID(),
+          expectedVersion: currentVersion,
+          kind: "promote-scope",
+          handle: "active-work-agent",
+          workId: "work-owner",
+        },
+      ),
+    ).rejects.toThrow("TenantContext");
+  });
+
   it("split과 merge는 source 참조 처리 계획을 강제하고 원자 이동한다", async () => {
     await create("engineering");
     const reference = await graph.registerReference(context, "engineering", "task", "task-1");
