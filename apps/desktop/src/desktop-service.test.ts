@@ -1039,6 +1039,57 @@ describe("Application desktop service", () => {
     });
   });
 
+  it("실제 Work 산출물과 검증의 내부 식별자를 사람용 이름으로 투영한다", async () => {
+    const taskId = "0b75e4fe-e3f1-4911-ba05-ea1eccea5a91";
+    const native = transport({
+      "work.tasks": [{ workId: detail.workId, taskId, title: "결과 생성", status: "completed", revision: 2 }],
+      "work.artifacts": [
+        {
+          artifactId: "artifact-task-1",
+          artifactVersionId: "artifact-version-task-1",
+          workId: detail.workId,
+          name: `task-${taskId}`,
+          kind: "task-output",
+          version: 1,
+          mediaType: "application/json",
+          checksum: "a".repeat(64),
+          createdBy: "agent-1",
+          createdAt: "2026-07-22T00:24:00.000Z",
+        },
+        {
+          artifactId: "artifact-assurance-1",
+          artifactVersionId: "artifact-version-assurance-1",
+          workId: detail.workId,
+          name: "assurance-dcc7fd56-8e0b-4677-8baa-247ef0cdcef7.json",
+          kind: "verification-evidence",
+          version: 1,
+          mediaType: "application/vnd.massion.assurance-evidence+json",
+          checksum: "b".repeat(64),
+          createdBy: "assurance",
+          createdAt: "2026-07-22T00:25:00.000Z",
+        },
+      ],
+      "work.verifications": [
+        {
+          verificationId: "verification-1",
+          workId: detail.workId,
+          verifierId: "assurance",
+          passed: true,
+          criteria: [{ criterionKey: "exact-result", status: "passed" }],
+          evidenceArtifactVersionIds: ["artifact-version-assurance-1"],
+          createdAt: "2026-07-22T00:25:00.000Z",
+        },
+      ],
+    });
+
+    const work = await createApplicationDesktopService(native).loadWork(detail.workId);
+
+    expect(work.artifacts.map((artifact) => artifact.name)).toEqual(["결과 생성 결과", "독립 검증 근거"]);
+    expect(work.verifications).toEqual([
+      expect.objectContaining({ verifier: "독립 검증", criteria: [{ key: "exact-result", status: "passed" }] }),
+    ]);
+  });
+
   it("Work의 사용한 지식은 typed work.knowledge 조회로 반환한다", async () => {
     const native = transport({
       "work.knowledge": {

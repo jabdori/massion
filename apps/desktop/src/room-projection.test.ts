@@ -161,6 +161,18 @@ describe("협업방 투영", () => {
     expect(activity.speaker.role).toBe("quant-analysis");
   });
 
+  it("의미 없는 UUID handle은 사람용 역할로 가린다", () => {
+    const handle = "db06753b-4495-44e0-b16b-c17b9081aa0d";
+    const activities = projectRoomActivities(
+      [message({ messageId: "m-uuid", sequence: 1, messageType: "evidence", authorId: handle })],
+      nodes,
+    );
+    const activity = activities[0];
+    if (activity?.kind !== "room") throw new Error("활동이 room이 아닙니다");
+    expect(activity.speaker.name).not.toBe(handle);
+    expect(activity.speaker.role).toBe("작업 담당");
+  });
+
   it("status는 발언이 아니므로 아바타 없는 줄이 된다", () => {
     const activities = projectRoomActivities(
       [message({ messageId: "s", sequence: 1, messageType: "status", content: "라운드 4 / 12" })],

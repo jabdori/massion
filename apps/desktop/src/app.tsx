@@ -217,6 +217,11 @@ const criterionLabel: Record<string, string> = {
   "stage-latency-decomposed": "단계별 지연 분해",
   "batch-window-reproduced": "배치 구간 재현",
   "rollback-path-exists": "되돌릴 경로 존재",
+  "exact-result": "요청한 결과 일치",
+  "lifecycle-complete": "전체 단계 완료",
+  "no-side-effects": "원치 않는 변경 없음",
+  "profile:acceptance:coverage": "검증 기준 충족",
+  "single-line": "한 줄 결과 형식",
 };
 
 const criterionStatusLabel: Record<VerificationCriterionStatus, string> = {

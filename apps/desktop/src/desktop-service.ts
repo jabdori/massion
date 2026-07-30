@@ -1,6 +1,7 @@
 import {
   ApplicationClient,
   agentIdentityToken,
+  agentRoleToken,
   type ApprovalViewV1,
   type ArtifactViewV1,
   type AssignmentViewV1,
@@ -3909,9 +3910,12 @@ function projectOrganization(snapshot: Partial<OrganizationGraphSnapshotV1>): Or
 /** 조직 노드에서 역할 배지 문구를 찾습니다. 없으면 handle을 그대로 씁니다. */
 function roleLabelFor(handle: string, nodes: readonly OrganizationNodeView[]): string {
   const node = nodes.find((candidate) => candidate.handle === handle);
-  if (!node) return handle;
-  return node.responsibility.split(",")[0]?.trim() || node.name;
+  if (!node) return OPAQUE_UUID.test(handle) ? "작업 담당" : handle;
+  const label = node.responsibility.split(",")[0]?.trim() || node.name;
+  return OPAQUE_UUID.test(label) ? "작업 담당" : label;
 }
+
+const OPAQUE_UUID = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/iu;
 
 function speakerFor(
   message: Pick<RoomMessageViewV1, "authorKind" | "authorId"> & { readonly modelId?: string },
@@ -4719,7 +4723,7 @@ function projectWorkSummary(work: WorkSummaryV1): WorkView {
 function projectWorkDetail(sources: WorkDetailSources): WorkView {
   const tasks = sources.tasks.map(projectTask);
   const agents = projectAgents(sources.assignments, sources.executions);
-  const artifacts = sources.artifacts.map(projectArtifact);
+  const artifacts = sources.artifacts.map((artifact) => projectArtifact(artifact, tasks));
   const approvals = sources.approvals.map(projectApproval);
   const run = sources.runs.find((candidate) => ACTIVE_RUN_STATUSES.has(candidate.status)) ?? sources.runs[0];
   const activeExecutionId = sources.executions.find((execution) =>
@@ -4823,10 +4827,22 @@ function projectAgents(assignments: readonly AssignmentViewV1[], executions: rea
   return [...agents.values()];
 }
 
-function projectArtifact(artifact: ArtifactViewV1): ArtifactView {
+function projectArtifact(artifact: ArtifactViewV1, tasks: readonly TaskView[]): ArtifactView {
+  const task =
+    artifact.kind === "task-output" && artifact.name.startsWith("task-")
+      ? tasks.find((candidate) => candidate.id === artifact.name.slice("task-".length))
+      : undefined;
+  const name =
+    task === undefined
+      ? artifact.kind === "verification-evidence"
+        ? "독립 검증 근거"
+        : artifact.kind === "task-output" && OPAQUE_UUID.test(artifact.name.slice("task-".length))
+          ? "작업 결과"
+          : artifact.name
+      : `${task.title} 결과`;
   return {
     id: artifact.artifactVersionId,
-    name: artifact.name,
+    name,
     format: artifactFormat(artifact),
     size: "메타데이터",
     createdAt: artifact.createdAt,
@@ -4873,9 +4889,10 @@ function projectVerificationCriteria(value: unknown): VerificationCriterionView[
 }
 
 function projectVerification(verification: VerificationViewV1): VerificationView {
+  const verifier = agentRoleToken(verification.verifierId).friendlyLabel;
   return {
     id: verification.verificationId,
-    verifier: verification.verifierId,
+    verifier: OPAQUE_UUID.test(verifier) ? "검증 담당" : verifier,
     state: verification.passed ? "done" : "failed",
     criteria: projectVerificationCriteria(verification.criteria),
     ...(verification.evidenceArtifactVersionIds.length === 0
