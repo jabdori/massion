@@ -1439,6 +1439,35 @@ describe("Application desktop service", () => {
     );
   });
 
+  it("권한 조회에 실제 자가개선 설정과 동시성 version을 함께 투영한다", async () => {
+    const native = transport({
+      "governance.autonomy": {
+        mode: "automatic",
+        revision: 3,
+        runtimePermissionStatus: "governed",
+        emergencyStopActive: false,
+      },
+      "growth.configuration.get": {
+        reflectionEnabled: true,
+        adoptionMode: "review",
+        version: 4,
+        governanceDecisionId: "decision-growth-0004",
+        activatedAt: "2026-07-22T00:00:00.000Z",
+      },
+    });
+
+    await expect(createApplicationDesktopService(native).loadAutonomy()).resolves.toMatchObject({
+      mode: "automatic",
+      revision: 3,
+      growthMode: "review",
+      growthReflectionEnabled: true,
+      growthConfigurationVersion: 4,
+    });
+    expect(native.query.mock.calls.map(([operation]) => operation)).toEqual(
+      expect.arrayContaining(["governance.autonomy", "growth.configuration.get"]),
+    );
+  });
+
   it("실제 Desktop service가 최근 모델 호출 기록을 조회하고 사람용 view로 투영한다", async () => {
     const native = transport({
       "router.attempts": [

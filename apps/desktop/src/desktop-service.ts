@@ -107,6 +107,8 @@ export interface AutonomyView {
   readonly emergencyStopActive: boolean;
   /** 없으면 아직 정해지지 않은 것이라 `review`로 단정하지 않고 화면이 «모른다»를 말합니다. */
   readonly growthMode?: GrowthAdoptionMode;
+  readonly growthReflectionEnabled?: boolean;
+  readonly growthConfigurationVersion?: number;
 }
 
 /** 전체 권한이면 자가개선도 자동입니다. 이 파생은 화면이 아니라 여기 한 곳이 소유합니다. */
@@ -1356,12 +1358,19 @@ export function createApplicationDesktopService(
     },
 
     async loadAutonomy() {
-      return projectAutonomy(await client.query("governance.autonomy", {}));
+      const [autonomy, growthConfiguration] = await Promise.all([
+        client.query("governance.autonomy", {}),
+        query("growth.configuration.get", {}),
+      ]);
+      return projectAutonomy(autonomy, projectGrowthConfiguration(growthConfiguration));
     },
 
     async setAutonomy(mode, expectedRevision) {
       const result = await client.command("governance.autonomy.set", { mode }, { expectedRevision });
-      return projectAutonomy(object(result.data));
+      return projectAutonomy(
+        object(result.data),
+        projectGrowthConfiguration(await query("growth.configuration.get", {})),
+      );
     },
 
     async loadEmergency() {
@@ -2827,7 +2836,9 @@ export function createFixtureDesktopService(): DesktopService {
         mode: "automatic",
         revision: 0,
         runtimePermissionStatus: "governed",
-        growthMode: "review",
+        growthMode: growthConfiguration.adoptionMode,
+        growthReflectionEnabled: growthConfiguration.reflectionEnabled,
+        growthConfigurationVersion: growthConfiguration.version,
         emergencyStopActive: false,
       })),
     setAutonomy: (mode, expectedRevision) =>
@@ -2835,8 +2846,9 @@ export function createFixtureDesktopService(): DesktopService {
         mode,
         revision: expectedRevision + 1,
         runtimePermissionStatus: mode === "full-access" ? "full-access" : "governed",
-        // 전체 권한은 자가개선 채택도 사람을 거치지 않습니다. 파생이지 별도 설정이 아닙니다.
-        growthMode: mode === "full-access" ? "auto" : "review",
+        growthMode: growthConfiguration.adoptionMode,
+        growthReflectionEnabled: growthConfiguration.reflectionEnabled,
+        growthConfigurationVersion: growthConfiguration.version,
         emergencyStopActive: false,
       })),
     loadEmergency: () => fixturePromise(() => ({ active: false, revision: 0 })),
@@ -4269,7 +4281,33 @@ export function projectRoom(
   };
 }
 
-function projectAutonomy(value: GovernanceAutonomyViewV1 | Record<string, unknown> | undefined): AutonomyView {
+function projectGrowthConfiguration(value: unknown):
+  | {
+      readonly reflectionEnabled: boolean;
+      readonly adoptionMode: GrowthAdoptionMode;
+      readonly version?: number;
+    }
+  | undefined {
+  if (value === undefined) return undefined;
+  const source = object(value);
+  if (
+    typeof source?.reflectionEnabled !== "boolean" ||
+    (source.adoptionMode !== "review" && source.adoptionMode !== "auto") ||
+    (source.version !== undefined &&
+      (typeof source.version !== "number" || !Number.isSafeInteger(source.version) || source.version < 1))
+  )
+    throw new Error("자가개선 설정 응답이 유효하지 않습니다");
+  return {
+    reflectionEnabled: source.reflectionEnabled,
+    adoptionMode: source.adoptionMode,
+    ...(source.version === undefined ? {} : { version: source.version }),
+  };
+}
+
+function projectAutonomy(
+  value: GovernanceAutonomyViewV1 | Record<string, unknown> | undefined,
+  growthConfiguration?: ReturnType<typeof projectGrowthConfiguration>,
+): AutonomyView {
   if (
     !value ||
     (value.mode !== "automatic" && value.mode !== "review" && value.mode !== "full-access") ||
@@ -4290,7 +4328,17 @@ function projectAutonomy(value: GovernanceAutonomyViewV1 | Record<string, unknow
     ...(typeof source.permissionLimitReason === "string"
       ? { permissionLimitReason: source.permissionLimitReason }
       : {}),
-    ...(source.growthMode === "review" || source.growthMode === "auto" ? { growthMode: source.growthMode } : {}),
+    ...(growthConfiguration === undefined
+      ? source.growthMode === "review" || source.growthMode === "auto"
+        ? { growthMode: source.growthMode }
+        : {}
+      : {
+          growthMode: growthConfiguration.adoptionMode,
+          growthReflectionEnabled: growthConfiguration.reflectionEnabled,
+          ...(growthConfiguration.version === undefined
+            ? {}
+            : { growthConfigurationVersion: growthConfiguration.version }),
+        }),
     emergencyStopActive: source.emergencyStopActive === true,
   };
 }

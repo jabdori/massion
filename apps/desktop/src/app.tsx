@@ -4429,20 +4429,42 @@ const GROWTH_OPTIONS = [
 
 function GrowthAdoptionBoundary({
   autonomy,
+  busy,
+  error,
   onSelect,
 }: {
   autonomy: AutonomyView;
+  busy: boolean;
+  error: string;
   onSelect: (mode: GrowthAdoptionMode) => void;
 }) {
   const derived = autonomy.mode === "full-access";
   const mode = effectiveGrowthMode(autonomy);
+  const unavailable = autonomy.growthReflectionEnabled === undefined;
   return (
     <GrowthSection headingLevel={2} title="자가개선">
       <ChoiceGroup
+        busy={busy}
         options={GROWTH_OPTIONS}
         value={mode}
-        {...(derived ? { locked: "전체 권한이라 자동으로 고정됩니다" } : { onSelect })}
+        {...(derived
+          ? { locked: "전체 권한이라 자동으로 고정됩니다" }
+          : unavailable
+            ? { locked: "자가개선 설정을 읽을 수 없어 변경할 수 없습니다" }
+            : { onSelect })}
       />
+      <p className="mt-2 text-[11px] text-muted">
+        {autonomy.growthReflectionEnabled === undefined
+          ? "자가개선 설정을 읽을 수 없습니다."
+          : autonomy.growthReflectionEnabled
+            ? "완료된 실행에서 개선 후보를 찾습니다."
+            : "개선 후보 찾기가 꺼져 있습니다."}
+      </p>
+      {error ? (
+        <p className="mt-2 text-[11px] text-danger" role="alert">
+          {error}
+        </p>
+      ) : null}
     </GrowthSection>
   );
 }
@@ -5034,16 +5056,13 @@ function SettingsSurface({ focusWorkspaceTrust, service }: { focusWorkspaceTrust
   const [workspaceError, setWorkspaceError] = useState("");
   const [notice, setNotice] = useState("");
   const [autonomySaving, setAutonomySaving] = useState(false);
+  const [growthSaving, setGrowthSaving] = useState(false);
+  const [growthError, setGrowthError] = useState("");
   const [workspaceSavingId, setWorkspaceSavingId] = useState<string>();
   const [workspaceRevokingId, setWorkspaceRevokingId] = useState<string>();
   const [fullAccessPending, setFullAccessPending] = useState(false);
   const workspaceCommandRef = useRef<string | undefined>(undefined);
   const workspaceTrustSectionRef = useRef<HTMLElement>(null);
-  /*
-   * 자가개선 채택은 실행 자율성과 다른 축이라 따로 고를 수 있어야 합니다. 쓰는 명령이 아직
-   * 계약에 없어 화면이 앞세웁니다. 인계: docs/phases/30-surface-parity-agent-ux/settings-contract-handoff.md
-   */
-  const [growthModeOverride, setGrowthModeOverride] = useState<GrowthAdoptionMode>();
   useEffect(() => {
     if (!focusWorkspaceTrust) return;
     const workspaceTrustSection: (Pick<HTMLElement, "focus"> & Partial<Pick<HTMLElement, "scrollIntoView">>) | null =
@@ -5101,6 +5120,34 @@ function SettingsSurface({ focusWorkspaceTrust, service }: { focusWorkspaceTrust
       setAutonomyError(surfaceErrorMessage(cause, "자율성 경계를 변경하지 못했습니다."));
     } finally {
       setAutonomySaving(false);
+    }
+  };
+  const commitGrowthMode = async (mode: GrowthAdoptionMode) => {
+    if (!autonomy || effectiveGrowthMode(autonomy) === mode || growthSaving) return;
+    if (autonomy.growthReflectionEnabled === undefined) {
+      setGrowthError("자가개선 설정을 읽을 수 없어 변경하지 못했습니다.");
+      return;
+    }
+    setGrowthSaving(true);
+    setGrowthError("");
+    setNotice("");
+    let saved = false;
+    try {
+      await service.configureGrowth({
+        reflectionEnabled: autonomy.growthReflectionEnabled,
+        adoptionMode: mode,
+        ...(autonomy.growthConfigurationVersion === undefined
+          ? {}
+          : { expectedVersion: autonomy.growthConfigurationVersion }),
+      });
+      saved = true;
+      setAutonomy(await service.loadAutonomy());
+      setNotice("자가개선 설정을 저장했습니다.");
+    } catch (cause) {
+      const message = surfaceErrorMessage(cause, "개선 반영 방식을 바꾸지 못했습니다.");
+      setGrowthError(saved ? `자가개선 설정은 저장됐지만 최신 상태를 불러오지 못했습니다. ${message}` : message);
+    } finally {
+      setGrowthSaving(false);
     }
   };
   const commitWorkspaceTrust = async (workspace: DesktopWorkspaceView, decision: "trusted" | "blocked") => {
@@ -5186,8 +5233,12 @@ function SettingsSurface({ focusWorkspaceTrust, service }: { focusWorkspaceTrust
             </GrowthSection>
             {autonomy ? (
               <GrowthAdoptionBoundary
-                autonomy={growthModeOverride === undefined ? autonomy : { ...autonomy, growthMode: growthModeOverride }}
-                onSelect={setGrowthModeOverride}
+                autonomy={autonomy}
+                busy={growthSaving}
+                error={growthError}
+                onSelect={(mode) => {
+                  void commitGrowthMode(mode);
+                }}
               />
             ) : null}
           </section>

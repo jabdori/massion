@@ -787,6 +787,76 @@ describe("AgentOS native data flow", () => {
     });
   });
 
+  it("Settings의 자가개선 반영 방식은 실제 Growth 설정으로 저장한다", async () => {
+    const user = userEvent.setup();
+    const loadAutonomy = vi
+      .fn()
+      .mockResolvedValueOnce({
+        mode: "automatic",
+        revision: 1,
+        runtimePermissionStatus: "governed",
+        emergencyStopActive: false,
+        growthMode: "review",
+        growthReflectionEnabled: true,
+        growthConfigurationVersion: 3,
+      })
+      .mockResolvedValueOnce({
+        mode: "automatic",
+        revision: 1,
+        runtimePermissionStatus: "governed",
+        emergencyStopActive: false,
+        growthMode: "auto",
+        growthReflectionEnabled: true,
+        growthConfigurationVersion: 4,
+      });
+    const configureGrowth = vi.fn(async () => undefined);
+    render(<App service={service({ loadAutonomy, configureGrowth })} />);
+
+    await user.click(screen.getByRole("button", { name: "설정" }));
+    const settings = await screen.findByRole("region", { name: "권한과 자가개선" });
+    const growth = within(settings).getByRole("region", { name: "자가개선" });
+    expect(within(growth).getByRole("button", { name: "수동" })).toHaveAttribute("aria-pressed", "true");
+
+    await user.click(within(growth).getByRole("button", { name: "자동" }));
+
+    await waitFor(() =>
+      expect(configureGrowth).toHaveBeenCalledWith({
+        reflectionEnabled: true,
+        adoptionMode: "auto",
+        expectedVersion: 3,
+      }),
+    );
+    await waitFor(() => expect(loadAutonomy).toHaveBeenCalledTimes(2));
+    expect(within(growth).getByRole("button", { name: "자동" })).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("자가개선 저장 후 재조회 실패는 저장 성공과 조회 실패를 구분한다", async () => {
+    const user = userEvent.setup();
+    const loadAutonomy = vi
+      .fn()
+      .mockResolvedValueOnce({
+        mode: "automatic",
+        revision: 1,
+        runtimePermissionStatus: "governed",
+        emergencyStopActive: false,
+        growthMode: "review",
+        growthReflectionEnabled: true,
+        growthConfigurationVersion: 3,
+      })
+      .mockRejectedValueOnce(new Error("최신 설정 조회 실패"));
+    render(<App service={service({ loadAutonomy, configureGrowth: vi.fn(async () => undefined) })} />);
+
+    await user.click(screen.getByRole("button", { name: "설정" }));
+    const growth = within(await screen.findByRole("region", { name: "권한과 자가개선" })).getByRole("region", {
+      name: "자가개선",
+    });
+    await user.click(within(growth).getByRole("button", { name: "자동" }));
+
+    expect(await within(growth).findByRole("alert")).toHaveTextContent(
+      "자가개선 설정은 저장됐지만 최신 상태를 불러오지 못했습니다. 최신 설정 조회 실패",
+    );
+  });
+
   it("Settings의 전체 권한은 확인 뒤 실제 지속 권한 명령으로 저장한다", async () => {
     const user = userEvent.setup();
     const setAutonomy = vi.fn(createFixtureDesktopService().setAutonomy);
