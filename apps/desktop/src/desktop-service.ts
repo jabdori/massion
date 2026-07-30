@@ -2020,7 +2020,15 @@ const fixtureSettings: SettingsView = {
     ],
   },
   credentials: [
-    { credentialId: "credential-zai", providerId: "zai", endpointId: "ep-zai", label: "coding-plan", status: "active", priority: 1, weight: 1 },
+    {
+      credentialId: "credential-zai",
+      providerId: "zai",
+      endpointId: "ep-zai",
+      label: "coding-plan",
+      status: "active",
+      priority: 1,
+      weight: 1,
+    },
   ],
   routes: [
     {
@@ -2219,7 +2227,11 @@ const fixtureGrowthSuggestionLineages: Readonly<
     status: "awaiting-review",
     revision: 1,
     targetDrifted: true,
-    evaluation: { evaluationRunId: "evaluation-target-drift", outcome: "eligible", inputHash: "fixture-evaluation-drift" },
+    evaluation: {
+      evaluationRunId: "evaluation-target-drift",
+      outcome: "eligible",
+      inputHash: "fixture-evaluation-drift",
+    },
     adoption: {
       adoptionId: "adoption-fixture-target-drift",
       status: "awaiting-review",
@@ -2281,7 +2293,12 @@ export function createFixtureDesktopService(): DesktopService {
   const executionSequences = new Map<string, number>();
   const executionHistory = new Map<
     string,
-    { readonly workId: string; readonly runId: string; readonly deltas: { readonly sequence: number }[]; completed: boolean }
+    {
+      readonly workId: string;
+      readonly runId: string;
+      readonly deltas: { readonly sequence: number }[];
+      completed: boolean;
+    }
   >();
   const completionPending = new Set<string>();
 
@@ -2375,14 +2392,20 @@ export function createFixtureDesktopService(): DesktopService {
         agents: current.agents.map((agent) => ({ ...agent, state: "waiting" })),
       }));
       execution.completed = true;
-      publishDurable("run.completed", { type: "ApplicationRun", id: execution.runId, revision: 0 }, { stage: "terminal" });
+      publishDurable(
+        "run.completed",
+        { type: "ApplicationRun", id: execution.runId, revision: 0 },
+        { stage: "terminal" },
+      );
       publishExecution(executionId, "finish");
     });
   };
 
-  const stop = (handlers: Set<DesktopStreamHandler>, handler: DesktopStreamHandler): DesktopStreamStop => async () => {
-    handlers.delete(handler);
-  };
+  const stop =
+    (handlers: Set<DesktopStreamHandler>, handler: DesktopStreamHandler): DesktopStreamStop =>
+    async () => {
+      handlers.delete(handler);
+    };
 
   /** 조회가 다시 읽는 자리를 바꿉니다. 화면은 loadWork로 따라옵니다. */
   const mutateWork = (workId: string, change: (current: WorkView) => WorkView): void => {
@@ -2645,7 +2668,15 @@ export function createFixtureDesktopService(): DesktopService {
           account.status = "active";
           account.version = Number(account.version ?? 0) + 1;
         } else {
-          accounts.push({ accountId, providerId: "zai-coding-plan", alias: input.alias, scope: "organization", status: "active", billingKind: "coding-plan", version: 1 });
+          accounts.push({
+            accountId,
+            providerId: "zai-coding-plan",
+            alias: input.alias,
+            scope: "organization",
+            status: "active",
+            billingKind: "coding-plan",
+            version: 1,
+          });
         }
         const catalog = settingsState.catalog as {
           providers: Array<Record<string, unknown>>;
@@ -2653,10 +2684,21 @@ export function createFixtureDesktopService(): DesktopService {
         };
         const endpointId = "ep-zai-coding-plan";
         if (!catalog.providers.some((row) => row.providerId === "zai-coding-plan")) {
-          catalog.providers.push({ providerId: "zai-coding-plan", displayName: "Z.ai Coding Plan", adapterKind: "openai-compatible", enabled: true });
+          catalog.providers.push({
+            providerId: "zai-coding-plan",
+            displayName: "Z.ai Coding Plan",
+            adapterKind: "openai-compatible",
+            enabled: true,
+          });
         }
         if (!catalog.endpoints.some((row) => row.endpointId === endpointId)) {
-          catalog.endpoints.push({ endpointId, providerId: "zai-coding-plan", name: "coding-plan", baseUrl: "https://api.z.ai/api/coding/paas/v4", local: false });
+          catalog.endpoints.push({
+            endpointId,
+            providerId: "zai-coding-plan",
+            name: "coding-plan",
+            baseUrl: "https://api.z.ai/api/coding/paas/v4",
+            local: false,
+          });
         }
         const credentialId = `credential-${accountId}`;
         const credentials = settingsState.credentials as Array<Record<string, unknown>>;
@@ -2666,7 +2708,15 @@ export function createFixtureDesktopService(): DesktopService {
           credential.label = input.alias;
           credential.status = "active";
         } else {
-          credentials.push({ credentialId, providerId: "zai-coding-plan", endpointId, label: input.alias, status: "active", priority: 1, weight: 1 });
+          credentials.push({
+            credentialId,
+            providerId: "zai-coding-plan",
+            endpointId,
+            label: input.alias,
+            status: "active",
+            priority: 1,
+            weight: 1,
+          });
           credentialVersions.set(credentialId, 1);
         }
       }),
@@ -2688,8 +2738,12 @@ export function createFixtureDesktopService(): DesktopService {
       }),
     registerEndpoint: (input) =>
       fixturePromise(() => {
-        const catalog = settingsState.catalog as { providers: Record<string, unknown>[]; endpoints: Record<string, unknown>[] };
-        if (!catalog.providers.some((row) => row.providerId === input.providerId)) throw new Error("Fixture Provider를 찾을 수 없습니다");
+        const catalog = settingsState.catalog as {
+          providers: Record<string, unknown>[];
+          endpoints: Record<string, unknown>[];
+        };
+        if (!catalog.providers.some((row) => row.providerId === input.providerId))
+          throw new Error("Fixture Provider를 찾을 수 없습니다");
         if (!catalog.endpoints.some((row) => row.providerId === input.providerId && row.baseUrl === input.baseUrl)) {
           catalog.endpoints.push({
             endpointId: `ep-${String(input.providerId)}${input.name === "api" ? "" : `-${String(input.name)}`}`,
@@ -2707,17 +2761,27 @@ export function createFixtureDesktopService(): DesktopService {
           endpoints: Record<string, unknown>[];
           credentials: Record<string, unknown>[];
         };
-        if (!catalog.providers.some((row) => row.providerId === input.providerId)) throw new Error("Fixture Provider를 찾을 수 없습니다");
+        if (!catalog.providers.some((row) => row.providerId === input.providerId))
+          throw new Error("Fixture Provider를 찾을 수 없습니다");
         const endpoint = catalog.endpoints.find((row) => row.endpointId === input.endpointId);
-        if (!endpoint || endpoint.providerId !== input.providerId) throw new Error("Fixture Endpoint를 찾을 수 없습니다");
+        if (!endpoint || endpoint.providerId !== input.providerId)
+          throw new Error("Fixture Endpoint를 찾을 수 없습니다");
         const existing = catalog.credentials.find(
-          (row) => row.providerId === input.providerId && row.endpointId === input.endpointId && row.label === input.label,
+          (row) =>
+            row.providerId === input.providerId && row.endpointId === input.endpointId && row.label === input.label,
         );
         if (existing) existing.secretVersion = Number(existing.secretVersion ?? 0) + 1;
-        else catalog.credentials.push({ providerId: input.providerId, endpointId: input.endpointId, label: input.label, secretVersion: 1 });
+        else
+          catalog.credentials.push({
+            providerId: input.providerId,
+            endpointId: input.endpointId,
+            label: input.label,
+            secretVersion: 1,
+          });
         const credentials = settingsState.credentials as Array<Record<string, unknown>>;
         const credential = credentials.find(
-          (row) => row.providerId === input.providerId && row.endpointId === input.endpointId && row.label === input.label,
+          (row) =>
+            row.providerId === input.providerId && row.endpointId === input.endpointId && row.label === input.label,
         );
         if (credential) {
           credential.status = "active";
@@ -2733,7 +2797,10 @@ export function createFixtureDesktopService(): DesktopService {
             priority: input.priority,
             weight: input.weight,
           });
-          credentialVersions.set(`credential-${String(input.providerId)}-${String(input.endpointId)}-${String(input.label)}`, 1);
+          credentialVersions.set(
+            `credential-${String(input.providerId)}-${String(input.endpointId)}-${String(input.label)}`,
+            1,
+          );
         }
       }),
     disableCredential: (credentialId, expectedVersion) =>
@@ -2741,7 +2808,8 @@ export function createFixtureDesktopService(): DesktopService {
         const credentials = settingsState.credentials as Array<Record<string, unknown>>;
         const credential = credentials.find((row) => row.credentialId === credentialId);
         if (!credential) throw new Error("Fixture Credential을 찾을 수 없습니다");
-        if (credentialVersions.get(credentialId) !== expectedVersion) throw new Error("Credential version precondition이 일치하지 않습니다");
+        if (credentialVersions.get(credentialId) !== expectedVersion)
+          throw new Error("Credential version precondition이 일치하지 않습니다");
         credential.status = "revoked";
         credentialVersions.set(credentialId, expectedVersion + 1);
       }),
@@ -2752,11 +2820,20 @@ export function createFixtureDesktopService(): DesktopService {
           endpoints: Array<Record<string, unknown>>;
           models: Array<Record<string, unknown>>;
         };
-        if (!catalog.providers.some((row) => row.providerId === input.providerId)) throw new Error("Fixture Provider를 찾을 수 없습니다");
+        if (!catalog.providers.some((row) => row.providerId === input.providerId))
+          throw new Error("Fixture Provider를 찾을 수 없습니다");
         const endpoint = catalog.endpoints.find((row) => row.endpointId === input.endpointId);
         if (!endpoint) throw new Error("Fixture Endpoint를 찾을 수 없습니다");
         if (endpoint.providerId !== input.providerId) throw new Error("Model Profile의 Provider와 Endpoint가 다릅니다");
-        if (catalog.models.some((row) => row.providerId === input.providerId && row.endpointId === input.endpointId && row.modelId === input.modelId)) throw new Error("중복 Model Profile입니다");
+        if (
+          catalog.models.some(
+            (row) =>
+              row.providerId === input.providerId &&
+              row.endpointId === input.endpointId &&
+              row.modelId === input.modelId,
+          )
+        )
+          throw new Error("중복 Model Profile입니다");
         catalog.models.push({
           modelProfileId: `mp-${String(input.modelId)}`,
           providerId: input.providerId,
@@ -2780,7 +2857,9 @@ export function createFixtureDesktopService(): DesktopService {
       fixturePromise(() => {
         const routes = settingsState.routes as Array<Record<string, unknown>>;
         const existing = routes.find((row) => row.name === input.name);
-        const routeId = `route-${String(input.name).toLowerCase().replace(/[^a-z0-9]+/gu, "-")}`;
+        const routeId = `route-${String(input.name)
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/gu, "-")}`;
         if (existing) throw new Error("중복 Model Route 이름입니다");
         routes.push({
           routeId,
@@ -2803,13 +2882,19 @@ export function createFixtureDesktopService(): DesktopService {
       }),
     addRouteCandidate: (input) =>
       fixturePromise(() => {
-        const catalog = settingsState.catalog as { models: Array<Record<string, unknown>>; candidates: Array<Record<string, unknown>> };
+        const catalog = settingsState.catalog as {
+          models: Array<Record<string, unknown>>;
+          candidates: Array<Record<string, unknown>>;
+        };
         const routes = settingsState.routes as Array<Record<string, unknown>>;
         const route = routes.find((row) => row.routeId === input.routeId);
         if (!route) throw new Error("Fixture Model Route를 찾을 수 없습니다");
         const model = catalog.models.find((row) => row.modelProfileId === input.modelProfileId);
         if (!model) throw new Error("Fixture Model Profile을 찾을 수 없습니다");
-        if (catalog.candidates.some((row) => row.routeId === input.routeId && row.modelProfileId === input.modelProfileId)) throw new Error("중복 Route Candidate입니다");
+        if (
+          catalog.candidates.some((row) => row.routeId === input.routeId && row.modelProfileId === input.modelProfileId)
+        )
+          throw new Error("중복 Route Candidate입니다");
         const endpoint = (settingsState.catalog as { endpoints: Array<Record<string, unknown>> }).endpoints.find(
           (row) => row.endpointId === model.endpointId,
         );
@@ -2839,15 +2924,27 @@ export function createFixtureDesktopService(): DesktopService {
       }),
     configureSubscriptionPolicy: (input) =>
       fixturePromise(() => {
-        const credentialPolicies = new Set(["adaptive", "priority", "fill-first", "round-robin", "weighted", "least-used", "quota-headroom", "reset-aware", "sticky"]);
+        const credentialPolicies = new Set([
+          "adaptive",
+          "priority",
+          "fill-first",
+          "round-robin",
+          "weighted",
+          "least-used",
+          "quota-headroom",
+          "reset-aware",
+          "sticky",
+        ]);
         const approvalModes = new Set(["automatic", "review", "deny"]);
-        if (!credentialPolicies.has(String(input.credentialPolicy))) throw new Error("지원하지 않는 구독 계정 선택 정책입니다");
-        if (input.approvalMode !== undefined && !approvalModes.has(String(input.approvalMode))) throw new Error("지원하지 않는 구독 승인 방식입니다");
+        if (!credentialPolicies.has(String(input.credentialPolicy)))
+          throw new Error("지원하지 않는 구독 계정 선택 정책입니다");
+        if (input.approvalMode !== undefined && !approvalModes.has(String(input.approvalMode)))
+          throw new Error("지원하지 않는 구독 승인 방식입니다");
         const policies = settingsState.policy as Array<Record<string, unknown>>;
         const existing = policies.find((row) => row.providerId === input.providerId);
-        const provider = (
-          settingsState.catalog as { providers: Array<Record<string, unknown>> }
-        ).providers.find((row) => row.providerId === input.providerId);
+        const provider = (settingsState.catalog as { providers: Array<Record<string, unknown>> }).providers.find(
+          (row) => row.providerId === input.providerId,
+        );
         const commonSurfaceProviders = new Set([
           "anthropic-claude-code",
           "openai-codex",
@@ -2863,8 +2960,24 @@ export function createFixtureDesktopService(): DesktopService {
               ? "automatic"
               : "deny";
         const approvalMode = input.approvalMode ?? (existing ? String(existing.approvalMode) : defaultApprovalMode);
-        if (existing) Object.assign(existing, { providerId: input.providerId, credentialPolicy: input.credentialPolicy, approvalMode, version: Number(existing.version ?? 0) + 1, source: "configured", updatedAt: new Date().toISOString() });
-        else policies.push({ providerId: input.providerId, credentialPolicy: input.credentialPolicy, approvalMode, version: 1, source: "configured", updatedAt: new Date().toISOString() });
+        if (existing)
+          Object.assign(existing, {
+            providerId: input.providerId,
+            credentialPolicy: input.credentialPolicy,
+            approvalMode,
+            version: Number(existing.version ?? 0) + 1,
+            source: "configured",
+            updatedAt: new Date().toISOString(),
+          });
+        else
+          policies.push({
+            providerId: input.providerId,
+            credentialPolicy: input.credentialPolicy,
+            approvalMode,
+            version: 1,
+            source: "configured",
+            updatedAt: new Date().toISOString(),
+          });
       }),
     searchRegistry: (query, limit = 20) =>
       fixturePromise(() =>
@@ -2899,7 +3012,8 @@ export function createFixtureDesktopService(): DesktopService {
       }),
     putExplicitMemory: (input) =>
       fixturePromise(() => {
-        if (explicitMemory.revision !== input.revision) throw new Error("개인 Memory version precondition이 일치하지 않습니다");
+        if (explicitMemory.revision !== input.revision)
+          throw new Error("개인 Memory version precondition이 일치하지 않습니다");
         explicitMemory = {
           ...explicitMemory,
           memoryVersionId: `memory-fixture-${String(++explicitMemorySequence).padStart(4, "0")}`,
@@ -2912,7 +3026,8 @@ export function createFixtureDesktopService(): DesktopService {
       }),
     forgetExplicitMemory: (input) =>
       fixturePromise(() => {
-        if (explicitMemory.revision !== input.revision) throw new Error("개인 Memory version precondition이 일치하지 않습니다");
+        if (explicitMemory.revision !== input.revision)
+          throw new Error("개인 Memory version precondition이 일치하지 않습니다");
         const entries = explicitMemory.entries.filter((entry) => entry.key !== input.key);
         if (entries.length === explicitMemory.entries.length) throw new Error("개인 Memory key를 찾을 수 없습니다");
         explicitMemory = {
@@ -2926,131 +3041,131 @@ export function createFixtureDesktopService(): DesktopService {
       fixturePromise(() => {
         const view = {
           configuration: { ...growthConfiguration },
-        suggestions: [
-          {
-            suggestionId: "suggestion-cohort-guard",
-            workId: "churn-q3",
-            targetKind: "prompt",
-            operation: "replace-instruction",
-            summary: "분기 비교 요청에서 코호트 정의를 먼저 확인하게 합니다.",
-            revision: 3,
-            createdAt: "2026-07-23T10:31:00.000Z",
-            reflectionRunId: "reflection-0011",
-            sourceReferenceIds: ["work:churn-q3", "message:cohort-challenge", "verification:significance"],
-            patch: [
-              {
-                targetHandle: "context-strategy",
-                path: "완료 기준",
-                before: "분석 대상 기간과 지표를 명시한다",
-                after: "분석 대상 기간과 지표를 명시하고, 기간 간 비교가 포함되면 코호트 정의 일치를 먼저 확인한다",
-              },
-            ],
-            evaluation: {
-              evaluationRunId: "evaluation-0031",
-              outcome: "eligible" as const,
-              inputHash: "fixture-evaluation-cohort",
-              strategyVersionId: "strategy-v4",
-              signals: [
+          suggestions: [
+            {
+              suggestionId: "suggestion-cohort-guard",
+              workId: "churn-q3",
+              targetKind: "prompt",
+              operation: "replace-instruction",
+              summary: "분기 비교 요청에서 코호트 정의를 먼저 확인하게 합니다.",
+              revision: 3,
+              createdAt: "2026-07-23T10:31:00.000Z",
+              reflectionRunId: "reflection-0011",
+              sourceReferenceIds: ["work:churn-q3", "message:cohort-challenge", "verification:significance"],
+              patch: [
                 {
-                  signalId: "signal-rework",
-                  group: "required" as const,
-                  origin: "deterministic" as const,
-                  outcome: "passed" as const,
-                  score: 0.75,
-                  adapterId: "rework-counter",
-                  adapterVersion: "1.2.0",
-                  note: "최근 12개 Work 중 3건이 같은 원인으로 재작업",
-                },
-                {
-                  signalId: "signal-assurance",
-                  group: "required" as const,
-                  origin: "independent" as const,
-                  outcome: "passed" as const,
-                  score: 0.68,
-                  adapterId: "assurance-verdict",
-                  adapterVersion: "2.0.1",
-                  note: "독립 검증이 같은 원인을 2회 반론으로 제기",
-                },
-                {
-                  signalId: "signal-latency",
-                  group: "conflict" as const,
-                  origin: "deterministic" as const,
-                  outcome: "failed" as const,
-                  score: 0.31,
-                  adapterId: "stage-duration",
-                  adapterVersion: "1.0.4",
-                  note: "맥락 단계 소요가 중앙값 기준 18% 늘어남",
-                },
-                {
-                  signalId: "signal-selfcheck",
-                  group: "supporting" as const,
-                  origin: "model-self" as const,
-                  outcome: "passed" as const,
-                  score: 0.82,
-                  adapterId: "reflection-selfcheck",
-                  adapterVersion: "0.9.0",
-                  note: "모델 자기평가. 독립 신호로 계산하지 않음",
+                  targetHandle: "context-strategy",
+                  path: "완료 기준",
+                  before: "분석 대상 기간과 지표를 명시한다",
+                  after: "분석 대상 기간과 지표를 명시하고, 기간 간 비교가 포함되면 코호트 정의 일치를 먼저 확인한다",
                 },
               ],
-            },
-            targetDrifted: false,
-            rationale:
-              "3분기 이탈 분석에서 검증이 코호트 정의 불일치를 반론으로 제기했고, 같은 원인으로 이전 두 Work에서도 재작업이 있었습니다.",
-            expectedEffect: "분기 비교가 포함된 Work의 재작업이 줄어듭니다.",
-            riskSummary: "완료 기준이 하나 늘어 단순 요청의 맥락 단계가 길어질 수 있습니다.",
-            status: "awaiting-review",
-            adoption: growthSuggestionLineages["suggestion-cohort-guard"]!.adoption!,
-          },
-          {
-            suggestionId: "suggestion-quant-persist",
-            workId: "churn-q3",
-            targetKind: "organization",
-            operation: "promote-node",
-            summary: "임시로 만든 계량분석 팀을 조직에 남깁니다.",
-            revision: 1,
-            createdAt: "2026-07-23T10:44:00.000Z",
-            reflectionRunId: "reflection-0011",
-            sourceReferenceIds: ["work:churn-q3", "organization:version-13"],
-            patch: [
-              {
-                path: "계량분석 팀",
-                before: 'scope: "work" · 이 Work가 끝나면 사라짐',
-                after: 'scope: "persistent" · 조직에 남음',
+              evaluation: {
+                evaluationRunId: "evaluation-0031",
+                outcome: "eligible" as const,
+                inputHash: "fixture-evaluation-cohort",
+                strategyVersionId: "strategy-v4",
+                signals: [
+                  {
+                    signalId: "signal-rework",
+                    group: "required" as const,
+                    origin: "deterministic" as const,
+                    outcome: "passed" as const,
+                    score: 0.75,
+                    adapterId: "rework-counter",
+                    adapterVersion: "1.2.0",
+                    note: "최근 12개 Work 중 3건이 같은 원인으로 재작업",
+                  },
+                  {
+                    signalId: "signal-assurance",
+                    group: "required" as const,
+                    origin: "independent" as const,
+                    outcome: "passed" as const,
+                    score: 0.68,
+                    adapterId: "assurance-verdict",
+                    adapterVersion: "2.0.1",
+                    note: "독립 검증이 같은 원인을 2회 반론으로 제기",
+                  },
+                  {
+                    signalId: "signal-latency",
+                    group: "conflict" as const,
+                    origin: "deterministic" as const,
+                    outcome: "failed" as const,
+                    score: 0.31,
+                    adapterId: "stage-duration",
+                    adapterVersion: "1.0.4",
+                    note: "맥락 단계 소요가 중앙값 기준 18% 늘어남",
+                  },
+                  {
+                    signalId: "signal-selfcheck",
+                    group: "supporting" as const,
+                    origin: "model-self" as const,
+                    outcome: "passed" as const,
+                    score: 0.82,
+                    adapterId: "reflection-selfcheck",
+                    adapterVersion: "0.9.0",
+                    note: "모델 자기평가. 독립 신호로 계산하지 않음",
+                  },
+                ],
               },
-            ],
-            evaluation: {
-              evaluationRunId: "evaluation-0032",
-              outcome: "ineligible" as const,
-              inputHash: "fixture-evaluation-quant",
-              strategyVersionId: "strategy-v4",
-              signals: [
+              targetDrifted: false,
+              rationale:
+                "3분기 이탈 분석에서 검증이 코호트 정의 불일치를 반론으로 제기했고, 같은 원인으로 이전 두 Work에서도 재작업이 있었습니다.",
+              expectedEffect: "분기 비교가 포함된 Work의 재작업이 줄어듭니다.",
+              riskSummary: "완료 기준이 하나 늘어 단순 요청의 맥락 단계가 길어질 수 있습니다.",
+              status: "awaiting-review",
+              adoption: growthSuggestionLineages["suggestion-cohort-guard"]!.adoption!,
+            },
+            {
+              suggestionId: "suggestion-quant-persist",
+              workId: "churn-q3",
+              targetKind: "organization",
+              operation: "promote-node",
+              summary: "임시로 만든 계량분석 팀을 조직에 남깁니다.",
+              revision: 1,
+              createdAt: "2026-07-23T10:44:00.000Z",
+              reflectionRunId: "reflection-0011",
+              sourceReferenceIds: ["work:churn-q3", "organization:version-13"],
+              patch: [
                 {
-                  signalId: "signal-demand",
-                  group: "required" as const,
-                  origin: "deterministic" as const,
-                  outcome: "passed" as const,
-                  score: 0.71,
-                  adapterId: "capability-demand",
-                  adapterVersion: "1.1.0",
-                  note: "최근 4개 Work 중 3개가 통계 검정을 요구",
-                },
-                {
-                  signalId: "signal-sample",
-                  group: "required" as const,
-                  origin: "deterministic" as const,
-                  outcome: "failed" as const,
-                  score: 0.22,
-                  adapterId: "observation-window",
-                  adapterVersion: "1.0.0",
-                  note: "관측 표본 4건. 최소 표본 10건에 못 미침",
+                  path: "계량분석 팀",
+                  before: 'scope: "work" · 이 Work가 끝나면 사라짐',
+                  after: 'scope: "persistent" · 조직에 남음',
                 },
               ],
-            },
-            targetDrifted: true,
-            rationale: "최근 4개 Work 중 3개가 통계 검정을 요구했고 매번 scope work 노드를 새로 만들었습니다.",
-            expectedEffect: "같은 팀을 반복 생성하지 않고 조직 버전이 안정됩니다.",
-            riskSummary: "쓰이지 않는 분기에도 노드가 남아 조직이 커집니다.",
-            status: "evaluated",
+              evaluation: {
+                evaluationRunId: "evaluation-0032",
+                outcome: "ineligible" as const,
+                inputHash: "fixture-evaluation-quant",
+                strategyVersionId: "strategy-v4",
+                signals: [
+                  {
+                    signalId: "signal-demand",
+                    group: "required" as const,
+                    origin: "deterministic" as const,
+                    outcome: "passed" as const,
+                    score: 0.71,
+                    adapterId: "capability-demand",
+                    adapterVersion: "1.1.0",
+                    note: "최근 4개 Work 중 3개가 통계 검정을 요구",
+                  },
+                  {
+                    signalId: "signal-sample",
+                    group: "required" as const,
+                    origin: "deterministic" as const,
+                    outcome: "failed" as const,
+                    score: 0.22,
+                    adapterId: "observation-window",
+                    adapterVersion: "1.0.0",
+                    note: "관측 표본 4건. 최소 표본 10건에 못 미침",
+                  },
+                ],
+              },
+              targetDrifted: true,
+              rationale: "최근 4개 Work 중 3개가 통계 검정을 요구했고 매번 scope work 노드를 새로 만들었습니다.",
+              expectedEffect: "같은 팀을 반복 생성하지 않고 조직 버전이 안정됩니다.",
+              riskSummary: "쓰이지 않는 분기에도 노드가 남아 조직이 커집니다.",
+              status: "evaluated",
             },
             {
               suggestionId: "suggestion-target-drift-fixture",
@@ -3096,235 +3211,235 @@ export function createFixtureDesktopService(): DesktopService {
               expectedEffect: "검토 근거를 기억에 남깁니다.",
               riskSummary: "현재 업무에는 적용 범위가 넓습니다.",
               status: "evaluated",
-          },
-          {
-            // 자동 반영(approvalId 없음) → 효과 개선 확인 → retained.
-            suggestionId: "suggestion-handoff-note",
-            workId: "contract-review",
-            targetKind: "prompt",
-            operation: "append-instruction",
-            summary: "인계할 때 해소하지 못한 질문을 함께 넘깁니다.",
-            revision: 2,
-            createdAt: "2026-07-16T14:05:00.000Z",
-            reflectionRunId: "reflection-0008",
-            sourceReferenceIds: ["work:contract-review", "message:handoff-gap", "verification:handoff-completeness"],
-            patch: [
-              {
-                targetHandle: "delivery",
-                path: "인계 규칙",
-                before: "완료한 것을 요약해 넘긴다",
-                after: "완료한 것과 함께 해소하지 못한 질문을 목록으로 넘긴다",
-              },
-            ],
-            evaluation: {
-              evaluationRunId: "evaluation-0024",
-              outcome: "eligible" as const,
-              strategyVersionId: "strategy-v4",
-              signals: [
+            },
+            {
+              // 자동 반영(approvalId 없음) → 효과 개선 확인 → retained.
+              suggestionId: "suggestion-handoff-note",
+              workId: "contract-review",
+              targetKind: "prompt",
+              operation: "append-instruction",
+              summary: "인계할 때 해소하지 못한 질문을 함께 넘깁니다.",
+              revision: 2,
+              createdAt: "2026-07-16T14:05:00.000Z",
+              reflectionRunId: "reflection-0008",
+              sourceReferenceIds: ["work:contract-review", "message:handoff-gap", "verification:handoff-completeness"],
+              patch: [
                 {
-                  signalId: "signal-handoff-rework",
-                  group: "required" as const,
-                  origin: "deterministic" as const,
-                  outcome: "passed" as const,
-                  score: 0.79,
-                  adapterId: "rework-counter",
-                  adapterVersion: "1.2.0",
-                  note: "인계 직후 재질문이 최근 9개 Work 중 5건",
+                  targetHandle: "delivery",
+                  path: "인계 규칙",
+                  before: "완료한 것을 요약해 넘긴다",
+                  after: "완료한 것과 함께 해소하지 못한 질문을 목록으로 넘긴다",
                 },
+              ],
+              evaluation: {
+                evaluationRunId: "evaluation-0024",
+                outcome: "eligible" as const,
+                strategyVersionId: "strategy-v4",
+                signals: [
+                  {
+                    signalId: "signal-handoff-rework",
+                    group: "required" as const,
+                    origin: "deterministic" as const,
+                    outcome: "passed" as const,
+                    score: 0.79,
+                    adapterId: "rework-counter",
+                    adapterVersion: "1.2.0",
+                    note: "인계 직후 재질문이 최근 9개 Work 중 5건",
+                  },
+                  {
+                    signalId: "signal-handoff-verdict",
+                    group: "required" as const,
+                    origin: "independent" as const,
+                    outcome: "passed" as const,
+                    score: 0.74,
+                    adapterId: "assurance-verdict",
+                    adapterVersion: "2.0.1",
+                    note: "독립 검증이 인계 누락을 3회 지적",
+                  },
+                ],
+              },
+              targetDrifted: false,
+              rationale: "인계 직후 같은 질문이 다시 올라오는 일이 최근 9개 Work 중 5건이었습니다.",
+              expectedEffect: "인계 후 재작업이 줄어듭니다.",
+              riskSummary: "인계 문서가 길어져 읽는 시간이 늘어납니다.",
+              status: "adopted",
+              adoption: {
+                adoptionId: "adoption-0002",
+                status: "retained",
+                commandId: "command-growth-0041",
+                evaluationRunId: "evaluation-0024",
+                evaluationInputHash: "6b1f0d4a92c7e35810ba4fd6c208e9713f5a4c8e2d0b7691a3f4c5e8d2b0179a",
+                beforeVersionId: "prompt-delivery-v7",
+                beforeChecksum: "a41c7e0932b58d16fe4a09c3d7b25801e6f39a4c8b0d2517e93f6a4c1b8d05e2",
+                afterVersionId: "prompt-delivery-v8",
+                afterChecksum: "d80b5f2a6c19e473a05d8b3f61c94207e5a83d1f0b62c748e91a3f5d0c26b481",
+                adoptedAt: "2026-07-16T14:22:00.000Z",
+              },
+            },
+            {
+              // 사람이 승인 → 효과 저하 관찰 → 되돌림.
+              suggestionId: "suggestion-verify-depth",
+              workId: "pricing-model",
+              targetKind: "policy",
+              operation: "raise-threshold",
+              summary: "수치 결론에는 독립 검증을 두 번 거칩니다.",
+              revision: 1,
+              createdAt: "2026-07-19T09:40:00.000Z",
+              reflectionRunId: "reflection-0009",
+              sourceReferenceIds: ["work:pricing-model", "verification:number-check"],
+              patch: [
                 {
-                  signalId: "signal-handoff-verdict",
-                  group: "required" as const,
-                  origin: "independent" as const,
-                  outcome: "passed" as const,
-                  score: 0.74,
-                  adapterId: "assurance-verdict",
-                  adapterVersion: "2.0.1",
-                  note: "독립 검증이 인계 누락을 3회 지적",
+                  path: "검증 횟수",
+                  before: "수치 결론은 독립 검증 1회",
+                  after: "수치 결론은 독립 검증 2회",
+                },
+              ],
+              evaluation: {
+                evaluationRunId: "evaluation-0027",
+                outcome: "eligible" as const,
+                strategyVersionId: "strategy-v4",
+                signals: [
+                  {
+                    signalId: "signal-number-defect",
+                    group: "required" as const,
+                    origin: "independent" as const,
+                    outcome: "passed" as const,
+                    score: 0.7,
+                    adapterId: "assurance-verdict",
+                    adapterVersion: "2.0.1",
+                    note: "수치 오류가 검증 이후 단계에서 2회 발견",
+                  },
+                  {
+                    signalId: "signal-verify-cost",
+                    group: "conflict" as const,
+                    origin: "deterministic" as const,
+                    outcome: "failed" as const,
+                    score: 0.38,
+                    adapterId: "stage-duration",
+                    adapterVersion: "1.0.4",
+                    note: "검증 단계 소요가 중앙값 기준 2배",
+                  },
+                ],
+              },
+              targetDrifted: false,
+              rationale: "가격 모델 Work에서 수치 오류가 검증을 통과한 뒤 두 번 발견됐습니다.",
+              expectedEffect: "수치 결론의 오류가 줄어듭니다.",
+              riskSummary: "모든 수치 Work의 검증 단계가 길어집니다.",
+              status: "adopted",
+              adoption: {
+                adoptionId: "adoption-0003",
+                status: "reverted",
+                commandId: "command-growth-0052",
+                approvalId: "approval-growth-0018",
+                evaluationRunId: "evaluation-0027",
+                evaluationInputHash: "3c9a7e15d0b846f2917c5a0e3d8b6412f7095c2a8e4d1b63095f7a2c4e8d61b0",
+                beforeVersionId: "policy-assurance-v3",
+                beforeChecksum: "5e2d90a7c13b846f095a2d7e4c1b830956f7a2e4d0c8b1739e5a2f6c04d8b319",
+                afterVersionId: "policy-assurance-v4",
+                afterChecksum: "91f4c7a205e8d3b607a4f9c2e50d8b3617f2a9c4e0d5b8317a6f2c9e40d5b8371",
+                adoptedAt: "2026-07-19T10:02:00.000Z",
+                revertedAt: "2026-07-24T08:15:00.000Z",
+              },
+            },
+            {
+              // 사람이 거부. 도메인이 거절에 결정 계보를 강제합니다.
+              suggestionId: "suggestion-tone-brief",
+              workId: "churn-q3",
+              targetKind: "memory",
+              operation: "add-entry",
+              summary: "모든 보고를 5줄 이내로 고정합니다.",
+              revision: 1,
+              createdAt: "2026-07-22T16:10:00.000Z",
+              reflectionRunId: "reflection-0010",
+              sourceReferenceIds: ["work:churn-q3", "message:length-complaint"],
+              patch: [
+                {
+                  path: "answer-style",
+                  before: "분석 결과는 결론부터 설명한다",
+                  after: "분석 결과는 결론부터 설명하고 본문을 5줄 이내로 쓴다",
+                },
+              ],
+              evaluation: {
+                evaluationRunId: "evaluation-0029",
+                outcome: "eligible" as const,
+                strategyVersionId: "strategy-v4",
+                signals: [
+                  {
+                    signalId: "signal-length-complaint",
+                    group: "required" as const,
+                    origin: "deterministic" as const,
+                    outcome: "passed" as const,
+                    score: 0.66,
+                    adapterId: "message-sentiment",
+                    adapterVersion: "1.0.2",
+                    note: "보고가 길다는 발언이 최근 6개 Work 중 4건",
+                  },
+                  {
+                    signalId: "signal-length-selfcheck",
+                    group: "supporting" as const,
+                    origin: "model-self" as const,
+                    outcome: "passed" as const,
+                    score: 0.88,
+                    adapterId: "reflection-selfcheck",
+                    adapterVersion: "0.9.0",
+                    note: "모델 자기평가. 독립 신호로 계산하지 않음",
+                  },
+                ],
+              },
+              targetDrifted: false,
+              rationale: "보고가 길다는 발언이 최근 6개 Work 중 4건이었습니다.",
+              expectedEffect: "보고를 읽는 시간이 줄어듭니다.",
+              riskSummary: "근거를 함께 읽어야 하는 보고에서 판단에 필요한 값이 잘립니다.",
+              status: "rejected",
+              decisionReason: "규제 검토 보고는 근거를 줄이면 다시 물어야 해서 길이를 고정하지 않는다",
+              decidedAt: "2026-07-22T16:38:00.000Z",
+            },
+          ],
+          memories: [
+            {
+              memoryVersionId: "memory-0004",
+              revision: 4,
+              entries: [
+                {
+                  key: "answer-style",
+                  kind: "preference" as const,
+                  value: "분석 결과는 결론부터 설명한다",
+                  authority: "explicit" as const,
                 },
               ],
             },
-            targetDrifted: false,
-            rationale: "인계 직후 같은 질문이 다시 올라오는 일이 최근 9개 Work 중 5건이었습니다.",
-            expectedEffect: "인계 후 재작업이 줄어듭니다.",
-            riskSummary: "인계 문서가 길어져 읽는 시간이 늘어납니다.",
-            status: "adopted",
-            adoption: {
+          ],
+          effects: [
+            {
+              effectEvaluationId: "effect-0002",
               adoptionId: "adoption-0002",
-              status: "retained",
-              commandId: "command-growth-0041",
-              evaluationRunId: "evaluation-0024",
-              evaluationInputHash: "6b1f0d4a92c7e35810ba4fd6c208e9713f5a4c8e2d0b7691a3f4c5e8d2b0179a",
-              beforeVersionId: "prompt-delivery-v7",
-              beforeChecksum: "a41c7e0932b58d16fe4a09c3d7b25801e6f39a4c8b0d2517e93f6a4c1b8d05e2",
-              afterVersionId: "prompt-delivery-v8",
-              afterChecksum: "d80b5f2a6c19e473a05d8b3f61c94207e5a83d1f0b62c748e91a3f5d0c26b481",
-              adoptedAt: "2026-07-16T14:22:00.000Z",
-            },
-          },
-          {
-            // 사람이 승인 → 효과 저하 관찰 → 되돌림.
-            suggestionId: "suggestion-verify-depth",
-            workId: "pricing-model",
-            targetKind: "policy",
-            operation: "raise-threshold",
-            summary: "수치 결론에는 독립 검증을 두 번 거칩니다.",
-            revision: 1,
-            createdAt: "2026-07-19T09:40:00.000Z",
-            reflectionRunId: "reflection-0009",
-            sourceReferenceIds: ["work:pricing-model", "verification:number-check"],
-            patch: [
-              {
-                path: "검증 횟수",
-                before: "수치 결론은 독립 검증 1회",
-                after: "수치 결론은 독립 검증 2회",
+              result: "improved" as const,
+              suggestionId: "suggestion-handoff-note",
+              measure: {
+                score: 0.34,
+                observationCount: 14,
+                minimumObservations: 10,
+                unit: "재작업 비율",
+                direction: "lower" as const,
+                baseline: 0.51,
               },
-            ],
-            evaluation: {
-              evaluationRunId: "evaluation-0027",
-              outcome: "eligible" as const,
-              strategyVersionId: "strategy-v4",
-              signals: [
-                {
-                  signalId: "signal-number-defect",
-                  group: "required" as const,
-                  origin: "independent" as const,
-                  outcome: "passed" as const,
-                  score: 0.7,
-                  adapterId: "assurance-verdict",
-                  adapterVersion: "2.0.1",
-                  note: "수치 오류가 검증 이후 단계에서 2회 발견",
-                },
-                {
-                  signalId: "signal-verify-cost",
-                  group: "conflict" as const,
-                  origin: "deterministic" as const,
-                  outcome: "failed" as const,
-                  score: 0.38,
-                  adapterId: "stage-duration",
-                  adapterVersion: "1.0.4",
-                  note: "검증 단계 소요가 중앙값 기준 2배",
-                },
-              ],
             },
-            targetDrifted: false,
-            rationale: "가격 모델 Work에서 수치 오류가 검증을 통과한 뒤 두 번 발견됐습니다.",
-            expectedEffect: "수치 결론의 오류가 줄어듭니다.",
-            riskSummary: "모든 수치 Work의 검증 단계가 길어집니다.",
-            status: "adopted",
-            adoption: {
+            {
+              // 저하가 확인돼 adoption-0003이 되돌아갔습니다.
+              effectEvaluationId: "effect-0003",
               adoptionId: "adoption-0003",
-              status: "reverted",
-              commandId: "command-growth-0052",
-              approvalId: "approval-growth-0018",
-              evaluationRunId: "evaluation-0027",
-              evaluationInputHash: "3c9a7e15d0b846f2917c5a0e3d8b6412f7095c2a8e4d1b63095f7a2c4e8d61b0",
-              beforeVersionId: "policy-assurance-v3",
-              beforeChecksum: "5e2d90a7c13b846f095a2d7e4c1b830956f7a2e4d0c8b1739e5a2f6c04d8b319",
-              afterVersionId: "policy-assurance-v4",
-              afterChecksum: "91f4c7a205e8d3b607a4f9c2e50d8b3617f2a9c4e0d5b8317a6f2c9e40d5b8371",
-              adoptedAt: "2026-07-19T10:02:00.000Z",
-              revertedAt: "2026-07-24T08:15:00.000Z",
-            },
-          },
-          {
-            // 사람이 거부. 도메인이 거절에 결정 계보를 강제합니다.
-            suggestionId: "suggestion-tone-brief",
-            workId: "churn-q3",
-            targetKind: "memory",
-            operation: "add-entry",
-            summary: "모든 보고를 5줄 이내로 고정합니다.",
-            revision: 1,
-            createdAt: "2026-07-22T16:10:00.000Z",
-            reflectionRunId: "reflection-0010",
-            sourceReferenceIds: ["work:churn-q3", "message:length-complaint"],
-            patch: [
-              {
-                path: "answer-style",
-                before: "분석 결과는 결론부터 설명한다",
-                after: "분석 결과는 결론부터 설명하고 본문을 5줄 이내로 쓴다",
+              result: "degraded" as const,
+              suggestionId: "suggestion-verify-depth",
+              measure: {
+                score: 0.44,
+                observationCount: 12,
+                minimumObservations: 10,
+                unit: "재작업 비율",
+                direction: "lower" as const,
+                baseline: 0.28,
               },
-            ],
-            evaluation: {
-              evaluationRunId: "evaluation-0029",
-              outcome: "eligible" as const,
-              strategyVersionId: "strategy-v4",
-              signals: [
-                {
-                  signalId: "signal-length-complaint",
-                  group: "required" as const,
-                  origin: "deterministic" as const,
-                  outcome: "passed" as const,
-                  score: 0.66,
-                  adapterId: "message-sentiment",
-                  adapterVersion: "1.0.2",
-                  note: "보고가 길다는 발언이 최근 6개 Work 중 4건",
-                },
-                {
-                  signalId: "signal-length-selfcheck",
-                  group: "supporting" as const,
-                  origin: "model-self" as const,
-                  outcome: "passed" as const,
-                  score: 0.88,
-                  adapterId: "reflection-selfcheck",
-                  adapterVersion: "0.9.0",
-                  note: "모델 자기평가. 독립 신호로 계산하지 않음",
-                },
-              ],
             },
-            targetDrifted: false,
-            rationale: "보고가 길다는 발언이 최근 6개 Work 중 4건이었습니다.",
-            expectedEffect: "보고를 읽는 시간이 줄어듭니다.",
-            riskSummary: "근거를 함께 읽어야 하는 보고에서 판단에 필요한 값이 잘립니다.",
-            status: "rejected",
-            decisionReason: "규제 검토 보고는 근거를 줄이면 다시 물어야 해서 길이를 고정하지 않는다",
-            decidedAt: "2026-07-22T16:38:00.000Z",
-          },
-        ],
-        memories: [
-          {
-            memoryVersionId: "memory-0004",
-            revision: 4,
-            entries: [
-              {
-                key: "answer-style",
-                kind: "preference" as const,
-                value: "분석 결과는 결론부터 설명한다",
-                authority: "explicit" as const,
-              },
-            ],
-          },
-        ],
-        effects: [
-          {
-            effectEvaluationId: "effect-0002",
-            adoptionId: "adoption-0002",
-            result: "improved" as const,
-            suggestionId: "suggestion-handoff-note",
-            measure: {
-              score: 0.34,
-              observationCount: 14,
-              minimumObservations: 10,
-              unit: "재작업 비율",
-              direction: "lower" as const,
-              baseline: 0.51,
-            },
-          },
-          {
-            // 저하가 확인돼 adoption-0003이 되돌아갔습니다.
-            effectEvaluationId: "effect-0003",
-            adoptionId: "adoption-0003",
-            result: "degraded" as const,
-            suggestionId: "suggestion-verify-depth",
-            measure: {
-              score: 0.44,
-              observationCount: 12,
-              minimumObservations: 10,
-              unit: "재작업 비율",
-              direction: "lower" as const,
-              baseline: 0.28,
-            },
-          },
-        ],
+          ],
         };
         return structuredClone({
           ...view,
@@ -3493,7 +3608,16 @@ export function createFixtureDesktopService(): DesktopService {
           artifacts: [],
           verifications: [],
           records: [],
-          activities: [{ id: `request-fixture-${suffix}`, kind: "message", time: "방금", author: "사용자", initials: "U", content: input.text }],
+          activities: [
+            {
+              id: `request-fixture-${suffix}`,
+              kind: "message",
+              time: "방금",
+              author: "사용자",
+              initials: "U",
+              content: input.text,
+            },
+          ],
         });
         executionHistory.set(executionId, { workId, runId, deltas: [], completed: false });
         publishDurable("run.started", { type: "ApplicationRun", id: runId, revision: 0 }, { stage: "intake" });
@@ -3522,7 +3646,8 @@ export function createFixtureDesktopService(): DesktopService {
         }
         return async () => {
           handlers.delete(handler);
-          if (handlers.size === 0 && executionHandlers.get(executionId) === handlers) executionHandlers.delete(executionId);
+          if (handlers.size === 0 && executionHandlers.get(executionId) === handlers)
+            executionHandlers.delete(executionId);
         };
       }),
   };

@@ -225,7 +225,11 @@ describe("Application desktop service", () => {
 
   it("fixture 설정과 새 Work 상태는 서비스 인스턴스마다 독립적이다", async () => {
     const changed = createFixtureDesktopService();
-    await changed.registerProvider({ providerId: "isolated-provider", displayName: "격리 제공자", adapterKind: "test" });
+    await changed.registerProvider({
+      providerId: "isolated-provider",
+      displayName: "격리 제공자",
+      adapterKind: "test",
+    });
     await changed.startWork({ text: "격리된 Work", workspaceId: "workspace-analytics" });
 
     const fresh = createFixtureDesktopService();
@@ -242,8 +246,17 @@ describe("Application desktop service", () => {
     );
     if (!credential) throw new Error("fixture credential이 필요합니다");
 
-    await service.registerProvider({ providerId: "fixture-provider", displayName: "Fixture Provider", adapterKind: "openai-compatible" });
-    await service.registerEndpoint({ providerId: "fixture-provider", name: "api", baseUrl: "https://fixture.example/v1", local: false });
+    await service.registerProvider({
+      providerId: "fixture-provider",
+      displayName: "Fixture Provider",
+      adapterKind: "openai-compatible",
+    });
+    await service.registerEndpoint({
+      providerId: "fixture-provider",
+      name: "api",
+      baseUrl: "https://fixture.example/v1",
+      local: false,
+    });
     await service.addCredential({
       providerId: "fixture-provider",
       endpointId: "ep-fixture-provider",
@@ -253,7 +266,12 @@ describe("Application desktop service", () => {
       priority: 0,
       weight: 100,
     });
-    await service.registerEndpoint({ providerId: "fixture-provider", name: "backup", baseUrl: "https://fixture.example/backup", local: false });
+    await service.registerEndpoint({
+      providerId: "fixture-provider",
+      name: "backup",
+      baseUrl: "https://fixture.example/backup",
+      local: false,
+    });
     await service.addCredential({
       providerId: "fixture-provider",
       endpointId: "ep-fixture-provider-backup",
@@ -298,8 +316,18 @@ describe("Application desktop service", () => {
       totalBudgetMicros: 100_000,
       secret: "route-secret",
     });
-    await service.addRouteCandidate({ routeId: "route-fixture-", modelProfileId: "mp-glm-fixture", priority: 0, token: "candidate-token" });
-    await service.configureSubscriptionPolicy({ providerId: "zai-coding-plan", credentialPolicy: "round-robin", approvalMode: "automatic", secret: "policy-secret" });
+    await service.addRouteCandidate({
+      routeId: "route-fixture-",
+      modelProfileId: "mp-glm-fixture",
+      priority: 0,
+      token: "candidate-token",
+    });
+    await service.configureSubscriptionPolicy({
+      providerId: "zai-coding-plan",
+      credentialPolicy: "round-robin",
+      approvalMode: "automatic",
+      secret: "policy-secret",
+    });
 
     const changed = await service.loadSettings();
     expect(JSON.stringify(changed)).toContain("glm-fixture");
@@ -317,12 +345,17 @@ describe("Application desktop service", () => {
       expect.arrayContaining([
         expect.objectContaining({ credentialId: credential.credentialId, status: "revoked" }),
         expect.objectContaining({ providerId: "fixture-provider", label: "기본 키", status: "active" }),
-        expect.objectContaining({ providerId: "fixture-provider", endpointId: "ep-fixture-provider-backup", label: "기본 키", status: "active" }),
+        expect.objectContaining({
+          providerId: "fixture-provider",
+          endpointId: "ep-fixture-provider-backup",
+          label: "기본 키",
+          status: "active",
+        }),
       ]),
     );
-    const fixtureCredentials = (changed.credentials as Array<{ credentialId: string; endpointId: string; status: string }>).filter(
-      (item) => item.endpointId.startsWith("ep-fixture-provider"),
-    );
+    const fixtureCredentials = (
+      changed.credentials as Array<{ credentialId: string; endpointId: string; status: string }>
+    ).filter((item) => item.endpointId.startsWith("ep-fixture-provider"));
     const primaryCredential = fixtureCredentials.find((item) => item.endpointId === "ep-fixture-provider");
     const backupCredential = fixtureCredentials.find((item) => item.endpointId === "ep-fixture-provider-backup");
     if (!primaryCredential || !backupCredential) throw new Error("endpoint별 fixture credential이 필요합니다");
@@ -339,7 +372,9 @@ describe("Application desktop service", () => {
       endpoints: expect.arrayContaining([expect.objectContaining({ providerId: "zai-coding-plan" })]),
     });
     expect(changed.credentials).toEqual(
-      expect.arrayContaining([expect.objectContaining({ credentialId: "credential-account-zai", label: "개인 Coding Plan" })]),
+      expect.arrayContaining([
+        expect.objectContaining({ credentialId: "credential-account-zai", label: "개인 Coding Plan" }),
+      ]),
     );
     expect(changed.policy).toEqual(
       expect.arrayContaining([expect.objectContaining({ source: "configured", updatedAt: expect.any(String) })]),
@@ -376,23 +411,43 @@ describe("Application desktop service", () => {
     await service.registerModel(model);
     await expect(service.registerModel(model)).rejects.toThrow("중복");
     await expect(service.configureRoute({ name: "추론", routeKind: "reasoning" })).rejects.toThrow("중복");
-    await expect(service.addRouteCandidate({ routeId: "없는-route", modelProfileId: "mp-glm-conflict", priority: 0 })).rejects.toThrow("Route");
-    await expect(service.configureSubscriptionPolicy({ providerId: "zai-coding-plan", credentialPolicy: "없는-policy" })).rejects.toThrow("정책");
-    await expect(service.configureSubscriptionPolicy({ providerId: "zai-coding-plan", credentialPolicy: "adaptive", approvalMode: "없는-mode" })).rejects.toThrow("승인");
+    await expect(
+      service.addRouteCandidate({ routeId: "없는-route", modelProfileId: "mp-glm-conflict", priority: 0 }),
+    ).rejects.toThrow("Route");
+    await expect(
+      service.configureSubscriptionPolicy({ providerId: "zai-coding-plan", credentialPolicy: "없는-policy" }),
+    ).rejects.toThrow("정책");
+    await expect(
+      service.configureSubscriptionPolicy({
+        providerId: "zai-coding-plan",
+        credentialPolicy: "adaptive",
+        approvalMode: "없는-mode",
+      }),
+    ).rejects.toThrow("승인");
   });
 
   it("fixture subscription policy는 기존 mode와 provider 기본 mode를 따른다", async () => {
     const service = createFixtureDesktopService();
 
     await service.configureSubscriptionPolicy({ providerId: "zai-coding-plan", credentialPolicy: "adaptive" });
-    expect(await service.loadSettings()).toMatchObject({ policy: [expect.objectContaining({ providerId: "zai-coding-plan", approvalMode: "deny" })] });
-    await service.configureSubscriptionPolicy({ providerId: "zai-coding-plan", credentialPolicy: "priority", approvalMode: "review" });
+    expect(await service.loadSettings()).toMatchObject({
+      policy: [expect.objectContaining({ providerId: "zai-coding-plan", approvalMode: "deny" })],
+    });
+    await service.configureSubscriptionPolicy({
+      providerId: "zai-coding-plan",
+      credentialPolicy: "priority",
+      approvalMode: "review",
+    });
     await service.configureSubscriptionPolicy({ providerId: "zai-coding-plan", credentialPolicy: "weighted" });
-    expect(await service.loadSettings()).toMatchObject({ policy: [expect.objectContaining({ providerId: "zai-coding-plan", approvalMode: "review" })] });
+    expect(await service.loadSettings()).toMatchObject({
+      policy: [expect.objectContaining({ providerId: "zai-coding-plan", approvalMode: "review" })],
+    });
 
     await service.configureSubscriptionPolicy({ providerId: "openai-codex", credentialPolicy: "adaptive" });
     expect(await service.loadSettings()).toMatchObject({
-      policy: expect.arrayContaining([expect.objectContaining({ providerId: "openai-codex", approvalMode: "automatic" })]),
+      policy: expect.arrayContaining([
+        expect.objectContaining({ providerId: "openai-codex", approvalMode: "automatic" }),
+      ]),
     });
     await service.configureSubscriptionPolicy({ providerId: "xai-grok-build", credentialPolicy: "adaptive" });
     await service.configureSubscriptionPolicy({ providerId: "manifest-없는-provider", credentialPolicy: "adaptive" });
@@ -410,7 +465,12 @@ describe("Application desktop service", () => {
     const memory = initial.memories[0];
     if (!memory) throw new Error("fixture explicit memory가 필요합니다");
 
-    await service.putExplicitMemory({ key: "fixture-rule", kind: "procedure", value: "재조회로 확인합니다", revision: memory.revision });
+    await service.putExplicitMemory({
+      key: "fixture-rule",
+      kind: "procedure",
+      value: "재조회로 확인합니다",
+      revision: memory.revision,
+    });
     const updated = (await service.loadGrowth()).memories[0];
     expect(updated?.memoryVersionId).not.toBe(memory.memoryVersionId);
     expect(updated?.revision).toBe(memory.revision + 1);
@@ -572,8 +632,11 @@ describe("Application desktop service", () => {
 
   it("fixture Growth 대기 제안 거절은 adoption도 rejected로 전이하고 계보를 보존한다", async () => {
     const service = createFixtureDesktopService();
-    const initial = (await service.loadGrowth()).suggestions.find((item) => item.suggestionId === "suggestion-cohort-guard");
-    if (!initial?.revision || !initial.adoption || !initial.evaluation) throw new Error("대기 Growth 제안 계보가 필요합니다");
+    const initial = (await service.loadGrowth()).suggestions.find(
+      (item) => item.suggestionId === "suggestion-cohort-guard",
+    );
+    if (!initial?.revision || !initial.adoption || !initial.evaluation)
+      throw new Error("대기 Growth 제안 계보가 필요합니다");
 
     await service.rejectGrowthSuggestion({
       suggestionId: initial.suggestionId,
@@ -581,7 +644,9 @@ describe("Application desktop service", () => {
       reason: "현재 변경은 보류합니다",
     });
 
-    const rejected = (await service.loadGrowth()).suggestions.find((item) => item.suggestionId === initial.suggestionId);
+    const rejected = (await service.loadGrowth()).suggestions.find(
+      (item) => item.suggestionId === initial.suggestionId,
+    );
     expect(rejected).toMatchObject({
       status: "rejected",
       decisionReason: "현재 변경은 보류합니다",
@@ -596,7 +661,9 @@ describe("Application desktop service", () => {
 
   it("fixture Growth 반환의 nested 계보 mutation은 같은 서비스와 새 서비스에 새지 않는다", async () => {
     const service = createFixtureDesktopService();
-    const returned = (await service.loadGrowth()).suggestions.find((item) => item.suggestionId === "suggestion-cohort-guard");
+    const returned = (await service.loadGrowth()).suggestions.find(
+      (item) => item.suggestionId === "suggestion-cohort-guard",
+    );
     if (!returned?.adoption || !returned.evaluation?.signals[0]) throw new Error("Growth nested 계보가 필요합니다");
 
     (returned.adoption as { status: string }).status = "observing";
@@ -709,10 +776,20 @@ describe("Application desktop service", () => {
 
     expect(execution).toHaveBeenNthCalledWith(
       1,
-      expect.objectContaining({ executionId: "execution-fixture-0001", sequence: 1, kind: "lifecycle", summary: "started" }),
+      expect.objectContaining({
+        executionId: "execution-fixture-0001",
+        sequence: 1,
+        kind: "lifecycle",
+        summary: "started",
+      }),
     );
     expect(execution).toHaveBeenLastCalledWith(
-      expect.objectContaining({ executionId: "execution-fixture-0001", sequence: 2, kind: "lifecycle", summary: "finish" }),
+      expect.objectContaining({
+        executionId: "execution-fixture-0001",
+        sequence: 2,
+        kind: "lifecycle",
+        summary: "finish",
+      }),
     );
     expect(otherExecution).not.toHaveBeenCalled();
     expect(foreignDurable).not.toHaveBeenCalled();
