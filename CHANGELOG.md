@@ -19,4 +19,4 @@
 - 레거시 CLI·TUI·Web Console, Compose·Kubernetes, 설치 묶음
 - 원격 SurrealDB 3.2.1과 백업·복구·배포 검증 코드
 
-철회 당시의 GitHub 메타데이터와 실패 실행은 [철회 증거](docs/evidence/phase-30/withdrawn-v1.0.0-release-2026-07-24.md)에 남깁니다. 보존된 감사 태그는 이동·재사용하지 않으며, Unreleased 후보는 개인용 데스크톱 게이트를 같은 후보 SHA에서 모두 통과하기 전까지 공개하지 않습니다.
+보존된 감사 태그는 이동·재사용하지 않으며, Unreleased 후보는 개인용 데스크톱 게이트를 같은 후보 SHA에서 모두 통과하기 전까지 공개하지 않습니다.

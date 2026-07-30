@@ -85,8 +85,8 @@ Control · Strategy · Evidence · Delivery · Assurance · Records · Growth
 
 - 헌법 §5 축 표와 §6 표면 목록을 개정합니다.
 - 데스크톱에 `지식` 표면을 추가합니다. 열1(워크스페이스)은 `workspace.*` 계약으로 실제 동작하고, 열2·열3은 계약이 열릴 때까지 완성본 fixture로 둡니다.
-- 조회 셋이 필요합니다: `knowledge.index`(색인 규모·제외), `knowledge.graph`(렌즈별 동종 지도), `knowledge.links`(고른 노드의 전종 연결). 인계 문서가 소유합니다: [지식 표면과 통합 이웃 조회](../phases/30-surface-parity-agent-ux/knowledge-surface-handoff.md).
-- 업무 `근거` 탭과 [근거 관계 그래프 핸드오프](../phases/30-surface-parity-agent-ux/knowledge-graph-handoff.md)는 그대로 유지됩니다. 같은 관계 데이터를 Work 범위에서 쓰는 소비자입니다.
+- 조회 셋은 `knowledge.index`(색인 규모·제외), `knowledge.graph`(렌즈별 동종 지도), `knowledge.links`(고른 노드의 전종 연결)로 나눕니다.
+- 업무 `근거` 탭은 같은 관계 데이터를 Work 범위에서 쓰는 소비자로 유지합니다.
 
 ## 대안과 기각 이유
 

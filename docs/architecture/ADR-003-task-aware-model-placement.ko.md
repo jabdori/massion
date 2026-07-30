@@ -50,7 +50,7 @@ Governance의 `riskClass`와 `strategyRiskSchema`의 likelihood·impact는 행�
 
 T0·T1·T2의 출처와 만료·비용·데이터 전송 범위가 선택 근거에 남습니다. 관찰은 서버가 계산한 품질·지연·비용과 실제 실행·모델을 잇고, 보존 기간과 policy 부재 시 gate도 적용합니다. 모델 batch는 Growth 제안 대상과 route lineage를 갖습니다.
 
-Phase 30은 아직 `in-progress`이므로 이 ADR의 실행 표면은 그 기능 동등화 작업과 함께 검증합니다. 본 결정의 구현·검증 계획은 [Phase 31 설계](../phases/31-task-aware-model-placement/design.md)와 [구현 계획](../phases/31-task-aware-model-placement/implementation-plan.md)이 소유합니다.
+이 결정의 실행 표면과 후보 커밋 동작은 코드와 실행 결과로 판정합니다.
 
 ## 대안과 기각 이유
 

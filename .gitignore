@@ -7,6 +7,13 @@ target/
 .claude/
 .playwright-mcp/
 .superpowers/
+/docs/superpowers/
+/docs/phases/
+/docs/evidence/
+/docs/generated/requirements-traceability.tsv
+/scripts/verify-phase30-reconciliation.mjs
+/scripts/verify-phase30-reconciliation.test.mjs
+/.github/workflows/desktop-release.yml
 .scratch-*
 .runtime-stage/
 existing-data-capture.*

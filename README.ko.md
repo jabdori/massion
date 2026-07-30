@@ -68,8 +68,6 @@ Massion의 중심은 채팅 세션이 아니라 Work입니다. 사용자가 일�
 - 자동 검사, fixture, 임시 패키징과 과거 UAT는 각각 결속된 커밋의 증거이며 최신 공개 릴리스를 대신하지 않습니다.
 - 서명·공증·Gatekeeper·깨끗한 Mac 설치·업데이트·제거와 실제 접근성 검증은 공개 릴리스 후보에서 다시 수행해야 합니다.
 
-검증 결과는 날짜와 후보 SHA에 결속된 [`docs/evidence/`](docs/evidence/)에서만 확인합니다.
-
 ## 개발 실행
 
 저장소 기준 도구는 Node.js 24 이상, Bun 1.3 이상, pnpm 11.13.0, Rust와 Tauri 2입니다.
@@ -98,9 +96,6 @@ pnpm verify
 - [AgentOS 아키텍처](docs/architecture/README.ko.md)
 - [데스크톱 시각 언어](apps/desktop/DESIGN.ko.md)
 - [운영 안내](docs/operations/)
-- [검증 증거](docs/evidence/)
-
-`docs/superpowers/specs/`, `docs/superpowers/plans/`와 `docs/phases/`는 날짜에 결속된 설계·실행 기록입니다. 오래된 문서의 문장이 최신 상태를 증명하지 않습니다.
 
 ## 저장소 범위
 

@@ -5,7 +5,7 @@
 > **Status:** Accepted architecture decision
 > **Decision date:** 2026-07-22
 > **Audience:** Desktop, Application API, and release engineers and reviewers
-> **Supersedes:** [Phase 30 WS-4 shared Web/GUI decision](../phases/30-surface-parity-agent-ux/ws4-web-role-decision.md)
+> **Supersedes:** the shared Web/GUI wrapper architecture
 
 ## Decision
 

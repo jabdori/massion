@@ -3614,7 +3614,7 @@ function BudgetSurface({ service }: { service: DesktopService }) {
   const [selectedId, setSelectedId] = useState<string>();
   const [days, setDays] = useState<number>(30);
   const [openAttempt, setOpenAttempt] = useState<RouteAttemptView>();
-  /* 알림을 쓰는 명령이 아직 계약에 없습니다. 인계: docs/phases/30-surface-parity-agent-ux/settings-contract-handoff.md */
+  /* 알림을 쓰는 명령이 아직 계약에 없습니다. */
   const [alerts, setAlerts] = useState<readonly BudgetAlert[]>([]);
 
   useEffect(() => {
@@ -4559,7 +4559,7 @@ function ProviderSurface({ service }: { service: DesktopService }) {
   const [addOpen, setAddOpen] = useState(false);
   /*
    * 모델 켜고 끄기는 화면이 먼저 세웁니다. 계약에 model.enable 명령이 아직 없어 이 회차는
-   * 화면 상태로만 남습니다. 인계: docs/phases/30-surface-parity-agent-ux/settings-contract-handoff.md
+   * 화면 상태로만 남습니다.
    */
   const [disabledModels, setDisabledModels] = useState<ReadonlySet<string>>(new Set());
   const [saving, setSaving] = useState(false);
@@ -5027,7 +5027,7 @@ function SettingsSurface({ focusWorkspaceTrust, service }: { focusWorkspaceTrust
   const workspaceTrustSectionRef = useRef<HTMLElement>(null);
   /*
    * 자가개선 채택은 실행 자율성과 다른 축이라 따로 고를 수 있어야 합니다. 쓰는 명령이 아직
-   * 계약에 없어 화면이 앞세웁니다. 인계: docs/phases/30-surface-parity-agent-ux/settings-contract-handoff.md
+   * 계약에 없어 화면이 앞세웁니다.
    */
   const [growthModeOverride, setGrowthModeOverride] = useState<GrowthAdoptionMode>();
   useEffect(() => {

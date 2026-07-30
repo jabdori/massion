@@ -133,7 +133,6 @@ export interface ExtensionView {
  * 도메인에는 있습니다 — `ExtensionContributionDeclaration`·`ExtensionPermissionDeclaration`
  * (`packages/extension-sdk/src/contracts.ts:16,27`). 계약이 노출하는 `ExtensionInstallationViewV1`은
  * 다섯 필드뿐이고 그중 어느 것도 Capability가 아닙니다.
- * 인계: docs/phases/30-surface-parity-agent-ux/extension-capability-handoff.md
  */
 export type ContributionKind =
   | "runtimeTools"
@@ -270,7 +269,6 @@ export interface ModelRouteCandidateView {
  *
  * 전역 graph는 Application 계약이 Work·reference·artifact 정본으로 제공합니다.
  * `WorkKnowledgeViewV1.references`의 코드 관계는 아직 평평하므로 아래 Work 상세의 관계는 fixture 표현입니다.
- * 인계: docs/phases/30-surface-parity-agent-ux/knowledge-graph-handoff.md
  */
 
 /** @massion/evidence의 relation kind. 한글 문구는 화면이 소유합니다. */
@@ -654,8 +652,6 @@ function fixtureKnowledge(workId: string): WorkKnowledgeView {
  * growth(source_reference_ids). 단일 간선 테이블이 없으므로 실제 경로는 **application 계층 조인**으로
  * 하나의 이웃 조회를 만듭니다. SurrealDB native relation은 §9.6이 성능 실패가
  * 측정될 때만 열라고 했으므로 여기서 열지 않습니다.
- *
- * 인계: docs/phases/30-surface-parity-agent-ux/knowledge-surface-handoff.md
  */
 
 /** 마인드맵 노드가 가리킬 수 있는 것. 코드에 한정하지 않습니다. */
@@ -996,7 +992,6 @@ export interface CapabilitiesView {
 /**
  * 아래 세 타입은 도메인(`packages/growth`)에는 있고 Application 계약에는 아직 없습니다.
  * 완성본 기준으로 화면을 먼저 고정하기 위한 뷰이며, 계약이 넓어지면 그대로 채워집니다.
- * 인계: docs/phases/30-surface-parity-agent-ux/growth-adoption-handoff.md
  */
 export interface GrowthSignalView {
   readonly signalId: string;

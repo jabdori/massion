@@ -5,7 +5,7 @@
 > **상태**: 승인된 아키텍처 결정
 > **결정일**: 2026-07-22
 > **대상 독자**: 데스크톱·Application API·릴리스 구현자와 검토자
-> **대체하는 결정**: [Phase 30 WS-4 Web·GUI 동일 화면 결정](../phases/30-surface-parity-agent-ux/ws4-web-role-decision.md)
+> **대체하는 결정**: Web·GUI 래퍼 공유 아키텍처
 > **제품 기준**: [Massion 제품 헌법과 현재 방향](../product/constitution.ko.md)
 
 ## 결정
@@ -68,8 +68,6 @@ Work 상세의 네 영역을 AgentOS 전체 정보 구조로 확대 해석하지
 전역 Sidebar는 확장 224px, 아이콘 모드 64px를 기본값으로 사용합니다. 표면 내부 패널은 모든 화면에 같은 열 비율을 강제하지 않고 Resizable의 표면별 기본값과 최소 폭을 사용합니다. Work의 초기값은 목록 248px, 본문 가변, Inspector 320px이며 사용자가 조절한 비율을 로컬 UI 환경설정으로 보존합니다. 최소 창 크기는 1180×720px이고 이 폭에서는 Sidebar가 아이콘 모드가 되며 Inspector를 접을 수 있습니다. 각 영역은 독립적으로 스크롤합니다. 모바일용 축소 레이아웃은 첫 릴리스 범위가 아닙니다.
 
 shadcn/ui는 공통 셸과 접근성 상호작용의 소스 공급 방식으로 적극 사용합니다. 제공된 코드는 `apps/desktop`이 직접 소유·검토·수정하며 `--all`이나 `--overwrite`로 일괄 추가하지 않습니다. 공통 셸에는 Sidebar, Resizable, ScrollArea, Separator, Command와 필요할 때만 Sheet를 사용합니다. 데이터 표면에는 Item/Table, Tabs, Badge, Progress, Accordion, Empty, Skeleton과 Alert를 사용하고, 설정에는 Field, Input, Select와 Switch를 사용합니다. 승인·권한·삭제에는 Dialog와 AlertDialog를 사용합니다. Card는 실제로 독립된 요약 경계에만 제한합니다. 제품은 단일 암갈색 배경, 한 가지 amber 강조색, 제한된 border·radius 계층과 정보 구조를 계속 직접 소유합니다.
-
-세부 컴포넌트 매핑, Provider 인증, Extension 설치와 구현 순서는 [데스크톱 제품 표면 구현 설계](../superpowers/specs/2026-07-22-massion-desktop-product-surfaces-design.md)를 따릅니다.
 
 ## 보안과 데이터 흐름 규칙
 

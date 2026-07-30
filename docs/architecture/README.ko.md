@@ -2,7 +2,7 @@
 
 [English](README.md) | [한국어](README.ko.md)
 
-이 문서는 Massion의 구성요소, 책임 경계와 데이터 흐름을 설명합니다. 제품의 목적과 불변 원칙은 [제품 헌법](../product/constitution.ko.md), 공개 릴리스 경계는 [저장소 README](../../README.ko.md), 실행 결과는 [검증 증거](../evidence/)가 소유합니다.
+이 문서는 Massion의 구성요소, 책임 경계와 데이터 흐름을 설명합니다. 제품의 목적과 불변 원칙은 [제품 헌법](../product/constitution.ko.md), 공개 릴리스 경계는 [저장소 README](../../README.ko.md)가 소유합니다.
 
 아키텍처 문장은 완료 여부를 판정하지 않습니다. 소스 경로는 책임의 위치를 가리킬 뿐, 공개 릴리스나 사용자 인수 검증을 증명하지 않습니다.
 
@@ -265,7 +265,7 @@ flowchart LR
 
 개인용 1.0은 macOS arm64 데스크톱을 대상으로 합니다. 저장소에 남은 CLI, Web, TUI, Compose와 Kubernetes 경로는 별도 운영·역사 경계이며 개인용 공개 릴리스의 완료 조건으로 사용하지 않습니다.
 
-## 11. 관련 결정과 검증
+## 11. 관련 결정
 
 - [개인용 전체 권한 실행 모드](ADR-001-personal-full-access.ko.md)
 - [지식 축과 표면 복원](ADR-002-knowledge-axis-restoration.ko.md)
@@ -273,6 +273,4 @@ flowchart LR
 - [독립 데스크톱 전환](desktop-clean-sheet.ko.md)
 - [데스크톱 시각 언어](../../apps/desktop/DESIGN.ko.md)
 - [문서 지도](../README.ko.md)
-- [검증 증거](../evidence/)
-
-아키텍처 변경은 ADR로 결정하고, 동작 여부와 출시 판정은 같은 후보 SHA에서 실행한 검증 증거로 남깁니다.
+아키텍처 변경은 ADR로 결정하고, 동작 여부와 출시 판정은 같은 후보 SHA에서 실행한 검증으로 판정합니다.

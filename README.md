@@ -68,8 +68,6 @@ The first public target is a personal macOS arm64 desktop app. Home, Work, Knowl
 - Automated checks, fixtures, ad hoc packages, and historical UAT apply only to the commits recorded with them.
 - Signing, notarization, Gatekeeper, clean-Mac install/update/removal, recovery, and accessibility must be verified again on a public release candidate.
 
-Verification results live in [`docs/evidence/`](docs/evidence/) and are valid only for their recorded date and candidate SHA.
-
 ## Development
 
 The repository expects Node.js 24+, Bun 1.3+, pnpm 11.13.0, Rust, and Tauri 2.
@@ -98,9 +96,6 @@ pnpm verify
 - [AgentOS architecture](docs/architecture/README.md)
 - [Desktop design language](apps/desktop/DESIGN.md)
 - [Operations guides](docs/operations/)
-- [Verification evidence](docs/evidence/)
-
-`docs/superpowers/specs/`, `docs/superpowers/plans/`, and `docs/phases/` are dated design and execution records. Statements in older documents do not prove the current state.
 
 ## Repository scope
 

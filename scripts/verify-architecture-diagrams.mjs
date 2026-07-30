@@ -16,7 +16,7 @@ const requiredHeadings = [
   "## 8. Commands, events, and recovery",
   "## 9. Extension trust boundary",
   "## 10. Desktop process boundary",
-  "## 11. Decisions and evidence",
+  "## 11. Related decisions",
 ];
 const forbidden = [
   "Dual Storage",

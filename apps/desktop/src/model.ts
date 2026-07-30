@@ -230,8 +230,7 @@ export interface VerificationView {
 /**
  * 이 Work에만 거는 실행 권한. Claude Code의 권한 모드처럼 세션 안에서 바뀝니다.
  * 조직 기본값(설정)을 따르면 `undefined`이고, 여기서 바꾸면 이 Work만 달라집니다.
- * 도메인의 AutonomyStore는 조직 단위라 Work 단위 계약이 아직 없습니다 —
- * 인계: docs/phases/30-surface-parity-agent-ux/settings-contract-handoff.md
+ * 도메인의 AutonomyStore는 조직 단위라 Work 단위 계약이 아직 없습니다.
  */
 export type WorkAutonomyMode = "automatic" | "review" | "full-access";
 

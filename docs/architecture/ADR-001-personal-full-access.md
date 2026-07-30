@@ -36,4 +36,4 @@ Stopping is Work-scoped. The escape path is not a duplicate global stop button: 
 - Work, Execution, Tool, Growth, and Effect events remain recorded where the OS boundary permits it.
 - Growth may adopt allowed Prompt, Memory, Policy, or Organization versions without an additional action-level approval, but independent evaluation, source and target checksums, effect measurement, exposure stop, and rollback remain mandatory.
 
-Detailed contracts and acceptance are defined in the [full-access design](../superpowers/specs/2026-07-25-full-access-permission-design.md).
+Candidate-bound verification is separate from this decision record.

@@ -44,7 +44,7 @@ Massion은 모델을 고를 수 있는 채팅 앱도, 에이전트 여러 개를
 - 사용자의 실제 루틴은 업무를 만들고, 실행 사건을 지켜보고, 승인 요청에 응답하고, 산출물과 검증 결과를 확인하는 것입니다.
 - 사용자의 일은 자기 기계의 **로컬 디렉토리(워크스페이스)**와 묶입니다. 워크스페이스는 이름·경로·신뢰 상태(`pending`/`trusted`/`blocked`)·최근 사용 시각을 가진 1급 도메인 객체이며, 일반 모드의 Work는 사용자가 그 디렉토리를 신뢰하기 전까지 도구 실행이 차단됩니다. 사용자가 별도 전체 권한을 켠 동안에는 Workspace가 실행 보안 경계가 아니라 작업·지식 문맥으로만 쓰입니다.
 - Work가 워크스페이스에 묶이는 것은 **선택**입니다. 워크스페이스가 하나도 없는 상태는 오류가 아니라 정상 상태이며, 처음 설치한 사용자는 항상 그 상태에서 시작합니다. 디렉토리가 필요 없는 조사·판단·문서 업무가 실재합니다.
-- 검증 근거는 `docs/evidence/`에 날짜별 파일로 남기며, 실행 결과와 짝지어지지 않은 완료 주장은 인정하지 않습니다.
+- 실행 결과와 짝지어지지 않은 완료 주장은 인정하지 않습니다.
 
 ## Capabilities and Constraints
 
@@ -58,7 +58,7 @@ Massion은 모델을 고를 수 있는 채팅 앱도, 에이전트 여러 개를
 
 **구현됐지만 최종 실측 게이트가 남은 v1 목표**
 
-- 실행 정책에 `review | automatic | full-access`를 제공합니다. 기본 `automatic`은 기존 정책·필수 승인·Workspace 경계를 유지하고, 사용자가 한 번 경고를 확인해 켜는 `full-access`는 사용자 책임 하에 Massion 승인과 실행 샌드박스를 우회합니다. 코드·재시작·해제 경로는 구현됐고, 전체 원자 Tauri UAT와 긴급정지 실측은 [전체 권한 설계](docs/superpowers/specs/2026-07-25-full-access-permission-design.md)가 소유합니다.
+- 실행 정책은 `review | automatic | full-access`를 구분합니다. 기본 `automatic`은 기존 정책·필수 승인·Workspace 경계를 유지하고, `full-access`는 사용자가 위험을 확인한 경우에만 현재 OS 사용자 권한으로 실행합니다. 후보 커밋의 실제 동작은 코드와 SHA에 결속된 검증 증거로 판정합니다.
 
 **기술 제약 (설계 취향이 아니라 런타임 사실)**
 
@@ -77,22 +77,6 @@ Massion은 모델을 고를 수 있는 채팅 앱도, 에이전트 여러 개를
 3. **프론트엔드는 멈추지 않습니다.** 런타임 구현을 기다리지 않고 계속 진행합니다.
 
 화면의 fixture가 실제 런타임보다 앞서 있는 것은 결함이 아니라 이 방식의 결과입니다. 다만 **어느 부분이 앞서 있는지는 반드시 문서로 남깁니다.**
-
-작성된 핸드오프:
-
-- [에이전트 협업 런타임](docs/phases/30-surface-parity-agent-ux/agent-collaboration-runtime-handoff.md) — VoltAgent 위임을 협업방에 기록
-- [개선 채택·거부·되돌리기](docs/phases/30-surface-parity-agent-ux/growth-adoption-handoff.md) — 자가개선 command를 계약에 노출
-- [확장 Capability](docs/phases/30-surface-parity-agent-ux/extension-capability-handoff.md) — 설치된 확장이 조직에 무엇을 더했는지 계약에 노출
-- [설정 조회 계약](docs/phases/30-surface-parity-agent-ux/settings-contract-handoff.md) — `router.*`·`subscription.*` 일곱 조회에 타입 주기
-
-핸드오프를 현재 데스크톱과 실제 검증 순서로 통합한 실행 문서:
-
-- [제품 통합·정합성 설계](docs/superpowers/specs/2026-07-24-phase-30-product-integration-design.md) — 현재 기준선, 세로 흐름 순서와 전체 완료 판정
-- [홈·워크스페이스·파일 문맥](docs/superpowers/specs/2026-07-24-desktop-home-context-design.md) — 내부 ID 없는 새 사명 입력과 네이티브 문맥 선택
-- [Runtime·Application·표면 계약 수렴](docs/superpowers/specs/2026-07-24-runtime-contract-convergence-design.md) — 네 핸드오프와 실제 코드 연결점
-- [실제 데스크톱 UAT](docs/superpowers/specs/2026-07-24-desktop-live-uat-design.md) — Computer Use 기반 핵심 12개·확장 4개 시나리오
-- [개인용 전체 권한](docs/superpowers/specs/2026-07-25-full-access-permission-design.md) — 사용자 책임형 승인·샌드박스 우회와 런타임·회수·UAT 계약
-- [통합 구현 계획](docs/superpowers/plans/2026-07-24-phase-30-product-integration.md) — 파일·명령·커밋 단위 실행 순서
 
 **표면 결정 (2026-07-24, 사용자 논의로 확정)**
 
@@ -116,29 +100,6 @@ Massion은 모델을 고를 수 있는 채팅 앱도, 에이전트 여러 개를
 기존 `apps/web`·`apps/tui`의 화면과 amber·암갈색 데스크톱 시안은 **교체 대상**입니다. 반례로만 참조하며 부분 보정하지 않습니다.
 
 시각 세계는 `apps/desktop/DESIGN.md`가 소유합니다(2026-07-23 승인: 협업방 중심, UI 무채 + 에이전트별 색, 노랑은 사람이 필요한 곳 전용, 점선은 `scope:"work"`와 미승인 전용).
-
-## Evidence on Hand
-
-**실재하는 것**
-
-- 개인 소유 Z.AI GLM Coding Plan 키의 로컬 실행 UAT 2건: `docs/evidence/phase-30/glm-dogfooding-uat-2026-07-20.md`, `glm-dogfooding-uat-2026-07-21.md`. 개발·테스트 작성·실패 패치와 개인용 Massion 도그푸딩에 `glm-5.2`를 계속 사용합니다. 키·계정·할당량은 소유자 밖으로 공유하지 않습니다.
-- 업무 협업 UAT: `docs/evidence/phase-30/work-collaboration-local-uat-2026-07-20.md`. Core Office 협업방 9명 참가자, handoff 정상.
-- Software Engineering 조직이 Git fixture에서 RED→GREEN 변경 후 독립 Assurance를 통과한 기록.
-- Evidence 패키지의 Tree-sitter 기반 파일·symbol·chunk·relation 인덱스, exact·BM25 검색, 선택적 embedding port, CodeGraphService와 EvidenceBrief 계약.
-- Growth 패키지의 versioned MemoryVersion·PromptVersion 합성 및 RuntimeExecution memory lineage 계약.
-- 품질 게이트 실측: ESLint 0, 4개 패키지 typecheck 통과, 테스트 518건 통과(commit `938709f` 기준).
-
-**없는 것 — 앞으로 지어내면 안 되는 것**
-
-- 고객, 사용자 후기, 사례 연구, 채택 수치, 벤치마크 비교, 가격, 공개 배포 라이선스 승인.
-- 복수 Provider 계정의 quota 소진·fallback 실증. 단일 GLM 계정만 검증됐습니다.
-- Claude 소비자 구독 실계정 UAT.
-- 접근성 실측. 코드 구현은 있으나 스크린리더 실사용 확인은 하지 않았습니다.
-- 데스크톱 자체의 전체 사용자 UAT. `e3b5fe883`에서 Tauri → bridge → daemon → 실제 Provider, workspace 파일 문맥, Knowledge, 재시작 보존의 증분 검증은 통과했지만 native picker·업데이트·제거·접근성 실측은 남아 있습니다. [최신 증거](docs/evidence/phase-30/desktop-live-tauri-uat-2026-07-26-e3b5fe883.md)
-- Workspace 자동 색인·검색·CodeGraph 결과가 실제 Work의 Representative·Strategy·Delivery 입력과 데스크톱 citation으로 이어지는 생산 경로.
-- 개인 MemoryVersion의 실제 자동 Work 주입·재시작·사용 중지 전체 UAT. API·코드 경로 증거는 있으나 전체 화면 시나리오는 남아 있습니다.
-- LSP client/server 구현. 현재 저장소에는 LSP 구현이나 의존성이 없으며 완료 기능으로 주장하지 않습니다.
-- 서명·공증된 앱의 깨끗한 Mac 설치·수동 업데이트·제거, 앱 교체·재시작 뒤 데이터 지속성, daemon 비정상 종료 복구, 키보드·VoiceOver 실측.
 
 ## Product Principles
 

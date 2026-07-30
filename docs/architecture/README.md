@@ -2,7 +2,7 @@
 
 [English](README.md) | [한국어](README.ko.md)
 
-This document explains Massion's components, responsibility boundaries, and data flow. The [Product Constitution](../product/constitution.md) owns purpose and invariants, the [repository README](../../README.md) owns the public release boundary, and [verification evidence](../evidence/) owns runtime results.
+This document explains Massion's components, responsibility boundaries, and data flow. The [Product Constitution](../product/constitution.md) owns purpose and invariants, while the [repository README](../../README.md) owns the public release boundary.
 
 Architecture does not declare implementation status. Source paths identify ownership; they do not prove user acceptance or a public release.
 
@@ -265,7 +265,7 @@ The renderer does not receive the daemon URL or access token. Tauri capabilities
 
 The personal 1.0 target is macOS arm64 desktop. CLI, Web, TUI, Compose, and Kubernetes paths in the repository are separate operational or historical boundaries and do not define personal release acceptance.
 
-## 11. Decisions and evidence
+## 11. Related decisions
 
 - [Personal full-access execution](ADR-001-personal-full-access.md)
 - [Knowledge axis and surface](ADR-002-knowledge-axis-restoration.md)
@@ -273,6 +273,4 @@ The personal 1.0 target is macOS arm64 desktop. CLI, Web, TUI, Compose, and Kube
 - [Independent desktop transition](desktop-clean-sheet.md)
 - [Desktop design language](../../apps/desktop/DESIGN.md)
 - [Documentation map](../README.md)
-- [Verification evidence](../evidence/)
-
-Record architecture changes as ADRs. Judge runtime behavior and release readiness only from evidence executed on the same candidate SHA.
+Record architecture changes as ADRs. Judge runtime behavior and release readiness only from verification executed on the same candidate SHA.

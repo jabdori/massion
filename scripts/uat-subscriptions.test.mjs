@@ -1428,9 +1428,9 @@ test("공백이 있는 file URL도 실제 repository root로 복원한다", () =
   assert.equal(repositoryRootForScript(import.meta.url), repositoryRoot);
 });
 
-test("Phase 24 evidence JSON Schema는 validator와 같은 exact receipt 계약을 선언한다", async () => {
+test("subscription UAT JSON Schema는 validator와 같은 exact receipt 계약을 선언한다", async () => {
   const schema = JSON.parse(
-    await readFile(join(repositoryRoot, "docs/evidence/phase-24/subscription-uat.schema.json"), "utf8"),
+    await readFile(join(repositoryRoot, "scripts/fixtures/subscription-uat.schema.json"), "utf8"),
   );
   assert.equal(schema.$schema, "https://json-schema.org/draft/2020-12/schema");
   assert.equal(schema.$id, "https://massion.dev/schemas/subscription-uat.v1.json");

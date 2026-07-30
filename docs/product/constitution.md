@@ -16,7 +16,7 @@ Documentation and source code have distinct responsibilities:
 2. [`docs/architecture/README.md`](../architecture/README.md) explains system responsibilities and data and trust boundaries.
 3. ADRs and dated designs preserve the context and choice behind a decision.
 4. Source code defines the behavior of a particular commit.
-5. [`docs/evidence/`](../evidence/) records verification tied to a candidate SHA.
+5. Candidate-bound verification is separate from product and architecture documentation.
 
 When the source does not satisfy this direction, the difference is a product gap. The constitution is not reduced to match current code, and it is not evidence that an absent behavior exists.
 

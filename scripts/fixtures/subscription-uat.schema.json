@@ -5,16 +5,7 @@
   "description": "최종 릴리스와 실제 UAT 결과의 비밀 제거 계보입니다. 개인정보·인증정보·로컬 경로 검사는 생성기 validator가 재귀적으로 강제합니다.",
   "type": "object",
   "additionalProperties": false,
-  "required": [
-    "schema",
-    "gitCommit",
-    "releaseDigest",
-    "tmuxSession",
-    "startedAt",
-    "endedAt",
-    "summary",
-    "scenarios"
-  ],
+  "required": ["schema", "gitCommit", "releaseDigest", "tmuxSession", "startedAt", "endedAt", "summary", "scenarios"],
   "properties": {
     "schema": {
       "const": "massion.subscription-uat.v1"
