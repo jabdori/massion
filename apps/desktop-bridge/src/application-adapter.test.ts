@@ -17,6 +17,16 @@ import {
   type ApplicationHttpPort,
 } from "./application-adapter.js";
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+}
+
 function client(overrides: Partial<ApplicationHttpPort> = {}): ApplicationHttpPort {
   return {
     status: async () => ({ status: "ready" }),
@@ -229,6 +239,124 @@ describe("ApplicationBridgeAdapter operation", () => {
     await expect(adapter.shutdown()).resolves.toBeUndefined();
     expect(fixture.dependencies.startDaemon).not.toHaveBeenCalled();
     expect(fixture.dependencies.stopDaemon).toHaveBeenCalledOnce();
+  });
+
+  it("동시 query·command의 local access가 만료되면 한 번만 갱신하고 같은 요청을 재시도한다", async () => {
+    const authenticationExpired = new ApplicationRemoteError(401, { category: "authentication" });
+    const staleQuery = vi.fn().mockRejectedValue(authenticationExpired);
+    const staleCommand = vi.fn().mockRejectedValue(authenticationExpired);
+    const freshQuery = vi.fn(async (operation: string, payload: unknown) => ({ operation, payload }));
+    const freshCommand = vi.fn(async (input: unknown) => input);
+    const stale = client({
+      status: vi.fn().mockResolvedValueOnce({ status: "ready" }).mockRejectedValue(authenticationExpired),
+      query: staleQuery,
+      command: staleCommand,
+    });
+    const fresh = client({ query: freshQuery, command: freshCommand });
+    const createClient = vi.fn().mockReturnValueOnce(stale).mockReturnValueOnce(fresh);
+    const openLocalSession = vi.fn().mockResolvedValueOnce("mat_expired").mockResolvedValueOnce("mat_refreshed");
+    const adapter = createApplicationAdapter(dependencies({ createClient, openLocalSession }).dependencies);
+    const command = {
+      schemaVersion: APPLICATION_SCHEMA_VERSION,
+      commandId: "command-auth-refresh-0001",
+      correlationId: "correlation-auth-refresh-0001",
+      operation: "run.cancel",
+      payload: { runId: "run-auth-refresh-0001" },
+    } as const;
+
+    await adapter.connect({});
+    const [first, second, commanded] = await Promise.all([
+      adapter.query({ operation: "organization.graph.snapshot", payload: {} }),
+      adapter.query({ operation: "subscription.providers", payload: {} }),
+      adapter.command(command),
+    ]);
+
+    expect(first).toEqual({ operation: "organization.graph.snapshot", payload: {} });
+    expect(second).toEqual({ operation: "subscription.providers", payload: {} });
+    expect(commanded).toEqual(command);
+    expect(openLocalSession).toHaveBeenCalledTimes(2);
+    expect(createClient).toHaveBeenCalledTimes(2);
+    expect(staleQuery).toHaveBeenCalledTimes(2);
+    expect(staleCommand).toHaveBeenCalledOnce();
+    expect(freshQuery).toHaveBeenCalledTimes(2);
+    expect(freshCommand).toHaveBeenCalledOnce();
+    expect(freshCommand).toHaveBeenCalledWith(command);
+  });
+
+  it("재연결 중 늦게 시작한 query도 같은 갱신을 기다린다", async () => {
+    const refresh = deferred<string>();
+    const authenticationExpired = new ApplicationRemoteError(401, { category: "authentication" });
+    const stale = client({ query: vi.fn().mockRejectedValue(authenticationExpired) });
+    const fresh = client();
+    const createClient = vi.fn().mockReturnValueOnce(stale).mockReturnValueOnce(fresh);
+    const openLocalSession = vi
+      .fn()
+      .mockResolvedValueOnce("mat_expired")
+      .mockImplementationOnce(async () => await refresh.promise);
+    const adapter = createApplicationAdapter(dependencies({ createClient, openLocalSession }).dependencies);
+
+    await adapter.connect({});
+    const first = adapter.query({ operation: "organization.graph.snapshot", payload: {} });
+    await vi.waitFor(() => expect(openLocalSession).toHaveBeenCalledTimes(2));
+    const late = adapter.query({ operation: "subscription.providers", payload: {} });
+    refresh.resolve("mat_refreshed");
+
+    await expect(Promise.all([first, late])).resolves.toEqual([
+      { operation: "organization.graph.snapshot", payload: {} },
+      { operation: "subscription.providers", payload: {} },
+    ]);
+    expect(openLocalSession).toHaveBeenCalledTimes(2);
+  });
+
+  it("첫 access 갱신이 실패해도 다음 query에서 다시 복구한다", async () => {
+    const authenticationExpired = new ApplicationRemoteError(401, { category: "authentication" });
+    const stale = client({ query: vi.fn().mockRejectedValue(authenticationExpired) });
+    const fresh = client();
+    const createClient = vi.fn().mockReturnValueOnce(stale).mockReturnValueOnce(fresh);
+    const openLocalSession = vi
+      .fn()
+      .mockResolvedValueOnce("mat_expired")
+      .mockRejectedValueOnce(new TypeError("local access refresh unavailable"))
+      .mockResolvedValueOnce("mat_refreshed");
+    const adapter = createApplicationAdapter(dependencies({ createClient, openLocalSession }).dependencies);
+
+    await adapter.connect({});
+    await expect(adapter.query({ operation: "organization.graph.snapshot", payload: {} })).rejects.toThrow(
+      "refresh unavailable",
+    );
+    await expect(adapter.query({ operation: "organization.graph.snapshot", payload: {} })).resolves.toEqual({
+      operation: "organization.graph.snapshot",
+      payload: {},
+    });
+    expect(openLocalSession).toHaveBeenCalledTimes(3);
+    expect(createClient).toHaveBeenCalledTimes(2);
+  });
+
+  it("shutdown은 진행 중인 access 갱신이 client와 요청을 되살리지 못하게 한다", async () => {
+    const refresh = deferred<string>();
+    const authenticationExpired = new ApplicationRemoteError(401, { category: "authentication" });
+    const stale = client({ query: vi.fn().mockRejectedValue(authenticationExpired) });
+    const freshQuery = vi.fn(async () => ({ data: "should-not-run" }));
+    const fresh = client({ query: freshQuery });
+    const createClient = vi.fn().mockReturnValueOnce(stale).mockReturnValueOnce(fresh);
+    const openLocalSession = vi
+      .fn()
+      .mockResolvedValueOnce("mat_expired")
+      .mockImplementationOnce(async () => await refresh.promise);
+    const { dependencies: adapterDependencies } = dependencies({ createClient, openLocalSession });
+    const adapter = createApplicationAdapter(adapterDependencies);
+
+    await adapter.connect({});
+    const pending = adapter.query({ operation: "organization.graph.snapshot", payload: {} });
+    await vi.waitFor(() => expect(openLocalSession).toHaveBeenCalledTimes(2));
+    const rejected = expect(pending).rejects.toThrow("종료");
+    const shutdown = adapter.shutdown();
+    refresh.resolve("mat_refreshed");
+
+    await Promise.all([rejected, shutdown]);
+    expect(freshQuery).not.toHaveBeenCalled();
+    expect(adapterDependencies.stopDaemon).toHaveBeenCalledOnce();
+    await expect(adapter.query({ operation: "organization.graph.snapshot", payload: {} })).rejects.toThrow("종료");
   });
 });
 

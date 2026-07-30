@@ -111,6 +111,8 @@ function discardDaemonBootstrapCapability(daemon: LocalDaemonManager): void {
 
 class ApplicationBridgeAdapter implements BridgeAdapter {
   private client: ApplicationHttpPort | undefined;
+  private reconnecting: Promise<ApplicationHttpPort> | undefined;
+  private closed = false;
   private readonly reconnectAttempts: number;
   private readonly wait: NonNullable<ApplicationAdapterDependencies["wait"]>;
 
@@ -124,23 +126,27 @@ class ApplicationBridgeAdapter implements BridgeAdapter {
 
   public async connect(params: Readonly<Record<string, unknown>>): Promise<unknown> {
     exact(params, [], "connect params");
+    this.assertOpen();
+    if (this.reconnecting) {
+      await this.reconnecting;
+      this.assertOpen();
+      return { status: "connected" };
+    }
     await this.dependencies.startDaemon();
+    this.assertOpen();
     if (this.client) {
       try {
         await this.client.status();
-        return { status: "connected" };
       } catch (error) {
         if (!authenticationFailure(error)) throw error;
         this.client = undefined;
       }
+      if (this.client) {
+        this.assertOpen();
+        return { status: "connected" };
+      }
     }
-    const client = this.dependencies.createClient(
-      this.dependencies.defaultEndpoint,
-      await this.dependencies.openLocalSession(),
-    );
-    await client.status();
-    await client.me();
-    this.client = client;
+    this.client = await this.openClient();
     return { status: "connected" };
   }
 
@@ -148,11 +154,12 @@ class ApplicationBridgeAdapter implements BridgeAdapter {
     exact(params, ["operation", "payload"], "query params");
     if (!("payload" in params)) throw new Error("query payload가 필요합니다");
     const operation = operationName(params.operation, "query operation");
-    return await this.connectedClient().query(operation, params.payload);
+    return await this.withAuthenticationRetry(async (client) => await client.query(operation, params.payload));
   }
 
   public async command(params: Readonly<Record<string, unknown>>): Promise<unknown> {
-    return await this.connectedClient().command(validateApplicationCommand(params));
+    const command = validateApplicationCommand(params);
+    return await this.withAuthenticationRetry(async (client) => await client.command(command));
   }
 
   public async *events(params: Readonly<Record<string, unknown>>, signal: AbortSignal): AsyncIterable<unknown> {
@@ -195,6 +202,8 @@ class ApplicationBridgeAdapter implements BridgeAdapter {
   }
 
   public async shutdown(): Promise<void> {
+    this.closed = true;
+    await this.reconnecting?.catch(() => undefined);
     this.client = undefined;
     await this.dependencies.stopDaemon();
   }
@@ -202,6 +211,62 @@ class ApplicationBridgeAdapter implements BridgeAdapter {
   private connectedClient(): ApplicationHttpPort {
     if (!this.client) throw new Error("Application에 연결되지 않았습니다");
     return this.client;
+  }
+
+  private async withAuthenticationRetry<T>(operation: (client: ApplicationHttpPort) => Promise<T>): Promise<T> {
+    const client = await this.operationClient();
+    try {
+      const result = await operation(client);
+      this.assertOpen();
+      return result;
+    } catch (error) {
+      if (!authenticationFailure(error)) throw error;
+      const refreshed = await this.reconnect(client);
+      this.assertOpen();
+      const result = await operation(refreshed);
+      this.assertOpen();
+      return result;
+    }
+  }
+
+  private async reconnect(staleClient: ApplicationHttpPort): Promise<ApplicationHttpPort> {
+    this.assertOpen();
+    if (this.reconnecting) return await this.reconnecting;
+    if (this.client !== staleClient) return await this.operationClient();
+    this.client = undefined;
+    this.reconnecting = this.openClient();
+    const reconnecting = this.reconnecting;
+    try {
+      const client = await reconnecting;
+      this.client = client;
+      return client;
+    } catch (error) {
+      if (!this.closed) this.client = staleClient;
+      throw error;
+    } finally {
+      if (this.reconnecting === reconnecting) this.reconnecting = undefined;
+    }
+  }
+
+  private async operationClient(): Promise<ApplicationHttpPort> {
+    this.assertOpen();
+    if (this.reconnecting) return await this.reconnecting;
+    if (this.client) return this.client;
+    return this.connectedClient();
+  }
+
+  private async openClient(): Promise<ApplicationHttpPort> {
+    const token = await this.dependencies.openLocalSession();
+    this.assertOpen();
+    const client = this.dependencies.createClient(this.dependencies.defaultEndpoint, token);
+    await client.status();
+    await client.me();
+    this.assertOpen();
+    return client;
+  }
+
+  private assertOpen(): void {
+    if (this.closed) throw new Error("Application bridge가 종료되었습니다");
   }
 }
 
