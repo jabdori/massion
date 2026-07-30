@@ -3,8 +3,11 @@ import { createHash } from "node:crypto";
 import { redactSecrets } from "@massion/evidence";
 import type { TenantContext } from "@massion/identity";
 
-import type { EngineeringDelivery } from "./contracts.js";
-import type { EngineeringAssuranceRecipe } from "./contracts.js";
+import type {
+  EngineeringAssuranceRecipe,
+  EngineeringDelivery,
+  EngineeringDeliveryLeaseOwnership,
+} from "./contracts.js";
 import type { ConfinedCommandInput, ConfinedCommandResult, EngineeringCommandStage } from "./command-runner.js";
 import { EngineeringDeliveryStore } from "./delivery-store.js";
 import { GitWorkspaceManager, type GitCommitResult, type GitDeliveryWorkspace } from "./git-workspace.js";
@@ -104,10 +107,14 @@ export class TddDeliveryEngine {
         })
       ).lease.version;
     };
-    const ownership = () =>
+    const ownership = (): EngineeringDeliveryLeaseOwnership | undefined =>
       input.pathLease
         ? { leaseId: input.pathLease.leaseId, ownerCommandId: input.pathLease.ownerCommandId }
         : undefined;
+    const ownershipField = (): { readonly ownership?: EngineeringDeliveryLeaseOwnership } => {
+      const current = ownership();
+      return current === undefined ? {} : { ownership: current };
+    };
     const runCommand = async (
       runner: EngineeringCommandRunner,
       command: CommandSpecification,
@@ -197,7 +204,7 @@ export class TddDeliveryEngine {
           target: "test_applied",
           workspaceId: delivery.deliveryId,
           testPatchHash: appliedTest.changeSetHash,
-          ...(ownership() === undefined ? {} : { ownership: ownership() }),
+          ...ownershipField(),
         })
       ).delivery;
 
@@ -209,7 +216,7 @@ export class TddDeliveryEngine {
           deliveryId: delivery.deliveryId,
           evidenceKey: "red",
           evidence: red.evidence,
-          ...(ownership() === undefined ? {} : { ownership: ownership() }),
+          ...ownershipField(),
         })
       ).commandEvidenceId;
       await renewOwnership();
@@ -237,7 +244,7 @@ export class TddDeliveryEngine {
           expectedVersion: delivery.version,
           target: "red_verified",
           redEvidenceId,
-          ...(ownership() === undefined ? {} : { ownership: ownership() }),
+          ...ownershipField(),
         })
       ).delivery;
 
@@ -251,7 +258,7 @@ export class TddDeliveryEngine {
           expectedVersion: delivery.version,
           target: "implementation_applied",
           implementationPatchHash: appliedImplementation.changeSetHash,
-          ...(ownership() === undefined ? {} : { ownership: ownership() }),
+          ...ownershipField(),
         })
       ).delivery;
 
@@ -263,7 +270,7 @@ export class TddDeliveryEngine {
           deliveryId: delivery.deliveryId,
           evidenceKey: "green",
           evidence: green.evidence,
-          ...(ownership() === undefined ? {} : { ownership: ownership() }),
+          ...ownershipField(),
         })
       ).commandEvidenceId;
       await renewOwnership();
@@ -277,7 +284,7 @@ export class TddDeliveryEngine {
           expectedVersion: delivery.version,
           target: "green_verified",
           greenEvidenceId,
-          ...(ownership() === undefined ? {} : { ownership: ownership() }),
+          ...ownershipField(),
         })
       ).delivery;
 
@@ -292,7 +299,7 @@ export class TddDeliveryEngine {
               deliveryId: delivery.deliveryId,
               evidenceKey: `validation-${String(index).padStart(3, "0")}`,
               evidence: validation.evidence,
-              ...(ownership() === undefined ? {} : { ownership: ownership() }),
+              ...ownershipField(),
             })
           ).commandEvidenceId,
         );
@@ -326,7 +333,7 @@ export class TddDeliveryEngine {
           changeSetHash: committed.changeSetHash,
           validationEvidenceIds,
           assuranceRecipe,
-          ...(ownership() === undefined ? {} : { ownership: ownership() }),
+          ...ownershipField(),
         })
       ).delivery;
       await renewOwnership();
@@ -360,7 +367,7 @@ export class TddDeliveryEngine {
           expectedVersion: current.version,
           target: "failed",
           error: { category, causeId: causeId(error) },
-          ...(ownership() === undefined ? {} : { ownership: ownership() }),
+          ...ownershipField(),
         });
       }
       throw error;

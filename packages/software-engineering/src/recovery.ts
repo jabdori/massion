@@ -417,7 +417,7 @@ export class EngineeringDeliveryRecovery {
         commandId: `${delivery.startCommandId}:recovery-release-lease:${lease.leaseId}`,
         leaseId: lease.leaseId,
         deliveryId: delivery.deliveryId,
-        expectedAcquireCommandId: cleanupLeaseCommandId,
+        ...(cleanupLeaseCommandId === undefined ? {} : { expectedAcquireCommandId: cleanupLeaseCommandId }),
       });
     }
     const remaining = (await this.leases.list(context, repositoryId)).filter(
