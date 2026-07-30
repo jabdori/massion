@@ -280,10 +280,19 @@ describe("Model Route simulation과 reservation", () => {
 
   it("reservation은 실행과 최적화 batch 계보를 route attempt에 저장한다", async () => {
     const created = await route();
+    await database.query(
+      "CREATE optimization_batch CONTENT { batch_id: 'optimization-batch-1', organization_id: $organization_id, role_key: 'assurance', version: 1, status: 'active', primary_model_profile_id: $profile_id, fallback_model_profile_ids: [], checksum: $checksum }; CREATE optimization_active_pointer CONTENT { pointer_id: 'optimization-pointer-1', organization_id: $organization_id, role_key: 'assurance', batch_id: 'optimization-batch-1', batch_version: 1, checksum: $checksum };",
+      {
+        organization_id: context.organizationId,
+        profile_id: profile.model_profile_id,
+        checksum: "a".repeat(64),
+      },
+    );
     const reserved = await router.reserve(context, {
       commandId: crypto.randomUUID(),
       executionId: "execution-lineage-1",
       optimizationBatchId: "optimization-batch-1",
+      preferredModelProfileIds: [profile.model_profile_id],
       routeName: created.name,
       estimatedTokens: 100,
       estimatedCostMicros: 1_000,
@@ -303,6 +312,94 @@ describe("Model Route simulation과 reservation", () => {
     });
   });
 
+  it("실행 ID의 reserved attempt 정본은 tenant·예약 사용자·단일성 경계를 지킨다", async () => {
+    const created = await route();
+    const reserved = await router.reserve(context, {
+      commandId: crypto.randomUUID(),
+      executionId: "execution-recovery-1",
+      routeName: created.name,
+      estimatedTokens: 100,
+      estimatedCostMicros: 1_000,
+    });
+
+    await expect(router.readReservedAttemptByExecution(context, "execution-recovery-1")).resolves.toMatchObject({
+      attempt_id: reserved.attempt.attempt_id,
+      execution_id: "execution-recovery-1",
+      status: "reserved",
+    });
+
+    const other = await identity.registerPersonalUser({
+      email: `route-recovery-${crypto.randomUUID()}@example.com`,
+      displayName: "Route Recovery",
+    });
+    const otherContext = await organizations.resolveTenantContext(
+      other.user.user_id,
+      other.organization.organization_id,
+    );
+    await expect(router.readReservedAttemptByExecution(otherContext, "execution-recovery-1")).resolves.toBeUndefined();
+
+    await organizations.addMember(context, other.user.user_id, "member");
+    const memberContext = await organizations.resolveTenantContext(other.user.user_id, context.organizationId);
+    const memberReserved = await router.reserve(memberContext, {
+      commandId: crypto.randomUUID(),
+      executionId: "execution-recovery-member",
+      routeName: created.name,
+      estimatedTokens: 100,
+      estimatedCostMicros: 1_000,
+    });
+    await expect(router.readReservedAttemptByExecution(context, "execution-recovery-member")).rejects.toThrow(
+      "예약 사용자",
+    );
+    await expect(
+      router.readReservedAttemptByExecution(memberContext, "execution-recovery-member"),
+    ).resolves.toMatchObject({ attempt_id: memberReserved.attempt.attempt_id });
+
+    const corrupted = await router.reserve(context, {
+      commandId: crypto.randomUUID(),
+      executionId: "execution-recovery-corrupted-candidate",
+      routeName: created.name,
+      estimatedTokens: 100,
+      estimatedCostMicros: 1_000,
+    });
+    await database.query(
+      "UPDATE route_attempt SET model_profile_id = 'mismatched-profile' WHERE organization_id = $organization_id AND attempt_id = $attempt_id;",
+      { organization_id: context.organizationId, attempt_id: corrupted.attempt.attempt_id },
+    );
+    await expect(
+      router.readReservedAttemptByExecution(context, "execution-recovery-corrupted-candidate"),
+    ).rejects.toThrow("Candidate 계보");
+
+    await router.reserve(context, {
+      commandId: crypto.randomUUID(),
+      executionId: "execution-recovery-ambiguous",
+      routeName: created.name,
+      estimatedTokens: 100,
+      estimatedCostMicros: 1_000,
+    });
+    await router.reserve(context, {
+      commandId: crypto.randomUUID(),
+      executionId: "execution-recovery-ambiguous",
+      routeName: created.name,
+      estimatedTokens: 100,
+      estimatedCostMicros: 1_000,
+    });
+    await expect(router.readReservedAttemptByExecution(context, "execution-recovery-ambiguous")).rejects.toThrow(
+      "둘 이상",
+    );
+
+    await router.reportFailure(context, {
+      commandId: crypto.randomUUID(),
+      attemptId: reserved.attempt.attempt_id,
+      signal: { kind: "cancelled" },
+      emittedTokens: 0,
+      sideEffectsStarted: false,
+      actualInputTokens: 0,
+      actualOutputTokens: 0,
+      actualCostMicros: 0,
+    });
+    await expect(router.readReservedAttemptByExecution(context, "execution-recovery-1")).resolves.toBeUndefined();
+  });
+
   it("새 계보 필드가 없는 reservation은 기존 경로대로 동작한다", async () => {
     const created = await route();
     const reserved = await router.reserve(context, {
@@ -318,11 +415,20 @@ describe("Model Route simulation과 reservation", () => {
 
   it("같은 commandId의 계보 필드가 같은 재전송은 재사용하고 다른 요청은 거부한다", async () => {
     const created = await route();
+    await database.query(
+      "CREATE optimization_batch CONTENT { batch_id: 'optimization-batch-1', organization_id: $organization_id, role_key: 'assurance', version: 1, status: 'active', primary_model_profile_id: $profile_id, fallback_model_profile_ids: [], checksum: $checksum }; CREATE optimization_active_pointer CONTENT { pointer_id: 'optimization-pointer-command', organization_id: $organization_id, role_key: 'assurance', batch_id: 'optimization-batch-1', batch_version: 1, checksum: $checksum };",
+      {
+        organization_id: context.organizationId,
+        profile_id: profile.model_profile_id,
+        checksum: "b".repeat(64),
+      },
+    );
     const commandId = crypto.randomUUID();
     const request = {
       commandId,
       executionId: "execution-lineage-1",
       optimizationBatchId: "optimization-batch-1",
+      preferredModelProfileIds: [profile.model_profile_id],
       routeName: created.name,
       estimatedTokens: 100,
       estimatedCostMicros: 1_000,
@@ -334,6 +440,121 @@ describe("Model Route simulation과 reservation", () => {
     await expect(router.reserve(context, { ...request, optimizationBatchId: "optimization-batch-2" })).rejects.toThrow(
       "같은 commandId에 다른 route 요청을 사용할 수 없습니다",
     );
+  });
+
+  it("선호 model profile 목록은 현재 tenant Route 후보의 중복 없는 strict allowlist다", async () => {
+    const created = await route();
+    const request = {
+      routeName: created.name,
+      estimatedTokens: 100,
+      estimatedCostMicros: 1_000,
+    };
+
+    await expect(
+      router.reserve(context, {
+        ...request,
+        commandId: crypto.randomUUID(),
+        preferredModelProfileIds: ["unknown-profile"],
+      }),
+    ).rejects.toThrow("선호 Model Profile");
+    await expect(
+      router.reserve(context, {
+        ...request,
+        commandId: crypto.randomUUID(),
+        preferredModelProfileIds: [profile.model_profile_id, profile.model_profile_id],
+      }),
+    ).rejects.toThrow("중복");
+  });
+
+  it("optimization batch는 현재 tenant pointer와 ordered profile 요청이 정확히 일치해야 한다", async () => {
+    const created = await route();
+    const request = {
+      routeName: created.name,
+      estimatedTokens: 100,
+      estimatedCostMicros: 1_000,
+      preferredModelProfileIds: [profile.model_profile_id],
+    };
+
+    await expect(
+      router.reserve(context, {
+        ...request,
+        commandId: crypto.randomUUID(),
+        optimizationBatchId: "missing-batch",
+      }),
+    ).rejects.toThrow("활성 Optimization Batch");
+
+    await database.query(
+      "CREATE optimization_batch CONTENT { batch_id: 'foreign-batch', organization_id: 'foreign-organization', role_key: 'assurance', version: 1, status: 'active', primary_model_profile_id: $profile_id, fallback_model_profile_ids: [], checksum: $checksum }; CREATE optimization_active_pointer CONTENT { pointer_id: 'foreign-pointer', organization_id: 'foreign-organization', role_key: 'assurance', batch_id: 'foreign-batch', batch_version: 1, checksum: $checksum };",
+      { profile_id: profile.model_profile_id, checksum: "f".repeat(64) },
+    );
+    await expect(
+      router.reserve(context, {
+        ...request,
+        commandId: crypto.randomUUID(),
+        optimizationBatchId: "foreign-batch",
+      }),
+    ).rejects.toThrow("활성 Optimization Batch");
+
+    await database.query(
+      "CREATE optimization_batch CONTENT { batch_id: 'inactive-batch', organization_id: $organization_id, role_key: 'assurance', version: 1, status: 'limited', primary_model_profile_id: $profile_id, fallback_model_profile_ids: [], checksum: $checksum }; CREATE optimization_active_pointer CONTENT { pointer_id: 'inactive-pointer', organization_id: $organization_id, role_key: 'assurance', batch_id: 'inactive-batch', batch_version: 1, checksum: $checksum };",
+      {
+        organization_id: context.organizationId,
+        profile_id: profile.model_profile_id,
+        checksum: "1".repeat(64),
+      },
+    );
+    await expect(
+      router.reserve(context, {
+        ...request,
+        commandId: crypto.randomUUID(),
+        optimizationBatchId: "inactive-batch",
+      }),
+    ).rejects.toThrow("활성 Optimization Batch");
+
+    await database.query(
+      "CREATE optimization_batch CONTENT { batch_id: 'misbound-batch', organization_id: $organization_id, role_key: 'assurance', version: 1, status: 'active', primary_model_profile_id: 'different-profile', fallback_model_profile_ids: [], checksum: $checksum }; CREATE optimization_active_pointer CONTENT { pointer_id: 'misbound-pointer', organization_id: $organization_id, role_key: 'assurance', batch_id: 'misbound-batch', batch_version: 1, checksum: $checksum };",
+      { organization_id: context.organizationId, checksum: "c".repeat(64) },
+    );
+    await expect(
+      router.reserve(context, {
+        ...request,
+        commandId: crypto.randomUUID(),
+        optimizationBatchId: "misbound-batch",
+      }),
+    ).rejects.toThrow("선호 순서");
+
+    await database.query(
+      "CREATE optimization_batch CONTENT { batch_id: 'stale-pointer-batch', organization_id: $organization_id, role_key: 'assurance', version: 2, status: 'active', primary_model_profile_id: $profile_id, fallback_model_profile_ids: [], checksum: $batch_checksum }; CREATE optimization_active_pointer CONTENT { pointer_id: 'stale-pointer', organization_id: $organization_id, role_key: 'assurance', batch_id: 'stale-pointer-batch', batch_version: 1, checksum: $pointer_checksum };",
+      {
+        organization_id: context.organizationId,
+        profile_id: profile.model_profile_id,
+        batch_checksum: "2".repeat(64),
+        pointer_checksum: "3".repeat(64),
+      },
+    );
+    await expect(
+      router.reserve(context, {
+        ...request,
+        commandId: crypto.randomUUID(),
+        optimizationBatchId: "stale-pointer-batch",
+      }),
+    ).rejects.toThrow("활성 pointer");
+
+    await database.query(
+      "CREATE optimization_batch CONTENT { batch_id: 'duplicate-pointer-batch', organization_id: $organization_id, role_key: 'assurance', version: 1, status: 'active', primary_model_profile_id: $profile_id, fallback_model_profile_ids: [], checksum: $checksum }; CREATE optimization_active_pointer CONTENT { pointer_id: 'duplicate-pointer-assurance', organization_id: $organization_id, role_key: 'assurance', batch_id: 'duplicate-pointer-batch', batch_version: 1, checksum: $checksum }; CREATE optimization_active_pointer CONTENT { pointer_id: 'duplicate-pointer-growth', organization_id: $organization_id, role_key: 'growth', batch_id: 'duplicate-pointer-batch', batch_version: 1, checksum: $checksum };",
+      {
+        organization_id: context.organizationId,
+        profile_id: profile.model_profile_id,
+        checksum: "d".repeat(64),
+      },
+    );
+    await expect(
+      router.reserve(context, {
+        ...request,
+        commandId: crypto.randomUUID(),
+        optimizationBatchId: "duplicate-pointer-batch",
+      }),
+    ).rejects.toThrow("활성 pointer");
   });
 
   it("조직에 설정된 route를 secret 없이 목록으로 조회한다", async () => {

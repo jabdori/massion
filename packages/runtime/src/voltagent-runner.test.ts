@@ -102,6 +102,9 @@ describe("VoltAgent AgentRunner", () => {
       kind: "model",
       attemptId,
       credentialId: crypto.randomUUID(),
+      modelProfileId: "model-profile-1",
+      optimizationBatchId: "optimization-batch-1",
+      preferenceApplied: true,
       model,
       supportsStructuredOutput: true,
       complete: vi.fn().mockResolvedValue({ status: "succeeded" } as RouteAttempt),
@@ -120,6 +123,9 @@ describe("VoltAgent AgentRunner", () => {
       kind: "agent-runtime",
       attemptId,
       credentialId: crypto.randomUUID(),
+      modelProfileId: "model-profile-1",
+      optimizationBatchId: "optimization-batch-1",
+      preferenceApplied: true,
       sessionLeaseId,
       sessionExpiresAt: new Date(Date.now() + 300_000).toISOString(),
       subscription: {
@@ -303,8 +309,23 @@ describe("VoltAgent AgentRunner", () => {
     expect(recovery.events.map((event) => event.event_type)).toEqual([
       "execution_queued",
       "execution_running",
+      "model.route.selected",
       "execution_succeeded",
     ]);
+    expect(recovery.events.map((event) => event.sequence)).toEqual([1, 2, 3, 4]);
+    expect(recovery.events[2]).toMatchObject({
+      event_type: "model.route.selected",
+      execution_id: result.executionId,
+      payload_json: expect.any(String),
+    });
+    expect(JSON.parse(recovery.events[2]?.payload_json ?? "null")).toEqual({
+      executionId: result.executionId,
+      attemptId: routed.attemptId,
+      modelProfileId: "model-profile-1",
+      routeName: "coding-balanced",
+      batchId: "optimization-batch-1",
+      preferenceApplied: true,
+    });
     expect(registry.size).toBe(0);
   });
 
@@ -326,6 +347,7 @@ describe("VoltAgent AgentRunner", () => {
     const runner = new VoltAgentRunner(voltAgent, store, { acquire }, registry, undefined, executionContext);
 
     const result = await runner.execute(context, input());
+    const recovery = await store.getRecovery(context, result.executionId);
 
     expect(result).toMatchObject({ status: "succeeded", output: "native agent result" });
     expect(routed.executor.execute).toHaveBeenCalledWith({
@@ -344,7 +366,165 @@ describe("VoltAgent AgentRunner", () => {
         instruction: "Representative instruction",
       }),
     );
+    expect(
+      recovery.events
+        .filter((event) => event.event_type === "model.route.selected")
+        .map((event) => JSON.parse(event.payload_json)),
+    ).toEqual([
+      {
+        executionId: result.executionId,
+        attemptId: routed.attemptId,
+        modelProfileId: "model-profile-1",
+        routeName: "coding-balanced",
+        batchId: "optimization-batch-1",
+        preferenceApplied: true,
+      },
+    ]);
     expect(registry.size).toBe(0);
+  });
+
+  it("선택 사건 저장이 실패하면 Agent runtime lease를 side effect 전에 정리하고 fallback하지 않는다", async () => {
+    const first = agentLease(
+      {
+        outcome: "completed",
+        executionId: "사용되지-않음",
+        sessionId: "사용되지-않음",
+        value: "사용되지 않음",
+      },
+      "selection-store-failed-attempt",
+      "selection-store-failed-lease",
+      true,
+    );
+    const fallback = lease(
+      new MockLanguageModelV3({
+        doGenerate: {
+          content: [{ type: "text", text: "실행되면 안 됨" }],
+          finishReason: "stop",
+          usage: USAGE,
+          warnings: [],
+        },
+      }),
+      "selection-store-fallback-attempt",
+    );
+    const acquire = vi.fn().mockResolvedValueOnce(first).mockResolvedValueOnce(fallback);
+    const appendEvent = store.appendEvent.bind(store);
+    vi.spyOn(store, "appendEvent").mockImplementation(async (tenant, event) => {
+      if (event.eventType === "model.route.selected") throw new Error("selection event store unavailable");
+      return await appendEvent(tenant, event);
+    });
+    const runner = new VoltAgentRunner(voltAgent, store, { acquire }, registry);
+
+    const result = await runner.execute(context, input());
+
+    expect(result.status).toBe("interrupted");
+    expect(acquire).toHaveBeenCalledOnce();
+    expect(first.executor.execute).not.toHaveBeenCalled();
+    expect(first.fail).toHaveBeenCalledOnce();
+    expect(first.fail).toHaveBeenCalledWith(expect.objectContaining({ sideEffectsStarted: false }));
+  });
+
+  it("선택 사건 append의 동시 version 충돌은 최신 version으로 재시도하고 한 번만 기록한다", async () => {
+    const generate = vi.fn(async () => ({
+      content: [{ type: "text" as const, text: "concurrent event" }],
+      finishReason: { unified: "stop" as const, raw: undefined },
+      usage: USAGE,
+      warnings: [],
+    }));
+    const routed = lease(new MockLanguageModelV3({ doGenerate: generate }), "concurrent-selection-attempt");
+    const appendEvent = store.appendEvent.bind(store);
+    let injected = false;
+    vi.spyOn(store, "appendEvent").mockImplementation(async (tenant, event) => {
+      if (event.eventType === "model.route.selected" && !injected) {
+        injected = true;
+        await appendEvent(tenant, {
+          commandId: `${event.executionId}:concurrent-observation`,
+          executionId: event.executionId,
+          expectedVersion: event.expectedVersion,
+          eventType: "concurrent_observation",
+          payload: {},
+        });
+      }
+      return await appendEvent(tenant, event);
+    });
+    const runner = new VoltAgentRunner(voltAgent, store, { acquire: vi.fn().mockResolvedValue(routed) }, registry);
+
+    const result = await runner.execute(context, input());
+    const recovery = await store.getRecovery(context, result.executionId);
+
+    expect(result).toMatchObject({ status: "succeeded", output: "concurrent event" });
+    expect(generate).toHaveBeenCalledOnce();
+    expect(routed.fail).not.toHaveBeenCalled();
+    expect(recovery.events.filter((event) => event.event_type === "model.route.selected")).toHaveLength(1);
+  });
+
+  it("선택 사건의 비-version 오류는 동시 version 증가가 있어도 재시도하지 않는다", async () => {
+    const generate = vi.fn(async () => ({
+      content: [{ type: "text" as const, text: "실행되면 안 됨" }],
+      finishReason: { unified: "stop" as const, raw: undefined },
+      usage: USAGE,
+      warnings: [],
+    }));
+    const routed = lease(new MockLanguageModelV3({ doGenerate: generate }), "non-version-selection-attempt");
+    const appendEvent = store.appendEvent.bind(store);
+    let selectionAppends = 0;
+    vi.spyOn(store, "appendEvent").mockImplementation(async (tenant, event) => {
+      if (event.eventType !== "model.route.selected") return await appendEvent(tenant, event);
+      selectionAppends += 1;
+      if (selectionAppends === 1) {
+        await appendEvent(tenant, {
+          commandId: `${event.executionId}:concurrent-non-version-observation`,
+          executionId: event.executionId,
+          expectedVersion: event.expectedVersion,
+          eventType: "concurrent_observation",
+          payload: {},
+        });
+        throw new Error("selection storage unavailable");
+      }
+      return await appendEvent(tenant, event);
+    });
+    const runner = new VoltAgentRunner(voltAgent, store, { acquire: vi.fn().mockResolvedValue(routed) }, registry);
+
+    const result = await runner.execute(context, input());
+
+    expect(result.status).toBe("interrupted");
+    expect(selectionAppends).toBe(1);
+    expect(generate).not.toHaveBeenCalled();
+    expect(routed.fail).toHaveBeenCalledOnce();
+  });
+
+  it("선택 사건 CAS 충돌 재시도는 유한 횟수 뒤 lease를 정리한다", async () => {
+    const generate = vi.fn(async () => ({
+      content: [{ type: "text" as const, text: "실행되면 안 됨" }],
+      finishReason: { unified: "stop" as const, raw: undefined },
+      usage: USAGE,
+      warnings: [],
+    }));
+    const routed = lease(new MockLanguageModelV3({ doGenerate: generate }), "bounded-selection-attempt");
+    const appendEvent = store.appendEvent.bind(store);
+    let selectionAppends = 0;
+    vi.spyOn(store, "appendEvent").mockImplementation(async (tenant, event) => {
+      if (event.eventType === "model.route.selected") {
+        selectionAppends += 1;
+        if (selectionAppends <= 6) {
+          await appendEvent(tenant, {
+            commandId: `${event.executionId}:cas-observation:${String(selectionAppends)}`,
+            executionId: event.executionId,
+            expectedVersion: event.expectedVersion,
+            eventType: "concurrent_observation",
+            payload: { selectionAppends },
+          });
+        }
+      }
+      return await appendEvent(tenant, event);
+    });
+    const runner = new VoltAgentRunner(voltAgent, store, { acquire: vi.fn().mockResolvedValue(routed) }, registry);
+
+    const result = await runner.execute(context, input());
+
+    expect(result.status).toBe("interrupted");
+    expect(selectionAppends).toBe(4);
+    expect(generate).not.toHaveBeenCalled();
+    expect(routed.fail).toHaveBeenCalledOnce();
   });
 
   it("Agent runtime 실제 경로는 acquired→started→terminal→settled receipt 순서를 지킨다", async () => {
@@ -1176,12 +1356,22 @@ describe("VoltAgent AgentRunner", () => {
       },
     });
     const first = lease(failedModel, "attempt-1", true);
-    const second = lease(
-      new MockLanguageModelV3({
-        doGenerate: { content: [{ type: "text", text: "fallback" }], finishReason: "stop", usage: USAGE, warnings: [] },
-      }),
-      "attempt-2",
-    );
+    const second = {
+      ...lease(
+        new MockLanguageModelV3({
+          doGenerate: {
+            content: [{ type: "text", text: "fallback" }],
+            finishReason: "stop",
+            usage: USAGE,
+            warnings: [],
+          },
+        }),
+        "attempt-2",
+      ),
+      modelProfileId: "model-profile-2",
+      optimizationBatchId: undefined,
+      preferenceApplied: false,
+    } satisfies RoutedModelLease;
     const acquire = vi.fn().mockResolvedValueOnce(first).mockResolvedValueOnce(second);
     const runner = new VoltAgentRunner(voltAgent, store, { acquire }, registry);
 
@@ -1190,6 +1380,28 @@ describe("VoltAgent AgentRunner", () => {
     expect(result.output).toBe("fallback");
     expect(first.fail).toHaveBeenCalledWith(expect.objectContaining({ signal: { kind: "http", statusCode: 401 } }));
     expect(acquire.mock.calls[1]?.[1]).toMatchObject({ fallbackFromAttemptId: "attempt-1" });
+    const recovery = await store.getRecovery(context, result.executionId);
+    expect(
+      recovery.events
+        .filter((event) => event.event_type === "model.route.selected")
+        .map((event) => JSON.parse(event.payload_json)),
+    ).toEqual([
+      {
+        executionId: result.executionId,
+        attemptId: "attempt-1",
+        modelProfileId: "model-profile-1",
+        routeName: "coding-balanced",
+        batchId: "optimization-batch-1",
+        preferenceApplied: true,
+      },
+      {
+        executionId: result.executionId,
+        attemptId: "attempt-2",
+        modelProfileId: "model-profile-2",
+        routeName: "coding-balanced",
+        preferenceApplied: false,
+      },
+    ]);
   });
 
   it("사용 가능한 모델이 없으면 명시적인 blocked 상태로 종료한다", async () => {
@@ -1229,7 +1441,7 @@ describe("VoltAgent AgentRunner", () => {
     expect(
       events.some((event) => event.type === "model_text_delta" && JSON.stringify(event.payload).includes("hello")),
     ).toBe(true);
-    expect(events.map((event) => event.sequence)).toEqual([...events.map((_, index) => index + 1)]);
+    expect(events.every((event, index) => event.sequence > (events[index - 1]?.sequence ?? 0))).toBe(true);
     const first = events[0];
     if (!first) throw new Error("stream event가 없습니다");
     const recovery = await store.getRecovery(context, first.executionId);
@@ -1399,6 +1611,76 @@ describe("VoltAgent AgentRunner", () => {
     await expect(runner.recover(context, "execution-1")).resolves.toMatchObject({ status: "suspended" });
 
     expect(lifecycle.suspend).toHaveBeenCalledWith(context, "execution-1", "approval");
+  });
+
+  it("cold restart는 reserved selection을 사건으로 한 번 복원·정리한 뒤 lifecycle recovery로 이어간다", async () => {
+    const created = await store.createExecution(context, input());
+    await store.transition(context, {
+      commandId: `${created.execution.execution_id}:running`,
+      executionId: created.execution.execution_id,
+      expectedVersion: created.execution.version,
+      target: "running",
+      payload: {},
+    });
+    const stages: string[] = [];
+    const release = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("selection 기록 뒤 process crash"))
+      .mockImplementation(async () => {
+        stages.push("released");
+        return { status: "failed", fallbackAllowed: false };
+      });
+    const recovered = {
+      attemptId: "recovered-attempt-1",
+      modelProfileId: "recovered-profile-1",
+      optimizationBatchId: "recovered-batch-1",
+      preferenceApplied: true,
+      fail: release,
+    };
+    const recoverReservedSelection = vi
+      .fn()
+      .mockResolvedValueOnce(recovered)
+      .mockResolvedValueOnce(recovered)
+      .mockResolvedValue(undefined);
+    const lifecycle = {
+      suspend: vi.fn(),
+      resume: vi.fn(),
+      recover: vi.fn(async () => {
+        stages.push("lifecycle");
+        return { executionId: created.execution.execution_id, status: "interrupted" as const };
+      }),
+    };
+    const runner = new VoltAgentRunner(
+      voltAgent,
+      store,
+      { acquire: vi.fn(), recoverReservedSelection },
+      registry,
+      lifecycle,
+    );
+
+    await expect(runner.recover(context, created.execution.execution_id)).rejects.toThrow("process crash");
+    await expect(runner.recover(context, created.execution.execution_id)).resolves.toMatchObject({
+      status: "interrupted",
+    });
+    const recovery = await store.getRecovery(context, created.execution.execution_id);
+
+    expect(stages).toEqual(["released", "lifecycle"]);
+    expect(recovered.fail).toHaveBeenNthCalledWith(1, expect.objectContaining({ sideEffectsStarted: false }));
+    expect(recovered.fail).toHaveBeenNthCalledWith(2, expect.objectContaining({ sideEffectsStarted: true }));
+    expect(
+      recovery.events
+        .filter((event) => event.event_type === "model.route.selected")
+        .map((event) => JSON.parse(event.payload_json)),
+    ).toEqual([
+      {
+        executionId: created.execution.execution_id,
+        attemptId: "recovered-attempt-1",
+        modelProfileId: "recovered-profile-1",
+        routeName: "coding-balanced",
+        batchId: "recovered-batch-1",
+        preferenceApplied: true,
+      },
+    ]);
   });
 
   it("프로세스 재시작으로 live 구독 adapter가 사라진 checkpoint는 interrupted 복구를 요청한다", async () => {

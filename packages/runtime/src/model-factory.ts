@@ -80,12 +80,18 @@ export interface ModelFailureOutcome {
   readonly fallbackAllowed: boolean;
 }
 
-interface RoutedExecutionLeaseBase {
+export interface RoutedModelSelectionLease {
   readonly attemptId: string;
+  readonly modelProfileId?: string;
+  readonly optimizationBatchId?: string;
+  readonly preferenceApplied?: boolean;
+  fail(usage: ModelFailureUsage): Promise<ModelFailureOutcome>;
+}
+
+interface RoutedExecutionLeaseBase extends RoutedModelSelectionLease {
   readonly credentialId: string;
   readonly sessionLeaseId?: string;
   complete(usage: ModelCompletionUsage): Promise<RouteAttempt>;
-  fail(usage: ModelFailureUsage): Promise<ModelFailureOutcome>;
 }
 
 export interface RoutedLanguageModelLease extends RoutedExecutionLeaseBase {
@@ -149,11 +155,20 @@ export type RoutedModelLease = RoutedLanguageModelLease | RoutedAgentRuntimeLeas
 
 export interface RoutedModelFactory {
   acquire(context: TenantContext, input: AcquireModelInput): Promise<RoutedModelLease>;
+  recoverReservedSelection?(
+    context: TenantContext,
+    executionId: string,
+  ): Promise<RoutedModelSelectionLease | undefined>;
   createSubscriptionReceipts?(store: RuntimeExecutionStore): SubscriptionExecutionReceiptCoordinator | undefined;
 }
 
 export interface RoutedModelPreferenceResolver {
-  resolve(context: TenantContext, input: AcquireModelInput): Promise<readonly string[] | undefined>;
+  resolve(context: TenantContext, input: AcquireModelInput): Promise<ModelPreferenceResolution | undefined>;
+}
+
+export interface ModelPreferenceResolution {
+  readonly profileIds: readonly string[];
+  readonly batchId?: string;
 }
 
 export interface ConnectorSessionBroker {
@@ -325,13 +340,17 @@ export class MassionModelFactory implements RoutedModelFactory {
   }
 
   public async acquire(context: TenantContext, input: AcquireModelInput): Promise<RoutedModelLease> {
-    const resolvedPreferences =
-      input.preferredModelProfileIds ?? (await this.preferenceResolver?.resolve(context, input));
+    const preferenceResolution = input.preferredModelProfileIds
+      ? { profileIds: input.preferredModelProfileIds }
+      : await this.preferenceResolver?.resolve(context, input);
+    const resolvedPreferences = preferenceResolution?.profileIds;
+    const optimizationBatchId = resolvedPreferences?.length ? preferenceResolution?.batchId : undefined;
     const reservation = await this.router
       .reserve(context, {
         commandId: input.commandId,
         ...(input.executionId !== undefined ? { executionId: input.executionId } : {}),
         ...(input.optimizationRunId !== undefined ? { optimizationRunId: input.optimizationRunId } : {}),
+        ...(optimizationBatchId !== undefined ? { optimizationBatchId } : {}),
         routeName: input.routeName,
         estimatedTokens: input.estimatedTokens,
         estimatedCostMicros: input.estimatedCostMicros,
@@ -353,8 +372,13 @@ export class MassionModelFactory implements RoutedModelFactory {
     const profile = reservation.profile;
     const credential = reservation.credential;
     if (!endpoint || !profile || !credential) throw new Error("Model reservation 선택 정보가 없습니다");
+    const preferenceApplied = resolvedPreferences?.includes(profile.model_profile_id) ?? false;
     if (reservation.material.kind === "connector_session") {
-      return await this.connectorLease(context, input, reservation);
+      return await this.connectorLease(context, input, reservation, {
+        modelProfileId: profile.model_profile_id,
+        ...(optimizationBatchId !== undefined ? { optimizationBatchId } : {}),
+        preferenceApplied,
+      });
     }
     const provider = await this.providers.getProvider(context, profile.provider_id);
     const model = this.builder.build({
@@ -376,10 +400,75 @@ export class MassionModelFactory implements RoutedModelFactory {
       kind: "model",
       attemptId,
       credentialId: credential.credential_id,
+      modelProfileId: profile.model_profile_id,
+      ...(optimizationBatchId !== undefined ? { optimizationBatchId } : {}),
+      preferenceApplied,
       model,
       supportsStructuredOutput: profile.supports_structured_output,
       complete: async (usage) => await this.completeAttempt(context, attemptId, usage, costFor(usage)),
       fail: async (usage) => await this.failAttempt(context, attemptId, usage, costFor(usage)),
+    };
+  }
+
+  public async recoverReservedSelection(
+    context: TenantContext,
+    executionId: string,
+  ): Promise<RoutedModelSelectionLease | undefined> {
+    const attempt = await this.router.readReservedAttemptByExecution(context, executionId);
+    if (!attempt) return undefined;
+    let request: Record<string, unknown>;
+    try {
+      const explanation = JSON.parse(attempt.explanation_json) as unknown;
+      if (!explanation || typeof explanation !== "object" || Array.isArray(explanation)) throw new Error();
+      const requestJson = (explanation as Record<string, unknown>).request;
+      if (typeof requestJson !== "string") throw new Error();
+      const parsed = JSON.parse(requestJson) as unknown;
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error();
+      request = parsed as Record<string, unknown>;
+    } catch (cause) {
+      throw new Error("reserved Route Attempt의 요청 계보가 유효하지 않습니다", { cause });
+    }
+    if (attempt.execution_id !== executionId || request.executionId !== executionId) {
+      throw new Error("reserved Route Attempt의 실행 계보가 유효하지 않습니다");
+    }
+    const requestBatchId = request.optimizationBatchId;
+    if (
+      (requestBatchId !== undefined &&
+        (typeof requestBatchId !== "string" || !requestBatchId || requestBatchId.length > 256)) ||
+      requestBatchId !== attempt.optimization_batch_id
+    ) {
+      throw new Error("reserved Route Attempt의 batch 계보가 유효하지 않습니다");
+    }
+    const preferences = request.preferredModelProfileIds;
+    let preferenceApplied = false;
+    if (preferences !== undefined) {
+      if (!Array.isArray(preferences) || preferences.some((profileId) => typeof profileId !== "string")) {
+        throw new Error("reserved Route Attempt의 선호 계보가 유효하지 않습니다");
+      }
+      const profileIds = preferences as string[];
+      if (new Set(profileIds).size !== profileIds.length) {
+        throw new Error("reserved Route Attempt의 선호 계보가 유효하지 않습니다");
+      }
+      preferenceApplied = profileIds.includes(attempt.model_profile_id);
+      if (profileIds.length > 0 && !preferenceApplied) {
+        throw new Error("reserved Route Attempt의 선호 계보가 유효하지 않습니다");
+      }
+    }
+    const sessions = this.connectorRuntime
+      ? await this.connectorRuntime.broker.findExecutionLeases(context, executionId)
+      : [];
+    const matchingSessions = sessions.filter((session) => session.routeAttemptId === attempt.attempt_id);
+    if (matchingSessions.length > 1) throw new Error("reserved Route Attempt의 Session Lease가 둘 이상입니다");
+    const session = matchingSessions[0];
+    return {
+      attemptId: attempt.attempt_id,
+      modelProfileId: attempt.model_profile_id,
+      ...(attempt.optimization_batch_id === undefined ? {} : { optimizationBatchId: attempt.optimization_batch_id }),
+      preferenceApplied,
+      fail: async (usage) =>
+        session
+          ? await this.failConnectorAttempt(context, attempt.attempt_id, session, usage)
+          : await this.failAttempt(context, attempt.attempt_id, usage, 0),
     };
   }
 
@@ -420,6 +509,11 @@ export class MassionModelFactory implements RoutedModelFactory {
     context: TenantContext,
     input: AcquireModelInput,
     reservation: Awaited<ReturnType<ModelRouter["reserve"]>>,
+    lineage: {
+      readonly modelProfileId: string;
+      readonly optimizationBatchId?: string;
+      readonly preferenceApplied: boolean;
+    },
   ): Promise<RoutedModelLease> {
     const runtime = this.connectorRuntime;
     const { material, credential, profile } = reservation;
@@ -619,11 +713,19 @@ export class MassionModelFactory implements RoutedModelFactory {
     return binding.kind === "model"
       ? {
           kind: "model",
+          ...lineage,
           model: binding.model,
           supportsStructuredOutput: profile.supports_structured_output,
           ...settlement,
         }
-      : { kind: "agent-runtime", executor: binding.executor, subscription, ...sessionLifecycle, ...settlement };
+      : {
+          kind: "agent-runtime",
+          ...lineage,
+          executor: binding.executor,
+          subscription,
+          ...sessionLifecycle,
+          ...settlement,
+        };
   }
 
   private async completeAttempt(
@@ -684,13 +786,13 @@ export class MassionModelFactory implements RoutedModelFactory {
     defaultSideEffectsStarted = true,
   ): Promise<ModelFailureOutcome> {
     const sideEffectsStarted = usage.sideEffectsStarted ?? defaultSideEffectsStarted;
-    const route = await this.failAttempt(context, attemptId, { ...usage, sideEffectsStarted }, 0);
     const connector = await session.fail({
       commandId: `${usage.commandId}:session`,
       emittedTokens: usage.emittedTokens,
       sideEffectsStarted,
       signal: connectorFailureSignal(usage.signal),
     });
+    const route = await this.failAttempt(context, attemptId, { ...usage, sideEffectsStarted }, 0);
     return {
       ...route,
       fallbackAllowed:

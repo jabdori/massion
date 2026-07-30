@@ -86,7 +86,12 @@ import {
   PolicyStore,
 } from "@massion/governance";
 import { IdentityService, OrganizationService } from "@massion/identity";
-import { isOptimizationRoleKey, ModelOptimizationStore, OptimizationBatchService } from "@massion/model-optimization";
+import {
+  isOptimizationRoleKey,
+  ModelOptimizationStore,
+  OptimizationBatchService,
+  type OptimizationBatch,
+} from "@massion/model-optimization";
 import { OrganizationGraphService, OrganizationGrowthProjection } from "@massion/organization";
 import {
   FileArtifactStore,
@@ -256,6 +261,20 @@ export interface MassionDaemonAssemblyOptions {
   readonly database?: MassionDatabase;
   /** 일반 설정 직렬화 경계를 우회하지 않는 테스트 전용 bootstrap 비밀 소유자입니다. */
   readonly bootstrapAuthorization?: ApplicationBootstrapAuthorization;
+}
+
+export function modelPreferenceFromActiveBatch(
+  roleKey: string | undefined,
+  batch: OptimizationBatch | undefined,
+): { readonly profileIds: readonly string[]; readonly batchId: string } | undefined {
+  if (!roleKey || !isOptimizationRoleKey(roleKey) || !batch || batch.status !== "active" || batch.roleKey !== roleKey) {
+    return undefined;
+  }
+  const profileIds = [
+    ...(batch.primaryModelProfileId ? [batch.primaryModelProfileId] : []),
+    ...batch.fallbackModelProfileIds,
+  ];
+  return profileIds.length > 0 ? { profileIds, batchId: batch.batchId } : undefined;
 }
 
 export async function createMassionDaemon(
@@ -497,11 +516,7 @@ export async function createMassionDaemon(
         resolve: async (context, input) => {
           if (!input.agentHandle || !isOptimizationRoleKey(input.agentHandle)) return undefined;
           const active = await optimizationBatches.getActiveBatch(context, input.agentHandle);
-          if (!active) return undefined;
-          return [
-            ...(active.primaryModelProfileId ? [active.primaryModelProfileId] : []),
-            ...active.fallbackModelProfileIds,
-          ];
+          return modelPreferenceFromActiveBatch(input.agentHandle, active);
         },
       },
     );

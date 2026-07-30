@@ -7,10 +7,45 @@ import { describe, expect, it } from "vitest";
 
 import { parseServerConfig } from "./config.js";
 import { createMassionDaemon } from "./product.js";
+import * as productModule from "./product.js";
 
 const bootstrapCapability = Buffer.alloc(32, 72).toString("base64url");
 
 describe("Massion server model optimization product boundary", () => {
+  it("활성 모델 batch resolver는 비어 있거나 비활성·다른 역할인 batch를 사용하지 않는다", () => {
+    const resolve = (
+      productModule as unknown as {
+        modelPreferenceFromActiveBatch?: (
+          roleKey: string | undefined,
+          batch: Record<string, unknown> | undefined,
+        ) => { readonly profileIds: readonly string[]; readonly batchId: string } | undefined;
+      }
+    ).modelPreferenceFromActiveBatch;
+    expect(resolve).toEqual(expect.any(Function));
+    const active = {
+      batchId: "batch-assurance-1",
+      organizationId: "organization-1",
+      roleKey: "assurance",
+      version: 1,
+      recommendationId: "recommendation-1",
+      policyVersionId: "policy-1",
+      status: "active",
+      primaryModelProfileId: "profile-primary",
+      fallbackModelProfileIds: ["profile-fallback"],
+      checksum: "a".repeat(64),
+    };
+
+    expect(resolve?.("assurance", active)).toEqual({
+      profileIds: ["profile-primary", "profile-fallback"],
+      batchId: "batch-assurance-1",
+    });
+    expect(
+      resolve?.("assurance", { ...active, primaryModelProfileId: undefined, fallbackModelProfileIds: [] }),
+    ).toBeUndefined();
+    expect(resolve?.("assurance", { ...active, status: "limited" })).toBeUndefined();
+    expect(resolve?.("growth", active)).toBeUndefined();
+  });
+
   it("서버 bootstrap부터 실제 로컬 모델 평가·receipt·추천까지 연결한다", async () => {
     const modelServer = createServer((_request, response) => {
       response.setHeader("content-type", "application/json");

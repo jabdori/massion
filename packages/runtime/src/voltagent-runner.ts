@@ -26,6 +26,7 @@ import {
   type RoutedLanguageModelLease,
   type RoutedModelFactory,
   type RoutedModelLease,
+  type RoutedModelSelectionLease,
 } from "./model-factory.js";
 import type {
   JsonValue,
@@ -34,6 +35,7 @@ import type {
 } from "./subscriptions/execution-receipt.js";
 
 const MAX_FALLBACKS = 16;
+const MODEL_ROUTE_EVENT_CAS_RETRIES = 3;
 const MINIMUM_SESSION_RENEW_DELAY_MS = 1_000;
 // 모델 제공자가 응답을 끝내지 않아도 Work가 영구 실행 상태에 남지 않도록 합니다.
 // 로컬 Connector의 기본 요청 기한(120초)과 맞춰, 모델 호출도 같은 상한을 사용합니다.
@@ -215,6 +217,10 @@ function failureSignal(error: unknown): FailureSignal {
 
 function isModelUnavailable(error: unknown): boolean {
   return error instanceof Error && error.message.startsWith("blocked_model_unavailable:");
+}
+
+function isRuntimeExecutionVersionConflict(error: unknown): boolean {
+  return error instanceof Error && /^현재 Runtime Execution version은 \d+입니다$/u.test(error.message);
 }
 
 /** 모든 모델 호출은 상위 취소를 보존하면서도 외부 응답 대기를 유한하게 제한합니다. */
@@ -415,6 +421,7 @@ export class VoltAgentRunner implements AgentRunner, StructuredAgentRunner {
               context,
               await this.acquireInput(context, input, executionId, attempt, fallbackFromAttemptId, fallbackFromLeaseId),
             );
+            state = await this.recordModelRouteSelected(context, executionId, input.modelRoute, lease);
             if (lease.kind === "agent-runtime") {
               await this.recordSubscriptionInvocationStarted(context, executionId, lease);
               const runtimeResult = await this.executeAgentRuntime(
@@ -622,8 +629,11 @@ export class VoltAgentRunner implements AgentRunner, StructuredAgentRunner {
       const suspended = this.suspendedSubscriptions.get(executionId);
       return suspended?.context.organizationId === context.organizationId;
     });
-    const settled = await Promise.allSettled(executionIds.map((executionId) => this.cancel(context, executionId, reason)));
-    const failures = settled.flatMap((result) => (result.status === "rejected" ? [result.reason] : []));
+    const settled = await Promise.allSettled(
+      executionIds.map((executionId) => this.cancel(context, executionId, reason)),
+    );
+    // PromiseRejectedResult.reason은 표준 lib 타입상 any이므로 unknown으로 좁혀 no-unsafe-return을 해소합니다.
+    const failures = settled.flatMap((result) => (result.status === "rejected" ? [result.reason as unknown] : []));
     if (failures.length > 0) throw new AggregateError(failures, "조직 실행 취소에 실패했습니다");
     const remaining = this.activeExecutionIds().filter((executionId) => {
       const active = this.active.get(executionId);
@@ -666,6 +676,21 @@ export class VoltAgentRunner implements AgentRunner, StructuredAgentRunner {
         }
         return this.resultFromExecution(await receipts.recover(context, executionId));
       }
+    }
+    const selection = await this.models.recoverReservedSelection?.(context, executionId);
+    if (selection) {
+      const snapshot = await this.store.getRecovery(context, executionId);
+      const commandId = `${executionId}:model:${selection.attemptId}:selected`;
+      const alreadyRecorded = snapshot.events.some((event) => event.command_id === commandId);
+      await this.recordModelRouteSelected(context, executionId, snapshot.execution.model_route, selection);
+      await selection.fail({
+        commandId: `${commandId}:recovery-release`,
+        signal: { kind: "cancelled" },
+        emittedTokens: 0,
+        sideEffectsStarted: alreadyRecorded,
+        inputTokens: 0,
+        outputTokens: 0,
+      });
     }
     return await this.requireLifecycle().recover(context, executionId);
   }
@@ -710,6 +735,7 @@ export class VoltAgentRunner implements AgentRunner, StructuredAgentRunner {
             fallbackFromLeaseId,
           ),
         );
+        await this.recordModelRouteSelected(context, running.execution_id, input.modelRoute, lease);
         if (abortSignal.aborted) {
           return await this.cancelAcquiredLease(
             context,
@@ -827,6 +853,7 @@ export class VoltAgentRunner implements AgentRunner, StructuredAgentRunner {
             fallbackFromLeaseId,
           ),
         );
+        await this.recordModelRouteSelected(context, running.execution_id, input.modelRoute, lease);
         if (abortSignal.aborted) {
           return await this.cancelAcquiredLease(
             context,
@@ -1206,6 +1233,99 @@ export class VoltAgentRunner implements AgentRunner, StructuredAgentRunner {
       adapterId: lease.subscription.adapterId,
       ...(lease.subscription.quotaSnapshotId ? { quotaSnapshotId: lease.subscription.quotaSnapshotId } : {}),
     };
+  }
+
+  private async recordModelRouteSelected(
+    context: TenantContext,
+    executionId: string,
+    routeName: string,
+    lease: RoutedModelSelectionLease,
+  ): Promise<{ readonly execution: RuntimeExecution; readonly event: RuntimeEvent }> {
+    const commandId = `${executionId}:model:${lease.attemptId}:selected`;
+    try {
+      if (!lease.modelProfileId) throw new Error("선택된 Model Profile 계보가 없습니다");
+      const payload = {
+        executionId,
+        attemptId: lease.attemptId,
+        modelProfileId: lease.modelProfileId,
+        routeName,
+        ...(lease.optimizationBatchId !== undefined ? { batchId: lease.optimizationBatchId } : {}),
+        preferenceApplied: lease.preferenceApplied ?? false,
+      };
+      const replay = (snapshot: {
+        readonly execution: RuntimeExecution;
+        readonly events: readonly RuntimeEvent[];
+      }): { readonly execution: RuntimeExecution; readonly event: RuntimeEvent } | undefined => {
+        const event = snapshot.events.find((candidate) => candidate.command_id === commandId);
+        if (!event) return undefined;
+        let stored: unknown;
+        try {
+          stored = JSON.parse(event.payload_json) as unknown;
+        } catch (cause) {
+          throw new Error("기존 Model Route 선택 사건 payload가 유효하지 않습니다", { cause });
+        }
+        const expectedEntries = Object.entries(payload);
+        if (
+          event.organization_id !== context.organizationId ||
+          event.execution_id !== executionId ||
+          event.event_type !== "model.route.selected" ||
+          !stored ||
+          typeof stored !== "object" ||
+          Array.isArray(stored) ||
+          Object.keys(stored).length !== expectedEntries.length ||
+          expectedEntries.some(([key, value]) => (stored as Record<string, unknown>)[key] !== value)
+        ) {
+          throw new Error("기존 Model Route 선택 사건 계보가 일치하지 않습니다");
+        }
+        return { execution: snapshot.execution, event };
+      };
+      for (let retry = 0; retry <= MODEL_ROUTE_EVENT_CAS_RETRIES; retry += 1) {
+        const current = await this.store.getRecovery(context, executionId);
+        const repeated = replay(current);
+        if (repeated) return repeated;
+        try {
+          return await this.store.appendEvent(context, {
+            commandId,
+            executionId,
+            expectedVersion: current.execution.version,
+            eventType: "model.route.selected",
+            payload,
+          });
+        } catch (error) {
+          const latest = await this.store.getRecovery(context, executionId);
+          const committed = replay(latest);
+          if (committed) return committed;
+          if (
+            retry < MODEL_ROUTE_EVENT_CAS_RETRIES &&
+            isRuntimeExecutionVersionConflict(error) &&
+            latest.execution.status === "running" &&
+            latest.execution.version > current.execution.version
+          ) {
+            continue;
+          }
+          throw error;
+        }
+      }
+      throw new Error("Model Route 선택 사건 CAS 재시도 상한을 초과했습니다");
+    } catch (error) {
+      try {
+        await lease.fail({
+          commandId: `${commandId}:release`,
+          signal: { kind: "unknown" },
+          emittedTokens: 0,
+          sideEffectsStarted: false,
+          inputTokens: 0,
+          outputTokens: 0,
+        });
+      } catch (settlementError) {
+        throw new RoutedExecutionSettlementError("Model Route 선택 사건 실패 뒤 lease 정산을 완료하지 못했습니다", {
+          cause: new AggregateError([error, settlementError]),
+        });
+      }
+      throw new RoutedExecutionSettlementError("Model Route 선택 사건을 기록하지 못해 lease를 정리했습니다", {
+        cause: error,
+      });
+    }
   }
 
   private async recordSubscriptionInvocationStarted(

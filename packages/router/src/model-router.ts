@@ -198,6 +198,25 @@ interface RouteAttemptListRow extends Omit<RouteAttemptListItem, "model_id" | "p
   readonly model_profile_id: string;
 }
 
+interface OptimizationBatchRoutingRecord {
+  readonly batch_id: unknown;
+  readonly organization_id: unknown;
+  readonly role_key: unknown;
+  readonly version: unknown;
+  readonly status: unknown;
+  readonly primary_model_profile_id?: unknown;
+  readonly fallback_model_profile_ids: unknown;
+  readonly checksum: unknown;
+}
+
+interface OptimizationActivePointerRoutingRecord {
+  readonly organization_id: unknown;
+  readonly role_key: unknown;
+  readonly batch_id: unknown;
+  readonly batch_version: unknown;
+  readonly checksum: unknown;
+}
+
 export interface CredentialSelectionView {
   readonly credential_id: string;
   readonly label: string;
@@ -925,6 +944,55 @@ export class ModelRouter {
     return attempt;
   }
 
+  public async readReservedAttemptByExecution(
+    context: TenantContext,
+    executionId: string,
+  ): Promise<RouteAttempt | undefined> {
+    await this.organizations.verifyTenantContext(context);
+    const normalizedExecutionId = executionId.trim();
+    if (!normalizedExecutionId || normalizedExecutionId.length > 256 || /[\0\r\n]/u.test(normalizedExecutionId)) {
+      throw new Error("실행 ID가 유효하지 않습니다");
+    }
+    return await this.database.transaction(async (tx) => {
+      await this.organizations.verifyTenantContext(context, undefined, tx);
+      const [records] = await tx.query<[Array<{ readonly attempt_id: unknown; readonly selection_sequence: unknown }>]>(
+        `SELECT attempt_id, selection_sequence FROM route_attempt
+         WHERE organization_id = $organization_id AND execution_id = $execution_id AND status = 'reserved'
+         ORDER BY selection_sequence DESC, attempt_id ASC LIMIT 2;`,
+        { organization_id: context.organizationId, execution_id: normalizedExecutionId },
+      );
+      if (records.length > 1) throw new Error("실행에 reserved Route Attempt가 둘 이상입니다");
+      const record = records[0];
+      if (!record) return undefined;
+      const attempt = await this.attempt(tx, context.organizationId, attemptRowText(record.attempt_id, "시도 ID"));
+      if (
+        attempt.organization_id !== context.organizationId ||
+        attempt.execution_id !== normalizedExecutionId ||
+        attempt.status !== "reserved"
+      ) {
+        throw new Error("reserved Route Attempt 실행 계보가 일치하지 않습니다");
+      }
+      await this.requireAttemptActor(tx, context, attempt);
+      const [candidates] = await tx.query<[RouteCandidate[]]>(
+        `SELECT * OMIT id FROM model_route_candidate
+         WHERE organization_id = $organization_id AND candidate_id = $candidate_id LIMIT 2;`,
+        { organization_id: context.organizationId, candidate_id: attempt.candidate_id },
+      );
+      const candidate = candidates[0];
+      if (
+        candidates.length !== 1 ||
+        !candidate ||
+        candidate.organization_id !== context.organizationId ||
+        candidate.route_id !== attempt.route_id ||
+        candidate.model_profile_id !== attempt.model_profile_id
+      ) {
+        throw new Error("reserved Route Attempt의 Candidate 계보가 일치하지 않습니다");
+      }
+      await this.profile(tx, context.organizationId, attempt.model_profile_id);
+      return attempt;
+    });
+  }
+
   public async listAttempts(context: TenantContext, limit = 50): Promise<readonly RouteAttemptListItem[]> {
     await this.organizations.verifyTenantContext(context);
     if (!Number.isSafeInteger(limit) || limit < 1 || limit > 200)
@@ -1413,10 +1481,89 @@ export class ModelRouter {
       "SELECT * OMIT id FROM model_route_candidate WHERE organization_id = $organization_id AND route_id = $route_id AND enabled = true ORDER BY priority ASC, candidate_id ASC;",
       { organization_id: context.organizationId, route_id: route.route_id },
     );
-    const preferenceRank = new Map(
-      (request.preferredModelProfileIds ?? []).map((profileId, index) => [profileId, index]),
-    );
-    const orderedCandidates = [...candidates].sort(
+    const preferences = request.preferredModelProfileIds ?? [];
+    if (new Set(preferences).size !== preferences.length) throw new Error("선호 Model Profile 목록에 중복이 있습니다");
+    const preferenceRank = new Map(preferences.map((profileId, index) => [profileId, index]));
+    if (request.optimizationBatchId !== undefined) {
+      const batchId = request.optimizationBatchId.trim();
+      if (!batchId || batchId !== request.optimizationBatchId || batchId.length > 256) {
+        throw new Error("Optimization Batch ID가 유효하지 않습니다");
+      }
+      let batches: OptimizationBatchRoutingRecord[];
+      try {
+        [batches] = await executor.query<[OptimizationBatchRoutingRecord[]]>(
+          `SELECT batch_id, organization_id, role_key, version, status, primary_model_profile_id,
+                  fallback_model_profile_ids, checksum
+           FROM optimization_batch
+           WHERE organization_id = $organization_id AND batch_id = $batch_id LIMIT 2;`,
+          { organization_id: context.organizationId, batch_id: batchId },
+        );
+      } catch (cause) {
+        throw new Error("현재 tenant의 활성 Optimization Batch가 유효하지 않습니다", { cause });
+      }
+      const batch = batches[0];
+      if (
+        batches.length !== 1 ||
+        !batch ||
+        batch.organization_id !== context.organizationId ||
+        batch.batch_id !== batchId ||
+        batch.status !== "active" ||
+        typeof batch.role_key !== "string" ||
+        !batch.role_key ||
+        !Number.isSafeInteger(batch.version) ||
+        (batch.version as number) < 1 ||
+        typeof batch.checksum !== "string" ||
+        !Array.isArray(batch.fallback_model_profile_ids) ||
+        batch.fallback_model_profile_ids.some((profileId) => typeof profileId !== "string") ||
+        (batch.primary_model_profile_id !== undefined && typeof batch.primary_model_profile_id !== "string")
+      ) {
+        throw new Error("현재 tenant의 활성 Optimization Batch가 유효하지 않습니다");
+      }
+      const batchProfileIds = [
+        ...(typeof batch.primary_model_profile_id === "string" ? [batch.primary_model_profile_id] : []),
+        ...(batch.fallback_model_profile_ids as string[]),
+      ];
+      if (
+        batchProfileIds.length === 0 ||
+        new Set(batchProfileIds).size !== batchProfileIds.length ||
+        batchProfileIds.length !== preferences.length ||
+        batchProfileIds.some((profileId, index) => preferences[index] !== profileId)
+      ) {
+        throw new Error("Optimization Batch의 선호 순서가 Router 요청과 일치하지 않습니다");
+      }
+      let pointers: OptimizationActivePointerRoutingRecord[];
+      try {
+        [pointers] = await executor.query<[OptimizationActivePointerRoutingRecord[]]>(
+          `SELECT organization_id, role_key, batch_id, batch_version, checksum
+           FROM optimization_active_pointer
+           WHERE organization_id = $organization_id AND batch_id = $batch_id
+           ORDER BY role_key ASC LIMIT 2;`,
+          { organization_id: context.organizationId, batch_id: batchId },
+        );
+      } catch (cause) {
+        throw new Error("Optimization Batch의 활성 pointer가 유효하지 않습니다", { cause });
+      }
+      const pointer = pointers[0];
+      if (
+        pointers.length !== 1 ||
+        !pointer ||
+        pointer.organization_id !== context.organizationId ||
+        pointer.batch_id !== batchId ||
+        pointer.role_key !== batch.role_key ||
+        pointer.batch_version !== batch.version ||
+        pointer.checksum !== batch.checksum
+      ) {
+        throw new Error("Optimization Batch의 활성 pointer가 유효하지 않습니다");
+      }
+    }
+    if (preferences.some((profileId) => !candidates.some((candidate) => candidate.model_profile_id === profileId))) {
+      throw new Error("선호 Model Profile은 현재 tenant Route 후보여야 합니다");
+    }
+    const orderedCandidates = (
+      preferences.length > 0
+        ? candidates.filter((candidate) => preferenceRank.has(candidate.model_profile_id))
+        : [...candidates]
+    ).sort(
       (left, right) =>
         (preferenceRank.get(left.model_profile_id) ?? Number.MAX_SAFE_INTEGER) -
           (preferenceRank.get(right.model_profile_id) ?? Number.MAX_SAFE_INTEGER) ||

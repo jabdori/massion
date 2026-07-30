@@ -22,6 +22,7 @@ function buildOpenAiModelFixture({
   baseUrl,
   modelId,
   providerId = "openai",
+  supportsStructuredOutputs,
 }: {
   readonly adapterKind?: ModelProvider["adapter_kind"];
   readonly baseUrl: string;
@@ -218,6 +219,14 @@ describe("Massion routed model factory", () => {
       modelProfileId: preferred.profile.model_profile_id,
       priority: 99,
     });
+    await database.query(
+      "CREATE optimization_batch CONTENT { batch_id: 'optimization-batch-1', organization_id: $organization_id, role_key: 'assurance', version: 1, status: 'active', primary_model_profile_id: $profile_id, fallback_model_profile_ids: [], checksum: $checksum }; CREATE optimization_active_pointer CONTENT { pointer_id: 'optimization-pointer-runtime', organization_id: $organization_id, role_key: 'assurance', batch_id: 'optimization-batch-1', batch_version: 1, checksum: $checksum };",
+      {
+        organization_id: context.organizationId,
+        profile_id: preferred.profile.model_profile_id,
+        checksum: "e".repeat(64),
+      },
+    );
     const simulation = await router.simulate(context, {
       routeName,
       estimatedTokens: 100,
@@ -233,16 +242,283 @@ describe("Massion routed model factory", () => {
       providers,
       { build: (selection) => ({ modelId: selection.modelId }) as LanguageModel },
       undefined,
-      { resolve: async () => [preferred.profile.model_profile_id] },
+      {
+        resolve: async () => ({
+          profileIds: [preferred.profile.model_profile_id],
+          batchId: "optimization-batch-1",
+        }),
+      },
     );
     const lease = await factory.acquire(context, {
       commandId: crypto.randomUUID(),
+      executionId: "execution-lineage-1",
       agentHandle: "assurance",
       routeName,
       estimatedTokens: 100,
       estimatedCostMicros: 1_000,
     });
     expect(lease.model.modelId).toBe("preferred-coding-model");
+    expect(lease).toMatchObject({
+      modelProfileId: preferred.profile.model_profile_id,
+      optimizationBatchId: "optimization-batch-1",
+      preferenceApplied: true,
+    });
+    const [attempts] = await database.query<[Array<{ execution_id?: string; optimization_batch_id?: string }>]>(
+      "SELECT execution_id, optimization_batch_id FROM route_attempt WHERE organization_id = $organization_id AND attempt_id = $attempt_id LIMIT 1;",
+      { organization_id: context.organizationId, attempt_id: lease.attemptId },
+    );
+    expect(attempts[0]).toEqual({
+      execution_id: "execution-lineage-1",
+      optimization_batch_id: "optimization-batch-1",
+    });
+    Object.assign(router, {
+      readReservedAttemptByExecution: async (tenant: TenantContext, executionId: string) => {
+        const attempt = await router.readAttempt(tenant, lease.attemptId);
+        return attempt.execution_id === executionId && attempt.status === "reserved" ? attempt : undefined;
+      },
+    });
+    const originalAttempt = await router.readAttempt(context, lease.attemptId);
+    const mismatchedExplanation = JSON.parse(originalAttempt.explanation_json) as {
+      request: string;
+      explanation: unknown;
+    };
+    mismatchedExplanation.request = JSON.stringify({
+      ...(JSON.parse(mismatchedExplanation.request) as Record<string, unknown>),
+      optimizationBatchId: "different-batch",
+    });
+    await database.query(
+      "UPDATE route_attempt SET explanation_json = $explanation_json WHERE organization_id = $organization_id AND attempt_id = $attempt_id;",
+      {
+        organization_id: context.organizationId,
+        attempt_id: lease.attemptId,
+        explanation_json: JSON.stringify(mismatchedExplanation),
+      },
+    );
+    await expect(factory.recoverReservedSelection(context, "execution-lineage-1")).rejects.toThrow("batch 계보");
+    await database.query(
+      "UPDATE route_attempt SET explanation_json = $explanation_json WHERE organization_id = $organization_id AND attempt_id = $attempt_id;",
+      {
+        organization_id: context.organizationId,
+        attempt_id: lease.attemptId,
+        explanation_json: originalAttempt.explanation_json,
+      },
+    );
+    const recovered = await factory.recoverReservedSelection(context, "execution-lineage-1");
+    expect(recovered).toMatchObject({
+      attemptId: lease.attemptId,
+      modelProfileId: preferred.profile.model_profile_id,
+      optimizationBatchId: "optimization-batch-1",
+      preferenceApplied: true,
+    });
+    await recovered?.fail({
+      commandId: "execution-lineage-1:model:recovery:release",
+      signal: { kind: "cancelled" },
+      emittedTokens: 0,
+      sideEffectsStarted: false,
+      inputTokens: 0,
+      outputTokens: 0,
+    });
+    await expect(factory.recoverReservedSelection(context, "execution-lineage-1")).resolves.toBeUndefined();
+  });
+
+  it("명시적 선호는 활성 batch resolver보다 우선하고 batch 계보를 가져오지 않는다", async () => {
+    const profile = (await router.listModels(context))[0];
+    if (!profile) throw new Error("model fixture가 없습니다");
+    const resolve = vi.fn().mockResolvedValue({
+      profileIds: ["resolver-profile"],
+      batchId: "resolver-batch",
+    });
+    const factory = new MassionModelFactory(
+      router,
+      providers,
+      { build: (selection) => ({ modelId: selection.modelId }) as LanguageModel },
+      undefined,
+      { resolve },
+    );
+
+    const lease = await factory.acquire(context, {
+      commandId: crypto.randomUUID(),
+      routeName,
+      estimatedTokens: 100,
+      estimatedCostMicros: 1_000,
+      preferredModelProfileIds: [profile.model_profile_id],
+    });
+
+    expect(resolve).not.toHaveBeenCalled();
+    expect(lease).toMatchObject({ modelProfileId: profile.model_profile_id, preferenceApplied: true });
+    expect(lease).not.toHaveProperty("optimizationBatchId");
+  });
+
+  it("활성 batch의 선호 목록이 비었으면 기존 Router 기준을 쓰고 batch 계보를 연결하지 않는다", async () => {
+    const profile = (await router.listModels(context))[0];
+    if (!profile) throw new Error("model fixture가 없습니다");
+    const factory = new MassionModelFactory(
+      router,
+      providers,
+      { build: (selection) => ({ modelId: selection.modelId }) as LanguageModel },
+      undefined,
+      { resolve: async () => ({ profileIds: [], batchId: "empty-batch" }) },
+    );
+
+    const lease = await factory.acquire(context, {
+      commandId: crypto.randomUUID(),
+      executionId: "execution-empty-preference",
+      routeName,
+      estimatedTokens: 100,
+      estimatedCostMicros: 1_000,
+    });
+    const [attempts] = await database.query<[Array<{ optimization_batch_id?: string }>]>(
+      "SELECT optimization_batch_id FROM route_attempt WHERE organization_id = $organization_id AND attempt_id = $attempt_id LIMIT 1;",
+      { organization_id: context.organizationId, attempt_id: lease.attemptId },
+    );
+
+    expect(lease).toMatchObject({ modelProfileId: profile.model_profile_id, preferenceApplied: false });
+    expect(lease).not.toHaveProperty("optimizationBatchId");
+    expect(attempts[0]).toEqual({});
+  });
+
+  it("cold recovery는 Session Lease를 먼저 닫아 Router 정산 재시도에도 고아를 남기지 않는다", async () => {
+    let attemptId = "";
+    let sessionActive = true;
+    const sessionFail = vi.fn(async () => {
+      sessionActive = false;
+      return { status: "failed" as const, fallbackAllowed: false, failureKind: "cancelled" as const };
+    });
+    const broker = {
+      acquire: vi.fn(),
+      bindRuntime: vi.fn(),
+      recoverActive: vi.fn(async () => []),
+      getLease: vi.fn(),
+      findExecutionLeases: vi.fn(async () =>
+        sessionActive && attemptId
+          ? [
+              {
+                leaseId: "recovery-session-1",
+                executionId: "execution-session-recovery",
+                accountId: "account-1",
+                connectorId: "connector-1",
+                workId: "work-1",
+                agentHandle: "assurance",
+                routeAttemptId: attemptId,
+                status: "active" as const,
+                expiresAt: new Date(Date.now() + 60_000).toISOString(),
+                complete: vi.fn(),
+                fail: sessionFail,
+                renew: vi.fn(),
+              },
+            ]
+          : [],
+      ),
+    };
+    const factory = new MassionModelFactory(
+      router,
+      providers,
+      { build: (selection) => ({ modelId: selection.modelId }) as LanguageModel },
+      { broker, resolver: { resolve: vi.fn() } } as never,
+    );
+    const lease = await factory.acquire(context, {
+      commandId: crypto.randomUUID(),
+      executionId: "execution-session-recovery",
+      routeName,
+      estimatedTokens: 100,
+      estimatedCostMicros: 1_000,
+    });
+    attemptId = lease.attemptId;
+    Object.assign(router, {
+      readReservedAttemptByExecution: async (tenant: TenantContext, executionId: string) => {
+        const attempt = await router.readAttempt(tenant, attemptId);
+        return attempt.execution_id === executionId && attempt.status === "reserved" ? attempt : undefined;
+      },
+    });
+    const reportFailure = router.reportFailure.bind(router);
+    vi.spyOn(router, "reportFailure")
+      .mockRejectedValueOnce(new Error("router recovery unavailable"))
+      .mockImplementation(reportFailure);
+    const usage = {
+      commandId: "execution-session-recovery:model:recovery-release",
+      signal: { kind: "cancelled" as const },
+      emittedTokens: 0,
+      sideEffectsStarted: false,
+      inputTokens: 0,
+      outputTokens: 0,
+    };
+
+    const first = await factory.recoverReservedSelection(context, "execution-session-recovery");
+    await expect(first?.fail(usage)).rejects.toThrow("Router 실패 정산");
+    expect(sessionFail).toHaveBeenCalledOnce();
+    const retried = await factory.recoverReservedSelection(context, "execution-session-recovery");
+    await retried?.fail(usage);
+
+    await expect(factory.recoverReservedSelection(context, "execution-session-recovery")).resolves.toBeUndefined();
+    expect(sessionFail).toHaveBeenCalledOnce();
+  });
+
+  it("공통 Connector 정산은 Session 실패 시 Router attempt를 reserved로 보존해 재시도한다", async () => {
+    const factory = new MassionModelFactory(router, providers, {
+      build: (selection) => ({ modelId: selection.modelId }) as LanguageModel,
+    });
+    const lease = await factory.acquire(context, {
+      commandId: crypto.randomUUID(),
+      executionId: "execution-shared-connector-settlement",
+      routeName,
+      estimatedTokens: 100,
+      estimatedCostMicros: 1_000,
+    });
+    const sessionFail = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("session settlement unavailable"))
+      .mockResolvedValue({ status: "failed", fallbackAllowed: false, failureKind: "cancelled" });
+    const session = {
+      leaseId: "shared-settlement-session",
+      executionId: "execution-shared-connector-settlement",
+      accountId: "account-1",
+      connectorId: "connector-1",
+      workId: "work-1",
+      agentHandle: "assurance",
+      routeAttemptId: lease.attemptId,
+      status: "active",
+      expiresAt: new Date(Date.now() + 60_000).toISOString(),
+      complete: vi.fn(),
+      fail: sessionFail,
+      renew: vi.fn(),
+    };
+    const reportFailure = vi.spyOn(router, "reportFailure");
+    const failConnectorAttempt = (
+      factory as unknown as {
+        failConnectorAttempt(
+          tenant: TenantContext,
+          attemptId: string,
+          connectorSession: typeof session,
+          usage: {
+            commandId: string;
+            signal: { kind: "cancelled" };
+            emittedTokens: number;
+            sideEffectsStarted: boolean;
+            inputTokens: number;
+            outputTokens: number;
+          },
+        ): Promise<unknown>;
+      }
+    ).failConnectorAttempt.bind(factory);
+    const usage = {
+      commandId: "execution-shared-connector-settlement:fail",
+      signal: { kind: "cancelled" as const },
+      emittedTokens: 0,
+      sideEffectsStarted: false,
+      inputTokens: 0,
+      outputTokens: 0,
+    };
+
+    await expect(failConnectorAttempt(context, lease.attemptId, session, usage)).rejects.toThrow(
+      "session settlement unavailable",
+    );
+    expect(reportFailure).not.toHaveBeenCalled();
+    await expect(router.readAttempt(context, lease.attemptId)).resolves.toMatchObject({ status: "reserved" });
+
+    await failConnectorAttempt(context, lease.attemptId, session, usage);
+    expect(sessionFail).toHaveBeenCalledTimes(2);
+    expect(reportFailure).toHaveBeenCalledOnce();
+    await expect(router.readAttempt(context, lease.attemptId)).resolves.toMatchObject({ status: "failed" });
   });
 
   it("first-token 전 401 실패 후 다른 credential lease로 fallback한다", async () => {
@@ -273,6 +549,8 @@ describe("Massion routed model factory", () => {
 
     expect(failed.fallbackAllowed).toBe(true);
     expect(fallback.credentialId).not.toBe(first.credentialId);
+    expect(fallback.modelProfileId).toBe(first.modelProfileId);
+    expect(fallback.preferenceApplied).toBe(false);
   });
 
   it.each(["https://api.openai.com/v1?", "https://api.openai.com/v1#"])(
