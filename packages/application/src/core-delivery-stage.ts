@@ -426,10 +426,10 @@ export class CoreDeliveryStage implements CoreWorkStageExecutor {
         content: execution.output ?? null,
         creatorAgentHandle: deliveryAgentHandle(task),
         creatorExecutionId: execution.executionId,
+        creatorTaskId: task.task_id,
       });
       this.throwIfCancelled(input);
       artifacts.push(artifact.artifactVersion.artifact_version_id);
-      this.throwIfCancelled(input);
       await this.dependencies.works.transitionTask(context, {
         commandId: `${root}:completed`,
         workId: input.workId,

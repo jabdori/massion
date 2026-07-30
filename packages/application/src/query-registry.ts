@@ -1977,6 +1977,10 @@ export function registerApplicationQueries(
             // 인과 계보. 반론이 무엇을 반박하는지, 답변이 어느 질문에 붙는지가 여기서 옵니다.
             ...(message.replyToMessageId === undefined ? {} : { replyToMessageId: message.replyToMessageId }),
             ...(message.causedByMessageId === undefined ? {} : { causedByMessageId: message.causedByMessageId }),
+            ...(message.taskId === undefined ? {} : { taskId: message.taskId }),
+            ...(message.contextVersionId === undefined ? {} : { contextVersionId: message.contextVersionId }),
+            ...(message.executionId === undefined ? {} : { executionId: message.executionId }),
+            ...(message.artifactVersionId === undefined ? {} : { artifactVersionId: message.artifactVersionId }),
           }));
       },
     });

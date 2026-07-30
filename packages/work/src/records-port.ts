@@ -4,7 +4,15 @@ import type { OrganizationService, TenantContext } from "@massion/identity";
 import { applyMigrations, type MassionDatabase, type QueryExecutor } from "@massion/storage";
 
 import { WORK_RECORDS_COMPLETION_MIGRATION, WORK_RECORDS_LINK_MIGRATION } from "./schema.js";
-import type { ArtifactVersion, Work, WorkEvent, WorkRecord } from "./work.js";
+import type {
+  ArtifactVersion,
+  CollaborationMessage,
+  CollaborationParticipant,
+  CollaborationRoom,
+  Work,
+  WorkEvent,
+  WorkRecord,
+} from "./work.js";
 
 export type RecordsProjectionDocumentKind = "adr" | "changelog" | "runbook";
 
@@ -105,6 +113,58 @@ function canonicalJson(value: unknown): string {
 
 function sha256(value: string): string {
   return createHash("sha256").update(value).digest("hex");
+}
+
+function datetimeMillis(value: unknown): number {
+  if (value instanceof Date) return value.getTime();
+  if (typeof value === "string" || typeof value === "number") return new Date(value).getTime();
+  const serialized = JSON.stringify(value);
+  if (!serialized) return Number.NaN;
+  const parsed = JSON.parse(serialized) as unknown;
+  return typeof parsed === "string" || typeof parsed === "number" ? new Date(parsed).getTime() : Number.NaN;
+}
+
+function safeDeliveryOutput(contentJson: string): string {
+  let display: string;
+  try {
+    const parsed = JSON.parse(contentJson) as unknown;
+    display = typeof parsed === "string" ? parsed : JSON.stringify(parsed, null, 2);
+  } catch {
+    display = contentJson;
+  }
+  const printable = Array.from(display)
+    .filter((character) => {
+      const code = character.charCodeAt(0);
+      return code === 9 || code === 10 || code === 13 || (code >= 32 && code !== 127 && (code < 128 || code > 159));
+    })
+    .join("");
+  const redacted = printable
+    .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]{8,}\b/giu, "Bearer [REDACTED]")
+    .replace(/\bsk-[A-Za-z0-9_-]{8,}\b/giu, "[REDACTED]")
+    .replace(/\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b/gu, "[REDACTED]")
+    .replace(
+      /(\b(?:api[_ -]?key|private[_ -]?key|key|access[_ -]?token|authorization|credential|secret)\s*[:=]\s*["']?)[^\s,"';}]{8,}/giu,
+      "$1[REDACTED]",
+    )
+    .trim();
+  return redacted || "작업 결과가 검증되었습니다.";
+}
+
+function finalDeliveryContent(outputs: readonly ArtifactVersion[]): string {
+  if (outputs.length === 0) return "검증된 작업 결과와 기록을 확정했습니다.";
+  const header = "완료된 작업 결과";
+  const labels = outputs.map((_output, index) => (outputs.length === 1 ? "" : `결과 ${String(index + 1)}`));
+  const separatorsLength = outputs.length > 1 ? (outputs.length - 1) * 2 : 0;
+  const labelsLength = labels.reduce((sum, label) => sum + (label ? label.length + 1 : 0), 0);
+  const available = Math.max(1, 4_000 - header.length - 2 - separatorsLength - labelsLength);
+  const perOutput = Math.max(1, Math.floor(available / outputs.length));
+  const sections = outputs.map((output, index) => {
+    const safe = safeDeliveryOutput(output.content_json);
+    const clipped = safe.length > perOutput ? `${safe.slice(0, Math.max(1, perOutput - 1))}…` : safe;
+    const label = labels[index];
+    return label ? `${label}\n${clipped}` : clipped;
+  });
+  return `${header}\n\n${sections.join("\n\n")}`.slice(0, 4_000);
 }
 
 function assertIdentifier(value: string, label: string): void {
@@ -208,6 +268,85 @@ export class WorkRecordsPort {
       }
       let completedWork = work;
       if (!replayedEvent) {
+        const [records] = await transaction.query<[WorkRecord[]]>(
+          "SELECT * OMIT id FROM work_record WHERE organization_id = $organization_id AND work_id = $work_id AND records_run_id = $records_run_id AND finalized = true LIMIT 1;",
+          {
+            organization_id: context.organizationId,
+            work_id: input.workId,
+            records_run_id: input.recordsRunId,
+          },
+        );
+        const record = records[0];
+        if (!record) throw new Error("Records completion WorkRecord 계보를 찾을 수 없습니다");
+        const [taskArtifacts] = await transaction.query<[Array<{ readonly artifact_id: string }>]>(
+          "SELECT artifact_id FROM work_artifact WHERE organization_id = $organization_id AND work_id = $work_id AND kind = 'task-output';",
+          { organization_id: context.organizationId, work_id: input.workId },
+        );
+        const [taskOutputVersions] = await transaction.query<[ArtifactVersion[]]>(
+          "SELECT * OMIT id FROM artifact_version WHERE organization_id = $organization_id AND work_id = $work_id AND artifact_id IN $artifact_ids AND artifact_version_id IN $version_ids ORDER BY created_at ASC, artifact_version_id ASC;",
+          {
+            organization_id: context.organizationId,
+            work_id: input.workId,
+            artifact_ids: taskArtifacts.map((artifact) => artifact.artifact_id),
+            version_ids: record.artifact_version_ids,
+          },
+        );
+        const finalContent = finalDeliveryContent(taskOutputVersions);
+        const lastTaskOutput = taskOutputVersions.at(-1);
+        const [rooms] = await transaction.query<[CollaborationRoom[]]>(
+          "SELECT * OMIT id FROM collaboration_room WHERE organization_id = $organization_id AND work_id = $work_id AND title = 'Core Office' AND coordinator_handle = 'representative' LIMIT 1;",
+          { organization_id: context.organizationId, work_id: input.workId },
+        );
+        const room = rooms[0];
+        if (room) {
+          if (room.status !== "active")
+            throw new Error("Representative 최종 답변을 기록할 Core Office 방이 비활성 상태입니다");
+          const [participants] = await transaction.query<[CollaborationParticipant[]]>(
+            "SELECT * OMIT id FROM collaboration_participant WHERE organization_id = $organization_id AND room_id = $room_id AND kind = 'agent' AND subject_id = 'representative' AND status = 'active' LIMIT 1;",
+            { organization_id: context.organizationId, room_id: room.room_id },
+          );
+          if (!participants[0]) throw new Error("Representative 최종 답변의 활성 participant를 찾을 수 없습니다");
+          const [messages] = await transaction.query<[CollaborationMessage[]]>(
+            "SELECT * OMIT id FROM collaboration_message WHERE organization_id = $organization_id AND work_id = $work_id AND room_id = $room_id ORDER BY sequence ASC;",
+            {
+              organization_id: context.organizationId,
+              work_id: input.workId,
+              room_id: room.room_id,
+            },
+          );
+          const previous = messages.at(-1);
+          if (!previous) throw new Error("Representative 최종 답변의 원인 Collaboration message를 찾을 수 없습니다");
+          if (room.round_count + 1 > room.max_rounds) {
+            throw new Error("Representative 최종 답변이 Collaboration Room round 한도를 초과했습니다");
+          }
+          const usedTokens = messages.reduce((sum, message) => sum + message.token_count, 0);
+          const usedCost = messages.reduce((sum, message) => sum + message.cost_micros, 0);
+          if (usedTokens > room.max_tokens) {
+            throw new Error("Representative 최종 답변이 Collaboration Room token 한도를 초과했습니다");
+          }
+          if (usedCost > room.max_cost_micros) {
+            throw new Error("Representative 최종 답변이 Collaboration Room cost 한도를 초과했습니다");
+          }
+          if (room.deadline && Date.now() > datetimeMillis(room.deadline)) {
+            throw new Error("Representative 최종 답변 전에 Collaboration Room deadline이 지났습니다");
+          }
+          await transaction.query(
+            "CREATE collaboration_message CONTENT { message_id: $message_id, organization_id: $organization_id, work_id: $work_id, room_id: $room_id, sequence: $sequence, message_type: 'answer', author_kind: 'agent', author_id: 'representative', content: $content, reply_to_message_id: $previous_message_id, caused_by_message_id: $previous_message_id, artifact_version_id: $artifact_version_id, token_count: 0, cost_micros: 0, created_at: time::now() }; UPDATE collaboration_room SET revision = $revision, next_sequence = $next_sequence, round_count = $round_count, updated_at = time::now() WHERE organization_id = $organization_id AND room_id = $room_id;",
+            {
+              message_id: randomUUID(),
+              organization_id: context.organizationId,
+              work_id: input.workId,
+              room_id: room.room_id,
+              sequence: room.next_sequence,
+              content: finalContent,
+              previous_message_id: previous.message_id,
+              artifact_version_id: lastTaskOutput?.artifact_version_id,
+              revision: room.revision + 1,
+              next_sequence: room.next_sequence + 1,
+              round_count: room.round_count + 1,
+            },
+          );
+        }
         await transaction.query(
           "UPDATE work SET status = 'completed', revision = $revision, updated_at = time::now() WHERE organization_id = $organization_id AND work_id = $work_id;",
           {

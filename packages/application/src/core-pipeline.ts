@@ -162,14 +162,31 @@ function blockUnsupportedDirectives(
 }
 
 function handoffContent(output: unknown): string {
-  if (typeof output === "string" && output.trim()) return output.trim().slice(0, 16_000);
+  let content: string | undefined;
+  if (typeof output === "string" && output.trim()) content = output.trim();
   try {
-    const encoded = JSON.stringify(output);
-    if (encoded && encoded !== "{}" && encoded !== "null") return encoded.slice(0, 16_000);
+    const encoded = content === undefined ? JSON.stringify(output) : undefined;
+    if (encoded && encoded !== "{}" && encoded !== "null") content = encoded;
   } catch {
     // 구조화할 수 없는 실행 출력은 handoff 본문으로 저장하지 않습니다.
   }
-  return "사용자 요청을 Context & Strategy에 전달합니다.";
+  if (!content) return "사용자 요청을 Context & Strategy에 전달합니다.";
+  const printable = Array.from(content)
+    .filter((character) => {
+      const code = character.charCodeAt(0);
+      return code === 9 || code === 10 || code === 13 || (code >= 32 && code !== 127 && (code < 128 || code > 159));
+    })
+    .join("");
+  const redacted = printable
+    .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]{8,}\b/giu, "Bearer [REDACTED]")
+    .replace(/\bsk-[A-Za-z0-9_-]{8,}\b/giu, "[REDACTED]")
+    .replace(/\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b/gu, "[REDACTED]")
+    .replace(
+      /(\b(?:api[_ -]?key|private[_ -]?key|key|access[_ -]?token|authorization|credential|secret)\s*[:=]\s*["']?)[^\s,"';}]{8,}/giu,
+      "$1[REDACTED]",
+    )
+    .trim();
+  return redacted ? redacted.slice(0, 16_000) : "사용자 요청을 Context & Strategy에 전달합니다.";
 }
 
 interface CoreRequest {
@@ -498,6 +515,15 @@ export function createCoreWorkPipelineExecutors(
       throwIfCancelled(input);
       const messages = room ? await dependencies.works.listMessages(context, input.workId, room.room_id) : [];
       throwIfCancelled(input);
+      const handoffIndex = messages.findLastIndex(
+        (message) =>
+          message.author_kind === "agent" &&
+          message.author_id === "representative" &&
+          message.message_type === "handoff",
+      );
+      // Strategy 입력은 권한 있는 Representative handoff까지로 고정합니다. 이후 projection message가
+      // stage command replay의 context hash를 바꾸거나 실행 완료 권한처럼 취급되면 안 됩니다.
+      const strategyMessages = handoffIndex < 0 ? messages : messages.slice(0, handoffIndex + 1);
       const evidenceReferences =
         room && work.workspace_id !== undefined
           ? (await dependencies.works.listSharedContexts(context, input.workId, room.room_id)).filter(
@@ -523,10 +549,10 @@ export function createCoreWorkPipelineExecutors(
         organizationDeclarationSource(organizationSnapshot, observedAt),
         ...strategyDirectiveSources(input, observedAt),
       ];
-      if (room && messages.length > 0) {
+      if (room && strategyMessages.length > 0) {
         const collaborationContent = {
           roomId: room.room_id,
-          messages: messages.map((message) => ({
+          messages: strategyMessages.map((message) => ({
             sequence: message.sequence,
             messageType: message.message_type,
             authorKind: message.author_kind,
@@ -538,7 +564,7 @@ export function createCoreWorkPipelineExecutors(
         sources.push({
           kind: "collaboration",
           sourceId: room.room_id,
-          revision: String(messages.at(-1)?.sequence ?? 0),
+          revision: String(strategyMessages.at(-1)?.sequence ?? 0),
           contentHash: hashContextContent(collaborationContent),
           observedAt: new Date().toISOString(),
           classification: "internal",

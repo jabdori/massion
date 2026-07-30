@@ -1524,6 +1524,10 @@ describe("협업방 조회", () => {
         content: "5축입니다.",
         createdAt: "2026-07-21T09:02:00.000Z",
         replyToMessageId: "message-question",
+        taskId: "task-delivery",
+        contextVersionId: "context-strategy",
+        executionId: "execution-delivery",
+        artifactVersionId: "artifact-delivery",
       },
       {
         organizationId: context.organizationId,
@@ -2531,7 +2535,15 @@ describe("협업방 조회", () => {
 
     expect(result.data).toMatchObject([
       { messageId: "message-question", messageType: "question", authorId: "delivery-coordination" },
-      { messageId: "message-answer", messageType: "answer", replyToMessageId: "message-question" },
+      {
+        messageId: "message-answer",
+        messageType: "answer",
+        replyToMessageId: "message-question",
+        taskId: "task-delivery",
+        contextVersionId: "context-strategy",
+        executionId: "execution-delivery",
+        artifactVersionId: "artifact-delivery",
+      },
       {
         messageId: "message-challenge",
         messageType: "challenge",

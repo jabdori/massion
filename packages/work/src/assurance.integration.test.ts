@@ -84,6 +84,40 @@ describe("Work Assurance 판정 투영", () => {
     };
   }
 
+  async function seedCoreOfficeRoom(
+    options: {
+      readonly assuranceParticipant?: boolean;
+      readonly maxRounds?: number;
+      readonly roundCount?: number;
+      readonly deadline?: string;
+    } = {},
+  ): Promise<void> {
+    await database.query(
+      `
+CREATE collaboration_room CONTENT { room_id: 'core-office-room', organization_id: $organization_id, work_id: $work_id, title: 'Core Office', coordinator_handle: 'representative', status: 'active', revision: 1, next_sequence: 2, max_parallel: 8, max_tokens: 32000, max_cost_micros: 1000000, max_rounds: $max_rounds, round_count: $round_count, created_at: time::now(), updated_at: time::now() };
+CREATE collaboration_message CONTENT { message_id: 'delivery-message', organization_id: $organization_id, work_id: $work_id, room_id: 'core-office-room', sequence: 1, message_type: 'evidence', author_kind: 'agent', author_id: 'delivery-coordination', content: 'Delivery 결과', token_count: 0, cost_micros: 0, created_at: time::now() };
+`,
+      {
+        organization_id: context.organizationId,
+        work_id: created.work.work_id,
+        max_rounds: options.maxRounds ?? 10,
+        round_count: options.roundCount ?? 1,
+      },
+    );
+    if (options.assuranceParticipant !== false) {
+      await database.query(
+        "CREATE collaboration_participant CONTENT { participant_id: 'assurance-participant', organization_id: $organization_id, work_id: $work_id, room_id: 'core-office-room', kind: 'agent', subject_id: 'assurance', role: 'participant', status: 'active', joined_at: time::now() };",
+        { organization_id: context.organizationId, work_id: created.work.work_id },
+      );
+    }
+    if (options.deadline) {
+      await database.query(
+        "UPDATE collaboration_room SET deadline = type::datetime($deadline) WHERE organization_id = $organization_id AND room_id = 'core-office-room';",
+        { organization_id: context.organizationId, deadline: options.deadline },
+      );
+    }
+  }
+
   it("passed 판정을 evidence Artifact와 WorkVerification으로 한 revision에 원자 투영한다", async () => {
     const reader = new FakeVerdictReader(projection());
     const port = new WorkAssurancePort(database, organizations, reader);
@@ -118,6 +152,83 @@ describe("Work Assurance 판정 투영", () => {
     );
     expect(verifications).toHaveLength(1);
     expect(artifactVersions).toHaveLength(1);
+  });
+
+  it("Assurance 메시지·evidence Artifact·Verification을 원자 투영하고 replay에서 중복하지 않는다", async () => {
+    await seedCoreOfficeRoom();
+    const reader = new FakeVerdictReader(projection());
+    const port = new WorkAssurancePort(database, organizations, reader);
+    const input = {
+      commandId: "assurance-collaboration-projection",
+      workId: created.work.work_id,
+      expectedRevision: created.work.revision,
+      assuranceRunId: reader.projection.assuranceRunId,
+    };
+
+    const first = await port.projectVerdict(context, input);
+    const replayed = await port.projectVerdict(context, input);
+
+    expect(replayed.verification?.verification_id).toBe(first.verification?.verification_id);
+    expect(first.verification?.projected_work_revision).toBe(first.work.revision);
+    const [messages, rooms] = await database.query<
+      [
+        Array<{
+          message_id: string;
+          sequence: number;
+          author_id: string;
+          reply_to_message_id?: string;
+          caused_by_message_id?: string;
+          execution_id?: string;
+          artifact_version_id?: string;
+        }>,
+        Array<{ revision: number; next_sequence: number; round_count: number }>,
+      ]
+    >(
+      "SELECT * OMIT id FROM collaboration_message WHERE organization_id = $organization_id AND work_id = $work_id ORDER BY sequence ASC; SELECT revision, next_sequence, round_count FROM collaboration_room WHERE organization_id = $organization_id AND room_id = 'core-office-room';",
+      { organization_id: context.organizationId, work_id: created.work.work_id },
+    );
+    expect(messages).toEqual([
+      expect.objectContaining({ message_id: "delivery-message", sequence: 1 }),
+      expect.objectContaining({
+        sequence: 2,
+        author_id: "assurance",
+        reply_to_message_id: "delivery-message",
+        caused_by_message_id: "delivery-message",
+        execution_id: reader.projection.verifierExecutionId,
+        artifact_version_id: first.evidenceArtifactVersion?.artifact_version_id,
+      }),
+    ]);
+    expect(rooms).toEqual([{ revision: 2, next_sequence: 3, round_count: 2 }]);
+  });
+
+  it.each([
+    ["participant 부재", { assuranceParticipant: false }, "participant"],
+    ["round 한도", { maxRounds: 1, roundCount: 1 }, "round"],
+    ["deadline 만료", { deadline: "2000-01-01T00:00:00.000Z" }, "deadline"],
+  ] as const)("Assurance Collaboration %s는 전체 투영을 rollback한다", async (_label, options, reason) => {
+    await seedCoreOfficeRoom(options);
+    const reader = new FakeVerdictReader(projection());
+    await expect(
+      new WorkAssurancePort(database, organizations, reader).projectVerdict(context, {
+        commandId: `assurance-collaboration-${reason}`,
+        workId: created.work.work_id,
+        expectedRevision: created.work.revision,
+        assuranceRunId: reader.projection.assuranceRunId,
+      }),
+    ).rejects.toThrow(reason);
+
+    const [artifacts, verifications, messages, rooms] = await database.query<
+      [unknown[], unknown[], unknown[], Array<{ revision: number; next_sequence: number; round_count: number }>]
+    >(
+      "SELECT * FROM work_artifact; SELECT * FROM work_verification; SELECT * FROM collaboration_message; SELECT revision, next_sequence, round_count FROM collaboration_room WHERE room_id = 'core-office-room';",
+    );
+    expect(artifacts).toHaveLength(0);
+    expect(verifications).toHaveLength(0);
+    expect(messages).toHaveLength(1);
+    expect(rooms).toEqual([{ revision: 1, next_sequence: 2, round_count: options.roundCount ?? 1 }]);
+    await expect(
+      (await WorkService.create(database, organizations)).getWork(context, created.work.work_id),
+    ).resolves.toMatchObject({ revision: created.work.revision, status: "verifying" });
   });
 
   it("failed 판정은 WorkVerification을 남기고 Work를 failed로 전이한다", async () => {

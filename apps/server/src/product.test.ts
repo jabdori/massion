@@ -913,6 +913,18 @@ describe("Massion server product", () => {
       expect(snapshot?.data?.executions).toEqual([
         expect.objectContaining({ agentHandle: "representative", status: "blocked_model_unavailable" }),
       ]);
+      const failedWorkId = snapshot?.data?.works?.[0]?.workId;
+      if (!failedWorkId) throw new Error("제한 모드에서 생성된 Work를 찾을 수 없습니다");
+      const failedRooms = (await client.query("work.rooms", { workId: failedWorkId })) as {
+        data: readonly { roomId: string }[];
+      };
+      const failedRoomId = failedRooms.data[0]?.roomId;
+      if (!failedRoomId) throw new Error("제한 모드의 Core Office 방을 찾을 수 없습니다");
+      await expect(
+        client.query("work.messages", { workId: failedWorkId, roomId: failedRoomId }),
+      ).resolves.toMatchObject({
+        data: [{ sequence: 1, messageType: "question", authorKind: "user" }],
+      });
       await expect(
         createLimitedExecutors().intake.execute(
           { userId: "user", organizationId: "organization", membershipId: "membership", role: "owner" },
@@ -933,6 +945,7 @@ describe("Massion server product", () => {
 
   it("OpenAI 호환 route가 있으면 Representative→Strategy→Delivery 실제 Core 경로를 실행한다", async () => {
     const sourceSecret = "sk-knowledge-secret-1234567890";
+    const providerOutputSecret = "sk-provider-output-secret-1234567890";
     const plan = {
       objective: "실제 Core 경로 검증",
       summary: "한 작업을 전달하고 검증 단계까지 진행한다",
@@ -973,6 +986,13 @@ describe("Massion server product", () => {
         modelRequests.push(rawBody);
         const body = JSON.parse(rawBody) as { response_format?: unknown };
         response.setHeader("content-type", "application/json");
+        const content = body.response_format
+          ? JSON.stringify(plan)
+          : rawBody.includes("execute_work_task")
+            ? "DELIVERY_RESULT_calculateTotal_검증완료"
+            : rawBody.includes("coordinate_work")
+              ? `전략 단계로 전달합니다. ${providerOutputSecret}`
+              : "완료";
         response.end(
           JSON.stringify({
             id: crypto.randomUUID(),
@@ -982,7 +1002,7 @@ describe("Massion server product", () => {
             choices: [
               {
                 index: 0,
-                message: { role: "assistant", content: body.response_format ? JSON.stringify(plan) : "완료" },
+                message: { role: "assistant", content },
                 finish_reason: "stop",
               },
             ],
@@ -1149,6 +1169,83 @@ describe("Massion server product", () => {
         run = (await client.query("run.get", { runId: accepted.data.runId })) as typeof run;
       }
       expect(run.data.status).toBe("completed");
+      const rooms = (await client.query("work.rooms", { workId: run.data.workId })) as {
+        data: readonly { roomId: string; coordinatorHandle?: string }[];
+      };
+      expect(rooms.data).toEqual([expect.objectContaining({ coordinatorHandle: "representative" })]);
+      const roomId = rooms.data[0]?.roomId;
+      if (!roomId) throw new Error("실제 Core 경로의 Core Office 방을 찾을 수 없습니다");
+      const collaboration = (await client.query("work.messages", {
+        workId: run.data.workId,
+        roomId,
+      })) as {
+        data: readonly {
+          messageId: string;
+          sequence: number;
+          messageType: string;
+          authorKind: string;
+          authorId: string;
+          content: string;
+          replyToMessageId?: string;
+          causedByMessageId?: string;
+          taskId?: string;
+          contextVersionId?: string;
+          executionId?: string;
+          artifactVersionId?: string;
+        }[];
+      };
+      expect(
+        collaboration.data.map(({ sequence, messageType, authorKind, authorId }) => ({
+          sequence,
+          messageType,
+          authorKind,
+          authorId,
+        })),
+      ).toEqual([
+        { sequence: 1, messageType: "question", authorKind: "user", authorId: expect.any(String) },
+        { sequence: 2, messageType: "handoff", authorKind: "agent", authorId: "representative" },
+        { sequence: 3, messageType: "answer", authorKind: "agent", authorId: "context-strategy" },
+        { sequence: 4, messageType: "evidence", authorKind: "agent", authorId: "delivery-coordination" },
+        { sequence: 5, messageType: "evidence", authorKind: "agent", authorId: "assurance" },
+        { sequence: 6, messageType: "answer", authorKind: "agent", authorId: "representative" },
+      ]);
+      for (const [index, message] of collaboration.data.entries()) {
+        expect(message.content.trim(), `collaboration message ${String(index + 1)} content`).not.toBe("");
+        expect(message.content, `collaboration message ${String(index + 1)} secret boundary`).not.toContain(
+          sourceSecret,
+        );
+        expect(message.content, `collaboration message ${String(index + 1)} provider secret boundary`).not.toContain(
+          providerOutputSecret,
+        );
+        if (index === 0) continue;
+        const previous = collaboration.data[index - 1];
+        expect(message.replyToMessageId, `collaboration message ${String(index + 1)} reply lineage`).toBe(
+          previous?.messageId,
+        );
+        expect(message.causedByMessageId, `collaboration message ${String(index + 1)} causal lineage`).toBe(
+          previous?.messageId,
+        );
+      }
+      expect(collaboration.data[1]?.executionId).toEqual(expect.any(String));
+      expect(collaboration.data[2]).toMatchObject({
+        contextVersionId: expect.any(String),
+        executionId: expect.any(String),
+      });
+      expect(collaboration.data[3]).toMatchObject({
+        taskId: expect.any(String),
+        executionId: expect.any(String),
+        artifactVersionId: expect.any(String),
+      });
+      expect(collaboration.data[4]?.executionId).toEqual(expect.any(String));
+      expect(collaboration.data[5]).toMatchObject({
+        artifactVersionId: collaboration.data[3]?.artifactVersionId,
+        content: expect.stringContaining("DELIVERY_RESULT_calculateTotal_검증완료"),
+      });
+      expect(
+        collaboration.data.filter(
+          (message) => message.authorId === "representative" && message.messageType === "answer",
+        ),
+      ).toHaveLength(1);
       const ready = (await client.query("work.knowledge", { workId: run.data.workId })) as {
         data: {
           status: string;

@@ -5,6 +5,9 @@ import type { MassionDatabase, QueryExecutor } from "@massion/storage";
 
 import type {
   ArtifactVersion,
+  CollaborationMessage,
+  CollaborationParticipant,
+  CollaborationRoom,
   Work,
   WorkCommandInput,
   WorkCommandResult,
@@ -83,6 +86,15 @@ function canonicalJson(value: unknown): string {
 
 function sha256(value: string): string {
   return createHash("sha256").update(value).digest("hex");
+}
+
+function datetimeMillis(value: unknown): number {
+  if (value instanceof Date) return value.getTime();
+  if (typeof value === "string" || typeof value === "number") return new Date(value).getTime();
+  const serialized = JSON.stringify(value);
+  if (!serialized) return Number.NaN;
+  const parsed = JSON.parse(serialized) as unknown;
+  return typeof parsed === "string" || typeof parsed === "number" ? new Date(parsed).getTime() : Number.NaN;
 }
 
 function assertSha256(value: string, label: string): void {
@@ -265,6 +277,59 @@ export class WorkAssurancePort {
       const artifactVersionIds = evidenceArtifactVersion
         ? [...work.artifact_version_ids, evidenceArtifactVersion.artifact_version_id]
         : work.artifact_version_ids;
+      const [rooms] = await transaction.query<[CollaborationRoom[]]>(
+        "SELECT * OMIT id FROM collaboration_room WHERE organization_id = $organization_id AND work_id = $work_id AND title = 'Core Office' AND coordinator_handle = 'representative' LIMIT 1;",
+        { organization_id: context.organizationId, work_id: work.work_id },
+      );
+      const room = rooms[0];
+      if (room) {
+        if (room.status !== "active") throw new Error("Assurance 결과를 기록할 Core Office 방이 비활성 상태입니다");
+        const [participants] = await transaction.query<[CollaborationParticipant[]]>(
+          "SELECT * OMIT id FROM collaboration_participant WHERE organization_id = $organization_id AND room_id = $room_id AND kind = 'agent' AND subject_id = 'assurance' AND status = 'active' LIMIT 1;",
+          { organization_id: context.organizationId, room_id: room.room_id },
+        );
+        if (!participants[0]) throw new Error("Assurance 결과의 활성 participant를 찾을 수 없습니다");
+        const [messages] = await transaction.query<[CollaborationMessage[]]>(
+          "SELECT * OMIT id FROM collaboration_message WHERE organization_id = $organization_id AND work_id = $work_id AND room_id = $room_id ORDER BY sequence ASC;",
+          { organization_id: context.organizationId, work_id: work.work_id, room_id: room.room_id },
+        );
+        const previous = messages.at(-1);
+        if (!previous) throw new Error("Assurance 결과의 원인 Collaboration message를 찾을 수 없습니다");
+        if (room.round_count + 1 > room.max_rounds) {
+          throw new Error("Assurance 결과가 Collaboration Room round 한도를 초과했습니다");
+        }
+        const usedTokens = messages.reduce((sum, message) => sum + message.token_count, 0);
+        const usedCost = messages.reduce((sum, message) => sum + message.cost_micros, 0);
+        if (usedTokens > room.max_tokens)
+          throw new Error("Assurance 결과가 Collaboration Room token 한도를 초과했습니다");
+        if (usedCost > room.max_cost_micros)
+          throw new Error("Assurance 결과가 Collaboration Room cost 한도를 초과했습니다");
+        if (room.deadline && Date.now() > datetimeMillis(room.deadline)) {
+          throw new Error("Assurance 결과 전에 Collaboration Room deadline이 지났습니다");
+        }
+        await transaction.query(
+          "CREATE collaboration_message CONTENT { message_id: $message_id, organization_id: $organization_id, work_id: $work_id, room_id: $room_id, sequence: $sequence, message_type: 'evidence', author_kind: 'agent', author_id: 'assurance', content: $content, reply_to_message_id: $previous_message_id, caused_by_message_id: $previous_message_id, execution_id: $execution_id, artifact_version_id: $artifact_version_id, token_count: 0, cost_micros: 0, created_at: time::now() }; UPDATE collaboration_room SET revision = $revision, next_sequence = $next_sequence, round_count = $round_count, updated_at = time::now() WHERE organization_id = $organization_id AND room_id = $room_id;",
+          {
+            message_id: randomUUID(),
+            organization_id: context.organizationId,
+            work_id: work.work_id,
+            room_id: room.room_id,
+            sequence: room.next_sequence,
+            content:
+              projection.verdict === "passed"
+                ? "독립 검증을 통과했습니다."
+                : projection.verdict === "failed"
+                  ? "독립 검증에서 완료 조건을 충족하지 못했습니다."
+                  : "독립 검증을 완료할 수 없어 작업을 중단했습니다.",
+            previous_message_id: previous.message_id,
+            execution_id: projection.verifierExecutionId,
+            artifact_version_id: evidenceArtifactVersion?.artifact_version_id,
+            revision: room.revision + 1,
+            next_sequence: room.next_sequence + 1,
+            round_count: room.round_count + 1,
+          },
+        );
+      }
       await transaction.query(
         "UPDATE work SET status = $status, revision = $revision, artifact_version_ids = $artifact_version_ids, updated_at = time::now() WHERE organization_id = $organization_id AND work_id = $work_id;",
         {

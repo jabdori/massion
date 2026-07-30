@@ -86,7 +86,7 @@ describe("SurrealApplicationReadModel", () => {
       estimatedCostMicros: 500,
       input: { request: "실행" },
     });
-    await works.postMessage(context, {
+    const message = await works.postMessage(context, {
       commandId: "read-model-message-0001",
       workId: created.work.work_id,
       roomId: room.room.room_id,
@@ -107,6 +107,23 @@ describe("SurrealApplicationReadModel", () => {
       name: "이탈 분석 보고서",
       mediaType: "application/json",
       content: { privateRawData: "읽기 모델에서 노출하면 안 됩니다" },
+    });
+    await works.postMessage(context, {
+      commandId: "read-model-message-0002",
+      workId: created.work.work_id,
+      roomId: room.room.room_id,
+      messageType: "evidence",
+      authorKind: "agent",
+      authorId: "representative",
+      content: "산출물 계보를 연결했습니다",
+      replyToMessageId: message.message.message_id,
+      causedByMessageId: message.message.message_id,
+      taskId: task.task.task_id,
+      contextVersionId: "read-model-context-version-0001",
+      executionId: execution.execution.execution_id,
+      artifactVersionId: artifact.artifactVersion.artifact_version_id,
+      tokenCount: 0,
+      costMicros: 0,
     });
     await database.query(
       "CREATE work_verification CONTENT { verification_id: 'read-model-verification-0001', organization_id: $organization_id, work_id: $work_id, verifier_id: 'assurance', passed: true, criteria_json: '[\"통계 유의성\"]', evidence_artifact_version_ids: [$artifact_version_id], created_at: time::now() };",
@@ -231,6 +248,21 @@ describe("SurrealApplicationReadModel", () => {
       }),
     ]);
     expect(JSON.stringify(await readModel.artifacts?.(context))).not.toContain("privateRawData");
+    await expect(readModel.messages(context)).resolves.toEqual([
+      expect.objectContaining({
+        messageId: message.message.message_id,
+        taskId: task.task.task_id,
+        executionId: execution.execution.execution_id,
+      }),
+      expect.objectContaining({
+        taskId: task.task.task_id,
+        contextVersionId: "read-model-context-version-0001",
+        executionId: execution.execution.execution_id,
+        artifactVersionId: artifact.artifactVersion.artifact_version_id,
+        replyToMessageId: message.message.message_id,
+        causedByMessageId: message.message.message_id,
+      }),
+    ]);
     await expect(readModel.verifications?.(context)).resolves.toEqual([
       expect.objectContaining({
         verificationId: "read-model-verification-0001",

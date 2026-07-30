@@ -56,6 +56,7 @@ describe("Context부터 Work projection까지의 StrategyService", () => {
 
   beforeEach(async () => {
     database = await createDatabase({ url: "mem://", namespace: "massion", database: crypto.randomUUID() });
+    await database.query("DEFINE TABLE runtime_execution SCHEMALESS;");
     const identity = await IdentityService.create(database);
     organizations = await OrganizationService.create(database);
     const owner = await identity.registerPersonalUser({ email: "service@example.com", displayName: "Service" });
@@ -108,7 +109,25 @@ describe("Context부터 Work projection까지의 StrategyService", () => {
   }
 
   async function service(runner: StructuredAgentRunner, beforeProjection?: () => Promise<void>) {
-    const generator = await StrategyGenerator.create(database, organizations, runner, contexts, works);
+    const trackedRunner: StructuredAgentRunner = {
+      ...runner,
+      executeStructured: async (tenant, runtimeInput, output) => {
+        const result = await runner.executeStructured(tenant, runtimeInput, output);
+        if (result.status === "succeeded") {
+          await database.query(
+            "CREATE runtime_execution CONTENT { execution_id: $execution_id, organization_id: $organization_id, work_id: $work_id, agent_handle: $agent_handle, status: 'succeeded' };",
+            {
+              execution_id: result.executionId,
+              organization_id: tenant.organizationId,
+              work_id: runtimeInput.workId,
+              agent_handle: runtimeInput.agentHandle,
+            },
+          );
+        }
+        return result;
+      },
+    };
+    const generator = await StrategyGenerator.create(database, organizations, trackedRunner, contexts, works);
     return StrategyService.create(contexts, generator, works, beforeProjection ? { beforeProjection } : undefined);
   }
 

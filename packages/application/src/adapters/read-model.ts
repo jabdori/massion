@@ -153,6 +153,10 @@ interface MessageRecord {
   readonly cost_micros?: number;
   readonly reply_to_message_id?: string;
   readonly caused_by_message_id?: string;
+  readonly task_id?: string;
+  readonly context_version_id?: string;
+  readonly execution_id?: string;
+  readonly artifact_version_id?: string;
 }
 
 interface WorkRecordProjection {
@@ -533,7 +537,7 @@ export class SurrealApplicationReadModel implements ApplicationReadModel {
   public async messages(context: TenantContext): Promise<readonly ApplicationMessageSource[]> {
     await this.organizations.verifyTenantContext(context);
     const [records] = await this.database.query<[MessageRecord[]]>(
-      "SELECT organization_id, work_id, room_id, message_id, sequence, message_type, author_kind, author_id, content, created_at, token_count, cost_micros, reply_to_message_id, caused_by_message_id FROM collaboration_message WHERE organization_id = $organization_id ORDER BY room_id ASC, sequence ASC;",
+      "SELECT organization_id, work_id, room_id, message_id, sequence, message_type, author_kind, author_id, content, created_at, token_count, cost_micros, reply_to_message_id, caused_by_message_id, task_id, context_version_id, execution_id, artifact_version_id FROM collaboration_message WHERE organization_id = $organization_id ORDER BY room_id ASC, sequence ASC;",
       { organization_id: context.organizationId },
     );
     return records.map((record) => ({
@@ -551,6 +555,10 @@ export class SurrealApplicationReadModel implements ApplicationReadModel {
       ...(record.cost_micros === undefined ? {} : { costMicros: record.cost_micros }),
       ...(record.reply_to_message_id === undefined ? {} : { replyToMessageId: record.reply_to_message_id }),
       ...(record.caused_by_message_id === undefined ? {} : { causedByMessageId: record.caused_by_message_id }),
+      ...(record.task_id === undefined ? {} : { taskId: record.task_id }),
+      ...(record.context_version_id === undefined ? {} : { contextVersionId: record.context_version_id }),
+      ...(record.execution_id === undefined ? {} : { executionId: record.execution_id }),
+      ...(record.artifact_version_id === undefined ? {} : { artifactVersionId: record.artifact_version_id }),
     }));
   }
 

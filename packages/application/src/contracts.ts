@@ -272,6 +272,10 @@ export interface RoomMessageViewV1 {
   readonly createdAt: string;
   readonly replyToMessageId?: string;
   readonly causedByMessageId?: string;
+  readonly taskId?: string;
+  readonly contextVersionId?: string;
+  readonly executionId?: string;
+  readonly artifactVersionId?: string;
 }
 
 export interface OrganizationNodeViewV1 {

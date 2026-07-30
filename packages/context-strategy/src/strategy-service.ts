@@ -95,6 +95,7 @@ export class StrategyService {
         expectedRevision: input.expectedWorkRevision,
         contextVersionId: contextVersion.contextVersionId,
         strategyGenerationId: generated.strategyGenerationId,
+        ...(generated.runtimeExecutionId === undefined ? {} : { strategyExecutionId: generated.runtimeExecutionId }),
         strategyChecksum: generated.checksum,
         plan: generated.plan,
       });

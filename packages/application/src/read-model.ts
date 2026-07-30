@@ -132,6 +132,10 @@ export interface ApplicationMessageSource {
   readonly replyToMessageId?: string;
   /** 이 메시지를 유발한 원인. 인과 계보를 화면까지 잇습니다. */
   readonly causedByMessageId?: string;
+  readonly taskId?: string;
+  readonly contextVersionId?: string;
+  readonly executionId?: string;
+  readonly artifactVersionId?: string;
 }
 
 export interface ApplicationRecordSource {

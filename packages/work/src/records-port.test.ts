@@ -212,6 +212,30 @@ CREATE documentation_impact_assessment CONTENT { assessment_id: 'assessment-runb
   });
 
   it("Work와 Records 완료를 함께 확정하고 replay·동시 호출에도 완료 event를 한 번만 만든다", async () => {
+    const firstDeliveryOutput = "DELIVERY_RESULT_records_projection_first";
+    const secondDeliveryOutput =
+      "DELIVERY_RESULT_records_projection_second Bearer bearer-record-123 sk-record-secret-1234567890 eyJabcdefghijk.abcdefghijk.abcdefghijk api_key=api-record-123 key=bare-record-123 private_key=private-record-123 secret=secret-record-123\u0001\u007f\u0085" +
+      "y".repeat(6_000);
+    await database.query(
+      `
+CREATE work_artifact CONTENT { artifact_id: 'task-output-artifact-1', organization_id: $organization_id, work_id: $work_id, kind: 'task-output', name: 'task-output-1', created_by: 'delivery-coordination', created_at: time::now() };
+CREATE artifact_version CONTENT { artifact_version_id: 'task-output-version-1', artifact_id: 'task-output-artifact-1', organization_id: $organization_id, work_id: $work_id, version: 1, checksum: $first_checksum, media_type: 'application/json', content_json: $first_content_json, created_by: 'delivery-coordination', created_at: time::now() };
+CREATE work_artifact CONTENT { artifact_id: 'task-output-artifact-2', organization_id: $organization_id, work_id: $work_id, kind: 'task-output', name: 'task-output-2', created_by: 'delivery-coordination', created_at: time::now() };
+CREATE artifact_version CONTENT { artifact_version_id: 'task-output-version-2', artifact_id: 'task-output-artifact-2', organization_id: $organization_id, work_id: $work_id, version: 1, checksum: $second_checksum, media_type: 'application/json', content_json: $second_content_json, created_by: 'delivery-coordination', created_at: time::now() };
+UPDATE work SET artifact_version_ids = ['task-output-version-1', 'task-output-version-2'] WHERE organization_id = $organization_id AND work_id = $work_id;
+CREATE collaboration_room CONTENT { room_id: 'core-office-room', organization_id: $organization_id, work_id: $work_id, title: 'Core Office', coordinator_handle: 'representative', status: 'active', revision: 1, next_sequence: 2, max_parallel: 8, max_tokens: 32000, max_cost_micros: 1000000, max_rounds: 100, round_count: 1, created_at: time::now(), updated_at: time::now() };
+CREATE collaboration_participant CONTENT { participant_id: 'representative-participant', organization_id: $organization_id, work_id: $work_id, room_id: 'core-office-room', kind: 'agent', subject_id: 'representative', role: 'coordinator', status: 'active', joined_at: time::now() };
+CREATE collaboration_message CONTENT { message_id: 'assurance-message', organization_id: $organization_id, work_id: $work_id, room_id: 'core-office-room', sequence: 1, message_type: 'evidence', author_kind: 'agent', author_id: 'assurance', content: '독립 검증을 통과했습니다.', execution_id: 'assurance-execution', token_count: 0, cost_micros: 0, created_at: time::now() };
+`,
+      {
+        organization_id: context.organizationId,
+        work_id: workId,
+        first_checksum: sha256(JSON.stringify(firstDeliveryOutput)),
+        first_content_json: JSON.stringify(firstDeliveryOutput),
+        second_checksum: sha256(JSON.stringify(secondDeliveryOutput)),
+        second_content_json: JSON.stringify(secondDeliveryOutput),
+      },
+    );
     const finalized = await port.finalize(context, input());
     const completion = completionInput(finalized.work.revision);
     const [completed, concurrent] = await Promise.all([
@@ -250,6 +274,49 @@ CREATE documentation_impact_assessment CONTENT { assessment_id: 'assessment-runb
       { organization_id: context.organizationId },
     );
     expect(workEvents).toHaveLength(1);
+    const [messages] = await database.query<
+      [
+        Array<{
+          sequence: number;
+          message_type: string;
+          author_id: string;
+          content: string;
+          artifact_version_id?: string;
+        }>,
+      ]
+    >(
+      "SELECT sequence, message_type, author_id, content, artifact_version_id FROM collaboration_message WHERE organization_id = $organization_id AND work_id = $work_id ORDER BY sequence ASC;",
+      { organization_id: context.organizationId, work_id: workId },
+    );
+    expect(messages).toEqual([
+      expect.objectContaining({ author_id: "assurance", message_type: "evidence" }),
+      expect.objectContaining({
+        author_id: "representative",
+        message_type: "answer",
+        artifact_version_id: "task-output-version-2",
+        content: expect.stringContaining("DELIVERY_RESULT_records_projection_first"),
+      }),
+    ]);
+    expect(messages[1]?.content).toContain("DELIVERY_RESULT_records_projection_second");
+    for (const secret of [
+      "bearer-record-123",
+      "sk-record-secret-1234567890",
+      "eyJabcdefghijk.abcdefghijk.abcdefghijk",
+      "api-record-123",
+      "bare-record-123",
+      "private-record-123",
+      "secret-record-123",
+    ]) {
+      expect(messages[1]?.content).not.toContain(secret);
+    }
+    expect(messages[1]?.content).toContain("[REDACTED]");
+    expect(messages[1]?.content.length).toBeLessThanOrEqual(4_000);
+    expect(
+      Array.from(messages[1]?.content ?? "").some((character) => {
+        const code = character.charCodeAt(0);
+        return (code < 32 && ![9, 10, 13].includes(code)) || (code >= 127 && code <= 159);
+      }),
+    ).toBe(false);
   });
 
   it("기존 분리 완료 상태를 replay하면 Work event 중복 없이 Records terminal을 복구한다", async () => {

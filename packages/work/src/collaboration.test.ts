@@ -4,9 +4,10 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { IdentityService, OrganizationService, type TenantContext } from "@massion/identity";
 import { OrganizationGraphService } from "@massion/organization";
-import { createDatabase, type MassionDatabase } from "@massion/storage";
+import { applyMigrations, createDatabase, type MassionDatabase } from "@massion/storage";
 
 import { WorkService, type CollaborationMessageType, type CreateWorkResult } from "./work.js";
+import { WORK_ASSURANCE_LINK_MIGRATION } from "./schema.js";
 
 const MESSAGE_TYPES: readonly CollaborationMessageType[] = [
   "question",
@@ -111,6 +112,146 @@ describe("Collaboration Room과 resource lease", () => {
         (message) => message.sequence,
       ),
     ).toEqual([1, 2, 3]);
+  });
+
+  it("Delivery Artifact·Task·Runtime·Collaboration 계보를 한 revision에 원자 기록하고 replay에서 중복하지 않는다", async () => {
+    await database.query("DEFINE TABLE runtime_execution SCHEMALESS;");
+    await applyMigrations(database, [WORK_ASSURANCE_LINK_MIGRATION]);
+    const opened = await service.openRoom(context, {
+      commandId: "delivery-lineage-room",
+      workId: created.work.work_id,
+      expectedRevision: (await service.getWork(context, created.work.work_id)).revision,
+      title: "Core Office",
+      coordinatorHandle: "representative",
+      participants: [
+        { kind: "agent", subjectId: "representative", role: "coordinator" },
+        { kind: "agent", subjectId: "delivery-coordination", role: "participant" },
+      ],
+      limits: { maxParallel: 2, maxTokens: 10_000, maxCostMicros: 1_000_000, maxRounds: 10 },
+    });
+    const handoff = await service.postMessage(context, {
+      commandId: "delivery-lineage-handoff",
+      workId: created.work.work_id,
+      roomId: opened.room.room_id,
+      messageType: "handoff",
+      authorKind: "agent",
+      authorId: "representative",
+      content: "Delivery로 전달합니다.",
+      tokenCount: 0,
+      costMicros: 0,
+    });
+    const plan = await service.addPlan(context, {
+      commandId: "delivery-lineage-plan",
+      workId: created.work.work_id,
+      expectedRevision: handoff.work.revision,
+      content: { objective: "Delivery lineage" },
+    });
+    const planned = await service.transition(context, {
+      commandId: "delivery-lineage-planned",
+      workId: created.work.work_id,
+      expectedRevision: plan.work.revision,
+      target: "planned",
+    });
+    const task = await service.addTask(context, {
+      commandId: "delivery-lineage-task",
+      workId: created.work.work_id,
+      expectedRevision: planned.work.revision,
+      title: "원자 Delivery",
+      objective: "계보를 원자 기록합니다",
+      acceptanceCriteria: ["Artifact와 메시지가 함께 생성됩니다"],
+      dependencyIds: [],
+    });
+    const assigned = await service.assignTask(context, {
+      commandId: "delivery-lineage-assignment",
+      workId: created.work.work_id,
+      expectedRevision: task.work.revision,
+      taskId: task.task.task_id,
+      agentHandle: "delivery-coordination",
+    });
+    const ready = await service.transition(context, {
+      commandId: "delivery-lineage-ready",
+      workId: created.work.work_id,
+      expectedRevision: assigned.work.revision,
+      target: "ready",
+    });
+    const running = await service.transition(context, {
+      commandId: "delivery-lineage-running",
+      workId: created.work.work_id,
+      expectedRevision: ready.work.revision,
+      target: "running",
+    });
+    const taskRunning = await service.transitionTask(context, {
+      commandId: "delivery-lineage-task-running",
+      workId: created.work.work_id,
+      expectedRevision: running.work.revision,
+      taskId: task.task.task_id,
+      expectedTaskRevision: task.task.revision,
+      target: "running",
+    });
+    const executionId = "delivery-lineage-execution";
+    await database.query(
+      "CREATE runtime_execution CONTENT { execution_id: $execution_id, organization_id: $organization_id, work_id: $work_id, task_id: $task_id, agent_handle: 'delivery-coordination', status: 'succeeded' };",
+      {
+        execution_id: executionId,
+        organization_id: context.organizationId,
+        work_id: created.work.work_id,
+        task_id: task.task.task_id,
+      },
+    );
+    const artifactInput = {
+      commandId: "delivery-lineage-artifact",
+      workId: created.work.work_id,
+      expectedRevision: taskRunning.work.revision,
+      kind: "task-output",
+      name: `task-${task.task.task_id}`,
+      mediaType: "application/json",
+      content: "DELIVERY_ATOMIC_RESULT",
+      creatorAgentHandle: "delivery-coordination",
+      creatorExecutionId: executionId,
+      creatorTaskId: task.task.task_id,
+    };
+    const artifact = await service.createArtifactVersion(context, artifactInput);
+    const replayed = await service.createArtifactVersion(context, artifactInput);
+    expect(artifact.work.revision).toBe(taskRunning.work.revision + 1);
+    expect(replayed.artifactVersion.artifact_version_id).toBe(artifact.artifactVersion.artifact_version_id);
+    expect(await service.listMessages(context, created.work.work_id, opened.room.room_id)).toEqual([
+      expect.objectContaining({ message_id: handoff.message.message_id }),
+      expect.objectContaining({
+        sequence: 2,
+        message_type: "evidence",
+        author_id: "delivery-coordination",
+        reply_to_message_id: handoff.message.message_id,
+        caused_by_message_id: handoff.message.message_id,
+        task_id: task.task.task_id,
+        execution_id: executionId,
+        artifact_version_id: artifact.artifactVersion.artifact_version_id,
+      }),
+    ]);
+
+    const reassigned = await service.assignTask(context, {
+      commandId: "delivery-lineage-reassigned",
+      workId: created.work.work_id,
+      expectedRevision: artifact.work.revision,
+      taskId: task.task.task_id,
+      agentHandle: "assurance",
+    });
+    const messagesBeforeLateResult = await service.listMessages(context, created.work.work_id, opened.room.room_id);
+    await expect(
+      service.createArtifactVersion(context, {
+        ...artifactInput,
+        commandId: "delivery-lineage-late-artifact",
+        expectedRevision: reassigned.work.revision,
+      }),
+    ).rejects.toThrow("현재 Task assignment");
+    expect((await service.getWork(context, created.work.work_id)).revision).toBe(reassigned.work.revision);
+    expect(await service.listMessages(context, created.work.work_id, opened.room.room_id)).toEqual(
+      messagesBeforeLateResult,
+    );
+    const [artifactVersions] = await database.query<[Array<{ readonly artifact_version_id: string }>]>(
+      "SELECT artifact_version_id FROM artifact_version WHERE organization_id = $organization_id AND work_id = $work_id;",
+      { organization_id: context.organizationId, work_id: created.work.work_id },
+    );
+    expect(artifactVersions).toHaveLength(1);
   });
 
   it("참여자와 round·token·deadline 한계를 강제한다", async () => {

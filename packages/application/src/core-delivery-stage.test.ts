@@ -389,6 +389,7 @@ describe("CoreDeliveryStage", () => {
   it("일반 Task는 assign→running→runtime→artifact→completed 순서를 지킨다", async () => {
     const calls: string[] = [];
     const runtimeInputs: unknown[] = [];
+    const artifactInputs: unknown[] = [];
     const materializeInputs: unknown[] = [];
     const knowledgeSources = [
       {
@@ -432,8 +433,9 @@ describe("CoreDeliveryStage", () => {
         revision += 1;
         return { work: { revision }, task: task() };
       },
-      createArtifactVersion: async () => {
+      createArtifactVersion: async (_context: unknown, value: unknown) => {
         calls.push("artifact");
+        artifactInputs.push(value);
         revision += 1;
         return { work: { revision }, artifactVersion: { artifact_version_id: "artifact-version-1" } };
       },
@@ -473,6 +475,13 @@ describe("CoreDeliveryStage", () => {
       }),
     ]);
     expect((runtimeInputs[0] as { estimatedTokens: number }).estimatedTokens).toBeLessThanOrEqual(32_000);
+    expect(artifactInputs).toEqual([
+      expect.objectContaining({
+        creatorTaskId: "task-general",
+        creatorAgentHandle: "data-analysis",
+        creatorExecutionId: "execution-1",
+      }),
+    ]);
   });
 
   it("검증된 Workspace 근거를 Software Engineering Task port에도 전달한다", async () => {

@@ -234,6 +234,7 @@ export interface StrategyProjection {
 export interface ApplyStrategyProjectionInput extends WorkCommandInput {
   readonly contextVersionId: string;
   readonly strategyGenerationId: string;
+  readonly strategyExecutionId?: string;
   readonly strategyChecksum: string;
   readonly plan: StrategyProjection;
 }
@@ -588,6 +589,8 @@ export interface CreateArtifactVersionInput extends WorkCommandInput {
   readonly content: unknown;
   readonly creatorAgentHandle?: string;
   readonly creatorExecutionId?: string;
+  /** Task 결과 Artifact인 경우 Runtime·Task·Collaboration 계보를 한 transaction에 묶습니다. */
+  readonly creatorTaskId?: string;
 }
 
 export interface FinalizeRecordInput extends WorkCommandInput {
@@ -1191,6 +1194,65 @@ export class WorkService {
         tasks.push(task);
       }
       assertAcyclic(tasks);
+      if (input.strategyExecutionId) {
+        const [executions] = await transaction.query<[{ readonly execution_id: string }[]]>(
+          "SELECT execution_id FROM runtime_execution WHERE organization_id = $organization_id AND work_id = $work_id AND execution_id = $execution_id AND agent_handle = 'context-strategy' AND status = 'succeeded' LIMIT 1;",
+          {
+            organization_id: context.organizationId,
+            work_id: work.work_id,
+            execution_id: input.strategyExecutionId,
+          },
+        );
+        if (!executions[0]) throw new Error("Strategy 결과의 Runtime Execution을 찾을 수 없습니다");
+        const [rooms] = await transaction.query<[CollaborationRoom[]]>(
+          "SELECT * OMIT id FROM collaboration_room WHERE organization_id = $organization_id AND work_id = $work_id AND title = 'Core Office' AND coordinator_handle = 'representative' LIMIT 1;",
+          { organization_id: context.organizationId, work_id: work.work_id },
+        );
+        const room = rooms[0];
+        if (room) {
+          if (room.status !== "active") throw new Error("Strategy 결과를 기록할 Core Office 방이 비활성 상태입니다");
+          const [participants] = await transaction.query<[CollaborationParticipant[]]>(
+            "SELECT * OMIT id FROM collaboration_participant WHERE organization_id = $organization_id AND room_id = $room_id AND kind = 'agent' AND subject_id = 'context-strategy' AND status = 'active' LIMIT 1;",
+            { organization_id: context.organizationId, room_id: room.room_id },
+          );
+          if (!participants[0]) throw new Error("Strategy 결과 작성자의 활성 participant를 찾을 수 없습니다");
+          const [messages] = await transaction.query<[CollaborationMessage[]]>(
+            "SELECT * OMIT id FROM collaboration_message WHERE organization_id = $organization_id AND work_id = $work_id AND room_id = $room_id ORDER BY sequence ASC;",
+            { organization_id: context.organizationId, work_id: work.work_id, room_id: room.room_id },
+          );
+          const previous = messages.at(-1);
+          if (!previous) throw new Error("Strategy 결과의 원인 Collaboration message를 찾을 수 없습니다");
+          if (room.round_count + 1 > room.max_rounds) {
+            throw new Error("Strategy 결과가 Collaboration Room round 한도를 초과했습니다");
+          }
+          const usedTokens = messages.reduce((sum, message) => sum + message.token_count, 0);
+          const usedCost = messages.reduce((sum, message) => sum + message.cost_micros, 0);
+          if (usedTokens > room.max_tokens)
+            throw new Error("Strategy 결과가 Collaboration Room token 한도를 초과했습니다");
+          if (usedCost > room.max_cost_micros)
+            throw new Error("Strategy 결과가 Collaboration Room cost 한도를 초과했습니다");
+          if (room.deadline && Date.now() > datetimeMillis(room.deadline)) {
+            throw new Error("Strategy 결과 전에 Collaboration Room deadline이 지났습니다");
+          }
+          await transaction.query(
+            "CREATE collaboration_message CONTENT { message_id: $message_id, organization_id: $organization_id, work_id: $work_id, room_id: $room_id, sequence: $sequence, message_type: 'answer', author_kind: 'agent', author_id: 'context-strategy', content: $content, reply_to_message_id: $previous_message_id, caused_by_message_id: $previous_message_id, context_version_id: $context_version_id, execution_id: $execution_id, token_count: 0, cost_micros: 0, created_at: time::now() }; UPDATE collaboration_room SET revision = $revision, next_sequence = $next_sequence, round_count = $round_count, updated_at = time::now() WHERE organization_id = $organization_id AND room_id = $room_id;",
+            {
+              message_id: randomUUID(),
+              organization_id: context.organizationId,
+              work_id: work.work_id,
+              room_id: room.room_id,
+              sequence: room.next_sequence,
+              content: `전략 계획을 확정했습니다. ${String(tasks.length)}개 작업을 실행합니다.`,
+              previous_message_id: previous.message_id,
+              context_version_id: input.contextVersionId,
+              execution_id: input.strategyExecutionId,
+              revision: room.revision + 1,
+              next_sequence: room.next_sequence + 1,
+              round_count: room.round_count + 1,
+            },
+          );
+        }
+      }
       await transaction.query(
         "UPDATE work SET status = $status, context_version_id = $context_version_id, active_plan_version_id = $active_plan_version_id, updated_at = time::now() WHERE organization_id = $organization_id AND work_id = $work_id;",
         {
@@ -2109,20 +2171,40 @@ export class WorkService {
     if (Boolean(input.creatorAgentHandle) !== Boolean(input.creatorExecutionId)) {
       throw new Error("ArtifactVersion creator Agent handle과 Runtime Execution ID는 함께 필요합니다");
     }
+    if (input.creatorTaskId && (!input.creatorAgentHandle || !input.creatorExecutionId)) {
+      throw new Error("ArtifactVersion creator Task ID에는 Agent handle과 Runtime Execution ID가 함께 필요합니다");
+    }
     if (!input.kind.trim() || !input.name.trim() || !input.mediaType.trim())
       throw new Error("Artifact kind, name과 media type이 필요합니다");
     return await this.mutate(context, input, "artifact_version_created", async (transaction, work) => {
       if (input.creatorAgentHandle && input.creatorExecutionId) {
         const [executions] = await transaction.query<[{ execution_id: string }[]]>(
-          "SELECT execution_id FROM runtime_execution WHERE organization_id = $organization_id AND work_id = $work_id AND execution_id = $execution_id AND agent_handle = $agent_handle AND status = 'succeeded' LIMIT 1;",
+          input.creatorTaskId
+            ? "SELECT execution_id FROM runtime_execution WHERE organization_id = $organization_id AND work_id = $work_id AND task_id = $task_id AND execution_id = $execution_id AND agent_handle = $agent_handle AND status = 'succeeded' LIMIT 1;"
+            : "SELECT execution_id FROM runtime_execution WHERE organization_id = $organization_id AND work_id = $work_id AND execution_id = $execution_id AND agent_handle = $agent_handle AND status = 'succeeded' LIMIT 1;",
           {
             organization_id: context.organizationId,
             work_id: work.work_id,
+            task_id: input.creatorTaskId,
             execution_id: input.creatorExecutionId,
             agent_handle: input.creatorAgentHandle,
           },
         );
         if (!executions[0]) throw new Error("ArtifactVersion creator Runtime Execution을 찾을 수 없습니다");
+        if (input.creatorTaskId) {
+          const [assignments] = await transaction.query<[{ readonly assignment_id: string }[]]>(
+            "SELECT assignment_id FROM task_assignment WHERE organization_id = $organization_id AND work_id = $work_id AND task_id = $task_id AND agent_handle = $agent_handle AND status = 'assigned' LIMIT 1;",
+            {
+              organization_id: context.organizationId,
+              work_id: work.work_id,
+              task_id: input.creatorTaskId,
+              agent_handle: input.creatorAgentHandle,
+            },
+          );
+          if (!assignments[0]) {
+            throw new Error("ArtifactVersion creator Agent가 현재 Task assignment와 일치하지 않습니다");
+          }
+        }
       }
       let artifact: WorkArtifact | undefined;
       if (input.artifactId) {
@@ -2177,6 +2259,68 @@ export class WorkService {
       );
       const artifactVersion = created[0];
       if (!artifactVersion) throw new Error("ArtifactVersion 생성 결과가 없습니다");
+      if (input.creatorTaskId && input.creatorAgentHandle && input.creatorExecutionId) {
+        const [tasks] = await transaction.query<[WorkTask[]]>(
+          "SELECT * OMIT id FROM work_task WHERE organization_id = $organization_id AND work_id = $work_id AND task_id = $task_id AND status = 'running' LIMIT 1;",
+          {
+            organization_id: context.organizationId,
+            work_id: work.work_id,
+            task_id: input.creatorTaskId,
+          },
+        );
+        if (!tasks[0]) throw new Error("ArtifactVersion creator Task가 실행 상태가 아닙니다");
+        const [rooms] = await transaction.query<[CollaborationRoom[]]>(
+          "SELECT * OMIT id FROM collaboration_room WHERE organization_id = $organization_id AND work_id = $work_id AND title = 'Core Office' AND coordinator_handle = 'representative' LIMIT 1;",
+          { organization_id: context.organizationId, work_id: work.work_id },
+        );
+        const room = rooms[0];
+        if (!room || room.status !== "active") throw new Error("Delivery 결과를 기록할 활성 Core Office 방이 없습니다");
+        const [participants] = await transaction.query<[CollaborationParticipant[]]>(
+          "SELECT * OMIT id FROM collaboration_participant WHERE organization_id = $organization_id AND room_id = $room_id AND kind = 'agent' AND subject_id = $agent_handle AND status = 'active' LIMIT 1;",
+          {
+            organization_id: context.organizationId,
+            room_id: room.room_id,
+            agent_handle: input.creatorAgentHandle,
+          },
+        );
+        if (!participants[0]) throw new Error("Delivery 결과 작성자의 활성 participant를 찾을 수 없습니다");
+        const [messages] = await transaction.query<[CollaborationMessage[]]>(
+          "SELECT * OMIT id FROM collaboration_message WHERE organization_id = $organization_id AND work_id = $work_id AND room_id = $room_id ORDER BY sequence ASC;",
+          { organization_id: context.organizationId, work_id: work.work_id, room_id: room.room_id },
+        );
+        const previous = messages.at(-1);
+        if (!previous) throw new Error("Delivery 결과의 원인 Collaboration message를 찾을 수 없습니다");
+        if (room.round_count + 1 > room.max_rounds) {
+          throw new Error("Delivery 결과가 Collaboration Room round 한도를 초과했습니다");
+        }
+        const usedTokens = messages.reduce((sum, message) => sum + message.token_count, 0);
+        const usedCost = messages.reduce((sum, message) => sum + message.cost_micros, 0);
+        if (usedTokens > room.max_tokens)
+          throw new Error("Delivery 결과가 Collaboration Room token 한도를 초과했습니다");
+        if (usedCost > room.max_cost_micros)
+          throw new Error("Delivery 결과가 Collaboration Room cost 한도를 초과했습니다");
+        if (room.deadline && Date.now() > datetimeMillis(room.deadline)) {
+          throw new Error("Delivery 결과 전에 Collaboration Room deadline이 지났습니다");
+        }
+        await transaction.query(
+          "CREATE collaboration_message CONTENT { message_id: $message_id, organization_id: $organization_id, work_id: $work_id, room_id: $room_id, sequence: $sequence, message_type: 'evidence', author_kind: 'agent', author_id: $author_id, content: '작업 결과를 산출물로 기록했습니다.', reply_to_message_id: $previous_message_id, caused_by_message_id: $previous_message_id, task_id: $task_id, execution_id: $execution_id, artifact_version_id: $artifact_version_id, token_count: 0, cost_micros: 0, created_at: time::now() }; UPDATE collaboration_room SET revision = $revision, next_sequence = $next_sequence, round_count = $round_count, updated_at = time::now() WHERE organization_id = $organization_id AND room_id = $room_id;",
+          {
+            message_id: randomUUID(),
+            organization_id: context.organizationId,
+            work_id: work.work_id,
+            room_id: room.room_id,
+            sequence: room.next_sequence,
+            author_id: input.creatorAgentHandle,
+            previous_message_id: previous.message_id,
+            task_id: input.creatorTaskId,
+            execution_id: input.creatorExecutionId,
+            artifact_version_id: artifactVersion.artifact_version_id,
+            revision: room.revision + 1,
+            next_sequence: room.next_sequence + 1,
+            round_count: room.round_count + 1,
+          },
+        );
+      }
       const references = [...new Set([...work.artifact_version_ids, artifactVersion.artifact_version_id])];
       await transaction.query(
         "UPDATE work SET artifact_version_ids = $artifact_version_ids WHERE organization_id = $organization_id AND work_id = $work_id;",

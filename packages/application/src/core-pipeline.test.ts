@@ -774,6 +774,9 @@ describe("actual Core Work pipeline adapters", () => {
     await graph.bootstrap(context);
     const works = await WorkService.create(database, organizations, graph);
     const captured: unknown[] = [];
+    const unsafeHandoff =
+      "요청을 분석했고 전략 수립으로 전달합니다. Bearer bearer-secret-123 sk-handoff-secret-1234567890 eyJabcdefghijk.abcdefghijk.abcdefghijk api_key=api-secret-123 key=bare-secret-123 private_key=private-secret-123 secret=secret-value-123\u0001\u007f\u0085" +
+      "x".repeat(20_000);
     const stages = createCoreWorkPipelineExecutors({
       graph,
       works,
@@ -782,7 +785,7 @@ describe("actual Core Work pipeline adapters", () => {
         execute: async () => ({
           executionId: "collaboration-representative-execution",
           status: "succeeded",
-          output: "요청을 분석했고 전략 수립으로 전달합니다.",
+          output: unsafeHandoff,
         }),
         cancel: async () => undefined,
       },
@@ -791,7 +794,12 @@ describe("actual Core Work pipeline adapters", () => {
           captured.push(input);
           return {
             contextVersion: { contextVersionId: "collaboration-context" },
-            generation: { status: "applied", strategyGenerationId: "collaboration-strategy" },
+            generation: {
+              status: "applied",
+              strategyGenerationId: "collaboration-strategy",
+              runtimeExecutionId: "collaboration-strategy-execution",
+              plan: { tasks: [] },
+            },
             projection: {},
           } as never;
         },
@@ -830,9 +838,29 @@ describe("actual Core Work pipeline adapters", () => {
         message_type: "handoff",
         author_kind: "agent",
         author_id: "representative",
-        content: "요청을 분석했고 전략 수립으로 전달합니다.",
+        content: expect.stringContaining("요청을 분석했고 전략 수립으로 전달합니다."),
       },
     ]);
+    const storedHandoff = messages[1]?.content ?? "";
+    for (const secret of [
+      "bearer-secret-123",
+      "sk-handoff-secret-1234567890",
+      "eyJabcdefghijk.abcdefghijk.abcdefghijk",
+      "api-secret-123",
+      "bare-secret-123",
+      "private-secret-123",
+      "secret-value-123",
+    ]) {
+      expect(storedHandoff).not.toContain(secret);
+    }
+    expect(storedHandoff).toContain("[REDACTED]");
+    expect(storedHandoff.length).toBeLessThanOrEqual(16_000);
+    expect(
+      Array.from(storedHandoff).some((character) => {
+        const code = character.charCodeAt(0);
+        return (code < 32 && ![9, 10, 13].includes(code)) || (code >= 127 && code <= 159);
+      }),
+    ).toBe(false);
 
     await expect(
       stages["context-strategy"].execute(context, {
