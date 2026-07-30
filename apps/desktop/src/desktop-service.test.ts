@@ -1076,7 +1076,7 @@ describe("Application desktop service", () => {
           verifierId: "assurance",
           passed: true,
           criteria: [{ criterionKey: "exact-result", status: "passed" }],
-          evidenceArtifactVersionIds: ["artifact-version-assurance-1"],
+          evidenceArtifactVersionIds: ["artifact-version-assurance-1", "opaque-missing-evidence"],
           createdAt: "2026-07-22T00:25:00.000Z",
         },
       ],
@@ -1086,7 +1086,11 @@ describe("Application desktop service", () => {
 
     expect(work.artifacts.map((artifact) => artifact.name)).toEqual(["결과 생성 결과", "독립 검증 근거"]);
     expect(work.verifications).toEqual([
-      expect.objectContaining({ verifier: "독립 검증", criteria: [{ key: "exact-result", status: "passed" }] }),
+      expect.objectContaining({
+        verifier: "독립 검증",
+        criteria: [{ key: "exact-result", status: "passed" }],
+        evidence: "독립 검증 근거 외 1개",
+      }),
     ]);
   });
 

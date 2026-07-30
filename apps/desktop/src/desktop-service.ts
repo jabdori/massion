@@ -4772,6 +4772,7 @@ function projectWorkDetail(sources: WorkDetailSources): WorkView {
   const tasks = sources.tasks.map(projectTask);
   const agents = projectAgents(sources.assignments, sources.executions);
   const artifacts = sources.artifacts.map((artifact) => projectArtifact(artifact, tasks));
+  const verifications = sources.verifications.map((verification) => projectVerification(verification, artifacts));
   const approvals = sources.approvals.map(projectApproval);
   const run = sources.runs.find((candidate) => ACTIVE_RUN_STATUSES.has(candidate.status)) ?? sources.runs[0];
   const activeExecutionId = sources.executions.find((execution) =>
@@ -4801,7 +4802,7 @@ function projectWorkDetail(sources: WorkDetailSources): WorkView {
     tasks,
     agents,
     artifacts,
-    verifications: sources.verifications.map(projectVerification),
+    verifications,
     records: sources.records.map(projectRecord),
     activities: projectActivities(sources.activities, sources.approvals, sources.directives, artifacts),
   };
@@ -4936,8 +4937,13 @@ function projectVerificationCriteria(value: unknown): VerificationCriterionView[
   });
 }
 
-function projectVerification(verification: VerificationViewV1): VerificationView {
+function projectVerification(verification: VerificationViewV1, artifacts: readonly ArtifactView[]): VerificationView {
   const verifier = agentRoleToken(verification.verifierId).friendlyLabel;
+  const evidence = verification.evidenceArtifactVersionIds.flatMap((id) => {
+    const artifact = artifacts.find((candidate) => candidate.artifactVersionId === id || candidate.id === id);
+    return artifact === undefined ? [] : [artifact.name];
+  });
+  const missingEvidence = verification.evidenceArtifactVersionIds.length - evidence.length;
   return {
     id: verification.verificationId,
     verifier: OPAQUE_UUID.test(verifier) ? "검증 담당" : verifier,
@@ -4945,7 +4951,12 @@ function projectVerification(verification: VerificationViewV1): VerificationView
     criteria: projectVerificationCriteria(verification.criteria),
     ...(verification.evidenceArtifactVersionIds.length === 0
       ? {}
-      : { evidence: verification.evidenceArtifactVersionIds.join(", ") }),
+      : {
+          evidence:
+            evidence.length === 0
+              ? `근거 ${String(missingEvidence)}개`
+              : `${evidence.join(", ")}${missingEvidence === 0 ? "" : ` 외 ${String(missingEvidence)}개`}`,
+        }),
   };
 }
 

@@ -90,6 +90,11 @@ describe("AgentOS 데스크톱", () => {
     expect(within(inspector).getByText(/정산 배치 주기를 4시간으로 바꿉니다/)).toBeInTheDocument();
     expect(within(inspector).getByText("CHANGELOG")).toBeInTheDocument();
     expect(within(inspector).getByText("승인됨")).toBeInTheDocument();
+    expect(within(inspector).getByText("Iris")).toBeInTheDocument();
+    expect(within(inspector).getByText("환불 지연 분석.pdf")).toBeInTheDocument();
+    expect(within(inspector).getByText("구간별 지연.csv")).toBeInTheDocument();
+    expect(within(inspector).queryByText("verification-refund")).not.toBeInTheDocument();
+    expect(within(inspector).queryByText("artifact-version-refund-report")).not.toBeInTheDocument();
   });
 
   it("기록이 없는 Work의 기록 탭은 산출물 빈 상태를 재사용하지 않는다", async () => {

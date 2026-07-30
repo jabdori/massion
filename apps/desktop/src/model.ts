@@ -731,8 +731,7 @@ const works: WorkView[] = [
       {
         id: "work-record-refund-1",
         version: 1,
-        // `summary`는 Records projection이 씁니다(packages/work/src/records-port.ts `:353`).
-        summary: "Records run records-run-refund finalized 2 document(s)",
+        summary: "업무 결과와 검증 기록을 확정했습니다. 문서 2건을 포함합니다.",
         recordedRevision: 12,
         finalizedBy: "나",
         finalizedAt: "07.24 16:41",

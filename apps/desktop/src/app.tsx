@@ -6603,7 +6603,13 @@ function WorkInspector({
             <InspectorVerifications values={work.verifications} />
           </TabsContent>
           <TabsContent className="space-y-3" value="records">
-            <InspectorRecords approvals={work.approvals} activities={work.activities} values={work.records} />
+            <InspectorRecords
+              approvals={work.approvals}
+              activities={work.activities}
+              artifacts={work.artifacts}
+              values={work.records}
+              verifications={work.verifications}
+            />
           </TabsContent>
           <TabsContent value="knowledge">
             <WorkKnowledgeInspector
@@ -6877,11 +6883,15 @@ function RecordRow({ label, children }: { label: string; children: ReactNode }) 
 function InspectorRecords({
   activities,
   approvals,
+  artifacts,
   values,
+  verifications,
 }: {
   activities: WorkView["activities"];
   approvals: WorkView["approvals"];
+  artifacts: WorkView["artifacts"];
   values: WorkView["records"];
+  verifications: WorkView["verifications"];
 }) {
   if (values.length === 0)
     return (
@@ -6972,9 +6982,10 @@ function InspectorRecords({
                   검증 <span className="ml-1 font-mono">{record.verificationIds.length}</span>
                 </h3>
                 <ul className="mt-1 space-y-0.5">
-                  {record.verificationIds.map((id) => (
-                    <li className="truncate font-mono text-[10px] text-secondary" key={id}>
-                      {id}
+                  {record.verificationIds.map((id, index) => (
+                    <li className="truncate text-[11px] text-secondary" key={id}>
+                      {verifications.find((verification) => verification.id === id)?.verifier ??
+                        `검증 결과 ${String(index + 1)}`}
                     </li>
                   ))}
                 </ul>
@@ -6984,9 +6995,10 @@ function InspectorRecords({
                   산출물 <span className="ml-1 font-mono">{record.artifactVersionIds.length}</span>
                 </h3>
                 <ul className="mt-1 space-y-0.5">
-                  {record.artifactVersionIds.map((id) => (
-                    <li className="truncate font-mono text-[10px] text-secondary" key={id}>
-                      {id}
+                  {record.artifactVersionIds.map((id, index) => (
+                    <li className="truncate text-[11px] text-secondary" key={id}>
+                      {artifacts.find((artifact) => artifact.artifactVersionId === id || artifact.id === id)?.name ??
+                        `산출물 ${String(index + 1)}`}
                     </li>
                   ))}
                 </ul>
