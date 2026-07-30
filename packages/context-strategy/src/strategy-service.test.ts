@@ -74,7 +74,7 @@ describe("Context부터 Work projection까지의 StrategyService", () => {
 
   afterEach(async () => database.close());
 
-  function input(commandId = crypto.randomUUID()): PlanStrategyInput {
+  function input(commandId: string = crypto.randomUUID()): PlanStrategyInput {
     const content = "계획을 세워주세요";
     return {
       commandId,
@@ -130,6 +130,72 @@ describe("Context부터 Work projection까지의 StrategyService", () => {
     expect(repeated.contextVersion.contextVersionId).toBe(first.contextVersion.contextVersionId);
     expect(repeated.projection?.plan.plan_version_id).toBe(first.projection?.plan.plan_version_id);
     expect(executeStructured).toHaveBeenCalledTimes(1);
+  });
+
+  it("실패한 생성을 새 command로 재시도하면 같은 ContextVersion을 재사용해 적용한다", async () => {
+    const executeStructured = vi
+      .fn()
+      .mockResolvedValueOnce({
+        executionId: "execution-retry-failed",
+        status: "failed",
+        error: { category: "provider", retryable: true, userMessage: "재시도 필요" },
+      })
+      .mockResolvedValueOnce({ executionId: "execution-retry-succeeded", status: "succeeded", output: PLAN });
+    const strategy = await service({ executeStructured });
+
+    const failed = await strategy.plan(context, input("strategy-retry-first"));
+    const retried = await strategy.plan(context, input("strategy-retry-second"));
+    const [rows] = await database.query<[{ readonly context_version_id: string }[]]>(
+      "SELECT context_version_id FROM context_version WHERE organization_id = $organization_id AND work_id = $work_id;",
+      { organization_id: context.organizationId, work_id: workId },
+    );
+
+    expect(failed.generation.status).toBe("failed");
+    expect(retried.generation.status).toBe("applied");
+    expect(retried.contextVersion.contextVersionId).toBe(failed.contextVersion.contextVersionId);
+    expect(rows).toHaveLength(1);
+    expect(executeStructured).toHaveBeenCalledTimes(2);
+  });
+
+  it("실제 Context material이 바뀌면 최신 ContextVersion을 parent로 새 version을 만든다", async () => {
+    const executeStructured = vi
+      .fn()
+      .mockResolvedValueOnce({
+        executionId: "execution-context-changed-failed",
+        status: "failed",
+        error: { category: "provider", retryable: true, userMessage: "재시도 필요" },
+      })
+      .mockResolvedValueOnce({ executionId: "execution-context-changed-succeeded", status: "succeeded", output: PLAN });
+    const strategy = await service({ executeStructured });
+    const first = await strategy.plan(context, input("strategy-context-first"));
+    const changedContent = "계획과 복구를 함께 세워주세요";
+    const changed = input("strategy-context-changed");
+
+    const changedRequest = {
+      ...changed,
+      context: {
+        ...changed.context,
+        sources: [
+          {
+            ...changed.context.sources[0]!,
+            revision: "2",
+            content: changedContent,
+            contentHash: hashContextContent(changedContent),
+          },
+        ],
+      },
+    };
+    const retried = await strategy.plan(context, changedRequest);
+    const repeated = await strategy.plan(context, changedRequest);
+
+    expect(retried.contextVersion).toMatchObject({
+      version: 2,
+      parentContextVersionId: first.contextVersion.contextVersionId,
+    });
+    expect(retried.generation.status).toBe("applied");
+    expect(repeated.contextVersion.contextVersionId).toBe(retried.contextVersion.contextVersionId);
+    expect(repeated.generation.strategyGenerationId).toBe(retried.generation.strategyGenerationId);
+    expect(executeStructured).toHaveBeenCalledTimes(2);
   });
 
   it("실행 레코드 생성 중 취소되면 StrategyGenerator가 structured Provider를 시작하지 않는다", async () => {

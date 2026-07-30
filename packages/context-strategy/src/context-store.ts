@@ -53,6 +53,16 @@ interface ContextPackageData {
   readonly sources: readonly ContextSource[];
 }
 
+interface ContextMaterialData {
+  readonly workId: string;
+  readonly projectId?: string;
+  readonly packageData: ContextPackageData;
+  readonly selectedSources: readonly ContextSource[];
+  readonly excludedSources: readonly ExcludedContextSource[];
+  readonly tokenBudget: number;
+  readonly tokenTotal: number;
+}
+
 function canonicalJson(value: unknown): string {
   if (value === undefined) return "null";
   if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
@@ -70,7 +80,27 @@ export function hashContextContent(content: unknown): string {
 }
 
 function hashRequest(input: CreateContextInput): string {
-  return createHash("sha256").update(canonicalJson(input)).digest("hex");
+  return createHash("sha256")
+    .update(canonicalJson({ ...input, sources: input.sources.map(sourceMaterial) }))
+    .digest("hex");
+}
+
+function sourceMaterial(source: ContextSource): Omit<ContextSource, "observedAt"> {
+  const { observedAt, ...material } = source;
+  void observedAt;
+  return material;
+}
+
+function hashContextMaterial(input: ContextMaterialData): string {
+  return hashContextContent({
+    workId: input.workId,
+    projectId: input.projectId,
+    package: { ...input.packageData, sources: input.packageData.sources.map(sourceMaterial) },
+    selectedSources: input.selectedSources.map(sourceMaterial),
+    excludedSources: input.excludedSources,
+    tokenBudget: input.tokenBudget,
+    tokenTotal: input.tokenTotal,
+  });
 }
 
 function sourceOrder(left: ContextSource, right: ContextSource): number {
@@ -118,11 +148,37 @@ export class ContextStore {
       await this.recordBudgetBlocked(context, input, requestHash, compiled);
       throw compiled;
     }
+    const packageData: ContextPackageData = {
+      objective: input.objective.trim(),
+      scopeIn: input.scopeIn,
+      scopeOut: input.scopeOut,
+      constraints: input.constraints,
+      assumptions: input.assumptions,
+      unknowns: input.unknowns,
+      decisions: input.decisions,
+      sources: input.sources,
+    };
+    const materialHash = hashContextMaterial({
+      workId: input.workId,
+      ...(input.projectId ? { projectId: input.projectId } : {}),
+      packageData,
+      selectedSources: compiled.selected,
+      excludedSources: compiled.excluded,
+      tokenBudget: input.tokenBudget,
+      tokenTotal: compiled.tokenTotal,
+    });
     return await this.database.transaction(async (tx) => {
       await this.organizations.verifyTenantContext(context, undefined, tx);
-      const repeated = await this.repeated(tx, context.organizationId, input.commandId, requestHash);
+      const repeated = await this.repeated(tx, context.organizationId, input.commandId, requestHash, true);
       if (repeated?.context_version_id) {
-        return this.view(await this.find(tx, context.organizationId, repeated.context_version_id));
+        const previous = await this.find(tx, context.organizationId, repeated.context_version_id);
+        if (
+          repeated.request_hash === requestHash ||
+          (input.expectedParentContextVersionId === undefined && this.materialHash(previous) === materialHash)
+        ) {
+          return this.view(previous);
+        }
+        throw new Error("같은 commandId에 다른 Context 요청을 사용할 수 없습니다");
       }
       const [records] = await tx.query<[ContextVersionRecord[]]>(
         "SELECT * OMIT id FROM context_version WHERE organization_id = $organization_id AND work_id = $work_id;",
@@ -132,22 +188,30 @@ export class ContextStore {
         (candidate, record) => (!candidate || record.version > candidate.version ? record : candidate),
         undefined,
       );
+      if (
+        latest &&
+        this.materialHash(latest) === materialHash &&
+        (input.expectedParentContextVersionId === undefined ||
+          input.expectedParentContextVersionId === latest.context_version_id)
+      ) {
+        await this.insertEvent(tx, {
+          eventId: randomUUID(),
+          organizationId: context.organizationId,
+          workId: input.workId,
+          contextVersionId: latest.context_version_id,
+          commandId: input.commandId,
+          eventType: "context_version_created",
+          requestHash,
+          payload: { version: latest.version, checksum: latest.checksum, reused: true },
+        });
+        return this.view(latest);
+      }
       if (latest && latest.context_version_id !== input.expectedParentContextVersionId) {
         throw new Error("parent ContextVersion precondition이 일치하지 않습니다");
       }
       if (!latest && input.expectedParentContextVersionId) {
         await this.find(tx, context.organizationId, input.expectedParentContextVersionId);
       }
-      const packageData: ContextPackageData = {
-        objective: input.objective.trim(),
-        scopeIn: input.scopeIn,
-        scopeOut: input.scopeOut,
-        constraints: input.constraints,
-        assumptions: input.assumptions,
-        unknowns: input.unknowns,
-        decisions: input.decisions,
-        sources: input.sources,
-      };
       const version = (latest?.version ?? 0) + 1;
       const contextVersionId = randomUUID();
       const checksum = hashContextContent({
@@ -335,14 +399,37 @@ export class ContextStore {
     organizationId: string,
     commandId: string,
     requestHash: string,
+    allowMismatch = false,
   ): Promise<ContextEventRecord | undefined> {
     const [records] = await executor.query<[ContextEventRecord[]]>(
       "SELECT * OMIT id FROM context_event WHERE organization_id = $organization_id AND command_id = $command_id LIMIT 1;",
       { organization_id: organizationId, command_id: commandId },
     );
-    if (records[0] && records[0].request_hash !== requestHash)
+    if (!allowMismatch && records[0] && records[0].request_hash !== requestHash)
       throw new Error("같은 commandId에 다른 Context 요청을 사용할 수 없습니다");
     return records[0];
+  }
+
+  private materialHash(record: ContextVersionRecord): string {
+    const version = this.view(record);
+    return hashContextMaterial({
+      workId: version.workId,
+      ...(version.projectId ? { projectId: version.projectId } : {}),
+      packageData: {
+        objective: version.objective,
+        scopeIn: version.scopeIn,
+        scopeOut: version.scopeOut,
+        constraints: version.constraints,
+        assumptions: version.assumptions,
+        unknowns: version.unknowns,
+        decisions: version.decisions,
+        sources: version.sources,
+      },
+      selectedSources: version.selectedSources,
+      excludedSources: version.excludedSources,
+      tokenBudget: version.tokenBudget,
+      tokenTotal: version.tokenTotal,
+    });
   }
 
   private async find(

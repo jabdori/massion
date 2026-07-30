@@ -73,6 +73,15 @@ DEFINE INDEX strategy_event_command ON strategy_event FIELDS organization_id, co
 `,
 );
 
+export const STRATEGY_GENERATION_RECOVERY_MIGRATION = defineMigration(
+  "0114-strategy-generation-recovery",
+  `
+DEFINE FIELD execution_claim_id ON strategy_generation TYPE option<string>;
+DEFINE FIELD execution_claim_expires_at ON strategy_generation TYPE option<datetime>;
+DEFINE FIELD execution_started_at ON strategy_generation TYPE option<datetime>;
+`,
+);
+
 export const CONTINUATION_STAFFING_MIGRATION = defineMigration(
   "0024-continuation-staffing",
   `

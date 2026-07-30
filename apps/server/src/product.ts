@@ -27,7 +27,7 @@ import {
   GovernanceBindingActivationAuthorizer,
   MetricObservationStore,
 } from "@massion/assurance";
-import { ContextStore, StrategyGenerator, StrategyService } from "@massion/context-strategy";
+import { ContextStore, StrategyGenerator, StrategyRecovery, StrategyService } from "@massion/context-strategy";
 import {
   CodeGraphService,
   CodeSearchService,
@@ -159,6 +159,7 @@ import { ServerConnectorStartupRecoveryService } from "./server-connector-startu
 import { BUILTIN_CORE_MODEL_ROUTES, BuiltinModelRouteAssembler } from "./server-model-route-assembler.js";
 import { BundledServerConnectorRuntimeAttestor } from "./server-runtime-attestor.js";
 import { ServerSubscriptionConnectionService } from "./server-subscription-connection.js";
+import { StrategyStartupRecoveryService } from "./strategy-startup-recovery.js";
 import { MassionSubscriptionExecutionContext } from "./subscription-execution-context.js";
 import { executeOptimizationCase } from "./model-optimization-executor.js";
 import { GovernanceSubscriptionPermissionBridge, SubscriptionAgentPolicyResolver } from "./subscription-governance.js";
@@ -538,6 +539,7 @@ export async function createMassionDaemon(
         await synchronize(context);
         return await routedRunner.executeStructured(context, input, output);
       },
+      findResultByCommand: runtimeExecutions.findResultByCommand.bind(runtimeExecutions),
       async *stream(context: Parameters<typeof routedRunner.execute>[0], input: AgentExecutionInput) {
         await synchronize(context);
         yield* routedRunner.stream(context, input);
@@ -598,6 +600,22 @@ export async function createMassionDaemon(
       evidencePromptMaterializer,
     );
     const strategy = StrategyService.create(contexts, strategyGenerator, works);
+    const strategyRecovery = StrategyRecovery.create(strategyGenerator, works);
+    const strategyStartupRecovery = new StrategyStartupRecoveryService(
+      strategyGenerator,
+      {
+        resolveTenantContext: async (userId, organizationId) =>
+          await organizations.resolveTenantContext(userId, organizationId),
+      },
+      strategyRecovery,
+      (failure) => {
+        operations.write("strategy.startup-recovery.failed", {
+          reason: failure.reason,
+          ...(failure.strategyGenerationId === undefined ? {} : { strategyGenerationId: failure.strategyGenerationId }),
+          ...(failure.organizationId === undefined ? {} : { organizationId: failure.organizationId }),
+        });
+      },
+    );
     const assurance = await AssuranceBootstrap.create(database, organizations);
     const growthMetricObservations = new MetricObservationStore(database, organizations, {
       systemAdapters: { [GROWTH_EFFECT_METRIC_SOURCE_ID]: createGrowthEffectMetricReader() },
@@ -1170,6 +1188,7 @@ export async function createMassionDaemon(
         serverConnectorLifecycle,
         serverConnectorStartupRecovery,
         runtimeRecovery,
+        strategyStartupRecovery,
         applicationRunRecovery,
       ],
       drainServices: [
@@ -1217,6 +1236,7 @@ export async function createMassionDaemon(
           Promise.resolve(serverConnectorLifecycle.ready() && serverConnectorStartupRecovery.ready()),
         "subscription-quota": () => Promise.resolve(subscriptionQuotaSynchronization.ready()),
         "runtime-recovery": () => Promise.resolve(runtimeRecovery.ready()),
+        "strategy-recovery": () => Promise.resolve(strategyStartupRecovery.ready()),
         "application-run-recovery": () => Promise.resolve(applicationRunRecovery.ready()),
       },
       onState: (state) => {

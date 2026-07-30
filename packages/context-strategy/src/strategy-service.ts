@@ -26,14 +26,14 @@ export interface StrategyServiceHooks {
 
 export class StrategyService {
   private constructor(
-    private readonly contexts: Pick<ContextStore, "create">,
+    private readonly contexts: Pick<ContextStore, "create" | "getLatestForWork">,
     private readonly generator: Pick<StrategyGenerator, "generate" | "markApplied" | "markConflicted">,
     private readonly works: Pick<WorkService, "getWork" | "getActivePlan" | "applyStrategyProjection">,
     private readonly hooks?: StrategyServiceHooks,
   ) {}
 
   public static create(
-    contexts: Pick<ContextStore, "create">,
+    contexts: Pick<ContextStore, "create" | "getLatestForWork">,
     generator: Pick<StrategyGenerator, "generate" | "markApplied" | "markConflicted">,
     works: Pick<WorkService, "getWork" | "getActivePlan" | "applyStrategyProjection">,
     hooks?: StrategyServiceHooks,
@@ -42,12 +42,30 @@ export class StrategyService {
   }
 
   public async plan(context: TenantContext, input: PlanStrategyInput): Promise<PlanStrategyResult> {
-    const contextVersion = await this.contexts.create(context, {
+    const contextInput = {
       ...input.context,
       commandId: `${input.commandId}:context`,
       workId: input.workId,
       tokenBudget: input.tokenBudget,
-    });
+    };
+    let contextVersion: ContextVersion;
+    try {
+      contextVersion = await this.contexts.create(context, contextInput);
+    } catch (error) {
+      if (
+        input.context.expectedParentContextVersionId !== undefined ||
+        !(error instanceof Error) ||
+        error.message !== "parent ContextVersion precondition이 일치하지 않습니다"
+      ) {
+        throw error;
+      }
+      const latestContext = await this.contexts.getLatestForWork(context, input.workId);
+      if (!latestContext) throw error;
+      contextVersion = await this.contexts.create(context, {
+        ...contextInput,
+        expectedParentContextVersionId: latestContext.contextVersionId,
+      });
+    }
     const generated = await this.generator.generate(context, {
       commandId: `${input.commandId}:generate`,
       workId: input.workId,

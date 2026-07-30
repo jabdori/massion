@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
+import { setTimeout as delay } from "node:timers/promises";
 
 import type { OrganizationService, TenantContext } from "@massion/identity";
 import { CORE_OFFICE_HANDLES } from "@massion/organization";
@@ -8,7 +9,7 @@ import type { WorkService } from "@massion/work";
 
 import type { ContextStore } from "./context-store.js";
 import { hashContextContent } from "./context-store.js";
-import { STRATEGY_GENERATION_MIGRATION } from "./schema.js";
+import { STRATEGY_GENERATION_MIGRATION, STRATEGY_GENERATION_RECOVERY_MIGRATION } from "./schema.js";
 import {
   automaticStrategyPlanJsonSchema,
   validateAutomaticStrategyPlan,
@@ -36,6 +37,12 @@ export interface StrategyGeneration {
   readonly updatedAt: unknown;
 }
 
+export interface StrategyStartupRecoveryCandidate {
+  readonly strategyGenerationId: string;
+  readonly organizationId: string;
+  readonly actorUserId?: string;
+}
+
 export interface GenerateStrategyInput {
   readonly commandId: string;
   readonly workId: string;
@@ -57,10 +64,32 @@ interface StrategyGenerationRecord {
   readonly plan_json?: string;
   readonly checksum?: string;
   readonly error_json?: string;
+  readonly execution_claim_id?: string;
+  readonly execution_claim_expires_at?: unknown;
+  readonly execution_started_at?: unknown;
   readonly created_by_user_id: string;
   readonly created_at: unknown;
   readonly updated_at: unknown;
 }
+
+interface PreparedStrategyExecution {
+  readonly contextVersion: Awaited<ReturnType<ContextStore["get"]>>;
+  readonly baselineTokens: number;
+  readonly evidenceTokens: number;
+  readonly evidenceMaterials: readonly StrategyEvidenceMaterial[];
+  readonly route: string;
+  readonly availableAgents: readonly StrategyPlanningAgent[];
+  readonly availableAgentHandles: ReadonlySet<string>;
+}
+
+interface StoredGenerationError {
+  readonly category: string;
+  readonly causeId: string;
+  readonly terminalStatus?: "blocked_model_unavailable" | "failed";
+}
+
+const EXECUTION_CLAIM_LEASE_MS = 60_000;
+const PENDING_POLL_MS = 10;
 
 function canonicalJson(value: unknown): string {
   if (value === undefined) return "null";
@@ -78,6 +107,20 @@ function requestHash(input: GenerateStrategyInput): string {
   const { signal, ...request } = input;
   void signal;
   return createHash("sha256").update(canonicalJson(request)).digest("hex");
+}
+
+function datetimeMillis(value: unknown): number {
+  if (value instanceof Date) return value.getTime();
+  if (typeof value === "string" || typeof value === "number") return new Date(value).getTime();
+  const serialized = JSON.stringify(value);
+  if (!serialized) return Number.NaN;
+  const parsed = JSON.parse(serialized) as unknown;
+  return typeof parsed === "string" || typeof parsed === "number" ? new Date(parsed).getTime() : Number.NaN;
+}
+
+async function waitForPending(signal?: AbortSignal): Promise<void> {
+  if (signal) await delay(PENDING_POLL_MS, undefined, { signal });
+  else await delay(PENDING_POLL_MS);
 }
 
 export interface StrategyPlanningAgent {
@@ -143,7 +186,7 @@ export class StrategyGenerator {
     agents?: StrategyAgentDirectory,
     evidence?: StrategyEvidenceMaterialResolver,
   ): Promise<StrategyGenerator> {
-    await applyMigrations(database, [STRATEGY_GENERATION_MIGRATION]);
+    await applyMigrations(database, [STRATEGY_GENERATION_MIGRATION, STRATEGY_GENERATION_RECOVERY_MIGRATION]);
     return new StrategyGenerator(database, organizations, runner, contexts, works, agents, evidence);
   }
 
@@ -153,12 +196,125 @@ export class StrategyGenerator {
     const existing = await this.byCommand(context.organizationId, input.commandId);
     if (existing) {
       if (existing.request_hash !== hash) throw new Error("같은 commandId에 다른 Strategy 요청을 사용할 수 없습니다");
-      return this.view(existing);
+      if (existing.status !== "pending") return this.view(existing);
+      const continued = await this.continuePending(context, input, hash, true);
+      if (!continued) throw new Error("Strategy generation pending 대기가 중단됐습니다");
+      return continued;
     }
+
+    const prepared = await this.prepareExecution(context, input);
+    const claimed = await this.claimGeneration(context, input, hash, true);
+    if (claimed.record.status !== "pending") return this.view(claimed.record);
+    if (!claimed.claimId) {
+      const continued = await this.continuePending(context, input, hash, true);
+      if (!continued) throw new Error("Strategy generation pending 대기가 중단됐습니다");
+      return continued;
+    }
+    return await this.executeClaimed(context, input, claimed.record, claimed.claimId, prepared);
+  }
+
+  public async get(context: TenantContext, strategyGenerationId: string): Promise<StrategyGeneration> {
+    await this.organizations.verifyTenantContext(context);
+    return this.view(await this.find(this.database, context.organizationId, strategyGenerationId));
+  }
+
+  public async listGenerated(context: TenantContext): Promise<StrategyGeneration[]> {
+    await this.organizations.verifyTenantContext(context);
+    const [records] = await this.database.query<[StrategyGenerationRecord[]]>(
+      "SELECT * OMIT id FROM strategy_generation WHERE organization_id = $organization_id AND status = 'generated' ORDER BY created_at ASC;",
+      { organization_id: context.organizationId },
+    );
+    return records.map((record) => this.view(record));
+  }
+
+  public async listRecoverable(context: TenantContext): Promise<StrategyGeneration[]> {
+    await this.organizations.verifyTenantContext(context);
+    const [records] = await this.database.query<[StrategyGenerationRecord[]]>(
+      "SELECT * OMIT id FROM strategy_generation WHERE organization_id = $organization_id AND status IN ['pending', 'generated'] ORDER BY created_at ASC;",
+      { organization_id: context.organizationId },
+    );
+    return records.map((record) => this.view(record));
+  }
+
+  public async listStartupRecoverable(limit = 100): Promise<StrategyStartupRecoveryCandidate[]> {
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 1_000) {
+      throw new Error("Strategy 시작 복구 조회 개수가 유효하지 않습니다");
+    }
+    const [records] = await this.database.query<
+      [
+        Pick<
+          StrategyGenerationRecord,
+          "strategy_generation_id" | "organization_id" | "created_by_user_id" | "created_at"
+        >[],
+      ]
+    >(
+      "SELECT strategy_generation_id, organization_id, created_by_user_id, created_at FROM strategy_generation WHERE status IN ['pending', 'generated'] ORDER BY created_at ASC, strategy_generation_id ASC LIMIT $limit;",
+      { limit },
+    );
+    return records.map((record) => ({
+      strategyGenerationId: record.strategy_generation_id,
+      organizationId: record.organization_id,
+      ...(record.created_by_user_id ? { actorUserId: record.created_by_user_id } : {}),
+    }));
+  }
+
+  public async recoverPending(
+    context: TenantContext,
+    strategyGenerationId: string,
+    waitForLease = false,
+    signal?: AbortSignal,
+  ): Promise<StrategyGeneration | undefined> {
+    signal?.throwIfAborted();
+    await this.organizations.verifyTenantContext(context);
+    signal?.throwIfAborted();
+    const record = await this.find(this.database, context.organizationId, strategyGenerationId);
+    signal?.throwIfAborted();
+    if (record.status !== "pending") return this.view(record);
+    return await this.continuePending(
+      context,
+      {
+        commandId: record.command_id,
+        workId: record.work_id,
+        expectedWorkRevision: record.expected_work_revision,
+        contextVersionId: record.context_version_id,
+        ...(signal ? { signal } : {}),
+      },
+      record.request_hash,
+      waitForLease,
+      signal,
+    );
+  }
+
+  public async markApplied(
+    context: TenantContext,
+    strategyGenerationId: string,
+    commandId: string,
+    signal?: AbortSignal,
+  ): Promise<StrategyGeneration> {
+    return await this.reconcile(context, strategyGenerationId, commandId, "applied", signal);
+  }
+
+  public async markConflicted(
+    context: TenantContext,
+    strategyGenerationId: string,
+    commandId: string,
+    signal?: AbortSignal,
+  ): Promise<StrategyGeneration> {
+    return await this.reconcile(context, strategyGenerationId, commandId, "conflicted", signal);
+  }
+
+  private async prepareExecution(
+    context: TenantContext,
+    input: GenerateStrategyInput,
+    recoverySignal?: AbortSignal,
+  ): Promise<PreparedStrategyExecution> {
+    recoverySignal?.throwIfAborted();
     const work = await this.works.getWork(context, input.workId);
+    recoverySignal?.throwIfAborted();
     if (work.revision !== input.expectedWorkRevision)
       throw new Error(`현재 Work revision은 ${String(work.revision)}입니다`);
     const contextVersion = await this.contexts.get(context, input.contextVersionId);
+    recoverySignal?.throwIfAborted();
     if (contextVersion.workId !== input.workId) throw new Error("ContextVersion과 Work가 일치하지 않습니다");
     const evidenceSources = contextVersion.selectedSources.filter((source) => source.kind === "evidence");
     if (evidenceSources.length > 0 && !this.evidence) throw new Error("Strategy evidence resolver가 없습니다");
@@ -179,7 +335,6 @@ export class StrategyGenerator {
       ) {
         throw new Error("Strategy evidence source 계약이 일치하지 않습니다");
       }
-      // this.evidence는 이미 164줄에서 검증했지만 TS 좁히기를 위해 지역 변수로 고정합니다.
       const evidence = this.evidence;
       if (!evidence) throw new Error("Strategy evidence resolver가 없습니다");
       const materialized = await evidence.materialize(context, {
@@ -187,6 +342,7 @@ export class StrategyGenerator {
         evidenceBriefId: reference.evidenceBriefId,
         maxEstimatedTokens: maxEvidenceTokens - evidenceTokens,
       });
+      recoverySignal?.throwIfAborted();
       if (
         materialized.evidenceBriefId !== reference.evidenceBriefId ||
         materialized.indexVersionId !== reference.indexVersionId ||
@@ -204,16 +360,69 @@ export class StrategyGenerator {
       evidenceTokens += materialized.estimatedTokens;
       evidenceMaterials.push(materialized);
     }
+    const route = contextVersion.selectedSources.some((source) => source.classification === "local-private")
+      ? "local-private"
+      : "planning-quality";
+    const availableAgents = await this.availableAgents(context);
+    recoverySignal?.throwIfAborted();
+    return {
+      contextVersion,
+      baselineTokens,
+      evidenceTokens,
+      evidenceMaterials,
+      route,
+      availableAgents,
+      availableAgentHandles: new Set(availableAgents.map((agent) => agent.handle)),
+    };
+  }
+
+  private async claimGeneration(
+    context: TenantContext,
+    input: GenerateStrategyInput,
+    hash: string,
+    create: boolean,
+    recoverySignal?: AbortSignal,
+  ): Promise<{ readonly record: StrategyGenerationRecord; readonly claimId?: string }> {
+    recoverySignal?.throwIfAborted();
+    const claimId = randomUUID();
+    const claimExpiresAt = new Date(Date.now() + EXECUTION_CLAIM_LEASE_MS).toISOString();
     const generationId = randomUUID();
-    await this.database.transaction(async (tx) => {
+    return await this.database.transaction(async (tx) => {
+      recoverySignal?.throwIfAborted();
       await this.organizations.verifyTenantContext(context, undefined, tx);
+      recoverySignal?.throwIfAborted();
       const repeated = await this.byCommand(context.organizationId, input.commandId, tx);
+      recoverySignal?.throwIfAborted();
       if (repeated) {
         if (repeated.request_hash !== hash) throw new Error("같은 commandId에 다른 Strategy 요청을 사용할 수 없습니다");
-        return;
+        if (
+          repeated.status !== "pending" ||
+          this.pendingCheckpoint(repeated) ||
+          this.claimIsActive(repeated) ||
+          repeated.execution_started_at !== undefined
+        ) {
+          return { record: repeated };
+        }
+        recoverySignal?.throwIfAborted();
+        const [updated] = await tx.query<[StrategyGenerationRecord[]]>(
+          "UPDATE strategy_generation SET execution_claim_id = $execution_claim_id, execution_claim_expires_at = type::datetime($execution_claim_expires_at), updated_at = time::now() WHERE organization_id = $organization_id AND strategy_generation_id = $strategy_generation_id AND status = 'pending' RETURN AFTER;",
+          {
+            execution_claim_id: claimId,
+            execution_claim_expires_at: claimExpiresAt,
+            organization_id: context.organizationId,
+            strategy_generation_id: repeated.strategy_generation_id,
+          },
+        );
+        recoverySignal?.throwIfAborted();
+        if (!updated[0] || updated[0].execution_claim_id !== claimId) {
+          return { record: await this.find(tx, context.organizationId, repeated.strategy_generation_id) };
+        }
+        return { record: updated[0], claimId };
       }
+      if (!create) throw new Error(`Strategy generation을 찾을 수 없습니다: ${input.commandId}`);
+      recoverySignal?.throwIfAborted();
       await tx.query(
-        "CREATE strategy_generation CONTENT { strategy_generation_id: $strategy_generation_id, organization_id: $organization_id, work_id: $work_id, context_version_id: $context_version_id, command_id: $command_id, request_hash: $request_hash, expected_work_revision: $expected_work_revision, status: 'pending', created_by_user_id: $created_by_user_id, created_at: time::now(), updated_at: time::now() };",
+        "CREATE strategy_generation CONTENT { strategy_generation_id: $strategy_generation_id, organization_id: $organization_id, work_id: $work_id, context_version_id: $context_version_id, command_id: $command_id, request_hash: $request_hash, expected_work_revision: $expected_work_revision, status: 'pending', execution_claim_id: $execution_claim_id, execution_claim_expires_at: type::datetime($execution_claim_expires_at), created_by_user_id: $created_by_user_id, created_at: time::now(), updated_at: time::now() };",
         {
           strategy_generation_id: generationId,
           organization_id: context.organizationId,
@@ -222,9 +431,12 @@ export class StrategyGenerator {
           command_id: input.commandId,
           request_hash: hash,
           expected_work_revision: input.expectedWorkRevision,
+          execution_claim_id: claimId,
+          execution_claim_expires_at: claimExpiresAt,
           created_by_user_id: context.userId,
         },
       );
+      recoverySignal?.throwIfAborted();
       await this.insertEvent(
         tx,
         context.organizationId,
@@ -234,143 +446,429 @@ export class StrategyGenerator {
         "strategy_generation_started",
         { contextVersionId: input.contextVersionId },
       );
-    });
-    const route = contextVersion.selectedSources.some((source) => source.classification === "local-private")
-      ? "local-private"
-      : "planning-quality";
-    const availableAgents = await this.availableAgents(context);
-    const availableAgentHandles = new Set(availableAgents.map((agent) => agent.handle));
-    const result = await this.runner.executeStructured(
-      context,
-      {
-        commandId: `${input.commandId}:runtime`,
-        workId: input.workId,
-        agentHandle: "context-strategy",
-        modelRoute: route,
-        correlationId: input.commandId,
-        estimatedTokens: baselineTokens + evidenceTokens,
-        estimatedCostMicros: 0,
-        ...(input.signal === undefined ? {} : { signal: input.signal }),
-        input: {
-          operation: "create_strategy_plan",
-          contextVersionId: contextVersion.contextVersionId,
-          objective: contextVersion.objective,
-          scopeIn: contextVersion.scopeIn,
-          scopeOut: contextVersion.scopeOut,
-          constraints: contextVersion.constraints,
-          assumptions: contextVersion.assumptions,
-          unknowns: contextVersion.unknowns,
-          decisions: contextVersion.decisions,
-          sources: contextVersion.selectedSources,
-          ...(evidenceMaterials.length === 0 ? {} : { evidenceMaterials }),
-          availableAgents: availableAgents.map((agent) => ({
-            handle: agent.handle,
-            capabilities: agent.capabilities,
-          })),
-        },
-      },
-      {
-        name: "massion-strategy-plan",
-        description: "검증 가능한 Work StrategyPlan",
-        jsonSchema: automaticStrategyPlanJsonSchema,
-        validate: (value) => validateOutput(value, availableAgentHandles),
-      },
-    );
-    if (result.status === "succeeded") {
-      try {
-        const plan = validatedPlan(result.output, availableAgentHandles);
-        return await this.finish(context, input, generationId, "generated", {
-          runtimeExecutionId: result.executionId,
-          plan,
-          checksum: hashContextContent(plan),
-        });
-      } catch {
-        return await this.finish(context, input, generationId, "failed", {
-          runtimeExecutionId: result.executionId,
-          error: { category: "structured_output", causeId: randomUUID() },
-        });
-      }
-    }
-    const status = result.status === "blocked_model_unavailable" ? "blocked_model_unavailable" : "failed";
-    return await this.finish(context, input, generationId, status, {
-      runtimeExecutionId: result.executionId,
-      error: { category: result.error?.category ?? "runtime", causeId: result.error?.causeId ?? randomUUID() },
+      recoverySignal?.throwIfAborted();
+      return { record: await this.find(tx, context.organizationId, generationId), claimId };
     });
   }
 
-  public async get(context: TenantContext, strategyGenerationId: string): Promise<StrategyGeneration> {
-    await this.organizations.verifyTenantContext(context);
-    return this.view(await this.find(this.database, context.organizationId, strategyGenerationId));
-  }
-
-  public async listGenerated(context: TenantContext): Promise<StrategyGeneration[]> {
-    await this.organizations.verifyTenantContext(context);
-    const [records] = await this.database.query<[StrategyGenerationRecord[]]>(
-      "SELECT * OMIT id FROM strategy_generation WHERE organization_id = $organization_id AND status = 'generated' ORDER BY created_at ASC;",
-      { organization_id: context.organizationId },
-    );
-    return records.map((record) => this.view(record));
-  }
-
-  public async markApplied(
-    context: TenantContext,
-    strategyGenerationId: string,
-    commandId: string,
-  ): Promise<StrategyGeneration> {
-    return await this.reconcile(context, strategyGenerationId, commandId, "applied");
-  }
-
-  public async markConflicted(
-    context: TenantContext,
-    strategyGenerationId: string,
-    commandId: string,
-  ): Promise<StrategyGeneration> {
-    return await this.reconcile(context, strategyGenerationId, commandId, "conflicted");
-  }
-
-  private async finish(
+  private async continuePending(
     context: TenantContext,
     input: GenerateStrategyInput,
+    hash: string,
+    wait: boolean,
+    recoverySignal?: AbortSignal,
+  ): Promise<StrategyGeneration | undefined> {
+    for (;;) {
+      recoverySignal?.throwIfAborted();
+      const claimed = await this.claimGeneration(context, input, hash, false, recoverySignal);
+      recoverySignal?.throwIfAborted();
+      if (claimed.record.status !== "pending") return this.view(claimed.record);
+      if (this.pendingCheckpoint(claimed.record)) {
+        return await this.finishCheckpoint(context, claimed.record, recoverySignal);
+      }
+      if (claimed.record.execution_started_at !== undefined && !this.claimIsActive(claimed.record)) {
+        return await this.closeUncertainExecution(context, claimed.record, recoverySignal);
+      }
+      if (claimed.claimId) {
+        const work = await this.works.getWork(context, input.workId);
+        recoverySignal?.throwIfAborted();
+        if (work.revision !== input.expectedWorkRevision) {
+          return await this.closeClaimed(
+            context,
+            claimed.record,
+            claimed.claimId,
+            "conflicted",
+            "work_revision_conflict",
+            recoverySignal,
+          );
+        }
+        let prepared: PreparedStrategyExecution;
+        try {
+          prepared = await this.prepareExecution(context, input, recoverySignal);
+        } catch {
+          recoverySignal?.throwIfAborted();
+          return await this.closeClaimed(
+            context,
+            claimed.record,
+            claimed.claimId,
+            "failed",
+            "recovery_preparation",
+            recoverySignal,
+          );
+        }
+        recoverySignal?.throwIfAborted();
+        return await this.executeClaimed(context, input, claimed.record, claimed.claimId, prepared, recoverySignal);
+      }
+      if (!wait) return undefined;
+      await waitForPending(recoverySignal);
+    }
+  }
+
+  private async executeClaimed(
+    context: TenantContext,
+    input: GenerateStrategyInput,
+    record: StrategyGenerationRecord,
+    claimId: string,
+    prepared: PreparedStrategyExecution,
+    recoverySignal?: AbortSignal,
+  ): Promise<StrategyGeneration> {
+    recoverySignal?.throwIfAborted();
+    if (!(await this.markExecutionStarted(context, record.strategy_generation_id, claimId, recoverySignal))) {
+      recoverySignal?.throwIfAborted();
+      const continued = await this.continuePending(context, input, requestHash(input), true, recoverySignal);
+      if (!continued) throw new Error("Strategy generation 실행 claim을 잃었습니다");
+      return continued;
+    }
+    recoverySignal?.throwIfAborted();
+    let result: Awaited<ReturnType<StructuredAgentRunner["executeStructured"]>>;
+    try {
+      result = await this.runner.executeStructured(
+        context,
+        {
+          commandId: `${input.commandId}:runtime`,
+          workId: input.workId,
+          agentHandle: "context-strategy",
+          modelRoute: prepared.route,
+          correlationId: input.commandId,
+          estimatedTokens: prepared.baselineTokens + prepared.evidenceTokens,
+          estimatedCostMicros: 0,
+          ...(input.signal === undefined ? {} : { signal: input.signal }),
+          input: {
+            operation: "create_strategy_plan",
+            contextVersionId: prepared.contextVersion.contextVersionId,
+            objective: prepared.contextVersion.objective,
+            scopeIn: prepared.contextVersion.scopeIn,
+            scopeOut: prepared.contextVersion.scopeOut,
+            constraints: prepared.contextVersion.constraints,
+            assumptions: prepared.contextVersion.assumptions,
+            unknowns: prepared.contextVersion.unknowns,
+            decisions: prepared.contextVersion.decisions,
+            sources: prepared.contextVersion.selectedSources,
+            ...(prepared.evidenceMaterials.length === 0 ? {} : { evidenceMaterials: prepared.evidenceMaterials }),
+            availableAgents: prepared.availableAgents.map((agent) => ({
+              handle: agent.handle,
+              capabilities: agent.capabilities,
+            })),
+          },
+        },
+        {
+          name: "massion-strategy-plan",
+          description: "검증 가능한 Work StrategyPlan",
+          jsonSchema: automaticStrategyPlanJsonSchema,
+          validate: (value) => validateOutput(value, prepared.availableAgentHandles),
+        },
+      );
+    } catch {
+      recoverySignal?.throwIfAborted();
+      return await this.closeClaimed(context, record, claimId, "failed", "runtime_exception", recoverySignal);
+    }
+    recoverySignal?.throwIfAborted();
+
+    let status: "generated" | "blocked_model_unavailable" | "failed";
+    let plan: StrategyPlan | undefined;
+    let checksum: string | undefined;
+    let error: { readonly category: string; readonly causeId: string } | undefined;
+    if (result.status === "succeeded") {
+      try {
+        plan = validatedPlan(result.output, prepared.availableAgentHandles);
+        checksum = hashContextContent(plan);
+        status = "generated";
+      } catch {
+        status = "failed";
+        error = { category: "structured_output", causeId: randomUUID() };
+      }
+    } else {
+      status = result.status === "blocked_model_unavailable" ? "blocked_model_unavailable" : "failed";
+      error = { category: result.error?.category ?? "runtime", causeId: result.error?.causeId ?? randomUUID() };
+    }
+    const checkpointed = await this.saveCheckpoint(
+      context,
+      record.strategy_generation_id,
+      claimId,
+      {
+        status,
+        runtimeExecutionId: result.executionId,
+        ...(plan ? { plan } : {}),
+        ...(checksum ? { checksum } : {}),
+        ...(error ? { error } : {}),
+      },
+      recoverySignal,
+    );
+    recoverySignal?.throwIfAborted();
+    if (checkpointed.status !== "pending") return this.view(checkpointed);
+    if (!this.pendingCheckpoint(checkpointed)) {
+      const continued = await this.continuePending(context, input, requestHash(input), true, recoverySignal);
+      if (!continued) throw new Error("Strategy generation 결과 checkpoint를 잃었습니다");
+      return continued;
+    }
+    return await this.finishCheckpoint(context, checkpointed, recoverySignal);
+  }
+
+  private async markExecutionStarted(
+    context: TenantContext,
     generationId: string,
-    status: "generated" | "blocked_model_unavailable" | "failed",
+    claimId: string,
+    signal?: AbortSignal,
+  ): Promise<boolean> {
+    signal?.throwIfAborted();
+    return await this.database.transaction(async (tx) => {
+      signal?.throwIfAborted();
+      await this.organizations.verifyTenantContext(context, undefined, tx);
+      signal?.throwIfAborted();
+      const [updated] = await tx.query<[StrategyGenerationRecord[]]>(
+        "UPDATE strategy_generation SET execution_started_at = time::now(), updated_at = time::now() WHERE organization_id = $organization_id AND strategy_generation_id = $strategy_generation_id AND status = 'pending' AND execution_claim_id = $execution_claim_id AND execution_claim_expires_at > time::now() RETURN AFTER;",
+        {
+          organization_id: context.organizationId,
+          strategy_generation_id: generationId,
+          execution_claim_id: claimId,
+        },
+      );
+      signal?.throwIfAborted();
+      return updated[0]?.execution_claim_id === claimId;
+    });
+  }
+
+  private async saveCheckpoint(
+    context: TenantContext,
+    generationId: string,
+    claimId: string,
     output: {
+      readonly status: "generated" | "blocked_model_unavailable" | "failed";
       readonly runtimeExecutionId: string;
       readonly plan?: StrategyPlan;
       readonly checksum?: string;
       readonly error?: { readonly category: string; readonly causeId: string };
     },
-  ): Promise<StrategyGeneration> {
+    signal?: AbortSignal,
+  ): Promise<StrategyGenerationRecord> {
+    signal?.throwIfAborted();
     return await this.database.transaction(async (tx) => {
+      signal?.throwIfAborted();
       await this.organizations.verifyTenantContext(context, undefined, tx);
+      signal?.throwIfAborted();
+      const storedError = output.error ? { ...output.error, terminalStatus: output.status } : undefined;
       const [updated] = await tx.query<[StrategyGenerationRecord[]]>(
-        "UPDATE strategy_generation SET status = $status, runtime_execution_id = $runtime_execution_id, plan_json = $plan_json, checksum = $checksum, error_json = $error_json, updated_at = time::now() WHERE organization_id = $organization_id AND strategy_generation_id = $strategy_generation_id AND status = 'pending' RETURN AFTER;",
+        "UPDATE strategy_generation SET runtime_execution_id = $runtime_execution_id, plan_json = $plan_json, checksum = $checksum, error_json = $error_json, updated_at = time::now() WHERE organization_id = $organization_id AND strategy_generation_id = $strategy_generation_id AND status = 'pending' AND execution_claim_id = $execution_claim_id AND execution_claim_expires_at > time::now() RETURN AFTER;",
         {
           organization_id: context.organizationId,
           strategy_generation_id: generationId,
-          status,
+          execution_claim_id: claimId,
           runtime_execution_id: output.runtimeExecutionId,
           plan_json: output.plan ? canonicalJson(output.plan) : undefined,
           checksum: output.checksum,
-          error_json: output.error ? canonicalJson(output.error) : undefined,
+          error_json: storedError ? canonicalJson(storedError) : undefined,
         },
       );
-      if (!updated[0]) throw new Error("Strategy generation terminal 전이에 실패했습니다");
+      signal?.throwIfAborted();
+      return updated[0] ?? (await this.find(tx, context.organizationId, generationId));
+    });
+  }
+
+  private async finishCheckpoint(
+    context: TenantContext,
+    record: StrategyGenerationRecord,
+    signal?: AbortSignal,
+  ): Promise<StrategyGeneration> {
+    signal?.throwIfAborted();
+    return await this.database.transaction(async (tx) => {
+      signal?.throwIfAborted();
+      await this.organizations.verifyTenantContext(context, undefined, tx);
+      signal?.throwIfAborted();
+      const current = await this.find(tx, context.organizationId, record.strategy_generation_id);
+      signal?.throwIfAborted();
+      if (current.status !== "pending") return this.view(current);
+      const checkpoint = this.pendingCheckpoint(current);
+      if (!checkpoint) throw new Error("Strategy generation terminal checkpoint가 없습니다");
+      const [updated] = await tx.query<[StrategyGenerationRecord[]]>(
+        "UPDATE strategy_generation SET status = $status, execution_claim_id = NONE, execution_claim_expires_at = NONE, updated_at = time::now() WHERE organization_id = $organization_id AND strategy_generation_id = $strategy_generation_id AND status = 'pending' RETURN AFTER;",
+        {
+          status: checkpoint.status,
+          organization_id: context.organizationId,
+          strategy_generation_id: current.strategy_generation_id,
+        },
+      );
+      signal?.throwIfAborted();
+      if (!updated[0]) return this.view(await this.find(tx, context.organizationId, current.strategy_generation_id));
       await this.insertEvent(
         tx,
         context.organizationId,
-        input.workId,
-        generationId,
-        `${input.commandId}:terminal`,
-        status === "generated" ? "strategy_generated" : `strategy_generation_${status}`,
+        current.work_id,
+        current.strategy_generation_id,
+        `${current.command_id}:terminal`,
+        checkpoint.status === "generated" ? "strategy_generated" : `strategy_generation_${checkpoint.status}`,
         {
-          status,
-          runtimeExecutionId: output.runtimeExecutionId,
-          ...(output.checksum ? { checksum: output.checksum } : {}),
-          ...(output.error ? { error: output.error } : {}),
+          status: checkpoint.status,
+          runtimeExecutionId: current.runtime_execution_id,
+          ...(current.checksum ? { checksum: current.checksum } : {}),
+          ...(checkpoint.error ? { error: checkpoint.error } : {}),
         },
       );
-      return this.view(await this.find(tx, context.organizationId, generationId));
+      return this.view(updated[0]);
     });
+  }
+
+  private async closeClaimed(
+    context: TenantContext,
+    record: StrategyGenerationRecord,
+    claimId: string,
+    status: "failed" | "conflicted",
+    category: string,
+    signal?: AbortSignal,
+  ): Promise<StrategyGeneration> {
+    signal?.throwIfAborted();
+    const error = { category, causeId: randomUUID() };
+    return await this.database.transaction(async (tx) => {
+      signal?.throwIfAborted();
+      await this.organizations.verifyTenantContext(context, undefined, tx);
+      signal?.throwIfAborted();
+      const current = await this.find(tx, context.organizationId, record.strategy_generation_id);
+      signal?.throwIfAborted();
+      if (current.status !== "pending") return this.view(current);
+      const [updated] = await tx.query<[StrategyGenerationRecord[]]>(
+        "UPDATE strategy_generation SET status = $status, error_json = $error_json, execution_claim_id = NONE, execution_claim_expires_at = NONE, updated_at = time::now() WHERE organization_id = $organization_id AND strategy_generation_id = $strategy_generation_id AND status = 'pending' AND execution_claim_id = $execution_claim_id RETURN AFTER;",
+        {
+          status,
+          error_json: canonicalJson(error),
+          organization_id: context.organizationId,
+          strategy_generation_id: current.strategy_generation_id,
+          execution_claim_id: claimId,
+        },
+      );
+      signal?.throwIfAborted();
+      if (!updated[0]) throw new Error("Strategy generation 실행 claim이 일치하지 않습니다");
+      await this.insertEvent(
+        tx,
+        context.organizationId,
+        current.work_id,
+        current.strategy_generation_id,
+        `${current.command_id}:terminal`,
+        `strategy_generation_${status}`,
+        { status, error },
+      );
+      return this.view(updated[0]);
+    });
+  }
+
+  private async closeUncertainExecution(
+    context: TenantContext,
+    record: StrategyGenerationRecord,
+    signal?: AbortSignal,
+  ): Promise<StrategyGeneration> {
+    signal?.throwIfAborted();
+    const runtimeResult = await this.runner.findResultByCommand?.(context, `${record.command_id}:runtime`);
+    signal?.throwIfAborted();
+    if (runtimeResult) return await this.restoreRuntimeCheckpoint(context, record, runtimeResult, signal);
+    const error = { category: "recovery_execution_outcome_unknown", causeId: randomUUID() };
+    return await this.database.transaction(async (tx) => {
+      signal?.throwIfAborted();
+      await this.organizations.verifyTenantContext(context, undefined, tx);
+      signal?.throwIfAborted();
+      const current = await this.find(tx, context.organizationId, record.strategy_generation_id);
+      signal?.throwIfAborted();
+      if (current.status !== "pending") return this.view(current);
+      if (this.pendingCheckpoint(current)) return this.view(current);
+      if (this.claimIsActive(current) || current.execution_started_at === undefined) {
+        return this.view(current);
+      }
+      const [updated] = await tx.query<[StrategyGenerationRecord[]]>(
+        "UPDATE strategy_generation SET status = 'failed', error_json = $error_json, execution_claim_id = NONE, execution_claim_expires_at = NONE, updated_at = time::now() WHERE organization_id = $organization_id AND strategy_generation_id = $strategy_generation_id AND status = 'pending' RETURN AFTER;",
+        {
+          error_json: canonicalJson(error),
+          organization_id: context.organizationId,
+          strategy_generation_id: current.strategy_generation_id,
+        },
+      );
+      signal?.throwIfAborted();
+      if (!updated[0]) return this.view(await this.find(tx, context.organizationId, current.strategy_generation_id));
+      await this.insertEvent(
+        tx,
+        context.organizationId,
+        current.work_id,
+        current.strategy_generation_id,
+        `${current.command_id}:terminal`,
+        "strategy_generation_failed",
+        { status: "failed", error },
+      );
+      return this.view(updated[0]);
+    });
+  }
+
+  private async restoreRuntimeCheckpoint(
+    context: TenantContext,
+    record: StrategyGenerationRecord,
+    result: Awaited<ReturnType<NonNullable<StructuredAgentRunner["findResultByCommand"]>>>,
+    signal?: AbortSignal,
+  ): Promise<StrategyGeneration> {
+    signal?.throwIfAborted();
+    if (!result) throw new Error("Runtime terminal 결과가 없습니다");
+    let status: "generated" | "blocked_model_unavailable" | "failed";
+    let plan: StrategyPlan | undefined;
+    let checksum: string | undefined;
+    let error: { readonly category: string; readonly causeId: string } | undefined;
+    if (result.status === "succeeded") {
+      try {
+        plan = validateAutomaticStrategyPlan(result.output);
+        checksum = hashContextContent(plan);
+        status = "generated";
+      } catch {
+        status = "failed";
+        error = { category: "structured_output", causeId: randomUUID() };
+      }
+    } else {
+      status = result.status === "blocked_model_unavailable" ? "blocked_model_unavailable" : "failed";
+      error = { category: result.error?.category ?? "runtime", causeId: result.error?.causeId ?? randomUUID() };
+    }
+    signal?.throwIfAborted();
+    const checkpointed = await this.database.transaction(async (tx) => {
+      signal?.throwIfAborted();
+      await this.organizations.verifyTenantContext(context, undefined, tx);
+      signal?.throwIfAborted();
+      const current = await this.find(tx, context.organizationId, record.strategy_generation_id);
+      signal?.throwIfAborted();
+      if (current.status !== "pending") return current;
+      const storedError = error ? { ...error, terminalStatus: status } : undefined;
+      const [updated] = await tx.query<[StrategyGenerationRecord[]]>(
+        "UPDATE strategy_generation SET runtime_execution_id = $runtime_execution_id, plan_json = $plan_json, checksum = $checksum, error_json = $error_json, updated_at = time::now() WHERE organization_id = $organization_id AND strategy_generation_id = $strategy_generation_id AND status = 'pending' RETURN AFTER;",
+        {
+          runtime_execution_id: result.executionId,
+          plan_json: plan ? canonicalJson(plan) : undefined,
+          checksum,
+          error_json: storedError ? canonicalJson(storedError) : undefined,
+          organization_id: context.organizationId,
+          strategy_generation_id: current.strategy_generation_id,
+        },
+      );
+      signal?.throwIfAborted();
+      return updated[0] ?? (await this.find(tx, context.organizationId, current.strategy_generation_id));
+    });
+    signal?.throwIfAborted();
+    return checkpointed.status === "pending"
+      ? await this.finishCheckpoint(context, checkpointed, signal)
+      : this.view(checkpointed);
+  }
+
+  private claimIsActive(record: StrategyGenerationRecord): boolean {
+    return Boolean(
+      record.execution_claim_id &&
+      record.execution_claim_expires_at !== undefined &&
+      datetimeMillis(record.execution_claim_expires_at) > Date.now(),
+    );
+  }
+
+  private pendingCheckpoint(record: StrategyGenerationRecord):
+    | {
+        readonly status: "generated" | "blocked_model_unavailable" | "failed";
+        readonly error?: { readonly category: string; readonly causeId: string };
+      }
+    | undefined {
+    if (!record.runtime_execution_id) return undefined;
+    if (record.plan_json && record.checksum) return { status: "generated" };
+    if (!record.error_json) return undefined;
+    const stored = JSON.parse(record.error_json) as StoredGenerationError;
+    return {
+      status: stored.terminalStatus === "blocked_model_unavailable" ? "blocked_model_unavailable" : "failed",
+      error: { category: stored.category, causeId: stored.causeId },
+    };
   }
 
   private async availableAgents(context: TenantContext): Promise<readonly StrategyPlanningAgent[]> {
@@ -394,11 +892,17 @@ export class StrategyGenerator {
     strategyGenerationId: string,
     commandId: string,
     status: "applied" | "conflicted",
+    signal?: AbortSignal,
   ): Promise<StrategyGeneration> {
+    signal?.throwIfAborted();
     await this.organizations.verifyTenantContext(context);
+    signal?.throwIfAborted();
     return await this.database.transaction(async (tx) => {
+      signal?.throwIfAborted();
       await this.organizations.verifyTenantContext(context, undefined, tx);
+      signal?.throwIfAborted();
       const current = await this.find(tx, context.organizationId, strategyGenerationId);
+      signal?.throwIfAborted();
       if (current.status === status) return this.view(current);
       if (current.status !== "generated") {
         throw new Error(`generated Strategy만 ${status} 상태로 조정할 수 있습니다: ${current.status}`);
@@ -413,6 +917,7 @@ export class StrategyGenerator {
           strategy_generation_id: strategyGenerationId,
         },
       );
+      signal?.throwIfAborted();
       if (!updated[0]) {
         const concurrent = await this.find(tx, context.organizationId, strategyGenerationId);
         if (concurrent.status === status) return this.view(concurrent);
@@ -481,6 +986,7 @@ export class StrategyGenerator {
 
   private view(record: StrategyGenerationRecord): StrategyGeneration {
     const plan = record.plan_json ? validateStrategyPlan(JSON.parse(record.plan_json) as unknown) : undefined;
+    const storedError = record.error_json ? (JSON.parse(record.error_json) as StoredGenerationError) : undefined;
     if (plan && record.checksum !== hashContextContent(plan)) {
       throw new Error(`Strategy generation checksum이 일치하지 않습니다: ${record.strategy_generation_id}`);
     }
@@ -495,9 +1001,7 @@ export class StrategyGenerator {
       ...(record.runtime_execution_id ? { runtimeExecutionId: record.runtime_execution_id } : {}),
       ...(plan ? { plan } : {}),
       ...(record.checksum ? { checksum: record.checksum } : {}),
-      ...(record.error_json
-        ? { error: JSON.parse(record.error_json) as { readonly category: string; readonly causeId: string } }
-        : {}),
+      ...(storedError ? { error: { category: storedError.category, causeId: storedError.causeId } } : {}),
       createdByUserId: record.created_by_user_id,
       createdAt: record.created_at,
       updatedAt: record.updated_at,

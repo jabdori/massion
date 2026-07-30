@@ -538,4 +538,117 @@ describe("Strategy Generator", () => {
     ).rejects.toThrow("Work revision");
     expect(executeStructured).toHaveBeenCalledTimes(1);
   });
+
+  it("같은 command 동시 호출은 하나의 terminal generation으로 수렴한다", async () => {
+    const version = await contextVersion();
+    let releaseRunner!: () => void;
+    const runnerReleased = new Promise<void>((resolve) => {
+      releaseRunner = resolve;
+    });
+    const executeStructured = vi.fn(async () => {
+      await runnerReleased;
+      return { executionId: "execution-concurrent", status: "succeeded" as const, output: VALID_STRATEGY_PLAN };
+    });
+    const firstGenerator = await StrategyGenerator.create(
+      database,
+      organizations,
+      { executeStructured },
+      contextStore,
+      work,
+    );
+    const secondGenerator = await StrategyGenerator.create(
+      database,
+      organizations,
+      { executeStructured },
+      contextStore,
+      work,
+    );
+    const commandId = crypto.randomUUID();
+    const request = {
+      commandId,
+      workId,
+      expectedWorkRevision: 1,
+      contextVersionId: version.contextVersionId,
+    };
+
+    const resultsPromise = Promise.all([
+      firstGenerator.generate(context, request),
+      secondGenerator.generate(context, request),
+    ]);
+    await vi.waitFor(() => expect(executeStructured).toHaveBeenCalledTimes(1));
+    releaseRunner();
+    const results = await resultsPromise;
+    const [events] = await database.query<[{ readonly event_type: string }[]]>(
+      "SELECT event_type FROM strategy_event WHERE organization_id = $organization_id AND strategy_generation_id = $strategy_generation_id;",
+      { organization_id: context.organizationId, strategy_generation_id: results[0]!.strategyGenerationId },
+    );
+
+    expect(results[0]).toEqual(results[1]);
+    expect(results[0]?.status).toBe("generated");
+    expect(executeStructured).toHaveBeenCalledTimes(1);
+    expect(events.filter((event) => event.event_type === "strategy_generation_started")).toHaveLength(1);
+    expect(events.filter((event) => event.event_type === "strategy_generated")).toHaveLength(1);
+  });
+
+  it("같은 command의 다른 payload를 runner 호출 전에 거부한다", async () => {
+    const version = await contextVersion();
+    const executeStructured = vi.fn().mockResolvedValue({
+      executionId: "execution-payload-collision",
+      status: "succeeded",
+      output: VALID_STRATEGY_PLAN,
+    });
+    const generator = await StrategyGenerator.create(
+      database,
+      organizations,
+      { executeStructured },
+      contextStore,
+      work,
+    );
+    const commandId = crypto.randomUUID();
+    const request = {
+      commandId,
+      workId,
+      expectedWorkRevision: 1,
+      contextVersionId: version.contextVersionId,
+    };
+
+    await generator.generate(context, request);
+    await expect(generator.generate(context, { ...request, expectedWorkRevision: 2 })).rejects.toThrow(
+      "같은 commandId",
+    );
+    expect(executeStructured).toHaveBeenCalledTimes(1);
+  });
+
+  it("lease 만료 후 돌아온 stale owner는 Strategy checkpoint와 generated terminal을 쓸 수 없다", async () => {
+    const version = await contextVersion();
+    const commandId = "strategy-stale-owner";
+    const executeStructured = vi.fn(async () => {
+      await database.query(
+        "UPDATE strategy_generation SET execution_claim_expires_at = type::datetime('2000-01-01T00:00:00.000Z') WHERE organization_id = $organization_id AND command_id = $command_id;",
+        { organization_id: context.organizationId, command_id: commandId },
+      );
+      return { executionId: "execution-stale-owner", status: "succeeded" as const, output: VALID_STRATEGY_PLAN };
+    });
+    const generator = await StrategyGenerator.create(
+      database,
+      organizations,
+      { executeStructured },
+      contextStore,
+      work,
+    );
+
+    const result = await generator.generate(context, {
+      commandId,
+      workId,
+      expectedWorkRevision: 1,
+      contextVersionId: version.contextVersionId,
+    });
+    const [events] = await database.query<[{ readonly event_type: string }[]]>(
+      "SELECT event_type FROM strategy_event WHERE organization_id = $organization_id AND strategy_generation_id = $strategy_generation_id;",
+      { organization_id: context.organizationId, strategy_generation_id: result.strategyGenerationId },
+    );
+
+    expect(result.status).toBe("failed");
+    expect(events.some((event) => event.event_type === "strategy_generated")).toBe(false);
+  });
 });

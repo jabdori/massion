@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { type OrganizationService, type TenantContext } from "@massion/identity";
 import { applyMigrations, type MassionDatabase, type QueryExecutor } from "@massion/storage";
 
-import type { AgentExecutionInput, RuntimeExecutionStatus } from "./contracts.js";
+import type { AgentExecutionInput, AgentExecutionResult, RuntimeExecutionStatus } from "./contracts.js";
 import type { AgentConfigurationReader, ResolvedAgentConfiguration } from "./agent-configuration.js";
 import {
   RUNTIME_ACTOR_LINEAGE_MIGRATION,
@@ -151,7 +151,10 @@ export class RuntimeExecutionStore {
     private readonly database: MassionDatabase,
     private readonly organizations: OrganizationService,
     private readonly configurations?: AgentConfigurationReader,
-    private readonly autonomy?: (context: TenantContext, executor: QueryExecutor) => Promise<{
+    private readonly autonomy?: (
+      context: TenantContext,
+      executor: QueryExecutor,
+    ) => Promise<{
       readonly mode: "automatic" | "review" | "full-access";
       readonly revision: number;
     }>,
@@ -161,7 +164,10 @@ export class RuntimeExecutionStore {
     database: MassionDatabase,
     organizations: OrganizationService,
     configurations?: AgentConfigurationReader,
-    autonomy?: (context: TenantContext, executor: QueryExecutor) => Promise<{
+    autonomy?: (
+      context: TenantContext,
+      executor: QueryExecutor,
+    ) => Promise<{
       readonly mode: "automatic" | "review" | "full-access";
       readonly revision: number;
     }>,
@@ -235,6 +241,39 @@ export class RuntimeExecutionStore {
     const event = events[0];
     if (!event) return undefined;
     return (await this.findExecution(this.database, context, event.execution_id))?.execution_id;
+  }
+
+  public async findResultByCommand(
+    context: TenantContext,
+    commandId: string,
+  ): Promise<AgentExecutionResult | undefined> {
+    const executionId = await this.findExecutionIdByCommand(context, commandId);
+    if (!executionId) return undefined;
+    const execution = await this.execution(this.database, context, executionId);
+    if (!["succeeded", "failed", "cancelled", "interrupted", "blocked_model_unavailable"].includes(execution.status)) {
+      return undefined;
+    }
+    const stored = execution.output_json ? (JSON.parse(execution.output_json) as unknown) : undefined;
+    const output =
+      stored && typeof stored === "object" && "output" in stored ? (stored as Record<string, unknown>).output : stored;
+    const storedError = execution.error_json
+      ? (JSON.parse(execution.error_json) as Record<string, unknown>)
+      : undefined;
+    return {
+      executionId,
+      status: execution.status,
+      ...(execution.output_json ? { output } : {}),
+      ...(storedError
+        ? {
+            error: {
+              category: typeof storedError.category === "string" ? storedError.category : "runtime",
+              retryable: storedError.retryable === true,
+              userMessage: "Agent 실행이 종료됐습니다",
+              ...(typeof storedError.causeId === "string" ? { causeId: storedError.causeId } : {}),
+            },
+          }
+        : {}),
+    };
   }
 
   private async attachConfiguration(

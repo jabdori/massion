@@ -51,7 +51,7 @@ describe("ContextVersion Store", () => {
     };
   }
 
-  function input(commandId = crypto.randomUUID()) {
+  function input(commandId: string = crypto.randomUUID()) {
     return {
       commandId,
       workId,
@@ -87,18 +87,54 @@ describe("ContextVersion Store", () => {
     ]);
   });
 
+  it("source 관측 시각만 바뀐 같은 material은 새 version 없이 기존 관측을 재사용한다", async () => {
+    const firstInput = input("context-observed-at-command");
+    const first = await store.create(context, firstInput);
+    const observedAgain = {
+      ...firstInput,
+      commandId: "context-observed-at-retry",
+      sources: firstInput.sources.map((candidate) => ({
+        ...candidate,
+        observedAt: "2026-07-10T00:00:01.000Z",
+      })),
+    };
+
+    const retried = await store.create(context, observedAgain);
+    const replayed = await store.create(context, { ...observedAgain, commandId: firstInput.commandId });
+    const [rows] = await database.query<[{ readonly context_version_id: string }[]]>(
+      "SELECT context_version_id FROM context_version WHERE organization_id = $organization_id AND work_id = $work_id;",
+      { organization_id: context.organizationId, work_id: workId },
+    );
+
+    expect(retried.contextVersionId).toBe(first.contextVersionId);
+    expect(replayed.contextVersionId).toBe(first.contextVersionId);
+    expect(retried.sources[0]?.observedAt).toBe("2026-07-10T00:00:00.000Z");
+    expect(rows).toHaveLength(1);
+  });
+
   it("command 멱등과 parent version 선행조건을 강제한다", async () => {
     const commandId = crypto.randomUUID();
     const first = await store.create(context, input(commandId));
     const repeated = await store.create(context, input(commandId));
-    const next = await store.create(context, {
+    const nextInput = {
       ...input(),
       expectedParentContextVersionId: first.contextVersionId,
       sources: [source("follow-up", "검증도 포함해주세요", { kind: "follow_up" })],
-    });
+    } as const;
+    const next = await store.create(context, nextInput);
 
     expect(repeated).toEqual(first);
     expect(next).toMatchObject({ version: 2, parentContextVersionId: first.contextVersionId });
+    await expect(
+      store.create(context, { ...input(commandId), expectedParentContextVersionId: "stale-parent" }),
+    ).rejects.toThrow("같은 commandId");
+    await expect(
+      store.create(context, {
+        ...nextInput,
+        commandId: crypto.randomUUID(),
+        expectedParentContextVersionId: first.contextVersionId,
+      }),
+    ).rejects.toThrow("parent ContextVersion precondition");
     await expect(store.create(context, { ...input(commandId), objective: "다른 목적" })).rejects.toThrow(
       "같은 commandId",
     );

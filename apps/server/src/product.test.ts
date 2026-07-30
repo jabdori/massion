@@ -1,4 +1,5 @@
 import { ApplicationHttpClient, ApplicationRunStore, type ApplicationRunClock } from "@massion/application";
+import { ContextStore, hashContextContent, StrategyGenerator } from "@massion/context-strategy";
 import {
   EvidenceIndexer,
   EvidenceParser,
@@ -14,6 +15,7 @@ import { RuntimeExecutionStore } from "@massion/runtime";
 import { ExtensionPackageService } from "@massion/extension-host";
 import { SOFTWARE_ENGINEERING_TEAM_PROFILE } from "@massion/software-engineering";
 import { createDatabase } from "@massion/storage";
+import { WorkService } from "@massion/work";
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
@@ -217,6 +219,116 @@ describe("Massion server product", () => {
         { execution_id: created.execution.execution_id },
       );
       expect(recovered).toEqual([{ status: "interrupted" }]);
+    } finally {
+      await daemon.close();
+      await rm(workspaceRoot, { recursive: true, force: true });
+    }
+  }, 20_000);
+
+  it("서버 수신 전에 이전 process lease의 pending Strategy를 안전하게 terminal로 복구한다", async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), "massion-strategy-recovery-"));
+    const parsed = parseServerConfig({
+      MASSION_TOKEN_KEY: Buffer.alloc(32, 61).toString("base64url"),
+      MASSION_CREDENTIAL_KEY: Buffer.alloc(32, 62).toString("base64url"),
+      MASSION_DATABASE_URL: "mem://",
+      MASSION_SOFTWARE_WORKSPACE_ROOT: join(workspaceRoot, "software"),
+      MASSION_CONNECTOR_ROOT: join(workspaceRoot, "connectors"),
+    });
+    const seedDatabase = await createDatabase(parsed.database);
+    const identities = await IdentityService.create(seedDatabase);
+    const organizations = await OrganizationService.create(seedDatabase);
+    const owner = await identities.registerPersonalUser({
+      email: "strategy-startup-recovery@example.com",
+      displayName: "Strategy Startup Recovery",
+    });
+    const context = await organizations.resolveTenantContext(owner.user.user_id, owner.organization.organization_id);
+    const works = await WorkService.create(seedDatabase, organizations);
+    const work = await works.createWork(context, {
+      commandId: "strategy-startup-work",
+      text: "재시작 뒤 복구할 계획",
+      surface: "test",
+      organizationVersionId: "organization-v1",
+    });
+    const contexts = await ContextStore.create(seedDatabase, organizations, works);
+    const content = "재시작 뒤 복구할 계획";
+    const version = await contexts.create(context, {
+      commandId: "strategy-startup-context",
+      workId: work.work.work_id,
+      tokenBudget: 1_000,
+      objective: "Strategy 시작 복구",
+      scopeIn: ["recovery"],
+      scopeOut: [],
+      constraints: [],
+      assumptions: [],
+      unknowns: [],
+      decisions: [],
+      sources: [
+        {
+          kind: "request",
+          sourceId: "strategy-startup-request",
+          revision: "1",
+          contentHash: hashContextContent(content),
+          observedAt: "2026-07-30T00:00:00.000Z",
+          classification: "internal",
+          priority: 100,
+          estimatedTokens: 100,
+          mandatory: true,
+          content,
+        },
+      ],
+    });
+    const seedGenerator = await StrategyGenerator.create(
+      seedDatabase,
+      organizations,
+      { executeStructured: vi.fn() },
+      contexts,
+      works,
+    );
+    const strategyGenerationId = crypto.randomUUID();
+    await seedDatabase.query(
+      "CREATE strategy_generation CONTENT { strategy_generation_id: $strategy_generation_id, organization_id: $organization_id, work_id: $work_id, context_version_id: $context_version_id, command_id: 'strategy-startup:generate', request_hash: $request_hash, expected_work_revision: 1, status: 'pending', execution_claim_id: 'previous-process', execution_claim_expires_at: type::datetime('2099-01-01T00:00:00.000Z'), created_by_user_id: $created_by_user_id, created_at: time::now(), updated_at: time::now() };",
+      {
+        strategy_generation_id: strategyGenerationId,
+        organization_id: context.organizationId,
+        work_id: work.work.work_id,
+        context_version_id: version.contextVersionId,
+        request_hash: "0".repeat(64),
+        created_by_user_id: context.userId,
+      },
+    );
+    await expect(seedGenerator.listStartupRecoverable()).resolves.toEqual([
+      {
+        strategyGenerationId,
+        organizationId: context.organizationId,
+        actorUserId: context.userId,
+      },
+    ]);
+    const daemon = await createMassionDaemon(
+      {
+        ...parsed,
+        server: { ...parsed.server, port: 0 },
+        metrics: { ...parsed.metrics, port: 0 },
+        registry: { ...parsed.registry, port: 0 },
+      },
+      { database: seedDatabase },
+    );
+    await seedDatabase.query(
+      "UPDATE strategy_generation SET execution_claim_expires_at = type::datetime($expires_at) WHERE strategy_generation_id = $strategy_generation_id;",
+      {
+        strategy_generation_id: strategyGenerationId,
+        expires_at: new Date(Date.now() + 100).toISOString(),
+      },
+    );
+
+    const address = await daemon.start();
+    try {
+      const ready = await fetch(`${address.url}/health/ready`);
+      await expect(ready.json()).resolves.toMatchObject({ components: { "strategy-recovery": "ready" } });
+      const [rows] = await seedDatabase.query<[{ readonly status: string }[]]>(
+        "SELECT status FROM strategy_generation WHERE strategy_generation_id = $strategy_generation_id;",
+        { strategy_generation_id: strategyGenerationId },
+      );
+      expect(rows[0]?.status).not.toBe("pending");
     } finally {
       await daemon.close();
       await rm(workspaceRoot, { recursive: true, force: true });

@@ -142,6 +142,32 @@ describe("Runtime Execution Store", () => {
     ).rejects.toThrow("version");
   });
 
+  it("deterministic command로 terminal Runtime 결과를 tenant 경계 안에서 복원한다", async () => {
+    const commandId = "runtime-terminal-result-command";
+    const created = await createExecution(commandId);
+    const running = await store.transition(context, {
+      commandId: `${commandId}:running`,
+      executionId: created.execution.execution_id,
+      expectedVersion: 1,
+      target: "running",
+      payload: {},
+    });
+    await store.transition(context, {
+      commandId: `${commandId}:succeeded`,
+      executionId: created.execution.execution_id,
+      expectedVersion: running.execution.version,
+      target: "succeeded",
+      payload: { output: { plan: "persisted" } },
+    });
+
+    await expect(store.findResultByCommand(context, commandId)).resolves.toEqual({
+      executionId: created.execution.execution_id,
+      status: "succeeded",
+      output: { plan: "persisted" },
+    });
+    await expect(store.findResultByCommand(context, "missing-command")).resolves.toBeUndefined();
+  });
+
   it("직접 DB 우회와 같은 version의 동시 전이 중 하나를 거부한다", async () => {
     const direct = await createExecution();
     await expect(
@@ -199,10 +225,15 @@ describe("Runtime Execution Store", () => {
   });
 
   it("owner가 자율성 mode·revision으로 조직의 활성 실행을 조회하고 member 접근은 거부한다", async () => {
-    const lineageStore = await RuntimeExecutionStore.create(database, await OrganizationService.create(database), undefined, async () => ({
-      mode: "full-access",
-      revision: 2,
-    }));
+    const lineageStore = await RuntimeExecutionStore.create(
+      database,
+      await OrganizationService.create(database),
+      undefined,
+      async () => ({
+        mode: "full-access",
+        revision: 2,
+      }),
+    );
     const created = await lineageStore.createExecution(context, {
       commandId: "autonomy-active-list-command",
       workId: "autonomy-active-list-work",
@@ -226,7 +257,10 @@ describe("Runtime Execution Store", () => {
     ]);
     const identity = await IdentityService.create(database);
     const organizations = await OrganizationService.create(database);
-    const other = await identity.registerPersonalUser({ email: "autonomy-active-member@example.com", displayName: "Member" });
+    const other = await identity.registerPersonalUser({
+      email: "autonomy-active-member@example.com",
+      displayName: "Member",
+    });
     await organizations.addMember(context, other.user.user_id, "member");
     const otherContext = await organizations.resolveTenantContext(other.user.user_id, context.organizationId);
     await expect(lineageStore.listActiveByAutonomy(otherContext, { mode: "full-access", revision: 2 })).rejects.toThrow(
