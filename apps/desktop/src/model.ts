@@ -103,7 +103,7 @@ export interface OrganizationChangeView {
   lifetime: string;
 }
 
-export type ActivityView =
+export type ActivityView = (
   | { id: string; kind: "message"; time: string; author: string; initials: string; content: string }
   | { id: string; kind: "plan"; time: string; title: string; steps: TaskView[] }
   | { id: string; kind: "agents"; time: string; title: string; agents: AgentView[] }
@@ -130,7 +130,7 @@ export type ActivityView =
   // 조직이 일을 넘겼다는 사실은 한 줄 텍스트보다 크게 보여야 합니다.
   // 도메인의 handoff 메시지는 넘긴 쪽만 저자로 남기고 받는 쪽을 구조화하지 않습니다.
   // 받는 쪽을 모르면 한쪽만 그립니다. 지어내지 않습니다.
-  | { id: string; kind: "handoff"; time: string; from: SpeakerView; to?: SpeakerView }
+  | { id: string; kind: "handoff"; time: string; from: SpeakerView; to?: SpeakerView; content?: string }
   | {
       id: string;
       kind: "room";
@@ -164,7 +164,8 @@ export type ActivityView =
       content: string;
       change: OrganizationChangeView;
       approvalId?: string;
-    };
+    }
+) & { occurredAt?: string };
 
 export interface RunView {
   runId: string;

@@ -290,6 +290,10 @@ export function App({ contextPicker = nativeContextPicker, service }: AppProps) 
   const [selectedRoomId, setSelectedRoomId] = useState<string>();
   // 방이 늘어나도 탭 바가 감당해야 할 개수는 사용자가 연 것뿐입니다. 대표 방은 항상 열려 있습니다.
   const [openRoomIds, setOpenRoomIds] = useState<readonly string[]>([]);
+  const [roomError, setRoomError] = useState("");
+  const roomWorkIdRef = useRef<string | undefined>(undefined);
+  const selectedRoomIdRef = useRef<string | undefined>(undefined);
+  const openRoomIdsRef = useRef<readonly string[]>([]);
   const selectedWorkId = controller.work?.id;
   const refreshNotifications = useCallback(async () => {
     try {
@@ -315,41 +319,71 @@ export function App({ contextPicker = nativeContextPicker, service }: AppProps) 
   }, [controller.eventRevision, controller.phase, refreshGrowth, refreshNotifications]);
   useEffect(() => {
     if (selectedWorkId === undefined) {
+      roomWorkIdRef.current = undefined;
+      selectedRoomIdRef.current = undefined;
+      openRoomIdsRef.current = [];
       setRooms([]);
       setSelectedRoomId(undefined);
       setOpenRoomIds([]);
+      setRoomError("");
       return;
     }
+    const workChanged = roomWorkIdRef.current !== selectedWorkId;
+    roomWorkIdRef.current = selectedWorkId;
+    setRoomError("");
+    if (workChanged) {
+      selectedRoomIdRef.current = undefined;
+      openRoomIdsRef.current = [];
+      setRooms([]);
+      setSelectedRoomId(undefined);
+      setOpenRoomIds([]);
+    }
     let disposed = false;
-    // 방을 못 읽어도 화면은 살아 있어야 합니다. 활동 타임라인은 Work 자체에서 계속 나옵니다.
     void service
       .loadRooms(selectedWorkId)
       .then((value) => {
         if (disposed) return;
+        const roomIds = new Set(value.map((candidate) => candidate.roomId));
+        const nextOpenRoomIds = (workChanged ? [] : openRoomIdsRef.current).filter((roomId) => roomIds.has(roomId));
+        const currentSelectedRoomId = workChanged ? undefined : selectedRoomIdRef.current;
+        const nextSelectedRoomId =
+          currentSelectedRoomId && roomIds.has(currentSelectedRoomId)
+            ? currentSelectedRoomId
+            : (nextOpenRoomIds[0] ?? value[0]?.roomId);
+        if (nextSelectedRoomId && !nextOpenRoomIds.includes(nextSelectedRoomId))
+          nextOpenRoomIds.push(nextSelectedRoomId);
+        selectedRoomIdRef.current = nextSelectedRoomId;
+        openRoomIdsRef.current = nextOpenRoomIds;
         setRooms(value);
-        setSelectedRoomId(value[0]?.roomId);
-        setOpenRoomIds(value[0] ? [value[0].roomId] : []);
+        setSelectedRoomId(nextSelectedRoomId);
+        setOpenRoomIds(nextOpenRoomIds);
+        setRoomError("");
       })
-      .catch(() => {
-        if (!disposed) {
-          setRooms([]);
-          setSelectedRoomId(undefined);
-          setOpenRoomIds([]);
-        }
+      .catch((cause: unknown) => {
+        if (!disposed) setRoomError(surfaceErrorMessage(cause, "협업방을 불러오지 못했습니다."));
       });
     return () => {
       disposed = true;
     };
-  }, [selectedWorkId, service]);
+  }, [controller.selectedWorkEventRevision, selectedWorkId, service]);
   const room = rooms.find((candidate) => candidate.roomId === selectedRoomId) ?? rooms[0];
   const openRoom = (roomId: string) => {
-    setOpenRoomIds((current) => (current.includes(roomId) ? current : [...current, roomId]));
+    setOpenRoomIds((current) => {
+      const next = current.includes(roomId) ? current : [...current, roomId];
+      openRoomIdsRef.current = next;
+      return next;
+    });
+    selectedRoomIdRef.current = roomId;
     setSelectedRoomId(roomId);
   };
   const closeRoom = (roomId: string) => {
     setOpenRoomIds((current) => {
       const next = current.filter((id) => id !== roomId);
-      if (selectedRoomId === roomId) setSelectedRoomId(next[0]);
+      openRoomIdsRef.current = next;
+      if (selectedRoomIdRef.current === roomId) {
+        selectedRoomIdRef.current = next[0];
+        setSelectedRoomId(next[0]);
+      }
       return next;
     });
   };
@@ -507,6 +541,7 @@ export function App({ contextPicker = nativeContextPicker, service }: AppProps) 
                   onCloseRoom={closeRoom}
                   onSelectRoom={openRoom}
                   room={room}
+                  roomError={roomError}
                   rooms={rooms.filter((candidate) => openRoomIds.includes(candidate.roomId))}
                   work={controller.work}
                 />
@@ -5654,10 +5689,28 @@ function WorkList({
   );
 }
 
+function mergeActivities(
+  workActivities: readonly ActivityView[],
+  roomActivities: readonly ActivityView[],
+): ActivityView[] {
+  const merged = new Map(workActivities.map((activity) => [activity.id, activity]));
+  for (const activity of roomActivities) {
+    if (!merged.has(activity.id)) merged.set(activity.id, activity);
+  }
+  return [...merged.values()].sort((left, right) => {
+    if (left.occurredAt !== undefined && right.occurredAt !== undefined)
+      return left.occurredAt.localeCompare(right.occurredAt) || left.id.localeCompare(right.id);
+    if (left.occurredAt !== undefined) return -1;
+    if (right.occurredAt !== undefined) return 1;
+    return left.time.localeCompare(right.time) || left.id.localeCompare(right.id);
+  });
+}
+
 interface WorkActivityProps {
   onCloseRoom: (roomId: string) => void;
   onSelectRoom: (roomId: string) => void;
   room?: RoomView | undefined;
+  roomError: string;
   rooms: RoomView[];
   work: WorkView;
   composer: string;
@@ -5694,11 +5747,11 @@ function WorkActivity({
   onCloseRoom,
   onSelectRoom,
   room,
+  roomError,
   rooms,
   work,
 }: WorkActivityProps) {
-  // 방이 있으면 대화는 방이 정본입니다. 없으면 Work의 활동 타임라인이 계속 나옵니다.
-  const activities = room ? room.activities : work.activities;
+  const activities = room ? mergeActivities(work.activities, room.activities) : work.activities;
   const [queuedOverride, setQueuedOverride] = useState<QueuedDirectiveView[]>();
   useEffect(() => {
     setQueuedOverride(undefined);
@@ -5848,6 +5901,7 @@ function WorkActivity({
       </div>
       <section aria-label={room ? `협업방 ${room.name}` : "Work 활동"} className="min-h-0 overflow-y-auto px-5 py-3">
         <div className="mx-auto max-w-[860px]">
+          {roomError ? <SurfaceError message={roomError} /> : null}
           {room && activities.length === 0 ? (
             <p className="py-10 text-center text-sm text-muted">
               아직 이 방에서 오간 말이 없습니다. 아래에 지시를 쓰면 조직이 시작합니다.
@@ -6079,7 +6133,7 @@ function ActivityRow({
   if (value.kind === "handoff") {
     return (
       <div className="py-2">
-        <RoomHandoff from={value.from} time={value.time} to={value.to} />
+        <RoomHandoff content={value.content} from={value.from} time={value.time} to={value.to} />
       </div>
     );
   }

@@ -1317,6 +1317,9 @@ describe("Application desktop service", () => {
       "artifacts:current",
       "approval:approval-0001",
     ]);
+    expect(work.activities.map((activity) => activity.occurredAt)).toEqual(
+      work.activities.map((activity) => activity.time),
+    );
   });
 
   it("지시·승인·run 제어에 실제 식별자와 revision을 보낸다", async () => {

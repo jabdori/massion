@@ -248,21 +248,38 @@ export function RoomStatus({ content }: { content: string }) {
 }
 
 /** 조직이 일을 넘겼다는 사실은 한 줄 텍스트보다 크게 보여야 합니다. */
-export function RoomHandoff({ from, time, to }: { from: SpeakerView; time: string; to?: SpeakerView | undefined }) {
+export function RoomHandoff({
+  content,
+  from,
+  time,
+  to,
+}: {
+  content?: string | undefined;
+  from: SpeakerView;
+  time: string;
+  to?: SpeakerView | undefined;
+}) {
   return (
     <div className="flex items-center gap-2.5 py-1.5">
       <span aria-hidden="true" className={`h-px flex-1 ${speakerFill(from)} opacity-60`} />
-      <span className="font-mono text-[11px] text-muted">
-        인계 · <span className={speakerText(from)}>{from.name}</span>
-        {/* 받는 쪽은 도메인이 구조화하지 않습니다. 모르면 넘긴 쪽만 말하고 지어내지 않습니다. */}
-        {to ? (
-          <>
-            {" → "}
-            <span className={speakerText(to)}>{to.name}</span>
-          </>
-        ) : null}{" "}
-        · {time}
-      </span>
+      <div className="min-w-0 max-w-[70%] text-center">
+        <p className="font-mono text-[11px] text-muted">
+          인계 · <span className={speakerText(from)}>{from.name}</span>
+          {/* 받는 쪽은 도메인이 구조화하지 않습니다. 모르면 넘긴 쪽만 말하고 지어내지 않습니다. */}
+          {to ? (
+            <>
+              {" → "}
+              <span className={speakerText(to)}>{to.name}</span>
+            </>
+          ) : null}{" "}
+          · {time}
+        </p>
+        {content ? (
+          <p className="mt-1 whitespace-pre-wrap break-words text-[12px] leading-5 text-secondary [overflow-wrap:anywhere]">
+            {content}
+          </p>
+        ) : null}
+      </div>
       <span aria-hidden="true" className={`h-px flex-1 ${to ? speakerFill(to) : "bg-border"} opacity-60`} />
     </div>
   );

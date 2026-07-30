@@ -11,7 +11,7 @@ import {
   type KnowledgeIndexView,
   type KnowledgeNodeKind,
 } from "./desktop-service";
-import { fixtureDataAdapter, type WorkView } from "./model";
+import { fixtureDataAdapter, type ActivityView, type RoomView, type SpeakerView, type WorkView } from "./model";
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -65,6 +65,382 @@ function knowledgeGraphFixture(lens: KnowledgeNodeKind, nodeId: string, label: s
 }
 
 describe("AgentOS native data flow", () => {
+  it("durable 갱신은 선택한 Work의 방만 다시 읽고 탭·오류·이전 성공 데이터를 보존한다", async () => {
+    const user = userEvent.setup();
+    const work = fixtureDataAdapter().works[0] as WorkView;
+    const atlas: SpeakerView = {
+      handle: "representative",
+      name: "Atlas",
+      initial: "A",
+      accentSlot: 0,
+      role: "조정",
+    };
+    const quill: SpeakerView = {
+      handle: "evidence-research",
+      name: "Quill",
+      initial: "Q",
+      accentSlot: 2,
+      role: "조사",
+    };
+    const auditMessage = (content: string): ActivityView => ({
+      id: "audit-message",
+      kind: "room",
+      messageType: "evidence",
+      time: "10:02",
+      speaker: quill,
+      content,
+    });
+    const auditRoom = (content: string): RoomView => ({
+      roomId: "room-audit",
+      name: "감사 방",
+      status: "active",
+      participants: [quill],
+      lastMessageSequence: 1,
+      budgets: [],
+      sharedContexts: [],
+      activities: [auditMessage(content)],
+    });
+    const coreRoom = (extraRooms: RoomView[]): RoomView => ({
+      roomId: "room-core",
+      name: "대표 방",
+      status: "active",
+      participants: [atlas],
+      lastMessageSequence: 1,
+      budgets: [],
+      sharedContexts: [],
+      activities: extraRooms.map((candidate) => ({
+        id: `roomref:${candidate.roomId}`,
+        kind: "roomRef" as const,
+        time: "10:01",
+        roomId: candidate.roomId,
+        name: candidate.name,
+        participants: candidate.participants,
+        messageCount: candidate.activities.length,
+        lastLine: "감사 대화",
+        waiting: false,
+      })),
+    });
+    const newRoom: RoomView = {
+      roomId: "room-new",
+      name: "새 방",
+      status: "active",
+      participants: [atlas],
+      lastMessageSequence: 0,
+      budgets: [],
+      sharedContexts: [],
+      activities: [],
+    };
+    let durable: ((event: unknown) => void) | undefined;
+    let revision: "initial" | "refreshed" | "failed" | "removed" = "initial";
+    const loadRooms = vi.fn(async () => {
+      if (revision === "failed") throw new Error("협업방을 다시 읽지 못했습니다.");
+      if (revision === "removed") return [auditRoom("갱신된 감사 대화"), newRoom];
+      const audit = auditRoom(revision === "initial" ? "처음 감사 대화" : "갱신된 감사 대화");
+      return [
+        coreRoom([audit, ...(revision === "refreshed" ? [newRoom] : [])]),
+        audit,
+        ...(revision === "refreshed" ? [newRoom] : []),
+      ];
+    });
+    const loadWork = vi.fn(async () => work);
+    render(
+      <App
+        service={service({
+          initialSnapshot: { works: [work] },
+          loadIndex: async () => [work],
+          loadWork,
+          loadRooms,
+          subscribeDurable: async (handler) => {
+            durable = handler;
+            return async () => undefined;
+          },
+        })}
+      />,
+    );
+
+    await user.click(await screen.findByRole("button", { name: "협업방 감사 방 열기" }));
+    expect(screen.getByRole("region", { name: "협업방 감사 방" })).toHaveTextContent("처음 감사 대화");
+    await waitFor(() => expect(durable).toBeTypeOf("function"));
+
+    revision = "refreshed";
+    act(() =>
+      durable?.({
+        sequence: 30,
+        type: "collaboration.message-posted",
+        resource: { type: "Work", id: "another-work" },
+      }),
+    );
+    await act(async () => await new Promise((resolve) => setTimeout(resolve, 150)));
+    expect(loadRooms).toHaveBeenCalledOnce();
+    act(() =>
+      durable?.({
+        sequence: 31,
+        type: "collaboration.message-posted",
+        resource: { type: "Work", id: work.id },
+      }),
+    );
+    await waitFor(() => expect(loadRooms).toHaveBeenCalledTimes(2));
+    expect(screen.getByRole("region", { name: "협업방 감사 방" })).toHaveTextContent("갱신된 감사 대화");
+    expect(screen.getByRole("button", { name: /대표 방/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { current: true })).toHaveTextContent("감사 방");
+    expect(screen.queryByRole("button", { name: /^새 방/u })).not.toBeInTheDocument();
+    expect(loadWork).not.toHaveBeenCalled();
+
+    revision = "failed";
+    act(() =>
+      durable?.({
+        sequence: 32,
+        type: "collaboration.message-posted",
+        resource: { type: "Work", id: work.id },
+      }),
+    );
+    expect(await screen.findByRole("alert")).toHaveTextContent("협업방을 다시 읽지 못했습니다.");
+    expect(screen.getByRole("region", { name: "협업방 감사 방" })).toHaveTextContent("갱신된 감사 대화");
+
+    revision = "removed";
+    act(() =>
+      durable?.({
+        sequence: 33,
+        type: "work.room.removed",
+        resource: { type: "Work", id: work.id },
+      }),
+    );
+    await waitFor(() => expect(loadRooms).toHaveBeenCalledTimes(4));
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { current: true })).toHaveTextContent("감사 방");
+    expect(screen.queryByRole("button", { name: /대표 방/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^새 방/u })).not.toBeInTheDocument();
+  });
+
+  it("방과 Work 활동을 ID 중복 없이 시간순으로 합치고 최종 응답 문법을 유지한다", async () => {
+    const base = fixtureDataAdapter().works[0] as WorkView;
+    const atlas: SpeakerView = {
+      handle: "representative",
+      name: "Atlas",
+      initial: "A",
+      accentSlot: 0,
+      role: "조정",
+    };
+    const work: WorkView = {
+      ...base,
+      activities: [
+        {
+          id: "stage",
+          kind: "event",
+          time: "10:00",
+          occurredAt: "2026-07-31T10:00:00.000Z",
+          title: "실행 단계",
+          detail: "준비",
+          status: "진행",
+        },
+        {
+          id: "duplicate",
+          kind: "artifacts",
+          time: "10:02",
+          occurredAt: "2026-07-31T10:02:00.000Z",
+          title: "산출물 활동",
+          artifacts: [{ id: "artifact-1", name: "결과.csv", format: "CSV", size: "1 KB", createdAt: "10:02" }],
+        },
+        {
+          id: "verification",
+          kind: "event",
+          time: "10:03",
+          occurredAt: "2026-07-31T10:03:00.000Z",
+          title: "검증 활동",
+          detail: "통과",
+          status: "완료",
+        },
+        {
+          id: "record",
+          kind: "event",
+          time: "10:04",
+          occurredAt: "2026-07-31T10:04:00.000Z",
+          title: "기록 활동",
+          detail: "확정",
+          status: "완료",
+        },
+        {
+          id: "final",
+          kind: "room",
+          time: "10:05",
+          occurredAt: "2026-07-31T10:05:00.000Z",
+          messageType: "answer",
+          speaker: atlas,
+          content: "대표 최종 답변",
+          final: true,
+        },
+      ],
+    };
+    const room: RoomView = {
+      roomId: "room-core",
+      name: "대표 방",
+      status: "active",
+      participants: [atlas],
+      lastMessageSequence: 2,
+      budgets: [],
+      sharedContexts: [],
+      activities: [
+        {
+          id: "room-message",
+          kind: "room",
+          time: "23:59",
+          occurredAt: "2026-07-31T10:01:00.000Z",
+          messageType: "evidence",
+          speaker: atlas,
+          content: "방 대화",
+        },
+        {
+          id: "duplicate",
+          kind: "room",
+          time: "10:02",
+          occurredAt: "2026-07-31T10:02:30.000Z",
+          messageType: "evidence",
+          speaker: atlas,
+          content: "중복 방 대화",
+        },
+      ],
+    };
+    render(
+      <App
+        service={service({
+          initialSnapshot: { works: [work] },
+          loadIndex: async () => [work],
+          loadRooms: async () => [room],
+        })}
+      />,
+    );
+
+    const activity = await screen.findByRole("region", { name: "협업방 대표 방" });
+    for (const text of ["실행 단계", "방 대화", "산출물 활동", "검증 활동", "기록 활동", "대표 최종 답변"]) {
+      expect(within(activity).getByText(text)).toBeInTheDocument();
+    }
+    expect(within(activity).queryByText("중복 방 대화")).not.toBeInTheDocument();
+    expect(within(activity).getByText("최종 응답")).toHaveClass("bg-fg", "text-canvas");
+    const text = activity.textContent ?? "";
+    expect(text.indexOf("실행 단계")).toBeLessThan(text.indexOf("방 대화"));
+    expect(text.indexOf("방 대화")).toBeLessThan(text.indexOf("산출물 활동"));
+    expect(text.indexOf("산출물 활동")).toBeLessThan(text.indexOf("검증 활동"));
+    expect(text.indexOf("검증 활동")).toBeLessThan(text.indexOf("기록 활동"));
+    expect(text.indexOf("기록 활동")).toBeLessThan(text.indexOf("대표 최종 답변"));
+  });
+
+  it("ISO 시각이 없는 legacy 활동은 ISO 활동과 섞어 비교하지 않고 뒤에서 결정적으로 정렬한다", async () => {
+    const base = fixtureDataAdapter().works[0] as WorkView;
+    const work: WorkView = {
+      ...base,
+      activities: [
+        { id: "legacy-z", kind: "event", time: "00:01", title: "Legacy Z", detail: "", status: "" },
+        { id: "legacy-a", kind: "event", time: "00:01", title: "Legacy A", detail: "", status: "" },
+        {
+          id: "canonical",
+          kind: "event",
+          time: "23:59",
+          occurredAt: "2026-07-31T23:59:00.000Z",
+          title: "Canonical",
+          detail: "",
+          status: "",
+        },
+      ],
+    };
+    const room: RoomView = {
+      roomId: "room-core",
+      name: "대표 방",
+      status: "active",
+      participants: [],
+      lastMessageSequence: 0,
+      budgets: [],
+      sharedContexts: [],
+      activities: [],
+    };
+    render(
+      <App
+        service={service({
+          initialSnapshot: { works: [work] },
+          loadIndex: async () => [work],
+          loadRooms: async () => [room],
+        })}
+      />,
+    );
+
+    const text = (await screen.findByRole("region", { name: "협업방 대표 방" })).textContent ?? "";
+    expect(text.indexOf("Canonical")).toBeLessThan(text.indexOf("Legacy A"));
+    expect(text.indexOf("Legacy A")).toBeLessThan(text.indexOf("Legacy Z"));
+  });
+
+  it("최초 방 조회 실패는 접근 가능한 오류이고 정상 무방 상태는 Work 활동이다", async () => {
+    const work: WorkView = {
+      ...(fixtureDataAdapter().works[0] as WorkView),
+      activities: [{ id: "work-only", kind: "event", time: "10:00", title: "Work 전용 활동", detail: "", status: "" }],
+    };
+    const failed = render(
+      <App
+        service={service({
+          initialSnapshot: { works: [work] },
+          loadIndex: async () => [work],
+          loadRooms: async () => {
+            throw new Error("최초 협업방 조회 실패");
+          },
+        })}
+      />,
+    );
+    expect(await screen.findByRole("alert")).toHaveTextContent("최초 협업방 조회 실패");
+    expect(screen.getByRole("region", { name: "Work 활동" })).toHaveTextContent("Work 전용 활동");
+    failed.unmount();
+
+    render(
+      <App
+        service={service({
+          initialSnapshot: { works: [work] },
+          loadIndex: async () => [work],
+          loadRooms: async () => [],
+        })}
+      />,
+    );
+    await waitFor(() => expect(screen.getByRole("region", { name: "Work 활동" })).toHaveTextContent("Work 전용 활동"));
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("이전 Work의 늦은 방 응답은 방이 없는 현재 Work를 덮지 않는다", async () => {
+    const user = userEvent.setup();
+    const snapshot = fixtureDataAdapter();
+    const first = snapshot.works[0] as WorkView;
+    const secondBase = snapshot.works[1] as WorkView;
+    const second: WorkView = {
+      ...secondBase,
+      activities: [
+        { id: "second-activity", kind: "event", time: "10:00", title: "현재 Work 활동", detail: "", status: "" },
+      ],
+    };
+    const firstRooms = deferred<RoomView[]>();
+    const staleRoom: RoomView = {
+      roomId: "stale-room",
+      name: "이전 Work 방",
+      status: "active",
+      participants: [],
+      lastMessageSequence: 0,
+      budgets: [],
+      sharedContexts: [],
+      activities: [{ id: "stale", kind: "roomStatus", time: "10:00", content: "오래된 방 응답" }],
+    };
+    render(
+      <App
+        service={service({
+          initialSnapshot: { works: [first, second] },
+          loadIndex: async () => [first, second],
+          loadWork: async (workId) => (workId === second.id ? second : first),
+          loadRooms: async (workId) => (workId === first.id ? await firstRooms.promise : []),
+        })}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: new RegExp(second.title) }));
+    expect(await screen.findByRole("region", { name: "Work 활동" })).toHaveTextContent("현재 Work 활동");
+    firstRooms.resolve([staleRoom]);
+    await Promise.resolve();
+    expect(screen.getByRole("region", { name: "Work 활동" })).toHaveTextContent("현재 Work 활동");
+    expect(screen.queryByText("오래된 방 응답")).not.toBeInTheDocument();
+  });
+
   it("워크스페이스 없는 Work의 근거 빈 상태는 산출물 안내를 재사용하지 않는다", async () => {
     const user = userEvent.setup();
     render(

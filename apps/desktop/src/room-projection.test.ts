@@ -126,18 +126,25 @@ describe("협업방 투영", () => {
     expect(challenge.quoted).toBeUndefined();
   });
 
-  it("인계는 다음 발언자를 받는 쪽으로 읽되 없으면 한쪽만 그린다", () => {
-    const withReceiver = projectRoomActivities(
+  it("인계는 저장된 내용을 보존하고 다음 발언자를 받는 쪽으로 지어내지 않는다", () => {
+    const followedByAnotherSpeaker = projectRoomActivities(
       [
-        message({ messageId: "h", sequence: 1, messageType: "handoff", authorId: "evidence-research" }),
+        message({
+          messageId: "h",
+          sequence: 1,
+          messageType: "handoff",
+          authorId: "evidence-research",
+          content: "검증할 표본과 남은 질문을 넘깁니다.",
+        }),
         message({ messageId: "n", sequence: 2, messageType: "evidence", authorId: "assurance" }),
       ],
       nodes,
     );
-    const handoff = withReceiver[0];
+    const handoff = followedByAnotherSpeaker[0];
     if (handoff?.kind !== "handoff") throw new Error("인계가 handoff 활동이 아닙니다");
     expect(handoff.from.name).toBe("Quill");
-    expect(handoff.to?.name).toBe("Iris");
+    expect(handoff.content).toBe("검증할 표본과 남은 질문을 넘깁니다.");
+    expect(handoff.to).toBeUndefined();
 
     const alone = projectRoomActivities(
       [message({ messageId: "h", sequence: 1, messageType: "handoff", authorId: "evidence-research" })],
@@ -145,7 +152,6 @@ describe("협업방 투영", () => {
     );
     const lonely = alone[0];
     if (lonely?.kind !== "handoff") throw new Error("인계가 handoff 활동이 아닙니다");
-    // 받는 쪽은 도메인에 없습니다. 모르면 지어내지 않습니다.
     expect(lonely.to).toBeUndefined();
   });
 

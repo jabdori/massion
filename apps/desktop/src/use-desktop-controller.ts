@@ -65,6 +65,7 @@ export function useDesktopController(service: DesktopService) {
   const [startingWork, setStartingWork] = useState(false);
   const [executionNotice, setExecutionNotice] = useState<ExecutionNotice | undefined>();
   const [eventRevision, setEventRevision] = useState(0);
+  const [selectedWorkEventRevision, setSelectedWorkEventRevision] = useState(0);
   const [retryVersion, setRetryVersion] = useState(0);
 
   const deferredQuery = useDeferredValue(query);
@@ -76,6 +77,7 @@ export function useDesktopController(service: DesktopService) {
   const queryRef = useRef(deferredQuery);
   const pendingCreationRef = useRef(pendingCreation);
   const durableWorkCandidatesRef = useRef(new Set<string>());
+  const durableChangedWorkIdsRef = useRef(new Set<string>());
   const detailRequestRef = useRef(0);
   const indexRequestRef = useRef(0);
   const commandLocks = useRef(new Set<string>());
@@ -243,10 +245,15 @@ export function useDesktopController(service: DesktopService) {
         if (disposed) return;
         const candidateWorkId = createdWorkId(event);
         if (candidateWorkId) durableWorkCandidatesRef.current.add(candidateWorkId);
+        const changedWorkId = eventWorkId(event);
+        if (changedWorkId) durableChangedWorkIdsRef.current.add(changedWorkId);
         if (timer) clearTimeout(timer);
         timer = setTimeout(() => {
           timer = undefined;
           setEventRevision((current) => current + 1);
+          if (durableChangedWorkIdsRef.current.has(selectedIdRef.current))
+            setSelectedWorkEventRevision((current) => current + 1);
+          durableChangedWorkIdsRef.current.clear();
           const candidateWorkIds = [...durableWorkCandidatesRef.current];
           durableWorkCandidatesRef.current.clear();
           void (async () => {
@@ -558,6 +565,7 @@ export function useDesktopController(service: DesktopService) {
     detailLoading,
     executionNotice,
     eventRevision,
+    selectedWorkEventRevision,
     filter,
     newWork: {
       error: [newWorkError, newWorkPickerError, newWorkWorkspaceLoadError].filter(Boolean).join(" "),
@@ -649,6 +657,11 @@ function createdWorkId(value: unknown): string | undefined {
   const event = asRecord(value);
   if (event?.type !== "work.created") return undefined;
   const resource = asRecord(event.resource);
+  return resource?.type === "Work" && typeof resource.id === "string" ? resource.id : undefined;
+}
+
+function eventWorkId(value: unknown): string | undefined {
+  const resource = asRecord(asRecord(value)?.resource);
   return resource?.type === "Work" && typeof resource.id === "string" ? resource.id : undefined;
 }
 

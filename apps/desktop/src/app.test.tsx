@@ -226,7 +226,7 @@ describe("AgentOS 데스크톱", () => {
 
     expect(screen.getByRole("status")).toHaveTextContent("다음 단계에 반영하도록 예약했습니다");
     expect(screen.getByRole("textbox", { name: "추가 지시" })).toHaveValue("");
-    expect(screen.getByText("산업군별 이탈률도 분리해줘")).toBeInTheDocument();
+    expect(screen.getAllByText("산업군별 이탈률도 분리해줘").length).toBeGreaterThan(0);
 
     const cards = screen.getAllByRole("button", { name: /현재 작업 조정/ });
     await user.click(cards[cards.length - 1] as HTMLElement);

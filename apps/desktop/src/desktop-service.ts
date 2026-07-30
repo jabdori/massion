@@ -4185,20 +4185,29 @@ export function projectRoomActivities(
   const ordered = [...messages].sort((left, right) => left.sequence - right.sequence);
   const byId = new Map(ordered.map((message) => [message.messageId, message]));
 
-  return ordered.map((message, index): ActivityView => {
+  return ordered.map((message): ActivityView => {
     const speaker = speakerFor(message, nodes);
     const time = clockOf(message.createdAt);
 
     if (message.messageType === "status") {
-      return { id: message.messageId, kind: "roomStatus", time, content: message.content };
+      return {
+        id: message.messageId,
+        kind: "roomStatus",
+        time,
+        occurredAt: message.createdAt,
+        content: message.content,
+      };
     }
 
     if (message.messageType === "handoff") {
-      // ponytail: 받는 쪽은 도메인에 없습니다. 다음 발언자를 받는 쪽으로 읽되,
-      // 다음 발언이 없거나 같은 화자면 한쪽만 그립니다. 도메인이 대상을 실으면 그때 교체합니다.
-      const next = ordered[index + 1];
-      const receiver = next && next.authorId !== message.authorId ? speakerFor(next, nodes) : undefined;
-      return { id: message.messageId, kind: "handoff", time, from: speaker, ...(receiver ? { to: receiver } : {}) };
+      return {
+        id: message.messageId,
+        kind: "handoff",
+        time,
+        occurredAt: message.createdAt,
+        from: speaker,
+        content: message.content,
+      };
     }
 
     const origin = message.replyToMessageId === undefined ? undefined : byId.get(message.replyToMessageId);
@@ -4207,6 +4216,7 @@ export function projectRoomActivities(
       id: message.messageId,
       kind: "room",
       time,
+      occurredAt: message.createdAt,
       messageType: message.messageType === "proposal" ? "decision" : (message.messageType as "question"),
       speaker,
       content: message.content,
@@ -4272,6 +4282,7 @@ export function withRoomReferences(rooms: readonly RoomView[]): RoomView[] {
   if (!main || others.length === 0) return [...rooms];
 
   const references: ActivityView[] = others.map((room) => {
+    const occurredAt = room.activities[0]?.occurredAt;
     const last = room.activities.at(-1);
     return {
       id: `roomref:${room.roomId}`,
@@ -4283,10 +4294,17 @@ export function withRoomReferences(rooms: readonly RoomView[]): RoomView[] {
       messageCount: room.activities.length,
       lastLine: last && "content" in last ? last.content : `${String(room.activities.length)}개의 발언`,
       waiting: room.activities.some((activity) => activity.kind === "proposal" || activity.kind === "approval"),
+      ...(occurredAt === undefined ? {} : { occurredAt }),
     };
   });
 
-  const merged = [...main.activities, ...references].sort((left, right) => left.time.localeCompare(right.time));
+  const merged = [...main.activities, ...references].sort((left, right) => {
+    if (left.occurredAt !== undefined && right.occurredAt !== undefined)
+      return left.occurredAt.localeCompare(right.occurredAt) || left.id.localeCompare(right.id);
+    if (left.occurredAt !== undefined) return -1;
+    if (right.occurredAt !== undefined) return 1;
+    return left.time.localeCompare(right.time) || left.id.localeCompare(right.id);
+  });
   return [{ ...main, activities: merged }, ...others];
 }
 
@@ -5044,10 +5062,12 @@ function projectActivities(
   for (const approval of sourceApprovals) {
     if (approval.status !== "pending" || representedApprovalIds.has(approval.approvalId)) continue;
     const view = projectApproval(approval);
+    const occurredAt = approval.createdAt ?? approval.expiresAt;
     projected.push({
       id: `approval:${approval.approvalId}`,
       kind: "approval",
-      time: approval.createdAt ?? approval.expiresAt,
+      time: occurredAt,
+      occurredAt,
       approvalId: approval.approvalId,
       title: view.title,
       description: view.description,
@@ -5059,6 +5079,7 @@ function projectActivities(
       id: `directive:${directive.directiveId}`,
       kind: "message",
       time: directive.createdAt,
+      occurredAt: directive.createdAt,
       author: "사용자",
       initials: "U",
       content: directive.content,
@@ -5070,6 +5091,7 @@ function projectActivities(
       id: "artifacts:current",
       kind: "artifacts",
       time: artifacts[0]?.createdAt ?? "",
+      ...(artifacts[0]?.createdAt === undefined ? {} : { occurredAt: artifacts[0].createdAt }),
       title: "산출물",
       artifacts: [...artifacts],
     });
@@ -5088,6 +5110,7 @@ function projectActivity(
       id: activity.activityId,
       kind: "approval",
       time: activity.createdAt,
+      occurredAt: activity.createdAt,
       approvalId: approval.approvalId,
       title: view.title,
       description: activity.detail ?? view.description,
@@ -5098,6 +5121,7 @@ function projectActivity(
       id: activity.activityId,
       kind: "event",
       time: activity.createdAt,
+      occurredAt: activity.createdAt,
       title: activity.title,
       detail: activity.detail ?? "",
       status: activity.status ?? "",
@@ -5108,6 +5132,7 @@ function projectActivity(
     id: activity.activityId,
     kind: "message",
     time: activity.createdAt,
+    occurredAt: activity.createdAt,
     author,
     initials: initials(author),
     content: activity.detail ?? activity.title,

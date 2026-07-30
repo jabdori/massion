@@ -105,11 +105,24 @@ describe("협업방 문법", () => {
     expect(container.querySelector("article")?.className).toContain("pl-[27px]");
   });
 
-  it("인계는 넘긴 쪽과 받는 쪽을 모두 이름으로 말한다", () => {
-    render(<RoomHandoff from={quill} time="10:24" to={vega} />);
+  it("인계는 넘긴 쪽·내용을 항상 말하고 구조화된 받는 쪽만 표시한다", () => {
+    const { rerender } = render(
+      <RoomHandoff content="검증할 표본과 남은 질문을 넘깁니다." from={quill} time="10:24" to={vega} />,
+    );
     const line = screen.getByText(/인계/);
     expect(line).toHaveTextContent("Quill");
     expect(line).toHaveTextContent("Vega");
+    expect(screen.getByText("검증할 표본과 남은 질문을 넘깁니다.")).toBeInTheDocument();
+
+    const longContent = `받는 쪽은 아직 정해지지 않았습니다.\n${"긴문자열".repeat(40)}`;
+    rerender(<RoomHandoff content={longContent} from={quill} time="10:25" />);
+    expect(screen.getByText(/인계/)).toHaveTextContent("Quill");
+    expect(screen.queryByText("Vega")).not.toBeInTheDocument();
+    expect(screen.getByText(/받는 쪽은 아직 정해지지 않았습니다/u)).toHaveClass(
+      "whitespace-pre-wrap",
+      "break-words",
+      "[overflow-wrap:anywhere]",
+    );
   });
 
   it("조직 변경 제안은 영향과 되돌리기를 버튼보다 먼저 보인다", async () => {
