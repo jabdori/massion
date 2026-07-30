@@ -357,6 +357,60 @@ describe("AgentOS native data flow", () => {
     expect(screen.queryByText("never-render-this")).not.toBeInTheDocument();
   });
 
+  it.each([
+    ["활성", [{ status: "active" }], "구독 계정으로 연결됨"],
+    ["비활성", [{ status: "expired" }], "계정 확인이 필요합니다"],
+    ["없음", [], "로그인이 필요합니다"],
+  ] as const)("구독 커넥터의 %s OAuth 계정을 인증 상태로 표시한다", async (_case, rows, expected) => {
+    const user = userEvent.setup();
+    render(
+      <App
+        service={service({
+          loadSettings: async () => ({
+            catalog: {
+              providers: [
+                {
+                  providerId: "openai-codex",
+                  displayName: "OpenAI Codex",
+                  adapterKind: "subscription-connector",
+                  enabled: true,
+                },
+              ],
+              endpoints: [
+                {
+                  endpointId: "codex-app-server",
+                  providerId: "openai-codex",
+                  name: "Codex app server",
+                  baseUrl: "massion-connector:///openai-codex/codex-app-server",
+                  local: false,
+                },
+              ],
+              models: [],
+              credentials: [],
+            },
+            credentials: [],
+            routes: [],
+            providers: [],
+            accounts: rows.map((account) => ({
+              accountId: "account-codex",
+              providerId: "openai-codex",
+              alias: "Codex",
+              status: account.status,
+              billingKind: "consumer-subscription",
+            })),
+            quota: [],
+            policy: [],
+          }),
+        })}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "프로바이더" }));
+
+    expect(await screen.findByText(expected)).toBeInTheDocument();
+    expect(screen.queryByText("등록되지 않았습니다")).not.toBeInTheDocument();
+  });
+
   it("확장 화면은 조직에 늘어난 Capability를 버전·출처보다 먼저 보인다", async () => {
     const user = userEvent.setup();
     const loadExtensions = vi.fn(async () => [

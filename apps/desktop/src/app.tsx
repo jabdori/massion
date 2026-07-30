@@ -4908,6 +4908,7 @@ function ProviderOverviewTab({
   const mine = accounts.filter((account) => account.providerId.startsWith(connection.providerId));
   // 구독 커넥터는 계정을 갖고, API 어댑터는 키를 갖습니다. 없는 쪽을 빈 목록으로 보이면 잘못된 인상을 줍니다.
   const usesAccounts = connection.adapterKind === "subscription-connector";
+  const activeAccount = mine.some((account) => account.status === "active");
   return (
     <>
       <section className="mb-6">
@@ -4920,11 +4921,19 @@ function ProviderOverviewTab({
             </ProviderField>
           ))}
           <ProviderField label="인증">
-            {connection.credentialVersion === undefined ? (
+            {usesAccounts ? (
+              <span className={activeAccount ? undefined : "text-muted"}>
+                {activeAccount
+                  ? "구독 계정으로 연결됨"
+                  : mine.length > 0
+                    ? "계정 확인이 필요합니다"
+                    : "로그인이 필요합니다"}
+              </span>
+            ) : connection.credentialVersion === undefined ? (
               <span className="text-muted">등록되지 않았습니다</span>
             ) : (
               <span>
-                {usesAccounts ? "구독 로그인" : "API 키"}
+                API 키
                 <span className="ml-2 font-mono text-[11px] tabular-nums text-muted">
                   v{connection.credentialVersion}
                 </span>
