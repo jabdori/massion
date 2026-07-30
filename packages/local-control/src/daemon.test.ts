@@ -11,6 +11,7 @@ import {
   utimes,
   writeFile,
 } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -152,6 +153,45 @@ describe("공용 local daemon 제어", () => {
 
     expect(await readFile(legacy, "utf8")).toBe("legacy data");
     await expect(stat(paths.epochFile)).resolves.toMatchObject({ isFile: expect.any(Function) });
+  });
+
+  it("실행 중일 수 있는 SurrealDB runtime을 제자리 덮어쓰지 않는다", async () => {
+    const root = await mkdtemp(join(tmpdir(), "massion-local-control-runtime-replace-"));
+    roots.push(root);
+    const environment = {
+      HOME: root,
+      XDG_CONFIG_HOME: join(root, "config"),
+      XDG_DATA_HOME: join(root, "data"),
+      XDG_STATE_HOME: join(root, "state"),
+      MASSION_SERVER_BIN: join(root, "server.js"),
+      MASSION_LOCAL_PORT: "17331",
+      MASSION_SURREAL_PORT: "17330",
+    };
+    const paths = resolveLocalPaths(environment);
+    await ensureLocalDataEpoch(paths);
+    const runtime = resolveLocalSurrealRuntime({ home: root, xdgDataHome: environment.XDG_DATA_HOME });
+    const source = join(root, "surreal-source");
+    const sourceBytes = Buffer.from("#!/bin/sh\nprintf 'invalid version\\n'\n");
+    const observer = join(root, "installed-runtime-observer");
+    await Promise.all([
+      writeFile(environment.MASSION_SERVER_BIN, "", { mode: 0o600 }),
+      writeFile(source, sourceBytes, { mode: 0o700 }),
+      mkdir(join(runtime.binaryPath, ".."), { recursive: true, mode: 0o700 }),
+    ]);
+    await writeFile(runtime.binaryPath, "installed-runtime", { mode: 0o700 });
+    await link(runtime.binaryPath, observer);
+    const manager = new LocalDaemonManager({
+      environment: {
+        ...environment,
+        MASSION_SURREAL_BINARY: source,
+        MASSION_SURREAL_SHA256: createHash("sha256").update(sourceBytes).digest("hex"),
+      },
+    });
+
+    await expect(manager.start()).rejects.toThrow(/version 3\.2\.1/u);
+
+    await expect(readFile(observer, "utf8")).resolves.toBe("installed-runtime");
+    await expect(readFile(runtime.binaryPath)).resolves.toEqual(sourceBytes);
   });
 
   it("호환 불명 epoch의 data-bearing root를 보존하고 migration을 요구한다", async () => {

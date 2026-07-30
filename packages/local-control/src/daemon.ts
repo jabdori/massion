@@ -897,8 +897,14 @@ export class LocalDaemonManager {
       }
       // 번들 sidecar를 사용자 전용 runtime 경계로 복사한 뒤 기존 digest·소유권 검증을 적용합니다.
       await mkdir(dirname(runtime.binaryPath), { recursive: true, mode: 0o700 });
-      await copyFile(sourceExecutable, runtime.binaryPath);
-      await chmod(runtime.binaryPath, 0o700);
+      const temporary = `${runtime.binaryPath}.${randomUUID()}.tmp`;
+      try {
+        await copyFile(sourceExecutable, temporary, constants.COPYFILE_EXCL);
+        await chmod(temporary, 0o700);
+        await rename(temporary, runtime.binaryPath);
+      } finally {
+        await rm(temporary, { force: true });
+      }
     }
     const sidecarPort = surrealPort(this.#environment);
     if (sidecarPort === port(this.#environment))
