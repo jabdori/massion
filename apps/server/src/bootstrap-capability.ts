@@ -1,5 +1,5 @@
 import { timingSafeEqual } from "node:crypto";
-import { constants } from "node:fs";
+import { constants, type Stats } from "node:fs";
 import { open, realpath, type FileHandle } from "node:fs/promises";
 import { dirname, isAbsolute, resolve } from "node:path";
 
@@ -142,16 +142,13 @@ function sameFile(
   return left.dev === right.dev && left.ino === right.ino;
 }
 
-function assertDirectoryTrust(
-  metadata: Awaited<ReturnType<FileHandle["stat"]>>,
-  expectedUid: number | undefined,
-): void {
+function assertDirectoryTrust(metadata: Stats, expectedUid: number | undefined): void {
   if (!metadata.isDirectory()) throw trustError();
   if (process.platform !== "win32" && (metadata.mode & 0o777) !== 0o700) throw trustError();
   if (expectedUid !== undefined && metadata.uid !== expectedUid) throw trustError();
 }
 
-function assertFileTrust(metadata: Awaited<ReturnType<FileHandle["stat"]>>, expectedUid: number | undefined): void {
+function assertFileTrust(metadata: Stats, expectedUid: number | undefined): void {
   if (!metadata.isFile() || metadata.nlink !== 1 || metadata.size !== BOOTSTRAP_CAPABILITY_BYTES) throw trustError();
   if (process.platform !== "win32" && (metadata.mode & 0o777) !== 0o600) throw trustError();
   if (expectedUid !== undefined && metadata.uid !== expectedUid) throw trustError();
