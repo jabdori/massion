@@ -93,4 +93,5 @@ export interface StructuredAgentRunner {
     input: AgentExecutionInput,
     output: StructuredOutputSpec,
   ): Promise<AgentExecutionResult>;
+  findResultByCommand?(context: TenantContext, commandId: string): Promise<AgentExecutionResult | undefined>;
 }
