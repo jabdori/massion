@@ -273,7 +273,7 @@ async function ensureDirectories(paths: LocalPaths): Promise<void> {
       if (
         path === paths.bootstrapDirectory &&
         ((process.platform !== "win32" && (metadata.mode & 0o777) !== 0o700) ||
-          (process.getuid?.() !== undefined && metadata.uid !== process.getuid?.()))
+          (process.getuid?.() !== undefined && metadata.uid !== process.getuid()))
       )
         throw new Error("local bootstrap directory 신뢰 검증에 실패했습니다");
     }),
@@ -360,7 +360,7 @@ function assertLocalBootstrapFile(metadata: Stats, sizes: readonly number[] = [3
     throw new Error("local bootstrap capability 파일 신뢰 검증에 실패했습니다");
   if (process.platform !== "win32" && (metadata.mode & 0o777) !== 0o600)
     throw new Error("local bootstrap capability 파일 신뢰 검증에 실패했습니다");
-  if (process.getuid?.() !== undefined && metadata.uid !== process.getuid?.())
+  if (process.getuid?.() !== undefined && metadata.uid !== process.getuid())
     throw new Error("local bootstrap capability 파일 신뢰 검증에 실패했습니다");
 }
 
@@ -380,11 +380,7 @@ async function createLocalBootstrapCapability(
   let handle: Awaited<ReturnType<typeof open>> | undefined;
   let binding: LocalBootstrapCapabilityBinding | undefined;
   try {
-    handle = await open(
-      path,
-      constants.O_RDWR | constants.O_CREAT | constants.O_EXCL | (constants.O_NOFOLLOW ?? 0),
-      0o600,
-    );
+    handle = await open(path, constants.O_RDWR | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
     const opened = await handle.stat();
     assertLocalBootstrapFile(opened, [0]);
     binding = { path, device: String(opened.dev), inode: String(opened.ino) };
@@ -413,7 +409,9 @@ async function createLocalBootstrapCapability(
           Array.from({ length: 33 }, (_, size) => size),
         );
       } catch (cleanupError) {
-        throw new AggregateError([error, cleanupError], `${String(error)}; capability cleanup failed`);
+        throw new AggregateError([error, cleanupError], `${String(error)}; capability cleanup failed`, {
+          cause: cleanupError,
+        });
       }
     }
     throw error;
@@ -431,7 +429,7 @@ async function readLocalBootstrapCapability(
   let handle: Awaited<ReturnType<typeof open>> | undefined;
   let capability: Buffer | undefined;
   try {
-    handle = await open(trustedPath, constants.O_RDWR | (constants.O_NOFOLLOW ?? 0));
+    handle = await open(trustedPath, constants.O_RDWR | constants.O_NOFOLLOW);
     const before = await handle.stat();
     assertLocalBootstrapFile(before, [0, 32]);
     if (String(before.dev) !== binding.device || String(before.ino) !== binding.inode)
@@ -473,7 +471,7 @@ async function sanitizeLocalBootstrapCapability(
   const trustedPath = localBootstrapPath(paths, binding.path);
   let handle: Awaited<ReturnType<typeof open>> | undefined;
   try {
-    handle = await open(trustedPath, constants.O_RDWR | (constants.O_NOFOLLOW ?? 0));
+    handle = await open(trustedPath, constants.O_RDWR | constants.O_NOFOLLOW);
     await sanitizeOpenedLocalBootstrapCapability(handle, binding, beforeCleanup, [0, 32]);
   } catch (error) {
     if (error instanceof Error && "code" in error && error.code === "ENOENT") return;
@@ -501,7 +499,7 @@ async function sanitizeOpenedLocalBootstrapCapability(
     current.nlink !== 1 ||
     !allowedSizes.includes(current.size) ||
     (process.platform !== "win32" && (current.mode & 0o777) !== 0o600) ||
-    (process.getuid?.() !== undefined && current.uid !== process.getuid?.())
+    (process.getuid?.() !== undefined && current.uid !== process.getuid())
   )
     throw new Error("local bootstrap capability cleanup 신뢰 검증에 실패했습니다");
   await handle.truncate(0);
@@ -555,7 +553,7 @@ function validatePidRecord(value: unknown): LocalPidRecord {
       typeof value.bootstrapCapabilityFile === "string" &&
       isAbsolute(value.bootstrapCapabilityFile)
     ) ||
-      !/^[0-9a-f-]{36}\.cap$/u.test(String(value.bootstrapCapabilityFile).split("/").at(-1) ?? "") ||
+      !/^[0-9a-f-]{36}\.cap$/u.test(value.bootstrapCapabilityFile.split("/").at(-1) ?? "") ||
       !("bootstrapCapabilityDevice" in value && /^\d+$/u.test(String(value.bootstrapCapabilityDevice))) ||
       !("bootstrapCapabilityInode" in value && /^\d+$/u.test(String(value.bootstrapCapabilityInode))))
   )
@@ -681,7 +679,7 @@ async function acquireLocalStartLock(
     try {
       handle = await open(
         paths.startLock,
-        constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | (constants.O_NOFOLLOW ?? 0),
+        constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW,
         0o600,
       );
       created = true;
@@ -690,7 +688,7 @@ async function acquireLocalStartLock(
         !owned.isFile() ||
         owned.nlink !== 1 ||
         (process.platform !== "win32" && (owned.mode & 0o777) !== 0o600) ||
-        (process.getuid?.() !== undefined && owned.uid !== process.getuid?.())
+        (process.getuid?.() !== undefined && owned.uid !== process.getuid())
       )
         throw new Error("local daemon 시작 lock 신뢰 검증에 실패했습니다");
       await handle.writeFile(`${String(process.pid)}\n`);
@@ -713,17 +711,18 @@ async function acquireLocalStartLock(
       if (!(error instanceof Error) || !("code" in error) || error.code !== "EEXIST") throw error;
       let current: Awaited<ReturnType<typeof open>> | undefined;
       try {
-        current = await open(paths.startLock, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
+        current = await open(paths.startLock, constants.O_RDONLY | constants.O_NOFOLLOW);
         const metadata = await current.stat();
         if (
           !metadata.isFile() ||
           metadata.nlink !== 1 ||
           (process.platform !== "win32" && (metadata.mode & 0o777) !== 0o600) ||
-          (process.getuid?.() !== undefined && metadata.uid !== process.getuid?.())
+          (process.getuid?.() !== undefined && metadata.uid !== process.getuid())
         )
-          throw new Error("local daemon 시작 lock 신뢰 검증에 실패했습니다");
+          throw new Error("local daemon 시작 lock 신뢰 검증에 실패했습니다", { cause: error });
         const owner = (await current.readFile("utf8")).trim();
-        if (!/^[1-9][0-9]*$/u.test(owner)) throw new Error("local daemon 시작 lock owner가 유효하지 않습니다");
+        if (!/^[1-9][0-9]*$/u.test(owner))
+          throw new Error("local daemon 시작 lock owner가 유효하지 않습니다", { cause: error });
         if (!processExists(Number(owner))) {
           await current.close();
           current = undefined;
@@ -1025,7 +1024,7 @@ export class LocalDaemonManager {
       },
       Math.min(remaining, 2_147_483_647),
     );
-    this.#bootstrapCapabilityTimer.unref?.();
+    this.#bootstrapCapabilityTimer.unref();
   }
 
   async start(): Promise<{

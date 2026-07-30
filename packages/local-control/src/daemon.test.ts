@@ -425,7 +425,9 @@ describe("공용 local daemon 제어", () => {
     const paths = resolveLocalPaths({ HOME: root });
     const files = (await readdir(paths.bootstrapDirectory)).filter((entry) => entry.endsWith(".cap"));
     expect(files).toHaveLength(1);
-    const metadata = await stat(join(paths.bootstrapDirectory, files[0]!));
+    const capabilityFile = files[0];
+    if (!capabilityFile) throw new Error("bootstrap capability 파일이 없습니다");
+    const metadata = await stat(join(paths.bootstrapDirectory, capabilityFile));
     expect(metadata).toMatchObject({ size: 0 });
     expect(metadata.mode & 0o777).toBe(0o600);
     expect(cryptoBuffers.values.at(-1)).toEqual(Buffer.alloc(32));
@@ -475,8 +477,8 @@ describe("공용 local daemon 제어", () => {
     }
     const paths = resolveLocalPaths({ HOME: root });
     const capabilityFile = (await readdir(paths.bootstrapDirectory)).find((entry) => entry.endsWith(".cap"));
-    expect(capabilityFile).toBeDefined();
-    const capabilityPath = join(paths.bootstrapDirectory, capabilityFile!);
+    if (!capabilityFile) throw new Error("bootstrap capability 파일이 없습니다");
+    const capabilityPath = join(paths.bootstrapDirectory, capabilityFile);
     await writeFile(capabilityPath, Buffer.alloc(33, 51));
     releaseCleanup?.();
 
@@ -637,10 +639,11 @@ describe("공용 local daemon 제어", () => {
       expect(cliManager.takeBootstrapCapability()).toBe(capabilityBytes.toString("base64url"));
       expect(desktopManager.takeBootstrapCapability()).toBe(capabilityBytes.toString("base64url"));
     } finally {
-      if (childPid !== undefined) {
+      const pid = childPid;
+      if (pid !== undefined) {
         await cliManager.stop().catch(() => {
           try {
-            process.kill(childPid!, "SIGKILL");
+            process.kill(pid, "SIGKILL");
           } catch {
             // 이미 종료된 test child입니다.
           }
@@ -796,8 +799,8 @@ describe("공용 local daemon 제어", () => {
     const retired = (await readdir(paths.stateDirectory)).find((entry) =>
       entry.startsWith("server.start.lock.retired-"),
     );
-    expect(retired).toBeDefined();
-    expect(await readFile(join(paths.stateDirectory, retired!), "utf8")).toBe("replacement-lock\n");
+    if (!retired) throw new Error("retired 시작 lock 파일이 없습니다");
+    expect(await readFile(join(paths.stateDirectory, retired), "utf8")).toBe("replacement-lock\n");
   });
 
   it("세 runtime identity와 endpoint가 일치하는 준비된 v3 process를 재사용한다", async () => {

@@ -7,6 +7,7 @@ import { redactSecrets } from "@massion/evidence";
 import type {
   DeliveryPrerequisiteReader,
   EngineeringDelivery,
+  EngineeringDeliveryLeaseOwnership,
   EngineeringDeliveryError,
   EngineeringAssuranceRecipe,
   EngineeringDeliveryResult,
@@ -618,7 +619,12 @@ export class EngineeringDeliveryStore {
 
   public async resetForRetry(
     context: TenantContext,
-    input: { readonly commandId: string; readonly deliveryId: string; readonly expectedVersion: number },
+    input: {
+      readonly commandId: string;
+      readonly deliveryId: string;
+      readonly expectedVersion: number;
+      readonly ownership: EngineeringDeliveryLeaseOwnership;
+    },
   ): Promise<EngineeringDeliveryResult> {
     await this.organizations.verifyTenantContext(context);
     const requestHash = hashRequest({ operation: "reset-for-retry", input });
@@ -634,10 +640,16 @@ export class EngineeringDeliveryStore {
         throw new Error(`부분 Delivery만 preparing으로 rollback할 수 있습니다: ${current.status}`);
       }
       const [activeLeases] = await transaction.query<[DeliveryLeaseRecord[]]>(
-        "SELECT lease_id FROM engineering_path_lease WHERE organization_id = $organization_id AND delivery_id = $delivery_id AND status = 'active' LIMIT 1;",
+        "SELECT lease_id, acquire_command_id FROM engineering_path_lease WHERE organization_id = $organization_id AND delivery_id = $delivery_id AND (status = 'active' OR status = 'expired');",
         { organization_id: context.organizationId, delivery_id: input.deliveryId },
       );
-      if (activeLeases[0]) throw new Error("active path lease가 있는 Delivery는 rollback할 수 없습니다");
+      if (
+        activeLeases.length !== 1 ||
+        activeLeases[0].lease_id !== input.ownership.leaseId ||
+        activeLeases[0].acquire_command_id !== input.ownership.ownerCommandId
+      ) {
+        throw new Error("active path lease가 있는 Delivery는 rollback할 수 없습니다");
+      }
       const [updated] = await transaction.query<[DeliveryRecord[]]>(
         "UPDATE engineering_delivery SET status = 'preparing', version = $version, workspace_id = NONE, branch_ref = NONE, commit_sha = NONE, test_patch_hash = NONE, implementation_patch_hash = NONE, change_set_hash = NONE, red_evidence_id = NONE, green_evidence_id = NONE, validation_evidence_ids = [], assurance_recipe_json = NONE, error_json = NONE, updated_at = time::now() WHERE organization_id = $organization_id AND delivery_id = $delivery_id AND version = $expected_version RETURN AFTER;",
         {

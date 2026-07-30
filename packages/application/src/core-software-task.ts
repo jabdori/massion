@@ -348,6 +348,10 @@ export class CoreSoftwareTaskAdapter implements CoreSoftwareTaskPort {
               observedLeaseExpired = observedLease !== undefined && pathLeaseExpired(observedLease);
             }
           }
+          if (!observedLease) {
+            lease = await this.claimLease(context, input, config, delivery, leaseCommandId);
+            claimedBeforeRecovery = true;
+          }
         } catch (error) {
           if (isCommandCleanupFailure(error)) {
             return { outcome: "blocked", reason: "software-delivery-command-cleanup-failed" };

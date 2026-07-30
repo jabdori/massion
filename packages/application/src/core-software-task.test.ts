@@ -656,6 +656,96 @@ describe("CoreSoftwareTaskAdapter", () => {
     });
   });
 
+  it("continuing non-terminal에 lease가 없으면 Recovery 전에 allowed path lease를 claim하고 owner를 전달한다", async () => {
+    const calls: string[] = [];
+    const ownerCommandId = "software-no-lease-run:delivery:lease:6:task:software-task";
+    let delivery = {
+      deliveryId: "delivery-no-lease",
+      version: 2,
+      status: "test_applied",
+      startCommandId: "software-no-lease-run:delivery:task:software-task:engineering",
+    };
+    const adapter = new CoreSoftwareTaskAdapter({
+      works: {
+        getWork: async () => ({ revision: 3 }),
+        listTasks: async () => [{ ...task, status: "running", revision: 2 }],
+      },
+      deliveries: { findByStartCommand: async () => delivery, get: async () => delivery },
+      leases: {
+        list: async () => {
+          calls.push("list");
+          return [];
+        },
+        claim: async (_context: unknown, input: { commandId: string; pathPrefixes: readonly string[] }) => {
+          calls.push(`claim:${input.commandId}`);
+          expect(input.pathPrefixes).toEqual(request.softwareDelivery.allowedPaths);
+          return {
+            lease: {
+              leaseId: "lease-no-lease",
+              deliveryId: delivery.deliveryId,
+              repositoryId: request.softwareDelivery.repositoryId,
+              acquireCommandId: input.commandId,
+              status: "active",
+              version: 1,
+              expiresAt: "2099-01-01T00:00:00.000Z",
+            },
+          };
+        },
+        renew: async () => ({
+          lease: {
+            leaseId: "lease-no-lease",
+            deliveryId: delivery.deliveryId,
+            repositoryId: request.softwareDelivery.repositoryId,
+            acquireCommandId: ownerCommandId,
+            status: "active",
+            version: 2,
+            expiresAt: "2099-01-01T00:00:00.000Z",
+          },
+        }),
+      },
+      recovery: {
+        recover: async (_context: unknown, input: { commandId: string; preserveLeaseCommandId?: string }) => {
+          if (input.commandId.endsWith(":recovery")) {
+            calls.push(`recover:${input.preserveLeaseCommandId ?? "none"}`);
+            delivery = { ...delivery, version: 3, status: "preparing" };
+          }
+          return { delivery, result: "resume_required" };
+        },
+      },
+      proposals: {
+        propose: async () => ({
+          testPatch: "test",
+          implementationPatch: "implementation",
+          focusedCommand: {},
+          redFailureMarker: "RED",
+          validationCommands: [],
+          commitMessage: "fix: preserve preclaimed lease",
+        }),
+      },
+      engine: {
+        execute: async (_context: unknown, input: { pathLease?: { ownerCommandId?: string } }) => {
+          calls.push(`tdd:${input.pathLease?.ownerCommandId ?? "none"}`);
+          delivery = { ...delivery, version: 4, status: "committed" };
+          return { delivery };
+        },
+      },
+      finalizer: { finalize: async () => ({}) },
+    } as never);
+
+    await expect(
+      adapter.executeTask(context, {
+        runId: "software-no-lease-run",
+        leaseGeneration: 6,
+        commandId: "software-no-lease-command",
+        correlationId: "software-no-lease-correlation",
+        workId: "software-work",
+        task,
+        request,
+      }),
+    ).resolves.toEqual({ outcome: "completed" });
+    expect(calls).toEqual(["list", `claim:${ownerCommandId}`, `recover:${ownerCommandId}`, `tdd:${ownerCommandId}`]);
+  });
+
   it("resume_required 중간 step은 Recovery가 preparing으로 rollback한 뒤 새 owner claim으로 재시작한다", async () => {
     const calls: string[] = [];
     let delivery = {

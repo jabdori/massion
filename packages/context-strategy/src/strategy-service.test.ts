@@ -170,6 +170,8 @@ describe("Context부터 Work projection까지의 StrategyService", () => {
     const first = await strategy.plan(context, input("strategy-context-first"));
     const changedContent = "계획과 복구를 함께 세워주세요";
     const changed = input("strategy-context-changed");
+    const source = changed.context.sources[0];
+    if (!source) throw new Error("변경할 Context source가 없습니다");
 
     const changedRequest = {
       ...changed,
@@ -177,7 +179,7 @@ describe("Context부터 Work projection까지의 StrategyService", () => {
         ...changed.context,
         sources: [
           {
-            ...changed.context.sources[0]!,
+            ...source,
             revision: "2",
             content: changedContent,
             contentHash: hashContextContent(changedContent),

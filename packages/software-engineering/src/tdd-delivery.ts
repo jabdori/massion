@@ -125,15 +125,18 @@ export class TddDeliveryEngine {
       let stopped = false;
       let timer: NodeJS.Timeout | undefined;
       let heartbeat: Promise<void> | undefined;
-      let heartbeatError: unknown;
+      let heartbeatError: Error | undefined;
       const schedule = (): void => {
         if (!input.pathLease) return;
         timer = setTimeout(
           () => {
             heartbeat = renewOwnership()
               .catch((error: unknown) => {
-                heartbeatError = error;
-                controller.abort(error);
+                heartbeatError =
+                  error instanceof Error
+                    ? error
+                    : new Error("Engineering path lease heartbeat 갱신에 실패했습니다", { cause: error });
+                controller.abort(heartbeatError);
               })
               .finally(() => {
                 if (!stopped && heartbeatError === undefined) schedule();
@@ -153,7 +156,10 @@ export class TddDeliveryEngine {
         } catch (error) {
           if (heartbeat) await heartbeat;
           if (error instanceof Error && error.name === "EngineeringCommandCleanupError") throw error;
-          throw heartbeatError ?? error;
+          throw (
+            heartbeatError ??
+            (error instanceof Error ? error : new Error("Engineering command 실행에 실패했습니다", { cause: error }))
+          );
         }
       } finally {
         stopped = true;

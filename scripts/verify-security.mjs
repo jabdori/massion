@@ -46,7 +46,8 @@ export function parseAuditReport(output, scope) {
   try {
     return assertAuditReport(JSON.parse(output), scope);
   } catch (error) {
-    if (error instanceof SyntaxError) throw new Error(`${scope} audit report JSON이 유효하지 않습니다`);
+    if (error instanceof SyntaxError)
+      throw new Error(`${scope} audit report JSON이 유효하지 않습니다`, { cause: error });
     throw error;
   }
 }

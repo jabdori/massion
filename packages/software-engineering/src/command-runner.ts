@@ -240,7 +240,9 @@ export class ConfinedCommandRunner {
         }, 100);
         forceKillTimer.unref();
       };
-      const abort = (): void => stop("abort");
+      const abort = (): void => {
+        stop("abort");
+      };
       input.signal?.addEventListener("abort", abort, { once: true });
       if (input.signal?.aborted) abort();
       const collect = (target: Buffer[], hash: ReturnType<typeof createHash>) => (chunk: Buffer) => {
@@ -307,7 +309,11 @@ export class ConfinedCommandRunner {
             };
             resolvePromise({ evidence, output });
           } catch (error) {
-            reject(error instanceof Error ? error : new Error("Managed command process group 정리에 실패했습니다"));
+            reject(
+              error instanceof Error
+                ? error
+                : new Error("Managed command process group 정리에 실패했습니다", { cause: error }),
+            );
           }
         })();
       });

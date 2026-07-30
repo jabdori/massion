@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 
 import type { TenantContext } from "@massion/identity";
 
-import type { EngineeringDelivery } from "./contracts.js";
+import type { EngineeringDelivery, EngineeringDeliveryLeaseOwnership } from "./contracts.js";
 import { EngineeringDeliveryStore } from "./delivery-store.js";
 import { GitWorkspaceManager } from "./git-workspace.js";
 import type { EngineeringMetricStore } from "./metrics.js";
@@ -78,15 +78,14 @@ export class EngineeringDeliveryRecovery {
     if (delivery.repositoryId !== input.repositoryId) {
       throw new Error("Recovery repository가 delivery 소유 계보와 다릅니다");
     }
+    const terminalDelivery = ["committed", "failed", "cancelled"].includes(delivery.status);
     const recoveryLeaseCommandId = input.preserveLeaseCommandId ?? input.cleanupLeaseCommandId;
     const deliveryLeases = await this.leases.list(context, input.repositoryId);
+    const activeDeliveryLeases = deliveryLeases.filter(
+      (lease) => lease.deliveryId === delivery.deliveryId && (lease.status === "active" || lease.status === "expired"),
+    );
     let recoveryLease = recoveryLeaseCommandId
-      ? deliveryLeases.find(
-          (lease) =>
-            lease.deliveryId === delivery.deliveryId &&
-            (lease.status === "active" || lease.status === "expired") &&
-            lease.acquireCommandId === recoveryLeaseCommandId,
-        )
+      ? activeDeliveryLeases.find((lease) => lease.acquireCommandId === recoveryLeaseCommandId)
       : undefined;
     const cleanupAlreadyReleased =
       input.cleanupLeaseCommandId !== undefined &&
@@ -96,13 +95,25 @@ export class EngineeringDeliveryRecovery {
           lease.status === "released" &&
           lease.acquireCommandId === input.cleanupLeaseCommandId,
       );
-    if (recoveryLeaseCommandId && !recoveryLease && !cleanupAlreadyReleased) {
+    const releasedCleanupReplay =
+      input.preserveLeaseCommandId === undefined &&
+      input.cleanupLeaseCommandId !== undefined &&
+      delivery.status === "preparing" &&
+      cleanupAlreadyReleased &&
+      activeDeliveryLeases.length === 0;
+    if (
+      ((!terminalDelivery || activeDeliveryLeases.length > 0) &&
+        !releasedCleanupReplay &&
+        (!recoveryLeaseCommandId || !recoveryLease)) ||
+      activeDeliveryLeases.some((lease) => lease.acquireCommandId !== recoveryLeaseCommandId) ||
+      (recoveryLeaseCommandId && !recoveryLease && !releasedCleanupReplay)
+    ) {
       throw new EngineeringPathLeaseOwnershipError("Recovery path lease owner fence가 일치하지 않습니다");
     }
     const recoveryLeaseId = recoveryLease?.leaseId;
     const assertOwnership = async (expectedDelivery?: EngineeringDelivery): Promise<void> => {
       if (input.signal?.aborted) throw new EngineeringPathLeaseOwnershipError("Recovery owner 실행이 중지됐습니다");
-      if (recoveryLeaseCommandId) {
+      if (recoveryLeaseCommandId && !releasedCleanupReplay) {
         const current = (await this.leases.list(context, input.repositoryId)).find(
           (lease) =>
             lease.leaseId === recoveryLeaseId &&
@@ -116,8 +127,15 @@ export class EngineeringDeliveryRecovery {
         recoveryLease = current;
         const expiresAt = new Date(String(current.expiresAt)).getTime();
         if (
+          input.preserveLeaseCommandId !== undefined &&
+          (current.status !== "active" || !Number.isFinite(expiresAt) || expiresAt <= Date.now())
+        ) {
+          throw new EngineeringPathLeaseOwnershipError("Recovery preserve path lease owner가 만료됐습니다");
+        }
+        if (
           current.status === "active" &&
-          (!Number.isFinite(expiresAt) || expiresAt > Date.now()) &&
+          Number.isFinite(expiresAt) &&
+          expiresAt > Date.now() &&
           input.leaseTtlMs !== undefined
         ) {
           const renewed = (
@@ -132,7 +150,10 @@ export class EngineeringDeliveryRecovery {
           if (
             renewed.leaseId !== current.leaseId ||
             renewed.acquireCommandId !== recoveryLeaseCommandId ||
-            renewed.status !== "active"
+            renewed.status !== "active" ||
+            (input.preserveLeaseCommandId !== undefined &&
+              (!Number.isFinite(new Date(String(renewed.expiresAt)).getTime()) ||
+                new Date(String(renewed.expiresAt)).getTime() <= Date.now()))
           ) {
             throw new EngineeringPathLeaseOwnershipError("Recovery path lease renew 결과의 owner fence가 다릅니다");
           }
@@ -164,6 +185,11 @@ export class EngineeringDeliveryRecovery {
     };
     const ownership = () =>
       recoveryLease ? { leaseId: recoveryLease.leaseId, ownerCommandId: recoveryLease.acquireCommandId } : undefined;
+    const requiredOwnership = (): EngineeringDeliveryLeaseOwnership => {
+      const current = ownership();
+      if (!current) throw new EngineeringPathLeaseOwnershipError("Recovery path lease owner fence가 필요합니다");
+      return current;
+    };
     await assertOwnership();
     await this.workspaces.verifyRepositoryRoot(input.repositoryRoot, delivery.repositoryRootRealPathHash);
     let result: EngineeringRecoveryResult;
@@ -239,7 +265,14 @@ export class EngineeringDeliveryRecovery {
           result = await this.resume(context, delivery);
           await assertOwnership();
           if (result === "resume_required") {
-            delivery = await this.rollbackForRetry(context, delivery, input, assertOwnership, cleanupAlreadyReleased);
+            delivery = await this.rollbackForRetry(
+              context,
+              delivery,
+              input,
+              requiredOwnership(),
+              assertOwnership,
+              cleanupAlreadyReleased,
+            );
           }
         } else {
           delivery = await this.fail(
@@ -260,7 +293,14 @@ export class EngineeringDeliveryRecovery {
         result = await this.resume(context, delivery);
         await assertOwnership();
         if (result === "resume_required") {
-          delivery = await this.rollbackForRetry(context, delivery, input, assertOwnership, cleanupAlreadyReleased);
+          delivery = await this.rollbackForRetry(
+            context,
+            delivery,
+            input,
+            requiredOwnership(),
+            assertOwnership,
+            cleanupAlreadyReleased,
+          );
         }
       } else {
         delivery = await this.fail(
@@ -359,8 +399,10 @@ export class EngineeringDeliveryRecovery {
       readonly commandId: string;
       readonly repositoryRoot: string;
       readonly repositoryId: string;
+      readonly preserveLeaseCommandId?: string;
       readonly cleanupLeaseCommandId?: string;
     },
+    ownership: EngineeringDeliveryLeaseOwnership,
     assertOwnership: (expectedDelivery?: EngineeringDelivery) => Promise<void>,
     cleanupAlreadyReleased: boolean,
   ): Promise<EngineeringDelivery> {
@@ -369,18 +411,26 @@ export class EngineeringDeliveryRecovery {
       delivery,
       input.repositoryRoot,
       input.repositoryId,
-      undefined,
+      ownership.ownerCommandId,
       input.cleanupLeaseCommandId,
       assertOwnership,
       cleanupAlreadyReleased,
     );
-    return (
-      await this.deliveries.resetForRetry(context, {
-        commandId: `${input.commandId}:rollback-for-retry`,
+    const reset = await this.deliveries.resetForRetry(context, {
+      commandId: `${input.commandId}:rollback-for-retry`,
+      deliveryId: delivery.deliveryId,
+      expectedVersion: delivery.version,
+      ownership,
+    });
+    if (input.preserveLeaseCommandId === undefined && input.cleanupLeaseCommandId !== undefined) {
+      await this.leases.release(context, {
+        commandId: `${delivery.startCommandId}:recovery-release-lease:${ownership.leaseId}`,
+        leaseId: ownership.leaseId,
         deliveryId: delivery.deliveryId,
-        expectedVersion: delivery.version,
-      })
-    ).delivery;
+        expectedAcquireCommandId: ownership.ownerCommandId,
+      });
+    }
+    return reset.delivery;
   }
 
   private async cleanup(
@@ -390,7 +440,7 @@ export class EngineeringDeliveryRecovery {
     repositoryId: string,
     preserveLeaseCommandId?: string,
     cleanupLeaseCommandId?: string,
-    assertOwnership: (expectedDelivery?: EngineeringDelivery) => Promise<void> = async () => undefined,
+    assertOwnership: (expectedDelivery?: EngineeringDelivery) => Promise<void> = () => Promise.resolve(),
     cleanupAlreadyReleased = false,
   ): Promise<void> {
     if (cleanupAlreadyReleased) return;

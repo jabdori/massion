@@ -14,6 +14,7 @@ import {
   EngineeringDeliveryRecovery,
   EngineeringDeliveryStore,
   EngineeringMetricStore,
+  EngineeringPathLeaseOwnershipError,
   EngineeringPathLeaseStore,
   GitWorkspaceManager,
   validateUnifiedPatch,
@@ -101,6 +102,13 @@ describe("Interrupted Engineering Delivery recovery", { timeout: 60_000 }, () =>
 
   it("등록 repository와 다른 실제 root 경로는 delivery 상태를 바꾸기 전에 거부한다", async () => {
     const { current, workspace } = await recoverableDelivery("wrong-root", "test_applied");
+    await leases.acquire(context, {
+      commandId: "wrong-root-lease",
+      deliveryId: current.deliveryId,
+      repositoryId: "repository-1",
+      pathPrefixes: ["src"],
+      ttlMs: 60_000,
+    });
 
     await expect(
       new EngineeringDeliveryRecovery(deliveries, manager, leases, metrics).recover(context, {
@@ -108,6 +116,7 @@ describe("Interrupted Engineering Delivery recovery", { timeout: 60_000 }, () =>
         deliveryId: current.deliveryId,
         repositoryRoot: workspaceRoot,
         repositoryId: "repository-1",
+        preserveLeaseCommandId: "wrong-root-lease",
       }),
     ).rejects.toThrow("root real path hash");
     expect((await deliveries.get(context, current.deliveryId)).status).toBe("test_applied");
@@ -220,32 +229,203 @@ describe("Interrupted Engineering Delivery recovery", { timeout: 60_000 }, () =>
     return { current, workspace };
   }
 
-  it("workspace 생성 직후 crash는 delivery를 실패 처리하고 workspace·lease를 정리한다", async () => {
-    const current = await delivery("workspace", "preparing");
+  it("lease가 없는 non-terminal Delivery도 owner ID 없이는 상태와 workspace를 보존하고 거부한다", async () => {
+    const current = await delivery("workspace-no-lease", "preparing");
+    const workspace = await manager.prepare({ repositoryRoot, baseRevision, deliveryId: current.deliveryId });
+    const resume = vi.fn().mockResolvedValue(undefined);
+
+    await expect(
+      new EngineeringDeliveryRecovery(deliveries, manager, leases, metrics, { resume }).recover(context, {
+        commandId: "recover-workspace-no-lease",
+        deliveryId: current.deliveryId,
+        repositoryRoot,
+        repositoryId: "repository-1",
+      }),
+    ).rejects.toBeInstanceOf(EngineeringPathLeaseOwnershipError);
+
+    expect((await deliveries.get(context, current.deliveryId)).status).toBe("preparing");
+    expect(await leases.list(context, "repository-1")).toEqual([]);
+    expect(await access(workspace.workspacePath).then(() => true)).toBe(true);
+    expect(resume).not.toHaveBeenCalled();
+    await manager.remove(workspace);
+  });
+
+  it("active lease의 owner ID가 없으면 delivery·lease·workspace를 그대로 보존하고 거부한다", async () => {
+    const current = await delivery("workspace-owner-missing", "preparing");
     const workspace = await manager.prepare({ repositoryRoot, baseRevision, deliveryId: current.deliveryId });
     await leases.acquire(context, {
-      commandId: "workspace-lease",
+      commandId: "workspace-owner-missing-lease",
       deliveryId: current.deliveryId,
       repositoryId: "repository-1",
       pathPrefixes: ["src"],
       ttlMs: 60_000,
     });
     const resume = vi.fn().mockResolvedValue(undefined);
-    const recovered = await new EngineeringDeliveryRecovery(deliveries, manager, leases, metrics, { resume }).recover(
-      context,
-      {
-        commandId: "recover-workspace",
+
+    await expect(
+      new EngineeringDeliveryRecovery(deliveries, manager, leases, metrics, { resume }).recover(context, {
+        commandId: "recover-workspace-owner-missing",
         deliveryId: current.deliveryId,
         repositoryRoot,
         repositoryId: "repository-1",
-      },
-    );
+      }),
+    ).rejects.toBeInstanceOf(EngineeringPathLeaseOwnershipError);
 
-    expect(recovered).toMatchObject({ result: "cleaned_terminal", delivery: { status: "failed" } });
-    expect(recovered.delivery.error?.category).toBe("recovery_preparing_interrupted");
+    expect((await deliveries.get(context, current.deliveryId)).status).toBe("preparing");
+    expect((await leases.list(context, "repository-1"))[0]?.status).toBe("active");
+    expect(await access(workspace.workspacePath).then(() => true)).toBe(true);
     expect(resume).not.toHaveBeenCalled();
-    expect((await leases.list(context, "repository-1"))[0]?.status).toBe("released");
+    await manager.remove(workspace);
+  });
+
+  it("expired cleanup owner는 workspace·owned reset·release 뒤 event 실패를 중복 파괴 없이 재생한다", async () => {
+    const { current, workspace } = await recoverableDelivery("workspace-owner-match", "test_applied");
+    const { lease } = await leases.acquire(context, {
+      commandId: "workspace-owner-match-lease",
+      deliveryId: current.deliveryId,
+      repositoryId: "repository-1",
+      pathPrefixes: ["src"],
+      ttlMs: 1_000,
+    });
+    const other = await delivery("workspace-owner-other", "preparing");
+    await leases.acquire(context, {
+      commandId: "workspace-owner-other-lease",
+      deliveryId: other.deliveryId,
+      repositoryId: "repository-1",
+      pathPrefixes: ["docs"],
+      ttlMs: 60_000,
+    });
+    await database.query(
+      "UPDATE engineering_path_lease SET status = 'expired', version = $version WHERE organization_id = $organization_id AND lease_id = $lease_id;",
+      { organization_id: context.organizationId, lease_id: lease.leaseId, version: lease.version + 1 },
+    );
+    const calls: string[] = [];
+    const removeWorkspace = manager.removeDeliveryWorkspaceIfExists.bind(manager);
+    vi.spyOn(manager, "removeDeliveryWorkspaceIfExists").mockImplementation(async (input) => {
+      calls.push("workspace");
+      await removeWorkspace(input);
+    });
+    const resetForRetry = deliveries.resetForRetry.bind(deliveries);
+    vi.spyOn(deliveries, "resetForRetry").mockImplementation(async (resetContext, input) => {
+      calls.push("reset");
+      expect(input.ownership).toEqual({ leaseId: lease.leaseId, ownerCommandId: lease.acquireCommandId });
+      return await resetForRetry(resetContext, input);
+    });
+    const release = leases.release.bind(leases);
+    const releaseSpy = vi.spyOn(leases, "release").mockImplementation(async (releaseContext, input) => {
+      calls.push("release");
+      expect(input).toMatchObject({
+        commandId: `${current.startCommandId}:recovery-release-lease:${lease.leaseId}`,
+        leaseId: lease.leaseId,
+        deliveryId: current.deliveryId,
+        expectedAcquireCommandId: lease.acquireCommandId,
+      });
+      return await release(releaseContext, input);
+    });
+    const recordRecoveryEvent = deliveries.recordRecoveryEvent.bind(deliveries);
+    vi.spyOn(deliveries, "recordRecoveryEvent")
+      .mockImplementationOnce(async () => {
+        calls.push("event");
+        throw new Error("event unavailable");
+      })
+      .mockImplementation(async (eventContext, input) => {
+        calls.push("event-retry");
+        await recordRecoveryEvent(eventContext, input);
+      });
+    const recovery = new EngineeringDeliveryRecovery(deliveries, manager, leases, metrics);
+    const recoveryInput = {
+      commandId: "recover-workspace-owner-match",
+      deliveryId: current.deliveryId,
+      repositoryRoot,
+      repositoryId: "repository-1",
+      cleanupLeaseCommandId: lease.acquireCommandId,
+    } as const;
+
+    await expect(recovery.recover(context, recoveryInput)).rejects.toThrow("event unavailable");
+
+    expect(calls).toEqual(["workspace", "reset", "release", "event"]);
+    expect((await deliveries.get(context, current.deliveryId)).status).toBe("preparing");
+    expect(
+      Object.fromEntries(
+        (await leases.list(context, "repository-1")).map((candidate) => [candidate.acquireCommandId, candidate.status]),
+      ),
+    ).toMatchObject({
+      "workspace-owner-match-lease": "released",
+      "workspace-owner-other-lease": "active",
+    });
     await expect(access(workspace.workspacePath)).rejects.toMatchObject({ code: "ENOENT" });
+
+    await expect(recovery.recover(context, recoveryInput)).resolves.toMatchObject({
+      result: "resume_required",
+      delivery: { status: "preparing" },
+    });
+    expect(calls).toEqual(["workspace", "reset", "release", "event", "event-retry"]);
+    expect(
+      Object.fromEntries(
+        (await leases.list(context, "repository-1")).map((candidate) => [candidate.acquireCommandId, candidate.status]),
+      ),
+    ).toMatchObject({
+      "workspace-owner-match-lease": "released",
+      "workspace-owner-other-lease": "active",
+    });
+    releaseSpy.mockRestore();
+
+    const partial = await recoverableDelivery("released-intermediate", "test_applied");
+    const { lease: partialLease } = await leases.acquire(context, {
+      commandId: "released-intermediate-lease",
+      deliveryId: partial.current.deliveryId,
+      repositoryId: "repository-1",
+      pathPrefixes: ["src/intermediate"],
+      ttlMs: 60_000,
+    });
+    await leases.release(context, {
+      commandId: "released-intermediate-release",
+      leaseId: partialLease.leaseId,
+      deliveryId: partial.current.deliveryId,
+      expectedAcquireCommandId: partialLease.acquireCommandId,
+    });
+    await expect(
+      recovery.recover(context, {
+        commandId: "recover-released-intermediate",
+        deliveryId: partial.current.deliveryId,
+        repositoryRoot,
+        repositoryId: "repository-1",
+        cleanupLeaseCommandId: partialLease.acquireCommandId,
+      }),
+    ).rejects.toBeInstanceOf(EngineeringPathLeaseOwnershipError);
+    expect((await deliveries.get(context, partial.current.deliveryId)).status).toBe("test_applied");
+    expect(await access(partial.workspace.workspacePath).then(() => true)).toBe(true);
+    await manager.remove(partial.workspace);
+  });
+
+  it("불일치하는 cleanup owner는 정리를 거부한다", async () => {
+    const current = await delivery("workspace-owner-mismatch", "preparing");
+    const workspace = await manager.prepare({ repositoryRoot, baseRevision, deliveryId: current.deliveryId });
+    await leases.acquire(context, {
+      commandId: "workspace-owner-mismatch-lease",
+      deliveryId: current.deliveryId,
+      repositoryId: "repository-1",
+      pathPrefixes: ["src"],
+      ttlMs: 60_000,
+    });
+    const recovery = new EngineeringDeliveryRecovery(deliveries, manager, leases, metrics);
+
+    await expect(
+      recovery.recover(context, {
+        commandId: "recover-workspace-owner-wrong",
+        deliveryId: current.deliveryId,
+        repositoryRoot,
+        repositoryId: "repository-1",
+        cleanupLeaseCommandId: "workspace-owner-wrong-lease",
+      }),
+    ).rejects.toBeInstanceOf(EngineeringPathLeaseOwnershipError);
+
+    expect((await deliveries.get(context, current.deliveryId)).status).toBe("preparing");
+    expect(
+      (await leases.list(context, "repository-1")).filter((lease) => lease.deliveryId === current.deliveryId),
+    ).toEqual([expect.objectContaining({ acquireCommandId: "workspace-owner-mismatch-lease", status: "active" })]);
+    expect(await access(workspace.workspacePath).then(() => true)).toBe(true);
+    await manager.remove(workspace);
   });
 
   it("RED·implementation crash 상태를 continuation에 정확히 위임한다", async () => {
@@ -253,6 +433,14 @@ describe("Interrupted Engineering Delivery recovery", { timeout: 60_000 }, () =>
     const resume = vi.fn().mockResolvedValue(undefined);
     for (const status of statuses) {
       const { current, workspace } = await recoverableDelivery(status, status);
+      const ownerCommandId = `recover-${status}-lease`;
+      await leases.acquire(context, {
+        commandId: ownerCommandId,
+        deliveryId: current.deliveryId,
+        repositoryId: "repository-1",
+        pathPrefixes: [`src/${status}`],
+        ttlMs: 60_000,
+      });
       const recovered = await new EngineeringDeliveryRecovery(deliveries, manager, leases, metrics, { resume }).recover(
         context,
         {
@@ -260,6 +448,7 @@ describe("Interrupted Engineering Delivery recovery", { timeout: 60_000 }, () =>
           deliveryId: current.deliveryId,
           repositoryRoot,
           repositoryId: "repository-1",
+          preserveLeaseCommandId: ownerCommandId,
         },
       );
       expect(recovered.result).toBe("resumed");
@@ -267,6 +456,210 @@ describe("Interrupted Engineering Delivery recovery", { timeout: 60_000 }, () =>
     }
     expect(resume.mock.calls.map((call) => call[1].status)).toEqual(statuses);
   }, 60_000);
+
+  it("resume_required rollback은 workspace를 지우되 preserve owner lease를 active로 유지한다", async () => {
+    const { current, workspace } = await recoverableDelivery("preserve-retry", "test_applied");
+    const ownerCommandId = "preserve-retry-lease";
+    await leases.acquire(context, {
+      commandId: ownerCommandId,
+      deliveryId: current.deliveryId,
+      repositoryId: "repository-1",
+      pathPrefixes: ["src"],
+      ttlMs: 60_000,
+    });
+
+    const recovered = await new EngineeringDeliveryRecovery(deliveries, manager, leases, metrics).recover(context, {
+      commandId: "recover-preserve-retry",
+      deliveryId: current.deliveryId,
+      repositoryRoot,
+      repositoryId: "repository-1",
+      preserveLeaseCommandId: ownerCommandId,
+    });
+
+    expect(recovered).toMatchObject({ result: "resume_required", delivery: { status: "preparing" } });
+    expect(
+      (await leases.list(context, "repository-1")).find((lease) => lease.deliveryId === current.deliveryId),
+    ).toMatchObject({ acquireCommandId: ownerCommandId, status: "active" });
+    await expect(access(workspace.workspacePath)).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("expired preserve owner는 workspace와 Delivery를 바꾸기 전에 거부한다", async () => {
+    const { current, workspace } = await recoverableDelivery("preserve-expired", "test_applied");
+    const ownerCommandId = "preserve-expired-lease";
+    const { lease } = await leases.acquire(context, {
+      commandId: ownerCommandId,
+      deliveryId: current.deliveryId,
+      repositoryId: "repository-1",
+      pathPrefixes: ["src/expired"],
+      ttlMs: 1_000,
+    });
+    await database.query(
+      "UPDATE engineering_path_lease SET status = 'expired', version = $version WHERE organization_id = $organization_id AND lease_id = $lease_id;",
+      { organization_id: context.organizationId, lease_id: lease.leaseId, version: lease.version + 1 },
+    );
+    const removeWorkspace = vi.spyOn(manager, "removeDeliveryWorkspaceIfExists");
+    const resetForRetry = vi.spyOn(deliveries, "resetForRetry");
+
+    await expect(
+      new EngineeringDeliveryRecovery(deliveries, manager, leases, metrics).recover(context, {
+        commandId: "recover-preserve-expired",
+        deliveryId: current.deliveryId,
+        repositoryRoot,
+        repositoryId: "repository-1",
+        preserveLeaseCommandId: ownerCommandId,
+      }),
+    ).rejects.toBeInstanceOf(EngineeringPathLeaseOwnershipError);
+
+    expect(removeWorkspace).not.toHaveBeenCalled();
+    expect(resetForRetry).not.toHaveBeenCalled();
+    expect((await deliveries.get(context, current.deliveryId)).status).toBe("test_applied");
+    expect(await access(workspace.workspacePath).then(() => true)).toBe(true);
+    await manager.remove(workspace);
+  });
+
+  it("진행 중 만료된 preserve owner는 rollback 직전 workspace와 Delivery를 보존하고 거부한다", async () => {
+    const { current, workspace } = await recoverableDelivery("preserve-elapsed", "test_applied");
+    const ownerCommandId = "preserve-elapsed-lease";
+    const { lease } = await leases.acquire(context, {
+      commandId: ownerCommandId,
+      deliveryId: current.deliveryId,
+      repositoryId: "repository-1",
+      pathPrefixes: ["src/elapsed"],
+      ttlMs: 1_000,
+    });
+    const inspectWorkspace = manager.inspectDeliveryWorkspace.bind(manager);
+    vi.spyOn(manager, "inspectDeliveryWorkspace").mockImplementationOnce(async (input) => {
+      const snapshot = await inspectWorkspace(input);
+      await database.query(
+        "UPDATE engineering_path_lease SET expires_at = type::datetime($expires_at) WHERE organization_id = $organization_id AND lease_id = $lease_id;",
+        {
+          organization_id: context.organizationId,
+          lease_id: lease.leaseId,
+          expires_at: new Date(Date.now() - 1_000).toISOString(),
+        },
+      );
+      return snapshot;
+    });
+    const removeWorkspace = vi.spyOn(manager, "removeDeliveryWorkspaceIfExists");
+    const resetForRetry = vi.spyOn(deliveries, "resetForRetry");
+
+    await expect(
+      new EngineeringDeliveryRecovery(deliveries, manager, leases, metrics).recover(context, {
+        commandId: "recover-preserve-elapsed",
+        deliveryId: current.deliveryId,
+        repositoryRoot,
+        repositoryId: "repository-1",
+        preserveLeaseCommandId: ownerCommandId,
+      }),
+    ).rejects.toBeInstanceOf(EngineeringPathLeaseOwnershipError);
+
+    expect(removeWorkspace).not.toHaveBeenCalled();
+    expect(resetForRetry).not.toHaveBeenCalled();
+    expect((await deliveries.get(context, current.deliveryId)).status).toBe("test_applied");
+    expect(await access(workspace.workspacePath).then(() => true)).toBe(true);
+    await manager.remove(workspace);
+  });
+
+  it("resetForRetry는 active·expired 단일 owner만 허용하고 0·복수·불일치를 거부한다", async () => {
+    const noActive = await delivery("retry-owner-none", "test_applied");
+    await expect(
+      deliveries.resetForRetry(context, {
+        commandId: "retry-owner-boundary-no-active",
+        deliveryId: noActive.deliveryId,
+        expectedVersion: noActive.version,
+        ownership: { leaseId: "missing-lease", ownerCommandId: "missing-owner" },
+      }),
+    ).rejects.toThrow("active path lease가 있는 Delivery는 rollback할 수 없습니다");
+
+    const active = await delivery("retry-owner-active", "test_applied");
+    const { lease: activeLease } = await leases.acquire(context, {
+      commandId: "retry-owner-boundary-lease",
+      deliveryId: active.deliveryId,
+      repositoryId: "repository-1",
+      pathPrefixes: ["src/active"],
+      ttlMs: 60_000,
+    });
+    const rejectedOwnerships = [
+      { leaseId: "wrong-lease", ownerCommandId: activeLease.acquireCommandId },
+      { leaseId: activeLease.leaseId, ownerCommandId: "wrong-owner" },
+    ] as const;
+
+    for (const [index, ownership] of rejectedOwnerships.entries()) {
+      await expect(
+        deliveries.resetForRetry(context, {
+          commandId: `retry-owner-boundary-rejected-${index}`,
+          deliveryId: active.deliveryId,
+          expectedVersion: active.version,
+          ownership,
+        }),
+      ).rejects.toThrow("active path lease가 있는 Delivery는 rollback할 수 없습니다");
+    }
+
+    await expect(
+      deliveries.resetForRetry(context, {
+        commandId: "retry-owner-boundary-accepted",
+        deliveryId: active.deliveryId,
+        expectedVersion: active.version,
+        ownership: { leaseId: activeLease.leaseId, ownerCommandId: activeLease.acquireCommandId },
+      }),
+    ).resolves.toMatchObject({ delivery: { status: "preparing" } });
+    expect(
+      (await leases.list(context, "repository-1")).find((candidate) => candidate.leaseId === activeLease.leaseId),
+    ).toMatchObject({ status: "active" });
+
+    const expired = await delivery("retry-owner-expired", "test_applied");
+    const { lease: expiredLease } = await leases.acquire(context, {
+      commandId: "retry-owner-expired-lease",
+      deliveryId: expired.deliveryId,
+      repositoryId: "repository-1",
+      pathPrefixes: ["src/expired"],
+      ttlMs: 1_000,
+    });
+    await database.query(
+      "UPDATE engineering_path_lease SET status = 'expired', version = $version WHERE organization_id = $organization_id AND lease_id = $lease_id;",
+      {
+        organization_id: context.organizationId,
+        lease_id: expiredLease.leaseId,
+        version: expiredLease.version + 1,
+      },
+    );
+    expect(
+      (await leases.list(context, "repository-1")).find((candidate) => candidate.leaseId === expiredLease.leaseId),
+    ).toMatchObject({ status: "expired" });
+    await expect(
+      deliveries.resetForRetry(context, {
+        commandId: "retry-owner-expired-accepted",
+        deliveryId: expired.deliveryId,
+        expectedVersion: expired.version,
+        ownership: { leaseId: expiredLease.leaseId, ownerCommandId: expiredLease.acquireCommandId },
+      }),
+    ).resolves.toMatchObject({ delivery: { status: "preparing" } });
+
+    const multiple = await delivery("retry-owner-multiple", "test_applied");
+    await database.query("REMOVE INDEX engineering_path_lease_delivery ON engineering_path_lease;");
+    const { lease: firstLease } = await leases.acquire(context, {
+      commandId: "retry-owner-multiple-first",
+      deliveryId: multiple.deliveryId,
+      repositoryId: "repository-1",
+      pathPrefixes: ["src/multiple-first"],
+      ttlMs: 60_000,
+    });
+    await leases.acquire(context, {
+      commandId: "retry-owner-multiple-second",
+      deliveryId: multiple.deliveryId,
+      repositoryId: "repository-1",
+      pathPrefixes: ["src/multiple-second"],
+      ttlMs: 60_000,
+    });
+    await expect(
+      deliveries.resetForRetry(context, {
+        commandId: "retry-owner-multiple-rejected",
+        deliveryId: multiple.deliveryId,
+        expectedVersion: multiple.version,
+        ownership: { leaseId: firstLease.leaseId, ownerCommandId: firstLease.acquireCommandId },
+      }),
+    ).rejects.toThrow("active path lease가 있는 Delivery는 rollback할 수 없습니다");
+  });
 
   it("저장된 test patch hash와 staged diff가 다르면 재개하지 않고 실패 처리한다", async () => {
     const current = await delivery("mismatch", "test_applied");
@@ -284,6 +677,13 @@ describe("Interrupted Engineering Delivery recovery", { timeout: 60_000 }, () =>
         { allowedPaths: ["src"] },
       ),
     );
+    await leases.acquire(context, {
+      commandId: "mismatch-lease",
+      deliveryId: current.deliveryId,
+      repositoryId: "repository-1",
+      pathPrefixes: ["src"],
+      ttlMs: 60_000,
+    });
     const resume = vi.fn().mockResolvedValue(undefined);
 
     const recovered = await new EngineeringDeliveryRecovery(deliveries, manager, leases, metrics, { resume }).recover(
@@ -293,6 +693,7 @@ describe("Interrupted Engineering Delivery recovery", { timeout: 60_000 }, () =>
         deliveryId: current.deliveryId,
         repositoryRoot,
         repositoryId: "repository-1",
+        cleanupLeaseCommandId: "mismatch-lease",
       },
     );
 
@@ -328,6 +729,7 @@ describe("Interrupted Engineering Delivery recovery", { timeout: 60_000 }, () =>
         deliveryId: current.deliveryId,
         repositoryRoot,
         repositoryId: "repository-1",
+        cleanupLeaseCommandId: "continuation-terminal-lease",
       },
     );
 
@@ -364,6 +766,7 @@ describe("Interrupted Engineering Delivery recovery", { timeout: 60_000 }, () =>
       deliveryId: current.deliveryId,
       repositoryRoot,
       repositoryId: "repository-1",
+      cleanupLeaseCommandId: "commit-lease",
     });
     expect(recovered).toMatchObject({
       result: "reconciled_commit",
@@ -384,6 +787,7 @@ describe("Interrupted Engineering Delivery recovery", { timeout: 60_000 }, () =>
       deliveryId: current.deliveryId,
       repositoryRoot,
       repositoryId: "repository-1",
+      cleanupLeaseCommandId: "commit-lease",
     });
     expect(replayed).toMatchObject({ result: "reconciled_commit", delivery: { status: "committed" } });
     expect(await metrics.aggregate(context)).toContainEqual({
@@ -413,12 +817,20 @@ describe("Interrupted Engineering Delivery recovery", { timeout: 60_000 }, () =>
     await git(["add", "src/value.ts"], staged.workspace.workspacePath);
     await git(["switch", "--create", `massion/${current.deliveryId}`], staged.workspace.workspacePath);
     await git(["commit", "--no-verify", "-m", "tampered"], staged.workspace.workspacePath);
+    await leases.acquire(context, {
+      commandId: "branch-mismatch-lease",
+      deliveryId: current.deliveryId,
+      repositoryId: "repository-1",
+      pathPrefixes: ["src"],
+      ttlMs: 60_000,
+    });
 
     const recovered = await new EngineeringDeliveryRecovery(deliveries, manager, leases, metrics).recover(context, {
       commandId: "recover-branch-mismatch",
       deliveryId: current.deliveryId,
       repositoryRoot,
       repositoryId: "repository-1",
+      cleanupLeaseCommandId: "branch-mismatch-lease",
     });
 
     expect(recovered).toMatchObject({ result: "cleaned_terminal", delivery: { status: "failed" } });
@@ -455,6 +867,7 @@ describe("Interrupted Engineering Delivery recovery", { timeout: 60_000 }, () =>
       deliveryId: current.deliveryId,
       repositoryRoot,
       repositoryId: "repository-1",
+      cleanupLeaseCommandId: "branch-parent-lease",
     });
 
     expect(recovered).toMatchObject({ result: "cleaned_terminal", delivery: { status: "failed" } });
@@ -489,6 +902,7 @@ describe("Interrupted Engineering Delivery recovery", { timeout: 60_000 }, () =>
         deliveryId: current.deliveryId,
         repositoryRoot,
         repositoryId: "repository-1",
+        cleanupLeaseCommandId: `${terminal}-lease`,
       });
       expect(recovered.result).toBe("cleaned_terminal");
       expect((await leases.list(context, "repository-1"))[0]?.status).toBe("released");

@@ -578,13 +578,15 @@ describe("Strategy Generator", () => {
     await vi.waitFor(() => expect(executeStructured).toHaveBeenCalledTimes(1));
     releaseRunner();
     const results = await resultsPromise;
+    const firstResult = results[0];
+    if (!firstResult) throw new Error("첫 Strategy 생성 결과가 없습니다");
     const [events] = await database.query<[{ readonly event_type: string }[]]>(
       "SELECT event_type FROM strategy_event WHERE organization_id = $organization_id AND strategy_generation_id = $strategy_generation_id;",
-      { organization_id: context.organizationId, strategy_generation_id: results[0]!.strategyGenerationId },
+      { organization_id: context.organizationId, strategy_generation_id: firstResult.strategyGenerationId },
     );
 
-    expect(results[0]).toEqual(results[1]);
-    expect(results[0]?.status).toBe("generated");
+    expect(firstResult).toEqual(results[1]);
+    expect(firstResult.status).toBe("generated");
     expect(executeStructured).toHaveBeenCalledTimes(1);
     expect(events.filter((event) => event.event_type === "strategy_generation_started")).toHaveLength(1);
     expect(events.filter((event) => event.event_type === "strategy_generated")).toHaveLength(1);
