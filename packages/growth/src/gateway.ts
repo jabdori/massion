@@ -115,6 +115,17 @@ export class GrowthGateway {
   ): Promise<GrowthSuggestionDecision> {
     return await this.dependencies.reflections.reject(context, input);
   }
+  public async quarantine(
+    context: TenantContext,
+    input: {
+      readonly commandId: string;
+      readonly suggestionId: string;
+      readonly expectedRevision: number;
+      readonly reason: string;
+    },
+  ) {
+    return await this.dependencies.reflections.quarantine(context, input);
+  }
   public async listSuggestionDetails(
     context: TenantContext,
     input: ListGrowthSuggestionsInput = {},
@@ -134,8 +145,8 @@ export class GrowthGateway {
     );
   }
   public async getSuggestionDetails(context: TenantContext, suggestionId: string): Promise<GrowthSuggestionDetails> {
-    const details = await this.listSuggestionDetails(context, {});
-    const detail = details.find((candidate) => candidate.suggestion.suggestion_id === suggestionId);
+    const details = await this.listSuggestionDetails(context, { suggestionId, limit: 1 });
+    const detail = details[0];
     if (!detail) throw new Error("Growth Suggestion을 찾을 수 없습니다");
     return detail;
   }

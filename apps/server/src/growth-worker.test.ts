@@ -4,6 +4,7 @@ import { IdentityService, OrganizationService, type TenantContext } from "@massi
 import { metricObservationChecksum } from "@massion/assurance";
 import {
   GrowthAdoptionService,
+  GrowthEvaluationIntegrityError,
   GrowthEvaluationStore,
   GrowthGateway,
   GrowthTargetRegistry,
@@ -946,6 +947,115 @@ describe("Growth worker orphan suggestion recovery", () => {
       "claim",
     ]);
     expect(claim).toHaveBeenCalledOnce();
+  });
+
+  it("저장된 suggestion detail JSON SyntaxError는 정확히 한 번 격리한다", async () => {
+    const corrupt = orphanSuggestion("suggestion-detail-json-corrupt", "evaluated");
+    const gateway = resumableGateway();
+    let quarantined = false;
+    gateway.listSuggestions.mockImplementation(async () => (quarantined ? [] : [corrupt]));
+    gateway.getSuggestionDetails.mockRejectedValue(new SyntaxError("stored detail JSON is corrupt"));
+    gateway.quarantine.mockImplementation(async () => {
+      quarantined = true;
+      return { status: "superseded", actor: "system:growth-worker" };
+    });
+    const worker = new GrowthWorker({
+      database: orphanDatabase(),
+      organizations: {} as never,
+      triggers: {
+        requeueExpired: vi.fn().mockResolvedValue(0),
+        backfill: vi.fn().mockResolvedValue({ created: 0, existing: 0 }),
+        claim: vi.fn().mockResolvedValue({ outcome: "none" }),
+      } as never,
+      gateway: gateway as unknown as GrowthGateway,
+      runner: {} as never,
+    });
+
+    await worker.tick(context);
+    await worker.tick(context);
+
+    expect(gateway.quarantine).toHaveBeenCalledOnce();
+    expect(gateway.quarantine).toHaveBeenCalledWith(
+      context,
+      expect.objectContaining({
+        commandId: `growth:${corrupt.suggestion_id}:orphan-quarantine`,
+        suggestionId: corrupt.suggestion_id,
+      }),
+    );
+    expect(gateway.adopt).not.toHaveBeenCalled();
+  });
+
+  it.each(["inspectTarget", "adopt"] as const)(
+    "%s downstream SyntaxError는 격리하지 않고 다음 tick에서 재시도한다",
+    async (stage) => {
+      const suggestion = orphanSuggestion(`suggestion-${stage}-syntax`, "evaluated");
+      const gateway = resumableGateway([evaluatedDetails(suggestion)]);
+      if (stage === "inspectTarget") {
+        gateway.inspectTarget.mockRejectedValue(new SyntaxError("temporary target JSON failure"));
+      } else {
+        gateway.adopt.mockRejectedValue(new SyntaxError("temporary adoption JSON failure"));
+      }
+      const worker = new GrowthWorker({
+        database: orphanDatabase(),
+        organizations: {} as never,
+        triggers: {
+          requeueExpired: vi.fn().mockResolvedValue(0),
+          backfill: vi.fn().mockResolvedValue({ created: 0, existing: 0 }),
+          claim: vi.fn().mockResolvedValue({ outcome: "none" }),
+        } as never,
+        gateway: gateway as unknown as GrowthGateway,
+        runner: {} as never,
+      });
+
+      await worker.tick(context);
+      await worker.tick(context);
+
+      expect(gateway.quarantine).not.toHaveBeenCalled();
+      expect(gateway.getSuggestionDetails).toHaveBeenCalledTimes(2);
+      expect(gateway.inspectTarget).toHaveBeenCalledTimes(2);
+      expect(gateway.adopt).toHaveBeenCalledTimes(stage === "adopt" ? 2 : 0);
+      expect(suggestion.status).toBe("evaluated");
+    },
+  );
+
+  it("evaluation 무결성 손상은 민감 원문 없이 한 번 격리하고 replay에서 채택하지 않는다", async () => {
+    const corrupt = orphanSuggestion("suggestion-evaluation-integrity", "evaluated");
+    const gateway = resumableGateway();
+    let quarantined = false;
+    gateway.listSuggestions.mockImplementation(async () => (quarantined ? [] : [corrupt]));
+    gateway.getSuggestionDetails.mockRejectedValue(
+      new GrowthEvaluationIntegrityError("receipt evidence: super-secret"),
+    );
+    gateway.quarantine.mockImplementation(async () => {
+      quarantined = true;
+      return { status: "superseded", actor: "system:growth-worker" };
+    });
+    const worker = new GrowthWorker({
+      database: orphanDatabase(),
+      organizations: {} as never,
+      triggers: {
+        requeueExpired: vi.fn().mockResolvedValue(0),
+        backfill: vi.fn().mockResolvedValue({ created: 0, existing: 0 }),
+        claim: vi.fn().mockResolvedValue({ outcome: "none" }),
+      } as never,
+      gateway: gateway as unknown as GrowthGateway,
+      runner: {} as never,
+    });
+
+    await expect(worker.tick(context)).resolves.toEqual({ outcome: "none" });
+    await expect(worker.tick(context)).resolves.toEqual({ outcome: "none" });
+
+    expect(gateway.quarantine).toHaveBeenCalledOnce();
+    expect(gateway.quarantine).toHaveBeenCalledWith(
+      context,
+      expect.objectContaining({
+        commandId: `growth:${corrupt.suggestion_id}:orphan-quarantine`,
+        suggestionId: corrupt.suggestion_id,
+        reason: expect.not.stringContaining("super-secret"),
+      }),
+    );
+    expect(gateway.evaluate).not.toHaveBeenCalled();
+    expect(gateway.adopt).not.toHaveBeenCalled();
   });
 
   it("valid JSON이지만 domain patch가 invalid인 proposed orphan은 부분 원장 없이 격리하고 재시도하지 않는다", async () => {

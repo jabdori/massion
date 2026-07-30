@@ -369,7 +369,15 @@ export class GrowthWorker {
     for (const suggestion of suggestions) {
       if (suggestion.status !== "proposed" && suggestion.status !== "evaluated") continue;
       try {
-        const detail = await this.dependencies.gateway.getSuggestionDetails(context, suggestion.suggestion_id);
+        let detail: GrowthSuggestionDetails;
+        try {
+          detail = await this.dependencies.gateway.getSuggestionDetails(context, suggestion.suggestion_id);
+        } catch (error) {
+          if (error instanceof SyntaxError) {
+            throw new GrowthOrphanValidationError("Growth Suggestion 상세 JSON이 유효하지 않습니다");
+          }
+          throw error;
+        }
         if (detail.suggestion.suggestion_id !== suggestion.suggestion_id) {
           throw new GrowthOrphanValidationError("Growth Suggestion 상세 계보가 일치하지 않습니다");
         }
@@ -381,9 +389,7 @@ export class GrowthWorker {
             ? error.message
             : error instanceof GrowthEvaluationIntegrityError
               ? "저장된 Growth evaluation 계보가 유효하지 않습니다"
-              : error instanceof SyntaxError
-                ? "Growth Suggestion 상세 JSON이 유효하지 않습니다"
-                : undefined;
+              : undefined;
         if (!reason) continue;
         try {
           await this.dependencies.gateway.quarantine(context, {

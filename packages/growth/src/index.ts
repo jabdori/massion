@@ -26,6 +26,7 @@ export {
   OrganizationGrowthTarget,
   PolicyGrowthTarget,
   PromptGrowthTarget,
+  growthTargetChecksum,
 } from "./targets.js";
 
 export type {
@@ -49,6 +50,7 @@ export type {
   GrowthEvaluationStrategyVersion,
   GrowthSignalReceiptInput,
 } from "./evaluation.js";
+export { GrowthEvaluationIntegrityError, growthEvaluationInputHash } from "./evaluation.js";
 export type {
   EffectivePromptVersion,
   ForgetExplicitMemoryInput,
@@ -60,12 +62,14 @@ export type {
 } from "./prompt-memory.js";
 export type {
   GrowthSuggestionDecision,
+  GrowthSuggestionQuarantine,
   GrowthSuggestionRecord,
   ListGrowthSuggestionsInput,
   ReflectionRunRecord,
   SuggestionCandidate,
   SuggestionTargetKind,
 } from "./reflection.js";
+export { validateSuggestionCandidate } from "./reflection.js";
 export type { GrowthRecoveryAction, GrowthRecoveryRecord } from "./recovery.js";
 export type { GrowthRevertOperation, RevertGrowthAdoptionInput } from "./revert.js";
 export type { ReflectionSnapshot, ReflectionSnapshotBundle } from "./snapshot.js";
