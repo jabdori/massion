@@ -743,8 +743,8 @@ export class PromptMemoryStore {
         }
         return {
           agentHandle: node.handle,
-          instruction: `${node.responsibility}\n주요 산출물: ${(node.outputs as string[]).join(", ")}`,
-          capabilityReferences: [...(node.capabilities as string[])].sort(),
+          instruction: `${node.responsibility}\n주요 산출물: ${node.outputs.join(", ")}`,
+          capabilityReferences: [...node.capabilities].sort(),
         } satisfies PromptAgentSection;
       })
       .filter((section) => !knownHandles.has(section.agentHandle));

@@ -137,6 +137,16 @@ describe("공식 Claude Agent SDK 구독 Connector", () => {
     ).toThrow();
   });
 
+  it("전체 권한 확인 flag가 없는 bypassPermissions를 거부한다", () => {
+    expect(
+      () =>
+        new ClaudeSubscriptionConnector(undefined, undefined, {
+          executable: "/opt/massion/connectors/claude",
+          permissionMode: "bypassPermissions",
+        } as never),
+    ).toThrow("allowDangerouslySkipPermissions");
+  });
+
   it("실행 파일 override가 없으면 pinned Agent SDK bundled runtime을 사용한다", async () => {
     const query: ClaudeAgentQuery = vi.fn().mockImplementation(async function* () {
       yield { type: "result", subtype: "success", session_id: "session-bundled", result: "완료", usage: {} };

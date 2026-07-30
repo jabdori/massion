@@ -93,9 +93,9 @@ export class GrowthComplianceAuditor {
       "SELECT action, resource_id FROM governance_policy_decision WHERE organization_id = $organization_id AND decision_id = $decision_id LIMIT 1;",
       { organization_id: org, decision_id: adoption.governance_decision_id },
     );
-    const [baselines] = await this.database.query<[
-      Array<{ target_version_id: string; status: "pending" | "captured" | "closed" }>
-    ]>(
+    const [baselines] = await this.database.query<
+      [Array<{ target_version_id: string; status: "pending" | "captured" | "closed" }>]
+    >(
       "SELECT target_version_id, status FROM growth_effect_baseline WHERE organization_id = $organization_id AND adoption_id = $adoption_id LIMIT 1;",
       { organization_id: org, adoption_id: adoption.adoption_id },
     );
@@ -140,7 +140,9 @@ export class GrowthComplianceAuditor {
       // baseline은 adoption 전 버전을 비교 기준으로 고정합니다. observing 직후에는 pending일 수 있습니다.
       baselineMatches:
         baselines[0]?.target_version_id === adoption.before_version_id &&
-        ["pending", "captured", "closed"].includes(baselines[0]?.status ?? ""),
+        // baselines[0]?.target_version_id 비교가 참인 순간 baselines[0]는 이미 non-nullish로 좁혀집니다
+        // (좌변이 undefined였다면 && 단락 평가로 이 줄에 도달할 수 없습니다).
+        ["pending", "captured", "closed"].includes(baselines[0].status),
       effectSequenceMatches: adoption.status === "observing" || effects.length > 0 || reverts[0]?.mode === "explicit",
       revertSequenceMatches: adoption.status !== "reverted" || reverts[0]?.status === "completed",
     };

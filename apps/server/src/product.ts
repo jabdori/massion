@@ -1171,7 +1171,9 @@ export async function createMassionDaemon(
             ? await daemonReference.current.readiness()
             : { database: true, migrations: true, connectors: true },
       },
-      onInitialized: (context) => growthWorker.start(context),
+      onInitialized: (context) => {
+        growthWorker.start(context);
+      },
       server: config.server,
     });
     const applicationRunRecovery = new ApplicationRunStartupRecoveryService(

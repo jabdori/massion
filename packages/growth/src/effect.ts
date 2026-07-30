@@ -66,7 +66,7 @@ function assertSample(sample: GrowthEffectSample): void {
       reference.metricObservationId,
       reference.sourceChecksum,
     ]) {
-      if (!value?.trim()) throw new Error("Growth effect sample lineage 값이 비었습니다");
+      if (!value.trim()) throw new Error("Growth effect sample lineage 값이 비었습니다");
     }
     if (!/^[a-f0-9]{64}$/u.test(reference.sourceChecksum))
       throw new Error("Growth effect sample source checksum이 유효하지 않습니다");
@@ -245,7 +245,10 @@ export class GrowthEffectStore {
         throw new Error("captured Growth baseline이 필요합니다");
       if (!baseline.sample_lineage_json || !baseline.sample_lineage_checksum)
         throw new Error("Growth baseline sample lineage가 없습니다");
-      if (growthEffectSampleLineageChecksum(JSON.parse(baseline.sample_lineage_json) as GrowthEffectSampleLineage) !== baseline.sample_lineage_checksum)
+      if (
+        growthEffectSampleLineageChecksum(JSON.parse(baseline.sample_lineage_json) as GrowthEffectSampleLineage) !==
+        baseline.sample_lineage_checksum
+      )
         throw new Error("Growth baseline sample lineage checksum이 일치하지 않습니다");
       const [adoptionRows] = await executor.query<[AdoptionLineageRecord[]]>(
         "SELECT before_version_id, after_version_id FROM growth_adoption_run WHERE organization_id = $organization_id AND adoption_id = $adoption_id LIMIT 1;",

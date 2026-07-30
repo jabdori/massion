@@ -159,6 +159,10 @@ export class ClaudeSubscriptionConnector implements SubscriptionAgentAdapter {
       throw new Error("Claude SDK 실행 파일은 절대 경로여야 합니다");
     }
     if (options.permissionMode === "bypassPermissions") {
+      // options는 타입상 이 분기에서 allowDangerouslySkipPermissions가 항상 true지만, 이 필드는
+      // "전체 권한 우회"라는 위험 옵션에 대한 런타임 방어선이다: 호출부가 `as` 캐스트나 타입 체크를
+      // 우회한 값으로 이 생성자를 호출하면 컴파일 타임 내로잉이 보장하지 못하므로 가드를 유지한다.
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-boolean-literal-compare, @typescript-eslint/no-unnecessary-condition
       if (options.allowDangerouslySkipPermissions !== true) {
         throw new Error("Claude 전체 권한에는 allowDangerouslySkipPermissions 확인이 필요합니다");
       }

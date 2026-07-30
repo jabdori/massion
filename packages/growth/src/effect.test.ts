@@ -55,6 +55,13 @@ describe("Growth effect comparison", () => {
     );
   });
 
+  it("0113 effect sample lineage migration checksum을 고정한다", () => {
+    expect(GROWTH_EFFECT_SAMPLE_LINEAGE_MIGRATION.id).toBe("0113-growth-effect-sample-lineage");
+    expect(GROWTH_EFFECT_SAMPLE_LINEAGE_MIGRATION.checksum).toBe(
+      "b681edac543b796772d95ca4557818706a4956dda41cc4f0dfc3e13a3cedfb92",
+    );
+  });
+
   it("효과 표본의 target과 Assurance 계보를 checksum과 함께 보존한다", async () => {
     database = await createDatabase({ url: "mem://", namespace: "massion", database: crypto.randomUUID() });
     const identity = await IdentityService.create(database);
@@ -73,7 +80,11 @@ describe("Growth effect comparison", () => {
     );
     const store = await GrowthEffectStore.create(database, organizations);
     const baseline = sample(0.7, "case-v1", 10, "prompt-v1");
-    await store.captureBaseline(context, { commandId: "baseline-lineage", adoptionId: "adoption-lineage", sample: baseline });
+    await store.captureBaseline(context, {
+      commandId: "baseline-lineage",
+      adoptionId: "adoption-lineage",
+      sample: baseline,
+    });
     const [rows] = await database.query<[{ sample_lineage_json: string; sample_lineage_checksum: string }[]]>(
       "SELECT sample_lineage_json, sample_lineage_checksum FROM growth_effect_baseline WHERE organization_id = $organization_id AND adoption_id = 'adoption-lineage';",
       { organization_id: context.organizationId },
