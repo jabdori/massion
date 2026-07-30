@@ -309,6 +309,8 @@ export class CoreSoftwareTaskAdapter implements CoreSoftwareTaskPort {
         }
         await this.throwIfCancelled(context, input, config);
       }
+      if (!delivery) throw new Error("Software Delivery가 시작되지 않았습니다");
+      const deliveryId = delivery.deliveryId;
       const terminal = terminalDeliveryResult(delivery);
       if (terminal) return await this.finishTerminal(context, input, config, delivery);
       let observedLease: EngineeringPathLease | undefined;
@@ -317,15 +319,14 @@ export class CoreSoftwareTaskAdapter implements CoreSoftwareTaskPort {
       if (continuing && delivery.status !== "committed" && this.dependencies.leases?.list) {
         try {
           observedLease = (await this.dependencies.leases.list(context, config.repositoryId)).find(
-            (candidate) =>
-              candidate.deliveryId === delivery.deliveryId && ["active", "expired"].includes(candidate.status),
+            (candidate) => candidate.deliveryId === deliveryId && ["active", "expired"].includes(candidate.status),
           );
           if (observedLease) {
             observedLeaseExpired = pathLeaseExpired(observedLease);
             const foreignOwner = observedLease.acquireCommandId !== leaseCommandId;
             if (
               (foreignOwner && !observedLeaseExpired) ||
-              (!observedLeaseExpired && this.activeDeliveryExecutions.has(delivery.deliveryId)) ||
+              (!observedLeaseExpired && this.activeDeliveryExecutions.has(deliveryId)) ||
               (foreignOwner &&
                 input.leaseGeneration !== undefined &&
                 pathLeaseGeneration(observedLease.acquireCommandId) >= input.leaseGeneration)
@@ -333,10 +334,9 @@ export class CoreSoftwareTaskAdapter implements CoreSoftwareTaskPort {
               return { outcome: "blocked", reason: "software-delivery-owned" };
             }
             if (observedLeaseExpired) {
-              await this.stopDeliveryExecution(delivery.deliveryId, observedLease.acquireCommandId);
+              await this.stopDeliveryExecution(deliveryId, observedLease.acquireCommandId);
               observedLease = (await this.dependencies.leases.list(context, config.repositoryId)).find(
-                (candidate) =>
-                  candidate.deliveryId === delivery.deliveryId && ["active", "expired"].includes(candidate.status),
+                (candidate) => candidate.deliveryId === deliveryId && ["active", "expired"].includes(candidate.status),
               );
               if (
                 observedLease &&
@@ -370,13 +370,13 @@ export class CoreSoftwareTaskAdapter implements CoreSoftwareTaskPort {
         try {
           const recoveryOwnerCommandId = observedLease?.acquireCommandId ?? lease?.acquireCommandId ?? leaseCommandId;
           const recovered = await this.runDeliveryExecution(
-            delivery.deliveryId,
+            deliveryId,
             recoveryOwnerCommandId,
             input.signal,
             async (signal) =>
               await this.dependencies.recovery.recover(context, {
                 commandId: `${leaseCommandId}:recovery`,
-                deliveryId: delivery.deliveryId,
+                deliveryId,
                 repositoryRoot: config.repositoryRoot,
                 repositoryId: config.repositoryId,
                 leaseTtlMs: config.leaseTtlMs,
@@ -411,12 +411,14 @@ export class CoreSoftwareTaskAdapter implements CoreSoftwareTaskPort {
       }
       if (delivery.status === "preparing") {
         await this.throwIfCancelled(context, input, config);
+        const preparingDelivery = delivery;
         try {
           delivery = await this.runDeliveryExecution(
-            delivery.deliveryId,
+            deliveryId,
             lease?.acquireCommandId ?? leaseCommandId,
             input.signal,
-            async (signal) => await this.executeTdd(context, input, config, delivery, agentHandle, lease, signal),
+            async (signal) =>
+              await this.executeTdd(context, input, config, preparingDelivery, agentHandle, lease, signal),
           );
         } catch (error) {
           if (isCommandCleanupFailure(error)) {
@@ -442,6 +444,7 @@ export class CoreSoftwareTaskAdapter implements CoreSoftwareTaskPort {
             await this.cleanupRetryable(context, input, config, delivery, leaseCommandId);
             return { outcome: "blocked", reason: "software-delivery-interrupted" };
           }
+          const ownership = deliveryOwnership(lease);
           if (executionStatus === "cancelled") {
             delivery = (
               await this.dependencies.deliveries.transition(context, {
@@ -449,7 +452,7 @@ export class CoreSoftwareTaskAdapter implements CoreSoftwareTaskPort {
                 deliveryId: delivery.deliveryId,
                 expectedVersion: delivery.version,
                 target: "cancelled",
-                ...(deliveryOwnership(lease) === undefined ? {} : { ownership: deliveryOwnership(lease) }),
+                ...(ownership === undefined ? {} : { ownership }),
               })
             ).delivery;
             const cancelled = terminalDeliveryResult(delivery);
@@ -466,7 +469,7 @@ export class CoreSoftwareTaskAdapter implements CoreSoftwareTaskPort {
               expectedVersion: delivery.version,
               target: "failed",
               error: { category: "delivery_execution_failed", causeId: failureCauseId(error) },
-              ...(deliveryOwnership(lease) === undefined ? {} : { ownership: deliveryOwnership(lease) }),
+              ...(ownership === undefined ? {} : { ownership }),
             })
           ).delivery;
           const finalizedFailure = terminalDeliveryResult(delivery);
@@ -631,12 +634,13 @@ export class CoreSoftwareTaskAdapter implements CoreSoftwareTaskPort {
           ).lease;
         if (owned.status !== "active") throw new Error("취소 worker가 active path lease를 소유하지 않습니다");
       }
+      const ownership = deliveryOwnership(owned);
       const transitioned = await this.dependencies.deliveries.transition(context, {
         commandId: `${input.commandId}:cancel`,
         deliveryId: delivery.deliveryId,
         expectedVersion: delivery.version,
         target: "cancelled",
-        ...(deliveryOwnership(owned) === undefined ? {} : { ownership: deliveryOwnership(owned) }),
+        ...(ownership === undefined ? {} : { ownership }),
       });
       await this.observeTerminal(context, input, config, transitioned.delivery);
       return;

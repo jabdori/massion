@@ -6,6 +6,7 @@ import { ApplicationEventCursorExpiredError } from "./event-store.js";
 import {
   ApplicationBootstrapCapability,
   ApplicationHttpServer,
+  type ApplicationBootstrapDisposalReason,
   type ApplicationHttpDependencies,
 } from "./http-server.js";
 
@@ -36,8 +37,8 @@ describe("ApplicationHttpServer", () => {
   let calls: string[];
   let bootstrapInitialize: () => Promise<unknown>;
   let bootstrapNow: number;
-  let bootstrapConsumed: ReturnType<typeof vi.fn>;
-  let bootstrapCleanupError: ReturnType<typeof vi.fn>;
+  let bootstrapConsumed: ReturnType<typeof vi.fn<(reason: ApplicationBootstrapDisposalReason) => Promise<void>>>;
+  let bootstrapCleanupError: ReturnType<typeof vi.fn<(reason: ApplicationBootstrapDisposalReason) => void>>;
 
   const bootstrapCapability = Buffer.alloc(32, 7).toString("base64url");
 
@@ -45,15 +46,15 @@ describe("ApplicationHttpServer", () => {
     events = [];
     calls = [];
     bootstrapNow = Date.now();
-    bootstrapConsumed = vi.fn();
-    bootstrapCleanupError = vi.fn();
+    bootstrapConsumed = vi.fn(async () => {});
+    bootstrapCleanupError = vi.fn<(reason: ApplicationBootstrapDisposalReason) => void>();
     bootstrapInitialize = async () => ({ access: { token: "one-time" } });
     const bootstrapSecret = Buffer.from(bootstrapCapability, "base64url");
     const bootstrapAuthorization = new ApplicationBootstrapCapability({
       capability: bootstrapSecret,
       expiresAt: bootstrapNow + 60_000,
       clock: () => bootstrapNow,
-      onDisposed: async (reason) => await bootstrapConsumed(reason),
+      onDisposed: bootstrapConsumed,
       onCleanupError: bootstrapCleanupError,
     });
     expect(bootstrapSecret).toEqual(Buffer.alloc(32));

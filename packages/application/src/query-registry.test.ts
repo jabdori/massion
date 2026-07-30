@@ -3,7 +3,11 @@ import { describe, expect, it, vi } from "vitest";
 
 import { ApplicationEventCursorExpiredError } from "./event-store.js";
 import type { ApplicationReadModel } from "./read-model.js";
-import { ApplicationQueryRegistry, registerApplicationQueries } from "./query-registry.js";
+import {
+  ApplicationQueryRegistry,
+  registerApplicationQueries,
+  type ApplicationQueryDependencies,
+} from "./query-registry.js";
 import { CollaborationGraphSnapshotProjector } from "./snapshot.js";
 
 const context: TenantContext = {
@@ -1939,7 +1943,9 @@ describe("협업방 조회", () => {
 
   function knowledgeQueryDependencies(
     options: { readonly trust?: "trusted" | "pending"; readonly empty?: boolean } = {},
-  ) {
+  ): ApplicationQueryDependencies & {
+    readonly workKnowledge: NonNullable<ApplicationQueryDependencies["workKnowledge"]>;
+  } {
     const works = [
       {
         organizationId: context.organizationId,
@@ -2016,6 +2022,7 @@ describe("협업방 조회", () => {
       workspaces: {
         list: async () => [],
         get: async () => ({
+          organizationId: context.organizationId,
           workspaceId: "workspace-knowledge",
           name: "knowledge",
           path: "/private/workspace/knowledge",
@@ -2317,9 +2324,11 @@ describe("협업방 조회", () => {
     expect(get).not.toHaveBeenCalled();
 
     const oversizedDependencies = knowledgeQueryDependencies();
+    const firstWork = works[0];
+    if (!firstWork) throw new Error("Work fixture가 없습니다");
     oversizedDependencies.readModel.works = async () => [
       ...works,
-      { ...works[0], workId: "work-200", title: "Work 200" },
+      { ...firstWork, workId: "work-200", title: "Work 200" },
     ];
     const oversizedGet = vi.fn(get);
     oversizedDependencies.workKnowledge.get = oversizedGet;
@@ -2356,7 +2365,11 @@ describe("협업방 조회", () => {
 
   it("지식 계보가 끊기거나 모호하면 dangling 관계를 숨기지 않고 fail-closed한다", async () => {
     const source = knowledgeWorkspaceSource();
-    source.snapshot.symbols[0] = { ...source.snapshot.symbols[0], sourceFileId: "missing-file" };
+    const sourceSymbol = source.snapshot.symbols[0];
+    const sourceChunk = source.snapshot.chunks[0];
+    const symbolRelation = source.snapshot.relations[0];
+    if (!sourceSymbol || !sourceChunk || !symbolRelation) throw new Error("Knowledge fixture가 없습니다");
+    source.snapshot.symbols[0] = { ...sourceSymbol, sourceFileId: "missing-file" };
     const dependencies = knowledgeQueryDependencies();
     dependencies.workKnowledge.getWorkspaceSnapshot = async () => source;
     const registry = new ApplicationQueryRegistry();
@@ -2369,8 +2382,8 @@ describe("협업방 조회", () => {
       }),
     ).rejects.toThrow("계보");
 
-    source.snapshot.symbols[0] = { ...source.snapshot.symbols[0], sourceFileId: "file-payment" };
-    source.snapshot.chunks[0] = { ...source.snapshot.chunks[0], relativePath: "../private/secret.ts" };
+    source.snapshot.symbols[0] = { ...sourceSymbol, sourceFileId: "file-payment" };
+    source.snapshot.chunks[0] = { ...sourceChunk, relativePath: "../private/secret.ts" };
     await expect(
       registry.query(context, ["workspace:read", "work:read"], "knowledge.links", {
         workspaceId: "workspace-knowledge",
@@ -2378,8 +2391,8 @@ describe("협업방 조회", () => {
       }),
     ).rejects.toThrow();
 
-    source.snapshot.chunks[0] = { ...source.snapshot.chunks[0], relativePath: "src/payment.ts" };
-    source.snapshot.relations.push({ ...source.snapshot.relations[0] });
+    source.snapshot.chunks[0] = { ...sourceChunk, relativePath: "src/payment.ts" };
+    source.snapshot.relations.push({ ...symbolRelation });
     source.index.relationCount += 1;
     await expect(
       registry.query(context, ["workspace:read", "work:read"], "knowledge.graph", {
@@ -2415,12 +2428,15 @@ describe("협업방 조회", () => {
     source.index.symbolCount -= 1;
 
     source.snapshot.relations.push({
-      ...source.snapshot.relations[0],
       relationId: "relation-unresolved",
       relationKey: "relation-key-unresolved",
+      sourceFileId: symbolRelation.sourceFileId,
+      relativePath: symbolRelation.relativePath,
+      kind: "calls" as const,
       sourceSymbolKey: "missing-symbol",
-      targetSymbolKey: undefined,
+      targetText: symbolRelation.targetText,
       resolved: false,
+      startLine: symbolRelation.startLine,
     });
     source.index.relationCount += 1;
     await expect(

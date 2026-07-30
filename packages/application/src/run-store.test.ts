@@ -14,11 +14,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApplicationRunStore, type ApplicationRunClock } from "./run-store.js";
 import { APPLICATION_MIGRATIONS, APPLICATION_RUN_MIGRATION } from "./schema.js";
 
-vi.mock("@massion/storage", async (importOriginal) => ({
-  ...(await importOriginal()),
-  serializeSurrealDateTime: (await import("../../storage/src/database.js")).serializeSurrealDateTime,
-}));
-
 class MutableRunClock implements ApplicationRunClock {
   public constructor(public now: Date) {}
 }

@@ -54,6 +54,7 @@ import {
 import type {
   KnowledgeGraphEdgeViewV1,
   KnowledgeGraphLensV1,
+  KnowledgeGraphViewV1,
   KnowledgeIndexViewV1,
   KnowledgeLinkViewV1,
   KnowledgeNodeKindV1,
