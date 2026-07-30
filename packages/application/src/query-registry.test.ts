@@ -1053,7 +1053,7 @@ describe("ApplicationQueryRegistry", () => {
     await expect(registry.query(context, ["router:read"], "router.attempts", {})).rejects.toThrow("계보");
   });
 
-  it("Route Attempt 시각은 canonical ISO instant만 허용하고 DB datetime object를 투영한다", async () => {
+  it("Route Attempt 시각은 유효한 UTC instant를 밀리초 ISO로 정규화한다", async () => {
     const attempt = (createdAt: unknown) => ({
       attempt_id: "attempt-time",
       route_id: "route-1",
@@ -1078,6 +1078,9 @@ describe("ApplicationQueryRegistry", () => {
     await expect(query("2026-02-30T00:00:00.000Z")).rejects.toThrow("시각");
     await expect(query(new Date(Number.NaN))).rejects.toThrow("시각");
     await expect(query({ toISOString: () => "2026-07-30T01:02:03.004Z" })).resolves.toMatchObject({
+      data: [{ at: "2026-07-30T01:02:03.004Z" }],
+    });
+    await expect(query({ toISOString: () => "2026-07-30T01:02:03.004567Z" })).resolves.toMatchObject({
       data: [{ at: "2026-07-30T01:02:03.004Z" }],
     });
   });

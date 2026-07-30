@@ -1140,7 +1140,7 @@ function routeAttemptCount(value: unknown, label: string): number {
 }
 
 const ROUTE_ATTEMPT_INSTANT =
-  /^\d{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])T(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d\.\d{3}Z$/u;
+  /^(\d{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])T(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d)(?:\.(\d{1,9}))?Z$/u;
 
 function routeAttemptInstant(value: unknown): string {
   let serialized: unknown;
@@ -1159,12 +1159,15 @@ function routeAttemptInstant(value: unknown): string {
   } catch {
     throw new Error("Route Attempt 시각이 유효하지 않습니다");
   }
-  if (typeof serialized !== "string" || !ROUTE_ATTEMPT_INSTANT.test(serialized))
-    throw new Error("Route Attempt 시각이 유효하지 않습니다");
+  if (typeof serialized !== "string") throw new Error("Route Attempt 시각이 유효하지 않습니다");
+  const matched = ROUTE_ATTEMPT_INSTANT.exec(serialized);
+  const seconds = matched?.[1];
+  if (!seconds) throw new Error("Route Attempt 시각이 유효하지 않습니다");
   const parsed = new Date(serialized);
-  if (!Number.isFinite(parsed.getTime()) || parsed.toISOString() !== serialized)
+  const normalized = `${seconds}.${(matched[2] ?? "").padEnd(3, "0").slice(0, 3)}Z`;
+  if (!Number.isFinite(parsed.getTime()) || parsed.toISOString() !== normalized)
     throw new Error("Route Attempt 시각이 유효하지 않습니다");
-  return serialized;
+  return normalized;
 }
 
 interface RouteAttemptPublicLineage {
