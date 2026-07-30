@@ -132,6 +132,7 @@ export class CodexSubscriptionConnector implements SubscriptionAgentAdapter {
     });
     const threadOptions: ThreadOptions = {
       workingDirectory: workspaceRoot,
+      ...(this.options.managedProfile ? { skipGitRepoCheck: true } : {}),
       ...(this.options.threadPolicy
         ? {
             sandboxMode: this.options.threadPolicy.sandboxMode,

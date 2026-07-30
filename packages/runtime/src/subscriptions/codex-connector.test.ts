@@ -70,6 +70,7 @@ describe("공식 Codex 구독 Connector", () => {
     });
     expect(startThread).toHaveBeenCalledWith({
       workingDirectory: "/tmp/work-policy",
+      skipGitRepoCheck: true,
       sandboxMode: "workspace-write",
       approvalPolicy: "never",
       networkAccessEnabled: false,
@@ -170,7 +171,7 @@ describe("공식 Codex 구독 Connector", () => {
       env: { PATH: "/usr/bin", CODEX_HOME: profileRoot, HOME: profileRoot },
       config: { cli_auth_credentials_store: "file" },
     });
-    expect(startThread).toHaveBeenCalledWith({ workingDirectory: "/tmp/work-1" });
+    expect(startThread).toHaveBeenCalledWith({ workingDirectory: "/tmp/work-1", skipGitRepoCheck: true });
     expect(run).toHaveBeenCalledWith(
       "상태를 확인하세요",
       expect.objectContaining({ outputSchema: expect.objectContaining({ type: "object" }) }),
