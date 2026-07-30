@@ -2,6 +2,7 @@ import type { MaterializedEvidencePrompt } from "@massion/evidence";
 import type { TenantContext } from "@massion/identity";
 import type { AgentRunner, RuntimeExecutionStore } from "@massion/runtime";
 import { isSoftwareEngineeringTask } from "@massion/software-engineering";
+import type { QueryExecutor } from "@massion/storage";
 import type { WorkService, WorkTask } from "@massion/work";
 import type { WorkspaceService } from "@massion/workspace";
 
@@ -59,9 +60,15 @@ function deliveryAgentHandle(task: WorkTask): string {
 }
 
 export interface CoreSoftwareTaskPort {
+  inspectTask?(
+    context: TenantContext,
+    input: { readonly runId: string; readonly workId: string; readonly task: WorkTask },
+  ): Promise<{ readonly outcome: "failed" | "cancelled"; readonly reason: string } | undefined>;
   executeTask(
     context: TenantContext,
     input: {
+      readonly runId: string;
+      readonly leaseGeneration?: number;
       readonly commandId: string;
       readonly correlationId: string;
       readonly workId: string;
@@ -72,13 +79,20 @@ export interface CoreSoftwareTaskPort {
       readonly signal?: AbortSignal;
     },
   ): Promise<{
-    readonly outcome: "completed" | "awaiting-approval" | "blocked";
+    readonly outcome: "completed" | "awaiting-approval" | "blocked" | "failed" | "cancelled";
     readonly approvalId?: string;
     readonly reason?: string;
   }>;
   cancelTask(
     context: TenantContext,
-    input: { readonly commandId: string; readonly workId: string; readonly task: WorkTask; readonly request: unknown },
+    input: {
+      readonly runId: string;
+      readonly leaseGeneration?: number;
+      readonly commandId: string;
+      readonly workId: string;
+      readonly task: WorkTask;
+      readonly request: unknown;
+    },
   ): Promise<void>;
 }
 
@@ -97,11 +111,70 @@ export class CoreDeliveryStage implements CoreWorkStageExecutor {
     },
   ) {}
 
+  public async convergeFailure(
+    context: TenantContext,
+    result: Extract<CoreWorkStageResult, { readonly outcome: "failed" }>,
+    executor: QueryExecutor,
+  ): Promise<void> {
+    const failure = result.failure;
+    if (!failure || !result.workId) return;
+    await this.dependencies.works.transitionTask(
+      context,
+      {
+        commandId: failure.commandId,
+        workId: result.workId,
+        expectedRevision: failure.expectedWorkRevision,
+        taskId: failure.taskId,
+        expectedTaskRevision: failure.expectedTaskRevision,
+        target: "failed",
+      },
+      executor,
+    );
+  }
+
   public async execute(context: TenantContext, input: CoreWorkStageInput): Promise<CoreWorkStageResult> {
     this.throwIfCancelled(input);
     if (!input.workId) throw new Error("Delivery stage에 Work ID가 없습니다");
     let initial = await this.dependencies.works.getWork(context, input.workId);
     this.throwIfCancelled(input);
+    if (initial.status === "failed" || initial.status === "cancelled") {
+      return {
+        outcome: initial.status,
+        reason: `delivery-work-${initial.status}`,
+        workId: input.workId,
+      };
+    }
+    if (initial.status === "completed") {
+      return { outcome: "completed", workId: input.workId, data: { recoveredFromWork: "completed" } };
+    }
+    if (initial.status === "verifying") {
+      return { outcome: "advanced", workId: input.workId, data: { artifactVersionIds: [] } };
+    }
+    if (this.dependencies.software?.inspectTask) {
+      const tasks = await this.dependencies.works.listTasks(context, input.workId);
+      this.throwIfCancelled(input);
+      for (const task of tasks.filter(isSoftwareTask)) {
+        const terminal = await this.dependencies.software.inspectTask(context, {
+          runId: input.runId,
+          workId: input.workId,
+          task,
+        });
+        this.throwIfCancelled(input);
+        if (!terminal) continue;
+        return terminal.outcome === "failed"
+          ? {
+              ...terminal,
+              workId: input.workId,
+              failure: {
+                taskId: task.task_id,
+                expectedWorkRevision: initial.revision,
+                expectedTaskRevision: task.revision,
+                commandId: `${input.runId}:delivery:task:${task.task_id}:failed`,
+              },
+            }
+          : { ...terminal, workId: input.workId };
+      }
+    }
     // 신뢰 게이트: workspace에 바인딩된 Work는 trusted 승인 전 도구 실행(delivery)을 차단합니다.
     // blocked는 재시도 가능 상태이므로 신뢰 결정 후 명시적 retry로 재개합니다.
     if (initial.workspace_id !== undefined && this.dependencies.workspaces) {
@@ -226,6 +299,8 @@ export class CoreDeliveryStage implements CoreWorkStageExecutor {
         const software = this.dependencies.software;
         if (!software) return { outcome: "blocked", reason: "software-delivery-not-configured" };
         const result = await software.executeTask(context, {
+          runId: input.runId,
+          ...(input.leaseGeneration === undefined ? {} : { leaseGeneration: input.leaseGeneration }),
           commandId: `${input.commandId}:task:${task.task_id}`,
           correlationId: input.correlationId,
           workId: input.workId,
@@ -253,6 +328,37 @@ export class CoreDeliveryStage implements CoreWorkStageExecutor {
         }
         if (result.outcome === "blocked")
           return { outcome: "blocked", reason: result.reason ?? "software-delivery-blocked" };
+        if (result.outcome === "failed") {
+          const [current, tasks] = await Promise.all([
+            this.dependencies.works.getWork(context, input.workId),
+            this.dependencies.works.listTasks(context, input.workId),
+          ]);
+          this.throwIfCancelled(input);
+          const active = tasks.find((candidate) => candidate.task_id === task.task_id);
+          if (!active) throw new Error("실패한 Software Delivery의 Task를 찾을 수 없습니다");
+          return {
+            outcome: "failed",
+            reason: result.reason ?? "software-delivery-failed",
+            workId: input.workId,
+            ...(current.status === "failed" && active.status === "failed"
+              ? {}
+              : {
+                  failure: {
+                    taskId: active.task_id,
+                    expectedWorkRevision: current.revision,
+                    expectedTaskRevision: active.revision,
+                    commandId: `${input.runId}:delivery:task:${active.task_id}:failed`,
+                  },
+                }),
+          };
+        }
+        if (result.outcome === "cancelled") {
+          return {
+            outcome: "cancelled",
+            reason: result.reason ?? "software-delivery-cancelled",
+            workId: input.workId,
+          };
+        }
         continue;
       }
       const root = `${input.commandId}:task:${task.task_id}`;
@@ -347,6 +453,8 @@ export class CoreDeliveryStage implements CoreWorkStageExecutor {
       if (isSoftwareTask(task)) {
         if (!this.dependencies.software) continue;
         await this.dependencies.software.cancelTask(context, {
+          runId: input.runId,
+          ...(input.leaseGeneration === undefined ? {} : { leaseGeneration: input.leaseGeneration }),
           commandId,
           workId: input.workId,
           task,

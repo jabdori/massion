@@ -48,6 +48,51 @@ describe("Task DAG, Assignment와 Session", () => {
     ).work;
   }
 
+  async function readyTask(label: string) {
+    const planned = await plannedWork(label);
+    const added = await service.addTask(context, {
+      commandId: crypto.randomUUID(),
+      workId: planned.work_id,
+      expectedRevision: planned.revision,
+      title: label,
+      objective: label,
+      acceptanceCriteria: ["완료"],
+      dependencyIds: [],
+    });
+    const assigned = await service.assignTask(context, {
+      commandId: crypto.randomUUID(),
+      workId: planned.work_id,
+      expectedRevision: added.work.revision,
+      taskId: added.task.task_id,
+      agentHandle: "delivery-coordination",
+    });
+    const ready = await service.transition(context, {
+      commandId: crypto.randomUUID(),
+      workId: planned.work_id,
+      expectedRevision: assigned.work.revision,
+      target: "ready",
+    });
+    const running = await service.transition(context, {
+      commandId: crypto.randomUUID(),
+      workId: planned.work_id,
+      expectedRevision: ready.work.revision,
+      target: "running",
+    });
+    return { work: running.work, task: added.task };
+  }
+
+  async function runningTask(label: string) {
+    const ready = await readyTask(label);
+    return await service.transitionTask(context, {
+      commandId: crypto.randomUUID(),
+      workId: ready.work.work_id,
+      expectedRevision: ready.work.revision,
+      taskId: ready.task.task_id,
+      expectedTaskRevision: ready.task.revision,
+      target: "running",
+    });
+  }
+
   it("cycle 없는 DAG와 모든 Assignment가 있어야 Work를 ready로 전이한다", async () => {
     let work = await plannedWork();
     const first = await service.addTask(context, {
@@ -195,6 +240,113 @@ describe("Task DAG, Assignment와 Session", () => {
     expect(
       (await service.listAssignments(context, work.work_id)).filter((assignment) => assignment.status === "assigned"),
     ).toHaveLength(1);
+  });
+
+  it("실행 중 Task 실패는 같은 transaction에서 Work도 failed로 전이한다", async () => {
+    const running = await runningTask("terminal delivery failure");
+
+    const failed = await service.transitionTask(context, {
+      commandId: "delivery-terminal-failure-command-0001",
+      workId: running.work.work_id,
+      expectedRevision: running.work.revision,
+      taskId: running.task.task_id,
+      expectedTaskRevision: running.task.revision,
+      target: "failed",
+    });
+
+    expect(failed).toMatchObject({ work: { status: "failed" }, task: { status: "failed" } });
+    await expect(service.getWork(context, running.work.work_id)).resolves.toMatchObject({ status: "failed" });
+    await expect(service.listTasks(context, running.work.work_id)).resolves.toEqual([
+      expect.objectContaining({ task_id: running.task.task_id, status: "failed" }),
+    ]);
+  });
+
+  it("Delivery 조정이 Task 실행 전 실패해도 ready→running→failed를 같은 transaction에서 수렴시킨다", async () => {
+    const ready = await readyTask("coordination failure");
+
+    const failed = await service.transitionTask(context, {
+      commandId: "delivery-coordination-failure-command-0001",
+      workId: ready.work.work_id,
+      expectedRevision: ready.work.revision,
+      taskId: ready.task.task_id,
+      expectedTaskRevision: ready.task.revision,
+      target: "failed",
+    });
+
+    expect(failed).toMatchObject({
+      work: { status: "failed" },
+      task: { status: "failed", revision: ready.task.revision + 2 },
+    });
+    const failureEvents = (await service.listEvents(context, ready.work.work_id)).filter((event) =>
+      event.command_id.startsWith("delivery-coordination-failure-command-0001"),
+    );
+    expect(failureEvents.map((event) => event.command_id)).toEqual([
+      "delivery-coordination-failure-command-0001:started",
+      "delivery-coordination-failure-command-0001",
+    ]);
+    expect(failureEvents[1]?.sequence).toBe((failureEvents[0]?.sequence ?? 0) + 1);
+    expect(JSON.parse(failureEvents[0]?.payload_json ?? "null")).toMatchObject({
+      from: "ready",
+      to: "running",
+      reason: "delivery-failure-convergence",
+    });
+    expect(JSON.parse(failureEvents[1]?.request_json ?? "null")).toMatchObject({ target: "failed" });
+  });
+
+  it("상위 Application run 실패가 중단되면 같은 transaction의 Task·Work 실패도 모두 rollback한다", async () => {
+    const ready = await readyTask("application failure rollback");
+    const commandId = "delivery-application-failure-rollback-command-0001";
+
+    await expect(
+      database.transaction(async (transaction) => {
+        await service.transitionTask(
+          context,
+          {
+            commandId,
+            workId: ready.work.work_id,
+            expectedRevision: ready.work.revision,
+            taskId: ready.task.task_id,
+            expectedTaskRevision: ready.task.revision,
+            target: "failed",
+          },
+          transaction,
+        );
+        throw new Error("Application run failure write failed");
+      }),
+    ).rejects.toThrow("Application run failure write failed");
+
+    await expect(service.getWork(context, ready.work.work_id)).resolves.toMatchObject({ status: "running" });
+    await expect(service.listTasks(context, ready.work.work_id)).resolves.toEqual([
+      expect.objectContaining({ task_id: ready.task.task_id, status: "ready", revision: ready.task.revision }),
+    ]);
+    expect(
+      (await service.listEvents(context, ready.work.work_id)).filter((event) => event.command_id.startsWith(commandId)),
+    ).toHaveLength(0);
+  });
+
+  it("Work를 함께 실패시킬 수 없으면 Task 실패도 남기지 않는다", async () => {
+    const running = await runningTask("atomic delivery failure");
+    const awaiting = await service.transition(context, {
+      commandId: "delivery-terminal-failure-awaiting-command-0001",
+      workId: running.work.work_id,
+      expectedRevision: running.work.revision,
+      target: "waiting_approval",
+    });
+
+    await expect(
+      service.transitionTask(context, {
+        commandId: "delivery-terminal-failure-rejected-command-0001",
+        workId: running.work.work_id,
+        expectedRevision: awaiting.work.revision,
+        taskId: running.task.task_id,
+        expectedTaskRevision: running.task.revision,
+        target: "failed",
+      }),
+    ).rejects.toThrow("Work 상태");
+    await expect(service.getWork(context, running.work.work_id)).resolves.toMatchObject({ status: "waiting_approval" });
+    await expect(service.listTasks(context, running.work.work_id)).resolves.toEqual([
+      expect.objectContaining({ task_id: running.task.task_id, status: "running" }),
+    ]);
   });
 
   it("재배정 계보를 보존하고 Agent Session과 checkpoint를 Work별로 격리한다", async () => {

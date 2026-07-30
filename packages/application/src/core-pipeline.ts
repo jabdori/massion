@@ -14,6 +14,7 @@ import type {
 import type { TenantContext } from "@massion/identity";
 import { CORE_OFFICE_HANDLES, type OrganizationGraphService } from "@massion/organization";
 import type { AgentRunner, RuntimeExecutionStore } from "@massion/runtime";
+import type { QueryExecutor } from "@massion/storage";
 import { canTransitionWork, type WorkService } from "@massion/work";
 import type { WorkspaceService } from "@massion/workspace";
 
@@ -26,6 +27,11 @@ import type {
 
 type StagePort = {
   execute(context: TenantContext, input: CoreWorkStageInput): Promise<CoreWorkStageResult>;
+  convergeCancellation?(
+    context: TenantContext,
+    input: Omit<CoreWorkStageInput, "resumeInput">,
+    executor: QueryExecutor,
+  ): Promise<void>;
   cancel?(context: TenantContext, input: Omit<CoreWorkStageInput, "resumeInput">): Promise<void>;
 };
 
@@ -149,6 +155,9 @@ function blockUnsupportedDirectives(
     async cancel(context, input) {
       await executor.cancel?.(context, input);
     },
+    async convergeCancellation(context, input, transaction) {
+      await executor.convergeCancellation?.(context, input, transaction);
+    },
   };
 }
 
@@ -210,15 +219,24 @@ function request(value: unknown): CoreRequest {
 export function createCoreWorkPipelineExecutors(
   dependencies: CoreWorkPipelineDependencies,
 ): Readonly<Record<CoreWorkStage, CoreWorkStageExecutor>> {
-  const cancelCreatedWork = async (context: TenantContext, runId: string, workId: string): Promise<void> => {
-    const work = await dependencies.works.getWork(context, workId);
+  const cancelCreatedWork = async (
+    context: TenantContext,
+    runId: string,
+    workId: string,
+    executor?: QueryExecutor,
+  ): Promise<void> => {
+    const work = await dependencies.works.getWork(context, workId, executor);
     if (!canTransitionWork(work.status, "cancelled")) return;
-    await dependencies.works.transition(context, {
-      commandId: `${runId}:work-cancel`,
-      workId,
-      expectedRevision: work.revision,
-      target: "cancelled",
-    });
+    await dependencies.works.transition(
+      context,
+      {
+        commandId: `${runId}:work-cancel`,
+        workId,
+        expectedRevision: work.revision,
+        target: "cancelled",
+      },
+      executor,
+    );
   };
   const throwIfCancelled = (input: CoreWorkStageInput): void => {
     if (input.signal?.aborted) throw new Error("Application run cancelled");
@@ -598,14 +616,11 @@ export function createCoreWorkPipelineExecutors(
   const cancelWork = (stage: StagePort): CoreWorkStageExecutor => ({
     execute: async (context, input) => await stage.execute(context, input),
     async cancel(context, input) {
-      let cleanupError: Error | undefined;
-      try {
-        await stage.cancel?.(context, input);
-      } catch (error) {
-        cleanupError = error instanceof Error ? error : new Error(String(error), { cause: error });
-      }
-      if (input.workId) await cancelCreatedWork(context, input.runId, input.workId);
-      if (cleanupError) throw cleanupError;
+      await stage.cancel?.(context, input);
+    },
+    async convergeCancellation(context, input, transaction) {
+      await stage.convergeCancellation?.(context, input, transaction);
+      if (input.workId) await cancelCreatedWork(context, input.runId, input.workId, transaction);
     },
   });
   return {

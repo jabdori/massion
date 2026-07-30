@@ -57,6 +57,83 @@ describe("CoreDeliveryStage", () => {
     });
   });
 
+  it.each([
+    ["verifying", "advanced"],
+    ["completed", "completed"],
+  ] as const)("복구 시 이미 %s인 Work는 신뢰 게이트나 Delivery를 재실행하지 않고 진행한다", async (status, outcome) => {
+    let sideEffects = 0;
+    const stage = new CoreDeliveryStage({
+      works: {
+        getWork: async () => ({ revision: 9, status, workspace_id: "workspace-untrusted" }),
+        listTasks: async () => {
+          sideEffects += 1;
+          return [];
+        },
+      },
+      runner: {},
+      runtimeExecutions: {},
+      workspaces: {
+        get: async () => {
+          sideEffects += 1;
+          return { trust: "pending" };
+        },
+      },
+      software: {
+        executeTask: async () => {
+          sideEffects += 1;
+          return { outcome: "completed" };
+        },
+        cancelTask: async () => undefined,
+      },
+    } as never);
+
+    await expect(stage.execute(context, input)).resolves.toMatchObject({ outcome, workId: input.workId });
+    expect(sideEffects).toBe(0);
+  });
+
+  it("저장된 failed Delivery를 신뢰·근거 게이트보다 먼저 찾아 원자 실패 수렴 정보로 반환한다", async () => {
+    const task = {
+      task_id: "task-stored-terminal-failure",
+      title: "저장 실패",
+      objective: "저장 실패",
+      acceptance_criteria_json: "[]",
+      status: "running",
+      required_capabilities: ["backend-engineering"],
+      recommended_agent_handles: ["software-engineering.backend-specialist"],
+      revision: 4,
+    };
+    let gated = 0;
+    const stage = new CoreDeliveryStage({
+      works: {
+        getWork: async () => ({ revision: 11, status: "running", workspace_id: "workspace-untrusted" }),
+        listTasks: async () => [task],
+      },
+      runner: {},
+      runtimeExecutions: {},
+      workspaces: {
+        get: async () => {
+          gated += 1;
+          return { trust: "pending" };
+        },
+      },
+      software: {
+        inspectTask: async () => ({ outcome: "failed", reason: "software-delivery-failed" }),
+        executeTask: async () => {
+          gated += 1;
+          return { outcome: "completed" };
+        },
+        cancelTask: async () => undefined,
+      },
+    } as never);
+
+    await expect(stage.execute(context, input)).resolves.toMatchObject({
+      outcome: "failed",
+      workId: input.workId,
+      failure: { taskId: task.task_id, expectedWorkRevision: 11, expectedTaskRevision: 4 },
+    });
+    expect(gated).toBe(0);
+  });
+
   it("trusted workspace에 바인딩된 Work는 정상 진행한다", async () => {
     const stage = new CoreDeliveryStage({
       works: {
@@ -213,6 +290,100 @@ describe("CoreDeliveryStage", () => {
       outcome: "blocked",
       reason: "software-delivery-not-configured",
     });
+  });
+
+  it("terminal Software Delivery 실패는 실행 중 Task와 Work를 failed로 수렴시킨다", async () => {
+    const transitions: unknown[] = [];
+    const task = {
+      task_id: "task-software-failed",
+      title: "실패 수렴",
+      objective: "실패 수렴",
+      acceptance_criteria_json: "[]",
+      status: "running",
+      required_capabilities: ["backend-engineering"],
+      recommended_agent_handles: ["software-engineering.backend-specialist"],
+      revision: 2,
+    };
+    const stage = new CoreDeliveryStage({
+      works: {
+        listTasks: async () => [task],
+        getWork: async () => ({ revision: 7, status: "running" }),
+        transitionTask: async (_context: unknown, value: unknown) => {
+          transitions.push(value);
+          return { work: { revision: 8, status: "failed" }, task: { ...task, status: "failed", revision: 3 } };
+        },
+      },
+      runner: {},
+      runtimeExecutions: {},
+      software: {
+        executeTask: async () => ({ outcome: "failed", reason: "software-delivery-failed" }),
+        cancelTask: async () => undefined,
+      },
+    } as never);
+
+    await expect(stage.execute(context, input)).resolves.toEqual({
+      outcome: "failed",
+      reason: "software-delivery-failed",
+      workId: input.workId,
+      failure: {
+        taskId: task.task_id,
+        expectedWorkRevision: 7,
+        expectedTaskRevision: 2,
+        commandId: `${input.runId}:delivery:task:${task.task_id}:failed`,
+      },
+    });
+    expect(transitions).toEqual([]);
+    await stage.convergeFailure(
+      context,
+      {
+        outcome: "failed",
+        reason: "software-delivery-failed",
+        workId: input.workId,
+        failure: {
+          taskId: task.task_id,
+          expectedWorkRevision: 7,
+          expectedTaskRevision: 2,
+          commandId: `${input.runId}:delivery:task:${task.task_id}:failed`,
+        },
+      },
+      {} as never,
+    );
+    expect(transitions).toEqual([
+      expect.objectContaining({
+        workId: input.workId,
+        expectedRevision: 7,
+        taskId: task.task_id,
+        expectedTaskRevision: 2,
+        target: "failed",
+      }),
+    ]);
+  });
+
+  it.each([
+    ["failed", "failed"],
+    ["cancelled", "cancelled"],
+  ] as const)("이미 %s인 Work는 Delivery를 재실행하지 않고 terminal 결과를 보존한다", async (status, outcome) => {
+    let softwareCalls = 0;
+    const stage = new CoreDeliveryStage({
+      works: {
+        getWork: async () => ({ revision: 8, status }),
+        listTasks: async () => {
+          throw new Error("terminal Work의 Task를 다시 읽으면 안 됩니다");
+        },
+      },
+      runner: {},
+      runtimeExecutions: {},
+      software: {
+        executeTask: async () => {
+          softwareCalls += 1;
+          return { outcome: "completed" };
+        },
+        cancelTask: async () => undefined,
+      },
+    } as never);
+
+    await expect(stage.execute(context, input)).resolves.toMatchObject({ outcome, workId: input.workId });
+    expect(softwareCalls).toBe(0);
   });
 
   it("일반 Task는 assign→running→runtime→artifact→completed 순서를 지킨다", async () => {

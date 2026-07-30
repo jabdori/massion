@@ -794,17 +794,22 @@ export async function createMassionDaemon(
       engineeringCoordination,
     );
     const engineeringWorkspaces = await GitWorkspaceManager.create({ workspaceRoot: config.software.workspaceRoot });
-    const engineeringEngine = new TddDeliveryEngine(engineeringDeliveries, engineeringWorkspaces, {
-      create: async (workspaceRoot) =>
-        await ConfinedCommandRunner.create({
-          workspaceRoot,
-          executables: config.software.executables,
-          environmentAllowlist: config.software.environmentAllowlist,
-          maxTimeoutMs: 3_600_000,
-          maxOutputBytes: 10_000_000,
-          maxExcerptBytes: 64_000,
-        }),
-    });
+    const engineeringEngine = new TddDeliveryEngine(
+      engineeringDeliveries,
+      engineeringWorkspaces,
+      {
+        create: async (workspaceRoot) =>
+          await ConfinedCommandRunner.create({
+            workspaceRoot,
+            executables: config.software.executables,
+            environmentAllowlist: config.software.environmentAllowlist,
+            maxTimeoutMs: 3_600_000,
+            maxOutputBytes: 10_000_000,
+            maxExcerptBytes: 64_000,
+          }),
+      },
+      engineeringLeases,
+    );
     const softwareAssuranceReader = new DatabaseSoftwareAssuranceSourceReader(database, organizations);
     const softwareAssuranceAdapter = await SoftwareAssuranceAdapter.create(softwareAssuranceReader, {
       workspaceRoot: join(config.software.workspaceRoot, "assurance-command"),
@@ -849,6 +854,8 @@ export async function createMassionDaemon(
       engine: engineeringEngine,
       finalizer: engineeringFinalizer,
       recovery: engineeringRecovery,
+      leases: engineeringLeases,
+      metrics: engineeringMetrics,
     });
     const evidenceStage = new CoreEvidenceStage({
       works,

@@ -386,8 +386,9 @@ export class SoftwarePatchProposalService {
         },
       },
     );
-    if (result.status !== "succeeded")
-      throw new Error(`Software patch proposal execution이 실패했습니다: ${result.status}`);
+    if (result.status !== "succeeded") {
+      throw new Error(`Software patch proposal execution이 실패했습니다: ${result.status}`, { cause: result });
+    }
     if (!proposal(result.output)) throw new Error("Software patch proposal 구조가 계약과 다릅니다");
     return result.output;
   }

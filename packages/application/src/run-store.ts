@@ -445,12 +445,32 @@ export class ApplicationRunStore {
     return await this.finish(context, runId, generation, "completed", { result });
   }
 
-  public async cancel(context: TenantContext, runId: string): Promise<ApplicationRunView> {
+  public async fail(
+    context: TenantContext,
+    runId: string,
+    generation: number,
+    reason: string,
+    workId?: string,
+    converge?: (transaction: QueryExecutor) => Promise<void>,
+  ): Promise<ApplicationRunView> {
+    return await this.finish(context, runId, generation, "failed", {
+      reason,
+      ...(workId === undefined ? {} : { workId }),
+      ...(converge === undefined ? {} : { converge }),
+    });
+  }
+
+  public async cancel(
+    context: TenantContext,
+    runId: string,
+    converge?: (transaction: QueryExecutor) => Promise<void>,
+  ): Promise<ApplicationRunView> {
     await this.organizations.verifyTenantContext(context);
     return await this.database.transaction(async (transaction) => {
       await this.organizations.verifyTenantContext(context, undefined, transaction);
       const record = await this.find(transaction, context.organizationId, runId);
       if (["completed", "failed", "cancelled"].includes(record.status)) return this.view(record);
+      await converge?.(transaction);
       await transaction.query(
         "UPDATE application_run SET status = 'cancelled', stage = 'terminal', approval_id = NONE, resume_approval_id = NONE, lease_expires_at = NONE, updated_at = <datetime>$updated_at WHERE organization_id = $organization_id AND run_id = $run_id AND status = $previous_status AND lease_generation = $previous_generation;",
         {
@@ -576,19 +596,26 @@ export class ApplicationRunStore {
     context: TenantContext,
     runId: string,
     generation: number,
-    status: "completed",
-    input: { readonly result?: unknown },
+    status: "completed" | "failed",
+    input: {
+      readonly result?: unknown;
+      readonly reason?: string;
+      readonly workId?: string;
+      readonly converge?: (transaction: QueryExecutor) => Promise<void>;
+    },
   ): Promise<ApplicationRunView> {
     const resultJson = input.result === undefined ? undefined : canonicalJson(input.result);
     return await this.transition(context, runId, generation, async (transaction, record) => {
+      await input.converge?.(transaction);
       await transaction.query(
-        "UPDATE application_run SET status = $status, stage = 'terminal', blocked_reason = $blocked_reason, result_json = $result_json, result_hash = $result_hash, resume_approval_id = NONE, lease_expires_at = NONE, updated_at = <datetime>$updated_at WHERE organization_id = $organization_id AND run_id = $run_id AND status = 'running' AND lease_generation = $generation;",
+        "UPDATE application_run SET status = $status, stage = 'terminal', blocked_reason = $blocked_reason, work_id = $work_id, result_json = $result_json, result_hash = $result_hash, resume_approval_id = NONE, lease_expires_at = NONE, updated_at = <datetime>$updated_at WHERE organization_id = $organization_id AND run_id = $run_id AND status = 'running' AND lease_generation = $generation;",
         {
           organization_id: context.organizationId,
           run_id: runId,
           generation,
           status,
-          blocked_reason: undefined,
+          blocked_reason: input.reason,
+          work_id: input.workId ?? record.work_id,
           result_json: resultJson,
           result_hash: resultJson === undefined ? undefined : sha256(resultJson),
           updated_at: this.clock.now.toISOString(),
@@ -601,9 +628,13 @@ export class ApplicationRunStore {
         record.correlation_id,
         generation,
         "terminal",
-        "completed",
-        sha256(resultJson ?? status),
+        status,
+        sha256(input.reason ?? resultJson ?? status),
       );
+      const terminal = await this.find(transaction, context.organizationId, runId);
+      if (terminal.status !== status || terminal.stage !== "terminal" || terminal.lease_generation !== generation) {
+        throw new Error("Application run terminal 전이 동시성 충돌입니다");
+      }
     });
   }
 

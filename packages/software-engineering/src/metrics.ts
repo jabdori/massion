@@ -33,7 +33,14 @@ const DIMENSION_VALUES: Readonly<Record<EngineeringMetricName, MetricDimensionPo
     test: new Set(["true", "false"]),
   },
   engineering_recovery_total: {
-    result: new Set(["reconciled_commit", "resumed", "resume_required", "cleaned_terminal", "finalized"]),
+    result: new Set([
+      "reconciled_commit",
+      "resumed",
+      "resume_required",
+      "cleaned_terminal",
+      "finalized",
+      "cleanup_failed",
+    ]),
   },
 };
 

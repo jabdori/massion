@@ -21,7 +21,7 @@ import {
   WORK_STRATEGY_PROJECTION_MIGRATION,
   WORK_WORKSPACE_MIGRATION,
 } from "./schema.js";
-import type { PromptVersionResolver, ResolveWorkPromptInput, ResolvedWorkPrompt } from "./prompt-version.js";
+import type { PromptVersionResolver, ResolveWorkPromptInput } from "./prompt-version.js";
 
 export type WorkStatus =
   | "draft"
@@ -846,7 +846,10 @@ export class WorkService {
     private readonly graph?: OrganizationGraphService,
     private readonly governance?: Pick<GovernanceGate, "authorize" | "getApprovalStatus">,
     private readonly promptVersions?: PromptVersionResolver,
-    private readonly autonomy?: (context: TenantContext, executor: QueryExecutor) => Promise<{
+    private readonly autonomy?: (
+      context: TenantContext,
+      executor: QueryExecutor,
+    ) => Promise<{
       readonly mode: "automatic" | "review" | "full-access";
       readonly revision: number;
     }>,
@@ -858,7 +861,10 @@ export class WorkService {
     graph?: OrganizationGraphService,
     governance?: Pick<GovernanceGate, "authorize" | "getApprovalStatus">,
     promptVersions?: PromptVersionResolver,
-    autonomy?: (context: TenantContext, executor: QueryExecutor) => Promise<{
+    autonomy?: (
+      context: TenantContext,
+      executor: QueryExecutor,
+    ) => Promise<{
       readonly mode: "automatic" | "review" | "full-access";
       readonly revision: number;
     }>,
@@ -963,9 +969,9 @@ export class WorkService {
     });
   }
 
-  public async getWork(context: TenantContext, workId: string): Promise<Work> {
+  public async getWork(context: TenantContext, workId: string, executor: QueryExecutor = this.database): Promise<Work> {
     await this.verify(context);
-    const work = await findWork(this.database, context.organizationId, workId);
+    const work = await findWork(executor, context.organizationId, workId);
     if (!work) throw new Error(`Work를 찾을 수 없습니다: ${workId}`);
     return work;
   }
@@ -1361,6 +1367,7 @@ export class WorkService {
   public async transitionTask(
     context: TenantContext,
     input: TransitionTaskInput,
+    executor?: QueryExecutor,
   ): Promise<WorkCommandResult & { task: WorkTask; unblockedTasks: WorkTask[] }> {
     const allowed: Readonly<Record<TaskStatus, readonly TaskStatus[]>> = {
       blocked: ["ready", "cancelled"],
@@ -1370,61 +1377,101 @@ export class WorkService {
       failed: ["ready", "cancelled"],
       cancelled: [],
     };
-    return await this.mutate(context, input, "task_state_changed", async (transaction, work) => {
-      const tasks = await listActiveTasksWith(transaction, context.organizationId, work);
-      const target = tasks.find((task) => task.task_id === input.taskId);
-      if (!target) throw new Error(`Task를 찾을 수 없습니다: ${input.taskId}`);
-      if (target.revision !== input.expectedTaskRevision) {
-        throw new Error(`현재 Task revision은 ${String(target.revision)}입니다`);
-      }
-      if (!allowed[target.status].includes(input.target)) {
-        throw new Error(`허용되지 않은 Task 상태 전이입니다: ${target.status} -> ${input.target}`);
-      }
-      if (
-        input.target === "ready" &&
-        target.dependency_ids.some(
-          (dependencyId) => tasks.find((task) => task.task_id === dependencyId)?.status !== "completed",
-        )
-      ) {
-        throw new Error("완료되지 않은 dependency Task가 있습니다");
-      }
-      await transaction.query(
-        "UPDATE work_task SET status = $status, revision = $revision, updated_at = time::now() WHERE organization_id = $organization_id AND work_id = $work_id AND task_id = $task_id;",
-        {
-          status: input.target,
-          revision: target.revision + 1,
-          organization_id: context.organizationId,
-          work_id: work.work_id,
-          task_id: target.task_id,
-        },
-      );
-      const unblockedTasks: WorkTask[] = [];
-      if (input.target === "completed") {
-        const completedIds = new Set(
-          tasks
-            .filter((task) => task.status === "completed" || task.task_id === target.task_id)
-            .map((task) => task.task_id),
+    return await this.mutate(
+      context,
+      input,
+      "task_state_changed",
+      async (transaction, work) => {
+        const tasks = await listActiveTasksWith(transaction, context.organizationId, work);
+        const target = tasks.find((task) => task.task_id === input.taskId);
+        if (!target) throw new Error(`Task를 찾을 수 없습니다: ${input.taskId}`);
+        if (target.revision !== input.expectedTaskRevision) {
+          throw new Error(`현재 Task revision은 ${String(target.revision)}입니다`);
+        }
+        const failsBeforeRunning = target.status === "ready" && input.target === "failed";
+        if (!allowed[target.status].includes(input.target) && !failsBeforeRunning) {
+          throw new Error(`허용되지 않은 Task 상태 전이입니다: ${target.status} -> ${input.target}`);
+        }
+        if (
+          input.target === "ready" &&
+          target.dependency_ids.some(
+            (dependencyId) => tasks.find((task) => task.task_id === dependencyId)?.status !== "completed",
+          )
+        ) {
+          throw new Error("완료되지 않은 dependency Task가 있습니다");
+        }
+        if (input.target === "failed" && !canTransitionWork(work.status, "failed")) {
+          throw new Error(`Task와 함께 실패시킬 수 없는 Work 상태입니다: ${work.status}`);
+        }
+        if (failsBeforeRunning) {
+          await transaction.query(
+            "UPDATE work_task SET status = 'running', revision = $revision, updated_at = time::now() WHERE organization_id = $organization_id AND work_id = $work_id AND task_id = $task_id;",
+            {
+              revision: target.revision + 1,
+              organization_id: context.organizationId,
+              work_id: work.work_id,
+              task_id: target.task_id,
+            },
+          );
+          const runningTask = { ...target, status: "running" as const, revision: target.revision + 1 };
+          await this.appendEvent(
+            transaction,
+            context,
+            work,
+            `${input.commandId}:started`,
+            "task_state_changed",
+            canonicalJson({ ...input, commandId: `${input.commandId}:started`, target: "running" }),
+            { from: "ready", to: "running", taskId: target.task_id, reason: "delivery-failure-convergence" },
+            { work, task: runningTask, unblockedTasks: [] },
+            input.causedByEventId,
+          );
+        }
+        const nextTaskRevision = target.revision + (failsBeforeRunning ? 2 : 1);
+        await transaction.query(
+          "UPDATE work_task SET status = $status, revision = $revision, updated_at = time::now() WHERE organization_id = $organization_id AND work_id = $work_id AND task_id = $task_id;",
+          {
+            status: input.target,
+            revision: nextTaskRevision,
+            organization_id: context.organizationId,
+            work_id: work.work_id,
+            task_id: target.task_id,
+          },
         );
-        for (const candidate of tasks) {
-          if (
-            candidate.status === "blocked" &&
-            candidate.dependency_ids.every((dependencyId) => completedIds.has(dependencyId))
-          ) {
-            await transaction.query(
-              "UPDATE work_task SET status = 'ready', revision = $revision, updated_at = time::now() WHERE organization_id = $organization_id AND work_id = $work_id AND task_id = $task_id;",
-              {
-                revision: candidate.revision + 1,
-                organization_id: context.organizationId,
-                work_id: work.work_id,
-                task_id: candidate.task_id,
-              },
-            );
-            unblockedTasks.push({ ...candidate, status: "ready", revision: candidate.revision + 1 });
+        if (input.target === "failed") {
+          await transaction.query(
+            "UPDATE work SET status = 'failed', updated_at = time::now() WHERE organization_id = $organization_id AND work_id = $work_id;",
+            { organization_id: context.organizationId, work_id: work.work_id },
+          );
+        }
+        const unblockedTasks: WorkTask[] = [];
+        if (input.target === "completed") {
+          const completedIds = new Set(
+            tasks
+              .filter((task) => task.status === "completed" || task.task_id === target.task_id)
+              .map((task) => task.task_id),
+          );
+          for (const candidate of tasks) {
+            if (
+              candidate.status === "blocked" &&
+              candidate.dependency_ids.every((dependencyId) => completedIds.has(dependencyId))
+            ) {
+              await transaction.query(
+                "UPDATE work_task SET status = 'ready', revision = $revision, updated_at = time::now() WHERE organization_id = $organization_id AND work_id = $work_id AND task_id = $task_id;",
+                {
+                  revision: candidate.revision + 1,
+                  organization_id: context.organizationId,
+                  work_id: work.work_id,
+                  task_id: candidate.task_id,
+                },
+              );
+              unblockedTasks.push({ ...candidate, status: "ready", revision: candidate.revision + 1 });
+            }
           }
         }
-      }
-      return { task: { ...target, status: input.target, revision: target.revision + 1 }, unblockedTasks };
-    });
+        return { task: { ...target, status: input.target, revision: nextTaskRevision }, unblockedTasks };
+      },
+      executor,
+    );
   }
 
   public async listTasks(context: TenantContext, workId: string): Promise<WorkTask[]> {
@@ -2465,79 +2512,89 @@ export class WorkService {
     };
   }
 
-  public async transition(context: TenantContext, input: TransitionInput): Promise<WorkCommandResult> {
-    return await this.mutate(context, input, "work_state_changed", async (transaction, work) => {
-      if (!canTransitionWork(work.status, input.target)) {
-        throw new Error(`허용되지 않은 Work 상태 전이입니다: ${work.status} -> ${input.target}`);
-      }
-      if (input.target === "planned") {
-        const [plans] = await transaction.query<[PlanVersion[]]>(
-          "SELECT * OMIT id FROM plan_version WHERE organization_id = $organization_id AND work_id = $work_id ORDER BY version ASC;",
-          { organization_id: context.organizationId, work_id: work.work_id },
-        );
-        const activePlan = plans.find(
-          (plan) =>
-            plan.valid && (!work.active_plan_version_id || plan.plan_version_id === work.active_plan_version_id),
-        );
-        if (!activePlan) throw new Error("planned 전이에는 유효한 PlanVersion이 필요합니다");
-      }
-      if (input.target === "ready") {
-        const tasks = await listActiveTasksWith(transaction, context.organizationId, work);
-        assertAcyclic(tasks);
-        if (tasks.length === 0) throw new Error("ready 전이에는 Task DAG가 필요합니다");
-        const assignments = await listAssignmentsWith(transaction, context.organizationId, work.work_id);
-        if (
-          tasks
-            .filter((task) => task.status !== "cancelled")
-            .some(
-              (task) =>
-                !assignments.some(
-                  (assignment) => assignment.task_id === task.task_id && assignment.status === "assigned",
-                ),
-            )
-        ) {
-          throw new Error("ready 전이에는 모든 실행 Task의 Assignment가 필요합니다");
+  public async transition(
+    context: TenantContext,
+    input: TransitionInput,
+    executor?: QueryExecutor,
+  ): Promise<WorkCommandResult> {
+    return await this.mutate(
+      context,
+      input,
+      "work_state_changed",
+      async (transaction, work) => {
+        if (!canTransitionWork(work.status, input.target)) {
+          throw new Error(`허용되지 않은 Work 상태 전이입니다: ${work.status} -> ${input.target}`);
         }
-        if (!this.graph) throw new Error("ready 전이에는 Organization Graph reader가 필요합니다");
-        for (const assignment of assignments.filter((candidate) => candidate.status === "assigned")) {
-          await this.graph.verifyActiveNode(context, assignment.agent_handle, transaction);
+        if (input.target === "planned") {
+          const [plans] = await transaction.query<[PlanVersion[]]>(
+            "SELECT * OMIT id FROM plan_version WHERE organization_id = $organization_id AND work_id = $work_id ORDER BY version ASC;",
+            { organization_id: context.organizationId, work_id: work.work_id },
+          );
+          const activePlan = plans.find(
+            (plan) =>
+              plan.valid && (!work.active_plan_version_id || plan.plan_version_id === work.active_plan_version_id),
+          );
+          if (!activePlan) throw new Error("planned 전이에는 유효한 PlanVersion이 필요합니다");
         }
-      }
-      if (input.target === "verifying") {
-        const tasks = await listActiveTasksWith(transaction, context.organizationId, work);
-        if (tasks.length === 0 || tasks.some((task) => !["completed", "cancelled"].includes(task.status))) {
-          throw new Error("verifying 전이에는 모든 실행 Task의 완료가 필요합니다");
+        if (input.target === "ready") {
+          const tasks = await listActiveTasksWith(transaction, context.organizationId, work);
+          assertAcyclic(tasks);
+          if (tasks.length === 0) throw new Error("ready 전이에는 Task DAG가 필요합니다");
+          const assignments = await listAssignmentsWith(transaction, context.organizationId, work.work_id);
+          if (
+            tasks
+              .filter((task) => task.status !== "cancelled")
+              .some(
+                (task) =>
+                  !assignments.some(
+                    (assignment) => assignment.task_id === task.task_id && assignment.status === "assigned",
+                  ),
+              )
+          ) {
+            throw new Error("ready 전이에는 모든 실행 Task의 Assignment가 필요합니다");
+          }
+          if (!this.graph) throw new Error("ready 전이에는 Organization Graph reader가 필요합니다");
+          for (const assignment of assignments.filter((candidate) => candidate.status === "assigned")) {
+            await this.graph.verifyActiveNode(context, assignment.agent_handle, transaction);
+          }
         }
-      }
-      if (input.target === "completed") {
-        const [verifications] = await transaction.query<[WorkVerification[]]>(
-          "SELECT * OMIT id FROM work_verification WHERE organization_id = $organization_id AND work_id = $work_id ORDER BY created_at ASC;",
-          { organization_id: context.organizationId, work_id: work.work_id },
+        if (input.target === "verifying") {
+          const tasks = await listActiveTasksWith(transaction, context.organizationId, work);
+          if (tasks.length === 0 || tasks.some((task) => !["completed", "cancelled"].includes(task.status))) {
+            throw new Error("verifying 전이에는 모든 실행 Task의 완료가 필요합니다");
+          }
+        }
+        if (input.target === "completed") {
+          const [verifications] = await transaction.query<[WorkVerification[]]>(
+            "SELECT * OMIT id FROM work_verification WHERE organization_id = $organization_id AND work_id = $work_id ORDER BY created_at ASC;",
+            { organization_id: context.organizationId, work_id: work.work_id },
+          );
+          const [records] = await transaction.query<[WorkRecord[]]>(
+            "SELECT * OMIT id FROM work_record WHERE organization_id = $organization_id AND work_id = $work_id AND finalized = true ORDER BY version ASC;",
+            { organization_id: context.organizationId, work_id: work.work_id },
+          );
+          const latestVerification = verifications.at(-1);
+          if (
+            !latestVerification?.passed ||
+            latestVerification.projected_work_revision + 1 !== work.revision ||
+            records.at(-1)?.recorded_work_revision !== work.revision
+          ) {
+            throw new Error("completed 전이에는 통과 Verification과 확정 WorkRecord가 필요합니다");
+          }
+        }
+        await transaction.query(
+          "UPDATE work SET status = $status, revision = $revision, updated_at = time::now() WHERE organization_id = $organization_id AND work_id = $work_id;",
+          {
+            status: input.target,
+            revision: work.revision + 1,
+            organization_id: context.organizationId,
+            work_id: work.work_id,
+          },
         );
-        const [records] = await transaction.query<[WorkRecord[]]>(
-          "SELECT * OMIT id FROM work_record WHERE organization_id = $organization_id AND work_id = $work_id AND finalized = true ORDER BY version ASC;",
-          { organization_id: context.organizationId, work_id: work.work_id },
-        );
-        const latestVerification = verifications.at(-1);
-        if (
-          !latestVerification?.passed ||
-          latestVerification.projected_work_revision + 1 !== work.revision ||
-          records.at(-1)?.recorded_work_revision !== work.revision
-        ) {
-          throw new Error("completed 전이에는 통과 Verification과 확정 WorkRecord가 필요합니다");
-        }
-      }
-      await transaction.query(
-        "UPDATE work SET status = $status, revision = $revision, updated_at = time::now() WHERE organization_id = $organization_id AND work_id = $work_id;",
-        {
-          status: input.target,
-          revision: work.revision + 1,
-          organization_id: context.organizationId,
-          work_id: work.work_id,
-        },
-      );
-      return {};
-    });
+        return {};
+      },
+      executor,
+    );
   }
 
   public async authorizeRunningAction(
@@ -2617,10 +2674,11 @@ export class WorkService {
     input: WorkCommandInput,
     eventType: string,
     operation: (transaction: QueryExecutor, work: Work) => Promise<Extra>,
+    executor?: QueryExecutor,
   ): Promise<WorkCommandResult & Extra> {
     await this.verify(context);
     const requestJson = canonicalJson(input);
-    return await this.database.transaction(async (transaction) => {
+    const mutate = async (transaction: QueryExecutor): Promise<WorkCommandResult & Extra> => {
       await this.organizations.verifyTenantContext(context, undefined, transaction);
       const repeated = await findCommand(transaction, context.organizationId, input.commandId);
       if (repeated) return this.replay(repeated, requestJson) as WorkCommandResult & Extra;
@@ -2661,7 +2719,8 @@ export class WorkService {
         event_id: event.event_id,
       });
       return result;
-    });
+    };
+    return executor ? await mutate(executor) : await this.database.transaction(mutate);
   }
 
   private replay(event: WorkEvent, requestJson: string): unknown {

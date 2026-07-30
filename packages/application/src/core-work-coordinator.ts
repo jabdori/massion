@@ -1,4 +1,5 @@
 import type { TenantContext } from "@massion/identity";
+import type { QueryExecutor } from "@massion/storage";
 
 import {
   type ApplicationRunStage,
@@ -30,6 +31,7 @@ interface ApprovalResumeInput {
 
 export interface CoreWorkStageInput {
   readonly runId: string;
+  readonly leaseGeneration?: number;
   readonly workId?: string;
   readonly commandId: string;
   readonly correlationId: string;
@@ -45,13 +47,36 @@ export interface CoreWorkStageInput {
 
 export type CoreWorkStageResult = (
   | { readonly outcome: "advanced"; readonly workId?: string; readonly data?: unknown }
+  | { readonly outcome: "completed"; readonly workId?: string; readonly data?: unknown }
   | { readonly outcome: "in-progress" }
   | { readonly outcome: "awaiting-approval"; readonly approvalId: string }
   | { readonly outcome: "blocked"; readonly reason: string; readonly workId?: string }
+  | {
+      readonly outcome: "failed";
+      readonly reason: string;
+      readonly workId?: string;
+      readonly failure?: {
+        readonly taskId: string;
+        readonly expectedWorkRevision: number;
+        readonly expectedTaskRevision: number;
+        readonly commandId: string;
+      };
+    }
+  | { readonly outcome: "cancelled"; readonly reason: string; readonly workId?: string }
 ) & { readonly appliedDirectiveIds?: readonly string[] };
 
 export interface CoreWorkStageExecutor {
   execute(context: TenantContext, input: CoreWorkStageInput): Promise<CoreWorkStageResult>;
+  convergeFailure?(
+    context: TenantContext,
+    result: Extract<CoreWorkStageResult, { readonly outcome: "failed" }>,
+    executor: QueryExecutor,
+  ): Promise<void>;
+  convergeCancellation?(
+    context: TenantContext,
+    input: Omit<CoreWorkStageInput, "resumeInput">,
+    executor: QueryExecutor,
+  ): Promise<void>;
   cancel?(context: TenantContext, input: Omit<CoreWorkStageInput, "resumeInput">): Promise<void>;
 }
 
@@ -164,6 +189,11 @@ export class CoreWorkCoordinator {
     retryAttemptId: string,
   ): Promise<ApplicationRunView> {
     const run = await this.store.get(context, runId);
+    if (["completed", "failed", "cancelled"].includes(run.status)) {
+      throw new Error(
+        "차단되었거나 같은 재시도 시도를 가진 Application run만 다시 시도할 수 있으며 terminal run은 거부됩니다",
+      );
+    }
     if (run.retryAttemptId === retryAttemptId || run.retryReplayId === retryAttemptId) {
       return await this.recover(context, runId);
     }
@@ -190,19 +220,28 @@ export class CoreWorkCoordinator {
     if (run.stage === "terminal") return run;
     const stage = run.stage;
     this.abortStageExecutions(run.runId);
+    const cancellationInput = {
+      runId: run.runId,
+      leaseGeneration: run.leaseGeneration,
+      ...(run.workId === undefined ? {} : { workId: run.workId }),
+      commandId: `${stageCommandId(run.runId, stage, run.retryAttemptId)}:cancel`,
+      correlationId: run.correlationId,
+      request: run.request,
+    };
     let cleanupError: Error | undefined;
     try {
-      await this.executors[stage].cancel?.(context, {
-        runId: run.runId,
-        ...(run.workId === undefined ? {} : { workId: run.workId }),
-        commandId: `${stageCommandId(run.runId, stage, run.retryAttemptId)}:cancel`,
-        correlationId: run.correlationId,
-        request: run.request,
-      });
+      await this.executors[stage].cancel?.(context, cancellationInput);
     } catch (error) {
       cleanupError = error instanceof Error ? error : new Error(String(error), { cause: error });
     }
-    const cancelled = await this.store.cancel(context, runId);
+    const cancelled = await this.store.cancel(
+      context,
+      runId,
+      this.executors[stage].convergeCancellation
+        ? async (transaction) =>
+            await this.executors[stage].convergeCancellation?.(context, cancellationInput, transaction)
+        : undefined,
+    );
     await this.directives?.markUnapplied(context, runId);
     if (cleanupError) throw cleanupError;
     return cancelled;
@@ -230,12 +269,14 @@ export class CoreWorkCoordinator {
       const explicitRetryAttemptId = resumeBlocked ? nextRetryAttemptId : undefined;
       let claim: Awaited<ReturnType<ApplicationRunStore["claim"]>>;
       try {
-        claim = initialClaim ?? (await this.store.claim(context, run.runId, {
-          resumeAwaitingApproval: shouldResume,
-          resumeBlocked,
-          ...(nextRetryAttemptId === undefined ? {} : { retryAttemptId: nextRetryAttemptId }),
-          ...(shouldResume && nextResumeInput !== undefined ? { approvalId: nextResumeInput.approvalId } : {}),
-        }));
+        claim =
+          initialClaim ??
+          (await this.store.claim(context, run.runId, {
+            resumeAwaitingApproval: shouldResume,
+            resumeBlocked,
+            ...(nextRetryAttemptId === undefined ? {} : { retryAttemptId: nextRetryAttemptId }),
+            ...(shouldResume && nextResumeInput !== undefined ? { approvalId: nextResumeInput.approvalId } : {}),
+          }));
         initialClaim = undefined;
         if (claim.outcome === "claimed" && explicitRetryAttemptId !== undefined) {
           if (claim.retryAttemptId !== explicitRetryAttemptId) {
@@ -267,6 +308,7 @@ export class CoreWorkCoordinator {
             (await this.directives?.claimEligible(context, run.runId, stage, claim.leaseGeneration)) ?? [];
           result = await this.executors[stage].execute(context, {
             runId: run.runId,
+            leaseGeneration: claim.leaseGeneration,
             ...(run.workId === undefined ? {} : { workId: run.workId }),
             commandId: stageCommandId(run.runId, stage, claim.retryAttemptId),
             correlationId: run.correlationId,
@@ -335,6 +377,28 @@ export class CoreWorkCoordinator {
         }
         if (result.outcome === "blocked") {
           return await this.store.block(context, run.runId, claim.leaseGeneration, result.reason, result.workId);
+        }
+        if (result.outcome === "failed") {
+          const failed = await this.store.fail(
+            context,
+            run.runId,
+            claim.leaseGeneration,
+            result.reason,
+            result.workId,
+            this.executors[stage].convergeFailure
+              ? async (transaction) => await this.executors[stage].convergeFailure?.(context, result, transaction)
+              : undefined,
+          );
+          await this.directives?.markUnapplied(context, run.runId);
+          return failed;
+        }
+        if (result.outcome === "cancelled") {
+          return await this.cancel(context, run.runId);
+        }
+        if (result.outcome === "completed") {
+          const completed = await this.store.complete(context, run.runId, claim.leaseGeneration, result.data);
+          await this.directives?.markUnapplied(context, run.runId);
+          return completed;
         }
         const following = nextStage(stage);
         if (following === "terminal") {

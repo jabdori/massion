@@ -35,10 +35,37 @@ export interface AcquireEngineeringPathLeaseInput {
   readonly ttlMs: number;
 }
 
+export interface ClaimEngineeringPathLeaseInput extends AcquireEngineeringPathLeaseInput {
+  readonly ownerGeneration: number;
+}
+
 export interface ReleaseEngineeringPathLeaseInput {
   readonly commandId: string;
   readonly leaseId: string;
   readonly deliveryId: string;
+  readonly expectedAcquireCommandId?: string;
+}
+
+export interface RenewEngineeringPathLeaseInput {
+  readonly leaseId: string;
+  readonly deliveryId: string;
+  readonly repositoryId: string;
+  readonly expectedVersion: number;
+  readonly ttlMs: number;
+}
+
+export class EngineeringPathLeaseBusyError extends Error {
+  public constructor() {
+    super("요청한 Engineering path가 기존 active lease와 겹칩니다");
+    this.name = "EngineeringPathLeaseBusyError";
+  }
+}
+
+export class EngineeringPathLeaseOwnershipError extends Error {
+  public constructor(message = "Path lease 소유권이 만료되었거나 version이 다릅니다") {
+    super(message);
+    this.name = "EngineeringPathLeaseOwnershipError";
+  }
 }
 
 interface LeaseRecord {
@@ -187,24 +214,9 @@ export class EngineeringPathLeaseStore {
           await this.verifyDelivery(transaction, context.organizationId, input.deliveryId, input.repositoryId);
           await this.advanceClock(transaction, context.organizationId, input.repositoryId);
           const records = await this.listRecords(transaction, context.organizationId, input.repositoryId);
-          for (const record of records) {
-            if (record.status === "active" && datetimeMillis(record.expires_at) <= now.getTime()) {
-              await transaction.query(
-                "UPDATE engineering_path_lease SET status = 'expired', version = $version, updated_at = time::now() WHERE organization_id = $organization_id AND lease_id = $lease_id AND version = $expected_version;",
-                {
-                  version: record.version + 1,
-                  expected_version: record.version,
-                  organization_id: context.organizationId,
-                  lease_id: record.lease_id,
-                },
-              );
-            }
-          }
-          const active = records.filter(
-            (record) => record.status === "active" && datetimeMillis(record.expires_at) > now.getTime(),
-          );
+          const active = records.filter((record) => record.status === "active" || record.status === "expired");
           if (active.some((record) => pathsOverlap(record.path_prefixes, pathPrefixes))) {
-            throw new Error("요청한 Engineering path가 기존 active lease와 겹칩니다");
+            throw new EngineeringPathLeaseBusyError();
           }
           const [created] = await transaction.query<[LeaseRecord[]]>(
             "CREATE engineering_path_lease CONTENT { lease_id: $lease_id, organization_id: $organization_id, repository_id: $repository_id, delivery_id: $delivery_id, path_prefixes: $path_prefixes, status: 'active', version: 1, expires_at: type::datetime($expires_at), acquire_command_id: $acquire_command_id, acquire_request_hash: $acquire_request_hash, created_at: time::now(), updated_at: time::now() } RETURN AFTER;",
@@ -231,6 +243,110 @@ export class EngineeringPathLeaseStore {
     throw new Error("Engineering path lease 획득 재시도 한도를 초과했습니다");
   }
 
+  public async claim(
+    context: TenantContext,
+    input: ClaimEngineeringPathLeaseInput,
+  ): Promise<{ readonly lease: EngineeringPathLease }> {
+    await this.organizations.verifyTenantContext(context);
+    if (!Number.isSafeInteger(input.ownerGeneration) || input.ownerGeneration < 1) {
+      throw new Error("Path lease owner generation이 유효하지 않습니다");
+    }
+    if (!input.commandId.trim() || !input.deliveryId.trim() || !input.repositoryId.trim()) {
+      throw new Error("Path lease command, delivery와 repository가 필요합니다");
+    }
+    if (!Number.isInteger(input.ttlMs) || input.ttlMs < 1 || input.ttlMs > 86_400_000) {
+      throw new Error("Path lease TTL은 1ms 이상 24시간 이하여야 합니다");
+    }
+    const pathPrefixes = normalizeEngineeringPaths(input.pathPrefixes);
+    const requestHash = sha256(canonicalJson({ ...input, pathPrefixes }));
+    await this.verifyDelivery(this.database, context.organizationId, input.deliveryId, input.repositoryId);
+    await this.ensureClock(context.organizationId, input.repositoryId);
+    const now = this.now();
+
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      try {
+        return await this.database.transaction(async (transaction) => {
+          await this.organizations.verifyTenantContext(context, undefined, transaction);
+          await this.verifyDelivery(transaction, context.organizationId, input.deliveryId, input.repositoryId);
+          await this.advanceClock(transaction, context.organizationId, input.repositoryId);
+          const records = await this.listRecords(transaction, context.organizationId, input.repositoryId);
+          const replayed = records.find((record) => record.acquire_command_id === input.commandId);
+          if (replayed) {
+            if (replayed.acquire_request_hash !== requestHash) {
+              throw new Error("같은 command ID에 다른 path lease 명령을 사용할 수 없습니다");
+            }
+            if (replayed.status !== "active" || datetimeMillis(replayed.expires_at) <= now.getTime()) {
+              throw new EngineeringPathLeaseOwnershipError("재생한 path lease 소유권이 더 이상 active가 아닙니다");
+            }
+            return { lease: this.view(replayed) };
+          }
+          if (
+            records.some(
+              (record) =>
+                record.delivery_id === input.deliveryId && (record.status === "active" || record.status === "expired"),
+            )
+          ) {
+            throw new EngineeringPathLeaseOwnershipError(
+              "이전 owner의 path lease 정리가 끝나기 전에는 새 generation이 claim할 수 없습니다",
+            );
+          }
+          const active = records.filter((record) => record.status === "active" || record.status === "expired");
+          if (active.some((record) => pathsOverlap(record.path_prefixes, pathPrefixes))) {
+            throw new EngineeringPathLeaseBusyError();
+          }
+          const previous = records.find((record) => record.delivery_id === input.deliveryId);
+          if (previous) {
+            if (previous.status !== "released") {
+              throw new EngineeringPathLeaseOwnershipError(
+                "Recovery가 이전 path lease를 release하기 전에는 다시 claim할 수 없습니다",
+              );
+            }
+            if (this.ownerGeneration(previous.acquire_command_id) >= input.ownerGeneration) {
+              throw new EngineeringPathLeaseOwnershipError(
+                "낮거나 같은 generation은 path lease를 다시 claim할 수 없습니다",
+              );
+            }
+            const [claimed] = await transaction.query<[LeaseRecord[]]>(
+              "UPDATE engineering_path_lease SET path_prefixes = $path_prefixes, status = 'active', version = $version, expires_at = type::datetime($expires_at), acquire_command_id = $acquire_command_id, acquire_request_hash = $acquire_request_hash, release_command_id = NONE, release_request_hash = NONE, updated_at = time::now() WHERE organization_id = $organization_id AND lease_id = $lease_id AND version = $expected_version RETURN AFTER;",
+              {
+                organization_id: context.organizationId,
+                lease_id: previous.lease_id,
+                expected_version: previous.version,
+                path_prefixes: pathPrefixes,
+                version: previous.version + 1,
+                expires_at: new Date(now.getTime() + input.ttlMs).toISOString(),
+                acquire_command_id: input.commandId,
+                acquire_request_hash: requestHash,
+              },
+            );
+            if (!claimed[0]) throw new EngineeringPathLeaseOwnershipError("Path lease claim 동시성 충돌입니다");
+            return { lease: this.view(claimed[0]) };
+          }
+          const [created] = await transaction.query<[LeaseRecord[]]>(
+            "CREATE engineering_path_lease CONTENT { lease_id: $lease_id, organization_id: $organization_id, repository_id: $repository_id, delivery_id: $delivery_id, path_prefixes: $path_prefixes, status: 'active', version: 1, expires_at: type::datetime($expires_at), acquire_command_id: $acquire_command_id, acquire_request_hash: $acquire_request_hash, created_at: time::now(), updated_at: time::now() } RETURN AFTER;",
+            {
+              lease_id: randomUUID(),
+              organization_id: context.organizationId,
+              repository_id: input.repositoryId,
+              delivery_id: input.deliveryId,
+              path_prefixes: pathPrefixes,
+              expires_at: new Date(now.getTime() + input.ttlMs).toISOString(),
+              acquire_command_id: input.commandId,
+              acquire_request_hash: requestHash,
+            },
+          );
+          if (!created[0]) throw new Error("EngineeringPathLease claim 결과가 없습니다");
+          return { lease: this.view(created[0]) };
+        });
+      } catch (error) {
+        if (!(error instanceof Error) || error.message !== "Engineering path lease clock 충돌입니다" || attempt === 3) {
+          throw error;
+        }
+      }
+    }
+    throw new Error("Engineering path lease claim 재시도 한도를 초과했습니다");
+  }
+
   public async release(
     context: TenantContext,
     input: ReleaseEngineeringPathLeaseInput,
@@ -247,7 +363,15 @@ export class EngineeringPathLeaseStore {
         return { lease: this.view(record) };
       }
       if (record.delivery_id !== input.deliveryId) throw new Error("Path lease의 Delivery 소유 계보가 다릅니다");
-      if (record.status !== "active") throw new Error(`active path lease만 해제할 수 있습니다: ${record.status}`);
+      if (
+        input.expectedAcquireCommandId !== undefined &&
+        record.acquire_command_id !== input.expectedAcquireCommandId
+      ) {
+        throw new EngineeringPathLeaseOwnershipError("Path lease cleanup owner가 현재 owner와 다릅니다");
+      }
+      if (record.status !== "active" && record.status !== "expired") {
+        throw new Error(`active 또는 expired path lease만 해제할 수 있습니다: ${record.status}`);
+      }
       const [updated] = await transaction.query<[LeaseRecord[]]>(
         "UPDATE engineering_path_lease SET status = 'released', version = $version, release_command_id = $release_command_id, release_request_hash = $release_request_hash, updated_at = time::now() WHERE organization_id = $organization_id AND lease_id = $lease_id AND version = $expected_version RETURN AFTER;",
         {
@@ -260,6 +384,44 @@ export class EngineeringPathLeaseStore {
         },
       );
       if (!updated[0]) throw new Error("Engineering path lease version 충돌입니다");
+      return { lease: this.view(updated[0]) };
+    });
+  }
+
+  public async renew(
+    context: TenantContext,
+    input: RenewEngineeringPathLeaseInput,
+  ): Promise<{ readonly lease: EngineeringPathLease }> {
+    await this.organizations.verifyTenantContext(context);
+    if (!Number.isInteger(input.ttlMs) || input.ttlMs < 1 || input.ttlMs > 86_400_000) {
+      throw new Error("Path lease TTL은 1ms 이상 24시간 이하여야 합니다");
+    }
+    const now = this.now();
+    return await this.database.transaction(async (transaction) => {
+      await this.organizations.verifyTenantContext(context, undefined, transaction);
+      await this.advanceClock(transaction, context.organizationId, input.repositoryId);
+      const record = await this.find(transaction, context.organizationId, input.leaseId);
+      if (record.delivery_id !== input.deliveryId || record.repository_id !== input.repositoryId) {
+        throw new EngineeringPathLeaseOwnershipError("Path lease 갱신 소유 계보가 다릅니다");
+      }
+      if (
+        record.status !== "active" ||
+        record.version !== input.expectedVersion ||
+        datetimeMillis(record.expires_at) <= now.getTime()
+      ) {
+        throw new EngineeringPathLeaseOwnershipError();
+      }
+      const [updated] = await transaction.query<[LeaseRecord[]]>(
+        "UPDATE engineering_path_lease SET version = $version, expires_at = type::datetime($expires_at), updated_at = time::now() WHERE organization_id = $organization_id AND lease_id = $lease_id AND status = 'active' AND version = $expected_version RETURN AFTER;",
+        {
+          version: record.version + 1,
+          expires_at: new Date(now.getTime() + input.ttlMs).toISOString(),
+          organization_id: context.organizationId,
+          lease_id: record.lease_id,
+          expected_version: record.version,
+        },
+      );
+      if (!updated[0]) throw new EngineeringPathLeaseOwnershipError("Path lease 갱신 동시성 충돌입니다");
       return { lease: this.view(updated[0]) };
     });
   }
@@ -333,6 +495,13 @@ export class EngineeringPathLeaseStore {
       { organization_id: organizationId, command_id: commandId },
     );
     return records[0];
+  }
+
+  private ownerGeneration(commandId: string): number {
+    const match = /:delivery:lease:(\d+):task:/u.exec(commandId);
+    if (!match?.[1]) return 0;
+    const generation = Number(match[1]);
+    return Number.isSafeInteger(generation) && generation > 0 ? generation : 0;
   }
 
   private replayAcquire(record: LeaseRecord, requestHash: string): EngineeringPathLease {

@@ -80,6 +80,14 @@ interface FileChangeRecord {
   readonly change_hash?: string;
 }
 
+interface DeliveryLeaseRecord {
+  readonly lease_id: string;
+  readonly delivery_id: string;
+  readonly acquire_command_id: string;
+  readonly status: string;
+  readonly expires_at: unknown;
+}
+
 const TERMINAL_STATUSES = new Set<EngineeringDeliveryStatus>(["committed", "failed", "cancelled"]);
 const NEXT_STATUS: Readonly<Partial<Record<EngineeringDeliveryStatus, EngineeringDeliveryStatus>>> = {
   preparing: "test_applied",
@@ -284,6 +292,9 @@ export class EngineeringDeliveryStore {
       if (replayed) return { delivery: this.view(await this.find(tx, context.organizationId, replayed.deliveryId)) };
 
       const current = await this.find(tx, context.organizationId, input.deliveryId);
+      if (input.ownership) {
+        await this.assertLeaseOwnership(tx, context.organizationId, input.deliveryId, input.ownership);
+      }
       if (current.version !== input.expectedVersion) throw new Error("Engineering delivery version 충돌입니다");
       if (TERMINAL_STATUSES.has(current.status)) throw new Error("terminal delivery는 변경할 수 없습니다");
       const terminalFailure = input.target === "failed" || input.target === "cancelled";
@@ -345,6 +356,7 @@ export class EngineeringDeliveryStore {
       readonly deliveryId: string;
       readonly evidenceKey: string;
       readonly evidence: EngineeringCommandEvidence;
+      readonly ownership?: TransitionEngineeringDeliveryInput["ownership"];
     },
   ): Promise<{ readonly commandEvidenceId: string }> {
     await this.organizations.verifyTenantContext(context);
@@ -374,6 +386,9 @@ export class EngineeringDeliveryStore {
     return await this.database.transaction(async (transaction) => {
       await this.organizations.verifyTenantContext(context, undefined, transaction);
       await this.find(transaction, context.organizationId, input.deliveryId);
+      if (input.ownership) {
+        await this.assertLeaseOwnership(transaction, context.organizationId, input.deliveryId, input.ownership);
+      }
       const [existing] = await transaction.query<[CommandEvidenceRecord[]]>(
         "SELECT command_evidence_id, evidence_hash FROM engineering_command_evidence WHERE organization_id = $organization_id AND command_evidence_id = $command_evidence_id LIMIT 1;",
         { organization_id: context.organizationId, command_evidence_id: commandEvidenceId },
@@ -413,6 +428,7 @@ export class EngineeringDeliveryStore {
     context: TenantContext,
     deliveryId: string,
     changes: readonly GitFileChange[],
+    ownership?: TransitionEngineeringDeliveryInput["ownership"],
   ): Promise<{ readonly fileChangeIds: readonly string[] }> {
     await this.organizations.verifyTenantContext(context);
     if (changes.length === 0) throw new Error("하나 이상의 Engineering file change가 필요합니다");
@@ -422,6 +438,7 @@ export class EngineeringDeliveryStore {
     return await this.database.transaction(async (transaction) => {
       await this.organizations.verifyTenantContext(context, undefined, transaction);
       await this.find(transaction, context.organizationId, deliveryId);
+      if (ownership) await this.assertLeaseOwnership(transaction, context.organizationId, deliveryId, ownership);
       const fileChangeIds: string[] = [];
       for (const change of changes) {
         if (!change.relativePath.trim()) throw new Error("Engineering file change path가 필요합니다");
@@ -599,6 +616,49 @@ export class EngineeringDeliveryStore {
     });
   }
 
+  public async resetForRetry(
+    context: TenantContext,
+    input: { readonly commandId: string; readonly deliveryId: string; readonly expectedVersion: number },
+  ): Promise<EngineeringDeliveryResult> {
+    await this.organizations.verifyTenantContext(context);
+    const requestHash = hashRequest({ operation: "reset-for-retry", input });
+    return await this.database.transaction(async (transaction) => {
+      await this.organizations.verifyTenantContext(context, undefined, transaction);
+      const replayed = await this.replay(context.organizationId, input.commandId, requestHash, transaction);
+      if (replayed) {
+        return { delivery: this.view(await this.find(transaction, context.organizationId, replayed.deliveryId)) };
+      }
+      const current = await this.find(transaction, context.organizationId, input.deliveryId);
+      if (current.version !== input.expectedVersion) throw new Error("Engineering delivery version 충돌입니다");
+      if (!["test_applied", "red_verified", "implementation_applied", "green_verified"].includes(current.status)) {
+        throw new Error(`부분 Delivery만 preparing으로 rollback할 수 있습니다: ${current.status}`);
+      }
+      const [activeLeases] = await transaction.query<[DeliveryLeaseRecord[]]>(
+        "SELECT lease_id FROM engineering_path_lease WHERE organization_id = $organization_id AND delivery_id = $delivery_id AND status = 'active' LIMIT 1;",
+        { organization_id: context.organizationId, delivery_id: input.deliveryId },
+      );
+      if (activeLeases[0]) throw new Error("active path lease가 있는 Delivery는 rollback할 수 없습니다");
+      const [updated] = await transaction.query<[DeliveryRecord[]]>(
+        "UPDATE engineering_delivery SET status = 'preparing', version = $version, workspace_id = NONE, branch_ref = NONE, commit_sha = NONE, test_patch_hash = NONE, implementation_patch_hash = NONE, change_set_hash = NONE, red_evidence_id = NONE, green_evidence_id = NONE, validation_evidence_ids = [], assurance_recipe_json = NONE, error_json = NONE, updated_at = time::now() WHERE organization_id = $organization_id AND delivery_id = $delivery_id AND version = $expected_version RETURN AFTER;",
+        {
+          organization_id: context.organizationId,
+          delivery_id: input.deliveryId,
+          expected_version: current.version,
+          version: current.version + 1,
+        },
+      );
+      if (!updated[0]) throw new Error("Engineering delivery rollback version 충돌입니다");
+      await this.recordEvent(transaction, context, {
+        deliveryId: input.deliveryId,
+        commandId: input.commandId,
+        eventType: "engineering_delivery_retry_prepared",
+        requestHash,
+        payload: { from: current.status, to: "preparing", version: updated[0].version },
+      });
+      return { delivery: this.view(updated[0]) };
+    });
+  }
+
   private validateStartInput(input: StartEngineeringDeliveryInput): void {
     for (const [label, value] of [
       ["Command ID", input.commandId],
@@ -707,6 +767,30 @@ export class EngineeringDeliveryStore {
       if (!evidence || evidence.delivery_id !== deliveryId || evidence.stage !== stage) {
         throw new Error(`${stage} command evidence가 delivery 소유·stage 계보와 다릅니다`);
       }
+    }
+  }
+
+  private async assertLeaseOwnership(
+    executor: QueryExecutor,
+    organizationId: string,
+    deliveryId: string,
+    ownership: NonNullable<TransitionEngineeringDeliveryInput["ownership"]>,
+  ): Promise<void> {
+    const [records] = await executor.query<[DeliveryLeaseRecord[]]>(
+      "SELECT lease_id, delivery_id, acquire_command_id, status, expires_at FROM engineering_path_lease WHERE organization_id = $organization_id AND lease_id = $lease_id LIMIT 1;",
+      { organization_id: organizationId, lease_id: ownership.leaseId },
+    );
+    const lease = records[0];
+    const expiresAt = lease ? new Date(String(lease.expires_at)).getTime() : Number.NaN;
+    if (
+      !lease ||
+      lease.delivery_id !== deliveryId ||
+      lease.acquire_command_id !== ownership.ownerCommandId ||
+      lease.status !== "active" ||
+      !Number.isFinite(expiresAt) ||
+      expiresAt <= Date.now()
+    ) {
+      throw new Error("Engineering delivery path lease owner fence가 일치하지 않습니다");
     }
   }
 

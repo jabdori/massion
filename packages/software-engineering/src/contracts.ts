@@ -15,6 +15,11 @@ export interface EngineeringDeliveryError {
   readonly causeId: string;
 }
 
+export interface EngineeringDeliveryLeaseOwnership {
+  readonly leaseId: string;
+  readonly ownerCommandId: string;
+}
+
 /** 독립 검증에서 재실행할 수 있는, 비밀값 없는 명령 명세입니다. */
 export interface EngineeringAssuranceCommand {
   readonly executable: string;
@@ -95,6 +100,7 @@ export interface TransitionEngineeringDeliveryInput {
   readonly assuranceRecipe?: EngineeringAssuranceRecipe;
   readonly artifactVersionId?: string;
   readonly error?: EngineeringDeliveryError;
+  readonly ownership?: EngineeringDeliveryLeaseOwnership;
 }
 
 export interface DeliveryPrerequisiteReader {

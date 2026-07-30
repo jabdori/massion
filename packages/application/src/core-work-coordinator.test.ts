@@ -1,7 +1,8 @@
 import type { TenantContext } from "@massion/identity";
 import { IdentityService, OrganizationService } from "@massion/identity";
-import { createDatabase } from "@massion/storage";
-import { WorkService } from "@massion/work";
+import { OrganizationGraphService } from "@massion/organization";
+import { createDatabase, type MassionDatabase } from "@massion/storage";
+import { canTransitionWork, WorkService } from "@massion/work";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -30,6 +31,63 @@ function executors(calls: string[]): Readonly<Record<CoreWorkStage, CoreWorkStag
       },
     ]),
   ) as unknown as Readonly<Record<CoreWorkStage, CoreWorkStageExecutor>>;
+}
+
+async function runningDeliveryWork(
+  database: MassionDatabase,
+  organizations: OrganizationService,
+  context: TenantContext,
+) {
+  const graph = await OrganizationGraphService.create(database, organizations);
+  await graph.bootstrap(context);
+  const works = await WorkService.create(database, organizations, graph);
+  const created = await works.createWork(context, {
+    commandId: crypto.randomUUID(),
+    text: "cancel fail fence",
+    surface: "test",
+    organizationVersionId: "org-version-cancel-fail-fence",
+  });
+  const plan = await works.addPlan(context, {
+    commandId: crypto.randomUUID(),
+    workId: created.work.work_id,
+    expectedRevision: created.work.revision,
+    content: { objective: "cancel fail fence" },
+  });
+  const planned = await works.transition(context, {
+    commandId: crypto.randomUUID(),
+    workId: created.work.work_id,
+    expectedRevision: plan.work.revision,
+    target: "planned",
+  });
+  const added = await works.addTask(context, {
+    commandId: crypto.randomUUID(),
+    workId: created.work.work_id,
+    expectedRevision: planned.work.revision,
+    title: "delivery",
+    objective: "delivery",
+    acceptanceCriteria: ["done"],
+    dependencyIds: [],
+  });
+  const assigned = await works.assignTask(context, {
+    commandId: crypto.randomUUID(),
+    workId: created.work.work_id,
+    expectedRevision: added.work.revision,
+    taskId: added.task.task_id,
+    agentHandle: "delivery-coordination",
+  });
+  const ready = await works.transition(context, {
+    commandId: crypto.randomUUID(),
+    workId: created.work.work_id,
+    expectedRevision: assigned.work.revision,
+    target: "ready",
+  });
+  const running = await works.transition(context, {
+    commandId: crypto.randomUUID(),
+    workId: created.work.work_id,
+    expectedRevision: ready.work.revision,
+    target: "running",
+  });
+  return { works, work: running.work, task: added.task };
 }
 
 describe("CoreWorkCoordinator", () => {
@@ -278,6 +336,349 @@ describe("CoreWorkCoordinator", () => {
       stage: "delivery",
       blockedReason: "delivery-stage-failed",
     });
+  });
+
+  it("terminal Delivery 실패는 failed로 확정하고 재생·복구·재시도로 다시 실행하지 않는다", async () => {
+    await using database = await createDatabase({ url: "mem://", namespace: "massion", database: crypto.randomUUID() });
+    const identities = await IdentityService.create(database);
+    const organizations = await OrganizationService.create(database);
+    const owner = await identities.registerPersonalUser({
+      email: "coordinator-terminal-delivery@example.com",
+      displayName: "Terminal delivery",
+    });
+    const context = await organizations.resolveTenantContext(owner.user.user_id, owner.organization.organization_id);
+    const store = await ApplicationRunStore.create(database, organizations);
+    let deliveryCalls = 0;
+    const stages = executors([]);
+    const coordinator = new CoreWorkCoordinator(store, {
+      ...stages,
+      delivery: {
+        async execute() {
+          deliveryCalls += 1;
+          return {
+            outcome: "failed" as const,
+            reason: "software-delivery-failed",
+            workId: "work-terminal-delivery",
+          };
+        },
+      },
+    });
+    const request = {
+      commandId: "core-run-terminal-delivery-command-0001",
+      correlationId: "core-run-terminal-delivery-correlation-0001",
+      request: {},
+    };
+
+    const failed = await coordinator.start(context, request);
+    expect(failed).toMatchObject({
+      status: "failed",
+      stage: "terminal",
+      workId: "work-terminal-delivery",
+      blockedReason: "software-delivery-failed",
+    });
+    await expect(coordinator.start(context, request)).resolves.toMatchObject({ status: "failed", stage: "terminal" });
+    await expect(coordinator.recover(context, failed.runId)).resolves.toMatchObject({
+      status: "failed",
+      stage: "terminal",
+    });
+    await expect(
+      coordinator.retryBlocked(context, failed.runId, "core-run-terminal-delivery-retry-0001"),
+    ).rejects.toThrow("차단되었거나");
+    expect(await store.listStartupRecoverable()).not.toContainEqual(expect.objectContaining({ runId: failed.runId }));
+    expect(deliveryCalls).toBe(1);
+  });
+
+  it("blocked 재시도에서 failed가 된 run은 같은 retry attempt와 새 attempt를 모두 거부한다", async () => {
+    await using database = await createDatabase({ url: "mem://", namespace: "massion", database: crypto.randomUUID() });
+    const identities = await IdentityService.create(database);
+    const organizations = await OrganizationService.create(database);
+    const owner = await identities.registerPersonalUser({
+      email: "coordinator-terminal-retry-lineage@example.com",
+      displayName: "Terminal retry lineage",
+    });
+    const context = await organizations.resolveTenantContext(owner.user.user_id, owner.organization.organization_id);
+    const store = await ApplicationRunStore.create(database, organizations);
+    let calls = 0;
+    const coordinator = new CoreWorkCoordinator(store, {
+      ...executors([]),
+      intake: {
+        async execute() {
+          calls += 1;
+          return calls === 1
+            ? { outcome: "blocked", reason: "model-unavailable" }
+            : { outcome: "failed", reason: "irrecoverable-delivery-failure" };
+        },
+      },
+    });
+    const blocked = await coordinator.start(context, {
+      commandId: "core-run-terminal-retry-lineage-command-0001",
+      correlationId: "core-run-terminal-retry-lineage-correlation-0001",
+      request: {},
+    });
+    const retryAttemptId = "core-run-terminal-retry-lineage-attempt-0001";
+    await expect(coordinator.retryBlocked(context, blocked.runId, retryAttemptId)).resolves.toMatchObject({
+      status: "failed",
+      retryAttemptId,
+    });
+    await expect(coordinator.retryBlocked(context, blocked.runId, retryAttemptId)).rejects.toThrow("terminal");
+    await expect(
+      coordinator.retryBlocked(context, blocked.runId, "core-run-terminal-retry-lineage-attempt-0002"),
+    ).rejects.toThrow("terminal");
+    expect(calls).toBe(2);
+  });
+
+  it("failed transaction이 먼저 이기면 뒤늦은 cancel은 Task·Work·ApplicationRun을 cancelled로 후퇴시키지 않는다", async () => {
+    await using database = await createDatabase({ url: "mem://", namespace: "massion", database: crypto.randomUUID() });
+    const identities = await IdentityService.create(database);
+    const organizations = await OrganizationService.create(database);
+    const owner = await identities.registerPersonalUser({
+      email: "coordinator-fail-wins@example.com",
+      displayName: "Fail wins",
+    });
+    const context = await organizations.resolveTenantContext(owner.user.user_id, owner.organization.organization_id);
+    const target = await runningDeliveryWork(database, organizations, context);
+    const store = await ApplicationRunStore.create(database, organizations);
+    let entered!: () => void;
+    let release!: () => void;
+    const entry = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const barrier = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let cancelCalls = 0;
+    const coordinator = new CoreWorkCoordinator(store, {
+      ...executors([]),
+      intake: { execute: async () => ({ outcome: "advanced", workId: target.work.work_id }) },
+      delivery: {
+        async execute() {
+          entered();
+          await barrier;
+          return { outcome: "failed", reason: "software-delivery-failed", workId: target.work.work_id };
+        },
+        async convergeFailure(_context, _result, transaction) {
+          await target.works.transitionTask(
+            context,
+            {
+              commandId: "coordinator-fail-wins-task-command-0001",
+              workId: target.work.work_id,
+              expectedRevision: target.work.revision,
+              taskId: target.task.task_id,
+              expectedTaskRevision: target.task.revision,
+              target: "failed",
+            },
+            transaction,
+          );
+        },
+        async cancel() {
+          cancelCalls += 1;
+        },
+      },
+    });
+    const starting = coordinator.start(context, {
+      commandId: "coordinator-fail-wins-run-command-0001",
+      correlationId: "coordinator-fail-wins-run-correlation-0001",
+      request: {},
+    });
+    await entry;
+    release();
+    const failed = await starting;
+    await expect(coordinator.cancel(context, failed.runId)).resolves.toMatchObject({ status: "failed" });
+    await expect(target.works.getWork(context, target.work.work_id)).resolves.toMatchObject({ status: "failed" });
+    await expect(target.works.listTasks(context, target.work.work_id)).resolves.toEqual([
+      expect.objectContaining({ task_id: target.task.task_id, status: "failed" }),
+    ]);
+    expect(cancelCalls).toBe(0);
+  });
+
+  it("cancel이 먼저 이기면 stale failed transaction은 Task·Work·ApplicationRun을 덮어쓰지 않는다", async () => {
+    await using database = await createDatabase({ url: "mem://", namespace: "massion", database: crypto.randomUUID() });
+    const identities = await IdentityService.create(database);
+    const organizations = await OrganizationService.create(database);
+    const owner = await identities.registerPersonalUser({
+      email: "coordinator-cancel-wins@example.com",
+      displayName: "Cancel wins",
+    });
+    const context = await organizations.resolveTenantContext(owner.user.user_id, owner.organization.organization_id);
+    const target = await runningDeliveryWork(database, organizations, context);
+    const store = await ApplicationRunStore.create(database, organizations);
+    let entered!: () => void;
+    let release!: () => void;
+    const entry = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const barrier = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let staleFailCalls = 0;
+    const coordinator = new CoreWorkCoordinator(store, {
+      ...executors([]),
+      intake: { execute: async () => ({ outcome: "advanced", workId: target.work.work_id }) },
+      delivery: {
+        async execute() {
+          entered();
+          await barrier;
+          return { outcome: "failed", reason: "software-delivery-failed", workId: target.work.work_id };
+        },
+        async convergeFailure(_context, _result, transaction) {
+          staleFailCalls += 1;
+          await target.works.transitionTask(
+            context,
+            {
+              commandId: "coordinator-cancel-wins-stale-fail-command-0001",
+              workId: target.work.work_id,
+              expectedRevision: target.work.revision,
+              taskId: target.task.task_id,
+              expectedTaskRevision: target.task.revision,
+              target: "failed",
+            },
+            transaction,
+          );
+        },
+        async cancel() {
+          const work = await target.works.getWork(context, target.work.work_id);
+          if (!canTransitionWork(work.status, "cancelled")) return;
+          await target.works.transition(context, {
+            commandId: "coordinator-cancel-wins-work-command-0001",
+            workId: work.work_id,
+            expectedRevision: work.revision,
+            target: "cancelled",
+          });
+        },
+      },
+    });
+    const starting = coordinator.start(context, {
+      commandId: "coordinator-cancel-wins-run-command-0001",
+      correlationId: "coordinator-cancel-wins-run-correlation-0001",
+      request: {},
+    });
+    await entry;
+    const active = await store.getByCommand(context, "coordinator-cancel-wins-run-command-0001");
+    await expect(coordinator.cancel(context, active.runId)).resolves.toMatchObject({ status: "cancelled" });
+    release();
+    await expect(starting).resolves.toMatchObject({ status: "cancelled" });
+    await expect(target.works.getWork(context, target.work.work_id)).resolves.toMatchObject({ status: "cancelled" });
+    await expect(target.works.listTasks(context, target.work.work_id)).resolves.toEqual([
+      expect.objectContaining({ task_id: target.task.task_id, status: "ready" }),
+    ]);
+    expect(staleFailCalls).toBe(0);
+  });
+
+  it("cancel이 running을 읽고 cleanup 대기 중일 때 failed transaction이 커밋되면 stale cancel CAS가 후퇴를 막는다", async () => {
+    await using database = await createDatabase({ url: "mem://", namespace: "massion", database: crypto.randomUUID() });
+    const identities = await IdentityService.create(database);
+    const organizations = await OrganizationService.create(database);
+    const owner = await identities.registerPersonalUser({
+      email: "coordinator-cancel-read-before-fail@example.com",
+      displayName: "Cancel read before fail",
+    });
+    const context = await organizations.resolveTenantContext(owner.user.user_id, owner.organization.organization_id);
+    const target = await runningDeliveryWork(database, organizations, context);
+    const store = await ApplicationRunStore.create(database, organizations);
+    let failEntered!: () => void;
+    let releaseFail!: () => void;
+    let cleanupEntered!: () => void;
+    let releaseCleanup!: () => void;
+    const failEntry = new Promise<void>((resolve) => {
+      failEntered = resolve;
+    });
+    const failBarrier = new Promise<void>((resolve) => {
+      releaseFail = resolve;
+    });
+    const cleanupEntry = new Promise<void>((resolve) => {
+      cleanupEntered = resolve;
+    });
+    const cleanupBarrier = new Promise<void>((resolve) => {
+      releaseCleanup = resolve;
+    });
+    const coordinator = new CoreWorkCoordinator(store, {
+      ...executors([]),
+      intake: { execute: async () => ({ outcome: "advanced", workId: target.work.work_id }) },
+      delivery: {
+        execute: async () => ({
+          outcome: "failed",
+          reason: "software-delivery-failed",
+          workId: target.work.work_id,
+        }),
+        async convergeFailure(_context, _result, transaction) {
+          failEntered();
+          await failBarrier;
+          await target.works.transitionTask(
+            context,
+            {
+              commandId: "coordinator-cancel-read-before-fail-task-0001",
+              workId: target.work.work_id,
+              expectedRevision: target.work.revision,
+              taskId: target.task.task_id,
+              expectedTaskRevision: target.task.revision,
+              target: "failed",
+            },
+            transaction,
+          );
+        },
+        async cancel() {
+          const observed = await target.works.getWork(context, target.work.work_id);
+          cleanupEntered();
+          await cleanupBarrier;
+          await target.works.transition(context, {
+            commandId: "coordinator-cancel-read-before-fail-work-0001",
+            workId: observed.work_id,
+            expectedRevision: observed.revision,
+            target: "cancelled",
+          });
+        },
+      },
+    });
+    const starting = coordinator.start(context, {
+      commandId: "coordinator-cancel-read-before-fail-run-0001",
+      correlationId: "coordinator-cancel-read-before-fail-correlation-0001",
+      request: {},
+    });
+    await failEntry;
+    const active = await store.getByCommand(context, "coordinator-cancel-read-before-fail-run-0001");
+    const cancelling = coordinator.cancel(context, active.runId);
+    await cleanupEntry;
+    releaseFail();
+    await expect(starting).resolves.toMatchObject({ status: "failed" });
+    releaseCleanup();
+    await expect(cancelling).rejects.toThrow("revision");
+    await expect(store.get(context, active.runId)).resolves.toMatchObject({ status: "failed" });
+    await expect(target.works.getWork(context, target.work.work_id)).resolves.toMatchObject({ status: "failed" });
+    await expect(target.works.listTasks(context, target.work.work_id)).resolves.toEqual([
+      expect.objectContaining({ status: "failed" }),
+    ]);
+  });
+
+  it("명시적 Delivery cancelled 결과도 기존 취소 drain을 거쳐 cancelled로 확정한다", async () => {
+    await using database = await createDatabase({ url: "mem://", namespace: "massion", database: crypto.randomUUID() });
+    const identities = await IdentityService.create(database);
+    const organizations = await OrganizationService.create(database);
+    const owner = await identities.registerPersonalUser({
+      email: "coordinator-terminal-cancelled@example.com",
+      displayName: "Terminal cancelled",
+    });
+    const context = await organizations.resolveTenantContext(owner.user.user_id, owner.organization.organization_id);
+    const store = await ApplicationRunStore.create(database, organizations);
+    const drains: string[] = [];
+    const stages = executors([]);
+    const coordinator = new CoreWorkCoordinator(store, {
+      ...stages,
+      delivery: {
+        execute: async () => ({ outcome: "cancelled", reason: "software-delivery-cancelled" }),
+        cancel: async (_context, input) => {
+          drains.push(input.commandId);
+        },
+      },
+    });
+
+    const cancelled = await coordinator.start(context, {
+      commandId: "core-run-terminal-cancelled-command-0001",
+      correlationId: "core-run-terminal-cancelled-correlation-0001",
+      request: {},
+    });
+
+    expect(cancelled).toMatchObject({ status: "cancelled", stage: "terminal" });
+    expect(drains).toEqual([`${cancelled.runId}:delivery:cancel`]);
   });
 
   it("차단된 재시도와 실행 중 취소는 같은 재시도 시도 command prefix를 사용한다", async () => {

@@ -5,7 +5,7 @@ import type { OrganizationNode } from "@massion/organization";
 
 import type { EngineeringDelivery } from "./contracts.js";
 import { EngineeringDeliveryStore } from "./delivery-store.js";
-import { EngineeringPathLeaseStore, type EngineeringPathLease } from "./path-lease.js";
+import { EngineeringPathLeaseBusyError, EngineeringPathLeaseStore, type EngineeringPathLease } from "./path-lease.js";
 import { selectEngineeringAgent } from "./team-profile.js";
 
 export interface EngineeringCoordinationPort {
@@ -71,6 +71,7 @@ export interface EngineeringCoordinationPort {
 
 export interface StartCoordinatedEngineeringDeliveryInput {
   readonly commandId: string;
+  readonly leaseCommandId?: string;
   readonly workId: string;
   readonly expectedWorkRevision: number;
   readonly taskId: string;
@@ -125,7 +126,7 @@ export class EngineeringDeliveryCoordinator {
     try {
       lease = (
         await this.leases.acquire(context, {
-          commandId: `${input.commandId}:path-lease`,
+          commandId: input.leaseCommandId ?? `${input.commandId}:path-lease`,
           deliveryId: started.delivery.deliveryId,
           repositoryId: input.repositoryId,
           pathPrefixes: input.allowedPaths,
@@ -151,7 +152,9 @@ export class EngineeringDeliveryCoordinator {
           })
           .catch(() => undefined);
       }
-      await this.failDelivery(context, started.delivery.deliveryId, error).catch(() => undefined);
+      if (!(error instanceof EngineeringPathLeaseBusyError)) {
+        await this.failDelivery(context, started.delivery.deliveryId, error).catch(() => undefined);
+      }
       throw error;
     }
   }

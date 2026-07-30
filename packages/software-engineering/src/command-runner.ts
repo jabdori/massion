@@ -18,6 +18,7 @@ export interface ConfinedCommandInput {
   readonly timeoutMs: number;
   readonly maxOutputBytes: number;
   readonly environment: Readonly<Record<string, string>>;
+  readonly signal?: AbortSignal;
 }
 
 export interface EngineeringCommandEvidence {
@@ -40,6 +41,13 @@ export interface EngineeringCommandEvidence {
 export interface ConfinedCommandResult {
   readonly evidence: EngineeringCommandEvidence;
   readonly output: string;
+}
+
+export class EngineeringCommandCleanupError extends Error {
+  public constructor(message: string) {
+    super(message);
+    this.name = "EngineeringCommandCleanupError";
+  }
 }
 
 interface RunnerOptions {
@@ -114,7 +122,9 @@ async function cleanupManagedProcessGroup(
   for (let attempt = 0; attempt < 20 && processGroupExists(child); attempt += 1) {
     await new Promise((resolve) => setTimeout(resolve, 10));
   }
-  if (processGroupExists(child)) throw new Error("Managed command process group을 완전히 종료하지 못했습니다");
+  if (processGroupExists(child)) {
+    throw new EngineeringCommandCleanupError("Managed command process group을 완전히 종료하지 못했습니다");
+  }
 }
 
 export class ConfinedCommandRunner {
@@ -183,6 +193,7 @@ export class ConfinedCommandRunner {
   }
 
   public async run(input: ConfinedCommandInput): Promise<ConfinedCommandResult> {
+    if (input.signal?.aborted) throw new DOMException("Command 실행이 중지됐습니다", "AbortError");
     const executablePath = this.executables.get(input.executable);
     if (!executablePath) throw new Error(`Command executable allowlist에 없습니다: ${input.executable}`);
     if (!Number.isInteger(input.timeoutMs) || input.timeoutMs < 1 || input.timeoutMs > this.limits.maxTimeoutMs) {
@@ -220,7 +231,7 @@ export class ConfinedCommandRunner {
       let settled = false;
       let forceKillTimer: NodeJS.Timeout | undefined;
 
-      const stop = (reason: "timeout" | "output"): void => {
+      const stop = (reason: "timeout" | "output" | "abort"): void => {
         if (reason === "timeout") timedOut = true;
         if (reason === "output") outputLimited = true;
         killProcessGroup(child, "SIGTERM");
@@ -229,6 +240,9 @@ export class ConfinedCommandRunner {
         }, 100);
         forceKillTimer.unref();
       };
+      const abort = (): void => stop("abort");
+      input.signal?.addEventListener("abort", abort, { once: true });
+      if (input.signal?.aborted) abort();
       const collect = (target: Buffer[], hash: ReturnType<typeof createHash>) => (chunk: Buffer) => {
         hash.update(chunk);
         const remaining = input.maxOutputBytes - capturedBytes;
@@ -251,6 +265,7 @@ export class ConfinedCommandRunner {
         if (settled) return;
         settled = true;
         clearTimeout(timeout);
+        input.signal?.removeEventListener("abort", abort);
         if (forceKillTimer) clearTimeout(forceKillTimer);
         reject(new Error(`허용된 executable을 시작하지 못했습니다: ${input.executable}`, { cause: error }));
       });
@@ -258,6 +273,7 @@ export class ConfinedCommandRunner {
         if (settled) return;
         settled = true;
         clearTimeout(timeout);
+        input.signal?.removeEventListener("abort", abort);
         void (async () => {
           try {
             await cleanupManagedProcessGroup(child, forceKillTimer);
