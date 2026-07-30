@@ -7,8 +7,13 @@ import {
   validateApplicationCommand,
   validateApplicationEvent,
 } from "@massion/application";
-import { defaultLocalEndpoint } from "@massion/local-control/access";
-import { LocalDaemonManager } from "@massion/local-control/daemon";
+import {
+  defaultLocalEndpoint,
+  ensurePersonalLoopbackAccess,
+  resolveTokenReference,
+} from "@massion/local-control/access";
+import { LocalDaemonManager, resolveLocalPaths } from "@massion/local-control/daemon";
+import { replaceCliFileToken } from "@massion/local-control/profiles";
 
 import type { BridgeAdapter } from "./bridge.js";
 
@@ -48,14 +53,60 @@ export function createProductionApplicationAdapter(
     environment: runtimeEnvironment,
   });
   const endpoint = defaultLocalEndpoint(runtimeEnvironment);
+  const tokenReference = `file:${resolveLocalPaths(runtimeEnvironment).accessToken}`;
   return createApplicationAdapter({
     startDaemon: async () => await daemon.start(),
     stopDaemon: async () => await daemon.stop(),
-    openLocalSession: async () =>
-      bootstrapLocalSession(endpoint, async (input) => await ApplicationHttpClient.bootstrap(endpoint, input)),
+    openLocalSession: async () => {
+      try {
+        const token = await resolveTokenReference(tokenReference);
+        const access = await ensurePersonalLoopbackAccess({
+          endpoint,
+          tokenReference,
+          token,
+          verify: async (candidate) => {
+            await new ApplicationHttpClient({ baseUrl: endpoint, token: candidate }).status();
+          },
+          refresh: async (candidate) =>
+            (
+              await ApplicationHttpClient.refreshLocalAccess(endpoint, candidate, {
+                commandId: randomUUID(),
+              })
+            ).token,
+          replace: replaceCliFileToken,
+        });
+        discardDaemonBootstrapCapability(daemon);
+        return access;
+      } catch (error) {
+        if (!(error instanceof Error) || !("code" in error) || error.code !== "ENOENT") {
+          discardDaemonBootstrapCapability(daemon);
+          throw error;
+        }
+      }
+      const capability = daemon.takeBootstrapCapability();
+      if (!capability) throw new Error("local AgentOS access를 열 수 없습니다");
+      const token = await bootstrapLocalSession(
+        endpoint,
+        capability,
+        async (input) => await ApplicationHttpClient.bootstrap(endpoint, input),
+      );
+      await replaceCliFileToken(tokenReference, token);
+      return token;
+    },
     createClient: (endpoint, token) => new ApplicationHttpClient({ baseUrl: endpoint, token }),
     defaultEndpoint: endpoint,
   });
+}
+
+function discardDaemonBootstrapCapability(daemon: LocalDaemonManager): void {
+  const discard = (daemon as LocalDaemonManager & { discardBootstrapCapability?: () => void })
+    .discardBootstrapCapability;
+  if (typeof discard === "function") {
+    discard.call(daemon);
+    return;
+  }
+  // source-freeze 중 오래된 local-control dist와 실행할 때도 보유 Buffer를 즉시 비웁니다.
+  void daemon.takeBootstrapCapability();
 }
 
 class ApplicationBridgeAdapter implements BridgeAdapter {
@@ -153,10 +204,12 @@ function exact(value: Readonly<Record<string, unknown>>, fields: readonly string
 
 async function bootstrapLocalSession(
   endpoint: string,
-  bootstrap: (input: { readonly commandId: string }) => Promise<unknown>,
+  capability: string,
+  bootstrap: (input: { readonly commandId: string; readonly capability: string }) => Promise<unknown>,
 ): Promise<string> {
   const response = await bootstrap({
     commandId: randomUUID(),
+    capability,
   });
   const access = response && typeof response === "object" ? (response as { access?: unknown }).access : undefined;
   const token = access && typeof access === "object" ? (access as { token?: unknown }).token : undefined;

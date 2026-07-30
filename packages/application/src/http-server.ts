@@ -1,4 +1,5 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
+import { timingSafeEqual } from "node:crypto";
 import { realpath, readFile, stat } from "node:fs/promises";
 import { extname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
@@ -15,6 +16,136 @@ import { WebLoginTicketError, type AuthenticatedWebSession, type ExchangedWebSes
 const JSON_LIMIT = 1024 * 1024;
 const ARTIFACT_LIMIT = 64 * 1024 * 1024;
 const LOOPBACK = new Set(["127.0.0.1", "::1", "::ffff:127.0.0.1", "localhost"]);
+const BOOTSTRAP_CAPABILITY_BYTES = 32;
+
+export type ApplicationBootstrapDisposalReason = "consumed" | "expired" | "closed" | "failed";
+
+export interface ApplicationBootstrapCapabilityOptions {
+  readonly capability: Uint8Array;
+  readonly expiresAt: number;
+  readonly clock?: () => number;
+  readonly onDisposed?: (reason: ApplicationBootstrapDisposalReason) => void | Promise<void>;
+  readonly onCleanupError?: (reason: ApplicationBootstrapDisposalReason) => void;
+}
+
+export interface ApplicationBootstrapAuthorization {
+  claim(authorization: string | undefined): Promise<boolean>;
+  consume(): Promise<void>;
+  fail(): Promise<void>;
+  close(): Promise<void>;
+}
+
+/** Bootstrap 비밀을 일반 설정 객체 밖에서 짧게 소유하고 모든 종료 경로에서 폐기합니다. */
+export class ApplicationBootstrapCapability implements ApplicationBootstrapAuthorization {
+  #capability: Buffer | undefined;
+  readonly #expiresAt: number;
+  readonly #clock: () => number;
+  readonly #onDisposed: ((reason: ApplicationBootstrapDisposalReason) => void | Promise<void>) | undefined;
+  readonly #onCleanupError: ((reason: ApplicationBootstrapDisposalReason) => void) | undefined;
+  #inFlight = false;
+  #disposed = false;
+  #cleanup: Promise<void> | undefined;
+  #expiryTimer: ReturnType<typeof setTimeout> | undefined;
+
+  public constructor(options: ApplicationBootstrapCapabilityOptions) {
+    let owned: Buffer | undefined;
+    try {
+      if (options.capability.length !== BOOTSTRAP_CAPABILITY_BYTES || !Number.isSafeInteger(options.expiresAt)) {
+        throw new Error("Application bootstrap capability가 유효하지 않습니다");
+      }
+      owned = Buffer.from(options.capability);
+    } finally {
+      options.capability.fill(0);
+    }
+    this.#capability = owned;
+    this.#expiresAt = options.expiresAt;
+    this.#clock = options.clock ?? Date.now;
+    this.#onDisposed = options.onDisposed;
+    this.#onCleanupError = options.onCleanupError;
+    this.#scheduleExpiry();
+  }
+
+  public expiresAtForDiagnostics(): number {
+    return this.#expiresAt;
+  }
+
+  public async claim(authorization: string | undefined): Promise<boolean> {
+    const encoded = authorization?.match(/^MassionBootstrap ([A-Za-z0-9_-]{43})$/u)?.[1];
+    const decoded = encoded === undefined ? undefined : Buffer.from(encoded, "base64url");
+    const candidateValid = decoded?.length === BOOTSTRAP_CAPABILITY_BYTES && decoded.toString("base64url") === encoded;
+    const candidate = candidateValid ? decoded : Buffer.alloc(BOOTSTRAP_CAPABILITY_BYTES);
+    const capability = this.#capability;
+    const dummy = capability === undefined ? Buffer.alloc(BOOTSTRAP_CAPABILITY_BYTES, 0xff) : undefined;
+    let matches = false;
+    try {
+      matches = timingSafeEqual(candidate, capability ?? dummy!);
+    } finally {
+      candidate.fill(0);
+      dummy?.fill(0);
+    }
+    if (this.#clock() >= this.#expiresAt) {
+      await this.#dispose("expired");
+      return false;
+    }
+    if (!candidateValid || !matches || capability === undefined || this.#disposed || this.#inFlight) return false;
+    this.#inFlight = true;
+    return true;
+  }
+
+  public async consume(): Promise<void> {
+    if (!this.#inFlight) return;
+    await this.#dispose("consumed");
+  }
+
+  public async fail(): Promise<void> {
+    if (!this.#inFlight) return;
+    await this.#dispose("failed");
+  }
+
+  public async close(): Promise<void> {
+    await this.#dispose("closed");
+  }
+
+  #scheduleExpiry(): void {
+    if (this.#disposed) return;
+    const remaining = this.#expiresAt - this.#clock();
+    if (remaining <= 0) {
+      void this.#dispose("expired");
+      return;
+    }
+    this.#expiryTimer = setTimeout(
+      () => {
+        this.#expiryTimer = undefined;
+        if (this.#clock() >= this.#expiresAt) void this.#dispose("expired");
+        else this.#scheduleExpiry();
+      },
+      Math.min(remaining, 2_147_483_647),
+    );
+    this.#expiryTimer.unref?.();
+  }
+
+  async #dispose(reason: ApplicationBootstrapDisposalReason): Promise<void> {
+    if (this.#cleanup) return await this.#cleanup;
+    if (this.#disposed) return;
+    this.#disposed = true;
+    this.#inFlight = false;
+    if (this.#expiryTimer) clearTimeout(this.#expiryTimer);
+    this.#expiryTimer = undefined;
+    const capability = this.#capability;
+    this.#capability = undefined;
+    capability?.fill(0);
+    this.#cleanup = Promise.resolve()
+      .then(async () => await this.#onDisposed?.(reason))
+      .catch(() => {
+        try {
+          this.#onCleanupError?.(reason);
+        } catch {
+          // 운영 오류 보고 자체의 실패는 비밀 수명주기나 HTTP 응답으로 전파하지 않습니다.
+        }
+      });
+    await this.#cleanup;
+  }
+}
 
 export interface ApplicationHttpDependencies {
   readonly health?: {
@@ -71,11 +202,8 @@ export interface ApplicationHttpDependencies {
     issue(context: TenantContext, input: IssueEnrollmentInput): Promise<IssuedEnrollment>;
   };
   readonly bootstrap?: {
-    initialize(input: {
-      readonly commandId: string;
-      readonly remoteAddress: string;
-      readonly trustedLocal: boolean;
-    }): Promise<unknown>;
+    readonly authorization: ApplicationBootstrapAuthorization;
+    initialize(input: { readonly commandId: string; readonly remoteAddress: string }): Promise<unknown>;
   };
   readonly webSessions?: {
     issueLoginTicket(
@@ -313,13 +441,18 @@ export class ApplicationHttpServer {
 
   public async close(): Promise<void> {
     this.beginDrain();
-    if (!this.server.listening) return;
-    await new Promise<void>((resolve, reject) =>
-      this.server.close((error) => {
-        if (error) reject(error);
-        else resolve();
-      }),
-    );
+    try {
+      if (this.server.listening) {
+        await new Promise<void>((resolve, reject) =>
+          this.server.close((error) => {
+            if (error) reject(error);
+            else resolve();
+          }),
+        );
+      }
+    } finally {
+      await this.dependencies.bootstrap?.authorization.close();
+    }
   }
 
   public beginDrain(): void {
@@ -483,26 +616,27 @@ export class ApplicationHttpServer {
         !LOOPBACK.has(request.socket.remoteAddress ?? "") ||
         !this.dependencies.bootstrap
       )
-        throw new ApplicationError({
-          category: "authorization",
-          severity: "error",
-          retryable: false,
-          userMessage: "로컬 bootstrap을 사용할 수 없습니다",
-          operatorCode: "APP_HTTP_BOOTSTRAP_LOCAL",
-        });
-      this.acceptJson(request);
-      const input = (await json(request)) as Record<string, unknown>;
-      if (typeof input.commandId !== "string" || Object.keys(input).some((key) => key !== "commandId"))
-        throw validation("bootstrap input이 유효하지 않습니다");
-      sendJson(
-        response,
-        201,
-        await this.dependencies.bootstrap.initialize({
+        throw this.bootstrapAuthenticationError();
+      const bootstrapAuthorization = this.dependencies.bootstrap.authorization;
+      if (!(await bootstrapAuthorization.claim(header(request, "authorization")))) {
+        throw this.bootstrapAuthenticationError();
+      }
+      try {
+        this.acceptJson(request);
+        const input = (await json(request)) as Record<string, unknown>;
+        if (typeof input.commandId !== "string" || Object.keys(input).some((key) => key !== "commandId"))
+          throw validation("bootstrap input이 유효하지 않습니다");
+        const result = await this.dependencies.bootstrap.initialize({
           commandId: input.commandId,
           remoteAddress: request.socket.remoteAddress ?? "",
-          trustedLocal: true,
-        }),
-      );
+        });
+        await bootstrapAuthorization.consume();
+        response.setHeader("cache-control", "no-store");
+        sendJson(response, 201, result);
+      } catch (error) {
+        await bootstrapAuthorization.fail();
+        throw error;
+      }
       return;
     }
     if (url.pathname === "/api/v1/access/refresh") {
@@ -1074,6 +1208,16 @@ export class ApplicationHttpServer {
   private method(response: ServerResponse, allowed: readonly string[]): void {
     response.setHeader("allow", allowed.join(", "));
     sendJson(response, 405, validation("허용되지 않은 HTTP method입니다").publicView());
+  }
+
+  private bootstrapAuthenticationError(): ApplicationError {
+    return new ApplicationError({
+      category: "authentication",
+      severity: "error",
+      retryable: false,
+      userMessage: "Application bootstrap 인증에 실패했습니다",
+      operatorCode: "APP_HTTP_BOOTSTRAP_AUTH",
+    });
   }
 
   private scope(): ApplicationError {

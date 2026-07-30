@@ -3,6 +3,62 @@ import { describe, expect, it, vi } from "vitest";
 import { ApplicationHttpClient, ApplicationRemoteError } from "./http-client.js";
 
 describe("ApplicationHttpClient", () => {
+  it("bootstrap capability를 전용 Authorization header로만 전달한다", async () => {
+    const capability = Buffer.alloc(32, 7).toString("base64url");
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response(JSON.stringify({ access: { token: "mat_bootstrap" } }), {
+        status: 201,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    const input = { commandId: "bootstrap-client-command-0001", capability };
+
+    await ApplicationHttpClient.bootstrap("http://127.0.0.1:9000", input, fetcher);
+
+    const [url, request] = fetcher.mock.calls[0] ?? [];
+    expect(String(url)).not.toContain(capability);
+    expect(new Headers(request?.headers).get("authorization")).toBe(`MassionBootstrap ${capability}`);
+    expect(String(request?.body)).toBe(JSON.stringify({ commandId: input.commandId }));
+    expect(String(request?.body)).not.toContain(capability);
+  });
+
+  it.each(["success", "error"] as const)(
+    "bootstrap %s 경로에서 client가 만든 capability Buffer를 zeroize한다",
+    async (outcome) => {
+      const capability = Buffer.alloc(32, 17).toString("base64url");
+      const copies: Buffer[] = [];
+      const original = Buffer.from;
+      const from = vi.spyOn(Buffer, "from").mockImplementation(((...arguments_: unknown[]) => {
+        const copy = Reflect.apply(original, Buffer, arguments_) as Buffer;
+        if (arguments_[0] === capability && arguments_[1] === "base64url") copies.push(copy);
+        return copy;
+      }) as typeof Buffer.from);
+      const fetcher =
+        outcome === "success"
+          ? vi
+              .fn<typeof fetch>()
+              .mockResolvedValue(Response.json({ access: { token: "mat_bootstrap" } }, { status: 201 }))
+          : vi.fn<typeof fetch>().mockRejectedValue(new Error("bootstrap transport failed"));
+      try {
+        const request = ApplicationHttpClient.bootstrap(
+          "http://127.0.0.1:9000",
+          {
+            commandId: "bootstrap-zeroize-command-0001",
+            capability,
+          },
+          fetcher,
+        );
+        if (outcome === "success") await expect(request).resolves.toMatchObject({ access: { token: "mat_bootstrap" } });
+        else await expect(request).rejects.toThrow("transport failed");
+      } finally {
+        from.mockRestore();
+      }
+
+      expect(copies).toHaveLength(1);
+      expect(copies[0]).toEqual(Buffer.alloc(32));
+    },
+  );
+
   it("query와 동일 command는 일시 네트워크 실패를 bounded retry한다", async () => {
     const fetcher = vi
       .fn<typeof fetch>()

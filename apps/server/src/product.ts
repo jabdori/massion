@@ -12,6 +12,7 @@ import {
   CoreSoftwareTaskAdapter,
   CodeChangeAssuranceRecipeResolver,
   ApplicationArtifactGateway,
+  type ApplicationBootstrapAuthorization,
   DatabaseCoreAssuranceCheckOrchestrator,
   DeterministicRecordsDocumentPlanner,
   SubscriptionConnectionService,
@@ -167,6 +168,7 @@ import { SubscriptionQuotaSynchronizationService } from "./subscription-quota-sy
 import { MassionSubscriptionRuntimeResolver } from "./subscription-runtime-resolver.js";
 import { GovernanceSubscriptionSharingAuthorizer } from "./subscription-sharing.js";
 import { JsonOperationalLogger, MetricRegistry, MetricsHttpServer } from "./telemetry.js";
+import { loadBootstrapCapabilityFile } from "./bootstrap-capability.js";
 import { seedBundledOfficialExtensions } from "./bundled-official-extensions.js";
 import {
   createGrowthEffectMetricReader,
@@ -252,6 +254,8 @@ export function createLimitedExecutors(): Readonly<Record<CoreWorkStage, CoreWor
 export interface MassionDaemonAssemblyOptions {
   /** 테스트와 내장 배포에서 이미 연결된 Database의 소유권을 daemon에 넘깁니다. */
   readonly database?: MassionDatabase;
+  /** 일반 설정 직렬화 경계를 우회하지 않는 테스트 전용 bootstrap 비밀 소유자입니다. */
+  readonly bootstrapAuthorization?: ApplicationBootstrapAuthorization;
 }
 
 export async function createMassionDaemon(
@@ -259,6 +263,7 @@ export async function createMassionDaemon(
   options: MassionDaemonAssemblyOptions = {},
 ): Promise<MassionDaemon> {
   const database = options.database ?? (await createDatabase(config.database));
+  let bootstrapAuthorization: ApplicationBootstrapAuthorization | undefined;
   try {
     const operations = new JsonOperationalLogger((line) => process.stderr.write(`${line}\n`));
     await mkdir(config.connectors.root, { recursive: true, mode: 0o700 });
@@ -1019,6 +1024,18 @@ export async function createMassionDaemon(
       runtime: extensionRuntime,
     });
     const daemonReference: { current?: MassionDaemon } = {};
+    if (options.bootstrapAuthorization !== undefined && config.bootstrapCapabilityFile !== undefined) {
+      throw new Error("bootstrap capability 소유자를 중복 구성할 수 없습니다");
+    }
+    bootstrapAuthorization =
+      options.bootstrapAuthorization ??
+      (config.bootstrapCapabilityFile === undefined
+        ? undefined
+        : await loadBootstrapCapabilityFile(config.bootstrapCapabilityFile, {
+            onCleanupError: (reason) => {
+              operations.write("application.bootstrap.cleanup_failed", { reason });
+            },
+          }));
     const application = await ApplicationProduct.create({
       executionStream,
       database,
@@ -1027,6 +1044,7 @@ export async function createMassionDaemon(
       graph,
       policies,
       tokenKey: config.tokenKey,
+      ...(bootstrapAuthorization === undefined ? {} : { bootstrapAuthorization }),
       executors,
       autonomyTransition: {
         autonomy: governance.autonomy,
@@ -1249,6 +1267,7 @@ export async function createMassionDaemon(
     daemonReference.current = daemon;
     return daemon;
   } catch (error) {
+    await bootstrapAuthorization?.close();
     await database.close().catch(() => undefined);
     throw error;
   }

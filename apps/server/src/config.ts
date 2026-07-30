@@ -12,6 +12,7 @@ export interface ServerConfig {
   readonly metrics: { readonly host: string; readonly port: number };
   readonly tokenKey: { readonly keyId: string; readonly key: Buffer };
   readonly credentialKey: Buffer;
+  readonly bootstrapCapabilityFile?: string;
   readonly connectors: {
     readonly root: string;
     readonly executables: Readonly<Record<string, string>>;
@@ -313,6 +314,8 @@ async function secretFile(path: string): Promise<string> {
 export async function loadServerConfig(
   environment: Readonly<Record<string, string | undefined>> = process.env,
 ): Promise<ServerConfig> {
+  if (environment.MASSION_BOOTSTRAP_CAPABILITY !== undefined)
+    throw new Error("bootstrap capability 평문 환경 변수는 허용되지 않습니다");
   const resolved = { ...environment };
   const references = [
     ["MASSION_TOKEN_KEY", "MASSION_TOKEN_KEY_FILE"],
@@ -327,7 +330,12 @@ export async function loadServerConfig(
     if (path) resolved[valueName] = await secretFile(path);
     resolved[fileName] = undefined;
   }
-  return parseServerConfig(resolved);
+  const config = parseServerConfig(resolved);
+  const bootstrapFile = environment.MASSION_BOOTSTRAP_CAPABILITY_FILE;
+  if (!bootstrapFile) return config;
+  if (config.mode !== "local") throw new Error("bootstrap capability는 local mode에서만 사용할 수 있습니다");
+  if (!isAbsolute(bootstrapFile)) throw new Error("bootstrap capability file은 절대 경로여야 합니다");
+  return { ...config, bootstrapCapabilityFile: bootstrapFile };
 }
 
 export async function loadDatabaseProvisionConfig(

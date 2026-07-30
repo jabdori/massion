@@ -1,13 +1,18 @@
 import { describe, expect, it, vi } from "vitest";
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 import {
   APPLICATION_EVENT_SCHEMA_VERSION,
   APPLICATION_SCHEMA_VERSION,
   ApplicationRemoteError,
 } from "@massion/application";
+import { LocalDaemonManager, resolveLocalPaths } from "@massion/local-control/daemon";
 
 import {
   createApplicationAdapter,
+  createProductionApplicationAdapter,
   type ApplicationAdapterDependencies,
   type ApplicationHttpPort,
 } from "./application-adapter.js";
@@ -60,6 +65,86 @@ async function connected(overrides: Partial<ApplicationAdapterDependencies> = {}
 }
 
 describe("ApplicationBridgeAdapter 연결", () => {
+  it("production desktop은 daemon의 in-process capability로 bootstrap하고 access token만 0600 file에 저장한다", async () => {
+    const root = await mkdtemp(join(tmpdir(), "massion-desktop-bootstrap-"));
+    const capability = Buffer.alloc(32, 7).toString("base64url");
+    await mkdir(resolveLocalPaths({ HOME: root }).configDirectory, { recursive: true, mode: 0o700 });
+    const bootstrap = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = new URL(String(input));
+      if (url.pathname === "/api/v1/bootstrap") {
+        expect(new Headers(init?.headers).get("authorization")).toBe(`MassionBootstrap ${capability}`);
+        expect(String(init?.body)).not.toContain(capability);
+        return Response.json(
+          { access: { token: "mat_desktop-bootstrap", tokenId: "desktop-token-1" } },
+          { status: 201 },
+        );
+      }
+      if (url.pathname === "/api/v1/status" || url.pathname === "/api/v1/me") return Response.json({ status: "ready" });
+      throw new Error(`예상하지 못한 desktop HTTP 경로: ${url.pathname}`);
+    });
+    vi.spyOn(LocalDaemonManager.prototype, "start").mockResolvedValue({
+      status: "started",
+      pid: 42,
+      endpoint: "http://127.0.0.1:7331",
+    });
+    vi.spyOn(LocalDaemonManager.prototype, "takeBootstrapCapability").mockReturnValue(capability);
+    vi.spyOn(LocalDaemonManager.prototype, "stop").mockResolvedValue({ status: "stopped", pid: 42 });
+    const adapter = createProductionApplicationAdapter({ HOME: root, MASSION_SERVER_BIN: "/opt/massion/server.js" });
+
+    try {
+      await expect(adapter.connect({})).resolves.toEqual({ status: "connected" });
+      const tokenPath = resolveLocalPaths({ HOME: root }).accessToken;
+      expect((await readFile(tokenPath, "utf8")).trim()).toBe("mat_desktop-bootstrap");
+      expect((await stat(tokenPath)).mode & 0o777).toBe(0o600);
+      expect(bootstrap).toHaveBeenCalledTimes(3);
+    } finally {
+      await adapter.shutdown();
+      await rm(root, { recursive: true, force: true });
+      vi.restoreAllMocks();
+    }
+  });
+
+  it("production desktop 재시작은 bootstrap capability 대신 저장된 Bearer access token을 재사용한다", async () => {
+    const root = await mkdtemp(join(tmpdir(), "massion-desktop-access-reuse-"));
+    const paths = resolveLocalPaths({ HOME: root });
+    await mkdir(paths.configDirectory, { recursive: true, mode: 0o700 });
+    await writeFile(paths.accessToken, "mat_existing-desktop\n", { mode: 0o600 });
+    const fetcher = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = new URL(String(input));
+      expect(url.pathname).not.toBe("/api/v1/bootstrap");
+      expect(new Headers(init?.headers).get("authorization")).toBe("Bearer mat_existing-desktop");
+      return Response.json({ status: "ready" });
+    });
+    vi.spyOn(LocalDaemonManager.prototype, "start").mockResolvedValue({
+      status: "already-running",
+      pid: 42,
+      endpoint: "http://127.0.0.1:7331",
+    });
+    const capability = vi.spyOn(LocalDaemonManager.prototype, "takeBootstrapCapability");
+    const discard =
+      typeof (LocalDaemonManager.prototype as { discardBootstrapCapability?: unknown }).discardBootstrapCapability ===
+      "function"
+        ? vi.spyOn(LocalDaemonManager.prototype, "discardBootstrapCapability")
+        : undefined;
+    vi.spyOn(LocalDaemonManager.prototype, "stop").mockResolvedValue({ status: "stopped", pid: 42 });
+    const adapter = createProductionApplicationAdapter({ HOME: root, MASSION_SERVER_BIN: "/opt/massion/server.js" });
+
+    try {
+      await expect(adapter.connect({})).resolves.toEqual({ status: "connected" });
+      if (discard) {
+        expect(discard).toHaveBeenCalledOnce();
+        expect(capability).not.toHaveBeenCalled();
+      } else {
+        expect(capability).toHaveBeenCalledOnce();
+      }
+      expect(fetcher).toHaveBeenCalledTimes(3);
+    } finally {
+      await adapter.shutdown();
+      await rm(root, { recursive: true, force: true });
+      vi.restoreAllMocks();
+    }
+  });
+
   it("daemon 뒤에 메모리 local session만 열고 secret 없는 연결 결과를 반환한다", async () => {
     const calls: string[] = [];
     const finalClient = client({

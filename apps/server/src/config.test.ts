@@ -1,8 +1,21 @@
-import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  link,
+  mkdtemp,
+  readFile,
+  realpath,
+  rename,
+  rm,
+  stat,
+  symlink,
+  utimes,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   loadDatabaseRestoreConfig,
@@ -12,6 +25,7 @@ import {
   parseDatabaseProvisionConfig,
   parseServerConfig,
 } from "./config.js";
+import { loadBootstrapCapabilityFile } from "./bootstrap-capability.js";
 
 const key = Buffer.alloc(32, 7).toString("base64url");
 const credentialKey = Buffer.alloc(32, 8).toString("base64url");
@@ -234,6 +248,162 @@ describe("server configuration", () => {
       await rm(directory, { recursive: true, force: true });
     }
   });
+
+  it("일반 server config에는 bootstrap 비밀 byte가 아니라 전용 파일 경로만 보관된다", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "massion-bootstrap-config-"));
+    const tokenPath = join(directory, "token-key");
+    const credentialPath = join(directory, "credential-key");
+    const capabilityPath = join(directory, "bootstrap-capability");
+    const capability = Buffer.alloc(32, 9);
+    try {
+      await writeFile(tokenPath, key, { mode: 0o600 });
+      await writeFile(credentialPath, credentialKey, { mode: 0o600 });
+      await writeFile(capabilityPath, capability, { mode: 0o600 });
+
+      const config = await loadServerConfig({
+        MASSION_TOKEN_KEY_FILE: tokenPath,
+        MASSION_CREDENTIAL_KEY_FILE: credentialPath,
+        MASSION_BOOTSTRAP_CAPABILITY_FILE: capabilityPath,
+      });
+
+      expect(config.bootstrapCapabilityFile).toBe(capabilityPath);
+      const serialized = JSON.stringify(config);
+      expect(serialized).not.toContain('"type":"Buffer","data":[9,9,9');
+      expect(serialized).not.toContain(capability.toString("base64url"));
+      await expect(stat(capabilityPath)).resolves.toMatchObject({ size: 32 });
+      await expect(
+        loadServerConfig({
+          MASSION_TOKEN_KEY: key,
+          MASSION_CREDENTIAL_KEY: credentialKey,
+          MASSION_BOOTSTRAP_CAPABILITY: capability.toString("base64url"),
+        }),
+      ).rejects.toThrow("평문");
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("bootstrap capability 파일은 fd로 검증하고 APFS 소수 mtime을 안전한 정수 만료 시각으로 정규화한다", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "massion-bootstrap-fd-"));
+    const capabilityPath = join(await realpath(directory), "instance.cap");
+    const bytes = Buffer.alloc(32, 21);
+    try {
+      await chmod(directory, 0o700);
+      await writeFile(capabilityPath, bytes, { mode: 0o600, flag: "wx" });
+      const fractionalSeconds = Date.now() / 1_000 - 0.123_456;
+      await utimes(capabilityPath, fractionalSeconds, fractionalSeconds);
+
+      const owner = await loadBootstrapCapabilityFile(capabilityPath);
+      expect(JSON.stringify(owner)).toBe("{}");
+      expect(owner.expiresAtForDiagnostics()).toSatisfy(Number.isSafeInteger);
+      await owner.close();
+      await expect(stat(capabilityPath)).resolves.toMatchObject({ size: 0 });
+    } finally {
+      bytes.fill(0);
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it.each(["parent-mode", "file-mode", "symlink", "hardlink", "uid", "replace-race"])(
+    "bootstrap capability 파일 신뢰 위반(%s)을 fail-closed한다",
+    async (violation) => {
+      const directory = await mkdtemp(join(tmpdir(), "massion-bootstrap-untrusted-"));
+      const canonicalDirectory = await realpath(directory);
+      const capabilityPath = join(canonicalDirectory, "instance.cap");
+      const replacementPath = join(canonicalDirectory, "replacement.cap");
+      const bytes = Buffer.alloc(32, 22);
+      try {
+        await chmod(directory, 0o700);
+        await writeFile(capabilityPath, bytes, { mode: 0o600, flag: "wx" });
+        let options: Parameters<typeof loadBootstrapCapabilityFile>[1] = {};
+        if (violation === "parent-mode") await chmod(directory, 0o755);
+        if (violation === "file-mode") await chmod(capabilityPath, 0o644);
+        if (violation === "symlink") {
+          await rename(capabilityPath, replacementPath);
+          await symlink(replacementPath, capabilityPath);
+        }
+        if (violation === "hardlink") await link(capabilityPath, replacementPath);
+        if (violation === "uid") options = { currentUid: (process.getuid?.() ?? 1_000) + 1 };
+        if (violation === "replace-race") {
+          options = {
+            afterRead: async () => {
+              await rename(capabilityPath, replacementPath);
+              await writeFile(capabilityPath, Buffer.alloc(32, 23), { mode: 0o600, flag: "wx" });
+            },
+          };
+        }
+
+        await expect(loadBootstrapCapabilityFile(capabilityPath, options)).rejects.toThrow("신뢰");
+      } finally {
+        bytes.fill(0);
+        await rm(directory, { recursive: true, force: true });
+      }
+    },
+  );
+
+  it.each(["replacement", "symlink", "hardlink"] as const)(
+    "bootstrap cleanup의 %s barrier race가 다른 파일을 변경하거나 삭제하지 않는다",
+    async (race) => {
+      const directory = await mkdtemp(join(tmpdir(), "massion-bootstrap-cleanup-race-"));
+      const canonicalDirectory = await realpath(directory);
+      const capabilityPath = join(canonicalDirectory, "instance.cap");
+      const movedPath = join(canonicalDirectory, "moved.cap");
+      const targetPath = join(canonicalDirectory, "target.cap");
+      const cleanupError = vi.fn();
+      let enteredCleanup: (() => void) | undefined;
+      const entered = new Promise<void>((resolve) => {
+        enteredCleanup = resolve;
+      });
+      let releaseCleanup: (() => void) | undefined;
+      const release = new Promise<void>((resolve) => {
+        releaseCleanup = resolve;
+      });
+      try {
+        await chmod(directory, 0o700);
+        await writeFile(capabilityPath, Buffer.alloc(32, 24), { mode: 0o600, flag: "wx" });
+        const owner = await loadBootstrapCapabilityFile(capabilityPath, {
+          onCleanupError: cleanupError,
+          beforeCleanup: async () => {
+            enteredCleanup?.();
+            await release;
+          },
+        });
+
+        const closing = owner.close();
+        const reached = await Promise.race([entered.then(() => true), delay(100).then(() => false)]);
+        if (!reached) {
+          await closing;
+          expect(reached).toBe(true);
+          return;
+        }
+        if (race === "replacement") {
+          await rename(capabilityPath, movedPath);
+          await writeFile(capabilityPath, Buffer.alloc(32, 25), { mode: 0o600, flag: "wx" });
+        } else if (race === "symlink") {
+          await rename(capabilityPath, movedPath);
+          await writeFile(targetPath, Buffer.alloc(32, 26), { mode: 0o600, flag: "wx" });
+          await symlink(targetPath, capabilityPath);
+        } else {
+          await link(capabilityPath, movedPath);
+        }
+        releaseCleanup?.();
+        await closing;
+
+        if (race === "hardlink") {
+          expect(await readFile(capabilityPath)).toEqual(Buffer.alloc(32, 24));
+          expect(await readFile(movedPath)).toEqual(Buffer.alloc(32, 24));
+          expect(cleanupError).toHaveBeenCalledWith("closed");
+        } else {
+          expect(await readFile(capabilityPath)).toEqual(Buffer.alloc(32, race === "replacement" ? 25 : 26));
+          await expect(stat(movedPath)).resolves.toMatchObject({ size: 0 });
+          expect(cleanupError).not.toHaveBeenCalled();
+        }
+      } finally {
+        releaseCleanup?.();
+        await rm(directory, { recursive: true, force: true });
+      }
+    },
+  );
 
   it("provisioning secret file 두 개를 owner-only로 읽는다", async () => {
     const directory = await mkdtemp(join(tmpdir(), "massion-provision-config-"));

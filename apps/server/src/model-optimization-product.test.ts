@@ -1,4 +1,4 @@
-import { ApplicationHttpClient } from "@massion/application";
+import { ApplicationBootstrapCapability, ApplicationHttpClient } from "@massion/application";
 import { createServer } from "node:http";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -7,6 +7,8 @@ import { describe, expect, it } from "vitest";
 
 import { parseServerConfig } from "./config.js";
 import { createMassionDaemon } from "./product.js";
+
+const bootstrapCapability = Buffer.alloc(32, 72).toString("base64url");
 
 describe("Massion server model optimization product boundary", () => {
   it("서버 bootstrap부터 실제 로컬 모델 평가·receipt·추천까지 연결한다", async () => {
@@ -41,17 +43,26 @@ describe("Massion server model optimization product boundary", () => {
       MASSION_SOFTWARE_WORKSPACE_ROOT: workspaceRoot,
       MASSION_CONNECTOR_ROOT: join(workspaceRoot, "connectors"),
     });
-    const daemon = await createMassionDaemon({
-      ...parsed,
-      server: { ...parsed.server, port: 0 },
-      metrics: { ...parsed.metrics, port: 0 },
-      registry: { ...parsed.registry, port: 0 },
-    });
+    const daemon = await createMassionDaemon(
+      {
+        ...parsed,
+        server: { ...parsed.server, port: 0 },
+        metrics: { ...parsed.metrics, port: 0 },
+        registry: { ...parsed.registry, port: 0 },
+      },
+      {
+        bootstrapAuthorization: new ApplicationBootstrapCapability({
+          capability: Buffer.from(bootstrapCapability, "base64url"),
+          expiresAt: Date.now() + 60_000,
+        }),
+      },
+    );
     const address = await daemon.start();
 
     try {
       const initialized = (await ApplicationHttpClient.bootstrap(address.url, {
         commandId: "model-optimization-bootstrap-0001",
+        capability: bootstrapCapability,
       })) as { access: { token: string } };
       const client = new ApplicationHttpClient({ baseUrl: address.url, token: initialized.access.token });
       const command = async (operation: string, payload: unknown) =>

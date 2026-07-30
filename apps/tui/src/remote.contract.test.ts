@@ -1,6 +1,6 @@
 import { randomBytes, randomUUID } from "node:crypto";
 
-import { ApplicationHttpClient, ApplicationProduct } from "@massion/application";
+import { ApplicationBootstrapCapability, ApplicationHttpClient, ApplicationProduct } from "@massion/application";
 import { ExtensionStore } from "@massion/extension-host";
 import { ApprovalStore, GovernanceService, PolicyStore } from "@massion/governance";
 import { IdentityService, OrganizationService } from "@massion/identity";
@@ -15,6 +15,7 @@ import { createTuiState, reduceTuiState } from "./state.js";
 
 const remoteUrl = process.env.SURREAL_TEST_URL;
 const remoteTest = remoteUrl ? it : it.skip;
+const bootstrapCapability = Buffer.alloc(32, 73).toString("base64url");
 
 describe("TUI remote product contract", () => {
   remoteTest(
@@ -70,6 +71,10 @@ describe("TUI remote product contract", () => {
         graph,
         policies,
         tokenKey: { keyId: "tui-remote-key", key: randomBytes(32) },
+        bootstrapAuthorization: new ApplicationBootstrapCapability({
+          capability: Buffer.from(bootstrapCapability, "base64url"),
+          expiresAt: Date.now() + 60_000,
+        }),
         executors,
         domain: { works },
         queries: { status: async () => ({ status: "ready", database: await database.version() }) },
@@ -77,6 +82,7 @@ describe("TUI remote product contract", () => {
       const endpoint = await product.start();
       const initialized = (await ApplicationHttpClient.bootstrap(endpoint.url, {
         commandId: `tui-bootstrap-${randomUUID()}`,
+        capability: bootstrapCapability,
       })) as {
         access: { token: string };
         context: { userId: string; organizationId: string; membershipId: string; role: "owner" };

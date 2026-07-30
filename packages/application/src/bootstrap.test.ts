@@ -37,7 +37,6 @@ describe("LocalApplicationBootstrap", () => {
     const result = await bootstrap.initialize({
       commandId: "local-bootstrap-command-0001",
       remoteAddress: "127.0.0.1",
-      trustedLocal: true,
     });
     expect(result.registration.organization.kind).toBe("personal");
     expect(result.coreOffice.nodes).toHaveLength(8);
@@ -47,7 +46,6 @@ describe("LocalApplicationBootstrap", () => {
     const replayed = await bootstrap.initialize({
       commandId: "local-bootstrap-command-0001",
       remoteAddress: "127.0.0.1",
-      trustedLocal: true,
     });
     expect(replayed.registration.organization.organization_id).toBe(result.registration.organization.organization_id);
     expect(replayed.coreOffice.version.version).toBe(1);
@@ -69,26 +67,17 @@ describe("LocalApplicationBootstrap", () => {
     const result = await wiredBootstrap.initialize({
       commandId: "local-bootstrap-growth-command-0001",
       remoteAddress: "127.0.0.1",
-      trustedLocal: true,
     });
 
     expect(calls).toEqual([{ organizationId: result.registration.organization.organization_id }]);
   });
 
-  it("remote·untrusted·비loopback bootstrap을 초기 mutation 전에 거부한다", async () => {
+  it("비loopback bootstrap을 초기 mutation 전에 거부한다", async () => {
     await expect(
       bootstrap.initialize({
         commandId: "remote-bootstrap-command-0001",
         remoteAddress: "203.0.113.8",
-        trustedLocal: true,
       }),
     ).rejects.toThrow("loopback");
-    await expect(
-      bootstrap.initialize({
-        commandId: "untrusted-bootstrap-command-0001",
-        remoteAddress: "::1",
-        trustedLocal: false,
-      }),
-    ).rejects.toThrow("trusted local");
   });
 });

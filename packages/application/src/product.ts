@@ -21,6 +21,7 @@ import { ApplicationEventProjector } from "./event-projector.js";
 import { ApplicationEventStore } from "./event-store.js";
 import {
   ApplicationHttpServer,
+  type ApplicationBootstrapAuthorization,
   type ApplicationHttpDependencies,
   type ApplicationHttpServerOptions,
 } from "./http-server.js";
@@ -50,6 +51,7 @@ export interface ApplicationProductDependencies {
   readonly graph: OrganizationGraphService;
   readonly policies: PolicyStore;
   readonly tokenKey: { readonly keyId: string; readonly key: Buffer };
+  readonly bootstrapAuthorization?: ApplicationBootstrapAuthorization;
   readonly executors: Readonly<Record<CoreWorkStage, CoreWorkStageExecutor>>;
   readonly domain: ApplicationDomainDependencies;
   readonly autonomyTransition?: {
@@ -272,7 +274,14 @@ export class ApplicationProduct implements AsyncDisposable {
           ? {}
           : { connectorEnrollments: dependencies.connectorEnrollments }),
         ...(dependencies.health === undefined ? {} : { health: dependencies.health }),
-        bootstrap,
+        ...(dependencies.bootstrapAuthorization === undefined
+          ? {}
+          : {
+              bootstrap: {
+                authorization: dependencies.bootstrapAuthorization,
+                initialize: bootstrap.initialize.bind(bootstrap),
+              },
+            }),
         webSessions,
       },
       dependencies.server,

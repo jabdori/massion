@@ -11,19 +11,25 @@ describe("massion init", () => {
   it("loopback bootstrap token을 별도 0600 file에 저장하고 config에는 reference만 둔다", async () => {
     const root = await mkdtemp(join(tmpdir(), "massion-init-"));
     const store = new CliConfigStore(join(root, "config.json"));
+    const capability = Buffer.alloc(32, 7).toString("base64url");
+    const tokenPath = join(root, "access.token");
     const result = await initializeCli({
       endpoint: "http://127.0.0.1:7331",
       email: "owner@example.com",
       displayName: "Owner",
       profile: "local",
       config: store,
-      bootstrap: async () => ({ access: { token: "mat_bootstrap", tokenId: "token-1" } }),
+      bootstrapCapability: capability,
+      tokenPath,
+      bootstrap: async (_endpoint, input) => {
+        expect(input).toEqual({ commandId: expect.any(String), capability });
+        return { access: { token: "mat_bootstrap", tokenId: "token-1" } };
+      },
     });
     expect(result).toMatchObject({ profile: "local", tokenId: "token-1" });
     const config = await store.load();
     expect(JSON.stringify(config)).not.toContain("mat_bootstrap");
-    const tokenPath = config.profiles.local?.tokenReference.slice(5);
-    if (!tokenPath) throw new Error("token path가 없습니다");
+    expect(config.profiles.local?.tokenReference).toBe(`file:${tokenPath}`);
     expect((await stat(tokenPath)).mode & 0o777).toBe(0o600);
     expect((await readFile(tokenPath, "utf8")).trim()).toBe("mat_bootstrap");
     await rm(root, { recursive: true, force: true });
@@ -43,6 +49,7 @@ describe("massion init", () => {
       displayName: "Owner",
       profile: "local",
       config: store,
+      bootstrapCapability: Buffer.alloc(32, 7).toString("base64url"),
       bootstrap,
     });
     await initializeCli({
@@ -51,6 +58,7 @@ describe("massion init", () => {
       displayName: "Owner",
       profile: "local",
       config: store,
+      bootstrapCapability: Buffer.alloc(32, 8).toString("base64url"),
       bootstrap,
     });
     const config = await store.load();

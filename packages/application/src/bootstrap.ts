@@ -9,15 +9,13 @@ import type { TenantContext } from "@massion/identity";
 export interface InitializeLocalApplicationInput {
   readonly commandId: string;
   readonly remoteAddress: string;
-  readonly trustedLocal: boolean;
 }
 
 // 로컬 설치의 조직 루트입니다. 사람의 계정·Cloud profile은 이 경로로 만들지 않습니다.
 const LOCAL_INSTALLATION_EMAIL = "local@massion.invalid";
 const LOCAL_INSTALLATION_DISPLAY_NAME = "Massion Local";
 
-function assertTrustedLoopback(input: InitializeLocalApplicationInput): void {
-  if (!input.trustedLocal) throw new Error("Application bootstrap에는 trusted local capability가 필요합니다");
+function assertLoopback(input: InitializeLocalApplicationInput): void {
   if (!new Set(["127.0.0.1", "::1", "::ffff:127.0.0.1"]).has(input.remoteAddress)) {
     throw new Error("Application bootstrap은 loopback에서만 실행할 수 있습니다");
   }
@@ -37,7 +35,7 @@ export class LocalApplicationBootstrap {
   ) {}
 
   public async initialize(input: InitializeLocalApplicationInput) {
-    assertTrustedLoopback(input);
+    assertLoopback(input);
     const registration = await this.identities.registerPersonalUser({
       email: LOCAL_INSTALLATION_EMAIL,
       displayName: LOCAL_INSTALLATION_DISPLAY_NAME,

@@ -8,7 +8,17 @@ import { WorkService } from "@massion/work";
 import { describe, expect, it, vi } from "vitest";
 
 import { ApplicationHttpClient } from "./http-client.js";
+import { ApplicationBootstrapCapability } from "./http-server.js";
 import { ApplicationProduct } from "./product.js";
+
+const bootstrapCapability = Buffer.alloc(32, 7).toString("base64url");
+
+function bootstrapAuthorization() {
+  return new ApplicationBootstrapCapability({
+    capability: Buffer.from(bootstrapCapability, "base64url"),
+    expiresAt: Date.now() + 60_000,
+  });
+}
 
 describe("ApplicationProduct", () => {
   it("공개 approval.decide를 실제 제품 명령 레지스트리에 조립한다", async () => {
@@ -96,6 +106,7 @@ describe("ApplicationProduct", () => {
       graph,
       policies,
       tokenKey: { keyId: "product-test-key", key: randomBytes(32) },
+      bootstrapAuthorization: bootstrapAuthorization(),
       executors,
       domain: {},
       queries: { status: async () => ({ status: "ready" }) },
@@ -103,6 +114,7 @@ describe("ApplicationProduct", () => {
     const endpoint = await product.start();
     const initialized = (await ApplicationHttpClient.bootstrap(endpoint.url, {
       commandId: "product-bootstrap-command-0001",
+      capability: bootstrapCapability,
     })) as {
       access: { token: string };
       context: { userId: string; organizationId: string; membershipId: string; role: "owner" };
@@ -163,6 +175,7 @@ describe("ApplicationProduct", () => {
       graph,
       policies,
       tokenKey: { keyId: "product-stage-failure-key", key: randomBytes(32) },
+      bootstrapAuthorization: bootstrapAuthorization(),
       executors,
       domain: {},
       queries: { status: async () => ({ status: "ready" }) },
@@ -170,6 +183,7 @@ describe("ApplicationProduct", () => {
     const endpoint = await product.start();
     const initialized = (await ApplicationHttpClient.bootstrap(endpoint.url, {
       commandId: "product-stage-failure-bootstrap-0001",
+      capability: bootstrapCapability,
     })) as { access: { token: string } };
     const client = new ApplicationHttpClient({ baseUrl: endpoint.url, token: initialized.access.token });
     const correlationId = "product-stage-failure-correlation-0001";
@@ -222,6 +236,7 @@ describe("ApplicationProduct", () => {
       graph,
       policies,
       tokenKey: { keyId: "web-product-key", key: randomBytes(32) },
+      bootstrapAuthorization: bootstrapAuthorization(),
       executors,
       domain: {},
       queries: { status: async () => ({ status: "ready" }) },
@@ -229,6 +244,7 @@ describe("ApplicationProduct", () => {
     const endpoint = await product.start();
     const initialized = (await ApplicationHttpClient.bootstrap(endpoint.url, {
       commandId: "web-product-bootstrap-0001",
+      capability: bootstrapCapability,
     })) as {
       access: { token: string };
       context: { userId: string; organizationId: string; membershipId: string; role: "owner" };
@@ -417,6 +433,7 @@ describe("ApplicationProduct", () => {
       graph,
       policies,
       tokenKey: { keyId: "product-directive-key", key: randomBytes(32) },
+      bootstrapAuthorization: bootstrapAuthorization(),
       executors,
       domain: { works },
       queries: { status: async () => ({ status: "ready" }) },
@@ -424,6 +441,7 @@ describe("ApplicationProduct", () => {
     const endpoint = await product.start();
     const initialized = (await ApplicationHttpClient.bootstrap(endpoint.url, {
       commandId: "product-directive-bootstrap-0001",
+      capability: bootstrapCapability,
     })) as {
       access: { token: string };
       context: { userId: string; organizationId: string; membershipId: string; role: "owner" };

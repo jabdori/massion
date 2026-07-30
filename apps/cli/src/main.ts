@@ -215,17 +215,20 @@ export async function runCli(argv = process.argv.slice(2)): Promise<number> {
         displayName = answers.displayName;
       }
       if (!email || !displayName) throw new Error("사용법: massion init [endpoint] <email> <display name>");
-      await ensureLocalEndpoint(endpoint, { start: async () => await new LocalDaemonManager().start() });
+      const manager = new LocalDaemonManager();
+      await ensureLocalEndpoint(endpoint, { start: async () => await manager.start() });
+      const bootstrapCapability = manager.takeBootstrapCapability();
+      if (!bootstrapCapability) throw new Error("local AgentOS bootstrap capability를 사용할 수 없습니다");
       const value = await initializeCli({
         endpoint,
         email,
         displayName,
         profile: invocation.profile ?? "local",
         config: new CliConfigStore(),
-        bootstrap: async (
-          baseUrl: string,
-          bootstrapInput: { readonly commandId: string; readonly email: string; readonly displayName: string },
-        ) => await ApplicationHttpClient.bootstrap(baseUrl, bootstrapInput),
+        bootstrapCapability,
+        tokenPath: resolveLocalPaths().accessToken,
+        bootstrap: async (baseUrl, bootstrapInput) =>
+          await ApplicationHttpClient.bootstrap(baseUrl, bootstrapInput),
       });
       process.stdout.write(
         renderCliOutput(value, invocation.output, {

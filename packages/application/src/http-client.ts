@@ -61,20 +61,31 @@ export class ApplicationHttpClient {
 
   public static async bootstrap(
     baseUrl: string,
-    input: { readonly commandId: string },
+    input: { readonly commandId: string; readonly capability: string },
     fetcher: typeof fetch = fetch,
   ): Promise<unknown> {
     const endpoint = new URL(baseUrl);
     if (endpoint.protocol !== "http:" || !isLoopback(endpoint.hostname) || endpoint.username || endpoint.password)
       throw new Error("Application bootstrap endpoint는 credential 없는 loopback HTTP여야 합니다");
-    const response = await fetcher(new URL("/api/v1/bootstrap", endpoint), {
-      method: "POST",
-      headers: { accept: "application/json", "content-type": "application/json" },
-      body: JSON.stringify(input),
-    });
-    const value = await decode(response);
-    if (!response.ok) throw new ApplicationRemoteError(response.status, value);
-    return value;
+    const capability = Buffer.from(input.capability, "base64url");
+    try {
+      if (capability.length !== 32 || capability.toString("base64url") !== input.capability)
+        throw new Error("Application bootstrap capability가 유효하지 않습니다");
+      const response = await fetcher(new URL("/api/v1/bootstrap", endpoint), {
+        method: "POST",
+        headers: {
+          authorization: `MassionBootstrap ${input.capability}`,
+          accept: "application/json",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ commandId: input.commandId }),
+      });
+      const value = await decode(response);
+      if (!response.ok) throw new ApplicationRemoteError(response.status, value);
+      return value;
+    } finally {
+      capability.fill(0);
+    }
   }
 
   public static async refreshLocalAccess(

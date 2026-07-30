@@ -1,4 +1,9 @@
-import { ApplicationHttpClient, ApplicationRunStore, type ApplicationRunClock } from "@massion/application";
+import {
+  ApplicationBootstrapCapability,
+  ApplicationHttpClient,
+  ApplicationRunStore,
+  type ApplicationRunClock,
+} from "@massion/application";
 import { ContextStore, hashContextContent, StrategyGenerator } from "@massion/context-strategy";
 import {
   EvidenceIndexer,
@@ -18,20 +23,35 @@ import { createDatabase } from "@massion/storage";
 import { WorkService } from "@massion/work";
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, realpath, rm, stat, utimes, writeFile } from "node:fs/promises";
 import { createServer, request } from "node:http";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { promisify } from "node:util";
 import { describe, expect, it, vi } from "vitest";
 
-import { parseDatabaseProvisionConfig, parseServerConfig } from "./config.js";
+import { loadServerConfig, parseDatabaseProvisionConfig, parseServerConfig } from "./config.js";
 import {
   createLimitedExecutors,
-  createMassionDaemon,
+  createMassionDaemon as createProductDaemon,
   deriveSubscriptionFingerprintKey,
   provisionRemoteDatabase,
 } from "./product.js";
+
+const bootstrapCapability = Buffer.alloc(32, 71).toString("base64url");
+
+async function createMassionDaemon(
+  config: Parameters<typeof createProductDaemon>[0],
+  options?: Parameters<typeof createProductDaemon>[1],
+) {
+  return await createProductDaemon(config, {
+    ...options,
+    bootstrapAuthorization: new ApplicationBootstrapCapability({
+      capability: Buffer.from(bootstrapCapability, "base64url"),
+      expiresAt: Date.now() + 60_000,
+    }),
+  });
+}
 
 async function connectorUpgradeStatus(baseUrl: string): Promise<number> {
   return await new Promise<number>((resolve, reject) => {
@@ -464,12 +484,21 @@ describe("Massion server product", () => {
 
   it("로컬 daemon과 owner 접근 토큰으로 extension.list를 조회하고 registry.info 누락 버전이 fallback 메시지로 실패하지 않는다", async () => {
     const workspaceRoot = await mkdtemp(join(tmpdir(), "massion-extension-registry-wiring-"));
-    const parsed = parseServerConfig({
+    const capabilityDirectory = join(workspaceRoot, "bootstrap");
+    const rawCapability = Buffer.alloc(32, 71);
+    await mkdir(capabilityDirectory, { mode: 0o700 });
+    await chmod(capabilityDirectory, 0o700);
+    const capabilityPath = join(await realpath(capabilityDirectory), "instance.cap");
+    await writeFile(capabilityPath, rawCapability, { mode: 0o600, flag: "wx" });
+    const fractionalSeconds = Date.now() / 1_000 - 0.456_789;
+    await utimes(capabilityPath, fractionalSeconds, fractionalSeconds);
+    const parsed = await loadServerConfig({
       MASSION_TOKEN_KEY: Buffer.alloc(32, 7).toString("base64url"),
       MASSION_CREDENTIAL_KEY: Buffer.alloc(32, 8).toString("base64url"),
       MASSION_DATABASE_URL: "mem://",
       MASSION_SOFTWARE_WORKSPACE_ROOT: workspaceRoot,
       MASSION_CONNECTOR_ROOT: join(workspaceRoot, "connectors"),
+      MASSION_BOOTSTRAP_CAPABILITY_FILE: capabilityPath,
     });
     const config = {
       ...parsed,
@@ -477,11 +506,12 @@ describe("Massion server product", () => {
       metrics: { ...parsed.metrics, port: 0 },
       registry: { ...parsed.registry, port: 0 },
     };
-    const daemon = await createMassionDaemon(config);
+    const daemon = await createProductDaemon(config);
     const address = await daemon.start();
     try {
       const initialized = (await ApplicationHttpClient.bootstrap(address.url, {
         commandId: "extension-registry-wiring-bootstrap-0001",
+        capability: rawCapability.toString("base64url"),
       })) as { access: { token: string } };
       const client = new ApplicationHttpClient({ baseUrl: address.url, token: initialized.access.token });
       // extension.list: governance 승인 기반 lifecycle/gateway가 연결되어 빈 설치 목록을 반환한다.
@@ -497,6 +527,7 @@ describe("Massion server product", () => {
       expect(String((registryInfoError as Error).message)).not.toContain("Registry가 구성되지 않았습니다");
     } finally {
       await daemon.close();
+      rawCapability.fill(0);
       await rm(workspaceRoot, { recursive: true, force: true });
     }
   }, 20_000);
@@ -545,6 +576,7 @@ describe("Massion server product", () => {
     try {
       const initialized = (await ApplicationHttpClient.bootstrap(address.url, {
         commandId: "registry-resume-bootstrap-0001",
+        capability: bootstrapCapability,
       })) as { access: { token: string } };
       const client = new ApplicationHttpClient({ baseUrl: address.url, token: initialized.access.token });
       const search = (await client.query("registry.search", { query: "slack", limit: 20 })) as {
@@ -622,6 +654,7 @@ describe("Massion server product", () => {
     try {
       const initialized = (await ApplicationHttpClient.bootstrap(address.url, {
         commandId: "decisions-query-wiring-bootstrap-0001",
+        capability: bootstrapCapability,
       })) as { access: { token: string } };
       const client = new ApplicationHttpClient({ baseUrl: address.url, token: initialized.access.token });
 
@@ -662,6 +695,7 @@ describe("Massion server product", () => {
     try {
       const initialized = (await ApplicationHttpClient.bootstrap(address.url, {
         commandId: "knowledge-wiring-bootstrap-0001",
+        capability: bootstrapCapability,
       })) as { access: { token: string } };
       const client = new ApplicationHttpClient({ baseUrl: address.url, token: initialized.access.token });
       const registered = (await client.command({
@@ -743,6 +777,7 @@ describe("Massion server product", () => {
     try {
       const initialized = (await ApplicationHttpClient.bootstrap(address.url, {
         commandId: "growth-query-wiring-bootstrap-0001",
+        capability: bootstrapCapability,
       })) as { access: { token: string } };
       const client = new ApplicationHttpClient({ baseUrl: address.url, token: initialized.access.token });
 
@@ -795,6 +830,7 @@ describe("Massion server product", () => {
       await expect(connectorUpgradeStatus(address.url)).resolves.toBe(101);
       const initialized = (await ApplicationHttpClient.bootstrap(address.url, {
         commandId: "server-bootstrap-command-0001",
+        capability: bootstrapCapability,
       })) as { access: { token: string } };
       const client = new ApplicationHttpClient({ baseUrl: address.url, token: initialized.access.token });
       await expect(
@@ -987,6 +1023,7 @@ describe("Massion server product", () => {
     try {
       const initialized = (await ApplicationHttpClient.bootstrap(address.url, {
         commandId: "live-core-bootstrap-command-0001",
+        capability: bootstrapCapability,
       })) as { access: { token: string } };
       const client = new ApplicationHttpClient({ baseUrl: address.url, token: initialized.access.token });
       const command = async (operation: string, payload: unknown) =>
@@ -1300,6 +1337,7 @@ describe("Massion server product", () => {
     try {
       const initialized = (await ApplicationHttpClient.bootstrap(address.url, {
         commandId: "minimax-core-bootstrap-command-0001",
+        capability: bootstrapCapability,
       })) as { access: { token: string } };
       const client = new ApplicationHttpClient({ baseUrl: address.url, token: initialized.access.token });
       const connected = await client.command({
@@ -1505,6 +1543,7 @@ describe("Massion server product", () => {
     try {
       const initialized = (await ApplicationHttpClient.bootstrap(address.url, {
         commandId: "software-product-bootstrap-command-0001",
+        capability: bootstrapCapability,
       })) as {
         readonly access: { readonly token: string };
         readonly context: {
@@ -1807,6 +1846,7 @@ describe("Massion server product", () => {
     try {
       const initialized = (await ApplicationHttpClient.bootstrap(address.url, {
         commandId: "zai-core-bootstrap-command-0001",
+        capability: bootstrapCapability,
       })) as { access: { token: string } };
       const client = new ApplicationHttpClient({ baseUrl: address.url, token: initialized.access.token });
       const memory = (await client.command({

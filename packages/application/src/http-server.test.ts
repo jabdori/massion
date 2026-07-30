@@ -1,9 +1,13 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { setTimeout as delay } from "node:timers/promises";
 
 import type { ApplicationEventV1 } from "./contracts.js";
 import { ApplicationEventCursorExpiredError } from "./event-store.js";
-import { ApplicationHttpServer, type ApplicationHttpDependencies } from "./http-server.js";
+import {
+  ApplicationBootstrapCapability,
+  ApplicationHttpServer,
+  type ApplicationHttpDependencies,
+} from "./http-server.js";
 
 const context = {
   userId: "http-user",
@@ -30,10 +34,30 @@ describe("ApplicationHttpServer", () => {
   let baseUrl: string;
   let events: ApplicationEventV1[];
   let calls: string[];
+  let bootstrapInitialize: () => Promise<unknown>;
+  let bootstrapNow: number;
+  let bootstrapConsumed: ReturnType<typeof vi.fn>;
+  let bootstrapCleanupError: ReturnType<typeof vi.fn>;
+
+  const bootstrapCapability = Buffer.alloc(32, 7).toString("base64url");
 
   beforeEach(async () => {
     events = [];
     calls = [];
+    bootstrapNow = Date.now();
+    bootstrapConsumed = vi.fn();
+    bootstrapCleanupError = vi.fn();
+    bootstrapInitialize = async () => ({ access: { token: "one-time" } });
+    const bootstrapSecret = Buffer.from(bootstrapCapability, "base64url");
+    const bootstrapAuthorization = new ApplicationBootstrapCapability({
+      capability: bootstrapSecret,
+      expiresAt: bootstrapNow + 60_000,
+      clock: () => bootstrapNow,
+      onDisposed: async (reason) => await bootstrapConsumed(reason),
+      onCleanupError: bootstrapCleanupError,
+    });
+    expect(bootstrapSecret).toEqual(Buffer.alloc(32));
+    expect(JSON.stringify(bootstrapAuthorization)).toBe("{}");
     const dependencies: ApplicationHttpDependencies = {
       auth: {
         async authenticateAccess(authorization) {
@@ -102,7 +126,8 @@ describe("ApplicationHttpServer", () => {
         }),
       },
       bootstrap: {
-        initialize: async () => ({ access: { token: "one-time" } }),
+        authorization: bootstrapAuthorization,
+        initialize: async () => await bootstrapInitialize(),
       },
       integrations: {
         async handle(input) {
@@ -213,14 +238,154 @@ describe("ApplicationHttpServer", () => {
     expect(oversized.status).toBe(400);
   });
 
-  it("loopback bootstrap만 인증 전 일회성 token 발급 경계에 접근한다", async () => {
+  it("bootstrap capability가 누락·불일치하면 같은 오류로 거부하고 성공 뒤 replay도 거부한다", async () => {
+    const request = async (authorization?: string) =>
+      await fetch(`${baseUrl}/api/v1/bootstrap`, {
+        method: "POST",
+        headers: {
+          ...(authorization === undefined ? {} : { authorization }),
+          accept: "application/json",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ commandId: "bootstrap-command-0001" }),
+      });
+
+    const missing = await request();
+    const invalid = await request(`MassionBootstrap ${Buffer.alloc(32, 8).toString("base64url")}`);
+    expect(missing.status).toBe(401);
+    expect(invalid.status).toBe(401);
+    const { errorId: _missingErrorId, ...missingError } = (await missing.json()) as Record<string, unknown>;
+    const { errorId: _invalidErrorId, ...invalidError } = (await invalid.json()) as Record<string, unknown>;
+    expect(invalidError).toEqual(missingError);
+
+    const response = await request(`MassionBootstrap ${bootstrapCapability}`);
+    expect(response.status).toBe(201);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(await response.json()).toMatchObject({ access: { token: "one-time" } });
+
+    const replay = await request(`MassionBootstrap ${bootstrapCapability}`);
+    expect(replay.status).toBe(401);
+    expect(await replay.json()).toMatchObject(missingError);
+    expect(bootstrapConsumed).toHaveBeenCalledOnce();
+    expect(bootstrapConsumed).toHaveBeenCalledWith("consumed");
+  });
+
+  it("동일 bootstrap capability 동시 요청은 하나만 초기화를 소유한다", async () => {
+    let release: (() => void) | undefined;
+    const waiting = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let started: (() => void) | undefined;
+    const entered = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    bootstrapInitialize = async () => {
+      started?.();
+      await waiting;
+      return { access: { token: "one-time" } };
+    };
+    const send = async () =>
+      await fetch(`${baseUrl}/api/v1/bootstrap`, {
+        method: "POST",
+        headers: {
+          authorization: `MassionBootstrap ${bootstrapCapability}`,
+          accept: "application/json",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ commandId: "bootstrap-command-0001" }),
+      });
+
+    const owner = send();
+    await entered;
+    const raced = send();
+    await delay(20);
+    release?.();
+    expect((await Promise.all([owner, raced])).map(({ status }) => status).sort()).toEqual([201, 401]);
+  });
+
+  it("만료된 bootstrap capability는 초기화를 호출하지 않고 거부한다", async () => {
+    const initialize = vi.fn(bootstrapInitialize);
+    bootstrapInitialize = initialize;
+    bootstrapNow += 60_001;
+
     const response = await fetch(`${baseUrl}/api/v1/bootstrap`, {
       method: "POST",
-      headers: { accept: "application/json", "content-type": "application/json" },
-      body: JSON.stringify({ commandId: "bootstrap-command-0001" }),
+      headers: {
+        authorization: `MassionBootstrap ${bootstrapCapability}`,
+        accept: "application/json",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ commandId: "expired-bootstrap-command-0001" }),
     });
-    expect(response.status).toBe(201);
-    expect(await response.json()).toMatchObject({ access: { token: "one-time" } });
+
+    expect(response.status).toBe(401);
+    expect(initialize).not.toHaveBeenCalled();
+    expect(bootstrapConsumed).toHaveBeenCalledWith("expired");
+  });
+
+  it("bootstrap 성공 cleanup 실패가 발급 응답을 잃거나 replay를 다시 열지 않는다", async () => {
+    bootstrapConsumed.mockRejectedValueOnce(new Error("capability path cleanup failed: secret-path"));
+    const request = async () =>
+      await fetch(`${baseUrl}/api/v1/bootstrap`, {
+        method: "POST",
+        headers: {
+          authorization: `MassionBootstrap ${bootstrapCapability}`,
+          accept: "application/json",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ commandId: "bootstrap-cleanup-failure-0001" }),
+      });
+
+    const issued = await request();
+    expect(issued.status).toBe(201);
+    expect(await issued.json()).toMatchObject({ access: { token: "one-time" } });
+    expect((await request()).status).toBe(401);
+    expect(bootstrapCleanupError).toHaveBeenCalledWith("consumed");
+    expect(JSON.stringify(bootstrapCleanupError.mock.calls)).not.toContain("secret-path");
+  });
+
+  it("bootstrap 초기화 오류는 capability를 폐기하고 이후 replay를 거부한다", async () => {
+    bootstrapInitialize = async () => {
+      throw new Error("bootstrap initialization failed");
+    };
+    const request = async () =>
+      await fetch(`${baseUrl}/api/v1/bootstrap`, {
+        method: "POST",
+        headers: {
+          authorization: `MassionBootstrap ${bootstrapCapability}`,
+          accept: "application/json",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ commandId: "bootstrap-initialize-failure-0001" }),
+      });
+
+    expect((await request()).status).toBe(500);
+    expect((await request()).status).toBe(401);
+    expect(bootstrapConsumed).toHaveBeenCalledWith("failed");
+  });
+
+  it("listen 전 close도 bootstrap 비밀을 폐기하고 cleanup을 한 번만 수행한다", async () => {
+    await server.close();
+    const source = Buffer.alloc(32, 19);
+    const disposed = vi.fn();
+    const authorization = new ApplicationBootstrapCapability({
+      capability: source,
+      expiresAt: Date.now() + 60_000,
+      onDisposed: disposed,
+    });
+    server = new ApplicationHttpServer({
+      auth: { authenticateAccess: async () => ({ context, tokenId: "token", scopes: ["application:*"] }) },
+      queries: { query: async () => ({}) },
+      commands: { dispatch: async () => ({}) },
+      events: { read: async () => ({ events: [], cursor: 0 }) },
+      bootstrap: { authorization, initialize: async () => ({}) },
+    });
+
+    expect(source).toEqual(Buffer.alloc(32));
+    await server.close();
+    await server.close();
+    expect(disposed).toHaveBeenCalledOnce();
+    expect(disposed).toHaveBeenCalledWith("closed");
   });
 
   it("loopback access refresh는 만료된 Bearer 원문으로만 새 token을 발급한다", async () => {

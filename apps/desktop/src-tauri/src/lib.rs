@@ -625,6 +625,17 @@ mod tests {
     }
 
     #[test]
+    fn tauri_bootstrap_does_not_transport_the_http_owner_capability() {
+        let encoded = encode_request("native-bootstrap", BridgeMethod::Connect, json!({}))
+            .expect("bootstrap 연결 요청");
+        let text = String::from_utf8(encoded).expect("UTF-8 bootstrap 요청");
+
+        assert!(text.contains(r#""method":"connect""#));
+        assert!(!text.to_ascii_lowercase().contains("capability"));
+        assert!(!text.to_ascii_lowercase().contains("authorization"));
+    }
+
+    #[test]
     fn response_and_event_are_parsed_without_exposing_private_error_fields() {
         let response = parse_incoming(
             r#"{"id":"native-1","ok":false,"error":{"code":"denied","message":"승인이 필요합니다","stack":"secret stack","headers":{"authorization":"secret"}}}"#.as_bytes(),

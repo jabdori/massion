@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { chmod, lstat, mkdir, open, rename, rm } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { dirname, isAbsolute, join } from "node:path";
 
 import type { CliConfigStore } from "./profiles-config.js";
 
@@ -39,27 +39,29 @@ export async function initializeCli(input: {
   readonly displayName: string;
   readonly profile: string;
   readonly config: CliConfigStore;
+  readonly bootstrapCapability: string;
+  readonly tokenPath?: string;
   readonly bootstrap: (
     endpoint: string,
-    input: { readonly commandId: string; readonly email: string; readonly displayName: string },
+    input: { readonly commandId: string; readonly capability: string },
   ) => Promise<unknown>;
 }): Promise<{ readonly profile: string; readonly endpoint: string; readonly tokenId: string }> {
   if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/u.test(input.profile))
     throw new Error("CLI profile 이름이 유효하지 않습니다");
   const response = await input.bootstrap(input.endpoint, {
     commandId: randomUUID(),
-    email: input.email,
-    displayName: input.displayName,
+    capability: input.bootstrapCapability,
   });
   const access = response && typeof response === "object" ? (response as { access?: unknown }).access : undefined;
   const token = access && typeof access === "object" ? (access as { token?: unknown }).token : undefined;
   const tokenId = access && typeof access === "object" ? (access as { tokenId?: unknown }).tokenId : undefined;
   if (typeof token !== "string" || typeof tokenId !== "string")
     throw new Error("bootstrap 응답에 일회성 token이 없습니다");
-  const tokenDirectory = join(dirname(input.config.path), "tokens");
+  const tokenPath = input.tokenPath ?? join(dirname(input.config.path), "tokens", `${input.profile}.token`);
+  if (!isAbsolute(tokenPath)) throw new Error("CLI token file은 절대 경로여야 합니다");
+  const tokenDirectory = dirname(tokenPath);
   await mkdir(tokenDirectory, { recursive: true, mode: 0o700 });
   await chmod(tokenDirectory, 0o700);
-  const tokenPath = join(tokenDirectory, `${input.profile}.token`);
   await replaceCliFileToken(`file:${tokenPath}`, token);
   await input.config.save({
     schemaVersion: "massion.cli.config.v1",

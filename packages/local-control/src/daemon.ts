@@ -1,7 +1,20 @@
 import { spawn } from "node:child_process";
-import { randomBytes } from "node:crypto";
-import { closeSync, constants, openSync } from "node:fs";
-import { access, chmod, copyFile, lstat, mkdir, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
+import { randomBytes, randomUUID } from "node:crypto";
+import { closeSync, constants, openSync, type Stats } from "node:fs";
+import {
+  access,
+  chmod,
+  copyFile,
+  lstat,
+  mkdir,
+  open,
+  readFile,
+  readdir,
+  rename,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import { homedir, platform } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 
@@ -25,6 +38,9 @@ export interface LocalPaths {
   readonly tokenKey: string;
   readonly credentialKey: string;
   readonly databasePassword: string;
+  readonly bootstrapDirectory: string;
+  readonly startLock: string;
+  readonly accessToken: string;
   readonly pidFile: string;
   readonly logFile: string;
   readonly surrealPidFile: string;
@@ -34,6 +50,7 @@ export interface LocalPaths {
 
 const LOCAL_DATA_EPOCH = "massion-v1-data-epoch-1";
 const LOCAL_DATA_ROOT = "massion-v1";
+export const LOCAL_BOOTSTRAP_CAPABILITY_TTL_MS = 5 * 60_000;
 const epochOperations = new Map<string, Promise<void>>();
 
 export class LocalDataEpochMigrationRequiredError extends Error {
@@ -61,7 +78,26 @@ interface LocalPidRecordV2 {
   readonly startedAt: string;
 }
 
-type LocalPidRecord = LocalPidRecordV1 | LocalPidRecordV2;
+interface LocalPidRecordV3 {
+  readonly schema: "massion.local-process.v3";
+  readonly pid: number;
+  readonly endpoint: string;
+  readonly nodeExecutable: string;
+  readonly serverScript: string;
+  readonly runtimeVersion: string;
+  readonly bootstrapCapabilityFile: string;
+  readonly bootstrapCapabilityDevice: string;
+  readonly bootstrapCapabilityInode: string;
+  readonly startedAt: string;
+}
+
+interface LocalBootstrapCapabilityBinding {
+  readonly path: string;
+  readonly device: string;
+  readonly inode: string;
+}
+
+type LocalPidRecord = LocalPidRecordV1 | LocalPidRecordV2 | LocalPidRecordV3;
 
 interface SpawnedProcess {
   readonly pid?: number | undefined;
@@ -98,6 +134,9 @@ export interface LocalDaemonDependencies {
     },
   ) => SpawnedProcess;
   readonly surrealRuntime?: LocalSurrealRuntimeController;
+  readonly beforeBootstrapCreateFailureCleanup?: () => void | Promise<void>;
+  readonly beforeBootstrapCleanup?: () => void | Promise<void>;
+  readonly beforeStartLockRetire?: () => void | Promise<void>;
 }
 
 function directory(
@@ -124,6 +163,9 @@ export function resolveLocalPaths(environment: Readonly<Record<string, string | 
     tokenKey: join(configDirectory, "token-key"),
     credentialKey: join(configDirectory, "credential-key"),
     databasePassword: join(configDirectory, "database-password"),
+    bootstrapDirectory: join(stateDirectory, "bootstrap"),
+    startLock: join(stateDirectory, "server.start.lock"),
+    accessToken: join(configDirectory, "access.token"),
     pidFile: join(stateDirectory, "server.json"),
     logFile: join(stateDirectory, "server.log"),
     surrealPidFile: join(stateDirectory, "surrealdb.json"),
@@ -222,11 +264,18 @@ async function ensureDirectories(paths: LocalPaths): Promise<void> {
       paths.backupDirectory,
       paths.softwareWorkspaceDirectory,
       paths.connectorDirectory,
+      paths.bootstrapDirectory,
     ].map(async (path) => {
       await mkdir(path, { recursive: true, mode: 0o700 });
       const metadata = await stat(path);
       if (!metadata.isDirectory() || (metadata.mode & 0o077) !== 0)
         throw new Error(`local directory는 owner-only여야 합니다: ${path}`);
+      if (
+        path === paths.bootstrapDirectory &&
+        ((process.platform !== "win32" && (metadata.mode & 0o777) !== 0o700) ||
+          (process.getuid?.() !== undefined && metadata.uid !== process.getuid?.()))
+      )
+        throw new Error("local bootstrap directory 신뢰 검증에 실패했습니다");
     }),
   );
 }
@@ -296,12 +345,187 @@ export async function ensureLocalDatabasePassword(paths: LocalPaths): Promise<st
   return value;
 }
 
+function localBootstrapPath(paths: LocalPaths, path: string): string {
+  const resolved = resolve(path);
+  if (
+    dirname(resolved) !== resolve(paths.bootstrapDirectory) ||
+    !/^[0-9a-f-]{36}\.cap$/u.test(resolved.split("/").at(-1) ?? "")
+  )
+    throw new Error("local bootstrap capability 경로 신뢰 검증에 실패했습니다");
+  return resolved;
+}
+
+function assertLocalBootstrapFile(metadata: Stats, sizes: readonly number[] = [32]): void {
+  if (!metadata.isFile() || metadata.nlink !== 1 || !sizes.includes(metadata.size))
+    throw new Error("local bootstrap capability 파일 신뢰 검증에 실패했습니다");
+  if (process.platform !== "win32" && (metadata.mode & 0o777) !== 0o600)
+    throw new Error("local bootstrap capability 파일 신뢰 검증에 실패했습니다");
+  if (process.getuid?.() !== undefined && metadata.uid !== process.getuid?.())
+    throw new Error("local bootstrap capability 파일 신뢰 검증에 실패했습니다");
+}
+
+async function createLocalBootstrapCapability(
+  paths: LocalPaths,
+  beforeFailureCleanup?: () => void | Promise<void>,
+): Promise<{
+  readonly path: string;
+  readonly device: string;
+  readonly inode: string;
+  readonly capability: Buffer;
+  readonly expiresAt: number;
+}> {
+  await ensureDirectories(paths);
+  const path = join(paths.bootstrapDirectory, `${randomUUID()}.cap`);
+  const capability = randomBytes(32);
+  let handle: Awaited<ReturnType<typeof open>> | undefined;
+  let binding: LocalBootstrapCapabilityBinding | undefined;
+  try {
+    handle = await open(
+      path,
+      constants.O_RDWR | constants.O_CREAT | constants.O_EXCL | (constants.O_NOFOLLOW ?? 0),
+      0o600,
+    );
+    const opened = await handle.stat();
+    assertLocalBootstrapFile(opened, [0]);
+    binding = { path, device: String(opened.dev), inode: String(opened.ino) };
+    await handle.writeFile(capability);
+    await handle.sync();
+    const metadata = await handle.stat();
+    assertLocalBootstrapFile(metadata);
+    return {
+      path,
+      device: String(metadata.dev),
+      inode: String(metadata.ino),
+      capability,
+      expiresAt: Math.min(
+        Math.floor(metadata.mtimeMs) + LOCAL_BOOTSTRAP_CAPABILITY_TTL_MS,
+        Date.now() + LOCAL_BOOTSTRAP_CAPABILITY_TTL_MS,
+      ),
+    };
+  } catch (error) {
+    capability.fill(0);
+    if (handle && binding) {
+      try {
+        await sanitizeOpenedLocalBootstrapCapability(
+          handle,
+          binding,
+          beforeFailureCleanup,
+          Array.from({ length: 33 }, (_, size) => size),
+        );
+      } catch (cleanupError) {
+        throw new AggregateError([error, cleanupError], `${String(error)}; capability cleanup failed`);
+      }
+    }
+    throw error;
+  } finally {
+    await handle?.close().catch(() => undefined);
+  }
+}
+
+async function readLocalBootstrapCapability(
+  paths: LocalPaths,
+  binding: LocalBootstrapCapabilityBinding,
+  beforeCleanup?: () => void | Promise<void>,
+): Promise<{ readonly capability: Buffer; readonly expiresAt: number } | undefined> {
+  const trustedPath = localBootstrapPath(paths, binding.path);
+  let handle: Awaited<ReturnType<typeof open>> | undefined;
+  let capability: Buffer | undefined;
+  try {
+    handle = await open(trustedPath, constants.O_RDWR | (constants.O_NOFOLLOW ?? 0));
+    const before = await handle.stat();
+    assertLocalBootstrapFile(before, [0, 32]);
+    if (String(before.dev) !== binding.device || String(before.ino) !== binding.inode)
+      throw new Error("local bootstrap capability 인스턴스 binding 검증에 실패했습니다");
+    if (before.size === 0) return undefined;
+    const expiresAt = Math.min(
+      Math.floor(before.mtimeMs) + LOCAL_BOOTSTRAP_CAPABILITY_TTL_MS,
+      Date.now() + LOCAL_BOOTSTRAP_CAPABILITY_TTL_MS,
+    );
+    if (Date.now() >= expiresAt) {
+      await sanitizeOpenedLocalBootstrapCapability(handle, binding, beforeCleanup, [32]);
+      return undefined;
+    }
+    capability = await handle.readFile();
+    const after = await handle.stat();
+    if (
+      before.dev !== after.dev ||
+      before.ino !== after.ino ||
+      before.mtimeMs !== after.mtimeMs ||
+      capability.length !== 32
+    )
+      throw new Error("local bootstrap capability 파일 교체 검증에 실패했습니다");
+    return { capability, expiresAt };
+  } catch (error) {
+    capability?.fill(0);
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") return undefined;
+    throw error;
+  } finally {
+    await handle?.close().catch(() => undefined);
+  }
+}
+
+async function sanitizeLocalBootstrapCapability(
+  paths: LocalPaths,
+  binding: LocalBootstrapCapabilityBinding | undefined,
+  beforeCleanup?: () => void | Promise<void>,
+): Promise<void> {
+  if (binding === undefined) return;
+  const trustedPath = localBootstrapPath(paths, binding.path);
+  let handle: Awaited<ReturnType<typeof open>> | undefined;
+  try {
+    handle = await open(trustedPath, constants.O_RDWR | (constants.O_NOFOLLOW ?? 0));
+    await sanitizeOpenedLocalBootstrapCapability(handle, binding, beforeCleanup, [0, 32]);
+  } catch (error) {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") return;
+    throw error;
+  } finally {
+    await handle?.close().catch(() => undefined);
+  }
+}
+
+async function sanitizeOpenedLocalBootstrapCapability(
+  handle: Awaited<ReturnType<typeof open>>,
+  binding: LocalBootstrapCapabilityBinding,
+  beforeCleanup: (() => void | Promise<void>) | undefined,
+  allowedSizes: readonly number[],
+): Promise<void> {
+  const opened = await handle.stat();
+  if (!opened.isFile() || String(opened.dev) !== binding.device || String(opened.ino) !== binding.inode)
+    throw new Error("local bootstrap capability cleanup binding 검증에 실패했습니다");
+  await beforeCleanup?.();
+  const current = await handle.stat();
+  if (!current.isFile() || String(current.dev) !== binding.device || String(current.ino) !== binding.inode)
+    throw new Error("local bootstrap capability cleanup fd 검증에 실패했습니다");
+  if (current.nlink === 0) return;
+  if (
+    current.nlink !== 1 ||
+    !allowedSizes.includes(current.size) ||
+    (process.platform !== "win32" && (current.mode & 0o777) !== 0o600) ||
+    (process.getuid?.() !== undefined && current.uid !== process.getuid?.())
+  )
+    throw new Error("local bootstrap capability cleanup 신뢰 검증에 실패했습니다");
+  await handle.truncate(0);
+  await handle.sync();
+}
+
+function bootstrapBinding(record: LocalPidRecord): LocalBootstrapCapabilityBinding | undefined {
+  return record.schema === "massion.local-process.v3"
+    ? {
+        path: record.bootstrapCapabilityFile,
+        device: record.bootstrapCapabilityDevice,
+        inode: record.bootstrapCapabilityInode,
+      }
+    : undefined;
+}
+
 function validatePidRecord(value: unknown): LocalPidRecord {
   if (
     !value ||
     typeof value !== "object" ||
     !("schema" in value) ||
-    !["massion.local-process.v1", "massion.local-process.v2"].includes(String(value.schema)) ||
+    !["massion.local-process.v1", "massion.local-process.v2", "massion.local-process.v3"].includes(
+      String(value.schema),
+    ) ||
     !("pid" in value) ||
     !Number.isSafeInteger(value.pid) ||
     Number(value.pid) < 1 ||
@@ -315,7 +539,7 @@ function validatePidRecord(value: unknown): LocalPidRecord {
   )
     throw new Error("local process state가 유효하지 않습니다");
   if (
-    value.schema === "massion.local-process.v2" &&
+    (value.schema === "massion.local-process.v2" || value.schema === "massion.local-process.v3") &&
     (!("nodeExecutable" in value && typeof value.nodeExecutable === "string" && isAbsolute(value.nodeExecutable)) ||
       !(
         "runtimeVersion" in value &&
@@ -324,6 +548,18 @@ function validatePidRecord(value: unknown): LocalPidRecord {
       ))
   )
     throw new Error("local process state runtime identity가 유효하지 않습니다");
+  if (
+    value.schema === "massion.local-process.v3" &&
+    (!(
+      "bootstrapCapabilityFile" in value &&
+      typeof value.bootstrapCapabilityFile === "string" &&
+      isAbsolute(value.bootstrapCapabilityFile)
+    ) ||
+      !/^[0-9a-f-]{36}\.cap$/u.test(String(value.bootstrapCapabilityFile).split("/").at(-1) ?? "") ||
+      !("bootstrapCapabilityDevice" in value && /^\d+$/u.test(String(value.bootstrapCapabilityDevice))) ||
+      !("bootstrapCapabilityInode" in value && /^\d+$/u.test(String(value.bootstrapCapabilityInode))))
+  )
+    throw new Error("local process state bootstrap capability 경로가 유효하지 않습니다");
   return value as LocalPidRecord;
 }
 
@@ -432,6 +668,87 @@ function applicationDatabaseEndpoint(sidecarEndpoint: string): string {
   return endpoint.toString().replace(/\/$/u, "");
 }
 
+async function acquireLocalStartLock(
+  paths: LocalPaths,
+  processExists: (pid: number) => boolean,
+  wait: (milliseconds: number) => Promise<void>,
+  beforeRetire?: () => void | Promise<void>,
+): Promise<() => Promise<void>> {
+  await ensureDirectories(paths);
+  for (let attempt = 0; attempt < 400; attempt += 1) {
+    let handle: Awaited<ReturnType<typeof open>> | undefined;
+    let created = false;
+    try {
+      handle = await open(
+        paths.startLock,
+        constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | (constants.O_NOFOLLOW ?? 0),
+        0o600,
+      );
+      created = true;
+      const owned = await handle.stat();
+      if (
+        !owned.isFile() ||
+        owned.nlink !== 1 ||
+        (process.platform !== "win32" && (owned.mode & 0o777) !== 0o600) ||
+        (process.getuid?.() !== undefined && owned.uid !== process.getuid?.())
+      )
+        throw new Error("local daemon 시작 lock 신뢰 검증에 실패했습니다");
+      await handle.writeFile(`${String(process.pid)}\n`);
+      await handle.sync();
+      return async () => {
+        try {
+          await handle?.close();
+        } finally {
+          handle = undefined;
+          await retireLocalStartLock(paths.startLock, beforeRetire);
+        }
+      };
+    } catch (error) {
+      await handle?.close().catch(() => undefined);
+      handle = undefined;
+      if (created) {
+        await retireLocalStartLock(paths.startLock, beforeRetire);
+        throw error;
+      }
+      if (!(error instanceof Error) || !("code" in error) || error.code !== "EEXIST") throw error;
+      let current: Awaited<ReturnType<typeof open>> | undefined;
+      try {
+        current = await open(paths.startLock, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
+        const metadata = await current.stat();
+        if (
+          !metadata.isFile() ||
+          metadata.nlink !== 1 ||
+          (process.platform !== "win32" && (metadata.mode & 0o777) !== 0o600) ||
+          (process.getuid?.() !== undefined && metadata.uid !== process.getuid?.())
+        )
+          throw new Error("local daemon 시작 lock 신뢰 검증에 실패했습니다");
+        const owner = (await current.readFile("utf8")).trim();
+        if (!/^[1-9][0-9]*$/u.test(owner)) throw new Error("local daemon 시작 lock owner가 유효하지 않습니다");
+        if (!processExists(Number(owner))) {
+          await current.close();
+          current = undefined;
+          await retireLocalStartLock(paths.startLock, beforeRetire);
+          continue;
+        }
+      } finally {
+        await current?.close().catch(() => undefined);
+      }
+      await wait(100);
+    }
+  }
+  throw new Error("local daemon 시작 lock 대기 시간을 초과했습니다");
+}
+
+async function retireLocalStartLock(path: string, beforeRetire?: () => void | Promise<void>): Promise<void> {
+  await beforeRetire?.();
+  try {
+    await rename(path, `${path}.retired-${randomUUID()}`);
+  } catch (error) {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") return;
+    throw error;
+  }
+}
+
 export class LocalDaemonManager {
   readonly #environment: Readonly<Record<string, string | undefined>>;
   readonly #paths: LocalPaths;
@@ -444,7 +761,13 @@ export class LocalDaemonManager {
   readonly #signal: (pid: number, signal: NodeJS.Signals) => void;
   readonly #wait: (milliseconds: number) => Promise<void>;
   readonly #spawnProcess: NonNullable<LocalDaemonDependencies["spawnProcess"]>;
+  readonly #beforeBootstrapCreateFailureCleanup: (() => void | Promise<void>) | undefined;
+  readonly #beforeBootstrapCleanup: (() => void | Promise<void>) | undefined;
+  readonly #beforeStartLockRetire: (() => void | Promise<void>) | undefined;
   #surrealRuntime: LocalSurrealRuntimeController | undefined;
+  #bootstrapCapability: Buffer | undefined;
+  #bootstrapCapabilityBinding: LocalBootstrapCapabilityBinding | undefined;
+  #bootstrapCapabilityTimer: ReturnType<typeof setTimeout> | undefined;
 
   constructor(dependencies: LocalDaemonDependencies = {}) {
     this.#environment = dependencies.environment ?? process.env;
@@ -479,12 +802,15 @@ export class LocalDaemonManager {
         });
         return child;
       });
+    this.#beforeBootstrapCreateFailureCleanup = dependencies.beforeBootstrapCreateFailureCleanup;
+    this.#beforeBootstrapCleanup = dependencies.beforeBootstrapCleanup;
+    this.#beforeStartLockRetire = dependencies.beforeStartLockRetire;
     this.#surrealRuntime = dependencies.surrealRuntime;
   }
 
   #current(record: LocalPidRecord): boolean {
     return (
-      record.schema === "massion.local-process.v2" &&
+      record.schema === "massion.local-process.v3" &&
       record.nodeExecutable === this.#nodeExecutable &&
       record.serverScript === this.#serverScript &&
       record.runtimeVersion === this.#runtimeVersion &&
@@ -495,7 +821,10 @@ export class LocalDaemonManager {
   async #owned(record: LocalPidRecord): Promise<boolean> {
     if (!this.#processExists(record.pid)) return false;
     const command = await this.#processCommand(record.pid).catch(() => "");
-    const nodeExecutable = record.schema === "massion.local-process.v2" ? record.nodeExecutable : this.#nodeExecutable;
+    const nodeExecutable =
+      record.schema === "massion.local-process.v2" || record.schema === "massion.local-process.v3"
+        ? record.nodeExecutable
+        : this.#nodeExecutable;
     const expected = `${nodeExecutable} ${record.serverScript}`;
     return command === expected || command.startsWith(`${expected} `);
   }
@@ -518,7 +847,7 @@ export class LocalDaemonManager {
     }
   }
 
-  #serverEnvironment(databaseEndpoint: string): NodeJS.ProcessEnv {
+  #serverEnvironment(databaseEndpoint: string, bootstrapCapabilityFile?: string): NodeJS.ProcessEnv {
     return {
       PATH: this.#environment.PATH,
       HOME: this.#environment.HOME,
@@ -529,6 +858,7 @@ export class LocalDaemonManager {
       MASSION_DATABASE_URL: applicationDatabaseEndpoint(databaseEndpoint),
       MASSION_DATABASE_USER: "massion",
       MASSION_DATABASE_PASSWORD_FILE: this.#paths.databasePassword,
+      ...(bootstrapCapabilityFile === undefined ? {} : { MASSION_BOOTSTRAP_CAPABILITY_FILE: bootstrapCapabilityFile }),
       ...(this.#environment.MASSION_WEB_ROOT === undefined
         ? {}
         : { MASSION_WEB_ROOT: this.#environment.MASSION_WEB_ROOT }),
@@ -560,7 +890,7 @@ export class LocalDaemonManager {
       ...(this.#environment.XDG_DATA_HOME === undefined ? {} : { xdgDataHome: this.#environment.XDG_DATA_HOME }),
     });
     const sourceExecutable = resolve(binary);
-    let executable = runtime.binaryPath;
+    const executable = runtime.binaryPath;
     if (sourceExecutable !== runtime.binaryPath) {
       const sourceMetadata = await lstat(sourceExecutable);
       if (sourceMetadata.isSymbolicLink() || !sourceMetadata.isFile() || (sourceMetadata.mode & 0o111) === 0) {
@@ -637,18 +967,87 @@ export class LocalDaemonManager {
   async initializeStateForTest(input: { readonly pid: number; readonly endpoint: string }): Promise<void> {
     await ensureLocalDataEpoch(this.#paths);
     await ensureDirectories(this.#paths);
+    const bootstrap = await createLocalBootstrapCapability(this.#paths, this.#beforeBootstrapCreateFailureCleanup);
+    this.#holdBootstrapCapability(bootstrap);
     await writePidRecord(this.#paths.pidFile, {
-      schema: "massion.local-process.v2",
+      schema: "massion.local-process.v3",
       pid: input.pid,
       endpoint: input.endpoint,
       nodeExecutable: this.#nodeExecutable,
       serverScript: this.#serverScript,
       runtimeVersion: this.#runtimeVersion,
+      bootstrapCapabilityFile: bootstrap.path,
+      bootstrapCapabilityDevice: bootstrap.device,
+      bootstrapCapabilityInode: bootstrap.inode,
       startedAt: new Date(0).toISOString(),
     });
   }
 
+  takeBootstrapCapability(): string | undefined {
+    const capability = this.#bootstrapCapability;
+    this.#bootstrapCapability = undefined;
+    if (this.#bootstrapCapabilityTimer) clearTimeout(this.#bootstrapCapabilityTimer);
+    this.#bootstrapCapabilityTimer = undefined;
+    if (capability === undefined) return undefined;
+    try {
+      return capability.toString("base64url");
+    } finally {
+      capability.fill(0);
+    }
+  }
+
+  discardBootstrapCapability(): void {
+    if (this.#bootstrapCapabilityTimer) clearTimeout(this.#bootstrapCapabilityTimer);
+    this.#bootstrapCapabilityTimer = undefined;
+    const capability = this.#bootstrapCapability;
+    this.#bootstrapCapability = undefined;
+    capability?.fill(0);
+  }
+
+  #holdBootstrapCapability(input: {
+    readonly path: string;
+    readonly device: string;
+    readonly inode: string;
+    readonly capability: Buffer;
+    readonly expiresAt: number;
+  }): void {
+    this.discardBootstrapCapability();
+    this.#bootstrapCapability = input.capability;
+    this.#bootstrapCapabilityBinding = { path: input.path, device: input.device, inode: input.inode };
+    const owned = input.capability;
+    const remaining = Math.max(0, input.expiresAt - Date.now());
+    this.#bootstrapCapabilityTimer = setTimeout(
+      () => {
+        if (this.#bootstrapCapability !== owned) return;
+        this.#bootstrapCapabilityTimer = undefined;
+        this.#bootstrapCapability = undefined;
+        owned.fill(0);
+      },
+      Math.min(remaining, 2_147_483_647),
+    );
+    this.#bootstrapCapabilityTimer.unref?.();
+  }
+
   async start(): Promise<{
+    readonly status: "started" | "already-running";
+    readonly pid: number;
+    readonly endpoint: string;
+  }> {
+    await ensureLocalDataEpoch(this.#paths);
+    const release = await acquireLocalStartLock(
+      this.#paths,
+      this.#processExists,
+      this.#wait,
+      this.#beforeStartLockRetire,
+    );
+    try {
+      return await this.#startUnlocked();
+    } finally {
+      await release();
+    }
+  }
+
+  async #startUnlocked(): Promise<{
     readonly status: "started" | "already-running";
     readonly pid: number;
     readonly endpoint: string;
@@ -665,19 +1064,35 @@ export class LocalDaemonManager {
         if (this.#current(existing)) {
           // 현재 runtime이면 준비 완료 또는 부팅 중인 process를 재사용한다.
           for (let attempt = 0; attempt < 40; attempt += 1) {
-            if (await this.#ready(existing.endpoint))
+            if (await this.#ready(existing.endpoint)) {
+              const binding = bootstrapBinding(existing);
+              if (!binding) throw new Error("local bootstrap capability binding이 없습니다");
+              const bootstrap = await readLocalBootstrapCapability(this.#paths, binding, this.#beforeBootstrapCleanup);
+              if (bootstrap === undefined) {
+                this.discardBootstrapCapability();
+                this.#bootstrapCapabilityBinding = binding;
+              } else {
+                this.#holdBootstrapCapability({ ...binding, ...bootstrap });
+              }
               return { status: "already-running", pid: existing.pid, endpoint: existing.endpoint };
+            }
             if (!this.#processExists(existing.pid)) break;
             await this.#wait(250);
           }
         }
-        // v1·runtime 불일치·준비 실패 상태는 소유 process의 종료를 확인한 뒤 v2로 교체한다.
-        if (this.#processExists(existing.pid)) await this.#terminate(existing);
-        else await rm(this.#paths.pidFile, { force: true });
+        // 구 schema·runtime 불일치·준비 실패 상태는 소유 process의 종료를 확인한 뒤 v3로 교체합니다.
+        if (this.#processExists(existing.pid)) {
+          await this.#terminate(existing);
+          await sanitizeLocalBootstrapCapability(this.#paths, bootstrapBinding(existing), this.#beforeBootstrapCleanup);
+        } else {
+          await rm(this.#paths.pidFile, { force: true });
+          await sanitizeLocalBootstrapCapability(this.#paths, bootstrapBinding(existing), this.#beforeBootstrapCleanup);
+        }
       } else if (this.#processExists(existing.pid)) {
         throw new Error("기록된 PID가 Massion server가 아니므로 덮어쓰지 않습니다");
       } else {
         await rm(this.#paths.pidFile, { force: true });
+        await sanitizeLocalBootstrapCapability(this.#paths, bootstrapBinding(existing), this.#beforeBootstrapCleanup);
       }
     }
     await Promise.all([access(this.#nodeExecutable, constants.X_OK), access(this.#serverScript, constants.R_OK)]);
@@ -687,13 +1102,15 @@ export class LocalDaemonManager {
     const database = await surrealRuntime.start();
     const startedSidecar = database.status === "started";
     let child: SpawnedProcess | undefined;
-    let record: LocalPidRecordV2 | undefined;
+    let record: LocalPidRecordV3 | undefined;
     try {
+      const bootstrap = await createLocalBootstrapCapability(this.#paths, this.#beforeBootstrapCreateFailureCleanup);
+      this.#holdBootstrapCapability(bootstrap);
       const logDescriptor = openSync(this.#paths.logFile, "a", 0o600);
       try {
         child = this.#spawnProcess(this.#nodeExecutable, [this.#serverScript], {
           cwd: this.#paths.dataDirectory,
-          env: this.#serverEnvironment(database.endpoint),
+          env: this.#serverEnvironment(database.endpoint, bootstrap.path),
           stdout: logDescriptor,
           stderr: logDescriptor,
         });
@@ -703,12 +1120,15 @@ export class LocalDaemonManager {
       }
       if (!child.pid) throw new Error("local Massion server PID를 받지 못했습니다");
       record = {
-        schema: "massion.local-process.v2",
+        schema: "massion.local-process.v3",
         pid: child.pid,
         endpoint,
         nodeExecutable: this.#nodeExecutable,
         serverScript: this.#serverScript,
         runtimeVersion: this.#runtimeVersion,
+        bootstrapCapabilityFile: bootstrap.path,
+        bootstrapCapabilityDevice: bootstrap.device,
+        bootstrapCapabilityInode: bootstrap.inode,
         startedAt: new Date().toISOString(),
       };
       await writePidRecord(this.#paths.pidFile, record);
@@ -721,6 +1141,13 @@ export class LocalDaemonManager {
     } catch (error) {
       if (record && this.#processExists(record.pid) && (await this.#owned(record))) await this.#terminate(record);
       else await rm(this.#paths.pidFile, { force: true });
+      this.discardBootstrapCapability();
+      await sanitizeLocalBootstrapCapability(
+        this.#paths,
+        this.#bootstrapCapabilityBinding,
+        this.#beforeBootstrapCleanup,
+      );
+      this.#bootstrapCapabilityBinding = undefined;
       if (startedSidecar) await surrealRuntime.stop().catch(() => undefined);
       throw error;
     }
@@ -748,15 +1175,32 @@ export class LocalDaemonManager {
       throw new Error("기록된 PID는 Massion server가 아닙니다");
     const surrealRuntime = await this.#localSurrealRuntime();
     if (!record) {
+      this.discardBootstrapCapability();
+      await sanitizeLocalBootstrapCapability(
+        this.#paths,
+        this.#bootstrapCapabilityBinding,
+        this.#beforeBootstrapCleanup,
+      );
+      this.#bootstrapCapabilityBinding = undefined;
       await surrealRuntime.stop();
       return { status: "already-stopped" };
     }
     if (!this.#processExists(record.pid)) {
       await rm(this.#paths.pidFile, { force: true });
+      this.discardBootstrapCapability();
+      await sanitizeLocalBootstrapCapability(
+        this.#paths,
+        bootstrapBinding(record) ?? this.#bootstrapCapabilityBinding,
+        this.#beforeBootstrapCleanup,
+      );
+      this.#bootstrapCapabilityBinding = undefined;
       await surrealRuntime.stop();
       return { status: "already-stopped", pid: record.pid };
     }
     await this.#terminate(record);
+    this.discardBootstrapCapability();
+    await sanitizeLocalBootstrapCapability(this.#paths, this.#bootstrapCapabilityBinding, this.#beforeBootstrapCleanup);
+    this.#bootstrapCapabilityBinding = undefined;
     await surrealRuntime.stop();
     return { status: "stopped", pid: record.pid };
   }
