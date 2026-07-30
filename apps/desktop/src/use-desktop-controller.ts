@@ -168,11 +168,19 @@ export function useDesktopController(service: DesktopService) {
       setWorks(next);
 
       const currentId = selectedIdRef.current;
-      if (!currentId) {
-        if (pendingCreationRef.current) return;
-        const first = next[0];
-        if (first) setSelectedId(first.id);
+      if (currentId && next.some((candidate) => candidate.id === currentId)) return;
+      if (pendingCreationRef.current) return;
+      const first = next[0];
+      if (first) {
+        setSelectedId(first.id);
+        return;
       }
+      detailRequestRef.current += 1;
+      selectedIdRef.current = "";
+      workRef.current = undefined;
+      setSelectedIdState("");
+      setWork(undefined);
+      setDetailLoading(false);
     },
     [setSelectedId],
   );

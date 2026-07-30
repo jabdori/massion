@@ -57,11 +57,13 @@ describe("AgentOS 데스크톱", () => {
     await user.type(within(list).getByRole("searchbox"), "계약서");
     expect(within(list).getByRole("button", { name: /파트너 계약서 검토/ })).toBeInTheDocument();
     expect(within(list).queryByRole("button", { name: /3분기 고객 이탈 원인 분석/ })).not.toBeInTheDocument();
+    expect(await screen.findByRole("main", { name: "파트너 계약서 검토" })).toBeInTheDocument();
 
     await user.clear(within(list).getByRole("searchbox"));
     await user.click(within(list).getByRole("tab", { name: "완료" }));
     expect(await within(list).findByRole("button", { name: /환불 지연 원인 제거/ })).toBeInTheDocument();
     expect(within(list).queryByRole("button", { name: /3분기 고객 이탈 원인 분석/ })).not.toBeInTheDocument();
+    expect(await screen.findByRole("main", { name: "환불 지연 원인 제거" })).toBeInTheDocument();
   });
 
   it("완료된 Work는 통과한 검증·최종 응답·기록을 함께 보여준다", async () => {
