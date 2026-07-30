@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { IdentityService, OrganizationService, type TenantContext } from "@massion/identity";
 import { createDatabase, type MassionDatabase } from "@massion/storage";
 
-import { RuntimeExecutionStore } from "../execution-store.js";
+import { runtimeExecutionResult, RuntimeExecutionStore } from "../execution-store.js";
 import {
   SubscriptionExecutionReceiptCoordinator,
   type SubscriptionReceiptBroker,
@@ -170,6 +170,70 @@ describe("구독 실행 crash-safe receipt", () => {
     expect(dependencies.counts()).toEqual({ routerSettlements: 1, leaseSettlements: 1 });
     expect(snapshot.terminal?.providerSessionId).toBe("provider-session-1");
     expect(snapshot.settled).toBeDefined();
+  });
+
+  it("실패 terminal receipt 뒤 crash 복구는 signal의 quota·retryable 오류를 Runtime에 투영한다", async () => {
+    const state = await running();
+    const value = lineage(state.execution.execution_id);
+    const dependencies = ports(value);
+    const beforeCrash = new SubscriptionExecutionReceiptCoordinator(store, dependencies.router, dependencies.broker);
+    await acquiredAndStarted(beforeCrash, value);
+    await beforeCrash.recordTerminalObserved(context, {
+      commandId: `${value.executionId}:subscription:${value.routeAttemptId}:terminal`,
+      ...value,
+      providerExecutionId: value.executionId,
+      outcome: "failed",
+      usage: { inputTokens: 7, outputTokens: 0 },
+      emittedTokens: 0,
+      sideEffectsStarted: false,
+      signal: { kind: "http", statusCode: 429 },
+    });
+
+    const restarted = new SubscriptionExecutionReceiptCoordinator(store, dependencies.router, dependencies.broker);
+    const recovered = await restarted.recover(context, value.executionId);
+    const replayed = await restarted.recover(context, value.executionId);
+
+    expect(runtimeExecutionResult(recovered)).toEqual({
+      executionId: value.executionId,
+      status: "failed",
+      error: { category: "quota", retryable: true, userMessage: "Agent 실행이 종료됐습니다" },
+    });
+    expect(runtimeExecutionResult(replayed)).toEqual(runtimeExecutionResult(recovered));
+    expect(JSON.parse(recovered.error_json ?? "null")).toEqual({ category: "quota", retryable: true });
+    expect(dependencies.reportFailure).toHaveBeenCalledWith(
+      context,
+      expect.objectContaining({ signal: { kind: "http", statusCode: 429 } }),
+    );
+  });
+
+  it("구조화된 provider 오류는 terminal receipt와 crash 복구 뒤에도 signal 분류로 덮어쓰지 않는다", async () => {
+    const state = await running();
+    const value = lineage(state.execution.execution_id);
+    const dependencies = ports(value);
+    const beforeCrash = new SubscriptionExecutionReceiptCoordinator(store, dependencies.router, dependencies.broker);
+    await acquiredAndStarted(beforeCrash, value);
+    await beforeCrash.recordTerminalObserved(context, {
+      commandId: `${value.executionId}:subscription:${value.routeAttemptId}:terminal`,
+      ...value,
+      providerExecutionId: value.executionId,
+      outcome: "failed",
+      usage: { inputTokens: 7, outputTokens: 0 },
+      emittedTokens: 0,
+      sideEffectsStarted: false,
+      category: "provider",
+      retryable: true,
+      signal: { kind: "network" },
+    });
+
+    const restarted = new SubscriptionExecutionReceiptCoordinator(store, dependencies.router, dependencies.broker);
+    const recovered = await restarted.recover(context, value.executionId);
+
+    expect(runtimeExecutionResult(recovered)).toEqual({
+      executionId: value.executionId,
+      status: "failed",
+      error: { category: "provider", retryable: true, userMessage: "Agent 실행이 종료됐습니다" },
+    });
+    expect(JSON.parse(recovered.error_json ?? "null")).toEqual({ category: "provider", retryable: true });
   });
 
   it("Receipt는 Runtime Execution의 자율성 mode·revision을 caller 값보다 우선해 고정한다", async () => {

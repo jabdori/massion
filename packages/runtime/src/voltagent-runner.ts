@@ -18,7 +18,14 @@ import type {
 } from "./contracts.js";
 import { MASSION_RUNTIME_EXECUTION_CONTEXT_KEY, MASSION_TENANT_CONTEXT_KEY } from "./agent-configuration.js";
 import { runtimeAgentName } from "./agent-topology.js";
-import { type RuntimeEvent, type RuntimeExecution, RuntimeExecutionStore } from "./execution-store.js";
+import {
+  runtimeErrorFromFailureSignal,
+  runtimeErrorFromStructuredFailure,
+  runtimeExecutionResult,
+  type RuntimeEvent,
+  type RuntimeExecution,
+  RuntimeExecutionStore,
+} from "./execution-store.js";
 import {
   RoutedExecutionSettlementError,
   type AcquireModelInput,
@@ -130,6 +137,8 @@ type ReceiptTerminalDetails =
       readonly usage: { readonly inputTokens: number; readonly outputTokens: number };
       readonly emittedTokens: number;
       readonly sideEffectsStarted: boolean;
+      readonly category?: string;
+      readonly retryable?: boolean;
       readonly signal: FailureSignal;
     };
 
@@ -209,7 +218,9 @@ function failureSignal(error: unknown): FailureSignal {
   if (error && typeof error === "object") {
     const record = error as Record<string, unknown>;
     const statusCode = record.statusCode;
-    if (typeof statusCode === "number") return { kind: "http", statusCode };
+    if (Number.isSafeInteger(statusCode) && Number(statusCode) >= 100 && Number(statusCode) <= 599) {
+      return { kind: "http", statusCode: Number(statusCode) };
+    }
     const name = record.name;
     if (name === "TimeoutError") return { kind: "timeout" };
   }
@@ -1196,6 +1207,8 @@ export class VoltAgentRunner implements AgentRunner, StructuredAgentRunner {
       usage: { inputTokens: 0, outputTokens: result.emittedTokens },
       emittedTokens: result.emittedTokens,
       sideEffectsStarted: result.sideEffectsStarted,
+      category: result.category,
+      retryable: result.retryable,
       signal: result.signal,
     });
     const failed = await lease.fail({
@@ -1212,13 +1225,12 @@ export class VoltAgentRunner implements AgentRunner, StructuredAgentRunner {
       return { kind: "fallback" };
     }
     const target = result.emittedTokens > 0 || result.sideEffectsStarted ? "interrupted" : "failed";
-    const terminal = await this.toTerminalIfRunning(context, executionId, target, {
-      category: result.category,
-      retryable: result.retryable,
-      attemptId: lease.attemptId,
-      sessionLeaseId: lease.sessionLeaseId,
-      ...(result.sessionId ? { providerSessionId: result.sessionId } : {}),
-    });
+    const terminal = await this.toTerminalIfRunning(
+      context,
+      executionId,
+      target,
+      runtimeErrorFromStructuredFailure(result),
+    );
     return { kind: "terminal", result: this.resultFromExecution(terminal.execution) };
   }
 
@@ -1595,26 +1607,11 @@ export class VoltAgentRunner implements AgentRunner, StructuredAgentRunner {
   }
 
   private resultFromExecution(execution: RuntimeExecution): AgentExecutionResult {
-    const stored = execution.output_json ? (JSON.parse(execution.output_json) as unknown) : undefined;
-    const output =
-      stored && typeof stored === "object" && "output" in stored ? (stored as Record<string, unknown>).output : stored;
-    return {
-      executionId: execution.execution_id,
-      status: execution.status,
-      ...(execution.output_json ? { output } : {}),
-      ...(execution.error_json
-        ? { error: { category: "runtime", retryable: false, userMessage: "Agent 실행에 실패했습니다" } }
-        : {}),
-    };
+    return runtimeExecutionResult(execution);
   }
 
   private errorPayload(error: unknown): Record<string, unknown> {
-    return {
-      category: failureSignal(error).kind,
-      retryable: ["timeout", "network"].includes(failureSignal(error).kind),
-      message: error instanceof Error ? error.message : "알 수 없는 Runtime 오류",
-      causeId: randomUUID(),
-    };
+    return runtimeErrorFromFailureSignal(failureSignal(error), randomUUID());
   }
 
   private requireAccepting(): void {

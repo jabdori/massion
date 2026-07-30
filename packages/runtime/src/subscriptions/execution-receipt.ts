@@ -5,7 +5,7 @@ import type { FailureSignal, ReportFailureInput, ReportSuccessInput } from "@mas
 import type { ConnectorFailureSignal, ConnectorLeaseFailure, ConnectorSessionLeaseView } from "@massion/subscriptions";
 
 import type { RuntimeExecution, RuntimeEvent } from "../execution-store.js";
-import { RuntimeExecutionStore } from "../execution-store.js";
+import { runtimeErrorFromStructuredFailure, RuntimeExecutionStore } from "../execution-store.js";
 
 const RECEIPT_BYTE_LIMIT = 64 * 1024;
 const RECEIPT_EVENT_TYPES = new Set([
@@ -61,6 +61,8 @@ export type RecordTerminalObservedInput =
         readonly usage: { readonly inputTokens: number; readonly outputTokens: number };
         readonly emittedTokens: number;
         readonly sideEffectsStarted: boolean;
+        readonly category?: string;
+        readonly retryable?: boolean;
         readonly signal: FailureSignal;
       });
 
@@ -105,6 +107,8 @@ export interface SubscriptionReceiptTerminal {
   readonly usage: { readonly inputTokens: number; readonly outputTokens: number };
   readonly emittedTokens: number;
   readonly sideEffectsStarted: boolean;
+  readonly category?: string;
+  readonly retryable?: boolean;
   readonly signal?: FailureSignal;
   readonly output?: SubscriptionTerminalOutput;
   readonly outputChecksum?: string;
@@ -285,6 +289,7 @@ export class SubscriptionExecutionReceiptCoordinator {
     const providerSessionId = input.providerSessionId
       ? text(input.providerSessionId, "Provider Session ID")
       : undefined;
+    const runtimeError = input.outcome === "completed" ? undefined : runtimeErrorFromStructuredFailure(input);
     const payload =
       input.outcome === "completed"
         ? boundedPayload({
@@ -306,6 +311,7 @@ export class SubscriptionExecutionReceiptCoordinator {
             usage,
             emittedTokens: nonnegativeInteger(input.emittedTokens, "방출 token 수"),
             sideEffectsStarted: input.sideEffectsStarted,
+            ...(runtimeError ?? {}),
             signal: input.signal,
           });
     await this.append(context, input.commandId, lineage, "subscription_terminal_observed", payload);
@@ -547,6 +553,8 @@ export class SubscriptionExecutionReceiptCoordinator {
       },
       emittedTokens: nonnegativeInteger(payload.emittedTokens, "방출 token 수"),
       sideEffectsStarted: payload.sideEffectsStarted === true,
+      ...(typeof payload.category === "string" ? { category: payload.category } : {}),
+      ...(typeof payload.retryable === "boolean" ? { retryable: payload.retryable } : {}),
       ...(payload.signal ? { signal: payload.signal as FailureSignal } : {}),
       ...(payload.output ? { output: payload.output as SubscriptionTerminalOutput } : {}),
       ...(typeof payload.outputChecksum === "string" ? { outputChecksum: payload.outputChecksum } : {}),
@@ -669,14 +677,13 @@ export class SubscriptionExecutionReceiptCoordinator {
               sessionLeaseId: attempt.lineage.leaseId,
               ...(terminal.providerSessionId ? { providerSessionId: terminal.providerSessionId } : {}),
             }
-          : {
-              attemptId: attempt.lineage.routeAttemptId,
-              sessionLeaseId: attempt.lineage.leaseId,
-              outcome: terminal.outcome,
-              signal: terminal.signal,
-              sideEffectsStarted: terminal.sideEffectsStarted,
-              emittedTokens: terminal.emittedTokens,
-            },
+          : target === "failed" || target === "interrupted"
+            ? runtimeErrorFromStructuredFailure({
+                category: terminal.category,
+                retryable: terminal.retryable,
+                signal: terminal.signal ?? { kind: "unknown" },
+              })
+            : { outcome: terminal.outcome },
     });
     return transitioned.execution;
   }

@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { IdentityService, OrganizationService, type TenantContext } from "@massion/identity";
 import { applyMigrations, createDatabase, type MassionDatabase } from "@massion/storage";
 
-import { RuntimeExecutionStore } from "./execution-store.js";
+import { runtimeExecutionResult, RuntimeExecutionStore } from "./execution-store.js";
 import {
   RUNTIME_BLOCKED_TRANSITION_MIGRATION,
   RUNTIME_EXECUTION_MIGRATION,
@@ -166,6 +166,220 @@ describe("Runtime Execution Store", () => {
       output: { plan: "persisted" },
     });
     await expect(store.findResultByCommand(context, "missing-command")).resolves.toBeUndefined();
+  });
+
+  it.each([
+    ["quota", true, "8fcd84ad-68a7-4bb2-a149-61ef1d40e02c"],
+    ["upstream", true, undefined],
+    ["timeout", true, undefined],
+    ["network", true, undefined],
+    ["provider", true, undefined],
+    ["authentication", false, undefined],
+    ["policy", false, undefined],
+    ["input", false, undefined],
+    ["billing", false, undefined],
+    ["output", false, undefined],
+    ["unknown", false, undefined],
+    ["cancelled", false, undefined],
+    ["runtime", false, "ec71ec62-c446-4a6d-bccd-5154885ce86d"],
+  ] as const)(
+    "failed %s 오류의 retryable·causeId를 command replay에서 보존한다",
+    async (category, retryable, causeId) => {
+      const commandId = `runtime-failed-${category}-command`;
+      const created = await createExecution(commandId);
+      const running = await store.transition(context, {
+        commandId: `${commandId}:running`,
+        executionId: created.execution.execution_id,
+        expectedVersion: created.execution.version,
+        target: "running",
+        payload: {},
+      });
+      await store.transition(context, {
+        commandId: `${commandId}:failed`,
+        executionId: created.execution.execution_id,
+        expectedVersion: running.execution.version,
+        target: "failed",
+        payload: {
+          category,
+          retryable,
+          ...(causeId === undefined ? {} : { causeId }),
+        },
+      });
+
+      await expect(store.findResultByCommand(context, commandId)).resolves.toEqual({
+        executionId: created.execution.execution_id,
+        status: "failed",
+        error: {
+          category,
+          retryable,
+          userMessage: "Agent 실행이 종료됐습니다",
+          ...(causeId === undefined ? {} : { causeId }),
+        },
+      });
+    },
+  );
+
+  it.each([
+    ["malformed", "provider-secret-token"],
+    ["legacy", JSON.stringify({ message: "provider-secret-token" })],
+    ["missing", undefined],
+    ["unknown-category", JSON.stringify({ category: "provider-secret-token", retryable: true })],
+    ["invalid-combination", JSON.stringify({ category: "quota", retryable: false })],
+    ["invalid-provider-combination", JSON.stringify({ category: "provider", retryable: false })],
+    ["extra-field", JSON.stringify({ category: "quota", retryable: true, message: "provider-secret-token" })],
+  ] as const)("%s failed 오류 계보는 원문을 노출하지 않는 non-retryable 결과로 복원한다", async (kind, errorJson) => {
+    const commandId = `runtime-${kind}-error-command`;
+    const created = await createExecution(commandId);
+    const running = await store.transition(context, {
+      commandId: `${commandId}:running`,
+      executionId: created.execution.execution_id,
+      expectedVersion: created.execution.version,
+      target: "running",
+      payload: {},
+    });
+    await store.transition(context, {
+      commandId: `${commandId}:failed`,
+      executionId: created.execution.execution_id,
+      expectedVersion: running.execution.version,
+      target: "failed",
+      payload: {},
+    });
+    await database.query(
+      errorJson === undefined
+        ? "UPDATE runtime_execution SET error_json = NONE WHERE organization_id = $organization_id AND execution_id = $execution_id;"
+        : "UPDATE runtime_execution SET error_json = $error_json WHERE organization_id = $organization_id AND execution_id = $execution_id;",
+      {
+        organization_id: context.organizationId,
+        execution_id: created.execution.execution_id,
+        error_json: errorJson,
+      },
+    );
+
+    const replayed = await store.findResultByCommand(context, commandId);
+    expect(replayed).toEqual({
+      executionId: created.execution.execution_id,
+      status: "failed",
+      error: { category: "runtime", retryable: false, userMessage: "Agent 실행이 종료됐습니다" },
+    });
+    expect(JSON.stringify(replayed)).not.toContain("provider-secret-token");
+  });
+
+  it.each(["provider-secret-token", "a".repeat(64)])(
+    "임의 causeId %s는 제거하고 검증된 오류 분류만 보존한다",
+    async (causeId) => {
+      const commandId = "runtime-arbitrary-cause-command";
+      const created = await createExecution(commandId);
+      const running = await store.transition(context, {
+        commandId: `${commandId}:running`,
+        executionId: created.execution.execution_id,
+        expectedVersion: created.execution.version,
+        target: "running",
+        payload: {},
+      });
+      await store.transition(context, {
+        commandId: `${commandId}:failed`,
+        executionId: created.execution.execution_id,
+        expectedVersion: running.execution.version,
+        target: "failed",
+        payload: { category: "quota", retryable: true, causeId },
+      });
+
+      const replayed = await store.findResultByCommand(context, commandId);
+      expect(replayed).toEqual({
+        executionId: created.execution.execution_id,
+        status: "failed",
+        error: { category: "quota", retryable: true, userMessage: "Agent 실행이 종료됐습니다" },
+      });
+      expect(JSON.stringify(replayed)).not.toContain(causeId);
+    },
+  );
+
+  it("blocked 결과는 기존 generic runtime 오류 형태를 보존한다", async () => {
+    const created = await createExecution("runtime-blocked-shape-command");
+    const blocked = await store.transition(context, {
+      commandId: "runtime-blocked-shape-terminal",
+      executionId: created.execution.execution_id,
+      expectedVersion: created.execution.version,
+      target: "blocked_model_unavailable",
+      payload: { category: "quota", retryable: true },
+    });
+    expect(runtimeExecutionResult(blocked.execution)).toEqual({
+      executionId: created.execution.execution_id,
+      status: "blocked_model_unavailable",
+      error: { category: "runtime", retryable: false, userMessage: "Agent 실행에 실패했습니다" },
+    });
+
+    for (const target of ["failed", "interrupted"] as const) {
+      const state = await createExecution(`runtime-${target}-shape-command`);
+      const running = await store.transition(context, {
+        commandId: `runtime-${target}-shape-running`,
+        executionId: state.execution.execution_id,
+        expectedVersion: state.execution.version,
+        target: "running",
+        payload: {},
+      });
+      const terminal = await store.transition(context, {
+        commandId: `runtime-${target}-shape-terminal`,
+        executionId: state.execution.execution_id,
+        expectedVersion: running.execution.version,
+        target,
+        payload: { category: "network", retryable: true },
+      });
+      expect(runtimeExecutionResult(terminal.execution)).toMatchObject({
+        status: target,
+        error: { category: "network", retryable: true },
+      });
+    }
+
+    for (const status of ["succeeded", "cancelled", "suspended"] as const) {
+      expect(
+        runtimeExecutionResult({
+          ...created.execution,
+          status,
+          error_json: JSON.stringify({ category: "network", retryable: true }),
+        }),
+      ).not.toHaveProperty("error");
+    }
+  });
+
+  it("malformed output_json은 원문 없이 생략하고 failed 오류 fallback은 유지한다", async () => {
+    const secret = "provider-output-secret";
+    for (const status of ["succeeded", "failed"] as const) {
+      const commandId = `runtime-malformed-output-${status}`;
+      const created = await createExecution(commandId);
+      const running = await store.transition(context, {
+        commandId: `${commandId}:running`,
+        executionId: created.execution.execution_id,
+        expectedVersion: created.execution.version,
+        target: "running",
+        payload: {},
+      });
+      await store.transition(context, {
+        commandId: `${commandId}:terminal`,
+        executionId: created.execution.execution_id,
+        expectedVersion: running.execution.version,
+        target: status,
+        payload: status === "succeeded" ? { output: "safe" } : {},
+      });
+      await database.query(
+        "UPDATE runtime_execution SET output_json = $output_json WHERE organization_id = $organization_id AND execution_id = $execution_id;",
+        {
+          organization_id: context.organizationId,
+          execution_id: created.execution.execution_id,
+          output_json: secret,
+        },
+      );
+
+      const replayed = await store.findResultByCommand(context, commandId);
+      expect(replayed).toMatchObject({ executionId: created.execution.execution_id, status });
+      expect(replayed).not.toHaveProperty("output");
+      if (status === "failed") {
+        expect(replayed).toMatchObject({
+          error: { category: "runtime", retryable: false, userMessage: "Agent 실행이 종료됐습니다" },
+        });
+      }
+      expect(JSON.stringify(replayed)).not.toContain(secret);
+    }
   });
 
   it("직접 DB 우회와 같은 version의 동시 전이 중 하나를 거부한다", async () => {
@@ -333,6 +547,7 @@ describe("Runtime Execution Store", () => {
     await expect(store.listRecoverable(memberContext)).resolves.toEqual([]);
     await expect(store.listByCorrelation(memberContext, "team-correlation")).resolves.toEqual([]);
     await expect(store.findExecutionIdByCommand(memberContext, "owner-command")).resolves.toBeUndefined();
+    await expect(store.findResultByCommand(memberContext, "owner-command")).resolves.toBeUndefined();
     await expect(
       store.createExecution(memberContext, {
         commandId: "owner-command",

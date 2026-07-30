@@ -1,7 +1,7 @@
 import type { TenantContext } from "@massion/identity";
 
 import type { AgentExecutionResult, RuntimeExecutionStatus } from "./contracts.js";
-import { RuntimeExecutionStore } from "./execution-store.js";
+import { runtimeExecutionResult, RuntimeExecutionStore } from "./execution-store.js";
 
 export interface PersistedWorkflowState {
   readonly id: string;
@@ -23,10 +23,10 @@ export class RuntimeRecovery {
   public async recover(context: TenantContext, executionId: string): Promise<AgentExecutionResult> {
     const snapshot = await this.store.getRecovery(context, executionId);
     if (this.isTerminal(snapshot.execution.status) || snapshot.execution.status === "suspended") {
-      return this.result(snapshot.execution.execution_id, snapshot.execution.status, snapshot.execution.output_json);
+      return runtimeExecutionResult(snapshot.execution);
     }
     if (snapshot.execution.status !== "running") {
-      return this.result(snapshot.execution.execution_id, snapshot.execution.status, snapshot.execution.output_json);
+      return runtimeExecutionResult(snapshot.execution);
     }
     const workflow = snapshot.binding
       ? await this.workflows.getWorkflowState(snapshot.binding.workflow_execution_id)
@@ -40,7 +40,7 @@ export class RuntimeRecovery {
       payload:
         target === "succeeded" ? { output: workflow?.output } : { workflowStatus: workflow?.status ?? "missing" },
     });
-    return this.result(changed.execution.execution_id, changed.execution.status, changed.execution.output_json);
+    return runtimeExecutionResult(changed.execution);
   }
 
   public async recoverAll(context: TenantContext): Promise<AgentExecutionResult[]> {
@@ -60,12 +60,5 @@ export class RuntimeRecovery {
 
   private isTerminal(status: RuntimeExecutionStatus): boolean {
     return ["succeeded", "failed", "cancelled", "interrupted", "blocked_model_unavailable"].includes(status);
-  }
-
-  private result(executionId: string, status: RuntimeExecutionStatus, outputJson?: string): AgentExecutionResult {
-    const stored = outputJson ? (JSON.parse(outputJson) as unknown) : undefined;
-    const output =
-      stored && typeof stored === "object" && "output" in stored ? (stored as Record<string, unknown>).output : stored;
-    return { executionId, status, ...(outputJson ? { output } : {}) };
   }
 }

@@ -1,9 +1,15 @@
 import { randomUUID } from "node:crypto";
 
 import { type OrganizationService, type TenantContext } from "@massion/identity";
+import { classifyFailure, type FailureClass, type FailureSignal } from "@massion/router";
 import { applyMigrations, type MassionDatabase, type QueryExecutor } from "@massion/storage";
 
-import type { AgentExecutionInput, AgentExecutionResult, RuntimeExecutionStatus } from "./contracts.js";
+import type {
+  AgentExecutionInput,
+  AgentExecutionResult,
+  RuntimeExecutionError,
+  RuntimeExecutionStatus,
+} from "./contracts.js";
 import type { AgentConfigurationReader, ResolvedAgentConfiguration } from "./agent-configuration.js";
 import {
   RUNTIME_ACTOR_LINEAGE_MIGRATION,
@@ -68,6 +74,137 @@ export interface RuntimeWorkflowBinding {
   readonly workflow_execution_id: string;
   readonly created_at: unknown;
   readonly updated_at: unknown;
+}
+
+const SAFE_RUNTIME_ERROR = {
+  category: "runtime",
+  retryable: false,
+  userMessage: "Agent 실행이 종료됐습니다",
+} as const;
+
+const BLOCKED_MODEL_UNAVAILABLE_ERROR = {
+  category: "runtime",
+  retryable: false,
+  userMessage: "Agent 실행에 실패했습니다",
+} as const;
+
+const RUNTIME_ERROR_RETRYABLE = {
+  runtime: false,
+  authentication: false,
+  billing: false,
+  quota: true,
+  upstream: true,
+  timeout: true,
+  network: true,
+  provider: true,
+  input: false,
+  policy: false,
+  cancelled: false,
+  output: false,
+  unknown: false,
+} as const satisfies Readonly<Record<FailureClass | "provider" | "runtime", boolean>>;
+
+type RuntimeErrorCategory = keyof typeof RUNTIME_ERROR_RETRYABLE;
+
+function safeCauseId(value: unknown): string | undefined {
+  return typeof value === "string" &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(value)
+    ? value
+    : undefined;
+}
+
+export function runtimeErrorFromFailureSignal(
+  signal: FailureSignal,
+  causeId?: string,
+): { readonly category: RuntimeErrorCategory; readonly retryable: boolean; readonly causeId?: string } {
+  const category = classifyFailure(signal).failureClass;
+  const safeId = safeCauseId(causeId);
+  return {
+    category,
+    retryable: RUNTIME_ERROR_RETRYABLE[category],
+    ...(safeId === undefined ? {} : { causeId: safeId }),
+  };
+}
+
+export function runtimeErrorFromStructuredFailure(failure: {
+  readonly category?: unknown;
+  readonly retryable?: unknown;
+  readonly signal: FailureSignal;
+}): { readonly category: RuntimeErrorCategory; readonly retryable: boolean } {
+  if (
+    typeof failure.category === "string" &&
+    Object.hasOwn(RUNTIME_ERROR_RETRYABLE, failure.category) &&
+    typeof failure.retryable === "boolean"
+  ) {
+    const category = failure.category as RuntimeErrorCategory;
+    if (failure.retryable === RUNTIME_ERROR_RETRYABLE[category]) {
+      return { category, retryable: failure.retryable };
+    }
+  }
+  return runtimeErrorFromFailureSignal(failure.signal);
+}
+
+function persistedError(errorJson: string | undefined): RuntimeExecutionError {
+  if (!errorJson) return SAFE_RUNTIME_ERROR;
+  let value: unknown;
+  try {
+    value = JSON.parse(errorJson) as unknown;
+  } catch {
+    return SAFE_RUNTIME_ERROR;
+  }
+  if (!value || typeof value !== "object" || Array.isArray(value)) return SAFE_RUNTIME_ERROR;
+  const error = value as Record<string, unknown>;
+  const keys = Object.keys(error);
+  if (
+    keys.some((key) => !["category", "retryable", "causeId"].includes(key)) ||
+    !Object.hasOwn(error, "category") ||
+    !Object.hasOwn(error, "retryable") ||
+    typeof error.category !== "string" ||
+    !Object.hasOwn(RUNTIME_ERROR_RETRYABLE, error.category) ||
+    typeof error.retryable !== "boolean"
+  ) {
+    return SAFE_RUNTIME_ERROR;
+  }
+  const category = error.category as RuntimeErrorCategory;
+  if (error.retryable !== RUNTIME_ERROR_RETRYABLE[category]) return SAFE_RUNTIME_ERROR;
+  const causeId = safeCauseId(error.causeId);
+  return {
+    category,
+    retryable: error.retryable,
+    userMessage: SAFE_RUNTIME_ERROR.userMessage,
+    ...(causeId === undefined ? {} : { causeId }),
+  };
+}
+
+function persistedOutput(outputJson: string | undefined): { readonly output: unknown } | undefined {
+  if (!outputJson) return undefined;
+  try {
+    const stored = JSON.parse(outputJson) as unknown;
+    return {
+      output:
+        stored && typeof stored === "object" && "output" in stored
+          ? (stored as Record<string, unknown>).output
+          : stored,
+    };
+  } catch {
+    return undefined;
+  }
+}
+
+export function runtimeExecutionResult(execution: RuntimeExecution): AgentExecutionResult {
+  const output = persistedOutput(execution.output_json);
+  const failed = ["failed", "interrupted"].includes(execution.status);
+  const blocked = execution.status === "blocked_model_unavailable" && Boolean(execution.error_json);
+  return {
+    executionId: execution.execution_id,
+    status: execution.status,
+    ...(output ?? {}),
+    ...(failed
+      ? { error: persistedError(execution.error_json) }
+      : blocked
+        ? { error: BLOCKED_MODEL_UNAVAILABLE_ERROR }
+        : {}),
+  };
 }
 
 export interface TransitionExecutionInput {
@@ -253,27 +390,7 @@ export class RuntimeExecutionStore {
     if (!["succeeded", "failed", "cancelled", "interrupted", "blocked_model_unavailable"].includes(execution.status)) {
       return undefined;
     }
-    const stored = execution.output_json ? (JSON.parse(execution.output_json) as unknown) : undefined;
-    const output =
-      stored && typeof stored === "object" && "output" in stored ? (stored as Record<string, unknown>).output : stored;
-    const storedError = execution.error_json
-      ? (JSON.parse(execution.error_json) as Record<string, unknown>)
-      : undefined;
-    return {
-      executionId,
-      status: execution.status,
-      ...(execution.output_json ? { output } : {}),
-      ...(storedError
-        ? {
-            error: {
-              category: typeof storedError.category === "string" ? storedError.category : "runtime",
-              retryable: storedError.retryable === true,
-              userMessage: "Agent 실행이 종료됐습니다",
-              ...(typeof storedError.causeId === "string" ? { causeId: storedError.causeId } : {}),
-            },
-          }
-        : {}),
-    };
+    return runtimeExecutionResult(execution);
   }
 
   private async attachConfiguration(

@@ -11,12 +11,14 @@ import type { AgentExecutionInput } from "./contracts.js";
 import { MASSION_RUNTIME_EXECUTION_CONTEXT_KEY, MASSION_TENANT_CONTEXT_KEY } from "./agent-configuration.js";
 import { runtimeAgentName } from "./agent-topology.js";
 import { RuntimeExecutionStore } from "./execution-store.js";
+import { DirectExecutionLifecycle } from "./lifecycle.js";
 import type {
   RoutedAgentRuntimeLease,
   RoutedAgentRuntimeResult,
   RoutedModelFactory,
   RoutedModelLease,
 } from "./model-factory.js";
+import { RuntimeRecovery } from "./recovery.js";
 import { normalizeVoltAgentStreamPart, RoutedModelRegistry, VoltAgentRunner } from "./voltagent-runner.js";
 
 const USAGE = {
@@ -978,7 +980,7 @@ describe("VoltAgent AgentRunner", () => {
       {
         outcome: "failed",
         executionId: "provider-execution-output",
-        category: "provider-unavailable",
+        category: "provider",
         retryable: true,
         signal: { kind: "network" },
         emittedTokens: 1,
@@ -999,7 +1001,7 @@ describe("VoltAgent AgentRunner", () => {
 
     const result = await runner.execute(context, input());
 
-    expect(result.status).toBe("interrupted");
+    expect(result).toMatchObject({ status: "interrupted", error: { category: "provider", retryable: true } });
     expect(acquire).toHaveBeenCalledOnce();
     expect(routed.fail).toHaveBeenCalledWith(expect.objectContaining({ emittedTokens: 1, outputTokens: 1 }));
   });
@@ -1402,7 +1404,7 @@ describe("VoltAgent AgentRunner", () => {
     const failed = await invalidRunner.executeStructured(context, input(), spec);
     const failedRecovery = await store.getRecovery(context, failed.executionId);
 
-    expect(failed.status).toBe("failed");
+    expect(failed).toMatchObject({ status: "failed", error: { category: "output", retryable: false } });
     expect(JSON.stringify(failedRecovery)).not.toContain("secret-value");
 
     const blockedRunner = new VoltAgentRunner(
@@ -1413,7 +1415,11 @@ describe("VoltAgent AgentRunner", () => {
     );
     const blocked = await blockedRunner.executeStructured(context, input(), spec);
 
-    expect(blocked.status).toBe("blocked_model_unavailable");
+    expect(blocked).toEqual({
+      executionId: expect.any(String),
+      status: "blocked_model_unavailable",
+      error: { category: "runtime", retryable: false, userMessage: "Agent 실행에 실패했습니다" },
+    });
   });
 
   it("first-token 전 인증 실패는 Router가 허용한 다음 lease로 fallback한다", async () => {
@@ -1783,5 +1789,49 @@ describe("VoltAgent AgentRunner", () => {
       approvalId: "approval-restart",
     });
     expect(receipts.recover).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["HTTP 429", () => Object.assign(new Error("secret-429"), { statusCode: 429 }), "quota", true],
+    ["HTTP 503", () => Object.assign(new Error("secret-503"), { statusCode: 503 }), "upstream", true],
+    ["HTTP 408", () => Object.assign(new Error("secret-408"), { statusCode: 408 }), "timeout", true],
+    ["HTTP 409", () => Object.assign(new Error("secret-409"), { statusCode: 409 }), "upstream", true],
+    ["network", () => new TypeError("network-secret"), "network", true],
+    ["timeout", () => Object.assign(new Error("timeout-secret"), { name: "TimeoutError" }), "timeout", true],
+    ["HTTP 401", () => Object.assign(new Error("secret-401"), { statusCode: 401 }), "authentication", false],
+    ["HTTP 402", () => Object.assign(new Error("secret-402"), { statusCode: 402 }), "billing", false],
+    ["HTTP 403", () => Object.assign(new Error("secret-403"), { statusCode: 403 }), "policy", false],
+    ["HTTP 418", () => Object.assign(new Error("secret-418"), { statusCode: 418 }), "input", false],
+    ["output", () => new Error("Invalid JSON response"), "output", false],
+    ["unknown", () => new Error("unknown-secret"), "unknown", false],
+  ] as const)("직접 %s 실패의 분류를 영속·복구한다", async (_label, error, category, retryable) => {
+    const runtimeInput = input();
+    const routed = lease(
+      new MockLanguageModelV3({
+        doGenerate: async () => {
+          throw error();
+        },
+      }),
+    );
+    const runner = new VoltAgentRunner(
+      voltAgent,
+      store,
+      { acquire: vi.fn().mockResolvedValue(routed) },
+      registry,
+      new DirectExecutionLifecycle(new RuntimeRecovery(store, { getWorkflowState: async () => null })),
+    );
+
+    const result = await runner.execute(context, runtimeInput);
+    const replayed = await store.findResultByCommand(context, runtimeInput.commandId);
+    const recovered = await runner.recover(context, result.executionId);
+
+    expect(result).toMatchObject({
+      status: "failed",
+      error: { category, retryable, userMessage: "Agent 실행이 종료됐습니다", causeId: expect.any(String) },
+    });
+    expect(result.error?.causeId).toMatch(/^[0-9a-f-]{36}$/u);
+    expect(replayed).toEqual(result);
+    expect(recovered).toEqual(result);
+    expect(JSON.stringify(result)).not.toContain("secret");
   });
 });
