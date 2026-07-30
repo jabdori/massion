@@ -86,8 +86,8 @@ async function main(): Promise<void> {
       })
       .finally(removeSignalHandlers);
   };
-  process.once("SIGTERM", shutdown);
-  process.once("SIGINT", shutdown);
+  process.on("SIGTERM", shutdown);
+  process.on("SIGINT", shutdown);
   log("server.ready", { mode: config.mode, host: address.host, port: address.port });
 }
 
