@@ -482,9 +482,9 @@ export class OrganizationGraphService {
     });
   }
 
-  public async listNodes(context: TenantContext): Promise<OrganizationNode[]> {
-    await this.verify(context);
-    return await listNodes(this.database, context.organizationId);
+  public async listNodes(context: TenantContext, executor: QueryExecutor = this.database): Promise<OrganizationNode[]> {
+    await this.organizations.verifyTenantContext(context, undefined, executor);
+    return await listNodes(executor, context.organizationId);
   }
 
   public async getCurrentSnapshot(

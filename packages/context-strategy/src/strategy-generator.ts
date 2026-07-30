@@ -127,10 +127,12 @@ export interface StrategyPlanningAgent {
   readonly handle: string;
   readonly status: string;
   readonly capabilities: readonly string[];
+  readonly scope: "persistent" | "work";
+  readonly work_id?: string;
 }
 
 export interface StrategyAgentDirectory {
-  listNodes(context: TenantContext): Promise<readonly StrategyPlanningAgent[]>;
+  listNodes(context: TenantContext, executor?: QueryExecutor): Promise<readonly StrategyPlanningAgent[]>;
 }
 
 export interface StrategyEvidenceMaterial {
@@ -363,7 +365,7 @@ export class StrategyGenerator {
     const route = contextVersion.selectedSources.some((source) => source.classification === "local-private")
       ? "local-private"
       : "planning-quality";
-    const availableAgents = await this.availableAgents(context);
+    const availableAgents = await this.availableAgents(context, input.workId);
     recoverySignal?.throwIfAborted();
     return {
       contextVersion,
@@ -646,16 +648,32 @@ export class StrategyGenerator {
       signal?.throwIfAborted();
       await this.organizations.verifyTenantContext(context, undefined, tx);
       signal?.throwIfAborted();
-      const storedError = output.error ? { ...output.error, terminalStatus: output.status } : undefined;
+      const current = await this.find(tx, context.organizationId, generationId);
+      signal?.throwIfAborted();
+      let checkpoint = output;
+      if (output.status === "generated" && output.plan) {
+        const availableAgents = await this.availableAgents(context, current.work_id, tx);
+        signal?.throwIfAborted();
+        try {
+          validatedPlan(output.plan, new Set(availableAgents.map((agent) => agent.handle)));
+        } catch {
+          checkpoint = {
+            status: "failed",
+            runtimeExecutionId: output.runtimeExecutionId,
+            error: { category: "structured_output", causeId: randomUUID() },
+          };
+        }
+      }
+      const storedError = checkpoint.error ? { ...checkpoint.error, terminalStatus: checkpoint.status } : undefined;
       const [updated] = await tx.query<[StrategyGenerationRecord[]]>(
         "UPDATE strategy_generation SET runtime_execution_id = $runtime_execution_id, plan_json = $plan_json, checksum = $checksum, error_json = $error_json, updated_at = time::now() WHERE organization_id = $organization_id AND strategy_generation_id = $strategy_generation_id AND status = 'pending' AND execution_claim_id = $execution_claim_id AND execution_claim_expires_at > time::now() RETURN AFTER;",
         {
           organization_id: context.organizationId,
           strategy_generation_id: generationId,
           execution_claim_id: claimId,
-          runtime_execution_id: output.runtimeExecutionId,
-          plan_json: output.plan ? canonicalJson(output.plan) : undefined,
-          checksum: output.checksum,
+          runtime_execution_id: checkpoint.runtimeExecutionId,
+          plan_json: checkpoint.plan ? canonicalJson(checkpoint.plan) : undefined,
+          checksum: checkpoint.checksum,
           error_json: storedError ? canonicalJson(storedError) : undefined,
         },
       );
@@ -871,17 +889,29 @@ export class StrategyGenerator {
     };
   }
 
-  private async availableAgents(context: TenantContext): Promise<readonly StrategyPlanningAgent[]> {
-    const candidates = this.agents
-      ? await this.agents.listNodes(context)
-      : CORE_OFFICE_HANDLES.map((handle) => ({ handle, status: "active", capabilities: [] }));
+  private async availableAgents(
+    context: TenantContext,
+    workId: string,
+    executor?: QueryExecutor,
+  ): Promise<readonly StrategyPlanningAgent[]> {
+    const candidates: readonly StrategyPlanningAgent[] = this.agents
+      ? await this.agents.listNodes(context, executor)
+      : CORE_OFFICE_HANDLES.map((handle) => ({
+          handle,
+          status: "active",
+          capabilities: [],
+          scope: "persistent" as const,
+        }));
     const unique = new Map<string, StrategyPlanningAgent>();
     for (const candidate of candidates) {
       if (candidate.status !== "active" || !candidate.handle.trim()) continue;
+      if (candidate.scope === "work" && candidate.work_id !== workId) continue;
       unique.set(candidate.handle, {
         handle: candidate.handle,
         status: candidate.status,
         capabilities: [...candidate.capabilities],
+        scope: candidate.scope,
+        ...(candidate.work_id === undefined ? {} : { work_id: candidate.work_id }),
       });
     }
     return [...unique.values()].sort((left, right) => left.handle.localeCompare(right.handle));

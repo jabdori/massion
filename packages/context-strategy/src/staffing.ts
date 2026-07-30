@@ -82,58 +82,73 @@ export class StaffingAdvisor {
   private constructor(
     private readonly database: MassionDatabase,
     private readonly organizations: OrganizationService,
-    private readonly graph: Pick<OrganizationGraphService, "verifyActiveNode">,
+    private readonly graph: {
+      listNodes(context: TenantContext, executor?: QueryExecutor): ReturnType<OrganizationGraphService["listNodes"]>;
+    },
   ) {}
 
   public static async create(
     database: MassionDatabase,
     organizations: OrganizationService,
-    graph: Pick<OrganizationGraphService, "verifyActiveNode">,
+    graph: {
+      listNodes(context: TenantContext, executor?: QueryExecutor): ReturnType<OrganizationGraphService["listNodes"]>;
+    },
   ): Promise<StaffingAdvisor> {
     await applyMigrations(database, [STRATEGY_GENERATION_MIGRATION, CONTINUATION_STAFFING_MIGRATION]);
     return new StaffingAdvisor(database, organizations, graph);
   }
 
   public async assess(context: TenantContext, input: StaffingAssessmentInput): Promise<StaffingAssessment> {
-    await this.organizations.verifyTenantContext(context);
     if (input.tasks.length === 0) throw new Error("Staffing assessment에는 Strategy Task가 필요합니다");
     const hash = requestHash(input);
-    const existing = await this.findByCommand(context.organizationId, input.commandId);
-    if (existing) {
-      if (existing.request_hash !== hash) throw new Error("같은 commandId에 다른 staffing 요청을 사용할 수 없습니다");
-      return await this.view(existing);
-    }
-
-    const recommendations: StaffingRecommendation[] = [];
-    const gaps: Omit<StaffingGap, "gapId">[] = [];
-    for (const task of input.tasks) {
-      if (task.requiredCapabilities.length > 0 && task.recommendedAgentHandles.length === 0) {
-        for (const capability of task.requiredCapabilities) {
-          gaps.push({ taskKey: task.key, reason: "missing_recommendation", capability });
-        }
-        continue;
+    return await this.database.transaction(async (tx) => {
+      await this.organizations.verifyTenantContext(context, undefined, tx);
+      const existing = await this.findByCommand(context.organizationId, input.commandId, tx);
+      if (existing) {
+        if (existing.request_hash !== hash) throw new Error("같은 commandId에 다른 staffing 요청을 사용할 수 없습니다");
+        return await this.view(existing, tx);
       }
-      for (const agentHandle of task.recommendedAgentHandles) {
-        try {
-          await this.graph.verifyActiveNode(context, agentHandle, undefined, input.workId);
+
+      const availableNodes = (await this.graph.listNodes(context, tx))
+        .filter((node) => node.status === "active" && (node.scope === "persistent" || node.work_id === input.workId))
+        .sort((left, right) => left.handle.localeCompare(right.handle));
+      const availableByHandle = new Map(availableNodes.map((node) => [node.handle, node]));
+      const recommendations: StaffingRecommendation[] = [];
+      const gaps: Omit<StaffingGap, "gapId">[] = [];
+      for (const task of input.tasks) {
+        if (task.requiredCapabilities.length > 0 && task.recommendedAgentHandles.length === 0) {
+          const candidates = availableNodes.filter((node) =>
+            task.requiredCapabilities.every((capability) => node.capabilities.includes(capability)),
+          );
+          if (candidates.length === 0) {
+            for (const capability of task.requiredCapabilities) {
+              gaps.push({ taskKey: task.key, reason: "missing_recommendation", capability });
+            }
+            continue;
+          }
+          for (const candidate of candidates) {
+            recommendations.push({
+              taskKey: task.key,
+              agentHandle: candidate.handle,
+              requiredCapabilities: task.requiredCapabilities,
+            });
+          }
+          continue;
+        }
+        for (const agentHandle of task.recommendedAgentHandles) {
+          const node = availableByHandle.get(agentHandle);
+          if (!node || !task.requiredCapabilities.every((capability) => node.capabilities.includes(capability))) {
+            gaps.push({ taskKey: task.key, reason: "unavailable_recommendation", agentHandle });
+            continue;
+          }
           recommendations.push({
             taskKey: task.key,
             agentHandle,
             requiredCapabilities: task.requiredCapabilities,
           });
-        } catch {
-          gaps.push({ taskKey: task.key, reason: "unavailable_recommendation", agentHandle });
         }
       }
-    }
 
-    return await this.database.transaction(async (tx) => {
-      await this.organizations.verifyTenantContext(context, undefined, tx);
-      const repeated = await this.findByCommand(context.organizationId, input.commandId, tx);
-      if (repeated) {
-        if (repeated.request_hash !== hash) throw new Error("같은 commandId에 다른 staffing 요청을 사용할 수 없습니다");
-        return await this.view(repeated, tx);
-      }
       const assessmentId = randomUUID();
       const status = gaps.length > 0 ? "gaps" : "verified";
       const [created] = await tx.query<[StaffingAssessmentRecord[]]>(

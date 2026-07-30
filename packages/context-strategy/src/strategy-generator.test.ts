@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { IdentityService, OrganizationService, type TenantContext } from "@massion/identity";
+import { OrganizationGraphService } from "@massion/organization";
 import type { StructuredAgentRunner } from "@massion/runtime";
 import { createDatabase, type MassionDatabase } from "@massion/storage";
 import { WorkService } from "@massion/work";
@@ -45,6 +46,15 @@ const VALID_STRATEGY_PLAN: StrategyPlan = {
   ],
   evidenceRequests: [],
 };
+
+function planWithAgent(agentHandle: string): StrategyPlan {
+  const [baseTask] = VALID_STRATEGY_PLAN.tasks;
+  if (!baseTask) throw new Error("기본 Strategy Task가 없습니다");
+  return {
+    ...VALID_STRATEGY_PLAN,
+    tasks: [{ ...baseTask, recommendedAgentHandles: [agentHandle] }],
+  };
+}
 
 describe("Strategy Generator", () => {
   let database: MassionDatabase;
@@ -428,6 +438,7 @@ describe("Strategy Generator", () => {
             handle: "software-engineering.backend-specialist",
             status: "active",
             capabilities: ["backend-engineering"],
+            scope: "persistent",
           },
         ],
       } as never,
@@ -455,6 +466,183 @@ describe("Strategy Generator", () => {
       }),
       expect.any(Object),
     );
+  });
+
+  it("현재 Work에서 사용할 수 없는 work-scoped Agent를 모델 입력과 structured output에서 거부한다", async () => {
+    const version = await contextVersion();
+    const [baseTask] = VALID_STRATEGY_PLAN.tasks;
+    if (!baseTask) throw new Error("기본 Strategy Task가 없습니다");
+    const otherWorkPlan: StrategyPlan = {
+      ...VALID_STRATEGY_PLAN,
+      tasks: [
+        {
+          ...baseTask,
+          recommendedAgentHandles: ["staffing-other-work"],
+        },
+      ],
+    };
+    const executeStructured = vi.fn().mockResolvedValue({
+      executionId: "execution-other-work-agent",
+      status: "succeeded",
+      output: otherWorkPlan,
+    });
+    const generator = await StrategyGenerator.create(
+      database,
+      organizations,
+      { executeStructured },
+      contextStore,
+      work,
+      {
+        listNodes: async () => [
+          {
+            handle: "staffing-persistent",
+            status: "active",
+            capabilities: ["testing"],
+            scope: "persistent",
+          },
+          {
+            handle: "staffing-current-work",
+            status: "active",
+            capabilities: ["testing"],
+            scope: "work",
+            work_id: workId,
+          },
+          {
+            handle: "staffing-other-work",
+            status: "active",
+            capabilities: ["testing"],
+            scope: "work",
+            work_id: "different-work",
+          },
+        ],
+      },
+    );
+
+    const generated = await generator.generate(context, {
+      commandId: crypto.randomUUID(),
+      workId,
+      expectedWorkRevision: 1,
+      contextVersionId: version.contextVersionId,
+    });
+
+    expect(generated.status).toBe("failed");
+    expect(executeStructured).toHaveBeenCalledWith(
+      context,
+      expect.objectContaining({
+        input: expect.objectContaining({
+          availableAgents: [
+            expect.objectContaining({ handle: "staffing-current-work" }),
+            expect.objectContaining({ handle: "staffing-persistent" }),
+          ],
+        }),
+      }),
+      expect.any(Object),
+    );
+    const output = executeStructured.mock.calls[0]?.[2];
+    expect(output?.validate?.(otherWorkPlan)).toMatchObject({ success: false });
+  });
+
+  it("runner 실행 중 추천 Agent가 inactive가 되면 checkpoint에서 failed로 수렴하고 plan을 저장하지 않는다", async () => {
+    const version = await contextVersion();
+    const graph = await OrganizationGraphService.create(database, organizations);
+    await graph.bootstrap(context);
+    await graph.execute(context, {
+      commandId: crypto.randomUUID(),
+      expectedVersion: 1,
+      kind: "install-profile",
+      profileId: "checkpoint-deactivation",
+      profileVersion: "1.0.0",
+      nodes: [
+        {
+          handle: "checkpoint-deactivation-agent",
+          name: "Checkpoint Deactivation",
+          responsibility: "Checkpoint 경쟁 검증",
+          outputs: ["Review"],
+          capabilities: ["testing"],
+          parentHandle: "delivery-coordination",
+          scope: "work",
+          workId,
+          role: "operator",
+        },
+      ],
+    });
+    const outputPlan = planWithAgent("checkpoint-deactivation-agent");
+    const generator = await StrategyGenerator.create(
+      database,
+      organizations,
+      {
+        executeStructured: async () => {
+          await graph.execute(context, {
+            commandId: crypto.randomUUID(),
+            expectedVersion: 2,
+            kind: "deactivate",
+            handle: "checkpoint-deactivation-agent",
+          });
+          return { executionId: "execution-checkpoint-deactivation", status: "succeeded", output: outputPlan };
+        },
+      },
+      contextStore,
+      work,
+      graph,
+    );
+
+    const generated = await generator.generate(context, {
+      commandId: crypto.randomUUID(),
+      workId,
+      expectedWorkRevision: 1,
+      contextVersionId: version.contextVersionId,
+    });
+
+    expect(generated).toMatchObject({
+      status: "failed",
+      runtimeExecutionId: "execution-checkpoint-deactivation",
+      error: { category: "structured_output" },
+    });
+    expect(generated.plan).toBeUndefined();
+    expect(generated.checksum).toBeUndefined();
+  });
+
+  it("runner 실행 중 추천 Agent가 다른 Work 범위로 바뀌면 checkpoint snapshot으로 거부한다", async () => {
+    const version = await contextVersion();
+    const listNodes = vi.fn(async () => {
+      const checkpointRead = listNodes.mock.calls.length > 1;
+      return [
+        {
+          handle: "checkpoint-work-scope-agent",
+          status: "active",
+          capabilities: ["testing"],
+          scope: "work" as const,
+          work_id: checkpointRead ? "different-work" : workId,
+        },
+      ];
+    });
+    const outputPlan = planWithAgent("checkpoint-work-scope-agent");
+    const generator = await StrategyGenerator.create(
+      database,
+      organizations,
+      {
+        executeStructured: async () => ({
+          executionId: "execution-checkpoint-work-scope",
+          status: "succeeded",
+          output: outputPlan,
+        }),
+      },
+      contextStore,
+      work,
+      { listNodes },
+    );
+
+    const generated = await generator.generate(context, {
+      commandId: crypto.randomUUID(),
+      workId,
+      expectedWorkRevision: 1,
+      contextVersionId: version.contextVersionId,
+    });
+
+    expect(listNodes).toHaveBeenCalledTimes(2);
+    expect(generated).toMatchObject({ status: "failed", error: { category: "structured_output" } });
+    expect(generated.plan).toBeUndefined();
+    expect(generated.checksum).toBeUndefined();
   });
 
   it("모델 부재와 invalid output은 Work를 변경하지 않고 secret 없는 상태를 남긴다", async () => {
