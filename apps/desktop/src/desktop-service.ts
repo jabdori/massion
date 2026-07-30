@@ -1298,10 +1298,8 @@ export function createApplicationDesktopService(
     },
 
     async loadKnowledgeGraph(workspaceId, lens) {
-      if (!KNOWLEDGE_GRAPH_LENSES.has(lens as KnowledgeGraphLensV1))
-        throw new Error("Knowledge graph lens가 유효하지 않습니다");
-      const graphLens = lens as KnowledgeGraphLensV1;
-      return projectKnowledgeGraph(await client.query("knowledge.graph", { workspaceId, lens: graphLens }), graphLens);
+      if (!KNOWLEDGE_GRAPH_LENSES.has(lens)) throw new Error("Knowledge graph lens가 유효하지 않습니다");
+      return projectKnowledgeGraph(await client.query("knowledge.graph", { workspaceId, lens }), lens);
     },
 
     async loadKnowledgeLinks(workspaceId, nodeId) {
@@ -2593,8 +2591,9 @@ export function createFixtureDesktopService(): DesktopService {
 
   const stop =
     (handlers: Set<DesktopStreamHandler>, handler: DesktopStreamHandler): DesktopStreamStop =>
-    async () => {
+    () => {
       handlers.delete(handler);
+      return Promise.resolve();
     };
 
   /** 조회가 다시 읽는 자리를 바꿉니다. 화면은 loadWork로 따라옵니다. */
@@ -3128,7 +3127,11 @@ export function createFixtureDesktopService(): DesktopService {
         const approvalModes = new Set(["automatic", "review", "deny"]);
         if (!credentialPolicies.has(String(input.credentialPolicy)))
           throw new Error("지원하지 않는 구독 계정 선택 정책입니다");
-        if (input.approvalMode !== undefined && !approvalModes.has(String(input.approvalMode)))
+        const requestedApprovalMode = input.approvalMode;
+        if (
+          requestedApprovalMode !== undefined &&
+          (typeof requestedApprovalMode !== "string" || !approvalModes.has(requestedApprovalMode))
+        )
           throw new Error("지원하지 않는 구독 승인 방식입니다");
         const policies = settingsState.policy as Array<Record<string, unknown>>;
         const existing = policies.find((row) => row.providerId === input.providerId);
@@ -3149,7 +3152,7 @@ export function createFixtureDesktopService(): DesktopService {
             : provider?.enabled === true && commonSurfaceProviders.has(String(input.providerId))
               ? "automatic"
               : "deny";
-        const approvalMode = input.approvalMode ?? (existing ? String(existing.approvalMode) : defaultApprovalMode);
+        const approvalMode = requestedApprovalMode ?? (existing ? String(existing.approvalMode) : defaultApprovalMode);
         if (existing)
           Object.assign(existing, {
             providerId: input.providerId,
@@ -3183,7 +3186,8 @@ export function createFixtureDesktopService(): DesktopService {
       fixturePromise(() => {
         if (typeof input.reflectionEnabled !== "boolean")
           throw new Error("Growth reflectionEnabled는 boolean이어야 합니다");
-        if (input.adoptionMode !== "review" && input.adoptionMode !== "auto") {
+        const adoptionMode: unknown = input.adoptionMode;
+        if (adoptionMode !== "review" && adoptionMode !== "auto") {
           throw new Error("Growth adoptionMode는 review 또는 auto여야 합니다");
         }
         if (input.expectedVersion !== undefined && input.expectedVersion !== growthConfiguration.version) {
@@ -3304,7 +3308,7 @@ export function createFixtureDesktopService(): DesktopService {
               expectedEffect: "분기 비교가 포함된 Work의 재작업이 줄어듭니다.",
               riskSummary: "완료 기준이 하나 늘어 단순 요청의 맥락 단계가 길어질 수 있습니다.",
               status: "awaiting-review",
-              adoption: growthSuggestionLineages["suggestion-cohort-guard"]!.adoption!,
+              adoption: growthSuggestionLineages["suggestion-cohort-guard"]?.adoption,
             },
             {
               suggestionId: "suggestion-quant-persist",
@@ -3376,7 +3380,7 @@ export function createFixtureDesktopService(): DesktopService {
                 strategyVersionId: "strategy-v4",
                 signals: [],
               },
-              adoption: growthSuggestionLineages["suggestion-target-drift-fixture"]!.adoption!,
+              adoption: growthSuggestionLineages["suggestion-target-drift-fixture"]?.adoption,
             },
             {
               suggestionId: "suggestion-proposed-fixture",
@@ -3816,7 +3820,7 @@ export function createFixtureDesktopService(): DesktopService {
         if ((executionHandlers.get(executionId)?.size ?? 0) > 0) scheduleCompletion(executionId);
         return { runId };
       }),
-    subscribeDurable: (handler, _after) =>
+    subscribeDurable: (handler) =>
       fixturePromise(() => {
         durableHandlers.add(handler);
         return stop(durableHandlers, handler);
@@ -3834,10 +3838,11 @@ export function createFixtureDesktopService(): DesktopService {
             scheduleCompletion(executionId);
           });
         }
-        return async () => {
+        return () => {
           handlers.delete(handler);
           if (handlers.size === 0 && executionHandlers.get(executionId) === handlers)
             executionHandlers.delete(executionId);
+          return Promise.resolve();
         };
       }),
   };

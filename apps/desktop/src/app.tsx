@@ -5032,8 +5032,10 @@ function SettingsSurface({ focusWorkspaceTrust, service }: { focusWorkspaceTrust
   const [growthModeOverride, setGrowthModeOverride] = useState<GrowthAdoptionMode>();
   useEffect(() => {
     if (!focusWorkspaceTrust) return;
-    workspaceTrustSectionRef.current?.focus();
-    workspaceTrustSectionRef.current?.scrollIntoView?.({ block: "center" });
+    const workspaceTrustSection: (Pick<HTMLElement, "focus"> & Partial<Pick<HTMLElement, "scrollIntoView">>) | null =
+      workspaceTrustSectionRef.current;
+    workspaceTrustSection?.focus();
+    workspaceTrustSection?.scrollIntoView?.({ block: "center" });
   }, [focusWorkspaceTrust]);
   useEffect(() => {
     let disposed = false;
