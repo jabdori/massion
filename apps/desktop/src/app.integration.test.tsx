@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import { App } from "./app";
-import { createFixtureDesktopService, type DesktopService } from "./desktop-service";
+import { createFixtureDesktopService, type DesktopService, type DesktopWorkspaceView } from "./desktop-service";
 import { fixtureDataAdapter, type WorkView } from "./model";
 
 function deferred<T>() {
@@ -18,6 +18,26 @@ function deferred<T>() {
 
 function service(overrides: Partial<DesktopService> = {}): DesktopService {
   return { ...createFixtureDesktopService(), ...overrides };
+}
+
+function workspaceFixture(
+  workspaceId: string,
+  name: string,
+  path: string,
+  trust: DesktopWorkspaceView["trust"],
+  revision: number,
+): DesktopWorkspaceView {
+  return {
+    workspaceId,
+    name,
+    path,
+    kind: "local-directory",
+    trust,
+    status: "active",
+    revision,
+    createdAt: "2026-07-24T00:00:00.000Z",
+    lastUsedAt: "2026-07-24T00:00:00.000Z",
+  };
 }
 
 describe("AgentOS native data flow", () => {
@@ -292,7 +312,7 @@ describe("AgentOS native data flow", () => {
     expect(await screen.findByText("CRM 고객 데이터 읽기")).toBeInTheDocument();
   });
 
-  it("같은 차단 실행을 Home·Inbox·Work에서 같은 상태와 행동으로 표시한다", async () => {
+  it("같은 차단 실행을 Home·Inbox·Work에서 같은 상태로 표시하고 폴더 신뢰는 Settings 해결 지점으로 이동한다", async () => {
     const user = userEvent.setup();
     const resumeRun = vi.fn(async () => undefined);
     render(<App service={service({ resumeRun })} />);
@@ -327,7 +347,11 @@ describe("AgentOS native data flow", () => {
     expect(within(runStatus).getByText("차단됨")).toHaveClass("text-halt");
     expect(runStatus).not.toHaveTextContent(/막힘|중단됨|에서 멈춤/u);
     await user.click(within(runStatus).getByRole("button", { name: "폴더 신뢰" }));
-    expect(resumeRun).toHaveBeenCalledWith(expect.objectContaining({ id: "partner-contract" }));
+    const settings = await screen.findByRole("main", { name: "설정" });
+    const workspaceTrust = within(settings).getByRole("region", { name: "작업공간 신뢰" });
+    expect(workspaceTrust).toHaveFocus();
+    expect(within(workspaceTrust).getByRole("button", { name: "ops-runbook 신뢰" })).toBeInTheDocument();
+    expect(resumeRun).not.toHaveBeenCalled();
   });
 
   it("승인 대기 실행은 Home·Inbox·Work에서 gate 상태로 일치한다", async () => {
@@ -496,6 +520,131 @@ describe("AgentOS native data flow", () => {
 
     await waitFor(() => expect(setAutonomy).toHaveBeenCalledWith("full-access", 0));
     expect(screen.getByText("권한을 저장했습니다.")).toBeInTheDocument();
+  });
+
+  it("설정은 작업공간의 신뢰 상태와 개정을 표시하고 신뢰 명령의 실제 반환 행만 갱신한다", async () => {
+    const user = userEvent.setup();
+    const pending = workspaceFixture("workspace-pending", "검토 폴더", "/tmp/pending", "pending", 1);
+    const blocked = workspaceFixture("workspace-blocked", "차단 폴더", "/tmp/blocked", "blocked", 2);
+    const trusted = workspaceFixture("workspace-trusted", "신뢰 폴더", "/tmp/trusted", "trusted", 3);
+    const response = deferred<DesktopWorkspaceView>();
+    const loadWorkspaces = vi.fn(async () => [pending, blocked, trusted]);
+    const decideWorkspaceTrust = vi.fn(async () => await response.promise);
+    render(<App service={service({ loadWorkspaces, decideWorkspaceTrust })} />);
+
+    await user.click(screen.getByRole("button", { name: "설정" }));
+    const section = await screen.findByRole("region", { name: "작업공간 신뢰" });
+    for (const title of ["권한", "자가개선", "작업공간 신뢰"]) {
+      expect(screen.getByRole("heading", { name: title, level: 2 })).toBeInTheDocument();
+    }
+    const pendingRow = within(section).getByRole("row", { name: /검토 폴더/u });
+    expect(pendingRow).toHaveTextContent("/tmp/pending");
+    expect(pendingRow).toHaveTextContent("신뢰 대기 (pending)");
+    expect(pendingRow).toHaveTextContent("개정 1");
+    expect(within(section).getByRole("row", { name: /차단 폴더/u })).toHaveTextContent("차단됨 (blocked)");
+    expect(within(section).getByRole("row", { name: /신뢰 폴더/u })).toHaveTextContent("신뢰됨 (trusted)");
+
+    const trustButton = within(pendingRow).getByRole("button", { name: "검토 폴더 신뢰" });
+    await user.click(trustButton);
+    await user.click(trustButton);
+    expect(decideWorkspaceTrust).toHaveBeenCalledOnce();
+    expect(decideWorkspaceTrust).toHaveBeenCalledWith(pending, "trusted");
+    expect(trustButton).toBeDisabled();
+
+    response.resolve({ ...pending, name: "서버가 돌려준 폴더", trust: "trusted", revision: 9 });
+    const updatedRow = await within(section).findByRole("row", { name: /서버가 돌려준 폴더/u });
+    expect(updatedRow).toHaveTextContent("신뢰됨 (trusted)");
+    expect(updatedRow).toHaveTextContent("개정 9");
+    expect(within(section).getByRole("row", { name: /차단 폴더/u })).toHaveTextContent("개정 2");
+    expect(loadWorkspaces).toHaveBeenCalledOnce();
+  });
+
+  it("신뢰된 작업공간은 확인 뒤에만 회수하고 revision 오류를 해당 설정 구역에 표시한다", async () => {
+    const user = userEvent.setup();
+    const trusted = workspaceFixture("workspace-trusted", "신뢰 폴더", "/tmp/trusted", "trusted", 3);
+    const decideWorkspaceTrust = vi.fn(async () => {
+      throw new Error("workspace revision이 일치하지 않습니다");
+    });
+    render(<App service={service({ loadWorkspaces: async () => [trusted], decideWorkspaceTrust })} />);
+
+    await user.click(screen.getByRole("button", { name: "설정" }));
+    const section = await screen.findByRole("region", { name: "작업공간 신뢰" });
+    await user.click(within(section).getByRole("button", { name: "신뢰 폴더 신뢰 회수" }));
+    expect(decideWorkspaceTrust).not.toHaveBeenCalled();
+
+    const confirmation = await screen.findByRole("alertdialog", { name: "신뢰 회수 확인" });
+    expect(confirmation).toHaveTextContent("/tmp/trusted");
+    await user.click(within(confirmation).getByRole("button", { name: "신뢰 폴더 회수하고 차단" }));
+
+    expect(await within(section).findByRole("alert")).toHaveTextContent("workspace revision이 일치하지 않습니다");
+    expect(decideWorkspaceTrust).toHaveBeenCalledWith(trusted, "blocked");
+    const unchangedRow = within(section).getByRole("row", { name: /신뢰 폴더/u });
+    expect(unchangedRow).toHaveTextContent("신뢰됨 (trusted)");
+    expect(unchangedRow).toHaveTextContent("개정 3");
+  });
+
+  it("신뢰 명령의 늦은 다른 작업공간 응답은 어느 행에도 주입하지 않는다", async () => {
+    const user = userEvent.setup();
+    const current = workspaceFixture("workspace-current", "현재 폴더", "/tmp/current", "pending", 4);
+    const foreign = workspaceFixture("workspace-foreign", "다른 폴더", "/tmp/foreign", "trusted", 99);
+    const decideWorkspaceTrust = vi.fn(async () => foreign);
+    render(<App service={service({ loadWorkspaces: async () => [current], decideWorkspaceTrust })} />);
+
+    await user.click(screen.getByRole("button", { name: "설정" }));
+    const section = await screen.findByRole("region", { name: "작업공간 신뢰" });
+    await user.click(within(section).getByRole("button", { name: "현재 폴더 신뢰" }));
+
+    expect(await within(section).findByRole("alert")).toHaveTextContent(
+      "작업공간 신뢰 응답의 식별자가 요청과 일치하지 않습니다.",
+    );
+    const unchangedRow = within(section).getByRole("row", { name: /현재 폴더/u });
+    expect(unchangedRow).toHaveTextContent("신뢰 대기 (pending)");
+    expect(unchangedRow).toHaveTextContent("개정 4");
+    expect(within(section).queryByText("다른 폴더")).not.toBeInTheDocument();
+    expect(decideWorkspaceTrust).toHaveBeenCalledWith(current, "trusted");
+  });
+
+  it("설정과 권한 조회 실패가 작업공간 신뢰 목록을 가리지 않는다", async () => {
+    const user = userEvent.setup();
+    const pending = workspaceFixture("workspace-pending", "검토 폴더", "/tmp/pending", "pending", 1);
+    render(
+      <App
+        service={service({
+          loadSettings: async () => {
+            throw new Error("설정 조회 실패");
+          },
+          loadAutonomy: async () => {
+            throw new Error("권한 조회 실패");
+          },
+          loadWorkspaces: async () => [pending],
+        })}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "설정" }));
+    const section = await screen.findByRole("region", { name: "작업공간 신뢰" });
+    expect(within(section).getByRole("row", { name: /검토 폴더/u })).toBeInTheDocument();
+    expect(screen.getByText("설정 조회 실패")).toBeInTheDocument();
+    expect(screen.getByText("권한 조회 실패")).toBeInTheDocument();
+  });
+
+  it("작업공간 목록 조회 실패가 권한 설정을 가리지 않는다", async () => {
+    const user = userEvent.setup();
+    render(
+      <App
+        service={service({
+          loadWorkspaces: async () => {
+            throw new Error("작업공간 목록 조회 실패");
+          },
+        })}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "설정" }));
+    const permissions = await screen.findByRole("region", { name: "권한" });
+    expect(within(permissions).getByRole("button", { name: "전체 권한" })).toBeInTheDocument();
+    const workspaces = screen.getByRole("region", { name: "작업공간 신뢰" });
+    expect(within(workspaces).getByRole("alert")).toHaveTextContent("작업공간 목록 조회 실패");
   });
 
   it("성장 화면은 개인 기억과 승인 근거를 함께 표시한다", async () => {

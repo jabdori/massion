@@ -49,6 +49,16 @@ import {
 import "@xyflow/react/dist/style.css";
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
@@ -260,6 +270,7 @@ interface AppProps {
 export function App({ contextPicker = nativeContextPicker, service }: AppProps) {
   const controller = useDesktopController(service);
   const [surface, setSurface] = useState<DesktopSurface>("work");
+  const [focusWorkspaceTrust, setFocusWorkspaceTrust] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [notifications, setNotifications] = useState<ApprovalView[]>();
@@ -408,6 +419,10 @@ export function App({ contextPicker = nativeContextPicker, service }: AppProps) 
     void refreshNotifications();
     void refreshGrowth();
   };
+  const openWorkspaceTrustSettings = () => {
+    setFocusWorkspaceTrust(true);
+    setSurface("settings");
+  };
   const openApproval = (approval: ApprovalView) => {
     const destination = approvalDestination(approval, awaitingRegistryInstall?.approvalId);
     if (destination === undefined) return;
@@ -437,7 +452,10 @@ export function App({ contextPicker = nativeContextPicker, service }: AppProps) 
           connection="local"
           notificationCount={inboxItems === undefined ? 0 : inboxItems.length}
           onOpenNotifications={openInbox}
-          onSelect={setSurface}
+          onSelect={(nextSurface) => {
+            setFocusWorkspaceTrust(false);
+            setSurface(nextSurface);
+          }}
           onToggle={() => {
             setSidebarCollapsed((current) => !current);
           }}
@@ -470,6 +488,7 @@ export function App({ contextPicker = nativeContextPicker, service }: AppProps) 
                   onControlRun={(action) => {
                     void controller.controlRun(action);
                   }}
+                  onOpenWorkspaceTrust={openWorkspaceTrustSettings}
                   onDecideApproval={(approval, decision) => {
                     void decideWorkApproval(approval, decision);
                   }}
@@ -502,6 +521,7 @@ export function App({ contextPicker = nativeContextPicker, service }: AppProps) 
             growth={growth}
             growthError={growthError}
             inboxItems={inboxItems}
+            focusWorkspaceTrust={focusWorkspaceTrust}
             onAwaitingRegistryInstallChange={(value) => {
               setAwaitingRegistryInstall(value);
               if (value !== undefined) void refreshNotifications();
@@ -555,7 +575,7 @@ export function App({ contextPicker = nativeContextPicker, service }: AppProps) 
         contextPicker={contextPicker}
         onOpenSettings={() => {
           controller.newWork.setOpen(false);
-          setSurface("settings");
+          openWorkspaceTrustSettings();
         }}
       />
     </TooltipProvider>
@@ -676,6 +696,7 @@ function GlobalRail({
 function ProductSurface({
   approvalBusy,
   awaitingRegistryInstall,
+  focusWorkspaceTrust,
   growth,
   growthError,
   inboxItems,
@@ -692,6 +713,7 @@ function ProductSurface({
 }: {
   approvalBusy: boolean;
   awaitingRegistryInstall: AwaitingRegistryInstall | undefined;
+  focusWorkspaceTrust: boolean;
   growth: GrowthView | undefined;
   growthError: string;
   inboxItems: InboxItem[] | undefined;
@@ -742,7 +764,7 @@ function ProductSurface({
         service={service}
       />
     );
-  return <SettingsSurface service={service} />;
+  return <SettingsSurface focusWorkspaceTrust={focusWorkspaceTrust} service={service} />;
 }
 
 function SurfaceFrame({ children, title }: { children: React.ReactNode; title: string }) {
@@ -3312,10 +3334,21 @@ function GrowthSourceRow({ onOpenWork, reference }: { onOpenWork: (workId: strin
   );
 }
 
-function GrowthSection({ children, title }: { children: React.ReactNode; title: string }) {
+function GrowthSection({
+  children,
+  headingLevel = 3,
+  sectionRef,
+  title,
+}: {
+  children: React.ReactNode;
+  headingLevel?: 2 | 3;
+  sectionRef?: React.Ref<HTMLElement>;
+  title: string;
+}) {
+  const Heading = headingLevel === 2 ? "h2" : "h3";
   return (
-    <section aria-label={title} className="mt-7">
-      <h3 className="mb-2.5 text-[12px] font-semibold tracking-[0.01em] text-fg-3">{title}</h3>
+    <section aria-label={title} className="mt-7" ref={sectionRef} tabIndex={sectionRef === undefined ? undefined : -1}>
+      <Heading className="mb-2.5 text-[12px] font-semibold tracking-[0.01em] text-fg-3">{title}</Heading>
       {children}
     </section>
   );
@@ -4317,7 +4350,7 @@ function GrowthAdoptionBoundary({
   const derived = autonomy.mode === "full-access";
   const mode = effectiveGrowthMode(autonomy);
   return (
-    <GrowthSection title="자가개선">
+    <GrowthSection headingLevel={2} title="자가개선">
       <ChoiceGroup
         options={GROWTH_OPTIONS}
         value={mode}
@@ -4896,30 +4929,56 @@ function AccountCard({ account }: { account: SubscriptionAccountView }) {
   );
 }
 
-function SettingsSurface({ service }: { service: DesktopService }) {
+function SettingsSurface({ focusWorkspaceTrust, service }: { focusWorkspaceTrust: boolean; service: DesktopService }) {
   const [settings, setSettings] = useState<SettingsView>();
   const [autonomy, setAutonomy] = useState<AutonomyView>();
-  const [error, setError] = useState("");
+  const [workspaces, setWorkspaces] = useState<readonly DesktopWorkspaceView[]>();
+  const [settingsError, setSettingsError] = useState("");
+  const [autonomyError, setAutonomyError] = useState("");
+  const [workspaceError, setWorkspaceError] = useState("");
   const [notice, setNotice] = useState("");
   const [autonomySaving, setAutonomySaving] = useState(false);
+  const [workspaceSavingId, setWorkspaceSavingId] = useState<string>();
+  const [workspaceRevokingId, setWorkspaceRevokingId] = useState<string>();
   const [fullAccessPending, setFullAccessPending] = useState(false);
+  const workspaceCommandRef = useRef<string | undefined>(undefined);
+  const workspaceTrustSectionRef = useRef<HTMLElement>(null);
   /*
    * 자가개선 채택은 실행 자율성과 다른 축이라 따로 고를 수 있어야 합니다. 쓰는 명령이 아직
    * 계약에 없어 화면이 앞세웁니다. 인계: docs/phases/30-surface-parity-agent-ux/settings-contract-handoff.md
    */
   const [growthModeOverride, setGrowthModeOverride] = useState<GrowthAdoptionMode>();
   useEffect(() => {
+    if (!focusWorkspaceTrust) return;
+    workspaceTrustSectionRef.current?.focus();
+    workspaceTrustSectionRef.current?.scrollIntoView?.({ block: "center" });
+  }, [focusWorkspaceTrust]);
+  useEffect(() => {
     let disposed = false;
-    void Promise.all([service.loadSettings(), service.loadAutonomy()])
-      .then(([value, mode]) => {
-        if (!disposed) {
-          setSettings(value);
-          setAutonomy(mode);
-        }
-      })
-      .catch((cause: unknown) => {
-        if (!disposed) setError(surfaceErrorMessage(cause, "설정을 불러오지 못했습니다."));
-      });
+    void service.loadSettings().then(
+      (value) => {
+        if (!disposed) setSettings(value);
+      },
+      (cause: unknown) => {
+        if (!disposed) setSettingsError(surfaceErrorMessage(cause, "설정을 불러오지 못했습니다."));
+      },
+    );
+    void service.loadAutonomy().then(
+      (value) => {
+        if (!disposed) setAutonomy(value);
+      },
+      (cause: unknown) => {
+        if (!disposed) setAutonomyError(surfaceErrorMessage(cause, "권한을 불러오지 못했습니다."));
+      },
+    );
+    void service.loadWorkspaces().then(
+      (value) => {
+        if (!disposed) setWorkspaces(value);
+      },
+      (cause: unknown) => {
+        if (!disposed) setWorkspaceError(surfaceErrorMessage(cause, "작업공간 목록을 불러오지 못했습니다."));
+      },
+    );
     return () => {
       disposed = true;
     };
@@ -4935,17 +4994,35 @@ function SettingsSurface({ service }: { service: DesktopService }) {
   const commitAutonomyMode = async (mode: AutonomyView["mode"]) => {
     if (!autonomy || autonomy.mode === mode || autonomySaving) return;
     setAutonomySaving(true);
-    setError("");
+    setAutonomyError("");
     setNotice("");
     try {
       setAutonomy(await service.setAutonomy(mode, autonomy.revision));
       setNotice("권한을 저장했습니다.");
     } catch (cause) {
-      setError(surfaceErrorMessage(cause, "자율성 경계를 변경하지 못했습니다."));
+      setAutonomyError(surfaceErrorMessage(cause, "자율성 경계를 변경하지 못했습니다."));
     } finally {
       setAutonomySaving(false);
     }
   };
+  const commitWorkspaceTrust = async (workspace: DesktopWorkspaceView, decision: "trusted" | "blocked") => {
+    if (workspaceCommandRef.current !== undefined) return;
+    workspaceCommandRef.current = workspace.workspaceId;
+    setWorkspaceSavingId(workspace.workspaceId);
+    setWorkspaceError("");
+    try {
+      const updated = await service.decideWorkspaceTrust(workspace, decision);
+      if (updated.workspaceId !== workspace.workspaceId)
+        throw new Error("작업공간 신뢰 응답의 식별자가 요청과 일치하지 않습니다.");
+      setWorkspaces((current) => current?.map((item) => (item.workspaceId === workspace.workspaceId ? updated : item)));
+    } catch (cause) {
+      setWorkspaceError(surfaceErrorMessage(cause, "작업공간 신뢰 상태를 저장하지 못했습니다."));
+    } finally {
+      workspaceCommandRef.current = undefined;
+      setWorkspaceSavingId(undefined);
+    }
+  };
+  const workspaceRevoking = workspaces?.find((workspace) => workspace.workspaceId === workspaceRevokingId);
 
   return (
     <main aria-label="설정" className="col-span-3 grid min-h-0 min-w-0 grid-rows-[46px_minmax(0,1fr)] bg-canvas">
@@ -4953,13 +5030,15 @@ function SettingsSurface({ service }: { service: DesktopService }) {
         <h1 className="text-[15px] font-semibold tracking-[-0.008em] text-primary">설정</h1>
       </header>
       <div className="min-h-0 overflow-y-auto px-5 py-4">
-        {error ? <SurfaceError message={error} /> : null}
-        {!settings && !error ? <SurfaceLoading /> : null}
-        {settings ? (
-          <div className="mx-auto max-w-[76ch] pb-8">
-            {autonomy ? (
-              <section aria-label="권한과 자가개선">
-                <GrowthSection title="권한">
+        {settingsError ? <SurfaceError message={settingsError} /> : null}
+        {!settings && !settingsError ? <SurfaceLoading /> : null}
+        <div className="mx-auto max-w-[88ch] pb-8">
+          <section aria-label="권한과 자가개선">
+            <GrowthSection headingLevel={2} title="권한">
+              {autonomyError ? <SurfaceError message={autonomyError} /> : null}
+              {!autonomy && !autonomyError ? <SurfaceLoading /> : null}
+              {autonomy ? (
+                <>
                   {/* 막힌 것이 아니라 사람이 결정할 자리입니다. halt가 아니라 gate를 씁니다. */}
                   {fullAccessPending ? (
                     <div className="mt-3 rounded-[5px] border border-gate/50 bg-surface-1 p-3" role="alert">
@@ -5004,20 +5083,149 @@ function SettingsSurface({ service }: { service: DesktopService }) {
                       {autonomy.permissionLimitReason === undefined ? "" : ` · ${autonomy.permissionLimitReason}`}
                     </p>
                   ) : null}
-                </GrowthSection>
-                <GrowthAdoptionBoundary
-                  autonomy={
-                    growthModeOverride === undefined ? autonomy : { ...autonomy, growthMode: growthModeOverride }
-                  }
-                  onSelect={setGrowthModeOverride}
-                />
-              </section>
+                </>
+              ) : null}
+            </GrowthSection>
+            {autonomy ? (
+              <GrowthAdoptionBoundary
+                autonomy={growthModeOverride === undefined ? autonomy : { ...autonomy, growthMode: growthModeOverride }}
+                onSelect={setGrowthModeOverride}
+              />
             ) : null}
+          </section>
 
-            {notice ? <p className="text-[12px] text-fg-3">{notice}</p> : null}
-          </div>
-        ) : null}
+          <GrowthSection headingLevel={2} sectionRef={workspaceTrustSectionRef} title="작업공간 신뢰">
+            <p className="mb-3 text-[12px] leading-5 text-muted">
+              신뢰한 폴더에서만 에이전트가 파일 도구를 사용할 수 있습니다.
+            </p>
+            {workspaceError ? <SurfaceError message={workspaceError} /> : null}
+            {!workspaces && !workspaceError ? <SurfaceLoading /> : null}
+            {workspaces?.length === 0 ? <p className="text-[12px] text-muted">등록된 작업공간이 없습니다.</p> : null}
+            {workspaces && workspaces.length > 0 ? (
+              <div className="overflow-x-auto">
+                <table
+                  aria-label="작업공간 신뢰 목록"
+                  className="w-full min-w-[640px] border-y border-border text-left"
+                >
+                  <thead>
+                    <tr className="border-b border-border text-[11px] text-muted">
+                      <th className="px-2 py-1.5 font-medium" scope="col">
+                        작업공간
+                      </th>
+                      <th className="px-2 py-1.5 font-medium" scope="col">
+                        경로
+                      </th>
+                      <th className="px-2 py-1.5 font-medium" scope="col">
+                        신뢰 상태
+                      </th>
+                      <th className="px-2 py-1.5 font-medium" scope="col">
+                        개정
+                      </th>
+                      <th className="px-2 py-1.5 text-right font-medium" scope="col">
+                        동작
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border text-[12px]">
+                    {workspaces.map((workspace) => (
+                      <tr key={workspace.workspaceId}>
+                        <th className="whitespace-nowrap px-2 py-2 font-medium text-secondary" scope="row">
+                          {workspace.name}
+                        </th>
+                        <td className="whitespace-nowrap px-2 py-2 font-mono text-[11px] text-muted">
+                          {workspace.path}
+                        </td>
+                        <td
+                          className={`whitespace-nowrap px-2 py-2 text-[11px] ${
+                            workspace.trust === "pending"
+                              ? "text-gate"
+                              : workspace.trust === "blocked"
+                                ? "text-halt"
+                                : "text-fg-3"
+                          }`}
+                        >
+                          {workspace.trust === "pending"
+                            ? "신뢰 대기 (pending)"
+                            : workspace.trust === "blocked"
+                              ? "차단됨 (blocked)"
+                              : "신뢰됨 (trusted)"}
+                        </td>
+                        <td className="whitespace-nowrap px-2 py-2 font-mono text-[11px] text-muted">
+                          개정 {workspace.revision}
+                        </td>
+                        <td className="px-2 py-1.5 text-right">
+                          {workspace.trust === "trusted" ? (
+                            <Button
+                              aria-label={`${workspace.name} 신뢰 회수`}
+                              className="h-7 px-2.5"
+                              disabled={workspaceSavingId !== undefined}
+                              onClick={() => {
+                                setWorkspaceRevokingId(workspace.workspaceId);
+                              }}
+                              size="sm"
+                              variant="danger"
+                            >
+                              신뢰 회수
+                            </Button>
+                          ) : (
+                            <Button
+                              aria-label={`${workspace.name} 신뢰`}
+                              className="h-7 px-2.5"
+                              disabled={workspaceSavingId !== undefined}
+                              onClick={() => {
+                                void commitWorkspaceTrust(workspace, "trusted");
+                              }}
+                              size="sm"
+                              variant="outline"
+                            >
+                              신뢰
+                            </Button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : null}
+          </GrowthSection>
+
+          {notice ? <p className="text-[12px] text-fg-3">{notice}</p> : null}
+        </div>
       </div>
+      <AlertDialog
+        onOpenChange={(open) => {
+          if (!open) setWorkspaceRevokingId(undefined);
+        }}
+        open={workspaceRevoking !== undefined}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>신뢰 회수 확인</AlertDialogTitle>
+            <AlertDialogDescription>
+              {workspaceRevoking?.name}의 신뢰를 회수하면 이 폴더를 사용하는 Work가 차단됩니다.
+              <span className="mt-1 block font-mono text-[11px]">{workspaceRevoking?.path}</span>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel size="sm">취소</AlertDialogCancel>
+            <AlertDialogAction
+              aria-label={`${workspaceRevoking?.name ?? "작업공간"} 회수하고 차단`}
+              disabled={workspaceSavingId !== undefined}
+              onClick={() => {
+                if (!workspaceRevoking) return;
+                const target = workspaceRevoking;
+                setWorkspaceRevokingId(undefined);
+                void commitWorkspaceTrust(target, "blocked");
+              }}
+              size="sm"
+              variant="danger"
+            >
+              회수하고 차단
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </main>
   );
 }
@@ -5248,6 +5456,7 @@ interface WorkActivityProps {
   onComposerChange: (value: string) => void;
   onAnnouncement: (message: string) => void;
   onControlRun: (action: "cancel" | "resume") => void;
+  onOpenWorkspaceTrust: () => void;
   onDecideApproval: (approval: ApprovalView, decision: "approved" | "rejected") => void;
   onSubmitDirective: (mode: "now" | "next-stage", content?: string) => void;
 }
@@ -5262,6 +5471,7 @@ function WorkActivity({
   onComposerChange,
   onControlRun,
   onDecideApproval,
+  onOpenWorkspaceTrust,
   onSubmitDirective,
   pendingApprovals,
   pendingDirective,
@@ -5441,7 +5651,12 @@ function WorkActivity({
             />
           ))}
           {work.run ? (
-            <RunStatusCard onControlRun={onControlRun} pendingRunAction={pendingRunAction} run={work.run} />
+            <RunStatusCard
+              onControlRun={onControlRun}
+              onOpenWorkspaceTrust={onOpenWorkspaceTrust}
+              pendingRunAction={pendingRunAction}
+              run={work.run}
+            />
           ) : null}
         </div>
       </section>
@@ -5520,10 +5735,12 @@ function blockedReasonText(reason: string | undefined): string {
  */
 function RunStatusCard({
   onControlRun,
+  onOpenWorkspaceTrust,
   pendingRunAction,
   run,
 }: {
   onControlRun: (action: "cancel" | "resume") => void;
+  onOpenWorkspaceTrust: () => void;
   pendingRunAction: "cancel" | "resume" | undefined;
   run: NonNullable<WorkView["run"]>;
 }) {
@@ -5553,7 +5770,8 @@ function RunStatusCard({
             className="shrink-0 rounded-[5px] border border-control px-2.5 py-1 text-[12px] text-secondary transition-colors duration-150 hover:border-fg-3 hover:text-primary disabled:opacity-50"
             disabled={pendingRunAction !== undefined}
             onClick={() => {
-              onControlRun("resume");
+              if (run.blockedReason === "workspace-untrusted") onOpenWorkspaceTrust();
+              else onControlRun("resume");
             }}
             type="button"
           >
