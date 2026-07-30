@@ -174,9 +174,9 @@ describe("Engineering path lease", () => {
     );
   });
 
-  it("만료 lease를 expired로 고정하고 같은 path를 인계한다", async () => {
+  it("만료 시각만으로 lease를 인계하지 않고 명시적 release 후 같은 path를 인계한다", async () => {
     const first = await delivery("expired");
-    await leaseStore.acquire(context, {
+    const initial = await leaseStore.acquire(context, {
       commandId: "lease-expired",
       deliveryId: first.deliveryId,
       repositoryId,
@@ -185,18 +185,27 @@ describe("Engineering path lease", () => {
     });
     now = new Date(now.getTime() + 1_001);
     const successor = await delivery("successor");
-    await expect(
-      leaseStore.acquire(context, {
-        commandId: "lease-successor",
-        deliveryId: successor.deliveryId,
-        repositoryId,
-        pathPrefixes: ["packages/shared/file.ts"],
-        ttlMs: 1_000,
-      }),
-    ).resolves.toMatchObject({ lease: { deliveryId: successor.deliveryId, status: "active" } });
+    const successorInput = {
+      commandId: "lease-successor",
+      deliveryId: successor.deliveryId,
+      repositoryId,
+      pathPrefixes: ["packages/shared/file.ts"],
+      ttlMs: 1_000,
+    } as const;
+
+    await expect(leaseStore.acquire(context, successorInput)).rejects.toThrow("기존 active lease와 겹칩니다");
+    await leaseStore.release(context, {
+      commandId: "release-expired",
+      leaseId: initial.lease.leaseId,
+      deliveryId: first.deliveryId,
+      expectedAcquireCommandId: initial.lease.acquireCommandId,
+    });
+    await expect(leaseStore.acquire(context, successorInput)).resolves.toMatchObject({
+      lease: { deliveryId: successor.deliveryId, status: "active" },
+    });
     expect((await leaseStore.list(context, repositoryId)).map((lease) => lease.status).sort()).toEqual([
       "active",
-      "expired",
+      "released",
     ]);
   });
 });
