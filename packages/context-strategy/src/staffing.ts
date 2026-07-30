@@ -115,7 +115,7 @@ export class StaffingAdvisor {
       }
       for (const agentHandle of task.recommendedAgentHandles) {
         try {
-          await this.graph.verifyActiveNode(context, agentHandle);
+          await this.graph.verifyActiveNode(context, agentHandle, undefined, input.workId);
           recommendations.push({
             taskKey: task.key,
             agentHandle,

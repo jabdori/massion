@@ -1328,7 +1328,7 @@ export class WorkService {
   ): Promise<WorkCommandResult & { assignment: TaskAssignment }> {
     if (!this.graph) throw new Error("Organization Graph reader가 필요합니다");
     return await this.mutate(context, input, "task_assigned", async (transaction, work) => {
-      await this.graph?.verifyActiveNode(context, input.agentHandle, transaction);
+      await this.graph?.verifyActiveNode(context, input.agentHandle, transaction, work.work_id);
       const tasks = await listActiveTasksWith(transaction, context.organizationId, work);
       if (!tasks.some((task) => task.task_id === input.taskId))
         throw new Error(`Task를 찾을 수 없습니다: ${input.taskId}`);
@@ -1580,10 +1580,10 @@ export class WorkService {
       throw new Error("coordinator Agent가 참여자에 포함되어야 합니다");
     }
     return await this.mutate(context, input, "collaboration_room_opened", async (transaction, work) => {
-      await this.graph?.verifyActiveNode(context, input.coordinatorHandle, transaction);
+      await this.graph?.verifyActiveNode(context, input.coordinatorHandle, transaction, work.work_id);
       for (const participant of input.participants) {
         if (participant.kind === "agent")
-          await this.graph?.verifyActiveNode(context, participant.subjectId, transaction);
+          await this.graph?.verifyActiveNode(context, participant.subjectId, transaction, work.work_id);
         else
           await this.organizations.verifyOrganizationMember(participant.subjectId, context.organizationId, transaction);
       }
@@ -1771,7 +1771,7 @@ export class WorkService {
       }
       if (input.kind === "agent") {
         if (!this.graph) throw new Error("Agent 참여에는 Organization Graph reader가 필요합니다");
-        await this.graph.verifyActiveNode(context, input.subjectId, transaction);
+        await this.graph.verifyActiveNode(context, input.subjectId, transaction, work.work_id);
       } else {
         await this.organizations.verifyOrganizationMember(input.subjectId, context.organizationId, transaction);
       }
@@ -2555,7 +2555,7 @@ export class WorkService {
           }
           if (!this.graph) throw new Error("ready 전이에는 Organization Graph reader가 필요합니다");
           for (const assignment of assignments.filter((candidate) => candidate.status === "assigned")) {
-            await this.graph.verifyActiveNode(context, assignment.agent_handle, transaction);
+            await this.graph.verifyActiveNode(context, assignment.agent_handle, transaction, work.work_id);
           }
         }
         if (input.target === "verifying") {

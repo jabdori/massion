@@ -1,14 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { AgentRegistry, VoltAgent } from "@voltagent/core";
+import { Agent, AgentRegistry, VoltAgent } from "@voltagent/core";
 
-import type { MaterializedAgent } from "./agent-topology.js";
+import { runtimeAgentName, type MaterializedAgent } from "./agent-topology.js";
 import { VoltAgentTopologyRuntime } from "./voltagent-topology.js";
 
 describe("VoltAgent 2.9 topology adapter", () => {
   let voltAgent: VoltAgent;
   let runtime: VoltAgentTopologyRuntime;
-  const createdIds = ["organization-a:parent", "organization-a:child"];
+  const createdIds = ["organization-a:parent", "organization-a:child", "organization-a:temporary"];
 
   beforeEach(async () => {
     voltAgent = new VoltAgent({ agents: {} });
@@ -24,7 +24,7 @@ describe("VoltAgent 2.9 topology adapter", () => {
   function agent(id: string, handle: string): MaterializedAgent {
     return {
       id,
-      name: `organization-a:${handle}`,
+      name: runtimeAgentName("organization-a", handle),
       handle,
       instructions: `${handle} instructions`,
       role: handle === "parent" ? "orchestrator" : "operator",
@@ -63,5 +63,22 @@ describe("VoltAgent 2.9 topology adapter", () => {
     runtime.remove("organization-a:child");
     expect(voltAgent.getAgent("organization-a:child")).toBeUndefined();
     expect(runtime.childIds("organization-a:parent")).toEqual([]);
+  });
+
+  it("metadata가 없는 Work 범위 Agent도 purpose에서 handle을 복구한다", () => {
+    voltAgent.registerAgent(
+      new Agent({
+        id: "organization-a:temporary",
+        name: runtimeAgentName("organization-a", "temporary", "work-owner"),
+        purpose: "temporary",
+        instructions: "temporary instructions",
+        model: "openai/test-model",
+      }),
+    );
+
+    expect(runtime.get("organization-a:temporary")).toMatchObject({
+      handle: "temporary",
+      name: runtimeAgentName("organization-a", "temporary", "work-owner"),
+    });
   });
 });

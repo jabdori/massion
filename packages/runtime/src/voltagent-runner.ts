@@ -17,6 +17,7 @@ import type {
   StructuredOutputSpec,
 } from "./contracts.js";
 import { MASSION_RUNTIME_EXECUTION_CONTEXT_KEY, MASSION_TENANT_CONTEXT_KEY } from "./agent-configuration.js";
+import { runtimeAgentName } from "./agent-topology.js";
 import { type RuntimeEvent, type RuntimeExecution, RuntimeExecutionStore } from "./execution-store.js";
 import {
   RoutedExecutionSettlementError,
@@ -446,7 +447,7 @@ export class VoltAgentRunner implements AgentRunner, StructuredAgentRunner {
               return;
             }
             this.registry.set(executionId, lease);
-            const agent = this.agent(context, input.agentHandle);
+            const agent = this.agent(context, input.workId, input.agentHandle);
             const result = await agent.streamText(prompt(input.input), {
               abortSignal: modelAbortSignal(active.controller.signal),
               timeout: {
@@ -764,7 +765,7 @@ export class VoltAgentRunner implements AgentRunner, StructuredAgentRunner {
           return outcome.result;
         }
         this.registry.set(running.execution_id, lease);
-        const result = await this.agent(context, input.agentHandle).generateText(prompt(input.input), {
+        const result = await this.agent(context, input.workId, input.agentHandle).generateText(prompt(input.input), {
           abortSignal: modelAbortSignal(abortSignal),
           context: new Map<string | symbol, unknown>([
             [MASSION_RUNTIME_EXECUTION_CONTEXT_KEY, running.execution_id],
@@ -898,7 +899,7 @@ export class VoltAgentRunner implements AgentRunner, StructuredAgentRunner {
             output.jsonSchema as Parameters<typeof jsonSchema>[0],
             output.validate ? { validate: output.validate } : undefined,
           );
-          const result = await this.agent(context, input.agentHandle).generateText(prompt(input.input), {
+          const result = await this.agent(context, input.workId, input.agentHandle).generateText(prompt(input.input), {
             ...generationOptions,
             output: Output.object({ schema, name: output.name, description: output.description }),
           });
@@ -906,7 +907,7 @@ export class VoltAgentRunner implements AgentRunner, StructuredAgentRunner {
           inputTokens = result.usage.inputTokens ?? 0;
           outputTokens = result.usage.outputTokens ?? 0;
         } else {
-          const result = await this.agent(context, input.agentHandle).generateText(
+          const result = await this.agent(context, input.workId, input.agentHandle).generateText(
             jsonOutputPrompt(input.input, output),
             {
               ...generationOptions,
@@ -987,7 +988,7 @@ export class VoltAgentRunner implements AgentRunner, StructuredAgentRunner {
     abortSignal: AbortSignal,
     output?: StructuredOutputSpec,
   ): Promise<RoutedAgentRuntimeResult> {
-    this.agent(context, input.agentHandle);
+    this.agent(context, input.workId, input.agentHandle);
     const renewal = this.startSessionRenewal(executionId, lease, abortSignal);
     // 일반 모델과 동일하게 Provider가 응답하지 않는 구독 실행도 유한하게 종료합니다.
     // ponytail: 고정 120초 상한, Provider별 timeout 정책이 필요해질 때 실행 정책 계보와 함께 분리합니다.
@@ -1427,9 +1428,12 @@ export class VoltAgentRunner implements AgentRunner, StructuredAgentRunner {
     };
   }
 
-  private agent(context: TenantContext, handle: string): Agent {
-    const name = `${context.organizationId}:${handle}`;
-    const agent = this.voltAgent.getAgents().find((candidate) => candidate.name === name);
+  private agent(context: TenantContext, workId: string, handle: string): Agent {
+    const scopedName = runtimeAgentName(context.organizationId, handle, workId);
+    const persistentName = runtimeAgentName(context.organizationId, handle);
+    const agent = this.voltAgent
+      .getAgents()
+      .find((candidate) => candidate.name === scopedName || candidate.name === persistentName);
     if (!agent) throw new Error(`활성 Runtime Agent를 찾을 수 없습니다: ${handle}`);
     return agent;
   }

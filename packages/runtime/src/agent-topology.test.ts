@@ -4,6 +4,7 @@ import type { OrganizationNode } from "@massion/organization";
 
 import {
   OrganizationAgentTopology,
+  runtimeAgentName,
   type AgentTopologyRuntime,
   type MaterializedAgent,
   type OrganizationNodeSource,
@@ -67,6 +68,37 @@ function node(handle: string, parentHandle?: string, status: OrganizationNode["s
 }
 
 describe("Organization Agent topology", () => {
+  it("구분자가 포함된 Work와 handle 조합도 Runtime 이름이 충돌하지 않는다", () => {
+    expect(runtimeAgentName("organization-a", "b:c", "a")).not.toBe(runtimeAgentName("organization-a", "c", "a:b"));
+    expect(runtimeAgentName("organization-a", "work-owner:temporary")).not.toBe(
+      runtimeAgentName("organization-a", "temporary", "work-owner"),
+    );
+  });
+
+  it("Work 범위 node를 Work 이름으로 격리하고 전역 parent에 연결하지 않는다", async () => {
+    const scoped = {
+      ...node("temporary", "representative"),
+      scope: "work" as const,
+      work_id: "work-owner",
+    };
+    const runtime = new FakeTopologyRuntime();
+    const topology = new OrganizationAgentTopology(
+      "organization-a",
+      new MutableNodeSource([node("representative"), scoped]),
+      runtime,
+      async () => 0,
+    );
+
+    await topology.sync();
+
+    expect(runtime.get("organization-a:node-representative")).toBeDefined();
+    expect(runtime.get("organization-a:node-temporary")).toMatchObject({
+      name: runtimeAgentName("organization-a", "temporary", "work-owner"),
+      handle: "temporary",
+    });
+    expect(runtime.childIds("organization-a:node-representative")).not.toContain("organization-a:node-temporary");
+  });
+
   it("활성 node를 tenant namespace Agent와 단일 부모 topology로 멱등 동기화한다", async () => {
     const source = new MutableNodeSource([
       node("representative"),
@@ -84,7 +116,7 @@ describe("Organization Agent topology", () => {
         .list("organization-a:")
         .map((agent) => agent.name)
         .sort(),
-    ).toEqual(["organization-a:representative", "organization-a:research"]);
+    ).toEqual([runtimeAgentName("organization-a", "representative"), runtimeAgentName("organization-a", "research")]);
     expect(runtime.childIds("organization-a:node-representative")).toEqual(["organization-a:node-research"]);
   });
 

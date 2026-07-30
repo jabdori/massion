@@ -78,7 +78,7 @@ export class VoltAgentTopologyRuntime implements AgentTopologyRuntime {
 
   private fromAgent(agent: Agent): MaterializedAgent {
     const separator = agent.name.indexOf(":");
-    const handle = separator >= 0 ? agent.name.slice(separator + 1) : agent.name;
+    const handle = agent.purpose?.trim() || (separator >= 0 ? agent.name.slice(separator + 1) : agent.name);
     return {
       id: agent.id,
       name: agent.name,

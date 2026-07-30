@@ -61,7 +61,7 @@ describe("Strategy staffing recommendation 검증", () => {
     expect(first.gaps).toEqual([]);
     expect(repeated.assessmentId).toBe(first.assessmentId);
     expect(verifyActiveNode).toHaveBeenCalledTimes(1);
-    expect(verifyActiveNode).toHaveBeenCalledWith(context, "assurance");
+    expect(verifyActiveNode).toHaveBeenCalledWith(context, "assurance", undefined, "work-1");
   });
 
   it("추천 없음·존재하지 않음·비활성을 gap으로 기록하고 문자열 유사 대상을 선택하지 않는다", async () => {

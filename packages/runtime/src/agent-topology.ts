@@ -27,6 +27,10 @@ export interface AgentTopologyRuntime {
 
 export type ActiveExecutionCounter = (agentId: string) => Promise<number>;
 
+export function runtimeAgentName(organizationId: string, handle: string, workId?: string): string {
+  return JSON.stringify([organizationId, workId ?? null, handle]);
+}
+
 export class OrganizationAgentTopology {
   public constructor(
     private readonly organizationId: string,
@@ -65,7 +69,12 @@ export class OrganizationAgentTopology {
       const parentId = this.agentId(node);
       const desiredChildren = new Set(
         active
-          .filter((candidate) => candidate.parent_handle === node.handle)
+          .filter(
+            (candidate) =>
+              candidate.parent_handle === node.handle &&
+              candidate.scope === node.scope &&
+              (node.scope === "persistent" || candidate.work_id === node.work_id),
+          )
           .map((candidate) => this.agentId(candidate)),
       );
       for (const childId of this.runtime.childIds(parentId)) {
@@ -104,7 +113,7 @@ export class OrganizationAgentTopology {
     const legacyInstruction = `${node.responsibility}\n주요 산출물: ${node.outputs.join(", ")}`;
     return {
       id: this.agentId(node),
-      name: `${this.organizationId}:${node.handle}`,
+      name: runtimeAgentName(this.organizationId, node.handle, node.scope === "work" ? node.work_id : undefined),
       handle: node.handle,
       instructions: this.instructions?.instructions(node.handle) ?? legacyInstruction,
       role: node.role,

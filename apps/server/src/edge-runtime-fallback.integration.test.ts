@@ -13,6 +13,7 @@ import {
   RoutedModelRegistry,
   RuntimeExecutionStore,
   VoltAgentRunner,
+  runtimeAgentName,
   type SubscriptionAgentAdapter,
 } from "@massion/runtime";
 import { createDatabase, type MassionDatabase } from "@massion/storage";
@@ -474,7 +475,7 @@ describe("실제 Edge 구독 fallback 통합", () => {
     const runner = new VoltAgentRunner(
       {
         // Agent runtime도 요청된 조직 Agent가 실제 활성 상태인지 먼저 검증합니다.
-        getAgents: () => [{ name: `${context.organizationId}:representative` } as never],
+        getAgents: () => [{ name: runtimeAgentName(context.organizationId, "representative") } as never],
       },
       store,
       modelFactory,

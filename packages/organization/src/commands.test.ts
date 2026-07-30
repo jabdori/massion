@@ -78,6 +78,36 @@ describe("버전 기반 조직 명령", () => {
         scope: "work",
       }),
     ).rejects.toThrow("workId");
+    await execute({
+      kind: "create",
+      handle: "temporary",
+      name: "Temporary",
+      responsibility: "임시",
+      parentHandle: "delivery-coordination",
+      scope: "work",
+      workId: "work-owner",
+    });
+    await expect(
+      execute({
+        kind: "create",
+        handle: "persistent-child",
+        name: "Persistent Child",
+        responsibility: "영속 자식",
+        parentHandle: "temporary",
+        scope: "persistent",
+      }),
+    ).rejects.toThrow("persistent");
+    await expect(
+      execute({
+        kind: "create",
+        handle: "foreign-work-child",
+        name: "Foreign Work Child",
+        responsibility: "다른 Work 자식",
+        parentHandle: "temporary",
+        scope: "work",
+        workId: "work-other",
+      }),
+    ).rejects.toThrow("같은 Work");
     await expect(execute({ kind: "deactivate", handle: "engineering" })).rejects.toThrow("부모는 active");
   });
 

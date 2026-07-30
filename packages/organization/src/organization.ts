@@ -323,7 +323,14 @@ function validateGraph(nodes: readonly OrganizationNode[]): void {
   for (const node of nodes) {
     if (node.scope === "work" && !node.work_id) throw new Error("work scope 노드는 workId가 필요합니다");
     if (node.scope === "persistent" && node.work_id) throw new Error("persistent 노드는 workId를 가질 수 없습니다");
-    if (node.parent_handle && !handles.has(node.parent_handle)) throw new Error(`고아 부모 참조입니다: ${node.handle}`);
+    const parent = node.parent_handle ? handles.get(node.parent_handle) : undefined;
+    if (node.parent_handle && !parent) throw new Error(`고아 부모 참조입니다: ${node.handle}`);
+    if (parent?.scope === "work" && node.scope === "persistent") {
+      throw new Error(`persistent 노드는 Work 범위 부모를 가질 수 없습니다: ${node.handle}`);
+    }
+    if (parent?.scope === "work" && node.scope === "work" && parent.work_id !== node.work_id) {
+      throw new Error(`Work 범위 부모와 자식은 같은 Work에 속해야 합니다: ${node.handle}`);
+    }
     const visited = new Set<string>();
     let current: OrganizationNode | undefined = node;
     while (current?.parent_handle) {
@@ -472,11 +479,16 @@ export class OrganizationGraphService {
     context: TenantContext,
     handle: string,
     executor: QueryExecutor = this.database,
+    workId?: string,
   ): Promise<void> {
     await this.organizations.verifyTenantContext(context, undefined, executor);
     const nodes = await listNodes(executor, context.organizationId);
-    if (!nodes.some((node) => node.handle === handle && node.status === "active")) {
+    const node = nodes.find((candidate) => candidate.handle === handle && candidate.status === "active");
+    if (!node) {
       throw new Error(`활성 OrganizationNode를 찾을 수 없습니다: ${handle}`);
+    }
+    if (node.scope === "work" && node.work_id !== workId) {
+      throw new Error(`Work 범위 OrganizationNode를 다른 Work에서 사용할 수 없습니다: ${handle}`);
     }
   }
 

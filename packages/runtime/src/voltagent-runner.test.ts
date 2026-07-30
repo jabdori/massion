@@ -9,6 +9,7 @@ import { createDatabase, type MassionDatabase } from "@massion/storage";
 
 import type { AgentExecutionInput } from "./contracts.js";
 import { MASSION_RUNTIME_EXECUTION_CONTEXT_KEY, MASSION_TENANT_CONTEXT_KEY } from "./agent-configuration.js";
+import { runtimeAgentName } from "./agent-topology.js";
 import { RuntimeExecutionStore } from "./execution-store.js";
 import type {
   RoutedAgentRuntimeLease,
@@ -50,7 +51,7 @@ describe("VoltAgent AgentRunner", () => {
       agents: {
         representative: new Agent({
           id: agentId,
-          name: `${context.organizationId}:representative`,
+          name: runtimeAgentName(context.organizationId, "representative"),
           instructions: ({ context: executionContext }) => {
             expect(executionContext.get(MASSION_RUNTIME_EXECUTION_CONTEXT_KEY)).toEqual(expect.any(String));
             expect(executionContext.get(MASSION_TENANT_CONTEXT_KEY)).toEqual(context);
@@ -118,6 +119,10 @@ describe("VoltAgent AgentRunner", () => {
     sessionLeaseId = crypto.randomUUID(),
     fallbackAllowed = false,
     preserveExecutionId = false,
+    subscription: { readonly workId: string; readonly agentHandle: string } = {
+      workId: "work-1",
+      agentHandle: "representative",
+    },
   ): RoutedAgentRuntimeLease {
     return {
       kind: "agent-runtime",
@@ -129,8 +134,7 @@ describe("VoltAgent AgentRunner", () => {
       sessionLeaseId,
       sessionExpiresAt: new Date(Date.now() + 300_000).toISOString(),
       subscription: {
-        workId: "work-1",
-        agentHandle: "representative",
+        ...subscription,
         accountId: "account-1",
         connectorId: "connector-1",
         adapterId: "connector-1",
@@ -381,6 +385,71 @@ describe("VoltAgent AgentRunner", () => {
       },
     ]);
     expect(registry.size).toBe(0);
+  });
+
+  it("Work 범위 Runtime Agent는 소유 Work에서만 실행한다", async () => {
+    const handle = "temporary-specialist";
+    const scopedAgentId = `${context.organizationId}:node-temporary-specialist`;
+    voltAgent.registerAgent(
+      new Agent({
+        id: scopedAgentId,
+        name: runtimeAgentName(context.organizationId, handle, "work-1"),
+        instructions: "Work 전용 지시",
+        model: registry.resolve,
+        maxRetries: 0,
+      }),
+    );
+    const ownerLease = agentLease(
+      {
+        outcome: "completed",
+        executionId: "runtime에서-대체",
+        sessionId: "owner-session",
+        value: "owner result",
+      },
+      "owner-attempt",
+      "owner-lease",
+      false,
+      false,
+      { workId: "work-1", agentHandle: handle },
+    );
+    const foreignLease = agentLease(
+      {
+        outcome: "completed",
+        executionId: "runtime에서-대체",
+        sessionId: "foreign-session",
+        value: "foreign result",
+      },
+      "foreign-attempt",
+      "foreign-lease",
+      false,
+      false,
+      { workId: "work-2", agentHandle: handle },
+    );
+    const runner = new VoltAgentRunner(
+      voltAgent,
+      store,
+      { acquire: vi.fn().mockResolvedValueOnce(ownerLease).mockResolvedValueOnce(foreignLease) },
+      registry,
+    );
+
+    try {
+      await expect(runner.execute(context, { ...input(), agentHandle: handle })).resolves.toMatchObject({
+        status: "succeeded",
+        output: "owner result",
+      });
+      await expect(
+        runner.execute(context, {
+          ...input(),
+          commandId: crypto.randomUUID(),
+          workId: "work-2",
+          agentHandle: handle,
+        }),
+      ).resolves.toMatchObject({ status: "failed" });
+      expect(ownerLease.executor.execute).toHaveBeenCalledOnce();
+      expect(foreignLease.executor.execute).not.toHaveBeenCalled();
+    } finally {
+      AgentRegistry.getInstance().removeAgent(scopedAgentId);
+    }
   });
 
   it("선택 사건 저장이 실패하면 Agent runtime lease를 side effect 전에 정리하고 fallback하지 않는다", async () => {

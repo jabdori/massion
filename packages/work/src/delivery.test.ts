@@ -10,6 +10,8 @@ describe("Task DAG, Assignment와 Session", () => {
   let database: MassionDatabase;
   let context: TenantContext;
   let service: WorkService;
+  let graph: OrganizationGraphService;
+  let graphVersion: number;
 
   beforeEach(async () => {
     database = await createDatabase({ url: "mem://", namespace: "massion", database: crypto.randomUUID() });
@@ -17,10 +19,11 @@ describe("Task DAG, Assignment와 Session", () => {
     const organizations = await OrganizationService.create(database);
     const owner = await identity.registerPersonalUser({ email: "owner@example.com", displayName: "Owner" });
     context = await organizations.resolveTenantContext(owner.user.user_id, owner.organization.organization_id);
-    const graph = await OrganizationGraphService.create(database, organizations);
-    const graphVersion = await graph.bootstrap(context);
+    graph = await OrganizationGraphService.create(database, organizations);
+    const bootstrapped = await graph.bootstrap(context);
+    graphVersion = bootstrapped.version.version;
     service = await WorkService.create(database, organizations, graph);
-    expect(graphVersion.version.version).toBe(1);
+    expect(graphVersion).toBe(1);
   });
 
   afterEach(async () => database.close());
@@ -92,6 +95,76 @@ describe("Task DAG, Assignment와 Session", () => {
       target: "running",
     });
   }
+
+  it("Work 범위 Agent는 다른 Work에 배정하거나 참여시킬 수 없다", async () => {
+    const ownerWork = await plannedWork("owner-work");
+    const ownerTask = await service.addTask(context, {
+      commandId: crypto.randomUUID(),
+      workId: ownerWork.work_id,
+      expectedRevision: ownerWork.revision,
+      title: "소유 Work Task",
+      objective: "소유 Work만 처리",
+      acceptanceCriteria: ["격리"],
+      dependencyIds: [],
+    });
+    const otherWork = await plannedWork("other-work");
+    const otherTask = await service.addTask(context, {
+      commandId: crypto.randomUUID(),
+      workId: otherWork.work_id,
+      expectedRevision: otherWork.revision,
+      title: "다른 Work Task",
+      objective: "다른 Work 처리",
+      acceptanceCriteria: ["격리"],
+      dependencyIds: [],
+    });
+    const scopedHandle = "owner-work-specialist";
+    const createdAgent = await graph.execute(context, {
+      commandId: crypto.randomUUID(),
+      expectedVersion: graphVersion,
+      kind: "create",
+      handle: scopedHandle,
+      name: "Owner Work Specialist",
+      responsibility: "한 Work만 처리합니다",
+      parentHandle: "delivery-coordination",
+      scope: "work",
+      workId: ownerWork.work_id,
+    });
+    graphVersion = createdAgent.version.version;
+
+    await expect(
+      service.assignTask(context, {
+        commandId: crypto.randomUUID(),
+        workId: otherWork.work_id,
+        expectedRevision: otherTask.work.revision,
+        taskId: otherTask.task.task_id,
+        agentHandle: scopedHandle,
+      }),
+    ).rejects.toThrow("Work 범위");
+    await expect(
+      service.openRoom(context, {
+        commandId: crypto.randomUUID(),
+        workId: otherWork.work_id,
+        expectedRevision: otherTask.work.revision,
+        title: "잘못된 Work 방",
+        coordinatorHandle: scopedHandle,
+        participants: [
+          { kind: "user", subjectId: context.userId, role: "participant" },
+          { kind: "agent", subjectId: scopedHandle, role: "coordinator" },
+        ],
+        limits: { maxParallel: 1, maxTokens: 100, maxCostMicros: 0, maxRounds: 2 },
+      }),
+    ).rejects.toThrow("Work 범위");
+
+    await expect(
+      service.assignTask(context, {
+        commandId: crypto.randomUUID(),
+        workId: ownerWork.work_id,
+        expectedRevision: ownerTask.work.revision,
+        taskId: ownerTask.task.task_id,
+        agentHandle: scopedHandle,
+      }),
+    ).resolves.toMatchObject({ assignment: { agent_handle: scopedHandle } });
+  });
 
   it("cycle 없는 DAG와 모든 Assignment가 있어야 Work를 ready로 전이한다", async () => {
     let work = await plannedWork();
