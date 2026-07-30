@@ -6,8 +6,13 @@ import { describe, expect, it } from "vitest";
 
 import { CoreWorkCoordinator } from "./core-work-coordinator.js";
 import { createCoreProductExecutors } from "./core-product.js";
+import type { DynamicStaffingCoordinator } from "./core-staffing.js";
 import { ApplicationRunStore } from "./run-store.js";
 import { WorkDirectiveStore } from "./work-directive-store.js";
+
+const readyStaffing = {
+  prepare: async () => ({ outcome: "ready" as const }),
+} satisfies Pick<DynamicStaffingCoordinator, "prepare">;
 
 describe("Core product composition", () => {
   it("Core Office의 여섯 단계를 실제 전용 adapter로 빠짐없이 조립한다", () => {
@@ -24,6 +29,7 @@ describe("Core product composition", () => {
       records: {},
       recordDocuments: {},
       software: {},
+      staffing: readyStaffing,
     } as never);
     expect(Object.keys(executors)).toEqual([
       "intake",
@@ -71,6 +77,7 @@ describe("Core product composition", () => {
       assuranceChecks: {},
       records: {},
       software: {},
+      staffing: readyStaffing,
       knowledge: {
         workspaces: {
           get: async () =>
@@ -153,6 +160,7 @@ describe("Core product composition", () => {
       assuranceChecks: {},
       records: {},
       software: {},
+      staffing: readyStaffing,
     } as never);
     const coordinator = new CoreWorkCoordinator(runs, executors, {}, directives);
 
@@ -239,6 +247,7 @@ describe("Core product composition", () => {
       assuranceChecks: {},
       records: {},
       software: {},
+      staffing: readyStaffing,
     } as never);
     const coordinator = new CoreWorkCoordinator(runs, executors, {}, directives);
 

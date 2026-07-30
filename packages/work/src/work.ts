@@ -1086,10 +1086,14 @@ export class WorkService {
     return await listEventsWith(this.database, context.organizationId, workId);
   }
 
-  public async getActivePlan(context: TenantContext, workId: string): Promise<PlanVersion | undefined> {
-    const work = await this.getWork(context, workId);
+  public async getActivePlan(
+    context: TenantContext,
+    workId: string,
+    executor: QueryExecutor = this.database,
+  ): Promise<PlanVersion | undefined> {
+    const work = await this.getWork(context, workId, executor);
     if (!work.active_plan_version_id) return undefined;
-    const [plans] = await this.database.query<[PlanVersion[]]>(
+    const [plans] = await executor.query<[PlanVersion[]]>(
       "SELECT * OMIT id FROM plan_version WHERE organization_id = $organization_id AND work_id = $work_id AND plan_version_id = $plan_version_id LIMIT 1;",
       {
         organization_id: context.organizationId,
@@ -1387,9 +1391,10 @@ export class WorkService {
   public async assignTask(
     context: TenantContext,
     input: AssignTaskInput,
+    executor?: QueryExecutor,
   ): Promise<WorkCommandResult & { assignment: TaskAssignment }> {
     if (!this.graph) throw new Error("Organization Graph reader가 필요합니다");
-    return await this.mutate(context, input, "task_assigned", async (transaction, work) => {
+    const assign = async (transaction: QueryExecutor, work: Work) => {
       await this.graph?.verifyActiveNode(context, input.agentHandle, transaction, work.work_id);
       const tasks = await listActiveTasksWith(transaction, context.organizationId, work);
       if (!tasks.some((task) => task.task_id === input.taskId))
@@ -1466,7 +1471,8 @@ export class WorkService {
       const assignment = records[0];
       if (!assignment) throw new Error("Assignment 생성 결과가 없습니다");
       return { assignment };
-    });
+    };
+    return await this.mutate(context, input, "task_assigned", assign, executor);
   }
 
   public async transitionTask(
@@ -1584,9 +1590,13 @@ export class WorkService {
     return await listTasksWith(this.database, context.organizationId, workId);
   }
 
-  public async listAssignments(context: TenantContext, workId: string): Promise<TaskAssignment[]> {
-    await this.getWork(context, workId);
-    return await listAssignmentsWith(this.database, context.organizationId, workId);
+  public async listAssignments(
+    context: TenantContext,
+    workId: string,
+    executor: QueryExecutor = this.database,
+  ): Promise<TaskAssignment[]> {
+    await this.getWork(context, workId, executor);
+    return await listAssignmentsWith(executor, context.organizationId, workId);
   }
 
   public async openSession(
@@ -1734,6 +1744,7 @@ export class WorkService {
   public async postMessage(
     context: TenantContext,
     input: PostMessageInput,
+    executor?: QueryExecutor,
   ): Promise<WorkCommandResult & { room: CollaborationRoom; message: CollaborationMessage }> {
     await this.verify(context);
     const content = input.content.trim();
@@ -1746,7 +1757,9 @@ export class WorkService {
     }
     if (input.tokenCount < 0 || input.costMicros < 0) throw new Error("token과 cost는 음수일 수 없습니다");
     const requestJson = canonicalJson(input);
-    return await this.database.transaction(async (transaction) => {
+    const postMessage = async (
+      transaction: QueryExecutor,
+    ): Promise<WorkCommandResult & { room: CollaborationRoom; message: CollaborationMessage }> => {
       await this.organizations.verifyTenantContext(context, undefined, transaction);
       const repeated = await findCommand(transaction, context.organizationId, input.commandId);
       if (repeated) {
@@ -1854,7 +1867,8 @@ export class WorkService {
         event_id: event.event_id,
       });
       return result;
-    });
+    };
+    return executor ? await postMessage(executor) : await this.database.transaction(postMessage);
   }
 
   public async joinRoom(

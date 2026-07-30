@@ -15,6 +15,7 @@ import type { WorkspaceService } from "@massion/workspace";
 import { CoreAssuranceStage, type CoreAssuranceCheckOrchestrator } from "./core-assurance-stage.js";
 import { CoreDeliveryStage, type CoreSoftwareTaskPort } from "./core-delivery-stage.js";
 import { CoreEvidenceStage } from "./core-evidence-stage.js";
+import type { DynamicStaffingCoordinator } from "./core-staffing.js";
 import { createCoreWorkPipelineExecutors } from "./core-pipeline.js";
 import { CoreRecordsStage, type CoreRecordsDocumentPlanner } from "./core-records-stage.js";
 import { DeterministicRecordsDocumentPlanner } from "./records-document-planner.js";
@@ -41,6 +42,7 @@ export interface CoreProductDependencies {
   readonly records: RecordsService;
   readonly recordDocuments?: CoreRecordsDocumentPlanner;
   readonly software: CoreSoftwareTaskPort;
+  readonly staffing: Pick<DynamicStaffingCoordinator, "prepare">;
   readonly knowledge?: CoreProductKnowledgeDependencies;
 }
 
@@ -60,6 +62,7 @@ export function createCoreProductExecutors(
     runner: dependencies.runner,
     runtimeExecutions: dependencies.runtimeExecutions,
     software: dependencies.software,
+    staffing: dependencies.staffing,
     evidence,
     ...(knowledge === undefined ? {} : { workspaces: knowledge.workspaces }),
   });

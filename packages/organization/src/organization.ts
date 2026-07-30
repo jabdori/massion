@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 
 import { type OrganizationService, type TenantContext } from "@massion/identity";
 import { applyMigrations, type MassionDatabase, type QueryExecutor } from "@massion/storage";
@@ -253,11 +253,17 @@ export interface OrganizationGovernanceGate {
     input: {
       readonly commandId: string;
       readonly action: string;
-      readonly resource: { readonly type: string; readonly id: string; readonly revision?: number };
+      readonly resource: {
+        readonly type: string;
+        readonly id: string;
+        readonly revision?: number;
+        readonly attributes?: Readonly<Record<string, unknown>>;
+      };
       readonly environment: string;
       readonly riskClass: string;
       readonly external: boolean;
       readonly executionId: string;
+      readonly workId?: string;
       readonly approvalId?: string;
     },
     executor?: QueryExecutor,
@@ -313,6 +319,10 @@ function logicalCommandJson(command: OrganizationCommand): string {
   const logicalCommand: Record<string, unknown> = { ...command };
   delete logicalCommand.governanceApprovalId;
   return canonicalJson(logicalCommand);
+}
+
+function logicalCommandHash(command: OrganizationCommand): string {
+  return createHash("sha256").update(logicalCommandJson(command)).digest("hex");
 }
 
 function recordedLogicalCommandJson(requestJson: string): string | undefined {
@@ -418,6 +428,11 @@ export class OrganizationGraphService {
     executor?: QueryExecutor,
   ): Promise<void> {
     if (!this.governance) return;
+    const workIds =
+      command.kind === "install-profile"
+        ? [...new Set(command.nodes.filter((node) => node.scope === "work").map((node) => node.workId))]
+        : [];
+    const workId = workIds.length === 1 ? workIds[0] : undefined;
     await this.governance.authorize(
       context,
       {
@@ -427,11 +442,13 @@ export class OrganizationGraphService {
           type: "Organization",
           id: context.organizationId,
           revision: command.expectedVersion,
+          attributes: { toolInputDigest: logicalCommandHash(command) },
         },
         environment: command.governanceEnvironment ?? "local",
         riskClass: "write",
         external: false,
         executionId: `organization-change:${command.commandId}`,
+        ...(workId ? { workId } : {}),
         ...(command.governanceApprovalId ? { approvalId: command.governanceApprovalId } : {}),
       },
       executor,
@@ -547,39 +564,34 @@ export class OrganizationGraphService {
     return await this.analyzeImpactWith(this.database, context.organizationId, rootHandles, nodes);
   }
 
-  public async execute(context: TenantContext, command: OrganizationCommand): Promise<GraphChangeResult> {
-    await this.verify(context, true);
+  public async execute(
+    context: TenantContext,
+    command: OrganizationCommand,
+    executor?: QueryExecutor,
+  ): Promise<GraphChangeResult> {
+    if (executor) {
+      if (context.role !== "owner") throw new Error("조직 그래프 변경은 owner만 수행할 수 있습니다");
+    } else {
+      await this.verify(context, true);
+    }
     const requestJson = logicalCommandJson(command);
-    const observedVersions = await listVersions(this.database, context.organizationId);
-    const observedReplay = observedVersions.find((version) => version.command_id === command.commandId);
-    if (observedReplay) {
-      if (recordedLogicalCommandJson(observedReplay.request_json) !== requestJson) {
+    const replay = (versions: OrganizationVersion[]): GraphChangeResult | undefined => {
+      const repeated = versions.find((version) => version.command_id === command.commandId);
+      if (!repeated) return undefined;
+      if (recordedLogicalCommandJson(repeated.request_json) !== requestJson) {
         throw new Error("같은 commandId에 다른 명령을 사용할 수 없습니다");
       }
       return {
-        nodes: normalizeSnapshot(JSON.parse(observedReplay.after_json) as StoredOrganizationNode[]),
-        version: observedReplay,
-        impact: JSON.parse(observedReplay.impact_json) as ImpactReport,
+        nodes: normalizeSnapshot(JSON.parse(repeated.after_json) as StoredOrganizationNode[]),
+        version: repeated,
+        impact: JSON.parse(repeated.impact_json) as ImpactReport,
       };
-    }
-    const observedCurrent = latestVersion(observedVersions);
-    if (!observedCurrent || observedCurrent.version !== command.expectedVersion) {
-      throw new Error(`현재 OrganizationVersion은 ${String(observedCurrent?.version ?? 0)}입니다`);
-    }
-    if (!command.governanceApprovalId) await this.authorizeChange(context, command);
-    return await this.database.transaction(async (transaction) => {
+    };
+    const execute = async (transaction: QueryExecutor): Promise<GraphChangeResult> => {
       await this.organizations.verifyTenantContext(context, ["owner"], transaction);
       const versions = await listVersions(transaction, context.organizationId);
-      const repeated = versions.find((version) => version.command_id === command.commandId);
-      if (repeated) {
-        if (recordedLogicalCommandJson(repeated.request_json) !== requestJson)
-          throw new Error("같은 commandId에 다른 명령을 사용할 수 없습니다");
-        return {
-          nodes: normalizeSnapshot(JSON.parse(repeated.after_json) as StoredOrganizationNode[]),
-          version: repeated,
-          impact: JSON.parse(repeated.impact_json) as ImpactReport,
-        };
-      }
+      const repeated = replay(versions);
+      if (repeated) return repeated;
       const current = latestVersion(versions);
       if (!current || current.version !== command.expectedVersion) {
         throw new Error(`현재 OrganizationVersion은 ${String(current?.version ?? 0)}입니다`);
@@ -612,7 +624,28 @@ export class OrganizationGraphService {
         storedAfter,
       );
       return { nodes: storedAfter, version, impact };
-    });
+    };
+    if (executor) {
+      await this.organizations.verifyTenantContext(context, ["owner"], executor);
+      const observedVersions = await listVersions(executor, context.organizationId);
+      const observedReplay = replay(observedVersions);
+      if (observedReplay) return observedReplay;
+      const observedCurrent = latestVersion(observedVersions);
+      if (!observedCurrent || observedCurrent.version !== command.expectedVersion) {
+        throw new Error(`현재 OrganizationVersion은 ${String(observedCurrent?.version ?? 0)}입니다`);
+      }
+      if (!command.governanceApprovalId) await this.authorizeChange(context, command, this.database);
+      return await execute(executor);
+    }
+    const observedVersions = await listVersions(this.database, context.organizationId);
+    const observedReplay = replay(observedVersions);
+    if (observedReplay) return observedReplay;
+    const observedCurrent = latestVersion(observedVersions);
+    if (!observedCurrent || observedCurrent.version !== command.expectedVersion) {
+      throw new Error(`현재 OrganizationVersion은 ${String(observedCurrent?.version ?? 0)}입니다`);
+    }
+    if (!command.governanceApprovalId) await this.authorizeChange(context, command);
+    return await this.database.transaction(execute);
   }
 
   /** Growth projection이 현재 정본을 같은 transaction에서 검사할 때만 사용합니다. */

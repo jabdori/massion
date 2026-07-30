@@ -13,7 +13,7 @@ import {
   RepositoryScanner,
   RepositoryStore,
 } from "@massion/evidence";
-import { PromptMemoryStore } from "@massion/growth";
+import { PromptMemoryStore, growthChecksum } from "@massion/growth";
 import { IdentityService, OrganizationService } from "@massion/identity";
 import { OrganizationGraphService } from "@massion/organization";
 import { RuntimeExecutionStore } from "@massion/runtime";
@@ -943,7 +943,7 @@ describe("Massion server product", () => {
     expect(daemon.state).toBe("stopped");
   }, 20_000);
 
-  it("OpenAI 호환 route가 있으면 Representative→Strategy→Delivery 실제 Core 경로를 실행한다", async () => {
+  it("OpenAI 호환 route에서 역량 공백을 승인받아 Work Agent로 실제 Core 경로를 완료한다", async () => {
     const sourceSecret = "sk-knowledge-secret-1234567890";
     const providerOutputSecret = "sk-provider-output-secret-1234567890";
     const plan = {
@@ -970,8 +970,8 @@ describe("Massion server product", () => {
           objective: "실제 Delivery Agent를 실행한다",
           criterionKeys: ["core-path"],
           dependencyKeys: [],
-          requiredCapabilities: [],
-          recommendedAgentHandles: ["delivery-coordination"],
+          requiredCapabilities: ["quant-analysis"],
+          recommendedAgentHandles: [],
           parallelizable: false,
         },
       ],
@@ -1130,13 +1130,87 @@ describe("Massion server product", () => {
         expectedRevision: registered.data.revision,
         payload: { workspaceId: registered.data.workspaceId, decision: "trusted" },
       });
-      const accepted = await command("run.start", {
+      const accepted = (await command("run.start", {
         request: {
           text: "calculateTotal 함수의 동작을 검증해주세요",
           workspaceId: registered.data.workspaceId,
           workspacePaths: ["src/order.ts"],
         },
-      });
+      })) as { data: { runId: string } };
+      let run = (await client.query("run.get", { runId: accepted.data.runId })) as {
+        data: { runId: string; workId: string; status: string; approvalId?: string; blockedReason?: string };
+      };
+      let dynamicStaffingApprovalSeen = false;
+      for (let decisionRound = 0; decisionRound < 12; decisionRound += 1) {
+        for (let attempt = 0; attempt < 300; attempt += 1) {
+          if (["awaiting-approval", "blocked", "completed", "failed", "cancelled"].includes(run.data.status)) break;
+          await new Promise((resolve) => setTimeout(resolve, 10));
+          run = (await client.query("run.get", { runId: accepted.data.runId })) as typeof run;
+        }
+        if (run.data.status === "completed") break;
+        if (run.data.status === "blocked") {
+          throw new Error(`실제 Core 경로가 차단됐습니다: ${run.data.blockedReason ?? "unknown"}`);
+        }
+        expect(run.data).toMatchObject({ status: "awaiting-approval", approvalId: expect.any(String) });
+        const pending = (await client.query("governance.approval.list", {
+          workId: run.data.workId,
+          status: "pending",
+        })) as {
+          data: readonly {
+            approvalId: string;
+            action: string;
+            workId?: string;
+            revision?: number;
+          }[];
+        };
+        const approval = pending.data.find((candidate) => candidate.approvalId === run.data.approvalId);
+        expect(approval).toMatchObject({ workId: run.data.workId, revision: expect.any(Number) });
+        if (!approval?.revision) throw new Error("Work Approval을 찾을 수 없습니다");
+        const [staffingProposals] = await database.query<
+          [{ readonly organization_id: string; readonly approval_id: string; readonly status: string }[]]
+        >(
+          "SELECT organization_id, approval_id, status FROM dynamic_staffing_proposal WHERE work_id = $work_id AND approval_id = $approval_id LIMIT 1;",
+          {
+            work_id: run.data.workId,
+            approval_id: approval.approvalId,
+          },
+        );
+        const staffingProposal = staffingProposals[0];
+        const isDynamicStaffingApproval = staffingProposal?.status === "awaiting-approval";
+        if (isDynamicStaffingApproval) {
+          dynamicStaffingApprovalSeen = true;
+          const [approvalRecords] = await database.query<[{ readonly decision_id: string }[]]>(
+            "SELECT decision_id FROM governance_approval WHERE organization_id = $organization_id AND approval_id = $approval_id LIMIT 1;",
+            { organization_id: staffingProposal.organization_id, approval_id: approval.approvalId },
+          );
+          const decisionId = approvalRecords[0]?.decision_id;
+          if (!decisionId) throw new Error("Dynamic Staffing Policy Decision을 찾을 수 없습니다");
+          const [decisions] = await database.query<[{ readonly action: string }[]]>(
+            "SELECT action FROM governance_policy_decision WHERE organization_id = $organization_id AND decision_id = $decision_id LIMIT 1;",
+            { organization_id: staffingProposal.organization_id, decision_id: decisionId },
+          );
+          expect(decisions[0]?.action).toBe("organization.change");
+          const beforeApprovalGraph = (await client.query("organization.graph.snapshot", {})) as {
+            data: { nodes: readonly { scope: string; work_id?: string }[] };
+          };
+          expect(
+            beforeApprovalGraph.data.nodes.filter((node) => node.scope === "work" && node.work_id === run.data.workId),
+          ).toEqual([]);
+          await expect(client.query("work.assignments", { workId: run.data.workId })).resolves.toMatchObject({
+            data: [],
+          });
+        }
+        await command("approval.decide", {
+          approvalId: approval.approvalId,
+          expectedApprovalRevision: approval.revision,
+          vote: "approve",
+          reason: isDynamicStaffingApproval
+            ? "Work별 quant-analysis Agent 제안을 승인합니다"
+            : "실제 Core 경로의 선행 실행을 승인합니다",
+        });
+        run = (await client.query("run.get", { runId: accepted.data.runId })) as typeof run;
+      }
+      expect(dynamicStaffingApprovalSeen).toBe(true);
       let snapshot: {
         data?: {
           works?: readonly { status: string }[];
@@ -1153,26 +1227,144 @@ describe("Massion server product", () => {
         await new Promise((resolve) => setTimeout(resolve, 10));
       }
       expect(snapshot.data?.works).toEqual([expect.objectContaining({ status: "completed" })]);
+      const organizationGraph = (await client.query("organization.graph.snapshot", {})) as {
+        data: {
+          nodes: readonly {
+            handle: string;
+            status: string;
+            scope: string;
+            work_id?: string;
+            capabilities: readonly string[];
+          }[];
+        };
+      };
+      const workNodes = organizationGraph.data.nodes.filter(
+        (node) => node.scope === "work" && node.work_id === run.data.workId,
+      );
+      expect(workNodes).toEqual([expect.objectContaining({ status: "active", capabilities: ["quant-analysis"] })]);
+      const staffHandle = workNodes[0]?.handle;
+      if (!staffHandle) throw new Error("적용된 Dynamic Staffing Work Agent가 없습니다");
       expect(snapshot.data?.executions).toEqual(
         expect.arrayContaining([
           expect.objectContaining({ agentHandle: "representative", status: "succeeded" }),
           expect.objectContaining({ agentHandle: "context-strategy", status: "succeeded" }),
-          expect.objectContaining({ agentHandle: "delivery-coordination", status: "succeeded" }),
+          expect.objectContaining({ agentHandle: staffHandle, status: "succeeded" }),
           expect.objectContaining({ agentHandle: "assurance", status: "succeeded" }),
         ]),
       );
-      let run = (await client.query("run.get", { runId: accepted.data.runId })) as {
-        data: { workId: string; status: string };
-      };
       for (let attempt = 0; attempt < 300 && run.data.status !== "completed"; attempt += 1) {
         await new Promise((resolve) => setTimeout(resolve, 10));
         run = (await client.query("run.get", { runId: accepted.data.runId })) as typeof run;
       }
       expect(run.data.status).toBe("completed");
-      const rooms = (await client.query("work.rooms", { workId: run.data.workId })) as {
-        data: readonly { roomId: string; coordinatorHandle?: string }[];
+      const assignments = (await client.query("work.assignments", { workId: run.data.workId })) as {
+        data: readonly { taskId: string; agentHandle: string; status: string }[];
       };
-      expect(rooms.data).toEqual([expect.objectContaining({ coordinatorHandle: "representative" })]);
+      expect(assignments.data).toEqual([expect.objectContaining({ agentHandle: staffHandle, status: "assigned" })]);
+      const executions = (await client.query("work.executions", { workId: run.data.workId })) as {
+        data: readonly { executionId: string; taskId?: string; agentHandle: string; status: string }[];
+      };
+      const staffExecution = executions.data.find(
+        (execution) => execution.agentHandle === staffHandle && execution.status === "succeeded",
+      );
+      expect(staffExecution).toMatchObject({ taskId: assignments.data[0]?.taskId, executionId: expect.any(String) });
+      const [runtimeLineages] = await database.query<
+        [
+          {
+            prompt_version_id?: string;
+            prompt_checksum?: string;
+            memory_version_ids?: readonly string[];
+            agent_instruction_checksum?: string;
+          }[],
+        ]
+      >(
+        "SELECT prompt_version_id, prompt_checksum, memory_version_ids, agent_instruction_checksum FROM runtime_execution WHERE execution_id = $execution_id LIMIT 1;",
+        { execution_id: staffExecution?.executionId },
+      );
+      const runtimeLineage = runtimeLineages[0];
+      if (!runtimeLineage?.prompt_version_id) throw new Error("Dynamic Staffing Runtime Prompt 계보가 없습니다");
+      const [promptVersions] = await database.query<
+        [
+          {
+            prompt_version_id: string;
+            work_id: string;
+            agent_sections_json: string;
+            checksum: string;
+            memory_version_ids: readonly string[];
+          }[],
+        ]
+      >(
+        "SELECT prompt_version_id, work_id, agent_sections_json, checksum, memory_version_ids FROM prompt_version WHERE prompt_version_id = $prompt_version_id LIMIT 1;",
+        { prompt_version_id: runtimeLineage.prompt_version_id },
+      );
+      const promptVersion = promptVersions[0];
+      if (!promptVersion) throw new Error("Dynamic Staffing Runtime의 PromptVersion을 찾을 수 없습니다");
+      const deliverySection = (
+        JSON.parse(promptVersion.agent_sections_json) as readonly {
+          agentHandle: string;
+          instruction: string;
+          capabilityReferences: readonly string[];
+        }[]
+      ).find((section) => section.agentHandle === "delivery-coordination");
+      if (!deliverySection) throw new Error("Dynamic Staffing이 상속할 Delivery Prompt section이 없습니다");
+      const [workNodeRecords] = await database.query<
+        [
+          {
+            handle: string;
+            responsibility: string;
+            capabilities: readonly string[];
+            outputs: readonly string[];
+          }[],
+        ]
+      >(
+        "SELECT handle, responsibility, capabilities, outputs FROM organization_node WHERE work_id = $work_id AND handle = $handle LIMIT 1;",
+        { work_id: run.data.workId, handle: staffHandle },
+      );
+      const workNode = workNodeRecords[0];
+      if (!workNode) throw new Error("Dynamic Staffing Work Agent node를 찾을 수 없습니다");
+      const expectedInstruction = [
+        deliverySection.instruction,
+        "",
+        `Work 전용 역할: ${workNode.responsibility}`,
+        `필수 역량: ${workNode.capabilities.join(", ")}`,
+        `주요 산출물: ${workNode.outputs.join(", ")}`,
+      ].join("\n");
+      const expectedInstructionChecksum = growthChecksum({
+        agentHandle: staffHandle,
+        instruction: expectedInstruction,
+        capabilityReferences: workNode.capabilities,
+      });
+      expect(runtimeLineage).toMatchObject({
+        prompt_version_id: promptVersion.prompt_version_id,
+        prompt_checksum: promptVersion.checksum,
+        memory_version_ids: promptVersion.memory_version_ids,
+        agent_instruction_checksum: expectedInstructionChecksum,
+      });
+      expect(promptVersion.work_id).toBe(run.data.workId);
+      const artifacts = (await client.query("work.artifacts", { workId: run.data.workId })) as {
+        data: readonly {
+          artifactVersionId: string;
+          creatorAgentHandle?: string;
+          creatorExecutionId?: string;
+        }[];
+      };
+      expect(artifacts.data).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            creatorAgentHandle: staffHandle,
+            creatorExecutionId: staffExecution?.executionId,
+          }),
+        ]),
+      );
+      const rooms = (await client.query("work.rooms", { workId: run.data.workId })) as {
+        data: readonly { roomId: string; coordinatorHandle?: string; participantIds: readonly string[] }[];
+      };
+      expect(rooms.data).toEqual([
+        expect.objectContaining({
+          coordinatorHandle: "representative",
+          participantIds: expect.arrayContaining([staffHandle]),
+        }),
+      ]);
       const roomId = rooms.data[0]?.roomId;
       if (!roomId) throw new Error("실제 Core 경로의 Core Office 방을 찾을 수 없습니다");
       const collaboration = (await client.query("work.messages", {
@@ -1205,9 +1397,10 @@ describe("Massion server product", () => {
         { sequence: 1, messageType: "question", authorKind: "user", authorId: expect.any(String) },
         { sequence: 2, messageType: "handoff", authorKind: "agent", authorId: "representative" },
         { sequence: 3, messageType: "answer", authorKind: "agent", authorId: "context-strategy" },
-        { sequence: 4, messageType: "evidence", authorKind: "agent", authorId: "delivery-coordination" },
-        { sequence: 5, messageType: "evidence", authorKind: "agent", authorId: "assurance" },
-        { sequence: 6, messageType: "answer", authorKind: "agent", authorId: "representative" },
+        { sequence: 4, messageType: "proposal", authorKind: "agent", authorId: "context-strategy" },
+        { sequence: 5, messageType: "evidence", authorKind: "agent", authorId: staffHandle },
+        { sequence: 6, messageType: "evidence", authorKind: "agent", authorId: "assurance" },
+        { sequence: 7, messageType: "answer", authorKind: "agent", authorId: "representative" },
       ]);
       for (const [index, message] of collaboration.data.entries()) {
         expect(message.content.trim(), `collaboration message ${String(index + 1)} content`).not.toBe("");
@@ -1232,13 +1425,17 @@ describe("Massion server product", () => {
         executionId: expect.any(String),
       });
       expect(collaboration.data[3]).toMatchObject({
+        messageType: "proposal",
+        content: expect.stringContaining(staffHandle),
+      });
+      expect(collaboration.data[4]).toMatchObject({
         taskId: expect.any(String),
-        executionId: expect.any(String),
+        executionId: staffExecution?.executionId,
         artifactVersionId: expect.any(String),
       });
-      expect(collaboration.data[4]?.executionId).toEqual(expect.any(String));
-      expect(collaboration.data[5]).toMatchObject({
-        artifactVersionId: collaboration.data[3]?.artifactVersionId,
+      expect(collaboration.data[5]?.executionId).toEqual(expect.any(String));
+      expect(collaboration.data[6]).toMatchObject({
+        artifactVersionId: collaboration.data[4]?.artifactVersionId,
         content: expect.stringContaining("DELIVERY_RESULT_calculateTotal_검증완료"),
       });
       expect(
@@ -1296,6 +1493,12 @@ describe("Massion server product", () => {
         expect(matches, `${operation} model request`).toHaveLength(1);
         return matches[0] as string;
       };
+      const nestedStrings = (value: unknown): readonly string[] => {
+        if (typeof value === "string") return [value];
+        if (Array.isArray(value)) return value.flatMap(nestedStrings);
+        if (value && typeof value === "object") return Object.values(value).flatMap(nestedStrings);
+        return [];
+      };
       for (const [stage, operation] of [
         ["Representative", "coordinate_work"],
         ["Strategy", "create_strategy_plan"],
@@ -1307,29 +1510,137 @@ describe("Massion server product", () => {
         expect(modelRequest, `${stage} citation`).toContain(citation);
         expect(modelRequest, `${stage} redacted source`).toContain("function calculateTotal");
         expect(modelRequest, `${stage} secret redaction`).not.toContain(sourceSecret);
+        if (stage === "Delivery") {
+          expect(nestedStrings(JSON.parse(modelRequest)).some((value) => value.includes(expectedInstruction))).toBe(
+            true,
+          );
+        }
       }
 
       await writeFile(
         sourcePath,
         `const apiKey = "${sourceSecret}";\nexport function calculateTotal(items: number[]): number {\n  return items.reduce((sum, item) => sum + item, 1);\n}\n`,
       );
-      const changed = await command("run.start", {
+      const changed = (await command("run.start", {
         request: {
           text: "변경된 calculateTotal 함수를 검증해주세요",
           workspaceId: registered.data.workspaceId,
           workspacePaths: ["src/order.ts"],
         },
-      });
-      let changedStatus = "";
-      for (let attempt = 0; attempt < 300; attempt += 1) {
-        const changedRun = (await client.query("run.get", { runId: changed.data.runId })) as {
-          data: { status: string };
+      })) as { data: { runId: string } };
+      let changedRun = (await client.query("run.get", { runId: changed.data.runId })) as {
+        data: { workId: string; status: string; approvalId?: string; blockedReason?: string };
+      };
+      for (let decisionRound = 0; decisionRound < 12; decisionRound += 1) {
+        for (let attempt = 0; attempt < 300; attempt += 1) {
+          if (["awaiting-approval", "blocked", "completed", "failed", "cancelled"].includes(changedRun.data.status))
+            break;
+          await new Promise((resolve) => setTimeout(resolve, 10));
+          changedRun = (await client.query("run.get", { runId: changed.data.runId })) as typeof changedRun;
+        }
+        if (changedRun.data.status === "completed") break;
+        if (changedRun.data.status === "blocked") {
+          throw new Error(`변경 후 Core 경로가 차단됐습니다: ${changedRun.data.blockedReason ?? "unknown"}`);
+        }
+        expect(changedRun.data).toMatchObject({ status: "awaiting-approval", approvalId: expect.any(String) });
+        const pending = (await client.query("governance.approval.list", {
+          workId: changedRun.data.workId,
+          status: "pending",
+        })) as {
+          data: readonly { approvalId: string; revision?: number }[];
         };
-        changedStatus = changedRun.data.status;
-        if (changedStatus === "completed") break;
-        await new Promise((resolve) => setTimeout(resolve, 10));
+        const approval = pending.data.find((candidate) => candidate.approvalId === changedRun.data.approvalId);
+        if (!approval?.revision) throw new Error("변경 후 Core 경로의 Work Approval을 찾을 수 없습니다");
+        await command("approval.decide", {
+          approvalId: approval.approvalId,
+          expectedApprovalRevision: approval.revision,
+          vote: "approve",
+          reason: "변경 후 실제 Core 경로를 승인합니다",
+        });
+        changedRun = (await client.query("run.get", { runId: changed.data.runId })) as typeof changedRun;
       }
-      expect(changedStatus).toBe("completed");
+      expect(changedRun.data.status).toBe("completed");
+
+      const deliveryRequestsBeforeToctou = modelRequests.filter((modelRequest) =>
+        modelRequest.includes("execute_work_task"),
+      ).length;
+      const raced = (await command("run.start", {
+        request: {
+          text: "런타임 지시문 고정 중 변경된 calculateTotal 함수를 검증해주세요",
+          workspaceId: registered.data.workspaceId,
+          workspacePaths: ["src/order.ts"],
+        },
+      })) as { data: { runId: string } };
+      let racedRun = (await client.query("run.get", { runId: raced.data.runId })) as {
+        data: { workId: string; status: string; approvalId?: string; blockedReason?: string };
+      };
+      let toctouEventInstalled = false;
+      let racedStaffHandle: string | undefined;
+      for (let decisionRound = 0; decisionRound < 12; decisionRound += 1) {
+        for (let attempt = 0; attempt < 300; attempt += 1) {
+          if (["awaiting-approval", "blocked", "completed", "failed", "cancelled"].includes(racedRun.data.status))
+            break;
+          await new Promise((resolve) => setTimeout(resolve, 10));
+          racedRun = (await client.query("run.get", { runId: raced.data.runId })) as typeof racedRun;
+        }
+        if (["blocked", "completed", "failed", "cancelled"].includes(racedRun.data.status)) break;
+        expect(racedRun.data).toMatchObject({ status: "awaiting-approval", approvalId: expect.any(String) });
+        const pending = (await client.query("governance.approval.list", {
+          workId: racedRun.data.workId,
+          status: "pending",
+        })) as {
+          data: readonly { approvalId: string; revision?: number }[];
+        };
+        const approval = pending.data.find((candidate) => candidate.approvalId === racedRun.data.approvalId);
+        if (!approval?.revision) throw new Error("TOCTOU 경로의 Work Approval을 찾을 수 없습니다");
+        const [staffingProposals] = await database.query<[{ readonly status: string; readonly nodes_json: string }[]]>(
+          "SELECT status, nodes_json FROM dynamic_staffing_proposal WHERE work_id = $work_id AND approval_id = $approval_id LIMIT 1;",
+          { work_id: racedRun.data.workId, approval_id: approval.approvalId },
+        );
+        const staffingProposal = staffingProposals[0];
+        if (staffingProposal?.status === "awaiting-approval" && !toctouEventInstalled) {
+          const proposedNodes = JSON.parse(staffingProposal.nodes_json) as readonly { agentHandle?: unknown }[];
+          const proposedHandle = proposedNodes[0]?.agentHandle;
+          if (typeof proposedHandle !== "string" || !/^[a-z0-9-]+$/u.test(proposedHandle)) {
+            throw new Error("TOCTOU 경로의 Dynamic Staffing Agent handle이 유효하지 않습니다");
+          }
+          racedStaffHandle = proposedHandle;
+          await database.query(`
+            DEFINE EVENT OVERWRITE runtime_instruction_toctou_test ON TABLE runtime_execution
+            WHEN $event = 'UPDATE'
+              AND $before.prompt_version_id = NONE
+              AND $after.prompt_version_id != NONE
+              AND $after.agent_handle = ${JSON.stringify(proposedHandle)}
+            THEN {
+              UPDATE organization_node
+                SET responsibility = '런타임 프롬프트 계보 저장 직후 변경된 역할'
+                WHERE organization_id = $after.organization_id
+                  AND work_id = $after.work_id
+                  AND handle = $after.agent_handle;
+            };
+          `);
+          toctouEventInstalled = true;
+        }
+        await command("approval.decide", {
+          approvalId: approval.approvalId,
+          expectedApprovalRevision: approval.revision,
+          vote: "approve",
+          reason: "런타임 지시문 TOCTOU 경로를 승인합니다",
+        });
+        racedRun = (await client.query("run.get", { runId: raced.data.runId })) as typeof racedRun;
+      }
+      expect(toctouEventInstalled).toBe(true);
+      expect(racedStaffHandle).toEqual(expect.any(String));
+      expect(["blocked", "failed"]).toContain(racedRun.data.status);
+      expect(modelRequests.filter((modelRequest) => modelRequest.includes("execute_work_task"))).toHaveLength(
+        deliveryRequestsBeforeToctou,
+      );
+      const [racedNodes] = await database.query<[{ readonly responsibility: string }[]]>(
+        "SELECT responsibility FROM organization_node WHERE work_id = $work_id AND handle = $handle LIMIT 1;",
+        { work_id: racedRun.data.workId, handle: racedStaffHandle },
+      );
+      expect(racedNodes[0]?.responsibility).toBe("런타임 프롬프트 계보 저장 직후 변경된 역할");
+
       await expect(client.query("work.knowledge", { workId: run.data.workId })).resolves.toMatchObject({
         data: { status: "ready", freshnessStatus: "stale_warning" },
       });
@@ -1347,7 +1658,7 @@ describe("Massion server product", () => {
       await rm(workspaceRoot, { recursive: true, force: true });
       await new Promise<void>((resolve, reject) => modelServer.close((error) => (error ? reject(error) : resolve())));
     }
-  }, 20_000);
+  }, 40_000);
 
   it("clean install에서 MiniMax connect-model 하나로 Core route·ready 상태·실제 run을 완성한다", async () => {
     const plan = {

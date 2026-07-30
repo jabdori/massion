@@ -1,6 +1,9 @@
+import type { AgentRunner, RuntimeExecutionStore } from "@massion/runtime";
+import type { Work, WorkCommandResult } from "@massion/work";
 import { describe, expect, it } from "vitest";
 
 import { CoreDeliveryStage } from "./core-delivery-stage.js";
+import type { DynamicStaffingCoordinator } from "./core-staffing.js";
 
 const context = {
   userId: "delivery-user",
@@ -16,10 +19,71 @@ const input = {
   request: {},
 };
 
+function workView(status: Work["status"], revision: number): Work {
+  return {
+    work_id: input.workId,
+    organization_id: context.organizationId,
+    request_id: "delivery-request-0001",
+    status,
+    revision,
+    organization_version_id: "delivery-organization-version-0001",
+    artifact_version_ids: [],
+    created_at: "2026-07-31T00:00:00.000Z",
+    updated_at: "2026-07-31T00:00:00.000Z",
+  };
+}
+
+function transitionResult(status: Work["status"], revision: number): WorkCommandResult {
+  return {
+    work: workView(status, revision),
+    event: {
+      event_id: `delivery-event-${String(revision)}`,
+      organization_id: context.organizationId,
+      work_id: input.workId,
+      sequence: revision,
+      command_id: `delivery-command-${String(revision)}`,
+      event_type: "work_transitioned",
+      actor_user_id: context.userId,
+      request_json: "{}",
+      payload_json: "{}",
+      result_json: "{}",
+      created_at: "2026-07-31T00:00:00.000Z",
+    },
+  };
+}
+
+async function unexpectedCall(): Promise<never> {
+  throw new Error("호출되면 안 되는 테스트 경로입니다");
+}
+
+const unexpectedRunner = {
+  execute: unexpectedCall,
+  recover: unexpectedCall,
+  cancel: unexpectedCall,
+} satisfies Pick<AgentRunner, "execute" | "recover" | "cancel">;
+
+const unexpectedRuntimeExecutions = {
+  findExecutionIdByCommand: unexpectedCall,
+} satisfies Pick<RuntimeExecutionStore, "findExecutionIdByCommand">;
+
+const readyStaffing = {
+  prepare: async () => ({ outcome: "ready" as const }),
+} satisfies Pick<DynamicStaffingCoordinator, "prepare">;
+
+type DeliveryDependencies = ConstructorParameters<typeof CoreDeliveryStage>[0];
+
+function deliveryStage(
+  dependencies: Omit<DeliveryDependencies, "staffing"> & {
+    readonly staffing?: DeliveryDependencies["staffing"];
+  },
+): CoreDeliveryStage {
+  return new CoreDeliveryStage({ ...dependencies, staffing: dependencies.staffing ?? readyStaffing });
+}
+
 describe("CoreDeliveryStage", () => {
   it("Task가 없으면 비소프트웨어 Work도 Assurance 경로로 진행한다", async () => {
     const transitions: string[] = [];
-    const stage = new CoreDeliveryStage({
+    const stage = deliveryStage({
       works: {
         listTasks: async () => [],
         getWork: async () => ({ revision: 1, status: "running" }),
@@ -39,7 +103,7 @@ describe("CoreDeliveryStage", () => {
   });
 
   it("신뢰되지 않은 workspace에 바인딩된 Work는 delivery를 차단한다", async () => {
-    const stage = new CoreDeliveryStage({
+    const stage = deliveryStage({
       works: {
         listTasks: async () => [],
         getWork: async () => ({ revision: 1, status: "running", workspace_id: "workspace-1" }),
@@ -62,7 +126,7 @@ describe("CoreDeliveryStage", () => {
     ["completed", "completed"],
   ] as const)("복구 시 이미 %s인 Work는 신뢰 게이트나 Delivery를 재실행하지 않고 진행한다", async (status, outcome) => {
     let sideEffects = 0;
-    const stage = new CoreDeliveryStage({
+    const stage = deliveryStage({
       works: {
         getWork: async () => ({ revision: 9, status, workspace_id: "workspace-untrusted" }),
         listTasks: async () => {
@@ -103,7 +167,7 @@ describe("CoreDeliveryStage", () => {
       revision: 4,
     };
     let gated = 0;
-    const stage = new CoreDeliveryStage({
+    const stage = deliveryStage({
       works: {
         getWork: async () => ({ revision: 11, status: "running", workspace_id: "workspace-untrusted" }),
         listTasks: async () => [task],
@@ -135,7 +199,7 @@ describe("CoreDeliveryStage", () => {
   });
 
   it("trusted workspace에 바인딩된 Work는 정상 진행한다", async () => {
-    const stage = new CoreDeliveryStage({
+    const stage = deliveryStage({
       works: {
         listTasks: async () => [],
         getWork: async () => ({ revision: 1, status: "running", workspace_id: "workspace-1" }),
@@ -155,7 +219,7 @@ describe("CoreDeliveryStage", () => {
     const transitions: string[] = [];
     let status = "planned";
     let revision = 1;
-    const stage = new CoreDeliveryStage({
+    const stage = deliveryStage({
       works: {
         listTasks: async () => [],
         getWork: async () => ({ revision, status }),
@@ -173,12 +237,115 @@ describe("CoreDeliveryStage", () => {
     expect(transitions).toEqual(["ready", "running", "verifying"]);
   });
 
+  it("동적 Staffing 승인 대기는 planned Work와 기존 preassignment를 건드리지 않고 그대로 반환한다", async () => {
+    const calls: string[] = [];
+    const stage = deliveryStage({
+      works: {
+        getWork: async () => workView("planned", 7),
+        listTasks: async () => {
+          calls.push("list-tasks");
+          return [];
+        },
+        listAssignments: unexpectedCall,
+        assignTask: async (): Promise<never> => {
+          calls.push("assign");
+          return await unexpectedCall();
+        },
+        transition: async (): Promise<never> => {
+          calls.push("transition");
+          return await unexpectedCall();
+        },
+        transitionTask: unexpectedCall,
+        createArtifactVersion: unexpectedCall,
+      },
+      staffing: {
+        prepare: async (_context: unknown, value: { readonly commandId: string; readonly workId: string }) => {
+          calls.push(`staffing:${value.commandId}:${value.workId}`);
+          return {
+            outcome: "awaiting-approval" as const,
+            approvalId: "dynamic-staffing-approval-0001",
+            proposalId: "dynamic-staffing-proposal-0001",
+          };
+        },
+      },
+      runner: unexpectedRunner,
+      runtimeExecutions: unexpectedRuntimeExecutions,
+    });
+
+    await expect(stage.execute(context, input)).resolves.toEqual({
+      outcome: "awaiting-approval",
+      approvalId: "dynamic-staffing-approval-0001",
+      proposalId: "dynamic-staffing-proposal-0001",
+    });
+    expect(calls).toEqual([`staffing:${input.commandId}:staffing:${input.workId}`]);
+  });
+
+  it("동적 Staffing ready 뒤 최신 Work를 다시 읽어 기존 preassignment와 실행 흐름을 계속한다", async () => {
+    const controller = new AbortController();
+    const calls: string[] = [];
+    let receivedSignal: AbortSignal | undefined;
+    let revision = 3;
+    let status: Work["status"] = "planned";
+    let reads = 0;
+    const stage = deliveryStage({
+      works: {
+        getWork: async () => {
+          reads += 1;
+          calls.push(`read:${String(revision)}`);
+          return workView(status, revision);
+        },
+        listTasks: async () => [],
+        listAssignments: unexpectedCall,
+        assignTask: unexpectedCall,
+        transitionTask: unexpectedCall,
+        createArtifactVersion: unexpectedCall,
+        transition: async (
+          _context: unknown,
+          value: { readonly expectedRevision: number; readonly target: Work["status"] },
+        ) => {
+          calls.push(`${value.target}:${String(value.expectedRevision)}`);
+          if (value.expectedRevision !== revision) throw new Error("최신 Work revision을 사용하지 않았습니다");
+          revision += 1;
+          status = value.target;
+          return transitionResult(status, revision);
+        },
+      },
+      staffing: {
+        prepare: async (_context: unknown, value: { readonly approvalId?: string; readonly signal?: AbortSignal }) => {
+          calls.push(`staffing:${value.approvalId ?? "none"}`);
+          receivedSignal = value.signal;
+          revision = 9;
+          return { outcome: "ready" as const, proposalId: "dynamic-staffing-proposal-0002" };
+        },
+      },
+      runner: unexpectedRunner,
+      runtimeExecutions: unexpectedRuntimeExecutions,
+    });
+
+    await expect(
+      stage.execute(context, {
+        ...input,
+        resumeInput: { approvalId: "dynamic-staffing-approval-0002" },
+        signal: controller.signal,
+      }),
+    ).resolves.toMatchObject({ outcome: "advanced" });
+    expect(receivedSignal).toBe(controller.signal);
+    expect(reads).toBeGreaterThanOrEqual(3);
+    expect(calls.slice(0, 5)).toEqual([
+      "read:3",
+      "staffing:dynamic-staffing-approval-0002",
+      "read:9",
+      "ready:9",
+      "running:10",
+    ]);
+  });
+
   it("계획된 Work는 의존 관계로 막힌 Task까지 배정한 뒤 ready로 전이한다", async () => {
     const assignedTaskIds: string[] = [];
     let status = "planned";
     let revision = 1;
     let listCalls = 0;
-    const stage = new CoreDeliveryStage({
+    const stage = deliveryStage({
       works: {
         listTasks: async () => {
           listCalls += 1;
@@ -245,7 +412,7 @@ describe("CoreDeliveryStage", () => {
       recommended_agent_handles: ["assurance"],
       revision: 1,
     };
-    const stage = new CoreDeliveryStage({
+    const stage = deliveryStage({
       works: {
         listTasks: async () => (++listCalls === 1 ? [task] : []),
         listAssignments: async () => [],
@@ -277,7 +444,7 @@ describe("CoreDeliveryStage", () => {
   });
 
   it("승인 대기 Work는 승인 재개 입력 없이 실행하지 않는다", async () => {
-    const stage = new CoreDeliveryStage({
+    const stage = deliveryStage({
       works: {
         listTasks: async () => [],
         getWork: async () => ({ revision: 1, status: "waiting_approval" }),
@@ -302,7 +469,7 @@ describe("CoreDeliveryStage", () => {
       recommended_agent_handles: ["software-engineering.backend-specialist"],
       revision: 1,
     };
-    const stage = new CoreDeliveryStage({
+    const stage = deliveryStage({
       works: { listTasks: async () => [task], getWork: async () => ({ revision: 1, status: "running" }) },
       runner: {},
       runtimeExecutions: {},
@@ -325,7 +492,7 @@ describe("CoreDeliveryStage", () => {
       recommended_agent_handles: ["software-engineering.backend-specialist"],
       revision: 2,
     };
-    const stage = new CoreDeliveryStage({
+    const stage = deliveryStage({
       works: {
         listTasks: async () => [task],
         getWork: async () => ({ revision: 7, status: "running" }),
@@ -385,7 +552,7 @@ describe("CoreDeliveryStage", () => {
     ["cancelled", "cancelled"],
   ] as const)("이미 %s인 Work는 Delivery를 재실행하지 않고 terminal 결과를 보존한다", async (status, outcome) => {
     let softwareCalls = 0;
-    const stage = new CoreDeliveryStage({
+    const stage = deliveryStage({
       works: {
         getWork: async () => ({ revision: 8, status }),
         listTasks: async () => {
@@ -468,7 +635,7 @@ describe("CoreDeliveryStage", () => {
         return { work: { revision }, artifactVersion: { artifact_version_id: "artifact-version-1" } };
       },
     };
-    const stage = new CoreDeliveryStage({
+    const stage = deliveryStage({
       works,
       runner: {
         execute: async (_context: unknown, runtimeInput: unknown) => {
@@ -528,7 +695,7 @@ describe("CoreDeliveryStage", () => {
       recommended_agent_handles: [],
       revision,
     });
-    const stage = new CoreDeliveryStage({
+    const stage = deliveryStage({
       works: {
         listTasks: async () => [task()],
         listAssignments: async () => [
@@ -599,7 +766,7 @@ describe("CoreDeliveryStage", () => {
       recommended_agent_handles: ["software-engineering.backend-specialist"],
       revision: 1,
     };
-    const stage = new CoreDeliveryStage({
+    const stage = deliveryStage({
       works: {
         listTasks: async () => (++listCalls === 1 ? [task] : []),
         getWork: async () => ({ revision: 1, status: "running", workspace_id: "workspace-software" }),
@@ -625,7 +792,7 @@ describe("CoreDeliveryStage", () => {
   it("1,000 token Work에서 stage baseline 뒤 근거 여유가 없으면 실행 전에 차단한다", async () => {
     let materializeCalls = 0;
     let runtimeCalls = 0;
-    const stage = new CoreDeliveryStage({
+    const stage = deliveryStage({
       works: {
         getWork: async () => ({ revision: 1, status: "running", workspace_id: "workspace-low-budget" }),
         listTasks: async () => [
@@ -672,7 +839,7 @@ describe("CoreDeliveryStage", () => {
     const work = new Promise<{ readonly revision: number; readonly status: string }>((resolve) => {
       releaseWork = resolve;
     });
-    const stage = new CoreDeliveryStage({
+    const stage = deliveryStage({
       works: {
         getWork: async () => await work,
         listTasks: async () => {
@@ -709,7 +876,7 @@ describe("CoreDeliveryStage", () => {
       recommended_agent_handles: ["delivery-coordination"],
       revision: 1,
     };
-    const stage = new CoreDeliveryStage({
+    const stage = deliveryStage({
       works: {
         listTasks: async () => [task],
         listAssignments: async () => [
@@ -752,7 +919,7 @@ describe("CoreDeliveryStage", () => {
       recommended_agent_handles: ["delivery-coordination"],
       revision: 1,
     };
-    const stage = new CoreDeliveryStage({
+    const stage = deliveryStage({
       works: {
         listTasks: async () => [task],
         listAssignments: async () => [
@@ -796,7 +963,7 @@ describe("CoreDeliveryStage", () => {
       recommended_agent_handles: ["delivery-coordination"],
       revision: 1,
     };
-    const stage = new CoreDeliveryStage({
+    const stage = deliveryStage({
       works: {
         listTasks: async () => [task],
         listAssignments: async () => [
@@ -829,7 +996,7 @@ describe("CoreDeliveryStage", () => {
       recommended_agent_handles: ["software-engineering.backend-specialist"],
       revision: 1,
     };
-    const stage = new CoreDeliveryStage({
+    const stage = deliveryStage({
       works: { listTasks: async () => [task] },
       runner: {},
       runtimeExecutions: {},

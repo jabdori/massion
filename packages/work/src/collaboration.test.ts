@@ -64,6 +64,143 @@ describe("Collaboration Room과 resource lease", () => {
     });
   }
 
+  async function prepareAtomicStaffing() {
+    const plan = await service.addPlan(context, {
+      commandId: crypto.randomUUID(),
+      workId: created.work.work_id,
+      expectedRevision: created.work.revision,
+      content: { objective: "원자적 staffing" },
+    });
+    const planned = await service.transition(context, {
+      commandId: crypto.randomUUID(),
+      workId: created.work.work_id,
+      expectedRevision: plan.work.revision,
+      target: "planned",
+    });
+    const task = await service.addTask(context, {
+      commandId: crypto.randomUUID(),
+      workId: created.work.work_id,
+      expectedRevision: planned.work.revision,
+      title: "원자적 staffing",
+      objective: "메시지와 배정을 함께 기록합니다",
+      acceptanceCriteria: ["모두 commit되거나 모두 rollback됩니다"],
+      dependencyIds: [],
+    });
+    const opened = await service.openRoom(context, {
+      commandId: crypto.randomUUID(),
+      workId: created.work.work_id,
+      expectedRevision: task.work.revision,
+      title: "Core Office",
+      coordinatorHandle: "representative",
+      participants: [{ kind: "agent", subjectId: "representative", role: "coordinator" }],
+      limits: { maxParallel: 2, maxTokens: 10_000, maxCostMicros: 1_000_000, maxRounds: 10 },
+    });
+    return { plan: plan.plan, task: task.task, opened };
+  }
+
+  it("외부 transaction 실패 시 message와 assignment의 모든 변경을 rollback한다", async () => {
+    const { task, opened } = await prepareAtomicStaffing();
+    const messageCommandId = "atomic-staffing-message-rollback";
+    const assignmentCommandId = "atomic-staffing-assignment-rollback";
+    const eventCount = (await service.listEvents(context, created.work.work_id)).length;
+
+    await expect(
+      database.transaction(async (transaction) => {
+        const posted = await service.postMessage(
+          context,
+          {
+            commandId: messageCommandId,
+            workId: created.work.work_id,
+            roomId: opened.room.room_id,
+            messageType: "handoff",
+            authorKind: "agent",
+            authorId: "representative",
+            content: "Assurance에 배정합니다.",
+            tokenCount: 0,
+            costMicros: 0,
+          },
+          transaction,
+        );
+        const assigned = await service.assignTask(
+          context,
+          {
+            commandId: assignmentCommandId,
+            workId: created.work.work_id,
+            expectedRevision: posted.work.revision,
+            taskId: task.task_id,
+            agentHandle: "assurance",
+          },
+          transaction,
+        );
+        expect(
+          (await service.listAssignments(context, created.work.work_id, transaction)).map(
+            (assignment) => assignment.assignment_id,
+          ),
+        ).toEqual([assigned.assignment.assignment_id]);
+        throw new Error("상위 Dynamic Staffing 실패");
+      }),
+    ).rejects.toThrow("상위 Dynamic Staffing 실패");
+
+    expect((await service.getWork(context, created.work.work_id)).revision).toBe(opened.work.revision);
+    expect(await service.listMessages(context, created.work.work_id, opened.room.room_id)).toEqual([]);
+    expect(await service.listAssignments(context, created.work.work_id)).toEqual([]);
+    expect(await service.listEvents(context, created.work.work_id)).toHaveLength(eventCount);
+    const [participants] = await database.query<[Array<{ readonly subject_id: string }>]>(
+      "SELECT subject_id FROM collaboration_participant WHERE organization_id = $organization_id AND room_id = $room_id ORDER BY subject_id ASC;",
+      { organization_id: context.organizationId, room_id: opened.room.room_id },
+    );
+    expect(participants).toEqual([{ subject_id: "representative" }]);
+  });
+
+  it("외부 transaction commit 후 기존 공개 호출을 replay해도 message와 assignment를 한 번만 기록한다", async () => {
+    const { plan, task, opened } = await prepareAtomicStaffing();
+    const messageInput = {
+      commandId: "atomic-staffing-message-commit",
+      workId: created.work.work_id,
+      roomId: opened.room.room_id,
+      messageType: "handoff" as const,
+      authorKind: "agent" as const,
+      authorId: "representative",
+      content: "Assurance에 배정합니다.",
+      tokenCount: 0,
+      costMicros: 0,
+    };
+    const assignmentInput = {
+      commandId: "atomic-staffing-assignment-commit",
+      workId: created.work.work_id,
+      expectedRevision: opened.work.revision + 1,
+      taskId: task.task_id,
+      agentHandle: "assurance",
+    };
+
+    const committed = await database.transaction(async (transaction) => {
+      expect((await service.getActivePlan(context, created.work.work_id, transaction))?.plan_version_id).toBe(
+        plan.plan_version_id,
+      );
+      const posted = await service.postMessage(context, messageInput, transaction);
+      const assigned = await service.assignTask(context, assignmentInput, transaction);
+      return { posted, assigned };
+    });
+    const replayedMessage = await service.postMessage(context, messageInput);
+    const replayedAssignment = await service.assignTask(context, assignmentInput);
+
+    expect(replayedMessage.message.message_id).toBe(committed.posted.message.message_id);
+    expect(replayedAssignment.assignment.assignment_id).toBe(committed.assigned.assignment.assignment_id);
+    expect((await service.getWork(context, created.work.work_id)).revision).toBe(opened.work.revision + 2);
+    expect(await service.listMessages(context, created.work.work_id, opened.room.room_id)).toHaveLength(1);
+    expect(await service.listAssignments(context, created.work.work_id)).toHaveLength(1);
+    expect(
+      (await service.listEvents(context, created.work.work_id)).filter((event) =>
+        [messageInput.commandId, assignmentInput.commandId].includes(event.command_id),
+      ),
+    ).toHaveLength(2);
+    const [participants] = await database.query<[Array<{ readonly subject_id: string }>]>(
+      "SELECT subject_id FROM collaboration_participant WHERE organization_id = $organization_id AND room_id = $room_id AND subject_id = 'assurance';",
+      { organization_id: context.organizationId, room_id: opened.room.room_id },
+    );
+    expect(participants).toEqual([{ subject_id: "assurance" }]);
+  });
+
   it("모든 구조화 message type과 reply·causation을 순서대로 기록한다", async () => {
     const opened = await openRoom();
     let previousMessageId: string | undefined;

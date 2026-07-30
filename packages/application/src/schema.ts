@@ -355,6 +355,42 @@ DEFINE FIELD resume_approval_id ON application_run TYPE option<string>;
 `,
 );
 
+export const APPLICATION_DYNAMIC_STAFFING_MIGRATION = defineMigration(
+  "0116-application-dynamic-staffing",
+  `
+DEFINE TABLE dynamic_staffing_proposal SCHEMAFULL PERMISSIONS NONE;
+DEFINE FIELD proposal_id ON dynamic_staffing_proposal TYPE string;
+DEFINE FIELD organization_id ON dynamic_staffing_proposal TYPE string;
+DEFINE FIELD created_by_user_id ON dynamic_staffing_proposal TYPE string;
+DEFINE FIELD command_id ON dynamic_staffing_proposal TYPE string;
+DEFINE FIELD request_hash ON dynamic_staffing_proposal TYPE string ASSERT string::len($value) = 64;
+DEFINE FIELD intent_hash ON dynamic_staffing_proposal TYPE string ASSERT string::len($value) = 64;
+DEFINE FIELD work_id ON dynamic_staffing_proposal TYPE string;
+DEFINE FIELD plan_version_id ON dynamic_staffing_proposal TYPE string;
+DEFINE FIELD context_version_id ON dynamic_staffing_proposal TYPE option<string>;
+DEFINE FIELD strategy_generation_id ON dynamic_staffing_proposal TYPE string;
+DEFINE FIELD assessment_id ON dynamic_staffing_proposal TYPE string;
+DEFINE FIELD graph_command_json ON dynamic_staffing_proposal TYPE string;
+DEFINE FIELD expected_organization_version ON dynamic_staffing_proposal TYPE int ASSERT $value > 0;
+DEFINE FIELD expected_work_revision ON dynamic_staffing_proposal TYPE int ASSERT $value > 0;
+DEFINE FIELD nodes_json ON dynamic_staffing_proposal TYPE string;
+DEFINE FIELD assignments_json ON dynamic_staffing_proposal TYPE string;
+DEFINE FIELD core_office_room_id ON dynamic_staffing_proposal TYPE string;
+DEFINE FIELD ux_metadata_json ON dynamic_staffing_proposal TYPE string;
+DEFINE FIELD status ON dynamic_staffing_proposal TYPE string ASSERT $value IN ['prepared', 'awaiting-approval', 'applied'];
+DEFINE FIELD approval_id ON dynamic_staffing_proposal TYPE option<string>;
+DEFINE FIELD applied_organization_version ON dynamic_staffing_proposal TYPE option<int>;
+DEFINE FIELD applied_organization_version_id ON dynamic_staffing_proposal TYPE option<string>;
+DEFINE FIELD impact_json ON dynamic_staffing_proposal TYPE option<string>;
+DEFINE FIELD message_id ON dynamic_staffing_proposal TYPE option<string>;
+DEFINE FIELD revision ON dynamic_staffing_proposal TYPE int ASSERT $value > 0;
+DEFINE FIELD created_at ON dynamic_staffing_proposal TYPE datetime;
+DEFINE FIELD updated_at ON dynamic_staffing_proposal TYPE datetime;
+DEFINE INDEX dynamic_staffing_proposal_id ON dynamic_staffing_proposal FIELDS organization_id, proposal_id UNIQUE;
+DEFINE INDEX dynamic_staffing_proposal_command ON dynamic_staffing_proposal FIELDS organization_id, command_id UNIQUE;
+`,
+);
+
 export const APPLICATION_MIGRATIONS = [
   APPLICATION_AUTH_MIGRATION,
   APPLICATION_COMMAND_MIGRATION,
@@ -367,4 +403,5 @@ export const APPLICATION_MIGRATIONS = [
   APPLICATION_RUN_RETRY_MIGRATION,
   APPLICATION_WORK_DIRECTIVE_MIGRATION,
   APPLICATION_RUN_APPROVAL_RESUME_MIGRATION,
+  APPLICATION_DYNAMIC_STAFFING_MIGRATION,
 ] as const;

@@ -15,6 +15,7 @@ import {
   type ApplicationBootstrapAuthorization,
   DatabaseCoreAssuranceCheckOrchestrator,
   DeterministicRecordsDocumentPlanner,
+  DynamicStaffingCoordinator,
   SubscriptionConnectionService,
   createCoreWorkPipelineExecutors,
   type CoreWorkStage,
@@ -28,7 +29,13 @@ import {
   GovernanceBindingActivationAuthorizer,
   MetricObservationStore,
 } from "@massion/assurance";
-import { ContextStore, StrategyGenerator, StrategyRecovery, StrategyService } from "@massion/context-strategy";
+import {
+  ContextStore,
+  StaffingAdvisor,
+  StrategyGenerator,
+  StrategyRecovery,
+  StrategyService,
+} from "@massion/context-strategy";
 import {
   CodeGraphService,
   CodeSearchService,
@@ -75,6 +82,7 @@ import {
   PromptGrowthTarget,
   PromptMemoryStore,
   ReflectionService,
+  growthChecksum,
 } from "@massion/growth";
 import {
   ApprovalStore,
@@ -289,7 +297,6 @@ export async function createMassionDaemon(
     await chmod(config.connectors.root, 0o700);
     const identities = await IdentityService.create(database);
     const organizations = await OrganizationService.create(database);
-    const graph = await OrganizationGraphService.create(database, organizations);
     const policies = await PolicyStore.create(database, organizations);
     const governance = await GovernanceService.create(database, organizations, policies);
     const approvals = await ApprovalStore.create(database, organizations, governance);
@@ -297,6 +304,7 @@ export async function createMassionDaemon(
     const emergency = await EmergencyControl.create(database, organizations, permits);
     const growthRuntimeIdentities = new GrowthRuntimeAgentIdentityReader(database, organizations);
     const governanceGate = new GovernanceGate(governance, approvals, permits, emergency, growthRuntimeIdentities);
+    const graph = await OrganizationGraphService.create(database, organizations, governanceGate);
     const subscriptionPermissionBridge = new GovernanceSubscriptionPermissionBridge(
       governanceGate,
       config.mode,
@@ -306,8 +314,6 @@ export async function createMassionDaemon(
     const growthPrompts = await PromptMemoryStore.create(database, organizations);
     const workPromptVersions = await GrowthWorkPromptAdapter.create(database, organizations, growthPrompts);
     const agentConfigurations = new GrowthAgentConfigurationReader(database, organizations, growthPrompts);
-    const instructions = new AgentInstructionRegistry(agentConfigurations);
-    // governance 자리는 본 작업 범위 밖이므로 그대로 두고 promptVersions만 주입한다.
     const works = await WorkService.create(
       database,
       organizations,
@@ -316,6 +322,126 @@ export async function createMassionDaemon(
       workPromptVersions,
       (context, executor) => governance.autonomy.get(context, executor),
     );
+    const staffingAdvisor = await StaffingAdvisor.create(database, organizations, graph);
+    const staffing = await DynamicStaffingCoordinator.create(database, {
+      advisor: staffingAdvisor,
+      graph,
+      organizations,
+      works,
+    });
+    const workScopedAgentConfiguration = async (
+      context: Parameters<typeof graph.listNodes>[0],
+      node: Awaited<ReturnType<typeof graph.listNodes>>[number],
+    ) => {
+      if (node.scope !== "work" || !node.work_id || node.status !== "active") {
+        throw new Error("동적 Agent configuration에는 활성 Work 범위 OrganizationNode가 필요합니다");
+      }
+      const work = await works.getWork(context, node.work_id);
+      if (!work.prompt_version_id || work.prompt_schema_version !== "massion.work.prompt.v1") {
+        throw new Error("동적 Agent의 Work PromptVersion을 찾을 수 없습니다");
+      }
+      const prompt = await growthPrompts.getPromptVersion(context, work.prompt_version_id);
+      if (prompt.workId !== node.work_id) throw new Error("동적 Agent와 Work PromptVersion의 Work가 다릅니다");
+      const delivery = prompt.sections.find((section) => section.agentHandle === "delivery-coordination");
+      if (!delivery) throw new Error("동적 Agent가 상속할 Delivery Prompt section을 찾을 수 없습니다");
+      const section = {
+        agentHandle: node.handle,
+        instruction: [
+          delivery.instruction,
+          "",
+          `Work 전용 역할: ${node.responsibility}`,
+          `필수 역량: ${node.capabilities.join(", ")}`,
+          `주요 산출물: ${node.outputs.join(", ")}`,
+        ].join("\n"),
+        capabilityReferences: node.capabilities,
+      };
+      return {
+        promptVersionId: prompt.promptVersionId,
+        promptChecksum: prompt.checksum,
+        memoryVersionIds: prompt.memoryVersionIds,
+        instruction: section.instruction,
+        instructionChecksum: growthChecksum(section),
+      };
+    };
+    type RuntimePromptLineage = {
+      readonly prompt_version_id?: unknown;
+      readonly prompt_checksum?: unknown;
+      readonly memory_version_ids?: unknown;
+      readonly agent_instruction_checksum?: unknown;
+    };
+    const matchesStringArray = (left: unknown, right: readonly string[]): boolean =>
+      Array.isArray(left) &&
+      left.length === right.length &&
+      left.every((value, index) => typeof value === "string" && value === right[index]);
+    const verifyRuntimePromptLineage = async (
+      context: Parameters<typeof agentConfigurations.resolve>[0],
+      input: Parameters<typeof agentConfigurations.resolve>[1],
+      configuration: Awaited<ReturnType<typeof agentConfigurations.resolve>>,
+    ) => {
+      const [executions] = await database.query<[RuntimePromptLineage[]]>(
+        "SELECT prompt_version_id, prompt_checksum, memory_version_ids, agent_instruction_checksum FROM runtime_execution WHERE organization_id = $organization_id AND execution_id = $execution_id LIMIT 1;",
+        { organization_id: context.organizationId, execution_id: input.executionId },
+      );
+      const execution = executions[0];
+      if (!execution) throw new Error("Runtime Execution을 찾을 수 없습니다");
+      const lineage = [
+        execution.prompt_version_id,
+        execution.prompt_checksum,
+        execution.memory_version_ids,
+        execution.agent_instruction_checksum,
+      ];
+      const absent = lineage.map((value) => value === undefined || value === null);
+      if (absent.every(Boolean)) return configuration;
+      if (!absent.every((value) => !value)) {
+        throw new Error("Runtime Execution Prompt 계보가 부분적으로 저장됐습니다");
+      }
+      if (
+        execution.prompt_version_id !== configuration.promptVersionId ||
+        execution.prompt_checksum !== configuration.promptChecksum ||
+        !matchesStringArray(execution.memory_version_ids, configuration.memoryVersionIds) ||
+        execution.agent_instruction_checksum !== configuration.instructionChecksum
+      ) {
+        throw new Error("Runtime Execution Prompt 계보와 호출 직전 Agent configuration이 다릅니다");
+      }
+      return configuration;
+    };
+    const runtimeAgentConfigurations = {
+      async resolve(
+        context: Parameters<typeof agentConfigurations.resolve>[0],
+        input: Parameters<typeof agentConfigurations.resolve>[1],
+      ) {
+        let configuration: Awaited<ReturnType<typeof agentConfigurations.resolve>>;
+        try {
+          configuration = await agentConfigurations.resolve(context, input);
+        } catch (error) {
+          if (
+            !(error instanceof Error) ||
+            !error.message.startsWith("PromptVersion에서 Agent section을 찾을 수 없습니다")
+          ) {
+            throw error;
+          }
+          const [executions] = await database.query<
+            [{ readonly execution_id: string; readonly work_id: string; readonly agent_handle: string }[]]
+          >(
+            "SELECT execution_id, work_id, agent_handle FROM runtime_execution WHERE organization_id = $organization_id AND execution_id = $execution_id LIMIT 1;",
+            { organization_id: context.organizationId, execution_id: input.executionId },
+          );
+          const execution = executions[0];
+          if (!execution || execution.agent_handle !== input.agentHandle) throw error;
+          const node = (await graph.listNodes(context)).find(
+            (candidate) =>
+              candidate.handle === input.agentHandle &&
+              candidate.scope === "work" &&
+              candidate.work_id === execution.work_id &&
+              candidate.status === "active",
+          );
+          if (!node) throw error;
+          configuration = await workScopedAgentConfiguration(context, node);
+        }
+        return await verifyRuntimePromptLineage(context, input, configuration);
+      },
+    };
+    const instructions = new AgentInstructionRegistry(runtimeAgentConfigurations);
     const workspaces = await WorkspaceService.create(database, organizations);
     const extensionStore = await ExtensionStore.create(database, organizations);
     const connectorEnrollment = await ConnectorEnrollmentService.create(database, organizations);
@@ -482,7 +608,7 @@ export async function createMassionDaemon(
     const runtimeExecutions = await RuntimeExecutionStore.create(
       database,
       organizations,
-      agentConfigurations,
+      runtimeAgentConfigurations,
       (context, executor) => governance.autonomy.get(context, executor),
     );
     const directExecutionLifecycle = new DirectExecutionLifecycle(
@@ -977,6 +1103,7 @@ export async function createMassionDaemon(
       software,
       workspaces,
       evidence: evidenceStage,
+      staffing,
     });
     const assuranceStage = new CoreAssuranceStage({
       works,

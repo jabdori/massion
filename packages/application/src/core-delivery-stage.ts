@@ -7,6 +7,7 @@ import type { WorkService, WorkTask } from "@massion/work";
 import type { WorkspaceService } from "@massion/workspace";
 
 import type { CoreEvidenceStage } from "./core-evidence-stage.js";
+import type { DynamicStaffingCoordinator } from "./core-staffing.js";
 import type { CoreWorkStageExecutor, CoreWorkStageInput, CoreWorkStageResult } from "./core-work-coordinator.js";
 
 const APPLICATION_RUN_CANCELLED = "Application run cancelled";
@@ -112,6 +113,7 @@ export class CoreDeliveryStage implements CoreWorkStageExecutor {
       readonly runner: Pick<AgentRunner, "execute" | "recover" | "cancel">;
       readonly runtimeExecutions: Pick<RuntimeExecutionStore, "findExecutionIdByCommand">;
       readonly software?: CoreSoftwareTaskPort;
+      readonly staffing: Pick<DynamicStaffingCoordinator, "prepare">;
       readonly workspaces?: Pick<WorkspaceService, "get">;
       readonly evidence?: Pick<CoreEvidenceStage, "materializeActive">;
     },
@@ -189,6 +191,26 @@ export class CoreDeliveryStage implements CoreWorkStageExecutor {
       if (workspace.trust !== "trusted") return { outcome: "blocked", reason: "workspace-untrusted" };
     }
     const tokenBudget = requestedTokenBudget(input.request);
+    if (initial.status === "planned") {
+      const approvalId =
+        input.resumeInput &&
+        typeof input.resumeInput === "object" &&
+        !Array.isArray(input.resumeInput) &&
+        typeof (input.resumeInput as { readonly approvalId?: unknown }).approvalId === "string"
+          ? (input.resumeInput as { readonly approvalId: string }).approvalId
+          : undefined;
+      const staffing = await this.dependencies.staffing.prepare(context, {
+        commandId: `${input.commandId}:staffing`,
+        workId: input.workId,
+        ...(approvalId === undefined ? {} : { approvalId }),
+        ...(input.signal === undefined ? {} : { signal: input.signal }),
+      });
+      this.throwIfCancelled(input);
+      if (staffing.outcome === "awaiting-approval") return staffing;
+      if (staffing.outcome === "blocked") return { ...staffing, workId: input.workId };
+      initial = await this.dependencies.works.getWork(context, input.workId);
+      this.throwIfCancelled(input);
+    }
     if (initial.status === "planned") {
       const tasks = await this.dependencies.works.listTasks(context, input.workId);
       this.throwIfCancelled(input);
