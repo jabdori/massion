@@ -63,13 +63,13 @@ class FileBackedBootstrapCapability implements FileBackedBootstrapAuthorization 
     const candidateValid = decoded?.length === BOOTSTRAP_CAPABILITY_BYTES && decoded.toString("base64url") === encoded;
     const candidate = candidateValid ? decoded : Buffer.alloc(BOOTSTRAP_CAPABILITY_BYTES);
     const expected = this.#capability;
-    const dummy = expected === undefined ? Buffer.alloc(BOOTSTRAP_CAPABILITY_BYTES, 0xff) : undefined;
-    let matches = false;
+    const comparisonTarget = expected ?? Buffer.alloc(BOOTSTRAP_CAPABILITY_BYTES, 0xff);
+    let matches: boolean;
     try {
-      matches = timingSafeEqual(candidate, expected ?? dummy!);
+      matches = timingSafeEqual(candidate, comparisonTarget);
     } finally {
       candidate.fill(0);
-      dummy?.fill(0);
+      if (expected === undefined) comparisonTarget.fill(0);
     }
     if (this.#clock() >= this.#expiresAt) {
       await this.#dispose("expired");
@@ -107,11 +107,14 @@ class FileBackedBootstrapCapability implements FileBackedBootstrapAuthorization 
       },
       Math.min(remaining, 2_147_483_647),
     );
-    this.#expiryTimer.unref?.();
+    this.#expiryTimer.unref();
   }
 
   async #dispose(reason: ApplicationBootstrapDisposalReason): Promise<void> {
-    if (this.#cleanup) return await this.#cleanup;
+    if (this.#cleanup) {
+      await this.#cleanup;
+      return;
+    }
     if (this.#disposed) return;
     this.#disposed = true;
     this.#inFlight = false;
@@ -156,6 +159,8 @@ function assertFileTrust(metadata: Stats, expectedUid: number | undefined): void
 
 async function openNoFollow(path: string, flags: number): Promise<FileHandle> {
   try {
+    // Node 타입은 상수가 항상 있다고 보지만 런타임 미지원 플랫폼의 fallback은 유지합니다.
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
     return await open(path, flags | (constants.O_NOFOLLOW ?? 0));
   } catch {
     throw trustError();
@@ -194,6 +199,8 @@ export async function loadBootstrapCapabilityFile(
   let capability: Buffer | undefined;
   try {
     if ((await realpath(parent)) !== parent) throw trustError();
+    // Node 타입은 상수가 항상 있다고 보지만 런타임 미지원 플랫폼의 fallback은 유지합니다.
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
     directoryHandle = await openNoFollow(parent, constants.O_RDONLY | (constants.O_DIRECTORY ?? 0));
     assertDirectoryTrust(await directoryHandle.stat(), expectedUid);
 

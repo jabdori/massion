@@ -21,6 +21,10 @@ export interface StrategyStartupRecoveryTarget {
 export type StrategyStartupRecoveryFailureReason =
   "candidate_list_failed" | "legacy_actor_lineage_missing" | "membership_unavailable" | "recovery_failed";
 
+function isAborted(signal: AbortSignal): boolean {
+  return signal.aborted;
+}
+
 export interface StrategyStartupRecoveryFailure {
   readonly reason: StrategyStartupRecoveryFailureReason;
   readonly strategyGenerationId?: string;
@@ -99,7 +103,7 @@ export class StrategyStartupRecoveryService {
       try {
         context = await this.contexts.resolveTenantContext(candidate.actorUserId, candidate.organizationId);
       } catch (error) {
-        if (signal.aborted) break;
+        if (isAborted(signal)) break;
         healthy = false;
         await this.report({
           reason: "membership_unavailable",
@@ -117,7 +121,7 @@ export class StrategyStartupRecoveryService {
           throw new Error("Strategy 시작 복구가 terminal 상태로 수렴하지 않았습니다");
         }
       } catch (error) {
-        if (signal.aborted) break;
+        if (isAborted(signal)) break;
         healthy = false;
         await this.report({
           reason: "recovery_failed",

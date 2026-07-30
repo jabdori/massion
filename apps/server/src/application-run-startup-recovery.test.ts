@@ -318,6 +318,8 @@ describe("ApplicationRun 시작 복구 서비스", () => {
       actorUserId: "user-1",
       createdAt: "2026-07-11T06:00:00.000Z",
     }));
+    const firstCandidate = candidates[0];
+    if (!firstCandidate) throw new Error("첫 복구 후보가 없습니다");
     const listStartupRecoverable = vi
       .fn()
       .mockResolvedValueOnce(candidates)
@@ -327,7 +329,7 @@ describe("ApplicationRun 시작 복구 서비스", () => {
     const recover = vi.fn(async () => undefined);
     const service = new ApplicationRunStartupRecoveryService(
       { listStartupRecoverable },
-      { resolveTenantContext: async () => context(candidates[0]!) },
+      { resolveTenantContext: async () => context(firstCandidate) },
       { recover },
       { onFailure: (failure) => failures.push(failure) },
     );

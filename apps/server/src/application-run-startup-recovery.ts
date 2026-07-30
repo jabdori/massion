@@ -115,12 +115,14 @@ export class ApplicationRunStartupRecoveryService {
         return;
       }
 
-      if (this.closed) return;
+      if (this.isClosed()) return;
       if (candidates.length === 0) break;
 
       let nextCursor: ApplicationRunStartupRecoveryCursor;
       try {
-        nextCursor = recoveryCursor(candidates.at(-1)!);
+        const lastCandidate = candidates.at(-1);
+        if (!lastCandidate) throw new Error("ApplicationRun 시작 복구 page가 비어 있습니다");
+        nextCursor = recoveryCursor(lastCandidate);
         if (
           cursor &&
           (nextCursor.createdAt < cursor.createdAt ||
@@ -135,7 +137,7 @@ export class ApplicationRunStartupRecoveryService {
       }
 
       for (const candidate of candidates) {
-        if (this.closed) {
+        if (this.isClosed()) {
           healthy = false;
           break;
         }
@@ -163,7 +165,7 @@ export class ApplicationRunStartupRecoveryService {
           continue;
         }
 
-        if (this.closed) {
+        if (this.isClosed()) {
           healthy = false;
           break;
         }
@@ -182,6 +184,10 @@ export class ApplicationRunStartupRecoveryService {
       cursor = nextCursor;
     }
     if (!this.closed) this.healthy = healthy;
+  }
+
+  private isClosed(): boolean {
+    return this.closed;
   }
 
   private async report(failure: ApplicationRunStartupRecoveryFailure): Promise<void> {
