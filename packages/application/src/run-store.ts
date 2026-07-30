@@ -320,7 +320,11 @@ export class ApplicationRunStore {
         return { outcome: "terminal", run: this.view(record) };
       }
       if (record.status === "blocked" && !options.resumeBlocked) return { outcome: "terminal", run: this.view(record) };
-      if (record.status === "awaiting-approval" && !options.resumeAwaitingApproval && !options.reevaluateAwaitingApproval) {
+      if (
+        record.status === "awaiting-approval" &&
+        !options.resumeAwaitingApproval &&
+        !options.reevaluateAwaitingApproval
+      ) {
         return { outcome: "terminal", run: this.view(record) };
       }
       if (
@@ -346,8 +350,8 @@ export class ApplicationRunStore {
         options.reevaluateAwaitingApproval
           ? "UPDATE application_run SET status = 'running', lease_generation = $generation, lease_expires_at = <datetime>$expires_at, approval_id = NONE, resume_approval_id = NONE, blocked_reason = NONE, retry_attempt_id = $retry_attempt_id, retry_replay_id = NONE, updated_at = <datetime>$updated_at WHERE organization_id = $organization_id AND run_id = $run_id AND status = $previous_status AND lease_generation = $previous_generation AND approval_id = $approval_id;"
           : options.resumeAwaitingApproval
-          ? "UPDATE application_run SET status = 'running', lease_generation = $generation, lease_expires_at = <datetime>$expires_at, approval_id = NONE, resume_approval_id = $resume_approval_id, blocked_reason = NONE, retry_attempt_id = $retry_attempt_id, retry_replay_id = $retry_replay_id, updated_at = <datetime>$updated_at WHERE organization_id = $organization_id AND run_id = $run_id AND status = $previous_status AND lease_generation = $previous_generation AND approval_id = $resume_approval_id;"
-          : "UPDATE application_run SET status = 'running', lease_generation = $generation, lease_expires_at = <datetime>$expires_at, approval_id = NONE, resume_approval_id = $resume_approval_id, blocked_reason = NONE, retry_attempt_id = $retry_attempt_id, retry_replay_id = $retry_replay_id, updated_at = <datetime>$updated_at WHERE organization_id = $organization_id AND run_id = $run_id AND status = $previous_status AND lease_generation = $previous_generation;",
+            ? "UPDATE application_run SET status = 'running', lease_generation = $generation, lease_expires_at = <datetime>$expires_at, approval_id = NONE, resume_approval_id = $resume_approval_id, blocked_reason = NONE, retry_attempt_id = $retry_attempt_id, retry_replay_id = $retry_replay_id, updated_at = <datetime>$updated_at WHERE organization_id = $organization_id AND run_id = $run_id AND status = $previous_status AND lease_generation = $previous_generation AND approval_id = $resume_approval_id;"
+            : "UPDATE application_run SET status = 'running', lease_generation = $generation, lease_expires_at = <datetime>$expires_at, approval_id = NONE, resume_approval_id = $resume_approval_id, blocked_reason = NONE, retry_attempt_id = $retry_attempt_id, retry_replay_id = $retry_replay_id, updated_at = <datetime>$updated_at WHERE organization_id = $organization_id AND run_id = $run_id AND status = $previous_status AND lease_generation = $previous_generation;",
         {
           organization_id: context.organizationId,
           run_id: runId,

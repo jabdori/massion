@@ -276,5 +276,4 @@ describe("SurrealApplicationReadModel", () => {
     await expect(readModel.verifications?.(otherContext)).resolves.toEqual([]);
     await expect(readModel.directives?.(otherContext)).resolves.toEqual([]);
   }, 15_000);
-
 });

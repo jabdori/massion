@@ -68,7 +68,9 @@ describe("Growth configuration migration", () => {
 
   it("0056의 이전 IF NOT EXISTS checksum을 허용한다", async () => {
     database = await createDatabase({ url: "mem://", namespace: "massion", database: crypto.randomUUID() });
-    await applyMigrations(database, [defineMigration("0001-migration-record", "DEFINE TABLE migration_record SCHEMALESS;")]);
+    await applyMigrations(database, [
+      defineMigration("0001-migration-record", "DEFINE TABLE migration_record SCHEMALESS;"),
+    ]);
     await database.query(
       "CREATE system_migration CONTENT { migration_id: $migration_id, checksum: $checksum, applied_at: time::now() };",
       {

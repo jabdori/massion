@@ -92,9 +92,9 @@ describe("ApplicationCommandRegistry", () => {
       payload: { text: "valid" },
     };
     await expect(registry.dispatch(context, ["work:read"], input)).rejects.toThrow("scope");
-    await expect(registry.dispatch(context, ["work:write"], { ...input, payload: { text: "bad" } })).rejects.toMatchObject(
-      { category: "validation" },
-    );
+    await expect(
+      registry.dispatch(context, ["work:write"], { ...input, payload: { text: "bad" } }),
+    ).rejects.toMatchObject({ category: "validation" });
     await expect(registry.dispatch(context, ["work:write"], input)).resolves.toMatchObject({
       outcome: "succeeded",
       data: { accepted: "valid" },

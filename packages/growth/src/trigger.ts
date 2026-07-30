@@ -138,9 +138,9 @@ export class GrowthTriggerStore {
     const configuration: ClaimConfiguration = candidate.configuration_version_id
       ? await this.storedConfiguration(context, candidate)
       : await this.configurations.resolve(context, candidate.requester_user_id).then((value) => ({
-        configurationVersionId: value.configurationVersionId,
-        reflectionEnabled: value.reflectionEnabled,
-      }));
+          configurationVersionId: value.configurationVersionId,
+          reflectionEnabled: value.reflectionEnabled,
+        }));
     if (!configuration.reflectionEnabled) {
       const skipped = await this.database.transaction(async (transaction) => {
         const [updated] = await transaction.query<[GrowthTrigger[]]>(

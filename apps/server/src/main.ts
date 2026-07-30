@@ -35,7 +35,10 @@ async function main(): Promise<void> {
     const database = await createDatabase(config);
     try {
       const receipt = await restoreOperationalBackup(database, path);
-      await new AssuranceComplianceAuditor(database, await OrganizationService.create(database)).assertDatabaseCompliance();
+      await new AssuranceComplianceAuditor(
+        database,
+        await OrganizationService.create(database),
+      ).assertDatabaseCompliance();
       exitAfterLog(0, "server.restore.completed", {
         path: receipt.path,
         checksum: receipt.checksum,

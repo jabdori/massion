@@ -179,8 +179,7 @@ export class GrowthAdoptionService {
           transaction,
         );
       } catch (error) {
-        if (!(error instanceof GovernanceApprovalRequiredError) || effectiveAdoptionMode !== "review")
-          throw error;
+        if (!(error instanceof GovernanceApprovalRequiredError) || effectiveAdoptionMode !== "review") throw error;
         const waiting = await this.createRun(
           transaction,
           context,

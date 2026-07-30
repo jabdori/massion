@@ -141,7 +141,11 @@ export class EvidencePromptMaterializer {
     context: TenantContext,
     workId: string,
     evidenceBriefId: string,
-  ): Promise<{ readonly brief: EvidenceBrief; readonly repository: Awaited<ReturnType<RepositoryStore["getRepository"]>>; readonly snapshot: IndexSnapshot }> {
+  ): Promise<{
+    readonly brief: EvidenceBrief;
+    readonly repository: Awaited<ReturnType<RepositoryStore["getRepository"]>>;
+    readonly snapshot: IndexSnapshot;
+  }> {
     const brief = await this.briefs.getBrief(context, evidenceBriefId);
     if (brief.organizationId !== context.organizationId || brief.workId !== workId)
       throw new Error("EvidenceBrief가 요청한 organization 또는 Work에 속하지 않습니다");

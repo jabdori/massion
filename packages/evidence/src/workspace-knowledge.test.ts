@@ -119,9 +119,9 @@ describe("Workspace 기반 자동 Evidence 지식 준비", () => {
         (reference) => reference.kind === "code" && reference.relativePath === "src/allowed.ts",
       ),
     ).toBe(true);
-    expect((await indexes.getSnapshot(context, scoped.brief.indexVersionId)).files.map((file) => file.relativePath)).toEqual([
-      "src/allowed.ts",
-    ]);
+    expect(
+      (await indexes.getSnapshot(context, scoped.brief.indexVersionId)).files.map((file) => file.relativePath),
+    ).toEqual(["src/allowed.ts"]);
     await expect(
       knowledge.prepare(context, {
         ...base,

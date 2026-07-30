@@ -11,9 +11,9 @@ describe("AutonomyTransitionCoordinator", () => {
       set: vi.fn().mockResolvedValue({ mode: "full-access", revision: 2 }),
     };
     const approvals = {
-      listPending: vi.fn().mockResolvedValue([
-        { approval_id: "approval-transition-0001", execution_id: "execution-transition-0001" },
-      ]),
+      listPending: vi
+        .fn()
+        .mockResolvedValue([{ approval_id: "approval-transition-0001", execution_id: "execution-transition-0001" }]),
       cancel: vi.fn().mockResolvedValue(undefined),
     };
     const runtime = { cancel: vi.fn().mockResolvedValue(undefined), cancelOrganization: vi.fn() };
@@ -35,14 +35,20 @@ describe("AutonomyTransitionCoordinator", () => {
     expect(runtime.cancel).toHaveBeenCalledWith(context, "execution-transition-0001", "autonomy_changed");
     expect(approvals.cancel).toHaveBeenCalledWith(
       context,
-      expect.objectContaining({ approvalId: "approval-transition-0001", commandId: "autonomy:2:approval:approval-transition-0001:cancel" }),
+      expect.objectContaining({
+        approvalId: "approval-transition-0001",
+        commandId: "autonomy:2:approval:approval-transition-0001:cancel",
+      }),
     );
   });
 
   it("전체 권한 해제 회수가 실패하면 긴급 정지와 제한 상태를 남긴다", async () => {
     const emergency = { get: vi.fn().mockResolvedValue(undefined), activate: vi.fn().mockResolvedValue(undefined) };
     const coordinator = new AutonomyTransitionCoordinator(
-      { get: vi.fn().mockResolvedValue({ mode: "full-access", revision: 3 }), set: vi.fn().mockResolvedValue({ mode: "review", revision: 4 }) } as never,
+      {
+        get: vi.fn().mockResolvedValue({ mode: "full-access", revision: 3 }),
+        set: vi.fn().mockResolvedValue({ mode: "review", revision: 4 }),
+      } as never,
       { listPending: vi.fn().mockResolvedValue([]), cancel: vi.fn() } as never,
       { findByApproval: vi.fn(), claim: vi.fn() } as never,
       { reevaluateAwaitingApproval: vi.fn() } as never,

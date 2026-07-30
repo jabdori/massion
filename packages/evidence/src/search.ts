@@ -186,7 +186,8 @@ export class CodeSearchService {
     const current = input.indexVersionId
       ? await this.repositories.getIndex(context, input.indexVersionId)
       : await this.repositories.getCurrentIndex(context, input.repositoryId);
-    const usable = current?.status === "complete" || (input.indexVersionId !== undefined && current?.status === "superseded");
+    const usable =
+      current?.status === "complete" || (input.indexVersionId !== undefined && current?.status === "superseded");
     if (!current || !usable || (!input.indexVersionId && !current.current))
       throw new Error("검색할 current complete IndexVersion이 없습니다");
     const snapshot = await this.indexes.getSnapshot(context, current.indexVersionId);

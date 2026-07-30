@@ -8,15 +8,7 @@ export interface ReflectionVersionReference {
 
 export interface ReflectionSourceReference {
   readonly kind:
-    | "work-record"
-    | "verification"
-    | "assurance"
-    | "event"
-    | "message"
-    | "artifact"
-    | "evidence"
-    | "symbol"
-    | "memory";
+    "work-record" | "verification" | "assurance" | "event" | "message" | "artifact" | "evidence" | "symbol" | "memory";
   readonly referenceId: string;
   readonly organizationId: string;
   readonly workId: string;

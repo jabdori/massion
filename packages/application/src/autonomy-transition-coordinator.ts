@@ -96,7 +96,9 @@ export class AutonomyTransitionCoordinator {
       mode: previousMode,
       revision: previousRevision,
     });
-    await Promise.all(active.map((execution) => this.runtime.cancel(context, execution.execution_id, "autonomy_revoked")));
+    await Promise.all(
+      active.map((execution) => this.runtime.cancel(context, execution.execution_id, "autonomy_revoked")),
+    );
     const remaining = await this.runtimeExecutions.listActiveByAutonomy(context, {
       mode: previousMode,
       revision: previousRevision,

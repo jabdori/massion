@@ -111,11 +111,9 @@ export class GrowthRevertService {
       if (input.reason === "explicit" && !["observing", "retained"].includes(adoption.status))
         throw new Error("명시적 Growth Revert는 observing 또는 retained Adoption만 허용합니다");
       if (input.reason === "explicit" && adoption.status === "retained") {
-        const current = await this.targets.get(adoption.target_kind).inspect(
-          context,
-          { suggestionId: adoption.suggestion_id, patch: {} },
-          executor,
-        );
+        const current = await this.targets
+          .get(adoption.target_kind)
+          .inspect(context, { suggestionId: adoption.suggestion_id, patch: {} }, executor);
         if (current.versionId !== adoption.after_version_id || current.checksum !== adoption.after_checksum)
           throw new Error("retained Growth Adoption의 현재 target이 이미 변경됐습니다");
       }
