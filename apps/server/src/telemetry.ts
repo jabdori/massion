@@ -137,7 +137,7 @@ export class JsonOperationalLogger {
   ) {}
 
   public write(event: string, fields: Readonly<Record<string, unknown>> = {}): void {
-    if (!/^[a-z][a-z0-9.-]{2,127}$/u.test(event)) throw new Error("운영 log event가 유효하지 않습니다");
+    if (!/^[a-z][a-z0-9._-]{2,127}$/u.test(event)) throw new Error("운영 log event가 유효하지 않습니다");
     const encoded = JSON.stringify({
       timestamp: new Date().toISOString(),
       event,

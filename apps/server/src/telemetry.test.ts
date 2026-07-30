@@ -35,7 +35,7 @@ describe("operations telemetry", () => {
   it("구조화 log에서 key·Bearer·URL secret을 제거하고 byte 상한을 적용한다", () => {
     const lines: string[] = [];
     const logger = new JsonOperationalLogger((line) => lines.push(line), { maximumBytes: 512 });
-    logger.write("operation.failed", {
+    logger.write("subscription.server_connector.startup_recovery", {
       token: "raw-token",
       message: "Bearer abcdefghijklmnopqrstuvwxyz",
       endpoint: "postgres://owner:password@db/internal",
