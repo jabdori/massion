@@ -1,492 +1,259 @@
-# Massion 제품 헌법과 현재 방향
+# Massion Product Constitution
 
-> **문서 상태:** 제품 정체성의 최상위 정본
-> **기준일:** 2026-07-22
-> **대상:** 제품·아키텍처·Surface·AgentOS 구현자와 구현 에이전트
-> **변경 규칙:** 제품 정체성이나 불변량을 바꾸려면 사용자 승인과 ADR이 필요합니다.
+[English](constitution.md) | [한국어](constitution.ko.md)
 
-## 1. 이 문서의 역할
+> **Role:** Highest-level source of truth for product identity
+> **Audience:** People who design or review the product, architecture, surfaces, and AgentOS
+> **Change rule:** Changes to product identity or invariants require user approval and an Architecture Decision Record (ADR).
 
-이 문서는 Massion이 왜 존재하고 무엇을 만들어야 하는지 고정합니다. 프레임워크, 데이터베이스, UI, 패키지 구조와 구현 Phase가 바뀌어도 이 문서의 제품 정체성을 임의로 다시 해석하지 않습니다.
+## 1. Responsibility of this document
 
-문서와 코드의 책임 순서는 다음과 같습니다.
+This document defines why Massion exists and what the product must preserve. A change in framework, database, UI, or package structure must not silently redefine the product.
 
-1. 이 문서는 제품의 목적, 철학, 불변량과 제품 경계를 소유합니다.
-2. `docs/architecture/README.md`는 현재 구현 구조와 실제 상태를 소유합니다.
-3. `docs/phases/**`와 ADR은 특정 변경의 범위와 구현 결정을 소유합니다.
-4. 코드와 실행 결과는 현재 동작 여부를 판정하는 최종 근거입니다.
+Documentation and source code have distinct responsibilities:
 
-현재 코드가 이 문서의 제품 방향을 충족하지 못하면 코드가 현재 사실이고, 그 차이는 제품 갭입니다. 구현에 맞추기 위해 이 문서의 정체성을 조용히 축소하지 않습니다. 반대로 이 문서를 근거로 구현되지 않은 기능을 완료됐다고 주장하지 않습니다.
+1. This constitution owns product purpose, principles, invariants, and boundaries.
+2. [`docs/architecture/README.md`](../architecture/README.md) explains system responsibilities and data and trust boundaries.
+3. ADRs and dated designs preserve the context and choice behind a decision.
+4. Source code defines the behavior of a particular commit.
+5. [`docs/evidence/`](../evidence/) records verification tied to a candidate SHA.
 
-## 2. 한 문장 정의
+When the source does not satisfy this direction, the difference is a product gap. The constitution is not reduced to match current code, and it is not evidence that an absent behavior exists.
 
-Massion은 사용자가 하나의 사명(Mission)을 맡기면 에이전트들이 실제 조직처럼 책임을 나누어 영속 업무(Work)를 수행하고, 사용자가 선택한 권한 경계와 검증·기록을 거친 경험으로 조직·기억·정책을 발전시키는 로컬·자체 호스팅 에이전트 운영체제(AgentOS)입니다.
+## 2. One-sentence definition
 
-제품 철학을 한 문장으로 줄이면 다음과 같습니다.
+Massion is a local AgentOS where a user delegates a mission, agents divide responsibility like an accountable organization, and persistent Work evolves organization, memory, and policy only through user-chosen authority, assurance, and records.
 
-> 사람이 지시하고, 조직이 책임지며, 근거가 판단하고, 기록이 기억하며, 검증된 경험만 다음 조직을 바꿉니다.
+> People direct. The organization takes responsibility. Evidence informs judgment. Records preserve memory. Only verified experience changes the next organization.
 
-## 3. 시작점과 발전 계보
+## 3. Product sovereignty
 
-Massion의 역사는 기술을 무작위로 교체한 과정이 아닙니다. Claude Code Team 기능에서 확인한 조직형 운영 가능성을 독립 제품으로 만들기 위해 AgentOS가 직접 소유하는 범위를 점진적으로 넓힌 과정입니다.
+The human user is the final authority of the AgentOS. The Representative is the default entry point that receives requests and coordinates the organization; it does not replace human authority.
 
-### 3.1 Claude Code Agent Teams와 `claude-agent-bootstrap`
+The user must be able to decide:
 
-최초 단계는 Claude Code Team 기능을 이용해 대표, 부서장과 전문가가 일을 나누는 조직형 운영을 검증한 것입니다. `claude-agent-bootstrap`은 완제품 AgentOS가 아니라 다음 운영 기반을 설치했습니다.
+- which Work to start or stop;
+- which Workspace and files to trust;
+- which Provider accounts to connect;
+- which actions to automate or review; and
+- which Organization, Prompt, Memory, or Policy version to adopt or revert.
 
-- 대표와 부서의 조직 골격
-- 로컬 세션 메모리와 복원 기반
-- 현재 환경의 Capability 발견
-- 업무 분류와 인력 배치 규칙
-- Hook과 프로젝트별 Overlay
-- Research 제안과 Representative 승인을 거치는 동적 부서 생성
+## 4. Product invariants
 
-이 단계의 핵심은 “AI 하나에 모든 일을 맡기지 말고 실제 회사처럼 운영한다”였습니다. 다만 조직·세션·실행 경계는 여전히 Claude Code가 소유했고, `self-upgrade`와 자가개선 엔진은 명시적인 범위 밖이었습니다.
+### 4.1 Operate an organization, not a single AI
 
-### 3.2 Pi Agent와 TypeScript Jabtang
+An agent is not a disposable prompt. It is an organizational member with responsibility and authority. The organization divides work, hands it off, challenges results, and attaches every outcome to one Work lineage.
 
-Claude Code Team의 플랫폼 소유 경계에서 벗어나기 위해 Pi Agent/Pi SDK를 내장 브레인으로 채택했습니다. 이 시기의 제품이 TypeScript Jabtang입니다.
+The durable responsibility language is:
 
-Jabtang은 다음을 제품이 직접 소유하는 독립 조직 OS로 발전했습니다.
+- **Representative:** request intake, coordination, and final response;
+- **Context & Strategy:** intent, risk, plan, and completion criteria;
+- **Evidence & Research:** code, documents, external evidence, and citations;
+- **Governance:** policy, authority, and human decisions;
+- **Delivery Coordination:** task decomposition, assignment, and specialist execution;
+- **Assurance:** quality judgment independent from execution;
+- **Records:** decisions, outcomes, changes, and operational records; and
+- **Growth:** suggestion, evaluation, adoption, effect, and rollback.
 
-- 사용자와 조직 사이의 기본 창구
-- 조직 구조와 역할 권한
-- 승인, 인계, 검증과 기록
-- 영속적인 조직·업무 Runtime Truth
-- 기본·선택·동적 조직
-- Control, Strategy, Evidence, Delivery, Assurance, Records, Growth라는 운영 책임
-- 명시적 기억과 학습 기억을 분리한 자가개선 루프
+Department names may change. These responsibilities may not be skipped.
 
-자가개선은 최초 Bootstrap 단계부터 존재한 불변량이 아니라 이 단계에서 조직 OS가 고도화되며 추가된 핵심 축입니다.
+### 4.2 The organization is a versioned operating structure
 
-### 3.3 Go와 Eino 기반 Jabtang-go
+The organization is not a static chart. It is persistent state that may be created, activated, moved, split, merged, disabled, and recovered according to evidence from real Work.
 
-Jabtang-go는 기존 조직 OS 철학을 버린 것이 아니라 실행 흐름까지 더 정밀하게 통제하기 위해 Go와 Eino로 재작성한 단계입니다.
+An organizational change follows this order:
 
-이 단계에서 다음 네 계층이 명확해졌습니다.
+1. Inspect the request and available capabilities.
+2. Decide whether the existing organization can handle it.
+3. Propose the missing responsibility, team, or specialist.
+4. Review impact, authority, and rollback conditions.
+5. Apply only an allowed change as a new Organization Version.
 
-- 항상 존재하는 운영 능력(OS Core Capability)
-- 누가 존재하는지를 나타내는 영속 조직 구조(Project Graph)
-- 요청을 어떻게 처리하는지를 나타내는 요청별 실행 구조(Execution Graph)
-- 실제 발생 사실을 보존하는 Runtime Truth
+Creating more organization is never a goal by itself.
 
-승인, 그래프 거버넌스, 모델 선택, 기억 동기화와 자가개선 평가가 정교해졌습니다. 반면 TypeScript Jabtang의 영속 Work 도메인은 동등하게 완성되지 않았고, 실질적인 성공 검증과 Extension 런타임 통합에도 미완성 영역이 남았습니다.
+### 4.3 Work and events are the source of truth
 
-### 3.4 TypeScript와 VoltAgent 기반 Massion
+Conversation is an interface for requests, collaboration, and intervention. Persistent Work and versioned events are the source of truth for execution and recovery.
 
-Massion은 Jabtang-go의 조직 OS를 폐기한 백지 프로젝트가 아닙니다. 조직·거버넌스·자가개선 정책은 계승하고, 모델 생태계, 런타임 확장, 벡터 검색과 배포 제약을 해결하기 위해 실행 기반을 VoltAgent로 교체한 재설계입니다.
+Work owns:
 
-동시에 단순한 실행 엔진 교체도 아닙니다. Massion은 다음을 새 도메인 계약으로 강화했습니다.
+- user intent;
+- Workspace, context, organization, policy, Prompt, and Memory versions;
+- plan, completion criteria, and tasks;
+- agents and assignments;
+- collaboration rooms and structured messages;
+- execution, tool use, artifacts, and usage;
+- approvals, decisions, assurance, and records;
+- failure, blocking, cancellation, and recovery conditions; and
+- causal links into Growth.
 
-- 대화가 아닌 Work를 실행과 복구의 정본으로 사용
-- 계획, 실행, 독립 검증과 기록 책임 분리
-- 에이전트 직접 대화와 다자 협업의 인과 계보
-- 조직·Prompt·Policy·Memory의 버전과 되돌리기
-- 자식 Work의 고정된 버전 상속과 명시적 병합
-- 단일 SurrealDB 실행 정본
-- 제한 모드와 로컬·자체 호스팅 운영
-- 권한 선언과 격리 실행을 갖춘 Extension 경계
+The same Work must survive a change in surface or model.
 
-## 4. 변하지 않는 제품 철학
+### 4.4 Execution engines reason; Massion owns policy
 
-### 4.1 한 명의 AI가 아니라 조직을 운영합니다
+VoltAgent and Provider SDKs perform inference, tool calls, and execution resume. Massion owns:
 
-에이전트는 일회성 프롬프트나 모델 인스턴스가 아니라 지속되는 조직 구성원입니다. 기본 역할 언어는 다음과 같습니다.
+- responsibility and authority;
+- the binding between requests, Work, and organization;
+- requirements for strategy, evidence, approval, and assurance;
+- the definition of completion; and
+- adoption of memory, organization, and policy changes.
 
-- 대표 에이전트(Representative): 사용자의 기본 접점, 요청 접수, 전체 조정과 최종 응답
-- 부서장(Unit/Department Lead): 자기 단위의 업무 해석, 분해, 인력 제안과 1차 검수
-- 팀장(Team Lead): 목적이 분명한 실행 팀의 조정, 인계와 위험 관리
-- 전문가(Specialist): 조사, 작성, 구현, 운영과 검증을 수행하는 실행 주체
+No framework or Provider becomes the public product contract.
 
-사람 사용자는 AgentOS의 최종 주권자입니다. Representative는 조직의 운영 창구이지 사람의 권한을 대체하지 않습니다. 기본 상호작용은 Representative를 통하지만, 정책이 허용하면 특정 Agent 직접 호출과 동급 협의체도 같은 조직 코어 위에서 지원할 수 있습니다.
+### 4.5 Completion is not a model claim
 
-### 4.2 조직은 정적 조직도가 아니라 버전된 운영 구조입니다
+A successful response, an existing artifact, or one passing test is not sufficient. Completion requires:
 
-조직은 실제 업무에 따라 생성, 활성화, 이동, 분리, 병합, 비활성화와 복구가 가능한 상태입니다. 새 부서와 Agent는 무작위로 생성하지 않습니다.
+- explicit completion criteria;
+- Assurance separated from the executing actor;
+- a judgment that preserves failures and evidence;
+- atomic Records finalization; and
+- lineage that converges to the same conclusion after restart.
 
-1. 현재 요청, 근거와 보유 Capability를 확인합니다.
-2. 기존 조직으로 처리 가능한지 판단합니다.
-3. 부족한 책임과 필요한 부서·팀·전문가를 제안합니다.
-4. 영향과 권한을 검토하고 필요한 승인을 받습니다.
-5. 새 Organization Version으로 적용하고 행동을 검증합니다.
+Recoverable conditions, such as exhausted model candidates, remain `blocked` instead of being disguised as success or terminal failure.
 
-조직 확장은 업무 필요성과 근거에 의해 일어나며, 생성 자체가 목적이 아닙니다.
+### 4.6 Automation and full access begin with a human decision
 
-### 4.3 고정하는 것은 부서명이 아니라 책임과 통제입니다
+Normal execution preserves policy, mandatory approval, Workspace boundaries, and audit. Automatic execution reduces interruption within an allowed scope; it does not remove controls.
 
-전략, 근거 조사, 실행, 독립 검증, 기록과 성장은 조직 이름이 바뀌어도 보존해야 하는 운영 책임입니다. 역사적인 운영 플레인은 다음과 같습니다.
+Full access may use the current OS user's authority only after an explicit warning and user decision. It does not remove schema, revision, checksum, idempotency, completion assurance, Growth effect measurement, or rollback.
 
-- Control
-- Strategy
-- Evidence
-- Delivery
-- Assurance
-- Records
-- Growth
+Stopping belongs where execution is visible: inside Work. A duplicate global danger switch is not a substitute for immediately stopping the active Work.
 
-현재 구현의 Core Office 여덟 노드는 이 책임을 제공하는 기본 투영입니다. 현재 코드에서는 내장 노드로 유지되지만, 사용자에게 보이는 전체 조직이 여덟 노드로 고정된다는 뜻은 아닙니다. 제품의 불변량은 책임과 통제 장치이며, 전문 조직과 동적 조직은 그 위에서 실제 회사 구조를 형성합니다.
+### 4.7 Providers do not own product state
 
-### 4.4 대화가 아니라 Work와 사건이 정본입니다
+Organization, Work, Records, approval, cancellation, and diagnosis remain available in limited mode when model accounts or networks are unavailable. Provider sessions, transcripts, and quotas cannot replace Massion's persistent state.
 
-대화는 요청·협업·개입을 위한 인터페이스입니다. 실행과 복구의 정본은 Work와 버전된 사건입니다.
+Model selection occurs within candidates that satisfy capability, data policy, budget, evaluation, and account health. Users manage Provider and budget boundaries rather than manually assembling internal model routes for every Work.
 
-Work에는 다음이 귀속됩니다.
+### 4.8 Growth is conservative, evidence-based change
 
-- 사용자 요청과 목적
-- 맥락·조직·정책·Prompt 버전
-- 계획, 완료 기준과 Task
-- 담당 Agent와 Assignment
-- Collaboration Room과 구조화된 메시지
-- 실행, Tool 사용과 산출물
-- 승인, 결정, 검증과 기록
-- 실패, 차단, 취소와 복구 조건
-- 성장 제안으로 이어지는 근거 계보
+Growth is not a model immediately rewriting itself. It preserves:
 
-Surface가 달라져도 같은 Work를 이어서 운영해야 하며, 모델의 transcript만으로 조직 상태나 완료를 복원하지 않습니다.
+- causal Work, Event, and Evidence;
+- target and before/after versions;
+- independent signals and counter-evidence;
+- evaluation and human or policy decision;
+- measured effects in later Work; and
+- rollback when outcomes regress.
 
-### 4.5 실행 엔진은 두뇌이고 Massion은 정책의 소유자입니다
+A new version applies only to subsequent Work and never rewrites past lineage.
 
-Pi, Eino와 VoltAgent는 한 턴의 추론, Tool 호출과 실행 재개를 담당하는 메커니즘입니다. Massion은 다음 정책을 직접 소유합니다.
+### 4.9 Separate the authority of knowledge and memory
 
-- 누가 어떤 책임과 권한을 가지는가
-- 어떤 요청이 어떤 Work와 조직에 귀속되는가
-- 언제 계획·근거·승인·검증이 필요한가
-- 무엇을 완료로 인정하는가
-- 어떤 기억·조직·정책 변경을 채택하는가
+Knowledge explains code, documents, relationships, and sources in a Workspace. Memory is persistent context explicitly supplied by the user or adopted from verified experience.
 
-프레임워크 타입이나 특정 모델 공급자를 공개 제품 계약으로 승격하지 않습니다. 실행 엔진 교체가 제품 정체성 변경이 되어서는 안 됩니다.
+- Knowledge is bound to a Repository and IndexVersion.
+- Citations point to source revision, file, document, or symbol.
+- Personal memory applies to later Work and can be disabled.
+- A transient model transcript never becomes organizational fact or permanent memory by itself.
 
-### 4.6 자동화와 전체 권한도 사람의 선택에서 출발합니다
+### 4.10 Extensions add capability without taking over the OS
 
-일반 실행은 다음 통제 가능성을 보존합니다.
+Extensions may contribute tools, skills, integrations, and specialist execution. They do not directly own the Core process, database, or credentials.
 
-- 위험한 Tool 실행의 선택적 승인과 감사
-- 권한 상승과 통제 장치 변경 제한
-- 조직 생성·병합·폐기의 영향 분석과 선택적 승인
-- 자기수정의 버전, 평가와 되돌리기
-- 사람의 중단, 재배정, 거부와 복구
+Extension execution requires artifact provenance, manifest, permissions, approval, bounded RPC, audit, and lifecycle lineage. Disable, update, and rollback do not rewrite historical Work.
 
-기본 `automatic`은 미리 허용된 범위에서 개입 빈도를 줄일 뿐 활성 정책·필수 승인·Workspace 실행 경계를 없애지 않습니다. `review`는 읽기가 아닌 행동에 사용자 검토를 더합니다.
+### 4.11 Local first
 
-개인용 v1의 승인된 목표는 별도 `full-access`를 제공하는 것입니다. 구현 시 사용자가 설정에서 위험을 한 번 확인하고 직접 켜면 Massion의 행동별 승인, Governance 권한 거부·승인 요구와 Workspace 실행 샌드박스를 우회하고 현재 macOS 사용자 권한으로 실행합니다. 이 선택은 재시작 뒤에도 유지되며 결과에 대한 책임은 사용자에게 있습니다.
+The first product boundary is a personal macOS arm64 desktop operated by one user on their own Mac. Data and Provider accounts remain within the user's local boundary, and the application window does not own the daemon lifecycle.
 
-전체 권한도 macOS 계정·Provider의 외부 제한을 넘지 않으며, schema·revision·checksum·멱등성·완료 검증과 Growth의 평가·효과·되돌리기를 제거하지 않습니다. 사용자는 언제든 전체 권한을 끄거나 **진행 중인 Work의 실행을 중단**할 수 있습니다. 상세 결정은 [ADR-001](../architecture/ADR-001-personal-full-access.md)이 소유합니다.
+Local-first operation does not remove security, recovery, or audit responsibilities. It makes installation, authority, backup and restore, restart, and secret storage explicit product responsibilities.
 
-**정지는 Work 단위입니다 — 2026-07-30 결정.** 전역 `긴급 정지`를 제품에서 제거했습니다.
+### 4.12 Organization is not bureaucracy
 
-실행은 언제나 어떤 Work에 속하고, 사람이 멈추고 싶은 것도 「그 일」입니다. 전역 스위치는 같은 능력을
-한 층 위에 다시 만드는 것이고, 평상시 늘 보이는 큰 빨간 버튼은 위험을 알리기보다 배경이 됩니다.
-멈추는 자리는 실행이 보이는 자리 — 즉 Work 안이어야 합니다. 수단은 `Esc`와 인풋의 「중단」입니다.
-Claude Code·Codex도 같은 자리에서 같은 키로 세션을 끊습니다. 이미 굳은 관습을 다른 것으로 바꿀 이유가 없습니다.
+Simple requests should not be forced through unnecessary meetings, approvals, or documents. Responsibility grows only with risk, uncertainty, impact, and required expertise.
 
-`governance.emergency.*` 명령과 `AutonomyView.emergencyStopActive`는 남습니다. daemon이나 정책이 조직을
-제한 상태로 둘 수 있고 화면은 그 사실을 표시해야 하기 때문입니다. **사람이 거는 진입점만 없앴습니다.**
+Good organizational operation is measured by whether:
 
-이 결정이 남기는 것: 진행 중인 Work가 여럿일 때 사람은 하나씩 멈춥니다. 조직이 자율적으로 새 Work를
-만드는 중이라면(`createWork`) 멈춘 뒤에도 새 Work가 생길 수 있습니다. 그때 사람이 조직을 세우는 수단은
-전역 정지가 아니라 **권한을 「수동」으로 내리는 것**입니다 — 새 실행이 승인을 기다리게 됩니다.
+- the user can understand the current state and next action;
+- responsibility and decision evidence are traceable;
+- failure and restart converge correctly; and
+- verified value exceeds coordination cost.
 
-[ADR-001](../architecture/ADR-001-personal-full-access.md)도 같은 날 개정했습니다.
+## 5. Product model
 
-### 4.7 완료는 모델의 선언이 아니라 독립 검증으로 결정합니다
-
-에이전트가 완료했다고 말하거나 산출물이 존재하는 것만으로 Work를 완료할 수 없습니다.
-
-- 실행 전 완료 기준이 존재해야 합니다.
-- 실행 결과와 근거가 Work에 연결되어야 합니다.
-- 실행 책임과 분리된 Assurance가 결과를 판정해야 합니다.
-- Records가 결정, 인계, 산출물과 검증 결과를 보존해야 합니다.
-- 검증 실패는 수정, 재시도, 재계획 또는 명시적 중단으로 이어져야 합니다.
-
-검증 강도는 위험과 변경 범위에 비례합니다. 변경되지 않은 영역을 습관적으로 반복 검토하거나 전체 회귀 테스트하는 것도 제품 철학이 아닙니다.
-
-### 4.8 자가개선은 근거 기반의 보수적 채택입니다
-
-자가개선은 모델이 스스로 Prompt를 고쳐 즉시 적용하는 기능이 아닙니다.
-
-1. 실제 Work, Event, 대화, Tool 실행, Evidence와 결과를 기록합니다.
-2. 열린 Reflection으로 반복 패턴과 개선 후보를 찾습니다.
-3. 독립된 신호, 반대 근거와 적용 위험을 평가합니다.
-4. 정책과 사용자가 선택한 채택·권한 모드 아래 채택하거나 거부합니다.
-5. Prompt, Policy, Organization 또는 Memory의 새 버전으로 적용합니다.
-6. 다음 실행부터 적용하고 전후 효과를 비교합니다.
-7. 악화되거나 현재 유효 권한 모드에서 적용할 수 없으면 중단하고 되돌립니다.
-
-특정 벡터·AST·동시 발생 신호나 고정 임계값은 제품 불변량이 아닙니다. 평가 전략은 버전된 계약이며 LLM 자기평가 하나만으로 자동 채택할 수 없습니다.
-
-### 4.9 정체성과 기억, 사람과 시스템의 권위를 분리합니다
-
-- 정체성(Identity)은 Agent가 누구이며 어떤 책임을 가지는지 정의합니다.
-- 명시적 기억(Explicit Memory)은 사람이 직접 제공하거나 승인한 프로젝트 기억입니다.
-- 학습 기억(Learned Memory)은 실제 작업에서 시스템이 추출한 후보입니다.
-
-명시적 기억은 학습 기억보다 높은 권위를 가집니다. 학습 기억은 사람의 지시를 덮어쓸 수 없으며, 현재 응답 중간이 아니라 다음 턴부터 적용합니다.
-
-### 4.10 로컬 우선이며 Provider가 제품 상태를 소유하지 않습니다
-
-조직, Work, 승인, 기억, 사건과 감사 기록은 Massion 또는 사용자가 운영하는 저장소에 남습니다. Provider가 바뀌거나 모든 모델 경로가 실패해도 조회, 승인, 취소, 진단, 복구와 백업 같은 제어 기능은 제한 모드에서 동작해야 합니다.
-
-### 4.11 Extension은 조직의 역량을 늘리되 OS를 장악하지 않습니다
-
-Extension은 Marketplace 항목과 같은 뜻이 아닙니다. 다음을 제공할 수 있는 선택적 능력 단위입니다.
-
-- Skill과 지식·행동 규칙
-- Tool과 MCP 연결
-- 전문 조직과 Agent Template
-- 실행 모듈과 외부 Surface
-- 조직별 기록·성장 신호와 모델 Profile
-
-Extension은 승인, Runtime Truth, 기억 권위, 조직 거버넌스와 사람의 통제를 대체할 수 없습니다. 사용자가 설치·권한·활성화·충돌 해결을 통제합니다.
-
-### 4.12 조직 운영은 관료주의가 아니라 적절한 책임 배분입니다
-
-- 짧고 명확한 요청은 최소한의 직접 실행 경로로 처리합니다.
-- 불명확하거나 위험한 요청만 전략·근거·승인 단계를 강화합니다.
-- 독립 업무는 의미 있는 큰 단위로 나누어 병렬 실행합니다.
-- 단순 수정에는 가벼운 모델, 설계·판단에는 강한 추론 모델을 배치합니다.
-- 검토와 테스트는 실제 변경과 위험에 비례합니다.
-- 동일 근거를 반복 조사하거나 변경 없는 영역을 재검토하지 않습니다.
-
-조직은 절차를 늘리는 장치가 아니라 올바른 책임자에게 더 빠르고 안전하게 일을 맡기는 장치입니다.
-
-## 5. 제품 모델
-
-| 축 | 답하는 질문 | 핵심 객체와 결과 |
-|---|---|---|
-| 조직 | 누가 책임지는가? | Organization, Agent, Role, Capability, Organization Version |
-| 업무 | 무엇을 완수해야 하는가? | Work, Context, Plan, Task, Assignment, Artifact |
-| 실행·협업 | 지금 어떻게 일하는가? | Session, Execution, Collaboration Room, Message, Handoff, Event |
-| 결정 | 무엇을 허용하고 채택하는가? | Policy Decision, Approval, Audit, Revert |
-| 성장 | 다음에는 어떻게 더 잘할 것인가? | Reflection, Suggestion, Evaluation, Adoption, Effect |
-| 역량 | 조직이 무엇을 할 수 있는가? | Skill, Tool, MCP, Extension, Capability Contribution |
-| 지식 | 조직이 무엇을 알고 있는가? | Workspace, Repository, IndexVersion, Symbol, Chunk, Relation, EvidenceBrief |
-
-지식 축은 2026-07-27에 복원했습니다. 4.3이 Evidence를 불변 운영 책임으로 선언했는데 이 표에서 빠져 있었고, 그 결과 6절 표면에도 자리가 없었습니다. 도메인은 그 책임을 이미 구현하고 있었으므로 새 정체성 추가가 아니라 정합입니다. 근거와 결정은 [ADR-002](../architecture/ADR-002-knowledge-axis-restoration.md)가 소유합니다.
-
-2026-07-30 현재 이 표에는 **모델 공급과 호출 계보를 담는 객체가 없습니다.** `프로바이더`는 역량 축의 투영으로, `예산`은 실행 축의 관측으로 읽고 있지만 역량 축에 Model·Provider가, 실행 축에 RouteAttempt가 적혀 있지 않습니다. 표면이 축의 투영이라는 6절 전제가 두 표면에 대해서는 아직 성립하지 않습니다. 축 표를 고치는 것은 제품 정체성 변경이므로 ADR과 사용자 승인 없이 여기서 하지 않습니다.
-
-대표적인 업무 흐름은 다음과 같습니다.
-
-```text
-사용자 요청
-→ Representative가 Work 접수
-→ 맥락·전략과 완료 기준 수립
-→ 필요한 근거 조사
-→ 필요한 조직·팀·전문가 편성
-→ 정책 평가와 선택적 승인
-→ 실행과 Agent 협업
-→ 독립 Assurance
-→ Records와 최종 응답
-→ 비동기 Growth
-```
-
-업무 특성에 따라 조사, 승인과 전문 조직은 생략할 수 있지만 유효한 목적·계획, 필요한 검증, 기록과 복구 가능성은 잃지 않습니다.
-
-## 6. Surface 원칙
-
-Surface는 AgentOS 자체가 아니라 조직을 이해하고 운영하기 위한 투영입니다. 데스크톱의 주요 의미 표면은 다음과 같습니다.
-
-| 표면 | 사용자 목적 |
+| Concept | Meaning |
 |---|---|
-| 홈 | 조직과 대화하고 새 사명을 맡기며 현재 중요한 상황을 파악 |
-| 업무 | Work의 대화·계획·실행·산출물·검증·후속 지시를 관제 |
-| 지식 | 조직이 워크스페이스에 대해 아는 것 — 색인·검색·관계와 EvidenceBrief를 탐색 |
-| 조직 | 부서·팀·전문가·책임·역량·현재 배치와 조직 변경 제안을 운영 |
-| 개선 | Reflection, 개선 근거, 평가, 채택·거부·효과·되돌리기를 관리 |
-| 확장 | Skill·Tool·MCP·Extension이 추가하는 실제 능력을 검색·설치·관리 |
-| 프로바이더 | 모델을 공급하는 연결·구독 계정·키와 공급되는 모델 목록을 관리 |
-| 예산 | 경로별 차단 한도와 알림 임계값을 걸고, 모델 호출 기록을 관측 |
-| 설정 | 사람이 정한 경계 — 실행 권한과 자가개선 채택 모드를 구성 |
+| Organization | Versioned responsibilities, relationships, authority, and capability |
+| Work | Persistent unit from user request through execution, assurance, records, and Growth |
+| Collaboration Room | Structured user-agent collaboration bound to one Work |
+| Decision | Human or policy judgment over execution, organization, authority, or adoption |
+| Artifact | Document, code, patch, or report produced by Work; not proof of completion |
+| Assurance | Independent judgment against completion criteria |
+| Records | Persistent decisions, assurance, outcomes, and operational change |
+| Growth | Versioned suggestion, evaluation, adoption, effect, and rollback |
 
-하나의 Work를 보는 4영역 관제 화면은 유효한 Work 상세 화면입니다. 그러나 그것이 AgentOS 전체 정보 구조는 아닙니다. `설정`은 새 제품 도메인이 아니라 여러 도메인의 운영 구성을 투영하는 독립 표면입니다. `자동화`는 독립적인 제품 축이 아니라 실행 정책과 성장 채택 정책의 설정이며, 개인용 `전체 권한`의 경고·활성 상태·해제도 설정이 소유합니다. `확장`은 읽기 전용 설치 목록이 아니라 검색·검토·승인 또는 사용자가 선택한 전체 권한 아래 설치할 수 있어야 하고 조직에 추가된 Capability를 먼저 보여줘야 합니다.
+## 6. Product surfaces
 
-주요 의미 표면은 홈·업무·지식·조직·개선·확장·프로바이더·예산·설정 **아홉 개**이며, 위 표의 순서가 전역 레일의 순서입니다. 2026-07-24 사용자 논의에 따라 독립 `확인 필요` 표면은 제거하고 전역 `수신함` 유틸리티로 통합했습니다. `지식`은 2026-07-27에 복원했습니다([ADR-002](../architecture/ADR-002-knowledge-axis-restoration.md)) — 5절 축에서 Evidence가 빠져 있어 표면에도 자리가 없었고, 도메인은 이미 구현돼 있었습니다. `프로바이더`와 `예산`은 2026-07-30에 설정에서 분리했습니다.
+| Surface | Question it must answer |
+|---|---|
+| Home | What needs attention or a decision now? |
+| Work | Where is this Work, and what is it waiting for? |
+| Knowledge | What does the organization know about this Workspace, and from which sources? |
+| Organization | Who is responsible for what, and how are they related? |
+| Growth | What was learned, and what should change? |
+| Extensions | Which capabilities can be added to the organization? |
+| Providers | Which model supply and accounts are available? |
+| Budget | Which model was selected, why, and what did it cost? |
+| Settings | Which persistent boundaries did the user choose? |
 
-- 2026-07-27까지 이 절은 표면이 일곱이라고 적으면서 위 표에는 여섯 줄만 두었습니다. `지식`이 문장에만 있고 표에 없었습니다. 2026-07-30에 표를 정본으로 맞췄습니다.
-- 표면 수는 제품 불변량이 아닙니다. 불변량은 **하나의 표면이 하나의 질문을 소유하고 두 표면이 같은 질문을 나눠 갖지 않는다**는 것입니다. 표면이 늘어난 이유는 설정 하나가 세 개의 서로 다른 질문(무엇을 공급받는가 · 얼마를 썼는가 · 무엇을 허용하는가)을 겹쳐 갖고 있었기 때문입니다.
+The global inbox is not another domain. It is an entry point for states that require human attention and opens over the current surface. Surfaces share Application state and Work lineage without duplicating each other's responsibility.
 
-- `수신함` 항목은 단순 통보가 아니라 조직이 **멈춰서 사람을 기다리는 상태**입니다. 종류를 타입으로 가릅니다: **승인 대기**(gate 노랑, 소유 화면으로 이동해 승인·거절), **차단**(halt 빨강, 원인을 풀러 업무로 이동), **개선 검토**(gate 노랑, 근거를 읽을 수 있는 개선 상세로 이동). 읽거나 닫아도 사라지지 않고 결정 또는 차단 해소 뒤에만 제거됩니다.
-- **배지·수신함·홈 "나를 기다리는 것"은 한 원천을 봅니다**(2026-07-24 재구성). App이 승인+차단+검토 대기 개선을 한 번 투영(`InboxItem`)해 셋에 같은 배열을 내립니다. 배지는 읽지 않은 수가 아니라 미해결 조치 수를 셉니다. 각 표면이 따로 조회하거나 세지 않으므로 숫자가 갈리지 않습니다.
-- 수신함은 **찾아가는 곳**이고 결정은 근거를 소유한 업무·확장·개선 등의 화면에서 내립니다. 아직 소유 화면이 연결되지 않은 조직 전역 승인은 처리 불능을 막기 위한 임시 예외입니다. 감사 식별자(업무 id·승인 요청 id)는 슬러그로 찍지 않고 `title` 툴팁으로 내립니다.
-- `개선`은 자가개선의 **근거와 효과**를 소유합니다. 채택할 것이 생겼다는 사실은 `수신함`에 뜨지만, 왜 바꾸자는지·반대 근거·효과는 개선 표면이 소유합니다. 근거를 수신함 항목으로 축소하면 4.8의 "근거 기반의 보수적 채택"이 성립하지 않습니다.
-- `수신함`은 제품 표면이 아니라 어느 표면에서나 여는 전역 유틸리티입니다. 승인+차단+개선 검토를 투영하며, 개선 항목은 `awaiting-review` 상태일 때만 남습니다.
-- `지식`은 **조직이 내 워크스페이스에 대해 무엇을 아는가**를 소유합니다. 업무의 `근거` 탭과 겹치지 않습니다 — 지식 표면은 서가(워크스페이스 범위·현재형)이고 근거 탭은 이 Work가 실제로 인용한 것(Work 범위·과거형)입니다. 관계는 전체 그래프가 아니라 **하나를 중심에 둔 이웃**으로 봅니다. 노드를 누르면 열3에 상세가 나오고 중심은 움직이지 않으며, 「중심으로 옮기기」로만 이동합니다.
-- `프로바이더`는 **조직이 무엇을 공급받는가**를 소유합니다(2026-07-30 분리). 연결·구독 계정·키와 그 연결이 공급하는 모델 목록이 여기 있습니다. 4.11이 말하는 「조직의 역량을 늘리는 선택적 능력 단위」와 같은 종류라 `확장` 옆에 둡니다 — Extension이 Tool과 Skill을 공급하듯 Provider는 모델을 공급합니다. 4.10에 따라 이 표면이 비어 있어도 조회·승인·기록은 제한 모드로 동작해야 하며, 화면은 연결 전에 그 사실을 말합니다.
-- `예산`은 **조직이 얼마를 썼는가**를 소유합니다(2026-07-30 분리). 경로별 차단 한도와 알림 임계값, 그리고 모델 호출 기록(어느 Work가 어느 모델을 얼마에 썼는지, 실패와 fallback으로 넘어온 사슬을 포함)이 여기 있습니다. 한도는 사람이 거는 값이지만 **예산의 본체는 관측**입니다. 한도만 보고 기록을 못 보면 그 숫자를 고칠 근거가 없으므로 설정이 아니라 기록 옆에 둡니다. 이 기록은 ADR-003 §4가 잇는 `assurance_check → runtime_execution → route_attempt → model_profile` 계보를 사람이 읽는 자리이기도 합니다.
-- `설정`이 소유하는 것은 **사람이 정한 경계**뿐입니다(2026-07-30 축소). 실행 권한(자동·수동·바이패스)과 자가개선 채택 모드(수동·자동) 둘입니다. Provider 인증·모델 경로·로컬 운영 환경은 설정에서 나갔습니다. 「로컬 환경」 구역은 daemon 상태·데이터 위치를 볼 조회가 없어 빈 칸만 남았으므로 없앴습니다 — 없는 것을 0이나 빈 표로 채우지 않는다는 9.1의 규칙을 설정에도 적용한 것입니다.
-- **모델 경로를 사람이 짜는 화면은 두지 않습니다**(2026-07-30). 4.12와 [ADR-003](../architecture/ADR-003-task-aware-model-placement.md)은 단순 수정에 가벼운 모델을, 설계·판단에 강한 추론 모델을 **조직이** 배치한다고 선언합니다. ADR-003의 결정은 역할별 배치가 후보 집합을 주고 전략이 만든 난이도 신호로 실행 시점에 고르는 것이며, 명시적으로 "사용자에게 요청마다 모델을 고르게 하지 않습니다". 설정에 라우트와 후보를 손으로 짜는 「고급 라우팅 설정」 폼이 있으면 그 선언이 성립하지 않고, 7절의 "모델 선택 기능이 있는 채팅 앱"과 "VoltAgent 설정 UI"로 제품이 축소됩니다. 그래서 폼을 제거했습니다. 사람이 모델에 대해 갖는 권한은 **무엇을 공급할지**(프로바이더)와 **얼마까지 쓸지**(예산)이며, 어느 작업에 무엇을 쓸지는 조직이 정하고 그 결과를 예산의 호출 기록으로 검증합니다.
-- `full-access`가 허용한 행동은 승인·개선 검토 항목을 만들지 않습니다. 실제 OS·Provider·Capability 실패는 승인 대기가 아니라 해결 조건이 있는 차단으로 남습니다.
+## 7. What Massion is not
 
-사람이 내리는 결정은 표면 어디서든 `승인` / `거절` 둘뿐입니다. 위험 실행이든 조직 변경이든 개선 제안이든 «멈춘 것을 진행시킬지» 하나이며, 화면마다 다른 말로 부를 이유가 없습니다.
+- a generic model-selection chat client;
+- a launcher that merely starts several agent processes;
+- automation that accepts a model's final sentence as completion;
+- a central proxy that owns user Provider accounts and data;
+- self-modification without evidence and effect measurement; or
+- a marketplace that treats installation count as organizational capability.
 
-UI 라이브러리는 제품 정체성을 결정하지 않습니다. shadcn/ui 같은 도구는 접근성 있는 기본 상호작용을 구현하기 위한 소스 공급 방식으로 사용할 수 있지만, 정보 구조와 운영 모델은 이 문서를 따라야 합니다.
+## 8. Product decision test
 
-## 7. Massion이 아닌 것
+A new feature, surface, or architecture must answer yes to these questions:
 
-Massion을 다음 중 하나로 축소하지 않습니다.
+1. Does it make organizational responsibility clearer?
+2. Can the user control the organization and stop execution?
+3. Is the result bound to persistent Work and causal lineage?
+4. Does it preserve required strategy, evidence, assurance, and records?
+5. Does it avoid forcing unnecessary process on simple Work?
+6. Can authority be chosen and revoked while preserving available audit and rollback?
+7. Does it avoid turning a model, Provider, or framework into product identity?
+8. Is learned behavior backed by real evidence and effect measurement?
+9. Does an Extension remain below OS Core authority?
+10. Does it preserve the distinct AgentOS product instead of collapsing into a generic SaaS screen?
 
-- 모델 선택 기능이 있는 채팅 앱
-- 여러 Agent를 실행하는 런처
-- 코딩 전용 Agent 또는 IDE
-- 일반 프로젝트 관리·Task 관리 SaaS
-- 정적 조직도 뷰어
-- 단순 승인 수신함과 자동화 설정 앱
-- Extension Marketplace
-- VoltAgent 설정 UI
-- 기존 Web 화면을 감싼 데스크톱 래퍼
+If any answer lacks evidence, revisit the product design before implementation.
 
-## 8. 제품 판단 기준
+## 9. Release acceptance
 
-새 기능, 화면 또는 아키텍처는 다음 질문을 통과해야 합니다.
-
-1. 이 변경이 실제 조직 책임을 더 명확하게 하는가?
-2. 사용자가 Representative 또는 직접 호출을 통해 조직을 통제할 수 있는가?
-3. 결과가 영속 Work와 인과 계보에 귀속되는가?
-4. 필요한 계획·근거·검증·기록을 보존하고, 승인을 생략한다면 사용자가 명시적으로 선택한 권한 모드에 따른 것인가?
-5. 단순한 업무에 불필요한 조직 절차를 강요하지 않는가?
-6. 사람이 권한 모드를 선택·회수하고 실행을 중단하며, 가능한 감사와 되돌리기를 보존하는가?
-7. 모델·Provider·실행 프레임워크를 제품 정체성으로 승격하지 않는가?
-8. 학습 결과가 실제 근거와 효과 평가를 가지는가?
-9. Extension이 OS Core의 권한을 대체하지 않는가?
-10. 기존 제품 기능을 일반적인 SaaS 화면으로 축소하지 않는가?
-
-하나라도 근거 없이 실패하면 구현보다 제품 설계를 먼저 다시 검토합니다.
-
-## 9. 현재 확인된 갭 — 2026-07-22
-
-이 절은 제품 불변량이 아니라 현재 작업 트리의 구현 진단입니다.
-
-### 9.1 데스크톱 Surface
-
-2026-07-30 기준. 표면 아홉(홈, 업무, 지식, 조직, 개선, 확장, 프로바이더, 예산, 설정)과 전역 수신함이 구현돼 있습니다. 도메인 표면은 같은 3열 골격을 쓰고 수신함은 현재 표면 위에 열립니다. 설정만 3열을 쓰지 않습니다 — 남은 것이 권한과 자가개선 채택 둘뿐이라 열을 나눌 내용이 없습니다.
-
-남은 계약·Runtime·실제 데스크톱 검증의 통합 순서는 [Phase 30 제품 통합·정합성 설계](../superpowers/specs/2026-07-24-phase-30-product-integration-design.md)와 [구현 계획](../superpowers/plans/2026-07-24-phase-30-product-integration.md)이 소유합니다. 지식·그래프·RAG·기억의 선행 복원 범위는 [통합 설계](../superpowers/specs/2026-07-25-knowledge-memory-integration-design.md)와 [실행 계획](../superpowers/plans/2026-07-25-knowledge-memory-integration.md)이 소유합니다.
-
-- 남은 격차는 화면 추가보다 **계약과 실제 실행 연결**에 집중돼 있습니다. 표면을 완성본 기준으로 만들면서 도메인에는 있고 Application 계약이나 생산 호출 경로가 버리는 것이 반복해서 드러났습니다. 현재 네 인계 문서가 개선, 협업·조직, 확장, 설정 범위를 소유합니다(9.3·9.4·9.5, [설정 조회 계약](../phases/30-surface-parity-agent-ux/settings-contract-handoff.md)).
-- 조직 화면은 **구조(A) + 지도(B) 하이브리드**로 완성본 기준으로 그립니다(2026-07-24). 본문은 자식이 있는 노드를 접을 수 있는 중첩 구조, 우측은 전체 위치를 보여주는 지도이며 A가 읽기의 중심임을 유지하도록 55:45로 나눕니다. `NodeRole`은 총괄·조율·실행만 뜻하므로 `coordinator`를 부서나 팀으로 번역하지 않습니다. 에이전트는 `agentIdentityToken`으로 업무 화면과 같은 이름을 쓰고, scope:"work" 임시 팀은 분리·점선으로 구분합니다.
-- 다만 **읽기 전용**입니다. 편성·분리·병합·Staffing 명령이 계약에 없고, `parent_handle`은 조회 쿼리가 가져오지 않으며 `scope`·`work_id`는 `OrganizationNodeViewV1`에 없습니다. 따라서 **실 데이터로는 계층·임시/영속 구분을 그릴 수 없습니다.** 지금 화면은 fixture로 완성본을 고정해 둔 상태입니다([협업 런타임 핸드오프](../phases/30-surface-parity-agent-ux/agent-collaboration-runtime-handoff.md) §7).
-- 확장 화면은 Capability를 먼저 보이지만 **설치된 확장의 Capability는 계약이 주지 않아 비어 있습니다.** 9.5를 보십시오.
-- 설정에 있던 `로컬 환경` 구역은 daemon 상태·데이터 위치를 볼 **조회 자체가 없어** 2026-07-30에 제거했습니다. 조회가 열리면 어느 표면이 소유할지 다시 정합니다 — 이것은 사람이 정한 경계가 아니므로 설정으로 돌아가지 않습니다.
-- `프로바이더`는 연결·계정·키 추가가 실제 명령으로 동작하지만 **모델 개별 on/off는 계약에 명령이 없어 화면 상태로만 남습니다.**
-- `예산`은 한도·임계값을 걸 수 있게 그려 두었으나 **가드를 쓰는 명령이 계약에 없습니다.** 모델 호출 기록은 `route_attempt` 테이블이 있는데도 `ApplicationQueryMapV1`에 조회가 없어 화면이 빈 목록 대신 「조회가 아직 계약에 없다」고 말합니다. 즉 **예산 표면은 지금 한도도 못 걸고 기록도 못 읽습니다.** 인계: [설정 조회 계약](../phases/30-surface-parity-agent-ux/settings-contract-handoff.md)
-- (해소 2026-07-30) Work 실행 중단을 `Esc`에 걸었습니다. 4.6이 정지를 Work 단위로 확정했으므로 그 자리의 접근성이 곧 안전 수단의 접근성입니다.
-- 위 세 표면 분리(프로바이더·예산 신설, 설정 축소, 모델 경로 폼 제거)는 ADR-002가 `지식` 표면에 대해 남긴 수준의 결정 기록을 아직 갖고 있지 않습니다. 6절이 근거를 적었을 뿐이며 별도 ADR이 필요합니다.
-- 화면은 없는 것을 숫자 0이나 빈 표로 채우지 않고 무엇이 없는지 말합니다. 이 규칙은 테스트로 고정돼 있습니다.
-
-### 9.2 조직과 전문 실행
-
-- Core Office 여덟 노드와 조직 버전 명령은 구현되어 있습니다.
-- Software Engineering Profile 설치 함수는 존재하지만 생산 Bootstrap 호출이 없습니다.
-- 따라서 코드 포함과 사용자 조직에 실제 설치·활성화되는 것은 구분해야 합니다.
-
-### 9.3 개선(자가개선)
-
-- **도메인은 4.8을 정확히 구현하고 있습니다.** 평가 게이트(`proposed → evaluated → awaiting-review → adopted`), 신호 그룹 `required`/`supporting`/`conflict`, 신호 출처 `deterministic`/`independent`/`model-self`, 전후 버전(`beforeVersionId`/`afterVersionId`), 측정 기반 효과 판정(표본 수·임계값·단위)이 모두 존재합니다.
-- **Application 조회 계약은 판정 결과만 내보내고 근거를 버립니다.** 조회는 넷뿐이며 `growth.suggestions` 투영이 `patch_json`(전후 diff), `source_reference_ids`(원인 Event·Evidence), `reflection_run_id`, `revision`을 버립니다. 평가 실행과 신호 영수증은 조회 자체가 없고, 효과는 측정값 없이 판정 한 단어만 전달됩니다. 명령 레지스트리에는 `growth.configure`·`growth.adopt`·`growth.revert`가 이미 있지만 타입이 지정된 `ApplicationCommandMapV1`과 데스크톱 서비스에 연결되지 않았습니다. `evaluate`·명시적 `reject`·효과 관측 명령도 공개 제품 경로에 없습니다.
-- 그래서 화면은 "무엇을 바꾸자"만 보여줄 수 있고 "왜 믿어야 하는가"를 보여줄 수 없습니다. **근거 없는 승인 버튼**이며, 4.8이 막으려던 것을 화면에서 무력화합니다.
-- 데스크톱 `개선` 표면은 이 제약 아래 읽기 전용입니다. 승인·거절 버튼은 비활성이며 이유가 화면에 표시됩니다.
-- 인계 문서: [개선 평가·채택·효과 핸드오프](../phases/30-surface-parity-agent-ux/growth-adoption-handoff.md)
-
-### 9.4 에이전트 협업 런타임
-
-- 협업방 도메인은 완성돼 있습니다. 메시지 10종, `reply`·`caused-by` 인과, 동시 커밋의 고유 sequence, 라운드·token·비용·deadline 한계, 참여·이탈, 불변 Shared Context Reference와 versioned lease가 모두 계약과 테스트로 존재합니다.
-- VoltAgent 위임도 구현돼 있습니다. 조직 그래프가 supervisor·subAgent로 배선되어 에이전트가 실제로 서로에게 일을 넘깁니다.
-- **그러나 둘이 연결돼 있지 않습니다.** 생산 경로에서 협업 메시지를 기록하는 곳은 `core-pipeline.ts`의 두 지점(사용자 요청, Representative handoff)과 Surface가 부르는 공개 command뿐이고, `packages/runtime/src`는 `postMessage`를 호출하지 않습니다.
-- 따라서 실제 방에는 Work당 메시지 두 건만 남습니다. 에이전트끼리 묻고 반론하고 인계하는 장면은 VoltAgent 메모리에서 끝나고 사라집니다.
-- 이것은 4.4가 정한 "모델의 transcript만으로 조직 상태나 완료를 복원하지 않는다"를 지키지 못하는 지점입니다. 재시작하면 협업 과정이 사라지고, 감사할 수 없으며, 사용자가 볼 수 없습니다.
-- `SharedContextReference`와 `ResourceLease`는 생산 호출이 0건입니다. 도메인 포함과 실제 사용을 구분해야 합니다.
-- 이 갭은 `REQ-AGENT-HARNESS-001`이 요구하는 범위이며 요구사항 추적표에서 `in-progress`입니다.
-
-### 9.5 Extension
-
-- Extension SDK·Host 패키지에는 manifest, 권한, artifact, worker와 lifecycle 계약이 있습니다.
-- 서버는 Extension lifecycle, worker supervisor와 gateway를 생산 Application 경로에 조립하고 Registry 설치도 같은 lifecycle을 사용합니다. 다만 설치된 확장의 Tool·Skill·조직 Template 선언을 Core Agent Runtime이 실제 Capability로 소비하는 연결은 없습니다.
-- 현재 공식 예시는 외부 연동 중심이며 Skill·Tool·조직 Template이 실제 Agent Runtime에 기여하는 완성 경로가 없습니다.
-- **Application 계약이 Capability 선언을 버립니다.** SDK에는 `ExtensionContributionDeclaration` 8종과 `ExtensionPermissionDeclaration` 8종이 있는데 `ExtensionInstallationViewV1`은 다섯 필드뿐이고 그중 어느 것도 Capability가 아닙니다. `registry.*` 조회 넷은 계약에 반환 타입 자체가 없어 `Promise<unknown>`입니다. 그래서 6절이 요구하는 *"조직에 추가된 Capability를 먼저"*를 **설치된 확장에 대해 만족할 수 없습니다.**
-- 인계 문서: [확장 Capability 핸드오프](../phases/30-surface-parity-agent-ux/extension-capability-handoff.md)
-
-### 9.6 지식·그래프·RAG·기억
-
-- Evidence에는 Tree-sitter 기반 SourceFile·Symbol·Chunk·Relation 인덱스, exact·BM25 검색, 선택적 embedding port, CodeGraphService와 EvidenceBrief가 구현돼 있습니다.
-- 생산 server는 `WorkspaceKnowledgeService`를 통해 Repository·Revision·Indexer·Search·CodeGraph·EvidenceBrief를 Workspace Work intake에 조립하고, 검증된 prompt 자료와 citation을 Agent 실행에 전달합니다. 실제 Provider Work에서도 `work.knowledge=ready`와 reference 2개를 확인했지만, 화면 기반 K01~K04 전체 UAT는 아직 남아 있습니다.
-- Work·Room·Message를 정본으로 유지하면서 Growth의 versioned MemoryVersion·PromptVersion·RuntimeExecution 계보를 생산 WorkService·Agent instruction에 주입했습니다. 명시적 기억은 다음 새 Work부터 적용되고 사용 중지 뒤 이후 Work에서 제외되며 과거 계보는 재작성하지 않습니다. 실제 Provider 재시작 증거에서 memory revision과 Work 실행 계보가 보존됐지만, K03·K04 화면 UAT는 미완료입니다.
-- v1은 기존 relation을 1-hop 검색 확장에 사용하고 EvidenceBrief를 SharedContextReference·ContextVersion·Agent prompt·Work citation에 연결합니다. LSP, embedding provider, SurrealDB native relation 전환은 실제 품질·성능 실패가 측정될 때만 별도 계획을 엽니다.
-- **화면은 근거 목록까지만 답합니다.** `WorkKnowledgeViewV1.references`가 평평한 목록이라 `contains·imports·calls·implements·documents` 관계가 계약에서 잘립니다. 업무 `근거` 탭은 완성본 기준으로 관계를 그려두었고 연결만 기다립니다. 인계: [근거 관계 그래프](../phases/30-surface-parity-agent-ux/knowledge-graph-handoff.md)
-- 현재 저장소에는 LSP 구현이 없습니다. Tree-sitter+BM25+1-hop graph의 실제 UAT가 cross-file 정확도 때문에 반복 실패할 때만 LSP adapter 계획을 엽니다. embedding과 SurrealDB native relation 전환도 각각 검색 품질과 순회 성능 실패가 측정될 때만 추가합니다.
-
-## 10. 다음 목표
-
-### 목표 1 — 제품 정보 구조와 목업을 먼저 승인합니다
-
-추가 화면 코드를 작성하기 전에 홈, 업무, 지식, 조직, 개선, 확장, 프로바이더, 예산, 설정과 전역 수신함의 역할과 이동 관계를 목업과 구현 설계로 고정합니다. 기존 Work 관제 화면은 업무 상세로 유지하고 AgentOS 전체 셸로 확장 해석하지 않습니다.
-
-완료 조건:
-
-- 아홉 표면의 사용자 목적과 핵심 행동이 중복되지 않고 수신함은 표면을 대체하지 않습니다.
-- 조직 생성·Staffing과 Growth 채택 루프가 이미지에서 설명됩니다.
-- 프로바이더는 Provider 인증과 공급 모델을, 예산은 한도와 호출 기록을, 확장은 Extension 설치와 Capability를, 설정은 사람이 정한 경계를 명확히 소유합니다. 모델 경로는 어느 표면도 사람의 편집 대상으로 소유하지 않습니다.
-- 내부 식별자보다 사람이 이해하는 조직·업무 언어를 사용합니다.
-- 사용자가 목업을 승인한 뒤에만 Surface 구현을 계속합니다.
-
-### 목표 2 — 동적 조직 운영의 한 흐름을 완성합니다
-
-정적 조직도보다 먼저 “현재 조직으로 처리 불가 → 새 팀 제안 → 영향·승인 → 적용 → Work 배정” 한 흐름을 Application API와 데스크톱에서 완성합니다.
-
-완료 조건:
-
-- 업무 근거와 Capability 부족이 조직 변경 제안에 연결됩니다.
-- 사람은 제안 이유, 영향, 권한과 되돌리기 조건을 확인합니다.
-- 정책 또는 사용자가 선택한 전체 권한이 허용한 변경만 새 Organization Version이 됩니다.
-- 생성된 팀과 Agent가 실제 Work를 받고 결과를 남깁니다.
-
-### 목표 3 — Growth를 1급 제품 표면으로 완성합니다
-
-완료 Work 하나에서 Reflection과 Suggestion을 만들고, 사용자가 근거와 반대 증거를 확인해 채택·거부하며, 후속 Work의 효과를 비교하고 되돌릴 수 있게 합니다.
-
-완료 조건:
-
-- Suggestion이 원인 Work·Event·Evidence를 가리킵니다.
-- 변경 대상과 전후 diff를 보여줍니다.
-- 채택은 새 버전을 만들고 다음 실행부터 적용됩니다.
-- Effect와 Revert가 같은 계보에서 보입니다.
-
-### 목표 4 — Extension을 Capability 경로로 연결합니다
-
-Marketplace나 설치 목록을 확장 완성으로 간주하지 않습니다. 가장 작은 공식 Extension 하나가 현재 실행 정책에 따른 권한 처리 후 실제 Tool 또는 Skill을 Agent에 제공하고 Work에서 사용되는 세로 흐름을 먼저 연결합니다.
-
-완료 조건:
-
-- 서버가 Extension lifecycle·worker·broker·gateway를 실제로 조립합니다.
-- 선언된 Capability만 Agent Runtime에 노출됩니다.
-- Tool 사용이 Work·Approval·Audit에 기록됩니다.
-- 비활성화·업데이트·되돌리기가 기존 Work 정본을 훼손하지 않습니다.
-
-### 목표 5 — 전체 조직 운영 UAT로 닫습니다
-
-다음 하나의 시나리오를 실제 Provider 또는 명시적 제한 모드로 검증합니다.
+The first public release must prove one vertical flow on the same candidate SHA:
 
 ```text
-사용자 Mission
-→ Representative Work 생성
-→ 근거 조사와 조직 부족 발견
-→ 새 전문 팀 승인·생성
-→ 병렬 실행과 협업
-→ 독립 검증과 Records
-→ Growth 개선 제안
-→ 사용자 채택
-→ 후속 Work 효과 확인 또는 Revert
+User Mission
+→ Representative creates Work
+→ Workspace knowledge and evidence
+→ strategy, tasks, and specialist assignment
+→ Provider and model selection with budget lineage
+→ execution, collaboration, and human decisions
+→ independent Assurance and Records
+→ Growth suggestion, evaluation, and decision
+→ later Work effect or rollback
 ```
 
-이 시나리오가 완료되기 전에는 독립 데스크톱 셸이나 Work 화면만으로 “AgentOS 구현 완료”라고 판단하지 않습니다.
+The same candidate must cover limited mode, authentication failure, cancellation, blocking and resume, abnormal restart, Workspace trust, backup and restore, keyboard and screen-reader access, signing, notarization, Gatekeeper, and clean-Mac installation and removal.
 
-## 11. 역사적 근거
+Individual screens, fixtures, package tests, and ad hoc builds cannot replace this acceptance flow. Results are judged only by evidence tied to the candidate SHA.
 
-이 문서는 다음 보존 자료와 현재 코드를 교차 확인해 작성했습니다.
+## 10. Lineage
 
-- 2026-03-21~22 `claude-agent-bootstrap` 초기 Git 이력과 README
-- `docs/philosophy.md`, `docs/org-model.md`
-- TypeScript Jabtang 설계와 메모리·자가개선 설계
-- `jabtang-go AgentOS Reference`와 Extension Model
-- Massion 완제품 설계, 현재 아키텍처와 현재 패키지 구현
+Massion has used several execution foundations while preserving the goal of accountable organizational AI:
 
-역사 문서는 현재 구현 상태를 증명하지 않으며, 현재 구현은 제품의 기원을 다시 정의하지 않습니다. 이 문서는 두 근거를 연결하는 제품 정본입니다.
+- `claude-agent-bootstrap`: demonstrated organization through representatives, departments, and specialists;
+- TypeScript Jabtang: expanded persistent organization, Work, approval, memory, and Growth;
+- Go and Eino Jabtang-go: separated OS capabilities, organization graph, execution graph, and Runtime Truth; and
+- TypeScript and VoltAgent Massion: changed the execution ecosystem while strengthening Work, Assurance, Records, Extensions, and local operation.
+
+This lineage does not require loyalty to a framework. It preserves the principle that people direct, the organization takes responsibility, and only verified experience changes the next organization.

@@ -6,20 +6,26 @@ import { spawnSync } from "node:child_process";
 const documentPath = "docs/architecture/README.md";
 const mermaidCliVersion = "11.16.0";
 const requiredHeadings = [
-  "## 1. 읽는 법과 상태 범례",
-  "## 2. 전체 시스템 지도",
-  "## 3. 제품 구성요소와 패키지 경계",
-  "## 4. Core Office와 전문 조직",
-  "## 5. Work 처리 전체 흐름",
-  "## 6. 실행·승인·차단·취소·복구",
-  "## 7. 에이전트 협업과 대화",
-  "## 8. 모델 계정·Provider 라우팅",
-  "## 9. 데이터·명령·이벤트 계보",
-  "## 10. Extension·Registry·격리",
-  "## 11. 개인·팀 배포 구조",
-  "## 12. 구현 위치와 Phase 상태 색인",
+  "## 1. Design principles",
+  "## 2. System map",
+  "## 3. Package responsibility",
+  "## 4. Organization and responsibility",
+  "## 5. Work flow",
+  "## 6. Knowledge and Growth",
+  "## 7. Providers and Runtime",
+  "## 8. Commands, events, and recovery",
+  "## 9. Extension trust boundary",
+  "## 10. Desktop process boundary",
+  "## 11. Decisions and evidence",
 ];
-const forbidden = ["Dual Storage", "SQLite + sqlite-vec", ["T", "B", "D"].join(""), ["T", "O", "D", "O"].join("")];
+const forbidden = [
+  "Dual Storage",
+  "SQLite + sqlite-vec",
+  "classDef implemented",
+  ":::implemented",
+  ["T", "B", "D"].join(""),
+  ["T", "O", "D", "O"].join(""),
+];
 const localPathPrefixes = ["apps/", "docs/", "packages/", "scripts/"];
 
 async function exists(path) {
@@ -49,7 +55,7 @@ async function validateStructure(markdown) {
     if (!markdown.includes(heading)) errors.push(`필수 제목이 없습니다: ${heading}`);
   }
   const blocks = mermaidBlocks(markdown);
-  if (blocks.length !== 11) errors.push(`Mermaid 다이어그램은 정확히 11개여야 합니다: ${String(blocks.length)}개`);
+  if (blocks.length !== 7) errors.push(`Mermaid 다이어그램은 정확히 7개여야 합니다: ${String(blocks.length)}개`);
   for (const text of forbidden) {
     if (markdown.includes(text)) errors.push(`대체되었거나 임시인 표현이 남아 있습니다: ${text}`);
   }

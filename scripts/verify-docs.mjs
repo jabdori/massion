@@ -126,6 +126,14 @@ async function validateMarkdown(root, errors) {
   const docs = join(root, "docs");
   const phaseRoot = join(docs, "phases");
   const candidates = [
+    join(root, "README.md"),
+    join(root, "README.ko.md"),
+    join(docs, "README.md"),
+    join(docs, "README.ko.md"),
+    join(root, "apps", "desktop", "README.md"),
+    join(root, "apps", "desktop", "README.ko.md"),
+    join(root, "apps", "desktop", "DESIGN.md"),
+    join(root, "apps", "desktop", "DESIGN.ko.md"),
     ...(await markdownFiles(join(docs, "product"))),
     ...(await markdownFiles(join(docs, "history"))),
     ...(await markdownFiles(join(docs, "architecture"))),
@@ -155,6 +163,33 @@ async function validateMarkdown(root, errors) {
   }
 }
 
+async function validateLanguagePairs(root, errors) {
+  const pairs = [
+    ["README.md", "README.ko.md"],
+    ["docs/README.md", "docs/README.ko.md"],
+    ["docs/product/constitution.md", "docs/product/constitution.ko.md"],
+    ["docs/architecture/README.md", "docs/architecture/README.ko.md"],
+    ["docs/architecture/desktop-clean-sheet.md", "docs/architecture/desktop-clean-sheet.ko.md"],
+    ["docs/architecture/ADR-001-personal-full-access.md", "docs/architecture/ADR-001-personal-full-access.ko.md"],
+    [
+      "docs/architecture/ADR-002-knowledge-axis-restoration.md",
+      "docs/architecture/ADR-002-knowledge-axis-restoration.ko.md",
+    ],
+    [
+      "docs/architecture/ADR-003-task-aware-model-placement.md",
+      "docs/architecture/ADR-003-task-aware-model-placement.ko.md",
+    ],
+    ["apps/desktop/README.md", "apps/desktop/README.ko.md"],
+    ["apps/desktop/DESIGN.md", "apps/desktop/DESIGN.ko.md"],
+  ];
+  for (const [english, korean] of pairs) {
+    const englishContent = await readFile(join(root, english), "utf8");
+    const koreanContent = await readFile(join(root, korean), "utf8");
+    if (!englishContent.includes(korean.split("/").at(-1))) errors.push(`${english}: 한국어 문서 링크 누락`);
+    if (!koreanContent.includes(english.split("/").at(-1))) errors.push(`${korean}: 영어 문서 링크 누락`);
+  }
+}
+
 async function validatePhase30ReconciliationManifest(root, errors) {
   if (!(await exists(reconciliationManifestPath(root)))) return;
   for (const error of await validatePhase30Reconciliation(root)) {
@@ -167,6 +202,7 @@ export async function validateDocs(root) {
   await validatePhaseFiles(root, errors);
   await validateTrace(root, errors);
   await validateMarkdown(root, errors);
+  await validateLanguagePairs(root, errors);
   await validatePhase30ReconciliationManifest(root, errors);
   return errors.sort();
 }

@@ -1,59 +1,49 @@
-# 공개 저장소 문서 정합성 설계
+# Public Repository Documentation Consistency Design
 
-> 기준 소스: `51a39660f1b6a00a1f79027a4f39a6b0e5061394`
-> 대상 독자: Massion을 처음 방문한 사용자와 기여자
+[English](2026-07-30-public-repository-documentation-design.md) | [한국어](2026-07-30-public-repository-documentation-design.ko.md)
 
-## 목적
+> Source baseline: `51a39660f1b6a00a1f79027a4f39a6b0e5061394`
+> Audience: people visiting or contributing to Massion for the first time
 
-공개 저장소의 첫 화면에서 Massion이 활발히 개발 중인 사전 릴리스(pre-release) AgentOS임을 분명히 알립니다. 제품 설명, 아키텍처, 검증 기록이 서로 다른 책임을 갖게 하여 설계 문장의 `구현됨` 표현이나 오래된 테스트 수가 현재 출시 상태로 오해되지 않게 합니다.
+## Purpose
 
-## 문서 역할
+The public repository must immediately identify Massion as an actively developed pre-release AgentOS. Product intent, architecture, historical plans, and verification evidence have separate responsibilities so that an architectural statement or old test count cannot be mistaken for current release status.
 
-- `README.md`: 제품의 핵심 가치, 개발 상태, 공개 릴리스 경계, 개발 시작점
-- `PRODUCT.md`와 `docs/product/`: 제품 목적과 변하지 않는 판단 기준
-- `docs/architecture/`: 구성요소, 책임 경계, 데이터 흐름, 아키텍처 결정
-- `apps/desktop/DESIGN.md`: 데스크톱 시각 언어와 경험 원칙
-- `docs/operations/`: 특정 운영 문제를 해결하는 절차
-- `docs/superpowers/specs/`: 날짜에 결속된 설계 의도
-- `docs/superpowers/plans/`와 `docs/phases/`: 실행 과정과 역사적 계획
-- `docs/evidence/`: 날짜·후보 SHA·명령에 결속된 검증 결과
+## Documentation contract
 
-아키텍처와 제품 설계는 완료 여부를 판정하지 않습니다. `구현됨`, `구현 완료`, 고정 테스트 수와 같은 상태 표현은 README와 아키텍처에서 제거합니다. 검증 결과는 `docs/evidence/`에서만 주장하며, README는 공개 릴리스가 없다는 현재 경계만 요약합니다.
+- Public canonical documents are English files. Korean companions use `.ko.md` beside them, and each pair links to the other.
+- The repository README owns the product introduction and public release boundary.
+- The product constitution owns purpose and invariants.
+- Architecture owns components, responsibility, data flow, and trust boundaries—not implementation status.
+- Dated designs and plans preserve their original intent and sequence.
+- Evidence owns results tied to a date, candidate SHA, and exact command.
 
-## 용어
+Architecture and product documents do not use “implemented,” “complete,” or fixed test counts as a status board. “Completed” remains valid as a Work domain state after independent Assurance.
 
-처음 등장할 때 사람의 의미를 먼저 쓰고 내부 용어를 괄호에 병기합니다.
+## Shared terms
 
-- 업무(Work)
-- 독립 검증(Assurance)
-- 기록(Records)
-- 자가개선(Growth)
-- 지식(Knowledge)
-- 제공자(Provider)
-- 실행 계층(Runtime)
-- 시연 데이터(fixture)
+Work is the persistent unit of delegation. Assurance is quality judgment independent from execution. Records preserve decisions and outcomes. Growth is versioned improvement based on evidence and effect measurement. Knowledge represents Workspace sources and relationships. Provider is the external model and account boundary. Runtime performs agent reasoning and tool execution. Fixture data demonstrates product states without becoming user data or release evidence.
 
-같은 문서 안에서는 첫 정의 이후 영문 식별자만 사용할 수 있습니다. `완료`는 검증된 Work의 도메인 상태에만 사용하고, 프로젝트 개발 상태에는 사용하지 않습니다.
+## README images
 
-## README 시각 자료
+Render the browser fixture from the source baseline at 1440×900 and capture:
 
-기준 SHA의 브라우저 fixture를 1440×900으로 실행해 다음 두 화면을 캡처합니다.
+1. the Work collaboration surface; and
+2. the Organization surface showing persistent and temporary responsibility;
+3. the Knowledge surface connecting Work, files, and documents; and
+4. the Growth surface showing evidence, counter-evidence, adoption, and rollback.
 
-1. 하나의 Work에서 협업·승인·산출물·검증을 읽는 핵심 화면
-2. Work와 파일·문서 관계를 탐색하는 Knowledge 화면
+Store both images under `docs/assets/readme/`. Their caption must identify them as fixture renders, not evidence of a real Provider run or public release. Do not expose secrets, personal paths, or account identifiers.
 
-이미지는 `docs/assets/readme/`에 저장합니다. README의 캡션은 fixture가 제품 방향을 설명하는 시연이며 실제 Provider 실행이나 공개 릴리스 증거가 아니라고 명시합니다. 이미지 안에 비밀값, 사용자 경로, 계정 식별자를 포함하지 않습니다.
+## Scope and preservation
 
-## 범위와 보존
+This change covers the repository entry points, documentation map, architecture overview, product constitution, desktop documentation, README images, and MIT license declaration. Dated phase records and evidence remain historical records and are not bulk-rewritten.
 
-이번 변경은 README, 문서 분류 인덱스, 아키텍처 개요, 제품 헌법의 상태 표현, 데스크톱 문서 안내와 README 이미지에 한정합니다. 날짜와 SHA에 결속된 `docs/evidence/`, 과거 Phase 회고와 실행 계획은 사실 기록이므로 내용을 다시 쓰지 않습니다.
+## Acceptance criteria
 
-## 수용 기준
-
-- README 첫 화면에서 사전 릴리스와 공개 설치본 부재를 즉시 확인할 수 있습니다.
-- README와 아키텍처 문서에 `구현 완료` 표와 고정 테스트 수가 없습니다.
-- 아키텍처 도표는 상태 색 대신 책임과 흐름을 표현합니다.
-- 문서 역할과 현재 상태의 증거 위치가 `docs/README.md`에서 한 번만 정의됩니다.
-- 두 README 이미지가 GitHub Markdown에서 상대 경로로 렌더링됩니다.
-- 수정 Markdown의 Prettier 검사와 `git diff --check`가 통과합니다.
-
+- The README immediately states that no stable public build exists.
+- Public canonical documents are English and have linked `.ko.md` companions.
+- Architecture diagrams communicate responsibility and flow without implementation-status colors.
+- All four README images resolve through relative GitHub Markdown paths.
+- The root contains the standard MIT license text, and README links to it without duplicating rights guidance.
+- Modified Markdown passes Prettier and `git diff --check`.

@@ -1,0 +1,43 @@
+# ADR-001 — 개인용 전체 권한 실행 모드
+
+[English](ADR-001-personal-full-access.md) | [한국어](ADR-001-personal-full-access.ko.md)
+
+> **상태:** 승인됨
+> **승인일:** 2026-07-25
+> **대상:** 개인용 macOS v1
+
+## 맥락
+
+Massion은 현재 조직 자율성 모드를 `automatic | review`로 저장하지만, 두 모드 모두 활성 정책과 필수 승인 및 Workspace 실행 경계를 넘지 않습니다. 실제 Codex와 Claude Code는 사용자가 명시적으로 선택하면 승인 프롬프트와 샌드박스를 우회하는 실행 방식을 제공합니다. 개인이 자기 Mac과 자기 Provider 계정으로 사용하는 Massion에도 같은 수준의 선택지가 필요하다는 사용자 결정을 반영합니다.
+
+## 결정
+
+기존 두 모드를 유지하고 세 번째 조직 자율성 모드 `full-access`를 추가합니다.
+
+- `review`: 읽기가 아닌 Massion 행동에 사용자 검토를 추가합니다.
+- `automatic`: 기본값입니다. 활성 정책이 허용한 행동은 자동 실행하지만 정책 거부·필수 승인·Workspace 실행 경계를 유지합니다.
+- `full-access`: 사용자가 설정에서 위험을 확인하고 직접 켠 경우 Massion의 승인 프롬프트, Governance 권한 거부·승인 요구와 Workspace 실행 샌드박스를 우회합니다. 에이전트 실행기는 현재 macOS 사용자에게 이미 부여된 파일·프로세스·네트워크 권한을 사용합니다.
+
+전체 권한은 다음을 뜻하지 않습니다.
+
+- macOS 계정, 접근 제어 목록(ACL), 시스템 무결성 보호(SIP), Provider 자체 제한을 우회하지 않습니다.
+- 설치되지 않았거나 실행기에 노출되지 않은 능력을 새로 만들지 않습니다.
+- 입력 형식, tenant 문맥, revision·checksum, 멱등성, 완료 검증 같은 데이터 정확성 검사를 제거하지 않습니다.
+- 선택한 Workspace 전체를 넘어 홈 디렉토리를 자동 색인하지 않습니다. 지식 색인 범위는 작업 문맥이며 실행 권한과 별개입니다.
+
+전체 권한 진입 때마다 경고와 확인을 한 번 요구하고, 그 뒤에는 행동별 확인을 반복하지 않습니다. 선택은 재시작 뒤에도 유지되며 사용자가 끄거나 **진행 중인 Work의 실행을 중단**할 수 있습니다. 모드 변경은 에이전트 도구로 노출하지 않습니다.
+
+**개정 2026-07-30 — 전역 긴급 정지를 탈출구에서 뺍니다.** 이 문서는 원래 전체 권한의 탈출구로 「끄기 또는 긴급 정지」 둘을 적었습니다. 정지는 Work 단위로 확정했으므로(헌법 4.6) 탈출구는 **권한을 내리는 것**과 **그 Work를 멈추는 것** 둘입니다.
+
+- 실행은 언제나 어떤 Work에 속합니다. 사람이 멈추려는 것도 「그 일」이고, 멈추는 자리는 실행이 보이는 자리여야 합니다. 전역 스위치는 같은 능력을 한 층 위에 다시 만드는 것입니다. 수단은 `Esc`와 인풋의 「중단」이며, Claude Code·Codex가 같은 자리에서 같은 키로 세션을 끊는 관습을 따릅니다.
+- 진행 중인 Work가 여럿이면 하나씩 멈춥니다. 조직이 자율적으로 새 Work를 만드는 중이라면, 사람이 조직을 세우는 수단은 전역 정지가 아니라 **권한을 「수동」으로 내리는 것**입니다 — 새 실행이 승인을 기다리게 됩니다.
+- `governance.emergency.activate`·`.release` 명령과 `AutonomyView.emergencyStopActive`는 남습니다. daemon이나 정책이 조직을 제한 상태로 둘 수 있고 화면은 그 사실을 표시해야 합니다. 없앤 것은 **사람이 거는 진입점**뿐입니다.
+
+## 결과
+
+- Governance 판단, 구독 실행 정책과 Codex·Claude 연결기가 같은 유효 모드와 revision을 사용해야 합니다.
+- Codex는 `danger-full-access`와 승인 정책 `never`, Claude는 `bypassPermissions`, `allowDangerouslySkipPermissions: true`와 비격리 실행을 사용합니다. 연결기가 이 수준을 지원하지 못하면 `limited`로 보고하며 전체 권한이라고 표시하지 않습니다.
+- 전체 권한에서도 Work·Execution·Tool·Growth·Effect 사건은 가능한 범위에서 계속 기록합니다. 다만 동일 macOS 사용자 권한의 외부 프로세스가 로컬 DB 파일까지 변경할 수 있으므로 변조 방지를 보장한다고 주장하지 않습니다.
+- Growth는 전체 권한에서 Prompt·Memory·Policy·Organization 후보를 별도 승인 없이 반영하지만 독립 평가, source·target checksum, 효과 측정, 노출 중단과 되돌리기는 유지합니다.
+
+세부 계약과 검증 조건은 [전체 권한 설계](../superpowers/specs/2026-07-25-full-access-permission-design.md)가 소유합니다.

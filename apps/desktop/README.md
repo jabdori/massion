@@ -1,18 +1,34 @@
-# Massion Desktop Shell
+# Massion Desktop
 
-로컬 Massion 서버가 서빙하는 Web Console을 native window로 감싸는 Tauri shell입니다.
-[WS-4 결정](../../docs/phases/30-surface-parity-agent-ux/ws4-web-role-decision.md)에 따라
-화면 코드는 `apps/web` 단일 소스이고, 이 패키지는 다음만 소유합니다.
+[English](README.md) | [한국어](README.ko.md)
 
-- 로컬 서버 미기동 시 `massion local start` 기동 시도 후 `http://127.0.0.1:7331` 로드
-- `window.massionShell` 주입: 폴더 선택(dialog)·OS 알림(notification) — `apps/web/src/local-shell.ts` 계약
+`apps/desktop` owns the personal macOS AgentOS surface and local lifecycle. Browser fixtures, the Tauri application, and the live daemon connection share the same React surface but have different verification boundaries.
 
-## 빌드·실행
-
-```sh
-cd apps/desktop/src-tauri
-cargo build            # 개발 빌드
-cargo run              # shell 실행 (서버가 없으면 기동 시도)
+```text
+React and Vite renderer
+→ Tauri host
+→ Node.js bridge sidecar
+→ loopback Massion daemon
+→ SurrealDB
 ```
 
-번들(설치 파일)은 `cargo tauri build`(tauri-cli 필요)로 생성하며, 서명·배포는 릴리스 파이프라인 결정 후 연결합니다.
+- The renderer does not receive the daemon URL, authentication token, or general shell and filesystem permissions.
+- The Tauri host owns allowlisted native commands and the bridge lifecycle.
+- The bridge translates authentication, Application queries and commands, and event streams into a bounded message contract.
+- The daemon owns Work, organization, policy, Runtime, and persistent state.
+- Browser development uses `createFixtureDesktopService()` and does not prove real Provider or release behavior.
+
+See the [documentation map](../../docs/README.md) for document responsibilities and [DESIGN.md](DESIGN.md) for the visual and interaction language.
+
+## Development
+
+Run commands from the repository root.
+
+```sh
+pnpm --filter @massion/desktop dev
+pnpm --filter @massion/desktop test
+pnpm --filter @massion/desktop typecheck
+pnpm --filter @massion/desktop tauri:dev
+```
+
+`dev` renders fixture data in a browser. Verify the native picker, bridge, daemon lifecycle, and restart persistence separately with `tauri:dev` or a release candidate application.
