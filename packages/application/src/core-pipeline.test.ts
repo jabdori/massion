@@ -919,7 +919,7 @@ describe("actual Core Work pipeline adapters", () => {
     expect(deliveryCalls).toBe(0);
   });
 
-  it("어느 단계에서 취소해도 현재 실행을 drain한 뒤 실제 Work를 cancelled로 전이한다", async () => {
+  it("취소는 현재 실행을 drain하고 원자 convergence에서 실제 Work를 cancelled로 전이한다", async () => {
     await using database = await createDatabase({ url: "mem://", namespace: "massion", database: crypto.randomUUID() });
     const identities = await IdentityService.create(database);
     const organizations = await OrganizationService.create(database);
@@ -957,14 +957,20 @@ describe("actual Core Work pipeline adapters", () => {
       assurance: { execute: async () => ({ outcome: "advanced" }) },
       records: { execute: async () => ({ outcome: "advanced" }) },
     });
-    await stages.delivery.cancel?.(context, {
+    const cancellationInput = {
       runId: "pipeline-cancel-run-0001",
       workId: created.work.work_id,
       commandId: "pipeline-cancel-run-0001:delivery:cancel",
       correlationId: "pipeline-cancel-correlation-0001",
       request: {},
-    });
+    } as const;
+    await stages.delivery.cancel?.(context, cancellationInput);
     expect(drains).toEqual(["pipeline-cancel-run-0001:delivery:cancel"]);
+    await expect(works.getWork(context, created.work.work_id)).resolves.toMatchObject({ status: "draft" });
+
+    await database.transaction(async (transaction) => {
+      await stages.delivery.convergeCancellation?.(context, cancellationInput, transaction);
+    });
     await expect(works.getWork(context, created.work.work_id)).resolves.toMatchObject({ status: "cancelled" });
   });
 });
