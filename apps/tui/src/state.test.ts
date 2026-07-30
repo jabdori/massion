@@ -10,13 +10,14 @@ const snapshot = {
   organization: { organizationId: "organization-1", version: 2 },
   nodes: [
     {
+      nodeId: "node-representative",
       handle: "representative",
       name: "대표",
       responsibility: "요청 조정",
       capabilities: ["intake"],
       status: "active",
       role: "representative",
-      scope: "core",
+      scope: "persistent",
       currentTaskId: "task-1",
       currentWorkId: "work-1",
       executionId: "execution-1",

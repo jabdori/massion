@@ -1,4 +1,4 @@
-import type { CollaborationGraphSnapshot } from "@massion/application";
+import type { CollaborationGraphNode, CollaborationGraphSnapshot } from "@massion/application";
 import type { TuiExecutionDelta } from "./state.js";
 
 export interface TuiEvent {
@@ -117,18 +117,21 @@ export function decodeSnapshot(input: unknown): CollaborationGraphSnapshot {
   const organization = record(root.organization, "organization");
   fields(organization, ["organizationId", "version"], "organization");
 
-  const nodes = array(root.nodes, "nodes").map((item, index) => {
+  const nodes = array(root.nodes, "nodes").map((item, index): CollaborationGraphNode => {
     const node = record(item, `nodes[${String(index)}]`);
     fields(
       node,
       [
+        "nodeId",
         "handle",
         "name",
         "responsibility",
         "capabilities",
+        "parentHandle",
         "status",
         "role",
         "scope",
+        "workId",
         "currentTaskId",
         "currentWorkId",
         "executionId",
@@ -145,14 +148,21 @@ export function decodeSnapshot(input: unknown): CollaborationGraphSnapshot {
     const executionId = optionalText(node.executionId, "executionId");
     const executionStatus = optionalText(node.executionStatus, "executionStatus");
     const modelRoute = optionalText(node.modelRoute, "modelRoute");
+    const parentHandle = optionalText(node.parentHandle, "parentHandle");
+    const workId = optionalText(node.workId, "workId");
+    const scope = text(node.scope, "scope", 128);
+    if (scope !== "persistent" && scope !== "work") throw new Error("node scope가 유효하지 않습니다");
     return {
+      nodeId: text(node.nodeId, "nodeId", 1_024),
       handle: text(node.handle, "handle", 256),
       name: text(node.name, "name", 1_024),
       responsibility: text(node.responsibility, "responsibility"),
       capabilities: strings(node.capabilities, "capabilities"),
+      ...(parentHandle === undefined ? {} : { parentHandle }),
       status: text(node.status, "status", 128),
       role: text(node.role, "role", 128),
-      scope: text(node.scope, "scope", 128),
+      scope,
+      ...(workId === undefined ? {} : { workId }),
       ...(currentTaskId === undefined ? {} : { currentTaskId }),
       ...(currentWorkId === undefined ? {} : { currentWorkId }),
       ...(executionId === undefined ? {} : { executionId }),
@@ -163,6 +173,31 @@ export function decodeSnapshot(input: unknown): CollaborationGraphSnapshot {
       ...(node.costMicros === undefined ? {} : { costMicros: integer(node.costMicros, "costMicros") }),
     };
   });
+  const nodeIds = new Set<string>();
+  const nodesByHandle = new Map<string, CollaborationGraphNode>();
+  for (const node of nodes) {
+    if (nodeIds.has(node.nodeId)) throw new Error("nodeId가 중복됐습니다");
+    if (nodesByHandle.has(node.handle)) throw new Error("node handle이 중복됐습니다");
+    nodeIds.add(node.nodeId);
+    nodesByHandle.set(node.handle, node);
+    if (node.scope === "work" && node.workId === undefined) throw new Error("work scope node에는 workId가 필요합니다");
+    if (node.scope === "persistent" && node.workId !== undefined)
+      throw new Error("persistent scope node에는 workId가 없어야 합니다");
+    if (node.scope === "work" && node.currentWorkId !== undefined && node.currentWorkId !== node.workId)
+      throw new Error("work node의 currentWorkId와 workId가 일치하지 않습니다");
+  }
+  for (const node of nodes) {
+    const visited = new Set([node.handle]);
+    let current = node;
+    while (current.parentHandle !== undefined) {
+      if (current.parentHandle === current.handle) throw new Error("node parentHandle이 자기 자신을 가리킵니다");
+      if (visited.has(current.parentHandle)) throw new Error("node parentHandle 계보에 cycle이 있습니다");
+      const parent = nodesByHandle.get(current.parentHandle);
+      if (parent === undefined) throw new Error("node parentHandle이 snapshot에 존재하지 않습니다");
+      visited.add(parent.handle);
+      current = parent;
+    }
+  }
 
   const works = array(root.works, "works").map((item) => {
     const work = record(item, "work");
