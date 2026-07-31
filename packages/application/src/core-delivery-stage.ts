@@ -301,6 +301,8 @@ export class CoreDeliveryStage implements CoreWorkStageExecutor {
           typeof task.acceptance_criteria_json === "string"
             ? (JSON.parse(task.acceptance_criteria_json) as unknown)
             : [],
+        outputContract:
+          "최종 응답 전체는 Task output ArtifactVersion으로 자동 저장되고 후속 Assurance가 acceptance evidence를 검증합니다. Artifact 생성·제출 도구를 찾거나 호출하지 말고 acceptance criteria를 충족하는 최종 결과 본문만 반환하세요.",
       };
       const baselineTokens = stageBaseline(
         softwareTask ? softwarePrompt(task, input.request) : runtimeInput,

@@ -244,8 +244,14 @@ describe("actual Core Work pipeline adapters", () => {
         input: {
           operation: "coordinate_work",
           knowledgeSources: [materialized],
+          coordinationContract: expect.stringContaining("Task·Artifact 도구를 직접 호출하지 않습니다"),
         },
       });
+      const coordinationContract = (representativeInput.input as { readonly coordinationContract: string })
+        .coordinationContract;
+      expect(coordinationContract).toContain("업무 완료 불가 사유로 보고하지 말고");
+      expect(coordinationContract).toContain("실행 지향 handoff");
+      expect(coordinationContract).toContain("후속 AgentOS 단계가 자동 처리");
       expect(representativeInput.estimatedTokens).toBeLessThanOrEqual(32_000);
     }
     expect(materializeInputs).toEqual([

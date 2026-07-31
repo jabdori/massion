@@ -666,9 +666,17 @@ describe("CoreDeliveryStage", () => {
     expect(runtimeInputs).toEqual([
       expect.objectContaining({
         estimatedTokens: expect.any(Number),
-        input: expect.objectContaining({ operation: "execute_work_task", knowledgeSources }),
+        input: expect.objectContaining({
+          operation: "execute_work_task",
+          knowledgeSources,
+          outputContract: expect.stringContaining("Task output ArtifactVersion으로 자동 저장"),
+        }),
       }),
     ]);
+    const outputContract = (runtimeInputs[0] as { readonly input: { readonly outputContract: string } }).input
+      .outputContract;
+    expect(outputContract).toContain("Artifact 생성·제출 도구를 찾거나 호출하지 말고");
+    expect(outputContract).toContain("최종 결과 본문만 반환");
     expect((runtimeInputs[0] as { estimatedTokens: number }).estimatedTokens).toBeLessThanOrEqual(32_000);
     expect(artifactInputs).toEqual([
       expect.objectContaining({

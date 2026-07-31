@@ -310,6 +310,8 @@ export function createCoreWorkPipelineExecutors(
         operation: "coordinate_work",
         request: value,
         organization: organizationDeclarationContent(organizationSnapshot),
+        coordinationContract:
+          "Representative는 이 단계에서 Task·Artifact 도구를 직접 호출하지 않습니다. 도구 부재를 업무 완료 불가 사유로 보고하지 말고, 요청과 조직을 분석해 Context & Strategy가 후속 계획·배치·실행을 진행할 수 있는 실행 지향 handoff만 반환하세요. Task 실행, ArtifactVersion 저장, Assurance 검증, Records 완료는 후속 AgentOS 단계가 자동 처리합니다.",
       };
       const representativeBaseline = Math.min(
         value.tokenBudget,
