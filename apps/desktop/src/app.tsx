@@ -6002,7 +6002,7 @@ function blockedReasonText(reason: string | undefined): string {
     case "strategy-failed":
       return "Provider가 전략 계획의 구조화 응답을 완성하지 못했습니다.";
     case "model-unavailable":
-      return "사용 가능한 Provider 모델을 찾지 못했습니다.";
+      return "사용 가능한 모델을 찾지 못했습니다.";
     case "evidence-invalid":
       return "업무에 연결된 근거를 검증하지 못했습니다.";
     case "workspace-untrusted":

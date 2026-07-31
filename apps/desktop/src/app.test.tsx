@@ -256,6 +256,38 @@ describe("AgentOS 데스크톱", () => {
     expect(resumeRun).toHaveBeenCalledWith(blocked);
   });
 
+  it("모델 부재를 내부 Provider 용어 없이 설명한다", () => {
+    const fixture = createFixtureDesktopService();
+    const seed = fixture.initialSnapshot?.works[0];
+    if (!seed) throw new Error("fixture Work가 필요합니다.");
+    const blocked: WorkView = {
+      ...seed,
+      id: "work-model-unavailable",
+      title: "모델을 기다리는 업무",
+      run: {
+        runId: "run-model-unavailable",
+        status: "blocked",
+        stage: "intake",
+        leaseGeneration: 1,
+        blockedReason: "model-unavailable",
+      },
+    };
+    render(
+      <App
+        service={{
+          ...fixture,
+          initialSnapshot: { works: [blocked] },
+          loadIndex: async () => [blocked],
+          loadWork: async () => blocked,
+        }}
+      />,
+    );
+
+    const status = screen.getByRole("status", { name: "실행 상태" });
+    expect(status).toHaveTextContent("사용 가능한 모델을 찾지 못했습니다.");
+    expect(status).not.toHaveTextContent("Provider");
+  });
+
   it("승인 결정을 반영하고 중복 결정을 막는다", async () => {
     const user = userEvent.setup();
     renderApp();
