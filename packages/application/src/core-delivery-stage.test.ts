@@ -73,21 +73,22 @@ const readyStaffing = {
 type DeliveryDependencies = ConstructorParameters<typeof CoreDeliveryStage>[0];
 
 function deliveryStage(
-  dependencies: Omit<DeliveryDependencies, "staffing"> & {
+  dependencies: Omit<DeliveryDependencies, "staffing" | "works"> & {
     readonly staffing?: DeliveryDependencies["staffing"];
+    readonly works: Omit<DeliveryDependencies["works"], "recoverWork"> &
+      Partial<Pick<DeliveryDependencies["works"], "recoverWork">>;
   },
 ): CoreDeliveryStage {
+  const { recoverWork, ...works } = dependencies.works;
   return new CoreDeliveryStage({
     ...dependencies,
     works: {
-      recoverWork: async () => ({
-        request: {},
-        work: { artifact_version_ids: [] },
-        messages: [],
-        artifactVersions: [],
-      }),
-      ...dependencies.works,
-    } as never,
+      ...works,
+      recoverWork:
+        recoverWork ??
+        (async () =>
+          ({ request: {}, work: { artifact_version_ids: [] }, messages: [], artifactVersions: [] }) as never),
+    },
     staffing: dependencies.staffing ?? readyStaffing,
   });
 }
