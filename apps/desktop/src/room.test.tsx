@@ -203,6 +203,129 @@ describe("협업방 문법", () => {
     );
   });
 
+  it("MathJax inline delimiter를 KaTeX 수식으로 렌더링한다", () => {
+    const { container } = render(
+      <RoomMessage content={String.raw`유의수준은 \(p < 0.05\)입니다.`} speaker={quill} time="10:25" type="evidence" />,
+    );
+
+    expect(container.querySelector(".katex")).toBeInTheDocument();
+  });
+
+  it("MathJax multiline delimiter와 fraction을 KaTeX display 수식으로 렌더링한다", () => {
+    const content = ["\\[", String.raw`\frac{13-10}{10}=30\%`, "\\]"].join("\n");
+    const { container } = render(<RoomMessage content={content} speaker={quill} time="10:25" type="evidence" />);
+
+    expect(container.querySelector(".katex-display")).toBeInTheDocument();
+    expect(
+      [...container.querySelectorAll("*")]
+        .filter((element) => element.closest(".katex") === null)
+        .flatMap((element) => [...element.childNodes])
+        .some((node) => node.nodeType === Node.TEXT_NODE && node.textContent?.includes("\\frac")),
+    ).toBe(false);
+  });
+
+  it("inline code와 fenced code 안의 수식 delimiter는 literal로 유지한다", () => {
+    const content = [
+      "inline `\\(p < 0.05\\)`",
+      "",
+      "```text",
+      "\\[",
+      String.raw`\frac{13-10}{10}=30\%`,
+      "\\]",
+      "```",
+    ].join("\n");
+    const { container } = render(<RoomMessage content={content} speaker={quill} time="10:25" type="evidence" />);
+
+    expect(container.querySelector(".katex")).toBeNull();
+    expect([...container.querySelectorAll("code")].map((code) => code.textContent)).toEqual([
+      String.raw`\(p < 0.05\)`,
+      ["\\[", String.raw`\frac{13-10}{10}=30\%`, "\\]", ""].join("\n"),
+    ]);
+  });
+
+  it("달러 통화 범위는 inline math로 오인하지 않는다", () => {
+    const { container } = render(<RoomMessage content="$7M to $40M" speaker={quill} time="10:25" type="evidence" />);
+
+    expect(container.querySelector(".katex")).toBeNull();
+    expect(screen.getByText("$7M to $40M")).toBeInTheDocument();
+  });
+
+  it("신뢰할 수 없는 KaTeX href 명령은 link를 만들지 않는다", () => {
+    const { container } = render(
+      <RoomMessage
+        content={String.raw`\(\href{javascript:alert(1)}{x}\)`}
+        speaker={quill}
+        time="10:25"
+        type="evidence"
+      />,
+    );
+
+    expect(container.querySelector("a, [href]")).toBeNull();
+  });
+
+  it("잘못된 수식은 앱을 중단하지 않고 원문 fallback을 표시한다", () => {
+    const { container } = render(
+      <RoomMessage content={String.raw`\(\frac{1}{\)`} speaker={quill} time="10:25" type="evidence" />,
+    );
+
+    expect(container.querySelector(".katex-error")).toHaveTextContent(String.raw`\frac{1}{`);
+  });
+
+  it("짝이 없는 MathJax 여는·닫는 delimiter는 각각 literal로 유지한다", () => {
+    const { container, rerender } = render(
+      <RoomMessage content={String.raw`open \(p < 0.05`} speaker={quill} time="10:25" type="evidence" />,
+    );
+    expect(container.querySelector(".katex")).toBeNull();
+    expect(container).toHaveTextContent("open (p < 0.05");
+
+    rerender(<RoomMessage content={String.raw`close p < 0.05\)`} speaker={quill} time="10:25" type="evidence" />);
+    expect(container.querySelector(".katex")).toBeNull();
+    expect(container).toHaveTextContent("close p < 0.05)");
+  });
+
+  it("여러 줄 inline code 안의 delimiter는 exact literal로 유지한다", () => {
+    const content = ["``first", String.raw`\(p < 0.05\)`, "last``"].join("\n");
+    const { container } = render(<RoomMessage content={content} speaker={quill} time="10:25" type="evidence" />);
+
+    expect(container.querySelector(".katex")).toBeNull();
+    expect(container.querySelector("code")).toHaveTextContent(String.raw`first \(p < 0.05\) last`);
+  });
+
+  it("더 긴 backtick run은 짧은 opener를 닫지 않고 전체 inline code를 literal로 유지한다", () => {
+    const { container } = render(
+      <RoomMessage content={"``a ``` \\(x\\) b``"} speaker={quill} time="10:25" type="evidence" />,
+    );
+
+    expect(container.querySelector(".katex")).toBeNull();
+    expect(container.querySelector("code")).toHaveTextContent("a ``` \\(x\\) b");
+  });
+
+  it("backtick이 든 잘못된 fence info 뒤의 수식은 정상 렌더링한다", () => {
+    const content = ["```bad`info", "", String.raw`\(x\)`].join("\n");
+    const { container } = render(<RoomMessage content={content} speaker={quill} time="10:25" type="evidence" />);
+
+    expect(container.querySelector(".katex")).toBeInTheDocument();
+  });
+
+  it("delimiter 앞 연속 backslash 2·3·4개의 escape parity를 지킨다", () => {
+    const content = String.raw`two \\(two\\), three \\\(three\\\), four \\\\(four\\\\)`;
+    const { container } = render(<RoomMessage content={content} speaker={quill} time="10:25" type="evidence" />);
+
+    const katex = container.querySelector(".katex");
+    const paragraph = katex?.closest("p");
+    expect(container.querySelectorAll(".katex")).toHaveLength(1);
+    expect(paragraph?.childNodes[0]?.textContent).toBe("two \\(two\\), three \\");
+    expect(paragraph?.childNodes[paragraph.childNodes.length - 1]?.textContent).toBe(", four \\\\(four\\\\)");
+  });
+
+  it("EOF까지 닫히지 않은 valid fence 안의 delimiter는 exact literal로 유지한다", () => {
+    const content = ["```text", String.raw`\(p < 0.05\)`].join("\n");
+    const { container } = render(<RoomMessage content={content} speaker={quill} time="10:25" type="evidence" />);
+
+    expect(container.querySelector(".katex")).toBeNull();
+    expect(container.querySelector("code")).toHaveTextContent(String.raw`\(p < 0.05\)`);
+  });
+
   it("최종 응답은 heading과 GFM 표를 의미 구조로 렌더링한다", () => {
     const { container } = render(
       <RoomMessage

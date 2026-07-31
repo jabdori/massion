@@ -1,6 +1,11 @@
 import { agentIdentityToken } from "@massion/application/client";
+import { fromMarkdown } from "mdast-util-from-markdown";
+import { useMemo } from "react";
 import ReactMarkdown from "react-markdown";
+import rehypeKatex from "rehype-katex";
 import remarkGfm from "remark-gfm";
+import remarkMath from "remark-math";
+import "katex/dist/katex.min.css";
 
 import type {
   ComplianceCode,
@@ -234,6 +239,112 @@ function TypeTag({ speaker, type }: { speaker?: SpeakerView; type: RoomMessageTy
   );
 }
 
+interface MarkdownNode {
+  readonly children?: readonly MarkdownNode[];
+  readonly position?: {
+    readonly end: { readonly offset?: number };
+    readonly start: { readonly offset?: number };
+  };
+  readonly type: string;
+}
+
+interface SourceRange {
+  readonly end: number;
+  readonly start: number;
+}
+
+interface MathDelimiter extends SourceRange {
+  readonly bracket: "(" | ")" | "[" | "]";
+  readonly slashCount: number;
+}
+
+function codeRanges(content: string): SourceRange[] {
+  const ranges: SourceRange[] = [];
+
+  function visit(node: MarkdownNode) {
+    if (node.type === "code" || node.type === "inlineCode") {
+      const start = node.position?.start.offset;
+      const end = node.position?.end.offset;
+      if (start !== undefined && end !== undefined) ranges.push({ end, start });
+      return;
+    }
+    node.children?.forEach(visit);
+  }
+
+  visit(fromMarkdown(content) as MarkdownNode);
+  return ranges.sort((left, right) => left.start - right.start);
+}
+
+function mathDelimiters(content: string): MathDelimiter[] {
+  const delimiters: MathDelimiter[] = [];
+
+  for (let index = 0; index < content.length;) {
+    if (content[index] !== "\\") {
+      index += 1;
+      continue;
+    }
+
+    const start = index;
+    while (content[index] === "\\") index += 1;
+    const slashCount = index - start;
+    const bracket = content[index];
+    if (slashCount % 2 === 1 && (bracket === "(" || bracket === ")" || bracket === "[" || bracket === "]")) {
+      delimiters.push({ bracket, end: index + 1, slashCount, start });
+      index += 1;
+    }
+  }
+
+  return delimiters;
+}
+
+function normalizedDelimiter(delimiter: MathDelimiter): string {
+  return `${"\\".repeat(delimiter.slashCount - 1)}$$`;
+}
+
+function normalizeMathSegment(content: string): string {
+  const pairs: { close: MathDelimiter; open: MathDelimiter }[] = [];
+  let open: MathDelimiter | undefined;
+
+  for (const delimiter of mathDelimiters(content)) {
+    if (delimiter.bracket === "(" || delimiter.bracket === "[") {
+      open = delimiter;
+      continue;
+    }
+
+    const matchingOpen = delimiter.bracket === ")" ? "(" : "[";
+    if (open?.bracket === matchingOpen) {
+      pairs.push({ close: delimiter, open });
+      open = undefined;
+    }
+  }
+
+  if (pairs.length === 0) return content;
+
+  let normalized = "";
+  let offset = 0;
+  for (const pair of pairs) {
+    normalized += content.slice(offset, pair.open.start);
+    normalized += normalizedDelimiter(pair.open);
+    normalized += content.slice(pair.open.end, pair.close.start);
+    normalized += normalizedDelimiter(pair.close);
+    offset = pair.close.end;
+  }
+  return normalized + content.slice(offset);
+}
+
+function normalizeMathDelimiters(content: string): string {
+  let normalized = "";
+  let offset = 0;
+
+  for (const range of codeRanges(content)) {
+    normalized += normalizeMathSegment(content.slice(offset, range.start));
+    normalized += content.slice(range.start, range.end);
+    offset = range.end;
+  }
+
+  return normalized + normalizeMathSegment(content.slice(offset));
+}
+
 export function AgentMessageContent({
   compact = false,
   content,
@@ -243,9 +354,11 @@ export function AgentMessageContent({
   content: string;
   emphasized?: boolean;
 }) {
+  const normalizedContent = useMemo(() => normalizeMathDelimiters(content), [content]);
+
   return (
     <div
-      className={`min-w-0 [&>:first-child]:mt-0 [&>:last-child]:mb-0 [&_a]:underline [&_a]:underline-offset-2 [&_blockquote]:my-2 [&_blockquote]:border-l-2 [&_blockquote]:border-control [&_blockquote]:pl-3 [&_blockquote]:text-secondary [&_code]:rounded-[3px] [&_code]:bg-canvas [&_code]:px-1 [&_code]:font-mono [&_h1]:my-3 [&_h1]:font-semibold [&_h2]:my-3 [&_h2]:font-semibold [&_h3]:my-2 [&_h3]:font-semibold [&_h4]:my-2 [&_h4]:font-semibold [&_h5]:my-2 [&_h5]:font-semibold [&_h6]:my-2 [&_h6]:font-semibold [&_li]:my-0.5 [&_ol]:my-2 [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:my-2 [&_pre]:my-2 [&_pre]:overflow-x-auto [&_pre]:rounded-[5px] [&_pre]:bg-canvas [&_pre]:p-2 [&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_td]:border [&_td]:border-control [&_td]:px-2 [&_td]:py-1 [&_th]:border [&_th]:border-control [&_th]:bg-surface-2 [&_th]:px-2 [&_th]:py-1 [&_ul]:my-2 [&_ul]:list-disc [&_ul]:pl-5 ${
+      className={`min-w-0 [&>:first-child]:mt-0 [&>:last-child]:mb-0 [&_.katex-display]:overflow-x-auto [&_.katex]:text-inherit [&_a]:underline [&_a]:underline-offset-2 [&_blockquote]:my-2 [&_blockquote]:border-l-2 [&_blockquote]:border-control [&_blockquote]:pl-3 [&_blockquote]:text-secondary [&_code]:rounded-[3px] [&_code]:bg-canvas [&_code]:px-1 [&_code]:font-mono [&_h1]:my-3 [&_h1]:font-semibold [&_h2]:my-3 [&_h2]:font-semibold [&_h3]:my-2 [&_h3]:font-semibold [&_h4]:my-2 [&_h4]:font-semibold [&_h5]:my-2 [&_h5]:font-semibold [&_h6]:my-2 [&_h6]:font-semibold [&_li]:my-0.5 [&_ol]:my-2 [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:my-2 [&_pre]:my-2 [&_pre]:overflow-x-auto [&_pre]:rounded-[5px] [&_pre]:bg-canvas [&_pre]:p-2 [&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_td]:border [&_td]:border-control [&_td]:px-2 [&_td]:py-1 [&_th]:border [&_th]:border-control [&_th]:bg-surface-2 [&_th]:px-2 [&_th]:py-1 [&_ul]:my-2 [&_ul]:list-disc [&_ul]:pl-5 ${
         compact
           ? "mt-1 break-words text-[12px] leading-5 text-secondary [overflow-wrap:anywhere] [&_h1]:text-[14px] [&_h2]:text-[13px] [&_h3]:text-[12px]"
           : `${emphasized ? "mt-1.5 font-medium" : "mt-1"} text-[13px] leading-5 text-primary [&_h1]:text-[18px] [&_h2]:text-[16px] [&_h3]:text-[14px]`
@@ -267,10 +380,11 @@ export function AgentMessageContent({
             </div>
           ),
         }}
-        remarkPlugins={[remarkGfm]}
+        rehypePlugins={[[rehypeKatex, { throwOnError: false, trust: false }]]}
+        remarkPlugins={[remarkGfm, [remarkMath, { singleDollarTextMath: false }]]}
         skipHtml
       >
-        {content}
+        {normalizedContent}
       </ReactMarkdown>
     </div>
   );
