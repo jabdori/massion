@@ -39,7 +39,7 @@ const PLAN: StrategyPlan = {
       criterionKeys: ["criterion-tests"],
       dependencyKeys: [],
       requiredCapabilities: ["testing"],
-      recommendedAgentHandles: ["assurance"],
+      recommendedAgentHandles: [],
       parallelizable: false,
     },
   ],

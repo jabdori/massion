@@ -41,7 +41,7 @@ const PLAN: StrategyPlan = {
       criterionKeys: ["criterion-remote"],
       dependencyKeys: [],
       requiredCapabilities: ["database-testing"],
-      recommendedAgentHandles: ["assurance"],
+      recommendedAgentHandles: [],
       parallelizable: false,
     },
   ],

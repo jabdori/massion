@@ -40,7 +40,7 @@ const REPLAN: StrategyPlan = {
       criterionKeys: ["criterion-deploy"],
       dependencyKeys: [],
       requiredCapabilities: ["deployment"],
-      recommendedAgentHandles: ["assurance"],
+      recommendedAgentHandles: [],
       parallelizable: false,
     },
   ],
