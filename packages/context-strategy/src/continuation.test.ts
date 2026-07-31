@@ -75,6 +75,7 @@ describe("후속 요청 Continuation 분류와 적용", () => {
 
   beforeEach(async () => {
     database = await createDatabase({ url: "mem://", namespace: "massion", database: crypto.randomUUID() });
+    await database.query("DEFINE TABLE runtime_execution SCHEMALESS;");
     const identity = await IdentityService.create(database);
     organizations = await OrganizationService.create(database);
     const owner = await identity.registerPersonalUser({
@@ -233,10 +234,16 @@ describe("후속 요청 Continuation 분류와 적용", () => {
       database,
       organizations,
       {
-        executeStructured: vi.fn().mockResolvedValue({
-          executionId: "continuation-replan-strategy",
-          status: "succeeded",
-          output: REPLAN,
+        executeStructured: vi.fn(async () => {
+          await database.query(
+            "CREATE runtime_execution CONTENT { execution_id: 'continuation-replan-strategy', organization_id: $organization_id, work_id: $work_id, agent_handle: 'context-strategy', status: 'succeeded' };",
+            { organization_id: context.organizationId, work_id: workId },
+          );
+          return {
+            executionId: "continuation-replan-strategy",
+            status: "succeeded" as const,
+            output: REPLAN,
+          };
         }),
       },
       contexts,
