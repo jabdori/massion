@@ -3955,7 +3955,7 @@ function projectOrganization(snapshot: Partial<OrganizationGraphSnapshotV1>): Or
 //
 // 도메인이 실제로 가진 것만 옮깁니다. 없는 것은 지어내지 않습니다.
 //   있음: messageType · authorId(handle) · content · createdAt · replyTo · causedBy · sequence
-//   없음: question의 수신자, handoff의 받는 쪽. 둘 다 구조화돼 있지 않습니다.
+//   없음: question의 수신자. handoff 수신자는 새 메시지부터 recipientAgentId로 구조화합니다.
 
 /** 조직 노드에서 역할 배지 문구를 찾습니다. snapshot 경합 중인 노드는 일반 역할로 가립니다. */
 function roleLabelFor(handle: string, nodes: readonly OrganizationNodeView[]): string {
@@ -3999,17 +3999,12 @@ function clockOf(createdAt: string): string {
   return Number.isNaN(parsed.getTime()) ? createdAt : parsed.toTimeString().slice(0, 5);
 }
 
-function handoffDisplayContent(content: string): string {
+function handoffDisplayContent(content: string): string | undefined {
   try {
     const parsed = JSON.parse(content) as unknown;
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return content;
-    const record = parsed as Record<string, unknown>;
-    const intent = typeof record.intent === "string" && record.intent.trim() ? record.intent.trim() : undefined;
-    const nextAction =
-      typeof record.nextAction === "string" && record.nextAction.trim() ? record.nextAction.trim() : undefined;
-    return (
-      [intent, nextAction === undefined ? undefined : `다음 단계 · ${nextAction}`].filter(Boolean).join("\n") || content
-    );
+    // 구조화 handoff는 다음 Agent의 실행 입력입니다. 사람용 대화 본문으로 투영하지 않습니다.
+    return undefined;
   } catch {
     return content;
   }
@@ -4229,13 +4224,18 @@ export function projectRoomActivities(
     }
 
     if (message.messageType === "handoff") {
+      const content = handoffDisplayContent(message.content);
       return {
         id: message.messageId,
         kind: "handoff",
         time,
         occurredAt: message.createdAt,
         from: speaker,
-        content: handoffDisplayContent(message.content),
+        ...(message.recipientAgentId === undefined
+          ? content === undefined
+            ? {}
+            : { content }
+          : { to: speakerFor({ authorKind: "agent", authorId: message.recipientAgentId }, nodes) }),
       };
     }
 
@@ -4931,7 +4931,7 @@ function projectWorkDetail(sources: WorkDetailSources): WorkView {
     artifacts,
     verifications,
     records: sources.records.map(projectRecord),
-    activities: projectActivities(sources.activities, sources.approvals, sources.directives, artifacts),
+    activities: projectActivities(sources.activities, sources.approvals, sources.directives, artifacts, tasks),
   };
 }
 
@@ -4963,14 +4963,14 @@ function projectTask(task: TaskViewV1): TaskView {
     id: task.taskId,
     title: task.title,
     state: projectStepState(task.status),
-    ...(time === undefined ? {} : { time: clockOf(time) }),
+    ...(time === undefined ? {} : { time: clockOf(time), createdAtIso: task.createdAt ?? time }),
   };
 }
 
 function projectStepState(status: string): StepState {
   if (new Set(["completed", "done", "passed", "succeeded"]).has(status)) return "done";
   if (new Set(["active", "running", "verifying"]).has(status)) return "active";
-  if (new Set(["blocked", "cancelled", "failed"]).has(status)) return "failed";
+  if (new Set(["cancelled", "failed"]).has(status)) return "failed";
   return "pending";
 }
 
@@ -5159,6 +5159,7 @@ function projectActivities(
   sourceApprovals: readonly ApprovalViewV1[],
   directives: readonly DirectiveViewV1[],
   artifacts: readonly ArtifactView[],
+  tasks: readonly TaskView[],
 ): ActivityView[] {
   const approvalsById = new Map(sourceApprovals.map((approval) => [approval.approvalId, approval]));
   const projected = activities.map((activity) => projectActivity(activity, approvalsById));
@@ -5190,6 +5191,18 @@ function projectActivities(
       author: "나",
       initials: "나",
       content: directive.content,
+    });
+  }
+
+  if (tasks.length > 0) {
+    const occurredAt = tasks[0]?.createdAtIso;
+    projected.push({
+      id: "plan:current",
+      kind: "plan",
+      time: occurredAt === undefined ? "" : clockOf(occurredAt),
+      ...(occurredAt === undefined ? {} : { occurredAt }),
+      title: "실행 계획",
+      steps: [...tasks],
     });
   }
 

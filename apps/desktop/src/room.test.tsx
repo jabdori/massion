@@ -44,7 +44,7 @@ describe("협업방 문법", () => {
     expect(screen.getAllByText("나")).toHaveLength(2);
   });
 
-  it("일반 발언과 인계에 실제 Provider·모델을 함께 표시한다", () => {
+  it("일반 발언과 인계에는 내부 Provider가 아니라 실제 모델만 표시한다", () => {
     const actual: SpeakerView = {
       ...quill,
       providerId: "openai-codex",
@@ -53,10 +53,12 @@ describe("협업방 문법", () => {
     const { rerender } = render(
       <RoomMessage content="근거를 찾았습니다." speaker={actual} time="10:23" type="evidence" />,
     );
-    expect(screen.getByText("openai-codex · gpt-5.6-sol")).toBeInTheDocument();
+    expect(screen.getByText("gpt-5.6-sol")).toBeInTheDocument();
+    expect(screen.queryByText(/openai-codex/u)).not.toBeInTheDocument();
 
     rerender(<RoomHandoff content="검증을 넘깁니다." from={actual} time="10:24" />);
-    expect(screen.getByText("openai-codex · gpt-5.6-sol")).toBeInTheDocument();
+    expect(screen.getByText("gpt-5.6-sol")).toBeInTheDocument();
+    expect(screen.queryByText(/openai-codex/u)).not.toBeInTheDocument();
   });
 
   it("같은 역할이 병렬로 있어도 이름과 색이 갈린다", () => {

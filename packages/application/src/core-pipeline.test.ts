@@ -844,6 +844,7 @@ describe("actual Core Work pipeline adapters", () => {
         message_type: "handoff",
         author_kind: "agent",
         author_id: "representative",
+        recipient_agent_id: "context-strategy",
         content: expect.stringContaining("요청을 분석했고 전략 수립으로 전달합니다."),
       },
     ]);

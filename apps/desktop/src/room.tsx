@@ -170,10 +170,9 @@ export function AgentAvatar({ speaker }: { speaker: SpeakerView }) {
 }
 
 function SpeakerModel({ speaker }: { speaker: SpeakerView }) {
-  const label = [speaker.providerId, speaker.modelId].filter(Boolean).join(" · ");
-  return label ? (
-    <span className="font-mono text-[10px] text-muted" title="이 발화를 만든 Provider와 모델">
-      {label}
+  return speaker.modelId ? (
+    <span className="font-mono text-[10px] text-muted" title="이 발화를 만든 모델">
+      {speaker.modelId}
     </span>
   ) : null;
 }
@@ -271,7 +270,7 @@ export function RoomHandoff({
       <div className="min-w-0 max-w-[70%] text-center">
         <p className="font-mono text-[11px] text-muted">
           인계 · <span className={speakerText(from)}>{from.name}</span>
-          {/* 받는 쪽은 도메인이 구조화하지 않습니다. 모르면 넘긴 쪽만 말하고 지어내지 않습니다. */}
+          {/* 과거 메시지처럼 받는 쪽을 모르면 넘긴 쪽만 말하고 지어내지 않습니다. */}
           {to ? (
             <>
               {" → "}

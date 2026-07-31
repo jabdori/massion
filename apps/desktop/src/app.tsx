@@ -5694,7 +5694,11 @@ function mergeActivities(
   workActivities: readonly ActivityView[],
   roomActivities: readonly ActivityView[],
 ): ActivityView[] {
-  const merged = new Map(workActivities.map((activity) => [activity.id, activity]));
+  const merged = new Map(
+    workActivities
+      .filter((activity) => activity.kind !== "event" || /실패|보완|다시 확인/u.test(activity.title))
+      .map((activity) => [activity.id, activity]),
+  );
   for (const activity of roomActivities) {
     merged.delete(`message:${activity.id}`);
     if (!merged.has(activity.id)) merged.set(activity.id, activity);
@@ -5753,7 +5757,7 @@ function WorkActivity({
   rooms,
   work,
 }: WorkActivityProps) {
-  const activities = room ? mergeActivities(work.activities, room.activities) : work.activities;
+  const activities = mergeActivities(work.activities, room?.activities ?? []);
   const [queuedOverride, setQueuedOverride] = useState<QueuedDirectiveView[]>();
   useEffect(() => {
     setQueuedOverride(undefined);
@@ -5821,11 +5825,7 @@ function WorkActivity({
           >
             {workRowLabel(work)}
           </Badge>
-          {work.providerId && work.modelId ? (
-            <span className="shrink-0 font-mono text-[11px] text-muted">
-              {work.providerId} · {work.modelId}
-            </span>
-          ) : null}
+          {work.modelId ? <span className="shrink-0 font-mono text-[11px] text-muted">{work.modelId}</span> : null}
           {room ? (
             <>
               <span aria-hidden="true" className="hidden h-4 w-px shrink-0 bg-border min-[1280px]:block" />
@@ -6186,7 +6186,7 @@ function ActivityRow({
   }
 
   return (
-    <article className="grid grid-cols-[40px_minmax(0,1fr)] gap-3 border-b border-border/70 py-4 last:border-b-0">
+    <article className="grid grid-cols-[40px_minmax(0,1fr)] gap-3 py-3">
       <ActivityMarker value={value} />
       <div className="min-w-0">
         <div className="mb-2 flex items-center gap-2 text-xs text-muted">

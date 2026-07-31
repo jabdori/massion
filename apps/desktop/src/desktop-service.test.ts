@@ -1105,6 +1105,22 @@ describe("Application desktop service", () => {
           revision: 2,
           updatedAt: "07.24",
         },
+        {
+          workId: detail.workId,
+          taskId: "task-waiting",
+          title: "선행 작업 대기",
+          status: "blocked",
+          revision: 1,
+          updatedAt: "2026-07-31T02:25:42.000Z",
+        },
+        {
+          workId: detail.workId,
+          taskId: "task-failed",
+          title: "실패한 작업",
+          status: "failed",
+          revision: 2,
+          updatedAt: "2026-07-31T02:25:43.000Z",
+        },
       ],
       "work.artifacts": [
         {
@@ -1150,7 +1166,12 @@ describe("Application desktop service", () => {
 
     const work = await createApplicationDesktopService(native).loadWork(detail.workId);
 
-    expect(work.tasks).toMatchObject([{ time: "11:25" }, { time: "07.24" }]);
+    expect(work.tasks).toMatchObject([
+      { time: "11:25", createdAtIso: "2026-07-31T02:25:41.005Z" },
+      { time: "07.24", createdAtIso: "07.24" },
+      { state: "pending", time: "11:25" },
+      { state: "failed", time: "11:25" },
+    ]);
     expect(work.artifacts[0]).toMatchObject({
       createdAt: "11:25",
       createdAtIso: "2026-07-31T02:25:40.977Z",
@@ -1163,6 +1184,17 @@ describe("Application desktop service", () => {
       "verification",
       "record",
     ]);
+    expect(work.activities.find((activity) => activity.kind === "plan")).toMatchObject({
+      kind: "plan",
+      title: "실행 계획",
+      time: "11:25",
+      steps: [
+        { id: "task-actual", title: "실제 작업" },
+        { id: "task-fixture", title: "표시 시각 작업" },
+        { id: "task-waiting", title: "선행 작업 대기", state: "pending" },
+        { id: "task-failed", title: "실패한 작업", state: "failed" },
+      ],
+    });
   });
 
   it("완료된 Work의 열린 협업방에서도 마지막 대표 답변을 최종 응답으로 표시한다", async () => {
@@ -1662,22 +1694,30 @@ describe("Application desktop service", () => {
 
     expect(work).toMatchObject({ status: "failed", run: { runId: "run-current", status: "running" } });
     expect(work.activities.map((activity) => activity.id)).toEqual([
+      "plan:current",
       "activity-old",
       "directive:directive-1",
       "activity-new",
       "artifacts:current",
       "approval:approval-0001",
     ]);
-    expect(work.activities.map((activity) => activity.time)).toEqual(["09:10", "09:20", "09:30", "09:40", "09:00"]);
+    expect(work.activities.map((activity) => activity.time)).toEqual(["", "09:10", "09:20", "09:30", "09:40", "09:00"]);
     expect(work.activities.map((activity) => activity.occurredAt)).toEqual([
+      undefined,
       "2026-07-22T00:10:00.000Z",
       "2026-07-22T00:20:00.000Z",
       "2026-07-22T00:30:00.000Z",
       "2026-07-22T00:40:00.000Z",
       "2026-07-23T00:00:00.000Z",
     ]);
-    expect(work.activities[0]).toMatchObject({ kind: "message", author: expect.not.stringContaining("db06753b") });
-    expect(work.activities[2]).toMatchObject({ kind: "message", author: "나" });
+    expect(work.activities.find((activity) => activity.id === "activity-old")).toMatchObject({
+      kind: "message",
+      author: expect.not.stringContaining("db06753b"),
+    });
+    expect(work.activities.find((activity) => activity.id === "activity-new")).toMatchObject({
+      kind: "message",
+      author: "나",
+    });
   });
 
   it("지시·승인·run 제어에 실제 식별자와 revision을 보낸다", async () => {

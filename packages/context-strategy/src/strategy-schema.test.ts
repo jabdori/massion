@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { automaticStrategyPlanJsonSchema, validateStrategyPlan, type StrategyPlan } from "./index.js";
+import {
+  automaticStrategyPlanJsonSchema,
+  validateAutomaticStrategyPlan,
+  validateStrategyPlan,
+  type StrategyPlan,
+} from "./index.js";
 
 export const VALID_STRATEGY_PLAN: StrategyPlan = {
   objective: "Massion 완제품을 구현한다",
@@ -127,5 +132,24 @@ describe("StrategyPlan schema", () => {
         ],
       }),
     ).toThrow("critical");
+  });
+
+  it("자동 계획은 소비되지 않는 evidence request를 조용히 남기지 않는다", () => {
+    const criterion = required(VALID_STRATEGY_PLAN.acceptanceCriteria[0], "first criterion");
+    const automatic = {
+      ...VALID_STRATEGY_PLAN,
+      acceptanceCriteria: [
+        { ...criterion, method: "evidence" as const, evidenceKinds: ["artifact-version"], planLevel: false },
+      ],
+      evidenceRequests: [],
+    };
+
+    expect(validateAutomaticStrategyPlan(automatic).evidenceRequests).toEqual([]);
+    expect(() =>
+      validateAutomaticStrategyPlan({
+        ...automatic,
+        evidenceRequests: [{ key: "missing-evidence", question: "추가 근거가 필요한가", required: true }],
+      }),
+    ).toThrow();
   });
 });

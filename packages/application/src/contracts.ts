@@ -292,6 +292,8 @@ export interface RoomMessageViewV1 {
   readonly authorKind: string;
   /** 에이전트면 조직 handle, 사람이면 사용자 식별자. 화자 정체성의 정본입니다. */
   readonly authorId: string;
+  /** handoff를 실제로 받는 같은 방의 Agent handle입니다. */
+  readonly recipientAgentId?: string;
   readonly authorDisplayName?: string;
   readonly providerId?: string;
   readonly modelId?: string;

@@ -16,6 +16,8 @@ export interface TaskView {
   title: string;
   state: StepState;
   time?: string;
+  /** 계획 카드의 시간순 정렬에 쓰는 원본 시각입니다. */
+  createdAtIso?: string;
 }
 
 export interface ArtifactView {
@@ -146,8 +148,7 @@ export type ActivityView = (
       waiting: boolean;
     }
   // 조직이 일을 넘겼다는 사실은 한 줄 텍스트보다 크게 보여야 합니다.
-  // 도메인의 handoff 메시지는 넘긴 쪽만 저자로 남기고 받는 쪽을 구조화하지 않습니다.
-  // 받는 쪽을 모르면 한쪽만 그립니다. 지어내지 않습니다.
+  // 새 handoff는 받는 Agent를 구조화합니다. 과거 메시지처럼 값이 없으면 넘긴 쪽만 그립니다.
   | { id: string; kind: "handoff"; time: string; from: SpeakerView; to?: SpeakerView; content?: string }
   | {
       id: string;

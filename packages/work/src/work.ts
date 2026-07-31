@@ -387,6 +387,7 @@ export interface CollaborationMessage {
   readonly message_type: CollaborationMessageType;
   readonly author_kind: "user" | "agent";
   readonly author_id: string;
+  readonly recipient_agent_id?: string;
   readonly content: string;
   readonly reply_to_message_id?: string;
   readonly caused_by_message_id?: string;
@@ -463,6 +464,7 @@ export interface PostMessageInput {
   readonly messageType: CollaborationMessageType;
   readonly authorKind: "user" | "agent";
   readonly authorId: string;
+  readonly recipientAgentId?: string;
   readonly content: string;
   readonly replyToMessageId?: string;
   readonly causedByMessageId?: string;
@@ -1755,6 +1757,12 @@ export class WorkService {
     if (input.authorKind === "user" && input.authorId !== context.userId) {
       throw new Error("다른 사용자를 작성자로 지정할 수 없습니다");
     }
+    if (input.recipientAgentId !== undefined && (input.messageType !== "handoff" || input.authorKind !== "agent")) {
+      throw new Error("수신 Agent는 Agent가 작성한 handoff 메시지에만 지정할 수 있습니다");
+    }
+    if (input.recipientAgentId === input.authorId) {
+      throw new Error("handoff 작성자와 수신 Agent는 달라야 합니다");
+    }
     if (input.tokenCount < 0 || input.costMicros < 0) throw new Error("token과 cost는 음수일 수 없습니다");
     const requestJson = canonicalJson(input);
     const postMessage = async (
@@ -1789,6 +1797,17 @@ export class WorkService {
         },
       );
       if (!participants[0]) throw new Error("활성 Collaboration participant만 메시지를 작성할 수 있습니다");
+      if (input.recipientAgentId !== undefined) {
+        const [recipients] = await transaction.query<[CollaborationParticipant[]]>(
+          "SELECT * OMIT id FROM collaboration_participant WHERE organization_id = $organization_id AND room_id = $room_id AND kind = 'agent' AND subject_id = $subject_id AND status = 'active' LIMIT 1;",
+          {
+            organization_id: context.organizationId,
+            room_id: room.room_id,
+            subject_id: input.recipientAgentId,
+          },
+        );
+        if (!recipients[0]) throw new Error("같은 Collaboration Room의 활성 수신 Agent를 찾을 수 없습니다");
+      }
       const [messages] = await transaction.query<[CollaborationMessage[]]>(
         "SELECT * OMIT id FROM collaboration_message WHERE organization_id = $organization_id AND room_id = $room_id ORDER BY sequence ASC;",
         { organization_id: context.organizationId, room_id: room.room_id },
@@ -1808,7 +1827,7 @@ export class WorkService {
       if (room.deadline && Date.now() > datetimeMillis(room.deadline))
         throw new Error("Collaboration Room deadline이 지났습니다");
       const [created] = await transaction.query<[CollaborationMessage[]]>(
-        "CREATE collaboration_message CONTENT { message_id: $message_id, organization_id: $organization_id, work_id: $work_id, room_id: $room_id, sequence: $sequence, message_type: $message_type, author_kind: $author_kind, author_id: $author_id, content: $content, reply_to_message_id: $reply_to_message_id, caused_by_message_id: $caused_by_message_id, task_id: $task_id, context_version_id: $context_version_id, execution_id: $execution_id, artifact_version_id: $artifact_version_id, token_count: $token_count, cost_micros: $cost_micros, created_at: time::now() } RETURN AFTER;",
+        "CREATE collaboration_message CONTENT { message_id: $message_id, organization_id: $organization_id, work_id: $work_id, room_id: $room_id, sequence: $sequence, message_type: $message_type, author_kind: $author_kind, author_id: $author_id, recipient_agent_id: $recipient_agent_id, content: $content, reply_to_message_id: $reply_to_message_id, caused_by_message_id: $caused_by_message_id, task_id: $task_id, context_version_id: $context_version_id, execution_id: $execution_id, artifact_version_id: $artifact_version_id, token_count: $token_count, cost_micros: $cost_micros, created_at: time::now() } RETURN AFTER;",
         {
           message_id: randomUUID(),
           organization_id: context.organizationId,
@@ -1818,6 +1837,7 @@ export class WorkService {
           message_type: input.messageType,
           author_kind: input.authorKind,
           author_id: input.authorId,
+          recipient_agent_id: input.recipientAgentId,
           content,
           reply_to_message_id: input.replyToMessageId,
           caused_by_message_id: input.causedByMessageId,

@@ -21,7 +21,7 @@ describe("AgentOS 데스크톱", () => {
     expect(screen.getByText("CRM 고객 데이터 읽기")).toBeInTheDocument();
   });
 
-  it("실패한 Work 헤더에 실제 프로바이더와 모델만 표시한다", () => {
+  it("Work 헤더에는 내부 Provider가 아니라 실제 모델만 표시한다", () => {
     const fixture = createFixtureDesktopService();
     const seed = fixture.initialSnapshot?.works[0];
     if (!seed) throw new Error("fixture Work가 필요합니다.");
@@ -44,8 +44,51 @@ describe("AgentOS 데스크톱", () => {
     );
 
     const main = screen.getByRole("main", { name: failed.title });
-    expect(within(main).getByText("openai-codex · gpt-5.6-sol")).toHaveClass("font-mono");
+    expect(within(main).getByText("gpt-5.6-sol")).toHaveClass("font-mono");
+    expect(main).not.toHaveTextContent("openai-codex");
     expect(main).not.toHaveTextContent(failed.modelRoute);
+  });
+
+  it("방이 아직 없어도 routine 이벤트 대신 실제 Task 계획을 표시한다", async () => {
+    const fixture = createFixtureDesktopService();
+    const seed = fixture.initialSnapshot?.works[0];
+    if (!seed) throw new Error("fixture Work가 필요합니다.");
+    const work: WorkView = {
+      ...seed,
+      activities: [
+        {
+          id: "routine-stage",
+          kind: "event",
+          semantic: "stage",
+          time: "10:21",
+          title: "업무가 접수되었습니다",
+          detail: "",
+          status: "",
+        },
+        {
+          id: "actual-plan",
+          kind: "plan",
+          time: "10:22",
+          title: "실행 계획",
+          steps: [{ id: "task-1", title: "자연어 목표 분석", state: "active" }],
+        },
+      ],
+    };
+    render(
+      <App
+        service={{
+          ...fixture,
+          initialSnapshot: { works: [work] },
+          loadIndex: async () => [work],
+          loadWork: async () => work,
+          loadRooms: async () => [],
+        }}
+      />,
+    );
+
+    expect(await screen.findByText("자연어 목표 분석")).toBeInTheDocument();
+    expect(screen.getByText("실행 계획").closest("details")).toBeInTheDocument();
+    expect(screen.queryByText("업무가 접수되었습니다")).not.toBeInTheDocument();
   });
 
   it("문서가 아니라 각 열만 스크롤하고 composer를 viewport 안에 고정한다", () => {

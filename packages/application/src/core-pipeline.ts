@@ -482,6 +482,7 @@ export function createCoreWorkPipelineExecutors(
         messageType: "handoff",
         authorKind: "agent",
         authorId: "representative",
+        recipientAgentId: "context-strategy",
         content: handoffContent(runtime.output),
         replyToMessageId: requestMessage.message.message_id,
         causedByMessageId: requestMessage.message.message_id,

@@ -992,6 +992,7 @@ function registerWork(
           "messageType",
           "authorKind",
           "authorId",
+          "recipientAgentId",
           "content",
           "replyToMessageId",
           "causedByMessageId",
@@ -1012,6 +1013,9 @@ function registerWork(
         messageType: string(value.messageType, "messageType") as never,
         authorKind: string(value.authorKind, "authorKind") as never,
         authorId: string(value.authorId, "authorId"),
+        ...(value.recipientAgentId === undefined
+          ? {}
+          : { recipientAgentId: string(value.recipientAgentId, "recipientAgentId") }),
         content: string(value.content, "content"),
         ...(value.replyToMessageId === undefined
           ? {}

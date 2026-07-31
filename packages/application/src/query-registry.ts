@@ -1998,6 +1998,7 @@ export function registerApplicationQueries(
               messageType: message.messageType,
               authorKind: message.authorKind,
               authorId: message.authorId,
+              ...(message.recipientAgentId === undefined ? {} : { recipientAgentId: message.recipientAgentId }),
               ...(message.authorDisplayName === undefined ? {} : { authorDisplayName: message.authorDisplayName }),
               ...(message.providerId === undefined ? {} : { providerId: message.providerId }),
               ...(message.modelId === undefined ? {} : { modelId: message.modelId }),

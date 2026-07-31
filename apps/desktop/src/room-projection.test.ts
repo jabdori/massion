@@ -161,7 +161,7 @@ describe("협업방 투영", () => {
     expect(lonely.to).toBeUndefined();
   });
 
-  it("구조화된 Representative 인계는 저장된 의도와 다음 단계만 사람이 읽는 문장으로 표시한다", () => {
+  it("구조화된 Representative 인계는 내부 실행 요약 대신 실제 받는 Agent만 표시한다", () => {
     const [activity] = projectRoomActivities(
       [
         message({
@@ -169,6 +169,7 @@ describe("협업방 투영", () => {
           sequence: 1,
           messageType: "handoff",
           authorId: "representative",
+          recipientAgentId: "context-strategy",
           content: JSON.stringify({
             intent: "동적 배치 게이트를 검증합니다.",
             execution: { artifactCount: 1, artifactType: "text" },
@@ -181,10 +182,28 @@ describe("협업방 투영", () => {
     );
 
     if (activity?.kind !== "handoff") throw new Error("인계가 handoff 활동이 아닙니다");
-    expect(activity.content).toBe(
-      "동적 배치 게이트를 검증합니다.\n다음 단계 · 필수 역량을 배치한 뒤 실행과 검증을 진행하세요.",
+    expect(activity.from.name).toBe("Atlas");
+    expect(activity.to?.name).toBe("Lyra");
+    expect(activity.content).toBeUndefined();
+  });
+
+  it("수신자 없는 과거 인계는 받는 Agent를 추정하지 않고 구조화 payload만 숨긴다", () => {
+    const [activity] = projectRoomActivities(
+      [
+        message({
+          messageId: "legacy-structured-handoff",
+          sequence: 1,
+          messageType: "handoff",
+          authorId: "representative",
+          content: JSON.stringify({ intent: "내부 의도", nextAction: "내부 다음 단계" }),
+        }),
+      ],
+      nodes,
     );
-    expect(activity.content).not.toContain("artifactCount");
+
+    if (activity?.kind !== "handoff") throw new Error("인계가 handoff 활동이 아닙니다");
+    expect(activity.to).toBeUndefined();
+    expect(activity.content).toBeUndefined();
   });
 
   it("조직 그래프에 없는 화자는 내부 handle 대신 일반 역할로 표기한다", () => {

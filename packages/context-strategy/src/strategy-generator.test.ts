@@ -139,6 +139,11 @@ describe("Strategy Generator", () => {
         agentHandle: "context-strategy",
         modelRoute: "planning-quality",
         estimatedTokens: 1_000,
+        input: expect.objectContaining({
+          planningContract: expect.stringMatching(
+            /자연어 목표.+requiredCapabilities.+recommendedAgentHandles.+동적 배치/su,
+          ),
+        }),
       }),
       expect.objectContaining({ name: "massion-strategy-plan", validate: expect.any(Function) }),
     );

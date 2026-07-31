@@ -226,6 +226,56 @@ describe("Collaboration Room과 resource lease", () => {
     expect(messages[1]?.reply_to_message_id).toBe(messages[0]?.message_id);
   });
 
+  it("Agent 인계는 같은 방의 실제 수신 Agent를 구조적으로 기록한다", async () => {
+    const opened = await openRoom();
+    await expect(
+      service.postMessage(context, {
+        commandId: "handoff-self-recipient",
+        workId: created.work.work_id,
+        roomId: opened.room.room_id,
+        messageType: "handoff",
+        authorKind: "agent",
+        authorId: "representative",
+        recipientAgentId: "representative",
+        content: "자기 자신에게 넘길 수 없습니다",
+        tokenCount: 0,
+        costMicros: 0,
+      }),
+    ).rejects.toThrow("달라야");
+    await expect(
+      service.postMessage(context, {
+        commandId: "handoff-missing-recipient",
+        workId: created.work.work_id,
+        roomId: opened.room.room_id,
+        messageType: "handoff",
+        authorKind: "agent",
+        authorId: "representative",
+        recipientAgentId: "not-in-room",
+        content: "내부 실행 요약",
+        tokenCount: 0,
+        costMicros: 0,
+      }),
+    ).rejects.toThrow("수신 Agent");
+
+    const posted = await service.postMessage(context, {
+      commandId: "handoff-real-recipient",
+      workId: created.work.work_id,
+      roomId: opened.room.room_id,
+      messageType: "handoff",
+      authorKind: "agent",
+      authorId: "representative",
+      recipientAgentId: "assurance",
+      content: "내부 실행 요약",
+      tokenCount: 0,
+      costMicros: 0,
+    });
+
+    expect(posted.message.recipient_agent_id).toBe("assurance");
+    expect(await service.listMessages(context, created.work.work_id, opened.room.room_id)).toMatchObject([
+      { author_id: "representative", recipient_agent_id: "assurance", message_type: "handoff" },
+    ]);
+  });
+
   it("동시 message를 모두 commit하되 고유 sequence로 직렬화한다", async () => {
     const opened = await openRoom();
     const inputs = ["one", "two", "three"].map((content) =>

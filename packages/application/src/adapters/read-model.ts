@@ -149,6 +149,7 @@ interface MessageRecord {
   readonly message_type: string;
   readonly author_kind: string;
   readonly author_id: string;
+  readonly recipient_agent_id?: string;
   readonly content: string;
   readonly created_at: unknown;
   readonly token_count?: number;
@@ -749,7 +750,7 @@ export class SurrealApplicationReadModel implements ApplicationReadModel {
           ApprovalLineageRecord[],
         ]
       >(
-        `SELECT organization_id, work_id, room_id, message_id, sequence, message_type, author_kind, author_id, content, created_at, token_count, cost_micros, reply_to_message_id, caused_by_message_id, task_id, context_version_id, execution_id, artifact_version_id FROM collaboration_message WHERE organization_id = $organization_id ORDER BY room_id ASC, sequence ASC;
+        `SELECT organization_id, work_id, room_id, message_id, sequence, message_type, author_kind, author_id, recipient_agent_id, content, created_at, token_count, cost_micros, reply_to_message_id, caused_by_message_id, task_id, context_version_id, execution_id, artifact_version_id FROM collaboration_message WHERE organization_id = $organization_id ORDER BY room_id ASC, sequence ASC;
        SELECT user_id FROM membership WHERE organization_id = $organization_id;
        SELECT user_id, display_name FROM identity_user WHERE user_id IN (SELECT VALUE user_id FROM membership WHERE organization_id = $organization_id);
        SELECT handle, name, scope, work_id FROM organization_node WHERE organization_id = $organization_id;
@@ -821,6 +822,7 @@ export class SurrealApplicationReadModel implements ApplicationReadModel {
         messageType: record.message_type,
         authorKind: record.author_kind,
         authorId: record.author_id,
+        ...(record.recipient_agent_id === undefined ? {} : { recipientAgentId: record.recipient_agent_id }),
         ...(authorDisplayName === undefined ? {} : { authorDisplayName }),
         ...(actualModel === undefined ? {} : { providerId: actualModel.provider_id, modelId: actualModel.model_id }),
         content: record.content,

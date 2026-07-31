@@ -126,6 +126,7 @@ export interface ApplicationMessageSource {
   readonly messageType: string;
   readonly authorKind: string;
   readonly authorId: string;
+  readonly recipientAgentId?: string;
   readonly authorDisplayName?: string;
   readonly providerId?: string;
   readonly modelId?: string;

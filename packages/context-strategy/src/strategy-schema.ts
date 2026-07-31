@@ -78,6 +78,8 @@ export const strategyPlanSchema = z
 
 const automaticStrategyPlanSchema = strategyPlanSchema.extend({
   acceptanceCriteria: z.array(automaticAcceptanceCriterionSchema).min(1).max(100),
+  // 자동 실행 경로에는 별도 evidence request 소비자가 없습니다. 필요한 조사는 실행 Task로 계획합니다.
+  evidenceRequests: z.array(evidenceRequestSchema).length(0),
 });
 
 export type AcceptanceCriterion = z.infer<typeof acceptanceCriterionSchema>;

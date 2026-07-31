@@ -2618,6 +2618,39 @@ describe("협업방 조회", () => {
     }
   });
 
+  it("Agent handoff의 실제 수신자를 공개 계약까지 보존한다", async () => {
+    const registry = new ApplicationQueryRegistry();
+    registerApplicationQueries(registry, {
+      readModel: {
+        ...roomReadModel,
+        messages: async () => [
+          {
+            organizationId: context.organizationId,
+            workId: "query-work",
+            roomId: "room-1",
+            messageId: "message-handoff",
+            sequence: 1,
+            messageType: "handoff",
+            authorKind: "agent",
+            authorId: "representative",
+            recipientAgentId: "context-strategy",
+            content: "내부 실행 요약",
+            createdAt: "2026-07-21T09:01:00.000Z",
+          },
+        ],
+      },
+    });
+
+    await expect(
+      registry.query(context, ["collaboration:read"], "work.messages", {
+        workId: "query-work",
+        roomId: "room-1",
+      }),
+    ).resolves.toMatchObject({
+      data: [{ authorId: "representative", recipientAgentId: "context-strategy", messageType: "handoff" }],
+    });
+  });
+
   it("적용된 Staffing 제안은 안전한 공개 필드만 반환한다", async () => {
     const unsafeProposalMessage = {
       organizationId: context.organizationId,

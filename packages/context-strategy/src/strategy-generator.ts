@@ -537,6 +537,8 @@ export class StrategyGenerator {
           ...(input.signal === undefined ? {} : { signal: input.signal }),
           input: {
             operation: "create_strategy_plan",
+            planningContract:
+              "사용자의 자연어 목표와 제공된 맥락만으로 실제 deliverable을 만드는 최소 실행 Task, 검증 가능한 acceptance criteria, 필요한 requiredCapabilities를 추론하세요. intake, planning, assurance, records 같은 AgentOS 내장 단계를 Work Task로 복제하지 마세요. 해당 역량을 가진 availableAgents만 recommendedAgentHandles에 넣고, 없으면 빈 배열로 두어 AgentOS의 동적 배치가 보완하게 하세요. 별도 근거 조사가 필요하면 evidenceRequests를 만들지 말고 실행 가능한 research Task로 계획하세요. 사용자에게 내부 key나 schema 필드를 지정하도록 요구하지 마세요.",
             contextVersionId: prepared.contextVersion.contextVersionId,
             objective: prepared.contextVersion.objective,
             scopeIn: prepared.contextVersion.scopeIn,
