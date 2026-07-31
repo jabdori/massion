@@ -20,6 +20,16 @@ vi.mock('node:child_process', () => ({
   },
 }));
 
+vi.mock('../utils/logger', () => ({
+  logger: {
+    ai: {
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+    },
+  },
+}));
+
 // Mock promisify to work with our mocked execFile.
 // In vitest 4 the imported `execFile` is no longer referentially `===` our
 // local mock, so identify it by name/mock-flag instead of identity.
@@ -230,7 +240,7 @@ describe('ElectronFileSystemService Security Tests', () => {
     it('should limit log size to prevent memory issues', async () => {
       // Make many access attempts
       for (let i = 0; i < 1500; i++) {
-        await service.readFile('safe.txt');
+        await service.readFile('../../../etc/passwd');
       }
 
       const logs = service.getAccessLog(2000);
