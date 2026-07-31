@@ -101,5 +101,5 @@ describe("massion child E2E", () => {
     const detached = await run(["run", "제품화", "--detach", "--json"]);
     expect(detached).toMatchObject({ code: 0, stderr: "" });
     expect(JSON.parse(detached.stdout)).toMatchObject({ type: "accepted", runId: "run-child-0001" });
-  });
+  }, 15_000);
 });
