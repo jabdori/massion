@@ -20,6 +20,8 @@ const RESPONSE_TIMEOUT: Duration = Duration::from_secs(30);
 const CODEX_LOGIN_TIMEOUT: Duration = Duration::from_secs(10 * 60);
 const CODEX_LOGIN_POLL: Duration = Duration::from_millis(200);
 const BRIDGE_EVENT: &str = "massion://bridge-event";
+const MAIN_WEBVIEW_LABEL: &str = "main";
+const BUNDLED_FRONTEND_URL: &str = "tauri://localhost";
 
 #[derive(Clone, Copy)]
 enum BridgeMethod {
@@ -765,6 +767,27 @@ fn should_shutdown_bridge(event: BridgeShutdownEvent) -> bool {
     )
 }
 
+fn startup_navigation_target(
+    event: &tauri::RunEvent,
+    debug_build: bool,
+) -> Option<(&'static str, &'static str)> {
+    (!debug_build && matches!(event, tauri::RunEvent::Ready))
+        .then_some((MAIN_WEBVIEW_LABEL, BUNDLED_FRONTEND_URL))
+}
+
+fn navigate_main_webview_on_ready(app_handle: &tauri::AppHandle, event: &tauri::RunEvent) {
+    let Some((label, url)) = startup_navigation_target(event, cfg!(debug_assertions)) else {
+        return;
+    };
+    let Some(webview) = app_handle.get_webview_window(label) else {
+        return;
+    };
+    let url = tauri::Url::parse(url).expect("고정된 번들 프런트엔드 URL");
+    if let Err(error) = webview.navigate(url) {
+        eprintln!("초기 WebView 탐색 실패: {error}");
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let app = tauri::Builder::default()
@@ -789,6 +812,8 @@ pub fn run() {
         .expect("Massion desktop 실행 준비 실패");
 
     app.run(|app_handle, event| {
+        navigate_main_webview_on_ready(app_handle, &event);
+
         let shutdown_event = match event {
             tauri::RunEvent::ExitRequested { .. } => BridgeShutdownEvent::ExitRequested,
             tauri::RunEvent::Exit => BridgeShutdownEvent::Exit,
@@ -922,6 +947,22 @@ mod tests {
         assert!(should_shutdown_bridge(BridgeShutdownEvent::ExitRequested));
         assert!(should_shutdown_bridge(BridgeShutdownEvent::Exit));
         assert!(!should_shutdown_bridge(BridgeShutdownEvent::Other));
+    }
+
+    #[test]
+    fn ready_event_navigates_the_main_webview_to_the_bundled_frontend() {
+        assert_eq!(
+            startup_navigation_target(&tauri::RunEvent::Ready, false),
+            Some(("main", "tauri://localhost"))
+        );
+        assert_eq!(
+            startup_navigation_target(&tauri::RunEvent::Ready, true),
+            None
+        );
+        assert_eq!(
+            startup_navigation_target(&tauri::RunEvent::Resumed, false),
+            None
+        );
     }
 
     #[test]
