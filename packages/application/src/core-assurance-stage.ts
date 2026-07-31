@@ -128,13 +128,9 @@ function verificationMaterial(
   planContentJson: string | undefined,
   fallbackRequest: unknown,
 ): Readonly<Record<string, unknown>> {
-  const candidate = recovery as {
-    readonly request?: Readonly<Record<string, unknown>>;
-    readonly work?: { readonly artifact_version_ids?: readonly string[] };
-    readonly tasks?: readonly Readonly<Record<string, unknown>>[];
-    readonly messages?: readonly Readonly<Record<string, unknown>>[];
-    readonly artifactVersions?: readonly Readonly<Record<string, unknown>>[];
-  };
+  const candidate = recovery as Partial<
+    Pick<WorkRecoveryBundle, "request" | "work" | "tasks" | "messages" | "artifactVersions">
+  >;
   const activeTasks = (candidate.tasks ?? []).filter((task) => task.plan_version_id === planVersionId);
   const taskIds = new Set(activeTasks.flatMap((task) => (typeof task.task_id === "string" ? [task.task_id] : [])));
   const tasks = activeTasks.map((task) => ({
@@ -166,11 +162,11 @@ function verificationMaterial(
         messageByArtifact.has(version.artifact_version_id) &&
         (allowed === undefined || allowed.has(version.artifact_version_id)),
     )
-    .sort((left, right) => String(left.artifact_version_id).localeCompare(String(right.artifact_version_id)))
+    .sort((left, right) => left.artifact_version_id.localeCompare(right.artifact_version_id))
     .map((version) => ({
       artifactVersionId: version.artifact_version_id,
-      ...(messageByArtifact.has(String(version.artifact_version_id))
-        ? { taskId: messageByArtifact.get(String(version.artifact_version_id)) }
+      ...(messageByArtifact.has(version.artifact_version_id)
+        ? { taskId: messageByArtifact.get(version.artifact_version_id) }
         : {}),
       content: parseJson(version.content_json),
     }));
