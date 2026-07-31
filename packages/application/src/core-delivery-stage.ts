@@ -72,7 +72,7 @@ function sourceRequest(request: unknown): Readonly<Record<string, unknown>> | un
 }
 
 function dependencyOutputs(task: WorkTask, recovery: WorkRecoveryBundle): readonly Readonly<Record<string, unknown>>[] {
-  const dependencyIds = new Set(task.dependency_ids ?? []);
+  const dependencyIds = new Set(task.dependency_ids);
   if (dependencyIds.size === 0) return [];
   const allowedVersionIds = new Set(recovery.work.artifact_version_ids);
   const versions = new Map(

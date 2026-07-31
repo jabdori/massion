@@ -128,7 +128,7 @@ function verificationMaterial(
   planContentJson: string | undefined,
   fallbackRequest: unknown,
 ): Readonly<Record<string, unknown>> {
-  const candidate = recovery as WorkRecoveryBundle & {
+  const candidate = recovery as {
     readonly request?: Readonly<Record<string, unknown>>;
     readonly work?: { readonly artifact_version_ids?: readonly string[] };
     readonly tasks?: readonly Readonly<Record<string, unknown>>[];
