@@ -88,6 +88,7 @@ describe("ApplicationRunStore", () => {
     expect(APPLICATION_RUN_MIGRATION.id).toBe("0069-application-run");
     expect(APPLICATION_RUN_MIGRATION.checksum).toMatch(/^[a-f0-9]{64}$/u);
     expect(APPLICATION_MIGRATIONS.map((migration) => migration.id)).toContain("0109-application-run-approval-resume");
+    expect(APPLICATION_MIGRATIONS.map((migration) => migration.id)).toContain("0118-application-run-event-work");
   });
 
   it("기존 0069 checksum 데이터베이스에 재시도 schema migration을 적용한다", async () => {
@@ -108,8 +109,41 @@ describe("ApplicationRunStore", () => {
         "0069-application-run",
         "0105-application-run-retry",
         "0109-application-run-approval-resume",
+        "0118-application-run-event-work",
       ]),
     );
+  });
+
+  it("run event는 발생 당시 Work 계보를 불변으로 저장한다", async () => {
+    const run = await store.start(context, {
+      commandId: "application-run-event-work-0001",
+      correlationId: "application-run-event-work-correlation-0001",
+      request: {},
+    });
+    const firstClaim = await store.claim(context, run.runId);
+    if (firstClaim.outcome !== "claimed") throw new Error("첫 run lease를 얻지 못했습니다");
+    await store.advance(context, run.runId, firstClaim.leaseGeneration, {
+      stage: "context-strategy",
+      workId: "work-event-first",
+    });
+    const secondClaim = await store.claim(context, run.runId);
+    if (secondClaim.outcome !== "claimed") throw new Error("두 번째 run lease를 얻지 못했습니다");
+    await store.advance(context, run.runId, secondClaim.leaseGeneration, {
+      stage: "delivery",
+      workId: "work-event-second",
+    });
+
+    const [records] = await database.query<[{ event_type: string; stage: string; work_id?: string }[]]>(
+      "SELECT event_type, stage, work_id FROM application_run_event WHERE organization_id = $organization_id AND run_id = $run_id;",
+      { organization_id: context.organizationId, run_id: run.runId },
+    );
+    expect(records.find((event) => event.event_type === "started")?.work_id).toBeUndefined();
+    expect(
+      records.find((event) => event.event_type === "advanced" && event.stage === "context-strategy"),
+    ).toMatchObject({ work_id: "work-event-first" });
+    expect(records.find((event) => event.event_type === "advanced" && event.stage === "delivery")).toMatchObject({
+      work_id: "work-event-second",
+    });
   });
 
   it("Router의 0090 migration이 적용된 데이터베이스에도 재시도 schema migration을 적용한다", async () => {

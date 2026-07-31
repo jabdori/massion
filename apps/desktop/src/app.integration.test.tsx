@@ -65,6 +65,86 @@ function knowledgeGraphFixture(lens: KnowledgeNodeKind, nodeId: string, label: s
 }
 
 describe("AgentOS native data flow", () => {
+  it("선택한 Work의 run event는 상세 상태·계획·승인을 다시 읽는다", async () => {
+    const base = fixtureDataAdapter().works[0] as WorkView;
+    const blocked: WorkView = {
+      ...base,
+      approvals: [],
+      tasks: [],
+      activities: [],
+      progress: 0,
+      run: {
+        runId: "run-projection-refresh",
+        status: "blocked",
+        stage: "context-strategy",
+        blockedReason: "strategy-failed",
+        leaseGeneration: 4,
+      },
+    };
+    const approval = {
+      id: "approval-projection-refresh",
+      title: "배포 계획 승인",
+      description: "확정된 작업 2개를 실행합니다.",
+      workId: blocked.id,
+      revision: 1,
+      status: "pending" as const,
+    };
+    const refreshed: WorkView = {
+      ...blocked,
+      approvals: [approval],
+      tasks: base.tasks.slice(0, 2),
+      activities: [
+        {
+          id: "approval-projection-refresh-activity",
+          kind: "approval",
+          time: "10:30",
+          approvalId: approval.id,
+          title: approval.title,
+          description: approval.description,
+        },
+      ],
+      progress: 50,
+      run: {
+        runId: "run-projection-refresh",
+        status: "awaiting-approval",
+        stage: "delivery",
+        leaseGeneration: 5,
+      },
+    };
+    let durable: ((event: unknown) => void) | undefined;
+    const loadWork = vi.fn(async () => refreshed);
+    render(
+      <App
+        service={service({
+          initialSnapshot: { works: [blocked] },
+          loadIndex: async () => [blocked],
+          loadWork,
+          subscribeDurable: async (handler) => {
+            durable = handler;
+            return async () => undefined;
+          },
+        })}
+      />,
+    );
+    expect(screen.getByRole("status", { name: "실행 상태" })).toHaveTextContent("차단됨");
+    expect(screen.getByRole("complementary", { name: "Work 세부 정보" })).toHaveTextContent("작업 0/0");
+    await waitFor(() => expect(durable).toBeTypeOf("function"));
+
+    act(() =>
+      durable?.({
+        sequence: 30,
+        type: "run.suspended",
+        resource: { type: "ApplicationRun", id: "run-projection-refresh", revision: 5 },
+        payload: { stage: "delivery", workId: blocked.id },
+      }),
+    );
+
+    await waitFor(() => expect(loadWork).toHaveBeenCalledWith(blocked.id));
+    expect(screen.getByRole("status", { name: "실행 상태" })).toHaveTextContent("승인 대기");
+    expect(screen.getByRole("complementary", { name: "Work 세부 정보" })).toHaveTextContent("작업 1/2");
+    expect(screen.getByRole("button", { name: "배포 계획 승인 승인" })).toBeInTheDocument();
+  });
+
   it("durable 갱신은 선택한 Work의 방만 다시 읽고 탭·오류·이전 성공 데이터를 보존한다", async () => {
     const user = userEvent.setup();
     const work = fixtureDataAdapter().works[0] as WorkView;
@@ -1838,6 +1918,101 @@ describe("AgentOS native data flow", () => {
     });
     expect(await screen.findByRole("main", { name: created.title }, { timeout: 2_000 })).toBeInTheDocument();
     expect(startWork).toHaveBeenCalledOnce();
+  });
+
+  it("동시 durable batch의 첫 목록 응답이 stale이어도 다음 batch가 Work 생성을 해소한다", async () => {
+    const user = userEvent.setup();
+    const snapshot = fixtureDataAdapter();
+    const created: WorkView = {
+      ...(snapshot.works[1] as WorkView),
+      id: "work-created-concurrent-0001",
+      title: "동시 생성 후보 확인",
+      run: { runId: "run-created-concurrent-0001", status: "running", stage: "delivery", leaseGeneration: 1 },
+    };
+    const firstEventLoad = deferred<WorkView[]>();
+    let durable: ((event: unknown) => void) | undefined;
+    let eventLoads = 0;
+    let eventsStarted = false;
+    const loadIndex = vi.fn(async () => {
+      if (!eventsStarted) return snapshot.works;
+      eventLoads += 1;
+      if (eventLoads === 1) return await firstEventLoad.promise;
+      firstEventLoad.resolve([...snapshot.works, created]);
+      return [...snapshot.works, created];
+    });
+    render(
+      <App
+        service={service({
+          startWork: async () => ({ runId: "run-created-concurrent-0001" }),
+          loadIndex,
+          loadWork: async (workId) => (workId === created.id ? created : (snapshot.works[0] as WorkView)),
+          subscribeDurable: async (handler) => {
+            durable = handler;
+            return async () => undefined;
+          },
+        })}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: "새 Work 만들기" }));
+    await user.type(screen.getByRole("textbox", { name: "업무 요청" }), "동시 생성 후보를 확인해줘");
+    await user.click(screen.getByRole("button", { name: "실행 시작" }));
+    expect(await screen.findByText("Work 생성 중")).toBeInTheDocument();
+
+    eventsStarted = true;
+    durable?.({ sequence: 41, type: "work.created", resource: { type: "Work", id: created.id } });
+    await waitFor(() => expect(eventLoads).toBe(1));
+    durable?.({ sequence: 42, type: "run.claimed", payload: { workId: created.id } });
+    await waitFor(() => expect(eventLoads).toBe(2));
+
+    expect(await screen.findByRole("main", { name: created.title }, { timeout: 2_000 })).toBeInTheDocument();
+    await waitFor(() => expect(loadIndex).toHaveBeenCalled());
+    expect(screen.queryByText("Work 생성 중")).not.toBeInTheDocument();
+  });
+
+  it("Work 후보의 첫 목록 조회가 실패해도 다음 durable batch 성공으로 생성을 해소한다", async () => {
+    const user = userEvent.setup();
+    const snapshot = fixtureDataAdapter();
+    const created: WorkView = {
+      ...(snapshot.works[1] as WorkView),
+      id: "work-created-retry-0001",
+      title: "실패 뒤 생성 후보 확인",
+      run: { runId: "run-created-retry-0001", status: "running", stage: "delivery", leaseGeneration: 1 },
+    };
+    let durable: ((event: unknown) => void) | undefined;
+    let eventLoads = 0;
+    let eventsStarted = false;
+    const loadIndex = vi.fn(async () => {
+      if (!eventsStarted) return snapshot.works;
+      eventLoads += 1;
+      if (eventLoads === 1) throw new Error("첫 생성 목록 조회 실패");
+      return [...snapshot.works, created];
+    });
+    render(
+      <App
+        service={service({
+          startWork: async () => ({ runId: "run-created-retry-0001" }),
+          loadIndex,
+          loadWork: async (workId) => (workId === created.id ? created : (snapshot.works[0] as WorkView)),
+          subscribeDurable: async (handler) => {
+            durable = handler;
+            return async () => undefined;
+          },
+        })}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: "새 Work 만들기" }));
+    await user.type(screen.getByRole("textbox", { name: "업무 요청" }), "실패 뒤 생성 후보를 확인해줘");
+    await user.click(screen.getByRole("button", { name: "실행 시작" }));
+    expect(await screen.findByText("Work 생성 중")).toBeInTheDocument();
+
+    eventsStarted = true;
+    durable?.({ sequence: 51, type: "work.created", resource: { type: "Work", id: created.id } });
+    await waitFor(() => expect(eventLoads).toBe(1));
+    expect(screen.getByText("Work 생성 중")).toBeInTheDocument();
+    durable?.({ sequence: 52, type: "run.claimed", payload: { workId: created.id } });
+
+    expect(await screen.findByRole("main", { name: created.title }, { timeout: 2_000 })).toBeInTheDocument();
+    expect(screen.queryByText("Work 생성 중")).not.toBeInTheDocument();
   });
 
   it("네이티브 선택 취소와 워크스페이스 밖 파일은 현재 draft를 보존한다", async () => {

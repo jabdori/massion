@@ -391,6 +391,13 @@ DEFINE INDEX dynamic_staffing_proposal_command ON dynamic_staffing_proposal FIEL
 `,
 );
 
+export const APPLICATION_RUN_EVENT_WORK_MIGRATION = defineMigration(
+  "0118-application-run-event-work",
+  `
+DEFINE FIELD work_id ON application_run_event TYPE option<string>;
+`,
+);
+
 export const APPLICATION_MIGRATIONS = [
   APPLICATION_AUTH_MIGRATION,
   APPLICATION_COMMAND_MIGRATION,
@@ -404,4 +411,5 @@ export const APPLICATION_MIGRATIONS = [
   APPLICATION_WORK_DIRECTIVE_MIGRATION,
   APPLICATION_RUN_APPROVAL_RESUME_MIGRATION,
   APPLICATION_DYNAMIC_STAFFING_MIGRATION,
+  APPLICATION_RUN_EVENT_WORK_MIGRATION,
 ] as const;

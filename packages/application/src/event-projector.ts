@@ -381,6 +381,7 @@ export class ApplicationEventProjector {
       case "run-event": {
         const source = await this.source<{
           run_id: string;
+          work_id?: string;
           lease_generation: number;
           stage: string;
           event_type: string;
@@ -391,7 +392,7 @@ export class ApplicationEventProjector {
           authorKind: "system",
           authorId: "application",
           resource: { type: "ApplicationRun", id: source.run_id, revision: source.lease_generation },
-          payload: { stage: source.stage },
+          payload: { stage: source.stage, ...(source.work_id === undefined ? {} : { workId: source.work_id }) },
         };
       }
       default:

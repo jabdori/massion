@@ -5,6 +5,7 @@ import { applyMigrations, serializeSurrealDateTime, type MassionDatabase, type Q
 
 import {
   APPLICATION_RUN_APPROVAL_RESUME_MIGRATION,
+  APPLICATION_RUN_EVENT_WORK_MIGRATION,
   APPLICATION_RUN_MIGRATION,
   APPLICATION_RUN_RETRY_MIGRATION,
 } from "./schema.js";
@@ -213,6 +214,7 @@ export class ApplicationRunStore {
       APPLICATION_RUN_MIGRATION,
       APPLICATION_RUN_RETRY_MIGRATION,
       APPLICATION_RUN_APPROVAL_RESUME_MIGRATION,
+      APPLICATION_RUN_EVENT_WORK_MIGRATION,
     ]);
     return new ApplicationRunStore(database, organizations, leaseMs, input.clock);
   }
@@ -745,13 +747,15 @@ export class ApplicationRunStore {
     eventType: string,
     detailHash: string,
   ): Promise<void> {
+    const run = await this.find(executor, organizationId, runId);
     await executor.query(
-      "CREATE application_run_event CONTENT { event_id: $event_id, organization_id: $organization_id, run_id: $run_id, correlation_id: $correlation_id, lease_generation: $generation, stage: $stage, event_type: $event_type, detail_hash: $detail_hash, created_at: <datetime>$created_at };",
+      "CREATE application_run_event CONTENT { event_id: $event_id, organization_id: $organization_id, run_id: $run_id, correlation_id: $correlation_id, work_id: $work_id, lease_generation: $generation, stage: $stage, event_type: $event_type, detail_hash: $detail_hash, created_at: <datetime>$created_at };",
       {
         event_id: randomUUID(),
         organization_id: organizationId,
         run_id: runId,
         correlation_id: correlationId,
+        work_id: run.work_id,
         generation,
         stage,
         event_type: eventType,

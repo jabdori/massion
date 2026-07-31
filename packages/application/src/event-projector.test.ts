@@ -159,4 +159,49 @@ describe("ApplicationEventProjector", () => {
       payload: { stage: "intake" },
     });
   });
+
+  it("Core run event는 투영 시점과 replay에 무관하게 발생 당시 Work 계보를 보존한다", async () => {
+    const runs = await ApplicationRunStore.create(database, organizations);
+    const run = await runs.start(context, {
+      commandId: "projector-run-command-0002",
+      correlationId: "projector-run-correlation-0002",
+      request: {},
+    });
+    const firstClaim = await runs.claim(context, run.runId);
+    if (firstClaim.outcome !== "claimed") throw new Error("첫 Core run claim이 필요합니다");
+    await runs.advance(context, run.runId, firstClaim.leaseGeneration, {
+      stage: "context-strategy",
+      workId: "work-projection-first",
+    });
+    const secondClaim = await runs.claim(context, run.runId);
+    if (secondClaim.outcome !== "claimed") throw new Error("두 번째 Core run claim이 필요합니다");
+    await runs.advance(context, run.runId, secondClaim.leaseGeneration, {
+      stage: "delivery",
+      workId: "work-projection-second",
+    });
+
+    await projector.projectPending(context, 10);
+
+    const firstProjection = (await events.read(context, { after: 0, limit: 10 })).events;
+    const projected = (type: string, stage: string) =>
+      firstProjection.find(
+        (event) => event.type === type && (event.payload as { readonly stage?: string }).stage === stage,
+      );
+    expect(projected("run.started", "intake")?.payload).toEqual({ stage: "intake" });
+    expect(projected("run.claimed", "intake")?.payload).toEqual({ stage: "intake" });
+    expect(projected("run.advanced", "context-strategy")?.payload).toEqual({
+      stage: "context-strategy",
+      workId: "work-projection-first",
+    });
+    expect(projected("run.claimed", "context-strategy")?.payload).toEqual({
+      stage: "context-strategy",
+      workId: "work-projection-first",
+    });
+    expect(projected("run.advanced", "delivery")?.payload).toEqual({
+      stage: "delivery",
+      workId: "work-projection-second",
+    });
+    expect(await projector.projectPending(context, 10)).toBe(0);
+    expect((await events.read(context, { after: 0, limit: 10 })).events).toEqual(firstProjection);
+  });
 });

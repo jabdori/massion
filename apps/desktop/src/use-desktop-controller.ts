@@ -78,6 +78,7 @@ export function useDesktopController(service: DesktopService) {
   const pendingCreationRef = useRef(pendingCreation);
   const durableWorkCandidatesRef = useRef(new Set<string>());
   const durableChangedWorkIdsRef = useRef(new Set<string>());
+  const durableDetailWorkIdsRef = useRef(new Set<string>());
   const detailRequestRef = useRef(0);
   const indexRequestRef = useRef(0);
   const commandLocks = useRef(new Set<string>());
@@ -244,18 +245,23 @@ export function useDesktopController(service: DesktopService) {
       .subscribeDurable((event) => {
         if (disposed) return;
         const candidateWorkId = createdWorkId(event);
-        if (candidateWorkId) durableWorkCandidatesRef.current.add(candidateWorkId);
+        if (candidateWorkId && (pendingCreationRef.current || commandLocks.current.has("start-work")))
+          durableWorkCandidatesRef.current.add(candidateWorkId);
         const changedWorkId = eventWorkId(event);
         if (changedWorkId) durableChangedWorkIdsRef.current.add(changedWorkId);
+        const detailWorkId = detailEventWorkId(event);
+        if (detailWorkId) durableDetailWorkIdsRef.current.add(detailWorkId);
         if (timer) clearTimeout(timer);
         timer = setTimeout(() => {
           timer = undefined;
           setEventRevision((current) => current + 1);
-          if (durableChangedWorkIdsRef.current.has(selectedIdRef.current))
+          const selectedWorkId = selectedIdRef.current;
+          if (durableChangedWorkIdsRef.current.has(selectedWorkId))
             setSelectedWorkEventRevision((current) => current + 1);
           durableChangedWorkIdsRef.current.clear();
+          if (durableDetailWorkIdsRef.current.has(selectedWorkId)) setSelectedId(selectedWorkId);
+          durableDetailWorkIdsRef.current.clear();
           const candidateWorkIds = [...durableWorkCandidatesRef.current];
-          durableWorkCandidatesRef.current.clear();
           void (async () => {
             const next = await reloadIndex();
             if (disposed || !next) return;
@@ -263,8 +269,11 @@ export function useDesktopController(service: DesktopService) {
             const creation = pendingCreationRef.current;
             if (creation) {
               for (const candidateId of candidateWorkIds) {
-                if (creation.baselineWorkIds.has(candidateId) || !next.some((value) => value.id === candidateId))
+                if (creation.baselineWorkIds.has(candidateId)) {
+                  durableWorkCandidatesRef.current.delete(candidateId);
                   continue;
+                }
+                if (!next.some((value) => value.id === candidateId)) continue;
                 try {
                   const candidate = await service.loadWork(candidateId);
                   if (isDisposed() || pendingCreationRef.current?.runId !== creation.runId) return;
@@ -275,6 +284,7 @@ export function useDesktopController(service: DesktopService) {
                     continue;
                   }
                   detailRequestRef.current += 1;
+                  durableWorkCandidatesRef.current.clear();
                   pendingCreationRef.current = undefined;
                   setPendingCreationState(undefined);
                   selectedIdRef.current = candidate.id;
@@ -288,6 +298,8 @@ export function useDesktopController(service: DesktopService) {
                   if (!isDisposed()) setAnnouncement(errorMessage(error, "새 Work의 실행 계보를 확인하지 못했습니다."));
                 }
               }
+            } else if (!commandLocks.current.has("start-work")) {
+              for (const candidateId of candidateWorkIds) durableWorkCandidatesRef.current.delete(candidateId);
             }
 
             /*
@@ -661,8 +673,18 @@ function createdWorkId(value: unknown): string | undefined {
 }
 
 function eventWorkId(value: unknown): string | undefined {
-  const resource = asRecord(asRecord(value)?.resource);
-  return resource?.type === "Work" && typeof resource.id === "string" ? resource.id : undefined;
+  const event = asRecord(value);
+  const resource = asRecord(event?.resource);
+  if (resource?.type === "Work" && typeof resource.id === "string") return resource.id;
+  const payload = asRecord(event?.payload);
+  return typeof payload?.workId === "string" ? payload.workId : undefined;
+}
+
+function detailEventWorkId(value: unknown): string | undefined {
+  const type = asRecord(value)?.type;
+  return typeof type === "string" && (type.startsWith("work.") || type.startsWith("run."))
+    ? eventWorkId(value)
+    : undefined;
 }
 
 function executionMessage(value: unknown, executionId: string): string | undefined {
