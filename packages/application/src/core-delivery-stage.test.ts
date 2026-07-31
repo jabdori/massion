@@ -77,7 +77,19 @@ function deliveryStage(
     readonly staffing?: DeliveryDependencies["staffing"];
   },
 ): CoreDeliveryStage {
-  return new CoreDeliveryStage({ ...dependencies, staffing: dependencies.staffing ?? readyStaffing });
+  return new CoreDeliveryStage({
+    ...dependencies,
+    works: {
+      recoverWork: async () => ({
+        request: {},
+        work: { artifact_version_ids: [] },
+        messages: [],
+        artifactVersions: [],
+      }),
+      ...dependencies.works,
+    } as never,
+    staffing: dependencies.staffing ?? readyStaffing,
+  });
 }
 
 describe("CoreDeliveryStage", () => {
@@ -597,6 +609,7 @@ describe("CoreDeliveryStage", () => {
       title: "분석",
       objective: "분석",
       acceptance_criteria_json: "[]",
+      dependency_ids: ["task-prior"],
       status: taskStatus,
       required_capabilities: [],
       recommended_agent_handles: ["data-analysis"],
@@ -634,6 +647,26 @@ describe("CoreDeliveryStage", () => {
         revision += 1;
         return { work: { revision }, artifactVersion: { artifact_version_id: "artifact-version-1" } };
       },
+      recoverWork: async () => ({
+        request: {
+          text: "A안 1,000명 중 100명과 B안 1,000명 중 130명의 차이를 분석해 주세요.",
+          surface: "test",
+        },
+        work: { artifact_version_ids: ["artifact-prior"] },
+        messages: [
+          {
+            sequence: 1,
+            task_id: "task-prior",
+            artifact_version_id: "artifact-prior",
+          },
+        ],
+        artifactVersions: [
+          {
+            artifact_version_id: "artifact-prior",
+            content_json: '{"absoluteLift":0.03,"pValue":0.036}',
+          },
+        ],
+      }),
     };
     const stage = deliveryStage({
       works,
@@ -657,7 +690,7 @@ describe("CoreDeliveryStage", () => {
         },
       },
     } as never);
-    await expect(stage.execute(context, input)).resolves.toMatchObject({
+    await expect(stage.execute(context, { ...input, request: {} })).resolves.toMatchObject({
       outcome: "advanced",
       data: { artifactVersionIds: ["artifact-version-1"] },
     });
@@ -668,6 +701,16 @@ describe("CoreDeliveryStage", () => {
         estimatedTokens: expect.any(Number),
         input: expect.objectContaining({
           operation: "execute_work_task",
+          sourceRequest: expect.objectContaining({
+            text: "A안 1,000명 중 100명과 B안 1,000명 중 130명의 차이를 분석해 주세요.",
+          }),
+          dependencyOutputs: [
+            {
+              taskId: "task-prior",
+              artifactVersionId: "artifact-prior",
+              content: { absoluteLift: 0.03, pValue: 0.036 },
+            },
+          ],
           knowledgeSources,
           outputContract: expect.stringContaining("Task output ArtifactVersion으로 자동 저장"),
         }),
@@ -797,31 +840,32 @@ describe("CoreDeliveryStage", () => {
     expect(softwareInputs).toEqual([expect.objectContaining({ knowledgeSources })]);
   });
 
-  it("1,000 token Work에서 stage baseline 뒤 근거 여유가 없으면 실행 전에 차단한다", async () => {
-    let materializeCalls = 0;
+  it("의존 Artifact를 포함한 runtime 입력이 Work 예산을 넘으면 실행 전에 차단한다", async () => {
     let runtimeCalls = 0;
     const stage = deliveryStage({
       works: {
-        getWork: async () => ({ revision: 1, status: "running", workspace_id: "workspace-low-budget" }),
+        getWork: async () => ({ revision: 1, status: "running" }),
         listTasks: async () => [
           {
             task_id: "task-low-budget",
             title: "저예산 실행",
             objective: "요청 예산 안에서 실행",
             acceptance_criteria_json: "[]",
+            dependency_ids: ["task-prior"],
             status: "ready",
             required_capabilities: [],
             recommended_agent_handles: ["delivery-coordination"],
             revision: 1,
           },
         ],
-      },
-      workspaces: { get: async () => ({ trust: "trusted" }) },
-      evidence: {
-        materializeActive: async () => {
-          materializeCalls += 1;
-          return [];
-        },
+        recoverWork: async () => ({
+          request: { text: "대형 선행 결과를 요약해 주세요." },
+          work: { artifact_version_ids: ["artifact-prior"] },
+          messages: [{ sequence: 1, task_id: "task-prior", artifact_version_id: "artifact-prior" }],
+          artifactVersions: [
+            { artifact_version_id: "artifact-prior", content_json: JSON.stringify({ result: "x".repeat(120_000) }) },
+          ],
+        }),
       },
       runner: {
         execute: async () => {
@@ -832,11 +876,10 @@ describe("CoreDeliveryStage", () => {
       runtimeExecutions: {},
     } as never);
 
-    await expect(stage.execute(context, { ...input, request: { tokenBudget: 1_000 } })).resolves.toEqual({
+    await expect(stage.execute(context, { ...input, request: { tokenBudget: 32_000 } })).resolves.toEqual({
       outcome: "blocked",
       reason: "evidence-invalid",
     });
-    expect(materializeCalls).toBe(0);
     expect(runtimeCalls).toBe(0);
   });
 

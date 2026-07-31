@@ -3,7 +3,7 @@ import type { TenantContext } from "@massion/identity";
 import type { AgentRunner, RuntimeExecutionStore } from "@massion/runtime";
 import { isSoftwareEngineeringTask } from "@massion/software-engineering";
 import type { QueryExecutor } from "@massion/storage";
-import type { WorkService, WorkTask } from "@massion/work";
+import type { WorkRecoveryBundle, WorkService, WorkTask } from "@massion/work";
 import type { WorkspaceService } from "@massion/workspace";
 
 import type { CoreEvidenceStage } from "./core-evidence-stage.js";
@@ -27,8 +27,8 @@ function promptTokens(value: unknown): number {
   return Math.max(1, Math.ceil(JSON.stringify(value).length / 4));
 }
 
-function stageBaseline(value: unknown, tokenBudget: number): number {
-  return Math.min(tokenBudget, promptTokens(value) + STAGE_OUTPUT_RESERVE_TOKENS);
+function stageBaseline(value: unknown): number {
+  return promptTokens(value) + STAGE_OUTPUT_RESERVE_TOKENS;
 }
 
 function softwarePrompt(task: WorkTask, request: unknown): unknown {
@@ -58,6 +58,47 @@ function isSoftwareTask(task: WorkTask): boolean {
 
 function deliveryAgentHandle(task: WorkTask): string {
   return task.recommended_agent_handles?.find((handle) => handle !== "assurance") ?? "delivery-coordination";
+}
+
+function sourceRequest(request: unknown): Readonly<Record<string, unknown>> | undefined {
+  if (!request || typeof request !== "object" || Array.isArray(request)) return undefined;
+  const input = request as Record<string, unknown>;
+  const context = Object.fromEntries(
+    ["text", "scopeIn", "scopeOut", "constraints", "assumptions", "unknowns", "decisions"].flatMap((key) =>
+      input[key] === undefined ? [] : [[key, input[key]]],
+    ),
+  );
+  return Object.keys(context).length === 0 ? undefined : context;
+}
+
+function dependencyOutputs(task: WorkTask, recovery: WorkRecoveryBundle): readonly Readonly<Record<string, unknown>>[] {
+  const dependencyIds = new Set(task.dependency_ids ?? []);
+  if (dependencyIds.size === 0) return [];
+  const allowedVersionIds = new Set(recovery.work.artifact_version_ids);
+  const versions = new Map(
+    recovery.artifactVersions.map((version) => [version.artifact_version_id, version.content_json] as const),
+  );
+  return recovery.messages
+    .filter(
+      (message) =>
+        message.task_id !== undefined &&
+        dependencyIds.has(message.task_id) &&
+        message.artifact_version_id !== undefined &&
+        allowedVersionIds.has(message.artifact_version_id),
+    )
+    .sort((left, right) => left.sequence - right.sequence)
+    .flatMap((message) => {
+      const artifactVersionId = message.artifact_version_id;
+      const contentJson = artifactVersionId === undefined ? undefined : versions.get(artifactVersionId);
+      if (artifactVersionId === undefined || contentJson === undefined || message.task_id === undefined) return [];
+      return [
+        {
+          taskId: message.task_id,
+          artifactVersionId,
+          content: JSON.parse(contentJson) as unknown,
+        },
+      ];
+    });
 }
 
 export interface CoreSoftwareTaskPort {
@@ -109,6 +150,7 @@ export class CoreDeliveryStage implements CoreWorkStageExecutor {
         | "assignTask"
         | "transitionTask"
         | "createArtifactVersion"
+        | "recoverWork"
       >;
       readonly runner: Pick<AgentRunner, "execute" | "recover" | "cancel">;
       readonly runtimeExecutions: Pick<RuntimeExecutionStore, "findExecutionIdByCommand">;
@@ -293,6 +335,10 @@ export class CoreDeliveryStage implements CoreWorkStageExecutor {
       if (softwareTask && !this.dependencies.software) {
         return { outcome: "blocked", reason: "software-delivery-not-configured" };
       }
+      const recovery = softwareTask ? undefined : await this.dependencies.works.recoverWork(context, input.workId);
+      const requestContext = sourceRequest(recovery?.request ?? input.request);
+      const priorOutputs = recovery ? dependencyOutputs(task, recovery) : [];
+      this.throwIfCancelled(input);
       const runtimeInput = {
         operation: "execute_work_task",
         title: task.title,
@@ -303,11 +349,11 @@ export class CoreDeliveryStage implements CoreWorkStageExecutor {
             : [],
         outputContract:
           "최종 응답 전체는 Task output ArtifactVersion으로 자동 저장되고 후속 Assurance가 acceptance evidence를 검증합니다. Artifact 생성·제출 도구를 찾거나 호출하지 말고 acceptance criteria를 충족하는 최종 결과 본문만 반환하세요.",
+        ...(requestContext === undefined ? {} : { sourceRequest: requestContext }),
+        ...(priorOutputs.length === 0 ? {} : { dependencyOutputs: priorOutputs }),
       };
-      const baselineTokens = stageBaseline(
-        softwareTask ? softwarePrompt(task, input.request) : runtimeInput,
-        tokenBudget,
-      );
+      const baselineTokens = stageBaseline(softwareTask ? softwarePrompt(task, input.request) : runtimeInput);
+      if (baselineTokens > tokenBudget) return { outcome: "blocked", reason: "evidence-invalid" };
       let knowledgeSources: readonly MaterializedEvidencePrompt[] | undefined;
       if (initial.workspace_id !== undefined) {
         if (!this.dependencies.evidence) return { outcome: "blocked", reason: "evidence-invalid" };
