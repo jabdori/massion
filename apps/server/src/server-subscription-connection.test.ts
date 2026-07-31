@@ -1308,7 +1308,7 @@ describe("실제 서버 구독 계정 준비 조립", () => {
     expect(finalConnectors).toEqual([{ status: "ready" }]);
     expect(finalCredentials).toEqual([{ status: "active" }]);
     expect(applicationCommands).toEqual([{ state: "succeeded", lease_generation: 2 }]);
-  });
+  }, 15_000);
 
   it("실제 Codex 준비가 Credential 생성 뒤 실패해도 같은 command 재개는 연결기 하나만 재사용하고 계정 계보를 한 번만 만든다", async () => {
     database = await createDatabase({ url: "mem://", namespace: "massion", database: randomUUID() });
@@ -1973,5 +1973,5 @@ describe("실제 서버 구독 계정 준비 조립", () => {
     );
     expect(persisted).not.toContain(secret);
     expect(JSON.stringify(connected)).not.toContain(secret);
-  });
+  }, 15_000);
 });

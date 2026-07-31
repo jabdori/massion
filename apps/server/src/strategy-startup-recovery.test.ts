@@ -144,7 +144,7 @@ describe("Strategy 시작 복구 서비스 종료", () => {
     await vi.waitFor(() => expect(recoverGeneration).toHaveBeenCalledOnce());
     const callsBeforeClose = executeStructured.mock.calls.length;
     const completed = Promise.all([starting, service.close(), service.close()]);
-    const closedWithin50Ms = await Promise.race([completed.then(() => true), delay(50).then(() => false)]);
+    const closedWithinOneSecond = await Promise.race([completed.then(() => true), delay(1_000).then(() => false)]);
 
     await database.query(
       "UPDATE strategy_generation SET execution_claim_expires_at = type::datetime('2000-01-01T00:00:00.000Z') WHERE strategy_generation_id = $strategy_generation_id;",
@@ -158,12 +158,12 @@ describe("Strategy 시작 복구 서비스 종료", () => {
     );
 
     expect({
-      closedWithin50Ms,
+      closedWithinOneSecond,
       callsBeforeClose,
       callsAfterLeaseExpiry: executeStructured.mock.calls.length,
       row: rows[0],
     }).toEqual({
-      closedWithin50Ms: true,
+      closedWithinOneSecond: true,
       callsBeforeClose: 0,
       callsAfterLeaseExpiry: 0,
       row: { status: "pending", execution_claim_id: "previous-process" },

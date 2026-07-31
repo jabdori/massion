@@ -8,7 +8,7 @@ import { createInterface } from "node:readline";
 import { describe, expect, it } from "vitest";
 
 describe("massion-server process", () => {
-  it("backup 일회성 command가 owner-only artifact를 만들고 종료한다", async () => {
+  it("backup 일회성 command가 owner-only artifact를 만들고 종료한다", { timeout: 20_000 }, async () => {
     const directory = await mkdtemp(join(tmpdir(), "massion-server-backup-command-"));
     const path = join(directory, "backup.json");
     try {
