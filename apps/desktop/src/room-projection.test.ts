@@ -29,6 +29,15 @@ const nodes: OrganizationNodeView[] = [
     capabilities: ["evidence-research"],
   },
   {
+    id: "node-context",
+    handle: "context-strategy",
+    name: "Context & Strategy",
+    responsibility: "맥락 구성, 계획, 위험 분석",
+    status: "active",
+    role: "operator",
+    capabilities: ["context-strategy"],
+  },
+  {
     id: "node-assurance",
     handle: "assurance",
     name: "Assurance",
@@ -169,12 +178,38 @@ describe("협업방 투영", () => {
           sequence: 1,
           messageType: "handoff",
           authorId: "representative",
-          recipientAgentId: "context-strategy",
+          recipientAgentId: "evidence-research",
           content: JSON.stringify({
+            handoffTo: "context-strategy",
             intent: "동적 배치 게이트를 검증합니다.",
             execution: { artifactCount: 1, artifactType: "text" },
             constraints: { criticalRisks: [], fileChanges: false },
             nextAction: "필수 역량을 배치한 뒤 실행과 검증을 진행하세요.",
+          }),
+        }),
+      ],
+      nodes,
+    );
+
+    if (activity?.kind !== "handoff") throw new Error("인계가 handoff 활동이 아닙니다");
+    expect(activity.from.name).toBe("Atlas");
+    expect(activity.to?.name).toBe("Quill");
+    expect(activity.content).toBeUndefined();
+  });
+
+  it("실제 collaboration_message의 명시적 handoffTo를 현재 조직의 받는 Agent로 표시한다", () => {
+    const [activity] = projectRoomActivities(
+      [
+        message({
+          messageId: "actual-collaboration-handoff",
+          sequence: 1,
+          messageType: "handoff",
+          authorId: "representative",
+          content: JSON.stringify({
+            handoffTo: "context-strategy",
+            intent: "사용자 요청을 실행 가능한 계획으로 전환합니다.",
+            nextAction: "위험과 실행 순서를 정리하세요.",
+            tasks: [{ title: "실행 계획 작성", status: "pending" }],
           }),
         }),
       ],
@@ -196,6 +231,50 @@ describe("협업방 투영", () => {
           messageType: "handoff",
           authorId: "representative",
           content: JSON.stringify({ intent: "내부 의도", nextAction: "내부 다음 단계" }),
+        }),
+      ],
+      nodes,
+    );
+
+    if (activity?.kind !== "handoff") throw new Error("인계가 handoff 활동이 아닙니다");
+    expect(activity.to).toBeUndefined();
+    expect(activity.content).toBeUndefined();
+  });
+
+  it.each(["", "unknown-agent", 42])("유효하지 않은 handoffTo %j로 받는 Agent를 만들지 않는다", (handoffTo) => {
+    const [activity] = projectRoomActivities(
+      [
+        message({
+          messageId: `invalid-handoff-${String(handoffTo)}`,
+          sequence: 1,
+          messageType: "handoff",
+          authorId: "representative",
+          content: JSON.stringify({ handoffTo, intent: "내부 의도" }),
+        }),
+      ],
+      nodes,
+    );
+
+    if (activity?.kind !== "handoff") throw new Error("인계가 handoff 활동이 아닙니다");
+    expect(activity.to).toBeUndefined();
+    expect(activity.content).toBeUndefined();
+  });
+
+  it("배열형 구조화 인계도 내부 실행 정보와 유사 handle을 모두 숨긴다", () => {
+    const [activity] = projectRoomActivities(
+      [
+        message({
+          messageId: "array-handoff",
+          sequence: 1,
+          messageType: "handoff",
+          authorId: "representative",
+          content: JSON.stringify([
+            {
+              nextAction: "내부 다음 단계",
+              provider: "internal-provider",
+              handle: "context-strategy",
+            },
+          ]),
         }),
       ],
       nodes,

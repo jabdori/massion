@@ -3999,14 +3999,21 @@ function clockOf(createdAt: string): string {
   return Number.isNaN(parsed.getTime()) ? createdAt : parsed.toTimeString().slice(0, 5);
 }
 
-function handoffDisplayContent(content: string): string | undefined {
+function handoffDisplay(
+  content: string,
+  nodes: readonly OrganizationNodeView[],
+): { readonly content?: string; readonly recipientAgentId?: string } {
   try {
-    const parsed = JSON.parse(content) as unknown;
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return content;
+    const parsed = object(JSON.parse(content));
+    if (!parsed) return {};
     // 구조화 handoff는 다음 Agent의 실행 입력입니다. 사람용 대화 본문으로 투영하지 않습니다.
-    return undefined;
+    return typeof parsed.handoffTo === "string" &&
+      parsed.handoffTo.length > 0 &&
+      nodes.some((node) => node.handle === parsed.handoffTo)
+      ? { recipientAgentId: parsed.handoffTo }
+      : {};
   } catch {
-    return content;
+    return { content };
   }
 }
 
@@ -4224,18 +4231,19 @@ export function projectRoomActivities(
     }
 
     if (message.messageType === "handoff") {
-      const content = handoffDisplayContent(message.content);
+      const display = handoffDisplay(message.content, nodes);
+      const recipientAgentId =
+        message.recipientAgentId === undefined ? display.recipientAgentId : message.recipientAgentId;
       return {
         id: message.messageId,
         kind: "handoff",
         time,
         occurredAt: message.createdAt,
         from: speaker,
-        ...(message.recipientAgentId === undefined
-          ? content === undefined
-            ? {}
-            : { content }
-          : { to: speakerFor({ authorKind: "agent", authorId: message.recipientAgentId }, nodes) }),
+        ...(display.content === undefined ? {} : { content: display.content }),
+        ...(recipientAgentId === undefined
+          ? {}
+          : { to: speakerFor({ authorKind: "agent", authorId: recipientAgentId }, nodes) }),
       };
     }
 

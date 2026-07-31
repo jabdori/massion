@@ -1,4 +1,6 @@
 import { agentIdentityToken } from "@massion/application/client";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 import type {
   ComplianceCode,
@@ -171,7 +173,10 @@ export function AgentAvatar({ speaker }: { speaker: SpeakerView }) {
 
 function SpeakerModel({ speaker }: { speaker: SpeakerView }) {
   return speaker.modelId ? (
-    <span className="font-mono text-[10px] text-muted" title="이 발화를 만든 모델">
+    <span
+      className="min-w-0 max-w-full break-words font-mono text-[10px] text-muted [overflow-wrap:anywhere]"
+      title="이 발화를 만든 모델"
+    >
       {speaker.modelId}
     </span>
   ) : null;
@@ -252,7 +257,7 @@ export function RoomStatus({ content }: { content: string }) {
   return <p className="py-1 text-center font-mono text-[11px] text-muted">— {content} —</p>;
 }
 
-/** 조직이 일을 넘겼다는 사실은 한 줄 텍스트보다 크게 보여야 합니다. */
+/** 인계는 대화를 끊는 장벽이 아니라 방향이 바뀐 한 지점으로 표시합니다. */
 export function RoomHandoff({
   content,
   from,
@@ -265,28 +270,31 @@ export function RoomHandoff({
   to?: SpeakerView | undefined;
 }) {
   return (
-    <div className="flex items-center gap-2.5 py-1.5">
-      <span aria-hidden="true" className={`h-px flex-1 ${speakerFill(from)} opacity-60`} />
-      <div className="min-w-0 max-w-[70%] text-center">
-        <p className="font-mono text-[11px] text-muted">
-          인계 · <span className={speakerText(from)}>{from.name}</span>
-          {/* 과거 메시지처럼 받는 쪽을 모르면 넘긴 쪽만 말하고 지어내지 않습니다. */}
-          {to ? (
-            <>
-              {" → "}
-              <span className={speakerText(to)}>{to.name}</span>
-            </>
-          ) : null}{" "}
-          · {time}
-        </p>
-        <SpeakerModel speaker={from} />
+    <div className="flex min-w-0 items-start gap-2 py-1.5 pl-[27px]">
+      <span aria-hidden="true" className={`font-mono text-[12px] ${speakerText(from)}`}>
+        ↳
+      </span>
+      <div className="min-w-0">
+        <div className="flex min-w-0 flex-wrap items-baseline gap-x-2">
+          <p className="font-mono text-[11px] text-muted">
+            인계 · <span className={speakerText(from)}>{from.name}</span>
+            {/* 과거 메시지처럼 받는 쪽을 모르면 넘긴 쪽만 말하고 지어내지 않습니다. */}
+            {to ? (
+              <>
+                {" → "}
+                <span className={speakerText(to)}>{to.name}</span>
+              </>
+            ) : null}{" "}
+            · {time}
+          </p>
+          <SpeakerModel speaker={from} />
+        </div>
         {content ? (
           <p className="mt-1 whitespace-pre-wrap break-words text-[12px] leading-5 text-secondary [overflow-wrap:anywhere]">
             {content}
           </p>
         ) : null}
       </div>
-      <span aria-hidden="true" className={`h-px flex-1 ${to ? speakerFill(to) : "bg-border"} opacity-60`} />
     </div>
   );
 }
@@ -347,7 +355,31 @@ export function RoomMessage({
             {quoted.author} · {quoted.time} — {quoted.content}
           </blockquote>
         ) : null}
-        <p className={`text-[13px] leading-5 text-primary ${final ? "mt-1.5 font-medium" : ""}`}>{content}</p>
+        {final ? (
+          <div className="mt-1.5 min-w-0 text-[13px] font-medium leading-5 text-primary [&>:first-child]:mt-0 [&>:last-child]:mb-0 [&_a]:underline [&_a]:underline-offset-2 [&_blockquote]:my-2 [&_blockquote]:border-l-2 [&_blockquote]:border-control [&_blockquote]:pl-3 [&_blockquote]:text-secondary [&_code]:rounded-[3px] [&_code]:bg-canvas [&_code]:px-1 [&_code]:font-mono [&_h1]:my-3 [&_h1]:text-[18px] [&_h1]:font-semibold [&_h2]:my-3 [&_h2]:text-[16px] [&_h2]:font-semibold [&_h3]:my-2 [&_h3]:text-[14px] [&_h3]:font-semibold [&_h4]:my-2 [&_h4]:font-semibold [&_h5]:my-2 [&_h5]:font-semibold [&_h6]:my-2 [&_h6]:font-semibold [&_li]:my-0.5 [&_ol]:my-2 [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:my-2 [&_pre]:my-2 [&_pre]:overflow-x-auto [&_pre]:rounded-[5px] [&_pre]:bg-canvas [&_pre]:p-2 [&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_td]:border [&_td]:border-control [&_td]:px-2 [&_td]:py-1 [&_th]:border [&_th]:border-control [&_th]:bg-surface-2 [&_th]:px-2 [&_th]:py-1 [&_ul]:my-2 [&_ul]:list-disc [&_ul]:pl-5">
+            <ReactMarkdown
+              components={{
+                a: ({ children, href, title }) => (
+                  <a href={href || undefined} title={title}>
+                    {children}
+                  </a>
+                ),
+                img: ({ alt, src, title }) => <img alt={alt ?? ""} src={src || undefined} title={title} />,
+                table: ({ children }) => (
+                  <div aria-label="최종 응답 표" className="my-2 overflow-x-auto" role="region" tabIndex={0}>
+                    <table className="w-full border-collapse text-left">{children}</table>
+                  </div>
+                ),
+              }}
+              remarkPlugins={[remarkGfm]}
+              skipHtml
+            >
+              {content}
+            </ReactMarkdown>
+          </div>
+        ) : (
+          <p className="text-[13px] leading-5 text-primary">{content}</p>
+        )}
         {evidence ? (
           <p className="mt-1.5 flex flex-wrap items-center gap-2">
             <span

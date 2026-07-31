@@ -61,6 +61,15 @@ describe("협업방 문법", () => {
     expect(screen.queryByText(/openai-codex/u)).not.toBeInTheDocument();
   });
 
+  it("긴 단일-token 모델명은 compact 인계 너비 안에서 줄바꿈한다", () => {
+    const modelId = "m".repeat(120);
+    render(<RoomHandoff from={{ ...quill, modelId }} time="10:24" to={vega} />);
+
+    const model = screen.getByText(modelId);
+    expect(model).toHaveClass("min-w-0", "max-w-full", "[overflow-wrap:anywhere]");
+    expect(model.parentElement).toHaveClass("min-w-0");
+  });
+
   it("같은 역할이 병렬로 있어도 이름과 색이 갈린다", () => {
     // scope:"work"로 만들어진 조사 노드 둘. 역할은 같고 handle만 다릅니다.
     const first: SpeakerView = { handle: "research-cohort", name: "Nova", initial: "N", accentSlot: 1, role: "조사" };
@@ -133,12 +142,12 @@ describe("협업방 문법", () => {
   });
 
   it("인계는 넘긴 쪽·내용을 항상 말하고 구조화된 받는 쪽만 표시한다", () => {
-    const { rerender } = render(
+    const { container, rerender } = render(
       <RoomHandoff content="검증할 표본과 남은 질문을 넘깁니다." from={quill} time="10:24" to={vega} />,
     );
     const line = screen.getByText(/인계/);
-    expect(line).toHaveTextContent("Quill");
-    expect(line).toHaveTextContent("Vega");
+    expect(line).toHaveTextContent("인계 · Quill → Vega · 10:24");
+    expect(container.querySelectorAll(".h-px.flex-1")).toHaveLength(0);
     expect(screen.getByText("검증할 표본과 남은 질문을 넘깁니다.")).toBeInTheDocument();
 
     const longContent = `받는 쪽은 아직 정해지지 않았습니다.\n${"긴문자열".repeat(40)}`;
@@ -150,6 +159,70 @@ describe("협업방 문법", () => {
       "break-words",
       "[overflow-wrap:anywhere]",
     );
+  });
+
+  it("최종 응답은 heading과 GFM 표를 의미 구조로 렌더링한다", () => {
+    const { container } = render(
+      <RoomMessage
+        content={"## 결과\n\n| 항목 | 상태 |\n| --- | --- |\n| 검증 | 통과 |"}
+        final
+        speaker={atlas}
+        time="10:26"
+        type="answer"
+      />,
+    );
+
+    expect(screen.getByRole("heading", { level: 2, name: "결과" })).toBeInTheDocument();
+    expect(screen.getByRole("table")).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "항목" })).toBeInTheDocument();
+    expect(screen.getByRole("cell", { name: "통과" })).toBeInTheDocument();
+    const tableRegion = screen.getByRole("region", { name: "최종 응답 표" });
+    expect(tableRegion).toHaveAttribute("tabindex", "0");
+    expect(tableRegion).toHaveClass("overflow-x-auto");
+    expect(tableRegion).toContainElement(container.querySelector("table"));
+  });
+
+  it("최종 응답의 raw HTML은 실행하지 않는다", () => {
+    const { container } = render(
+      <RoomMessage
+        content={'<em data-testid="raw-html">실행 금지</em>'}
+        final
+        speaker={atlas}
+        time="10:26"
+        type="answer"
+      />,
+    );
+
+    expect(container.querySelector("[data-testid='raw-html']")).toBeNull();
+  });
+
+  it("최종 응답의 위험한 link와 image URL은 안전한 기본 변환으로 제거한다", () => {
+    render(
+      <RoomMessage
+        content={
+          "[직접](javascript:alert(1)) [혼합](JaVaScRiPt:alert(1)) [인코딩](jav&#x61;script:alert(1)) ![이미지](data:text/html;base64,PHNjcmlwdD4=)"
+        }
+        final
+        speaker={atlas}
+        time="10:26"
+        type="answer"
+      />,
+    );
+
+    for (const name of ["직접", "혼합", "인코딩"]) {
+      expect(screen.getByText(name)).not.toHaveAttribute("href");
+    }
+    expect(screen.getByRole("img", { name: "이미지" })).not.toHaveAttribute("src");
+  });
+
+  it("일반 메시지는 Markdown 문법을 기존 plain text로 보존한다", () => {
+    render(
+      <RoomMessage content={"## 일반 메시지\n\n| 그대로 | 표시 |"} speaker={quill} time="10:26" type="evidence" />,
+    );
+
+    expect(screen.queryByRole("heading")).toBeNull();
+    expect(screen.queryByRole("table")).toBeNull();
+    expect(screen.getByText(/## 일반 메시지/u)).toHaveTextContent("| 그대로 | 표시 |");
   });
 
   it("조직 변경 제안은 영향과 되돌리기를 버튼보다 먼저 보인다", async () => {
