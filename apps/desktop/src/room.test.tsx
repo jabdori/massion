@@ -203,6 +203,37 @@ describe("협업방 문법", () => {
     );
   });
 
+  it("닫는 punctuation 바로 뒤에 조사가 와도 Agent 강조를 strong 의미 구조로 렌더링한다", () => {
+    const { container } = render(
+      <RoomMessage
+        content="사업팀은 **최소 사업 허용 효과(MBE)**를 정한다"
+        speaker={quill}
+        time="10:25"
+        type="evidence"
+      />,
+    );
+
+    expect(screen.getByText("최소 사업 허용 효과(MBE)", { selector: "strong" })).toBeInTheDocument();
+    expect(container).toHaveTextContent("사업팀은 최소 사업 허용 효과(MBE)를 정한다");
+    expect(container).not.toHaveTextContent("**");
+  });
+
+  it("공백 뒤 조사가 오는 표준 strong 강조는 기존 의미를 유지한다", () => {
+    render(<RoomMessage content="**한국어** 조사" speaker={quill} time="10:25" type="evidence" />);
+
+    expect(screen.getByText("한국어", { selector: "strong" })).toBeInTheDocument();
+  });
+
+  it("escape된 marker와 inline·fenced code 안의 marker는 literal로 유지한다", () => {
+    const marked = "**최소 사업 허용 효과(MBE)**를";
+    const content = [`\\${marked}`, "", `inline \`${marked}\``, "", "```text", marked, "```"].join("\n");
+    const { container } = render(<RoomMessage content={content} speaker={quill} time="10:25" type="evidence" />);
+
+    expect(container.querySelector("strong")).toBeNull();
+    expect(container).toHaveTextContent(marked);
+    expect([...container.querySelectorAll("code")].map((code) => code.textContent)).toEqual([marked, `${marked}\n`]);
+  });
+
   it("MathJax inline delimiter를 KaTeX 수식으로 렌더링한다", () => {
     const { container } = render(
       <RoomMessage content={String.raw`유의수준은 \(p < 0.05\)입니다.`} speaker={quill} time="10:25" type="evidence" />,

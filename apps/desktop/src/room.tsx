@@ -240,12 +240,13 @@ function TypeTag({ speaker, type }: { speaker?: SpeakerView; type: RoomMessageTy
 }
 
 interface MarkdownNode {
-  readonly children?: readonly MarkdownNode[];
+  children?: MarkdownNode[];
   readonly position?: {
     readonly end: { readonly offset?: number };
     readonly start: { readonly offset?: number };
   };
   readonly type: string;
+  readonly value?: string;
 }
 
 interface SourceRange {
@@ -345,6 +346,56 @@ function normalizeMathDelimiters(content: string): string {
   return normalized + normalizeMathSegment(content.slice(offset));
 }
 
+function splitStrongBeforeWordSuffix(node: MarkdownNode, source: string): MarkdownNode[] {
+  const value = node.value;
+  const sourceStart = node.position?.start.offset;
+  if (node.type !== "text" || value === undefined || sourceStart === undefined) return [node];
+
+  const children: MarkdownNode[] = [];
+  let valueOffset = 0;
+  for (const match of value.matchAll(/\*\*([^*\r\n]*\p{P})\*\*([\p{L}\p{M}\p{N}_]+)/gu)) {
+    const matchOffset = match.index;
+    const raw = match[0];
+    const emphasized = match[1];
+    const suffix = match[2];
+    if (
+      emphasized === undefined ||
+      suffix === undefined ||
+      source.slice(sourceStart + matchOffset, sourceStart + matchOffset + raw.length) !== raw
+    ) {
+      continue;
+    }
+
+    const prefix = value.slice(valueOffset, matchOffset);
+    if (prefix.length > 0) children.push({ type: "text", value: prefix });
+    children.push({ children: [{ type: "text", value: emphasized }], type: "strong" });
+    children.push({ type: "text", value: suffix });
+    valueOffset = matchOffset + raw.length;
+  }
+
+  if (valueOffset === 0) return [node];
+  const remainder = value.slice(valueOffset);
+  if (remainder.length > 0) children.push({ type: "text", value: remainder });
+  return children;
+}
+
+function remarkStrongBeforeWordSuffix() {
+  return (tree: MarkdownNode, file: { readonly value: unknown }) => {
+    const source = String(file.value);
+
+    function transform(parent: MarkdownNode) {
+      if (parent.children === undefined) return;
+      parent.children = parent.children.flatMap((node) => {
+        if (node.type === "text") return splitStrongBeforeWordSuffix(node, source);
+        transform(node);
+        return [node];
+      });
+    }
+
+    transform(tree);
+  };
+}
+
 export function AgentMessageContent({
   compact = false,
   content,
@@ -381,7 +432,7 @@ export function AgentMessageContent({
           ),
         }}
         rehypePlugins={[[rehypeKatex, { throwOnError: false, trust: false }]]}
-        remarkPlugins={[remarkGfm, [remarkMath, { singleDollarTextMath: false }]]}
+        remarkPlugins={[remarkGfm, [remarkMath, { singleDollarTextMath: false }], remarkStrongBeforeWordSuffix]}
         skipHtml
       >
         {normalizedContent}
