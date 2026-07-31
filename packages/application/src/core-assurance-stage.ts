@@ -73,11 +73,113 @@ interface ReadyVerifier {
 
 const AUTOMATIC_EVIDENCE_MAXIMUM_AGE_MS = 300_000;
 const APPLICATION_RUN_CANCELLED = "Application run cancelled";
+const MAX_VERIFICATION_MATERIAL_TOKENS = 28_000;
+const VERIFICATION_OUTPUT_RESERVE_TOKENS = 4_000;
 
 function approvalId(value: unknown): string | undefined {
   if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
   const id = (value as { readonly approvalId?: unknown }).approvalId;
   return typeof id === "string" && id.trim() ? id : undefined;
+}
+
+function record(value: unknown): Readonly<Record<string, unknown>> | undefined {
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+    ? (value as Readonly<Record<string, unknown>>)
+    : undefined;
+}
+
+function parseJson(value: unknown): unknown {
+  return typeof value === "string" ? (JSON.parse(value) as unknown) : value;
+}
+
+function verifierAccepted(output: unknown, snapshotHash: string): boolean {
+  let value = output;
+  for (let depth = 0; depth < 3; depth += 1) {
+    try {
+      value = parseJson(value);
+    } catch {
+      return false;
+    }
+    const current = record(value);
+    if (!current) return false;
+    if (current.snapshotHash === snapshotHash && current.verified === true && typeof current.reason === "string") {
+      return current.reason.trim().length > 0;
+    }
+    if (!("output" in current)) return false;
+    value = current.output;
+  }
+  return false;
+}
+
+function promptTokens(value: unknown): number {
+  return Math.max(1, Math.ceil(JSON.stringify(value).length / 4));
+}
+
+function verificationRequest(recovered: unknown, fallback: unknown): Readonly<Record<string, unknown>> {
+  const recoveredText = record(recovered)?.text;
+  const fallbackText = record(fallback)?.text;
+  const text = typeof recoveredText === "string" ? recoveredText : fallbackText;
+  return typeof text === "string" && text.trim() ? { text } : {};
+}
+
+function verificationMaterial(
+  recovery: WorkRecoveryBundle,
+  planVersionId: string,
+  planContentJson: string | undefined,
+  fallbackRequest: unknown,
+): Readonly<Record<string, unknown>> {
+  const candidate = recovery as WorkRecoveryBundle & {
+    readonly request?: Readonly<Record<string, unknown>>;
+    readonly work?: { readonly artifact_version_ids?: readonly string[] };
+    readonly tasks?: readonly Readonly<Record<string, unknown>>[];
+    readonly messages?: readonly Readonly<Record<string, unknown>>[];
+    readonly artifactVersions?: readonly Readonly<Record<string, unknown>>[];
+  };
+  const activeTasks = (candidate.tasks ?? []).filter((task) => task.plan_version_id === planVersionId);
+  const taskIds = new Set(activeTasks.flatMap((task) => (typeof task.task_id === "string" ? [task.task_id] : [])));
+  const tasks = activeTasks.map((task) => ({
+    taskId: task.task_id,
+    taskKey: task.task_key,
+    title: task.title,
+    objective: task.objective,
+    acceptanceCriteria:
+      typeof task.acceptance_criteria_json === "string" ? parseJson(task.acceptance_criteria_json) : [],
+    dependencyTaskIds: Array.isArray(task.dependency_ids) ? task.dependency_ids : [],
+    requiredCapabilities: Array.isArray(task.required_capabilities) ? task.required_capabilities : [],
+    status: task.status,
+  }));
+  const messageByArtifact = new Map(
+    (candidate.messages ?? []).flatMap((message) =>
+      typeof message.artifact_version_id === "string" &&
+      typeof message.task_id === "string" &&
+      taskIds.has(message.task_id)
+        ? [[message.artifact_version_id, message.task_id] as const]
+        : [],
+    ),
+  );
+  const allowed = candidate.work?.artifact_version_ids ? new Set(candidate.work.artifact_version_ids) : undefined;
+  const artifactVersions = (candidate.artifactVersions ?? [])
+    .filter(
+      (version) =>
+        typeof version.artifact_version_id === "string" &&
+        typeof version.content_json === "string" &&
+        messageByArtifact.has(version.artifact_version_id) &&
+        (allowed === undefined || allowed.has(version.artifact_version_id)),
+    )
+    .sort((left, right) => String(left.artifact_version_id).localeCompare(String(right.artifact_version_id)))
+    .map((version) => ({
+      artifactVersionId: version.artifact_version_id,
+      ...(messageByArtifact.has(String(version.artifact_version_id))
+        ? { taskId: messageByArtifact.get(String(version.artifact_version_id)) }
+        : {}),
+      content: parseJson(version.content_json),
+    }));
+  return {
+    request: verificationRequest(candidate.request, fallbackRequest),
+    ...(planContentJson === undefined ? {} : { plan: parseJson(planContentJson) }),
+    tasks,
+    artifactVersions,
+  };
 }
 
 function configurationFromBinding(binding: {
@@ -279,15 +381,26 @@ export class CoreAssuranceStage implements CoreWorkStageExecutor {
     this.throwIfCancelled(input);
     const prepared = await this.dependencies.assurance.prepareSnapshot(context, snapshotInput);
     this.throwIfCancelled(input);
+    const material = verificationMaterial(recovery, plan.plan_version_id, plan.content_json, input.request);
+    const materialTokens = promptTokens(material);
+    if (materialTokens > MAX_VERIFICATION_MATERIAL_TOKENS) {
+      return { outcome: "blocked", reason: "assurance-verification-material-too-large" };
+    }
     const verifierInput = {
       commandId: verifierCommandId,
       workId,
       agentHandle: "assurance",
       modelRoute: "assurance-independent",
       correlationId: input.correlationId,
-      estimatedTokens: 16_000,
+      estimatedTokens: Math.max(16_000, materialTokens + VERIFICATION_OUTPUT_RESERVE_TOKENS),
       estimatedCostMicros: 0,
-      input: { operation: "verify_work", snapshotHash: prepared.snapshot.hash },
+      input: {
+        operation: "verify_work",
+        snapshotHash: prepared.snapshot.hash,
+        verificationContract:
+          "요청·계획·완료 기준과 각 산출물 본문을 대조하세요. 모순, 누락 또는 검증 불가능한 주장이 하나라도 있으면 verified=false로 판정하세요. 정확히 { snapshotHash, verified, reason } JSON 객체만 반환하고 snapshotHash는 입력값을 그대로 사용하세요.",
+        material,
+      },
     };
     const verifier =
       existingVerifier?.execution.status === "queued"
@@ -355,6 +468,15 @@ export class CoreAssuranceStage implements CoreWorkStageExecutor {
           return { outcome: "blocked", reason: "model-unavailable" };
         }
         return completed.result;
+      }
+      if (!verifierAccepted(completedVerifier.output, prepared.snapshot.hash)) {
+        const current = await this.dependencies.assurance.get(context, started.run.assuranceRunId);
+        await this.cancelAndThrowIfCancelled(context, input, verifier);
+        const completed = await this.completeRun(context, input, workId, current);
+        if (completed.result.outcome !== "blocked") {
+          throw new Error("Assurance verifier 거부와 terminal 판정이 일치하지 않습니다");
+        }
+        return { ...completed.result, reason: "assurance-verifier-rejected" };
       }
       const checks = await this.dependencies.checks.execute(context, {
         commandId: `${input.commandId}:checks`,

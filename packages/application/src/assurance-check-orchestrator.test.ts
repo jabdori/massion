@@ -144,9 +144,143 @@ describe("DatabaseCoreAssuranceCheckOrchestrator", () => {
         expect.objectContaining({ bindingKey: "software-correctness", artifactVersionIds: ["code-change-version"] }),
         expect.objectContaining({
           bindingKey: "deliverable",
-          artifactVersionIds: ["task-output-version", "code-change-version"],
+          artifactVersionIds: [],
         }),
       ]),
     );
+  });
+
+  it("각 완료 기준에는 그 기준을 담당한 Task의 ArtifactVersion만 연결한다", async () => {
+    const recorded: Array<{ readonly criterionId: string; readonly artifactVersionIds: readonly string[] }> = [];
+    const plan = {
+      objective: "두 산출물을 검증한다",
+      summary: "각 Task 산출물을 개별 검증한다",
+      scopeIn: [],
+      scopeOut: [],
+      assumptions: [],
+      unknowns: [],
+      acceptanceCriteria: [
+        {
+          key: "analysis-correct",
+          statement: "분석이 정확하다",
+          method: "evidence",
+          evidenceKinds: ["artifact-version"],
+          planLevel: false,
+        },
+        {
+          key: "recommendation-written",
+          statement: "권고안이 작성된다",
+          method: "evidence",
+          evidenceKinds: ["artifact-version"],
+          planLevel: false,
+        },
+        {
+          key: "plan-complete",
+          statement: "계획 전체가 완료된다",
+          method: "evidence",
+          evidenceKinds: ["artifact-version"],
+          planLevel: true,
+        },
+      ],
+      risks: [],
+      tasks: [
+        {
+          key: "analysis",
+          title: "분석",
+          objective: "분석한다",
+          criterionKeys: ["analysis-correct"],
+          dependencyKeys: [],
+          requiredCapabilities: ["statistical-analysis"],
+          recommendedAgentHandles: [],
+          parallelizable: false,
+        },
+        {
+          key: "recommendation",
+          title: "권고",
+          objective: "권고한다",
+          criterionKeys: ["recommendation-written"],
+          dependencyKeys: ["analysis"],
+          requiredCapabilities: ["context-strategy"],
+          recommendedAgentHandles: ["context-strategy"],
+          parallelizable: false,
+        },
+      ],
+      evidenceRequests: [],
+    };
+    const orchestrator = new DatabaseCoreAssuranceCheckOrchestrator({
+      runs: {
+        listCriteria: async () => [
+          { criterionId: "criterion-analysis", criterionKey: "analysis-correct", status: "pending" },
+          { criterionId: "criterion-plan", criterionKey: "plan-complete", status: "pending" },
+          { criterionId: "criterion-recommendation", criterionKey: "recommendation-written", status: "pending" },
+        ],
+      },
+      bindings: {
+        get: async () => ({
+          bindings: [
+            {
+              criterionKey: "analysis-correct",
+              bindingKey: "analysis",
+              kind: "evidence",
+              evidenceKinds: ["artifact-version"],
+            },
+            {
+              criterionKey: "plan-complete",
+              bindingKey: "plan",
+              kind: "evidence",
+              evidenceKinds: ["artifact-version"],
+            },
+            {
+              criterionKey: "recommendation-written",
+              bindingKey: "recommendation",
+              kind: "evidence",
+              evidenceKinds: ["artifact-version"],
+            },
+          ],
+        }),
+      },
+      works: {
+        recoverWork: async () => ({
+          work: {
+            active_plan_version_id: "plan-1",
+            artifact_version_ids: ["artifact-a", "artifact-b", "artifact-stale"],
+          },
+          plans: [{ plan_version_id: "plan-1", valid: true, content_json: JSON.stringify(plan) }],
+          tasks: [
+            { task_id: "task-a", task_key: "analysis", plan_version_id: "plan-1" },
+            { task_id: "task-b", task_key: "recommendation", plan_version_id: "plan-1" },
+            { task_id: "task-stale", task_key: "analysis", plan_version_id: "plan-stale" },
+          ],
+          messages: [
+            { task_id: "task-a", artifact_version_id: "artifact-a" },
+            { task_id: "task-b", artifact_version_id: "artifact-b" },
+            { task_id: "task-stale", artifact_version_id: "artifact-stale" },
+          ],
+          artifacts: [],
+          artifactVersions: [],
+        }),
+      },
+      checks: {
+        record: async (
+          _context: unknown,
+          value: { readonly criterionId: string; readonly artifactVersionIds: readonly string[] },
+        ) => {
+          recorded.push({ criterionId: value.criterionId, artifactVersionIds: value.artifactVersionIds });
+          return {};
+        },
+      },
+    } as never);
+
+    await orchestrator.execute({} as never, {
+      commandId: "assurance-checks-command",
+      run: { assuranceRunId: "assurance-run", bindingVersionId: "binding-version", workId: "work-1" } as never,
+      request: {},
+    });
+
+    expect(recorded).toEqual([
+      { criterionId: "criterion-analysis", artifactVersionIds: ["artifact-a"] },
+      { criterionId: "criterion-plan", artifactVersionIds: ["artifact-a", "artifact-b"] },
+      { criterionId: "criterion-recommendation", artifactVersionIds: ["artifact-b"] },
+    ]);
   });
 });

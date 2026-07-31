@@ -94,6 +94,25 @@ interface WorkRevisionRecord {
   readonly revision: number;
 }
 
+function verifierAccepted(outputJson: string | undefined, snapshotHash: string): boolean {
+  let value: unknown = outputJson;
+  for (let depth = 0; depth < 3; depth += 1) {
+    try {
+      value = typeof value === "string" ? (JSON.parse(value) as unknown) : value;
+    } catch {
+      return false;
+    }
+    if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+    const record = value as Readonly<Record<string, unknown>>;
+    if (record.snapshotHash === snapshotHash && record.verified === true) {
+      return typeof record.reason === "string" && record.reason.trim().length > 0;
+    }
+    if (!("output" in record)) return false;
+    value = record.output;
+  }
+  return false;
+}
+
 interface BindingIdentity {
   readonly bindingKey: string;
   readonly criterionKey: string;
@@ -440,16 +459,7 @@ export class DatabaseAssuranceDecisionSource implements AssuranceDecisionSource 
     });
     const verifier = verifierRecords[0];
     const verifierSucceeded =
-      verifier?.status === "succeeded" &&
-      typeof verifier.output_json === "string" &&
-      (() => {
-        try {
-          JSON.parse(verifier.output_json);
-          return true;
-        } catch {
-          return false;
-        }
-      })();
+      verifier?.status === "succeeded" && verifierAccepted(verifier.output_json, run.snapshotHash);
     return {
       run,
       decisionInput: {

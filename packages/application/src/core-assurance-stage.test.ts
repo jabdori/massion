@@ -55,9 +55,20 @@ const noStoredVerifier = {
   },
 };
 
-function verifierRunner(calls: string[] = []) {
+function verifierRunner(
+  calls: string[] = [],
+  inputs: unknown[] = [],
+  output: unknown = {
+    output: JSON.stringify({
+      snapshotHash: "a".repeat(64),
+      verified: true,
+      reason: "모든 기준을 충족했습니다.",
+    }),
+  },
+) {
   return {
-    stream: async function* () {
+    stream: async function* (_context: unknown, input: unknown) {
+      inputs.push(input);
       calls.push("verifier-queued");
       yield { executionId: "verifier-execution", sequence: 1, type: "execution_queued", payload: {}, createdAt: "now" };
       calls.push("verifier-running");
@@ -79,7 +90,11 @@ function verifierRunner(calls: string[] = []) {
     },
     recover: async () => {
       calls.push("verifier-finished");
-      return { executionId: "verifier-execution", status: "succeeded" };
+      return {
+        executionId: "verifier-execution",
+        status: "succeeded",
+        output,
+      };
     },
   };
 }
@@ -87,6 +102,7 @@ function verifierRunner(calls: string[] = []) {
 describe("CoreAssuranceStage", () => {
   it("계획 조직의 일반 완료 기준을 실제 산출물 검사로 자동 연결하고 Work 검증까지 반영한다", async () => {
     const calls: string[] = [];
+    const verifierInputs: unknown[] = [];
     let proposed: unknown;
     let activated: unknown;
     const plan = {
@@ -125,13 +141,54 @@ describe("CoreAssuranceStage", () => {
         getWork: async () => ({ revision: 7 }),
         getActivePlan: async () => ({ plan_version_id: "plan-1", content_json: JSON.stringify(plan) }),
         recoverWork: async () => ({
+          request: {
+            request_id: "request-internal",
+            organization_id: "organization-internal",
+            requester_user_id: "user-internal",
+            text: "A안 100/1000과 B안 130/1000을 분석해 주세요.",
+            surface: "desktop",
+            created_at: "2026-07-31T00:00:00.000Z",
+          },
+          work: {
+            active_plan_version_id: "plan-1",
+            artifact_version_ids: ["artifact-version-1", "stale-artifact-version"],
+          },
           artifacts: [{ kind: "task-output" }],
+          artifactVersions: [
+            {
+              artifact_version_id: "artifact-version-1",
+              content_json: '{"pValue":0.036,"recommendation":"단계적 출시"}',
+            },
+            {
+              artifact_version_id: "stale-artifact-version",
+              content_json: '{"recommendation":"전면 출시"}',
+            },
+          ],
           tasks: [
             {
               task_id: "task-1",
+              organization_id: "organization-internal",
+              work_id: "work-internal",
+              plan_version_id: "plan-1",
+              task_key: "deliver",
+              title: "전달",
+              objective: "산출물을 만든다",
+              status: "completed",
+              acceptance_criteria_json: JSON.stringify([plan.acceptanceCriteria[0]]),
+              dependency_ids: [],
+              required_capabilities: [],
+              revision: 3,
+            },
+            {
+              task_id: "stale-task",
+              plan_version_id: "plan-stale",
               status: "completed",
               acceptance_criteria_json: JSON.stringify([plan.acceptanceCriteria[0]]),
             },
+          ],
+          messages: [
+            { task_id: "task-1", artifact_version_id: "artifact-version-1" },
+            { task_id: "stale-task", artifact_version_id: "stale-artifact-version" },
           ],
         }),
       },
@@ -158,7 +215,7 @@ describe("CoreAssuranceStage", () => {
           };
         },
       },
-      runner: verifierRunner(calls),
+      runner: verifierRunner(calls, verifierInputs),
       runtimeExecutions: noStoredVerifier,
       assurance: {
         prepareSnapshot: async () => {
@@ -193,7 +250,12 @@ describe("CoreAssuranceStage", () => {
       },
     } as never);
 
-    await expect(stage.execute(context, { ...input, request: {} })).resolves.toMatchObject({
+    await expect(
+      stage.execute(context, {
+        ...input,
+        request: { text: "A안 100/1000과 B안 130/1000을 분석해 주세요." },
+      }),
+    ).resolves.toMatchObject({
       outcome: "advanced",
       data: { assuranceRunId: "assurance-1", verdict: "passed", projectedWorkRevision: 8 },
     });
@@ -217,6 +279,40 @@ describe("CoreAssuranceStage", () => {
       ],
     });
     expect(activated).toMatchObject({ bindingVersionId: "binding-1", expectedRevision: 1 });
+    expect(verifierInputs).toEqual([
+      expect.objectContaining({
+        input: expect.objectContaining({
+          operation: "verify_work",
+          snapshotHash: "a".repeat(64),
+          verificationContract: expect.stringContaining("verified"),
+          material: expect.objectContaining({
+            request: { text: "A안 100/1000과 B안 130/1000을 분석해 주세요." },
+            plan,
+            tasks: [
+              {
+                taskId: "task-1",
+                taskKey: "deliver",
+                title: "전달",
+                objective: "산출물을 만든다",
+                acceptanceCriteria: [plan.acceptanceCriteria[0]],
+                dependencyTaskIds: [],
+                requiredCapabilities: [],
+                status: "completed",
+              },
+            ],
+            artifactVersions: [
+              expect.objectContaining({
+                artifactVersionId: "artifact-version-1",
+                content: { pValue: 0.036, recommendation: "단계적 출시" },
+              }),
+            ],
+          }),
+        }),
+      }),
+    ]);
+    expect(JSON.stringify(verifierInputs)).not.toContain("organization-internal");
+    expect(JSON.stringify(verifierInputs)).not.toContain("user-internal");
+    expect(JSON.stringify(verifierInputs)).not.toContain("request-internal");
     expect(calls).toEqual([
       "binding-propose",
       "binding-activate",
@@ -447,7 +543,7 @@ describe("CoreAssuranceStage", () => {
     ]);
   });
 
-  it("human check는 approval 대기로, failed verdict는 명시 차단으로 반환한다", async () => {
+  it("거짓 verifier 결과와 failed verdict는 차단하고 human check는 approval 대기로 반환한다", async () => {
     const base = {
       works: {
         getWork: async () => ({ revision: 7 }),
@@ -474,6 +570,42 @@ describe("CoreAssuranceStage", () => {
         projectVerdict: async () => ({ work: { revision: 8 } }),
       },
     };
+    for (const output of [
+      { snapshotHash: "a".repeat(64), verified: false, reason: "산출물을 검증할 수 없습니다." },
+      { snapshotHash: "b".repeat(64), verified: true, reason: "다른 snapshot 결과입니다." },
+      "{malformed",
+    ]) {
+      const rejected = new CoreAssuranceStage({
+        ...base,
+        runner: verifierRunner([], [], output),
+        runtimeExecutions: noStoredVerifier,
+        checks: {
+          execute: async () => Promise.reject(new Error("거부된 verifier 뒤에 검사를 실행하면 안 됩니다")),
+        },
+      } as never);
+      await expect(rejected.execute(context, input)).resolves.toMatchObject({
+        outcome: "blocked",
+        reason: "assurance-verifier-rejected",
+      });
+    }
+    const oversized = new CoreAssuranceStage({
+      ...base,
+      works: {
+        ...base.works,
+        recoverWork: async () => ({ request: { text: "x".repeat(120_000) }, artifacts: [] }),
+      },
+      runner: {
+        stream: () => {
+          throw new Error("과대 검증 자료로 verifier를 실행하면 안 됩니다");
+        },
+      },
+      runtimeExecutions: noStoredVerifier,
+      checks: { execute: async () => Promise.reject(new Error("과대 검증 자료로 검사를 실행하면 안 됩니다")) },
+    } as never);
+    await expect(oversized.execute(context, input)).resolves.toMatchObject({
+      outcome: "blocked",
+      reason: "assurance-verification-material-too-large",
+    });
     const waiting = new CoreAssuranceStage({
       ...base,
       runtimeExecutions: noStoredVerifier,
@@ -515,7 +647,11 @@ describe("CoreAssuranceStage", () => {
         },
         recover: async () => {
           calls.push("verifier-reused");
-          return { executionId: "verifier-existing", status: "succeeded" };
+          return {
+            executionId: "verifier-existing",
+            status: "succeeded",
+            output: { snapshotHash: "a".repeat(64), verified: true, reason: "모든 기준을 충족했습니다." },
+          };
         },
       },
       runtimeExecutions: {

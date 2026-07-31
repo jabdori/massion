@@ -5,6 +5,7 @@ import type {
   AssuranceRunGateway,
   RecordAssuranceCheckInput,
 } from "@massion/assurance";
+import { validateStrategyPlan } from "@massion/context-strategy";
 import type { TenantContext } from "@massion/identity";
 import type { WorkService } from "@massion/work";
 
@@ -58,19 +59,60 @@ function requiresExactCodeChange(binding: AssuranceCheckBinding): boolean {
 }
 
 function artifactVersionIds(
+  criterionKey: string,
   binding: AssuranceCheckBinding,
   recovery: Awaited<ReturnType<WorkService["recoverWork"]>>,
 ): readonly string[] {
-  if (!requiresExactCodeChange(binding)) return recovery.work.artifact_version_ids;
-  const codeChangeArtifacts = recovery.artifacts.filter((artifact) => artifact.kind === "code-change");
-  if (codeChangeArtifacts.length !== 1 || !codeChangeArtifacts[0]) return [];
-  const workArtifactVersions = new Set(recovery.work.artifact_version_ids);
-  const versions = recovery.artifactVersions.filter(
-    (version) =>
-      version.artifact_id === codeChangeArtifacts[0]?.artifact_id &&
-      workArtifactVersions.has(version.artifact_version_id),
-  );
-  return versions.length === 1 && versions[0] ? [versions[0].artifact_version_id] : [];
+  if (requiresExactCodeChange(binding)) {
+    const codeChangeArtifacts = recovery.artifacts.filter((artifact) => artifact.kind === "code-change");
+    if (codeChangeArtifacts.length !== 1 || !codeChangeArtifacts[0]) return [];
+    const workArtifactVersions = new Set(recovery.work.artifact_version_ids);
+    const versions = recovery.artifactVersions.filter(
+      (version) =>
+        version.artifact_id === codeChangeArtifacts[0]?.artifact_id &&
+        workArtifactVersions.has(version.artifact_version_id),
+    );
+    return versions.length === 1 && versions[0] ? [versions[0].artifact_version_id] : [];
+  }
+  if (binding.kind !== "evidence") return recovery.work.artifact_version_ids;
+  if (!binding.evidenceKinds.includes("artifact-version")) return [];
+  try {
+    const planVersion = recovery.plans.find(
+      (plan) => plan.plan_version_id === recovery.work.active_plan_version_id && plan.valid,
+    );
+    if (!planVersion) return [];
+    const plan = validateStrategyPlan(JSON.parse(planVersion.content_json) as unknown);
+    const criterion = plan.acceptanceCriteria.find((item) => item.key === criterionKey);
+    if (!criterion) return [];
+    const taskKeys = new Set(
+      plan.tasks
+        .filter((task) => criterion.planLevel || task.criterionKeys.includes(criterionKey))
+        .map((task) => task.key),
+    );
+    const taskIds = new Set(
+      recovery.tasks
+        .filter(
+          (task) =>
+            task.plan_version_id === planVersion.plan_version_id && task.task_key && taskKeys.has(task.task_key),
+        )
+        .map((task) => task.task_id),
+    );
+    const allowed = new Set(recovery.work.artifact_version_ids);
+    return [
+      ...new Set(
+        recovery.messages.flatMap((message) =>
+          message.task_id &&
+          taskIds.has(message.task_id) &&
+          message.artifact_version_id &&
+          allowed.has(message.artifact_version_id)
+            ? [message.artifact_version_id]
+            : [],
+        ),
+      ),
+    ].sort();
+  } catch {
+    return [];
+  }
 }
 
 export class DatabaseCoreAssuranceCheckOrchestrator implements CoreAssuranceCheckOrchestrator {
@@ -112,7 +154,7 @@ export class DatabaseCoreAssuranceCheckOrchestrator implements CoreAssuranceChec
         assuranceRunId: input.run.assuranceRunId,
         criterionId: item.criterion.criterionId,
         bindingKey: checkBinding.bindingKey,
-        artifactVersionIds: artifactVersionIds(checkBinding, recovery),
+        artifactVersionIds: artifactVersionIds(item.criterion.criterionKey, checkBinding, recovery),
         evidenceBriefIds: references.evidenceBriefIds,
         metricObservationIds: references.metricObservationIds,
         humanAttestationIds: references.humanAttestationIds,

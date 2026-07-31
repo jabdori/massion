@@ -230,6 +230,7 @@ describe("Assurance run과 Work 완료 게이트", () => {
     commandOutcome: "passed" | "failed" | "blocked" = "passed",
     omitAcceptanceCheck = false,
     decisionService?: AssuranceService,
+    verifierVerified = true,
   ): Promise<string> {
     const authorizer: BindingActivationAuthorizer = {
       async authorize(_context, input) {
@@ -342,7 +343,13 @@ describe("Assurance run과 Work 완료 게이트", () => {
       executionId: runningVerifier.execution.execution_id,
       expectedVersion: runningVerifier.execution.version,
       target: "succeeded",
-      payload: { outputHash: "e".repeat(64) },
+      payload: {
+        output: JSON.stringify({
+          snapshotHash: prepared.snapshot.hash,
+          verified: verifierVerified,
+          reason: verifierVerified ? "모든 기준을 충족했습니다." : "산출물이 사용자 요청과 모순됩니다.",
+        }),
+      },
     });
     const checkArtifactId = crypto.randomUUID();
     checkEvidenceArtifactVersionId = crypto.randomUUID();
@@ -858,6 +865,11 @@ describe("Assurance run과 Work 완료 게이트", () => {
     );
     expect(recovered.result).toBe("terminal_unchanged");
     expect(blockedMetrics).toEqual([{ dimensions_json: '{"reason":"evidence"}' }]);
+  });
+
+  it("무결한 증거가 있어도 독립 verifier가 거부하면 Work를 통과시키지 않는다", async () => {
+    const blockedRunId = await passedRun(created, "blocked", "passed", false, undefined, false);
+    expect((await runs.get(context, blockedRunId)).status).toBe("blocked");
   });
 
   it("판정 snapshot 뒤 critical finding이 commit돼도 evidence guard 충돌 재시도로 failed가 된다", async () => {
