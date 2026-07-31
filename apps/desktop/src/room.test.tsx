@@ -183,6 +183,26 @@ describe("협업방 문법", () => {
     expect(screen.getByRole("region", { name: "협업 메시지 표" })).toHaveAttribute("tabindex", "0");
   });
 
+  it("3열 GFM 표는 첫 열을 가로로 유지하고 표 영역에서 스크롤한다", () => {
+    render(
+      <RoomMessage
+        content={
+          "| 확인 항목 | 유효 조건 | 미충족 시 영향과 판단 |\n| --- | --- | --- |\n| 독립 관측 | 사용자 단위로 한 번만 집계 | 동일 사용자의 반복 집계가 있으면 표준오차가 과소평가됩니다. |"
+        }
+        speaker={quill}
+        time="10:25"
+        type="evidence"
+      />,
+    );
+
+    expect(screen.getByRole("region", { name: "협업 메시지 표" })).toHaveClass("overflow-x-auto");
+    expect(screen.getByRole("table")).toHaveClass(
+      "min-w-[36rem]",
+      "[&_tr>*:first-child]:min-w-16",
+      "[&_tr>*:first-child]:whitespace-nowrap",
+    );
+  });
+
   it("최종 응답은 heading과 GFM 표를 의미 구조로 렌더링한다", () => {
     const { container } = render(
       <RoomMessage

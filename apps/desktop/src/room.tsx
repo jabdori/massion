@@ -261,7 +261,9 @@ function AgentMessageContent({
           img: ({ alt, src, title }) => <img alt={alt ?? ""} src={src || undefined} title={title} />,
           table: ({ children }) => (
             <div aria-label="협업 메시지 표" className="my-2 overflow-x-auto" role="region" tabIndex={0}>
-              <table className="w-full border-collapse text-left">{children}</table>
+              <table className="w-full min-w-[36rem] border-collapse text-left [&_tr>*:first-child]:min-w-16 [&_tr>*:first-child]:whitespace-nowrap">
+                {children}
+              </table>
             </div>
           ),
         }}
