@@ -388,6 +388,44 @@ describe("서버 bundled runtime 건강 증명", () => {
     expect(inspectModelRuntime).toHaveBeenCalledTimes(1);
   });
 
+  it("같은 Codex runtime의 릴리스 교체는 offline 새 process에서만 현재 artifact로 복구한다", async () => {
+    const { attestor, setConnectorStatus } = await fixture({
+      providerId: "openai-codex",
+      runtimeId: "codex",
+      codexAccount: { requiresOpenaiAuth: true, account: { type: "chatgpt", planType: "plus" } },
+    });
+    const previousRelease = {
+      organizationId: "organization-12345678",
+      actorUserId: "user-12345678",
+      connectorId: "connector-12345678",
+      providerId: "openai-codex",
+      executionKind: "agent-runtime" as const,
+      runtimeId: "codex",
+      runtimeArtifactDigest: "f".repeat(64),
+      version: "0.143.0",
+    };
+
+    await expect(attestor.attestHealth(previousRelease)).resolves.toEqual({
+      runtimeId: "codex",
+      runtimeArtifactDigest: "a".repeat(64),
+      version: "0.144.1",
+      processGeneration: 1,
+      processState: "new-process",
+    });
+
+    setConnectorStatus("ready");
+    await expect(attestor.attestHealth({ ...previousRelease, previousProcessGeneration: 1 })).rejects.toThrow(
+      "artifact",
+    );
+    await expect(
+      attestor.attestHealth({
+        ...previousRelease,
+        providerId: "anthropic-claude-code",
+        runtimeId: "claude",
+      }),
+    ).rejects.toThrow("계보");
+  });
+
   it("Z.AI Coding Plan도 같은 OpenAI 호환 runtime과 암호화 API key 계보로 건강 증명한다", async () => {
     const inspectModelRuntime = vi.fn().mockResolvedValue({
       runtimeId: "openai-model",
@@ -492,6 +530,7 @@ describe("서버 bundled runtime 건강 증명", () => {
       runtimeId: "codex",
       codexAccount: { requiresOpenaiAuth: true, account: { type: "chatgpt", planType: "plus" } },
     });
+    changed.setConnectorStatus("ready");
     await expect(
       changed.attestor.attestHealth({
         organizationId: "organization-12345678",

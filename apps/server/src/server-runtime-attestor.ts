@@ -301,13 +301,19 @@ export class BundledServerConnectorRuntimeAttestor implements ServerConnectorRun
       (isBundledAgentRuntime(selected)
         ? input.executionKind !== "agent-runtime" || input.providerId !== expectedProvider(selected)
         : input.executionKind !== "model" || !isOpenAiCompatibleModelProvider(input.providerId)) ||
-      artifact.runtimeId !== selected ||
-      (!isModelRuntime &&
-        (artifact.runtimeArtifactDigest !== input.runtimeArtifactDigest || artifact.version !== input.version))
+      artifact.runtimeId !== selected
     ) {
       throw new Error("서버 Runtime artifact 건강 계보가 일치하지 않습니다");
     }
     const account = await this.account(input.organizationId, input.connectorId, input.providerId);
+    const connectorStatus = await this.connectorStatus(input.organizationId, input.connectorId);
+    if (
+      !isModelRuntime &&
+      connectorStatus !== "offline" &&
+      (artifact.runtimeArtifactDigest !== input.runtimeArtifactDigest || artifact.version !== input.version)
+    ) {
+      throw new Error("서버 Runtime artifact 건강 계보가 일치하지 않습니다");
+    }
     if (selected === "openai-model") {
       if (!hasSupportedModelPlanBilling(input.providerId, account.billing_kind)) {
         throw new Error("서버 내장 OpenAI 호환 runtime의 구독 결제 유형이 일치하지 않습니다");
@@ -367,7 +373,6 @@ export class BundledServerConnectorRuntimeAttestor implements ServerConnectorRun
 
     const key = `${input.organizationId}\0${input.connectorId}`;
     const activeGeneration = this.generations.get(key);
-    const connectorStatus = await this.connectorStatus(input.organizationId, input.connectorId);
     if (activeGeneration !== undefined && connectorStatus === "ready") {
       if (input.previousProcessGeneration !== activeGeneration) {
         throw new Error("서버 Runtime의 기존 process generation이 일치하지 않습니다");

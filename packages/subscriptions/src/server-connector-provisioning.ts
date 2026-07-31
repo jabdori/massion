@@ -383,21 +383,18 @@ export class ServerConnectorProvisioningService {
           const attestedVersion = requireVersion(attested.version ?? connector.version);
           if (connector.runtime_id !== attestedRuntimeId)
             throw new Error("서버 Connector Runtime ID가 일치하지 않습니다");
-          if (
-            connector.execution_kind === "agent-runtime" &&
-            connector.runtime_artifact_digest !== attestedArtifactDigest
-          ) {
-            throw new Error("서버 Connector runtime artifact digest가 일치하지 않습니다");
-          }
-          if (connector.execution_kind === "agent-runtime" && connector.version !== attestedVersion) {
-            throw new Error("서버 Connector runtime version이 일치하지 않습니다");
-          }
           if (!Number.isSafeInteger(attested.processGeneration) || attested.processGeneration < 1) {
             throw new Error("Process generation은 1 이상의 안전한 정수여야 합니다");
           }
+          const agentRuntimeArtifactChanged =
+            connector.execution_kind === "agent-runtime" &&
+            (connector.runtime_artifact_digest !== attestedArtifactDigest || connector.version !== attestedVersion);
           const previousProcessGeneration = connector.process_generation;
           const processState: unknown = attested.processState;
           if (processState === "same-process") {
+            if (agentRuntimeArtifactChanged) {
+              throw new Error("동일 Process의 서버 Connector runtime artifact 계보가 일치하지 않습니다");
+            }
             if (
               connector.status !== "ready" ||
               previousProcessGeneration === undefined ||
@@ -406,6 +403,9 @@ export class ServerConnectorProvisioningService {
               throw new Error("동일 Process 건강 증명의 generation이 일치하지 않습니다");
             }
           } else if (processState === "new-process") {
+            if (agentRuntimeArtifactChanged && connector.status !== "offline") {
+              throw new Error("새 Process의 서버 Connector runtime 교체는 offline 상태에서만 허용됩니다");
+            }
             if (attested.processGeneration !== (previousProcessGeneration ?? 0) + 1) {
               throw new Error("새 Process generation은 이전 값보다 정확히 1 증가해야 합니다");
             }

@@ -179,6 +179,39 @@ describe("서버 관리형 Connector 프로비저닝", () => {
     });
   });
 
+  it("저장된 Codex Connector는 앱 릴리스 뒤 같은 runtime의 새 artifact로 다시 건강 증명한다", async () => {
+    await service.provision(ownerContext, provisionInput());
+    await service.attestHealth(ownerContext, { commandId: randomUUID(), connectorId: "server-codex-1" });
+    await service.markOffline(ownerContext, { commandId: randomUUID(), connectorId: "server-codex-1" });
+    verifiedHealth = {
+      runtimeId: "codex",
+      runtimeArtifactDigest: "c".repeat(64),
+      version: "0.145.0",
+      processGeneration: 2,
+      processState: "new-process",
+    };
+
+    await expect(
+      service.attestHealth(ownerContext, { commandId: randomUUID(), connectorId: "server-codex-1" }),
+    ).resolves.toMatchObject({
+      status: "ready",
+      runtimeId: "codex",
+      runtimeArtifactDigest: "c".repeat(64),
+      version: "0.145.0",
+      processGeneration: 2,
+    });
+
+    verifiedHealth = {
+      ...verifiedHealth,
+      runtimeArtifactDigest: "d".repeat(64),
+      version: "0.146.0",
+      processState: "same-process",
+    };
+    await expect(
+      service.attestHealth(ownerContext, { commandId: randomUUID(), connectorId: "server-codex-1" }),
+    ).rejects.toThrow("동일 Process");
+  });
+
   it("Provider catalog의 실행 종류와 capability를 정확히 강제하고 경로 형태 runtime ID를 저장하지 않는다", async () => {
     await expect(
       service.provision(ownerContext, {
@@ -283,11 +316,11 @@ describe("서버 관리형 Connector 프로비저닝", () => {
         fingerprint: "b".repeat(64),
       },
     );
-    verifiedHealth = { ...verifiedHealth, runtimeArtifactDigest: "c".repeat(64) };
+    verifiedHealth = { ...verifiedHealth, runtimeId: "claude" };
     await expect(
       service.attestHealth(ownerContext, { commandId: randomUUID(), connectorId: "server-codex-1" }),
-    ).rejects.toThrow("artifact digest");
-    verifiedHealth = { ...verifiedHealth, runtimeArtifactDigest: artifactDigest };
+    ).rejects.toThrow("Runtime ID");
+    verifiedHealth = { ...verifiedHealth, runtimeId: "codex" };
 
     const commandId = randomUUID();
     const input = {
