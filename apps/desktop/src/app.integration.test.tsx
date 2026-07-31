@@ -429,6 +429,7 @@ describe("AgentOS native data flow", () => {
           occurredAt,
           author: "collaboration.message-posted",
           initials: "C",
+          human: false,
           content,
         },
       ],
@@ -537,6 +538,24 @@ describe("AgentOS native data flow", () => {
       ...(fixtureDataAdapter().works[0] as WorkView),
       activities: [
         {
+          id: "agent-message",
+          kind: "message",
+          time: "09:58",
+          author: "Atlas",
+          initials: "A",
+          human: false,
+          content: "## 결과\n\n- 항목",
+        },
+        {
+          id: "user-message",
+          kind: "message",
+          time: "09:59",
+          author: "나",
+          initials: "나",
+          human: true,
+          content: "## 요청\n\n- 그대로",
+        },
+        {
           id: "work-only",
           kind: "event",
           semantic: "stage",
@@ -546,6 +565,15 @@ describe("AgentOS native data flow", () => {
           status: "",
         },
       ],
+    };
+    const expectFallbackMessages = () => {
+      const activity = screen.getByRole("region", { name: "Work 활동" });
+      expect(within(activity).getByRole("heading", { level: 2, name: "결과" })).toBeInTheDocument();
+      expect(within(activity).getByText("항목").tagName).toBe("LI");
+      expect(within(activity).queryByRole("heading", { name: "요청" })).toBeNull();
+      const userMessage = within(activity).getByText(/## 요청/u);
+      expect(userMessage).toHaveClass("whitespace-pre-wrap");
+      expect(userMessage.textContent).toBe("## 요청\n\n- 그대로");
     };
     const failed = render(
       <App
@@ -560,6 +588,7 @@ describe("AgentOS native data flow", () => {
     );
     expect(await screen.findByRole("alert")).toHaveTextContent("최초 협업방 조회 실패");
     expect(screen.getByRole("region", { name: "Work 활동" })).toHaveTextContent("Work 전용 활동");
+    expectFallbackMessages();
     failed.unmount();
 
     render(
@@ -572,6 +601,7 @@ describe("AgentOS native data flow", () => {
       />,
     );
     await waitFor(() => expect(screen.getByRole("region", { name: "Work 활동" })).toHaveTextContent("Work 전용 활동"));
+    expectFallbackMessages();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 

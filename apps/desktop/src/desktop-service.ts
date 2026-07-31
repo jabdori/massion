@@ -3786,6 +3786,7 @@ export function createFixtureDesktopService(): DesktopService {
               time: current.activities.at(-1)?.time ?? fixtureTime(),
               author: "사용자",
               initials: "U",
+              human: true,
               content,
             },
           ],
@@ -3867,6 +3868,7 @@ export function createFixtureDesktopService(): DesktopService {
               time: "방금",
               author: "사용자",
               initials: "U",
+              human: true,
               content: input.text,
             },
           ],
@@ -5198,6 +5200,7 @@ function projectActivities(
       occurredAt: directive.createdAt,
       author: "나",
       initials: "나",
+      human: true,
       content: directive.content,
     });
   }
@@ -5270,6 +5273,7 @@ function projectActivity(
     occurredAt: activity.createdAt,
     author,
     initials: identity?.initial ?? initials(author),
+    human: source.authorKind === "user",
     content: activity.detail ?? activity.title,
   };
 }

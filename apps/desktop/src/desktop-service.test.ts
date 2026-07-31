@@ -235,6 +235,7 @@ describe("Application desktop service", () => {
     expect(updated.activities.at(-1)).toMatchObject({
       kind: "message",
       author: "사용자",
+      human: true,
       content: "코호트를 계약 규모별로도 나눠줘",
     });
   });
@@ -1713,10 +1714,12 @@ describe("Application desktop service", () => {
     expect(work.activities.find((activity) => activity.id === "activity-old")).toMatchObject({
       kind: "message",
       author: expect.not.stringContaining("db06753b"),
+      human: false,
     });
     expect(work.activities.find((activity) => activity.id === "activity-new")).toMatchObject({
       kind: "message",
       author: "나",
+      human: true,
     });
   });
 

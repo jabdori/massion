@@ -144,6 +144,7 @@ import { agentIdentityToken, growthTargetToken, type WorkKnowledgeViewV1 } from 
 import { nativeContextPicker, type NativeContextPicker } from "@/native-context-picker";
 import {
   AgentAvatar,
+  AgentMessageContent,
   DecisionActions,
   OpenButton,
   ProposalActivity,
@@ -6198,7 +6199,15 @@ function ActivityRow({
           {value.kind === "message" ? <span className="font-medium text-secondary">{value.author}</span> : null}
           <time className="font-mono">{value.time}</time>
         </div>
-        {value.kind === "message" ? <p className="text-sm leading-6 text-secondary">{value.content}</p> : null}
+        {value.kind === "message" ? (
+          value.human ? (
+            <p className="whitespace-pre-wrap break-words text-sm leading-6 text-secondary [overflow-wrap:anywhere]">
+              {value.content}
+            </p>
+          ) : (
+            <AgentMessageContent content={value.content} />
+          )
+        ) : null}
         {value.kind === "plan" ? <PlanActivity title={value.title} steps={value.steps} /> : null}
         {value.kind === "agents" ? <AgentsActivity agents={value.agents} title={value.title} /> : null}
         {value.kind === "approval" ? (

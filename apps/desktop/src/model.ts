@@ -116,7 +116,7 @@ export interface OrganizationChangeView {
 export type EventSemantic = "stage" | "task" | "artifact" | "verification" | "record";
 
 export type ActivityView = (
-  | { id: string; kind: "message"; time: string; author: string; initials: string; content: string }
+  | { id: string; kind: "message"; time: string; author: string; initials: string; human: boolean; content: string }
   | { id: string; kind: "plan"; time: string; title: string; steps: TaskView[] }
   | { id: string; kind: "agents"; time: string; title: string; agents: AgentView[] }
   | { id: string; kind: "approval"; time: string; approvalId: string; title: string; description: string }
@@ -656,6 +656,7 @@ const works: WorkView[] = [
         time: "어제",
         author: "배정우",
         initials: "배",
+        human: true,
         content: "파트너 갱신 계약에서 불리한 조항이 있는지 확인해줘.",
       },
       {
@@ -664,6 +665,7 @@ const works: WorkView[] = [
         time: "어제",
         author: "Atlas",
         initials: "A",
+        human: false,
         content: "계약 원문과 내부 표준 정책을 대조하고 있습니다.",
       },
     ],
@@ -702,6 +704,7 @@ const works: WorkView[] = [
         time: "09.02",
         author: "Atlas",
         initials: "A",
+        human: false,
         content: "지난주 대비 변동 폭이 큰 운영 지표부터 확인하고 있습니다.",
       },
     ],

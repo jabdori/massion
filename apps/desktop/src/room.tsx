@@ -234,7 +234,7 @@ function TypeTag({ speaker, type }: { speaker?: SpeakerView; type: RoomMessageTy
   );
 }
 
-function AgentMessageContent({
+export function AgentMessageContent({
   compact = false,
   content,
   emphasized = false,
