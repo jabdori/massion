@@ -516,6 +516,26 @@ describe("Massion server product", () => {
     const activeClaim = await runs.claim(ownerPersonalContext, active.runId);
     if (activeClaim.outcome !== "claimed") throw new Error("활성 ApplicationRun lease를 얻지 못했습니다");
 
+    const preflight = await runs.listStartupRecoverable(100);
+    expect(preflight).toHaveLength(2);
+    expect(preflight.map(({ runId, organizationId, actorUserId }) => ({ runId, organizationId, actorUserId }))).toEqual(
+      [
+        {
+          runId: ready.runId,
+          organizationId: ownerContext.organizationId,
+          actorUserId: ownerContext.userId,
+        },
+        {
+          runId: expired.runId,
+          organizationId: memberContext.organizationId,
+          actorUserId: memberContext.userId,
+        },
+      ].sort((left, right) => left.runId.localeCompare(right.runId)),
+    );
+    expect(preflight.every((candidate) => new Date(candidate.createdAt).toISOString() === candidate.createdAt)).toBe(
+      true,
+    );
+
     const address = await daemon.start();
     try {
       const readyResponse = await fetch(`${address.url}/health/ready`);

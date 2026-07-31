@@ -641,7 +641,7 @@ export class ApplicationRunStore {
     }
     const validatedCursor = cursor === undefined ? undefined : startupRecoveryCursor(cursor);
     const [records] = await this.database.query<[StartupRecoveryRecord[]]>(
-      `SELECT run_id, organization_id, actor_user_id, created_at FROM application_run
+      `SELECT run_id, organization_id, actor_user_id, time::format(created_at, "%Y-%m-%dT%H:%M:%S%.3fZ") AS created_at FROM application_run
        WHERE (status = 'ready' OR (status = 'running' AND lease_expires_at <= <datetime>$now))${validatedCursor ? " AND (created_at > <datetime>$cursor_created_at OR (created_at = <datetime>$cursor_created_at AND run_id > $cursor_run_id))" : ""}
        ORDER BY created_at ASC, run_id ASC LIMIT $limit;`,
       {

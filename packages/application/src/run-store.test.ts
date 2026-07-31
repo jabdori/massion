@@ -634,6 +634,33 @@ describe("ApplicationRunStore", () => {
     expect(query).not.toHaveBeenCalled();
   });
 
+  it("시작 복구 생성 시각은 driver DateTime brand가 아니라 SQL에서 canonical millisecond ISO로 투영한다", async () => {
+    const canonical = "2026-07-11T06:00:00.000Z";
+    const query = vi.spyOn(database, "query").mockResolvedValueOnce([
+      [
+        {
+          run_id: "run-canonical-created-at",
+          organization_id: context.organizationId,
+          actor_user_id: context.userId,
+          created_at: canonical,
+        },
+      ],
+    ]);
+
+    await expect(store.listStartupRecoverable()).resolves.toEqual([
+      {
+        runId: "run-canonical-created-at",
+        organizationId: context.organizationId,
+        actorUserId: context.userId,
+        createdAt: canonical,
+      },
+    ]);
+    expect(query).toHaveBeenCalledWith(
+      expect.stringContaining('time::format(created_at, "%Y-%m-%dT%H:%M:%S%.3fZ") AS created_at'),
+      expect.any(Object),
+    );
+  });
+
   it("저장 생성 시각은 canonical ISO 문자열·Date·SurrealDB DateTime만 허용한다", async () => {
     const canonical = "2026-07-11T06:00:00.000Z";
     const [surrealDateTime] = await database.query<[unknown]>("RETURN <datetime>$created_at;", {
