@@ -5696,7 +5696,12 @@ function mergeActivities(
 ): ActivityView[] {
   const merged = new Map(
     workActivities
-      .filter((activity) => activity.kind !== "event" || /실패|보완|다시 확인/u.test(activity.title))
+      .filter(
+        (activity) =>
+          activity.kind !== "event" ||
+          activity.semantic !== "stage" ||
+          !["업무가 접수되었습니다", "분기된 업무가 시작되었습니다"].includes(activity.title),
+      )
       .map((activity) => [activity.id, activity]),
   );
   for (const activity of roomActivities) {
