@@ -39,7 +39,7 @@ const PLAN: StrategyPlan = {
       objective: "생성 상태를 조정한다",
       criterionKeys: ["criterion-recovered"],
       dependencyKeys: [],
-      requiredCapabilities: ["recovery"],
+      requiredCapabilities: ["delivery-coordination"],
       recommendedAgentHandles: ["delivery-coordination"],
       parallelizable: false,
     },
@@ -420,6 +420,49 @@ CREATE strategy_event CONTENT { event_id: $event_id, organization_id: $organizat
       expect.objectContaining({ strategyGenerationId: candidate.strategyGenerationId, status: "applied" }),
     ]);
     expect(findResultByCommand).toHaveBeenCalledWith(context, `${candidate.generationCommandId}:runtime`);
+    expect(executeStructured).not.toHaveBeenCalled();
+  });
+
+  it("Strategy checkpoint 전 crash 복구도 부분 충족 Agent 추천을 거부한다", async () => {
+    const candidate = await pending();
+    await database.query(
+      "UPDATE strategy_generation SET execution_claim_id = 'crashed-owner', execution_claim_expires_at = type::datetime('2000-01-01T00:00:00.000Z'), execution_started_at = type::datetime('2026-07-10T00:00:00.000Z') WHERE organization_id = $organization_id AND strategy_generation_id = $strategy_generation_id;",
+      { organization_id: context.organizationId, strategy_generation_id: candidate.strategyGenerationId },
+    );
+    const [recoveryTask] = PLAN.tasks;
+    if (!recoveryTask) throw new Error("복구 Strategy Task가 없습니다");
+    const partialPlan: StrategyPlan = {
+      ...PLAN,
+      tasks: [
+        {
+          ...recoveryTask,
+          requiredCapabilities: ["delivery-coordination", "security-review"],
+        },
+      ],
+    };
+    const executeStructured = vi.fn<StructuredAgentRunner["executeStructured"]>();
+    const restarted = await StrategyGenerator.create(
+      database,
+      organizations,
+      {
+        executeStructured,
+        findResultByCommand: vi.fn().mockResolvedValue({
+          executionId: "execution-partial-agent-before-checkpoint",
+          status: "succeeded",
+          output: partialPlan,
+        }),
+      },
+      contexts,
+      works,
+    );
+
+    await expect(StrategyRecovery.create(restarted, works).recover(context)).resolves.toEqual([
+      expect.objectContaining({ strategyGenerationId: candidate.strategyGenerationId, status: "failed" }),
+    ]);
+    expect(await restarted.get(context, candidate.strategyGenerationId)).toMatchObject({
+      status: "failed",
+      error: { category: "structured_output" },
+    });
     expect(executeStructured).not.toHaveBeenCalled();
   });
 

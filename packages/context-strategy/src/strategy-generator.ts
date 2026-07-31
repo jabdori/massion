@@ -79,7 +79,7 @@ interface PreparedStrategyExecution {
   readonly evidenceMaterials: readonly StrategyEvidenceMaterial[];
   readonly route: string;
   readonly availableAgents: readonly StrategyPlanningAgent[];
-  readonly availableAgentHandles: ReadonlySet<string>;
+  readonly availableAgentCapabilities: ReadonlyMap<string, ReadonlySet<string>>;
 }
 
 interface StoredGenerationError {
@@ -150,19 +150,29 @@ export interface StrategyEvidenceMaterialResolver {
   ): Promise<StrategyEvidenceMaterial>;
 }
 
-function validatedPlan(value: unknown, availableAgentHandles: ReadonlySet<string>): StrategyPlan {
+function validatedPlan(
+  value: unknown,
+  availableAgentCapabilities: ReadonlyMap<string, ReadonlySet<string>>,
+): StrategyPlan {
   const plan = validateAutomaticStrategyPlan(value);
   for (const task of plan.tasks) {
-    if (task.recommendedAgentHandles.some((handle) => !availableAgentHandles.has(handle))) {
-      throw new Error("StrategyPlan이 활성 Organization Agent가 아닌 담당자를 추천했습니다");
+    for (const handle of task.recommendedAgentHandles) {
+      const capabilities = availableAgentCapabilities.get(handle);
+      if (!capabilities) throw new Error("StrategyPlan이 활성 Organization Agent가 아닌 담당자를 추천했습니다");
+      if (task.requiredCapabilities.some((capability) => !capabilities.has(capability))) {
+        throw new Error("StrategyPlan이 필수 역량을 모두 보유하지 않은 담당자를 추천했습니다");
+      }
     }
   }
   return plan;
 }
 
-function validateOutput(value: unknown, availableAgentHandles: ReadonlySet<string>): StructuredOutputValidationResult {
+function validateOutput(
+  value: unknown,
+  availableAgentCapabilities: ReadonlyMap<string, ReadonlySet<string>>,
+): StructuredOutputValidationResult {
   try {
-    return { success: true, value: validatedPlan(value, availableAgentHandles) };
+    return { success: true, value: validatedPlan(value, availableAgentCapabilities) };
   } catch {
     return { success: false, error: new Error("StrategyPlan structured output 검증에 실패했습니다") };
   }
@@ -374,7 +384,9 @@ export class StrategyGenerator {
       evidenceMaterials,
       route,
       availableAgents,
-      availableAgentHandles: new Set(availableAgents.map((agent) => agent.handle)),
+      availableAgentCapabilities: new Map(
+        availableAgents.map((agent) => [agent.handle, new Set(agent.capabilities)] as const),
+      ),
     };
   }
 
@@ -538,7 +550,7 @@ export class StrategyGenerator {
           input: {
             operation: "create_strategy_plan",
             planningContract:
-              "사용자의 자연어 목표와 제공된 맥락만으로 실제 deliverable을 만드는 최소 실행 Task, 검증 가능한 acceptance criteria, 필요한 requiredCapabilities를 추론하세요. intake, planning, assurance, records 같은 AgentOS 내장 단계를 Work Task로 복제하지 마세요. 해당 역량을 가진 availableAgents만 recommendedAgentHandles에 넣고, 없으면 빈 배열로 두어 AgentOS의 동적 배치가 보완하게 하세요. 별도 근거 조사가 필요하면 evidenceRequests를 만들지 말고 실행 가능한 research Task로 계획하세요. 사용자에게 내부 key나 schema 필드를 지정하도록 요구하지 마세요.",
+              "사용자의 자연어 목표와 제공된 맥락만으로 실제 deliverable을 만드는 최소 실행 Task와 검증 가능한 acceptance criteria를 계획하세요. availableAgents는 추천 후보를 고르기 위한 비완전 목록이며 requiredCapabilities의 허용 목록이 아닙니다. 각 Task에 불가결한 도메인·방법론 전문성을 먼저 구체적인 requiredCapabilities로 정의하고 현재 Agent에 없어도 그대로 유지하세요. evidence-research나 context-strategy 같은 범용 실행 역량으로 전문성을 대체하지 마세요. 모든 필수 역량을 실제로 보유한 availableAgents만 recommendedAgentHandles에 넣고, 없으면 빈 배열로 두어 AgentOS의 동적 배치가 보완하게 하세요. intake, planning, assurance, records 같은 AgentOS 내장 단계를 Work Task로 복제하지 마세요. 별도 근거 조사가 필요하면 evidenceRequests를 만들지 말고 실행 가능한 research Task로 계획하세요. 사용자에게 내부 key나 schema 필드를 지정하도록 요구하지 마세요.",
             contextVersionId: prepared.contextVersion.contextVersionId,
             objective: prepared.contextVersion.objective,
             scopeIn: prepared.contextVersion.scopeIn,
@@ -559,7 +571,7 @@ export class StrategyGenerator {
           name: "massion-strategy-plan",
           description: "검증 가능한 Work StrategyPlan",
           jsonSchema: automaticStrategyPlanJsonSchema,
-          validate: (value) => validateOutput(value, prepared.availableAgentHandles),
+          validate: (value) => validateOutput(value, prepared.availableAgentCapabilities),
         },
       );
     } catch {
@@ -574,7 +586,7 @@ export class StrategyGenerator {
     let error: { readonly category: string; readonly causeId: string } | undefined;
     if (result.status === "succeeded") {
       try {
-        plan = validatedPlan(result.output, prepared.availableAgentHandles);
+        plan = validatedPlan(result.output, prepared.availableAgentCapabilities);
         checksum = hashContextContent(plan);
         status = "generated";
       } catch {
@@ -657,7 +669,10 @@ export class StrategyGenerator {
         const availableAgents = await this.availableAgents(context, current.work_id, tx);
         signal?.throwIfAborted();
         try {
-          validatedPlan(output.plan, new Set(availableAgents.map((agent) => agent.handle)));
+          validatedPlan(
+            output.plan,
+            new Map(availableAgents.map((agent) => [agent.handle, new Set(agent.capabilities)] as const)),
+          );
         } catch {
           checkpoint = {
             status: "failed",
@@ -826,14 +841,7 @@ export class StrategyGenerator {
     let checksum: string | undefined;
     let error: { readonly category: string; readonly causeId: string } | undefined;
     if (result.status === "succeeded") {
-      try {
-        plan = validateAutomaticStrategyPlan(result.output);
-        checksum = hashContextContent(plan);
-        status = "generated";
-      } catch {
-        status = "failed";
-        error = { category: "structured_output", causeId: randomUUID() };
-      }
+      status = "generated";
     } else {
       status = result.status === "blocked_model_unavailable" ? "blocked_model_unavailable" : "failed";
       error = { category: result.error?.category ?? "runtime", causeId: result.error?.causeId ?? randomUUID() };
@@ -846,6 +854,20 @@ export class StrategyGenerator {
       const current = await this.find(tx, context.organizationId, record.strategy_generation_id);
       signal?.throwIfAborted();
       if (current.status !== "pending") return current;
+      if (result.status === "succeeded") {
+        try {
+          const availableAgents = await this.availableAgents(context, current.work_id, tx);
+          signal?.throwIfAborted();
+          plan = validatedPlan(
+            result.output,
+            new Map(availableAgents.map((agent) => [agent.handle, new Set(agent.capabilities)] as const)),
+          );
+          checksum = hashContextContent(plan);
+        } catch {
+          status = "failed";
+          error = { category: "structured_output", causeId: randomUUID() };
+        }
+      }
       const storedError = error ? { ...error, terminalStatus: status } : undefined;
       const [updated] = await tx.query<[StrategyGenerationRecord[]]>(
         "UPDATE strategy_generation SET runtime_execution_id = $runtime_execution_id, plan_json = $plan_json, checksum = $checksum, error_json = $error_json, updated_at = time::now() WHERE organization_id = $organization_id AND strategy_generation_id = $strategy_generation_id AND status = 'pending' RETURN AFTER;",
@@ -901,7 +923,7 @@ export class StrategyGenerator {
       : CORE_OFFICE_HANDLES.map((handle) => ({
           handle,
           status: "active",
-          capabilities: [],
+          capabilities: [handle === "representative" ? "request-coordination" : handle],
           scope: "persistent" as const,
         }));
     const unique = new Map<string, StrategyPlanningAgent>();

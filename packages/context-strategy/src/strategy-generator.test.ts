@@ -39,7 +39,7 @@ const VALID_STRATEGY_PLAN: StrategyPlan = {
       objective: "산출물을 생성한다",
       criterionKeys: ["criterion-tests"],
       dependencyKeys: [],
-      requiredCapabilities: ["testing"],
+      requiredCapabilities: ["assurance"],
       recommendedAgentHandles: ["assurance"],
       parallelizable: false,
     },
@@ -141,7 +141,7 @@ describe("Strategy Generator", () => {
         estimatedTokens: 1_000,
         input: expect.objectContaining({
           planningContract: expect.stringMatching(
-            /자연어 목표.+requiredCapabilities.+recommendedAgentHandles.+동적 배치/su,
+            /자연어 목표.+비완전 목록.+허용 목록.+도메인.+방법론.+현재 Agent에 없어도.+모든 필수 역량.+빈 배열.+동적 배치/su,
           ),
         }),
       }),
@@ -471,6 +471,18 @@ describe("Strategy Generator", () => {
       }),
       expect.any(Object),
     );
+    const structuredOutput = executeStructured.mock.calls[0]?.[2];
+    expect(
+      structuredOutput?.validate?.({
+        ...softwarePlan,
+        tasks: [
+          {
+            ...softwarePlan.tasks[0],
+            requiredCapabilities: ["backend-engineering", "security-review"],
+          },
+        ],
+      }),
+    ).toMatchObject({ success: false });
   });
 
   it("현재 Work에서 사용할 수 없는 work-scoped Agent를 모델 입력과 structured output에서 거부한다", async () => {
@@ -502,20 +514,20 @@ describe("Strategy Generator", () => {
           {
             handle: "staffing-persistent",
             status: "active",
-            capabilities: ["testing"],
+            capabilities: ["assurance"],
             scope: "persistent",
           },
           {
             handle: "staffing-current-work",
             status: "active",
-            capabilities: ["testing"],
+            capabilities: ["assurance"],
             scope: "work",
             work_id: workId,
           },
           {
             handle: "staffing-other-work",
             status: "active",
-            capabilities: ["testing"],
+            capabilities: ["assurance"],
             scope: "work",
             work_id: "different-work",
           },
@@ -563,7 +575,7 @@ describe("Strategy Generator", () => {
           name: "Checkpoint Deactivation",
           responsibility: "Checkpoint 경쟁 검증",
           outputs: ["Review"],
-          capabilities: ["testing"],
+          capabilities: ["assurance"],
           parentHandle: "delivery-coordination",
           scope: "work",
           workId,
@@ -615,7 +627,7 @@ describe("Strategy Generator", () => {
         {
           handle: "checkpoint-work-scope-agent",
           status: "active",
-          capabilities: ["testing"],
+          capabilities: ["assurance"],
           scope: "work" as const,
           work_id: checkpointRead ? "different-work" : workId,
         },
