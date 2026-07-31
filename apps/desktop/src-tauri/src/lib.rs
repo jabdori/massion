@@ -767,30 +767,48 @@ fn should_shutdown_bridge(event: BridgeShutdownEvent) -> bool {
     )
 }
 
-fn startup_navigation_target(
-    event: &tauri::RunEvent,
-    debug_build: bool,
-) -> Option<(&'static str, &'static str)> {
-    (!debug_build && matches!(event, tauri::RunEvent::Ready))
-        .then_some((MAIN_WEBVIEW_LABEL, BUNDLED_FRONTEND_URL))
+fn webview_created_navigation_target(
+    label: &str,
+    release_build: bool,
+    already_navigated: bool,
+) -> Option<&'static str> {
+    (release_build && !already_navigated && label == MAIN_WEBVIEW_LABEL)
+        .then_some(BUNDLED_FRONTEND_URL)
 }
 
-fn navigate_main_webview_on_ready(app_handle: &tauri::AppHandle, event: &tauri::RunEvent) {
-    let Some((label, url)) = startup_navigation_target(event, cfg!(debug_assertions)) else {
+fn navigate_main_webview_when_created(webview: tauri::Webview, navigated: &AtomicBool) {
+    let Some(url) = webview_created_navigation_target(
+        webview.label(),
+        !cfg!(debug_assertions),
+        navigated.load(Ordering::Acquire),
+    ) else {
         return;
     };
-    let Some(webview) = app_handle.get_webview_window(label) else {
+    if navigated
+        .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+        .is_err()
+    {
         return;
-    };
+    }
     let url = tauri::Url::parse(url).expect("고정된 번들 프런트엔드 URL");
     if let Err(error) = webview.navigate(url) {
+        navigated.store(false, Ordering::Release);
         eprintln!("초기 WebView 탐색 실패: {error}");
     }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let startup_navigation_done = Arc::new(AtomicBool::new(false));
+    let startup_navigation_done_ = Arc::clone(&startup_navigation_done);
     let app = tauri::Builder::default()
+        .plugin(
+            tauri::plugin::Builder::<tauri::Wry>::new("startup-navigation")
+                .on_webview_ready(move |webview| {
+                    navigate_main_webview_when_created(webview, &startup_navigation_done_);
+                })
+                .build(),
+        )
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             let paths = RuntimePaths::discover(app.handle())?;
@@ -812,8 +830,6 @@ pub fn run() {
         .expect("Massion desktop 실행 준비 실패");
 
     app.run(|app_handle, event| {
-        navigate_main_webview_on_ready(app_handle, &event);
-
         let shutdown_event = match event {
             tauri::RunEvent::ExitRequested { .. } => BridgeShutdownEvent::ExitRequested,
             tauri::RunEvent::Exit => BridgeShutdownEvent::Exit,
@@ -950,17 +966,18 @@ mod tests {
     }
 
     #[test]
-    fn ready_event_navigates_the_main_webview_to_the_bundled_frontend() {
+    fn only_the_first_created_main_webview_in_release_gets_the_bundled_url() {
         assert_eq!(
-            startup_navigation_target(&tauri::RunEvent::Ready, false),
-            Some(("main", "tauri://localhost"))
+            webview_created_navigation_target("main", true, false),
+            Some("tauri://localhost")
         );
+        assert_eq!(webview_created_navigation_target("main", true, true), None);
         assert_eq!(
-            startup_navigation_target(&tauri::RunEvent::Ready, true),
+            webview_created_navigation_target("settings", true, false),
             None
         );
         assert_eq!(
-            startup_navigation_target(&tauri::RunEvent::Resumed, false),
+            webview_created_navigation_target("main", false, false),
             None
         );
     }
