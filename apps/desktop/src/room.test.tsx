@@ -154,11 +154,33 @@ describe("협업방 문법", () => {
     rerender(<RoomHandoff content={longContent} from={quill} time="10:25" />);
     expect(screen.getByText(/인계/)).toHaveTextContent("Quill");
     expect(screen.queryByText("Vega")).not.toBeInTheDocument();
-    expect(screen.getByText(/받는 쪽은 아직 정해지지 않았습니다/u)).toHaveClass(
-      "whitespace-pre-wrap",
+    expect(screen.getByText(/받는 쪽은 아직 정해지지 않았습니다/u).parentElement).toHaveClass(
       "break-words",
       "[overflow-wrap:anywhere]",
     );
+  });
+
+  it("인계 본문은 compact 배치를 유지하면서 Agent Markdown 의미를 렌더링한다", () => {
+    render(<RoomHandoff content={"### 다음 단계\n\n- 표본 검증\n- 결과 보고"} from={quill} time="10:24" to={vega} />);
+
+    expect(screen.getByRole("heading", { level: 3, name: "다음 단계" })).toBeInTheDocument();
+    expect(screen.getAllByRole("listitem").map((item) => item.textContent)).toEqual(["표본 검증", "결과 보고"]);
+  });
+
+  it("일반 Agent 발언도 heading, list, GFM 표를 의미 구조로 렌더링한다", () => {
+    render(
+      <RoomMessage
+        content={"## 조사 결과\n\n- 근거 확인\n- 반론 검토\n\n| 항목 | 상태 |\n| --- | --- |\n| 조사 | 완료 |"}
+        speaker={quill}
+        time="10:25"
+        type="evidence"
+      />,
+    );
+
+    expect(screen.getByRole("heading", { level: 2, name: "조사 결과" })).toBeInTheDocument();
+    expect(screen.getAllByRole("listitem").map((item) => item.textContent)).toEqual(["근거 확인", "반론 검토"]);
+    expect(screen.getByRole("table")).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "협업 메시지 표" })).toHaveAttribute("tabindex", "0");
   });
 
   it("최종 응답은 heading과 GFM 표를 의미 구조로 렌더링한다", () => {
@@ -176,7 +198,7 @@ describe("협업방 문법", () => {
     expect(screen.getByRole("table")).toBeInTheDocument();
     expect(screen.getByRole("columnheader", { name: "항목" })).toBeInTheDocument();
     expect(screen.getByRole("cell", { name: "통과" })).toBeInTheDocument();
-    const tableRegion = screen.getByRole("region", { name: "최종 응답 표" });
+    const tableRegion = screen.getByRole("region", { name: "협업 메시지 표" });
     expect(tableRegion).toHaveAttribute("tabindex", "0");
     expect(tableRegion).toHaveClass("overflow-x-auto");
     expect(tableRegion).toContainElement(container.querySelector("table"));
@@ -196,13 +218,12 @@ describe("협업방 문법", () => {
     expect(container.querySelector("[data-testid='raw-html']")).toBeNull();
   });
 
-  it("최종 응답의 위험한 link와 image URL은 안전한 기본 변환으로 제거한다", () => {
-    render(
+  it("일반 Agent 발언도 위험한 link·image URL과 raw HTML을 차단한다", () => {
+    const { container } = render(
       <RoomMessage
         content={
-          "[직접](javascript:alert(1)) [혼합](JaVaScRiPt:alert(1)) [인코딩](jav&#x61;script:alert(1)) ![이미지](data:text/html;base64,PHNjcmlwdD4=)"
+          '<em data-testid="raw-html">실행 금지</em> [직접](javascript:alert(1)) [혼합](JaVaScRiPt:alert(1)) [인코딩](jav&#x61;script:alert(1)) ![이미지](data:text/html;base64,PHNjcmlwdD4=)'
         }
-        final
         speaker={atlas}
         time="10:26"
         type="answer"
@@ -213,16 +234,25 @@ describe("협업방 문법", () => {
       expect(screen.getByText(name)).not.toHaveAttribute("href");
     }
     expect(screen.getByRole("img", { name: "이미지" })).not.toHaveAttribute("src");
+    expect(container.querySelector("[data-testid='raw-html']")).toBeNull();
   });
 
-  it("일반 메시지는 Markdown 문법을 기존 plain text로 보존한다", () => {
-    render(
-      <RoomMessage content={"## 일반 메시지\n\n| 그대로 | 표시 |"} speaker={quill} time="10:26" type="evidence" />,
-    );
+  it("사용자 메시지는 Markdown을 해석하지 않고 줄바꿈을 보존한다", () => {
+    const content = "## 사용자 입력\n\n- 그대로 표시";
+    const me: SpeakerView = {
+      handle: "owner-1",
+      name: "나",
+      initial: "나",
+      accentSlot: -1,
+      role: "사람",
+      human: true,
+    };
+    render(<RoomMessage content={content} speaker={me} time="10:26" type="question" />);
 
     expect(screen.queryByRole("heading")).toBeNull();
-    expect(screen.queryByRole("table")).toBeNull();
-    expect(screen.getByText(/## 일반 메시지/u)).toHaveTextContent("| 그대로 | 표시 |");
+    expect(screen.queryByRole("list")).toBeNull();
+    expect(screen.getByText(/## 사용자 입력/u)).toHaveClass("whitespace-pre-wrap");
+    expect(screen.getByText(/## 사용자 입력/u).textContent).toBe(content);
   });
 
   it("조직 변경 제안은 영향과 되돌리기를 버튼보다 먼저 보인다", async () => {

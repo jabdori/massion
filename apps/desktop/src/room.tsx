@@ -234,6 +234,46 @@ function TypeTag({ speaker, type }: { speaker?: SpeakerView; type: RoomMessageTy
   );
 }
 
+function AgentMessageContent({
+  compact = false,
+  content,
+  emphasized = false,
+}: {
+  compact?: boolean;
+  content: string;
+  emphasized?: boolean;
+}) {
+  return (
+    <div
+      className={`min-w-0 [&>:first-child]:mt-0 [&>:last-child]:mb-0 [&_a]:underline [&_a]:underline-offset-2 [&_blockquote]:my-2 [&_blockquote]:border-l-2 [&_blockquote]:border-control [&_blockquote]:pl-3 [&_blockquote]:text-secondary [&_code]:rounded-[3px] [&_code]:bg-canvas [&_code]:px-1 [&_code]:font-mono [&_h1]:my-3 [&_h1]:font-semibold [&_h2]:my-3 [&_h2]:font-semibold [&_h3]:my-2 [&_h3]:font-semibold [&_h4]:my-2 [&_h4]:font-semibold [&_h5]:my-2 [&_h5]:font-semibold [&_h6]:my-2 [&_h6]:font-semibold [&_li]:my-0.5 [&_ol]:my-2 [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:my-2 [&_pre]:my-2 [&_pre]:overflow-x-auto [&_pre]:rounded-[5px] [&_pre]:bg-canvas [&_pre]:p-2 [&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_td]:border [&_td]:border-control [&_td]:px-2 [&_td]:py-1 [&_th]:border [&_th]:border-control [&_th]:bg-surface-2 [&_th]:px-2 [&_th]:py-1 [&_ul]:my-2 [&_ul]:list-disc [&_ul]:pl-5 ${
+        compact
+          ? "mt-1 break-words text-[12px] leading-5 text-secondary [overflow-wrap:anywhere] [&_h1]:text-[14px] [&_h2]:text-[13px] [&_h3]:text-[12px]"
+          : `${emphasized ? "mt-1.5 font-medium" : "mt-1"} text-[13px] leading-5 text-primary [&_h1]:text-[18px] [&_h2]:text-[16px] [&_h3]:text-[14px]`
+      }`}
+    >
+      <ReactMarkdown
+        components={{
+          a: ({ children, href, title }) => (
+            <a href={href || undefined} title={title}>
+              {children}
+            </a>
+          ),
+          img: ({ alt, src, title }) => <img alt={alt ?? ""} src={src || undefined} title={title} />,
+          table: ({ children }) => (
+            <div aria-label="협업 메시지 표" className="my-2 overflow-x-auto" role="region" tabIndex={0}>
+              <table className="w-full border-collapse text-left">{children}</table>
+            </div>
+          ),
+        }}
+        remarkPlugins={[remarkGfm]}
+        skipHtml
+      >
+        {content}
+      </ReactMarkdown>
+    </div>
+  );
+}
+
 /** 챕터 구분선. 6단계 전환 지점에만 놓고 대화를 담지 않습니다. */
 export function RoomChapter({ label, time, until }: { label: string; time: string; until?: string | undefined }) {
   return (
@@ -289,11 +329,7 @@ export function RoomHandoff({
           </p>
           <SpeakerModel speaker={from} />
         </div>
-        {content ? (
-          <p className="mt-1 whitespace-pre-wrap break-words text-[12px] leading-5 text-secondary [overflow-wrap:anywhere]">
-            {content}
-          </p>
-        ) : null}
+        {content ? <AgentMessageContent compact content={content} /> : null}
       </div>
     </div>
   );
@@ -355,30 +391,12 @@ export function RoomMessage({
             {quoted.author} · {quoted.time} — {quoted.content}
           </blockquote>
         ) : null}
-        {final ? (
-          <div className="mt-1.5 min-w-0 text-[13px] font-medium leading-5 text-primary [&>:first-child]:mt-0 [&>:last-child]:mb-0 [&_a]:underline [&_a]:underline-offset-2 [&_blockquote]:my-2 [&_blockquote]:border-l-2 [&_blockquote]:border-control [&_blockquote]:pl-3 [&_blockquote]:text-secondary [&_code]:rounded-[3px] [&_code]:bg-canvas [&_code]:px-1 [&_code]:font-mono [&_h1]:my-3 [&_h1]:text-[18px] [&_h1]:font-semibold [&_h2]:my-3 [&_h2]:text-[16px] [&_h2]:font-semibold [&_h3]:my-2 [&_h3]:text-[14px] [&_h3]:font-semibold [&_h4]:my-2 [&_h4]:font-semibold [&_h5]:my-2 [&_h5]:font-semibold [&_h6]:my-2 [&_h6]:font-semibold [&_li]:my-0.5 [&_ol]:my-2 [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:my-2 [&_pre]:my-2 [&_pre]:overflow-x-auto [&_pre]:rounded-[5px] [&_pre]:bg-canvas [&_pre]:p-2 [&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_td]:border [&_td]:border-control [&_td]:px-2 [&_td]:py-1 [&_th]:border [&_th]:border-control [&_th]:bg-surface-2 [&_th]:px-2 [&_th]:py-1 [&_ul]:my-2 [&_ul]:list-disc [&_ul]:pl-5">
-            <ReactMarkdown
-              components={{
-                a: ({ children, href, title }) => (
-                  <a href={href || undefined} title={title}>
-                    {children}
-                  </a>
-                ),
-                img: ({ alt, src, title }) => <img alt={alt ?? ""} src={src || undefined} title={title} />,
-                table: ({ children }) => (
-                  <div aria-label="최종 응답 표" className="my-2 overflow-x-auto" role="region" tabIndex={0}>
-                    <table className="w-full border-collapse text-left">{children}</table>
-                  </div>
-                ),
-              }}
-              remarkPlugins={[remarkGfm]}
-              skipHtml
-            >
-              {content}
-            </ReactMarkdown>
-          </div>
+        {speaker.human === true ? (
+          <p className="whitespace-pre-wrap break-words text-[13px] leading-5 text-primary [overflow-wrap:anywhere]">
+            {content}
+          </p>
         ) : (
-          <p className="text-[13px] leading-5 text-primary">{content}</p>
+          <AgentMessageContent content={content} emphasized={final} />
         )}
         {evidence ? (
           <p className="mt-1.5 flex flex-wrap items-center gap-2">
