@@ -396,7 +396,7 @@ export function RoomMessage({
             {content}
           </p>
         ) : (
-          <AgentMessageContent content={content} emphasized={final} />
+          <AgentMessageContent content={content} emphasized={final === true} />
         )}
         {evidence ? (
           <p className="mt-1.5 flex flex-wrap items-center gap-2">
