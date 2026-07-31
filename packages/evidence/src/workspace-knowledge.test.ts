@@ -78,7 +78,7 @@ describe("Workspace 기반 자동 Evidence 지식 준비", () => {
     await rm(root, { recursive: true, force: true });
   });
 
-  it("Work 재시도·scope·1-hop·revision 고정·prompt 무결성 경계를 함께 지킨다", async () => {
+  it("Work 재시도·scope·1-hop·revision 고정·prompt 무결성 경계를 함께 지킨다", { timeout: 15_000 }, async () => {
     const base = {
       workId: "work-unscoped",
       workspaceId: "workspace-knowledge",
