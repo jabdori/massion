@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { IdentityService, OrganizationService, type TenantContext } from "@massion/identity";
+import { RuntimeExecutionStore } from "@massion/runtime";
 import { createDatabase, type MassionDatabase } from "@massion/storage";
 
 import {
@@ -56,6 +57,7 @@ describe("Software delivery Governance", () => {
         rootRealPathHash: "a".repeat(64),
       }),
     };
+    const executions = await RuntimeExecutionStore.create(database, organizations);
     deliveries = await EngineeringDeliveryStore.create(database, organizations, prerequisites);
     let delivery = (
       await deliveries.start(context, {
@@ -68,6 +70,55 @@ describe("Software delivery Governance", () => {
         baseRevision: "a".repeat(40),
         agentHandle: "software-engineering.infrastructure-specialist",
         profileVersion: "1.0.0",
+      })
+    ).delivery;
+    const proposal = await executions.createExecution(context, {
+      commandId: "risk-proposal",
+      workId: "work-1",
+      taskId: "task-1",
+      agentHandle: "software-engineering.infrastructure-specialist",
+      modelRoute: "software-engineering-quality",
+      correlationId: delivery.deliveryId,
+      estimatedTokens: 100,
+      estimatedCostMicros: 0,
+      input: {},
+    });
+    const runningProposal = await executions.transition(context, {
+      commandId: "risk-proposal:running",
+      executionId: proposal.execution.execution_id,
+      expectedVersion: proposal.execution.version,
+      target: "running",
+      payload: {},
+    });
+    await executions.transition(context, {
+      commandId: "risk-proposal:succeeded",
+      executionId: proposal.execution.execution_id,
+      expectedVersion: runningProposal.execution.version,
+      target: "succeeded",
+      payload: {
+        output: {
+          testPatch: "test",
+          implementationPatch: "implementation",
+          focusedCommand: {
+            executable: "node",
+            args: ["test.js"],
+            cwd: ".",
+            timeoutMs: 1_000,
+            maxOutputBytes: 1_000,
+            environment: {},
+          },
+          redFailureMarker: "EXPECTED_RED",
+          validationCommands: [],
+          commitMessage: "fix: governed",
+        },
+      },
+    });
+    delivery = (
+      await deliveries.bindProposalExecution(context, {
+        commandId: "risk-proposal:bind",
+        deliveryId: delivery.deliveryId,
+        expectedVersion: delivery.version,
+        executionId: proposal.execution.execution_id,
       })
     ).delivery;
     for (const [target, extra] of [
@@ -107,20 +158,27 @@ describe("Software delivery Governance", () => {
     artifactCalls = 0;
     let workRevision = 10;
     let taskStatus = "running";
+    let storedArtifact: NonNullable<Awaited<ReturnType<WorkDeliveryPort["findArtifactVersion"]>>>;
     port = {
       getWork: async () => ({ workId: "work-1", status: "running", revision: workRevision }),
       createArtifactVersion: async (_context, input) => {
         artifactCalls += 1;
         workRevision += 1;
-        return {
+        storedArtifact = {
           work: { workId: "work-1", status: "running", revision: workRevision },
           artifact: { artifactId: "artifact-1" },
           artifactVersion: {
             artifactVersionId: "artifact-version-1",
+            workId: "work-1",
+            mediaType: input.mediaType,
             contentJson: JSON.stringify(input.content),
+            ...(input.creatorAgentHandle === undefined ? {} : { creatorAgentHandle: input.creatorAgentHandle }),
+            ...(input.creatorExecutionId === undefined ? {} : { creatorExecutionId: input.creatorExecutionId }),
           },
         };
+        return storedArtifact;
       },
+      findArtifactVersion: async () => storedArtifact,
       transitionTask: async () => {
         taskStatus = "completed";
         workRevision += 1;
@@ -153,6 +211,67 @@ describe("Software delivery Governance", () => {
     expect(classifyDeliveryRisk(["db/migrations/001.sql"])).toBe("high");
     expect(classifyDeliveryRisk([".github/workflows/release.yml"])).toBe("high");
     expect(classifyDeliveryRisk(["infrastructure/main.tf"])).toBe("high");
+  });
+
+  it("Proposal execution 계보가 없으면 Governance와 Work side effect 전에 거부한다", async () => {
+    const gate = { authorize: vi.fn() };
+    const unbound = {
+      ...(await deliveries.get(context, deliveryId)),
+      proposalExecutionId: undefined,
+    };
+    const finalizer = new SoftwareDeliveryFinalizer(
+      {
+        get: async () => unbound,
+        listFileChanges: vi.fn(),
+      } as never,
+      port,
+      gate,
+    );
+
+    await expect(finalizer.finalize(context, { ...input, deliveryId })).rejects.toThrow("committed Delivery");
+    expect(gate.authorize).not.toHaveBeenCalled();
+    expect(artifactCalls).toBe(0);
+  });
+
+  it("기존 Artifact manifest 전체가 현재 Delivery와 다르면 attach·Task·Work 변경 전에 거부한다", async () => {
+    const delivery = await deliveries.get(context, deliveryId);
+    const proposalExecutionId = delivery.proposalExecutionId;
+    if (!proposalExecutionId) throw new Error("Proposal execution 계보가 없습니다");
+    const gate = { authorize: vi.fn().mockResolvedValue({ outcome: "allow" }) };
+    const createArtifactVersion = vi.fn(port.createArtifactVersion.bind(port));
+    const transitionTask = vi.fn(port.transitionTask.bind(port));
+    const transitionWork = vi.fn(port.transitionWork.bind(port));
+    const stalePort: WorkDeliveryPort = {
+      ...port,
+      createArtifactVersion,
+      transitionTask,
+      transitionWork,
+      findArtifactVersion: async () => ({
+        work: await port.getWork(context, "work-1"),
+        artifact: { artifactId: "stale-artifact" },
+        artifactVersion: {
+          artifactVersionId: "stale-artifact-version",
+          workId: "work-1",
+          mediaType: "application/vnd.massion.code-change-manifest+json",
+          contentJson: JSON.stringify({
+            schemaVersion: "massion.code-change-manifest.v1",
+            deliveryId,
+            changeSetHash: delivery.changeSetHash,
+            files: [],
+          }),
+          creatorAgentHandle: delivery.agentHandle,
+          creatorExecutionId: proposalExecutionId,
+        },
+      }),
+    };
+
+    await expect(
+      new SoftwareDeliveryFinalizer(deliveries, stalePort, gate).finalize(context, { ...input, deliveryId }),
+    ).rejects.toThrow("creator 계보");
+    expect(createArtifactVersion).not.toHaveBeenCalled();
+    expect(transitionTask).not.toHaveBeenCalled();
+    expect(transitionWork).not.toHaveBeenCalled();
+    expect(await deliveries.get(context, deliveryId)).not.toHaveProperty("artifactVersionId");
   });
 
   it("deny이면 Artifact·Task side effect 전에 중단한다", async () => {

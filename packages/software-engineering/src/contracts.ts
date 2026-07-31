@@ -54,6 +54,7 @@ export interface EngineeringDelivery {
   readonly status: EngineeringDeliveryStatus;
   readonly version: number;
   readonly startCommandId: string;
+  readonly proposalExecutionId?: string;
   readonly workspaceId?: string;
   readonly branchRef?: string;
   readonly commitSha?: string;

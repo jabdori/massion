@@ -1514,7 +1514,7 @@ describe("VoltAgent AgentRunner", () => {
     expect(recovery.events.at(-1)?.event_type).toBe("execution_blocked_model_unavailable");
   });
 
-  it("stream part를 단조 Runtime Event로 영속하고 text delta를 전달한다", async () => {
+  it("stream part를 단조 Runtime Event로 영속하고 text delta 순서를 성공 출력에 보존한다", async () => {
     const routed = lease(
       new MockLanguageModelV3({
         doStream: {
@@ -1523,6 +1523,9 @@ describe("VoltAgent AgentRunner", () => {
               { type: "stream-start", warnings: [] },
               { type: "text-start", id: "text-1" },
               { type: "text-delta", id: "text-1", delta: "hello" },
+              { type: "text-delta", id: "text-1", delta: "" },
+              { type: "text-delta", id: "text-1", delta: "hello" },
+              { type: "text-delta", id: "text-1", delta: "!" },
               { type: "text-end", id: "text-1" },
               { type: "finish", finishReason: "stop", usage: USAGE },
             ],
@@ -1543,6 +1546,7 @@ describe("VoltAgent AgentRunner", () => {
     if (!first) throw new Error("stream event가 없습니다");
     const recovery = await store.getRecovery(context, first.executionId);
     expect(recovery.execution.status).toBe("succeeded");
+    expect(JSON.parse(recovery.execution.output_json ?? "null")).toMatchObject({ output: "hellohello!" });
   });
 
   it("delta observer에 휘발성 실행 델타를 전달하고 observer 오류는 실행에 전파하지 않는다", async () => {
@@ -1624,6 +1628,8 @@ describe("VoltAgent AgentRunner", () => {
     expect(acquire).toHaveBeenCalledTimes(1);
     expect(routed.fail).toHaveBeenCalledWith(expect.objectContaining({ emittedTokens: 1, outputTokens: 1 }));
     expect(events.at(-1)?.type).toBe("execution_interrupted");
+    const recovery = await store.getRecovery(context, events.at(-1)?.executionId ?? "");
+    expect(recovery.execution.output_json).toBeUndefined();
   });
 
   it("tool·handoff 귀속 필드는 유지하고 provider secret은 제거한다", () => {

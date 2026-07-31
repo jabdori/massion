@@ -1,6 +1,6 @@
 import { GovernanceApprovalRequiredError } from "@massion/governance";
 import type { WorkTask } from "@massion/work";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { CoreSoftwareTaskAdapter } from "./core-software-task.js";
 
@@ -74,6 +74,10 @@ describe("CoreSoftwareTaskAdapter", () => {
       deliveries: {
         findByStartCommand: async () => existing,
         get: async () => existing,
+        bindProposalExecution: async (_context: unknown, input: { executionId: string }) => {
+          existing = { ...existing, proposalExecutionId: input.executionId } as never;
+          return { delivery: existing };
+        },
         transition: async () => ({ delivery: existing }),
       },
       coordinator: {
@@ -95,12 +99,15 @@ describe("CoreSoftwareTaskAdapter", () => {
           calls.push(`propose:${input.acceptanceCriteria[0]}`);
           proposalInputs.push(input);
           return {
-            testPatch: "test",
-            implementationPatch: "implementation",
-            focusedCommand: {},
-            redFailureMarker: "RED",
-            validationCommands: [],
-            commitMessage: "feat: implement",
+            executionId: "proposal-execution-1",
+            proposal: {
+              testPatch: "test",
+              implementationPatch: "implementation",
+              focusedCommand: {},
+              redFailureMarker: "RED",
+              validationCommands: [],
+              commitMessage: "feat: implement",
+            },
           };
         },
       },
@@ -323,7 +330,13 @@ describe("CoreSoftwareTaskAdapter", () => {
 
   it("새 generation은 이전 owner의 유효한 lease와 파일 작업이 끝날 때까지 takeover하지 않는다", async () => {
     const calls: string[] = [];
-    let delivery = {
+    let delivery: {
+      deliveryId: string;
+      version: number;
+      status: string;
+      startCommandId: string;
+      proposalExecutionId?: string;
+    } = {
       deliveryId: "delivery-generation-handoff",
       version: 1,
       status: "preparing",
@@ -345,6 +358,10 @@ describe("CoreSoftwareTaskAdapter", () => {
       deliveries: {
         findByStartCommand: async () => delivery,
         get: async () => delivery,
+        bindProposalExecution: async (_context: unknown, input: { executionId: string }) => {
+          delivery = { ...delivery, version: delivery.version + 1, proposalExecutionId: input.executionId };
+          return { delivery };
+        },
         transition: async () => {
           throw new Error("handoff 경로에서 Delivery를 실패시키면 안 됩니다");
         },
@@ -413,7 +430,13 @@ describe("CoreSoftwareTaskAdapter", () => {
 
   it("만료 takeover는 이전 TDD 실행 종료를 기다린 뒤 Recovery·새 claim·파일 작업을 시작한다", async () => {
     const calls: string[] = [];
-    let delivery = {
+    let delivery: {
+      deliveryId: string;
+      version: number;
+      status: string;
+      startCommandId: string;
+      proposalExecutionId?: string;
+    } = {
       deliveryId: "delivery-expired-handoff",
       version: 1,
       status: "preparing",
@@ -445,6 +468,10 @@ describe("CoreSoftwareTaskAdapter", () => {
       deliveries: {
         findByStartCommand: async () => delivery,
         get: async () => delivery,
+        bindProposalExecution: async (_context: unknown, input: { executionId: string }) => {
+          delivery = { ...delivery, version: delivery.version + 1, proposalExecutionId: input.executionId };
+          return { delivery };
+        },
         transition: async () => {
           throw new Error("handoff worker가 Delivery를 실패시키면 안 됩니다");
         },
@@ -503,12 +530,15 @@ describe("CoreSoftwareTaskAdapter", () => {
             calls.push("proposal:new");
           }
           return {
-            testPatch: "test",
-            implementationPatch: "implementation",
-            focusedCommand: {},
-            redFailureMarker: "RED",
-            validationCommands: [],
-            commitMessage: "fix: expired handoff",
+            executionId: `proposal-execution-handoff-${String(proposalCalls)}`,
+            proposal: {
+              testPatch: "test",
+              implementationPatch: "implementation",
+              focusedCommand: {},
+              redFailureMarker: "RED",
+              validationCommands: [],
+              commitMessage: "fix: expired handoff",
+            },
           };
         },
       },
@@ -554,7 +584,13 @@ describe("CoreSoftwareTaskAdapter", () => {
   });
 
   it("process group 회수 실패는 settled 실패를 보존해 새 owner의 Recovery·claim·TDD를 모두 막는다", async () => {
-    let delivery = {
+    let delivery: {
+      deliveryId: string;
+      version: number;
+      status: string;
+      startCommandId: string;
+      proposalExecutionId?: string;
+    } = {
       deliveryId: "delivery-reap-failed",
       version: 1,
       status: "preparing",
@@ -580,6 +616,10 @@ describe("CoreSoftwareTaskAdapter", () => {
       deliveries: {
         findByStartCommand: async () => delivery,
         get: async () => delivery,
+        bindProposalExecution: async (_context: unknown, input: { executionId: string }) => {
+          delivery = { ...delivery, version: delivery.version + 1, proposalExecutionId: input.executionId };
+          return { delivery };
+        },
         transition: async (_context: unknown, input: { target: string }) => {
           transitionCalls += 1;
           delivery = { ...delivery, status: input.target, version: delivery.version + 1 };
@@ -614,12 +654,15 @@ describe("CoreSoftwareTaskAdapter", () => {
         propose: async () => {
           proposalCalls += 1;
           return {
-            testPatch: "test",
-            implementationPatch: "implementation",
-            focusedCommand: {},
-            redFailureMarker: "RED",
-            validationCommands: [],
-            commitMessage: "fix: reap failed",
+            executionId: "proposal-execution-reap-failed",
+            proposal: {
+              testPatch: "test",
+              implementationPatch: "implementation",
+              focusedCommand: {},
+              redFailureMarker: "RED",
+              validationCommands: [],
+              commitMessage: "fix: reap failed",
+            },
           };
         },
       },
@@ -659,7 +702,13 @@ describe("CoreSoftwareTaskAdapter", () => {
   it("continuing non-terminal에 lease가 없으면 Recovery 전에 allowed path lease를 claim하고 owner를 전달한다", async () => {
     const calls: string[] = [];
     const ownerCommandId = "software-no-lease-run:delivery:lease:6:task:software-task";
-    let delivery = {
+    let delivery: {
+      deliveryId: string;
+      version: number;
+      status: string;
+      startCommandId: string;
+      proposalExecutionId?: string;
+    } = {
       deliveryId: "delivery-no-lease",
       version: 2,
       status: "test_applied",
@@ -670,7 +719,14 @@ describe("CoreSoftwareTaskAdapter", () => {
         getWork: async () => ({ revision: 3 }),
         listTasks: async () => [{ ...task, status: "running", revision: 2 }],
       },
-      deliveries: { findByStartCommand: async () => delivery, get: async () => delivery },
+      deliveries: {
+        findByStartCommand: async () => delivery,
+        get: async () => delivery,
+        bindProposalExecution: async (_context: unknown, input: { executionId: string }) => {
+          delivery = { ...delivery, version: delivery.version + 1, proposalExecutionId: input.executionId };
+          return { delivery };
+        },
+      },
       leases: {
         list: async () => {
           calls.push("list");
@@ -714,12 +770,15 @@ describe("CoreSoftwareTaskAdapter", () => {
       },
       proposals: {
         propose: async () => ({
-          testPatch: "test",
-          implementationPatch: "implementation",
-          focusedCommand: {},
-          redFailureMarker: "RED",
-          validationCommands: [],
-          commitMessage: "fix: preserve preclaimed lease",
+          executionId: "proposal-execution-no-lease",
+          proposal: {
+            testPatch: "test",
+            implementationPatch: "implementation",
+            focusedCommand: {},
+            redFailureMarker: "RED",
+            validationCommands: [],
+            commitMessage: "fix: preserve preclaimed lease",
+          },
         }),
       },
       engine: {
@@ -748,7 +807,13 @@ describe("CoreSoftwareTaskAdapter", () => {
 
   it("resume_required 중간 step은 Recovery가 preparing으로 rollback한 뒤 새 owner claim으로 재시작한다", async () => {
     const calls: string[] = [];
-    let delivery = {
+    let delivery: {
+      deliveryId: string;
+      version: number;
+      status: string;
+      startCommandId: string;
+      proposalExecutionId?: string;
+    } = {
       deliveryId: "delivery-resume-required",
       version: 5,
       status: "test_applied",
@@ -762,6 +827,10 @@ describe("CoreSoftwareTaskAdapter", () => {
       deliveries: {
         findByStartCommand: async () => delivery,
         get: async () => delivery,
+        bindProposalExecution: async (_context: unknown, input: { executionId: string }) => {
+          delivery = { ...delivery, version: delivery.version + 1, proposalExecutionId: input.executionId };
+          return { delivery };
+        },
       },
       leases: {
         list: async () => [
@@ -808,12 +877,15 @@ describe("CoreSoftwareTaskAdapter", () => {
       },
       proposals: {
         propose: async () => ({
-          testPatch: "test",
-          implementationPatch: "implementation",
-          focusedCommand: {},
-          redFailureMarker: "RED",
-          validationCommands: [],
-          commitMessage: "feat: resume",
+          executionId: "proposal-execution-resume-required",
+          proposal: {
+            testPatch: "test",
+            implementationPatch: "implementation",
+            focusedCommand: {},
+            redFailureMarker: "RED",
+            validationCommands: [],
+            commitMessage: "feat: resume",
+          },
         }),
       },
       engine: {
@@ -1282,6 +1354,7 @@ describe("CoreSoftwareTaskAdapter", () => {
     });
     const delivery = { deliveryId: "delivery-3", version: 1, status: "preparing" };
     const transitions: string[] = [];
+    const bindProposalExecution = vi.fn();
     let tddCalls = 0;
     const adapter = new CoreSoftwareTaskAdapter({
       works: {
@@ -1291,6 +1364,7 @@ describe("CoreSoftwareTaskAdapter", () => {
       },
       deliveries: {
         findByStartCommand: async () => delivery,
+        bindProposalExecution,
         transition: async (_context: unknown, value: { readonly target: string }) => {
           transitions.push(value.target);
           delivery.status = value.target;
@@ -1330,6 +1404,7 @@ describe("CoreSoftwareTaskAdapter", () => {
 
     await expect(executing).rejects.toThrow("Application run cancelled");
     expect(transitions).toEqual(["cancelled"]);
+    expect(bindProposalExecution).not.toHaveBeenCalled();
     expect(tddCalls).toBe(0);
   });
 
@@ -1386,25 +1461,37 @@ describe("CoreSoftwareTaskAdapter", () => {
   );
 
   it("TDD 엔진이 Delivery를 failed로 확정한 뒤 던져도 terminal 결과를 반환한다", async () => {
-    let delivery = { deliveryId: "delivery-tdd-failed", version: 1, status: "preparing" };
+    let delivery: {
+      deliveryId: string;
+      version: number;
+      status: string;
+      proposalExecutionId?: string;
+    } = { deliveryId: "delivery-tdd-failed", version: 1, status: "preparing" };
     let finalizerCalls = 0;
     const adapter = new CoreSoftwareTaskAdapter({
       works: {},
       deliveries: {
         findByStartCommand: async () => delivery,
         get: async () => delivery,
+        bindProposalExecution: async (_context: unknown, input: { executionId: string }) => {
+          delivery = { ...delivery, version: delivery.version + 1, proposalExecutionId: input.executionId };
+          return { delivery };
+        },
         transition: async () => {
           throw new Error("TDD 엔진이 이미 terminal 상태를 저장했습니다");
         },
       },
       proposals: {
         propose: async () => ({
-          testPatch: "test",
-          implementationPatch: "implementation",
-          focusedCommand: {},
-          redFailureMarker: "RED",
-          validationCommands: [],
-          commitMessage: "feat: fail",
+          executionId: "proposal-execution-tdd-failed",
+          proposal: {
+            testPatch: "test",
+            implementationPatch: "implementation",
+            focusedCommand: {},
+            redFailureMarker: "RED",
+            validationCommands: [],
+            commitMessage: "feat: fail",
+          },
         }),
       },
       engine: {
@@ -1437,6 +1524,8 @@ describe("CoreSoftwareTaskAdapter", () => {
 
   it("모델 부재는 blocked로 유지하고 재시도에서도 같은 Delivery를 이어서 사용한다", async () => {
     const startCommands: string[] = [];
+    const proposalCommands: string[] = [];
+    const engineProposalExecutionIds: string[] = [];
     let coordinatorCalls = 0;
     let proposalCalls = 0;
     let delivery: { deliveryId: string; version: number; status: string } | undefined;
@@ -1452,6 +1541,15 @@ describe("CoreSoftwareTaskAdapter", () => {
           return delivery;
         },
         get: async () => delivery,
+        bindProposalExecution: async (_context: unknown, input: { executionId: string }) => {
+          delivery = {
+            deliveryId: "delivery-model-retry",
+            version: 2,
+            status: "preparing",
+            proposalExecutionId: input.executionId,
+          } as never;
+          return { delivery };
+        },
         transition: async () => {
           throw new Error("모델 부재는 Delivery를 terminal로 바꾸면 안 됩니다");
         },
@@ -1464,7 +1562,8 @@ describe("CoreSoftwareTaskAdapter", () => {
         },
       },
       proposals: {
-        propose: async () => {
+        propose: async (_context: unknown, input: { commandId: string }) => {
+          proposalCommands.push(input.commandId);
           proposalCalls += 1;
           if (proposalCalls === 1) {
             throw new Error("Software patch proposal execution이 실패했습니다: blocked_model_unavailable", {
@@ -1472,18 +1571,22 @@ describe("CoreSoftwareTaskAdapter", () => {
             });
           }
           return {
-            testPatch: "test",
-            implementationPatch: "implementation",
-            focusedCommand: {},
-            redFailureMarker: "RED",
-            validationCommands: [],
-            commitMessage: "feat: retry",
+            executionId: "proposal-execution-retry-1",
+            proposal: {
+              testPatch: "test",
+              implementationPatch: "implementation",
+              focusedCommand: {},
+              redFailureMarker: "RED",
+              validationCommands: [],
+              commitMessage: "feat: retry",
+            },
           };
         },
       },
       engine: {
-        execute: async () => {
-          delivery = { deliveryId: "delivery-model-retry", version: 2, status: "committed" };
+        execute: async (_context: unknown, input: { proposalExecutionId: string }) => {
+          engineProposalExecutionIds.push(input.proposalExecutionId);
+          delivery = { deliveryId: "delivery-model-retry", version: 3, status: "committed" };
           return { delivery };
         },
       },
@@ -1512,5 +1615,73 @@ describe("CoreSoftwareTaskAdapter", () => {
       "software-model-retry-run:delivery:task:software-task:engineering",
       "software-model-retry-run:delivery:task:software-task:engineering",
     ]);
+    expect(proposalCommands).toEqual([
+      "software-model-retry-run:delivery:task:software-task:proposal",
+      "software-model-retry-run:delivery:retry:attempt-1:task:software-task:proposal",
+    ]);
+    expect(engineProposalExecutionIds).toEqual(["proposal-execution-retry-1"]);
+  });
+
+  it("Proposal bind 뒤 재진입은 저장된 성공 출력을 재사용하고 새 모델 실행으로 교체하지 않는다", async () => {
+    const delivery = {
+      deliveryId: "delivery-bound-proposal",
+      version: 2,
+      status: "preparing",
+      proposalExecutionId: "proposal-execution-bound",
+      startCommandId: "software-bound-run:delivery:task:software-task:engineering",
+    };
+    const propose = vi.fn(async () => {
+      throw new Error("저장된 Proposal이 있으면 새 모델을 호출하면 안 됩니다");
+    });
+    const readSucceeded = vi.fn(async () => ({
+      executionId: "proposal-execution-bound",
+      proposal: {
+        testPatch: "test",
+        implementationPatch: "implementation",
+        focusedCommand: {},
+        redFailureMarker: "RED",
+        validationCommands: [],
+        commitMessage: "feat: reuse",
+      },
+    }));
+    const bindProposalExecution = vi.fn(async () => {
+      throw new Error("이미 연결된 Proposal execution을 다시 bind하면 안 됩니다");
+    });
+    const engine = vi.fn(async (_context: unknown, input: { proposalExecutionId: string }) => ({
+      delivery: { ...delivery, version: 3, status: "committed", proposalExecutionId: input.proposalExecutionId },
+    }));
+    const adapter = new CoreSoftwareTaskAdapter({
+      works: {
+        getWork: async () => ({ revision: 5 }),
+        listTasks: async () => [{ ...task, status: "running", revision: 2 }],
+      },
+      deliveries: {
+        findByStartCommand: async () => delivery,
+        get: async () => delivery,
+        bindProposalExecution,
+      },
+      proposals: { propose, readSucceeded },
+      engine: { execute: engine },
+      finalizer: { finalize: async () => ({}) },
+      recovery: { recover: async () => ({ delivery, result: "resume_required" }) },
+    } as never);
+
+    await expect(
+      adapter.executeTask(context, {
+        runId: "software-bound-run",
+        commandId: "software-bound-run:delivery:retry:attempt-1:task:software-task",
+        correlationId: "software-bound-correlation",
+        workId: "software-work",
+        task,
+        request,
+      }),
+    ).resolves.toEqual({ outcome: "completed" });
+    expect(propose).not.toHaveBeenCalled();
+    expect(readSucceeded).toHaveBeenCalledWith(context, "proposal-execution-bound");
+    expect(bindProposalExecution).not.toHaveBeenCalled();
+    expect(engine).toHaveBeenCalledWith(
+      context,
+      expect.objectContaining({ proposalExecutionId: "proposal-execution-bound" }),
+    );
   });
 });

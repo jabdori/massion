@@ -393,6 +393,21 @@ export class RuntimeExecutionStore {
     return runtimeExecutionResult(execution);
   }
 
+  public async findResultByExecutionId(
+    context: TenantContext,
+    executionId: string,
+  ): Promise<AgentExecutionResult | undefined> {
+    await this.organizations.verifyTenantContext(context);
+    const execution = await this.findExecution(this.database, context, executionId);
+    if (
+      !execution ||
+      !["succeeded", "failed", "cancelled", "interrupted", "blocked_model_unavailable"].includes(execution.status)
+    ) {
+      return undefined;
+    }
+    return runtimeExecutionResult(execution);
+  }
+
   private async attachConfiguration(
     context: TenantContext,
     created: { execution: RuntimeExecution; event: RuntimeEvent },

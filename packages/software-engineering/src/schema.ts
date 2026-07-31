@@ -157,3 +157,10 @@ export const SOFTWARE_ENGINEERING_COMMAND_ENVIRONMENT_MIGRATION = defineMigratio
 DEFINE FIELD environment_hash ON engineering_command_evidence TYPE option<string> ASSERT $value = NONE OR string::len($value) = 64;
 `,
 );
+
+export const SOFTWARE_ENGINEERING_PROPOSAL_EXECUTION_LINEAGE_MIGRATION = defineMigration(
+  "0119-software-engineering-proposal-execution-lineage",
+  `
+DEFINE FIELD proposal_execution_id ON engineering_delivery TYPE option<string> ASSERT $value = NONE OR string::len($value) > 0;
+`,
+);

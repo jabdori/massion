@@ -801,6 +801,9 @@ importers:
       '@massion/evidence':
         specifier: workspace:*
         version: link:../evidence
+      '@massion/governance':
+        specifier: workspace:*
+        version: link:../governance
       '@massion/identity':
         specifier: workspace:*
         version: link:../identity

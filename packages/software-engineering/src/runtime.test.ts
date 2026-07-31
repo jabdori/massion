@@ -64,7 +64,7 @@ describe("AgentRunner patch proposal 경계", () => {
         knowledgeSources,
         allowedPaths: ["src", "test.ts"],
       }),
-    ).resolves.toEqual(proposal);
+    ).resolves.toEqual({ executionId: "execution-1", proposal });
     expect(executeStructured).toHaveBeenCalledWith(
       context,
       expect.objectContaining({
@@ -267,6 +267,7 @@ describe("Delivery filesystem 소유권 경계", () => {
       repositoryRootRealPathHash: "a".repeat(64),
       baseRevision: "b".repeat(40),
       startCommandId: "start-stale-cleanup",
+      proposalExecutionId: "proposal-execution-stale-cleanup",
       status: "preparing",
       version: 1,
     } as EngineeringDelivery;
@@ -297,10 +298,13 @@ describe("Delivery filesystem 소유권 경계", () => {
         },
       } as never,
     );
+    const proposalExecutionId = delivery.proposalExecutionId;
+    if (!proposalExecutionId) throw new Error("Proposal execution 계보가 없습니다");
 
     await expect(
       engine.execute(context, {
         deliveryId: delivery.deliveryId,
+        proposalExecutionId,
         repositoryRoot: "/repository",
         allowedPaths: ["src", "test"],
         testPaths: ["test"],
@@ -348,6 +352,7 @@ describe("Delivery filesystem 소유권 경계", () => {
       repositoryRootRealPathHash: "a".repeat(64),
       baseRevision: "b".repeat(40),
       startCommandId: "start-command-heartbeat",
+      proposalExecutionId: "proposal-execution-command-heartbeat",
       status: "preparing",
       version: 1,
     } as EngineeringDelivery;
@@ -413,10 +418,13 @@ describe("Delivery filesystem 소유권 경계", () => {
         },
       } as never,
     );
+    const proposalExecutionId = delivery.proposalExecutionId;
+    if (!proposalExecutionId) throw new Error("Proposal execution 계보가 없습니다");
 
     await expect(
       engine.execute(context, {
         deliveryId: delivery.deliveryId,
+        proposalExecutionId,
         repositoryRoot: "/repository",
         allowedPaths: ["src", "test"],
         testPaths: ["test"],
@@ -465,6 +473,7 @@ describe("Delivery filesystem 소유권 경계", () => {
       repositoryRootRealPathHash: "a".repeat(64),
       baseRevision: "b".repeat(40),
       startCommandId: "start-command-reap-failed",
+      proposalExecutionId: "proposal-execution-command-reap-failed",
       status: "preparing",
       version: 1,
     } as EngineeringDelivery;
@@ -504,10 +513,13 @@ describe("Delivery filesystem 소유권 경계", () => {
         },
       } as never,
     );
+    const proposalExecutionId = delivery.proposalExecutionId;
+    if (!proposalExecutionId) throw new Error("Proposal execution 계보가 없습니다");
 
     await expect(
       engine.execute(context, {
         deliveryId: delivery.deliveryId,
+        proposalExecutionId,
         repositoryRoot: "/repository",
         allowedPaths: ["src", "test"],
         testPaths: ["test"],

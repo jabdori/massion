@@ -983,6 +983,37 @@ export class WorkService {
     return work;
   }
 
+  public async findArtifactVersion(
+    context: TenantContext,
+    input: { readonly workId: string; readonly kind: string; readonly name: string },
+  ): Promise<{ readonly artifact: WorkArtifact; readonly artifactVersion: ArtifactVersion } | undefined> {
+    await this.getWork(context, input.workId);
+    const [artifacts] = await this.database.query<[WorkArtifact[]]>(
+      "SELECT * OMIT id FROM work_artifact WHERE organization_id = $organization_id AND work_id = $work_id AND kind = $kind AND name = $name;",
+      {
+        organization_id: context.organizationId,
+        work_id: input.workId,
+        kind: input.kind,
+        name: input.name,
+      },
+    );
+    if (artifacts.length > 1) throw new Error("같은 Work delivery 이름의 Artifact가 중복됐습니다");
+    const artifact = artifacts[0];
+    if (!artifact) return undefined;
+    const [versions] = await this.database.query<[ArtifactVersion[]]>(
+      "SELECT * OMIT id FROM artifact_version WHERE organization_id = $organization_id AND work_id = $work_id AND artifact_id = $artifact_id ORDER BY version ASC;",
+      {
+        organization_id: context.organizationId,
+        work_id: input.workId,
+        artifact_id: artifact.artifact_id,
+      },
+    );
+    if (versions.length !== 1 || !versions[0]) {
+      throw new Error("Software delivery Artifact에는 정확히 하나의 버전이 필요합니다");
+    }
+    return { artifact, artifactVersion: versions[0] };
+  }
+
   public async getWorkRequest(context: TenantContext, workId: string): Promise<WorkRequest> {
     const work = await this.getWork(context, workId);
     const [requests] = await this.database.query<[WorkRequest[]]>(

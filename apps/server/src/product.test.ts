@@ -99,6 +99,89 @@ async function productWorkState(client: ApplicationHttpClient) {
   return { data: { works, executions } };
 }
 
+function openAiCompatibleFixtureResponse(
+  request: { readonly messages?: unknown; readonly stream?: unknown },
+  fallbackContent: string,
+  model: string,
+): { readonly contentType: string; readonly body: string } {
+  let content = fallbackContent;
+  if (Array.isArray(request.messages)) {
+    for (const message of request.messages) {
+      if (!message || typeof message !== "object" || Array.isArray(message)) continue;
+      const candidate = (message as { readonly content?: unknown }).content;
+      if (typeof candidate !== "string" || !candidate.includes('"operation":"verify_work"')) continue;
+      const input = JSON.parse(candidate) as {
+        readonly snapshotHash?: unknown;
+        readonly material?: {
+          readonly tasks?: readonly { readonly taskId?: unknown; readonly status?: unknown }[];
+          readonly artifactVersions?: readonly { readonly taskId?: unknown; readonly content?: unknown }[];
+        };
+      };
+      if (typeof input.snapshotHash !== "string" || !/^[a-f0-9]{64}$/u.test(input.snapshotHash)) break;
+      const tasks = input.material?.tasks ?? [];
+      const artifacts = input.material?.artifactVersions ?? [];
+      const verified =
+        tasks.length > 0 &&
+        tasks.every(
+          (task) =>
+            typeof task.taskId === "string" &&
+            task.status === "completed" &&
+            artifacts.some(
+              (artifact) =>
+                artifact.taskId === task.taskId &&
+                artifact.content !== undefined &&
+                artifact.content !== null &&
+                (typeof artifact.content !== "string" || artifact.content.trim().length > 0),
+            ),
+        );
+      content = JSON.stringify({
+        snapshotHash: input.snapshotHash,
+        verified,
+        reason: verified
+          ? "완료된 모든 작업에 연결된 산출물 본문을 확인했습니다."
+          : "완료 작업 또는 연결된 산출물 본문이 부족합니다.",
+      });
+      break;
+    }
+  }
+  const id = crypto.randomUUID();
+  const usage = { prompt_tokens: 10, completion_tokens: 10, total_tokens: 20 };
+  if (request.stream === true) {
+    const chunks = [
+      {
+        id,
+        object: "chat.completion.chunk",
+        created: 1,
+        model,
+        choices: [{ index: 0, delta: { role: "assistant", content }, finish_reason: null }],
+      },
+      {
+        id,
+        object: "chat.completion.chunk",
+        created: 1,
+        model,
+        choices: [{ index: 0, delta: {}, finish_reason: "stop" }],
+        usage,
+      },
+    ];
+    return {
+      contentType: "text/event-stream",
+      body: `${chunks.map((chunk) => `data: ${JSON.stringify(chunk)}\n\n`).join("")}data: [DONE]\n\n`,
+    };
+  }
+  return {
+    contentType: "application/json",
+    body: JSON.stringify({
+      id,
+      object: "chat.completion",
+      created: 1,
+      model,
+      choices: [{ index: 0, message: { role: "assistant", content }, finish_reason: "stop" }],
+      usage,
+    }),
+  };
+}
+
 describe("Massion server product", () => {
   it("구독 profile fingerprint key를 credential key와 도메인 분리해 결정론적으로 파생한다", () => {
     const credentialKey = Buffer.alloc(32, 31);
@@ -946,6 +1029,7 @@ describe("Massion server product", () => {
   it("OpenAI 호환 route에서 역량 공백을 승인받아 Work Agent로 실제 Core 경로를 완료한다", async () => {
     const sourceSecret = "sk-knowledge-secret-1234567890";
     const providerOutputSecret = "sk-provider-output-secret-1234567890";
+    const modelRequests: string[] = [];
     const plan = {
       objective: "실제 Core 경로 검증",
       summary: "한 작업을 전달하고 검증 단계까지 진행한다",
@@ -977,38 +1061,26 @@ describe("Massion server product", () => {
       ],
       evidenceRequests: [],
     };
-    const modelRequests: string[] = [];
     const modelServer = createServer((request, response) => {
       const chunks: Buffer[] = [];
       request.on("data", (chunk: Buffer) => chunks.push(chunk));
       request.on("end", () => {
         const rawBody = Buffer.concat(chunks).toString("utf8");
         modelRequests.push(rawBody);
-        const body = JSON.parse(rawBody) as { response_format?: unknown };
-        response.setHeader("content-type", "application/json");
-        const content = body.response_format
-          ? JSON.stringify(plan)
-          : rawBody.includes("execute_work_task")
-            ? "DELIVERY_RESULT_calculateTotal_검증완료"
-            : rawBody.includes("coordinate_work")
-              ? `전략 단계로 전달합니다. ${providerOutputSecret}`
-              : "완료";
-        response.end(
-          JSON.stringify({
-            id: crypto.randomUUID(),
-            object: "chat.completion",
-            created: 1,
-            model: "massion-test-model",
-            choices: [
-              {
-                index: 0,
-                message: { role: "assistant", content },
-                finish_reason: "stop",
-              },
-            ],
-            usage: { prompt_tokens: 10, completion_tokens: 10, total_tokens: 20 },
-          }),
+        const body = JSON.parse(rawBody) as { response_format?: unknown; messages?: unknown; stream?: unknown };
+        const fixture = openAiCompatibleFixtureResponse(
+          body,
+          body.response_format
+            ? JSON.stringify(plan)
+            : rawBody.includes("execute_work_task")
+              ? "DELIVERY_RESULT_calculateTotal_검증완료"
+              : rawBody.includes("coordinate_work")
+                ? `전략 단계로 전달합니다. ${providerOutputSecret}`
+                : "완료",
+          "massion-test-model",
         );
+        response.setHeader("content-type", fixture.contentType);
+        response.end(fixture.body);
       });
     });
     await new Promise<void>((resolve) => modelServer.listen(0, "127.0.0.1", resolve));
@@ -1710,21 +1782,17 @@ describe("Massion server product", () => {
       }
       const bodyText =
         input instanceof Request ? await input.clone().text() : typeof init?.body === "string" ? init.body : "{}";
-      const body = JSON.parse(bodyText) as { readonly response_format?: unknown };
-      return Response.json({
-        id: crypto.randomUUID(),
-        object: "chat.completion",
-        created: 1,
-        model: "MiniMax-M2.7",
-        choices: [
-          {
-            index: 0,
-            message: { role: "assistant", content: body.response_format ? JSON.stringify(plan) : "완료" },
-            finish_reason: "stop",
-          },
-        ],
-        usage: { prompt_tokens: 10, completion_tokens: 10, total_tokens: 20 },
-      });
+      const body = JSON.parse(bodyText) as {
+        readonly response_format?: unknown;
+        readonly messages?: unknown;
+        readonly stream?: unknown;
+      };
+      const fixture = openAiCompatibleFixtureResponse(
+        body,
+        body.response_format ? JSON.stringify(plan) : "완료",
+        "MiniMax-M2.7",
+      );
+      return new Response(fixture.body, { headers: { "content-type": fixture.contentType } });
     });
     const workspaceRoot = await mkdtemp(join(tmpdir(), "massion-minimax-core-"));
     const parsed = parseServerConfig({
@@ -1882,32 +1950,30 @@ describe("Massion server product", () => {
       validationCommands: [],
       commitMessage: "feat: update value",
     };
+    const modelRequests: string[] = [];
     const modelServer = createServer((request, response) => {
       const chunks: Buffer[] = [];
       request.on("data", (chunk: Buffer) => chunks.push(chunk));
       request.on("end", () => {
-        const body = JSON.parse(Buffer.concat(chunks).toString("utf8")) as {
+        const rawBody = Buffer.concat(chunks).toString("utf8");
+        modelRequests.push(rawBody);
+        const body = JSON.parse(rawBody) as {
           readonly messages?: unknown;
           readonly response_format?: unknown;
+          readonly stream?: unknown;
         };
         const structuredPrompt = `${JSON.stringify(body.messages) ?? ""}\n${JSON.stringify(body.response_format) ?? ""}`;
-        const content =
+        const fixture = openAiCompatibleFixtureResponse(
+          body,
           structuredPrompt.includes("software_patch_proposal") || structuredPrompt.includes("testPatch")
             ? JSON.stringify(proposal)
             : structuredPrompt.includes("massion-strategy-plan") || body.response_format
               ? JSON.stringify(plan)
-              : "완료";
-        response.setHeader("content-type", "application/json");
-        response.end(
-          JSON.stringify({
-            id: crypto.randomUUID(),
-            object: "chat.completion",
-            created: 1,
-            model: "massion-test-model",
-            choices: [{ index: 0, message: { role: "assistant", content }, finish_reason: "stop" }],
-            usage: { prompt_tokens: 10, completion_tokens: 10, total_tokens: 20 },
-          }),
+              : "완료",
+          "massion-test-model",
         );
+        response.setHeader("content-type", fixture.contentType);
+        response.end(fixture.body);
       });
     });
     await new Promise<void>((resolve) => modelServer.listen(0, "127.0.0.1", resolve));
@@ -2163,6 +2229,22 @@ describe("Massion server product", () => {
           expect.objectContaining({ agentHandle: "assurance", status: "succeeded" }),
         ]),
       );
+      expect(
+        modelRequests.filter((request) => request.includes("software_patch_proposal") || request.includes("testPatch")),
+      ).toHaveLength(1);
+      const [taskArtifactMessages] = await database.query<
+        [{ task_id?: string; execution_id?: string; artifact_version_id?: string }[]]
+      >(
+        "SELECT task_id, execution_id, artifact_version_id FROM collaboration_message WHERE organization_id = $organization_id AND author_id = 'software-engineering.backend-specialist' AND message_type = 'evidence' AND task_id != NONE AND artifact_version_id != NONE;",
+        { organization_id: initialized.context.organizationId },
+      );
+      expect(taskArtifactMessages).toEqual([
+        expect.objectContaining({
+          task_id: expect.any(String),
+          execution_id: expect.any(String),
+          artifact_version_id: expect.any(String),
+        }),
+      ]);
       expect(await readFile(join(repositoryRoot, "src", "value.mjs"), "utf8")).toBe("export const value = 1;\n");
       await expect(runFile("git", ["status", "--porcelain=v1"], { cwd: repositoryRoot })).resolves.toMatchObject({
         stdout: "",
@@ -2223,6 +2305,7 @@ describe("Massion server product", () => {
         readonly model?: unknown;
         readonly response_format?: { readonly type?: unknown };
         readonly messages?: unknown;
+        readonly stream?: unknown;
       };
       upstreamRequests.push({
         url,
@@ -2233,28 +2316,18 @@ describe("Massion server product", () => {
       if (body.model !== "glm-5.2") return new Response("invalid model", { status: 400 });
       if (body.response_format?.type === "json_schema")
         return new Response("JSON Schema response format is unsupported", { status: 400 });
-      const content =
+      const fixture = openAiCompatibleFixtureResponse(
+        body,
         body.response_format?.type === "json_object"
           ? JSON.stringify(
               JSON.stringify(body.messages).includes("Massion JSON output schema")
                 ? plan
                 : { objective: "불완전한 계획" },
             )
-          : "완료";
-      return Response.json({
-        id: crypto.randomUUID(),
-        object: "chat.completion",
-        created: 1,
-        model: "glm-5.2",
-        choices: [
-          {
-            index: 0,
-            message: { role: "assistant", content },
-            finish_reason: "stop",
-          },
-        ],
-        usage: { prompt_tokens: 10, completion_tokens: 10, total_tokens: 20 },
-      });
+          : "완료",
+        "glm-5.2",
+      );
+      return new Response(fixture.body, { headers: { "content-type": fixture.contentType } });
     });
     const workspaceRoot = await mkdtemp(join(tmpdir(), "massion-zai-core-"));
     const parsed = parseServerConfig({

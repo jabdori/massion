@@ -20,6 +20,7 @@ import type { GitFileChange } from "./git-workspace.js";
 import {
   SOFTWARE_ENGINEERING_DELIVERY_MIGRATION,
   SOFTWARE_ENGINEERING_COMMAND_ENVIRONMENT_MIGRATION,
+  SOFTWARE_ENGINEERING_PROPOSAL_EXECUTION_LINEAGE_MIGRATION,
   SOFTWARE_ENGINEERING_ROOT_BINDING_MIGRATION,
   SOFTWARE_ENGINEERING_TDD_EVIDENCE_MIGRATION,
 } from "./schema.js";
@@ -39,6 +40,7 @@ interface DeliveryRecord {
   readonly status: EngineeringDeliveryStatus;
   readonly version: number;
   readonly start_command_id: string;
+  readonly proposal_execution_id?: string;
   readonly workspace_id?: string;
   readonly branch_ref?: string;
   readonly commit_sha?: string;
@@ -206,6 +208,7 @@ export class EngineeringDeliveryStore {
       SOFTWARE_ENGINEERING_TDD_EVIDENCE_MIGRATION,
       SOFTWARE_ENGINEERING_ROOT_BINDING_MIGRATION,
       SOFTWARE_ENGINEERING_COMMAND_ENVIRONMENT_MIGRATION,
+      SOFTWARE_ENGINEERING_PROPOSAL_EXECUTION_LINEAGE_MIGRATION,
     ]);
     return new EngineeringDeliveryStore(database, organizations, prerequisites);
   }
@@ -346,6 +349,87 @@ export class EngineeringDeliveryStore {
         eventType: this.eventType(input.target),
         requestHash,
         payload: { from: current.status, to: input.target, version: updated[0].version },
+      });
+      return { delivery: this.view(updated[0]) };
+    });
+  }
+
+  public async bindProposalExecution(
+    context: TenantContext,
+    input: {
+      readonly commandId: string;
+      readonly deliveryId: string;
+      readonly expectedVersion: number;
+      readonly executionId: string;
+    },
+  ): Promise<EngineeringDeliveryResult> {
+    await this.organizations.verifyTenantContext(context);
+    assertText(input.commandId, "Command ID");
+    assertText(input.deliveryId, "Delivery ID");
+    assertText(input.executionId, "Proposal execution ID");
+    const requestHash = hashRequest({ operation: "bind-proposal-execution", input });
+    return await this.database.transaction(async (transaction) => {
+      await this.organizations.verifyTenantContext(context, undefined, transaction);
+      const replayed = await this.replay(context.organizationId, input.commandId, requestHash, transaction);
+      if (replayed) {
+        return { delivery: this.view(await this.find(transaction, context.organizationId, replayed.deliveryId)) };
+      }
+      const current = await this.find(transaction, context.organizationId, input.deliveryId);
+      if (current.proposal_execution_id) {
+        if (current.proposal_execution_id !== input.executionId) {
+          throw new Error("EngineeringDelivery에는 다른 Proposal execution이 이미 연결됐습니다");
+        }
+        return { delivery: this.view(current) };
+      }
+      if (current.status !== "preparing") {
+        throw new Error("preparing Delivery에만 Proposal execution을 연결할 수 있습니다");
+      }
+      if (current.version !== input.expectedVersion) throw new Error("Engineering delivery version 충돌입니다");
+      const [executions] = await transaction.query<
+        [
+          {
+            readonly execution_id: string;
+            readonly work_id: string;
+            readonly task_id?: string;
+            readonly agent_handle: string;
+            readonly model_route: string;
+            readonly status: string;
+            readonly output_json?: string;
+          }[],
+        ]
+      >(
+        "SELECT execution_id, work_id, task_id, agent_handle, model_route, status, output_json FROM runtime_execution WHERE organization_id = $organization_id AND execution_id = $execution_id LIMIT 1;",
+        { organization_id: context.organizationId, execution_id: input.executionId },
+      );
+      const execution = executions[0];
+      if (
+        !execution ||
+        execution.status !== "succeeded" ||
+        execution.work_id !== current.work_id ||
+        execution.task_id !== current.task_id ||
+        execution.agent_handle !== current.agent_handle ||
+        execution.model_route !== "software-engineering-quality" ||
+        !execution.output_json
+      ) {
+        throw new Error("성공한 Proposal execution의 Work·Task·Agent 계보가 Delivery와 다릅니다");
+      }
+      const [updated] = await transaction.query<[DeliveryRecord[]]>(
+        "UPDATE engineering_delivery SET proposal_execution_id = $proposal_execution_id, version = $version, updated_at = time::now() WHERE organization_id = $organization_id AND delivery_id = $delivery_id AND version = $expected_version AND proposal_execution_id = NONE RETURN AFTER;",
+        {
+          organization_id: context.organizationId,
+          delivery_id: input.deliveryId,
+          expected_version: current.version,
+          proposal_execution_id: input.executionId,
+          version: current.version + 1,
+        },
+      );
+      if (!updated[0]) throw new Error("Engineering delivery Proposal execution 연결 충돌입니다");
+      await this.recordEvent(transaction, context, {
+        deliveryId: input.deliveryId,
+        commandId: input.commandId,
+        eventType: "engineering_proposal_execution_bound",
+        requestHash,
+        payload: { executionId: input.executionId },
       });
       return { delivery: this.view(updated[0]) };
     });
@@ -882,6 +966,7 @@ export class EngineeringDeliveryStore {
       status: record.status,
       version: record.version,
       startCommandId: record.start_command_id,
+      ...(record.proposal_execution_id ? { proposalExecutionId: record.proposal_execution_id } : {}),
       ...(record.workspace_id ? { workspaceId: record.workspace_id } : {}),
       ...(record.branch_ref ? { branchRef: record.branch_ref } : {}),
       ...(record.commit_sha ? { commitSha: record.commit_sha } : {}),

@@ -481,7 +481,9 @@ export class VoltAgentRunner implements AgentRunner, StructuredAgentRunner {
                 part,
                 typeof text === "string" ? text : undefined,
               );
-              if (part.type === "text-delta" && typeof text === "string" && text.length > 0) emittedTokens += 1;
+              if (part.type === "text-delta" && typeof text === "string" && text.length > 0) {
+                emittedTokens += 1;
+              }
               state = await this.store.appendEvent(context, {
                 commandId: `${executionId}:stream:${String(state.execution.event_sequence + 1)}`,
                 executionId,
@@ -496,7 +498,7 @@ export class VoltAgentRunner implements AgentRunner, StructuredAgentRunner {
                   : new Error("Model stream에서 오류가 발생했습니다", { cause: part.error });
               }
             }
-            const usage = await result.usage;
+            const [output, usage] = await Promise.all([result.text, result.usage]);
             await lease.complete({
               commandId: `${executionId}:model:${String(attempt)}:complete`,
               inputTokens: usage.inputTokens ?? 0,
@@ -507,7 +509,7 @@ export class VoltAgentRunner implements AgentRunner, StructuredAgentRunner {
               executionId,
               expectedVersion: state.execution.version,
               target: "succeeded",
-              payload: { attemptId: lease.attemptId },
+              payload: { output, attemptId: lease.attemptId },
             });
             this.finish(executionId);
             yield eventView(state.event);

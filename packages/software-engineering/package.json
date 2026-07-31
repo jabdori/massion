@@ -21,6 +21,7 @@
   "dependencies": {
     "@massion/assurance": "workspace:*",
     "@massion/evidence": "workspace:*",
+    "@massion/governance": "workspace:*",
     "@massion/identity": "workspace:*",
     "@massion/organization": "workspace:*",
     "@massion/runtime": "workspace:*",

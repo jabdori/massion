@@ -194,9 +194,12 @@ export class CoreSoftwareTaskAdapter implements CoreSoftwareTaskPort {
     private readonly dependencies: {
       readonly works: Pick<WorkService, "getWork" | "listTasks" | "assignTask"> &
         Partial<Pick<WorkService, "listAssignments">>;
-      readonly deliveries: Pick<EngineeringDeliveryStore, "findByStartCommand" | "get" | "transition">;
+      readonly deliveries: Pick<
+        EngineeringDeliveryStore,
+        "findByStartCommand" | "get" | "transition" | "bindProposalExecution"
+      >;
       readonly coordinator: Pick<EngineeringDeliveryCoordinator, "start">;
-      readonly proposals: Pick<SoftwarePatchProposalService, "propose">;
+      readonly proposals: Pick<SoftwarePatchProposalService, "propose" | "readSucceeded">;
       readonly engine: Pick<TddDeliveryEngine, "execute">;
       readonly finalizer: Pick<SoftwareDeliveryFinalizer, "finalize">;
       readonly recovery: Pick<EngineeringDeliveryRecovery, "recover">;
@@ -679,21 +682,35 @@ export class CoreSoftwareTaskAdapter implements CoreSoftwareTaskPort {
       ).lease;
     };
     await assertOwnership();
-    const proposal = await this.dependencies.proposals.propose(context, {
-      commandId: `${input.commandId}:proposal`,
-      workId: input.workId,
-      taskId: input.task.task_id,
-      agentHandle,
-      modelRoute: "software-engineering-quality",
-      correlationId: input.correlationId,
-      estimatedTokens: proposalBaseline(input.task, config, tokenBudget) + knowledgeTokens,
-      estimatedCostMicros: 0,
-      objective: input.task.objective,
-      acceptanceCriteria: criteria(input.task),
-      evidenceBriefIds: input.knowledgeSources?.map((source) => source.evidenceBriefId) ?? [],
-      knowledgeSources: input.knowledgeSources ?? [],
-      allowedPaths: config.allowedPaths,
-    });
+    const proposed = delivery.proposalExecutionId
+      ? await this.dependencies.proposals.readSucceeded(context, delivery.proposalExecutionId)
+      : await this.dependencies.proposals.propose(context, {
+          commandId: `${input.commandId}:proposal`,
+          workId: input.workId,
+          taskId: input.task.task_id,
+          agentHandle,
+          modelRoute: "software-engineering-quality",
+          correlationId: input.correlationId,
+          estimatedTokens: proposalBaseline(input.task, config, tokenBudget) + knowledgeTokens,
+          estimatedCostMicros: 0,
+          objective: input.task.objective,
+          acceptanceCriteria: criteria(input.task),
+          evidenceBriefIds: input.knowledgeSources?.map((source) => source.evidenceBriefId) ?? [],
+          knowledgeSources: input.knowledgeSources ?? [],
+          allowedPaths: config.allowedPaths,
+        });
+    await assertOwnership();
+    await this.throwIfCancelled(context, input, config);
+    if (!delivery.proposalExecutionId) {
+      delivery = (
+        await this.dependencies.deliveries.bindProposalExecution(context, {
+          commandId: `${input.commandId}:proposal-bind`,
+          deliveryId: delivery.deliveryId,
+          expectedVersion: delivery.version,
+          executionId: proposed.executionId,
+        })
+      ).delivery;
+    }
     await assertOwnership();
     await this.throwIfCancelled(context, input, config);
     this.markFilesystemStarted(
@@ -718,7 +735,8 @@ export class CoreSoftwareTaskAdapter implements CoreSoftwareTaskPort {
               },
             }),
         ...(signal === undefined ? {} : { signal }),
-        ...proposal,
+        proposalExecutionId: proposed.executionId,
+        ...proposed.proposal,
       })
     ).delivery;
   }

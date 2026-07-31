@@ -9,8 +9,9 @@ import { describe, expect, it } from "vitest";
 
 import { IdentityService, OrganizationService } from "@massion/identity";
 import { CORE_OFFICE_HANDLES, OrganizationGraphService } from "@massion/organization";
-import { createDatabase } from "@massion/storage";
-import { WorkService } from "@massion/work";
+import { RuntimeExecutionStore } from "@massion/runtime";
+import { applyMigrations, createDatabase } from "@massion/storage";
+import { WorkService, WORK_ASSURANCE_LINK_MIGRATION } from "@massion/work";
 
 import {
   EngineeringDeliveryRecovery,
@@ -220,6 +221,8 @@ describe("remote Software Engineering delivery contract", () => {
             rootRealPathHash,
           }),
         };
+        const executions = await RuntimeExecutionStore.create(database, organizations);
+        await applyMigrations(database, [WORK_ASSURANCE_LINK_MIGRATION]);
         const deliveries = await EngineeringDeliveryStore.create(database, organizations, prerequisites);
         const deliveryInputs = ["first", "second"].map((label) => ({
           commandId: `remote-delivery-${label}`,
@@ -256,13 +259,62 @@ describe("remote Software Engineering delivery contract", () => {
         const winner = deliveryPair[winnerIndex]?.delivery;
         if (!winner) throw new Error("원격 path lease winner가 없습니다");
 
+        const proposal = await executions.createExecution(context, {
+          commandId: "remote-proposal",
+          workId: created.work.work_id,
+          taskId: task.task.task_id,
+          agentHandle: assigned.assignment.agent_handle,
+          modelRoute: "software-engineering-quality",
+          correlationId: winner.deliveryId,
+          estimatedTokens: 100,
+          estimatedCostMicros: 0,
+          input: {},
+        });
+        const runningProposal = await executions.transition(context, {
+          commandId: "remote-proposal:running",
+          executionId: proposal.execution.execution_id,
+          expectedVersion: proposal.execution.version,
+          target: "running",
+          payload: {},
+        });
+        await executions.transition(context, {
+          commandId: "remote-proposal:succeeded",
+          executionId: proposal.execution.execution_id,
+          expectedVersion: runningProposal.execution.version,
+          target: "succeeded",
+          payload: {
+            output: {
+              testPatch: "test",
+              implementationPatch: "implementation",
+              focusedCommand: {
+                executable: "node",
+                args: ["test.js"],
+                cwd: ".",
+                timeoutMs: 1_000,
+                maxOutputBytes: 1_000,
+                environment: {},
+              },
+              redFailureMarker: "EXPECTED_RED",
+              validationCommands: [],
+              commitMessage: "fix: remote",
+            },
+          },
+        });
+        let current = (
+          await deliveries.bindProposalExecution(context, {
+            commandId: "remote-proposal:bind",
+            deliveryId: winner.deliveryId,
+            expectedVersion: winner.version,
+            executionId: proposal.execution.execution_id,
+          })
+        ).delivery;
+
         const manager = await GitWorkspaceManager.create({ workspaceRoot });
         const workspace = await manager.prepare({
           repositoryRoot,
           baseRevision,
           deliveryId: winner.deliveryId,
         });
-        let current = winner;
         const testApplied = await manager.applyPatch(
           workspace,
           validateUnifiedPatch(
@@ -350,7 +402,11 @@ describe("remote Software Engineering delivery contract", () => {
         });
         expect(recovered).toMatchObject({
           result: "reconciled_commit",
-          delivery: { status: "committed", commitSha: commit.commitSha },
+          delivery: {
+            status: "committed",
+            commitSha: commit.commitSha,
+            proposalExecutionId: proposal.execution.execution_id,
+          },
         });
 
         const port = new WorkServiceDeliveryPort(work);
@@ -372,6 +428,7 @@ describe("remote Software Engineering delivery contract", () => {
         let artifactCrashInjected = false;
         const artifactCrashPort: WorkDeliveryPort = {
           getWork: port.getWork.bind(port),
+          findArtifactVersion: port.findArtifactVersion.bind(port),
           listTasks: port.listTasks.bind(port),
           transitionTask: port.transitionTask.bind(port),
           transitionWork: port.transitionWork.bind(port),
@@ -391,6 +448,7 @@ describe("remote Software Engineering delivery contract", () => {
         let taskCrashInjected = false;
         const taskCrashPort: WorkDeliveryPort = {
           getWork: port.getWork.bind(port),
+          findArtifactVersion: port.findArtifactVersion.bind(port),
           listTasks: port.listTasks.bind(port),
           createArtifactVersion: port.createArtifactVersion.bind(port),
           transitionWork: port.transitionWork.bind(port),

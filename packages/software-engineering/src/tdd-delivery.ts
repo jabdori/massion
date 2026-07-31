@@ -30,6 +30,7 @@ type CommandSpecification = Omit<ConfinedCommandInput, "stage">;
 
 export interface TddDeliveryInput {
   readonly deliveryId: string;
+  readonly proposalExecutionId: string;
   readonly repositoryRoot: string;
   readonly testPatch: string;
   readonly implementationPatch: string;
@@ -86,6 +87,13 @@ export class TddDeliveryEngine {
     let delivery = await this.deliveries.get(context, input.deliveryId);
     if (delivery.status !== "preparing") {
       throw new Error(`preparing Delivery만 TDD 실행할 수 있습니다: ${delivery.status}`);
+    }
+    if (
+      !delivery.proposalExecutionId ||
+      !input.proposalExecutionId ||
+      delivery.proposalExecutionId !== input.proposalExecutionId
+    ) {
+      throw new Error("TDD 입력의 Proposal execution 계보가 Delivery와 다릅니다");
     }
     await this.workspaces.verifyRepositoryRoot(input.repositoryRoot, delivery.repositoryRootRealPathHash);
     let leaseVersion = input.pathLease?.version;

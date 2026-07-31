@@ -991,7 +991,7 @@ export async function createMassionDaemon(
       works,
       deliveries: engineeringDeliveries,
       coordinator: engineeringCoordinator,
-      proposals: new SoftwarePatchProposalService(runner),
+      proposals: new SoftwarePatchProposalService(runner, runtimeExecutions),
       engine: engineeringEngine,
       finalizer: engineeringFinalizer,
       recovery: engineeringRecovery,

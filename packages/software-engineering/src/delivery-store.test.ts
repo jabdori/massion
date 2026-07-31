@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { IdentityService, OrganizationService, type TenantContext } from "@massion/identity";
+import { RuntimeExecutionStore } from "@massion/runtime";
 import { createDatabase, type MassionDatabase } from "@massion/storage";
 
 import {
@@ -16,6 +17,7 @@ describe("Software Engineering delivery 저장소", () => {
   let organizations: OrganizationService;
   let prerequisites: DeliveryPrerequisiteReader;
   let store: EngineeringDeliveryStore;
+  let executions: RuntimeExecutionStore;
 
   const workId = "work-1";
   const taskId = "task-1";
@@ -59,6 +61,7 @@ describe("Software Engineering delivery 저장소", () => {
         rootRealPathHash: repositoryRootRealPathHash,
       }),
     };
+    executions = await RuntimeExecutionStore.create(database, organizations);
     store = await EngineeringDeliveryStore.create(database, organizations, prerequisites);
   });
 
@@ -77,6 +80,150 @@ describe("Software Engineering delivery 저장소", () => {
       profileVersion: "software-engineering-v1",
     };
   }
+
+  async function succeededExecution(
+    overrides: Partial<{ workId: string; taskId: string; agentHandle: string; modelRoute: string }> = {},
+  ): Promise<string> {
+    const created = await executions.createExecution(context, {
+      commandId: crypto.randomUUID(),
+      workId: overrides.workId ?? workId,
+      taskId: overrides.taskId ?? taskId,
+      agentHandle: overrides.agentHandle ?? "software-engineering.backend-specialist",
+      modelRoute: overrides.modelRoute ?? "software-engineering-quality",
+      correlationId: crypto.randomUUID(),
+      estimatedTokens: 100,
+      estimatedCostMicros: 0,
+      input: { objective: "proposal" },
+    });
+    const running = await executions.transition(context, {
+      commandId: crypto.randomUUID(),
+      executionId: created.execution.execution_id,
+      expectedVersion: created.execution.version,
+      target: "running",
+      payload: {},
+    });
+    await executions.transition(context, {
+      commandId: crypto.randomUUID(),
+      executionId: created.execution.execution_id,
+      expectedVersion: running.execution.version,
+      target: "succeeded",
+      payload: {
+        output: {
+          testPatch: "test",
+          implementationPatch: "implementation",
+          focusedCommand: {
+            executable: "node",
+            args: ["test.js"],
+            cwd: ".",
+            timeoutMs: 1_000,
+            maxOutputBytes: 1_000,
+            environment: {},
+          },
+          redFailureMarker: "EXPECTED_RED",
+          validationCommands: [],
+          commitMessage: "fix: proposal",
+        },
+      },
+    });
+    return created.execution.execution_id;
+  }
+
+  it("성공한 Proposal execution만 한 번 연결하고 재생·충돌·계보 경계를 지킨다", async () => {
+    const started = await store.start(context, input());
+    const executionId = await succeededExecution();
+    const commandId = crypto.randomUUID();
+    const bound = await store.bindProposalExecution(context, {
+      commandId,
+      deliveryId: started.delivery.deliveryId,
+      expectedVersion: started.delivery.version,
+      executionId,
+    });
+    const replayed = await store.bindProposalExecution(context, {
+      commandId,
+      deliveryId: started.delivery.deliveryId,
+      expectedVersion: started.delivery.version,
+      executionId,
+    });
+    expect(bound.delivery).toMatchObject({ proposalExecutionId: executionId, version: 2, status: "preparing" });
+    expect(replayed.delivery).toEqual(bound.delivery);
+
+    const otherExecutionId = await succeededExecution();
+    await expect(
+      store.bindProposalExecution(context, {
+        commandId,
+        deliveryId: started.delivery.deliveryId,
+        expectedVersion: started.delivery.version,
+        executionId: otherExecutionId,
+      }),
+    ).rejects.toThrow("다른 delivery 명령");
+    await expect(
+      store.bindProposalExecution(context, {
+        commandId: crypto.randomUUID(),
+        deliveryId: started.delivery.deliveryId,
+        expectedVersion: bound.delivery.version,
+        executionId: otherExecutionId,
+      }),
+    ).rejects.toThrow("다른 Proposal execution");
+
+    const transitioned = await store.transition(context, {
+      commandId: crypto.randomUUID(),
+      deliveryId: started.delivery.deliveryId,
+      expectedVersion: bound.delivery.version,
+      target: "test_applied",
+    });
+    expect(transitioned.delivery.proposalExecutionId).toBe(executionId);
+  });
+
+  it("미완료·foreign 계보 execution과 terminal Delivery 연결을 거부한다", async () => {
+    const cases = [
+      await succeededExecution({ workId: "foreign-work" }),
+      await succeededExecution({ taskId: "foreign-task" }),
+      await succeededExecution({ agentHandle: "software-engineering.frontend-specialist" }),
+      await succeededExecution({ modelRoute: "coding-balanced" }),
+    ];
+    const queued = await executions.createExecution(context, {
+      commandId: crypto.randomUUID(),
+      workId,
+      taskId,
+      agentHandle: "software-engineering.backend-specialist",
+      modelRoute: "software-engineering-quality",
+      correlationId: crypto.randomUUID(),
+      estimatedTokens: 100,
+      estimatedCostMicros: 0,
+      input: {},
+    });
+    cases.push(queued.execution.execution_id);
+    for (const executionId of cases) {
+      const started = await store.start(context, input());
+      await expect(
+        store.bindProposalExecution(context, {
+          commandId: crypto.randomUUID(),
+          deliveryId: started.delivery.deliveryId,
+          expectedVersion: started.delivery.version,
+          executionId,
+        }),
+      ).rejects.toThrow("계보");
+    }
+
+    let terminal = (await store.start(context, input())).delivery;
+    terminal = (
+      await store.transition(context, {
+        commandId: crypto.randomUUID(),
+        deliveryId: terminal.deliveryId,
+        expectedVersion: terminal.version,
+        target: "failed",
+        error: { category: "test", causeId: "a".repeat(64) },
+      })
+    ).delivery;
+    await expect(
+      store.bindProposalExecution(context, {
+        commandId: crypto.randomUUID(),
+        deliveryId: terminal.deliveryId,
+        expectedVersion: terminal.version,
+        executionId: await succeededExecution(),
+      }),
+    ).rejects.toThrow("preparing Delivery");
+  });
 
   it("listByWork는 같은 Work의 delivery만 시간순으로 반환하고 tenant를 격리한다", async () => {
     const started = await store.start(context, input(crypto.randomUUID()));

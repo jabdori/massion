@@ -1,9 +1,21 @@
 import type { TenantContext } from "@massion/identity";
-import type { StructuredAgentRunner } from "@massion/runtime";
+import type { RuntimeExecutionStore, StructuredAgentRunner } from "@massion/runtime";
 import type { ArtifactVersion, WorkArtifact, WorkService } from "@massion/work";
 
 import type { ConfinedCommandInput } from "./command-runner.js";
 import { EngineeringDeliveryStore } from "./delivery-store.js";
+
+function canonicalJson(value: unknown): string {
+  if (value === undefined) return "null";
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
+  if (value && typeof value === "object") {
+    return `{${Object.entries(value as Record<string, unknown>)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, child]) => `${JSON.stringify(key)}:${canonicalJson(child)}`)
+      .join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
 
 export interface DeliveryWorkView {
   readonly workId: string;
@@ -23,7 +35,11 @@ export interface DeliveryArtifactView {
 
 export interface DeliveryArtifactVersionView {
   readonly artifactVersionId: string;
+  readonly workId: string;
+  readonly mediaType: string;
   readonly contentJson: string;
+  readonly creatorAgentHandle?: string;
+  readonly creatorExecutionId?: string;
 }
 
 export interface WorkDeliveryPort {
@@ -38,12 +54,26 @@ export interface WorkDeliveryPort {
       readonly name: string;
       readonly mediaType: string;
       readonly content: unknown;
+      readonly creatorAgentHandle?: string;
+      readonly creatorExecutionId?: string;
+      readonly creatorTaskId?: string;
     },
   ): Promise<{
     readonly work: DeliveryWorkView;
     readonly artifact: DeliveryArtifactView;
     readonly artifactVersion: DeliveryArtifactVersionView;
   }>;
+  findArtifactVersion(
+    context: TenantContext,
+    input: { readonly workId: string; readonly kind: string; readonly name: string },
+  ): Promise<
+    | {
+        readonly work: DeliveryWorkView;
+        readonly artifact: DeliveryArtifactView;
+        readonly artifactVersion: DeliveryArtifactVersionView;
+      }
+    | undefined
+  >;
   transitionTask(
     context: TenantContext,
     input: {
@@ -88,7 +118,14 @@ function artifactView(artifact: WorkArtifact): DeliveryArtifactView {
 }
 
 function artifactVersionView(version: ArtifactVersion): DeliveryArtifactVersionView {
-  return { artifactVersionId: version.artifact_version_id, contentJson: version.content_json };
+  return {
+    artifactVersionId: version.artifact_version_id,
+    workId: version.work_id,
+    mediaType: version.media_type,
+    contentJson: version.content_json,
+    ...(version.creator_agent_handle ? { creatorAgentHandle: version.creator_agent_handle } : {}),
+    ...(version.creator_execution_id ? { creatorExecutionId: version.creator_execution_id } : {}),
+  };
 }
 
 export class WorkServiceDeliveryPort implements WorkDeliveryPort {
@@ -105,6 +142,19 @@ export class WorkServiceDeliveryPort implements WorkDeliveryPort {
     const result = await this.work.createArtifactVersion(context, input);
     return {
       work: workView(result.work),
+      artifact: artifactView(result.artifact),
+      artifactVersion: artifactVersionView(result.artifactVersion),
+    };
+  }
+
+  public async findArtifactVersion(
+    context: TenantContext,
+    input: Parameters<WorkDeliveryPort["findArtifactVersion"]>[1],
+  ): Promise<Awaited<ReturnType<WorkDeliveryPort["findArtifactVersion"]>>> {
+    const result = await this.work.findArtifactVersion(context, input);
+    if (!result) return undefined;
+    return {
+      work: workView(await this.work.getWork(context, input.workId)),
       artifact: artifactView(result.artifact),
       artifactVersion: artifactVersionView(result.artifactVersion),
     };
@@ -185,7 +235,8 @@ export class SoftwareDeliveryFinalizer {
       !delivery.testPatchHash ||
       !delivery.implementationPatchHash ||
       !delivery.redEvidenceId ||
-      !delivery.greenEvidenceId
+      !delivery.greenEvidenceId ||
+      !delivery.proposalExecutionId
     ) {
       throw new Error("완전한 Git provenance가 있는 committed Delivery만 finalize할 수 있습니다");
     }
@@ -193,7 +244,7 @@ export class SoftwareDeliveryFinalizer {
     if (changes.length === 0) throw new Error("Committed Delivery의 file change manifest가 없습니다");
     const riskClass = classifyDeliveryRisk(changes.map((change) => change.relativePath));
     await this.governance.authorize(context, {
-      commandId: `${input.commandId}:governance`,
+      commandId: `software-delivery:${delivery.deliveryId}:governance:${input.governanceApprovalId ?? "automatic"}`,
       action: "software-delivery.finalize",
       resource: { type: "EngineeringDelivery", id: delivery.deliveryId },
       environment: input.environment,
@@ -228,15 +279,44 @@ export class SoftwareDeliveryFinalizer {
         testFile: change.testFile,
       })),
     };
-    const artifactResult = await this.work.createArtifactVersion(context, {
-      commandId: `${input.commandId}:artifact`,
+    const artifactName = `software-delivery:${delivery.deliveryId}`;
+    const mediaType = "application/vnd.massion.code-change-manifest+json";
+    const existingArtifact = await this.work.findArtifactVersion(context, {
       workId: delivery.workId,
-      expectedRevision: input.expectedWorkRevision,
       kind: "code-change",
-      name: `software-delivery:${delivery.deliveryId}`,
-      mediaType: "application/vnd.massion.code-change-manifest+json",
-      content: manifest,
+      name: artifactName,
     });
+    if (
+      delivery.artifactVersionId &&
+      (!existingArtifact || existingArtifact.artifactVersion.artifactVersionId !== delivery.artifactVersionId)
+    ) {
+      throw new Error("Delivery에 연결된 code-change ArtifactVersion을 Work에서 찾을 수 없습니다");
+    }
+    if (existingArtifact) {
+      if (
+        existingArtifact.artifactVersion.workId !== delivery.workId ||
+        existingArtifact.artifactVersion.mediaType !== mediaType ||
+        existingArtifact.artifactVersion.creatorAgentHandle !== delivery.agentHandle ||
+        existingArtifact.artifactVersion.creatorExecutionId !== delivery.proposalExecutionId ||
+        existingArtifact.artifactVersion.contentJson !== canonicalJson(manifest)
+      ) {
+        throw new Error("기존 code-change ArtifactVersion의 Delivery·creator 계보가 다릅니다");
+      }
+    }
+    const artifactResult =
+      existingArtifact ??
+      (await this.work.createArtifactVersion(context, {
+        commandId: `${input.commandId}:artifact`,
+        workId: delivery.workId,
+        expectedRevision: input.expectedWorkRevision,
+        kind: "code-change",
+        name: artifactName,
+        mediaType,
+        content: manifest,
+        creatorAgentHandle: delivery.agentHandle,
+        creatorExecutionId: delivery.proposalExecutionId,
+        creatorTaskId: delivery.taskId,
+      }));
     const currentDelivery = await this.deliveries.get(context, delivery.deliveryId);
     if (
       currentDelivery.artifactVersionId &&
@@ -252,23 +332,44 @@ export class SoftwareDeliveryFinalizer {
         artifactVersionId: artifactResult.artifactVersion.artifactVersionId,
       });
     }
-    const taskResult = await this.work.transitionTask(context, {
-      commandId: `${input.commandId}:task-completed`,
-      workId: delivery.workId,
-      expectedRevision: artifactResult.work.revision,
-      taskId: delivery.taskId,
-      expectedTaskRevision: input.expectedTaskRevision,
-      target: "completed",
-    });
-    const tasks = await this.work.listTasks(context, delivery.workId);
-    const finalWork = tasks.every((task) => ["completed", "cancelled"].includes(task.status))
-      ? await this.work.transitionWork(context, {
+    let [currentWork, tasks] = await Promise.all([
+      this.work.getWork(context, delivery.workId),
+      this.work.listTasks(context, delivery.workId),
+    ]);
+    const currentTask = tasks.find((task) => task.taskId === delivery.taskId);
+    if (!currentTask) throw new Error("Delivery Task를 Work에서 찾을 수 없습니다");
+    let taskResult: { readonly work: DeliveryWorkView; readonly task: DeliveryTaskView };
+    if (currentTask.status === "running") {
+      taskResult = await this.work.transitionTask(context, {
+        commandId: `${input.commandId}:task-completed`,
+        workId: delivery.workId,
+        expectedRevision: currentWork.revision,
+        taskId: delivery.taskId,
+        expectedTaskRevision: currentTask.revision,
+        target: "completed",
+      });
+      currentWork = taskResult.work;
+      tasks = await this.work.listTasks(context, delivery.workId);
+    } else if (currentTask.status === "completed") {
+      taskResult = { work: currentWork, task: currentTask };
+    } else {
+      throw new Error(`Delivery Task 상태가 finalization과 수렴할 수 없습니다: ${currentTask.status}`);
+    }
+    let finalWork = currentWork;
+    if (tasks.every((task) => ["completed", "cancelled"].includes(task.status))) {
+      if (currentWork.status === "running") {
+        finalWork = await this.work.transitionWork(context, {
           commandId: `${input.commandId}:work-verifying`,
           workId: delivery.workId,
-          expectedRevision: taskResult.work.revision,
+          expectedRevision: currentWork.revision,
           target: "verifying",
-        })
-      : taskResult.work;
+        });
+      } else if (currentWork.status !== "verifying") {
+        throw new Error(`Delivery Work 상태가 finalization과 수렴할 수 없습니다: ${currentWork.status}`);
+      }
+    } else if (currentWork.status !== "running") {
+      throw new Error(`미완료 Task가 있는 Delivery Work 상태가 올바르지 않습니다: ${currentWork.status}`);
+    }
     return {
       work: finalWork,
       task: taskResult.task,
@@ -313,6 +414,11 @@ export interface SoftwarePatchProposalRequest {
   readonly allowedPaths: readonly string[];
 }
 
+export interface SoftwarePatchProposalResult {
+  readonly executionId: string;
+  readonly proposal: SoftwarePatchProposal;
+}
+
 function command(value: unknown): value is ProposalCommand {
   if (!value || typeof value !== "object") return false;
   const item = value as Record<string, unknown>;
@@ -344,9 +450,15 @@ function proposal(value: unknown): value is SoftwarePatchProposal {
 }
 
 export class SoftwarePatchProposalService {
-  public constructor(private readonly runner: StructuredAgentRunner) {}
+  public constructor(
+    private readonly runner: StructuredAgentRunner,
+    private readonly results?: Pick<RuntimeExecutionStore, "findResultByExecutionId">,
+  ) {}
 
-  public async propose(context: TenantContext, request: SoftwarePatchProposalRequest): Promise<SoftwarePatchProposal> {
+  public async propose(
+    context: TenantContext,
+    request: SoftwarePatchProposalRequest,
+  ): Promise<SoftwarePatchProposalResult> {
     const result = await this.runner.executeStructured(
       context,
       {
@@ -390,6 +502,14 @@ export class SoftwarePatchProposalService {
       throw new Error(`Software patch proposal execution이 실패했습니다: ${result.status}`, { cause: result });
     }
     if (!proposal(result.output)) throw new Error("Software patch proposal 구조가 계약과 다릅니다");
-    return result.output;
+    return { executionId: result.executionId, proposal: result.output };
+  }
+
+  public async readSucceeded(context: TenantContext, executionId: string): Promise<SoftwarePatchProposalResult> {
+    const result = await this.results?.findResultByExecutionId(context, executionId);
+    if (!result || result.status !== "succeeded" || !proposal(result.output)) {
+      throw new Error("연결된 Software patch proposal execution을 복구할 수 없습니다");
+    }
+    return { executionId: result.executionId, proposal: result.output };
   }
 }

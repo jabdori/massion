@@ -5,9 +5,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { IdentityService, OrganizationService, type TenantContext } from "@massion/identity";
+import { RuntimeExecutionStore } from "@massion/runtime";
 import { createDatabase, type MassionDatabase } from "@massion/storage";
 
 import {
@@ -33,6 +34,7 @@ describe("test-first Engineering Delivery engine", { timeout: 60_000 }, () => {
   let deliveries: EngineeringDeliveryStore;
   let manager: GitWorkspaceManager;
   let deliveryId: string;
+  let proposalExecutionId: string;
   let commandOrder: string[];
   let engine: TddDeliveryEngine;
 
@@ -102,8 +104,9 @@ describe("test-first Engineering Delivery engine", { timeout: 60_000 }, () => {
         rootRealPathHash: repositoryRootRealPathHash,
       }),
     };
+    const executions = await RuntimeExecutionStore.create(database, organizations);
     deliveries = await EngineeringDeliveryStore.create(database, organizations, prerequisites);
-    deliveryId = (
+    const started = (
       await deliveries.start(context, {
         commandId: "start-delivery",
         workId: "work-1",
@@ -115,7 +118,40 @@ describe("test-first Engineering Delivery engine", { timeout: 60_000 }, () => {
         agentHandle: "software-engineering.backend-specialist",
         profileVersion: "1.0.0",
       })
-    ).delivery.deliveryId;
+    ).delivery;
+    deliveryId = started.deliveryId;
+    const createdExecution = await executions.createExecution(context, {
+      commandId: "proposal-execution",
+      workId: "work-1",
+      taskId: "task-1",
+      agentHandle: "software-engineering.backend-specialist",
+      modelRoute: "software-engineering-quality",
+      correlationId: deliveryId,
+      estimatedTokens: 100,
+      estimatedCostMicros: 0,
+      input: {},
+    });
+    proposalExecutionId = createdExecution.execution.execution_id;
+    const runningExecution = await executions.transition(context, {
+      commandId: "proposal-execution:running",
+      executionId: proposalExecutionId,
+      expectedVersion: createdExecution.execution.version,
+      target: "running",
+      payload: {},
+    });
+    await executions.transition(context, {
+      commandId: "proposal-execution:succeeded",
+      executionId: proposalExecutionId,
+      expectedVersion: runningExecution.execution.version,
+      target: "succeeded",
+      payload: { output: { proposal: true } },
+    });
+    await deliveries.bindProposalExecution(context, {
+      commandId: "proposal-execution:bind",
+      deliveryId,
+      expectedVersion: started.version,
+      executionId: proposalExecutionId,
+    });
     manager = await GitWorkspaceManager.create({ workspaceRoot });
     commandOrder = [];
     engine = new TddDeliveryEngine(deliveries, manager, {
@@ -164,6 +200,7 @@ describe("test-first Engineering Delivery engine", { timeout: 60_000 }, () => {
   function input(overrides: Record<string, unknown> = {}) {
     return {
       deliveryId,
+      proposalExecutionId,
       repositoryRoot,
       testPatch,
       implementationPatch,
@@ -215,12 +252,13 @@ describe("test-first Engineering Delivery engine", { timeout: 60_000 }, () => {
 
     expect(result.delivery).toMatchObject({
       status: "committed",
-      version: 6,
+      version: 7,
       branchRef: `refs/heads/massion/${deliveryId}`,
       commitSha: result.commit.commitSha,
       changeSetHash: result.commit.changeSetHash,
       testPatchHash: expect.stringMatching(/^[a-f0-9]{64}$/u),
       implementationPatchHash: expect.stringMatching(/^[a-f0-9]{64}$/u),
+      proposalExecutionId,
     });
     expect(result.delivery.validationEvidenceIds).toHaveLength(2);
     expect(result.delivery.assuranceRecipe).toEqual({
@@ -286,6 +324,22 @@ describe("test-first Engineering Delivery engine", { timeout: 60_000 }, () => {
       error: { category: "false_red" },
     });
     expect(await branchExists()).toBe(false);
+  });
+
+  it("Proposal execution 계보가 양쪽 모두 없어도 filesystem 접근 전에 거부한다", async () => {
+    const verifyRepositoryRoot = vi.fn(async () => undefined);
+    const isolated = new TddDeliveryEngine(
+      {
+        get: async () => ({ deliveryId: "legacy-delivery", status: "preparing" }),
+      } as never,
+      { verifyRepositoryRoot } as never,
+      { create: vi.fn() } as never,
+    );
+
+    await expect(
+      isolated.execute(context, { ...input(), deliveryId: "legacy-delivery", proposalExecutionId: undefined } as never),
+    ).rejects.toThrow("Proposal execution 계보");
+    expect(verifyRepositoryRoot).not.toHaveBeenCalled();
   });
 
   it("failure marker mismatch는 branch commit을 만들지 않는다", async () => {
