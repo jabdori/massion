@@ -1,8 +1,11 @@
+import { agentIdentityToken } from "@massion/application/client";
 import { describe, expect, it, vi } from "vitest";
 
 import {
   createApplicationDesktopService,
   createFixtureDesktopService,
+  projectRoomActivities,
+  projectRoom,
   projectRouteAttempts,
   type DesktopService,
 } from "./desktop-service";
@@ -102,6 +105,7 @@ function transport(overrides: Record<string, unknown> = {}): NativeTransport & {
       },
     ],
     "work.directive.list": [],
+    "organization.graph.snapshot": { version: { version: 1 }, nodes: [] },
     "router.catalog": { providers: [{ providerId: "openai", apiKey: "never-return-this" }] },
     "router.credentials": [{ credentialId: "credential-1", token: "never-return-this" }],
     "router.routes": [],
@@ -916,9 +920,10 @@ describe("Application desktop service", () => {
     const service = createApplicationDesktopService(native, { createId: () => "request-0001" });
 
     await expect(service.bootstrap()).resolves.toBe("ready");
-    await service.loadIndex({ filter: "active", search: "이탈" });
+    const [work] = await service.loadIndex({ filter: "active", search: "이탈" });
 
     expect(native.query).toHaveBeenCalledWith("work.index", { search: "이탈", limit: 50 });
+    expect(work).toMatchObject({ updatedAt: "09:24", updatedAtIso: detail.updatedAt });
   });
 
   it("개선 정책 변경은 조직 대상과 현재 version을 command에 전달한다", async () => {
@@ -1005,7 +1010,36 @@ describe("Application desktop service", () => {
   });
 
   it("Work 선택 시 상세 투영을 독립 query로 병렬 조회한다", async () => {
-    const native = transport();
+    const native = transport({
+      "organization.graph.snapshot": {
+        version: { version: 1 },
+        nodes: [
+          {
+            node_id: "node-evidence",
+            handle: "evidence",
+            name: "Evidence & Research",
+            responsibility: "근거 조사, 출처 검증",
+            status: "active",
+            role: "operator",
+            capabilities: ["evidence-research"],
+            scope: "persistent",
+          },
+        ],
+      },
+      "work.executions": [
+        {
+          ...run,
+          executionId: "execution-0001",
+          agentHandle: "evidence",
+          modelRoute: "coding/high",
+          providerId: "openai-codex",
+          modelId: "gpt-5.6-sol",
+          inputTokens: 120,
+          outputTokens: 48,
+          costMicros: 810,
+        },
+      ],
+    });
     const service = createApplicationDesktopService(native, { createId: () => "request-0001" });
 
     const work = await service.loadWork(detail.workId);
@@ -1023,6 +1057,7 @@ describe("Application desktop service", () => {
         "work.records",
         "governance.approval.list",
         "work.directive.list",
+        "organization.graph.snapshot",
       ]),
     );
     expect(work).toMatchObject({
@@ -1030,6 +1065,11 @@ describe("Application desktop service", () => {
       revision: 7,
       run: { runId: run.runId },
       activeExecutionId: "execution-0001",
+      updatedAt: "09:24",
+      updatedAtIso: detail.updatedAt,
+      providerId: "openai-codex",
+      modelId: "gpt-5.6-sol",
+      agents: [{ name: "Quill", initials: "Q", role: "근거 조사" }],
       records: [
         {
           id: "record-0001",
@@ -1041,6 +1081,231 @@ describe("Application desktop service", () => {
         },
       ],
     });
+  });
+
+  it("완료된 Work의 열린 협업방에서도 마지막 대표 답변을 최종 응답으로 표시한다", async () => {
+    const native = transport({
+      "work.detail": { ...detail, status: "completed" },
+      "work.rooms": [
+        {
+          roomId: "room-core",
+          workId: detail.workId,
+          name: "Core Office",
+          kind: "core-office",
+          status: "active",
+          coordinatorHandle: "representative",
+          participantIds: ["representative"],
+          lastMessageSequence: 1,
+        },
+      ],
+      "work.shared-contexts": [],
+      "work.messages": [
+        {
+          messageId: "message-final",
+          sequence: 1,
+          messageType: "answer",
+          authorKind: "agent",
+          authorId: "representative",
+          content: "완료된 작업 결과입니다.",
+          createdAt: "2026-07-31T02:26:18.602Z",
+        },
+      ],
+    });
+
+    const [room] = await createApplicationDesktopService(native).loadRooms(detail.workId);
+
+    expect(room?.activities[0]).toMatchObject({ kind: "room", final: true });
+    expect(native.query).toHaveBeenCalledWith("work.detail", { workId: detail.workId });
+  });
+
+  it("적용된 Staffing 제안의 모든 노드를 처리된 카드로 투영하고 일반 제안은 decision으로 유지한다", () => {
+    const activities = projectRoomActivities(
+      [
+        {
+          messageId: "message-applied-staffing",
+          sequence: 1,
+          messageType: "proposal",
+          authorKind: "agent",
+          authorId: "representative",
+          content: "두 개의 Work 전용 Agent를 적용했습니다.",
+          createdAt: "2026-07-31T02:20:00.000Z",
+          staffingProposal: {
+            proposalId: "proposal-applied",
+            status: "applied",
+            nodes: [
+              {
+                handle: "staff-analysis",
+                name: "분석 담당",
+                scope: "work",
+                workId: detail.workId,
+                parentHandle: "delivery-coordination",
+                role: "operator",
+                capabilities: ["analysis", "statistics"],
+              },
+              {
+                handle: "staff-review",
+                name: "검토 담당",
+                scope: "work",
+                workId: detail.workId,
+                parentHandle: "assurance",
+                role: "coordinator",
+                capabilities: ["review"],
+              },
+            ],
+            impactNodeHandles: ["delivery-coordination", "assurance"],
+            impactReferenceCount: 3,
+            fromOrganizationVersion: 12,
+            toOrganizationVersion: 13,
+          },
+        },
+        {
+          messageId: "message-legacy-proposal",
+          sequence: 2,
+          messageType: "proposal",
+          authorKind: "agent",
+          authorId: "representative",
+          content: "구조화 계보가 없는 기존 제안입니다.",
+          createdAt: "2026-07-31T02:21:00.000Z",
+        },
+      ],
+      [],
+    );
+
+    expect(activities[0]).toMatchObject({
+      kind: "proposal",
+      decided: true,
+      content: "Work에 필요한 전문 Agent 2명을 구성하고 배치를 완료했습니다.",
+      change: {
+        nodes: [
+          {
+            handle: "staff-analysis",
+            name: agentIdentityToken("staff-analysis").name,
+            capabilities: ["analysis", "statistics"],
+          },
+          {
+            handle: "staff-review",
+            name: agentIdentityToken("staff-review").name,
+            capabilities: ["review"],
+          },
+        ],
+        impactNodes: 2,
+        impactReferences: 3,
+        impactHandles: ["delivery-coordination", "assurance"],
+        fromVersion: 12,
+        toVersion: 13,
+      },
+    });
+    expect(activities[1]).toMatchObject({ kind: "room", messageType: "decision" });
+  });
+
+  it("완료된 Work에서도 canonical Core Office의 대표 답변만 최종 응답으로 표시한다", () => {
+    const answer = {
+      messageId: "message-final",
+      sequence: 1,
+      messageType: "answer" as const,
+      authorKind: "agent" as const,
+      authorId: "representative",
+      content: "최종 결과입니다.",
+      createdAt: "2026-07-31T02:26:18.602Z",
+    };
+    const room = {
+      workId: detail.workId,
+      roomId: "room-core",
+      name: "Core Office",
+      kind: "core-office",
+      status: "active",
+      participantIds: ["representative"],
+      lastMessageSequence: 1,
+      coordinatorHandle: "representative",
+    };
+
+    const core = projectRoom(room, [answer], [], [], "completed");
+    const auxiliary = projectRoom(
+      { ...room, roomId: "room-review", name: "검증 협업방", coordinatorHandle: "assurance" },
+      [answer],
+      [],
+      [],
+      "completed",
+    );
+
+    expect(core.activities[0]).toMatchObject({ kind: "room", final: true });
+    expect(auxiliary.activities[0]).toMatchObject({ kind: "room" });
+    expect(auxiliary.activities[0]).not.toHaveProperty("final");
+  });
+
+  it("여러 실행의 실제 모델이 다르면 Work 모델을 단정하지 않는다", async () => {
+    const native = transport({
+      "work.executions": [
+        {
+          executionId: "execution-openai",
+          workId: detail.workId,
+          agentHandle: "staff-research",
+          modelRoute: "coding/high",
+          providerId: "openai-codex",
+          modelId: "gpt-5.6-sol",
+          status: "completed",
+          inputTokens: 120,
+          outputTokens: 48,
+          costMicros: 810,
+        },
+        {
+          executionId: "execution-zai",
+          workId: detail.workId,
+          agentHandle: "staff-review",
+          modelRoute: "coding/high",
+          providerId: "zai",
+          modelId: "glm-5.2",
+          status: "completed",
+          inputTokens: 120,
+          outputTokens: 48,
+          costMicros: 810,
+        },
+      ],
+      "work.assignments": [],
+    });
+    const service = createApplicationDesktopService(native, { createId: () => "request-0001" });
+
+    const work = await service.loadWork(detail.workId);
+
+    expect(work.providerId).toBeUndefined();
+    expect(work.modelId).toBeUndefined();
+    expect(work.agents.map((agent) => agent.name)).not.toContain("staff-research");
+    expect(work.agents.map((agent) => agent.name)).not.toContain("staff-review");
+  });
+
+  it("모델 계보가 없는 실행이 하나라도 있으면 Work 전체 모델을 단정하지 않는다", async () => {
+    const native = transport({
+      "work.executions": [
+        {
+          executionId: "execution-attributed",
+          workId: detail.workId,
+          agentHandle: "representative",
+          modelRoute: "coding/high",
+          providerId: "openai-codex",
+          modelId: "gpt-5.6-sol",
+          status: "completed",
+          inputTokens: 120,
+          outputTokens: 48,
+          costMicros: 810,
+        },
+        {
+          executionId: "execution-unattributed",
+          workId: detail.workId,
+          agentHandle: "assurance",
+          modelRoute: "coding/high",
+          status: "completed",
+          inputTokens: 20,
+          outputTokens: 8,
+          costMicros: 100,
+        },
+      ],
+      "work.assignments": [],
+    });
+
+    const work = await createApplicationDesktopService(native).loadWork(detail.workId);
+
+    expect(work.providerId).toBeUndefined();
+    expect(work.modelId).toBeUndefined();
   });
 
   it("실제 Work 산출물과 검증의 내부 식별자를 사람용 이름으로 투영한다", async () => {
@@ -1271,6 +1536,8 @@ describe("Application desktop service", () => {
             workId: detail.workId,
             kind: "message",
             title: "새 활동",
+            authorKind: "user",
+            authorId: "db06753b-4495-44e0-b16b-c17b9081aa0d",
             createdAt: "2026-07-22T00:30:00.000Z",
           },
           {
@@ -1278,6 +1545,8 @@ describe("Application desktop service", () => {
             workId: detail.workId,
             kind: "message",
             title: "이전 활동",
+            authorKind: "agent",
+            authorId: "db06753b-4495-44e0-b16b-c17b9081aa0d",
             createdAt: "2026-07-22T00:10:00.000Z",
           },
         ],
@@ -1317,9 +1586,16 @@ describe("Application desktop service", () => {
       "artifacts:current",
       "approval:approval-0001",
     ]);
-    expect(work.activities.map((activity) => activity.occurredAt)).toEqual(
-      work.activities.map((activity) => activity.time),
-    );
+    expect(work.activities.map((activity) => activity.time)).toEqual(["09:10", "09:20", "09:30", "09:40", "09:00"]);
+    expect(work.activities.map((activity) => activity.occurredAt)).toEqual([
+      "2026-07-22T00:10:00.000Z",
+      "2026-07-22T00:20:00.000Z",
+      "2026-07-22T00:30:00.000Z",
+      "2026-07-22T00:40:00.000Z",
+      "2026-07-23T00:00:00.000Z",
+    ]);
+    expect(work.activities[0]).toMatchObject({ kind: "message", author: expect.not.stringContaining("db06753b") });
+    expect(work.activities[2]).toMatchObject({ kind: "message", author: "나" });
   });
 
   it("지시·승인·run 제어에 실제 식별자와 revision을 보낸다", async () => {

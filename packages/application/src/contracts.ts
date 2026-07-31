@@ -113,6 +113,7 @@ export interface WorkActivityViewV1 {
   readonly createdAt: string;
   readonly detail?: string;
   readonly status?: string;
+  readonly authorKind?: string;
   readonly authorId?: string;
   readonly resourceId?: string;
 }
@@ -162,6 +163,8 @@ export interface ExecutionViewV1 {
   readonly taskId?: string;
   readonly agentHandle: string;
   readonly modelRoute: string;
+  readonly providerId?: string;
+  readonly modelId?: string;
   readonly status: string;
   readonly inputTokens: number;
   readonly outputTokens: number;
@@ -260,6 +263,27 @@ export type RoomMessageTypeV1 =
   | "handoff"
   | "status";
 
+export interface AppliedStaffingProposalNodeViewV1 {
+  readonly handle: string;
+  readonly name: string;
+  readonly scope: "work";
+  readonly workId: string;
+  readonly parentHandle: string;
+  readonly role: "orchestrator" | "coordinator" | "operator";
+  readonly capabilities: readonly string[];
+}
+
+export interface AppliedStaffingProposalViewV1 {
+  readonly proposalId: string;
+  readonly status: "applied";
+  readonly approvalId?: string;
+  readonly nodes: readonly AppliedStaffingProposalNodeViewV1[];
+  readonly impactNodeHandles: readonly string[];
+  readonly impactReferenceCount: number;
+  readonly fromOrganizationVersion: number;
+  readonly toOrganizationVersion: number;
+}
+
 export interface RoomMessageViewV1 {
   readonly messageId: string;
   readonly sequence: number;
@@ -268,6 +292,9 @@ export interface RoomMessageViewV1 {
   readonly authorKind: string;
   /** 에이전트면 조직 handle, 사람이면 사용자 식별자. 화자 정체성의 정본입니다. */
   readonly authorId: string;
+  readonly authorDisplayName?: string;
+  readonly providerId?: string;
+  readonly modelId?: string;
   readonly content: string;
   readonly createdAt: string;
   readonly replyToMessageId?: string;
@@ -276,6 +303,7 @@ export interface RoomMessageViewV1 {
   readonly contextVersionId?: string;
   readonly executionId?: string;
   readonly artifactVersionId?: string;
+  readonly staffingProposal?: AppliedStaffingProposalViewV1;
 }
 
 export interface OrganizationNodeViewV1 {

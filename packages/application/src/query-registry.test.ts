@@ -337,10 +337,19 @@ describe("ApplicationQueryRegistry", () => {
             agentHandle: "representative",
             modelRoute: "balanced",
             status: "running",
+            providerId: "openai-codex",
+            modelId: "gpt-5.6-sol",
             inputTokens: 10,
             outputTokens: 20,
             costMicros: 30,
             createdAt: "2026-07-21T09:02:00.000Z",
+            credentialId: "credential-secret",
+            lease: "lease-secret",
+            prompt: "prompt-secret",
+            input: "input-secret",
+            output: "output-secret",
+            explanation: "explanation-secret",
+            receipt: "receipt-secret",
           },
         ],
         artifacts: async () => [
@@ -448,7 +457,15 @@ describe("ApplicationQueryRegistry", () => {
       }),
     ]);
     expect(results[0]).toMatchObject({ data: [{ runId: "run-work-1", workId: "query-work" }] });
-    expect(results[1]).toMatchObject({ data: [{ executionId: "execution-work-1" }] });
+    expect(results[1]).toMatchObject({
+      data: [
+        {
+          executionId: "execution-work-1",
+          providerId: "openai-codex",
+          modelId: "gpt-5.6-sol",
+        },
+      ],
+    });
     expect(results[2]).toMatchObject({ data: [{ artifactVersionId: "artifact-version-1", name: "이탈 분석 보고서" }] });
     expect(results[3]).toMatchObject({ data: { artifactId: "artifact-1" } });
     expect(results[4]).toMatchObject({ data: [{ verificationId: "verification-1", passed: true }] });
@@ -466,6 +483,17 @@ describe("ApplicationQueryRegistry", () => {
     expect(JSON.stringify(results)).not.toContain("원문 노출 금지");
     expect(JSON.stringify(results)).not.toContain("contentJson");
     expect(JSON.stringify(results)).not.toContain("노출 금지");
+    for (const secret of [
+      "credential-secret",
+      "lease-secret",
+      "prompt-secret",
+      "input-secret",
+      "output-secret",
+      "explanation-secret",
+      "receipt-secret",
+    ]) {
+      expect(JSON.stringify(results)).not.toContain(secret);
+    }
   });
 
   it("work.activity.list는 최신 활동부터 cursor로 이전 활동을 페이지한다", async () => {
@@ -513,7 +541,7 @@ describe("ApplicationQueryRegistry", () => {
     expect(latest).toMatchObject({
       data: {
         items: [
-          { activityId: "message:message-1", kind: "message" },
+          { activityId: "message:message-1", kind: "message", authorKind: "agent" },
           { activityId: "event:event-2", kind: "task" },
         ],
         nextCursor: "2",
@@ -1507,8 +1535,9 @@ describe("협업방 조회", () => {
         messageId: "message-question",
         sequence: 1,
         messageType: "question",
-        authorKind: "agent",
-        authorId: "delivery-coordination",
+        authorKind: "user",
+        authorId: "query-user",
+        authorDisplayName: "Reader",
         content: "라벨링 기준이 뭔가요?",
         createdAt: "2026-07-21T09:01:00.000Z",
       },
@@ -1521,6 +1550,9 @@ describe("협업방 조회", () => {
         messageType: "answer",
         authorKind: "agent",
         authorId: "evidence-research",
+        authorDisplayName: "Evidence & Research",
+        providerId: "openai-codex",
+        modelId: "gpt-5.6-sol",
         content: "5축입니다.",
         createdAt: "2026-07-21T09:02:00.000Z",
         replyToMessageId: "message-question",
@@ -1528,6 +1560,15 @@ describe("협업방 조회", () => {
         contextVersionId: "context-strategy",
         executionId: "execution-delivery",
         artifactVersionId: "artifact-delivery",
+        email: "reader-secret@example.com",
+        accountId: "account-secret",
+        credentialId: "credential-secret",
+        lease: "lease-secret",
+        prompt: "prompt-secret",
+        input: "input-secret",
+        output: "output-secret",
+        explanation: "explanation-secret",
+        receipt: "receipt-secret",
       },
       {
         organizationId: context.organizationId,
@@ -2534,10 +2575,20 @@ describe("협업방 조회", () => {
     });
 
     expect(result.data).toMatchObject([
-      { messageId: "message-question", messageType: "question", authorId: "delivery-coordination" },
+      {
+        messageId: "message-question",
+        messageType: "question",
+        authorKind: "user",
+        authorId: "query-user",
+        authorDisplayName: "Reader",
+      },
       {
         messageId: "message-answer",
         messageType: "answer",
+        authorKind: "agent",
+        authorDisplayName: "Evidence & Research",
+        providerId: "openai-codex",
+        modelId: "gpt-5.6-sol",
         replyToMessageId: "message-question",
         taskId: "task-delivery",
         contextVersionId: "context-strategy",
@@ -2551,6 +2602,105 @@ describe("협업방 조회", () => {
         causedByMessageId: "message-question",
       },
     ]);
+    const serialized = JSON.stringify(result.data);
+    for (const forbidden of [
+      "reader-secret@example.com",
+      "account-secret",
+      "credential-secret",
+      "lease-secret",
+      "prompt-secret",
+      "input-secret",
+      "output-secret",
+      "explanation-secret",
+      "receipt-secret",
+    ]) {
+      expect(serialized).not.toContain(forbidden);
+    }
+  });
+
+  it("적용된 Staffing 제안은 안전한 공개 필드만 반환한다", async () => {
+    const unsafeProposalMessage = {
+      organizationId: context.organizationId,
+      workId: "query-work",
+      roomId: "room-1",
+      messageId: "message-staffing-proposal",
+      sequence: 4,
+      messageType: "proposal",
+      authorKind: "agent",
+      authorId: "representative",
+      content: "두 개의 Work 전용 Agent를 적용했습니다.",
+      createdAt: "2026-07-21T09:04:00.000Z",
+      staffingProposal: {
+        proposalId: "proposal-public",
+        status: "applied" as const,
+        approvalId: "approval-public",
+        nodes: [
+          {
+            handle: "staff-analysis",
+            name: "분석 담당",
+            scope: "work" as const,
+            workId: "query-work",
+            parentHandle: "delivery-coordination",
+            role: "operator" as const,
+            capabilities: ["analysis"],
+          },
+          {
+            handle: "staff-review",
+            name: "검토 담당",
+            scope: "work" as const,
+            workId: "query-work",
+            parentHandle: "assurance",
+            role: "coordinator" as const,
+            capabilities: ["review"],
+          },
+        ],
+        impactNodeHandles: ["delivery-coordination", "assurance"],
+        impactReferenceCount: 2,
+        fromOrganizationVersion: 12,
+        toOrganizationVersion: 13,
+        graphCommandJson: "graph-command-secret",
+        assignmentsJson: "assignments-secret",
+        references: ["reference-secret"],
+        intentHash: "intent-hash-secret",
+        commandId: "command-secret",
+        userId: "user-secret",
+      },
+    };
+    const registry = new ApplicationQueryRegistry();
+    registerApplicationQueries(registry, {
+      readModel: { ...roomReadModel, messages: async () => [unsafeProposalMessage] },
+    });
+
+    const result = await registry.query(context, ["collaboration:read"], "work.messages", {
+      workId: "query-work",
+      roomId: "room-1",
+    });
+
+    expect(result.data).toEqual([
+      expect.objectContaining({
+        staffingProposal: {
+          proposalId: "proposal-public",
+          status: "applied",
+          approvalId: "approval-public",
+          nodes: unsafeProposalMessage.staffingProposal.nodes,
+          impactNodeHandles: ["delivery-coordination", "assurance"],
+          impactReferenceCount: 2,
+          fromOrganizationVersion: 12,
+          toOrganizationVersion: 13,
+        },
+      }),
+    ]);
+    const serialized = JSON.stringify(result.data);
+    for (const secret of [
+      "graph-command-secret",
+      "assignments-secret",
+      "reference-secret",
+      "intent-hash-secret",
+      "command-secret",
+      "user-secret",
+    ]) {
+      expect(serialized).not.toContain(secret);
+    }
   });
 
   it("다른 Work·다른 방의 메시지는 섞이지 않는다", async () => {

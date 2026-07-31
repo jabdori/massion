@@ -63,6 +63,8 @@ export interface SpeakerView {
   role: string;
   /** 사람 참가자. */
   human?: boolean;
+  /** 이 발화를 실제 처리한 Provider. 모델과 함께 표시합니다. */
+  providerId?: string;
   /** scope:"work"이거나 아직 승인되지 않은 노드. 점선으로 표기합니다. */
   provisional?: boolean;
   /**
@@ -78,29 +80,33 @@ export interface RoomQuote {
   content: string;
 }
 
-/** `proposal` 메시지에 붙는 조직 변경. ImpactReport·ComplianceFinding·Revert 가능 여부를 싣습니다. */
 /** @massion/organization의 NodeRole. 문구는 room.tsx가 소유합니다. */
 export type NodeRole = "orchestrator" | "coordinator" | "operator";
 
 /** @massion/organization의 ComplianceFinding.code. 화면에는 통과한 검사로 나옵니다. */
 export type ComplianceCode = "core-office" | "orphan" | "cycle" | "scope" | "inactive-parent";
 
-export interface OrganizationChangeView {
+export interface OrganizationChangeNodeView {
   handle: string;
   name: string;
   scope: "work" | "persistent";
+  workId?: string;
   parentHandle: string;
-  // 도메인 값을 그대로 들고 있습니다. 여기서 한글 문구로 굳히면 정렬·필터가 문구에 묶입니다.
   role: NodeRole;
   capabilities: string[];
+}
+
+/** `proposal` 메시지에 붙는 조직 변경. 실제 응답에 없는 판단은 optional로 둡니다. */
+export interface OrganizationChangeView {
+  nodes: OrganizationChangeNodeView[];
   impactNodes: number;
   impactReferences: number;
   impactHandles: string[];
   fromVersion: number;
   toVersion: number;
-  revertable: boolean;
-  compliance: ComplianceCode[];
-  lifetime: string;
+  revertable?: boolean;
+  compliance?: ComplianceCode[];
+  lifetime?: string;
 }
 
 export type ActivityView = (
@@ -164,6 +170,7 @@ export type ActivityView = (
       content: string;
       change: OrganizationChangeView;
       approvalId?: string;
+      decided?: boolean;
     }
 ) & { occurredAt?: string };
 
@@ -290,6 +297,7 @@ export interface WorkView {
   /** 이 Work가 묶인 워크스페이스. 없으면 디렉토리 없는 업무입니다. */
   workspace?: { name: string; trusted: boolean };
   /** 이 업무가 쓰는 모델과 추론 수준. 없으면 조직이 배치한 값을 따릅니다. */
+  providerId?: string;
   modelId?: string;
   reasoningEffort?: ReasoningEffort;
   /** 보냈지만 아직 반영되지 않은 지시. */
@@ -300,6 +308,8 @@ export interface WorkView {
   sourceStatus: string;
   team: string;
   updatedAt: string;
+  /** 표시 시각으로 바꾸기 전 ISO 값. 정렬이 필요할 때 씁니다. */
+  updatedAtIso?: string;
   summary: string;
   progress: number;
   run?: RunView;
@@ -516,12 +526,16 @@ const works: WorkView[] = [
         content:
           "검증의 반론을 받으려면 코호트 정규화와 유의성 검정이 필요한데, 현재 조직에 통계 역량이 없습니다. 이 업무에만 존재하는 임시 팀을 제안합니다.",
         change: {
-          handle: "quant-analysis",
-          name: "계량분석 팀",
-          scope: "work",
-          parentHandle: "delivery-coordination",
-          role: "operator",
-          capabilities: ["코호트 정규화", "유의성 검정", "시계열 분해"],
+          nodes: [
+            {
+              handle: "quant-analysis",
+              name: "계량분석 팀",
+              scope: "work",
+              parentHandle: "delivery-coordination",
+              role: "operator",
+              capabilities: ["코호트 정규화", "유의성 검정", "시계열 분해"],
+            },
+          ],
           impactNodes: 2,
           impactReferences: 3,
           impactHandles: ["delivery-coordination", "assurance"],

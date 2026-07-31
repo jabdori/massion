@@ -17,6 +17,7 @@ function event(input: {
   readonly eventType: string;
   readonly createdAt: string;
   readonly payload?: Record<string, unknown>;
+  readonly request?: Record<string, unknown>;
 }) {
   return {
     event_id: input.eventId,
@@ -26,7 +27,7 @@ function event(input: {
     command_id: `command-${String(input.sequence)}`,
     event_type: input.eventType,
     actor_user_id: "timeline-user",
-    request_json: "{}",
+    request_json: JSON.stringify(input.request ?? {}),
     payload_json: JSON.stringify(input.payload ?? {}),
     result_json: "{}",
     created_at: input.createdAt,
@@ -112,11 +113,17 @@ describe("work.timeline 투영", () => {
       "event:event-3",
     ]);
     expect(cells.map((cell) => cell.kind)).toEqual(["stage", "user-message", "task", "agent-message", "artifact"]);
-    expect(cells[1]).toMatchObject({ detail: "환불 API를 추가해주세요", roomId: "room-1", authorId: "timeline-user" });
+    expect(cells[1]).toMatchObject({
+      detail: "환불 API를 추가해주세요",
+      roomId: "room-1",
+      authorKind: "user",
+      authorId: "timeline-user",
+    });
+    expect(cells[3]).toMatchObject({ authorKind: "agent", authorId: "representative" });
     expect(cells[2]?.title).toContain("환불 API 계약 정의");
   });
 
-  it("알 수 없는 event는 activity 셀로 보존하고 limit으로 최근 항목만 반환한다", async () => {
+  it("의미 규칙이 없는 내부 event는 사용자 timeline에서 숨긴다", async () => {
     const cells = await projectWorkTimeline(
       {
         events: async () => [
@@ -127,11 +134,62 @@ describe("work.timeline 투영", () => {
             createdAt: "2026-07-21T09:00:00.000Z",
           }),
           event({
-            eventId: "event-2",
+            eventId: "event-transport-room",
             sequence: 2,
+            eventType: "collaboration_room_opened",
+            createdAt: "2026-07-21T09:00:10.000Z",
+          }),
+          event({
+            eventId: "event-transport-message",
+            sequence: 3,
+            eventType: "collaboration_message_posted",
+            createdAt: "2026-07-21T09:00:20.000Z",
+          }),
+          event({
+            eventId: "event-strategy",
+            sequence: 4,
+            eventType: "strategy_projection_applied",
+            createdAt: "2026-07-21T09:00:30.000Z",
+          }),
+          event({
+            eventId: "event-verification",
+            sequence: 5,
+            eventType: "verification_recorded",
+            createdAt: "2026-07-21T09:00:40.000Z",
+          }),
+          event({
+            eventId: "event-records",
+            sequence: 6,
+            eventType: "records_finalized",
+            createdAt: "2026-07-21T09:00:50.000Z",
+          }),
+          event({
+            eventId: "event-2",
+            sequence: 7,
             eventType: "work_state_changed",
             createdAt: "2026-07-21T09:01:00.000Z",
             payload: { target: "running" },
+          }),
+          event({
+            eventId: "event-work-failed",
+            sequence: 8,
+            eventType: "work_state_changed",
+            createdAt: "2026-07-21T09:01:10.000Z",
+            request: { target: "failed" },
+          }),
+          event({
+            eventId: "event-task-failed",
+            sequence: 9,
+            eventType: "task_state_changed",
+            createdAt: "2026-07-21T09:01:20.000Z",
+            payload: { task: { task_id: "task-1", status: "failed" } },
+          }),
+          event({
+            eventId: "event-task-assigned",
+            sequence: 10,
+            eventType: "task_assigned",
+            createdAt: "2026-07-21T09:01:30.000Z",
+            payload: { agentHandle: "staff-opaque-agent" },
           }),
         ],
         rooms: async () => [],
@@ -139,12 +197,20 @@ describe("work.timeline 투영", () => {
       },
       context,
       "work-1",
-      { limit: 1 },
     );
 
-    expect(cells).toHaveLength(1);
-    expect(cells[0]).toMatchObject({ cellId: "event:event-2", kind: "stage" });
-    expect(cells[0]?.title).toContain("running");
+    expect(cells).toMatchObject([
+      { cellId: "event:event-strategy", kind: "plan", title: "실행 계획을 확정했습니다" },
+      { cellId: "event:event-verification", kind: "verification", title: "독립 검증을 완료했습니다" },
+      { cellId: "event:event-records", kind: "record", title: "결과 기록을 확정했습니다" },
+      { cellId: "event:event-work-failed", kind: "stage", title: "업무 실행에 실패했습니다" },
+      { cellId: "event:event-task-failed", kind: "task", title: "작업 실행에 실패했습니다" },
+      { cellId: "event:event-task-assigned", kind: "task" },
+    ]);
+    expect(cells.at(-1)?.title).not.toContain("staff-opaque-agent");
+    expect(cells.map((cell) => cell.title).join(" ")).not.toMatch(
+      /활동:|custom_future_event|collaboration_room_opened|collaboration_message_posted|work_state_changed|running/u,
+    );
   });
 
   it("셀 kind별 공통 표시 토큰을 제공한다", () => {

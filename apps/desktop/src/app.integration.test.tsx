@@ -324,6 +324,71 @@ describe("AgentOS native data flow", () => {
     expect(text.indexOf("기록 활동")).toBeLessThan(text.indexOf("대표 최종 답변"));
   });
 
+  it("같은 협업 메시지는 풍부한 방 활동 하나만 표시한다", async () => {
+    const base = fixtureDataAdapter().works[0] as WorkView;
+    const messageId = "018f0f36-7b55-7d5c-9bb6-5f9979f52291";
+    const occurredAt = "2026-07-31T10:01:00.000Z";
+    const content = "근거를 확인했습니다.";
+    const atlas: SpeakerView = {
+      handle: "representative",
+      name: "Atlas",
+      initial: "A",
+      accentSlot: 0,
+      role: "조정",
+    };
+    const work: WorkView = {
+      ...base,
+      activities: [
+        {
+          id: `message:${messageId}`,
+          kind: "message",
+          time: occurredAt,
+          occurredAt,
+          author: "collaboration.message-posted",
+          initials: "C",
+          content,
+        },
+      ],
+    };
+    const room: RoomView = {
+      roomId: "room-core",
+      name: "대표 방",
+      status: "active",
+      participants: [atlas],
+      lastMessageSequence: 1,
+      budgets: [],
+      sharedContexts: [],
+      activities: [
+        {
+          id: messageId,
+          kind: "room",
+          time: "10:01",
+          occurredAt,
+          messageType: "evidence",
+          speaker: atlas,
+          content,
+        },
+      ],
+    };
+
+    render(
+      <App
+        service={service({
+          initialSnapshot: { works: [work] },
+          loadIndex: async () => [work],
+          loadRooms: async () => [room],
+        })}
+      />,
+    );
+
+    const activity = await screen.findByRole("region", { name: "협업방 대표 방" });
+    expect(within(activity).getAllByText(content)).toHaveLength(1);
+    expect(within(activity).getByText("Atlas")).toBeInTheDocument();
+    expect(activity).not.toHaveTextContent(messageId);
+    expect(activity).not.toHaveTextContent(occurredAt);
+    expect(activity).not.toHaveTextContent("collaboration.message-posted");
+  });
+
   it("ISO 시각이 없는 legacy 활동은 ISO 활동과 섞어 비교하지 않고 뒤에서 결정적으로 정렬한다", async () => {
     const base = fixtureDataAdapter().works[0] as WorkView;
     const work: WorkView = {

@@ -3,6 +3,7 @@ import { agentIdentityToken } from "@massion/application/client";
 import type {
   ComplianceCode,
   NodeRole,
+  OrganizationChangeNodeView,
   OrganizationChangeView,
   RoomMessageType,
   RoomQuote,
@@ -34,7 +35,7 @@ const complianceLabel: Record<ComplianceCode, string> = {
   "inactive-parent": "중단된 부모 없음",
 };
 
-const scopeLabel: Record<OrganizationChangeView["scope"], string> = {
+const scopeLabel: Record<OrganizationChangeNodeView["scope"], string> = {
   work: "이 업무에서만",
   persistent: "조직에 남습니다",
 };
@@ -168,6 +169,15 @@ export function AgentAvatar({ speaker }: { speaker: SpeakerView }) {
   );
 }
 
+function SpeakerModel({ speaker }: { speaker: SpeakerView }) {
+  const label = [speaker.providerId, speaker.modelId].filter(Boolean).join(" · ");
+  return label ? (
+    <span className="font-mono text-[10px] text-muted" title="이 발화를 만든 Provider와 모델">
+      {label}
+    </span>
+  ) : null;
+}
+
 /**
  * 아바타 줄. 참가자가 늘어나도 폭이 무한히 자라지 않게 상한을 두되,
  * 잘린 사실을 말없이 감추지 않고 `+N`으로 표시합니다.
@@ -204,11 +214,7 @@ export function SpeakerName({ speaker }: { speaker: SpeakerView }) {
         {speaker.role}
       </span>
       {/* 조직이 모델을 배치하므로 "누가 말했나"에는 "무엇으로 말했나"가 따라붙습니다. */}
-      {speaker.modelId === undefined ? null : (
-        <span className="font-mono text-[10px] text-muted" title="이 발화를 만든 모델">
-          {speaker.modelId}
-        </span>
-      )}
+      <SpeakerModel speaker={speaker} />
     </>
   );
 }
@@ -274,6 +280,7 @@ export function RoomHandoff({
           ) : null}{" "}
           · {time}
         </p>
+        <SpeakerModel speaker={from} />
         {content ? (
           <p className="mt-1 whitespace-pre-wrap break-words text-[12px] leading-5 text-secondary [overflow-wrap:anywhere]">
             {content}
@@ -386,6 +393,10 @@ export function ProposalActivity({
   onReject,
   time,
 }: ProposalActivityProps) {
+  const primary = change.nodes[0];
+  const proposalName = primary
+    ? `${primary.name}${change.nodes.length > 1 ? ` 외 ${String(change.nodes.length - 1)}개` : ""}`
+    : "조직 변경";
   return (
     <article className="grid grid-cols-[18px_minmax(0,1fr)] gap-2.5">
       <AgentAvatar speaker={speaker} />
@@ -400,74 +411,93 @@ export function ProposalActivity({
         <p className="text-[13px] leading-5 text-primary">{content}</p>
 
         <section
-          aria-label={`조직 변경 제안 ${change.name}`}
+          aria-label={`조직 변경 제안 ${proposalName}`}
           className={`mt-2 rounded-[7px] border ${decided ? "border-border bg-surface-1" : "border-gate-border bg-gate-wash"}`}
         >
-          <header className="flex items-center gap-2.5 border-b border-gate-border px-3.5 py-2.5">
-            <AgentAvatar
-              speaker={{
-                handle: change.handle,
-                name: change.name,
-                initial: change.name.slice(0, 1),
-                accentSlot: -1,
-                role: change.role,
-                provisional: true,
-              }}
-            />
-            <div className="min-w-0 flex-1">
-              <h4 className="text-[13px] font-medium">{change.name} 신설</h4>
-              {/*
-               * handle은 h4의 이름과 같은 것을 두 번 말하는 자리였습니다. 감사에 필요하므로
-               * 지우지 않고 title로 내립니다. 부모는 handle이 아니라 이름으로 말합니다.
-               */}
-              <p className="text-[11px] text-muted" title={change.handle}>
-                {agentIdentityToken(change.parentHandle).name} 아래 · {nodeRoleLabel[change.role]} 역할 ·{" "}
-                {scopeLabel[change.scope]}
-              </p>
-            </div>
+          <header className="flex items-center border-b border-gate-border px-3.5 py-2.5">
+            <h4 className="min-w-0 flex-1 text-[13px] font-medium">{proposalName} 신설</h4>
             <span className="text-[11px] font-medium text-gate">{decided ? "처리됨" : "승인 필요"}</span>
           </header>
 
+          <div className="divide-y divide-border border-b border-gate-border px-3.5">
+            {change.nodes.map((node) => (
+              <div className="flex items-start gap-2.5 py-3" key={node.handle}>
+                <AgentAvatar
+                  speaker={{
+                    handle: node.handle,
+                    name: node.name,
+                    initial: node.name.slice(0, 1),
+                    accentSlot: agentIdentityToken(node.handle, nodeRoleLabel[node.role]).accentSlot,
+                    role: node.role,
+                    provisional: true,
+                  }}
+                />
+                <div className="min-w-0 flex-1">
+                  <h5 className="text-[13px] font-medium">{node.name}</h5>
+                  <p className="text-[11px] text-muted">
+                    {agentIdentityToken(node.parentHandle).name} 아래 · {nodeRoleLabel[node.role]} 역할 ·{" "}
+                    {scopeLabel[node.scope]}
+                  </p>
+                  <p className="mt-1 text-[10px] font-semibold tracking-[0.08em] text-muted">추가되는 역량</p>
+                  <p className="mt-0.5 text-[12px] text-secondary">{node.capabilities.join(" · ")}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+
           <div className="grid gap-x-6 gap-y-3 px-3.5 py-3 min-[900px]:grid-cols-2">
-            <div>
-              <p className="text-[10px] font-semibold tracking-[0.08em] text-muted">추가되는 역량</p>
-              <p className="mt-1 text-[12px] text-secondary">{change.capabilities.join(" · ")}</p>
-            </div>
             <div>
               <p className="text-[10px] font-semibold tracking-[0.08em] text-muted">영향</p>
               <p className="mt-1 text-[12px] text-secondary">
                 노드 {change.impactNodes}개 · 참조 {change.impactReferences}건
               </p>
-              <p className="text-[11px] text-muted" title={change.impactHandles.join(" · ")}>
-                {change.impactHandles.map((handle) => agentIdentityToken(handle).name).join(" · ")}
-              </p>
+              {change.impactHandles.length === 0 ? null : (
+                <p className="text-[11px] text-muted">
+                  {change.impactHandles.map((handle) => agentIdentityToken(handle).name).join(" · ")}
+                </p>
+              )}
             </div>
             <div>
-              <p className="text-[10px] font-semibold tracking-[0.08em] text-muted">이 업무가 끝나면</p>
-              <p className="mt-1 text-[12px] text-secondary">{change.lifetime}</p>
-            </div>
-            <div>
-              <p className="text-[10px] font-semibold tracking-[0.08em] text-muted">되돌리기</p>
+              <p className="text-[10px] font-semibold tracking-[0.08em] text-muted">조직 버전</p>
               <p className="mt-1 font-mono text-[11px] text-muted">
                 조직 버전 {change.fromVersion} → {change.toVersion}
-                {change.revertable ? " · Revert 가능" : " · Revert 불가"}
               </p>
             </div>
+            {change.lifetime === undefined ? null : (
+              <div>
+                <p className="text-[10px] font-semibold tracking-[0.08em] text-muted">이 업무가 끝나면</p>
+                <p className="mt-1 text-[12px] text-secondary">{change.lifetime}</p>
+              </div>
+            )}
+            {change.revertable === undefined ? null : (
+              <div>
+                <p className="text-[10px] font-semibold tracking-[0.08em] text-muted">되돌리기</p>
+                <p className="mt-1 font-mono text-[11px] text-muted">
+                  {change.revertable ? "Revert 가능" : "Revert 불가"}
+                </p>
+              </div>
+            )}
           </div>
 
-          <footer className="flex flex-wrap items-center gap-2 border-t border-gate-border px-3.5 py-2.5">
-            <p className="flex-1 text-[11px] text-muted">
-              조직 검사 통과 · {change.compliance.map((code) => complianceLabel[code]).join(" · ")}
-            </p>
-            {decided ? null : (
-              <DecisionActions
-                approveName={`${change.name} 신설`}
-                disabled={disabled}
-                onApprove={onApprove}
-                onReject={onReject}
-              />
-            )}
-          </footer>
+          {change.compliance === undefined && decided ? null : (
+            <footer className="flex flex-wrap items-center gap-2 border-t border-gate-border px-3.5 py-2.5">
+              {change.compliance === undefined ? (
+                <span className="flex-1" />
+              ) : (
+                <p className="flex-1 text-[11px] text-muted">
+                  조직 검사 통과 · {change.compliance.map((code) => complianceLabel[code]).join(" · ")}
+                </p>
+              )}
+              {decided ? null : (
+                <DecisionActions
+                  approveName={`${proposalName} 신설`}
+                  disabled={disabled}
+                  onApprove={onApprove}
+                  onReject={onReject}
+                />
+              )}
+            </footer>
+          )}
         </section>
       </div>
     </article>

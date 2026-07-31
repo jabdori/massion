@@ -11,12 +11,16 @@ const vega: SpeakerView = { handle: "delivery-coordination", name: "Vega", initi
 const atlas: SpeakerView = { handle: "representative", name: "Atlas", initial: "A", accentSlot: 0, role: "조정" };
 
 const change: OrganizationChangeView = {
-  handle: "quant-analysis",
-  name: "계량분석 팀",
-  scope: "work",
-  parentHandle: "delivery-coordination",
-  role: "operator",
-  capabilities: ["코호트 정규화", "유의성 검정"],
+  nodes: [
+    {
+      handle: "quant-analysis",
+      name: "계량분석 팀",
+      scope: "work",
+      parentHandle: "delivery-coordination",
+      role: "operator",
+      capabilities: ["코호트 정규화", "유의성 검정"],
+    },
+  ],
   impactNodes: 2,
   impactReferences: 3,
   impactHandles: ["delivery-coordination", "assurance"],
@@ -32,6 +36,27 @@ describe("협업방 문법", () => {
     render(<RoomMessage content="분류를 마쳤습니다." speaker={quill} time="10:23" type="evidence" />);
     expect(screen.getByText("Quill")).toBeInTheDocument();
     expect(screen.getByText("조사")).toBeInTheDocument();
+  });
+
+  it("사람 화자도 빈 아바타 대신 자신의 이니셜을 유지한다", () => {
+    const me: SpeakerView = { handle: "owner-1", name: "나", initial: "나", accentSlot: -1, role: "사람", human: true };
+    render(<RoomMessage content="진행해주세요." speaker={me} time="10:22" type="question" />);
+    expect(screen.getAllByText("나")).toHaveLength(2);
+  });
+
+  it("일반 발언과 인계에 실제 Provider·모델을 함께 표시한다", () => {
+    const actual: SpeakerView = {
+      ...quill,
+      providerId: "openai-codex",
+      modelId: "gpt-5.6-sol",
+    };
+    const { rerender } = render(
+      <RoomMessage content="근거를 찾았습니다." speaker={actual} time="10:23" type="evidence" />,
+    );
+    expect(screen.getByText("openai-codex · gpt-5.6-sol")).toBeInTheDocument();
+
+    rerender(<RoomHandoff content="검증을 넘깁니다." from={actual} time="10:24" />);
+    expect(screen.getByText("openai-codex · gpt-5.6-sol")).toBeInTheDocument();
   });
 
   it("같은 역할이 병렬로 있어도 이름과 색이 갈린다", () => {
@@ -145,7 +170,7 @@ describe("협업방 문법", () => {
     const text = block.textContent ?? "";
     expect(text).toContain("노드 2개 · 참조 3건");
     expect(text).toContain("조직 버전 12 → 13");
-    expect(text).toContain("Revert 가능");
+    expect(screen.getByText("Revert 가능")).toBeInTheDocument();
     // scope:"work"는 이 업무가 끝나면 사라진다는 사실이 승인 전에 보여야 합니다.
     expect(text).toContain("이 업무에서만");
     expect(text).toContain("자동으로 사라집니다");
@@ -181,5 +206,61 @@ describe("협업방 문법", () => {
     // 노랑은 "지금 사람이 필요함" 전용어이므로 결정이 끝나면 남아 있으면 안 됩니다.
     expect(container.querySelector("section")?.className).not.toContain("bg-gate-wash");
     expect(screen.queryByRole("button", { name: /승인/ })).toBeNull();
+  });
+
+  it("적용된 Staffing 카드는 두 노드를 모두 보여주고 추정 정보와 결정 버튼을 숨긴다", () => {
+    const appliedChange = {
+      nodes: [
+        {
+          handle: "staff-analysis",
+          name: "Wren",
+          scope: "work",
+          workId: "work-0001",
+          parentHandle: "delivery-coordination",
+          role: "operator",
+          capabilities: ["analysis", "statistics"],
+        },
+        {
+          handle: "staff-review",
+          name: "Haven",
+          scope: "work",
+          workId: "work-0001",
+          parentHandle: "assurance",
+          role: "coordinator",
+          capabilities: ["review"],
+        },
+      ],
+      impactNodes: 3,
+      impactReferences: 3,
+      impactHandles: ["delivery-coordination", "assurance", "staff-analysis"],
+      fromVersion: 12,
+      toVersion: 13,
+    } as unknown as OrganizationChangeView;
+    render(
+      <ProposalActivity
+        change={appliedChange}
+        content="두 개의 Work 전용 Agent를 적용했습니다."
+        decided
+        disabled={false}
+        onApprove={vi.fn()}
+        onReject={vi.fn()}
+        speaker={atlas}
+        time="10:25"
+      />,
+    );
+
+    const card = screen.getByRole("region", { name: "조직 변경 제안 Wren 외 1개" });
+    expect(card).toHaveTextContent("Wren");
+    expect(card).toHaveTextContent("Haven");
+    expect(card).toHaveTextContent("analysis · statistics");
+    expect(card).toHaveTextContent("review");
+    expect(card).toHaveTextContent("노드 3개 · 참조 3건");
+    expect(card).toHaveTextContent("조직 버전 12 → 13");
+    expect(card).toHaveTextContent("처리됨");
+    expect(card).not.toHaveTextContent("조직 검사 통과");
+    expect(card).not.toHaveTextContent("Revert");
+    expect(card).not.toHaveTextContent("자동으로 사라집니다");
+    expect(card.outerHTML).not.toContain("staff-");
+    expect(screen.queryByRole("button", { name: /승인|거절/u })).toBeNull();
   });
 });

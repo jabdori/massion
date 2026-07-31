@@ -3,6 +3,12 @@ import { describe, expect, it } from "vitest";
 
 import { projectRoomActivities, type OrganizationNodeView } from "@/desktop-service";
 
+type MessageProjectionSource = RoomMessageViewV1 & {
+  readonly authorDisplayName?: string;
+  readonly providerId?: string;
+  readonly modelId?: string;
+};
+
 const nodes: OrganizationNodeView[] = [
   {
     id: "node-rep",
@@ -34,8 +40,8 @@ const nodes: OrganizationNodeView[] = [
 ];
 
 function message(
-  overrides: Partial<RoomMessageViewV1> & Pick<RoomMessageViewV1, "messageId" | "sequence">,
-): RoomMessageViewV1 {
+  overrides: Partial<MessageProjectionSource> & Pick<RoomMessageViewV1, "messageId" | "sequence">,
+): MessageProjectionSource {
   return {
     messageType: "status",
     authorKind: "agent",
@@ -155,7 +161,33 @@ describe("협업방 투영", () => {
     expect(lonely.to).toBeUndefined();
   });
 
-  it("조직 그래프에 없는 화자는 미승인으로 표기한다", () => {
+  it("구조화된 Representative 인계는 저장된 의도와 다음 단계만 사람이 읽는 문장으로 표시한다", () => {
+    const [activity] = projectRoomActivities(
+      [
+        message({
+          messageId: "structured-handoff",
+          sequence: 1,
+          messageType: "handoff",
+          authorId: "representative",
+          content: JSON.stringify({
+            intent: "동적 배치 게이트를 검증합니다.",
+            execution: { artifactCount: 1, artifactType: "text" },
+            constraints: { criticalRisks: [], fileChanges: false },
+            nextAction: "필수 역량을 배치한 뒤 실행과 검증을 진행하세요.",
+          }),
+        }),
+      ],
+      nodes,
+    );
+
+    if (activity?.kind !== "handoff") throw new Error("인계가 handoff 활동이 아닙니다");
+    expect(activity.content).toBe(
+      "동적 배치 게이트를 검증합니다.\n다음 단계 · 필수 역량을 배치한 뒤 실행과 검증을 진행하세요.",
+    );
+    expect(activity.content).not.toContain("artifactCount");
+  });
+
+  it("조직 그래프에 없는 화자는 내부 handle 대신 일반 역할로 표기한다", () => {
     const activities = projectRoomActivities(
       [message({ messageId: "m", sequence: 1, messageType: "evidence", authorId: "quant-analysis" })],
       nodes,
@@ -164,7 +196,7 @@ describe("협업방 투영", () => {
     if (activity?.kind !== "room") throw new Error("활동이 room이 아닙니다");
     // scope:"work" 노드이거나 아직 승인되지 않은 노드입니다. 점선으로 표기됩니다.
     expect(activity.speaker.provisional).toBe(true);
-    expect(activity.speaker.role).toBe("quant-analysis");
+    expect(activity.speaker.role).toBe("작업 담당");
   });
 
   it("의미 없는 UUID handle은 사람용 역할로 가린다", () => {
@@ -189,12 +221,88 @@ describe("협업방 투영", () => {
 
   it("사람 참가자는 색 슬롯을 쓰지 않는다", () => {
     const activities = projectRoomActivities(
-      [message({ messageId: "u", sequence: 1, messageType: "question", authorKind: "user", authorId: "owner-1" })],
+      [
+        message({
+          messageId: "u",
+          sequence: 1,
+          messageType: "question",
+          authorKind: "user",
+          authorId: "owner-1",
+          authorDisplayName: "외부 사용자 이름",
+        }),
+      ],
       nodes,
     );
     const activity = activities[0];
     if (activity?.kind !== "room") throw new Error("활동이 room이 아닙니다");
+    expect(activity.speaker.name).toBe("나");
     expect(activity.speaker.human).toBe(true);
     expect(activity.speaker.accentSlot).toBeLessThan(0);
+  });
+
+  it("에이전트의 표시 이름과 실제 Provider·모델을 일반 발언과 인계에 보존한다", () => {
+    const activities = projectRoomActivities(
+      [
+        message({
+          messageId: "a",
+          sequence: 1,
+          messageType: "answer",
+          authorId: "evidence-research",
+          authorDisplayName: "Evidence & Research",
+          providerId: "openai-codex",
+          modelId: "gpt-5.6-sol",
+        }),
+        message({
+          messageId: "h",
+          sequence: 2,
+          messageType: "handoff",
+          authorId: "evidence-research",
+          authorDisplayName: "Evidence & Research",
+          providerId: "openai-codex",
+          modelId: "gpt-5.6-sol",
+        }),
+      ],
+      nodes,
+    );
+
+    const answer = activities[0];
+    if (answer?.kind !== "room") throw new Error("답변이 room 활동이 아닙니다");
+    expect(answer.speaker).toMatchObject({
+      name: "Quill",
+      role: "코드·문서·외부 근거 조사",
+      providerId: "openai-codex",
+      modelId: "gpt-5.6-sol",
+    });
+
+    const handoff = activities[1];
+    if (handoff?.kind !== "handoff") throw new Error("인계가 handoff 활동이 아닙니다");
+    expect(handoff.from).toMatchObject({ providerId: "openai-codex", modelId: "gpt-5.6-sol" });
+  });
+
+  it("닫힌 방의 마지막 대표 답변만 최종 응답으로 표시한다", () => {
+    const messages = [
+      message({ messageId: "a", sequence: 1, messageType: "answer", authorId: "representative" }),
+      message({ messageId: "s", sequence: 2, messageType: "status", content: "방 종료" }),
+    ];
+
+    const active = projectRoomActivities(messages, nodes, "active");
+    const closed = projectRoomActivities(messages, nodes, "closed");
+    const activeAnswer = active[0];
+    const closedAnswer = closed[0];
+    if (activeAnswer?.kind !== "room" || closedAnswer?.kind !== "room") throw new Error("답변이 room 활동이 아닙니다");
+    expect(activeAnswer.final).toBeUndefined();
+    expect(closedAnswer.final).toBe(true);
+
+    const followed = projectRoomActivities(
+      [
+        message({ messageId: "a", sequence: 1, messageType: "answer", authorId: "representative" }),
+        message({ messageId: "e", sequence: 2, messageType: "evidence", authorId: "assurance" }),
+      ],
+      nodes,
+      "closed",
+    );
+    const followedAnswer = followed[0];
+    if (followedAnswer?.kind !== "room") throw new Error("답변이 room 활동이 아닙니다");
+    expect(followedAnswer.final).toBeUndefined();
   });
 });

@@ -21,6 +21,33 @@ describe("AgentOS 데스크톱", () => {
     expect(screen.getByText("CRM 고객 데이터 읽기")).toBeInTheDocument();
   });
 
+  it("실패한 Work 헤더에 실제 프로바이더와 모델만 표시한다", () => {
+    const fixture = createFixtureDesktopService();
+    const seed = fixture.initialSnapshot?.works[0];
+    if (!seed) throw new Error("fixture Work가 필요합니다.");
+    const failed = {
+      ...seed,
+      status: "failed",
+      providerId: "openai-codex",
+      modelId: "gpt-5.6-sol",
+      modelRoute: "openai-codex/gpt-5.6-sol/ultra",
+    } as WorkView & { modelRoute: string };
+    render(
+      <App
+        service={{
+          ...fixture,
+          initialSnapshot: { works: [failed] },
+          loadIndex: async () => [failed],
+          loadWork: async () => failed,
+        }}
+      />,
+    );
+
+    const main = screen.getByRole("main", { name: failed.title });
+    expect(within(main).getByText("openai-codex · gpt-5.6-sol")).toHaveClass("font-mono");
+    expect(main).not.toHaveTextContent(failed.modelRoute);
+  });
+
   it("문서가 아니라 각 열만 스크롤하고 composer를 viewport 안에 고정한다", () => {
     renderApp();
 
@@ -37,7 +64,7 @@ describe("AgentOS 데스크톱", () => {
     expect(screen.getByTestId("directive-composer")).toBeInTheDocument();
   });
 
-  it("Work 요청 조건은 조직이 자동 배치하고 저장되지 않는 로컬 제어를 노출하지 않는다", () => {
+  it("Work 요청 입력은 저장되지 않는 로컬 제어와 정적 배치 문구를 노출하지 않는다", () => {
     renderApp();
     const composer = screen.getByTestId("directive-composer");
 
@@ -46,7 +73,7 @@ describe("AgentOS 데스크톱", () => {
     expect(
       within(composer).queryByRole("button", { name: /^(?:자동|수동|바이패스|전체 권한)$/u }),
     ).not.toBeInTheDocument();
-    expect(screen.getAllByText("조직이 실행 조건을 자동 배치합니다")).toHaveLength(1);
+    expect(screen.queryByText("조직이 실행 조건을 자동 배치합니다")).not.toBeInTheDocument();
   });
 
   it("검색과 상태 필터로 Work 목록을 좁힌다", async () => {
@@ -139,21 +166,21 @@ describe("AgentOS 데스크톱", () => {
     expect(screen.getByText("계약 조항 검증")).toBeInTheDocument();
   });
 
-  it("차단된 Work의 실행 단계와 오류를 중앙 대화에 표시하고 재개를 제공한다", async () => {
+  it("요청 이해 Agent 실패를 행동 가능한 말로 설명하고 요청 해석부터 다시 시도한다", async () => {
     const user = userEvent.setup();
     const fixture = createFixtureDesktopService();
     const seed = fixture.initialSnapshot?.works[0];
     if (!seed) throw new Error("fixture Work가 필요합니다.");
     const blocked: WorkView = {
       ...seed,
-      id: "work-context-strategy-failed",
-      title: "전략 계획이 멈춘 업무",
+      id: "work-representative-failed",
+      title: "요청 이해가 멈춘 업무",
       run: {
-        runId: "run-context-strategy-failed",
+        runId: "run-representative-failed",
         status: "blocked",
-        stage: "context-strategy",
+        stage: "intake",
         leaseGeneration: 2,
-        blockedReason: "strategy-failed",
+        blockedReason: "representative-failed",
       },
     };
     const resumeRun = vi.fn(async () => undefined);
@@ -172,9 +199,10 @@ describe("AgentOS 데스크톱", () => {
     // 차단 상태는 스트림 안에 놓이고 재시도가 원인 바로 옆에 붙습니다.
     const status = screen.getByRole("status", { name: "실행 상태" });
     expect(within(status).getByText("차단됨")).toHaveClass("text-halt");
-    expect(status).toHaveTextContent("Provider가 전략 계획의 구조화 응답을 완성하지 못했습니다.");
-    expect(status).toHaveTextContent("맥락·전략 구성");
-    expect(status).not.toHaveTextContent(/막힘|중단됨|에서 멈춤/u);
+    expect(status).toHaveTextContent(
+      "요청 이해 Agent가 요청 해석에 실패했습니다. 다시 시도하면 요청 해석부터 다시 시작합니다.",
+    );
+    expect(status).not.toHaveTextContent(/representative-failed|실행 단계/u);
     await user.click(screen.getByRole("button", { name: "다시 시도" }));
     expect(resumeRun).toHaveBeenCalledWith(blocked);
   });

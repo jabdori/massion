@@ -1022,6 +1022,8 @@ function publicExecution(execution: ApplicationExecutionSource) {
     ...(execution.taskId === undefined ? {} : { taskId: execution.taskId }),
     agentHandle: execution.agentHandle,
     modelRoute: execution.modelRoute,
+    ...(execution.providerId === undefined ? {} : { providerId: execution.providerId }),
+    ...(execution.modelId === undefined ? {} : { modelId: execution.modelId }),
     status: execution.status,
     inputTokens: execution.inputTokens,
     outputTokens: execution.outputTokens,
@@ -1501,6 +1503,7 @@ export function registerApplicationQueries(
           title: cell.title,
           createdAt: cell.createdAt,
           ...(cell.detail === undefined ? {} : { detail: cell.detail }),
+          ...(cell.authorKind === undefined ? {} : { authorKind: cell.authorKind }),
           ...(cell.authorId === undefined ? {} : { authorId: cell.authorId }),
           resourceId: cell.cellId,
         }));
@@ -1966,22 +1969,50 @@ export function registerApplicationQueries(
         const roomId = text(value.roomId, "roomId");
         return ((await dependencies.readModel.messages?.(context)) ?? [])
           .filter((message) => message.workId === workId && message.roomId === roomId)
-          .map((message) => ({
-            messageId: message.messageId,
-            sequence: message.sequence,
-            messageType: message.messageType,
-            authorKind: message.authorKind,
-            authorId: message.authorId,
-            content: message.content,
-            createdAt: message.createdAt,
-            // 인과 계보. 반론이 무엇을 반박하는지, 답변이 어느 질문에 붙는지가 여기서 옵니다.
-            ...(message.replyToMessageId === undefined ? {} : { replyToMessageId: message.replyToMessageId }),
-            ...(message.causedByMessageId === undefined ? {} : { causedByMessageId: message.causedByMessageId }),
-            ...(message.taskId === undefined ? {} : { taskId: message.taskId }),
-            ...(message.contextVersionId === undefined ? {} : { contextVersionId: message.contextVersionId }),
-            ...(message.executionId === undefined ? {} : { executionId: message.executionId }),
-            ...(message.artifactVersionId === undefined ? {} : { artifactVersionId: message.artifactVersionId }),
-          }));
+          .map((message) => {
+            const proposal = message.staffingProposal;
+            const staffingProposal =
+              proposal === undefined
+                ? undefined
+                : {
+                    proposalId: proposal.proposalId,
+                    status: proposal.status,
+                    ...(proposal.approvalId === undefined ? {} : { approvalId: proposal.approvalId }),
+                    nodes: proposal.nodes.map((node) => ({
+                      handle: node.handle,
+                      name: node.name,
+                      scope: node.scope,
+                      workId: node.workId,
+                      parentHandle: node.parentHandle,
+                      role: node.role,
+                      capabilities: node.capabilities,
+                    })),
+                    impactNodeHandles: proposal.impactNodeHandles,
+                    impactReferenceCount: proposal.impactReferenceCount,
+                    fromOrganizationVersion: proposal.fromOrganizationVersion,
+                    toOrganizationVersion: proposal.toOrganizationVersion,
+                  };
+            return {
+              messageId: message.messageId,
+              sequence: message.sequence,
+              messageType: message.messageType,
+              authorKind: message.authorKind,
+              authorId: message.authorId,
+              ...(message.authorDisplayName === undefined ? {} : { authorDisplayName: message.authorDisplayName }),
+              ...(message.providerId === undefined ? {} : { providerId: message.providerId }),
+              ...(message.modelId === undefined ? {} : { modelId: message.modelId }),
+              content: message.content,
+              createdAt: message.createdAt,
+              // 인과 계보. 반론이 무엇을 반박하는지, 답변이 어느 질문에 붙는지가 여기서 옵니다.
+              ...(message.replyToMessageId === undefined ? {} : { replyToMessageId: message.replyToMessageId }),
+              ...(message.causedByMessageId === undefined ? {} : { causedByMessageId: message.causedByMessageId }),
+              ...(message.taskId === undefined ? {} : { taskId: message.taskId }),
+              ...(message.contextVersionId === undefined ? {} : { contextVersionId: message.contextVersionId }),
+              ...(message.executionId === undefined ? {} : { executionId: message.executionId }),
+              ...(message.artifactVersionId === undefined ? {} : { artifactVersionId: message.artifactVersionId }),
+              ...(staffingProposal === undefined ? {} : { staffingProposal }),
+            };
+          });
       },
     });
   }

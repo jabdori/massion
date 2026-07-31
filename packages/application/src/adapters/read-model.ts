@@ -3,6 +3,7 @@ import type { OrganizationService, TenantContext } from "@massion/identity";
 import type { MassionDatabase } from "@massion/storage";
 
 import type {
+  ApplicationAppliedStaffingProposalSource,
   ApplicationApprovalSource,
   ApplicationArtifactSource,
   ApplicationAssignmentSource,
@@ -14,6 +15,7 @@ import type {
   ApplicationReadModel,
   ApplicationRoomSource,
   ApplicationSharedContextSource,
+  ApplicationStaffingProposalNodeSource,
   ApplicationRecordSource,
   ApplicationSourceWatermarks,
   ApplicationTaskSource,
@@ -157,6 +159,60 @@ interface MessageRecord {
   readonly context_version_id?: string;
   readonly execution_id?: string;
   readonly artifact_version_id?: string;
+}
+
+interface StaffingProposalRecord {
+  readonly proposal_id: string;
+  readonly organization_id: string;
+  readonly work_id: string;
+  readonly core_office_room_id: string;
+  readonly status: string;
+  readonly approval_id?: string;
+  readonly nodes_json: string;
+  readonly impact_json?: string;
+  readonly expected_organization_version: number;
+  readonly applied_organization_version?: number;
+  readonly message_id: string;
+}
+
+interface ApprovalLineageRecord {
+  readonly organization_id: string;
+  readonly approval_id: string;
+  readonly work_id?: string;
+  readonly status: string;
+}
+
+interface MembershipDisplayRecord {
+  readonly user_id: string;
+}
+
+interface UserDisplayRecord {
+  readonly user_id: string;
+  readonly display_name: string;
+}
+
+interface NodeDisplayRecord {
+  readonly handle: string;
+  readonly name: string;
+  readonly scope: string;
+  readonly work_id?: string;
+}
+
+interface ExecutionLineageRecord {
+  readonly execution_id: string;
+  readonly work_id: string;
+  readonly agent_handle: string;
+}
+
+interface RouteAttemptLineageRecord {
+  readonly execution_id: string;
+  readonly model_profile_id: string;
+}
+
+interface ModelProfileLineageRecord {
+  readonly model_profile_id: string;
+  readonly provider_id: string;
+  readonly model_id: string;
 }
 
 interface WorkRecordProjection {
@@ -336,6 +392,121 @@ function organizationNodeScope(scope: string): "persistent" | "work" {
   return scope;
 }
 
+function appliedStaffingProposal(
+  message: MessageRecord,
+  proposals: readonly StaffingProposalRecord[],
+  approvals: readonly ApprovalLineageRecord[],
+): ApplicationAppliedStaffingProposalSource | undefined {
+  if (
+    message.message_type !== "proposal" ||
+    message.author_kind !== "agent" ||
+    message.author_id !== "context-strategy" ||
+    proposals.length !== 1
+  )
+    return undefined;
+  const [proposal] = proposals;
+  const toVersion = proposal?.applied_organization_version;
+  if (
+    !proposal ||
+    proposal.organization_id !== message.organization_id ||
+    proposal.work_id !== message.work_id ||
+    proposal.core_office_room_id !== message.room_id ||
+    proposal.message_id !== message.message_id ||
+    proposal.status !== "applied" ||
+    typeof proposal.proposal_id !== "string" ||
+    proposal.proposal_id.length === 0 ||
+    !Number.isSafeInteger(proposal.expected_organization_version) ||
+    proposal.expected_organization_version < 1 ||
+    !Number.isSafeInteger(toVersion) ||
+    toVersion === undefined ||
+    toVersion <= proposal.expected_organization_version
+  )
+    return undefined;
+  if (
+    proposal.approval_id !== undefined &&
+    approvals.filter(
+      (approval) =>
+        approval.organization_id === message.organization_id &&
+        approval.approval_id === proposal.approval_id &&
+        approval.work_id === message.work_id &&
+        approval.status === "consumed",
+    ).length !== 1
+  )
+    return undefined;
+
+  try {
+    const rawNodes = JSON.parse(proposal.nodes_json) as unknown;
+    const rawImpact = JSON.parse(proposal.impact_json ?? "") as unknown;
+    if (
+      !Array.isArray(rawNodes) ||
+      rawNodes.length === 0 ||
+      !rawImpact ||
+      typeof rawImpact !== "object" ||
+      Array.isArray(rawImpact)
+    ) {
+      return undefined;
+    }
+    const impact = rawImpact as Record<string, unknown>;
+    if (
+      !Array.isArray(impact.nodeHandles) ||
+      !impact.nodeHandles.every((handle) => typeof handle === "string" && handle.length > 0) ||
+      !Array.isArray(impact.references)
+    )
+      return undefined;
+    const nodes = rawNodes.map((item): ApplicationStaffingProposalNodeSource => {
+      if (!item || typeof item !== "object" || Array.isArray(item)) throw new Error("invalid proposal item");
+      const proposalNode = item as Record<string, unknown>;
+      const candidate = proposalNode.node;
+      if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) {
+        throw new Error("invalid proposal node");
+      }
+      const node = candidate as Record<string, unknown>;
+      const { capabilities, handle, name, parentHandle, role, scope, workId } = node;
+      if (
+        typeof proposalNode.taskKey !== "string" ||
+        proposalNode.taskKey.length === 0 ||
+        typeof proposalNode.taskId !== "string" ||
+        proposalNode.taskId.length === 0 ||
+        proposalNode.agentHandle !== handle ||
+        typeof handle !== "string" ||
+        handle.length === 0 ||
+        typeof name !== "string" ||
+        name.length === 0 ||
+        scope !== "work" ||
+        workId !== message.work_id ||
+        typeof parentHandle !== "string" ||
+        parentHandle.length === 0 ||
+        (role !== "orchestrator" && role !== "coordinator" && role !== "operator") ||
+        !Array.isArray(capabilities) ||
+        !capabilities.every((capability) => typeof capability === "string" && capability.length > 0)
+      )
+        throw new Error("invalid proposal node");
+      return {
+        handle,
+        name,
+        scope: "work" as const,
+        workId,
+        parentHandle,
+        role,
+        capabilities,
+      };
+    });
+    if (new Set(nodes.map((node) => node.handle)).size !== nodes.length) return undefined;
+    return {
+      proposalId: proposal.proposal_id,
+      status: "applied",
+      ...(proposal.approval_id === undefined ? {} : { approvalId: proposal.approval_id }),
+      nodes,
+      impactNodeHandles: impact.nodeHandles as string[],
+      impactReferenceCount: impact.references.length,
+      fromOrganizationVersion: proposal.expected_organization_version,
+      toOrganizationVersion: toVersion,
+    };
+  } catch {
+    return undefined;
+  }
+}
+
 export class SurrealApplicationReadModel implements ApplicationReadModel {
   public constructor(
     private readonly database: MassionDatabase,
@@ -476,16 +647,43 @@ export class SurrealApplicationReadModel implements ApplicationReadModel {
 
   public async executions(context: TenantContext): Promise<readonly ApplicationExecutionSource[]> {
     await this.organizations.verifyTenantContext(context);
-    const [records] = await this.database.query<[ExecutionRecord[]]>(
-      "SELECT organization_id, execution_id, work_id, task_id, agent_handle, model_route, status, autonomy_mode, autonomy_revision, created_at, updated_at FROM runtime_execution WHERE organization_id = $organization_id ORDER BY created_at ASC, execution_id ASC;",
+    const [records, usages, attempts, profiles] = await this.database.query<
+      [ExecutionRecord[], UsageRecord[], RouteAttemptLineageRecord[], ModelProfileLineageRecord[]]
+    >(
+      `SELECT organization_id, execution_id, work_id, task_id, agent_handle, model_route, status, autonomy_mode, autonomy_revision, created_at, updated_at FROM runtime_execution WHERE organization_id = $organization_id ORDER BY created_at ASC, execution_id ASC;
+       SELECT execution_id, token_count, cost_micros FROM collaboration_message WHERE organization_id = $organization_id AND execution_id != NONE;
+       SELECT execution_id, model_profile_id FROM route_attempt WHERE organization_id = $organization_id AND execution_id != NONE;
+       SELECT model_profile_id, provider_id, model_id FROM model_profile WHERE organization_id = $organization_id;`,
       { organization_id: context.organizationId },
     );
-    const [usages] = await this.database.query<[UsageRecord[]]>(
-      "SELECT execution_id, token_count, cost_micros FROM collaboration_message WHERE organization_id = $organization_id AND execution_id != NONE;",
-      { organization_id: context.organizationId },
-    );
+    const usageByExecution = new Map<string, { inputTokens: number; costMicros: number }>();
+    for (const usage of usages) {
+      if (usage.execution_id === undefined) continue;
+      const total = usageByExecution.get(usage.execution_id) ?? { inputTokens: 0, costMicros: 0 };
+      total.inputTokens += usage.token_count;
+      total.costMicros += usage.cost_micros;
+      usageByExecution.set(usage.execution_id, total);
+    }
+    const attemptsByExecution = new Map<string, RouteAttemptLineageRecord[]>();
+    for (const attempt of attempts) {
+      const linked = attemptsByExecution.get(attempt.execution_id) ?? [];
+      linked.push(attempt);
+      attemptsByExecution.set(attempt.execution_id, linked);
+    }
+    const profilesById = new Map(profiles.map((profile) => [profile.model_profile_id, profile]));
     return records.map((record) => {
-      const linked = usages.filter((usage) => usage.execution_id === record.execution_id);
+      const usage = usageByExecution.get(record.execution_id);
+      const linkedAttempts = attemptsByExecution.get(record.execution_id) ?? [];
+      const linkedProfiles = linkedAttempts.map((attempt) => profilesById.get(attempt.model_profile_id));
+      const actualModels = new Map(
+        linkedProfiles
+          .filter((profile): profile is ModelProfileLineageRecord => profile !== undefined)
+          .map((profile) => [`${profile.provider_id}\0${profile.model_id}`, profile]),
+      );
+      const actualModel =
+        linkedAttempts.length > 0 && linkedProfiles.every((profile) => profile !== undefined) && actualModels.size === 1
+          ? actualModels.values().next().value
+          : undefined;
       return {
         organizationId: record.organization_id,
         executionId: record.execution_id,
@@ -493,12 +691,13 @@ export class SurrealApplicationReadModel implements ApplicationReadModel {
         ...(record.task_id === undefined ? {} : { taskId: record.task_id }),
         agentHandle: record.agent_handle,
         modelRoute: record.model_route,
+        ...(actualModel === undefined ? {} : { providerId: actualModel.provider_id, modelId: actualModel.model_id }),
         status: record.status,
         ...(record.autonomy_mode === undefined ? {} : { autonomyMode: record.autonomy_mode }),
         ...(record.autonomy_revision === undefined ? {} : { autonomyRevision: record.autonomy_revision }),
-        inputTokens: linked.reduce((sum, usage) => sum + usage.token_count, 0),
+        inputTokens: usage?.inputTokens ?? 0,
         outputTokens: 0,
-        costMicros: linked.reduce((sum, usage) => sum + usage.cost_micros, 0),
+        costMicros: usage?.costMicros ?? 0,
         createdAt: iso(record.created_at),
         updatedAt: iso(record.updated_at),
       };
@@ -536,30 +735,107 @@ export class SurrealApplicationReadModel implements ApplicationReadModel {
 
   public async messages(context: TenantContext): Promise<readonly ApplicationMessageSource[]> {
     await this.organizations.verifyTenantContext(context);
-    const [records] = await this.database.query<[MessageRecord[]]>(
-      "SELECT organization_id, work_id, room_id, message_id, sequence, message_type, author_kind, author_id, content, created_at, token_count, cost_micros, reply_to_message_id, caused_by_message_id, task_id, context_version_id, execution_id, artifact_version_id FROM collaboration_message WHERE organization_id = $organization_id ORDER BY room_id ASC, sequence ASC;",
-      { organization_id: context.organizationId },
-    );
-    return records.map((record) => ({
-      organizationId: record.organization_id,
-      workId: record.work_id,
-      roomId: record.room_id,
-      messageId: record.message_id,
-      sequence: record.sequence,
-      messageType: record.message_type,
-      authorKind: record.author_kind,
-      authorId: record.author_id,
-      content: record.content,
-      createdAt: iso(record.created_at),
-      ...(record.token_count === undefined ? {} : { tokenCount: record.token_count }),
-      ...(record.cost_micros === undefined ? {} : { costMicros: record.cost_micros }),
-      ...(record.reply_to_message_id === undefined ? {} : { replyToMessageId: record.reply_to_message_id }),
-      ...(record.caused_by_message_id === undefined ? {} : { causedByMessageId: record.caused_by_message_id }),
-      ...(record.task_id === undefined ? {} : { taskId: record.task_id }),
-      ...(record.context_version_id === undefined ? {} : { contextVersionId: record.context_version_id }),
-      ...(record.execution_id === undefined ? {} : { executionId: record.execution_id }),
-      ...(record.artifact_version_id === undefined ? {} : { artifactVersionId: record.artifact_version_id }),
-    }));
+    const [records, memberships, users, nodes, executions, attempts, profiles, proposals, approvalLineages] =
+      await this.database.query<
+        [
+          MessageRecord[],
+          MembershipDisplayRecord[],
+          UserDisplayRecord[],
+          NodeDisplayRecord[],
+          ExecutionLineageRecord[],
+          RouteAttemptLineageRecord[],
+          ModelProfileLineageRecord[],
+          StaffingProposalRecord[],
+          ApprovalLineageRecord[],
+        ]
+      >(
+        `SELECT organization_id, work_id, room_id, message_id, sequence, message_type, author_kind, author_id, content, created_at, token_count, cost_micros, reply_to_message_id, caused_by_message_id, task_id, context_version_id, execution_id, artifact_version_id FROM collaboration_message WHERE organization_id = $organization_id ORDER BY room_id ASC, sequence ASC;
+       SELECT user_id FROM membership WHERE organization_id = $organization_id;
+       SELECT user_id, display_name FROM identity_user WHERE user_id IN (SELECT VALUE user_id FROM membership WHERE organization_id = $organization_id);
+       SELECT handle, name, scope, work_id FROM organization_node WHERE organization_id = $organization_id;
+       SELECT execution_id, work_id, agent_handle FROM runtime_execution WHERE organization_id = $organization_id;
+       SELECT execution_id, model_profile_id FROM route_attempt WHERE organization_id = $organization_id AND execution_id != NONE AND status = 'succeeded';
+       SELECT model_profile_id, provider_id, model_id FROM model_profile WHERE organization_id = $organization_id;
+       SELECT proposal_id, organization_id, work_id, core_office_room_id, status, approval_id, nodes_json, impact_json, expected_organization_version, applied_organization_version, message_id FROM dynamic_staffing_proposal WHERE organization_id = $organization_id AND message_id != NONE;
+       SELECT organization_id, approval_id, work_id, status FROM governance_approval WHERE organization_id = $organization_id;`,
+        { organization_id: context.organizationId },
+      );
+    const memberIds = new Set(memberships.map((membership) => membership.user_id));
+    const usersById = new Map(users.map((user) => [user.user_id, user]));
+    const nodesByHandle = new Map<string, NodeDisplayRecord[]>();
+    for (const node of nodes) {
+      const matching = nodesByHandle.get(node.handle) ?? [];
+      matching.push(node);
+      nodesByHandle.set(node.handle, matching);
+    }
+    const executionsById = new Map<string, ExecutionLineageRecord[]>();
+    for (const execution of executions) {
+      const matching = executionsById.get(execution.execution_id) ?? [];
+      matching.push(execution);
+      executionsById.set(execution.execution_id, matching);
+    }
+    const attemptsByExecution = new Map<string, RouteAttemptLineageRecord[]>();
+    for (const attempt of attempts) {
+      const matching = attemptsByExecution.get(attempt.execution_id) ?? [];
+      matching.push(attempt);
+      attemptsByExecution.set(attempt.execution_id, matching);
+    }
+    const profilesById = new Map(profiles.map((profile) => [profile.model_profile_id, profile]));
+    const proposalsByMessage = new Map<string, StaffingProposalRecord[]>();
+    for (const proposal of proposals) {
+      const matching = proposalsByMessage.get(proposal.message_id) ?? [];
+      matching.push(proposal);
+      proposalsByMessage.set(proposal.message_id, matching);
+    }
+    return records.map((record) => {
+      const authorDisplayName =
+        record.author_kind === "user" && memberIds.has(record.author_id)
+          ? usersById.get(record.author_id)?.display_name
+          : record.author_kind === "agent"
+            ? nodesByHandle
+                .get(record.author_id)
+                ?.find(
+                  (node) => node.scope === "persistent" || (node.scope === "work" && node.work_id === record.work_id),
+                )?.name
+            : undefined;
+      const execution = (
+        record.execution_id === undefined ? [] : (executionsById.get(record.execution_id) ?? [])
+      ).filter((candidate) => candidate.work_id === record.work_id);
+      const successfulAttempts =
+        record.author_kind === "agent" && execution.length === 1 && execution[0]?.agent_handle === record.author_id
+          ? (attemptsByExecution.get(execution[0].execution_id) ?? [])
+          : [];
+      const actualModel =
+        successfulAttempts.length === 1 ? profilesById.get(successfulAttempts[0]?.model_profile_id ?? "") : undefined;
+      const staffingProposal = appliedStaffingProposal(
+        record,
+        proposalsByMessage.get(record.message_id) ?? [],
+        approvalLineages,
+      );
+      return {
+        organizationId: record.organization_id,
+        workId: record.work_id,
+        roomId: record.room_id,
+        messageId: record.message_id,
+        sequence: record.sequence,
+        messageType: record.message_type,
+        authorKind: record.author_kind,
+        authorId: record.author_id,
+        ...(authorDisplayName === undefined ? {} : { authorDisplayName }),
+        ...(actualModel === undefined ? {} : { providerId: actualModel.provider_id, modelId: actualModel.model_id }),
+        content: record.content,
+        createdAt: iso(record.created_at),
+        ...(record.token_count === undefined ? {} : { tokenCount: record.token_count }),
+        ...(record.cost_micros === undefined ? {} : { costMicros: record.cost_micros }),
+        ...(record.reply_to_message_id === undefined ? {} : { replyToMessageId: record.reply_to_message_id }),
+        ...(record.caused_by_message_id === undefined ? {} : { causedByMessageId: record.caused_by_message_id }),
+        ...(record.task_id === undefined ? {} : { taskId: record.task_id }),
+        ...(record.context_version_id === undefined ? {} : { contextVersionId: record.context_version_id }),
+        ...(record.execution_id === undefined ? {} : { executionId: record.execution_id }),
+        ...(record.artifact_version_id === undefined ? {} : { artifactVersionId: record.artifact_version_id }),
+        ...(staffingProposal === undefined ? {} : { staffingProposal }),
+      };
+    });
   }
 
   public async sharedContexts(context: TenantContext): Promise<readonly ApplicationSharedContextSource[]> {

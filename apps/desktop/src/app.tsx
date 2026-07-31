@@ -5695,6 +5695,7 @@ function mergeActivities(
 ): ActivityView[] {
   const merged = new Map(workActivities.map((activity) => [activity.id, activity]));
   for (const activity of roomActivities) {
+    merged.delete(`message:${activity.id}`);
     if (!merged.has(activity.id)) merged.set(activity.id, activity);
   }
   return [...merged.values()].sort((left, right) => {
@@ -5819,6 +5820,11 @@ function WorkActivity({
           >
             {workRowLabel(work)}
           </Badge>
+          {work.providerId && work.modelId ? (
+            <span className="shrink-0 font-mono text-[11px] text-muted">
+              {work.providerId} · {work.modelId}
+            </span>
+          ) : null}
           {room ? (
             <>
               <span aria-hidden="true" className="hidden h-4 w-px shrink-0 bg-border min-[1280px]:block" />
@@ -5984,6 +5990,8 @@ function blockedActionText(reason: string | undefined): string | undefined {
 
 function blockedReasonText(reason: string | undefined): string {
   switch (reason) {
+    case "representative-failed":
+      return "요청 이해 Agent가 요청 해석에 실패했습니다. 다시 시도하면 요청 해석부터 다시 시작합니다.";
     case "context-strategy-stage-failed":
     case "strategy-failed":
       return "Provider가 전략 계획의 구조화 응답을 완성하지 못했습니다.";
@@ -6030,9 +6038,6 @@ function RunStatusCard({
             </p>
             <p className="mt-0.5 flex items-baseline gap-1.5 text-[11px] text-muted">
               <span>{runStageText(run.stage)}</span>
-              {run.blockedReason === undefined ? null : (
-                <span className="font-mono text-fg-4">{run.blockedReason}</span>
-              )}
             </p>
           </div>
           <button
@@ -6157,20 +6162,21 @@ function ActivityRow({
     );
   }
   if (value.kind === "proposal") {
+    const proposalName = value.change.nodes[0]?.name ?? "조직 변경";
     return (
       <div className="py-2.5">
         <ProposalActivity
           speaker={value.speaker}
           change={value.change}
           content={value.content}
-          decided={false}
+          decided={value.decided ?? false}
           disabled={false}
           // ponytail: 조직 변경 command는 슬라이스 4에서 연결합니다. 지금은 결과를 알림으로만 알립니다.
           onApprove={() => {
-            onAnnouncement(`${value.change.name} 신설을 승인했습니다.`);
+            onAnnouncement(`${proposalName} 신설을 승인했습니다.`);
           }}
           onReject={() => {
-            onAnnouncement(`${value.change.name} 신설을 거절했습니다.`);
+            onAnnouncement(`${proposalName} 신설을 거절했습니다.`);
           }}
           time={value.time}
         />
@@ -6513,7 +6519,6 @@ function Composer({
             >
               <At aria-hidden="true" size={16} />
             </button>
-            <span className="ml-1 min-w-0 truncate text-[11px] text-muted">조직이 실행 조건을 자동 배치합니다</span>
             <div className="ml-auto flex items-center gap-1">
               {/* 실행 중에도 지시는 대기열에 들어갑니다. 중단은 보내기를 대체하지 않습니다. */}
               {running ? (

@@ -72,6 +72,8 @@ export interface ApplicationExecutionSource {
   readonly taskId?: string;
   readonly agentHandle: string;
   readonly modelRoute: string;
+  readonly providerId?: string;
+  readonly modelId?: string;
   readonly status: string;
   readonly inputTokens: number;
   readonly outputTokens: number;
@@ -124,6 +126,9 @@ export interface ApplicationMessageSource {
   readonly messageType: string;
   readonly authorKind: string;
   readonly authorId: string;
+  readonly authorDisplayName?: string;
+  readonly providerId?: string;
+  readonly modelId?: string;
   readonly content: string;
   readonly createdAt: string;
   /** 이 메시지가 답한 원본. answer가 어느 question에 붙는지, challenge가 무엇을 반박하는지. */
@@ -136,6 +141,28 @@ export interface ApplicationMessageSource {
   readonly contextVersionId?: string;
   readonly executionId?: string;
   readonly artifactVersionId?: string;
+  readonly staffingProposal?: ApplicationAppliedStaffingProposalSource;
+}
+
+export interface ApplicationStaffingProposalNodeSource {
+  readonly handle: string;
+  readonly name: string;
+  readonly scope: "work";
+  readonly workId: string;
+  readonly parentHandle: string;
+  readonly role: "orchestrator" | "coordinator" | "operator";
+  readonly capabilities: readonly string[];
+}
+
+export interface ApplicationAppliedStaffingProposalSource {
+  readonly proposalId: string;
+  readonly status: "applied";
+  readonly approvalId?: string;
+  readonly nodes: readonly ApplicationStaffingProposalNodeSource[];
+  readonly impactNodeHandles: readonly string[];
+  readonly impactReferenceCount: number;
+  readonly fromOrganizationVersion: number;
+  readonly toOrganizationVersion: number;
 }
 
 export interface ApplicationRecordSource {

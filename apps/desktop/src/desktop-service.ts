@@ -1276,6 +1276,7 @@ export function createApplicationDesktopService(
         records,
         approvals,
         directives,
+        organizationSnapshot,
       ] = await Promise.all([
         client.query("work.detail", { workId }),
         client.query("run.list", { workId }),
@@ -1288,6 +1289,7 @@ export function createApplicationDesktopService(
         client.query("work.records", { workId }),
         client.query("governance.approval.list", { workId }),
         client.query("work.directive.list", { workId }),
+        client.query("organization.graph.snapshot", {}),
       ]);
 
       return projectWorkDetail({
@@ -1302,6 +1304,7 @@ export function createApplicationDesktopService(
         records,
         approvals,
         directives,
+        organizationNodes: projectOrganization(organizationSnapshot).nodes,
       });
     },
 
@@ -1350,10 +1353,11 @@ export function createApplicationDesktopService(
     },
 
     async loadRooms(workId) {
-      const [rooms, snapshot, sharedContexts] = await Promise.all([
+      const [rooms, snapshot, sharedContexts, work] = await Promise.all([
         client.query("work.rooms", { workId }),
         client.query("organization.graph.snapshot", {}),
         client.query("work.shared-contexts", { workId }),
+        client.query("work.detail", { workId }),
       ]);
       if (rooms.length === 0) return [];
       const nodes = projectOrganization(snapshot).nodes;
@@ -1361,7 +1365,7 @@ export function createApplicationDesktopService(
         rooms.map(async (room) => client.query("work.messages", { workId, roomId: room.roomId })),
       );
       return withRoomReferences(
-        rooms.map((room, index) => projectRoom(room, messageSets[index] ?? [], nodes, sharedContexts)),
+        rooms.map((room, index) => projectRoom(room, messageSets[index] ?? [], nodes, sharedContexts, work.status)),
       );
     },
 
@@ -3952,20 +3956,22 @@ function projectOrganization(snapshot: Partial<OrganizationGraphSnapshotV1>): Or
 //   있음: messageType · authorId(handle) · content · createdAt · replyTo · causedBy · sequence
 //   없음: question의 수신자, handoff의 받는 쪽. 둘 다 구조화돼 있지 않습니다.
 
-/** 조직 노드에서 역할 배지 문구를 찾습니다. 없으면 handle을 그대로 씁니다. */
+/** 조직 노드에서 역할 배지 문구를 찾습니다. snapshot 경합 중인 노드는 일반 역할로 가립니다. */
 function roleLabelFor(handle: string, nodes: readonly OrganizationNodeView[]): string {
   const node = nodes.find((candidate) => candidate.handle === handle);
-  if (!node) return OPAQUE_UUID.test(handle) ? "작업 담당" : handle;
+  if (!node) return "작업 담당";
   const label = node.responsibility.split(",")[0]?.trim() || node.name;
   return OPAQUE_UUID.test(label) ? "작업 담당" : label;
 }
 
 const OPAQUE_UUID = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/iu;
 
-function speakerFor(
-  message: Pick<RoomMessageViewV1, "authorKind" | "authorId"> & { readonly modelId?: string },
-  nodes: readonly OrganizationNodeView[],
-): SpeakerView {
+type SpeakerSource = Pick<RoomMessageViewV1, "authorKind" | "authorId"> & {
+  readonly providerId?: string;
+  readonly modelId?: string;
+};
+
+function speakerFor(message: SpeakerSource, nodes: readonly OrganizationNodeView[]): SpeakerView {
   if (message.authorKind !== "agent") {
     return { handle: message.authorId, name: "나", initial: "나", accentSlot: -1, role: "사람", human: true };
   }
@@ -3980,6 +3986,7 @@ function speakerFor(
     role,
     // 조직 그래프에 없는 handle이 말하고 있으면 아직 승인되지 않았거나 scope:"work" 노드입니다.
     ...(node ? {} : { provisional: true }),
+    ...(typeof message.providerId === "string" && message.providerId ? { providerId: message.providerId } : {}),
     ...(typeof message.modelId === "string" && message.modelId ? { modelId: message.modelId } : {}),
   };
 }
@@ -3987,6 +3994,22 @@ function speakerFor(
 function clockOf(createdAt: string): string {
   const parsed = new Date(createdAt);
   return Number.isNaN(parsed.getTime()) ? createdAt : parsed.toTimeString().slice(0, 5);
+}
+
+function handoffDisplayContent(content: string): string {
+  try {
+    const parsed = JSON.parse(content) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return content;
+    const record = parsed as Record<string, unknown>;
+    const intent = typeof record.intent === "string" && record.intent.trim() ? record.intent.trim() : undefined;
+    const nextAction =
+      typeof record.nextAction === "string" && record.nextAction.trim() ? record.nextAction.trim() : undefined;
+    return (
+      [intent, nextAction === undefined ? undefined : `다음 단계 · ${nextAction}`].filter(Boolean).join("\n") || content
+    );
+  } catch {
+    return content;
+  }
 }
 
 /** fixture 조직. Core Office 일부만 둡니다. 실 daemon에서는 organization.graph.snapshot이 대체합니다. */
@@ -4181,9 +4204,12 @@ const fixtureOrganizationNodes: OrganizationNodeView[] = [
 export function projectRoomActivities(
   messages: readonly RoomMessageViewV1[],
   nodes: readonly OrganizationNodeView[],
+  roomStatus?: string,
+  finalResponse = roomStatus === "closed",
 ): ActivityView[] {
   const ordered = [...messages].sort((left, right) => left.sequence - right.sequence);
   const byId = new Map(ordered.map((message) => [message.messageId, message]));
+  const lastMessageId = ordered.filter((message) => message.messageType !== "status").at(-1)?.messageId;
 
   return ordered.map((message): ActivityView => {
     const speaker = speakerFor(message, nodes);
@@ -4206,7 +4232,37 @@ export function projectRoomActivities(
         time,
         occurredAt: message.createdAt,
         from: speaker,
-        content: message.content,
+        content: handoffDisplayContent(message.content),
+      };
+    }
+
+    const proposal = message.messageType === "proposal" ? message.staffingProposal : undefined;
+    if (proposal !== undefined) {
+      return {
+        id: message.messageId,
+        kind: "proposal",
+        time,
+        occurredAt: message.createdAt,
+        speaker,
+        content: `Work에 필요한 전문 Agent ${String(proposal.nodes.length)}명을 구성하고 배치를 완료했습니다.`,
+        decided: true,
+        ...(proposal.approvalId === undefined ? {} : { approvalId: proposal.approvalId }),
+        change: {
+          nodes: proposal.nodes.map((node) => ({
+            handle: node.handle,
+            name: agentIdentityToken(node.handle).name,
+            scope: node.scope,
+            workId: node.workId,
+            parentHandle: node.parentHandle,
+            role: node.role,
+            capabilities: [...node.capabilities],
+          })),
+          impactNodes: proposal.impactNodeHandles.length,
+          impactReferences: proposal.impactReferenceCount,
+          impactHandles: [...proposal.impactNodeHandles],
+          fromVersion: proposal.fromOrganizationVersion,
+          toVersion: proposal.toOrganizationVersion,
+        },
       };
     }
 
@@ -4220,6 +4276,13 @@ export function projectRoomActivities(
       messageType: message.messageType === "proposal" ? "decision" : (message.messageType as "question"),
       speaker,
       content: message.content,
+      ...(finalResponse &&
+      message.messageId === lastMessageId &&
+      message.messageType === "answer" &&
+      message.authorKind === "agent" &&
+      message.authorId === "representative"
+        ? { final: true }
+        : {}),
       // 답변은 질문 아래 들여써서 짝을 눈에 보이게 합니다.
       ...(message.messageType === "answer" && origin ? { indented: true } : {}),
       // 반론은 무엇에 대한 반론인지 없이 존재할 수 없습니다.
@@ -4313,7 +4376,10 @@ export function projectRoom(
   messages: readonly RoomMessageViewV1[],
   nodes: readonly OrganizationNodeView[],
   sharedContexts: readonly SharedContextViewV1[] = [],
+  workStatus?: string,
 ): RoomView {
+  const finalResponseRoom =
+    workStatus === "completed" && room.name === "Core Office" && room.coordinatorHandle === "representative";
   return {
     roomId: room.roomId,
     name: room.name,
@@ -4328,7 +4394,7 @@ export function projectRoom(
         label: `${reference.sourceKind} · ${reference.sourceId}`,
         checksum: reference.checksum.slice(0, 6),
       })),
-    activities: projectRoomActivities(messages, nodes),
+    activities: projectRoomActivities(messages, nodes, room.status, finalResponseRoom),
   };
 }
 
@@ -4795,10 +4861,12 @@ interface WorkDetailSources {
   readonly records: readonly WorkRecordViewV1[];
   readonly approvals: readonly ApprovalViewV1[];
   readonly directives: readonly DirectiveViewV1[];
+  readonly organizationNodes: readonly OrganizationNodeView[];
 }
 
 function projectWorkSummary(work: WorkSummaryV1): WorkView {
   const status = projectWorkStatus(work.status);
+  const updatedAtIso = work.updatedAt;
   return {
     id: work.workId,
     title: work.title,
@@ -4806,7 +4874,8 @@ function projectWorkSummary(work: WorkSummaryV1): WorkView {
     revision: work.revision,
     sourceStatus: work.status,
     team: work.workspaceId === undefined ? "Massion" : "워크스페이스",
-    updatedAt: work.updatedAt ?? "",
+    updatedAt: updatedAtIso === undefined ? "" : clockOf(updatedAtIso),
+    ...(updatedAtIso === undefined ? {} : { updatedAtIso }),
     summary: work.title,
     progress: status === "complete" ? 100 : 0,
     approvals: [],
@@ -4821,7 +4890,8 @@ function projectWorkSummary(work: WorkSummaryV1): WorkView {
 
 function projectWorkDetail(sources: WorkDetailSources): WorkView {
   const tasks = sources.tasks.map(projectTask);
-  const agents = projectAgents(sources.assignments, sources.executions);
+  const agents = projectAgents(sources.assignments, sources.executions, sources.organizationNodes);
+  const actualModel = projectActualModel(sources.executions);
   const artifacts = sources.artifacts.map((artifact) => projectArtifact(artifact, tasks));
   const verifications = sources.verifications.map((verification) => projectVerification(verification, artifacts));
   const approvals = sources.approvals.map(projectApproval);
@@ -4836,6 +4906,7 @@ function projectWorkDetail(sources: WorkDetailSources): WorkView {
         ? 100
         : 0
       : Math.round((completedTasks / tasks.length) * 100);
+  const updatedAtIso = sources.detail.updatedAt ?? sources.detail.createdAt;
 
   return {
     id: sources.detail.workId,
@@ -4844,7 +4915,9 @@ function projectWorkDetail(sources: WorkDetailSources): WorkView {
     revision: sources.detail.revision,
     sourceStatus: sources.detail.status,
     team: sources.detail.workspaceId === undefined ? "Massion" : "워크스페이스",
-    updatedAt: sources.detail.updatedAt ?? sources.detail.createdAt ?? "",
+    updatedAt: updatedAtIso === undefined ? "" : clockOf(updatedAtIso),
+    ...(updatedAtIso === undefined ? {} : { updatedAtIso }),
+    ...(actualModel ?? {}),
     summary: sources.activities.find((activity) => activity.detail !== undefined)?.detail ?? sources.detail.title,
     progress,
     ...(run === undefined ? {} : { run: projectRun(run) }),
@@ -4898,15 +4971,21 @@ function projectStepState(status: string): StepState {
   return "pending";
 }
 
-function projectAgents(assignments: readonly AssignmentViewV1[], executions: readonly ExecutionViewV1[]): AgentView[] {
+function projectAgents(
+  assignments: readonly AssignmentViewV1[],
+  executions: readonly ExecutionViewV1[],
+  nodes: readonly OrganizationNodeView[],
+): AgentView[] {
   const agents = new Map<string, AgentView>();
   for (const assignment of assignments) {
     const execution = executions.find((candidate) => candidate.agentHandle === assignment.agentHandle);
+    const role = agentRoleFor(assignment.agentHandle, nodes);
+    const identity = agentIdentityToken(assignment.agentHandle, role);
     agents.set(assignment.agentHandle, {
       id: assignment.assignmentId ?? assignment.agentHandle,
-      role: execution?.modelRoute ?? "에이전트",
-      name: assignment.agentHandle,
-      initials: initials(assignment.agentHandle),
+      role,
+      name: identity.name,
+      initials: identity.initial,
       state:
         ACTIVE_AGENT_STATUSES.has(assignment.status) ||
         (execution !== undefined && ACTIVE_EXECUTION_STATUSES.has(execution.status))
@@ -4916,15 +4995,39 @@ function projectAgents(assignments: readonly AssignmentViewV1[], executions: rea
   }
   for (const execution of executions) {
     if (agents.has(execution.agentHandle)) continue;
+    const role = agentRoleFor(execution.agentHandle, nodes);
+    const identity = agentIdentityToken(execution.agentHandle, role);
     agents.set(execution.agentHandle, {
       id: execution.agentHandle,
-      role: execution.modelRoute,
-      name: execution.agentHandle,
-      initials: initials(execution.agentHandle),
+      role,
+      name: identity.name,
+      initials: identity.initial,
       state: ACTIVE_EXECUTION_STATUSES.has(execution.status) ? "active" : "waiting",
     });
   }
   return [...agents.values()];
+}
+
+function agentRoleFor(handle: string, nodes: readonly OrganizationNodeView[]): string {
+  return nodes.some((node) => node.handle === handle)
+    ? roleLabelFor(handle, nodes)
+    : agentRoleToken(handle).friendlyLabel;
+}
+
+function projectActualModel(
+  executions: readonly ExecutionViewV1[],
+): Pick<WorkView, "providerId" | "modelId"> | undefined {
+  if (executions.length === 0) return undefined;
+  const actual = new Map<string, { providerId: string; modelId: string }>();
+  for (const execution of executions) {
+    const source = execution as ExecutionViewV1 & { readonly providerId?: string; readonly modelId?: string };
+    if (!source.providerId || !source.modelId) return undefined;
+    actual.set(`${source.providerId}\u0000${source.modelId}`, {
+      providerId: source.providerId,
+      modelId: source.modelId,
+    });
+  }
+  return actual.size === 1 ? actual.values().next().value : undefined;
 }
 
 function projectArtifact(artifact: ArtifactViewV1, tasks: readonly TaskView[]): ArtifactView {
@@ -5066,7 +5169,7 @@ function projectActivities(
     projected.push({
       id: `approval:${approval.approvalId}`,
       kind: "approval",
-      time: occurredAt,
+      time: clockOf(occurredAt),
       occurredAt,
       approvalId: approval.approvalId,
       title: view.title,
@@ -5078,10 +5181,10 @@ function projectActivities(
     projected.push({
       id: `directive:${directive.directiveId}`,
       kind: "message",
-      time: directive.createdAt,
+      time: clockOf(directive.createdAt),
       occurredAt: directive.createdAt,
-      author: "사용자",
-      initials: "U",
+      author: "나",
+      initials: "나",
       content: directive.content,
     });
   }
@@ -5090,13 +5193,16 @@ function projectActivities(
     projected.push({
       id: "artifacts:current",
       kind: "artifacts",
-      time: artifacts[0]?.createdAt ?? "",
+      time: artifacts[0]?.createdAt === undefined ? "" : clockOf(artifacts[0].createdAt),
       ...(artifacts[0]?.createdAt === undefined ? {} : { occurredAt: artifacts[0].createdAt }),
       title: "산출물",
       artifacts: [...artifacts],
     });
   }
-  return projected.sort((left, right) => left.time.localeCompare(right.time) || left.id.localeCompare(right.id));
+  return projected.sort(
+    (left, right) =>
+      (left.occurredAt ?? left.time).localeCompare(right.occurredAt ?? right.time) || left.id.localeCompare(right.id),
+  );
 }
 
 function projectActivity(
@@ -5109,7 +5215,7 @@ function projectActivity(
     return {
       id: activity.activityId,
       kind: "approval",
-      time: activity.createdAt,
+      time: clockOf(activity.createdAt),
       occurredAt: activity.createdAt,
       approvalId: approval.approvalId,
       title: view.title,
@@ -5120,21 +5226,23 @@ function projectActivity(
     return {
       id: activity.activityId,
       kind: "event",
-      time: activity.createdAt,
+      time: clockOf(activity.createdAt),
       occurredAt: activity.createdAt,
       title: activity.title,
       detail: activity.detail ?? "",
       status: activity.status ?? "",
     };
   }
-  const author = activity.authorId ?? "Massion";
+  const source = activity as WorkActivityViewV1 & { readonly authorKind?: string };
+  const identity = source.authorKind === "agent" ? agentIdentityToken(activity.authorId ?? "agent") : undefined;
+  const author = source.authorKind === "user" ? "나" : (identity?.name ?? "Massion");
   return {
     id: activity.activityId,
     kind: "message",
-    time: activity.createdAt,
+    time: clockOf(activity.createdAt),
     occurredAt: activity.createdAt,
     author,
-    initials: initials(author),
+    initials: identity?.initial ?? initials(author),
     content: activity.detail ?? activity.title,
   };
 }
