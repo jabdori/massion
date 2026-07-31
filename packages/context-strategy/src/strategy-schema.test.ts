@@ -68,6 +68,18 @@ describe("StrategyPlan schema", () => {
     const schema = JSON.stringify(automaticStrategyPlanJsonSchema);
     expect(schema).toContain("도메인·방법론 전문성");
     expect(schema).toContain("현재 Agent 보유 여부와 무관");
+    expect(schema).toContain("critical이면 requiresApproval을 반드시 true");
+  });
+
+  it("자동 계획 JSON schema가 critical risk 승인 불변조건을 직접 표현한다", () => {
+    const properties = automaticStrategyPlanJsonSchema.properties as Record<string, unknown>;
+    const risks = properties.risks as { readonly items?: { readonly anyOf?: readonly unknown[] } };
+    const variants = risks.items?.anyOf;
+
+    expect(variants).toHaveLength(3);
+    expect(JSON.stringify(variants)).toContain('"const":"critical"');
+    expect(JSON.stringify(variants)).toContain('"const":true');
+    expect(JSON.stringify(variants)).toContain('"minLength":1');
   });
 
   it("자동 계획의 모든 배열에 구조화 출력 item schema를 제공한다", () => {

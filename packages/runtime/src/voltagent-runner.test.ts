@@ -1330,6 +1330,28 @@ describe("VoltAgent AgentRunner", () => {
     expect(acquire.mock.calls[1]?.[1]).toMatchObject({ fallbackFromAttemptId: "structured-output-attempt-1" });
   });
 
+  it("Agent runtime의 영문 structured output 검증 실패를 output 오류로 분류한다", async () => {
+    const routed = agentLease({
+      outcome: "completed",
+      executionId: "provider-execution",
+      sessionId: "provider-session",
+      value: {},
+    });
+    routed.executor.executeStructured = vi
+      .fn()
+      .mockRejectedValue(new Error("StrategyPlan structured output 검증에 실패했습니다"));
+    const runner = new VoltAgentRunner(voltAgent, store, { acquire: vi.fn().mockResolvedValue(routed) }, registry);
+
+    const result = await runner.executeStructured(context, input(), {
+      name: "strategy-plan",
+      description: "계획",
+      jsonSchema: { type: "object" },
+    });
+
+    expect(result).toMatchObject({ status: "failed", error: { category: "output", retryable: false } });
+    expect(routed.fail).toHaveBeenCalledWith(expect.objectContaining({ signal: { kind: "output" } }));
+  });
+
   it("Provider timeout의 Operation aborted 오류도 timeout fallback으로 분류한다", async () => {
     const first = lease(
       new MockLanguageModelV3({

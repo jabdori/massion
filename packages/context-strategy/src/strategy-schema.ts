@@ -35,10 +35,36 @@ export const strategyRiskSchema = z
     description: z.string().trim().min(1).max(2_000),
     likelihood: z.enum(["low", "medium", "high", "critical"]),
     impact: z.enum(["low", "medium", "high", "critical"]),
-    mitigation: z.string().trim().max(2_000),
-    requiresApproval: z.boolean(),
+    mitigation: z
+      .string()
+      .trim()
+      .max(2_000)
+      .describe("likelihood 또는 impact가 critical이면 비어 있지 않은 완화 방안을 작성합니다."),
+    requiresApproval: z
+      .boolean()
+      .describe("likelihood 또는 impact가 critical이면 requiresApproval을 반드시 true로 설정합니다."),
   })
   .strict();
+
+const nonCriticalRiskLevel = z.enum(["low", "medium", "high"]);
+const criticalRiskFields = {
+  mitigation: z.string().trim().min(1).max(2_000),
+  requiresApproval: z.literal(true),
+} as const;
+const automaticStrategyRiskSchema = z.union([
+  strategyRiskSchema.extend({
+    likelihood: nonCriticalRiskLevel,
+    impact: nonCriticalRiskLevel,
+  }),
+  strategyRiskSchema.extend({
+    impact: z.literal("critical"),
+    ...criticalRiskFields,
+  }),
+  strategyRiskSchema.extend({
+    likelihood: z.literal("critical"),
+    ...criticalRiskFields,
+  }),
+]);
 
 export const strategyTaskSchema = z
   .object({
@@ -84,6 +110,7 @@ export const strategyPlanSchema = z
 
 const automaticStrategyPlanSchema = strategyPlanSchema.extend({
   acceptanceCriteria: z.array(automaticAcceptanceCriterionSchema).min(1).max(100),
+  risks: z.array(automaticStrategyRiskSchema).max(100),
   // 자동 실행 경로에는 별도 evidence request 소비자가 없습니다. 필요한 조사는 실행 Task로 계획합니다.
   evidenceRequests: z.array(evidenceRequestSchema).length(0),
 });

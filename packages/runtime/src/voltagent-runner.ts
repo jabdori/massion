@@ -204,6 +204,7 @@ function failureSignal(error: unknown): FailureSignal {
     error instanceof Error &&
     (error.message.startsWith("No object generated:") ||
       error.message === "Invalid JSON response" ||
+      error.message.toLowerCase().includes("structured output") ||
       error.message.includes("구조화 출력"))
   ) {
     return { kind: "output" };
