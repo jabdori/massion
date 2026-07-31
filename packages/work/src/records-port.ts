@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 
+import { fromMarkdown } from "mdast-util-from-markdown";
 import type { OrganizationService, TenantContext } from "@massion/identity";
 import { applyMigrations, type MassionDatabase, type QueryExecutor } from "@massion/storage";
 
@@ -150,21 +151,68 @@ function safeDeliveryOutput(contentJson: string): string {
   return redacted || "작업 결과가 검증되었습니다.";
 }
 
+const FINAL_DELIVERY_CONTENT_MAXIMUM_CHARS = 16_000;
+const FINAL_DELIVERY_OUTPUTS_MAXIMUM = 20;
+const FINAL_DELIVERY_CONTINUATION_NOTICE =
+  "표시 결과가 길어 일부 내용은 생략되었습니다. 전체 원문은 저장된 결과에서 확인할 수 있습니다.";
+const FINAL_DELIVERY_SECTION_NOTICE = "표시 가능한 완결 구간이 없어 이 결과는 생략되었습니다.";
+
+function clipAtMarkdownBoundary(value: string, maximumChars: number): string {
+  if (value.length <= maximumChars) return value;
+  try {
+    const root = fromMarkdown(value);
+    const end = root.children.reduce((last, node) => {
+      const offset = node.position?.end.offset;
+      return offset !== undefined && offset <= maximumChars ? offset : last;
+    }, 0);
+    return end > 0 ? value.slice(0, end) : FINAL_DELIVERY_SECTION_NOTICE;
+  } catch {
+    return FINAL_DELIVERY_SECTION_NOTICE;
+  }
+}
+
 function finalDeliveryContent(outputs: readonly ArtifactVersion[]): string {
   if (outputs.length === 0) return "검증된 작업 결과와 기록을 확정했습니다.";
   const header = "완료된 작업 결과";
-  const labels = outputs.map((_output, index) => (outputs.length === 1 ? "" : `결과 ${String(index + 1)}`));
-  const separatorsLength = outputs.length > 1 ? (outputs.length - 1) * 2 : 0;
-  const labelsLength = labels.reduce((sum, label) => sum + (label ? label.length + 1 : 0), 0);
-  const available = Math.max(1, 4_000 - header.length - 2 - separatorsLength - labelsLength);
-  const perOutput = Math.max(1, Math.floor(available / outputs.length));
-  const sections = outputs.map((output, index) => {
+  const limitedOutputs = outputs.slice(0, FINAL_DELIVERY_OUTPUTS_MAXIMUM);
+  const omittedOutputCount = outputs.length - limitedOutputs.length;
+  const labels = limitedOutputs.map((_output, index) => (outputs.length === 1 ? "" : `결과 ${String(index + 1)}`));
+  const sections = limitedOutputs.map((output, index) => {
     const safe = safeDeliveryOutput(output.content_json);
-    const clipped = safe.length > perOutput ? `${safe.slice(0, Math.max(1, perOutput - 1))}…` : safe;
+    const label = labels[index];
+    return label ? `${label}\n${safe}` : safe;
+  });
+  const complete = `${header}\n\n${sections.join("\n\n")}`;
+  if (omittedOutputCount === 0 && complete.length <= FINAL_DELIVERY_CONTENT_MAXIMUM_CHARS) return complete;
+  const countNotice =
+    omittedOutputCount > 0
+      ? `나머지 ${String(omittedOutputCount)}개 결과는 저장된 전체 결과에서 확인할 수 있습니다.`
+      : "";
+  if (omittedOutputCount > 0 && complete.length + countNotice.length + 2 <= FINAL_DELIVERY_CONTENT_MAXIMUM_CHARS) {
+    return `${complete}\n\n${countNotice}`;
+  }
+  const continuationNotice = [countNotice, FINAL_DELIVERY_CONTINUATION_NOTICE].filter(Boolean).join(" ");
+  const labelsLength = labels.reduce((sum, label) => sum + (label ? label.length + 1 : 0), 0);
+  const noticeLength = continuationNotice.length + 2;
+  const available = Math.max(
+    0,
+    FINAL_DELIVERY_CONTENT_MAXIMUM_CHARS -
+      `${header}\n\n`.length -
+      Math.max(0, limitedOutputs.length - 1) * 2 -
+      labelsLength -
+      noticeLength,
+  );
+  const perOutput = Math.floor(available / Math.max(1, limitedOutputs.length));
+  const clippedSections = limitedOutputs.map((output, index) => {
+    const safe = safeDeliveryOutput(output.content_json);
+    const clipped = clipAtMarkdownBoundary(safe, perOutput);
     const label = labels[index];
     return label ? `${label}\n${clipped}` : clipped;
   });
-  return `${header}\n\n${sections.join("\n\n")}`.slice(0, 4_000);
+  const result = `${header}\n\n${clippedSections.join("\n\n")}\n\n${continuationNotice}`;
+  return result.length <= FINAL_DELIVERY_CONTENT_MAXIMUM_CHARS
+    ? result
+    : `${header}\n\n${FINAL_DELIVERY_SECTION_NOTICE}\n\n${FINAL_DELIVERY_CONTINUATION_NOTICE}`;
 }
 
 function assertIdentifier(value: string, label: string): void {

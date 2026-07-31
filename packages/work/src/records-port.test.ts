@@ -129,6 +129,37 @@ CREATE documentation_impact_assessment CONTENT { assessment_id: 'assessment-runb
     };
   }
 
+  async function seedTaskOutputs(outputs: readonly string[]): Promise<void> {
+    const artifactStatements = outputs
+      .map(
+        (_output, index) => `
+CREATE work_artifact CONTENT { artifact_id: 'task-output-artifact-${String(index + 1)}', organization_id: $organization_id, work_id: $work_id, kind: 'task-output', name: 'task-output-${String(index + 1)}', created_by: 'delivery-coordination', created_at: time::now() };
+CREATE artifact_version CONTENT { artifact_version_id: 'task-output-version-${String(index + 1)}', artifact_id: 'task-output-artifact-${String(index + 1)}', organization_id: $organization_id, work_id: $work_id, version: 1, checksum: $checksum_${String(index)}, media_type: 'application/json', content_json: $content_json_${String(index)}, created_by: 'delivery-coordination', created_at: time::now() };`,
+      )
+      .join("\n");
+    const artifactIds = outputs.map((_output, index) => `'task-output-version-${String(index + 1)}'`).join(", ");
+    const parameters = Object.fromEntries(
+      outputs.flatMap((output, index) => [
+        [`checksum_${String(index)}`, sha256(JSON.stringify(output))],
+        [`content_json_${String(index)}`, JSON.stringify(output)],
+      ]),
+    );
+    await database.query(
+      `
+${artifactStatements}
+UPDATE work SET artifact_version_ids = [${artifactIds}] WHERE organization_id = $organization_id AND work_id = $work_id;
+CREATE collaboration_room CONTENT { room_id: 'core-office-room', organization_id: $organization_id, work_id: $work_id, title: 'Core Office', coordinator_handle: 'representative', status: 'active', revision: 1, next_sequence: 2, max_parallel: 8, max_tokens: 32000, max_cost_micros: 1000000, max_rounds: 100, round_count: 1, created_at: time::now(), updated_at: time::now() };
+CREATE collaboration_participant CONTENT { participant_id: 'representative-participant', organization_id: $organization_id, work_id: $work_id, room_id: 'core-office-room', kind: 'agent', subject_id: 'representative', role: 'coordinator', status: 'active', joined_at: time::now() };
+CREATE collaboration_message CONTENT { message_id: 'assurance-message', organization_id: $organization_id, work_id: $work_id, room_id: 'core-office-room', sequence: 1, message_type: 'evidence', author_kind: 'agent', author_id: 'assurance', content: '독립 검증을 통과했습니다.', execution_id: 'assurance-execution', token_count: 0, cost_micros: 0, created_at: time::now() };
+`,
+      {
+        organization_id: context.organizationId,
+        work_id: workId,
+        ...parameters,
+      },
+    );
+  }
+
   it("문서 ArtifactVersion·WorkRecord·event와 Work N+2를 한 transaction에 만든다", async () => {
     const result = await port.finalize(context, input());
 
@@ -317,6 +348,101 @@ CREATE collaboration_message CONTENT { message_id: 'assurance-message', organiza
         return (code < 32 && ![9, 10, 13].includes(code)) || (code >= 127 && code <= 159);
       }),
     ).toBe(false);
+  });
+
+  it("4,000자를 넘지만 16,000자 이내인 두 Markdown 결과는 전체를 보존한다", async () => {
+    const first = `# 첫 번째 결과\n\n| 항목 | 값 |\n| --- | --- |\n| A | 100 |\n\n${"첫 번째 내용 ".repeat(260)}\n\n**FIRST_CLOSING_MARKER**`;
+    const second = `# 두 번째 결과\n\n| 항목 | 값 |\n| --- | --- |\n| B | 200 |\n\n${"두 번째 내용 ".repeat(300)}\n\n**SECOND_CLOSING_MARKER**`;
+    await seedTaskOutputs([first, second]);
+
+    const finalized = await port.finalize(context, input());
+    await port.complete(context, completionInput(finalized.work.revision));
+    const [messages] = await database.query<[Array<{ content: string }>]>(
+      "SELECT content FROM collaboration_message WHERE organization_id = $organization_id AND work_id = $work_id AND message_type = 'answer';",
+      { organization_id: context.organizationId, work_id: workId },
+    );
+    const content = messages[0]?.content ?? "";
+    expect(content).toContain("FIRST_CLOSING_MARKER");
+    expect(content).toContain("SECOND_CLOSING_MARKER");
+    expect(content).toContain("| A | 100 |");
+    expect(content).toContain("| B | 200 |");
+    expect(content).not.toContain("표시 결과가 길어 일부 내용은 생략되었습니다.");
+    expect(content.length).toBeLessThanOrEqual(16_000);
+  });
+
+  it("16,000자를 넘는 astral Unicode 결과는 경계와 continuation notice를 지킨다", async () => {
+    const astralLines = Array.from(
+      { length: 160 },
+      (_, index) => `${"😀".repeat(40)}${(index + 1) % 8 === 0 ? "\n" : ""}`,
+    ).join("\n");
+    const first = `# 첫 번째 결과\n\n| 항목 | 값 |\n| --- | --- |\n| A | 100 |\n\n**FIRST_BLOCK**\n\n${astralLines}\n\n**FIRST_CLOSING_MARKER**`;
+    const second = `# 두 번째 결과\n\n| 항목 | 값 |\n| --- | --- |\n| B | 200 |\n\n**SECOND_BLOCK**\n\n${astralLines}\n\n**SECOND_CLOSING_MARKER**`;
+    await seedTaskOutputs([first, second]);
+
+    const finalized = await port.finalize(context, input());
+    await port.complete(context, completionInput(finalized.work.revision));
+    const [messages] = await database.query<[Array<{ content: string }>]>(
+      "SELECT content FROM collaboration_message WHERE organization_id = $organization_id AND work_id = $work_id AND message_type = 'answer';",
+      { organization_id: context.organizationId, work_id: workId },
+    );
+    const content = messages[0]?.content ?? "";
+    const notice = "표시 결과가 길어 일부 내용은 생략되었습니다. 전체 원문은 저장된 결과에서 확인할 수 있습니다.";
+    expect(content).toContain("😀");
+    expect(content.length).toBeLessThanOrEqual(16_000);
+    expect(content.endsWith(`\n\n${notice}`)).toBe(true);
+    expect(content).not.toMatch(/ArtifactVersion|Markdown 블록|표시 예산/u);
+    expect((content.match(/(?<!\\)\*\*/gu)?.length ?? 0) % 2).toBe(0);
+    expect((content.match(/(?<!\\)`/gu)?.length ?? 0) % 2).toBe(0);
+    expect(
+      Array.from(content).some((character) => {
+        const code = character.charCodeAt(0);
+        return character.length === 1 && code >= 0xd800 && code <= 0xdfff;
+      }),
+    ).toBe(false);
+    for (const line of content.split("\n")) {
+      if (line.trim().startsWith("|")) expect(line.trim().endsWith("|")).toBe(true);
+    }
+  });
+
+  it("결과 수가 과도해도 section 수와 최종 답변 길이를 제한한다", async () => {
+    await seedTaskOutputs(
+      Array.from({ length: 30 }, (_, index) => `# 결과 ${String(index + 1)}\n\n고유 결과 ${String(index + 1)}`),
+    );
+
+    const finalized = await port.finalize(context, input());
+    await port.complete(context, completionInput(finalized.work.revision));
+    const [messages] = await database.query<[Array<{ content: string }>]>(
+      "SELECT content FROM collaboration_message WHERE organization_id = $organization_id AND work_id = $work_id AND message_type = 'answer';",
+      { organization_id: context.organizationId, work_id: workId },
+    );
+    const content = messages[0]?.content ?? "";
+    expect(content.length).toBeLessThanOrEqual(16_000);
+    expect(content).toContain("결과 20");
+    expect(content).not.toContain("\n결과 21\n");
+    expect(content).toContain("나머지 10개 결과는 저장된 전체 결과에서 확인할 수 있습니다.");
+    expect(content).not.toContain("표시 결과가 길어 일부 내용은 생략되었습니다.");
+    expect(content).not.toMatch(/ArtifactVersion|Markdown 블록|표시 예산/u);
+  });
+
+  it("Markdown AST 완결 block만 사용해 긴 무공백·escape·fence·GFM 행을 안전하게 줄인다", async () => {
+    const first = `${"x".repeat(20_000)}\n\n\\*\\*escaped\\*\\*`;
+    const second =
+      "```markdown\ninner `code`\n```\n\nname | value\n--- | ---\nalpha | beta\n\n**SECOND_CLOSING_MARKER**";
+    await seedTaskOutputs([first, second]);
+
+    const finalized = await port.finalize(context, input());
+    await port.complete(context, completionInput(finalized.work.revision));
+    const [messages] = await database.query<[Array<{ content: string }>]>(
+      "SELECT content FROM collaboration_message WHERE organization_id = $organization_id AND work_id = $work_id AND message_type = 'answer';",
+      { organization_id: context.organizationId, work_id: workId },
+    );
+    const content = messages[0]?.content ?? "";
+    expect(content.length).toBeLessThanOrEqual(16_000);
+    expect(content).toContain("inner `code`");
+    expect(content).toContain("SECOND_CLOSING_MARKER");
+    expect(content).not.toContain("x".repeat(7_900));
+    expect(content.endsWith("결과에서 확인할 수 있습니다.")).toBe(true);
+    expect(content).not.toMatch(/ArtifactVersion|Markdown 블록|표시 예산/u);
   });
 
   it("기존 분리 완료 상태를 replay하면 Work event 중복 없이 Records terminal을 복구한다", async () => {
