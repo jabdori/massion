@@ -413,9 +413,77 @@ describe("SurrealApplicationReadModel", () => {
         summary: "검증 로직 변경",
       },
     });
+    const createStaffingApproval = async (suffix: string) => {
+      const staffingDecision = await governance.evaluate(context, {
+        commandId: `read-model-decision-staffing-${suffix}`,
+        request: {
+          principal: { type: "Human", id: context.userId, organizationId: context.organizationId },
+          action: "organization.change",
+          resource: {
+            type: "Organization",
+            id: context.organizationId,
+            organizationId: context.organizationId,
+            revision: 12,
+          },
+          context: { environment: "local", riskClass: "write", external: false },
+        },
+      });
+      return await approvals.request(context, {
+        commandId: `read-model-approval-staffing-${suffix}`,
+        decisionId: staffingDecision.decisionId,
+        resourceRevision: 12,
+        workId: created.work.work_id,
+      });
+    };
+    const staffingApproval = await createStaffingApproval("valid");
+    const malformedStaffingApproval = await createStaffingApproval("malformed");
+    const wrongPolicyStaffingApproval = await createStaffingApproval("wrong-policy");
+    const missingDecisionStaffingApproval = await createStaffingApproval("missing-decision");
+    const wrongWorkStaffingApproval = await createStaffingApproval("wrong-work");
+    const blankAssignmentStaffingApproval = await createStaffingApproval("blank-assignment");
+    const duplicateAgentStaffingApproval = await createStaffingApproval("duplicate-agent");
     await database.query(
       "UPDATE governance_approval SET status = 'consumed' WHERE organization_id = $organization_id AND approval_id = $approval_id;",
       { organization_id: context.organizationId, approval_id: approval.approval_id },
+    );
+    await database.query(
+      "UPDATE governance_approval SET requirement_json = '{' WHERE organization_id = $organization_id AND approval_id = $approval_id;",
+      { organization_id: context.organizationId, approval_id: pendingApproval.approval_id },
+    );
+    await database.query(
+      "UPDATE governance_approval SET request_hash = $request_hash, display_preview_json = $display_preview_json WHERE organization_id = $organization_id AND approval_id = $approval_id;",
+      {
+        organization_id: context.organizationId,
+        approval_id: malformedStaffingApproval.approval_id,
+        request_hash: "0".repeat(64),
+        display_preview_json: JSON.stringify({
+          kind: "provider",
+          title: "노출되면 안 되는 저장 미리보기",
+          reason: "결정 계보가 일치하지 않습니다",
+        }),
+      },
+    );
+    await database.query(
+      "UPDATE governance_approval SET policy_version_id = 'missing-policy-version', display_preview_json = $display_preview_json WHERE organization_id = $organization_id AND approval_id = $approval_id;",
+      {
+        organization_id: context.organizationId,
+        approval_id: wrongPolicyStaffingApproval.approval_id,
+        display_preview_json: JSON.stringify({
+          kind: "provider",
+          title: "노출되면 안 되는 정책 버전 미리보기",
+        }),
+      },
+    );
+    await database.query(
+      "UPDATE governance_approval SET decision_id = 'missing-decision', display_preview_json = $display_preview_json WHERE organization_id = $organization_id AND approval_id = $approval_id;",
+      {
+        organization_id: context.organizationId,
+        approval_id: missingDecisionStaffingApproval.approval_id,
+        display_preview_json: JSON.stringify({
+          kind: "provider",
+          title: "노출되면 안 되는 결정 미리보기",
+        }),
+      },
     );
 
     const validStaffingMessage = await works.postMessage(context, {
@@ -567,6 +635,7 @@ describe("SurrealApplicationReadModel", () => {
       proposalRecord("proposal-wrong-tenant", wrongTenantMessage.message.message_id, {
         organization_id: otherContext.organizationId,
         created_by_user_id: otherContext.userId,
+        approval_id: staffingApproval.approval_id,
       }),
       proposalRecord("proposal-wrong-work", wrongWorkMessage.message.message_id, { work_id: "other-work" }),
       proposalRecord("proposal-wrong-room", wrongRoomMessage.message.message_id, {
@@ -590,6 +659,70 @@ describe("SurrealApplicationReadModel", () => {
       proposalRecord("proposal-human-author", humanAuthorMessage.message.message_id),
       proposalRecord("proposal-pending-approval", pendingApprovalMessage.message.message_id, {
         approval_id: pendingApproval.approval_id,
+      }),
+      proposalRecord("proposal-approval-valid", "staffing-approval-message-valid", {
+        approval_id: staffingApproval.approval_id,
+        status: "awaiting-approval",
+        ux_metadata_json: JSON.stringify({
+          kind: "dynamic-staffing-proposal",
+          title: "동적 Staffing 제안",
+          workId: created.work.work_id,
+          strategyGenerationId: "provider-secret",
+          taskCount: 2,
+          proposedAgentCount: 2,
+          assignments: [
+            { taskKey: "task-key-secret-1", agentHandle: "provider-handle-secret-1", source: "proposal" },
+            { taskKey: "task-key-secret-2", agentHandle: "provider-handle-secret-2", source: "proposal" },
+          ],
+        }),
+      }),
+      proposalRecord("proposal-approval-malformed", "staffing-approval-message-malformed", {
+        approval_id: malformedStaffingApproval.approval_id,
+        status: "awaiting-approval",
+        ux_metadata_json: "{",
+      }),
+      proposalRecord("proposal-approval-wrong-work", "staffing-approval-message-wrong-work", {
+        approval_id: wrongWorkStaffingApproval.approval_id,
+        status: "awaiting-approval",
+        work_id: "other-work",
+        ux_metadata_json: JSON.stringify({
+          kind: "dynamic-staffing-proposal",
+          title: "동적 Staffing 제안",
+          workId: "other-work",
+          strategyGenerationId: "strategy-other-work",
+          taskCount: 1,
+          proposedAgentCount: 1,
+          assignments: [{ taskKey: "other-task", agentHandle: "other-agent", source: "proposal" }],
+        }),
+      }),
+      proposalRecord("proposal-approval-blank-assignment", "staffing-approval-message-blank-assignment", {
+        approval_id: blankAssignmentStaffingApproval.approval_id,
+        status: "awaiting-approval",
+        ux_metadata_json: JSON.stringify({
+          kind: "dynamic-staffing-proposal",
+          title: "동적 Staffing 제안",
+          workId: created.work.work_id,
+          strategyGenerationId: "strategy-blank-assignment",
+          taskCount: 1,
+          proposedAgentCount: 1,
+          assignments: [{ taskKey: "  ", agentHandle: "  ", source: "proposal" }],
+        }),
+      }),
+      proposalRecord("proposal-approval-duplicate-agent", "staffing-approval-message-duplicate-agent", {
+        approval_id: duplicateAgentStaffingApproval.approval_id,
+        status: "awaiting-approval",
+        ux_metadata_json: JSON.stringify({
+          kind: "dynamic-staffing-proposal",
+          title: "동적 Staffing 제안",
+          workId: created.work.work_id,
+          strategyGenerationId: "strategy-duplicate-agent",
+          taskCount: 2,
+          proposedAgentCount: 2,
+          assignments: [
+            { taskKey: "task-duplicate-agent-1", agentHandle: "same-agent", source: "proposal" },
+            { taskKey: "task-duplicate-agent-2", agentHandle: " same-agent ", source: "proposal" },
+          ],
+        }),
       }),
     ];
     for (const record of staffingProposalRecords) {
@@ -799,17 +932,52 @@ describe("SurrealApplicationReadModel", () => {
         updatedAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/u),
       }),
     ]);
-    await expect(readModel.approvals(context)).resolves.toEqual(
+    const projectedApprovals = await readModel.approvals(context);
+    expect(projectedApprovals).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           approvalId: approval.approval_id,
+          action: "tool.call",
           workId: created.work.work_id,
           executionId: execution.execution.execution_id,
           resourceRevision: artifact.work.revision,
           revision: 1,
         }),
+        expect.objectContaining({
+          approvalId: staffingApproval.approval_id,
+          action: "organization.change",
+          displayPreview: {
+            kind: "provider",
+            title: "동적 Staffing 제안",
+            reason: "전문 Agent 2명을 추가하고 2개 Task의 담당을 정하는 조직 변경입니다.",
+          },
+        }),
       ]),
     );
+    for (const lineageMismatch of [
+      malformedStaffingApproval,
+      wrongPolicyStaffingApproval,
+      missingDecisionStaffingApproval,
+    ]) {
+      const failedClosed = projectedApprovals.find((item) => item.approvalId === lineageMismatch.approval_id);
+      expect(failedClosed).toMatchObject({ action: "unknown" });
+      expect(failedClosed).not.toHaveProperty("displayPreview");
+    }
+    expect(
+      projectedApprovals.find((item) => item.approvalId === wrongWorkStaffingApproval.approval_id),
+    ).not.toHaveProperty("displayPreview");
+    expect(
+      projectedApprovals.find((item) => item.approvalId === blankAssignmentStaffingApproval.approval_id),
+    ).not.toHaveProperty("displayPreview");
+    expect(
+      projectedApprovals.find((item) => item.approvalId === duplicateAgentStaffingApproval.approval_id),
+    ).not.toHaveProperty("displayPreview");
+    const staffingApprovalProjection = JSON.stringify(
+      projectedApprovals.find((item) => item.approvalId === staffingApproval.approval_id),
+    );
+    for (const internal of ["task-key-secret", "provider-handle-secret", "provider-secret"]) {
+      expect(staffingApprovalProjection).not.toContain(internal);
+    }
 
     await expect(readModel.works(otherContext)).resolves.toEqual([]);
     await expect(readModel.messages(otherContext)).resolves.toEqual([]);
@@ -817,5 +985,6 @@ describe("SurrealApplicationReadModel", () => {
     await expect(readModel.artifacts?.(otherContext)).resolves.toEqual([]);
     await expect(readModel.verifications?.(otherContext)).resolves.toEqual([]);
     await expect(readModel.directives?.(otherContext)).resolves.toEqual([]);
+    await expect(readModel.approvals(otherContext)).resolves.toEqual([]);
   }, 15_000);
 });

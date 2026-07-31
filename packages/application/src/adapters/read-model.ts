@@ -1,4 +1,8 @@
-import { decodeApprovalDisplayPreview } from "@massion/governance";
+import {
+  decodeApprovalDisplayPreview,
+  normalizeApprovalDisplayPreview,
+  type ApprovalDisplayPreview,
+} from "@massion/governance";
 import type { OrganizationService, TenantContext } from "@massion/identity";
 import type { MassionDatabase } from "@massion/storage";
 
@@ -230,18 +234,38 @@ interface WorkRecordProjection {
 interface ApprovalRecord {
   readonly organization_id: string;
   readonly approval_id: string;
+  readonly decision_id: string;
+  readonly request_hash: string;
+  readonly policy_version_id: string;
   readonly status: string;
   readonly requester_user_id: string;
   readonly work_id?: string;
   readonly execution_id?: string;
   readonly resource_revision?: number;
   readonly resume_target?: string;
-  readonly requirement_json: string;
   readonly display_preview_json?: string;
   readonly revision: number;
   readonly expires_at: unknown;
   readonly created_at: unknown;
   readonly updated_at: unknown;
+}
+
+interface ApprovalDecisionRecord {
+  readonly decision_id: string;
+  readonly policy_version_id?: string;
+  readonly request_hash: string;
+  readonly action: string;
+  readonly resource_type: string;
+  readonly resource_id: string;
+  readonly resource_revision?: number;
+}
+
+interface DynamicStaffingApprovalRecord {
+  readonly organization_id: string;
+  readonly approval_id?: string;
+  readonly work_id: string;
+  readonly status: string;
+  readonly ux_metadata_json: string;
 }
 
 interface WorkArtifactRecord {
@@ -359,6 +383,88 @@ function json(value: string, label: string): unknown {
     return JSON.parse(value) as unknown;
   } catch {
     throw new Error(`${label} JSON을 해석할 수 없습니다`);
+  }
+}
+
+function staffingApprovalPreview(
+  approval: ApprovalRecord,
+  decision: ApprovalDecisionRecord,
+  candidates: readonly DynamicStaffingApprovalRecord[],
+): ApprovalDisplayPreview | undefined {
+  if (
+    candidates.length !== 1 ||
+    decision.action !== "organization.change" ||
+    decision.resource_type !== "Organization" ||
+    decision.resource_id !== approval.organization_id ||
+    decision.resource_revision !== approval.resource_revision ||
+    approval.work_id === undefined
+  )
+    return undefined;
+  const proposal = candidates[0];
+  if (
+    !proposal ||
+    proposal.organization_id !== approval.organization_id ||
+    proposal.work_id !== approval.work_id ||
+    (proposal.status !== "awaiting-approval" && proposal.status !== "applied")
+  )
+    return undefined;
+  try {
+    const metadata = json(proposal.ux_metadata_json, "Dynamic Staffing UX metadata");
+    if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return undefined;
+    const value = metadata as Record<string, unknown>;
+    if (
+      Object.keys(value).sort().join("\0") !==
+        ["assignments", "kind", "proposedAgentCount", "strategyGenerationId", "taskCount", "title", "workId"].join(
+          "\0",
+        ) ||
+      value.kind !== "dynamic-staffing-proposal" ||
+      value.title !== "동적 Staffing 제안" ||
+      value.workId !== proposal.work_id ||
+      typeof value.strategyGenerationId !== "string" ||
+      value.strategyGenerationId.length === 0 ||
+      !Number.isSafeInteger(value.taskCount) ||
+      Number(value.taskCount) < 1 ||
+      !Number.isSafeInteger(value.proposedAgentCount) ||
+      Number(value.proposedAgentCount) < 1 ||
+      Number(value.proposedAgentCount) > Number(value.taskCount) ||
+      !Array.isArray(value.assignments) ||
+      value.assignments.length !== value.taskCount
+    )
+      return undefined;
+    const assignments = value.assignments as readonly unknown[];
+    if (
+      assignments.some(
+        (item) =>
+          !item ||
+          typeof item !== "object" ||
+          Array.isArray(item) ||
+          Object.keys(item).sort().join("\0") !== "agentHandle\0source\0taskKey" ||
+          typeof (item as Record<string, unknown>).taskKey !== "string" ||
+          String((item as Record<string, unknown>).taskKey).trim().length === 0 ||
+          typeof (item as Record<string, unknown>).agentHandle !== "string" ||
+          String((item as Record<string, unknown>).agentHandle).trim().length === 0 ||
+          !["recommendation", "proposal"].includes(String((item as Record<string, unknown>).source)),
+      )
+    )
+      return undefined;
+    const taskKeys = assignments.map((item) => (item as { readonly taskKey: string }).taskKey.trim());
+    const proposedAgentHandles = assignments.flatMap((item) => {
+      const assignment = item as { readonly agentHandle: string; readonly source: string };
+      return assignment.source === "proposal" ? [assignment.agentHandle.trim()] : [];
+    });
+    if (
+      new Set(taskKeys).size !== assignments.length ||
+      proposedAgentHandles.length !== value.proposedAgentCount ||
+      new Set(proposedAgentHandles).size !== value.proposedAgentCount
+    )
+      return undefined;
+    return normalizeApprovalDisplayPreview({
+      kind: "provider",
+      title: value.title,
+      reason: `전문 Agent ${String(value.proposedAgentCount)}명을 추가하고 ${String(value.taskCount)}개 Task의 담당을 정하는 조직 변경입니다.`,
+    });
+  } catch {
+    return undefined;
   }
 }
 
@@ -965,17 +1071,39 @@ export class SurrealApplicationReadModel implements ApplicationReadModel {
 
   public async approvals(context: TenantContext): Promise<readonly ApplicationApprovalSource[]> {
     await this.organizations.verifyTenantContext(context);
-    const [records] = await this.database.query<[ApprovalRecord[]]>(
-      "SELECT organization_id, approval_id, status, requester_user_id, work_id, execution_id, resource_revision, resume_target, requirement_json, display_preview_json, revision, expires_at, created_at, updated_at FROM governance_approval WHERE organization_id = $organization_id ORDER BY created_at ASC, approval_id ASC;",
-      { organization_id: context.organizationId },
-    );
+    const [[records], [decisions], [staffingProposals]] = await Promise.all([
+      this.database.query<[ApprovalRecord[]]>(
+        "SELECT organization_id, approval_id, decision_id, request_hash, policy_version_id, status, requester_user_id, work_id, execution_id, resource_revision, resume_target, display_preview_json, revision, expires_at, created_at, updated_at FROM governance_approval WHERE organization_id = $organization_id ORDER BY created_at ASC, approval_id ASC;",
+        { organization_id: context.organizationId },
+      ),
+      this.database.query<[ApprovalDecisionRecord[]]>(
+        "SELECT decision_id, policy_version_id, request_hash, action, resource_type, resource_id, resource_revision FROM governance_policy_decision WHERE organization_id = $organization_id;",
+        { organization_id: context.organizationId },
+      ),
+      this.database.query<[DynamicStaffingApprovalRecord[]]>(
+        "SELECT organization_id, approval_id, work_id, status, ux_metadata_json FROM dynamic_staffing_proposal WHERE organization_id = $organization_id AND approval_id != NONE;",
+        { organization_id: context.organizationId },
+      ),
+    ]);
+    const decisionsById = new Map(decisions.map((decision) => [decision.decision_id, decision]));
     return records.map((record) => {
-      const requirement = JSON.parse(record.requirement_json) as { actions?: readonly string[] };
-      const displayPreview = decodeApprovalDisplayPreview(record.display_preview_json);
+      const decision = decisionsById.get(record.decision_id);
+      const decisionMatches =
+        decision !== undefined &&
+        decision.request_hash === record.request_hash &&
+        decision.policy_version_id === record.policy_version_id;
+      const displayPreview = decisionMatches
+        ? (decodeApprovalDisplayPreview(record.display_preview_json) ??
+          staffingApprovalPreview(
+            record,
+            decision,
+            staffingProposals.filter((proposal) => proposal.approval_id === record.approval_id),
+          ))
+        : undefined;
       return {
         organizationId: record.organization_id,
         approvalId: record.approval_id,
-        action: requirement.actions?.[0] ?? "unknown",
+        action: decisionMatches ? decision.action : "unknown",
         status: record.status,
         requestedBy: record.requester_user_id,
         expiresAt: iso(record.expires_at),
