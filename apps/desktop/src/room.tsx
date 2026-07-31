@@ -346,23 +346,63 @@ function normalizeMathDelimiters(content: string): string {
   return normalized + normalizeMathSegment(content.slice(offset));
 }
 
+function isAsciiPunctuation(value: string | undefined): boolean {
+  const code = value?.codePointAt(0);
+  return (
+    code !== undefined &&
+    ((code >= 33 && code <= 47) ||
+      (code >= 58 && code <= 64) ||
+      (code >= 91 && code <= 96) ||
+      (code >= 123 && code <= 126))
+  );
+}
+
+function sourceOffsetAtValueOffset(
+  node: MarkdownNode,
+  source: string,
+  value: string,
+  valueOffset: number,
+): number | undefined {
+  const sourceStart = node.position?.start.offset;
+  const sourceEnd = node.position?.end.offset;
+  if (sourceStart === undefined || sourceEnd === undefined) return undefined;
+
+  let renderedOffset = 0;
+  let sourceOffset = sourceStart;
+  while (renderedOffset < valueOffset && sourceOffset < sourceEnd) {
+    const renderedCharacter = value[renderedOffset];
+    const sourceCharacter = source[sourceOffset];
+    const escapedCharacter = source[sourceOffset + 1];
+    if (sourceCharacter === "\\" && isAsciiPunctuation(escapedCharacter) && escapedCharacter === renderedCharacter) {
+      sourceOffset += 2;
+      renderedOffset += 1;
+      continue;
+    }
+    if (sourceCharacter !== renderedCharacter) return undefined;
+    sourceOffset += 1;
+    renderedOffset += 1;
+  }
+
+  return renderedOffset === valueOffset ? sourceOffset : undefined;
+}
+
+function hasExactSource(node: MarkdownNode, source: string, value: string, matchOffset: number, raw: string): boolean {
+  const sourceOffset = sourceOffsetAtValueOffset(node, source, value, matchOffset);
+  return sourceOffset !== undefined && source.slice(sourceOffset, sourceOffset + raw.length) === raw;
+}
+
 function splitStrongBeforeWordSuffix(node: MarkdownNode, source: string): MarkdownNode[] {
   const value = node.value;
-  const sourceStart = node.position?.start.offset;
-  if (node.type !== "text" || value === undefined || sourceStart === undefined) return [node];
+  if (node.type !== "text" || value === undefined) return [node];
 
   const children: MarkdownNode[] = [];
   let valueOffset = 0;
-  for (const match of value.matchAll(/\*\*([^*\r\n]*\p{P})\*\*([\p{L}\p{M}\p{N}_]+)/gu)) {
+  for (const match of value.matchAll(/(?<!\*)\*\*(?!\*)([^*\r\n]*\p{P})\*\*([\p{L}\p{M}\p{N}_]+)/gu)) {
     const matchOffset = match.index;
     const raw = match[0];
     const emphasized = match[1];
     const suffix = match[2];
-    if (
-      emphasized === undefined ||
-      suffix === undefined ||
-      source.slice(sourceStart + matchOffset, sourceStart + matchOffset + raw.length) !== raw
-    ) {
+    if (emphasized === undefined || suffix === undefined || !hasExactSource(node, source, value, matchOffset, raw)) {
       continue;
     }
 
@@ -371,6 +411,20 @@ function splitStrongBeforeWordSuffix(node: MarkdownNode, source: string): Markdo
     children.push({ children: [{ type: "text", value: emphasized }], type: "strong" });
     children.push({ type: "text", value: suffix });
     valueOffset = matchOffset + raw.length;
+  }
+
+  const unclosed = /(?<!\*)\*\*(?!\*)(?![^\r\n]*\*\*)([^\r\n]+)$/u.exec(value);
+  if (
+    unclosed !== null &&
+    unclosed.index >= valueOffset &&
+    !value.slice(valueOffset, unclosed.index).includes("**") &&
+    unclosed[1] !== undefined &&
+    hasExactSource(node, source, value, unclosed.index, unclosed[0])
+  ) {
+    const prefix = value.slice(valueOffset, unclosed.index);
+    if (prefix.length > 0) children.push({ type: "text", value: prefix });
+    children.push({ children: [{ type: "text", value: unclosed[1] }], type: "strong" });
+    valueOffset = value.length;
   }
 
   if (valueOffset === 0) return [node];

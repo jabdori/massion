@@ -234,6 +234,57 @@ describe("협업방 문법", () => {
     expect([...container.querySelectorAll("code")].map((code) => code.textContent)).toEqual([marked, `${marked}\n`]);
   });
 
+  it("절단된 실제 GFM 표 셀의 unclosed marker부터 셀 끝까지 strong으로 렌더링한다", () => {
+    const content = [
+      "| 확인 항목 | 유효 조건 | 미충족 시 영향과 판단 |",
+      "| --- | --- | --- |",
+      "| 사전 정의 지표 | 전환 정의, 분석 단위, 귀속 기간을 사전에 정한다 | 결과를 본 뒤 지표를 선택하면 선택 편향이 발생한다. **해당 결과는… |",
+    ].join("\n");
+    const { container } = render(<RoomMessage content={content} speaker={quill} time="10:25" type="evidence" />);
+
+    const emphasized = screen.getByText("해당 결과는…", { selector: "strong" });
+    expect(emphasized.closest("td")).toHaveTextContent("선택 편향이 발생한다. 해당 결과는…");
+    expect(container).not.toHaveTextContent("**");
+  });
+
+  it("unclosed marker의 odd escape와 longer run 및 코드 범위는 literal로 유지한다", () => {
+    const content = [
+      String.raw`\**literal`,
+      "",
+      "***longer",
+      "",
+      "inline `**inline`",
+      "",
+      "```text",
+      "**fenced",
+      "```",
+    ].join("\n");
+    const { container } = render(<RoomMessage content={content} speaker={quill} time="10:25" type="evidence" />);
+
+    expect(container.querySelector("strong")).toBeNull();
+    expect(container).toHaveTextContent("**literal");
+    expect(container).toHaveTextContent("***longer");
+    expect([...container.querySelectorAll("code")].map((code) => code.textContent)).toEqual(["**inline", "**fenced\n"]);
+  });
+
+  it("unclosed marker 앞 짝수 backslash는 하나를 표시하고 marker를 strong으로 렌더링한다", () => {
+    const { container } = render(
+      <RoomMessage content={String.raw`\\**짝수 escape 뒤 강조`} speaker={quill} time="10:25" type="evidence" />,
+    );
+
+    const emphasized = screen.getByText("짝수 escape 뒤 강조", { selector: "strong" });
+    expect(emphasized.previousSibling?.textContent).toBe("\\");
+    expect(container).not.toHaveTextContent("**");
+  });
+
+  it("사람 메시지의 unclosed marker는 Markdown으로 해석하지 않는다", () => {
+    const me: SpeakerView = { handle: "owner-1", name: "나", initial: "나", accentSlot: -1, role: "사람", human: true };
+    const { container } = render(<RoomMessage content="**사람 원문" speaker={me} time="10:25" type="question" />);
+
+    expect(container.querySelector("strong")).toBeNull();
+    expect(container).toHaveTextContent("**사람 원문");
+  });
+
   it("MathJax inline delimiter를 KaTeX 수식으로 렌더링한다", () => {
     const { container } = render(
       <RoomMessage content={String.raw`유의수준은 \(p < 0.05\)입니다.`} speaker={quill} time="10:25" type="evidence" />,
