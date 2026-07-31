@@ -1120,9 +1120,13 @@ function registerOrganization(
           "profileId",
           "profileVersion",
           "nodes",
+          "governanceApprovalId",
         ],
         ["kind"],
       ),
+    idempotencyPayload: (value) =>
+      Object.fromEntries(Object.entries(value).filter(([key]) => key !== "governanceApprovalId")),
+    resumeAwaitingApproval: (value) => value.governanceApprovalId !== undefined,
     async handle(context, command, value) {
       try {
         const changed = await organization.execute(context, {
@@ -1135,6 +1139,17 @@ function registerOrganization(
           data: { version: changed.version.version, changedHandles: changed.impact.nodeHandles },
         });
       } catch (error) {
+        if (error instanceof GovernanceApprovalRequiredError) {
+          return result(command, {
+            outcome: "awaiting-approval",
+            resource: {
+              type: "Organization",
+              id: context.organizationId,
+              revision: expectedRevision(command),
+            },
+            data: { decisionId: error.decisionId, approvalId: error.approvalId },
+          });
+        }
         return domainError(error, command.correlationId);
       }
     },

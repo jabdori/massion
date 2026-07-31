@@ -1972,16 +1972,41 @@ describe("Massion server product", () => {
           payload,
         })) as { readonly data: Record<string, unknown> };
 
-      await command(
-        "organization.command",
-        {
+      const organizationCommand = {
+        schemaVersion: "massion.application.v1" as const,
+        commandId: "software-profile-install-command-0001",
+        correlationId: "software-profile-install-correlation-0001",
+        operation: "organization.command",
+        expectedRevision: 1,
+        payload: {
           kind: "install-profile",
           profileId: SOFTWARE_ENGINEERING_TEAM_PROFILE.profileId,
           profileVersion: SOFTWARE_ENGINEERING_TEAM_PROFILE.profileVersion,
           nodes: SOFTWARE_ENGINEERING_TEAM_PROFILE.nodes,
         },
-        1,
-      );
+      };
+      const awaitingOrganization = (await client.command(organizationCommand)) as {
+        readonly outcome: string;
+        readonly data: { readonly approvalId: string };
+      };
+      expect(awaitingOrganization).toMatchObject({
+        outcome: "awaiting-approval",
+        data: { approvalId: expect.any(String) },
+      });
+      await command("approval.vote", {
+        approvalId: awaitingOrganization.data.approvalId,
+        vote: "approve",
+        reason: "Software Engineering 조직 설치를 승인합니다",
+      });
+      await expect(
+        client.command({
+          ...organizationCommand,
+          payload: {
+            ...organizationCommand.payload,
+            governanceApprovalId: awaitingOrganization.data.approvalId,
+          },
+        }),
+      ).resolves.toMatchObject({ outcome: "succeeded", data: { version: 2 } });
       await command("router.provider.register", {
         providerId: "local-openai",
         displayName: "Local OpenAI",
