@@ -173,7 +173,6 @@ DEFINE FIELD sequence ON collaboration_message TYPE int;
 DEFINE FIELD message_type ON collaboration_message TYPE string;
 DEFINE FIELD author_kind ON collaboration_message TYPE string;
 DEFINE FIELD author_id ON collaboration_message TYPE string;
-DEFINE FIELD recipient_agent_id ON collaboration_message TYPE option<string>;
 DEFINE FIELD content ON collaboration_message TYPE string;
 DEFINE FIELD reply_to_message_id ON collaboration_message TYPE option<string>;
 DEFINE FIELD caused_by_message_id ON collaboration_message TYPE option<string>;
@@ -651,5 +650,12 @@ THEN {
     THROW 'Work 자율성 계보는 immutable입니다';
   };
 };
+`,
+);
+
+export const WORK_HANDOFF_RECIPIENT_MIGRATION = defineMigration(
+  "0117-work-handoff-recipient",
+  `
+DEFINE FIELD recipient_agent_id ON collaboration_message TYPE option<string>;
 `,
 );

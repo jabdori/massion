@@ -7,7 +7,11 @@ import { OrganizationGraphService } from "@massion/organization";
 import { applyMigrations, createDatabase, type MassionDatabase } from "@massion/storage";
 
 import { WorkService, type CollaborationMessageType, type CreateWorkResult } from "./work.js";
-import { WORK_ASSURANCE_LINK_MIGRATION } from "./schema.js";
+import {
+  WORK_ASSURANCE_LINK_MIGRATION,
+  WORK_COLLABORATION_MIGRATION,
+  WORK_HANDOFF_RECIPIENT_MIGRATION,
+} from "./schema.js";
 
 const MESSAGE_TYPES: readonly CollaborationMessageType[] = [
   "question",
@@ -21,6 +25,33 @@ const MESSAGE_TYPES: readonly CollaborationMessageType[] = [
   "handoff",
   "status",
 ];
+
+describe("Work collaboration migration upgrade", () => {
+  it("기존 collaboration migration을 유지하고 handoff recipient 필드만 추가한다", async () => {
+    const database = await createDatabase({
+      url: "mem://",
+      namespace: "massion",
+      database: crypto.randomUUID(),
+    });
+
+    try {
+      expect(WORK_COLLABORATION_MIGRATION.id).toBe("0006-work-collaboration");
+      expect(WORK_COLLABORATION_MIGRATION.checksum).toBe(
+        "ca89d2dee193e4b4d8c152213b4e15bac652ffef93d80b68c100c9a433e94ce5",
+      );
+      expect(WORK_COLLABORATION_MIGRATION.surql).not.toContain("recipient_agent_id");
+      expect(WORK_HANDOFF_RECIPIENT_MIGRATION.id).toBe("0117-work-handoff-recipient");
+      await expect(applyMigrations(database, [WORK_COLLABORATION_MIGRATION])).resolves.toEqual([
+        "0006-work-collaboration",
+      ]);
+      await expect(
+        applyMigrations(database, [WORK_COLLABORATION_MIGRATION, WORK_HANDOFF_RECIPIENT_MIGRATION]),
+      ).resolves.toEqual(["0117-work-handoff-recipient"]);
+    } finally {
+      await database.close();
+    }
+  });
+});
 
 describe("Collaboration Room과 resource lease", () => {
   let database: MassionDatabase;
