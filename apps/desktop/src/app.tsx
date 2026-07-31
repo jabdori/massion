@@ -127,6 +127,7 @@ import {
   type ApprovalView,
   type InboxItem,
   type ArtifactView,
+  type EventSemantic,
   type RecordDocumentKind,
   type StepState,
   type TaskView,
@@ -6211,7 +6212,7 @@ function ActivityRow({
         ) : null}
         {value.kind === "artifacts" ? <ArtifactsActivity artifacts={value.artifacts} title={value.title} /> : null}
         {value.kind === "event" ? (
-          <EventActivity detail={value.detail} status={value.status} title={value.title} />
+          <EventActivity detail={value.detail} semantic={value.semantic} status={value.status} title={value.title} />
         ) : null}
       </div>
     </article>
@@ -6233,8 +6234,15 @@ function ActivityMarker({ value }: { value: MarkedActivity }) {
     );
   }
 
-  const icons = { plan: ListChecks, agents: UsersThree, approval: ShieldCheck, artifacts: Briefcase, event: Clock };
-  const Icon = icons[value.kind];
+  const icons = { plan: ListChecks, agents: UsersThree, approval: ShieldCheck, artifacts: Briefcase };
+  const eventIcons: Record<EventSemantic, typeof Clock> = {
+    stage: Clock,
+    task: ListChecks,
+    artifact: Briefcase,
+    verification: ShieldCheck,
+    record: CheckCircle,
+  };
+  const Icon = value.kind === "event" ? eventIcons[value.semantic] : icons[value.kind];
   return (
     <span className="flex size-8 items-center justify-center rounded-[5px] border border-control text-secondary">
       <Icon aria-hidden="true" size={17} />
@@ -6382,17 +6390,27 @@ function ArtifactsActivity({ artifacts, title }: { artifacts: ArtifactView[]; ti
 
 function EventActivity({
   detail,
+  semantic,
   status,
   title,
 }: {
   detail: string | undefined;
+  semantic: EventSemantic;
   status: string | undefined;
   title: string;
 }) {
+  const label: Record<EventSemantic, string> = {
+    stage: "진행 단계",
+    task: "작업",
+    artifact: "산출물",
+    verification: "검증",
+    record: "기록",
+  };
   return (
-    <div className="rounded-md border border-border bg-surface-1 px-4 py-3">
+    <div className="border-l-2 border-control bg-surface-1/60 px-3 py-2.5" data-semantic={semantic}>
+      <p className="mb-0.5 text-[10px] font-semibold tracking-[0.08em] text-muted">{label[semantic]}</p>
       <div className="flex items-center justify-between gap-3">
-        <h3 className="text-sm font-medium">{title}</h3>
+        <h3 className="text-[13px] font-medium text-primary">{title}</h3>
         {status ? <Badge>{status}</Badge> : null}
       </div>
       {detail ? <p className="mt-1 text-xs leading-5 text-muted">{detail}</p> : null}
@@ -6501,7 +6519,8 @@ function Composer({
           <div className="flex items-center gap-1.5 px-2 pb-2">
             <button
               aria-label="파일 첨부"
-              className="rounded-[5px] p-1 text-muted outline-none transition-colors duration-150 hover:text-primary"
+              className="rounded-[5px] p-1 text-muted outline-none transition-colors duration-150 hover:text-primary disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:text-muted"
+              disabled={closed}
               onClick={() => {
                 onAnnouncement("파일 첨부 준비가 되었습니다.");
               }}
@@ -6511,7 +6530,8 @@ function Composer({
             </button>
             <button
               aria-label="에이전트 멘션"
-              className="rounded-[5px] p-1 text-muted outline-none transition-colors duration-150 hover:text-primary"
+              className="rounded-[5px] p-1 text-muted outline-none transition-colors duration-150 hover:text-primary disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:text-muted"
+              disabled={closed}
               onClick={() => {
                 onAnnouncement("멘션할 에이전트를 선택하세요.");
               }}

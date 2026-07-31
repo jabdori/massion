@@ -24,6 +24,8 @@ export interface ArtifactView {
   format: string;
   size: string;
   createdAt: string;
+  /** 표시 시각으로 바꾸기 전 ISO 값. 활동 정렬에만 씁니다. */
+  createdAtIso?: string;
   artifactId?: string;
   artifactVersionId?: string;
   kind?: string;
@@ -109,13 +111,23 @@ export interface OrganizationChangeView {
   lifetime?: string;
 }
 
+export type EventSemantic = "stage" | "task" | "artifact" | "verification" | "record";
+
 export type ActivityView = (
   | { id: string; kind: "message"; time: string; author: string; initials: string; content: string }
   | { id: string; kind: "plan"; time: string; title: string; steps: TaskView[] }
   | { id: string; kind: "agents"; time: string; title: string; agents: AgentView[] }
   | { id: string; kind: "approval"; time: string; approvalId: string; title: string; description: string }
   | { id: string; kind: "artifacts"; time: string; title: string; artifacts: ArtifactView[] }
-  | { id: string; kind: "event"; time: string; title: string; detail: string; status: string }
+  | {
+      id: string;
+      kind: "event";
+      semantic: EventSemantic;
+      time: string;
+      title: string;
+      detail: string;
+      status: string;
+    }
   // 6단계 전환 지점에만 놓는 챕터 구분선. 대화를 접거나 담지 않습니다.
   | { id: string; kind: "chapter"; time: string; stage: string; label: string; until?: string }
   // 발언이 아니므로 아바타를 주지 않고 가운데 한 줄로 둡니다.

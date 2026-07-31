@@ -321,7 +321,11 @@ export function RoomMessage({
   type,
 }: RoomMessageProps) {
   return (
-    <article className={`grid grid-cols-[18px_minmax(0,1fr)] gap-2.5 ${indented ? "pl-[27px]" : ""}`}>
+    <article
+      className={`grid grid-cols-[18px_minmax(0,1fr)] gap-2.5 ${
+        final ? "rounded-[7px] border border-control bg-surface-1 px-3 py-3" : ""
+      } ${indented ? "pl-[27px]" : ""}`}
+    >
       <AgentAvatar speaker={speaker} />
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
@@ -344,9 +348,7 @@ export function RoomMessage({
             {quoted.author} · {quoted.time} — {quoted.content}
           </blockquote>
         ) : null}
-        <p className={`text-[13px] leading-5 text-primary ${final ? "mt-1 border-l-2 border-primary pl-2.5" : ""}`}>
-          {content}
-        </p>
+        <p className={`text-[13px] leading-5 text-primary ${final ? "mt-1.5 font-medium" : ""}`}>{content}</p>
         {evidence ? (
           <p className="mt-1.5 flex flex-wrap items-center gap-2">
             <span

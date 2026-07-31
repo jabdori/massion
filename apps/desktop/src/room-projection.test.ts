@@ -199,6 +199,35 @@ describe("협업방 투영", () => {
     expect(activity.speaker.role).toBe("작업 담당");
   });
 
+  it("동적 Work Agent의 생성용 task key는 사람용 역할 배지에서 숨긴다", () => {
+    const generatedNode: OrganizationNodeView = {
+      id: "node-generated",
+      handle: "staff-generated",
+      name: "Generated Worker",
+      responsibility: "Work task internal-task-key 실행",
+      status: "active",
+      role: "operator",
+      capabilities: ["specialized-analysis"],
+      scope: "work",
+      workId: "work-1",
+    };
+    const [activity] = projectRoomActivities(
+      [
+        message({
+          messageId: "m-generated",
+          sequence: 1,
+          messageType: "evidence",
+          authorId: generatedNode.handle,
+        }),
+      ],
+      [...nodes, generatedNode],
+    );
+
+    if (activity?.kind !== "room") throw new Error("활동이 room이 아닙니다");
+    expect(activity.speaker.role).toBe("전문 작업 실행");
+    expect(activity.speaker.role).not.toContain("internal-task-key");
+  });
+
   it("의미 없는 UUID handle은 사람용 역할로 가린다", () => {
     const handle = "db06753b-4495-44e0-b16b-c17b9081aa0d";
     const activities = projectRoomActivities(

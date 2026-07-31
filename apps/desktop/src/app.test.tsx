@@ -103,7 +103,13 @@ describe("AgentOS 데스크톱", () => {
 
     // 최종 응답은 활동 흐름 안에서 다른 발언과 갈립니다.
     expect(await screen.findByText(/정산 배치 대기였습니다/)).toBeInTheDocument();
-    expect(screen.getByText("최종 응답")).toBeInTheDocument();
+    const finalResponse = screen.getByText("최종 응답").closest("article");
+    expect(finalResponse).toHaveClass("border", "border-control", "bg-surface-1");
+
+    const composer = screen.getByTestId("directive-composer");
+    expect(within(composer).getByRole("button", { name: "파일 첨부" })).toBeDisabled();
+    expect(within(composer).getByRole("button", { name: "에이전트 멘션" })).toBeDisabled();
+    expect(within(composer).getByRole("button", { name: "보내기" })).toBeDisabled();
 
     const inspector = screen.getByRole("complementary", { name: "Work 세부 정보" });
     await user.click(within(inspector).getByRole("tab", { name: "검증" }));

@@ -1077,10 +1077,92 @@ describe("Application desktop service", () => {
           summary: "업무 결과와 검증 기록을 확정했습니다.",
           artifactVersionIds: ["artifact-version-0001"],
           verificationIds: ["verification-0001"],
-          finalizedAt: "2026-07-22T00:25:00.000Z",
+          finalizedAt: "09:25",
         },
       ],
     });
+    expect(work.activities.find((activity) => activity.kind === "approval")).toMatchObject({
+      description: "승인 요청 · 09:00까지",
+    });
+  });
+
+  it("실제 ISO 시각과 활동 종류를 사람이 읽는 Work 표시 모델로 투영한다", async () => {
+    const native = transport({
+      "work.tasks": [
+        {
+          workId: detail.workId,
+          taskId: "task-actual",
+          title: "실제 작업",
+          status: "completed",
+          revision: 2,
+          updatedAt: "2026-07-31T02:25:41.005Z",
+        },
+        {
+          workId: detail.workId,
+          taskId: "task-fixture",
+          title: "표시 시각 작업",
+          status: "completed",
+          revision: 2,
+          updatedAt: "07.24",
+        },
+      ],
+      "work.artifacts": [
+        {
+          artifactId: "artifact-actual",
+          artifactVersionId: "artifact-version-actual",
+          workId: detail.workId,
+          name: "실제 산출물",
+          kind: "task-output",
+          version: 1,
+          mediaType: "text/plain",
+          checksum: "a".repeat(64),
+          createdBy: "staff-actual",
+          createdAt: "2026-07-31T02:25:40.977Z",
+        },
+      ],
+      "work.records": [
+        {
+          recordId: "record-actual",
+          version: 1,
+          summary: "실제 기록",
+          artifactIds: ["artifact-version-actual"],
+          verificationIds: [],
+          finalizedAt: "2026-07-31T02:26:18.579Z",
+        },
+      ],
+      "work.activity.list": {
+        items: [
+          ["stage", "work", "업무가 접수되었습니다"],
+          ["task", "task", "작업이 배정되었습니다"],
+          ["artifact", "artifact", "산출물이 생성되었습니다"],
+          ["verification", "verification", "독립 검증을 완료했습니다"],
+          ["record", "record", "결과 기록을 확정했습니다"],
+        ].map(([activityId, kind, title], index) => ({
+          activityId,
+          workId: detail.workId,
+          kind,
+          title,
+          createdAt: `2026-07-31T02:2${String(index)}:00.000Z`,
+        })),
+      },
+      "work.assignments": [],
+    });
+
+    const work = await createApplicationDesktopService(native).loadWork(detail.workId);
+
+    expect(work.tasks).toMatchObject([{ time: "11:25" }, { time: "07.24" }]);
+    expect(work.artifacts[0]).toMatchObject({
+      createdAt: "11:25",
+      createdAtIso: "2026-07-31T02:25:40.977Z",
+    });
+    expect(work.records[0]).toMatchObject({ finalizedAt: "11:26" });
+    expect(work.activities.flatMap((activity) => (activity.kind === "event" ? [activity.semantic] : []))).toEqual([
+      "stage",
+      "task",
+      "artifact",
+      "verification",
+      "record",
+    ]);
   });
 
   it("완료된 Work의 열린 협업방에서도 마지막 대표 답변을 최종 응답으로 표시한다", async () => {

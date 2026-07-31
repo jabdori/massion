@@ -227,6 +227,7 @@ describe("AgentOS native data flow", () => {
         {
           id: "stage",
           kind: "event",
+          semantic: "stage",
           time: "10:00",
           occurredAt: "2026-07-31T10:00:00.000Z",
           title: "실행 단계",
@@ -244,6 +245,7 @@ describe("AgentOS native data flow", () => {
         {
           id: "verification",
           kind: "event",
+          semantic: "verification",
           time: "10:03",
           occurredAt: "2026-07-31T10:03:00.000Z",
           title: "검증 활동",
@@ -253,6 +255,7 @@ describe("AgentOS native data flow", () => {
         {
           id: "record",
           kind: "event",
+          semantic: "record",
           time: "10:04",
           occurredAt: "2026-07-31T10:04:00.000Z",
           title: "기록 활동",
@@ -394,11 +397,28 @@ describe("AgentOS native data flow", () => {
     const work: WorkView = {
       ...base,
       activities: [
-        { id: "legacy-z", kind: "event", time: "00:01", title: "Legacy Z", detail: "", status: "" },
-        { id: "legacy-a", kind: "event", time: "00:01", title: "Legacy A", detail: "", status: "" },
+        {
+          id: "legacy-z",
+          kind: "event",
+          semantic: "stage",
+          time: "00:01",
+          title: "Legacy Z",
+          detail: "",
+          status: "",
+        },
+        {
+          id: "legacy-a",
+          kind: "event",
+          semantic: "stage",
+          time: "00:01",
+          title: "Legacy A",
+          detail: "",
+          status: "",
+        },
         {
           id: "canonical",
           kind: "event",
+          semantic: "stage",
           time: "23:59",
           occurredAt: "2026-07-31T23:59:00.000Z",
           title: "Canonical",
@@ -435,7 +455,17 @@ describe("AgentOS native data flow", () => {
   it("최초 방 조회 실패는 접근 가능한 오류이고 정상 무방 상태는 Work 활동이다", async () => {
     const work: WorkView = {
       ...(fixtureDataAdapter().works[0] as WorkView),
-      activities: [{ id: "work-only", kind: "event", time: "10:00", title: "Work 전용 활동", detail: "", status: "" }],
+      activities: [
+        {
+          id: "work-only",
+          kind: "event",
+          semantic: "stage",
+          time: "10:00",
+          title: "Work 전용 활동",
+          detail: "",
+          status: "",
+        },
+      ],
     };
     const failed = render(
       <App
@@ -473,7 +503,15 @@ describe("AgentOS native data flow", () => {
     const second: WorkView = {
       ...secondBase,
       activities: [
-        { id: "second-activity", kind: "event", time: "10:00", title: "현재 Work 활동", detail: "", status: "" },
+        {
+          id: "second-activity",
+          kind: "event",
+          semantic: "stage",
+          time: "10:00",
+          title: "현재 Work 활동",
+          detail: "",
+          status: "",
+        },
       ],
     };
     const firstRooms = deferred<RoomView[]>();

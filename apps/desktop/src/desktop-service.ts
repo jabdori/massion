@@ -34,6 +34,7 @@ import {
   type ApprovalView,
   type ArtifactView,
   type DesktopSnapshot,
+  type EventSemantic,
   type RoomBudgetView,
   type RoomView,
   type RecordView,
@@ -3961,6 +3962,7 @@ function roleLabelFor(handle: string, nodes: readonly OrganizationNodeView[]): s
   const node = nodes.find((candidate) => candidate.handle === handle);
   if (!node) return "작업 담당";
   const label = node.responsibility.split(",")[0]?.trim() || node.name;
+  if (node.scope === "work" && /^Work task .+ 실행$/u.test(label)) return "전문 작업 실행";
   return OPAQUE_UUID.test(label) ? "작업 담당" : label;
 }
 
@@ -3992,6 +3994,7 @@ function speakerFor(message: SpeakerSource, nodes: readonly OrganizationNodeView
 }
 
 function clockOf(createdAt: string): string {
+  if (!/^\d{4}-\d{2}-\d{2}T/u.test(createdAt)) return createdAt;
   const parsed = new Date(createdAt);
   return Number.isNaN(parsed.getTime()) ? createdAt : parsed.toTimeString().slice(0, 5);
 }
@@ -4960,7 +4963,7 @@ function projectTask(task: TaskViewV1): TaskView {
     id: task.taskId,
     title: task.title,
     state: projectStepState(task.status),
-    ...(time === undefined ? {} : { time }),
+    ...(time === undefined ? {} : { time: clockOf(time) }),
   };
 }
 
@@ -5048,7 +5051,8 @@ function projectArtifact(artifact: ArtifactViewV1, tasks: readonly TaskView[]): 
     name,
     format: artifactFormat(artifact),
     size: "메타데이터",
-    createdAt: artifact.createdAt,
+    createdAt: clockOf(artifact.createdAt),
+    createdAtIso: artifact.createdAt,
     artifactId: artifact.artifactId,
     artifactVersionId: artifact.artifactVersionId,
     kind: artifact.kind,
@@ -5124,7 +5128,7 @@ function projectRecord(record: WorkRecordViewV1): RecordView {
       internal === null
         ? record.summary
         : `업무 결과와 검증 기록을 확정했습니다.${documentCount === undefined || documentCount === "0" ? "" : ` 문서 ${documentCount}건을 포함합니다.`}`,
-    finalizedAt: record.finalizedAt,
+    finalizedAt: clockOf(record.finalizedAt),
     verificationIds: [...record.verificationIds],
     artifactVersionIds: [...record.artifactIds],
   };
@@ -5147,7 +5151,7 @@ function approvalDescription(approval: ApprovalViewV1): string {
   if (preview?.reason !== undefined) return preview.reason;
   if (preview?.kind === "command") return [preview.executable, ...preview.arguments].join(" ");
   if (preview?.kind === "file-change") return `${preview.path} · ${preview.summary}`;
-  return `${approval.requestedBy} · ${approval.expiresAt} 만료`;
+  return `승인 요청 · ${clockOf(approval.expiresAt)}까지`;
 }
 
 function projectActivities(
@@ -5190,11 +5194,12 @@ function projectActivities(
   }
 
   if (artifacts.length > 0) {
+    const createdAt = artifacts[0]?.createdAtIso ?? artifacts[0]?.createdAt;
     projected.push({
       id: "artifacts:current",
       kind: "artifacts",
-      time: artifacts[0]?.createdAt === undefined ? "" : clockOf(artifacts[0].createdAt),
-      ...(artifacts[0]?.createdAt === undefined ? {} : { occurredAt: artifacts[0].createdAt }),
+      time: artifacts[0]?.createdAt ?? "",
+      ...(createdAt === undefined ? {} : { occurredAt: createdAt }),
       title: "산출물",
       artifacts: [...artifacts],
     });
@@ -5226,6 +5231,7 @@ function projectActivity(
     return {
       id: activity.activityId,
       kind: "event",
+      semantic: eventSemantic(activity.kind),
       time: clockOf(activity.createdAt),
       occurredAt: activity.createdAt,
       title: activity.title,
@@ -5245,6 +5251,14 @@ function projectActivity(
     initials: identity?.initial ?? initials(author),
     content: activity.detail ?? activity.title,
   };
+}
+
+function eventSemantic(kind: WorkActivityViewV1["kind"]): EventSemantic {
+  if (kind === "task" || kind === "assignment") return "task";
+  if (kind === "artifact") return "artifact";
+  if (kind === "verification") return "verification";
+  if (kind === "record") return "record";
+  return "stage";
 }
 
 function requireRun(work: WorkView): RunView {
