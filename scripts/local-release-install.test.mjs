@@ -77,7 +77,6 @@ async function makeBundle(context) {
     massion: "runtime/node_modules/@massion/cli/dist/main.js",
     connector: "runtime/node_modules/@massion/connector/dist/main.js",
     server: "runtime/node_modules/@massion/server/dist/main.js",
-    tui: "runtime/node_modules/@massion/tui/dist/main.js",
   };
   for (const path of Object.values(entrypoints)) {
     const absolute = join(bundle, path);
@@ -103,8 +102,6 @@ async function makeBundle(context) {
     `${JSON.stringify({ schema: "massion.release-bundle.v1", version, entrypoints, nativeRuntime: { surrealdb: surreal } }, undefined, 2)}\n`,
     { mode: 0o600 },
   );
-  await mkdir(join(bundle, "web"), { recursive: true });
-  await writeFile(join(bundle, "web", "index.html"), "<!doctype html>\n", { mode: 0o600 });
   await writeChecksums(bundle);
   return { bundle, prefix, root, surreal };
 }
@@ -128,12 +125,10 @@ test("공백이 있는 개인 경로에 connector를 설치하고 진단한 뒤 
   const release = join(prefix, "lib/massion", version);
   assert.equal(await readFile(join(release, ".massion-install-owner"), "utf8"), `${ownerMarker}\n`);
   assert.equal((await stat(release)).mode & 0o777, 0o700);
-  assert.match(await readFile(join(release, "bin/massion"), "utf8"), /local ensure/u);
   assert.match(
     await readFile(join(release, "bin/massion"), "utf8"),
-    /runtime\/node_modules\/@massion\/cli\/dist\/main\.js" init/u,
+    /exec node "\$release_dir\/runtime\/node_modules\/@massion\/cli\/dist\/main\.js" "\$@"/u,
   );
-  assert.match(await readFile(join(release, "bin/massion"), "utf8"), /status --json.*main\.js" init/su);
   assert.equal((await lstat(join(release, "update.sh"))).isFile(), true);
   assert.match(await readFile(join(release, "bin/massion"), "utf8"), /MASSION_UPDATE_BIN/u);
   for (const command of commands) {
@@ -185,23 +180,6 @@ test("설치기는 native SurrealDB binary를 XDG cache로 복사하고 massion�
   });
   assertSucceeded(launched);
   assert.deepEqual(JSON.parse(launched.stdout), { binary: cached, sha256: surreal.sha256 });
-});
-
-test("설치기는 Bun 1.3 미만이면 파일을 만들기 전에 중단한다", async (context) => {
-  const { bundle, prefix, root } = await makeBundle(context);
-  const tools = join(root, "unsupported bun");
-  await mkdir(tools, { mode: 0o700 });
-  const bun = join(tools, "bun");
-  await writeFile(bun, "#!/bin/sh\nprintf '1.2.99\\n'\n", { mode: 0o700 });
-  await chmod(bun, 0o700);
-
-  const result = runScript(join(bundle, "install.sh"), prefix, {
-    PATH: `${tools}:${process.env.PATH}`,
-  });
-
-  assert.notEqual(result.status, 0);
-  assert.match(result.stderr, /Bun 1\.3 이상이 필요합니다/u);
-  await assert.rejects(async () => await lstat(join(prefix, "lib/massion", version)), { code: "ENOENT" });
 });
 
 test("기존 외부 connector 실행 파일을 덮어쓰지 않고 설치 전 상태를 보존한다", async (context) => {

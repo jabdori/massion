@@ -24,14 +24,12 @@ done
 prefix=${MASSION_PREFIX:-"${HOME:?HOME이 필요합니다}/.local"}
 release_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 current_bundle="$release_dir/release-bundle.json"
-for tool in curl node bun tar; do
+for tool in curl node tar; do
   if ! command -v "$tool" >/dev/null 2>&1; then
     echo "$tool 실행 파일이 필요합니다" >&2
     exit 1
   fi
 done
-bun_version=${MASSION_BUN_VERSION:-$(bun --version)}
-export MASSION_BUN_VERSION="$bun_version"
 if command -v sha256sum >/dev/null 2>&1; then checksum_tool=sha256sum; else checksum_tool=shasum; fi
 
 temporary=$(mktemp -d "${TMPDIR:-/tmp}/massion-upgrade.XXXXXX")
@@ -99,27 +97,18 @@ if (targetParts[0] !== currentParts[0]) throw new Error("주 버전이 달라 �
 const artifact = manifest.artifacts.find((item) => item?.name === `massion-local-${targetVersion}.tar.gz`);
 if (!artifact || typeof artifact.digest !== "string" || !/^sha256:[a-f0-9]{64}$/u.test(artifact.digest)) throw new Error("개인용 아카이브 정보가 없습니다");
 const toolchains = manifest.toolchains;
-if (!toolchains || typeof toolchains.node !== "string" || typeof toolchains.bun !== "string") throw new Error("릴리스 호환성 정보가 없습니다");
+if (!toolchains || typeof toolchains.node !== "string") throw new Error("릴리스 호환성 정보가 없습니다");
 const compatibility = manifest.compatibility ?? {
   platforms: ["darwin-arm64", "darwin-amd64", "linux-arm64", "linux-amd64"],
   node: { minMajor: 24 },
-  bun: { minVersion: "1.3.0" },
 };
 const architecture = process.arch === "x64" ? "amd64" : process.arch;
 const platform = `${process.platform}-${architecture}`;
 if (!compatibility || !Array.isArray(compatibility.platforms) || !compatibility.platforms.includes(platform)) throw new Error(`현재 실행 환경(${platform})과 호환되지 않는 release입니다`);
 const nodeRequiredMajor = Number(compatibility.node?.minMajor);
-const bunRequired = semver(compatibility.bun?.minVersion);
 if (!Number.isSafeInteger(nodeRequiredMajor) || nodeRequiredMajor < 1) throw new Error("릴리스 Node.js 호환성 정보가 유효하지 않습니다");
 const nodeCurrent = semver(process.versions.node);
-const bunCurrent = semver(process.env.MASSION_BUN_VERSION ?? compatibility.bun.minVersion);
-if (
-  nodeCurrent[0] < nodeRequiredMajor ||
-  bunCurrent[0] < bunRequired[0] ||
-  (bunCurrent[0] === bunRequired[0] &&
-    (bunCurrent[1] < bunRequired[1] || (bunCurrent[1] === bunRequired[1] && bunCurrent[2] < bunRequired[2])))
-)
-  throw new Error("현재 Node.js 또는 Bun이 release 호환 범위를 만족하지 않습니다");
+if (nodeCurrent[0] < nodeRequiredMajor) throw new Error("현재 Node.js가 release 호환 범위를 만족하지 않습니다");
 process.stdout.write(`${artifact.name}|${artifact.digest.slice(7)}|${compare(targetVersion, currentVersion)}\n`);
 NODE
 )

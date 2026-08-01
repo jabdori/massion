@@ -57,7 +57,7 @@ Kustomize base의 `massion-config`에도 위 네 연결 장치 값이 들어 있
 
 - `/health/live`: process 생존
 - `/health/ready`: Database·migration 준비 및 non-draining
-- Web: HTTPS root에서 정적 자산 로드
+- Proxy: HTTPS root는 UI를 제공하지 않고 404를 반환
 - API: 인증 없는 `/api/v1/status`는 401
 - Connector: 등록된 장치만 `wss://<domain>/connectors`에 연결되고 미등록·만료·재사용 nonce는 거부
 - container: read-only root filesystem, `cap_drop: ALL`, secret 원문 없는 environment

@@ -169,6 +169,15 @@ describe("ApplicationHttpServer", () => {
     expect(calls).toEqual(["query:system.status", "query:work.list", "command"]);
   });
 
+  it("제거된 Web UI session 경로를 제공하지 않는다", async () => {
+    for (const path of ["sessions", "local-session", "login-tickets", "session"]) {
+      const response = await fetch(`${baseUrl}/api/v1/web/${path}`, {
+        headers: { authorization: "Bearer test-token", accept: "application/json" },
+      });
+      expect(response.status).toBe(404);
+    }
+  });
+
   it("인증 없이 생존·준비 상태를 공개하고 drain 중 일반 traffic을 거부한다", async () => {
     const live = await fetch(`${baseUrl}/health/live`);
     expect(live.status).toBe(200);

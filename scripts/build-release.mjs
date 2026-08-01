@@ -310,12 +310,10 @@ async function main() {
   await removeEscapingDeploySelfReference(resolve(local, "runtime"), "@massion/distribution");
   await assertContainedSymlinks(resolve(local, "runtime"));
   await removeTestArtifacts(resolve(local, "runtime"));
-  await cp(resolve(root, "apps/web/dist"), resolve(local, "web"), { recursive: true });
   const entrypoints = {
     massion: "runtime/node_modules/@massion/cli/dist/main.js",
     connector: "runtime/node_modules/@massion/connector/dist/main.js",
     server: "runtime/node_modules/@massion/server/dist/main.js",
-    tui: "runtime/node_modules/@massion/tui/dist/main.js",
   };
   await verifyRuntimeEntrypoints(local, entrypoints);
   const nativeRuntime = await stageNativeSurrealRuntime(local);
@@ -361,7 +359,6 @@ async function main() {
   await tar(deploy, deployArchive);
   const toolchains = {
     node: process.versions.node,
-    bun: String(run("bun", ["--version"], { cwd: root })).trim(),
     pnpm: String(run("pnpm", ["--version"], { cwd: root })).trim(),
   };
   const manifest = createReleaseManifest({

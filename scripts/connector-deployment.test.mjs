@@ -22,11 +22,10 @@ test("Caddy가 정확한 연결 장치 WebSocket 경로를 API 서버로 전달�
   const caddy = await source("deploy/caddy/Caddyfile");
   const connectorStart = caddy.indexOf("\t@connectors path /connectors\n");
   const backendStart = caddy.indexOf("\t@backend path ");
-  const fallbackStart = caddy.indexOf("\troot * /srv\n");
 
   assert.notEqual(connectorStart, -1, "정확한 /connectors matcher가 필요합니다");
   assert.ok(connectorStart < backendStart, "연결 장치 경로는 일반 API 경로보다 먼저 처리해야 합니다");
-  assert.ok(connectorStart < fallbackStart, "연결 장치 경로가 정적 웹 fallback에 도달하면 안 됩니다");
+  assert.doesNotMatch(caddy, /(?:root \* \/srv|file_server)/u, "삭제된 Web UI 정적 자산을 제공하면 안 됩니다");
 
   const connector = caddy.slice(connectorStart, backendStart);
   assert.match(connector, /handle @connectors/u);

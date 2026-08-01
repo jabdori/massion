@@ -17,7 +17,7 @@
 1. backup과 restore rehearsal을 완료한다.
 2. 새 image digest를 검증해 세 image 환경 변수에 지정한 뒤 pull하거나, 검증한 source에서 build한다.
 3. `docker compose up -d --wait --wait-timeout 120`을 실행한다.
-4. HTTPS readiness, Web/API, 제한 모드, metric과 log를 확인한다.
+4. HTTPS readiness, API·연결 장치, 제한 모드, metric과 log를 확인한다.
 
 실패하면 이전 application/Caddy image로 되돌린다. migration 이후의 data가 이전 application과 호환되지 않으면 기존 DB를 역변형하지 않고, 검증된 backup을 새 clean database에 복구해 이전 image가 그 database를 보도록 바꾼다.
 

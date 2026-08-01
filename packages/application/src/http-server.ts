@@ -1,7 +1,5 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { timingSafeEqual } from "node:crypto";
-import { realpath, readFile, stat } from "node:fs/promises";
-import { extname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
 import type { TenantContext } from "@massion/identity";
 import type { IssueEnrollmentInput, IssuedEnrollment } from "@massion/subscriptions";
@@ -11,7 +9,6 @@ import type { ApplicationEventV1 } from "./contracts.js";
 import { ApplicationError, applicationErrorToHttpStatus } from "./errors.js";
 import { ApplicationEventCursorExpiredError } from "./event-store.js";
 import { encodeApplicationSseEvent, parseEventCursor } from "./sse.js";
-import { WebLoginTicketError, type AuthenticatedWebSession, type ExchangedWebSession } from "./web-session.js";
 
 const JSON_LIMIT = 1024 * 1024;
 const ARTIFACT_LIMIT = 64 * 1024 * 1024;
@@ -208,25 +205,6 @@ export interface ApplicationHttpDependencies {
     readonly authorization: ApplicationBootstrapAuthorization;
     initialize(input: { readonly commandId: string; readonly remoteAddress: string }): Promise<unknown>;
   };
-  readonly webSessions?: {
-    issueLoginTicket(
-      access: AuthenticatedApplicationAccess,
-      input: { readonly commandId: string; readonly ttlSeconds?: number },
-    ): Promise<unknown>;
-    exchangeLoginTicket(code: string): Promise<ExchangedWebSession>;
-    issueLocalSession(
-      access: AuthenticatedApplicationAccess,
-      input: { readonly commandId: string; readonly absoluteTtlSeconds?: number; readonly idleTtlSeconds?: number },
-    ): Promise<ExchangedWebSession>;
-    authenticate(
-      sessionToken: string,
-      audience: string,
-      requiredScopes: readonly string[],
-    ): Promise<AuthenticatedWebSession>;
-    verifyCsrf(sessionToken: string, csrfToken: string): Promise<boolean>;
-    rotateCsrf(sessionToken: string): Promise<string>;
-    revoke(sessionToken: string, csrfToken: string, reason: string): Promise<void>;
-  };
   readonly integrations?: {
     handle(input: {
       readonly method: string;
@@ -256,7 +234,6 @@ export interface ApplicationHttpServerOptions {
   readonly pollMs?: number;
   readonly maxConcurrentRequests?: number;
   readonly maxStreams?: number;
-  readonly webRoot?: string;
 }
 
 function hasScope(scopes: readonly string[], required: string): boolean {
@@ -279,32 +256,10 @@ function header(request: IncomingMessage, name: string): string | undefined {
   return value;
 }
 
-function cookie(request: IncomingMessage, name: string): string | undefined {
-  const source = header(request, "cookie");
-  if (!source) return undefined;
-  const values = source
-    .split(";")
-    .map((part) => part.trim())
-    .filter((part) => part.startsWith(`${name}=`))
-    .map((part) => part.slice(name.length + 1));
-  if (values.length > 1) throw validation(`중복 ${name} cookie는 허용되지 않습니다`);
-  return values[0];
-}
-
 function requestOrigin(request: IncomingMessage, secure: boolean): string | undefined {
   const host = header(request, "host");
   if (!host || !/^(?:\[[0-9a-f:]+\]|[A-Za-z0-9.-]+)(?::[0-9]{1,5})?$/u.test(host)) return undefined;
   return `${secure ? "https" : "http"}://${host}`;
-}
-
-interface HttpAccess extends AuthenticatedApplicationAccess {
-  readonly web?: {
-    readonly sessionId: string;
-    readonly sessionToken: string;
-    readonly issuedAt: string;
-    readonly expiresAt: string;
-    readonly idleExpiresAt: string;
-  };
 }
 
 async function body(request: IncomingMessage, maximum: number): Promise<Buffer> {
@@ -388,12 +343,6 @@ export class ApplicationHttpServer {
   private activeRequests = 0;
   private activeStreams = 0;
   private draining = false;
-  // Frictionless 로컬 진입: CLI가 local-session으로 발급한 세션을 잠깐 보관합니다.
-  // 루프백에서 익명 첫 요청이 오면 이 세션 쿠키를 자동으로 내려주고 비웁니다.
-  // 시스템 브라우저는 CLI가 얻은 세션 쿠키를 직접 주입할 수 없기 때문에,
-  // 로컬 서버가 잠깐 기억하는 bootstrap 역할만 합니다(짧은 TTL, 1회 소비).
-  private pendingLocalSession: { readonly token: string; readonly expiresAt: string } | undefined;
-
   public constructor(
     private readonly dependencies: ApplicationHttpDependencies,
     options: ApplicationHttpServerOptions = {},
@@ -411,8 +360,6 @@ export class ApplicationHttpServer {
       maxConcurrentRequests: options.maxConcurrentRequests ?? 128,
       maxStreams: options.maxStreams ?? 32,
     };
-    if (this.options.webRoot !== undefined && !isAbsolute(this.options.webRoot))
-      throw new Error("Web root는 절대 경로여야 합니다");
     if (!LOOPBACK.has(this.options.host) && (options.trustedProxyAddresses?.length ?? 0) === 0) {
       throw new Error("loopback 밖 bind에는 trusted TLS proxy allowlist가 필요합니다");
     }
@@ -526,22 +473,6 @@ export class ApplicationHttpServer {
       }
       return;
     }
-    // Frictionless 로컬 진입: CLI가 local-session으로 예약한 세션이 있으면
-    // 루프백 첫 GET 요청에 자동으로 쿠키를 내려주고 비웁니다. 시스템 브라우저는
-    // CLI가 얻은 세션 쿠키를 직접 주입할 수 없으므로 로컬 서버가 bootstrap합니다.
-    if (this.pendingLocalSession !== undefined && request.method === "GET") {
-      const secure = !LOOPBACK.has(this.options.host);
-      const cookieName = secure ? "__Host-massion_session" : "massion_session";
-      const existing = header(request, "cookie");
-      const hasSession = existing !== undefined && existing.includes(`${cookieName}=`);
-      const loopback = LOOPBACK.has(request.socket.remoteAddress ?? "");
-      if (!hasSession && loopback) {
-        const pending = this.pendingLocalSession;
-        this.pendingLocalSession = undefined;
-        response.setHeader("set-cookie", this.sessionCookie(pending.token, pending.expiresAt, secure));
-      }
-    }
-    if (await this.webAsset(request, response, url)) return;
     if (this.draining) {
       sendJson(response, 503, { status: "draining" });
       return;
@@ -687,93 +618,12 @@ export class ApplicationHttpServer {
       sendJson(response, 201, { access });
       return;
     }
-    if (url.pathname === "/api/v1/web/sessions") {
-      if (request.method !== "POST") {
-        this.method(response, ["POST"]);
-        return;
-      }
-      this.browserOrigin(request);
-      if (!this.dependencies.webSessions) throw validation("Web session을 사용할 수 없습니다");
-      this.acceptJson(request);
-      const input = (await json(request)) as Record<string, unknown>;
-      if (Object.keys(input).some((key) => key !== "code") || typeof input.code !== "string")
-        throw validation("Web login code가 필요합니다");
-      let exchanged: ExchangedWebSession;
-      try {
-        exchanged = await this.dependencies.webSessions.exchangeLoginTicket(input.code);
-      } catch (cause) {
-        if (!(cause instanceof WebLoginTicketError)) throw cause;
-        throw new ApplicationError({
-          category: "authentication",
-          severity: "error",
-          retryable: false,
-          userMessage: "Web login code가 유효하지 않거나 만료됐습니다",
-          operatorCode: "APP_HTTP_WEB_LOGIN",
-          cause,
-        });
-      }
-      response.setHeader("set-cookie", this.sessionCookie(exchanged.sessionToken, exchanged.expiresAt, secure));
-      response.setHeader("cache-control", "no-store");
-      sendJson(response, 201, {
-        schemaVersion: "massion.web.session.v1",
-        sessionId: exchanged.sessionId,
-        context: exchanged.context,
-        scopes: exchanged.scopes,
-        csrfToken: exchanged.csrfToken,
-        issuedAt: exchanged.issuedAt,
-        expiresAt: exchanged.expiresAt,
-        idleExpiresAt: exchanged.idleExpiresAt,
-      });
-      return;
-    }
-    // Frictionless 로컬 진입: access 토큰 → 세션 쿠키를 티켓(code) 없이 1단계로 발급합니다.
-    // 로컬 loopback(host·remoteAddress 모두 루프백)에서만 허용합니다. 원격/조직 서버는 차단.
-    if (url.pathname === "/api/v1/web/local-session") {
-      if (request.method !== "POST") {
-        this.method(response, ["POST"]);
-        return;
-      }
-      if (!LOOPBACK.has(this.options.host) || !LOOPBACK.has(request.socket.remoteAddress ?? ""))
-        throw new ApplicationError({
-          category: "authorization",
-          severity: "error",
-          retryable: false,
-          userMessage: "로컬 세션 발급은 loopback 경계에서만 사용할 수 있습니다",
-          operatorCode: "APP_HTTP_WEB_LOCAL_ORIGIN",
-        });
-      if (!this.dependencies.webSessions) throw validation("Web session을 사용할 수 없습니다");
-      // 로컬 프로파일 access 토큰(Authorization Bearer)으로 access를 검증합니다.
-      const localAccess = await this.authenticate(request);
-      // browserOrigin은 동기(void) 메서드이므로 await를 뺍니다(다른 호출 지점과 동일).
-      if (!localAccess.web) this.browserOrigin(request);
-      this.acceptJson(request);
-      const input = (await json(request)) as Record<string, unknown>;
-      if (Object.keys(input).some((key) => key !== "commandId") || typeof input.commandId !== "string")
-        throw validation("Local session commandId가 필요합니다");
-      const issued = await this.dependencies.webSessions.issueLocalSession(localAccess, { commandId: input.commandId });
-      // 시스템 브라우저가 CLI 세션을 받을 수 있도록 잠깐 보관합니다. 브라우저 첫 요청에서 소비.
-      this.pendingLocalSession = { token: issued.sessionToken, expiresAt: issued.expiresAt };
-      response.setHeader("set-cookie", this.sessionCookie(issued.sessionToken, issued.expiresAt, secure));
-      response.setHeader("cache-control", "no-store");
-      sendJson(response, 201, {
-        schemaVersion: "massion.web.session.v1",
-        sessionId: issued.sessionId,
-        context: issued.context,
-        scopes: issued.scopes,
-        csrfToken: issued.csrfToken,
-        issuedAt: issued.issuedAt,
-        expiresAt: issued.expiresAt,
-        idleExpiresAt: issued.idleExpiresAt,
-      });
-      return;
-    }
     const access = await this.authenticate(request);
     if (url.pathname === "/api/v1/subscriptions/connectors/enrollments") {
       if (request.method !== "POST") {
         this.method(response, ["POST"]);
         return;
       }
-      if (access.web) await this.browserMutation(request, access);
       if (
         !this.dependencies.connectorEnrollments ||
         !hasScope(access.scopes, "subscription:write") ||
@@ -803,60 +653,6 @@ export class ApplicationHttpServer {
           ...(input.ttlMs === undefined ? {} : { ttlMs: input.ttlMs as number }),
         }),
       );
-      return;
-    }
-    if (url.pathname === "/api/v1/web/login-tickets") {
-      if (request.method !== "POST") {
-        this.method(response, ["POST"]);
-        return;
-      }
-      if (!this.dependencies.webSessions || access.web) throw this.scope();
-      if (!hasScope(access.scopes, "web-session:write") || !["owner", "admin", "member"].includes(access.context.role))
-        throw this.scope();
-      this.acceptJson(request);
-      const input = (await json(request)) as Record<string, unknown>;
-      if (
-        Object.keys(input).some((key) => !["commandId", "ttlSeconds"].includes(key)) ||
-        typeof input.commandId !== "string"
-      )
-        throw validation("Web login ticket input이 유효하지 않습니다");
-      response.setHeader("cache-control", "no-store");
-      sendJson(
-        response,
-        201,
-        await this.dependencies.webSessions.issueLoginTicket(access, {
-          commandId: input.commandId,
-          ...(input.ttlSeconds === undefined ? {} : { ttlSeconds: Number(input.ttlSeconds) }),
-        }),
-      );
-      return;
-    }
-    if (url.pathname === "/api/v1/web/session") {
-      if (!access.web || !this.dependencies.webSessions) throw this.scope();
-      response.setHeader("cache-control", "no-store");
-      if (request.method === "GET") {
-        const csrfToken = await this.dependencies.webSessions.rotateCsrf(access.web.sessionToken);
-        sendJson(response, 200, {
-          schemaVersion: "massion.web.session.v1",
-          sessionId: access.web.sessionId,
-          context: access.context,
-          scopes: access.scopes,
-          csrfToken,
-          issuedAt: access.web.issuedAt,
-          expiresAt: access.web.expiresAt,
-          idleExpiresAt: access.web.idleExpiresAt,
-        });
-        return;
-      }
-      if (request.method === "DELETE") {
-        const csrfToken = await this.browserMutation(request, access);
-        await this.dependencies.webSessions.revoke(access.web.sessionToken, csrfToken, "user-logout");
-        response.setHeader("set-cookie", this.clearSessionCookie(secure));
-        response.writeHead(204);
-        response.end();
-        return;
-      }
-      this.method(response, ["GET", "DELETE"]);
       return;
     }
     if (url.pathname === "/api/v1/executions/stream") {
@@ -923,7 +719,6 @@ export class ApplicationHttpServer {
         this.method(response, ["POST"]);
         return;
       }
-      if (access.web) await this.browserMutation(request, access);
       this.acceptJson(request);
       const result = await this.dependencies.commands.dispatch(access.context, access.scopes, await json(request));
       sendJson(response, result.outcome === "accepted" || result.outcome === "awaiting-approval" ? 202 : 200, result);
@@ -934,7 +729,6 @@ export class ApplicationHttpServer {
         this.method(response, ["POST"]);
         return;
       }
-      if (access.web) await this.browserMutation(request, access);
       this.acceptJson(request);
       if (
         !this.dependencies.tokens ||
@@ -955,7 +749,6 @@ export class ApplicationHttpServer {
         this.method(response, ["DELETE"]);
         return;
       }
-      if (access.web) await this.browserMutation(request, access);
       if (
         !this.dependencies.tokens ||
         !hasScope(access.scopes, "token:write") ||
@@ -974,7 +767,6 @@ export class ApplicationHttpServer {
         this.method(response, ["POST"]);
         return;
       }
-      if (access.web) await this.browserMutation(request, access);
       this.acceptJson(request);
       if (header(request, "content-type") !== "application/octet-stream")
         throw validation("Content-Type application/octet-stream이 필요합니다");
@@ -1004,7 +796,6 @@ export class ApplicationHttpServer {
         this.method(response, ["POST"]);
         return;
       }
-      if (access.web) await this.browserMutation(request, access);
       this.acceptJson(request);
       if (header(request, "content-type") !== "application/vnd.massion.registry-publish.v1")
         throw validation("Registry publish Content-Type이 유효하지 않습니다");
@@ -1046,30 +837,13 @@ export class ApplicationHttpServer {
     });
   }
 
-  private async authenticate(request: IncomingMessage): Promise<HttpAccess> {
+  private async authenticate(request: IncomingMessage): Promise<AuthenticatedApplicationAccess> {
     try {
-      const authorization = header(request, "authorization");
-      if (authorization !== undefined)
-        return await this.dependencies.auth.authenticateAccess(authorization, this.options.audience, []);
-      if (this.dependencies.webSessions) {
-        const secure = !LOOPBACK.has(this.options.host);
-        const cookieName = secure ? "__Host-massion_session" : "massion_session";
-        const sessionToken = cookie(request, cookieName);
-        if (sessionToken) {
-          const access = await this.dependencies.webSessions.authenticate(sessionToken, this.options.audience, []);
-          return {
-            ...access,
-            web: {
-              sessionId: access.sessionId,
-              sessionToken,
-              issuedAt: access.issuedAt,
-              expiresAt: access.expiresAt,
-              idleExpiresAt: access.idleExpiresAt,
-            },
-          };
-        }
-      }
-      return await this.dependencies.auth.authenticateAccess(undefined, this.options.audience, []);
+      return await this.dependencies.auth.authenticateAccess(
+        header(request, "authorization"),
+        this.options.audience,
+        [],
+      );
     } catch (cause) {
       throw new ApplicationError({
         category: "authentication",
@@ -1080,123 +854,6 @@ export class ApplicationHttpServer {
         cause,
       });
     }
-  }
-
-  private async browserMutation(request: IncomingMessage, access: HttpAccess): Promise<string> {
-    if (!access.web || !this.dependencies.webSessions) throw this.scope();
-    this.browserOrigin(request);
-    const csrfToken = header(request, "x-massion-csrf");
-    if (!csrfToken || !(await this.dependencies.webSessions.verifyCsrf(access.web.sessionToken, csrfToken)))
-      throw new ApplicationError({
-        category: "authorization",
-        severity: "error",
-        retryable: false,
-        userMessage: "Web mutation CSRF 검증에 실패했습니다",
-        operatorCode: "APP_HTTP_WEB_CSRF",
-      });
-    return csrfToken;
-  }
-
-  private browserOrigin(request: IncomingMessage): void {
-    const secure = !LOOPBACK.has(this.options.host);
-    if (header(request, "origin") !== requestOrigin(request, secure))
-      throw new ApplicationError({
-        category: "authorization",
-        severity: "error",
-        retryable: false,
-        userMessage: "Web mutation Origin이 일치하지 않습니다",
-        operatorCode: "APP_HTTP_WEB_ORIGIN",
-      });
-    if (header(request, "sec-fetch-site") !== "same-origin")
-      throw new ApplicationError({
-        category: "authorization",
-        severity: "error",
-        retryable: false,
-        userMessage: "Web mutation Fetch Metadata가 유효하지 않습니다",
-        operatorCode: "APP_HTTP_WEB_FETCH_METADATA",
-      });
-  }
-
-  private async webAsset(request: IncomingMessage, response: ServerResponse, url: URL): Promise<boolean> {
-    const root = this.options.webRoot;
-    if (!root || (request.method !== "GET" && request.method !== "HEAD")) return false;
-    if (
-      url.pathname === "/connectors" ||
-      url.pathname.startsWith("/api/") ||
-      url.pathname.startsWith("/health/") ||
-      url.pathname.startsWith("/integrations/")
-    )
-      return false;
-    let decoded: string;
-    try {
-      decoded = decodeURIComponent(url.pathname);
-    } catch {
-      sendJson(response, 404, { error: "Web asset를 찾을 수 없습니다" });
-      return true;
-    }
-    if (decoded.includes("\0")) {
-      sendJson(response, 404, { error: "Web asset를 찾을 수 없습니다" });
-      return true;
-    }
-    const resolvedRoot = await realpath(root).catch(() => undefined);
-    if (!resolvedRoot) return false;
-    const candidate = resolve(resolvedRoot, `.${decoded}`);
-    if (candidate !== resolvedRoot && !candidate.startsWith(`${resolvedRoot}${sep}`)) {
-      sendJson(response, 404, { error: "Web asset를 찾을 수 없습니다" });
-      return true;
-    }
-    let target = candidate;
-    let metadata = await stat(target).catch(() => undefined);
-    if (!metadata?.isFile()) {
-      if (extname(decoded) !== "") {
-        sendJson(response, 404, { error: "Web asset를 찾을 수 없습니다" });
-        return true;
-      }
-      target = join(resolvedRoot, "index.html");
-      metadata = await stat(target).catch(() => undefined);
-    }
-    if (!metadata?.isFile()) return false;
-    const realTarget = await realpath(target).catch(() => undefined);
-    if (!realTarget || (realTarget !== resolvedRoot && !realTarget.startsWith(`${resolvedRoot}${sep}`))) {
-      sendJson(response, 404, { error: "Web asset를 찾을 수 없습니다" });
-      return true;
-    }
-    const content = await readFile(realTarget);
-    const extension = extname(realTarget).toLowerCase();
-    const contentType =
-      extension === ".html"
-        ? "text/html; charset=utf-8"
-        : extension === ".js"
-          ? "text/javascript; charset=utf-8"
-          : extension === ".css"
-            ? "text/css; charset=utf-8"
-            : extension === ".json"
-              ? "application/json; charset=utf-8"
-              : extension === ".svg"
-                ? "image/svg+xml"
-                : extension === ".woff2"
-                  ? "font/woff2"
-                  : "application/octet-stream";
-    response.writeHead(200, {
-      "content-type": contentType,
-      "content-length": content.length,
-      "cache-control":
-        relative(resolvedRoot, realTarget) === "index.html" ? "no-cache" : "public, max-age=31536000, immutable",
-    });
-    if (request.method === "GET") response.end(content);
-    else response.end();
-    return true;
-  }
-
-  private sessionCookie(sessionToken: string, expiresAt: string, secure: boolean): string {
-    const name = secure ? "__Host-massion_session" : "massion_session";
-    const maximumAge = Math.max(0, Math.floor((new Date(expiresAt).getTime() - Date.now()) / 1_000));
-    return `${name}=${sessionToken}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${String(maximumAge)}${secure ? "; Secure" : ""}`;
-  }
-
-  private clearSessionCookie(secure: boolean): string {
-    const name = secure ? "__Host-massion_session" : "massion_session";
-    return `${name}=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0${secure ? "; Secure" : ""}`;
   }
 
   private acceptJson(request: IncomingMessage): void {

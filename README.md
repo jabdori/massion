@@ -40,7 +40,7 @@ Massion은 개인이 자기 기계에서 여러 AI 에이전트를 조직처럼 
 
 ## 개발 실행
 
-저장소 기준 도구는 Node.js 24 이상, Bun 1.3 이상, pnpm 11.13.0, Rust와 Tauri 2입니다.
+저장소 기준 도구는 Node.js 24 이상, pnpm 11.13.0, Rust와 Tauri 2입니다.
 
 ```sh
 corepack enable
@@ -57,7 +57,7 @@ pnpm --filter @massion/desktop test
 pnpm verify
 ```
 
-`pnpm verify:release`는 현재 레거시 CLI·TUI·Web 배포 묶음을 검사합니다. 개인용 데스크톱 릴리스 완료 근거로 사용하지 않습니다.
+`pnpm verify:release`는 기존 headless CLI·서버·연결 장치 설치 묶음을 검사합니다. 개인용 데스크톱 릴리스 완료 근거로 사용하지 않습니다.
 
 ## 현재 문서 정본
 
@@ -74,6 +74,6 @@ pnpm verify
 ## 릴리스 경계
 
 - `apps/desktop`만 첫 개인용 메인 릴리스 표면입니다.
-- `apps/web`과 `apps/tui`는 제거 예정인 레거시 표면이며, 관련 배포·설치·테스트 참조를 끊기 전까지 저장소에 남아 있습니다.
+- 레거시 Web·TUI 표면과 Web session API, 정적 자산 배포, 공개 실행 진입점은 저장소와 제품에서 제거됐습니다.
 - 기존 CLI 설치 스크립트, Compose·Kubernetes 배포는 코드와 역사적 검증 경로로 남아 있지만 개인용 1.0의 설치 경로가 아닙니다.
 - 개발·테스트 작성·실패 분석·패치는 Z.AI GLM Coding Plan `glm-5.2`를 사용합니다. Massion도 개인 사용자가 자기 계정의 키를 자기 로컬 앱에 직접 등록하는 BYOK 방식이며, Massion이 키·계정·할당량을 판매·공유·대여·중계하지 않습니다.

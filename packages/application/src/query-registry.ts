@@ -36,7 +36,6 @@ import type {
 } from "./read-model.js";
 import type { ApplicationRunStore, ApplicationRunView } from "./run-store.js";
 import type { CollaborationGraphSnapshot, CollaborationGraphSnapshotProjector } from "./snapshot.js";
-import type { WebSessionService } from "./web-session.js";
 import { ASSURANCE_VERIFIER_REJECTED, blockedDetailFromResult } from "./blocked-detail.js";
 import type {
   SubscriptionAccountQueries,
@@ -133,7 +132,6 @@ export interface ApplicationQueryDependencies {
     >;
   };
   readonly audit?: Pick<ApplicationEventStore, "read">;
-  readonly webSessions?: Pick<WebSessionService, "list">;
   readonly providers?: Pick<ProviderService, "listProviders" | "listEndpoints" | "listCredentials">;
   readonly router?: Pick<ModelRouter, "listModels" | "listRoutes" | "listCandidates" | "listAttempts" | "readAttempt">;
   readonly status?: (context: TenantContext) => Promise<unknown>;
@@ -1374,15 +1372,6 @@ export function registerApplicationQueries(
           revision: member.revision,
           createdAt: member.createdAt,
         })),
-    });
-  }
-  if (dependencies.webSessions) {
-    registry.register({
-      operation: "application.sessions",
-      requiredScopes: ["identity:read"],
-      allowedRoles: EVERY_ROLE,
-      validate: (value) => object(value, []),
-      handle: async (context) => await dependencies.webSessions?.list(context),
     });
   }
   if (dependencies.audit) {

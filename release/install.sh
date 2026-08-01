@@ -68,21 +68,6 @@ if [ -z "$node_major" ] || [ "$node_major" -lt 24 ]; then
   echo "Node.js 24 이상이 필요합니다" >&2
   exit 1
 fi
-bun_version=$(bun --version 2>/dev/null || true)
-bun_supported=$(node - "$bun_version" <<'NODE'
-const value = process.argv[2]?.trim() ?? "";
-const match = /^v?(\d+)\.(\d+)(?:\.\d+)?(?:[-+][0-9A-Za-z.-]+)?$/u.exec(value);
-if (!match) process.exit(0);
-const major = Number(match[1]);
-const minor = Number(match[2]);
-process.stdout.write(major > 1 || (major === 1 && minor >= 3) ? "true" : "false");
-NODE
-)
-if [ "$bun_supported" != "true" ]; then
-  echo "Bun 1.3 이상이 필요합니다" >&2
-  exit 1
-fi
-
 verify_checksums
 
 native_runtime=$(node - "$source_dir/release-bundle.json" <<'NODE'
@@ -138,8 +123,7 @@ assert_safe_managed_directory "$bin_dir" "실행 파일"
 for entrypoint in \
   "runtime/node_modules/@massion/cli/dist/main.js" \
   "runtime/node_modules/@massion/connector/dist/main.js" \
-  "runtime/node_modules/@massion/server/dist/main.js" \
-  "runtime/node_modules/@massion/tui/dist/main.js"
+  "runtime/node_modules/@massion/server/dist/main.js"
 do
   if [ ! -f "$source_dir/$entrypoint" ] || [ -L "$source_dir/$entrypoint" ]; then
     echo "release runtime 진입점이 없거나 일반 파일이 아닙니다: $entrypoint" >&2
@@ -148,10 +132,6 @@ do
 done
 if [ ! -f "$source_dir/$native_binary_relative" ] || [ -L "$source_dir/$native_binary_relative" ] || [ ! -x "$source_dir/$native_binary_relative" ]; then
   echo "release native SurrealDB binary가 없거나 실행할 수 없습니다: $native_binary_relative" >&2
-  exit 1
-fi
-if [ ! -f "$source_dir/web/index.html" ] || [ -L "$source_dir/web/index.html" ]; then
-  echo "release Web 진입점이 없거나 일반 파일이 아닙니다: web/index.html" >&2
   exit 1
 fi
 if [ ! -f "$source_dir/update.sh" ] || [ -L "$source_dir/update.sh" ]; then
@@ -259,7 +239,6 @@ cp "$source_dir/$native_binary_relative" "$native_cache_binary"
 chmod 700 "$native_cache_binary"
 
 cp -R "$source_dir/runtime" "$staged/runtime"
-cp -R "$source_dir/web" "$staged/web"
 cp "$source_dir/release-bundle.json" "$source_dir/SHA256SUMS" "$source_dir/uninstall.sh" "$source_dir/update.sh" "$staged/"
 printf '%s\n' "$owner_marker" >"$staged/.massion-install-owner"
 mkdir -m 700 "$staged/bin"
@@ -271,10 +250,8 @@ launcher=$0
 if [ -L "$launcher" ]; then launcher=$(readlink "$launcher"); fi
 release_dir=$(CDPATH= cd -- "$(dirname -- "$launcher")/.." && pwd)
 export MASSION_SERVER_BIN="$release_dir/runtime/node_modules/@massion/server/dist/main.js"
-export MASSION_WEB_ROOT="$release_dir/web"
 export MASSION_PREFIX="$(CDPATH= cd -- "$release_dir/../../.." && pwd)"
 export MASSION_UPDATE_BIN="$release_dir/update.sh"
-export MASSION_BUN_VERSION="$(bun --version)"
 native_runtime=$(node - "$release_dir/release-bundle.json" <<'NODE'
 const { readFileSync } = require("node:fs");
 const [path] = process.argv.slice(2);
@@ -293,21 +270,6 @@ native_sha256=$(printf '%s\n' "$native_runtime" | sed -n '2p')
 data_home=${XDG_DATA_HOME:-"$HOME/.local/share"}
 export MASSION_SURREAL_BINARY="$data_home/massion/runtime/surrealdb/3.2.1/$native_platform/surreal"
 export MASSION_SURREAL_SHA256="$native_sha256"
-if [ "$#" -eq 0 ] && [ -t 0 ] && [ -t 1 ]; then
-  config_path="${XDG_CONFIG_HOME:-$HOME/.config}/massion/config.json"
-  case "$(uname -s)" in
-    Darwin) config_path="$HOME/Library/Application Support/Massion/config.json" ;;
-  esac
-  if [ ! -e "$config_path" ]; then
-    node "$release_dir/runtime/node_modules/@massion/cli/dist/main.js" init
-  fi
-  node "$release_dir/runtime/node_modules/@massion/cli/dist/main.js" local ensure --json >/dev/null
-  if [ ! -e "$config_path" ] || ! node "$release_dir/runtime/node_modules/@massion/cli/dist/main.js" status --json >/dev/null 2>&1; then
-    node "$release_dir/runtime/node_modules/@massion/cli/dist/main.js" init
-  fi
-  # @opentui/solid reactivity 셋업을 번들보다 먼저 로드해야 TUI가 첫 화면에 갇히지 않습니다.
-  exec bun --preload "$release_dir/runtime/node_modules/@massion/tui/dist/preload.mjs" "$release_dir/runtime/node_modules/@massion/tui/dist/main.js"
-fi
 exec node "$release_dir/runtime/node_modules/@massion/cli/dist/main.js" "$@"
 EOF
 

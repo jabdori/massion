@@ -1326,19 +1326,6 @@ describe("ApplicationQueryRegistry", () => {
       audit: {
         read: async () => ({ events: [{ type: "work.created", sequence: 1 }], cursor: 1, snapshotRequired: false }),
       } as never,
-      webSessions: {
-        list: async () => [
-          {
-            sessionId: "session-1",
-            status: "active",
-            issuedAt: "2026-07-11T00:00:00.000Z",
-            expiresAt: "2026-07-11T08:00:00.000Z",
-            idleExpiresAt: "2026-07-11T00:30:00.000Z",
-            lastSeenAt: "2026-07-11T00:00:00.000Z",
-            revision: 0,
-          },
-        ],
-      },
     });
 
     const members = await registry.query(context, ["identity:read"], "identity.memberships", {});
@@ -1356,9 +1343,6 @@ describe("ApplicationQueryRegistry", () => {
     });
     await expect(registry.query(context, ["audit:read"], "application.audit", {})).resolves.toMatchObject({
       data: { events: [{ type: "work.created" }], cursor: 1 },
-    });
-    await expect(registry.query(context, ["identity:read"], "application.sessions", {})).resolves.toMatchObject({
-      data: [{ sessionId: "session-1", status: "active" }],
     });
   });
 

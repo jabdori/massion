@@ -52,7 +52,6 @@ test("상위 install.sh가 고정 릴리스 매니페스트와 해시를 검증�
     "runtime/node_modules/@massion/cli/dist/main.js",
     "runtime/node_modules/@massion/connector/dist/main.js",
     "runtime/node_modules/@massion/server/dist/main.js",
-    "runtime/node_modules/@massion/tui/dist/main.js",
   ]) {
     const absolute = join(bundle, path);
     await mkdir(dirname(absolute), { recursive: true });
@@ -78,8 +77,6 @@ test("상위 install.sh가 고정 릴리스 매니페스트와 해시를 검증�
     `${JSON.stringify({ schema: "massion.release-bundle.v1", version: "1.0.0", nativeRuntime: { surrealdb: nativeRuntime } })}\n`,
     { mode: 0o600 },
   );
-  await mkdir(join(bundle, "web"), { recursive: true });
-  await writeFile(join(bundle, "web", "index.html"), "<!doctype html>\n", { mode: 0o600 });
   await checksums(bundle);
   const archive = spawnSync("tar", ["-czf", artifact, "."], { cwd: bundle, encoding: "utf8" });
   assert.equal(archive.status, 0, archive.stderr);

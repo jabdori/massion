@@ -120,7 +120,7 @@ describe("Request와 Work 상태 머신", () => {
   });
 
   it("같은 command는 같은 결과를 반환하고 다른 payload 재사용은 거부한다", async () => {
-    const input = { commandId: crypto.randomUUID(), text: "요청", surface: "web", organizationVersionId: "org-v1" };
+    const input = { commandId: crypto.randomUUID(), text: "요청", surface: "api", organizationVersionId: "org-v1" };
     const first = await service.createWork(context, input);
     const repeated = await service.createWork(context, input);
 
@@ -132,7 +132,7 @@ describe("Request와 Work 상태 머신", () => {
     const created = await service.createWork(context, {
       commandId: crypto.randomUUID(),
       text: "요청",
-      surface: "tui",
+      surface: "desktop",
       organizationVersionId: "org-v1",
     });
 
@@ -273,7 +273,7 @@ describe("Work workspace 바인딩", () => {
     const created = await service.createWork(context, {
       commandId: crypto.randomUUID(),
       text: "일반 요청",
-      surface: "web",
+      surface: "cli",
       organizationVersionId: "organization-version-1",
     });
     expect(created.work.workspace_id).toBeUndefined();

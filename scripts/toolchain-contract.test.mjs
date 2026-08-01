@@ -11,11 +11,10 @@ async function read(relativePath) {
 }
 
 test("pnpm 11 실행 계약은 manifest·workspace·CI·Docker·개발 안내에서 일치한다", async () => {
-  const [manifestText, workspace, dockerfile, caddyDockerfile, ci, release, readme] = await Promise.all([
+  const [manifestText, workspace, dockerfile, ci, release, readme] = await Promise.all([
     read("package.json"),
     read("pnpm-workspace.yaml"),
     read("Dockerfile"),
-    read("deploy/caddy/Dockerfile"),
     read(".github/workflows/ci.yml"),
     read(".github/workflows/release.yml"),
     read("README.md"),
@@ -30,10 +29,8 @@ test("pnpm 11 실행 계약은 manifest·workspace·CI·Docker·개발 안내에
   assert.match(workspace, /^allowBuilds: \{ protobufjs: false \}$/mu);
   assert.doesNotMatch(workspace, /onlyBuiltDependencies/u);
 
-  for (const source of [dockerfile, caddyDockerfile]) {
-    assert.match(source, new RegExp(`pnpm@${PNPM_VERSION}`, "u"));
-    assert.doesNotMatch(source, /pnpm@10\.30\.3/u);
-  }
+  assert.match(dockerfile, new RegExp(`pnpm@${PNPM_VERSION}`, "u"));
+  assert.doesNotMatch(dockerfile, /pnpm@10\.30\.3/u);
   for (const workflow of [ci, release]) {
     assert.match(workflow, new RegExp(`corepack prepare pnpm@${PNPM_VERSION} --activate`, "u"));
     assert.doesNotMatch(workflow, /pnpm@10\.30\.3/u);

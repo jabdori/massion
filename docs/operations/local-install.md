@@ -52,6 +52,6 @@ pnpm --filter @massion/desktop tauri:dev
 
 내부 `LocalDaemonManager.backup()`과 운영 복구 원시는 보존하지만 개인용 데스크톱 UI와 왕복 UAT는 1.0 필수 범위가 아닙니다. 첫 파괴적 schema migration, 버전 간 자동 업그레이드 또는 복구할 가치가 큰 실사용 데이터가 생기기 전에 [백업·복구 Runbook](backup-restore.md)을 다시 승격합니다.
 
-## 6. 레거시 경로
+## 6. 레거시 경로 제거 상태
 
-루트 `install.sh`, `massion` CLI/TUI launcher, `massion --web`, Compose·Kubernetes 문서는 과거 배포 코드입니다. 개인용 데스크톱 1.0이 확정될 때까지 공식 사용자 설치 경로가 아닙니다.
+레거시 Web·TUI 애플리케이션, `massion --web`, 기본 TUI 실행, Web session API와 정적 자산 묶음은 제거됐습니다. 루트 `install.sh`는 명시적 headless CLI·서버·연결 장치 명령만 설치하며, Compose·Kubernetes와 함께 개인용 데스크톱 1.0의 공식 설치 경로가 아닙니다.

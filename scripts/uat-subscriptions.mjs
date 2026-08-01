@@ -58,7 +58,6 @@ const REQUIRED_ENTRYPOINTS = {
   massion: "runtime/node_modules/@massion/cli/dist/main.js",
   connector: "runtime/node_modules/@massion/connector/dist/main.js",
   server: "runtime/node_modules/@massion/server/dist/main.js",
-  tui: "runtime/node_modules/@massion/tui/dist/main.js",
 };
 const DEFAULT_TIMEOUT_MS = 120_000;
 const MAXIMUM_TIMEOUT_MS = 15 * 60_000;
@@ -1306,9 +1305,7 @@ export function validateReleaseBinding(input) {
     !GIT_COMMIT.test(manifest.gitCommit) ||
     !SHA256.test(manifest.sourceDigest) ||
     !manifest.toolchains ||
-    ![manifest.toolchains.node, manifest.toolchains.bun, manifest.toolchains.pnpm].every((value) =>
-      SEMANTIC_VERSION.test(value),
-    ) ||
+    ![manifest.toolchains.node, manifest.toolchains.pnpm].every((value) => SEMANTIC_VERSION.test(value)) ||
     !Array.isArray(manifest.artifacts)
   ) {
     throw new Error("release manifest가 유효하지 않습니다");

@@ -12,7 +12,12 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ApplicationRunStore, type ApplicationRunClock } from "./run-store.js";
-import { APPLICATION_MIGRATIONS, APPLICATION_RUN_MIGRATION } from "./schema.js";
+import {
+  APPLICATION_MIGRATIONS,
+  APPLICATION_RUN_MIGRATION,
+  APPLICATION_WEB_SESSION_MIGRATION,
+  APPLICATION_WEB_SESSION_REVISION_MIGRATION,
+} from "./schema.js";
 
 class MutableRunClock implements ApplicationRunClock {
   public constructor(public now: Date) {}
@@ -90,6 +95,21 @@ describe("ApplicationRunStore", () => {
     expect(APPLICATION_RUN_MIGRATION.checksum).toMatch(/^[a-f0-9]{64}$/u);
     expect(APPLICATION_MIGRATIONS.map((migration) => migration.id)).toContain("0109-application-run-approval-resume");
     expect(APPLICATION_MIGRATIONS.map((migration) => migration.id)).toContain("0118-application-run-event-work");
+  });
+
+  it("제거된 Web session의 적용 완료 schema checksum을 호환성 기록으로 고정한다", () => {
+    expect(APPLICATION_WEB_SESSION_MIGRATION).toMatchObject({
+      id: "0071-application-web-session",
+      checksum: "d9e27c81e8d1ee9ecf691ca951ab657d842d0ae54965541e3aa3caba4cc7f63d",
+    });
+    expect(APPLICATION_WEB_SESSION_MIGRATION.surql).toContain("DEFINE TABLE application_web_session SCHEMAFULL");
+    expect(APPLICATION_WEB_SESSION_REVISION_MIGRATION).toMatchObject({
+      id: "0073-application-web-session-revision",
+      checksum: "f885b9e92252b03b892353bc652aa26f1ba9d7cf25ebb031ed9fcbac4e9828c1",
+    });
+    expect(APPLICATION_WEB_SESSION_REVISION_MIGRATION.surql).toContain(
+      "DEFINE FIELD revision ON application_web_session",
+    );
   });
 
   it("기존 0069 checksum 데이터베이스에 재시도 schema migration을 적용한다", async () => {

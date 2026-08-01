@@ -1,4 +1,4 @@
-import { createHash, createHmac, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 
 import type { ApprovalStore, AutonomyStore, EmergencyControl, PolicyStore } from "@massion/governance";
 import type { IdentityService, OrganizationService, TenantContext } from "@massion/identity";
@@ -40,7 +40,6 @@ import { registerApplicationRegistryOperations, type ApplicationRegistryOperatio
 import { ApplicationRunStore } from "./run-store.js";
 import { AutonomyTransitionCoordinator } from "./autonomy-transition-coordinator.js";
 import { CollaborationGraphSnapshotProjector } from "./snapshot.js";
-import { WebSessionService } from "./web-session.js";
 import { registerWorkDirectiveCommands } from "./work-directive-commands.js";
 import { WorkDirectiveStore } from "./work-directive-store.js";
 
@@ -61,10 +60,7 @@ export interface ApplicationProductDependencies {
     readonly runtimeExecutions: Pick<RuntimeExecutionStore, "listActiveByAutonomy">;
     readonly emergency: Pick<EmergencyControl, "get" | "activate">;
   };
-  readonly queries?: Omit<
-    ApplicationQueryDependencies,
-    "readModel" | "runs" | "snapshot" | "memberships" | "audit" | "webSessions"
-  >;
+  readonly queries?: Omit<ApplicationQueryDependencies, "readModel" | "runs" | "snapshot" | "memberships" | "audit">;
   readonly executionStream?: ExecutionStreamRegistry;
   readonly artifacts?: Pick<ApplicationArtifactGateway, "inspect" | "install" | "update">;
   readonly integrations?: {
@@ -94,7 +90,6 @@ export class ApplicationProduct implements AsyncDisposable {
     public readonly events: ApplicationEventStore,
     public readonly projector: ApplicationEventProjector,
     public readonly metrics: ApplicationMetricStore,
-    public readonly webSessions: WebSessionService,
   ) {}
 
   public static async create(dependencies: ApplicationProductDependencies): Promise<ApplicationProduct> {
@@ -147,22 +142,9 @@ export class ApplicationProduct implements AsyncDisposable {
       key: dependencies.tokenKey.key,
     });
     const metrics = await ApplicationMetricStore.create(dependencies.database, dependencies.organizations);
-    const webSessions = await WebSessionService.create(dependencies.database, dependencies.organizations, tokens, {
-      keyId: `web-${createHash("sha256").update(dependencies.tokenKey.keyId).digest("hex").slice(0, 16)}`,
-      key: createHmac("sha256", dependencies.tokenKey.key).update("massion-web-session-v1").digest(),
-      telemetry: {
-        async record(context, input) {
-          await metrics.recordOnce(context, input.idempotencyKey, {
-            name: "application_request_total",
-            value: 1,
-            dimensions: { operationClass: input.action, result: "succeeded" },
-          });
-        },
-      },
-    });
     const events = await ApplicationEventStore.create(dependencies.database, dependencies.organizations);
     const projector = await ApplicationEventProjector.create(dependencies.database, dependencies.organizations);
-    registerApplicationAccessCommands(commands, { organizations: dependencies.organizations, webSessions });
+    registerApplicationAccessCommands(commands, { organizations: dependencies.organizations });
     registerApplicationQueries(queries, {
       ...dependencies.queries,
       readModel,
@@ -171,7 +153,6 @@ export class ApplicationProduct implements AsyncDisposable {
       memberships: dependencies.organizations,
       ...(dependencies.domain.workspaces === undefined ? {} : { workspaces: dependencies.domain.workspaces }),
       audit: events,
-      webSessions,
     });
     if (dependencies.integrations?.operations)
       registerApplicationIntegrationOperations(commands, queries, dependencies.integrations.operations);
@@ -292,7 +273,6 @@ export class ApplicationProduct implements AsyncDisposable {
                 initialize: bootstrap.initialize.bind(bootstrap),
               },
             }),
-        webSessions,
       },
       dependencies.server,
     );
@@ -307,7 +287,6 @@ export class ApplicationProduct implements AsyncDisposable {
       events,
       projector,
       metrics,
-      webSessions,
     );
     productReference.current = product;
     return product;

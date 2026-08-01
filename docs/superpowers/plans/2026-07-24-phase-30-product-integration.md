@@ -444,7 +444,7 @@ pnpm verify
 pnpm --filter @massion/desktop tauri:build
 ```
 
-Developer ID와 공증 비밀은 CI secret으로만 빌드에 주입합니다. Expected: 모두 exit 0. `pnpm verify:release`는 레거시 CLI·TUI·Web 묶음 검사라 개인용 데스크톱 완료 근거에서 제외합니다. 실패하면 UAT를 시작하지 않습니다.
+Developer ID와 공증 비밀은 CI secret으로만 빌드에 주입합니다. Expected: 모두 exit 0. `pnpm verify:release`는 headless CLI·서버·연결 장치 릴리스 검사라 개인용 데스크톱 완료 근거에서 제외합니다. 실패하면 UAT를 시작하지 않습니다.
 
 - [ ] **Step 3: macOS arm64 배포 신원을 검증합니다.**
 

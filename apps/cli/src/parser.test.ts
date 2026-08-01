@@ -18,17 +18,8 @@ describe("massion CLI parser", () => {
     expect(parseCliArguments(["version"])).toMatchObject({ command: "version" });
   });
 
-  it("최상위 Web Console option을 별도 실행 흐름으로 파싱한다", () => {
-    expect(parseCliArguments(["--web"])).toMatchObject({ command: "web", output: "human" });
-    expect(parseCliArguments(["--web", "--print-url"])).toMatchObject({
-      command: "web",
-      arguments: ["--print-url"],
-    });
-    expect(parseCliArguments(["--web", "--print-session"])).toMatchObject({
-      command: "web",
-      arguments: ["--print-session"],
-    });
-    expect(() => parseCliArguments(["--web", "foo"])).toThrow(/추가 인자/u);
+  it("제거된 Web Console option을 거부한다", () => {
+    expect(() => parseCliArguments(["--web"])).toThrow("지원하지 않는 option");
   });
 
   it.each([

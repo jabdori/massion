@@ -11,8 +11,6 @@ export default tseslint.config(
       "apps/desktop/src-tauri/**",
       "apps/studio/**",
       "apps/cli/**",
-      "apps/web/**",
-      "apps/tui/**",
       ".claude/**",
       ".playwright-mcp/**",
       ".superpowers/**",
@@ -33,10 +31,6 @@ export default tseslint.config(
   },
   {
     files: ["**/*.test.{ts,tsx}"],
-    ...tseslint.configs.disableTypeChecked,
-  },
-  {
-    files: ["apps/web/e2e-actual/server.ts"],
     ...tseslint.configs.disableTypeChecked,
   },
   {

@@ -27,7 +27,7 @@
 
 ## 2. 전체 시스템 지도
 
-Massion은 사용자 요청을 일회성 채팅이 아닌 영속 업무(Work)로 만들고, 조직이 계획·조사·실행·검증·기록·개선을 분담하는 AgentOS입니다. 현재 메인 표면은 데스크톱이며, CLI는 운영 코드, TUI·Web은 제거 예정 레거시 코드입니다. 표면은 같은 Application API와 상태를 사용해야 하지만 데스크톱의 실제 계약 연결은 Phase 30에서 진행 중입니다.
+Massion은 사용자 요청을 일회성 채팅이 아닌 영속 업무(Work)로 만들고, 조직이 계획·조사·실행·검증·기록·개선을 분담하는 AgentOS입니다. 현재 메인 표면은 데스크톱이며 CLI는 headless 운영 코드입니다. 레거시 TUI와 Web Console은 제품·배포·세션 API와 함께 제거됐습니다. 데스크톱의 실제 Application 계약 연결은 Phase 30에서 진행 중입니다.
 
 ```mermaid
 flowchart TB
@@ -42,8 +42,6 @@ flowchart TB
   subgraph Surfaces["사용자 화면·외부 연동"]
     Desktop["Desktop · Tauri<br/>표면 구현 · 실계약 연결 중"]:::implementing
     CLI["CLI · massion<br/>운영용 레거시"]:::planned
-    TUI["TUI · OpenTUI<br/>제거 예정"]:::planned
-    Web["Web Console<br/>제거 예정"]:::planned
     Channels["Slack · Discord · GitHub<br/>구현됨 · Phase 19"]:::implemented
   end
 
@@ -67,12 +65,9 @@ flowchart TB
 
   Person ==> Desktop
   Team ==> CLI
-  Team --> Web
   Team --> Channels
   Desktop ==> API
   CLI ==> API
-  TUI --> API
-  Web --> API
   Channels --> API
   API ==> Coordinator
   Coordinator ==> Office
@@ -92,13 +87,12 @@ flowchart TB
 |---|---|---|---|
 | Desktop | 구현 중 | `apps/desktop` | 표면·fixture 테스트는 존재, 실제 Core·Application 연결과 Tauri UAT 진행 중 |
 | CLI·Application API | 레거시 운영 경로·구현됨 | `apps/cli`, `packages/application` | 명령·조회·인증·이벤트 테스트 |
-| TUI | 제거 예정 레거시 | `apps/tui` | 과거 상태·표현·OpenTUI 렌더러 테스트 |
+| 레거시 TUI·Web Console | 제거됨 | — | 저장소·패키지·배포·세션 API 경계 테스트 |
 | Core Office·Work·Governance | 구현됨 | `packages/organization`, `packages/work`, `packages/governance` | 조직·업무·승인 통합 테스트 |
 | Runtime·Router | 구현됨 | `packages/runtime`, `packages/router` | 모델 생성·실행·라우팅 실패 테스트 |
 | Extension Host | 구현됨 | `packages/extension-host`, `apps/server` | 수명주기·Gateway·Registry 설치기와 Application API 조립, 서버 통합 테스트 |
-| Web Console | 제거 예정 레거시 | `apps/web` | 과거 페이지·상태·사용자 흐름 테스트 |
 | Slack·Discord·GitHub Surface | 구현됨 | `packages/integrations`, `extensions/slack`, `extensions/discord`, `extensions/github` | 공식 통합 계약 테스트 |
-| Registry·Marketplace | 구현됨 | `packages/registry`, `apps/cli`, `apps/web` | 게시·정책·검색·설치 테스트 |
+| Registry·Marketplace | 구현됨 | `packages/registry`, `apps/cli` | 게시·정책·검색·설치 테스트 |
 | SurrealDB 단일 정본 | 구현됨 | `packages/storage` | transaction·schema·migration 테스트 |
 
 ## 3. 제품 구성요소와 패키지 경계
@@ -133,7 +127,7 @@ flowchart LR
   ExtSDK["Extension 계약<br/>@massion/extension-sdk"]:::implemented
   ExtHost["Extension lifecycle·Gateway<br/>서버 조립·Application API 연결됨"]:::implemented
   Application["제품 API 조합<br/>@massion/application<br/>구현됨"]:::implemented
-  Surfaces["Desktop 우선 · CLI 운영 · TUI/Web 레거시"]:::implementing
+  Surfaces["Desktop 우선 · CLI 운영"]:::implementing
   VoltAgent["VoltAgent 실행 엔진<br/>외부"]:::external
   Provider["AI Provider<br/>외부"]:::external
 
@@ -525,7 +519,7 @@ flowchart TB
   Projector["Public event projector<br/>허용 field mapper · payload hash"]:::implemented
   Sequence["조직별 전역 event sequence<br/>cursor · retention floor"]:::implemented
   SSE["SSE·event replay<br/>Last-Event-ID·cursor 재연결"]:::implemented
-  Observer["Desktop · CLI · Connector<br/>TUI/Web 레거시 투영"]:::implementing
+  Observer["Desktop · CLI · Connector"]:::implementing
   DB[("SurrealDB 단일 정본")]:::implemented
 
   subgraph Lineage["Work 결과 계보"]
@@ -703,15 +697,15 @@ flowchart LR
 | Context·Evidence·Engineering·Assurance·Records·Growth | 구현됨 | `packages/context-strategy`, `packages/evidence`, `packages/software-engineering`, `packages/assurance`, `packages/records`, `packages/growth` | 9~14 |
 | Extension SDK·Host | 구현됨 | `packages/extension-sdk`, `packages/extension-host`, `apps/server` | Application API에 Extension Host와 Registry 설치기 조립 |
 | Application API·CLI | 구현됨 | `packages/application`, `apps/cli` | 16 |
-| TUI | 제거 예정 레거시 | `apps/tui` | 17 |
-| Web Console | 제거 예정 레거시 | `apps/web` | 18 |
+| TUI | 제거됨 | — | 17 |
+| Web Console | 제거됨 | — | 18 |
 | Slack·Discord·GitHub 공식 통합 | 구현됨 | `packages/integrations`, `extensions/*` | 19 |
-| Registry·Marketplace | 구현됨 | `packages/registry`, `packages/application`, `apps/cli`, `apps/web` | 20 |
+| Registry·Marketplace | 구현됨 | `packages/registry`, `packages/application`, `apps/cli` | 20 |
 | 자체 호스팅·운영 | 구현됨 | `apps/server`, `compose.yaml`, `deploy/kubernetes`, `docs/operations` | 21 |
 | 보안·성능·복구 강화 | 구현됨 | `apps/server`, `packages/registry`, `scripts/verify-security.mjs`, `scripts/hardening-load.mjs` | 22 |
 | 레거시 배포 묶음 E2E | 코드 존재·공개 릴리스 철회 | `apps/distribution`, `release`, `scripts/build-release.mjs`, `scripts/verify-release.mjs`, `.github/workflows/release.yml` | 23 |
 | 개인용 데스크톱 1.0 릴리스 | 진행 중 | `apps/desktop`, `docs/superpowers/plans/2026-07-24-phase-30-product-integration.md` | 30 |
-| 모델 평가실·역할별 배치 | 구현 중 | `packages/model-optimization`, `packages/router`, `packages/runtime`, `apps/server`, `apps/cli`, `apps/web`, `apps/tui` | 25 |
+| 모델 평가실·역할별 배치 | 구현 중 | `packages/model-optimization`, `packages/router`, `packages/runtime`, `apps/server`, `apps/cli` | 25 |
 
 이 문서의 상태가 현재 코드와 달라지면 실제 검증 근거를 확인한 뒤 그림과 표를 함께 갱신합니다.
 

@@ -260,7 +260,7 @@ test("release manifest·archive·bundle·현재 clean commit이 모두 일치해
       version: "1.0.0",
       gitCommit: commit,
       sourceDigest: `sha256:${"f".repeat(64)}`,
-      toolchains: { node: "24.18.0", bun: "1.3.14", pnpm: "10.30.3" },
+      toolchains: { node: "24.18.0", pnpm: "10.30.3" },
       artifacts: [
         {
           name: "massion-local-1.0.0.tar.gz",
@@ -278,7 +278,6 @@ test("release manifest·archive·bundle·현재 clean commit이 모두 일치해
         massion: "runtime/node_modules/@massion/cli/dist/main.js",
         connector: "runtime/node_modules/@massion/connector/dist/main.js",
         server: "runtime/node_modules/@massion/server/dist/main.js",
-        tui: "runtime/node_modules/@massion/tui/dist/main.js",
       },
     },
     currentCommit: commit,

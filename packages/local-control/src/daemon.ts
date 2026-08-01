@@ -858,9 +858,6 @@ export class LocalDaemonManager {
       MASSION_DATABASE_USER: "massion",
       MASSION_DATABASE_PASSWORD_FILE: this.#paths.databasePassword,
       ...(bootstrapCapabilityFile === undefined ? {} : { MASSION_BOOTSTRAP_CAPABILITY_FILE: bootstrapCapabilityFile }),
-      ...(this.#environment.MASSION_WEB_ROOT === undefined
-        ? {}
-        : { MASSION_WEB_ROOT: this.#environment.MASSION_WEB_ROOT }),
       ...(this.#environment.MASSION_REGISTRY_BUNDLED_EXTENSIONS === undefined
         ? {}
         : { MASSION_REGISTRY_BUNDLED_EXTENSIONS: this.#environment.MASSION_REGISTRY_BUNDLED_EXTENSIONS }),

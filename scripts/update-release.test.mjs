@@ -58,8 +58,6 @@ async function runUpdate(release, baseUrl, version, operation = "--check") {
       MASSION_RELEASE_BASE_URL: baseUrl,
       MASSION_VERSION: version,
       MASSION_PREFIX: join(release, "prefix"),
-      MASSION_BUN_VERSION:
-        process.env.MASSION_BUN_VERSION ?? spawnSync("bun", ["--version"], { encoding: "utf8" }).stdout.trim(),
     },
   });
   let stdout = "";
@@ -78,11 +76,10 @@ function manifest(version, platform = runtimePlatform(), artifactDigest = "c".re
     version,
     gitCommit: "a".repeat(40),
     sourceDigest: `sha256:${"b".repeat(64)}`,
-    toolchains: { node: process.versions.node, bun: "1.3.0", pnpm: "11.13.0" },
+    toolchains: { node: process.versions.node, pnpm: "11.13.0" },
     compatibility: {
       platforms: [platform],
       node: { minMajor: Number(process.versions.node.split(".")[0]) },
-      bun: { minVersion: "1.3.0" },
     },
     artifacts: [{ name: `massion-local-${version}.tar.gz`, bytes: 1, digest: `sha256:${artifactDigest}` }],
   };

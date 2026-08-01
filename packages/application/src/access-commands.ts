@@ -3,11 +3,9 @@ import type { OrganizationService } from "@massion/identity";
 import type { ApplicationCommandRegistry } from "./command-registry.js";
 import type { ApplicationCommandResultV1, ApplicationCommandV1 } from "./contracts.js";
 import { ApplicationError } from "./errors.js";
-import type { WebSessionService } from "./web-session.js";
 
 interface AccessCommandDependencies {
   readonly organizations: Pick<OrganizationService, "updateMembershipRole" | "suspendMembership">;
-  readonly webSessions: Pick<WebSessionService, "revokeById">;
 }
 
 function payload(
@@ -152,41 +150,6 @@ export function registerApplicationAccessCommands(
             role: updated.role,
             status: updated.status,
             revision: updated.revision,
-          },
-        );
-      } catch (error) {
-        return accessError(error, command.correlationId);
-      }
-    },
-  });
-  registry.register({
-    operation: "application.session.revoke",
-    requiredScopes: ["identity:write"],
-    allowedRoles: ["owner", "admin", "member"],
-    recovery: "replay-domain",
-    validate: (value) => {
-      const parsed = payload(value, ["sessionId", "reason"], ["sessionId", "reason"]);
-      return {
-        sessionId: text(parsed.sessionId, "sessionId", 128),
-        reason: text(parsed.reason, "reason"),
-      };
-    },
-    async handle(context, command, value) {
-      try {
-        const revoked = await dependencies.webSessions.revokeById(
-          context,
-          value.sessionId,
-          revision(command),
-          value.reason,
-        );
-        return result(
-          command,
-          { type: "WebSession", id: revoked.sessionId, revision: revoked.revision },
-          {
-            sessionId: revoked.sessionId,
-            status: revoked.status,
-            revision: revoked.revision,
-            revokedAt: revoked.revokedAt,
           },
         );
       } catch (error) {

@@ -22,7 +22,6 @@ import { connectLocalServerSubscription, listLocalSubscriptionLoginProviders } f
 import { resolveTokenReference } from "./token.js";
 import { collectOnboardingAnswers } from "./onboarding.js";
 import { PromptCancelledError } from "./prompt-cancelled.js";
-import { issueDesktopSession, openWebConsole } from "./web-login.js";
 import { collectProviderOnboardingAnswers } from "./provider-onboarding.js";
 
 export async function resolveProviderLoginOnboarding(invocation: CliInvocation): Promise<CliInvocation> {
@@ -122,50 +121,6 @@ async function resolveProfileAccess(profile: {
 export async function runCli(argv = process.argv.slice(2)): Promise<number> {
   try {
     const invocation = parseCliArguments(argv);
-    if (invocation.command === "web") {
-      const store = new CliConfigStore();
-      let config;
-      try {
-        config = await store.load();
-      } catch (error) {
-        if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
-          if (!process.stdin.isTTY || !process.stdout.isTTY)
-            throw new Error("Massion이 아직 초기화되지 않았습니다. 먼저 `massion init`을 실행해 주세요.", {
-              cause: error,
-            });
-          const initialized = await runCli(["init"]);
-          if (initialized !== 0) return initialized;
-          config = await store.load();
-        } else {
-          throw error;
-        }
-      }
-      const profile = config.profiles[config.selectedProfile];
-      if (!profile) throw new Error("선택된 CLI profile이 없습니다. 먼저 massion init을 실행해 주세요");
-      await ensureLocalEndpoint(profile.endpoint, { start: async () => await new LocalDaemonManager().start() });
-      const token = await resolveProfileAccess(profile);
-      // --print-session: 티켓을 서버측에서 교환해 세션 쿠키를 JSON으로 출력합니다.
-      // 데스크톱 shell이 이 쿠키를 webview에 주입하고 콘솔 root를 로드해 로그인 마찰 없이 인증합니다.
-      if (invocation.arguments.includes("--print-session")) {
-        const session = await issueDesktopSession({ endpoint: profile.endpoint, token });
-        process.stdout.write(`${JSON.stringify(session)}\n`);
-        return 0;
-      }
-      // --print-url: 브라우저를 열지 않고 인증된 URL만 출력합니다. 데스크톱 shell이 이 URL을 webview에 로드합니다.
-      const printUrl = invocation.arguments.includes("--print-url");
-      const web = await openWebConsole({
-        endpoint: profile.endpoint,
-        token,
-        ...(printUrl ? { openBrowser: () => Promise.resolve() } : {}),
-      });
-     if (printUrl) {
-       process.stdout.write(`${web.url}\n`);
-     } else {
-        // Frictionless: access 토큰으로 세션을 예약했으므로 브라우저가 콘솔을 열면 자동 인증됩니다.
-        process.stdout.write(`Web Console: ${web.url}\n`);
-     }
-      return 0;
-    }
     if (invocation.command === "version") {
       process.stdout.write("Massion AgentOS 1.0.0\n");
       return 0;

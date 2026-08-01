@@ -21,7 +21,7 @@ export function createReleaseManifest(input) {
   if (!VERSION.test(input.version) || !COMMIT.test(input.gitCommit) || !DIGEST.test(input.sourceDigest))
     throw new Error("release identity가 유효하지 않습니다");
   const toolchains = input.toolchains;
-  if (!toolchains || !VERSION.test(toolchains.node) || !VERSION.test(toolchains.bun) || !VERSION.test(toolchains.pnpm))
+  if (!toolchains || !VERSION.test(toolchains.node) || !VERSION.test(toolchains.pnpm))
     throw new Error("release toolchain이 유효하지 않습니다");
   if (!Array.isArray(input.artifacts) || input.artifacts.length < 1)
     throw new Error("release artifact 목록이 비어 있습니다");
@@ -52,7 +52,6 @@ export function createReleaseManifest(input) {
     compatibility: {
       platforms: [...new Set(platforms)].sort(),
       node: { minMajor: 24 },
-      bun: { minVersion: "1.3.0" },
     },
     artifacts,
   };

@@ -3,7 +3,7 @@ import type { TenantContext } from "@massion/identity";
 import { agentIdentityToken } from "./design-tokens.js";
 
 // Work 계보(도메인 event + 협업 메시지)를 Surface가 공유하는 단일 시간순 셀 목록으로 투영합니다.
-// 셀 union과 표시 토큰이 TUI·Web transcript의 공통 정본입니다.
+// 셀 union과 표시 토큰이 transcript 표시 표면의 공통 정본입니다.
 
 export type WorkTimelineCellKind =
   "user-message" | "agent-message" | "stage" | "task" | "artifact" | "verification" | "record" | "plan" | "activity";

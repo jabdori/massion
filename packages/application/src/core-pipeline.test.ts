@@ -80,7 +80,7 @@ describe("actual Core Work pipeline adapters", () => {
       runId: "pipeline-workspace-run-0001",
       commandId: "pipeline-workspace-run-0001:intake",
       correlationId: "pipeline-workspace-correlation-0001",
-      request: { text: "워크스페이스 바인딩 검증", surface: "tui", workspaceId: "workspace-shop-api" },
+      request: { text: "워크스페이스 바인딩 검증", surface: "desktop", workspaceId: "workspace-shop-api" },
     });
     const workId = (result as { workId: string }).workId;
     const work = await works.getWork(context, workId);

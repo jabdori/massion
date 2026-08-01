@@ -1,5 +1,5 @@
 /**
- * Massion 공통 디자인 토큰 — Web과 TUI가 공유하는 의미 체계
+ * Massion 공통 디자인 토큰 — 제품 화면이 공유하는 의미 체계
  *
  * Guided Workspace 방향: 복잡한 AgentOS를 보여주는 것이 아니라,
  * AgentOS가 사용자를 대신해 일을 정리해주는 제품으로 보이게 합니다.

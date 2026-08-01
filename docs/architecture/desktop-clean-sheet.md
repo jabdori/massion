@@ -8,7 +8,7 @@
 
 ## 결정
 
-Massion 데스크톱은 `apps/web`을 감싸는 래퍼(wrapper)가 아니라 `apps/desktop`이 화면과 수명 주기를 소유하는 독립 AgentOS 앱으로 구현합니다. 기존 Web·Studio·TUI의 화면 코드, 시각 자산, 레이아웃은 재사용하지 않습니다. 이미 검증된 도메인 규칙과 Application API 계약은 재사용합니다.
+Massion 데스크톱은 삭제된 레거시 Web을 감싸는 래퍼(wrapper)가 아니라 `apps/desktop`이 화면과 수명 주기를 소유하는 독립 AgentOS 앱으로 구현합니다. 기존 Web·Studio·TUI의 화면 코드, 시각 자산, 레이아웃은 재사용하지 않습니다. 이미 검증된 도메인 규칙과 Application API 계약은 재사용합니다.
 
 첫 릴리스 대상은 macOS arm64입니다. 앱은 다음 네 부분으로 나눕니다.
 
@@ -36,6 +36,8 @@ flowchart LR
 - `apps/desktop/src-tauri/src/lib.rs`는 `WebviewUrl::External`로 Web Console을 로드하고 인증 쿠키를 `document.cookie`로 주입합니다.
 - `scripts/build-release.mjs`는 `apps/web/dist`를 로컬 릴리스에 복사하고, 배포용 Caddy 이미지도 Web 빌드에 의존합니다.
 - 현재 릴리스 manifest와 구독 UAT는 TUI 산출물을 참조합니다.
+
+2026-08-02 현재 데스크톱은 독립 렌더러와 Node.js 브리지를 소유하며, 위 기준선의 레거시 Web·TUI 디렉터리, 세션 API, 정적 배포와 실행 진입점은 제거됐습니다. 위 목록은 전환 전 기준선의 역사 기록입니다.
 
 이 구조에서는 Work 관제 화면과 데스크톱 프로세스 수명 주기를 바꿀 때마다 Web 인증·원격 URL·native capability 주입을 함께 유지해야 합니다. 새 제품은 Work 활동뿐 아니라 조직 편성, 결정, 성장과 역량 확장을 하나의 AgentOS에서 다뤄야 하므로 화면 자체와 로컬 실행 경계를 같은 제품 단위에서 검증할 수 있어야 합니다. 따라서 기존 화면에 기능을 덧붙이는 방식은 종료하고, 도메인 계약 아래에서만 재사용 경계를 둡니다.
 
@@ -85,19 +87,18 @@ shadcn/ui는 공통 셸과 접근성 상호작용의 소스 공급 방식으로 
 |---|---|---|---|
 | 0. 경계 고정 | 독립성 회귀 검사 추가, 기존 Web 동결 | `node --test scripts/desktop-boundary.test.mjs`가 목표 위반을 정확히 보고 | 없음 |
 | 1. 독립 shell | React/Vite 렌더러와 보안 Tauri 설정 연결 | desktop build·typecheck·component test, CSP·capability 검사 통과 | `apps/desktop/fallback`, 외부 URL·쿠키 주입 코드 |
-| 2. 로컬 연결 | Node.js bridge와 daemon manager 연결 | handshake, query, command, SSE 재연결, 종료 동작 테스트 통과 | `massion --web` 세션을 통한 desktop bootstrap |
+| 2. 로컬 연결 | Node.js bridge와 daemon manager 연결 | handshake, query, command, SSE 재연결, 종료 동작 테스트 통과 | 레거시 Web session bootstrap |
 | 3. Work 세로 흐름 | 생성·선택·검색·필터, 실제 활동, 승인, 산출물, 검증, 후속 지시 연결 | fixture가 아닌 로컬 daemon UAT와 접근성 점검 통과 | desktop 내부 임시 fixture adapter |
 | 4. AgentOS 표면 | 대표·홈, 조직 변경, 결정, 성장, 역량을 실제 도메인 흐름에 연결 | 승인된 제품 목업, 동적 조직·Growth 세로 흐름 통과 | 읽기 전용 조직·자동화·설치 목록 임시 화면 |
 | 5. macOS arm64 릴리스 | stock Node.js와 필요한 runtime을 sidecar/resource로 번들 | 깨끗한 macOS arm64 환경에서 설치·시작·Work 완료·재시작 검증 | 구형 local release의 Web/TUI 진입 경로 |
-| 6. 구형 화면 정리 | release·배포·문서 의존성 제거 | 아래 삭제 gate가 모두 통과 | `apps/web`, `apps/tui`, 사용되지 않는 `apps/studio` |
+| 6. 구형 화면 정리 | release·배포·문서 의존성 제거 | 경계 테스트와 대상 검증 통과 | 레거시 Web·TUI 표면 |
 
-구형 화면 디렉터리는 다음 gate를 모두 통과한 뒤 별도 변경으로 삭제합니다.
+레거시 Web·TUI 삭제는 다음 경계로 완료됐습니다.
 
-- `scripts/build-release.mjs`, 설치 테스트, 구독 UAT, Caddy 배포에서 해당 산출물 참조가 제거되거나 명시적으로 별도 제품으로 이전됩니다.
-- CLI 기본 진입점과 릴리스 manifest가 새 데스크톱 또는 지원되는 headless 흐름만 가리킵니다.
-- 문서와 보안·릴리스 검사가 새 경로를 검증하며 전체 `pnpm verify`가 통과합니다.
-- macOS arm64 설치 UAT의 증거가 남고 rollback 가능한 직전 릴리스가 보존됩니다.
-- 사용자 소유의 untracked 파일인 `apps/studio/driver.mjs`는 자동 정리하지 않습니다. 소유자가 보존·이동·삭제를 결정한 뒤 처리합니다.
+- 릴리스 빌드, 설치 테스트, 구독 UAT와 Caddy는 Web·TUI 산출물을 패키징하지 않습니다.
+- CLI는 `--web`과 기본 TUI 실행을 제공하지 않고, 릴리스 manifest는 지원되는 headless 진입점만 가리킵니다.
+- Web session API와 정적 자산 루트는 Application·서버·로컬 daemon 조립에서 제거됐습니다.
+- 데이터베이스 호환성을 위해 이미 적용된 Web session schema migration 정의는 보존합니다.
 
 ## 구현 완료 체크리스트
 
@@ -110,11 +111,11 @@ shadcn/ui는 공통 셸과 접근성 상호작용의 소스 공급 방식으로 
 - [ ] Growth 제안·채택·효과 비교·되돌리기 세로 흐름 통과
 - [ ] 키보드 이동, focus 표시, 대화상자 label, 명암 대비 점검 통과
 - [ ] 앱 재시작 후 Work 선택·활동 cursor 복구 확인
-- [ ] release artifact의 외부 Web URL·구형 UI 참조 부재 확인
+- [x] release artifact의 외부 Web URL·구형 UI 참조 부재 확인
 
 ## 결과와 제외 범위
 
-이 결정으로 Desktop과 Web의 화면 중복 가능성은 받아들입니다. 대신 데스크톱의 보안 경계, 로컬 프로세스 수명 주기와 조직·Work·성장 운영 UX를 한 배포 단위에서 테스트할 수 있습니다.
+이 결정으로 데스크톱의 보안 경계, 로컬 프로세스 수명 주기와 조직·Work·성장 운영 UX를 한 배포 단위에서 테스트할 수 있습니다. 별도 레거시 Web 화면은 유지하지 않습니다.
 
 관리형 Cloud, Windows/Linux 패키지, 자동 업데이트, mobile layout은 이 결정에 포함하지 않습니다. 실제 요구와 릴리스 기준이 생길 때 별도 ADR로 추가합니다.
 
