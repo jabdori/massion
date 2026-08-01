@@ -68,6 +68,7 @@ THEN {
 
 describe("ApplicationRunStore", () => {
   let database: MassionDatabase;
+  let organizations: OrganizationService;
   let context: TenantContext;
   let clock: MutableRunClock;
   let store: ApplicationRunStore;
@@ -75,7 +76,7 @@ describe("ApplicationRunStore", () => {
   beforeEach(async () => {
     database = await createDatabase({ url: "mem://", namespace: "massion", database: crypto.randomUUID() });
     const identities = await IdentityService.create(database);
-    const organizations = await OrganizationService.create(database);
+    organizations = await OrganizationService.create(database);
     const owner = await identities.registerPersonalUser({ email: "run-store@example.com", displayName: "Run" });
     context = await organizations.resolveTenantContext(owner.user.user_id, owner.organization.organization_id);
     clock = new MutableRunClock(new Date("2026-07-11T06:00:00.000Z"));
@@ -500,6 +501,60 @@ describe("ApplicationRunStore", () => {
       resumeInput: { approvalId: blocked.approvalId },
     });
   });
+
+  it.each(["completed", "failed"] as const)(
+    "%s terminal commit 뒤 release 실패는 같은 status·generation 재호출로 복구한다",
+    async (status) => {
+      let releaseAttempts = 0;
+      const retryStore = await ApplicationRunStore.create(database, organizations, {
+        clock,
+        leaseMs: 30_000,
+        graph: {
+          reconcileTerminalWorkScopedNodes: async () => 0,
+          releaseTerminalWorkScopedNodes: async () => {
+            releaseAttempts += 1;
+            if (releaseAttempts === 1) throw new Error("injected release failure");
+            return undefined;
+          },
+        },
+      });
+      const started = await retryStore.start(context, {
+        commandId: `application-run-terminal-replay-${status}`,
+        correlationId: `application-run-terminal-replay-${status}:correlation`,
+        request: {},
+      });
+      const initial = await retryStore.claim(context, started.runId);
+      if (initial.outcome !== "claimed") throw new Error("terminal replay 초기 lease를 얻지 못했습니다");
+      await retryStore.advance(context, started.runId, initial.leaseGeneration, {
+        stage: "records",
+        workId: `work-terminal-replay-${status}`,
+      });
+      const running = await retryStore.claim(context, started.runId);
+      if (running.outcome !== "claimed") throw new Error("terminal replay 실행 lease를 얻지 못했습니다");
+      const finish = async (target: "completed" | "failed", generation = running.leaseGeneration) =>
+        target === "completed"
+          ? await retryStore.complete(context, started.runId, generation)
+          : await retryStore.fail(context, started.runId, generation, "delivery-failed");
+
+      await expect(finish(status)).rejects.toThrow("injected release failure");
+      await expect(retryStore.get(context, started.runId)).resolves.toMatchObject({
+        status,
+        stage: "terminal",
+        leaseGeneration: running.leaseGeneration,
+      });
+      await expect(finish(status, running.leaseGeneration + 1)).rejects.toThrow("lease generation");
+      await expect(finish(status === "completed" ? "failed" : "completed")).rejects.toThrow("lease generation");
+      expect(releaseAttempts).toBe(1);
+
+      await expect(finish(status)).resolves.toMatchObject({
+        runId: started.runId,
+        status,
+        stage: "terminal",
+        leaseGeneration: running.leaseGeneration,
+      });
+      expect(releaseAttempts).toBe(2);
+    },
+  );
 
   it("승인 결정을 실행 전에 ready와 재개 입력으로 영속하고 기존 시작 복구 후보에 포함한다", async () => {
     const started = await store.start(context, {

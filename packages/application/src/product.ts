@@ -98,7 +98,9 @@ export class ApplicationProduct implements AsyncDisposable {
   ) {}
 
   public static async create(dependencies: ApplicationProductDependencies): Promise<ApplicationProduct> {
-    const runs = await ApplicationRunStore.create(dependencies.database, dependencies.organizations);
+    const runs = await ApplicationRunStore.create(dependencies.database, dependencies.organizations, {
+      graph: dependencies.graph,
+    });
     const directives = await WorkDirectiveStore.create(dependencies.database, dependencies.organizations);
     const coordinator = new CoreWorkCoordinator(runs, dependencies.executors, {}, directives);
     const autonomyTransition = dependencies.autonomyTransition

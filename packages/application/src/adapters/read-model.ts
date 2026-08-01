@@ -656,7 +656,7 @@ export class SurrealApplicationReadModel implements ApplicationReadModel {
     );
     if (!versions[0]) throw new Error("Application snapshot OrganizationVersion을 찾을 수 없습니다");
     const [nodes] = await this.database.query<[OrganizationNodeRecord[]]>(
-      "SELECT node_id, handle, name, responsibility, capabilities, parent_handle, status, role, scope, work_id FROM organization_node WHERE organization_id = $organization_id ORDER BY handle ASC;",
+      "SELECT node_id, handle, name, responsibility, capabilities, parent_handle, status, role, scope, work_id FROM organization_node WHERE organization_id = $organization_id AND (scope != 'work' OR status = 'active') ORDER BY handle ASC;",
       { organization_id: context.organizationId },
     );
     return {

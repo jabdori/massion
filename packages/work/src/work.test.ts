@@ -35,6 +35,35 @@ describe("Request와 Work 상태 머신", () => {
     expect(result.event).toMatchObject({ sequence: 1, event_type: "work_created" });
   });
 
+  it("terminal Work hook은 Work commit 뒤 persisted 상태를 보고 호출한다", async () => {
+    let observedStatus: string | undefined;
+    const lifecycleService = await WorkService.create(database, organizations, {
+      verifyActiveNode: async () => undefined,
+      releaseTerminalWorkScopedNodes: async (_context, workId) => {
+        const [records] = await database.query<[{ readonly status: string }[]]>(
+          "SELECT status FROM work WHERE organization_id = $organization_id AND work_id = $work_id LIMIT 1;",
+          { organization_id: context.organizationId, work_id: workId },
+        );
+        observedStatus = records[0]?.status;
+      },
+    });
+    const created = await lifecycleService.createWork(context, {
+      commandId: "work-terminal-post-commit:create",
+      text: "post-commit lifecycle hook",
+      surface: "test",
+      organizationVersionId: "organization-version-1",
+    });
+
+    await lifecycleService.transition(context, {
+      commandId: "work-terminal-post-commit:cancel",
+      workId: created.work.work_id,
+      expectedRevision: created.work.revision,
+      target: "cancelled",
+    });
+
+    expect(observedStatus).toBe("cancelled");
+  });
+
   it("새 Work는 생성 시점의 자율성 snapshot을 고정하고 replay에서는 유지한다", async () => {
     let snapshot: { readonly mode: "automatic" | "review" | "full-access"; readonly revision: number } = {
       mode: "full-access",

@@ -6,7 +6,6 @@ import {
   type GovernanceGate,
 } from "@massion/governance";
 import { type OrganizationService, type TenantContext } from "@massion/identity";
-import { type OrganizationGraphService } from "@massion/organization";
 import { applyMigrations, type MassionDatabase, type QueryExecutor } from "@massion/storage";
 
 import {
@@ -634,6 +633,11 @@ export interface WorkRecoveryBundle {
   readonly records: WorkRecord[];
 }
 
+interface WorkOrganizationGraph {
+  verifyActiveNode(context: TenantContext, handle: string, executor?: QueryExecutor, workId?: string): Promise<void>;
+  releaseTerminalWorkScopedNodes(context: TenantContext, workId: string): Promise<unknown>;
+}
+
 const ALLOWED_TRANSITIONS: Readonly<Record<WorkStatus, readonly WorkStatus[]>> = {
   draft: ["planned", "cancelled"],
   planned: ["ready", "cancelled"],
@@ -849,7 +853,7 @@ export class WorkService {
   private constructor(
     private readonly database: MassionDatabase,
     private readonly organizations: OrganizationService,
-    private readonly graph?: OrganizationGraphService,
+    private readonly graph?: WorkOrganizationGraph,
     private readonly governance?: Pick<GovernanceGate, "authorize" | "getApprovalStatus">,
     private readonly promptVersions?: PromptVersionResolver,
     private readonly autonomy?: (
@@ -864,7 +868,7 @@ export class WorkService {
   public static async create(
     database: MassionDatabase,
     organizations: OrganizationService,
-    graph?: OrganizationGraphService,
+    graph?: WorkOrganizationGraph,
     governance?: Pick<GovernanceGate, "authorize" | "getApprovalStatus">,
     promptVersions?: PromptVersionResolver,
     autonomy?: (
@@ -1523,7 +1527,7 @@ export class WorkService {
       failed: ["ready", "cancelled"],
       cancelled: [],
     };
-    return await this.mutate(
+    const result = await this.mutate(
       context,
       input,
       "task_state_changed",
@@ -1618,6 +1622,10 @@ export class WorkService {
       },
       executor,
     );
+    if (input.target === "failed" && executor === undefined) {
+      await this.graph?.releaseTerminalWorkScopedNodes(context, input.workId);
+    }
+    return result;
   }
 
   public async listTasks(context: TenantContext, workId: string): Promise<WorkTask[]> {
@@ -2771,7 +2779,7 @@ export class WorkService {
     input: TransitionInput,
     executor?: QueryExecutor,
   ): Promise<WorkCommandResult> {
-    return await this.mutate(
+    const result = await this.mutate(
       context,
       input,
       "work_state_changed",
@@ -2849,6 +2857,10 @@ export class WorkService {
       },
       executor,
     );
+    if (["completed", "failed", "cancelled"].includes(input.target) && executor === undefined) {
+      await this.graph?.releaseTerminalWorkScopedNodes(context, input.workId);
+    }
+    return result;
   }
 
   public async authorizeRunningAction(

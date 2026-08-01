@@ -128,6 +128,21 @@ interface CommandBase {
   readonly governanceEnvironment?: string;
 }
 
+interface LifecycleWork {
+  readonly work_id: string;
+  readonly request_id: string;
+  readonly status: string;
+}
+
+interface LifecycleMembership {
+  readonly user_id: string;
+  readonly created_at: unknown;
+}
+
+interface DatabaseInfo {
+  readonly tables: Readonly<Record<string, string>>;
+}
+
 export interface CreateNodeCommand extends CommandBase {
   readonly kind: "create";
   readonly handle: string;
@@ -298,6 +313,11 @@ function latestVersion(versions: OrganizationVersion[]): OrganizationVersion | u
   );
 }
 
+async function databaseTables(executor: QueryExecutor): Promise<ReadonlySet<string>> {
+  const [info] = await executor.query<[DatabaseInfo]>("INFO FOR DB;");
+  return new Set(Object.keys(info.tables));
+}
+
 function normalizeSnapshot(nodes: readonly StoredOrganizationNode[]): OrganizationNode[] {
   return [...nodes]
     .map((node) => ({ ...node, capabilities: node.capabilities ?? [], created_at: String(node.created_at) }))
@@ -402,6 +422,8 @@ function changedHandles(before: readonly OrganizationNode[], after: readonly Org
 }
 
 export class OrganizationGraphService {
+  private readonly workScopeReleaseQueues = new Map<string, Promise<unknown>>();
+
   private constructor(
     private readonly database: MassionDatabase,
     private readonly organizations: OrganizationService,
@@ -420,6 +442,22 @@ export class OrganizationGraphService {
   private async verify(context: TenantContext, requireOwner = false): Promise<void> {
     if (requireOwner && context.role !== "owner") throw new Error("조직 그래프 변경은 owner만 수행할 수 있습니다");
     await this.organizations.getOrganization(context, context.organizationId);
+  }
+
+  private async serializeWorkScopeRelease<Result>(
+    organizationId: string,
+    operation: () => Promise<Result>,
+  ): Promise<Result> {
+    const previous = this.workScopeReleaseQueues.get(organizationId) ?? Promise.resolve();
+    const current = previous.catch(() => undefined).then(operation);
+    this.workScopeReleaseQueues.set(organizationId, current);
+    try {
+      return await current;
+    } finally {
+      if (this.workScopeReleaseQueues.get(organizationId) === current) {
+        this.workScopeReleaseQueues.delete(organizationId);
+      }
+    }
   }
 
   private async authorizeChange(
@@ -528,6 +566,124 @@ export class OrganizationGraphService {
     if (node.scope === "work" && node.work_id !== workId) {
       throw new Error(`Work 범위 OrganizationNode를 다른 Work에서 사용할 수 없습니다: ${handle}`);
     }
+  }
+
+  /** terminal Work의 임시 노드를 현재 조직에서 해제하고 immutable version에 남깁니다. */
+  public async releaseTerminalWorkScopedNodes(
+    context: TenantContext,
+    workId: string,
+  ): Promise<GraphChangeResult | undefined> {
+    if (!workId.trim()) throw new Error("Work 범위 OrganizationNode 해제에는 Work ID가 필요합니다");
+    return await this.serializeWorkScopeRelease(
+      context.organizationId,
+      async () =>
+        await this.database.transaction(async (transaction): Promise<GraphChangeResult | undefined> => {
+          await this.organizations.verifyTenantContext(context, undefined, transaction);
+          const tables = await databaseTables(transaction);
+          if (!tables.has("work")) return undefined;
+          const [works] = await transaction.query<[LifecycleWork[]]>(
+            "SELECT work_id, request_id, status FROM work WHERE organization_id = $organization_id AND work_id = $work_id LIMIT 1;",
+            { organization_id: context.organizationId, work_id: workId },
+          );
+          const work = works[0];
+          if (!work || !["completed", "failed", "cancelled"].includes(work.status)) return undefined;
+          if (tables.has("application_run")) {
+            const [activeRuns] = await transaction.query<[{ readonly run_id: string }[]]>(
+              "SELECT run_id FROM application_run WHERE organization_id = $organization_id AND work_id = $work_id AND status NOT IN ['completed', 'failed', 'cancelled'] LIMIT 1;",
+              { organization_id: context.organizationId, work_id: workId },
+            );
+            if (activeRuns[0]) return undefined;
+          }
+
+          const before = normalizeSnapshot(await listNodes(transaction, context.organizationId));
+          const releasedHandles = before
+            .filter(
+              (node) => node.scope === "work" && node.work_id === workId && node.status === "active" && !node.builtin,
+            )
+            .map((node) => node.handle)
+            .sort();
+          if (releasedHandles.length === 0) return undefined;
+
+          const released = new Set(releasedHandles);
+          const after = before.map((node) =>
+            released.has(node.handle) ? { ...node, status: "inactive" as const } : node,
+          );
+          validateGraph(after);
+          validateOperationalGraph(after);
+          const versions = await listVersions(transaction, context.organizationId);
+          const current = latestVersion(versions);
+          if (!current) throw new Error("OrganizationVersion을 찾을 수 없습니다");
+          const impact = await this.analyzeImpactWith(transaction, context.organizationId, releasedHandles, after);
+          await this.replaceNodes(transaction, context.organizationId, after);
+          const storedAfter = normalizeSnapshot(await listNodes(transaction, context.organizationId));
+          const version = await this.createVersion(
+            transaction,
+            context,
+            current.version + 1,
+            current.version,
+            `work-scope-release:${workId}:${current.version_id}`,
+            "release-work-scope",
+            canonicalJson({ workId, releasedHandles }),
+            impact,
+            before,
+            storedAfter,
+          );
+          return { nodes: storedAfter, version, impact };
+        }),
+    );
+  }
+
+  /** 시작 시 이전 process가 남긴 terminal Work의 활성 임시 노드를 tenant별로 재조정합니다. */
+  public async reconcileTerminalWorkScopedNodes(): Promise<number> {
+    const tables = await databaseTables(this.database);
+    if (!tables.has("work") || !tables.has("application_run")) return 0;
+    const [nodes] = await this.database.query<[Array<{ readonly organization_id: string; readonly work_id?: string }>]>(
+      "SELECT organization_id, work_id FROM organization_node WHERE scope = 'work' AND status = 'active' AND work_id != NONE;",
+    );
+    const candidates = new Map<string, { readonly organizationId: string; readonly workId: string }>();
+    for (const node of nodes) {
+      if (!node.work_id) continue;
+      candidates.set(`${node.organization_id}:${node.work_id}`, {
+        organizationId: node.organization_id,
+        workId: node.work_id,
+      });
+    }
+    let reconciled = 0;
+    for (const candidate of candidates.values()) {
+      const [works] = await this.database.query<[LifecycleWork[]]>(
+        "SELECT work_id, request_id, status FROM work WHERE organization_id = $organization_id AND work_id = $work_id LIMIT 1;",
+        { organization_id: candidate.organizationId, work_id: candidate.workId },
+      );
+      const work = works[0];
+      if (!work || !["completed", "failed", "cancelled"].includes(work.status)) continue;
+      const [requests] = await this.database.query<[{ readonly requester_user_id: string }[]]>(
+        "SELECT requester_user_id FROM work_request WHERE organization_id = $organization_id AND request_id = $request_id LIMIT 1;",
+        { organization_id: candidate.organizationId, request_id: work.request_id },
+      );
+      const [memberships] = await this.database.query<[LifecycleMembership[]]>(
+        "SELECT user_id, created_at FROM membership WHERE organization_id = $organization_id AND status = 'active' ORDER BY created_at ASC;",
+        { organization_id: candidate.organizationId },
+      );
+      const actorIds = [requests[0]?.requester_user_id, ...memberships.map((membership) => membership.user_id)].filter(
+        (userId): userId is string => userId !== undefined,
+      );
+      let tenant: TenantContext | undefined;
+      for (const userId of new Set(actorIds)) {
+        try {
+          tenant = await this.organizations.resolveTenantContext(userId, candidate.organizationId);
+          break;
+        } catch {
+          // 중단된 requester 대신 같은 tenant의 활성 Membership을 사용합니다.
+        }
+      }
+      if (!tenant) continue;
+      try {
+        if (await this.releaseTerminalWorkScopedNodes(tenant, candidate.workId)) reconciled += 1;
+      } catch {
+        // 한 Work의 손상이나 일시 실패가 다른 tenant의 시작 조정을 막지 않습니다.
+      }
+    }
+    return reconciled;
   }
 
   public async registerReference(

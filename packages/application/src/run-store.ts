@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 
 import type { OrganizationService, TenantContext } from "@massion/identity";
+import type { OrganizationGraphService } from "@massion/organization";
 import { applyMigrations, serializeSurrealDateTime, type MassionDatabase, type QueryExecutor } from "@massion/storage";
 
 import {
@@ -194,6 +195,10 @@ export class ApplicationRunStore {
     private readonly database: MassionDatabase,
     private readonly organizations: OrganizationService,
     private readonly leaseMs: number,
+    private readonly graph?: Pick<
+      OrganizationGraphService,
+      "releaseTerminalWorkScopedNodes" | "reconcileTerminalWorkScopedNodes"
+    >,
     clock?: ApplicationRunClock,
   ) {
     this.clock = clock ?? {
@@ -206,7 +211,14 @@ export class ApplicationRunStore {
   public static async create(
     database: MassionDatabase,
     organizations: OrganizationService,
-    input: { readonly leaseMs?: number; readonly clock?: ApplicationRunClock } = {},
+    input: {
+      readonly leaseMs?: number;
+      readonly clock?: ApplicationRunClock;
+      readonly graph?: Pick<
+        OrganizationGraphService,
+        "releaseTerminalWorkScopedNodes" | "reconcileTerminalWorkScopedNodes"
+      >;
+    } = {},
   ): Promise<ApplicationRunStore> {
     const leaseMs = input.leaseMs ?? 30_000;
     if (!Number.isSafeInteger(leaseMs) || leaseMs < 1_000 || leaseMs > 300_000) {
@@ -218,7 +230,9 @@ export class ApplicationRunStore {
       APPLICATION_RUN_APPROVAL_RESUME_MIGRATION,
       APPLICATION_RUN_EVENT_WORK_MIGRATION,
     ]);
-    return new ApplicationRunStore(database, organizations, leaseMs, input.clock);
+    const store = new ApplicationRunStore(database, organizations, leaseMs, input.graph, input.clock);
+    await input.graph?.reconcileTerminalWorkScopedNodes();
+    return store;
   }
 
   public async start(
@@ -543,7 +557,7 @@ export class ApplicationRunStore {
     converge?: (transaction: QueryExecutor) => Promise<void>,
   ): Promise<ApplicationRunView> {
     await this.organizations.verifyTenantContext(context);
-    return await this.database.transaction(async (transaction) => {
+    const cancelled = await this.database.transaction(async (transaction) => {
       await this.organizations.verifyTenantContext(context, undefined, transaction);
       const record = await this.find(transaction, context.organizationId, runId);
       if (["completed", "failed", "cancelled"].includes(record.status)) return this.view(record);
@@ -558,8 +572,8 @@ export class ApplicationRunStore {
           updated_at: this.clock.now.toISOString(),
         },
       );
-      const cancelled = await this.find(transaction, context.organizationId, runId);
-      if (cancelled.status !== "cancelled" || cancelled.resume_approval_id !== undefined) {
+      const terminal = await this.find(transaction, context.organizationId, runId);
+      if (terminal.status !== "cancelled" || terminal.resume_approval_id !== undefined) {
         throw new Error("Application run 취소 동시성 충돌입니다");
       }
       await this.event(
@@ -572,8 +586,10 @@ export class ApplicationRunStore {
         "cancelled",
         sha256("cancelled"),
       );
-      return this.view(cancelled);
+      return this.view(terminal);
     });
+    if (cancelled.workId) await this.graph?.releaseTerminalWorkScopedNodes(context, cancelled.workId);
+    return cancelled;
   }
 
   public async get(context: TenantContext, runId: string): Promise<ApplicationRunView> {
@@ -731,7 +747,15 @@ export class ApplicationRunStore {
     },
   ): Promise<ApplicationRunView> {
     const resultJson = input.result === undefined ? undefined : canonicalJson(input.result);
-    return await this.transition(context, runId, generation, async (transaction, record) => {
+    const existing = await this.get(context, runId);
+    if (["completed", "failed", "cancelled"].includes(existing.status)) {
+      if (existing.status !== status || existing.stage !== "terminal" || existing.leaseGeneration !== generation) {
+        throw new Error("Application run lease generation이 일치하지 않습니다");
+      }
+      if (existing.workId) await this.graph?.releaseTerminalWorkScopedNodes(context, existing.workId);
+      return existing;
+    }
+    const terminal = await this.transition(context, runId, generation, async (transaction, record) => {
       await input.converge?.(transaction);
       await transaction.query(
         "UPDATE application_run SET status = $status, stage = 'terminal', blocked_reason = $blocked_reason, work_id = $work_id, result_json = $result_json, result_hash = $result_hash, resume_approval_id = NONE, lease_expires_at = NONE, updated_at = <datetime>$updated_at WHERE organization_id = $organization_id AND run_id = $run_id AND status = 'running' AND lease_generation = $generation;",
@@ -762,6 +786,8 @@ export class ApplicationRunStore {
         throw new Error("Application run terminal 전이 동시성 충돌입니다");
       }
     });
+    if (terminal.workId) await this.graph?.releaseTerminalWorkScopedNodes(context, terminal.workId);
+    return terminal;
   }
 
   private async transition(
