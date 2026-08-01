@@ -29,6 +29,7 @@ interface TerminalStabilization {
 
 const SELECTED_WORK_RECONCILE_MS = 1_000;
 const TERMINAL_STABILIZATION_PASSES = 3;
+const PENDING_CREATION_RECONCILE_PASSES = 3;
 
 export function useDesktopController(service: DesktopService) {
   const initialWorks = service.initialSnapshot?.works ?? [];
@@ -92,8 +93,10 @@ export function useDesktopController(service: DesktopService) {
   const queryRef = useRef(deferredQuery);
   const pendingCreationRef = useRef(pendingCreation);
   const durableWorkCandidatesRef = useRef(new Set<string>());
+  const durableRunEventsRef = useRef(new Map<string, unknown>());
   const durableChangedWorkIdsRef = useRef(new Set<string>());
   const durableDetailWorkIdsRef = useRef(new Set<string>());
+  const preserveSelectionOnNextIndexRef = useRef(false);
   const detailRequestRef = useRef(0);
   const detailLoadingOwnerRef = useRef<number | undefined>(undefined);
   const indexRequestRef = useRef(0);
@@ -253,6 +256,89 @@ export function useDesktopController(service: DesktopService) {
     [refreshSelectedWork],
   );
 
+  const selectPendingCreation = useCallback(
+    (candidate: WorkView, creation: PendingCreation, eventType?: string): boolean => {
+      if (pendingCreationRef.current?.runId !== creation.runId || candidate.run?.runId !== creation.runId) return false;
+      detailRequestRef.current += 1;
+      detailLoadingOwnerRef.current = undefined;
+      terminalStabilizationRef.current = undefined;
+      durableWorkCandidatesRef.current.clear();
+      durableRunEventsRef.current.clear();
+      pendingCreationRef.current = undefined;
+      setPendingCreationState(undefined);
+      selectedIdRef.current = candidate.id;
+      setSelectedIdState(candidate.id);
+      workRef.current = candidate;
+      setWork(candidate);
+      setDetailLoading(false);
+      const nextWorks = [candidate, ...worksRef.current.filter((value) => value.id !== candidate.id)];
+      worksRef.current = nextWorks;
+      setWorks(nextWorks);
+      const nextFilter: DesktopFilter = candidate.status === "active" ? "active" : "complete";
+      if (filterRef.current !== nextFilter) {
+        preserveSelectionOnNextIndexRef.current = true;
+        filterRef.current = nextFilter;
+        setFilterState(nextFilter);
+      }
+      setAnnouncement(creationEventMessage(eventType));
+      return true;
+    },
+    [setAnnouncement],
+  );
+
+  const resolvePendingCreation = useCallback(
+    async (index: readonly WorkView[]): Promise<boolean> => {
+      const creation = pendingCreationRef.current;
+      if (!creation) return false;
+      const runEvent = durableRunEventsRef.current.get(creation.runId);
+      const acknowledgedWorkId = runEventWorkId(runEvent);
+      if (acknowledgedWorkId) {
+        try {
+          const candidate = await service.loadWork(acknowledgedWorkId);
+          if (pendingCreationRef.current?.runId !== creation.runId) return true;
+          if (selectPendingCreation(candidate, creation, runEventType(runEvent))) return true;
+        } catch (error) {
+          if (pendingCreationRef.current?.runId !== creation.runId) return true;
+          setAnnouncement(errorMessage(error, "새 Work의 실행 계보를 확인하지 못했습니다."));
+          return false;
+        }
+      }
+      if (creationSettledEvent(runEvent)) {
+        durableRunEventsRef.current.clear();
+        durableWorkCandidatesRef.current.clear();
+        pendingCreationRef.current = undefined;
+        setPendingCreationState(undefined);
+        setAnnouncement(creationEventMessage(runEventType(runEvent)));
+        return true;
+      }
+
+      const candidateIds = new Set(durableWorkCandidatesRef.current);
+      for (const candidate of index) {
+        if (!creation.baselineWorkIds.has(candidate.id) && candidate.run?.runId === creation.runId)
+          candidateIds.add(candidate.id);
+      }
+      for (const candidateId of candidateIds) {
+        if (creation.baselineWorkIds.has(candidateId)) {
+          durableWorkCandidatesRef.current.delete(candidateId);
+          continue;
+        }
+        const indexed = index.find((candidate) => candidate.id === candidateId);
+        if (!indexed) continue;
+        try {
+          const candidate = await service.loadWork(candidateId);
+          if (pendingCreationRef.current?.runId !== creation.runId) return true;
+          if (selectPendingCreation(candidate, creation)) return true;
+          durableWorkCandidatesRef.current.add(candidateId);
+        } catch (error) {
+          if (pendingCreationRef.current?.runId === creation.runId)
+            setAnnouncement(errorMessage(error, "새 Work의 실행 계보를 확인하지 못했습니다."));
+        }
+      }
+      return false;
+    },
+    [selectPendingCreation, service, setAnnouncement],
+  );
+
   const applyIndex = useCallback(
     (next: WorkView[], preserveSelection = false) => {
       const selectedDetail = workRef.current;
@@ -264,6 +350,13 @@ export function useDesktopController(service: DesktopService) {
           ? selectedDetail
           : newest;
       });
+      if (
+        preserveSelection &&
+        selectedDetail &&
+        !merged.some((candidate) => candidate.id === selectedDetail.id) &&
+        (filterRef.current === "active" ? selectedDetail.status === "active" : selectedDetail.status !== "active")
+      )
+        merged.unshift(selectedDetail);
       worksRef.current = merged;
       setWorks(merged);
 
@@ -324,7 +417,8 @@ export function useDesktopController(service: DesktopService) {
         await service.bootstrap();
         if (disposed) return;
         setPhase("ready");
-        await reloadIndex({ surfaceError: !service.initialSnapshot });
+        const next = await reloadIndex({ surfaceError: !service.initialSnapshot });
+        if (next) await resolvePendingCreation(next);
       } catch (error) {
         if (disposed) return;
         setRootError(errorMessage(error, "로컬 AgentOS에 연결하지 못했습니다."));
@@ -340,11 +434,13 @@ export function useDesktopController(service: DesktopService) {
       workLoadFlightsRef.current.clear();
       indexRequestRef.current += 1;
     };
-  }, [reloadIndex, retryVersion, service]);
+  }, [reloadIndex, resolvePendingCreation, retryVersion, service]);
 
   useEffect(() => {
     if (phase !== "ready") return;
-    void reloadIndex();
+    const preserveSelection = preserveSelectionOnNextIndexRef.current;
+    preserveSelectionOnNextIndexRef.current = false;
+    void reloadIndex({ preserveSelection });
   }, [deferredQuery, filter, phase, reloadIndex]);
 
   useEffect(() => {
@@ -417,22 +513,13 @@ export function useDesktopController(service: DesktopService) {
   useEffect(() => {
     if (phase !== "ready") return;
     let disposed = false;
-    const isDisposed = () => disposed;
     let timer: ReturnType<typeof setTimeout> | undefined;
     let stop: (() => Promise<void>) | undefined;
-    void service
-      .subscribeDurable((event) => {
-        if (disposed) return;
-        const candidateWorkId = createdWorkId(event);
-        if (candidateWorkId && (pendingCreationRef.current || commandLocks.current.has("start-work")))
-          durableWorkCandidatesRef.current.add(candidateWorkId);
-        const changedWorkId = eventWorkId(event);
-        if (changedWorkId) durableChangedWorkIdsRef.current.add(changedWorkId);
-        const detailWorkId = detailEventWorkId(event);
-        if (detailWorkId) durableDetailWorkIdsRef.current.add(detailWorkId);
-        if (timer) clearTimeout(timer);
-        timer = setTimeout(() => {
-          timer = undefined;
+    const scheduleReconciliation = (event: unknown, remaining: number) => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => {
+        timer = undefined;
+        if (remaining === PENDING_CREATION_RECONCILE_PASSES) {
           setEventRevision((current) => current + 1);
           const selectedWorkId = selectedIdRef.current;
           if (durableChangedWorkIdsRef.current.has(selectedWorkId))
@@ -440,60 +527,46 @@ export function useDesktopController(service: DesktopService) {
           durableChangedWorkIdsRef.current.clear();
           if (durableDetailWorkIdsRef.current.has(selectedWorkId)) setSelectedId(selectedWorkId);
           durableDetailWorkIdsRef.current.clear();
-          const candidateWorkIds = [...durableWorkCandidatesRef.current];
-          void (async () => {
-            const next = await reloadIndex({ preserveSelection: true });
-            if (disposed || !next) return;
+        }
+        void (async () => {
+          const next = await reloadIndex({ preserveSelection: true });
+          if (disposed || !next) return;
+          if (await resolvePendingCreation(next)) return;
+          const creation = pendingCreationRef.current;
+          if (creation && creationSettledEvent(durableRunEventsRef.current.get(creation.runId))) {
+            if (remaining > 1) scheduleReconciliation(event, remaining - 1);
+            return;
+          }
+          if (!creation && !commandLocks.current.has("start-work")) {
+            durableWorkCandidatesRef.current.clear();
+            durableRunEventsRef.current.clear();
+          }
 
-            const creation = pendingCreationRef.current;
-            if (creation) {
-              for (const candidateId of candidateWorkIds) {
-                if (creation.baselineWorkIds.has(candidateId)) {
-                  durableWorkCandidatesRef.current.delete(candidateId);
-                  continue;
-                }
-                if (!next.some((value) => value.id === candidateId)) continue;
-                try {
-                  const candidate = await service.loadWork(candidateId);
-                  if (isDisposed() || pendingCreationRef.current?.runId !== creation.runId) return;
-                  if (candidate.run?.runId !== creation.runId) {
-                    // Work 생성 이벤트가 실행 원장보다 먼저 도착할 수 있습니다. 다음 durable event에서
-                    // 같은 후보를 다시 확인해야 임시 "생성 중" 행이 영구히 남지 않습니다.
-                    durableWorkCandidatesRef.current.add(candidateId);
-                    continue;
-                  }
-                  detailRequestRef.current += 1;
-                  detailLoadingOwnerRef.current = undefined;
-                  terminalStabilizationRef.current = undefined;
-                  durableWorkCandidatesRef.current.clear();
-                  pendingCreationRef.current = undefined;
-                  setPendingCreationState(undefined);
-                  selectedIdRef.current = candidate.id;
-                  setSelectedIdState(candidate.id);
-                  workRef.current = candidate;
-                  setWork(candidate);
-                  setDetailLoading(false);
-                  setWorks((current) => current.map((value) => (value.id === candidate.id ? candidate : value)));
-                  setAnnouncement("새 Work가 생성되어 선택했습니다.");
-                  return;
-                } catch (error) {
-                  if (!isDisposed()) setAnnouncement(errorMessage(error, "새 Work의 실행 계보를 확인하지 못했습니다."));
-                }
-              }
-            } else if (!commandLocks.current.has("start-work")) {
-              for (const candidateId of candidateWorkIds) durableWorkCandidatesRef.current.delete(candidateId);
-            }
-
-            /*
-             * 여기서 선택을 다시 밀지 않습니다. 스트림 이벤트마다(100ms 디바운스) 이전 Work로
-             * 되돌려서, 사용자가 방금 누른 Work가 간헐적으로 버려졌습니다. 목록 갱신은 아래
-             * setWorks가 이미 합니다 — 선택은 사용자만 바꿉니다.
-             */
-            const value = asRecord(event);
-            if (typeof value?.sequence === "number")
-              setAnnouncement(`업데이트 ${String(value.sequence)}을 반영했습니다.`);
-          })();
-        }, 100);
+          /*
+           * 여기서 선택을 다시 밀지 않습니다. 스트림 이벤트마다(100ms 디바운스) 이전 Work로
+           * 되돌려서, 사용자가 방금 누른 Work가 간헐적으로 버려졌습니다. 목록 갱신은 아래
+           * setWorks가 이미 합니다 — 선택은 사용자만 바꿉니다.
+           */
+          const value = asRecord(event);
+          if (typeof value?.sequence === "number")
+            setAnnouncement(`업데이트 ${String(value.sequence)}을 반영했습니다.`);
+        })();
+      }, 100);
+    };
+    void service
+      .subscribeDurable((event) => {
+        if (disposed) return;
+        const runId = applicationRunEventId(event);
+        if (runId && (pendingCreationRef.current || commandLocks.current.has("start-work")))
+          durableRunEventsRef.current.set(runId, event);
+        const candidateWorkId = createdWorkId(event);
+        if (candidateWorkId && (pendingCreationRef.current || commandLocks.current.has("start-work")))
+          durableWorkCandidatesRef.current.add(candidateWorkId);
+        const changedWorkId = eventWorkId(event);
+        if (changedWorkId) durableChangedWorkIdsRef.current.add(changedWorkId);
+        const detailWorkId = detailEventWorkId(event);
+        if (detailWorkId) durableDetailWorkIdsRef.current.add(detailWorkId);
+        scheduleReconciliation(event, PENDING_CREATION_RECONCILE_PASSES);
       })
       .then(async (cleanup) => {
         if (disposed) await cleanup();
@@ -507,7 +580,7 @@ export function useDesktopController(service: DesktopService) {
       if (timer) clearTimeout(timer);
       if (stop) stopStream(stop);
     };
-  }, [phase, reloadIndex, service, setSelectedId]);
+  }, [phase, reloadIndex, resolvePendingCreation, service, setSelectedId]);
 
   useEffect(() => {
     const executionId = work?.activeExecutionId;
@@ -537,6 +610,7 @@ export function useDesktopController(service: DesktopService) {
   }, [phase, service, work?.activeExecutionId]);
 
   const setFilter = (next: DesktopFilter) => {
+    preserveSelectionOnNextIndexRef.current = false;
     filterRef.current = next;
     setFilterState(next);
   };
@@ -633,22 +707,31 @@ export function useDesktopController(service: DesktopService) {
       ...(newWorkWorkspace === undefined ? {} : { workspaceId: newWorkWorkspace.workspaceId }),
       ...(newWorkWorkspacePaths.length === 0 ? {} : { workspacePaths: newWorkWorkspacePaths }),
     };
+    const baselineWorkIds = new Set(worksRef.current.map((value) => value.id));
     try {
       const result = await service.startWork(input);
+      const ownRunEvent = durableRunEventsRef.current.get(result.runId);
+      durableRunEventsRef.current.clear();
+      if (ownRunEvent) durableRunEventsRef.current.set(result.runId, ownRunEvent);
       const creation: PendingCreation = {
         runId: result.runId,
-        baselineWorkIds: new Set(worksRef.current.map((value) => value.id)),
+        baselineWorkIds,
       };
       pendingCreationRef.current = creation;
       setPendingCreationState(creation);
+      filterRef.current = "active";
+      setFilterState("active");
       setNewWorkOpen(false);
       setNewWorkText("");
       newWorkWorkspaceRef.current = undefined;
       setNewWorkWorkspace(undefined);
       setNewWorkWorkspacePaths([]);
       setAnnouncement("새 Work 실행을 시작했습니다. Work 생성을 기다리고 있습니다.");
-      await reloadIndex();
+      const next = await reloadIndex();
+      if (next) await resolvePendingCreation(next);
     } catch (error) {
+      durableRunEventsRef.current.clear();
+      durableWorkCandidatesRef.current.clear();
       setNewWorkError(errorMessage(error, "새 Work 실행을 시작하지 못했습니다."));
     } finally {
       commandLocks.current.delete("start-work");
@@ -867,6 +950,39 @@ function detailEventWorkId(value: unknown): string | undefined {
   return typeof type === "string" && (type.startsWith("work.") || type.startsWith("run."))
     ? eventWorkId(value)
     : undefined;
+}
+
+function applicationRunEventId(value: unknown): string | undefined {
+  const event = asRecord(value);
+  if (typeof event?.type !== "string" || !event.type.startsWith("run.")) return undefined;
+  const resource = asRecord(event.resource);
+  return resource?.type === "ApplicationRun" && typeof resource.id === "string" ? resource.id : undefined;
+}
+
+function runEventType(value: unknown): string | undefined {
+  const type = asRecord(value)?.type;
+  return typeof type === "string" ? type : undefined;
+}
+
+function runEventWorkId(value: unknown): string | undefined {
+  if (!applicationRunEventId(value)) return undefined;
+  const payload = asRecord(asRecord(value)?.payload);
+  return typeof payload?.workId === "string" ? payload.workId : undefined;
+}
+
+function creationSettledEvent(value: unknown): boolean {
+  return ["run.blocked", "run.suspended", "run.completed", "run.failed", "run.cancelled"].includes(
+    runEventType(value) ?? "",
+  );
+}
+
+function creationEventMessage(type: string | undefined): string {
+  if (type === "run.blocked") return "새 Work가 차단되었습니다.";
+  if (type === "run.suspended") return "새 Work가 승인을 기다리고 있습니다.";
+  if (type === "run.failed") return "새 Work 실행에 실패했습니다.";
+  if (type === "run.cancelled") return "새 Work 실행이 취소되었습니다.";
+  if (type === "run.completed") return "새 Work가 완료되어 선택했습니다.";
+  return "새 Work가 생성되어 선택했습니다.";
 }
 
 function executionMessage(value: unknown, executionId: string): string | undefined {

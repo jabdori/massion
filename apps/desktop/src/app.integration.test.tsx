@@ -2502,7 +2502,7 @@ describe("AgentOS native data flow", () => {
     await user.click(within(dialog).getByRole("button", { name: "실행 시작" }));
 
     expect(await screen.findByText("Work 생성 중")).toBeInTheDocument();
-    expect(screen.getByText("run-created-0001")).toBeInTheDocument();
+    expect(screen.getByRole("status", { name: "Work 생성 중" })).toBeInTheDocument();
     expect(startWork).toHaveBeenCalledWith({
       text: "파트너 계약 위험을 검토해줘",
       workspaceId: "workspace-0001",
@@ -2512,6 +2512,586 @@ describe("AgentOS native data flow", () => {
     createdVisible = true;
     durable?.({ sequence: 12, type: "work.created", resource: { type: "Work", id: created.id } });
     expect(await screen.findByRole("main", { name: created.title }, { timeout: 2_000 })).toBeInTheDocument();
+  });
+
+  it("완료 목록에서 생성한 Work를 진행 중 목록으로 전환해 선택하고 실행 식별자를 숨긴다", async () => {
+    const user = userEvent.setup();
+    const snapshot = fixtureDataAdapter();
+    const active = snapshot.works.find((candidate) => candidate.status === "active") as WorkView;
+    const completed = snapshot.works.find((candidate) => candidate.status === "complete") as WorkView;
+    const created: WorkView = {
+      ...active,
+      id: "work-created-from-complete-0001",
+      title: "완료 목록에서 시작한 새 Work",
+      run: {
+        runId: "26cd20b6-c6f9-40cd-9c36-82bd22f7f529",
+        status: "running",
+        stage: "delivery",
+        leaseGeneration: 1,
+      },
+    };
+    let durable: ((event: unknown) => void) | undefined;
+    let createdVisible = false;
+    render(
+      <App
+        service={service({
+          initialSnapshot: { works: [active] },
+          startWork: async () => ({ runId: created.run?.runId ?? "" }),
+          loadIndex: async ({ filter }) =>
+            filter === "complete" ? [completed] : createdVisible ? [created, active] : [active],
+          loadWork: async (workId) => {
+            if (workId === created.id) return created;
+            if (workId === completed.id) return completed;
+            return active;
+          },
+          subscribeDurable: async (handler) => {
+            durable = handler;
+            return async () => undefined;
+          },
+        })}
+      />,
+    );
+
+    await user.click(screen.getByRole("tab", { name: "완료" }));
+    expect(await screen.findByRole("main", { name: completed.title })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "새 Work 만들기" }));
+    await user.type(screen.getByRole("textbox", { name: "업무 요청" }), "새 완료 보고서를 만들어줘");
+    await user.click(screen.getByRole("button", { name: "실행 시작" }));
+
+    expect(screen.getByRole("tab", { name: "진행 중" })).toHaveAttribute("aria-selected", "true");
+    expect(await screen.findByRole("status", { name: "Work 생성 중" })).toBeInTheDocument();
+    expect(document.body.innerHTML).not.toContain(created.run?.runId);
+
+    createdVisible = true;
+    durable?.({ sequence: 61, type: "work.created", resource: { type: "Work", id: created.id } });
+
+    expect(await screen.findByRole("main", { name: created.title }, { timeout: 2_000 })).toBeInTheDocument();
+    expect(screen.queryByRole("status", { name: "Work 생성 중" })).not.toBeInTheDocument();
+  });
+
+  it("생성 대기 중인 실행의 종료 이벤트를 받으면 임시 행을 제거한다", async () => {
+    const user = userEvent.setup();
+    const active = fixtureDataAdapter().works.find((candidate) => candidate.status === "active") as WorkView;
+    const runId = "26cd20b6-c6f9-40cd-9c36-82bd22f7f529";
+    let durable: ((event: unknown) => void) | undefined;
+    render(
+      <App
+        service={service({
+          initialSnapshot: { works: [active] },
+          startWork: async () => ({ runId }),
+          loadIndex: async () => [active],
+          loadWork: async () => active,
+          subscribeDurable: async (handler) => {
+            durable = handler;
+            return async () => undefined;
+          },
+        })}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "새 Work 만들기" }));
+    await user.type(screen.getByRole("textbox", { name: "업무 요청" }), "종료 경계를 확인해줘");
+    await user.click(screen.getByRole("button", { name: "실행 시작" }));
+    expect(await screen.findByText("Work 생성 중")).toBeInTheDocument();
+
+    durable?.({
+      sequence: 62,
+      type: "run.completed",
+      payload: { workId: "work-terminal-before-created-0001", stage: "terminal" },
+      resource: { type: "ApplicationRun", id: runId },
+    });
+
+    await waitFor(() => expect(screen.queryByText("Work 생성 중")).not.toBeInTheDocument());
+  });
+
+  it.each([
+    ["run.blocked", "blocked", "active", "차단된 새 Work", "새 Work가 차단되었습니다."],
+    ["run.suspended", "awaiting-approval", "active", "승인을 기다리는 새 Work", "새 Work가 승인을 기다리고 있습니다."],
+    ["run.failed", "failed", "failed", "실패한 새 Work", "새 Work 실행에 실패했습니다."],
+    ["run.cancelled", "cancelled", "cancelled", "취소된 새 Work", "새 Work 실행이 취소되었습니다."],
+  ] as const)(
+    "%s가 생성 Work를 연결해 선택하고 사람이 이해할 안내를 표시한다",
+    async (eventType, runStatus, workStatus, title, notice) => {
+      const user = userEvent.setup();
+      const active = fixtureDataAdapter().works.find((candidate) => candidate.status === "active") as WorkView;
+      const runId = `run-created-${runStatus}`;
+      const created: WorkView = {
+        ...active,
+        id: `work-created-${runStatus}`,
+        title,
+        status: workStatus,
+        run: { runId, status: runStatus, stage: "delivery", leaseGeneration: 2 },
+      };
+      const loadIndex = vi.fn(async ({ filter }: { filter: "active" | "complete" }) =>
+        filter === "active" ? [active] : [],
+      );
+      let durable: ((event: unknown) => void) | undefined;
+      render(
+        <App
+          service={service({
+            initialSnapshot: { works: [active] },
+            startWork: async () => ({ runId }),
+            loadIndex,
+            loadWork: async (workId) => (workId === created.id ? created : active),
+            subscribeDurable: async (handler) => {
+              durable = handler;
+              return async () => undefined;
+            },
+          })}
+        />,
+      );
+
+      await user.click(screen.getByRole("button", { name: "새 Work 만들기" }));
+      await user.type(screen.getByRole("textbox", { name: "업무 요청" }), `${title} 경계를 확인해줘`);
+      await user.click(screen.getByRole("button", { name: "실행 시작" }));
+      expect(await screen.findByRole("status", { name: "Work 생성 중" })).toBeInTheDocument();
+
+      durable?.({
+        sequence: 63,
+        type: eventType,
+        payload: { workId: created.id },
+        resource: { type: "ApplicationRun", id: runId },
+      });
+
+      expect(await screen.findByRole("main", { name: title }, { timeout: 2_000 })).toBeInTheDocument();
+      expect(screen.getByText(notice)).toBeInTheDocument();
+      expect(screen.queryByRole("status", { name: "Work 생성 중" })).not.toBeInTheDocument();
+      expect(screen.getByRole("tab", { name: workStatus === "active" ? "진행 중" : "완료" })).toHaveAttribute(
+        "aria-selected",
+        "true",
+      );
+      if (workStatus !== "active") {
+        await waitFor(() => expect(loadIndex).toHaveBeenCalledWith(expect.objectContaining({ filter: "complete" })));
+        expect(
+          within(screen.getByRole("region", { name: "Work 목록" })).getByRole("button", {
+            name: new RegExp(title, "u"),
+          }),
+        ).toBeInTheDocument();
+      }
+    },
+  );
+
+  it.each([
+    ["run.blocked", "새 Work가 차단되었습니다."],
+    ["run.failed", "새 Work 실행에 실패했습니다."],
+    ["run.cancelled", "새 Work 실행이 취소되었습니다."],
+  ] as const)("%s에 Work 연결 정보가 없어도 생성 대기를 해소한다", async (eventType, notice) => {
+    const user = userEvent.setup();
+    const active = fixtureDataAdapter().works.find((candidate) => candidate.status === "active") as WorkView;
+    const runId = `run-without-work-${eventType}`;
+    let durable: ((event: unknown) => void) | undefined;
+    render(
+      <App
+        service={service({
+          initialSnapshot: { works: [active] },
+          startWork: async () => ({ runId }),
+          loadIndex: async () => [active],
+          loadWork: async () => active,
+          subscribeDurable: async (handler) => {
+            durable = handler;
+            return async () => undefined;
+          },
+        })}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "새 Work 만들기" }));
+    await user.type(screen.getByRole("textbox", { name: "업무 요청" }), `${eventType} 종료를 확인해줘`);
+    await user.click(screen.getByRole("button", { name: "실행 시작" }));
+    expect(await screen.findByRole("status", { name: "Work 생성 중" })).toBeInTheDocument();
+
+    durable?.({ sequence: 67, type: eventType, resource: { type: "ApplicationRun", id: runId } });
+
+    await waitFor(() => expect(screen.queryByRole("status", { name: "Work 생성 중" })).not.toBeInTheDocument());
+    expect(screen.getByText(notice)).toBeInTheDocument();
+    expect(screen.getByRole("main", { name: active.title })).toBeInTheDocument();
+  });
+
+  it("생성 응답 직후 목록에 실행 계보가 나타나면 durable 이벤트 없이 즉시 선택한다", async () => {
+    const user = userEvent.setup();
+    const active = fixtureDataAdapter().works.find((candidate) => candidate.status === "active") as WorkView;
+    const created: WorkView = {
+      ...active,
+      id: "work-created-in-start-reload",
+      title: "응답 직후 나타난 새 Work",
+      run: { runId: "run-created-in-start-reload", status: "running", stage: "intake", leaseGeneration: 1 },
+    };
+    let started = false;
+    render(
+      <App
+        service={service({
+          initialSnapshot: { works: [active] },
+          startWork: async () => {
+            started = true;
+            return { runId: created.run?.runId ?? "" };
+          },
+          loadIndex: async () => (started ? [created, active] : [active]),
+          loadWork: async (workId) => (workId === created.id ? created : active),
+        })}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "새 Work 만들기" }));
+    await user.type(screen.getByRole("textbox", { name: "업무 요청" }), "응답 직후 Work를 연결해줘");
+    await user.click(screen.getByRole("button", { name: "실행 시작" }));
+
+    expect(await screen.findByRole("main", { name: created.title })).toBeInTheDocument();
+    expect(screen.queryByRole("status", { name: "Work 생성 중" })).not.toBeInTheDocument();
+  });
+
+  it("생성 대기 중 재연결한 초기 목록의 실행 계보로 새 Work를 즉시 선택한다", async () => {
+    const user = userEvent.setup();
+    const active = fixtureDataAdapter().works.find((candidate) => candidate.status === "active") as WorkView;
+    const created: WorkView = {
+      ...active,
+      id: "work-created-on-reconnect",
+      title: "재연결에서 찾은 새 Work",
+      run: { runId: "run-created-on-reconnect", status: "running", stage: "intake", leaseGeneration: 1 },
+    };
+    const first = service({
+      initialSnapshot: { works: [active] },
+      startWork: async () => ({ runId: created.run?.runId ?? "" }),
+      loadIndex: async () => [active],
+      loadWork: async () => active,
+    });
+    const view = render(<App service={first} />);
+
+    await user.click(screen.getByRole("button", { name: "새 Work 만들기" }));
+    await user.type(screen.getByRole("textbox", { name: "업무 요청" }), "재연결 목록에서 Work를 찾아줘");
+    await user.click(screen.getByRole("button", { name: "실행 시작" }));
+    expect(await screen.findByRole("status", { name: "Work 생성 중" })).toBeInTheDocument();
+
+    view.rerender(
+      <App
+        service={service({
+          initialSnapshot: { works: [created, active] },
+          loadIndex: async () => [created, active],
+          loadWork: async (workId) => (workId === created.id ? created : active),
+        })}
+      />,
+    );
+
+    expect(await screen.findByRole("main", { name: created.title })).toBeInTheDocument();
+    expect(screen.queryByRole("status", { name: "Work 생성 중" })).not.toBeInTheDocument();
+  });
+
+  it("work.created가 생성 응답보다 빨라도 응답 직후 새 Work를 선택한다", async () => {
+    const user = userEvent.setup();
+    const active = fixtureDataAdapter().works.find((candidate) => candidate.status === "active") as WorkView;
+    const created: WorkView = {
+      ...active,
+      id: "work-created-before-start-response",
+      title: "응답보다 먼저 생긴 새 Work",
+      run: { runId: "run-created-before-start-response", status: "running", stage: "intake", leaseGeneration: 1 },
+    };
+    const started = deferred<{ runId: string }>();
+    let durable: ((event: unknown) => void) | undefined;
+    let createdVisible = false;
+    let eventBatchApplied = false;
+    render(
+      <App
+        service={service({
+          initialSnapshot: { works: [active] },
+          startWork: async () => await started.promise,
+          loadIndex: async () => {
+            if (createdVisible) eventBatchApplied = true;
+            return createdVisible ? [created, active] : [active];
+          },
+          loadWork: async (workId) => (workId === created.id ? created : active),
+          subscribeDurable: async (handler) => {
+            durable = handler;
+            return async () => undefined;
+          },
+        })}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "새 Work 만들기" }));
+    await user.type(screen.getByRole("textbox", { name: "업무 요청" }), "빠른 생성 이벤트를 연결해줘");
+    const submitting = user.click(screen.getByRole("button", { name: "실행 시작" }));
+    await waitFor(() => expect(durable).toBeTypeOf("function"));
+    createdVisible = true;
+    durable?.({ sequence: 64, type: "work.created", resource: { type: "Work", id: created.id } });
+    await waitFor(() => expect(eventBatchApplied).toBe(true));
+    started.resolve({ runId: created.run?.runId ?? "" });
+    await submitting;
+
+    expect(await screen.findByRole("main", { name: created.title })).toBeInTheDocument();
+    expect(screen.queryByRole("status", { name: "Work 생성 중" })).not.toBeInTheDocument();
+  });
+
+  it("완료 이벤트가 생성 연결보다 먼저 오면 payload Work를 선택하고 완료 목록으로 전환한다", async () => {
+    const user = userEvent.setup();
+    const active = fixtureDataAdapter().works.find((candidate) => candidate.status === "active") as WorkView;
+    const completed: WorkView = {
+      ...active,
+      id: "work-completed-before-creation-link",
+      title: "연결 전에 완료된 새 Work",
+      status: "complete",
+      run: { runId: "run-completed-before-creation-link", status: "completed", stage: "terminal", leaseGeneration: 3 },
+    };
+    let durable: ((event: unknown) => void) | undefined;
+    render(
+      <App
+        service={service({
+          initialSnapshot: { works: [active] },
+          startWork: async () => ({ runId: completed.run?.runId ?? "" }),
+          loadIndex: async ({ filter }) => (filter === "active" ? [active] : [completed]),
+          loadWork: async (workId) => (workId === completed.id ? completed : active),
+          subscribeDurable: async (handler) => {
+            durable = handler;
+            return async () => undefined;
+          },
+        })}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "새 Work 만들기" }));
+    await user.type(screen.getByRole("textbox", { name: "업무 요청" }), "완료된 Work를 연결해줘");
+    await user.click(screen.getByRole("button", { name: "실행 시작" }));
+    durable?.({
+      sequence: 65,
+      type: "run.completed",
+      payload: { workId: completed.id, stage: "terminal" },
+      resource: { type: "ApplicationRun", id: completed.run?.runId },
+    });
+
+    expect(await screen.findByRole("main", { name: completed.title }, { timeout: 2_000 })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "완료" })).toHaveAttribute("aria-selected", "true");
+    expect(
+      within(screen.getByRole("region", { name: "Work 목록" })).getByRole("button", {
+        name: new RegExp(completed.title, "u"),
+      }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("main", { name: completed.title })).toBeInTheDocument();
+  });
+
+  it("종료 이벤트의 Work 조회가 일시 실패하면 미래 이벤트 없이 다시 연결한다", async () => {
+    const user = userEvent.setup();
+    const active = fixtureDataAdapter().works.find((candidate) => candidate.status === "active") as WorkView;
+    const failed: WorkView = {
+      ...active,
+      id: "work-transient-terminal-load",
+      title: "재조회로 연결한 실패 Work",
+      status: "failed",
+      run: { runId: "run-transient-terminal-load", status: "failed", stage: "terminal", leaseGeneration: 3 },
+    };
+    let durable: ((event: unknown) => void) | undefined;
+    let attempts = 0;
+    render(
+      <App
+        service={service({
+          initialSnapshot: { works: [active] },
+          startWork: async () => ({ runId: failed.run?.runId ?? "" }),
+          loadIndex: async () => [active],
+          loadWork: async (workId) => {
+            if (workId !== failed.id) return active;
+            attempts += 1;
+            if (attempts === 1) throw new Error("Work 투영이 아직 준비되지 않았습니다.");
+            return failed;
+          },
+          subscribeDurable: async (handler) => {
+            durable = handler;
+            return async () => undefined;
+          },
+        })}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "새 Work 만들기" }));
+    await user.type(screen.getByRole("textbox", { name: "업무 요청" }), "종료 Work 조회를 재시도해줘");
+    await user.click(screen.getByRole("button", { name: "실행 시작" }));
+    durable?.({
+      sequence: 68,
+      type: "run.failed",
+      payload: { workId: failed.id },
+      resource: { type: "ApplicationRun", id: failed.run?.runId },
+    });
+
+    expect(await screen.findByRole("main", { name: failed.title }, { timeout: 2_000 })).toBeInTheDocument();
+    expect(attempts).toBe(2);
+    expect(screen.queryByRole("status", { name: "Work 생성 중" })).not.toBeInTheDocument();
+  });
+
+  it("이전 생성에서 받은 foreign run 이벤트를 다음 생성에 재사용하지 않는다", async () => {
+    const user = userEvent.setup();
+    const active = fixtureDataAdapter().works.find((candidate) => candidate.status === "active") as WorkView;
+    const first: WorkView = {
+      ...active,
+      id: "work-first-cleanup",
+      title: "첫 번째 생성 Work",
+      run: { runId: "run-first-cleanup", status: "running", stage: "intake", leaseGeneration: 1 },
+    };
+    const stale: WorkView = {
+      ...active,
+      id: "work-stale-next-creation",
+      title: "이전 foreign 이벤트 Work",
+      status: "complete",
+      run: { runId: "run-stale-next-creation", status: "completed", stage: "terminal", leaseGeneration: 1 },
+    };
+    let durable: ((event: unknown) => void) | undefined;
+    let firstVisible = false;
+    let starts = 0;
+    const loadWork = vi.fn(async (workId: string) => {
+      if (workId === first.id) return first;
+      if (workId === stale.id) return stale;
+      return active;
+    });
+    render(
+      <App
+        service={service({
+          initialSnapshot: { works: [active] },
+          startWork: async () => ({ runId: ++starts === 1 ? (first.run?.runId ?? "") : (stale.run?.runId ?? "") }),
+          loadIndex: async () => (firstVisible ? [first, active] : [active]),
+          loadWork,
+          subscribeDurable: async (handler) => {
+            durable = handler;
+            return async () => undefined;
+          },
+        })}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "새 Work 만들기" }));
+    await user.type(screen.getByRole("textbox", { name: "업무 요청" }), "첫 번째 Work를 만들어줘");
+    await user.click(screen.getByRole("button", { name: "실행 시작" }));
+    durable?.({
+      sequence: 69,
+      type: "run.completed",
+      payload: { workId: stale.id },
+      resource: { type: "ApplicationRun", id: stale.run?.runId },
+    });
+    firstVisible = true;
+    durable?.({ sequence: 70, type: "work.created", resource: { type: "Work", id: first.id } });
+    expect(await screen.findByRole("main", { name: first.title }, { timeout: 2_000 })).toBeInTheDocument();
+
+    loadWork.mockClear();
+    await user.click(screen.getByRole("button", { name: "새 Work 만들기" }));
+    await user.type(screen.getByRole("textbox", { name: "업무 요청" }), "두 번째 Work를 만들어줘");
+    await user.click(screen.getByRole("button", { name: "실행 시작" }));
+
+    expect(loadWork).not.toHaveBeenCalledWith(stale.id);
+    expect(screen.getByRole("status", { name: "Work 생성 중" })).toBeInTheDocument();
+    expect(screen.getByRole("main", { name: first.title })).toBeInTheDocument();
+  });
+
+  it("실패한 생성 요청 중 수집한 foreign 이벤트와 후보를 다음 생성에 재사용하지 않는다", async () => {
+    const user = userEvent.setup();
+    const active = fixtureDataAdapter().works.find((candidate) => candidate.status === "active") as WorkView;
+    const foreign: WorkView = {
+      ...active,
+      id: "work-foreign-before-start-reject",
+      title: "실패한 요청의 foreign Work",
+      run: { runId: "run-foreign-before-start-reject", status: "running", stage: "intake", leaseGeneration: 1 },
+    };
+    const created: WorkView = {
+      ...active,
+      id: "work-after-start-reject",
+      title: "실패 뒤 생성한 새 Work",
+      run: { runId: "run-after-start-reject", status: "running", stage: "intake", leaseGeneration: 1 },
+    };
+    const firstStart = deferred<{ runId: string }>();
+    let starts = 0;
+    let durable: ((event: unknown) => void) | undefined;
+    let foreignEventsSent = false;
+    let firstBatchApplied = false;
+    let secondVisible = false;
+    const startWork = vi.fn(async () => {
+      starts += 1;
+      return starts === 1 ? await firstStart.promise : { runId: created.run?.runId ?? "" };
+    });
+    const loadWork = vi.fn(async (workId: string) => {
+      if (workId === foreign.id) return foreign;
+      if (workId === created.id) return created;
+      return active;
+    });
+    render(
+      <App
+        service={service({
+          initialSnapshot: { works: [active] },
+          startWork,
+          loadIndex: async () => {
+            if (foreignEventsSent && !secondVisible) firstBatchApplied = true;
+            return secondVisible ? [foreign, created, active] : [active];
+          },
+          loadWork,
+          subscribeDurable: async (handler) => {
+            durable = handler;
+            return async () => undefined;
+          },
+        })}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "새 Work 만들기" }));
+    await user.type(screen.getByRole("textbox", { name: "업무 요청" }), "첫 실패 뒤 다시 생성해줘");
+    const firstSubmitting = user.click(screen.getByRole("button", { name: "실행 시작" }));
+    await waitFor(() => expect(durable).toBeTypeOf("function"));
+    await waitFor(() => expect(startWork).toHaveBeenCalledOnce());
+    foreignEventsSent = true;
+    durable?.({
+      sequence: 71,
+      type: "run.completed",
+      payload: { workId: foreign.id },
+      resource: { type: "ApplicationRun", id: created.run?.runId },
+    });
+    durable?.({ sequence: 72, type: "work.created", resource: { type: "Work", id: foreign.id } });
+    await waitFor(() => expect(firstBatchApplied).toBe(true));
+    expect(await screen.findByText("업데이트 72을 반영했습니다.")).toBeInTheDocument();
+    firstStart.reject(new Error("첫 생성 요청이 늦게 실패했습니다."));
+    await firstSubmitting;
+    expect(await screen.findByText("첫 생성 요청이 늦게 실패했습니다.")).toBeInTheDocument();
+
+    loadWork.mockClear();
+    secondVisible = true;
+    await user.click(screen.getByRole("button", { name: "실행 시작" }));
+
+    expect(await screen.findByRole("main", { name: created.title })).toBeInTheDocument();
+    expect(loadWork).not.toHaveBeenCalledWith(foreign.id);
+    expect(screen.queryByText("첫 생성 요청이 늦게 실패했습니다.")).not.toBeInTheDocument();
+    expect(screen.getByText("새 Work가 생성되어 선택했습니다.")).toBeInTheDocument();
+  });
+
+  it("완료 이벤트 payload가 다른 실행의 Work를 가리키면 선택하지 않는다", async () => {
+    const user = userEvent.setup();
+    const active = fixtureDataAdapter().works.find((candidate) => candidate.status === "active") as WorkView;
+    const foreign: WorkView = {
+      ...active,
+      id: "work-foreign-terminal-payload",
+      title: "다른 실행의 완료 Work",
+      status: "complete",
+      run: { runId: "run-foreign-terminal-payload", status: "completed", stage: "terminal", leaseGeneration: 3 },
+    };
+    const runId = "run-owned-terminal-payload";
+    let durable: ((event: unknown) => void) | undefined;
+    render(
+      <App
+        service={service({
+          initialSnapshot: { works: [active] },
+          startWork: async () => ({ runId }),
+          loadIndex: async () => [active],
+          loadWork: async (workId) => (workId === foreign.id ? foreign : active),
+          subscribeDurable: async (handler) => {
+            durable = handler;
+            return async () => undefined;
+          },
+        })}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "새 Work 만들기" }));
+    await user.type(screen.getByRole("textbox", { name: "업무 요청" }), "내 실행만 연결해줘");
+    await user.click(screen.getByRole("button", { name: "실행 시작" }));
+    durable?.({
+      sequence: 66,
+      type: "run.completed",
+      payload: { workId: foreign.id, stage: "terminal" },
+      resource: { type: "ApplicationRun", id: runId },
+    });
+
+    await waitFor(() => expect(screen.queryByRole("status", { name: "Work 생성 중" })).not.toBeInTheDocument());
+    expect(screen.getByRole("main", { name: active.title })).toBeInTheDocument();
+    expect(screen.queryByRole("main", { name: foreign.title })).not.toBeInTheDocument();
   });
 
   it("Work 생성 이벤트가 실행 원장보다 먼저 와도 다음 이벤트에서 임시 행을 해소한다", async () => {
@@ -3112,13 +3692,13 @@ describe("AgentOS native data flow", () => {
 
     visible = "foreign";
     durable?.({ sequence: 21, type: "work.created", resource: { type: "Work", id: foreign.id } });
-    await waitFor(() => expect(screen.getByText("run-owned-0001")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole("status", { name: "Work 생성 중" })).toBeInTheDocument());
     expect(screen.getByRole("main")).not.toHaveAccessibleName(foreign.title);
 
     visible = "both";
     durable?.({ sequence: 22, type: "work.created", resource: { type: "Work", id: created.id } });
     expect(await screen.findByRole("main", { name: created.title }, { timeout: 2_000 })).toBeInTheDocument();
-    expect(screen.queryByText("run-owned-0001")).not.toBeInTheDocument();
+    expect(screen.queryByRole("status", { name: "Work 생성 중" })).not.toBeInTheDocument();
   });
 
   it("승인 대기 run에는 재개를 노출하지 않고 blocked run만 재개한다", async () => {

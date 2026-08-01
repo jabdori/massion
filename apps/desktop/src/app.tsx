@@ -512,7 +512,7 @@ export function App({ contextPicker = nativeContextPicker, service }: AppProps) 
               onFilterChange={controller.setFilter}
               onQueryChange={controller.setQuery}
               onSelect={controller.setSelectedId}
-              pendingRunId={controller.pendingCreation?.runId}
+              pendingCreation={controller.pendingCreation !== undefined}
               query={controller.query}
               selectedId={controller.selectedId}
               works={controller.visibleWorks}
@@ -5565,7 +5565,7 @@ interface WorkListProps {
   selectedId: string;
   filter: DesktopFilter;
   query: string;
-  pendingRunId: string | undefined;
+  pendingCreation: boolean;
   onCreate: () => void;
   onSelect: (id: string) => void;
   onFilterChange: (filter: DesktopFilter) => void;
@@ -5578,7 +5578,7 @@ function WorkList({
   onFilterChange,
   onQueryChange,
   onSelect,
-  pendingRunId,
+  pendingCreation,
   query,
   selectedId,
   works,
@@ -5635,12 +5635,12 @@ function WorkList({
         </Tabs>
       </div>
       <div className="min-h-0 overflow-y-auto">
-        {works.length || (pendingRunId && filter === "active") ? (
+        {works.length || (pendingCreation && filter === "active") ? (
           // 둥근 행에 여백을 주면 사이 구분이 약합니다. 전폭 행과 1px 선이 밀도와 구분감을 같이 만듭니다.
           <div className="divide-y divide-border border-b border-border">
-            {pendingRunId && filter === "active" ? (
+            {pendingCreation && filter === "active" ? (
               <div
-                aria-label={`Work 생성 중 ${pendingRunId}`}
+                aria-label="Work 생성 중"
                 className="border-b border-dashed border-control bg-surface-1 px-3 py-2.5"
                 role="status"
               >
@@ -5648,7 +5648,6 @@ function WorkList({
                   <span aria-hidden="true" className="size-2 animate-pulse rounded-full bg-accent" />
                   Work 생성 중
                 </span>
-                <span className="mt-2 block truncate font-mono text-[10px] text-muted">{pendingRunId}</span>
               </div>
             ) : null}
             {works.map((work) => {
