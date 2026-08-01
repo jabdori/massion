@@ -116,7 +116,16 @@ export interface OrganizationChangeView {
 export type EventSemantic = "stage" | "task" | "artifact" | "verification" | "record";
 
 export type ActivityView = (
-  | { id: string; kind: "message"; time: string; author: string; initials: string; human: boolean; content: string }
+  | {
+      id: string;
+      kind: "message";
+      messageType?: string;
+      time: string;
+      author: string;
+      initials: string;
+      human: boolean;
+      content: string;
+    }
   | { id: string; kind: "plan"; time: string; title: string; steps: TaskView[] }
   | { id: string; kind: "agents"; time: string; title: string; agents: AgentView[] }
   | { id: string; kind: "approval"; time: string; approvalId: string; title: string; description: string }

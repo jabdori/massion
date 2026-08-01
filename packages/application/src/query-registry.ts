@@ -1511,6 +1511,7 @@ export function registerApplicationQueries(
           ...(cell.detail === undefined ? {} : { detail: cell.detail }),
           ...(cell.authorKind === undefined ? {} : { authorKind: cell.authorKind }),
           ...(cell.authorId === undefined ? {} : { authorId: cell.authorId }),
+          ...(cell.messageType === undefined ? {} : { messageType: cell.messageType }),
           resourceId: cell.cellId,
         }));
         return page(activities, pageCursor(value.cursor), pageLimit(value.limit, 100));

@@ -115,6 +115,7 @@ export interface WorkActivityViewV1 {
   readonly status?: string;
   readonly authorKind?: string;
   readonly authorId?: string;
+  readonly messageType?: string;
   readonly resourceId?: string;
 }
 

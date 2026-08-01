@@ -15,6 +15,21 @@ interface ExecutionNotice {
   message: string;
 }
 
+interface WorkLoadFlight {
+  readonly service: DesktopService;
+  readonly active: Promise<WorkView>;
+  trailing?: Promise<WorkView>;
+}
+
+interface TerminalStabilization {
+  readonly workId: string;
+  readonly fingerprint: string;
+  readonly remaining: number;
+}
+
+const SELECTED_WORK_RECONCILE_MS = 1_000;
+const TERMINAL_STABILIZATION_PASSES = 3;
+
 export function useDesktopController(service: DesktopService) {
   const initialWorks = service.initialSnapshot?.works ?? [];
   const initialWork = initialWorks[0];
@@ -80,7 +95,10 @@ export function useDesktopController(service: DesktopService) {
   const durableChangedWorkIdsRef = useRef(new Set<string>());
   const durableDetailWorkIdsRef = useRef(new Set<string>());
   const detailRequestRef = useRef(0);
+  const detailLoadingOwnerRef = useRef<number | undefined>(undefined);
   const indexRequestRef = useRef(0);
+  const workLoadFlightsRef = useRef(new Map<string, WorkLoadFlight>());
+  const terminalStabilizationRef = useRef<TerminalStabilization | undefined>(undefined);
   const commandLocks = useRef(new Set<string>());
 
   useEffect(() => {
@@ -140,62 +158,148 @@ export function useDesktopController(service: DesktopService) {
     };
   }, [newWorkOpen, service]);
 
-  const setSelectedId = useCallback(
-    (nextId: string) => {
-      selectedIdRef.current = nextId;
-      setSelectedIdState(nextId);
-      const request = ++detailRequestRef.current;
-      setDetailLoading(true);
-      void service
-        .loadWork(nextId)
-        .then((next) => {
-          if (request !== detailRequestRef.current || selectedIdRef.current !== nextId) return;
-          workRef.current = next;
-          setWork(next);
-          setWorks((current) => current.map((value) => (value.id === next.id ? next : value)));
-        })
-        .catch((error: unknown) => {
-          if (request !== detailRequestRef.current) return;
-          setAnnouncement(errorMessage(error, "Work 상세 정보를 불러오지 못했습니다."));
-        })
-        .finally(() => {
-          if (request === detailRequestRef.current) setDetailLoading(false);
-        });
+  const loadWorkSingleFlight = useCallback(
+    (workId: string): Promise<WorkView> => {
+      const current = workLoadFlightsRef.current.get(workId);
+      if (current?.service === service) {
+        if (current.trailing) return current.trailing;
+        const trailing = current.active.then(
+          (value) =>
+            workLoadFlightsRef.current.get(workId) === current && current.service === service
+              ? service.loadWork(workId)
+              : value,
+          (error: unknown) => {
+            if (workLoadFlightsRef.current.get(workId) === current && current.service === service)
+              return service.loadWork(workId);
+            throw error;
+          },
+        );
+        current.trailing = trailing;
+        void trailing.then(
+          () => {
+            if (workLoadFlightsRef.current.get(workId) === current) workLoadFlightsRef.current.delete(workId);
+          },
+          () => {
+            if (workLoadFlightsRef.current.get(workId) === current) workLoadFlightsRef.current.delete(workId);
+          },
+        );
+        return trailing;
+      }
+      const active = service.loadWork(workId);
+      const flight: WorkLoadFlight = { service, active };
+      workLoadFlightsRef.current.set(workId, flight);
+      void active.then(
+        () => {
+          if (workLoadFlightsRef.current.get(workId) === flight && flight.trailing === undefined)
+            workLoadFlightsRef.current.delete(workId);
+        },
+        () => {
+          if (workLoadFlightsRef.current.get(workId) === flight && flight.trailing === undefined)
+            workLoadFlightsRef.current.delete(workId);
+        },
+      );
+      return active;
     },
     [service],
   );
 
+  const refreshSelectedWork = useCallback(
+    async (workId: string, foreground: boolean): Promise<WorkView | undefined> => {
+      if (!foreground && detailLoadingOwnerRef.current !== undefined) return undefined;
+      const request = ++detailRequestRef.current;
+      if (foreground) {
+        detailLoadingOwnerRef.current = request;
+        setDetailLoading(true);
+      }
+      try {
+        const next = await loadWorkSingleFlight(workId);
+        if (request !== detailRequestRef.current || selectedIdRef.current !== workId) return undefined;
+        const current = workRef.current;
+        if (current?.id === workId && current.revision > next.revision) return current;
+        if (foreground && current?.id === workId && !terminalWork(current) && terminalWork(next)) {
+          terminalStabilizationRef.current = {
+            workId,
+            fingerprint: JSON.stringify(next),
+            remaining: TERMINAL_STABILIZATION_PASSES,
+          };
+        }
+        workRef.current = next;
+        setWork(next);
+        setWorks((values) =>
+          values.map((value) => (value.id === next.id && value.revision <= next.revision ? next : value)),
+        );
+        return next;
+      } catch (error) {
+        if (request === detailRequestRef.current && selectedIdRef.current === workId && foreground)
+          setAnnouncement(errorMessage(error, "Work 상세 정보를 불러오지 못했습니다."));
+        return undefined;
+      } finally {
+        if (detailLoadingOwnerRef.current === request) {
+          detailLoadingOwnerRef.current = undefined;
+          setDetailLoading(false);
+        }
+      }
+    },
+    [loadWorkSingleFlight, setAnnouncement],
+  );
+
+  const setSelectedId = useCallback(
+    (nextId: string) => {
+      if (selectedIdRef.current !== nextId) terminalStabilizationRef.current = undefined;
+      selectedIdRef.current = nextId;
+      setSelectedIdState(nextId);
+      void refreshSelectedWork(nextId, true);
+    },
+    [refreshSelectedWork],
+  );
+
   const applyIndex = useCallback(
-    (next: WorkView[]) => {
-      worksRef.current = next;
-      setWorks(next);
+    (next: WorkView[], preserveSelection = false) => {
+      const selectedDetail = workRef.current;
+      const currentById = new Map(worksRef.current.map((candidate) => [candidate.id, candidate]));
+      const merged = next.map((candidate) => {
+        const current = currentById.get(candidate.id);
+        const newest = current !== undefined && current.revision > candidate.revision ? current : candidate;
+        return selectedDetail?.id === candidate.id && selectedDetail.revision >= newest.revision
+          ? selectedDetail
+          : newest;
+      });
+      worksRef.current = merged;
+      setWorks(merged);
 
       const currentId = selectedIdRef.current;
-      if (currentId && next.some((candidate) => candidate.id === currentId)) return;
-      if (pendingCreationRef.current) return;
-      const first = next[0];
+      if (
+        currentId &&
+        (merged.some((candidate) => candidate.id === currentId) ||
+          (preserveSelection && workRef.current?.id === currentId))
+      )
+        return merged;
+      if (pendingCreationRef.current) return merged;
+      const first = merged[0];
       if (first) {
         setSelectedId(first.id);
-        return;
+        return merged;
       }
       detailRequestRef.current += 1;
+      detailLoadingOwnerRef.current = undefined;
+      terminalStabilizationRef.current = undefined;
       selectedIdRef.current = "";
       workRef.current = undefined;
       setSelectedIdState("");
       setWork(undefined);
       setDetailLoading(false);
+      return merged;
     },
     [setSelectedId],
   );
 
   const reloadIndex = useCallback(
-    async (options: { surfaceError?: boolean } = {}): Promise<WorkView[] | undefined> => {
+    async (options: { preserveSelection?: boolean; surfaceError?: boolean } = {}): Promise<WorkView[] | undefined> => {
       const request = ++indexRequestRef.current;
       try {
         const next = await service.loadIndex({ filter: filterRef.current, search: queryRef.current });
         if (request !== indexRequestRef.current) return undefined;
-        applyIndex([...next]);
-        return [...next];
+        return applyIndex([...next], options.preserveSelection);
       } catch (error) {
         if (request !== indexRequestRef.current) return undefined;
         if (options.surfaceError) throw error;
@@ -207,6 +311,11 @@ export function useDesktopController(service: DesktopService) {
   );
 
   useEffect(() => {
+    detailRequestRef.current += 1;
+    detailLoadingOwnerRef.current = undefined;
+    terminalStabilizationRef.current = undefined;
+    workLoadFlightsRef.current.clear();
+    setDetailLoading(false);
     let disposed = false;
     async function connect() {
       if (!service.initialSnapshot) setPhase("loading");
@@ -226,6 +335,9 @@ export function useDesktopController(service: DesktopService) {
     return () => {
       disposed = true;
       detailRequestRef.current += 1;
+      detailLoadingOwnerRef.current = undefined;
+      terminalStabilizationRef.current = undefined;
+      workLoadFlightsRef.current.clear();
       indexRequestRef.current += 1;
     };
   }, [reloadIndex, retryVersion, service]);
@@ -234,6 +346,73 @@ export function useDesktopController(service: DesktopService) {
     if (phase !== "ready") return;
     void reloadIndex();
   }, [deferredQuery, filter, phase, reloadIndex]);
+
+  useEffect(() => {
+    const selectedWorkId = work?.id;
+    const runStatus = work?.run?.status;
+    const stabilizing = terminalStabilizationRef.current?.workId === selectedWorkId;
+    if (phase !== "ready" || selectedWorkId === undefined || (!reconcilableRunStatus(runStatus) && !stabilizing))
+      return;
+    let disposed = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const schedule = () => {
+      timer = setTimeout(() => {
+        timer = undefined;
+        const before = workRef.current;
+        void refreshSelectedWork(selectedWorkId, false).then((next) => {
+          if (disposed || selectedIdRef.current !== selectedWorkId) return;
+          if (next === undefined) {
+            const terminal = terminalStabilizationRef.current;
+            if (terminal?.workId === selectedWorkId) {
+              if (terminal.remaining <= 1) {
+                terminalStabilizationRef.current = undefined;
+                return;
+              }
+              terminalStabilizationRef.current = { ...terminal, remaining: terminal.remaining - 1 };
+            }
+            schedule();
+            return;
+          }
+          if (terminalWork(next)) {
+            setEventRevision((current) => current + 1);
+            setSelectedWorkEventRevision((current) => current + 1);
+            const fingerprint = JSON.stringify(next);
+            const terminal = terminalStabilizationRef.current;
+            if (terminal?.workId === selectedWorkId && terminal.fingerprint === fingerprint) {
+              terminalStabilizationRef.current = undefined;
+              return;
+            }
+            const remaining =
+              terminal?.workId === selectedWorkId ? terminal.remaining - 1 : TERMINAL_STABILIZATION_PASSES;
+            if (remaining <= 0) {
+              terminalStabilizationRef.current = undefined;
+              return;
+            }
+            terminalStabilizationRef.current = { workId: selectedWorkId, fingerprint, remaining };
+            schedule();
+            return;
+          }
+          terminalStabilizationRef.current = undefined;
+          if (
+            before?.revision !== next.revision ||
+            before.status !== next.status ||
+            before.run?.status !== next.run?.status ||
+            before.run?.stage !== next.run?.stage ||
+            before.run?.leaseGeneration !== next.run?.leaseGeneration
+          ) {
+            setEventRevision((current) => current + 1);
+            setSelectedWorkEventRevision((current) => current + 1);
+          }
+          if (reconcilableRunStatus(next.run?.status)) schedule();
+        });
+      }, SELECTED_WORK_RECONCILE_MS);
+    };
+    schedule();
+    return () => {
+      disposed = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, [phase, refreshSelectedWork, work?.id, work?.run?.status]);
 
   useEffect(() => {
     if (phase !== "ready") return;
@@ -263,7 +442,7 @@ export function useDesktopController(service: DesktopService) {
           durableDetailWorkIdsRef.current.clear();
           const candidateWorkIds = [...durableWorkCandidatesRef.current];
           void (async () => {
-            const next = await reloadIndex();
+            const next = await reloadIndex({ preserveSelection: true });
             if (disposed || !next) return;
 
             const creation = pendingCreationRef.current;
@@ -284,6 +463,8 @@ export function useDesktopController(service: DesktopService) {
                     continue;
                   }
                   detailRequestRef.current += 1;
+                  detailLoadingOwnerRef.current = undefined;
+                  terminalStabilizationRef.current = undefined;
                   durableWorkCandidatesRef.current.clear();
                   pendingCreationRef.current = undefined;
                   setPendingCreationState(undefined);
@@ -291,6 +472,7 @@ export function useDesktopController(service: DesktopService) {
                   setSelectedIdState(candidate.id);
                   workRef.current = candidate;
                   setWork(candidate);
+                  setDetailLoading(false);
                   setWorks((current) => current.map((value) => (value.id === candidate.id ? candidate : value)));
                   setAnnouncement("새 Work가 생성되어 선택했습니다.");
                   return;
@@ -697,4 +879,17 @@ function executionMessage(value: unknown, executionId: string): string | undefin
   if (delta.kind === "output-text") return "에이전트 응답을 생성하고 있습니다.";
   if (delta.kind === "reasoning") return "에이전트가 다음 단계를 검토하고 있습니다.";
   return undefined;
+}
+
+function reconcilableRunStatus(status: string | undefined): boolean {
+  return status === "ready" || status === "running" || status === "awaiting-approval";
+}
+
+function terminalWork(work: WorkView): boolean {
+  return (
+    work.run?.stage === "terminal" ||
+    work.status === "complete" ||
+    work.status === "failed" ||
+    work.status === "cancelled"
+  );
 }

@@ -5702,9 +5702,10 @@ function mergeActivities(
     workActivities
       .filter(
         (activity) =>
-          activity.kind !== "event" ||
-          activity.semantic !== "stage" ||
-          !["업무가 접수되었습니다", "분기된 업무가 시작되었습니다"].includes(activity.title),
+          !isStructuredHandoffFallback(activity) &&
+          (activity.kind !== "event" ||
+            activity.semantic !== "stage" ||
+            !["업무가 접수되었습니다", "분기된 업무가 시작되었습니다"].includes(activity.title)),
       )
       .map((activity) => [activity.id, activity]),
   );
@@ -5719,6 +5720,10 @@ function mergeActivities(
     if (right.occurredAt !== undefined) return 1;
     return left.time.localeCompare(right.time) || left.id.localeCompare(right.id);
   });
+}
+
+function isStructuredHandoffFallback(activity: ActivityView): boolean {
+  return activity.kind === "message" && !activity.human && activity.messageType === "handoff";
 }
 
 interface WorkActivityProps {

@@ -1,5 +1,6 @@
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { StrictMode } from "react";
 import { describe, expect, it, vi } from "vitest";
 
 import { App } from "./app";
@@ -65,6 +66,567 @@ function knowledgeGraphFixture(lens: KnowledgeNodeKind, nodeId: string, label: s
 }
 
 describe("AgentOS native data flow", () => {
+  it("선택한 활성 Work를 백그라운드에서 승인 대기부터 완료까지 동기화하고 완료 뒤 조회를 멈춘다", async () => {
+    vi.useFakeTimers();
+    try {
+      const base = fixtureDataAdapter().works[0] as WorkView;
+      const completedFixture = fixtureDataAdapter().works.find((work) => work.status === "complete") as WorkView;
+      const approval = {
+        id: "approval-live-refresh",
+        title: "전문 Agent 배치 승인",
+        description: "보고서 작성 담당을 배치합니다.",
+        workId: base.id,
+        revision: 1,
+        status: "pending" as const,
+      };
+      const running: WorkView = {
+        ...base,
+        approvals: [],
+        tasks: [],
+        agents: [],
+        artifacts: [],
+        verifications: [],
+        records: [],
+        activities: [],
+        progress: 0,
+        run: { runId: "run-live-refresh", status: "running", stage: "delivery", leaseGeneration: 4 },
+      };
+      const awaiting: WorkView = {
+        ...running,
+        revision: 2,
+        approvals: [approval],
+        tasks: [{ id: "task-live-refresh", title: "우선순위 보고서 작성", state: "active", time: "13:00" }],
+        activities: [
+          {
+            id: "approval-live-refresh-activity",
+            kind: "approval",
+            time: "13:00",
+            approvalId: approval.id,
+            title: approval.title,
+            description: approval.description,
+          },
+        ],
+        progress: 25,
+        run: { runId: "run-live-refresh", status: "awaiting-approval", stage: "delivery", leaseGeneration: 4 },
+      };
+      const completed: WorkView = {
+        ...completedFixture,
+        id: base.id,
+        title: base.title,
+        revision: 3,
+        activities: [],
+        run: { runId: "run-live-refresh", status: "completed", stage: "terminal", leaseGeneration: 7 },
+      };
+      const partialTerminal: WorkView = {
+        ...running,
+        status: "complete",
+        sourceStatus: "completed",
+        revision: completed.revision,
+        run: completed.run,
+      };
+      const atlas: SpeakerView = {
+        handle: "representative",
+        name: "Atlas",
+        initial: "A",
+        accentSlot: 0,
+        role: "조정",
+        modelId: "gpt-5.6-sol",
+      };
+      const lyra: SpeakerView = {
+        handle: "context-strategy",
+        name: "Lyra",
+        initial: "L",
+        accentSlot: 1,
+        role: "전략",
+        modelId: "gpt-5.6-sol",
+      };
+      const room = (work: WorkView): RoomView => {
+        const completeProjection = work.status === "complete" && work.artifacts.length > 0;
+        return {
+          roomId: "room-live-refresh",
+          name: "대표 방",
+          status: work.status === "complete" ? "closed" : "active",
+          participants: completeProjection ? [atlas, lyra] : [atlas],
+          lastMessageSequence: completeProjection ? 2 : 0,
+          budgets: [],
+          sharedContexts: [],
+          activities: completeProjection
+            ? [
+                {
+                  id: "handoff-live-refresh",
+                  kind: "handoff",
+                  time: "13:01",
+                  from: atlas,
+                  to: lyra,
+                },
+                {
+                  id: "answer-live-refresh",
+                  kind: "room",
+                  messageType: "answer",
+                  time: "13:02",
+                  speaker: atlas,
+                  content: "# 완료 보고서\n\n| 순위 | 항목 |\n|---:|---|\n| 1 | 내보내기 중복 |",
+                  final: true,
+                },
+              ]
+            : [],
+        };
+      };
+      let current = running;
+      const loadWork = vi.fn(async () => current);
+      const loadPendingApprovals = vi.fn(async () => current.approvals);
+      const loadRooms = vi.fn(async () => [room(current)]);
+      let durable: ((event: unknown) => void) | undefined;
+      render(
+        <App
+          service={service({
+            initialSnapshot: { works: [running] },
+            loadIndex: async ({ filter }) =>
+              (current.status === "active" ? "active" : "complete") === filter ? [current] : [],
+            loadWork,
+            loadPendingApprovals,
+            loadRooms,
+            subscribeDurable: async (handler) => {
+              durable = handler;
+              return async () => undefined;
+            },
+          })}
+        />,
+      );
+      await act(async () => await Promise.resolve());
+      expect(durable).toBeTypeOf("function");
+
+      current = awaiting;
+      await act(async () => await vi.advanceTimersByTimeAsync(1_000));
+
+      const workList = screen.getByRole("region", { name: "Work 목록" });
+      expect(within(workList).getByText("승인 대기")).toHaveClass("text-gate");
+      expect(screen.getByRole("status", { name: "실행 상태" })).toHaveTextContent("승인 대기");
+      expect(screen.getByRole("button", { name: "전문 Agent 배치 승인 승인" })).toBeInTheDocument();
+      expect(screen.getByRole("complementary", { name: "Work 세부 정보" })).toHaveTextContent("작업 0/1");
+      expect(loadPendingApprovals).toHaveBeenCalledTimes(2);
+
+      current = partialTerminal;
+      act(() =>
+        durable?.({
+          sequence: 902,
+          type: "run.completed",
+          payload: { workId: running.id, stage: "terminal" },
+          resource: { type: "ApplicationRun", id: "run-live-refresh" },
+        }),
+      );
+      await act(async () => await vi.advanceTimersByTimeAsync(100));
+
+      expect(screen.getByRole("main", { name: completed.title })).toHaveTextContent("완료");
+      expect(screen.queryByRole("heading", { level: 1, name: "완료 보고서" })).not.toBeInTheDocument();
+
+      current = completed;
+      await act(async () => await vi.advanceTimersByTimeAsync(1_000));
+
+      const main = screen.getByRole("main", { name: completed.title });
+      expect(within(main).getByRole("heading", { level: 1, name: "완료 보고서" })).toBeInTheDocument();
+      expect(within(main).getByRole("table")).toHaveTextContent("내보내기 중복");
+      expect(within(main).getByText("최종 응답")).toBeInTheDocument();
+      expect(within(main).getAllByText("Atlas").length).toBeGreaterThan(0);
+      expect(within(main).getByText("Lyra")).toBeInTheDocument();
+      expect(within(main).getAllByText("gpt-5.6-sol").length).toBeGreaterThan(0);
+      const inspector = screen.getByRole("complementary", { name: "Work 세부 정보" });
+      expect(inspector).toHaveTextContent(`작업 ${String(completed.tasks.length)}/${String(completed.tasks.length)}`);
+      expect(inspector).toHaveTextContent("이 방의 참가자 2");
+
+      await act(async () => {
+        screen.getByRole("tab", { name: "산출물" }).click();
+      });
+      expect(inspector).toHaveTextContent(completed.artifacts[0]?.name ?? "");
+      await act(async () => {
+        screen.getByRole("tab", { name: "검증" }).click();
+      });
+      expect(inspector).toHaveTextContent(completed.verifications[0]?.verifier ?? "");
+      await act(async () => {
+        screen.getByRole("tab", { name: "기록" }).click();
+      });
+      expect(inspector).toHaveTextContent(completed.records[0]?.summary ?? "");
+      await act(async () => {
+        screen.getByRole("tab", { name: "완료" }).click();
+      });
+      expect(within(workList).getByRole("button", { name: new RegExp(completed.title, "u") })).toHaveTextContent(
+        "완료",
+      );
+
+      await act(async () => await vi.advanceTimersByTimeAsync(1_000));
+      expect(loadRooms.mock.calls.length).toBeGreaterThanOrEqual(4);
+      expect(loadPendingApprovals.mock.calls.length).toBeGreaterThanOrEqual(4);
+      const terminalCalls = loadWork.mock.calls.length;
+      await act(async () => await vi.advanceTimersByTimeAsync(5_000));
+      expect(loadWork).toHaveBeenCalledTimes(terminalCalls);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("협업방 투영 전에는 구조화 인계 JSON을 노출하지 않고 풍부한 인계가 준비되면 모델 계보를 표시한다", async () => {
+    const work = fixtureDataAdapter().works[0] as WorkView;
+    const rooms = deferred<RoomView[]>();
+    const rawHandoff = JSON.stringify({
+      handoffType: "ContextStrategyExecutionHandoff",
+      objective: "내부 실행 목표",
+      recommendedAssignment: { primary: { handle: "context-strategy" } },
+    });
+    const atlas: SpeakerView = {
+      handle: "representative",
+      name: "Atlas",
+      initial: "A",
+      accentSlot: 0,
+      role: "조정",
+      modelId: "gpt-5.6-sol",
+    };
+    const lyra: SpeakerView = {
+      handle: "context-strategy",
+      name: "Lyra",
+      initial: "L",
+      accentSlot: 1,
+      role: "전략",
+      modelId: "gpt-5.6-sol",
+    };
+    render(
+      <App
+        service={service({
+          initialSnapshot: {
+            works: [
+              {
+                ...work,
+                activities: [
+                  {
+                    id: "message:handoff-live",
+                    kind: "message",
+                    messageType: "handoff",
+                    time: "13:00",
+                    author: "Atlas",
+                    initials: "A",
+                    human: false,
+                    content: rawHandoff,
+                  },
+                  {
+                    id: "message:json-answer-live",
+                    kind: "message",
+                    messageType: "answer",
+                    time: "13:01",
+                    author: "Atlas",
+                    initials: "A",
+                    human: false,
+                    content: '{"handoffTo":"context-strategy","result":"사용자에게 보여줄 JSON"}',
+                  },
+                ],
+              },
+            ],
+          },
+          loadIndex: async () => [work],
+          loadRooms: async () => await rooms.promise,
+        })}
+      />,
+    );
+
+    expect(screen.queryByText(rawHandoff)).not.toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Work 활동" })).not.toHaveTextContent("handoffType");
+    expect(screen.getByRole("region", { name: "Work 활동" })).toHaveTextContent("사용자에게 보여줄 JSON");
+
+    rooms.resolve([
+      {
+        roomId: "room-handoff-live",
+        name: "대표 방",
+        status: "active",
+        participants: [atlas, lyra],
+        lastMessageSequence: 1,
+        budgets: [],
+        sharedContexts: [],
+        activities: [{ id: "handoff-live", kind: "handoff", time: "13:00", from: atlas, to: lyra }],
+      },
+    ]);
+
+    const activity = await screen.findByRole("region", { name: "협업방 대표 방" });
+    expect(activity).toHaveTextContent("Atlas");
+    expect(activity).toHaveTextContent("Lyra");
+    expect(activity).toHaveTextContent("gpt-5.6-sol");
+    expect(activity).not.toHaveTextContent("handoffType");
+    expect(activity).not.toHaveTextContent("recommendedAssignment");
+  });
+
+  it("백그라운드의 늦은 Work 응답은 새 선택을 덮지 않고 unmount 뒤 재조회를 예약하지 않는다", async () => {
+    vi.useFakeTimers();
+    try {
+      const snapshot = fixtureDataAdapter();
+      const first: WorkView = {
+        ...(snapshot.works[0] as WorkView),
+        run: { runId: "run-live-race-first", status: "running", stage: "delivery", leaseGeneration: 2 },
+      };
+      const second: WorkView = {
+        ...(snapshot.works[1] as WorkView),
+        run: { runId: "run-live-race-second", status: "running", stage: "delivery", leaseGeneration: 3 },
+      };
+      const stale = deferred<WorkView>();
+      let firstReads = 0;
+      const loadWork = vi.fn(async (workId: string) => {
+        if (workId !== first.id) return second;
+        firstReads += 1;
+        return firstReads === 1 ? await stale.promise : first;
+      });
+      const view = render(
+        <App
+          service={service({
+            initialSnapshot: { works: [first, second] },
+            loadIndex: async () => [first, second],
+            loadWork,
+          })}
+        />,
+      );
+      await act(async () => await Promise.resolve());
+      act(() => {
+        vi.advanceTimersByTime(1_000);
+      });
+
+      await act(async () => {
+        screen.getByRole("button", { name: new RegExp(second.title, "u") }).click();
+        await Promise.resolve();
+      });
+      expect(screen.getByRole("main", { name: second.title })).toBeInTheDocument();
+
+      stale.resolve({ ...first, title: "늦게 도착한 이전 Work" });
+      await act(async () => await Promise.resolve());
+      expect(screen.getByRole("main", { name: second.title })).toBeInTheDocument();
+      expect(screen.queryByRole("main", { name: "늦게 도착한 이전 Work" })).not.toBeInTheDocument();
+
+      const callsAtUnmount = loadWork.mock.calls.length;
+      view.unmount();
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect(loadWork).toHaveBeenCalledTimes(callsAtUnmount);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("늦은 이전 revision 목록은 완료된 선택 상세를 덮지 않고 더 최신 목록은 보존한다", async () => {
+    const base = fixtureDataAdapter().works[0] as WorkView;
+    const running: WorkView = {
+      ...base,
+      revision: 4,
+      run: { runId: "run-stale-index", status: "running", stage: "records", leaseGeneration: 6 },
+    };
+    const terminal: WorkView = {
+      ...running,
+      status: "complete",
+      sourceStatus: "completed",
+      revision: 5,
+      run: { runId: "run-stale-index", status: "completed", stage: "terminal", leaseGeneration: 6 },
+    };
+    const newer: WorkView = { ...terminal, revision: 6, updatedAt: "13:09" };
+    const staleIndex = deferred<WorkView[]>();
+    let durable: ((event: unknown) => void) | undefined;
+    let background = false;
+    const loadIndex = vi.fn(async () => (background ? await staleIndex.promise : [running]));
+    render(
+      <App
+        service={service({
+          initialSnapshot: { works: [running] },
+          loadIndex,
+          loadWork: async () => terminal,
+          subscribeDurable: async (handler) => {
+            durable = handler;
+            return async () => undefined;
+          },
+        })}
+      />,
+    );
+    await waitFor(() => expect(durable).toBeTypeOf("function"));
+
+    background = true;
+    act(() =>
+      durable?.({
+        sequence: 901,
+        type: "run.completed",
+        payload: { workId: running.id, stage: "terminal" },
+        resource: { type: "ApplicationRun", id: "run-stale-index" },
+      }),
+    );
+    await waitFor(() => expect(screen.getByRole("main", { name: terminal.title })).toHaveTextContent("완료"));
+
+    staleIndex.resolve([running]);
+    await act(async () => await Promise.resolve());
+    await act(async () => {
+      screen.getByRole("tab", { name: "완료" }).click();
+    });
+    const workList = screen.getByRole("region", { name: "Work 목록" });
+    await waitFor(() =>
+      expect(within(workList).getByRole("button", { name: new RegExp(terminal.title, "u") })).toHaveTextContent("완료"),
+    );
+
+    background = false;
+    loadIndex.mockResolvedValueOnce([newer]);
+    await act(async () => {
+      screen.getByRole("tab", { name: "진행 중" }).click();
+      await Promise.resolve();
+    });
+    await act(async () => {
+      screen.getByRole("tab", { name: "완료" }).click();
+      await Promise.resolve();
+    });
+    await waitFor(() => expect(within(workList).getByText("13:09")).toBeInTheDocument());
+  });
+
+  it("같은 Work의 백그라운드·사용자 refresh burst를 한 비행과 한 trailing 조회로 합친다", async () => {
+    vi.useFakeTimers();
+    try {
+      const running: WorkView = {
+        ...(fixtureDataAdapter().works[0] as WorkView),
+        run: { runId: "run-single-flight", status: "running", stage: "delivery", leaseGeneration: 3 },
+      };
+      const first = deferred<WorkView>();
+      let activeLoads = 0;
+      let maxActiveLoads = 0;
+      const loadWork = vi.fn(async () => {
+        activeLoads += 1;
+        maxActiveLoads = Math.max(maxActiveLoads, activeLoads);
+        try {
+          return loadWork.mock.calls.length === 1 ? await first.promise : running;
+        } finally {
+          activeLoads -= 1;
+        }
+      });
+      const view = render(
+        <App
+          service={service({
+            initialSnapshot: { works: [running] },
+            loadIndex: async () => [running],
+            loadWork,
+            subscribeDurable: async () => async () => undefined,
+          })}
+        />,
+      );
+      await act(async () => await Promise.resolve());
+      act(() => {
+        vi.advanceTimersByTime(1_000);
+        const selected = screen.getByRole("button", { name: new RegExp(running.title, "u") });
+        selected.click();
+        selected.click();
+      });
+      await act(async () => await Promise.resolve());
+      expect(maxActiveLoads).toBe(1);
+
+      first.resolve(running);
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      expect(loadWork).toHaveBeenCalledTimes(2);
+      expect(screen.getByRole("main", { name: running.title })).not.toHaveAttribute("aria-busy");
+      view.unmount();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("같은 Work의 trailing 대기 중 unmount하면 첫 조회 완료 뒤 추가 조회를 시작하지 않는다", async () => {
+    vi.useFakeTimers();
+    try {
+      const running: WorkView = {
+        ...(fixtureDataAdapter().works[0] as WorkView),
+        run: { runId: "run-single-flight-unmount", status: "running", stage: "delivery", leaseGeneration: 3 },
+      };
+      const first = deferred<WorkView>();
+      const loadWork = vi.fn(async () => (loadWork.mock.calls.length === 1 ? await first.promise : running));
+      const view = render(
+        <App
+          service={service({
+            initialSnapshot: { works: [running] },
+            loadIndex: async () => [running],
+            loadWork,
+            subscribeDurable: async () => async () => undefined,
+          })}
+        />,
+      );
+      await act(async () => await Promise.resolve());
+      act(() => {
+        vi.advanceTimersByTime(1_000);
+      });
+      expect(loadWork).toHaveBeenCalledOnce();
+
+      act(() => {
+        screen.getByRole("button", { name: new RegExp(running.title, "u") }).click();
+      });
+      expect(loadWork).toHaveBeenCalledOnce();
+
+      const firstRequest = loadWork.mock.results[0]?.value;
+      if (!(firstRequest instanceof Promise)) throw new Error("첫 Work 조회 Promise가 필요합니다.");
+      view.unmount();
+      first.resolve(running);
+      await act(async () => await firstRequest);
+
+      expect(loadWork).toHaveBeenCalledOnce();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("service lifecycle은 이전 foreground loading 소유권을 해제하고 늦은 응답을 버린다", async () => {
+    const snapshot = fixtureDataAdapter();
+    const first = snapshot.works[0] as WorkView;
+    const second = snapshot.works[1] as WorkView;
+    const stale = deferred<WorkView>();
+    const initialService = service({
+      initialSnapshot: { works: [first, second] },
+      loadIndex: async () => [first, second],
+      loadWork: async (workId) => (workId === second.id ? await stale.promise : first),
+    });
+    const replacementService = service({
+      initialSnapshot: { works: [first, second] },
+      loadIndex: async () => [first, second],
+      loadWork: async (workId) => (workId === second.id ? second : first),
+    });
+    const view = render(<App service={initialService} />);
+
+    act(() => {
+      screen.getByRole("button", { name: new RegExp(second.title, "u") }).click();
+    });
+    expect(screen.getByRole("main", { name: first.title })).toHaveAttribute("aria-busy", "true");
+
+    view.rerender(<App service={replacementService} />);
+    await waitFor(() => expect(screen.getByRole("main")).not.toHaveAttribute("aria-busy"));
+    stale.resolve({ ...second, title: "이전 service의 늦은 Work" });
+    await act(async () => await Promise.resolve());
+    expect(screen.queryByRole("main", { name: "이전 service의 늦은 Work" })).not.toBeInTheDocument();
+  });
+
+  it("StrictMode 재실행과 unmount에서도 selected Work timer를 하나만 유지한다", async () => {
+    vi.useFakeTimers();
+    try {
+      const running: WorkView = {
+        ...(fixtureDataAdapter().works[0] as WorkView),
+        run: { runId: "run-strict-refresh", status: "running", stage: "delivery", leaseGeneration: 2 },
+      };
+      const loadWork = vi.fn(async () => running);
+      const view = render(
+        <StrictMode>
+          <App
+            service={service({
+              initialSnapshot: { works: [running] },
+              loadIndex: async () => [running],
+              loadWork,
+              subscribeDurable: async () => async () => undefined,
+            })}
+          />
+        </StrictMode>,
+      );
+      await act(async () => await Promise.resolve());
+      await act(async () => await vi.advanceTimersByTimeAsync(1_000));
+      expect(loadWork).toHaveBeenCalledOnce();
+
+      view.unmount();
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect(loadWork).toHaveBeenCalledOnce();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("선택한 Work의 run event는 상세 상태·계획·승인을 다시 읽는다", async () => {
     const base = fixtureDataAdapter().works[0] as WorkView;
     const blocked: WorkView = {

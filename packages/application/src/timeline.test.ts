@@ -38,6 +38,7 @@ function message(input: {
   readonly messageId: string;
   readonly sequence: number;
   readonly authorKind: "user" | "agent";
+  readonly messageType?: string;
   readonly content: string;
   readonly createdAt: string;
 }) {
@@ -47,7 +48,7 @@ function message(input: {
     work_id: "work-1",
     room_id: "room-1",
     sequence: input.sequence,
-    message_type: "question" as const,
+    message_type: input.messageType ?? "question",
     author_kind: input.authorKind,
     author_id: input.authorKind === "user" ? "timeline-user" : "representative",
     content: input.content,
@@ -96,6 +97,7 @@ describe("work.timeline 투영", () => {
             messageId: "message-2",
             sequence: 2,
             authorKind: "agent",
+            messageType: "handoff",
             content: "계획을 수립했습니다",
             createdAt: "2026-07-21T09:03:00.000Z",
           }),
@@ -119,7 +121,7 @@ describe("work.timeline 투영", () => {
       authorKind: "user",
       authorId: "timeline-user",
     });
-    expect(cells[3]).toMatchObject({ authorKind: "agent", authorId: "representative" });
+    expect(cells[3]).toMatchObject({ authorKind: "agent", authorId: "representative", messageType: "handoff" });
     expect(cells[2]?.title).toContain("환불 API 계약 정의");
   });
 

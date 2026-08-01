@@ -525,6 +525,7 @@ describe("ApplicationQueryRegistry", () => {
             message_id: "message-1",
             room_id: "room-1",
             sequence: 1,
+            message_type: "handoff",
             author_kind: "agent" as const,
             author_id: "analysis",
             content: "분석을 시작했습니다",
@@ -541,7 +542,7 @@ describe("ApplicationQueryRegistry", () => {
     expect(latest).toMatchObject({
       data: {
         items: [
-          { activityId: "message:message-1", kind: "message", authorKind: "agent" },
+          { activityId: "message:message-1", kind: "message", authorKind: "agent", messageType: "handoff" },
           { activityId: "event:event-2", kind: "task" },
         ],
         nextCursor: "2",

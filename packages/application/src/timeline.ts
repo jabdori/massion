@@ -15,6 +15,7 @@ export interface WorkTimelineCell {
   readonly detail?: string;
   readonly authorKind?: "user" | "agent";
   readonly authorId?: string;
+  readonly messageType?: string;
   readonly roomId?: string;
   readonly eventType?: string;
   readonly createdAt: string;
@@ -61,6 +62,7 @@ interface TimelineMessageSource {
   readonly message_id: string;
   readonly room_id: string;
   readonly sequence: number;
+  readonly message_type?: string;
   readonly author_kind: "user" | "agent";
   readonly author_id: string;
   readonly content: string;
@@ -200,6 +202,7 @@ function cellFromMessage(message: TimelineMessageSource): WorkTimelineCell {
     detail: message.content,
     authorKind: message.author_kind,
     authorId: message.author_id,
+    ...(message.message_type === undefined ? {} : { messageType: message.message_type }),
     roomId: message.room_id,
     createdAt: isoTimestamp(message.created_at),
     sequence: message.sequence,

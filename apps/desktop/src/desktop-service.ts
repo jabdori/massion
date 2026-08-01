@@ -5264,7 +5264,7 @@ function projectActivity(
       status: activity.status ?? "",
     };
   }
-  const source = activity as WorkActivityViewV1 & { readonly authorKind?: string };
+  const source = activity as WorkActivityViewV1 & { readonly authorKind?: string; readonly messageType?: string };
   const identity = source.authorKind === "agent" ? agentIdentityToken(activity.authorId ?? "agent") : undefined;
   const author = source.authorKind === "user" ? "나" : (identity?.name ?? "Massion");
   return {
@@ -5276,6 +5276,7 @@ function projectActivity(
     initials: identity?.initial ?? initials(author),
     human: source.authorKind === "user",
     content: activity.detail ?? activity.title,
+    ...(source.messageType === undefined ? {} : { messageType: source.messageType }),
   };
 }
 
