@@ -479,6 +479,42 @@ describe("CoreWorkCoordinator", () => {
     });
   });
 
+  it("blocked stage의 bounded detail을 Application run 결과로 전달한다", async () => {
+    await using database = await createDatabase({ url: "mem://", namespace: "massion", database: crypto.randomUUID() });
+    const identities = await IdentityService.create(database);
+    const organizations = await OrganizationService.create(database);
+    const owner = await identities.registerPersonalUser({
+      email: "coordinator-blocked-detail@example.com",
+      displayName: "Blocked detail",
+    });
+    const context = await organizations.resolveTenantContext(owner.user.user_id, owner.organization.organization_id);
+    const store = await ApplicationRunStore.create(database, organizations);
+    const coordinator = new CoreWorkCoordinator(store, {
+      ...executors([]),
+      intake: {
+        async execute() {
+          return {
+            outcome: "blocked",
+            reason: "assurance-verifier-rejected",
+            blockedDetail: "산출물의 모순을 보완해야 합니다.",
+          } as const;
+        },
+      },
+    });
+
+    await expect(
+      coordinator.start(context, {
+        commandId: "coordinator-blocked-detail-command-0001",
+        correlationId: "coordinator-blocked-detail-correlation-0001",
+        request: {},
+      }),
+    ).resolves.toMatchObject({
+      status: "blocked",
+      blockedReason: "assurance-verifier-rejected",
+      result: { blockedDetail: "산출물의 모순을 보완해야 합니다." },
+    });
+  });
+
   it("terminal Delivery 실패는 failed로 확정하고 재생·복구·재시도로 다시 실행하지 않는다", async () => {
     await using database = await createDatabase({ url: "mem://", namespace: "massion", database: crypto.randomUUID() });
     const identities = await IdentityService.create(database);

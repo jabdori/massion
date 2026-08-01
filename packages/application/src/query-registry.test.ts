@@ -599,6 +599,101 @@ describe("ApplicationQueryRegistry", () => {
     expect(JSON.stringify(result)).not.toContain("공개하면 안 되는 요청 원문");
   });
 
+  it("차단 상세는 exact bounded result만 공개하고 arbitrary result는 노출하지 않는다", async () => {
+    const cases = [
+      {
+        name: "valid",
+        status: "blocked",
+        blockedReason: "assurance-verifier-rejected",
+        result: { blockedDetail: "산출물의 모순을 보완해야 합니다." },
+        expected: "산출물의 모순을 보완해야 합니다.",
+      },
+      {
+        name: "extra-key",
+        status: "blocked",
+        blockedReason: "assurance-verifier-rejected",
+        result: { blockedDetail: "노출 금지", secret: "arbitrary-result-secret" },
+      },
+      {
+        name: "oversize",
+        status: "blocked",
+        blockedReason: "assurance-verifier-rejected",
+        result: { blockedDetail: "x".repeat(2_049) },
+      },
+      {
+        name: "control",
+        status: "blocked",
+        blockedReason: "assurance-verifier-rejected",
+        result: { blockedDetail: "숨은\u0001문자" },
+      },
+      {
+        name: "tab-control",
+        status: "blocked",
+        blockedReason: "assurance-verifier-rejected",
+        result: { blockedDetail: "탭\t문자" },
+      },
+      {
+        name: "lf-control",
+        status: "blocked",
+        blockedReason: "assurance-verifier-rejected",
+        result: { blockedDetail: "줄\n바꿈" },
+      },
+      {
+        name: "cr-control",
+        status: "blocked",
+        blockedReason: "assurance-verifier-rejected",
+        result: { blockedDetail: "캐리지\r리턴" },
+      },
+      {
+        name: "malformed",
+        status: "blocked",
+        blockedReason: "assurance-verifier-rejected",
+        result: { blockedDetail: 42 },
+      },
+      {
+        name: "wrong-reason",
+        status: "blocked",
+        blockedReason: "model-unavailable",
+        result: { blockedDetail: "노출 금지" },
+      },
+      {
+        name: "wrong-status",
+        status: "running",
+        blockedReason: "assurance-verifier-rejected",
+        result: { blockedDetail: "노출 금지" },
+      },
+    ];
+
+    for (const candidate of cases) {
+      const registry = new ApplicationQueryRegistry();
+      registerApplicationQueries(registry, {
+        readModel,
+        runs: {
+          get: async () => ({
+            runId: `query-run-detail-${candidate.name}`,
+            organizationId: context.organizationId,
+            commandId: `query-run-detail-command-${candidate.name}`,
+            correlationId: `query-run-detail-correlation-${candidate.name}`,
+            request: {},
+            workId: "query-work",
+            stage: "assurance",
+            status: candidate.status,
+            blockedReason: candidate.blockedReason,
+            result: candidate.result,
+            leaseGeneration: 3,
+          }),
+        },
+      } as never);
+
+      const queried = await registry.query(context, ["work:read"], "run.get", {
+        runId: `query-run-detail-${candidate.name}`,
+      });
+      if (candidate.expected === undefined) expect(queried.data).not.toHaveProperty("blockedDetail");
+      else expect(queried.data).toMatchObject({ blockedDetail: candidate.expected });
+      expect(JSON.stringify(queried)).not.toContain("arbitrary-result-secret");
+    }
+  });
+
   it("감사 사건 cursor가 보존 범위 밖이면 snapshot 재동기화가 가능한 공개 오류로 변환한다", async () => {
     const registry = new ApplicationQueryRegistry();
     registerApplicationQueries(registry, {

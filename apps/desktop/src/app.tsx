@@ -1025,7 +1025,10 @@ function buildInboxItems(
       id: `blocked:${work.id}`,
       workId: work.id,
       title: work.title,
-      reason: work.run?.blockedReason ?? "차단됨",
+      reason:
+        work.run?.blockedReason === "assurance-verifier-rejected" && work.run.blockedDetail !== undefined
+          ? work.run.blockedDetail
+          : blockedReasonText(work.run?.blockedReason),
     }));
   const approval: InboxItem[] = approvals.map((item) => ({ kind: "approval", id: item.id, approval: item }));
   const growth: InboxItem[] = suggestions
@@ -1225,7 +1228,7 @@ function BlockedInboxCard({
     <section
       className="rounded-[7px] border px-3.5 py-3"
       style={{ borderColor: "var(--halt)", background: "color-mix(in srgb, var(--halt) 8%, transparent)" }}
-      title={`업무 ${item.workId}`}
+      title={item.title}
     >
       {/* 제목·상태·꺾쇠를 한 줄에 두고, 꺾쇠는 두 카드 모두 맨 오른쪽에 맞춥니다. */}
       <h3 className="text-[13px] font-medium">
@@ -6008,6 +6011,8 @@ function blockedReasonText(reason: string | undefined): string {
       return "업무에 연결된 근거를 검증하지 못했습니다.";
     case "workspace-untrusted":
       return "워크스페이스 신뢰 확인이 필요합니다.";
+    case "assurance-verifier-rejected":
+      return "산출물의 모순을 보완한 새 Work가 필요합니다.";
     default:
       return "실행 단계에서 오류가 발생했습니다.";
   }
@@ -6034,30 +6039,38 @@ function RunStatusCard({
   if (!blocked && !awaitingApproval && !active) return null;
 
   if (blocked) {
+    const assuranceRejected = run.blockedReason === "assurance-verifier-rejected";
     return (
       <div aria-label="실행 상태" className="my-2 rounded-[5px] border border-halt/40 px-3 py-2.5" role="status">
         <div className="flex items-start gap-2.5">
           <WarningCircle aria-hidden="true" className="mt-0.5 shrink-0 text-halt" size={16} />
           <div className="min-w-0 flex-1">
             <p className="flex items-baseline gap-1.5 text-[13px] text-halt">
-              <span className="shrink-0 font-medium text-halt">차단됨</span>
+              <span className="shrink-0 font-medium text-halt">
+                {assuranceRejected ? "검증에서 보완 필요" : "차단됨"}
+              </span>
               <span>{blockedReasonText(run.blockedReason)}</span>
             </p>
+            {!assuranceRejected || run.blockedDetail === undefined ? null : (
+              <p className="mt-1 text-[12px] leading-5 text-secondary">{run.blockedDetail}</p>
+            )}
             <p className="mt-0.5 flex items-baseline gap-1.5 text-[11px] text-muted">
               <span>{runStageText(run.stage)}</span>
             </p>
           </div>
-          <button
-            className="shrink-0 rounded-[5px] border border-control px-2.5 py-1 text-[12px] text-secondary transition-colors duration-150 hover:border-fg-3 hover:text-primary disabled:opacity-50"
-            disabled={pendingRunAction !== undefined}
-            onClick={() => {
-              if (run.blockedReason === "workspace-untrusted") onOpenWorkspaceTrust();
-              else onControlRun("resume");
-            }}
-            type="button"
-          >
-            {pendingRunAction === "resume" ? "재개 중" : (blockedActionText(run.blockedReason) ?? "다시 시도")}
-          </button>
+          {assuranceRejected ? null : (
+            <button
+              className="shrink-0 rounded-[5px] border border-control px-2.5 py-1 text-[12px] text-secondary transition-colors duration-150 hover:border-fg-3 hover:text-primary disabled:opacity-50"
+              disabled={pendingRunAction !== undefined}
+              onClick={() => {
+                if (run.blockedReason === "workspace-untrusted") onOpenWorkspaceTrust();
+                else onControlRun("resume");
+              }}
+              type="button"
+            >
+              {pendingRunAction === "resume" ? "재개 중" : (blockedActionText(run.blockedReason) ?? "다시 시도")}
+            </button>
+          )}
         </div>
       </div>
     );

@@ -1723,6 +1723,30 @@ describe("Application desktop service", () => {
     });
   });
 
+  it("Application API의 blockedDetail을 Desktop run model까지 그대로 투영한다", async () => {
+    const native = transport({
+      "run.list": [
+        {
+          ...run,
+          status: "blocked",
+          stage: "assurance",
+          blockedReason: "assurance-verifier-rejected",
+          blockedDetail: "산출물의 모순을 보완해야 합니다.",
+        },
+      ],
+    });
+    const service = createApplicationDesktopService(native);
+
+    await expect(service.loadWork(detail.workId)).resolves.toMatchObject({
+      run: {
+        status: "blocked",
+        stage: "assurance",
+        blockedReason: "assurance-verifier-rejected",
+        blockedDetail: "산출물의 모순을 보완해야 합니다.",
+      },
+    });
+  });
+
   it("지시·승인·run 제어에 실제 식별자와 revision을 보낸다", async () => {
     const native = transport();
     let id = 0;

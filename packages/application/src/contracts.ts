@@ -152,6 +152,7 @@ export interface RunViewV1 {
   readonly status: string;
   readonly approvalId?: string;
   readonly blockedReason?: string;
+  readonly blockedDetail?: string;
   readonly leaseGeneration: number;
   readonly createdAt?: string;
   readonly updatedAt?: string;

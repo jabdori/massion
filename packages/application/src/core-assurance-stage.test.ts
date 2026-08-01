@@ -570,11 +570,41 @@ describe("CoreAssuranceStage", () => {
         projectVerdict: async () => ({ work: { revision: 8 } }),
       },
     };
-    for (const output of [
-      { snapshotHash: "a".repeat(64), verified: false, reason: "산출물을 검증할 수 없습니다." },
-      { snapshotHash: "b".repeat(64), verified: true, reason: "다른 snapshot 결과입니다." },
-      "{malformed",
-    ]) {
+    const rejectedCases = [
+      {
+        output: {
+          snapshotHash: "a".repeat(64),
+          verified: false,
+          reason: "  산출물의   모순을 보완해야 합니다.  ",
+        },
+        blockedDetail: "산출물의 모순을 보완해야 합니다.",
+      },
+      { output: { snapshotHash: "b".repeat(64), verified: false, reason: "다른 snapshot 결과입니다." } },
+      { output: { snapshotHash: "a".repeat(64), verified: false, reason: "" } },
+      { output: { snapshotHash: "a".repeat(64), verified: false, reason: "x".repeat(2_049) } },
+      { output: { snapshotHash: "a".repeat(64), verified: false, reason: "숨은\u0001제어문자" } },
+      { output: { snapshotHash: "a".repeat(64), verified: false, reason: "탭\t문자" } },
+      { output: { snapshotHash: "a".repeat(64), verified: false, reason: "줄\n바꿈" } },
+      { output: { snapshotHash: "a".repeat(64), verified: false, reason: "캐리지\r리턴" } },
+      { output: { snapshotHash: "a".repeat(64), verified: false } },
+      {
+        output: {
+          output: {
+            output: {
+              output: {
+                output: {
+                  snapshotHash: "a".repeat(64),
+                  verified: false,
+                  reason: "너무 깊은 결과",
+                },
+              },
+            },
+          },
+        },
+      },
+      { output: "{malformed" },
+    ];
+    for (const { output, blockedDetail } of rejectedCases) {
       const rejected = new CoreAssuranceStage({
         ...base,
         runner: verifierRunner([], [], output),
@@ -583,10 +613,13 @@ describe("CoreAssuranceStage", () => {
           execute: async () => Promise.reject(new Error("거부된 verifier 뒤에 검사를 실행하면 안 됩니다")),
         },
       } as never);
-      await expect(rejected.execute(context, input)).resolves.toMatchObject({
+      const result = await rejected.execute(context, input);
+      expect(result).toMatchObject({
         outcome: "blocked",
         reason: "assurance-verifier-rejected",
       });
+      if (blockedDetail === undefined) expect(result).not.toHaveProperty("blockedDetail");
+      else expect(result).toMatchObject({ blockedDetail });
     }
     const oversized = new CoreAssuranceStage({
       ...base,

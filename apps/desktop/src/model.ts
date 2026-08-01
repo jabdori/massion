@@ -194,6 +194,7 @@ export interface RunView {
   leaseGeneration: number;
   approvalId?: string;
   blockedReason?: string;
+  blockedDetail?: string;
 }
 
 export interface ApprovalView {

@@ -37,6 +37,7 @@ import type {
 import type { ApplicationRunStore, ApplicationRunView } from "./run-store.js";
 import type { CollaborationGraphSnapshot, CollaborationGraphSnapshotProjector } from "./snapshot.js";
 import type { WebSessionService } from "./web-session.js";
+import { ASSURANCE_VERIFIER_REJECTED, blockedDetailFromResult } from "./blocked-detail.js";
 import type {
   SubscriptionAccountQueries,
   SubscriptionConnectorQueries,
@@ -151,6 +152,10 @@ export interface ApplicationQueryDependencies {
 }
 
 function publicRun(run: ApplicationRunView): Record<string, unknown> {
+  const blockedDetail =
+    run.status === "blocked" && run.blockedReason === ASSURANCE_VERIFIER_REJECTED
+      ? blockedDetailFromResult(run.result)
+      : undefined;
   return {
     runId: run.runId,
     ...(run.workId === undefined ? {} : { workId: run.workId }),
@@ -158,6 +163,7 @@ function publicRun(run: ApplicationRunView): Record<string, unknown> {
     status: run.status,
     ...(run.approvalId === undefined ? {} : { approvalId: run.approvalId }),
     ...(run.blockedReason === undefined ? {} : { blockedReason: run.blockedReason }),
+    ...(blockedDetail === undefined ? {} : { blockedDetail }),
     leaseGeneration: run.leaseGeneration,
     ...(run.createdAt === undefined ? {} : { createdAt: run.createdAt }),
     ...(run.updatedAt === undefined ? {} : { updatedAt: run.updatedAt }),

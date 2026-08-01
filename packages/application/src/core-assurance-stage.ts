@@ -14,6 +14,7 @@ import type { AgentRunner, RuntimeExecutionStore } from "@massion/runtime";
 import type { WorkRecoveryBundle, WorkService } from "@massion/work";
 
 import type { CoreWorkStageExecutor, CoreWorkStageInput, CoreWorkStageResult } from "./core-work-coordinator.js";
+import { ASSURANCE_VERIFIER_REJECTED, normalizeBlockedDetail } from "./blocked-detail.js";
 
 export interface CoreAssuranceCheckOrchestrator {
   execute(
@@ -92,23 +93,36 @@ function parseJson(value: unknown): unknown {
   return typeof value === "string" ? (JSON.parse(value) as unknown) : value;
 }
 
-function verifierAccepted(output: unknown, snapshotHash: string): boolean {
+type VerifierDecision = { readonly accepted: true } | { readonly accepted: false; readonly blockedDetail?: string };
+
+function verifierDecision(output: unknown, snapshotHash: string): VerifierDecision {
   let value = output;
-  for (let depth = 0; depth < 3; depth += 1) {
+  for (let depth = 0; depth <= 3; depth += 1) {
     try {
       value = parseJson(value);
     } catch {
-      return false;
+      return { accepted: false };
     }
     const current = record(value);
-    if (!current) return false;
-    if (current.snapshotHash === snapshotHash && current.verified === true && typeof current.reason === "string") {
-      return current.reason.trim().length > 0;
+    if (!current) return { accepted: false };
+    if (["snapshotHash", "verified", "reason"].some((key) => Object.hasOwn(current, key))) {
+      if (
+        Object.keys(current).length !== 3 ||
+        current.snapshotHash !== snapshotHash ||
+        (current.verified !== true && current.verified !== false)
+      ) {
+        return { accepted: false };
+      }
+      const reason = normalizeBlockedDetail(current.reason);
+      if (!reason) return { accepted: false };
+      return current.verified ? { accepted: true } : { accepted: false, blockedDetail: reason };
     }
-    if (!("output" in current)) return false;
+    if (depth === 3 || Object.keys(current).length !== 1 || !Object.hasOwn(current, "output")) {
+      return { accepted: false };
+    }
     value = current.output;
   }
-  return false;
+  return { accepted: false };
 }
 
 function promptTokens(value: unknown): number {
@@ -465,14 +479,19 @@ export class CoreAssuranceStage implements CoreWorkStageExecutor {
         }
         return completed.result;
       }
-      if (!verifierAccepted(completedVerifier.output, prepared.snapshot.hash)) {
+      const decision = verifierDecision(completedVerifier.output, prepared.snapshot.hash);
+      if (!decision.accepted) {
         const current = await this.dependencies.assurance.get(context, started.run.assuranceRunId);
         await this.cancelAndThrowIfCancelled(context, input, verifier);
         const completed = await this.completeRun(context, input, workId, current);
         if (completed.result.outcome !== "blocked") {
           throw new Error("Assurance verifier 거부와 terminal 판정이 일치하지 않습니다");
         }
-        return { ...completed.result, reason: "assurance-verifier-rejected" };
+        return {
+          ...completed.result,
+          reason: ASSURANCE_VERIFIER_REJECTED,
+          ...(decision.blockedDetail === undefined ? {} : { blockedDetail: decision.blockedDetail }),
+        };
       }
       const checks = await this.dependencies.checks.execute(context, {
         commandId: `${input.commandId}:checks`,

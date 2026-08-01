@@ -4964,6 +4964,7 @@ function projectRun(run: RunViewV1): RunView {
     leaseGeneration: run.leaseGeneration,
     ...(run.approvalId === undefined ? {} : { approvalId: run.approvalId }),
     ...(run.blockedReason === undefined ? {} : { blockedReason: run.blockedReason }),
+    ...(run.blockedDetail === undefined ? {} : { blockedDetail: run.blockedDetail }),
   };
 }
 

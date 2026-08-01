@@ -574,6 +574,70 @@ describe("ApplicationRunStore", () => {
     expect(claims.filter((claim) => claim.outcome === "in-progress")).toHaveLength(7);
   });
 
+  it("blocked detail은 exact result로 저장하고 detail 없는 재차단은 stale result와 hash를 모두 지운다", async () => {
+    const started = await store.start(context, {
+      commandId: "application-run-blocked-detail-0001",
+      correlationId: "application-run-blocked-detail-correlation-0001",
+      request: {},
+    });
+    const firstClaim = await store.claim(context, started.runId);
+    if (firstClaim.outcome !== "claimed") throw new Error("첫 차단 lease를 얻지 못했습니다");
+    await expect(
+      store.block(
+        context,
+        started.runId,
+        firstClaim.leaseGeneration,
+        "assurance-verifier-rejected",
+        undefined,
+        "산출물의 모순을 보완해야 합니다.",
+      ),
+    ).resolves.toMatchObject({
+      status: "blocked",
+      result: { blockedDetail: "산출물의 모순을 보완해야 합니다." },
+    });
+
+    const resumed = await store.claim(context, started.runId, { resumeBlocked: true });
+    if (resumed.outcome !== "claimed") throw new Error("재차단 lease를 얻지 못했습니다");
+    await expect(
+      store.block(context, started.runId, resumed.leaseGeneration, "model-unavailable"),
+    ).resolves.not.toHaveProperty("result");
+    const [records] = await database.query<[{ result_json?: string; result_hash?: string }[]]>(
+      "SELECT result_json, result_hash FROM application_run WHERE organization_id = $organization_id AND run_id = $run_id;",
+      { organization_id: context.organizationId, run_id: started.runId },
+    );
+    expect(records[0]).toEqual({});
+  });
+
+  it.each([
+    ["TAB", "탭\t문자"],
+    ["LF", "줄\n바꿈"],
+    ["CR", "캐리지\r리턴"],
+  ])("원문 %s control이 있는 blocked detail은 result와 hash를 저장하지 않는다", async (_name, blockedDetail) => {
+    const started = await store.start(context, {
+      commandId: `application-run-blocked-control-${_name.toLowerCase()}-0001`,
+      correlationId: `application-run-blocked-control-${_name.toLowerCase()}-correlation-0001`,
+      request: {},
+    });
+    const claim = await store.claim(context, started.runId);
+    if (claim.outcome !== "claimed") throw new Error("control detail 차단 lease를 얻지 못했습니다");
+
+    await expect(
+      store.block(
+        context,
+        started.runId,
+        claim.leaseGeneration,
+        "assurance-verifier-rejected",
+        undefined,
+        blockedDetail,
+      ),
+    ).resolves.not.toHaveProperty("result");
+    const [records] = await database.query<[{ result_json?: string; result_hash?: string }[]]>(
+      "SELECT result_json, result_hash FROM application_run WHERE organization_id = $organization_id AND run_id = $run_id;",
+      { organization_id: context.organizationId, run_id: started.runId },
+    );
+    expect(records[0]).toEqual({});
+  });
+
   it("시작 복구 후보는 tenant별 actor 계보와 안정 순서를 보존하고 복구 가능한 상태만 반환한다", async () => {
     const ready = await store.start(context, {
       commandId: "application-run-startup-ready-0001",

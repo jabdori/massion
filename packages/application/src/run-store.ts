@@ -9,6 +9,7 @@ import {
   APPLICATION_RUN_MIGRATION,
   APPLICATION_RUN_RETRY_MIGRATION,
 } from "./schema.js";
+import { ASSURANCE_VERIFIER_REJECTED, normalizeBlockedDetail } from "./blocked-detail.js";
 
 export type ApplicationRunStage =
   "intake" | "context-strategy" | "evidence" | "delivery" | "assurance" | "records" | "terminal";
@@ -481,16 +482,21 @@ export class ApplicationRunStore {
     generation: number,
     reason: string,
     workId?: string,
+    blockedDetail?: string,
   ): Promise<ApplicationRunView> {
+    const detail = reason === ASSURANCE_VERIFIER_REJECTED ? normalizeBlockedDetail(blockedDetail) : undefined;
+    const resultJson = detail === undefined ? undefined : canonicalJson({ blockedDetail: detail });
     return await this.transition(context, runId, generation, async (transaction, record) => {
       await transaction.query(
-        "UPDATE application_run SET status = 'blocked', blocked_reason = $blocked_reason, work_id = $work_id, lease_expires_at = NONE, updated_at = <datetime>$updated_at WHERE organization_id = $organization_id AND run_id = $run_id AND status = 'running' AND lease_generation = $generation;",
+        "UPDATE application_run SET status = 'blocked', blocked_reason = $blocked_reason, work_id = $work_id, result_json = $result_json, result_hash = $result_hash, lease_expires_at = NONE, updated_at = <datetime>$updated_at WHERE organization_id = $organization_id AND run_id = $run_id AND status = 'running' AND lease_generation = $generation;",
         {
           organization_id: context.organizationId,
           run_id: runId,
           generation,
           blocked_reason: reason,
           work_id: workId ?? record.work_id,
+          result_json: resultJson,
+          result_hash: resultJson === undefined ? undefined : sha256(resultJson),
           updated_at: this.clock.now.toISOString(),
         },
       );

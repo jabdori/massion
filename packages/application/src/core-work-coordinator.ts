@@ -50,7 +50,7 @@ export type CoreWorkStageResult = (
   | { readonly outcome: "completed"; readonly workId?: string; readonly data?: unknown }
   | { readonly outcome: "in-progress" }
   | { readonly outcome: "awaiting-approval"; readonly approvalId: string }
-  | { readonly outcome: "blocked"; readonly reason: string; readonly workId?: string }
+  | { readonly outcome: "blocked"; readonly reason: string; readonly workId?: string; readonly blockedDetail?: string }
   | {
       readonly outcome: "failed";
       readonly reason: string;
@@ -382,7 +382,14 @@ export class CoreWorkCoordinator {
           return await this.store.suspend(context, run.runId, claim.leaseGeneration, result.approvalId);
         }
         if (result.outcome === "blocked") {
-          return await this.store.block(context, run.runId, claim.leaseGeneration, result.reason, result.workId);
+          return await this.store.block(
+            context,
+            run.runId,
+            claim.leaseGeneration,
+            result.reason,
+            result.workId,
+            result.blockedDetail,
+          );
         }
         if (result.outcome === "failed") {
           const failed = await this.store.fail(

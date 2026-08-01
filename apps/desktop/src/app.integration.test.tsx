@@ -1275,6 +1275,55 @@ describe("AgentOS native data flow", () => {
     expect(resumeRun).not.toHaveBeenCalled();
   });
 
+  it("Assurance 거부 상세를 Inbox와 기존 실행 카드에 안전한 사용자 문구로 표시하고 재시도를 숨긴다", async () => {
+    const user = userEvent.setup();
+    const base = fixtureDataAdapter().works[0] as WorkView;
+    const detail = "산출물 <strong>모순</strong>을 보완해야 합니다.";
+    const rejected: WorkView = {
+      ...base,
+      approvals: [],
+      id: "work-assurance-rejected",
+      title: "검증 보완 업무",
+      run: {
+        runId: "run-assurance-rejected",
+        status: "blocked",
+        stage: "assurance",
+        leaseGeneration: 3,
+        blockedReason: "assurance-verifier-rejected",
+        blockedDetail: detail,
+      },
+    };
+    const resumeRun = vi.fn(async () => undefined);
+    render(
+      <App
+        service={service({
+          initialSnapshot: { works: [rejected] },
+          loadIndex: async () => [rejected],
+          loadWork: async () => rejected,
+          resumeRun,
+        })}
+      />,
+    );
+
+    await user.click(await screen.findByRole("button", { name: /수신함, 미해결/u }));
+    const inbox = await screen.findByRole("dialog", { name: "수신함" });
+    const source = within(inbox).getByRole("button", { name: "업무로 이동: 검증 보완 업무" });
+    expect(source.closest("section")).toHaveTextContent(detail);
+    expect(inbox).not.toHaveTextContent("assurance-verifier-rejected");
+    expect(inbox).not.toHaveTextContent("run-assurance-rejected");
+
+    await user.click(source);
+    const main = screen.getByRole("main", { name: rejected.title });
+    const status = within(main).getByRole("status", { name: "실행 상태" });
+    expect(within(status).getByText("검증에서 보완 필요")).toBeInTheDocument();
+    expect(status).toHaveTextContent(detail);
+    expect(status).toHaveTextContent("산출물의 모순을 보완한 새 Work가 필요합니다.");
+    expect(status.querySelector("strong, script")).toBeNull();
+    expect(within(status).queryByRole("button", { name: "다시 시도" })).not.toBeInTheDocument();
+    expect(status).not.toHaveTextContent("assurance-verifier-rejected");
+    expect(resumeRun).not.toHaveBeenCalled();
+  });
+
   it("승인 대기 실행은 Home·Inbox·Work에서 gate 상태로 일치한다", async () => {
     const user = userEvent.setup();
     const base = fixtureDataAdapter().works[0] as WorkView;
