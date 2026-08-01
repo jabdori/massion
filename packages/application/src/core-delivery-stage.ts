@@ -348,7 +348,7 @@ export class CoreDeliveryStage implements CoreWorkStageExecutor {
             ? (JSON.parse(task.acceptance_criteria_json) as unknown)
             : [],
         outputContract:
-          "최종 응답 전체는 Task output ArtifactVersion으로 자동 저장되고 후속 Assurance가 acceptance evidence를 검증합니다. Artifact 생성·제출 도구를 찾거나 호출하지 말고 acceptance criteria를 충족하는 최종 결과 본문만 반환하세요.",
+          "최종 응답 전체는 Task output ArtifactVersion으로 자동 저장되고 후속 Assurance가 acceptance evidence를 검증합니다. 반환 전에 해당하는 모든 acceptance criteria와 대조하고, 해당하는 시간·수치·가중치·동률 결정 입력·완료 조건·후속 조치 및 보완 규칙 사이의 내부 일관성을 자체 점검하세요. 사실·근거·측정값·현장 관찰을 지어내지 말고, 해결되지 않은 항목은 가정·알 수 없음·미완료·현장 입력 필요 중 해당 상태로 명시하세요. Assurance 또는 검증을 통과했다고 주장하지 마세요. 최종 결과에는 사용자 업무 결과만 포함하고 내부 실행 과정이나 평가 절차를 언급하지 않으며, 후속 평가를 통과하려고 사실이나 표현을 왜곡하지 마세요. Artifact 생성·제출 도구를 찾거나 호출하지 말고 acceptance criteria별 충족 여부와 미해결 상태가 드러나는 최종 결과 본문만 반환하세요. 사실이나 근거가 없는 기준은 미충족 상태를 숨기지 마세요.",
         ...(requestContext === undefined ? {} : { sourceRequest: requestContext }),
         ...(priorOutputs.length === 0 ? {} : { dependencyOutputs: priorOutputs }),
       };

@@ -719,8 +719,23 @@ describe("CoreDeliveryStage", () => {
     ]);
     const outputContract = (runtimeInputs[0] as { readonly input: { readonly outputContract: string } }).input
       .outputContract;
+    expect(outputContract).toContain("반환 전에 해당하는 모든 acceptance criteria와 대조");
+    expect(outputContract).toContain(
+      "해당하는 시간·수치·가중치·동률 결정 입력·완료 조건·후속 조치 및 보완 규칙 사이의 내부 일관성을 자체 점검",
+    );
+    expect(outputContract).toContain("사실·근거·측정값·현장 관찰을 지어내지");
+    expect(outputContract).toContain("가정·알 수 없음·미완료·현장 입력 필요 중 해당 상태로 명시");
+    expect(outputContract).toContain("Assurance 또는 검증을 통과했다고 주장하지");
+    expect(outputContract).toContain(
+      "최종 결과에는 사용자 업무 결과만 포함하고 내부 실행 과정이나 평가 절차를 언급하지 않으며",
+    );
+    expect(outputContract).toContain("후속 평가를 통과하려고 사실이나 표현을 왜곡하지");
     expect(outputContract).toContain("Artifact 생성·제출 도구를 찾거나 호출하지 말고");
+    expect(outputContract).toContain("acceptance criteria별 충족 여부와 미해결 상태가 드러나는");
+    expect(outputContract).toContain("사실이나 근거가 없는 기준은 미충족 상태를 숨기지");
     expect(outputContract).toContain("최종 결과 본문만 반환");
+    expect(outputContract).not.toContain("AgentOS");
+    expect(outputContract).not.toContain("verifier");
     expect((runtimeInputs[0] as { estimatedTokens: number }).estimatedTokens).toBeLessThanOrEqual(32_000);
     expect(artifactInputs).toEqual([
       expect.objectContaining({
@@ -810,6 +825,11 @@ describe("CoreDeliveryStage", () => {
       },
     ];
     const softwareInputs: unknown[] = [];
+    const materializeInputs: unknown[] = [];
+    const softwareRequest = {
+      tokenBudget: 5_000,
+      softwareDelivery: { allowedPaths: ["packages/software"] },
+    };
     let listCalls = 0;
     const task = {
       task_id: "task-software-evidence",
@@ -827,7 +847,12 @@ describe("CoreDeliveryStage", () => {
       runner: {},
       runtimeExecutions: {},
       workspaces: { get: async () => ({ trust: "trusted" }) },
-      evidence: { materializeActive: async () => knowledgeSources },
+      evidence: {
+        materializeActive: async (...args: unknown[]) => {
+          materializeInputs.push(args);
+          return knowledgeSources;
+        },
+      },
       software: {
         executeTask: async (_context: unknown, softwareInput: unknown) => {
           softwareInputs.push(softwareInput);
@@ -837,8 +862,12 @@ describe("CoreDeliveryStage", () => {
       },
     } as never);
 
-    await expect(stage.execute(context, input)).resolves.toMatchObject({ outcome: "advanced" });
-    expect(softwareInputs).toEqual([expect.objectContaining({ knowledgeSources })]);
+    await expect(stage.execute(context, { ...input, request: softwareRequest })).resolves.toMatchObject({
+      outcome: "advanced",
+    });
+    expect(materializeInputs).toEqual([[context, input.workId, 961]]);
+    expect(softwareInputs).toEqual([expect.objectContaining({ request: softwareRequest, knowledgeSources })]);
+    expect(softwareInputs[0]).not.toHaveProperty("outputContract");
   });
 
   it("의존 Artifact를 포함한 runtime 입력이 Work 예산을 넘으면 실행 전에 차단한다", async () => {
