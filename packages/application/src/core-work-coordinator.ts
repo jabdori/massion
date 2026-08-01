@@ -299,7 +299,13 @@ export class CoreWorkCoordinator {
         this.releaseStageAbortController(run.runId, controller);
         return claim.run;
       }
-      const stage = run.stage;
+      if (claim.run.status !== "running" || claim.run.stage === "terminal") {
+        this.releaseStageAbortController(run.runId, controller);
+        throw new Error("claim된 Application run snapshot이 유효하지 않습니다");
+      }
+      run = claim.run;
+      nextResumeInput = run.resumeInput;
+      const stage = claim.run.stage;
       let claimedDirectives: readonly WorkDirectiveView[] = [];
       try {
         let result: CoreWorkStageResult;

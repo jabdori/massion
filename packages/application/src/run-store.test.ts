@@ -192,13 +192,24 @@ describe("ApplicationRunStore", () => {
       correlationId: "application-run-lease-correlation-0001",
       request: {},
     });
-    expect(await store.claim(context, run.runId)).toMatchObject({ outcome: "claimed", leaseGeneration: 1 });
+    expect(await store.claim(context, run.runId)).toMatchObject({
+      outcome: "claimed",
+      leaseGeneration: 1,
+      run: {
+        runId: run.runId,
+        status: "running",
+        stage: "intake",
+        leaseGeneration: 1,
+        request: {},
+      },
+    });
     expect(await store.claim(context, run.runId)).toMatchObject({ outcome: "in-progress", leaseGeneration: 1 });
     clock.now = new Date("2026-07-11T06:00:31.000Z");
     expect(await store.claim(context, run.runId)).toMatchObject({
       outcome: "claimed",
       leaseGeneration: 2,
       recovered: true,
+      run: { runId: run.runId, status: "running", stage: "intake", leaseGeneration: 2 },
     });
   });
 
@@ -488,6 +499,79 @@ describe("ApplicationRunStore", () => {
       status: "running",
       resumeInput: { approvalId: blocked.approvalId },
     });
+  });
+
+  it("승인 결정을 실행 전에 ready와 재개 입력으로 영속하고 기존 시작 복구 후보에 포함한다", async () => {
+    const started = await store.start(context, {
+      commandId: "application-run-prepare-approval-0001",
+      correlationId: "application-run-prepare-approval-correlation-0001",
+      request: { text: "승인 뒤 재시작 복구" },
+    });
+    const claimed = await store.claim(context, started.runId);
+    if (claimed.outcome !== "claimed") throw new Error("승인 대기 준비 lease를 얻지 못했습니다");
+    const approvalId = "approval-prepare-resume-0001";
+    await store.suspend(context, started.runId, claimed.leaseGeneration, approvalId);
+
+    await expect(store.prepareApprovalResume(context, started.runId, approvalId)).resolves.toMatchObject({
+      runId: started.runId,
+      status: "ready",
+      resumeInput: { approvalId },
+    });
+    await expect(store.get(context, started.runId)).resolves.not.toHaveProperty("approvalId");
+    await expect(store.prepareApprovalResume(context, started.runId, approvalId)).resolves.toMatchObject({
+      runId: started.runId,
+      status: "ready",
+      resumeInput: { approvalId },
+    });
+    await expect(store.listStartupRecoverable()).resolves.toContainEqual(
+      expect.objectContaining({
+        runId: started.runId,
+        organizationId: context.organizationId,
+        actorUserId: context.userId,
+      }),
+    );
+  });
+
+  it("승인 재개 준비는 다른 연결과 tenant를 실패 폐쇄한다", async () => {
+    const started = await store.start(context, {
+      commandId: "application-run-prepare-fence-0001",
+      correlationId: "application-run-prepare-fence-correlation-0001",
+      request: {},
+    });
+    const claimed = await store.claim(context, started.runId);
+    if (claimed.outcome !== "claimed") throw new Error("승인 대기 준비 lease를 얻지 못했습니다");
+    await store.suspend(context, started.runId, claimed.leaseGeneration, "approval-prepare-fence-0001");
+
+    await expect(
+      store.prepareApprovalResume(context, started.runId, "approval-prepare-different-0001"),
+    ).rejects.toThrow("Approval 연결");
+
+    const identities = await IdentityService.create(database);
+    const organizations = await OrganizationService.create(database);
+    const other = await identities.registerPersonalUser({
+      email: "run-prepare-other@example.com",
+      displayName: "Other",
+    });
+    const otherContext = await organizations.resolveTenantContext(
+      other.user.user_id,
+      other.organization.organization_id,
+    );
+    await expect(
+      store.prepareApprovalResume(otherContext, started.runId, "approval-prepare-fence-0001"),
+    ).rejects.toThrow("찾을 수 없습니다");
+  });
+
+  it("동시에 같은 ready run을 claim해도 한 실행자만 lease를 획득한다", async () => {
+    const started = await store.start(context, {
+      commandId: "application-run-claim-race-0001",
+      correlationId: "application-run-claim-race-correlation-0001",
+      request: {},
+    });
+
+    const claims = await Promise.all(Array.from({ length: 8 }, async () => await store.claim(context, started.runId)));
+
+    expect(claims.filter((claim) => claim.outcome === "claimed")).toHaveLength(1);
+    expect(claims.filter((claim) => claim.outcome === "in-progress")).toHaveLength(7);
   });
 
   it("시작 복구 후보는 tenant별 actor 계보와 안정 순서를 보존하고 복구 가능한 상태만 반환한다", async () => {

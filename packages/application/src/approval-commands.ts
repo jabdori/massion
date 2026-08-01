@@ -10,7 +10,7 @@ interface ApprovalVoteRecord {
   readonly status: string;
   readonly revision: number;
   readonly execution_id?: string;
-  readonly resume_target?: "runtime-subscription";
+  readonly resume_target?: string;
 }
 
 interface ApprovalCommandDependencies {
@@ -26,11 +26,12 @@ interface ApprovalCommandDependencies {
       },
     ): Promise<ApprovalVoteRecord>;
   };
-  readonly runs: Pick<ApplicationRunStore, "findByApproval">;
-  readonly coordinator: Pick<CoreWorkCoordinator, "resume">;
+  readonly runs: Pick<ApplicationRunStore, "findByApproval" | "prepareApprovalResume">;
+  readonly coordinator: Pick<CoreWorkCoordinator, "recover">;
   readonly runtime?: {
     resume(context: TenantContext, executionId: string, input?: unknown): Promise<unknown>;
   };
+  readonly schedule: (context: TenantContext, continuation: () => Promise<void>) => void;
 }
 
 interface ApprovalDecidePayload {
@@ -81,22 +82,25 @@ function result(command: ApplicationCommandV1, voted: ApprovalVoteRecord): Appli
   };
 }
 
-async function resumeTerminalDecision(
+async function prepareTerminalDecision(
   context: TenantContext,
   dependencies: ApprovalCommandDependencies,
   voted: ApprovalVoteRecord,
-): Promise<void> {
-  if (voted.status !== "approved" && voted.status !== "rejected") return;
+): Promise<(() => Promise<void>) | undefined> {
+  if (voted.status !== "approved" && voted.status !== "rejected") return undefined;
+  if (voted.resume_target !== undefined && voted.resume_target !== "runtime-subscription") {
+    throw new Error("Approval 재개 대상이 유효하지 않습니다");
+  }
   if (voted.resume_target === "runtime-subscription") {
     if (!dependencies.runtime || !voted.execution_id) {
       throw new Error("runtime-subscription Approval 재개 대상이 구성되지 않았습니다");
     }
     await dependencies.runtime.resume(context, voted.execution_id, { approvalId: voted.approval_id });
-    return;
+    return undefined;
   }
 
   const link = await dependencies.runs.findByApproval(context, voted.approval_id);
-  if (!link) return;
+  if (!link) return undefined;
   const run = link.run;
   if (run.organizationId !== context.organizationId) {
     throw new Error("Approval에 연결된 Application run 조직이 일치하지 않습니다");
@@ -104,13 +108,19 @@ async function resumeTerminalDecision(
   if (link.approvalId !== voted.approval_id) {
     throw new Error("Application run의 Approval 연결이 일치하지 않습니다");
   }
-  if (link.kind !== "active") return;
-  if (run.status !== "awaiting-approval" || run.approvalId !== voted.approval_id) {
+  if (link.kind === "historical") return undefined;
+  if (link.kind === "active" && (run.status !== "awaiting-approval" || run.approvalId !== voted.approval_id)) {
     throw new Error("Application run의 Approval 연결이 일치하지 않습니다");
   }
-  await dependencies.coordinator.resume(context, run.runId, {
-    approvalId: voted.approval_id,
-  });
+  const prepared =
+    link.kind === "active" ? await dependencies.runs.prepareApprovalResume(context, run.runId, voted.approval_id) : run;
+  if (prepared.organizationId !== context.organizationId || prepared.resumeInput?.approvalId !== voted.approval_id) {
+    throw new Error("Application run의 영속 승인 재개 입력이 일치하지 않습니다");
+  }
+  if (prepared.status !== "ready" && prepared.status !== "running") return undefined;
+  return async () => {
+    await dependencies.coordinator.recover(context, prepared.runId);
+  };
 }
 
 export function registerApplicationApprovalCommands(
@@ -135,7 +145,8 @@ export function registerApplicationApprovalCommands(
       if (voted.approval_id !== value.approvalId) {
         throw new Error("Approval 결과가 요청한 Approval과 일치하지 않습니다");
       }
-      await resumeTerminalDecision(context, dependencies, voted);
+      const continuation = await prepareTerminalDecision(context, dependencies, voted);
+      if (continuation) dependencies.schedule(context, continuation);
       return result(command, voted);
     },
   });

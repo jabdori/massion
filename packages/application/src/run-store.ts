@@ -94,6 +94,7 @@ export type ClaimApplicationRunResult =
       readonly leaseGeneration: number;
       readonly recovered: boolean;
       readonly retryAttemptId?: string;
+      readonly run: ApplicationRunView;
     }
   | { readonly outcome: "in-progress"; readonly leaseGeneration: number }
   | { readonly outcome: "terminal"; readonly run: ApplicationRunView };
@@ -348,12 +349,12 @@ export class ApplicationRunStore {
       const nextResumeApprovalId = options.reevaluateAwaitingApproval
         ? undefined
         : (resumeApprovalId ?? record.resume_approval_id);
-      await transaction.query(
+      const [updated] = await transaction.query<[RunRecord[]]>(
         options.reevaluateAwaitingApproval
-          ? "UPDATE application_run SET status = 'running', lease_generation = $generation, lease_expires_at = <datetime>$expires_at, approval_id = NONE, resume_approval_id = NONE, blocked_reason = NONE, retry_attempt_id = $retry_attempt_id, retry_replay_id = NONE, updated_at = <datetime>$updated_at WHERE organization_id = $organization_id AND run_id = $run_id AND status = $previous_status AND lease_generation = $previous_generation AND approval_id = $approval_id;"
+          ? "UPDATE application_run SET status = 'running', lease_generation = $generation, lease_expires_at = <datetime>$expires_at, approval_id = NONE, resume_approval_id = NONE, blocked_reason = NONE, retry_attempt_id = $retry_attempt_id, retry_replay_id = NONE, updated_at = <datetime>$updated_at WHERE organization_id = $organization_id AND run_id = $run_id AND status = $previous_status AND lease_generation = $previous_generation AND approval_id = $approval_id RETURN AFTER;"
           : options.resumeAwaitingApproval
-            ? "UPDATE application_run SET status = 'running', lease_generation = $generation, lease_expires_at = <datetime>$expires_at, approval_id = NONE, resume_approval_id = $resume_approval_id, blocked_reason = NONE, retry_attempt_id = $retry_attempt_id, retry_replay_id = $retry_replay_id, updated_at = <datetime>$updated_at WHERE organization_id = $organization_id AND run_id = $run_id AND status = $previous_status AND lease_generation = $previous_generation AND approval_id = $resume_approval_id;"
-            : "UPDATE application_run SET status = 'running', lease_generation = $generation, lease_expires_at = <datetime>$expires_at, approval_id = NONE, resume_approval_id = $resume_approval_id, blocked_reason = NONE, retry_attempt_id = $retry_attempt_id, retry_replay_id = $retry_replay_id, updated_at = <datetime>$updated_at WHERE organization_id = $organization_id AND run_id = $run_id AND status = $previous_status AND lease_generation = $previous_generation;",
+            ? "UPDATE application_run SET status = 'running', lease_generation = $generation, lease_expires_at = <datetime>$expires_at, approval_id = NONE, resume_approval_id = $resume_approval_id, blocked_reason = NONE, retry_attempt_id = $retry_attempt_id, retry_replay_id = $retry_replay_id, updated_at = <datetime>$updated_at WHERE organization_id = $organization_id AND run_id = $run_id AND status = $previous_status AND lease_generation = $previous_generation AND approval_id = $resume_approval_id RETURN AFTER;"
+            : "UPDATE application_run SET status = 'running', lease_generation = $generation, lease_expires_at = <datetime>$expires_at, approval_id = NONE, resume_approval_id = $resume_approval_id, blocked_reason = NONE, retry_attempt_id = $retry_attempt_id, retry_replay_id = $retry_replay_id, updated_at = <datetime>$updated_at WHERE organization_id = $organization_id AND run_id = $run_id AND status = $previous_status AND lease_generation = $previous_generation RETURN AFTER;",
         {
           organization_id: context.organizationId,
           run_id: runId,
@@ -368,7 +369,21 @@ export class ApplicationRunStore {
           updated_at: this.clock.now.toISOString(),
         },
       );
-      const claimed = await this.find(transaction, context.organizationId, runId);
+      const claimed = updated[0];
+      if (!claimed) {
+        const current = await this.find(transaction, context.organizationId, runId);
+        if (
+          current.status === "running" &&
+          current.lease_expires_at !== undefined &&
+          dateMillis(current.lease_expires_at) > this.clock.now.getTime()
+        ) {
+          return { outcome: "in-progress", leaseGeneration: current.lease_generation };
+        }
+        if (["completed", "failed", "cancelled"].includes(current.status)) {
+          return { outcome: "terminal", run: this.view(current) };
+        }
+        throw new Error("Application run lease 회수 동시성 충돌입니다");
+      }
       if (
         claimed.status !== "running" ||
         claimed.lease_generation !== generation ||
@@ -392,6 +407,7 @@ export class ApplicationRunStore {
         leaseGeneration: generation,
         recovered,
         ...(claimed.retry_attempt_id === undefined ? {} : { retryAttemptId: claimed.retry_attempt_id }),
+        run: this.view(claimed),
       };
     });
   }
@@ -608,6 +624,39 @@ export class ApplicationRunStore {
     const link = await this.findByApproval(context, approvalId);
     if (!link) throw new Error("Approval에 연결된 Application run을 찾을 수 없습니다");
     return link.run;
+  }
+
+  public async prepareApprovalResume(
+    context: TenantContext,
+    runId: string,
+    approvalId: string,
+  ): Promise<ApplicationRunView> {
+    const resumeApprovalId = validResumeApprovalId(approvalId);
+    if (!resumeApprovalId) throw new Error("승인 재개 Approval ID가 필요합니다");
+    await this.organizations.verifyTenantContext(context);
+    return await this.database.transaction(async (transaction) => {
+      await this.organizations.verifyTenantContext(context, undefined, transaction);
+      const record = await this.find(transaction, context.organizationId, runId);
+      if (record.status === "ready" && record.resume_approval_id === resumeApprovalId) return this.view(record);
+      if (record.status !== "awaiting-approval" || record.approval_id !== resumeApprovalId) {
+        throw new Error("Application run의 승인 재개 Approval 연결이 일치하지 않습니다");
+      }
+      const [updated] = await transaction.query<[RunRecord[]]>(
+        "UPDATE application_run SET status = 'ready', approval_id = NONE, resume_approval_id = $approval_id, lease_expires_at = NONE, updated_at = <datetime>$updated_at WHERE organization_id = $organization_id AND run_id = $run_id AND status = 'awaiting-approval' AND approval_id = $approval_id AND lease_generation = $lease_generation RETURN AFTER;",
+        {
+          organization_id: context.organizationId,
+          run_id: runId,
+          approval_id: resumeApprovalId,
+          lease_generation: record.lease_generation,
+          updated_at: this.clock.now.toISOString(),
+        },
+      );
+      const prepared = updated[0];
+      if (prepared) return this.view(prepared);
+      const current = await this.find(transaction, context.organizationId, runId);
+      if (current.status === "ready" && current.resume_approval_id === resumeApprovalId) return this.view(current);
+      throw new Error("Application run 승인 재개 준비 동시성 충돌입니다");
+    });
   }
 
   public async listByWork(context: TenantContext, workId: string, limit = 50): Promise<readonly ApplicationRunView[]> {

@@ -118,12 +118,21 @@ export class ApplicationProduct implements AsyncDisposable {
       ...dependencies.domain,
       ...(autonomyTransition === undefined ? {} : { autonomyTransition }),
     });
+    const productReference: { current?: ApplicationProduct } = {};
     if (dependencies.domain.approvals) {
       registerApplicationApprovalCommands(commands, {
         approvals: dependencies.domain.approvals,
         runs,
         coordinator,
         ...(dependencies.domain.runtime === undefined ? {} : { runtime: dependencies.domain.runtime }),
+        schedule(context, continuation) {
+          const product = productReference.current;
+          if (!product) throw new Error("Application product 조립이 완료되지 않았습니다");
+          product.track(async () => {
+            await continuation();
+            await product.projector.projectPending(context, 1_000);
+          });
+        },
       });
     }
 
@@ -195,7 +204,6 @@ export class ApplicationProduct implements AsyncDisposable {
       dependencies.onInitialized,
     );
 
-    const productReference: { current?: ApplicationProduct } = {};
     registerApplicationRunCommands(commands, {
       store: runs,
       coordinator,
@@ -325,18 +333,22 @@ export class ApplicationProduct implements AsyncDisposable {
   }
 
   private schedule(context: TenantContext, runId: string, retryAttemptId?: string): void {
+    this.track(async () => {
+      const run = retryAttemptId
+        ? await this.coordinator.retryBlocked(context, runId, retryAttemptId)
+        : await this.coordinator.recover(context, runId);
+      await this.metrics.recordOnce(context, `${runId}:run:${String(run.leaseGeneration)}`, {
+        name: "application_run_total",
+        value: 1,
+        dimensions: { stage: run.stage, result: run.status },
+      });
+      await this.projector.projectPending(context, 1_000);
+    });
+  }
+
+  private track(operation: () => Promise<void>): void {
     const task = Promise.resolve()
-      .then(async () => {
-        const run = retryAttemptId
-          ? await this.coordinator.retryBlocked(context, runId, retryAttemptId)
-          : await this.coordinator.recover(context, runId);
-        await this.metrics.recordOnce(context, `${runId}:run:${String(run.leaseGeneration)}`, {
-          name: "application_run_total",
-          value: 1,
-          dimensions: { stage: run.stage, result: run.status },
-        });
-        await this.projector.projectPending(context, 1_000);
-      })
+      .then(operation)
       .catch((error: unknown) => {
         this.failures.push(error);
       })

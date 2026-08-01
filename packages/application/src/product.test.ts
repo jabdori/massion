@@ -32,10 +32,20 @@ describe("ApplicationProduct", () => {
       displayName: "Owner",
     });
     const context = await organizations.resolveTenantContext(owner.user.user_id, owner.organization.organization_id);
+    let releaseResume: () => void = () => undefined;
+    const resumeCompletion = new Promise<void>((resolve) => {
+      releaseResume = resolve;
+    });
     const vote = vi.fn().mockResolvedValue({
       approval_id: "approval-product-0001",
-      status: "pending",
+      execution_id: "approval-product-execution-0001",
+      resume_target: "runtime-subscription",
+      status: "approved",
       revision: 2,
+    });
+    const runtimeResume = vi.fn().mockImplementation(async () => {
+      await resumeCompletion;
+      return { executionId: "approval-product-execution-0001", status: "succeeded" };
     });
     const executors = Object.fromEntries(
       (["intake", "context-strategy", "evidence", "delivery", "assurance", "records"] as const).map((stage) => [
@@ -51,27 +61,48 @@ describe("ApplicationProduct", () => {
       policies,
       tokenKey: { keyId: "approval-decide-product-key", key: randomBytes(32) },
       executors,
-      domain: { approvals: { vote, cancel: vi.fn() } as never },
+      domain: {
+        approvals: { vote, cancel: vi.fn() } as never,
+        runtime: { resume: runtimeResume } as never,
+      },
       queries: { status: async () => ({ status: "ready" }) },
     });
+    const projectPending = vi.spyOn(product.projector, "projectPending");
+    const input = {
+      schemaVersion: "massion.application.v1" as const,
+      commandId: "approval-decide-product-command-0001",
+      correlationId: "approval-decide-product-correlation-0001",
+      operation: "approval.decide",
+      payload: {
+        approvalId: "approval-product-0001",
+        expectedApprovalRevision: 1,
+        vote: "approve",
+        reason: "검토 완료",
+      },
+    };
 
-    await expect(
-      product.commands.dispatch(context, ["approval:write"], {
-        schemaVersion: "massion.application.v1",
-        commandId: "approval-decide-product-command-0001",
-        correlationId: "approval-decide-product-correlation-0001",
-        operation: "approval.decide",
-        payload: {
-          approvalId: "approval-product-0001",
-          expectedApprovalRevision: 1,
-          vote: "approve",
-          reason: "검토 완료",
-        },
+    const first = product.commands.dispatch(context, ["approval:write"], input);
+    await vi.waitFor(() => expect(runtimeResume).toHaveBeenCalledOnce());
+    const firstBeforeRelease = await Promise.race([
+      first.then(
+        (value) => ({ state: "settled" as const, value }),
+        (error: unknown) => ({ state: "rejected" as const, error }),
+      ),
+      new Promise<{ readonly state: "pending" }>((resolve) => {
+        setTimeout(() => resolve({ state: "pending" }), 100);
       }),
-    ).resolves.toMatchObject({
+    ]);
+    releaseResume();
+    const firstResult = await first;
+    const replayed = await product.commands.dispatch(context, ["approval:write"], input);
+    await product.drain();
+
+    expect(firstBeforeRelease).toEqual({ state: "pending" });
+    expect(firstResult).toMatchObject({
       outcome: "succeeded",
       resource: { type: "Approval", id: "approval-product-0001", revision: 2 },
     });
+    expect(replayed).toMatchObject({ outcome: "succeeded" });
     expect(vote).toHaveBeenCalledWith(context, {
       commandId: "approval-decide-product-command-0001",
       approvalId: "approval-product-0001",
@@ -79,6 +110,98 @@ describe("ApplicationProduct", () => {
       vote: "approve",
       reason: "검토 완료",
     });
+    expect(vote).toHaveBeenCalledOnce();
+    expect(runtimeResume).toHaveBeenCalledOnce();
+    expect(projectPending).not.toHaveBeenCalled();
+  });
+
+  it("ApplicationRun Approval은 성공 응답 전 재개 입력을 영속하고 제품 background 복구로 완료한다", async () => {
+    await using database = await createDatabase({ url: "mem://", namespace: "massion", database: crypto.randomUUID() });
+    const identities = await IdentityService.create(database);
+    const organizations = await OrganizationService.create(database);
+    const graph = await OrganizationGraphService.create(database, organizations);
+    const policies = await PolicyStore.create(database, organizations);
+    const owner = await identities.registerPersonalUser({
+      email: "approval-run-product@example.com",
+      displayName: "Approval run owner",
+    });
+    const context = await organizations.resolveTenantContext(owner.user.user_id, owner.organization.organization_id);
+    const approvalId = "approval-run-product-0001";
+    let releaseRun: () => void = () => undefined;
+    let reportRunEntered: () => void = () => undefined;
+    const runEntered = new Promise<void>((resolve) => {
+      reportRunEntered = resolve;
+    });
+    const runRelease = new Promise<void>((resolve) => {
+      releaseRun = resolve;
+    });
+    const intake = vi.fn().mockImplementation(async () => {
+      reportRunEntered();
+      await runRelease;
+      return { outcome: "advanced" as const, workId: "approval-run-product-work-0001" };
+    });
+    const executors = Object.fromEntries(
+      (["intake", "context-strategy", "evidence", "delivery", "assurance", "records"] as const).map((stage) => [
+        stage,
+        { execute: stage === "intake" ? intake : async () => ({ outcome: "advanced" as const }) },
+      ]),
+    ) as never;
+    const vote = vi.fn().mockResolvedValue({ approval_id: approvalId, status: "approved", revision: 2 });
+    await using product = await ApplicationProduct.create({
+      database,
+      identities,
+      organizations,
+      graph,
+      policies,
+      tokenKey: { keyId: "approval-run-product-key", key: randomBytes(32) },
+      executors,
+      domain: { approvals: { vote, cancel: vi.fn() } as never },
+      queries: { status: async () => ({ status: "ready" }) },
+    });
+    const started = await product.runs.start(context, {
+      commandId: "approval-run-product-start-0001",
+      correlationId: "approval-run-product-start-correlation-0001",
+      request: {},
+    });
+    const claim = await product.runs.claim(context, started.runId);
+    if (claim.outcome !== "claimed") throw new Error("제품 승인 대기 준비 lease를 얻지 못했습니다");
+    await product.runs.suspend(context, started.runId, claim.leaseGeneration, approvalId);
+    const projectPending = vi.spyOn(product.projector, "projectPending");
+    const input = {
+      schemaVersion: "massion.application.v1" as const,
+      commandId: "approval-run-product-decide-0001",
+      correlationId: "approval-run-product-decide-correlation-0001",
+      operation: "approval.decide",
+      payload: {
+        approvalId,
+        expectedApprovalRevision: 1,
+        vote: "approve",
+        reason: "제품 복구 승인",
+      },
+    };
+
+    const handled = product.commands.dispatch(context, ["approval:write"], input);
+    await runEntered;
+    const beforeRelease = await Promise.race([
+      handled.then((value) => ({ state: "settled" as const, value })),
+      new Promise<{ readonly state: "pending" }>((resolve) => {
+        setTimeout(() => resolve({ state: "pending" }), 100);
+      }),
+    ]);
+    const replayed = await product.commands.dispatch(context, ["approval:write"], input);
+    releaseRun();
+    await product.drain();
+
+    expect(beforeRelease).toMatchObject({ state: "settled", value: { outcome: "succeeded" } });
+    expect(replayed).toMatchObject({ outcome: "succeeded" });
+    expect(vote).toHaveBeenCalledOnce();
+    expect(intake).toHaveBeenCalledOnce();
+    await expect(product.runs.get(context, started.runId)).resolves.toMatchObject({
+      status: "completed",
+      stage: "terminal",
+      workId: "approval-run-product-work-0001",
+    });
+    expect(projectPending).toHaveBeenCalledTimes(1);
   });
 
   it("인증·명령·Core run·event를 하나의 실제 HTTP 제품 경계로 조립한다", async () => {

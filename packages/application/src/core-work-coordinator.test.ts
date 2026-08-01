@@ -305,6 +305,147 @@ describe("CoreWorkCoordinator", () => {
     await expect(firstResume).rejects.toThrow("lease generation");
   });
 
+  it("늦은 recovery는 stale initial view가 아니라 실제 claim한 stage와 재개 입력만 실행한다", async () => {
+    await using database = await createDatabase({ url: "mem://", namespace: "massion", database: crypto.randomUUID() });
+    const identities = await IdentityService.create(database);
+    const organizations = await OrganizationService.create(database);
+    const owner = await identities.registerPersonalUser({
+      email: "coordinator-claimed-snapshot@example.com",
+      displayName: "Claimed snapshot",
+    });
+    const context = await organizations.resolveTenantContext(owner.user.user_id, owner.organization.organization_id);
+    const store = await ApplicationRunStore.create(database, organizations);
+    const started = await store.start(context, {
+      commandId: "core-run-claimed-snapshot-command-0001",
+      correlationId: "core-run-claimed-snapshot-correlation-0001",
+      request: { text: "실제 claim stage만 실행" },
+    });
+    const initialClaim = await store.claim(context, started.runId);
+    if (initialClaim.outcome !== "claimed") throw new Error("승인 대기 준비 lease를 얻지 못했습니다");
+    const approvalId = "approval-claimed-snapshot-0001";
+    await store.suspend(context, started.runId, initialClaim.leaseGeneration, approvalId);
+    const ready = await store.prepareApprovalResume(context, started.runId, approvalId);
+
+    let reportLateClaimWaiting: () => void = () => undefined;
+    const lateClaimWaiting = new Promise<void>((resolve) => {
+      reportLateClaimWaiting = resolve;
+    });
+    let reportFirstAdvanced: () => void = () => undefined;
+    const firstAdvanced = new Promise<void>((resolve) => {
+      reportFirstAdvanced = resolve;
+    });
+    let releaseFirstAdvance: () => void = () => undefined;
+    const firstAdvanceRelease = new Promise<void>((resolve) => {
+      releaseFirstAdvance = resolve;
+    });
+    const firstStore = {
+      get: store.get.bind(store),
+      claim: store.claim.bind(store),
+      async advance(...input: Parameters<ApplicationRunStore["advance"]>) {
+        const advanced = await store.advance(...input);
+        reportFirstAdvanced();
+        await firstAdvanceRelease;
+        return advanced;
+      },
+      block: store.block.bind(store),
+      suspend: store.suspend.bind(store),
+      fail: store.fail.bind(store),
+      complete: store.complete.bind(store),
+    };
+    let lateReads = 0;
+    const lateStore = {
+      get: async (...input: Parameters<ApplicationRunStore["get"]>) =>
+        lateReads++ === 0 ? ready : await store.get(...input),
+      async claim(...input: Parameters<ApplicationRunStore["claim"]>) {
+        reportLateClaimWaiting();
+        await firstAdvanced;
+        return await store.claim(...input);
+      },
+      advance: store.advance.bind(store),
+      block: store.block.bind(store),
+      suspend: store.suspend.bind(store),
+      fail: store.fail.bind(store),
+      complete: store.complete.bind(store),
+    };
+    const intakeInputs: Array<{ readonly workId?: string; readonly resumeInput?: unknown }> = [];
+    const strategyInputs: Array<{ readonly workId?: string; readonly resumeInput?: unknown }> = [];
+    const stages = executors([]);
+    const pipeline = {
+      ...stages,
+      intake: {
+        async execute(_context: TenantContext, input: { readonly workId?: string; readonly resumeInput?: unknown }) {
+          intakeInputs.push({
+            ...(input.workId === undefined ? {} : { workId: input.workId }),
+            resumeInput: input.resumeInput,
+          });
+          return intakeInputs.length === 1
+            ? { outcome: "advanced" as const, workId: "work-claimed-snapshot-0001" }
+            : { outcome: "in-progress" as const };
+        },
+      },
+      "context-strategy": {
+        async execute(_context: TenantContext, input: { readonly workId?: string; readonly resumeInput?: unknown }) {
+          strategyInputs.push({
+            ...(input.workId === undefined ? {} : { workId: input.workId }),
+            resumeInput: input.resumeInput,
+          });
+          return { outcome: "in-progress" as const };
+        },
+      },
+    };
+    const firstCoordinator = new CoreWorkCoordinator(firstStore as never, pipeline);
+    const lateCoordinator = new CoreWorkCoordinator(lateStore as never, pipeline);
+
+    const lateRecovery = lateCoordinator.recover(context, started.runId);
+    await lateClaimWaiting;
+    const firstRecovery = firstCoordinator.recover(context, started.runId);
+    await firstAdvanced;
+    await expect(lateRecovery).resolves.toMatchObject({ status: "running", stage: "context-strategy" });
+    releaseFirstAdvance();
+    await expect(firstRecovery).resolves.toMatchObject({ status: "running", stage: "context-strategy" });
+
+    expect(intakeInputs).toEqual([{ resumeInput: { approvalId } }]);
+    expect(strategyInputs).toEqual([{ workId: "work-claimed-snapshot-0001", resumeInput: undefined }]);
+  });
+
+  it.each([
+    { name: "running이 아닌 상태", status: "ready" as const, stage: "intake" as const },
+    { name: "terminal stage", status: "running" as const, stage: "terminal" as const },
+  ])("claim된 snapshot의 $name 계보는 executor 전에 실패 폐쇄한다", async ({ status, stage }) => {
+    const tenant: TenantContext = {
+      userId: "user-malformed-claimed-snapshot-0001",
+      organizationId: "organization-malformed-claimed-snapshot-0001",
+      membershipId: "membership-malformed-claimed-snapshot-0001",
+      role: "member",
+    };
+    const initial = {
+      runId: "run-malformed-claimed-snapshot-0001",
+      organizationId: tenant.organizationId,
+      commandId: "run-malformed-claimed-snapshot-command-0001",
+      correlationId: "run-malformed-claimed-snapshot-correlation-0001",
+      request: {},
+      stage: "intake" as const,
+      status: "ready" as const,
+      leaseGeneration: 0,
+    };
+    const calls: string[] = [];
+    const coordinator = new CoreWorkCoordinator(
+      {
+        get: async () => initial,
+        claim: async () => ({
+          outcome: "claimed" as const,
+          leaseGeneration: 1,
+          recovered: false,
+          run: { ...initial, status, stage, leaseGeneration: 1 },
+        }),
+      } as never,
+      executors(calls),
+    );
+
+    await expect(coordinator.recover(tenant, initial.runId)).rejects.toThrow("claim된 Application run snapshot");
+    expect(calls).toEqual([]);
+  });
+
   it("stage 실행 예외는 run을 대기 상태로 남기지 않고 차단 상태로 끝낸다", async () => {
     await using database = await createDatabase({ url: "mem://", namespace: "massion", database: crypto.randomUUID() });
     const identities = await IdentityService.create(database);

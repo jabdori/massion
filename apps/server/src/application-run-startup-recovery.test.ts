@@ -1,3 +1,15 @@
+import {
+  APPLICATION_RUN_STAGES,
+  ApplicationCommandRegistry,
+  ApplicationCommandStore,
+  ApplicationRunStore,
+  CoreWorkCoordinator,
+  registerApplicationApprovalCommands,
+  type CoreWorkStage,
+  type CoreWorkStageExecutor,
+} from "../../../packages/application/src/index.js";
+import { IdentityService, OrganizationService } from "@massion/identity";
+import { createDatabase } from "@massion/storage";
 import { describe, expect, it, vi } from "vitest";
 
 import type { TenantContext } from "@massion/identity";
@@ -111,6 +123,142 @@ describe("ApplicationRun 시작 복구 서비스", () => {
     expect(service.ready()).toBe(true);
     await service.close();
   });
+
+  it("투표 뒤 continuation 실행 전 종료되어도 같은 DB의 다음 시작 복구가 명령 replay와 경쟁해 정확히 한 번 완료한다", async () => {
+    await using database = await createDatabase({
+      url: "mem://",
+      namespace: "massion",
+      database: crypto.randomUUID(),
+    });
+    const approvalId = "approval-startup-recovery-0001";
+    const command = {
+      schemaVersion: "massion.application.v1" as const,
+      commandId: "approval-startup-recovery-command-0001",
+      correlationId: "approval-startup-recovery-correlation-0001",
+      operation: "approval.decide",
+      payload: {
+        approvalId,
+        expectedApprovalRevision: 1,
+        vote: "approve" as const,
+        reason: "재시작 복구 승인",
+      },
+    };
+    let contextBefore: TenantContext;
+    let runId: string;
+    {
+      const identities = await IdentityService.create(database);
+      const organizations = await OrganizationService.create(database);
+      const owner = await identities.registerPersonalUser({
+        email: "approval-startup-recovery@example.com",
+        displayName: "Approval startup recovery",
+      });
+      contextBefore = await organizations.resolveTenantContext(owner.user.user_id, owner.organization.organization_id);
+      const runs = await ApplicationRunStore.create(database, organizations);
+      const started = await runs.start(contextBefore, {
+        commandId: "run-before-approval-startup-recovery-0001",
+        correlationId: "run-before-approval-startup-recovery-correlation-0001",
+        request: { text: "투표 뒤 프로세스 종료" },
+      });
+      runId = started.runId;
+      const claim = await runs.claim(contextBefore, runId);
+      if (claim.outcome !== "claimed") throw new Error("승인 대기 준비 lease를 얻지 못했습니다");
+      await runs.suspend(contextBefore, runId, claim.leaseGeneration, approvalId);
+
+      const abandonedContinuations: Array<() => Promise<void>> = [];
+      const registry = new ApplicationCommandRegistry(await ApplicationCommandStore.create(database, organizations));
+      registerApplicationApprovalCommands(registry, {
+        approvals: {
+          vote: vi.fn().mockResolvedValue({ approval_id: approvalId, status: "approved", revision: 2 }),
+        },
+        runs,
+        coordinator: { recover: vi.fn() },
+        schedule: (_context, continuation) => abandonedContinuations.push(continuation),
+      });
+
+      await expect(registry.dispatch(contextBefore, ["approval:write"], command)).resolves.toMatchObject({
+        outcome: "succeeded",
+      });
+      expect(abandonedContinuations).toHaveLength(1);
+      await expect(runs.get(contextBefore, runId)).resolves.toMatchObject({
+        status: "ready",
+        resumeInput: { approvalId },
+      });
+    }
+
+    // 첫 제품 경계의 continuation은 버리고 저장소·coordinator·명령 registry를 새로 조립합니다.
+    {
+      const organizations = await OrganizationService.create(database);
+      const contextAfter = await organizations.resolveTenantContext(contextBefore.userId, contextBefore.organizationId);
+      const runs = await ApplicationRunStore.create(database, organizations);
+      const stageCalls: Array<{ readonly stage: CoreWorkStage; readonly resumeInput: unknown }> = [];
+      const executors = Object.fromEntries(
+        APPLICATION_RUN_STAGES.map((stage) => [
+          stage,
+          {
+            async execute(_context: TenantContext, input: { readonly resumeInput?: unknown }) {
+              stageCalls.push({ stage, resumeInput: input.resumeInput });
+              return {
+                outcome: "advanced" as const,
+                ...(stage === "intake" ? { workId: "work-after-approval-startup-recovery" } : {}),
+              };
+            },
+          },
+        ]),
+      ) as unknown as Readonly<Record<CoreWorkStage, CoreWorkStageExecutor>>;
+      const coordinator = new CoreWorkCoordinator(runs, executors);
+      const service = new ApplicationRunStartupRecoveryService(
+        runs,
+        {
+          resolveTenantContext: async (userId, organizationId) => {
+            expect({ userId, organizationId }).toEqual({
+              userId: contextAfter.userId,
+              organizationId: contextAfter.organizationId,
+            });
+            return contextAfter;
+          },
+        },
+        coordinator,
+      );
+      const replayVote = vi.fn();
+      const replaySchedule = vi.fn();
+      const replayRegistry = new ApplicationCommandRegistry(
+        await ApplicationCommandStore.create(database, organizations),
+      );
+      registerApplicationApprovalCommands(replayRegistry, {
+        approvals: { vote: replayVote },
+        runs,
+        coordinator,
+        schedule: replaySchedule,
+      });
+
+      const [, replayed] = await Promise.all([
+        service.start(),
+        replayRegistry.dispatch(contextAfter, ["approval:write"], command),
+      ]);
+
+      expect(replayed).toMatchObject({ outcome: "succeeded" });
+      expect(replayVote).not.toHaveBeenCalled();
+      expect(replaySchedule).not.toHaveBeenCalled();
+      await expect(runs.get(contextAfter, runId)).resolves.toMatchObject({
+        status: "completed",
+        stage: "terminal",
+        workId: "work-after-approval-startup-recovery",
+      });
+      expect(stageCalls).toHaveLength(APPLICATION_RUN_STAGES.length);
+      expect(stageCalls[0]).toEqual({ stage: "intake", resumeInput: { approvalId } });
+      expect(stageCalls.slice(1).every((call) => call.resumeInput === undefined)).toBe(true);
+
+      const historicalRecovery = new ApplicationRunStartupRecoveryService(
+        runs,
+        { resolveTenantContext: async () => contextAfter },
+        coordinator,
+      );
+      await historicalRecovery.start();
+      expect(stageCalls).toHaveLength(APPLICATION_RUN_STAGES.length);
+      await historicalRecovery.close();
+      await service.close();
+    }
+  }, 20_000);
 
   it("같은 생성 시각의 201개 후보를 복합 cursor로 페이지해 정확히 한 번씩 복구한다", async () => {
     const createdAt = "2026-07-11T06:00:00.000Z";
