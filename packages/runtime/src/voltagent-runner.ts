@@ -49,6 +49,7 @@ const MINIMUM_SESSION_RENEW_DELAY_MS = 1_000;
 // 로컬 Connector의 기본 요청 기한(120초)과 맞춰, 모델 호출도 같은 상한을 사용합니다.
 const MODEL_TOTAL_TIMEOUT_MS = 120_000;
 const MODEL_STREAM_CHUNK_TIMEOUT_MS = 30_000;
+const AGENT_RUNTIME_TOTAL_TIMEOUT_MS = 300_000;
 
 export interface SessionRenewalClock {
   now(): number;
@@ -57,7 +58,7 @@ export interface SessionRenewalClock {
 
 export interface VoltAgentRunnerOptions {
   readonly sessionRenewalClock?: SessionRenewalClock;
-  /** 테스트에서만 짧게 검증할 수 있는 Provider 응답 상한입니다. 운영 기본값은 120초입니다. */
+  /** 테스트에서만 짧게 검증할 수 있는 Provider 응답 상한입니다. 운영 기본값은 300초입니다. */
   readonly agentRuntimeTimeoutMs?: number;
   readonly deltaObserver?: ExecutionDeltaObserver;
   readonly subscriptionReceipts?: Pick<
@@ -1004,9 +1005,21 @@ export class VoltAgentRunner implements AgentRunner, StructuredAgentRunner {
   ): Promise<RoutedAgentRuntimeResult> {
     this.agent(context, input.workId, input.agentHandle);
     const renewal = this.startSessionRenewal(executionId, lease, abortSignal);
-    // 일반 모델과 동일하게 Provider가 응답하지 않는 구독 실행도 유한하게 종료합니다.
-    // ponytail: 고정 120초 상한, Provider별 timeout 정책이 필요해질 때 실행 정책 계보와 함께 분리합니다.
-    const boundedSignal = modelAbortSignal(renewal.signal, this.options.agentRuntimeTimeoutMs);
+    // timeout 신호 자체를 보존해야 뒤늦은 부모 취소와 구분할 수 있습니다.
+    const timeoutSignal = AbortSignal.timeout(this.options.agentRuntimeTimeoutMs ?? AGENT_RUNTIME_TOTAL_TIMEOUT_MS);
+    const boundedSignal = AbortSignal.any([renewal.signal, timeoutSignal]);
+    const timeoutWon = () => timeoutSignal.aborted && boundedSignal.reason === timeoutSignal.reason;
+    // ponytail: timeout 실패는 공통 Provider 정산 경로가 요구하는 최소 구조만 만듭니다.
+    const timeoutResult = (sessionId?: string): RoutedAgentRuntimeResult => ({
+      outcome: "failed",
+      executionId,
+      ...(sessionId === undefined ? {} : { sessionId }),
+      category: "timeout",
+      retryable: true,
+      signal: { kind: "timeout" },
+      emittedTokens: 0,
+      sideEffectsStarted: true,
+    });
     try {
       let result: RoutedAgentRuntimeResult;
       if (output) {
@@ -1022,9 +1035,13 @@ export class VoltAgentRunner implements AgentRunner, StructuredAgentRunner {
       }
       const lateRenewalError = renewal.error();
       if (lateRenewalError) throw lateRenewalError;
+      if (result.outcome === "cancelled" && timeoutWon()) return timeoutResult(result.sessionId);
       return result;
     } catch (error) {
-      throw renewal.error() ?? error;
+      const renewalError = renewal.error();
+      if (renewalError) throw renewalError;
+      if (timeoutWon()) return timeoutResult();
+      throw error;
     } finally {
       renewal.stop();
     }

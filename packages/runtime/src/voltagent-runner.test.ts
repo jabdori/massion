@@ -150,6 +150,43 @@ describe("VoltAgent AgentRunner", () => {
     };
   }
 
+  function subscriptionReceiptFixture(): {
+    readonly stages: string[];
+    readonly receipts: {
+      readonly read: ReturnType<typeof vi.fn>;
+      readonly recover: ReturnType<typeof vi.fn>;
+      readonly recordRouteSessionAcquired: ReturnType<typeof vi.fn>;
+      readonly recordInvocationStarted: ReturnType<typeof vi.fn>;
+      readonly recordCheckpointObserved: ReturnType<typeof vi.fn>;
+      readonly recordTerminalObserved: ReturnType<typeof vi.fn>;
+      readonly recordSettlementCompleted: ReturnType<typeof vi.fn>;
+    };
+  } {
+    const stages: string[] = [];
+    return {
+      stages,
+      receipts: {
+        read: vi.fn(),
+        recover: vi.fn(),
+        recordRouteSessionAcquired: vi.fn(async () => {
+          stages.push("acquired");
+        }),
+        recordInvocationStarted: vi.fn(async () => {
+          stages.push("started");
+        }),
+        recordCheckpointObserved: vi.fn(async () => {
+          stages.push("checkpoint");
+        }),
+        recordTerminalObserved: vi.fn(async () => {
+          stages.push("terminal");
+        }),
+        recordSettlementCompleted: vi.fn(async () => {
+          stages.push("settled");
+        }),
+      },
+    };
+  }
+
   it("종료는 새 실행 수신을 막고 활성 Provider 실행이 취소 정산될 때까지 기다린다", async () => {
     const routed = agentLease({
       outcome: "completed",
@@ -647,7 +684,8 @@ describe("VoltAgent AgentRunner", () => {
     );
   });
 
-  it("응답하지 않는 Agent runtime은 공통 모델 timeout 뒤 failed로 종료된다", async () => {
+  it("Agent runtime 내부 timeout reject도 receipt 정산 뒤 interrupted로 종료한다", async () => {
+    const { stages, receipts } = subscriptionReceiptFixture();
     const routed = agentLease({
       outcome: "completed",
       executionId: "provider-execution-timeout",
@@ -663,6 +701,108 @@ describe("VoltAgent AgentRunner", () => {
     const runner = new VoltAgentRunner(
       voltAgent,
       store,
+      {
+        acquire: vi.fn().mockResolvedValue(routed),
+        createSubscriptionReceipts: vi.fn(() => receipts as never),
+      },
+      registry,
+      undefined,
+      undefined,
+      { agentRuntimeTimeoutMs: 1 },
+    );
+
+    const result = await runner.execute(context, input());
+
+    expect(result).toMatchObject({ status: "interrupted", error: { category: "timeout", retryable: true } });
+    expect(routed.fail).toHaveBeenCalledWith(
+      expect.objectContaining({ signal: { kind: "timeout" }, emittedTokens: 0, sideEffectsStarted: true }),
+    );
+    expect(stages).toEqual(["acquired", "started", "terminal", "settled"]);
+
+    const recovery = await store.getRecovery(context, result.executionId);
+    receipts.read.mockResolvedValue({ execution: recovery.execution, attempts: [{}] });
+    receipts.recover.mockResolvedValue(recovery.execution);
+    await expect(runner.recover(context, result.executionId)).resolves.toEqual(result);
+    expect(receipts.recover).toHaveBeenCalledOnce();
+    expect(routed.fail).toHaveBeenCalledOnce();
+    expect(stages).toEqual(["acquired", "started", "terminal", "settled"]);
+  });
+
+  it("Agent runtime 내부 timeout 취소 결과도 receipt 정산 뒤 interrupted로 종료한다", async () => {
+    const { stages, receipts } = subscriptionReceiptFixture();
+    const routed = agentLease({
+      outcome: "completed",
+      executionId: "provider-execution-timeout-cancelled",
+      sessionId: "provider-session-timeout-cancelled",
+      value: "사용되지 않음",
+    });
+    routed.executor.execute = vi.fn(
+      async ({ executionId, abortSignal }) =>
+        await new Promise<RoutedAgentRuntimeResult>((resolve) => {
+          abortSignal?.addEventListener(
+            "abort",
+            () => {
+              resolve({ outcome: "cancelled", executionId, sessionId: "provider-session-timeout-cancelled" });
+            },
+            { once: true },
+          );
+        }),
+    );
+    const runner = new VoltAgentRunner(
+      voltAgent,
+      store,
+      {
+        acquire: vi.fn().mockResolvedValue(routed),
+        createSubscriptionReceipts: vi.fn(() => receipts as never),
+      },
+      registry,
+      undefined,
+      undefined,
+      { agentRuntimeTimeoutMs: 1 },
+    );
+
+    await expect(runner.execute(context, input())).resolves.toMatchObject({
+      status: "interrupted",
+      error: { category: "timeout", retryable: true },
+    });
+    expect(routed.fail).toHaveBeenCalledWith(
+      expect.objectContaining({ signal: { kind: "timeout" }, emittedTokens: 0, sideEffectsStarted: true }),
+    );
+    expect(receipts.recordTerminalObserved).toHaveBeenCalledWith(
+      context,
+      expect.objectContaining({
+        outcome: "failed",
+        providerSessionId: "provider-session-timeout-cancelled",
+        category: "timeout",
+      }),
+    );
+    expect(stages).toEqual(["acquired", "started", "terminal", "settled"]);
+  });
+
+  it("Agent runtime timeout이 부모 취소보다 먼저 발생하면 timeout을 보존한다", async () => {
+    const controller = new AbortController();
+    const routed = agentLease({
+      outcome: "completed",
+      executionId: "provider-execution-timeout-race",
+      sessionId: "provider-session-timeout-race",
+      value: "사용되지 않음",
+    });
+    routed.executor.execute = vi.fn(
+      async ({ executionId, abortSignal }) =>
+        await new Promise<RoutedAgentRuntimeResult>((resolve) => {
+          abortSignal?.addEventListener(
+            "abort",
+            () => {
+              controller.abort(new DOMException("뒤늦은 부모 취소", "AbortError"));
+              resolve({ outcome: "cancelled", executionId, sessionId: "provider-session-timeout-race" });
+            },
+            { once: true },
+          );
+        }),
+    );
+    const runner = new VoltAgentRunner(
+      voltAgent,
+      store,
       { acquire: vi.fn().mockResolvedValue(routed) },
       registry,
       undefined,
@@ -670,8 +810,81 @@ describe("VoltAgent AgentRunner", () => {
       { agentRuntimeTimeoutMs: 1 },
     );
 
-    await expect(runner.execute(context, input())).resolves.toMatchObject({ status: "failed" });
-    expect(routed.fail).toHaveBeenCalledWith(expect.objectContaining({ signal: { kind: "timeout" } }));
+    await expect(runner.execute(context, { ...input(), signal: controller.signal })).resolves.toMatchObject({
+      status: "interrupted",
+      error: { category: "timeout", retryable: true },
+    });
+    expect(routed.fail).toHaveBeenCalledWith(
+      expect.objectContaining({ signal: { kind: "timeout" }, sideEffectsStarted: true }),
+    );
+  });
+
+  it("부모가 TimeoutError reason으로 먼저 취소하면 cancelled를 유지한다", async () => {
+    const controller = new AbortController();
+    const routed = agentLease({
+      outcome: "completed",
+      executionId: "provider-execution-parent-timeout-reason",
+      sessionId: "provider-session-parent-timeout-reason",
+      value: "사용되지 않음",
+    });
+    routed.executor.execute = vi.fn(
+      async ({ executionId, abortSignal }) =>
+        await new Promise<RoutedAgentRuntimeResult>((resolve) => {
+          abortSignal?.addEventListener(
+            "abort",
+            () => {
+              resolve({ outcome: "cancelled", executionId, sessionId: "provider-session-parent-timeout-reason" });
+            },
+            { once: true },
+          );
+        }),
+    );
+    const runner = new VoltAgentRunner(
+      voltAgent,
+      store,
+      { acquire: vi.fn().mockResolvedValue(routed) },
+      registry,
+      undefined,
+      undefined,
+      { agentRuntimeTimeoutMs: 30_000 },
+    );
+
+    const pending = runner.execute(context, { ...input(), signal: controller.signal });
+    await vi.waitFor(() => expect(routed.executor.execute).toHaveBeenCalledOnce());
+    controller.abort(new DOMException("상위 계층 시간 제한", "TimeoutError"));
+
+    await expect(pending).resolves.toMatchObject({ status: "cancelled" });
+    expect(routed.fail).toHaveBeenCalledWith(expect.objectContaining({ signal: { kind: "cancelled" } }));
+  });
+
+  it("Provider 자체 cancelled 결과는 cancelled를 유지한다", async () => {
+    const routed = agentLease({
+      outcome: "cancelled",
+      executionId: "provider-execution-cancelled",
+      sessionId: "provider-session-cancelled",
+    });
+    const runner = new VoltAgentRunner(voltAgent, store, { acquire: vi.fn().mockResolvedValue(routed) }, registry);
+
+    await expect(runner.execute(context, input())).resolves.toMatchObject({ status: "cancelled" });
+    expect(routed.fail).toHaveBeenCalledWith(expect.objectContaining({ signal: { kind: "cancelled" } }));
+  });
+
+  it("Agent runtime 기본 응답 상한은 300초다", async () => {
+    const timeout = vi.spyOn(AbortSignal, "timeout");
+    const routed = agentLease({
+      outcome: "completed",
+      executionId: "provider-execution-default-timeout",
+      sessionId: "provider-session-default-timeout",
+      value: "완료",
+    });
+    const runner = new VoltAgentRunner(voltAgent, store, { acquire: vi.fn().mockResolvedValue(routed) }, registry);
+
+    try {
+      await expect(runner.execute(context, input())).resolves.toMatchObject({ status: "succeeded" });
+      expect(timeout).toHaveBeenCalledWith(300_000);
+    } finally {
+      timeout.mockRestore();
+    }
   });
 
   it("구독 승인 ID만 받아 정본 결정을 소비한 뒤 같은 lease를 terminal까지 재개한다", async () => {
