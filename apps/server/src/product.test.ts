@@ -1319,7 +1319,12 @@ describe("Massion server product", () => {
         await new Promise((resolve) => setTimeout(resolve, 10));
       }
       expect(snapshot.data?.works).toEqual([expect.objectContaining({ status: "completed" })]);
-      const organizationGraph = (await client.query("organization.graph.snapshot", {})) as {
+      for (let attempt = 0; attempt < 300 && run.data.status !== "completed"; attempt += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        run = (await client.query("run.get", { runId: accepted.data.runId })) as typeof run;
+      }
+      expect(run.data.status).toBe("completed");
+      let organizationGraph = (await client.query("organization.graph.snapshot", {})) as {
         data: {
           nodes: readonly {
             handle: string;
@@ -1330,11 +1335,24 @@ describe("Massion server product", () => {
           }[];
         };
       };
-      const workNodes = organizationGraph.data.nodes.filter(
+      let workNodes = organizationGraph.data.nodes.filter(
         (node) => node.scope === "work" && node.work_id === run.data.workId,
       );
-      expect(workNodes).toEqual([expect.objectContaining({ status: "active", capabilities: ["quant-analysis"] })]);
-      const staffHandle = workNodes[0]?.handle;
+      for (let attempt = 0; attempt < 300 && workNodes.length > 0; attempt += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        organizationGraph = (await client.query("organization.graph.snapshot", {})) as typeof organizationGraph;
+        workNodes = organizationGraph.data.nodes.filter(
+          (node) => node.scope === "work" && node.work_id === run.data.workId,
+        );
+      }
+      expect(workNodes).toEqual([]);
+      const assignments = (await client.query("work.assignments", { workId: run.data.workId })) as {
+        data: readonly { taskId: string; agentHandle: string; status: string }[];
+      };
+      expect(assignments.data).toEqual([
+        expect.objectContaining({ agentHandle: expect.any(String), status: "assigned" }),
+      ]);
+      const staffHandle = assignments.data[0]?.agentHandle;
       if (!staffHandle) throw new Error("적용된 Dynamic Staffing Work Agent가 없습니다");
       expect(snapshot.data?.executions).toEqual(
         expect.arrayContaining([
@@ -1344,15 +1362,6 @@ describe("Massion server product", () => {
           expect.objectContaining({ agentHandle: "assurance", status: "succeeded" }),
         ]),
       );
-      for (let attempt = 0; attempt < 300 && run.data.status !== "completed"; attempt += 1) {
-        await new Promise((resolve) => setTimeout(resolve, 10));
-        run = (await client.query("run.get", { runId: accepted.data.runId })) as typeof run;
-      }
-      expect(run.data.status).toBe("completed");
-      const assignments = (await client.query("work.assignments", { workId: run.data.workId })) as {
-        data: readonly { taskId: string; agentHandle: string; status: string }[];
-      };
-      expect(assignments.data).toEqual([expect.objectContaining({ agentHandle: staffHandle, status: "assigned" })]);
       const executions = (await client.query("work.executions", { workId: run.data.workId })) as {
         data: readonly { executionId: string; taskId?: string; agentHandle: string; status: string }[];
       };
@@ -1403,17 +1412,19 @@ describe("Massion server product", () => {
         [
           {
             handle: string;
+            status: string;
             responsibility: string;
             capabilities: readonly string[];
             outputs: readonly string[];
           }[],
         ]
       >(
-        "SELECT handle, responsibility, capabilities, outputs FROM organization_node WHERE work_id = $work_id AND handle = $handle LIMIT 1;",
+        "SELECT handle, status, responsibility, capabilities, outputs FROM organization_node WHERE work_id = $work_id AND handle = $handle LIMIT 1;",
         { work_id: run.data.workId, handle: staffHandle },
       );
       const workNode = workNodeRecords[0];
       if (!workNode) throw new Error("Dynamic Staffing Work Agent node를 찾을 수 없습니다");
+      expect(workNode).toMatchObject({ status: "inactive", capabilities: ["quant-analysis"] });
       const expectedInstruction = [
         deliverySection.instruction,
         "",
