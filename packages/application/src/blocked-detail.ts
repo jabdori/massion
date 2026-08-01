@@ -1,10 +1,17 @@
 export const ASSURANCE_VERIFIER_REJECTED = "assurance-verifier-rejected";
 
 const MAX_BLOCKED_DETAIL_BYTES = 2_048;
-const FORBIDDEN_CONTROL = /[\u0000-\u001F\u007F]/u;
+
+function hasForbiddenControl(value: string): boolean {
+  for (const character of value) {
+    const codePoint = character.codePointAt(0);
+    if (codePoint !== undefined && (codePoint <= 0x1f || codePoint === 0x7f)) return true;
+  }
+  return false;
+}
 
 export function normalizeBlockedDetail(value: unknown): string | undefined {
-  if (typeof value !== "string" || FORBIDDEN_CONTROL.test(value)) return undefined;
+  if (typeof value !== "string" || hasForbiddenControl(value)) return undefined;
   const normalized = value.trim().replace(/\s+/gu, " ");
   if (!normalized || Buffer.byteLength(normalized, "utf8") > MAX_BLOCKED_DETAIL_BYTES) return undefined;
   return normalized;
