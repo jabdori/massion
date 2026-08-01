@@ -147,7 +147,7 @@ export function registerApplicationRunCommands(
         correlationId: command.correlationId,
         request: payload.request,
       });
-      await dependencies.schedule(context, run.runId);
+      dependencies.schedule(context, run.runId);
       return result(command, {
         outcome: "accepted",
         resource: { type: "ApplicationRun", id: run.runId, revision: run.leaseGeneration },
@@ -188,13 +188,15 @@ export function registerApplicationRunCommands(
         retryBlocked: true as const,
       };
     },
-    async handle(context, command, payload) {
+    handle(context, command, payload) {
       dependencies.schedule(context, payload.runId, command.commandId);
-      return result(command, {
-        outcome: "accepted",
-        resource: { type: "ApplicationRun", id: payload.runId },
-        data: { runId: payload.runId },
-      });
+      return Promise.resolve(
+        result(command, {
+          outcome: "accepted",
+          resource: { type: "ApplicationRun", id: payload.runId },
+          data: { runId: payload.runId },
+        }),
+      );
     },
   });
 }
