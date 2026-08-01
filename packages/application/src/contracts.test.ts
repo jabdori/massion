@@ -51,6 +51,79 @@ describe("Application wire contracts", () => {
     ).toMatchObject({ sequence: 1 });
   });
 
+  it("실제 delivery 재시도 계보의 140자 event correlationId를 허용한다", () => {
+    const correlationId =
+      "14000000-0000-4000-8000-000000000001:delivery:retry:14000000-0000-4000-8000-000000000002:task:14000000-0000-4000-8000-000000000003:completed";
+
+    expect(correlationId).toHaveLength(140);
+    expect(
+      validateApplicationEvent({
+        schemaVersion: "massion.application.event.v1",
+        eventId: "event-delivery-retry-0001",
+        organizationId: "organization-1",
+        sequence: 640,
+        type: "task.completed",
+        author: { kind: "system", id: "system-1" },
+        correlationId,
+        occurredAt: "2026-08-02T00:00:00.000Z",
+        payload: {},
+      }),
+    ).toMatchObject({ correlationId, sequence: 640 });
+  });
+
+  it("Application event correlationId는 256자까지 허용하고 257자를 거부한다", () => {
+    const event = {
+      schemaVersion: "massion.application.event.v1",
+      eventId: "event-correlation-boundary-0001",
+      organizationId: "organization-1",
+      sequence: 1,
+      type: "work.created",
+      author: { kind: "system", id: "system-1" },
+      occurredAt: "2026-08-02T00:00:00.000Z",
+      payload: {},
+    } as const;
+
+    expect(validateApplicationEvent({ ...event, correlationId: "a".repeat(256) }).correlationId).toHaveLength(256);
+    expect(() => validateApplicationEvent({ ...event, correlationId: "a".repeat(257) })).toThrow("correlationId");
+    expect(() => validateApplicationEvent({ ...event, correlationId: `${"a".repeat(255)}/` })).toThrow("correlationId");
+  });
+
+  it("event correlationId 외 opaque 식별자는 128자 상한을 유지한다", () => {
+    const atLimit = "a".repeat(128);
+    const overLimit = "a".repeat(129);
+    const result = {
+      schemaVersion: APPLICATION_SCHEMA_VERSION,
+      commandId: atLimit,
+      correlationId: atLimit,
+      operation: command.operation,
+      outcome: "succeeded",
+    } as const;
+    const event = {
+      schemaVersion: "massion.application.event.v1",
+      eventId: atLimit,
+      organizationId: "organization-1",
+      sequence: 1,
+      type: "work.created",
+      author: { kind: "system", id: "system-1" },
+      causationId: atLimit,
+      occurredAt: "2026-08-02T00:00:00.000Z",
+      payload: {},
+    } as const;
+
+    expect(validateApplicationCommand({ ...command, commandId: atLimit, correlationId: atLimit })).toMatchObject({
+      commandId: atLimit,
+      correlationId: atLimit,
+    });
+    expect(() => validateApplicationCommand({ ...command, commandId: overLimit })).toThrow("commandId");
+    expect(() => validateApplicationCommand({ ...command, correlationId: overLimit })).toThrow("correlationId");
+    expect(validateApplicationResult(result)).toMatchObject({ commandId: atLimit, correlationId: atLimit });
+    expect(() => validateApplicationResult({ ...result, commandId: overLimit })).toThrow("commandId");
+    expect(() => validateApplicationResult({ ...result, correlationId: overLimit })).toThrow("correlationId");
+    expect(validateApplicationEvent(event)).toMatchObject({ eventId: atLimit, causationId: atLimit });
+    expect(() => validateApplicationEvent({ ...event, eventId: overLimit })).toThrow("eventId");
+    expect(() => validateApplicationEvent({ ...event, causationId: overLimit })).toThrow("causationId");
+  });
+
   it("unknown field·prototype key·non-finite number·깊이·배열·byte 상한을 거부한다", () => {
     expect(() => validateApplicationCommand({ ...command, surprise: true })).toThrow("알 수 없는");
     expect(() =>

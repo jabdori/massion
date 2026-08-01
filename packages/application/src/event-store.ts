@@ -4,7 +4,7 @@ import type { OrganizationService, TenantContext } from "@massion/identity";
 import { applyMigrations, type MassionDatabase, type QueryExecutor } from "@massion/storage";
 
 import { APPLICATION_EVENT_SCHEMA_VERSION, type ApplicationEventV1, validateApplicationEvent } from "./contracts.js";
-import { APPLICATION_EVENT_MIGRATION } from "./schema.js";
+import { APPLICATION_EVENT_LINEAGE_MIGRATION, APPLICATION_EVENT_MIGRATION } from "./schema.js";
 
 interface EventRecord {
   readonly event_id: string;
@@ -89,7 +89,7 @@ export class ApplicationEventStore {
     database: MassionDatabase,
     organizations: OrganizationService,
   ): Promise<ApplicationEventStore> {
-    await applyMigrations(database, [APPLICATION_EVENT_MIGRATION]);
+    await applyMigrations(database, [APPLICATION_EVENT_MIGRATION, APPLICATION_EVENT_LINEAGE_MIGRATION]);
     return new ApplicationEventStore(database, organizations);
   }
 

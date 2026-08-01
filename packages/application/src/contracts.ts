@@ -744,6 +744,7 @@ const EVENT_FIELDS = new Set([
 ]);
 const IDENTIFIER = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u;
 const OPAQUE_IDENTIFIER = /^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$/u;
+const EVENT_CORRELATION_IDENTIFIER = /^[A-Za-z0-9][A-Za-z0-9._:-]{7,255}$/u;
 const OPERATION = /^[a-z][a-z0-9-]*(?:\.[a-z][a-z0-9-]*)+$/u;
 const MAX_WIRE_BYTES = 1024 * 1024;
 
@@ -775,6 +776,12 @@ function identifier(value: unknown, label: string): string {
 function opaqueIdentifier(value: unknown, label: string): string {
   const candidate = text(value, label, 128);
   if (!OPAQUE_IDENTIFIER.test(candidate)) throw new Error(`${label}가 유효하지 않습니다`);
+  return candidate;
+}
+
+function eventCorrelationIdentifier(value: unknown): string {
+  const candidate = text(value, "correlationId", 256);
+  if (!EVENT_CORRELATION_IDENTIFIER.test(candidate)) throw new Error("correlationId가 유효하지 않습니다");
   return candidate;
 }
 
@@ -908,7 +915,7 @@ export function validateApplicationEvent(value: unknown): ApplicationEventV1 {
     author: { kind: author.kind as ApplicationAuthorKind, id: identifier(author.id, "event.author.id") },
     ...(candidate.correlationId === undefined
       ? {}
-      : { correlationId: opaqueIdentifier(candidate.correlationId, "correlationId") }),
+      : { correlationId: eventCorrelationIdentifier(candidate.correlationId) }),
     ...(candidate.causationId === undefined
       ? {}
       : { causationId: opaqueIdentifier(candidate.causationId, "causationId") }),

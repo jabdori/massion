@@ -398,6 +398,13 @@ DEFINE FIELD work_id ON application_run_event TYPE option<string>;
 `,
 );
 
+export const APPLICATION_EVENT_LINEAGE_MIGRATION = defineMigration(
+  "0119-application-event-lineage",
+  `
+DEFINE FIELD OVERWRITE correlation_id ON application_event TYPE option<string> ASSERT $value = NONE OR (string::len($value) >= 8 AND string::len($value) <= 256 AND string::matches($value, '^[A-Za-z0-9][A-Za-z0-9._:-]*$'));
+`,
+);
+
 export const APPLICATION_MIGRATIONS = [
   APPLICATION_AUTH_MIGRATION,
   APPLICATION_COMMAND_MIGRATION,
@@ -412,4 +419,5 @@ export const APPLICATION_MIGRATIONS = [
   APPLICATION_RUN_APPROVAL_RESUME_MIGRATION,
   APPLICATION_DYNAMIC_STAFFING_MIGRATION,
   APPLICATION_RUN_EVENT_WORK_MIGRATION,
+  APPLICATION_EVENT_LINEAGE_MIGRATION,
 ] as const;

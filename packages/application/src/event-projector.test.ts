@@ -160,6 +160,38 @@ describe("ApplicationEventProjector", () => {
     });
   });
 
+  it("140자 delivery 재시도 correlation을 projection과 store read에서 보존한다", async () => {
+    const correlationId =
+      "14000000-0000-4000-8000-000000000001:delivery:retry:14000000-0000-4000-8000-000000000002:task:14000000-0000-4000-8000-000000000003:completed";
+    const runs = await ApplicationRunStore.create(database, organizations);
+    await runs.start(context, {
+      commandId: "projector-long-correlation-0001",
+      correlationId,
+      request: {},
+    });
+
+    expect(await projector.projectPending(context, 1)).toBe(1);
+    expect((await events.read(context, { after: 0, limit: 10 })).events).toEqual([
+      expect.objectContaining({ correlationId }),
+    ]);
+  });
+
+  it.each([
+    ["257자", "a".repeat(257)],
+    ["불법 문자", `${"a".repeat(127)}/`],
+    ["선두 구두점", ":abcdefg"],
+  ])("%s event correlation의 projection을 DB가 거절한다", async (_boundary, correlationId) => {
+    const runs = await ApplicationRunStore.create(database, organizations);
+    await runs.start(context, {
+      commandId: `projector-invalid-correlation-${crypto.randomUUID()}`,
+      correlationId,
+      request: {},
+    });
+
+    await expect(projector.projectPending(context, 1)).rejects.toThrow();
+    expect((await events.read(context, { after: 0, limit: 10 })).events).toEqual([]);
+  });
+
   it("Core run event는 투영 시점과 replay에 무관하게 발생 당시 Work 계보를 보존한다", async () => {
     const runs = await ApplicationRunStore.create(database, organizations);
     const run = await runs.start(context, {

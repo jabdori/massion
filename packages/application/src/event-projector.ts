@@ -3,7 +3,11 @@ import { createHash, randomUUID } from "node:crypto";
 import type { OrganizationService, TenantContext } from "@massion/identity";
 import { applyMigrations, type MassionDatabase, type QueryExecutor } from "@massion/storage";
 
-import { APPLICATION_EVENT_MIGRATION, APPLICATION_OUTBOX_MIGRATION } from "./schema.js";
+import {
+  APPLICATION_EVENT_LINEAGE_MIGRATION,
+  APPLICATION_EVENT_MIGRATION,
+  APPLICATION_OUTBOX_MIGRATION,
+} from "./schema.js";
 
 interface OutboxRecord {
   readonly outbox_id: string;
@@ -87,7 +91,11 @@ export class ApplicationEventProjector {
     organizations: OrganizationService,
     hooks?: ApplicationEventProjectorHooks,
   ): Promise<ApplicationEventProjector> {
-    await applyMigrations(database, [APPLICATION_OUTBOX_MIGRATION, APPLICATION_EVENT_MIGRATION]);
+    await applyMigrations(database, [
+      APPLICATION_OUTBOX_MIGRATION,
+      APPLICATION_EVENT_MIGRATION,
+      APPLICATION_EVENT_LINEAGE_MIGRATION,
+    ]);
     return new ApplicationEventProjector(database, organizations, hooks);
   }
 
