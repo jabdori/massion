@@ -93,6 +93,7 @@ export function useDesktopController(service: DesktopService) {
   const queryRef = useRef(deferredQuery);
   const pendingCreationRef = useRef(pendingCreation);
   const durableWorkCandidatesRef = useRef(new Set<string>());
+  const durableWorkCorrelationsRef = useRef(new Map<string, string>());
   const durableRunEventsRef = useRef(new Map<string, unknown>());
   const durableChangedWorkIdsRef = useRef(new Set<string>());
   const durableDetailWorkIdsRef = useRef(new Set<string>());
@@ -257,12 +258,18 @@ export function useDesktopController(service: DesktopService) {
   );
 
   const selectPendingCreation = useCallback(
-    (candidate: WorkView, creation: PendingCreation, eventType?: string): boolean => {
-      if (pendingCreationRef.current?.runId !== creation.runId || candidate.run?.runId !== creation.runId) return false;
+    (candidate: WorkView, creation: PendingCreation, eventType?: string, authoritativeLineage = false): boolean => {
+      const candidateRunId = candidate.run?.runId;
+      if (
+        pendingCreationRef.current?.runId !== creation.runId ||
+        (candidateRunId !== creation.runId && !(authoritativeLineage && candidateRunId === undefined))
+      )
+        return false;
       detailRequestRef.current += 1;
       detailLoadingOwnerRef.current = undefined;
       terminalStabilizationRef.current = undefined;
       durableWorkCandidatesRef.current.clear();
+      durableWorkCorrelationsRef.current.clear();
       durableRunEventsRef.current.clear();
       pendingCreationRef.current = undefined;
       setPendingCreationState(undefined);
@@ -306,6 +313,7 @@ export function useDesktopController(service: DesktopService) {
       if (creationSettledEvent(runEvent)) {
         durableRunEventsRef.current.clear();
         durableWorkCandidatesRef.current.clear();
+        durableWorkCorrelationsRef.current.clear();
         pendingCreationRef.current = undefined;
         setPendingCreationState(undefined);
         setAnnouncement(creationEventMessage(runEventType(runEvent)));
@@ -313,13 +321,21 @@ export function useDesktopController(service: DesktopService) {
       }
 
       const candidateIds = new Set(durableWorkCandidatesRef.current);
+      const expectedCorrelationId = `${creation.runId}:intake:work`;
       for (const candidate of index) {
         if (!creation.baselineWorkIds.has(candidate.id) && candidate.run?.runId === creation.runId)
           candidateIds.add(candidate.id);
       }
       for (const candidateId of candidateIds) {
+        const correlationId = durableWorkCorrelationsRef.current.get(candidateId);
+        if (correlationId !== undefined && correlationId !== expectedCorrelationId) {
+          durableWorkCandidatesRef.current.delete(candidateId);
+          durableWorkCorrelationsRef.current.delete(candidateId);
+          continue;
+        }
         if (creation.baselineWorkIds.has(candidateId)) {
           durableWorkCandidatesRef.current.delete(candidateId);
+          durableWorkCorrelationsRef.current.delete(candidateId);
           continue;
         }
         const indexed = index.find((candidate) => candidate.id === candidateId);
@@ -327,7 +343,8 @@ export function useDesktopController(service: DesktopService) {
         try {
           const candidate = await service.loadWork(candidateId);
           if (pendingCreationRef.current?.runId !== creation.runId) return true;
-          if (selectPendingCreation(candidate, creation)) return true;
+          if (selectPendingCreation(candidate, creation, undefined, correlationId === expectedCorrelationId))
+            return true;
           durableWorkCandidatesRef.current.add(candidateId);
         } catch (error) {
           if (pendingCreationRef.current?.runId === creation.runId)
@@ -440,8 +457,10 @@ export function useDesktopController(service: DesktopService) {
     if (phase !== "ready") return;
     const preserveSelection = preserveSelectionOnNextIndexRef.current;
     preserveSelectionOnNextIndexRef.current = false;
-    void reloadIndex({ preserveSelection });
-  }, [deferredQuery, filter, phase, reloadIndex]);
+    void reloadIndex({ preserveSelection }).then((next) => {
+      if (next) void resolvePendingCreation(next);
+    });
+  }, [deferredQuery, filter, phase, reloadIndex, resolvePendingCreation]);
 
   useEffect(() => {
     const selectedWorkId = work?.id;
@@ -539,6 +558,7 @@ export function useDesktopController(service: DesktopService) {
           }
           if (!creation && !commandLocks.current.has("start-work")) {
             durableWorkCandidatesRef.current.clear();
+            durableWorkCorrelationsRef.current.clear();
             durableRunEventsRef.current.clear();
           }
 
@@ -560,8 +580,11 @@ export function useDesktopController(service: DesktopService) {
         if (runId && (pendingCreationRef.current || commandLocks.current.has("start-work")))
           durableRunEventsRef.current.set(runId, event);
         const candidateWorkId = createdWorkId(event);
-        if (candidateWorkId && (pendingCreationRef.current || commandLocks.current.has("start-work")))
+        if (candidateWorkId && (pendingCreationRef.current || commandLocks.current.has("start-work"))) {
           durableWorkCandidatesRef.current.add(candidateWorkId);
+          const correlationId = asRecord(event)?.correlationId;
+          if (typeof correlationId === "string") durableWorkCorrelationsRef.current.set(candidateWorkId, correlationId);
+        }
         const changedWorkId = eventWorkId(event);
         if (changedWorkId) durableChangedWorkIdsRef.current.add(changedWorkId);
         const detailWorkId = detailEventWorkId(event);
@@ -713,6 +736,12 @@ export function useDesktopController(service: DesktopService) {
       const ownRunEvent = durableRunEventsRef.current.get(result.runId);
       durableRunEventsRef.current.clear();
       if (ownRunEvent) durableRunEventsRef.current.set(result.runId, ownRunEvent);
+      const expectedCorrelationId = `${result.runId}:intake:work`;
+      for (const [workId, correlationId] of durableWorkCorrelationsRef.current) {
+        if (correlationId === expectedCorrelationId) continue;
+        durableWorkCorrelationsRef.current.delete(workId);
+        durableWorkCandidatesRef.current.delete(workId);
+      }
       const creation: PendingCreation = {
         runId: result.runId,
         baselineWorkIds,
@@ -732,6 +761,7 @@ export function useDesktopController(service: DesktopService) {
     } catch (error) {
       durableRunEventsRef.current.clear();
       durableWorkCandidatesRef.current.clear();
+      durableWorkCorrelationsRef.current.clear();
       setNewWorkError(errorMessage(error, "새 Work 실행을 시작하지 못했습니다."));
     } finally {
       commandLocks.current.delete("start-work");
