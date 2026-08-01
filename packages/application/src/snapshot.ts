@@ -243,6 +243,7 @@ export class CollaborationGraphSnapshotProjector {
         kind: room.kind,
         status: room.status,
         participantIds: [...room.participantIds],
+        ...(room.participants === undefined ? {} : { participants: [...room.participants] }),
         lastMessageSequence: room.lastMessageSequence,
       })),
       pendingApprovals: sources.approvals

@@ -1348,6 +1348,58 @@ describe("Application desktop service", () => {
     expect(auxiliary.activities[0]).not.toHaveProperty("final");
   });
 
+  it("UUID 사용자는 사람으로, 종료된 동적 Agent는 저장된 Agent 이름으로 표시한다", () => {
+    const userId = "00000000-0000-4000-8000-000000000000";
+    const dynamicAgentId = "dynamic-staff-8";
+    const room = projectRoom(
+      {
+        workId: detail.workId,
+        roomId: "room-participant-kinds",
+        name: "Core Office",
+        kind: "core-office",
+        status: "closed",
+        participantIds: [userId, dynamicAgentId],
+        participants: [
+          { subjectId: userId, kind: "user" },
+          { subjectId: dynamicAgentId, kind: "agent" },
+        ],
+        lastMessageSequence: 0,
+      },
+      [],
+      [],
+    );
+
+    expect(room.participants[0]).toMatchObject({ handle: userId, name: "나", role: "사람", human: true });
+    expect(room.participants[0]?.name).not.toBe("Haven");
+    expect(room.participants[1]).toMatchObject({ handle: dynamicAgentId, name: "Brook" });
+    expect(room.participants[1]).not.toHaveProperty("human");
+  });
+
+  it("같은 UUID의 손상된 user·agent 중복도 각각 저장된 종류대로 표시한다", () => {
+    const subjectId = "00000000-0000-4000-8000-000000000000";
+    const room = projectRoom(
+      {
+        workId: detail.workId,
+        roomId: "room-duplicate-participant-kinds",
+        name: "Core Office",
+        kind: "core-office",
+        status: "closed",
+        participantIds: [subjectId, subjectId],
+        participants: [
+          { subjectId, kind: "agent" },
+          { subjectId, kind: "user" },
+        ],
+        lastMessageSequence: 0,
+      },
+      [],
+      [],
+    );
+
+    expect(room.participants[0]).toMatchObject({ handle: subjectId, name: "Haven" });
+    expect(room.participants[0]).not.toHaveProperty("human");
+    expect(room.participants[1]).toMatchObject({ handle: subjectId, name: "나", human: true });
+  });
+
   it("여러 실행의 실제 모델이 다르면 Work 모델을 단정하지 않는다", async () => {
     const native = transport({
       "work.executions": [

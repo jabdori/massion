@@ -4397,7 +4397,9 @@ export function projectRoom(
     roomId: room.roomId,
     name: room.name,
     status: room.status,
-    participants: room.participantIds.map((handle) => speakerFor({ authorKind: "agent", authorId: handle }, nodes)),
+    participants: (
+      room.participants ?? room.participantIds.map((subjectId) => ({ subjectId, kind: "agent" as const }))
+    ).map((participant) => speakerFor({ authorKind: participant.kind, authorId: participant.subjectId }, nodes)),
     lastMessageSequence: room.lastMessageSequence,
     budgets: projectRoomBudgets(room),
     sharedContexts: sharedContexts

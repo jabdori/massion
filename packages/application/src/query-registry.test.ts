@@ -1619,7 +1619,12 @@ describe("협업방 조회", () => {
         name: "3분기 이탈 분석",
         kind: "work",
         status: "active",
-        participantIds: ["representative", "evidence-research", "assurance"],
+        participantIds: ["00000000-0000-4000-8000-000000000000", "representative", "dynamic-staff-8"],
+        participants: [
+          { subjectId: "00000000-0000-4000-8000-000000000000", kind: "user" as const },
+          { subjectId: "representative", kind: "agent" as const },
+          { subjectId: "dynamic-staff-8", kind: "agent" as const },
+        ],
         lastMessageSequence: 3,
       },
     ],
@@ -2653,7 +2658,12 @@ describe("협업방 조회", () => {
       data: [
         {
           roomId: "room-1",
-          participantIds: ["representative", "evidence-research", "assurance"],
+          participantIds: ["00000000-0000-4000-8000-000000000000", "representative", "dynamic-staff-8"],
+          participants: [
+            { subjectId: "00000000-0000-4000-8000-000000000000", kind: "user" },
+            { subjectId: "representative", kind: "agent" },
+            { subjectId: "dynamic-staff-8", kind: "agent" },
+          ],
           lastMessageSequence: 3,
         },
       ],

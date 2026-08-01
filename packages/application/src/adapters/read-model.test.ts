@@ -104,6 +104,41 @@ describe("SurrealApplicationReadModel", () => {
       ],
       limits: { maxParallel: 2, maxTokens: 10_000, maxCostMicros: 1_000_000, maxRounds: 20 },
     });
+    const duplicateSubjectId = "00000000-0000-4000-8000-000000000001";
+    const legacySubjectId = "00000000-0000-4000-8000-000000000002";
+    for (const participant of [
+      {
+        participantId: "read-model-ordering-user",
+        kind: "user",
+        subjectId: duplicateSubjectId,
+        joinedAt: "2000-01-02T00:00:00.000Z",
+      },
+      {
+        participantId: "read-model-ordering-agent",
+        kind: "agent",
+        subjectId: duplicateSubjectId,
+        joinedAt: "2000-01-02T00:00:00.000Z",
+      },
+      {
+        participantId: "read-model-ordering-legacy",
+        kind: "legacy",
+        subjectId: legacySubjectId,
+        joinedAt: "2000-01-01T00:00:00.000Z",
+      },
+    ]) {
+      await database.query(
+        "CREATE collaboration_participant CONTENT { participant_id: $participant_id, organization_id: $organization_id, work_id: $work_id, room_id: $room_id, kind: $kind, subject_id: $subject_id, role: 'participant', status: 'active', joined_at: <datetime>$joined_at };",
+        {
+          participant_id: participant.participantId,
+          organization_id: context.organizationId,
+          work_id: created.work.work_id,
+          room_id: room.room.room_id,
+          kind: participant.kind,
+          subject_id: participant.subjectId,
+          joined_at: participant.joinedAt,
+        },
+      );
+    }
     const runtime = await RuntimeExecutionStore.create(database, organizations);
     const execution = await runtime.createExecution(context, {
       commandId: "read-model-execution-0001",
@@ -752,6 +787,23 @@ describe("SurrealApplicationReadModel", () => {
     expect(snapshot.rooms[0]).toMatchObject({
       participantIds: expect.arrayContaining([context.userId, "representative"]),
     });
+    const [projectedRoom] = await readModel.rooms(context);
+    expect(projectedRoom?.participantIds.slice(0, 3)).toEqual([
+      legacySubjectId,
+      duplicateSubjectId,
+      duplicateSubjectId,
+    ]);
+    expect(projectedRoom?.participants?.slice(0, 3)).toEqual([
+      { subjectId: legacySubjectId, kind: "agent" },
+      { subjectId: duplicateSubjectId, kind: "agent" },
+      { subjectId: duplicateSubjectId, kind: "user" },
+    ]);
+    expect(projectedRoom?.participants).toEqual(
+      expect.arrayContaining([
+        { subjectId: context.userId, kind: "user" },
+        { subjectId: "read-model-specialist", kind: "agent" },
+      ]),
+    );
     expect(snapshot.pendingApprovals[0]?.displayPreview).toEqual({
       kind: "file-change",
       path: "/workspace/src/index.ts",

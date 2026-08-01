@@ -1789,6 +1789,7 @@ export function registerApplicationQueries(
             kind: room.kind,
             status: room.status,
             participantIds: room.participantIds,
+            ...(room.participants === undefined ? {} : { participants: room.participants }),
             lastMessageSequence: room.lastMessageSequence,
             ...(room.coordinatorHandle === undefined ? {} : { coordinatorHandle: room.coordinatorHandle }),
             ...(room.roundCount === undefined ? {} : { roundCount: room.roundCount }),

@@ -231,6 +231,7 @@ export interface RoomViewV1 {
   readonly kind: string;
   readonly status: string;
   readonly participantIds: readonly string[];
+  readonly participants?: readonly { readonly subjectId: string; readonly kind: "user" | "agent" }[];
   readonly lastMessageSequence: number;
   readonly coordinatorHandle?: string;
   /** 방의 실행 예산과 소비량. 남은 여유를 알아야 계속할지 멈출지 판단할 수 있습니다. */

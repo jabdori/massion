@@ -101,6 +101,10 @@ function source(overrides: Partial<ApplicationReadModel> = {}): ApplicationReadM
         kind: "work",
         status: "active",
         participantIds: ["user-snapshot", "representative"],
+        participants: [
+          { subjectId: "user-snapshot", kind: "user" },
+          { subjectId: "representative", kind: "agent" },
+        ],
         lastMessageSequence: 9,
       },
     ],
@@ -160,6 +164,10 @@ describe("CollaborationGraphSnapshotProjector", () => {
       taskIds: ["task-snapshot"],
       roomIds: ["room-snapshot"],
     });
+    expect(snapshot.rooms[0]?.participants).toEqual([
+      { subjectId: "user-snapshot", kind: "user" },
+      { subjectId: "representative", kind: "agent" },
+    ]);
     expect(snapshot.pendingApprovals).toHaveLength(1);
     expect(snapshot.pendingApprovals[0]?.displayPreview).toEqual({
       kind: "file-change",
@@ -184,6 +192,27 @@ describe("CollaborationGraphSnapshotProjector", () => {
     const snapshot = await new CollaborationGraphSnapshotProjector(model, { maxAttempts: 3 }).project(context);
     expect(reads).toBe(4);
     expect(snapshot.sourceWatermarks).toEqual({ organization: 2, work: 1 });
+  });
+
+  it("source에 참가자 종류가 없으면 snapshot에도 선택 필드를 만들지 않는다", async () => {
+    const model = source({
+      rooms: async () => [
+        {
+          organizationId: context.organizationId,
+          workId: "work-snapshot",
+          roomId: "room-snapshot",
+          name: "전체 협업방",
+          kind: "work",
+          status: "active",
+          participantIds: ["representative"],
+          lastMessageSequence: 9,
+        },
+      ],
+    });
+
+    const snapshot = await new CollaborationGraphSnapshotProjector(model).project(context);
+
+    expect(snapshot.rooms[0]).not.toHaveProperty("participants");
   });
 
   it("watermark가 계속 바뀌면 conflict를 반환한다", async () => {

@@ -92,6 +92,7 @@ export interface ApplicationRoomSource {
   readonly kind: string;
   readonly status: string;
   readonly participantIds: readonly string[];
+  readonly participants?: readonly { readonly subjectId: string; readonly kind: "user" | "agent" }[];
   readonly lastMessageSequence: number;
   /** 방을 조정하는 노드 handle. */
   readonly coordinatorHandle?: string;

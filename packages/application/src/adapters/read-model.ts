@@ -139,9 +139,12 @@ interface SharedContextRecord {
 }
 
 interface ParticipantRecord {
+  readonly participant_id: string;
   readonly room_id: string;
   readonly subject_id: string;
+  readonly kind: string;
   readonly status: string;
+  readonly joined_at: unknown;
 }
 
 interface MessageRecord {
@@ -818,26 +821,33 @@ export class SurrealApplicationReadModel implements ApplicationReadModel {
       { organization_id: context.organizationId },
     );
     const [participants] = await this.database.query<[ParticipantRecord[]]>(
-      "SELECT room_id, subject_id, status FROM collaboration_participant WHERE organization_id = $organization_id;",
+      "SELECT participant_id, room_id, subject_id, kind, status, joined_at FROM collaboration_participant WHERE organization_id = $organization_id ORDER BY joined_at ASC, participant_id ASC;",
       { organization_id: context.organizationId },
     );
-    return rooms.map((room) => ({
-      organizationId: room.organization_id,
-      workId: room.work_id,
-      roomId: room.room_id,
-      name: room.title,
-      kind: "work",
-      status: room.status,
-      ...(room.coordinator_handle === undefined ? {} : { coordinatorHandle: room.coordinator_handle }),
-      ...(room.round_count === undefined ? {} : { roundCount: room.round_count }),
-      ...(room.max_rounds === undefined ? {} : { maxRounds: room.max_rounds }),
-      ...(room.max_tokens === undefined ? {} : { maxTokens: room.max_tokens }),
-      ...(room.max_cost_micros === undefined ? {} : { maxCostMicros: room.max_cost_micros }),
-      participantIds: participants
+    return rooms.map((room) => {
+      const roomParticipants = participants
         .filter((participant) => participant.room_id === room.room_id && participant.status === "active")
-        .map((participant) => participant.subject_id),
-      lastMessageSequence: Math.max(0, room.next_sequence - 1),
-    }));
+        .map((participant) => ({
+          subjectId: participant.subject_id,
+          kind: participant.kind === "user" ? ("user" as const) : ("agent" as const),
+        }));
+      return {
+        organizationId: room.organization_id,
+        workId: room.work_id,
+        roomId: room.room_id,
+        name: room.title,
+        kind: "work",
+        status: room.status,
+        ...(room.coordinator_handle === undefined ? {} : { coordinatorHandle: room.coordinator_handle }),
+        ...(room.round_count === undefined ? {} : { roundCount: room.round_count }),
+        ...(room.max_rounds === undefined ? {} : { maxRounds: room.max_rounds }),
+        ...(room.max_tokens === undefined ? {} : { maxTokens: room.max_tokens }),
+        ...(room.max_cost_micros === undefined ? {} : { maxCostMicros: room.max_cost_micros }),
+        participantIds: roomParticipants.map((participant) => participant.subjectId),
+        participants: roomParticipants,
+        lastMessageSequence: Math.max(0, room.next_sequence - 1),
+      };
+    });
   }
 
   public async messages(context: TenantContext): Promise<readonly ApplicationMessageSource[]> {
