@@ -1,9 +1,9 @@
 import { IdentityService, OrganizationService, type TenantContext } from "@massion/identity";
+import { OrganizationGraphService, type OrganizationVersion } from "@massion/organization";
 import { createDatabase, type MassionDatabase } from "@massion/storage";
+import { WorkService, type Work, type WorkStatus } from "@massion/work";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { OrganizationGraphService, type OrganizationVersion } from "../../organization/src/organization.js";
-import { WorkService, type Work, type WorkStatus } from "../../work/src/work.js";
 import { SurrealApplicationReadModel } from "./adapters/read-model.js";
 import { ApplicationRunStore, type ApplicationRunStatus, type ApplicationRunView } from "./run-store.js";
 
