@@ -269,9 +269,10 @@ describe("Application run commands", () => {
     expect(cancelled).toEqual(["run-command-1"]);
   });
 
-  it("차단된 run 재시도는 외부 command ID를 재시도 시도 ID로 전달한다", async () => {
+  it("차단된 run 재시도는 실행을 기다리지 않고 외부 command ID로 background schedule한다", async () => {
     const descriptors = new Map<string, ApplicationCommandDescriptor>();
-    const retryCalls: Array<{ runId: string; retryAttemptId: string }> = [];
+    const scheduled: Array<{ runId: string; retryAttemptId: string | undefined }> = [];
+    let retryStarted = false;
     const completed = {
       runId: "run-command-retry-1",
       organizationId: context.organizationId,
@@ -292,12 +293,14 @@ describe("Application run commands", () => {
         store: { start: async () => completed },
         coordinator: {
           cancel: async () => completed,
-          retryBlocked: async (_context, runId, retryAttemptId) => {
-            retryCalls.push({ runId, retryAttemptId });
-            return completed;
+          retryBlocked: async () => {
+            retryStarted = true;
+            return await new Promise<never>(() => undefined);
           },
         },
-        schedule: async () => undefined,
+        schedule: async (_context, runId, retryAttemptId) => {
+          scheduled.push({ runId, retryAttemptId });
+        },
       },
     );
     const resume = descriptors.get("run.resume");
@@ -311,8 +314,17 @@ describe("Application run commands", () => {
     };
     const payload = resume.validate({ runId: "run-command-retry-1", retryBlocked: true });
 
-    await expect(resume.handle(context, command, payload)).resolves.toMatchObject({ outcome: "succeeded" });
-    expect(retryCalls).toEqual([{ runId: "run-command-retry-1", retryAttemptId: "run-resume-retry-command-0001" }]);
+    await expect(resume.handle(context, command, payload)).resolves.toEqual({
+      schemaVersion: "massion.application.v1",
+      commandId: "run-resume-retry-command-0001",
+      correlationId: "run-resume-retry-correlation-0001",
+      operation: "run.resume",
+      outcome: "accepted",
+      resource: { type: "ApplicationRun", id: "run-command-retry-1" },
+      data: { runId: "run-command-retry-1" },
+    });
+    expect(scheduled).toEqual([{ runId: "run-command-retry-1", retryAttemptId: "run-resume-retry-command-0001" }]);
+    expect(retryStarted).toBe(false);
   });
 
   it("work:write run.resume으로 승인 대기 실행을 직접 재개할 수 없다", () => {

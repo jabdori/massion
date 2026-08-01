@@ -13,7 +13,7 @@ import type { ApplicationRunStore } from "./run-store.js";
 interface RunCommandDependencies {
   readonly store: Pick<ApplicationRunStore, "start">;
   readonly coordinator: Pick<CoreWorkCoordinator, "cancel" | "retryBlocked">;
-  readonly schedule: (context: TenantContext, runId: string) => void | Promise<void>;
+  readonly schedule: (context: TenantContext, runId: string, retryAttemptId?: string) => void;
   readonly workspaces?: Pick<WorkspaceService, "get">;
 }
 
@@ -189,11 +189,11 @@ export function registerApplicationRunCommands(
       };
     },
     async handle(context, command, payload) {
-      const run = await dependencies.coordinator.retryBlocked(context, payload.runId, command.commandId);
+      dependencies.schedule(context, payload.runId, command.commandId);
       return result(command, {
-        outcome: run.status === "completed" ? "succeeded" : "accepted",
-        resource: { type: "ApplicationRun", id: run.runId, revision: run.leaseGeneration },
-        data: { runId: run.runId, status: run.status, stage: run.stage },
+        outcome: "accepted",
+        resource: { type: "ApplicationRun", id: payload.runId },
+        data: { runId: payload.runId },
       });
     },
   });

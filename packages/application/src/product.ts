@@ -200,9 +200,9 @@ export class ApplicationProduct implements AsyncDisposable {
       store: runs,
       coordinator,
       ...(dependencies.domain.workspaces === undefined ? {} : { workspaces: dependencies.domain.workspaces }),
-      schedule(context, runId) {
+      schedule(context, runId, retryAttemptId) {
         if (!productReference.current) throw new Error("Application product 조립이 완료되지 않았습니다");
-        productReference.current.schedule(context, runId);
+        productReference.current.schedule(context, runId, retryAttemptId);
       },
     });
     registerWorkDirectiveCommands(commands, {
@@ -324,10 +324,12 @@ export class ApplicationProduct implements AsyncDisposable {
     await this.close();
   }
 
-  private schedule(context: TenantContext, runId: string): void {
+  private schedule(context: TenantContext, runId: string, retryAttemptId?: string): void {
     const task = Promise.resolve()
       .then(async () => {
-        const run = await this.coordinator.recover(context, runId);
+        const run = retryAttemptId
+          ? await this.coordinator.retryBlocked(context, runId, retryAttemptId)
+          : await this.coordinator.recover(context, runId);
         await this.metrics.recordOnce(context, `${runId}:run:${String(run.leaseGeneration)}`, {
           name: "application_run_total",
           value: 1,

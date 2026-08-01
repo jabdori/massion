@@ -149,6 +149,103 @@ describe("ApplicationProduct", () => {
     await expect(client.events()).resolves.toMatchObject({ events: expect.any(Array) });
   });
 
+  it("run.resume은 background retry를 한 번 예약하고 같은 command를 accepted로 replay한다", async () => {
+    await using database = await createDatabase({ url: "mem://", namespace: "massion", database: crypto.randomUUID() });
+    const identities = await IdentityService.create(database);
+    const organizations = await OrganizationService.create(database);
+    const graph = await OrganizationGraphService.create(database, organizations);
+    const policies = await PolicyStore.create(database, organizations);
+    let deliveryAttempts = 0;
+    let releaseRetry: () => void = () => undefined;
+    const retryCompletion = new Promise<void>((resolve) => {
+      releaseRetry = resolve;
+    });
+    const executors = Object.fromEntries(
+      (["intake", "context-strategy", "evidence", "delivery", "assurance", "records"] as const).map((stage) => [
+        stage,
+        {
+          async execute() {
+            if (stage === "intake") return { outcome: "advanced" as const, workId: "product-resume-work-0001" };
+            if (stage !== "delivery") return { outcome: "advanced" as const };
+            deliveryAttempts += 1;
+            if (deliveryAttempts === 1) return { outcome: "blocked" as const, reason: "delivery-retry-required" };
+            await retryCompletion;
+            return { outcome: "advanced" as const };
+          },
+        },
+      ]),
+    ) as never;
+    await using product = await ApplicationProduct.create({
+      database,
+      identities,
+      organizations,
+      graph,
+      policies,
+      tokenKey: { keyId: "product-resume-key", key: randomBytes(32) },
+      bootstrapAuthorization: bootstrapAuthorization(),
+      executors,
+      domain: {},
+      queries: { status: async () => ({ status: "ready" }) },
+    });
+    const endpoint = await product.start();
+    const initialized = (await ApplicationHttpClient.bootstrap(endpoint.url, {
+      commandId: "product-resume-bootstrap-0001",
+      capability: bootstrapCapability,
+    })) as {
+      access: { token: string };
+      context: { userId: string; organizationId: string; membershipId: string; role: "owner" };
+    };
+    const client = new ApplicationHttpClient({ baseUrl: endpoint.url, token: initialized.access.token });
+    const started = (await client.command({
+      schemaVersion: "massion.application.v1",
+      commandId: "product-resume-start-0001",
+      correlationId: "product-resume-start-correlation-0001",
+      operation: "run.start",
+      payload: { request: { text: "차단 뒤 비동기 재시도" } },
+    })) as { readonly data?: { readonly runId?: string } };
+    const runId = started.data?.runId;
+    if (!runId) throw new Error("run.start가 runId를 반환하지 않았습니다");
+    await product.drain();
+    await expect(client.query("run.get", { runId })).resolves.toMatchObject({
+      data: { status: "blocked", stage: "delivery", blockedReason: "delivery-retry-required" },
+    });
+
+    const resumeCommand = {
+      schemaVersion: "massion.application.v1",
+      commandId: "product-resume-command-0001",
+      correlationId: "product-resume-correlation-0001",
+      operation: "run.resume",
+      payload: { runId, retryBlocked: true },
+    };
+    const first = client.command(resumeCommand);
+    await vi.waitFor(() => expect(deliveryAttempts).toBe(2));
+    const firstBeforeRelease = await Promise.race([
+      first.then(
+        (value) => ({ state: "settled" as const, value }),
+        (error: unknown) => ({ state: "rejected" as const, error }),
+      ),
+      new Promise<{ readonly state: "pending" }>((resolve) => {
+        setTimeout(() => resolve({ state: "pending" }), 100);
+      }),
+    ]);
+    const replayBeforeRelease = await client.command(resumeCommand).then(
+      (value) => ({ state: "settled" as const, value }),
+      (error: unknown) => ({ state: "rejected" as const, error }),
+    );
+
+    releaseRetry();
+    const firstResult = await first;
+    await product.drain();
+
+    expect(firstBeforeRelease).toMatchObject({ state: "settled", value: { outcome: "accepted" } });
+    expect(replayBeforeRelease).toMatchObject({ state: "settled", value: { outcome: "accepted" } });
+    expect(firstResult).toMatchObject({ outcome: "accepted", data: { runId } });
+    expect(deliveryAttempts).toBe(2);
+    await expect(client.query("run.get", { runId })).resolves.toMatchObject({
+      data: { status: "completed", stage: "terminal" },
+    });
+  });
+
   it("백그라운드 stage 예외도 run.blocked 이벤트로 종료한다", async () => {
     await using database = await createDatabase({ url: "mem://", namespace: "massion", database: crypto.randomUUID() });
     const identities = await IdentityService.create(database);
