@@ -109,14 +109,14 @@ describe("AgentOS native data flow", () => {
         progress: 25,
         run: { runId: "run-live-refresh", status: "awaiting-approval", stage: "delivery", leaseGeneration: 4 },
       };
-      const completed: WorkView = {
+      const completed = {
         ...completedFixture,
         id: base.id,
         title: base.title,
         revision: 3,
         activities: [],
         run: { runId: "run-live-refresh", status: "completed", stage: "terminal", leaseGeneration: 7 },
-      };
+      } satisfies WorkView;
       const partialTerminal: WorkView = {
         ...running,
         status: "complete",
