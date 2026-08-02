@@ -13,7 +13,13 @@ import {
 import { validateStrategyPlan } from "@massion/context-strategy";
 import { GovernanceApprovalRequiredError, GovernanceDeniedError } from "@massion/governance";
 import type { TenantContext } from "@massion/identity";
-import type { AgentRunner, RuntimeExecutionStore } from "@massion/runtime";
+import {
+  executionEvidenceIsSafe,
+  type AgentRunner,
+  type ExecutionEvidenceItem,
+  type RuntimeExecutionStore,
+} from "@massion/runtime";
+import { serializeSurrealDateTime } from "@massion/storage";
 import type { WorkRecoveryBundle, WorkService } from "@massion/work";
 
 import type { CoreWorkStageExecutor, CoreWorkStageInput, CoreWorkStageResult } from "./core-work-coordinator.js";
@@ -79,6 +85,7 @@ export const AUTOMATIC_EVIDENCE_MAXIMUM_AGE_MS = 30 * 24 * 60 * 60 * 1_000;
 const APPLICATION_RUN_CANCELLED = "Application run cancelled";
 const MAX_VERIFICATION_MATERIAL_TOKENS = 28_000;
 const TASK_EVIDENCE_ARTIFACT_KINDS = new Set(["task-output", "code-change"]);
+const UTC_ISO_INSTANT = /^([1-9]\d{3})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,9}))?Z$/u;
 const VERIFICATION_OUTPUT_RESERVE_TOKENS = 4_000;
 
 function approvalId(value: unknown): string | undefined {
@@ -114,6 +121,119 @@ function verificationRequest(recovered: unknown, fallback: unknown): Readonly<Re
   const fallbackText = record(fallback)?.text;
   const text = typeof recoveredText === "string" ? recoveredText : fallbackText;
   return typeof text === "string" && text.trim() ? { text } : {};
+}
+
+function artifactInstant(value: unknown): { readonly createdAt: string; readonly sortKey: bigint } {
+  let serialized: unknown = typeof value === "string" ? value : undefined;
+  if (value instanceof Date) {
+    if (!Number.isFinite(value.getTime())) throw new Error("Assurance ArtifactVersion createdAt이 유효하지 않습니다");
+    serialized = value.toISOString();
+  } else if (value && typeof value === "object") {
+    serialized = serializeSurrealDateTime(value);
+  }
+  const createdAt = typeof serialized === "string" ? serialized : undefined;
+  const match = createdAt ? UTC_ISO_INSTANT.exec(createdAt) : null;
+  if (match) {
+    const year = Number(match[1]);
+    const month = Number(match[2]);
+    const day = Number(match[3]);
+    const hour = Number(match[4]);
+    const minute = Number(match[5]);
+    const second = Number(match[6]);
+    const instant = new Date(Date.UTC(year, month - 1, day, hour, minute, second));
+    if (
+      instant.getUTCFullYear() === year &&
+      instant.getUTCMonth() === month - 1 &&
+      instant.getUTCDate() === day &&
+      instant.getUTCHours() === hour &&
+      instant.getUTCMinutes() === minute &&
+      instant.getUTCSeconds() === second
+    ) {
+      const epochSeconds = BigInt(Math.trunc(instant.getTime() / 1_000));
+      const nanoseconds = BigInt((match[7] ?? "").padEnd(9, "0") || "0");
+      return { createdAt, sortKey: epochSeconds * 1_000_000_000n + nanoseconds };
+    }
+  }
+  throw new Error("Assurance ArtifactVersion createdAt이 유효하지 않습니다");
+}
+
+type ObservationPhase =
+  | "before-final-workspace-change"
+  | "workspace-change"
+  | "after-final-workspace-change"
+  | "final-observation"
+  | "indeterminate-truncated-observation";
+
+type ObservationTimelineItem = {
+  readonly observationSequence: number;
+  readonly phase: ObservationPhase;
+  readonly providerItemId: string;
+  readonly artifactVersionId: string;
+};
+
+type ProjectedArtifactVersion = {
+  readonly artifactVersionId: string;
+  readonly artifactKind: string;
+  readonly createdAt: string;
+  readonly creatorExecutionId?: string;
+  readonly taskId?: string;
+  readonly content: unknown;
+  readonly observationTimeline?: readonly ObservationTimelineItem[];
+};
+
+function annotateExecutionObservations(
+  artifactVersions: readonly ProjectedArtifactVersion[],
+): readonly ProjectedArtifactVersion[] {
+  const receipts: {
+    readonly artifactIndex: number;
+    readonly artifactVersionId: string;
+    readonly items: readonly ExecutionEvidenceItem[];
+    readonly truncated: boolean;
+  }[] = [];
+  for (const [artifactIndex, artifact] of artifactVersions.entries()) {
+    if (artifact.artifactKind !== "execution-evidence") continue;
+    if (!executionEvidenceIsSafe(artifact.content)) {
+      throw new Error("Assurance execution-evidence receipt가 유효하지 않습니다");
+    }
+    receipts.push({
+      artifactIndex,
+      artifactVersionId: artifact.artifactVersionId,
+      items: artifact.content.items,
+      truncated: artifact.content.truncated === true,
+    });
+  }
+
+  const observations = receipts.flatMap((receipt) =>
+    receipt.items.map((item, itemIndex) => ({ receipt, item, itemIndex })),
+  );
+  const lastFileObservation = observations.findLastIndex(({ item }) => item.kind === "file");
+  const timelineByArtifact = new Map<number, ObservationTimelineItem[]>();
+  for (const [observationIndex, observation] of observations.entries()) {
+    const localLastFile = observation.receipt.items.findLastIndex((item) => item.kind === "file");
+    const phase: ObservationPhase =
+      observation.receipt.truncated && (localLastFile < 0 || observation.itemIndex > localLastFile)
+        ? "indeterminate-truncated-observation"
+        : lastFileObservation < 0
+          ? "final-observation"
+          : observationIndex < lastFileObservation
+            ? "before-final-workspace-change"
+            : observationIndex === lastFileObservation
+              ? "workspace-change"
+              : "after-final-workspace-change";
+    const timeline = timelineByArtifact.get(observation.receipt.artifactIndex) ?? [];
+    timeline.push({
+      observationSequence: observationIndex + 1,
+      phase,
+      providerItemId: observation.item.providerItemId,
+      artifactVersionId: observation.receipt.artifactVersionId,
+    });
+    timelineByArtifact.set(observation.receipt.artifactIndex, timeline);
+  }
+
+  return artifactVersions.map((artifact, artifactIndex) => {
+    const observationTimeline = timelineByArtifact.get(artifactIndex);
+    return observationTimeline ? { ...artifact, observationTimeline } : artifact;
+  });
 }
 
 function verificationMaterial(
@@ -193,35 +313,57 @@ function verificationMaterial(
     ),
   );
   const allowed = candidate.work?.artifact_version_ids ? new Set(candidate.work.artifact_version_ids) : undefined;
-  const artifactVersions = (candidate.artifactVersions ?? [])
-    .filter(
-      (version) =>
-        typeof version.artifact_version_id === "string" &&
-        typeof version.content_json === "string" &&
-        typeof currentWorkId === "string" &&
-        version.work_id === currentWorkId &&
-        (messageByArtifact.has(version.artifact_version_id) ||
-          (typeof version.creator_execution_id === "string" &&
-            taskByExecution.has(version.creator_execution_id) &&
-            artifactKindById.get(version.artifact_id) === "execution-evidence" &&
-            (candidate.artifacts ?? []).some(
-              (artifact) => artifact.artifact_id === version.artifact_id && artifact.work_id === currentWorkId,
-            ))) &&
-        (allowed === undefined || allowed.has(version.artifact_version_id)),
-    )
-    .sort((left, right) => left.artifact_version_id.localeCompare(right.artifact_version_id))
-    .map((version) => {
-      const taskId =
-        messageByArtifact.get(version.artifact_version_id) ??
-        (typeof version.creator_execution_id === "string"
-          ? taskByExecution.get(version.creator_execution_id)
-          : undefined);
-      return {
-        artifactVersionId: version.artifact_version_id,
-        ...(taskId ? { taskId } : {}),
-        content: parseJson(version.content_json),
-      };
-    });
+  const artifactVersions = annotateExecutionObservations(
+    (candidate.artifactVersions ?? [])
+      .filter(
+        (version) =>
+          typeof version.artifact_version_id === "string" &&
+          typeof currentWorkId === "string" &&
+          version.work_id === currentWorkId &&
+          (messageByArtifact.has(version.artifact_version_id) ||
+            (typeof version.creator_execution_id === "string" &&
+              taskByExecution.has(version.creator_execution_id) &&
+              artifactKindById.get(version.artifact_id) === "execution-evidence" &&
+              (candidate.artifacts ?? []).some(
+                (artifact) => artifact.artifact_id === version.artifact_id && artifact.work_id === currentWorkId,
+              ))) &&
+          (allowed === undefined || allowed.has(version.artifact_version_id)),
+      )
+      .map((version) => {
+        const instant = artifactInstant(version.created_at);
+        const artifactKind = artifactKindById.get(version.artifact_id);
+        if (!artifactKind) throw new Error("Assurance ArtifactVersion kind가 유효하지 않습니다");
+        if (typeof version.content_json !== "string") {
+          throw new Error("Assurance ArtifactVersion content가 유효하지 않습니다");
+        }
+        const content = parseJson(version.content_json);
+        if (artifactKind === "execution-evidence" && !executionEvidenceIsSafe(content)) {
+          throw new Error("Assurance execution-evidence receipt가 유효하지 않습니다");
+        }
+        const taskId =
+          messageByArtifact.get(version.artifact_version_id) ??
+          (typeof version.creator_execution_id === "string"
+            ? taskByExecution.get(version.creator_execution_id)
+            : undefined);
+        return {
+          artifactVersionId: version.artifact_version_id,
+          artifactKind,
+          createdAt: instant.createdAt,
+          sortKey: instant.sortKey,
+          ...(typeof version.creator_execution_id === "string"
+            ? { creatorExecutionId: version.creator_execution_id }
+            : {}),
+          ...(taskId ? { taskId } : {}),
+          content,
+        };
+      })
+      .sort(
+        (left, right) =>
+          (left.sortKey < right.sortKey ? -1 : left.sortKey > right.sortKey ? 1 : 0) ||
+          left.artifactVersionId.localeCompare(right.artifactVersionId),
+      )
+      .map(({ sortKey: _sortKey, ...version }) => version),
+  );
   return {
     request: verificationRequest(candidate.request, fallbackRequest),
     ...(planContentJson === undefined ? {} : { plan: parseJson(planContentJson) }),
@@ -446,7 +588,7 @@ export class CoreAssuranceStage implements CoreWorkStageExecutor {
         operation: "verify_work",
         snapshotHash: prepared.snapshot.hash,
         verificationContract:
-          "요청·계획·완료 기준과 각 산출물 본문을 대조하세요. 모순, 누락 또는 검증 불가능한 주장이 하나라도 있으면 verified=false로 판정하세요. 정확히 { snapshotHash, verified, reason } JSON 객체만 반환하고 snapshotHash는 입력값을 그대로 사용하세요.",
+          "요청·계획·완료 기준과 각 산출물 본문을 대조하세요. execution-evidence의 before-final-workspace-change 관측은 이후 workspace change 이전 상태이므로 최종 상태의 모순으로 사용하지 말고, indeterminate-truncated-observation은 최종 상태로 간주하지 않으며, 후속 workspace change·산출물·after-final-workspace-change 검사 결과를 우선하세요. 모순, 누락 또는 검증 불가능한 주장이 하나라도 있으면 verified=false로 판정하세요. 정확히 { snapshotHash, verified, reason } JSON 객체만 반환하고 snapshotHash는 입력값을 그대로 사용하세요.",
         material,
       },
     };

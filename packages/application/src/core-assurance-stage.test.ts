@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { canonicalAssuranceBindings, checksumCriterionCoverage } from "@massion/assurance";
+import { executionEvidenceIsSafe, normalizeCodexExecutionEvidence } from "@massion/runtime";
 
 import { CoreAssuranceStage } from "./core-assurance-stage.js";
 
@@ -101,6 +102,57 @@ function verifierRunner(
   };
 }
 
+function stageCapturingVerificationMaterial(recovery: unknown, verifierInputs: unknown[]): CoreAssuranceStage {
+  return new CoreAssuranceStage({
+    works: {
+      getWork: async () => ({ revision: 7 }),
+      getActivePlan: async () => ({ plan_version_id: "plan-1" }),
+      recoverWork: async () => recovery,
+    },
+    bindings: {
+      getActive: async () => ({
+        bindingVersionId: "binding-1",
+        profileId: "massion.assurance.acceptance.v1",
+        profileVersion: "1.0.0",
+      }),
+    },
+    runner: verifierRunner([], verifierInputs),
+    runtimeExecutions: noStoredVerifier,
+    assurance: {
+      prepareSnapshot: async () => ({ snapshot: { hash: "a".repeat(64) } }),
+      start: async () => ({ run: { assuranceRunId: "assurance-1", status: "planned", version: 1 } }),
+      transition: async () => ({ run: { assuranceRunId: "assurance-1", status: "running", version: 2 } }),
+      get: async () => ({ assuranceRunId: "assurance-1", status: "running", version: 2 }),
+      decide: async () => ({ run: { assuranceRunId: "assurance-1", status: "passed", version: 3 } }),
+      projectVerdict: async () => ({ work: { revision: 8 } }),
+    },
+    checks: { execute: async () => ({ outcome: "ready" }) },
+  } as never);
+}
+
+function fixtureArtifactVersion(
+  artifactVersionId: string,
+  artifactId: string,
+  creatorExecutionId: string,
+  createdAt: string,
+  content: unknown,
+) {
+  return {
+    artifact_version_id: artifactVersionId,
+    artifact_id: artifactId,
+    work_id: "assurance-work",
+    creator_execution_id: creatorExecutionId,
+    content_json: typeof content === "string" ? content : JSON.stringify(content),
+    created_at: createdAt,
+  };
+}
+
+function executionReceipt(items: readonly unknown[], truncated = false) {
+  const receipt = normalizeCodexExecutionEvidence(items, "/workspace");
+  if (!receipt) throw new Error("안전한 execution receipt fixture가 필요합니다");
+  return truncated ? { ...receipt, truncated: true as const } : receipt;
+}
+
 describe("CoreAssuranceStage", () => {
   it("계획 조직의 일반 완료 기준을 실제 산출물 검사로 자동 연결하고 Work 검증까지 반영한다", async () => {
     const calls: string[] = [];
@@ -168,6 +220,7 @@ describe("CoreAssuranceStage", () => {
               work_id: "assurance-work",
               creator_execution_id: "execution-output",
               content_json: '{"pValue":0.036,"recommendation":"단계적 출시"}',
+              created_at: "2026-07-31T00:00:01.000Z",
             },
             {
               artifact_version_id: "debug-log",
@@ -381,6 +434,10 @@ describe("CoreAssuranceStage", () => {
             artifactVersions: [
               expect.objectContaining({
                 artifactVersionId: "artifact-version-1",
+                artifactKind: "task-output",
+                createdAt: "2026-07-31T00:00:01.000Z",
+                creatorExecutionId: "execution-output",
+                taskId: "task-1",
                 content: { pValue: 0.036, recommendation: "단계적 출시" },
               }),
             ],
@@ -459,6 +516,7 @@ describe("CoreAssuranceStage", () => {
               work_id: "assurance-work",
               creator_execution_id: "software-execution",
               content_json: '{"commitSha":"abc123","files":["src/value.mjs"]}',
+              created_at: "2026-07-31T00:00:01.000Z",
             },
           ],
           tasks: [
@@ -555,6 +613,9 @@ describe("CoreAssuranceStage", () => {
             artifactVersions: [
               {
                 artifactVersionId: "code-change-version",
+                artifactKind: "code-change",
+                createdAt: "2026-07-31T00:00:01.000Z",
+                creatorExecutionId: "software-execution",
                 taskId: "software-task",
                 content: { commitSha: "abc123", files: ["src/value.mjs"] },
               },
@@ -563,6 +624,311 @@ describe("CoreAssuranceStage", () => {
         }),
       }),
     ]);
+  });
+
+  it("Verifier projection은 Artifact 계보와 시간 순서를 보존하고 최종 workspace change 전후 관측을 구분한다", async () => {
+    const verifierInputs: unknown[] = [];
+    const artifacts = [
+      { artifact_id: "output-pre", work_id: "assurance-work", kind: "task-output" },
+      { artifact_id: "output-post", work_id: "assurance-work", kind: "task-output" },
+      { artifact_id: "evidence-pre", work_id: "assurance-work", kind: "execution-evidence" },
+      { artifact_id: "evidence-post", work_id: "assurance-work", kind: "execution-evidence" },
+    ];
+    const artifactVersions = [
+      fixtureArtifactVersion("z-output-pre", "output-pre", "execution-pre", "2026-08-02T00:00:00.000Z", {
+        answer: "pre",
+      }),
+      fixtureArtifactVersion(
+        "z-evidence-pre",
+        "evidence-pre",
+        "execution-pre",
+        "2026-08-02T00:00:01.132437Z",
+        executionReceipt(
+          [
+            {
+              id: "pre-cat",
+              type: "command_execution",
+              command: "cat src/rank-incidents.mjs",
+              aggregated_output: "effort * 0.15",
+              exit_code: 0,
+              status: "completed",
+            },
+            {
+              id: "change-file",
+              type: "file_change",
+              changes: [{ path: "src/rank-incidents.mjs", kind: "update" }],
+              status: "completed",
+            },
+          ],
+          true,
+        ),
+      ),
+      fixtureArtifactVersion("a-output-post", "output-post", "execution-post", "2026-08-02T00:00:01.132895Z", {
+        answer: "post",
+      }),
+      fixtureArtifactVersion(
+        "b-evidence-post",
+        "evidence-post",
+        "execution-post",
+        "2026-08-02T00:00:04.000Z",
+        executionReceipt([
+          {
+            id: "post-test",
+            type: "command_execution",
+            command: "npm test",
+            aggregated_output: "9/9 passed",
+            exit_code: 0,
+            status: "completed",
+          },
+        ]),
+      ),
+    ];
+    const messages = [
+      ["execution-pre", "z-output-pre"],
+      ["execution-post", "a-output-post"],
+    ].map(([executionId, artifactVersionId]) => ({
+      task_id: "task-1",
+      work_id: "assurance-work",
+      artifact_version_id: artifactVersionId,
+      execution_id: executionId,
+      message_type: "evidence",
+    }));
+    const recovery = {
+      work: {
+        work_id: "assurance-work",
+        artifact_version_ids: artifactVersions.map((item) => item.artifact_version_id),
+      },
+      artifacts,
+      artifactVersions,
+      tasks: [
+        {
+          task_id: "task-1",
+          work_id: "assurance-work",
+          plan_version_id: "plan-1",
+          status: "completed",
+          acceptance_criteria_json: "[]",
+          dependency_ids: [],
+        },
+      ],
+      messages,
+    };
+    const originalReceipts = artifactVersions.map((version) => version.content_json);
+    const stage = stageCapturingVerificationMaterial(recovery, verifierInputs);
+
+    await expect(stage.execute(context, input)).resolves.toMatchObject({ outcome: "advanced" });
+    const material = (
+      verifierInputs[0] as { readonly input: { readonly material: { readonly artifactVersions: readonly unknown[] } } }
+    ).input.material;
+    const projected = material.artifactVersions as Array<Record<string, unknown>>;
+    expect(projected.map((version) => version.artifactVersionId)).toEqual([
+      "z-output-pre",
+      "z-evidence-pre",
+      "a-output-post",
+      "b-evidence-post",
+    ]);
+    expect(projected[0]).toMatchObject({
+      artifactKind: "task-output",
+      createdAt: "2026-08-02T00:00:00.000Z",
+      creatorExecutionId: "execution-pre",
+      taskId: "task-1",
+      content: { answer: "pre" },
+    });
+    const evidence = projected.filter((version) => version.artifactKind === "execution-evidence");
+    expect(evidence.map((version) => version.content)).toEqual([
+      JSON.parse(artifactVersions[1]?.content_json ?? "null"),
+      JSON.parse(artifactVersions[3]?.content_json ?? "null"),
+    ]);
+    expect(evidence[0]).toMatchObject({
+      artifactVersionId: "z-evidence-pre",
+      createdAt: "2026-08-02T00:00:01.132437Z",
+      observationTimeline: [
+        {
+          observationSequence: 1,
+          phase: "before-final-workspace-change",
+          providerItemId: "pre-cat",
+          artifactVersionId: "z-evidence-pre",
+        },
+        {
+          observationSequence: 2,
+          phase: "workspace-change",
+          providerItemId: "change-file:0",
+          artifactVersionId: "z-evidence-pre",
+        },
+      ],
+    });
+    expect(evidence[1]).toMatchObject({
+      artifactVersionId: "b-evidence-post",
+      observationTimeline: [
+        {
+          observationSequence: 3,
+          phase: "after-final-workspace-change",
+          providerItemId: "post-test",
+          artifactVersionId: "b-evidence-post",
+        },
+      ],
+    });
+    expect(executionEvidenceIsSafe(evidence[0]?.content)).toBe(true);
+    expect(executionEvidenceIsSafe(evidence[1]?.content)).toBe(true);
+    expect(artifactVersions.map((version) => version.content_json)).toEqual(originalReceipts);
+    const verificationContract = (verifierInputs[0] as { readonly input: { readonly verificationContract: string } })
+      .input.verificationContract;
+    expect(verificationContract).toContain("before-final-workspace-change");
+    expect(verificationContract).toContain("후속 workspace change");
+  });
+
+  it("truncated execution evidence에 file 관측이 없으면 최종 상태를 주장하지 않는다", async () => {
+    const verifierInputs: unknown[] = [];
+    const recovery = {
+      work: { work_id: "assurance-work", artifact_version_ids: ["output-only", "evidence-only"] },
+      artifacts: [
+        { artifact_id: "output", work_id: "assurance-work", kind: "task-output" },
+        { artifact_id: "evidence", work_id: "assurance-work", kind: "execution-evidence" },
+      ],
+      artifactVersions: [
+        fixtureArtifactVersion("output-only", "output", "execution-only", "2026-08-02T00:00:00.000Z", {}),
+        fixtureArtifactVersion(
+          "evidence-only",
+          "evidence",
+          "execution-only",
+          "2026-08-02T00:00:01.000Z",
+          executionReceipt(
+            [
+              {
+                id: "test-only",
+                type: "command_execution",
+                command: "npm test",
+                aggregated_output: "partial output",
+                exit_code: 0,
+                status: "completed",
+              },
+            ],
+            true,
+          ),
+        ),
+      ],
+      tasks: [
+        {
+          task_id: "task-1",
+          work_id: "assurance-work",
+          plan_version_id: "plan-1",
+          status: "completed",
+          acceptance_criteria_json: "[]",
+          dependency_ids: [],
+        },
+      ],
+      messages: [
+        {
+          task_id: "task-1",
+          work_id: "assurance-work",
+          artifact_version_id: "output-only",
+          execution_id: "execution-only",
+          message_type: "evidence",
+        },
+      ],
+    };
+    const stage = stageCapturingVerificationMaterial(recovery, verifierInputs);
+
+    await stage.execute(context, input);
+    expect(verifierInputs).toEqual([
+      expect.objectContaining({
+        input: expect.objectContaining({
+          material: expect.objectContaining({
+            artifactVersions: expect.arrayContaining([
+              expect.objectContaining({
+                artifactVersionId: "evidence-only",
+                observationTimeline: [
+                  {
+                    observationSequence: 1,
+                    phase: "indeterminate-truncated-observation",
+                    providerItemId: "test-only",
+                    artifactVersionId: "evidence-only",
+                  },
+                ],
+              }),
+            ]),
+          }),
+        }),
+      }),
+    ]);
+  });
+
+  it.each([
+    ["malformed execution receipt", "{", "2026-08-02T00:00:01.000Z"],
+    [
+      "invalid createdAt",
+      executionReceipt([
+        { id: "file", type: "file_change", changes: [{ path: "a.ts", kind: "update" }], status: "completed" },
+      ]),
+      "invalid",
+    ],
+    [
+      "ambiguous locale createdAt",
+      executionReceipt([
+        { id: "file", type: "file_change", changes: [{ path: "a.ts", kind: "update" }], status: "completed" },
+      ]),
+      "08/02/2026 18:47:26",
+    ],
+    [
+      "impossible calendar createdAt",
+      executionReceipt([
+        {
+          id: "file",
+          type: "file_change",
+          changes: [{ path: "a.ts", kind: "update" }],
+          status: "completed",
+        },
+      ]),
+      "2026-02-31T00:00:00Z",
+    ],
+    [
+      "out-of-range hour createdAt",
+      executionReceipt([
+        {
+          id: "file",
+          type: "file_change",
+          changes: [{ path: "a.ts", kind: "update" }],
+          status: "completed",
+        },
+      ]),
+      "2026-01-01T24:00:00Z",
+    ],
+  ])("%s는 verifier 전에 fail-closed한다", async (_label, evidenceContent, createdAt) => {
+    const verifierInputs: unknown[] = [];
+    const recovery = {
+      work: { work_id: "assurance-work", artifact_version_ids: ["output", "evidence"] },
+      artifacts: [
+        { artifact_id: "output-artifact", work_id: "assurance-work", kind: "task-output" },
+        { artifact_id: "evidence-artifact", work_id: "assurance-work", kind: "execution-evidence" },
+      ],
+      artifactVersions: [
+        fixtureArtifactVersion("output", "output-artifact", "execution", "2026-08-02T00:00:00.000Z", {}),
+        fixtureArtifactVersion("evidence", "evidence-artifact", "execution", createdAt, evidenceContent),
+      ],
+      tasks: [
+        {
+          task_id: "task-1",
+          work_id: "assurance-work",
+          plan_version_id: "plan-1",
+          status: "completed",
+          acceptance_criteria_json: "[]",
+          dependency_ids: [],
+        },
+      ],
+      messages: [
+        {
+          task_id: "task-1",
+          work_id: "assurance-work",
+          artifact_version_id: "output",
+          execution_id: "execution",
+          message_type: "evidence",
+        },
+      ],
+    };
+
+    await expect(
+      stageCapturingVerificationMaterial(recovery, verifierInputs).execute(context, input),
+    ).rejects.toThrow();
+    expect(verifierInputs).toEqual([]);
   });
 
   it("요청에 ID가 없어도 현재 Plan과 Artifact에 맞는 활성 binding을 자동 선택한다", async () => {
