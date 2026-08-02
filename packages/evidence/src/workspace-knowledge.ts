@@ -24,6 +24,27 @@ const SCHEMA_VERSION = "evidence-v1";
 const MAX_REFERENCES = 12;
 const MAX_GRAPH_NEIGHBORS = 8;
 const GRAPH_RELATION_KINDS = new Set(["imports", "calls", "implements"]);
+const KOREAN_PATH_POSTPOSITIONS = [
+  "에서",
+  "으로",
+  "부터",
+  "까지",
+  "의",
+  "을",
+  "를",
+  "은",
+  "는",
+  "이",
+  "가",
+  "과",
+  "와",
+  "에",
+  "로",
+  "만",
+  "도",
+] as const;
+const QUERY_PATH_PREFIX_PUNCTUATION = new Set(["(", "[", "{", "'", '"', "`", ",", ";", ":", "!", "?"]);
+const QUERY_PATH_SUFFIX_PUNCTUATION = new Set([")", "]", "}", "'", '"', "`", ",", ";", ":", "!", "?", "."]);
 
 export interface WorkspaceKnowledgeOptions {
   readonly scanOptions: ScanOptions;
@@ -107,6 +128,34 @@ function normalizedInput(input: PrepareWorkspaceKnowledgeInput): NormalizedPrepa
 
 function chunksForSymbol(snapshot: IndexSnapshot, symbolKey: string): readonly IndexedChunk[] {
   return snapshot.chunks.filter((chunk) => chunk.symbolKey === symbolKey);
+}
+
+function trimQueryPathPunctuation(token: string): string {
+  let start = 0;
+  let end = token.length;
+  while (start < end && QUERY_PATH_PREFIX_PUNCTUATION.has(token[start])) start += 1;
+  while (start < end && QUERY_PATH_SUFFIX_PUNCTUATION.has(token[end - 1])) end -= 1;
+  return token.slice(start, end);
+}
+
+function withoutKoreanPathPostposition(token: string): string {
+  const postposition = KOREAN_PATH_POSTPOSITIONS.find((candidate) => token.endsWith(candidate));
+  return postposition ? token.slice(0, -postposition.length) : token;
+}
+
+function exactRepositoryPathsInQuery(query: string): ReadonlySet<string> {
+  const paths = new Set<string>();
+  // 질의를 한 번만 토큰화해 snapshot 청크마다 정규식을 다시 만들지 않습니다.
+  for (const rawToken of query.split(/\s+/u)) {
+    const token = trimQueryPathPunctuation(withoutKoreanPathPostposition(trimQueryPathPunctuation(rawToken)));
+    try {
+      const normalized = normalizeRepositoryPath(token);
+      if (normalized === token) paths.add(normalized);
+    } catch {
+      // 절대·상위·NUL·비정규화 경로는 후보에 넣지 않습니다.
+    }
+  }
+  return paths;
 }
 
 function frozenRelation(relation: IndexedRelation): FrozenEvidenceRelation {
@@ -270,6 +319,12 @@ export class WorkspaceKnowledgeService {
       : [];
     if (scopedPaths && seeds.length === 0)
       throw new Error("명시된 Workspace knowledge scope에서 usable chunk를 찾을 수 없습니다");
+    const snapshotChunkPaths = new Set(snapshot.chunks.map((chunk) => chunk.relativePath));
+    const exactPaths = new Set(
+      [...exactRepositoryPathsInQuery(input.query)].filter(
+        (relativePath) => snapshotChunkPaths.has(relativePath) && (!scopedPaths || scopedPaths.has(relativePath)),
+      ),
+    );
     const searched = await this.search.search(context, {
       repositoryId: repository.repositoryId,
       indexVersionId: index.indexVersionId,
@@ -297,6 +352,16 @@ export class WorkspaceKnowledgeService {
         ...(chunk.symbolKey === undefined ? {} : { symbolKey: chunk.symbolKey }),
       }),
     }));
+    const exactPathCandidates = snapshot.chunks
+      .filter((chunk) => exactPaths.has(chunk.relativePath))
+      .map((chunk) => ({
+        chunk,
+        provenance: provenance("scope", snapshot.checksum, {
+          referenceId: chunk.chunkId,
+          kind: "chunk" as const,
+          ...(chunk.symbolKey === undefined ? {} : { symbolKey: chunk.symbolKey }),
+        }),
+      }));
     const searchCandidates: Array<{ readonly chunk: IndexedChunk; readonly provenance: CodeEvidenceProvenance }> = [];
     const roots: IndexedSymbol[] = [];
     const rootKeys = new Set<string>();
@@ -382,7 +447,7 @@ export class WorkspaceKnowledgeService {
       }
     }
     const selected = new Map<string, { readonly chunk: IndexedChunk; readonly provenance: CodeEvidenceProvenance }>();
-    for (const candidate of [...scopedCandidates, ...searchCandidates, ...graphCandidates]) {
+    for (const candidate of [...scopedCandidates, ...exactPathCandidates, ...searchCandidates, ...graphCandidates]) {
       const existing = selected.get(candidate.chunk.chunkId);
       if (existing) {
         if (existing.provenance.selection !== candidate.provenance.selection) continue;

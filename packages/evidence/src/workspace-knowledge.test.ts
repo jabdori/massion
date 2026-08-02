@@ -53,6 +53,7 @@ describe("Workspace 기반 자동 Evidence 지식 준비", () => {
 
   async function writeFixture(): Promise<void> {
     await mkdir(path.join(root, "src"), { recursive: true });
+    await mkdir(path.join(root, "docs"), { recursive: true });
     await writeFile(
       path.join(root, "src/allowed.ts"),
       `export function allowed() {\n  const marker = "${QUERY}";\n  return marker && related();\n}\n`,
@@ -60,6 +61,9 @@ describe("Workspace 기반 자동 Evidence 지식 준비", () => {
     await writeFile(path.join(root, "src/related.ts"), "export function related() { return 'related evidence'; }\n");
     await writeFile(path.join(root, "src/outside.ts"), "export function outside() { return 'outside evidence'; }\n");
     await writeFile(path.join(root, "src/unsupported.bin"), "not usable code evidence\n");
+    await writeFile(path.join(root, "ISSUE.md"), "root issue evidence\n");
+    await writeFile(path.join(root, "docs/ISSUE.md"), "nested issue evidence\n");
+    await writeFile(path.join(root, "docs/ONLY.md"), "nested-only evidence\n");
   }
 
   beforeEach(async () => {
@@ -267,6 +271,85 @@ describe("Workspace 기반 자동 Evidence 지식 준비", () => {
 
     expect(prepared.brief.status).toBe("ready");
     expect(prepared.brief.references).toEqual(
+      expect.arrayContaining([expect.objectContaining({ kind: "code", relativePath: "history.txt" })]),
+    );
+  });
+
+  it("자연어 질의의 정확한 상대 경로만 동결된 snapshot 청크로 선택한다", { timeout: 15_000 }, async () => {
+    await writeFile(path.join(root, ".gitignore"), "history.txt\n");
+    await writeFile(path.join(root, "history.txt"), "ignored attachment evidence\n");
+    const cases = [
+      { name: "루트 파일", query: "(ISSUE.md)를 확인해주세요.", paths: ["ISSUE.md"] },
+      { name: "중첩 파일", query: "`docs/ISSUE.md`, 계약을 확인해주세요.", paths: ["docs/ISSUE.md"] },
+      { name: "조사 의", query: "ISSUE.md의 incident priority report 순서 오류를 해결해 주세요.", paths: ["ISSUE.md"] },
+      { name: "조사 을", query: "ISSUE.md을 확인해주세요.", paths: ["ISSUE.md"] },
+      { name: "조사 를", query: "ISSUE.md를 확인해주세요.", paths: ["ISSUE.md"] },
+      { name: "조사 은", query: "ISSUE.md은 확인해주세요.", paths: ["ISSUE.md"] },
+      { name: "조사 는", query: "ISSUE.md는 확인해주세요.", paths: ["ISSUE.md"] },
+      { name: "조사 이", query: "ISSUE.md이 맞습니다.", paths: ["ISSUE.md"] },
+      { name: "조사 가", query: "ISSUE.md가 맞습니다.", paths: ["ISSUE.md"] },
+      { name: "조사 과", query: "ISSUE.md과 비교해주세요.", paths: ["ISSUE.md"] },
+      { name: "조사 와", query: "ISSUE.md와 비교해주세요.", paths: ["ISSUE.md"] },
+      { name: "조사 에", query: "ISSUE.md에 기록해주세요.", paths: ["ISSUE.md"] },
+      { name: "조사 에서", query: "ISSUE.md에서 확인해주세요.", paths: ["ISSUE.md"] },
+      { name: "조사 으로", query: "ISSUE.md으로 이동해주세요.", paths: ["ISSUE.md"] },
+      { name: "조사 로", query: "ISSUE.md로 이동해주세요.", paths: ["ISSUE.md"] },
+      { name: "조사 부터", query: "ISSUE.md부터 확인해주세요.", paths: ["ISSUE.md"] },
+      { name: "조사 까지", query: "ISSUE.md까지 확인해주세요.", paths: ["ISSUE.md"] },
+      { name: "조사 만", query: "ISSUE.md만 확인해주세요.", paths: ["ISSUE.md"] },
+      { name: "조사 도", query: "ISSUE.md도 확인해주세요.", paths: ["ISSUE.md"] },
+      { name: "없는 파일", query: "MISSING.md를 확인해주세요.", paths: [] },
+      { name: "다른 디렉터리 basename", query: "ONLY.md를 확인해주세요.", paths: [] },
+      { name: "붙은 명사", query: "ISSUE.md파일을 확인해주세요.", paths: [] },
+      { name: "조사 뒤 명사", query: "ISSUE.md의파일을 확인해주세요.", paths: [] },
+      { name: "비슷한 파일명 접두사", query: "backup-ISSUE.md를 확인해주세요.", paths: [] },
+      { name: "점 확장자 접미사", query: "ISSUE.md.bak를 확인해주세요.", paths: [] },
+      { name: "점 파일명 접두사", query: "backup.ISSUE.md를 확인해주세요.", paths: [] },
+      { name: "점 파일명 접두사 2", query: "foo.ISSUE.md를 확인해주세요.", paths: [] },
+      { name: "절대 경로", query: "/ISSUE.md를 확인해주세요.", paths: [] },
+      { name: "상위 디렉터리", query: "../ISSUE.md를 확인해주세요.", paths: [] },
+      { name: "NUL", query: "\0ISSUE.md를 확인해주세요.", paths: [] },
+      { name: "비정규화 경로", query: "docs/./ISSUE.md를 확인해주세요.", paths: [] },
+      { name: "디렉터리", query: "docs를 확인해주세요.", paths: [] },
+    ] as const;
+
+    for (const testCase of cases) {
+      const prepared = await knowledge.prepare(context, {
+        commandId: crypto.randomUUID(),
+        workId: `work-exact-path-${testCase.name}`,
+        workspaceId: "workspace-exact-path",
+        workspaceName: "Exact path fixture",
+        root,
+        query: testCase.query,
+      });
+      const paths = prepared.brief.references.flatMap((reference) =>
+        reference.kind === "code" ? [reference.relativePath] : [],
+      );
+
+      expect(paths, testCase.name).toEqual(testCase.paths);
+      expect(prepared.brief.status, testCase.name).toBe(testCase.paths.length === 0 ? "no_match" : "ready");
+      if (testCase.paths.length > 0) {
+        expect(
+          prepared.brief.references.every(
+            (reference) => reference.kind === "code" && reference.provenance.selection === "scope",
+          ),
+        ).toBe(true);
+      }
+    }
+
+    const attached = await knowledge.prepare(context, {
+      commandId: crypto.randomUUID(),
+      workId: "work-exact-path-ignored-attachment",
+      workspaceId: "workspace-exact-path",
+      workspaceName: "Exact path fixture",
+      root,
+      query: "history.txt를 확인해주세요.",
+      relativePaths: ["history.txt"],
+    });
+    expect(
+      (await indexes.getSnapshot(context, attached.brief.indexVersionId)).files.map((file) => file.relativePath),
+    ).toEqual(["history.txt"]);
+    expect(attached.brief.references).toEqual(
       expect.arrayContaining([expect.objectContaining({ kind: "code", relativePath: "history.txt" })]),
     );
   });
