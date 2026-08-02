@@ -173,33 +173,52 @@ describe("CoreDeliveryStage", () => {
           tokenCount: 0,
           costMicros: 0,
         });
-        const plan = await works.addPlan(tenantContext, {
+        const projected = await works.applyStrategyProjection(tenantContext, {
           commandId: randomUUID(),
           workId: created.work.work_id,
           expectedRevision: handoff.work.revision,
-          content: { objective: "두 Delivery Artifact를 중복 없이 기록합니다." },
+          contextVersionId: `context-${crashKind}`,
+          strategyGenerationId: `strategy-${crashKind}`,
+          strategyChecksum: "c".repeat(64),
+          plan: {
+            objective: "두 Delivery Artifact를 중복 없이 기록합니다.",
+            summary: "Crash-safe Delivery를 실행합니다.",
+            scopeIn: ["Delivery"],
+            scopeOut: [],
+            assumptions: [],
+            unknowns: [],
+            acceptanceCriteria: [
+              {
+                key: "artifact-pair",
+                statement: "Task output과 execution evidence Artifact가 각각 하나씩 존재합니다.",
+                method: "evidence",
+                evidenceKinds: ["task-output", "execution-evidence"],
+                planLevel: false,
+              },
+            ],
+            risks: [],
+            tasks: [
+              {
+                key: "deliver",
+                title: "Crash-safe Delivery",
+                objective: "출력과 실행 근거를 정확히 한 번 기록합니다.",
+                criterionKeys: ["artifact-pair"],
+                dependencyKeys: [],
+                requiredCapabilities: ["delivery"],
+                recommendedAgentHandles: ["delivery-crash-agent"],
+                parallelizable: false,
+              },
+            ],
+            evidenceRequests: [],
+          },
         });
-        const planned = await works.transition(tenantContext, {
-          commandId: randomUUID(),
-          workId: created.work.work_id,
-          expectedRevision: plan.work.revision,
-          target: "planned",
-        });
-        const taskResult = await works.addTask(tenantContext, {
-          commandId: randomUUID(),
-          workId: created.work.work_id,
-          expectedRevision: planned.work.revision,
-          title: "Crash-safe Delivery",
-          objective: "출력과 실행 근거를 정확히 한 번 기록합니다.",
-          acceptanceCriteria: ["Task output과 execution evidence Artifact가 각각 하나씩 존재합니다."],
-          dependencyIds: [],
-          recommendedAgentHandles: ["delivery-crash-agent"],
-        });
+        const task = projected.tasks[0];
+        if (!task) throw new Error("Delivery Task fixture 생성에 실패했습니다");
         const assigned = await works.assignTask(tenantContext, {
           commandId: randomUUID(),
           workId: created.work.work_id,
-          expectedRevision: taskResult.work.revision,
-          taskId: taskResult.task.task_id,
+          expectedRevision: projected.work.revision,
+          taskId: task.task_id,
           agentHandle: "delivery-crash-agent",
         });
         const ready = await works.transition(tenantContext, {
@@ -218,8 +237,8 @@ describe("CoreDeliveryStage", () => {
           commandId: randomUUID(),
           workId: created.work.work_id,
           expectedRevision: running.work.revision,
-          taskId: taskResult.task.task_id,
-          expectedTaskRevision: taskResult.task.revision,
+          taskId: task.task_id,
+          expectedTaskRevision: task.revision,
           target: "running",
         });
 
@@ -230,11 +249,11 @@ describe("CoreDeliveryStage", () => {
           correlationId: `delivery-crash-correlation-${crashKind}`,
           request: {},
         };
-        const runtimeCommand = `${stageInput.commandId}:task:${taskResult.task.task_id}:runtime`;
+        const runtimeCommand = `${stageInput.commandId}:task:${task.task_id}:runtime`;
         const queuedExecution = await runtimeExecutions.createExecution(tenantContext, {
           commandId: runtimeCommand,
           workId: created.work.work_id,
-          taskId: taskResult.task.task_id,
+          taskId: task.task_id,
           agentHandle: "delivery-crash-agent",
           modelRoute: "delivery-quality",
           correlationId: stageInput.correlationId,
@@ -324,7 +343,7 @@ describe("CoreDeliveryStage", () => {
 
         const finalWork = await works.getWork(tenantContext, created.work.work_id);
         const finalTask = (await works.listTasks(tenantContext, created.work.work_id)).find(
-          (candidate) => candidate.task_id === taskResult.task.task_id,
+          (candidate) => candidate.task_id === task.task_id,
         );
         const recovery = await works.recoverWork(tenantContext, created.work.work_id);
         const messagesAfter = await works.listMessages(tenantContext, created.work.work_id, opened.room.room_id);
@@ -349,7 +368,7 @@ describe("CoreDeliveryStage", () => {
         const deliveryEvidenceMessages = messagesAfter.filter(
           (message) =>
             message.message_type === "evidence" &&
-            message.task_id === taskResult.task.task_id &&
+            message.task_id === task.task_id &&
             message.execution_id === executionId,
         );
         expect(deliveryEvidenceMessages).toHaveLength(1);
