@@ -1388,6 +1388,7 @@ export interface DesktopService {
   loadSettings(): Promise<SettingsView>;
   loginSubscription(input: SubscriptionLoginInput): Promise<void>;
   connectZaiCodingPlan(input: ZaiCodingPlanConnectionInput): Promise<void>;
+  connectDeepSeekCommunity(input: { readonly acceptCommunityDataTransfer: true }): Promise<void>;
   registerProvider(input: Record<string, unknown>): Promise<void>;
   registerEndpoint(input: Record<string, unknown>): Promise<void>;
   addCredential(input: Record<string, unknown>): Promise<void>;
@@ -1754,6 +1755,9 @@ export function createApplicationDesktopService(
         billingKind: "coding-plan",
         secret: input.secret,
       });
+    },
+    async connectDeepSeekCommunity(input) {
+      await command("router.community.deepseek.connect", input);
     },
     async registerProvider(input) {
       await command("router.provider.register", input);
@@ -3373,6 +3377,70 @@ export function createFixtureDesktopService(): DesktopService {
             weight: 1,
           });
           credentialVersions.set(credentialId, 1);
+        }
+      }),
+    connectDeepSeekCommunity: () =>
+      fixturePromise(() => {
+        const providerId = "huggingface-deepseek-community";
+        const endpointId = "deepseek-v4-flash-community-api";
+        const modelProfileId = "deepseek-v4-flash-0731-community";
+        const catalog = settingsState.catalog as {
+          providers: Array<Record<string, unknown>>;
+          endpoints: Array<Record<string, unknown>>;
+          models: Array<Record<string, unknown>>;
+          credentials: Array<Record<string, unknown>>;
+        };
+        if (!catalog.providers.some((row) => row.providerId === providerId)) {
+          catalog.providers.push({
+            providerId,
+            displayName: "DeepSeek V4 Flash 0731 · Community",
+            adapterKind: "openai-compatible",
+            enabled: true,
+          });
+        }
+        if (!catalog.endpoints.some((row) => row.endpointId === endpointId)) {
+          catalog.endpoints.push({
+            endpointId,
+            providerId,
+            name: "Hugging Face public endpoint",
+            baseUrl: "https://q5dh1rfszfym23hj.us-east-2.aws.endpoints.huggingface.cloud/v1",
+            local: false,
+          });
+        }
+        if (!catalog.credentials.some((row) => row.providerId === providerId)) {
+          catalog.credentials.push({ providerId, endpointId, label: "공개 endpoint", secretVersion: 1 });
+        }
+        if (!catalog.models.some((row) => row.modelProfileId === modelProfileId)) {
+          catalog.models.push({
+            modelProfileId,
+            providerId,
+            endpointId,
+            modelId: "deepseek-ai/DeepSeek-V4-Flash-0731",
+            routeKind: "chat",
+            contextWindow: 393_216,
+            supportsTools: true,
+            supportsStructuredOutput: false,
+            supportsVision: false,
+            supportsStreaming: true,
+            equivalenceGroup: "massion-core-general",
+            evalScore: 1,
+            inputCostMicrosPerMillion: 0,
+            outputCostMicrosPerMillion: 0,
+            verified: true,
+            enabled: true,
+          });
+        }
+        const credentials = settingsState.credentials as Array<Record<string, unknown>>;
+        if (!credentials.some((row) => row.providerId === providerId)) {
+          credentials.push({
+            credentialId: "credential-huggingface-deepseek-community",
+            providerId,
+            endpointId,
+            label: "공개 endpoint",
+            status: "active",
+            priority: 100,
+            weight: 1,
+          });
         }
       }),
     /*

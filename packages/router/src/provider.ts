@@ -462,27 +462,36 @@ export class ProviderService {
   public async registerProvider(
     context: TenantContext,
     input: RegisterProviderInput,
+    executor: QueryExecutor = this.database,
   ): Promise<{ provider: ModelProvider; audit: RouterAuditEvent }> {
     if (!/^[a-z0-9][a-z0-9-]*$/.test(input.providerId)) throw new Error("Provider ID 형식이 유효하지 않습니다");
     if (!input.displayName.trim()) throw new Error("Provider 표시 이름은 비어 있을 수 없습니다");
-    return await this.command(context, input.commandId, "provider_registered", canonicalJson(input), async (tx) => {
-      const [providers] = await tx.query<[ModelProvider[]]>(
-        "CREATE model_provider CONTENT { provider_id: $provider_id, organization_id: $organization_id, display_name: $display_name, adapter_kind: $adapter_kind, enabled: true, created_at: time::now(), updated_at: time::now() } RETURN AFTER;",
-        {
-          provider_id: input.providerId,
-          organization_id: context.organizationId,
-          display_name: input.displayName.trim(),
-          adapter_kind: input.adapterKind,
-        },
-      );
-      if (!providers[0]) throw new Error("Provider 생성 결과가 없습니다");
-      return { provider: providers[0] };
-    });
+    return await this.command(
+      context,
+      input.commandId,
+      "provider_registered",
+      canonicalJson(input),
+      async (tx) => {
+        const [providers] = await tx.query<[ModelProvider[]]>(
+          "CREATE model_provider CONTENT { provider_id: $provider_id, organization_id: $organization_id, display_name: $display_name, adapter_kind: $adapter_kind, enabled: true, created_at: time::now(), updated_at: time::now() } RETURN AFTER;",
+          {
+            provider_id: input.providerId,
+            organization_id: context.organizationId,
+            display_name: input.displayName.trim(),
+            adapter_kind: input.adapterKind,
+          },
+        );
+        if (!providers[0]) throw new Error("Provider 생성 결과가 없습니다");
+        return { provider: providers[0] };
+      },
+      { executor },
+    );
   }
 
   public async registerEndpoint(
     context: TenantContext,
     input: RegisterEndpointInput,
+    executor: QueryExecutor = this.database,
   ): Promise<{ endpoint: ProviderEndpoint; audit: RouterAuditEvent }> {
     const url = new URL(input.baseUrl);
     if (!input.local && url.protocol !== "https:") throw new Error("외부 Provider endpoint는 HTTPS여야 합니다");
@@ -515,21 +524,29 @@ export class ProviderService {
         if (!endpoints[0]) throw new Error("Provider Endpoint 생성 결과가 없습니다");
         return { endpoint: endpoints[0] };
       },
+      { executor },
     );
   }
 
-  public async listProviders(context: TenantContext): Promise<ModelProvider[]> {
-    await this.organizations.verifyTenantContext(context);
-    const [providers] = await this.database.query<[ModelProvider[]]>(
+  public async listProviders(
+    context: TenantContext,
+    executor: QueryExecutor = this.database,
+  ): Promise<ModelProvider[]> {
+    await this.organizations.verifyTenantContext(context, undefined, executor);
+    const [providers] = await executor.query<[ModelProvider[]]>(
       "SELECT * OMIT id FROM model_provider WHERE organization_id = $organization_id ORDER BY display_name ASC, provider_id ASC;",
       { organization_id: context.organizationId },
     );
     return providers;
   }
 
-  public async listEndpoints(context: TenantContext, providerId?: string): Promise<ProviderEndpoint[]> {
-    await this.organizations.verifyTenantContext(context);
-    const [endpoints] = await this.database.query<[ProviderEndpoint[]]>(
+  public async listEndpoints(
+    context: TenantContext,
+    providerId?: string,
+    executor: QueryExecutor = this.database,
+  ): Promise<ProviderEndpoint[]> {
+    await this.organizations.verifyTenantContext(context, undefined, executor);
+    const [endpoints] = await executor.query<[ProviderEndpoint[]]>(
       providerId === undefined
         ? "SELECT * OMIT id FROM provider_endpoint WHERE organization_id = $organization_id ORDER BY provider_id ASC, name ASC, endpoint_id ASC;"
         : "SELECT * OMIT id FROM provider_endpoint WHERE organization_id = $organization_id AND provider_id = $provider_id ORDER BY name ASC, endpoint_id ASC;",
@@ -541,6 +558,7 @@ export class ProviderService {
   public async addCredential(
     context: TenantContext,
     input: AddCredentialInput,
+    executor: QueryExecutor = this.database,
   ): Promise<{ credential: ProviderCredential; audit: RouterAuditEvent }> {
     if (!CREDENTIAL_TYPES.has(input.credentialType)) throw new Error("지원하지 않는 Credential type입니다");
     if (input.priority < 0 || input.weight < 1) throw new Error("Credential priority와 weight가 유효하지 않습니다");
@@ -549,31 +567,38 @@ export class ProviderService {
       secret: "[REDACTED]",
       secretFingerprint: this.vault.fingerprint(input.secret),
     });
-    return await this.command(context, input.commandId, "credential_added", requestJson, async (tx) => {
-      const provider = await this.requireProvider(tx, context.organizationId, input.providerId);
-      if (provider.adapter_kind === "subscription-connector") {
-        throw new Error("구독 연결기 Provider에는 평문 Credential을 추가할 수 없습니다");
-      }
-      await this.requireEndpoint(tx, context.organizationId, input.providerId, input.endpointId);
-      const credentialId = randomUUID();
-      const [credentials] = await tx.query<[ProviderCredential[]]>(
-        "CREATE provider_credential CONTENT { credential_id: $credential_id, organization_id: $organization_id, provider_id: $provider_id, endpoint_id: $endpoint_id, label: $label, credential_type: $credential_type, status: 'active', version: 1, secret_version: 1, priority: $priority, weight: $weight, request_count: 0, input_tokens: 0, output_tokens: 0, cost_micros: 0, last_selected_sequence: 0, created_at: time::now(), updated_at: time::now() } RETURN AFTER;",
-        {
-          credential_id: credentialId,
-          organization_id: context.organizationId,
-          provider_id: input.providerId,
-          endpoint_id: input.endpointId,
-          label: input.label.trim(),
-          credential_type: input.credentialType,
-          priority: input.priority,
-          weight: input.weight,
-        },
-      );
-      const credential = credentials[0];
-      if (!credential) throw new Error("Credential 생성 결과가 없습니다");
-      await this.insertSecret(tx, context, credential, 1, input.secret);
-      return { credential };
-    });
+    return await this.command(
+      context,
+      input.commandId,
+      "credential_added",
+      requestJson,
+      async (tx) => {
+        const provider = await this.requireProvider(tx, context.organizationId, input.providerId);
+        if (provider.adapter_kind === "subscription-connector") {
+          throw new Error("구독 연결기 Provider에는 평문 Credential을 추가할 수 없습니다");
+        }
+        await this.requireEndpoint(tx, context.organizationId, input.providerId, input.endpointId);
+        const credentialId = randomUUID();
+        const [credentials] = await tx.query<[ProviderCredential[]]>(
+          "CREATE provider_credential CONTENT { credential_id: $credential_id, organization_id: $organization_id, provider_id: $provider_id, endpoint_id: $endpoint_id, label: $label, credential_type: $credential_type, status: 'active', version: 1, secret_version: 1, priority: $priority, weight: $weight, request_count: 0, input_tokens: 0, output_tokens: 0, cost_micros: 0, last_selected_sequence: 0, created_at: time::now(), updated_at: time::now() } RETURN AFTER;",
+          {
+            credential_id: credentialId,
+            organization_id: context.organizationId,
+            provider_id: input.providerId,
+            endpoint_id: input.endpointId,
+            label: input.label.trim(),
+            credential_type: input.credentialType,
+            priority: input.priority,
+            weight: input.weight,
+          },
+        );
+        const credential = credentials[0];
+        if (!credential) throw new Error("Credential 생성 결과가 없습니다");
+        await this.insertSecret(tx, context, credential, 1, input.secret);
+        return { credential };
+      },
+      { executor },
+    );
   }
 
   public async addConnectorCredential(
@@ -876,9 +901,13 @@ export class ProviderService {
     );
   }
 
-  public async listCredentials(context: TenantContext, providerId?: string): Promise<ProviderCredential[]> {
-    await this.organizations.verifyTenantContext(context);
-    const [credentials] = await this.database.query<[ProviderCredential[]]>(
+  public async listCredentials(
+    context: TenantContext,
+    providerId?: string,
+    executor: QueryExecutor = this.database,
+  ): Promise<ProviderCredential[]> {
+    await this.organizations.verifyTenantContext(context, undefined, executor);
+    const [credentials] = await executor.query<[ProviderCredential[]]>(
       "SELECT * OMIT id FROM provider_credential WHERE organization_id = $organization_id AND ($provider_id = NONE OR provider_id = $provider_id) ORDER BY label ASC;",
       { organization_id: context.organizationId, provider_id: providerId },
     );

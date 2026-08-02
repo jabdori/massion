@@ -2250,6 +2250,24 @@ describe("Application desktop service", () => {
     );
   });
 
+  it("DeepSeek 커뮤니티 연결은 서버 고정 계약과 명시 동의만 전달한다", async () => {
+    const native = transport();
+    const service = createApplicationDesktopService(native, { createId: () => "request-deepseek-0001" });
+
+    await (
+      service as unknown as {
+        connectDeepSeekCommunity(input: { acceptCommunityDataTransfer: true }): Promise<void>;
+      }
+    ).connectDeepSeekCommunity({ acceptCommunityDataTransfer: true });
+
+    expect(native.command).toHaveBeenCalledWith(
+      expect.objectContaining({
+        operation: "router.community.deepseek.connect",
+        payload: { acceptCommunityDataTransfer: true },
+      }),
+    );
+  });
+
   it("Codex 로그인 뒤 native 연결을 다시 열어 갱신된 local access를 사용한다", async () => {
     const native = transport();
     const bootstrap = vi.spyOn(native, "bootstrap");

@@ -840,6 +840,44 @@ describe("Application domain adapters", () => {
     }
   });
 
+  it("명시 동의가 있는 owner만 DeepSeek 커뮤니티 Provider 제품 연결을 실행한다", async () => {
+    await using database = await createDatabase({
+      url: "mem://",
+      namespace: "massion",
+      database: crypto.randomUUID(),
+    });
+    const identities = await IdentityService.create(database);
+    const organizations = await OrganizationService.create(database);
+    const owner = await identities.registerPersonalUser({ email: "deepseek-domain@example.com", displayName: "Owner" });
+    const context = await organizations.resolveTenantContext(owner.user.user_id, owner.organization.organization_id);
+    const registry = new ApplicationCommandRegistry(await ApplicationCommandStore.create(database, organizations));
+    const connect = vi.fn().mockResolvedValue({
+      providerId: "huggingface-deepseek-community",
+      modelId: "deepseek-ai/DeepSeek-V4-Flash-0731",
+      modelProfileId: "profile-deepseek",
+      routeNames: ["orchestration-balanced"],
+      verification: { modelList: true, tools: true, streaming: true },
+    });
+    registerApplicationDomainCommands(registry, { communityModels: { connectDeepSeek: connect } } as never);
+
+    const result = await registry.dispatch(context, ["router:write"], {
+      schemaVersion: "massion.application.v1",
+      commandId: "deepseek-domain-connect",
+      correlationId: "deepseek-domain-correlation",
+      operation: "router.community.deepseek.connect",
+      payload: { acceptCommunityDataTransfer: true },
+    });
+
+    expect(connect).toHaveBeenCalledWith(context, {
+      commandId: "deepseek-domain-connect",
+      acceptCommunityDataTransfer: true,
+    });
+    expect(result.data).toMatchObject({
+      providerId: "huggingface-deepseek-community",
+      modelProfileId: "profile-deepseek",
+    });
+  });
+
   it("Assurance binding 제안과 정책 승인 재개를 공개 command로 제공한다", async () => {
     await using database = await createDatabase({ url: "mem://", namespace: "massion", database: crypto.randomUUID() });
     const identities = await IdentityService.create(database);

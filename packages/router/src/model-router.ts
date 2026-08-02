@@ -752,6 +752,7 @@ export class ModelRouter {
   public async registerModel(
     context: TenantContext,
     input: RegisterModelInput,
+    executor: QueryExecutor = this.database,
   ): Promise<{
     profile: ModelProfile;
     evidence: readonly ModelVerificationEvidence[];
@@ -801,18 +802,20 @@ export class ModelRouter {
         const recorded = await this.createModelEvidence(tx, context, profile, evidence);
         return { profile, evidence: recorded };
       },
+      { executor },
     );
   }
 
   public async listModelEvidence(
     context: TenantContext,
     modelProfileId: string,
+    executor: QueryExecutor = this.database,
   ): Promise<readonly ModelVerificationEvidence[]> {
-    await this.organizations.verifyTenantContext(context);
+    await this.organizations.verifyTenantContext(context, undefined, executor);
     const profileId = modelProfileId.trim();
     if (!profileId || profileId.length > 256) throw new Error("Model Profile ID가 유효하지 않습니다");
-    await this.profile(this.database, context.organizationId, profileId);
-    const [evidence] = await this.database.query<[ModelVerificationEvidence[]]>(
+    await this.profile(executor, context.organizationId, profileId);
+    const [evidence] = await executor.query<[ModelVerificationEvidence[]]>(
       `SELECT * OMIT id FROM model_verification_evidence
        WHERE organization_id = $organization_id AND model_profile_id = $model_profile_id
        ORDER BY evidence_kind ASC, observed_at ASC, evidence_id ASC;`,
@@ -861,48 +864,62 @@ export class ModelRouter {
   public async createRoute(
     context: TenantContext,
     input: CreateRouteInput,
+    executor: QueryExecutor = this.database,
   ): Promise<{ route: ModelRoute; audit: RouterAuditEvent }> {
     if (!POLICIES.has(input.credentialPolicy)) throw new Error("지원하지 않는 Credential policy입니다");
     if (input.maxContextTokens < 1 || input.requestBudgetMicros < 0 || input.totalBudgetMicros < 0)
       throw new Error("Route budget 또는 context가 유효하지 않습니다");
-    return await this.command(context, input.commandId, "model_route_created", canonicalJson(input), async (tx) => {
-      const [routes] = await tx.query<[ModelRoute[]]>(
-        "CREATE model_route CONTENT { route_id: $route_id, organization_id: $organization_id, name: $name, route_kind: $route_kind, credential_policy: $credential_policy, data_policy: $data_policy, equivalence_group: $equivalence_group, min_eval_score: $min_eval_score, require_tools: $require_tools, require_structured_output: $require_structured, require_vision: $require_vision, require_streaming: $require_streaming, max_context_tokens: $max_context_tokens, request_budget_micros: $request_budget, total_budget_micros: $total_budget, spent_micros: 0, selection_sequence: 0, routing_policy_version: 1, enabled: true, created_at: time::now(), updated_at: time::now() } RETURN AFTER;",
-        {
-          route_id: randomUUID(),
-          organization_id: context.organizationId,
-          name: input.name,
-          route_kind: input.routeKind,
-          credential_policy: input.credentialPolicy,
-          data_policy: input.dataPolicy,
-          equivalence_group: input.equivalenceGroup,
-          min_eval_score: input.minEvalScore,
-          require_tools: input.requireTools,
-          require_structured: input.requireStructuredOutput,
-          require_vision: input.requireVision,
-          require_streaming: input.requireStreaming,
-          max_context_tokens: input.maxContextTokens,
-          request_budget: input.requestBudgetMicros,
-          total_budget: input.totalBudgetMicros,
-        },
-      );
-      if (!routes[0]) throw new Error("Model Route 생성 결과가 없습니다");
-      return { route: routes[0] };
-    });
+    return await this.command(
+      context,
+      input.commandId,
+      "model_route_created",
+      canonicalJson(input),
+      async (tx) => {
+        const [routes] = await tx.query<[ModelRoute[]]>(
+          "CREATE model_route CONTENT { route_id: $route_id, organization_id: $organization_id, name: $name, route_kind: $route_kind, credential_policy: $credential_policy, data_policy: $data_policy, equivalence_group: $equivalence_group, min_eval_score: $min_eval_score, require_tools: $require_tools, require_structured_output: $require_structured, require_vision: $require_vision, require_streaming: $require_streaming, max_context_tokens: $max_context_tokens, request_budget_micros: $request_budget, total_budget_micros: $total_budget, spent_micros: 0, selection_sequence: 0, routing_policy_version: 1, enabled: true, created_at: time::now(), updated_at: time::now() } RETURN AFTER;",
+          {
+            route_id: randomUUID(),
+            organization_id: context.organizationId,
+            name: input.name,
+            route_kind: input.routeKind,
+            credential_policy: input.credentialPolicy,
+            data_policy: input.dataPolicy,
+            equivalence_group: input.equivalenceGroup,
+            min_eval_score: input.minEvalScore,
+            require_tools: input.requireTools,
+            require_structured: input.requireStructuredOutput,
+            require_vision: input.requireVision,
+            require_streaming: input.requireStreaming,
+            max_context_tokens: input.maxContextTokens,
+            request_budget: input.requestBudgetMicros,
+            total_budget: input.totalBudgetMicros,
+          },
+        );
+        if (!routes[0]) throw new Error("Model Route 생성 결과가 없습니다");
+        return { route: routes[0] };
+      },
+      { executor },
+    );
   }
 
-  public async listModels(context: TenantContext): Promise<readonly ModelProfile[]> {
-    await this.organizations.verifyTenantContext(context);
-    const [profiles] = await this.database.query<[ModelProfile[]]>(
+  public async listModels(
+    context: TenantContext,
+    executor: QueryExecutor = this.database,
+  ): Promise<readonly ModelProfile[]> {
+    await this.organizations.verifyTenantContext(context, undefined, executor);
+    const [profiles] = await executor.query<[ModelProfile[]]>(
       "SELECT * OMIT id FROM model_profile WHERE organization_id = $organization_id ORDER BY provider_id ASC, model_id ASC, model_profile_id ASC;",
       { organization_id: context.organizationId },
     );
     return profiles;
   }
 
-  public async listRoutes(context: TenantContext): Promise<readonly ModelRoute[]> {
-    await this.organizations.verifyTenantContext(context);
-    const [routes] = await this.database.query<[ModelRoute[]]>(
+  public async listRoutes(
+    context: TenantContext,
+    executor: QueryExecutor = this.database,
+  ): Promise<readonly ModelRoute[]> {
+    await this.organizations.verifyTenantContext(context, undefined, executor);
+    const [routes] = await executor.query<[ModelRoute[]]>(
       "SELECT * OMIT id FROM model_route WHERE organization_id = $organization_id ORDER BY name ASC, route_id ASC;",
       { organization_id: context.organizationId },
     );
@@ -1040,36 +1057,48 @@ export class ModelRouter {
   public async addCandidate(
     context: TenantContext,
     input: AddCandidateInput,
+    executor: QueryExecutor = this.database,
   ): Promise<{ candidate: RouteCandidate; audit: RouterAuditEvent }> {
-    return await this.command(context, input.commandId, "route_candidate_added", canonicalJson(input), async (tx) => {
-      const route = await this.routeById(tx, context.organizationId, input.routeId);
-      const profile = await this.profile(tx, context.organizationId, input.modelProfileId);
-      const endpoint = await this.endpoint(tx, context.organizationId, profile.endpoint_id);
-      const failures = this.profileFailures(route, profile, endpoint);
-      if (failures.length > 0)
-        throw new Error(`Route Candidate가 요구사항을 충족하지 않습니다: ${failures.join(", ")}`);
-      const [candidates] = await tx.query<[RouteCandidate[]]>(
-        "CREATE model_route_candidate CONTENT { candidate_id: $candidate_id, organization_id: $organization_id, route_id: $route_id, model_profile_id: $profile_id, priority: $priority, enabled: true, created_at: time::now() } RETURN AFTER;",
-        {
-          candidate_id: randomUUID(),
-          organization_id: context.organizationId,
-          route_id: route.route_id,
-          profile_id: profile.model_profile_id,
-          priority: input.priority,
-        },
-      );
-      if (!candidates[0]) throw new Error("Route Candidate 생성 결과가 없습니다");
-      await tx.query(
-        "UPDATE model_route SET routing_policy_version += 1, updated_at = time::now() WHERE organization_id = $organization_id AND route_id = $route_id;",
-        { organization_id: context.organizationId, route_id: route.route_id },
-      );
-      return { candidate: candidates[0] };
-    });
+    return await this.command(
+      context,
+      input.commandId,
+      "route_candidate_added",
+      canonicalJson(input),
+      async (tx) => {
+        const route = await this.routeById(tx, context.organizationId, input.routeId);
+        const profile = await this.profile(tx, context.organizationId, input.modelProfileId);
+        const endpoint = await this.endpoint(tx, context.organizationId, profile.endpoint_id);
+        const failures = this.profileFailures(route, profile, endpoint);
+        if (failures.length > 0)
+          throw new Error(`Route Candidate가 요구사항을 충족하지 않습니다: ${failures.join(", ")}`);
+        const [candidates] = await tx.query<[RouteCandidate[]]>(
+          "CREATE model_route_candidate CONTENT { candidate_id: $candidate_id, organization_id: $organization_id, route_id: $route_id, model_profile_id: $profile_id, priority: $priority, enabled: true, created_at: time::now() } RETURN AFTER;",
+          {
+            candidate_id: randomUUID(),
+            organization_id: context.organizationId,
+            route_id: route.route_id,
+            profile_id: profile.model_profile_id,
+            priority: input.priority,
+          },
+        );
+        if (!candidates[0]) throw new Error("Route Candidate 생성 결과가 없습니다");
+        await tx.query(
+          "UPDATE model_route SET routing_policy_version += 1, updated_at = time::now() WHERE organization_id = $organization_id AND route_id = $route_id;",
+          { organization_id: context.organizationId, route_id: route.route_id },
+        );
+        return { candidate: candidates[0] };
+      },
+      { executor },
+    );
   }
 
-  public async listCandidates(context: TenantContext, routeId?: string): Promise<readonly RouteCandidate[]> {
-    await this.organizations.verifyTenantContext(context);
-    const [candidates] = await this.database.query<[RouteCandidate[]]>(
+  public async listCandidates(
+    context: TenantContext,
+    routeId?: string,
+    executor: QueryExecutor = this.database,
+  ): Promise<readonly RouteCandidate[]> {
+    await this.organizations.verifyTenantContext(context, undefined, executor);
+    const [candidates] = await executor.query<[RouteCandidate[]]>(
       routeId === undefined
         ? "SELECT * OMIT id FROM model_route_candidate WHERE organization_id = $organization_id ORDER BY route_id ASC, priority ASC, candidate_id ASC;"
         : "SELECT * OMIT id FROM model_route_candidate WHERE organization_id = $organization_id AND route_id = $route_id ORDER BY priority ASC, candidate_id ASC;",
@@ -1993,11 +2022,13 @@ export class ModelRouter {
     eventType: string,
     requestJson: string,
     operation: (executor: QueryExecutor) => Promise<Payload>,
-    options: { readonly roles?: readonly ("owner" | "admin" | "member")[] } = {},
+    options: {
+      readonly roles?: readonly ("owner" | "admin" | "member")[];
+      readonly executor?: QueryExecutor;
+    } = {},
   ): Promise<Payload & { audit: RouterAuditEvent }> {
     const roles = options.roles ?? ["owner", "admin"];
-    await this.organizations.verifyTenantContext(context, roles);
-    return await this.database.transaction(async (tx) => {
+    const execute = async (tx: QueryExecutor): Promise<Payload & { audit: RouterAuditEvent }> => {
       await this.organizations.verifyTenantContext(context, roles, tx);
       const [existing] = await tx.query<[RouterAuditEvent[]]>(
         "SELECT * OMIT id FROM router_audit_event WHERE organization_id = $organization_id AND command_id = $command_id LIMIT 1;",
@@ -2031,7 +2062,9 @@ export class ModelRouter {
         audit_id: audit.audit_event_id,
       });
       return result;
-    });
+    };
+    const executor = options.executor ?? this.database;
+    return executor === this.database ? await this.database.transaction(execute) : await execute(executor);
   }
 
   private async routeByName(executor: QueryExecutor, organizationId: string, name: string): Promise<ModelRoute> {

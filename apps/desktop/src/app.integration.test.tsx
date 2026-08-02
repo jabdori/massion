@@ -1568,6 +1568,38 @@ describe("AgentOS native data flow", () => {
     expect(screen.queryByText("never-render-this")).not.toBeInTheDocument();
   });
 
+  it("DeepSeek 무료 커뮤니티 모델은 외부 전송 동의 뒤에만 연결한다", async () => {
+    const user = userEvent.setup();
+    const connectDeepSeekCommunity = vi.fn(async () => undefined);
+    const loadSettings = vi.fn(async () => ({
+      catalog: { providers: [], endpoints: [], models: [], credentials: [] },
+      credentials: [],
+      routes: [],
+      providers: [],
+      accounts: [],
+      quota: [],
+      policy: [],
+    }));
+    render(<App service={service({ connectDeepSeekCommunity, loadSettings })} />);
+
+    await user.click(screen.getByRole("button", { name: "프로바이더" }));
+    await user.click(await screen.findByRole("button", { name: "프로바이더 추가" }));
+
+    const dialog = await screen.findByRole("dialog", { name: "프로바이더 추가" });
+    expect(within(dialog).getByText("DeepSeek V4 Flash 0731")).toBeInTheDocument();
+    expect(within(dialog).getByText(/공개 커뮤니티 endpoint/)).toBeInTheDocument();
+    expect(within(dialog).getByText(/요청 제한/)).toBeInTheDocument();
+    const connect = within(dialog).getByRole("button", { name: "무료 모델 연결" });
+    expect(connect).toBeDisabled();
+
+    await user.click(within(dialog).getByRole("checkbox", { name: /외부 전송.*동의/ }));
+    await user.click(connect);
+
+    expect(connectDeepSeekCommunity).toHaveBeenCalledWith({ acceptCommunityDataTransfer: true });
+    expect(loadSettings).toHaveBeenCalledTimes(2);
+    expect(await screen.findByText("DeepSeek 무료 모델을 연결했습니다.")).toBeInTheDocument();
+  }, 15_000);
+
   it("깨끗한 프로필에서도 공식 OpenAI Codex 카드로 로그인한다", async () => {
     const user = userEvent.setup();
     const loginSubscription = vi.fn(async () => undefined);

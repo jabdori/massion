@@ -4529,6 +4529,59 @@ const PROVIDER_ADAPTERS = [
   { value: "ollama", label: "Ollama" },
 ] as const;
 
+function DeepSeekCommunityConnect({ busy, onConnect }: { busy: boolean; onConnect: () => Promise<void> }) {
+  const [accepted, setAccepted] = useState(false);
+  return (
+    <section
+      aria-label="DeepSeek 무료 커뮤니티 모델"
+      className="rounded-[7px] border border-control bg-[rgb(255_255_255/0.025)] p-3.5"
+    >
+      <div className="flex items-start gap-3">
+        <span className="mt-0.5 grid size-7 shrink-0 place-items-center rounded-[5px] border border-border bg-canvas text-fg-3">
+          <Plugs aria-hidden="true" size={14} />
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+            <h3 className="text-[13px] font-medium text-primary">DeepSeek V4 Flash 0731</h3>
+            <span className="font-mono text-[10px] tracking-[0.08em] text-fg-3">무료 미리보기</span>
+          </div>
+          <p className="mt-1 text-[11px] leading-4 text-muted">393K 컨텍스트 · 도구 호출 · 스트리밍</p>
+        </div>
+      </div>
+      <div className="mt-3 flex gap-2 text-[11px] leading-4 text-secondary">
+        <WarningCircle aria-hidden="true" className="mt-0.5 shrink-0 text-muted" size={13} />
+        <p>
+          공개 커뮤니티 endpoint로 요청이 외부 전송됩니다. 무료 서비스라 요청 제한과 일시적 중단이 있으며, 안정 모델이
+          fallback으로 유지됩니다.
+        </p>
+      </div>
+      <label className="mt-3 flex cursor-pointer items-start gap-2 text-[11px] leading-4 text-secondary">
+        <input
+          checked={accepted}
+          className="mt-0.5 size-3.5 accent-[var(--fg-3)]"
+          onChange={(event) => {
+            setAccepted(event.target.checked);
+          }}
+          type="checkbox"
+        />
+        <span>이 모델을 사용하는 Work의 내용을 외부 전송하는 데 동의합니다.</span>
+      </label>
+      <div className="mt-3 flex justify-end">
+        <button
+          className="rounded-[5px] border border-control px-3 py-1.5 text-[12px] text-secondary transition duration-150 hover:border-fg-3 hover:text-primary active:translate-y-px disabled:cursor-not-allowed disabled:opacity-40"
+          disabled={busy || !accepted}
+          onClick={() => {
+            void onConnect();
+          }}
+          type="button"
+        >
+          {busy ? "검증 중…" : "무료 모델 연결"}
+        </button>
+      </div>
+    </section>
+  );
+}
+
 /**
  * 사람이 대는 것은 넷뿐입니다 — 이름·어댑터·주소·키. 나머지(내부 id, endpoint 이름, 자격 종류,
  * 로컬 여부)는 도출합니다. 키는 선택입니다: 지금 없어도 등록하고 나중에 더할 수 있습니다.
@@ -4634,6 +4687,7 @@ function ProviderSurface({ service }: { service: DesktopService }) {
   const [disabledModels, setDisabledModels] = useState<ReadonlySet<string>>(new Set());
   const [saving, setSaving] = useState(false);
   const [loginBusy, setLoginBusy] = useState(false);
+  const [communityBusy, setCommunityBusy] = useState(false);
   const [notice, setNotice] = useState("");
   const [secret, setSecret] = useState("");
   const [draft, setDraft] = useState({ displayName: "", adapterKind: "openai-compatible", baseUrl: "" });
@@ -4729,6 +4783,24 @@ function ProviderSurface({ service }: { service: DesktopService }) {
       setError(surfaceErrorMessage(cause, "Codex 계정을 연결하지 못했습니다."));
     } finally {
       setLoginBusy(false);
+    }
+  };
+
+  const connectDeepSeekCommunity = async () => {
+    if (communityBusy) return;
+    setCommunityBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      await service.connectDeepSeekCommunity({ acceptCommunityDataTransfer: true });
+      setSettings(await service.loadSettings());
+      setSelectedId("huggingface-deepseek-community");
+      setAddOpen(false);
+      setNotice("DeepSeek 무료 모델을 연결했습니다.");
+    } catch (cause) {
+      setError(surfaceErrorMessage(cause, "DeepSeek 무료 모델을 연결하지 못했습니다."));
+    } finally {
+      setCommunityBusy(false);
     }
   };
 
@@ -4942,7 +5014,7 @@ function ProviderSurface({ service }: { service: DesktopService }) {
               <div className="min-w-0 flex-1">
                 <DialogTitle className="text-[17px] font-semibold tracking-[-0.012em]">프로바이더 추가</DialogTitle>
                 <DialogDescription className="mt-1 text-[12px] leading-5 text-muted">
-                  저장한 자격 증명은 화면에 다시 표시되지 않습니다.
+                  검증된 모델을 연결하거나 직접 Provider를 등록합니다.
                 </DialogDescription>
               </div>
               <DialogClose
@@ -4952,15 +5024,19 @@ function ProviderSurface({ service }: { service: DesktopService }) {
                 <X aria-hidden="true" size={15} />
               </DialogClose>
             </header>
-            <div className="min-h-0 overflow-y-auto px-5 py-4">
-              <ProviderAddForm
-                draft={draft}
-                saving={saving}
-                secret={secret}
-                setDraft={setDraft}
-                setSecret={setSecret}
-                submit={submitProvider}
-              />
+            <div className="grid min-h-0 gap-5 overflow-y-auto px-5 py-4">
+              <DeepSeekCommunityConnect busy={communityBusy} onConnect={connectDeepSeekCommunity} />
+              <div>
+                <p className="mb-3 text-[11px] text-muted">직접 연결</p>
+                <ProviderAddForm
+                  draft={draft}
+                  saving={saving}
+                  secret={secret}
+                  setDraft={setDraft}
+                  setSecret={setSecret}
+                  submit={submitProvider}
+                />
+              </div>
             </div>
           </div>
         </DialogContent>
