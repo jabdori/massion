@@ -1015,6 +1015,12 @@ describe("CoreDeliveryStage", () => {
                   exit_code: 0,
                   status: "completed",
                 },
+                {
+                  id: "file-delivery-1",
+                  type: "file_change",
+                  changes: [{ path: "output/analysis.md", kind: "add" }],
+                  status: "completed",
+                },
               ],
               "/workspace",
             ),
@@ -1118,7 +1124,30 @@ describe("CoreDeliveryStage", () => {
     ]);
   });
 
-  it("workspace delivery는 agent runtime과 실행 근거 없이는 완료하지 않는다", async () => {
+  it.each([
+    {
+      label: "안전한 실행 근거",
+      executionEvidence: { items: [], checksum: "e".repeat(64), byteCount: 0 },
+      reason: "delivery-execution-evidence-missing",
+    },
+    {
+      label: "workspace 파일 변경 근거",
+      executionEvidence: normalizeCodexExecutionEvidence(
+        [
+          {
+            id: "outside-workspace-command",
+            type: "command_execution",
+            command: "/bin/zsh -c '/bin/pwd; /bin/echo ok'",
+            aggregated_output: "/private/tmp\nok\n",
+            exit_code: 0,
+            status: "completed",
+          },
+        ],
+        "/workspace",
+      ),
+      reason: "delivery-workspace-change-missing",
+    },
+  ])("workspace delivery는 $label 없이는 완료하지 않는다", async ({ executionEvidence, reason }) => {
     let taskStatus = "ready";
     let revision = 1;
     const runtimeInputs: unknown[] = [];
@@ -1156,7 +1185,7 @@ describe("CoreDeliveryStage", () => {
             executionId: "execution-workspace-evidence",
             status: "succeeded",
             output: "완료했습니다",
-            executionEvidence: { items: [], checksum: "e".repeat(64), byteCount: 0 },
+            executionEvidence,
           };
         },
         recover: async () => {
@@ -1171,7 +1200,7 @@ describe("CoreDeliveryStage", () => {
 
     await expect(stage.execute(context, input)).resolves.toMatchObject({
       outcome: "blocked",
-      reason: "delivery-execution-evidence-missing",
+      reason,
     });
     expect(runtimeInputs).toEqual([
       expect.objectContaining({ workspaceAccess: "workspace-write", requiredExecutionKind: "agent-runtime" }),

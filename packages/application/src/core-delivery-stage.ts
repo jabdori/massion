@@ -550,6 +550,12 @@ export class CoreDeliveryStage implements CoreWorkStageExecutor {
       if (initial.workspace_id !== undefined && !executionEvidenceIsSafe(execution.executionEvidence)) {
         return { outcome: "blocked", reason: "delivery-execution-evidence-missing" };
       }
+      if (
+        initial.workspace_id !== undefined &&
+        !execution.executionEvidence?.items.some((item) => item.kind === "file")
+      ) {
+        return { outcome: "blocked", reason: "delivery-workspace-change-missing" };
+      }
       work = await this.dependencies.works.getWork(context, input.workId);
       this.throwIfCancelled(input);
       const recovered = await this.dependencies.works.recoverWork(context, input.workId);
