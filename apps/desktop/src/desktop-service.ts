@@ -1540,8 +1540,10 @@ export function createApplicationDesktopService(
         client.query("work.detail", { workId }),
         client.query("work.knowledge", { workId }),
       ]);
-      if (knowledge.status !== "ready" || detail.workspaceId === undefined) return knowledge;
+      const workspaceId = detail.workspaceId;
+      if (knowledge.status !== "ready" || workspaceId === undefined) return knowledge;
 
+      const indexVersionId = knowledgeString(knowledge.indexVersionId, "Work Knowledge index version ID", 128);
       const snapshotChecksum = knowledgeChecksum(knowledge.snapshotChecksum, "Work Knowledge snapshot checksum");
       knowledgeChecksum(knowledge.evidenceBriefChecksum, "Work Knowledge Evidence Brief checksum");
       const references = await Promise.all(
@@ -1565,9 +1567,9 @@ export function createApplicationDesktopService(
 
           const links = projectKnowledgeLinks(
             await client.query("knowledge.links", {
-              workspaceId: detail.workspaceId,
+              workspaceId,
               nodeId,
-              indexVersionId: knowledge.indexVersionId,
+              indexVersionId,
               snapshotChecksum,
               relationIds: [...frozenRelations.keys()],
             }),
@@ -1579,6 +1581,7 @@ export function createApplicationDesktopService(
             const link = matches[0];
             if (
               !link ||
+              link.relationId !== frozen.relationId ||
               link.relationKey !== frozen.relationKey ||
               link.kind !== frozen.kind ||
               link.sourceSymbolKey !== frozen.sourceSymbolKey ||
@@ -1609,7 +1612,7 @@ export function createApplicationDesktopService(
           return { ...reference, relations };
         }),
       );
-      return { ...knowledge, workspaceId: detail.workspaceId, references };
+      return { ...knowledge, workspaceId, references };
     },
 
     async loadKnowledgeIndex(workspaceId) {

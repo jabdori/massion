@@ -59,23 +59,29 @@ function service(overrides: Partial<DesktopService> = {}): DesktopService {
             ]
           : [],
       );
-      const approvalItems: InboxItem[] = approvals.map((approval) => ({
-        kind: "approval",
-        id: approval.id,
-        approval,
-        workTitle: works.find((work) => work.id === approval.workId)?.title,
-      }));
+      const approvalItems: InboxItem[] = approvals.map((approval) => {
+        const workTitle = works.find((work) => work.id === approval.workId)?.title;
+        return {
+          kind: "approval",
+          id: approval.id,
+          approval,
+          ...(workTitle === undefined ? {} : { workTitle }),
+        };
+      });
       const growthItems: InboxItem[] = growth.suggestions
         .filter((suggestion) => suggestion.status === "awaiting-review")
-        .map((suggestion) => ({
-          kind: "growth",
-          id: `growth:${suggestion.suggestionId}`,
-          suggestionId: suggestion.suggestionId,
-          workId: suggestion.workId,
-          workTitle: works.find((work) => work.id === suggestion.workId)?.title,
-          title: suggestion.summary,
-          reason: suggestion.rationale,
-        }));
+        .map((suggestion) => {
+          const workTitle = works.find((work) => work.id === suggestion.workId)?.title;
+          return {
+            kind: "growth" as const,
+            id: `growth:${suggestion.suggestionId}`,
+            suggestionId: suggestion.suggestionId,
+            workId: suggestion.workId,
+            ...(workTitle === undefined ? {} : { workTitle }),
+            title: suggestion.summary,
+            reason: suggestion.rationale,
+          };
+        });
       return [...blocked, ...approvalItems, ...growthItems];
     };
   }
@@ -2215,11 +2221,19 @@ describe("AgentOS native data flow", () => {
     const initial = await fixture.loadGrowth();
     const template = initial.suggestions[0];
     if (!template) throw new Error("Growth suggestion fixture가 없습니다");
-    const firstFifty = Array.from({ length: 50 }, (_, index) => ({
+    const firstSuggestion = {
       ...template,
-      suggestionId: `suggestion-recent-${String(index).padStart(4, "0")}`,
-      summary: `${String(index + 1)}번째 최근 개선`,
-    }));
+      suggestionId: "suggestion-recent-0000",
+      summary: "1번째 최근 개선",
+    };
+    const firstFifty = [
+      firstSuggestion,
+      ...Array.from({ length: 49 }, (_, index) => ({
+        ...template,
+        suggestionId: `suggestion-recent-${String(index + 1).padStart(4, "0")}`,
+        summary: `${String(index + 2)}번째 최근 개선`,
+      })),
+    ];
     const target = {
       ...template,
       suggestionId: "suggestion-exact-0051",
@@ -2257,7 +2271,7 @@ describe("AgentOS native data flow", () => {
 
     const growth = await screen.findByRole("main", { name: "개선" });
     expect(await within(growth).findByRole("heading", { name: target.summary })).toBeInTheDocument();
-    expect(within(growth).queryByRole("heading", { name: firstFifty[0]?.summary })).not.toBeInTheDocument();
+    expect(within(growth).queryByRole("heading", { name: firstSuggestion.summary })).not.toBeInTheDocument();
     expect(loadGrowthSuggestion).toHaveBeenCalledWith(target.suggestionId);
   });
 

@@ -6260,6 +6260,7 @@ function ActivityMarker({ value }: { value: MarkedActivity }) {
     artifact: Briefcase,
     verification: ShieldCheck,
     record: CheckCircle,
+    directive: ArrowBendDownRight,
   };
   const Icon = value.kind === "event" ? eventIcons[value.semantic] : icons[value.kind];
   return (
