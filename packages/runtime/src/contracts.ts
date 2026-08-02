@@ -10,10 +10,13 @@ export type RuntimeExecutionStatus =
   | "interrupted"
   | "blocked_model_unavailable";
 
+export type WorkspaceAccess = "isolated" | "read-only" | "workspace-write";
+
 export interface AgentExecutionInput {
   readonly commandId: string;
   readonly workId: string;
   readonly taskId?: string;
+  readonly workspaceAccess?: WorkspaceAccess;
   readonly agentHandle: string;
   readonly modelRoute: string;
   readonly correlationId: string;

@@ -109,7 +109,10 @@ function resolution(overrides: Partial<ConnectorRuntimeResolutionInput> = {}): C
   return {
     executionId: "execution-1",
     workId: "work-1",
+    taskId: "task-1",
     agentHandle: "software-engineering.engineering-lead",
+    workspaceAccess: "workspace-write",
+    workspaceCapability: "workspace-capability-1",
     workspaceRoot: "/untrusted/request/path",
     providerId: "openai-codex",
     modelId: "gpt-5.6-codex",
@@ -167,6 +170,7 @@ async function options(
     workspaceCapabilities: {
       verify: vi.fn().mockResolvedValue({
         workspaceRoot: "/approved/capability/workspace",
+        workspaceAccess: "workspace-write",
         allowedTools: [],
         disallowedTools: [],
       }),
@@ -266,6 +270,22 @@ describe("구독 실행 해석기", () => {
     expect((await stat(agentInput?.profileRoot ?? "")).mode & 0o077).toBe(0);
     expect(JSON.stringify(agentInput)).not.toContain("HOME");
     expect(JSON.stringify(agentInput)).not.toMatch(/secret@example\.com|Users\/private|raw-profile-locator/u);
+    expect(configured.workspaceCapabilities.verify).toHaveBeenCalledWith(
+      context,
+      expect.objectContaining({
+        taskId: "task-1",
+        workspaceAccess: "workspace-write",
+        workspaceCapability: "workspace-capability-1",
+      }),
+    );
+    expect(configured.policies.resolve).toHaveBeenCalledWith(
+      context,
+      expect.objectContaining({
+        taskId: "task-1",
+        workspaceAccess: "workspace-write",
+        workspaceRoot: "/approved/capability/workspace",
+      }),
+    );
   });
 
   it("Codex·Claude는 명시 override가 없으면 pinned SDK bundled runtime을 사용한다", async () => {

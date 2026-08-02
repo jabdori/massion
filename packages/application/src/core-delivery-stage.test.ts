@@ -142,6 +142,27 @@ describe("CoreDeliveryStage", () => {
   });
 
   it.each([
+    ["workspace dependency missing", undefined],
+    ["archived workspace", { get: async () => ({ status: "archived", trust: "trusted" }) }],
+  ])("%s이면 workspace Task 실행을 fail closed한다", async (_label, workspaces) => {
+    const stage = deliveryStage({
+      works: {
+        listTasks: async () => [],
+        getWork: async () => ({ revision: 1, status: "running", workspace_id: "workspace-1" }),
+        transition: unexpectedCall,
+      },
+      runner: {},
+      runtimeExecutions: {},
+      ...(workspaces ? { workspaces } : {}),
+    } as never);
+
+    await expect(stage.execute(context, input)).resolves.toMatchObject({
+      outcome: "blocked",
+      reason: "workspace-untrusted",
+    });
+  });
+
+  it.each([
     ["verifying", "advanced"],
     ["completed", "completed"],
   ] as const)("복구 시 이미 %s인 Work는 신뢰 게이트나 Delivery를 재실행하지 않고 진행한다", async (status, outcome) => {
@@ -231,7 +252,7 @@ describe("CoreDeliveryStage", () => {
       },
       runner: {},
       runtimeExecutions: {},
-      workspaces: { get: async () => ({ workspaceId: "workspace-1", trust: "trusted" }) },
+      workspaces: { get: async () => ({ workspaceId: "workspace-1", status: "active", trust: "trusted" }) },
       evidence: { materializeActive: async () => [] },
     } as never);
     await expect(stage.execute(context, input)).resolves.toMatchObject({ outcome: "advanced" });
@@ -697,7 +718,7 @@ describe("CoreDeliveryStage", () => {
         cancel: async () => undefined,
       },
       runtimeExecutions: { findExecutionIdByCommand: async () => undefined },
-      workspaces: { get: async () => ({ trust: "trusted" }) },
+      workspaces: { get: async () => ({ status: "active", trust: "trusted" }) },
       evidence: {
         materializeActive: async (...args: unknown[]) => {
           materializeInputs.push(args);
@@ -716,6 +737,7 @@ describe("CoreDeliveryStage", () => {
     expect(materializeInputs).toEqual([[context, input.workId, 24_000]]);
     expect(runtimeInputs).toEqual([
       expect.objectContaining({
+        workspaceAccess: "workspace-write",
         estimatedTokens: expect.any(Number),
         input: expect.objectContaining({
           operation: "execute_work_task",
@@ -840,6 +862,7 @@ describe("CoreDeliveryStage", () => {
       data: { artifactVersionIds: ["artifact-dynamic-staffing"] },
     });
     expect(runtimeInputs).toEqual([expect.objectContaining({ agentHandle: "work-quant-specialist" })]);
+    expect(runtimeInputs[0]).not.toHaveProperty("workspaceAccess");
     expect(artifactInputs).toEqual([expect.objectContaining({ creatorAgentHandle: "work-quant-specialist" })]);
   });
 
@@ -875,7 +898,7 @@ describe("CoreDeliveryStage", () => {
       },
       runner: {},
       runtimeExecutions: {},
-      workspaces: { get: async () => ({ trust: "trusted" }) },
+      workspaces: { get: async () => ({ status: "active", trust: "trusted" }) },
       evidence: {
         materializeActive: async (...args: unknown[]) => {
           materializeInputs.push(args);
@@ -910,6 +933,7 @@ describe("CoreDeliveryStage", () => {
       expect.objectContaining({ request: softwareRequest, directives: deliveryDirectives, knowledgeSources }),
     ]);
     expect(softwareInputs[0]).not.toHaveProperty("outputContract");
+    expect(softwareInputs[0]).not.toHaveProperty("workspaceAccess");
   });
 
   it("의존 Artifact를 포함한 runtime 입력이 Work 예산을 넘으면 실행 전에 차단한다", async () => {

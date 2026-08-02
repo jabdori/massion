@@ -1628,9 +1628,13 @@ export class WorkService {
     return result;
   }
 
-  public async listTasks(context: TenantContext, workId: string): Promise<WorkTask[]> {
-    await this.getWork(context, workId);
-    return await listTasksWith(this.database, context.organizationId, workId);
+  public async listTasks(
+    context: TenantContext,
+    workId: string,
+    executor: QueryExecutor = this.database,
+  ): Promise<WorkTask[]> {
+    await this.getWork(context, workId, executor);
+    return await listTasksWith(executor, context.organizationId, workId);
   }
 
   public async listAssignments(

@@ -295,8 +295,14 @@ export interface RoutedExecutionContextResolver {
       readonly workId: string;
       readonly taskId?: string;
       readonly agentHandle: string;
+      readonly workspaceAccess?: import("./contracts.js").WorkspaceAccess;
     },
-  ): Promise<{ readonly workspaceRoot?: string; readonly instruction?: string }>;
+  ): Promise<{
+    readonly workspaceRoot?: string;
+    readonly workspaceAccess?: import("./contracts.js").WorkspaceAccess;
+    readonly workspaceCapability?: string;
+    readonly instruction?: string;
+  }>;
 }
 
 export class VoltAgentRunner implements AgentRunner, StructuredAgentRunner {
@@ -1443,12 +1449,16 @@ export class VoltAgentRunner implements AgentRunner, StructuredAgentRunner {
       workId: input.workId,
       ...(input.taskId ? { taskId: input.taskId } : {}),
       agentHandle: input.agentHandle,
+      ...(input.workspaceAccess ? { workspaceAccess: input.workspaceAccess } : {}),
     });
     return {
       commandId: `${executionId}:model:${String(attempt)}:reserve`,
       executionId,
       workId: input.workId,
+      ...(input.taskId ? { taskId: input.taskId } : {}),
       agentHandle: input.agentHandle,
+      ...(resolved?.workspaceAccess ? { workspaceAccess: resolved.workspaceAccess } : {}),
+      ...(resolved?.workspaceCapability ? { workspaceCapability: resolved.workspaceCapability } : {}),
       ...(resolved?.workspaceRoot ? { workspaceRoot: resolved.workspaceRoot } : {}),
       ...(resolved?.instruction ? { instruction: resolved.instruction } : {}),
       routeName: input.modelRoute,

@@ -384,6 +384,8 @@ describe("VoltAgent AgentRunner", () => {
     const executionContext = {
       resolve: vi.fn().mockResolvedValue({
         workspaceRoot: "/tmp/massion-work-1",
+        workspaceAccess: "read-only",
+        workspaceCapability: "workspace-capability-1",
         instruction: "Representative instruction",
       }),
     };
@@ -1173,19 +1175,33 @@ describe("VoltAgent AgentRunner", () => {
     const executionContext = {
       resolve: vi.fn().mockResolvedValue({
         workspaceRoot: "/tmp/massion-work-1",
+        workspaceAccess: "read-only",
+        workspaceCapability: "workspace-capability-1",
         instruction: "Representative instruction",
       }),
     };
     const runner = new VoltAgentRunner(voltAgent, store, { acquire }, registry, undefined, executionContext);
 
-    const result = await runner.execute(context, input());
+    const result = await runner.execute(context, { ...input(), workspaceAccess: "workspace-write" });
 
     expect(result).toMatchObject({ status: "succeeded", output: "fallback model" });
     expect(first.fail).toHaveBeenCalledWith(expect.objectContaining({ signal: { kind: "timeout" }, emittedTokens: 0 }));
     expect(acquire.mock.calls[1]?.[1]).toMatchObject({
+      taskId: "task-1",
+      workspaceAccess: "read-only",
+      workspaceCapability: "workspace-capability-1",
       fallbackFromAttemptId: "agent-attempt-1",
       fallbackFromLeaseId: "agent-lease-1",
     });
+    expect(acquire.mock.calls[0]?.[1]).toMatchObject({
+      taskId: "task-1",
+      workspaceAccess: "read-only",
+      workspaceCapability: "workspace-capability-1",
+    });
+    expect(executionContext.resolve).toHaveBeenCalledTimes(2);
+    for (const call of executionContext.resolve.mock.calls) {
+      expect(call[1]).toMatchObject({ taskId: "task-1", workspaceAccess: "workspace-write" });
+    }
   });
 
   it("Agent runtime이 출력을 만든 뒤 실패하면 자동 fallback하지 않고 interrupted로 종료한다", async () => {

@@ -231,10 +231,13 @@ export class CoreDeliveryStage implements CoreWorkStageExecutor {
     }
     // 신뢰 게이트: workspace에 바인딩된 Work는 trusted 승인 전 도구 실행(delivery)을 차단합니다.
     // blocked는 재시도 가능 상태이므로 신뢰 결정 후 명시적 retry로 재개합니다.
-    if (initial.workspace_id !== undefined && this.dependencies.workspaces) {
+    if (initial.workspace_id !== undefined) {
+      if (!this.dependencies.workspaces) return { outcome: "blocked", reason: "workspace-untrusted" };
       const workspace = await this.dependencies.workspaces.get(context, initial.workspace_id);
       this.throwIfCancelled(input);
-      if (workspace.trust !== "trusted") return { outcome: "blocked", reason: "workspace-untrusted" };
+      if (workspace.status !== "active" || workspace.trust !== "trusted") {
+        return { outcome: "blocked", reason: "workspace-untrusted" };
+      }
     }
     const tokenBudget = requestedTokenBudget(input.request);
     if (initial.status === "planned") {
@@ -501,6 +504,7 @@ export class CoreDeliveryStage implements CoreWorkStageExecutor {
           commandId: runtimeCommand,
           workId: input.workId,
           taskId: task.task_id,
+          ...(initial.workspace_id === undefined ? {} : { workspaceAccess: "workspace-write" as const }),
           agentHandle,
           modelRoute: "delivery-quality",
           correlationId: input.correlationId,

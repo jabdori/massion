@@ -1,6 +1,6 @@
 import { ApplicationBootstrapCapability, ApplicationHttpClient } from "@massion/application";
 import { createServer } from "node:http";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -12,6 +12,20 @@ import * as productModule from "./product.js";
 const bootstrapCapability = Buffer.alloc(32, 72).toString("base64url");
 
 describe("Massion server model optimization product boundary", () => {
+  it("모델 최적화 acquire는 실행 context가 확정한 workspace access와 capability를 함께 전달한다", async () => {
+    const source = await readFile(new URL("./product.ts", import.meta.url), "utf8");
+    const start = source.indexOf("const workspace = await subscriptionExecutionContext.resolve");
+    const end = source.indexOf("return await executeOptimizationCase", start);
+    expect(start).toBeGreaterThanOrEqual(0);
+    expect(end).toBeGreaterThan(start);
+    const optimizationAcquire = source.slice(start, end);
+
+    expect([
+      optimizationAcquire.includes("workspaceAccess: workspace.workspaceAccess"),
+      optimizationAcquire.includes("workspaceCapability: workspace.workspaceCapability"),
+    ]).toEqual([true, true]);
+  });
+
   it("활성 모델 batch resolver는 비어 있거나 비활성·다른 역할인 batch를 사용하지 않는다", () => {
     const resolve = (
       productModule as unknown as {

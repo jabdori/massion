@@ -38,6 +38,13 @@ import {
 import { prepareSubscriptionProfileRoot } from "./subscription-profile.js";
 import { CodexAppServerSubscriptionConnector } from "./codex-app-server-agent.js";
 
+type WorkspaceAccess = "isolated" | "read-only" | "workspace-write";
+type WorkspaceConnectorRuntimeResolutionInput = ConnectorRuntimeResolutionInput & {
+  readonly taskId?: string;
+  readonly workspaceAccess?: WorkspaceAccess;
+  readonly workspaceCapability?: string;
+};
+
 export type NativeSubscriptionAgentAdapterId =
   "codex" | "claude" | "gemini-acp" | "copilot-acp" | "grok-acp" | "antigravity";
 
@@ -51,6 +58,7 @@ export interface SubscriptionAgentExecutionPolicy {
 
 export interface WorkspaceCapabilityView {
   readonly workspaceRoot: string;
+  readonly workspaceAccess: WorkspaceAccess;
   readonly allowedTools: readonly string[];
   readonly disallowedTools: readonly string[];
 }
@@ -66,7 +74,10 @@ export interface SubscriptionWorkspaceCapabilityVerifier {
     input: {
       readonly executionId: string;
       readonly workId: string;
+      readonly taskId?: string;
       readonly agentHandle: string;
+      readonly workspaceAccess?: WorkspaceAccess;
+      readonly workspaceCapability: string;
       readonly providerId: string;
       readonly accountId: string;
       readonly connectorId: string;
@@ -81,7 +92,9 @@ export interface SubscriptionAgentPolicyPort {
     input: {
       readonly executionId: string;
       readonly workId: string;
+      readonly taskId?: string;
       readonly agentHandle: string;
+      readonly workspaceAccess: WorkspaceAccess;
       readonly providerId: string;
       readonly accountId: string;
       readonly connectorId: string;
@@ -786,7 +799,7 @@ export class MassionSubscriptionRuntimeResolver implements ConnectorRuntimeResol
 
   public async resolve(
     context: TenantContext,
-    input: ConnectorRuntimeResolutionInput,
+    input: WorkspaceConnectorRuntimeResolutionInput,
   ): Promise<ConnectorRuntimeBinding> {
     const descriptor = providerDescriptor(input.providerId);
     if (descriptor.availability === "requires-provider-approval") {
@@ -826,7 +839,9 @@ export class MassionSubscriptionRuntimeResolver implements ConnectorRuntimeResol
       await this.options.policies.resolve(context, {
         executionId: input.executionId,
         workId: input.workId,
+        ...(input.taskId ? { taskId: input.taskId } : {}),
         agentHandle: input.agentHandle,
+        workspaceAccess: workspace.workspaceAccess,
         providerId: input.providerId,
         accountId: input.accountId,
         connectorId: input.connectorId,
@@ -872,7 +887,7 @@ export class MassionSubscriptionRuntimeResolver implements ConnectorRuntimeResol
 
   private validateLineage(
     context: TenantContext,
-    input: ConnectorRuntimeResolutionInput,
+    input: WorkspaceConnectorRuntimeResolutionInput,
     descriptor: ProviderRuntimeDescriptor,
     account: SubscriptionAccount,
     connector: SubscriptionConnector,
@@ -909,14 +924,18 @@ export class MassionSubscriptionRuntimeResolver implements ConnectorRuntimeResol
 
   private async workspace(
     context: TenantContext,
-    input: ConnectorRuntimeResolutionInput,
+    input: WorkspaceConnectorRuntimeResolutionInput,
   ): Promise<WorkspaceCapabilityView> {
     const requestedWorkspaceRoot = input.workspaceRoot;
     if (!requestedWorkspaceRoot) throw new Error("구독 Agent 실행에는 workspace capability가 필요합니다");
+    if (!input.workspaceCapability) throw new Error("구독 Agent 실행에는 서명된 workspace capability가 필요합니다");
     const verified = await this.options.workspaceCapabilities.verify(context, {
       executionId: input.executionId,
       workId: input.workId,
+      ...(input.taskId ? { taskId: input.taskId } : {}),
       agentHandle: input.agentHandle,
+      ...(input.workspaceAccess ? { workspaceAccess: input.workspaceAccess } : {}),
+      workspaceCapability: input.workspaceCapability,
       providerId: input.providerId,
       accountId: input.accountId,
       connectorId: input.connectorId,
@@ -924,6 +943,7 @@ export class MassionSubscriptionRuntimeResolver implements ConnectorRuntimeResol
     });
     return {
       workspaceRoot: requireAbsolutePath(verified.workspaceRoot, "승인된 workspace root"),
+      workspaceAccess: verified.workspaceAccess,
       allowedTools: safeToolList(verified.allowedTools, "허용 도구"),
       disallowedTools: safeToolList(verified.disallowedTools, "제외 도구"),
     };

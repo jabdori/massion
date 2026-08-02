@@ -485,6 +485,8 @@ export async function createMassionDaemon(
         hasOptimizationRun: async (context, runId) =>
           (await optimizationEvaluationReference.current?.hasEvaluationRun(context, runId)) ?? false,
       },
+      workspaces,
+      database,
     );
     const optimizationEvaluations = await ModelOptimizationStore.create(database, organizations, {
       modelCatalog: async (context) => {
@@ -525,6 +527,8 @@ export async function createMassionDaemon(
             workId,
             agentHandle: input.roleKey,
             workspaceRoot: workspace.workspaceRoot,
+            workspaceAccess: workspace.workspaceAccess,
+            workspaceCapability: workspace.workspaceCapability,
             routeName: route.name,
             preferredModelProfileIds: [input.modelProfileId],
             estimatedTokens: 4_096,

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { IdentityService, OrganizationService, type TenantContext } from "@massion/identity";
-import { createDatabase, type MassionDatabase } from "@massion/storage";
+import { createDatabase, type MassionDatabase, type QueryExecutor } from "@massion/storage";
 
 import { canTransitionWork, WorkService, type WorkStatus } from "./work.js";
 
@@ -277,5 +277,26 @@ describe("Work workspace 바인딩", () => {
       organizationVersionId: "organization-version-1",
     });
     expect(created.work.workspace_id).toBeUndefined();
+  });
+
+  it("Task 목록 조회는 전달된 transaction executor로 Work와 Task를 함께 읽는다", async () => {
+    const created = await service.createWork(context, {
+      commandId: crypto.randomUUID(),
+      text: "transaction snapshot",
+      surface: "test",
+      organizationVersionId: "organization-version-1",
+    });
+    const queries: string[] = [];
+    const executor: QueryExecutor = {
+      query: async <R>(surql: string, bindings?: Record<string, unknown>) => {
+        queries.push(surql);
+        return await database.query<R>(surql, bindings);
+      },
+    };
+
+    await service.listTasks(context, created.work.work_id, executor);
+
+    expect(queries.some((query) => query.includes("FROM work "))).toBe(true);
+    expect(queries.some((query) => query.includes("FROM work_task "))).toBe(true);
   });
 });

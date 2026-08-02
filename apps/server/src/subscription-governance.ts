@@ -53,10 +53,6 @@ function requiresToolApproval(requirement: ApprovalRequirementView, environment:
   return matches(requirement.actions, "tool.call") && matches(requirement.environments, environment);
 }
 
-function canWriteWorkspace(agentHandle: string): boolean {
-  return agentHandle === "software-development" || agentHandle.startsWith("software-engineering");
-}
-
 function digest(value: string): string {
   return createHash("sha256").update(value).digest("hex");
 }
@@ -196,7 +192,9 @@ export class SubscriptionAgentPolicyResolver implements SubscriptionAgentPolicyP
     input: {
       readonly executionId: string;
       readonly workId: string;
+      readonly taskId?: string;
       readonly agentHandle: string;
+      readonly workspaceAccess?: "isolated" | "read-only" | "workspace-write";
       readonly providerId: string;
       readonly accountId: string;
       readonly connectorId: string;
@@ -230,7 +228,7 @@ export class SubscriptionAgentPolicyResolver implements SubscriptionAgentPolicyP
     }
     return {
       permissionMode: "governed",
-      sandboxMode: canWriteWorkspace(input.agentHandle) ? "workspace-write" : "read-only",
+      sandboxMode: input.workspaceAccess === "workspace-write" ? "workspace-write" : "read-only",
       approvalPolicy: approvalMode === "automatic" ? "never" : approvalMode === "review" ? "on-request" : "deny",
       networkAccessEnabled: false,
       autonomyRevision: autonomy.revision,

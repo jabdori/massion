@@ -171,9 +171,13 @@ export class WorkspaceService {
     return rows.map(view);
   }
 
-  public async get(context: TenantContext, workspaceId: string): Promise<WorkspaceView> {
-    await this.organizations.verifyTenantContext(context);
-    const row = await findById(this.database, context, workspaceId);
+  public async get(
+    context: TenantContext,
+    workspaceId: string,
+    executor: QueryExecutor = this.database,
+  ): Promise<WorkspaceView> {
+    await this.organizations.verifyTenantContext(context, undefined, executor);
+    const row = await findById(executor, context, workspaceId);
     if (!row) throw new Error("Workspace를 찾을 수 없습니다");
     return view(row);
   }

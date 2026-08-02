@@ -19,7 +19,7 @@ import type {
   SubscriptionScope,
 } from "@massion/subscriptions";
 
-import type { StructuredOutputSpec } from "./contracts.js";
+import type { StructuredOutputSpec, WorkspaceAccess } from "./contracts.js";
 import type { RuntimeExecutionStore } from "./execution-store.js";
 import type { SubscriptionAgentResult } from "./subscriptions/agent-runtime.js";
 import { SubscriptionExecutionReceiptCoordinator } from "./subscriptions/execution-receipt.js";
@@ -50,7 +50,10 @@ export interface AcquireModelInput {
   readonly executionId?: string;
   readonly optimizationRunId?: string;
   readonly workId?: string;
+  readonly taskId?: string;
   readonly agentHandle?: string;
+  readonly workspaceAccess?: WorkspaceAccess;
+  readonly workspaceCapability?: string;
   readonly workspaceRoot?: string;
   readonly instruction?: string;
   readonly routeName: string;
@@ -185,7 +188,10 @@ export interface ConnectorSessionBroker {
 export interface ConnectorRuntimeResolutionInput {
   readonly executionId: string;
   readonly workId: string;
+  readonly taskId?: string;
   readonly agentHandle: string;
+  readonly workspaceAccess?: WorkspaceAccess;
+  readonly workspaceCapability?: string;
   readonly workspaceRoot?: string;
   readonly instruction?: string;
   readonly providerId: string;
@@ -626,7 +632,10 @@ export class MassionModelFactory implements RoutedModelFactory {
       binding = await runtime.resolver.resolve(context, {
         executionId,
         workId,
+        ...(input.taskId ? { taskId: input.taskId } : {}),
         agentHandle,
+        ...(input.workspaceAccess ? { workspaceAccess: input.workspaceAccess } : {}),
+        ...(input.workspaceCapability ? { workspaceCapability: input.workspaceCapability } : {}),
         ...(input.workspaceRoot ? { workspaceRoot: input.workspaceRoot } : {}),
         ...(input.instruction ? { instruction: input.instruction } : {}),
         providerId: profile.provider_id,

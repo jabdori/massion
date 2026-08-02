@@ -24,6 +24,49 @@ const decision: PolicyDecision = {
 };
 
 describe("구독 Agent 정책과 도구 승인", () => {
+  it("동적 Agent도 검증된 Task 바인딩 쓰기 권한이면 workspace-write를 사용한다", async () => {
+    const resolver = new SubscriptionAgentPolicyResolver({ getActivePolicy: async () => undefined }, "local", {
+      resolve: async () => ({ approvalMode: "automatic" }),
+    });
+
+    await expect(
+      resolver.resolve(context, {
+        executionId: "execution-wren",
+        workId: "work-1",
+        taskId: "task-1",
+        agentHandle: "work-wren-specialist",
+        workspaceAccess: "workspace-write",
+        providerId: "anthropic-claude-code",
+        accountId: "account-1",
+        connectorId: "connector-1",
+        workspaceRoot: "/tmp/work-1",
+      }),
+    ).resolves.toMatchObject({ sandboxMode: "workspace-write" });
+  });
+
+  it.each(["isolated", "read-only"] as const)(
+    "검증된 %s 접근은 동적 Agent에게도 read-only를 사용한다",
+    async (workspaceAccess) => {
+      const resolver = new SubscriptionAgentPolicyResolver({ getActivePolicy: async () => undefined }, "local", {
+        resolve: async () => ({ approvalMode: "automatic" }),
+      });
+
+      await expect(
+        resolver.resolve(context, {
+          executionId: `execution-${workspaceAccess}`,
+          workId: "work-1",
+          taskId: "task-1",
+          agentHandle: "work-wren-specialist",
+          workspaceAccess,
+          providerId: "anthropic-claude-code",
+          accountId: "account-1",
+          connectorId: "connector-1",
+          workspaceRoot: "/tmp/work-1",
+        }),
+      ).resolves.toMatchObject({ sandboxMode: "read-only" });
+    },
+  );
+
   it("전체 권한 자율성은 실행기 우회 정책과 revision을 반환한다", async () => {
     const resolver = Reflect.construct(SubscriptionAgentPolicyResolver, [
       { getActivePolicy: async () => undefined },
@@ -83,7 +126,12 @@ describe("구독 Agent 정책과 도구 승인", () => {
     } as const;
 
     await expect(
-      resolver.resolve(context, { ...base, agentHandle: "software-engineering.backend-specialist" }),
+      resolver.resolve(context, {
+        ...base,
+        taskId: "task-1",
+        agentHandle: "software-engineering.backend-specialist",
+        workspaceAccess: "workspace-write",
+      }),
     ).resolves.toEqual({
       permissionMode: "governed",
       sandboxMode: "workspace-write",

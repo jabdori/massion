@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 
 import { IdentityService, OrganizationService, type PersonalRegistration, type TenantContext } from "@massion/identity";
-import { createDatabase, type MassionDatabase } from "@massion/storage";
+import { createDatabase, type MassionDatabase, type QueryExecutor } from "@massion/storage";
 
 import { WorkspaceService } from "./workspace.js";
 
@@ -58,6 +58,21 @@ describe("Workspace 등록·신뢰·tenant 격리", () => {
 
     expect(second.workspaceId).toBe(first.workspaceId);
     expect(await workspaces.list(ownerContext)).toHaveLength(1);
+  });
+
+  it("Workspace 단건 조회는 전달된 transaction executor를 사용한다", async () => {
+    const workspace = await workspaces.register(ownerContext, { path: await directory("transaction-project") });
+    const queries: string[] = [];
+    const executor: QueryExecutor = {
+      query: async <R>(surql: string, bindings?: Record<string, unknown>) => {
+        queries.push(surql);
+        return await database.query<R>(surql, bindings);
+      },
+    };
+
+    await expect(workspaces.get(ownerContext, workspace.workspaceId, executor)).resolves.toEqual(workspace);
+    expect(queries).toHaveLength(2);
+    expect(queries.some((query) => query.includes("FROM workspace"))).toBe(true);
   });
 
   it("상대 경로와 상위 참조 경로를 거부한다", async () => {
