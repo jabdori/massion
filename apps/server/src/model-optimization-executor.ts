@@ -1,4 +1,4 @@
-import { generateText, type RoutedModelLease } from "@massion/runtime";
+import { failureSignal, generateText, type RoutedModelLease } from "@massion/runtime";
 
 export interface OptimizationCaseExecutionInput {
   readonly lease: RoutedModelLease;
@@ -59,7 +59,12 @@ export async function executeOptimizationCase(
     let text: string;
     let tokens: { readonly inputTokens: number; readonly outputTokens: number };
     if (input.lease.kind === "model") {
-      const result = await generateText({ model: input.lease.model, prompt: input.prompt, maxRetries: 0 });
+      const result = await generateText({
+        model: input.lease.model,
+        prompt: input.prompt,
+        maxRetries: 0,
+        abortSignal: AbortSignal.timeout(120_000),
+      });
       text = result.text;
       tokens = usage(result.usage);
     } else {
@@ -87,7 +92,7 @@ export async function executeOptimizationCase(
     await input.lease
       .fail({
         commandId: `${input.executionId}:${input.caseId}:fail`,
-        signal: { kind: "unknown" },
+        signal: failureSignal(error),
         emittedTokens: 0,
         sideEffectsStarted: false,
         inputTokens: 0,

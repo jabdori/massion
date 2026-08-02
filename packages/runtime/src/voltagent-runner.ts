@@ -205,7 +205,7 @@ function nonNativeStructuredGenerationOptions(lease: RoutedLanguageModelLease) {
   };
 }
 
-function failureSignal(error: unknown): FailureSignal {
+export function failureSignal(error: unknown): FailureSignal {
   if (
     error instanceof Error &&
     (error.message.startsWith("No object generated:") ||
