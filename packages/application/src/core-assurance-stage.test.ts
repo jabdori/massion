@@ -1249,10 +1249,14 @@ describe("CoreAssuranceStage", () => {
       },
       assurance: {
         prepareSnapshot: async () => {
-          calls.push("snapshot");
-          return { snapshot: { hash: "a".repeat(64) } };
+          throw new Error("저장된 verifier 재개에서 snapshot을 다시 만들면 안 됩니다");
         },
-        findByStartCommand: async () => ({ assuranceRunId: "assurance-1", status: "running", version: 2 }),
+        findByStartCommand: async () => ({
+          assuranceRunId: "assurance-1",
+          status: "running",
+          version: 2,
+          snapshotHash: "a".repeat(64),
+        }),
         start: async () => {
           calls.push("start-replay");
           return { run: { assuranceRunId: "assurance-1", status: "running", version: 2 } };
@@ -1282,7 +1286,7 @@ describe("CoreAssuranceStage", () => {
     await expect(
       stage.execute(context, { ...input, request: {}, resumeInput: { approvalId: "approval-1" } }),
     ).resolves.toMatchObject({ outcome: "advanced", data: { projectedWorkRevision: 8 } });
-    expect(calls).toEqual(["snapshot", "start-replay", "verifier-reused", "checks", "decide", "project"]);
+    expect(calls).toEqual(["start-replay", "verifier-reused", "checks", "decide", "project"]);
   });
 
   it("중단 직후 대기열에 남은 verifier는 같은 실행을 시작해 완료한다", async () => {

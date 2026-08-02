@@ -563,13 +563,16 @@ export class CoreAssuranceStage implements CoreWorkStageExecutor {
       }
       return completed.result;
     }
+    let existingRun: AssuranceRun | undefined;
     if (existingVerifier?.execution.status === "succeeded") {
-      const existingRun = await this.dependencies.assurance.findByStartCommand(context, `${input.commandId}:start`);
+      existingRun = await this.dependencies.assurance.findByStartCommand(context, `${input.commandId}:start`);
       this.throwIfCancelled(input);
       if (!existingRun) return { outcome: "blocked", reason: "assurance-verifier-terminal-without-run" };
     }
     this.throwIfCancelled(input);
-    const prepared = await this.dependencies.assurance.prepareSnapshot(context, snapshotInput);
+    const prepared = existingRun
+      ? { snapshot: { hash: existingRun.snapshotHash } }
+      : await this.dependencies.assurance.prepareSnapshot(context, snapshotInput);
     this.throwIfCancelled(input);
     const material = verificationMaterial(recovery, plan.plan_version_id, plan.content_json, input.request);
     const materialTokens = promptTokens(material);
