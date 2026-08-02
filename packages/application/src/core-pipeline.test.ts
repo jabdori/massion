@@ -3,7 +3,7 @@ import { IdentityService, OrganizationService } from "@massion/identity";
 import { OrganizationGraphService } from "@massion/organization";
 import { createDatabase } from "@massion/storage";
 import { WorkService } from "@massion/work";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { createCoreWorkPipelineExecutors } from "./core-pipeline.js";
 
@@ -372,6 +372,96 @@ describe("actual Core Work pipeline adapters", () => {
     expect(prepareCalls).toBe(0);
     expect(representativeCalls).toBe(0);
     expect(await works.listRooms(context, (result as { workId: string }).workId)).toHaveLength(1);
+  });
+
+  it("Workspace 지식 준비가 정지해도 질문을 먼저 기록하고 제한 시간 뒤 명시적으로 차단한다", async () => {
+    await using database = await createDatabase({ url: "mem://", namespace: "massion", database: crypto.randomUUID() });
+    const identities = await IdentityService.create(database);
+    const organizations = await OrganizationService.create(database);
+    const owner = await identities.registerPersonalUser({
+      email: "workspace-timeout-pipeline@example.com",
+      displayName: "Workspace Timeout",
+    });
+    const context = await organizations.resolveTenantContext(owner.user.user_id, owner.organization.organization_id);
+    const graph = await OrganizationGraphService.create(database, organizations);
+    await graph.bootstrap(context);
+    const works = await WorkService.create(database, organizations, graph);
+    let preparedWorkId = "";
+    let preparationStarted: (() => void) | undefined;
+    const started = new Promise<void>((resolve) => {
+      preparationStarted = resolve;
+    });
+    let representativeCalls = 0;
+    const stages = createCoreWorkPipelineExecutors({
+      graph,
+      works,
+      workspaces: {
+        get: async () =>
+          ({
+            workspaceId: "pipeline-timeout-workspace-0001",
+            name: "Timeout workspace",
+            path: "/workspace/timeout",
+            status: "active",
+            trust: "trusted",
+          }) as never,
+      },
+      workspaceKnowledge: {
+        prepare: async (_context, input) => {
+          preparedWorkId = input.workId;
+          preparationStarted?.();
+          return await new Promise<never>(() => undefined);
+        },
+      },
+      evidencePromptMaterializer: { materialize: async () => ({}) as never },
+      evidenceContextBinder: { bind: async () => ({}) as never },
+      runtimeExecutions: { findExecutionIdByCommand: async () => undefined },
+      representative: {
+        execute: async () => {
+          representativeCalls += 1;
+          return { executionId: "timeout-representative", status: "succeeded" };
+        },
+        cancel: async () => undefined,
+      },
+      strategy: { plan: async () => ({}) as never },
+      evidence: { execute: async () => ({ outcome: "advanced" }) },
+      delivery: { execute: async () => ({ outcome: "advanced" }) },
+      assurance: { execute: async () => ({ outcome: "advanced" }) },
+      records: { execute: async () => ({ outcome: "advanced" }) },
+    });
+
+    vi.useFakeTimers();
+    try {
+      const execution = stages.intake.execute(context, {
+        runId: "pipeline-timeout-run-0001",
+        commandId: "pipeline-timeout-run-0001:intake",
+        correlationId: "pipeline-timeout-correlation-0001",
+        request: {
+          text: "지식 준비가 멈춰도 질문을 보존해주세요",
+          workspaceId: "pipeline-timeout-workspace-0001",
+        },
+      });
+      await started;
+      const room = (await works.listRooms(context, preparedWorkId))[0];
+      if (!room) throw new Error("Core Office 협업방이 없습니다");
+      await expect(works.listMessages(context, preparedWorkId, room.room_id)).resolves.toMatchObject([
+        {
+          sequence: 1,
+          message_type: "question",
+          author_kind: "user",
+          content: "지식 준비가 멈춰도 질문을 보존해주세요",
+        },
+      ]);
+
+      await vi.advanceTimersByTimeAsync(30_000);
+      await expect(execution).resolves.toMatchObject({
+        outcome: "blocked",
+        reason: "workspace-knowledge-timeout",
+        workId: preparedWorkId,
+      });
+      expect(representativeCalls).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("재시도 intake는 기존 Work를 만들지 않고 같은 Work로 Representative를 다시 실행한다", async () => {
