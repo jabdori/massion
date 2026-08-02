@@ -312,6 +312,7 @@ describe("CoreAssuranceStage", () => {
           criterionKey: "deliverable-created",
           kind: "evidence",
           evidenceKinds: ["artifact-version"],
+          maximumAgeMs: 30 * 24 * 60 * 60 * 1_000,
         }),
         expect.objectContaining({
           criterionKey: "profile:acceptance:coverage",

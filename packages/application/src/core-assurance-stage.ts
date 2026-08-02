@@ -72,7 +72,7 @@ interface ReadyVerifier {
   readonly complete: () => Promise<Awaited<ReturnType<AgentRunner["recover"]>>>;
 }
 
-const AUTOMATIC_EVIDENCE_MAXIMUM_AGE_MS = 300_000;
+export const AUTOMATIC_EVIDENCE_MAXIMUM_AGE_MS = 30 * 24 * 60 * 60 * 1_000;
 const APPLICATION_RUN_CANCELLED = "Application run cancelled";
 const MAX_VERIFICATION_MATERIAL_TOKENS = 28_000;
 const TASK_EVIDENCE_ARTIFACT_KINDS = new Set(["task-output", "code-change"]);

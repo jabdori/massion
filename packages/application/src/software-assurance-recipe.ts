@@ -5,10 +5,13 @@ import { validateStrategyPlan } from "@massion/context-strategy";
 import { redactSecrets } from "@massion/evidence";
 import type { WorkRecoveryBundle } from "@massion/work";
 
-import type { AutomaticAssuranceBindingRecipe, SoftwareAssuranceRecipeResolver } from "./core-assurance-stage.js";
+import {
+  AUTOMATIC_EVIDENCE_MAXIMUM_AGE_MS,
+  type AutomaticAssuranceBindingRecipe,
+  type SoftwareAssuranceRecipeResolver,
+} from "./core-assurance-stage.js";
 
 const CODE_CHANGE_MEDIA_TYPE = "application/vnd.massion.code-change-manifest+json";
-const AUTOMATIC_EVIDENCE_MAXIMUM_AGE_MS = 300_000;
 const SOFTWARE_COMMAND_ADAPTER_ID = "massion.software-command.v1";
 const SOFTWARE_SECURITY_INSPECTOR_PROFILE = "massion.software-security-scan.v1";
 

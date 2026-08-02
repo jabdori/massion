@@ -119,6 +119,7 @@ describe("Software assurance recipe resolver", () => {
           bindingKey: "software-security",
           inspectorProfile: "massion.software-security-scan.v1",
           evidenceAllowlist: ["artifact-version-1"],
+          maximumAgeMs: 30 * 24 * 60 * 60 * 1_000,
         }),
       ]),
     });
