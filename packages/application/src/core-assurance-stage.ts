@@ -75,6 +75,7 @@ interface ReadyVerifier {
 const AUTOMATIC_EVIDENCE_MAXIMUM_AGE_MS = 300_000;
 const APPLICATION_RUN_CANCELLED = "Application run cancelled";
 const MAX_VERIFICATION_MATERIAL_TOKENS = 28_000;
+const TASK_EVIDENCE_ARTIFACT_KINDS = new Set(["task-output", "code-change"]);
 const VERIFICATION_OUTPUT_RESERVE_TOKENS = 4_000;
 
 function approvalId(value: unknown): string | undefined {
@@ -171,7 +172,7 @@ function verificationMaterial(
       message.message_type === "evidence" &&
       (candidate.artifacts ?? []).some(
         (artifact) =>
-          artifact.kind === "task-output" &&
+          TASK_EVIDENCE_ARTIFACT_KINDS.has(artifact.kind) &&
           artifact.work_id === currentWorkId &&
           artifact.artifact_id ===
             (candidate.artifactVersions ?? []).find(
@@ -205,7 +206,9 @@ function verificationMaterial(
       message.work_id === currentWorkId &&
       message.message_type === "evidence" &&
       taskIds.has(message.task_id) &&
-      artifactKindById.get(versionById.get(message.artifact_version_id)?.artifact_id ?? "") === "task-output"
+      TASK_EVIDENCE_ARTIFACT_KINDS.has(
+        artifactKindById.get(versionById.get(message.artifact_version_id)?.artifact_id ?? "") ?? "",
+      )
         ? [[message.execution_id, message.task_id] as const]
         : [],
     ),

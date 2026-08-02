@@ -401,14 +401,43 @@ describe("CoreAssuranceStage", () => {
 
   it("소프트웨어 변경은 독립 재실행 recipe가 있을 때 해당 binding을 자동 연결한다", async () => {
     let proposed: unknown;
+    const verifierInputs: unknown[] = [];
     const stage = new CoreAssuranceStage({
       works: {
         getWork: async () => ({ revision: 7 }),
         getActivePlan: async () => ({ plan_version_id: "plan-1", content_json: "{}" }),
         recoverWork: async () => ({
-          artifacts: [{ kind: "code-change" }],
-          artifactVersions: [{ artifact_version_id: "code-change-version" }],
-          tasks: [],
+          work: { work_id: "assurance-work", artifact_version_ids: ["code-change-version"] },
+          artifacts: [{ artifact_id: "code-change", work_id: "assurance-work", kind: "code-change" }],
+          artifactVersions: [
+            {
+              artifact_version_id: "code-change-version",
+              artifact_id: "code-change",
+              work_id: "assurance-work",
+              creator_execution_id: "software-execution",
+              content_json: '{"commitSha":"abc123","files":["src/value.mjs"]}',
+            },
+          ],
+          tasks: [
+            {
+              task_id: "software-task",
+              work_id: "assurance-work",
+              plan_version_id: "plan-1",
+              status: "completed",
+              acceptance_criteria_json: "[]",
+              dependency_ids: [],
+              required_capabilities: ["backend-engineering"],
+            },
+          ],
+          messages: [
+            {
+              task_id: "software-task",
+              work_id: "assurance-work",
+              artifact_version_id: "code-change-version",
+              execution_id: "software-execution",
+              message_type: "evidence",
+            },
+          ],
         }),
       },
       bindings: {
@@ -455,7 +484,7 @@ describe("CoreAssuranceStage", () => {
           };
         },
       },
-      runner: verifierRunner(),
+      runner: verifierRunner([], verifierInputs),
       runtimeExecutions: noStoredVerifier,
       assurance: {
         prepareSnapshot: async () => ({ snapshot: { hash: "a".repeat(64) } }),
@@ -476,6 +505,21 @@ describe("CoreAssuranceStage", () => {
       profileId: "massion.assurance.software-change.v1",
       bindings: [expect.objectContaining({ bindingKey: "software-correctness" })],
     });
+    expect(verifierInputs).toEqual([
+      expect.objectContaining({
+        input: expect.objectContaining({
+          material: expect.objectContaining({
+            artifactVersions: [
+              {
+                artifactVersionId: "code-change-version",
+                taskId: "software-task",
+                content: { commitSha: "abc123", files: ["src/value.mjs"] },
+              },
+            ],
+          }),
+        }),
+      }),
+    ]);
   });
 
   it("요청에 ID가 없어도 현재 Plan과 Artifact에 맞는 활성 binding을 자동 선택한다", async () => {
