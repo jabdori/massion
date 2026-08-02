@@ -133,8 +133,8 @@ function chunksForSymbol(snapshot: IndexSnapshot, symbolKey: string): readonly I
 function trimQueryPathPunctuation(token: string): string {
   let start = 0;
   let end = token.length;
-  while (start < end && QUERY_PATH_PREFIX_PUNCTUATION.has(token[start])) start += 1;
-  while (start < end && QUERY_PATH_SUFFIX_PUNCTUATION.has(token[end - 1])) end -= 1;
+  while (start < end && QUERY_PATH_PREFIX_PUNCTUATION.has(token.charAt(start))) start += 1;
+  while (start < end && QUERY_PATH_SUFFIX_PUNCTUATION.has(token.charAt(end - 1))) end -= 1;
   return token.slice(start, end);
 }
 
