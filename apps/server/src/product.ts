@@ -152,6 +152,7 @@ import {
   SubscriptionConnectorBroker,
   SubscriptionPolicyStore,
   SubscriptionQuotaService,
+  type ConnectorTransportDirectory,
 } from "@massion/subscriptions";
 import { WorkService } from "@massion/work";
 import { WorkspaceService } from "@massion/workspace";
@@ -269,6 +270,8 @@ export interface MassionDaemonAssemblyOptions {
   readonly database?: MassionDatabase;
   /** 일반 설정 직렬화 경계를 우회하지 않는 테스트 전용 bootstrap 비밀 소유자입니다. */
   readonly bootstrapAuthorization?: ApplicationBootstrapAuthorization;
+  /** 검증된 in-process Connector transport를 사용하는 조립 테스트 포트입니다. */
+  readonly connectorTransport?: ConnectorTransportDirectory;
 }
 
 export function modelPreferenceFromActiveBatch(
@@ -466,7 +469,7 @@ export async function createMassionDaemon(
       },
     };
     const connectorBroker = await SubscriptionConnectorBroker.create(database, organizations, subscriptionAccounts, {
-      transport: connectorChannels,
+      transport: options.connectorTransport ?? connectorChannels,
     });
     const providers = await ProviderService.create(database, organizations, new CredentialVault(config.credentialKey), {
       accounts: subscriptionAccounts,
@@ -487,6 +490,7 @@ export async function createMassionDaemon(
       },
       workspaces,
       database,
+      runtimeAgentConfigurations,
     );
     const optimizationEvaluations = await ModelOptimizationStore.create(database, organizations, {
       modelCatalog: async (context) => {

@@ -9,6 +9,7 @@ import type {
   SubscriptionAgentInput,
   SubscriptionAgentResult,
 } from "@massion/runtime";
+import { normalizeCodexExecutionEvidence } from "@massion/runtime";
 import type {
   ConnectorEvent,
   ConnectorSessionLease,
@@ -500,6 +501,20 @@ describe("구독 실행 해석기", () => {
   });
 
   it("Edge Agent 결과와 사용량을 변환하되 원격 suspend capability를 과장하지 않는다", async () => {
+    const executionEvidence = normalizeCodexExecutionEvidence(
+      [
+        {
+          id: "command-edge-agent-1",
+          type: "command_execution",
+          command: "pnpm test",
+          aggregated_output: "Tests passed",
+          exit_code: 0,
+          status: "completed",
+        },
+      ],
+      "/workspace",
+    );
+    if (!executionEvidence) throw new Error("Edge 실행 근거 fixture를 만들지 못했습니다");
     const configured = await options({
       currentConnector: edgeAgentConnector(),
       events: [
@@ -508,7 +523,7 @@ describe("구독 실행 해석기", () => {
         {
           kind: "done",
           sequence: 2,
-          payload: { outcome: "completed", sessionId: "remote-session-1" },
+          payload: { outcome: "completed", sessionId: "remote-session-1", executionEvidence },
         },
       ],
     });
@@ -522,7 +537,17 @@ describe("구독 실행 해석기", () => {
       sessionId: "remote-session-1",
       value: "완료",
       usage: { inputTokens: 4, outputTokens: 1 },
+      executionEvidence,
     });
+    expect(configured.broker.invocations[0]?.input.payload).toMatchObject({
+      policy: {
+        sandboxMode: "workspace-write",
+        approvalPolicy: "never",
+        networkAccessEnabled: false,
+      },
+    });
+    expect(configured.broker.invocations[0]?.input.payload).not.toHaveProperty("policy.permissionMode");
+    expect(configured.broker.invocations[0]?.input.payload).not.toHaveProperty("policy.autonomyRevision");
 
     const suspended = await options({
       currentConnector: edgeAgentConnector(),
@@ -538,6 +563,26 @@ describe("구독 실행 해석기", () => {
     if (suspendedBinding.kind !== "agent-runtime") throw new Error("Agent runtime binding이 필요합니다");
     await expect(suspendedBinding.executor.execute({ executionId: "execution-1", prompt: "승인" })).rejects.toThrow(
       "지원하지 않는 terminal 결과",
+    );
+
+    const malformed = await options({
+      currentConnector: edgeAgentConnector(),
+      events: [
+        {
+          kind: "done",
+          sequence: 0,
+          payload: {
+            outcome: "completed",
+            sessionId: "remote-session-1",
+            executionEvidence: { schemaVersion: "forged" },
+          },
+        },
+      ],
+    });
+    const malformedBinding = await new MassionSubscriptionRuntimeResolver(malformed).resolve(context, resolution());
+    if (malformedBinding.kind !== "agent-runtime") throw new Error("Agent runtime binding이 필요합니다");
+    await expect(malformedBinding.executor.execute({ executionId: "execution-1", prompt: "작업" })).rejects.toThrow(
+      "실행 근거",
     );
   });
 

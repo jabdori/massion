@@ -6,6 +6,7 @@ import {
   CopilotAcpConnector,
   GeminiCliAcpConnector,
   GrokBuildAcpConnector,
+  normalizeCodexExecutionEvidence,
   type AcpClientFactory,
   type SubscriptionAgentAdapter,
   type SubscriptionAgentInput,
@@ -130,6 +131,20 @@ describe("Edge Connector agent-turn 실행", () => {
       createHash("sha256").update("work-12345678").digest("hex"),
     );
     let received: SubscriptionAgentInput | undefined;
+    const executionEvidence = normalizeCodexExecutionEvidence(
+      [
+        {
+          id: "command-edge-1",
+          type: "command_execution",
+          command: "pnpm test",
+          aggregated_output: "Tests passed",
+          exit_code: 0,
+          status: "completed",
+        },
+      ],
+      managedWorkspace,
+    );
+    if (!executionEvidence) throw new Error("Edge 실행 근거 fixture를 만들지 못했습니다");
     const adapter: SubscriptionAgentAdapter = {
       execute: async (_context, input) => {
         received = input;
@@ -139,6 +154,7 @@ describe("Edge Connector agent-turn 실행", () => {
           sessionId: "session-12345678",
           value: "완료했습니다",
           usage: { input_tokens: 12, output_tokens: 3 },
+          executionEvidence,
         };
       },
       resume: vi.fn(),
@@ -148,7 +164,7 @@ describe("Edge Connector agent-turn 실행", () => {
     const executor = new EdgeRequestExecutor({ identity, factory, healthProbe: healthyProfile });
     const events: ConnectorEventFrame[] = [];
 
-    await executor.execute(request(identity), async (event) => {
+    await executor.execute(request(identity, { instruction: "변경 후 검증을 실행하세요" }), async (event) => {
       events.push(event);
     });
 
@@ -161,6 +177,7 @@ describe("Edge Connector agent-turn 실행", () => {
       }),
     );
     expect(received).toMatchObject({
+      prompt: "변경 후 검증을 실행하세요\n\n작업을 완료해주세요",
       workspaceRoot: managedWorkspace,
       profileRoot: identity.profileRoot,
       environment: { LANG: "C.UTF-8", LC_ALL: "C.UTF-8" },
@@ -172,6 +189,7 @@ describe("Edge Connector agent-turn 실행", () => {
       [2, "done"],
     ]);
     expect(events[1]?.payload).toEqual({ inputTokens: 12, outputTokens: 3 });
+    expect(events[2]?.payload).toMatchObject({ executionEvidence });
     expect(events[2]?.payload).toMatchObject({ outcome: "completed", sessionId: "session-12345678" });
   });
 
@@ -212,6 +230,36 @@ describe("Edge Connector agent-turn 실행", () => {
       });
     }
     expect(create).not.toHaveBeenCalled();
+  });
+
+  it("Adapter가 반환한 검증되지 않은 실행 근거를 외부 성공 frame으로 내보내지 않는다", async () => {
+    const { identity } = await fixture();
+    const adapter: SubscriptionAgentAdapter = {
+      execute: vi.fn().mockResolvedValue({
+        outcome: "completed",
+        executionId: "execution-12345678",
+        sessionId: "session-12345678",
+        value: "완료",
+        executionEvidence: { schemaVersion: "forged" },
+      }),
+      resume: vi.fn(),
+      cancel: vi.fn(),
+    } as SubscriptionAgentAdapter;
+    const executor = new EdgeRequestExecutor({
+      identity,
+      factory: { create: () => adapter },
+      healthProbe: healthyProfile,
+    });
+    const events: ConnectorEventFrame[] = [];
+
+    await executor.execute(request(identity), async (event) => events.push(event));
+
+    expect(events).toEqual([
+      expect.objectContaining({
+        kind: "error",
+        payload: expect.objectContaining({ category: "provider-runtime-error", sideEffectsStarted: true }),
+      }),
+    ]);
   });
 
   it("generate·ACP·승인 대기 결과는 명시적인 fail-closed error로 끝낸다", async () => {

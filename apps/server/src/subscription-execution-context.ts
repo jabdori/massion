@@ -160,6 +160,12 @@ export class MassionSubscriptionExecutionContext
     private readonly optimizationRuns?: SubscriptionOptimizationWorkAccessReader,
     private readonly workspaces?: SubscriptionWorkspaceReader,
     private readonly transactions?: TransactionRunner,
+    private readonly instructions?: {
+      resolve(
+        context: TenantContext,
+        input: { readonly executionId: string; readonly workId: string; readonly agentHandle: string },
+      ): Promise<{ readonly instruction: string }>;
+    },
   ) {
     if (!isAbsolute(workspaceRoot)) throw new Error("구독 Agent 작업공간 root는 절대 경로여야 합니다");
   }
@@ -177,6 +183,7 @@ export class MassionSubscriptionExecutionContext
     readonly workspaceRoot: string;
     readonly workspaceAccess: WorkspaceAccess;
     readonly workspaceCapability: string;
+    readonly instruction?: string;
   }> {
     const requestedAccess = requireWorkspaceAccess(input.workspaceAccess);
     const optimization = input.workId.startsWith("optimization:");
@@ -198,7 +205,19 @@ export class MassionSubscriptionExecutionContext
       workspaceAccess,
       ...snapshot,
     };
-    return { workspaceRoot: snapshot.workspaceRoot, workspaceAccess, workspaceCapability: this.sign(payload) };
+    const configuration = optimization
+      ? undefined
+      : await this.instructions?.resolve(context, {
+          executionId: input.executionId,
+          workId: input.workId,
+          agentHandle: input.agentHandle,
+        });
+    return {
+      workspaceRoot: snapshot.workspaceRoot,
+      workspaceAccess,
+      workspaceCapability: this.sign(payload),
+      ...(configuration?.instruction ? { instruction: configuration.instruction } : {}),
+    };
   }
 
   public async verify(

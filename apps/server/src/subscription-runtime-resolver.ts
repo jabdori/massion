@@ -9,6 +9,7 @@ import {
   CopilotAcpConnector,
   GeminiCliAcpConnector,
   GrokBuildAcpConnector,
+  executionEvidenceIsSafe,
   type AcpPermissionBridge,
   type ClaudeSubscriptionConnectorOptions,
   type ConnectorRuntimeBinding,
@@ -508,6 +509,7 @@ class RemoteConnectorAgentExecutor implements RoutedAgentRuntimeExecutor {
     private readonly workspacePolicy: RemoteEdgeWorkspacePolicy,
     private readonly workspaceCapability: string,
     private readonly policy: SubscriptionAgentExecutionPolicy,
+    private readonly instruction?: string,
   ) {}
 
   public async execute(input: {
@@ -554,10 +556,15 @@ class RemoteConnectorAgentExecutor implements RoutedAgentRuntimeExecutor {
         ...this.lineage,
         accountId: this.accountId,
         prompt: input.prompt,
+        ...(this.instruction ? { instruction: this.instruction } : {}),
         workspaceCapability: this.workspaceCapability,
         allowedTools: this.workspacePolicy.allowedTools,
         disallowedTools: this.workspacePolicy.disallowedTools,
-        policy: this.policy,
+        policy: {
+          sandboxMode: this.policy.sandboxMode,
+          approvalPolicy: this.policy.approvalPolicy,
+          networkAccessEnabled: this.policy.networkAccessEnabled,
+        },
         ...(output
           ? { output: { name: output.name, description: output.description, jsonSchema: output.jsonSchema } }
           : {}),
@@ -597,12 +604,16 @@ class RemoteConnectorAgentExecutor implements RoutedAgentRuntimeExecutor {
           if (validation && !validation.success) throw validation.error;
           if (validation?.success) value = validation.value;
         }
+        if (done.executionEvidence !== undefined && !executionEvidenceIsSafe(done.executionEvidence)) {
+          throw new ConnectorProtocolError("Connector Agent 실행 근거가 유효하지 않습니다");
+        }
         return {
           outcome: "completed",
           executionId: this.lineage.executionId,
           sessionId,
           value,
           ...(usage ? { usage } : {}),
+          ...(done.executionEvidence ? { executionEvidence: done.executionEvidence } : {}),
         };
       }
       throw new ConnectorProtocolError("Connector Agent terminal frame이 없습니다");
@@ -879,6 +890,7 @@ export class MassionSubscriptionRuntimeResolver implements ConnectorRuntimeResol
           { allowedTools: workspace.allowedTools, disallowedTools: workspace.disallowedTools },
           workspaceCapability,
           policy,
+          input.instruction,
         ),
       };
     }

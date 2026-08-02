@@ -16,10 +16,15 @@ import {
 import { PromptMemoryStore, growthChecksum } from "@massion/growth";
 import { IdentityService, OrganizationService } from "@massion/identity";
 import { OrganizationGraphService } from "@massion/organization";
-import { RuntimeExecutionStore } from "@massion/runtime";
+import {
+  normalizeCodexExecutionEvidence,
+  RuntimeExecutionStore,
+  type SubscriptionAgentAdapter,
+} from "@massion/runtime";
 import { ExtensionPackageService } from "@massion/extension-host";
 import { SOFTWARE_ENGINEERING_TEAM_PROFILE } from "@massion/software-engineering";
 import { createDatabase } from "@massion/storage";
+import { type ConnectorEvent, type ConnectorTransportDirectory } from "@massion/subscriptions";
 import { WorkService } from "@massion/work";
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -30,6 +35,9 @@ import { join, resolve } from "node:path";
 import { promisify } from "node:util";
 import { describe, expect, it, vi } from "vitest";
 
+import { EdgeRequestExecutor } from "../../connector/src/executor.js";
+import { ConnectorIdentityStore } from "../../connector/src/identity-store.js";
+import type { ConnectorRequestFrame } from "../../connector/src/protocol.js";
 import { loadServerConfig, parseDatabaseProvisionConfig, parseServerConfig } from "./config.js";
 import {
   createLimitedExecutors,
@@ -1050,6 +1058,43 @@ describe("Massion server product", () => {
     const sourceSecret = "sk-knowledge-secret-1234567890";
     const providerOutputSecret = "sk-provider-output-secret-1234567890";
     const modelRequests: string[] = [];
+    const connectorEvents: ConnectorEvent[] = [];
+    const deliveryEvidence = normalizeCodexExecutionEvidence(
+      [
+        {
+          id: "live-core-command-1",
+          type: "command_execution",
+          command: "pnpm test",
+          aggregated_output: "calculateTotal tests passed",
+          exit_code: 0,
+          status: "completed",
+        },
+        {
+          id: "live-core-file-1",
+          type: "file_change",
+          changes: [{ path: "src/order.ts", kind: "update" }],
+          status: "completed",
+        },
+      ],
+      "/workspace",
+    );
+    if (!deliveryEvidence) throw new Error("제품 실행 근거 fixture를 만들지 못했습니다");
+    let edgeExecutor: EdgeRequestExecutor | undefined;
+    const connectorTransport: ConnectorTransportDirectory = {
+      async *invoke(_organizationId, connectorId, connectorRequest): AsyncIterable<ConnectorEvent> {
+        if (connectorId !== "live-core-agent-runtime" || connectorRequest.operation !== "agent-turn") {
+          throw new Error("제품 fixture Connector 요청이 유효하지 않습니다");
+        }
+        if (!edgeExecutor) throw new Error("제품 fixture Edge executor가 준비되지 않았습니다");
+        const events: ConnectorEvent[] = [];
+        await edgeExecutor.execute({ ...connectorRequest, type: "request" } as ConnectorRequestFrame, (event) => {
+          const connectorEvent = { kind: event.kind, sequence: event.sequence, payload: event.payload } as const;
+          events.push(connectorEvent);
+          connectorEvents.push(connectorEvent);
+        });
+        for (const event of events) yield event;
+      },
+    };
     const plan = {
       objective: "실제 Core 경로 검증",
       summary: "한 작업을 전달하고 검증 단계까지 진행한다",
@@ -1106,9 +1151,29 @@ describe("Massion server product", () => {
     await new Promise<void>((resolve) => modelServer.listen(0, "127.0.0.1", resolve));
     const modelAddress = modelServer.address();
     if (!modelAddress || typeof modelAddress === "string") throw new Error("테스트 모델 주소를 찾을 수 없습니다");
-    const workspaceRoot = await mkdtemp(join(tmpdir(), "massion-live-core-"));
+    const workspaceRoot = await realpath(await mkdtemp(join(tmpdir(), "massion-live-core-")));
     const repositoryRoot = join(workspaceRoot, "repository");
     const sourcePath = join(repositoryRoot, "src", "order.ts");
+    await mkdir(repositoryRoot, { recursive: true });
+    await chmod(repositoryRoot, 0o700);
+    const profileRoot = join(workspaceRoot, "live-core-profile");
+    await mkdir(profileRoot, { mode: 0o700 });
+    const edgeWorkspaceRoot = join(workspaceRoot, "live-core-edge-workspace");
+    await mkdir(edgeWorkspaceRoot, { mode: 0o700 });
+    const identityPath = join(workspaceRoot, "live-core-identity.json");
+    const pendingIdentity = await ConnectorIdentityStore.createPending(identityPath, {
+      baseUrl: "https://massion.example",
+      enrollmentId: "enrollment-live-core-agent-runtime",
+      connectorId: "live-core-agent-runtime",
+      commandId: "command-live-core-agent-runtime",
+      providerId: "openai-codex",
+      accountAlias: "Live Core Agent Runtime",
+      authKind: "cli-profile",
+      billingKind: "consumer-subscription",
+      enrollmentDigest: "a".repeat(64),
+      profileRoot,
+      workspaceRoots: [edgeWorkspaceRoot],
+    });
     await mkdir(join(repositoryRoot, "src"), { recursive: true });
     await writeFile(
       sourcePath,
@@ -1129,7 +1194,7 @@ describe("Massion server product", () => {
         metrics: { ...parsed.metrics, port: 0 },
         registry: { ...parsed.registry, port: 0 },
       },
-      { database },
+      { database, connectorTransport },
     );
     const address = await daemon.start();
     try {
@@ -1182,6 +1247,7 @@ describe("Massion server product", () => {
         outputCostMicrosPerMillion: 0,
         verified: true,
       });
+      let deliveryRouteId = "";
       for (const name of [
         "orchestration-balanced",
         "planning-quality",
@@ -1204,11 +1270,223 @@ describe("Massion server product", () => {
           requestBudgetMicros: 1000000,
           totalBudgetMicros: 10000000,
         });
+        if (name === "delivery-quality") deliveryRouteId = String(route.data.routeId);
         await command("router.candidate.add", {
           routeId: route.data.routeId,
           modelProfileId: model.data.modelProfileId,
           priority: 1,
         });
+      }
+      if (!deliveryRouteId) throw new Error("Delivery route fixture가 없습니다");
+      const [organizations, users, memberships] = await database.query<
+        [
+          Array<{ readonly organization_id: string }>,
+          Array<{ readonly user_id: string }>,
+          Array<{ readonly membership_id: string; readonly role: "owner" | "admin" | "member" }>,
+        ]
+      >(
+        "SELECT organization_id FROM organization LIMIT 1; SELECT user_id FROM identity_user LIMIT 1; SELECT membership_id, role FROM membership LIMIT 1;",
+      );
+      const organization = organizations[0];
+      const user = users[0];
+      const membership = memberships[0];
+      if (!organization || !user || !membership) throw new Error("제품 fixture 조직·사용자를 찾을 수 없습니다");
+      const edgeIdentity = await new ConnectorIdentityStore(identityPath).activate(pendingIdentity, {
+        organizationId: organization.organization_id,
+        userId: user.user_id,
+        membershipId: membership.membership_id,
+        role: membership.role,
+      });
+      const adapter: SubscriptionAgentAdapter = {
+        execute: async (_context, input) => {
+          modelRequests.push(JSON.stringify({ prompt: input.prompt }));
+          return {
+            outcome: "completed",
+            executionId: input.executionId,
+            sessionId: "live-core-session",
+            value: "DELIVERY_RESULT_calculateTotal_검증완료",
+            usage: { inputTokens: 8, outputTokens: 2 },
+            executionEvidence: deliveryEvidence,
+          };
+        },
+        resume: vi.fn(),
+        cancel: vi.fn(),
+      };
+      edgeExecutor = new EdgeRequestExecutor({
+        identity: edgeIdentity,
+        factory: { create: () => adapter },
+        healthProbe: { verify: async (input) => ({ authKind: input.expectedAuthKind }) },
+      });
+      await database.query(
+        `CREATE subscription_connector CONTENT {
+           connector_id: 'live-core-agent-runtime', organization_id: $organization_id, owner_user_id: $owner_user_id,
+           location: 'edge', trust_origin: 'edge-device', execution_kind: 'agent-runtime',
+           protocol: 'massion.connector.v1', version: '1.0.0', public_key: $public_key,
+           capabilities: $capabilities, status: 'ready',
+           last_heartbeat_at: time::now(), expires_at: time::now() + 30m,
+           created_at: time::now(), updated_at: time::now()
+         };`,
+        {
+          organization_id: organization.organization_id,
+          owner_user_id: user.user_id,
+          public_key: edgeIdentity.publicKey,
+          capabilities: edgeIdentity.capabilities,
+        },
+      );
+      await command("router.provider.register", {
+        providerId: "openai-codex",
+        displayName: "OpenAI Codex",
+        adapterKind: "subscription-agent",
+      });
+      const codexEndpoint = await command("router.endpoint.register", {
+        providerId: "openai-codex",
+        name: "Live Core Agent Runtime",
+        baseUrl: "http://127.0.0.1/live-core-agent-runtime",
+        local: true,
+      });
+      await command("subscription.account.register", {
+        providerId: "openai-codex",
+        alias: "Live Core Agent Runtime",
+        connectorId: "live-core-agent-runtime",
+        profileLocator: "live-core-agent-runtime-profile",
+        authKind: "cli-profile",
+        billingKind: "consumer-subscription",
+        priority: 1,
+        weight: 1,
+      });
+      const [codexAccounts] = await database.query<[Array<{ readonly account_id: string }>]>(
+        "SELECT account_id FROM subscription_account WHERE organization_id = $organization_id AND provider_id = 'openai-codex' LIMIT 1;",
+        { organization_id: organization.organization_id },
+      );
+      const subscriptionAccountId = codexAccounts[0]?.account_id;
+      const codexEndpointId = String(codexEndpoint.data.endpointId ?? "");
+      if (!subscriptionAccountId || !codexEndpointId) {
+        throw new Error(
+          `Agent runtime Provider fixture가 불완전합니다 (account=${String(Boolean(subscriptionAccountId))}, endpoint=${String(Boolean(codexEndpointId))})`,
+        );
+      }
+      await database.query(
+        `CREATE provider_credential CONTENT {
+           credential_id: $credential_id, organization_id: $organization_id, provider_id: 'openai-codex',
+           endpoint_id: $endpoint_id, label: 'Live Core Agent Runtime', credential_type: 'subscription_session',
+           status: 'active', version: 1, secret_version: 0, priority: 1, weight: 1, request_count: 0,
+           input_tokens: 0, output_tokens: 0, cost_micros: 0, last_selected_sequence: 0,
+           material_kind: 'connector_session', subscription_account_id: $account_id,
+           subscription_connector_id: 'live-core-agent-runtime', subscription_scope: 'personal',
+           created_at: time::now(), updated_at: time::now()
+         };`,
+        {
+          credential_id: crypto.randomUUID(),
+          organization_id: organization.organization_id,
+          endpoint_id: codexEndpointId,
+          account_id: subscriptionAccountId,
+        },
+      );
+      const agentModel = await command("router.model.register", {
+        providerId: "openai-codex",
+        endpointId: codexEndpointId,
+        modelId: "gpt-5.6-sol",
+        routeKind: "chat",
+        contextWindow: 200000,
+        supportsTools: true,
+        supportsStructuredOutput: false,
+        supportsVision: false,
+        supportsStreaming: false,
+        equivalenceGroup: "core-test",
+        evalScore: 1,
+        inputCostMicrosPerMillion: 0,
+        outputCostMicrosPerMillion: 0,
+        verified: false,
+      });
+      const verificationEvidence = [
+        {
+          kind: "runtime-availability",
+          source: "codex-app-server:model/list",
+          sourceVersion: "0.144.1",
+          observedAt: "2026-08-02T00:00:00.000Z",
+          accountId: subscriptionAccountId,
+          claim: { modelId: "gpt-5.6-sol", hidden: false, actualAvailable: true },
+        },
+        {
+          kind: "provider-capability-contract",
+          source: "https://developers.openai.com/codex/models",
+          sourceVersion: "retrieved-2026-08-02",
+          observedAt: "2026-08-02T00:00:01.000Z",
+          claim: { contextWindow: 200000, tools: true, structuredOutput: false, vision: false, streaming: false },
+        },
+        {
+          kind: "runtime-capability-contract",
+          source: "massion:fixture-agent-runtime",
+          sourceVersion: "1.0.0",
+          observedAt: "2026-08-02T00:00:02.000Z",
+          accountId: subscriptionAccountId,
+          claim: {
+            runtimeArtifactDigest: "a".repeat(64),
+            agentRuntime: true,
+            contextWindow: 200000,
+            tools: true,
+            structuredOutput: false,
+            vision: false,
+            streaming: false,
+          },
+        },
+      ];
+      for (const evidence of verificationEvidence) {
+        const claimJson = JSON.stringify(evidence.claim);
+        await database.query(
+          `CREATE model_verification_evidence CONTENT {
+             evidence_id: $evidence_id, organization_id: $organization_id, model_profile_id: $model_profile_id,
+             model_id: 'gpt-5.6-sol', subscription_account_id: $account_id, evidence_kind: $kind,
+             source: $source, source_version: $source_version, claim_json: $claim_json,
+             claim_digest: $claim_digest, observed_at: type::datetime($observed_at),
+             created_by: $created_by, created_at: time::now()
+           };`,
+          {
+            evidence_id: crypto.randomUUID(),
+            organization_id: organization.organization_id,
+            model_profile_id: agentModel.data.modelProfileId,
+            account_id: evidence.accountId,
+            kind: evidence.kind,
+            source: evidence.source,
+            source_version: evidence.sourceVersion,
+            claim_json: claimJson,
+            claim_digest: createHash("sha256").update(claimJson).digest("hex"),
+            observed_at: evidence.observedAt,
+            created_by: user.user_id,
+          },
+        );
+      }
+      await database.query(
+        "UPDATE model_profile SET verified = true, updated_at = time::now() WHERE organization_id = $organization_id AND model_profile_id = $model_profile_id;",
+        { organization_id: organization.organization_id, model_profile_id: agentModel.data.modelProfileId },
+      );
+      await database.query(
+        `CREATE model_route_candidate CONTENT {
+           candidate_id: $candidate_id, organization_id: $organization_id, route_id: $route_id,
+           model_profile_id: $model_profile_id, priority: 2, enabled: true,
+           created_at: time::now()
+         };`,
+        {
+          candidate_id: crypto.randomUUID(),
+          organization_id: organization.organization_id,
+          route_id: deliveryRouteId,
+          model_profile_id: agentModel.data.modelProfileId,
+        },
+      );
+      const [agentCredentials] = await database.query<
+        [
+          Array<{
+            readonly credential_id: string;
+            readonly subscription_connector_id?: string;
+            readonly status: string;
+          }>,
+        ]
+      >(
+        "SELECT credential_id, subscription_connector_id, status FROM provider_credential WHERE organization_id = $organization_id AND provider_id = 'openai-codex';",
+        { organization_id: organization.organization_id },
+      );
+      if (!agentCredentials.some((credential) => credential.subscription_connector_id === "live-core-agent-runtime")) {
+        throw new Error(`Agent runtime Credential fixture가 없습니다 (${String(agentCredentials.length)})`);
       }
       await expect(client.status()).resolves.toMatchObject({ data: { modelRuntime: "ready" } });
       const registered = (await command("workspace.register", { path: repositoryRoot })) as {
@@ -1241,7 +1519,9 @@ describe("Massion server product", () => {
         }
         if (run.data.status === "completed") break;
         if (run.data.status === "blocked") {
-          throw new Error(`실제 Core 경로가 차단됐습니다: ${run.data.blockedReason ?? "unknown"}`);
+          throw new Error(
+            `실제 Core 경로가 차단됐습니다: ${run.data.blockedReason ?? "unknown"} ${JSON.stringify(connectorEvents)}`,
+          );
         }
         expect(run.data).toMatchObject({ status: "awaiting-approval", approvalId: expect.any(String) });
         const pending = (await client.query("governance.approval.list", {

@@ -8,6 +8,7 @@ import {
   CodexSubscriptionConnector,
   GeminiCliAcpConnector,
   GrokBuildAcpConnector,
+  executionEvidenceIsSafe,
   type AcpClientFactory,
   type AcpPermissionBridge,
   type ClaudeSubscriptionConnectorOptions,
@@ -67,6 +68,7 @@ interface ValidAgentTurn {
   readonly workId: string;
   readonly agentHandle: string;
   readonly prompt: string;
+  readonly instruction?: string;
   readonly workspaceRoot: string;
   readonly allowedTools: readonly string[];
   readonly disallowedTools: readonly string[];
@@ -104,13 +106,14 @@ const AGENT_TURN_FIELDS = [
   "workId",
   "agentHandle",
   "prompt",
+  "instruction",
   "workspaceCapability",
   "allowedTools",
   "disallowedTools",
   "policy",
   "output",
 ] as const;
-const REQUIRED_AGENT_TURN_FIELDS = AGENT_TURN_FIELDS.filter((field) => field !== "output");
+const REQUIRED_AGENT_TURN_FIELDS = AGENT_TURN_FIELDS.filter((field) => field !== "output" && field !== "instruction");
 const SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,255}$/u;
 const MAXIMUM_TEXT_BYTES = 512 * 1024;
 
@@ -136,9 +139,9 @@ function identifier(value: unknown, label: string): string {
   return value;
 }
 
-function prompt(value: unknown): string {
+function prompt(value: unknown, label = "Agent prompt"): string {
   if (typeof value !== "string" || !value || value.includes("\0") || Buffer.byteLength(value, "utf8") > 1024 * 1024) {
-    throw new Error("Agent prompt가 유효하지 않습니다");
+    throw new Error(`${label}가 유효하지 않습니다`);
   }
   return value;
 }
@@ -518,7 +521,7 @@ export class EdgeRequestExecutor {
         executionId: input.executionId,
         workId: input.workId,
         agentHandle: input.agentHandle,
-        prompt: input.prompt,
+        prompt: input.instruction ? `${input.instruction}\n\n${input.prompt}` : input.prompt,
         workspaceRoot: input.workspaceRoot,
         profileRoot: this.identity.profileRoot,
         environment: {
@@ -609,6 +612,7 @@ export class EdgeRequestExecutor {
       workId,
       agentHandle,
       prompt: prompt(source.prompt),
+      ...(source.instruction === undefined ? {} : { instruction: prompt(source.instruction, "Agent instruction") }),
       workspaceRoot: await workspace(source.workspaceCapability, this.identity, {
         providerId,
         accountId,
@@ -664,12 +668,16 @@ export class EdgeRequestExecutor {
       return;
     }
     const text = resultText(result.value);
+    if (result.executionEvidence && !executionEvidenceIsSafe(result.executionEvidence)) {
+      throw new Error("Provider 실행 근거가 유효하지 않습니다");
+    }
     if (text) await send("data", { type: "text-delta", delta: text });
     await send("usage", usage(result.usage));
     await send("done", {
       outcome: "completed",
       sessionId: safeSessionId(result.sessionId),
       ...(structuredOutput ? { value: result.value } : {}),
+      ...(result.executionEvidence ? { executionEvidence: result.executionEvidence } : {}),
     });
   }
 

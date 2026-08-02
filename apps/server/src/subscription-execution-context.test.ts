@@ -2,7 +2,7 @@ import { lstat, mkdtemp, mkdir, readFile, realpath, rename, rm, stat, symlink } 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { TenantContext } from "@massion/identity";
 
@@ -355,10 +355,18 @@ describe("구독 Agent 작업공간 권한", () => {
 
   it("모델 평가 run도 조직 정본으로 확인한 뒤 격리 workspace를 발급한다", async () => {
     const directory = await root("massion-subscription-optimization-workspace-");
-    const service = new MassionSubscriptionExecutionContext(join(directory, "workspaces"), works, {
-      hasOptimizationRun: async (tenant, runId) =>
-        tenant.organizationId === context.organizationId && runId === "run-1",
-    });
+    const resolveInstruction = vi.fn();
+    const service = new MassionSubscriptionExecutionContext(
+      join(directory, "workspaces"),
+      works,
+      {
+        hasOptimizationRun: async (tenant, runId) =>
+          tenant.organizationId === context.organizationId && runId === "run-1",
+      },
+      undefined,
+      undefined,
+      { resolve: resolveInstruction },
+    );
 
     const resolved = await service.resolve(context, {
       executionId: "run-1",
@@ -368,6 +376,7 @@ describe("구독 Agent 작업공간 권한", () => {
 
     expect(resolved.workspaceRoot).toContain("workspaces");
     expect(resolved).toMatchObject({ workspaceAccess: "isolated", workspaceCapability: expect.any(String) });
+    expect(resolveInstruction).not.toHaveBeenCalled();
     await expect(
       service.resolve(context, {
         executionId: "run-2",
