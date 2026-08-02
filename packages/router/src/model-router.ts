@@ -1467,10 +1467,10 @@ export class ModelRouter {
     excludedAttemptKeys?: ReadonlySet<string>,
   ): Promise<RouteSimulation> {
     const route = await this.routeByName(executor, context.organizationId, request.routeName);
+    const requestedExecutionKind: unknown = request.requiredExecutionKind;
     if (
-      request.requiredExecutionKind !== undefined &&
-      request.requiredExecutionKind !== "model" &&
-      request.requiredExecutionKind !== "agent-runtime"
+      requestedExecutionKind !== undefined &&
+      !new Set<unknown>(["model", "agent-runtime"]).has(requestedExecutionKind)
     ) {
       throw new Error("요구 실행 종류가 유효하지 않습니다");
     }

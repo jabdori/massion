@@ -110,6 +110,7 @@ export async function openCodexAppServer(
   let terminalError: Error | undefined;
   let closing = false;
   let closed = false;
+  const currentTerminalError = (): Error | undefined => terminalError;
 
   const fail = (message = "Codex app-server RPC를 완료하지 못했습니다"): void => {
     if (closing || terminalError) return;
@@ -146,7 +147,7 @@ export async function openCodexAppServer(
         await write({ method, id, ...(params === undefined ? {} : { params }) });
       } catch (error) {
         pending.delete(id);
-        throw terminalError ?? error;
+        throw currentTerminalError() ?? error;
       }
       return await response;
     },

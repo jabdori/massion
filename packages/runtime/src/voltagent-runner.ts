@@ -1466,6 +1466,7 @@ export class VoltAgentRunner implements AgentRunner, StructuredAgentRunner {
     if (signal.aborted) throw signal.reason;
     const pending = this.models.acquire(context, input);
     let onAbort: (() => void) | undefined;
+    let abortError: Error | undefined;
     let acquiredFailureSignal: FailureSignal | undefined;
     const aborted = new Promise<never>((_resolve, reject) => {
       onAbort = () => {
@@ -1474,7 +1475,9 @@ export class VoltAgentRunner implements AgentRunner, StructuredAgentRunner {
           : timeoutSignal.aborted
             ? { kind: "timeout" }
             : failureSignal(signal.reason);
-        reject(signal.reason);
+        abortError = new Error("Model acquire가 중단됐습니다", { cause: signal.reason });
+        abortError.name = acquiredFailureSignal.kind === "timeout" ? "TimeoutError" : "AbortError";
+        reject(abortError);
       };
       signal.addEventListener("abort", onAbort, { once: true });
     });
@@ -1484,12 +1487,13 @@ export class VoltAgentRunner implements AgentRunner, StructuredAgentRunner {
     try {
       const lease = await Promise.race([pending, aborted]);
       acquiredLease = lease;
-      if (!signal.aborted) return lease;
-      this.settleLateAcquire(input, lease, capturedFailureSignal());
-      throw signal.reason;
+      signal.throwIfAborted();
+      return lease;
     } catch (error) {
-      if (!signal.aborted) throw error;
-      if (!acquiredLease) {
+      if (!acquiredLease && error !== abortError) throw error;
+      if (acquiredLease) {
+        this.settleLateAcquire(input, acquiredLease, capturedFailureSignal());
+      } else {
         void pending
           .then((lease) => {
             this.settleLateAcquire(input, lease, capturedFailureSignal());
@@ -1500,7 +1504,7 @@ export class VoltAgentRunner implements AgentRunner, StructuredAgentRunner {
             });
           });
       }
-      throw signal.reason;
+      throw abortError ?? (error instanceof Error ? error : new Error("Model acquire가 중단됐습니다"));
     } finally {
       if (onAbort) signal.removeEventListener("abort", onAbort);
     }
