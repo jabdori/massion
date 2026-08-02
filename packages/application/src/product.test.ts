@@ -532,6 +532,7 @@ describe("ApplicationProduct", () => {
       stages.map((stage) => [
         stage,
         {
+          claimDirectives: stage === "evidence",
           async execute(
             _context: unknown,
             input: { readonly directives?: readonly { readonly directiveId: string }[] },

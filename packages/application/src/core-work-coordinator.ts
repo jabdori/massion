@@ -66,6 +66,7 @@ export type CoreWorkStageResult = (
 ) & { readonly appliedDirectiveIds?: readonly string[] };
 
 export interface CoreWorkStageExecutor {
+  readonly claimDirectives?: boolean;
   execute(context: TenantContext, input: CoreWorkStageInput): Promise<CoreWorkStageResult>;
   convergeFailure?(
     context: TenantContext,
@@ -312,7 +313,7 @@ export class CoreWorkCoordinator {
         let result: CoreWorkStageResult;
         try {
           claimedDirectives =
-            stage === "context-strategy" || stage === "delivery"
+            stage === "context-strategy" || stage === "delivery" || this.executors[stage].claimDirectives === true
               ? ((await this.directives?.claimEligible(context, run.runId, stage, claim.leaseGeneration)) ?? [])
               : [];
           result = await this.executors[stage].execute(context, {

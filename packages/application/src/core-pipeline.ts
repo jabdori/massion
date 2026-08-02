@@ -146,6 +146,7 @@ function blockUnsupportedDirectives(
   executor: CoreWorkStageExecutor,
 ): CoreWorkStageExecutor {
   return {
+    claimDirectives: true,
     async execute(context, input) {
       if (input.directives && input.directives.length > 0) {
         return { outcome: "blocked", reason: `${stage}-directive-unsupported` };
