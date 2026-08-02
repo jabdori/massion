@@ -5,6 +5,12 @@ import { describe, expect, it, vi } from "vitest";
 import { openCodexAppServer, withCodexAppServer, type CodexAppServerInboundRequest } from "./codex-app-server.js";
 
 describe("Codex app-server JSON-RPC transport", () => {
+  it("실행 파일 시작 실패를 호출자 오류로 반환하고 server process에 전파하지 않는다", async () => {
+    await expect(
+      openCodexAppServer("/massion-test/missing-codex-executable", [], { CODEX_HOME: "/isolated/profile" }),
+    ).rejects.toThrow("Codex app-server process를 시작하지 못했습니다");
+  });
+
   it("runtime workspace root capability를 initialize에서 선언한다", async () => {
     const fixturePath = fileURLToPath(new URL("./fixtures/codex-app-server-capability.mjs", import.meta.url));
 

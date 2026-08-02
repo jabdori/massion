@@ -141,11 +141,12 @@ export async function openCodexAppServer(
       const response = new Promise<unknown>((resolve, reject) => {
         pending.set(id, { resolve, reject });
       });
+      void response.catch(() => undefined);
       try {
         await write({ method, id, ...(params === undefined ? {} : { params }) });
       } catch (error) {
         pending.delete(id);
-        throw error;
+        throw terminalError ?? error;
       }
       return await response;
     },
