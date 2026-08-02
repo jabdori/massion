@@ -21,6 +21,7 @@ const ACTIONS = [
   "emergency.stop.disable",
   "audit.disable",
   "software-delivery.finalize",
+  "model.optimization.approve",
 ] as const;
 
 function entityShape() {
@@ -37,7 +38,9 @@ function entityShape() {
   };
 }
 
-function resourceShape() {
+function resourceShape(
+  additionalAttributes: Readonly<Record<string, { readonly type: "String"; readonly required: boolean }>> = {},
+) {
   return {
     shape: {
       type: "Record",
@@ -57,6 +60,7 @@ function resourceShape() {
         toolInputDigest: { type: "String", required: false },
         agentHandle: { type: "String", required: false },
         workId: { type: "String", required: false },
+        ...additionalAttributes,
       },
     },
   };
@@ -80,6 +84,7 @@ export function createDefaultPolicy(kind: "personal" | "team"): {
     "GrowthConfiguration",
     "SubscriptionAccount",
     "EngineeringDelivery",
+    "OptimizationRecommendation",
   ];
   const context = {
     type: "Record",
@@ -103,6 +108,7 @@ export function createDefaultPolicy(kind: "personal" | "team"): {
     "policy.activate",
     "declaration.apply",
     "emergency.stop.disable",
+    "model.optimization.approve",
   ];
   return {
     bundle: {
@@ -124,6 +130,9 @@ export function createDefaultPolicy(kind: "personal" | "team"): {
             GrowthConfiguration: resourceShape(),
             SubscriptionAccount: resourceShape(),
             EngineeringDelivery: resourceShape(),
+            OptimizationRecommendation: resourceShape({
+              recommendationChecksum: { type: "String", required: true },
+            }),
           },
           actions,
         },

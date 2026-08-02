@@ -173,6 +173,57 @@ describe("Governance Policy Decision", () => {
     expect(result.reasons).toContain("full-access-non-bypassable");
   });
 
+  it("full-access에서도 모델 최적화 추천 승인은 사람 승인을 요구한다", async () => {
+    await activate("personal");
+    const autonomy = await AutonomyStore.create(database, organizations);
+    await autonomy.set(context, { mode: "full-access", expectedRevision: 0 });
+
+    const result = await governance.evaluate(context, {
+      commandId: crypto.randomUUID(),
+      request: request("model.optimization.approve", {
+        resource: {
+          type: "OptimizationRecommendation",
+          id: "recommendation-1",
+          organizationId: context.organizationId,
+          attributes: { recommendationChecksum: "a".repeat(64) },
+        },
+        context: { environment: "local", riskClass: "model-optimization", external: false },
+      }),
+    });
+
+    expect(result).toMatchObject({
+      outcome: "require_approval",
+      requirement: { requirementId: "invariant-model-optimization-approve" },
+    });
+    expect(result.reasons).toContain("full-access-non-bypassable");
+  });
+
+  it("기본 정책도 모델 최적화 추천 승인을 사람 승인으로 판정한다", async () => {
+    await activate("personal");
+
+    const result = await governance.evaluate(context, {
+      commandId: crypto.randomUUID(),
+      request: request("model.optimization.approve", {
+        resource: {
+          type: "OptimizationRecommendation",
+          id: "recommendation-1",
+          organizationId: context.organizationId,
+          attributes: {
+            dataClassification: "internal",
+            recommendationChecksum: "a".repeat(64),
+          },
+        },
+        context: { environment: "local", riskClass: "model-optimization", external: false },
+      }),
+    });
+
+    expect(result).toMatchObject({
+      outcome: "require_approval",
+      requirement: { requirementId: "personal-dangerous-action" },
+      errors: [],
+    });
+  });
+
   it("full-access는 tenant 검증 뒤 활성 정책 부재만 우회한다", async () => {
     const autonomy = await AutonomyStore.create(database, organizations);
     await autonomy.set(context, { mode: "full-access", expectedRevision: 0 });

@@ -83,7 +83,12 @@ function autonomyReviewRequirement(action: string): ApprovalRequirement {
 }
 
 /** full-access도 우회하지 못하는 안전 불변식. 통제 장치 자체를 바꾸는 행동입니다. */
-const NON_BYPASSABLE_ACTIONS = new Set(["policy.activate", "emergency.stop.disable", "declaration.apply"]);
+const NON_BYPASSABLE_ACTIONS = new Set([
+  "policy.activate",
+  "emergency.stop.disable",
+  "declaration.apply",
+  "model.optimization.approve",
+]);
 
 /**
  * `hardOnly`는 full-access 경로가 씁니다. 자가개선 채택·되돌리기는 사용자가 고른 채택 모드를 표현하는

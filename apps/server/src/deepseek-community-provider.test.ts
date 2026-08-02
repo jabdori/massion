@@ -591,6 +591,7 @@ describe("DeepSeek 무료 커뮤니티 Provider 제품 연결", () => {
     const approved = await batches.approveRecommendation(context, {
       commandId: "deepseek-dynamic-approve",
       recommendationId: recommendation.recommendationId,
+      recommendationChecksum: recommendation.checksum,
       governanceDecisionId: "deepseek-dynamic-decision",
     });
     const limited = await batches.createBatch(context, {

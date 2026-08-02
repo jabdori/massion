@@ -90,6 +90,63 @@ describe("Governance Gate", () => {
     expect(result.permit?.approval_id).toBe(required.approvalId);
   });
 
+  it("모델 추천 승인을 recommendation checksum·resource에 결합해 Permit을 한 번 소비한다", async () => {
+    const governed = {
+      commandId: "optimization-recommendation-approve",
+      action: "model.optimization.approve",
+      resource: {
+        type: "OptimizationRecommendation",
+        id: "recommendation-1",
+        attributes: { recommendationChecksum: "a".repeat(64) },
+      },
+      environment: "local",
+      riskClass: "model-optimization",
+      external: false,
+      executionId: "optimization-recommendation:recommendation-1",
+    } as const;
+    let required: GovernanceApprovalRequiredError | undefined;
+    try {
+      await gate.authorize(context, governed);
+    } catch (error) {
+      if (error instanceof GovernanceApprovalRequiredError) required = error;
+      else throw error;
+    }
+    if (!required) throw new Error("모델 추천 승인 요청이 없습니다");
+    await approvals.vote(context, {
+      commandId: "optimization-recommendation-vote",
+      approvalId: required.approvalId,
+      expectedRevision: 1,
+      vote: "approve",
+      reason: "검증된 모델 추천입니다",
+    });
+
+    const authorized = await gate.authorize(context, { ...governed, approvalId: required.approvalId });
+    const replayed = await gate.authorize(context, { ...governed, approvalId: required.approvalId });
+    expect(replayed.permit).toEqual(authorized.permit);
+    const [permits] = await database.query<[Array<{ approval_id: string }>]>(
+      "SELECT approval_id FROM governance_execution_permit WHERE organization_id = $organization_id AND approval_id = $approval_id;",
+      { organization_id: context.organizationId, approval_id: required.approvalId },
+    );
+    expect(permits).toEqual([{ approval_id: required.approvalId }]);
+    await expect(
+      gate.authorize(context, {
+        ...governed,
+        resource: {
+          ...governed.resource,
+          attributes: { recommendationChecksum: "b".repeat(64) },
+        },
+        approvalId: required.approvalId,
+      }),
+    ).rejects.toThrow("request hash");
+    await expect(
+      gate.authorize(context, {
+        ...governed,
+        resource: { ...governed.resource, id: "recommendation-2" },
+        approvalId: required.approvalId,
+      }),
+    ).rejects.toThrow("request hash");
+  });
+
   it("구독 Runtime 승인만 명시적인 재개 대상으로 기록한다", async () => {
     let required: GovernanceApprovalRequiredError | undefined;
     try {

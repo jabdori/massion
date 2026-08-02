@@ -139,6 +139,9 @@ export class GovernanceGate {
           policyVersionId: decision.policyVersionId,
           ...(input.resource.revision === undefined ? {} : { resourceRevision: input.resource.revision }),
           executionId: input.executionId,
+          expectedAction: input.action,
+          expectedResourceType: input.resource.type,
+          expectedResourceId: input.resource.id,
         },
         executor,
       );

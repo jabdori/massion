@@ -16,6 +16,7 @@ import {
   isOptimizationRoleKey,
   type EvaluationPolicy,
   type EvaluationReceipt,
+  type ModelRecommendationRecord,
   type ModelOptimizationStore,
   type OptimizationBatchService,
   type OptimizationModelProfile,
@@ -115,6 +116,7 @@ export interface ApplicationDomainDependencies {
       | "completeEvaluation"
       | "configurePolicy"
       | "recommend"
+      | "listRecommendations"
     >;
     readonly batches: Pick<
       OptimizationBatchService,
@@ -2638,13 +2640,57 @@ function registerOptimization(registry: ApplicationCommandRegistry, dependencies
     requiredScopes: ["optimization:write"],
     allowedRoles: ["owner", "admin"],
     recovery: "replay-domain",
-    validate: (value) =>
-      payload(value, ["recommendationId", "governanceDecisionId"], ["recommendationId", "governanceDecisionId"]),
+    validate: (value) => payload(value, ["recommendationId", "approvalId"], ["recommendationId"]),
+    idempotencyPayload: (value) => Object.fromEntries(Object.entries(value).filter(([key]) => key !== "approvalId")),
+    resumeAwaitingApproval: (value) => value.approvalId !== undefined,
     async handle(context, command, value) {
+      const recommendationId = string(value.recommendationId, "recommendationId");
+      const recommendations = (await optimization.evaluations.listRecommendations(context)).filter(
+        (recommendation: ModelRecommendationRecord) => recommendation.recommendationId === recommendationId,
+      );
+      if (recommendations.length !== 1 || recommendations[0]?.organizationId !== context.organizationId) {
+        throw new Error("현재 tenant의 모델 추천을 정확히 하나 찾을 수 없습니다");
+      }
+      if (recommendations[0].status !== "pending-approval") {
+        throw new Error("pending-approval 상태가 아닌 모델 추천의 새 승인 절차는 허용되지 않습니다");
+      }
+      if (!dependencies.governanceGate) throw new Error("모델 추천 승인 Governance Gate가 구성되지 않았습니다");
+      let authorization: Awaited<ReturnType<GovernanceGate["authorize"]>>;
+      try {
+        authorization = await dependencies.governanceGate.authorize(context, {
+          commandId: `${command.commandId}:governance`,
+          action: "model.optimization.approve",
+          resource: {
+            type: "OptimizationRecommendation",
+            id: recommendationId,
+            attributes: { recommendationChecksum: recommendations[0].checksum },
+          },
+          environment: "local",
+          riskClass: "model-optimization",
+          external: false,
+          executionId: `optimization-recommendation:${recommendationId}`,
+          approvalPreview: {
+            kind: "provider",
+            title: "모델 최적화 추천 승인",
+            reason: "검증된 평가 결과에 따라 활성 모델 선택 계보를 변경합니다.",
+          },
+          ...(value.approvalId === undefined ? {} : { approvalId: string(value.approvalId, "approvalId") }),
+        });
+      } catch (error) {
+        if (error instanceof GovernanceApprovalRequiredError) {
+          return result(command, {
+            outcome: "awaiting-approval",
+            resource: { type: "OptimizationRecommendation", id: recommendationId },
+            data: { decisionId: error.decisionId, approvalId: error.approvalId },
+          });
+        }
+        throw error;
+      }
       const approved = await optimization.batches.approveRecommendation(context, {
         commandId: command.commandId,
-        recommendationId: string(value.recommendationId, "recommendationId"),
-        governanceDecisionId: string(value.governanceDecisionId, "governanceDecisionId"),
+        recommendationId,
+        recommendationChecksum: recommendations[0].checksum,
+        governanceDecisionId: authorization.decision.decisionId,
       });
       return result(command, {
         resource: { type: "OptimizationRecommendation", id: approved.recommendationId },

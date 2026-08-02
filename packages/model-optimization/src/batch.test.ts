@@ -34,6 +34,7 @@ describe("모델 최적화 batch lifecycle", () => {
     const approved = await batches.approveRecommendation(context, {
       commandId: "approve-1",
       recommendationId: "recommendation-1",
+      recommendationChecksum: "a".repeat(64),
       governanceDecisionId: "decision-1",
     });
     expect(approved.status).toBe("approved");
@@ -66,6 +67,49 @@ describe("모델 최적화 batch lifecycle", () => {
       batchId: candidate.batchId,
       status: "active",
     });
+  });
+
+  it("이미 승인된 추천은 동일 Governance decision 계보만 재시도한다", async () => {
+    await database.query(
+      "CREATE optimization_recommendation CONTENT { recommendation_id: 'recommendation-lineage', organization_id: $organization_id, role_key: 'assurance', policy_version_id: 'policy-1', primary_model_profile_id: 'profile-1', fallback_model_profile_ids: [], excluded_json: '[]', receipt_ids: [], status: 'pending-approval', checksum: $checksum, command_id: 'recommendation-lineage-command', request_hash: $request_hash, created_by_user_id: $user_id, created_at: time::now() };",
+      {
+        organization_id: context.organizationId,
+        checksum: "a".repeat(64),
+        request_hash: "b".repeat(64),
+        user_id: context.userId,
+      },
+    );
+
+    await expect(
+      batches.approveRecommendation(context, {
+        commandId: "approve-lineage-stale",
+        recommendationId: "recommendation-lineage",
+        recommendationChecksum: "c".repeat(64),
+        governanceDecisionId: "decision-lineage",
+      }),
+    ).rejects.toThrow("checksum precondition");
+    const approved = await batches.approveRecommendation(context, {
+      commandId: "approve-lineage-first",
+      recommendationId: "recommendation-lineage",
+      recommendationChecksum: "a".repeat(64),
+      governanceDecisionId: "decision-lineage",
+    });
+    await expect(
+      batches.approveRecommendation(context, {
+        commandId: "approve-lineage-replay",
+        recommendationId: "recommendation-lineage",
+        recommendationChecksum: "a".repeat(64),
+        governanceDecisionId: "decision-lineage",
+      }),
+    ).resolves.toEqual(approved);
+    await expect(
+      batches.approveRecommendation(context, {
+        commandId: "approve-lineage-forged",
+        recommendationId: "recommendation-lineage",
+        recommendationChecksum: "a".repeat(64),
+        governanceDecisionId: "decision-forged",
+      }),
+    ).rejects.toThrow("Governance decision 계보");
   });
 
   it("같은 role의 세 번째 batch도 transaction 안에서 가장 큰 version 다음에 생성한다", async () => {

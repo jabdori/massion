@@ -24,6 +24,7 @@ interface RecommendationRecord {
   readonly excluded_json: string;
   readonly receipt_ids: readonly string[];
   readonly checksum: string;
+  readonly governance_decision_id?: string;
 }
 
 interface BatchRecord {
@@ -143,6 +144,7 @@ function observationView(record: ObservationRecord): OptimizationObservation {
 export interface ApproveRecommendationInput {
   readonly commandId: string;
   readonly recommendationId: string;
+  readonly recommendationChecksum: string;
   readonly governanceDecisionId: string;
 }
 
@@ -192,7 +194,7 @@ export class OptimizationBatchService {
     input: ApproveRecommendationInput,
   ): Promise<ModelRecommendationRecord> {
     await this.organizations.verifyTenantContext(context);
-    if (!input.commandId || !input.recommendationId || !input.governanceDecisionId)
+    if (!input.commandId || !input.recommendationId || !input.recommendationChecksum || !input.governanceDecisionId)
       throw new Error("추천 승인 입력이 유효하지 않습니다");
     return await this.database.transaction(async (tx) => {
       const [records] = await tx.query<[RecommendationRecord[]]>(
@@ -201,8 +203,17 @@ export class OptimizationBatchService {
       );
       const recommendation = records[0];
       if (!recommendation) throw new Error("모델 추천을 찾을 수 없습니다");
+      if (recommendation.checksum !== input.recommendationChecksum) {
+        throw new Error("모델 추천 checksum precondition이 일치하지 않습니다");
+      }
       if (recommendation.status === "rejected" || recommendation.status === "superseded")
         throw new Error("종료된 모델 추천은 승인할 수 없습니다");
+      if (
+        recommendation.status === "approved" &&
+        recommendation.governance_decision_id !== input.governanceDecisionId
+      ) {
+        throw new Error("이미 승인된 모델 추천의 Governance decision 계보가 일치하지 않습니다");
+      }
       if (recommendation.status === "pending-approval") {
         await tx.query(
           "UPDATE optimization_recommendation SET status = 'approved', governance_decision_id = $decision_id WHERE organization_id = $organization_id AND recommendation_id = $recommendation_id;",
