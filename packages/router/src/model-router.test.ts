@@ -278,6 +278,65 @@ describe("Model Route simulation과 reservation", () => {
     expect(reserved.attempt.status).toBe("reserved");
   });
 
+  it("required execution kind는 direct model을 agent runtime 후보로 선택하지 않는다", async () => {
+    const created = await route();
+    const request = { routeName: created.name, estimatedTokens: 100, estimatedCostMicros: 1_000 };
+
+    await expect(router.simulate(context, { ...request, requiredExecutionKind: "model" })).resolves.toMatchObject({
+      status: "selected",
+      profile: { model_profile_id: profile.model_profile_id },
+    });
+    await expect(
+      router.simulate(context, { ...request, requiredExecutionKind: "agent-runtime" }),
+    ).resolves.toMatchObject({ status: "blocked_model_unavailable" });
+  });
+
+  it("구독 connector의 execution kind를 양방향으로 필터링한다", async () => {
+    await database.query(
+      `UPDATE provider_credential SET status = 'disabled' WHERE organization_id = $organization_id;
+       CREATE subscription_connector CONTENT {
+         connector_id: 'agent-runtime-only', organization_id: $organization_id, owner_user_id: $owner_user_id,
+         location: 'edge', trust_origin: 'edge-device', execution_kind: 'agent-runtime',
+         protocol: 'massion-connector-v1', version: '1.0.0', public_key: 'fixture',
+         capabilities: ['workspace-tools'], status: 'ready', created_at: time::now(), updated_at: time::now()
+       };`,
+      { organization_id: context.organizationId, owner_user_id: context.userId },
+    );
+    const account = await accounts.register(context, {
+      commandId: crypto.randomUUID(),
+      providerId: "openai",
+      alias: "Agent Runtime",
+      connectorId: "agent-runtime-only",
+      profileLocator: "agent-runtime-profile",
+      billingKind: "subscription",
+      requiredExecutionKind: "agent-runtime",
+      requiredCapability: "workspace-tools",
+    });
+    await providers.addConnectorCredential(context, {
+      commandId: crypto.randomUUID(),
+      providerId: "openai",
+      endpointId: endpoint.endpoint_id,
+      label: "agent-runtime-credential",
+      accountId: account.account_id,
+      connectorId: account.connector_id,
+      scope: "personal",
+      priority: 1,
+      weight: 1,
+    });
+    const created = await route();
+    const request = { routeName: created.name, estimatedTokens: 100, estimatedCostMicros: 1_000 };
+
+    await expect(
+      router.simulate(context, { ...request, requiredExecutionKind: "agent-runtime" }),
+    ).resolves.toMatchObject({
+      status: "selected",
+      credential: { subscription_connector_id: "agent-runtime-only" },
+    });
+    await expect(router.simulate(context, { ...request, requiredExecutionKind: "model" })).resolves.toMatchObject({
+      status: "blocked_model_unavailable",
+    });
+  });
+
   it("reservation은 실행과 최적화 batch 계보를 route attempt에 저장한다", async () => {
     const created = await route();
     await database.query(

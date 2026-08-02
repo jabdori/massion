@@ -19,7 +19,7 @@ import type {
   SubscriptionScope,
 } from "@massion/subscriptions";
 
-import type { StructuredOutputSpec, WorkspaceAccess } from "./contracts.js";
+import type { ExecutionKind, StructuredOutputSpec, WorkspaceAccess } from "./contracts.js";
 import type { RuntimeExecutionStore } from "./execution-store.js";
 import type { SubscriptionAgentResult } from "./subscriptions/agent-runtime.js";
 import { SubscriptionExecutionReceiptCoordinator } from "./subscriptions/execution-receipt.js";
@@ -56,6 +56,7 @@ export interface AcquireModelInput {
   readonly workspaceCapability?: string;
   readonly workspaceRoot?: string;
   readonly instruction?: string;
+  readonly requiredExecutionKind?: ExecutionKind;
   readonly routeName: string;
   readonly estimatedTokens: number;
   readonly estimatedCostMicros: number;
@@ -365,6 +366,7 @@ export class MassionModelFactory implements RoutedModelFactory {
           : {}),
         ...(input.stickyKey ? { stickyKey: input.stickyKey } : {}),
         ...(input.fallbackFromAttemptId ? { fallbackFromAttemptId: input.fallbackFromAttemptId } : {}),
+        ...(input.requiredExecutionKind ? { requiredExecutionKind: input.requiredExecutionKind } : {}),
       })
       .catch((error: unknown) => {
         if (error instanceof Error && error.message.includes("Model Route를 찾을 수 없습니다")) {

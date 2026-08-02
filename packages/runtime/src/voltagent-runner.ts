@@ -51,6 +51,7 @@ const MINIMUM_SESSION_RENEW_DELAY_MS = 1_000;
 const MODEL_TOTAL_TIMEOUT_MS = 120_000;
 const MODEL_STREAM_CHUNK_TIMEOUT_MS = 30_000;
 const AGENT_RUNTIME_TOTAL_TIMEOUT_MS = 300_000;
+const MODEL_ACQUIRE_TIMEOUT_MS = 30_000;
 
 export interface SessionRenewalClock {
   now(): number;
@@ -61,6 +62,8 @@ export interface VoltAgentRunnerOptions {
   readonly sessionRenewalClock?: SessionRenewalClock;
   /** 테스트에서만 짧게 검증할 수 있는 Provider 응답 상한입니다. 운영 기본값은 300초입니다. */
   readonly agentRuntimeTimeoutMs?: number;
+  /** Router reservation과 Connector session 확보를 포함한 모델 임대 상한입니다. */
+  readonly modelAcquireTimeoutMs?: number;
   readonly deltaObserver?: ExecutionDeltaObserver;
   readonly subscriptionReceipts?: Pick<
     SubscriptionExecutionReceiptCoordinator,
@@ -439,9 +442,10 @@ export class VoltAgentRunner implements AgentRunner, StructuredAgentRunner {
         for (let attempt = 0; attempt < MAX_FALLBACKS; attempt += 1) {
           let lease: RoutedModelLease | undefined;
           try {
-            lease = await this.models.acquire(
+            lease = await this.acquireModel(
               context,
               await this.acquireInput(context, input, executionId, attempt, fallbackFromAttemptId, fallbackFromLeaseId),
+              active.controller.signal,
             );
             state = await this.recordModelRouteSelected(context, executionId, input.modelRoute, lease);
             if (lease.kind === "agent-runtime") {
@@ -751,7 +755,7 @@ export class VoltAgentRunner implements AgentRunner, StructuredAgentRunner {
     for (let attempt = 0; attempt < MAX_FALLBACKS; attempt += 1) {
       let lease: RoutedModelLease | undefined;
       try {
-        lease = await this.models.acquire(
+        lease = await this.acquireModel(
           context,
           await this.acquireInput(
             context,
@@ -761,6 +765,7 @@ export class VoltAgentRunner implements AgentRunner, StructuredAgentRunner {
             fallbackFromAttemptId,
             fallbackFromLeaseId,
           ),
+          abortSignal,
         );
         await this.recordModelRouteSelected(context, running.execution_id, input.modelRoute, lease);
         if (abortSignal.aborted) {
@@ -869,7 +874,7 @@ export class VoltAgentRunner implements AgentRunner, StructuredAgentRunner {
     for (let attempt = 0; attempt < MAX_FALLBACKS; attempt += 1) {
       let lease: RoutedModelLease | undefined;
       try {
-        lease = await this.models.acquire(
+        lease = await this.acquireModel(
           context,
           await this.acquireInput(
             context,
@@ -879,6 +884,7 @@ export class VoltAgentRunner implements AgentRunner, StructuredAgentRunner {
             fallbackFromAttemptId,
             fallbackFromLeaseId,
           ),
+          abortSignal,
         );
         await this.recordModelRouteSelected(context, running.execution_id, input.modelRoute, lease);
         if (abortSignal.aborted) {
@@ -1450,6 +1456,86 @@ export class VoltAgentRunner implements AgentRunner, StructuredAgentRunner {
     return `${executionId}:subscription:${lease.attemptId}:settlement:router`;
   }
 
+  private async acquireModel(
+    context: TenantContext,
+    input: AcquireModelInput,
+    parentSignal: AbortSignal,
+  ): Promise<RoutedModelLease> {
+    const timeoutSignal = AbortSignal.timeout(this.options.modelAcquireTimeoutMs ?? MODEL_ACQUIRE_TIMEOUT_MS);
+    const signal = AbortSignal.any([parentSignal, timeoutSignal]);
+    if (signal.aborted) throw signal.reason;
+    const pending = this.models.acquire(context, input);
+    let onAbort: (() => void) | undefined;
+    let acquiredFailureSignal: FailureSignal | undefined;
+    const aborted = new Promise<never>((_resolve, reject) => {
+      onAbort = () => {
+        acquiredFailureSignal = parentSignal.aborted
+          ? { kind: "cancelled" }
+          : timeoutSignal.aborted
+            ? { kind: "timeout" }
+            : failureSignal(signal.reason);
+        reject(signal.reason);
+      };
+      signal.addEventListener("abort", onAbort, { once: true });
+    });
+    const capturedFailureSignal = () =>
+      acquiredFailureSignal ?? this.acquireFailureSignal(parentSignal, timeoutSignal, signal.reason);
+    let acquiredLease: RoutedModelLease | undefined;
+    try {
+      const lease = await Promise.race([pending, aborted]);
+      acquiredLease = lease;
+      if (!signal.aborted) return lease;
+      this.settleLateAcquire(input, lease, capturedFailureSignal());
+      throw signal.reason;
+    } catch (error) {
+      if (!signal.aborted) throw error;
+      if (!acquiredLease) {
+        void pending
+          .then((lease) => {
+            this.settleLateAcquire(input, lease, capturedFailureSignal());
+          })
+          .catch(() => {
+            process.emitWarning("기한 종료 후 Model acquire가 실패했습니다", {
+              code: "MASSION_LATE_MODEL_ACQUIRE_FAILED",
+            });
+          });
+      }
+      throw signal.reason;
+    } finally {
+      if (onAbort) signal.removeEventListener("abort", onAbort);
+    }
+  }
+
+  private acquireFailureSignal(parentSignal: AbortSignal, timeoutSignal: AbortSignal, reason: unknown): FailureSignal {
+    if (parentSignal.aborted) return { kind: "cancelled" };
+    if (timeoutSignal.aborted) return { kind: "timeout" };
+    return failureSignal(reason);
+  }
+
+  private settleLateAcquire(input: AcquireModelInput, lease: RoutedModelLease, signal: FailureSignal): void {
+    void (async () => {
+      const commandId = `${input.commandId}:late-acquire-fail`;
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        try {
+          await lease.fail({
+            commandId,
+            signal,
+            emittedTokens: 0,
+            sideEffectsStarted: false,
+            inputTokens: 0,
+            outputTokens: 0,
+          });
+          return;
+        } catch {
+          // 같은 command ID의 정산은 멱등이므로 한 번 재시도합니다.
+        }
+      }
+      process.emitWarning("늦게 반환된 Model lease 정산에 실패했습니다", {
+        code: "MASSION_LATE_MODEL_LEASE_SETTLEMENT_FAILED",
+      });
+    })();
+  }
+
   private async acquireInput(
     context: TenantContext,
     input: AgentExecutionInput,
@@ -1475,6 +1561,7 @@ export class VoltAgentRunner implements AgentRunner, StructuredAgentRunner {
       ...(resolved?.workspaceCapability ? { workspaceCapability: resolved.workspaceCapability } : {}),
       ...(resolved?.workspaceRoot ? { workspaceRoot: resolved.workspaceRoot } : {}),
       ...(resolved?.instruction ? { instruction: resolved.instruction } : {}),
+      ...(input.requiredExecutionKind ? { requiredExecutionKind: input.requiredExecutionKind } : {}),
       routeName: input.modelRoute,
       estimatedTokens: input.estimatedTokens,
       estimatedCostMicros: input.estimatedCostMicros,

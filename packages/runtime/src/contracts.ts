@@ -12,12 +12,14 @@ export type RuntimeExecutionStatus =
   | "blocked_model_unavailable";
 
 export type WorkspaceAccess = "isolated" | "read-only" | "workspace-write";
+export type ExecutionKind = "model" | "agent-runtime";
 
 export interface AgentExecutionInput {
   readonly commandId: string;
   readonly workId: string;
   readonly taskId?: string;
   readonly workspaceAccess?: WorkspaceAccess;
+  readonly requiredExecutionKind?: ExecutionKind;
   readonly agentHandle: string;
   readonly modelRoute: string;
   readonly correlationId: string;

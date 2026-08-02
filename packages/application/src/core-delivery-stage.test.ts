@@ -1005,11 +1005,19 @@ describe("CoreDeliveryStage", () => {
             executionId: "execution-1",
             status: "succeeded",
             output: { answer: 42 },
-            executionEvidence: {
-              items: [],
-              checksum: "e".repeat(64),
-              byteCount: 0,
-            },
+            executionEvidence: normalizeCodexExecutionEvidence(
+              [
+                {
+                  id: "command-delivery-1",
+                  type: "command_execution",
+                  command: "pnpm test",
+                  aggregated_output: "Tests passed",
+                  exit_code: 0,
+                  status: "completed",
+                },
+              ],
+              "/workspace",
+            ),
           };
         },
         recover: async () => {
@@ -1108,6 +1116,68 @@ describe("CoreDeliveryStage", () => {
         suppressEvidenceMessage: true,
       }),
     ]);
+  });
+
+  it("workspace delivery는 agent runtime과 실행 근거 없이는 완료하지 않는다", async () => {
+    let taskStatus = "ready";
+    let revision = 1;
+    const runtimeInputs: unknown[] = [];
+    const artifactInputs: unknown[] = [];
+    const task = () => ({
+      task_id: "task-workspace-evidence",
+      title: "코드 수정",
+      objective: "작업공간의 오류를 수정한다",
+      acceptance_criteria_json: "[]",
+      status: taskStatus,
+      required_capabilities: ["workspace-analysis"],
+      recommended_agent_handles: ["workspace-agent"],
+      revision,
+    });
+    const stage = deliveryStage({
+      works: {
+        listTasks: async () => [task()],
+        listAssignments: async () => [{ task_id: task().task_id, agent_handle: "workspace-agent", status: "assigned" }],
+        getWork: async () => ({ revision, status: "running", workspace_id: "workspace-evidence" }),
+        transitionTask: async (_context: unknown, value: { target: string }) => {
+          taskStatus = value.target;
+          revision += 1;
+          return { work: { revision }, task: task() };
+        },
+        recoverWork: async () => ({ request: { text: "코드를 수정해 주세요" }, messages: [], artifactVersions: [] }),
+        createArtifactVersion: async (_context: unknown, value: unknown) => {
+          artifactInputs.push(value);
+          throw new Error("근거 없는 workspace 실행은 Artifact를 만들면 안 됩니다");
+        },
+      },
+      runner: {
+        execute: async (_context: unknown, value: unknown) => {
+          runtimeInputs.push(value);
+          return {
+            executionId: "execution-workspace-evidence",
+            status: "succeeded",
+            output: "완료했습니다",
+            executionEvidence: { items: [], checksum: "e".repeat(64), byteCount: 0 },
+          };
+        },
+        recover: async () => {
+          throw new Error("not used");
+        },
+        cancel: async () => undefined,
+      },
+      runtimeExecutions: { findExecutionIdByCommand: async () => undefined },
+      workspaces: { get: async () => ({ status: "active", trust: "trusted" }) },
+      evidence: { materializeActive: async () => [] },
+    } as never);
+
+    await expect(stage.execute(context, input)).resolves.toMatchObject({
+      outcome: "blocked",
+      reason: "delivery-execution-evidence-missing",
+    });
+    expect(runtimeInputs).toEqual([
+      expect.objectContaining({ workspaceAccess: "workspace-write", requiredExecutionKind: "agent-runtime" }),
+    ]);
+    expect(artifactInputs).toEqual([]);
+    expect(taskStatus).toBe("running");
   });
 
   it("동적 Staffing이 만든 활성 Assignment를 덮어쓰지 않고 같은 Agent로 실행·산출한다", async () => {

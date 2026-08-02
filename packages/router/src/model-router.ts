@@ -7,6 +7,7 @@ import {
   subscriptionProviderApprovalModes,
   type SubscriptionAccountService,
   type ConnectorLocation,
+  type ConnectorExecutionKind,
   type ConnectorTrustOrigin,
   type SubscriptionPolicyStore,
   type SubscriptionQuotaService,
@@ -297,6 +298,7 @@ export interface RouteRequest {
   readonly preferredModelProfileIds?: readonly string[];
   readonly stickyKey?: string;
   readonly fallbackFromAttemptId?: string;
+  readonly requiredExecutionKind?: ConnectorExecutionKind;
 }
 
 export interface ReserveRouteInput extends RouteRequest {
@@ -1125,6 +1127,7 @@ export class ModelRouter {
       ...(input.preferredModelProfileIds ? { preferredModelProfileIds: input.preferredModelProfileIds } : {}),
       ...(stickyKeyHash ? { stickyKeyHash } : {}),
       ...(input.fallbackFromAttemptId ? { fallbackFromAttemptId: input.fallbackFromAttemptId } : {}),
+      ...(input.requiredExecutionKind ? { requiredExecutionKind: input.requiredExecutionKind } : {}),
     });
     return await this.database.transaction(async (tx) => {
       await this.organizations.verifyTenantContext(context, undefined, tx);
@@ -1464,6 +1467,13 @@ export class ModelRouter {
     excludedAttemptKeys?: ReadonlySet<string>,
   ): Promise<RouteSimulation> {
     const route = await this.routeByName(executor, context.organizationId, request.routeName);
+    if (
+      request.requiredExecutionKind !== undefined &&
+      request.requiredExecutionKind !== "model" &&
+      request.requiredExecutionKind !== "agent-runtime"
+    ) {
+      throw new Error("요구 실행 종류가 유효하지 않습니다");
+    }
     const budgetFailures: string[] = [];
     if (request.estimatedTokens > route.max_context_tokens) budgetFailures.push("context token 한도 초과");
     if (request.estimatedCostMicros > route.request_budget_micros) budgetFailures.push("요청 예산 초과");
@@ -1606,6 +1616,10 @@ export class ModelRouter {
       const now = Date.now();
       const eligible: CredentialSelectionView[] = [];
       for (const credential of credentials) {
+        if (request.requiredExecutionKind === "agent-runtime" && !isSubscriptionCredential(credential)) {
+          excluded.push(`${profile.model_id}/${credential.label}: agent runtime 실행 표면 없음`);
+          continue;
+        }
         if (excludedAttemptKeys?.has(`${profile.model_profile_id}:${credential.credential_id}`)) {
           excluded.push(`${profile.model_id}/${credential.label}: 이전 실패 Model/Credential 조합 제외`);
           continue;
@@ -1638,14 +1652,26 @@ export class ModelRouter {
             if (account.provider_id !== credential.provider_id) throw new Error("Provider binding 불일치");
             if (account.connector_id !== connectorId) throw new Error("Connector binding 불일치");
             const [connectors] = await executor.query<
-              [Array<{ readonly location: ConnectorLocation; readonly trust_origin?: ConnectorTrustOrigin }>]
+              [
+                Array<{
+                  readonly location: ConnectorLocation;
+                  readonly trust_origin?: ConnectorTrustOrigin;
+                  readonly execution_kind: ConnectorExecutionKind;
+                }>,
+              ]
             >(
-              `SELECT location, trust_origin FROM subscription_connector
+              `SELECT location, trust_origin, execution_kind FROM subscription_connector
                WHERE organization_id = $organization_id AND connector_id = $connector_id LIMIT 1;`,
               { organization_id: context.organizationId, connector_id: connectorId },
             );
             const connector = connectors[0];
             if (!connector) throw new Error("Connector 연결 표면을 찾을 수 없습니다");
+            if (request.requiredExecutionKind && connector.execution_kind !== request.requiredExecutionKind) {
+              excluded.push(
+                `${profile.model_id}/${credential.label}: ${request.requiredExecutionKind} 실행 종류 불일치`,
+              );
+              continue;
+            }
             if (!(
               (connector.location === "server" && connector.trust_origin === "server-managed") ||
               (connector.location === "edge" && connector.trust_origin === "edge-device")

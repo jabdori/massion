@@ -1,7 +1,7 @@
 import type { MaterializedEvidencePrompt } from "@massion/evidence";
 import { isDeepStrictEqual } from "node:util";
 import type { TenantContext } from "@massion/identity";
-import type { AgentRunner, RuntimeExecutionStore } from "@massion/runtime";
+import { executionEvidenceIsSafe, type AgentRunner, type RuntimeExecutionStore } from "@massion/runtime";
 import { isSoftwareEngineeringTask } from "@massion/software-engineering";
 import type { QueryExecutor } from "@massion/storage";
 import type { WorkRecoveryBundle, WorkService, WorkTask } from "@massion/work";
@@ -531,6 +531,7 @@ export class CoreDeliveryStage implements CoreWorkStageExecutor {
           workId: input.workId,
           taskId: task.task_id,
           ...(initial.workspace_id === undefined ? {} : { workspaceAccess: "workspace-write" as const }),
+          ...(initial.workspace_id === undefined ? {} : { requiredExecutionKind: "agent-runtime" as const }),
           agentHandle,
           modelRoute: "delivery-quality",
           correlationId: input.correlationId,
@@ -546,6 +547,9 @@ export class CoreDeliveryStage implements CoreWorkStageExecutor {
       this.throwIfCancelled(input);
       if (execution.status === "blocked_model_unavailable") return { outcome: "blocked", reason: "model-unavailable" };
       if (execution.status !== "succeeded") return { outcome: "blocked", reason: `delivery-${execution.status}` };
+      if (initial.workspace_id !== undefined && !executionEvidenceIsSafe(execution.executionEvidence)) {
+        return { outcome: "blocked", reason: "delivery-execution-evidence-missing" };
+      }
       work = await this.dependencies.works.getWork(context, input.workId);
       this.throwIfCancelled(input);
       const recovered = await this.dependencies.works.recoverWork(context, input.workId);

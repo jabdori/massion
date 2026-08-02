@@ -730,6 +730,140 @@ describe("VoltAgent AgentRunner", () => {
     expect(stages).toEqual(["acquired", "started", "terminal", "settled"]);
   });
 
+  it("Model acquire timeout은 실행을 종료하고 늦게 반환된 lease를 정산한다", async () => {
+    let resolveLease: ((value: RoutedModelLease) => void) | undefined;
+    const pending = new Promise<RoutedModelLease>((resolve) => {
+      resolveLease = resolve;
+    });
+    const routed = lease(new MockLanguageModelV3({ doGenerate: async () => ({}) as never }));
+    const runner = new VoltAgentRunner(
+      voltAgent,
+      store,
+      { acquire: vi.fn(() => pending) },
+      registry,
+      undefined,
+      undefined,
+      { modelAcquireTimeoutMs: 1 },
+    );
+
+    const result = await runner.execute(context, input());
+
+    expect(result).toMatchObject({ status: "failed", error: { category: "timeout", retryable: true } });
+    expect(runner.activeCount).toBe(0);
+    resolveLease?.(routed);
+    await vi.waitFor(() => {
+      expect(routed.fail).toHaveBeenCalledWith(
+        expect.objectContaining({ signal: { kind: "timeout" }, emittedTokens: 0, sideEffectsStarted: false }),
+      );
+    });
+  });
+
+  it("구조화 실행과 stream도 같은 Model acquire timeout으로 종료한다", async () => {
+    const structuredLease = lease(new MockLanguageModelV3({ doGenerate: async () => ({}) as never }));
+    const streamLease = lease(new MockLanguageModelV3({ doGenerate: async () => ({}) as never }));
+    let resolveStructured!: (value: RoutedModelLease) => void;
+    let resolveStream!: (value: RoutedModelLease) => void;
+    const runner = new VoltAgentRunner(
+      voltAgent,
+      store,
+      {
+        acquire: vi
+          .fn()
+          .mockImplementationOnce(
+            async () => await new Promise<RoutedModelLease>((resolve) => (resolveStructured = resolve)),
+          )
+          .mockImplementationOnce(
+            async () => await new Promise<RoutedModelLease>((resolve) => (resolveStream = resolve)),
+          ),
+      },
+      registry,
+      undefined,
+      undefined,
+      { modelAcquireTimeoutMs: 1 },
+    );
+
+    const structured = await runner.executeStructured(context, input(), {
+      name: "result",
+      description: "result",
+      jsonSchema: { type: "object" },
+    });
+    const events = [];
+    for await (const event of runner.stream(context, input())) events.push(event);
+
+    expect(structured).toMatchObject({ status: "failed", error: { category: "timeout" } });
+    expect(events.at(-1)?.type).toBe("execution_failed");
+    resolveStructured(structuredLease);
+    resolveStream(streamLease);
+    await vi.waitFor(() => {
+      expect(structuredLease.fail).toHaveBeenCalledWith(expect.objectContaining({ signal: { kind: "timeout" } }));
+      expect(streamLease.fail).toHaveBeenCalledWith(expect.objectContaining({ signal: { kind: "timeout" } }));
+    });
+  });
+
+  it("늦게 반환된 lease 정산 실패는 재시도 후 운영 경고를 남긴다", async () => {
+    let resolveLease!: (value: RoutedModelLease) => void;
+    const routed = lease(new MockLanguageModelV3({ doGenerate: async () => ({}) as never }));
+    routed.fail = vi.fn().mockRejectedValue(new Error("정산 실패"));
+    const warning = vi.spyOn(process, "emitWarning").mockImplementation(() => undefined);
+    const runner = new VoltAgentRunner(
+      voltAgent,
+      store,
+      { acquire: vi.fn(async () => await new Promise<RoutedModelLease>((resolve) => (resolveLease = resolve))) },
+      registry,
+      undefined,
+      undefined,
+      { modelAcquireTimeoutMs: 1 },
+    );
+
+    await expect(runner.execute(context, input())).resolves.toMatchObject({ status: "failed" });
+    resolveLease(routed);
+
+    await vi.waitFor(() => {
+      expect(routed.fail).toHaveBeenCalledTimes(2);
+      expect(warning).toHaveBeenCalledWith(
+        "늦게 반환된 Model lease 정산에 실패했습니다",
+        expect.objectContaining({ code: "MASSION_LATE_MODEL_LEASE_SETTLEMENT_FAILED" }),
+      );
+    });
+    warning.mockRestore();
+  });
+
+  it("Model acquire timeout 뒤 부모 취소가 와도 최초 timeout 원인을 보존한다", async () => {
+    const controller = new AbortController();
+    let resolveLease!: (value: RoutedModelLease) => void;
+    let releaseFailureTransition!: () => void;
+    const failureTransitionGate = new Promise<void>((resolve) => (releaseFailureTransition = resolve));
+    const originalTransition = store.transition.bind(store);
+    const transition = vi.spyOn(store, "transition").mockImplementation(async (tenant, value) => {
+      if (value.target === "failed") await failureTransitionGate;
+      return await originalTransition(tenant, value);
+    });
+    const routed = lease(new MockLanguageModelV3({ doGenerate: async () => ({}) as never }));
+    const runner = new VoltAgentRunner(
+      voltAgent,
+      store,
+      { acquire: vi.fn(async () => await new Promise<RoutedModelLease>((resolve) => (resolveLease = resolve))) },
+      registry,
+      undefined,
+      undefined,
+      { modelAcquireTimeoutMs: 1 },
+    );
+
+    const pendingResult = runner.execute(context, { ...input(), signal: controller.signal });
+    await vi.waitFor(() => {
+      expect(transition).toHaveBeenCalledWith(context, expect.objectContaining({ target: "failed" }));
+    });
+    controller.abort("application-run-cancelled");
+    resolveLease(routed);
+    releaseFailureTransition();
+    const result = await pendingResult;
+
+    expect(result).toMatchObject({ status: "failed", error: { category: "timeout" } });
+    await vi.waitFor(() => {
+      expect(routed.fail).toHaveBeenCalledWith(expect.objectContaining({ signal: { kind: "timeout" } }));
+    });
+  });
+
   it("Agent runtime 내부 timeout 취소 결과도 receipt 정산 뒤 interrupted로 종료한다", async () => {
     const { stages, receipts } = subscriptionReceiptFixture();
     const routed = agentLease({
@@ -1429,6 +1563,38 @@ describe("VoltAgent AgentRunner", () => {
     );
     await expect(store.getRecovery(context, result.executionId)).resolves.toMatchObject({
       execution: { status: "cancelled" },
+    });
+  });
+
+  it("Model acquire 완료와 취소가 겹치면 lease를 실행하지 않고 정산한다", async () => {
+    const controller = new AbortController();
+    const routed = agentLease({
+      outcome: "completed",
+      executionId: "provider-execution-race",
+      sessionId: "provider-session-race",
+      value: "사용되지 않음",
+    });
+    const runner = new VoltAgentRunner(
+      voltAgent,
+      store,
+      {
+        acquire: vi.fn(async () => {
+          controller.abort("application-run-cancelled");
+          return routed;
+        }),
+      },
+      registry,
+    );
+
+    const result = await runner.execute(context, { ...input(), signal: controller.signal });
+
+    expect(result.status).toBe("cancelled");
+    expect(routed.executor.execute).not.toHaveBeenCalled();
+    await vi.waitFor(() => {
+      expect(routed.fail).toHaveBeenCalledTimes(1);
+      expect(routed.fail).toHaveBeenCalledWith(
+        expect.objectContaining({ signal: { kind: "cancelled" }, sideEffectsStarted: false }),
+      );
     });
   });
 
