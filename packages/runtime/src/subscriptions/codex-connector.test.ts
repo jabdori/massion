@@ -111,6 +111,7 @@ describe("공식 Codex 구독 Connector", () => {
     });
     expect(startThread).toHaveBeenCalledWith({
       workingDirectory: "/tmp/work-policy",
+      additionalDirectories: ["/tmp/work-policy"],
       skipGitRepoCheck: true,
       sandboxMode: "workspace-write",
       approvalPolicy: "never",
@@ -151,6 +152,37 @@ describe("공식 Codex 구독 Connector", () => {
         networkAccessEnabled: true,
       }),
     );
+    expect(startThread.mock.calls[0]?.[0]).not.toHaveProperty("additionalDirectories");
+  });
+
+  it("read-only 정책은 workspace를 추가 쓰기 경로로 승격하지 않는다", async () => {
+    const run = vi.fn().mockResolvedValue({ finalResponse: "완료", items: [] });
+    const startThread = vi.fn().mockReturnValue({ id: "thread-read-only", run });
+    const connector = new CodexSubscriptionConnector(
+      { create: () => ({ startThread, resumeThread: vi.fn() }) },
+      {
+        allowedEnvironment: [],
+        threadPolicy: {
+          sandboxMode: "read-only",
+          approvalPolicy: "never",
+          networkAccessEnabled: false,
+        },
+      },
+    );
+
+    await connector.execute(context, {
+      executionId: "execution-read-only",
+      workId: "work-read-only",
+      agentHandle: "representative",
+      prompt: "읽기 전용 정책을 확인하세요",
+      workspaceRoot: "/tmp/work-read-only",
+      profileRoot: "/tmp/profile-read-only",
+      environment: {},
+      allowedTools: [],
+      disallowedTools: [],
+    });
+
+    expect(startThread.mock.calls[0]?.[0]).not.toHaveProperty("additionalDirectories");
   });
 
   it("위험한 전체 접근 sandbox와 상대 실행 파일을 거부한다", () => {
@@ -355,7 +387,14 @@ describe("공식 Codex 구독 Connector", () => {
     const resumeThread = vi.fn().mockReturnValue({ id: "thread-existing", run });
     const connector = new CodexSubscriptionConnector(
       { create: () => ({ startThread: vi.fn(), resumeThread }) },
-      { allowedEnvironment: ["PATH"] },
+      {
+        allowedEnvironment: ["PATH"],
+        threadPolicy: {
+          sandboxMode: "workspace-write",
+          approvalPolicy: "never",
+          networkAccessEnabled: false,
+        },
+      },
     );
 
     await connector.execute(context, {
@@ -371,7 +410,13 @@ describe("공식 Codex 구독 Connector", () => {
       sessionId: "thread-existing",
     });
 
-    expect(resumeThread).toHaveBeenCalledWith("thread-existing", { workingDirectory: "/tmp/work-1" });
+    expect(resumeThread).toHaveBeenCalledWith("thread-existing", {
+      workingDirectory: "/tmp/work-1",
+      additionalDirectories: ["/tmp/work-1"],
+      sandboxMode: "workspace-write",
+      approvalPolicy: "never",
+      networkAccessEnabled: false,
+    });
   });
 
   it.each([
