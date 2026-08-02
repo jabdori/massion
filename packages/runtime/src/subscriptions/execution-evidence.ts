@@ -164,7 +164,9 @@ export function executionEvidenceIsSafe(value: unknown): value is ExecutionEvide
         return false;
       const storedBytes = Buffer.byteLength(item.command) + Buffer.byteLength(item.output);
       if (
+        typeof item.byteCount !== "number" ||
         !Number.isSafeInteger(item.byteCount) ||
+        (item.truncated !== undefined && typeof item.truncated !== "boolean") ||
         item.byteCount < storedBytes ||
         (!item.truncated && item.byteCount !== storedBytes)
       )
