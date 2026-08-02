@@ -12,7 +12,14 @@ import {
   type KnowledgeIndexView,
   type KnowledgeNodeKind,
 } from "./desktop-service";
-import { fixtureDataAdapter, type ActivityView, type RoomView, type SpeakerView, type WorkView } from "./model";
+import {
+  fixtureDataAdapter,
+  type ActivityView,
+  type InboxItem,
+  type RoomView,
+  type SpeakerView,
+  type WorkView,
+} from "./model";
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -25,7 +32,54 @@ function deferred<T>() {
 }
 
 function service(overrides: Partial<DesktopService> = {}): DesktopService {
-  return { ...createFixtureDesktopService(), ...overrides };
+  const merged = { ...createFixtureDesktopService(), ...overrides };
+  if (
+    overrides.loadInbox === undefined &&
+    (overrides.initialSnapshot !== undefined || overrides.loadPendingApprovals !== undefined)
+  ) {
+    merged.loadInbox = async () => {
+      const works = merged.initialSnapshot?.works ?? [];
+      const [approvals, growth] = await Promise.all([
+        overrides.loadPendingApprovals === undefined
+          ? Promise.resolve(works.flatMap((work) => work.approvals.filter((approval) => approval.status === "pending")))
+          : merged.loadPendingApprovals(),
+        merged.loadGrowth(),
+      ]);
+      const blocked: InboxItem[] = works.flatMap((work) =>
+        work.run?.status === "blocked"
+          ? [
+              {
+                kind: "blocked" as const,
+                id: `blocked:${work.run.runId}`,
+                runId: work.run.runId,
+                workId: work.id,
+                title: work.title,
+                reason: work.run.blockedDetail ?? "실행 단계에서 오류가 발생했습니다.",
+              },
+            ]
+          : [],
+      );
+      const approvalItems: InboxItem[] = approvals.map((approval) => ({
+        kind: "approval",
+        id: approval.id,
+        approval,
+        workTitle: works.find((work) => work.id === approval.workId)?.title,
+      }));
+      const growthItems: InboxItem[] = growth.suggestions
+        .filter((suggestion) => suggestion.status === "awaiting-review")
+        .map((suggestion) => ({
+          kind: "growth",
+          id: `growth:${suggestion.suggestionId}`,
+          suggestionId: suggestion.suggestionId,
+          workId: suggestion.workId,
+          workTitle: works.find((work) => work.id === suggestion.workId)?.title,
+          title: suggestion.summary,
+          reason: suggestion.rationale,
+        }));
+      return [...blocked, ...approvalItems, ...growthItems];
+    };
+  }
+  return merged;
 }
 
 function workspaceFixture(
@@ -1720,7 +1774,11 @@ describe("AgentOS native data flow", () => {
       revision: 1,
       status: "pending",
     };
-    const decideApproval = vi.fn(async () => undefined);
+    const decideApproval = vi.fn(async () => ({
+      approvalId: approval.id,
+      status: "approved",
+      revision: approval.revision + 1,
+    }));
     render(
       <App
         service={service({
@@ -1793,6 +1851,131 @@ describe("AgentOS native data flow", () => {
     await user.click(within(panel).getByRole("button", { name: "수신함 닫기" }));
     await user.click(screen.getByRole("button", { name: "수신함, 미해결 4개" }));
     expect(await screen.findByText("CRM 고객 데이터 읽기")).toBeInTheDocument();
+  });
+
+  it("정본 Inbox는 현재 검색·필터·50개 Work 밖의 차단 실행을 Home·배지·수신함에 유지한다", async () => {
+    const user = userEvent.setup();
+    const visible = {
+      ...(fixtureDataAdapter().works[0] as WorkView),
+      id: "visible-nonmatching-work",
+      title: "현재 필터에만 보이는 Work",
+      approvals: [],
+      run: { runId: "run-visible", status: "running", stage: "delivery", leaseGeneration: 1 },
+    };
+    const loadInbox = vi.fn(async () => [
+      {
+        kind: "blocked" as const,
+        id: "blocked:run-beyond-page",
+        runId: "run-beyond-page",
+        workId: "work-beyond-page-051",
+        title: "51번째 검색 밖 차단 Work",
+        reason: "사용 가능한 모델이 없습니다.",
+      },
+    ]);
+    const fake = service({
+      initialSnapshot: { works: [visible] },
+      loadIndex: async () => [visible],
+      loadPendingApprovals: async () => [],
+      loadGrowth: async () => ({ suggestions: [], memories: [], effects: [] }),
+    });
+    (fake as DesktopService & { loadInbox: typeof loadInbox }).loadInbox = loadInbox;
+
+    render(<App service={fake} />);
+
+    expect(await screen.findByRole("button", { name: "수신함, 미해결 1개" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "홈" }));
+    expect(
+      within(await screen.findByRole("main", { name: "홈" })).getByRole("button", {
+        name: /51번째 검색 밖 차단 Work/u,
+      }),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "수신함, 미해결 1개" }));
+    expect(
+      within(await screen.findByRole("dialog", { name: "수신함" })).getByRole("button", {
+        name: "업무로 이동: 51번째 검색 밖 차단 Work",
+      }),
+    ).toBeInTheDocument();
+    expect(loadInbox).toHaveBeenCalled();
+  });
+
+  it("수신함 승인 결정은 영속 명령 후 정본을 다시 읽어 해결한 한 항목만 제거한다", async () => {
+    const user = userEvent.setup();
+    const first = {
+      id: "approval-inbox-first",
+      title: "첫 번째 승인",
+      description: "첫 항목만 해결합니다.",
+      revision: 1,
+      status: "pending",
+    };
+    const second = {
+      id: "approval-inbox-second",
+      title: "두 번째 승인",
+      description: "두 번째 항목은 남아야 합니다.",
+      revision: 1,
+      status: "pending",
+    };
+    let approvals = [first, second];
+    const loadInbox = vi.fn(async () =>
+      approvals.map((approval) => ({ kind: "approval" as const, id: approval.id, approval })),
+    );
+    const decideApproval = vi.fn(async (approval: typeof first) => {
+      approvals = approvals.filter((candidate) => candidate.id !== approval.id);
+      return { approvalId: approval.id, status: "approved", revision: approval.revision + 1 };
+    });
+    const fake = service({
+      decideApproval: decideApproval as never,
+      loadPendingApprovals: async () => [],
+      loadGrowth: async () => ({ suggestions: [], memories: [], effects: [] }),
+    });
+    (fake as DesktopService & { loadInbox: typeof loadInbox }).loadInbox = loadInbox;
+    render(<App service={fake} />);
+
+    await user.click(await screen.findByRole("button", { name: "수신함, 미해결 2개" }));
+    const inbox = await screen.findByRole("dialog", { name: "수신함" });
+    await user.click(within(inbox).getByRole("button", { name: "첫 번째 승인 승인" }));
+
+    await waitFor(() => {
+      expect(within(inbox).queryByText("첫 번째 승인")).not.toBeInTheDocument();
+      expect(within(inbox).getByText("두 번째 승인")).toBeInTheDocument();
+    });
+    expect(decideApproval).toHaveBeenCalledOnce();
+    expect(loadInbox.mock.calls.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("Approval quorum이 남으면 투표 기록을 알리고 최신 revision의 Inbox 카드를 유지한다", async () => {
+    const user = userEvent.setup();
+    let approval = {
+      id: "approval-inbox-quorum",
+      title: "복수 승인 필요",
+      description: "추가 승인자를 기다립니다.",
+      revision: 1,
+      status: "pending",
+    };
+    const loadInbox = vi.fn(async () => [{ kind: "approval" as const, id: approval.id, approval }]);
+    const decideApproval = vi.fn(async () => {
+      approval = { ...approval, revision: 2 };
+      return { approvalId: approval.id, status: "pending", revision: approval.revision };
+    });
+    const fake = service({
+      decideApproval: decideApproval as never,
+      loadPendingApprovals: async () => [],
+      loadGrowth: async () => ({ suggestions: [], memories: [], effects: [] }),
+    });
+    (fake as DesktopService & { loadInbox: typeof loadInbox }).loadInbox = loadInbox;
+    render(<App service={fake} />);
+
+    await user.click(await screen.findByRole("button", { name: "수신함, 미해결 1개" }));
+    const inbox = await screen.findByRole("dialog", { name: "수신함" });
+    await user.click(within(inbox).getByRole("button", { name: "복수 승인 필요 승인" }));
+
+    expect(await within(inbox).findByText("승인 투표가 기록되었습니다. 추가 의결을 기다립니다.")).toBeInTheDocument();
+    expect(within(inbox).getByText("복수 승인 필요")).toBeInTheDocument();
+    expect(loadInbox.mock.calls.length).toBeGreaterThanOrEqual(2);
+    expect(decideApproval).toHaveBeenCalledWith(
+      expect.objectContaining({ revision: 1 }),
+      "approve",
+      expect.any(String),
+    );
   });
 
   it("같은 차단 실행을 Home·Inbox·Work에서 같은 상태로 표시하고 폴더 신뢰는 Settings 해결 지점으로 이동한다", async () => {
@@ -1963,6 +2146,7 @@ describe("AgentOS native data flow", () => {
           ...fixture,
           initialSnapshot: { works: [] },
           loadGrowth: async () => ({ ...growth, suggestions: [] }),
+          loadInbox: async () => [],
           loadIndex: async () => [],
           loadPendingApprovals: async () => [],
         }}
@@ -2023,6 +2207,58 @@ describe("AgentOS native data flow", () => {
     expect(
       within(growth).getByRole("button", { name: "분기 비교 요청에서 코호트 정의를 먼저 확인하게 합니다. 승인" }),
     ).toBeEnabled();
+  });
+
+  it("수신함의 51번째 개선은 첫 목록 항목으로 fallback하지 않고 exact 상세를 연다", async () => {
+    const user = userEvent.setup();
+    const fixture = createFixtureDesktopService();
+    const initial = await fixture.loadGrowth();
+    const template = initial.suggestions[0];
+    if (!template) throw new Error("Growth suggestion fixture가 없습니다");
+    const firstFifty = Array.from({ length: 50 }, (_, index) => ({
+      ...template,
+      suggestionId: `suggestion-recent-${String(index).padStart(4, "0")}`,
+      summary: `${String(index + 1)}번째 최근 개선`,
+    }));
+    const target = {
+      ...template,
+      suggestionId: "suggestion-exact-0051",
+      workId: "work-exact-0051",
+      summary: "51번째 정확한 개선",
+      rationale: "최근 목록 밖 대상입니다",
+      status: "awaiting-review" as const,
+    };
+    const loadGrowthSuggestion = vi.fn(async (suggestionId: string) => {
+      if (suggestionId !== target.suggestionId) throw new Error("다른 개선을 조회했습니다");
+      return target;
+    });
+    render(
+      <App
+        service={service({
+          loadGrowth: async () => ({ ...initial, suggestions: firstFifty }),
+          loadGrowthSuggestion,
+          loadInbox: async () => [
+            {
+              kind: "growth",
+              id: `growth:${target.suggestionId}`,
+              suggestionId: target.suggestionId,
+              workId: target.workId,
+              title: target.summary,
+              reason: target.rationale,
+            },
+          ],
+        } as Partial<DesktopService>)}
+      />,
+    );
+
+    await user.click(await screen.findByRole("button", { name: "수신함, 미해결 1개" }));
+    const inbox = await screen.findByRole("dialog", { name: "수신함" });
+    await user.click(within(inbox).getByRole("button", { name: `개선 검토 열기: ${target.summary}` }));
+
+    const growth = await screen.findByRole("main", { name: "개선" });
+    expect(await within(growth).findByRole("heading", { name: target.summary })).toBeInTheDocument();
+    expect(within(growth).queryByRole("heading", { name: firstFifty[0]?.summary })).not.toBeInTheDocument();
+    expect(loadGrowthSuggestion).toHaveBeenCalledWith(target.suggestionId);
   });
 
   it("권한은 설정에서 실제 서비스 조회를 사용한다", async () => {
@@ -2430,6 +2666,7 @@ describe("AgentOS native data flow", () => {
     const active = {
       ...first,
       revision: 4,
+      queuedDirectives: [],
       run: { runId: "run-fixture-1", status: "running", stage: "delivery", leaseGeneration: 1 },
     };
     const submitDirective = vi.fn(async () => {
@@ -2449,7 +2686,97 @@ describe("AgentOS native data flow", () => {
 
     expect(await screen.findByText("지시를 저장하지 못했습니다")).toBeInTheDocument();
     expect(input).toHaveValue("산업군별 이탈률도 분리해줘");
+    expect(screen.queryByText("산업군별 이탈률도 분리해줘", { selector: "span" })).not.toBeInTheDocument();
     expect(submitDirective).toHaveBeenCalledOnce();
+  });
+
+  it("대기 지시는 영속 편집·취소 명령을 쓰고 실행 중 파일·멘션은 지원 전 상태로 둔다", async () => {
+    const user = userEvent.setup();
+    const updateDirective = vi.fn(async () => undefined);
+    const cancelDirective = vi.fn(async () => undefined);
+    render(<App service={service({ updateDirective, cancelDirective })} />);
+
+    const composer = screen.getByTestId("directive-composer");
+    await user.click(within(composer).getByRole("button", { name: "현재 작업 조정" }));
+    expect(updateDirective).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "churn-q3" }),
+      expect.objectContaining({ id: "queued-cohort", revision: 1 }),
+      "코호트를 계약 규모별로도 나눠줘",
+      "now",
+    );
+    await user.click(within(composer).getByRole("button", { name: "대기 지시 삭제" }));
+    expect(cancelDirective).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "churn-q3" }),
+      expect.objectContaining({ id: "queued-cohort", revision: 1 }),
+    );
+
+    const attachment = within(composer).getByRole("button", { name: "파일 첨부" });
+    const mention = within(composer).getByRole("button", { name: "에이전트 멘션" });
+    expect(attachment).toBeDisabled();
+    expect(mention).toBeDisabled();
+    expect(within(composer).getByText("실행 중 파일 첨부·에이전트 멘션은 아직 지원하지 않습니다.")).toBeInTheDocument();
+  });
+
+  it("아직 적용되지 않은 fixture 조직 제안은 결정 명령 없이 성공을 알리지 않는다", async () => {
+    render(<App service={service()} />);
+
+    const proposal = await screen.findByRole("region", { name: /\uc870\uc9c1 \ubcc0\uacbd \uc81c\uc548/u });
+    expect(within(proposal).queryByRole("button", { name: /신설 승인$/u })).not.toBeInTheDocument();
+    expect(within(proposal).queryByRole("button", { name: /신설 거절$/u })).not.toBeInTheDocument();
+    expect(within(proposal).getByText("이 화면에서는 조직 변경을 결정할 수 없습니다.")).toBeInTheDocument();
+    expect(
+      screen.queryByText(/신설을 승인했습니다|\uc2e0\uc124을 \uac70\uc808\ud588\uc2b5\ub2c8\ub2e4/u),
+    ).not.toBeInTheDocument();
+  });
+
+  it("Work 근거에서 실제 evidence 관계의 대상·종류·경로·줄·ID·checksum을 탐색한다", async () => {
+    const user = userEvent.setup();
+    const knowledge = {
+      workId: "churn-q3",
+      workspaceId: "workspace-analytics",
+      status: "ready" as const,
+      indexVersionId: "index-knowledge",
+      freshnessStatus: "fresh" as const,
+      references: [
+        {
+          referenceId: "symbol-order-total",
+          kind: "symbol" as const,
+          relativePath: "src/order.ts",
+          qualifiedName: "calculateTotal",
+          startLine: 3,
+          endLine: 6,
+          contentHash: "a".repeat(64),
+          nodeId: "symbol:symbol-order-total",
+          relations: [
+            {
+              node: {
+                nodeId: "symbol:symbol-tax-rate",
+                kind: "symbol" as const,
+                label: "resolveTaxRate",
+                detail: "src/tax.ts:8",
+              },
+              kind: "calls" as const,
+              direction: "outgoing" as const,
+              relationId: "relation-order-tax",
+              snapshotChecksum: "b".repeat(64),
+              sourcePath: "src/order.ts",
+              sourceLine: 5,
+            },
+          ],
+        },
+      ],
+    };
+    render(<App service={service({ loadWorkKnowledge: async () => knowledge as never })} />);
+
+    const inspector = screen.getByRole("complementary", { name: "Work 세부 정보" });
+    await user.click(within(inspector).getByRole("tab", { name: "근거" }));
+    await user.click(await within(inspector).findByRole("button", { name: "src/order.ts 연결된 지식 보기" }));
+
+    expect(within(inspector).getByText("resolveTaxRate")).toBeInTheDocument();
+    expect(within(inspector).getByText("이 심볼이 부르는 대상")).toBeInTheDocument();
+    expect(within(inspector).getByText("src/order.ts:5")).toBeInTheDocument();
+    expect(within(inspector).getByText("relation-order-tax")).toBeInTheDocument();
+    expect(within(inspector).getByText(`snapshot ${"b".repeat(64)}`)).toBeInTheDocument();
   });
 
   it("새 Work 실행을 임시 행으로 표시하고 재조회된 Work를 자동 선택한다", async () => {

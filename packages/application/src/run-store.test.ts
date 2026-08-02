@@ -983,6 +983,43 @@ describe("ApplicationRunStore", () => {
     ]);
   });
 
+  it("현재 Work 목록과 무관하게 조직의 모든 차단 run을 조회한다", async () => {
+    const blockedRunIds: string[] = [];
+    for (let index = 0; index < 2; index += 1) {
+      const suffix = String(index).padStart(4, "0");
+      const run = await store.start(context, {
+        commandId: `application-run-inbox-command-${suffix}`,
+        correlationId: `application-run-inbox-correlation-${suffix}`,
+        request: { text: `차단 실행 ${suffix}` },
+      });
+      const claim = await store.claim(context, run.runId);
+      if (claim.outcome !== "claimed") throw new Error("run lease를 얻지 못했습니다");
+      await store.advance(context, run.runId, claim.leaseGeneration, {
+        stage: "context-strategy",
+        workId: `work-global-inbox-${suffix}`,
+      });
+      const nextClaim = await store.claim(context, run.runId);
+      if (nextClaim.outcome !== "claimed") throw new Error("다음 run lease를 얻지 못했습니다");
+      await store.block(context, run.runId, nextClaim.leaseGeneration, "model-unavailable");
+      blockedRunIds.push(run.runId);
+    }
+    const unrelated = await store.start(context, {
+      commandId: "application-run-inbox-unrelated-command-0001",
+      correlationId: "application-run-inbox-unrelated-correlation-0001",
+      request: { text: "정상 실행" },
+    });
+
+    const listed = await (
+      store as ApplicationRunStore & {
+        listBlocked(context: TenantContext): Promise<readonly { readonly runId: string; readonly status: string }[]>;
+      }
+    ).listBlocked(context);
+
+    expect(listed.map((run) => run.runId).sort()).toEqual(blockedRunIds.sort());
+    expect(listed.every((run) => run.status === "blocked")).toBe(true);
+    expect(listed.map((run) => run.runId)).not.toContain(unrelated.runId);
+  });
+
   it("차단된 run도 cancel하고 Work별 run을 조회한다", async () => {
     const run = await store.start(context, {
       commandId: "application-run-blocked-cancel-0001",

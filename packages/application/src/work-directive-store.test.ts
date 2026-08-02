@@ -137,7 +137,126 @@ describe("WorkDirectiveStore", () => {
     ).rejects.toThrow("후속 Work");
   });
 
-  it("FIFO로 안전 경계의 지시만 claim하고 applying 지시는 lease 만료 뒤에도 자동 회수하지 않는다", async () => {
+  it("queued 지시를 Work·지시 revision으로 원자적으로 수정·취소하고 감사 기록을 보존한다", async () => {
+    const submitted = await directives.submit(context, {
+      commandId: "directive-mutate-submit-command-0001",
+      correlationId: "directive-mutate-submit-correlation-0001",
+      expectedRevision: 1,
+      workId,
+      runId,
+      content: "다음 단계에서 적용할 지시",
+      mode: "next-stage",
+    });
+    expect(submitted).toMatchObject({ revision: 1, leaseGeneration: 0, status: "queued" });
+
+    const updated = await directives.update(context, {
+      commandId: "directive-update-command-0001",
+      expectedWorkRevision: 1,
+      expectedDirectiveRevision: submitted.revision,
+      workId,
+      directiveId: submitted.directiveId,
+      content: "현재 단계에서 바로 적용할 지시",
+      mode: "now",
+    });
+    expect(updated).toMatchObject({
+      directiveId: submitted.directiveId,
+      content: "현재 단계에서 바로 적용할 지시",
+      mode: "now",
+      status: "queued",
+      revision: 2,
+      leaseGeneration: 0,
+    });
+    await expect(
+      directives.update(context, {
+        commandId: "directive-update-stale-command-0001",
+        expectedWorkRevision: 1,
+        expectedDirectiveRevision: submitted.revision,
+        workId,
+        directiveId: submitted.directiveId,
+        content: "stale 수정은 저장되면 안 됩니다",
+        mode: "next-stage",
+      }),
+    ).rejects.toThrow("directive revision");
+    await expect(
+      directives.cancel(context, {
+        commandId: "directive-cancel-stale-work-command-0001",
+        expectedWorkRevision: 0,
+        expectedDirectiveRevision: updated.revision,
+        workId,
+        directiveId: submitted.directiveId,
+      }),
+    ).rejects.toThrow("Work revision");
+
+    const cancelled = await directives.cancel(context, {
+      commandId: "directive-cancel-command-0001",
+      expectedWorkRevision: 1,
+      expectedDirectiveRevision: updated.revision,
+      workId,
+      directiveId: submitted.directiveId,
+    });
+    expect(cancelled).toMatchObject({
+      directiveId: submitted.directiveId,
+      status: "cancelled",
+      revision: 3,
+      content: "현재 단계에서 바로 적용할 지시",
+    });
+    const runClaim = await runStore.claim(context, runId);
+    if (runClaim.outcome !== "claimed") throw new Error("취소 지시 확인용 run lease를 얻지 못했습니다");
+    await expect(
+      directives.claimEligible(context, runId, "context-strategy", runClaim.leaseGeneration),
+    ).resolves.toEqual([]);
+    await expect(directives.listByRun(context, runId)).resolves.toEqual([
+      expect.objectContaining({ directiveId: submitted.directiveId, status: "cancelled", revision: 3 }),
+    ]);
+  });
+
+  it("applying 지시는 수정·취소할 수 없고 실패한 시도도 내용을 바꾸지 않는다", async () => {
+    const submitted = await directives.submit(context, {
+      commandId: "directive-applying-submit-command-0001",
+      correlationId: "directive-applying-submit-correlation-0001",
+      expectedRevision: 1,
+      workId,
+      runId,
+      content: "claim 전 원본 지시",
+      mode: "now",
+    });
+    const runClaim = await runStore.claim(context, runId);
+    if (runClaim.outcome !== "claimed") throw new Error("수정 차단 확인용 run lease를 얻지 못했습니다");
+    const [applying] = await directives.claimEligible(context, runId, "context-strategy", runClaim.leaseGeneration);
+    if (!applying) throw new Error("수정 차단 확인용 지시를 claim하지 못했습니다");
+
+    await expect(
+      directives.update(context, {
+        commandId: "directive-applying-update-command-0001",
+        expectedWorkRevision: 1,
+        expectedDirectiveRevision: submitted.revision,
+        workId,
+        directiveId: submitted.directiveId,
+        content: "처리 중 바꾸려는 지시",
+        mode: "next-stage",
+      }),
+    ).rejects.toThrow("queued");
+    await expect(
+      directives.cancel(context, {
+        commandId: "directive-applying-cancel-command-0001",
+        expectedWorkRevision: 1,
+        expectedDirectiveRevision: submitted.revision,
+        workId,
+        directiveId: submitted.directiveId,
+      }),
+    ).rejects.toThrow("queued");
+    await expect(directives.listByRun(context, runId)).resolves.toEqual([
+      expect.objectContaining({
+        directiveId: submitted.directiveId,
+        content: "claim 전 원본 지시",
+        mode: "now",
+        status: "applying",
+        revision: 1,
+      }),
+    ]);
+  });
+
+  it("대기 중인 next-stage가 뒤의 now를 막지 않고 만료된 applying lease를 같은 행에서 회수한다", async () => {
     const first = await directives.submit(context, {
       commandId: "directive-fifo-command-0001",
       correlationId: "directive-fifo-correlation-0001",
@@ -159,9 +278,9 @@ describe("WorkDirectiveStore", () => {
 
     const stageClaim = await runStore.claim(context, runId);
     if (stageClaim.outcome !== "claimed") throw new Error("stage 전환 lease를 얻지 못했습니다");
-    await expect(
-      directives.claimEligible(context, runId, "context-strategy", stageClaim.leaseGeneration),
-    ).resolves.toEqual([]);
+    const immediate = await directives.claimEligible(context, runId, "context-strategy", stageClaim.leaseGeneration);
+    expect(immediate.map((directive) => directive.directiveId)).toEqual([second.directiveId]);
+    await directives.markApplied(context, second.directiveId, immediate[0]?.leaseGeneration ?? -1);
     await expect(directives.claimEligible(context, runId, "evidence", stageClaim.leaseGeneration)).rejects.toThrow(
       "stage",
     );
@@ -169,23 +288,59 @@ describe("WorkDirectiveStore", () => {
     const evidenceClaim = await runStore.claim(context, runId);
     if (evidenceClaim.outcome !== "claimed") throw new Error("evidence lease를 얻지 못했습니다");
     const claimed = await directives.claimEligible(context, runId, "evidence", evidenceClaim.leaseGeneration);
-    expect(claimed.map((directive) => directive.directiveId)).toEqual([first.directiveId, second.directiveId]);
-    expect(claimed.map((directive) => directive.status)).toEqual(["applying", "applying"]);
+    expect(claimed.map((directive) => directive.directiveId)).toEqual([first.directiveId]);
+    expect(claimed.map((directive) => directive.status)).toEqual(["applying"]);
     await expect(directives.claimEligible(context, runId, "evidence", evidenceClaim.leaseGeneration)).rejects.toThrow(
       "applying",
     );
 
     clock.now = new Date("2026-07-22T00:00:01.001Z");
-    await expect(directives.claimEligible(context, runId, "evidence", evidenceClaim.leaseGeneration)).rejects.toThrow(
-      "applying",
+    const recovered = await directives.claimEligible(context, runId, "evidence", evidenceClaim.leaseGeneration);
+    expect(recovered).toEqual([
+      expect.objectContaining({
+        directiveId: first.directiveId,
+        status: "applying",
+        revision: 1,
+        leaseGeneration: 2,
+      }),
+    ]);
+    await expect(directives.markApplied(context, first.directiveId, claimed[0]?.leaseGeneration ?? -1)).rejects.toThrow(
+      "lease generation",
     );
-    await Promise.all(
-      claimed.map((directive) => directives.markApplied(context, directive.directiveId, directive.leaseGeneration)),
-    );
+    await directives.markApplied(context, first.directiveId, recovered[0]?.leaseGeneration ?? -1);
     await expect(directives.listByRun(context, runId)).resolves.toEqual([
       expect.objectContaining({ directiveId: first.directiveId, status: "applied" }),
       expect.objectContaining({ directiveId: second.directiveId, status: "applied" }),
     ]);
+  });
+
+  it("같은 단계의 next-stage 100개 뒤에 제출된 now 지시를 현재 안전 경계에서 굶기지 않는다", async () => {
+    for (let sequence = 1; sequence <= 100; sequence += 1) {
+      await directives.submit(context, {
+        commandId: `directive-starvation-next-command-${String(sequence).padStart(4, "0")}`,
+        correlationId: `directive-starvation-next-correlation-${String(sequence).padStart(4, "0")}`,
+        expectedRevision: 1,
+        workId,
+        runId,
+        content: `${String(sequence)}번째 다음 단계 지시`,
+        mode: "next-stage",
+      });
+    }
+    const immediate = await directives.submit(context, {
+      commandId: "directive-starvation-now-command-0101",
+      correlationId: "directive-starvation-now-correlation-0101",
+      expectedRevision: 1,
+      workId,
+      runId,
+      content: "현재 안전 경계에서 즉시 반영할 지시",
+      mode: "now",
+    });
+    const runClaim = await runStore.claim(context, runId);
+    if (runClaim.outcome !== "claimed") throw new Error("starvation 확인용 run lease를 얻지 못했습니다");
+
+    await expect(
+      directives.claimEligible(context, runId, "context-strategy", runClaim.leaseGeneration),
+    ).resolves.toEqual([expect.objectContaining({ directiveId: immediate.directiveId, status: "applying" })]);
   });
 
   it("첫 100개 claim 범위 뒤에 applying 지시가 있어도 run 전체를 busy로 거부한다", async () => {

@@ -105,6 +105,39 @@ function transport(overrides: Record<string, unknown> = {}): NativeTransport & {
       },
     ],
     "work.directive.list": [],
+    "inbox.list": [
+      {
+        kind: "blocked",
+        id: "blocked:run-inbox-0001",
+        runId: "run-inbox-0001",
+        workId: detail.workId,
+        title: detail.title,
+        blockedReason: "model-unavailable",
+      },
+      {
+        kind: "approval",
+        id: "approval-0001",
+        workTitle: detail.title,
+        approval: {
+          approvalId: "approval-0001",
+          action: "crm.read",
+          status: "pending",
+          requestedBy: "agent:evidence",
+          expiresAt: "2026-07-23T00:00:00.000Z",
+          workId: detail.workId,
+          revision: 3,
+        },
+      },
+      {
+        kind: "growth",
+        id: "growth:suggestion-0001",
+        suggestionId: "suggestion-0001",
+        workId: detail.workId,
+        workTitle: detail.title,
+        title: "검증 근거 보강",
+        reason: "기록된 검증 누락을 줄이기 위해",
+      },
+    ],
     "organization.graph.snapshot": { version: { version: 1 }, nodes: [] },
     "router.catalog": { providers: [{ providerId: "openai", apiKey: "never-return-this" }] },
     "router.credentials": [{ credentialId: "credential-1", token: "never-return-this" }],
@@ -164,6 +197,9 @@ function transport(overrides: Record<string, unknown> = {}): NativeTransport & {
       operation: value.operation,
       outcome: "succeeded",
       ...(value.operation === "run.start" ? { data: { runId: "run-new-0001", status: "ready" } } : {}),
+      ...(value.operation === "approval.decide"
+        ? { data: { approvalId: "approval-0001", status: "approved", revision: 4 } }
+        : {}),
       ...(value.operation === "registry.install"
         ? { outcome: "awaiting-approval", data: { approvalId: "approval-install-1" } }
         : {}),
@@ -927,6 +963,40 @@ describe("Application desktop service", () => {
     expect(work).toMatchObject({ updatedAt: "09:24", updatedAtIso: detail.updatedAt });
   });
 
+  it("전역 Inbox를 하나의 typed Application 조회에서 투영한다", async () => {
+    const native = transport();
+    const service = createApplicationDesktopService(native, { createId: () => "request-0001" });
+
+    const items = await (
+      service as DesktopService & { loadInbox(): Promise<readonly { readonly kind: string; readonly id: string }[]> }
+    ).loadInbox();
+
+    expect(items).toMatchObject([
+      {
+        kind: "blocked",
+        id: "blocked:run-inbox-0001",
+        workId: detail.workId,
+        title: detail.title,
+      },
+      {
+        kind: "approval",
+        id: "approval-0001",
+        workTitle: detail.title,
+        approval: { id: "approval-0001", revision: 3 },
+      },
+      {
+        kind: "growth",
+        id: "growth:suggestion-0001",
+        suggestionId: "suggestion-0001",
+        workTitle: detail.title,
+      },
+    ]);
+    expect(native.query).toHaveBeenCalledWith("inbox.list", {});
+    expect(native.query).not.toHaveBeenCalledWith("work.index", expect.anything());
+    expect(native.query).not.toHaveBeenCalledWith("governance.approval.list", expect.anything());
+    expect(native.query).not.toHaveBeenCalledWith("growth.suggestions", expect.anything());
+  });
+
   it("개선 정책 변경은 조직 대상과 현재 version을 command에 전달한다", async () => {
     const native = transport();
     const service = createApplicationDesktopService(native, { createId: () => "request-0001" });
@@ -952,6 +1022,31 @@ describe("Application desktop service", () => {
         },
       }),
     );
+  });
+
+  it("개선 목록의 최근 50개 밖 대상은 suggestion ID exact 조회로 불러온다", async () => {
+    const target = {
+      suggestionId: "suggestion-exact-0051",
+      workId: "work-0051",
+      targetKind: "memory",
+      operation: "add-entry",
+      summary: "51번째 정확한 개선",
+      rationale: "목록 밖 대상도 정확히 열어야 합니다",
+      expectedEffect: "오선택 방지",
+      riskSummary: "검토 필요",
+      status: "awaiting-review",
+    };
+    const native = transport({ "growth.suggestion.get": target });
+    const service = createApplicationDesktopService(native, { createId: () => "request-0001" });
+
+    await expect(
+      (
+        service as DesktopService & {
+          loadGrowthSuggestion(suggestionId: string): Promise<typeof target>;
+        }
+      ).loadGrowthSuggestion(target.suggestionId),
+    ).resolves.toEqual(target);
+    expect(native.query).toHaveBeenCalledWith("growth.suggestion.get", { suggestionId: target.suggestionId });
   });
 
   it("조직 스냅샷에 노드나 버전이 없으면 빈 조직 화면용 데이터를 반환한다", async () => {
@@ -1530,33 +1625,117 @@ describe("Application desktop service", () => {
     ]);
   });
 
-  it("Work의 사용한 지식은 typed work.knowledge 조회로 반환한다", async () => {
+  it("Work의 사용한 지식에 실제 evidence 1-hop 관계와 ID·checksum 계보를 연결한다", async () => {
     const native = transport({
+      "work.detail": { ...detail, workspaceId: "workspace-knowledge" },
       "work.knowledge": {
         workId: detail.workId,
         status: "ready",
+        indexVersionId: "index-knowledge",
+        snapshotChecksum: "b".repeat(64),
+        evidenceBriefChecksum: "c".repeat(64),
         freshnessStatus: "fresh",
         evidenceBriefId: "brief-0001",
         references: [
           {
-            referenceId: "chunk-0001",
-            kind: "chunk",
+            referenceId: "symbol-order-total",
+            kind: "symbol",
             relativePath: "src/order.ts",
             qualifiedName: "calculateTotal",
             startLine: 3,
             endLine: 6,
             contentHash: "a".repeat(64),
+            nodeId: "symbol:symbol-order-total",
+            provenance: {
+              selection: "graph-neighbor",
+              snapshotChecksum: "b".repeat(64),
+              paths: [
+                {
+                  seed: {
+                    referenceId: "symbol-tax-rate",
+                    kind: "symbol",
+                    symbolKey: "symbol-key-tax-rate",
+                  },
+                  relation: {
+                    relationId: "relation-order-tax",
+                    relationKey: "relation-key-order-tax",
+                    kind: "calls",
+                    sourceSymbolKey: "symbol-key-order-total",
+                    targetSymbolKey: "symbol-key-tax-rate",
+                    targetText: "resolveTaxRate",
+                    resolved: true,
+                    relativePath: "src/order.ts",
+                    startLine: 5,
+                  },
+                },
+              ],
+            },
           },
         ],
       },
+      "knowledge.links": [
+        {
+          node: {
+            nodeId: "symbol:symbol-order-total",
+            kind: "symbol",
+            label: "calculateTotal",
+            detail: "src/order.ts:3",
+          },
+          kind: "documents",
+          direction: "outgoing",
+        },
+        {
+          node: {
+            nodeId: "symbol:symbol-tax-rate",
+            kind: "symbol",
+            label: "resolveTaxRate",
+            detail: "src/tax.ts:8",
+          },
+          kind: "calls",
+          direction: "outgoing",
+          relationId: "relation-order-tax",
+          relationKey: "relation-key-order-tax",
+          sourceSymbolKey: "symbol-key-order-total",
+          targetSymbolKey: "symbol-key-tax-rate",
+          snapshotChecksum: "b".repeat(64),
+          sourcePath: "src/order.ts",
+          sourceLine: 5,
+        },
+      ],
     });
     const service = createApplicationDesktopService(native, { createId: () => "request-0001" });
 
     await expect(service.loadWorkKnowledge(detail.workId)).resolves.toMatchObject({
       status: "ready",
-      references: [expect.objectContaining({ relativePath: "src/order.ts", qualifiedName: "calculateTotal" })],
+      workspaceId: "workspace-knowledge",
+      references: [
+        expect.objectContaining({
+          relativePath: "src/order.ts",
+          qualifiedName: "calculateTotal",
+          nodeId: "symbol:symbol-order-total",
+          relations: [
+            expect.objectContaining({
+              kind: "calls",
+              direction: "outgoing",
+              node: expect.objectContaining({ nodeId: "symbol:symbol-tax-rate", label: "resolveTaxRate" }),
+              relationId: "relation-order-tax",
+              snapshotChecksum: "b".repeat(64),
+              sourcePath: "src/order.ts",
+              sourceLine: 5,
+            }),
+          ],
+        }),
+      ],
     });
+    expect(native.query).toHaveBeenCalledWith("work.detail", { workId: detail.workId });
     expect(native.query).toHaveBeenCalledWith("work.knowledge", { workId: detail.workId });
+    expect(native.query).toHaveBeenCalledWith("knowledge.links", {
+      workspaceId: "workspace-knowledge",
+      nodeId: "symbol:symbol-order-total",
+      indexVersionId: "index-knowledge",
+      snapshotChecksum: "b".repeat(64),
+      relationIds: ["relation-order-tax"],
+    });
   });
 
   it("실제 지식 표면은 typed index·graph·links query를 호출하고 canonical DTO를 보존한다", async () => {
@@ -1687,6 +1866,94 @@ describe("Application desktop service", () => {
     await expect(mismatchedGraph.loadKnowledgeGraph("workspace-knowledge", "work")).rejects.toThrow();
     await expect(danglingGraph.loadKnowledgeGraph("workspace-knowledge", "work")).rejects.toThrow();
     await expect(invalidLinks.loadKnowledgeLinks("workspace-knowledge", "file:file-payment")).rejects.toThrow();
+  });
+
+  it("영속 Work 지시의 대기·반영 시점·revision을 pending control과 상태 기록에 정직하게 투영한다", async () => {
+    const directive = (
+      directiveId: string,
+      status: "queued" | "applying" | "applied" | "failed" | "unapplied",
+      mode: "now" | "next-stage",
+      submittedStage: string,
+      revision: number,
+    ) => ({
+      directiveId,
+      workId: detail.workId,
+      runId: run.runId,
+      sequence: Number(directiveId.at(-1)),
+      content: `${directiveId} 지시`,
+      mode,
+      submittedStage,
+      status,
+      revision,
+      createdAt: `2026-07-22T00:2${directiveId.at(-1)}:00.000Z`,
+      updatedAt: `2026-07-22T00:3${directiveId.at(-1)}:00.000Z`,
+    });
+    const native = transport({
+      "run.list": [{ ...run, stage: "delivery" }],
+      "work.directive.list": [
+        directive("directive-1", "queued", "now", "delivery", 0),
+        directive("directive-2", "queued", "next-stage", "delivery", 0),
+        directive("directive-3", "queued", "next-stage", "evidence", 0),
+        directive("directive-4", "applying", "now", "delivery", 2),
+        directive("directive-5", "applied", "now", "delivery", 1),
+        directive("directive-6", "unapplied", "next-stage", "delivery", 0),
+        directive("directive-7", "failed", "now", "delivery", 1),
+      ],
+    });
+
+    const work = await createApplicationDesktopService(native).loadWork(detail.workId);
+
+    expect(work.queuedDirectives).toEqual([
+      {
+        id: "directive-1",
+        content: "directive-1 지시",
+        status: "queued",
+        mode: "now",
+        submittedStage: "delivery",
+        applyAt: "current-stage",
+        revision: 0,
+      },
+      {
+        id: "directive-2",
+        content: "directive-2 지시",
+        status: "queued",
+        mode: "next-stage",
+        submittedStage: "delivery",
+        applyAt: "next-stage",
+        revision: 0,
+      },
+      {
+        id: "directive-3",
+        content: "directive-3 지시",
+        status: "queued",
+        mode: "next-stage",
+        submittedStage: "evidence",
+        applyAt: "current-stage",
+        revision: 0,
+      },
+      {
+        id: "directive-4",
+        content: "directive-4 지시",
+        status: "applying",
+        mode: "now",
+        submittedStage: "delivery",
+        applyAt: "current-stage",
+        revision: 2,
+      },
+    ]);
+    expect(
+      work.activities
+        .filter((activity) => activity.id.startsWith("directive:"))
+        .map((activity) => ({ kind: activity.kind, status: activity.kind === "event" ? activity.status : undefined })),
+    ).toEqual([
+      { kind: "event", status: "대기" },
+      { kind: "event", status: "대기" },
+      { kind: "event", status: "대기" },
+      { kind: "event", status: "반영 중" },
+      { kind: "event", status: "반영됨" },
+      { kind: "event", status: "미반영 종료" },
+      { kind: "event", status: "반영 실패" },
+    ]);
   });
 
   it("현재 run과 종료 Work 상태 및 병합 활동의 시간순을 보존한다", async () => {
@@ -1841,6 +2108,62 @@ describe("Application desktop service", () => {
         payload: { runId: run.runId, retryBlocked: true },
       }),
     ]);
+  });
+
+  it("Approval 결정의 최종 status·revision을 반환하고 긴급 정지는 terminal approved 뒤에만 해제한다", async () => {
+    const native = transport();
+    let approvalStatus: "pending" | "approved" = "pending";
+    native.command.mockImplementation(async (input: unknown) => {
+      const value = input as { commandId: string; correlationId: string; operation: string };
+      return {
+        schemaVersion: "massion.application.v1",
+        commandId: value.commandId,
+        correlationId: value.correlationId,
+        operation: value.operation,
+        outcome: "succeeded",
+        ...(value.operation === "approval.decide"
+          ? {
+              data: {
+                approvalId: "approval-emergency",
+                status: approvalStatus,
+                revision: approvalStatus === "pending" ? 4 : 5,
+              },
+            }
+          : {}),
+      } as never;
+    });
+    const service = createApplicationDesktopService(native, { createId: () => crypto.randomUUID() });
+    const approval = {
+      id: "approval-emergency",
+      title: "긴급 정지 해제",
+      description: "두 명의 승인이 필요합니다.",
+      action: "emergency.stop.disable",
+      status: "pending",
+      revision: 3,
+    };
+
+    await expect(service.decideApproval(approval, "approve", "첫 번째 투표")).resolves.toEqual({
+      approvalId: "approval-emergency",
+      status: "pending",
+      revision: 4,
+    });
+    expect(
+      native.command.mock.calls.some(
+        ([input]) => (input as { operation?: string }).operation === "governance.emergency.release",
+      ),
+    ).toBe(false);
+
+    approvalStatus = "approved";
+    await expect(service.decideApproval({ ...approval, revision: 4 }, "approve", "두 번째 투표")).resolves.toEqual({
+      approvalId: "approval-emergency",
+      status: "approved",
+      revision: 5,
+    });
+    expect(
+      native.command.mock.calls.filter(
+        ([input]) => (input as { operation?: string }).operation === "governance.emergency.release",
+      ),
+    ).toHaveLength(1);
   });
 
   it("새 Work 요청을 desktop surface의 run.start로 시작한다", async () => {

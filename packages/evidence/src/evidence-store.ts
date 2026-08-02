@@ -10,14 +10,43 @@ import type { RepositoryStore } from "./repository-store.js";
 import {
   EVIDENCE_BRIEF_KNOWLEDGE_MIGRATION,
   EVIDENCE_BRIEF_MIGRATION,
+  EVIDENCE_BRIEF_PROVENANCE_MIGRATION,
   EVIDENCE_CONTENT_MIGRATION,
   EVIDENCE_INDEX_MIGRATION,
   EVIDENCE_RESEARCH_MIGRATION,
 } from "./schema.js";
 
+export interface EvidenceReferenceSeed {
+  readonly referenceId: string;
+  readonly kind: "symbol" | "chunk";
+  readonly symbolKey?: string;
+}
+
+export interface FrozenEvidenceRelation {
+  readonly relationId: string;
+  readonly relationKey: string;
+  readonly kind: "contains" | "imports" | "calls" | "implements" | "documents";
+  readonly sourceSymbolKey?: string;
+  readonly targetSymbolKey?: string;
+  readonly targetText: string;
+  readonly resolved: boolean;
+  readonly relativePath: string;
+  readonly startLine: number;
+}
+
+export interface CodeEvidenceProvenance {
+  readonly selection: "scope" | "direct-search" | "graph-neighbor";
+  readonly snapshotChecksum: string;
+  readonly paths: readonly {
+    readonly seed: EvidenceReferenceSeed;
+    readonly relation?: FrozenEvidenceRelation;
+  }[];
+}
+
 export interface CodeEvidenceReferenceInput {
   readonly kind: "code";
   readonly result: CodeSearchResult;
+  readonly provenance?: CodeEvidenceProvenance;
 }
 
 export interface ExternalEvidenceReferenceInput {
@@ -42,6 +71,7 @@ export interface CodeEvidenceReference {
   readonly endByte: number;
   readonly contentHash: string;
   readonly parserConfidence: "complete" | "partial";
+  readonly provenance: CodeEvidenceProvenance;
 }
 
 export interface ExternalEvidenceReference {
@@ -77,6 +107,7 @@ export interface EvidenceBrief {
   readonly repositoryRevisionId: string;
   readonly indexVersionId: string;
   readonly configurationChecksum: string;
+  readonly snapshotChecksum?: string;
   readonly query: string;
   readonly status: "ready" | "stale_warning" | "blocked" | "failed" | "no_match";
   readonly scopeChecksum?: string;
@@ -103,6 +134,7 @@ export interface CreateNoMatchEvidenceBriefInput {
   readonly indexVersionId: string;
   readonly query: string;
   readonly scopeChecksum: string;
+  readonly replacesEvidenceBriefId?: string;
 }
 
 export interface CreateAutomaticEvidenceBriefInput {
@@ -113,6 +145,7 @@ export interface CreateAutomaticEvidenceBriefInput {
   readonly query: string;
   readonly scopeChecksum: string;
   readonly references: readonly CodeEvidenceReferenceInput[];
+  readonly replacesEvidenceBriefId?: string;
 }
 
 interface BriefRecord {
@@ -123,6 +156,7 @@ interface BriefRecord {
   readonly repository_revision_id: string;
   readonly index_version_id: string;
   readonly configuration_checksum: string;
+  readonly snapshot_checksum?: string;
   readonly query: string;
   readonly status: EvidenceBrief["status"];
   readonly scope_checksum?: string;
@@ -156,12 +190,25 @@ interface PersistAutomaticBriefInput {
   readonly repositoryRevisionId: string;
   readonly indexVersionId: string;
   readonly configurationChecksum: string;
+  readonly snapshotChecksum: string;
   readonly query: string;
   readonly status: Extract<EvidenceBrief["status"], "ready" | "no_match">;
   readonly scopeChecksum: string;
   readonly references: readonly CodeEvidenceReference[];
   readonly claims: readonly EvidenceClaim[];
   readonly checksum: string;
+  readonly replacesEvidenceBriefId?: string;
+}
+
+export function isLegacyAutomaticEvidenceBrief(brief: EvidenceBrief): boolean {
+  return (
+    brief.snapshotChecksum === undefined &&
+    brief.scopeChecksum !== undefined &&
+    (brief.status === "ready" || brief.status === "no_match") &&
+    brief.references.every(
+      (reference) => reference.kind === "code" && !("provenance" in (reference as unknown as object)),
+    )
+  );
 }
 
 function canonicalJson(value: unknown): string {
@@ -180,12 +227,107 @@ function sha256(value: string): string {
   return createHash("sha256").update(value).digest("hex");
 }
 
+function automaticBriefKeys(organizationId: string, workId: string): readonly [string, string] {
+  const legacy = `${organizationId}:${workId}`;
+  return [legacy, `${legacy}:provenance-v1`];
+}
+
+function frozenRelation(relation: IndexSnapshot["relations"][number]): FrozenEvidenceRelation {
+  return {
+    relationId: relation.relationId,
+    relationKey: relation.relationKey,
+    kind: relation.kind,
+    ...(relation.sourceSymbolKey === undefined ? {} : { sourceSymbolKey: relation.sourceSymbolKey }),
+    ...(relation.targetSymbolKey === undefined ? {} : { targetSymbolKey: relation.targetSymbolKey }),
+    targetText: relation.targetText,
+    resolved: relation.resolved,
+    relativePath: relation.relativePath,
+    startLine: relation.startLine,
+  };
+}
+
+function referenceSeed(snapshot: IndexSnapshot, seed: EvidenceReferenceSeed): EvidenceReferenceSeed {
+  const item =
+    seed.kind === "symbol"
+      ? snapshot.symbols.find((candidate) => candidate.symbolId === seed.referenceId)
+      : snapshot.chunks.find((candidate) => candidate.chunkId === seed.referenceId);
+  if (!item) throw new Error(`Evidence provenance seed를 snapshot에서 찾을 수 없습니다: ${seed.referenceId}`);
+  const symbolKey = item.symbolKey;
+  if (seed.symbolKey !== undefined && seed.symbolKey !== symbolKey)
+    throw new Error(`Evidence provenance seed symbol 계보가 다릅니다: ${seed.referenceId}`);
+  return {
+    referenceId: seed.referenceId,
+    kind: seed.kind,
+    ...(symbolKey === undefined ? {} : { symbolKey }),
+  };
+}
+
+function defaultProvenance(
+  snapshot: IndexSnapshot,
+  result: CodeSearchResult,
+  selection: Extract<CodeEvidenceProvenance["selection"], "direct-search" | "scope"> = "direct-search",
+): CodeEvidenceProvenance {
+  return {
+    selection,
+    snapshotChecksum: snapshot.checksum,
+    paths: [{ seed: referenceSeed(snapshot, { referenceId: result.referenceId, kind: result.kind }) }],
+  };
+}
+
+function validatedProvenance(
+  snapshot: IndexSnapshot,
+  result: CodeSearchResult,
+  provenance: CodeEvidenceProvenance | undefined,
+): CodeEvidenceProvenance {
+  const value = provenance ?? defaultProvenance(snapshot, result);
+  if (value.snapshotChecksum !== snapshot.checksum)
+    throw new Error("Evidence provenance snapshot checksum이 IndexVersion과 다릅니다");
+  if (!(["scope", "direct-search", "graph-neighbor"] as const).includes(value.selection))
+    throw new Error("Evidence provenance selection이 유효하지 않습니다");
+  if (value.paths.length < 1 || value.paths.length > 64)
+    throw new Error("Evidence provenance path 개수가 유효하지 않습니다");
+  const selectedItem =
+    result.kind === "symbol"
+      ? snapshot.symbols.find((candidate) => candidate.symbolId === result.referenceId)
+      : snapshot.chunks.find((candidate) => candidate.chunkId === result.referenceId);
+  if (!selectedItem)
+    throw new Error(`Evidence provenance reference를 snapshot에서 찾을 수 없습니다: ${result.referenceId}`);
+  const selectedSymbolKey = selectedItem.symbolKey;
+  const paths = value.paths.map((path) => {
+    const seed = referenceSeed(snapshot, path.seed);
+    if (value.selection === "scope" && seed.referenceId !== result.referenceId)
+      throw new Error("Evidence scope provenance seed가 선택 reference와 다릅니다");
+    if (value.selection !== "graph-neighbor") {
+      if (path.relation !== undefined) throw new Error("직접 Evidence provenance에는 graph relation을 둘 수 없습니다");
+      return { seed };
+    }
+    if (!path.relation || !selectedSymbolKey || !seed.symbolKey)
+      throw new Error("Graph-neighbor Evidence provenance의 seed 또는 relation이 없습니다");
+    const actual = snapshot.relations.find((relation) => relation.relationId === path.relation?.relationId);
+    if (!actual || canonicalJson(frozenRelation(actual)) !== canonicalJson(path.relation))
+      throw new Error("Evidence provenance relation이 frozen snapshot과 다릅니다");
+    const connected =
+      (actual.sourceSymbolKey === seed.symbolKey && actual.targetSymbolKey === selectedSymbolKey) ||
+      (actual.targetSymbolKey === seed.symbolKey && actual.sourceSymbolKey === selectedSymbolKey);
+    if (!actual.resolved || !connected)
+      throw new Error("Evidence provenance relation이 seed와 선택 reference를 직접 연결하지 않습니다");
+    return { seed, relation: frozenRelation(actual) };
+  });
+  const unique = new Map(paths.map((path) => [canonicalJson(path), path]));
+  return {
+    selection: value.selection,
+    snapshotChecksum: snapshot.checksum,
+    paths: [...unique.values()].sort((left, right) => canonicalJson(left).localeCompare(canonicalJson(right))),
+  };
+}
+
 function briefChecksum(input: {
   readonly workId: string;
   readonly repositoryId: string;
   readonly repositoryRevisionId: string;
   readonly indexVersionId: string;
   readonly configurationChecksum: string;
+  readonly snapshotChecksum?: string;
   readonly query: string;
   readonly status: EvidenceBrief["status"];
   readonly references: readonly EvidenceReference[];
@@ -218,6 +360,7 @@ export class EvidenceBriefStore {
       EVIDENCE_BRIEF_MIGRATION,
       EVIDENCE_RESEARCH_MIGRATION,
       EVIDENCE_BRIEF_KNOWLEDGE_MIGRATION,
+      EVIDENCE_BRIEF_PROVENANCE_MIGRATION,
     ]);
     return new EvidenceBriefStore(database, organizations, repositories, indexes, synthesis);
   }
@@ -263,7 +406,7 @@ export class EvidenceBriefStore {
             contentHash: source.content_hash,
           };
         }
-        return this.validateCodeReference(input.repositoryId, index, snapshot, reference.result);
+        return this.validateCodeReference(input.repositoryId, index, snapshot, reference.result, reference.provenance);
       }),
     );
     if (new Set(references.map((reference) => reference.referenceId)).size !== references.length)
@@ -275,6 +418,7 @@ export class EvidenceBriefStore {
       repositoryRevisionId: index.repositoryRevisionId,
       indexVersionId: input.indexVersionId,
       configurationChecksum: index.configurationChecksum,
+      snapshotChecksum: snapshot.checksum,
       query,
       status: "ready" as const,
       references,
@@ -287,7 +431,7 @@ export class EvidenceBriefStore {
       if (repeated) return { brief: await this.getBrief(context, repeated.evidenceBriefId) };
       const evidenceBriefId = randomUUID();
       const [created] = await tx.query<[BriefRecord[]]>(
-        "CREATE evidence_brief CONTENT { evidence_brief_id: $evidence_brief_id, organization_id: $organization_id, work_id: $work_id, repository_id: $repository_id, repository_revision_id: $repository_revision_id, index_version_id: $index_version_id, configuration_checksum: $configuration_checksum, query: $query, status: 'ready', references_json: $references_json, claims_json: $claims_json, checksum: $checksum, created_by_user_id: $created_by_user_id, created_at: time::now() } RETURN AFTER;",
+        "CREATE evidence_brief CONTENT { evidence_brief_id: $evidence_brief_id, organization_id: $organization_id, work_id: $work_id, repository_id: $repository_id, repository_revision_id: $repository_revision_id, index_version_id: $index_version_id, configuration_checksum: $configuration_checksum, snapshot_checksum: $snapshot_checksum, query: $query, status: 'ready', references_json: $references_json, claims_json: $claims_json, checksum: $checksum, created_by_user_id: $created_by_user_id, created_at: time::now() } RETURN AFTER;",
         {
           evidence_brief_id: evidenceBriefId,
           organization_id: context.organizationId,
@@ -296,6 +440,7 @@ export class EvidenceBriefStore {
           repository_revision_id: index.repositoryRevisionId,
           index_version_id: input.indexVersionId,
           configuration_checksum: index.configurationChecksum,
+          snapshot_checksum: snapshot.checksum,
           query,
           references_json: canonicalJson(references),
           claims_json: canonicalJson(claims),
@@ -347,7 +492,9 @@ export class EvidenceBriefStore {
     if (existing) {
       if (existing.scopeChecksum !== input.scopeChecksum)
         throw new Error("같은 Work의 automatic EvidenceBrief scope가 다릅니다");
-      return { brief: existing };
+      if (input.replacesEvidenceBriefId !== existing.evidenceBriefId) return { brief: existing };
+      if (!isLegacyAutomaticEvidenceBrief(existing))
+        throw new Error("완전한 automatic EvidenceBrief는 교체할 수 없습니다");
     }
 
     const index = await this.repositories.getIndex(context, input.indexVersionId);
@@ -355,7 +502,7 @@ export class EvidenceBriefStore {
       throw new Error("EvidenceBrief IndexVersion은 같은 Repository의 완전한 snapshot이어야 합니다");
     const snapshot = await this.verifiedSnapshot(context, index);
     const references = input.references.map((reference) =>
-      this.validateCodeReference(input.repositoryId, index, snapshot, reference.result),
+      this.validateCodeReference(input.repositoryId, index, snapshot, reference.result, reference.provenance),
     );
     if (new Set(references.map((reference) => reference.referenceId)).size !== references.length)
       throw new Error("EvidenceBrief reference ID는 중복될 수 없습니다");
@@ -366,6 +513,7 @@ export class EvidenceBriefStore {
       repositoryRevisionId: index.repositoryRevisionId,
       indexVersionId: input.indexVersionId,
       configurationChecksum: index.configurationChecksum,
+      snapshotChecksum: snapshot.checksum,
       query,
       status: "ready",
       references,
@@ -380,12 +528,16 @@ export class EvidenceBriefStore {
       repositoryRevisionId: index.repositoryRevisionId,
       indexVersionId: input.indexVersionId,
       configurationChecksum: index.configurationChecksum,
+      snapshotChecksum: snapshot.checksum,
       query,
       status: "ready",
       scopeChecksum: input.scopeChecksum,
       references,
       claims,
       checksum,
+      ...(input.replacesEvidenceBriefId === undefined
+        ? {}
+        : { replacesEvidenceBriefId: input.replacesEvidenceBriefId }),
     });
   }
 
@@ -403,10 +555,10 @@ export class EvidenceBriefStore {
   public async findAutomaticByWork(context: TenantContext, workId: string): Promise<EvidenceBrief | undefined> {
     await this.organizations.verifyTenantContext(context);
     if (!workId.trim()) throw new Error("Work ID가 필요합니다");
-    const automaticKey = `${context.organizationId}:${workId}`;
+    const automaticKeys = automaticBriefKeys(context.organizationId, workId);
     const [records] = await this.database.query<[BriefRecord[]]>(
-      "SELECT * OMIT id FROM evidence_brief WHERE organization_id = $organization_id AND automatic_key = $automatic_key LIMIT 1;",
-      { organization_id: context.organizationId, automatic_key: automaticKey },
+      "SELECT * OMIT id FROM evidence_brief WHERE organization_id = $organization_id AND automatic_key IN $automatic_keys ORDER BY automatic_key DESC LIMIT 1;",
+      { organization_id: context.organizationId, automatic_keys: automaticKeys },
     );
     return records[0] ? this.view(records[0], true) : undefined;
   }
@@ -430,18 +582,21 @@ export class EvidenceBriefStore {
     if (existing) {
       if (existing.scopeChecksum !== input.scopeChecksum)
         throw new Error("같은 Work의 automatic EvidenceBrief scope가 다릅니다");
-      return { brief: existing };
+      if (input.replacesEvidenceBriefId !== existing.evidenceBriefId) return { brief: existing };
+      if (!isLegacyAutomaticEvidenceBrief(existing))
+        throw new Error("완전한 automatic EvidenceBrief는 교체할 수 없습니다");
     }
     const index = await this.repositories.getIndex(context, input.indexVersionId);
     if (index.repositoryId !== input.repositoryId || !["complete", "superseded"].includes(index.status))
       throw new Error("EvidenceBrief IndexVersion은 같은 Repository의 완전한 snapshot이어야 합니다");
-    await this.verifiedSnapshot(context, index);
+    const snapshot = await this.verifiedSnapshot(context, index);
     const checksum = briefChecksum({
       workId: input.workId,
       repositoryId: input.repositoryId,
       repositoryRevisionId: index.repositoryRevisionId,
       indexVersionId: input.indexVersionId,
       configurationChecksum: index.configurationChecksum,
+      snapshotChecksum: snapshot.checksum,
       query,
       status: "no_match",
       references: [],
@@ -456,12 +611,16 @@ export class EvidenceBriefStore {
       repositoryRevisionId: index.repositoryRevisionId,
       indexVersionId: input.indexVersionId,
       configurationChecksum: index.configurationChecksum,
+      snapshotChecksum: snapshot.checksum,
       query,
       status: "no_match",
       scopeChecksum: input.scopeChecksum,
       references: [],
       claims: [],
       checksum,
+      ...(input.replacesEvidenceBriefId === undefined
+        ? {}
+        : { replacesEvidenceBriefId: input.replacesEvidenceBriefId }),
     });
   }
 
@@ -486,6 +645,7 @@ export class EvidenceBriefStore {
     index: IndexVersion,
     snapshot: IndexSnapshot,
     result: CodeSearchResult,
+    provenance?: CodeEvidenceProvenance,
   ): CodeEvidenceReference {
     if (
       result.repositoryId !== repositoryId ||
@@ -525,6 +685,7 @@ export class EvidenceBriefStore {
       endByte: result.endByte,
       contentHash: result.contentHash,
       parserConfidence: file.status,
+      provenance: validatedProvenance(snapshot, result, provenance),
     };
   }
 
@@ -548,23 +709,27 @@ export class EvidenceBriefStore {
     context: TenantContext,
     input: PersistAutomaticBriefInput,
   ): Promise<{ readonly brief: EvidenceBrief }> {
-    const automaticKey = `${context.organizationId}:${input.workId}`;
+    const automaticKeys = automaticBriefKeys(context.organizationId, input.workId);
+    const automaticKey = automaticKeys[1];
     return await this.database.transaction(async (tx) => {
       await this.organizations.verifyTenantContext(context, undefined, tx);
       const repeated = await this.replay(context.organizationId, input.commandId, input.requestHash, tx);
       if (repeated) return { brief: await this.getBrief(context, repeated.evidenceBriefId) };
       const [existing] = await tx.query<[BriefRecord[]]>(
-        "SELECT * OMIT id FROM evidence_brief WHERE organization_id = $organization_id AND automatic_key = $automatic_key LIMIT 1;",
-        { organization_id: context.organizationId, automatic_key: automaticKey },
+        "SELECT * OMIT id FROM evidence_brief WHERE organization_id = $organization_id AND automatic_key IN $automatic_keys ORDER BY automatic_key DESC LIMIT 1;",
+        { organization_id: context.organizationId, automatic_keys: automaticKeys },
       );
       if (existing[0]) {
         if (existing[0].scope_checksum !== input.scopeChecksum)
           throw new Error("같은 Work의 automatic EvidenceBrief scope가 다릅니다");
-        return { brief: this.view(existing[0], true) };
+        const current = this.view(existing[0], true);
+        if (input.replacesEvidenceBriefId !== current.evidenceBriefId) return { brief: current };
+        if (!isLegacyAutomaticEvidenceBrief(current))
+          throw new Error("완전한 automatic EvidenceBrief는 교체할 수 없습니다");
       }
       const evidenceBriefId = randomUUID();
       const [created] = await tx.query<[BriefRecord[]]>(
-        "CREATE evidence_brief CONTENT { evidence_brief_id: $evidence_brief_id, organization_id: $organization_id, work_id: $work_id, repository_id: $repository_id, repository_revision_id: $repository_revision_id, index_version_id: $index_version_id, configuration_checksum: $configuration_checksum, query: $query, status: $status, scope_checksum: $scope_checksum, automatic_key: $automatic_key, references_json: $references_json, claims_json: $claims_json, checksum: $checksum, created_by_user_id: $created_by_user_id, created_at: time::now() } RETURN AFTER;",
+        "CREATE evidence_brief CONTENT { evidence_brief_id: $evidence_brief_id, organization_id: $organization_id, work_id: $work_id, repository_id: $repository_id, repository_revision_id: $repository_revision_id, index_version_id: $index_version_id, configuration_checksum: $configuration_checksum, snapshot_checksum: $snapshot_checksum, query: $query, status: $status, scope_checksum: $scope_checksum, automatic_key: $automatic_key, references_json: $references_json, claims_json: $claims_json, checksum: $checksum, created_by_user_id: $created_by_user_id, created_at: time::now() } RETURN AFTER;",
         {
           evidence_brief_id: evidenceBriefId,
           organization_id: context.organizationId,
@@ -573,6 +738,7 @@ export class EvidenceBriefStore {
           repository_revision_id: input.repositoryRevisionId,
           index_version_id: input.indexVersionId,
           configuration_checksum: input.configurationChecksum,
+          snapshot_checksum: input.snapshotChecksum,
           query: input.query,
           status: input.status,
           scope_checksum: input.scopeChecksum,
@@ -635,6 +801,7 @@ export class EvidenceBriefStore {
               repositoryRevisionId: record.repository_revision_id,
               indexVersionId: record.index_version_id,
               configurationChecksum: record.configuration_checksum,
+              ...(record.snapshot_checksum === undefined ? {} : { snapshotChecksum: record.snapshot_checksum }),
               query: record.query,
               status: record.status,
               references,
@@ -646,6 +813,7 @@ export class EvidenceBriefStore {
               repositoryRevisionId: record.repository_revision_id,
               indexVersionId: record.index_version_id,
               configurationChecksum: record.configuration_checksum,
+              ...(record.snapshot_checksum === undefined ? {} : { snapshotChecksum: record.snapshot_checksum }),
               query: record.query,
               status: record.status,
               references,
@@ -664,6 +832,7 @@ export class EvidenceBriefStore {
       repositoryRevisionId: record.repository_revision_id,
       indexVersionId: record.index_version_id,
       configurationChecksum: record.configuration_checksum,
+      ...(record.snapshot_checksum === undefined ? {} : { snapshotChecksum: record.snapshot_checksum }),
       query: record.query,
       status: record.status,
       ...(record.scope_checksum === undefined ? {} : { scopeChecksum: record.scope_checksum }),

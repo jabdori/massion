@@ -694,6 +694,15 @@ export class ApplicationRunStore {
     return records.map((record) => this.view(record));
   }
 
+  public async listBlocked(context: TenantContext): Promise<readonly ApplicationRunView[]> {
+    await this.organizations.verifyTenantContext(context);
+    const [records] = await this.database.query<[RunRecord[]]>(
+      "SELECT * OMIT id FROM application_run WHERE organization_id = $organization_id AND status = 'blocked' ORDER BY updated_at ASC, created_at ASC, run_id ASC;",
+      { organization_id: context.organizationId },
+    );
+    return records.map((record) => this.view(record));
+  }
+
   public async listRecoverable(context: TenantContext, limit = 100): Promise<readonly ApplicationRunView[]> {
     await this.organizations.verifyTenantContext(context);
     const [records] = await this.database.query<[RunRecord[]]>(

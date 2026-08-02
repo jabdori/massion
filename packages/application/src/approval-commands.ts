@@ -4,6 +4,9 @@ import type { ApplicationCommandRegistry } from "./command-registry.js";
 import type { ApplicationCommandResultV1, ApplicationCommandV1 } from "./contracts.js";
 import type { CoreWorkCoordinator } from "./core-work-coordinator.js";
 import type { ApplicationRunStore } from "./run-store.js";
+import type { GrowthGateway } from "@massion/growth";
+
+import { approveGrowthSuggestion, rejectGrowthSuggestion } from "./growth-suggestion-decision.js";
 
 interface ApprovalVoteRecord {
   readonly approval_id: string;
@@ -15,6 +18,7 @@ interface ApprovalVoteRecord {
 
 interface ApprovalCommandDependencies {
   readonly approvals: {
+    get(context: TenantContext, approvalId: string): Promise<ApprovalVoteRecord>;
     vote(
       context: TenantContext,
       input: {
@@ -25,7 +29,12 @@ interface ApprovalCommandDependencies {
         readonly reason: string;
       },
     ): Promise<ApprovalVoteRecord>;
+    cancel(
+      context: TenantContext,
+      input: { readonly commandId: string; readonly approvalId: string; readonly reason: string },
+    ): Promise<ApprovalVoteRecord>;
   };
+  readonly growth?: Pick<GrowthGateway, "getSuggestionDetailsByApproval" | "adopt" | "reject">;
   readonly runs: Pick<ApplicationRunStore, "findByApproval" | "prepareApprovalResume">;
   readonly coordinator: Pick<CoreWorkCoordinator, "recover">;
   readonly runtime?: {
@@ -135,6 +144,28 @@ export function registerApplicationApprovalCommands(
     retryFailedCommand: true,
     validate: payload,
     async handle(context, command, value) {
+      const growth = dependencies.growth;
+      const growthDetail = await growth?.getSuggestionDetailsByApproval(context, value.approvalId);
+      if (growth && growthDetail) {
+        const decisionDependencies = { approvals: dependencies.approvals, growth };
+        const decided =
+          value.vote === "approve"
+            ? await approveGrowthSuggestion(context, decisionDependencies, {
+                commandId: command.commandId,
+                approvalId: value.approvalId,
+                reason: value.reason,
+                detail: growthDetail,
+                expectedApprovalRevision: value.expectedApprovalRevision,
+              })
+            : await rejectGrowthSuggestion(context, decisionDependencies, {
+                commandId: command.commandId,
+                approvalId: value.approvalId,
+                reason: value.reason,
+                detail: growthDetail,
+                expectedApprovalRevision: value.expectedApprovalRevision,
+              });
+        return result(command, decided.approval);
+      }
       const voted = await dependencies.approvals.vote(context, {
         commandId: command.commandId,
         approvalId: value.approvalId,

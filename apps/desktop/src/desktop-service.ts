@@ -35,6 +35,7 @@ import {
   type ArtifactView,
   type DesktopSnapshot,
   type EventSemantic,
+  type InboxItem,
   type RoomBudgetView,
   type RoomView,
   type RecordView,
@@ -288,6 +289,16 @@ export interface KnowledgeRelationView {
   readonly direction: "outgoing" | "incoming";
   readonly qualifiedName: string;
   readonly relativePath: string;
+  /** 실제 이웃 노드. 오래된 fixture 관계는 이 필드 없이도 표시할 수 있습니다. */
+  readonly node?: KnowledgeNodeView;
+  readonly relationId?: string;
+  readonly relationKey?: string;
+  readonly sourceSymbolKey?: string;
+  readonly targetSymbolKey?: string;
+  readonly targetText?: string;
+  readonly snapshotChecksum?: string;
+  readonly sourcePath?: string;
+  readonly sourceLine?: number;
   /**
    * 인덱스 밖을 가리켜 아직 이어지지 않은 관계(`CodeGraphResult.unresolved`).
    * 없는 연결을 이어진 것처럼 그리지 않기 위해 그대로 표시합니다.
@@ -300,6 +311,7 @@ export interface KnowledgeReferenceView extends KnowledgeReferenceViewV1 {
 }
 
 export interface WorkKnowledgeView extends Omit<WorkKnowledgeViewV1, "references"> {
+  readonly workspaceId?: string;
   readonly references: readonly KnowledgeReferenceView[];
 }
 
@@ -694,6 +706,14 @@ export interface KnowledgeGraphEdgeView {
    * 왜 이어졌는지 말하지 못하면 사용자에게는 우연한 선으로 보입니다.
    */
   readonly derivedVia?: string;
+  readonly relationId?: string;
+  readonly relationKey?: string;
+  readonly sourceSymbolKey?: string;
+  readonly targetSymbolKey?: string;
+  readonly targetText?: string;
+  readonly snapshotChecksum?: string;
+  readonly sourcePath?: string;
+  readonly sourceLine?: number;
 }
 
 /**
@@ -712,6 +732,14 @@ export interface KnowledgeLinkView {
   readonly kind: KnowledgeRelationKind;
   readonly direction: "outgoing" | "incoming";
   readonly unresolved?: boolean;
+  readonly relationId?: string;
+  readonly relationKey?: string;
+  readonly sourceSymbolKey?: string;
+  readonly targetSymbolKey?: string;
+  readonly targetText?: string;
+  readonly snapshotChecksum?: string;
+  readonly sourcePath?: string;
+  readonly sourceLine?: number;
 }
 
 /** 워크스페이스가 무엇으로 색인됐나. */
@@ -788,6 +816,167 @@ function knowledgeInstant(value: unknown): string {
   return instant;
 }
 
+function knowledgeChecksum(value: unknown, label: string): string {
+  const checksum = knowledgeString(value, label, 64);
+  if (!/^[a-f0-9]{64}$/u.test(checksum)) throw new Error(`${label}이(가) 유효하지 않습니다`);
+  return checksum;
+}
+
+type KnowledgeRelationMetadata = Pick<
+  KnowledgeLinkView,
+  | "relationId"
+  | "relationKey"
+  | "sourceSymbolKey"
+  | "targetSymbolKey"
+  | "targetText"
+  | "snapshotChecksum"
+  | "sourcePath"
+  | "sourceLine"
+>;
+
+const KNOWLEDGE_RELATION_METADATA_FIELDS = [
+  "relationId",
+  "relationKey",
+  "sourceSymbolKey",
+  "targetSymbolKey",
+  "targetText",
+  "snapshotChecksum",
+  "sourcePath",
+  "sourceLine",
+] as const;
+
+function knowledgeRelativePath(value: unknown, label: string): string {
+  const path = knowledgeString(value, label, 1_024);
+  if (
+    path.startsWith("/") ||
+    /^[A-Za-z]:/u.test(path) ||
+    path.includes("\\") ||
+    path.split("/").some((segment) => segment.length === 0 || segment === "." || segment === "..")
+  )
+    throw new Error(`${label}이(가) 정규화된 상대 경로가 아닙니다`);
+  return path;
+}
+
+function projectKnowledgeRelationMetadata(row: Readonly<Record<string, unknown>>): KnowledgeRelationMetadata {
+  const hasMetadata = KNOWLEDGE_RELATION_METADATA_FIELDS.some((field) => row[field] !== undefined);
+  if (!hasMetadata) return {};
+  const relationId = knowledgeString(row.relationId, "Knowledge relation ID", 128);
+  const relationKey = knowledgeString(row.relationKey, "Knowledge relation key", 256);
+  const snapshotChecksum = knowledgeString(row.snapshotChecksum, "Knowledge relation snapshot checksum", 64);
+  if (!/^[a-f0-9]{64}$/u.test(snapshotChecksum))
+    throw new Error("Knowledge relation snapshot checksum이 유효하지 않습니다");
+  if (!Number.isSafeInteger(row.sourceLine) || (row.sourceLine as number) < 1)
+    throw new Error("Knowledge relation source line이 유효하지 않습니다");
+  return {
+    relationId,
+    relationKey,
+    ...(row.sourceSymbolKey === undefined
+      ? {}
+      : { sourceSymbolKey: knowledgeString(row.sourceSymbolKey, "Knowledge relation source symbol key", 256) }),
+    ...(row.targetSymbolKey === undefined
+      ? {}
+      : { targetSymbolKey: knowledgeString(row.targetSymbolKey, "Knowledge relation target symbol key", 256) }),
+    ...(row.targetText === undefined
+      ? {}
+      : { targetText: knowledgeString(row.targetText, "Knowledge relation target text", 1_024) }),
+    snapshotChecksum,
+    sourcePath: knowledgeRelativePath(row.sourcePath, "Knowledge relation source path"),
+    sourceLine: row.sourceLine as number,
+  };
+}
+
+interface FrozenKnowledgeRelationView {
+  readonly relationId: string;
+  readonly relationKey: string;
+  readonly kind: KnowledgeRelationKind;
+  readonly sourceSymbolKey?: string;
+  readonly targetSymbolKey?: string;
+  readonly targetText: string;
+  readonly resolved: boolean;
+  readonly relativePath: string;
+  readonly startLine: number;
+}
+
+function projectFrozenKnowledgeRelations(
+  value: unknown,
+  selection: "scope" | "direct-search" | "graph-neighbor",
+  selectedReferenceId: string,
+): ReadonlyMap<string, FrozenKnowledgeRelationView> {
+  if (!Array.isArray(value) || value.length === 0 || value.length > 100)
+    throw new Error("Work Knowledge provenance path가 유효하지 않습니다");
+  const relations = new Map<string, FrozenKnowledgeRelationView>();
+  for (const valuePath of value) {
+    const path = knowledgeRecord(valuePath, ["seed", "relation"], "Work Knowledge provenance path");
+    const seed = knowledgeRecord(path.seed, ["referenceId", "kind", "symbolKey"], "Work Knowledge provenance seed");
+    const seedReferenceId = knowledgeString(seed.referenceId, "Work Knowledge provenance seed reference ID", 128);
+    if (seed.kind !== "symbol" && seed.kind !== "chunk")
+      throw new Error("Work Knowledge provenance seed 종류가 유효하지 않습니다");
+    if (seed.symbolKey !== undefined) knowledgeString(seed.symbolKey, "Work Knowledge provenance seed symbol key", 256);
+    if (selection === "scope" && seedReferenceId !== selectedReferenceId)
+      throw new Error("Work Knowledge scope provenance seed가 선택 reference와 일치하지 않습니다");
+    if (path.relation === undefined) {
+      if (selection === "graph-neighbor") throw new Error("Work Knowledge graph provenance 관계가 없습니다");
+      continue;
+    }
+    if (selection !== "graph-neighbor") throw new Error("Work Knowledge 직접 provenance에 graph 관계가 있습니다");
+    const source = knowledgeRecord(
+      path.relation,
+      [
+        "relationId",
+        "relationKey",
+        "kind",
+        "sourceSymbolKey",
+        "targetSymbolKey",
+        "targetText",
+        "resolved",
+        "relativePath",
+        "startLine",
+      ],
+      "Work Knowledge provenance relation",
+    );
+    if (!KNOWLEDGE_RELATION_KINDS.has(source.kind as KnowledgeRelationKind))
+      throw new Error("Work Knowledge provenance relation 종류가 유효하지 않습니다");
+    if (typeof source.resolved !== "boolean")
+      throw new Error("Work Knowledge provenance relation resolved가 유효하지 않습니다");
+    if (!Number.isSafeInteger(source.startLine) || (source.startLine as number) < 1)
+      throw new Error("Work Knowledge provenance relation 시작 줄이 유효하지 않습니다");
+    const relation: FrozenKnowledgeRelationView = {
+      relationId: knowledgeString(source.relationId, "Work Knowledge provenance relation ID", 128),
+      relationKey: knowledgeString(source.relationKey, "Work Knowledge provenance relation key", 256),
+      kind: source.kind as KnowledgeRelationKind,
+      ...(source.sourceSymbolKey === undefined
+        ? {}
+        : {
+            sourceSymbolKey: knowledgeString(
+              source.sourceSymbolKey,
+              "Work Knowledge provenance source symbol key",
+              256,
+            ),
+          }),
+      ...(source.targetSymbolKey === undefined
+        ? {}
+        : {
+            targetSymbolKey: knowledgeString(
+              source.targetSymbolKey,
+              "Work Knowledge provenance target symbol key",
+              256,
+            ),
+          }),
+      targetText: knowledgeString(source.targetText, "Work Knowledge provenance target text", 1_024),
+      resolved: source.resolved,
+      relativePath: knowledgeRelativePath(source.relativePath, "Work Knowledge provenance relation 경로"),
+      startLine: source.startLine as number,
+    };
+    const previous = relations.get(relation.relationId);
+    if (previous !== undefined && JSON.stringify(previous) !== JSON.stringify(relation))
+      throw new Error("Work Knowledge 고정 관계 계보가 충돌합니다");
+    relations.set(relation.relationId, relation);
+  }
+  if (selection === "graph-neighbor" && relations.size === 0)
+    throw new Error("Work Knowledge graph provenance 관계가 없습니다");
+  return relations;
+}
+
 function projectKnowledgeNode(value: unknown): KnowledgeNodeView {
   const row = knowledgeRecord(value, ["nodeId", "kind", "label", "detail", "group"], "Knowledge node");
   if (!KNOWLEDGE_NODE_KINDS.has(row.kind as KnowledgeNodeKind))
@@ -860,7 +1049,11 @@ function projectKnowledgeGraph(value: unknown, expectedLens: KnowledgeGraphLensV
   if (nodeIds.size !== nodes.length || nodes.some((node, index) => node.nodeId !== sortedNodes[index]?.nodeId))
     throw new Error("Knowledge graph node 순서가 유효하지 않습니다");
   const edges = row.edges.map((value): KnowledgeGraphEdgeView => {
-    const edge = knowledgeRecord(value, ["kind", "sourceId", "targetId", "unresolved", "derivedVia"], "Knowledge edge");
+    const edge = knowledgeRecord(
+      value,
+      ["kind", "sourceId", "targetId", "unresolved", "derivedVia", ...KNOWLEDGE_RELATION_METADATA_FIELDS],
+      "Knowledge edge",
+    );
     if (!KNOWLEDGE_RELATION_KINDS.has(edge.kind as KnowledgeRelationKind))
       throw new Error("Knowledge edge 종류가 유효하지 않습니다");
     const sourceId = knowledgeId(edge.sourceId, "Knowledge edge source ID");
@@ -877,6 +1070,7 @@ function projectKnowledgeGraph(value: unknown, expectedLens: KnowledgeGraphLensV
       ...(edge.derivedVia === undefined
         ? {}
         : { derivedVia: knowledgeString(edge.derivedVia, "Knowledge edge 공유 근거", 1_024) }),
+      ...projectKnowledgeRelationMetadata(edge),
     };
   });
   const sortedEdges = [...edges].sort(
@@ -884,10 +1078,18 @@ function projectKnowledgeGraph(value: unknown, expectedLens: KnowledgeGraphLensV
       left.sourceId.localeCompare(right.sourceId) ||
       left.targetId.localeCompare(right.targetId) ||
       left.kind.localeCompare(right.kind) ||
+      (left.relationId ?? "").localeCompare(right.relationId ?? "") ||
       (left.derivedVia ?? "").localeCompare(right.derivedVia ?? ""),
   );
   const edgeKeys = edges.map((edge) =>
-    [edge.sourceId, edge.targetId, edge.kind, edge.unresolved ? "1" : "0", edge.derivedVia ?? ""].join("\0"),
+    [
+      edge.sourceId,
+      edge.targetId,
+      edge.kind,
+      edge.relationId ?? "",
+      edge.unresolved ? "1" : "0",
+      edge.derivedVia ?? "",
+    ].join("\0"),
   );
   if (new Set(edgeKeys).size !== edgeKeys.length || edges.some((edge, index) => edge !== sortedEdges[index]))
     throw new Error("Knowledge graph edge 순서가 유효하지 않습니다");
@@ -897,7 +1099,11 @@ function projectKnowledgeGraph(value: unknown, expectedLens: KnowledgeGraphLensV
 function projectKnowledgeLinks(value: unknown): readonly KnowledgeLinkView[] {
   if (!Array.isArray(value)) throw new Error("Knowledge links가 유효하지 않습니다");
   const links = value.map((item): KnowledgeLinkView => {
-    const row = knowledgeRecord(item, ["node", "kind", "direction", "unresolved"], "Knowledge link");
+    const row = knowledgeRecord(
+      item,
+      ["node", "kind", "direction", "unresolved", ...KNOWLEDGE_RELATION_METADATA_FIELDS],
+      "Knowledge link",
+    );
     if (!KNOWLEDGE_RELATION_KINDS.has(row.kind as KnowledgeRelationKind))
       throw new Error("Knowledge link 종류가 유효하지 않습니다");
     if (row.direction !== "outgoing" && row.direction !== "incoming")
@@ -909,16 +1115,18 @@ function projectKnowledgeLinks(value: unknown): readonly KnowledgeLinkView[] {
       kind: row.kind as KnowledgeRelationKind,
       direction: row.direction,
       ...(row.unresolved === undefined ? {} : { unresolved: row.unresolved }),
+      ...projectKnowledgeRelationMetadata(row),
     };
   });
   const keys = links.map((link) =>
-    [link.node.nodeId, link.kind, link.direction, link.unresolved ? "1" : "0"].join("\0"),
+    [link.node.nodeId, link.kind, link.direction, link.relationId ?? "", link.unresolved ? "1" : "0"].join("\0"),
   );
   const sortedLinks = [...links].sort(
     (left, right) =>
       left.node.nodeId.localeCompare(right.node.nodeId) ||
       left.kind.localeCompare(right.kind) ||
-      left.direction.localeCompare(right.direction),
+      left.direction.localeCompare(right.direction) ||
+      (left.relationId ?? "").localeCompare(right.relationId ?? ""),
   );
   if (new Set(keys).size !== keys.length || links.some((link, index) => link !== sortedLinks[index]))
     throw new Error("Knowledge links 순서가 유효하지 않습니다");
@@ -1116,6 +1324,8 @@ export interface GrowthView {
   }[];
 }
 
+export type GrowthSuggestionView = GrowthView["suggestions"][number];
+
 export interface RegistryInstallView {
   readonly outcome: string;
   readonly installationId?: string;
@@ -1126,6 +1336,12 @@ export interface RegistryInstallView {
 export interface CommandIdentity {
   readonly commandId: string;
   readonly correlationId: string;
+}
+
+export interface ApprovalDecisionResult {
+  readonly approvalId: string;
+  readonly status: string;
+  readonly revision: number;
 }
 
 export interface DesktopService {
@@ -1144,6 +1360,8 @@ export interface DesktopService {
    * 볼 수 없게 됩니다.
    */
   loadKnowledgeLinks(workspaceId: string, nodeId: string): Promise<readonly KnowledgeLinkView[]>;
+  /** 테넌트 전체에서 지금 사람의 판단이나 조치가 필요한 정본 목록입니다. */
+  loadInbox(): Promise<InboxItem[]>;
   loadPendingApprovals(): Promise<ApprovalView[]>;
   loadWorkspaces(): Promise<readonly DesktopWorkspaceView[]>;
   registerWorkspace(path: string): Promise<DesktopWorkspaceView>;
@@ -1178,6 +1396,7 @@ export interface DesktopService {
   /** 설치된 확장과 마켓플레이스 항목을 하나의 목록으로 줍니다. Capability가 먼저입니다. */
   loadExtensions(): Promise<readonly ExtensionEntryView[]>;
   loadGrowth(): Promise<GrowthView>;
+  loadGrowthSuggestion(suggestionId: string): Promise<GrowthSuggestionView>;
   configureGrowth(input: {
     readonly reflectionEnabled: boolean;
     readonly adoptionMode: "review" | "auto";
@@ -1202,7 +1421,14 @@ export interface DesktopService {
   forgetExplicitMemory(input: { readonly key: string; readonly revision: number }): Promise<void>;
   installRegistry(input: Record<string, unknown>, identity?: CommandIdentity): Promise<RegistryInstallView>;
   submitDirective(work: WorkView, content: string, mode: DirectiveMode): Promise<void>;
-  decideApproval(approval: ApprovalView, vote: ApprovalVote, reason: string): Promise<void>;
+  updateDirective(
+    work: WorkView,
+    directive: NonNullable<WorkView["queuedDirectives"]>[number],
+    content: string,
+    mode: DirectiveMode,
+  ): Promise<void>;
+  cancelDirective(work: WorkView, directive: NonNullable<WorkView["queuedDirectives"]>[number]): Promise<void>;
+  decideApproval(approval: ApprovalView, vote: ApprovalVote, reason: string): Promise<ApprovalDecisionResult>;
   cancelRun(work: WorkView): Promise<void>;
   resumeRun(work: WorkView): Promise<void>;
   startWork(input: StartWorkInput): Promise<StartedWork>;
@@ -1310,7 +1536,80 @@ export function createApplicationDesktopService(
     },
 
     async loadWorkKnowledge(workId) {
-      return await client.query("work.knowledge", { workId });
+      const [detail, knowledge] = await Promise.all([
+        client.query("work.detail", { workId }),
+        client.query("work.knowledge", { workId }),
+      ]);
+      if (knowledge.status !== "ready" || detail.workspaceId === undefined) return knowledge;
+
+      const snapshotChecksum = knowledgeChecksum(knowledge.snapshotChecksum, "Work Knowledge snapshot checksum");
+      knowledgeChecksum(knowledge.evidenceBriefChecksum, "Work Knowledge Evidence Brief checksum");
+      const references = await Promise.all(
+        knowledge.references.map(async (reference): Promise<KnowledgeReferenceView> => {
+          const nodeId = knowledgeId(reference.nodeId, "Work Knowledge reference node ID");
+          const provenance = reference.provenance;
+          if (
+            !provenance ||
+            !["scope", "direct-search", "graph-neighbor"].includes(provenance.selection) ||
+            provenance.snapshotChecksum !== snapshotChecksum ||
+            !Array.isArray(provenance.paths)
+          )
+            throw new Error("Work Knowledge reference provenance가 유효하지 않습니다");
+
+          const frozenRelations = projectFrozenKnowledgeRelations(
+            provenance.paths,
+            provenance.selection,
+            reference.referenceId,
+          );
+          if (frozenRelations.size === 0) return { ...reference, relations: [] };
+
+          const links = projectKnowledgeLinks(
+            await client.query("knowledge.links", {
+              workspaceId: detail.workspaceId,
+              nodeId,
+              indexVersionId: knowledge.indexVersionId,
+              snapshotChecksum,
+              relationIds: [...frozenRelations.keys()],
+            }),
+          );
+          const relations = [...frozenRelations.values()].map((frozen): KnowledgeRelationView => {
+            const matches = links.filter((link) => link.relationId === frozen.relationId);
+            if (matches.length !== 1)
+              throw new Error("Work Knowledge 고정 관계를 현재 색인에서 유일하게 확인하지 못했습니다");
+            const link = matches[0];
+            if (
+              !link ||
+              link.relationKey !== frozen.relationKey ||
+              link.kind !== frozen.kind ||
+              link.sourceSymbolKey !== frozen.sourceSymbolKey ||
+              link.targetSymbolKey !== frozen.targetSymbolKey ||
+              link.snapshotChecksum !== snapshotChecksum ||
+              link.sourcePath !== frozen.relativePath ||
+              link.sourceLine !== frozen.startLine ||
+              Boolean(link.unresolved) === frozen.resolved
+            )
+              throw new Error("Work Knowledge 고정 관계가 Evidence Brief provenance와 일치하지 않습니다");
+            return {
+              node: link.node,
+              kind: link.kind,
+              direction: link.direction,
+              qualifiedName: link.node.label,
+              relativePath: link.node.detail ?? "",
+              ...(link.unresolved === undefined ? {} : { unresolved: link.unresolved }),
+              relationId: link.relationId,
+              relationKey: link.relationKey,
+              ...(link.sourceSymbolKey === undefined ? {} : { sourceSymbolKey: link.sourceSymbolKey }),
+              ...(link.targetSymbolKey === undefined ? {} : { targetSymbolKey: link.targetSymbolKey }),
+              ...(link.targetText === undefined ? {} : { targetText: link.targetText }),
+              snapshotChecksum: link.snapshotChecksum,
+              sourcePath: link.sourcePath,
+              sourceLine: link.sourceLine,
+            };
+          });
+          return { ...reference, relations };
+        }),
+      );
+      return { ...knowledge, workspaceId: detail.workspaceId, references };
     },
 
     async loadKnowledgeIndex(workspaceId) {
@@ -1325,6 +1624,10 @@ export function createApplicationDesktopService(
     async loadKnowledgeLinks(workspaceId, nodeId) {
       knowledgeId(nodeId, "Knowledge node ID");
       return projectKnowledgeLinks(await client.query("knowledge.links", { workspaceId, nodeId }));
+    },
+
+    async loadInbox() {
+      return projectInbox(await client.query("inbox.list", {}));
     },
 
     async loadPendingApprovals() {
@@ -1509,6 +1812,9 @@ export function createApplicationDesktopService(
         effects: safeView(effects) as GrowthView["effects"],
       };
     },
+    async loadGrowthSuggestion(suggestionId) {
+      return safeView(await query("growth.suggestion.get", { suggestionId })) as GrowthSuggestionView;
+    },
     async configureGrowth(input) {
       await client.command("growth.configure", {
         subject: { type: "organization" },
@@ -1562,20 +1868,60 @@ export function createApplicationDesktopService(
       );
     },
 
+    async updateDirective(work, directive, content, mode) {
+      await client.command(
+        "work.directive.update",
+        {
+          workId: work.id,
+          directiveId: directive.id,
+          expectedDirectiveRevision: directive.revision,
+          content,
+          mode,
+        },
+        { expectedRevision: work.revision },
+      );
+    },
+
+    async cancelDirective(work, directive) {
+      await client.command(
+        "work.directive.cancel",
+        {
+          workId: work.id,
+          directiveId: directive.id,
+          expectedDirectiveRevision: directive.revision,
+        },
+        { expectedRevision: work.revision },
+      );
+    },
+
     async decideApproval(approval, vote, reason) {
       if (approval.revision === undefined) throw new Error("승인 revision이 없어 결정을 제출할 수 없습니다");
-      await client.command("approval.decide", {
+      const result = await client.command("approval.decide", {
         approvalId: approval.id,
         expectedApprovalRevision: approval.revision,
         vote,
         reason,
       });
-      if (vote === "approve" && approval.action === "emergency.stop.disable") {
+      const data = object(result.data);
+      if (
+        data?.approvalId !== approval.id ||
+        typeof data.status !== "string" ||
+        !Number.isSafeInteger(data.revision) ||
+        (data.revision as number) < 1
+      )
+        throw new Error("승인 결정 결과의 status·revision이 유효하지 않습니다");
+      const decision = {
+        approvalId: approval.id,
+        status: data.status,
+        revision: data.revision as number,
+      };
+      if (vote === "approve" && approval.action === "emergency.stop.disable" && decision.status === "approved") {
         await client.command("governance.emergency.release", {
           approvalId: approval.id,
           reason: "수신함 승인으로 긴급 정지 해제",
         });
       }
+      return decision;
     },
 
     async cancelRun(work) {
@@ -2658,6 +3004,61 @@ export function createFixtureDesktopService(): DesktopService {
         return work;
       }),
     loadWorkKnowledge: (workId) => fixturePromise(() => fixtureKnowledge(workId)),
+    loadInbox: () =>
+      fixturePromise(() => {
+        const blocked: InboxItem[] = initialSnapshot.works.flatMap((work) =>
+          work.run?.status === "blocked"
+            ? [
+                {
+                  kind: "blocked" as const,
+                  id: `blocked:${work.run.runId}`,
+                  runId: work.run.runId,
+                  workId: work.id,
+                  title: work.title,
+                  reason: inboxBlockedReason(work.run.blockedReason, work.run.blockedDetail),
+                },
+              ]
+            : [],
+        );
+        const approvals: InboxItem[] = initialSnapshot.works.flatMap((work) =>
+          work.approvals
+            .filter((approval) => approval.status === "pending")
+            .map((approval) => ({ kind: "approval" as const, id: approval.id, approval, workTitle: work.title })),
+        );
+        const growthDefinitions = [
+          {
+            suggestionId: "suggestion-cohort-guard",
+            workId: "churn-q3",
+            title: "분기 비교 요청에서 코호트 정의를 먼저 확인하게 합니다.",
+            reason:
+              "3분기 이탈 분석에서 검증이 코호트 정의 불일치를 반론으로 제기했고, 같은 원인으로 이전 두 Work에서도 재작업이 있었습니다.",
+          },
+          {
+            suggestionId: "suggestion-target-drift-fixture",
+            workId: "churn-q3",
+            title: "변경된 대상의 개선 제안",
+            reason: "검토 전에 대상 checksum이 달라졌습니다.",
+          },
+        ];
+        const growth: InboxItem[] = growthDefinitions.flatMap((definition) => {
+          const base = growthSuggestionLineages[definition.suggestionId];
+          const current = base && { ...base, ...growthSuggestionOverrides.get(definition.suggestionId) };
+          if (!current || current.status !== "awaiting-review") return [];
+          const workTitle = initialSnapshot.works.find((work) => work.id === definition.workId)?.title;
+          return [
+            {
+              kind: "growth" as const,
+              id: `growth:${definition.suggestionId}`,
+              suggestionId: definition.suggestionId,
+              workId: definition.workId,
+              ...(workTitle === undefined ? {} : { workTitle }),
+              title: definition.title,
+              reason: definition.reason,
+            },
+          ];
+        });
+        return [...blocked, ...approvals, ...growth];
+      }),
     loadPendingApprovals: () =>
       fixturePromise(() =>
         initialSnapshot.works.flatMap((work) => work.approvals.filter((approval) => approval.status === "pending")),
@@ -3711,6 +4112,10 @@ export function createFixtureDesktopService(): DesktopService {
           }),
         });
       }),
+    loadGrowthSuggestion: (suggestionId) =>
+      fixturePromise(() => {
+        throw new Error(`Fixture Growth Suggestion exact 조회를 구성하지 않았습니다: ${suggestionId}`);
+      }),
     approveGrowthSuggestion: (input) =>
       fixturePromise(() => {
         const base = growthSuggestionLineages[input.suggestionId];
@@ -3771,12 +4176,25 @@ export function createFixtureDesktopService(): DesktopService {
     installRegistry: () =>
       fixturePromise(() => ({ outcome: "succeeded", installationId: "installation-fixture-0001" })),
     /* 도메인은 지시를 status 'queued'로 남기고, 투영이 활동 흐름의 message 한 줄로 옮깁니다. */
-    submitDirective: (work, content) =>
+    submitDirective: (work, content, mode) =>
       fixturePromise(() => {
         directiveSequence += 1;
         const directiveId = `directive:fixture-${String(directiveSequence)}`;
         mutateWork(work.id, (current) => ({
           ...current,
+          revision: current.revision + 1,
+          queuedDirectives: [
+            ...(current.queuedDirectives ?? []),
+            {
+              id: directiveId,
+              content,
+              status: "queued",
+              mode,
+              submittedStage: current.run?.stage ?? "intake",
+              applyAt: mode === "now" ? "current-stage" : "next-stage",
+              revision: 1,
+            },
+          ],
           activities: [
             ...current.activities,
             {
@@ -3792,7 +4210,82 @@ export function createFixtureDesktopService(): DesktopService {
           ],
         }));
       }),
-    decideApproval: () => fixturePromise(() => undefined),
+    updateDirective: (work, directive, content, mode) =>
+      fixturePromise(() => {
+        mutateWork(work.id, (current) => {
+          const queued = current.queuedDirectives ?? [];
+          const target = queued.find((candidate) => candidate.id === directive.id);
+          if (!target || target.revision !== directive.revision) throw new Error("Fixture 지시 revision 충돌입니다");
+          return {
+            ...current,
+            revision: current.revision + 1,
+            queuedDirectives: queued.map((candidate) =>
+              candidate.id === directive.id
+                ? {
+                    ...candidate,
+                    content,
+                    mode,
+                    applyAt: mode === "now" ? "current-stage" : "next-stage",
+                    revision: candidate.revision + 1,
+                  }
+                : candidate,
+            ),
+          };
+        });
+      }),
+    cancelDirective: (work, directive) =>
+      fixturePromise(() => {
+        mutateWork(work.id, (current) => {
+          const queued = current.queuedDirectives ?? [];
+          const target = queued.find((candidate) => candidate.id === directive.id);
+          if (!target || target.revision !== directive.revision) throw new Error("Fixture 지시 revision 충돌입니다");
+          return {
+            ...current,
+            revision: current.revision + 1,
+            queuedDirectives: queued.filter((candidate) => candidate.id !== directive.id),
+            activities: [
+              ...current.activities,
+              {
+                id: `directive-cancelled:${directive.id}`,
+                kind: "event",
+                semantic: "directive",
+                time: current.activities.at(-1)?.time ?? fixtureTime(),
+                title: "지시 상태",
+                detail: target.content,
+                status: "취소됨",
+              },
+            ],
+          };
+        });
+      }),
+    decideApproval: (approval, vote) =>
+      fixturePromise(() => {
+        if (approval.revision === undefined) throw new Error("Fixture 승인 revision이 없습니다");
+        const approvalRevision = approval.revision;
+        let found = false;
+        for (const work of initialSnapshot.works) {
+          const current = work.approvals.find((candidate) => candidate.id === approval.id);
+          if (!current) continue;
+          if (current.revision !== approvalRevision) throw new Error("Fixture 승인 revision 충돌입니다");
+          found = true;
+          mutateWork(work.id, (candidate) => ({
+            ...candidate,
+            revision: candidate.revision + 1,
+            approvals: candidate.approvals.map((item) =>
+              item.id === approval.id
+                ? { ...item, status: vote === "approve" ? "approved" : "rejected", revision: approvalRevision + 1 }
+                : item,
+            ),
+          }));
+          break;
+        }
+        if (!found) throw new Error("Fixture 승인 요청을 찾을 수 없습니다");
+        return {
+          approvalId: approval.id,
+          status: vote === "approve" ? "approved" : "rejected",
+          revision: approvalRevision + 1,
+        };
+      }),
     /* ApplicationRunStore.cancel: status 'cancelled', stage 'terminal', approvalId 해제. */
     cancelRun: (work) =>
       fixturePromise(() => {
@@ -4922,6 +5415,22 @@ function projectWorkDetail(sources: WorkDetailSources): WorkView {
         : 0
       : Math.round((completedTasks / tasks.length) * 100);
   const updatedAtIso = sources.detail.updatedAt ?? sources.detail.createdAt;
+  const queuedDirectives = sources.directives.flatMap((directive) => {
+    if (directive.status !== "queued" && directive.status !== "applying") return [];
+    const applyAt =
+      directive.mode === "now" || directive.submittedStage !== run?.stage ? "current-stage" : "next-stage";
+    return [
+      {
+        id: directive.directiveId,
+        content: directive.content,
+        status: directive.status,
+        mode: directive.mode,
+        submittedStage: directive.submittedStage,
+        applyAt,
+        revision: directive.revision,
+      } as const,
+    ];
+  });
 
   return {
     id: sources.detail.workId,
@@ -4937,6 +5446,7 @@ function projectWorkDetail(sources: WorkDetailSources): WorkView {
     progress,
     ...(run === undefined ? {} : { run: projectRun(run) }),
     ...(activeExecutionId === undefined ? {} : { activeExecutionId }),
+    queuedDirectives,
     approvals,
     tasks,
     agents,
@@ -5159,6 +5669,68 @@ function projectApproval(approval: ApprovalViewV1): ApprovalView {
   };
 }
 
+function inboxBlockedReason(reason: unknown, detail: unknown): string {
+  if (typeof detail === "string" && detail.trim().length > 0) return detail;
+  switch (reason) {
+    case "representative-failed":
+      return "요청 이해 Agent가 요청 해석에 실패했습니다.";
+    case "context-strategy-stage-failed":
+    case "strategy-failed":
+      return "Provider가 전략 계획의 구조화 응답을 완성하지 못했습니다.";
+    case "model-unavailable":
+      return "사용 가능한 모델을 찾지 못했습니다.";
+    case "evidence-invalid":
+      return "업무에 연결된 근거를 검증하지 못했습니다.";
+    case "workspace-untrusted":
+      return "워크스페이스 신뢰 확인이 필요합니다.";
+    case "assurance-verifier-rejected":
+      return "산출물의 모순을 보완한 새 Work가 필요합니다.";
+    default:
+      return "실행 단계에서 오류가 발생했습니다.";
+  }
+}
+
+function projectInbox(value: unknown): InboxItem[] {
+  if (!Array.isArray(value)) throw new Error("Inbox 응답이 유효하지 않습니다");
+  return value.map((item): InboxItem => {
+    const row = object(item);
+    if (!row) throw new Error("Inbox 항목이 유효하지 않습니다");
+    const id = knowledgeString(row.id, "Inbox 항목 ID", 256);
+    if (row.kind === "approval") {
+      const approval = object(row.approval);
+      if (!approval) throw new Error("Inbox 승인 항목이 유효하지 않습니다");
+      return {
+        kind: "approval",
+        id,
+        approval: projectApproval(approval as unknown as ApprovalViewV1),
+        ...(row.workTitle === undefined ? {} : { workTitle: knowledgeString(row.workTitle, "Inbox Work 제목", 1_024) }),
+      };
+    }
+    if (row.kind === "blocked") {
+      return {
+        kind: "blocked",
+        id,
+        runId: knowledgeString(row.runId, "Inbox run ID", 128),
+        ...(row.workId === undefined ? {} : { workId: knowledgeString(row.workId, "Inbox Work ID", 128) }),
+        title: knowledgeString(row.title, "Inbox 차단 제목", 1_024),
+        reason: inboxBlockedReason(row.blockedReason, row.blockedDetail),
+      };
+    }
+    if (row.kind === "growth") {
+      return {
+        kind: "growth",
+        id,
+        suggestionId: knowledgeString(row.suggestionId, "Inbox 개선 제안 ID", 128),
+        workId: knowledgeString(row.workId, "Inbox 개선 Work ID", 128),
+        workTitle: knowledgeString(row.workTitle, "Inbox 개선 Work 제목", 1_024),
+        title: knowledgeString(row.title, "Inbox 개선 제목", 1_024),
+        reason: knowledgeString(row.reason, "Inbox 개선 근거", 4_096),
+      };
+    }
+    throw new Error("Inbox 항목 종류가 유효하지 않습니다");
+  });
+}
+
 function approvalDescription(approval: ApprovalViewV1): string {
   const preview = approval.displayPreview;
   if (preview?.reason !== undefined) return preview.reason;
@@ -5196,15 +5768,16 @@ function projectActivities(
   }
 
   for (const directive of directives) {
+    const status = directiveStatusText(directive.status);
     projected.push({
       id: `directive:${directive.directiveId}`,
-      kind: "message",
+      kind: "event",
+      semantic: "directive",
       time: clockOf(directive.createdAt),
       occurredAt: directive.createdAt,
-      author: "나",
-      initials: "나",
-      human: true,
-      content: directive.content,
+      title: "지시 상태",
+      detail: directive.content,
+      status,
     });
   }
 
@@ -5235,6 +5808,25 @@ function projectActivities(
     (left, right) =>
       (left.occurredAt ?? left.time).localeCompare(right.occurredAt ?? right.time) || left.id.localeCompare(right.id),
   );
+}
+
+function directiveStatusText(status: string): string {
+  switch (status) {
+    case "queued":
+      return "대기";
+    case "applying":
+      return "반영 중";
+    case "applied":
+      return "반영됨";
+    case "cancelled":
+      return "취소됨";
+    case "unapplied":
+      return "미반영 종료";
+    case "failed":
+      return "반영 실패";
+    default:
+      return "상태 미상";
+  }
 }
 
 function projectActivity(

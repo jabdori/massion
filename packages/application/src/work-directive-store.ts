@@ -4,10 +4,10 @@ import type { OrganizationService, TenantContext } from "@massion/identity";
 import { applyMigrations, type MassionDatabase, type QueryExecutor } from "@massion/storage";
 
 import type { ApplicationRunStage, ApplicationRunStatus } from "./run-store.js";
-import { APPLICATION_WORK_DIRECTIVE_MIGRATION } from "./schema.js";
+import { APPLICATION_WORK_DIRECTIVE_MIGRATION, APPLICATION_WORK_DIRECTIVE_MUTATION_MIGRATION } from "./schema.js";
 
 export type WorkDirectiveMode = "now" | "next-stage";
-export type WorkDirectiveStatus = "queued" | "applying" | "applied" | "failed" | "unapplied";
+export type WorkDirectiveStatus = "queued" | "applying" | "applied" | "failed" | "unapplied" | "cancelled";
 
 export class WorkDirectiveBusyError extends Error {
   public constructor() {
@@ -32,6 +32,7 @@ export interface WorkDirectiveView {
   readonly mode: WorkDirectiveMode;
   readonly submittedStage: Exclude<ApplicationRunStage, "terminal">;
   readonly status: WorkDirectiveStatus;
+  readonly revision: number;
   readonly leaseGeneration: number;
   readonly failureReason?: string;
   readonly createdAt: string;
@@ -53,8 +54,11 @@ interface DirectiveRecord {
   readonly mode: WorkDirectiveMode;
   readonly submitted_stage: Exclude<ApplicationRunStage, "terminal">;
   readonly status: WorkDirectiveStatus;
+  readonly revision: number;
   readonly lease_generation: number;
   readonly lease_expires_at?: unknown;
+  readonly last_mutation_command_id?: string;
+  readonly last_mutation_request_hash?: string;
   readonly failure_reason?: string;
   readonly created_at: unknown;
   readonly updated_at: unknown;
@@ -141,7 +145,10 @@ export class WorkDirectiveStore {
     if (!Number.isSafeInteger(leaseMs) || leaseMs < 1_000 || leaseMs > 300_000) {
       throw new Error("Work directive lease 범위가 유효하지 않습니다");
     }
-    await applyMigrations(database, [APPLICATION_WORK_DIRECTIVE_MIGRATION]);
+    await applyMigrations(database, [
+      APPLICATION_WORK_DIRECTIVE_MIGRATION,
+      APPLICATION_WORK_DIRECTIVE_MUTATION_MIGRATION,
+    ]);
     return new WorkDirectiveStore(database, organizations, leaseMs, input.clock);
   }
 
@@ -217,7 +224,7 @@ export class WorkDirectiveStore {
           const directiveId = randomUUID();
           const createdAt = this.clock.now.toISOString();
           await transaction.query(
-            "CREATE application_work_directive CONTENT { directive_id: $directive_id, organization_id: $organization_id, actor_user_id: $actor_user_id, command_id: $command_id, correlation_id: $correlation_id, work_id: $work_id, run_id: $run_id, sequence: $sequence, content: $content, content_hash: $content_hash, request_hash: $request_hash, mode: $mode, submitted_stage: $submitted_stage, status: 'queued', lease_generation: 0, lease_expires_at: NONE, failure_reason: NONE, created_at: <datetime>$created_at, updated_at: <datetime>$created_at };",
+            "CREATE application_work_directive CONTENT { directive_id: $directive_id, organization_id: $organization_id, actor_user_id: $actor_user_id, command_id: $command_id, correlation_id: $correlation_id, work_id: $work_id, run_id: $run_id, sequence: $sequence, content: $content, content_hash: $content_hash, request_hash: $request_hash, mode: $mode, submitted_stage: $submitted_stage, status: 'queued', revision: 1, lease_generation: 0, lease_expires_at: NONE, failure_reason: NONE, last_mutation_command_id: NONE, last_mutation_request_hash: NONE, created_at: <datetime>$created_at, updated_at: <datetime>$created_at };",
             {
               directive_id: directiveId,
               organization_id: context.organizationId,
@@ -254,6 +261,46 @@ export class WorkDirectiveStore {
       }
     }
     throw new Error("Work directive 저장 동시성 충돌을 해결하지 못했습니다");
+  }
+
+  public async update(
+    context: TenantContext,
+    input: {
+      readonly commandId: string;
+      readonly expectedWorkRevision: number;
+      readonly expectedDirectiveRevision: number;
+      readonly workId: string;
+      readonly directiveId: string;
+      readonly content: string;
+      readonly mode: WorkDirectiveMode;
+    },
+  ): Promise<WorkDirectiveView> {
+    const content = validateContent(input.content);
+    if (!(["now", "next-stage"] as const).includes(input.mode))
+      throw new Error("Work directive mode가 유효하지 않습니다");
+    return await this.mutate(context, {
+      ...input,
+      content,
+      requestHash: sha256(canonicalJson({ ...input, content })),
+      status: "queued",
+    });
+  }
+
+  public async cancel(
+    context: TenantContext,
+    input: {
+      readonly commandId: string;
+      readonly expectedWorkRevision: number;
+      readonly expectedDirectiveRevision: number;
+      readonly workId: string;
+      readonly directiveId: string;
+    },
+  ): Promise<WorkDirectiveView> {
+    return await this.mutate(context, {
+      ...input,
+      requestHash: sha256(canonicalJson(input)),
+      status: "cancelled",
+    });
   }
 
   public async claimEligible(
@@ -298,19 +345,35 @@ export class WorkDirectiveStore {
       if (!runFenceUpdates[0]) {
         throw new Error("Application run lease generation이 지시 claim과 일치하지 않습니다");
       }
-      const applying = await first<Pick<DirectiveRecord, "directive_id">>(
-        transaction,
-        "SELECT directive_id FROM application_work_directive WHERE organization_id = $organization_id AND run_id = $run_id AND status = 'applying' LIMIT 1;",
+      const [applying] = await transaction.query<[DirectiveRecord[]]>(
+        "SELECT * OMIT id FROM application_work_directive WHERE organization_id = $organization_id AND run_id = $run_id AND status = 'applying' ORDER BY sequence ASC;",
         { organization_id: context.organizationId, run_id: runId },
       );
-      if (applying) throw new WorkDirectiveBusyError();
+      for (const record of applying) {
+        let expiresAt = Number.NaN;
+        try {
+          if (record.lease_expires_at !== undefined) expiresAt = Date.parse(iso(record.lease_expires_at));
+        } catch {
+          // 손상된 lease 시각은 회수하지 않고 실패 폐쇄합니다.
+        }
+        if (!Number.isFinite(expiresAt) || expiresAt > this.clock.now.getTime()) throw new WorkDirectiveBusyError();
+        const [recovered] = await transaction.query<[DirectiveRecord[]]>(
+          "UPDATE application_work_directive SET status = 'queued', lease_expires_at = NONE, updated_at = <datetime>$updated_at WHERE organization_id = $organization_id AND directive_id = $directive_id AND status = 'applying' AND lease_generation = $lease_generation RETURN AFTER;",
+          {
+            organization_id: context.organizationId,
+            directive_id: record.directive_id,
+            lease_generation: record.lease_generation,
+            updated_at: this.clock.now.toISOString(),
+          },
+        );
+        if (!recovered[0]) throw new Error("Work directive 만료 lease 회수 동시성 충돌입니다");
+      }
       const [records] = await transaction.query<[DirectiveRecord[]]>(
-        "SELECT * OMIT id FROM application_work_directive WHERE organization_id = $organization_id AND run_id = $run_id AND status = 'queued' ORDER BY sequence ASC LIMIT 100;",
-        { organization_id: context.organizationId, run_id: runId },
+        "SELECT * OMIT id FROM application_work_directive WHERE organization_id = $organization_id AND run_id = $run_id AND status = 'queued' AND (mode = 'now' OR submitted_stage != $stage) ORDER BY sequence ASC LIMIT 100;",
+        { organization_id: context.organizationId, run_id: runId, stage },
       );
       const claimed: WorkDirectiveView[] = [];
       for (const record of records) {
-        if (record.mode === "next-stage" && record.submitted_stage === stage) break;
         const leaseGeneration = record.lease_generation + 1;
         const leaseExpiresAt = new Date(this.clock.now.getTime() + this.leaseMs).toISOString();
         const [updates] = await transaction.query<[DirectiveRecord[]]>(
@@ -457,6 +520,82 @@ export class WorkDirectiveStore {
     });
   }
 
+  private async mutate(
+    context: TenantContext,
+    input: {
+      readonly commandId: string;
+      readonly requestHash: string;
+      readonly expectedWorkRevision: number;
+      readonly expectedDirectiveRevision: number;
+      readonly workId: string;
+      readonly directiveId: string;
+      readonly status: "queued" | "cancelled";
+      readonly content?: string;
+      readonly mode?: WorkDirectiveMode;
+    },
+  ): Promise<WorkDirectiveView> {
+    if (!input.commandId.trim()) throw new Error("Work directive mutation commandId가 유효하지 않습니다");
+    if (!Number.isSafeInteger(input.expectedWorkRevision) || input.expectedWorkRevision < 0)
+      throw new Error("Work revision이 유효하지 않습니다");
+    if (!Number.isSafeInteger(input.expectedDirectiveRevision) || input.expectedDirectiveRevision < 1)
+      throw new Error("Work directive revision이 유효하지 않습니다");
+    await this.organizations.verifyTenantContext(context);
+    return await this.database.transaction(async (transaction) => {
+      await this.organizations.verifyTenantContext(context, undefined, transaction);
+      const current = await this.find(transaction, context.organizationId, input.directiveId);
+      if (current.work_id !== input.workId) throw new Error("Work와 Work directive 연결이 일치하지 않습니다");
+      if (current.last_mutation_command_id === input.commandId) {
+        if (current.last_mutation_request_hash !== input.requestHash)
+          throw new Error("같은 commandId에 다른 Work directive mutation 요청을 사용할 수 없습니다");
+        return this.view(current);
+      }
+      const work = await first<WorkBoundaryRecord>(
+        transaction,
+        "SELECT work_id, status, revision FROM work WHERE organization_id = $organization_id AND work_id = $work_id LIMIT 1;",
+        { organization_id: context.organizationId, work_id: input.workId },
+      );
+      if (!work) throw new Error("Work를 찾을 수 없습니다");
+      if (work.revision !== input.expectedWorkRevision)
+        throw new Error(`현재 Work revision은 ${String(work.revision)}입니다`);
+      if (current.status !== "queued") throw new Error("queued Work directive만 수정하거나 취소할 수 있습니다");
+      if (current.revision !== input.expectedDirectiveRevision)
+        throw new Error(`현재 Work directive revision은 ${String(current.revision)}입니다`);
+      const nextRevision = current.revision + 1;
+      const [updates] =
+        input.status === "cancelled"
+          ? await transaction.query<[DirectiveRecord[]]>(
+              "UPDATE application_work_directive SET status = 'cancelled', revision = $next_revision, last_mutation_command_id = $command_id, last_mutation_request_hash = $request_hash, updated_at = <datetime>$updated_at WHERE organization_id = $organization_id AND directive_id = $directive_id AND status = 'queued' AND revision = $expected_revision RETURN AFTER;",
+              {
+                organization_id: context.organizationId,
+                directive_id: input.directiveId,
+                expected_revision: input.expectedDirectiveRevision,
+                next_revision: nextRevision,
+                command_id: input.commandId,
+                request_hash: input.requestHash,
+                updated_at: this.clock.now.toISOString(),
+              },
+            )
+          : await transaction.query<[DirectiveRecord[]]>(
+              "UPDATE application_work_directive SET content = $content, content_hash = $content_hash, mode = $mode, revision = $next_revision, last_mutation_command_id = $command_id, last_mutation_request_hash = $request_hash, updated_at = <datetime>$updated_at WHERE organization_id = $organization_id AND directive_id = $directive_id AND status = 'queued' AND revision = $expected_revision RETURN AFTER;",
+              {
+                organization_id: context.organizationId,
+                directive_id: input.directiveId,
+                expected_revision: input.expectedDirectiveRevision,
+                next_revision: nextRevision,
+                content: input.content,
+                content_hash: sha256(input.content ?? ""),
+                mode: input.mode,
+                command_id: input.commandId,
+                request_hash: input.requestHash,
+                updated_at: this.clock.now.toISOString(),
+              },
+            );
+      const updated = updates[0];
+      if (!updated) throw new Error("Work directive revision 동시성 충돌입니다");
+      return this.view(updated);
+    });
+  }
+
   private async find(executor: QueryExecutor, organizationId: string, directiveId: string): Promise<DirectiveRecord> {
     const record = await first<DirectiveRecord>(
       executor,
@@ -481,6 +620,7 @@ export class WorkDirectiveStore {
       mode: record.mode,
       submittedStage: record.submitted_stage,
       status: record.status,
+      revision: record.revision,
       leaseGeneration: record.lease_generation,
       ...(record.failure_reason === undefined ? {} : { failureReason: record.failure_reason }),
       createdAt: iso(record.created_at),

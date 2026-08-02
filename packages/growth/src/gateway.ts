@@ -150,6 +150,18 @@ export class GrowthGateway {
     if (!detail) throw new Error("Growth Suggestion을 찾을 수 없습니다");
     return detail;
   }
+  public async getSuggestionDetailsByApproval(
+    context: TenantContext,
+    approvalId: string,
+  ): Promise<GrowthSuggestionDetails | undefined> {
+    const adoption = await this.dependencies.adoptions.findByApproval(context, approvalId);
+    if (!adoption) return undefined;
+    const detail = await this.getSuggestionDetails(context, adoption.suggestion_id);
+    if (detail.adoption?.adoptionId !== adoption.adoption_id || detail.adoption.approvalId !== approvalId) {
+      throw new Error("Growth Suggestion과 Approval 연결이 일치하지 않습니다");
+    }
+    return detail;
+  }
   public async evaluate(
     context: TenantContext,
     input: { readonly commandId: string; readonly suggestionId: string; readonly receiptIds: readonly string[] },

@@ -348,6 +348,17 @@ DEFINE INDEX application_run_work_history ON application_run FIELDS organization
 `,
 );
 
+export const APPLICATION_WORK_DIRECTIVE_MUTATION_MIGRATION = defineMigration(
+  "0120-application-work-directive-mutation",
+  `
+DEFINE FIELD OVERWRITE status ON application_work_directive TYPE string ASSERT $value IN ['queued', 'applying', 'applied', 'failed', 'unapplied', 'cancelled'];
+DEFINE FIELD revision ON application_work_directive TYPE int DEFAULT 1 ASSERT $value > 0;
+UPDATE application_work_directive SET revision = 1 WHERE revision = NONE;
+DEFINE FIELD last_mutation_command_id ON application_work_directive TYPE option<string>;
+DEFINE FIELD last_mutation_request_hash ON application_work_directive TYPE option<string>;
+`,
+);
+
 export const APPLICATION_RUN_APPROVAL_RESUME_MIGRATION = defineMigration(
   "0109-application-run-approval-resume",
   `
@@ -416,6 +427,7 @@ export const APPLICATION_MIGRATIONS = [
   APPLICATION_WEB_SESSION_REVISION_MIGRATION,
   APPLICATION_RUN_RETRY_MIGRATION,
   APPLICATION_WORK_DIRECTIVE_MIGRATION,
+  APPLICATION_WORK_DIRECTIVE_MUTATION_MIGRATION,
   APPLICATION_RUN_APPROVAL_RESUME_MIGRATION,
   APPLICATION_DYNAMIC_STAFFING_MIGRATION,
   APPLICATION_RUN_EVENT_WORK_MIGRATION,

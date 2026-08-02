@@ -3,10 +3,17 @@ import { createHash } from "node:crypto";
 import type { TenantContext } from "@massion/identity";
 
 import type { EvidenceRepository, IndexVersion } from "./contracts.js";
-import type { EvidenceBrief, EvidenceBriefStore } from "./evidence-store.js";
+import type {
+  CodeEvidenceProvenance,
+  EvidenceBrief,
+  EvidenceBriefStore,
+  EvidenceReferenceSeed,
+  FrozenEvidenceRelation,
+} from "./evidence-store.js";
+import { isLegacyAutomaticEvidenceBrief } from "./evidence-store.js";
 import type { CodeGraphService } from "./graph.js";
 import type { EvidenceIndexer } from "./indexer.js";
-import type { IndexedChunk, IndexedSymbol, IndexSnapshot, IndexStore } from "./index-store.js";
+import type { IndexedChunk, IndexedRelation, IndexedSymbol, IndexSnapshot, IndexStore } from "./index-store.js";
 import { normalizeRepositoryPath } from "./path.js";
 import type { RepositoryStore } from "./repository-store.js";
 import type { RepositoryRevisionCollector } from "./revision.js";
@@ -102,6 +109,38 @@ function chunksForSymbol(snapshot: IndexSnapshot, symbolKey: string): readonly I
   return snapshot.chunks.filter((chunk) => chunk.symbolKey === symbolKey);
 }
 
+function frozenRelation(relation: IndexedRelation): FrozenEvidenceRelation {
+  return {
+    relationId: relation.relationId,
+    relationKey: relation.relationKey,
+    kind: relation.kind,
+    ...(relation.sourceSymbolKey === undefined ? {} : { sourceSymbolKey: relation.sourceSymbolKey }),
+    ...(relation.targetSymbolKey === undefined ? {} : { targetSymbolKey: relation.targetSymbolKey }),
+    targetText: relation.targetText,
+    resolved: relation.resolved,
+    relativePath: relation.relativePath,
+    startLine: relation.startLine,
+  };
+}
+
+function provenance(
+  selection: CodeEvidenceProvenance["selection"],
+  snapshotChecksum: string,
+  seed: EvidenceReferenceSeed,
+  relations: readonly IndexedRelation[] = [],
+): CodeEvidenceProvenance {
+  return {
+    selection,
+    snapshotChecksum,
+    paths:
+      relations.length === 0
+        ? [{ seed }]
+        : relations
+            .map((relation) => ({ seed, relation: frozenRelation(relation) }))
+            .sort((left, right) => left.relation.relationKey.localeCompare(right.relation.relationKey)),
+  };
+}
+
 export class WorkspaceKnowledgeService {
   public constructor(
     private readonly repositories: RepositoryStore,
@@ -135,8 +174,10 @@ export class WorkspaceKnowledgeService {
         throw new Error("같은 Work의 automatic EvidenceBrief scope가 다릅니다");
       const repository = await this.repositories.findByWorkspace(context, input.workspaceId);
       if (!repository) throw new Error("Automatic EvidenceBrief의 Workspace Repository binding을 찾을 수 없습니다");
-      await this.verifyExistingBrief(context, repository, existing);
-      return { brief: existing };
+      const legacy = isLegacyAutomaticEvidenceBrief(existing);
+      await this.verifyExistingBrief(context, repository, existing, legacy);
+      if (!legacy) return { brief: existing };
+      return await this.upgradeLegacyBrief(context, input.commandId, existing);
     }
 
     const captured = await this.revisions.capture(input.root, scanOptions);
@@ -248,14 +289,29 @@ export class WorkspaceKnowledgeService {
     const chunkById = new Map(snapshot.chunks.map((chunk) => [chunk.chunkId, chunk]));
     const symbolById = new Map(snapshot.symbols.map((symbol) => [symbol.symbolId, symbol]));
     const symbolByKey = new Map(snapshot.symbols.map((symbol) => [symbol.symbolKey, symbol]));
-    const searchCandidates: IndexedChunk[] = [];
+    const scopedCandidates = seeds.map((chunk) => ({
+      chunk,
+      provenance: provenance("scope", snapshot.checksum, {
+        referenceId: chunk.chunkId,
+        kind: "chunk" as const,
+        ...(chunk.symbolKey === undefined ? {} : { symbolKey: chunk.symbolKey }),
+      }),
+    }));
+    const searchCandidates: Array<{ readonly chunk: IndexedChunk; readonly provenance: CodeEvidenceProvenance }> = [];
     const roots: IndexedSymbol[] = [];
     const rootKeys = new Set<string>();
     for (const result of searched.results) {
       if (result.kind === "chunk") {
         const chunk = chunkById.get(result.referenceId);
         if (!chunk) continue;
-        searchCandidates.push(chunk);
+        searchCandidates.push({
+          chunk,
+          provenance: provenance("direct-search", snapshot.checksum, {
+            referenceId: chunk.chunkId,
+            kind: "chunk",
+            ...(chunk.symbolKey === undefined ? {} : { symbolKey: chunk.symbolKey }),
+          }),
+        });
         if (chunk.symbolKey) {
           const symbol = symbolByKey.get(chunk.symbolKey);
           if (symbol && !rootKeys.has(symbol.symbolKey)) {
@@ -266,7 +322,16 @@ export class WorkspaceKnowledgeService {
       } else {
         const symbol = symbolById.get(result.referenceId);
         if (!symbol) continue;
-        searchCandidates.push(...chunksForSymbol(snapshot, symbol.symbolKey));
+        searchCandidates.push(
+          ...chunksForSymbol(snapshot, symbol.symbolKey).map((chunk) => ({
+            chunk,
+            provenance: provenance("direct-search", snapshot.checksum, {
+              referenceId: symbol.symbolId,
+              kind: "symbol" as const,
+              symbolKey: symbol.symbolKey,
+            }),
+          })),
+        );
         if (!rootKeys.has(symbol.symbolKey)) {
           roots.push(symbol);
           rootKeys.add(symbol.symbolKey);
@@ -274,10 +339,9 @@ export class WorkspaceKnowledgeService {
       }
     }
 
-    const graphSymbols: IndexedSymbol[] = [];
+    const graphCandidates: Array<{ readonly chunk: IndexedChunk; readonly provenance: CodeEvidenceProvenance }> = [];
     const graphSymbolKeys = new Set<string>();
     for (const root of roots) {
-      if (graphSymbols.length >= MAX_GRAPH_NEIGHBORS) break;
       if (scopedPaths && !scopedPaths.has(root.relativePath)) continue;
       const neighbors = await this.graph.neighbors(context, {
         repositoryId: repository.repositoryId,
@@ -288,28 +352,54 @@ export class WorkspaceKnowledgeService {
       });
       if (neighbors.indexVersionId !== index.indexVersionId)
         throw new Error("Graph 결과의 IndexVersion이 선택한 snapshot과 다릅니다");
-      const connectedKeys = new Set<string>();
-      for (const edge of neighbors.edges) {
-        if (!GRAPH_RELATION_KINDS.has(edge.kind)) continue;
-        if (edge.sourceSymbolKey === root.symbolKey && edge.targetSymbolKey) connectedKeys.add(edge.targetSymbolKey);
-        if (edge.targetSymbolKey === root.symbolKey && edge.sourceSymbolKey) connectedKeys.add(edge.sourceSymbolKey);
-      }
       for (const neighbor of neighbors.nodes) {
-        if (graphSymbols.length >= MAX_GRAPH_NEIGHBORS) break;
-        if (!connectedKeys.has(neighbor.symbolKey) || graphSymbolKeys.has(neighbor.symbolKey)) continue;
+        const relations = neighbors.edges
+          .filter(
+            (edge) =>
+              GRAPH_RELATION_KINDS.has(edge.kind) &&
+              ((edge.sourceSymbolKey === root.symbolKey && edge.targetSymbolKey === neighbor.symbolKey) ||
+                (edge.targetSymbolKey === root.symbolKey && edge.sourceSymbolKey === neighbor.symbolKey)),
+          )
+          .sort((left, right) => left.relationKey.localeCompare(right.relationKey));
+        if (relations.length === 0) continue;
         if (scopedPaths && (!scopedPaths.has(root.relativePath) || !scopedPaths.has(neighbor.relativePath))) continue;
-        graphSymbols.push(neighbor);
-        graphSymbolKeys.add(neighbor.symbolKey);
+        if (!graphSymbolKeys.has(neighbor.symbolKey)) {
+          if (graphSymbolKeys.size >= MAX_GRAPH_NEIGHBORS) continue;
+          graphSymbolKeys.add(neighbor.symbolKey);
+        }
+        const neighborProvenance = provenance(
+          "graph-neighbor",
+          snapshot.checksum,
+          { referenceId: root.symbolId, kind: "symbol", symbolKey: root.symbolKey },
+          relations,
+        );
+        graphCandidates.push(
+          ...chunksForSymbol(snapshot, neighbor.symbolKey).map((chunk) => ({
+            chunk,
+            provenance: neighborProvenance,
+          })),
+        );
       }
     }
-    const graphCandidates = graphSymbols.flatMap((symbol) => chunksForSymbol(snapshot, symbol.symbolKey));
-    const selected: IndexedChunk[] = [];
-    const selectedIds = new Set<string>();
-    for (const chunk of [...seeds, ...searchCandidates, ...graphCandidates]) {
-      if (selectedIds.has(chunk.chunkId)) continue;
-      selected.push(chunk);
-      selectedIds.add(chunk.chunkId);
-      if (selected.length === MAX_REFERENCES) break;
+    const selected = new Map<string, { readonly chunk: IndexedChunk; readonly provenance: CodeEvidenceProvenance }>();
+    for (const candidate of [...scopedCandidates, ...searchCandidates, ...graphCandidates]) {
+      const existing = selected.get(candidate.chunk.chunkId);
+      if (existing) {
+        if (existing.provenance.selection !== candidate.provenance.selection) continue;
+        const paths = new Map(
+          [...existing.provenance.paths, ...candidate.provenance.paths].map((path) => [canonicalJson(path), path]),
+        );
+        selected.set(candidate.chunk.chunkId, {
+          chunk: candidate.chunk,
+          provenance: {
+            ...existing.provenance,
+            paths: [...paths.values()].sort((left, right) => canonicalJson(left).localeCompare(canonicalJson(right))),
+          },
+        });
+        continue;
+      }
+      if (selected.size >= MAX_REFERENCES) continue;
+      selected.set(candidate.chunk.chunkId, candidate);
     }
 
     const baseBrief = {
@@ -320,18 +410,63 @@ export class WorkspaceKnowledgeService {
       query: input.query,
       scopeChecksum: input.scopeChecksum,
     };
-    if (selected.length === 0) return await this.briefs.createNoMatch(context, baseBrief);
-    const references = selected.map((chunk, position) => ({
+    if (selected.size === 0) return await this.briefs.createNoMatch(context, baseBrief);
+    const references = [...selected.values()].map(({ chunk, provenance: referenceProvenance }, position) => ({
       kind: "code" as const,
       result: this.chunkResult(repository, index, chunk, position + 1),
+      provenance: referenceProvenance,
     }));
     return await this.briefs.createAutomaticBrief(context, { ...baseBrief, references });
+  }
+
+  private async upgradeLegacyBrief(
+    context: TenantContext,
+    commandId: string,
+    brief: EvidenceBrief,
+  ): Promise<PrepareWorkspaceKnowledgeResult> {
+    if (!brief.scopeChecksum || !isLegacyAutomaticEvidenceBrief(brief)) {
+      throw new Error("Legacy automatic EvidenceBrief 계보가 유효하지 않습니다");
+    }
+    const base = {
+      commandId: `${commandId}:brief-upgrade`,
+      workId: brief.workId,
+      repositoryId: brief.repositoryId,
+      indexVersionId: brief.indexVersionId,
+      query: brief.query,
+      scopeChecksum: brief.scopeChecksum,
+      replacesEvidenceBriefId: brief.evidenceBriefId,
+    };
+    if (brief.status === "no_match") return await this.briefs.createNoMatch(context, base);
+    const references = brief.references.map((reference, index) => {
+      if (reference.kind !== "code") throw new Error("Automatic EvidenceBrief에는 code reference만 허용됩니다");
+      return {
+        kind: "code" as const,
+        result: {
+          referenceId: reference.referenceId,
+          kind: reference.sourceKind,
+          repositoryId: reference.repositoryId,
+          repositoryRevisionId: reference.repositoryRevisionId,
+          indexVersionId: reference.indexVersionId,
+          relativePath: reference.relativePath,
+          startLine: reference.startLine,
+          endLine: reference.endLine,
+          startByte: reference.startByte,
+          endByte: reference.endByte,
+          contentHash: reference.contentHash,
+          exact: true,
+          matchModes: ["exact" as const],
+          rank: index + 1,
+        },
+      };
+    });
+    return await this.briefs.createAutomaticBrief(context, { ...base, references });
   }
 
   private async verifyExistingBrief(
     context: TenantContext,
     repository: EvidenceRepository,
     brief: EvidenceBrief,
+    allowLegacy = false,
   ): Promise<void> {
     if (!brief.scopeChecksum || !["ready", "no_match"].includes(brief.status))
       throw new Error("Automatic EvidenceBrief 상태 또는 scope가 올바르지 않습니다");
@@ -358,7 +493,11 @@ export class WorkspaceKnowledgeService {
       throw new Error("Automatic EvidenceBrief의 IndexConfiguration checksum이 다릅니다");
     }
     const snapshot = await this.indexes.getSnapshot(context, index.indexVersionId);
-    if (!index.snapshotChecksum || index.snapshotChecksum !== snapshot.checksum)
+    if (
+      !index.snapshotChecksum ||
+      index.snapshotChecksum !== snapshot.checksum ||
+      (brief.snapshotChecksum === undefined ? !allowLegacy : brief.snapshotChecksum !== snapshot.checksum)
+    )
       throw new Error("Automatic EvidenceBrief의 snapshot checksum이 다릅니다");
   }
 

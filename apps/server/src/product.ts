@@ -1031,6 +1031,8 @@ export async function createMassionDaemon(
               repositoryRevisionId: verified.repositoryRevisionId,
               indexVersionId: verified.indexVersionId,
               evidenceBriefId: verified.evidenceBriefId,
+              ...(verified.snapshotChecksum === undefined ? {} : { snapshotChecksum: verified.snapshotChecksum }),
+              evidenceBriefChecksum: verified.checksum,
               freshnessStatus: freshness.status,
               query: verified.query,
               references: [],
@@ -1048,6 +1050,8 @@ export async function createMassionDaemon(
           if (brief.references.length === 0 || brief.references.some((item) => item.kind !== "code"))
             throw new Error("ready EvidenceBrief에 코드 근거가 없습니다");
           const snapshot = await indexes.getSnapshot(context, brief.indexVersionId);
+          if (brief.snapshotChecksum !== snapshot.checksum)
+            throw new Error("EvidenceBrief와 Index snapshot checksum이 다릅니다");
           const symbolByKey = new Map(snapshot.symbols.map((symbol) => [symbol.symbolKey, symbol]));
           const freshness = await evidenceFreshness.assess(context, brief, "warn");
           if (freshness.status !== "fresh" && freshness.status !== "stale_warning")
@@ -1059,6 +1063,8 @@ export async function createMassionDaemon(
             repositoryRevisionId: brief.repositoryRevisionId,
             indexVersionId: brief.indexVersionId,
             evidenceBriefId: brief.evidenceBriefId,
+            snapshotChecksum: snapshot.checksum,
+            evidenceBriefChecksum: brief.checksum,
             freshnessStatus: freshness.status,
             query: brief.query,
             references: brief.references.map((item) => {
@@ -1069,6 +1075,22 @@ export async function createMassionDaemon(
                   : symbolByKey.get(
                       snapshot.chunks.find((chunk) => chunk.chunkId === item.referenceId)?.symbolKey ?? "",
                     )?.qualifiedName;
+              const sourceNode =
+                item.sourceKind === "symbol"
+                  ? snapshot.symbols.find((symbol) => symbol.symbolId === item.referenceId)
+                  : snapshot.symbols.find(
+                      (symbol) =>
+                        symbol.symbolKey ===
+                        snapshot.chunks.find((chunk) => chunk.chunkId === item.referenceId)?.symbolKey,
+                    );
+              const sourceFile = snapshot.files.find(
+                (file) =>
+                  file.sourceFileId ===
+                  (item.sourceKind === "symbol"
+                    ? snapshot.symbols.find((symbol) => symbol.symbolId === item.referenceId)?.sourceFileId
+                    : snapshot.chunks.find((chunk) => chunk.chunkId === item.referenceId)?.sourceFileId),
+              );
+              if (!sourceNode && !sourceFile) throw new Error("Evidence reference Knowledge node를 찾을 수 없습니다");
               return {
                 referenceId: item.referenceId,
                 kind: item.sourceKind,
@@ -1076,6 +1098,8 @@ export async function createMassionDaemon(
                 startLine: item.startLine,
                 endLine: item.endLine,
                 contentHash: item.contentHash,
+                nodeId: sourceNode ? `symbol:${sourceNode.symbolId}` : `file:${sourceFile?.sourceFileId ?? ""}`,
+                provenance: item.provenance,
                 ...(qualifiedName ? { qualifiedName } : {}),
               };
             }),
@@ -1084,15 +1108,27 @@ export async function createMassionDaemon(
           return { workId, status: "blocked", references: [], failureReason: "knowledge-integrity-check-failed" };
         }
       },
-      async getWorkspaceSnapshot(context: Parameters<typeof works.getWork>[0], workspaceId: string) {
+      async getWorkspaceSnapshot(
+        context: Parameters<typeof works.getWork>[0],
+        workspaceId: string,
+        selector?: { readonly indexVersionId: string; readonly snapshotChecksum: string },
+      ) {
         const repository = await repositories.findByWorkspace(context, workspaceId);
         if (!repository) return undefined;
-        const index = await repositories.getCurrentIndex(context, repository.repositoryId);
+        const index = selector
+          ? await repositories.getIndex(context, selector.indexVersionId)
+          : await repositories.getCurrentIndex(context, repository.repositoryId);
         if (!index) return undefined;
+        if (index.repositoryId !== repository.repositoryId) {
+          throw new Error("Workspace Knowledge frozen index의 Repository 연결이 일치하지 않습니다");
+        }
         const [configuration, snapshot] = await Promise.all([
           repositories.getConfiguration(context, index.configurationId),
           indexes.getSnapshot(context, index.indexVersionId),
         ]);
+        if (selector && snapshot.checksum !== selector.snapshotChecksum) {
+          throw new Error("Workspace Knowledge frozen snapshot checksum이 일치하지 않습니다");
+        }
         return { repository, index, configuration, snapshot };
       },
     };

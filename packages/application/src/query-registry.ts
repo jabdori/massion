@@ -81,6 +81,7 @@ export interface ApplicationQueryDependencies {
   readonly readModel: ApplicationReadModel;
   readonly runs?: Pick<ApplicationRunStore, "get"> & {
     listByWork?(context: TenantContext, workId: string): Promise<readonly ApplicationRunView[]>;
+    listBlocked?(context: TenantContext): Promise<readonly ApplicationRunView[]>;
   };
   readonly snapshot?: CollaborationGraphSnapshotProjector;
   readonly runtime?: Pick<RuntimeExecutionStore, "listEvents" | "getRecovery" | "listByCorrelation">;
@@ -103,6 +104,7 @@ export interface ApplicationQueryDependencies {
     getWorkspaceSnapshot?(
       context: TenantContext,
       workspaceId: string,
+      selector?: { readonly indexVersionId: string; readonly snapshotChecksum: string },
     ): Promise<
       | {
           readonly repository: EvidenceRepository;
@@ -176,16 +178,53 @@ function publicWorkKnowledge(view: WorkKnowledgeViewV1): WorkKnowledgeViewV1 {
     ...(view.repositoryRevisionId === undefined ? {} : { repositoryRevisionId: view.repositoryRevisionId }),
     ...(view.indexVersionId === undefined ? {} : { indexVersionId: view.indexVersionId }),
     ...(view.evidenceBriefId === undefined ? {} : { evidenceBriefId: view.evidenceBriefId }),
+    ...(view.snapshotChecksum === undefined ? {} : { snapshotChecksum: view.snapshotChecksum }),
+    ...(view.evidenceBriefChecksum === undefined ? {} : { evidenceBriefChecksum: view.evidenceBriefChecksum }),
     ...(view.freshnessStatus === undefined ? {} : { freshnessStatus: view.freshnessStatus }),
     ...(view.query === undefined ? {} : { query: view.query }),
     references: view.references.map((reference) => ({
       referenceId: reference.referenceId,
       kind: reference.kind,
+      ...(reference.nodeId === undefined ? {} : { nodeId: reference.nodeId }),
       relativePath: reference.relativePath,
       ...(reference.qualifiedName === undefined ? {} : { qualifiedName: reference.qualifiedName }),
       startLine: reference.startLine,
       endLine: reference.endLine,
       contentHash: reference.contentHash,
+      ...(reference.provenance === undefined
+        ? {}
+        : {
+            provenance: {
+              selection: reference.provenance.selection,
+              snapshotChecksum: reference.provenance.snapshotChecksum,
+              paths: reference.provenance.paths.map((path) => ({
+                seed: {
+                  referenceId: path.seed.referenceId,
+                  kind: path.seed.kind,
+                  ...(path.seed.symbolKey === undefined ? {} : { symbolKey: path.seed.symbolKey }),
+                },
+                ...(path.relation === undefined
+                  ? {}
+                  : {
+                      relation: {
+                        relationId: path.relation.relationId,
+                        relationKey: path.relation.relationKey,
+                        kind: path.relation.kind,
+                        ...(path.relation.sourceSymbolKey === undefined
+                          ? {}
+                          : { sourceSymbolKey: path.relation.sourceSymbolKey }),
+                        ...(path.relation.targetSymbolKey === undefined
+                          ? {}
+                          : { targetSymbolKey: path.relation.targetSymbolKey }),
+                        targetText: path.relation.targetText,
+                        resolved: path.relation.resolved,
+                        relativePath: path.relation.relativePath,
+                        startLine: path.relation.startLine,
+                      },
+                    }),
+              })),
+            },
+          }),
     })),
     ...(view.failureReason === undefined ? {} : { failureReason: view.failureReason }),
   };
@@ -224,7 +263,14 @@ interface KnowledgeProjection {
 
 type KnowledgeProjectionRequest =
   | { readonly kind: "graph"; readonly lens: KnowledgeGraphLensV1; readonly limit: number }
-  | { readonly kind: "links"; readonly nodeId: string; readonly limit: number };
+  | {
+      readonly kind: "links";
+      readonly nodeId: string;
+      readonly limit: number;
+      readonly indexVersionId?: string;
+      readonly snapshotChecksum?: string;
+      readonly relationIds?: readonly string[];
+    };
 
 const MAX_KNOWLEDGE_WORKS = 200;
 
@@ -339,6 +385,7 @@ function knowledgeIndexView(
   context: TenantContext,
   workspaceId: string,
   source: WorkspaceKnowledgeSnapshot | undefined,
+  selector?: { readonly indexVersionId: string; readonly snapshotChecksum: string },
 ): KnowledgeIndexViewV1 {
   if (!source) {
     return { workspaceId, status: "none", fileCount: 0, symbolCount: 0, relationCount: 0, excluded: [] };
@@ -352,11 +399,8 @@ function knowledgeIndexView(
     repository.organizationId !== context.organizationId ||
     repository.workspaceId !== workspaceId ||
     repository.status !== "active" ||
-    repository.currentIndexVersionId !== index.indexVersionId ||
     index.organizationId !== context.organizationId ||
     index.repositoryId !== repository.repositoryId ||
-    index.status !== "complete" ||
-    !index.current ||
     configuration.organizationId !== context.organizationId ||
     configuration.repositoryId !== repository.repositoryId ||
     configuration.configurationId !== index.configurationId ||
@@ -369,6 +413,15 @@ function knowledgeIndexView(
     snapshot.chunks.length !== chunkCount
   ) {
     throw new Error("Knowledge workspace·repository·index 계보가 일치하지 않습니다");
+  }
+  if (
+    selector === undefined
+      ? repository.currentIndexVersionId !== index.indexVersionId || index.status !== "complete" || !index.current
+      : selector.indexVersionId !== index.indexVersionId ||
+        selector.snapshotChecksum !== snapshot.checksum ||
+        !["complete", "superseded"].includes(index.status)
+  ) {
+    throw new Error("Knowledge workspace의 선택한 frozen index 계보가 일치하지 않습니다");
   }
   knowledgeSourceId(repository.repositoryId, "repository ID");
   knowledgeSourceId(index.indexVersionId, "index ID");
@@ -416,7 +469,14 @@ function addKnowledgeNode(nodes: Map<string, KnowledgeNodeViewV1>, node: Knowled
 
 function addKnowledgeEdge(edges: Map<string, KnowledgeGraphEdgeViewV1>, edge: KnowledgeGraphEdgeViewV1): void {
   if (edge.sourceId === edge.targetId) return;
-  const key = [edge.kind, edge.sourceId, edge.targetId, edge.unresolved ? "1" : "0", edge.derivedVia ?? ""].join("\0");
+  const key = [
+    edge.kind,
+    edge.sourceId,
+    edge.targetId,
+    edge.unresolved ? "1" : "0",
+    edge.derivedVia ?? "",
+    edge.relationId ?? "",
+  ].join("\0");
   edges.set(key, edge);
 }
 
@@ -429,7 +489,8 @@ function compareKnowledgeEdge(left: KnowledgeGraphEdgeViewV1, right: KnowledgeGr
     left.sourceId.localeCompare(right.sourceId) ||
     left.targetId.localeCompare(right.targetId) ||
     left.kind.localeCompare(right.kind) ||
-    (left.derivedVia ?? "").localeCompare(right.derivedVia ?? "")
+    (left.derivedVia ?? "").localeCompare(right.derivedVia ?? "") ||
+    (left.relationId ?? "").localeCompare(right.relationId ?? "")
   );
 }
 
@@ -440,7 +501,11 @@ async function projectKnowledge(
   source: WorkspaceKnowledgeSnapshot | undefined,
   request: KnowledgeProjectionRequest,
 ): Promise<KnowledgeProjection> {
-  const index = knowledgeIndexView(context, workspaceId, source);
+  const selector =
+    request.kind === "links" && request.indexVersionId !== undefined && request.snapshotChecksum !== undefined
+      ? { indexVersionId: request.indexVersionId, snapshotChecksum: request.snapshotChecksum }
+      : undefined;
+  const index = knowledgeIndexView(context, workspaceId, source, selector);
   if (!source) return { index, nodes: new Map(), edges: [], nonCanonicalNodeIds: new Set() };
   const nodes = new Map<string, KnowledgeNodeViewV1>();
   const edges = new Map<string, KnowledgeGraphEdgeViewV1>();
@@ -535,7 +600,9 @@ async function projectKnowledge(
     if (!KNOWLEDGE_RELATION_KINDS.has(kind))
       throw new Error(`Knowledge relation 종류가 유효하지 않습니다: ${relationId}`);
     const sourceFile = filesById.get(knowledgeSourceId(relation.sourceFileId, "relation source file ID"));
-    if (!sourceFile || sourceFile.relativePath !== knowledgeRelativePath(relation.relativePath))
+    const relationPath = knowledgeRelativePath(relation.relativePath);
+    const relationLine = knowledgeLine(relation.startLine, "relation source line");
+    if (!sourceFile || sourceFile.relativePath !== relationPath)
       throw new Error(`Knowledge relation→file 계보가 끊겼습니다: ${relationId}`);
     const sourceSymbol =
       relation.sourceSymbolKey === undefined
@@ -566,6 +633,12 @@ async function projectKnowledge(
         sourceId: sourceNode.nodeId,
         targetId: placeholder.nodeId,
         unresolved: true,
+        relationId,
+        relationKey,
+        ...(relation.sourceSymbolKey === undefined ? {} : { sourceSymbolKey: relation.sourceSymbolKey }),
+        snapshotChecksum: source.snapshot.checksum,
+        sourcePath: relationPath,
+        sourceLine: relationLine,
       });
       continue;
     }
@@ -578,11 +651,29 @@ async function projectKnowledge(
       kind,
       sourceId: relationSourceNode.nodeId,
       targetId: `symbol:${targetSymbol.symbolId}`,
+      relationId,
+      relationKey,
+      ...(relation.sourceSymbolKey === undefined ? {} : { sourceSymbolKey: relation.sourceSymbolKey }),
+      ...(relation.targetSymbolKey === undefined ? {} : { targetSymbolKey: relation.targetSymbolKey }),
+      snapshotChecksum: source.snapshot.checksum,
+      sourcePath: relationPath,
+      sourceLine: relationLine,
     });
     const sourceNode = fileNodesById.get(relation.sourceFileId);
     const targetNode = fileNodesById.get(targetSymbol.sourceFileId);
     if (!sourceNode || !targetNode) throw new Error(`Knowledge relation node 계보가 끊겼습니다: ${relationId}`);
-    addKnowledgeEdge(edges, { kind, sourceId: sourceNode.nodeId, targetId: targetNode.nodeId });
+    addKnowledgeEdge(edges, {
+      kind,
+      sourceId: sourceNode.nodeId,
+      targetId: targetNode.nodeId,
+      relationId,
+      relationKey,
+      ...(relation.sourceSymbolKey === undefined ? {} : { sourceSymbolKey: relation.sourceSymbolKey }),
+      ...(relation.targetSymbolKey === undefined ? {} : { targetSymbolKey: relation.targetSymbolKey }),
+      snapshotChecksum: source.snapshot.checksum,
+      sourcePath: relationPath,
+      sourceLine: relationLine,
+    });
   }
 
   if (request.kind === "graph" && ["document", "file", "symbol"].includes(request.lens)) {
@@ -613,6 +704,7 @@ async function projectKnowledge(
   const includeReferences =
     (request.kind === "graph" && request.lens === "work") ||
     (request.kind === "links" &&
+      request.relationIds === undefined &&
       ["work:", "document:", "file:", "symbol:"].some((prefix) => request.nodeId.startsWith(prefix)));
   const artifacts = includeArtifacts
     ? ((await dependencies.readModel.artifacts?.(context)) ?? []).filter(
@@ -1107,6 +1199,7 @@ function publicDirective(directive: ApplicationDirectiveSource) {
     mode: directive.mode,
     submittedStage: directive.submittedStage,
     status: directive.status,
+    revision: directive.revision,
     createdAt: directive.createdAt,
     updatedAt: directive.updatedAt,
     ...(directive.failureReason === undefined ? {} : { failureReason: directive.failureReason }),
@@ -1609,6 +1702,95 @@ export function registerApplicationQueries(
     },
   });
   registry.register({
+    operation: "inbox.list",
+    requiredScopes: ["work:read", "approval:read", "growth:read"],
+    allowedRoles: EVERY_ROLE,
+    validate: (value) => object(value, []),
+    handle: async (context) => {
+      const works = (await dependencies.readModel.works(context)).filter(
+        (work) => work.organizationId === context.organizationId,
+      );
+      const worksById = new Map(works.map((work) => [work.workId, work]));
+      const completeGrowthDetails = async (): Promise<readonly GrowthSuggestionDetails[]> => {
+        if (!dependencies.growth?.listSuggestionDetails) return [];
+        const details: GrowthSuggestionDetails[] = [];
+        let after: { readonly createdAt: string; readonly suggestionId: string } | undefined;
+        for (;;) {
+          const batch = await dependencies.growth.listSuggestionDetails(context, {
+            status: "awaiting-review",
+            limit: 1_000,
+            oldestFirst: true,
+            ...(after === undefined ? {} : { after }),
+          });
+          details.push(...batch);
+          if (batch.length < 1_000) return details;
+          const last = batch.at(-1)?.suggestion;
+          if (!last || last.created_at === undefined) {
+            throw new Error("Growth Inbox cursor 계보가 유효하지 않습니다");
+          }
+          const next = {
+            createdAt: timestamp(last.created_at, "Growth Inbox"),
+            suggestionId: last.suggestion_id,
+          };
+          if (after?.createdAt === next.createdAt && after.suggestionId === next.suggestionId) {
+            throw new Error("Growth Inbox cursor가 진행하지 않습니다");
+          }
+          after = next;
+        }
+      };
+      const [blockedRuns, approvals, growthDetails] = await Promise.all([
+        dependencies.runs?.listBlocked?.(context) ?? [],
+        dependencies.readModel.approvals(context),
+        completeGrowthDetails(),
+      ]);
+      const blockedItems = blockedRuns.map((run) => {
+        const work = run.workId === undefined ? undefined : worksById.get(run.workId);
+        return {
+          kind: "blocked" as const,
+          id: `blocked:${run.runId}`,
+          runId: run.runId,
+          ...(run.workId === undefined ? {} : { workId: run.workId }),
+          title: work?.title ?? "차단된 실행",
+          ...(run.blockedReason === undefined ? {} : { blockedReason: run.blockedReason }),
+          ...(publicRun(run).blockedDetail === undefined ? {} : { blockedDetail: publicRun(run).blockedDetail }),
+        };
+      });
+      const growthApprovalIds = new Set(
+        growthDetails.flatMap((detail) =>
+          detail.adoption?.status === "awaiting-review" && detail.adoption.approvalId
+            ? [detail.adoption.approvalId]
+            : [],
+        ),
+      );
+      const approvalItems = approvals
+        .filter((approval) => approval.organizationId === context.organizationId && approval.status === "pending")
+        .filter((approval) => !growthApprovalIds.has(approval.approvalId))
+        .map((approval) => ({
+          kind: "approval" as const,
+          id: approval.approvalId,
+          ...(approval.workId === undefined
+            ? {}
+            : { workTitle: worksById.get(approval.workId)?.title ?? approval.workId }),
+          approval: publicApproval(approval),
+        }));
+      const growthItems = growthDetails
+        .filter((detail) => detail.suggestion.status === "awaiting-review")
+        .map((detail) => {
+          const suggestion = detail.suggestion;
+          return {
+            kind: "growth" as const,
+            id: `growth:${suggestion.suggestion_id}`,
+            suggestionId: suggestion.suggestion_id,
+            workId: suggestion.work_id,
+            workTitle: worksById.get(suggestion.work_id)?.title ?? suggestion.work_id,
+            title: suggestion.summary,
+            reason: suggestion.rationale,
+          };
+        });
+      return [...blockedItems, ...approvalItems, ...growthItems];
+    },
+  });
+  registry.register({
     operation: "work.get",
     requiredScopes: ["work:read"],
     allowedRoles: EVERY_ROLE,
@@ -1850,7 +2032,11 @@ export function registerApplicationQueries(
       request: KnowledgeProjectionRequest,
     ): Promise<KnowledgeProjection> => {
       await verifyWorkspace(context, workspaceId);
-      const source = await getWorkspaceSnapshot(context, workspaceId);
+      const selector =
+        request.kind === "links" && request.indexVersionId !== undefined && request.snapshotChecksum !== undefined
+          ? { indexVersionId: request.indexVersionId, snapshotChecksum: request.snapshotChecksum }
+          : undefined;
+      const source = await getWorkspaceSnapshot(context, workspaceId, selector);
       return await projectKnowledge(dependencies, context, workspaceId, source, request);
     };
     registry.register({
@@ -1905,13 +2091,44 @@ export function registerApplicationQueries(
       requiredScopes: ["workspace:read", "work:read"],
       allowedRoles: EVERY_ROLE,
       validate: (value) => {
-        const parsed = object(value, ["workspaceId", "nodeId", "limit"]);
-        const limit = boundedInteger(parsed.limit, "Knowledge links limit", 100);
+        const parsed = object(value, [
+          "workspaceId",
+          "nodeId",
+          "limit",
+          "indexVersionId",
+          "snapshotChecksum",
+          "relationIds",
+        ]);
+        if ((parsed.indexVersionId === undefined) !== (parsed.snapshotChecksum === undefined)) {
+          throw new Error("Knowledge frozen index selector는 version과 checksum이 함께 필요합니다");
+        }
+        const relationIds =
+          parsed.relationIds === undefined
+            ? undefined
+            : Array.isArray(parsed.relationIds) && parsed.relationIds.length > 0 && parsed.relationIds.length <= 200
+              ? parsed.relationIds.map((relationId) => knowledgeSourceId(relationId, "relation ID"))
+              : (() => {
+                  throw new Error("Knowledge exact relation ID 목록이 유효하지 않습니다");
+                })();
+        if (relationIds && new Set(relationIds).size !== relationIds.length) {
+          throw new Error("Knowledge exact relation ID는 중복될 수 없습니다");
+        }
+        if (relationIds && parsed.indexVersionId === undefined) {
+          throw new Error("Knowledge exact relation 조회에는 frozen index selector가 필요합니다");
+        }
+        const limit = boundedInteger(parsed.limit, "Knowledge links limit", relationIds?.length ?? 100);
         if (limit > 200) throw new Error("Knowledge links limit가 유효하지 않습니다");
         return {
           workspaceId: knowledgeSourceId(parsed.workspaceId, "workspace ID"),
           nodeId: knowledgeNodeId(parsed.nodeId),
           limit,
+          ...(parsed.indexVersionId === undefined
+            ? {}
+            : {
+                indexVersionId: knowledgeSourceId(parsed.indexVersionId, "index ID"),
+                snapshotChecksum: knowledgeHash(parsed.snapshotChecksum, "snapshot checksum"),
+              }),
+          ...(relationIds === undefined ? {} : { relationIds }),
         };
       },
       handle: async (context, value) => {
@@ -1919,6 +2136,10 @@ export function registerApplicationQueries(
           kind: "links",
           nodeId: value.nodeId,
           limit: value.limit,
+          ...(value.indexVersionId === undefined
+            ? {}
+            : { indexVersionId: value.indexVersionId, snapshotChecksum: value.snapshotChecksum }),
+          ...(value.relationIds === undefined ? {} : { relationIds: value.relationIds }),
         });
         if (!projection.nodes.has(value.nodeId)) {
           throw new ApplicationError({
@@ -1941,15 +2162,38 @@ export function registerApplicationQueries(
             kind: edge.kind,
             direction: outgoing ? "outgoing" : "incoming",
             ...(edge.unresolved === undefined ? {} : { unresolved: edge.unresolved }),
+            ...(edge.relationId === undefined ? {} : { relationId: edge.relationId }),
+            ...(edge.relationKey === undefined ? {} : { relationKey: edge.relationKey }),
+            ...(edge.sourceSymbolKey === undefined ? {} : { sourceSymbolKey: edge.sourceSymbolKey }),
+            ...(edge.targetSymbolKey === undefined ? {} : { targetSymbolKey: edge.targetSymbolKey }),
+            ...(edge.targetText === undefined ? {} : { targetText: edge.targetText }),
+            ...(edge.snapshotChecksum === undefined ? {} : { snapshotChecksum: edge.snapshotChecksum }),
+            ...(edge.sourcePath === undefined ? {} : { sourcePath: edge.sourcePath }),
+            ...(edge.sourceLine === undefined ? {} : { sourceLine: edge.sourceLine }),
           };
-          links.set([node.nodeId, link.kind, link.direction, link.unresolved ? "1" : "0"].join("\0"), link);
+          links.set(
+            [node.nodeId, link.kind, link.direction, link.unresolved ? "1" : "0", link.relationId ?? ""].join("\0"),
+            link,
+          );
         }
-        return [...links.values()]
+        const selectedLinks = [...links.values()].filter(
+          (link) => value.relationIds === undefined || (link.relationId && value.relationIds.includes(link.relationId)),
+        );
+        if (
+          value.relationIds !== undefined &&
+          value.relationIds.some(
+            (relationId) => selectedLinks.filter((link) => link.relationId === relationId).length !== 1,
+          )
+        ) {
+          throw new Error("Knowledge exact relation을 선택한 frozen node에서 유일하게 찾을 수 없습니다");
+        }
+        return selectedLinks
           .sort(
             (left, right) =>
               left.node.nodeId.localeCompare(right.node.nodeId) ||
               left.kind.localeCompare(right.kind) ||
-              left.direction.localeCompare(right.direction),
+              left.direction.localeCompare(right.direction) ||
+              (left.relationId ?? "").localeCompare(right.relationId ?? ""),
           )
           .slice(0, value.limit);
       },

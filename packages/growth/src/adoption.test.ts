@@ -81,6 +81,12 @@ describe("Growth Adoption 상태 전이", () => {
     });
 
     expect(result.adoption).toMatchObject({ status: "awaiting-review", approval_id: "approval-review" });
+    await expect(service.findByApproval(context, "approval-review")).resolves.toMatchObject({
+      suggestion_id: "suggestion-review",
+      approval_id: "approval-review",
+      status: "awaiting-review",
+    });
+    await expect(service.findByApproval(context, "approval-missing")).resolves.toBeUndefined();
     const [rows] = await database.query<[Array<{ status: string; approval_id: string }>]>(
       "SELECT status, approval_id FROM growth_adoption_run WHERE organization_id = $organization_id;",
       { organization_id: context.organizationId },

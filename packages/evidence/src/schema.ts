@@ -322,3 +322,10 @@ DEFINE FIELD automatic_key ON evidence_brief TYPE option<string>;
 DEFINE INDEX evidence_brief_automatic_key ON evidence_brief FIELDS automatic_key UNIQUE;
 `,
 );
+
+export const EVIDENCE_BRIEF_PROVENANCE_MIGRATION = defineMigration(
+  "0035-evidence-brief-provenance",
+  `
+DEFINE FIELD snapshot_checksum ON evidence_brief TYPE option<string>;
+`,
+);

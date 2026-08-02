@@ -113,7 +113,7 @@ export interface OrganizationChangeView {
   lifetime?: string;
 }
 
-export type EventSemantic = "stage" | "task" | "artifact" | "verification" | "record";
+export type EventSemantic = "stage" | "task" | "artifact" | "verification" | "record" | "directive";
 
 export type ActivityView = (
   | {
@@ -224,11 +224,12 @@ export interface ApprovalView {
  * 배지·수신함·홈이 모두 이 한 타입의 목록을 봅니다. 숫자가 갈리지 않게.
  */
 export type InboxItem =
-  | { readonly kind: "approval"; readonly id: string; readonly approval: ApprovalView }
+  | { readonly kind: "approval"; readonly id: string; readonly approval: ApprovalView; readonly workTitle?: string }
   | {
       readonly kind: "blocked";
       readonly id: string;
-      readonly workId: string;
+      readonly runId: string;
+      readonly workId?: string;
       readonly title: string;
       readonly reason: string;
     }
@@ -237,6 +238,7 @@ export type InboxItem =
       readonly id: string;
       readonly suggestionId: string;
       readonly workId: string;
+      readonly workTitle?: string;
       readonly title: string;
       readonly reason: string;
     };
@@ -273,6 +275,11 @@ export type ReasoningEffort = "low" | "medium" | "high";
 export interface QueuedDirectiveView {
   id: string;
   content: string;
+  status: "queued" | "applying";
+  mode: "now" | "next-stage";
+  submittedStage: string;
+  applyAt: "current-stage" | "next-stage";
+  revision: number;
 }
 
 /** `RecordsDocument`(packages/records/src/contracts.ts)의 kind. work-record는 문서가 아니라 기록 자신입니다. */
@@ -448,7 +455,17 @@ const works: WorkView[] = [
     modelId: "claude-sonnet-5",
     reasoningEffort: "high",
     // 보냈지만 아직 반영되지 않은 지시. 인풋 위에 서서 사람이 처리 시점을 고릅니다.
-    queuedDirectives: [{ id: "queued-cohort", content: "코호트를 계약 규모별로도 나눠줘" }],
+    queuedDirectives: [
+      {
+        id: "queued-cohort",
+        content: "코호트를 계약 규모별로도 나눠줘",
+        status: "queued",
+        mode: "next-stage",
+        submittedStage: "delivery",
+        applyAt: "next-stage",
+        revision: 1,
+      },
+    ],
     title: "3분기 고객 이탈 원인 분석",
     status: "active",
     revision: 1,

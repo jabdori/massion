@@ -45,6 +45,7 @@ import type {
   SubscriptionPolicyView,
 } from "../subscription-operations.js";
 import { SUBSCRIPTION_APPROVAL_MODES, SUBSCRIPTION_CREDENTIAL_POLICIES } from "../subscription-operations.js";
+import { approveGrowthSuggestion, rejectGrowthSuggestion } from "../growth-suggestion-decision.js";
 
 export interface ApplicationDomainDependencies {
   readonly works?: Pick<
@@ -78,6 +79,7 @@ export interface ApplicationDomainDependencies {
     | "configure"
     | "adopt"
     | "getSuggestionDetails"
+    | "getSuggestionDetailsByApproval"
     | "reject"
     | "revert"
     | "start"
@@ -1463,13 +1465,32 @@ function registerGrowth(
     register(registry, {
       operation,
       requiredScopes: ["growth:write"],
-      allowedRoles: ["owner", "admin", "member"],
+      allowedRoles: operation === "growth.suggestion.reject" ? ["owner", "admin"] : ["owner", "admin", "member"],
       recovery: "replay-domain",
       validate: (value) => payload(value, fields),
       idempotencyPayload: (value) => Object.fromEntries(Object.entries(value).filter(([key]) => key !== "approvalId")),
       resumeAwaitingApproval: (value) => value.approvalId !== undefined,
       async handle(context, command, value) {
         try {
+          if (method === "reject" && approvals) {
+            const suggestionId = string(value.suggestionId, "suggestionId");
+            const detail = await growth.getSuggestionDetails(context, suggestionId);
+            const approvalId = detail.adoption?.approvalId;
+            if (detail.adoption?.status === "awaiting-review" && approvalId) {
+              const rejected = await rejectGrowthSuggestion(
+                context,
+                { approvals, growth },
+                {
+                  commandId: command.commandId,
+                  approvalId,
+                  reason: string(value.reason, "reason"),
+                  detail,
+                  expectedSuggestionRevision: integer(value.expectedRevision, "expectedRevision", 1),
+                },
+              );
+              return result(command, { data: growthData(rejected.suggestion) });
+            }
+          }
           const output = await growth[method](context, { commandId: command.commandId, ...value } as never);
           return result(command, { data: growthData(output) });
         } catch (error) {
@@ -1495,40 +1516,38 @@ function registerGrowth(
       async handle(context, command, value) {
         try {
           const suggestionId = string(value.suggestionId, "suggestionId");
-          const expectedRevision = integer(value.expectedRevision, "expectedRevision", 1);
           const detail = await growth.getSuggestionDetails(context, suggestionId);
-          if (detail.suggestion.revision !== expectedRevision) throw new Error("Growth Suggestion revision 충돌입니다");
           const adoption = detail.adoption;
-          const evaluation = detail.evaluation;
           if (!adoption?.approvalId || adoption.status !== "awaiting-review")
             throw new Error("승인 대기 중인 Growth Adoption을 찾을 수 없습니다");
-          if (!evaluation || evaluation.outcome !== "eligible" || evaluation.inputHash !== adoption.evaluationInputHash)
-            throw new Error("Growth Suggestion의 eligible 평가 계보가 일치하지 않습니다");
-          const approval = await approvals.get(context, adoption.approvalId);
-          const voted = await approvals.vote(context, {
-            commandId: `${command.commandId}:approval`,
-            approvalId: adoption.approvalId,
-            expectedRevision: approval.revision,
-            vote: "approve",
-            reason: string(value.reason ?? "개선 상세에서 승인했습니다", "reason"),
-          });
-          if (voted.status !== "approved")
-            throw new Error("Growth Suggestion Approval이 아직 quorum을 충족하지 않았습니다");
-          const adopted = await growth.adopt(context, {
-            commandId: adoption.commandId,
-            suggestionId,
-            suggestionRevision: expectedRevision,
-            evaluationRunId: evaluation.evaluationRunId,
-            expectedEvaluationInputHash: adoption.evaluationInputHash,
-            expectedTargetChecksum: adoption.beforeChecksum,
-            approvalId: adoption.approvalId,
-          });
+          const decided = await approveGrowthSuggestion(
+            context,
+            { approvals, growth },
+            {
+              commandId: `${command.commandId}:approval`,
+              approvalId: adoption.approvalId,
+              reason: string(value.reason ?? "개선 상세에서 승인했습니다", "reason"),
+              detail,
+              expectedSuggestionRevision: integer(value.expectedRevision, "expectedRevision", 1),
+            },
+          );
+          if (decided.approval.status !== "approved") {
+            return result(command, {
+              outcome: "accepted",
+              resource: { type: "Approval", id: adoption.approvalId, revision: decided.approval.revision },
+              data: {
+                approvalId: adoption.approvalId,
+                approvalStatus: decided.approval.status,
+                approvalRevision: decided.approval.revision,
+              },
+            });
+          }
           return result(command, {
-            resource: { type: "GrowthSuggestion", id: suggestionId, revision: expectedRevision },
+            resource: { type: "GrowthSuggestion", id: suggestionId, revision: detail.suggestion.revision },
             data: {
               approvalId: adoption.approvalId,
-              approvalStatus: voted.status,
-              adoption: growthData(adopted),
+              approvalStatus: decided.approval.status,
+              adoption: growthData(decided.adoption),
             },
           });
         } catch (error) {

@@ -129,6 +129,13 @@ describe("Reflection suggestion validation", () => {
     await expect(service.listSuggestions(context, { workId: "work-1", limit: 10 })).resolves.toEqual([
       expect.objectContaining({ suggestion_id: result.suggestions[0]?.suggestion_id, summary: "설정 검증 강화" }),
     ]);
+    await database.query(
+      "DEFINE TABLE growth_adoption_run SCHEMALESS; CREATE growth_adoption_run CONTENT { adoption_id: 'adoption-reflection-reject', organization_id: $organization_id, suggestion_id: $suggestion_id, status: 'awaiting-review' };",
+      {
+        organization_id: context.organizationId,
+        suggestion_id: result.suggestions[0]?.suggestion_id,
+      },
+    );
     const rejected = await service.reject(context, {
       commandId: "reflection-reject-1",
       suggestionId: result.suggestions[0]?.suggestion_id ?? "",
@@ -140,6 +147,11 @@ describe("Reflection suggestion validation", () => {
       revision: 1,
       reason: "이번 Work 범위에서는 적용하지 않습니다",
     });
+    const [rejectedAdoptions] = await database.query<[Array<{ status: string }>]>(
+      "SELECT status FROM growth_adoption_run WHERE organization_id = $organization_id AND suggestion_id = $suggestion_id;",
+      { organization_id: context.organizationId, suggestion_id: rejected.suggestionId },
+    );
+    expect(rejectedAdoptions).toEqual([{ status: "rejected" }]);
     await expect(
       service.reject(context, {
         commandId: "reflection-reject-1",
@@ -149,7 +161,7 @@ describe("Reflection suggestion validation", () => {
       }),
     ).resolves.toEqual(rejected);
     await database.query(
-      "CREATE reflection_run CONTENT { reflection_run_id: 'reflection-nonterminal', organization_id: $organization_id, work_id: 'work-1', records_run_id: 'records-nonterminal', trigger_id: 'trigger-nonterminal', configuration_version_id: 'configuration-1', snapshot_hash: $snapshot_hash, status: 'generating', version: 1, attempt: 1, command_id: 'reflection-nonterminal', request_hash: $snapshot_hash, created_at: type::datetime('2024-01-01T00:00:00.000Z'), updated_at: type::datetime('2024-01-01T00:00:00.000Z') }; CREATE growth_suggestion CONTENT { suggestion_id: 'suggestion-nonterminal', organization_id: $organization_id, work_id: 'work-1', reflection_run_id: 'reflection-nonterminal', target_kind: 'prompt', operation: 'replace-instruction', patch_json: '{}', summary: 'nonterminal', rationale: 'nonterminal', expected_effect: 'nonterminal', risk_summary: 'nonterminal', source_reference_ids: [], revision: 1, status: 'proposed', created_at: type::datetime('2024-01-01T00:00:00.000Z') }; CREATE growth_suggestion CONTENT { suggestion_id: 'suggestion-oldest', organization_id: $organization_id, work_id: 'work-1', reflection_run_id: $reflection_run_id, target_kind: 'prompt', operation: 'replace-instruction', patch_json: '{}', summary: 'oldest', rationale: 'oldest', expected_effect: 'oldest', risk_summary: 'oldest', source_reference_ids: [], revision: 1, status: 'evaluated', created_at: type::datetime('2026-01-01T00:00:00.000Z') }; CREATE growth_suggestion CONTENT { suggestion_id: 'suggestion-other-tenant', organization_id: 'organization-other', work_id: 'work-1', reflection_run_id: $reflection_run_id, target_kind: 'prompt', operation: 'replace-instruction', patch_json: '{}', summary: 'other', rationale: 'other', expected_effect: 'other', risk_summary: 'other', source_reference_ids: [], revision: 1, status: 'proposed', created_at: type::datetime('2025-01-01T00:00:00.000Z') };",
+      "CREATE reflection_run CONTENT { reflection_run_id: 'reflection-nonterminal', organization_id: $organization_id, work_id: 'work-1', records_run_id: 'records-nonterminal', trigger_id: 'trigger-nonterminal', configuration_version_id: 'configuration-1', snapshot_hash: $snapshot_hash, status: 'generating', version: 1, attempt: 1, command_id: 'reflection-nonterminal', request_hash: $snapshot_hash, created_at: type::datetime('2024-01-01T00:00:00.000Z'), updated_at: type::datetime('2024-01-01T00:00:00.000Z') }; CREATE growth_suggestion CONTENT { suggestion_id: 'suggestion-nonterminal', organization_id: $organization_id, work_id: 'work-1', reflection_run_id: 'reflection-nonterminal', target_kind: 'prompt', operation: 'replace-instruction', patch_json: '{}', summary: 'nonterminal', rationale: 'nonterminal', expected_effect: 'nonterminal', risk_summary: 'nonterminal', source_reference_ids: [], revision: 1, status: 'proposed', created_at: type::datetime('2024-01-01T00:00:00.000Z') }; CREATE growth_suggestion CONTENT { suggestion_id: 'suggestion-oldest', organization_id: $organization_id, work_id: 'work-1', reflection_run_id: $reflection_run_id, target_kind: 'prompt', operation: 'replace-instruction', patch_json: '{}', summary: 'oldest', rationale: 'oldest', expected_effect: 'oldest', risk_summary: 'oldest', source_reference_ids: [], revision: 1, status: 'evaluated', created_at: type::datetime('2026-01-01T00:00:00.000Z') }; CREATE growth_suggestion CONTENT { suggestion_id: 'suggestion-oldest-next', organization_id: $organization_id, work_id: 'work-1', reflection_run_id: $reflection_run_id, target_kind: 'prompt', operation: 'replace-instruction', patch_json: '{}', summary: 'oldest-next', rationale: 'oldest-next', expected_effect: 'oldest-next', risk_summary: 'oldest-next', source_reference_ids: [], revision: 1, status: 'evaluated', created_at: type::datetime('2026-01-01T00:00:00.000Z') }; CREATE growth_suggestion CONTENT { suggestion_id: 'suggestion-other-tenant', organization_id: 'organization-other', work_id: 'work-1', reflection_run_id: $reflection_run_id, target_kind: 'prompt', operation: 'replace-instruction', patch_json: '{}', summary: 'other', rationale: 'other', expected_effect: 'other', risk_summary: 'other', source_reference_ids: [], revision: 1, status: 'proposed', created_at: type::datetime('2025-01-01T00:00:00.000Z') };",
       {
         organization_id: context.organizationId,
         reflection_run_id: result.run.reflection_run_id,
@@ -164,6 +176,15 @@ describe("Reflection suggestion validation", () => {
         limit: 1,
       }),
     ).resolves.toEqual([expect.objectContaining({ suggestion_id: "suggestion-oldest", status: "evaluated" })]);
+    await expect(
+      service.listSuggestions(context, {
+        status: ["proposed", "evaluated"],
+        recoverableOnly: true,
+        oldestFirst: true,
+        limit: 1,
+        after: { createdAt: "2026-01-01T00:00:00.000Z", suggestionId: "suggestion-oldest" },
+      }),
+    ).resolves.toEqual([expect.objectContaining({ suggestion_id: "suggestion-oldest-next", status: "evaluated" })]);
     const quarantine = (
       service as unknown as {
         quarantine?: (

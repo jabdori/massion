@@ -119,6 +119,7 @@ export class ApplicationProduct implements AsyncDisposable {
     if (dependencies.domain.approvals) {
       registerApplicationApprovalCommands(commands, {
         approvals: dependencies.domain.approvals,
+        ...(dependencies.domain.growth === undefined ? {} : { growth: dependencies.domain.growth }),
         runs,
         coordinator,
         ...(dependencies.domain.runtime === undefined ? {} : { runtime: dependencies.domain.runtime }),

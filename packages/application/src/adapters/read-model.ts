@@ -321,6 +321,7 @@ interface DirectiveRecord {
   readonly mode: "now" | "next-stage";
   readonly submitted_stage: string;
   readonly status: string;
+  readonly revision: number;
   readonly failure_reason?: string;
   readonly created_at: unknown;
   readonly updated_at: unknown;
@@ -1060,7 +1061,7 @@ export class SurrealApplicationReadModel implements ApplicationReadModel {
   public async directives(context: TenantContext): Promise<readonly ApplicationDirectiveSource[]> {
     await this.organizations.verifyTenantContext(context);
     const [records] = await this.database.query<[DirectiveRecord[]]>(
-      "SELECT directive_id, organization_id, work_id, run_id, sequence, content, mode, submitted_stage, status, failure_reason, created_at, updated_at FROM application_work_directive WHERE organization_id = $organization_id ORDER BY run_id ASC, sequence ASC;",
+      "SELECT directive_id, organization_id, work_id, run_id, sequence, content, mode, submitted_stage, status, revision, failure_reason, created_at, updated_at FROM application_work_directive WHERE organization_id = $organization_id ORDER BY run_id ASC, sequence ASC;",
       { organization_id: context.organizationId },
     );
     return records.map((record) => ({
@@ -1073,6 +1074,7 @@ export class SurrealApplicationReadModel implements ApplicationReadModel {
       mode: record.mode,
       submittedStage: record.submitted_stage,
       status: record.status,
+      revision: record.revision,
       ...(record.failure_reason === undefined ? {} : { failureReason: record.failure_reason }),
       createdAt: iso(record.created_at),
       updatedAt: iso(record.updated_at),

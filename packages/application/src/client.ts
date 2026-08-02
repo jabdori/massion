@@ -36,6 +36,7 @@ export type {
   KnowledgeNodeKindV1,
   KnowledgeNodeViewV1,
   KnowledgeReferenceViewV1,
+  KnowledgeReferenceProvenanceViewV1,
   KnowledgeRelationKindV1,
   OrganizationGraphSnapshotV1,
   RouteAttemptViewV1,

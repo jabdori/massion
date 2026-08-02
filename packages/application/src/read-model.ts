@@ -239,6 +239,7 @@ export interface ApplicationDirectiveSource {
   readonly mode: "now" | "next-stage";
   readonly submittedStage: string;
   readonly status: string;
+  readonly revision: number;
   readonly createdAt: string;
   readonly updatedAt: string;
   readonly failureReason?: string;

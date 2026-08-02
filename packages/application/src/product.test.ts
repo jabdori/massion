@@ -21,6 +21,84 @@ function bootstrapAuthorization() {
 }
 
 describe("ApplicationProduct", () => {
+  it("제품 조립의 approval.decide가 Growth 연결을 찾아 Adoption까지 같은 명령에서 완료한다", async () => {
+    await using database = await createDatabase({ url: "mem://", namespace: "massion", database: crypto.randomUUID() });
+    const identities = await IdentityService.create(database);
+    const organizations = await OrganizationService.create(database);
+    const graph = await OrganizationGraphService.create(database, organizations);
+    const policies = await PolicyStore.create(database, organizations);
+    const owner = await identities.registerPersonalUser({
+      email: "approval-growth-product@example.com",
+      displayName: "Growth approval owner",
+    });
+    const context = await organizations.resolveTenantContext(owner.user.user_id, owner.organization.organization_id);
+    const approvalId = "approval-growth-product-0001";
+    const adopt = vi.fn().mockResolvedValue({
+      adoption: { adoption_id: "adoption-growth-product-0001", status: "observing" },
+    });
+    const executors = Object.fromEntries(
+      (["intake", "context-strategy", "evidence", "delivery", "assurance", "records"] as const).map((stage) => [
+        stage,
+        { execute: async () => ({ outcome: "advanced" as const }) },
+      ]),
+    ) as never;
+    await using product = await ApplicationProduct.create({
+      database,
+      identities,
+      organizations,
+      graph,
+      policies,
+      tokenKey: { keyId: "approval-growth-product-key", key: randomBytes(32) },
+      executors,
+      domain: {
+        approvals: {
+          get: vi.fn().mockResolvedValue({ approval_id: approvalId, status: "pending", revision: 1 }),
+          vote: vi.fn().mockResolvedValue({ approval_id: approvalId, status: "approved", revision: 2 }),
+          cancel: vi.fn(),
+        } as never,
+        growth: {
+          getSuggestionDetailsByApproval: vi.fn().mockResolvedValue({
+            suggestion: { suggestion_id: "suggestion-growth-product-0001", revision: 3 },
+            evaluation: {
+              evaluationRunId: "evaluation-growth-product-0001",
+              outcome: "eligible",
+              inputHash: "e".repeat(64),
+            },
+            adoption: {
+              adoptionId: "adoption-growth-product-0001",
+              status: "awaiting-review",
+              commandId: "adoption-command-growth-product-0001",
+              approvalId,
+              evaluationRunId: "evaluation-growth-product-0001",
+              evaluationInputHash: "e".repeat(64),
+              beforeVersionId: "memory-growth-product-before",
+              beforeChecksum: "b".repeat(64),
+            },
+          }),
+          adopt,
+          reject: vi.fn(),
+        } as never,
+      },
+      queries: { status: async () => ({ status: "ready" }) },
+    });
+
+    await expect(
+      product.commands.dispatch(context, ["approval:write"], {
+        schemaVersion: "massion.application.v1",
+        commandId: "approval-growth-product-command-0001",
+        correlationId: "approval-growth-product-correlation-0001",
+        operation: "approval.decide",
+        payload: {
+          approvalId,
+          expectedApprovalRevision: 1,
+          vote: "approve",
+          reason: "제품 Work 표면에서 승인했습니다",
+        },
+      }),
+    ).resolves.toMatchObject({ data: { approvalId, status: "approved", revision: 2 } });
+    expect(adopt).toHaveBeenCalledOnce();
+  });
+
   it("공개 approval.decide를 실제 제품 명령 레지스트리에 조립한다", async () => {
     await using database = await createDatabase({ url: "mem://", namespace: "massion", database: crypto.randomUUID() });
     const identities = await IdentityService.create(database);
@@ -532,7 +610,7 @@ describe("ApplicationProduct", () => {
         }),
       ).resolves.toMatchObject({
         outcome: "accepted",
-        resource: { type: "WorkDirective", id: expect.any(String), revision: 0 },
+        resource: { type: "WorkDirective", id: expect.any(String), revision: 1 },
         data: { workId, runId, status: "queued" },
       });
     } finally {

@@ -308,6 +308,17 @@ export class GrowthAdoptionService {
     return records[0];
   }
 
+  public async findByApproval(context: TenantContext, approvalId: string): Promise<GrowthAdoptionRecord | undefined> {
+    await this.organizations.verifyTenantContext(context);
+    if (!approvalId.trim()) throw new Error("Growth Approval ID가 유효하지 않습니다");
+    const [records] = await this.database.query<[GrowthAdoptionRecord[]]>(
+      "SELECT * FROM growth_adoption_run WHERE organization_id = $organization_id AND approval_id = $approval_id LIMIT 2;",
+      { organization_id: context.organizationId, approval_id: approvalId },
+    );
+    if (records.length > 1) throw new Error("Growth Approval 연결이 모호합니다");
+    return records[0];
+  }
+
   private configurationView(organizationId: string, record: ConfigurationRecord): GrowthConfigurationVersion {
     return {
       configurationVersionId: record.configuration_version_id,

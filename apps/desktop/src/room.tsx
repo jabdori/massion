@@ -646,6 +646,7 @@ export interface ProposalActivityProps {
   content: string;
   decided: boolean;
   disabled: boolean;
+  disabledReason?: string;
   onApprove: () => void;
   onReject: () => void;
   time: string;
@@ -661,6 +662,7 @@ export function ProposalActivity({
   content,
   decided,
   disabled,
+  disabledReason,
   onApprove,
   onReject,
   time,
@@ -761,12 +763,12 @@ export function ProposalActivity({
                 </p>
               )}
               {decided ? null : (
-                <DecisionActions
-                  approveName={`${proposalName} 신설`}
-                  disabled={disabled}
-                  onApprove={onApprove}
-                  onReject={onReject}
-                />
+                <div className="flex items-center gap-3">
+                  {disabled && disabledReason ? <span className="text-[11px] text-muted">{disabledReason}</span> : null}
+                  {disabled ? null : (
+                    <DecisionActions approveName={`${proposalName} 신설`} onApprove={onApprove} onReject={onReject} />
+                  )}
+                </div>
               )}
             </footer>
           )}

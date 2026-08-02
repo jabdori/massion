@@ -4,10 +4,10 @@ import type { ApplicationCommandRegistry } from "./command-registry.js";
 import type { ApplicationCommandResultV1, ApplicationCommandV1 } from "./contracts.js";
 import { ApplicationError } from "./errors.js";
 import type { ApplicationRunStore } from "./run-store.js";
-import type { WorkDirectiveMode, WorkDirectiveStore } from "./work-directive-store.js";
+import type { WorkDirectiveMode, WorkDirectiveStore, WorkDirectiveView } from "./work-directive-store.js";
 
 interface WorkDirectiveCommandDependencies {
-  readonly directives: Pick<WorkDirectiveStore, "submit">;
+  readonly directives: Pick<WorkDirectiveStore, "submit" | "update" | "cancel">;
   readonly runs: Pick<ApplicationRunStore, "get">;
   readonly schedule: (context: TenantContext, runId: string) => void | Promise<void>;
 }
@@ -19,6 +19,36 @@ interface WorkDirectivePayload {
   readonly mode: WorkDirectiveMode;
 }
 
+function identifier(input: unknown, label: string): string {
+  if (typeof input !== "string" || input.length < 8 || input.length > 128) {
+    throw new Error(`${label}가 유효하지 않습니다`);
+  }
+  return input;
+}
+
+function directiveRevision(input: unknown): number {
+  if (!Number.isSafeInteger(input) || (input as number) < 1)
+    throw new Error("expectedDirectiveRevision이 유효하지 않습니다");
+  return input as number;
+}
+
+function directiveContent(input: unknown): string {
+  if (
+    typeof input !== "string" ||
+    !input.trim() ||
+    Buffer.byteLength(input.trim(), "utf8") > 64 * 1024 ||
+    /\0/u.test(input)
+  ) {
+    throw new Error("Work directive content가 유효하지 않습니다");
+  }
+  return input.trim();
+}
+
+function directiveMode(input: unknown): WorkDirectiveMode {
+  if (input !== "now" && input !== "next-stage") throw new Error("Work directive mode가 유효하지 않습니다");
+  return input;
+}
+
 function payload(value: unknown): WorkDirectivePayload {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new Error("Work directive payload는 object여야 합니다");
@@ -27,28 +57,41 @@ function payload(value: unknown): WorkDirectivePayload {
   const allowed = ["workId", "runId", "content", "mode"];
   const extra = Object.keys(record).find((key) => !allowed.includes(key));
   if (extra) throw new Error(`Work directive payload에 알 수 없는 필드가 있습니다: ${extra}`);
-  const identifier = (input: unknown, label: string): string => {
-    if (typeof input !== "string" || input.length < 8 || input.length > 128) {
-      throw new Error(`${label}가 유효하지 않습니다`);
-    }
-    return input;
-  };
-  if (
-    typeof record.content !== "string" ||
-    !record.content.trim() ||
-    Buffer.byteLength(record.content.trim(), "utf8") > 64 * 1024 ||
-    /\0/u.test(record.content)
-  ) {
-    throw new Error("Work directive content가 유효하지 않습니다");
-  }
-  if (record.mode !== "now" && record.mode !== "next-stage") {
-    throw new Error("Work directive mode가 유효하지 않습니다");
-  }
   return {
     workId: identifier(record.workId, "workId"),
     runId: identifier(record.runId, "runId"),
-    content: record.content.trim(),
-    mode: record.mode,
+    content: directiveContent(record.content),
+    mode: directiveMode(record.mode),
+  };
+}
+
+function updatePayload(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value))
+    throw new Error("Work directive update payload는 object여야 합니다");
+  const record = value as Record<string, unknown>;
+  const allowed = ["workId", "directiveId", "expectedDirectiveRevision", "content", "mode"];
+  const extra = Object.keys(record).find((key) => !allowed.includes(key));
+  if (extra) throw new Error(`Work directive update payload에 알 수 없는 필드가 있습니다: ${extra}`);
+  return {
+    workId: identifier(record.workId, "workId"),
+    directiveId: identifier(record.directiveId, "directiveId"),
+    expectedDirectiveRevision: directiveRevision(record.expectedDirectiveRevision),
+    content: directiveContent(record.content),
+    mode: directiveMode(record.mode),
+  };
+}
+
+function cancelPayload(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value))
+    throw new Error("Work directive cancel payload는 object여야 합니다");
+  const record = value as Record<string, unknown>;
+  const allowed = ["workId", "directiveId", "expectedDirectiveRevision"];
+  const extra = Object.keys(record).find((key) => !allowed.includes(key));
+  if (extra) throw new Error(`Work directive cancel payload에 알 수 없는 필드가 있습니다: ${extra}`);
+  return {
+    workId: identifier(record.workId, "workId"),
+    directiveId: identifier(record.directiveId, "directiveId"),
+    expectedDirectiveRevision: directiveRevision(record.expectedDirectiveRevision),
   };
 }
 
@@ -81,7 +124,7 @@ function directiveError(error: unknown, correlationId: string): never {
       cause: error,
     });
   }
-  if (/revision/iu.test(message)) {
+  if (/revision|queued/iu.test(message)) {
     throw new ApplicationError({
       category: "conflict",
       severity: "warning",
@@ -108,15 +151,16 @@ function directiveError(error: unknown, correlationId: string): never {
 
 function result(
   command: ApplicationCommandV1,
-  directive: Awaited<ReturnType<WorkDirectiveStore["submit"]>>,
+  directive: WorkDirectiveView,
+  outcome: "accepted" | "succeeded" = "accepted",
 ): ApplicationCommandResultV1 {
   return {
     schemaVersion: "massion.application.v1",
     commandId: command.commandId,
     correlationId: command.correlationId,
     operation: command.operation,
-    outcome: "accepted",
-    resource: { type: "WorkDirective", id: directive.directiveId, revision: directive.leaseGeneration },
+    outcome,
+    resource: { type: "WorkDirective", id: directive.directiveId, revision: directive.revision },
     data: {
       directiveId: directive.directiveId,
       workId: directive.workId,
@@ -124,6 +168,8 @@ function result(
       status: directive.status,
       mode: directive.mode,
       sequence: directive.sequence,
+      revision: directive.revision,
+      content: directive.content,
     },
   };
 }
@@ -149,6 +195,46 @@ export function registerWorkDirectiveCommands(
         const run = await dependencies.runs.get(context, value.runId);
         if (run.status === "ready") await dependencies.schedule(context, run.runId);
         return result(command, directive);
+      } catch (error) {
+        return directiveError(error, command.correlationId);
+      }
+    },
+  });
+  registry.register({
+    operation: "work.directive.update",
+    requiredScopes: ["work:write"],
+    allowedRoles: ["owner", "admin", "member"],
+    recovery: "replay-domain",
+    validate: updatePayload,
+    async handle(context, command, value) {
+      try {
+        const directive = await dependencies.directives.update(context, {
+          commandId: command.commandId,
+          expectedWorkRevision: revision(command),
+          ...value,
+        });
+        const run = await dependencies.runs.get(context, directive.runId);
+        if (directive.mode === "now" && run.status === "ready") await dependencies.schedule(context, run.runId);
+        return result(command, directive, "succeeded");
+      } catch (error) {
+        return directiveError(error, command.correlationId);
+      }
+    },
+  });
+  registry.register({
+    operation: "work.directive.cancel",
+    requiredScopes: ["work:write"],
+    allowedRoles: ["owner", "admin", "member"],
+    recovery: "replay-domain",
+    validate: cancelPayload,
+    async handle(context, command, value) {
+      try {
+        const directive = await dependencies.directives.cancel(context, {
+          commandId: command.commandId,
+          expectedWorkRevision: revision(command),
+          ...value,
+        });
+        return result(command, directive, "succeeded");
       } catch (error) {
         return directiveError(error, command.correlationId);
       }

@@ -216,6 +216,32 @@ export interface ApprovalViewV1 {
   readonly displayPreview?: ApprovalDisplayPreview;
 }
 
+export type InboxItemViewV1 =
+  | {
+      readonly kind: "blocked";
+      readonly id: string;
+      readonly runId: string;
+      readonly workId?: string;
+      readonly title: string;
+      readonly blockedReason?: string;
+      readonly blockedDetail?: string;
+    }
+  | {
+      readonly kind: "approval";
+      readonly id: string;
+      readonly workTitle?: string;
+      readonly approval: ApprovalViewV1;
+    }
+  | {
+      readonly kind: "growth";
+      readonly id: string;
+      readonly suggestionId: string;
+      readonly workId: string;
+      readonly workTitle: string;
+      readonly title: string;
+      readonly reason: string;
+    };
+
 export interface EmergencyStateViewV1 {
   readonly active: boolean;
   readonly reason?: string;
@@ -395,6 +421,7 @@ export interface DirectiveViewV1 {
   readonly mode: "now" | "next-stage";
   readonly submittedStage: string;
   readonly status: string;
+  readonly revision: number;
   readonly createdAt: string;
   readonly updatedAt: string;
   readonly failureReason?: string;
@@ -403,11 +430,36 @@ export interface DirectiveViewV1 {
 export interface KnowledgeReferenceViewV1 {
   readonly referenceId: string;
   readonly kind: "symbol" | "chunk";
+  readonly nodeId?: string;
   readonly relativePath: string;
   readonly qualifiedName?: string;
   readonly startLine: number;
   readonly endLine: number;
   readonly contentHash: string;
+  readonly provenance?: KnowledgeReferenceProvenanceViewV1;
+}
+
+export interface KnowledgeReferenceProvenanceViewV1 {
+  readonly selection: "scope" | "direct-search" | "graph-neighbor";
+  readonly snapshotChecksum: string;
+  readonly paths: readonly {
+    readonly seed: {
+      readonly referenceId: string;
+      readonly kind: "symbol" | "chunk";
+      readonly symbolKey?: string;
+    };
+    readonly relation?: {
+      readonly relationId: string;
+      readonly relationKey: string;
+      readonly kind: KnowledgeRelationKindV1;
+      readonly sourceSymbolKey?: string;
+      readonly targetSymbolKey?: string;
+      readonly targetText: string;
+      readonly resolved: boolean;
+      readonly relativePath: string;
+      readonly startLine: number;
+    };
+  }[];
 }
 
 export interface WorkKnowledgeViewV1 {
@@ -417,6 +469,8 @@ export interface WorkKnowledgeViewV1 {
   readonly repositoryRevisionId?: string;
   readonly indexVersionId?: string;
   readonly evidenceBriefId?: string;
+  readonly snapshotChecksum?: string;
+  readonly evidenceBriefChecksum?: string;
   readonly freshnessStatus?: "fresh" | "stale_warning";
   readonly query?: string;
   readonly references: readonly KnowledgeReferenceViewV1[];
@@ -441,6 +495,14 @@ export interface KnowledgeGraphEdgeViewV1 {
   readonly targetId: string;
   readonly unresolved?: boolean;
   readonly derivedVia?: string;
+  readonly relationId?: string;
+  readonly relationKey?: string;
+  readonly sourceSymbolKey?: string;
+  readonly targetSymbolKey?: string;
+  readonly targetText?: string;
+  readonly snapshotChecksum?: string;
+  readonly sourcePath?: string;
+  readonly sourceLine?: number;
 }
 
 export interface KnowledgeGraphViewV1 {
@@ -454,6 +516,14 @@ export interface KnowledgeLinkViewV1 {
   readonly kind: KnowledgeRelationKindV1;
   readonly direction: "outgoing" | "incoming";
   readonly unresolved?: boolean;
+  readonly relationId?: string;
+  readonly relationKey?: string;
+  readonly sourceSymbolKey?: string;
+  readonly targetSymbolKey?: string;
+  readonly targetText?: string;
+  readonly snapshotChecksum?: string;
+  readonly sourcePath?: string;
+  readonly sourceLine?: number;
 }
 
 export interface KnowledgeIndexViewV1 {
@@ -542,6 +612,7 @@ export interface ApplicationQueryMapV1 {
     readonly data: CursorPageV1<WorkSummaryV1>;
   };
   readonly "work.detail": { readonly payload: { readonly workId: string }; readonly data: WorkDetailV1 };
+  readonly "inbox.list": { readonly payload: Record<string, never>; readonly data: readonly InboxItemViewV1[] };
   readonly "run.list": { readonly payload: { readonly workId: string }; readonly data: readonly RunViewV1[] };
   readonly "work.activity.list": {
     readonly payload: { readonly workId: string; readonly cursor?: string; readonly limit?: number };
@@ -610,7 +681,14 @@ export interface ApplicationQueryMapV1 {
     readonly data: KnowledgeGraphViewV1;
   };
   readonly "knowledge.links": {
-    readonly payload: { readonly workspaceId: string; readonly nodeId: string; readonly limit?: number };
+    readonly payload: {
+      readonly workspaceId: string;
+      readonly nodeId: string;
+      readonly limit?: number;
+      readonly indexVersionId?: string;
+      readonly snapshotChecksum?: string;
+      readonly relationIds?: readonly string[];
+    };
     readonly data: readonly KnowledgeLinkViewV1[];
   };
   readonly "growth.memories": {
@@ -659,6 +737,22 @@ export interface ApplicationCommandMapV1 {
       readonly runId: string;
       readonly content: string;
       readonly mode: "now" | "next-stage";
+    };
+  };
+  readonly "work.directive.update": {
+    readonly payload: {
+      readonly workId: string;
+      readonly directiveId: string;
+      readonly expectedDirectiveRevision: number;
+      readonly content: string;
+      readonly mode: "now" | "next-stage";
+    };
+  };
+  readonly "work.directive.cancel": {
+    readonly payload: {
+      readonly workId: string;
+      readonly directiveId: string;
+      readonly expectedDirectiveRevision: number;
     };
   };
   readonly "approval.decide": {

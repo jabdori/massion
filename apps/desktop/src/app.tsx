@@ -104,6 +104,7 @@ import type {
   KnowledgeNodeKind,
   KnowledgeNodeView,
   KnowledgeRelationKind,
+  WorkKnowledgeView,
   OrganizationNodeView,
   OrganizationView,
   PermissionKind,
@@ -139,7 +140,7 @@ import {
   type WorkStatus,
   type WorkView,
 } from "@/model";
-import { agentIdentityToken, growthTargetToken, type WorkKnowledgeViewV1 } from "@massion/application/client";
+import { agentIdentityToken, growthTargetToken } from "@massion/application/client";
 
 import { nativeContextPicker, type NativeContextPicker } from "@/native-context-picker";
 import {
@@ -281,8 +282,9 @@ export function App({ contextPicker = nativeContextPicker, service }: AppProps) 
   const [focusWorkspaceTrust, setFocusWorkspaceTrust] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
-  const [notifications, setNotifications] = useState<ApprovalView[]>();
+  const [inboxItems, setInboxItems] = useState<InboxItem[]>();
   const [notificationError, setNotificationError] = useState("");
+  const [notificationNotice, setNotificationNotice] = useState("");
   const [growth, setGrowth] = useState<GrowthView>();
   const [growthError, setGrowthError] = useState("");
   const [requestedGrowthSuggestionId, setRequestedGrowthSuggestionId] = useState<string>();
@@ -297,10 +299,9 @@ export function App({ contextPicker = nativeContextPicker, service }: AppProps) 
   const selectedRoomIdRef = useRef<string | undefined>(undefined);
   const openRoomIdsRef = useRef<readonly string[]>([]);
   const selectedWorkId = controller.work?.id;
-  const refreshNotifications = useCallback(async () => {
+  const refreshInbox = useCallback(async () => {
     try {
-      const pending = await service.loadPendingApprovals();
-      setNotifications(pending.filter((approval) => approval.status === "pending"));
+      setInboxItems(await service.loadInbox());
       setNotificationError("");
     } catch (cause) {
       setNotificationError(surfaceErrorMessage(cause, "수신함을 불러오지 못했습니다."));
@@ -316,9 +317,9 @@ export function App({ contextPicker = nativeContextPicker, service }: AppProps) 
   }, [service]);
   useEffect(() => {
     if (controller.phase !== "ready") return;
-    void refreshNotifications();
+    void refreshInbox();
     void refreshGrowth();
-  }, [controller.eventRevision, controller.phase, refreshGrowth, refreshNotifications]);
+  }, [controller.eventRevision, controller.phase, refreshGrowth, refreshInbox]);
   useEffect(() => {
     if (selectedWorkId === undefined) {
       roomWorkIdRef.current = undefined;
@@ -424,16 +425,25 @@ export function App({ contextPicker = nativeContextPicker, service }: AppProps) 
     if (pendingNotificationIds.has(approval.id)) return;
     setPendingNotificationIds((current) => new Set(current).add(approval.id));
     setNotificationError("");
+    setNotificationNotice("");
     try {
-      await service.decideApproval(approval, vote, `데스크톱 ${source}에서 ${vote === "approve" ? "승인" : "거절"}`);
-      setNotifications((current) => current?.filter((item) => item.id !== approval.id));
-      await handleApprovalDecision(approval.id, vote);
+      const result = await service.decideApproval(
+        approval,
+        vote,
+        `데스크톱 ${source}에서 ${vote === "approve" ? "승인" : "거절"}`,
+      );
+      if (result.status === "pending") {
+        setNotificationNotice("승인 투표가 기록되었습니다. 추가 의결을 기다립니다.");
+      } else {
+        await handleApprovalDecision(approval.id, vote);
+      }
+      await refreshInbox();
       if (approval.workId !== undefined && approval.workId === selectedWorkId) {
         controller.setSelectedId(approval.workId);
       }
     } catch (cause) {
       setNotificationError(surfaceErrorMessage(cause, "승인 결정을 저장하지 못했습니다."));
-      await refreshNotifications();
+      await refreshInbox();
     } finally {
       setPendingNotificationIds((current) => {
         const next = new Set(current);
@@ -444,22 +454,17 @@ export function App({ contextPicker = nativeContextPicker, service }: AppProps) 
   };
   const decideWorkApproval = async (approval: ApprovalView, decision: "approved" | "rejected") => {
     await controller.decideApproval(approval, decision);
-    await refreshNotifications();
+    await refreshInbox();
   };
-  // 수신함 한 원천. 배지·수신함·홈이 모두 이 배열을 봅니다. 각 표면이 따로 세지 않습니다.
-  const inboxItems = useMemo(
-    () => buildInboxItems(notifications, controller.works, growth?.suggestions ?? []),
-    [growth?.suggestions, notifications, controller.works],
-  );
-  const inboxError = [notificationError, growthError].filter(Boolean).join(" ");
+  const notifications = inboxItems?.flatMap((item) => (item.kind === "approval" ? [item.approval] : []));
+  const inboxError = notificationError;
   const registryApproval =
     awaitingRegistryInstall === undefined
       ? undefined
       : notifications?.find((approval) => approval.id === awaitingRegistryInstall.approvalId);
   const openInbox = () => {
     setNotificationsOpen(true);
-    void refreshNotifications();
-    void refreshGrowth();
+    void refreshInbox();
   };
   const openWorkspaceTrustSettings = () => {
     setFocusWorkspaceTrust(true);
@@ -525,7 +530,6 @@ export function App({ contextPicker = nativeContextPicker, service }: AppProps) 
                   detailLoading={controller.detailLoading}
                   executionNotice={controller.executionNotice?.message}
                   composer={controller.composer}
-                  onAnnouncement={controller.setAnnouncement}
                   onComposerChange={controller.setComposer}
                   onControlRun={(action) => {
                     void controller.controlRun(action);
@@ -536,6 +540,12 @@ export function App({ contextPicker = nativeContextPicker, service }: AppProps) 
                   }}
                   onSubmitDirective={(mode, content) => {
                     void controller.submitDirective(mode, content);
+                  }}
+                  onUpdateDirective={(directive, content, mode) => {
+                    void controller.updateDirective(directive, content, mode);
+                  }}
+                  onCancelDirective={(directive) => {
+                    void controller.cancelDirective(directive);
                   }}
                   pendingApprovals={controller.pendingApprovals}
                   pendingDirective={controller.pendingDirective}
@@ -567,7 +577,7 @@ export function App({ contextPicker = nativeContextPicker, service }: AppProps) 
             focusWorkspaceTrust={focusWorkspaceTrust}
             onAwaitingRegistryInstallChange={(value) => {
               setAwaitingRegistryInstall(value);
-              if (value !== undefined) void refreshNotifications();
+              if (value !== undefined) void refreshInbox();
             }}
             onCreate={() => {
               controller.newWork.setOpen(true);
@@ -575,6 +585,7 @@ export function App({ contextPicker = nativeContextPicker, service }: AppProps) 
             onOpenNotifications={openInbox}
             onRetryGrowth={() => {
               void refreshGrowth();
+              void refreshInbox();
             }}
             onOpenWork={(workId) => {
               controller.setSelectedId(workId);
@@ -592,6 +603,7 @@ export function App({ contextPicker = nativeContextPicker, service }: AppProps) 
         canOpenApproval={(approval) => approvalDestination(approval, awaitingRegistryInstall?.approvalId) !== undefined}
         error={inboxError}
         items={inboxItems}
+        notice={notificationNotice}
         onDecide={decideNotification}
         onOpenChange={setNotificationsOpen}
         onOpenApproval={openApproval}
@@ -606,12 +618,10 @@ export function App({ contextPicker = nativeContextPicker, service }: AppProps) 
           setSurface("work");
         }}
         onRetry={() => {
-          void refreshNotifications();
-          void refreshGrowth();
+          void refreshInbox();
         }}
         open={notificationsOpen}
         pending={pendingNotificationIds}
-        works={controller.works}
       />
       <NewWorkDialog
         {...controller.newWork}
@@ -936,8 +946,9 @@ function HomeSurface({
                     <li key={item.id}>
                       <button
                         className="flex w-full items-center gap-2.5 rounded-[7px] border border-halt/40 bg-surface-1 px-3.5 py-2.5 text-left outline-none hover:border-halt"
+                        disabled={item.workId === undefined}
                         onClick={() => {
-                          onOpenWork(item.workId);
+                          if (item.workId !== undefined) onOpenWork(item.workId);
                         }}
                         type="button"
                       >
@@ -1007,47 +1018,11 @@ function HomeSurface({
   );
 }
 
-/**
- * 수신함 한 원천. 승인 대기·차단·검토 대기 개선을 한 목록으로 투영합니다.
- * 차단(halt)이 승인 대기보다 급하므로 먼저 둡니다. 배지·수신함·홈이 전부 이 결과를 봅니다.
- * approvals가 아직 undefined(로딩 중)면 목록도 undefined로 두어 로딩 상태를 구분합니다.
- */
-function buildInboxItems(
-  approvals: ApprovalView[] | undefined,
-  works: readonly WorkView[],
-  suggestions: GrowthView["suggestions"],
-): InboxItem[] | undefined {
-  if (approvals === undefined) return undefined;
-  const blocked: InboxItem[] = works
-    .filter((work) => work.run?.status === "blocked")
-    .map((work) => ({
-      kind: "blocked",
-      id: `blocked:${work.id}`,
-      workId: work.id,
-      title: work.title,
-      reason:
-        work.run?.blockedReason === "assurance-verifier-rejected" && work.run.blockedDetail !== undefined
-          ? work.run.blockedDetail
-          : blockedReasonText(work.run?.blockedReason),
-    }));
-  const approval: InboxItem[] = approvals.map((item) => ({ kind: "approval", id: item.id, approval: item }));
-  const growth: InboxItem[] = suggestions
-    .filter((suggestion) => suggestion.status === "awaiting-review")
-    .map((suggestion) => ({
-      kind: "growth",
-      id: `growth:${suggestion.suggestionId}`,
-      suggestionId: suggestion.suggestionId,
-      workId: suggestion.workId,
-      title: suggestion.summary,
-      reason: suggestion.rationale,
-    }));
-  return [...blocked, ...approval, ...growth];
-}
-
 function InboxPanel({
   canOpenApproval,
   error,
   items,
+  notice,
   onDecide,
   onOpenChange,
   onOpenApproval,
@@ -1056,11 +1031,11 @@ function InboxPanel({
   onRetry,
   open,
   pending,
-  works,
 }: {
   canOpenApproval: (approval: ApprovalView) => boolean;
   error: string;
   items: InboxItem[] | undefined;
+  notice: string;
   onDecide: (approval: ApprovalView, vote: "approve" | "reject") => Promise<void>;
   onOpenChange: (open: boolean) => void;
   onOpenApproval: (approval: ApprovalView) => void;
@@ -1069,9 +1044,7 @@ function InboxPanel({
   onRetry: () => void;
   open: boolean;
   pending: ReadonlySet<string>;
-  works: WorkView[];
 }) {
-  const workTitles = new Map(works.map((work) => [work.id, work.title]));
   return (
     <Dialog onOpenChange={onOpenChange} open={open}>
       {/* 오른쪽에 딱 붙는 시트. 그림자 대신 왼쪽 1px 선으로 가릅니다(DESIGN.md: 그림자 없음). */}
@@ -1103,6 +1076,11 @@ function InboxPanel({
                 </Button>
               </div>
             ) : null}
+            {notice ? (
+              <p className="rounded-[7px] border border-gate-border bg-gate-wash px-3 py-2 text-[12px] text-gate">
+                {notice}
+              </p>
+            ) : null}
             {items === undefined && !error ? <SurfaceLoading /> : null}
             {items?.length === 0 ? (
               <div className="py-12 text-center">
@@ -1122,15 +1100,10 @@ function InboxPanel({
                     onOpenApproval(item.approval);
                   }}
                   routable={canOpenApproval(item.approval)}
-                  workTitle={item.approval.workId === undefined ? undefined : workTitles.get(item.approval.workId)}
+                  workTitle={item.workTitle}
                 />
               ) : item.kind === "growth" ? (
-                <GrowthInboxCard
-                  key={item.id}
-                  item={item}
-                  onOpenGrowth={onOpenGrowth}
-                  workTitle={workTitles.get(item.workId)}
-                />
+                <GrowthInboxCard key={item.id} item={item} onOpenGrowth={onOpenGrowth} workTitle={item.workTitle} />
               ) : (
                 <BlockedInboxCard key={item.id} item={item} onOpenWork={onOpenWork} />
               ),
@@ -1235,8 +1208,9 @@ function BlockedInboxCard({
         <button
           aria-label={`업무로 이동: ${item.title}`}
           className="flex min-h-6 w-full items-center gap-2 rounded-[3px] text-left outline-none hover:text-primary focus-visible:ring-2 focus-visible:ring-halt/70"
+          disabled={item.workId === undefined}
           onClick={() => {
-            onOpenWork(item.workId);
+            if (item.workId !== undefined) onOpenWork(item.workId);
           }}
           type="button"
         >
@@ -2744,21 +2718,51 @@ function GrowthSurface({
   const [configurationSaving, setConfigurationSaving] = useState(false);
   const [decisionError, setDecisionError] = useState("");
   const [decisionSaving, setDecisionSaving] = useState(false);
+  const [exactSuggestion, setExactSuggestion] = useState<GrowthView["suggestions"][number]>();
   useEffect(() => {
     if (growth === undefined) return;
     const requested = growth.suggestions.find((suggestion) => suggestion.suggestionId === requestedSuggestionId);
-    if (requested !== undefined) setFilter("waiting");
-    setSelectedId(
-      (current) =>
-        requested?.suggestionId ??
-        growth.suggestions.find((suggestion) => suggestion.suggestionId === current)?.suggestionId ??
-        growth.suggestions[0]?.suggestionId,
+    if (requestedSuggestionId === undefined) {
+      setExactSuggestion(undefined);
+      setSelectedId(
+        (current) =>
+          growth.suggestions.find((suggestion) => suggestion.suggestionId === current)?.suggestionId ??
+          growth.suggestions[0]?.suggestionId,
+      );
+      return;
+    }
+    setSelectedId(requestedSuggestionId);
+    if (requested !== undefined) {
+      setExactSuggestion(undefined);
+      if (requested.status === "awaiting-review") setFilter("waiting");
+      return;
+    }
+    let active = true;
+    setExactSuggestion(undefined);
+    void service.loadGrowthSuggestion(requestedSuggestionId).then(
+      (suggestion) => {
+        if (!active || suggestion.suggestionId !== requestedSuggestionId) return;
+        setExactSuggestion(suggestion);
+        if (suggestion.status === "awaiting-review") setFilter("waiting");
+      },
+      () => {
+        if (active) setExactSuggestion(undefined);
+      },
     );
-  }, [growth, requestedSuggestionId]);
+    return () => {
+      active = false;
+    };
+  }, [growth, requestedSuggestionId, service]);
 
-  const suggestions = growth?.suggestions ?? [];
+  const suggestions =
+    exactSuggestion === undefined ||
+    growth?.suggestions.some((item) => item.suggestionId === exactSuggestion.suggestionId)
+      ? (growth?.suggestions ?? [])
+      : [...(growth?.suggestions ?? []), exactSuggestion];
   const visible = filter === "waiting" ? suggestions.filter((item) => item.status === "awaiting-review") : suggestions;
-  const selected = visible.find((item) => item.suggestionId === selectedId) ?? visible[0];
+  const selected =
+    visible.find((item) => item.suggestionId === selectedId) ??
+    (requestedSuggestionId === undefined ? visible[0] : undefined);
   const effect = growth?.effects.find((item) => item.suggestionId === selected?.suggestionId);
   const blockers = growthBlockers(selected);
   const reverted = selected?.adoption?.status === "reverted";
@@ -5741,11 +5745,12 @@ interface WorkActivityProps {
   pendingDirective: boolean;
   pendingRunAction: "cancel" | "resume" | undefined;
   onComposerChange: (value: string) => void;
-  onAnnouncement: (message: string) => void;
   onControlRun: (action: "cancel" | "resume") => void;
   onOpenWorkspaceTrust: () => void;
   onDecideApproval: (approval: ApprovalView, decision: "approved" | "rejected") => void;
   onSubmitDirective: (mode: "now" | "next-stage", content?: string) => void;
+  onUpdateDirective: (directive: QueuedDirectiveView, content: string, mode: "now" | "next-stage") => void;
+  onCancelDirective: (directive: QueuedDirectiveView) => void;
 }
 
 function WorkActivity({
@@ -5754,12 +5759,13 @@ function WorkActivity({
   composer,
   detailLoading,
   executionNotice,
-  onAnnouncement,
   onComposerChange,
   onControlRun,
   onDecideApproval,
   onOpenWorkspaceTrust,
   onSubmitDirective,
+  onUpdateDirective,
+  onCancelDirective,
   pendingApprovals,
   pendingDirective,
   pendingRunAction,
@@ -5771,12 +5777,7 @@ function WorkActivity({
   work,
 }: WorkActivityProps) {
   const activities = mergeActivities(work.activities, room?.activities ?? []);
-  const [queuedOverride, setQueuedOverride] = useState<QueuedDirectiveView[]>();
-  useEffect(() => {
-    setQueuedOverride(undefined);
-  }, [work.id]);
-  const queued = queuedOverride ?? work.queuedDirectives ?? [];
-  const setQueued = setQueuedOverride;
+  const queued = work.queuedDirectives ?? [];
   const running = work.run?.status === "running" || work.run?.status === "ready";
   /*
    * Esc가 실행을 끊습니다. 정지는 Work 단위이므로(헌법 4.6) 이 키가 사람이 조직을 세우는 수단입니다.
@@ -5932,7 +5933,6 @@ function WorkActivity({
               approvalDecision={activity.kind === "approval" ? approvalDecisions[activity.approvalId] : undefined}
               approvals={work.approvals}
               key={activity.id}
-              onAnnouncement={onAnnouncement}
               onDecideApproval={onDecideApproval}
               onOpenRoom={onSelectRoom}
               pendingApprovals={pendingApprovals}
@@ -5952,16 +5952,12 @@ function WorkActivity({
       <Composer
         announcement={announcement}
         closed={work.status !== "active"}
-        onAnnouncement={onAnnouncement}
-        onApplyQueued={(id) => {
-          const directive = queued.find((item) => item.id === id);
-          if (directive === undefined) return;
-          setQueued(queued.filter((item) => item.id !== id));
-          onSubmitDirective("now", directive.content);
+        onApplyQueued={(directive) => {
+          onUpdateDirective(directive, directive.content, "now");
         }}
         onChange={onComposerChange}
-        onDropQueued={(id) => {
-          setQueued(queued.filter((item) => item.id !== id));
+        onDropQueued={(directive) => {
+          onCancelDirective(directive);
         }}
         onStop={() => {
           onControlRun("cancel");
@@ -5969,7 +5965,6 @@ function WorkActivity({
         onSubmit={() => {
           const content = composer.trim();
           if (!content) return;
-          setQueued([...queued, { id: `queued-${String(queued.length)}-${content.slice(0, 12)}`, content }]);
           onSubmitDirective("next-stage");
         }}
         pending={pendingDirective}
@@ -6112,14 +6107,12 @@ interface ActivityRowProps {
   approvalDecision: "approved" | "rejected" | undefined;
   approvals: ApprovalView[];
   pendingApprovals: ReadonlySet<string>;
-  onAnnouncement: (message: string) => void;
   onDecideApproval: (approval: ApprovalView, decision: "approved" | "rejected") => void;
 }
 
 function ActivityRow({
   approvalDecision,
   approvals,
-  onAnnouncement,
   onOpenRoom,
   onDecideApproval,
   pendingApprovals,
@@ -6186,7 +6179,6 @@ function ActivityRow({
     );
   }
   if (value.kind === "proposal") {
-    const proposalName = value.change.nodes[0]?.name ?? "조직 변경";
     return (
       <div className="py-2.5">
         <ProposalActivity
@@ -6194,14 +6186,10 @@ function ActivityRow({
           change={value.change}
           content={value.content}
           decided={value.decided ?? false}
-          disabled={false}
-          // ponytail: 조직 변경 command는 슬라이스 4에서 연결합니다. 지금은 결과를 알림으로만 알립니다.
-          onApprove={() => {
-            onAnnouncement(`${proposalName} 신설을 승인했습니다.`);
-          }}
-          onReject={() => {
-            onAnnouncement(`${proposalName} 신설을 거절했습니다.`);
-          }}
+          disabled
+          disabledReason="이 화면에서는 조직 변경을 결정할 수 없습니다."
+          onApprove={() => undefined}
+          onReject={() => undefined}
           time={value.time}
         />
       </div>
@@ -6436,6 +6424,7 @@ function EventActivity({
     artifact: "산출물",
     verification: "검증",
     record: "기록",
+    directive: "지시",
   };
   return (
     <div className="border-l-2 border-control bg-surface-1/60 px-3 py-2.5" data-semantic={semantic}>
@@ -6460,10 +6449,9 @@ interface ComposerProps {
   pending: boolean;
   running: boolean;
   workspace?: { name: string; trusted: boolean };
-  onApplyQueued: (id: string) => void;
-  onDropQueued: (id: string) => void;
+  onApplyQueued: (directive: QueuedDirectiveView) => void;
+  onDropQueued: (directive: QueuedDirectiveView) => void;
   onChange: (value: string) => void;
-  onAnnouncement: (message: string) => void;
   onStop: () => void;
   onSubmit: () => void;
 }
@@ -6476,7 +6464,6 @@ interface ComposerProps {
 function Composer({
   announcement,
   closed,
-  onAnnouncement,
   onApplyQueued,
   onChange,
   onDropQueued,
@@ -6498,10 +6485,18 @@ function Composer({
             key={directive.id}
           >
             <span className="min-w-0 flex-1 truncate text-[12px] text-secondary">{directive.content}</span>
+            <span className="shrink-0 text-[10px] text-muted">
+              {directive.status === "applying"
+                ? "반영 중"
+                : directive.applyAt === "current-stage"
+                  ? "현재 단계"
+                  : "다음 단계"}
+            </span>
             <button
               className="inline-flex shrink-0 items-center gap-1 rounded-[5px] px-1.5 py-0.5 text-[11px] text-muted outline-none transition-colors duration-150 hover:text-primary"
+              disabled={pending || directive.status === "applying" || directive.mode === "now"}
               onClick={() => {
-                onApplyQueued(directive.id);
+                onApplyQueued(directive);
               }}
               type="button"
             >
@@ -6511,8 +6506,9 @@ function Composer({
             <button
               aria-label="대기 지시 삭제"
               className="shrink-0 rounded-[5px] p-0.5 text-muted outline-none transition-colors duration-150 hover:text-danger"
+              disabled={pending || directive.status === "applying"}
               onClick={() => {
-                onDropQueued(directive.id);
+                onDropQueued(directive);
               }}
               type="button"
             >
@@ -6551,10 +6547,8 @@ function Composer({
             <button
               aria-label="파일 첨부"
               className="rounded-[5px] p-1 text-muted outline-none transition-colors duration-150 hover:text-primary disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:text-muted"
-              disabled={closed}
-              onClick={() => {
-                onAnnouncement("파일 첨부 준비가 되었습니다.");
-              }}
+              disabled
+              title="실행 중 파일 첨부는 아직 지원하지 않습니다."
               type="button"
             >
               <Paperclip aria-hidden="true" size={16} />
@@ -6562,14 +6556,13 @@ function Composer({
             <button
               aria-label="에이전트 멘션"
               className="rounded-[5px] p-1 text-muted outline-none transition-colors duration-150 hover:text-primary disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:text-muted"
-              disabled={closed}
-              onClick={() => {
-                onAnnouncement("멘션할 에이전트를 선택하세요.");
-              }}
+              disabled
+              title="실행 중 에이전트 멘션은 아직 지원하지 않습니다."
               type="button"
             >
               <At aria-hidden="true" size={16} />
             </button>
+            <span className="text-[10px] text-muted">실행 중 파일 첨부·에이전트 멘션은 아직 지원하지 않습니다.</span>
             <div className="ml-auto flex items-center gap-1">
               {/* 실행 중에도 지시는 대기열에 들어갑니다. 중단은 보내기를 대체하지 않습니다. */}
               {running ? (
@@ -6689,7 +6682,7 @@ function WorkInspector({
   work: WorkView;
 }) {
   const [tab, setTab] = useState("work");
-  const [knowledge, setKnowledge] = useState<WorkKnowledgeViewV1>();
+  const [knowledge, setKnowledge] = useState<WorkKnowledgeView>();
   const [knowledgeError, setKnowledgeError] = useState("");
 
   useEffect(() => {
@@ -6810,10 +6803,11 @@ function WorkKnowledgeInspector({
   sharedContextAvailable,
 }: {
   error: string;
-  knowledge: WorkKnowledgeViewV1 | undefined;
+  knowledge: WorkKnowledgeView | undefined;
   onOpenSharedContext: () => void;
   sharedContextAvailable: boolean;
 }) {
+  const [expandedReferenceId, setExpandedReferenceId] = useState<string>();
   if (error)
     return (
       <section aria-label="사용한 지식" className="border border-danger/50 bg-surface-1 px-3.5 py-3">
@@ -6868,32 +6862,84 @@ function WorkKnowledgeInspector({
           <span className="rounded-[3px] border border-control px-1.5 text-[10px] text-muted">{freshness}</span>
         </div>
         <p className="mt-1 text-[11px] leading-4 text-muted">{freshnessDetail}</p>
+        {knowledge.snapshotChecksum ? (
+          <p className="mt-1 truncate font-mono text-[10px] text-muted" title={knowledge.snapshotChecksum}>
+            snapshot {knowledge.snapshotChecksum}
+          </p>
+        ) : null}
       </header>
       {knowledge.references.length === 0 ? (
         <p className="px-3.5 py-3 text-xs text-muted">사용한 코드 범위가 없습니다.</p>
       ) : (
         <ul className="divide-y divide-border">
-          {knowledge.references.map((reference) => (
-            <li key={reference.referenceId}>
-              <button
-                aria-label={`${reference.relativePath} 출처 보기`}
-                className="flex w-full items-center gap-2 px-3.5 py-3 text-left outline-none hover:bg-surface-2 disabled:cursor-default disabled:hover:bg-transparent"
-                disabled={!sharedContextAvailable}
-                onClick={onOpenSharedContext}
-                type="button"
-              >
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate font-mono text-[11px] text-primary">{reference.relativePath}</span>
-                  <span className="mt-0.5 block truncate text-[11px] text-muted">
-                    {reference.qualifiedName ?? "코드 범위"} · {reference.startLine}–{reference.endLine}
+          {knowledge.references.map((reference) => {
+            const relations = reference.relations ?? [];
+            const hasRelations = relations.length > 0;
+            const expanded = expandedReferenceId === reference.referenceId;
+            return (
+              <li key={reference.referenceId}>
+                <button
+                  aria-expanded={hasRelations ? expanded : undefined}
+                  aria-label={`${reference.relativePath} ${hasRelations ? "연결된 지식 보기" : "출처 보기"}`}
+                  className="flex w-full items-center gap-2 px-3.5 py-3 text-left outline-none hover:bg-surface-2 disabled:cursor-default disabled:hover:bg-transparent"
+                  disabled={!hasRelations && !sharedContextAvailable}
+                  onClick={() => {
+                    if (hasRelations) {
+                      setExpandedReferenceId(expanded ? undefined : reference.referenceId);
+                    } else {
+                      onOpenSharedContext();
+                    }
+                  }}
+                  type="button"
+                >
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-mono text-[11px] text-primary">{reference.relativePath}</span>
+                    <span className="mt-0.5 block truncate text-[11px] text-muted">
+                      {reference.qualifiedName ?? "코드 범위"} · {reference.startLine}–{reference.endLine}
+                    </span>
                   </span>
-                </span>
-                {sharedContextAvailable ? (
-                  <CaretRight aria-hidden="true" className="shrink-0 text-muted" size={14} />
+                  {hasRelations || sharedContextAvailable ? (
+                    <CaretRight
+                      aria-hidden="true"
+                      className={`shrink-0 text-muted ${expanded ? "rotate-90" : ""}`}
+                      size={14}
+                    />
+                  ) : null}
+                </button>
+                {expanded ? (
+                  <ul
+                    aria-label={`${reference.relativePath} 고정 관계`}
+                    className="border-t border-border bg-canvas/40"
+                  >
+                    {relations.map((relation, index) => (
+                      <li className="px-3.5 py-3" key={relation.relationId ?? `${relation.kind}:${String(index)}`}>
+                        <div className="flex items-baseline justify-between gap-2">
+                          <span className="truncate text-[12px] font-medium text-primary">
+                            {relation.node?.label ?? relation.qualifiedName}
+                          </span>
+                          <span className="shrink-0 text-[10px] text-muted">
+                            {knowledgeRelationText(relation.kind, relation.direction)}
+                          </span>
+                        </div>
+                        <p className="mt-1 font-mono text-[10px] text-muted">
+                          {relation.sourcePath ?? relation.relativePath}
+                          {relation.sourceLine === undefined ? "" : `:${String(relation.sourceLine)}`}
+                        </p>
+                        {relation.relationId ? (
+                          <p className="mt-1 break-all font-mono text-[10px] text-muted">{relation.relationId}</p>
+                        ) : null}
+                        {relation.snapshotChecksum ? (
+                          <p className="mt-1 break-all font-mono text-[10px] text-muted">
+                            snapshot {relation.snapshotChecksum}
+                          </p>
+                        ) : null}
+                      </li>
+                    ))}
+                  </ul>
                 ) : null}
-              </button>
-            </li>
-          ))}
+              </li>
+            );
+          })}
         </ul>
       )}
       {sharedContextAvailable ? (
@@ -6903,6 +6949,24 @@ function WorkKnowledgeInspector({
       ) : null}
     </section>
   );
+}
+
+function knowledgeRelationText(kind: KnowledgeRelationKind, direction: "outgoing" | "incoming"): string {
+  const outgoing: Record<KnowledgeRelationKind, string> = {
+    calls: "이 심볼이 부르는 대상",
+    imports: "이 심볼이 가져오는 대상",
+    implements: "이 심볼이 구현하는 대상",
+    documents: "이 심볼이 설명하는 대상",
+    contains: "이 심볼이 포함하는 대상",
+  };
+  const incoming: Record<KnowledgeRelationKind, string> = {
+    calls: "이 심볼을 부르는 대상",
+    imports: "이 심볼을 가져오는 대상",
+    implements: "이 심볼을 구현하는 대상",
+    documents: "이 심볼을 설명하는 대상",
+    contains: "이 심볼을 포함하는 대상",
+  };
+  return direction === "outgoing" ? outgoing[kind] : incoming[kind];
 }
 
 function InspectorTasks({ progress, tasks }: { progress: number; tasks: TaskView[] }) {

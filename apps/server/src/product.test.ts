@@ -1551,16 +1551,25 @@ describe("Massion server product", () => {
           status: string;
           evidenceBriefId?: string;
           freshnessStatus?: string;
+          snapshotChecksum?: string;
+          evidenceBriefChecksum?: string;
           references: readonly {
             relativePath?: string;
             startLine?: number;
             endLine?: number;
+            provenance?: {
+              selection: string;
+              snapshotChecksum: string;
+              paths: readonly unknown[];
+            };
           }[];
         };
       };
       expect(ready.data).toMatchObject({
         status: "ready",
         freshnessStatus: "fresh",
+        snapshotChecksum: expect.stringMatching(/^[a-f0-9]{64}$/u),
+        evidenceBriefChecksum: expect.stringMatching(/^[a-f0-9]{64}$/u),
         references: expect.arrayContaining([
           expect.objectContaining({
             kind: "chunk",
@@ -1569,9 +1578,17 @@ describe("Massion server product", () => {
             startLine: 2,
             endLine: 4,
             contentHash: expect.stringMatching(/^[a-f0-9]{64}$/u),
+            provenance: {
+              selection: "scope",
+              snapshotChecksum: expect.stringMatching(/^[a-f0-9]{64}$/u),
+              paths: [expect.objectContaining({ seed: expect.objectContaining({ referenceId: expect.any(String) }) })],
+            },
           }),
         ]),
       });
+      expect(
+        ready.data.references.every((item) => item.provenance?.snapshotChecksum === ready.data.snapshotChecksum),
+      ).toBe(true);
       expect(JSON.stringify(ready.data)).not.toContain(sourceSecret);
       const shared = (await client.query("work.shared-contexts", { workId: run.data.workId })) as {
         data: readonly { sourceKind: string; sourceId: string; checksum: string }[];

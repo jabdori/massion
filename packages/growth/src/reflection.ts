@@ -116,6 +116,7 @@ export interface ListGrowthSuggestionsInput {
   readonly recoverableOnly?: boolean;
   readonly oldestFirst?: boolean;
   readonly limit?: number;
+  readonly after?: { readonly createdAt: string; readonly suggestionId: string };
 }
 
 const MAX_TEXT = 2_000;
@@ -395,10 +396,26 @@ export class ReflectionService {
     if (!Number.isSafeInteger(limit) || limit < 1 || limit > 1_000) {
       throw new Error("Growth Suggestion 조회 개수가 유효하지 않습니다");
     }
+    if (input.after !== undefined) {
+      if (
+        !input.after.suggestionId.trim() ||
+        input.after.suggestionId.length > 200 ||
+        !Number.isFinite(Date.parse(input.after.createdAt))
+      ) {
+        throw new Error("Growth Suggestion cursor가 유효하지 않습니다");
+      }
+    }
     const clauses = ["organization_id = $organization_id"];
     if (input.suggestionId !== undefined) clauses.push("suggestion_id = $suggestion_id");
     if (input.workId !== undefined) clauses.push("work_id = $work_id");
     if (requestedStatuses !== undefined) clauses.push("status IN $statuses");
+    if (input.after !== undefined) {
+      clauses.push(
+        input.oldestFirst
+          ? "(created_at > <datetime>$after_created_at OR (created_at = <datetime>$after_created_at AND suggestion_id > $after_suggestion_id))"
+          : "(created_at < <datetime>$after_created_at OR (created_at = <datetime>$after_created_at AND suggestion_id > $after_suggestion_id))",
+      );
+    }
     if (input.recoverableOnly) {
       clauses.push(
         "reflection_run_id IN (SELECT VALUE reflection_run_id FROM reflection_run WHERE organization_id = $organization_id AND status = 'completed' AND trigger_id IN (SELECT VALUE trigger_id FROM growth_trigger WHERE organization_id = $organization_id AND status = 'completed'))",
@@ -411,6 +428,9 @@ export class ReflectionService {
         ...(input.suggestionId === undefined ? {} : { suggestion_id: input.suggestionId }),
         ...(input.workId === undefined ? {} : { work_id: input.workId }),
         ...(requestedStatuses === undefined ? {} : { statuses: requestedStatuses }),
+        ...(input.after === undefined
+          ? {}
+          : { after_created_at: input.after.createdAt, after_suggestion_id: input.after.suggestionId }),
         limit,
       },
     );
@@ -472,6 +492,25 @@ export class ReflectionService {
       );
       const rejected = updated[0];
       if (!rejected) throw new Error("Growth Suggestion 거절 동시성 충돌입니다");
+      const [rejectedAdoptions] = await executor.query<[Array<{ readonly adoption_id: string }>]>(
+        "UPDATE growth_adoption_run SET status = 'rejected', active_target_guard = NONE, updated_at = time::now() WHERE organization_id = $organization_id AND suggestion_id = $suggestion_id AND status = 'awaiting-review' RETURN AFTER;",
+        {
+          organization_id: context.organizationId,
+          suggestion_id: input.suggestionId,
+        },
+      );
+      const rejectedAdoption = rejectedAdoptions[0];
+      if (rejectedAdoption) {
+        await executor.query(
+          "CREATE growth_adoption_event CONTENT { event_id: $event_id, organization_id: $organization_id, adoption_id: $adoption_id, event_type: 'adoption_rejected', payload_json: $payload_json, created_at: time::now() };",
+          {
+            event_id: crypto.randomUUID(),
+            organization_id: context.organizationId,
+            adoption_id: rejectedAdoption.adoption_id,
+            payload_json: canonicalGrowthJson({ commandId: input.commandId, reason: input.reason }),
+          },
+        );
+      }
       await executor.query(
         "CREATE growth_event CONTENT { event_id: $event_id, organization_id: $organization_id, aggregate_type: 'suggestion', aggregate_id: $suggestion_id, event_type: 'suggestion_rejected', payload_json: $payload_json, created_at: time::now() };",
         {

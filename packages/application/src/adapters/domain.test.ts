@@ -56,7 +56,7 @@ describe("Application domain adapters", () => {
     registerApplicationDomainCommands(registry, {
       growth: { getSuggestionDetails, adopt } as never,
       approvals: {
-        get: vi.fn().mockResolvedValue({ approval_id: "approval-approve", revision: 1 }),
+        get: vi.fn().mockResolvedValue({ approval_id: "approval-approve", status: "pending", revision: 1 }),
         vote,
         cancel: vi.fn(),
       } as never,
@@ -88,6 +88,200 @@ describe("Application domain adapters", () => {
       expectedTargetChecksum: "b".repeat(64),
       approvalId: "approval-approve",
     });
+  });
+
+  it("Growth 거절은 연결된 pending Approval을 먼저 취소한 뒤 Suggestion을 같은 명령 계보로 종료한다", async () => {
+    await using database = await createDatabase({
+      url: "mem://",
+      namespace: "massion",
+      database: crypto.randomUUID(),
+    });
+    const identities = await IdentityService.create(database);
+    const organizations = await OrganizationService.create(database);
+    const owner = await identities.registerPersonalUser({ email: "growth-reject@example.com", displayName: "Owner" });
+    const context = await organizations.resolveTenantContext(owner.user.user_id, owner.organization.organization_id);
+    const registry = new ApplicationCommandRegistry(await ApplicationCommandStore.create(database, organizations));
+    const reject = vi.fn().mockResolvedValue({ suggestionId: "suggestion-reject", status: "rejected", revision: 3 });
+    const cancel = vi
+      .fn()
+      .mockResolvedValue({ approval_id: "approval-growth-reject", status: "cancelled", revision: 4 });
+    registerApplicationDomainCommands(registry, {
+      growth: {
+        getSuggestionDetails: vi.fn().mockResolvedValue({
+          suggestion: { suggestion_id: "suggestion-reject", revision: 3 },
+          adoption: {
+            adoptionId: "adoption-reject",
+            status: "awaiting-review",
+            approvalId: "approval-growth-reject",
+          },
+        }),
+        reject,
+      } as never,
+      approvals: {
+        get: vi.fn().mockResolvedValue({ approval_id: "approval-growth-reject", status: "pending", revision: 3 }),
+        vote: vi.fn(),
+        cancel,
+      } as never,
+    });
+
+    await registry.dispatch(context, ["growth:write"], {
+      schemaVersion: "massion.application.v1",
+      commandId: "growth-reject-command",
+      correlationId: "growth-reject-correlation",
+      operation: "growth.suggestion.reject",
+      payload: { suggestionId: "suggestion-reject", expectedRevision: 3, reason: "효과 대비 위험이 큽니다" },
+    });
+
+    expect(reject).toHaveBeenCalledWith(context, {
+      commandId: "growth-reject-command",
+      suggestionId: "suggestion-reject",
+      expectedRevision: 3,
+      reason: "효과 대비 위험이 큽니다",
+    });
+    expect(cancel).toHaveBeenCalledWith(context, {
+      commandId: "growth-reject-command:approval-cancel",
+      approvalId: "approval-growth-reject",
+      reason: "연결된 Growth Suggestion이 거절되었습니다",
+    });
+    expect(cancel.mock.invocationCallOrder[0]).toBeLessThan(reject.mock.invocationCallOrder[0] ?? 0);
+  });
+
+  it("Growth 거절 권한이 없는 member는 연결 Approval과 Suggestion을 모두 변경하지 않는다", async () => {
+    await using database = await createDatabase({
+      url: "mem://",
+      namespace: "massion",
+      database: crypto.randomUUID(),
+    });
+    const identities = await IdentityService.create(database);
+    const organizations = await OrganizationService.create(database);
+    const owner = await identities.registerPersonalUser({
+      email: "growth-member-owner@example.com",
+      displayName: "Owner",
+    });
+    const member = await identities.registerPersonalUser({ email: "growth-member@example.com", displayName: "Member" });
+    const ownerContext = await organizations.resolveTenantContext(
+      owner.user.user_id,
+      owner.organization.organization_id,
+    );
+    await organizations.addMember(ownerContext, member.user.user_id, "member");
+    const memberContext = await organizations.resolveTenantContext(member.user.user_id, ownerContext.organizationId);
+    const registry = new ApplicationCommandRegistry(await ApplicationCommandStore.create(database, organizations));
+    const cancel = vi.fn();
+    const reject = vi.fn();
+    registerApplicationDomainCommands(registry, {
+      growth: { getSuggestionDetails: vi.fn(), reject } as never,
+      approvals: { get: vi.fn(), vote: vi.fn(), cancel } as never,
+    });
+
+    await expect(
+      registry.dispatch(memberContext, ["growth:write"], {
+        schemaVersion: "massion.application.v1",
+        commandId: "growth-member-reject-command",
+        correlationId: "growth-member-reject-correlation",
+        operation: "growth.suggestion.reject",
+        payload: { suggestionId: "suggestion-member-reject", expectedRevision: 1, reason: "거절" },
+      }),
+    ).rejects.toMatchObject({ category: "authorization" });
+    expect(cancel).not.toHaveBeenCalled();
+    expect(reject).not.toHaveBeenCalled();
+  });
+
+  it("연결 Approval 취소가 실패하면 Growth Suggestion을 먼저 거절하지 않는다", async () => {
+    await using database = await createDatabase({
+      url: "mem://",
+      namespace: "massion",
+      database: crypto.randomUUID(),
+    });
+    const identities = await IdentityService.create(database);
+    const organizations = await OrganizationService.create(database);
+    const owner = await identities.registerPersonalUser({
+      email: "growth-cancel-fail@example.com",
+      displayName: "Owner",
+    });
+    const context = await organizations.resolveTenantContext(owner.user.user_id, owner.organization.organization_id);
+    const registry = new ApplicationCommandRegistry(await ApplicationCommandStore.create(database, organizations));
+    const reject = vi.fn();
+    registerApplicationDomainCommands(registry, {
+      growth: {
+        getSuggestionDetails: vi.fn().mockResolvedValue({
+          suggestion: { suggestion_id: "suggestion-cancel-fail", revision: 2 },
+          adoption: {
+            adoptionId: "adoption-cancel-fail",
+            status: "awaiting-review",
+            approvalId: "approval-cancel-fail",
+          },
+        }),
+        reject,
+      } as never,
+      approvals: {
+        get: vi.fn().mockResolvedValue({ approval_id: "approval-cancel-fail", status: "pending", revision: 1 }),
+        vote: vi.fn(),
+        cancel: vi.fn().mockRejectedValue(new Error("Approval cancellation 실패")),
+      } as never,
+    });
+
+    await expect(
+      registry.dispatch(context, ["growth:write"], {
+        schemaVersion: "massion.application.v1",
+        commandId: "growth-cancel-fail-command",
+        correlationId: "growth-cancel-fail-correlation",
+        operation: "growth.suggestion.reject",
+        payload: { suggestionId: "suggestion-cancel-fail", expectedRevision: 2, reason: "위험이 큽니다" },
+      }),
+    ).rejects.toMatchObject({ operatorCode: "APP_INTERNAL" });
+    expect(reject).not.toHaveBeenCalled();
+  });
+
+  it("Growth 승인 투표가 quorum 대기이면 Adoption을 실행하지 않고 최종 Approval 상태를 반환한다", async () => {
+    await using database = await createDatabase({
+      url: "mem://",
+      namespace: "massion",
+      database: crypto.randomUUID(),
+    });
+    const identities = await IdentityService.create(database);
+    const organizations = await OrganizationService.create(database);
+    const owner = await identities.registerPersonalUser({ email: "growth-quorum@example.com", displayName: "Owner" });
+    const context = await organizations.resolveTenantContext(owner.user.user_id, owner.organization.organization_id);
+    const registry = new ApplicationCommandRegistry(await ApplicationCommandStore.create(database, organizations));
+    const adopt = vi.fn();
+    registerApplicationDomainCommands(registry, {
+      growth: {
+        getSuggestionDetails: vi.fn().mockResolvedValue({
+          suggestion: { suggestion_id: "suggestion-quorum", revision: 2 },
+          evaluation: { evaluationRunId: "evaluation-quorum", outcome: "eligible", inputHash: "e".repeat(64) },
+          adoption: {
+            adoptionId: "adoption-quorum",
+            status: "awaiting-review",
+            commandId: "adoption-quorum-command",
+            approvalId: "approval-quorum",
+            evaluationRunId: "evaluation-quorum",
+            evaluationInputHash: "e".repeat(64),
+            beforeVersionId: "prompt-v1",
+            beforeChecksum: "b".repeat(64),
+          },
+        }),
+        adopt,
+      } as never,
+      approvals: {
+        get: vi.fn().mockResolvedValue({ approval_id: "approval-quorum", status: "pending", revision: 4 }),
+        vote: vi.fn().mockResolvedValue({ approval_id: "approval-quorum", status: "pending", revision: 5 }),
+        cancel: vi.fn(),
+      } as never,
+    });
+
+    await expect(
+      registry.dispatch(context, ["growth:write", "approval:write"], {
+        schemaVersion: "massion.application.v1",
+        commandId: "growth-quorum-command",
+        correlationId: "growth-quorum-correlation",
+        operation: "growth.suggestion.approve",
+        payload: { suggestionId: "suggestion-quorum", expectedRevision: 2, reason: "첫 번째 승인 투표" },
+      }),
+    ).resolves.toMatchObject({
+      outcome: "accepted",
+      data: { approvalId: "approval-quorum", approvalStatus: "pending", approvalRevision: 5 },
+    });
+    expect(adopt).not.toHaveBeenCalled();
   });
 
   it("만료된 Growth Approval은 내부 오류가 아니라 사용자 검증 오류로 반환한다", async () => {

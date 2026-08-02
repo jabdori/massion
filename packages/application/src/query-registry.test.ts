@@ -323,6 +323,195 @@ describe("ApplicationQueryRegistry", () => {
     });
   });
 
+  it("전역 Inbox는 Work 검색·상태·50개 페이지와 무관하게 정본 미해결 항목을 반환한다", async () => {
+    const works = Array.from({ length: 51 }, (_, index) => ({
+      organizationId: context.organizationId,
+      workId: `inbox-work-${String(index).padStart(3, "0")}`,
+      title: index === 50 ? "검색 밖 차단 업무" : `일반 업무 ${String(index)}`,
+      status: index === 50 ? "running" : "completed",
+      revision: 1,
+      artifactIds: [],
+      updatedAt: `2026-07-21T00:${String(index).padStart(2, "0")}:00.000Z`,
+    }));
+    const listSuggestionDetails = vi.fn(async () => [
+      {
+        suggestion: {
+          suggestion_id: "suggestion-global-inbox",
+          organization_id: context.organizationId,
+          work_id: "inbox-work-001",
+          target_kind: "memory",
+          operation: "add-entry",
+          patch_json: "{}",
+          summary: "정본 개선 검토",
+          rationale: "반복 누락을 줄입니다",
+          expected_effect: "누락 감소",
+          risk_summary: "검토 필요",
+          status: "awaiting-review" as const,
+          revision: 4,
+          reflection_run_id: "reflection-global-inbox",
+          source_reference_ids: [],
+        },
+      },
+    ]);
+    const registry = new ApplicationQueryRegistry();
+    registerApplicationQueries(registry, {
+      readModel: {
+        ...readModel,
+        works: async () => works,
+        approvals: async () => [
+          {
+            organizationId: context.organizationId,
+            approvalId: "approval-global-inbox",
+            action: "tool.call",
+            status: "pending",
+            requestedBy: "representative",
+            workId: "inbox-work-000",
+            revision: 2,
+            expiresAt: "2026-07-21T10:00:00.000Z",
+            displayPreview: { kind: "provider", title: "정본 승인", reason: "실행 전에 확인합니다" },
+          },
+        ],
+      },
+      runs: {
+        get: async () => {
+          throw new Error("사용하지 않음");
+        },
+        listByWork: async () => [],
+        listBlocked: async () => [
+          {
+            runId: "run-global-inbox",
+            organizationId: context.organizationId,
+            commandId: "command-global-inbox",
+            correlationId: "correlation-global-inbox",
+            request: { text: "원문은 Inbox에 노출하지 않습니다" },
+            workId: "inbox-work-050",
+            stage: "delivery",
+            status: "blocked",
+            blockedReason: "model-unavailable",
+            leaseGeneration: 3,
+          },
+        ],
+      },
+      growth: {
+        listSuggestions: async () => [],
+        listSuggestionDetails,
+      } as never,
+    } as never);
+
+    await expect(
+      registry.query(context, ["work:read", "approval:read", "growth:read"], "inbox.list", {}),
+    ).resolves.toMatchObject({
+      data: [
+        {
+          kind: "blocked",
+          id: "blocked:run-global-inbox",
+          runId: "run-global-inbox",
+          workId: "inbox-work-050",
+          title: "검색 밖 차단 업무",
+          blockedReason: "model-unavailable",
+        },
+        {
+          kind: "approval",
+          id: "approval-global-inbox",
+          workTitle: "일반 업무 0",
+          approval: { approvalId: "approval-global-inbox", revision: 2 },
+        },
+        {
+          kind: "growth",
+          id: "growth:suggestion-global-inbox",
+          suggestionId: "suggestion-global-inbox",
+          workId: "inbox-work-001",
+          workTitle: "일반 업무 1",
+        },
+      ],
+    });
+    await expect(
+      registry.query(context, ["work:read", "approval:read", "growth:read"], "inbox.list", {
+        search: "일치하지 않음",
+      }),
+    ).rejects.toThrow("알 수 없는 필드");
+    expect(listSuggestionDetails).toHaveBeenCalledWith(context, {
+      status: "awaiting-review",
+      limit: 1_000,
+      oldestFirst: true,
+    });
+  });
+
+  it("전역 Inbox는 1001번째 Growth 검토까지 완전 조회하고 연결 Approval을 중복 노출하지 않는다", async () => {
+    const createdAt = "2026-07-21T09:00:00.000Z";
+    const details = Array.from({ length: 1_001 }, (_, index) => {
+      const suffix = String(index).padStart(4, "0");
+      return {
+        suggestion: {
+          suggestion_id: `suggestion-inbox-${suffix}`,
+          organization_id: context.organizationId,
+          work_id: "query-work",
+          target_kind: "memory" as const,
+          operation: "add-entry",
+          patch_json: "{}",
+          summary: `${suffix}번째 개선 검토`,
+          rationale: "검토가 필요합니다",
+          expected_effect: "누락 감소",
+          risk_summary: "검토 필요",
+          status: "awaiting-review" as const,
+          revision: 1,
+          reflection_run_id: `reflection-inbox-${suffix}`,
+          source_reference_ids: [],
+          created_at: createdAt,
+        },
+        ...(index === 1_000
+          ? {
+              adoption: {
+                adoptionId: "adoption-inbox-1000",
+                status: "awaiting-review" as const,
+                commandId: "adoption-command-inbox-1000",
+                approvalId: "approval-growth-inbox-1000",
+                evaluationRunId: "evaluation-inbox-1000",
+                evaluationInputHash: "e".repeat(64),
+                beforeVersionId: "memory-before-inbox-1000",
+                beforeChecksum: "b".repeat(64),
+              },
+            }
+          : {}),
+      };
+    });
+    const listSuggestionDetails = vi.fn(
+      async (_context: TenantContext, input: { readonly after?: { readonly suggestionId: string } }) =>
+        input.after === undefined ? details.slice(0, 1_000) : details.slice(1_000),
+    );
+    const registry = new ApplicationQueryRegistry();
+    registerApplicationQueries(registry, {
+      readModel: {
+        ...readModel,
+        approvals: async () => [
+          {
+            organizationId: context.organizationId,
+            approvalId: "approval-growth-inbox-1000",
+            action: "growth.adopt",
+            status: "pending",
+            requestedBy: "growth",
+            workId: "query-work",
+            revision: 1,
+            expiresAt: "2026-07-22T09:00:00.000Z",
+          },
+        ],
+      },
+      growth: { listSuggestions: async () => [], listSuggestionDetails } as never,
+    });
+
+    const response = await registry.query(context, ["work:read", "approval:read", "growth:read"], "inbox.list", {});
+    const items = response.data as Array<{ readonly kind: string; readonly id: string }>;
+    expect(items.filter((item) => item.kind === "approval")).toEqual([]);
+    expect(items).toContainEqual(expect.objectContaining({ kind: "growth", id: "growth:suggestion-inbox-1000" }));
+    expect(items.filter((item) => item.kind === "growth")).toHaveLength(1_001);
+    expect(listSuggestionDetails).toHaveBeenNthCalledWith(2, context, {
+      status: "awaiting-review",
+      limit: 1_000,
+      oldestFirst: true,
+      after: { createdAt, suggestionId: "suggestion-inbox-0999" },
+    });
+  });
+
   it("Work inspector 조회는 연결 필드만 공개하고 artifact content는 노출하지 않는다", async () => {
     const registry = new ApplicationQueryRegistry();
     registerApplicationQueries(registry, {
@@ -391,6 +580,8 @@ describe("ApplicationQueryRegistry", () => {
             mode: "next-stage",
             submittedStage: "delivery",
             status: "queued",
+            revision: 9,
+            leaseGeneration: 4,
             createdAt: "2026-07-21T09:05:00.000Z",
             updatedAt: "2026-07-21T09:05:00.000Z",
           },
@@ -469,7 +660,9 @@ describe("ApplicationQueryRegistry", () => {
     expect(results[2]).toMatchObject({ data: [{ artifactVersionId: "artifact-version-1", name: "이탈 분석 보고서" }] });
     expect(results[3]).toMatchObject({ data: { artifactId: "artifact-1" } });
     expect(results[4]).toMatchObject({ data: [{ verificationId: "verification-1", passed: true }] });
-    expect(results[5]).toMatchObject({ data: [{ directiveId: "directive-1", status: "queued" }] });
+    expect(results[5]).toMatchObject({
+      data: [{ directiveId: "directive-1", status: "queued", revision: 9 }],
+    });
     expect(results[6]).toMatchObject({
       data: [
         {
@@ -1832,6 +2025,8 @@ describe("협업방 조회", () => {
               repositoryRevisionId: "revision-1",
               indexVersionId: "index-1",
               evidenceBriefId: "brief-1",
+              snapshotChecksum: "b".repeat(64),
+              evidenceBriefChecksum: "c".repeat(64),
               freshnessStatus: "fresh" as const,
               query: "결제 검증",
               references: [
@@ -1842,6 +2037,30 @@ describe("협업방 조회", () => {
                   startLine: 3,
                   endLine: 8,
                   contentHash: "a".repeat(64),
+                  provenance: {
+                    selection: "graph-neighbor" as const,
+                    snapshotChecksum: "b".repeat(64),
+                    paths: [
+                      {
+                        seed: {
+                          referenceId: "symbol-payment-seed",
+                          kind: "symbol" as const,
+                          symbolKey: "symbol-key-payment-seed",
+                        },
+                        relation: {
+                          relationId: "relation-payment-neighbor",
+                          relationKey: "relation-key-payment-neighbor",
+                          kind: "calls" as const,
+                          sourceSymbolKey: "symbol-key-payment-seed",
+                          targetSymbolKey: "symbol-key-payment",
+                          targetText: "Payment.authorize",
+                          resolved: true,
+                          relativePath: "src/seed.ts",
+                          startLine: 7,
+                        },
+                      },
+                    ],
+                  },
                   content: "sk-this-must-never-leave-the-server",
                 },
               ],
@@ -1867,6 +2086,8 @@ describe("협업방 조회", () => {
       repositoryRevisionId: "revision-1",
       indexVersionId: "index-1",
       evidenceBriefId: "brief-1",
+      snapshotChecksum: "b".repeat(64),
+      evidenceBriefChecksum: "c".repeat(64),
       freshnessStatus: "fresh",
       query: "결제 검증",
       references: [
@@ -1877,6 +2098,30 @@ describe("협업방 조회", () => {
           startLine: 3,
           endLine: 8,
           contentHash: "a".repeat(64),
+          provenance: {
+            selection: "graph-neighbor",
+            snapshotChecksum: "b".repeat(64),
+            paths: [
+              {
+                seed: {
+                  referenceId: "symbol-payment-seed",
+                  kind: "symbol",
+                  symbolKey: "symbol-key-payment-seed",
+                },
+                relation: {
+                  relationId: "relation-payment-neighbor",
+                  relationKey: "relation-key-payment-neighbor",
+                  kind: "calls",
+                  sourceSymbolKey: "symbol-key-payment-seed",
+                  targetSymbolKey: "symbol-key-payment",
+                  targetText: "Payment.authorize",
+                  resolved: true,
+                  relativePath: "src/seed.ts",
+                  startLine: 7,
+                },
+              },
+            ],
+          },
         },
       ],
     });
@@ -2334,6 +2579,63 @@ describe("협업방 조회", () => {
     expect(serialized).not.toContain("다른 워크스페이스");
   });
 
+  it("재색인 뒤에도 frozen snapshot의 101번째 exact 관계를 Work 계보로 조회한다", async () => {
+    const current = knowledgeWorkspaceSource();
+    const original = current.snapshot.relations[0];
+    if (!original) throw new Error("Knowledge relation fixture가 없습니다");
+    const frozenChecksum = "8".repeat(64);
+    const frozenRelations = Array.from({ length: 101 }, (_, index) => ({
+      ...original,
+      relationId: `relation-frozen-${String(index).padStart(3, "0")}`,
+      relationKey: `relation-key-frozen-${String(index).padStart(3, "0")}`,
+    }));
+    const frozen = {
+      ...current,
+      repository: { ...current.repository, currentIndexVersionId: current.index.indexVersionId },
+      index: {
+        ...current.index,
+        indexVersionId: "index-knowledge-frozen",
+        status: "superseded" as const,
+        current: false,
+        snapshotChecksum: frozenChecksum,
+        relationCount: frozenRelations.length,
+      },
+      snapshot: {
+        ...current.snapshot,
+        indexVersionId: "index-knowledge-frozen",
+        relations: frozenRelations,
+        checksum: frozenChecksum,
+      },
+    };
+    const selectors: unknown[] = [];
+    const dependencies = knowledgeQueryDependencies();
+    dependencies.workKnowledge.getWorkspaceSnapshot = async (_context, _workspaceId, selector) => {
+      selectors.push(selector);
+      return selector === undefined ? current : frozen;
+    };
+    const registry = new ApplicationQueryRegistry();
+    registerApplicationQueries(registry, dependencies as never);
+
+    await expect(
+      registry.query(context, ["workspace:read", "work:read"], "knowledge.links", {
+        workspaceId: "workspace-knowledge",
+        nodeId: "symbol:symbol-authorize",
+        indexVersionId: frozen.index.indexVersionId,
+        snapshotChecksum: frozenChecksum,
+        relationIds: ["relation-frozen-100"],
+      }),
+    ).resolves.toMatchObject({
+      data: [
+        {
+          relationId: "relation-frozen-100",
+          snapshotChecksum: frozenChecksum,
+          node: { nodeId: "symbol:symbol-zeta" },
+        },
+      ],
+    });
+    expect(selectors).toEqual([{ indexVersionId: frozen.index.indexVersionId, snapshotChecksum: frozenChecksum }]);
+  });
+
   it("지식 조회는 정본이 없으면 empty state를 반환하고 입력·scope·role을 엄격히 검증한다", async () => {
     const registry = new ApplicationQueryRegistry();
     registerApplicationQueries(registry, knowledgeQueryDependencies({ empty: true }) as never);
@@ -2613,12 +2915,25 @@ describe("협업방 조회", () => {
           node: { nodeId: "symbol:symbol-zeta" },
           kind: "calls",
           direction: "outgoing",
+          relationId: "relation-symbol-call",
+          relationKey: "relation-key-symbol-call",
+          sourceSymbolKey: "symbol-key-authorize",
+          targetSymbolKey: "symbol-key-zeta",
+          snapshotChecksum: "3".repeat(64),
+          sourcePath: "src/payment.ts",
+          sourceLine: 1,
         },
         {
           node: { nodeId: "symbol:unresolved.relation-external", label: "색인 밖 대상" },
           kind: "calls",
           direction: "outgoing",
           unresolved: true,
+          relationId: "relation-external",
+          relationKey: "relation-key-external",
+          sourceSymbolKey: "symbol-key-authorize",
+          snapshotChecksum: "3".repeat(64),
+          sourcePath: "src/payment.ts",
+          sourceLine: 1,
         },
       ],
     });

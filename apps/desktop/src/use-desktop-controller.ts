@@ -665,6 +665,49 @@ export function useDesktopController(service: DesktopService) {
     }
   };
 
+  const updateDirective = async (
+    directive: NonNullable<WorkView["queuedDirectives"]>[number],
+    content: string,
+    mode: "now" | "next-stage",
+  ) => {
+    const current = workRef.current;
+    const nextContent = content.trim();
+    const lock = `directive:${directive.id}`;
+    if (!current || !nextContent || commandLocks.current.has(lock)) return;
+    commandLocks.current.add(lock);
+    setPendingDirective(true);
+    try {
+      await service.updateDirective(current, directive, nextContent, mode);
+      setAnnouncement(
+        mode === "now" ? "대기 지시를 지금 반영하도록 변경했습니다." : "대기 지시를 다음 단계로 옮겼습니다.",
+      );
+      await refreshSelectedWork(current.id, false);
+    } catch (error) {
+      setAnnouncement(errorMessage(error, "대기 지시를 변경하지 못했습니다."));
+    } finally {
+      commandLocks.current.delete(lock);
+      setPendingDirective(false);
+    }
+  };
+
+  const cancelDirective = async (directive: NonNullable<WorkView["queuedDirectives"]>[number]) => {
+    const current = workRef.current;
+    const lock = `directive:${directive.id}`;
+    if (!current || commandLocks.current.has(lock)) return;
+    commandLocks.current.add(lock);
+    setPendingDirective(true);
+    try {
+      await service.cancelDirective(current, directive);
+      setAnnouncement("대기 지시를 취소했습니다.");
+      await refreshSelectedWork(current.id, false);
+    } catch (error) {
+      setAnnouncement(errorMessage(error, "대기 지시를 취소하지 못했습니다."));
+    } finally {
+      commandLocks.current.delete(lock);
+      setPendingDirective(false);
+    }
+  };
+
   const decideApproval = async (approval: ApprovalView, decision: "approved" | "rejected") => {
     const lock = `approval:${approval.id}`;
     if (commandLocks.current.has(lock)) return;
@@ -673,13 +716,20 @@ export function useDesktopController(service: DesktopService) {
     try {
       const vote = decision === "approved" ? "approve" : "reject";
       const reason = decision === "approved" ? "데스크톱 Work 화면에서 검토 완료" : "데스크톱 Work 화면에서 거절";
-      await service.decideApproval(approval, vote, reason);
-      setApprovalDecisions((current) => ({ ...current, [approval.id]: decision }));
+      const result = await service.decideApproval(approval, vote, reason);
+      if (result.status !== "pending") {
+        setApprovalDecisions((current) => ({ ...current, [approval.id]: decision }));
+      }
       setAnnouncement(
-        decision === "approved" ? "승인되었습니다. 실행을 계속합니다." : "거절되었습니다. 실행을 중단했습니다.",
+        result.status === "pending"
+          ? "승인 투표가 기록되었습니다. 추가 의결을 기다립니다."
+          : decision === "approved"
+            ? "승인되었습니다. 실행을 계속합니다."
+            : "거절되었습니다. 실행을 중단했습니다.",
       );
       const currentWork = workRef.current;
-      if (currentWork) setSelectedId(currentWork.id);
+      if (currentWork) await refreshSelectedWork(currentWork.id, false);
+      return result;
     } catch (error) {
       setAnnouncement(errorMessage(error, "승인 결정을 저장하지 못했습니다."));
     } finally {
@@ -867,6 +917,7 @@ export function useDesktopController(service: DesktopService) {
     announcement,
     approvalDecisions,
     composer,
+    cancelDirective,
     controlRun,
     decideApproval,
     detailLoading,
@@ -921,6 +972,7 @@ export function useDesktopController(service: DesktopService) {
     setQuery,
     setSelectedId,
     submitDirective,
+    updateDirective,
     visibleWorks,
     work,
     works,

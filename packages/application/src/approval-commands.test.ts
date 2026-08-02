@@ -402,6 +402,115 @@ describe("Application approval commands", () => {
     expect(recover).not.toHaveBeenCalled();
   });
 
+  it("Work의 Growth 연결 Approval 승인은 같은 정본 결정에서 Suggestion과 Adoption까지 종료한다", async () => {
+    const adopt = vi.fn().mockResolvedValue({
+      adoption: { adoption_id: "adoption-growth-linked", status: "observing" },
+    });
+    const vote = vi.fn().mockResolvedValue({
+      approval_id: validPayload.approvalId,
+      status: "approved",
+      revision: 8,
+    });
+    const descriptor = registration({
+      approvals: {
+        get: vi.fn().mockResolvedValue({ approval_id: validPayload.approvalId, status: "pending", revision: 7 }),
+        vote,
+      },
+      growth: {
+        getSuggestionDetailsByApproval: vi.fn().mockResolvedValue({
+          suggestion: { suggestion_id: "suggestion-growth-linked", revision: 3 },
+          evaluation: {
+            evaluationRunId: "evaluation-growth-linked",
+            outcome: "eligible",
+            inputHash: "e".repeat(64),
+          },
+          adoption: {
+            adoptionId: "adoption-growth-linked",
+            status: "awaiting-review",
+            commandId: "adoption-command-growth-linked",
+            approvalId: validPayload.approvalId,
+            evaluationRunId: "evaluation-growth-linked",
+            evaluationInputHash: "e".repeat(64),
+            beforeVersionId: "memory-before-growth-linked",
+            beforeChecksum: "b".repeat(64),
+          },
+        }),
+        adopt,
+      },
+      runs: { findByApproval: vi.fn(), prepareApprovalResume: vi.fn() },
+      coordinator: { recover: vi.fn() },
+      schedule: vi.fn(),
+    } as never);
+
+    await expect(descriptor.handle(context, command, descriptor.validate(validPayload))).resolves.toMatchObject({
+      outcome: "succeeded",
+      data: { approvalId: validPayload.approvalId, status: "approved" },
+    });
+    expect(vote).toHaveBeenCalledWith(context, {
+      commandId: command.commandId,
+      approvalId: validPayload.approvalId,
+      expectedRevision: validPayload.expectedApprovalRevision,
+      vote: "approve",
+      reason: validPayload.reason,
+    });
+    expect(adopt).toHaveBeenCalledWith(context, {
+      commandId: "adoption-command-growth-linked",
+      suggestionId: "suggestion-growth-linked",
+      suggestionRevision: 3,
+      evaluationRunId: "evaluation-growth-linked",
+      expectedEvaluationInputHash: "e".repeat(64),
+      expectedTargetChecksum: "b".repeat(64),
+      approvalId: validPayload.approvalId,
+    });
+  });
+
+  it("이미 approved인 Growth Approval은 terminal guard에 재투표하지 않고 남은 Adoption을 복구한다", async () => {
+    const vote = vi.fn();
+    const adopt = vi.fn().mockResolvedValue({
+      adoption: { adoption_id: "adoption-growth-recovery", status: "observing" },
+    });
+    const descriptor = registration({
+      approvals: {
+        get: vi.fn().mockResolvedValue({
+          approval_id: validPayload.approvalId,
+          status: "approved",
+          revision: 8,
+        }),
+        vote,
+      },
+      growth: {
+        getSuggestionDetailsByApproval: vi.fn().mockResolvedValue({
+          suggestion: { suggestion_id: "suggestion-growth-recovery", revision: 4 },
+          evaluation: {
+            evaluationRunId: "evaluation-growth-recovery",
+            outcome: "eligible",
+            inputHash: "e".repeat(64),
+          },
+          adoption: {
+            adoptionId: "adoption-growth-recovery",
+            status: "awaiting-review",
+            commandId: "adoption-command-growth-recovery",
+            approvalId: validPayload.approvalId,
+            evaluationRunId: "evaluation-growth-recovery",
+            evaluationInputHash: "e".repeat(64),
+            beforeVersionId: "memory-before-growth-recovery",
+            beforeChecksum: "b".repeat(64),
+          },
+        }),
+        adopt,
+      },
+      runs: { findByApproval: vi.fn(), prepareApprovalResume: vi.fn() },
+      coordinator: { recover: vi.fn() },
+      schedule: vi.fn(),
+    } as never);
+
+    await expect(descriptor.handle(context, command, descriptor.validate(validPayload))).resolves.toMatchObject({
+      data: { approvalId: validPayload.approvalId, status: "approved", revision: 8 },
+    });
+    expect(vote).not.toHaveBeenCalled();
+    expect(adopt).toHaveBeenCalledOnce();
+  });
+
   it("성공한 ApplicationRun 결정 command replay는 vote와 background 재개를 중복 예약하지 않는다", async () => {
     await using database = await createDatabase({ url: "mem://", namespace: "massion", database: crypto.randomUUID() });
     const identities = await IdentityService.create(database);

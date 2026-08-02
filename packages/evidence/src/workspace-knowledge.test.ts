@@ -25,6 +25,22 @@ import {
 const SCAN_OPTIONS = { include: ["**/*"], exclude: [], maxFileBytes: 128 * 1_024 } as const;
 const QUERY = "KNOWLEDGE_MARKER_8329";
 
+function canonicalJson(value: unknown): string {
+  if (value === undefined) return "null";
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
+  if (value && typeof value === "object") {
+    return `{${Object.entries(value as Record<string, unknown>)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, child]) => `${JSON.stringify(key)}:${canonicalJson(child)}`)
+      .join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+
+function checksum(value: unknown): string {
+  return createHash("sha256").update(canonicalJson(value)).digest("hex");
+}
+
 describe("Workspace 기반 자동 Evidence 지식 준비", () => {
   let database: MassionDatabase;
   let context: TenantContext;
@@ -97,6 +113,45 @@ describe("Workspace 기반 자동 Evidence 지식 준비", () => {
     expect(first.brief.references.map((reference) => reference.kind === "code" && reference.relativePath)).toEqual(
       expect.arrayContaining(["src/allowed.ts", "src/related.ts"]),
     );
+    const frozenSnapshot = await indexes.getSnapshot(context, first.brief.indexVersionId);
+    const directReference = first.brief.references.find(
+      (reference) => reference.kind === "code" && reference.relativePath === "src/allowed.ts",
+    );
+    const neighborReference = first.brief.references.find(
+      (reference) => reference.kind === "code" && reference.relativePath === "src/related.ts",
+    );
+    const actualRelation = frozenSnapshot.relations.find(
+      (relation) => relation.kind === "calls" && relation.targetText === "related",
+    );
+    if (directReference?.kind !== "code" || neighborReference?.kind !== "code" || !actualRelation) {
+      throw new Error("Workspace knowledge provenance fixture가 없습니다");
+    }
+    expect(first.brief.snapshotChecksum).toBe(frozenSnapshot.checksum);
+    expect(directReference.provenance).toMatchObject({
+      selection: "direct-search",
+      snapshotChecksum: frozenSnapshot.checksum,
+      paths: [expect.objectContaining({ seed: expect.objectContaining({ referenceId: expect.any(String) }) })],
+    });
+    expect(neighborReference.provenance).toMatchObject({
+      selection: "graph-neighbor",
+      snapshotChecksum: frozenSnapshot.checksum,
+      paths: [
+        expect.objectContaining({
+          seed: expect.objectContaining({ referenceId: expect.any(String), symbolKey: actualRelation.sourceSymbolKey }),
+          relation: {
+            relationId: actualRelation.relationId,
+            relationKey: actualRelation.relationKey,
+            kind: actualRelation.kind,
+            sourceSymbolKey: actualRelation.sourceSymbolKey,
+            targetSymbolKey: actualRelation.targetSymbolKey,
+            targetText: actualRelation.targetText,
+            resolved: true,
+            relativePath: actualRelation.relativePath,
+            startLine: actualRelation.startLine,
+          },
+        }),
+      ],
+    });
 
     await expect(
       knowledge.prepare(context, {
@@ -214,5 +269,135 @@ describe("Workspace 기반 자동 Evidence 지식 준비", () => {
     expect(prepared.brief.references).toEqual(
       expect.arrayContaining([expect.objectContaining({ kind: "code", relativePath: "history.txt" })]),
     );
+  });
+
+  it("동결된 graph provenance를 바꾸면 EvidenceBrief checksum 검증이 fail-closed한다", async () => {
+    const prepared = await knowledge.prepare(context, {
+      commandId: crypto.randomUUID(),
+      workId: "work-provenance-tamper",
+      workspaceId: "workspace-provenance-tamper",
+      workspaceName: "Provenance tamper",
+      root,
+      query: QUERY,
+    });
+    const references = prepared.brief.references.map((reference) => {
+      if (reference.kind !== "code" || reference.provenance.selection !== "graph-neighbor") return reference;
+      const firstPath = reference.provenance.paths[0];
+      if (!firstPath?.relation) throw new Error("변조 확인용 graph relation이 없습니다");
+      return {
+        ...reference,
+        provenance: {
+          ...reference.provenance,
+          paths: [
+            {
+              ...firstPath,
+              relation: { ...firstPath.relation, relationId: "tampered-relation-id" },
+            },
+          ],
+        },
+      };
+    });
+    await database.query(
+      "UPDATE evidence_brief SET references_json = $references_json WHERE organization_id = $organization_id AND evidence_brief_id = $evidence_brief_id;",
+      {
+        organization_id: context.organizationId,
+        evidence_brief_id: prepared.brief.evidenceBriefId,
+        references_json: JSON.stringify(references),
+      },
+    );
+
+    await expect(briefs.getBrief(context, prepared.brief.evidenceBriefId)).rejects.toThrow("checksum");
+  });
+
+  it("migration 전 ready automatic Brief는 원본을 보존한 새 provenance 버전으로 안전하게 복구한다", async () => {
+    const base = {
+      workspaceId: "workspace-legacy-brief",
+      workspaceName: "Legacy brief recovery",
+      root,
+      query: QUERY,
+    };
+    const prepared = await knowledge.prepare(context, {
+      ...base,
+      commandId: crypto.randomUUID(),
+      workId: "work-legacy-brief",
+    });
+    const legacyReferences = prepared.brief.references.map((reference) => {
+      if (reference.kind !== "code") return reference;
+      return Object.fromEntries(Object.entries(reference).filter(([key]) => key !== "provenance"));
+    });
+    const legacyChecksum = checksum({
+      workId: prepared.brief.workId,
+      repositoryId: prepared.brief.repositoryId,
+      repositoryRevisionId: prepared.brief.repositoryRevisionId,
+      indexVersionId: prepared.brief.indexVersionId,
+      configurationChecksum: prepared.brief.configurationChecksum,
+      query: prepared.brief.query,
+      status: prepared.brief.status,
+      references: legacyReferences,
+      claims: prepared.brief.claims,
+      scopeChecksum: prepared.brief.scopeChecksum,
+    });
+    await database.query(
+      "UPDATE evidence_brief SET snapshot_checksum = NONE, automatic_key = $automatic_key, references_json = $references_json, checksum = $checksum WHERE organization_id = $organization_id AND evidence_brief_id = $evidence_brief_id;",
+      {
+        organization_id: context.organizationId,
+        evidence_brief_id: prepared.brief.evidenceBriefId,
+        automatic_key: `${context.organizationId}:${prepared.brief.workId}`,
+        references_json: canonicalJson(legacyReferences),
+        checksum: legacyChecksum,
+      },
+    );
+    await database.query(`
+      DEFINE EVENT legacy_brief_upgrade_immutable_test ON TABLE evidence_brief
+      WHEN $event IN ['UPDATE', 'DELETE']
+      THEN { THROW 'EvidenceBrief는 immutable입니다'; };
+    `);
+    await writeFile(path.join(root, "src/allowed.ts"), "export const changedAfterLegacyBrief = true;\n");
+
+    const recovered = await knowledge.prepare(context, {
+      ...base,
+      commandId: crypto.randomUUID(),
+      workId: prepared.brief.workId,
+    });
+    expect(recovered.brief.evidenceBriefId).not.toBe(prepared.brief.evidenceBriefId);
+    expect(recovered.brief.indexVersionId).toBe(prepared.brief.indexVersionId);
+    expect(recovered.brief.references.map((reference) => reference.referenceId)).toEqual(
+      legacyReferences.map((reference) => String(reference.referenceId)),
+    );
+    expect(recovered.brief.snapshotChecksum).toMatch(/^[a-f0-9]{64}$/u);
+    expect(
+      recovered.brief.references.every(
+        (reference) =>
+          reference.kind !== "code" || reference.provenance.snapshotChecksum === recovered.brief.snapshotChecksum,
+      ),
+    ).toBe(true);
+    const preservedLegacy = await briefs.getBrief(context, prepared.brief.evidenceBriefId);
+    expect(preservedLegacy).toMatchObject({
+      evidenceBriefId: prepared.brief.evidenceBriefId,
+      checksum: legacyChecksum,
+    });
+    expect(preservedLegacy.snapshotChecksum).toBeUndefined();
+    await database.query("REMOVE EVENT legacy_brief_upgrade_immutable_test ON TABLE evidence_brief;");
+
+    const tampered = await knowledge.prepare(context, {
+      ...base,
+      commandId: crypto.randomUUID(),
+      workId: "work-legacy-tampered",
+    });
+    await database.query(
+      "UPDATE evidence_brief SET snapshot_checksum = NONE, checksum = $checksum WHERE organization_id = $organization_id AND evidence_brief_id = $evidence_brief_id;",
+      {
+        organization_id: context.organizationId,
+        evidence_brief_id: tampered.brief.evidenceBriefId,
+        checksum: "0".repeat(64),
+      },
+    );
+    await expect(
+      knowledge.prepare(context, {
+        ...base,
+        commandId: crypto.randomUUID(),
+        workId: tampered.brief.workId,
+      }),
+    ).rejects.toThrow("checksum");
   });
 });
