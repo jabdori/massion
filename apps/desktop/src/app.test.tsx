@@ -339,6 +339,8 @@ describe("AgentOS 데스크톱", () => {
 
     const cards = screen.getAllByRole("button", { name: /현재 작업 조정/ });
     await user.click(cards[cards.length - 1] as HTMLElement);
-    expect(screen.getByRole("status")).toHaveTextContent("안전한 실행 경계에서 지금 반영합니다");
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "대기 지시를 안전한 실행 경계에서 지금 반영하도록 변경했습니다",
+    );
   });
 });

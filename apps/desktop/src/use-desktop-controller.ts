@@ -679,7 +679,9 @@ export function useDesktopController(service: DesktopService) {
     try {
       await service.updateDirective(current, directive, nextContent, mode);
       setAnnouncement(
-        mode === "now" ? "대기 지시를 지금 반영하도록 변경했습니다." : "대기 지시를 다음 단계로 옮겼습니다.",
+        mode === "now"
+          ? "대기 지시를 안전한 실행 경계에서 지금 반영하도록 변경했습니다."
+          : "대기 지시를 다음 단계로 옮겼습니다.",
       );
       await refreshSelectedWork(current.id, false);
     } catch (error) {
