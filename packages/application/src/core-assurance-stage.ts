@@ -133,7 +133,7 @@ function artifactInstant(value: unknown): { readonly createdAt: string; readonly
   }
   const createdAt = typeof serialized === "string" ? serialized : undefined;
   const match = createdAt ? UTC_ISO_INSTANT.exec(createdAt) : null;
-  if (match) {
+  if (match && createdAt) {
     const year = Number(match[1]);
     const month = Number(match[2]);
     const day = Number(match[3]);
