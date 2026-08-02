@@ -1157,6 +1157,12 @@ export interface ProviderConnectionView {
   readonly displayName: string;
   readonly adapterKind: string;
   readonly enabled: boolean;
+  /** 공식 디렉터리 항목이 실제 Router endpoint까지 연결되었는지입니다. */
+  readonly connected: boolean;
+  /** 이 카드가 공식 구독 로그인 진입점을 제공하는지입니다. */
+  readonly subscriptionConnectable: boolean;
+  /** 같은 공식 ID가 호환되지 않는 Router adapter로 등록된 업그레이드 충돌입니다. */
+  readonly connectionConflict: boolean;
   readonly endpoints: readonly { readonly name: string; readonly baseUrl: string; readonly local: boolean }[];
   /** 없으면 «아직 한 번도 부르지 않았다»입니다. 성하다고 단정하지 않습니다. */
   readonly health?: ProviderHealthView;
@@ -5175,17 +5181,19 @@ function projectProviderHealth(row: Record<string, unknown> | undefined): Provid
   };
 }
 
-export function projectProviderConnections(catalog: unknown): readonly ProviderConnectionView[] {
+export function projectProviderConnections(catalog: unknown, providers?: unknown): readonly ProviderConnectionView[] {
   const source = catalog && typeof catalog === "object" ? (catalog as Record<string, unknown>) : {};
   const endpoints = rows(source.endpoints);
   const circuits = rows(source.circuits);
   const evidence = rows(source.verificationEvidence);
   const credentials = rows(source.credentials);
   const models = rows(source.models);
-  return rows(source.providers)
+  const connections = rows(source.providers)
     .filter((row) => typeof row.providerId === "string")
     .map((row) => {
       const providerId = str(row, "providerId");
+      const providerEndpoints = endpoints.filter((endpoint) => str(endpoint, "providerId") === providerId);
+      const providerModels = models.filter((item) => str(item, "providerId") === providerId);
       const health = projectProviderHealth(circuits.find((item) => str(item, "providerId") === providerId));
       const verified = evidence.filter((item) => str(item, "providerId") === providerId);
       const credential = credentials.find((item) => str(item, "providerId") === providerId);
@@ -5199,26 +5207,25 @@ export function projectProviderConnections(catalog: unknown): readonly ProviderC
         displayName: str(row, "displayName"),
         adapterKind: str(row, "adapterKind"),
         enabled: bool(row, "enabled"),
-        endpoints: endpoints
-          .filter((endpoint) => str(endpoint, "providerId") === providerId)
-          .map((endpoint) => ({
-            name: str(endpoint, "name"),
-            baseUrl: str(endpoint, "baseUrl"),
-            local: bool(endpoint, "local"),
-          })),
-        models: models
-          .filter((item) => str(item, "providerId") === providerId)
-          .map((item) => {
-            const modelEndpoint = endpoints.find((row) => str(row, "endpointId") === str(item, "endpointId"));
-            return {
-              modelProfileId: str(item, "modelProfileId"),
-              modelId: str(item, "modelId"),
-              routeKind: str(item, "routeKind"),
-              enabled: bool(item, "enabled"),
-              verified: bool(item, "verified"),
-              local: modelEndpoint ? bool(modelEndpoint, "local") : false,
-            };
-          }),
+        connected: providerEndpoints.length > 0,
+        subscriptionConnectable: false,
+        connectionConflict: false,
+        endpoints: providerEndpoints.map((endpoint) => ({
+          name: str(endpoint, "name"),
+          baseUrl: str(endpoint, "baseUrl"),
+          local: bool(endpoint, "local"),
+        })),
+        models: providerModels.map((item) => {
+          const modelEndpoint = endpoints.find((row) => str(row, "endpointId") === str(item, "endpointId"));
+          return {
+            modelProfileId: str(item, "modelProfileId"),
+            modelId: str(item, "modelId"),
+            routeKind: str(item, "routeKind"),
+            enabled: bool(item, "enabled"),
+            verified: bool(item, "verified"),
+            local: modelEndpoint ? bool(modelEndpoint, "local") : false,
+          };
+        }),
         ...(health ? { health } : {}),
         ...(verified.length ? { verifiedModelCount: verified.length } : {}),
         ...(verifiedAt ? { verifiedAt } : {}),
@@ -5227,6 +5234,34 @@ export function projectProviderConnections(catalog: unknown): readonly ProviderC
           : {}),
       };
     });
+  const codex = rows(providers).find((row) => str(row, "providerId") === "openai-codex");
+  if (!codex) return connections;
+  const existing = connections.find((connection) => connection.providerId === "openai-codex");
+  if (existing) {
+    return connections.map((connection) =>
+      connection === existing
+        ? {
+            ...connection,
+            subscriptionConnectable: true,
+            connectionConflict: connection.adapterKind !== "subscription-connector",
+          }
+        : connection,
+    );
+  }
+  return [
+    ...connections,
+    {
+      providerId: "openai-codex",
+      displayName: str(codex, "displayName") || "OpenAI Codex",
+      adapterKind: "subscription-connector",
+      enabled: true,
+      connected: false,
+      subscriptionConnectable: true,
+      connectionConflict: false,
+      endpoints: [],
+      models: [],
+    },
+  ].sort((left, right) => left.displayName.localeCompare(right.displayName));
 }
 
 export function projectSubscriptionAccounts(accounts: unknown): readonly SubscriptionAccountView[] {

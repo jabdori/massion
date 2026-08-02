@@ -1568,6 +1568,136 @@ describe("AgentOS native data flow", () => {
     expect(screen.queryByText("never-render-this")).not.toBeInTheDocument();
   });
 
+  it("깨끗한 프로필에서도 공식 OpenAI Codex 카드로 로그인한다", async () => {
+    const user = userEvent.setup();
+    const loginSubscription = vi.fn(async () => undefined);
+    const official = {
+      providerId: "openai-codex",
+      displayName: "OpenAI Codex",
+      connectionSurface: "server-and-edge",
+    };
+    const zai = {
+      providerId: "zai-coding-plan",
+      displayName: "Z.AI GLM Coding Plan",
+      adapterKind: "subscription-connector",
+      enabled: true,
+    };
+    const initial = {
+      catalog: { providers: [zai], endpoints: [], models: [], credentials: [] },
+      credentials: [],
+      routes: [],
+      providers: [official],
+      accounts: [],
+      quota: [],
+      policy: [],
+    };
+    const connected = {
+      ...initial,
+      catalog: {
+        providers: [
+          {
+            providerId: "openai-codex",
+            displayName: "OpenAI Codex",
+            adapterKind: "subscription-connector",
+            enabled: true,
+          },
+          zai,
+        ],
+        endpoints: [
+          {
+            endpointId: "codex-app-server",
+            providerId: "openai-codex",
+            name: "Codex app server",
+            baseUrl: "massion-connector:///openai-codex/codex-app-server",
+            local: false,
+          },
+        ],
+        models: [],
+        credentials: [],
+      },
+      accounts: [
+        {
+          accountId: "account-codex",
+          providerId: "openai-codex",
+          alias: "OpenAI Codex",
+          status: "active",
+          billingKind: "consumer-subscription",
+        },
+      ],
+    };
+    const loadSettings = vi.fn().mockResolvedValueOnce(initial).mockResolvedValue(connected);
+    render(<App service={service({ loadSettings, loginSubscription })} />);
+
+    await user.click(screen.getByRole("button", { name: "프로바이더" }));
+
+    expect(await screen.findByRole("button", { name: /OpenAI Codex/ })).toBeInTheDocument();
+    expect(screen.getAllByText("사용 가능").length).toBeGreaterThan(0);
+    await user.click(screen.getByRole("button", { name: "Codex 로그인" }));
+    expect(loginSubscription).toHaveBeenCalledWith({
+      providerId: "openai-codex",
+      alias: "OpenAI Codex",
+      newAccount: false,
+    });
+    expect(loadSettings).toHaveBeenCalledTimes(2);
+    expect(screen.getAllByRole("button", { name: /OpenAI Codex/ })).toHaveLength(1);
+    expect(await screen.findByText("구독 계정으로 연결됨")).toBeInTheDocument();
+    expect(screen.getAllByText("활성").length).toBeGreaterThan(0);
+  }, 15_000);
+
+  it("잘못된 Adapter의 기존 Codex ID를 연결 충돌로 표시하고 공식 로그인을 유지한다", async () => {
+    const user = userEvent.setup();
+    render(
+      <App
+        service={service({
+          loadSettings: async () => ({
+            catalog: {
+              providers: [
+                {
+                  providerId: "openai-codex",
+                  displayName: "Legacy Codex",
+                  adapterKind: "openai-compatible",
+                  enabled: true,
+                },
+              ],
+              endpoints: [],
+              models: [],
+              credentials: [],
+            },
+            credentials: [],
+            routes: [],
+            providers: [
+              {
+                providerId: "openai-codex",
+                displayName: "OpenAI Codex",
+                connectionSurface: "server-and-edge",
+              },
+            ],
+            accounts: [],
+            quota: [],
+            policy: [],
+          }),
+        })}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "프로바이더" }));
+
+    expect(await screen.findByText("연결 충돌")).toBeInTheDocument();
+    expect(screen.getByText(/다른 어댑터로 등록/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Codex 로그인" })).toBeInTheDocument();
+  }, 15_000);
+
+  it("일반 Provider 추가는 구독 커넥터를 노출하지 않는다", async () => {
+    const user = userEvent.setup();
+    render(<App service={service()} />);
+
+    await user.click(screen.getByRole("button", { name: "프로바이더" }));
+    await user.click(await screen.findByRole("button", { name: "프로바이더 추가" }));
+
+    const form = await screen.findByRole("form", { name: "프로바이더 추가" });
+    expect(within(form).queryByRole("option", { name: "구독 커넥터" })).not.toBeInTheDocument();
+  }, 15_000);
+
   it.each([
     ["활성", [{ status: "active" }], "구독 계정으로 연결됨"],
     ["비활성", [{ status: "expired" }], "계정 확인이 필요합니다"],

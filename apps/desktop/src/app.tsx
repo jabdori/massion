@@ -4527,7 +4527,6 @@ const PROVIDER_ADAPTERS = [
   { value: "openai-compatible", label: "OpenAI 호환" },
   { value: "anthropic", label: "Anthropic" },
   { value: "ollama", label: "Ollama" },
-  { value: "subscription-connector", label: "구독 커넥터" },
 ] as const;
 
 /**
@@ -4733,7 +4732,7 @@ function ProviderSurface({ service }: { service: DesktopService }) {
     }
   };
 
-  const connections = settings ? projectProviderConnections(settings.catalog) : [];
+  const connections = settings ? projectProviderConnections(settings.catalog, settings.providers) : [];
   const accounts = settings ? projectSubscriptionAccounts(settings.accounts) : [];
   const matched = connections.filter(
     (connection) =>
@@ -4743,8 +4742,26 @@ function ProviderSurface({ service }: { service: DesktopService }) {
   );
   // 그룹은 사용자가 켜고 끈 것으로만 가릅니다. 회로 상태는 분류가 아니라 그 항목의 상태입니다.
   const groups = [
-    { title: "활성", items: matched.filter((connection) => connection.enabled) },
-    { title: "비활성", items: matched.filter((connection) => !connection.enabled) },
+    {
+      title: "확인 필요",
+      items: matched.filter((connection) => connection.connectionConflict),
+    },
+    {
+      title: "활성",
+      items: matched.filter(
+        (connection) => !connection.connectionConflict && connection.connected && connection.enabled,
+      ),
+    },
+    {
+      title: "사용 가능",
+      items: matched.filter((connection) => !connection.connectionConflict && !connection.connected),
+    },
+    {
+      title: "비활성",
+      items: matched.filter(
+        (connection) => !connection.connectionConflict && connection.connected && !connection.enabled,
+      ),
+    },
   ].filter((group) => group.items.length > 0);
   const selected = matched.find((connection) => connection.providerId === selectedId) ?? matched[0];
 
@@ -4834,7 +4851,15 @@ function ProviderSurface({ service }: { service: DesktopService }) {
             {selected?.displayName ?? "프로바이더"}
           </h2>
           {selected ? (
-            <span className="shrink-0 text-[11px] text-muted">{selected.enabled ? "활성" : "비활성"}</span>
+            <span className="shrink-0 text-[11px] text-muted">
+              {selected.connectionConflict
+                ? "연결 충돌"
+                : selected.connected
+                  ? selected.enabled
+                    ? "활성"
+                    : "비활성"
+                  : "사용 가능"}
+            </span>
           ) : null}
         </header>
         <div className="min-h-0 overflow-y-auto px-5 py-4">
@@ -5007,7 +5032,7 @@ function ProviderOverviewTab({
 }) {
   const mine = accounts.filter((account) => account.providerId === connection.providerId);
   // 구독 커넥터는 계정을 갖고, API 어댑터는 키를 갖습니다. 없는 쪽을 빈 목록으로 보이면 잘못된 인상을 줍니다.
-  const usesAccounts = connection.adapterKind === "subscription-connector";
+  const usesAccounts = connection.subscriptionConnectable || connection.adapterKind === "subscription-connector";
   const activeAccount = mine.some((account) => account.status === "active");
   const canLogin = usesAccounts && connection.providerId === "openai-codex";
   const reconnectAccount = mine.find((account) => account.status !== "active");
@@ -5023,6 +5048,11 @@ function ProviderOverviewTab({
           } as const);
   return (
     <>
+      {connection.connectionConflict ? (
+        <p className="mb-4 rounded-[5px] border border-warning/40 bg-warning/10 px-3 py-2 text-[12px] text-secondary">
+          OpenAI Codex ID가 다른 어댑터로 등록되어 있습니다. Codex 로그인에서 호환성을 확인해 주세요.
+        </p>
+      ) : null}
       <section className="mb-6">
         <h3 className="mb-2 text-[13px] text-muted">연결</h3>
         <dl>
