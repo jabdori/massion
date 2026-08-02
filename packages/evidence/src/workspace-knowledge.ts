@@ -191,6 +191,8 @@ function provenance(
 }
 
 export class WorkspaceKnowledgeService {
+  private readonly activePreparations = new Map<string, Promise<PrepareWorkspaceKnowledgeResult>>();
+
   public constructor(
     private readonly repositories: RepositoryStore,
     private readonly indexes: IndexStore,
@@ -209,6 +211,24 @@ export class WorkspaceKnowledgeService {
     rawInput: PrepareWorkspaceKnowledgeInput,
   ): Promise<PrepareWorkspaceKnowledgeResult> {
     const input = normalizedInput(rawInput);
+    const preparationKey = `${context.organizationId}\0${input.workId}\0${input.scopeChecksum}`;
+    const active = this.activePreparations.get(preparationKey);
+    if (active) return await active;
+    const preparation = this.prepareOnce(context, input);
+    this.activePreparations.set(preparationKey, preparation);
+    try {
+      return await preparation;
+    } finally {
+      if (this.activePreparations.get(preparationKey) === preparation) {
+        this.activePreparations.delete(preparationKey);
+      }
+    }
+  }
+
+  private async prepareOnce(
+    context: TenantContext,
+    input: NormalizedPrepareInput,
+  ): Promise<PrepareWorkspaceKnowledgeResult> {
     const scanOptions = input.relativePaths
       ? {
           ...this.options.scanOptions,

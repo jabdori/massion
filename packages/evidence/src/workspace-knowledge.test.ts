@@ -98,6 +98,53 @@ describe("Workspace 기반 자동 Evidence 지식 준비", () => {
     await rm(root, { recursive: true, force: true });
   });
 
+  it("동일 Work·scope 준비를 single-flight로 공유하고 실패가 끝난 뒤 새 retry를 허용한다", async () => {
+    let attempts = 0;
+    let rejectAttempt: ((reason: Error) => void) | undefined;
+    const blocked = new Promise<never>((_resolve, reject) => {
+      rejectAttempt = reject;
+    });
+    const singleFlight = new WorkspaceKnowledgeService(
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {
+        findAutomaticByWork: async () => {
+          attempts += 1;
+          return await blocked;
+        },
+      } as never,
+      { scanOptions: SCAN_OPTIONS, parserBundleVersion: "single-flight-v1" },
+    );
+    const input = {
+      commandId: "knowledge-single-flight-command",
+      workId: "knowledge-single-flight-work",
+      workspaceId: "knowledge-single-flight-workspace",
+      workspaceName: "Single flight",
+      root,
+      query: QUERY,
+      relativePaths: ["src/allowed.ts"],
+    };
+
+    const first = singleFlight.prepare(context, input);
+    const duplicate = singleFlight.prepare(context, { ...input, commandId: "knowledge-single-flight-retry" });
+    const settled = Promise.allSettled([first, duplicate]);
+    expect(attempts).toBe(1);
+    rejectAttempt?.(new Error("transient knowledge failure"));
+    await expect(settled).resolves.toEqual([
+      expect.objectContaining({ status: "rejected" }),
+      expect.objectContaining({ status: "rejected" }),
+    ]);
+
+    await expect(
+      singleFlight.prepare(context, { ...input, commandId: "knowledge-single-flight-next-retry" }),
+    ).rejects.toThrow("transient knowledge failure");
+    expect(attempts).toBe(2);
+  });
+
   it("Work 재시도·scope·1-hop·revision 고정·prompt 무결성 경계를 함께 지킨다", { timeout: 15_000 }, async () => {
     const base = {
       workId: "work-unscoped",

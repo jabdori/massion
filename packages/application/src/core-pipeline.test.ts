@@ -374,7 +374,7 @@ describe("actual Core Work pipeline adapters", () => {
     expect(await works.listRooms(context, (result as { workId: string }).workId)).toHaveLength(1);
   });
 
-  it("Workspace 지식 준비가 정지해도 질문을 먼저 기록하고 제한 시간 뒤 명시적으로 차단한다", async () => {
+  it("Workspace 지식 준비가 30초를 넘어도 false block 없이 실제 완료를 기다린다", async () => {
     await using database = await createDatabase({ url: "mem://", namespace: "massion", database: crypto.randomUUID() });
     const identities = await IdentityService.create(database);
     const organizations = await OrganizationService.create(database);
@@ -388,8 +388,12 @@ describe("actual Core Work pipeline adapters", () => {
     const works = await WorkService.create(database, organizations, graph);
     let preparedWorkId = "";
     let preparationStarted: (() => void) | undefined;
+    let finishPreparation: ((value: unknown) => void) | undefined;
     const started = new Promise<void>((resolve) => {
       preparationStarted = resolve;
+    });
+    const preparation = new Promise<unknown>((resolve) => {
+      finishPreparation = resolve;
     });
     let representativeCalls = 0;
     const stages = createCoreWorkPipelineExecutors({
@@ -409,7 +413,7 @@ describe("actual Core Work pipeline adapters", () => {
         prepare: async (_context, input) => {
           preparedWorkId = input.workId;
           preparationStarted?.();
-          return await new Promise<never>(() => undefined);
+          return (await preparation) as never;
         },
       },
       evidencePromptMaterializer: { materialize: async () => ({}) as never },
@@ -440,6 +444,15 @@ describe("actual Core Work pipeline adapters", () => {
           workspaceId: "pipeline-timeout-workspace-0001",
         },
       });
+      let settled = false;
+      void execution.then(
+        () => {
+          settled = true;
+        },
+        () => {
+          settled = true;
+        },
+      );
       await started;
       const room = (await works.listRooms(context, preparedWorkId))[0];
       if (!room) throw new Error("Core Office 협업방이 없습니다");
@@ -453,15 +466,106 @@ describe("actual Core Work pipeline adapters", () => {
       ]);
 
       await vi.advanceTimersByTimeAsync(30_000);
-      await expect(execution).resolves.toMatchObject({
-        outcome: "blocked",
-        reason: "workspace-knowledge-timeout",
-        workId: preparedWorkId,
+      expect(settled).toBe(false);
+      finishPreparation?.({
+        brief: {
+          evidenceBriefId: "pipeline-slow-brief-0001",
+          indexVersionId: "pipeline-slow-index-0001",
+          checksum: "a".repeat(64),
+          status: "no_match",
+        },
       });
-      expect(representativeCalls).toBe(0);
+      await expect(execution).resolves.toMatchObject({ outcome: "advanced", workId: preparedWorkId });
+      expect(representativeCalls).toBe(1);
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("Workspace 지식 준비 중 parent abort는 DB 작업을 버리지 않고 settle 직후 기존 취소 경계로 수렴한다", async () => {
+    await using database = await createDatabase({ url: "mem://", namespace: "massion", database: crypto.randomUUID() });
+    const identities = await IdentityService.create(database);
+    const organizations = await OrganizationService.create(database);
+    const owner = await identities.registerPersonalUser({
+      email: "workspace-abort-pipeline@example.com",
+      displayName: "Workspace Abort",
+    });
+    const context = await organizations.resolveTenantContext(owner.user.user_id, owner.organization.organization_id);
+    const graph = await OrganizationGraphService.create(database, organizations);
+    await graph.bootstrap(context);
+    const works = await WorkService.create(database, organizations, graph);
+    const controller = new AbortController();
+    let preparationStarted: (() => void) | undefined;
+    let finishPreparation: ((value: unknown) => void) | undefined;
+    const started = new Promise<void>((resolve) => {
+      preparationStarted = resolve;
+    });
+    const preparation = new Promise<unknown>((resolve) => {
+      finishPreparation = resolve;
+    });
+    const stages = createCoreWorkPipelineExecutors({
+      graph,
+      works,
+      workspaces: {
+        get: async () =>
+          ({
+            workspaceId: "pipeline-abort-workspace-0001",
+            name: "Abort workspace",
+            path: "/workspace/abort",
+            status: "active",
+            trust: "trusted",
+          }) as never,
+      },
+      workspaceKnowledge: {
+        prepare: async () => {
+          preparationStarted?.();
+          return (await preparation) as never;
+        },
+      },
+      evidencePromptMaterializer: { materialize: async () => ({}) as never },
+      evidenceContextBinder: { bind: async () => ({}) as never },
+      runtimeExecutions: { findExecutionIdByCommand: async () => undefined },
+      representative: {
+        execute: async () => ({ executionId: "abort-representative", status: "succeeded" }),
+        cancel: async () => undefined,
+      },
+      strategy: { plan: async () => ({}) as never },
+      evidence: { execute: async () => ({ outcome: "advanced" }) },
+      delivery: { execute: async () => ({ outcome: "advanced" }) },
+      assurance: { execute: async () => ({ outcome: "advanced" }) },
+      records: { execute: async () => ({ outcome: "advanced" }) },
+    });
+
+    const execution = stages.intake.execute(context, {
+      runId: "pipeline-abort-run-0001",
+      commandId: "pipeline-abort-run-0001:intake",
+      correlationId: "pipeline-abort-correlation-0001",
+      request: { text: "지식 준비 취소", workspaceId: "pipeline-abort-workspace-0001" },
+      signal: controller.signal,
+    });
+    await started;
+    controller.abort(new Error("Application run cancelled"));
+    let settled = false;
+    void execution.then(
+      () => {
+        settled = true;
+      },
+      () => {
+        settled = true;
+      },
+    );
+    await Promise.resolve();
+    expect(settled).toBe(false);
+    finishPreparation?.({
+      brief: {
+        evidenceBriefId: "pipeline-abort-brief-0001",
+        indexVersionId: "pipeline-abort-index-0001",
+        checksum: "b".repeat(64),
+        status: "no_match",
+      },
+    });
+
+    await expect(execution).rejects.toThrow("Application run cancelled");
   });
 
   it("재시도 intake는 기존 Work를 만들지 않고 같은 Work로 Representative를 다시 실행한다", async () => {

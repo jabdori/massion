@@ -65,28 +65,6 @@ export interface CoreWorkPipelineDependencies {
 const CORE_OFFICE_ROOM_TITLE = "Core Office";
 const MAX_KNOWLEDGE_TOKENS = 24_000;
 const STAGE_OUTPUT_RESERVE_TOKENS = 4_000;
-const WORKSPACE_KNOWLEDGE_TIMEOUT_MS = 30_000;
-
-class WorkspaceKnowledgeTimeoutError extends Error {}
-
-function boundedWorkspaceKnowledge<T>(operation: Promise<T>, signal?: AbortSignal): Promise<T> {
-  let abort = (): void => undefined;
-  let timeout: ReturnType<typeof setTimeout> | undefined;
-  const guard = new Promise<never>((_resolve, reject) => {
-    abort = () => {
-      reject(new Error("Application run cancelled"));
-    };
-    timeout = setTimeout(() => {
-      reject(new WorkspaceKnowledgeTimeoutError("Workspace knowledge 준비 시간이 초과되었습니다"));
-    }, WORKSPACE_KNOWLEDGE_TIMEOUT_MS);
-    signal?.addEventListener("abort", abort, { once: true });
-    if (signal?.aborted) abort();
-  });
-  return Promise.race([operation, guard]).finally(() => {
-    clearTimeout(timeout);
-    signal?.removeEventListener("abort", abort);
-  });
-}
 
 function promptTokens(value: unknown): number {
   return Math.max(1, Math.ceil(JSON.stringify(value).length / 4));
@@ -393,23 +371,17 @@ export function createCoreWorkPipelineExecutors(
         }
         let prepared: Awaited<ReturnType<typeof dependencies.workspaceKnowledge.prepare>>;
         try {
-          prepared = await boundedWorkspaceKnowledge(
-            dependencies.workspaceKnowledge.prepare(context, {
-              commandId: `${input.runId}:knowledge`,
-              workId,
-              workspaceId: workspace.workspaceId,
-              workspaceName: workspace.name,
-              root: workspace.path,
-              query: value.text,
-              ...(value.workspacePaths.length === 0 ? {} : { relativePaths: value.workspacePaths }),
-            }),
-            input.signal,
-          );
+          prepared = await dependencies.workspaceKnowledge.prepare(context, {
+            commandId: `${input.runId}:knowledge`,
+            workId,
+            workspaceId: workspace.workspaceId,
+            workspaceName: workspace.name,
+            root: workspace.path,
+            query: value.text,
+            ...(value.workspacePaths.length === 0 ? {} : { relativePaths: value.workspacePaths }),
+          });
         } catch (error) {
           await cancelAndThrowIfCancelled(context, input, workId);
-          if (error instanceof WorkspaceKnowledgeTimeoutError) {
-            return { outcome: "blocked", reason: "workspace-knowledge-timeout", workId };
-          }
           return { outcome: "blocked", reason: "evidence-invalid", workId };
         }
         await cancelAndThrowIfCancelled(context, input, workId);
