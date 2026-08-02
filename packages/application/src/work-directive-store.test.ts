@@ -438,6 +438,121 @@ describe("WorkDirectiveStore", () => {
     ]);
   });
 
+  it("소비 전에 멈춘 stage의 applying 지시를 원자적으로 queued로 되돌리고 lease를 비운다", async () => {
+    const submitted = [];
+    for (const sequence of [1, 2]) {
+      submitted.push(
+        await directives.submit(context, {
+          commandId: `directive-defer-command-000${String(sequence)}`,
+          correlationId: `directive-defer-correlation-000${String(sequence)}`,
+          expectedRevision: 1,
+          workId,
+          runId,
+          content: `${String(sequence)}번째 소비 전 대기 지시`,
+          mode: "now",
+        }),
+      );
+    }
+    const runClaim = await runStore.claim(context, runId);
+    if (runClaim.outcome !== "claimed") throw new Error("지시 defer용 run lease를 얻지 못했습니다");
+    const claimed = await directives.claimEligible(context, runId, "context-strategy", runClaim.leaseGeneration);
+
+    await directives.deferClaimed(context, runId, runClaim.leaseGeneration, claimed);
+
+    await expect(directives.listByRun(context, runId)).resolves.toEqual(
+      submitted.map((directive) =>
+        expect.objectContaining({
+          directiveId: directive.directiveId,
+          status: "queued",
+          leaseGeneration: 1,
+        }),
+      ),
+    );
+    const [records] = await database.query<[{ readonly sequence: number; readonly lease_expires_at?: unknown }[]]>(
+      "SELECT sequence, lease_expires_at FROM application_work_directive WHERE organization_id = $organization_id AND run_id = $run_id ORDER BY sequence ASC;",
+      { organization_id: context.organizationId, run_id: runId },
+    );
+    expect(records).toHaveLength(2);
+    expect(records.every((record) => record.lease_expires_at === undefined)).toBe(true);
+  });
+
+  it("defer 대상 중 하나의 lease가 바뀌면 모든 지시를 applying으로 보존한다", async () => {
+    const submitted = [];
+    for (const sequence of [1, 2]) {
+      submitted.push(
+        await directives.submit(context, {
+          commandId: `directive-defer-atomic-command-000${String(sequence)}`,
+          correlationId: `directive-defer-atomic-correlation-000${String(sequence)}`,
+          expectedRevision: 1,
+          workId,
+          runId,
+          content: `${String(sequence)}번째 원자 defer 지시`,
+          mode: "now",
+        }),
+      );
+    }
+    const runClaim = await runStore.claim(context, runId);
+    if (runClaim.outcome !== "claimed") throw new Error("원자 defer용 run lease를 얻지 못했습니다");
+    const claimed = await directives.claimEligible(context, runId, "context-strategy", runClaim.leaseGeneration);
+    const changed = claimed[1];
+    if (!changed) throw new Error("lease를 바꿀 두 번째 지시가 없습니다");
+    await database.query(
+      "UPDATE application_work_directive SET lease_generation = $lease_generation WHERE organization_id = $organization_id AND directive_id = $directive_id;",
+      {
+        organization_id: context.organizationId,
+        directive_id: changed.directiveId,
+        lease_generation: changed.leaseGeneration + 1,
+      },
+    );
+
+    await expect(directives.deferClaimed(context, runId, runClaim.leaseGeneration, claimed)).rejects.toThrow(
+      "lease generation",
+    );
+    await expect(directives.listByRun(context, runId)).resolves.toEqual([
+      expect.objectContaining({ directiveId: submitted[0]?.directiveId, status: "applying", leaseGeneration: 1 }),
+      expect.objectContaining({ directiveId: submitted[1]?.directiveId, status: "applying", leaseGeneration: 2 }),
+    ]);
+  });
+
+  it("run generation을 읽은 뒤 다른 worker가 회수하면 stale worker는 applying 지시를 defer하지 않는다", async () => {
+    const directive = await directives.submit(context, {
+      commandId: "directive-concurrent-defer-command-0001",
+      correlationId: "directive-concurrent-defer-correlation-0001",
+      expectedRevision: 1,
+      workId,
+      runId,
+      content: "동시 회수 뒤 stale worker는 지시를 되돌리지 마세요",
+      mode: "now",
+    });
+    const runClaim = await runStore.claim(context, runId);
+    if (runClaim.outcome !== "claimed") throw new Error("stale defer worker용 run lease를 얻지 못했습니다");
+    const claimed = await directives.claimEligible(context, runId, "context-strategy", runClaim.leaseGeneration);
+    const barrier = createRunReadBarrier(database);
+    const fencedDirectives = await WorkDirectiveStore.create(barrier.database, organizations, {
+      clock,
+      leaseMs: 1_000,
+    });
+    barrier.enable();
+    const staleDefer = fencedDirectives.deferClaimed(context, runId, runClaim.leaseGeneration, claimed);
+    await barrier.entered;
+    await database.query(
+      "UPDATE application_run SET lease_generation = $next_generation, updated_at = <datetime>$updated_at WHERE organization_id = $organization_id AND run_id = $run_id AND lease_generation = $previous_generation;",
+      {
+        organization_id: context.organizationId,
+        run_id: runId,
+        previous_generation: runClaim.leaseGeneration,
+        next_generation: runClaim.leaseGeneration + 1,
+        updated_at: new Date("2026-07-22T00:00:00.500Z").toISOString(),
+      },
+    );
+    barrier.release();
+
+    await expect(staleDefer).rejects.toThrow("run lease generation");
+    await expect(directives.listByRun(context, runId)).resolves.toEqual([
+      expect.objectContaining({ directiveId: directive.directiveId, status: "applying", leaseGeneration: 1 }),
+    ]);
+  });
+
   it("종료 전에 반영하지 못한 지시를 unapplied로 남긴다", async () => {
     const directive = await directives.submit(context, {
       commandId: "directive-unapplied-command-0001",

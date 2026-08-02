@@ -356,7 +356,9 @@ export class WorkDirectiveStore {
         } catch {
           // 손상된 lease 시각은 회수하지 않고 실패 폐쇄합니다.
         }
-        if (!Number.isFinite(expiresAt) || expiresAt > this.clock.now.getTime()) throw new WorkDirectiveBusyError();
+        if (stage === "delivery" || !Number.isFinite(expiresAt) || expiresAt > this.clock.now.getTime()) {
+          throw new WorkDirectiveBusyError();
+        }
         const [recovered] = await transaction.query<[DirectiveRecord[]]>(
           "UPDATE application_work_directive SET status = 'queued', lease_expires_at = NONE, updated_at = <datetime>$updated_at WHERE organization_id = $organization_id AND directive_id = $directive_id AND status = 'applying' AND lease_generation = $lease_generation RETURN AFTER;",
           {
@@ -402,6 +404,76 @@ export class WorkDirectiveStore {
     leaseGeneration: number,
   ): Promise<WorkDirectiveView> {
     return await this.finish(context, directiveId, leaseGeneration, "applied");
+  }
+
+  public async deferClaimed(
+    context: TenantContext,
+    runId: string,
+    expectedRunLeaseGeneration: number,
+    claimedDirectives: readonly WorkDirectiveView[],
+  ): Promise<void> {
+    if (claimedDirectives.length === 0) return;
+    const directiveIds = new Set<string>();
+    for (const directive of claimedDirectives) {
+      if (
+        directive.runId !== runId ||
+        directive.status !== "applying" ||
+        !Number.isSafeInteger(directive.leaseGeneration) ||
+        directive.leaseGeneration < 1 ||
+        directiveIds.has(directive.directiveId)
+      ) {
+        throw new Error("Work directive defer lease generation이 유효하지 않습니다");
+      }
+      directiveIds.add(directive.directiveId);
+    }
+    await this.organizations.verifyTenantContext(context);
+    await this.database.transaction(async (transaction) => {
+      await this.organizations.verifyTenantContext(context, undefined, transaction);
+      const run = await first<RunBoundaryRecord>(
+        transaction,
+        "SELECT run_id, status, lease_generation, updated_at FROM application_run WHERE organization_id = $organization_id AND run_id = $run_id LIMIT 1;",
+        { organization_id: context.organizationId, run_id: runId },
+      );
+      if (!run) throw new Error("Application run을 찾을 수 없습니다");
+      if (
+        run.status !== "running" ||
+        !Number.isSafeInteger(expectedRunLeaseGeneration) ||
+        expectedRunLeaseGeneration < 1 ||
+        run.lease_generation !== expectedRunLeaseGeneration
+      ) {
+        throw new Error("Application run lease generation이 지시 defer 요청과 일치하지 않습니다");
+      }
+      const previousRunUpdatedAt = iso(run.updated_at);
+      const nextRunUpdatedAt = new Date(
+        Math.max(this.clock.now.getTime(), new Date(previousRunUpdatedAt).getTime() + 1),
+      ).toISOString();
+      const [runFenceUpdates] = await transaction.query<[RunBoundaryRecord[]]>(
+        "UPDATE application_run SET updated_at = <datetime>$next_updated_at WHERE organization_id = $organization_id AND run_id = $run_id AND status = 'running' AND lease_generation = $lease_generation AND updated_at = <datetime>$previous_updated_at RETURN AFTER;",
+        {
+          organization_id: context.organizationId,
+          run_id: runId,
+          lease_generation: expectedRunLeaseGeneration,
+          previous_updated_at: previousRunUpdatedAt,
+          next_updated_at: nextRunUpdatedAt,
+        },
+      );
+      if (!runFenceUpdates[0]) {
+        throw new Error("Application run lease generation이 지시 defer 요청과 일치하지 않습니다");
+      }
+      for (const directive of claimedDirectives) {
+        const [updates] = await transaction.query<[DirectiveRecord[]]>(
+          "UPDATE application_work_directive SET status = 'queued', lease_expires_at = NONE, failure_reason = NONE, updated_at = <datetime>$updated_at WHERE organization_id = $organization_id AND run_id = $run_id AND directive_id = $directive_id AND status = 'applying' AND lease_generation = $lease_generation RETURN AFTER;",
+          {
+            organization_id: context.organizationId,
+            run_id: runId,
+            directive_id: directive.directiveId,
+            lease_generation: directive.leaseGeneration,
+            updated_at: this.clock.now.toISOString(),
+          },
+        );
+        if (!updates[0]) throw new Error("Work directive defer lease generation이 일치하지 않습니다");
+      }
+    });
   }
 
   public async markFailed(

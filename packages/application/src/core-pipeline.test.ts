@@ -712,7 +712,7 @@ describe("actual Core Work pipeline adapters", () => {
       context: {
         objective: string;
         constraints: readonly string[];
-        sources: ReadonlyArray<{ kind: string; content: { text: string }; contentHash: string }>;
+        sources: ReadonlyArray<{ kind: string; content: unknown; contentHash: string }>;
       };
     }> = [];
     const stages = createCoreWorkPipelineExecutors({
@@ -749,9 +749,19 @@ describe("actual Core Work pipeline adapters", () => {
           commandId: "pipeline-run-0002:context-strategy",
           correlationId: "pipeline-correlation-0002",
           request: { text: "계획", constraints: ["근거"] },
+          directives: [
+            {
+              directiveId: "pipeline-strategy-directive-0001",
+              content: "비용 상한을 계획에 반영해주세요",
+              mode: "now",
+            },
+          ],
         },
       ),
-    ).resolves.toMatchObject({ outcome: "advanced" });
+    ).resolves.toMatchObject({
+      outcome: "advanced",
+      appliedDirectiveIds: ["pipeline-strategy-directive-0001"],
+    });
     expect(captured[0]).toMatchObject({
       workId: "pipeline-work-0002",
       expectedWorkRevision: 3,
@@ -765,6 +775,18 @@ describe("actual Core Work pipeline adapters", () => {
     const source = capturedInput?.context.sources[0];
     if (!source) throw new Error("Strategy source가 capture되지 않았습니다");
     expect(source.contentHash).toBe(hashContextContent({ text: "계획" }));
+    expect(capturedInput.context.sources).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: "manual",
+          content: {
+            directiveId: "pipeline-strategy-directive-0001",
+            content: "비용 상한을 계획에 반영해주세요",
+            mode: "now",
+          },
+        }),
+      ]),
+    );
   });
 
   it("새 Work의 Core Office 방에 요청과 Representative handoff를 기록하고 전략 입력으로 다시 사용한다", async () => {
@@ -913,8 +935,8 @@ describe("actual Core Work pipeline adapters", () => {
     ).toHaveLength(1);
   });
 
-  it("미지원 Delivery 지시는 downstream 실행 전에 명시적으로 차단한다", async () => {
-    let deliveryCalls = 0;
+  it("Delivery 지시는 downstream 실행 입력과 반영 확인을 그대로 보존한다", async () => {
+    const deliveryInputs: unknown[] = [];
     const stages = createCoreWorkPipelineExecutors({
       graph: {},
       works: {},
@@ -923,9 +945,12 @@ describe("actual Core Work pipeline adapters", () => {
       strategy: {},
       evidence: { execute: async () => ({ outcome: "advanced" }) },
       delivery: {
-        execute: async () => {
-          deliveryCalls += 1;
-          return { outcome: "advanced" };
+        execute: async (_context: unknown, input: { readonly directives?: readonly { directiveId: string }[] }) => {
+          deliveryInputs.push(input);
+          return {
+            outcome: "advanced",
+            appliedDirectiveIds: input.directives?.map((directive) => directive.directiveId),
+          };
         },
       },
       assurance: { execute: async () => ({ outcome: "advanced" }) },
@@ -950,9 +975,64 @@ describe("actual Core Work pipeline adapters", () => {
           ],
         },
       ),
-    ).resolves.toEqual({ outcome: "blocked", reason: "delivery-directive-unsupported" });
-    expect(deliveryCalls).toBe(0);
+    ).resolves.toEqual({ outcome: "advanced", appliedDirectiveIds: ["pipeline-delivery-directive-0001"] });
+    expect(deliveryInputs).toEqual([
+      expect.objectContaining({
+        directives: [
+          {
+            directiveId: "pipeline-delivery-directive-0001",
+            content: "기존 구현을 다른 언어로 다시 작성해주세요",
+            mode: "now",
+          },
+        ],
+      }),
+    ]);
   });
+
+  it.each(["evidence", "assurance", "records"] as const)(
+    "미지원 %s 지시는 downstream 실행 전에 명시적으로 차단한다",
+    async (stage) => {
+      const downstreamCalls: string[] = [];
+      const unsupportedPort = {
+        execute: async () => {
+          downstreamCalls.push(stage);
+          return { outcome: "advanced" as const };
+        },
+      };
+      const stages = createCoreWorkPipelineExecutors({
+        graph: {},
+        works: {},
+        runtimeExecutions: {},
+        representative: {},
+        strategy: {},
+        evidence: stage === "evidence" ? unsupportedPort : { execute: async () => ({ outcome: "advanced" }) },
+        delivery: { execute: async () => ({ outcome: "advanced" }) },
+        assurance: stage === "assurance" ? unsupportedPort : { execute: async () => ({ outcome: "advanced" }) },
+        records: stage === "records" ? unsupportedPort : { execute: async () => ({ outcome: "advanced" }) },
+      } as never);
+
+      await expect(
+        stages[stage].execute(
+          { userId: "user", organizationId: "org", membershipId: "member", role: "owner" },
+          {
+            runId: `pipeline-${stage}-directive-run-0001`,
+            workId: `pipeline-${stage}-directive-work-0001`,
+            commandId: `pipeline-${stage}-directive-run-0001:${stage}`,
+            correlationId: `pipeline-${stage}-directive-correlation-0001`,
+            request: { text: "기존 실행" },
+            directives: [
+              {
+                directiveId: `pipeline-${stage}-directive-0001`,
+                content: "미지원 단계에서 소비하지 마세요",
+                mode: "now",
+              },
+            ],
+          },
+        ),
+      ).resolves.toEqual({ outcome: "blocked", reason: `${stage}-directive-unsupported` });
+      expect(downstreamCalls).toEqual([]);
+    },
+  );
 
   it("취소는 현재 실행을 drain하고 원자 convergence에서 실제 Work를 cancelled로 전이한다", async () => {
     await using database = await createDatabase({ url: "mem://", namespace: "massion", database: crypto.randomUUID() });

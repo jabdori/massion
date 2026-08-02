@@ -18,6 +18,13 @@ const input = {
   correlationId: "delivery-correlation-0001",
   request: {},
 };
+const deliveryDirectives = [
+  {
+    directiveId: "delivery-directive-0001",
+    content: "사용자 지시를 실제 Delivery 모델 입력에 포함해주세요",
+    mode: "now" as const,
+  },
+];
 
 function workView(status: Work["status"], revision: number): Work {
   return {
@@ -164,7 +171,9 @@ describe("CoreDeliveryStage", () => {
       },
     } as never);
 
-    await expect(stage.execute(context, input)).resolves.toMatchObject({ outcome, workId: input.workId });
+    const result = await stage.execute(context, { ...input, directives: deliveryDirectives });
+    expect(result).toMatchObject({ outcome, workId: input.workId });
+    expect(result).not.toHaveProperty("appliedDirectiveIds");
     expect(sideEffects).toBe(0);
   });
 
@@ -285,7 +294,7 @@ describe("CoreDeliveryStage", () => {
       runtimeExecutions: unexpectedRuntimeExecutions,
     });
 
-    await expect(stage.execute(context, input)).resolves.toEqual({
+    await expect(stage.execute(context, { ...input, directives: deliveryDirectives })).resolves.toEqual({
       outcome: "awaiting-approval",
       approvalId: "dynamic-staffing-approval-0001",
       proposalId: "dynamic-staffing-proposal-0001",
@@ -505,6 +514,7 @@ describe("CoreDeliveryStage", () => {
       recommended_agent_handles: ["software-engineering.backend-specialist"],
       revision: 2,
     };
+    const softwareInputs: unknown[] = [];
     const stage = deliveryStage({
       works: {
         listTasks: async () => [task],
@@ -517,12 +527,15 @@ describe("CoreDeliveryStage", () => {
       runner: {},
       runtimeExecutions: {},
       software: {
-        executeTask: async () => ({ outcome: "failed", reason: "software-delivery-failed" }),
+        executeTask: async (_context: unknown, softwareInput: unknown) => {
+          softwareInputs.push(softwareInput);
+          return { outcome: "failed", reason: "software-delivery-failed" };
+        },
         cancelTask: async () => undefined,
       },
     } as never);
 
-    await expect(stage.execute(context, input)).resolves.toEqual({
+    await expect(stage.execute(context, { ...input, directives: deliveryDirectives })).resolves.toEqual({
       outcome: "failed",
       reason: "software-delivery-failed",
       workId: input.workId,
@@ -533,6 +546,7 @@ describe("CoreDeliveryStage", () => {
         commandId: `${input.runId}:delivery:task:${task.task_id}:failed`,
       },
     });
+    expect(softwareInputs).toEqual([expect.objectContaining({ directives: deliveryDirectives })]);
     expect(transitions).toEqual([]);
     await stage.convergeFailure(
       context,
@@ -691,9 +705,12 @@ describe("CoreDeliveryStage", () => {
         },
       },
     } as never);
-    await expect(stage.execute(context, { ...input, request: {} })).resolves.toMatchObject({
+    await expect(
+      stage.execute(context, { ...input, request: {}, directives: deliveryDirectives }),
+    ).resolves.toMatchObject({
       outcome: "advanced",
       data: { artifactVersionIds: ["artifact-version-1"] },
+      appliedDirectiveIds: ["delivery-directive-0001"],
     });
     expect(calls).toEqual(["assign", "running", "runtime", "artifact", "completed", "work-verifying"]);
     expect(materializeInputs).toEqual([[context, input.workId, 24_000]]);
@@ -712,6 +729,7 @@ describe("CoreDeliveryStage", () => {
               content: { absoluteLift: 0.03, pValue: 0.036 },
             },
           ],
+          directives: deliveryDirectives,
           knowledgeSources,
           outputContract: expect.stringContaining("Task output ArtifactVersion으로 자동 저장"),
         }),
@@ -736,7 +754,16 @@ describe("CoreDeliveryStage", () => {
     expect(outputContract).toContain("최종 결과 본문만 반환");
     expect(outputContract).not.toContain("AgentOS");
     expect(outputContract).not.toContain("verifier");
-    expect((runtimeInputs[0] as { estimatedTokens: number }).estimatedTokens).toBeLessThanOrEqual(32_000);
+    const runtimeExecution = runtimeInputs[0] as {
+      readonly estimatedTokens: number;
+      readonly input: Readonly<Record<string, unknown>>;
+    };
+    const taskModelInput = { ...runtimeExecution.input };
+    delete taskModelInput.knowledgeSources;
+    expect(runtimeExecution.estimatedTokens).toBe(
+      Math.max(1, Math.ceil(JSON.stringify(taskModelInput).length / 4)) + 4_000 + knowledgeSources[0].estimatedTokens,
+    );
+    expect(runtimeExecution.estimatedTokens).toBeLessThanOrEqual(32_000);
     expect(artifactInputs).toEqual([
       expect.objectContaining({
         creatorTaskId: "task-general",
@@ -862,11 +889,24 @@ describe("CoreDeliveryStage", () => {
       },
     } as never);
 
-    await expect(stage.execute(context, { ...input, request: softwareRequest })).resolves.toMatchObject({
+    await expect(
+      stage.execute(context, { ...input, request: softwareRequest, directives: deliveryDirectives }),
+    ).resolves.toMatchObject({
       outcome: "advanced",
+      appliedDirectiveIds: ["delivery-directive-0001"],
     });
-    expect(materializeInputs).toEqual([[context, input.workId, 961]]);
-    expect(softwareInputs).toEqual([expect.objectContaining({ request: softwareRequest, knowledgeSources })]);
+    const softwareModelInput = {
+      acceptanceCriteria: [],
+      allowedPaths: ["packages/software"],
+      instruction: "testPatch와 implementationPatch를 분리해 제안하고 filesystem이나 process를 직접 실행하지 마세요.",
+      directives: deliveryDirectives,
+    };
+    const expectedKnowledgeBudget =
+      softwareRequest.tokenBudget - (Math.max(1, Math.ceil(JSON.stringify(softwareModelInput).length / 4)) + 4_000);
+    expect(materializeInputs).toEqual([[context, input.workId, expectedKnowledgeBudget]]);
+    expect(softwareInputs).toEqual([
+      expect.objectContaining({ request: softwareRequest, directives: deliveryDirectives, knowledgeSources }),
+    ]);
     expect(softwareInputs[0]).not.toHaveProperty("outputContract");
   });
 

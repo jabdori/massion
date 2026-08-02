@@ -115,6 +115,7 @@ function acknowledgedAllClaimedDirectives(
   claimedDirectives: readonly WorkDirectiveView[],
 ): boolean {
   if (claimedDirectives.length === 0) return true;
+  if (result.outcome !== "advanced" && result.outcome !== "completed") return false;
   const acknowledged = result.appliedDirectiveIds;
   if (acknowledged === undefined || acknowledged.length !== claimedDirectives.length) return false;
   const acknowledgedIds = new Set(acknowledged);
@@ -134,7 +135,7 @@ export class CoreWorkCoordinator {
     private readonly hooks: CoreWorkCoordinatorHooks = {},
     private readonly directives?: Pick<
       WorkDirectiveStore,
-      "claimEligible" | "markApplied" | "markFailed" | "markUnapplied" | "requeueFailed"
+      "claimEligible" | "deferClaimed" | "markApplied" | "markFailed" | "markUnapplied" | "requeueFailed"
     >,
   ) {}
 
@@ -311,7 +312,9 @@ export class CoreWorkCoordinator {
         let result: CoreWorkStageResult;
         try {
           claimedDirectives =
-            (await this.directives?.claimEligible(context, run.runId, stage, claim.leaseGeneration)) ?? [];
+            stage === "context-strategy" || stage === "delivery"
+              ? ((await this.directives?.claimEligible(context, run.runId, stage, claim.leaseGeneration)) ?? [])
+              : [];
           result = await this.executors[stage].execute(context, {
             runId: run.runId,
             leaseGeneration: claim.leaseGeneration,
@@ -353,6 +356,13 @@ export class CoreWorkCoordinator {
           const cancellation = this.cancellationRequests.get(run.runId);
           if (cancellation) return await cancellation;
           return await this.store.get(context, run.runId);
+        }
+        if (
+          claimedDirectives.length > 0 &&
+          (result.outcome === "awaiting-approval" || result.outcome === "in-progress")
+        ) {
+          await this.directives?.deferClaimed(context, run.runId, claim.leaseGeneration, claimedDirectives);
+          claimedDirectives = [];
         }
         if (!acknowledgedAllClaimedDirectives(result, claimedDirectives)) {
           const reason =

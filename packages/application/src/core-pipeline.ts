@@ -656,7 +656,7 @@ export function createCoreWorkPipelineExecutors(
     intake: blockUnsupportedDirectives("intake", cancelWork(intake)),
     "context-strategy": cancelWork(strategy),
     evidence: blockUnsupportedDirectives("evidence", cancelWork(dependencies.evidence)),
-    delivery: blockUnsupportedDirectives("delivery", cancelWork(dependencies.delivery)),
+    delivery: cancelWork(dependencies.delivery),
     assurance: blockUnsupportedDirectives("assurance", cancelWork(dependencies.assurance)),
     records: blockUnsupportedDirectives("records", cancelWork(dependencies.records)),
   };

@@ -31,7 +31,7 @@ function stageBaseline(value: unknown): number {
   return promptTokens(value) + STAGE_OUTPUT_RESERVE_TOKENS;
 }
 
-function softwarePrompt(task: WorkTask, request: unknown): unknown {
+function softwarePrompt(task: WorkTask, request: unknown, directives: CoreWorkStageInput["directives"]): unknown {
   const softwareDelivery =
     request && typeof request === "object" && !Array.isArray(request)
       ? (request as { softwareDelivery?: unknown }).softwareDelivery
@@ -46,6 +46,7 @@ function softwarePrompt(task: WorkTask, request: unknown): unknown {
       typeof task.acceptance_criteria_json === "string" ? (JSON.parse(task.acceptance_criteria_json) as unknown) : [],
     allowedPaths,
     instruction: "testPatch와 implementationPatch를 분리해 제안하고 filesystem이나 process를 직접 실행하지 마세요.",
+    ...(directives === undefined || directives.length === 0 ? {} : { directives }),
   };
 }
 
@@ -116,6 +117,7 @@ export interface CoreSoftwareTaskPort {
       readonly workId: string;
       readonly task: WorkTask;
       readonly request: unknown;
+      readonly directives?: CoreWorkStageInput["directives"];
       readonly knowledgeSources?: readonly MaterializedEvidencePrompt[];
       readonly resumeInput?: unknown;
       readonly signal?: AbortSignal;
@@ -185,6 +187,8 @@ export class CoreDeliveryStage implements CoreWorkStageExecutor {
   public async execute(context: TenantContext, input: CoreWorkStageInput): Promise<CoreWorkStageResult> {
     this.throwIfCancelled(input);
     if (!input.workId) throw new Error("Delivery stage에 Work ID가 없습니다");
+    const directiveIds = input.directives?.map((directive) => directive.directiveId) ?? [];
+    let consumedDirectives = false;
     let initial = await this.dependencies.works.getWork(context, input.workId);
     this.throwIfCancelled(input);
     if (initial.status === "failed" || initial.status === "cancelled") {
@@ -319,7 +323,11 @@ export class CoreDeliveryStage implements CoreWorkStageExecutor {
           });
           this.throwIfCancelled(input);
         }
-        return { outcome: "advanced", data: { artifactVersionIds: artifacts } };
+        return {
+          outcome: "advanced",
+          data: { artifactVersionIds: artifacts },
+          ...(consumedDirectives && directiveIds.length > 0 ? { appliedDirectiveIds: directiveIds } : {}),
+        };
       }
       const running = tasks.find((task) => task.status === "running");
       const ready = tasks.find((task) => task.status === "ready");
@@ -351,8 +359,11 @@ export class CoreDeliveryStage implements CoreWorkStageExecutor {
           "최종 응답 전체는 Task output ArtifactVersion으로 자동 저장되고 후속 Assurance가 acceptance evidence를 검증합니다. 반환 전에 해당하는 모든 acceptance criteria와 대조하고, 해당하는 시간·수치·가중치·동률 결정 입력·완료 조건·후속 조치 및 보완 규칙 사이의 내부 일관성을 자체 점검하세요. 사실·근거·측정값·현장 관찰을 지어내지 말고, 해결되지 않은 항목은 가정·알 수 없음·미완료·현장 입력 필요 중 해당 상태로 명시하세요. Assurance 또는 검증을 통과했다고 주장하지 마세요. 최종 결과에는 사용자 업무 결과만 포함하고 내부 실행 과정이나 평가 절차를 언급하지 않으며, 후속 평가를 통과하려고 사실이나 표현을 왜곡하지 마세요. Artifact 생성·제출 도구를 찾거나 호출하지 말고 acceptance criteria별 충족 여부와 미해결 상태가 드러나는 최종 결과 본문만 반환하세요. 사실이나 근거가 없는 기준은 미충족 상태를 숨기지 마세요.",
         ...(requestContext === undefined ? {} : { sourceRequest: requestContext }),
         ...(priorOutputs.length === 0 ? {} : { dependencyOutputs: priorOutputs }),
+        ...(input.directives === undefined || input.directives.length === 0 ? {} : { directives: input.directives }),
       };
-      const baselineTokens = stageBaseline(softwareTask ? softwarePrompt(task, input.request) : runtimeInput);
+      const baselineTokens = stageBaseline(
+        softwareTask ? softwarePrompt(task, input.request, input.directives) : runtimeInput,
+      );
       if (baselineTokens > tokenBudget) return { outcome: "blocked", reason: "evidence-invalid" };
       let knowledgeSources: readonly MaterializedEvidencePrompt[] | undefined;
       if (initial.workspace_id !== undefined) {
@@ -377,6 +388,7 @@ export class CoreDeliveryStage implements CoreWorkStageExecutor {
         // ponytail: async 대기 후 속성이 변경될 수 있어 지역 변수로 좁힘 — 라인 187 가드와 동일 조건
         const software = this.dependencies.software;
         if (!software) return { outcome: "blocked", reason: "software-delivery-not-configured" };
+        if (directiveIds.length > 0) consumedDirectives = true;
         const result = await software.executeTask(context, {
           runId: input.runId,
           ...(input.leaseGeneration === undefined ? {} : { leaseGeneration: input.leaseGeneration }),
@@ -385,6 +397,7 @@ export class CoreDeliveryStage implements CoreWorkStageExecutor {
           workId: input.workId,
           task,
           request: input.request,
+          ...(input.directives === undefined || input.directives.length === 0 ? {} : { directives: input.directives }),
           ...(knowledgeSources === undefined ? {} : { knowledgeSources }),
           ...(input.resumeInput === undefined ? {} : { resumeInput: input.resumeInput }),
           ...(input.signal === undefined ? {} : { signal: input.signal }),
@@ -479,23 +492,27 @@ export class CoreDeliveryStage implements CoreWorkStageExecutor {
       const runtimeCommand = `${root}:runtime`;
       const executionId = await this.dependencies.runtimeExecutions.findExecutionIdByCommand(context, runtimeCommand);
       this.throwIfCancelled(input);
-      const execution = executionId
-        ? await this.dependencies.runner.recover(context, executionId)
-        : await this.dependencies.runner.execute(context, {
-            commandId: runtimeCommand,
-            workId: input.workId,
-            taskId: task.task_id,
-            agentHandle,
-            modelRoute: "delivery-quality",
-            correlationId: input.correlationId,
-            estimatedTokens: baselineTokens + (knowledgeSources?.[0]?.estimatedTokens ?? 0),
-            estimatedCostMicros: 0,
-            ...(input.signal === undefined ? {} : { signal: input.signal }),
-            input: {
-              ...runtimeInput,
-              ...(knowledgeSources === undefined ? {} : { knowledgeSources }),
-            },
-          });
+      let execution: Awaited<ReturnType<AgentRunner["execute"]>>;
+      if (executionId) {
+        execution = await this.dependencies.runner.recover(context, executionId);
+      } else {
+        if (directiveIds.length > 0) consumedDirectives = true;
+        execution = await this.dependencies.runner.execute(context, {
+          commandId: runtimeCommand,
+          workId: input.workId,
+          taskId: task.task_id,
+          agentHandle,
+          modelRoute: "delivery-quality",
+          correlationId: input.correlationId,
+          estimatedTokens: baselineTokens + (knowledgeSources?.[0]?.estimatedTokens ?? 0),
+          estimatedCostMicros: 0,
+          ...(input.signal === undefined ? {} : { signal: input.signal }),
+          input: {
+            ...runtimeInput,
+            ...(knowledgeSources === undefined ? {} : { knowledgeSources }),
+          },
+        });
+      }
       this.throwIfCancelled(input);
       if (execution.status === "blocked_model_unavailable") return { outcome: "blocked", reason: "model-unavailable" };
       if (execution.status !== "succeeded") return { outcome: "blocked", reason: `delivery-${execution.status}` };
