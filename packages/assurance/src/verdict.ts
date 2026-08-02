@@ -57,6 +57,7 @@ const CHECK_STATUSES = new Set<AssuranceCheckStatus>([
 ]);
 const FINDING_SEVERITIES = new Set<AssuranceFindingSeverity>(["critical", "major", "minor", "info"]);
 const FINDING_STATUSES = new Set<AssuranceFindingStatus>(["open", "resolved", "accepted"]);
+const MAX_VERIFIER_REASON_BYTES = 2_048;
 
 function canonicalJson(value: unknown): string {
   if (value === undefined) return "null";
@@ -72,6 +73,50 @@ function canonicalJson(value: unknown): string {
 
 function sha256(value: string): string {
   return createHash("sha256").update(value).digest("hex");
+}
+
+function verifierReason(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  for (const character of value) {
+    const codePoint = character.codePointAt(0);
+    if (codePoint !== undefined && (codePoint <= 0x1f || codePoint === 0x7f)) return undefined;
+  }
+  const normalized = value.trim().replace(/\s+/gu, " ");
+  return normalized && Buffer.byteLength(normalized, "utf8") <= MAX_VERIFIER_REASON_BYTES ? normalized : undefined;
+}
+
+export function parseAssuranceVerifierDecision(
+  output: unknown,
+  snapshotHash: string,
+): { readonly verified: boolean; readonly reason: string } | undefined {
+  let value = output;
+  for (let depth = 0; depth <= 3; depth += 1) {
+    try {
+      if (typeof value === "string") {
+        const trimmed = value.trim();
+        const fenced = /^```json\r?\n([\s\S]+)\r?\n```$/u.exec(trimmed);
+        value = JSON.parse(fenced?.[1] ?? trimmed) as unknown;
+      }
+    } catch {
+      return undefined;
+    }
+    if (!record(value)) return undefined;
+    const current = value;
+    if (["snapshotHash", "verified", "reason"].some((key) => Object.hasOwn(current, key))) {
+      if (
+        Object.keys(current).length !== 3 ||
+        current.snapshotHash !== snapshotHash ||
+        (current.verified !== true && current.verified !== false)
+      ) {
+        return undefined;
+      }
+      const reason = verifierReason(current.reason);
+      return reason ? { verified: current.verified, reason } : undefined;
+    }
+    if (depth === 3 || Object.keys(current).length !== 1 || !Object.hasOwn(current, "output")) return undefined;
+    value = current.output;
+  }
+  return undefined;
 }
 
 function text(value: unknown): value is string {

@@ -2,6 +2,7 @@ import {
   canonicalAssuranceBindings,
   checksumCriterionCoverage,
   compileAssuranceCriteria,
+  parseAssuranceVerifierDecision,
   selectAssuranceProfile,
   type AssuranceCheckBinding,
   type AssuranceBindingStore,
@@ -16,7 +17,7 @@ import type { AgentRunner, RuntimeExecutionStore } from "@massion/runtime";
 import type { WorkRecoveryBundle, WorkService } from "@massion/work";
 
 import type { CoreWorkStageExecutor, CoreWorkStageInput, CoreWorkStageResult } from "./core-work-coordinator.js";
-import { ASSURANCE_VERIFIER_REJECTED, normalizeBlockedDetail } from "./blocked-detail.js";
+import { ASSURANCE_VERIFIER_REJECTED } from "./blocked-detail.js";
 
 export interface CoreAssuranceCheckOrchestrator {
   execute(
@@ -96,43 +97,12 @@ function parseJson(value: unknown): unknown {
   return typeof value === "string" ? (JSON.parse(value) as unknown) : value;
 }
 
-function parseVerifierJson(value: unknown): unknown {
-  if (typeof value !== "string") return value;
-  const trimmed = value.trim();
-  const fenced = /^```json\r?\n([\s\S]+)\r?\n```$/u.exec(trimmed);
-  return JSON.parse(fenced?.[1] ?? trimmed) as unknown;
-}
-
 type VerifierDecision = { readonly accepted: true } | { readonly accepted: false; readonly blockedDetail?: string };
 
 function verifierDecision(output: unknown, snapshotHash: string): VerifierDecision {
-  let value = output;
-  for (let depth = 0; depth <= 3; depth += 1) {
-    try {
-      value = parseVerifierJson(value);
-    } catch {
-      return { accepted: false };
-    }
-    const current = record(value);
-    if (!current) return { accepted: false };
-    if (["snapshotHash", "verified", "reason"].some((key) => Object.hasOwn(current, key))) {
-      if (
-        Object.keys(current).length !== 3 ||
-        current.snapshotHash !== snapshotHash ||
-        (current.verified !== true && current.verified !== false)
-      ) {
-        return { accepted: false };
-      }
-      const reason = normalizeBlockedDetail(current.reason);
-      if (!reason) return { accepted: false };
-      return current.verified ? { accepted: true } : { accepted: false, blockedDetail: reason };
-    }
-    if (depth === 3 || Object.keys(current).length !== 1 || !Object.hasOwn(current, "output")) {
-      return { accepted: false };
-    }
-    value = current.output;
-  }
-  return { accepted: false };
+  const decision = parseAssuranceVerifierDecision(output, snapshotHash);
+  if (!decision) return { accepted: false };
+  return decision.verified ? { accepted: true } : { accepted: false, blockedDetail: decision.reason };
 }
 
 function promptTokens(value: unknown): number {

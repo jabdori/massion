@@ -5,6 +5,7 @@ import type { TenantContext } from "@massion/identity";
 import type { AssuranceRun } from "./contracts.js";
 import {
   createAssuranceServiceTestHarness,
+  parsePersistedAssuranceVerifierDecision,
   type AssuranceDecisionSource,
   type AssuranceRunDecisionGateway,
 } from "./service.js";
@@ -16,6 +17,20 @@ const context = {
   membershipId: "membership-1",
   role: "owner",
 } as TenantContext;
+
+it("저장된 runtime envelope에서만 verifier 결정을 추출한다", () => {
+  const snapshotHash = "a".repeat(64);
+  const output = `\`\`\`json\n${JSON.stringify({ snapshotHash, verified: true, reason: "검증 통과" })}\n\`\`\``;
+  expect(
+    parsePersistedAssuranceVerifierDecision(JSON.stringify({ attemptId: "attempt-1", output }), snapshotHash),
+  ).toEqual({ verified: true, reason: "검증 통과" });
+  expect(
+    parsePersistedAssuranceVerifierDecision(
+      JSON.stringify({ attemptId: "attempt-1", output, injected: true }),
+      snapshotHash,
+    ),
+  ).toBeUndefined();
+});
 
 function run(status: AssuranceRun["status"] = "running"): AssuranceRun {
   return {

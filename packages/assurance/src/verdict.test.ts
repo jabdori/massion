@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { decideAssuranceVerdict, type AssuranceVerdictDecisionInput } from "./verdict.js";
+import {
+  decideAssuranceVerdict,
+  parseAssuranceVerifierDecision,
+  type AssuranceVerdictDecisionInput,
+} from "./verdict.js";
 
 function input(overrides: Partial<AssuranceVerdictDecisionInput> = {}): AssuranceVerdictDecisionInput {
   return {
@@ -19,6 +23,18 @@ function input(overrides: Partial<AssuranceVerdictDecisionInput> = {}): Assuranc
 }
 
 describe("deterministic Assurance verdict", () => {
+  it("Application과 DB verdict가 동일한 fenced verifier 결정을 해석한다", () => {
+    const snapshotHash = "a".repeat(64);
+    expect(
+      parseAssuranceVerifierDecision(
+        JSON.stringify({
+          output: `\`\`\`json\n${JSON.stringify({ snapshotHash, verified: true, reason: "검증 통과" })}\n\`\`\``,
+        }),
+        snapshotHash,
+      ),
+    ).toEqual({ verified: true, reason: "검증 통과" });
+  });
+
   it("explicit cancellation은 다른 결과보다 우선하며 Work projection 없는 cancelled를 반환한다", () => {
     expect(
       decideAssuranceVerdict(
