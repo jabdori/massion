@@ -59,11 +59,11 @@ function verifierRunner(
   calls: string[] = [],
   inputs: unknown[] = [],
   output: unknown = {
-    output: JSON.stringify({
+    output: `\`\`\`json\n${JSON.stringify({
       snapshotHash: "a".repeat(64),
       verified: true,
       reason: "모든 기준을 충족했습니다.",
-    }),
+    })}\n\`\`\``,
   },
 ) {
   return {
@@ -689,6 +689,27 @@ describe("CoreAssuranceStage", () => {
         },
       },
       { output: "{malformed" },
+      {
+        output: `설명\n\`\`\`json\n${JSON.stringify({
+          snapshotHash: "a".repeat(64),
+          verified: true,
+          reason: "설명 뒤 결과",
+        })}\n\`\`\``,
+      },
+      {
+        output: `\`\`\`javascript\n${JSON.stringify({
+          snapshotHash: "a".repeat(64),
+          verified: true,
+          reason: "잘못된 언어 fence",
+        })}\n\`\`\``,
+      },
+      {
+        output: `\`\`\`json\n${JSON.stringify({
+          snapshotHash: "a".repeat(64),
+          verified: true,
+          reason: "첫 결과",
+        })}\n\`\`\`\n\`\`\`json\n{}\n\`\`\``,
+      },
     ];
     for (const { output, blockedDetail } of rejectedCases) {
       const rejected = new CoreAssuranceStage({

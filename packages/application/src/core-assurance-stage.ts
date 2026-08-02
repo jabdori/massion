@@ -94,13 +94,20 @@ function parseJson(value: unknown): unknown {
   return typeof value === "string" ? (JSON.parse(value) as unknown) : value;
 }
 
+function parseVerifierJson(value: unknown): unknown {
+  if (typeof value !== "string") return value;
+  const trimmed = value.trim();
+  const fenced = /^```json\r?\n([\s\S]+)\r?\n```$/u.exec(trimmed);
+  return JSON.parse(fenced?.[1] ?? trimmed) as unknown;
+}
+
 type VerifierDecision = { readonly accepted: true } | { readonly accepted: false; readonly blockedDetail?: string };
 
 function verifierDecision(output: unknown, snapshotHash: string): VerifierDecision {
   let value = output;
   for (let depth = 0; depth <= 3; depth += 1) {
     try {
-      value = parseJson(value);
+      value = parseVerifierJson(value);
     } catch {
       return { accepted: false };
     }
