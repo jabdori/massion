@@ -344,6 +344,7 @@ describe("Assurance run과 Work 완료 게이트", () => {
       expectedVersion: runningVerifier.execution.version,
       target: "succeeded",
       payload: {
+        attemptId: "work-gate-verifier-attempt",
         output: JSON.stringify({
           snapshotHash: prepared.snapshot.hash,
           verified: verifierVerified,

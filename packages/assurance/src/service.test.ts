@@ -30,6 +30,7 @@ it("저장된 runtime envelope에서만 verifier 결정을 추출한다", () => 
       snapshotHash,
     ),
   ).toBeUndefined();
+  expect(parsePersistedAssuranceVerifierDecision(JSON.stringify({ output }), snapshotHash)).toBeUndefined();
 });
 
 function run(status: AssuranceRun["status"] = "running"): AssuranceRun {
