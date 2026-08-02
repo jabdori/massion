@@ -1,4 +1,6 @@
 import {
+  canonicalAssuranceBindings,
+  checksumCriterionCoverage,
   compileAssuranceCriteria,
   selectAssuranceProfile,
   type AssuranceCheckBinding,
@@ -649,7 +651,13 @@ export class CoreAssuranceStage implements CoreWorkStageExecutor {
     const profile = selectAssuranceProfile(recovery.artifacts.map((artifact) => artifact.kind));
     const active = await this.dependencies.bindings.getActive(context, workId, plan.plan_version_id);
     this.throwIfCancelled(input);
-    if (active && active.profileId === profile.profileId && active.profileVersion === profile.version) {
+    const matchingActive =
+      active && active.profileId === profile.profileId && active.profileVersion === profile.version;
+    const managedActive =
+      matchingActive &&
+      active.authorHandle === "assurance" &&
+      active.bindings.some((binding) => binding.bindingKey.startsWith("auto-"));
+    if (matchingActive && !managedActive) {
       return { outcome: "ready", configuration: configurationFromBinding(active) };
     }
     const recipe =
@@ -660,6 +668,14 @@ export class CoreAssuranceStage implements CoreWorkStageExecutor {
             recovery,
           })
         : automaticBindings(plan.content_json, recovery, profile);
+    if (
+      managedActive &&
+      recipe &&
+      active.criteriaChecksum === checksumCriterionCoverage(recipe.requiredCriteria) &&
+      canonicalAssuranceBindings(active.bindings) === canonicalAssuranceBindings(recipe.bindings)
+    ) {
+      return { outcome: "ready", configuration: configurationFromBinding(active) };
+    }
     if (!recipe) return { outcome: "blocked", reason: "assurance-recipe-unavailable" };
     this.throwIfCancelled(input);
     const draft = await this.dependencies.bindings.propose(context, {

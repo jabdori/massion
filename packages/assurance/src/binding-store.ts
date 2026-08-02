@@ -239,6 +239,10 @@ function canonicalJson(value: unknown): string {
   return JSON.stringify(value);
 }
 
+export function canonicalAssuranceBindings(bindings: readonly AssuranceCheckBinding[]): string {
+  return canonicalJson([...bindings].sort((left, right) => left.bindingKey.localeCompare(right.bindingKey)));
+}
+
 function sha256(value: string): string {
   return createHash("sha256").update(value).digest("hex");
 }
@@ -585,7 +589,7 @@ export class AssuranceBindingStore {
       const version = versions.reduce((maximum, candidate) => Math.max(maximum, candidate.version), 0) + 1;
       const bindingVersionId = randomUUID();
       const criteriaChecksum = checksumCriterionCoverage(input.requiredCriteria);
-      const bindingsJson = canonicalJson([...input.bindings].sort((a, b) => a.bindingKey.localeCompare(b.bindingKey)));
+      const bindingsJson = canonicalAssuranceBindings(input.bindings);
       const checksum = assuranceBindingVersionChecksum({
         workId: input.workId,
         planVersionId: input.planVersionId,

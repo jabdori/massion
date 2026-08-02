@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 
+import { canonicalAssuranceBindings, checksumCriterionCoverage } from "@massion/assurance";
+
 import { CoreAssuranceStage } from "./core-assurance-stage.js";
 
 const context = {
@@ -235,7 +237,40 @@ describe("CoreAssuranceStage", () => {
         }),
       },
       bindings: {
-        getActive: async () => undefined,
+        getActive: async () => {
+          if (proposed) {
+            const proposal = proposed as {
+              readonly requiredCriteria: Parameters<typeof checksumCriterionCoverage>[0];
+              readonly bindings: Parameters<typeof canonicalAssuranceBindings>[0];
+            };
+            return {
+              bindingVersionId: "binding-1",
+              profileId: "massion.assurance.acceptance.v1",
+              profileVersion: "1.0.0",
+              authorHandle: "assurance",
+              criteriaChecksum: checksumCriterionCoverage(proposal.requiredCriteria),
+              bindings: JSON.parse(canonicalAssuranceBindings(proposal.bindings)),
+            };
+          }
+          return {
+            bindingVersionId: "stale-binding",
+            profileId: "massion.assurance.acceptance.v1",
+            profileVersion: "1.0.0",
+            authorHandle: "assurance",
+            criteriaChecksum: "stale-checksum",
+            bindings: [
+              {
+                bindingKey: "auto-evidence-1",
+                criterionKey: "deliverable-created",
+                kind: "evidence",
+                executor: { kind: "system_adapter", adapterId: "massion.evidence.v1" },
+                evidenceKinds: ["artifact-version"],
+                requiredEvidenceKinds: ["artifact-version"],
+                maximumAgeMs: 300_000,
+              },
+            ],
+          };
+        },
         propose: async (_context: unknown, value: unknown) => {
           calls.push("binding-propose");
           proposed = value;
@@ -370,6 +405,13 @@ describe("CoreAssuranceStage", () => {
       "decide",
       "project",
     ]);
+    const firstProposal = proposed;
+    await stage.execute(context, {
+      ...input,
+      request: { text: "A안 100/1000과 B안 130/1000을 분석해 주세요." },
+    });
+    expect(proposed).toBe(firstProposal);
+    expect(calls.filter((call) => call === "binding-propose")).toHaveLength(1);
   });
 
   it("소프트웨어 변경은 신뢰할 수 있는 검사 recipe가 연결되기 전까지 자동 통과시키지 않는다", async () => {
