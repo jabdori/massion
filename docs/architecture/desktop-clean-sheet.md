@@ -69,7 +69,7 @@ Work 상세의 네 영역을 AgentOS 전체 정보 구조로 확대 해석하지
 
 shadcn/ui는 공통 셸과 접근성 상호작용의 소스 공급 방식으로 적극 사용합니다. 제공된 코드는 `apps/desktop`이 직접 소유·검토·수정하며 `--all`이나 `--overwrite`로 일괄 추가하지 않습니다. 공통 셸에는 Sidebar, Resizable, ScrollArea, Separator, Command와 필요할 때만 Sheet를 사용합니다. 데이터 표면에는 Item/Table, Tabs, Badge, Progress, Accordion, Empty, Skeleton과 Alert를 사용하고, 설정에는 Field, Input, Select와 Switch를 사용합니다. 승인·권한·삭제에는 Dialog와 AlertDialog를 사용합니다. Card는 실제로 독립된 요약 경계에만 제한합니다. 제품은 단일 암갈색 배경, 한 가지 amber 강조색, 제한된 border·radius 계층과 정보 구조를 계속 직접 소유합니다.
 
-세부 컴포넌트 매핑, Provider 인증, Extension 설치와 구현 순서는 [데스크톱 제품 표면 구현 설계](../superpowers/specs/2026-07-22-massion-desktop-product-surfaces-design.md)를 따릅니다.
+세부 컴포넌트 매핑, Provider 인증, Extension 설치와 구현 순서는 [Phase 30 v1 전달 기록](../phases/30-surface-parity-agent-ux/v1-delivery/README.md)을 따릅니다.
 
 ## 보안과 데이터 흐름 규칙
 

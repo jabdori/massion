@@ -38,4 +38,4 @@ Massion은 현재 조직 자율성 모드를 `automatic | review`로 저장하�
 - 전체 권한에서도 Work·Execution·Tool·Growth·Effect 사건은 가능한 범위에서 계속 기록합니다. 다만 동일 macOS 사용자 권한의 외부 프로세스가 로컬 DB 파일까지 변경할 수 있으므로 변조 방지를 보장한다고 주장하지 않습니다.
 - Growth는 전체 권한에서 Prompt·Memory·Policy·Organization 후보를 별도 승인 없이 반영하지만 독립 평가, source·target checksum, 효과 측정, 노출 중단과 되돌리기는 유지합니다.
 
-세부 계약과 검증 조건은 [전체 권한 설계](../superpowers/specs/2026-07-25-full-access-permission-design.md)가 소유합니다.
+세부 릴리스 검증 조건은 [개인용 데스크톱 릴리스 기준](../../apps/desktop/src-tauri/RELEASE.md)이 소유합니다.

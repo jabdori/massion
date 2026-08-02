@@ -2,7 +2,7 @@
 
 ## 결론
 
-현재 정정: 2026-07-15 게시됐던 `Massion AgentOS 1.0.0` GitHub Release는 2026-07-24 삭제됐습니다. 원격 `v1.0.0` 태그는 현재 감사 기준선으로 보존되어 있으며 공개 Release나 다운로드 artifact를 뜻하지 않습니다. 아래 삭제 전 명령과 관측은 당시 상태를 보존한 역사 기록입니다.
+현재 정정: 2026-07-15 게시됐던 `Massion AgentOS 1.0.0` GitHub Release는 2026-07-24 삭제됐고, 잘못된 원격 `v1.0.0` 태그도 삭제됐습니다. 아래 삭제 전 명령과 관측은 당시 상태를 보존한 역사 기록입니다.
 
 철회 이유는 다음 두 가지입니다.
 
@@ -48,10 +48,10 @@ gh release delete v1.0.0 --cleanup-tag --yes
 - `git ls-remote --tags origin`: 원격 태그 없음
 - 로컬 태그: 없음
 
-> 위 태그 부재는 2026-07-24 당시 관측입니다. 현재 원격 `v1.0.0` 태그는 감사 기준선으로 보존되어 있으며, 공개 Release나 다운로드 artifact를 뜻하지 않습니다.
+> 위 태그 부재는 2026-07-24 당시 관측이며 현시점에도 원격 `v1.0.0` 태그는 존재하지 않습니다.
 
 대상 커밋은 `main`과 후속 브랜치 이력에 남아 있어 코드 계보는 보존됩니다.
 
 ## 재게시 조건
 
-다음 `v1.0.0`은 [개인용 데스크톱 릴리스 기준](../../../apps/desktop/src-tauri/RELEASE.md)과 [제품 통합 계획](../../superpowers/plans/2026-07-24-phase-30-product-integration.md)의 모든 게이트가 같은 후보 SHA에서 통과한 뒤 새 태그와 새 artifact로만 만들 수 있습니다.
+다음 `v1.0.0`은 [개인용 데스크톱 릴리스 기준](../../../apps/desktop/src-tauri/RELEASE.md)과 [Phase 30 v1 전달 기록](../../phases/30-surface-parity-agent-ux/v1-delivery/README.md)의 모든 게이트가 같은 후보 SHA에서 통과한 뒤 새 태그와 새 artifact로만 만들 수 있습니다.

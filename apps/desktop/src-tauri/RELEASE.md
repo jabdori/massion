@@ -29,7 +29,7 @@ pnpm --filter @massion/desktop tauri:build
 - 키보드만으로 핵심 흐름 완주, VoiceOver와 Accessibility Inspector 실측
 - 개인 사용자가 등록한 BYOK 키가 로컬 소유자 경계 밖으로 노출·공유·중계되지 않는지 확인
 
-보존된 감사 기준선 `v1.0.0` 태그는 이동하거나 재사용하지 않습니다. 공개 릴리스는 현재 만들지 않으며, 후보 검증이 필요하면 수동 승인된 비공개 Actions artifact만 보관합니다.
+잘못 게시된 `v1.0.0` 태그는 삭제됐으며 현시점에 존재해서는 안 됩니다. 공개 릴리스는 현재 만들지 않으며, 후보 검증이 필요하면 수동 승인된 비공개 Actions artifact만 보관합니다.
 
 Tauri 공식 문서에 따라 브라우저로 배포하는 macOS 앱은 Developer ID 서명과 공증을 사용합니다: [Tauri macOS code signing](https://v2.tauri.app/distribute/sign/macos/).
 

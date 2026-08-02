@@ -6,7 +6,7 @@
 > **표면 이름:** `개선` (2026-07-23 확정. 구 `성장`)
 > **행동 용어:** `승인` / `거부`. 도메인 메서드는 `adopt()`이지만 화면과 명령 이름은 제품 전체의 승인 문법을 따릅니다.
 >
-> **2026-07-25 범위 복원:** 이 문서 작성 당시 화면 조각에서 미뤘던 `adoptionMode: "auto"`는 개인용 v1 필수 설정으로 복원합니다. 기본값은 `review`이고 사용자가 `auto`를 명시적으로 선택할 수 있습니다. Growth 자동 모드 자체는 독립 평가·Policy·Governance·효과 측정·되돌리기를 우회하지 않습니다. 별도 전역 `full-access`가 켜진 동안에만 Governance 승인 대기를 만들지 않으며 정확성 계보는 유지합니다. 정본은 `docs/superpowers/specs/2026-07-25-knowledge-memory-integration-design.md`와 [전체 권한 설계](../../superpowers/specs/2026-07-25-full-access-permission-design.md)입니다.
+> **2026-07-25 범위 복원:** 이 문서 작성 당시 화면 조각에서 미뤘던 `adoptionMode: "auto"`는 개인용 v1 필수 설정으로 복원합니다. 기본값은 `review`이고 사용자가 `auto`를 명시적으로 선택할 수 있습니다. Growth 자동 모드 자체는 독립 평가·Policy·Governance·효과 측정·되돌리기를 우회하지 않습니다. 별도 전역 `full-access`가 켜진 동안에만 Governance 승인 대기를 만들지 않으며 정확성 계보는 유지합니다. 정본은 [지식 축 결정](../../architecture/ADR-002-knowledge-axis-restoration.md)과 [전체 권한 결정](../../architecture/ADR-001-personal-full-access.md)입니다.
 
 ## 1. 한 줄 요약
 

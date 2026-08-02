@@ -1,6 +1,6 @@
 # Phase 29 증거: 단일 진입점과 설치 UX
 
-> **현재 상태 정정:** 아래는 레거시 CLI·TUI·Web 설치 묶음을 당시 실행한 역사적 증거입니다. GitHub Release `v1.0.0`은 이후 삭제됐고 원격 태그는 감사 기준선으로 보존되어 있으며, 현재 설치 가능성이나 개인용 데스크톱 1.0 완료를 뜻하지 않습니다. 현재 상태는 [철회 증거](../phase-30/withdrawn-v1.0.0-release-2026-07-24.md)를 따릅니다.
+> **현재 상태 정정:** 아래는 레거시 CLI·TUI·Web 설치 묶음을 당시 실행한 역사적 증거입니다. GitHub Release `v1.0.0`과 잘못된 원격 태그는 이후 삭제됐으며, 현재 설치 가능성이나 개인용 데스크톱 1.0 완료를 뜻하지 않습니다. 현재 상태는 [철회 증거](../phase-30/withdrawn-v1.0.0-release-2026-07-24.md)를 따릅니다.
 
 ## 범위
 
@@ -42,7 +42,7 @@ CI=true pnpm verify:release /private/tmp/massion-release-20260716-final
 
 ## 과거 공개 Release 당시 설치 검증(역사 기록)
 
-당시 GitHub Release [`v1.0.0`](https://github.com/jabdori/massion/releases/tag/v1.0.0)에 개인용·배포용 아카이브와 `release-manifest.json`이 게시됐습니다. 현재 Release는 삭제됐고, 원격 `v1.0.0` 태그는 감사 기준선으로만 보존됩니다. 당시 `v1.0.0` 태그와 릴리스 자산의 소스 커밋은 `ecd35b1b34e4e8797da6e458c4d69e857bd90656`으로 고정되어 있었습니다.
+당시 GitHub Release `v1.0.0`에 개인용·배포용 아카이브와 `release-manifest.json`이 게시됐습니다. 현재 Release와 잘못된 원격 태그는 모두 삭제됐으며, 현재 상태는 [철회 기록](../phase-30/withdrawn-v1.0.0-release-2026-07-24.md)을 따릅니다. 당시 태그와 릴리스 자산의 소스 커밋은 `ecd35b1b34e4e8797da6e458c4d69e857bd90656`으로 고정되어 있었습니다.
 
 ```text
 curl -fsSL https://raw.githubusercontent.com/jabdori/massion/main/install.sh | MASSION_PREFIX=/private/tmp/massion-curl-release.IEbYPG bash

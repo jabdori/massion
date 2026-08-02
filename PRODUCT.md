@@ -12,7 +12,7 @@ desktop
 
 근시일 최다 사용 시간은 소유자 본인의 도그푸딩에서 나오지만, 그것은 검증 경로이지 설계 대상이 아닙니다.
 
-현재 공개 설치 가능한 릴리스는 없습니다. 2026-07-15에 게시됐던 GitHub Release `v1.0.0`은 개인용 데스크톱 완성·배포 게이트를 통과하지 못해 2026-07-24 삭제했습니다. 원격 `v1.0.0` 태그는 당시 소스의 감사 기준선으로 보존되며 공개 artifact나 재사용 가능한 릴리스 태그를 뜻하지 않습니다. 레거시 Web·TUI 표면은 제거됐습니다. 기존 headless `install.sh`와 팀 자체 호스팅은 코드에 남아 있지만 개인용 메인 릴리스 표면이 아닙니다.
+현재 공개 설치 가능한 릴리스는 없습니다. 2026-07-15에 게시됐던 GitHub Release `v1.0.0`은 개인용 데스크톱 완성·배포 게이트를 통과하지 못해 2026-07-24 삭제했고, 잘못된 원격 태그도 삭제했습니다. 레거시 Web·TUI 표면은 제거됐습니다. 기존 headless `install.sh`와 팀 자체 호스팅은 코드에 남아 있지만 개인용 메인 릴리스 표면이 아닙니다.
 
 ## Product Purpose
 
@@ -58,7 +58,7 @@ Massion은 모델을 고를 수 있는 채팅 앱도, 에이전트 여러 개를
 
 **구현됐지만 최종 실측 게이트가 남은 v1 목표**
 
-- 실행 정책에 `review | automatic | full-access`를 제공합니다. 기본 `automatic`은 기존 정책·필수 승인·Workspace 경계를 유지하고, 사용자가 한 번 경고를 확인해 켜는 `full-access`는 사용자 책임 하에 Massion 승인과 실행 샌드박스를 우회합니다. 코드·재시작·해제 경로는 구현됐고, 전체 원자 Tauri UAT와 긴급정지 실측은 [전체 권한 설계](docs/superpowers/specs/2026-07-25-full-access-permission-design.md)가 소유합니다.
+- 실행 정책에 `review | automatic | full-access`를 제공합니다. 기본 `automatic`은 기존 정책·필수 승인·Workspace 경계를 유지하고, 사용자가 한 번 경고를 확인해 켜는 `full-access`는 사용자 책임 하에 Massion 승인과 실행 샌드박스를 우회합니다. 코드·재시작·해제 경로는 구현됐고, 남은 릴리스 조건은 [전체 권한 결정 기록](docs/architecture/ADR-001-personal-full-access.md)과 [개인용 데스크톱 릴리스 기준](apps/desktop/src-tauri/RELEASE.md)이 소유합니다.
 
 **기술 제약 (설계 취향이 아니라 런타임 사실)**
 
@@ -87,12 +87,13 @@ Massion은 모델을 고를 수 있는 채팅 앱도, 에이전트 여러 개를
 
 핸드오프를 현재 데스크톱과 실제 검증 순서로 통합한 실행 문서:
 
-- [제품 통합·정합성 설계](docs/superpowers/specs/2026-07-24-phase-30-product-integration-design.md) — 현재 기준선, 세로 흐름 순서와 전체 완료 판정
-- [홈·워크스페이스·파일 문맥](docs/superpowers/specs/2026-07-24-desktop-home-context-design.md) — 내부 ID 없는 새 사명 입력과 네이티브 문맥 선택
-- [Runtime·Application·표면 계약 수렴](docs/superpowers/specs/2026-07-24-runtime-contract-convergence-design.md) — 네 핸드오프와 실제 코드 연결점
-- [실제 데스크톱 UAT](docs/superpowers/specs/2026-07-24-desktop-live-uat-design.md) — Computer Use 기반 핵심 12개·확장 4개 시나리오
-- [개인용 전체 권한](docs/superpowers/specs/2026-07-25-full-access-permission-design.md) — 사용자 책임형 승인·샌드박스 우회와 런타임·회수·UAT 계약
-- [통합 구현 계획](docs/superpowers/plans/2026-07-24-phase-30-product-integration.md) — 파일·명령·커밋 단위 실행 순서
+- [현재 아키텍처 정본](docs/architecture/README.md) — 현재 기준선, 세로 흐름과 구현 위치
+- [워크스페이스 문맥 전달](docs/phases/30-surface-parity-agent-ux/v1-delivery/phase-01-workspace-context.md) — 내부 ID 없는 사명과 로컬 디렉터리 문맥
+- [네이티브 문맥 선택 전달](docs/phases/30-surface-parity-agent-ux/v1-delivery/phase-02-native-context-picker.md) — 폴더·파일 선택과 신뢰 경계
+- [Core 협업·권한·수신함 전달](docs/phases/30-surface-parity-agent-ux/v1-delivery/phase-04-core-collaboration-permission-inbox.md) — Runtime·Application·표면 연결점
+- [실제 데스크톱 UAT 실행 체크리스트](docs/evidence/phase-30/uat-execution-checklist-2026-07-25.md) — 핵심·확장 시나리오와 실행 기록
+- [개인용 전체 권한 결정](docs/architecture/ADR-001-personal-full-access.md) — 사용자 책임형 승인·샌드박스 우회와 회수 계약
+- [Phase 30 v1 전달 기록](docs/phases/30-surface-parity-agent-ux/v1-delivery/README.md) — 증분 구현·검증 순서
 
 **표면 결정 (2026-07-24, 사용자 논의로 확정)**
 

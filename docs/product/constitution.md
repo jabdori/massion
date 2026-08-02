@@ -360,7 +360,7 @@ Massion을 다음 중 하나로 축소하지 않습니다.
 
 2026-07-30 기준. 표면 아홉(홈, 업무, 지식, 조직, 개선, 확장, 프로바이더, 예산, 설정)과 전역 수신함이 구현돼 있습니다. 도메인 표면은 같은 3열 골격을 쓰고 수신함은 현재 표면 위에 열립니다. 설정만 3열을 쓰지 않습니다 — 남은 것이 권한과 자가개선 채택 둘뿐이라 열을 나눌 내용이 없습니다.
 
-남은 계약·Runtime·실제 데스크톱 검증의 통합 순서는 [Phase 30 제품 통합·정합성 설계](../superpowers/specs/2026-07-24-phase-30-product-integration-design.md)와 [구현 계획](../superpowers/plans/2026-07-24-phase-30-product-integration.md)이 소유합니다. 지식·그래프·RAG·기억의 선행 복원 범위는 [통합 설계](../superpowers/specs/2026-07-25-knowledge-memory-integration-design.md)와 [실행 계획](../superpowers/plans/2026-07-25-knowledge-memory-integration.md)이 소유합니다.
+남은 계약·Runtime·실제 데스크톱 검증의 통합 순서는 [현재 아키텍처 정본](../architecture/README.md)과 [Phase 30 v1 전달 기록](../phases/30-surface-parity-agent-ux/v1-delivery/README.md)이 소유합니다. 지식·그래프·RAG·기억의 선행 복원 범위는 [지식 축 결정](../architecture/ADR-002-knowledge-axis-restoration.md)과 [지식·기억 전달 기록](../phases/30-surface-parity-agent-ux/v1-delivery/phase-03-knowledge-memory.md)이 소유합니다.
 
 - 남은 격차는 화면 추가보다 **계약과 실제 실행 연결**에 집중돼 있습니다. 표면을 완성본 기준으로 만들면서 도메인에는 있고 Application 계약이나 생산 호출 경로가 버리는 것이 반복해서 드러났습니다. 현재 네 인계 문서가 개선, 협업·조직, 확장, 설정 범위를 소유합니다(9.3·9.4·9.5, [설정 조회 계약](../phases/30-surface-parity-agent-ux/settings-contract-handoff.md)).
 - 조직 화면은 **구조(A) + 지도(B) 하이브리드**로 완성본 기준으로 그립니다(2026-07-24). 본문은 자식이 있는 노드를 접을 수 있는 중첩 구조, 우측은 전체 위치를 보여주는 지도이며 A가 읽기의 중심임을 유지하도록 55:45로 나눕니다. `NodeRole`은 총괄·조율·실행만 뜻하므로 `coordinator`를 부서나 팀으로 번역하지 않습니다. 에이전트는 `agentIdentityToken`으로 업무 화면과 같은 이름을 쓰고, scope:"work" 임시 팀은 분리·점선으로 구분합니다.

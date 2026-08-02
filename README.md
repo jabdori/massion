@@ -1,6 +1,6 @@
 # Massion AgentOS
 
-> **현재 상태:** 개인용 macOS 데스크톱 1.0의 코드와 자동화 검증을 진행 중입니다. Playwright·백엔드 테스트·ad-hoc 패키징은 자동화 근거일 뿐 실제 Tauri UAT나 공개 릴리스 완료를 뜻하지 않습니다. GitHub Release `v1.0.0`은 삭제됐고, 원격 `v1.0.0` 태그는 감사 기준선으로만 보존되어 있습니다. 현재 공개 설치 가능한 릴리스는 없습니다.
+> **현재 상태:** 개인용 macOS 데스크톱 1.0의 코드와 자동화 검증을 진행 중입니다. Playwright·백엔드 테스트·ad-hoc 패키징은 자동화 근거일 뿐 실제 Tauri UAT나 공개 릴리스 완료를 뜻하지 않습니다. 잘못 게시된 GitHub Release와 `v1.0.0` 태그는 모두 삭제됐습니다. 현재 공개 설치 가능한 릴리스는 없습니다.
 
 Massion은 개인이 자기 기계에서 여러 AI 에이전트를 조직처럼 운영하고, 업무(Work)의 요청·실행·승인·독립 검증·기록·개선을 한 계보로 관리하는 AgentOS입니다.
 
@@ -63,11 +63,10 @@ pnpm verify
 
 - [제품 목적과 현재 구현 상태](PRODUCT.md)
 - [제품 헌법](docs/product/constitution.md)
-- [제품 통합·정합성 설계](docs/superpowers/specs/2026-07-24-phase-30-product-integration-design.md)
-- [통합 구현 계획](docs/superpowers/plans/2026-07-24-phase-30-product-integration.md)
-- [실제 데스크톱 UAT 설계](docs/superpowers/specs/2026-07-24-desktop-live-uat-design.md)
+- [현재 아키텍처 정본](docs/architecture/README.md)
+- [Phase 30 v1 전달 계획과 기록](docs/phases/30-surface-parity-agent-ux/v1-delivery/README.md)
+- [실제 데스크톱 UAT 실행 체크리스트](docs/evidence/phase-30/uat-execution-checklist-2026-07-25.md)
 - [UAT 시나리오 자동화 커버리지](docs/evidence/phase-30/uat-coverage-mapping-2026-07-25.md)
-- [Phase 30 v1 전달 기록](docs/phases/30-surface-parity-agent-ux/v1-delivery/README.md)
 - [개인용 데스크톱 릴리스 기준](apps/desktop/src-tauri/RELEASE.md)
 - [철회된 v1.0.0 기록](docs/evidence/phase-30/withdrawn-v1.0.0-release-2026-07-24.md)
 

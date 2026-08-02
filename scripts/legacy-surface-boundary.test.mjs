@@ -102,8 +102,8 @@ test("레거시 Web·TUI 제품 표면과 릴리스 진입점이 없다", async 
     "docs/operations/local-install.md",
     "docs/operations/self-hosting-install.md",
     "docs/operations/upgrade-rollback.md",
-    "docs/superpowers/plans/2026-07-24-phase-30-product-integration.md",
-    "docs/superpowers/specs/2026-07-24-phase-30-product-integration-design.md",
+    "docs/phases/30-surface-parity-agent-ux/v1-delivery/README.md",
+    "apps/desktop/src-tauri/RELEASE.md",
   ];
   for (const path of currentDocs) {
     const content = await source(path);

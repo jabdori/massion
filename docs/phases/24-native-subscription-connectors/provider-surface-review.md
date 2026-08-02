@@ -3,7 +3,7 @@
 > **검수일**: 2026-07-12, Codex·Claude 승인 재개 보강 2026-07-13
 > **상태**: 구현·정적 검증 완료, 실제 공급자 계정 UAT 대기
 > **범위**: OpenAI Codex app-server, Anthropic Claude Agent SDK, Gemini CLI Enterprise, GitHub Copilot CLI, xAI Grok Build, Google Antigravity CLI
-> **후속 결정:** 이 문서는 현재 구현된 제한 경계를 기록합니다. 2026-07-25 승인된 개인용 `full-access` 목표는 [ADR-001](../../architecture/ADR-001-personal-full-access.md)과 [전체 권한 설계](../../superpowers/specs/2026-07-25-full-access-permission-design.md)가 소유하며 아직 구현 완료로 보지 않습니다.
+> **후속 결정:** 이 문서는 현재 구현된 제한 경계를 기록합니다. 2026-07-25 승인된 개인용 `full-access` 목표는 [ADR-001](../../architecture/ADR-001-personal-full-access.md)과 [개인용 데스크톱 릴리스 기준](../../../apps/desktop/src-tauri/RELEASE.md)이 소유하며 아직 구현 완료로 보지 않습니다.
 
 ## 1. 결론
 

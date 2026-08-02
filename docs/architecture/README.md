@@ -293,7 +293,7 @@ flowchart LR
 
 핵심 업무 조정기 실행(Application run)은 현재 단계와 실행 임대 세대(lease generation)를 저장합니다. 자동 정책은 사람을 기다리지 않고 진행하고, review 정책만 `awaiting-approval`에서 정지합니다. 모델 부재는 성공이나 일반 실패로 꾸미지 않고 재시도 가능한 `blocked` 상태로 보존합니다.
 
-현재 코드는 `automatic | review`와 Workspace sandbox만 구현합니다. 개인용 v1에 승인된 `full-access`는 아직 구현되지 않았으며, Massion 승인·Governance 사용자 권한 제한·Workspace 실행 sandbox 우회와 Codex·Claude 전달·해제 검증은 [ADR-001](ADR-001-personal-full-access.md)과 [전체 권한 설계](../superpowers/specs/2026-07-25-full-access-permission-design.md)의 예정 범위입니다.
+현재 코드는 `automatic | review | full-access`를 저장하고 실행 계보에 고정합니다. `full-access`는 Massion 승인·Governance 사용자 권한 제한·Workspace 실행 sandbox를 우회하며 Codex·Claude 실행 옵션과 해제 전파까지 구현됐습니다. 전체 원자 Tauri UAT와 긴급 정지 실측은 [ADR-001](ADR-001-personal-full-access.md), [Phase 30 권한 전달 기록](../phases/30-surface-parity-agent-ux/v1-delivery/phase-04-core-collaboration-permission-inbox.md), [개인용 데스크톱 릴리스 기준](../../apps/desktop/src-tauri/RELEASE.md)의 남은 게이트입니다.
 
 ```mermaid
 stateDiagram-v2
@@ -704,7 +704,7 @@ flowchart LR
 | 자체 호스팅·운영 | 구현됨 | `apps/server`, `compose.yaml`, `deploy/kubernetes`, `docs/operations` | 21 |
 | 보안·성능·복구 강화 | 구현됨 | `apps/server`, `packages/registry`, `scripts/verify-security.mjs`, `scripts/hardening-load.mjs` | 22 |
 | 레거시 배포 묶음 E2E | 코드 존재·공개 릴리스 철회 | `apps/distribution`, `release`, `scripts/build-release.mjs`, `scripts/verify-release.mjs`, `.github/workflows/release.yml` | 23 |
-| 개인용 데스크톱 1.0 릴리스 | 진행 중 | `apps/desktop`, `docs/superpowers/plans/2026-07-24-phase-30-product-integration.md` | 30 |
+| 개인용 데스크톱 1.0 릴리스 | 진행 중 | `apps/desktop`, `docs/phases/30-surface-parity-agent-ux/v1-delivery/README.md` | 30 |
 | 모델 평가실·역할별 배치 | 구현 중 | `packages/model-optimization`, `packages/router`, `packages/runtime`, `apps/server`, `apps/cli` | 25 |
 
 이 문서의 상태가 현재 코드와 달라지면 실제 검증 근거를 확인한 뒤 그림과 표를 함께 갱신합니다.
