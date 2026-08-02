@@ -453,7 +453,12 @@ describe("실제 Edge 구독 fallback 통합", () => {
       connectors: connectorRegistry,
       broker,
       workspaceCapabilities: {
-        verify: async () => ({ workspaceRoot, allowedTools: [], disallowedTools: [] }),
+        verify: async () => ({
+          workspaceRoot,
+          workspaceAccess: "workspace-write",
+          allowedTools: [],
+          disallowedTools: [],
+        }),
       },
       policies: {
         resolve: async () => edgePolicy,
@@ -481,7 +486,13 @@ describe("실제 Edge 구독 fallback 통합", () => {
       modelFactory,
       new RoutedModelRegistry(),
       undefined,
-      { resolve: async () => ({ workspaceRoot }) },
+      {
+        resolve: async () => ({
+          workspaceRoot,
+          workspaceAccess: "workspace-write",
+          workspaceCapability: "workspace-capability-edge-fallback",
+        }),
+      },
     );
 
     const result = await runner.execute(context, {
