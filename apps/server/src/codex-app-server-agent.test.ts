@@ -530,6 +530,95 @@ describe("Codex app-server 구독 실행 adapter", () => {
     expect(result.outcome === "failed" ? result.signal : undefined).toBeUndefined();
   });
 
+  it("완료 item notification의 성공 명령과 파일 변경만 실행 근거로 반환한다", async () => {
+    let options: CodexAppServerOptions | undefined;
+    const connection: CodexAppServerConnection = {
+      get closed() {
+        return false;
+      },
+      close: async () => undefined,
+      notify: async () => undefined,
+      request: async (method) => {
+        if (method === "thread/start") return { thread: { id: "thread-evidence" } };
+        if (method === "turn/start") {
+          queueMicrotask(() => {
+            void (async () => {
+              await options?.onNotification?.({
+                method: "turn/started",
+                params: { threadId: "thread-evidence", turn: { id: "turn-evidence" } },
+              });
+              await options?.onNotification?.({
+                method: "item/completed",
+                params: {
+                  threadId: "thread-evidence",
+                  turnId: "turn-evidence",
+                  item: {
+                    id: "command-evidence",
+                    type: "commandExecution",
+                    command: "pnpm test",
+                    aggregatedOutput: "9 passed",
+                    exitCode: 0,
+                    status: "completed",
+                  },
+                },
+              });
+              await options?.onNotification?.({
+                method: "item/completed",
+                params: {
+                  threadId: "thread-evidence",
+                  turnId: "turn-evidence",
+                  item: {
+                    id: "file-evidence",
+                    type: "fileChange",
+                    changes: [{ path: "src/report.ts", kind: { type: "update" } }],
+                    status: "completed",
+                  },
+                },
+              });
+              await options?.onNotification?.({
+                method: "item/completed",
+                params: {
+                  threadId: "thread-evidence",
+                  turnId: "turn-evidence",
+                  item: { id: "message-evidence", type: "agentMessage", text: "완료" },
+                },
+              });
+              await options?.onNotification?.({
+                method: "turn/completed",
+                params: { threadId: "thread-evidence", turn: { id: "turn-evidence", status: "completed" } },
+              });
+            })();
+          });
+          return { turn: { id: "turn-evidence" } };
+        }
+        throw new Error(`예상하지 않은 method: ${method}`);
+      },
+    };
+    const connector = new CodexAppServerSubscriptionConnector(
+      { request: async () => ({ outcome: "allow" }) },
+      {
+        model: "gpt-5.6-codex",
+        policy: { sandboxMode: "workspace-write", approvalPolicy: "on-request", networkAccessEnabled: false },
+        runtime: async () => ({ command: "/usr/bin/node", commandArguments: ["/runtime/codex.js"] }),
+      },
+      async (_command, _arguments, _environment, configuredOptions) => {
+        options = configuredOptions;
+        return connection;
+      },
+    );
+
+    await expect(connector.execute(context, input)).resolves.toMatchObject({
+      outcome: "completed",
+      value: "완료",
+      executionEvidence: {
+        items: [
+          expect.objectContaining({ providerItemId: "command-evidence", kind: "command", exitCode: 0 }),
+          expect.objectContaining({ providerItemId: "file-evidence:0", kind: "file", path: "src/report.ts" }),
+        ],
+      },
+    });
+  });
+
   it("실제 NDJSON transport에서 thread→turn→승인→완료 순서를 수행한다", async () => {
     const fixturePath = fileURLToPath(new URL("./fixtures/codex-app-server-agent.mjs", import.meta.url));
     const connector = new CodexAppServerSubscriptionConnector(

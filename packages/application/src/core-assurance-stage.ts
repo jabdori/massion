@@ -143,9 +143,13 @@ function verificationMaterial(
   fallbackRequest: unknown,
 ): Readonly<Record<string, unknown>> {
   const candidate = recovery as Partial<
-    Pick<WorkRecoveryBundle, "request" | "work" | "tasks" | "messages" | "artifactVersions">
+    Pick<WorkRecoveryBundle, "request" | "work" | "tasks" | "messages" | "artifacts" | "artifactVersions">
   >;
-  const activeTasks = (candidate.tasks ?? []).filter((task) => task.plan_version_id === planVersionId);
+  const currentWorkId = candidate.work?.work_id;
+  const activeTasks = (candidate.tasks ?? []).filter(
+    (task) =>
+      typeof currentWorkId === "string" && task.plan_version_id === planVersionId && task.work_id === currentWorkId,
+  );
   const taskIds = new Set(activeTasks.flatMap((task) => (typeof task.task_id === "string" ? [task.task_id] : [])));
   const tasks = activeTasks.map((task) => ({
     taskId: task.task_id,
@@ -162,8 +166,47 @@ function verificationMaterial(
     (candidate.messages ?? []).flatMap((message) =>
       typeof message.artifact_version_id === "string" &&
       typeof message.task_id === "string" &&
+      typeof currentWorkId === "string" &&
+      message.work_id === currentWorkId &&
+      message.message_type === "evidence" &&
+      (candidate.artifacts ?? []).some(
+        (artifact) =>
+          artifact.kind === "task-output" &&
+          artifact.work_id === currentWorkId &&
+          artifact.artifact_id ===
+            (candidate.artifactVersions ?? []).find(
+              (version) =>
+                version.artifact_version_id === message.artifact_version_id && version.work_id === currentWorkId,
+            )?.artifact_id,
+      ) &&
       taskIds.has(message.task_id)
         ? [[message.artifact_version_id, message.task_id] as const]
+        : [],
+    ),
+  );
+  const artifactKindById = new Map(
+    (candidate.artifacts ?? []).flatMap((artifact) =>
+      typeof artifact.artifact_id === "string" && typeof artifact.kind === "string"
+        ? [[artifact.artifact_id, artifact.kind] as const]
+        : [],
+    ),
+  );
+  const versionById = new Map(
+    (candidate.artifactVersions ?? []).flatMap((version) =>
+      typeof version.artifact_version_id === "string" ? [[version.artifact_version_id, version] as const] : [],
+    ),
+  );
+  const taskByExecution = new Map(
+    (candidate.messages ?? []).flatMap((message) =>
+      typeof message.execution_id === "string" &&
+      typeof message.task_id === "string" &&
+      typeof message.artifact_version_id === "string" &&
+      typeof currentWorkId === "string" &&
+      message.work_id === currentWorkId &&
+      message.message_type === "evidence" &&
+      taskIds.has(message.task_id) &&
+      artifactKindById.get(versionById.get(message.artifact_version_id)?.artifact_id ?? "") === "task-output"
+        ? [[message.execution_id, message.task_id] as const]
         : [],
     ),
   );
@@ -173,17 +216,30 @@ function verificationMaterial(
       (version) =>
         typeof version.artifact_version_id === "string" &&
         typeof version.content_json === "string" &&
-        messageByArtifact.has(version.artifact_version_id) &&
+        typeof currentWorkId === "string" &&
+        version.work_id === currentWorkId &&
+        (messageByArtifact.has(version.artifact_version_id) ||
+          (typeof version.creator_execution_id === "string" &&
+            taskByExecution.has(version.creator_execution_id) &&
+            artifactKindById.get(version.artifact_id) === "execution-evidence" &&
+            (candidate.artifacts ?? []).some(
+              (artifact) => artifact.artifact_id === version.artifact_id && artifact.work_id === currentWorkId,
+            ))) &&
         (allowed === undefined || allowed.has(version.artifact_version_id)),
     )
     .sort((left, right) => left.artifact_version_id.localeCompare(right.artifact_version_id))
-    .map((version) => ({
-      artifactVersionId: version.artifact_version_id,
-      ...(messageByArtifact.has(version.artifact_version_id)
-        ? { taskId: messageByArtifact.get(version.artifact_version_id) }
-        : {}),
-      content: parseJson(version.content_json),
-    }));
+    .map((version) => {
+      const taskId =
+        messageByArtifact.get(version.artifact_version_id) ??
+        (typeof version.creator_execution_id === "string"
+          ? taskByExecution.get(version.creator_execution_id)
+          : undefined);
+      return {
+        artifactVersionId: version.artifact_version_id,
+        ...(taskId ? { taskId } : {}),
+        content: parseJson(version.content_json),
+      };
+    });
   return {
     request: verificationRequest(candidate.request, fallbackRequest),
     ...(planContentJson === undefined ? {} : { plan: parseJson(planContentJson) }),

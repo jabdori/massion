@@ -15,6 +15,7 @@ export * from "./subscriptions/claude-connector.js";
 export * from "./subscriptions/codex-connector.js";
 export * from "./subscriptions/codex-profile.js";
 export * from "./subscriptions/execution-receipt.js";
+export * from "./subscriptions/execution-evidence.js";
 export * from "./schema.js";
 export * from "./surreal-memory.js";
 export * from "./voltagent-topology.js";

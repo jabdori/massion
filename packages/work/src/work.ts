@@ -593,6 +593,8 @@ export interface CreateArtifactVersionInput extends WorkCommandInput {
   readonly creatorExecutionId?: string;
   /** Task 결과 Artifact인 경우 Runtime·Task·Collaboration 계보를 한 transaction에 묶습니다. */
   readonly creatorTaskId?: string;
+  /** 동일 실행의 보조 Artifact는 기존 Task 결과 message를 재사용해 round를 소비하지 않습니다. */
+  readonly suppressEvidenceMessage?: boolean;
 }
 
 export interface FinalizeRecordInput extends WorkCommandInput {
@@ -2381,7 +2383,12 @@ export class WorkService {
       );
       const artifactVersion = created[0];
       if (!artifactVersion) throw new Error("ArtifactVersion 생성 결과가 없습니다");
-      if (input.creatorTaskId && input.creatorAgentHandle && input.creatorExecutionId) {
+      if (
+        input.creatorTaskId &&
+        input.creatorAgentHandle &&
+        input.creatorExecutionId &&
+        !input.suppressEvidenceMessage
+      ) {
         const [tasks] = await transaction.query<[WorkTask[]]>(
           "SELECT * OMIT id FROM work_task WHERE organization_id = $organization_id AND work_id = $work_id AND task_id = $task_id AND status = 'running' LIMIT 1;",
           {

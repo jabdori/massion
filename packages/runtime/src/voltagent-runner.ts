@@ -41,6 +41,7 @@ import type {
   SubscriptionExecutionReceiptCoordinator,
   SubscriptionReceiptLineage,
 } from "./subscriptions/execution-receipt.js";
+import type { ExecutionEvidence } from "./subscriptions/execution-evidence.js";
 
 const MAX_FALLBACKS = 16;
 const MODEL_ROUTE_EVENT_CAS_RETRIES = 3;
@@ -130,6 +131,7 @@ type ReceiptTerminalDetails =
       readonly providerSessionId?: string;
       readonly usage: { readonly inputTokens: number; readonly outputTokens: number };
       readonly output: { readonly kind: "inline"; readonly value: JsonValue };
+      readonly executionEvidence?: ExecutionEvidence;
     }
   | {
       readonly outcome: "failed" | "cancelled" | "interrupted";
@@ -696,7 +698,10 @@ export class VoltAgentRunner implements AgentRunner, StructuredAgentRunner {
           }
           return this.resultFromExecution(await receipts.interruptSuspended(context, executionId));
         }
-        return this.resultFromExecution(await receipts.recover(context, executionId));
+        return this.resultFromExecution(
+          await receipts.recover(context, executionId),
+          snapshot.terminal?.executionEvidence,
+        );
       }
     }
     const selection = await this.models.recoverReservedSelection?.(context, executionId);
@@ -1154,6 +1159,7 @@ export class VoltAgentRunner implements AgentRunner, StructuredAgentRunner {
           outputTokens: result.usage?.outputTokens ?? 0,
         },
         output: { kind: "inline", value: result.value as JsonValue },
+        ...(result.executionEvidence ? { executionEvidence: result.executionEvidence } : {}),
       });
       await lease.complete({
         commandId: settlementCommand,
@@ -1174,7 +1180,15 @@ export class VoltAgentRunner implements AgentRunner, StructuredAgentRunner {
           providerSessionId: result.sessionId,
         },
       });
-      return { kind: "terminal", result: { executionId, status: "succeeded", output: result.value } };
+      return {
+        kind: "terminal",
+        result: {
+          executionId,
+          status: "succeeded",
+          output: result.value,
+          ...(result.executionEvidence ? { executionEvidence: result.executionEvidence } : {}),
+        },
+      };
     }
     if (result.outcome === "suspended") {
       this.suspendedSubscriptions.set(executionId, {
@@ -1636,8 +1650,12 @@ export class VoltAgentRunner implements AgentRunner, StructuredAgentRunner {
     });
   }
 
-  private resultFromExecution(execution: RuntimeExecution): AgentExecutionResult {
-    return runtimeExecutionResult(execution);
+  private resultFromExecution(
+    execution: RuntimeExecution,
+    executionEvidence?: ExecutionEvidence,
+  ): AgentExecutionResult {
+    const result = runtimeExecutionResult(execution);
+    return executionEvidence ? { ...result, executionEvidence } : result;
   }
 
   private errorPayload(error: unknown): Record<string, unknown> {

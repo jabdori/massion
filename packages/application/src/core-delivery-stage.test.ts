@@ -1,5 +1,10 @@
-import type { AgentRunner, RuntimeExecutionStore } from "@massion/runtime";
-import type { Work, WorkCommandResult } from "@massion/work";
+import { randomUUID } from "node:crypto";
+
+import { IdentityService, OrganizationService } from "@massion/identity";
+import { OrganizationGraphService } from "@massion/organization";
+import { normalizeCodexExecutionEvidence, type AgentRunner, RuntimeExecutionStore } from "@massion/runtime";
+import { applyMigrations, createDatabase } from "@massion/storage";
+import { WORK_ASSURANCE_LINK_MIGRATION, type Work, type WorkCommandResult, WorkService } from "@massion/work";
 import { describe, expect, it } from "vitest";
 
 import { CoreDeliveryStage } from "./core-delivery-stage.js";
@@ -101,6 +106,273 @@ function deliveryStage(
 }
 
 describe("CoreDeliveryStage", () => {
+  it.each(["task-output", "execution-evidence"] as const)(
+    "%s Artifact commit 직후 crash가 발생해도 실제 WorkService에서 중복 없이 수렴한다",
+    async (crashKind) => {
+      const database = await createDatabase({ url: "mem://", namespace: "massion", database: randomUUID() });
+      try {
+        const identities = await IdentityService.create(database);
+        const organizations = await OrganizationService.create(database);
+        const owner = await identities.registerPersonalUser({
+          email: `${randomUUID()}@example.com`,
+          displayName: "Delivery Crash Owner",
+        });
+        const tenantContext = await organizations.resolveTenantContext(
+          owner.user.user_id,
+          owner.organization.organization_id,
+        );
+        const graph = await OrganizationGraphService.create(database, organizations);
+        await graph.bootstrap(tenantContext);
+        const works = await WorkService.create(database, organizations, graph);
+        const runtimeExecutions = await RuntimeExecutionStore.create(database, organizations);
+        await applyMigrations(database, [WORK_ASSURANCE_LINK_MIGRATION]);
+
+        const created = await works.createWork(tenantContext, {
+          commandId: randomUUID(),
+          text: "commit 이후 crash가 발생한 Delivery를 복구합니다.",
+          surface: "test",
+          organizationVersionId: "organization-version-crash-test",
+        });
+        await graph.execute(tenantContext, {
+          commandId: randomUUID(),
+          expectedVersion: 1,
+          kind: "install-profile",
+          profileId: `delivery-crash-${crashKind}`,
+          profileVersion: "1.0.0",
+          nodes: [
+            {
+              handle: "delivery-crash-agent",
+              name: "Delivery Crash Agent",
+              responsibility: "Delivery crash 복구를 검증합니다.",
+              outputs: ["Delivery"],
+              capabilities: ["delivery"],
+              parentHandle: "delivery-coordination",
+              scope: "work",
+              workId: created.work.work_id,
+              role: "operator",
+            },
+          ],
+        });
+        const opened = await works.openRoom(tenantContext, {
+          commandId: randomUUID(),
+          workId: created.work.work_id,
+          expectedRevision: (await works.getWork(tenantContext, created.work.work_id)).revision,
+          title: "Core Office",
+          coordinatorHandle: "representative",
+          participants: [{ kind: "agent", subjectId: "representative", role: "coordinator" }],
+          limits: { maxParallel: 2, maxTokens: 10_000, maxCostMicros: 1_000_000, maxRounds: 10 },
+        });
+        const handoff = await works.postMessage(tenantContext, {
+          commandId: randomUUID(),
+          workId: created.work.work_id,
+          roomId: opened.room.room_id,
+          messageType: "handoff",
+          authorKind: "agent",
+          authorId: "representative",
+          content: "Delivery Agent로 전달합니다.",
+          tokenCount: 0,
+          costMicros: 0,
+        });
+        const plan = await works.addPlan(tenantContext, {
+          commandId: randomUUID(),
+          workId: created.work.work_id,
+          expectedRevision: handoff.work.revision,
+          content: { objective: "두 Delivery Artifact를 중복 없이 기록합니다." },
+        });
+        const planned = await works.transition(tenantContext, {
+          commandId: randomUUID(),
+          workId: created.work.work_id,
+          expectedRevision: plan.work.revision,
+          target: "planned",
+        });
+        const taskResult = await works.addTask(tenantContext, {
+          commandId: randomUUID(),
+          workId: created.work.work_id,
+          expectedRevision: planned.work.revision,
+          title: "Crash-safe Delivery",
+          objective: "출력과 실행 근거를 정확히 한 번 기록합니다.",
+          acceptanceCriteria: ["Task output과 execution evidence Artifact가 각각 하나씩 존재합니다."],
+          dependencyIds: [],
+          recommendedAgentHandles: ["delivery-crash-agent"],
+        });
+        const assigned = await works.assignTask(tenantContext, {
+          commandId: randomUUID(),
+          workId: created.work.work_id,
+          expectedRevision: taskResult.work.revision,
+          taskId: taskResult.task.task_id,
+          agentHandle: "delivery-crash-agent",
+        });
+        const ready = await works.transition(tenantContext, {
+          commandId: randomUUID(),
+          workId: created.work.work_id,
+          expectedRevision: assigned.work.revision,
+          target: "ready",
+        });
+        const running = await works.transition(tenantContext, {
+          commandId: randomUUID(),
+          workId: created.work.work_id,
+          expectedRevision: ready.work.revision,
+          target: "running",
+        });
+        await works.transitionTask(tenantContext, {
+          commandId: randomUUID(),
+          workId: created.work.work_id,
+          expectedRevision: running.work.revision,
+          taskId: taskResult.task.task_id,
+          expectedTaskRevision: taskResult.task.revision,
+          target: "running",
+        });
+
+        const stageInput = {
+          runId: `delivery-crash-run-${crashKind}`,
+          workId: created.work.work_id,
+          commandId: `delivery-crash-run-${crashKind}:delivery`,
+          correlationId: `delivery-crash-correlation-${crashKind}`,
+          request: {},
+        };
+        const runtimeCommand = `${stageInput.commandId}:task:${taskResult.task.task_id}:runtime`;
+        const queuedExecution = await runtimeExecutions.createExecution(tenantContext, {
+          commandId: runtimeCommand,
+          workId: created.work.work_id,
+          taskId: taskResult.task.task_id,
+          agentHandle: "delivery-crash-agent",
+          modelRoute: "delivery-quality",
+          correlationId: stageInput.correlationId,
+          estimatedTokens: 100,
+          estimatedCostMicros: 0,
+          input: { objective: "Crash-safe Delivery" },
+        });
+        const runningExecution = await runtimeExecutions.transition(tenantContext, {
+          commandId: randomUUID(),
+          executionId: queuedExecution.execution.execution_id,
+          expectedVersion: queuedExecution.execution.version,
+          target: "running",
+          payload: {},
+        });
+        const succeededExecution = await runtimeExecutions.transition(tenantContext, {
+          commandId: randomUUID(),
+          executionId: queuedExecution.execution.execution_id,
+          expectedVersion: runningExecution.execution.version,
+          target: "succeeded",
+          payload: { output: "done" },
+        });
+        const executionId = succeededExecution.execution.execution_id;
+        const executionEvidence = normalizeCodexExecutionEvidence(
+          [
+            {
+              id: "command-1",
+              type: "command_execution",
+              command: "true",
+              aggregated_output: "ok",
+              exit_code: 0,
+              status: "completed",
+            },
+          ],
+          "/tmp/work",
+        );
+        if (!executionEvidence) throw new Error("실행 근거 fixture 생성에 실패했습니다");
+        const runtimeOutput = { zeta: 1, alpha: 2 };
+        const messagesBefore = await works.listMessages(tenantContext, created.work.work_id, opened.room.room_id);
+        const [roomsBefore] = await database.query<[Array<{ readonly round_count: number }>]>(
+          "SELECT round_count FROM collaboration_room WHERE organization_id = $organization_id AND room_id = $room_id LIMIT 1;",
+          { organization_id: tenantContext.organizationId, room_id: opened.room.room_id },
+        );
+        const roundBefore = roomsBefore[0]?.round_count;
+        if (roundBefore === undefined) throw new Error("초기 Collaboration Room을 찾을 수 없습니다");
+
+        let crashArmed = true;
+        const stage = new CoreDeliveryStage({
+          works: {
+            listTasks: works.listTasks.bind(works),
+            listAssignments: works.listAssignments.bind(works),
+            getWork: works.getWork.bind(works),
+            recoverWork: works.recoverWork.bind(works),
+            transition: works.transition.bind(works),
+            assignTask: works.assignTask.bind(works),
+            transitionTask: works.transitionTask.bind(works),
+            createArtifactVersion: async (...args: Parameters<WorkService["createArtifactVersion"]>) => {
+              const result = await works.createArtifactVersion(...args);
+              if (crashArmed && args[1].kind === crashKind) {
+                crashArmed = false;
+                throw new Error(`process-crash-after-${crashKind}-commit`);
+              }
+              return result;
+            },
+          },
+          runner: {
+            execute: async () => {
+              throw new Error("기존 Runtime Execution을 재사용해야 합니다");
+            },
+            recover: async () => ({
+              executionId,
+              status: "succeeded" as const,
+              output: runtimeOutput,
+              executionEvidence,
+            }),
+            cancel: async () => undefined,
+          },
+          runtimeExecutions: {
+            findExecutionIdByCommand: runtimeExecutions.findExecutionIdByCommand.bind(runtimeExecutions),
+          },
+          staffing: { prepare: async () => ({ outcome: "ready" as const }) },
+        });
+
+        await expect(stage.execute(tenantContext, stageInput)).rejects.toThrow(
+          `process-crash-after-${crashKind}-commit`,
+        );
+        await expect(stage.execute(tenantContext, stageInput)).resolves.toMatchObject({ outcome: "advanced" });
+
+        const finalWork = await works.getWork(tenantContext, created.work.work_id);
+        const finalTask = (await works.listTasks(tenantContext, created.work.work_id)).find(
+          (candidate) => candidate.task_id === taskResult.task.task_id,
+        );
+        const recovery = await works.recoverWork(tenantContext, created.work.work_id);
+        const messagesAfter = await works.listMessages(tenantContext, created.work.work_id, opened.room.room_id);
+        const [roomsAfter] = await database.query<[Array<{ readonly round_count: number }>]>(
+          "SELECT round_count FROM collaboration_room WHERE organization_id = $organization_id AND room_id = $room_id LIMIT 1;",
+          { organization_id: tenantContext.organizationId, room_id: opened.room.room_id },
+        );
+        const roundAfter = roomsAfter[0]?.round_count;
+        if (roundAfter === undefined) throw new Error("최종 Collaboration Room을 찾을 수 없습니다");
+
+        expect(finalTask?.status).toBe("completed");
+        expect(finalWork.status).toBe("verifying");
+        expect(recovery.artifacts.map((artifact) => artifact.kind).sort()).toEqual([
+          "execution-evidence",
+          "task-output",
+        ]);
+        expect(recovery.artifactVersions).toHaveLength(2);
+        expect(new Set(recovery.artifactVersions.map((version) => version.artifact_version_id))).toHaveLength(2);
+        expect(messagesAfter).toHaveLength(messagesBefore.length + 1);
+        expect(roundAfter).toBe(roundBefore + 1);
+
+        const deliveryEvidenceMessages = messagesAfter.filter(
+          (message) =>
+            message.message_type === "evidence" &&
+            message.task_id === taskResult.task.task_id &&
+            message.execution_id === executionId,
+        );
+        expect(deliveryEvidenceMessages).toHaveLength(1);
+        const taskOutput = recovery.artifacts.find((artifact) => artifact.kind === "task-output");
+        const taskOutputVersion = recovery.artifactVersions.find(
+          (version) => version.artifact_id === taskOutput?.artifact_id,
+        );
+        expect(deliveryEvidenceMessages[0]?.artifact_version_id).toBe(taskOutputVersion?.artifact_version_id);
+        const executionEvidenceArtifact = recovery.artifacts.find((artifact) => artifact.kind === "execution-evidence");
+        const executionEvidenceVersion = recovery.artifactVersions.find(
+          (version) => version.artifact_id === executionEvidenceArtifact?.artifact_id,
+        );
+        expect(
+          messagesAfter.some(
+            (message) => message.artifact_version_id === executionEvidenceVersion?.artifact_version_id,
+          ),
+        ).toBe(false);
+      } finally {
+        await database.close();
+      }
+    },
+  );
+
   it("Task가 없으면 비소프트웨어 Work도 Assurance 경로로 진행한다", async () => {
     const transitions: string[] = [];
     const stage = deliveryStage({
@@ -678,10 +950,10 @@ describe("CoreDeliveryStage", () => {
         return { work: { revision }, task: task() };
       },
       createArtifactVersion: async (_context: unknown, value: unknown) => {
-        calls.push("artifact");
+        calls.push(`artifact-${String((value as { kind: string }).kind)}`);
         artifactInputs.push(value);
         revision += 1;
-        return { work: { revision }, artifactVersion: { artifact_version_id: "artifact-version-1" } };
+        return { work: { revision }, artifactVersion: { artifact_version_id: `artifact-version-${String(revision)}` } };
       },
       recoverWork: async () => ({
         request: {
@@ -710,7 +982,16 @@ describe("CoreDeliveryStage", () => {
         execute: async (_context: unknown, runtimeInput: unknown) => {
           calls.push("runtime");
           runtimeInputs.push(runtimeInput);
-          return { executionId: "execution-1", status: "succeeded", output: { answer: 42 } };
+          return {
+            executionId: "execution-1",
+            status: "succeeded",
+            output: { answer: 42 },
+            executionEvidence: {
+              items: [],
+              checksum: "e".repeat(64),
+              byteCount: 0,
+            },
+          };
         },
         recover: async () => {
           throw new Error("not used");
@@ -730,10 +1011,18 @@ describe("CoreDeliveryStage", () => {
       stage.execute(context, { ...input, request: {}, directives: deliveryDirectives }),
     ).resolves.toMatchObject({
       outcome: "advanced",
-      data: { artifactVersionIds: ["artifact-version-1"] },
+      data: { artifactVersionIds: ["artifact-version-4", "artifact-version-5"] },
       appliedDirectiveIds: ["delivery-directive-0001"],
     });
-    expect(calls).toEqual(["assign", "running", "runtime", "artifact", "completed", "work-verifying"]);
+    expect(calls).toEqual([
+      "assign",
+      "running",
+      "runtime",
+      "artifact-task-output",
+      "artifact-execution-evidence",
+      "completed",
+      "work-verifying",
+    ]);
     expect(materializeInputs).toEqual([[context, input.workId, 24_000]]);
     expect(runtimeInputs).toEqual([
       expect.objectContaining({
@@ -793,6 +1082,11 @@ describe("CoreDeliveryStage", () => {
         creatorTaskId: "task-general",
         creatorAgentHandle: "data-analysis",
         creatorExecutionId: "execution-1",
+      }),
+      expect.objectContaining({
+        kind: "execution-evidence",
+        creatorExecutionId: "execution-1",
+        suppressEvidenceMessage: true,
       }),
     ]);
   });

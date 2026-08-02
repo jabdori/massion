@@ -5,6 +5,7 @@ import {
   codexFileCredentialStoreArguments,
   inspectBundledSubscriptionRuntime,
   managedCodexCredentialState,
+  normalizeCodexExecutionEvidence,
   type StructuredOutputSpec,
   type SubscriptionAgentAdapter,
   type SubscriptionAgentInput,
@@ -65,6 +66,7 @@ interface ActiveTurn {
   turnId?: string;
   finalText?: string;
   usage?: { readonly inputTokens: number; readonly outputTokens: number };
+  readonly evidenceItems: unknown[];
   emittedTokens: number;
   sideEffectsStarted: boolean;
   pending: PendingApproval | undefined;
@@ -286,6 +288,7 @@ export class CodexAppServerSubscriptionConnector implements SubscriptionAgentAda
       output,
       completion: deferred(),
       suspension: deferred(),
+      evidenceItems: [],
       emittedTokens: 0,
       sideEffectsStarted: false,
       pending: undefined,
@@ -445,6 +448,25 @@ export class CodexAppServerSubscriptionConnector implements SubscriptionAgentAda
         if (text) active.emittedTokens += 1;
         if (method === "item/completed") active.finalText = text;
       }
+      if (method === "item/completed" && (item.type === "commandExecution" || item.type === "fileChange")) {
+        // 완료 notification만 provider 관측 정본이므로 승인 요청과 진행 중 item은 저장하지 않습니다.
+        const changes: readonly unknown[] | undefined =
+          item.type === "fileChange" && Array.isArray(item.changes) ? item.changes : undefined;
+        active.evidenceItems.push(
+          changes
+            ? {
+                ...item,
+                changes: changes.map((change): unknown => {
+                  const record = optionalRecord(change);
+                  const kind = optionalRecord(record?.kind);
+                  return kind?.type === "add" || kind?.type === "update" || kind?.type === "delete"
+                    ? { ...record, kind: kind.type }
+                    : change;
+                }),
+              }
+            : item,
+        );
+      }
       return;
     }
     if (method === "thread/tokenUsage/updated") {
@@ -513,12 +535,14 @@ export class CodexAppServerSubscriptionConnector implements SubscriptionAgentAda
       }
       if (validation?.success) result = validation.value;
     }
+    const executionEvidence = normalizeCodexExecutionEvidence(active.evidenceItems, active.input.workspaceRoot);
     active.completion.resolve({
       outcome: "completed",
       executionId: active.input.executionId,
       sessionId: threadId,
       value: result,
       ...(active.usage ? { usage: active.usage } : {}),
+      ...(executionEvidence ? { executionEvidence } : {}),
     });
   }
 

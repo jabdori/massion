@@ -1,6 +1,7 @@
 import type { TenantContext } from "@massion/identity";
 
 import type { StructuredOutputSpec } from "../contracts.js";
+import type { ExecutionEvidence } from "./execution-evidence.js";
 
 export type SubscriptionAgentFailureSignal =
   | { readonly kind: "http"; readonly statusCode: number; readonly retryAfter?: string }
@@ -26,6 +27,8 @@ export type SubscriptionAgentResult =
       readonly sessionId: string;
       readonly value: unknown;
       readonly usage?: unknown;
+      /** Provider가 성공 terminal item으로 관측한 실행 근거입니다. */
+      readonly executionEvidence?: ExecutionEvidence;
     }
   | {
       readonly outcome: "suspended";

@@ -1,4 +1,5 @@
 import type { TenantContext } from "@massion/identity";
+import type { ExecutionEvidence } from "./subscriptions/execution-evidence.js";
 
 export type RuntimeExecutionStatus =
   | "queued"
@@ -30,6 +31,8 @@ export interface AgentExecutionResult {
   readonly executionId: string;
   readonly status: RuntimeExecutionStatus;
   readonly output?: unknown;
+  /** 최종 모델 출력과 분리된, 공급자 관측 실행 근거입니다. */
+  readonly executionEvidence?: ExecutionEvidence;
   readonly error?: RuntimeExecutionError;
 }
 

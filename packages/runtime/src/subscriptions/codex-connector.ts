@@ -15,6 +15,7 @@ import type { TenantContext } from "@massion/identity";
 
 import type { StructuredOutputSpec } from "../contracts.js";
 import { managedCodexCredentialState } from "./codex-profile.js";
+import { normalizeCodexExecutionEvidence } from "./execution-evidence.js";
 import type {
   SubscriptionAgentAdapter,
   SubscriptionAgentInput,
@@ -171,12 +172,14 @@ export class CodexSubscriptionConnector implements SubscriptionAgentAdapter {
         if (validation && !validation.success) throw validation.error;
         if (validation?.success) value = validation.value;
       }
+      const executionEvidence = normalizeCodexExecutionEvidence(turn.items, workspaceRoot);
       return {
         outcome: "completed",
         executionId: input.executionId,
         sessionId,
         value,
         ...(turn.usage ? { usage: turn.usage } : {}),
+        ...(executionEvidence ? { executionEvidence } : {}),
       };
     } catch (error) {
       if (abortController.signal.aborted) {

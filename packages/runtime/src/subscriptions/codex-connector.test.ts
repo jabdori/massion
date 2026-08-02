@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { TenantContext } from "@massion/identity";
 
 import { CodexSubscriptionConnector, type CodexSdkFactory } from "./codex-connector.js";
+import { normalizeCodexExecutionEvidence } from "./execution-evidence.js";
 
 const context: TenantContext = {
   userId: "user-1",
@@ -20,6 +21,46 @@ describe("공식 Codex 구독 Connector", () => {
 
   afterEach(async () => {
     await Promise.all(profiles.splice(0).map(async (profile) => await rm(profile, { recursive: true, force: true })));
+  });
+
+  it("명령과 출력의 secret segment만 redaction하고 일반 단어는 보존한다", () => {
+    const evidence = normalizeCodexExecutionEvidence(
+      [
+        {
+          id: "redaction-1",
+          type: "command_execution",
+          command: "secret=plainsecret123456 api_key=plainapikey123456 TOKEN=plainsecret123456 TURKEY=sandwich",
+          aggregated_output: "Authorization: Bearer abcdefghijklmnopqrstuvwxyz The bearer capacity remains stable",
+          exit_code: 0,
+          status: "completed",
+        },
+      ],
+      "/tmp/work-redaction",
+    );
+    expect(JSON.stringify(evidence)).not.toContain("plainsecret123456");
+    expect(JSON.stringify(evidence)).not.toContain("plainapikey123456");
+    expect(JSON.stringify(evidence)).toContain("TURKEY=sandwich");
+    expect(JSON.stringify(evidence)).toContain("bearer capacity remains stable");
+  });
+
+  it("같은 fileChange provider item ID의 전체 원본이 달라지면 fail closed한다", () => {
+    expect(() =>
+      normalizeCodexExecutionEvidence(
+        [
+          { id: "files-1", type: "file_change", changes: [{ path: "a.ts", kind: "update" }], status: "completed" },
+          {
+            id: "files-1",
+            type: "file_change",
+            changes: [
+              { path: "a.ts", kind: "update" },
+              { path: "b.ts", kind: "update" },
+            ],
+            status: "completed",
+          },
+        ],
+        "/tmp/work-redaction",
+      ),
+    ).toThrow("item ID가 충돌");
   });
 
   async function authenticatedManagedProfile(): Promise<string> {
@@ -180,6 +221,78 @@ describe("공식 Codex 구독 Connector", () => {
     expect(turnOptions).not.toHaveProperty("outputSchema");
     expect(result).toMatchObject({ outcome: "completed", sessionId: "thread-1", value: { status: "ok" } });
     expect(JSON.stringify(result)).not.toContain("SECRET_TOKEN");
+  });
+
+  it("성공한 terminal 명령과 파일 변경만 정규화한 실행 근거로 보존한다", async () => {
+    const secret = "sk-this-must-never-reach-a-receipt-123456";
+    const run = vi.fn().mockResolvedValue({
+      finalResponse: "완료",
+      items: [
+        {
+          id: "command-1",
+          type: "command_execution",
+          command: "pnpm test",
+          aggregated_output: `9 passed\nTOKEN=${secret}`,
+          exit_code: 0,
+          status: "completed",
+        },
+        {
+          id: "file-1",
+          type: "file_change",
+          changes: [{ path: "src/report.ts", kind: "update" }],
+          status: "completed",
+        },
+        { id: "reasoning-1", type: "reasoning", text: "저장하면 안 되는 추론" },
+        {
+          id: "failed-command",
+          type: "command_execution",
+          command: "false",
+          aggregated_output: "실패",
+          exit_code: 1,
+          status: "failed",
+        },
+      ],
+      usage: null,
+    });
+    const startThread = vi.fn().mockReturnValue({ id: "thread-evidence", run });
+    const connector = new CodexSubscriptionConnector({ create: vi.fn().mockReturnValue({ startThread }) });
+
+    const result = await connector.execute(context, {
+      executionId: "execution-evidence",
+      workId: "work-evidence",
+      agentHandle: "representative",
+      prompt: "검증하세요",
+      workspaceRoot: "/tmp/work-evidence",
+      profileRoot: "/tmp/profile-evidence",
+      environment: {},
+      allowedTools: [],
+      disallowedTools: [],
+    });
+
+    expect(result).toMatchObject({
+      outcome: "completed",
+      value: "완료",
+      executionEvidence: {
+        items: [
+          expect.objectContaining({
+            providerItemId: "command-1",
+            kind: "command",
+            command: "pnpm test",
+            exitCode: 0,
+            status: "completed",
+          }),
+          expect.objectContaining({
+            providerItemId: "file-1:0",
+            kind: "file",
+            path: "src/report.ts",
+            changeKind: "modified",
+            status: "completed",
+          }),
+        ],
+      },
+    });
+    expect(JSON.stringify(result)).not.toContain(secret);
+    expect(JSON.stringify(result)).not.toContain("추론");
   });
 
   it("관리 Codex profile의 auth.json이 없으면 SDK client를 만들지 않고 실행을 거부한다", async () => {

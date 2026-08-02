@@ -1,4 +1,5 @@
 import type { MaterializedEvidencePrompt } from "@massion/evidence";
+import { isDeepStrictEqual } from "node:util";
 import type { TenantContext } from "@massion/identity";
 import type { AgentRunner, RuntimeExecutionStore } from "@massion/runtime";
 import { isSoftwareEngineeringTask } from "@massion/software-engineering";
@@ -59,6 +60,31 @@ function isSoftwareTask(task: WorkTask): boolean {
 
 function deliveryAgentHandle(task: WorkTask): string {
   return task.recommended_agent_handles?.find((handle) => handle !== "assurance") ?? "delivery-coordination";
+}
+
+function recoveredArtifact(
+  recovery: Awaited<ReturnType<WorkService["recoverWork"]>>,
+  kind: string,
+  name: string,
+  executionId: string,
+  agentHandle: string,
+  content: unknown,
+) {
+  const artifacts = (recovery as { readonly artifacts?: typeof recovery.artifacts }).artifacts ?? [];
+  const versions =
+    (recovery as { readonly artifactVersions?: typeof recovery.artifactVersions }).artifactVersions ?? [];
+  const artifact = artifacts.find((candidate) => candidate.kind === kind && candidate.name === name);
+  if (!artifact) return undefined;
+  const version = versions.find((candidate) => candidate.artifact_id === artifact.artifact_id);
+  if (
+    !version ||
+    version.creator_execution_id !== executionId ||
+    version.creator_agent_handle !== agentHandle ||
+    !isDeepStrictEqual(JSON.parse(version.content_json) as unknown, content)
+  ) {
+    throw new Error("기존 Delivery Artifact 계보 또는 내용이 일치하지 않습니다");
+  }
+  return version;
 }
 
 function sourceRequest(request: unknown): Readonly<Record<string, unknown>> | undefined {
@@ -522,24 +548,64 @@ export class CoreDeliveryStage implements CoreWorkStageExecutor {
       if (execution.status !== "succeeded") return { outcome: "blocked", reason: `delivery-${execution.status}` };
       work = await this.dependencies.works.getWork(context, input.workId);
       this.throwIfCancelled(input);
-      const artifact = await this.dependencies.works.createArtifactVersion(context, {
-        commandId: `${root}:artifact`,
-        workId: input.workId,
-        expectedRevision: work.revision,
-        kind: "task-output",
-        name: `task-${task.task_id}`,
-        mediaType: "application/json",
-        content: execution.output ?? null,
-        creatorAgentHandle: agentHandle,
-        creatorExecutionId: execution.executionId,
-        creatorTaskId: task.task_id,
-      });
+      const recovered = await this.dependencies.works.recoverWork(context, input.workId);
+      const existingOutput = recoveredArtifact(
+        recovered,
+        "task-output",
+        `task-${task.task_id}`,
+        execution.executionId,
+        agentHandle,
+        execution.output ?? null,
+      );
+      const artifact = existingOutput
+        ? { work, artifactVersion: existingOutput }
+        : await this.dependencies.works.createArtifactVersion(context, {
+            commandId: `${root}:artifact`,
+            workId: input.workId,
+            expectedRevision: work.revision,
+            kind: "task-output",
+            name: `task-${task.task_id}`,
+            mediaType: "application/json",
+            content: execution.output ?? null,
+            creatorAgentHandle: agentHandle,
+            creatorExecutionId: execution.executionId,
+            creatorTaskId: task.task_id,
+          });
       this.throwIfCancelled(input);
       artifacts.push(artifact.artifactVersion.artifact_version_id);
+      const afterOutput = existingOutput ? work : artifact.work;
+      const existingEvidence = execution.executionEvidence
+        ? recoveredArtifact(
+            recovered,
+            "execution-evidence",
+            `execution-${execution.executionId}`,
+            execution.executionId,
+            agentHandle,
+            execution.executionEvidence,
+          )
+        : undefined;
+      const evidenceArtifact = execution.executionEvidence
+        ? existingEvidence
+          ? { work: afterOutput, artifactVersion: existingEvidence }
+          : await this.dependencies.works.createArtifactVersion(context, {
+              commandId: `${root}:execution-evidence`,
+              workId: input.workId,
+              expectedRevision: afterOutput.revision,
+              kind: "execution-evidence",
+              name: `execution-${execution.executionId}`,
+              mediaType: "application/json",
+              content: execution.executionEvidence,
+              creatorAgentHandle: agentHandle,
+              creatorExecutionId: execution.executionId,
+              // task-output message가 같은 execution의 evidence Artifact까지 계보로 묶습니다.
+              suppressEvidenceMessage: true,
+            })
+        : undefined;
+      if (evidenceArtifact) artifacts.push(evidenceArtifact.artifactVersion.artifact_version_id);
       await this.dependencies.works.transitionTask(context, {
         commandId: `${root}:completed`,
         workId: input.workId,
-        expectedRevision: artifact.work.revision,
+        expectedRevision: evidenceArtifact?.work.revision ?? artifact.work.revision,
         taskId: task.task_id,
         expectedTaskRevision: active.revision,
         target: "completed",

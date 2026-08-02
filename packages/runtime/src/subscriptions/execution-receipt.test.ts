@@ -10,6 +10,7 @@ import {
   type SubscriptionReceiptLineage,
   type SubscriptionReceiptRouter,
 } from "./execution-receipt.js";
+import { normalizeCodexExecutionEvidence } from "./execution-evidence.js";
 
 describe("구독 실행 crash-safe receipt", () => {
   let database: MassionDatabase;
@@ -170,6 +171,50 @@ describe("구독 실행 crash-safe receipt", () => {
     expect(dependencies.counts()).toEqual({ routerSettlements: 1, leaseSettlements: 1 });
     expect(snapshot.terminal?.providerSessionId).toBe("provider-session-1");
     expect(snapshot.settled).toBeDefined();
+  });
+
+  it("terminal 실행 근거는 checksum과 함께 복구하고 Runtime 최종 출력과 분리한다", async () => {
+    const state = await running();
+    const value = lineage(state.execution.execution_id);
+    const dependencies = ports(value);
+    const coordinator = new SubscriptionExecutionReceiptCoordinator(store, dependencies.router, dependencies.broker);
+    const executionEvidence = normalizeCodexExecutionEvidence(
+      [
+        {
+          id: "command-1",
+          type: "command_execution",
+          command: "pnpm test",
+          aggregated_output: "9 passed",
+          exit_code: 0,
+          status: "completed",
+        },
+      ],
+      "/tmp/work-1",
+    );
+    if (!executionEvidence) throw new Error("실행 근거를 만들지 못했습니다");
+    await acquiredAndStarted(coordinator, value);
+    await coordinator.recordTerminalObserved(context, {
+      commandId: `${value.executionId}:subscription:${value.routeAttemptId}:terminal`,
+      ...value,
+      providerExecutionId: value.executionId,
+      outcome: "completed",
+      usage: { inputTokens: 7, outputTokens: 3 },
+      output: { kind: "inline", value: { text: "완료" } },
+      executionEvidence,
+    });
+
+    await coordinator.recover(context, value.executionId);
+    const recovered = await coordinator.read(context, value.executionId);
+
+    expect(recovered.terminal?.executionEvidence).toMatchObject({
+      checksum: executionEvidence.checksum,
+      items: [expect.objectContaining({ providerItemId: "command-1", exitCode: 0 })],
+    });
+    expect(JSON.parse((await store.getRecovery(context, value.executionId)).execution.output_json ?? "null")).toEqual({
+      output: { text: "완료" },
+      attemptId: value.routeAttemptId,
+      sessionLeaseId: value.leaseId,
+    });
   });
 
   it("실패 terminal receipt 뒤 crash 복구는 signal의 quota·retryable 오류를 Runtime에 투영한다", async () => {

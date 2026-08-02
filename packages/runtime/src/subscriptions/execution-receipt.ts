@@ -6,6 +6,7 @@ import type { ConnectorFailureSignal, ConnectorLeaseFailure, ConnectorSessionLea
 
 import type { RuntimeExecution, RuntimeEvent } from "../execution-store.js";
 import { runtimeErrorFromStructuredFailure, RuntimeExecutionStore } from "../execution-store.js";
+import { executionEvidenceIsSafe, type ExecutionEvidence } from "./execution-evidence.js";
 
 const RECEIPT_BYTE_LIMIT = 64 * 1024;
 const RECEIPT_EVENT_TYPES = new Set([
@@ -52,6 +53,7 @@ export type RecordTerminalObservedInput =
         readonly outcome: "completed";
         readonly usage: { readonly inputTokens: number; readonly outputTokens: number };
         readonly output: SubscriptionTerminalOutput;
+        readonly executionEvidence?: ExecutionEvidence;
       })
   | (ReceiptCommand &
       SubscriptionReceiptLineage & {
@@ -112,6 +114,8 @@ export interface SubscriptionReceiptTerminal {
   readonly signal?: FailureSignal;
   readonly output?: SubscriptionTerminalOutput;
   readonly outputChecksum?: string;
+  readonly executionEvidence?: ExecutionEvidence;
+  readonly executionEvidenceChecksum?: string;
 }
 
 export interface SubscriptionReceiptAttempt {
@@ -289,20 +293,37 @@ export class SubscriptionExecutionReceiptCoordinator {
     const providerSessionId = input.providerSessionId
       ? text(input.providerSessionId, "Provider Session ID")
       : undefined;
+    if (input.outcome === "completed" && input.executionEvidence && !executionEvidenceIsSafe(input.executionEvidence)) {
+      throw new Error("Subscription terminal 실행 근거 checksum이 일치하지 않습니다");
+    }
     const runtimeError = input.outcome === "completed" ? undefined : runtimeErrorFromStructuredFailure(input);
     const payload =
       input.outcome === "completed"
-        ? boundedPayload({
-            ...lineage,
-            providerExecutionId: input.providerExecutionId,
-            ...(providerSessionId ? { providerSessionId } : {}),
-            outcome: input.outcome,
-            usage,
-            emittedTokens: usage.outputTokens,
-            sideEffectsStarted: true,
-            output: input.output,
-            outputChecksum: checksum(input.output),
-          })
+        ? (() => {
+            const base = {
+              ...lineage,
+              providerExecutionId: input.providerExecutionId,
+              ...(providerSessionId ? { providerSessionId } : {}),
+              outcome: input.outcome,
+              usage,
+              emittedTokens: usage.outputTokens,
+              sideEffectsStarted: true,
+              output: input.output,
+              outputChecksum: checksum(input.output),
+            };
+            const withEvidence = {
+              ...base,
+              ...(input.executionEvidence
+                ? {
+                    executionEvidence: input.executionEvidence,
+                    executionEvidenceChecksum: checksum(input.executionEvidence),
+                  }
+                : {}),
+            };
+            return boundedPayload(
+              Buffer.byteLength(canonicalJson(withEvidence)) <= RECEIPT_BYTE_LIMIT ? withEvidence : base,
+            );
+          })()
         : boundedPayload({
             ...lineage,
             providerExecutionId: input.providerExecutionId,
@@ -543,6 +564,11 @@ export class SubscriptionExecutionReceiptCoordinator {
       throw new Error("Subscription terminal usage가 유효하지 않습니다");
     }
     const usage = usageValue as Record<string, unknown>;
+    const hasEvidence = Object.hasOwn(payload, "executionEvidence");
+    const hasEvidenceChecksum = Object.hasOwn(payload, "executionEvidenceChecksum");
+    if (hasEvidence !== hasEvidenceChecksum || (hasEvidence && !executionEvidenceIsSafe(payload.executionEvidence))) {
+      throw new Error("Subscription terminal 실행 근거가 유효하지 않습니다");
+    }
     const terminal: SubscriptionReceiptTerminal = {
       outcome: outcome as SubscriptionReceiptTerminal["outcome"],
       providerExecutionId: text(payload.providerExecutionId, "Provider Execution ID"),
@@ -558,12 +584,19 @@ export class SubscriptionExecutionReceiptCoordinator {
       ...(payload.signal ? { signal: payload.signal as FailureSignal } : {}),
       ...(payload.output ? { output: payload.output as SubscriptionTerminalOutput } : {}),
       ...(typeof payload.outputChecksum === "string" ? { outputChecksum: payload.outputChecksum } : {}),
+      ...(hasEvidence ? { executionEvidence: payload.executionEvidence as ExecutionEvidence } : {}),
+      ...(typeof payload.executionEvidenceChecksum === "string"
+        ? { executionEvidenceChecksum: payload.executionEvidenceChecksum }
+        : {}),
     };
     if (terminal.providerExecutionId !== String(payload.executionId)) {
       throw new Error("Provider Execution ID가 Receipt Execution ID와 일치하지 않습니다");
     }
     if (terminal.output && terminal.outputChecksum !== checksum(terminal.output)) {
       throw new Error("Subscription terminal output checksum이 일치하지 않습니다");
+    }
+    if (terminal.executionEvidence && terminal.executionEvidenceChecksum !== checksum(terminal.executionEvidence)) {
+      throw new Error("Subscription terminal 실행 근거 checksum이 일치하지 않습니다");
     }
     return terminal;
   }

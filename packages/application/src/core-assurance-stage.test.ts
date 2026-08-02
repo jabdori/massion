@@ -150,14 +150,36 @@ describe("CoreAssuranceStage", () => {
             created_at: "2026-07-31T00:00:00.000Z",
           },
           work: {
+            work_id: "assurance-work",
             active_plan_version_id: "plan-1",
-            artifact_version_ids: ["artifact-version-1", "stale-artifact-version"],
+            artifact_version_ids: ["artifact-version-1", "stale-artifact-version", "debug-log", "v-unrelated"],
           },
-          artifacts: [{ kind: "task-output" }],
+          artifacts: [
+            { artifact_id: "artifact-output", work_id: "assurance-work", kind: "task-output" },
+            { artifact_id: "artifact-debug", work_id: "assurance-work", kind: "debug-log" },
+            { artifact_id: "artifact-evidence", work_id: "other-work", kind: "execution-evidence" },
+          ],
           artifactVersions: [
             {
               artifact_version_id: "artifact-version-1",
+              artifact_id: "artifact-output",
+              work_id: "assurance-work",
+              creator_execution_id: "execution-output",
               content_json: '{"pValue":0.036,"recommendation":"단계적 출시"}',
+            },
+            {
+              artifact_version_id: "debug-log",
+              artifact_id: "artifact-debug",
+              work_id: "assurance-work",
+              creator_execution_id: "execution-output",
+              content_json: '{"secret":"exclude"}',
+            },
+            {
+              artifact_version_id: "v-unrelated",
+              artifact_id: "artifact-evidence",
+              work_id: "other-work",
+              creator_execution_id: "execution-other",
+              content_json: '{"secret":"exclude"}',
             },
             {
               artifact_version_id: "stale-artifact-version",
@@ -168,7 +190,7 @@ describe("CoreAssuranceStage", () => {
             {
               task_id: "task-1",
               organization_id: "organization-internal",
-              work_id: "work-internal",
+              work_id: "assurance-work",
               plan_version_id: "plan-1",
               task_key: "deliver",
               title: "전달",
@@ -187,7 +209,27 @@ describe("CoreAssuranceStage", () => {
             },
           ],
           messages: [
-            { task_id: "task-1", artifact_version_id: "artifact-version-1" },
+            {
+              task_id: "task-1",
+              work_id: "assurance-work",
+              artifact_version_id: "artifact-version-1",
+              execution_id: "execution-output",
+              message_type: "status",
+            },
+            {
+              task_id: "task-1",
+              work_id: "assurance-work",
+              artifact_version_id: "artifact-version-1",
+              execution_id: "execution-output",
+              message_type: "evidence",
+            },
+            {
+              task_id: "task-1",
+              work_id: "assurance-work",
+              artifact_version_id: "debug-log",
+              execution_id: "execution-output",
+              message_type: "evidence",
+            },
             { task_id: "stale-task", artifact_version_id: "stale-artifact-version" },
           ],
         }),
