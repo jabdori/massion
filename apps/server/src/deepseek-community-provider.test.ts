@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 
+import { ApplicationError } from "@massion/application";
 import { IdentityService, OrganizationService, type TenantContext } from "@massion/identity";
 import { ModelOptimizationStore, OptimizationBatchService } from "@massion/model-optimization";
 import { ModelRouter, ProviderService, CredentialVault } from "@massion/router";
@@ -187,12 +188,95 @@ describe("DeepSeek 무료 커뮤니티 Provider 제품 연결", () => {
     const service = new DeepSeekCommunityProviderService(database, organizations, providers, router, {
       fetcher: endpointFetch(status),
     });
-    await expect(
-      service.connect(context, { commandId: `deepseek-fail-${String(status)}`, acceptCommunityDataTransfer: true }),
-    ).rejects.toThrow(String(status));
+    const failure = await service
+      .connect(context, { commandId: `deepseek-fail-${String(status)}`, acceptCommunityDataTransfer: true })
+      .catch((error: unknown) => error);
+    expect(failure).toBeInstanceOf(ApplicationError);
     expect(
       (await providers.listProviders(context)).some((item) => item.provider_id === DEEPSEEK_COMMUNITY_PROVIDER_ID),
     ).toBe(false);
+  });
+
+  it("503은 bounded delay 뒤 정확히 한 번 재시도해 성공한다", async () => {
+    const available = endpointFetch();
+    const fetcher = vi.fn(async (...args: Parameters<typeof fetch>) => {
+      if (fetcher.mock.calls.length === 1) {
+        return new Response('{"error":{"message":"starting"}}', {
+          status: 503,
+          headers: { "content-type": "application/json", "retry-after": "0" },
+        });
+      }
+      return await available(...args);
+    });
+    const sleep = vi.fn(async () => undefined);
+    const service = new DeepSeekCommunityProviderService(database, organizations, providers, router, {
+      fetcher,
+      sleep,
+    });
+
+    await expect(
+      service.connect(context, { commandId: "deepseek-503-retry", acceptCommunityDataTransfer: true }),
+    ).resolves.toMatchObject({ modelId: DEEPSEEK_COMMUNITY_MODEL_ID });
+    expect(fetcher).toHaveBeenCalledTimes(4);
+    expect(sleep).toHaveBeenCalledOnce();
+    expect(sleep).toHaveBeenCalledWith(0);
+  });
+
+  it("503 재시도도 실패하면 두 번만 호출하고 공개 retryable 오류를 반환한다", async () => {
+    const fetcher = vi.fn(async () => json({ error: { message: "starting" } }, 503));
+    const service = new DeepSeekCommunityProviderService(database, organizations, providers, router, {
+      fetcher,
+      sleep: async () => undefined,
+    });
+
+    const failure = await service
+      .connect(context, { commandId: "deepseek-503-twice", acceptCommunityDataTransfer: true })
+      .catch((error: unknown) => error);
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(failure).toBeInstanceOf(ApplicationError);
+    expect((failure as ApplicationError).publicView()).toMatchObject({
+      category: "unavailable",
+      retryable: true,
+      operatorCode: "DEEPSEEK_COMMUNITY_UNAVAILABLE",
+    });
+  });
+
+  it("timeout은 정확히 한 번 재시도해 성공한다", async () => {
+    const available = endpointFetch();
+    const fetcher = vi.fn(async (...args: Parameters<typeof fetch>) => {
+      if (fetcher.mock.calls.length === 1) throw new DOMException("timed out", "TimeoutError");
+      return await available(...args);
+    });
+    const service = new DeepSeekCommunityProviderService(database, organizations, providers, router, {
+      fetcher,
+      sleep: async () => undefined,
+    });
+
+    await expect(
+      service.connect(context, { commandId: "deepseek-timeout-retry", acceptCommunityDataTransfer: true }),
+    ).resolves.toMatchObject({ modelId: DEEPSEEK_COMMUNITY_MODEL_ID });
+    expect(fetcher).toHaveBeenCalledTimes(4);
+  });
+
+  it("429는 재시도하지 않고 공개 retryable rate-limit 오류로 보존한다", async () => {
+    const fetcher = vi.fn(async () => json({ error: { message: "limited" } }, 429));
+    const service = new DeepSeekCommunityProviderService(database, organizations, providers, router, {
+      fetcher,
+      sleep: async () => undefined,
+    });
+
+    const failure = await service
+      .connect(context, { commandId: "deepseek-429-public", acceptCommunityDataTransfer: true })
+      .catch((error: unknown) => error);
+    expect(fetcher).toHaveBeenCalledOnce();
+    expect(failure).toBeInstanceOf(ApplicationError);
+    expect((failure as ApplicationError).publicView()).toMatchObject({
+      category: "rate-limit",
+      retryable: true,
+      operatorCode: "DEEPSEEK_COMMUNITY_RATE_LIMIT",
+    });
+    expect(JSON.stringify((failure as ApplicationError).publicView())).not.toContain("q5dh1rfszfym23hj");
+    expect(JSON.stringify((failure as ApplicationError).publicView())).not.toContain("limited");
   });
 
   it.each([

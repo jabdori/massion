@@ -1,3 +1,4 @@
+import { ApplicationError } from "@massion/application";
 import type { OrganizationService, TenantContext } from "@massion/identity";
 import type { ModelProfile, ModelRouter, ModelVerificationEvidence, ProviderService } from "@massion/router";
 import type { MassionDatabase } from "@massion/storage";
@@ -12,7 +13,7 @@ const PROVIDER_NAME = "DeepSeek V4 Flash 0731 (Hugging Face Community)";
 const CREDENTIAL_LABEL = "Public endpoint";
 const PLACEHOLDER_SECRET = "not-needed";
 const MAXIMUM_PROBE_BYTES = 256 * 1024;
-const DEFAULT_TIMEOUT_MS = 10_000;
+const DEFAULT_TIMEOUT_MS = 35_000;
 const PROVIDER_CONTRACT =
   "https://huggingface.co/spaces/victor/DeepSeek-V4-Flash-0731-free-endpoint/blob/17806432f88d034d62a910713e2826afa5e1ced3/index.html";
 const STABLE_PROVIDER_IDS = new Set(["openai-codex", "zai-coding-plan", "minimax-token-plan"]);
@@ -35,6 +36,7 @@ interface DeepSeekCommunityProviderOptions {
   readonly fetcher?: typeof fetch;
   readonly timeoutMs?: number;
   readonly maximumProbeBytes?: number;
+  readonly sleep?: (milliseconds: number) => Promise<void>;
 }
 
 async function boundedText(response: Response, maximumBytes: number): Promise<string> {
@@ -103,6 +105,7 @@ export class DeepSeekCommunityProviderService {
   private readonly fetcher: typeof fetch;
   private readonly timeoutMs: number;
   private readonly maximumProbeBytes: number;
+  private readonly sleep: (milliseconds: number) => Promise<void>;
 
   public constructor(
     private readonly database: MassionDatabase,
@@ -114,6 +117,7 @@ export class DeepSeekCommunityProviderService {
     this.fetcher = options.fetcher ?? fetch;
     this.timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
     this.maximumProbeBytes = options.maximumProbeBytes ?? MAXIMUM_PROBE_BYTES;
+    this.sleep = options.sleep ?? ((milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)));
     if (this.timeoutMs < 1 || this.timeoutMs > 60_000)
       throw new Error("DeepSeek probe timeout 범위가 유효하지 않습니다");
     if (this.maximumProbeBytes < 1 || this.maximumProbeBytes > 1024 * 1024)
@@ -411,7 +415,39 @@ export class DeepSeekCommunityProviderService {
     ];
   }
 
-  private async request(path: string, init?: RequestInit): Promise<{ response: Response; text: string }> {
+  private retryAfter(response: Response, fallback: number): number {
+    const value = response.headers.get("retry-after")?.trim();
+    if (!value) return fallback;
+    const seconds = Number(value);
+    const milliseconds = Number.isFinite(seconds) ? seconds * 1_000 : Date.parse(value) - Date.now();
+    return Math.min(10_000, Math.max(0, Number.isFinite(milliseconds) ? milliseconds : fallback));
+  }
+
+  private transient(error: unknown): error is Error {
+    return error instanceof Error && (error.name === "AbortError" || error.name === "TimeoutError");
+  }
+
+  private publicFailure(status: 429 | 503 | "timeout", retryAfterMs?: number): ApplicationError {
+    if (status === 429) {
+      return new ApplicationError({
+        category: "rate-limit",
+        severity: "warning",
+        retryable: true,
+        userMessage: "무료 모델 요청이 많습니다. 잠시 후 다시 시도해 주세요.",
+        operatorCode: "DEEPSEEK_COMMUNITY_RATE_LIMIT",
+        ...(retryAfterMs === undefined ? {} : { retryAfterMs }),
+      });
+    }
+    return new ApplicationError({
+      category: "unavailable",
+      severity: "warning",
+      retryable: true,
+      userMessage: "무료 모델이 잠시 응답하지 않습니다. 다시 시도해 주세요.",
+      operatorCode: status === 503 ? "DEEPSEEK_COMMUNITY_UNAVAILABLE" : "DEEPSEEK_COMMUNITY_TIMEOUT",
+    });
+  }
+
+  private async requestOnce(path: string, init?: RequestInit): Promise<{ response: Response; text: string }> {
     const headers = new Headers(init?.headers);
     headers.set("authorization", `Bearer ${PLACEHOLDER_SECRET}`);
     headers.set("content-type", "application/json");
@@ -421,8 +457,34 @@ export class DeepSeekCommunityProviderService {
       signal: AbortSignal.timeout(this.timeoutMs),
     });
     const text = await boundedText(response, this.maximumProbeBytes);
-    if (!response.ok) throw new Error(`DeepSeek 커뮤니티 endpoint probe 실패: HTTP ${String(response.status)}`);
     return { response, text };
+  }
+
+  private async request(path: string, init?: RequestInit): Promise<{ response: Response; text: string }> {
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      let result: { response: Response; text: string };
+      try {
+        result = await this.requestOnce(path, init);
+      } catch (error) {
+        if (!this.transient(error)) throw error;
+        if (attempt === 0) continue;
+        throw this.publicFailure("timeout");
+      }
+      if (result.response.status === 429) {
+        throw this.publicFailure(429, this.retryAfter(result.response, 1_000));
+      }
+      if (result.response.status === 503) {
+        if (attempt === 0) {
+          await this.sleep(this.retryAfter(result.response, 1_000));
+          continue;
+        }
+        throw this.publicFailure(503);
+      }
+      if (!result.response.ok)
+        throw new Error(`DeepSeek 커뮤니티 endpoint probe 실패: HTTP ${String(result.response.status)}`);
+      return result;
+    }
+    throw this.publicFailure("timeout");
   }
 
   private async probe(): Promise<{ readonly observedAt: string }> {

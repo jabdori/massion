@@ -1600,6 +1600,33 @@ describe("AgentOS native data flow", () => {
     expect(await screen.findByText("DeepSeek 무료 모델을 연결했습니다.")).toBeInTheDocument();
   }, 15_000);
 
+  it("DeepSeek 연결 실패는 dialog 카드 안에서 알리고 재시도할 때 초기화한다", async () => {
+    const user = userEvent.setup();
+    let releaseRetry: (() => void) | undefined;
+    const connectDeepSeekCommunity = vi
+      .fn<() => Promise<void>>()
+      .mockRejectedValueOnce(new Error("무료 모델이 잠시 응답하지 않습니다. 다시 시도해 주세요."))
+      .mockImplementationOnce(
+        async () =>
+          await new Promise<void>((resolve) => {
+            releaseRetry = resolve;
+          }),
+      );
+    render(<App service={service({ connectDeepSeekCommunity })} />);
+
+    await user.click(screen.getByRole("button", { name: "프로바이더" }));
+    await user.click(await screen.findByRole("button", { name: "프로바이더 추가" }));
+    const dialog = await screen.findByRole("dialog", { name: "프로바이더 추가" });
+    await user.click(within(dialog).getByRole("checkbox", { name: /외부 전송.*동의/ }));
+    const connect = within(dialog).getByRole("button", { name: "무료 모델 연결" });
+    await user.click(connect);
+
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent("무료 모델이 잠시 응답하지 않습니다");
+    await user.click(connect);
+    expect(within(dialog).queryByRole("alert")).not.toBeInTheDocument();
+    releaseRetry?.();
+  });
+
   it("깨끗한 프로필에서도 공식 OpenAI Codex 카드로 로그인한다", async () => {
     const user = userEvent.setup();
     const loginSubscription = vi.fn(async () => undefined);

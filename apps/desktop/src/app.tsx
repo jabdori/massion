@@ -4529,7 +4529,15 @@ const PROVIDER_ADAPTERS = [
   { value: "ollama", label: "Ollama" },
 ] as const;
 
-function DeepSeekCommunityConnect({ busy, onConnect }: { busy: boolean; onConnect: () => Promise<void> }) {
+function DeepSeekCommunityConnect({
+  busy,
+  error,
+  onConnect,
+}: {
+  busy: boolean;
+  error: string;
+  onConnect: () => Promise<void>;
+}) {
   const [accepted, setAccepted] = useState(false);
   return (
     <section
@@ -4566,6 +4574,11 @@ function DeepSeekCommunityConnect({ busy, onConnect }: { busy: boolean; onConnec
         />
         <span>이 모델을 사용하는 Work의 내용을 외부 전송하는 데 동의합니다.</span>
       </label>
+      {error ? (
+        <p className="mt-3 text-[11px] leading-4 text-danger" role="alert">
+          {error}
+        </p>
+      ) : null}
       <div className="mt-3 flex justify-end">
         <button
           className="rounded-[5px] border border-control px-3 py-1.5 text-[12px] text-secondary transition duration-150 hover:border-fg-3 hover:text-primary active:translate-y-px disabled:cursor-not-allowed disabled:opacity-40"
@@ -4688,6 +4701,7 @@ function ProviderSurface({ service }: { service: DesktopService }) {
   const [saving, setSaving] = useState(false);
   const [loginBusy, setLoginBusy] = useState(false);
   const [communityBusy, setCommunityBusy] = useState(false);
+  const [communityError, setCommunityError] = useState("");
   const [notice, setNotice] = useState("");
   const [secret, setSecret] = useState("");
   const [draft, setDraft] = useState({ displayName: "", adapterKind: "openai-compatible", baseUrl: "" });
@@ -4789,6 +4803,7 @@ function ProviderSurface({ service }: { service: DesktopService }) {
   const connectDeepSeekCommunity = async () => {
     if (communityBusy) return;
     setCommunityBusy(true);
+    setCommunityError("");
     setError("");
     setNotice("");
     try {
@@ -4798,7 +4813,7 @@ function ProviderSurface({ service }: { service: DesktopService }) {
       setAddOpen(false);
       setNotice("DeepSeek 무료 모델을 연결했습니다.");
     } catch (cause) {
-      setError(surfaceErrorMessage(cause, "DeepSeek 무료 모델을 연결하지 못했습니다."));
+      setCommunityError(surfaceErrorMessage(cause, "DeepSeek 무료 모델을 연결하지 못했습니다."));
     } finally {
       setCommunityBusy(false);
     }
@@ -5025,7 +5040,11 @@ function ProviderSurface({ service }: { service: DesktopService }) {
               </DialogClose>
             </header>
             <div className="grid min-h-0 gap-5 overflow-y-auto px-5 py-4">
-              <DeepSeekCommunityConnect busy={communityBusy} onConnect={connectDeepSeekCommunity} />
+              <DeepSeekCommunityConnect
+                busy={communityBusy}
+                error={communityError}
+                onConnect={connectDeepSeekCommunity}
+              />
               <div>
                 <p className="mb-3 text-[11px] text-muted">직접 연결</p>
                 <ProviderAddForm

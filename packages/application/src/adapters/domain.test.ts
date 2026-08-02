@@ -23,6 +23,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { ApplicationCommandRegistry } from "../command-registry.js";
 import { ApplicationCommandStore } from "../command-store.js";
+import { ApplicationError } from "../errors.js";
 import { registerApplicationDomainCommands } from "./domain.js";
 
 describe("Application domain adapters", () => {
@@ -875,6 +876,44 @@ describe("Application domain adapters", () => {
     expect(result.data).toMatchObject({
       providerId: "huggingface-deepseek-community",
       modelProfileId: "profile-deepseek",
+    });
+  });
+
+  it("DeepSeek 외부 transient 오류의 공개 retryable 계약을 보존한다", async () => {
+    await using database = await createDatabase({ url: "mem://", namespace: "massion", database: crypto.randomUUID() });
+    const identities = await IdentityService.create(database);
+    const organizations = await OrganizationService.create(database);
+    const owner = await identities.registerPersonalUser({ email: "deepseek-error@example.com", displayName: "Owner" });
+    const context = await organizations.resolveTenantContext(owner.user.user_id, owner.organization.organization_id);
+    const registry = new ApplicationCommandRegistry(await ApplicationCommandStore.create(database, organizations));
+    registerApplicationDomainCommands(registry, {
+      communityModels: {
+        connectDeepSeek: async () => {
+          throw new ApplicationError({
+            category: "rate-limit",
+            severity: "warning",
+            retryable: true,
+            userMessage: "무료 모델 요청이 많습니다. 잠시 후 다시 시도해 주세요.",
+            operatorCode: "DEEPSEEK_COMMUNITY_RATE_LIMIT",
+          });
+        },
+      },
+    } as never);
+
+    const failure = await registry
+      .dispatch(context, ["router:write"], {
+        schemaVersion: "massion.application.v1",
+        commandId: "deepseek-error-command",
+        correlationId: "deepseek-error-correlation",
+        operation: "router.community.deepseek.connect",
+        payload: { acceptCommunityDataTransfer: true },
+      })
+      .catch((error: unknown) => error);
+    expect(failure).toBeInstanceOf(ApplicationError);
+    expect((failure as ApplicationError).publicView()).toMatchObject({
+      category: "rate-limit",
+      retryable: true,
+      operatorCode: "DEEPSEEK_COMMUNITY_RATE_LIMIT",
     });
   });
 
