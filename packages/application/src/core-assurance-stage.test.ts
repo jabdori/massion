@@ -102,7 +102,11 @@ function verifierRunner(
   };
 }
 
-function stageCapturingVerificationMaterial(recovery: unknown, verifierInputs: unknown[]): CoreAssuranceStage {
+function stageCapturingVerificationMaterial(
+  recovery: unknown,
+  verifierInputs: unknown[],
+  runner = verifierRunner([], verifierInputs),
+): CoreAssuranceStage {
   return new CoreAssuranceStage({
     works: {
       getWork: async () => ({ revision: 7 }),
@@ -116,7 +120,7 @@ function stageCapturingVerificationMaterial(recovery: unknown, verifierInputs: u
         profileVersion: "1.0.0",
       }),
     },
-    runner: verifierRunner([], verifierInputs),
+    runner,
     runtimeExecutions: noStoredVerifier,
     assurance: {
       prepareSnapshot: async () => ({ snapshot: { hash: "a".repeat(64) } }),
@@ -154,6 +158,42 @@ function executionReceipt(items: readonly unknown[], truncated = false) {
 }
 
 describe("CoreAssuranceStage", () => {
+  it("verifier terminal event가 영속되면 stream 종료를 추가로 기다리지 않는다", async () => {
+    let cleaned = false;
+    const runner = {
+      stream: async function* () {
+        try {
+          yield { executionId: "verifier-1", sequence: 1, type: "execution_queued", payload: {}, createdAt: "now" };
+          yield { executionId: "verifier-1", sequence: 2, type: "execution_running", payload: {}, createdAt: "now" };
+          yield { executionId: "verifier-1", sequence: 3, type: "execution_succeeded", payload: {}, createdAt: "now" };
+          await new Promise(() => {});
+        } finally {
+          cleaned = true;
+        }
+      },
+      recover: async () => ({
+        executionId: "verifier-1",
+        status: "succeeded",
+        output: {
+          output: JSON.stringify({
+            snapshotHash: "a".repeat(64),
+            verified: true,
+            reason: "검증 완료",
+          }),
+        },
+      }),
+    };
+    const stage = stageCapturingVerificationMaterial({ artifacts: [] }, [], runner);
+
+    await expect(
+      Promise.race([
+        stage.execute(context, input),
+        new Promise((_, reject) => setTimeout(() => reject(new Error("verifier terminal 처리 timeout")), 100)),
+      ]),
+    ).resolves.toMatchObject({ outcome: "advanced" });
+    expect(cleaned).toBe(true);
+  });
+
   it("계획 조직의 일반 완료 기준을 실제 산출물 검사로 자동 연결하고 Work 검증까지 반영한다", async () => {
     const calls: string[] = [];
     const verifierInputs: unknown[] = [];

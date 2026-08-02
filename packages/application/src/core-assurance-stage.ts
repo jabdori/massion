@@ -739,7 +739,19 @@ export class CoreAssuranceStage implements CoreWorkStageExecutor {
     const complete = async (): Promise<Awaited<ReturnType<AgentRunner["recover"]>>> => {
       completion ??= (async () => {
         for (let event = await stream.next(); !event.done; event = await stream.next()) {
-          // verifier stream의 모든 terminal event를 영속한 뒤 Runtime 상태를 읽습니다.
+          if (
+            [
+              "execution_succeeded",
+              "execution_failed",
+              "execution_cancelled",
+              "execution_interrupted",
+              "execution_blocked_model_unavailable",
+              "execution_suspended",
+            ].includes(event.value.type)
+          ) {
+            await stream.return?.();
+            break;
+          }
         }
         return await this.dependencies.runner.recover(context, executionId);
       })();
