@@ -3,6 +3,22 @@ import { createRemoteEngines, DateTime, isRetryableConflict, Surreal, type Surre
 
 const SUPPORTED_PROTOCOLS = new Set(["mem:", "rocksdb:", "http:", "https:", "ws:", "wss:"]);
 const LEGACY_CONFLICT_PREFIX = "Transaction conflict: Write conflict";
+const ROLLBACK_TIMEOUT_MS = 1_000;
+
+async function cancelBestEffort(transaction: SurrealTransaction): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([
+      transaction.cancel(),
+      new Promise<void>((resolve) => {
+        timer = setTimeout(resolve, ROLLBACK_TIMEOUT_MS);
+        timer.unref?.();
+      }),
+    ]).catch(() => undefined);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
 
 function isCompatibleRetryableConflict(error: unknown): boolean {
   return (
@@ -60,7 +76,7 @@ export class MassionDatabase implements QueryExecutor, AsyncDisposable {
         await transaction.commit();
         return result;
       } catch (error) {
-        await transaction.cancel().catch(() => undefined);
+        await cancelBestEffort(transaction);
         if (!isCompatibleRetryableConflict(error) || attempt >= 3) throw error;
       } finally {
         await session.closeSession();

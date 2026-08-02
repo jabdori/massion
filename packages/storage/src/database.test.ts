@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { createDatabase, serializeSurrealDateTime } from "./database.js";
+import { createDatabase, MassionDatabase, serializeSurrealDateTime } from "./database.js";
 
 describe("SurrealDB 연결", () => {
   it("embedded memory DB에 연결하고 namespace와 database를 선택한다", async () => {
@@ -28,6 +28,25 @@ describe("SurrealDB 연결", () => {
     ).rejects.toThrow("rollback probe");
 
     expect(await db.query<unknown[][]>("SELECT payload FROM rollback_probe;")).toEqual([[]]);
+  });
+
+  it("원격 rollback이 응답하지 않아도 원래 transaction 오류를 보존한다", async () => {
+    let sessionClosed = false;
+    const database = new MassionDatabase({
+      forkSession: async () => ({
+        beginTransaction: async () => ({ cancel: async () => await new Promise(() => {}) }),
+        closeSession: async () => {
+          sessionClosed = true;
+        },
+      }),
+    } as never);
+
+    await expect(
+      database.transaction(async () => {
+        throw new Error("원래 transaction 오류");
+      }),
+    ).rejects.toThrow("원래 transaction 오류");
+    expect(sessionClosed).toBe(true);
   });
 
   it("동시 transaction을 서로 독립된 session에서 commit한다", async () => {
