@@ -84,9 +84,9 @@ apps/server/src/product.ts:465  deltaObserver: executionStream  ← 주입 지�
 
 `challenge`·`change_request`·`review_request`·`decision`·`evidence`·`proposal`은 VoltAgent 기본 위임에서 자연히 나오지 않습니다. 에이전트 프롬프트·도구가 그런 발화를 만들게 되면 그때 매핑하십시오. **없는 것을 추측해서 만들지 마십시오.**
 
-## 5. 프론트엔드는 이미 준비돼 있습니다
+## 5. 수동 개입을 제외한 프론트엔드는 이미 준비돼 있습니다
 
-데스크톱은 이 데이터를 받을 준비가 끝났습니다. **연결만 되면 화면이 채워집니다.** 프론트엔드 수정은 필요 없습니다.
+데스크톱은 Runtime이 만든 협업 기록을 받을 준비가 끝났습니다. **연결만 되면 화면이 채워집니다.** 수동 `@Agent` 개입은 6.1절의 별도 입력·실행 계약이 필요합니다.
 
 | 계층 | 상태 |
 |---|---|
@@ -131,6 +131,33 @@ apps/server/src/product.ts:465  deltaObserver: executionStream  ← 주입 지�
 
 방이 늘어나도 화면은 구현 전후로 깨지지 않습니다.
 
+## 6.1 사용자 `@Agent` 직접 개입
+
+사용자가 목표마다 Agent를 고르게 만들지 않습니다. 기본 경로는 계속 **사용자 요청 → Strategy → 자동 Task·Agent·모델 배치**입니다. `@Agent`는 자동 운영을 대체하는 라우터가 아니라, 사용자가 협업방에서 특정 담당자에게 질문하거나 보완을 요청하는 정밀 개입 수단입니다.
+
+### v1 결정
+
+- 같은 Work의 활성 협업방 참가자인 **정적·동적 Agent**를 이름·역할로 검색합니다. 화면은 handle 대신 `agentIdentityToken(handle)`의 이름을 보여주되, 전송 시에는 선택된 안정 handle을 구조화해 보냅니다.
+- 자유 텍스트에서 `@이름`을 추측하지 않습니다. 자동완성에서 선택한 대상을 composer state에 보존하고 `recipientAgentId`로 전송합니다.
+- 사용자 작성 `question`에 `recipientAgentId`를 허용하도록 `PostMessageInput`과 `collaboration.message.post` 계약을 확장합니다. 현재 도메인은 이 필드를 Agent 작성 `handoff`에만 허용하므로 그대로는 사용할 수 없습니다.
+- 메시지를 먼저 영속한 뒤 대상 Agent의 실행 또는 활성 session 전달을 큐에 넣습니다. 단순히 방에 태그만 저장하거나 알림만 띄우고 성공으로 표시하지 않습니다.
+- 대상 응답은 `answer`로 저장하고 원 질문을 `replyToMessageId`·`causedByMessageId`로 가리킵니다. Task·RuntimeExecution·Artifact가 생기면 같은 질문 message ID를 원인 계보에 보존합니다.
+- 동적 Agent가 이미 해제됐거나 방에서 이탈했으면 전송 전에 **현재 비활성**으로 표시하고 거부합니다. 이름이 비슷한 다른 Agent로 조용히 재라우팅하지 않습니다.
+- Work·방·참가자·Agent·동적 노드의 tenant와 활성 상태를 한 정본 snapshot에서 검증합니다. terminal Work, 다른 Work의 Agent, inactive participant, stale organization version은 fail-closed합니다.
+- 방의 round·token·cost·deadline 한계와 사용자의 취소·긴급 정지는 멘션 실행에도 동일하게 적용합니다.
+
+### 사용자 경험
+
+1. composer에서 `@`를 입력하거나 멘션 버튼을 누릅니다.
+2. 현재 방의 활성 Agent 목록에서 이름·역할·동적 편성 여부를 보고 하나를 선택합니다.
+3. composer에 번역되지 않는 대상 chip이 생기고, 메시지 전송 전 사용자가 제거할 수 있습니다.
+4. 전송 뒤에는 `전달됨`, `실행 대기`, `차단됨`을 구분합니다. 대상 실행 계약이 없으면 성공으로 표시하지 않습니다.
+5. 답변은 원 질문 아래에 나타나며, Work의 Task·산출물·검증으로 이어졌다면 같은 계보에서 이동할 수 있습니다.
+
+### 조직 멘션은 후속 계약
+
+`@Security Team`처럼 조직 노드 전체를 호출하는 기능은 v1 `@Agent`와 섞지 않습니다. 현재 `NodeRole`만으로 부서·팀·Agent를 구분하거나 조직 버전별 구성원을 확정할 수 없기 때문입니다. 조직 단위 종류와 membership snapshot 계약이 생긴 뒤 `@OrganizationNode`를 추가하며, 기본 동작은 전체 구성원 fan-out이 아니라 해당 조직의 coordinator에게 한 번 전달하는 것으로 설계합니다.
+
 ## 7. 조직 변경 제안 블록 — 계약이 통째로 없습니다
 
 `proposal` 메시지에 붙는 조직 변경 블록은 **현재 100% fixture입니다.** 도메인에는 다 있고 계약이 하나도 노출하지 않습니다. 4·5절과 같은 패턴입니다.
@@ -171,8 +198,14 @@ apps/server/src/product.ts:465  deltaObserver: executionStream  ← 주입 지�
 - [ ] 방 한계 초과가 실행을 죽이지 않고 정의된 상태로 끝난다
 - [ ] 기록 실패가 에이전트 실행을 중단시키지 않는다
 - [ ] 실제 Provider로 Work 하나를 완주해 방에 3건 이상의 메시지가 남는 증거를 `docs/evidence/phase-30/`에 남긴다
+- [ ] 사용자가 현재 방의 정적·동적 Agent를 `@` 자동완성에서 선택하고 구조화된 `recipientAgentId`로 질문을 보낸다
+- [ ] 멘션 질문이 영속된 뒤 대상 Agent 실행 또는 활성 session 전달로 이어지고, 단순 알림·성공 no-op이 없다
+- [ ] 대상의 `answer`가 원 질문의 `replyToMessageId`·`causedByMessageId`와 Task·RuntimeExecution 계보를 보존한다
+- [ ] inactive·다른 Work·다른 tenant·stale 동적 Agent 멘션은 전송 전에 fail-closed한다
+- [ ] 자동 배치는 멘션 없이 계속 동작하며 `@Agent`가 필수 사용자 절차가 되지 않는다
 
 ## 9. 범위 밖
 
 - **Shared Context Reference·Resource Lease** — 도메인과 테스트는 있으나 생산 호출 0건. 공유 쓰기 충돌이 실제로 발생하는 시나리오가 나오면 그때 붙이십시오.
 - **`System participant`** — 상태·정책 이벤트를 방에 남기는 경로.
+- **`@OrganizationNode` fan-out** — 조직 단위 종류·membership snapshot·coordinator routing 계약 뒤에 추가합니다.
