@@ -12,6 +12,17 @@ import * as productModule from "./product.js";
 const bootstrapCapability = Buffer.alloc(32, 72).toString("base64url");
 
 describe("Massion server model optimization product boundary", () => {
+  it("서버 시작은 GovernanceService 생성 전에 managed default 정책을 reconcile한다", async () => {
+    const source = await readFile(new URL("./product.ts", import.meta.url), "utf8");
+    const policyStore = source.indexOf("const policies = await PolicyStore.create(database, organizations)");
+    const reconciliation = source.indexOf("await policies.reconcileManagedDefaultsAtStartup()", policyStore);
+    const governanceService = source.indexOf("const governance = await GovernanceService.create", policyStore);
+
+    expect(policyStore).toBeGreaterThanOrEqual(0);
+    expect(reconciliation).toBeGreaterThan(policyStore);
+    expect(governanceService).toBeGreaterThan(reconciliation);
+  });
+
   it("모델 최적화 acquire는 실행 context가 확정한 workspace access와 capability를 함께 전달한다", async () => {
     const source = await readFile(new URL("./product.ts", import.meta.url), "utf8");
     const start = source.indexOf("const workspace = await subscriptionExecutionContext.resolve");

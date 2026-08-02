@@ -5,6 +5,7 @@ import { applyMigrations, type MassionDatabase, type QueryExecutor } from "@mass
 
 import { validatePolicyBundle } from "./cedar-authorizer.js";
 import type { ApprovalRequirement, PolicyBundle } from "./contracts.js";
+import { createDefaultPolicy } from "./defaults.js";
 import { GOVERNANCE_POLICY_MIGRATION } from "./schema.js";
 
 export interface PolicyVersion {
@@ -65,6 +66,22 @@ interface PolicyEvent {
   readonly result_json: string;
 }
 
+type ManagedDefaultKind = "personal" | "team";
+
+const RELEASED_MANAGED_DEFAULT_CHECKSUMS: Readonly<Record<ManagedDefaultKind, string>> = {
+  personal: "637c72da0469ebd33b81bcc4c0474adcb7790e78b1bdfd1debf89d6faf6be423",
+  team: "fe2b5aa02cf0760b9f6fb26180e541b8f80045b5c73e35e94817e0743ce76c18",
+};
+
+export interface ManagedDefaultReconciliation {
+  readonly organizationId: string;
+  readonly kind: ManagedDefaultKind;
+  readonly action: "upgraded";
+  readonly previousPolicyVersionId: string;
+  readonly policyVersionId: string;
+  readonly version: number;
+}
+
 function canonicalJson(value: unknown): string {
   if (value === undefined) return "null";
   if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
@@ -75,6 +92,53 @@ function canonicalJson(value: unknown): string {
       .join(",")}}`;
   }
   return JSON.stringify(value);
+}
+
+function legacyDefaultPolicy(kind: ManagedDefaultKind): {
+  readonly bundle: PolicyBundle;
+  readonly requirements: readonly ApprovalRequirement[];
+} {
+  const current = structuredClone(createDefaultPolicy(kind));
+  const namespace = (current.bundle.schema as { Massion: Record<string, Record<string, unknown>> }).Massion;
+  delete namespace.actions?.["model.optimization.approve"];
+  delete namespace.entityTypes?.OptimizationRecommendation;
+  for (const action of Object.values(namespace.actions ?? {})) {
+    const appliesTo = (action as { appliesTo?: { resourceTypes?: string[] } }).appliesTo;
+    if (appliesTo?.resourceTypes) {
+      appliesTo.resourceTypes = appliesTo.resourceTypes.filter((type) => type !== "OptimizationRecommendation");
+    }
+  }
+  return {
+    bundle: current.bundle,
+    requirements: current.requirements.map((requirement) => ({
+      ...requirement,
+      actions: requirement.actions.filter((action) => action !== "model.optimization.approve"),
+    })),
+  };
+}
+
+function policyMaterial(input: {
+  readonly bundle: PolicyBundle;
+  readonly requirements: readonly ApprovalRequirement[];
+}): Pick<PolicyVersion, "schema_json" | "policies_json" | "requirements_json" | "checksum"> {
+  return {
+    schema_json: canonicalJson(input.bundle.schema),
+    policies_json: canonicalJson(input.bundle.policies),
+    requirements_json: canonicalJson(input.requirements),
+    checksum: createHash("sha256").update(canonicalJson(input)).digest("hex"),
+  };
+}
+
+function exactPolicyMaterial(
+  version: PolicyVersion,
+  material: Pick<PolicyVersion, "schema_json" | "policies_json" | "requirements_json" | "checksum">,
+): boolean {
+  return (
+    version.schema_json === material.schema_json &&
+    version.policies_json === material.policies_json &&
+    version.requirements_json === material.requirements_json &&
+    version.checksum === material.checksum
+  );
 }
 
 function assertPolicyIntegrity(version: PolicyVersion): void {
@@ -113,6 +177,98 @@ export class PolicyStore {
   ): Promise<PolicyStore> {
     await applyMigrations(database, [GOVERNANCE_POLICY_MIGRATION]);
     return new PolicyStore(database, organizations, activationGate);
+  }
+
+  /** 제품 시작 시 과거 exact default만 현재 managed default로 올리는 내부 reconciliation 경계입니다. */
+  public async reconcileManagedDefaultsAtStartup(): Promise<readonly ManagedDefaultReconciliation[]> {
+    const [organizations] = await this.database.query<
+      [Array<{ readonly organization_id: string; readonly kind: string }>]
+    >(
+      "SELECT organization_id, kind FROM organization WHERE kind IN ['personal', 'team'] ORDER BY organization_id ASC;",
+    );
+    const reconciled: ManagedDefaultReconciliation[] = [];
+    for (const organization of organizations) {
+      if (organization.kind !== "personal" && organization.kind !== "team") continue;
+      const changed = await this.reconcileManagedDefault(organization.organization_id, organization.kind);
+      if (changed) reconciled.push(changed);
+    }
+    return reconciled;
+  }
+
+  private async reconcileManagedDefault(
+    organizationId: string,
+    kind: ManagedDefaultKind,
+  ): Promise<ManagedDefaultReconciliation | undefined> {
+    const currentDefault = createDefaultPolicy(kind);
+    const currentMaterial = policyMaterial(currentDefault);
+    const legacyMaterial = policyMaterial(legacyDefaultPolicy(kind));
+    return await this.database.transaction(async (tx) => {
+      const active = await this.active(tx, organizationId);
+      if (!active || exactPolicyMaterial(active, currentMaterial)) return undefined;
+      if (legacyMaterial.checksum !== RELEASED_MANAGED_DEFAULT_CHECKSUMS[kind]) return undefined;
+      if (!exactPolicyMaterial(active, legacyMaterial)) return undefined;
+      const [versions] = await tx.query<[Array<{ readonly version: number }>]>(
+        "SELECT version FROM governance_policy_version WHERE organization_id = $organization_id;",
+        { organization_id: organizationId },
+      );
+      const version = versions.reduce((maximum, item) => Math.max(maximum, item.version), 0) + 1;
+      const lineageHash = createHash("sha256").update(`${organizationId}\0${currentMaterial.checksum}`).digest("hex");
+      const policyVersionId = `managed-default-${lineageHash}`;
+      const commandId = `managed-default-reconcile-${lineageHash}`;
+      const requestJson = canonicalJson({
+        operation: "reconcile-managed-default",
+        organizationId,
+        kind,
+        previousPolicyVersionId: active.policy_version_id,
+        previousChecksum: active.checksum,
+        targetChecksum: currentMaterial.checksum,
+      });
+      const repeated = await this.repeated(tx, organizationId, commandId, requestJson);
+      if (repeated) {
+        const replayed = await this.find(tx, organizationId, repeated.policy_version_id);
+        return {
+          organizationId,
+          kind,
+          action: "upgraded",
+          previousPolicyVersionId: active.policy_version_id,
+          policyVersionId: replayed.policy_version_id,
+          version: replayed.version,
+        };
+      }
+      const [superseded] = await tx.query<[PolicyVersion[]]>(
+        "UPDATE governance_policy_version SET status = 'superseded', superseded_at = time::now() WHERE organization_id = $organization_id AND policy_version_id = $policy_version_id AND status = 'active' RETURN AFTER;",
+        { organization_id: organizationId, policy_version_id: active.policy_version_id },
+      );
+      if (superseded.length !== 1) throw new Error("managed default active Policy Version 선점에 실패했습니다");
+      const [created] = await tx.query<[PolicyVersion[]]>(
+        "CREATE governance_policy_version CONTENT { policy_version_id: $policy_version_id, organization_id: $organization_id, version: $version, status: 'active', schema_json: $schema_json, policies_json: $policies_json, requirements_json: $requirements_json, checksum: $checksum, created_at: time::now(), activated_at: time::now() } RETURN AFTER;",
+        {
+          policy_version_id: policyVersionId,
+          organization_id: organizationId,
+          version,
+          ...currentMaterial,
+        },
+      );
+      if (created.length !== 1) throw new Error("managed default Policy Version 생성 결과가 없습니다");
+      const result = await this.find(tx, organizationId, policyVersionId);
+      await this.record(
+        tx,
+        organizationId,
+        policyVersionId,
+        commandId,
+        "managed_default_reconciled",
+        requestJson,
+        result,
+      );
+      return {
+        organizationId,
+        kind,
+        action: "upgraded",
+        previousPolicyVersionId: active.policy_version_id,
+        policyVersionId,
+        version,
+      };
+    });
   }
 
   public async createDraft(context: TenantContext, input: CreatePolicyDraftInput): Promise<PolicyVersion> {

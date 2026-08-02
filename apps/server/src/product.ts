@@ -302,6 +302,7 @@ export async function createMassionDaemon(
     const identities = await IdentityService.create(database);
     const organizations = await OrganizationService.create(database);
     const policies = await PolicyStore.create(database, organizations);
+    await policies.reconcileManagedDefaultsAtStartup();
     const governance = await GovernanceService.create(database, organizations, policies);
     const approvals = await ApprovalStore.create(database, organizations, governance);
     const permits = await PermitStore.create(database, organizations);
