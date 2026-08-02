@@ -17,6 +17,7 @@ const MAX_REQUEST_BYTES: usize = 1024 * 1024;
 const MAX_INCOMING_BYTES: usize = 4 * 1024 * 1024;
 const MAX_PENDING_REQUESTS: usize = 128;
 const RESPONSE_TIMEOUT: Duration = Duration::from_secs(30);
+const COMMAND_RESPONSE_TIMEOUT: Duration = Duration::from_secs(5 * 60);
 const CODEX_LOGIN_TIMEOUT: Duration = Duration::from_secs(10 * 60);
 const CODEX_LOGIN_POLL: Duration = Duration::from_millis(200);
 const BRIDGE_EVENT: &str = "massion://bridge-event";
@@ -49,6 +50,13 @@ impl BridgeMethod {
             Self::ExecutionsStop => "executions.stop",
             Self::Shutdown => "shutdown",
         }
+    }
+}
+
+fn response_timeout(method: BridgeMethod) -> Duration {
+    match method {
+        BridgeMethod::Command => COMMAND_RESPONSE_TIMEOUT,
+        _ => RESPONSE_TIMEOUT,
     }
 }
 
@@ -614,10 +622,12 @@ impl Bridge {
             self.router.cancel(&id);
             return Err(error);
         }
-        let response = receiver.recv_timeout(RESPONSE_TIMEOUT).map_err(|_| {
-            self.router.cancel(&id);
-            bridge_closed()
-        })?;
+        let response = receiver
+            .recv_timeout(response_timeout(method))
+            .map_err(|_| {
+                self.router.cancel(&id);
+                bridge_closed()
+            })?;
         if response.ok {
             Ok(response.result.unwrap_or(Value::Null))
         } else {
@@ -983,8 +993,27 @@ mod tests {
     }
 
     #[test]
-    fn bridge_response_timeout_is_thirty_seconds() {
-        assert_eq!(RESPONSE_TIMEOUT, Duration::from_secs(30));
+    fn command_response_timeout_is_five_minutes() {
+        assert_eq!(
+            response_timeout(BridgeMethod::Command),
+            Duration::from_secs(300)
+        );
+    }
+
+    #[test]
+    fn non_command_response_timeouts_remain_thirty_seconds() {
+        for method in [
+            BridgeMethod::Hello,
+            BridgeMethod::Connect,
+            BridgeMethod::Query,
+            BridgeMethod::EventsStart,
+            BridgeMethod::EventsStop,
+            BridgeMethod::ExecutionsStart,
+            BridgeMethod::ExecutionsStop,
+            BridgeMethod::Shutdown,
+        ] {
+            assert_eq!(response_timeout(method), Duration::from_secs(30));
+        }
     }
 
     #[test]
