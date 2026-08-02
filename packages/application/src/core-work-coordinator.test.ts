@@ -2053,9 +2053,10 @@ describe("CoreWorkCoordinator", () => {
         ...stages,
         evidence: {
           async execute(_context, input) {
+            const receivedIds = input.directives?.map((directive) => directive.directiveId);
             received.push({
               stage: "evidence",
-              directiveIds: input.directives?.map((directive) => directive.directiveId),
+              ...(receivedIds === undefined ? {} : { directiveIds: receivedIds }),
             });
             return { outcome: "advanced" };
           },
@@ -2063,7 +2064,10 @@ describe("CoreWorkCoordinator", () => {
         delivery: {
           async execute(_context, input) {
             const receivedIds = input.directives?.map((directive) => directive.directiveId);
-            received.push({ stage: "delivery", directiveIds: receivedIds });
+            received.push({
+              stage: "delivery",
+              ...(receivedIds === undefined ? {} : { directiveIds: receivedIds }),
+            });
             return { outcome: "advanced", appliedDirectiveIds: receivedIds ?? [] };
           },
         },

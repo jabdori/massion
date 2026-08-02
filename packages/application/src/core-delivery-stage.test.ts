@@ -760,8 +760,10 @@ describe("CoreDeliveryStage", () => {
     };
     const taskModelInput = { ...runtimeExecution.input };
     delete taskModelInput.knowledgeSources;
+    const firstKnowledgeSource = knowledgeSources[0];
+    if (!firstKnowledgeSource) throw new Error("Delivery 근거 source가 없습니다");
     expect(runtimeExecution.estimatedTokens).toBe(
-      Math.max(1, Math.ceil(JSON.stringify(taskModelInput).length / 4)) + 4_000 + knowledgeSources[0].estimatedTokens,
+      Math.max(1, Math.ceil(JSON.stringify(taskModelInput).length / 4)) + 4_000 + firstKnowledgeSource.estimatedTokens,
     );
     expect(runtimeExecution.estimatedTokens).toBeLessThanOrEqual(32_000);
     expect(artifactInputs).toEqual([
